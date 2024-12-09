@@ -25,19 +25,19 @@ import (
 // ImagesEditsHandler just copy response body to client
 //
 // https://replicate.com/black-forest-labs/flux-fill-pro
-// func ImagesEditsHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusCode, *model.Usage) {
-// 	c.Writer.WriteHeader(resp.StatusCode)
-// 	for k, v := range resp.Header {
-// 		c.Writer.Header().Set(k, v[0])
-// 	}
+func ImagesEditsHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusCode, *model.Usage) {
+	c.Writer.WriteHeader(resp.StatusCode)
+	for k, v := range resp.Header {
+		c.Writer.Header().Set(k, v[0])
+	}
 
-// 	if _, err := io.Copy(c.Writer, resp.Body); err != nil {
-// 		return ErrorWrapper(err, "copy_response_body_failed", http.StatusInternalServerError), nil
-// 	}
-// 	defer resp.Body.Close()
+	if _, err := io.Copy(c.Writer, resp.Body); err != nil {
+		return openai.ErrorWrapper(err, "copy_response_body_failed", http.StatusInternalServerError), nil
+	}
+	defer resp.Body.Close()
 
-// 	return nil, nil
-// }
+	return nil, nil
+}
 
 var errNextLoop = errors.New("next_loop")
 

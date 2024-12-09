@@ -1,10 +1,67 @@
 package replicate
 
 import (
+	"encoding/base64"
 	"time"
 
 	"github.com/pkg/errors"
 )
+
+type OpenaiImageEditRequest struct {
+	Image        []byte `json:"image" form:"image" binding:"required"`
+	Mask         []byte `json:"mask" form:"mask" binding:"required"`
+	Prompt       string `json:"prompt" form:"prompt" binding:"required"`
+	Model        string `json:"model" form:"model" binding:"required"`
+	ResponseType string `json:"response_type" form:"response_type"`
+}
+
+// toFluxRemixRequest convert OpenAI's image edit request to Flux's remix request.
+//
+// Note that the mask formats of OpenAI and Flux are different:
+// OpenAI's mask sets the parts to be modified as transparent (0, 0, 0, 0),
+// while Flux sets the parts to be modified as black (255, 255, 255, 255),
+// so we need to convert the format here.
+//
+// Both OpenAI's Image and Mask are browser-native ImageData,
+// which need to be converted to base64 dataURI format.
+func (r *OpenaiImageEditRequest) toFluxRemixRequest() *InpaintingImageByFlusReplicateRequest {
+	fluxReq := &InpaintingImageByFlusReplicateRequest{
+		Input: FluxInpaintingInput{
+			Prompt:           r.Prompt,
+			Seed:             int(time.Now().UnixNano()),
+			Steps:            30,
+			Guidance:         3,
+			SafetyTolerance:  5,
+			PromptUnsampling: false,
+		},
+	}
+
+	// Convert image to base64
+	imageBase64 := "data:image/png;base64," + base64.StdEncoding.EncodeToString(r.Image)
+	fluxReq.Input.Image = imageBase64
+
+	// Convert mask and invert transparency
+	maskLen := len(r.Mask)
+	invertedMask := make([]byte, maskLen)
+	for i := 0; i < maskLen; i += 4 {
+		// If pixel is transparent (alpha = 0), make it black (255)
+		if i+3 < maskLen && r.Mask[i+3] == 0 {
+			invertedMask[i] = 255   // R
+			invertedMask[i+1] = 255 // G
+			invertedMask[i+2] = 255 // B
+			invertedMask[i+3] = 255 // A
+		} else {
+			// Copy original pixel
+			copy(invertedMask[i:i+4], r.Mask[i:i+4])
+		}
+	}
+
+	// Convert inverted mask to base64
+	maskBase64 := "data:image/png;base64," + base64.StdEncoding.EncodeToString(invertedMask)
+	fluxReq.Input.Mask = maskBase64
+
+	return fluxReq
+}
 
 // DrawImageRequest draw image by fluxpro
 //

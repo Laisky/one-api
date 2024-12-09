@@ -22,7 +22,24 @@ type Adaptor struct {
 }
 
 // ConvertImageRequest implements adaptor.Adaptor.
-func (*Adaptor) ConvertImageRequest(request *model.ImageRequest) (any, error) {
+func (a *Adaptor) ConvertImageRequest(request *model.ImageRequest) (any, error) {
+	return nil, errors.New("should call replicate.ConvertImageRequest instead")
+}
+
+func ConvertImageRequest(c *gin.Context, request *model.ImageRequest) (any, error) {
+	meta := meta.GetByContext(c)
+
+	switch meta.Mode {
+	case relaymode.ImagesGenerations:
+		return convertImageCreateRequest(request)
+	case relaymode.ImagesEdits:
+		return convertImageRemixRequest(c)
+	default:
+		return nil, errors.New("not implemented")
+	}
+}
+
+func convertImageCreateRequest(request *model.ImageRequest) (any, error) {
 	return DrawImageRequest{
 		Input: ImageInput{
 			Steps:           25,
@@ -36,6 +53,15 @@ func (*Adaptor) ConvertImageRequest(request *model.ImageRequest) (any, error) {
 			AspectRatio:     "1:1",
 		},
 	}, nil
+}
+
+func convertImageRemixRequest(c *gin.Context) (any, error) {
+	rawReq := new(OpenaiImageEditRequest)
+	if err := c.ShouldBind(rawReq); err != nil {
+		return nil, errors.Wrap(err, "parse image edit form")
+	}
+
+	return rawReq.toFluxRemixRequest(), nil
 }
 
 func (a *Adaptor) ConvertRequest(c *gin.Context, relayMode int, request *model.GeneralOpenAIRequest) (any, error) {
@@ -69,6 +95,8 @@ func (a *Adaptor) DoResponse(c *gin.Context, resp *http.Response, meta *meta.Met
 	switch meta.Mode {
 	case relaymode.ImagesGenerations:
 		err, usage = ImageHandler(c, resp)
+	case relaymode.ImagesEdits:
+		err, usage = ImagesEditsHandler(c, resp)
 	default:
 		err = openai.ErrorWrapper(errors.New("not implemented"), "not_implemented", http.StatusInternalServerError)
 	}
