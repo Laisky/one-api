@@ -21,7 +21,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     rm -rf /var/lib/apt/lists/*
 
 # Declare TARGETARCH so BuildKit can set it correctly.
-ARG TARGETARCH = "amd64"
+ARG TARGETARCH=amd64
 ENV GO111MODULE=on \
     CGO_ENABLED=1 \
     GOOS=linux \
