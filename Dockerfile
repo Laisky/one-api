@@ -1,5 +1,4 @@
 FROM node:18 AS builder
-
 WORKDIR /web
 COPY ./VERSION .
 COPY ./web .
@@ -21,7 +20,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     sqlite3 libsqlite3-dev && \
     rm -rf /var/lib/apt/lists/*
 
-# TARGETARCH should be set by BuildKit when building multi-arch images.
+# Declare TARGETARCH so BuildKit can set it correctly.
+ARG TARGETARCH = "amd64"
 ENV GO111MODULE=on \
     CGO_ENABLED=1 \
     GOOS=linux \
@@ -37,10 +37,8 @@ RUN go mod download
 COPY . .
 COPY --from=builder /web/build ./web/build
 
-# Use double quotes for the -ldflags parameter so that the $(cat VERSION) is expanded.
 RUN go build -trimpath -ldflags "-s -w -X github.com/songquanpeng/one-api/common.Version=$(cat VERSION)" -o one-api
 
-# Final runtime image
 FROM debian:bullseye
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
