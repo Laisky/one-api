@@ -41,8 +41,10 @@ RUN go build -trimpath -ldflags "-s -w -X github.com/songquanpeng/one-api/common
 
 FROM debian:bullseye
 
+RUN rm /var/lib/dpkg/info/libc-bin.*
+
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    ca-certificates tzdata bash haveged ffmpeg && \
+    ca-certificates tzdata bash haveged libc-bin ffmpeg && \
     rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder2 /build/one-api /

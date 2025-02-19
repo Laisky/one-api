@@ -113,30 +113,30 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-  build_arm64_latest:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+  # build_arm64_latest:
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - name: Checkout
+  #       uses: actions/checkout@v4
 
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
+  #     - name: Set up QEMU
+  #       uses: docker/setup-qemu-action@v3
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+  #     - name: Set up Docker Buildx
+  #       uses: docker/setup-buildx-action@v3
 
-      - name: Login to Docker Hub
-        uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
+  #     - name: Login to Docker Hub
+  #       uses: docker/login-action@v3
+  #       with:
+  #         username: ${{ secrets.DOCKERHUB_USERNAME }}
+  #         password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Build and push arm64 latest
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          push: true
-          tags: ppcelery/one-api:arm64-latest
-          platforms: linux/arm64
-          cache-from: type=gha
-          # cache-to: type=gha,mode=max
+  #     - name: Build and push arm64 latest
+  #       uses: docker/build-push-action@v5
+  #       with:
+  #         context: .
+  #         push: true
+  #         tags: ppcelery/one-api:arm64-latest
+  #         platforms: linux/arm64
+  #         cache-from: type=gha
+  #         # cache-to: type=gha,mode=max
