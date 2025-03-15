@@ -5,6 +5,7 @@ go 1.24
 toolchain go1.24.0
 
 require (
+	cloud.google.com/go/ai v0.10.1
 	cloud.google.com/go/iam v1.4.1
 	github.com/Laisky/gin-middlewares/v6 v6.0.0
 	github.com/Laisky/go-utils/v5 v5.0.1-0.20250228054950-e1500acd6929
@@ -43,6 +44,7 @@ require (
 	cloud.google.com/go/auth v0.15.0 // indirect
 	cloud.google.com/go/auth/oauth2adapt v0.2.7 // indirect
 	cloud.google.com/go/compute/metadata v0.6.0 // indirect
+	cloud.google.com/go/longrunning v0.6.5 // indirect
 	github.com/GoWebProd/gip v0.0.0-20230623090727-b60d41d5d320 // indirect
 	github.com/GoWebProd/uuid7 v0.0.0-20231130161441-17ee54b097d4 // indirect
 	github.com/Laisky/errors/v2 v2.0.1 // indirect
@@ -129,7 +131,7 @@ require (
 	golang.org/x/text v0.23.0 // indirect
 	golang.org/x/time v0.11.0 // indirect
 	golang.org/x/tools v0.21.1-0.20240508182429-e35e4ccd0d2d // indirect
-	google.golang.org/genproto/googleapis/api v0.0.0-20250219182151-9fdb1cabc7b2 // indirect
+	google.golang.org/genproto/googleapis/api v0.0.0-20250303144028-a0af3efb3deb // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20250303144028-a0af3efb3deb // indirect
 	google.golang.org/grpc v1.71.0 // indirect
 	google.golang.org/protobuf v1.36.5 // indirect

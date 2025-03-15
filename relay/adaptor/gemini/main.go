@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strings"
 
+	api "cloud.google.com/go/ai/generativelanguage/apiv1beta/generativelanguagepb"
 	"github.com/gin-gonic/gin"
 	"github.com/songquanpeng/one-api/common"
 	"github.com/songquanpeng/one-api/common/config"
@@ -32,47 +33,102 @@ var mimeTypeMap = map[string]string{
 	"text":        "text/plain",
 }
 
+func toFloat32Ptr(v *float64) *float32 {
+	if v == nil {
+		return nil
+	}
+
+	f := float32(*v)
+	return &f
+}
+
+func toInt32Ptr(v *int) *int32 {
+	if v == nil {
+		return nil
+	}
+
+	i := int32(*v)
+	return &i
+}
+
 // Setting safety to the lowest possible values since Gemini is already powerless enough
-func ConvertRequest(textRequest model.GeneralOpenAIRequest) *ChatRequest {
-	geminiRequest := ChatRequest{
-		Contents: make([]ChatContent, 0, len(textRequest.Messages)),
-		SafetySettings: []ChatSafetySettings{
+func ConvertRequest(textRequest model.GeneralOpenAIRequest) *api.GenerateContentRequest {
+	geminiRequest := api.GenerateContentRequest{
+		Contents: make([]*api.Content, 0, len(textRequest.Messages)),
+		SafetySettings: []*api.SafetySetting{
 			{
-				Category:  "HARM_CATEGORY_HARASSMENT",
-				Threshold: config.GeminiSafetySetting,
+				Category:  api.HarmCategory_HARM_CATEGORY_DEROGATORY,
+				Threshold: api.SafetySetting_BLOCK_NONE,
 			},
 			{
-				Category:  "HARM_CATEGORY_HATE_SPEECH",
-				Threshold: config.GeminiSafetySetting,
+				Category:  api.HarmCategory_HARM_CATEGORY_TOXICITY,
+				Threshold: api.SafetySetting_BLOCK_NONE,
 			},
 			{
-				Category:  "HARM_CATEGORY_SEXUALLY_EXPLICIT",
-				Threshold: config.GeminiSafetySetting,
+				Category:  api.HarmCategory_HARM_CATEGORY_VIOLENCE,
+				Threshold: api.SafetySetting_BLOCK_NONE,
 			},
 			{
-				Category:  "HARM_CATEGORY_DANGEROUS_CONTENT",
-				Threshold: config.GeminiSafetySetting,
+				Category:  api.HarmCategory_HARM_CATEGORY_SEXUAL,
+				Threshold: api.SafetySetting_BLOCK_NONE,
 			},
 			{
-				Category:  "HARM_CATEGORY_CIVIC_INTEGRITY",
-				Threshold: config.GeminiSafetySetting,
+				Category:  api.HarmCategory_HARM_CATEGORY_MEDICAL,
+				Threshold: api.SafetySetting_BLOCK_NONE,
+			},
+			{
+				Category:  api.HarmCategory_HARM_CATEGORY_DANGEROUS,
+				Threshold: api.SafetySetting_BLOCK_NONE,
+			},
+			{
+				Category:  api.HarmCategory_HARM_CATEGORY_HARASSMENT,
+				Threshold: api.SafetySetting_BLOCK_NONE,
+			},
+			{
+				Category:  api.HarmCategory_HARM_CATEGORY_HATE_SPEECH,
+				Threshold: api.SafetySetting_BLOCK_NONE,
+			},
+			{
+				Category:  api.HarmCategory_HARM_CATEGORY_SEXUALLY_EXPLICIT,
+				Threshold: api.SafetySetting_BLOCK_NONE,
+			},
+			{
+				Category:  api.HarmCategory_HARM_CATEGORY_DANGEROUS_CONTENT,
+				Threshold: api.SafetySetting_BLOCK_NONE,
+			},
+			{
+				Category:  api.HarmCategory_HARM_CATEGORY_CIVIC_INTEGRITY,
+				Threshold: api.SafetySetting_BLOCK_NONE,
 			},
 		},
-		GenerationConfig: ChatGenerationConfig{
-			Temperature:     textRequest.Temperature,
-			TopP:            textRequest.TopP,
-			MaxOutputTokens: textRequest.MaxTokens,
+		GenerationConfig: &api.GenerationConfig{
+			Temperature:     toFloat32Ptr(textRequest.Temperature),
+			TopP:            toFloat32Ptr(textRequest.TopP),
+			MaxOutputTokens: toInt32Ptr(&textRequest.MaxTokens),
 		},
 	}
+
 	if textRequest.ResponseFormat != nil {
 		if mimeType, ok := mimeTypeMap[textRequest.ResponseFormat.Type]; ok {
 			geminiRequest.GenerationConfig.ResponseMimeType = mimeType
 		}
 		if textRequest.ResponseFormat.JsonSchema != nil {
-			geminiRequest.GenerationConfig.ResponseSchema = textRequest.ResponseFormat.JsonSchema.Schema
+			// Convert map[string]interface{} to Schema
+			schemaData, err := json.Marshal(textRequest.ResponseFormat.JsonSchema.Schema)
+			if err == nil {
+				var schema api.Schema
+				if err = json.Unmarshal(schemaData, &schema); err == nil {
+					geminiRequest.GenerationConfig.ResponseSchema = &schema
+				} else {
+					logger.SysError("failed to unmarshal schema: " + err.Error())
+				}
+			} else {
+				logger.SysError("failed to marshal schema: " + err.Error())
+			}
 			geminiRequest.GenerationConfig.ResponseMimeType = mimeTypeMap["json_object"]
 		}
 	}
+
 	if textRequest.Tools != nil {
 		functions := make([]model.Function, 0, len(textRequest.Tools))
 		for _, tool := range textRequest.Tools {

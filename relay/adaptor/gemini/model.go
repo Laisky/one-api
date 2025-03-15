@@ -1,12 +1,13 @@
 package gemini
 
-type ChatRequest struct {
-	Contents          []ChatContent        `json:"contents"`
-	SafetySettings    []ChatSafetySettings `json:"safety_settings,omitempty"`
-	GenerationConfig  ChatGenerationConfig `json:"generation_config,omitempty"`
-	Tools             []ChatTools          `json:"tools,omitempty"`
-	SystemInstruction *ChatContent         `json:"system_instruction,omitempty"`
-}
+// https://pkg.go.dev/cloud.google.com/go/ai/generativelanguage/apiv1beta/generativelanguagepb#GenerateContentRequest
+// type ChatRequest struct {
+// 	Contents          []ChatContent        `json:"contents"`
+// 	SafetySettings    []ChatSafetySettings `json:"safety_settings,omitempty"`
+// 	GenerationConfig  ChatGenerationConfig `json:"generation_config,omitempty"`
+// 	Tools             []ChatTools          `json:"tools,omitempty"`
+// 	SystemInstruction *ChatContent         `json:"system_instruction,omitempty"`
+// }
 
 type EmbeddingRequest struct {
 	Model                string      `json:"model"`
