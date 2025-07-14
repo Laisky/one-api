@@ -351,29 +351,31 @@ func CacheGetRandomSatisfiedChannel(group string, model string, ignoreFirstPrior
 		}
 	}
 
-	candidateChannels = candidateChannels[:endIdx]
+	if config.DefaultUseMinMaxTokensModel {
+		candidateChannels = candidateChannels[:endIdx]
 
-	sort.Slice(candidateChannels, func(i, j int) bool {
-		iModelConfig, jModelConfig := candidateChannels[i].GetModelConfig(model), candidateChannels[j].GetModelConfig(model)
-		// Treat 0 as infinity (no limit)
-		if iModelConfig == nil || iModelConfig.MaxTokens == 0 {
-			return false // i has no limit, so it's not less than j
-		}
-		if jModelConfig == nil || jModelConfig.MaxTokens == 0 {
-			return true // j has no limit, so i is less than j
-		}
+		sort.Slice(candidateChannels, func(i, j int) bool {
+			iModelConfig, jModelConfig := candidateChannels[i].GetModelConfig(model), candidateChannels[j].GetModelConfig(model)
+			// Treat 0 as infinity (no limit)
+			if iModelConfig == nil || iModelConfig.MaxTokens == 0 {
+				return false // i has no limit, so it's not less than j
+			}
+			if jModelConfig == nil || jModelConfig.MaxTokens == 0 {
+				return true // j has no limit, so i is less than j
+			}
 
-		return iModelConfig.MaxTokens < jModelConfig.MaxTokens
-	})
+			return iModelConfig.MaxTokens < jModelConfig.MaxTokens
+		})
 
-	minTokensChannel := candidateChannels[0]
-	minTokensModelConfig := minTokensChannel.GetModelConfig(model)
-	if minTokensModelConfig.MaxTokens > 0 {
-		for i := range candidateChannels {
-			modeConfig := candidateChannels[i].GetModelConfig(model)
-			if modeConfig.MaxTokens != minTokensModelConfig.MaxTokens {
-				endIdx = i
-				break
+		minTokensChannel := candidateChannels[0]
+		minTokensModelConfig := minTokensChannel.GetModelConfig(model)
+		if minTokensModelConfig.MaxTokens > 0 {
+			for i := range candidateChannels {
+				modeConfig := candidateChannels[i].GetModelConfig(model)
+				if modeConfig.MaxTokens != minTokensModelConfig.MaxTokens {
+					endIdx = i
+					break
+				}
 			}
 		}
 	}
@@ -398,7 +400,9 @@ func CacheGetRandomSatisfiedChannel(group string, model string, ignoreFirstPrior
 			// This seems okay.
 		}
 	}
-	return candidateChannels[idx], nil
+	channel := candidateChannels[idx]
+	logger.SysLogf("select channel %s#%d in cache", channel.Name, channel.Id)
+	return channel, nil
 }
 
 // CacheGetRandomSatisfiedChannelExcluding gets a random satisfied channel while excluding specified channel IDs
@@ -469,7 +473,9 @@ func CacheGetRandomSatisfiedChannelExcluding(group string, model string, ignoreF
 		// If there are lower priority channels available, select from them
 		if endIdx < len(candidateChannels) {
 			idx := random.RandRange(endIdx, len(candidateChannels))
-			return candidateChannels[idx], nil
+			channel := candidateChannels[idx]
+			logger.SysLogf("select channel %s#%d in cache", channel.Name, channel.Id)
+			return channel, nil
 		} else {
 			// No lower priority channels available, return error to indicate we should try a different approach
 			return nil, errors.New("no lower priority channels available after excluding failed channels")
@@ -503,6 +509,8 @@ func CacheGetRandomSatisfiedChannelExcluding(group string, model string, ignoreF
 		}
 
 		idx := rand.Intn(len(maxPriorityChannels))
-		return maxPriorityChannels[idx], nil
+		channel := maxPriorityChannels[idx]
+		logger.SysLogf("select channel %s#%d in cache", channel.Name, channel.Id)
+		return channel, nil
 	}
 }

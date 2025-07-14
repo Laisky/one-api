@@ -205,3 +205,5 @@ var OpenrouterProviderSort = env.String("OPENROUTER_PROVIDER_SORT", "")
 
 // DefaultMaxToken is the default maximum number of tokens for requests
 var DefaultMaxToken = env.Int("DEFAULT_MAX_TOKEN", 2048)
+
+var DefaultUseMinMaxTokensModel = env.Bool("DEFAULT_USE_MIN_MAX_TOKENS_MODEL", true)
