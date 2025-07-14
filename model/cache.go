@@ -371,8 +371,8 @@ func CacheGetRandomSatisfiedChannel(group string, model string, ignoreFirstPrior
 		minTokensModelConfig := minTokensChannel.GetModelConfig(model)
 		if minTokensModelConfig.MaxTokens > 0 {
 			for i := range candidateChannels {
-				modeConfig := candidateChannels[i].GetModelConfig(model)
-				if modeConfig.MaxTokens != minTokensModelConfig.MaxTokens {
+				modelConfig := candidateChannels[i].GetModelConfig(model)
+				if modelConfig.MaxTokens != minTokensModelConfig.MaxTokens {
 					endIdx = i
 					break
 				}
