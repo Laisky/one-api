@@ -1121,22 +1121,17 @@ const EditChannel = () => {
                 />
               </Form.Field>
             )}
-            {inputs.type !== 3 &&
-              inputs.type !== 33 &&
-              inputs.type !== 8 &&
-                inputs.type !== 50 &&
-              inputs.type !== 22 && (
-                <Form.Field>
-                  <Form.Input
-                      label={t('channel.edit.ratelimit')}
-                    name='ratelimit'
-                      placeholder={t('channel.edit.ratelimit_placeholder')}
-                    onChange={handleInputChange}
-                    value={inputs.ratelimit}
-                    autoComplete='new-password'
-                  />
-                </Form.Field>
-              )}
+
+            <Form.Field>
+              <Form.Input
+                  label={t('channel.edit.ratelimit')}
+                name='ratelimit'
+                  placeholder={t('channel.edit.ratelimit_placeholder')}
+                onChange={handleInputChange}
+                value={inputs.ratelimit}
+                autoComplete='new-password'
+              />
+            </Form.Field>
 
             {/* Channel-specific pricing fields - now handled through model_configs */}
 
