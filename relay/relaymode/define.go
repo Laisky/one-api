@@ -17,4 +17,6 @@ const (
 	ImagesEdits
 	// ResponseAPI is for OpenAI Response API direct requests
 	ResponseAPI
+	// ClaudeMessages is for Claude Messages API direct requests
+	ClaudeMessages
 )

@@ -1,7 +1,10 @@
 package openai
 
 import (
+	"bufio"
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"math"
@@ -79,6 +82,13 @@ func (a *Adaptor) GetRequestURL(meta *meta.Meta) (string, error) {
 	case channeltype.GeminiOpenAICompatible:
 		return geminiOpenaiCompatible.GetRequestURL(meta)
 	default:
+		// Handle Claude Messages requests - convert to OpenAI Chat Completions endpoint
+		if meta.RequestURLPath == "/v1/messages" {
+			// Claude Messages requests should use OpenAI's chat completions endpoint
+			chatCompletionsPath := "/v1/chat/completions"
+			return GetFullRequestURL(meta.BaseURL, chatCompletionsPath, meta.ChannelType), nil
+		}
+
 		// Convert chat completions to responses API for OpenAI only
 		// Skip conversion for models that only support ChatCompletion API
 		if meta.Mode == relaymode.ChatCompletions &&
@@ -224,6 +234,150 @@ func (a *Adaptor) ConvertImageRequest(_ *gin.Context, request *model.ImageReques
 		return nil, errors.New("request is nil")
 	}
 	return request, nil
+}
+
+func (a *Adaptor) ConvertClaudeRequest(c *gin.Context, request *model.ClaudeRequest) (any, error) {
+	if request == nil {
+		return nil, errors.New("request is nil")
+	}
+
+	// Convert Claude Messages API request to OpenAI Chat Completions format
+	openaiRequest := &model.GeneralOpenAIRequest{
+		Model:       request.Model,
+		MaxTokens:   request.MaxTokens,
+		Temperature: request.Temperature,
+		TopP:        request.TopP,
+		Stream:      request.Stream != nil && *request.Stream,
+		Stop:        request.StopSequences,
+		Thinking:    request.Thinking,
+	}
+
+	// Convert system prompt
+	if request.System != nil {
+		switch system := request.System.(type) {
+		case string:
+			if system != "" {
+				openaiRequest.Messages = append(openaiRequest.Messages, model.Message{
+					Role:    "system",
+					Content: system,
+				})
+			}
+		case []any:
+			// For structured system content, extract text parts
+			var systemParts []string
+			for _, block := range system {
+				if blockMap, ok := block.(map[string]any); ok {
+					if text, exists := blockMap["text"]; exists {
+						if textStr, ok := text.(string); ok {
+							systemParts = append(systemParts, textStr)
+						}
+					}
+				}
+			}
+			if len(systemParts) > 0 {
+				systemText := strings.Join(systemParts, "\n")
+				openaiRequest.Messages = append(openaiRequest.Messages, model.Message{
+					Role:    "system",
+					Content: systemText,
+				})
+			}
+		}
+	}
+
+	// Convert messages
+	for _, msg := range request.Messages {
+		openaiMessage := model.Message{
+			Role: msg.Role,
+		}
+
+		// Convert content based on type
+		switch content := msg.Content.(type) {
+		case string:
+			// Simple string content
+			openaiMessage.Content = content
+		case []any:
+			// Structured content blocks - convert to OpenAI format
+			var contentParts []model.MessageContent
+			for _, block := range content {
+				if blockMap, ok := block.(map[string]any); ok {
+					if blockType, exists := blockMap["type"]; exists {
+						switch blockType {
+						case "text":
+							if text, exists := blockMap["text"]; exists {
+								if textStr, ok := text.(string); ok {
+									contentParts = append(contentParts, model.MessageContent{
+										Type: "text",
+										Text: &textStr,
+									})
+								}
+							}
+						case "image":
+							if source, exists := blockMap["source"]; exists {
+								if sourceMap, ok := source.(map[string]any); ok {
+									imageURL := model.ImageURL{}
+									if mediaType, exists := sourceMap["media_type"]; exists {
+										if data, exists := sourceMap["data"]; exists {
+											if dataStr, ok := data.(string); ok {
+												// Convert to data URL format
+												imageURL.Url = fmt.Sprintf("data:%s;base64,%s", mediaType, dataStr)
+											}
+										}
+									}
+									contentParts = append(contentParts, model.MessageContent{
+										Type:     "image_url",
+										ImageURL: &imageURL,
+									})
+								}
+							}
+						}
+					}
+				}
+			}
+			if len(contentParts) > 0 {
+				openaiMessage.Content = contentParts
+			}
+		default:
+			// Fallback: convert to string
+			if contentBytes, err := json.Marshal(content); err == nil {
+				openaiMessage.Content = string(contentBytes)
+			}
+		}
+
+		openaiRequest.Messages = append(openaiRequest.Messages, openaiMessage)
+	}
+
+	// Convert tools
+	for _, tool := range request.Tools {
+		openaiTool := model.Tool{
+			Type: "function",
+			Function: model.Function{
+				Name:        tool.Name,
+				Description: tool.Description,
+			},
+		}
+
+		// Convert input schema
+		if tool.InputSchema != nil {
+			if schemaMap, ok := tool.InputSchema.(map[string]any); ok {
+				openaiTool.Function.Parameters = schemaMap
+			}
+		}
+
+		openaiRequest.Tools = append(openaiRequest.Tools, openaiTool)
+	}
+
+	// Convert tool choice
+	if request.ToolChoice != nil {
+		openaiRequest.ToolChoice = request.ToolChoice
+	}
+
+	// Mark this as a Claude Messages conversion for response handling
+	c.Set(ctxkey.ClaudeMessagesConversion, true)
+	c.Set(ctxkey.OriginalClaudeRequest, request)
+
+	// For OpenAI adaptor, we can return the OpenAI request directly
+	// since OpenAI format is the native format
+	return openaiRequest, nil
 }
 
 func (a *Adaptor) DoRequest(c *gin.Context,
@@ -403,7 +557,216 @@ func (a *Adaptor) DoResponse(c *gin.Context,
 		}
 	}
 
+	// Handle Claude Messages response conversion
+	if isClaudeConversion, exists := c.Get(ctxkey.ClaudeMessagesConversion); exists && isClaudeConversion.(bool) {
+		claudeResp, convertErr := a.convertToClaudeResponse(c, resp)
+		if convertErr != nil {
+			return nil, convertErr
+		}
+
+		// Replace the original response with the converted Claude response
+		// We need to update the response in the context so the controller can use it
+		c.Set(ctxkey.ConvertedResponse, claudeResp)
+
+		// For Claude Messages conversion, we don't return usage separately
+		// The usage is included in the Claude response body, so return nil usage
+		return nil, nil
+	}
+
 	return
+}
+
+// convertToClaudeResponse converts OpenAI response format to Claude Messages format
+func (a *Adaptor) convertToClaudeResponse(c *gin.Context, resp *http.Response) (*http.Response, *model.ErrorWithStatusCode) {
+	// Read the response body
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, ErrorWrapper(err, "read_response_body_failed", http.StatusInternalServerError)
+	}
+	resp.Body.Close()
+
+	// Check if it's a streaming response
+	if strings.Contains(resp.Header.Get("Content-Type"), "text/event-stream") {
+		// Handle streaming response conversion
+		return a.convertStreamingToClaudeResponse(c, resp, body)
+	}
+
+	// Handle non-streaming response conversion
+	return a.convertNonStreamingToClaudeResponse(c, resp, body)
+}
+
+// convertNonStreamingToClaudeResponse converts a non-streaming OpenAI response to Claude format
+func (a *Adaptor) convertNonStreamingToClaudeResponse(c *gin.Context, resp *http.Response, body []byte) (*http.Response, *model.ErrorWithStatusCode) {
+	var openaiResp TextResponse
+	if err := json.Unmarshal(body, &openaiResp); err != nil {
+		// If it's an error response, pass it through
+		newResp := &http.Response{
+			StatusCode: resp.StatusCode,
+			Header:     resp.Header,
+			Body:       io.NopCloser(bytes.NewReader(body)),
+		}
+		return newResp, nil
+	}
+
+	// Convert to Claude Messages format
+	claudeResp := model.ClaudeResponse{
+		ID:      openaiResp.Id,
+		Type:    "message",
+		Role:    "assistant",
+		Model:   openaiResp.Model,
+		Content: []model.ClaudeContent{},
+		Usage: model.ClaudeUsage{
+			InputTokens:  openaiResp.Usage.PromptTokens,
+			OutputTokens: openaiResp.Usage.CompletionTokens,
+		},
+		StopReason: "end_turn",
+	}
+
+	// Convert choices to content
+	for _, choice := range openaiResp.Choices {
+		if choice.Message.Content != nil {
+			switch content := choice.Message.Content.(type) {
+			case string:
+				claudeResp.Content = append(claudeResp.Content, model.ClaudeContent{
+					Type: "text",
+					Text: content,
+				})
+			case []model.MessageContent:
+				// Handle structured content
+				for _, part := range content {
+					if part.Type == "text" && part.Text != nil {
+						claudeResp.Content = append(claudeResp.Content, model.ClaudeContent{
+							Type: "text",
+							Text: *part.Text,
+						})
+					}
+				}
+			}
+		}
+
+		// Handle tool calls
+		if len(choice.Message.ToolCalls) > 0 {
+			for _, toolCall := range choice.Message.ToolCalls {
+				var input json.RawMessage
+				if toolCall.Function.Arguments != nil {
+					if argsStr, ok := toolCall.Function.Arguments.(string); ok {
+						input = json.RawMessage(argsStr)
+					} else if argsBytes, err := json.Marshal(toolCall.Function.Arguments); err == nil {
+						input = json.RawMessage(argsBytes)
+					}
+				}
+				claudeResp.Content = append(claudeResp.Content, model.ClaudeContent{
+					Type:  "tool_use",
+					ID:    toolCall.Id,
+					Name:  toolCall.Function.Name,
+					Input: input,
+				})
+			}
+		}
+
+		// Set stop reason based on finish reason
+		switch choice.FinishReason {
+		case "stop":
+			claudeResp.StopReason = "end_turn"
+		case "length":
+			claudeResp.StopReason = "max_tokens"
+		case "tool_calls":
+			claudeResp.StopReason = "tool_use"
+		case "content_filter":
+			claudeResp.StopReason = "stop_sequence"
+		}
+	}
+
+	// Marshal the Claude response
+	claudeBody, err := json.Marshal(claudeResp)
+	if err != nil {
+		return nil, ErrorWrapper(err, "marshal_claude_response_failed", http.StatusInternalServerError)
+	}
+
+	// Create new response with Claude format
+	newResp := &http.Response{
+		StatusCode: resp.StatusCode,
+		Header:     make(http.Header),
+		Body:       io.NopCloser(bytes.NewReader(claudeBody)),
+	}
+
+	// Copy headers but update content type
+	for k, v := range resp.Header {
+		newResp.Header[k] = v
+	}
+	newResp.Header.Set("Content-Type", "application/json")
+	newResp.Header.Set("Content-Length", fmt.Sprintf("%d", len(claudeBody)))
+
+	return newResp, nil
+}
+
+// convertStreamingToClaudeResponse converts a streaming OpenAI response to Claude format
+func (a *Adaptor) convertStreamingToClaudeResponse(c *gin.Context, resp *http.Response, body []byte) (*http.Response, *model.ErrorWithStatusCode) {
+	// For streaming responses, we need to convert each SSE event
+	// This is more complex and would require parsing SSE events and converting them
+	// For now, we'll create a simple streaming converter
+
+	reader, writer := io.Pipe()
+
+	go func() {
+		defer writer.Close()
+
+		// Parse SSE events from the body and convert them
+		scanner := bufio.NewScanner(bytes.NewReader(body))
+		for scanner.Scan() {
+			line := scanner.Text()
+
+			if strings.HasPrefix(line, "data: ") {
+				data := strings.TrimPrefix(line, "data: ")
+
+				if data == "[DONE]" {
+					// Send Claude-style done event
+					writer.Write([]byte("event: message_stop\n"))
+					writer.Write([]byte("data: {\"type\":\"message_stop\"}\n\n"))
+					break
+				}
+
+				// Parse OpenAI streaming chunk
+				var chunk ChatCompletionsStreamResponse
+				if err := json.Unmarshal([]byte(data), &chunk); err != nil {
+					continue
+				}
+
+				// Convert to Claude streaming format
+				if len(chunk.Choices) > 0 {
+					choice := chunk.Choices[0]
+					if choice.Delta.Content != nil {
+						claudeChunk := map[string]interface{}{
+							"type":  "content_block_delta",
+							"index": 0,
+							"delta": map[string]interface{}{
+								"type": "text_delta",
+								"text": choice.Delta.Content,
+							},
+						}
+
+						claudeData, _ := json.Marshal(claudeChunk)
+						writer.Write([]byte("event: content_block_delta\n"))
+						writer.Write([]byte(fmt.Sprintf("data: %s\n\n", claudeData)))
+					}
+				}
+			}
+		}
+	}()
+
+	// Create new streaming response
+	newResp := &http.Response{
+		StatusCode: resp.StatusCode,
+		Header:     make(http.Header),
+		Body:       reader,
+	}
+
+	// Copy headers
+	for k, v := range resp.Header {
+		newResp.Header[k] = v
+	}
+
+	return newResp, nil
 }
 
 func (a *Adaptor) GetModelList() []string {

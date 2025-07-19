@@ -44,6 +44,11 @@ func (a *Adaptor) ConvertImageRequest(c *gin.Context, request *model.ImageReques
 	return nil, errors.New("lingyiwanwu does not support image generation")
 }
 
+func (a *Adaptor) ConvertClaudeRequest(c *gin.Context, request *model.ClaudeRequest) (any, error) {
+	// Use the shared OpenAI-compatible Claude Messages conversion
+	return openai_compatible.ConvertClaudeRequest(c, request)
+}
+
 func (a *Adaptor) DoRequest(c *gin.Context, meta *meta.Meta, requestBody io.Reader) (*http.Response, error) {
 	return adaptor.DoRequestHelper(a, c, meta, requestBody)
 }

@@ -107,9 +107,9 @@ func authHelper(c *gin.Context, minRole int) {
 	}
 
 	// Authentication successful - set user context and continue
-	c.Set("username", username)
-	c.Set("role", role)
-	c.Set("id", id)
+	c.Set(ctxkey.Username, username)
+	c.Set(ctxkey.Role, role)
+	c.Set(ctxkey.Id, id)
 	c.Next()
 }
 

@@ -8,6 +8,8 @@ func GetByPath(path string) int {
 		relayMode = Proxy
 	} else if strings.HasPrefix(path, "/v1/responses") {
 		relayMode = ResponseAPI
+	} else if strings.HasPrefix(path, "/v1/messages") {
+		relayMode = ClaudeMessages
 	} else if strings.HasPrefix(path, "/v1/chat/completions") {
 		relayMode = ChatCompletions
 	} else if strings.HasPrefix(path, "/v1/completions") {

@@ -49,6 +49,12 @@ func (a *Adaptor) ConvertImageRequest(_ *gin.Context, request *model.ImageReques
 	return request, nil
 }
 
+func (a *Adaptor) ConvertClaudeRequest(c *gin.Context, request *model.ClaudeRequest) (any, error) {
+	// DeepL is a translation service, not a chat completion service
+	// Claude Messages API is not applicable for translation
+	return nil, errors.New("Claude Messages API not supported by DeepL translation service")
+}
+
 func (a *Adaptor) DoRequest(c *gin.Context, meta *meta.Meta, requestBody io.Reader) (*http.Response, error) {
 	return adaptor.DoRequestHelper(a, c, meta, requestBody)
 }

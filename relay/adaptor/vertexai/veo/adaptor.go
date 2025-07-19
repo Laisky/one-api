@@ -92,6 +92,11 @@ func (a *Adaptor) ConvertImageRequest(c *gin.Context, request *model.ImageReques
 	return nil, errors.New("not implemented")
 }
 
+func (a *Adaptor) ConvertClaudeRequest(c *gin.Context, request *model.ClaudeRequest) (any, error) {
+	// VertexAI VEO doesn't support Claude Messages API directly
+	return nil, errors.New("Claude Messages API not supported by VertexAI VEO adaptor")
+}
+
 func (a *Adaptor) DoResponse(c *gin.Context, resp *http.Response, meta *meta.Meta) (usage *model.Usage, wrapErr *model.ErrorWithStatusCode) {
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {

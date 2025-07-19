@@ -441,6 +441,9 @@ func ConvertEmbeddingRequest(request model.GeneralOpenAIRequest) *BatchEmbedding
 type ChatResponse struct {
 	Candidates     []ChatCandidate    `json:"candidates"`
 	PromptFeedback ChatPromptFeedback `json:"promptFeedback"`
+	UsageMetadata  *UsageMetadata     `json:"usageMetadata,omitempty"`
+	ModelVersion   string             `json:"modelVersion,omitempty"`
+	ResponseId     string             `json:"responseId,omitempty"`
 }
 
 func (g *ChatResponse) GetResponseText() string {

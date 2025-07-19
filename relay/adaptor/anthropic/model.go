@@ -46,6 +46,7 @@ type InputSchema struct {
 	Required   any    `json:"required,omitempty"`
 }
 
+// Request is anthropic's request body
 type Request struct {
 	Model         string    `json:"model"`
 	Messages      []Message `json:"messages"`

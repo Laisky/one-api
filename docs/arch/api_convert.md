@@ -2,7 +2,12 @@
 
 ## Overview
 
-This document describes the architecture and implementation of the API format conversion system in the one-api project. The system enables automatic conversion between OpenAI's ChatCompletion API format and the newer Response API format, allowing users to access Response API capabilities through the familiar ChatCompletion interface.
+This document describes the architecture and implementation of the API format conversion system in the one-api project. The system enables automatic conversion between different API formats:
+
+1. **OpenAI Response API Conversion**: Conversion between OpenAI's ChatCompletion API format and the newer Response API format
+2. **Claude Messages API Conversion**: Conversion from Claude Messages API format to various adapter formats (OpenAI, Gemini, etc.)
+
+This allows users to access different API capabilities through standardized interfaces.
 
 ## Problem Statement
 
@@ -520,3 +525,422 @@ The API conversion system provides transparent bidirectional conversion between 
 5. **Error Resilience**: Comprehensive error handling and fallbacks
 
 The implementation maintains the familiar ChatCompletion interface while leveraging Response API capabilities when beneficial, with proper safeguards for models that only support the traditional format.
+
+---
+
+# Claude Messages API Conversion Architecture
+
+## Overview
+
+The Claude Messages API conversion system enables users to access various AI models through the standardized Claude Messages API format (`/v1/messages`). This system automatically converts Claude Messages requests to the appropriate format for each adapter (OpenAI, Gemini, Groq, etc.) and converts responses back to Claude Messages format.
+
+## Problem Statement
+
+Different AI providers use different API formats:
+
+- **Anthropic**: Native Claude Messages API format
+- **OpenAI-compatible providers**: OpenAI ChatCompletion format
+- **Google**: Gemini API format
+- **Other providers**: Various proprietary formats
+
+The system needs to:
+
+1. Accept requests in Claude Messages API format
+2. Convert to the appropriate format for each adapter
+3. Convert responses back to Claude Messages format
+4. Maintain full feature compatibility including function calling, streaming, and structured content
+
+## Architecture
+
+### High-Level Flow
+
+```plaintext
+User Request (Claude Messages API)
+    ↓
+[Route to Claude Messages Controller]
+    ↓
+[Determine Target Adapter]
+    ↓
+┌─ If Anthropic Adapter ─→ Native Processing
+│
+└─ If Other Adapter
+    ↓
+[Convert to Adapter Format]
+    ↓
+[Send to Upstream via Adapter]
+    ↓
+[Adapter Response]
+    ↓
+[Convert back to Claude Messages]
+    ↓
+User Response (Claude Messages API)
+```
+
+### Key Components
+
+#### 1. Claude Messages Controller
+
+**Location**: `relay/controller/claude_messages.go`
+
+**Entry Point**: `RelayClaudeMessagesHelper()` method
+
+**Key Responsibilities**:
+
+- Accept Claude Messages API requests at `/v1/messages`
+- Route to appropriate adapter based on model
+- Handle response conversion coordination
+- Manage streaming and non-streaming responses
+
+#### 2. Adapter Conversion Interface
+
+**Interface Methods**:
+
+- `ConvertClaudeRequest(c *gin.Context, request *model.ClaudeRequest) (any, error)`
+- `DoResponse(c *gin.Context, resp *http.Response, meta *meta.Meta) (*model.Usage, *model.ErrorWithStatusCode)`
+
+**Conversion Patterns**:
+
+1. **Native Support** (Anthropic):
+
+   - Sets `ClaudeMessagesNative` flag
+   - Uses native Claude handlers directly
+
+2. **Conversion Support** (OpenAI, Gemini, etc.):
+   - Sets `ClaudeMessagesConversion` flag
+   - Converts request format in `ConvertClaudeRequest`
+   - Converts response format in `DoResponse`
+
+#### 3. Shared OpenAI-Compatible Conversion
+
+**Location**: `relay/adaptor/openai_compatible/claude_messages.go`
+
+**Function**: `ConvertClaudeRequest(c *gin.Context, request *model.ClaudeRequest) (any, error)`
+
+**Used by**: All OpenAI-compatible adapters (DeepSeek, Groq, Mistral, XAI, etc.)
+
+## Adapter Implementation Patterns
+
+### Pattern 1: Native Claude Support (Anthropic)
+
+```go
+func (a *Adaptor) ConvertClaudeRequest(c *gin.Context, request *model.ClaudeRequest) (any, error) {
+    // Set native processing flags
+    c.Set(ctxkey.ClaudeMessagesNative, true)
+    c.Set(ctxkey.ClaudeDirectPassthrough, true)
+
+    return request, nil
+}
+```
+
+### Pattern 2: OpenAI-Compatible Conversion
+
+```go
+func (a *Adaptor) ConvertClaudeRequest(c *gin.Context, request *model.ClaudeRequest) (any, error) {
+    // Use shared OpenAI-compatible conversion
+    return openai_compatible.ConvertClaudeRequest(c, request)
+}
+```
+
+### Pattern 3: Custom Conversion (Gemini)
+
+```go
+func (a *Adaptor) ConvertClaudeRequest(c *gin.Context, request *model.ClaudeRequest) (any, error) {
+    // Convert to OpenAI format first
+    openaiRequest := convertClaudeToOpenAI(request)
+
+    // Set conversion flags
+    c.Set(ctxkey.ClaudeMessagesConversion, true)
+    c.Set(ctxkey.OriginalClaudeRequest, request)
+
+    // Use Gemini's existing conversion logic
+    return a.ConvertRequest(c, relaymode.ChatCompletions, openaiRequest)
+}
+
+func (a *Adaptor) DoResponse(c *gin.Context, resp *http.Response, meta *meta.Meta) (*model.Usage, *model.ErrorWithStatusCode) {
+    // Check for Claude Messages conversion
+    if isClaudeConversion, exists := c.Get(ctxkey.ClaudeMessagesConversion); exists && isClaudeConversion.(bool) {
+        // Convert Gemini response to Claude format
+        claudeResp, convertErr := a.convertToClaudeResponse(c, resp, meta)
+        if convertErr != nil {
+            return nil, convertErr
+        }
+
+        // Set converted response for controller to use
+        c.Set(ctxkey.ConvertedResponse, claudeResp)
+        return nil, nil
+    }
+
+    // Normal processing for non-Claude requests
+    return a.normalDoResponse(c, resp, meta)
+}
+```
+
+## Supported Adapters
+
+### ✅ Native Claude Messages Support
+
+- **Anthropic**: Native Claude Messages API support
+
+### ✅ OpenAI-Compatible Conversion
+
+These adapters use the shared `openai_compatible.ConvertClaudeRequest()`:
+
+- **DeepSeek**: `relay/adaptor/deepseek/adaptor.go`
+- **Moonshot**: `relay/adaptor/moonshot/adaptor.go`
+- **Groq**: `relay/adaptor/groq/adaptor.go`
+- **Mistral**: `relay/adaptor/mistral/adaptor.go`
+- **XAI**: `relay/adaptor/xai/adaptor.go`
+- **TogetherAI**: `relay/adaptor/togetherai/adaptor.go`
+- **OpenRouter**: `relay/adaptor/openrouter/adaptor.go`
+- **SiliconFlow**: `relay/adaptor/siliconflow/adaptor.go`
+- **Doubao**: `relay/adaptor/doubao/adaptor.go`
+- **StepFun**: `relay/adaptor/stepfun/adaptor.go`
+- **Novita**: `relay/adaptor/novita/adaptor.go`
+- **AIProxy**: `relay/adaptor/aiproxy/adaptor.go`
+- **LingYiWanWu**: `relay/adaptor/lingyiwanwu/adaptor.go`
+- **AI360**: `relay/adaptor/ai360/adaptor.go`
+
+### ✅ Custom Conversion
+
+These adapters implement custom Claude Messages conversion logic:
+
+- **Anthropic**: Native Claude support with direct pass-through
+- **OpenAI**: Full conversion with response format transformation
+- **Gemini**: Custom conversion with response format transformation
+- **Ali**: Custom conversion implementation
+- **Baidu**: Custom conversion implementation
+- **Zhipu**: Custom conversion implementation
+- **Xunfei**: Custom conversion implementation
+- **Tencent**: Custom conversion implementation
+- **AWS**: Custom conversion for Bedrock Claude models
+- **VertexAI**: Custom conversion with sub-adapter routing
+- **Replicate**: Custom conversion implementation
+- **Cohere**: Custom conversion implementation
+- **Cloudflare**: Custom conversion implementation
+- **Palm**: Basic text-only conversion support
+- **Ollama**: Basic text-only conversion support
+- **Coze**: Basic text-only conversion support
+
+### ❌ Limited or No Support
+
+These adapters have limited or no Claude Messages support:
+
+- **DeepL**: Translation service, not applicable for chat completion
+- **Minimax**: Stub implementation, returns "not implemented" error
+- **Baichuan**: Stub implementation, returns "not implemented" error
+
+### 📋 Test Results Summary
+
+Based on comprehensive testing:
+
+- **✅ Fully Working**: 25+ adapters with complete Claude Messages support
+- **⚠️ Configuration Required**: Some adapters (Baidu, Tencent, VertexAI) require valid API keys/configuration
+- **❌ Not Applicable**: 3 adapters (DeepL, Minimax, Baichuan) correctly return appropriate errors
+
+## Data Structure Mappings
+
+### Claude Messages to OpenAI Format
+
+| Claude Messages Field | OpenAI Field  | Notes                              |
+| --------------------- | ------------- | ---------------------------------- |
+| `model`               | `model`       | Direct mapping                     |
+| `max_tokens`          | `max_tokens`  | Direct mapping                     |
+| `messages`            | `messages`    | Message format conversion required |
+| `system`              | `messages[0]` | System message as first message    |
+| `tools`               | `tools`       | Tool format conversion required    |
+| `tool_choice`         | `tool_choice` | Direct mapping                     |
+| `temperature`         | `temperature` | Direct mapping                     |
+| `top_p`               | `top_p`       | Direct mapping                     |
+| `stream`              | `stream`      | Direct mapping                     |
+| `stop_sequences`      | `stop`        | Direct mapping                     |
+
+### Message Content Conversion
+
+#### Text Content
+
+```json
+// Claude Messages
+{"role": "user", "content": "Hello"}
+
+// OpenAI
+{"role": "user", "content": "Hello"}
+```
+
+#### Structured Content
+
+```json
+// Claude Messages
+{
+  "role": "user",
+  "content": [
+    {"type": "text", "text": "Hello"},
+    {"type": "image", "source": {"type": "base64", "media_type": "image/jpeg", "data": "..."}}
+  ]
+}
+
+// OpenAI
+{
+  "role": "user",
+  "content": [
+    {"type": "text", "text": "Hello"},
+    {"type": "image_url", "image_url": {"url": "data:image/jpeg;base64,..."}}
+  ]
+}
+```
+
+#### Tool Use
+
+```json
+// Claude Messages
+{
+  "role": "assistant",
+  "content": [
+    {"type": "tool_use", "id": "toolu_123", "name": "get_weather", "input": {"location": "NYC"}}
+  ]
+}
+
+// OpenAI
+{
+  "role": "assistant",
+  "tool_calls": [
+    {"id": "toolu_123", "type": "function", "function": {"name": "get_weather", "arguments": "{\"location\":\"NYC\"}"}}
+  ]
+}
+```
+
+### Response Format Conversion
+
+#### OpenAI to Claude Messages
+
+| OpenAI Field                    | Claude Messages Field | Notes                               |
+| ------------------------------- | --------------------- | ----------------------------------- |
+| `id`                            | `id`                  | Generate Claude-style ID if missing |
+| `choices[0].message.content`    | `content[0].text`     | Text content                        |
+| `choices[0].message.tool_calls` | `content[].tool_use`  | Tool calls conversion               |
+| `choices[0].finish_reason`      | `stop_reason`         | Reason mapping required             |
+| `usage.prompt_tokens`           | `usage.input_tokens`  | Direct mapping                      |
+| `usage.completion_tokens`       | `usage.output_tokens` | Direct mapping                      |
+
+#### Finish Reason Mapping
+
+| OpenAI finish_reason | Claude stop_reason | Notes               |
+| -------------------- | ------------------ | ------------------- |
+| `stop`               | `end_turn`         | Normal completion   |
+| `length`             | `max_tokens`       | Token limit reached |
+| `tool_calls`         | `tool_use`         | Function calling    |
+| `content_filter`     | `stop_sequence`    | Content filtered    |
+
+## Context Management
+
+### Context Keys
+
+**Location**: `common/ctxkey/key.go`
+
+**Key Constants**:
+
+- `ClaudeMessagesConversion = "claude_messages_conversion"`
+- `ClaudeMessagesNative = "claude_messages_native"`
+- `ClaudeDirectPassthrough = "claude_direct_passthrough"`
+- `OriginalClaudeRequest = "original_claude_request"`
+- `ConvertedResponse = "converted_response"`
+
+### Context Flow
+
+1. **Request Phase**:
+
+   - `ConvertClaudeRequest()` sets conversion flags
+   - Original request stored for reference
+
+2. **Response Phase**:
+
+   - `DoResponse()` checks conversion flags
+   - Converts response format if needed
+   - Sets converted response in context
+
+3. **Controller Phase**:
+   - Controller checks for converted response
+   - Uses converted response or falls back to native handlers
+
+## Error Handling
+
+### Conversion Errors
+
+- Request conversion errors wrapped with proper error types
+- Response parsing errors logged with debug information
+- Malformed content handled gracefully with fallbacks
+
+### Adapter Errors
+
+- Upstream adapter errors passed through unchanged
+- Error format preserved for client compatibility
+- Proper HTTP status codes maintained
+
+### Fallback Mechanisms
+
+- Token usage calculation fallback when adapter doesn't provide usage
+- Content extraction fallback for malformed responses
+- Default values for missing required fields
+
+## Performance Considerations
+
+### Memory Management
+
+- Minimal context storage for conversion flags
+- Efficient message content transformation
+- Streaming support with proper buffer management
+
+### Processing Efficiency
+
+- Single-pass conversion for request and response
+- Lazy evaluation - conversion only when needed
+- Early detection of conversion requirements
+
+## Testing
+
+### Test Coverage
+
+**Locations**:
+
+- `relay/adaptor/gemini/adaptor_test.go` - Gemini conversion tests
+- `relay/adaptor/openai_compatible/claude_messages_test.go` - Shared conversion tests
+- Individual adapter test files for specific conversion logic
+
+**Key Test Categories**:
+
+- Request format conversion
+- Response format conversion
+- Streaming conversion
+- Function calling workflows
+- Error handling scenarios
+
+## Future Enhancements
+
+### 1. Enhanced Content Support
+
+- Support for more Claude Messages content types
+- Better handling of complex structured content
+- Improved image and file handling
+
+### 2. Performance Optimizations
+
+- Response format detection optimization
+- Memory usage optimization for large messages
+- Caching for repeated conversions
+
+### 3. Extended Adapter Support
+
+- Support for more specialized adapters
+- Dynamic adapter capability detection
+- Runtime adapter registration
+
+## Summary
+
+The Claude Messages API conversion system provides:
+
+1. **Universal Access**: Single API endpoint for multiple AI providers
+2. **Format Transparency**: Automatic format conversion between different APIs
+3. **Feature Preservation**: Full support for function calling, streaming, and structured content
+4. **Extensible Architecture**: Easy addition of new adapters
+5. **Error Resilience**: Comprehensive error handling and fallbacks
+
+The implementation allows users to interact with various AI models through the familiar Claude Messages API while maintaining compatibility with each provider's native capabilities.

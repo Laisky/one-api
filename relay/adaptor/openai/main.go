@@ -13,6 +13,7 @@ import (
 
 	"github.com/songquanpeng/one-api/common"
 	"github.com/songquanpeng/one-api/common/conv"
+	"github.com/songquanpeng/one-api/common/ctxkey"
 	"github.com/songquanpeng/one-api/common/logger"
 	"github.com/songquanpeng/one-api/common/render"
 	"github.com/songquanpeng/one-api/relay/adaptor/openai_compatible"
@@ -210,6 +211,15 @@ func Handler(c *gin.Context, resp *http.Response, promptTokens int, modelName st
 	// Reset response body for forwarding to client
 	resp.Body = io.NopCloser(bytes.NewBuffer(responseBody))
 	logger.Debugf(c.Request.Context(), "handler response: %s", string(responseBody))
+
+	// Check if this is a Claude Messages conversion - if so, don't write response here
+	// The DoResponse method will handle the conversion and response writing
+	if isClaudeConversion, exists := c.Get(ctxkey.ClaudeMessagesConversion); exists && isClaudeConversion.(bool) {
+		// For Claude Messages conversion, just return the usage information
+		// The DoResponse method will handle the response conversion and writing
+		calculateTokenUsage(&textResponse, promptTokens, modelName)
+		return nil, &textResponse.Usage
+	}
 
 	// Forward all response headers (not just first value of each)
 	for k, values := range resp.Header {

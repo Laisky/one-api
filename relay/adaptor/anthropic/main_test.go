@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/songquanpeng/one-api/common/ctxkey"
 	"github.com/songquanpeng/one-api/relay/model"
 )
 
@@ -380,7 +381,7 @@ func TestConvertRequest_ThinkingBlocksConversion(t *testing.T) {
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
 	c.Request = req
-	c.Set("token_id", 12345)
+	c.Set(ctxkey.TokenId, 12345)
 
 	// Test case: assistant message with reasoning content that should be converted to thinking blocks
 	// This simulates the bug scenario where the first request works but the second fails
@@ -518,7 +519,7 @@ func TestConvertRequest_ThinkingBlocksWithComplexContent(t *testing.T) {
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
 	c.Request = req
-	c.Set("token_id", 12345)
+	c.Set(ctxkey.TokenId, 12345)
 
 	// Test case: assistant message with complex content structure and reasoning
 	// This tests the non-string content path in the conversion logic
@@ -722,7 +723,7 @@ func TestConvertRequest_BugScenario_FullWorkflow(t *testing.T) {
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
 	c.Request = req
-	c.Set("token_id", 12345)
+	c.Set(ctxkey.TokenId, 12345)
 
 	// Test the exact scenario from the bug report
 	// First request: user asks to read vite.config.ts
@@ -917,4 +918,55 @@ func TestConvertRequest_BugScenario_FullWorkflow(t *testing.T) {
 			}
 		}
 	}
+}
+
+func TestConvertClaudeRequest_DirectPassthrough(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	// Create a proper test context with a request
+	req := httptest.NewRequest("POST", "/v1/messages", nil)
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = req
+
+	// Create an Anthropic adaptor instance
+	adaptor := &Adaptor{}
+
+	// Test Claude Messages request
+	claudeRequest := &model.ClaudeRequest{
+		Model:     "claude-3.5-sonnet",
+		MaxTokens: 1000,
+		Messages: []model.ClaudeMessage{
+			{
+				Role:    "user",
+				Content: "Hello, how are you?",
+			},
+		},
+		Temperature: func() *float64 { f := 0.7; return &f }(),
+		Stream:      func() *bool { b := false; return &b }(),
+	}
+
+	// Call ConvertClaudeRequest
+	result, err := adaptor.ConvertClaudeRequest(c, claudeRequest)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	// Verify that the direct pass-through flag is set
+	directPassthrough, exists := c.Get(ctxkey.ClaudeDirectPassthrough)
+	assert.True(t, exists, "claude_direct_passthrough flag should be set")
+	assert.True(t, directPassthrough.(bool), "claude_direct_passthrough should be true")
+
+	// Verify that claude_messages_native flag is set
+	nativeFlag, exists := c.Get(ctxkey.ClaudeMessagesNative)
+	assert.True(t, exists, "claude_messages_native flag should be set")
+	assert.True(t, nativeFlag.(bool), "claude_messages_native should be true")
+
+	// Verify that claude_model is set
+	model, exists := c.Get(ctxkey.ClaudeModel)
+	assert.True(t, exists, "claude_model should be set")
+	assert.Equal(t, "claude-3.5-sonnet", model.(string), "claude_model should match request model")
+
+	// The result should be the original request (though it won't be used for marshaling)
+	// Since the interface returns any, we just verify it's not nil and the flags are set correctly
+	assert.NotNil(t, result, "result should not be nil")
 }

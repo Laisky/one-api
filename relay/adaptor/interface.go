@@ -4,6 +4,7 @@ import (
 	"io"
 	"net/http"
 
+	"github.com/Laisky/errors/v2"
 	"github.com/gin-gonic/gin"
 
 	"github.com/songquanpeng/one-api/relay/meta"
@@ -28,6 +29,7 @@ type Adaptor interface {
 	SetupRequestHeader(c *gin.Context, req *http.Request, meta *meta.Meta) error
 	ConvertRequest(c *gin.Context, relayMode int, request *model.GeneralOpenAIRequest) (any, error)
 	ConvertImageRequest(c *gin.Context, request *model.ImageRequest) (any, error)
+	ConvertClaudeRequest(c *gin.Context, request *model.ClaudeRequest) (any, error)
 	DoRequest(c *gin.Context, meta *meta.Meta, requestBody io.Reader) (*http.Response, error)
 	DoResponse(c *gin.Context, resp *http.Response, meta *meta.Meta) (usage *model.Usage, err *model.ErrorWithStatusCode)
 	GetModelList() []string
@@ -53,6 +55,11 @@ func (d *DefaultPricingMethods) GetModelRatio(modelName string) float64 {
 
 func (d *DefaultPricingMethods) GetCompletionRatio(modelName string) float64 {
 	return 1.0 // Default completion ratio
+}
+
+func (d *DefaultPricingMethods) ConvertClaudeRequest(c *gin.Context, request *model.ClaudeRequest) (any, error) {
+	// Default implementation: not supported
+	return nil, errors.New("Claude Messages API not supported by this adaptor")
 }
 
 // GetModelListFromPricing derives model list from pricing map keys

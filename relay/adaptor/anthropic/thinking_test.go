@@ -9,6 +9,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/songquanpeng/one-api/common/ctxkey"
 	"github.com/songquanpeng/one-api/relay/model"
 )
 
@@ -20,7 +21,7 @@ func setupTestContext() *gin.Context {
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
 	c.Request = req
-	c.Set("token_id", 12345)
+	c.Set(ctxkey.TokenId, 12345)
 	return c
 }
 
@@ -311,7 +312,7 @@ func TestBackwardCompatibility_WithoutThinking(t *testing.T) {
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
 	c.Request = req
-	c.Set("token_id", 12345)
+	c.Set(ctxkey.TokenId, 12345)
 
 	textRequest := model.GeneralOpenAIRequest{
 		Messages: []model.Message{
@@ -415,7 +416,7 @@ func TestSignatureCachingIntegration(t *testing.T) {
 		{Role: "user", Content: "Test question"},
 	}
 	conversationID := generateConversationID(messages)
-	c.Set("conversation_id", conversationID)
+	c.Set(ctxkey.ConversationId, conversationID)
 
 	// Process the response (this should cache the signature)
 	openaiResponse := ResponseClaude2OpenAI(c, claudeResponse)
@@ -807,7 +808,7 @@ func TestBackwardCompatibilityWithFallback(t *testing.T) {
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
 	c.Request = req
-	c.Set("token_id", 12345)
+	c.Set(ctxkey.TokenId, 12345)
 
 	// Test normal request without thinking content
 	normalRequest := model.GeneralOpenAIRequest{

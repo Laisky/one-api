@@ -49,6 +49,9 @@ func (m *MockAdaptor) ConvertRequest(c *gin.Context, relayMode int, request *rel
 func (m *MockAdaptor) ConvertImageRequest(c *gin.Context, request *relaymodel.ImageRequest) (any, error) {
 	return nil, nil
 }
+func (m *MockAdaptor) ConvertClaudeRequest(c *gin.Context, request *relaymodel.ClaudeRequest) (any, error) {
+	return nil, nil
+}
 func (m *MockAdaptor) DoRequest(c *gin.Context, meta *meta.Meta, requestBody io.Reader) (*http.Response, error) {
 	return nil, nil
 }

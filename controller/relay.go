@@ -43,6 +43,8 @@ func relayHelper(c *gin.Context, relayMode int) *model.ErrorWithStatusCode {
 		err = controller.RelayProxyHelper(c, relayMode)
 	case relaymode.ResponseAPI:
 		err = controller.RelayResponseAPIHelper(c)
+	case relaymode.ClaudeMessages:
+		err = controller.RelayClaudeMessagesHelper(c)
 	default:
 		err = controller.RelayTextHelper(c)
 	}

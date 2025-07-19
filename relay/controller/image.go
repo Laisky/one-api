@@ -216,7 +216,7 @@ func RelayImageHelper(c *gin.Context, relayMode int) *relaymodel.ErrorWithStatus
 	imageModel := imageRequest.Model
 	// Convert the original image model
 	imageRequest.Model = metalib.GetMappedModelName(imageRequest.Model, billingratio.ImageOriginModelName)
-	c.Set("response_format", imageRequest.ResponseFormat)
+	c.Set(ctxkey.ResponseFormat, imageRequest.ResponseFormat)
 
 	var requestBody io.Reader
 	if strings.ToLower(c.GetString(ctxkey.ContentType)) == "application/json" &&

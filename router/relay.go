@@ -29,6 +29,7 @@ func SetRelayRouter(router *gin.Engine) {
 		relayV1Router.GET("/responses/:response_id", controller.RelayNotImplemented)
 		relayV1Router.DELETE("/responses/:response_id", controller.RelayNotImplemented)
 		relayV1Router.POST("/responses/:response_id/cancel", controller.RelayNotImplemented)
+		relayV1Router.POST("/messages", controller.Relay)
 		relayV1Router.POST("/edits", controller.Relay)
 		relayV1Router.POST("/images/generations", controller.Relay)
 		relayV1Router.POST("/images/edits", controller.Relay)

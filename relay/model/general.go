@@ -1,6 +1,7 @@
 package model
 
 import (
+	"encoding/json"
 	"mime/multipart"
 )
 
@@ -194,4 +195,60 @@ type OpenaiImageEditRequest struct {
 	// -------------------------------------
 	EditMode *string `json:"edit_mode" form:"edit_mode"`
 	MaskMode *string `json:"mask_mode" form:"mask_mode"`
+}
+
+// ClaudeRequest represents a Claude Messages API request
+// This is a flexible structure that can handle both simple and complex content
+type ClaudeRequest struct {
+	Model         string          `json:"model" binding:"required"`
+	MaxTokens     int             `json:"max_tokens" binding:"required"`
+	Messages      []ClaudeMessage `json:"messages" binding:"required"`
+	System        any             `json:"system,omitempty"`
+	Temperature   *float64        `json:"temperature,omitempty"`
+	TopP          *float64        `json:"top_p,omitempty"`
+	TopK          *int            `json:"top_k,omitempty"`
+	Stream        *bool           `json:"stream,omitempty"`
+	StopSequences []string        `json:"stop_sequences,omitempty"`
+	Tools         []ClaudeTool    `json:"tools,omitempty"`
+	ToolChoice    any             `json:"tool_choice,omitempty"`
+	Thinking      *Thinking       `json:"thinking,omitempty"`
+	Metadata      any             `json:"metadata,omitempty"`
+}
+
+// ClaudeMessage represents a message that can have either string or structured content
+type ClaudeMessage struct {
+	Role    string `json:"role" binding:"required"`
+	Content any    `json:"content" binding:"required"`
+}
+
+// ClaudeTool represents a tool definition in the Claude Messages API
+type ClaudeTool struct {
+	Name        string `json:"name" binding:"required"`
+	Description string `json:"description,omitempty"`
+	InputSchema any    `json:"input_schema" binding:"required"`
+}
+
+// Claude Messages API Response Types
+type ClaudeResponse struct {
+	ID           string          `json:"id"`
+	Type         string          `json:"type"`
+	Role         string          `json:"role"`
+	Model        string          `json:"model"`
+	Content      []ClaudeContent `json:"content"`
+	StopReason   string          `json:"stop_reason"`
+	StopSequence *string         `json:"stop_sequence,omitempty"`
+	Usage        ClaudeUsage     `json:"usage"`
+}
+
+type ClaudeContent struct {
+	Type  string          `json:"type"`
+	Text  string          `json:"text,omitempty"`
+	ID    string          `json:"id,omitempty"`
+	Name  string          `json:"name,omitempty"`
+	Input json.RawMessage `json:"input,omitempty"`
+}
+
+type ClaudeUsage struct {
+	InputTokens  int `json:"input_tokens"`
+	OutputTokens int `json:"output_tokens"`
 }

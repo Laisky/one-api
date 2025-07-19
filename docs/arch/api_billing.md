@@ -711,3 +711,392 @@ Tools Cost = Structured Output Cost + Function Call Cost + Web Search Cost
 - Optimized token counting and billing
 
 This implementation successfully provides complete Response API support while maintaining full compatibility with the existing ChatCompletion billing system and ensuring accurate cost calculation for all Response API features.
+
+## Claude Messages API
+
+The Claude Messages API provides full compatibility with Anthropic's Claude Messages API format while maintaining complete billing parity with the existing Chat Completion API. All billing features, pricing layers, and cost calculation methods are fully supported.
+
+### Implementation Architecture
+
+#### Universal Adapter Support
+
+**Conversion Strategy:** The Claude Messages API uses a universal conversion approach:
+
+```
+Claude Messages Request → OpenAI Format → Native Adapter Format
+```
+
+**Adapter Integration:** All adapters implement the `ConvertClaudeRequest()` method:
+
+- **Anthropic Adapter:** Native Claude Messages support (no conversion needed)
+- **All Other Adapters:** Automatic conversion to their native formats via OpenAI intermediate format
+
+**Context Marking:** Requests are marked with standardized context keys for proper response handling:
+
+- `ctxkey.ClaudeMessagesConversion` - Indicates Claude Messages conversion
+- `ctxkey.OriginalClaudeRequest` - Stores original request for response conversion
+
+#### Request Processing Flow
+
+**Path Detection:** The system detects Claude Messages API requests by checking for `/v1/messages` path prefix in `relay/relaymode/helper.go:GetByPath()`
+
+**Routing:** New endpoint added in `router/relay.go`:
+
+- `POST /v1/messages` - Main Claude Messages API endpoint
+
+**Controller Dispatch:** The main relay controller in `controller/relay.go:relayHelper()` routes Claude Messages requests to `RelayClaudeMessagesHelper()`
+
+#### Claude Messages Controller
+
+**Main Handler:** `RelayClaudeMessagesHelper()` in `relay/controller/claude_messages.go` handles Claude Messages requests with full billing integration:
+
+**Key Functions:**
+
+- `getAndValidateClaudeMessagesRequest()` - Validates incoming Claude Messages requests
+- `getClaudeMessagesPromptTokens()` - Estimates input tokens for pre-consumption
+- `preConsumeClaudeMessagesQuota()` - Reserves quota based on estimated tokens
+- `postConsumeClaudeMessagesQuota()` - Calculates final billing and adjusts quota
+- `getClaudeMessagesRequestBody()` - Prepares request for adapter conversion
+
+**Universal Channel Support:** Works with all supported channel types through adapter conversion
+
+**Pricing Integration:** Uses the same four-layer pricing system as Chat Completion API via `pricing.GetModelRatioWithThreeLayers()`
+
+### Core Billing Components
+
+#### 1. Token-Based Billing Fields
+
+The Claude Messages API supports all standard token-based billing fields with full compatibility:
+
+```go
+type Usage struct {
+    PromptTokens     int   `json:"prompt_tokens"`
+    CompletionTokens int   `json:"completion_tokens"`
+    TotalTokens      int   `json:"total_tokens"`
+    ToolsCost        int64 `json:"tools_cost,omitempty"`
+}
+```
+
+**Token Counting Methods:**
+
+- **Text Content:** Uses OpenAI tokenization for accuracy via `openai.CountTokenMessages()`
+- **Image Content:** Claude-specific calculation: `tokens = (width × height) / 750`
+- **Tools:** Comprehensive tool schema tokenization via `countClaudeToolsTokens()`
+
+#### 2. Additional Cost Components
+
+**Structured Output Billing:** Automatic detection and 25% surcharge for structured output patterns:
+
+```go
+func calculateClaudeStructuredOutputCost(request *ClaudeMessagesRequest, completionTokens int, modelRatio float64) int64 {
+    // Detects structured output patterns in tool usage
+    // Applies 25% surcharge on completion tokens (same as OpenAI)
+    if hasStructuredOutput {
+        return int64(math.Ceil(float64(completionTokens) * 0.25 * modelRatio))
+    }
+    return 0
+}
+```
+
+**Image Processing Costs:** Accurate image token calculation based on Claude's specifications:
+
+```go
+func calculateClaudeImageTokens(ctx context.Context, request *ClaudeMessagesRequest) int {
+    // Processes all image content blocks in messages and system prompts
+    // Uses Claude's formula: tokens = (width × height) / 750
+    // Handles base64, URL, and file-based images
+    // Provides reasonable estimates when exact dimensions unavailable
+}
+```
+
+### Billing Calculation Formula
+
+The Claude Messages API uses the same comprehensive billing formula as Chat Completion API:
+
+```
+Total Quota = Base Cost + Tools Cost + Structured Output Cost + Image Cost
+
+Where:
+- Base Cost = (PromptTokens + CompletionTokens × CompletionRatio) × ModelRatio
+- Tools Cost = Calculated during request processing
+- Structured Output Cost = CompletionTokens × 0.25 × ModelRatio (if applicable)
+- Image Cost = Σ(ImageTokens) × ModelRatio
+```
+
+#### Detailed Breakdown
+
+**Pre-consumption Estimation:**
+
+```go
+func getClaudeMessagesPromptTokens(ctx context.Context, request *ClaudeMessagesRequest) int {
+    // Convert to OpenAI format for accurate text tokenization
+    openaiRequest := convertClaudeToOpenAIForTokenCounting(request)
+
+    // Count text tokens
+    promptTokens := openai.CountTokenMessages(ctx, openaiRequest.Messages, openaiRequest.Model)
+
+    // Add tool tokens
+    if len(request.Tools) > 0 {
+        toolsTokens := countClaudeToolsTokens(ctx, request.Tools, openaiRequest.Model)
+        promptTokens += toolsTokens
+    }
+
+    // Add image tokens using Claude-specific calculation
+    imageTokens := calculateClaudeImageTokens(ctx, request)
+    promptTokens += imageTokens
+
+    return promptTokens
+}
+```
+
+**Post-consumption Calculation:**
+
+```go
+func postConsumeClaudeMessagesQuota(ctx context.Context, usage *relaymodel.Usage, meta *metalib.Meta, request *ClaudeMessagesRequest, modelRatio float64, completionRatio float64) {
+    // Calculate base quota
+    baseQuota := int64(math.Ceil((float64(usage.PromptTokens) + float64(usage.CompletionTokens)*completionRatio) * modelRatio))
+
+    // Add structured output cost
+    structuredOutputCost := calculateClaudeStructuredOutputCost(request, usage.CompletionTokens, modelRatio)
+
+    // Total quota includes all components
+    totalQuota := baseQuota + usage.ToolsCost + structuredOutputCost
+
+    // Use centralized billing system
+    billing.PostConsumeQuotaDetailed(ctx, usage, meta, totalQuota, modelRatio, completionRatio, request.Model)
+}
+```
+
+### Pricing Resolution System
+
+The Claude Messages API uses the same four-layer pricing resolution system:
+
+#### Layer 1: Channel-Specific Overrides (Highest Priority)
+
+Channel-specific pricing overrides stored in database `channels` table:
+
+- `model_ratio` - Channel-specific model pricing multiplier
+- `completion_ratio` - Channel-specific completion token ratio
+
+#### Layer 2: Adapter Default Pricing (Second Priority)
+
+Adapter-specific pricing defined in each adapter's pricing configuration.
+
+#### Layer 3: Global Pricing Fallback (Third Priority)
+
+Global model pricing from `relay/pricing/global.go` with comprehensive model coverage.
+
+#### Layer 4: Final Default (Lowest Priority)
+
+Fallback ratios when no specific pricing is found:
+- Model Ratio: 1.0
+- Completion Ratio: 1.0
+
+### Special Billing Features
+
+#### 1. Multimodal Content Billing
+
+**Image Processing:** Full support for Claude's image formats and pricing:
+
+- **Base64 Images:** Token estimation based on data size with reasonable bounds
+- **URL Images:** Default estimation (~853 tokens for typical web images)
+- **File Images:** Default estimation using Claude's average image size
+- **Multiple Images:** Accurate counting across all message content blocks
+
+**Supported Formats:** JPEG, PNG, GIF, WebP (matching Claude's specifications)
+
+**Size Limits:** Respects Claude's size constraints (8000×8000px max, 2000×2000px for >20 images)
+
+#### 2. Tool Calling Billing
+
+**Comprehensive Tool Support:**
+
+```go
+func countClaudeToolsTokens(ctx context.Context, tools []relaymodel.ClaudeTool, model string) int {
+    totalTokens := 0
+    for _, tool := range tools {
+        // Count tool name and description tokens
+        totalTokens += openai.CountTokenText(tool.Name, model)
+        totalTokens += openai.CountTokenText(tool.Description, model)
+
+        // Count input schema tokens (JSON serialized)
+        if tool.InputSchema != nil {
+            if schemaBytes, err := json.Marshal(tool.InputSchema); err == nil {
+                totalTokens += openai.CountTokenText(string(schemaBytes), model)
+            }
+        }
+    }
+    return totalTokens
+}
+```
+
+#### 3. System Prompt Billing
+
+**Structured System Prompts:** Full support for both string and structured system prompts:
+
+- **String System Prompts:** Direct tokenization
+- **Structured System Prompts:** Content block processing with image support
+- **Mixed Content:** Text and image blocks in system prompts
+
+### Pre-consumption vs Post-consumption
+
+#### Pre-consumption Phase
+
+**Quota Reservation:** Estimates total cost including all components:
+
+```go
+func preConsumeClaudeMessagesQuota(ctx context.Context, request *ClaudeMessagesRequest, meta *metalib.Meta, modelRatio float64) error {
+    // Estimate prompt tokens (text + tools + images)
+    promptTokens := getClaudeMessagesPromptTokens(ctx, request)
+
+    // Estimate completion tokens based on max_tokens
+    estimatedCompletionTokens := request.MaxTokens
+    if estimatedCompletionTokens == 0 {
+        estimatedCompletionTokens = 1000 // Default estimate
+    }
+
+    // Calculate estimated quota with all components
+    estimatedQuota := calculateEstimatedQuota(promptTokens, estimatedCompletionTokens, modelRatio, completionRatio)
+
+    // Reserve quota
+    return billing.PreConsumeQuota(ctx, meta, estimatedQuota)
+}
+```
+
+#### Post-consumption Phase
+
+**Accurate Billing:** Uses actual usage data from adapter responses:
+
+```go
+func postConsumeClaudeMessagesQuota(ctx context.Context, usage *relaymodel.Usage, meta *metalib.Meta, request *ClaudeMessagesRequest, modelRatio float64, completionRatio float64) {
+    // Use centralized billing system with detailed breakdown
+    billing.PostConsumeQuotaDetailed(ctx, usage, meta, totalQuota, modelRatio, completionRatio, request.Model)
+}
+```
+
+### Error Handling and Refunds
+
+#### Automatic Refund Scenarios
+
+The Claude Messages API supports the same automatic refund scenarios as Chat Completion API:
+
+- **Request Validation Failures:** Full refund before processing
+- **Adapter Errors:** Refund based on actual processing stage
+- **Network Failures:** Full refund if no response received
+- **Rate Limit Errors:** Full refund with proper error reporting
+
+#### Refund Implementation
+
+```go
+// Automatic refund on errors
+if err != nil {
+    billing.PostConsumeQuota(ctx, &relaymodel.Usage{}, meta, 0, request.Model)
+    return err
+}
+```
+
+### Usage Logging and Tracking
+
+#### Log Structure
+
+The Claude Messages API uses the same comprehensive logging structure:
+
+```go
+type BillingLog struct {
+    RequestID        string  `json:"request_id"`
+    UserID          int     `json:"user_id"`
+    ChannelID       int     `json:"channel_id"`
+    Model           string  `json:"model"`
+    PromptTokens    int     `json:"prompt_tokens"`
+    CompletionTokens int    `json:"completion_tokens"`
+    TotalTokens     int     `json:"total_tokens"`
+    ToolsCost       int64   `json:"tools_cost"`
+    StructuredCost  int64   `json:"structured_output_cost"`
+    ImageTokens     int     `json:"image_tokens"`
+    ModelRatio      float64 `json:"model_ratio"`
+    CompletionRatio float64 `json:"completion_ratio"`
+    TotalQuota      int64   `json:"total_quota"`
+    APIType         string  `json:"api_type"` // "claude_messages"
+}
+```
+
+#### Billing Metrics Tracked
+
+**Token Metrics:**
+- Prompt tokens (text + tools + images)
+- Completion tokens
+- Total tokens
+- Image-specific token counts
+
+**Cost Metrics:**
+- Base model cost
+- Tools processing cost
+- Structured output surcharge
+- Image processing cost
+- Total quota consumed
+
+**Operational Metrics:**
+- Request processing time
+- Adapter conversion overhead
+- Error rates and types
+- Refund amounts and reasons
+
+### Implementation Files
+
+#### Core Billing Logic
+
+- `relay/controller/claude_messages.go` - Main Claude Messages API controller with full billing integration
+- `relay/billing/billing.go` - Centralized billing system (shared with Chat Completion API)
+- `relay/pricing/global.go` - Model pricing configuration (shared across all APIs)
+
+#### Token Counting
+
+- `relay/controller/claude_messages.go:getClaudeMessagesPromptTokens()` - Main token estimation
+- `relay/controller/claude_messages.go:calculateClaudeImageTokens()` - Claude-specific image token calculation
+- `relay/controller/claude_messages.go:countClaudeToolsTokens()` - Tool schema tokenization
+- `relay/adaptor/openai/main.go:CountTokenMessages()` - Text tokenization (shared)
+
+#### Adapter Integration
+
+- `relay/adaptor/interface.go` - `ConvertClaudeRequest()` method definition
+- `relay/adaptor/*/adaptor.go` - Claude Messages conversion implementation for all adapters
+- `common/ctxkey/key.go` - Standardized context keys for conversion tracking
+
+#### Model Pricing
+
+- `relay/pricing/global.go` - Global model pricing with Claude model support
+- `relay/pricing/pricing.go` - Four-layer pricing resolution system (shared)
+- Database `channels` table - Channel-specific pricing overrides
+
+### Billing Integration Summary
+
+The Claude Messages API provides complete billing parity with the Chat Completion API:
+
+**✅ Full Feature Support:**
+- Two-phase billing (pre-consumption and post-consumption)
+- Four-layer pricing resolution system
+- Comprehensive token counting (text, images, tools)
+- Structured output billing with automatic detection
+- Multimodal content billing with Claude-specific calculations
+- Tool calling cost calculation
+- Error handling and automatic refunds
+
+**✅ Universal Compatibility:**
+- Works with all supported channel types and adapters
+- Maintains existing billing infrastructure
+- Uses centralized billing system (`billing.PostConsumeQuotaDetailed()`)
+- Preserves all existing pricing configurations
+
+**✅ Accurate Cost Calculation:**
+- Claude-specific image token calculation: `tokens = (width × height) / 750`
+- Proper tool schema tokenization
+- Structured output surcharge detection and application
+- Comprehensive usage tracking and logging
+
+**✅ Production Ready:**
+- Complete error handling and refund mechanisms
+- Detailed usage logging and metrics
+- Performance optimized token counting
+- Backward compatible with existing infrastructure
+
+This implementation ensures that users of the Claude Messages API receive accurate billing that matches the sophistication and completeness of the existing Chat Completion API billing system.
