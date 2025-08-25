@@ -50,9 +50,10 @@ func getImageRequest(c *gin.Context, _ int) (*relaymodel.ImageRequest, error) {
 			imageRequest.Size = "1024x1024"
 		case "gpt-image-1":
 			imageRequest.Size = "1024x1536"
+		case "grok-2-image", "grok-2-image-1212":
+			imageRequest.Size = "1024x1024" // Default size for Grok-2 image generation
 		}
 	}
-
 	if imageRequest.Model == "" {
 		imageRequest.Model = "dall-e-2"
 	}
@@ -66,9 +67,10 @@ func getImageRequest(c *gin.Context, _ int) (*relaymodel.ImageRequest, error) {
 			imageRequest.Quality = "standard"
 		case "gpt-image-1":
 			imageRequest.Quality = "high"
+		case "grok-2-image", "grok-2-image-1212":
+			imageRequest.Quality = "standard" // Default quality for Grok-2 image generation
 		}
 	}
-
 	if imageRequest.Model == "gpt-image-1" {
 		imageRequest.ResponseFormat = nil
 	}
@@ -268,7 +270,8 @@ func RelayImageHelper(c *gin.Context, relayMode int) *relaymodel.ErrorWithStatus
 	case channeltype.Zhipu,
 		channeltype.Ali,
 		channeltype.VertextAI,
-		channeltype.Baidu:
+		channeltype.Baidu,
+		channeltype.XAI:
 		finalRequest, err := adaptor.ConvertImageRequest(c, imageRequest)
 		if err != nil {
 			return openai.ErrorWrapper(err, "convert_image_request_failed", http.StatusInternalServerError)

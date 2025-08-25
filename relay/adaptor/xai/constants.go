@@ -20,6 +20,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 
 	// Image generation model (no per-token charge)
 	"grok-2-image-1212": {Ratio: 0, CompletionRatio: 1.0, ImagePriceUsd: 0.07}, // $0.07 per image
+	"grok-2-image":      {Ratio: 0, CompletionRatio: 1.0, ImagePriceUsd: 0.07}, // $0.07 per image
 
 	// Legacy aliases for backward compatibility
 	"grok-beta":        {Ratio: 2.0 * ratio.MilliTokensUsd, CompletionRatio: 5.0}, // Updated to match grok-2-1212

@@ -43,6 +43,12 @@ var ImageSizeRatios = map[string]map[string]float64{
 		"1280x800":  1,
 		"800x1280":  1,
 	},
+	"grok-2-image": {
+		"1024x1024": 1, // Standard size for Grok-2 image generation
+	},
+	"grok-2-image-1212": {
+		"1024x1024": 1, // Standard size for Grok-2 image generation
+	},
 }
 
 var ImageGenerationAmounts = map[string][2]int{
@@ -54,6 +60,8 @@ var ImageGenerationAmounts = map[string][2]int{
 	"wanx-v1":                   {1, 4}, // Ali
 	"cogview-3":                 {1, 1},
 	"step-1x-medium":            {1, 1},
+	"grok-2-image":              {1, 10}, // Grok-2 supports 1-10 images per xAI docs
+	"grok-2-image-1212":         {1, 10}, // Grok-2 supports 1-10 images per xAI docs
 }
 
 var ImagePromptLengthLimitations = map[string]int{
@@ -65,6 +73,8 @@ var ImagePromptLengthLimitations = map[string]int{
 	"wanx-v1":                   4000,
 	"cogview-3":                 833,
 	"step-1x-medium":            4000,
+	"grok-2-image":              4000, // Grok-2 supports long prompts similar to other modern models
+	"grok-2-image-1212":         4000, // Grok-2 supports long prompts similar to other modern models
 }
 
 var ImageOriginModelName = map[string]string{
@@ -163,6 +173,17 @@ var ImageTierTables = map[string]map[string]map[string]float64{
 			"1024x1024": 1,
 			"1280x800":  1,
 			"800x1280":  1,
+		},
+	},
+	// Grok-2 Image: simple default tier (no quality variations since xAI doesn't support quality parameter)
+	"grok-2-image": {
+		"default": {
+			"1024x1024": 1, // Base pricing for Grok-2 image generation
+		},
+	},
+	"grok-2-image-1212": {
+		"default": {
+			"1024x1024": 1, // Base pricing for Grok-2 image generation
 		},
 	},
 }
