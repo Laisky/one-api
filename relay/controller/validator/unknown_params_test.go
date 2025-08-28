@@ -1,11 +1,13 @@
-package validator
+package validator_test
 
 import (
 	"testing"
+
+	"github.com/songquanpeng/one-api/relay/controller/validator"
 )
 
 func TestGetKnownParameters(t *testing.T) {
-	knownParams := GetKnownParameters()
+	knownParams := validator.GetKnownParameters()
 
 	// Test that some key parameters are present
 	expectedParams := []string{
@@ -38,7 +40,7 @@ func TestValidateUnknownParameters_NoUnknownParams(t *testing.T) {
 		"max_tokens": 100
 	}`
 
-	err := ValidateUnknownParameters([]byte(validJSON))
+	err := validator.ValidateUnknownParameters([]byte(validJSON))
 	if err != nil {
 		t.Errorf("Expected no error for valid parameters, got: %v", err)
 	}
@@ -53,7 +55,7 @@ func TestValidateUnknownParameters_SingleUnknownParam(t *testing.T) {
 		"unknown_param": "value"
 	}`
 
-	err := ValidateUnknownParameters([]byte(invalidJSON))
+	err := validator.ValidateUnknownParameters([]byte(invalidJSON))
 	if err == nil {
 		t.Error("Expected error for unknown parameter")
 		return
@@ -75,7 +77,7 @@ func TestValidateUnknownParameters_MultipleUnknownParams(t *testing.T) {
 		"unknown_param3": "value3"
 	}`
 
-	err := ValidateUnknownParameters([]byte(invalidJSON))
+	err := validator.ValidateUnknownParameters([]byte(invalidJSON))
 	if err == nil {
 		t.Error("Expected error for multiple unknown parameters")
 		return
@@ -106,7 +108,7 @@ func TestValidateUnknownParameters_MixedKnownAndUnknown(t *testing.T) {
 		"another_unknown": "value2"
 	}`
 
-	err := ValidateUnknownParameters([]byte(invalidJSON))
+	err := validator.ValidateUnknownParameters([]byte(invalidJSON))
 	if err == nil {
 		t.Error("Expected error for unknown parameters")
 		return
@@ -139,7 +141,7 @@ func TestValidateUnknownParameters_InvalidJSON(t *testing.T) {
 	// Test with invalid JSON
 	invalidJSON := `{invalid json`
 
-	err := ValidateUnknownParameters([]byte(invalidJSON))
+	err := validator.ValidateUnknownParameters([]byte(invalidJSON))
 	if err != nil {
 		t.Errorf("Expected no error for invalid JSON (should be handled by normal validation), got: %v", err)
 	}
@@ -149,7 +151,7 @@ func TestValidateUnknownParameters_EmptyJSON(t *testing.T) {
 	// Test with empty JSON object
 	emptyJSON := `{}`
 
-	err := ValidateUnknownParameters([]byte(emptyJSON))
+	err := validator.ValidateUnknownParameters([]byte(emptyJSON))
 	if err != nil {
 		t.Errorf("Expected no error for empty JSON, got: %v", err)
 	}
@@ -178,7 +180,7 @@ func TestValidateUnknownParameters_ComplexNestedStructures(t *testing.T) {
 		"unknown_top_level": "should be caught"
 	}`
 
-	err := ValidateUnknownParameters([]byte(complexJSON))
+	err := validator.ValidateUnknownParameters([]byte(complexJSON))
 	if err == nil {
 		t.Error("Expected error for unknown top-level parameter")
 		return
@@ -216,7 +218,7 @@ func TestValidateUnknownParameters_CommonTypos(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			err := ValidateUnknownParameters([]byte(tc.json))
+			err := validator.ValidateUnknownParameters([]byte(tc.json))
 			if err == nil {
 				t.Error("Expected error for typo in parameter name")
 				return
