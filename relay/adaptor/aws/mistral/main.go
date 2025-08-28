@@ -129,7 +129,11 @@ func ConvertRequest(textRequest relaymodel.GeneralOpenAIRequest) *Request {
 	}
 
 	// Handle inference parameters
-	if textRequest.MaxTokens != 0 {
+	//
+	// Set max tokens for legacy compatibility: handles clients (chatbots, commit message generators) that don't specify max_tokens
+	if textRequest.MaxTokens == 0 {
+		mistralReq.MaxTokens = config.DefaultMaxToken
+	} else {
 		mistralReq.MaxTokens = textRequest.MaxTokens
 	}
 
@@ -461,8 +465,7 @@ func convertMistralToConverseRequest(mistralReq *Request, modelID string) (*bedr
 	inferenceConfig := &types.InferenceConfiguration{}
 	if mistralReq.MaxTokens != 0 {
 		inferenceConfig.MaxTokens = aws.Int32(int32(mistralReq.MaxTokens))
-	} else {
-		inferenceConfig.MaxTokens = aws.Int32(int32(config.DefaultMaxToken))
+		// If-else statement removed as it is already handled in the caller during request conversion
 	}
 
 	if mistralReq.Temperature != nil {
