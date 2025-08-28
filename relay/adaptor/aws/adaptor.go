@@ -188,6 +188,9 @@ func (a *Adaptor) GetDefaultModelPricing() map[string]adaptor.ModelConfig {
 		"ai21-jamba-1.5": {Ratio: 2 * MilliTokensUsd, CompletionRatio: 4},    // $2/$8 per 1M tokens
 
 		// Mistral Models (Supported) - Updated pricing as of 2025-08-27 - Note: These are per 1K tokens, converted to 1M tokens using MilliTokensUsd
+		//
+		// Note: The Mistral Instruct model (mistral-7b, mixtral-8x7b) is currently considered legacy and unsupported.
+		// Only the newest/latest models available in AWS Bedrock are supported.
 		"mistral-7b":                 {Ratio: 0.15 * ratio.MilliTokensUsd, CompletionRatio: 1.33}, // $0.00015/$0.0002 per 1K tokens = $0.15/$0.2 per 1M tokens
 		"mixtral-8x7b":               {Ratio: 0.45 * ratio.MilliTokensUsd, CompletionRatio: 1.56}, // $0.00045/$0.0007 per 1K tokens = $0.45/$0.7 per 1M tokens
 		"mistral-small-2402":         {Ratio: 1 * ratio.MilliTokensUsd, CompletionRatio: 3},       // $0.001/$0.003 per 1K tokens = $1/$3 per 1M tokens
