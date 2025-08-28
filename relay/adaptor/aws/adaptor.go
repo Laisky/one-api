@@ -280,7 +280,7 @@ func GetModelCapabilities(modelName string) ProviderCapabilities {
 		}
 	case AwsLlama3:
 		return ProviderCapabilities{
-			SupportsTools:               true, // Llama3 supports tools via Converse API
+			SupportsTools:               false, // Currently unsupported. May be implemented in the future.
 			SupportsFunctions:           false,
 			SupportsLogprobs:            false,
 			SupportsResponseFormat:      false,
