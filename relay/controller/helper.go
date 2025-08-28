@@ -30,8 +30,19 @@ import (
 )
 
 func getAndValidateTextRequest(c *gin.Context, relayMode int) (*relaymodel.GeneralOpenAIRequest, error) {
+	// Check for unknown parameters first
+	requestBody, err := common.GetRequestBody(c)
+	if err != nil {
+		return nil, err
+	}
+
+	// Validate for unknown parameters requests
+	if err = validator.ValidateUnknownParameters(requestBody); err != nil {
+		return nil, err
+	}
+
 	textRequest := &relaymodel.GeneralOpenAIRequest{}
-	err := common.UnmarshalBodyReusable(c, textRequest)
+	err = common.UnmarshalBodyReusable(c, textRequest)
 	if err != nil {
 		return nil, err
 	}
