@@ -23,10 +23,10 @@ var _ utils.AwsAdapter = new(Adaptor)
 // behavior across all AWS Bedrock integrations in the One API system.
 //
 // The adapter handles the complete request-response lifecycle:
-// - Converting OpenAI-compatible requests to AWS Bedrock Mistral format
-// - Processing responses from AWS Bedrock back to OpenAI-compatible format
-// - Managing both streaming and non-streaming response modes
-// - Handling error conditions and usage tracking
+//   - Converting OpenAI-compatible requests to AWS Bedrock Mistral format
+//   - Processing responses from AWS Bedrock back to OpenAI-compatible format
+//   - Managing both streaming and non-streaming response modes
+//   - Handling error conditions and usage tracking
 type Adaptor struct {
 	// No additional fields required - stateless adapter design
 }
@@ -36,10 +36,10 @@ type Adaptor struct {
 // This method performs the critical translation between the One API's unified request format
 // and the specific format expected by AWS Bedrock's Mistral Large model. It handles:
 //
-// - Message format conversion from OpenAI to Mistral structure
-// - Parameter mapping and validation
-// - Tool/function calling setup when applicable
-// - Context storage for downstream processing
+//   - Message format conversion from OpenAI to Mistral structure
+//   - Parameter mapping and validation
+//   - Tool/function calling setup when applicable
+//   - Context storage for downstream processing
 //
 // Parameters:
 //   - c: Gin context for the HTTP request, used for storing converted data
@@ -68,10 +68,10 @@ func (a *Adaptor) ConvertRequest(c *gin.Context, relayMode int, request *model.G
 // This method handles the complete response processing pipeline, supporting both streaming
 // and non-streaming modes. It coordinates with specialized handlers to:
 //
-// - Process AWS Bedrock responses in their native format
-// - Convert responses back to OpenAI-compatible structure
-// - Track token usage for billing and quota management
-// - Handle errors and edge cases appropriately
+//   - Process AWS Bedrock responses in their native format
+//   - Convert responses back to OpenAI-compatible structure
+//   - Track token usage for billing and quota management
+//   - Handle errors and edge cases appropriately
 //
 // The method automatically detects the response mode (streaming vs non-streaming) based
 // on metadata and delegates to the appropriate specialized handler.
