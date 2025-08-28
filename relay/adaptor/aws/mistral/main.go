@@ -130,7 +130,7 @@ func ConvertRequest(textRequest relaymodel.GeneralOpenAIRequest) *Request {
 
 	// Handle inference parameters
 	//
-	// Set max tokens for legacy compatibility: handles clients (chatbots, commit message generators) that don't specify max_tokens
+	// Set max tokens for legacy compatibility: handles clients (chatbots, git commit message generators) that don't specify max_tokens
 	if textRequest.MaxTokens == 0 {
 		mistralReq.MaxTokens = config.DefaultMaxToken
 	} else {
