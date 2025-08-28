@@ -359,8 +359,11 @@ func StreamHandler(c *gin.Context, awsCli *bedrockruntime.Client) (*relaymodel.E
 	return nil, &usage
 }
 
-// StreamResponseMistral2OpenAI converts Mistral streaming response to OpenAI format
-func StreamResponseMistral2OpenAI(mistralResponse *StreamResponse) *openai.ChatCompletionsStreamResponse {
+// StreamResponseMistral2OpenAI converts Mistral streaming responses to the OpenAI format.
+//
+// Note: This function is currently unused. It was previously used in the invoke method, but is now replaced by converse,
+// as the invoke method does not provide token usage information.
+func StreamResponseMistral2OpenAI(mistralResponse *StreamResponse, modelName string) *openai.ChatCompletionsStreamResponse {
 	if len(mistralResponse.Choices) == 0 {
 		return nil
 	}
@@ -371,7 +374,7 @@ func StreamResponseMistral2OpenAI(mistralResponse *StreamResponse) *openai.ChatC
 		Id:      "chatcmpl-oneapi-" + random.GetRandomString(29),
 		Object:  "chat.completion.chunk",
 		Created: time.Now().Unix(),
-		Model:   "mistral-large-2407",
+		Model:   modelName,
 		Choices: []openai.ChatCompletionsStreamResponseChoice{
 			{
 				Index: choice.Index,
