@@ -258,6 +258,10 @@ func StreamHandler(c *gin.Context, awsCli *bedrockruntime.Client) (*relaymodel.E
 	defer stream.Close()
 
 	c.Writer.Header().Set("Content-Type", "text/event-stream")
+	// This change addresses an issue with nginx that could be annoying regarding buffering.
+	c.Writer.Header().Set("Cache-Control", "no-cache")
+	c.Writer.Header().Set("Connection", "keep-alive")
+	c.Writer.Header().Set("X-Accel-Buffering", "no")
 	var usage relaymodel.Usage
 	var id string
 	var totalContent strings.Builder // Track accumulated content for fallback usage calculation
