@@ -54,6 +54,11 @@ func (a *Adaptor) ConvertRequest(c *gin.Context, relayMode int, request *model.G
 		return nil, errors.New("adaptor not found")
 	}
 
+	// Validate parameters using the new model-based validation
+	if validationErr := ValidateUnsupportedParameters(request, request.Model); validationErr != nil {
+		return nil, errors.Errorf("validation failed: %s", validationErr.Error.Message)
+	}
+
 	a.awsAdapter = adaptor
 	return adaptor.ConvertRequest(c, relayMode, request)
 }
