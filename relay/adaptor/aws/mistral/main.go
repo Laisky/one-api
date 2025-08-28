@@ -1,4 +1,3 @@
-// Package aws provides the AWS adaptor for the relay service.
 package aws
 
 import (
