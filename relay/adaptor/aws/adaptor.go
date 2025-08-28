@@ -16,6 +16,7 @@ import (
 	"github.com/songquanpeng/one-api/relay/adaptor"
 	anthropicAdaptor "github.com/songquanpeng/one-api/relay/adaptor/anthropic"
 	"github.com/songquanpeng/one-api/relay/adaptor/aws/utils"
+	"github.com/songquanpeng/one-api/relay/billing/ratio"
 	"github.com/songquanpeng/one-api/relay/meta"
 	"github.com/songquanpeng/one-api/relay/model"
 )
@@ -186,10 +187,12 @@ func (a *Adaptor) GetDefaultModelPricing() map[string]adaptor.ModelConfig {
 		"ai21-j2-ultra":  {Ratio: 18.8 * MilliTokensUsd, CompletionRatio: 1}, // $18.8 per 1M tokens
 		"ai21-jamba-1.5": {Ratio: 2 * MilliTokensUsd, CompletionRatio: 4},    // $2/$8 per 1M tokens
 
-		// Mistral Models (if supported)
-		"mistral-7b-instruct":   {Ratio: 0.15 * MilliTokensUsd, CompletionRatio: 1.33}, // $0.15/$0.2 per 1M tokens
-		"mistral-8x7b-instruct": {Ratio: 0.45 * MilliTokensUsd, CompletionRatio: 1.56}, // $0.45/$0.7 per 1M tokens
-		"mistral-large":         {Ratio: 4 * MilliTokensUsd, CompletionRatio: 3},       // $4/$12 per 1M tokens
+		// Mistral Models (Supported) - Updated pricing as of 2025-08-27 - Note: These are per 1K tokens, converted to 1M tokens using MilliTokensUsd
+		"mistral-7b":                 {Ratio: 0.15 * ratio.MilliTokensUsd, CompletionRatio: 1.33}, // $0.00015/$0.0002 per 1K tokens = $0.15/$0.2 per 1M tokens
+		"mixtral-8x7b":               {Ratio: 0.45 * ratio.MilliTokensUsd, CompletionRatio: 1.56}, // $0.00045/$0.0007 per 1K tokens = $0.45/$0.7 per 1M tokens
+		"mistral-small-2402":         {Ratio: 1 * ratio.MilliTokensUsd, CompletionRatio: 3},       // $0.001/$0.003 per 1K tokens = $1/$3 per 1M tokens
+		"mistral-large-2402":         {Ratio: 4 * ratio.MilliTokensUsd, CompletionRatio: 3},       // $0.004/$0.012 per 1K tokens = $4/$12 per 1M tokens
+		"mistral-pixtral-large-2502": {Ratio: 2 * ratio.MilliTokensUsd, CompletionRatio: 3},       // $0.002/$0.006 per 1K tokens = $2/$6 per 1M tokens
 	}
 }
 
