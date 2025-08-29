@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/Laisky/errors/v2"
@@ -459,7 +458,8 @@ func handleStreamWithConverseAPI(c *gin.Context, awsCli *bedrockruntime.Client, 
 
 	var usage relaymodel.Usage
 	var id string
-	var totalContent strings.Builder // Track accumulated content for fallback usage calculation
+	// TODO: Is this actually necessary? The usage calculation already handles it.
+	// var totalContent strings.Builder // Track accumulated content for fallback usage calculation
 
 	c.Stream(func(w io.Writer) bool {
 		event, ok := <-stream.Events()
@@ -482,7 +482,7 @@ func handleStreamWithConverseAPI(c *gin.Context, awsCli *bedrockruntime.Client, 
 				case *types.ContentBlockDeltaMemberText:
 					if textDelta := deltaValue.Value; textDelta != "" {
 						// Accumulate content for fallback usage calculation
-						totalContent.WriteString(textDelta)
+						// totalContent.WriteString(textDelta)
 
 						// Create streaming response with the text delta
 						response := &openai.ChatCompletionsStreamResponse{
