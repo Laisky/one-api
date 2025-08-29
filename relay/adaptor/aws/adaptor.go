@@ -300,7 +300,12 @@ func GetModelCapabilities(modelName string) ProviderCapabilities {
 		}
 	case AwsMistral:
 		return ProviderCapabilities{
-			SupportsTools:               true, // Mistral supports tools
+			// Disabled for now due to inconsistencies with the AWS Go SDK's documentation and behavior.
+			// Yesterday, it worked for counting tokens with this model using the invoke method, but the converse method doesn't work with tool calling.
+			// Furthermore, the token counting functionality has been disabled for this model in the invoke method.
+			// Therefore, function tool calling for this model is disabled because the converse method doesn't work with function tool calling,
+			// and using the invoke method doesn't provide token usage information, unlike the converse method.
+			SupportsTools:               false,
 			SupportsFunctions:           false,
 			SupportsLogprobs:            false,
 			SupportsResponseFormat:      false,
