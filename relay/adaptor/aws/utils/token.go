@@ -210,20 +210,34 @@ func detectImageFormat(contentType, imageURL string) (types.ImageFormat, error) 
 }
 
 // detectImageFormatFromBytes detects image format from magic bytes
+// Uses proper magic byte validation for robust format detection
 func detectImageFormatFromBytes(data []byte) (types.ImageFormat, error) {
 	if len(data) < 8 {
 		return "", errors.New("insufficient data to detect image format")
 	}
 
-	// Check magic bytes
+	// Check magic bytes with proper validation
 	switch {
-	case len(data) >= 8 && data[0] == 0x89 && data[1] == 0x50 && data[2] == 0x4E && data[3] == 0x47:
+	case len(data) >= 8 &&
+		data[0] == 0x89 && data[1] == 0x50 && data[2] == 0x4E && data[3] == 0x47 &&
+		data[4] == 0x0D && data[5] == 0x0A && data[6] == 0x1A && data[7] == 0x0A:
+		// PNG: Complete 8-byte signature: 89 50 4E 47 0D 0A 1A 0A
 		return types.ImageFormatPng, nil
-	case len(data) >= 3 && data[0] == 0xFF && data[1] == 0xD8 && data[2] == 0xFF:
+
+	case len(data) >= 2 && data[0] == 0xFF && data[1] == 0xD8:
+		// JPEG: Starts with FF D8, third byte can vary (E0, E1, DB, etc.)
 		return types.ImageFormatJpeg, nil
-	case len(data) >= 6 && data[0] == 0x47 && data[1] == 0x49 && data[2] == 0x46 && data[3] == 0x38:
+
+	case len(data) >= 6 &&
+		data[0] == 0x47 && data[1] == 0x49 && data[2] == 0x46 && data[3] == 0x38 &&
+		(data[4] == 0x37 || data[4] == 0x39) && data[5] == 0x61:
+		// GIF: GIF87a or GIF89a format validation
 		return types.ImageFormatGif, nil
-	case len(data) >= 12 && data[8] == 0x57 && data[9] == 0x45 && data[10] == 0x42 && data[11] == 0x50:
+
+	case len(data) >= 12 &&
+		data[0] == 0x52 && data[1] == 0x49 && data[2] == 0x46 && data[3] == 0x46 &&
+		data[8] == 0x57 && data[9] == 0x45 && data[10] == 0x42 && data[11] == 0x50:
+		// WebP: RIFF header (52 49 46 46) + WEBP signature at bytes 8-11
 		return types.ImageFormatWebp, nil
 	}
 
