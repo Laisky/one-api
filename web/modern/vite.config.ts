@@ -6,11 +6,14 @@ import { fileURLToPath } from 'node:url'
 import { createHash } from 'node:crypto'
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
-// Helper function to generate short SHA256 hash from chunk content
+// Helper function to generate short SHA256 hash from chunk content with date and time
 //
 // This is a better approach than using the default hash provided by Vite (I'm not sure what algorithm they use).
+// Now includes date and time for dynamic file naming and better cache busting.
 function generateContentHash(content: string): string {
-  return createHash('sha256').update(content).digest('hex').substring(0, 8)
+  const currentDateTime = new Date().toISOString() // Full ISO timestamp format (YYYY-MM-DDTHH:mm:ss.sssZ)
+  const contentWithDateTime = `${content}-${currentDateTime}`
+  return createHash('sha256').update(contentWithDateTime).digest('hex').substring(0, 8)
 }
 
 export default defineConfig(({ mode }) => ({
