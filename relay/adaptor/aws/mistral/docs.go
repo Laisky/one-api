@@ -18,10 +18,10 @@
 //   - Inference configuration for model parameters
 //
 // Key Features:
-// - Full compatibility with AWS Bedrock Mistral Large documentation
-// - Support for tool/function calling workflows
-// - Streaming and non-streaming response modes
-// - Comprehensive usage tracking and metadata
+//   - Full compatibility with AWS Bedrock Mistral Large documentation
+//   - Support for tool/function calling workflows
+//   - Streaming and non-streaming response modes
+//   - Comprehensive usage tracking and metadata
 //
 // The structures in this package mirror the AWS Bedrock API specifications
 // while providing Go-idiomatic field names and JSON marshaling tags.
