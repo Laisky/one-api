@@ -46,7 +46,7 @@ export default defineConfig(({ mode }) => ({
           const assetContent = assetInfo.name || 'asset'
           const contentHash = generateContentHash(assetContent)
           const extension = assetInfo.name?.split('.').pop() || 'asset'
-          return `${contentHash}.${extension}`
+          return `[name].${contentHash}.${extension}`
         },
         manualChunks: {
           vendor: ['react', 'react-dom'],
