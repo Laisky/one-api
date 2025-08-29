@@ -570,7 +570,7 @@ func StreamResponseMistral2OpenAI(mistralResponse *StreamResponse, modelName str
 	choice := mistralResponse.Choices[0]
 
 	return &openai.ChatCompletionsStreamResponse{
-		Id:      "chatcmpl-" + random.GetRandomString(29),
+		Id:      "chatcmpl-oneapi-" + random.GetRandomString(29),
 		Object:  "chat.completion.chunk",
 		Created: time.Now().Unix(),
 		Model:   modelName,
