@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 
 	"github.com/Laisky/errors/v2"
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -243,23 +244,47 @@ type ProviderCapabilities struct {
 	SupportsLogitBias           bool
 	SupportsServiceTier         bool
 	SupportsParallelToolCalls   bool
-	SupportsFrequencyPenalty    bool
-	SupportsPresencePenalty     bool
 	SupportsTopLogprobs         bool
 	SupportsPrediction          bool
 	SupportsMaxCompletionTokens bool
+	SupportsImageGeneration     bool
+	SupportsEmbedding           bool
 }
 
-// GetModelCapabilities returns the capabilities for a model based on its adapter type
+// isEmbeddingModel checks if a model name indicates it's an embedding model.
+//
+// TODO: This function needs improvement, as it's currently used for 'amazon-titan-embed-text' and may not cover all cases.
+func isEmbeddingModel(modelName string) bool { return strings.Contains(modelName, "embed") }
+
+// isImageGenerationModel checks if a model name indicates it's an image generation model.
+//
+// TODO: This function needs improvement, as it's currently used for 'amazon-titan-image-generator' and 'amazon-nova-canvas' (image generator) and may not cover all cases.
+func isImageGenerationModel(modelName string) bool {
+	return strings.Contains(modelName, "image") || strings.Contains(modelName, "canvas")
+}
+
+// GetModelCapabilities returns the capabilities for a model based on its adapter type and specific model characteristics
+// This function now uses the same model registry as GetModelList for consistency
 func GetModelCapabilities(modelName string) ProviderCapabilities {
 	adaptorType := adaptors[modelName]
 	if awsArnMatch != nil && awsArnMatch.MatchString(modelName) {
 		adaptorType = AwsClaude
 	}
 
+	// If model is not in registry, return minimal capabilities
+	if adaptorType == 0 {
+		return ProviderCapabilities{
+			SupportsImageGeneration: false,
+			SupportsEmbedding:       false,
+		}
+	}
+
+	// Get base capabilities for the adapter type
+	var baseCapabilities ProviderCapabilities
+
 	switch adaptorType {
 	case AwsClaude:
-		return ProviderCapabilities{
+		baseCapabilities = ProviderCapabilities{
 			SupportsTools:               true,  // Claude supports tools via Anthropic format
 			SupportsFunctions:           false, // Claude doesn't support OpenAI functions
 			SupportsLogprobs:            false,
@@ -272,14 +297,14 @@ func GetModelCapabilities(modelName string) ProviderCapabilities {
 			SupportsLogitBias:           false,
 			SupportsServiceTier:         false,
 			SupportsParallelToolCalls:   false,
-			SupportsFrequencyPenalty:    false,
-			SupportsPresencePenalty:     false,
 			SupportsTopLogprobs:         false,
 			SupportsPrediction:          false,
 			SupportsMaxCompletionTokens: false,
+			SupportsImageGeneration:     false, // Claude models don't support image generation
+			SupportsEmbedding:           false, // Claude models don't support embedding
 		}
 	case AwsLlama3:
-		return ProviderCapabilities{
+		baseCapabilities = ProviderCapabilities{
 			SupportsTools:               false, // Currently unsupported. May be implemented in the future.
 			SupportsFunctions:           false,
 			SupportsLogprobs:            false,
@@ -292,14 +317,14 @@ func GetModelCapabilities(modelName string) ProviderCapabilities {
 			SupportsLogitBias:           false,
 			SupportsServiceTier:         false,
 			SupportsParallelToolCalls:   false,
-			SupportsFrequencyPenalty:    false,
-			SupportsPresencePenalty:     false,
 			SupportsTopLogprobs:         false,
 			SupportsPrediction:          false,
 			SupportsMaxCompletionTokens: false,
+			SupportsImageGeneration:     false, // Llama models don't support image generation
+			SupportsEmbedding:           false, // Llama models don't support embedding
 		}
 	case AwsMistral:
-		return ProviderCapabilities{
+		baseCapabilities = ProviderCapabilities{
 			// Disabled for now due to inconsistencies with the AWS Go SDK's documentation and behavior.
 			// Yesterday, it worked for counting tokens with this model using the invoke method, but the converse method doesn't work with tool calling.
 			// Furthermore, the token counting functionality has been disabled for this model in the invoke method.
@@ -317,16 +342,37 @@ func GetModelCapabilities(modelName string) ProviderCapabilities {
 			SupportsLogitBias:           false,
 			SupportsServiceTier:         false,
 			SupportsParallelToolCalls:   false,
-			SupportsFrequencyPenalty:    false,
-			SupportsPresencePenalty:     false,
 			SupportsTopLogprobs:         false,
 			SupportsPrediction:          false,
 			SupportsMaxCompletionTokens: false,
+			SupportsImageGeneration:     false, // Mistral models don't support image generation
+			SupportsEmbedding:           false, // Mistral models don't support embedding
 		}
 	default:
 		// Default to minimal capabilities for unknown models
-		return ProviderCapabilities{}
+		return ProviderCapabilities{
+			SupportsImageGeneration: false,
+			SupportsEmbedding:       false,
+		}
 	}
+
+	// Override capabilities based on specific model characteristics
+	// This ensures consistency with the actual model registry used by GetModelList
+	if isEmbeddingModel(modelName) {
+		// Embedding models only support embedding, not text generation or image generation
+		baseCapabilities.SupportsEmbedding = true
+		baseCapabilities.SupportsImageGeneration = false
+	} else if isImageGenerationModel(modelName) {
+		// Image generation models only support image generation, not embedding
+		baseCapabilities.SupportsImageGeneration = true
+		baseCapabilities.SupportsEmbedding = false
+	} else {
+		// Text models don't support embedding or image generation unless specifically indicated
+		baseCapabilities.SupportsImageGeneration = false
+		baseCapabilities.SupportsEmbedding = false
+	}
+
+	return baseCapabilities
 }
 
 // ValidateUnsupportedParameters checks for unsupported parameters and returns an error if any are found
@@ -471,21 +517,7 @@ func ValidateUnsupportedParameters(request *model.GeneralOpenAIRequest, modelNam
 		})
 	}
 
-	// Check for frequency_penalty support
-	if request.FrequencyPenalty != nil && !capabilities.SupportsFrequencyPenalty {
-		unsupportedParams = append(unsupportedParams, UnsupportedParameter{
-			Name:        "frequency_penalty",
-			Description: "Frequency penalty is not supported by this model",
-		})
-	}
-
-	// Check for presence_penalty support
-	if request.PresencePenalty != nil && !capabilities.SupportsPresencePenalty {
-		unsupportedParams = append(unsupportedParams, UnsupportedParameter{
-			Name:        "presence_penalty",
-			Description: "Presence penalty is not supported by this model",
-		})
-	}
+	// Note: Support for frequency_penalty and presence_penalty has been removed to reduce the number of if statements.
 
 	// If we found unsupported parameters, return an error
 	if len(unsupportedParams) > 0 {
