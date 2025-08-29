@@ -395,6 +395,9 @@ func CountTokenMessages(ctx context.Context, client *bedrockruntime.Client,
 }
 
 // getAWSModelID converts the request model name to AWS Bedrock model ID
+//
+// Note: This function may need modification later,
+// as some models might be unsupported due to inconsistencies in the AWS Go SDK documentation and its behavior.
 func getAWSModelID(requestModel string) (string, error) {
 	// Use the existing model ID mapping from Nova adapter
 	switch requestModel {
