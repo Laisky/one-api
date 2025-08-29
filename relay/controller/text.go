@@ -95,6 +95,8 @@ func RelayTextHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 		// This is for AWS, which must be different from other providers that are based on proprietary systems such as OpenAI, etc.
 		if strings.Contains(err.Error(), "validation failed") {
 			return openai.ErrorWrapper(err, "invalid_request_error", http.StatusBadRequest)
+		} else if strings.Contains(err.Error(), "does not support embedding") {
+			return openai.ErrorWrapper(err, "invalid_request_error", http.StatusBadRequest)
 		}
 		return openai.ErrorWrapper(err, "convert_request_failed", http.StatusInternalServerError)
 	}
