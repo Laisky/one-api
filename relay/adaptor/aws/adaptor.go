@@ -21,6 +21,7 @@ import (
 	"github.com/songquanpeng/one-api/relay/billing/ratio"
 	"github.com/songquanpeng/one-api/relay/meta"
 	"github.com/songquanpeng/one-api/relay/model"
+	"github.com/songquanpeng/one-api/relay/relaymode"
 )
 
 var _ adaptor.Adaptor = new(Adaptor)
@@ -48,6 +49,14 @@ func (a *Adaptor) Init(meta *meta.Meta) {
 func (a *Adaptor) ConvertRequest(c *gin.Context, relayMode int, request *model.GeneralOpenAIRequest) (any, error) {
 	if request == nil {
 		return nil, errors.New("request is nil")
+	}
+
+	// Check if the model supports embedding for embedding requests
+	if relayMode == relaymode.Embeddings {
+		capabilities := GetModelCapabilities(request.Model)
+		if !capabilities.SupportsEmbedding {
+			return nil, errors.Errorf("model '%s' does not support embedding", request.Model)
+		}
 	}
 
 	adaptor := GetAdaptor(request.Model)
@@ -94,6 +103,13 @@ func (a *Adaptor) ConvertImageRequest(_ *gin.Context, request *model.ImageReques
 	if request == nil {
 		return nil, errors.New("request is nil")
 	}
+
+	// Check if the model supports image generation
+	capabilities := GetModelCapabilities(request.Model)
+	if !capabilities.SupportsImageGeneration {
+		return nil, errors.Errorf("model '%s' does not support image generation", request.Model)
+	}
+
 	return request, nil
 }
 
