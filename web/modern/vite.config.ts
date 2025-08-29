@@ -3,7 +3,15 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { createHash } from 'node:crypto'
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
+
+// Helper function to generate short SHA256 hash from chunk content
+//
+// This is a better approach than using the default hash provided by Vite (I'm not sure what algorithm they use).
+function generateContentHash(content: string): string {
+  return createHash('sha256').update(content).digest('hex').substring(0, 8)
+}
 
 export default defineConfig(({ mode }) => ({
   plugins: [react()],
@@ -18,8 +26,28 @@ export default defineConfig(({ mode }) => ({
     sourcemap: mode === 'development',
     rollupOptions: {
       output: {
-        // Use both name and hash for chunk file names to aid debugging and cache busting
-        chunkFileNames: '[name].[hash].js',
+        // Use both name and hash (Use SHA256 digest) for chunk file names to aid debugging and cache busting
+        chunkFileNames: (chunkInfo) => {
+          // Use moduleIds as a proxy for chunk content since code is not available at this stage
+          const moduleContent = chunkInfo.moduleIds?.join('') || chunkInfo.name || 'chunk'
+          const contentHash = generateContentHash(moduleContent)
+          return `[name].${contentHash}.js`
+        },
+        // Use SHA256 digest for entry file names
+        entryFileNames: (chunkInfo) => {
+          // Use moduleIds as a proxy for entry content
+          const moduleContent = chunkInfo.moduleIds?.join('') || chunkInfo.name || 'entry'
+          const contentHash = generateContentHash(moduleContent)
+          return `[name].${contentHash}.js`
+        },
+        // Use SHA256 digest for asset file names (CSS, images, etc.)
+        assetFileNames: (assetInfo) => {
+          // Use the asset name and type for content hashing
+          const assetContent = assetInfo.name || 'asset'
+          const contentHash = generateContentHash(assetContent)
+          const extension = assetInfo.name?.split('.').pop() || 'asset'
+          return `${contentHash}.${extension}`
+        },
         manualChunks: {
           vendor: ['react', 'react-dom'],
           router: ['react-router-dom'],
