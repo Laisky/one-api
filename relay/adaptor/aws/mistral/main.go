@@ -10,10 +10,10 @@ import (
 
 	"github.com/Laisky/errors/v2"
 	gmw "github.com/Laisky/gin-middlewares/v6"
+	"github.com/Laisky/go-utils/v5/log"
 	"github.com/Laisky/zap"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/bedrockruntime"
-	"github.com/aws/aws-sdk-go-v2/service/bedrockruntime/document"
 	"github.com/aws/aws-sdk-go-v2/service/bedrockruntime/types"
 	"github.com/gin-gonic/gin"
 
@@ -149,7 +149,7 @@ func ConvertRequest(textRequest relaymodel.GeneralOpenAIRequest) *Request {
 	return mistralReq
 }
 
-// Handler handles non-streaming requests using Converse API
+// Handler handles non-streaming requests using appropriate API
 func Handler(c *gin.Context, awsCli *bedrockruntime.Client, modelName string) (*relaymodel.ErrorWithStatusCode, *relaymodel.Usage) {
 	awsModelName, err := awsModelID(c.GetString(ctxkey.RequestModel))
 	if err != nil {
@@ -162,20 +162,102 @@ func Handler(c *gin.Context, awsCli *bedrockruntime.Client, modelName string) (*
 		return utils.WrapErr(errors.New("request not found")), nil
 	}
 
+	req := mistralReq.(*Request)
+
+	// Use InvokeModel API when tools are present, Converse API otherwise
+	if len(req.Tools) > 0 {
+		return handleWithInvokeModel(c, awsCli, req, awsModelName, modelName)
+	}
+
+	// Use Converse API for regular requests
+	return handleWithConverseAPI(c, awsCli, req, awsModelName, modelName)
+}
+
+// handleWithInvokeModel handles requests with tools using InvokeModel API
+func handleWithInvokeModel(c *gin.Context, awsCli *bedrockruntime.Client, mistralReq *Request, awsModelName, modelName string) (*relaymodel.ErrorWithStatusCode, *relaymodel.Usage) {
+	// Convert request to JSON for InvokeModel
+	requestJSON, err := json.Marshal(mistralReq)
+	if err != nil {
+		return utils.WrapErr(errors.Wrap(err, "marshal request")), nil
+	}
+
+	// Make the API call to Bedrock using InvokeModel
+	input := &bedrockruntime.InvokeModelInput{
+		ModelId:     aws.String(awsModelName),
+		ContentType: aws.String("application/json"),
+		Accept:      aws.String("application/json"),
+		Body:        requestJSON,
+	}
+
+	awsResp, err := awsCli.InvokeModel(gmw.Ctx(c), input)
+	if err != nil {
+		return utils.WrapErr(errors.Wrap(err, "InvokeModel")), nil
+	}
+
+	// Parse the response
+	var mistralResp Response
+	err = json.Unmarshal(awsResp.Body, &mistralResp)
+	if err != nil {
+		return utils.WrapErr(errors.Wrap(err, "unmarshal response")), nil
+	}
+
+	// Convert to OpenAI format
+	openaiResp := ResponseMistral2OpenAI(&mistralResp, modelName)
+	openaiResp.Model = modelName
+
+	// Calculate token usage using accurate AWS Bedrock CountTokens API
+	// Convert Mistral messages to relaymodel.Message for accurate token counting
+	var relayMessages []relaymodel.Message
+	for _, msg := range mistralReq.Messages {
+		relayMessages = append(relayMessages, relaymodel.Message{
+			Role:    msg.Role,
+			Content: msg.Content,
+		})
+	}
+
+	// Use accurate token counting from AWS Bedrock
+	promptTokens, err := utils.GetAccurateTokenCount(gmw.Ctx(c), awsCli, relayMessages, modelName)
+	if err != nil {
+		return utils.WrapErr(errors.Wrap(err, "prompt token")), nil
+	}
+
+	usage := relaymodel.Usage{
+		PromptTokens: promptTokens,
+	}
+
+	// Use accurate completion token counting from response content
+	if len(openaiResp.Choices) > 0 {
+		content := openaiResp.Choices[0].Message.StringContent()
+		completionTokens, err := utils.CountTokenText(gmw.Ctx(c), awsCli, content, modelName)
+		if err != nil {
+			return utils.WrapErr(errors.Wrap(err, "completion token")), nil
+		}
+
+		usage.CompletionTokens = completionTokens
+	}
+	usage.TotalTokens = usage.PromptTokens + usage.CompletionTokens
+	openaiResp.Usage = usage
+
+	c.JSON(http.StatusOK, openaiResp)
+	return nil, &usage
+}
+
+// handleWithConverseAPI handles regular requests using Converse API
+func handleWithConverseAPI(c *gin.Context, awsCli *bedrockruntime.Client, mistralReq *Request, awsModelName, modelName string) (*relaymodel.ErrorWithStatusCode, *relaymodel.Usage) {
 	// Convert Mistral request to Converse API format
-	converseReq, err := convertMistralToConverseRequest(mistralReq.(*Request), awsModelName)
+	converseReq, err := convertMistralToConverseRequest(mistralReq, awsModelName)
 	if err != nil {
 		return utils.WrapErr(errors.Wrap(err, "convert to converse request")), nil
 	}
 
-	// Use Converse API instead of InvokeModel to get actual token counts
+	// Use Converse API to get actual token counts
 	awsResp, err := awsCli.Converse(gmw.Ctx(c), converseReq)
 	if err != nil {
 		return utils.WrapErr(errors.Wrap(err, "Converse")), nil
 	}
 
 	// Convert Converse response to OpenAI format
-	openaiResp := convertConverseResponseToOpenAI(awsResp, modelName)
+	openaiResp := convertConverseResponseToOpenAI(awsResp, c.GetString(ctxkey.RequestModel))
 
 	// Extract actual usage from Converse API response
 	var usage relaymodel.Usage
@@ -201,22 +283,39 @@ func Handler(c *gin.Context, awsCli *bedrockruntime.Client, modelName string) (*
 }
 
 // ResponseMistral2OpenAI converts Mistral response to OpenAI format
-func ResponseMistral2OpenAI(mistralResponse *Response) *openai.TextResponse {
+func ResponseMistral2OpenAI(mistralResponse *Response, modelName string) *openai.TextResponse {
 	var responseText string
 	var finishReason string
+	var toolCalls []relaymodel.Tool
 
 	if len(mistralResponse.Choices) > 0 {
 		responseText = mistralResponse.Choices[0].Message.Content
 		if stopReason := convertStopReason(mistralResponse.Choices[0].StopReason); stopReason != nil {
 			finishReason = *stopReason
 		}
+
+		// Convert tool calls from Mistral to OpenAI format
+		if len(mistralResponse.Choices[0].Message.ToolCalls) > 0 {
+			toolCalls = make([]relaymodel.Tool, len(mistralResponse.Choices[0].Message.ToolCalls))
+			for i, tc := range mistralResponse.Choices[0].Message.ToolCalls {
+				toolCalls[i] = relaymodel.Tool{
+					Id:   tc.ID,
+					Type: "function",
+					Function: &relaymodel.Function{
+						Name:      tc.Function.Name,
+						Arguments: tc.Function.Arguments,
+					},
+				}
+			}
+		}
 	}
 
 	choice := openai.TextResponseChoice{
 		Index: 0,
 		Message: relaymodel.Message{
-			Role:    "assistant",
-			Content: responseText,
+			Role:      "assistant",
+			Content:   responseText,
+			ToolCalls: toolCalls,
 		},
 		FinishReason: finishReason,
 	}
@@ -225,12 +324,12 @@ func ResponseMistral2OpenAI(mistralResponse *Response) *openai.TextResponse {
 		Id:      fmt.Sprintf("chatcmpl-oneapi-%s", random.GetUUID()),
 		Object:  "chat.completion",
 		Created: helper.GetTimestamp(),
-		Model:   "mistral-large-2407",
+		Model:   modelName,
 		Choices: []openai.TextResponseChoice{choice},
 	}
 }
 
-// StreamHandler handles streaming requests using Converse API
+// StreamHandler handles streaming requests using appropriate API
 func StreamHandler(c *gin.Context, awsCli *bedrockruntime.Client) (*relaymodel.ErrorWithStatusCode, *relaymodel.Usage) {
 	lg := gmw.GetLogger(c)
 	createdTime := helper.GetTimestamp()
@@ -245,8 +344,101 @@ func StreamHandler(c *gin.Context, awsCli *bedrockruntime.Client) (*relaymodel.E
 		return utils.WrapErr(errors.New("request not found")), nil
 	}
 
+	req := mistralReq.(*Request)
+
+	// Use InvokeModelWithResponseStream when tools are present, ConverseStream otherwise
+	if len(req.Tools) > 0 {
+		return handleStreamWithInvokeModel(c, awsCli, req, awsModelName, createdTime, lg)
+	}
+
+	// Use ConverseStream API for regular requests
+	return handleStreamWithConverseAPI(c, awsCli, req, awsModelName, createdTime, lg)
+}
+
+// handleStreamWithInvokeModel handles streaming requests with tools using InvokeModelWithResponseStream
+func handleStreamWithInvokeModel(c *gin.Context, awsCli *bedrockruntime.Client, mistralReq *Request, awsModelName string, createdTime int64, lg log.Logger) (*relaymodel.ErrorWithStatusCode, *relaymodel.Usage) {
+	// Convert request to JSON for InvokeModelWithResponseStream
+	requestJSON, err := json.Marshal(mistralReq)
+	if err != nil {
+		return utils.WrapErr(errors.Wrap(err, "marshal request")), nil
+	}
+
+	awsReq := &bedrockruntime.InvokeModelWithResponseStreamInput{
+		ModelId:     aws.String(awsModelName),
+		Accept:      aws.String("application/json"),
+		ContentType: aws.String("application/json"),
+		Body:        requestJSON,
+	}
+
+	awsResp, err := awsCli.InvokeModelWithResponseStream(gmw.Ctx(c), awsReq)
+	if err != nil {
+		return utils.WrapErr(errors.Wrap(err, "InvokeModelWithResponseStream")), nil
+	}
+	stream := awsResp.GetStream()
+	defer stream.Close()
+
+	c.Writer.Header().Set("Content-Type", "text/event-stream")
+	c.Writer.Header().Set("Cache-Control", "no-cache")
+	c.Writer.Header().Set("Connection", "keep-alive")
+	c.Writer.Header().Set("X-Accel-Buffering", "no")
+	c.Writer.Header().Set("Pragma", "no-cache")
+
+	var usage relaymodel.Usage
+	var id string
+
+	c.Stream(func(w io.Writer) bool {
+		event, ok := <-stream.Events()
+		if !ok {
+			c.Render(-1, common.CustomEvent{Data: "data: [DONE]"})
+			return false
+		}
+
+		switch v := event.(type) {
+		case *types.ResponseStreamMemberChunk:
+			var mistralResp StreamResponse
+			err := json.Unmarshal(v.Value.Bytes, &mistralResp)
+			if err != nil {
+				lg.Error("error unmarshalling stream response", zap.Error(err))
+				return false
+			}
+
+			// Convert Mistral streaming response to OpenAI format
+			openaiResp := StreamResponseMistral2OpenAI(&mistralResp, c.GetString(ctxkey.RequestModel))
+			if openaiResp == nil {
+				return true
+			}
+
+			if id == "" {
+				id = openaiResp.Id
+			}
+			openaiResp.Id = id
+			openaiResp.Model = c.GetString(ctxkey.OriginalModel)
+			openaiResp.Created = createdTime
+
+			jsonStr, err := json.Marshal(openaiResp)
+			if err != nil {
+				lg.Error("error marshalling stream response", zap.Error(err))
+				return true
+			}
+			c.Render(-1, common.CustomEvent{Data: "data: " + string(jsonStr)})
+			return true
+
+		case *types.UnknownUnionMember:
+			lg.Warn("unknown event type in stream", zap.String("tag", v.Tag))
+			return false
+		default:
+			lg.Warn("unexpected event type in stream")
+			return false
+		}
+	})
+
+	return nil, &usage
+}
+
+// handleStreamWithConverseAPI handles streaming requests using ConverseStream API
+func handleStreamWithConverseAPI(c *gin.Context, awsCli *bedrockruntime.Client, mistralReq *Request, awsModelName string, createdTime int64, lg log.Logger) (*relaymodel.ErrorWithStatusCode, *relaymodel.Usage) {
 	// Convert Mistral request to Converse API format
-	converseReq, err := convertMistralToConverseStreamRequest(mistralReq.(*Request), awsModelName)
+	converseReq, err := convertMistralToConverseStreamRequest(mistralReq, awsModelName)
 	if err != nil {
 		return utils.WrapErr(errors.Wrap(err, "convert to converse request")), nil
 	}
@@ -267,8 +459,7 @@ func StreamHandler(c *gin.Context, awsCli *bedrockruntime.Client) (*relaymodel.E
 
 	var usage relaymodel.Usage
 	var id string
-	var totalContent strings.Builder            // Track accumulated content for fallback usage calculation
-	var currentToolUse *types.ToolUseBlockStart // Track current tool use for delta accumulation
+	var totalContent strings.Builder // Track accumulated content for fallback usage calculation
 
 	c.Stream(func(w io.Writer) bool {
 		event, ok := <-stream.Events()
@@ -281,18 +472,6 @@ func StreamHandler(c *gin.Context, awsCli *bedrockruntime.Client) (*relaymodel.E
 		case *types.ConverseStreamOutputMemberMessageStart:
 			// Handle message start
 			id = fmt.Sprintf("chatcmpl-oneapi-%s", random.GetUUID())
-			return true
-
-		case *types.ConverseStreamOutputMemberContentBlockStart:
-			// Handle content block start - this includes tool use start
-			if v.Value.Start != nil {
-				switch startValue := v.Value.Start.(type) {
-				case *types.ContentBlockStartMemberToolUse:
-					// Store tool use metadata for delta processing
-					currentToolUse = &startValue.Value
-					return true
-				}
-			}
 			return true
 
 		case *types.ConverseStreamOutputMemberContentBlockDelta:
@@ -325,48 +504,6 @@ func StreamHandler(c *gin.Context, awsCli *bedrockruntime.Client) (*relaymodel.E
 						jsonStr, err := json.Marshal(response)
 						if err != nil {
 							lg.Error("error marshalling stream response", zap.Error(err))
-							return true
-						}
-						c.Render(-1, common.CustomEvent{Data: "data: " + string(jsonStr)})
-					}
-				case *types.ContentBlockDeltaMemberToolUse:
-					// Handle tool use delta - accumulate input data
-					if currentToolUse != nil {
-						toolUseDelta := deltaValue.Value
-						// In streaming, we get incremental input data
-						// For now, send the delta input as arguments (this might need accumulation)
-						var toolCalls []relaymodel.Tool
-
-						toolCall := relaymodel.Tool{
-							Id:   aws.ToString(currentToolUse.ToolUseId),
-							Type: "function",
-							Function: &relaymodel.Function{
-								Name:      aws.ToString(currentToolUse.Name),
-								Arguments: aws.ToString(toolUseDelta.Input),
-							},
-						}
-						toolCalls = append(toolCalls, toolCall)
-
-						// Create streaming response with tool calls
-						response := &openai.ChatCompletionsStreamResponse{
-							Id:      id,
-							Object:  "chat.completion.chunk",
-							Created: createdTime,
-							Model:   c.GetString(ctxkey.OriginalModel),
-							Choices: []openai.ChatCompletionsStreamResponseChoice{
-								{
-									Index: 0,
-									Delta: relaymodel.Message{
-										Role:      "assistant",
-										ToolCalls: toolCalls,
-									},
-								},
-							},
-						}
-
-						jsonStr, err := json.Marshal(response)
-						if err != nil {
-							lg.Error("error marshalling tool use stream response", zap.Error(err))
 							return true
 						}
 						c.Render(-1, common.CustomEvent{Data: "data: " + string(jsonStr)})
@@ -424,10 +561,7 @@ func StreamHandler(c *gin.Context, awsCli *bedrockruntime.Client) (*relaymodel.E
 	return nil, &usage
 }
 
-// StreamResponseMistral2OpenAI converts Mistral streaming responses to the OpenAI format.
-//
-// Note: This function is currently unused. It was previously used in the invoke method, but is now replaced by converse,
-// as the invoke method does not provide token usage information.
+// StreamResponseMistral2OpenAI converts Mistral streaming response to OpenAI format
 func StreamResponseMistral2OpenAI(mistralResponse *StreamResponse, modelName string) *openai.ChatCompletionsStreamResponse {
 	if len(mistralResponse.Choices) == 0 {
 		return nil
@@ -436,7 +570,7 @@ func StreamResponseMistral2OpenAI(mistralResponse *StreamResponse, modelName str
 	choice := mistralResponse.Choices[0]
 
 	return &openai.ChatCompletionsStreamResponse{
-		Id:      "chatcmpl-oneapi-" + random.GetRandomString(29),
+		Id:      "chatcmpl-" + random.GetRandomString(29),
 		Object:  "chat.completion.chunk",
 		Created: time.Now().Unix(),
 		Model:   modelName,
@@ -455,7 +589,6 @@ func StreamResponseMistral2OpenAI(mistralResponse *StreamResponse, modelName str
 }
 
 // convertToolCalls converts Mistral tool calls to OpenAI format
-// TODO: This still needs a fix, because the content output becomes empty even though the tool is called.
 func convertToolCalls(mistralToolCalls []ToolCall) []relaymodel.Tool {
 	if len(mistralToolCalls) == 0 {
 		return nil
@@ -549,65 +682,6 @@ func convertMistralToConverseRequest(mistralReq *Request, modelID string) (*bedr
 		converseReq.System = systemMessages
 	}
 
-	// Add tool configuration if tools are present
-	// TODO: This still needs a fix, because the content output becomes empty even though the tool is called.
-	if len(mistralReq.Tools) > 0 {
-		var tools []types.Tool
-		for _, tool := range mistralReq.Tools {
-			// Convert parameters to JSON schema format
-			var inputSchema types.ToolInputSchema
-			if tool.Function.Parameters != nil {
-				inputSchema = &types.ToolInputSchemaMemberJson{
-					Value: document.NewLazyDocument(tool.Function.Parameters),
-				}
-			}
-
-			tools = append(tools, &types.ToolMemberToolSpec{
-				Value: types.ToolSpecification{
-					Name:        aws.String(tool.Function.Name),
-					Description: aws.String(tool.Function.Description),
-					InputSchema: inputSchema,
-				},
-			})
-		}
-
-		// Convert tool choice
-		var toolChoice types.ToolChoice
-		if mistralReq.ToolChoice != nil {
-			switch choice := mistralReq.ToolChoice.(type) {
-			case string:
-				switch choice {
-				case "auto":
-					toolChoice = &types.ToolChoiceMemberAuto{
-						Value: types.AutoToolChoice{},
-					}
-				case "any":
-					toolChoice = &types.ToolChoiceMemberAny{
-						Value: types.AnyToolChoice{},
-					}
-				}
-			case map[string]interface{}:
-				// Handle specific tool choice object
-				if toolType, ok := choice["type"].(string); ok && toolType == "function" {
-					if function, ok := choice["function"].(map[string]interface{}); ok {
-						if name, ok := function["name"].(string); ok {
-							toolChoice = &types.ToolChoiceMemberTool{
-								Value: types.SpecificToolChoice{
-									Name: aws.String(name),
-								},
-							}
-						}
-					}
-				}
-			}
-		}
-
-		converseReq.ToolConfig = &types.ToolConfiguration{
-			Tools:      tools,
-			ToolChoice: toolChoice,
-		}
-	}
-
 	return converseReq, nil
 }
 
@@ -615,44 +689,16 @@ func convertMistralToConverseRequest(mistralReq *Request, modelID string) (*bedr
 func convertConverseResponseToOpenAI(converseResp *bedrockruntime.ConverseOutput, modelName string) *openai.TextResponse {
 	var responseText string
 	var finishReason string
-	var toolCalls []relaymodel.Tool
 
 	// Extract response content from Converse API response
 	if converseResp.Output != nil {
 		switch outputValue := converseResp.Output.(type) {
 		case *types.ConverseOutputMemberMessage:
 			if len(outputValue.Value.Content) > 0 {
-				// Process all content blocks
-				for _, contentBlock := range outputValue.Value.Content {
-					switch contentValue := contentBlock.(type) {
-					case *types.ContentBlockMemberText:
-						responseText += contentValue.Value
-					case *types.ContentBlockMemberToolUse:
-						// Handle tool use content blocks
-						toolUse := contentValue.Value
-
-						// Convert input to JSON string
-						var argsStr string
-						if toolUse.Input != nil {
-							if argsBytes, err := json.Marshal(toolUse.Input); err == nil {
-								argsStr = string(argsBytes)
-							} else {
-								argsStr = "{}"
-							}
-						} else {
-							argsStr = "{}"
-						}
-
-						toolCall := relaymodel.Tool{
-							Id:   aws.ToString(toolUse.ToolUseId),
-							Type: "function",
-							Function: &relaymodel.Function{
-								Name:      aws.ToString(toolUse.Name),
-								Arguments: argsStr,
-							},
-						}
-						toolCalls = append(toolCalls, toolCall)
-					}
+				// Get the first content block (assuming text)
+				switch contentValue := outputValue.Value.Content[0].(type) {
+				case *types.ContentBlockMemberText:
+					responseText = contentValue.Value
 				}
 			}
 			// Convert stop reason
@@ -662,20 +708,12 @@ func convertConverseResponseToOpenAI(converseResp *bedrockruntime.ConverseOutput
 		}
 	}
 
-	message := relaymodel.Message{
-		Role:    "assistant",
-		Content: responseText,
-	}
-
-	// Add tool calls if present
-	// TODO: This still needs a fix, because the content output becomes empty even though the tool is called.
-	if len(toolCalls) > 0 {
-		message.ToolCalls = toolCalls
-	}
-
 	choice := openai.TextResponseChoice{
-		Index:        0,
-		Message:      message,
+		Index: 0,
+		Message: relaymodel.Message{
+			Role:    "assistant",
+			Content: responseText,
+		},
 		FinishReason: finishReason,
 	}
 
@@ -740,66 +778,6 @@ func convertMistralToConverseStreamRequest(mistralReq *Request, modelID string) 
 	// Add system messages if any
 	if len(systemMessages) > 0 {
 		converseReq.System = systemMessages
-	}
-
-	// Add tool configuration if tools are present
-	// TODO: This still needs a fix, because the content output becomes empty even though the tool is called.
-	// Additionally, the tool is not supported in streaming mode and will return an error.
-	if len(mistralReq.Tools) > 0 {
-		var tools []types.Tool
-		for _, tool := range mistralReq.Tools {
-			// Convert parameters to JSON schema format
-			var inputSchema types.ToolInputSchema
-			if tool.Function.Parameters != nil {
-				inputSchema = &types.ToolInputSchemaMemberJson{
-					Value: document.NewLazyDocument(tool.Function.Parameters),
-				}
-			}
-
-			tools = append(tools, &types.ToolMemberToolSpec{
-				Value: types.ToolSpecification{
-					Name:        aws.String(tool.Function.Name),
-					Description: aws.String(tool.Function.Description),
-					InputSchema: inputSchema,
-				},
-			})
-		}
-
-		// Convert tool choice
-		var toolChoice types.ToolChoice
-		if mistralReq.ToolChoice != nil {
-			switch choice := mistralReq.ToolChoice.(type) {
-			case string:
-				switch choice {
-				case "auto":
-					toolChoice = &types.ToolChoiceMemberAuto{
-						Value: types.AutoToolChoice{},
-					}
-				case "any":
-					toolChoice = &types.ToolChoiceMemberAny{
-						Value: types.AnyToolChoice{},
-					}
-				}
-			case map[string]interface{}:
-				// Handle specific tool choice object
-				if toolType, ok := choice["type"].(string); ok && toolType == "function" {
-					if function, ok := choice["function"].(map[string]interface{}); ok {
-						if name, ok := function["name"].(string); ok {
-							toolChoice = &types.ToolChoiceMemberTool{
-								Value: types.SpecificToolChoice{
-									Name: aws.String(name),
-								},
-							}
-						}
-					}
-				}
-			}
-		}
-
-		converseReq.ToolConfig = &types.ToolConfiguration{
-			Tools:      tools,
-			ToolChoice: toolChoice,
-		}
 	}
 
 	return converseReq, nil
