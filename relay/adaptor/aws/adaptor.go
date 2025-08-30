@@ -16,6 +16,7 @@ import (
 	"github.com/songquanpeng/one-api/relay/adaptor"
 	anthropicAdaptor "github.com/songquanpeng/one-api/relay/adaptor/anthropic"
 	"github.com/songquanpeng/one-api/relay/adaptor/aws/utils"
+	"github.com/songquanpeng/one-api/relay/billing/ratio"
 	"github.com/songquanpeng/one-api/relay/meta"
 	"github.com/songquanpeng/one-api/relay/model"
 )
@@ -190,6 +191,9 @@ func (a *Adaptor) GetDefaultModelPricing() map[string]adaptor.ModelConfig {
 		"mistral-7b-instruct":   {Ratio: 0.15 * MilliTokensUsd, CompletionRatio: 1.33}, // $0.15/$0.2 per 1M tokens
 		"mistral-8x7b-instruct": {Ratio: 0.45 * MilliTokensUsd, CompletionRatio: 1.56}, // $0.45/$0.7 per 1M tokens
 		"mistral-large":         {Ratio: 4 * MilliTokensUsd, CompletionRatio: 3},       // $4/$12 per 1M tokens
+
+		// DeepSeek Models (Supported) - Updated pricing as of 2025-08-28 - Note: These are per 1K tokens, converted to 1M tokens using MilliTokensUsd
+		"deepseek-r1": {Ratio: 1.35 * ratio.MilliTokensUsd, CompletionRatio: 4}, // $0.00135/$0.0054 per 1K tokens = $1.35/$5.4 per 1M tokens
 	}
 }
 
