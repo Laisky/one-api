@@ -25,6 +25,7 @@ func TestAdapterPricingImplementations(t *testing.T) {
 		{"Xunfei", apitype.Xunfei, "Spark-Lite", false},
 		{"VertexAI", apitype.VertexAI, "gemini-pro", false},
 		{"xAI", apitype.XAI, "grok-beta", false}, // Prefer primary constant; model alias still tested
+		{"AWS Bedrock/Mistral AI", apitype.AwsClaude, "mistral-pixtral-large-2502", false},
 		// Adapters that still use DefaultPricingMethods (expected to have empty pricing)
 		{"Ollama", apitype.Ollama, "llama2", true},
 		{"Cohere", apitype.Cohere, "command", false},
@@ -280,6 +281,7 @@ func TestFallbackPricing(t *testing.T) {
 		{"Xunfei", apitype.Xunfei},
 		{"VertexAI", apitype.VertexAI},
 		{"xAI", apitype.XAI},
+		{"AWS Bedrock", apitype.AwsClaude},
 	}
 
 	unknownModel := "unknown-test-model-12345"

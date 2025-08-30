@@ -2,8 +2,10 @@ package aws
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"net/http"
+	"strings"
 
 	"github.com/Laisky/errors/v2"
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -16,8 +18,10 @@ import (
 	"github.com/songquanpeng/one-api/relay/adaptor"
 	anthropicAdaptor "github.com/songquanpeng/one-api/relay/adaptor/anthropic"
 	"github.com/songquanpeng/one-api/relay/adaptor/aws/utils"
+	"github.com/songquanpeng/one-api/relay/billing/ratio"
 	"github.com/songquanpeng/one-api/relay/meta"
 	"github.com/songquanpeng/one-api/relay/model"
+	"github.com/songquanpeng/one-api/relay/relaymode"
 )
 
 var _ adaptor.Adaptor = new(Adaptor)
@@ -47,9 +51,22 @@ func (a *Adaptor) ConvertRequest(c *gin.Context, relayMode int, request *model.G
 		return nil, errors.New("request is nil")
 	}
 
+	// Check if the model supports embedding for embedding requests
+	if relayMode == relaymode.Embeddings {
+		capabilities := GetModelCapabilities(request.Model)
+		if !capabilities.SupportsEmbedding {
+			return nil, errors.Errorf("model '%s' does not support embedding", request.Model)
+		}
+	}
+
 	adaptor := GetAdaptor(request.Model)
 	if adaptor == nil {
 		return nil, errors.New("adaptor not found")
+	}
+
+	// Validate parameters using the new model-based validation
+	if validationErr := ValidateUnsupportedParameters(request, request.Model); validationErr != nil {
+		return nil, errors.Errorf("validation failed: %s", validationErr.Error.Message)
 	}
 
 	a.awsAdapter = adaptor
@@ -86,6 +103,13 @@ func (a *Adaptor) ConvertImageRequest(_ *gin.Context, request *model.ImageReques
 	if request == nil {
 		return nil, errors.New("request is nil")
 	}
+
+	// Check if the model supports image generation
+	capabilities := GetModelCapabilities(request.Model)
+	if !capabilities.SupportsImageGeneration {
+		return nil, errors.Errorf("model '%s' does not support image generation", request.Model)
+	}
+
 	return request, nil
 }
 
@@ -186,10 +210,15 @@ func (a *Adaptor) GetDefaultModelPricing() map[string]adaptor.ModelConfig {
 		"ai21-j2-ultra":  {Ratio: 18.8 * MilliTokensUsd, CompletionRatio: 1}, // $18.8 per 1M tokens
 		"ai21-jamba-1.5": {Ratio: 2 * MilliTokensUsd, CompletionRatio: 4},    // $2/$8 per 1M tokens
 
-		// Mistral Models (if supported)
-		"mistral-7b-instruct":   {Ratio: 0.15 * MilliTokensUsd, CompletionRatio: 1.33}, // $0.15/$0.2 per 1M tokens
-		"mistral-8x7b-instruct": {Ratio: 0.45 * MilliTokensUsd, CompletionRatio: 1.56}, // $0.45/$0.7 per 1M tokens
-		"mistral-large":         {Ratio: 4 * MilliTokensUsd, CompletionRatio: 3},       // $4/$12 per 1M tokens
+		// Mistral Models (Supported) - Updated pricing as of 2025-08-27 - Note: These are per 1K tokens, converted to 1M tokens using MilliTokensUsd
+		//
+		// Note: The Mistral Instruct model (mistral-7b, mixtral-8x7b) is currently considered legacy and unsupported.
+		// Only the newest/latest models available in AWS Bedrock are supported.
+		"mistral-7b":                 {Ratio: 0.15 * ratio.MilliTokensUsd, CompletionRatio: 1.33}, // $0.00015/$0.0002 per 1K tokens = $0.15/$0.2 per 1M tokens
+		"mixtral-8x7b":               {Ratio: 0.45 * ratio.MilliTokensUsd, CompletionRatio: 1.56}, // $0.00045/$0.0007 per 1K tokens = $0.45/$0.7 per 1M tokens
+		"mistral-small-2402":         {Ratio: 1 * ratio.MilliTokensUsd, CompletionRatio: 3},       // $0.001/$0.003 per 1K tokens = $1/$3 per 1M tokens
+		"mistral-large-2402":         {Ratio: 4 * ratio.MilliTokensUsd, CompletionRatio: 3},       // $0.004/$0.012 per 1K tokens = $4/$12 per 1M tokens
+		"mistral-pixtral-large-2502": {Ratio: 2 * ratio.MilliTokensUsd, CompletionRatio: 3},       // $0.002/$0.006 per 1K tokens = $2/$6 per 1M tokens
 	}
 }
 
@@ -209,4 +238,325 @@ func (a *Adaptor) GetCompletionRatio(modelName string) float64 {
 	}
 	// Default completion ratio for AWS
 	return 5.0
+}
+
+// UnsupportedParameter represents a parameter that is not supported by a provider
+type UnsupportedParameter struct {
+	Name        string
+	Description string
+}
+
+// ProviderCapabilities defines what features are supported by different AWS providers
+type ProviderCapabilities struct {
+	SupportsTools               bool
+	SupportsFunctions           bool
+	SupportsLogprobs            bool
+	SupportsResponseFormat      bool
+	SupportsReasoningEffort     bool
+	SupportsModalities          bool
+	SupportsAudio               bool
+	SupportsWebSearch           bool
+	SupportsThinking            bool
+	SupportsLogitBias           bool
+	SupportsServiceTier         bool
+	SupportsParallelToolCalls   bool
+	SupportsTopLogprobs         bool
+	SupportsPrediction          bool
+	SupportsMaxCompletionTokens bool
+	SupportsImageGeneration     bool
+	SupportsEmbedding           bool
+}
+
+// isEmbeddingModel checks if a model name indicates it's an embedding model.
+//
+// TODO: This function needs improvement, as it's currently used for 'amazon-titan-embed-text' and may not cover all cases.
+func isEmbeddingModel(modelName string) bool { return strings.Contains(modelName, "embed") }
+
+// isImageGenerationModel checks if a model name indicates it's an image generation model.
+//
+// TODO: This function needs improvement, as it's currently used for 'amazon-titan-image-generator' and 'amazon-nova-canvas' (image generator) and may not cover all cases.
+func isImageGenerationModel(modelName string) bool {
+	return strings.Contains(modelName, "image") || strings.Contains(modelName, "canvas")
+}
+
+// GetModelCapabilities returns the capabilities for a model based on its adapter type and specific model characteristics
+// This function now uses the same model registry as GetModelList for consistency
+func GetModelCapabilities(modelName string) ProviderCapabilities {
+	adaptorType := adaptors[modelName]
+	if awsArnMatch != nil && awsArnMatch.MatchString(modelName) {
+		adaptorType = AwsClaude
+	}
+
+	// If model is not in registry, return minimal capabilities
+	if adaptorType == 0 {
+		return ProviderCapabilities{
+			SupportsImageGeneration: false,
+			SupportsEmbedding:       false,
+		}
+	}
+
+	// Get base capabilities for the adapter type
+	var baseCapabilities ProviderCapabilities
+
+	switch adaptorType {
+	case AwsClaude:
+		baseCapabilities = ProviderCapabilities{
+			SupportsTools:               true,  // Claude supports tools via Anthropic format
+			SupportsFunctions:           false, // Claude doesn't support OpenAI functions
+			SupportsLogprobs:            false,
+			SupportsResponseFormat:      true, // Claude supports some response formats
+			SupportsReasoningEffort:     false,
+			SupportsModalities:          false,
+			SupportsAudio:               false,
+			SupportsWebSearch:           false,
+			SupportsThinking:            true, // Claude supports thinking
+			SupportsLogitBias:           false,
+			SupportsServiceTier:         false,
+			SupportsParallelToolCalls:   false,
+			SupportsTopLogprobs:         false,
+			SupportsPrediction:          false,
+			SupportsMaxCompletionTokens: false,
+			SupportsImageGeneration:     false, // Claude models don't support image generation
+			SupportsEmbedding:           false, // Claude models don't support embedding
+		}
+	case AwsLlama3:
+		baseCapabilities = ProviderCapabilities{
+			SupportsTools:               false, // Currently unsupported. May be implemented in the future.
+			SupportsFunctions:           false,
+			SupportsLogprobs:            false,
+			SupportsResponseFormat:      false,
+			SupportsReasoningEffort:     false,
+			SupportsModalities:          false,
+			SupportsAudio:               false,
+			SupportsWebSearch:           false,
+			SupportsThinking:            false,
+			SupportsLogitBias:           false,
+			SupportsServiceTier:         false,
+			SupportsParallelToolCalls:   false,
+			SupportsTopLogprobs:         false,
+			SupportsPrediction:          false,
+			SupportsMaxCompletionTokens: false,
+			SupportsImageGeneration:     false, // Llama models don't support image generation
+			SupportsEmbedding:           false, // Llama models don't support embedding
+		}
+	case AwsMistral:
+		baseCapabilities = ProviderCapabilities{
+			// Disabled for now due to inconsistencies with the AWS Go SDK's documentation and behavior.
+			// Yesterday, it worked for counting tokens with this model using the invoke method, but the converse method doesn't work with tool calling.
+			// Furthermore, the token counting functionality has been disabled for this model in the invoke method.
+			// Therefore, function tool calling for this model is disabled because the converse method doesn't work with function tool calling,
+			// and using the invoke method doesn't provide token usage information, unlike the converse method.
+			SupportsTools:               false,
+			SupportsFunctions:           false,
+			SupportsLogprobs:            false,
+			SupportsResponseFormat:      false,
+			SupportsReasoningEffort:     false,
+			SupportsModalities:          false,
+			SupportsAudio:               false,
+			SupportsWebSearch:           false,
+			SupportsThinking:            false,
+			SupportsLogitBias:           false,
+			SupportsServiceTier:         false,
+			SupportsParallelToolCalls:   false,
+			SupportsTopLogprobs:         false,
+			SupportsPrediction:          false,
+			SupportsMaxCompletionTokens: false,
+			SupportsImageGeneration:     false, // Mistral models don't support image generation
+			SupportsEmbedding:           false, // Mistral models don't support embedding
+		}
+	default:
+		// Default to minimal capabilities for unknown models
+		return ProviderCapabilities{
+			SupportsImageGeneration: false,
+			SupportsEmbedding:       false,
+		}
+	}
+
+	// Override capabilities based on specific model characteristics
+	// This ensures consistency with the actual model registry used by GetModelList
+	if isEmbeddingModel(modelName) {
+		// Embedding models only support embedding, not text generation or image generation
+		baseCapabilities.SupportsEmbedding = true
+		baseCapabilities.SupportsImageGeneration = false
+	} else if isImageGenerationModel(modelName) {
+		// Image generation models only support image generation, not embedding
+		baseCapabilities.SupportsImageGeneration = true
+		baseCapabilities.SupportsEmbedding = false
+	} else {
+		// Text models don't support embedding or image generation unless specifically indicated
+		baseCapabilities.SupportsImageGeneration = false
+		baseCapabilities.SupportsEmbedding = false
+	}
+
+	return baseCapabilities
+}
+
+// ValidateUnsupportedParameters checks for unsupported parameters and returns an error if any are found
+// Now uses model names instead of provider names
+func ValidateUnsupportedParameters(request *model.GeneralOpenAIRequest, modelName string) *model.ErrorWithStatusCode {
+	capabilities := GetModelCapabilities(modelName)
+	var unsupportedParams []UnsupportedParameter
+
+	// Check for tools support
+	if len(request.Tools) > 0 && !capabilities.SupportsTools {
+		unsupportedParams = append(unsupportedParams, UnsupportedParameter{
+			Name:        "tools",
+			Description: "Tool calling is not supported by this model",
+		})
+	}
+
+	// Check for tool_choice support
+	if request.ToolChoice != nil && !capabilities.SupportsTools {
+		unsupportedParams = append(unsupportedParams, UnsupportedParameter{
+			Name:        "tool_choice",
+			Description: "Tool choice is not supported by this model",
+		})
+	}
+
+	// Check for parallel_tool_calls support
+	if request.ParallelTooCalls != nil && !capabilities.SupportsParallelToolCalls {
+		unsupportedParams = append(unsupportedParams, UnsupportedParameter{
+			Name:        "parallel_tool_calls",
+			Description: "Parallel tool calls are not supported by this model",
+		})
+	}
+
+	// Check for functions support (deprecated OpenAI feature)
+	if len(request.Functions) > 0 && !capabilities.SupportsFunctions {
+		unsupportedParams = append(unsupportedParams, UnsupportedParameter{
+			Name:        "functions",
+			Description: "Functions (deprecated OpenAI feature) are not supported by this model. Use 'tools' instead",
+		})
+	}
+
+	// Check for function_call support
+	if request.FunctionCall != nil && !capabilities.SupportsFunctions {
+		unsupportedParams = append(unsupportedParams, UnsupportedParameter{
+			Name:        "function_call",
+			Description: "Function call (deprecated OpenAI feature) is not supported by this model. Use 'tool_choice' instead",
+		})
+	}
+
+	// Check for logprobs support
+	if request.Logprobs != nil && *request.Logprobs && !capabilities.SupportsLogprobs {
+		unsupportedParams = append(unsupportedParams, UnsupportedParameter{
+			Name:        "logprobs",
+			Description: "Log probabilities are not supported by this model",
+		})
+	}
+
+	// Check for top_logprobs support
+	if request.TopLogprobs != nil && !capabilities.SupportsTopLogprobs {
+		unsupportedParams = append(unsupportedParams, UnsupportedParameter{
+			Name:        "top_logprobs",
+			Description: "Top log probabilities are not supported by this model",
+		})
+	}
+
+	// Check for logit_bias support
+	if request.LogitBias != nil && !capabilities.SupportsLogitBias {
+		unsupportedParams = append(unsupportedParams, UnsupportedParameter{
+			Name:        "logit_bias",
+			Description: "Logit bias is not supported by this model",
+		})
+	}
+
+	// Check for response_format support
+	if request.ResponseFormat != nil && !capabilities.SupportsResponseFormat {
+		unsupportedParams = append(unsupportedParams, UnsupportedParameter{
+			Name:        "response_format",
+			Description: "Response format is not supported by this model",
+		})
+	}
+
+	// Check for reasoning_effort support
+	if request.ReasoningEffort != nil && !capabilities.SupportsReasoningEffort {
+		unsupportedParams = append(unsupportedParams, UnsupportedParameter{
+			Name:        "reasoning_effort",
+			Description: "Reasoning effort is not supported by this model",
+		})
+	}
+
+	// Check for modalities support
+	if len(request.Modalities) > 0 && !capabilities.SupportsModalities {
+		unsupportedParams = append(unsupportedParams, UnsupportedParameter{
+			Name:        "modalities",
+			Description: "Modalities are not supported by this model",
+		})
+	}
+
+	// Check for audio support
+	if request.Audio != nil && !capabilities.SupportsAudio {
+		unsupportedParams = append(unsupportedParams, UnsupportedParameter{
+			Name:        "audio",
+			Description: "Audio input/output is not supported by this model",
+		})
+	}
+
+	// Check for web_search_options support
+	if request.WebSearchOptions != nil && !capabilities.SupportsWebSearch {
+		unsupportedParams = append(unsupportedParams, UnsupportedParameter{
+			Name:        "web_search_options",
+			Description: "Web search is not supported by this model",
+		})
+	}
+
+	// Check for thinking support (Anthropic-specific)
+	if request.Thinking != nil && !capabilities.SupportsThinking {
+		unsupportedParams = append(unsupportedParams, UnsupportedParameter{
+			Name:        "thinking",
+			Description: "Extended thinking is not supported by this model",
+		})
+	}
+
+	// Check for service_tier support
+	if request.ServiceTier != nil && !capabilities.SupportsServiceTier {
+		unsupportedParams = append(unsupportedParams, UnsupportedParameter{
+			Name:        "service_tier",
+			Description: "Service tier is not supported by this model",
+		})
+	}
+
+	// Check for prediction support
+	if request.Prediction != nil && !capabilities.SupportsPrediction {
+		unsupportedParams = append(unsupportedParams, UnsupportedParameter{
+			Name:        "prediction",
+			Description: "Prediction is not supported by this model",
+		})
+	}
+
+	// Check for max_completion_tokens support
+	if request.MaxCompletionTokens != nil && !capabilities.SupportsMaxCompletionTokens {
+		unsupportedParams = append(unsupportedParams, UnsupportedParameter{
+			Name:        "max_completion_tokens",
+			Description: "max_completion_tokens is not supported by this model. Use 'max_tokens' instead",
+		})
+	}
+
+	// Note: Support for frequency_penalty and presence_penalty has been removed to reduce the number of if statements.
+
+	// If we found unsupported parameters, return an error
+	if len(unsupportedParams) > 0 {
+		var errorMessage string
+		if len(unsupportedParams) == 1 {
+			errorMessage = fmt.Sprintf("Unsupported parameter '%s': %s",
+				unsupportedParams[0].Name, unsupportedParams[0].Description)
+		} else {
+			errorMessage = fmt.Sprintf("Unsupported parameters for model '%s':", modelName)
+			for _, param := range unsupportedParams {
+				errorMessage += fmt.Sprintf("\n- %s: %s", param.Name, param.Description)
+			}
+		}
+
+		return &model.ErrorWithStatusCode{
+			StatusCode: http.StatusBadRequest,
+			Error: model.Error{
+				Message: errorMessage,
+				Type:    "invalid_request_error",
+				Code:    "unsupported_parameter",
+			},
+		}
+	}
+
+	return nil
 }
