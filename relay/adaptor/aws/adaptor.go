@@ -16,6 +16,7 @@ import (
 	"github.com/songquanpeng/one-api/relay/adaptor"
 	anthropicAdaptor "github.com/songquanpeng/one-api/relay/adaptor/anthropic"
 	"github.com/songquanpeng/one-api/relay/adaptor/aws/utils"
+	"github.com/songquanpeng/one-api/relay/billing/ratio"
 	"github.com/songquanpeng/one-api/relay/meta"
 	"github.com/songquanpeng/one-api/relay/model"
 )
@@ -177,9 +178,9 @@ func (a *Adaptor) GetDefaultModelPricing() map[string]adaptor.ModelConfig {
 		"amazon-titan-text-express": {Ratio: 0.8 * MilliTokensUsd, CompletionRatio: 2},    // $0.8/$1.6 per 1M tokens
 		"amazon-titan-embed-text":   {Ratio: 0.1 * MilliTokensUsd, CompletionRatio: 1},    // $0.1 per 1M tokens
 
-		// Cohere Models (if supported)
-		"cohere-command-text":       {Ratio: 1.5 * MilliTokensUsd, CompletionRatio: 1.33}, // $1.5/$2 per 1M tokens
-		"cohere-command-light-text": {Ratio: 0.3 * MilliTokensUsd, CompletionRatio: 2},    // $0.3/$0.6 per 1M tokens
+		// Cohere Models (Supported) - Note: These are per 1K tokens, converted to 1M tokens using MilliTokensUsd
+		"command-r":      {Ratio: 0.5 * ratio.MilliTokensUsd, CompletionRatio: 3}, // $0.0005/$0.0015 per 1K tokens = $0.5/$1.5 per 1M tokens
+		"command-r-plus": {Ratio: 3 * ratio.MilliTokensUsd, CompletionRatio: 5},   // $0.003/$0.015 per 1K tokens = $3/$15 per 1M tokens
 
 		// AI21 Models (if supported)
 		"ai21-j2-mid":    {Ratio: 12.5 * MilliTokensUsd, CompletionRatio: 1}, // $12.5 per 1M tokens
