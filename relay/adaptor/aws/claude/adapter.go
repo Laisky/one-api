@@ -39,6 +39,27 @@ func (a *Adaptor) ConvertRequest(c *gin.Context, relayMode int, request *model.G
 	return claudeReq, nil
 }
 
+func (a *Adaptor) ConvertClaudeRequest(c *gin.Context, request *model.ClaudeRequest) (any, error) {
+	if request == nil {
+		return nil, errors.New("request is nil")
+	}
+
+	// AWS Bedrock supports Claude Messages natively. Do not convert payload.
+	// Just set context for billing/routing and mark direct pass-through.
+	c.Set(ctxkey.ClaudeMessagesNative, true)
+	c.Set(ctxkey.ClaudeDirectPassthrough, true)
+	c.Set(ctxkey.OriginalClaudeRequest, request)
+	c.Set(ctxkey.RequestModel, request.Model)
+	// Also parse into anthropic.Request for AWS SDK payload building
+	if parsed, perr := anthropic.ConvertClaudeRequest(c, *request); perr == nil {
+		c.Set(ctxkey.ConvertedRequest, parsed)
+	} else {
+		return nil, perr
+	}
+	// Return the original request object; controller will forward original body
+	return request, nil
+}
+
 func (a *Adaptor) DoResponse(c *gin.Context, awsCli *bedrockruntime.Client, meta *meta.Meta) (usage *model.Usage, err *model.ErrorWithStatusCode) {
 	if meta.IsStream {
 		err, usage = StreamHandler(c, awsCli)

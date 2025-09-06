@@ -85,3 +85,13 @@ func GetAdaptor(model string) utils.AwsAdapter {
 		return nil
 	}
 }
+
+// IsClaudeModel checks if the given model is a Claude model that supports v1/messages endpoint
+func IsClaudeModel(model string) bool {
+	adaptorType := adaptors[model]
+	// Suggested by CodeRabbitAI
+	if awsArnMatch != nil && awsArnMatch.MatchString(model) {
+		adaptorType = AwsClaude
+	}
+	return adaptorType == AwsClaude
+}

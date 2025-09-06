@@ -135,6 +135,12 @@ func (a *Adaptor) ConvertClaudeRequest(c *gin.Context, request *model.ClaudeRequ
 		return nil, errors.New("request is nil")
 	}
 
+	// Check if this model supports Claude Messages API (v1/messages)
+	// Only Claude models should use this endpoint; other models should use v1/chat/completions
+	if !IsClaudeModel(request.Model) {
+		return nil, errors.Errorf("model '%s' does not support the v1/messages endpoint. Please use v1/chat/completions instead", request.Model)
+	}
+
 	// AWS Bedrock supports Claude Messages natively. Do not convert payload.
 	// Just set context for billing/routing and mark direct pass-through.
 	sub := GetAdaptor(request.Model)
@@ -157,6 +163,15 @@ func (a *Adaptor) ConvertClaudeRequest(c *gin.Context, request *model.ClaudeRequ
 }
 
 func (a *Adaptor) DoRequest(c *gin.Context, meta *meta.Meta, requestBody io.Reader) (*http.Response, error) {
+	// AWS Bedrock doesn't use HTTP requests - it uses the AWS SDK directly
+	// For Claude Messages API, we should return nil to indicate DoResponse should handle everything
+	// But we need to ensure the controller doesn't try to access a nil response
+	if a.awsAdapter == nil {
+		return nil, errors.New("AWS sub-adapter not initialized")
+	}
+
+	// For AWS Bedrock, we don't make HTTP requests - we use the AWS SDK directly
+	// Return nil response to indicate DoResponse should handle the entire flow
 	return nil, nil
 }
 

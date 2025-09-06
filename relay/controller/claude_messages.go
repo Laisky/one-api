@@ -85,7 +85,16 @@ func RelayClaudeMessagesHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 	// convert request using adaptor's ConvertClaudeRequest method
 	convertedRequest, err := adaptorInstance.ConvertClaudeRequest(c, claudeRequest)
 	if err != nil {
-		return openai.ErrorWrapper(err, "convert_request_failed", http.StatusInternalServerError)
+		// Check if this is a validation error and preserve the correct HTTP status code
+		//
+		// This is for AWS, which must be different from other providers that are
+		// based on proprietary systems such as OpenAI, etc.
+		switch {
+		case strings.Contains(err.Error(), "does not support the v1/messages endpoint"):
+			return openai.ErrorWrapper(err, "invalid_request_error", http.StatusBadRequest)
+		default:
+			return openai.ErrorWrapper(err, "convert_request_failed", http.StatusInternalServerError)
+		}
 	}
 
 	// Determine request body:
@@ -159,55 +168,67 @@ func RelayClaudeMessagesHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 
 	if passthrough, ok := c.Get(ctxkey.ClaudeDirectPassthrough); ok && passthrough.(bool) && meta.IsStream {
 		// Streaming direct passthrough: forward Claude SSE events verbatim
-		respErr, usage = anthropic.ClaudeNativeStreamHandler(c, resp)
+		// For AWS Bedrock, resp might be nil since it uses SDK calls
+		if resp != nil {
+			respErr, usage = anthropic.ClaudeNativeStreamHandler(c, resp)
+		} else {
+			// For AWS Bedrock streaming, delegate to adapter's DoResponse
+			usage, respErr = adaptorInstance.DoResponse(c, resp, meta)
+		}
 	} else if passthrough, ok := c.Get(ctxkey.ClaudeDirectPassthrough); ok && passthrough.(bool) && !meta.IsStream {
 		// Non-streaming direct passthrough: copy headers/body exactly as upstream returned
 		// and extract usage for billing from the Claude response
-		body, rerr := io.ReadAll(resp.Body)
-		if rerr != nil {
-			respErr = openai.ErrorWrapper(rerr, "read_upstream_response_failed", http.StatusInternalServerError)
-		} else {
-			// Close upstream body
-			_ = resp.Body.Close()
-
-			// Forward headers
-			for k, v := range resp.Header {
-				if len(v) > 0 {
-					c.Header(k, v[0])
-				}
-			}
-			c.Status(resp.StatusCode)
-			c.Data(resp.StatusCode, resp.Header.Get("Content-Type"), body)
-
-			// Parse usage from Claude native response for billing
-			var claudeResp anthropic.Response
-			if perr := json.Unmarshal(body, &claudeResp); perr == nil {
-				usage = &relaymodel.Usage{
-					PromptTokens:     claudeResp.Usage.InputTokens,
-					CompletionTokens: claudeResp.Usage.OutputTokens,
-					TotalTokens:      claudeResp.Usage.InputTokens + claudeResp.Usage.OutputTokens,
-					ServiceTier:      claudeResp.Usage.ServiceTier,
-				}
-				// Map cached prompt token details
-				if claudeResp.Usage.CacheReadInputTokens > 0 {
-					usage.PromptTokensDetails = &relaymodel.UsagePromptTokensDetails{CachedTokens: claudeResp.Usage.CacheReadInputTokens}
-				}
-				if claudeResp.Usage.CacheCreation != nil {
-					usage.CacheWrite5mTokens = claudeResp.Usage.CacheCreation.Ephemeral5mInputTokens
-					usage.CacheWrite1hTokens = claudeResp.Usage.CacheCreation.Ephemeral1hInputTokens
-				} else if claudeResp.Usage.CacheCreationInputTokens > 0 {
-					// Legacy field: treat as 5m cache write
-					usage.CacheWrite5mTokens = claudeResp.Usage.CacheCreationInputTokens
-				}
+		// For AWS Bedrock, resp might be nil since it uses SDK calls
+		if resp != nil {
+			body, rerr := io.ReadAll(resp.Body)
+			if rerr != nil {
+				respErr = openai.ErrorWrapper(rerr, "read_upstream_response_failed", http.StatusInternalServerError)
 			} else {
-				// Fallback usage on parse error
-				promptTokens := getClaudeMessagesPromptTokens(ctx, claudeRequest)
-				usage = &relaymodel.Usage{
-					PromptTokens:     promptTokens,
-					CompletionTokens: 0,
-					TotalTokens:      promptTokens,
+				// Close upstream body
+				_ = resp.Body.Close()
+
+				// Forward headers
+				for k, v := range resp.Header {
+					if len(v) > 0 {
+						c.Header(k, v[0])
+					}
+				}
+				c.Status(resp.StatusCode)
+				c.Data(resp.StatusCode, resp.Header.Get("Content-Type"), body)
+
+				// Parse usage from Claude native response for billing
+				var claudeResp anthropic.Response
+				if perr := json.Unmarshal(body, &claudeResp); perr == nil {
+					usage = &relaymodel.Usage{
+						PromptTokens:     claudeResp.Usage.InputTokens,
+						CompletionTokens: claudeResp.Usage.OutputTokens,
+						TotalTokens:      claudeResp.Usage.InputTokens + claudeResp.Usage.OutputTokens,
+						ServiceTier:      claudeResp.Usage.ServiceTier,
+					}
+					// Map cached prompt token details
+					if claudeResp.Usage.CacheReadInputTokens > 0 {
+						usage.PromptTokensDetails = &relaymodel.UsagePromptTokensDetails{CachedTokens: claudeResp.Usage.CacheReadInputTokens}
+					}
+					if claudeResp.Usage.CacheCreation != nil {
+						usage.CacheWrite5mTokens = claudeResp.Usage.CacheCreation.Ephemeral5mInputTokens
+						usage.CacheWrite1hTokens = claudeResp.Usage.CacheCreation.Ephemeral1hInputTokens
+					} else if claudeResp.Usage.CacheCreationInputTokens > 0 {
+						// Legacy field: treat as 5m cache write
+						usage.CacheWrite5mTokens = claudeResp.Usage.CacheCreationInputTokens
+					}
+				} else {
+					// Fallback usage on parse error
+					promptTokens := getClaudeMessagesPromptTokens(ctx, claudeRequest)
+					usage = &relaymodel.Usage{
+						PromptTokens:     promptTokens,
+						CompletionTokens: 0,
+						TotalTokens:      promptTokens,
+					}
 				}
 			}
+		} else {
+			// For AWS Bedrock non-streaming, delegate to adapter's DoResponse
+			usage, respErr = adaptorInstance.DoResponse(c, resp, meta)
 		}
 	} else {
 		// Call the adapter's DoResponse method to handle response conversion
