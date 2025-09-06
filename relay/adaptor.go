@@ -18,6 +18,7 @@ import (
 	"github.com/songquanpeng/one-api/relay/adaptor/moonshot"
 	"github.com/songquanpeng/one-api/relay/adaptor/ollama"
 	"github.com/songquanpeng/one-api/relay/adaptor/openai"
+	"github.com/songquanpeng/one-api/relay/adaptor/openrouter"
 	"github.com/songquanpeng/one-api/relay/adaptor/palm"
 	"github.com/songquanpeng/one-api/relay/adaptor/proxy"
 	"github.com/songquanpeng/one-api/relay/adaptor/replicate"
@@ -80,6 +81,8 @@ func GetAdaptor(apiType int) adaptor.Adaptor {
 		return &moonshot.Adaptor{}
 	case apitype.XAI:
 		return &xai.Adaptor{}
+	case apitype.OpenRouter:
+		return &openrouter.Adaptor{}
 	}
 
 	return nil

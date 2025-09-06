@@ -5,6 +5,10 @@ import (
 	"github.com/songquanpeng/one-api/relay/billing/ratio"
 )
 
+// ModelRatios defines the comprehensive pricing configuration for all OpenRouter models.
+//
+// Note (H0llyW00dzZ): This price may need modified, due these price are outdated, as for me I can't modified them because it's too much for me,
+// even previously used OpenRouter with oneapi I only used for specific model that I need
 var ModelRatios = map[string]adaptor.ModelConfig{
 	// OpenRouter Models - Based on https://openrouter.ai/models
 	"01-ai/yi-large":                                  {Ratio: 1.5 * ratio.MilliTokensUsd, CompletionRatio: 1},

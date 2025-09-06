@@ -3,6 +3,7 @@ package relay
 import (
 	"testing"
 
+	"github.com/songquanpeng/one-api/relay/adaptor/openrouter"
 	"github.com/songquanpeng/one-api/relay/adaptor/xai"
 	"github.com/songquanpeng/one-api/relay/apitype"
 )
@@ -105,6 +106,42 @@ func TestSpecificAdapterPricing(t *testing.T) {
 	})
 
 	// H0llyW00dzZ: I'm writing this test myself now because this codebase is too complex.
+	t.Run("OpenRouter_Pricing", func(t *testing.T) {
+		adaptor := &openrouter.Adaptor{}
+
+		// Test GetDefaultModelPricing
+		defaultPricing := adaptor.GetDefaultModelPricing()
+		if len(defaultPricing) == 0 {
+			t.Fatal("OpenRouter: GetDefaultModelPricing returned empty map")
+		}
+
+		t.Logf("OpenRouter: Found %d models with pricing", len(defaultPricing))
+
+		// Test specific OpenRouter models to ensure they have proper pricing
+		testModels := map[string]struct {
+			expectValidRatio      bool
+			expectValidCompletion bool
+		}{
+			"openai/gpt-4o":                    {true, true},
+			"anthropic/claude-3-sonnet":        {true, true},
+			"meta-llama/llama-3.1-8b-instruct": {true, true},
+		}
+
+		for model, expected := range testModels {
+			ratio := adaptor.GetModelRatio(model)
+			completionRatio := adaptor.GetCompletionRatio(model)
+
+			if expected.expectValidRatio && ratio <= 0 {
+				t.Errorf("OpenRouter %s: expected valid ratio, got %.6f", model, ratio)
+			}
+			if expected.expectValidCompletion && completionRatio <= 0 {
+				t.Errorf("OpenRouter %s: expected valid completion ratio, got %.2f", model, completionRatio)
+			}
+
+			t.Logf("OpenRouter %s: ratio=%.6f, completion_ratio=%.2f", model, ratio, completionRatio)
+		}
+	})
+
 	t.Run("xAI_Pricing", func(t *testing.T) {
 		adaptor := GetAdaptor(apitype.XAI)
 		if adaptor == nil {
