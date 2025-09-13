@@ -275,6 +275,11 @@ func (a *Adaptor) GetDefaultModelPricing() map[string]adaptor.ModelConfig {
 		"mistral-small-2402":         {Ratio: 1 * ratio.MilliTokensUsd, CompletionRatio: 3},       // $0.001/$0.003 per 1K tokens = $1/$3 per 1M tokens
 		"mistral-large-2402":         {Ratio: 4 * ratio.MilliTokensUsd, CompletionRatio: 3},       // $0.004/$0.012 per 1K tokens = $4/$12 per 1M tokens
 		"mistral-pixtral-large-2502": {Ratio: 2 * ratio.MilliTokensUsd, CompletionRatio: 3},       // $0.002/$0.006 per 1K tokens = $2/$6 per 1M tokens
+
+		// OpenAI OSS Models (Supported) - Updated pricing as of 2025-09-13 - Note: These are per 1K tokens, converted to 1M tokens using ratio.MilliTokensUsd
+		// These models work similarly to DeepSeek-R1 with reasoning content and use converse method
+		"gpt-oss-20b":  {Ratio: 0.07 * ratio.MilliTokensUsd, CompletionRatio: 4.29}, // $0.00007/$0.0003 per 1K tokens = $0.07/$0.3 per 1M tokens
+		"gpt-oss-120b": {Ratio: 0.15 * ratio.MilliTokensUsd, CompletionRatio: 4},    // $0.00015/$0.0006 per 1K tokens = $0.15/$0.6 per 1M tokens
 	}
 }
 
@@ -426,6 +431,27 @@ func GetModelCapabilities(modelName string) ProviderCapabilities {
 			SupportsStop:                true,  // Mistral models support stop parameter
 			SupportsImageGeneration:     false, // Mistral models don't support image generation
 			SupportsEmbedding:           false, // Mistral models don't support embedding
+		}
+	case AwsOpenAI:
+		baseCapabilities = ProviderCapabilities{
+			SupportsTools:               false, // OpenAI OSS models don't support tool calling yet
+			SupportsFunctions:           false, // OpenAI OSS models don't support OpenAI functions
+			SupportsLogprobs:            false,
+			SupportsResponseFormat:      false,
+			SupportsReasoningEffort:     false,
+			SupportsModalities:          false,
+			SupportsAudio:               false,
+			SupportsWebSearch:           false,
+			SupportsThinking:            false,
+			SupportsLogitBias:           false,
+			SupportsServiceTier:         false,
+			SupportsParallelToolCalls:   false,
+			SupportsTopLogprobs:         false,
+			SupportsPrediction:          false,
+			SupportsMaxCompletionTokens: false,
+			SupportsStop:                false, // OpenAI OSS models don't support stop parameter
+			SupportsImageGeneration:     false, // OpenAI OSS models don't support image generation
+			SupportsEmbedding:           false, // OpenAI OSS models don't support embedding
 		}
 	default:
 		// Default to minimal capabilities for unknown models

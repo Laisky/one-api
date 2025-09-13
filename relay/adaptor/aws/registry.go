@@ -10,6 +10,7 @@ import (
 	deepseek "github.com/songquanpeng/one-api/relay/adaptor/aws/deepseek"
 	llama3 "github.com/songquanpeng/one-api/relay/adaptor/aws/llama3"
 	mistral "github.com/songquanpeng/one-api/relay/adaptor/aws/mistral"
+	openai "github.com/songquanpeng/one-api/relay/adaptor/aws/openai"
 	"github.com/songquanpeng/one-api/relay/adaptor/aws/utils"
 )
 
@@ -21,6 +22,7 @@ const (
 	AwsDeepSeek
 	AwsLlama3
 	AwsMistral
+	AwsOpenAI
 )
 
 var (
@@ -44,6 +46,9 @@ func init() {
 	}
 	for model := range cohere.AwsModelIDMap {
 		adaptors[model] = AwsCohere
+	}
+	for model := range openai.AwsModelIDMap {
+		adaptors[model] = AwsOpenAI
 	}
 
 	match, err := regexp.Compile("arn:aws:bedrock.+claude")
@@ -81,6 +86,8 @@ func GetAdaptor(model string) utils.AwsAdapter {
 		return &llama3.Adaptor{}
 	case AwsMistral:
 		return &mistral.Adaptor{}
+	case AwsOpenAI:
+		return &openai.Adaptor{}
 	default:
 		return nil
 	}
