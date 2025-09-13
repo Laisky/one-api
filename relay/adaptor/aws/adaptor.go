@@ -380,6 +380,27 @@ func GetModelCapabilities(modelName string) ProviderCapabilities {
 			SupportsImageGeneration:     false, // Claude models don't support image generation
 			SupportsEmbedding:           false, // Claude models don't support embedding
 		}
+	case AwsCohere:
+		baseCapabilities = ProviderCapabilities{
+			SupportsTools:               true,  // Cohere models on AWS Bedrock support tool calling via Converse API
+			SupportsFunctions:           false, // Cohere doesn't support OpenAI functions
+			SupportsLogprobs:            false,
+			SupportsResponseFormat:      false,
+			SupportsReasoningEffort:     false,
+			SupportsModalities:          false,
+			SupportsAudio:               false,
+			SupportsWebSearch:           false,
+			SupportsThinking:            false,
+			SupportsLogitBias:           false,
+			SupportsServiceTier:         false,
+			SupportsParallelToolCalls:   false,
+			SupportsTopLogprobs:         false,
+			SupportsPrediction:          false,
+			SupportsMaxCompletionTokens: false,
+			SupportsStop:                true,  // Cohere Command R models support stop parameter
+			SupportsImageGeneration:     false, // Cohere Command R models don't support image generation
+			SupportsEmbedding:           false, // Cohere Command R models don't support embedding
+		}
 	case AwsLlama3:
 		baseCapabilities = ProviderCapabilities{
 			SupportsTools:               false, // Currently unsupported. May be implemented in the future.

@@ -6,12 +6,14 @@ package aws
 // request to the Cohere Command R family models via AWS Bedrock. Cohere Command R
 // is designed for enterprise-grade conversations with advanced multi-lingual support,
 // safety filtering, and coherent long-form dialogue capabilities.
+// Supports both basic conversation and advanced tool calling capabilities.
 //
 // Based on AWS Bedrock Cohere Command R documentation.
 type Request struct {
 	// Messages contains the conversation history including system, user, and assistant messages.
 	// This field is required and must contain at least one message.
 	// Cohere Command R processes these messages to generate contextually aware, enterprise-grade responses.
+	// Now supports tool calls and tool results for advanced functionality.
 	Messages []Message `json:"messages"`
 
 	// MaxTokens specifies the maximum number of tokens to generate in the response.
@@ -35,6 +37,16 @@ type Request struct {
 	// Optional field that allows fine-grained control over response termination.
 	// Useful for controlling when Cohere Command R stops generating in specific contexts.
 	Stop []string `json:"stop,omitempty"`
+
+	// Tools contains the available tool definitions for the model to use.
+	// Optional field that enables function calling capabilities.
+	// When provided, Cohere Command R can invoke these tools during conversation.
+	Tools []CohereTool `json:"tools,omitempty"`
+
+	// ToolChoice controls how the model decides to use tools.
+	// Can be "auto" (model decides), "any" (must use a tool), or specify a particular tool.
+	// Optional field that provides fine-grained control over tool invocation behavior.
+	ToolChoice interface{} `json:"tool_choice,omitempty"`
 }
 
 // Message represents a single message in the conversation history.
@@ -42,6 +54,7 @@ type Request struct {
 // Messages form the core of the chat completion request, containing the back-and-forth
 // conversation between different participants. Each message has a specific role that
 // determines its purpose and expected content format for Cohere Command R processing.
+// Supports both basic conversation and advanced tool calling capabilities.
 type Message struct {
 	// Role identifies the sender of the message.
 	// Valid values: "system" (instructions to guide model behavior),
@@ -54,6 +67,16 @@ type Message struct {
 	// the model's response with Cohere's enterprise-grade conversation quality.
 	// Supports multi-lingual content with Cohere's advanced language understanding.
 	Content string `json:"content,omitempty"`
+
+	// ToolCalls contains tool invocations made by the assistant.
+	// Present in assistant messages when the model decides to call tools.
+	// Each tool call includes function name, arguments, and unique identifier.
+	ToolCalls []CohereToolCall `json:"tool_calls,omitempty"`
+
+	// ToolCallID identifies which tool call this message responds to.
+	// Present in user messages that contain tool execution results.
+	// Links tool results back to the original assistant tool call.
+	ToolCallID string `json:"tool_call_id,omitempty"`
 }
 
 // Response represents the complete response from AWS Bedrock Cohere Command R models.
@@ -553,4 +576,236 @@ type CohereBedrockStreamMessage struct {
 	// conversation response with coherent dialogue, contextual appropriateness,
 	// and comprehensive safety filtering applied to streaming content.
 	Content []CohereBedrockContentBlock `json:"content,omitempty"`
+}
+
+// --- Tool Calling Support Structures ---
+
+// CohereTool represents a tool definition for Cohere Command R's advanced function calling capabilities.
+//
+// This structure defines individual tools that can be made available to Cohere Command R
+// models through AWS Bedrock's Converse API. Each tool represents a function that the model
+// can intelligently decide to invoke during conversation, enabling enterprise-grade
+// automation, data retrieval, and interactive workflows with Cohere's advanced reasoning
+// and contextual understanding capabilities.
+//
+// Based on AWS Bedrock Converse API tool specification format.
+type CohereTool struct {
+	// Type specifies the tool category, typically "function" for callable functions.
+	// This field categorizes the tool for Cohere Command R's intelligent tool selection
+	// process, ensuring appropriate invocation within enterprise conversation contexts
+	// and maintaining compatibility with AWS Bedrock's tool calling infrastructure.
+	Type string `json:"type"`
+
+	// Function contains the detailed specification of the callable function.
+	// Provides Cohere Command R with comprehensive function metadata including name,
+	// description, and parameter schema for intelligent tool selection and invocation
+	// within enterprise-grade conversation flows and automated workflows.
+	Function CohereToolSpec `json:"function"`
+}
+
+// CohereToolSpec represents the specification of a tool function for Cohere Command R integration.
+//
+// This structure provides comprehensive metadata about a callable function that Cohere Command R
+// can intelligently invoke through AWS Bedrock's Converse API. The specification enables
+// the model to understand function capabilities, parameter requirements, and appropriate
+// usage contexts for enterprise-grade tool calling with advanced reasoning and safety
+// considerations applied throughout the invocation process.
+type CohereToolSpec struct {
+	// Name identifies the unique function name for tool invocation.
+	// Used by Cohere Command R for precise tool selection and invocation within
+	// enterprise conversation contexts, ensuring accurate function identification
+	// and maintaining compatibility with AWS Bedrock's tool calling mechanisms.
+	Name string `json:"name"`
+
+	// Description provides human-readable explanation of the function's purpose and behavior.
+	// Enables Cohere Command R's advanced reasoning capabilities to intelligently decide
+	// when and how to invoke the tool within conversation context, supporting enterprise
+	// automation workflows with contextual appropriateness and safety considerations.
+	Description string `json:"description"`
+
+	// Parameters defines the JSON schema for function input parameters.
+	// Provides Cohere Command R with parameter structure, types, and constraints
+	// for generating appropriate function calls with proper validation and type safety
+	// within enterprise-grade tool calling workflows through AWS Bedrock integration.
+	Parameters interface{} `json:"parameters"`
+}
+
+// CohereToolCall represents a tool invocation made by Cohere Command R during conversation.
+//
+// This structure contains the details of a function call that Cohere Command R has decided
+// to make during conversation processing through AWS Bedrock. Each tool call represents
+// an intelligent decision by the model to invoke external functionality, featuring
+// enterprise-grade reasoning, contextual appropriateness, and safety validation
+// applied to the tool selection and parameter generation process.
+type CohereToolCall struct {
+	// ID provides a unique identifier for this specific tool call invocation.
+	// Used for tracking and correlating tool calls with their corresponding results
+	// in enterprise conversation flows, enabling proper response handling and
+	// maintaining conversation context throughout the tool calling process.
+	ID string `json:"id"`
+
+	// Type specifies the tool call category, typically "function" for function invocations.
+	// Indicates the nature of the tool call for proper processing and response handling
+	// within Cohere Command R's enterprise conversation workflows and AWS Bedrock
+	// tool calling infrastructure integration.
+	Type string `json:"type"`
+
+	// Function contains the specific function invocation details and generated parameters.
+	// Includes the function name and arguments generated by Cohere Command R's advanced
+	// reasoning capabilities, ensuring appropriate parameter values and maintaining
+	// enterprise-grade accuracy and safety throughout the tool invocation process.
+	Function CohereToolFunction `json:"function"`
+}
+
+// CohereToolFunction represents the function details in a Cohere Command R tool call.
+//
+// This structure contains the specific function invocation information generated by
+// Cohere Command R during intelligent tool calling through AWS Bedrock. It includes
+// the function identifier and generated arguments, demonstrating the model's
+// enterprise-grade reasoning capabilities in parameter generation and contextual
+// appropriateness for automated workflow integration and enterprise tool calling.
+type CohereToolFunction struct {
+	// Name identifies the specific function to be invoked by the tool call.
+	// Corresponds to a function defined in the available tools list, enabling
+	// precise function selection by Cohere Command R's intelligent reasoning
+	// within enterprise conversation contexts and AWS Bedrock integration.
+	Name string `json:"name"`
+
+	// Arguments contains the JSON-encoded function parameters generated by the model.
+	// Represents Cohere Command R's intelligent parameter generation based on
+	// conversation context, function schema, and enterprise-grade reasoning
+	// capabilities, ensuring appropriate values for successful tool invocation.
+	Arguments string `json:"arguments"`
+}
+
+// --- OpenAI Compatibility Structures ---
+
+// CohereResponseMessage represents an OpenAI-compatible message with comprehensive tool calling support.
+//
+// This structure provides OpenAI API compatibility for Cohere Command R responses processed
+// through AWS Bedrock, enabling seamless integration with existing OpenAI-based applications
+// while preserving Cohere's enterprise-grade conversation quality and advanced tool calling
+// capabilities. The message format maintains full compatibility with OpenAI's chat completion
+// API while delivering Cohere Command R's multi-lingual support and safety filtering.
+//
+// Based on OpenAI Chat Completions API message format with Cohere Command R enhancements.
+type CohereResponseMessage struct {
+	// Role identifies the message sender, typically "assistant" for Cohere Command R responses.
+	// Maintains OpenAI API compatibility while indicating enterprise-grade content generation
+	// from Cohere Command R with advanced conversation capabilities, contextual understanding,
+	// and comprehensive safety filtering applied throughout the response generation.
+	Role string `json:"role"`
+
+	// Content contains the generated text response from Cohere Command R.
+	// Delivers enterprise-quality conversation content with OpenAI API compatibility,
+	// featuring Cohere's advanced multi-lingual support, contextual coherence,
+	// and safety filtering while maintaining the expected OpenAI response structure.
+	Content string `json:"content,omitempty"`
+
+	// ToolCalls contains tool invocations made by Cohere Command R in OpenAI-compatible format.
+	// Provides seamless OpenAI API compatibility for tool calling functionality while
+	// preserving Cohere Command R's intelligent tool selection and parameter generation
+	// capabilities within enterprise-grade conversation workflows.
+	ToolCalls []CohereToolCallResponse `json:"tool_calls,omitempty"`
+}
+
+// CohereToolCallResponse represents a tool call in OpenAI-compatible format for seamless integration.
+//
+// This structure converts Cohere Command R's intelligent tool calling decisions into
+// OpenAI-compatible format, enabling existing OpenAI-based applications to seamlessly
+// integrate with Cohere's enterprise-grade tool calling capabilities through AWS Bedrock.
+// Maintains full compatibility with OpenAI's tool calling API while preserving Cohere's
+// advanced reasoning and contextual appropriateness in tool selection and invocation.
+type CohereToolCallResponse struct {
+	// ID provides the unique identifier for this tool call, maintaining OpenAI compatibility.
+	// Enables proper tool call tracking and correlation with results in existing
+	// OpenAI-based applications while preserving Cohere Command R's enterprise-grade
+	// tool calling workflow management and conversation context handling.
+	ID string `json:"id"`
+
+	// Type specifies the tool call category in OpenAI-compatible format, typically "function".
+	// Maintains compatibility with OpenAI's tool calling API structure while indicating
+	// Cohere Command R's intelligent function invocation within enterprise conversation
+	// workflows and AWS Bedrock integration capabilities.
+	Type string `json:"type"`
+
+	// Function contains the specific function details generated by Cohere Command R.
+	// Provides OpenAI-compatible function invocation information while preserving
+	// Cohere's enterprise-grade parameter generation, contextual reasoning, and
+	// intelligent tool selection capabilities for seamless application integration.
+	Function CohereToolFunction `json:"function"`
+}
+
+// CohereResponseChoice represents an OpenAI-compatible choice with comprehensive tool calling support.
+//
+// This structure provides individual response options from Cohere Command R in OpenAI-compatible
+// format, enabling seamless integration with existing applications while preserving enterprise-grade
+// conversation quality. Each choice represents Cohere's advanced reasoning capabilities, contextual
+// understanding, and safety filtering delivered through AWS Bedrock with full OpenAI API
+// compatibility for tool calling and standard conversation workflows.
+type CohereResponseChoice struct {
+	// Index identifies the position of this choice in the choices array for OpenAI compatibility.
+	// Typically 0 for the primary choice, maintaining OpenAI API structure while delivering
+	// Cohere Command R's focused enterprise-grade conversation quality and intelligent
+	// tool calling capabilities through AWS Bedrock integration.
+	Index int `json:"index"`
+
+	// Message contains the response content and tool calls from Cohere Command R.
+	// Delivers enterprise-quality conversation content in OpenAI-compatible format,
+	// featuring Cohere's advanced multi-lingual support, contextual coherence,
+	// intelligent tool calling, and comprehensive safety filtering capabilities.
+	Message CohereResponseMessage `json:"message"`
+
+	// FinishReason indicates why Cohere Command R stopped generating content in OpenAI format.
+	// Provides completion status information compatible with OpenAI API expectations
+	// while reflecting Cohere's enterprise-grade generation logic, safety filtering
+	// outcomes, and intelligent conversation completion decisions.
+	FinishReason string `json:"finish_reason"`
+}
+
+// CohereResponse represents the complete OpenAI-compatible response with enterprise Cohere capabilities.
+//
+// This structure provides full OpenAI Chat Completions API compatibility for Cohere Command R
+// responses processed through AWS Bedrock, enabling seamless integration with existing
+// applications while preserving all of Cohere's enterprise-grade features including advanced
+// tool calling, multi-lingual support, contextual understanding, and comprehensive safety
+// filtering. The response maintains OpenAI format while delivering superior conversation quality.
+//
+// Based on OpenAI Chat Completions API response format with Cohere Command R enhancements.
+type CohereResponse struct {
+	// ID provides a unique identifier for this response in OpenAI-compatible format.
+	// Enables proper response tracking and correlation in existing applications while
+	// maintaining enterprise-grade conversation session management and audit capabilities
+	// for Cohere Command R interactions through AWS Bedrock infrastructure.
+	ID string `json:"id"`
+
+	// Object specifies the response type, maintaining OpenAI API compatibility.
+	// Typically "chat.completion" to indicate chat completion response format
+	// while delivering Cohere Command R's enterprise-grade conversation capabilities
+	// and advanced tool calling features through AWS Bedrock integration.
+	Object string `json:"object"`
+
+	// Created represents the Unix timestamp when the response was generated for OpenAI compatibility.
+	// Provides timing information in standard OpenAI format while enabling enterprise
+	// conversation analytics, performance monitoring, and audit trails for Cohere
+	// Command R interactions and tool calling workflows.
+	Created int64 `json:"created"`
+
+	// Model identifies the specific Cohere model used, maintaining OpenAI API compatibility.
+	// Indicates which Cohere Command R variant processed the request while preserving
+	// OpenAI format expectations for model identification in enterprise applications
+	// and conversation analytics workflows.
+	Model string `json:"model"`
+
+	// Choices contains the response options from Cohere Command R in OpenAI-compatible format.
+	// Delivers enterprise-grade conversation choices with advanced tool calling support,
+	// multi-lingual capabilities, contextual understanding, and safety filtering
+	// while maintaining full compatibility with existing OpenAI-based applications.
+	Choices []CohereResponseChoice `json:"choices"`
+
+	// Usage contains detailed token consumption statistics in OpenAI-compatible format.
+	// Provides comprehensive usage tracking for cost management and performance monitoring
+	// while maintaining OpenAI API compatibility for existing billing and analytics
+	// systems integrated with Cohere Command R enterprise conversations.
+	Usage CohereUsage `json:"usage"`
 }

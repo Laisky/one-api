@@ -11,6 +11,7 @@ import (
 	"github.com/Laisky/zap"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/bedrockruntime"
+	"github.com/aws/aws-sdk-go-v2/service/bedrockruntime/document"
 	"github.com/aws/aws-sdk-go-v2/service/bedrockruntime/types"
 	"github.com/gin-gonic/gin"
 
@@ -37,7 +38,7 @@ func awsModelID(requestModel string) (string, error) {
 	return "", errors.Errorf("model %s not found", requestModel)
 }
 
-// ConvertRequest converts OpenAI request to Cohere request
+// ConvertRequest converts OpenAI request to Cohere request with tool support
 func ConvertRequest(textRequest relaymodel.GeneralOpenAIRequest) *Request {
 	cohereReq := &Request{
 		Messages: ConvertMessages(textRequest.Messages),
@@ -71,6 +72,31 @@ func ConvertRequest(textRequest relaymodel.GeneralOpenAIRequest) *Request {
 			cohereReq.Stop = []string{stopStr}
 		} else if stopSlice, ok := textRequest.Stop.([]string); ok {
 			cohereReq.Stop = stopSlice
+		}
+	}
+
+	// Handle tools conversion
+	if len(textRequest.Tools) > 0 {
+		cohereTools := make([]CohereTool, 0, len(textRequest.Tools))
+		for _, tool := range textRequest.Tools {
+			if tool.Function == nil {
+				continue
+			}
+
+			cohereTools = append(cohereTools, CohereTool{
+				Type: "function",
+				Function: CohereToolSpec{
+					Name:        tool.Function.Name,
+					Description: tool.Function.Description,
+					Parameters:  tool.Function.Parameters,
+				},
+			})
+		}
+		cohereReq.Tools = cohereTools
+
+		// Handle tool choice
+		if textRequest.ToolChoice != nil {
+			cohereReq.ToolChoice = textRequest.ToolChoice
 		}
 	}
 
@@ -143,12 +169,8 @@ func StreamHandler(c *gin.Context, awsCli *bedrockruntime.Client) (*relaymodel.E
 	stream := awsResp.GetStream()
 	defer stream.Close()
 
-	c.Writer.Header().Set("Content-Type", "text/event-stream")
-	// This change addresses an issue with nginx that could be annoying regarding buffering.
-	c.Writer.Header().Set("Cache-Control", "no-cache")
-	c.Writer.Header().Set("Connection", "keep-alive")
-	c.Writer.Header().Set("X-Accel-Buffering", "no")
-	c.Writer.Header().Set("Pragma", "no-cache") // This is for legacy HTTP; I'm pretty sure.
+	// Set response headers for SSE
+	common.SetEventStreamHeaders(c)
 
 	var usage relaymodel.Usage
 	var id string
@@ -255,30 +277,35 @@ func StreamHandler(c *gin.Context, awsCli *bedrockruntime.Client) (*relaymodel.E
 	return nil, &usage
 }
 
-func convertStopReason(cohereReason string) *string {
-	if cohereReason == "" {
+// convertStopReason converts AWS converse stop reason to OpenAI format
+func convertStopReason(awsReason string) *string {
+	if awsReason == "" {
 		return nil
 	}
 
 	var result string
-	switch cohereReason {
-	case "stop", "end_turn":
-		result = "stop"
-	case "length", "max_tokens":
+	switch awsReason {
+	case "max_tokens":
 		result = "length"
-	default:
+	case "end_turn", "stop_sequence":
 		result = "stop"
+	case "content_filtered":
+		result = "content_filter"
+	default:
+		// Return the actual AWS response instead of hardcoded "stop"
+		result = awsReason
 	}
+
 	return &result
 }
 
-// convertCohereToConverseRequest converts Cohere request to Converse API format for non-streaming
-func convertCohereToConverseRequest(cohereReq *Request, modelID string) (*bedrockruntime.ConverseInput, error) {
+// convertMessages converts Cohere messages to AWS Converse format
+func convertMessages(messages []Message) ([]types.Message, []types.SystemContentBlock, error) {
 	var converseMessages []types.Message
 	var systemMessages []types.SystemContentBlock
 
 	// Convert messages using standard Converse API format
-	for _, msg := range cohereReq.Messages {
+	for _, msg := range messages {
 		switch msg.Role {
 		case "system":
 			// System messages go to the system field in Converse API
@@ -287,33 +314,83 @@ func convertCohereToConverseRequest(cohereReq *Request, modelID string) (*bedroc
 			})
 		case "user":
 			// User messages use standard Converse API format
-			contentBlocks := []types.ContentBlock{
-				&types.ContentBlockMemberText{
+			var contentBlocks []types.ContentBlock
+
+			// Handle tool results for user messages (tool role messages)
+			if msg.ToolCallID != "" {
+				// This is a tool result message - ONLY add tool result block
+				toolResult := &types.ContentBlockMemberToolResult{
+					Value: types.ToolResultBlock{
+						ToolUseId: &msg.ToolCallID,
+						Content: []types.ToolResultContentBlock{
+							&types.ToolResultContentBlockMemberText{
+								Value: msg.Content,
+							},
+						},
+						Status: types.ToolResultStatusSuccess,
+					},
+				}
+				contentBlocks = append(contentBlocks, toolResult)
+			} else if msg.Content != "" {
+				// Regular user message - add text content only
+				contentBlocks = append(contentBlocks, &types.ContentBlockMemberText{
 					Value: msg.Content,
-				},
+				})
 			}
 
-			converseMessages = append(converseMessages, types.Message{
-				Role:    types.ConversationRole(msg.Role),
-				Content: contentBlocks,
-			})
+			if len(contentBlocks) > 0 {
+				converseMessages = append(converseMessages, types.Message{
+					Role:    types.ConversationRole("user"),
+					Content: contentBlocks,
+				})
+			}
 		case "assistant":
-			// Assistant messages
-			contentBlocks := []types.ContentBlock{
-				&types.ContentBlockMemberText{
+			var contentBlocks []types.ContentBlock
+
+			// Add text content if present
+			if msg.Content != "" {
+				contentBlocks = append(contentBlocks, &types.ContentBlockMemberText{
 					Value: msg.Content,
-				},
+				})
 			}
 
-			converseMessages = append(converseMessages, types.Message{
-				Role:    types.ConversationRole(msg.Role),
-				Content: contentBlocks,
-			})
+			// Handle tool calls from assistant messages
+			for _, toolCall := range msg.ToolCalls {
+				// Parse tool call arguments
+				var inputData map[string]interface{}
+				if err := json.Unmarshal([]byte(toolCall.Function.Arguments), &inputData); err != nil {
+					return nil, nil, errors.Wrapf(err, "unmarshal tool call arguments for tool %s", toolCall.Function.Name)
+				}
+
+				// Convert to document.Interface using bedrockruntime document package
+				docInput := document.NewLazyDocument(inputData)
+
+				toolUse := &types.ContentBlockMemberToolUse{
+					Value: types.ToolUseBlock{
+						ToolUseId: &toolCall.ID,
+						Name:      &toolCall.Function.Name,
+						Input:     docInput,
+					},
+				}
+				contentBlocks = append(contentBlocks, toolUse)
+			}
+
+			if len(contentBlocks) > 0 {
+				converseMessages = append(converseMessages, types.Message{
+					Role:    types.ConversationRole("assistant"),
+					Content: contentBlocks,
+				})
+			}
 		}
 	}
 
-	// Create inference configuration
+	return converseMessages, systemMessages, nil
+}
+
+// createInferenceConfig creates AWS inference configuration from Cohere request
+func createInferenceConfig(cohereReq *Request) *types.InferenceConfiguration {
 	inferenceConfig := &types.InferenceConfiguration{}
+
 	if cohereReq.MaxTokens != 0 {
 		inferenceConfig.MaxTokens = aws.Int32(int32(cohereReq.MaxTokens))
 	} else {
@@ -332,6 +409,78 @@ func convertCohereToConverseRequest(cohereReq *Request, modelID string) (*bedroc
 		inferenceConfig.StopSequences = stopSequences
 	}
 
+	return inferenceConfig
+}
+
+// createToolConfig creates AWS tool configuration from Cohere tools
+func createToolConfig(cohereTools []CohereTool, toolChoice interface{}) *types.ToolConfiguration {
+	if len(cohereTools) == 0 {
+		return nil // Return nil when no tools - this optimizes for normal Converse API
+	}
+
+	var awsTools []types.Tool
+	for _, tool := range cohereTools {
+		// Convert tool parameters to document.Interface for InputSchema
+		var inputSchemaDoc document.Interface
+		if tool.Function.Parameters != nil {
+			inputSchemaDoc = document.NewLazyDocument(tool.Function.Parameters)
+		}
+
+		toolSpec := &types.ToolMemberToolSpec{
+			Value: types.ToolSpecification{
+				Name:        aws.String(tool.Function.Name),
+				Description: aws.String(tool.Function.Description),
+				InputSchema: &types.ToolInputSchemaMemberJson{
+					Value: inputSchemaDoc,
+				},
+			},
+		}
+		awsTools = append(awsTools, toolSpec)
+	}
+
+	toolConfig := &types.ToolConfiguration{
+		Tools: awsTools,
+	}
+
+	// Handle tool choice
+	if toolChoice != nil {
+		if toolChoiceMap, ok := toolChoice.(map[string]interface{}); ok {
+			if funcMap, ok := toolChoiceMap["function"].(map[string]interface{}); ok {
+				if funcName, ok := funcMap["name"].(string); ok {
+					toolConfig.ToolChoice = &types.ToolChoiceMemberTool{
+						Value: types.SpecificToolChoice{
+							Name: aws.String(funcName),
+						},
+					}
+				}
+			}
+		} else if toolChoiceStr, ok := toolChoice.(string); ok {
+			switch toolChoiceStr {
+			case "auto":
+				toolConfig.ToolChoice = &types.ToolChoiceMemberAuto{}
+			case "any":
+				toolConfig.ToolChoice = &types.ToolChoiceMemberAny{}
+			}
+		}
+	} else {
+		// Default to auto if not specified
+		toolConfig.ToolChoice = &types.ToolChoiceMemberAuto{}
+	}
+
+	return toolConfig
+}
+
+// convertCohereToConverseRequest converts Cohere request to Converse API format for non-streaming
+func convertCohereToConverseRequest(cohereReq *Request, modelID string) (*bedrockruntime.ConverseInput, error) {
+	// Convert messages using shared helper
+	converseMessages, systemMessages, err := convertMessages(cohereReq.Messages)
+	if err != nil {
+		return nil, err
+	}
+
+	// Create inference configuration using shared helper
+	inferenceConfig := createInferenceConfig(cohereReq)
+
 	converseReq := &bedrockruntime.ConverseInput{
 		ModelId:         aws.String(modelID),
 		Messages:        converseMessages,
@@ -343,12 +492,18 @@ func convertCohereToConverseRequest(cohereReq *Request, modelID string) (*bedroc
 		converseReq.System = systemMessages
 	}
 
+	// Add tool configuration only if tools are present (optimizes for normal Converse)
+	if toolConfig := createToolConfig(cohereReq.Tools, cohereReq.ToolChoice); toolConfig != nil {
+		converseReq.ToolConfig = toolConfig
+	}
+
 	return converseReq, nil
 }
 
-// convertConverseResponseToCohere converts AWS Converse response to AWS Bedrock format
-func convertConverseResponseToCohere(c *gin.Context, converseResp *bedrockruntime.ConverseOutput, modelName string) *CohereBedrockResponse {
-	var contentBlocks []CohereBedrockContentBlock
+// convertConverseResponseToCohere converts AWS Converse response to OpenAI-compatible format
+func convertConverseResponseToCohere(c *gin.Context, converseResp *bedrockruntime.ConverseOutput, modelName string) *CohereResponse {
+	var content string
+	var toolCalls []CohereToolCallResponse
 	var finishReason string
 
 	// Extract response content from Converse API response
@@ -360,12 +515,32 @@ func convertConverseResponseToCohere(c *gin.Context, converseResp *bedrockruntim
 				for _, contentBlock := range outputValue.Value.Content {
 					switch contentValue := contentBlock.(type) {
 					case *types.ContentBlockMemberText:
-						// Add text content block
+						// Add text content
 						if contentValue.Value != "" {
-							textValue := contentValue.Value
-							contentBlocks = append(contentBlocks, CohereBedrockContentBlock{
-								Text: &textValue,
-							})
+							content += contentValue.Value
+						}
+					case *types.ContentBlockMemberToolUse:
+						// Handle tool use content blocks - convert to OpenAI tool call format
+						toolUse := contentValue.Value
+						if toolUse.ToolUseId != nil && toolUse.Name != nil {
+							// Convert document.Interface input back to JSON string
+							var inputJSON string
+							if toolUse.Input != nil {
+								if inputBytes, err := json.Marshal(toolUse.Input); err == nil {
+									inputJSON = string(inputBytes)
+								}
+							}
+
+							// Create proper OpenAI tool call
+							toolCall := CohereToolCallResponse{
+								ID:   *toolUse.ToolUseId,
+								Type: "function",
+								Function: CohereToolFunction{
+									Name:      *toolUse.Name,
+									Arguments: inputJSON,
+								},
+							}
+							toolCalls = append(toolCalls, toolCall)
 						}
 					}
 				}
@@ -377,14 +552,15 @@ func convertConverseResponseToCohere(c *gin.Context, converseResp *bedrockruntim
 		}
 	}
 
-	// Create AWS Bedrock format message with content array
-	message := CohereBedrockMessage{
-		Role:    "assistant",
-		Content: contentBlocks,
+	// Create OpenAI-compatible message with proper tool_calls support
+	message := CohereResponseMessage{
+		Role:      "assistant",
+		Content:   content,
+		ToolCalls: toolCalls,
 	}
 
-	// Create AWS Bedrock format choice
-	choice := CohereBedrockChoice{
+	// Create OpenAI-compatible choice
+	choice := CohereResponseChoice{
 		Index:        0,
 		Message:      message,
 		FinishReason: finishReason,
@@ -407,75 +583,26 @@ func convertConverseResponseToCohere(c *gin.Context, converseResp *bedrockruntim
 		}
 	}
 
-	return &CohereBedrockResponse{
+	return &CohereResponse{
 		ID:      fmt.Sprintf("chatcmpl-oneapi-%s", tracing.GetTraceIDFromContext(c)),
 		Object:  "chat.completion",
 		Created: helper.GetTimestamp(),
 		Model:   modelName,
-		Choices: []CohereBedrockChoice{choice},
+		Choices: []CohereResponseChoice{choice},
 		Usage:   usage,
 	}
 }
 
 // convertCohereToConverseStreamRequest converts Cohere request to Converse API format for streaming
 func convertCohereToConverseStreamRequest(cohereReq *Request, modelID string) (*bedrockruntime.ConverseStreamInput, error) {
-	var converseMessages []types.Message
-	var systemMessages []types.SystemContentBlock
-
-	// Convert messages using standard Converse API format
-	for _, msg := range cohereReq.Messages {
-		switch msg.Role {
-		case "system":
-			// System messages go to the system field in Converse API
-			systemMessages = append(systemMessages, &types.SystemContentBlockMemberText{
-				Value: msg.Content,
-			})
-		case "user":
-			// User messages use standard Converse API format
-			contentBlocks := []types.ContentBlock{
-				&types.ContentBlockMemberText{
-					Value: msg.Content,
-				},
-			}
-
-			converseMessages = append(converseMessages, types.Message{
-				Role:    types.ConversationRole(msg.Role),
-				Content: contentBlocks,
-			})
-		case "assistant":
-			// Assistant messages
-			contentBlocks := []types.ContentBlock{
-				&types.ContentBlockMemberText{
-					Value: msg.Content,
-				},
-			}
-
-			converseMessages = append(converseMessages, types.Message{
-				Role:    types.ConversationRole(msg.Role),
-				Content: contentBlocks,
-			})
-		}
+	// Convert messages using shared helper
+	converseMessages, systemMessages, err := convertMessages(cohereReq.Messages)
+	if err != nil {
+		return nil, err
 	}
 
-	// Create inference configuration
-	inferenceConfig := &types.InferenceConfiguration{}
-	if cohereReq.MaxTokens != 0 {
-		inferenceConfig.MaxTokens = aws.Int32(int32(cohereReq.MaxTokens))
-	} else {
-		inferenceConfig.MaxTokens = aws.Int32(int32(config.DefaultMaxToken))
-	}
-
-	if cohereReq.Temperature != nil {
-		inferenceConfig.Temperature = aws.Float32(float32(*cohereReq.Temperature))
-	}
-	if cohereReq.TopP != nil {
-		inferenceConfig.TopP = aws.Float32(float32(*cohereReq.TopP))
-	}
-	if len(cohereReq.Stop) > 0 {
-		stopSequences := make([]string, len(cohereReq.Stop))
-		copy(stopSequences, cohereReq.Stop)
-		inferenceConfig.StopSequences = stopSequences
-	}
+	// Create inference configuration using shared helper
+	inferenceConfig := createInferenceConfig(cohereReq)
 
 	converseReq := &bedrockruntime.ConverseStreamInput{
 		ModelId:         aws.String(modelID),
@@ -488,17 +615,55 @@ func convertCohereToConverseStreamRequest(cohereReq *Request, modelID string) (*
 		converseReq.System = systemMessages
 	}
 
+	// Add tool configuration only if tools are present (optimizes for normal Converse)
+	if toolConfig := createToolConfig(cohereReq.Tools, cohereReq.ToolChoice); toolConfig != nil {
+		converseReq.ToolConfig = toolConfig
+	}
+
 	return converseReq, nil
 }
 
-// ConvertMessages converts relay model message to Cohere message
+// ConvertMessages converts relay model messages to Cohere messages with tool support
 func ConvertMessages(messages []relaymodel.Message) []Message {
 	cohereMessages := make([]Message, 0, len(messages))
-	for _, msg := range messages {
-		cohereMessages = append(cohereMessages, Message{
-			Role:    msg.Role,
-			Content: msg.StringContent(),
-		})
+
+	for _, message := range messages {
+		cohereMessage := Message{
+			Role:    message.Role,
+			Content: message.StringContent(),
+		}
+
+		// Handle tool calls in assistant messages
+		if len(message.ToolCalls) > 0 {
+			toolCalls := make([]CohereToolCall, 0, len(message.ToolCalls))
+			for _, toolCall := range message.ToolCalls {
+				arguments := ""
+				if toolCall.Function.Arguments != nil {
+					if argStr, ok := toolCall.Function.Arguments.(string); ok {
+						arguments = argStr
+					}
+				}
+
+				toolCalls = append(toolCalls, CohereToolCall{
+					ID:   toolCall.Id,
+					Type: "function",
+					Function: CohereToolFunction{
+						Name:      toolCall.Function.Name,
+						Arguments: arguments,
+					},
+				})
+			}
+			cohereMessage.ToolCalls = toolCalls
+		}
+
+		// Handle tool results (tool role messages) - convert to user messages for AWS Bedrock compatibility
+		if message.Role == "tool" {
+			cohereMessage.Role = "user" // AWS Bedrock requires tool results to be user messages
+			cohereMessage.ToolCallID = message.ToolCallId
+		}
+
+		cohereMessages = append(cohereMessages, cohereMessage)
 	}
+
 	return cohereMessages
 }
