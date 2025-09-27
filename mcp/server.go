@@ -12,7 +12,8 @@ import (
 // The Server struct encapsulates the MCP SDK server instance and automatically
 // registers all available One-API relay tools during initialization.
 type Server struct {
-	server *mcp.Server // The underlying MCP SDK server instance
+	server  *mcp.Server    // The underlying MCP SDK server instance
+	options *ServerOptions // Server configuration options
 }
 
 // NewServer creates a new MCP server instance using the official MCP SDK.
@@ -33,18 +34,54 @@ type Server struct {
 //	server := NewServer()
 //	// Server is now ready to handle MCP protocol requests
 func NewServer() *Server {
+	return NewServerWithOptions(DefaultServerOptions())
+}
+
+// NewServerWithOptions creates a new MCP server instance with custom options.
+// It allows full customization of server behavior, instructions, and configuration.
+//
+// The server can be configured with:
+//   - Custom name and version
+//   - Instruction templates and custom instructions
+//   - Custom base URL for documentation
+//   - Additional template data
+//
+// Returns a fully configured Server instance ready to handle MCP requests.
+// The server includes tools for all supported API endpoints and optional
+// instruction generation capabilities.
+//
+// Example:
+//
+//	opts := DefaultServerOptions().
+//		WithName("my-custom-mcp").
+//		WithInstructionType(ToolUsageInstructions).
+//		WithBaseURL("https://my-api.com")
+//	server := NewServerWithOptions(opts)
+func NewServerWithOptions(options *ServerOptions) *Server {
+	// Validate options
+	if err := options.Validate(); err != nil {
+		// Use default options if validation fails
+		options = DefaultServerOptions()
+	}
+
 	// Create the MCP server with implementation info
 	server := mcp.NewServer(&mcp.Implementation{
-		Name:    "one-api-official-mcp",
-		Version: "1.0.0",
+		Name:    options.Name,
+		Version: options.Version,
 	}, nil)
 
 	mcpServer := &Server{
-		server: server,
+		server:  server,
+		options: options,
 	}
 
 	// Add tools for each One-API relay endpoint
 	mcpServer.addRelayAPITools()
+
+	// Add instruction tools if enabled
+	if options.EnableInstructions {
+		mcpServer.addInstructionTools()
+	}
 
 	return mcpServer
 }
@@ -69,6 +106,37 @@ func getBaseURL() string {
 		return config.ServerAddress
 	}
 	return "https://your-one-api-host" // fallback placeholder
+}
+
+// getEffectiveBaseURL returns the base URL to use for this server instance,
+// considering both server options and global configuration.
+func (s *Server) getEffectiveBaseURL() string {
+	if s.options != nil && s.options.BaseURL != "" {
+		return s.options.BaseURL
+	}
+	return getBaseURL()
+}
+
+// getAvailableToolNames returns a list of available tool names for this server.
+func (s *Server) getAvailableToolNames() []string {
+	tools := []string{
+		"chat_completions",
+		"completions",
+		"embeddings",
+		"images_generations",
+		"audio_transcriptions",
+		"audio_translations",
+		"audio_speech",
+		"moderations",
+		"models_list",
+		"claude_messages",
+	}
+
+	if s.options != nil && s.options.EnableInstructions {
+		tools = append(tools, "instructions")
+	}
+
+	return tools
 }
 
 // Handler provides an HTTP endpoint for MCP server information and status.
