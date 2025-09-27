@@ -1,0 +1,31 @@
+# {{.Title}}
+
+## Endpoint
+{{.Method}} {{.BaseURL}}{{.Endpoint}}
+
+## Description
+{{.Description}}
+
+## Authentication
+Authorization: Bearer YOUR_API_KEY
+
+{{if .ExampleRequest}}
+## Example Request
+```{{.ExampleRequestType}}
+{{.ExampleRequest}}
+```
+{{end}}
+
+{{if .Parameters}}
+## Parameters
+{{range .Parameters}}
+- **{{.Name}}**{{if .Required}} (required){{end}}: {{.Description}}
+{{end}}
+{{end}}
+
+{{if .ResponseExample}}
+## Response Format
+```json
+{{.ResponseExample}}
+```
+{{end}}

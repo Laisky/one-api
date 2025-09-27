@@ -1,0 +1,22 @@
+# Audio Translations API
+
+## Endpoint
+POST {{.BaseURL}}/v1/audio/translations
+
+## Description
+Translates audio into English.
+
+## Authentication
+Authorization: Bearer YOUR_API_KEY
+
+## Example Request
+```bash
+curl {{.BaseURL}}/v1/audio/translations \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -F file="@audio.mp3" \
+  -F model="whisper-1"
+```
+
+## Parameters
+- **file** (required): Audio file to translate
+- **model** (required): Model identifier (whisper-1)

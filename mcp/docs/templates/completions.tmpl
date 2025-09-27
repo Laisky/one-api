@@ -1,0 +1,29 @@
+# Completions API
+
+## Endpoint
+POST {{.BaseURL}}/v1/completions
+
+## Description
+Creates a completion for the provided prompt and parameters.
+
+## Authentication
+Authorization: Bearer YOUR_API_KEY
+
+## Example Request
+```bash
+curl {{.BaseURL}}/v1/completions \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -d '{
+    "model": "gpt-3.5-turbo-instruct",
+    "prompt": "Once upon a time",
+    "max_tokens": 50,
+    "temperature": 0.7
+  }'
+```
+
+## Key Parameters
+- **model** (required): Model identifier
+- **prompt** (required): Text prompt to complete
+- **max_tokens**: Maximum tokens to generate
+- **temperature**: Sampling temperature (0.0 to 2.0)
