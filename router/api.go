@@ -3,6 +3,7 @@ package router
 import (
 	"github.com/songquanpeng/one-api/controller"
 	"github.com/songquanpeng/one-api/controller/auth"
+	"github.com/songquanpeng/one-api/controller/mcp"
 	"github.com/songquanpeng/one-api/middleware"
 
 	"github.com/gin-contrib/gzip"
@@ -156,5 +157,13 @@ func SetApiRouter(router *gin.Engine) {
 		{
 			groupRoute.GET("/", controller.GetGroups)
 		}
+	}
+
+	// MCP (Model Context Protocol) server routes using official SDK
+	mcpRoute := apiRouter.Group("/mcp")
+	mcpRoute.Use(middleware.TokenAuth()) // Require API token authentication
+	{
+		mcpRoute.GET("/", mcp.Handler)
+		mcpRoute.POST("/", mcp.Handler)
 	}
 }
