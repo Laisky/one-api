@@ -11,34 +11,46 @@ import (
 //go:embed docs/templates/*.tmpl
 var templateFS embed.FS
 
-// TemplateData holds the data for rendering documentation templates
+// TemplateData holds the data structure used for rendering documentation templates.
+// It contains the base URL that will be substituted into the template placeholders.
 type TemplateData struct {
-	BaseURL string
+	BaseURL string // The base URL for the API endpoint (e.g., "https://api.example.com")
 }
 
-// DocumentationType represents the available documentation types
+// DocumentationType represents the available documentation types that can be generated.
+// Each type corresponds to a specific API endpoint and its associated template.
 type DocumentationType string
 
+// Supported documentation types for various API endpoints.
 const (
-	ChatCompletions     DocumentationType = "chat_completions"
-	Completions         DocumentationType = "completions"
-	Embeddings          DocumentationType = "embeddings"
-	Images              DocumentationType = "images"
-	AudioTranscriptions DocumentationType = "audio_transcriptions"
-	AudioTranslations   DocumentationType = "audio_translations"
-	AudioSpeech         DocumentationType = "audio_speech"
-	Moderations         DocumentationType = "moderations"
-	ModelsList          DocumentationType = "models_list"
-	ClaudeMessages      DocumentationType = "claude_messages"
+	ChatCompletions     DocumentationType = "chat_completions"     // OpenAI Chat Completions API
+	Completions         DocumentationType = "completions"          // OpenAI Completions API
+	Embeddings          DocumentationType = "embeddings"           // OpenAI Embeddings API
+	Images              DocumentationType = "images"               // OpenAI Image Generation API
+	AudioTranscriptions DocumentationType = "audio_transcriptions" // OpenAI Audio Transcriptions API
+	AudioTranslations   DocumentationType = "audio_translations"   // OpenAI Audio Translations API
+	AudioSpeech         DocumentationType = "audio_speech"         // OpenAI Audio Speech API
+	Moderations         DocumentationType = "moderations"          // OpenAI Moderations API
+	ModelsList          DocumentationType = "models_list"          // Models List API
+	ClaudeMessages      DocumentationType = "claude_messages"      // Claude Messages API
 )
 
-// DocumentationRenderer handles template-based documentation generation
+// DocumentationRenderer handles template-based documentation generation with
+// automatic template discovery and caching. It provides a centralized system
+// for rendering API documentation from magic embedded Go templates.
 type DocumentationRenderer struct {
-	templates map[string]*template.Template
-	registry  map[DocumentationType]string // Maps doc type to template name
+	templates map[string]*template.Template // Cache of parsed templates
+	registry  map[DocumentationType]string  // Maps documentation types to template names
 }
 
 // NewDocumentationRenderer creates a new template-based documentation renderer
+// with automatic template loading and registry initialization.
+//
+// It scans the magic embedded template filesystem, loads all available templates,
+// and initializes the type-to-template registry for efficient lookups.
+//
+// Returns an error if template parsing fails or the templates directory
+// cannot be accessed.
 func NewDocumentationRenderer() (*DocumentationRenderer, error) {
 	renderer := &DocumentationRenderer{
 		templates: make(map[string]*template.Template),
@@ -56,7 +68,16 @@ func NewDocumentationRenderer() (*DocumentationRenderer, error) {
 	return renderer, nil
 }
 
-// loadTemplates dynamically loads all available template files
+// loadTemplates dynamically discovers and loads all available template files
+// from the magic embedded filesystem. It parses each .tmpl file (except api_base.tmpl)
+// and stores the compiled templates in the renderer's cache.
+//
+// Template files are expected to be in the "docs/templates/" directory and
+// have a .tmpl extension. The api_base.tmpl file is skipped as it serves
+// as a base template for composition.
+//
+// Returns an error if the templates directory cannot be read or if any
+// template fails to parse.
 func (r *DocumentationRenderer) loadTemplates() error {
 	// Get list of template files
 	entries, err := templateFS.ReadDir("docs/templates")
@@ -91,7 +112,19 @@ func (r *DocumentationRenderer) loadTemplates() error {
 	return nil
 }
 
-// GenerateDocumentation renders documentation for the specified type
+// GenerateDocumentation renders documentation for the specified documentation type
+// using the appropriate template and the provided base URL.
+//
+// It looks up the template associated with the documentation type, executes it
+// with the provided base URL, and returns the rendered documentation as a string.
+//
+// Parameters:
+//   - docType: The type of documentation to generate (e.g., ChatCompletions, Embeddings)
+//   - baseURL: The base URL to substitute in the template (e.g., "https://api.example.com")
+//
+// Returns the rendered documentation string, or an error if the documentation type
+// is unknown or template execution fails. Falls back to generic documentation
+// if the specific template is not available.
 func (r *DocumentationRenderer) GenerateDocumentation(docType DocumentationType, baseURL string) (string, error) {
 	templateName, exists := r.registry[docType]
 	if !exists {
@@ -114,7 +147,12 @@ func (r *DocumentationRenderer) GenerateDocumentation(docType DocumentationType,
 	return buf.String(), nil
 }
 
-// GetAvailableTypes returns all available documentation types
+// GetAvailableTypes returns a slice of all available documentation types
+// that are registered in the renderer. This can be used to discover what
+// documentation types are supported without attempting to generate them.
+//
+// The returned slice contains all DocumentationType constants that have
+// been registered in the type-to-template mapping.
 func (r *DocumentationRenderer) GetAvailableTypes() []DocumentationType {
 	types := make([]DocumentationType, 0, len(r.registry))
 	for docType := range r.registry {
@@ -123,13 +161,35 @@ func (r *DocumentationRenderer) GetAvailableTypes() []DocumentationType {
 	return types
 }
 
-// IsTypeSupported checks if a documentation type is supported
+// IsTypeSupported checks whether a specific documentation type is supported
+// by this renderer instance. It returns true if the type is registered in
+// the type-to-template mapping, false otherwise.
+//
+// This is useful for validating documentation types before attempting to
+// generate documentation, avoiding unnecessary error handling.
+//
+// Parameters:
+//   - docType: The documentation type to check for support
+//
+// Returns true if the documentation type is supported, false otherwise.
 func (r *DocumentationRenderer) IsTypeSupported(docType DocumentationType) bool {
 	_, exists := r.registry[docType]
 	return exists
 }
 
-// generateFallbackDocumentation provides a generic fallback when templates are not available
+// generateFallbackDocumentation provides a generic fallback documentation
+// when the specific template for a documentation type is not available.
+//
+// This ensures that the system gracefully degrades and always returns
+// some form of documentation, even if the specific template is missing
+// or fails to load.
+//
+// Parameters:
+//   - docType: The name of the documentation type that failed to load
+//   - baseURL: The base URL to include in the fallback documentation
+//
+// Returns a formatted string containing basic API documentation with
+// an error message explaining the template issue.
 func (r *DocumentationRenderer) generateFallbackDocumentation(docType, baseURL string) string {
 	return fmt.Sprintf(`# API Documentation
 
@@ -140,11 +200,35 @@ The documentation template for '%s' could not be loaded.
 %s
 
 ## Note
-Please ensure all template files are properly embedded and accessible.`, docType, baseURL)
+Please ensure all template files are properly magic embedded and accessible.`, docType, baseURL)
 }
 
-// GenerateDocumentation is the main entry point for generating documentation
-// This replaces all the individual generate*DocumentationFromTemplate functions
+// GenerateDocumentation is the main entry point for generating API documentation
+// using the global renderer instance. This function replaces all the individual
+// generate*DocumentationFromTemplate functions with a unified, type-safe interface.
+//
+// It uses the global renderer to generate documentation for the specified type
+// and base URL. If the global renderer is not available or template execution
+// fails, it falls back to generic documentation to ensure the system remains
+// functional.
+//
+// This is the recommended way to generate documentation as it provides:
+//   - Type safety through the DocumentationType enum
+//   - Automatic template discovery and caching
+//   - Graceful error handling with fallback documentation
+//   - Consistent API across all documentation types
+//
+// Parameters:
+//   - docType: The type of documentation to generate (e.g., ChatCompletions, Embeddings)
+//   - baseURL: The base URL for the API endpoint (e.g., "https://api.example.com")
+//
+// Returns a string containing the rendered API documentation. Always returns
+// valid documentation, even if the specific template fails to load.
+//
+// Example:
+//
+//	doc := GenerateDocumentation(ChatCompletions, "https://api.example.com")
+//	fmt.Println(doc) // Prints complete Chat Completions API documentation
 func GenerateDocumentation(docType DocumentationType, baseURL string) string {
 	if globalRenderer == nil {
 		return getFallbackDocumentation(string(docType), baseURL)
@@ -158,7 +242,18 @@ func GenerateDocumentation(docType DocumentationType, baseURL string) string {
 	return doc
 }
 
-// Helper function for fallback when renderer is not available
+// getFallbackDocumentation is a helper function that provides fallback documentation
+// when the global renderer is not available or fails to initialize.
+//
+// This ensures that the system can still provide basic documentation even in
+// error conditions, maintaining system reliability and user experience.
+//
+// Parameters:
+//   - templateName: The name of the template that could not be loaded
+//   - baseURL: The base URL to include in the fallback documentation
+//
+// Returns a formatted string containing basic error documentation that
+// explains the template loading issue and provides the base URL.
 func getFallbackDocumentation(templateName, baseURL string) string {
 	return fmt.Sprintf(`# API Documentation
 
@@ -169,5 +264,5 @@ The documentation template for '%s' could not be loaded.
 %s
 
 ## Note
-Please ensure all template files are properly embedded and accessible.`, templateName, baseURL)
+Please ensure all template files are properly magic embedded and accessible.`, templateName, baseURL)
 }

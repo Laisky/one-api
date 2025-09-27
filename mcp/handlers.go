@@ -6,7 +6,34 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-// addRelayAPITools adds all the relay API tools to the MCP server
+// addRelayAPITools registers all One-API relay endpoint tools with the MCP server.
+// This method configures the server to provide documentation generation tools for
+// various API endpoints including OpenAI-compatible APIs and Claude messages.
+//
+// The registered tools include:
+//   - chat_completions: OpenAI Chat Completions API documentation
+//   - completions: OpenAI Completions API documentation
+//   - embeddings: OpenAI Embeddings API documentation
+//   - images_generations: OpenAI Image Generation API documentation
+//   - audio_transcriptions: OpenAI Audio Transcriptions API documentation
+//   - audio_translations: OpenAI Audio Translations API documentation
+//   - audio_speech: OpenAI Audio Speech API documentation
+//   - moderations: OpenAI Moderations API documentation
+//   - models_list: Models List API documentation
+//   - claude_messages: Claude Messages API documentation
+//
+// Each tool is configured with:
+//   - Appropriate input argument schemas with validation
+//   - JSON schema descriptions for all parameters
+//   - Required/optional parameter specifications
+//   - Tool-specific documentation generation using the unified system
+//
+// The tools use the new GenerateDocumentation function with appropriate
+// DocumentationType constants to ensure consistent and maintainable
+// documentation generation across all endpoints.
+//
+// This method is called automatically during server initialization and
+// should not be called directly by external code.
 func (s *Server) addRelayAPITools() {
 	// Chat Completions tool
 	type ChatCompletionsArgs struct {
