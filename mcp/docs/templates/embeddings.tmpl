@@ -1,0 +1,25 @@
+# Embeddings API
+
+## Endpoint
+POST {{.BaseURL}}/v1/embeddings
+
+## Description
+Creates an embedding vector representing the input text.
+
+## Authentication
+Authorization: Bearer YOUR_API_KEY
+
+## Example Request
+```bash
+curl {{.BaseURL}}/v1/embeddings \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -d '{
+    "model": "text-embedding-ada-002",
+    "input": "The food was delicious and the waiter..."
+  }'
+```
+
+## Parameters
+- **model** (required): Embedding model (e.g., text-embedding-ada-002)
+- **input** (required): Input text to embed

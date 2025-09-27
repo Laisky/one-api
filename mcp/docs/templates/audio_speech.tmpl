@@ -1,0 +1,27 @@
+# Audio Speech API
+
+## Endpoint
+POST {{.BaseURL}}/v1/audio/speech
+
+## Description
+Generates audio from input text.
+
+## Authentication
+Authorization: Bearer YOUR_API_KEY
+
+## Example Request
+```bash
+curl {{.BaseURL}}/v1/audio/speech \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -d '{
+    "model": "tts-1",
+    "input": "Hello world",
+    "voice": "alloy"
+  }'
+```
+
+## Parameters
+- **model** (required): TTS model (tts-1, tts-1-hd)
+- **input** (required): Text to generate audio for
+- **voice** (required): Voice option (alloy, echo, fable, onyx, nova, shimmer)

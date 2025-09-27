@@ -1,0 +1,29 @@
+# Image Generation API
+
+## Endpoint
+POST {{.BaseURL}}/v1/images/generations
+
+## Description
+Creates images from text prompts.
+
+## Authentication
+Authorization: Bearer YOUR_API_KEY
+
+## Example Request
+```bash
+curl {{.BaseURL}}/v1/images/generations \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -d '{
+    "model": "dall-e-3",
+    "prompt": "A cute baby sea otter",
+    "n": 1,
+    "size": "1024x1024"
+  }'
+```
+
+## Parameters
+- **model** (required): Image generation model (dall-e-3, dall-e-2)
+- **prompt** (required): Text description of desired image
+- **n**: Number of images to generate (1-10)
+- **size**: Image size (256x256, 512x512, 1024x1024)

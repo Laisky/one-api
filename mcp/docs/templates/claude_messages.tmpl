@@ -1,0 +1,29 @@
+# Claude Messages API
+
+## Endpoint
+POST {{.BaseURL}}/v1/messages
+
+## Description
+Creates messages using Claude API format.
+
+## Authentication
+Authorization: Bearer YOUR_API_KEY
+
+## Example Request
+```bash
+curl {{.BaseURL}}/v1/messages \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -d '{
+    "model": "claude-3-opus-20240229",
+    "max_tokens": 1000,
+    "messages": [
+      {"role": "user", "content": "Hello, Claude!"}
+    ]
+  }'
+```
+
+## Parameters
+- **model** (required): Claude model identifier
+- **messages** (required): Array of message objects
+- **max_tokens** (required): Maximum tokens to generate
