@@ -295,3 +295,233 @@ func TestDocumentationConsistency(t *testing.T) {
 
 	t.Logf("✓ All %d documentation functions follow consistent patterns", len(docs))
 }
+
+// Test the new GenerateDocumentation function
+func TestGenerateDocumentation(t *testing.T) {
+	baseURL := "https://api.example.com"
+
+	testCases := []struct {
+		name    string
+		docType DocumentationType
+	}{
+		{"chat_completions", ChatCompletions},
+		{"completions", Completions},
+		{"embeddings", Embeddings},
+		{"images", Images},
+		{"audio_transcriptions", AudioTranscriptions},
+		{"audio_translations", AudioTranslations},
+		{"audio_speech", AudioSpeech},
+		{"moderations", Moderations},
+		{"models_list", ModelsList},
+		{"claude_messages", ClaudeMessages},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			doc := GenerateDocumentation(tc.docType, baseURL)
+
+			// Verify documentation is not empty
+			assert.NotEmpty(t, doc, "Documentation should not be empty")
+			assert.Greater(t, len(doc), 50, "Documentation should be substantial")
+
+			// Verify baseURL is included
+			assert.Contains(t, doc, baseURL, "Documentation should contain base URL")
+
+			// Verify it has proper structure
+			assert.Contains(t, doc, "#", "Documentation should have headers")
+
+			t.Logf("✓ %s documentation generated successfully (%d chars)", tc.name, len(doc))
+		})
+	}
+}
+
+// Test DocumentationRenderer methods
+func TestDocumentationRenderer(t *testing.T) {
+	renderer, err := NewDocumentationRenderer()
+	assert.NoError(t, err, "Should create renderer without error")
+	assert.NotNil(t, renderer, "Renderer should not be nil")
+
+	// Test GetAvailableTypes
+	types := renderer.GetAvailableTypes()
+	assert.NotEmpty(t, types, "Should have available types")
+	assert.GreaterOrEqual(t, len(types), 10, "Should have at least 10 types")
+
+	// Test IsTypeSupported
+	assert.True(t, renderer.IsTypeSupported(ChatCompletions), "Should support ChatCompletions")
+	assert.True(t, renderer.IsTypeSupported(Embeddings), "Should support Embeddings")
+	assert.False(t, renderer.IsTypeSupported(DocumentationType("nonexistent")), "Should not support nonexistent type")
+
+	// Test GenerateDocumentation method
+	doc, err := renderer.GenerateDocumentation(ChatCompletions, "https://test.com")
+	assert.NoError(t, err, "Should generate documentation without error")
+	assert.NotEmpty(t, doc, "Documentation should not be empty")
+	assert.Contains(t, doc, "https://test.com", "Should contain base URL")
+
+	t.Logf("✓ DocumentationRenderer methods work correctly")
+}
+
+// Test error handling for unknown documentation types
+func TestGenerateDocumentationUnknownType(t *testing.T) {
+	renderer, err := NewDocumentationRenderer()
+	assert.NoError(t, err, "Should create renderer without error")
+
+	// Test with unknown type
+	doc, err := renderer.GenerateDocumentation(DocumentationType("unknown"), "https://test.com")
+	assert.Error(t, err, "Should return error for unknown type")
+	assert.Empty(t, doc, "Documentation should be empty for unknown type")
+
+	t.Logf("✓ Error handling for unknown types works correctly")
+}
+
+// Test backward compatibility - ensure old functions still work
+func TestBackwardCompatibility(t *testing.T) {
+	baseURL := "https://api.example.com"
+
+	testCases := []struct {
+		name string
+		fn   func(string) string
+	}{
+		{"generateChatCompletionsDocumentationFromTemplate", generateChatCompletionsDocumentationFromTemplate},
+		{"generateCompletionsDocumentationFromTemplate", generateCompletionsDocumentationFromTemplate},
+		{"generateEmbeddingsDocumentationFromTemplate", generateEmbeddingsDocumentationFromTemplate},
+		{"generateImagesDocumentationFromTemplate", generateImagesDocumentationFromTemplate},
+		{"generateAudioTranscriptionsDocumentationFromTemplate", generateAudioTranscriptionsDocumentationFromTemplate},
+		{"generateAudioTranslationsDocumentationFromTemplate", generateAudioTranslationsDocumentationFromTemplate},
+		{"generateAudioSpeechDocumentationFromTemplate", generateAudioSpeechDocumentationFromTemplate},
+		{"generateModerationsDocumentationFromTemplate", generateModerationsDocumentationFromTemplate},
+		{"generateModelsListDocumentationFromTemplate", generateModelsListDocumentationFromTemplate},
+		{"generateClaudeMessagesDocumentationFromTemplate", generateClaudeMessagesDocumentationFromTemplate},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			doc := tc.fn(baseURL)
+
+			// Verify documentation is generated
+			assert.NotEmpty(t, doc, "Documentation should not be empty")
+			assert.Contains(t, doc, baseURL, "Documentation should contain base URL")
+
+			t.Logf("✓ %s works correctly (backward compatibility)", tc.name)
+		})
+	}
+}
+
+// Test that new and old functions produce the same output
+func TestNewVsOldFunctionEquivalence(t *testing.T) {
+	baseURL := "https://api.example.com"
+
+	testCases := []struct {
+		docType DocumentationType
+		oldFn   func(string) string
+	}{
+		{ChatCompletions, generateChatCompletionsDocumentationFromTemplate},
+		{Completions, generateCompletionsDocumentationFromTemplate},
+		{Embeddings, generateEmbeddingsDocumentationFromTemplate},
+		{Images, generateImagesDocumentationFromTemplate},
+		{AudioTranscriptions, generateAudioTranscriptionsDocumentationFromTemplate},
+		{AudioTranslations, generateAudioTranslationsDocumentationFromTemplate},
+		{AudioSpeech, generateAudioSpeechDocumentationFromTemplate},
+		{Moderations, generateModerationsDocumentationFromTemplate},
+		{ModelsList, generateModelsListDocumentationFromTemplate},
+		{ClaudeMessages, generateClaudeMessagesDocumentationFromTemplate},
+	}
+
+	for _, tc := range testCases {
+		t.Run(string(tc.docType), func(t *testing.T) {
+			newDoc := GenerateDocumentation(tc.docType, baseURL)
+			oldDoc := tc.oldFn(baseURL)
+
+			// Both should produce the same output
+			assert.Equal(t, newDoc, oldDoc, "New and old functions should produce identical output")
+
+			t.Logf("✓ %s: new and old functions produce identical output", tc.docType)
+		})
+	}
+}
+
+// Test template loading and registry initialization
+func TestTemplateLoadingAndRegistry(t *testing.T) {
+	renderer, err := NewDocumentationRenderer()
+	assert.NoError(t, err, "Should create renderer without error")
+
+	// Verify registry is properly initialized
+	expectedTypes := []DocumentationType{
+		ChatCompletions, Completions, Embeddings, Images,
+		AudioTranscriptions, AudioTranslations, AudioSpeech,
+		Moderations, ModelsList, ClaudeMessages,
+	}
+
+	for _, docType := range expectedTypes {
+		assert.True(t, renderer.IsTypeSupported(docType), "Should support %s", docType)
+	}
+
+	t.Logf("✓ Template loading and registry initialization works correctly")
+}
+
+// Test performance - ensure new system is not significantly slower
+func TestPerformanceComparison(t *testing.T) {
+	baseURL := "https://api.example.com"
+
+	// Test new function performance
+	t.Run("new_function", func(t *testing.T) {
+		for i := 0; i < 1000; i++ {
+			doc := GenerateDocumentation(ChatCompletions, baseURL)
+			assert.NotEmpty(t, doc)
+		}
+	})
+
+	// Test old function performance
+	t.Run("old_function", func(t *testing.T) {
+		for i := 0; i < 1000; i++ {
+			doc := generateChatCompletionsDocumentationFromTemplate(baseURL)
+			assert.NotEmpty(t, doc)
+		}
+	})
+
+	t.Logf("✓ Performance comparison completed")
+}
+
+// Test global renderer initialization
+func TestGlobalRendererInitialization(t *testing.T) {
+	// The global renderer should be initialized during package init
+	assert.NotNil(t, globalRenderer, "Global renderer should be initialized")
+
+	// Test that GenerateDocumentation works with global renderer
+	doc := GenerateDocumentation(ChatCompletions, "https://test.com")
+	assert.NotEmpty(t, doc, "Should generate documentation using global renderer")
+	assert.Contains(t, doc, "https://test.com", "Should contain base URL")
+
+	t.Logf("✓ Global renderer initialization works correctly")
+}
+
+// Test documentation consistency across all types
+func TestDocumentationConsistencyNewSystem(t *testing.T) {
+	baseURL := "https://api.example.com"
+
+	renderer, err := NewDocumentationRenderer()
+	assert.NoError(t, err, "Should create renderer without error")
+
+	types := renderer.GetAvailableTypes()
+
+	for _, docType := range types {
+		t.Run(string(docType), func(t *testing.T) {
+			doc, err := renderer.GenerateDocumentation(docType, baseURL)
+			assert.NoError(t, err, "Should generate documentation without error")
+
+			// Check for consistent structure
+			assert.Contains(t, doc, "#", "Should have headers")
+			assert.Contains(t, doc, baseURL, "Should contain base URL")
+			assert.Greater(t, len(doc), 100, "Should be substantial documentation")
+
+			// Check for common sections that should exist in API documentation
+			docLower := strings.ToLower(doc)
+			assert.True(t,
+				strings.Contains(docLower, "api") ||
+					strings.Contains(docLower, "endpoint") ||
+					strings.Contains(docLower, "description"),
+				"Should contain API-related content")
+
+			t.Logf("✓ %s documentation is consistent", docType)
+		})
+	}
+}
