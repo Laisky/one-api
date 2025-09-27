@@ -14,18 +14,18 @@ The `magic_documentation.go` file has been completely refactored to eliminate co
 
 #### 1. **Eliminated Code Duplication** 
 - **Before**: 10+ individual functions with identical patterns and error handling
-- **After**: Single [`GenerateDocumentation()`](../magic_documentation.go:147) function handles all documentation types
+- **After**: Single `GenerateDocumentation`function handles all documentation types
 - **Result**: 90% reduction in duplicated code
 
 #### 2. **Registry-Based Architecture**
-- **New [`DocumentationType`](../magic_documentation.go:20) enum** for type safety
+- **New `DocumentationType` enum** for type safety
 - **Automatic template discovery** from embedded filesystem
 - **Centralized registry** mapping documentation types to templates
 - **Dynamic template loading** with robust error handling
 
 #### 3. **Enhanced Scalability**
 - **Adding new documentation types** now requires only:
-  1. Adding a constant to [`DocumentationType`](../magic_documentation.go:20)
+  1. Adding a constant to `DocumentationType`
   2. Adding an entry to the registry
   3. Creating a template file
 - **No code changes** needed for new API endpoints
