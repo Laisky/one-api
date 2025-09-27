@@ -3,6 +3,7 @@ package mcp
 import (
 	"context"
 	"fmt"
+	"maps"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -305,23 +306,17 @@ func (s *Server) addInstructionTools() {
 
 		// Add custom data from arguments
 		if args.CustomData != nil {
-			for k, v := range args.CustomData {
-				templateData.CustomData[k] = v
-			}
+			maps.Copy(templateData.CustomData, args.CustomData)
 		}
 
 		// Add custom data from server options
 		if s.options.CustomTemplateData != nil {
-			for k, v := range s.options.CustomTemplateData {
-				templateData.CustomData[k] = v
-			}
+			maps.Copy(templateData.CustomData, s.options.CustomTemplateData)
 		}
 
 		// Add custom data from instruction config
 		if s.options.Instructions != nil && s.options.Instructions.TemplateData != nil {
-			for k, v := range s.options.Instructions.TemplateData {
-				templateData.CustomData[k] = v
-			}
+			maps.Copy(templateData.CustomData, s.options.Instructions.TemplateData)
 		}
 
 		// Generate instructions using the global renderer
