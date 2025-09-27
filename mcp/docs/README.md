@@ -1,8 +1,8 @@
-# One-API Official MCP Documentation Template System
+# One API Official MCP Documentation Template System
 
 ## Overview
 
-The One-API Official MCP documentation system by [H0llyW00dzZ](https://github.com/H0llyW00dzZ) has been refactored to use Go's magic embed file system with template-based documentation generation. This approach provides better maintainability, scalability, and separation of concerns.
+The One API Official MCP documentation system by [H0llyW00dzZ](https://github.com/H0llyW00dzZ) has been refactored to use Go's magic embed file system with template-based documentation generation. This approach provides better maintainability, scalability, and separation of concerns.
 
 **Status: ✅ COMPLETED** - The template system is now fully implemented and operational.
 
