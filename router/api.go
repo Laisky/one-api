@@ -3,7 +3,7 @@ package router
 import (
 	"github.com/songquanpeng/one-api/controller"
 	"github.com/songquanpeng/one-api/controller/auth"
-	"github.com/songquanpeng/one-api/controller/mcp"
+	"github.com/songquanpeng/one-api/mcp"
 	"github.com/songquanpeng/one-api/middleware"
 
 	"github.com/gin-contrib/gzip"
