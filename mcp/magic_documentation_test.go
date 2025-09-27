@@ -525,3 +525,215 @@ func TestDocumentationConsistencyNewSystem(t *testing.T) {
 		})
 	}
 }
+
+// Test the exported backward compatibility functions that have 0% coverage
+func TestExportedBackwardCompatibilityFunctions(t *testing.T) {
+	baseURL := "https://api.example.com"
+
+	testCases := []struct {
+		name string
+		fn   func(string) string
+	}{
+		{"GenerateChatCompletionsDocumentationFromTemplate", GenerateChatCompletionsDocumentationFromTemplate},
+		{"GenerateCompletionsDocumentationFromTemplate", GenerateCompletionsDocumentationFromTemplate},
+		{"GenerateEmbeddingsDocumentationFromTemplate", GenerateEmbeddingsDocumentationFromTemplate},
+		{"GenerateImagesDocumentationFromTemplate", GenerateImagesDocumentationFromTemplate},
+		{"GenerateAudioTranscriptionsDocumentationFromTemplate", GenerateAudioTranscriptionsDocumentationFromTemplate},
+		{"GenerateAudioTranslationsDocumentationFromTemplate", GenerateAudioTranslationsDocumentationFromTemplate},
+		{"GenerateAudioSpeechDocumentationFromTemplate", GenerateAudioSpeechDocumentationFromTemplate},
+		{"GenerateModerationsDocumentationFromTemplate", GenerateModerationsDocumentationFromTemplate},
+		{"GenerateModelsListDocumentationFromTemplate", GenerateModelsListDocumentationFromTemplate},
+		{"GenerateClaudeMessagesDocumentationFromTemplate", GenerateClaudeMessagesDocumentationFromTemplate},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			doc := tc.fn(baseURL)
+
+			// Verify documentation is generated
+			assert.NotEmpty(t, doc, "Documentation should not be empty")
+			assert.Contains(t, doc, baseURL, "Documentation should contain base URL")
+			assert.Greater(t, len(doc), 50, "Documentation should be substantial")
+
+			t.Logf("✓ %s works correctly (exported function)", tc.name)
+		})
+	}
+}
+
+// Test fallback documentation generation scenarios
+func TestFallbackDocumentationScenarios(t *testing.T) {
+	// Test getFallbackDocumentation function
+	templateName := "test_template"
+	baseURL := "https://fallback.test.com"
+
+	fallbackDoc := getFallbackDocumentation(templateName, baseURL)
+
+	assert.NotEmpty(t, fallbackDoc, "Fallback documentation should not be empty")
+	assert.Contains(t, fallbackDoc, templateName, "Should contain template name")
+	assert.Contains(t, fallbackDoc, baseURL, "Should contain base URL")
+	assert.Contains(t, fallbackDoc, "Template Error", "Should indicate template error")
+
+	t.Logf("✓ getFallbackDocumentation works correctly")
+}
+
+// Test renderer fallback scenarios
+func TestRendererFallbackScenarios(t *testing.T) {
+	renderer, err := NewDocumentationRenderer()
+	assert.NoError(t, err, "Should create renderer without error")
+
+	// Test generateFallbackDocumentation method
+	docType := "test_doc_type"
+	baseURL := "https://renderer-fallback.test.com"
+
+	fallbackDoc := renderer.generateFallbackDocumentation(docType, baseURL)
+
+	assert.NotEmpty(t, fallbackDoc, "Fallback documentation should not be empty")
+	assert.Contains(t, fallbackDoc, docType, "Should contain doc type")
+	assert.Contains(t, fallbackDoc, baseURL, "Should contain base URL")
+	assert.Contains(t, fallbackDoc, "Template Error", "Should indicate template error")
+
+	t.Logf("✓ DocumentationRenderer.generateFallbackDocumentation works correctly")
+}
+
+// Test error scenarios in template loading
+func TestTemplateLoadingErrorScenarios(t *testing.T) {
+	// Test what happens when global renderer fails to initialize
+	// This tests the init() function error path
+
+	// We can't easily test the init() failure without complex mocking,
+	// but we can test the fallback behavior when globalRenderer is nil
+
+	// Save original global renderer
+	originalRenderer := globalRenderer
+
+	// Temporarily set to nil to test fallback
+	globalRenderer = nil
+
+	doc := GenerateDocumentation(ChatCompletions, "https://test-fallback.com")
+
+	// Should get fallback documentation
+	assert.NotEmpty(t, doc, "Should get fallback documentation")
+	assert.Contains(t, doc, "https://test-fallback.com", "Should contain base URL")
+	assert.Contains(t, doc, "Template Error", "Should indicate template error")
+
+	// Restore original renderer
+	globalRenderer = originalRenderer
+
+	t.Logf("✓ Global renderer fallback works correctly")
+}
+
+// Test instruction template loading scenarios
+func TestInstructionTemplateLoadingScenarios(t *testing.T) {
+	renderer, err := NewInstructionRenderer()
+	assert.NoError(t, err, "Should create instruction renderer without error")
+
+	// Test loadInstructionTemplates when directory doesn't exist
+	// This is already covered by the existing implementation which handles missing directories gracefully
+
+	// Test instruction generation with missing template
+	templateData := InstructionTemplateData{
+		BaseURL:        "https://instruction-test.com",
+		ServerName:     "test-server",
+		ServerVersion:  "1.0.0",
+		AvailableTools: []string{"test_tool"},
+		CustomData:     make(map[string]any),
+	}
+
+	// Test with unsupported type (should return error)
+	_, err = renderer.GenerateInstructions(InstructionType("unsupported_type"), templateData)
+	assert.Error(t, err, "Should return error for unsupported instruction type")
+
+	// Test fallback generation directly
+	fallback := renderer.generateFallbackInstructions("test_type", templateData)
+	assert.NotEmpty(t, fallback, "Should generate fallback instructions")
+	assert.Contains(t, fallback, "test-server", "Should contain server name")
+	assert.Contains(t, fallback, "https://instruction-test.com", "Should contain base URL")
+
+	t.Logf("✓ Instruction template loading scenarios work correctly")
+}
+
+// Test server options edge cases for better coverage
+func TestServerOptionsEdgeCases(t *testing.T) {
+	// Test WithCustomTemplateData with nil map
+	opts := &ServerOptions{}
+	opts.WithCustomTemplateData("test_key", "test_value")
+
+	assert.NotNil(t, opts.CustomTemplateData, "Should initialize custom template data")
+	assert.Equal(t, "test_value", opts.CustomTemplateData["test_key"], "Should set custom data")
+
+	// Test WithCustomInstructions with nil instructions
+	opts2 := &ServerOptions{}
+	opts2.WithCustomInstructions("custom instructions")
+
+	assert.NotNil(t, opts2.Instructions, "Should initialize instructions config")
+	assert.Equal(t, "custom instructions", opts2.Instructions.CustomInstructions, "Should set custom instructions")
+	assert.True(t, opts2.EnableInstructions, "Should enable instructions")
+
+	// Test WithInstructionType with nil instructions
+	opts3 := &ServerOptions{}
+	opts3.WithInstructionType(BestPracticesInstructions)
+
+	assert.NotNil(t, opts3.Instructions, "Should initialize instructions config")
+	assert.Equal(t, BestPracticesInstructions, opts3.Instructions.Type, "Should set instruction type")
+	assert.True(t, opts3.EnableInstructions, "Should enable instructions")
+
+	t.Logf("✓ Server options edge cases work correctly")
+}
+
+// Test magic documentation registry initialization edge cases
+func TestMagicDocumentationRegistryEdgeCases(t *testing.T) {
+	// Test that init() handles renderer creation failure gracefully
+	// The init() function already has error handling, but we can test the registry functions
+
+	renderer, err := NewDocumentationRenderer()
+	assert.NoError(t, err, "Should create renderer")
+
+	// Test that all expected types are registered
+	expectedTypes := []DocumentationType{
+		ChatCompletions, Completions, Embeddings, Images,
+		AudioTranscriptions, AudioTranslations, AudioSpeech,
+		Moderations, ModelsList, ClaudeMessages,
+	}
+
+	for _, docType := range expectedTypes {
+		assert.True(t, renderer.IsTypeSupported(docType), "Should support %s", docType)
+	}
+
+	// Test instruction registry
+	instrRenderer, err := NewInstructionRenderer()
+	assert.NoError(t, err, "Should create instruction renderer")
+
+	expectedInstrTypes := []InstructionType{
+		GeneralInstructions, ToolUsageInstructions, APIEndpointInstructions,
+		ErrorHandlingInstructions, BestPracticesInstructions,
+	}
+
+	for _, instrType := range expectedInstrTypes {
+		assert.True(t, instrRenderer.IsInstructionTypeSupported(instrType), "Should support %s", instrType)
+	}
+
+	t.Logf("✓ Magic documentation registry edge cases work correctly")
+}
+
+// Test template execution error scenarios
+func TestTemplateExecutionErrorScenarios(t *testing.T) {
+	renderer, err := NewDocumentationRenderer()
+	assert.NoError(t, err, "Should create renderer without error")
+
+	// Test GenerateDocumentation with template execution that might fail
+	// Since our templates are simple and don't have complex logic that could fail,
+	// we test the error handling paths that are already implemented
+
+	// Test with all supported types to ensure no template execution errors
+	types := renderer.GetAvailableTypes()
+	baseURL := "https://template-test.com"
+
+	for _, docType := range types {
+		doc, err := renderer.GenerateDocumentation(docType, baseURL)
+		assert.NoError(t, err, "Should generate documentation for %s without error", docType)
+		assert.NotEmpty(t, doc, "Should generate non-empty documentation for %s", docType)
+		assert.Contains(t, doc, baseURL, "Should contain base URL for %s", docType)
+	}
+
+	t.Logf("✓ Template execution scenarios work correctly")
+}

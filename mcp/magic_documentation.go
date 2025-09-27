@@ -2,14 +2,10 @@ package mcp
 
 import (
 	"bytes"
-	"embed"
 	"fmt"
 	"strings"
 	"text/template"
 )
-
-//go:embed docs/templates/*.tmpl
-var templateFS embed.FS
 
 // TemplateData holds the data structure used for rendering documentation templates.
 // It contains the base URL that will be substituted into the template placeholders.
