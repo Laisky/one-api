@@ -6,8 +6,8 @@ import (
 	"testing"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
-	"github.com/stretchr/testify/assert"
 	"github.com/songquanpeng/one-api/common/config"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestNewServer(t *testing.T) {
@@ -91,10 +91,10 @@ func TestGetBaseURLEnvironmentVariable(t *testing.T) {
 	// Test with environment variable (if the config reads from env)
 	testURL := "https://env.example.com"
 	os.Setenv("SERVER_ADDRESS", testURL)
-	
+
 	// Reset config to empty to test fallback
 	config.ServerAddress = ""
-	
+
 	result := getBaseURL()
 	expected := "https://your-one-api-host" // Should use fallback since config.ServerAddress is empty
 
@@ -122,7 +122,7 @@ func TestServerToolsRegistration(t *testing.T) {
 	// The addRelayAPITools() function should have been called during NewServer()
 	// We can't directly verify the tools are registered due to SDK limitations,
 	// but we can ensure the function completes successfully
-	
+
 	t.Logf("✓ Server tools registration completed")
 }
 
@@ -157,25 +157,6 @@ func TestServerToolsCanBeCalled(t *testing.T) {
 	_ = ctx // Use ctx to avoid unused variable warning
 
 	t.Logf("✓ Server is properly set up to handle tool calls")
-}
-
-// Benchmark test for server creation
-func BenchmarkNewServer(b *testing.B) {
-	for i := 0; i < b.N; i++ {
-		server := NewServer()
-		_ = server // Avoid unused variable warning
-	}
-}
-
-// Benchmark test for getBaseURL
-func BenchmarkGetBaseURL(b *testing.B) {
-	config.ServerAddress = "https://api.example.com"
-	
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		url := getBaseURL()
-		_ = url // Avoid unused variable warning
-	}
 }
 
 // Test server configuration edge cases
@@ -242,7 +223,7 @@ func TestConcurrentServerCreation(t *testing.T) {
 	done := make(chan int, goroutines)
 
 	// Create servers concurrently
-	for i := 0; i < goroutines; i++ {
+	for i := range goroutines {
 		go func(index int) {
 			servers[index] = NewServer()
 			done <- index
@@ -250,7 +231,7 @@ func TestConcurrentServerCreation(t *testing.T) {
 	}
 
 	// Wait for all goroutines to complete
-	for i := 0; i < goroutines; i++ {
+	for range goroutines {
 		<-done
 	}
 

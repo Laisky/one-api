@@ -7,8 +7,8 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
-	"github.com/stretchr/testify/assert"
 	"github.com/songquanpeng/one-api/common/config"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestHandler(t *testing.T) {
@@ -146,7 +146,7 @@ func TestHandlerWithDifferentContentTypes(t *testing.T) {
 func TestHandlerWithDifferentHTTPMethods(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
-	
+
 	// Register handler for various methods
 	router.GET("/mcp", Handler)
 	router.POST("/mcp", Handler)
@@ -275,20 +275,6 @@ func TestHandlerWithConfigChanges(t *testing.T) {
 	config.ServerAddress = originalServerAddress
 }
 
-// Benchmark the handler performance
-func BenchmarkHandler(b *testing.B) {
-	gin.SetMode(gin.TestMode)
-	router := gin.New()
-	router.GET("/mcp", Handler)
-
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		req, _ := http.NewRequest("GET", "/mcp", nil)
-		w := httptest.NewRecorder()
-		router.ServeHTTP(w, req)
-	}
-}
-
 // Test middleware compatibility
 func TestHandlerWithMiddleware(t *testing.T) {
 	gin.SetMode(gin.TestMode)
@@ -329,7 +315,7 @@ func TestHandlerErrorScenarios(t *testing.T) {
 	// Test with malformed requests (though our handler doesn't parse request body)
 	req, _ := http.NewRequest("GET", "/mcp", nil)
 	req.Header.Set("Content-Length", "invalid")
-	
+
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
@@ -349,7 +335,7 @@ func TestHandlerResponseSize(t *testing.T) {
 	router.ServeHTTP(w, req)
 
 	responseSize := len(w.Body.Bytes())
-	
+
 	// Response should be reasonably sized (not too small, not too large)
 	assert.Greater(t, responseSize, 50, "Response should contain meaningful content")
 	assert.Less(t, responseSize, 5000, "Response should not be excessively large")
