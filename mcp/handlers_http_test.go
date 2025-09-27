@@ -211,7 +211,7 @@ func TestHandlerConcurrentRequests(t *testing.T) {
 	results := make(chan int, numRequests)
 
 	// Send concurrent requests
-	for i := 0; i < numRequests; i++ {
+	for range numRequests {
 		go func() {
 			req, _ := http.NewRequest("GET", "/mcp", nil)
 			w := httptest.NewRecorder()
@@ -222,7 +222,7 @@ func TestHandlerConcurrentRequests(t *testing.T) {
 
 	// Collect results
 	successCount := 0
-	for i := 0; i < numRequests; i++ {
+	for range numRequests {
 		statusCode := <-results
 		if statusCode == http.StatusOK {
 			successCount++
