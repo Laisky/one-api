@@ -9,7 +9,7 @@ import (
 
 func TestGenerateChatCompletionsDocumentation(t *testing.T) {
 	baseURL := "https://api.example.com"
-	doc := generateChatCompletionsDocumentation(baseURL)
+	doc := generateChatCompletionsDocumentationFromTemplate(baseURL)
 
 	// Test that documentation contains expected elements
 	assert.Contains(t, doc, "# Chat Completions API")
@@ -35,7 +35,7 @@ func TestGenerateChatCompletionsDocumentation(t *testing.T) {
 
 func TestGenerateCompletionsDocumentation(t *testing.T) {
 	baseURL := "https://api.example.com"
-	doc := generateCompletionsDocumentation(baseURL)
+	doc := generateCompletionsDocumentationFromTemplate(baseURL)
 
 	// Test that documentation contains expected elements
 	assert.Contains(t, doc, "# Completions API")
@@ -54,7 +54,7 @@ func TestGenerateCompletionsDocumentation(t *testing.T) {
 
 func TestGenerateEmbeddingsDocumentation(t *testing.T) {
 	baseURL := "https://api.example.com"
-	doc := generateEmbeddingsDocumentation(baseURL)
+	doc := generateEmbeddingsDocumentationFromTemplate(baseURL)
 
 	// Test that documentation contains expected elements
 	assert.Contains(t, doc, "# Embeddings API")
@@ -71,7 +71,7 @@ func TestGenerateEmbeddingsDocumentation(t *testing.T) {
 
 func TestGenerateImagesDocumentation(t *testing.T) {
 	baseURL := "https://api.example.com"
-	doc := generateImagesDocumentation(baseURL)
+	doc := generateImagesDocumentationFromTemplate(baseURL)
 
 	// Test that documentation contains expected elements
 	assert.Contains(t, doc, "# Image Generation API")
@@ -90,7 +90,7 @@ func TestGenerateImagesDocumentation(t *testing.T) {
 
 func TestGenerateAudioTranscriptionsDocumentation(t *testing.T) {
 	baseURL := "https://api.example.com"
-	doc := generateAudioTranscriptionsDocumentation(baseURL)
+	doc := generateAudioTranscriptionsDocumentationFromTemplate(baseURL)
 
 	// Test that documentation contains expected elements
 	assert.Contains(t, doc, "# Audio Transcriptions API")
@@ -108,7 +108,7 @@ func TestGenerateAudioTranscriptionsDocumentation(t *testing.T) {
 
 func TestGenerateAudioTranslationsDocumentation(t *testing.T) {
 	baseURL := "https://api.example.com"
-	doc := generateAudioTranslationsDocumentation(baseURL)
+	doc := generateAudioTranslationsDocumentationFromTemplate(baseURL)
 
 	// Test that documentation contains expected elements
 	assert.Contains(t, doc, "# Audio Translations API")
@@ -125,7 +125,7 @@ func TestGenerateAudioTranslationsDocumentation(t *testing.T) {
 
 func TestGenerateAudioSpeechDocumentation(t *testing.T) {
 	baseURL := "https://api.example.com"
-	doc := generateAudioSpeechDocumentation(baseURL)
+	doc := generateAudioSpeechDocumentationFromTemplate(baseURL)
 
 	// Test that documentation contains expected elements
 	assert.Contains(t, doc, "# Audio Speech API")
@@ -144,7 +144,7 @@ func TestGenerateAudioSpeechDocumentation(t *testing.T) {
 
 func TestGenerateModerationsDocumentation(t *testing.T) {
 	baseURL := "https://api.example.com"
-	doc := generateModerationsDocumentation(baseURL)
+	doc := generateModerationsDocumentationFromTemplate(baseURL)
 
 	// Test that documentation contains expected elements
 	assert.Contains(t, doc, "# Moderations API")
@@ -160,7 +160,7 @@ func TestGenerateModerationsDocumentation(t *testing.T) {
 
 func TestGenerateModelsListDocumentation(t *testing.T) {
 	baseURL := "https://api.example.com"
-	doc := generateModelsListDocumentation(baseURL)
+	doc := generateModelsListDocumentationFromTemplate(baseURL)
 
 	// Test that documentation contains expected elements
 	assert.Contains(t, doc, "# Models List API")
@@ -175,7 +175,7 @@ func TestGenerateModelsListDocumentation(t *testing.T) {
 
 func TestGenerateClaudeMessagesDocumentation(t *testing.T) {
 	baseURL := "https://api.example.com"
-	doc := generateClaudeMessagesDocumentation(baseURL)
+	doc := generateClaudeMessagesDocumentationFromTemplate(baseURL)
 
 	// Test that documentation contains expected elements
 	assert.Contains(t, doc, "# Claude Messages API")
@@ -205,7 +205,7 @@ func TestDocumentationWithDifferentBaseURLs(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			doc := generateChatCompletionsDocumentation(tc.baseURL)
+			doc := generateChatCompletionsDocumentationFromTemplate(tc.baseURL)
 
 			// Verify the base URL appears correctly in the documentation
 			assert.Contains(t, doc, tc.baseURL)
@@ -227,16 +227,16 @@ func TestDocumentationStructure(t *testing.T) {
 		genFunc  func(string) string
 		endpoint string
 	}{
-		{"chat_completions", generateChatCompletionsDocumentation, "/v1/chat/completions"},
-		{"completions", generateCompletionsDocumentation, "/v1/completions"},
-		{"embeddings", generateEmbeddingsDocumentation, "/v1/embeddings"},
-		{"images", generateImagesDocumentation, "/v1/images/generations"},
-		{"audio_transcriptions", generateAudioTranscriptionsDocumentation, "/v1/audio/transcriptions"},
-		{"audio_translations", generateAudioTranslationsDocumentation, "/v1/audio/translations"},
-		{"audio_speech", generateAudioSpeechDocumentation, "/v1/audio/speech"},
-		{"moderations", generateModerationsDocumentation, "/v1/moderations"},
-		{"models_list", generateModelsListDocumentation, "/v1/models"},
-		{"claude_messages", generateClaudeMessagesDocumentation, "/v1/messages"},
+		{"chat_completions", generateChatCompletionsDocumentationFromTemplate, "/v1/chat/completions"},
+		{"completions", generateCompletionsDocumentationFromTemplate, "/v1/completions"},
+		{"embeddings", generateEmbeddingsDocumentationFromTemplate, "/v1/embeddings"},
+		{"images", generateImagesDocumentationFromTemplate, "/v1/images/generations"},
+		{"audio_transcriptions", generateAudioTranscriptionsDocumentationFromTemplate, "/v1/audio/transcriptions"},
+		{"audio_translations", generateAudioTranslationsDocumentationFromTemplate, "/v1/audio/translations"},
+		{"audio_speech", generateAudioSpeechDocumentationFromTemplate, "/v1/audio/speech"},
+		{"moderations", generateModerationsDocumentationFromTemplate, "/v1/moderations"},
+		{"models_list", generateModelsListDocumentationFromTemplate, "/v1/models"},
+		{"claude_messages", generateClaudeMessagesDocumentationFromTemplate, "/v1/messages"},
 	}
 
 	for _, tc := range testCases {
@@ -266,16 +266,16 @@ func TestDocumentationConsistency(t *testing.T) {
 	baseURL := "https://api.example.com"
 
 	docs := []string{
-		generateChatCompletionsDocumentation(baseURL),
-		generateCompletionsDocumentation(baseURL),
-		generateEmbeddingsDocumentation(baseURL),
-		generateImagesDocumentation(baseURL),
-		generateAudioTranscriptionsDocumentation(baseURL),
-		generateAudioTranslationsDocumentation(baseURL),
-		generateAudioSpeechDocumentation(baseURL),
-		generateModerationsDocumentation(baseURL),
-		generateModelsListDocumentation(baseURL),
-		generateClaudeMessagesDocumentation(baseURL),
+		generateChatCompletionsDocumentationFromTemplate(baseURL),
+		generateCompletionsDocumentationFromTemplate(baseURL),
+		generateEmbeddingsDocumentationFromTemplate(baseURL),
+		generateImagesDocumentationFromTemplate(baseURL),
+		generateAudioTranscriptionsDocumentationFromTemplate(baseURL),
+		generateAudioTranslationsDocumentationFromTemplate(baseURL),
+		generateAudioSpeechDocumentationFromTemplate(baseURL),
+		generateModerationsDocumentationFromTemplate(baseURL),
+		generateModelsListDocumentationFromTemplate(baseURL),
+		generateClaudeMessagesDocumentationFromTemplate(baseURL),
 	}
 
 	// Test that all documentations follow consistent patterns

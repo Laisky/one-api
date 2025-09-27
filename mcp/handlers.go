@@ -22,7 +22,7 @@ func (s *Server) addRelayAPITools() {
 		Description: "Create a chat completion using OpenAI-compatible API. Supports streaming and non-streaming responses.",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args ChatCompletionsArgs) (*mcp.CallToolResult, any, error) {
 		baseURL := getBaseURL()
-		doc := generateChatCompletionsDocumentation(baseURL)
+		doc := generateChatCompletionsDocumentationFromTemplate(baseURL)
 
 		return &mcp.CallToolResult{
 			Content: []mcp.Content{
@@ -44,7 +44,7 @@ func (s *Server) addRelayAPITools() {
 		Description: "Create a text completion using OpenAI-compatible API.",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args CompletionsArgs) (*mcp.CallToolResult, any, error) {
 		baseURL := getBaseURL()
-		doc := generateCompletionsDocumentation(baseURL)
+		doc := generateCompletionsDocumentationFromTemplate(baseURL)
 
 		return &mcp.CallToolResult{
 			Content: []mcp.Content{
@@ -64,7 +64,7 @@ func (s *Server) addRelayAPITools() {
 		Description: "Create embeddings for input text using OpenAI-compatible API.",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args EmbeddingsArgs) (*mcp.CallToolResult, any, error) {
 		baseURL := getBaseURL()
-		doc := generateEmbeddingsDocumentation(baseURL)
+		doc := generateEmbeddingsDocumentationFromTemplate(baseURL)
 
 		return &mcp.CallToolResult{
 			Content: []mcp.Content{
@@ -86,7 +86,7 @@ func (s *Server) addRelayAPITools() {
 		Description: "Create images from text prompts using OpenAI-compatible API.",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args ImagesArgs) (*mcp.CallToolResult, any, error) {
 		baseURL := getBaseURL()
-		doc := generateImagesDocumentation(baseURL)
+		doc := generateImagesDocumentationFromTemplate(baseURL)
 
 		return &mcp.CallToolResult{
 			Content: []mcp.Content{
@@ -107,7 +107,7 @@ func (s *Server) addRelayAPITools() {
 		Description: "Transcribe audio into text using OpenAI-compatible API.",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args AudioTranscriptionsArgs) (*mcp.CallToolResult, any, error) {
 		baseURL := getBaseURL()
-		doc := generateAudioTranscriptionsDocumentation(baseURL)
+		doc := generateAudioTranscriptionsDocumentationFromTemplate(baseURL)
 
 		return &mcp.CallToolResult{
 			Content: []mcp.Content{
@@ -127,7 +127,7 @@ func (s *Server) addRelayAPITools() {
 		Description: "Translate audio into English text using OpenAI-compatible API.",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args AudioTranslationsArgs) (*mcp.CallToolResult, any, error) {
 		baseURL := getBaseURL()
-		doc := generateAudioTranslationsDocumentation(baseURL)
+		doc := generateAudioTranslationsDocumentationFromTemplate(baseURL)
 
 		return &mcp.CallToolResult{
 			Content: []mcp.Content{
@@ -148,7 +148,7 @@ func (s *Server) addRelayAPITools() {
 		Description: "Generate speech from text using OpenAI-compatible API.",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args AudioSpeechArgs) (*mcp.CallToolResult, any, error) {
 		baseURL := getBaseURL()
-		doc := generateAudioSpeechDocumentation(baseURL)
+		doc := generateAudioSpeechDocumentationFromTemplate(baseURL)
 
 		return &mcp.CallToolResult{
 			Content: []mcp.Content{
@@ -168,7 +168,7 @@ func (s *Server) addRelayAPITools() {
 		Description: "Check if text violates OpenAI's usage policies using moderation API.",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args ModerationsArgs) (*mcp.CallToolResult, any, error) {
 		baseURL := getBaseURL()
-		doc := generateModerationsDocumentation(baseURL)
+		doc := generateModerationsDocumentationFromTemplate(baseURL)
 
 		return &mcp.CallToolResult{
 			Content: []mcp.Content{
@@ -183,7 +183,7 @@ func (s *Server) addRelayAPITools() {
 		Description: "List available models through the One-API relay.",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args struct{}) (*mcp.CallToolResult, any, error) {
 		baseURL := getBaseURL()
-		doc := generateModelsListDocumentation(baseURL)
+		doc := generateModelsListDocumentationFromTemplate(baseURL)
 
 		return &mcp.CallToolResult{
 			Content: []mcp.Content{
@@ -204,7 +204,7 @@ func (s *Server) addRelayAPITools() {
 		Description: "Create messages using Claude API format.",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args ClaudeMessagesArgs) (*mcp.CallToolResult, any, error) {
 		baseURL := getBaseURL()
-		doc := generateClaudeMessagesDocumentation(baseURL)
+		doc := generateClaudeMessagesDocumentationFromTemplate(baseURL)
 
 		return &mcp.CallToolResult{
 			Content: []mcp.Content{
