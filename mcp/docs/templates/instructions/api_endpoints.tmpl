@@ -1,0 +1,514 @@
+# One-API Endpoints Integration Reference
+
+## Server: {{.ServerName}} v{{.ServerVersion}}
+**Base URL**: {{.BaseURL}}
+
+## OpenAI-Compatible Endpoints in One-API
+
+One-API provides a unified gateway to multiple AI providers through OpenAI-compatible endpoints. All examples show both Go and bash/curl implementations.
+
+### Chat Completions
+**Endpoint**: `POST {{.BaseURL}}/v1/chat/completions`
+**Supported Models**: GPT-3.5, GPT-4, Claude, Gemini, and more
+
+#### Go Implementation
+```go
+package main
+
+import (
+    "bytes"
+    "encoding/json"
+    "fmt"
+    "io"
+    "net/http"
+    "os"
+)
+
+type ChatRequest struct {
+    Model       string    `json:"model"`
+    Messages    []Message `json:"messages"`
+    Temperature *float64  `json:"temperature,omitempty"`
+    MaxTokens   *int      `json:"max_tokens,omitempty"`
+    Stream      *bool     `json:"stream,omitempty"`
+}
+
+type Message struct {
+    Role    string `json:"role"`
+    Content string `json:"content"`
+}
+
+type ChatResponse struct {
+    ID      string   `json:"id"`
+    Object  string   `json:"object"`
+    Choices []Choice `json:"choices"`
+    Usage   Usage    `json:"usage"`
+}
+
+type Choice struct {
+    Index        int     `json:"index"`
+    Message      Message `json:"message"`
+    FinishReason string  `json:"finish_reason"`
+}
+
+type Usage struct {
+    PromptTokens     int `json:"prompt_tokens"`
+    CompletionTokens int `json:"completion_tokens"`
+    TotalTokens      int `json:"total_tokens"`
+}
+
+func chatCompletion(model, userMessage string) (*ChatResponse, error) {
+    url := "{{.BaseURL}}/v1/chat/completions"
+    apiKey := os.Getenv("ONE_API_KEY")
+    
+    req := ChatRequest{
+        Model: model,
+        Messages: []Message{
+            {Role: "user", Content: userMessage},
+        },
+        Temperature: func(f float64) *float64 { return &f }(0.7),
+        MaxTokens:   func(i int) *int { return &i }(1000),
+    }
+    
+    jsonData, _ := json.Marshal(req)
+    httpReq, _ := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
+    httpReq.Header.Set("Content-Type", "application/json")
+    httpReq.Header.Set("Authorization", "Bearer "+apiKey)
+    
+    client := &http.Client{}
+    resp, err := client.Do(httpReq)
+    if err != nil {
+        return nil, err
+    }
+    defer resp.Body.Close()
+    
+    var chatResp ChatResponse
+    json.NewDecoder(resp.Body).Decode(&chatResp)
+    return &chatResp, nil
+}
+```
+
+#### Bash/Curl Implementation
+```bash
+#!/bin/bash
+
+chat_completion() {
+    local model="$1"
+    local message="$2"
+    
+    curl -X POST "{{.BaseURL}}/v1/chat/completions" \
+        -H "Content-Type: application/json" \
+        -H "Authorization: Bearer $ONE_API_KEY" \
+        -d "{
+            \"model\": \"${model}\",
+            \"messages\": [
+                {\"role\": \"user\", \"content\": \"${message}\"}
+            ],
+            \"temperature\": 0.7,
+            \"max_tokens\": 1000
+        }"
+}
+
+# Usage examples
+chat_completion "gpt-3.5-turbo" "Hello, world!"
+chat_completion "claude-3-sonnet" "Explain machine learning"
+```
+
+### Text Embeddings
+**Endpoint**: `POST {{.BaseURL}}/v1/embeddings`
+**Supported Models**: text-embedding-ada-002, text-embedding-3-small, etc.
+
+#### Go Implementation
+```go
+type EmbeddingRequest struct {
+    Model string `json:"model"`
+    Input string `json:"input"`
+}
+
+type EmbeddingResponse struct {
+    Object string      `json:"object"`
+    Data   []Embedding `json:"data"`
+    Usage  Usage       `json:"usage"`
+}
+
+type Embedding struct {
+    Object    string    `json:"object"`
+    Embedding []float64 `json:"embedding"`
+    Index     int       `json:"index"`
+}
+
+func createEmbedding(text string) (*EmbeddingResponse, error) {
+    url := "{{.BaseURL}}/v1/embeddings"
+    apiKey := os.Getenv("ONE_API_KEY")
+    
+    req := EmbeddingRequest{
+        Model: "text-embedding-ada-002",
+        Input: text,
+    }
+    
+    jsonData, _ := json.Marshal(req)
+    httpReq, _ := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
+    httpReq.Header.Set("Content-Type", "application/json")
+    httpReq.Header.Set("Authorization", "Bearer "+apiKey)
+    
+    client := &http.Client{}
+    resp, err := client.Do(httpReq)
+    if err != nil {
+        return nil, err
+    }
+    defer resp.Body.Close()
+    
+    var embResp EmbeddingResponse
+    json.NewDecoder(resp.Body).Decode(&embResp)
+    return &embResp, nil
+}
+```
+
+#### Bash/Curl Implementation
+```bash
+create_embedding() {
+    local text="$1"
+    
+    curl -X POST "{{.BaseURL}}/v1/embeddings" \
+        -H "Content-Type: application/json" \
+        -H "Authorization: Bearer $ONE_API_KEY" \
+        -d "{
+            \"model\": \"text-embedding-ada-002\",
+            \"input\": \"${text}\"
+        }"
+}
+
+# Usage
+create_embedding "One-API is a unified gateway for AI services"
+```
+
+### Image Generation
+**Endpoint**: `POST {{.BaseURL}}/v1/images/generations`
+**Supported Models**: DALL-E 2, DALL-E 3
+
+#### Go Implementation
+```go
+type ImageRequest struct {
+    Model  string `json:"model"`
+    Prompt string `json:"prompt"`
+    N      *int   `json:"n,omitempty"`
+    Size   string `json:"size,omitempty"`
+}
+
+type ImageResponse struct {
+    Created int64       `json:"created"`
+    Data    []ImageData `json:"data"`
+}
+
+type ImageData struct {
+    URL string `json:"url"`
+}
+
+func generateImage(prompt string) (*ImageResponse, error) {
+    url := "{{.BaseURL}}/v1/images/generations"
+    apiKey := os.Getenv("ONE_API_KEY")
+    
+    req := ImageRequest{
+        Model:  "dall-e-3",
+        Prompt: prompt,
+        N:      func(i int) *int { return &i }(1),
+        Size:   "1024x1024",
+    }
+    
+    jsonData, _ := json.Marshal(req)
+    httpReq, _ := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
+    httpReq.Header.Set("Content-Type", "application/json")
+    httpReq.Header.Set("Authorization", "Bearer "+apiKey)
+    
+    client := &http.Client{}
+    resp, err := client.Do(httpReq)
+    if err != nil {
+        return nil, err
+    }
+    defer resp.Body.Close()
+    
+    var imgResp ImageResponse
+    json.NewDecoder(resp.Body).Decode(&imgResp)
+    return &imgResp, nil
+}
+```
+
+#### Bash/Curl Implementation
+```bash
+generate_image() {
+    local prompt="$1"
+    
+    curl -X POST "{{.BaseURL}}/v1/images/generations" \
+        -H "Content-Type: application/json" \
+        -H "Authorization: Bearer $ONE_API_KEY" \
+        -d "{
+            \"model\": \"dall-e-3\",
+            \"prompt\": \"${prompt}\",
+            \"n\": 1,
+            \"size\": \"1024x1024\"
+        }"
+}
+
+# Usage
+generate_image "A futuristic API gateway connecting multiple AI services"
+```
+
+### Audio Transcription
+**Endpoint**: `POST {{.BaseURL}}/v1/audio/transcriptions`
+**Supported Models**: whisper-1
+
+#### Go Implementation
+```go
+func transcribeAudio(audioFilePath string) error {
+    url := "{{.BaseURL}}/v1/audio/transcriptions"
+    apiKey := os.Getenv("ONE_API_KEY")
+    
+    // Open audio file
+    file, err := os.Open(audioFilePath)
+    if err != nil {
+        return err
+    }
+    defer file.Close()
+    
+    // Create multipart form
+    var buf bytes.Buffer
+    writer := multipart.NewWriter(&buf)
+    
+    // Add file field
+    fileWriter, _ := writer.CreateFormFile("file", filepath.Base(audioFilePath))
+    io.Copy(fileWriter, file)
+    
+    // Add model field
+    writer.WriteField("model", "whisper-1")
+    writer.Close()
+    
+    // Create request
+    req, _ := http.NewRequest("POST", url, &buf)
+    req.Header.Set("Content-Type", writer.FormDataContentType())
+    req.Header.Set("Authorization", "Bearer "+apiKey)
+    
+    // Send request
+    client := &http.Client{}
+    resp, err := client.Do(req)
+    if err != nil {
+        return err
+    }
+    defer resp.Body.Close()
+    
+    body, _ := io.ReadAll(resp.Body)
+    fmt.Printf("Transcription: %s\n", body)
+    return nil
+}
+```
+
+#### Bash/Curl Implementation
+```bash
+transcribe_audio() {
+    local audio_file="$1"
+    
+    curl -X POST "{{.BaseURL}}/v1/audio/transcriptions" \
+        -H "Authorization: Bearer $ONE_API_KEY" \
+        -F "file=@${audio_file}" \
+        -F "model=whisper-1"
+}
+
+# Usage
+transcribe_audio "audio.mp3"
+```
+
+### Models List
+**Endpoint**: `GET {{.BaseURL}}/v1/models`
+
+#### Go Implementation
+```go
+type ModelsResponse struct {
+    Object string  `json:"object"`
+    Data   []Model `json:"data"`
+}
+
+type Model struct {
+    ID      string `json:"id"`
+    Object  string `json:"object"`
+    Created int64  `json:"created"`
+    OwnedBy string `json:"owned_by"`
+}
+
+func listModels() (*ModelsResponse, error) {
+    url := "{{.BaseURL}}/v1/models"
+    apiKey := os.Getenv("ONE_API_KEY")
+    
+    req, _ := http.NewRequest("GET", url, nil)
+    req.Header.Set("Authorization", "Bearer "+apiKey)
+    
+    client := &http.Client{}
+    resp, err := client.Do(req)
+    if err != nil {
+        return nil, err
+    }
+    defer resp.Body.Close()
+    
+    var modelsResp ModelsResponse
+    json.NewDecoder(resp.Body).Decode(&modelsResp)
+    return &modelsResp, nil
+}
+```
+
+#### Bash/Curl Implementation
+```bash
+list_models() {
+    curl -X GET "{{.BaseURL}}/v1/models" \
+        -H "Authorization: Bearer $ONE_API_KEY"
+}
+
+# Usage
+list_models | jq '.data[].id'  # List all model IDs
+```
+
+## Complete Integration Example
+
+### Go Complete Client
+```go
+package main
+
+import (
+    "fmt"
+    "log"
+    "os"
+)
+
+type OneAPIClient struct {
+    baseURL string
+    apiKey  string
+    client  *http.Client
+}
+
+func NewOneAPIClient(baseURL, apiKey string) *OneAPIClient {
+    return &OneAPIClient{
+        baseURL: baseURL,
+        apiKey:  apiKey,
+        client:  &http.Client{Timeout: 30 * time.Second},
+    }
+}
+
+func (c *OneAPIClient) ChatCompletion(model, message string) (*ChatResponse, error) {
+    // Implementation from above
+    return chatCompletion(model, message)
+}
+
+func (c *OneAPIClient) CreateEmbedding(text string) (*EmbeddingResponse, error) {
+    // Implementation from above
+    return createEmbedding(text)
+}
+
+func (c *OneAPIClient) GenerateImage(prompt string) (*ImageResponse, error) {
+    // Implementation from above
+    return generateImage(prompt)
+}
+
+func main() {
+    client := NewOneAPIClient("{{.BaseURL}}", os.Getenv("ONE_API_KEY"))
+    
+    // Test chat completion
+    response, err := client.ChatCompletion("gpt-3.5-turbo", "Hello, One-API!")
+    if err != nil {
+        log.Fatal(err)
+    }
+    
+    fmt.Printf("Chat Response: %s\n", response.Choices[0].Message.Content)
+}
+```
+
+### Bash Complete Script
+```bash
+#!/bin/bash
+
+# One-API Integration Script
+set -e
+
+ONE_API_KEY="${ONE_API_KEY:-your-api-key-here}"
+BASE_URL="{{.BaseURL}}"
+
+# Source all functions
+source chat_functions.sh
+source embedding_functions.sh
+source image_functions.sh
+
+main() {
+    echo "One-API Integration Demo"
+    echo "========================"
+    
+    # Test models list
+    echo "Available models:"
+    list_models | jq -r '.data[].id' | head -5
+    
+    # Test chat completion
+    echo -e "\nChat completion test:"
+    chat_completion "gpt-3.5-turbo" "What is One-API?" | jq -r '.choices[0].message.content'
+    
+    # Test embedding
+    echo -e "\nEmbedding test:"
+    create_embedding "One-API test" | jq -r '.data[0].embedding | length'
+    
+    echo -e "\nIntegration test completed!"
+}
+
+main "$@"
+```
+
+## Environment Setup
+
+### Go Module Setup
+```bash
+mkdir one-api-client
+cd one-api-client
+go mod init one-api-client
+
+# Create main.go with the examples above
+# Set environment variables
+export ONE_API_KEY="your-api-key-here"
+export ONE_API_BASE_URL="{{.BaseURL}}"
+
+# Run
+go run main.go
+```
+
+### Bash Environment Setup
+```bash
+# Set environment variables
+export ONE_API_KEY="your-api-key-here"
+export ONE_API_BASE_URL="{{.BaseURL}}"
+
+# Make scripts executable
+chmod +x *.sh
+
+# Test connection
+./test_connection.sh
+```
+
+## Testing Your Integration
+
+### Connection Test
+```bash
+#!/bin/bash
+test_one_api_connection() {
+    echo "Testing One-API connection..."
+    
+    local status=$(curl -s -o /dev/null -w "%{http_code}" \
+        -H "Authorization: Bearer $ONE_API_KEY" \
+        "{{.BaseURL}}/v1/models")
+    
+    if [ "$status" = "200" ]; then
+        echo "✅ One-API connection successful!"
+        return 0
+    else
+        echo "❌ Connection failed with status: $status"
+        return 1
+    fi
+}
+
+test_one_api_connection
+```
+
+This reference provides complete integration examples for all One-API endpoints using both Go and bash/curl implementations. Use these as templates for your own integration projects.
+
+---
+*API endpoints reference for {{.ServerName}} v{{.ServerVersion}}*

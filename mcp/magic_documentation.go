@@ -35,12 +35,21 @@ const (
 	ClaudeMessages      DocumentationType = "claude_messages"      // Claude Messages API
 )
 
+// InstructionRenderer handles template-based instruction generation with
+// automatic template discovery and caching. It provides a centralized system
+// for rendering MCP server instructions from magic embedded Go templates.
+type InstructionRenderer struct {
+	templates map[string]*template.Template // Cache of parsed instruction templates
+	registry  map[InstructionType]string    // Maps instruction types to template names
+}
+
 // DocumentationRenderer handles template-based documentation generation with
 // automatic template discovery and caching. It provides a centralized system
 // for rendering API documentation from magic embedded Go templates.
 type DocumentationRenderer struct {
-	templates map[string]*template.Template // Cache of parsed templates
-	registry  map[DocumentationType]string  // Maps documentation types to template names
+	templates           map[string]*template.Template // Cache of parsed templates
+	registry            map[DocumentationType]string  // Maps documentation types to template names
+	instructionRenderer *InstructionRenderer          // Embedded instruction renderer
 }
 
 // NewDocumentationRenderer creates a new template-based documentation renderer
@@ -52,9 +61,16 @@ type DocumentationRenderer struct {
 // Returns an error if template parsing fails or the templates directory
 // cannot be accessed.
 func NewDocumentationRenderer() (*DocumentationRenderer, error) {
+	// Create instruction renderer
+	instructionRenderer, err := NewInstructionRenderer()
+	if err != nil {
+		return nil, fmt.Errorf("failed to create instruction renderer: %w", err)
+	}
+
 	renderer := &DocumentationRenderer{
-		templates: make(map[string]*template.Template),
-		registry:  make(map[DocumentationType]string),
+		templates:           make(map[string]*template.Template),
+		registry:            make(map[DocumentationType]string),
+		instructionRenderer: instructionRenderer,
 	}
 
 	// Initialize the registry with available documentation types
@@ -265,4 +281,147 @@ The documentation template for '%s' could not be loaded.
 
 ## Note
 Please ensure all template files are properly magic embedded and accessible.`, templateName, baseURL)
+}
+
+// NewInstructionRenderer creates a new template-based instruction renderer
+// with automatic template loading and registry initialization.
+//
+// It scans the magic embedded template filesystem for instruction templates,
+// loads all available templates, and initializes the type-to-template registry
+// for efficient lookups.
+//
+// Returns an error if template parsing fails or the templates directory
+// cannot be accessed.
+func NewInstructionRenderer() (*InstructionRenderer, error) {
+	renderer := &InstructionRenderer{
+		templates: make(map[string]*template.Template),
+		registry:  make(map[InstructionType]string),
+	}
+
+	// Initialize the registry with available instruction types
+	renderer.initializeInstructionRegistry()
+
+	// Load all instruction template files dynamically
+	if err := renderer.loadInstructionTemplates(); err != nil {
+		return nil, err
+	}
+
+	return renderer, nil
+}
+
+// loadInstructionTemplates dynamically discovers and loads all available instruction template files
+// from the magic embedded filesystem. It parses each instruction .tmpl file
+// and stores the compiled templates in the renderer's cache.
+//
+// Instruction template files are expected to be in the "docs/templates/instructions/" directory
+// and have a .tmpl extension.
+//
+// Returns an error if the templates directory cannot be read or if any
+// template fails to parse.
+func (r *InstructionRenderer) loadInstructionTemplates() error {
+	// Get list of instruction template files
+	entries, err := templateFS.ReadDir("docs/templates/instructions")
+	if err != nil {
+		// If instructions directory doesn't exist, that's okay - just return without error
+		return nil
+	}
+
+	for _, entry := range entries {
+		if !entry.IsDir() && strings.HasSuffix(entry.Name(), ".tmpl") {
+			templateName := strings.TrimSuffix(entry.Name(), ".tmpl")
+
+			tmplContent, err := templateFS.ReadFile("docs/templates/instructions/" + entry.Name())
+			if err != nil {
+				// Log warning but continue with other templates
+				continue
+			}
+
+			tmpl, err := template.New(templateName).Parse(string(tmplContent))
+			if err != nil {
+				return fmt.Errorf("failed to parse instruction template %s: %w", entry.Name(), err)
+			}
+
+			r.templates[templateName] = tmpl
+		}
+	}
+
+	return nil
+}
+
+// GenerateInstructions renders instructions for the specified instruction type
+// using the appropriate template and the provided template data.
+//
+// It looks up the template associated with the instruction type, executes it
+// with the provided template data, and returns the rendered instructions as a string.
+//
+// Parameters:
+//   - instructionType: The type of instructions to generate (e.g., GeneralInstructions, ToolUsageInstructions)
+//   - data: The template data to substitute in the template
+//
+// Returns the rendered instructions string, or an error if the instruction type
+// is unknown or template execution fails. Falls back to generic instructions
+// if the specific template is not available.
+func (r *InstructionRenderer) GenerateInstructions(instructionType InstructionType, data InstructionTemplateData) (string, error) {
+	templateName, exists := r.registry[instructionType]
+	if !exists {
+		return "", fmt.Errorf("unknown instruction type: %s", instructionType)
+	}
+
+	tmpl, exists := r.templates[templateName]
+	if !exists {
+		// Fallback to generic instructions if template doesn't exist
+		return r.generateFallbackInstructions(string(instructionType), data), nil
+	}
+
+	var buf bytes.Buffer
+	if err := tmpl.Execute(&buf, data); err != nil {
+		return "", fmt.Errorf("failed to execute instruction template %s: %w", templateName, err)
+	}
+
+	return buf.String(), nil
+}
+
+// GetAvailableInstructionTypes returns a slice of all available instruction types
+// that are registered in the renderer.
+func (r *InstructionRenderer) GetAvailableInstructionTypes() []InstructionType {
+	types := make([]InstructionType, 0, len(r.registry))
+	for instructionType := range r.registry {
+		types = append(types, instructionType)
+	}
+	return types
+}
+
+// IsInstructionTypeSupported checks whether a specific instruction type is supported
+// by this renderer instance.
+func (r *InstructionRenderer) IsInstructionTypeSupported(instructionType InstructionType) bool {
+	_, exists := r.registry[instructionType]
+	return exists
+}
+
+// generateFallbackInstructions provides generic fallback instructions
+// when the specific template for an instruction type is not available.
+func (r *InstructionRenderer) generateFallbackInstructions(instructionType string, data InstructionTemplateData) string {
+	return fmt.Sprintf(`# MCP Server Instructions
+
+## Server Information
+- **Name**: %s
+- **Version**: %s
+- **Base URL**: %s
+
+## Template Error
+The instruction template for '%s' could not be loaded.
+
+## Available Tools
+%s
+
+## Note
+Please ensure all instruction template files are properly magic embedded and accessible.`,
+		data.ServerName, data.ServerVersion, data.BaseURL, instructionType,
+		strings.Join(data.AvailableTools, ", "))
+}
+
+// GetInstructionRenderer returns the embedded instruction renderer.
+// This allows access to instruction generation capabilities from the documentation renderer.
+func (r *DocumentationRenderer) GetInstructionRenderer() *InstructionRenderer {
+	return r.instructionRenderer
 }

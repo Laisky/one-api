@@ -1,5 +1,13 @@
 # One API Official MCP Documentation Template System
 
+<p align="center">
+  <img src="https://i.imgur.com/Rm7I8uK.png" alt="Golang logo" width="350">
+  <br>
+  <i>Image Copyright © <a href="https://github.com/SAWARATSUKI">SAWARATSUKI</a>. All rights reserved.</i>
+  <br>
+  <i>Image used under permission from the copyright holder.</i>
+</p>
+
 ## Overview
 
 The One API Official MCP documentation system by [H0llyW00dzZ](https://github.com/H0llyW00dzZ) has been significantly refactored to create a more reusable, maintainable, and scalable documentation generation system using Go's magic embed file system with template-based documentation generation.
@@ -292,3 +300,313 @@ The new architecture enables several future improvements:
 | **Testability** | Hard to test comprehensively | Easy to test all scenarios | 🚀 Much better |
 | **Performance** | Good | Good (maintained) | ✅ No regression |
 | **Backward Compatibility** | N/A | 100% compatible | ✅ Perfect |
+
+## Instruction System
+
+### Overview
+
+The MCP server now includes a comprehensive instruction system that allows servers to provide customized usage instructions and guidance to users. This system uses the same template-based architecture as the documentation system, ensuring consistency and maintainability.
+
+### Key Features
+
+- **Template-based Instructions**: Uses Go templates for flexible instruction generation
+- **Multiple Instruction Types**: Supports various instruction categories (general, tool usage, API endpoints, etc.)
+- **Server Options**: Configure instruction behavior through `ServerOptions`
+- **Integration with Documentation**: Seamlessly integrates with existing documentation system
+- **Fallback Support**: Graceful degradation when templates are unavailable
+
+### Instruction Types
+
+The system supports several predefined instruction types:
+
+- **`GeneralInstructions`**: General server usage and overview
+- **`ToolUsageInstructions`**: Specific tool usage guidance
+- **`APIEndpointInstructions`**: API endpoint reference and examples
+- **`ErrorHandlingInstructions`**: Error handling best practices
+- **`BestPracticesInstructions`**: Comprehensive best practices guide
+
+### Server Configuration
+
+#### Basic Usage with Default Options
+```go
+// Create server with default options (instructions enabled)
+server := mcp.NewServer()
+```
+
+#### Advanced Configuration with ServerOptions
+```go
+// Create server with custom instruction configuration
+opts := mcp.DefaultServerOptions().
+    WithName("my-custom-mcp").
+    WithVersion("2.0.0").
+    WithInstructionType(mcp.ToolUsageInstructions).
+    WithBaseURL("https://my-api.com").
+    WithCustomInstructions("Custom server-specific instructions").
+    WithCustomTemplateData("feature_flags", map[string]bool{
+        "streaming": true,
+        "batch_processing": false,
+    })
+
+server := mcp.NewServerWithOptions(opts)
+```
+
+#### ServerOptions Builder Pattern
+```go
+opts := mcp.DefaultServerOptions()
+
+// Configure server identity
+opts.WithName("production-mcp-server").
+    WithVersion("1.5.0")
+
+// Configure instructions
+opts.WithInstructionType(mcp.BestPracticesInstructions).
+    WithCustomInstructions("This server provides production-ready AI model access")
+
+// Configure networking
+opts.WithBaseURL("https://api.production.com")
+
+// Add custom template data
+opts.WithCustomTemplateData("rate_limits", map[string]int{
+    "requests_per_minute": 1000,
+    "concurrent_requests": 50,
+})
+
+// Disable instructions if needed
+opts.DisableInstructions()
+
+server := mcp.NewServerWithOptions(opts)
+```
+
+### Instruction Templates
+
+#### Template Structure
+```
+mcp/docs/templates/instructions/
+├── general.tmpl              # General server usage
+├── tool_usage.tmpl          # Tool-specific guidance
+├── api_endpoints.tmpl       # API endpoint reference
+├── error_handling.tmpl      # Error handling practices
+└── best_practices.tmpl      # Comprehensive best practices
+```
+
+#### Template Variables
+Instructions templates have access to rich template data:
+
+```go
+type InstructionTemplateData struct {
+    BaseURL        string                 // Server base URL
+    ServerName     string                 // Server name
+    ServerVersion  string                 // Server version
+    AvailableTools []string               // List of available tools
+    CustomData     map[string]interface{} // Custom template data
+}
+```
+
+#### Creating Custom Instruction Templates
+```markdown
+# {{.ServerName}} Instructions
+
+## Server Information
+- **Name**: {{.ServerName}}
+- **Version**: {{.ServerVersion}}
+- **Base URL**: {{.BaseURL}}
+
+## Available Tools
+{{range .AvailableTools}}
+- {{.}}
+{{end}}
+
+## Custom Configuration
+{{if .CustomData.rate_limits}}
+### Rate Limits
+- Requests per minute: {{.CustomData.rate_limits.requests_per_minute}}
+- Concurrent requests: {{.CustomData.rate_limits.concurrent_requests}}
+{{end}}
+```
+
+## Usage Examples
+Connect to this server using your preferred MCP client:
+
+```bash
+mcp-client connect {{.BaseURL}}
+```
+
+### Using the Instruction System
+
+#### Direct Instruction Generation
+```go
+// Generate instructions using the global system
+templateData := mcp.InstructionTemplateData{
+    BaseURL:        "https://api.example.com",
+    ServerName:     "my-server",
+    ServerVersion:  "1.0.0",
+    AvailableTools: []string{"chat_completions", "embeddings"},
+    CustomData:     map[string]interface{}{
+        "features": []string{"streaming", "batch"},
+    },
+}
+
+instructions := mcp.GenerateInstructions(mcp.GeneralInstructions, templateData)
+```
+
+#### Custom Instruction Renderer
+```go
+// Create custom renderer for advanced use cases
+renderer, err := mcp.NewInstructionRenderer()
+if err != nil {
+    log.Fatal(err)
+}
+
+// Check available instruction types
+types := renderer.GetAvailableInstructionTypes()
+fmt.Printf("Available instruction types: %v\n", types)
+
+// Generate specific instructions
+instructions, err := renderer.GenerateInstructions(
+    mcp.ToolUsageInstructions,
+    templateData,
+)
+if err != nil {
+    log.Printf("Failed to generate instructions: %v", err)
+}
+```
+
+### MCP Tools Integration
+
+The instruction system automatically registers an `instructions` tool when enabled:
+
+```go
+// The instructions tool is available to MCP clients
+// Usage example from MCP client:
+{
+    "tool": "instructions",
+    "arguments": {
+        "type": "general",           // Optional: instruction type
+        "include_tools": true,       // Optional: include tool list
+        "custom_data": {             // Optional: additional context
+            "user_level": "beginner"
+        }
+    }
+}
+```
+
+### Migration Guide
+
+#### Existing Code (No Changes Required)
+```go
+// Existing code continues to work unchanged
+server := mcp.NewServer()
+```
+
+#### Enhanced with Instructions
+```go
+// Enhanced version with instruction support
+opts := mcp.DefaultServerOptions().
+    WithInstructionType(mcp.GeneralInstructions)
+    
+server := mcp.NewServerWithOptions(opts)
+```
+
+### Adding New Instruction Types
+
+#### Step 1: Define the Instruction Type
+```go
+const (
+    // Add to existing instruction types
+    CustomInstructionType InstructionType = "custom_instruction"
+)
+```
+
+#### Step 2: Update the Registry
+```go
+func (r *InstructionRenderer) initializeInstructionRegistry() {
+    r.registry = map[InstructionType]string{
+        // ... existing mappings
+        CustomInstructionType: "custom_instruction",
+    }
+}
+```
+
+#### Step 3: Create Template File
+Create `docs/templates/instructions/custom_instruction.tmpl`:
+
+```markdown
+# Custom Instructions for {{.ServerName}}
+
+## Overview
+Custom instruction content here...
+
+## Server Details
+- Base URL: {{.BaseURL}}
+- Version: {{.ServerVersion}}
+
+## Available Tools
+{{range .AvailableTools}}
+- **{{.}}**: Tool description
+{{end}}
+```
+
+#### Step 4: Use the New Type
+```go
+opts := mcp.DefaultServerOptions().
+    WithInstructionType(CustomInstructionType)
+    
+server := mcp.NewServerWithOptions(opts)
+```
+
+### Best Practices for Instructions
+
+#### Template Design
+1. **Clear Structure**: Use consistent sections and formatting
+2. **Actionable Content**: Provide specific, actionable guidance
+3. **Context Awareness**: Use template data to customize content
+4. **Progressive Disclosure**: Start with basics, provide advanced details
+
+#### Server Configuration
+1. **Choose Appropriate Type**: Select instruction type that matches your use case
+2. **Provide Custom Data**: Enhance templates with server-specific information
+3. **Test Instructions**: Verify instruction generation in different scenarios
+4. **Update Documentation**: Keep instruction templates current with server changes
+
+### Performance Considerations
+
+- **Template Caching**: Instructions templates are cached for performance
+- **Lazy Loading**: Templates loaded only when instruction system is enabled
+- **Minimal Overhead**: Instruction system adds minimal performance impact
+- **Fallback Efficiency**: Fallback generation is optimized for speed
+
+### Testing Instructions
+
+```go
+func TestCustomInstructions(t *testing.T) {
+    opts := mcp.DefaultServerOptions().
+        WithName("test-server").
+        WithInstructionType(mcp.GeneralInstructions).
+        WithCustomTemplateData("test_mode", true)
+    
+    server := mcp.NewServerWithOptions(opts)
+    
+    // Test that instructions are enabled
+    assert.True(t, server.GetOptions().EnableInstructions)
+    
+    // Test instruction generation
+    tools := server.GetAvailableToolNames()
+    assert.Contains(t, tools, "instructions")
+}
+```
+
+### Troubleshooting Instructions
+
+#### Common Issues
+1. **Instructions Not Available**: Check that `EnableInstructions` is true in server options
+2. **Template Errors**: Verify template syntax and variable names
+3. **Missing Tools**: Ensure instruction tool is registered in handlers
+4. **Fallback Behavior**: System falls back to generic instructions if templates fail
+
+#### Debug Tips
+1. **Check Server Options**: Verify instruction configuration in server options
+2. **Validate Templates**: Use test suite to validate instruction templates
+3. **Test Tool Registration**: Confirm instructions tool appears in available tools list
+4. **Monitor Fallbacks**: Check logs for template loading errors
+
+The instruction system provides a powerful way to enhance user experience by providing contextual, server-specific guidance while maintaining the same level of reliability and performance as the core documentation system.

@@ -49,3 +49,26 @@ func (r *DocumentationRenderer) initializeRegistry() {
 		ClaudeMessages:      "claude_messages",      // maps to claude_messages.tmpl
 	}
 }
+
+// initializeInstructionRegistry sets up the mapping between instruction types and their
+// corresponding template names. This registry provides the association between
+// InstructionType constants and the actual instruction template file names.
+//
+// The registry enables:
+//   - Type-safe instruction generation
+//   - Automatic template discovery
+//   - Centralized mapping management
+//   - Easy addition of new instruction types
+//
+// Each entry maps an InstructionType constant to its corresponding template
+// file name (without the .tmpl extension). The template files must exist in
+// the docs/templates/instructions/ directory for successful instruction generation.
+func (r *InstructionRenderer) initializeInstructionRegistry() {
+	r.registry = map[InstructionType]string{
+		GeneralInstructions:       "general",        // maps to general.tmpl
+		ToolUsageInstructions:     "tool_usage",     // maps to tool_usage.tmpl
+		APIEndpointInstructions:   "api_endpoints",  // maps to api_endpoints.tmpl
+		ErrorHandlingInstructions: "error_handling", // maps to error_handling.tmpl
+		BestPracticesInstructions: "best_practices", // maps to best_practices.tmpl
+	}
+}
