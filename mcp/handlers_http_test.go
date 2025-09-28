@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/gin-gonic/gin"
@@ -341,4 +342,662 @@ func TestHandlerResponseSize(t *testing.T) {
 	assert.Less(t, responseSize, 5000, "Response should not be excessively large")
 
 	t.Logf("✓ Handler response size is appropriate: %d bytes", responseSize)
+}
+
+// TestMCPToolsIntegration tests the actual MCP tools functionality
+// by calling the registered tools and verifying their responses
+func TestMCPToolsIntegration(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	// Create MCP server instance with tools registered
+	mcpServer := NewServer()
+	handler := NewGinStreamableHTTPHandler(mcpServer)
+
+	// Create test router
+	router := gin.New()
+	router.POST("/mcp", handler)
+
+	t.Log("=== Testing MCP Tools Integration ===")
+
+	// First, we need to initialize the session
+	initializeRequest := `{
+		"jsonrpc": "2.0",
+		"id": 1,
+		"method": "initialize",
+		"params": {
+			"protocolVersion": "2024-11-05",
+			"capabilities": {},
+			"clientInfo": {
+				"name": "test-client",
+				"version": "1.0.0"
+			}
+		}
+	}`
+
+	req, err := http.NewRequest("POST", "/mcp", strings.NewReader(initializeRequest))
+	assert.NoError(t, err)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json, text/event-stream")
+
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code, "Initialize request should succeed")
+	t.Logf("✓ MCP session initialized successfully")
+
+	// Extract session ID from response headers for subsequent requests
+	sessionID := w.Header().Get("Mcp-Session-Id")
+	assert.NotEmpty(t, sessionID, "Should receive session ID")
+
+	// Test cases for different tools
+	toolTestCases := []struct {
+		name         string
+		toolName     string
+		arguments    map[string]any
+		expectResult bool
+	}{
+		{
+			name:     "chat_completions_tool",
+			toolName: "chat_completions",
+			arguments: map[string]any{
+				"model": "gpt-3.5-turbo",
+				"messages": []map[string]any{
+					{"role": "user", "content": "Hello"},
+				},
+			},
+			expectResult: true,
+		},
+		{
+			name:     "completions_tool",
+			toolName: "completions",
+			arguments: map[string]any{
+				"model":  "gpt-3.5-turbo",
+				"prompt": "Hello world",
+			},
+			expectResult: true,
+		},
+		{
+			name:     "embeddings_tool",
+			toolName: "embeddings",
+			arguments: map[string]any{
+				"model": "text-embedding-ada-002",
+				"input": "Hello world",
+			},
+			expectResult: true,
+		},
+		{
+			name:     "images_generations_tool",
+			toolName: "images_generations",
+			arguments: map[string]any{
+				"model":  "dall-e-3",
+				"prompt": "A beautiful sunset",
+			},
+			expectResult: true,
+		},
+		{
+			name:     "audio_transcriptions_tool",
+			toolName: "audio_transcriptions",
+			arguments: map[string]any{
+				"model": "whisper-1",
+				"file":  "audio.mp3",
+			},
+			expectResult: true,
+		},
+		{
+			name:     "audio_translations_tool",
+			toolName: "audio_translations",
+			arguments: map[string]any{
+				"model": "whisper-1",
+				"file":  "audio.mp3",
+			},
+			expectResult: true,
+		},
+		{
+			name:     "audio_speech_tool",
+			toolName: "audio_speech",
+			arguments: map[string]any{
+				"model": "tts-1",
+				"input": "Hello world",
+				"voice": "alloy",
+			},
+			expectResult: true,
+		},
+		{
+			name:     "moderations_tool",
+			toolName: "moderations",
+			arguments: map[string]any{
+				"input": "Hello world",
+			},
+			expectResult: true,
+		},
+		{
+			name:         "models_list_tool",
+			toolName:     "models_list",
+			arguments:    map[string]any{},
+			expectResult: true,
+		},
+		{
+			name:     "claude_messages_tool",
+			toolName: "claude_messages",
+			arguments: map[string]any{
+				"model": "claude-3-sonnet-20240229",
+				"messages": []map[string]any{
+					{"role": "user", "content": "Hello"},
+				},
+				"max_tokens": 100,
+			},
+			expectResult: true,
+		},
+	}
+
+	for _, tc := range toolTestCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Logf("\n--- Testing Tool: %s ---", tc.toolName)
+
+			// Create tools/call request
+			toolCallRequest := map[string]any{
+				"jsonrpc": "2.0",
+				"id":      2,
+				"method":  "tools/call",
+				"params": map[string]any{
+					"name":      tc.toolName,
+					"arguments": tc.arguments,
+				},
+			}
+
+			requestBody, err := json.Marshal(toolCallRequest)
+			assert.NoError(t, err, "Should marshal request body")
+
+			req, err := http.NewRequest("POST", "/mcp", strings.NewReader(string(requestBody)))
+			assert.NoError(t, err, "Should create request")
+			req.Header.Set("Content-Type", "application/json")
+			req.Header.Set("Accept", "application/json, text/event-stream")
+			if sessionID != "" {
+				req.Header.Set("Mcp-Session-Id", sessionID)
+			}
+
+			w := httptest.NewRecorder()
+			router.ServeHTTP(w, req)
+
+			t.Logf("Request Body: %s", string(requestBody))
+			t.Logf("Response Status: %d", w.Code)
+			t.Logf("Response Headers: %v", w.Header())
+			t.Logf("Response Body: %s", w.Body.String())
+
+			if tc.expectResult {
+				assert.Equal(t, http.StatusOK, w.Code, "Tool call should succeed")
+
+				// Check if response contains documentation
+				responseBody := w.Body.String()
+				assert.Contains(t, responseBody, "data:", "Should contain SSE data")
+
+				// Extract JSON data from SSE response
+				lines := strings.Split(responseBody, "\n")
+				var jsonData string
+				for _, line := range lines {
+					if strings.HasPrefix(line, "data: ") {
+						jsonData = strings.TrimPrefix(line, "data: ")
+						break
+					}
+				}
+
+				if jsonData != "" {
+					var response map[string]any
+					err = json.Unmarshal([]byte(jsonData), &response)
+					if err == nil {
+						// Check for result containing documentation
+						if result, exists := response["result"]; exists {
+							if resultMap, ok := result.(map[string]any); ok {
+								if content, exists := resultMap["content"]; exists {
+									t.Logf("✓ Tool %s returned documentation content", tc.toolName)
+
+									// Verify content structure
+									if contentArray, ok := content.([]any); ok && len(contentArray) > 0 {
+										if textContent, ok := contentArray[0].(map[string]any); ok {
+											if text, exists := textContent["text"]; exists {
+												textStr := text.(string)
+												assert.NotEmpty(t, textStr, "Documentation should not be empty")
+												assert.Contains(t, textStr, "API", "Documentation should mention API")
+												t.Logf("✓ Documentation length: %d characters", len(textStr))
+											}
+										}
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+
+			t.Logf("--- End Tool Test: %s ---\n", tc.toolName)
+		})
+	}
+}
+
+// TestMCPToolsList tests the tools/list functionality
+func TestMCPToolsList(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	mcpServer := NewServer()
+	handler := NewGinStreamableHTTPHandler(mcpServer)
+
+	router := gin.New()
+	router.POST("/mcp", handler)
+
+	t.Log("=== Testing MCP Tools List ===")
+
+	// Initialize session first
+	initializeRequest := `{
+		"jsonrpc": "2.0",
+		"id": 1,
+		"method": "initialize",
+		"params": {
+			"protocolVersion": "2024-11-05",
+			"capabilities": {},
+			"clientInfo": {
+				"name": "test-client",
+				"version": "1.0.0"
+			}
+		}
+	}`
+
+	req, err := http.NewRequest("POST", "/mcp", strings.NewReader(initializeRequest))
+	assert.NoError(t, err)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json, text/event-stream")
+
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	sessionID := w.Header().Get("Mcp-Session-Id")
+
+	// Now test tools/list
+	toolsListRequest := `{
+		"jsonrpc": "2.0",
+		"id": 2,
+		"method": "tools/list",
+		"params": {}
+	}`
+
+	req, err = http.NewRequest("POST", "/mcp", strings.NewReader(toolsListRequest))
+	assert.NoError(t, err)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json, text/event-stream")
+	if sessionID != "" {
+		req.Header.Set("Mcp-Session-Id", sessionID)
+	}
+
+	w = httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	t.Logf("Tools List Response Status: %d", w.Code)
+	t.Logf("Tools List Response Body: %s", w.Body.String())
+
+	assert.Equal(t, http.StatusOK, w.Code, "Tools list should succeed")
+
+	responseBody := w.Body.String()
+
+	// Expected tools from addRelayAPITools
+	expectedTools := []string{
+		"chat_completions",
+		"completions",
+		"embeddings",
+		"images_generations",
+		"audio_transcriptions",
+		"audio_translations",
+		"audio_speech",
+		"moderations",
+		"models_list",
+		"claude_messages",
+	}
+
+	// Extract JSON data from SSE response
+	lines := strings.Split(responseBody, "\n")
+	var jsonData string
+	for _, line := range lines {
+		if strings.HasPrefix(line, "data: ") {
+			jsonData = strings.TrimPrefix(line, "data: ")
+			break
+		}
+	}
+
+	if jsonData != "" {
+		var response map[string]any
+		err = json.Unmarshal([]byte(jsonData), &response)
+		if err == nil {
+			if result, exists := response["result"]; exists {
+				if resultMap, ok := result.(map[string]any); ok {
+					if tools, exists := resultMap["tools"]; exists {
+						if toolsArray, ok := tools.([]any); ok {
+							t.Logf("✓ Found %d tools in response", len(toolsArray))
+
+							// Verify all expected tools are present
+							foundTools := make(map[string]bool)
+							for _, tool := range toolsArray {
+								if toolMap, ok := tool.(map[string]any); ok {
+									if name, exists := toolMap["name"]; exists {
+										foundTools[name.(string)] = true
+									}
+								}
+							}
+
+							for _, expectedTool := range expectedTools {
+								assert.True(t, foundTools[expectedTool], "Should find tool: %s", expectedTool)
+							}
+
+							t.Logf("✓ All expected tools found in tools/list response")
+						}
+					}
+				}
+			}
+		}
+	}
+}
+
+// TestMCPDocumentationContent tests the actual documentation content generated by tools
+func TestMCPDocumentationContent(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	// Save original config
+	originalServerAddress := config.ServerAddress
+	config.ServerAddress = "https://api.example.com"
+	defer func() {
+		config.ServerAddress = originalServerAddress
+	}()
+
+	mcpServer := NewServer()
+	handler := NewGinStreamableHTTPHandler(mcpServer)
+
+	router := gin.New()
+	router.POST("/mcp", handler)
+
+	t.Log("=== Testing MCP Documentation Content Quality ===")
+
+	// Initialize session
+	initializeRequest := `{
+		"jsonrpc": "2.0",
+		"id": 1,
+		"method": "initialize",
+		"params": {
+			"protocolVersion": "2024-11-05",
+			"capabilities": {},
+			"clientInfo": {
+				"name": "test-client",
+				"version": "1.0.0"
+			}
+		}
+	}`
+
+	req, err := http.NewRequest("POST", "/mcp", strings.NewReader(initializeRequest))
+	assert.NoError(t, err)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json, text/event-stream")
+
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	sessionID := w.Header().Get("Mcp-Session-Id")
+
+	// Test documentation content for specific tools
+	contentTests := []struct {
+		name            string
+		toolName        string
+		arguments       map[string]any
+		expectedContent []string
+	}{
+		{
+			name:     "chat_completions_documentation",
+			toolName: "chat_completions",
+			arguments: map[string]any{
+				"model":    "gpt-3.5-turbo",
+				"messages": []map[string]any{{"role": "user", "content": "test"}},
+			},
+			expectedContent: []string{
+				"Chat Completions",
+				"POST",
+				"/v1/chat/completions",
+				"https://api.example.com",
+				"model",
+				"messages",
+			},
+		},
+		{
+			name:     "embeddings_documentation",
+			toolName: "embeddings",
+			arguments: map[string]any{
+				"model": "text-embedding-ada-002",
+				"input": "test text",
+			},
+			expectedContent: []string{
+				"Embeddings",
+				"POST",
+				"/v1/embeddings",
+				"https://api.example.com",
+				"model",
+				"input",
+			},
+		},
+		{
+			name:      "models_list_documentation",
+			toolName:  "models_list",
+			arguments: map[string]any{},
+			expectedContent: []string{
+				"Models",
+				"GET",
+				"/v1/models",
+				"https://api.example.com",
+			},
+		},
+	}
+
+	for _, tc := range contentTests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Logf("\n--- Testing Documentation Content: %s ---", tc.toolName)
+
+			// Create tools/call request
+			toolCallRequest := map[string]any{
+				"jsonrpc": "2.0",
+				"id":      2,
+				"method":  "tools/call",
+				"params": map[string]any{
+					"name":      tc.toolName,
+					"arguments": tc.arguments,
+				},
+			}
+
+			requestBody, err := json.Marshal(toolCallRequest)
+			assert.NoError(t, err, "Should marshal request body")
+
+			req, err := http.NewRequest("POST", "/mcp", strings.NewReader(string(requestBody)))
+			assert.NoError(t, err, "Should create request")
+			req.Header.Set("Content-Type", "application/json")
+			req.Header.Set("Accept", "application/json, text/event-stream")
+			if sessionID != "" {
+				req.Header.Set("Mcp-Session-Id", sessionID)
+			}
+
+			w := httptest.NewRecorder()
+			router.ServeHTTP(w, req)
+
+			assert.Equal(t, http.StatusOK, w.Code, "Tool call should succeed")
+
+			// Extract and verify documentation content
+			responseBody := w.Body.String()
+			lines := strings.Split(responseBody, "\n")
+			var jsonData string
+			for _, line := range lines {
+				if strings.HasPrefix(line, "data: ") {
+					jsonData = strings.TrimPrefix(line, "data: ")
+					break
+				}
+			}
+
+			if jsonData != "" {
+				var response map[string]any
+				err = json.Unmarshal([]byte(jsonData), &response)
+				if err == nil {
+					if result, exists := response["result"]; exists {
+						if resultMap, ok := result.(map[string]any); ok {
+							if content, exists := resultMap["content"]; exists {
+								if contentArray, ok := content.([]any); ok && len(contentArray) > 0 {
+									if textContent, ok := contentArray[0].(map[string]any); ok {
+										if text, exists := textContent["text"]; exists {
+											textStr := text.(string)
+											t.Logf("✓ Documentation generated for %s (%d chars)", tc.toolName, len(textStr))
+
+											// Verify expected content is present
+											for _, expectedStr := range tc.expectedContent {
+												assert.Contains(t, textStr, expectedStr,
+													"Documentation should contain: %s", expectedStr)
+											}
+
+											t.Logf("✓ All expected content found in %s documentation", tc.toolName)
+										}
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+
+			t.Logf("--- End Documentation Test: %s ---\n", tc.toolName)
+		})
+	}
+}
+
+// TestAddRelayAPIToolsFunction tests the addRelayAPITools function directly
+func TestAddRelayAPIToolsFunction(t *testing.T) {
+	t.Log("=== Testing addRelayAPITools Function ===")
+
+	// Create a new server instance
+	mcpServer := NewServer()
+
+	// Verify that tools are registered
+	assert.NotNil(t, mcpServer, "MCP server should be created")
+	assert.NotNil(t, mcpServer.server, "Underlying MCP server should exist")
+
+	// The addRelayAPITools function is called during NewServer()
+	// We can verify it worked by checking if we can get tool information
+	t.Logf("✓ addRelayAPITools function executed during server creation")
+
+	// Test that the server can handle tool-related requests
+	gin.SetMode(gin.TestMode)
+	handler := NewGinStreamableHTTPHandler(mcpServer)
+	router := gin.New()
+	router.POST("/mcp", handler)
+
+	// Initialize session
+	initReq := `{
+		"jsonrpc": "2.0",
+		"id": 1,
+		"method": "initialize",
+		"params": {
+			"protocolVersion": "2024-11-05",
+			"capabilities": {},
+			"clientInfo": {"name": "test", "version": "1.0"}
+		}
+	}`
+
+	req, _ := http.NewRequest("POST", "/mcp", strings.NewReader(initReq))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json, text/event-stream")
+
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code, "Initialize should succeed")
+	sessionID := w.Header().Get("Mcp-Session-Id")
+
+	// Test tools/list to verify tools were registered
+	toolsReq := `{
+		"jsonrpc": "2.0",
+		"id": 2,
+		"method": "tools/list",
+		"params": {}
+	}`
+
+	req, _ = http.NewRequest("POST", "/mcp", strings.NewReader(toolsReq))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json, text/event-stream")
+	if sessionID != "" {
+		req.Header.Set("Mcp-Session-Id", sessionID)
+	}
+
+	w = httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code, "Tools list should succeed")
+
+	// Verify response contains tools
+	responseBody := w.Body.String()
+	assert.Contains(t, responseBody, "tools", "Response should contain tools")
+	assert.Contains(t, responseBody, "chat_completions", "Should contain chat_completions tool")
+	assert.Contains(t, responseBody, "embeddings", "Should contain embeddings tool")
+
+	t.Logf("✓ addRelayAPITools function successfully registered tools")
+}
+
+// TestMCPToolsErrorHandling tests error scenarios for MCP tools
+func TestMCPToolsErrorHandling(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	mcpServer := NewServer()
+	handler := NewGinStreamableHTTPHandler(mcpServer)
+
+	router := gin.New()
+	router.POST("/mcp", handler)
+
+	t.Log("=== Testing MCP Tools Error Handling ===")
+
+	// Initialize session
+	initReq := `{
+		"jsonrpc": "2.0",
+		"id": 1,
+		"method": "initialize",
+		"params": {
+			"protocolVersion": "2024-11-05",
+			"capabilities": {},
+			"clientInfo": {"name": "test", "version": "1.0"}
+		}
+	}`
+
+	req, _ := http.NewRequest("POST", "/mcp", strings.NewReader(initReq))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json, text/event-stream")
+
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	sessionID := w.Header().Get("Mcp-Session-Id")
+
+	// Test invalid tool call
+	invalidToolReq := `{
+		"jsonrpc": "2.0",
+		"id": 2,
+		"method": "tools/call",
+		"params": {
+			"name": "nonexistent_tool",
+			"arguments": {}
+		}
+	}`
+
+	req, _ = http.NewRequest("POST", "/mcp", strings.NewReader(invalidToolReq))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json, text/event-stream")
+	if sessionID != "" {
+		req.Header.Set("Mcp-Session-Id", sessionID)
+	}
+
+	w = httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	t.Logf("Invalid tool call response: %d - %s", w.Code, w.Body.String())
+
+	// Should return an error response but still 200 OK (JSON-RPC error)
+	assert.Equal(t, http.StatusOK, w.Code, "Should return 200 with JSON-RPC error")
+
+	responseBody := w.Body.String()
+	assert.Contains(t, responseBody, "error", "Response should contain error")
+
+	t.Logf("✓ Error handling works correctly for invalid tool calls")
 }
