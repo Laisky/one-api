@@ -656,3 +656,96 @@ func TestCustomInstructions(t *testing.T) {
 4. **Monitor Fallbacks**: Check logs for template loading errors
 
 The instruction system provides a powerful way to enhance user experience by providing contextual, server-specific guidance while maintaining the same level of reliability and performance as the core documentation system.
+
+## Deployment Architecture
+
+### Integration with One-API Repository
+
+This MCP server is designed to integrate seamlessly with the One-API repository as part of its **modular monolith architecture**. The system maintains the benefits of a monolithic deployment while preserving clear module boundaries and separation of concerns.
+
+#### Key Architecture Benefits
+
+- **Single Deployment**: The MCP server deploys as part of the One-API application, eliminating the need for separate infrastructure
+- **Shared Resources**: Leverages existing database connections, configuration, and middleware from the parent application
+- **Modular Design**: Maintains clear boundaries through Go packages while sharing the same runtime
+- **Simplified Operations**: No additional service discovery, load balancing, or inter-service communication overhead
+- **Consistent Monitoring**: Uses the same logging, metrics, and tracing infrastructure as the main application
+
+#### Integration Points
+
+The MCP server integrates with One-API through:
+
+1. **Shared Configuration**: Uses `common/config` for centralized configuration management
+2. **Database Access**: Leverages existing database connections and models
+3. **Authentication**: Integrates with One-API's existing authentication and authorization systems
+4. **Middleware**: Shares common middleware for logging, rate limiting, and security
+5. **Router Integration**: Registers MCP endpoints alongside existing API routes
+
+## TODO: Future Planned Enhancements
+
+### 🔐 Authentication & Security
+
+- [ ] **API Key Authentication**: Implement token-based authentication mechanism
+  - Integrate with One-API's existing token management system
+  - Support for API key validation and authorization
+  - Rate limiting per API key
+  - Token scope and permission management
+  
+- [ ] **Enhanced Security Features**:
+  - Request signing and validation
+  - IP whitelisting support
+  - Audit logging for MCP operations
+
+### 🏗️ Architecture & Integration
+
+- [ ] **Modular Monolith Integration**:
+  - Complete integration with One-API's modular architecture
+  - Shared database models and repositories
+  - Unified configuration management
+  - Common middleware and error handling
+
+- [ ] **Performance Optimizations**:
+  - Connection pooling for MCP clients
+  - Template compilation caching improvements
+  - Async documentation generation
+  - Background template reloading
+
+### 🔧 Operational Features
+
+- [ ] **Monitoring & Observability**:
+  - Prometheus metrics integration
+  - Distributed tracing support
+  - Health check endpoints
+  - Performance monitoring dashboards
+
+### 🌐 Protocol & Standards
+
+- [ ] **MCP Protocol Enhancements**:
+  - Support for MCP 2.0 specification
+  - Streaming response capabilities
+  - Batch operation support
+  - Protocol versioning and compatibility
+
+- [ ] **Template System Extensions**:
+  - Template inheritance and composition
+  - Multi-language documentation support
+  - Custom template validation
+  - Template marketplace integration
+
+### 📊 Analytics & Insights
+
+- [ ] **Usage Analytics**:
+  - Documentation access patterns
+  - Popular API endpoints tracking
+  - User behavior analysis
+  - Performance bottleneck identification
+
+- [ ] **AI-Powered Features**:
+  - Smart documentation suggestions
+  - Automated example generation
+  - Context-aware help system
+  - Natural language query support
+
+---
+
+**Note**: These enhancements will be implemented incrementally while maintaining backward compatibility and the existing API surface. Each feature will include comprehensive tests and documentation updates.
