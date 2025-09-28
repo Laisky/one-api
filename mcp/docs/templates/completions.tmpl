@@ -15,15 +15,31 @@ curl {{.BaseURL}}/v1/completions \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer YOUR_API_KEY" \
   -d '{
+{{- if .Parameters.model}}
+    "model": "{{.Parameters.model}}",
+{{- else}}
     "model": "gpt-3.5-turbo-instruct",
+{{- end}}
+{{- if .Parameters.prompt}}
+    "prompt": "{{.Parameters.prompt}}",
+{{- else}}
     "prompt": "Once upon a time",
+{{- end}}
+{{- if .Parameters.max_tokens}}
+    "max_tokens": {{.Parameters.max_tokens}},
+{{- else}}
     "max_tokens": 50,
+{{- end}}
+{{- if .Parameters.temperature}}
+    "temperature": {{.Parameters.temperature}}
+{{- else}}
     "temperature": 0.7
+{{- end}}
   }'
 ```
 
 ## Key Parameters
-- **model** (required): Model identifier
-- **prompt** (required): Text prompt to complete
-- **max_tokens**: Maximum tokens to generate
-- **temperature**: Sampling temperature (0.0 to 2.0)
+- **model** (required): Model identifier{{if .Parameters.model}} - Current: `{{.Parameters.model}}`{{end}}
+- **prompt** (required): Text prompt to complete{{if .Parameters.prompt}} - Current: "{{.Parameters.prompt}}"{{end}}
+- **max_tokens**: Maximum tokens to generate{{if .Parameters.max_tokens}} - Current: {{.Parameters.max_tokens}}{{end}}
+- **temperature**: Sampling temperature (0.0 to 2.0{{if .Parameters.temperature}}, current: {{.Parameters.temperature}}{{else}}, default: 0.7{{end}})

@@ -15,15 +15,27 @@ curl {{.BaseURL}}/v1/messages \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer YOUR_API_KEY" \
   -d '{
+{{- if .Parameters.model}}
+    "model": "{{.Parameters.model}}",
+{{- else}}
     "model": "claude-3-opus-20240229",
+{{- end}}
+{{- if .Parameters.max_tokens}}
+    "max_tokens": {{.Parameters.max_tokens}},
+{{- else}}
     "max_tokens": 1000,
+{{- end}}
+{{- if .Parameters.messages}}
+    "messages": {{.Parameters.messages | printf "%v"}}
+{{- else}}
     "messages": [
       {"role": "user", "content": "Hello, Claude!"}
     ]
+{{- end}}
   }'
 ```
 
 ## Parameters
-- **model** (required): Claude model identifier
-- **messages** (required): Array of message objects
-- **max_tokens** (required): Maximum tokens to generate
+- **model** (required): Claude model identifier{{if .Parameters.model}} - Current: `{{.Parameters.model}}`{{end}}
+- **messages** (required): Array of message objects{{if .Parameters.messages}} - {{len .Parameters.messages}} message(s) provided{{end}}
+- **max_tokens** (required): Maximum tokens to generate{{if .Parameters.max_tokens}} - Current: {{.Parameters.max_tokens}}{{end}}

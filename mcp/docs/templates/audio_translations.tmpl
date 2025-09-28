@@ -13,10 +13,18 @@ Authorization: Bearer YOUR_API_KEY
 ```bash
 curl {{.BaseURL}}/v1/audio/translations \
   -H "Authorization: Bearer YOUR_API_KEY" \
+{{- if .Parameters.file}}
+  -F file="@{{.Parameters.file}}" \
+{{- else}}
   -F file="@audio.mp3" \
+{{- end}}
+{{- if .Parameters.model}}
+  -F model="{{.Parameters.model}}"
+{{- else}}
   -F model="whisper-1"
+{{- end}}
 ```
 
 ## Parameters
-- **file** (required): Audio file to translate
-- **model** (required): Model identifier (whisper-1)
+- **file** (required): Audio file to translate{{if .Parameters.file}} - Current: `{{.Parameters.file}}`{{end}}
+- **model** (required): Model identifier{{if .Parameters.model}} - Current: `{{.Parameters.model}}`{{else}} (whisper-1){{end}}

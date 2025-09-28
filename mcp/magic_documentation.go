@@ -8,9 +8,11 @@ import (
 )
 
 // TemplateData holds the data structure used for rendering documentation templates.
-// It contains the base URL that will be substituted into the template placeholders.
+// It contains the base URL and optional parameters from tool calls that will be
+// substituted into the template placeholders.
 type TemplateData struct {
-	BaseURL string // The base URL for the API endpoint (e.g., "https://api.example.com")
+	BaseURL    string         // The base URL for the API endpoint (e.g., "https://api.example.com")
+	Parameters map[string]any // Parameters passed from the MCP tool call
 }
 
 // DocumentationType represents the available documentation types that can be generated.
@@ -138,6 +140,24 @@ func (r *DocumentationRenderer) loadTemplates() error {
 // is unknown or template execution fails. Falls back to generic documentation
 // if the specific template is not available.
 func (r *DocumentationRenderer) GenerateDocumentation(docType DocumentationType, baseURL string) (string, error) {
+	return r.GenerateDocumentationWithParams(docType, baseURL, nil)
+}
+
+// GenerateDocumentationWithParams renders documentation for the specified documentation type
+// using the appropriate template, base URL, and optional parameters from tool calls.
+//
+// It looks up the template associated with the documentation type, executes it
+// with the provided data, and returns the rendered documentation as a string.
+//
+// Parameters:
+//   - docType: The type of documentation to generate (e.g., ChatCompletions, Embeddings)
+//   - baseURL: The base URL to substitute in the template (e.g., "https://api.example.com")
+//   - parameters: Optional parameters from MCP tool calls to include in examples
+//
+// Returns the rendered documentation string, or an error if the documentation type
+// is unknown or template execution fails. Falls back to generic documentation
+// if the specific template is not available.
+func (r *DocumentationRenderer) GenerateDocumentationWithParams(docType DocumentationType, baseURL string, parameters map[string]any) (string, error) {
 	templateName, exists := r.registry[docType]
 	if !exists {
 		return "", fmt.Errorf("unknown documentation type: %s", docType)
@@ -150,7 +170,10 @@ func (r *DocumentationRenderer) GenerateDocumentation(docType DocumentationType,
 	}
 
 	var buf bytes.Buffer
-	data := TemplateData{BaseURL: baseURL}
+	data := TemplateData{
+		BaseURL:    baseURL,
+		Parameters: parameters,
+	}
 
 	if err := tmpl.Execute(&buf, data); err != nil {
 		return "", fmt.Errorf("failed to execute template %s: %w", templateName, err)
@@ -242,11 +265,44 @@ Please ensure all template files are properly magic embedded and accessible.`, d
 //	doc := GenerateDocumentation(ChatCompletions, "https://api.example.com")
 //	fmt.Println(doc) // Prints complete Chat Completions API documentation
 func GenerateDocumentation(docType DocumentationType, baseURL string) string {
+	return GenerateDocumentationWithParams(docType, baseURL, nil)
+}
+
+// GenerateDocumentationWithParams is the main entry point for generating API documentation
+// with parameters using the global renderer instance. This function extends the basic
+// GenerateDocumentation function to include parameters from MCP tool calls.
+//
+// It uses the global renderer to generate documentation for the specified type,
+// base URL, and optional parameters. If the global renderer is not available or template
+// execution fails, it falls back to generic documentation to ensure the system remains
+// functional.
+//
+// This function provides:
+//   - Type safety through the DocumentationType enum
+//   - Automatic template discovery and caching
+//   - Parameter inclusion in documentation examples
+//   - Graceful error handling with fallback documentation
+//   - Consistent API across all documentation types
+//
+// Parameters:
+//   - docType: The type of documentation to generate (e.g., ChatCompletions, Embeddings)
+//   - baseURL: The base URL for the API endpoint (e.g., "https://api.example.com")
+//   - parameters: Optional parameters from MCP tool calls to include in examples
+//
+// Returns a string containing the rendered API documentation. Always returns
+// valid documentation, even if the specific template fails to load.
+//
+// Example:
+//
+//	params := map[string]any{"model": "gpt-4", "max_tokens": 100}
+//	doc := GenerateDocumentationWithParams(ChatCompletions, "https://api.example.com", params)
+//	fmt.Println(doc) // Prints complete Chat Completions API documentation with examples
+func GenerateDocumentationWithParams(docType DocumentationType, baseURL string, parameters map[string]any) string {
 	if globalRenderer == nil {
 		return getFallbackDocumentation(string(docType), baseURL)
 	}
 
-	doc, err := globalRenderer.GenerateDocumentation(docType, baseURL)
+	doc, err := globalRenderer.GenerateDocumentationWithParams(docType, baseURL, parameters)
 	if err != nil {
 		return globalRenderer.generateFallbackDocumentation(string(docType), baseURL)
 	}

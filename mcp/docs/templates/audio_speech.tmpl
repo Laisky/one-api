@@ -15,13 +15,25 @@ curl {{.BaseURL}}/v1/audio/speech \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer YOUR_API_KEY" \
   -d '{
+{{- if .Parameters.model}}
+    "model": "{{.Parameters.model}}",
+{{- else}}
     "model": "tts-1",
+{{- end}}
+{{- if .Parameters.input}}
+    "input": "{{.Parameters.input}}",
+{{- else}}
     "input": "Hello world",
+{{- end}}
+{{- if .Parameters.voice}}
+    "voice": "{{.Parameters.voice}}"
+{{- else}}
     "voice": "alloy"
+{{- end}}
   }'
 ```
 
 ## Parameters
-- **model** (required): TTS model (tts-1, tts-1-hd)
-- **input** (required): Text to generate audio for
-- **voice** (required): Voice option (alloy, echo, fable, onyx, nova, shimmer)
+- **model** (required): TTS model{{if .Parameters.model}} - Current: `{{.Parameters.model}}`{{else}} (tts-1, tts-1-hd){{end}}
+- **input** (required): Text to generate audio for{{if .Parameters.input}} - Current: "{{.Parameters.input}}"{{end}}
+- **voice** (required): Voice option{{if .Parameters.voice}} - Current: `{{.Parameters.voice}}`{{else}} (alloy, echo, fable, onyx, nova, shimmer){{end}}

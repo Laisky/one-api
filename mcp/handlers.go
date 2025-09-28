@@ -10,17 +10,17 @@ import (
 
 // addRelayAPITools registers all One-API relay endpoint tools with the MCP server.
 // This method configures the server to provide documentation generation tools for
-// various API endpoints including OpenAI-compatible APIs and Claude messages.
+// various API endpoints including OpenAI Compatible-compatible APIs and Claude messages.
 //
 // The registered tools include:
-//   - chat_completions: OpenAI Chat Completions API documentation
-//   - completions: OpenAI Completions API documentation
-//   - embeddings: OpenAI Embeddings API documentation
-//   - images_generations: OpenAI Image Generation API documentation
-//   - audio_transcriptions: OpenAI Audio Transcriptions API documentation
-//   - audio_translations: OpenAI Audio Translations API documentation
-//   - audio_speech: OpenAI Audio Speech API documentation
-//   - moderations: OpenAI Moderations API documentation
+//   - chat_completions: OpenAI Compatible Chat Completions API documentation
+//   - completions: OpenAI Compatible Completions API documentation
+//   - embeddings: OpenAI Compatible Embeddings API documentation
+//   - images_generations: OpenAI Compatible Image Generation API documentation
+//   - audio_transcriptions: OpenAI Compatible Audio Transcriptions API documentation
+//   - audio_translations: OpenAI Compatible Audio Translations API documentation
+//   - audio_speech: OpenAI Compatible Audio Speech API documentation
+//   - moderations: OpenAI Compatible Moderations API documentation
 //   - models_list: Models List API documentation
 //   - claude_messages: Claude Messages API documentation
 //
@@ -48,10 +48,20 @@ func (s *Server) addRelayAPITools() {
 
 	mcp.AddTool(s.server, &mcp.Tool{
 		Name:        "chat_completions",
-		Description: "Create a chat completion using OpenAI-compatible API. Supports streaming and non-streaming responses.",
+		Description: "Generate comprehensive documentation for OpenAI Compatible Chat Completions API with your specific parameters. Creates detailed API documentation including endpoint URL, authentication, request/response examples, and parameter descriptions. Perfect for understanding how to integrate chat completions with your model, messages, temperature, and token settings.",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args ChatCompletionsArgs) (*mcp.CallToolResult, any, error) {
 		baseURL := getBaseURL()
-		doc := generateChatCompletionsDocumentationFromTemplate(baseURL)
+
+		// Convert args struct to map for template data
+		params := map[string]any{
+			"model":       args.Model,
+			"messages":    args.Messages,
+			"temperature": args.Temperature,
+			"max_tokens":  args.MaxTokens,
+			"stream":      args.Stream,
+		}
+
+		doc := GenerateDocumentationWithParams(ChatCompletions, baseURL, params)
 
 		return &mcp.CallToolResult{
 			Content: []mcp.Content{
@@ -70,10 +80,19 @@ func (s *Server) addRelayAPITools() {
 
 	mcp.AddTool(s.server, &mcp.Tool{
 		Name:        "completions",
-		Description: "Create a text completion using OpenAI-compatible API.",
+		Description: "Generate detailed documentation for OpenAI Compatible Completions API with your specific prompt and parameters. Creates comprehensive API documentation including endpoint details, authentication headers, request examples with your exact prompt text, and parameter explanations for model, temperature, and max_tokens settings.",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args CompletionsArgs) (*mcp.CallToolResult, any, error) {
 		baseURL := getBaseURL()
-		doc := generateCompletionsDocumentationFromTemplate(baseURL)
+
+		// Convert args struct to map for template data
+		params := map[string]any{
+			"model":       args.Model,
+			"prompt":      args.Prompt,
+			"max_tokens":  args.MaxTokens,
+			"temperature": args.Temperature,
+		}
+
+		doc := GenerateDocumentationWithParams(Completions, baseURL, params)
 
 		return &mcp.CallToolResult{
 			Content: []mcp.Content{
@@ -90,10 +109,17 @@ func (s *Server) addRelayAPITools() {
 
 	mcp.AddTool(s.server, &mcp.Tool{
 		Name:        "embeddings",
-		Description: "Create embeddings for input text using OpenAI-compatible API.",
+		Description: "Generate comprehensive documentation for OpenAI Compatible Embeddings API with your specific input text and model. Creates detailed API documentation showing how to convert your text into vector embeddings, including endpoint URL, authentication, request examples with your exact input text, and response format explanations.",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args EmbeddingsArgs) (*mcp.CallToolResult, any, error) {
 		baseURL := getBaseURL()
-		doc := generateEmbeddingsDocumentationFromTemplate(baseURL)
+
+		// Convert args struct to map for template data
+		params := map[string]any{
+			"model": args.Model,
+			"input": args.Input,
+		}
+
+		doc := GenerateDocumentationWithParams(Embeddings, baseURL, params)
 
 		return &mcp.CallToolResult{
 			Content: []mcp.Content{
@@ -112,10 +138,19 @@ func (s *Server) addRelayAPITools() {
 
 	mcp.AddTool(s.server, &mcp.Tool{
 		Name:        "images_generations",
-		Description: "Create images from text prompts using OpenAI-compatible API.",
+		Description: "Generate detailed documentation for OpenAI Compatible Image Generation API with your specific prompt and settings. Creates comprehensive API documentation for generating images from text, including endpoint details, authentication, request examples with your exact prompt, and parameter explanations for model, size, and count options.",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args ImagesArgs) (*mcp.CallToolResult, any, error) {
 		baseURL := getBaseURL()
-		doc := generateImagesDocumentationFromTemplate(baseURL)
+
+		// Convert args struct to map for template data
+		params := map[string]any{
+			"model":  args.Model,
+			"prompt": args.Prompt,
+			"n":      args.N,
+			"size":   args.Size,
+		}
+
+		doc := GenerateDocumentationWithParams(Images, baseURL, params)
 
 		return &mcp.CallToolResult{
 			Content: []mcp.Content{
@@ -133,10 +168,18 @@ func (s *Server) addRelayAPITools() {
 
 	mcp.AddTool(s.server, &mcp.Tool{
 		Name:        "audio_transcriptions",
-		Description: "Transcribe audio into text using OpenAI-compatible API.",
+		Description: "Generate comprehensive documentation for OpenAI Compatible Audio Transcriptions API with your specific file and settings. Creates detailed API documentation for converting audio to text, including endpoint URL, authentication, multipart form examples with your audio file, and parameter explanations for model, language, and file handling.",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args AudioTranscriptionsArgs) (*mcp.CallToolResult, any, error) {
 		baseURL := getBaseURL()
-		doc := generateAudioTranscriptionsDocumentationFromTemplate(baseURL)
+
+		// Convert args struct to map for template data
+		params := map[string]any{
+			"model":    args.Model,
+			"file":     args.File,
+			"language": args.Language,
+		}
+
+		doc := GenerateDocumentationWithParams(AudioTranscriptions, baseURL, params)
 
 		return &mcp.CallToolResult{
 			Content: []mcp.Content{
@@ -153,10 +196,17 @@ func (s *Server) addRelayAPITools() {
 
 	mcp.AddTool(s.server, &mcp.Tool{
 		Name:        "audio_translations",
-		Description: "Translate audio into English text using OpenAI-compatible API.",
+		Description: "Generate detailed documentation for OpenAI Compatible Audio Translations API with your specific audio file. Creates comprehensive API documentation for translating audio to English text, including endpoint details, authentication, multipart form examples with your audio file, and parameter explanations for model and file processing.",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args AudioTranslationsArgs) (*mcp.CallToolResult, any, error) {
 		baseURL := getBaseURL()
-		doc := generateAudioTranslationsDocumentationFromTemplate(baseURL)
+
+		// Convert args struct to map for template data
+		params := map[string]any{
+			"model": args.Model,
+			"file":  args.File,
+		}
+
+		doc := GenerateDocumentationWithParams(AudioTranslations, baseURL, params)
 
 		return &mcp.CallToolResult{
 			Content: []mcp.Content{
@@ -174,10 +224,18 @@ func (s *Server) addRelayAPITools() {
 
 	mcp.AddTool(s.server, &mcp.Tool{
 		Name:        "audio_speech",
-		Description: "Generate speech from text using OpenAI-compatible API.",
+		Description: "Generate comprehensive documentation for OpenAI Compatible Text-to-Speech API with your specific text and voice settings. Creates detailed API documentation for converting text to audio, including endpoint URL, authentication, request examples with your exact input text, and parameter explanations for model, voice options, and audio format settings.",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args AudioSpeechArgs) (*mcp.CallToolResult, any, error) {
 		baseURL := getBaseURL()
-		doc := generateAudioSpeechDocumentationFromTemplate(baseURL)
+
+		// Convert args struct to map for template data
+		params := map[string]any{
+			"model": args.Model,
+			"input": args.Input,
+			"voice": args.Voice,
+		}
+
+		doc := GenerateDocumentationWithParams(AudioSpeech, baseURL, params)
 
 		return &mcp.CallToolResult{
 			Content: []mcp.Content{
@@ -194,10 +252,17 @@ func (s *Server) addRelayAPITools() {
 
 	mcp.AddTool(s.server, &mcp.Tool{
 		Name:        "moderations",
-		Description: "Check if text violates OpenAI's usage policies using moderation API.",
+		Description: "Generate detailed documentation for OpenAI Compatible Moderations API with your specific text input. Creates comprehensive API documentation for content moderation and policy compliance checking, including endpoint details, authentication, request examples with your exact text, and response format explanations for safety categories and scores.",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args ModerationsArgs) (*mcp.CallToolResult, any, error) {
 		baseURL := getBaseURL()
-		doc := generateModerationsDocumentationFromTemplate(baseURL)
+
+		// Convert args struct to map for template data
+		params := map[string]any{
+			"input": args.Input,
+			"model": args.Model,
+		}
+
+		doc := GenerateDocumentationWithParams(Moderations, baseURL, params)
 
 		return &mcp.CallToolResult{
 			Content: []mcp.Content{
@@ -209,10 +274,14 @@ func (s *Server) addRelayAPITools() {
 	// Models List tool
 	mcp.AddTool(s.server, &mcp.Tool{
 		Name:        "models_list",
-		Description: "List available models through the One-API relay.",
+		Description: "Generate comprehensive documentation for the Models List API endpoint. Creates detailed API documentation for retrieving available models through One-API relay, including endpoint URL, authentication headers, request examples, and response format showing model IDs, ownership, and capabilities information.",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args struct{}) (*mcp.CallToolResult, any, error) {
 		baseURL := getBaseURL()
-		doc := generateModelsListDocumentationFromTemplate(baseURL)
+
+		// Convert args struct to map for template data (empty struct)
+		params := map[string]any{}
+
+		doc := GenerateDocumentationWithParams(ModelsList, baseURL, params)
 
 		return &mcp.CallToolResult{
 			Content: []mcp.Content{
@@ -230,10 +299,18 @@ func (s *Server) addRelayAPITools() {
 
 	mcp.AddTool(s.server, &mcp.Tool{
 		Name:        "claude_messages",
-		Description: "Create messages using Claude API format.",
+		Description: "Generate comprehensive documentation for Claude Messages API with your specific conversation and settings. Creates detailed API documentation for Anthropic's Claude messaging format, including endpoint details, authentication, request examples with your exact messages array, and parameter explanations for model, max_tokens, and Claude-specific features.",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args ClaudeMessagesArgs) (*mcp.CallToolResult, any, error) {
 		baseURL := getBaseURL()
-		doc := generateClaudeMessagesDocumentationFromTemplate(baseURL)
+
+		// Convert args struct to map for template data
+		params := map[string]any{
+			"model":      args.Model,
+			"messages":   args.Messages,
+			"max_tokens": args.MaxTokens,
+		}
+
+		doc := GenerateDocumentationWithParams(ClaudeMessages, baseURL, params)
 
 		return &mcp.CallToolResult{
 			Content: []mcp.Content{

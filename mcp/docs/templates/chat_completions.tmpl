@@ -15,22 +15,41 @@ curl {{.BaseURL}}/v1/chat/completions \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer YOUR_API_KEY" \
   -d '{
+{{- if .Parameters.model}}
+    "model": "{{.Parameters.model}}",
+{{- else}}
     "model": "gpt-4",
+{{- end}}
+{{- if .Parameters.messages}}
+    "messages": {{.Parameters.messages | printf "%v"}},
+{{- else}}
     "messages": [
       {"role": "system", "content": "You are a helpful assistant."},
       {"role": "user", "content": "Hello!"}
     ],
+{{- end}}
+{{- if .Parameters.temperature}}
+    "temperature": {{.Parameters.temperature}},
+{{- else}}
     "temperature": 0.7,
-    "max_tokens": 150
+{{- end}}
+{{- if .Parameters.max_tokens}}
+    "max_tokens": {{.Parameters.max_tokens}}{{if .Parameters.stream}},{{end}}
+{{- else}}
+    "max_tokens": 150{{if .Parameters.stream}},{{end}}
+{{- end}}
+{{- if .Parameters.stream}}
+    "stream": {{.Parameters.stream}}
+{{- end}}
   }'
 ```
 
 ## Parameters
-- **model** (required): The model to use (e.g., gpt-4, gpt-3.5-turbo)
-- **messages** (required): Array of message objects with role and content
-- **temperature**: Controls randomness (0.0 to 2.0, default: 1.0)
-- **max_tokens**: Maximum tokens to generate
-- **stream**: Set to true for streaming responses
+- **model** (required): The model to use{{if .Parameters.model}} - Current: `{{.Parameters.model}}`{{end}}
+- **messages** (required): Array of message objects with role and content{{if .Parameters.messages}} - {{len .Parameters.messages}} message(s) provided{{end}}
+- **temperature**: Controls randomness (0.0 to 2.0{{if .Parameters.temperature}}, current: {{.Parameters.temperature}}{{else}}, default: 1.0{{end}})
+- **max_tokens**: Maximum tokens to generate{{if .Parameters.max_tokens}} - Current: {{.Parameters.max_tokens}}{{end}}
+- **stream**: Set to true for streaming responses{{if .Parameters.stream}} - Current: {{.Parameters.stream}}{{end}}
 
 ## Response Format
 ```json

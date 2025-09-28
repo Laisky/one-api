@@ -15,15 +15,31 @@ curl {{.BaseURL}}/v1/images/generations \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer YOUR_API_KEY" \
   -d '{
+{{- if .Parameters.model}}
+    "model": "{{.Parameters.model}}",
+{{- else}}
     "model": "dall-e-3",
+{{- end}}
+{{- if .Parameters.prompt}}
+    "prompt": "{{.Parameters.prompt}}",
+{{- else}}
     "prompt": "A cute baby sea otter",
+{{- end}}
+{{- if .Parameters.n}}
+    "n": {{.Parameters.n}},
+{{- else}}
     "n": 1,
+{{- end}}
+{{- if .Parameters.size}}
+    "size": "{{.Parameters.size}}"
+{{- else}}
     "size": "1024x1024"
+{{- end}}
   }'
 ```
 
 ## Parameters
-- **model** (required): Image generation model (dall-e-3, dall-e-2)
-- **prompt** (required): Text description of desired image
-- **n**: Number of images to generate (1-10)
-- **size**: Image size (256x256, 512x512, 1024x1024)
+- **model** (required): Image generation model{{if .Parameters.model}} - Current: `{{.Parameters.model}}`{{else}} (dall-e-3, dall-e-2){{end}}
+- **prompt** (required): Text description of desired image{{if .Parameters.prompt}} - Current: "{{.Parameters.prompt}}"{{end}}
+- **n**: Number of images to generate{{if .Parameters.n}} - Current: {{.Parameters.n}}{{else}} (1-10, default: 1){{end}}
+- **size**: Image size{{if .Parameters.size}} - Current: {{.Parameters.size}}{{else}} (256x256, 512x512, 1024x1024){{end}}
