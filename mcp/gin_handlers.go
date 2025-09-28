@@ -32,7 +32,7 @@ import (
 // Example usage in router:
 //
 //	mcpServer := mcp.NewServer()
-//	handler := mcp.NewStreamableHTTPHandler(mcpServer)
+//	handler := mcp.NewGinStreamableHTTPHandler(mcpServer)
 //	apiRouter.POST("/mcp", handler)
 func NewGinStreamableHTTPHandler(server *Server) gin.HandlerFunc {
 	// Create the MCP SDK's StreamableHTTPHandler
