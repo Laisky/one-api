@@ -180,15 +180,14 @@ func SetApiRouter(router *gin.Engine) {
 	}
 
 	// MCP (Model Context Protocol) server routes using official SDK
-	mcpRoute := apiRouter.Group("/mcp")
-	mcpRoute.Use(middleware.TokenAuth()) // Require API token authentication
-	{
-		// Initialize MCP server and handler singleton instances
-		initMCPServer()
+	// Initialize MCP server and handler singleton instances
+	initMCPServer()
 
-		// Keep GET endpoint for server information (backward compatibility)
-		mcpRoute.GET("/", mcp.Handler)
-		// Use singleton handler for POST requests (actual MCP protocol)
-		mcpRoute.POST("/", mcpHandlerInstance)
-	}
+	// Handle /api/mcp routes
+	//
+	// We avoid using a top-level /mcp endpoint (e.g., http://localhost:3000/mcp)
+	// because it doesn’t align well with backend conventions.
+	// The root path "/" is reserved for the frontend.
+	apiRouter.GET("/mcp", middleware.TokenAuth(), mcp.Handler)
+	apiRouter.POST("/mcp", middleware.TokenAuth(), mcpHandlerInstance)
 }
