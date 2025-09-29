@@ -1001,3 +1001,137 @@ func TestMCPToolsErrorHandling(t *testing.T) {
 
 	t.Logf("✓ Error handling works correctly for invalid tool calls")
 }
+
+// TestAddDocumentationResourcesFunction tests the addDocumentationResources function directly
+func TestAddDocumentationResourcesFunction(t *testing.T) {
+	t.Log("=== Testing addDocumentationResources Function ===")
+
+	// Test with resources enabled (default)
+	optsWithResources := DefaultServerOptions().
+		WithName("test-resources-server").
+		WithVersion("1.0.0")
+
+	serverWithResources := NewServerWithOptions(optsWithResources)
+
+	// Verify that server is created with documentation resources
+	assert.NotNil(t, serverWithResources, "MCP server with resources should be created")
+	assert.NotNil(t, serverWithResources.server, "Underlying MCP server should exist")
+
+	// Test that the server can handle resource-related requests
+	gin.SetMode(gin.TestMode)
+	handler := NewGinStreamableHTTPHandler(serverWithResources)
+	router := gin.New()
+	router.POST("/mcp", handler)
+
+	// Initialize session
+	initReq := `{
+		"jsonrpc": "2.0",
+		"id": 1,
+		"method": "initialize",
+		"params": {
+			"protocolVersion": "2024-11-05",
+			"capabilities": {},
+			"clientInfo": {"name": "test", "version": "1.0"}
+		}
+	}`
+
+	req, _ := http.NewRequest("POST", "/mcp", strings.NewReader(initReq))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json, text/event-stream")
+
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code, "Initialize should succeed")
+	sessionID := w.Header().Get("Mcp-Session-Id")
+
+	// Test resources/list to verify documentation resources were registered
+	resourcesReq := `{
+		"jsonrpc": "2.0",
+		"id": 2,
+		"method": "resources/list",
+		"params": {}
+	}`
+
+	req, _ = http.NewRequest("POST", "/mcp", strings.NewReader(resourcesReq))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json, text/event-stream")
+	if sessionID != "" {
+		req.Header.Set("Mcp-Session-Id", sessionID)
+	}
+
+	w = httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code, "Resources list should succeed")
+
+	// Verify response contains documentation resources
+	responseBody := w.Body.String()
+	assert.Contains(t, responseBody, "resources", "Response should contain resources")
+	assert.Contains(t, responseBody, "oneapi://docs/api-endpoints", "Should contain API endpoints resource")
+	assert.Contains(t, responseBody, "oneapi://docs/tool-usage-guide", "Should contain tool usage guide resource")
+	assert.Contains(t, responseBody, "oneapi://docs/authentication-guide", "Should contain authentication guide resource")
+	assert.Contains(t, responseBody, "oneapi://docs/integration-patterns", "Should contain integration patterns resource")
+
+	t.Logf("✓ addDocumentationResources function successfully registered documentation resources")
+
+	// Test with resources disabled
+	optsWithoutResources := DefaultServerOptions().
+		WithName("test-no-resources-server").
+		DisableResources().
+		WithVersion("1.0.0")
+
+	serverWithoutResources := NewServerWithOptions(optsWithoutResources)
+
+	// Verify that server is created without documentation resources
+	assert.NotNil(t, serverWithoutResources, "MCP server without resources should be created")
+	assert.NotNil(t, serverWithoutResources.server, "Underlying MCP server should exist")
+
+	// Test that the server can handle resource-related requests
+	handler2 := NewGinStreamableHTTPHandler(serverWithoutResources)
+	router2 := gin.New()
+	router2.POST("/mcp", handler2)
+
+	req2, _ := http.NewRequest("POST", "/mcp", strings.NewReader(initReq))
+	req2.Header.Set("Content-Type", "application/json")
+	req2.Header.Set("Accept", "application/json, text/event-stream")
+
+	w2 := httptest.NewRecorder()
+	router2.ServeHTTP(w2, req2)
+
+	assert.Equal(t, http.StatusOK, w2.Code, "Initialize should succeed")
+	sessionID2 := w2.Header().Get("Mcp-Session-Id")
+
+	// Test resources/list to verify documentation resources were not registered
+	resourcesReq2 := `{
+		"jsonrpc": "2.0",
+		"id": 2,
+		"method": "resources/list",
+		"params": {}
+	}`
+
+	req2, _ = http.NewRequest("POST", "/mcp", strings.NewReader(resourcesReq2))
+	req2.Header.Set("Content-Type", "application/json")
+	req2.Header.Set("Accept", "application/json, text/event-stream")
+	if sessionID2 != "" {
+		req2.Header.Set("Mcp-Session-Id", sessionID2)
+	}
+
+	w2 = httptest.NewRecorder()
+	router2.ServeHTTP(w2, req2)
+
+	assert.Equal(t, http.StatusOK, w2.Code, "Resources list should succeed")
+
+	// Verify response does not contain documentation resources
+	responseBody2 := w2.Body.String()
+	// Even if resources are disabled, the server might still return an empty resources list
+	// but it should not contain the specific documentation resources
+	if strings.Contains(responseBody2, "resources") {
+		assert.NotContains(t, responseBody2, "oneapi://docs/api-endpoints", "Should not contain API endpoints resource")
+		assert.NotContains(t, responseBody2, "oneapi://docs/tool-usage-guide", "Should not contain tool usage guide resource")
+		assert.NotContains(t, responseBody2, "oneapi://docs/authentication-guide", "Should not contain authentication guide resource")
+		assert.NotContains(t, responseBody2, "oneapi://docs/integration-patterns", "Should not contain integration patterns resource")
+	}
+
+	t.Logf("✓ addDocumentationResources function properly respects EnableResources flag")
+}
