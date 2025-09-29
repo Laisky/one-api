@@ -6,4 +6,5 @@ import "embed"
 
 //go:embed docs/templates/*.tmpl
 //go:embed docs/templates/instructions/*.tmpl
+//go:embed docs/resources/*.tmpl
 var templateFS embed.FS

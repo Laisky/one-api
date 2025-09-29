@@ -35,6 +35,9 @@ type ServerOptions struct {
 	// EnableInstructions determines whether instruction generation is enabled
 	EnableInstructions bool
 
+	// EnableResources determines whether documentation resources are enabled
+	EnableResources bool
+
 	// CustomTemplateData allows passing additional data to templates
 	CustomTemplateData map[string]any
 }
@@ -70,6 +73,7 @@ func DefaultServerOptions() *ServerOptions {
 		Name:               "one-api-official-mcp",
 		Version:            "1.0.0",
 		EnableInstructions: true,
+		EnableResources:    true,
 		Instructions: &InstructionConfig{
 			Type:           GeneralInstructions,
 			EnableFallback: true,
@@ -142,6 +146,12 @@ func (opts *ServerOptions) WithCustomTemplateData(key string, value any) *Server
 // DisableInstructions disables instruction generation for this server.
 func (opts *ServerOptions) DisableInstructions() *ServerOptions {
 	opts.EnableInstructions = false
+	return opts
+}
+
+// DisableResources disables documentation resources for this server.
+func (opts *ServerOptions) DisableResources() *ServerOptions {
+	opts.EnableResources = false
 	return opts
 }
 

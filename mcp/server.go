@@ -83,6 +83,11 @@ func NewServerWithOptions(options *ServerOptions) *Server {
 		mcpServer.addInstructionTools()
 	}
 
+	// Add documentation resources if enabled
+	if options.EnableResources {
+		mcpServer.addDocumentationResources()
+	}
+
 	return mcpServer
 }
 
