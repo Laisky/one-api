@@ -1,0 +1,769 @@
+
+# One-API Integration Best Practices
+
+## Server: {{.ServerName}} v{{.ServerVersion}}
+**Base URL**: {{.BaseURL}}
+
+## One-API Deployment and Configuration
+
+### 1. Environment Setup
+
+#### Production Environment Variables
+```bash
+# Essential One-API Configuration
+export ONE_API_KEY="your-api-key-here"
+export ONE_API_BASE_URL="{{.BaseURL}}"
+export ONE_API_TIMEOUT="30"
+export ONE_API_MAX_RETRIES="3"
+export ONE_API_LOG_LEVEL="info"
+
+# Optional Performance Tuning
+export ONE_API_CONNECTION_POOL_SIZE="10"
+export ONE_API_KEEP_ALIVE_TIMEOUT="30"
+export ONE_API_REQUEST_TIMEOUT="60"
+```
+
+#### Go Environment Setup
+```go
+package config
+
+import (
+    "os"
+    "strconv"
+    "time"
+)
+
+type OneAPIConfig struct {
+    APIKey              string
+    BaseURL             string
+    Timeout             time.Duration
+    MaxRetries          int
+    ConnectionPoolSize  int
+    LogLevel            string
+}
+
+func LoadOneAPIConfig() *OneAPIConfig {
+    timeout, _ := strconv.Atoi(getEnvOrDefault("ONE_API_TIMEOUT", "30"))
+    maxRetries, _ := strconv.Atoi(getEnvOrDefault("ONE_API_MAX_RETRIES", "3"))
+    poolSize, _ := strconv.Atoi(getEnvOrDefault("ONE_API_CONNECTION_POOL_SIZE", "10"))
+    
+    return &OneAPIConfig{
+        APIKey:             os.Getenv("ONE_API_KEY"),
+        BaseURL:            getEnvOrDefault("ONE_API_BASE_URL", "{{.BaseURL}}"),
+        Timeout:            time.Duration(timeout) * time.Second,
+        MaxRetries:         maxRetries,
+        ConnectionPoolSize: poolSize,
+        LogLevel:           getEnvOrDefault("ONE_API_LOG_LEVEL", "info"),
+    }
+}
+
+func getEnvOrDefault(key, defaultValue string) string {
+    if value := os.Getenv(key); value != "" {
+        return value
+    }
+    return defaultValue
+}
+```
+
+### 2. API Key Management
+
+#### Secure API Key Storage
+```go
+// Use environment variables or secure vaults
+func getAPIKey() string {
+    // Priority: Environment variable > Config file > Vault
+    if key := os.Getenv("ONE_API_KEY"); key != "" {
+        return key
+    }
+    
+    // Fallback to secure configuration
+    return loadFromSecureConfig()
+}
+
+// API Key validation
+func validateAPIKey(apiKey string) error {
+    if len(apiKey) < 10 {
+        return fmt.Errorf("API key too short")
+    }
+    
+    // Test with a simple request
+    client := NewOneAPIClient("{{.BaseURL}}", apiKey)
+    _, err := client.ListModels()
+    return err
+}
+```
+
+#### Bash API Key Management
+```bash
+#!/bin/bash
+
+# Secure API key loading
+load_api_key() {
+    # Try environment variable first
+    if [[ -n "$ONE_API_KEY" ]]; then
+        return 0
+    fi
+    
+    # Try secure config file
+    local config_file="$HOME/.config/one-api/credentials"
+    if [[ -f "$config_file" ]]; then
+        source "$config_file"
+        return 0
+    fi
+    
+    # Prompt user securely
+    read -s -p "Enter One-API key: " ONE_API_KEY
+    echo
+    export ONE_API_KEY
+}
+
+# Validate API key format
+validate_api_key() {
+    local key="$1"
+    
+    if [[ ${#key} -lt 10 ]]; then
+        log_error "API key too short"
+        return 1
+    fi
+    
+    # Test key with models endpoint
+    if ! make_api_request "GET" "/v1/models" ""; then
+        log_error "API key validation failed"
+        return 1
+    fi
+    
+    log_success "API key validated successfully"
+    return 0
+}
+```
+
+### 3. Connection Management
+
+#### Go HTTP Client Configuration
+```go
+func NewOptimizedOneAPIClient(config *OneAPIConfig) *OneAPIClient {
+    transport := &http.Transport{
+        MaxIdleConns:        config.ConnectionPoolSize,
+        MaxIdleConnsPerHost: config.ConnectionPoolSize,
+        IdleConnTimeout:     30 * time.Second,
+        DisableCompression:  false,
+        ForceAttemptHTTP2:   true,
+    }
+    
+    client := &http.Client{
+        Transport: transport,
+        Timeout:   config.Timeout,
+    }
+    
+    return &OneAPIClient{
+        baseURL:    config.BaseURL,
+        apiKey:     config.APIKey,
+        httpClient: client,
+        maxRetries: config.MaxRetries,
+    }
+}
+```
+
+#### Connection Pooling Best Practices
+```go
+// Singleton pattern for client reuse
+var (
+    oneAPIClient *OneAPIClient
+    clientOnce   sync.Once
+)
+
+func GetOneAPIClient() *OneAPIClient {
+    clientOnce.Do(func() {
+        config := LoadOneAPIConfig()
+        oneAPIClient = NewOptimizedOneAPIClient(config)
+    })
+    return oneAPIClient
+}
+```
+
+### 4. Request Optimization
+
+#### Batch Processing
+```go
+type BatchRequest struct {
+    Requests []ChatRequest
+    MaxConcurrency int
+}
+
+func (c *OneAPIClient) ProcessBatch(batch BatchRequest) ([]ChatResponse, error) {
+    semaphore := make(chan struct{}, batch.MaxConcurrency)
+    results := make([]ChatResponse, len(batch.Requests))
+    errors := make([]error, len(batch.Requests))
+    
+    var wg sync.WaitGroup
+    
+    for i, req := range batch.Requests {
+        wg.Add(1)
+        go func(index int, request ChatRequest) {
+            defer wg.Done()
+            
+            semaphore <- struct{}{} // Acquire
+            defer func() { <-semaphore }() // Release
+            
+            response, err := c.ChatCompletion(request.Model, request.Message)
+            if err != nil {
+                errors[index] = err
+                return
+            }
+            results[index] = *response
+        }(i, req)
+    }
+    
+    wg.Wait()
+    
+    // Check for errors
+    for i, err := range errors {
+        if err != nil {
+            return nil, fmt.Errorf("batch request %d failed: %w", i, err)
+        }
+    }
+    
+    return results, nil
+}
+```
+
+#### Request Caching
+```go
+type CachedClient struct {
+    client *OneAPIClient
+    cache  map[string]CacheEntry
+    mutex  sync.RWMutex
+    ttl    time.Duration
+}
+
+type CacheEntry struct {
+    Response  ChatResponse
+    Timestamp time.Time
+}
+
+func (c *CachedClient) ChatCompletionCached(model, message string) (*ChatResponse, error) {
+    cacheKey := fmt.Sprintf("%s:%s", model, message)
+    
+    c.mutex.RLock()
+    if entry, exists := c.cache[cacheKey]; exists {
+        if time.Since(entry.Timestamp) < c.ttl {
+            c.mutex.RUnlock()
+            return &entry.Response, nil
+        }
+    }
+    c.mutex.RUnlock()
+    
+    // Cache miss - make request
+    response, err := c.client.ChatCompletion(model, message)
+    if err != nil {
+        return nil, err
+    }
+    
+    // Update cache
+    c.mutex.Lock()
+    c.cache[cacheKey] = CacheEntry{
+        Response:  *response,
+        Timestamp: time.Now(),
+    }
+    c.mutex.Unlock()
+    
+    return response, nil
+}
+```
+
+### 5. Monitoring and Observability
+
+#### Comprehensive Logging
+```go
+import (
+    "context"
+    "log/slog"
+    "time"
+)
+
+type InstrumentedClient struct {
+    client *OneAPIClient
+    logger *slog.Logger
+}
+
+func (c *InstrumentedClient) ChatCompletion(ctx context.Context, model, message string) (*ChatResponse, error) {
+    start := time.Now()
+    
+    c.logger.InfoContext(ctx, "Starting chat completion",
+        "model", model,
+        "message_length", len(message),
+    )
+    
+    response, err := c.client.ChatCompletion(model, message)
+    duration := time.Since(start)
+    
+    if err != nil {
+        c.logger.ErrorContext(ctx, "Chat completion failed",
+            "model", model,
+            "duration_ms", duration.Milliseconds(),
+            "error", err,
+        )
+        return nil, err
+    }
+    
+    c.logger.InfoContext(ctx, "Chat completion successful",
+        "model", model,
+        "duration_ms", duration.Milliseconds(),
+        "response_length", len(response.Choices[0].Message.Content),
+        "tokens_used", response.Usage.TotalTokens,
+    )
+    
+    return response, nil
+}
+```
+
+#### Metrics Collection
+```go
+import "github.com/prometheus/client_golang/prometheus"
+
+var (
+    requestDuration = prometheus.NewHistogramVec(
+        prometheus.HistogramOpts{
+            Name: "oneapi_request_duration_seconds",
+            Help: "Duration of One-API requests",
+        },
+        []string{"model", "endpoint", "status"},
+    )
+    
+    requestCount = prometheus.NewCounterVec(
+        prometheus.CounterOpts{
+            Name: "oneapi_requests_total",
+            Help: "Total number of One-API requests",
+        },
+        []string{"model", "endpoint", "status"},
+    )
+)
+
+func init() {
+    prometheus.MustRegister(requestDuration, requestCount)
+}
+
+func (c *OneAPIClient) recordMetrics(model, endpoint, status string, duration time.Duration) {
+    requestDuration.WithLabelValues(model, endpoint, status).Observe(duration.Seconds())
+    requestCount.WithLabelValues(model, endpoint, status).Inc()
+}
+```
+
+### 6. Security Best Practices
+
+#### Request Validation
+```go
+func validateChatRequest(req ChatRequest) error {
+    if req.Model == "" {
+        return fmt.Errorf("model is required")
+    }
+    
+    if len(req.Messages) == 0 {
+        return fmt.Errorf("messages are required")
+    }
+    
+    // Check message content length
+    for i, msg := range req.Messages {
+        if len(msg.Content) > 32000 {
+            return fmt.Errorf("message %d exceeds maximum length", i)
+        }
+    }
+    
+    // Validate temperature range
+    if req.Temperature != nil && (*req.Temperature < 0 || *req.Temperature > 2) {
+        return fmt.Errorf("temperature must be between 0 and 2")
+    }
+    
+    return nil
+}
+```
+
+#### Input Sanitization
+```go
+func sanitizeInput(input string) string {
+    // Remove potentially harmful content
+    input = strings.ReplaceAll(input, "\x00", "")
+    
+    // Limit length
+    if len(input) > 32000 {
+        input = input[:32000]
+    }
+    
+    return strings.TrimSpace(input)
+}
+```
+
+### 7. Performance Optimization
+
+#### Streaming Responses
+```go
+func (c *OneAPIClient) ChatCompletionStream(model, message string, callback func(string)) error {
+    request := map[string]interface{}{
+        "model": model,
+        "messages": []map[string]string{
+            {"role": "user", "content": message},
+        },
+        "stream": true,
+    }
+    
+    jsonData, _ := json.Marshal(request)
+    req, _ := http.NewRequest("POST", c.baseURL+"/v1/chat/completions", bytes.NewBuffer(jsonData))
+    req.Header.Set("Authorization", "Bearer "+c.apiKey)
+    req.Header.Set("Content-Type", "application/json")
+    req.Header.Set("Accept", "text/event-stream")
+    
+    resp, err := c.httpClient.Do(req)
+    if err != nil {
+        return err
+    }
+    defer resp.Body.Close()
+    
+    scanner := bufio.NewScanner(resp.Body)
+    for scanner.Scan() {
+        line := scanner.Text()
+        if strings.HasPrefix(line, "data: ") {
+            data := strings.TrimPrefix(line, "data: ")
+            if data == "[DONE]" {
+                break
+            }
+            
+            var chunk StreamChunk
+            if err := json.Unmarshal([]byte(data), &chunk); err == nil {
+                if len(chunk.Choices) > 0 {
+                    callback(chunk.Choices[0].Delta.Content)
+                }
+            }
+        }
+    }
+    
+    return scanner.Err()
+}
+```
+
+### 8. Testing Strategies
+
+#### Integration Tests
+```go
+func TestOneAPIIntegration(t *testing.T) {
+    if testing.Short() {
+        t.Skip("Skipping integration test")
+    }
+    
+    client := NewOneAPIClient("{{.BaseURL}}", os.Getenv("ONE_API_KEY"))
+    
+    // Test models endpoint
+    models, err := client.ListModels()
+    assert.NoError(t, err)
+    assert.NotEmpty(t, models.Data)
+    
+    // Test chat completion
+    response, err := client.ChatCompletion("gpt-3.5-turbo", "Hello, world!")
+    assert.NoError(t, err)
+    assert.NotEmpty(t, response.Choices)
+    assert.NotEmpty(t, response.Choices[0].Message.Content)
+}
+```
+
+#### Load Testing
+```bash
+#!/bin/bash
+
+# Load test script
+load_test() {
+    local concurrent_users=10
+    local requests_per_user=50
+    local model="gpt-3.5-turbo"
+    
+    echo "Starting load test: $concurrent_users users, $requests_per_user requests each"
+    
+    for ((i=1; i<=concurrent_users; i++)); do
+        {
+            for ((j=1; j<=requests_per_user; j++)); do
+                chat_completion_safe "$model" "Load test message $i-$j" > /dev/null
+                sleep 0.1
+            done
+        } &
+    done
+    
+    wait
+    echo "Load test completed"
+}
+```
+
+### 9. Production Deployment
+
+#### Health Check Implementation
+```go
+func (c *OneAPIClient) HealthCheck() error {
+    ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+    defer cancel()
+    
+    req, _ := http.NewRequestWithContext(ctx, "GET", c.baseURL+"/v1/models", nil)
+    req.Header.Set("Authorization", "Bearer "+c.apiKey)
+    
+    resp, err := c.httpClient.Do(req)
+    if err != nil {
+        return fmt.Errorf("health check failed: %w", err)
+    }
+    defer resp.Body.Close()
+    
+    if resp.StatusCode != 200 {
+        return fmt.Errorf("health check failed: status %d", resp.StatusCode)
+    }
+    
+    return nil
+}
+```
+
+#### Graceful Shutdown
+```go
+func (s *Server) GracefulShutdown(ctx context.Context) error {
+    // Stop accepting new requests
+    s.mu.Lock()
+    s.shutdown = true
+    s.mu.Unlock()
+    
+    // Wait for ongoing requests to complete
+    done := make(chan struct{})
+    go func() {
+        s.wg.Wait()
+        close(done)
+    }()
+    
+    select {
+    case <-done:
+        return nil
+    case <-ctx.Done():
+        return ctx.Err()
+    }
+}
+```
+
+### 10. Configuration Management
+
+#### Environment-Specific Configurations
+```go
+type Environment string
+
+const (
+    Development Environment = "development"
+    Staging     Environment = "staging"
+    Production  Environment = "production"
+)
+
+type Config struct {
+    Environment Environment
+    OneAPI      OneAPIConfig
+    Logging     LoggingConfig
+    Monitoring  MonitoringConfig
+}
+
+func LoadConfig() *Config {
+    env := Environment(getEnvOrDefault("ENVIRONMENT", "development"))
+    
+    config := &Config{
+        Environment: env,
+        OneAPI:      *LoadOneAPIConfig(),
+    }
+    
+    // Environment-specific overrides
+    switch env {
+    case Production:
+        config.OneAPI.Timeout = 60 * time.Second
+        config.OneAPI.MaxRetries = 5
+    case Development:
+        config.OneAPI.Timeout = 10 * time.Second
+        config.OneAPI.MaxRetries = 1
+    }
+    
+    return config
+}
+```
+
+#### Configuration Validation
+```bash
+#!/bin/bash
+
+validate_config() {
+    local errors=0
+    
+    # Check required environment variables
+    required_vars=("ONE_API_KEY" "ONE_API_BASE_URL")
+    
+    for var in "${required_vars[@]}"; do
+        if [[ -z "${!var}" ]]; then
+            log_error "Required environment variable $var is not set"
+            ((errors++))
+        fi
+    done
+    
+    # Validate base URL format
+    if [[ ! "$ONE_API_BASE_URL" =~ ^https?:// ]]; then
+        log_error "ONE_API_BASE_URL must start with http:// or https://"
+        ((errors++))
+    fi
+    
+    # Test API connectivity
+    if ! curl -s -f -H "Authorization: Bearer $ONE_API_KEY" "$ONE_API_BASE_URL/v1/models" > /dev/null; then
+        log_error "Cannot connect to One-API at $ONE_API_BASE_URL"
+        ((errors++))
+    fi
+    
+    if [[ $errors -eq 0 ]]; then
+        log_success "Configuration validation passed"
+        return 0
+    else
+        log_error "Configuration validation failed with $errors errors"
+        return 1
+    fi
+}
+```
+
+### Best Practices Checklist
+
+#### Development Phase
+- [ ] Set up proper environment variables and configuration
+- [ ] Implement comprehensive error handling with retries
+- [ ] Add request/response logging for debugging
+- [ ] Create unit tests for all API interactions
+- [ ] Implement input validation and sanitization
+- [ ] Set up local development environment with test API keys
+
+#### Pre-Production Phase
+- [ ] Conduct load testing with realistic traffic patterns
+- [ ] Implement monitoring and alerting
+- [ ] Set up proper logging aggregation
+- [ ] Test failover and recovery scenarios
+- [ ] Validate API key rotation procedures
+- [ ] Review security configurations
+
+#### Production Phase
+- [ ] Monitor error rates and response times
+- [ ] Set up automated health checks
+- [ ] Implement proper backup and disaster recovery
+- [ ] Regular security audits and updates
+- [ ] Monitor API usage and costs
+- [ ] Maintain documentation and runbooks
+
+#### Performance Optimization
+- [ ] Use connection pooling and keep-alive
+- [ ] Implement request caching where appropriate
+- [ ] Optimize batch processing for multiple requests
+- [ ] Monitor and tune timeout values
+- [ ] Use streaming for long-running requests
+- [ ] Implement circuit breakers for resilience
+
+#### Security Hardening
+- [ ] Secure API key storage and rotation
+- [ ] Implement request rate limiting
+- [ ] Add input validation and sanitization
+- [ ] Use HTTPS for all communications
+- [ ] Regular security vulnerability scanning
+- [ ] Audit logs for security events
+
+### Common Pitfalls to Avoid
+
+1. **Hardcoded API Keys**: Never commit API keys to version control
+2. **Missing Error Handling**: Always handle API errors gracefully
+3. **No Request Timeouts**: Set appropriate timeouts to prevent hanging
+4. **Ignoring Rate Limits**: Implement proper backoff strategies
+5. **Poor Logging**: Log sufficient information for debugging
+6. **No Monitoring**: Monitor API health and performance metrics
+7. **Blocking Operations**: Use async/concurrent processing where possible
+8. **No Input Validation**: Validate all inputs before API calls
+9. **Missing Tests**: Test both success and failure scenarios
+10. **No Graceful Degradation**: Plan for API unavailability
+
+### Troubleshooting Guide
+
+#### Connection Issues
+```bash
+# Test basic connectivity
+curl -v {{.BaseURL}}/v1/models
+
+# Test with authentication
+curl -H "Authorization: Bearer $ONE_API_KEY" {{.BaseURL}}/v1/models
+
+# Check DNS resolution
+nslookup $(echo "{{.BaseURL}}" | sed 's|https\?://||' | cut -d'/' -f1)
+```
+
+#### Authentication Problems
+```bash
+# Validate API key format
+echo "API Key length: ${#ONE_API_KEY}"
+
+# Test authentication
+test_auth() {
+    response=$(curl -s -w "%{http_code}" -H "Authorization: Bearer $ONE_API_KEY" {{.BaseURL}}/v1/models)
+    status_code=$(echo "$response" | tail -n1)
+    
+    if [[ "$status_code" -eq 401 ]]; then
+        log_error "Authentication failed - check API key"
+    elif [[ "$status_code" -eq 200 ]]; then
+        log_success "Authentication successful"
+    else
+        log_warning "Unexpected status code: $status_code"
+    fi
+}
+```
+
+#### Performance Issues
+```go
+// Monitor request latency
+func (c *OneAPIClient) monitorPerformance() {
+    ticker := time.NewTicker(1 * time.Minute)
+    defer ticker.Stop()
+    
+    for range ticker.C {
+        start := time.Now()
+        _, err := c.ListModels()
+        duration := time.Since(start)
+        
+        if err != nil {
+            slog.Error("Health check failed", "error", err, "duration", duration)
+        } else if duration > 5*time.Second {
+            slog.Warn("Slow response detected", "duration", duration)
+        } else {
+            slog.Info("Health check passed", "duration", duration)
+        }
+    }
+}
+```
+
+### Resource Management
+
+#### Memory Management
+```go
+// Pool buffers for JSON marshaling
+var jsonBufferPool = sync.Pool{
+    New: func() interface{} {
+        return make([]byte, 0, 1024)
+    },
+}
+
+func (c *OneAPIClient) marshalRequest(req interface{}) ([]byte, error) {
+    buf := jsonBufferPool.Get().([]byte)
+    defer jsonBufferPool.Put(buf[:0])
+    
+    return json.Marshal(req)
+}
+```
+
+#### Connection Management
+```go
+// Cleanup connections periodically
+func (c *OneAPIClient) startConnectionCleanup() {
+    ticker := time.NewTicker(5 * time.Minute)
+    go func() {
+        for range ticker.C {
+            if transport, ok := c.httpClient.Transport.(*http.Transport); ok {
+                transport.CloseIdleConnections()
+            }
+        }
+    }()
+}
+```
+
+---
+*One-API Integration Best Practices for {{.ServerName}} v{{.ServerVersion}}*

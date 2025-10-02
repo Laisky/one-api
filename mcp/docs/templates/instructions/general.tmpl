@@ -1,0 +1,273 @@
+# {{.ServerName}} - One-API Integration Guide
+
+## Server Information
+- **Name**: {{.ServerName}}
+- **Version**: {{.ServerVersion}}
+- **Base URL**: {{.BaseURL}}
+
+## Overview
+This MCP server provides integration instructions for One-API relay endpoints with OpenAI-compatible APIs. One-API acts as a unified gateway that allows you to use multiple AI providers (OpenAI, Claude, Gemini, etc.) through a single OpenAI-compatible interface.
+
+## Quick Start Integration
+
+### 1. Prerequisites
+- One-API server running at {{.BaseURL}}
+- Valid API key from your One-API dashboard
+- Go 1.19+ or curl for testing
+
+### 2. Go Integration Example
+```go
+package main
+
+import (
+    "bytes"
+    "encoding/json"
+    "fmt"
+    "io"
+    "net/http"
+)
+
+type ChatRequest struct {
+    Model    string    `json:"model"`
+    Messages []Message `json:"messages"`
+    Temperature *float64 `json:"temperature,omitempty"`
+    MaxTokens   *int     `json:"max_tokens,omitempty"`
+}
+
+type Message struct {
+    Role    string `json:"role"`
+    Content string `json:"content"`
+}
+
+type ChatResponse struct {
+    ID      string   `json:"id"`
+    Object  string   `json:"object"`
+    Choices []Choice `json:"choices"`
+    Usage   Usage    `json:"usage"`
+}
+
+type Choice struct {
+    Index   int     `json:"index"`
+    Message Message `json:"message"`
+}
+
+type Usage struct {
+    PromptTokens     int `json:"prompt_tokens"`
+    CompletionTokens int `json:"completion_tokens"`
+    TotalTokens      int `json:"total_tokens"`
+}
+
+func main() {
+    // One-API endpoint
+    url := "{{.BaseURL}}/v1/chat/completions"
+    apiKey := "YOUR_ONE_API_KEY" // Replace with your actual API key
+    
+    // Prepare request
+    req := ChatRequest{
+        Model: "gpt-3.5-turbo", // or any model available in your One-API instance
+        Messages: []Message{
+            {Role: "user", Content: "Hello, how can One-API help me?"},
+        },
+        Temperature: func(f float64) *float64 { return &f }(0.7),
+        MaxTokens:   func(i int) *int { return &i }(1000),
+    }
+    
+    jsonData, err := json.Marshal(req)
+    if err != nil {
+        fmt.Printf("Error marshaling request: %v\n", err)
+        return
+    }
+    
+    // Create HTTP request
+    httpReq, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
+    if err != nil {
+        fmt.Printf("Error creating request: %v\n", err)
+        return
+    }
+    
+    httpReq.Header.Set("Content-Type", "application/json")
+    httpReq.Header.Set("Authorization", "Bearer "+apiKey)
+    
+    // Send request
+    client := &http.Client{}
+    resp, err := client.Do(httpReq)
+    if err != nil {
+        fmt.Printf("Error sending request: %v\n", err)
+        return
+    }
+    defer resp.Body.Close()
+    
+    // Read response
+    body, err := io.ReadAll(resp.Body)
+    if err != nil {
+        fmt.Printf("Error reading response: %v\n", err)
+        return
+    }
+    
+    if resp.StatusCode != http.StatusOK {
+        fmt.Printf("API Error (Status %d): %s\n", resp.StatusCode, body)
+        return
+    }
+    
+    // Parse response
+    var chatResp ChatResponse
+    if err := json.Unmarshal(body, &chatResp); err != nil {
+        fmt.Printf("Error parsing response: %v\n", err)
+        return
+    }
+    
+    // Print result
+    fmt.Printf("Response: %s\n", chatResp.Choices[0].Message.Content)
+    fmt.Printf("Usage: %d tokens\n", chatResp.Usage.TotalTokens)
+}
+```
+
+### 3. Bash/curl Integration Examples
+
+#### Chat Completions
+```bash
+#!/bin/bash
+
+# Set your One-API key
+API_KEY="YOUR_ONE_API_KEY"
+BASE_URL="{{.BaseURL}}"
+
+# Chat Completions
+curl -X POST "${BASE_URL}/v1/chat/completions" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer ${API_KEY}" \
+  -d '{
+    "model": "gpt-3.5-turbo",
+    "messages": [
+      {"role": "system", "content": "You are a helpful assistant."},
+      {"role": "user", "content": "Explain One-API in simple terms."}
+    ],
+    "temperature": 0.7,
+    "max_tokens": 1000
+  }'
+```
+
+#### Text Embeddings
+```bash
+# Text Embeddings
+curl -X POST "${BASE_URL}/v1/embeddings" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer ${API_KEY}" \
+  -d '{
+    "model": "text-embedding-ada-002",
+    "input": "One-API is a unified gateway for multiple AI providers"
+  }'
+```
+
+#### Image Generation
+```bash
+# Image Generation
+curl -X POST "${BASE_URL}/v1/images/generations" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer ${API_KEY}" \
+  -d '{
+    "model": "dall-e-3",
+    "prompt": "A futuristic API gateway connecting multiple AI services",
+    "n": 1,
+    "size": "1024x1024"
+  }'
+```
+
+#### List Available Models
+```bash
+# List Available Models
+curl -X GET "${BASE_URL}/v1/models" \
+  -H "Authorization: Bearer ${API_KEY}"
+```
+
+## Available MCP Tools
+Use these tools to get detailed documentation and examples:
+
+{{range .AvailableTools}}
+- **{{.}}**: Get comprehensive documentation and Go/curl examples for this endpoint
+{{end}}
+
+## Environment Setup
+
+### Go Environment Variables
+```bash
+export ONE_API_BASE_URL="{{.BaseURL}}"
+export ONE_API_KEY="your-api-key-here"
+```
+
+### Go Module Setup
+```bash
+go mod init your-project
+# No external dependencies needed for basic HTTP requests
+```
+
+## Configuration Best Practices
+
+1. **API Key Security**: Store your One-API key in environment variables
+   ```go
+   apiKey := os.Getenv("ONE_API_KEY")
+   if apiKey == "" {
+       log.Fatal("ONE_API_KEY environment variable is required")
+   }
+   ```
+
+2. **Base URL Configuration**: Use {{.BaseURL}} as your OpenAI API base URL replacement
+
+3. **Model Selection**: Check available models using the `/v1/models` endpoint
+
+4. **Error Handling**: Always check HTTP status codes and parse error responses
+
+5. **Rate Limiting**: Implement proper retry logic with exponential backoff
+
+## Testing Your Integration
+
+### Quick Test Script (Go)
+```go
+func testOneAPIConnection() error {
+    url := "{{.BaseURL}}/v1/models"
+    req, _ := http.NewRequest("GET", url, nil)
+    req.Header.Set("Authorization", "Bearer "+os.Getenv("ONE_API_KEY"))
+    
+    client := &http.Client{Timeout: 10 * time.Second}
+    resp, err := client.Do(req)
+    if err != nil {
+        return fmt.Errorf("connection failed: %v", err)
+    }
+    defer resp.Body.Close()
+    
+    if resp.StatusCode == 200 {
+        fmt.Println("✅ One-API connection successful!")
+        return nil
+    } else {
+        return fmt.Errorf("❌ API returned status: %d", resp.StatusCode)
+    }
+}
+```
+
+### Quick Test Script (Bash)
+```bash
+#!/bin/bash
+test_connection() {
+    local response=$(curl -s -o /dev/null -w "%{http_code}" \
+        -H "Authorization: Bearer ${ONE_API_KEY}" \
+        "{{.BaseURL}}/v1/models")
+    
+    if [ "$response" = "200" ]; then
+        echo "✅ One-API connection successful!"
+    else
+        echo "❌ Connection failed with status: $response"
+    fi
+}
+
+test_connection
+```
+
+## Next Steps
+1. Use the MCP tools above to get specific API documentation
+2. Test your integration with simple requests first  
+3. Monitor your usage through the One-API dashboard
+4. Configure appropriate rate limits and quotas
+5. Implement proper error handling and retry logic
+
+---
+*Generated by {{.ServerName}} v{{.ServerVersion}}*

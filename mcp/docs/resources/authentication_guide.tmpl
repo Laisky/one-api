@@ -1,0 +1,242 @@
+# Authentication Guide
+
+This resource provides comprehensive information about authentication methods for One-API endpoints.
+
+## Base URL
+{{.BaseURL}}
+
+## Authentication Methods
+
+### Bearer Token Authentication
+All API endpoints require authentication using Bearer tokens in the Authorization header.
+
+#### Header Format
+```
+Authorization: Bearer YOUR_API_KEY
+```
+
+#### Example Request
+```bash
+curl {{.BaseURL}}/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -d '{
+    "model": "gpt-4",
+    "messages": [{"role": "user", "content": "Hello"}]
+  }'
+```
+
+## API Key Management
+
+### Obtaining API Keys
+1. Access your One-API dashboard
+2. Navigate to the API Keys section
+3. Generate a new API key
+4. Copy and securely store the key
+
+### Key Security Best Practices
+- **Never expose keys in client-side code**
+- **Use environment variables for key storage**
+- **Rotate keys regularly**
+- **Use different keys for different environments**
+
+#### Environment Variable Setup
+```bash
+# Linux/macOS
+export ONE_API_KEY="your-api-key-here"
+
+# Windows
+set ONE_API_KEY=your-api-key-here
+```
+
+#### Code Examples
+
+##### Python
+```python
+import os
+import requests
+
+api_key = os.getenv('ONE_API_KEY')
+headers = {
+    'Authorization': f'Bearer {api_key}',
+    'Content-Type': 'application/json'
+}
+
+response = requests.post(
+    '{{.BaseURL}}/v1/chat/completions',
+    headers=headers,
+    json={
+        'model': 'gpt-4',
+        'messages': [{'role': 'user', 'content': 'Hello'}]
+    }
+)
+```
+
+##### JavaScript/Node.js
+```javascript
+const apiKey = process.env.ONE_API_KEY;
+
+const response = await fetch('{{.BaseURL}}/v1/chat/completions', {
+  method: 'POST',
+  headers: {
+    'Authorization': `Bearer ${apiKey}`,
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify({
+    model: 'gpt-4',
+    messages: [{role: 'user', content: 'Hello'}]
+  })
+});
+```
+
+##### Go
+```go
+package main
+
+import (
+    "bytes"
+    "encoding/json"
+    "net/http"
+    "os"
+)
+
+func main() {
+    apiKey := os.Getenv("ONE_API_KEY")
+    
+    req, _ := http.NewRequest("POST", "{{.BaseURL}}/v1/chat/completions", bytes.NewBuffer(jsonData))
+    req.Header.Set("Authorization", "Bearer "+apiKey)
+    req.Header.Set("Content-Type", "application/json")
+    
+    client := &http.Client{}
+    resp, _ := client.Do(req)
+}
+```
+
+##### cURL
+```bash
+curl {{.BaseURL}}/v1/chat/completions \
+  -H "Authorization: Bearer $ONE_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"model": "gpt-4", "messages": [{"role": "user", "content": "Hello"}]}'
+```
+
+## Error Handling
+
+### Authentication Errors
+
+#### 401 Unauthorized
+```json
+{
+  "error": {
+    "message": "Invalid API key provided",
+    "type": "invalid_request_error",
+    "code": "invalid_api_key"
+  }
+}
+```
+
+**Causes:**
+- Missing Authorization header
+- Invalid or expired API key
+- Malformed Bearer token format
+
+**Solutions:**
+- Verify API key is correct
+- Check header format: `Authorization: Bearer YOUR_KEY`
+- Ensure key hasn't expired or been revoked
+
+#### 403 Forbidden
+```json
+{
+  "error": {
+    "message": "Insufficient permissions for this resource",
+    "type": "permission_error",
+    "code": "insufficient_permissions"
+  }
+}
+```
+
+**Causes:**
+- API key lacks required permissions
+- Resource access restrictions
+- Rate limiting or quota exceeded
+
+**Solutions:**
+- Check API key permissions in dashboard
+- Verify endpoint access rights
+- Review rate limits and usage quotas
+
+## Rate Limiting
+
+### Headers
+API responses include rate limiting information:
+```
+X-RateLimit-Limit: 1000
+X-RateLimit-Remaining: 999
+X-RateLimit-Reset: 1640995200
+```
+
+### Handling Rate Limits
+```python
+import time
+import requests
+
+def make_request_with_retry(url, headers, data, max_retries=3):
+    for attempt in range(max_retries):
+        response = requests.post(url, headers=headers, json=data)
+        
+        if response.status_code == 429:  # Rate limited
+            retry_after = int(response.headers.get('Retry-After', 60))
+            time.sleep(retry_after)
+            continue
+            
+        return response
+    
+    raise Exception("Max retries exceeded")
+```
+
+## Security Considerations
+
+### HTTPS Only
+- All API calls must use HTTPS
+- HTTP requests will be rejected
+- Ensures encrypted transmission of API keys
+
+### Key Rotation
+```bash
+# Example rotation script
+OLD_KEY="old-api-key"
+NEW_KEY="new-api-key"
+
+# Update environment
+export ONE_API_KEY="$NEW_KEY"
+
+# Update configuration files
+sed -i "s/$OLD_KEY/$NEW_KEY/g" config.yaml
+
+# Restart services
+systemctl restart your-service
+```
+
+### Monitoring and Logging
+- Monitor API key usage patterns
+- Log authentication failures
+- Set up alerts for unusual activity
+- Regular security audits
+
+## Integration with MCP Tools
+
+All MCP tools in this server generate documentation with proper authentication examples:
+
+- **chat_completions**: Includes Bearer token in curl examples
+- **completions**: Shows authentication headers
+- **embeddings**: Demonstrates secure API calls
+- **images_generations**: Includes auth in multipart requests
+- **audio_***: Shows authentication for file uploads
+- **moderations**: Includes security headers
+- **claude_messages**: Demonstrates Claude API auth
+
+Use any MCP tool to get endpoint-specific authentication examples with your actual base URL and configuration.
+
+---
+*Authentication guide for {{.BaseURL}}*

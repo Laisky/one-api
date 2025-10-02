@@ -1,0 +1,387 @@
+# Integration Patterns and Examples
+
+This resource provides comprehensive integration patterns and real-world examples for using One-API endpoints effectively.
+
+## Base URL
+{{.BaseURL}}
+
+## Common Integration Patterns
+
+### 1. Conversational AI Applications
+
+#### Pattern: Multi-turn Chat Implementation
+```python
+class ChatSession:
+    def __init__(self, model="gpt-4"):
+        self.model = model
+        self.messages = []
+        self.base_url = "{{.BaseURL}}"
+        
+    def add_message(self, role, content):
+        self.messages.append({"role": role, "content": content})
+        
+    async def get_response(self):
+        response = await self.call_chat_api()
+        assistant_message = response['choices'][0]['message']['content']
+        self.add_message("assistant", assistant_message)
+        return assistant_message
+        
+    async def call_chat_api(self):
+        # Use chat_completions MCP tool for detailed documentation
+        return await api_call(f"{self.base_url}/v1/chat/completions", {
+            "model": self.model,
+            "messages": self.messages,
+            "temperature": 0.7
+        })
+```
+
+#### Pattern: Streaming Chat Responses
+```javascript
+async function streamChat(messages) {
+    const response = await fetch('{{.BaseURL}}/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+            'Authorization': `Bearer ${process.env.ONE_API_KEY}`,
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            model: 'gpt-4',
+            messages: messages,
+            stream: true
+        })
+    });
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+
+    while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        
+        const chunk = decoder.decode(value);
+        const lines = chunk.split('\n');
+        
+        for (const line of lines) {
+            if (line.startsWith('data: ')) {
+                const data = line.slice(6);
+                if (data === '[DONE]') return;
+                
+                try {
+                    const parsed = JSON.parse(data);
+                    const content = parsed.choices[0]?.delta?.content;
+                    if (content) {
+                        process.stdout.write(content);
+                    }
+                } catch (e) {
+                    // Handle parsing errors
+                }
+            }
+        }
+    }
+}
+```
+
+### 2. Content Generation Workflows
+
+#### Pattern: Document Processing Pipeline
+```python
+class DocumentProcessor:
+    def __init__(self):
+        self.base_url = "{{.BaseURL}}"
+        
+    async def process_document(self, text):
+        # Step 1: Generate embeddings for semantic search
+        embeddings = await self.get_embeddings(text)
+        
+        # Step 2: Check content moderation
+        moderation = await self.moderate_content(text)
+        
+        # Step 3: Generate summary if content is safe
+        if moderation['results'][0]['flagged'] == False:
+            summary = await self.generate_summary(text)
+            return {
+                'embeddings': embeddings,
+                'summary': summary,
+                'safe': True
+            }
+        
+        return {'safe': False, 'reason': 'Content flagged'}
+    
+    async def get_embeddings(self, text):
+        # Use embeddings MCP tool for detailed documentation
+        return await api_call(f"{self.base_url}/v1/embeddings", {
+            "model": "text-embedding-ada-002",
+            "input": text
+        })
+    
+    async def moderate_content(self, text):
+        # Use moderations MCP tool for detailed documentation
+        return await api_call(f"{self.base_url}/v1/moderations", {
+            "input": text
+        })
+    
+    async def generate_summary(self, text):
+        # Use completions MCP tool for detailed documentation
+        return await api_call(f"{self.base_url}/v1/completions", {
+            "model": "gpt-3.5-turbo",
+            "prompt": f"Summarize this text:\n\n{text}",
+            "max_tokens": 150
+        })
+```
+
+### 3. Multimedia Applications
+
+#### Pattern: Audio-to-Text-to-Audio Pipeline
+```python
+class AudioProcessor:
+    def __init__(self):
+        self.base_url = "{{.BaseURL}}"
+    
+    async def translate_audio(self, audio_file, target_voice="alloy"):
+        # Step 1: Transcribe original audio
+        transcription = await self.transcribe_audio(audio_file)
+        
+        # Step 2: Translate text if needed
+        translated_text = await self.translate_text(transcription['text'])
+        
+        # Step 3: Generate speech in target language
+        audio_response = await self.text_to_speech(translated_text, target_voice)
+        
+        return {
+            'original_text': transcription['text'],
+            'translated_text': translated_text,
+            'audio_url': audio_response['url']
+        }
+    
+    async def transcribe_audio(self, audio_file):
+        # Use audio_transcriptions MCP tool for detailed documentation
+        with open(audio_file, 'rb') as f:
+            return await api_call_multipart(
+                f"{self.base_url}/v1/audio/transcriptions",
+                files={'file': f},
+                data={'model': 'whisper-1'}
+            )
+    
+    async def text_to_speech(self, text, voice):
+        # Use audio_speech MCP tool for detailed documentation
+        return await api_call(f"{self.base_url}/v1/audio/speech", {
+            "model": "tts-1",
+            "input": text,
+            "voice": voice
+        })
+```
+
+### 4. Image Generation Workflows
+
+#### Pattern: Iterative Image Creation
+```python
+class ImageGenerator:
+    def __init__(self):
+        self.base_url = "{{.BaseURL}}"
+        
+    async def create_image_variations(self, base_prompt, variations=3):
+        results = []
+        
+        for i in range(variations):
+            # Modify prompt for each variation
+            varied_prompt = f"{base_prompt}, variation {i+1}, unique style"
+            
+            # Use images_generations MCP tool for detailed documentation
+            image_response = await api_call(f"{self.base_url}/v1/images/generations", {
+                "model": "dall-e-3",
+                "prompt": varied_prompt,
+                "size": "1024x1024",
+                "n": 1
+            })
+            
+            results.append({
+                'prompt': varied_prompt,
+                'url': image_response['data'][0]['url'],
+                'variation': i + 1
+            })
+            
+        return results
+    
+    async def generate_with_safety_check(self, prompt):
+        # Check prompt safety first
+        moderation = await api_call(f"{self.base_url}/v1/moderations", {
+            "input": prompt
+        })
+        
+        if moderation['results'][0]['flagged']:
+            return {'error': 'Prompt violates content policy'}
+        
+        # Generate image if safe
+        return await api_call(f"{self.base_url}/v1/images/generations", {
+            "model": "dall-e-3",
+            "prompt": prompt,
+            "size": "1024x1024"
+        })
+```
+
+### 5. Multi-Model Integration
+
+#### Pattern: Claude + OpenAI Hybrid System
+```python
+class HybridAI:
+    def __init__(self):
+        self.base_url = "{{.BaseURL}}"
+    
+    async def intelligent_routing(self, user_input, context):
+        # Analyze request to choose best model
+        analysis = await self.analyze_request(user_input)
+        
+        if analysis['requires_reasoning']:
+            # Use Claude for complex reasoning
+            return await self.claude_response(user_input, context)
+        else:
+            # Use GPT for general tasks
+            return await self.openai_response(user_input, context)
+    
+    async def claude_response(self, user_input, context):
+        messages = [
+            {"role": "user", "content": f"Context: {context}\n\nQuery: {user_input}"}
+        ]
+        
+        # Use claude_messages MCP tool for detailed documentation
+        return await api_call(f"{self.base_url}/v1/messages", {
+            "model": "claude-3-sonnet",
+            "messages": messages,
+            "max_tokens": 1000
+        })
+    
+    async def openai_response(self, user_input, context):
+        messages = [
+            {"role": "system", "content": f"Context: {context}"},
+            {"role": "user", "content": user_input}
+        ]
+        
+        # Use chat_completions MCP tool for detailed documentation
+        return await api_call(f"{self.base_url}/v1/chat/completions", {
+            "model": "gpt-4",
+            "messages": messages,
+            "temperature": 0.7
+        })
+```
+
+## Error Handling Patterns
+
+### Retry with Exponential Backoff
+```python
+import asyncio
+import random
+
+async def api_call_with_retry(url, data, max_retries=3):
+    for attempt in range(max_retries):
+        try:
+            response = await make_api_call(url, data)
+            return response
+        except Exception as e:
+            if attempt == max_retries - 1:
+                raise e
+            
+            # Exponential backoff with jitter
+            delay = (2 ** attempt) + random.uniform(0, 1)
+            await asyncio.sleep(delay)
+```
+
+### Graceful Degradation
+```python
+async def robust_text_generation(prompt, preferred_model="gpt-4"):
+    models_to_try = [preferred_model, "gpt-3.5-turbo", "gpt-3.5-turbo-instruct"]
+    
+    for model in models_to_try:
+        try:
+            response = await api_call(f"{{.BaseURL}}/v1/chat/completions", {
+                "model": model,
+                "messages": [{"role": "user", "content": prompt}]
+            })
+            return response
+        except Exception as e:
+            if model == models_to_try[-1]:
+                raise e
+            continue  # Try next model
+```
+
+## Performance Optimization
+
+### Batch Processing
+```python
+async def batch_embed_texts(texts, batch_size=100):
+    results = []
+    
+    for i in range(0, len(texts), batch_size):
+        batch = texts[i:i + batch_size]
+        
+        # Process batch
+        batch_response = await api_call(f"{{.BaseURL}}/v1/embeddings", {
+            "model": "text-embedding-ada-002",
+            "input": batch
+        })
+        
+        results.extend(batch_response['data'])
+        
+        # Rate limiting
+        await asyncio.sleep(0.1)
+    
+    return results
+```
+
+### Caching Strategy
+```python
+import hashlib
+import json
+from functools import wraps
+
+def cache_api_response(ttl=3600):
+    def decorator(func):
+        cache = {}
+        
+        @wraps(func)
+        async def wrapper(*args, **kwargs):
+            # Create cache key
+            key_data = json.dumps([args, kwargs], sort_keys=True)
+            cache_key = hashlib.md5(key_data.encode()).hexdigest()
+            
+            # Check cache
+            if cache_key in cache:
+                result, timestamp = cache[cache_key]
+                if time.time() - timestamp < ttl:
+                    return result
+            
+            # Call API and cache result
+            result = await func(*args, **kwargs)
+            cache[cache_key] = (result, time.time())
+            
+            return result
+        
+        return wrapper
+    return decorator
+```
+
+## MCP Tool Integration
+
+### Using MCP Tools for Documentation
+Each integration pattern above can be enhanced with detailed documentation using the corresponding MCP tools:
+
+- **chat_completions**: Get documentation for conversational AI patterns
+- **completions**: Document text generation workflows  
+- **embeddings**: Show embedding integration examples
+- **images_generations**: Demonstrate image generation patterns
+- **audio_***: Document multimedia processing pipelines
+- **moderations**: Show content safety integration
+- **claude_messages**: Document Claude-specific patterns
+
+### Example: Getting Pattern-Specific Documentation
+```python
+# Use MCP tools to generate documentation for your specific use case
+mcp_client.call_tool("chat_completions", {
+    "model": "gpt-4",
+    "messages": your_conversation_pattern,
+    "temperature": your_temperature_setting
+})
+# Returns comprehensive documentation tailored to your pattern
+```
+
+---
+*Integration patterns for {{.BaseURL}} - Use MCP tools for detailed, parameter-specific documentation*

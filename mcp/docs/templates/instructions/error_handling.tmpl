@@ -1,0 +1,628 @@
+
+# One-API Error Handling Guide
+
+## Server: {{.ServerName}} v{{.ServerVersion}}
+**Base URL**: {{.BaseURL}}
+
+## One-API Error Handling Best Practices
+
+### Common HTTP Status Codes in One-API
+
+#### 2xx Success
+- **200 OK**: Request successful
+- **201 Created**: Resource created successfully
+
+#### 4xx Client Errors
+- **400 Bad Request**: Invalid request parameters or malformed JSON
+- **401 Unauthorized**: Missing, invalid, or expired API key
+- **403 Forbidden**: API key lacks required permissions
+- **404 Not Found**: Endpoint not found or model unavailable
+- **422 Unprocessable Entity**: Valid request but semantic errors
+- **429 Too Many Requests**: Rate limit exceeded or quota depleted
+- **500 Internal Server Error**: One-API server error or upstream provider issue
+
+### One-API Error Response Format
+
+One-API follows OpenAI's error format:
+
+```json
+{
+  "error": {
+    "type": "invalid_request_error",
+    "code": "invalid_parameter",
+    "message": "The model 'gpt-5' does not exist",
+    "param": "model"
+  }
+}
+```
+
+### Go Error Handling Implementation
+
+#### Complete Error Handling Client
+```go
+package main
+
+import (
+    "bytes"
+    "encoding/json"
+    "fmt"
+    "io"
+    "net/http"
+    "os"
+    "time"
+)
+
+type OneAPIError struct {
+    Error struct {
+        Type    string `json:"type"`
+        Code    string `json:"code"`
+        Message string `json:"message"`
+        Param   string `json:"param,omitempty"`
+    } `json:"error"`
+}
+
+func (e OneAPIError) Error() string {
+    return fmt.Sprintf("One-API Error [%s]: %s", e.Error.Code, e.Error.Message)
+}
+
+type OneAPIClient struct {
+    baseURL    string
+    apiKey     string
+    httpClient *http.Client
+}
+
+func NewOneAPIClient(baseURL, apiKey string) *OneAPIClient {
+    return &OneAPIClient{
+        baseURL: baseURL,
+        apiKey:  apiKey,
+        httpClient: &http.Client{
+            Timeout: 30 * time.Second,
+        },
+    }
+}
+
+func (c *OneAPIClient) makeRequest(method, endpoint string, body interface{}) ([]byte, error) {
+    var reqBody io.Reader
+    
+    if body != nil {
+        jsonData, err := json.Marshal(body)
+        if err != nil {
+            return nil, fmt.Errorf("failed to marshal request body: %w", err)
+        }
+        reqBody = bytes.NewBuffer(jsonData)
+    }
+    
+    req, err := http.NewRequest(method, c.baseURL+endpoint, reqBody)
+    if err != nil {
+        return nil, fmt.Errorf("failed to create request: %w", err)
+    }
+    
+    req.Header.Set("Authorization", "Bearer "+c.apiKey)
+    if body != nil {
+        req.Header.Set("Content-Type", "application/json")
+    }
+    
+    resp, err := c.httpClient.Do(req)
+    if err != nil {
+        return nil, fmt.Errorf("request failed: %w", err)
+    }
+    defer resp.Body.Close()
+    
+    responseBody, err := io.ReadAll(resp.Body)
+    if err != nil {
+        return nil, fmt.Errorf("failed to read response body: %w", err)
+    }
+    
+    if resp.StatusCode >= 400 {
+        var apiError OneAPIError
+        if err := json.Unmarshal(responseBody, &apiError); err != nil {
+            return nil, fmt.Errorf("API error (status %d): %s", resp.StatusCode, string(responseBody))
+        }
+        return nil, apiError
+    }
+    
+    return responseBody, nil
+}
+
+// Chat completion with comprehensive error handling
+func (c *OneAPIClient) ChatCompletion(model, message string) (*ChatResponse, error) {
+    request := map[string]interface{}{
+        "model": model,
+        "messages": []map[string]string{
+            {"role": "user", "content": message},
+        },
+        "temperature": 0.7,
+        "max_tokens":  1000,
+    }
+    
+    responseBody, err := c.makeRequest("POST", "/v1/chat/completions", request)
+    if err != nil {
+        return nil, fmt.Errorf("chat completion failed: %w", err)
+    }
+    
+    var response ChatResponse
+    if err := json.Unmarshal(responseBody, &response); err != nil {
+        return nil, fmt.Errorf("failed to parse response: %w", err)
+    }
+    
+    return &response, nil
+}
+```
+
+#### Retry Logic with Exponential Backoff
+```go
+func (c *OneAPIClient) ChatCompletionWithRetry(model, message string, maxRetries int) (*ChatResponse, error) {
+    var lastErr error
+    
+    for attempt := 0; attempt <= maxRetries; attempt++ {
+        response, err := c.ChatCompletion(model, message)
+        if err == nil {
+            return response, nil
+        }
+        
+        lastErr = err
+        
+        // Check if error is retryable
+        if !isRetryableError(err) {
+            return nil, fmt.Errorf("non-retryable error: %w", err)
+        }
+        
+        if attempt < maxRetries {
+            // Exponential backoff: 1s, 2s, 4s, 8s...
+            backoffDuration := time.Duration(1<<attempt) * time.Second
+            fmt.Printf("Attempt %d failed, retrying in %v: %v\n", attempt+1, backoffDuration, err)
+            time.Sleep(backoffDuration)
+        }
+    }
+    
+    return nil, fmt.Errorf("max retries (%d) exceeded, last error: %w", maxRetries, lastErr)
+}
+
+func isRetryableError(err error) bool {
+    if apiErr, ok := err.(OneAPIError); ok {
+        // Retry on rate limits and server errors
+        return apiErr.Error.Code == "rate_limit_exceeded" ||
+               apiErr.Error.Type == "server_error"
+    }
+    
+    // Retry on network errors
+    return true
+}
+```
+
+#### Circuit Breaker Pattern
+```go
+type CircuitBreaker struct {
+    maxFailures int
+    resetTimeout time.Duration
+    failures     int
+    lastFailTime time.Time
+    state        string // "CLOSED", "OPEN", "HALF_OPEN"
+}
+
+func NewCircuitBreaker(maxFailures int, resetTimeout time.Duration) *CircuitBreaker {
+    return &CircuitBreaker{
+        maxFailures:  maxFailures,
+        resetTimeout: resetTimeout,
+        state:        "CLOSED",
+    }
+}
+
+func (cb *CircuitBreaker) Call(fn func() error) error {
+    if cb.state == "OPEN" {
+        if time.Since(cb.lastFailTime) > cb.resetTimeout {
+            cb.state = "HALF_OPEN"
+            cb.failures = 0
+        } else {
+            return fmt.Errorf("circuit breaker is OPEN")
+        }
+    }
+    
+    err := fn()
+    if err != nil {
+        cb.failures++
+        cb.lastFailTime = time.Now()
+        
+        if cb.failures >= cb.maxFailures {
+            cb.state = "OPEN"
+        }
+        return err
+    }
+    
+    // Success - reset circuit breaker
+    cb.failures = 0
+    cb.state = "CLOSED"
+    return nil
+}
+```
+
+### Bash Error Handling Implementation
+
+#### Complete Error Handling Script
+```bash
+#!/bin/bash
+
+# One-API Error Handling Functions
+set -euo pipefail
+
+ONE_API_KEY="${ONE_API_KEY:-}"
+BASE_URL="{{.BaseURL}}"
+MAX_RETRIES=3
+
+# Color codes for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m' # No Color
+
+log_error() {
+    echo -e "${RED}ERROR: $1${NC}" >&2
+}
+
+log_warning() {
+    echo -e "${YELLOW}WARNING: $1${NC}" >&2
+}
+
+log_success() {
+    echo -e "${GREEN}SUCCESS: $1${NC}"
+}
+
+# Check if API key is set
+check_api_key() {
+    if [[ -z "$ONE_API_KEY" ]]; then
+        log_error "ONE_API_KEY environment variable is not set"
+        exit 1
+    fi
+}
+
+# Parse error response
+parse_error() {
+    local response="$1"
+    local error_type=$(echo "$response" | jq -r '.error.type // "unknown"')
+    local error_code=$(echo "$response" | jq -r '.error.code // "unknown"')
+    local error_message=$(echo "$response" | jq -r '.error.message // "Unknown error"')
+    
+    echo "Error Type: $error_type"
+    echo "Error Code: $error_code"
+    echo "Error Message: $error_message"
+}
+
+# Check if error is retryable
+is_retryable_error() {
+    local status_code="$1"
+    local response="$2"
+    
+    # Retry on 5xx server errors
+    if [[ "$status_code" -ge 500 ]]; then
+        return 0
+    fi
+    
+    # Retry on rate limit errors
+    if [[ "$status_code" -eq 429 ]]; then
+        return 0
+    fi
+    
+    # Check for specific error codes
+    local error_code=$(echo "$response" | jq -r '.error.code // ""')
+    if [[ "$error_code" == "rate_limit_exceeded" || "$error_code" == "server_error" ]]; then
+        return 0
+    fi
+    
+    return 1
+}
+
+# Make API request with error handling
+make_api_request() {
+    local method="$1"
+    local endpoint="$2"
+    local data="$3"
+    local attempt=1
+    
+    check_api_key
+    
+    while [[ $attempt -le $MAX_RETRIES ]]; do
+        local response
+        local status_code
+        
+        if [[ "$method" == "GET" ]]; then
+            response=$(curl -s -w "\n%{http_code}" \
+                -X "$method" \
+                -H "Authorization: Bearer $ONE_API_KEY" \
+                "${BASE_URL}${endpoint}")
+        else
+            response=$(curl -s -w "\n%{http_code}" \
+                -X "$method" \
+                -H "Content-Type: application/json" \
+                -H "Authorization: Bearer $ONE_API_KEY" \
+                -d "$data" \
+                "${BASE_URL}${endpoint}")
+        fi
+        
+        local body=$(echo "$response" | head -n -1)
+        status_code=$(echo "$response" | tail -n 1)
+        
+        # Success
+        if [[ "$status_code" -eq 200 || "$status_code" -eq 201 ]]; then
+            echo "$body"
+            return 0
+        fi
+        
+        # Handle errors
+        log_error "API request failed (attempt $attempt/$MAX_RETRIES)"
+        log_error "Status Code: $status_code"
+        parse_error "$body"
+        
+        # Check if we should retry
+        if [[ $attempt -lt $MAX_RETRIES ]] && is_retryable_error "$status_code" "$body"; then
+            local backoff_time=$((2 ** (attempt - 1)))
+            log_warning "Retrying in ${backoff_time} seconds..."
+            sleep "$backoff_time"
+            ((attempt++))
+        else
+            log_error "Request failed permanently"
+            return 1
+        fi
+    done
+}
+
+# Chat completion with error handling
+chat_completion_safe() {
+    local model="$1"
+    local message="$2"
+    
+    local data=$(jq -n \
+        --arg model "$model" \
+        --arg message "$message" \
+        '{
+            model: $model,
+            messages: [
+                {role: "user", content: $message}
+            ],
+            temperature: 0.7,
+            max_tokens: 1000
+        }')
+    
+    local result
+    if result=$(make_api_request "POST" "/v1/chat/completions" "$data"); then
+        log_success "Chat completion successful"
+        echo "$result" | jq -r '.choices[0].message.content'
+        return 0
+    else
+        log_error "Chat completion failed"
+        return 1
+    fi
+}
+
+# Test models endpoint
+test_models_endpoint() {
+    log_warning "Testing models endpoint..."
+    
+    local result
+    if result=$(make_api_request "GET" "/v1/models" ""); then
+        log_success "Models endpoint working"
+        echo "$result" | jq -r '.data[].id' | head -5
+        return 0
+    else
+        log_error "Models endpoint failed"
+        return 1
+    fi
+}
+
+# Validate model availability
+validate_model() {
+    local model="$1"
+    
+    local models
+    if models=$(make_api_request "GET" "/v1/models" ""); then
+        if echo "$models" | jq -r '.data[].id' | grep -q "^$model$"; then
+            log_success "Model '$model' is available"
+            return 0
+        else
+            log_error "Model '$model' is not available"
+            log_warning "Available models:"
+            echo "$models" | jq -r '.data[].id' | head -10
+            return 1
+        fi
+    else
+        log_error "Failed to check model availability"
+        return 1
+    fi
+}
+
+# Main error handling demo
+main() {
+    echo "One-API Error Handling Demo"
+    echo "==========================="
+    
+    # Test connection
+    if ! test_models_endpoint; then
+        log_error "Connection test failed"
+        exit 1
+    fi
+    
+    # Validate model
+    local model="gpt-3.5-turbo"
+    if ! validate_model "$model"; then
+        log_warning "Using fallback model"
+        model="gpt-3.5-turbo"  # fallback
+    fi
+    
+    # Test chat completion
+    if chat_completion_safe "$model" "Hello, One-API!"; then
+        log_success "Demo completed successfully"
+    else
+        log_error "Demo failed"
+        exit 1
+    fi
+}
+
+# Usage examples
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    main "$@"
+fi
+```
+
+### Specific Error Scenarios
+
+#### Authentication Errors
+```bash
+# Handle authentication errors
+handle_auth_error() {
+    local response="$1"
+    
+    echo "Authentication failed. Please check:"
+    echo "1. API key is correct: ONE_API_KEY=$ONE_API_KEY"
+    echo "2. API key has not expired"
+    echo "3. API key has required permissions"
+    echo "4. One-API server is accessible at {{.BaseURL}}"
+}
+```
+
+#### Model Availability Errors
+```go
+func handleModelError(err error, requestedModel string) error {
+    if apiErr, ok := err.(OneAPIError); ok {
+        if apiErr.Error.Code == "model_not_found" {
+            // Try to get available models and suggest alternatives
+            models, modelsErr := c.ListModels()
+            if modelsErr == nil {
+                fmt.Printf("Model '%s' not found. Available models:\n", requestedModel)
+                for _, model := range models.Data {
+                    fmt.Printf("- %s\n", model.ID)
+                }
+            }
+        }
+    }
+    return err
+}
+```
+
+#### Rate Limit Handling
+```bash
+handle_rate_limit() {
+    local response="$1"
+    local retry_after=$(echo "$response" | jq -r '.error.retry_after // 60')
+    
+    log_warning "Rate limit exceeded. Waiting ${retry_after} seconds before retry..."
+    sleep "$retry_after"
+}
+```
+
+### Monitoring and Logging
+
+#### Go Logging Implementation
+```go
+import "log/slog"
+
+func (c *OneAPIClient) logRequest(method, endpoint string, statusCode int, duration time.Duration) {
+    slog.Info("One-API Request",
+        "method", method,
+        "endpoint", endpoint,
+        "status_code", statusCode,
+        "duration_ms", duration.Milliseconds(),
+        "base_url", c.baseURL,
+    )
+}
+
+func (c *OneAPIClient) logError(err error, context string) {
+    slog.Error("One-API Error",
+        "error", err.Error(),
+        "context", context,
+        "base_url", c.baseURL,
+    )
+}
+```
+
+#### Bash Logging
+```bash
+# Log to file with timestamp
+log_to_file() {
+    local level="$1"
+    local message="$2"
+    local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+    
+    echo "[$timestamp] [$level] $message" >> one-api-errors.log
+}
+
+# Enhanced error logging
+log_api_error() {
+    local status_code="$1"
+    local response="$2"
+    local endpoint="$3"
+    
+    log_to_file "ERROR" "API Error - Status: $status_code, Endpoint: $endpoint"
+    log_to_file "ERROR" "Response: $response"
+    log_error "API request failed (see one-api-errors.log for details)"
+}
+```
+
+### Testing Error Scenarios
+
+#### Go Error Testing
+```go
+func TestErrorHandling(t *testing.T) {
+    client := NewOneAPIClient("{{.BaseURL}}", "invalid-key")
+    
+    // Test authentication error
+    _, err := client.ChatCompletion("gpt-3.5-turbo", "test")
+    assert.Error(t, err)
+    
+    var apiErr OneAPIError
+    assert.True(t, errors.As(err, &apiErr))
+    assert.Equal(t, "invalid_api_key", apiErr.Error.Code)
+}
+```
+
+#### Bash Error Testing
+```bash
+# Test error scenarios
+test_error_scenarios() {
+    echo "Testing error scenarios..."
+    
+    # Test with invalid API key
+    local old_key="$ONE_API_KEY"
+    export ONE_API_KEY="invalid-key"
+    
+    if chat_completion_safe "gpt-3.5-turbo" "test" 2>/dev/null; then
+        log_error "Expected authentication error but request succeeded"
+    else
+        log_success "Authentication error handled correctly"
+    fi
+    
+    export ONE_API_KEY="$old_key"
+    
+    # Test with invalid model
+    if chat_completion_safe "nonexistent-model" "test" 2>/dev/null; then
+        log_error "Expected model error but request succeeded"
+    else
+        log_success "Model error handled correctly"
+    fi
+}
+```
+
+### Best Practices Summary
+
+1. **Always validate inputs** before making API requests
+2. **Implement proper retry logic** with exponential backoff
+3. **Use circuit breakers** for high-availability applications
+4. **Log all errors** with sufficient context for debugging
+5. **Handle rate limits gracefully** with appropriate delays
+6. **Validate API keys and models** before making requests
+7. **Implement timeouts** to prevent hanging requests
+8. **Use structured error handling** with proper error types
+9. **Monitor error rates** and set up alerts for production
+10. **Test error scenarios** regularly to ensure robustness
+
+### Production Deployment Checklist
+
+- [ ] API key validation and rotation strategy
+- [ ] Error monitoring and alerting setup
+- [ ] Rate limit handling and backoff strategies
+- [ ] Circuit breaker implementation for high availability
+- [ ] Comprehensive logging and error tracking
+- [ ] Health check endpoints for monitoring
+- [ ] Graceful degradation for service failures
+- [ ] Error rate thresholds and automated responses
+
+---
+*Error handling guide for {{.ServerName}} v{{.ServerVersion}}*
