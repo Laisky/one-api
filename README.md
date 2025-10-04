@@ -63,6 +63,7 @@ Also welcome to register and use my deployed one-api gateway, which supports var
     - [Why this fork exists](#why-this-fork-exists)
     - [What’s new](#whats-new)
   - [Multi Agent Framework Compatible](#multi-agent-framework-compatible)
+  - [›_ OpenCode Support](#_-opencode-support)
   - [Tutorial](#tutorial)
     - [Docker Compose Deployment](#docker-compose-deployment)
     - [Kubernetes Deployment](#kubernetes-deployment)
@@ -131,6 +132,105 @@ This repository is fully compatible with multi-agent frameworks and is recommend
 
 > [!TIP]
 > For optimal performance in multi-agent environments, it's recommended to use models that already have automated cached prompt capabilities, such as `grok-code-fast-1`. These models can significantly reduce latency and improve response times by leveraging cached prompts, which is especially beneficial when multiple agents are making frequent requests with similar contexts.
+
+## ›_ OpenCode Support
+
+<p align="center">
+  <a href="https://opencode.ai">
+    <picture>
+      <source srcset="https://github.com/sst/opencode/raw/dev/packages/console/app/src/asset/logo-ornate-dark.svg" media="(prefers-color-scheme: dark)">
+      <source srcset="https://github.com/sst/opencode/raw/dev/packages/console/app/src/asset/logo-ornate-light.svg" media="(prefers-color-scheme: light)">
+      <img src="https://github.com/sst/opencode/raw/dev/packages/console/app/src/asset/logo-ornate-light.svg" alt="OpenCode logo">
+    </picture>
+  </a>
+</p>
+
+[opencode.ai](https://opencode.ai) is an AI coding agent built for the terminal. OpenCode is fully open source, giving you control and `freedom` to use any provider, any model, and any editor. It's available as both a CLI and TUI.
+
+One‑API integrates seamlessly with OpenCode: you can connect any One‑API endpoint and use all your unified models through OpenCode's interface (both CLI and TUI).
+
+To get started, create or edit `~/.config/opencode/opencode.json` like this:
+
+**Using OpenAI SDK:**
+
+```json
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "one-api": {
+      "npm": "@ai-sdk/openai",
+      "name": "One API",
+      "options": {
+        "baseURL": "http://localhost:3000/v1",
+        "apiKey":  "HANDLE_APIKEY_HERE"
+      },
+      "models": {
+        "gpt-4.1-2025-04-14": {
+          "name": "GPT 4.1"
+        }
+      }
+    }
+  }
+}
+```
+
+**Using Anthropic SDK:**
+
+```json
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "one-api-anthropic": {
+      "npm": "@ai-sdk/anthropic",
+      "name": "One API (Anthropic)",
+      "options": {
+        "baseURL": "http://localhost:3000/v1",
+        "apiKey":  "HANDLE_APIKEY_HERE"
+      },
+      "models": {
+        "claude-sonnet-4-5": {
+          "name": "Claude Sonnet 4.5"
+        }
+      }
+    }
+  }
+}
+```
+
+- Replace `HANDLE_APIKEY_HERE` with your One‑API key.
+- Make sure `baseURL` matches your running One‑API endpoint.
+- Now, any opencode command (like `opencode chat`, `opencode run`, and more) works with all your One‑API models directly from the terminal! 😎
+
+**Best Practice - Using Environment Variables:**
+
+For better security, use environment variables instead of hardcoding API keys:
+
+```json
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "one-api": {
+      "npm": "@ai-sdk/openai",
+      "name": "One API",
+      "options": {
+        "baseURL": "http://localhost:3000/v1",
+        "apiKey": "{env:ONEAPI_API_KEY}"
+      },
+      "models": {
+        "gpt-4.1-2025-04-14": {
+          "name": "GPT 4.1"
+        }
+      }
+    }
+  }
+}
+```
+
+Then set the environment variable in your shell:
+
+```bash
+export ONEAPI_API_KEY="sk-your-actual-api-key-here"
+```
 
 ## Tutorial
 

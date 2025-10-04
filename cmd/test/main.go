@@ -19,6 +19,7 @@ import (
 	"github.com/Laisky/errors/v2"
 	glog "github.com/Laisky/go-utils/v5/log"
 	"github.com/Laisky/zap"
+	_ "github.com/joho/godotenv/autoload"
 	"github.com/olekukonko/tablewriter"
 	"golang.org/x/sync/errgroup"
 )
