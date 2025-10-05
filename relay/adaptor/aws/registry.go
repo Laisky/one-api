@@ -11,6 +11,8 @@ import (
 	llama3 "github.com/songquanpeng/one-api/relay/adaptor/aws/llama3"
 	mistral "github.com/songquanpeng/one-api/relay/adaptor/aws/mistral"
 	openai "github.com/songquanpeng/one-api/relay/adaptor/aws/openai"
+	qwen "github.com/songquanpeng/one-api/relay/adaptor/aws/qwen"
+
 	"github.com/songquanpeng/one-api/relay/adaptor/aws/utils"
 	writer "github.com/songquanpeng/one-api/relay/adaptor/aws/writer"
 )
@@ -24,6 +26,7 @@ const (
 	AwsLlama3
 	AwsMistral
 	AwsOpenAI
+	AwsQwen
 	AwsWriter
 )
 
@@ -51,6 +54,9 @@ func init() {
 	}
 	for model := range openai.AwsModelIDMap {
 		adaptors[model] = AwsOpenAI
+	}
+	for model := range qwen.AwsModelIDMap {
+		adaptors[model] = AwsQwen
 	}
 	for model := range writer.AwsModelIDMap {
 		adaptors[model] = AwsWriter
