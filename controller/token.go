@@ -304,7 +304,12 @@ func ConsumeToken(c *gin.Context) {
 		return
 	}
 
-	phase := ConsumePhase(strings.ToLower(strings.TrimSpace(req.Phase.String())))
+	phaseValue := ""
+	if req.Phase != nil {
+		phaseValue = strings.ToLower(strings.TrimSpace(req.Phase.String()))
+	}
+
+	phase := ConsumePhase(phaseValue)
 	if phase == "" {
 		phase = ConsumePhaseSingle
 	}

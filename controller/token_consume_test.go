@@ -255,3 +255,33 @@ func TestConsumeTokenAutoConfirmTimeout(t *testing.T) {
 		require.Contains(t, logEntry.Content, "auto-confirmed")
 	}
 }
+
+func TestConsumeTokenDefaultsToSinglePhase(t *testing.T) {
+	cleanup, user, token := setupConsumeTokenTest(t)
+	defer cleanup()
+
+	body := `{"add_used_quota":120,"add_reason":"serviceD"}`
+	c, recorder := newConsumeTokenContext(t, http.MethodPost, body, user.Id, token.Id, "req-single")
+
+	ConsumeToken(c)
+	require.Equal(t, http.StatusOK, recorder.Code)
+
+	var resp map[string]interface{}
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &resp))
+	require.True(t, resp["success"].(bool))
+
+	data := resp["data"].(map[string]interface{})
+	require.Equal(t, float64(token.RemainQuota-120), data["remain_quota"])
+
+	transaction := resp["transaction"].(map[string]interface{})
+	require.Equal(t, "confirmed", transaction["status"])
+	require.EqualValues(t, 120, transaction["final_quota"])
+
+	refreshedToken, err := model.GetTokenByIds(token.Id, user.Id)
+	require.NoError(t, err)
+	require.Equal(t, int64(880), refreshedToken.RemainQuota)
+
+	refreshedUser, err := model.GetUserById(user.Id, true)
+	require.NoError(t, err)
+	require.Equal(t, int64(880), refreshedUser.Quota)
+}
