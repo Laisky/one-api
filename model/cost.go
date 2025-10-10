@@ -77,15 +77,14 @@ func UpdateUserRequestCostQuotaByRequestID(userID int, requestID string, quota i
 	}
 	if err := DB.Create(docu).Error; err == nil {
 		return nil
-	} else {
-		// If create failed (possibly due to unique race), retry update once
-		if err2 := DB.Model(&UserRequestCost{}).
-			Where("request_id = ?", requestID).
-			Update("quota", quota).Error; err2 != nil {
-			return errors.Wrap(err2, "failed to update UserRequestCost quota after create race")
-		}
-		return nil
 	}
+	// If create failed (possibly due to unique race), retry update once
+	if err2 := DB.Model(&UserRequestCost{}).
+		Where("request_id = ?", requestID).
+		Update("quota", quota).Error; err2 != nil {
+		return errors.Wrap(err2, "failed to update UserRequestCost quota after create race")
+	}
+	return nil
 }
 
 // GetCostByRequestId get cost by request id
@@ -141,6 +140,40 @@ func MigrateUserRequestCostEnsureUniqueRequestID() error {
 		tableExists = DB.Migrator().HasTable(&UserRequestCost{})
 	}
 	if !tableExists {
+		return nil
+	}
+
+	// Early return if migration is already complete
+	indexName := "idx_user_request_costs_request_id"
+	var indexExists bool
+	if common.UsingMySQL {
+		indexExists, err = mysqlIndexExists("user_request_costs", indexName)
+	} else {
+		indexExists = DB.Migrator().HasIndex(&UserRequestCost{}, indexName)
+	}
+	if err != nil {
+		return errors.Wrap(err, "check user_request_costs index existence")
+	}
+
+	// Check if column is already sized correctly
+	var columnSized bool
+	if common.UsingMySQL {
+		columnSized, err = isMySQLRequestIDColumnSized()
+		if err != nil {
+			return err
+		}
+	} else if common.UsingPostgreSQL {
+		columnSized, err = isPostgresRequestIDColumnSized()
+		if err != nil {
+			return err
+		}
+	} else {
+		// SQLite doesn't need column sizing
+		columnSized = true
+	}
+
+	// If both index exists and column is sized correctly, skip migration
+	if indexExists && columnSized {
 		return nil
 	}
 
@@ -207,46 +240,36 @@ func MigrateUserRequestCostEnsureUniqueRequestID() error {
 		return err
 	}
 
-	if common.UsingMySQL {
+	if common.UsingMySQL && !columnSized {
 		if err = ensureMySQLRequestIDColumnSized(); err != nil {
 			return err
 		}
-	} else if common.UsingPostgreSQL {
+	} else if common.UsingPostgreSQL && !columnSized {
 		if err = ensurePostgresRequestIDColumnSized(); err != nil {
 			return err
 		}
 	}
 
-	indexName := "idx_user_request_costs_request_id"
-	var hasIndex bool
-	if common.UsingMySQL {
-		hasIndex, err = mysqlIndexExists("user_request_costs", indexName)
-	} else {
-		hasIndex = DB.Migrator().HasIndex(&UserRequestCost{}, indexName)
-	}
-	if err != nil {
-		return errors.Wrap(err, "check user_request_costs index existence")
-	}
-	if hasIndex {
+	if indexExists {
 		return nil
 	}
 
 	// 3) Create unique index if missing. Use generic SQL with dialect-aware fallbacks.
 	switch {
 	case common.UsingPostgreSQL:
-		if err = DB.Exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_user_request_costs_request_id ON user_request_costs (request_id)").Error; err != nil {
+		if err = DB.Exec(fmt.Sprintf("CREATE UNIQUE INDEX IF NOT EXISTS %s ON user_request_costs (request_id)", indexName)).Error; err != nil {
 			return errors.Wrap(err, "create unique index on user_request_costs.request_id failed (postgres)")
 		}
 	case common.UsingMySQL:
-		if err = DB.Exec("ALTER TABLE user_request_costs ADD UNIQUE INDEX idx_user_request_costs_request_id (request_id)").Error; err != nil {
+		if err = DB.Exec(fmt.Sprintf("ALTER TABLE user_request_costs ADD UNIQUE INDEX %s (request_id)", indexName)).Error; err != nil {
 			return errors.Wrap(err, "create unique index on user_request_costs.request_id failed (mysql)")
 		}
 	case common.UsingSQLite:
-		if err = DB.Exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_user_request_costs_request_id ON user_request_costs (request_id)").Error; err != nil {
+		if err = DB.Exec(fmt.Sprintf("CREATE UNIQUE INDEX IF NOT EXISTS %s ON user_request_costs (request_id)", indexName)).Error; err != nil {
 			return errors.Wrap(err, "create unique index on user_request_costs.request_id failed (sqlite)")
 		}
 	default:
-		if err = DB.Exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_user_request_costs_request_id ON user_request_costs (request_id)").Error; err != nil {
+		if err = DB.Exec(fmt.Sprintf("CREATE UNIQUE INDEX IF NOT EXISTS %s ON user_request_costs (request_id)", indexName)).Error; err != nil {
 			return errors.Wrap(err, "create unique index on user_request_costs.request_id failed")
 		}
 	}
@@ -311,17 +334,28 @@ func mysqlIndexExists(table, index string) (bool, error) {
 	return res.Count > 0, nil
 }
 
+// isMySQLRequestIDColumnSized checks if request_id column is already VARCHAR (not TEXT).
+func isMySQLRequestIDColumnSized() (bool, error) {
+	var dataType string
+	query := "SELECT DATA_TYPE FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = ? AND column_name = ?"
+	if err := DB.Raw(query, "user_request_costs", "request_id").Scan(&dataType).Error; err != nil {
+		return false, errors.Wrap(err, "query user_request_costs.request_id column type")
+	}
+	dataType = strings.ToLower(dataType)
+	if dataType == "" {
+		return false, nil
+	}
+	return !strings.Contains(dataType, "text"), nil
+}
+
 // ensureMySQLRequestIDColumnSized converts legacy TEXT request_id columns to VARCHAR(32) for index support.
 func ensureMySQLRequestIDColumnSized() error {
-	type result struct {
-		DataType string `gorm:"column:data_type"`
-	}
-	var res result
+	var dataType string
 	query := "SELECT DATA_TYPE FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = ? AND column_name = ?"
-	if err := DB.Raw(query, "user_request_costs", "request_id").Scan(&res).Error; err != nil {
+	if err := DB.Raw(query, "user_request_costs", "request_id").Scan(&dataType).Error; err != nil {
 		return errors.Wrap(err, "query user_request_costs.request_id column type")
 	}
-	dataType := strings.ToLower(res.DataType)
+	dataType = strings.ToLower(dataType)
 	if dataType == "" {
 		return nil
 	}
@@ -334,6 +368,20 @@ func ensureMySQLRequestIDColumnSized() error {
 		}
 	}
 	return nil
+}
+
+// isPostgresRequestIDColumnSized checks if request_id column is already the correct VARCHAR type.
+func isPostgresRequestIDColumnSized() (bool, error) {
+	var dataType string
+	query := "SELECT data_type FROM information_schema.columns WHERE table_schema = CURRENT_SCHEMA() AND table_name = ? AND column_name = ?"
+	if err := DB.Raw(query, "user_request_costs", "request_id").Scan(&dataType).Error; err != nil {
+		return false, errors.Wrap(err, "query user_request_costs.request_id column type (postgres)")
+	}
+	dataType = strings.ToLower(dataType)
+	if dataType == "" {
+		return false, nil
+	}
+	return strings.Contains(dataType, "character varying") || strings.Contains(dataType, "varchar"), nil
 }
 
 // ensurePostgresRequestIDColumnSized enforces a VARCHAR(32) type for request_id in PostgreSQL deployments.
