@@ -125,6 +125,47 @@ Agents also have access to built-in file and project tools:
 **Code Execution**:
 - `bash(command)`: Execute shell commands for builds, tests, git operations
 
+**Task Management**:
+- `todowrite(todos)`: Create/update task lists for complex multi-step work
+  - Each todo has: `id`, `content`, `status` (`pending`|`in_progress`|`completed`|`cancelled`), `priority` (`high`|`medium`|`low`)
+- `todoread()`: View current task list
+- `task(description, prompt, subagent_type)`: Launch specialized agents for complex tasks
+  - `subagent_type: "general"`: General-purpose agent for research, code search, and multi-step tasks
+
+**Usage Guidelines for Task Management**:
+- Use for complex multi-step tasks (3+ steps) or non-trivial work
+- Create todos immediately when receiving complex user requests
+- Mark ONE task as `in_progress` at a time
+- Update status in real-time - mark `completed` immediately after finishing each task
+- Use `task` tool for open-ended searches requiring multiple rounds of globbing/grepping
+- Launch multiple `task` agents concurrently for parallel research when possible
+
+**When to Use Todo List**:
+- Multi-step features requiring multiple file changes
+- Bug fixes affecting multiple components
+- Refactoring across multiple packages
+- User provides numbered/comma-separated task lists
+- Tasks requiring careful tracking and organization
+
+**When NOT to Use Todo List**:
+- Single straightforward tasks
+- Trivial operations (< 3 steps)
+- Purely conversational/informational requests
+
+**Example Usage**:
+```
+# Complex feature implementation
+todowrite([
+  {"id": "1", "content": "Add dark mode toggle to settings UI", "status": "pending", "priority": "high"},
+  {"id": "2", "content": "Implement dark mode state management", "status": "pending", "priority": "high"},
+  {"id": "3", "content": "Update CSS styles for dark theme", "status": "pending", "priority": "medium"},
+  {"id": "4", "content": "Run tests and build", "status": "pending", "priority": "high"}
+])
+
+# Launch research agent
+task("Search for rate limiting patterns", "Find all rate limiting implementations in the codebase and summarize approaches", "general")
+```
+
 **Project Knowledge**:
 - `.github/instructions/*.md`: Instruction files for Gopls, DeepWiki, Filesystem, Memory
 - `mcp/docs/README.md`: Internal MCP server documentation
@@ -135,14 +176,18 @@ Agents also have access to built-in file and project tools:
    - Go code intelligence → Gopls MCP
    - External API research → DeepWiki MCP
    - AWS documentation → AWS Knowledge MCP
+   - Complex multi-step tasks → Task management tools (todowrite/task)
    - File operations → Built-in read/write/edit/list tools
    - Code search → Built-in grep/glob tools
    - Build/test/git → Built-in bash tool
 
 2. **Workflow Integration**:
    - Start Go sessions with `gopls_go_workspace` for context
+   - Create todo list with `todowrite` for complex tasks (3+ steps)
+   - Mark tasks `in_progress` when starting, `completed` immediately when done
    - Use `read` before `edit` to verify file contents
    - Use `glob` + `grep` for efficient code discovery
+   - Use `task` tool for open-ended searches requiring multiple rounds
    - Use `bash` for running tests, builds, and git operations
    - Consult instruction files (`.github/instructions/*.md`) for architectural patterns
 
