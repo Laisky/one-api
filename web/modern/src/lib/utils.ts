@@ -121,3 +121,102 @@ export const loadSystemStatus = async (): Promise<SystemStatus | null> => {
 
   return null
 }
+
+// Crypto utility functions
+export async function generateSHA256Digest(input: string): Promise<string> {
+  // Encode the input string as UTF-8
+  const encoder = new TextEncoder();
+  const data = encoder.encode(input);
+
+  // Generate the SHA-256 hash using the Web Crypto API
+  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+
+  // Convert the hash to a hexadecimal string
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+
+  // Return the first 8 characters for a shorter digest
+  return hashHex.slice(0, 8);
+}
+
+// UUID v4 utility function
+export function generateUUIDv4(): string {
+  // Use crypto.randomUUID if available (modern browsers)
+  if (crypto && crypto.randomUUID) {
+    return crypto.randomUUID();
+  }
+
+  // Fallback for older browsers - generate UUID v4 manually
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
+    const r = Math.random() * 16 | 0;
+    const v = c === 'x' ? r : (r & 0x3 | 0x8);
+    return v.toString(16);
+  });
+}
+
+// Local storage utilities
+export const saveToStorage = (key: string, data: any) => {
+  try {
+    localStorage.setItem(key, JSON.stringify(data))
+  } catch (error) {
+    console.warn('Failed to save to localStorage:', error)
+  }
+}
+
+export const loadFromStorage = (key: string, defaultValue: any = null) => {
+  try {
+    const item = localStorage.getItem(key)
+    return item ? JSON.parse(item) : defaultValue
+  } catch (error) {
+    console.warn('Failed to load from localStorage:', error)
+    return defaultValue
+  }
+}
+
+export const clearStorage = (key: string) => {
+  try {
+    localStorage.removeItem(key)
+  } catch (error) {
+    console.warn('Failed to clear localStorage:', error)
+  }
+}
+
+export interface Message {
+  role: 'user' | 'assistant' | 'error' | 'system'
+  content: string | any[]
+  timestamp: number
+  error?: boolean
+  reasoning_content?: string | null  // For reasoning content from AI models
+  model?: string  // Model name used for assistant messages
+}
+
+// Helper function to extract string content from Message content (which can be string or array)
+export const getMessageStringContent = (content: string | any[]): string => {
+  if (typeof content === 'string') {
+    return content
+  }
+
+  if (Array.isArray(content)) {
+    // Extract text content from array format (compatible with MessageContent structure)
+    return content
+      .filter(item => item && item.type === 'text')
+      .map(item => item.text || '')
+      .join('')
+  }
+
+  return ''
+}
+
+// Helper function to check if message has mixed content (text + images)
+export const hasMultiModalContent = (content: string | any[]): boolean => {
+  return Array.isArray(content) && content.some(item => item && item.type === 'image_url')
+}
+
+// Function to copy text to clipboard
+export const copyToClipboard = async (text: string) => {
+  try {
+    await navigator.clipboard.writeText(text)
+  } catch (error) {
+    console.error('Failed to copy to clipboard:', error)
+  }
+}

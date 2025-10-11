@@ -75,7 +75,7 @@ export function Header() {
     { name: 'Top Up', to: '/topup', show: true },
     { name: 'Models', to: '/models', show: true },
     { name: 'Status', to: '/status', show: true },
-    { name: 'Chat', to: '/chat', show: !!chatLink },
+    { name: 'Playground', to: '/chat', show: true },
     { name: 'About', to: '/about', show: true },
     { name: 'Settings', to: '/settings', show: isAdmin },
   ].filter(item => item.show).map(item => ({

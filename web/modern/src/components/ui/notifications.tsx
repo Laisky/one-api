@@ -1,5 +1,31 @@
 import React, { createContext, useCallback, useContext, useMemo, useRef, useState } from 'react'
 
+// Helper function to copy text to clipboard
+const copyToClipboard = async (text: string): Promise<boolean> => {
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(text)
+      return true
+    } else {
+      // Fallback for older browsers
+      const textArea = document.createElement('textarea')
+      textArea.value = text
+      textArea.style.position = 'fixed'
+      textArea.style.left = '-999999px'
+      textArea.style.top = '-999999px'
+      document.body.appendChild(textArea)
+      textArea.focus()
+      textArea.select()
+      const result = document.execCommand('copy')
+      document.body.removeChild(textArea)
+      return result
+    }
+  } catch (err) {
+    console.error('Failed to copy text to clipboard:', err)
+    return false
+  }
+}
+
 type NotificationType = 'success' | 'error' | 'info' | 'warning'
 
 export interface NotificationOptions {
@@ -14,7 +40,7 @@ interface Notification extends Required<Omit<NotificationOptions, 'durationMs'>>
   durationMs: number
 }
 
-interface NotificationsContextValue {
+export interface NotificationsContextValue {
   notify: (opts: NotificationOptions) => string
   dismiss: (id: string) => void
 }
@@ -28,6 +54,19 @@ export function useNotifications(): NotificationsContextValue {
 }
 
 function genId() {
+  // Use crypto.randomUUID() if available for secure ID generation
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+    return crypto.randomUUID()
+  }
+
+  // Fallback to crypto.getRandomValues() for secure random bytes
+  if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
+    const array = new Uint8Array(16)
+    crypto.getRandomValues(array)
+    return Array.from(array, byte => byte.toString(36)).join('').slice(0, 11)
+  }
+
+  // Final fallback to Math.random() (should rarely be needed in modern browsers)
   return Math.random().toString(36).slice(2)
 }
 
@@ -72,6 +111,20 @@ export const NotificationsViewport: React.FC<{
   items: Notification[]
   onClose: (id: string) => void
 }> = ({ items, onClose }) => {
+  const handleCopy = async (e: React.MouseEvent, notification: Notification) => {
+    e.preventDefault()
+    e.stopPropagation()
+
+    // Create the text to copy (include both title and message if both exist)
+    const textToCopy = notification.title
+      ? `${notification.title}: ${notification.message}`
+      : notification.message
+
+    const success = await copyToClipboard(textToCopy)
+
+    // Provide feedback - success is handled silently since the user gets immediate clipboard access
+  }
+
   return (
     <div
       className="fixed right-3 top-3 z-[1000] flex w-[90vw] max-w-sm flex-col gap-2 md:right-6 md:top-6"
@@ -79,16 +132,14 @@ export const NotificationsViewport: React.FC<{
       aria-label="Notifications"
     >
       {items.map((n) => (
-        <button
+        <div
           key={n.id}
-          onClick={() => onClose(n.id)}
           className={[
-            'group relative w-full cursor-pointer rounded-md border px-4 py-3 text-left shadow-sm transition',
-            'focus:outline-none focus:ring-2 focus:ring-offset-2',
-            n.type === 'success' && 'border-green-300 bg-green-50 text-green-900 focus:ring-green-400',
-            n.type === 'error' && 'border-red-300 bg-red-50 text-red-900 focus:ring-red-400',
-            n.type === 'warning' && 'border-yellow-300 bg-yellow-50 text-yellow-900 focus:ring-yellow-400',
-            n.type === 'info' && 'border-blue-300 bg-blue-50 text-blue-900 focus:ring-blue-400',
+            'group relative w-full rounded-md border px-4 py-3 shadow-sm transition',
+            n.type === 'success' && 'border-green-300 bg-green-50 text-green-900',
+            n.type === 'error' && 'border-red-300 bg-red-50 text-red-900',
+            n.type === 'warning' && 'border-yellow-300 bg-yellow-50 text-yellow-900',
+            n.type === 'info' && 'border-blue-300 bg-blue-50 text-blue-900',
           ].join(' ')}
           aria-live="polite"
         >
@@ -97,12 +148,24 @@ export const NotificationsViewport: React.FC<{
               {n.title && <div className="font-medium leading-5">{n.title}</div>}
               <div className="text-sm leading-5">{n.message}</div>
             </div>
-            <span
-              className="shrink-0 rounded p-1 text-xs text-current/70 hover:text-current"
-              aria-label="Dismiss"
-            >
-              ✕
-            </span>
+            <div className="flex shrink-0 gap-1">
+              <button
+                onClick={(e) => handleCopy(e, n)}
+                className="rounded p-1 text-xs text-current/70 hover:text-current focus:outline-none focus:ring-2 focus:ring-current focus:ring-offset-1"
+                aria-label="Copy notification"
+                title="Copy notification content"
+              >
+                📋
+              </button>
+              <button
+                onClick={() => onClose(n.id)}
+                className="rounded p-1 text-xs text-current/70 hover:text-current focus:outline-none focus:ring-2 focus:ring-current focus:ring-offset-1"
+                aria-label="Dismiss"
+                title="Dismiss notification"
+              >
+                ✕
+              </button>
+            </div>
           </div>
           <div className="absolute inset-x-0 -bottom-[1px]">
             <div
@@ -116,7 +179,7 @@ export const NotificationsViewport: React.FC<{
               style={{ animationDuration: `${n.durationMs}ms` }}
             />
           </div>
-        </button>
+        </div>
       ))}
 
       {/* keyframes for progress bar */}
