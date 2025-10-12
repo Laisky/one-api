@@ -212,9 +212,12 @@ task("Search for rate limiting patterns", "Find all rate limiting implementation
    - AWS Knowledge may return "NOT FOUND" for invalid resources
    - Always verify file operations by reading after write/edit
 
-4. **Performance**:
-   - Use `grep` to narrow down files before reading
-   - Use `glob` patterns to filter searches
+4. **Performance** (Unix Philosophy):
+   - **Do one thing well**: `grep` searches content, `glob` matches file patterns
+   - **Compose tools**: Use `glob` to find files, then `grep` to search within them
+   - **Filter early**: Narrow down with `glob` patterns before expensive `read` operations
+   - **Stream processing**: Tools process data efficiently without loading everything into memory
+   - **Example workflow**: `glob("**/*.go")` → `grep("rate.*limit")` → `read(matched_files)`
    - Cache DeepWiki results - docs don't change often
    - Batch related operations when possible
 
