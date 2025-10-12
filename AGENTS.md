@@ -1,5 +1,19 @@
 # Repository Guidelines for Agents
 
+## Table of Contents
+
+1. [Commands](#commands)
+2. [Code Style](#code-style)
+3. [Concurrency](#concurrency)
+4. [MCP Server Instructions](#mcp-server-instructions)
+   - [Available MCP Servers](#available-mcp-servers)
+     - [1. Gopls MCP Server](#1-gopls-mcp-server)
+     - [2. DeepWiki MCP Server](#2-deepwiki-mcp-server)
+     - [3. AWS Knowledge MCP Server](#3-aws-knowledge-mcp-server)
+   - [Built-in Tools (Not MCP)](#built-in-tools-not-mcp)
+   - [MCP & Tool Usage Best Practices](#mcp--tool-usage-best-practices)
+5. [Testing Guidelines](#testing-guidelines)
+
 ## Commands
 
 **Build**: `go build` or `make build-frontend-modern` for frontend  
