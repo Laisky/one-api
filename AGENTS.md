@@ -129,7 +129,9 @@ mcp-aws-knowledge_aws___read_documentation("https://docs.aws.amazon.com/lambda/l
 Agents also have access to built-in file and project tools:
 
 **File Operations**:
-- `read(filePath)`: Read file contents with line numbers
+- `read(filePath, offset?, limit?)`: Read file contents with line numbers (default: first 2000 lines)
+  - `offset`: 0-based line number to start reading from
+  - `limit`: Number of lines to read (default 2000)
 - `write(filePath, content)`: Create or overwrite files
 - `edit(filePath, oldString, newString)`: Precise string replacement
 - `list(path)`: List directory contents
@@ -146,6 +148,7 @@ Agents also have access to built-in file and project tools:
 - `task(description, prompt, subagent_type)`: Launch specialized agents for complex tasks
   - `subagent_type: "general"`: General-purpose agent for research, code search, and multi-step tasks
   - ⚠️ **Note for Humans**: When delegating to sub-agents using the same AI model, there's no performance or quality benefit - the parent agent and sub-agent have identical capabilities. Delegation is most effective when using different model types (e.g., delegating simple search tasks to a faster/cheaper model, or complex reasoning to a more capable model). Consider whether the task truly requires delegation or can be handled directly by the current agent.
+  - 💡 **Recommended for `general` type**: Use built-in tools (`read`, `glob`, `grep`, etc.) instead of `bash` for research and code search. This provides better performance, structured output, and follows the Unix Philosophy of composable tools.
 
 **Usage Guidelines for Task Management**:
 - Use for complex multi-step tasks (3+ steps) or non-trivial work
@@ -217,7 +220,8 @@ task("Search for rate limiting patterns", "Find all rate limiting implementation
    - **Compose tools**: Use `glob` to find files, then `grep` to search within them
    - **Filter early**: Narrow down with `glob` patterns before expensive `read` operations
    - **Stream processing**: Tools process data efficiently without loading everything into memory
-   - **Example workflow**: `glob("**/*.go")` → `grep("rate.*limit")` → `read(matched_files)`
+   - **Lazy loading**: Use `read(file, offset, limit)` to read only needed lines after `grep` finds locations
+   - **Example workflow**: `glob("**/*.go")` → `grep("rate.*limit")` → `read(file, offset=166, limit=11)`
    - Cache DeepWiki results - docs don't change often
    - Batch related operations when possible
 
