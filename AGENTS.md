@@ -230,6 +230,136 @@ task("Search for rate limiting patterns", "Find all rate limiting implementation
    - Validate URLs before fetching external documentation
    - Review instruction files before modifying billing/pricing logic
 
+### Bad Practices to Avoid
+
+#### 1. **Incorrect Tool Usage**
+
+**❌ Bad: Using `bash` with `find`/`grep` for code search**
+```bash
+# BAD - Ignores .ignore file, searches node_modules, slow
+bash("find web -name '*.js' | xargs grep 'useState'")
+bash("grep -r 'pattern' .")
+```
+
+**✅ Good: Use composable tools (Unix Philosophy)**
+```
+# GOOD - Respects .ignore, fast, structured output
+glob("web/**/*.js")
+grep("useState", path="/path/to/web", include="*.js")
+```
+
+**Why it matters**:
+- `bash` commands ignore `.ignore` configuration → searches unnecessary files (node_modules, build artifacts)
+- Composable tools are faster and provide structured output
+- Follows Unix Philosophy: each tool does one thing well
+
+#### 2. **Inefficient File Operations**
+
+**❌ Bad: Reading entire large files unnecessarily**
+```
+# BAD - Reads all 5000 lines when you only need lines 100-120
+read("/path/to/large-file.go")
+```
+
+**✅ Good: Use offset and limit for targeted reading**
+```
+# GOOD - After grep finds line 105, read only needed context
+grep("functionName", include="*.go")  # Finds match at line 105
+read("/path/to/large-file.go", offset=100, limit=30)  # Read lines 100-130
+```
+
+#### 3. **Tool Misuse Patterns**
+
+**❌ Bad: Inefficient workflow**
+```
+# BAD - Searches all files without filtering
+grep("useState")  # Returns thousands of matches from node_modules
+```
+
+**✅ Good: Filter early, compose tools**
+```
+# GOOD - Filter with glob first, then search
+glob("web/modern/src/**/*.tsx")  # Get TypeScript files only
+grep("useState", path="web/modern/src", include="*.tsx")  # Search filtered set
+```
+
+#### 4. **Ignoring .ignore File**
+
+**❌ Bad: Manually excluding paths in every command**
+```bash
+# BAD - Repeating exclusions, error-prone
+bash("find . -name '*.go' -not -path '*/node_modules/*' -not -path '*/build/*'")
+```
+
+**✅ Good: Configure .ignore once, tools respect it automatically**
+```
+# Configure .ignore file once:
+node_modules
+build
+*.db
+
+# GOOD - All subsequent glob/grep automatically exclude these
+glob("**/*.go")  # Automatically excludes node_modules, build, *.db
+```
+
+#### 5. **Bash Command Anti-Patterns**
+
+**❌ Bad: Using bash for searches that built-in tools handle better**
+```bash
+# BAD - All of these should use composable tools (Unix Philosophy) instead
+bash("find . -type f -name '*.go'")          # Use glob instead
+bash("grep -r 'pattern' src/")               # Use grep tool instead
+bash("cat file.go")                          # Use read instead
+bash("ls -la directory/")                    # Use list instead
+```
+
+**✅ Good: Use bash only for operations built-in tools can't do**
+```bash
+# GOOD - These are appropriate bash uses:
+bash("go test -v ./...")                     # Running tests
+bash("make lint")                            # Build/lint operations
+bash("git status")                           # Git operations
+bash("npm install")                          # Package management
+```
+
+#### 6. **Performance Anti-Patterns**
+
+**❌ Bad: Sequential when parallel is possible**
+```
+# BAD - Reads files one by one
+read("file1.go")
+# wait...
+read("file2.go")
+# wait...
+read("file3.go")
+```
+
+**✅ Good: Batch operations when possible**
+```
+# GOOD - Multiple tool calls in single message execute in parallel
+read("file1.go")
+read("file2.go")
+read("file3.go")
+# All execute concurrently
+```
+
+#### 7. **MCP Tool Misuse**
+
+**❌ Bad: Using wrong MCP server for the task**
+```
+# BAD - Using bash to search Go symbols
+bash("grep -r 'func.*ProcessRequest' .")
+```
+
+**✅ Good: Use appropriate MCP server**
+```
+# GOOD - Use Gopls for Go intelligence
+gopls_go_search("ProcessRequest")
+gopls_go_symbol_references(file, "ProcessRequest")
+```
+
+**Summary**: Always prefer composable tools that follow Unix Philosophy (`glob`, `grep`, `read`, `list`) over `bash` for file operations and code search. These tools respect `.ignore` configuration, provide structured output, and compose efficiently. Reserve `bash` for builds, tests, git, and package management.
+
 ## Testing Guidelines
 
 - All bug fixes and features require updated unit tests
