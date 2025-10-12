@@ -131,6 +131,7 @@ Agents also have access to built-in file and project tools:
 - `todoread()`: View current task list
 - `task(description, prompt, subagent_type)`: Launch specialized agents for complex tasks
   - `subagent_type: "general"`: General-purpose agent for research, code search, and multi-step tasks
+  - ⚠️ **Note for Humans**: When delegating to sub-agents using the same AI model, there's no performance or quality benefit - the parent agent and sub-agent have identical capabilities. Delegation is most effective when using different model types (e.g., delegating simple search tasks to a faster/cheaper model, or complex reasoning to a more capable model). Consider whether the task truly requires delegation or can be handled directly by the current agent.
 
 **Usage Guidelines for Task Management**:
 - Use for complex multi-step tasks (3+ steps) or non-trivial work
