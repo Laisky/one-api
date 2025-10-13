@@ -362,7 +362,7 @@ bash("ls -la directory/")                    # Use list instead
 bash("go test -v ./...")                     # Running tests
 bash("make lint")                            # Build/lint operations
 bash("git status")                           # Git operations
-bash("npm install")                          # Package management
+bash("yarn install")                         # Package management (web/ uses yarn)
 ```
 
 #### 6. **Performance Anti-Patterns**
