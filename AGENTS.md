@@ -71,6 +71,12 @@ This repository integrates multiple MCP servers accessible in agent sessions. Ea
 - Run `go test` after successful diagnostics to verify changes
 - Use `go_symbol_references` before refactoring to understand impact
 
+**Connection Behavior**:
+- ⚠️ Gopls MCP connections may close after 3-5 operations or brief inactivity
+- ✅ Connections automatically re-establish on the next call
+- 💡 If you encounter "Connection closed" errors, simply retry - the system handles reconnection automatically
+- 🔄 No manual intervention needed - connection recovery is self-healing
+
 #### 2. DeepWiki MCP Server
 **Purpose**: External repository documentation and API research  
 **Instructions**: `.github/instructions/deepwiki.instructions.md`
@@ -188,6 +194,33 @@ task("Search for rate limiting patterns", "Find all rate limiting implementation
 - `.github/instructions/*.md`: Instruction files for Gopls, DeepWiki, Filesystem, Memory
 - `mcp/docs/README.md`: Internal MCP server documentation
 
+### MCP Connection Patterns
+
+**Understanding MCP Connection Lifecycle:**
+
+MCP servers exhibit different connection behaviors based on their implementation:
+
+| MCP Server | Connection Type | Behavior | Recovery |
+|------------|----------------|----------|----------|
+| **Gopls** | Stateful (Short-lived) | Closes after 3-5 operations or brief inactivity | ✅ Auto-reconnects |
+| **DeepWiki** | Stateful (Long-lived) | Maintains persistent connection | N/A (no closure) |
+| **AWS Knowledge** | Stateful (Long-lived) | Maintains persistent connection | N/A (no closure) |
+
+**Best Practices for Short-lived Connections (Gopls):**
+- Batch related operations when possible (e.g., multiple `gopls_go_search` calls in sequence)
+- Expect occasional "Connection closed" errors - they are normal and self-healing
+- Always retry once if you encounter connection errors - reconnection is automatic
+- Don't implement manual reconnection logic - the system handles it
+
+**Example of Self-healing Workflow:**
+```
+# First attempt may fail with "Connection closed"
+gopls_go_search("MyFunction")  # ❌ Error: Connection closed
+
+# Retry automatically succeeds (connection re-established)
+gopls_go_search("MyFunction")  # ✅ Returns results
+```
+
 ### MCP & Tool Usage Best Practices
 
 1. **Tool Selection**: Choose the right tool for each task:
@@ -210,6 +243,7 @@ task("Search for rate limiting patterns", "Find all rate limiting implementation
    - Consult instruction files (`.github/instructions/*.md`) for architectural patterns
 
 3. **Error Handling**:
+   - **MCP Connection Errors**: Gopls MCP connections are self-healing - if you encounter "Connection closed" or "Attempted to send a request from a closed client" errors, simply retry the operation
    - Gopls tools may fail gracefully - check return values
    - DeepWiki requires valid GitHub repository names
    - AWS Knowledge may return "NOT FOUND" for invalid resources
