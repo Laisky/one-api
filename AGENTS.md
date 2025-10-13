@@ -219,8 +219,8 @@ task("Search for rate limiting patterns", "Find all rate limiting implementation
    - **Do one thing well**: `grep` searches content, `glob` matches file patterns
    - **Compose tools**: Use `glob` to find files, then `grep` to search within them
    - **Filter early**: Narrow down with `glob` patterns before expensive `read` operations
-   - **Stream processing**: Tools process data efficiently without loading everything into memory
-   - **Lazy loading**: Use `read(file, offset, limit)` to read only needed lines after `grep` finds locations
+   - **Batch processing**: Tools return complete results efficiently without loading entire codebases into memory
+   - **Selective reading**: Use `read(file, offset, limit)` to extract only needed line ranges after `grep` locates matches
    - **Example workflow**: `glob("**/*.go")` → `grep("rate.*limit")` → `read(file, offset=166, limit=11)`
    - Cache DeepWiki results - docs don't change often
    - Batch related operations when possible
@@ -250,7 +250,7 @@ grep("useState", path="/path/to/web", include="*.js")
 
 **Why it matters**:
 - `bash` commands ignore `.ignore` configuration → searches unnecessary files (node_modules, build artifacts)
-- Composable tools are faster and provide structured output
+- Composable tools provide structured output and respect `.ignore` (see `.ignore` file for pattern organization)
 - Follows Unix Philosophy: each tool does one thing well
 
 #### 2. **Inefficient File Operations**
@@ -261,11 +261,11 @@ grep("useState", path="/path/to/web", include="*.js")
 read("/path/to/large-file.go")
 ```
 
-**✅ Good: Use offset and limit for targeted reading**
+**✅ Good: Use offset and limit for windowed reading**
 ```
 # GOOD - After grep finds line 105, read only needed context
 grep("functionName", include="*.go")  # Finds match at line 105
-read("/path/to/large-file.go", offset=100, limit=30)  # Read lines 100-130
+read("/path/to/large-file.go", offset=100, limit=30)  # Read lines 100-130 (selective/windowed reading)
 ```
 
 #### 3. **Tool Misuse Patterns**
@@ -276,7 +276,7 @@ read("/path/to/large-file.go", offset=100, limit=30)  # Read lines 100-130
 grep("useState")  # Returns thousands of matches from node_modules
 ```
 
-**✅ Good: Filter early, compose tools**
+**✅ Good: Filter early, compose tools (Unix Philosophy)**
 ```
 # GOOD - Filter with glob first, then search
 glob("web/modern/src/**/*.tsx")  # Get TypeScript files only
@@ -291,15 +291,24 @@ grep("useState", path="web/modern/src", include="*.tsx")  # Search filtered set
 bash("find . -name '*.go' -not -path '*/node_modules/*' -not -path '*/build/*'")
 ```
 
-**✅ Good: Configure .ignore once, tools respect it automatically**
+**✅ Good: Configure .ignore once, tools respect it**
 ```
-# Configure .ignore file once:
+# Configure .ignore file once (organized by reliability - see .ignore file):
+# Directories (reliably excluded):
 node_modules
 build
-*.db
+data
 
-# GOOD - All subsequent glob/grep automatically exclude these
-glob("**/*.go")  # Automatically excludes node_modules, build, *.db
+# File patterns (organized separately):
+*.db
+*.exe
+.env
+
+# GOOD - glob/grep respect .ignore configuration
+glob("**/*.go")  # Automatically excludes patterns defined in .ignore
+
+# Note: .ignore file is organized with directories first (most reliable)
+# followed by file patterns. See .ignore for current best practices.
 ```
 
 #### 5. **Bash Command Anti-Patterns**
@@ -358,7 +367,7 @@ gopls_go_search("ProcessRequest")
 gopls_go_symbol_references(file, "ProcessRequest")
 ```
 
-**Summary**: Always prefer composable tools that follow Unix Philosophy (`glob`, `grep`, `read`, `list`) over `bash` for file operations and code search. These tools respect `.ignore` configuration, provide structured output, and compose efficiently. Reserve `bash` for builds, tests, git, and package management.
+**Summary**: Always prefer composable tools that follow Unix Philosophy (`glob`, `grep`, `read`, `list`) over `bash` for file operations and code search. These tools respect `.ignore` configuration (see `.ignore` file for pattern organization), provide structured output, and compose efficiently. Reserve `bash` for builds, tests, git, and package management.
 
 ## Testing Guidelines
 
