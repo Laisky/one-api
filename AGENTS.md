@@ -1,87 +1,414 @@
-# Repository Guidelines
+# Repository Guidelines for Agents
 
-## General
+## Table of Contents
 
-### Agents
+1. [Commands](#commands)
+2. [Code Style](#code-style)
+3. [Concurrency](#concurrency)
+4. [MCP Server Instructions](#mcp-server-instructions)
+   - [Available MCP Servers](#available-mcp-servers)
+     - [1. Gopls MCP Server](#1-gopls-mcp-server)
+     - [2. DeepWiki MCP Server](#2-deepwiki-mcp-server)
+     - [3. AWS Knowledge MCP Server](#3-aws-knowledge-mcp-server)
+   - [Built-in Tools (Not MCP)](#built-in-tools-not-mcp)
+   - [MCP & Tool Usage Best Practices](#mcp--tool-usage-best-practices)
+5. [Testing Guidelines](#testing-guidelines)
 
-Multiple agents might be modifying the code at the same time. If you come across changes that aren't yours, preserve them and avoid interfering with other agents' work. Only halt the task and inform me when you encounter an irreconcilable conflict.
+## Commands
 
-### TimeZone
+**Build**: `go build` or `make build-frontend-modern` for frontend  
+**Lint**: `make lint` (runs goimports, go mod tidy, gofmt, go vet, golangci-lint, govulncheck)  
+**Test all**: `go test -v ./...`  
+**Test single**: `go test -run TestName ./package -v`  
+**Test package**: `go test -v ./model`  
+**Test race**: `go test -race ./...` (required before merges)  
+**Dev server**: `make dev-modern` (runs modern template on port 3001)
 
-Always use UTC for time handling in servers, databases, and APIs.
+## Code Style
 
-### Date Range
+**Imports**: Use `goimports -local module,github.com/songquanpeng/one-api`  
+**Formatting**: Use `gofmt -s`  
+**Line length**: Max 120 chars  
+**Comments**: Every exported function/interface must have a comment starting with its name in complete sentences  
+**Error handling**: Use `github.com/Laisky/errors/v2` - never return bare errors, always wrap with `errors.Wrap`/`errors.Wrapf`/`errors.WithStack`. Each error is processed once (returned OR logged, never both). Never use `err == nil`.  
+**Logging**: Use `gmw.GetLogger(c)` for request-scoped logging (not global `logger.Logger`). Store in local var. Use `zap.Error(err)` not `err.Error()`.  
+**Context**: Always pass and use context for lifecycle management  
+**ORM**: Use `gorm.io/gorm`. Prefer SQL for reads via `Model/Find/First` + Joins. Reserve ORM for writes. Never use `clause`/`Preload`.  
+**Testing**: Use `github.com/stretchr/testify/assert`. Create unit tests (`*_test.go`), not one-off scripts. Update tests when fixing bugs. Run `go test -race ./...` before merging.  
+**Timezone**: Always use UTC in servers/databases/APIs  
+**Date ranges**: Include entire final day (query until 00:00 next day)
 
-For any date‑range query, the handling of the ending date must encompass the entire final day. That means the database query should terminate **just before** 00:00 on the next day, ensuring that all hours of the last day are included.
+## Concurrency
 
-### Testing
+Multiple agents may modify code simultaneously. Preserve others' changes and report only irreconcilable conflicts.
 
-Please create suitable unit tests based on the current project circumstances. Whenever a new issue arises, update the unit tests during the fix to ensure thorough coverage of the problem by the test cases. Avoid creating temporary, one-off test scripts, and focus on continuously enhancing the unit test cases.
+## MCP Server Instructions
 
-### Comments
+This repository integrates multiple MCP servers accessible in agent sessions. Each provides specialized capabilities for development workflows.
 
-Every function/interface must have a comment explaining its purpose, parameters, and return values. This is crucial for maintaining code clarity and facilitating future maintenance.
-The comment should start with the function/interface name and be in complete sentences.
+### Available MCP Servers
 
-## Golang Style
+#### 1. Gopls MCP Server
+**Purpose**: Go language intelligence and workspace operations  
+**Instructions**: `.github/instructions/gopls.instructions.md`
 
-### Context
+**Core Workflows**:
+- **Read Workflow**: `go_workspace` → `go_search` → `go_file_context` → `go_package_api`
+- **Edit Workflow**: Read → `go_symbol_references` → Edit → `go_diagnostics` → Fix → `go test`
 
-Whenever feasible, utilize context to manage the lifecycle of the call chain.
+**Key Tools**:
+- `gopls_go_workspace()`: Get workspace structure, modules, and package layout
+- `gopls_go_search(query)`: Fuzzy search for Go symbols (max 100 results)
+- `gopls_go_file_context(file)`: Summarize file's cross-file dependencies
+- `gopls_go_package_api(packagePaths)`: Get package API summary
+- `gopls_go_symbol_references(file, symbol)`: Find references to package-level symbols (supports `Foo`, `pkg.Bar`, `T.M` formats)
+- `gopls_go_diagnostics(files)`: Check for parse/build errors
 
-### Golang Error Handling
+**Usage Guidelines**:
+- Always start with `go_workspace` to understand project structure
+- Use `go_search` for discovering symbols before reading files
+- Run `go_diagnostics` after every edit operation
+- Run `go test` after successful diagnostics to verify changes
+- Use `go_symbol_references` before refactoring to understand impact
 
-All errors should be handled, and the error handling should be as close to the source of the error as possible.
+**Connection Behavior**:
+- ⚠️ Gopls MCP connections may close after 3-5 operations or brief inactivity
+- ✅ Connections automatically re-establish on the next call
+- 💡 If you encounter "Connection closed" errors, simply retry - the system handles reconnection automatically
+- 🔄 No manual intervention needed - connection recovery is self-healing
 
-Never use `err == nil` to avoid shadowing the error variable.
+#### 2. DeepWiki MCP Server
+**Purpose**: External repository documentation and API research  
+**Instructions**: `.github/instructions/deepwiki.instructions.md`
 
-Use `github.com/Laisky/errors/v2`, its interface is as same as `github.com/Laisky/errors/v2`. Never return bare error, always wrap it by `errors.Wrap`/`errors.Wrapf`/`errors.WithStack`, check all files
+**Core Tools**:
+- `deepwiki_read_wiki_structure(repoName)`: Get documentation topics for a GitHub repo
+- `deepwiki_read_wiki_contents(repoName)`: View full documentation about a repo
+- `deepwiki_ask_question(repoName, question)`: Ask questions about a repository
 
-Every error must be processed a single time—either returned or logged—but never both.
+**URL Formats Supported**:
+- Full GitHub URLs: `https://github.com/owner/repo`
+- Owner/repo format: `vercel/ai`, `facebook/react`
+- Two-word format: `vercel ai`
+- Library keywords: `react`, `typescript`, `nextjs`
 
-Avoid returning raw errors; wrap them with errors.Wrap, errors.Wrapf, or errors.WithStack to preserve essential stack traces and contextual information.
+**Usage Guidelines**:
+- Use for researching external libraries/frameworks not in current codebase
+- Start with `read_wiki_structure` to understand available documentation
+- Use `ask_question` for specific technical queries about APIs
+- Avoid repeated identical calls - documentation doesn't change frequently
 
-### Golang ORM
-
-Use `gorm.io/gorm`, never use `gorm.io/gorm/clause`/`Preload`.
-
-The performance of ORMs is often quite inefficient. Therefore, adopt the data reading method that puts the least pressure on the database whenever possible. my philosophy is to use SQL for reading and reserve ORM for writing or modifying data.
-
-Example:
-
-```go
-// When retrieving data, utilize Model/Find/First as much as possible,
-// and rely on SQL for query conditions whenever you can.
-db.Model(&User{}).
-    Joins("JOIN emails ON emails.user_id = users.id AND emails.email = ?", "jinzhu@example.org").
-    Joins("JOIN credit_cards ON credit_cards.user_id = users.id").Where("credit_cards.number = ?", "411111111111").
-    Find(&user)
-
-// Use Scan only when the data being read does not align with the database table structure.
-db.Model(&User{}).
-    Select("users.name AS name, emails.email AS email").
-    Joins("left join emails on emails.user_id = users.id").
-    Scan(&result{})
-
+**Example Queries**:
+```
+deepwiki_read_wiki_structure("openai/openai-python")
+deepwiki_ask_question("vercel/ai", "How do I implement streaming chat completions?")
+deepwiki_read_wiki_contents("microsoft/typescript")
 ```
 
-### Logging
+#### 3. AWS Knowledge MCP Server
+**Purpose**: AWS service documentation and regional availability
 
-All code paths invoked by a request must use `gmw.GetLogger(c)` to retrieve the logger instead of the global `logger.Logger`. The logger returned by `gmw.GetLogger(c)` embeds rich call‑specific context.
+**Core Tools**:
+- `mcp-aws-knowledge_aws___get_regional_availability(region, resource_type, filters?)`: Check AWS resource availability in regions
+  - `resource_type`: `'api'` (SDK operations) or `'cfn'` (CloudFormation resources)
+  - `filters`: e.g., `['Athena+UpdateNamedQuery']` or `['AWS::EC2::Instance']`
+- `mcp-aws-knowledge_aws___list_regions()`: Get all AWS regions with IDs and names
+- `mcp-aws-knowledge_aws___read_documentation(url, start_index?, max_length?)`: Fetch AWS docs as markdown
+- `mcp-aws-knowledge_aws___recommend(url)`: Get related documentation (Highly Rated, New, Similar, Journey)
+- `mcp-aws-knowledge_aws___search_documentation(search_phrase, limit?)`: Search AWS docs, blogs, solutions
 
-Adopt these logger and error‑handling best practices:
+**Usage Guidelines**:
+- Verify resource availability before AWS deployments
+- Use `search_documentation` to find AWS best practices
+- Check `recommend` for newly released features
+- For long docs, use pagination with `start_index`
 
-1. Call `gmw.GetLogger(c)` only once per function and store the result in a local variable.
-2. Use `zap.Error(err)` rather than `err.Error()` when logging errors.
-3. Prefer the structured Zap logger over `fmt.Sprintf` for log messages.
-4. Never swallow errors silently; every error should be returned or recorded in the logs.
+**Example Queries**:
+```
+mcp-aws-knowledge_aws___get_regional_availability("us-east-1", "cfn", ["AWS::Lambda::Function"])
+mcp-aws-knowledge_aws___search_documentation("S3 bucket versioning best practices", 10)
+mcp-aws-knowledge_aws___read_documentation("https://docs.aws.amazon.com/lambda/latest/dg/lambda-invocation.html")
+```
 
-## CSS Style
+### Built-in Tools (Not MCP)
 
-Avoid using `!important` in CSS. If you find yourself needing to use it, consider whether the CSS can be refactored to avoid this necessity.
+Agents also have access to built-in file and project tools:
 
-Avoid inline styles in HTML or JSX. Instead, use CSS classes to manage styles. This approach promotes better maintainability and separation of concerns in your codebase.
+**File Operations**:
+- `read(filePath, offset?, limit?)`: Read file contents with line numbers (default: first 2000 lines)
+  - `offset`: 0-based line number to start reading from
+  - `limit`: Number of lines to read (default 2000)
+- `write(filePath, content)`: Create or overwrite files
+- `edit(filePath, oldString, newString)`: Precise string replacement
+- `list(path)`: List directory contents
+- `glob(pattern)`: Find files by pattern (e.g., `**/*.go`)
+- `grep(pattern)`: Search file contents with regex
 
-## Web
+**Code Execution**:
+- `bash(command)`: Execute shell commands for builds, tests, git operations
 
-When using the web console for debugging, avoid logging objects—they’re hard to copy. Strive to log only strings, making it simple for me to copy all the output and analyze it.
+**Task Management**:
+- `todowrite(todos)`: Create/update task lists for complex multi-step work
+  - Each todo has: `id`, `content`, `status` (`pending`|`in_progress`|`completed`|`cancelled`), `priority` (`high`|`medium`|`low`)
+- `todoread()`: View current task list
+- `task(description, prompt, subagent_type)`: Launch specialized agents for complex tasks
+  - `subagent_type: "general"`: General-purpose agent for research, code search, and multi-step tasks
+  - ⚠️ **Note for Humans**: When delegating to sub-agents using the same AI model, there's no performance or quality benefit - the parent agent and sub-agent have identical capabilities. Delegation is most effective when using different model types (e.g., delegating simple search tasks to a faster/cheaper model, or complex reasoning to a more capable model). Consider whether the task truly requires delegation or can be handled directly by the current agent.
+  - 💡 **Recommended for `general` type**: Use built-in tools (`read`, `glob`, `grep`, etc.) instead of `bash` for research and code search. This provides better performance, structured output, and follows the Unix Philosophy of composable tools.
+
+**Usage Guidelines for Task Management**:
+- Use for complex multi-step tasks (3+ steps) or non-trivial work
+- Create todos immediately when receiving complex user requests
+- Mark ONE task as `in_progress` at a time
+- Update status in real-time - mark `completed` immediately after finishing each task
+- Use `task` tool for open-ended searches requiring multiple rounds of globbing/grepping
+- Launch multiple `task` agents concurrently for parallel research when possible
+
+**When to Use Todo List**:
+- Multi-step features requiring multiple file changes
+- Bug fixes affecting multiple components
+- Refactoring across multiple packages
+- User provides numbered/comma-separated task lists
+- Tasks requiring careful tracking and organization
+
+**When NOT to Use Todo List**:
+- Single straightforward tasks
+- Trivial operations (< 3 steps)
+- Purely conversational/informational requests
+
+**Example Usage**:
+```
+# Complex feature implementation
+todowrite([
+  {"id": "1", "content": "Add dark mode toggle to settings UI", "status": "pending", "priority": "high"},
+  {"id": "2", "content": "Implement dark mode state management", "status": "pending", "priority": "high"},
+  {"id": "3", "content": "Update CSS styles for dark theme", "status": "pending", "priority": "medium"},
+  {"id": "4", "content": "Run tests and build", "status": "pending", "priority": "high"}
+])
+
+# Launch research agent
+task("Search for rate limiting patterns", "Find all rate limiting implementations in the codebase and summarize approaches", "general")
+```
+
+**Project Knowledge**:
+- `.github/instructions/*.md`: Instruction files for Gopls, DeepWiki, Filesystem, Memory
+- `mcp/docs/README.md`: Internal MCP server documentation
+
+### MCP Connection Patterns
+
+**Understanding MCP Connection Lifecycle:**
+
+MCP servers exhibit different connection behaviors based on their implementation:
+
+| MCP Server | Connection Type | Behavior | Recovery |
+|------------|----------------|----------|----------|
+| **Gopls** | Stateful (Short-lived) | Closes after 3-5 operations or brief inactivity | ✅ Auto-reconnects |
+| **DeepWiki** | Stateful (Long-lived) | Maintains persistent connection | N/A (no closure) |
+| **AWS Knowledge** | Stateful (Long-lived) | Maintains persistent connection | N/A (no closure) |
+
+**Best Practices for Short-lived Connections (Gopls):**
+- Batch related operations when possible (e.g., multiple `gopls_go_search` calls in sequence)
+- Expect occasional "Connection closed" errors - they are normal and self-healing
+- Always retry once if you encounter connection errors - reconnection is automatic
+- Don't implement manual reconnection logic - the system handles it
+
+**Example of Self-healing Workflow:**
+```
+# First attempt may fail with "Connection closed"
+gopls_go_search("MyFunction")  # ❌ Error: Connection closed
+
+# Retry automatically succeeds (connection re-established)
+gopls_go_search("MyFunction")  # ✅ Returns results
+```
+
+### MCP & Tool Usage Best Practices
+
+1. **Tool Selection**: Choose the right tool for each task:
+   - Go code intelligence → Gopls MCP
+   - External API research → DeepWiki MCP
+   - AWS documentation → AWS Knowledge MCP
+   - Complex multi-step tasks → Task management tools (todowrite/task)
+   - File operations → Built-in read/write/edit/list tools
+   - Code search → Built-in grep/glob tools
+   - Build/test/git → Built-in bash tool
+
+2. **Workflow Integration**:
+   - Start Go sessions with `gopls_go_workspace` for context
+   - Create todo list with `todowrite` for complex tasks (3+ steps)
+   - Mark tasks `in_progress` when starting, `completed` immediately when done
+   - Use `read` before `edit` to verify file contents
+   - Use `glob` + `grep` for efficient code discovery
+   - Use `task` tool for open-ended searches requiring multiple rounds
+   - Use `bash` for running tests, builds, and git operations
+   - Consult instruction files (`.github/instructions/*.md`) for architectural patterns
+
+3. **Error Handling**:
+   - **MCP Connection Errors**: Gopls MCP connections are self-healing - if you encounter "Connection closed" or "Attempted to send a request from a closed client" errors, simply retry the operation
+   - Gopls tools may fail gracefully - check return values
+   - DeepWiki requires valid GitHub repository names
+   - AWS Knowledge may return "NOT FOUND" for invalid resources
+   - Always verify file operations by reading after write/edit
+
+4. **Performance** (Unix Philosophy):
+   - **Do one thing well**: `grep` searches content, `glob` matches file patterns
+   - **Compose tools**: Use `glob` to find files, then `grep` to search within them
+   - **Filter early**: Narrow down with `glob` patterns before expensive `read` operations
+   - **Batch processing**: Tools return complete results efficiently without loading entire codebases into memory
+   - **Selective reading**: Use `read(file, offset, limit)` to extract only needed line ranges after `grep` locates matches
+   - **Example workflow**: `glob("**/*.go")` → `grep("rate.*limit")` → `read(file, offset=166, limit=11)`
+   - Cache DeepWiki results - docs don't change often
+   - Batch related operations when possible
+
+5. **Security**:
+   - Never commit secrets found during file operations
+   - Validate URLs before fetching external documentation
+   - Review instruction files before modifying billing/pricing logic
+
+### Bad Practices to Avoid
+
+#### 1. **Incorrect Tool Usage**
+
+**❌ Bad: Using `bash` with `find`/`grep` for code search**
+```bash
+# BAD - Ignores .ignore file, searches node_modules, slow
+bash("find web -name '*.js' | xargs grep 'useState'")
+bash("grep -r 'pattern' .")
+```
+
+**✅ Good: Use composable tools (Unix Philosophy)**
+```
+# GOOD - Respects .ignore, fast, structured output
+glob("web/**/*.js")
+grep("useState", path="/path/to/web", include="*.js")
+```
+
+**Why it matters**:
+- `bash` commands ignore `.ignore` configuration → searches unnecessary files (node_modules, build artifacts)
+- Composable tools provide structured output and respect `.ignore` (see `.ignore` file for pattern organization)
+- Follows Unix Philosophy: each tool does one thing well
+
+#### 2. **Inefficient File Operations**
+
+**❌ Bad: Reading entire large files unnecessarily**
+```
+# BAD - Reads all 5000 lines when you only need lines 100-120
+read("/path/to/large-file.go")
+```
+
+**✅ Good: Use offset and limit for windowed reading**
+```
+# GOOD - After grep finds line 105, read only needed context
+grep("functionName", include="*.go")  # Finds match at line 105
+read("/path/to/large-file.go", offset=100, limit=30)  # Read lines 100-130 (selective/windowed reading)
+```
+
+#### 3. **Tool Misuse Patterns**
+
+**❌ Bad: Inefficient workflow**
+```
+# BAD - Searches all files without filtering
+grep("useState")  # Returns thousands of matches from node_modules
+```
+
+**✅ Good: Filter early, compose tools (Unix Philosophy)**
+```
+# GOOD - Filter with glob first, then search
+glob("web/modern/src/**/*.tsx")  # Get TypeScript files only
+grep("useState", path="web/modern/src", include="*.tsx")  # Search filtered set
+```
+
+#### 4. **Ignoring .ignore File**
+
+**❌ Bad: Manually excluding paths in every command**
+```bash
+# BAD - Repeating exclusions, error-prone
+bash("find . -name '*.go' -not -path '*/node_modules/*' -not -path '*/build/*'")
+```
+
+**✅ Good: Configure .ignore once, tools respect it**
+```
+# Configure .ignore file once (organized by reliability - see .ignore file):
+# Directories (reliably excluded):
+node_modules
+build
+data
+
+# File patterns (organized separately):
+*.db
+*.exe
+.env
+
+# GOOD - glob/grep respect .ignore configuration
+glob("**/*.go")  # Automatically excludes patterns defined in .ignore
+
+# Note: .ignore file is organized with directories first (most reliable)
+# followed by file patterns. See .ignore for current best practices.
+```
+
+#### 5. **Bash Command Anti-Patterns**
+
+**❌ Bad: Using bash for searches that built-in tools handle better**
+```bash
+# BAD - All of these should use composable tools (Unix Philosophy) instead
+bash("find . -type f -name '*.go'")          # Use glob instead
+bash("grep -r 'pattern' src/")               # Use grep tool instead
+bash("cat file.go")                          # Use read instead
+bash("ls -la directory/")                    # Use list instead
+```
+
+**✅ Good: Use bash only for operations built-in tools can't do**
+```bash
+# GOOD - These are appropriate bash uses:
+bash("go test -v ./...")                     # Running tests
+bash("make lint")                            # Build/lint operations
+bash("git status")                           # Git operations
+bash("yarn install")                         # Package management (web/ uses yarn)
+```
+
+#### 6. **Performance Anti-Patterns**
+
+**❌ Bad: Sequential when parallel is possible**
+```
+# BAD - Reads files one by one
+read("file1.go")
+# wait...
+read("file2.go")
+# wait...
+read("file3.go")
+```
+
+**✅ Good: Batch operations when possible**
+```
+# GOOD - Multiple tool calls in single message execute in parallel
+read("file1.go")
+read("file2.go")
+read("file3.go")
+# All execute concurrently
+```
+
+#### 7. **MCP Tool Misuse**
+
+**❌ Bad: Using wrong MCP server for the task**
+```
+# BAD - Using bash to search Go symbols
+bash("grep -r 'func.*ProcessRequest' .")
+```
+
+**✅ Good: Use appropriate MCP server**
+```
+# GOOD - Use Gopls for Go intelligence
+gopls_go_search("ProcessRequest")
+gopls_go_symbol_references(file, "ProcessRequest")
+```
+
+**Summary**: Always prefer composable tools that follow Unix Philosophy (`glob`, `grep`, `read`, `list`) over `bash` for file operations and code search. These tools respect `.ignore` configuration (see `.ignore` file for pattern organization), provide structured output, and compose efficiently. Reserve `bash` for builds, tests, git, and package management.
+
+## Testing Guidelines
+
+- All bug fixes and features require updated unit tests
+- Use `github.com/stretchr/testify/assert` for assertions
+- Test files follow the pattern `*_test.go`
+- Run specific tests: `go test -run TestName ./package -v`
+- Run package tests: `go test -v ./package`
+- Always run `go test -race ./...` before merging
+- Use floating-point tolerance in tests when appropriate

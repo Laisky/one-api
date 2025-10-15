@@ -1,0 +1,29 @@
+# Directories (reliably ignored by opencode.ai glob/grep tools)
+
+.idea
+.vscode
+build
+data
+node_modules
+/web/node_modules
+/web/modern/node_modules
+/web/berry/node_modules
+/web/air/node_modules
+/web/default/node_modules
+temp
+/patch
+/logs/
+errlog
+
+# File patterns (may not be consistently honored by all tools)
+# For critical files, consider using directory-based organization instead
+upload
+*.exe
+*.db
+*.db-journal
+cmd.md
+.env
+/one-api
+.DS_Store
+/__debug_bin*
+/cmd/migrate/migrate
