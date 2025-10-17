@@ -828,10 +828,30 @@ func ClaudeNativeStreamHandler(c *gin.Context, resp *http.Response) (*model.Erro
 			continue
 		}
 
-		// Extract usage info from message_delta
-		if claudeResponse.Type == "message_delta" && claudeResponse.Usage != nil {
-			usage.PromptTokens += claudeResponse.Usage.InputTokens
-			usage.CompletionTokens += claudeResponse.Usage.OutputTokens
+		// Extract usage info from message_delta and message_start
+		if claudeResponse.Usage != nil {
+			if claudeResponse.Type == "message_delta" {
+				usage.PromptTokens += claudeResponse.Usage.InputTokens
+				usage.CompletionTokens += claudeResponse.Usage.OutputTokens
+			}
+
+			// Accumulate cache tokens from both message_start and message_delta events
+			if claudeResponse.Type == "message_start" || claudeResponse.Type == "message_delta" {
+				if claudeResponse.Usage.CacheReadInputTokens > 0 {
+					if usage.PromptTokensDetails == nil {
+						usage.PromptTokensDetails = &model.UsagePromptTokensDetails{}
+					}
+					usage.PromptTokensDetails.CachedTokens += claudeResponse.Usage.CacheReadInputTokens
+				}
+
+				// Accumulate cache creation tokens
+				if claudeResponse.Usage.CacheCreation != nil {
+					usage.CacheWrite5mTokens += claudeResponse.Usage.CacheCreation.Ephemeral5mInputTokens
+					usage.CacheWrite1hTokens += claudeResponse.Usage.CacheCreation.Ephemeral1hInputTokens
+				} else if claudeResponse.Usage.CacheCreationInputTokens > 0 {
+					usage.CacheWrite5mTokens += claudeResponse.Usage.CacheCreationInputTokens
+				}
+			}
 		}
 	}
 
@@ -924,6 +944,22 @@ func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusC
 		if meta != nil {
 			usage.PromptTokens += meta.Usage.InputTokens
 			usage.CompletionTokens += meta.Usage.OutputTokens
+
+			// Accumulate cache tokens from message_start and message_delta events
+			if meta.Usage.CacheReadInputTokens > 0 {
+				if usage.PromptTokensDetails == nil {
+					usage.PromptTokensDetails = &model.UsagePromptTokensDetails{}
+				}
+				usage.PromptTokensDetails.CachedTokens += meta.Usage.CacheReadInputTokens
+			}
+			// Accumulate cache creation tokens
+			if meta.Usage.CacheCreation != nil {
+				usage.CacheWrite5mTokens += meta.Usage.CacheCreation.Ephemeral5mInputTokens
+				usage.CacheWrite1hTokens += meta.Usage.CacheCreation.Ephemeral1hInputTokens
+			} else if meta.Usage.CacheCreationInputTokens > 0 {
+				usage.CacheWrite5mTokens += meta.Usage.CacheCreationInputTokens
+			}
+
 			if len(meta.Id) > 0 { // only message_start has an id, otherwise it's a finish_reason event.
 				modelName = meta.Model
 				id = fmt.Sprintf("chatcmpl-%s", meta.Id)
@@ -1060,6 +1096,21 @@ func ClaudeNativeHandler(c *gin.Context, resp *http.Response, promptTokens int, 
 		TotalTokens:      claudeResponse.Usage.InputTokens + claudeResponse.Usage.OutputTokens,
 	}
 
+	// Map Anthropic cache tokens to UsagePromptTokensDetails
+	if claudeResponse.Usage.CacheReadInputTokens > 0 || claudeResponse.Usage.CacheCreationInputTokens > 0 {
+		usage.PromptTokensDetails = &model.UsagePromptTokensDetails{
+			CachedTokens: claudeResponse.Usage.CacheReadInputTokens,
+		}
+		// Map cache creation tokens to CacheWrite fields
+		if claudeResponse.Usage.CacheCreation != nil {
+			usage.CacheWrite5mTokens = claudeResponse.Usage.CacheCreation.Ephemeral5mInputTokens
+			usage.CacheWrite1hTokens = claudeResponse.Usage.CacheCreation.Ephemeral1hInputTokens
+		} else if claudeResponse.Usage.CacheCreationInputTokens > 0 {
+			// Fallback: if CacheCreation object not present but CacheCreationInputTokens is set
+			usage.CacheWrite5mTokens = claudeResponse.Usage.CacheCreationInputTokens
+		}
+	}
+
 	jsonResponse, err := json.Marshal(claudeResponse)
 	if err != nil {
 		return openai.ErrorWrapper(err, "marshal_response_body_failed", http.StatusInternalServerError), nil
@@ -1112,12 +1163,20 @@ func Handler(c *gin.Context, resp *http.Response, promptTokens int, modelName st
 		ServiceTier:      claudeResponse.Usage.ServiceTier,
 	}
 
-	// Map cached input tokens to OpenAI usage details
-	if claudeResponse.Usage.CacheReadInputTokens > 0 || claudeResponse.Usage.CacheCreationInputTokens > 0 || (claudeResponse.Usage.CacheCreation != nil && (claudeResponse.Usage.CacheCreation.Ephemeral5mInputTokens > 0 || claudeResponse.Usage.CacheCreation.Ephemeral1hInputTokens > 0)) {
+	// Map Anthropic cache tokens to UsagePromptTokensDetails
+	if claudeResponse.Usage.CacheReadInputTokens > 0 || claudeResponse.Usage.CacheCreationInputTokens > 0 {
 		usage.PromptTokensDetails = &model.UsagePromptTokensDetails{
 			CachedTokens: claudeResponse.Usage.CacheReadInputTokens,
 		}
-		// Optionally, you can add more details from CacheCreation if needed
+
+		// Map cache creation tokens to CacheWrite fields
+		if claudeResponse.Usage.CacheCreation != nil {
+			usage.CacheWrite5mTokens = claudeResponse.Usage.CacheCreation.Ephemeral5mInputTokens
+			usage.CacheWrite1hTokens = claudeResponse.Usage.CacheCreation.Ephemeral1hInputTokens
+		} else if claudeResponse.Usage.CacheCreationInputTokens > 0 {
+			// Fallback: if CacheCreation object not present but CacheCreationInputTokens is set
+			usage.CacheWrite5mTokens = claudeResponse.Usage.CacheCreationInputTokens
+		}
 	}
 
 	// Map cache-write tokens for precise billing

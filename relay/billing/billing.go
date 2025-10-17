@@ -127,6 +127,8 @@ type QuotaConsumeDetail struct {
 	ToolsCost              int64
 	CachedPromptTokens     int
 	CachedCompletionTokens int
+	CacheWrite5mTokens     int
+	CacheWrite1hTokens     int
 	// Explicit IDs propagated from gin.Context
 	RequestId string
 	TraceId   string
@@ -173,11 +175,11 @@ func PostConsumeQuotaDetailed(detail QuotaConsumeDetail) {
 
 	var logContent string
 	if detail.ToolsCost == 0 {
-		logContent = fmt.Sprintf("model rate %.2f, group rate %.2f, completion rate %.2f, cached_prompt %d, cached_completion %d",
-			detail.ModelRatio, detail.GroupRatio, detail.CompletionRatio, detail.CachedPromptTokens, detail.CachedCompletionTokens)
+		logContent = fmt.Sprintf("model rate %.2f, group rate %.2f, completion rate %.2f, cached_prompt %d, cached_completion %d, cache_write_5m %d, cache_write_1h %d",
+			detail.ModelRatio, detail.GroupRatio, detail.CompletionRatio, detail.CachedPromptTokens, detail.CachedCompletionTokens, detail.CacheWrite5mTokens, detail.CacheWrite1hTokens)
 	} else {
-		logContent = fmt.Sprintf("model rate %.2f, group rate %.2f, completion rate %.2f, tools cost %d, cached_prompt %d, cached_completion %d",
-			detail.ModelRatio, detail.GroupRatio, detail.CompletionRatio, detail.ToolsCost, detail.CachedPromptTokens, detail.CachedCompletionTokens)
+		logContent = fmt.Sprintf("model rate %.2f, group rate %.2f, completion rate %.2f, tools cost %d, cached_prompt %d, cached_completion %d, cache_write_5m %d, cache_write_1h %d",
+			detail.ModelRatio, detail.GroupRatio, detail.CompletionRatio, detail.ToolsCost, detail.CachedPromptTokens, detail.CachedCompletionTokens, detail.CacheWrite5mTokens, detail.CacheWrite1hTokens)
 	}
 	entry := &model.Log{
 		UserId:                 detail.UserId,
@@ -192,6 +194,8 @@ func PostConsumeQuotaDetailed(detail QuotaConsumeDetail) {
 		SystemPromptReset:      detail.SystemPromptReset,
 		CachedPromptTokens:     detail.CachedPromptTokens,
 		CachedCompletionTokens: detail.CachedCompletionTokens,
+		CacheWrite5mTokens:     detail.CacheWrite5mTokens,
+		CacheWrite1hTokens:     detail.CacheWrite1hTokens,
 		RequestId:              detail.RequestId,
 		TraceId:                detail.TraceId,
 	}

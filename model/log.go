@@ -38,6 +38,9 @@ type Log struct {
 	// Cached token counts (prompt/output) for cost transparency
 	CachedPromptTokens     int `json:"cached_prompt_tokens" gorm:"default:0;index"`
 	CachedCompletionTokens int `json:"cached_completion_tokens" gorm:"default:0;index"`
+	// Cache write token counts (Anthropic Claude prompt caching)
+	CacheWrite5mTokens int `json:"cache_write_5m_tokens" gorm:"default:0;index"`
+	CacheWrite1hTokens int `json:"cache_write_1h_tokens" gorm:"default:0;index"`
 }
 
 const (

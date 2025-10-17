@@ -933,6 +933,20 @@ func postConsumeClaudeMessagesQuotaWithTraceID(ctx context.Context, requestId st
 		// we cannot just return, because we may have to return the pre-consumed quota
 		quota = 0
 	}
+
+	// Extract cache token counts from usage details
+	cachedPromptTokens := 0
+	if usage.PromptTokensDetails != nil {
+		cachedPromptTokens = usage.PromptTokensDetails.CachedTokens
+	}
+	cachedCompletionTokens := 0
+	if usage.CompletionTokensDetails != nil {
+		cachedCompletionTokens = usage.CompletionTokensDetails.CachedTokens
+	}
+
+	cacheWrite5mTokens := usage.CacheWrite5mTokens
+	cacheWrite1hTokens := usage.CacheWrite1hTokens
+
 	// Use centralized detailed billing function with explicit trace ID
 	quotaDelta := quota - preConsumedQuota
 	// If requestId somehow empty, try derive from ctx (best-effort)
@@ -959,8 +973,10 @@ func postConsumeClaudeMessagesQuotaWithTraceID(ctx context.Context, requestId st
 		SystemPromptReset:      false,
 		CompletionRatio:        completionRatio,
 		ToolsCost:              usage.ToolsCost,
-		CachedPromptTokens:     0,
-		CachedCompletionTokens: 0,
+		CachedPromptTokens:     cachedPromptTokens,
+		CachedCompletionTokens: cachedCompletionTokens,
+		CacheWrite5mTokens:     cacheWrite5mTokens,
+		CacheWrite1hTokens:     cacheWrite1hTokens,
 		RequestId:              requestId,
 		TraceId:                traceId,
 	})

@@ -28,6 +28,8 @@ interface LogRow {
   completion_tokens?: number
   cached_prompt_tokens?: number
   cached_completion_tokens?: number
+  cache_write_5m_tokens?: number
+  cache_write_1h_tokens?: number
   elapsed_time?: number
   request_id?: string
   trace_id?: string
@@ -298,7 +300,7 @@ export function LogsPage() {
 
   const handleExportLogs = () => {
     // Implementation for exporting logs to CSV
-    const csvHeaders = ['Time', 'Type', 'Model', 'Token', 'Username', 'Quota', 'Prompt Tokens', 'Completion Tokens', 'Latency', 'Content']
+    const csvHeaders = ['Time', 'Type', 'Model', 'Token', 'Username', 'Quota', 'Prompt Tokens', 'Completion Tokens', 'Cached Prompt Tokens', 'Cached Completion Tokens', 'Cache Write 5m Tokens', 'Cache Write 1h Tokens', 'Latency', 'Content']
     const csvData = data.map(log => [
       formatTimestamp(log.created_at),
       log.type,
@@ -308,6 +310,10 @@ export function LogsPage() {
       log.quota,
       log.prompt_tokens || 0,
       log.completion_tokens || 0,
+      log.cached_prompt_tokens || 0,
+      log.cached_completion_tokens || 0,
+      log.cache_write_5m_tokens || 0,
+      log.cache_write_1h_tokens || 0,
       log.elapsed_time || 0,
       (log.content || '').replace(/,/g, ';').replace(/\n/g, ' ')
     ])
@@ -457,6 +463,8 @@ export function LogsPage() {
                 <div className="flex flex-col gap-1">
                   <div>Output tokens: {row.original.completion_tokens ?? 0}</div>
                   <div>Cached tokens: {row.original.cached_completion_tokens ?? 0}</div>
+                  <div>Cache write 5m: {row.original.cache_write_5m_tokens ?? 0}</div>
+                  <div>Cache write 1h: {row.original.cache_write_1h_tokens ?? 0}</div>
                 </div>
               </TooltipContent>
             </Tooltip>
