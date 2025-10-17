@@ -1,0 +1,19 @@
+# Models List API
+
+## Endpoint
+GET {{.BaseURL}}/v1/models
+
+## Description
+Lists the currently available models and provides basic information about each.
+
+## Authentication
+Authorization: Bearer YOUR_API_KEY
+
+## Example Request
+```bash
+curl {{.BaseURL}}/v1/models \
+  -H "Authorization: Bearer YOUR_API_KEY"
+```
+
+## Response
+Returns a list of model objects containing id, object type, and other metadata.

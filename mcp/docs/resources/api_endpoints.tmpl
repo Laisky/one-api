@@ -1,0 +1,79 @@
+# Available API Endpoints
+
+This resource provides a comprehensive overview of all available API endpoints in the One-API system.
+
+## Base URL
+{{.BaseURL}}
+
+## OpenAI-Compatible Endpoints
+
+### Chat Completions
+- **Endpoint**: `POST {{.BaseURL}}/v1/chat/completions`
+- **Description**: Create chat completions for conversational AI
+- **Tool**: Use `chat_completions` tool for detailed documentation
+- **Key Parameters**: model, messages, temperature, max_tokens, stream
+
+### Text Completions  
+- **Endpoint**: `POST {{.BaseURL}}/v1/completions`
+- **Description**: Generate text completions from prompts
+- **Tool**: Use `completions` tool for detailed documentation
+- **Key Parameters**: model, prompt, max_tokens, temperature
+
+### Embeddings
+- **Endpoint**: `POST {{.BaseURL}}/v1/embeddings`
+- **Description**: Convert text into vector embeddings
+- **Tool**: Use `embeddings` tool for detailed documentation
+- **Key Parameters**: model, input
+
+### Image Generation
+- **Endpoint**: `POST {{.BaseURL}}/v1/images/generations`
+- **Description**: Generate images from text prompts
+- **Tool**: Use `images_generations` tool for detailed documentation
+- **Key Parameters**: model, prompt, n, size
+
+### Audio Transcription
+- **Endpoint**: `POST {{.BaseURL}}/v1/audio/transcriptions`
+- **Description**: Transcribe audio files to text
+- **Tool**: Use `audio_transcriptions` tool for detailed documentation
+- **Key Parameters**: model, file, language
+
+### Audio Translation
+- **Endpoint**: `POST {{.BaseURL}}/v1/audio/translations`
+- **Description**: Translate audio files to English text
+- **Tool**: Use `audio_translations` tool for detailed documentation
+- **Key Parameters**: model, file
+
+### Text-to-Speech
+- **Endpoint**: `POST {{.BaseURL}}/v1/audio/speech`
+- **Description**: Generate speech audio from text
+- **Tool**: Use `audio_speech` tool for detailed documentation
+- **Key Parameters**: model, input, voice
+
+### Content Moderation
+- **Endpoint**: `POST {{.BaseURL}}/v1/moderations`
+- **Description**: Check content for policy violations
+- **Tool**: Use `moderations` tool for detailed documentation
+- **Key Parameters**: input, model
+
+### Models List
+- **Endpoint**: `GET {{.BaseURL}}/v1/models`
+- **Description**: List all available models
+- **Tool**: Use `models_list` tool for detailed documentation
+- **Key Parameters**: None
+
+## Anthropic-Compatible Endpoints
+
+### Claude Messages
+- **Endpoint**: `POST {{.BaseURL}}/v1/messages`
+- **Description**: Create messages using Claude API format
+- **Tool**: Use `claude_messages` tool for detailed documentation
+- **Key Parameters**: model, messages, max_tokens
+
+## Authentication
+All endpoints require authentication via Bearer token:
+```
+Authorization: Bearer YOUR_API_KEY
+```
+
+## Usage
+To get detailed documentation for any endpoint, use the corresponding MCP tool with your specific parameters. The tools will generate comprehensive documentation including request examples, response formats, and parameter explanations tailored to your use case.
