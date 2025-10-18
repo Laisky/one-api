@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useAuthStore } from '@/lib/stores/auth'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
@@ -102,6 +102,7 @@ export function DashboardPage() {
   const { user } = useAuthStore()
   const isAdmin = useMemo(() => (user?.role ?? 0) >= 10, [user])
   const [filtersReady, setFiltersReady] = useState(false)
+  const abortControllerRef = useRef<AbortController | null>(null)
 
   useLayoutEffect(() => {
     if (typeof document === 'undefined') {
@@ -224,6 +225,15 @@ export function DashboardPage() {
       return
     }
 
+    // Cancel any pending request
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort()
+    }
+
+    // Create new AbortController for this request
+    const abortController = new AbortController()
+    abortControllerRef.current = abortController
+
     setLoading(true)
     setDateError('')
     try {
@@ -234,7 +244,15 @@ export function DashboardPage() {
         params.set('user_id', dashUser || 'all')
       }
       // Unified API call - complete URL with /api prefix
-      const res = await api.get('/api/user/dashboard?' + params.toString())
+      const res = await api.get('/api/user/dashboard?' + params.toString(), {
+        signal: abortController.signal
+      })
+
+      // Check if this request was aborted
+      if (abortController.signal.aborted) {
+        return
+      }
+
       const { success, data, message } = res.data
       if (success) {
         // Handle new API response structure
@@ -283,14 +301,21 @@ export function DashboardPage() {
         setUserRows([])
         setTokenRows([])
       }
-    } catch (error) {
+    } catch (error: any) {
+      // Ignore abort errors
+      if (error.name === 'AbortError' || error.name === 'CanceledError') {
+        return
+      }
       console.error('Failed to fetch dashboard data:', error)
       setDateError('Failed to fetch dashboard data')
       setRows([])
       setUserRows([])
       setTokenRows([])
     } finally {
-      setLoading(false)
+      // Only clear loading if this request wasn't aborted
+      if (!abortController.signal.aborted) {
+        setLoading(false)
+      }
     }
   }
 
@@ -303,15 +328,116 @@ export function DashboardPage() {
 
   // Fetch quota/status when dashUser changes (but not on initial load)
   // Presets
-  const applyPreset = (preset: 'today' | '7d' | '30d') => {
+  const applyPreset = async (preset: 'today' | '7d' | '30d') => {
     const today = new Date()
     const start = new Date(today)
     if (preset === 'today') start.setDate(today.getDate())
     if (preset === '7d') start.setDate(today.getDate() - 6)
     if (preset === '30d') start.setDate(today.getDate() - 29)
-    setFromDate(fmt(start))
-    setToDate(fmt(today))
-    // defer fetch until user clicks Apply/Refresh to avoid surprise reloads
+
+    const newFromDate = fmt(start)
+    const newToDate = fmt(today)
+
+    setFromDate(newFromDate)
+    setToDate(newToDate)
+
+    // Validate and fetch data immediately
+    const validationError = validateDateRange(newFromDate, newToDate)
+    if (validationError) {
+      setDateError(validationError)
+      return
+    }
+
+    // Cancel any pending request
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort()
+    }
+
+    // Create new AbortController for this request
+    const abortController = new AbortController()
+    abortControllerRef.current = abortController
+
+    setLoading(true)
+    setDateError('')
+    try {
+      const params = new URLSearchParams()
+      params.set('from_date', newFromDate)
+      params.set('to_date', newToDate)
+      if (isAdmin) {
+        params.set('user_id', dashUser || 'all')
+      }
+      const res = await api.get('/api/user/dashboard?' + params.toString(), {
+        signal: abortController.signal
+      })
+
+      // Check if this request was aborted
+      if (abortController.signal.aborted) {
+        return
+      }
+
+      const { success, data, message } = res.data
+      if (success) {
+        const logs = data?.logs || data || []
+        const userLogs = data?.user_logs || []
+        const tokenLogs = data?.token_logs || []
+        setRows(
+          logs.map((row: any) => ({
+            day: row.Day,
+            model_name: row.ModelName,
+            request_count: row.RequestCount,
+            quota: row.Quota,
+            prompt_tokens: row.PromptTokens,
+            completion_tokens: row.CompletionTokens,
+          }))
+        )
+        setUserRows(
+          userLogs.map((row: any) => ({
+            day: row.Day,
+            username: row.Username,
+            user_id: Number(row.UserId ?? 0),
+            request_count: row.RequestCount,
+            quota: row.Quota,
+            prompt_tokens: row.PromptTokens,
+            completion_tokens: row.CompletionTokens,
+          }))
+        )
+        setTokenRows(
+          tokenLogs.map((row: any) => ({
+            day: row.Day,
+            username: row.Username,
+            token_name: row.TokenName,
+            user_id: Number(row.UserId ?? 0),
+            request_count: row.RequestCount,
+            quota: row.Quota,
+            prompt_tokens: row.PromptTokens,
+            completion_tokens: row.CompletionTokens,
+          }))
+        )
+
+        setLastUpdated(new Date().toLocaleString())
+        setDateError('')
+      } else {
+        setDateError(message || 'Failed to fetch dashboard data')
+        setRows([])
+        setUserRows([])
+        setTokenRows([])
+      }
+    } catch (error: any) {
+      // Ignore abort errors
+      if (error.name === 'AbortError' || error.name === 'CanceledError') {
+        return
+      }
+      console.error('Failed to fetch dashboard data:', error)
+      setDateError('Failed to fetch dashboard data')
+      setRows([])
+      setUserRows([])
+      setTokenRows([])
+    } finally {
+      // Only clear loading if this request wasn't aborted
+      if (!abortController.signal.aborted) {
+        setLoading(false)
+      }
+    }
   }
 
   // Aggregate daily metrics (quota kept in raw units to avoid double conversion)
