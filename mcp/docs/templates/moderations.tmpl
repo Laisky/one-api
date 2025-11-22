@@ -1,0 +1,31 @@
+# Moderations API
+
+## Endpoint
+POST {{.BaseURL}}/v1/moderations
+
+## Description
+Classifies if text violates OpenAI's Usage Policies.
+
+## Authentication
+Authorization: Bearer YOUR_API_KEY
+
+## Example Request
+```bash
+curl {{.BaseURL}}/v1/moderations \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -d '{
+{{- if .Parameters.input}}
+    "input": "{{.Parameters.input}}"{{if .Parameters.model}},{{end}}
+{{- else}}
+    "input": "I want to kill them."{{if .Parameters.model}},{{end}}
+{{- end}}
+{{- if .Parameters.model}}
+    "model": "{{.Parameters.model}}"
+{{- end}}
+  }'
+```
+
+## Parameters
+- **input** (required): Text to classify{{if .Parameters.input}} - Current: "{{.Parameters.input}}"{{end}}
+- **model**: Moderation model{{if .Parameters.model}} - Current: `{{.Parameters.model}}`{{else}} (text-moderation-stable, text-moderation-latest){{end}}

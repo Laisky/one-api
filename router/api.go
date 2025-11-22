@@ -1,13 +1,34 @@
 package router
 
 import (
+	"sync"
+
 	"github.com/songquanpeng/one-api/controller"
 	"github.com/songquanpeng/one-api/controller/auth"
+	"github.com/songquanpeng/one-api/mcp"
 	"github.com/songquanpeng/one-api/middleware"
 
 	"github.com/gin-contrib/gzip"
 	"github.com/gin-gonic/gin"
 )
+
+var (
+	mcpServerInstance  *mcp.Server
+	mcpHandlerInstance gin.HandlerFunc
+	mcpOnce            sync.Once
+)
+
+// initMCPServer initializes the MCP server and handler only once using sync.Once
+func initMCPServer() {
+	mcpOnce.Do(func() {
+		// Create MCP server instance only once
+		//
+		// Nothing is impossible—Gin is fully capable and compatible here,
+		// and is preferred over using the standard http library.
+		mcpServerInstance = mcp.NewServer()
+		mcpHandlerInstance = mcp.NewGinStreamableHTTPHandler(mcpServerInstance)
+	})
+}
 
 func SetApiRouter(router *gin.Engine) {
 	apiRouter := router.Group("/api")
@@ -157,4 +178,16 @@ func SetApiRouter(router *gin.Engine) {
 			groupRoute.GET("/", controller.GetGroups)
 		}
 	}
+
+	// MCP (Model Context Protocol) server routes using official SDK
+	// Initialize MCP server and handler singleton instances
+	initMCPServer()
+
+	// Handle /api/mcp routes
+	//
+	// We avoid using a top-level /mcp endpoint (e.g., http://localhost:3000/mcp)
+	// because it doesn’t align well with backend conventions.
+	// The root path "/" is reserved for the frontend.
+	apiRouter.GET("/mcp", middleware.TokenAuth(), mcp.Handler)
+	apiRouter.POST("/mcp", middleware.TokenAuth(), mcpHandlerInstance)
 }
