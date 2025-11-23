@@ -1,0 +1,359 @@
+# One-API MCP Tool Usage Guide
+
+## Server: {{.ServerName}} v{{.ServerVersion}}
+**Base URL**: {{.BaseURL}}
+
+## Tool Usage for One-API Integration
+
+### Available Tools
+{{range .AvailableTools}}
+#### {{.}}
+Generate comprehensive documentation and integration examples for the {{.}} endpoint in One-API.
+
+**Go Integration Example**:
+```go
+package main
+
+import (
+    "bytes"
+    "encoding/json"
+    "fmt"
+    "io"
+    "net/http"
+    "os"
+)
+
+func call{{.}}() error {
+    url := "{{$.BaseURL}}/v1/{{.}}"
+    apiKey := os.Getenv("ONE_API_KEY")
+    
+    // Example request data - customize based on endpoint
+    requestData := map[string]interface{}{
+        // Add appropriate parameters for {{.}}
+    }
+    
+    jsonData, _ := json.Marshal(requestData)
+    
+    req, _ := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
+    req.Header.Set("Content-Type", "application/json")
+    req.Header.Set("Authorization", "Bearer "+apiKey)
+    
+    client := &http.Client{}
+    resp, err := client.Do(req)
+    if err != nil {
+        return fmt.Errorf("request failed: %v", err)
+    }
+    defer resp.Body.Close()
+    
+    body, _ := io.ReadAll(resp.Body)
+    fmt.Printf("{{.}} Response: %s\n", body)
+    return nil
+}
+```
+
+**Curl Integration Example**:
+```bash
+# {{.}} endpoint
+curl -X POST "{{$.BaseURL}}/v1/{{.}}" \
+  -H "Authorization: Bearer $ONE_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    // Add appropriate JSON parameters for {{.}}
+  }'
+```
+
+{{end}}
+
+## Specific Endpoint Integrations
+
+### Chat Completions Integration
+```go
+type ChatCompletionRequest struct {
+    Model       string    `json:"model"`
+    Messages    []Message `json:"messages"`
+    Temperature *float64  `json:"temperature,omitempty"`
+    MaxTokens   *int      `json:"max_tokens,omitempty"`
+    Stream      *bool     `json:"stream,omitempty"`
+}
+
+type Message struct {
+    Role    string `json:"role"`    // "system", "user", "assistant"
+    Content string `json:"content"`
+}
+
+func callChatCompletions(model, userMessage string) (*ChatResponse, error) {
+    url := "{{.BaseURL}}/v1/chat/completions"
+    
+    req := ChatCompletionRequest{
+        Model: model, // e.g., "gpt-3.5-turbo", "gpt-4", "claude-3-sonnet"
+        Messages: []Message{
+            {Role: "user", Content: userMessage},
+        },
+        Temperature: func(f float64) *float64 { return &f }(0.7),
+        MaxTokens:   func(i int) *int { return &i }(1000),
+    }
+    
+    return sendRequest[ChatCompletionRequest, ChatResponse](url, req)
+}
+```
+
+### Embeddings Integration  
+```go
+type EmbeddingRequest struct {
+    Model string `json:"model"`
+    Input string `json:"input"`
+}
+
+type EmbeddingResponse struct {
+    Object string      `json:"object"`
+    Data   []Embedding `json:"data"`
+    Usage  Usage       `json:"usage"`
+}
+
+type Embedding struct {
+    Object    string    `json:"object"`
+    Embedding []float64 `json:"embedding"`
+    Index     int       `json:"index"`
+}
+
+func callEmbeddings(text string) (*EmbeddingResponse, error) {
+    url := "{{.BaseURL}}/v1/embeddings"
+    
+    req := EmbeddingRequest{
+        Model: "text-embedding-ada-002", // or other embedding models
+        Input: text,
+    }
+    
+    return sendRequest[EmbeddingRequest, EmbeddingResponse](url, req)
+}
+```
+
+### Image Generation Integration
+```go
+type ImageRequest struct {
+    Model  string `json:"model"`
+    Prompt string `json:"prompt"`
+    N      *int   `json:"n,omitempty"`
+    Size   string `json:"size,omitempty"`
+}
+
+type ImageResponse struct {
+    Created int64       `json:"created"`
+    Data    []ImageData `json:"data"`
+}
+
+type ImageData struct {
+    URL string `json:"url"`
+}
+
+func callImageGeneration(prompt string) (*ImageResponse, error) {
+    url := "{{.BaseURL}}/v1/images/generations"
+    
+    req := ImageRequest{
+        Model:  "dall-e-3", // or "dall-e-2"
+        Prompt: prompt,
+        N:      func(i int) *int { return &i }(1),
+        Size:   "1024x1024", // "256x256", "512x512", "1024x1024"
+    }
+    
+    return sendRequest[ImageRequest, ImageResponse](url, req)
+}
+```
+
+## Generic Request Helper
+```go
+func sendRequest[T any, R any](url string, requestData T) (*R, error) {
+    apiKey := os.Getenv("ONE_API_KEY")
+    if apiKey == "" {
+        return nil, fmt.Errorf("ONE_API_KEY environment variable is required")
+    }
+    
+    jsonData, err := json.Marshal(requestData)
+    if err != nil {
+        return nil, fmt.Errorf("failed to marshal request: %v", err)
+    }
+    
+    req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
+    if err != nil {
+        return nil, fmt.Errorf("failed to create request: %v", err)
+    }
+    
+    req.Header.Set("Content-Type", "application/json")
+    req.Header.Set("Authorization", "Bearer "+apiKey)
+    
+    client := &http.Client{Timeout: 30 * time.Second}
+    resp, err := client.Do(req)
+    if err != nil {
+        return nil, fmt.Errorf("request failed: %v", err)
+    }
+    defer resp.Body.Close()
+    
+    body, err := io.ReadAll(resp.Body)
+    if err != nil {
+        return nil, fmt.Errorf("failed to read response: %v", err)
+    }
+    
+    if resp.StatusCode != http.StatusOK {
+        return nil, fmt.Errorf("API error (status %d): %s", resp.StatusCode, body)
+    }
+    
+    var response R
+    if err := json.Unmarshal(body, &response); err != nil {
+        return nil, fmt.Errorf("failed to unmarshal response: %v", err)
+    }
+    
+    return &response, nil
+}
+```
+
+## Bash Script Examples
+
+### Complete Chat Script
+```bash
+#!/bin/bash
+
+# One-API Chat Completions Script
+ONE_API_KEY="${ONE_API_KEY:-your-api-key-here}"
+BASE_URL="{{.BaseURL}}"
+
+chat_completion() {
+    local model="$1"
+    local message="$2"
+    
+    curl -s -X POST "${BASE_URL}/v1/chat/completions" \
+        -H "Content-Type: application/json" \
+        -H "Authorization: Bearer ${ONE_API_KEY}" \
+        -d "{
+            \"model\": \"${model}\",
+            \"messages\": [
+                {\"role\": \"user\", \"content\": \"${message}\"}
+            ],
+            \"temperature\": 0.7,
+            \"max_tokens\": 1000
+        }" | jq -r '.choices[0].message.content'
+}
+
+# Usage examples
+chat_completion "gpt-3.5-turbo" "Hello, how are you?"
+chat_completion "claude-3-sonnet" "Explain quantum computing"
+```
+
+### Batch Processing Script
+```bash
+#!/bin/bash
+
+# Process multiple requests
+process_batch() {
+    local input_file="$1"
+    local model="$2"
+    
+    while IFS= read -r line; do
+        echo "Processing: $line"
+        result=$(chat_completion "$model" "$line")
+        echo "Result: $result"
+        echo "---"
+        sleep 1  # Rate limiting
+    done < "$input_file"
+}
+
+# Usage: process_batch "questions.txt" "gpt-4"
+```
+
+## Error Handling Best Practices
+
+### Go Error Handling
+```go
+func handleAPIError(resp *http.Response, body []byte) error {
+    var apiError struct {
+        Error struct {
+            Type    string `json:"type"`
+            Code    string `json:"code"`
+            Message string `json:"message"`
+            Param   string `json:"param,omitempty"`
+        } `json:"error"`
+    }
+    
+    if err := json.Unmarshal(body, &apiError); err != nil {
+        return fmt.Errorf("API error (status %d): %s", resp.StatusCode, body)
+    }
+    
+    return fmt.Errorf("API error: %s (%s)", apiError.Error.Message, apiError.Error.Code)
+}
+```
+
+### Bash Error Handling
+```bash
+make_api_call() {
+    local response=$(curl -s -w "\n%{http_code}" "$@")
+    local body=$(echo "$response" | head -n -1)
+    local status=$(echo "$response" | tail -n 1)
+    
+    if [ "$status" -eq 200 ]; then
+        echo "$body"
+    else
+        echo "Error (Status $status): $body" >&2
+        return 1
+    fi
+}
+```
+
+## Testing Your Integration
+
+### Go Test Example
+```go
+func TestOneAPIIntegration(t *testing.T) {
+    // Set up test environment
+    os.Setenv("ONE_API_KEY", "test-key")
+    
+    // Test chat completion
+    response, err := callChatCompletions("gpt-3.5-turbo", "Hello")
+    if err != nil {
+        t.Fatalf("Chat completion failed: %v", err)
+    }
+    
+    if len(response.Choices) == 0 {
+        t.Fatal("No choices in response")
+    }
+    
+    t.Logf("Response: %s", response.Choices[0].Message.Content)
+}
+```
+
+### Bash Test Script
+```bash
+#!/bin/bash
+test_endpoints() {
+    echo "Testing One-API endpoints..."
+    
+    # Test models list
+    if models=$(curl -s -H "Authorization: Bearer $ONE_API_KEY" "{{.BaseURL}}/v1/models"); then
+        echo "✅ Models endpoint working"
+    else
+        echo "❌ Models endpoint failed"
+        return 1
+    fi
+    
+    # Test chat completions
+    if response=$(chat_completion "gpt-3.5-turbo" "test"); then
+        echo "✅ Chat completions working"
+    else
+        echo "❌ Chat completions failed"
+        return 1
+    fi
+    
+    echo "All tests passed!"
+}
+```
+
+## Integration Workflow
+
+1. **Setup Environment**: Set ONE_API_KEY and base URL
+2. **Test Connection**: Verify API key and connectivity
+3. **Choose Models**: List available models for your use case
+4. **Implement Requests**: Use the examples above as templates
+5. **Add Error Handling**: Implement robust error handling
+6. **Monitor Usage**: Track API usage and costs
+7. **Optimize**: Cache responses and implement rate limiting
+
+---
+*Tool usage guide for {{.ServerName}} v{{.ServerVersion}}*
