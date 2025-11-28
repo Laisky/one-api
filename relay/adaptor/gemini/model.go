@@ -5,6 +5,7 @@ type ChatRequest struct {
 	SafetySettings    []ChatSafetySettings `json:"safety_settings,omitempty"`
 	GenerationConfig  ChatGenerationConfig `json:"generation_config"`
 	Tools             []ChatTools          `json:"tools,omitempty"`
+	ToolConfig        *ToolConfig          `json:"tool_config,omitempty"`
 	SystemInstruction *ChatContent         `json:"system_instruction,omitempty"`
 	ModelVersion      string               `json:"model_version,omitempty"`
 	UsageMetadata     *UsageMetadata       `json:"usage_metadata,omitempty"`

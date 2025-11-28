@@ -171,9 +171,19 @@ func buildRequestSpecs(model string, variants []requestVariant) []requestSpec {
 // shouldSkipVariant reports whether the provided request specification should be skipped for the model.
 // The second return value describes the reason when the combination is unsupported.
 func shouldSkipVariant(model string, spec requestSpec) (bool, string) {
-	if spec.Expectation == expectationToolHistory {
+	lower := strings.ToLower(model)
+
+	// Check Azure EOF-prone variants (non-streaming Response API)
+	if lower == "azure-gpt-5-nano" {
+		if _, prone := azureEOFProneVariants[spec.RequestFormat]; prone {
+			return true, "Azure non-streaming Response API requests close prematurely (upstream EOF)"
+		}
+	}
+
+	// Check tool invocation skips first (covers both Tool and Tool History variants)
+	if spec.Expectation == expectationToolInvocation || spec.Expectation == expectationToolHistory {
 		if reasons, ok := toolHistoryVariantSkips[spec.RequestFormat]; ok {
-			if reason, exists := reasons[strings.ToLower(model)]; exists {
+			if reason, exists := reasons[lower]; exists {
 				return true, reason
 			}
 		}
@@ -181,7 +191,7 @@ func shouldSkipVariant(model string, spec requestSpec) (bool, string) {
 
 	if spec.Expectation == expectationStructuredOutput {
 		if reasons, ok := structuredVariantSkips[spec.RequestFormat]; ok {
-			if reason, exists := reasons[strings.ToLower(model)]; exists {
+			if reason, exists := reasons[lower]; exists {
 				return true, reason
 			}
 		}
@@ -191,7 +201,6 @@ func shouldSkipVariant(model string, spec requestSpec) (bool, string) {
 		return false, ""
 	}
 
-	lower := strings.ToLower(model)
 	if _, unsupported := visionUnsupportedModels[lower]; unsupported {
 		return true, "vision input unsupported by model " + model
 	}

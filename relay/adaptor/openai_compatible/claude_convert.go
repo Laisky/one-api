@@ -72,10 +72,10 @@ func responseAPIResponseToClaude(r *responseAPIResponse) relaymodel.ClaudeRespon
 	for _, item := range r.Output {
 		switch item.Type {
 		case "message":
-			if item.Role == "assistant" {
+			if strings.EqualFold(item.Role, "assistant") {
 				for _, c := range item.Content {
-					if c.Type == "output_text" && c.Text != "" {
-						out.Content = append(out.Content, relaymodel.ClaudeContent{Type: "text", Text: c.Text})
+					if text := responseAPIContentText(c); text != "" {
+						out.Content = append(out.Content, relaymodel.ClaudeContent{Type: "text", Text: text})
 					}
 				}
 			}
@@ -98,6 +98,20 @@ func responseAPIResponseToClaude(r *responseAPIResponse) relaymodel.ClaudeRespon
 	}
 
 	return out
+}
+
+func responseAPIContentText(content responseAPIContent) string {
+	switch strings.ToLower(strings.TrimSpace(content.Type)) {
+	case "output_text", "input_text", "text":
+		return strings.TrimSpace(content.Text)
+	case "output_json":
+		if len(content.JSON) > 0 {
+			return strings.TrimSpace(string(content.JSON))
+		}
+		return strings.TrimSpace(content.Text)
+	default:
+		return ""
+	}
 }
 
 // chatResponseToClaude maps OpenAI Chat Completion response to ClaudeMessages response

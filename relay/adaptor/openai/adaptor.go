@@ -48,6 +48,12 @@ func azureRequiresResponseAPI(modelName string) bool {
 	return strings.HasPrefix(normalized, "gpt-5")
 }
 
+// AzureRequiresResponseAPI reports whether an Azure deployment must be called via the Response API surface.
+// Exposed so controllers can keep conversion heuristics in sync with the adaptor's routing logic.
+func AzureRequiresResponseAPI(modelName string) bool {
+	return azureRequiresResponseAPI(modelName)
+}
+
 // shouldForceResponseAPI reports whether the upstream request must use the Response API surface.
 func shouldForceResponseAPI(metaInfo *meta.Meta) bool {
 	if metaInfo == nil {
@@ -820,6 +826,8 @@ func (a *Adaptor) DoResponse(c *gin.Context,
 			err, usage = ResponseAPIDirectHandler(c, resp, meta.PromptTokens, meta.ActualModelName)
 		case relaymode.Videos:
 			err, usage = VideoHandler(c, resp)
+		case relaymode.ClaudeMessages:
+			// Skip Handler so convertToClaudeResponse can reformat the upstream payload later
 		case relaymode.ChatCompletions:
 			if shouldConvertToClaude {
 				// Skip Handler to keep body intact for Claude conversion.

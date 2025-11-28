@@ -437,6 +437,8 @@ func Handler(c *gin.Context, resp *http.Response, promptTokens int, modelName st
 	// Check if this is a Claude Messages conversion - if so, don't write response here
 	// The DoResponse method will handle the conversion and response writing
 	if isClaudeConversion, exists := c.Get(ctxkey.ClaudeMessagesConversion); exists && isClaudeConversion.(bool) {
+		// Preserve the original response body so convertToClaudeResponse can consume it later.
+		resp.Body = io.NopCloser(bytes.NewReader(responseBody))
 		// For Claude Messages conversion, just return the usage information
 		// The DoResponse method will handle the response conversion and writing
 		calculateTokenUsage(&textResponse, promptTokens, modelName)

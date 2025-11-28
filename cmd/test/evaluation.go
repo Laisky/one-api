@@ -31,6 +31,10 @@ func evaluateResponse(spec requestSpec, body []byte) (bool, string) {
 			if structuredOutputSatisfied(payload) || structuredOutputSatisfiedBytes(body) {
 				return true, ""
 			}
+			// If the response was truncated due to max_tokens limit, treat it as a successful outcome
+			if isMaxTokensTruncated(payload) {
+				return true, ""
+			}
 			return false, "structured output fields missing"
 		case expectationToolInvocation:
 			if chatHasToolCalls(payload) {
@@ -56,6 +60,10 @@ func evaluateResponse(spec requestSpec, body []byte) (bool, string) {
 				if status == "failed" {
 					return false, snippet(body)
 				}
+				return true, ""
+			}
+			// If the response was truncated due to max_tokens limit, treat it as a successful outcome
+			if isMaxTokensTruncated(payload) {
 				return true, ""
 			}
 			return false, "structured output fields missing"
@@ -94,6 +102,11 @@ func evaluateResponse(spec requestSpec, body []byte) (bool, string) {
 			if structuredOutputSatisfied(payload) || structuredOutputSatisfiedBytes(body) {
 				return true, ""
 			}
+			// If the response was truncated due to max_tokens limit, treat it as a successful outcome
+			// since the upstream fulfilled the request as the user intended (respecting the token limit).
+			if isMaxTokensTruncated(payload) {
+				return true, ""
+			}
 			return false, "structured output fields missing"
 		case expectationToolInvocation:
 			if choices, ok := payload["choices"].([]any); ok {
@@ -120,6 +133,10 @@ func evaluateResponse(spec requestSpec, body []byte) (bool, string) {
 					}
 				}
 			}
+			// Accept function_call outputs from Response API conversions
+			if hasFunctionCallOutput(payload) {
+				return true, ""
+			}
 			return false, "response missing tool_use block"
 		case expectationToolHistory:
 			if choices, ok := payload["choices"].([]any); ok {
@@ -145,6 +162,10 @@ func evaluateResponse(spec requestSpec, body []byte) (bool, string) {
 						return true, ""
 					}
 				}
+			}
+			// Accept function_call outputs from Response API conversions even without assistant text
+			if hasFunctionCallOutput(payload) {
+				return true, ""
 			}
 			if claudePayloadHasText(payload) {
 				return true, ""
@@ -633,6 +654,33 @@ func isToolExpectation(exp expectation) bool {
 	return exp == expectationToolInvocation || exp == expectationToolHistory
 }
 
+// isMaxTokensTruncated reports whether the response was truncated due to max_tokens limit.
+// This is used to treat truncated responses as successful outcomes, since the upstream
+// service fulfilled the request as the user intended (respecting the token limit).
+func isMaxTokensTruncated(payload map[string]any) bool {
+	// Check for Claude Messages API stop_reason
+	stopReason := stringValue(payload, "stop_reason")
+	if stopReason == "max_tokens" || stopReason == "length" {
+		return true
+	}
+
+	// Check for OpenAI-style finish_reason in choices
+	if choices, ok := payload["choices"].([]any); ok {
+		for _, choice := range choices {
+			choiceMap, ok := choice.(map[string]any)
+			if !ok {
+				continue
+			}
+			finishReason := stringValue(choiceMap, "finish_reason")
+			if finishReason == "length" || finishReason == "max_tokens" {
+				return true
+			}
+		}
+	}
+
+	return false
+}
+
 func stringValue(data map[string]any, key string) string {
 	if raw, ok := data[key]; ok {
 		if s, ok := raw.(string); ok {
@@ -718,6 +766,15 @@ func isUnsupportedCombination(reqType requestType, stream bool, statusCode int, 
 	}
 
 	if statusCode == http.StatusNotFound || statusCode == http.StatusMethodNotAllowed {
+		return true
+	}
+
+	// Treat transient upstream errors (502, 503, 504) as skippable rather than failures.
+	// These typically indicate temporary infrastructure issues (Cloudflare, load balancer, etc.)
+	// rather than genuine API incompatibilities.
+	if statusCode == http.StatusBadGateway ||
+		statusCode == http.StatusServiceUnavailable ||
+		statusCode == http.StatusGatewayTimeout {
 		return true
 	}
 

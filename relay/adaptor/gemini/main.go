@@ -313,6 +313,11 @@ func ConvertRequest(textRequest model.GeneralOpenAIRequest) *ChatRequest {
 				},
 			})
 		}
+
+	}
+
+	if cfg := convertToolChoiceToConfig(textRequest.ToolChoice); cfg != nil {
+		geminiRequest.ToolConfig = cfg
 	}
 
 	if geminiRequest.GenerationConfig.TopP != nil &&
@@ -432,6 +437,40 @@ func ConvertRequest(textRequest model.GeneralOpenAIRequest) *ChatRequest {
 	}
 
 	return &geminiRequest
+}
+
+func convertToolChoiceToConfig(toolChoice any) *ToolConfig {
+	switch choice := toolChoice.(type) {
+	case string:
+		switch strings.ToLower(strings.TrimSpace(choice)) {
+		case "none":
+			return &ToolConfig{FunctionCallingConfig: FunctionCallingConfig{Mode: "NONE"}}
+		default:
+			return nil
+		}
+	case map[string]any:
+		choiceType := strings.ToLower(strings.TrimSpace(fmt.Sprint(choice["type"])))
+		var allowed []string
+		switch choiceType {
+		case "function":
+			if fn, ok := choice["function"].(map[string]any); ok {
+				if name, ok := fn["name"].(string); ok && strings.TrimSpace(name) != "" {
+					allowed = append(allowed, strings.TrimSpace(name))
+				}
+			}
+		case "tool":
+			if name, ok := choice["name"].(string); ok && strings.TrimSpace(name) != "" {
+				allowed = append(allowed, strings.TrimSpace(name))
+			}
+		}
+		if len(allowed) > 0 {
+			return &ToolConfig{FunctionCallingConfig: FunctionCallingConfig{
+				Mode:                 "ANY",
+				AllowedFunctionNames: allowed,
+			}}
+		}
+	}
+	return nil
 }
 
 func ConvertEmbeddingRequest(request model.GeneralOpenAIRequest) *BatchEmbeddingRequest {
@@ -561,50 +600,47 @@ func responseGeminiChat2OpenAI(c *gin.Context, response *ChatResponse) *openai.T
 			},
 			FinishReason: constant.StopFinishReason,
 		}
+
+		toolCalls := getToolCalls(&candidate)
+		if len(toolCalls) > 0 {
+			choice.Message.ToolCalls = toolCalls
+		}
+
 		if len(candidate.Content.Parts) > 0 {
-			if candidate.Content.Parts[0].FunctionCall != nil {
-				choice.Message.ToolCalls = getToolCalls(&candidate)
-			} else {
-				// Handle text and image content
-				var builder strings.Builder
-				var contentItems []model.MessageContent
+			var textParts []string
+			var structured []model.MessageContent
 
-				for _, part := range candidate.Content.Parts {
-					if part.Text != "" {
-						// For text parts
-						if i > 0 {
-							builder.WriteString("\n")
-						}
-						builder.WriteString(part.Text)
-
-						// Add to content items
-						contentItems = append(contentItems, model.MessageContent{
-							Type: model.ContentTypeText,
-							Text: &part.Text,
-						})
-					}
-
-					if part.InlineData != nil && part.InlineData.MimeType != "" && part.InlineData.Data != "" {
-						// For inline image data
-						imageURL := &model.ImageURL{
-							// The data is already base64 encoded
-							Url: fmt.Sprintf("data:%s;base64,%s", part.InlineData.MimeType, part.InlineData.Data),
-						}
-
-						contentItems = append(contentItems, model.MessageContent{
-							Type:     model.ContentTypeImageURL,
-							ImageURL: imageURL,
-						})
-					}
+			for _, part := range candidate.Content.Parts {
+				if part.FunctionCall != nil {
+					continue
 				}
 
-				// If we have multiple content types, use structured content format
-				if len(contentItems) > 1 || (len(contentItems) == 1 && contentItems[0].Type != model.ContentTypeText) {
-					choice.Message.Content = contentItems
-				} else {
-					// Otherwise use the simple string content format
-					choice.Message.Content = builder.String()
+				if part.Text != "" {
+					textParts = append(textParts, part.Text)
+					structured = append(structured, model.MessageContent{
+						Type: model.ContentTypeText,
+						Text: &part.Text,
+					})
 				}
+
+				if part.InlineData != nil && part.InlineData.MimeType != "" && part.InlineData.Data != "" {
+					imageURL := &model.ImageURL{
+						Url: fmt.Sprintf("data:%s;base64,%s", part.InlineData.MimeType, part.InlineData.Data),
+					}
+					structured = append(structured, model.MessageContent{
+						Type:     model.ContentTypeImageURL,
+						ImageURL: imageURL,
+					})
+				}
+			}
+
+			joined := strings.Join(textParts, "\n")
+			if len(structured) > 1 || (len(structured) == 1 && structured[0].Type != model.ContentTypeText) {
+				choice.Message.Content = structured
+			} else if joined != "" {
+				choice.Message.Content = joined
+			} else if len(toolCalls) == 0 {
+				choice.Message.Content = ""
 			}
 		} else {
 			choice.Message.Content = ""

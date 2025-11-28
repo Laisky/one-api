@@ -280,3 +280,71 @@ func TestShouldSkipVariantClaudeToolHistoryAzure(t *testing.T) {
 		t.Fatalf("expected azure-gpt-5-nano tool history variant to run, got skip: %s", reason)
 	}
 }
+
+func TestIsMaxTokensTruncated(t *testing.T) {
+	cases := []struct {
+		name     string
+		payload  map[string]any
+		expected bool
+	}{
+		{
+			name:     "claude max_tokens stop_reason",
+			payload:  map[string]any{"stop_reason": "max_tokens"},
+			expected: true,
+		},
+		{
+			name:     "openai length stop_reason",
+			payload:  map[string]any{"stop_reason": "length"},
+			expected: true,
+		},
+		{
+			name:     "openai choices with length finish_reason",
+			payload:  map[string]any{"choices": []any{map[string]any{"finish_reason": "length"}}},
+			expected: true,
+		},
+		{
+			name:     "normal end_turn stop_reason",
+			payload:  map[string]any{"stop_reason": "end_turn"},
+			expected: false,
+		},
+		{
+			name:     "normal choices with stop finish_reason",
+			payload:  map[string]any{"choices": []any{map[string]any{"finish_reason": "stop"}}},
+			expected: false,
+		},
+		{
+			name:     "empty payload",
+			payload:  map[string]any{},
+			expected: false,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			result := isMaxTokensTruncated(tc.payload)
+			if result != tc.expected {
+				t.Errorf("isMaxTokensTruncated(%v) = %v, want %v", tc.payload, result, tc.expected)
+			}
+		})
+	}
+}
+
+func TestEvaluateResponseMaxTokensTruncatedClaude(t *testing.T) {
+	// Claude response truncated due to max_tokens should be treated as success
+	body := []byte(`{"id":"msg_123","type":"message","role":"assistant","content":[],"stop_reason":"max_tokens","usage":{"input_tokens":82,"output_tokens":511}}`)
+	spec := requestSpec{Type: requestTypeClaudeMessages, Expectation: expectationStructuredOutput}
+	success, reason := evaluateResponse(spec, body)
+	if !success {
+		t.Fatalf("expected max_tokens truncated response to be successful, got: %s", reason)
+	}
+}
+
+func TestEvaluateResponseMaxTokensTruncatedChat(t *testing.T) {
+	// Chat completion response truncated due to length should be treated as success
+	body := []byte(`{"choices":[{"message":{"role":"assistant","content":""},"finish_reason":"length"}]}`)
+	spec := requestSpec{Type: requestTypeChatCompletion, Expectation: expectationStructuredOutput}
+	success, reason := evaluateResponse(spec, body)
+	if !success {
+		t.Fatalf("expected length truncated response to be successful, got: %s", reason)
+	}
+}

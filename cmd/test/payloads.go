@@ -98,11 +98,11 @@ func chatCompletionPayload(model string, stream bool, exp expectation) any {
 		base["messages"] = []map[string]any{
 			{
 				"role":    "system",
-				"content": "You are a weather assistant that must call tools when asked for weather information.",
+				"content": "You are a weather assistant. You MUST call the get_weather function to retrieve weather data. Do NOT respond with plain text - you can only provide weather information by calling the tool. Never guess or make up weather data.",
 			},
 			{
 				"role":    "user",
-				"content": "What is the weather in San Francisco, CA right now? Use the tool to find out.",
+				"content": "Call the get_weather tool to check the current weather in San Francisco, CA. Do not respond with text - just invoke the tool.",
 			},
 		}
 		base["tools"] = []map[string]any{chatWeatherToolDefinition()}
@@ -120,11 +120,11 @@ func chatCompletionPayload(model string, stream bool, exp expectation) any {
 		base["messages"] = []map[string]any{
 			{
 				"role":    "system",
-				"content": "You are a weather assistant that must call the get_weather function whenever updated forecasts are needed.",
+				"content": "You are a weather assistant. You MUST call the get_weather function to retrieve any weather data. Do NOT respond with plain text - always invoke the tool first. Never summarize previous results without calling the tool again.",
 			},
 			{
 				"role":    "user",
-				"content": "Fetch the current weather conditions for San Francisco, CA using the tool.",
+				"content": "Call the get_weather tool to check the current weather in San Francisco, CA.",
 			},
 			{
 				"role":    "assistant",
@@ -145,7 +145,7 @@ func chatCompletionPayload(model string, stream bool, exp expectation) any {
 			},
 			{
 				"role":    "user",
-				"content": "Thanks for the update. Please call the tool again to grab tomorrow morning's forecast for San Francisco in Fahrenheit and summarize the findings.",
+				"content": "Now call the get_weather tool again with unit=fahrenheit to get tomorrow's forecast for San Francisco. You MUST invoke the tool - do not respond with text.",
 			},
 		}
 		base["tools"] = []map[string]any{chatWeatherToolDefinition()}
@@ -201,13 +201,14 @@ func responseAPIPayload(model string, stream bool, exp expectation) any {
 
 	if exp == expectationToolInvocation {
 		base["max_output_tokens"] = defaultMaxTokens
+		base["instructions"] = "You MUST call the get_weather function to retrieve weather data. Do NOT respond with plain text - always invoke the tool. Never guess or make up weather information."
 		base["input"] = []map[string]any{
 			{
 				"role": "user",
 				"content": []map[string]any{
 					{
 						"type": "input_text",
-						"text": "Please call get_weather for San Francisco, CA in celsius and report the findings.",
+						"text": "Call the get_weather tool to check the weather in San Francisco, CA (use celsius). You MUST invoke the tool - do not respond with text.",
 					},
 				},
 			},
@@ -225,13 +226,14 @@ func responseAPIPayload(model string, stream bool, exp expectation) any {
 		callID := "call_" + callSuffix
 		fcID := "fc_" + callSuffix
 		base["max_output_tokens"] = defaultMaxTokens
+		base["instructions"] = "You MUST call the get_weather function to retrieve weather data. Do NOT respond with plain text - always invoke the tool first. Never summarize previous results without calling the tool again."
 		base["input"] = []any{
 			map[string]any{
 				"role": "user",
 				"content": []map[string]any{
 					{
 						"type": "input_text",
-						"text": "Retrieve the current weather for San Francisco, CA using the tool.",
+						"text": "Call the get_weather tool to check the current weather in San Francisco, CA.",
 					},
 				},
 			},
@@ -253,7 +255,7 @@ func responseAPIPayload(model string, stream bool, exp expectation) any {
 				"content": []map[string]any{
 					{
 						"type": "input_text",
-						"text": "Great, now call the tool again to retrieve tomorrow morning's forecast for San Francisco in Fahrenheit and summarize both readings.",
+						"text": "Now call the get_weather tool again with unit=fahrenheit to get tomorrow's forecast for San Francisco. You MUST invoke the tool - do not respond with text.",
 					},
 				},
 			},
@@ -365,13 +367,14 @@ func claudeMessagesPayload(model string, stream bool, exp expectation) any {
 	}
 
 	if exp == expectationToolInvocation {
+		base["system"] = "You MUST call the get_weather function to retrieve weather data. Do NOT respond with plain text - always invoke the tool. Never guess or make up weather information."
 		base["messages"] = []map[string]any{
 			{
 				"role": "user",
 				"content": []map[string]any{
 					{
 						"type": "text",
-						"text": "Use the get_weather tool to retrieve today's weather in San Francisco, CA.",
+						"text": "Call the get_weather tool to check the current weather in San Francisco, CA. You MUST invoke the tool - do not respond with text.",
 					},
 				},
 			},
@@ -386,13 +389,14 @@ func claudeMessagesPayload(model string, stream bool, exp expectation) any {
 
 	if exp == expectationToolHistory {
 		callID := "toolu_weather_history_1"
+		base["system"] = "You MUST call the get_weather function to retrieve weather data. Do NOT respond with plain text - always invoke the tool first. Never summarize previous results without calling the tool again."
 		base["messages"] = []map[string]any{
 			{
 				"role": "user",
 				"content": []map[string]any{
 					{
 						"type": "text",
-						"text": "Please use the weather tool to pull the current conditions in San Francisco, CA.",
+						"text": "Call the get_weather tool to check the current weather in San Francisco, CA.",
 					},
 				},
 			},
@@ -425,7 +429,7 @@ func claudeMessagesPayload(model string, stream bool, exp expectation) any {
 					},
 					{
 						"type": "text",
-						"text": "Thanks! Please call the tool again to gather tomorrow morning's forecast for San Francisco in Fahrenheit before replying.",
+						"text": "Now call the get_weather tool again with unit=fahrenheit to get tomorrow's forecast for San Francisco. You MUST invoke the tool - do not respond with text.",
 					},
 				},
 			},
@@ -547,11 +551,20 @@ func affineResponseTools() []map[string]any {
 			"strict": false,
 		},
 		{
-			"type":                "web_search_preview",
-			"search_context_size": "medium",
-			"user_location": map[string]any{
-				"type":    "approximate",
-				"country": "US",
+			"type":        "function",
+			"name":        "workspace_search",
+			"description": "Search the user's AFFiNE workspace for additional context snippets to cite in the response.",
+			"parameters": map[string]any{
+				"$schema":              "http://json-schema.org/draft-07/schema#",
+				"type":                 "object",
+				"additionalProperties": false,
+				"properties": map[string]any{
+					"query": map[string]any{
+						"description": "Plain language description of what to search for in the workspace.",
+						"type":        "string",
+					},
+				},
+				"required": []string{"query"},
 			},
 		},
 		{

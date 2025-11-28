@@ -34,6 +34,64 @@ func ValidateChatBuiltinTools(c *gin.Context, request *relaymodel.GeneralOpenAIR
 	return ValidateRequestedBuiltins(modelName, meta, channel, provider, requested)
 }
 
+// PruneDisallowedResponseBuiltins removes built-in tools from the Response API request when the
+// channel policy explicitly disallows them and the client did not force a specific tool choice.
+// Returns the list of canonical tool names that were removed.
+func PruneDisallowedResponseBuiltins(request *openai.ResponseAPIRequest, meta *metalib.Meta, channel *model.Channel, provider adaptor.Adaptor) []string {
+	if request == nil || !canPruneResponseToolChoice(request.ToolChoice) {
+		return nil
+	}
+
+	modelName := resolveModelName(meta, request.Model)
+	effectiveProvider := provider
+	if channel != nil {
+		switch channel.Type {
+		case channeltype.Azure:
+			effectiveProvider = nil
+		}
+	} else if meta != nil {
+		switch meta.ChannelType {
+		case channeltype.Azure:
+			effectiveProvider = nil
+		}
+	}
+
+	policy := buildToolPolicy(channel, effectiveProvider, modelName)
+	filtered := make([]openai.ResponseAPITool, 0, len(request.Tools))
+	removedSet := make(map[string]struct{})
+
+	for _, tool := range request.Tools {
+		name := NormalizeBuiltinType(tool.Type)
+		if name == "" || policy.isAllowed(name) {
+			filtered = append(filtered, tool)
+			continue
+		}
+		removedSet[name] = struct{}{}
+	}
+
+	if len(removedSet) == 0 {
+		return nil
+	}
+
+	request.Tools = filtered
+	removed := make([]string, 0, len(removedSet))
+	for name := range removedSet {
+		removed = append(removed, name)
+	}
+	return removed
+}
+
+func canPruneResponseToolChoice(choice any) bool {
+	if choice == nil {
+		return true
+	}
+	if s, ok := choice.(string); ok {
+		trimmed := strings.ToLower(strings.TrimSpace(s))
+		return trimmed == "" || trimmed == "auto"
+	}
+	return false
+}
+
 // ApplyBuiltinToolCharges reconciles built-in tool usage with billing by updating usage.ToolsCost and
 // recording metadata for downstream logging.
 func ApplyBuiltinToolCharges(c *gin.Context, usage **relaymodel.Usage, meta *metalib.Meta, channel *model.Channel, provider adaptor.Adaptor) {

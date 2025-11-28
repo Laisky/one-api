@@ -95,6 +95,12 @@ func RelayResponseAPIHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 	if requestAdaptor == nil {
 		return openai.ErrorWrapper(errors.New("invalid api type"), "invalid_api_type", http.StatusBadRequest)
 	}
+	if pruned := tooling.PruneDisallowedResponseBuiltins(responseAPIRequest, meta, channelRecord, requestAdaptor); len(pruned) > 0 {
+		for _, name := range pruned {
+			delete(requestedBuiltins, name)
+		}
+		lg.Debug("pruned disallowed response builtins", zap.Strings("tools", pruned), zap.String("model", responseAPIRequest.Model))
+	}
 	if err := tooling.ValidateRequestedBuiltins(responseAPIRequest.Model, meta, channelRecord, requestAdaptor, requestedBuiltins); err != nil {
 		return openai.ErrorWrapper(err, "tool_not_allowed", http.StatusBadRequest)
 	}
@@ -977,6 +983,10 @@ func sanitizeResponseAPIRequest(request *openai.ResponseAPIRequest, channelType 
 
 	for idx := range request.Tools {
 		tool := &request.Tools[idx]
+		toolType := strings.ToLower(strings.TrimSpace(tool.Type))
+		if (toolType == "web_search_preview" || toolType == "web_search_preview_reasoning" || toolType == "web_search_preview_non_reasoning") && channelType != channeltype.OpenAI {
+			tool.Type = "web_search"
+		}
 		if tool.Parameters != nil {
 			tool.Parameters, _ = openai.NormalizeStructuredJSONSchema(tool.Parameters, channelType)
 		}
@@ -1018,6 +1028,8 @@ func supportsNativeResponseAPI(meta *metalib.Meta) bool {
 			return true
 		}
 		return strings.Contains(base, "api.openai.com")
+	case channeltype.Azure:
+		return openai.AzureRequiresResponseAPI(meta.ActualModelName)
 	case channeltype.XAI:
 		// XAI supports Response API natively
 		return true
@@ -1040,11 +1052,23 @@ func isReasoningModel(modelName string) bool {
 	if modelName == "" {
 		return false
 	}
-	return strings.HasPrefix(modelName, "gpt-5") ||
+	// Check for reasoning model prefixes (direct model names)
+	if strings.HasPrefix(modelName, "gpt-5") ||
 		strings.HasPrefix(modelName, "o1") ||
 		strings.HasPrefix(modelName, "o3") ||
 		strings.HasPrefix(modelName, "o4") ||
-		strings.HasPrefix(modelName, "o-")
+		strings.HasPrefix(modelName, "o-") {
+		return true
+	}
+	// Also check for prefixed model names (e.g., "azure-gpt-5-nano", "vertex-o1-mini")
+	// These are user-facing aliases that map to reasoning models.
+	return strings.Contains(modelName, "-gpt-5") ||
+		strings.Contains(modelName, "-o1-") ||
+		strings.Contains(modelName, "-o3-") ||
+		strings.Contains(modelName, "-o4-") ||
+		strings.HasSuffix(modelName, "-o1") ||
+		strings.HasSuffix(modelName, "-o3") ||
+		strings.HasSuffix(modelName, "-o4")
 }
 
 // preConsumeResponseAPIQuota pre-consumes quota for Response API requests

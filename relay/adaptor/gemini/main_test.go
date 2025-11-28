@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/Laisky/errors/v2"
+	"github.com/stretchr/testify/require"
 
 	"github.com/songquanpeng/one-api/relay/model"
 )
@@ -249,6 +250,62 @@ func TestCleanFunctionParameters(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestConvertRequestSetsToolConfig(t *testing.T) {
+	t.Parallel()
+
+	req := model.GeneralOpenAIRequest{
+		Model: "gemini-2.5-flash",
+		Messages: []model.Message{{
+			Role:    "user",
+			Content: "hi",
+		}},
+		Tools: []model.Tool{{
+			Type: "function",
+			Function: &model.Function{
+				Name:       "get_weather",
+				Parameters: map[string]any{"type": "object"},
+			},
+		}},
+		ToolChoice: map[string]any{
+			"type":     "function",
+			"function": map[string]any{"name": "get_weather"},
+		},
+	}
+
+	t.Logf("tool_choice type: %T", req.ToolChoice)
+	converted := ConvertRequest(req)
+	require.NotNil(t, converted.ToolConfig)
+	require.Equal(t, "ANY", converted.ToolConfig.FunctionCallingConfig.Mode)
+	require.Equal(t, []string{"get_weather"}, converted.ToolConfig.FunctionCallingConfig.AllowedFunctionNames)
+}
+
+func TestConvertToolChoiceToConfig(t *testing.T) {
+	t.Parallel()
+
+	forced := map[string]any{
+		"type":     "function",
+		"function": map[string]any{"name": "get_weather"},
+	}
+	cfg := convertToolChoiceToConfig(forced)
+	require.NotNil(t, cfg)
+	require.Equal(t, "ANY", cfg.FunctionCallingConfig.Mode)
+	require.Equal(t, []string{"get_weather"}, cfg.FunctionCallingConfig.AllowedFunctionNames)
+
+	respStyle := map[string]any{
+		"type": "tool",
+		"name": "get_weather",
+	}
+	cfg = convertToolChoiceToConfig(respStyle)
+	require.NotNil(t, cfg)
+	require.Equal(t, []string{"get_weather"}, cfg.FunctionCallingConfig.AllowedFunctionNames)
+
+	cfg = convertToolChoiceToConfig("none")
+	require.NotNil(t, cfg)
+	require.Equal(t, "NONE", cfg.FunctionCallingConfig.Mode)
+
+	require.Nil(t, convertToolChoiceToConfig("auto"))
 }
 
 func TestCleanJsonSchemaForGemini(t *testing.T) {

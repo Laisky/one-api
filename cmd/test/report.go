@@ -67,7 +67,7 @@ func renderReport(rep report) {
 	}
 
 	fmt.Println()
-	fmt.Println("=== One-API Compatibility Matrix ===")
+	fmt.Printf("=== One-API Compatibility Matrix %s ===\n", time.Now().Format(time.RFC3339))
 	fmt.Println()
 
 	tw := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)

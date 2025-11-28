@@ -1,6 +1,7 @@
 package openai
 
 import (
+	"bytes"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -114,4 +115,47 @@ func TestDoResponseClaudeStreamingConvertsToClaudeSSE(t *testing.T) {
 	require.Contains(t, body, "\"type\":\"content_block_delta\"")
 	require.Contains(t, body, "Hello")
 	require.Contains(t, body, "data: [DONE]")
+}
+
+func TestDoResponseClaudeNonStreamDefersToConverter(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/messages", nil)
+	c.Set(ctxkey.ClaudeMessagesConversion, true)
+
+	meta := &metalib.Meta{
+		Mode:            relaymode.ClaudeMessages,
+		ChannelType:     channeltype.OpenAI,
+		APIType:         channeltype.OpenAI,
+		IsStream:        false,
+		OriginModelName: "gpt-4o-mini",
+		ActualModelName: "gpt-4o-mini",
+	}
+	metalib.Set2Context(c, meta)
+
+	adaptor := &Adaptor{}
+	adaptor.Init(meta)
+
+	payload := `{"id":"resp_123","object":"response","model":"gpt-4o-mini","output":[{"type":"function_call","id":"fc_1","call_id":"call_1","name":"get_weather","arguments":"{\"location\":\"San Francisco, CA\"}"}],"usage":{"input_tokens":12,"output_tokens":4}}`
+	resp := &http.Response{
+		StatusCode: http.StatusOK,
+		Header:     http.Header{"Content-Type": []string{"application/json"}},
+		Body:       io.NopCloser(strings.NewReader(payload)),
+	}
+
+	usage, respErr := adaptor.DoResponse(c, resp, meta)
+	require.Nil(t, respErr)
+	require.Nil(t, usage)
+	require.Equal(t, 0, recorder.Body.Len(), "handler should not have written directly")
+
+	convertedAny, exists := c.Get(ctxkey.ConvertedResponse)
+	require.True(t, exists)
+	convertedResp := convertedAny.(*http.Response)
+	bodyBytes, readErr := io.ReadAll(convertedResp.Body)
+	require.NoError(t, readErr)
+	convertedResp.Body = io.NopCloser(bytes.NewReader(bodyBytes))
+	require.Contains(t, string(bodyBytes), "\"tool_use\"")
+	require.Contains(t, string(bodyBytes), "get_weather")
 }

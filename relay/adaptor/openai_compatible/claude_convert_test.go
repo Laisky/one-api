@@ -123,6 +123,38 @@ func TestConvertOpenAIResponseToClaudeResponse_ResponseAPI(t *testing.T) {
 	assert.GreaterOrEqual(t, types["tool_use"], 1)
 }
 
+func TestConvertOpenAIResponseToClaudeResponse_ResponseAPIOutputJSON(t *testing.T) {
+	body := `{
+	    "id":"resp_json",
+	    "object":"response",
+	    "model":"gpt-resp",
+	    "output":[
+	        {"type":"message","role":"assistant","content":[{"type":"output_json","json":{"topic":"AI","confidence":0.92}}]}
+	    ],
+	    "usage":{"input_tokens":2,"output_tokens":3,"total_tokens":5},
+	    "created_at": 1,
+	    "status":"completed"
+	}`
+
+	resp := &http.Response{StatusCode: 200, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(body))}
+	got, errResp := ConvertOpenAIResponseToClaudeResponse(nil, resp)
+	require.Nil(t, errResp)
+	bytes, readErr := io.ReadAll(got.Body)
+	require.NoError(t, readErr)
+
+	var cr relaymodel.ClaudeResponse
+	require.NoError(t, json.Unmarshal(bytes, &cr))
+	require.NotEmpty(t, cr.Content)
+	found := false
+	for _, block := range cr.Content {
+		if block.Type == "text" {
+			found = true
+			assert.Equal(t, "{\"topic\":\"AI\",\"confidence\":0.92}", block.Text)
+		}
+	}
+	assert.True(t, found, "expected JSON text block")
+}
+
 func TestConvertOpenAIStreamToClaudeSSE_BasicsAndUsage(t *testing.T) {
 	c, w := newGinTestContext()
 
