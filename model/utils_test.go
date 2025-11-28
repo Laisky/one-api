@@ -73,9 +73,6 @@ func TestBatchUpdaterGracefulShutdown(t *testing.T) {
 	require.NoError(t, DB.First(&userAfter, user.Id).Error)
 	assert.Equal(t, int64(1150), userAfter.Quota, "quota should be updated after shutdown flush")
 
-	// Reset for potential future tests
-	batchUpdaterStop = nil
-	batchUpdaterDone = nil
 }
 
 // TestBatchUpdaterContextCancellation verifies that batch update respects context cancellation.

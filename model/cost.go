@@ -223,18 +223,37 @@ func MigrateUserRequestCostEnsureUniqueRequestID() error {
 		logger.Logger.Debug("user_request_costs table missing id column, using request_id fallback for dedup")
 
 		cond := fmt.Sprintf("%s < ?", dedupColumn)
-		type keepRow struct {
-			RequestID string `gorm:"column:request_id"`
-			MaxMarker any    `gorm:"column:max_marker"`
+		rows, err := latestQuery.Rows()
+		if err != nil {
+			return errors.Wrap(err, "query latest user_request_costs per request_id")
 		}
-
-		var keepRows []keepRow
-		if err := latestQuery.Scan(&keepRows).Error; err != nil {
-			return errors.Wrap(err, "scan latest user_request_costs per request_id")
+		var keepRows []struct {
+			requestID string
+			maxMarker any
+		}
+		for rows.Next() {
+			var (
+				rid    string
+				marker any
+			)
+			if err := rows.Scan(&rid, &marker); err != nil {
+				_ = rows.Close()
+				return errors.Wrap(err, "scan latest user_request_costs per request_id")
+			}
+			keepRows = append(keepRows, struct {
+				requestID string
+				maxMarker any
+			}{requestID: rid, maxMarker: marker})
+		}
+		if err := rows.Close(); err != nil {
+			return errors.Wrap(err, "close latest user_request_costs rows")
+		}
+		if err := rows.Err(); err != nil {
+			return errors.Wrap(err, "iterate latest user_request_costs rows")
 		}
 
 		for _, row := range keepRows {
-			result := DB.Where("request_id = ? AND "+cond, row.RequestID, row.MaxMarker).
+			result := DB.Where("request_id = ? AND "+cond, row.requestID, row.maxMarker).
 				Delete(&UserRequestCost{})
 			if result.Error != nil {
 				return errors.Wrap(result.Error, "delete duplicate user_request_costs row (fallback)")
