@@ -145,7 +145,17 @@ func TestProcessChannelRelayError_InternalInfraFailureDoesNotSuspend(t *testing.
 	}
 
 	require.NotPanics(t, func() {
-		processChannelRelayError(ctx, 1, 2, "test-channel", "default", "whisper-1", relayErr)
+		processChannelRelayError(ctx, processChannelRelayErrorParams{
+			UserId:        1,
+			TokenId:       0,
+			ChannelId:     2,
+			ChannelName:   "test-channel",
+			Group:         "default",
+			OriginalModel: "whisper-1",
+			ActualModel:   "whisper-1",
+			RequestURL:    "/v1/audio/transcriptions",
+			Err:           relayErr,
+		})
 	})
 }
 
@@ -166,7 +176,17 @@ func TestProcessChannelRelayError_InternalAdaptorFailureDoesNotSuspend(t *testin
 	}
 
 	require.NotPanics(t, func() {
-		processChannelRelayError(ctx, 1, 2, "azure text-embedding-3-large", "default", "text-embedding-3-large", relayErr)
+		processChannelRelayError(ctx, processChannelRelayErrorParams{
+			UserId:        1,
+			TokenId:       0,
+			ChannelId:     2,
+			ChannelName:   "azure text-embedding-3-large",
+			Group:         "default",
+			OriginalModel: "text-embedding-3-large",
+			ActualModel:   "text-embedding-3-large",
+			RequestURL:    "/v1/embeddings",
+			Err:           relayErr,
+		})
 	})
 }
 func TestProcessChannelRelayError_StatusTooManyRequests(t *testing.T) {
