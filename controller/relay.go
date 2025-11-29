@@ -399,6 +399,54 @@ func isAdaptorInternalError(err *model.ErrorWithStatusCode) bool {
 	return false
 }
 
+// upstreamSuggestsRetry detects whether the upstream error response indicates that the
+// request should be retried. When this returns true, one-api should NOT suspend the
+// ability or channel, as the upstream is signaling a transient issue rather than a
+// persistent failure.
+//
+// Common patterns from various providers:
+//   - OpenAI: "You can retry your request"
+//   - Generic: "please try again", "try again later", "retry later"
+//   - Server overload: "overloaded", "temporarily unavailable", "service unavailable"
+func upstreamSuggestsRetry(err *model.ErrorWithStatusCode) bool {
+	if err == nil {
+		return false
+	}
+
+	msg := strings.ToLower(err.Message)
+	if msg == "" {
+		return false
+	}
+
+	// Common retry suggestion patterns from various AI providers
+	retryPatterns := []string{
+		"retry your request",
+		"please retry",
+		"try again",
+		"retry later",
+		"try later",
+		"temporarily unavailable",
+		"temporary failure",
+		"temporary error",
+		"overloaded",
+		"service is busy",
+		"server is busy",
+		"currently experiencing",
+		"experiencing high",
+		"high load",
+		"high traffic",
+		"capacity limit",
+	}
+
+	for _, pattern := range retryPatterns {
+		if strings.Contains(msg, pattern) {
+			return true
+		}
+	}
+
+	return false
+}
+
 // classifyAuthLike returns true if error appears to be auth/permission/quota related
 func classifyAuthLike(e *model.ErrorWithStatusCode) bool {
 	if e == nil {
@@ -605,8 +653,25 @@ func processChannelRelayError(ctx context.Context, params processChannelRelayErr
 		return
 	}
 
-	// 5xx or network-type server errors -> suspend ability briefly
+	// 5xx or network-type server errors -> conditionally suspend ability
+	// If upstream explicitly suggests retry, do NOT suspend - the service is healthy but had a one-off issue
 	if params.Err.StatusCode >= 500 && params.Err.StatusCode <= 599 {
+		if upstreamSuggestsRetry(&params.Err) {
+			lg.Debug("upstream suggests retry for 5xx error, skipping ability suspension",
+				zap.String("request_url", params.RequestURL),
+				zap.String("origin_model", params.OriginalModel),
+				zap.String("actual_model", params.ActualModel),
+				zap.Int("channel_id", params.ChannelId),
+				zap.String("channel_name", params.ChannelName),
+				zap.String("group", params.Group),
+				zap.Int("status_code", params.Err.StatusCode),
+				zap.String("upstream_error", params.Err.Message),
+				zap.String("skip_rationale", "upstream error message suggests retry; treating as transient one-off issue"),
+			)
+			monitor.Emit(params.ChannelId, false)
+			return
+		}
+
 		lg.Error("ability suspended due to server error (5xx)",
 			zap.String("request_url", params.RequestURL),
 			zap.String("origin_model", params.OriginalModel),
