@@ -9,13 +9,14 @@ import (
 	"strings"
 
 	"github.com/Laisky/errors/v2"
+	gmw "github.com/Laisky/gin-middlewares/v7"
+	"github.com/Laisky/zap"
 	"github.com/gin-gonic/gin"
 
 	"github.com/songquanpeng/one-api/common"
 	"github.com/songquanpeng/one-api/common/config"
 	"github.com/songquanpeng/one-api/common/helper"
 	"github.com/songquanpeng/one-api/common/image"
-	"github.com/songquanpeng/one-api/common/logger"
 	"github.com/songquanpeng/one-api/common/random"
 	"github.com/songquanpeng/one-api/common/render"
 	"github.com/songquanpeng/one-api/common/tracing"
@@ -194,7 +195,10 @@ func cleanFunctionParametersInternal(params any, isTopLevel bool) any {
 	}
 }
 
-// Setting safety to the lowest possible values since Gemini is already powerless enough
+// ConvertRequest converts an OpenAI-compatible chat completion request to Gemini's native ChatRequest format.
+// It transforms messages, handles tool definitions, sets safety settings based on configuration,
+// and configures generation parameters like temperature, top_p, max_tokens, etc.
+// Safety settings are configured to the lowest possible thresholds by default.
 func ConvertRequest(textRequest model.GeneralOpenAIRequest) *ChatRequest {
 	geminiRequest := ChatRequest{
 		Contents: make([]ChatContent, 0, len(textRequest.Messages)),
@@ -473,6 +477,8 @@ func convertToolChoiceToConfig(toolChoice any) *ToolConfig {
 	return nil
 }
 
+// ConvertEmbeddingRequest converts an OpenAI-compatible embedding request to Gemini's BatchEmbeddingRequest format.
+// It transforms input text(s) into the format expected by Gemini's embedding API.
 func ConvertEmbeddingRequest(request model.GeneralOpenAIRequest) *BatchEmbeddingRequest {
 	inputs := request.ParseInput()
 	requests := make([]EmbeddingRequest, len(inputs))
@@ -530,32 +536,49 @@ type ChatPromptFeedback struct {
 	SafetyRatings []ChatSafetyRating `json:"safetyRatings"`
 }
 
-func getToolCalls(candidate *ChatCandidate) []model.Tool {
+// getToolCalls extracts function call tool information from a Gemini chat candidate.
+// It processes all parts that contain function calls and returns them as OpenAI-compatible tool calls.
+// Returns an empty slice if no function calls are present or if the candidate has no parts.
+func getToolCalls(c *gin.Context, candidate *ChatCandidate) []model.Tool {
+	lg := gmw.GetLogger(c)
 	var toolCalls []model.Tool
 
-	item := candidate.Content.Parts[0]
-	if item.FunctionCall == nil {
+	// Guard against empty Parts slice to prevent index out of range panic
+	if len(candidate.Content.Parts) == 0 {
+		lg.Debug("getToolCalls: candidate has no parts, returning empty tool calls")
 		return toolCalls
 	}
-	argsBytes, err := json.Marshal(item.FunctionCall.Arguments)
-	if err != nil {
-		logger.Logger.Fatal("getToolCalls failed: " + errors.Wrap(err, "marshal function call arguments").Error())
-		return toolCalls
+
+	// Process all parts that contain function calls, not just the first one
+	for _, part := range candidate.Content.Parts {
+		if part.FunctionCall == nil {
+			continue
+		}
+		argsBytes, err := json.Marshal(part.FunctionCall.Arguments)
+		if err != nil {
+			lg.Error("getToolCalls: failed to marshal function call arguments",
+				zap.String("function_name", part.FunctionCall.FunctionName),
+				zap.Error(err))
+			continue
+		}
+		toolCall := model.Tool{
+			Id:   fmt.Sprintf("call_%s", random.GetUUID()),
+			Type: "function",
+			Function: &model.Function{
+				Arguments: string(argsBytes),
+				Name:      part.FunctionCall.FunctionName,
+			},
+		}
+		toolCalls = append(toolCalls, toolCall)
 	}
-	toolCall := model.Tool{
-		Id:   fmt.Sprintf("call_%s", random.GetUUID()),
-		Type: "function",
-		Function: &model.Function{
-			Arguments: string(argsBytes),
-			Name:      item.FunctionCall.FunctionName,
-		},
-	}
-	toolCalls = append(toolCalls, toolCall)
 	return toolCalls
 }
 
-// getStreamingToolCalls creates tool calls for streaming responses with Index field set
-func getStreamingToolCalls(candidate *ChatCandidate) []model.Tool {
+// getStreamingToolCalls creates tool calls for streaming responses with Index field set.
+// It processes all parts that contain function calls and returns them with proper indexing
+// for stream delta accumulation.
+func getStreamingToolCalls(c *gin.Context, candidate *ChatCandidate) []model.Tool {
+	lg := gmw.GetLogger(c)
 	var toolCalls []model.Tool
 
 	// Process all parts in case there are multiple function calls
@@ -565,7 +588,9 @@ func getStreamingToolCalls(candidate *ChatCandidate) []model.Tool {
 		}
 		argsBytes, err := json.Marshal(part.FunctionCall.Arguments)
 		if err != nil {
-			logger.Logger.Fatal("getStreamingToolCalls failed: " + errors.Wrap(err, "marshal function call arguments").Error())
+			lg.Error("getStreamingToolCalls: failed to marshal function call arguments",
+				zap.String("function_name", part.FunctionCall.FunctionName),
+				zap.Error(err))
 			continue
 		}
 		// Set index for streaming tool calls - use the part index to ensure proper ordering
@@ -601,7 +626,7 @@ func responseGeminiChat2OpenAI(c *gin.Context, response *ChatResponse) *openai.T
 			FinishReason: constant.StopFinishReason,
 		}
 
-		toolCalls := getToolCalls(&candidate)
+		toolCalls := getToolCalls(c, &candidate)
 		if len(toolCalls) > 0 {
 			choice.Message.ToolCalls = toolCalls
 		}
@@ -714,7 +739,7 @@ func streamResponseGeminiChat2OpenAI(c *gin.Context, geminiResponse *ChatRespons
 
 		// Handle function calls (if present)
 		if part.FunctionCall != nil {
-			choice.Delta.ToolCalls = getStreamingToolCalls(&candidate)
+			choice.Delta.ToolCalls = getStreamingToolCalls(c, &candidate)
 		}
 	}
 
@@ -746,7 +771,12 @@ func embeddingResponseGemini2OpenAI(response *EmbeddingResponse) *openai.Embeddi
 	return &openAIEmbeddingResponse
 }
 
+// StreamHandler processes streaming responses from the Gemini API and converts them to OpenAI-compatible
+// Server-Sent Events (SSE) format. It reads the response body line by line, unmarshals each chunk,
+// converts it to OpenAI format, and streams it to the client.
+// Returns an error if the response processing fails, and the accumulated response text on success.
 func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusCode, string) {
+	lg := gmw.GetLogger(c)
 	responseText := ""
 	scanner := bufio.NewScanner(resp.Body)
 	scanner.Split(bufio.ScanLines)
@@ -769,7 +799,8 @@ func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusC
 		var geminiResponse ChatResponse
 		err := json.Unmarshal([]byte(data), &geminiResponse)
 		if err != nil {
-			logger.Logger.Error("error unmarshalling stream response: " + errors.Wrap(err, "unmarshal stream").Error())
+			lg.Error("error unmarshalling stream response",
+				zap.Error(errors.Wrap(err, "unmarshal stream")))
 			continue
 		}
 
@@ -782,11 +813,13 @@ func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusC
 
 		err = render.ObjectData(c, response)
 		if err != nil {
-			logger.Logger.Error(errors.Wrap(err, "render stream").Error())
+			lg.Error("error rendering stream",
+				zap.Error(errors.Wrap(err, "render stream")))
 		}
 	}
 	if err := scanner.Err(); err != nil {
-		logger.Logger.Error("error reading stream: " + errors.Wrap(err, "scanner stream").Error())
+		lg.Error("error reading stream",
+			zap.Error(errors.Wrap(err, "scanner stream")))
 	}
 
 	render.Done(c)
@@ -799,7 +832,12 @@ func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusC
 	return nil, responseText
 }
 
+// Handler processes non-streaming responses from the Gemini API and converts them to OpenAI-compatible format.
+// It reads the complete response body, unmarshals it, converts to OpenAI TextResponse format,
+// calculates token usage (preferring Gemini's usage metadata when available), and writes the response.
+// Returns an error if processing fails, and the usage statistics on success.
 func Handler(c *gin.Context, resp *http.Response, promptTokens int, modelName string) (*model.ErrorWithStatusCode, *model.Usage) {
+	lg := gmw.GetLogger(c)
 	responseBody, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return openai.ErrorWrapper(errors.Wrap(err, "read_response_body_failed"), "read_response_body_failed", http.StatusInternalServerError), nil
@@ -815,6 +853,14 @@ func Handler(c *gin.Context, resp *http.Response, promptTokens int, modelName st
 	if err != nil {
 		return openai.ErrorWrapper(errors.Wrap(err, "unmarshal_response_body_failed"), "unmarshal_response_body_failed", http.StatusInternalServerError), nil
 	}
+
+	// Debug logging for Gemini response structure
+	lg.Debug("gemini response received",
+		zap.String("model", modelName),
+		zap.Int("candidates_count", len(geminiResponse.Candidates)),
+		zap.Bool("has_usage_metadata", geminiResponse.UsageMetadata != nil),
+	)
+
 	if len(geminiResponse.Candidates) == 0 {
 		return &model.ErrorWithStatusCode{
 			Error: model.Error{
@@ -827,6 +873,17 @@ func Handler(c *gin.Context, resp *http.Response, promptTokens int, modelName st
 			StatusCode: resp.StatusCode,
 		}, nil
 	}
+
+	// Debug logging for candidate structure
+	for i, candidate := range geminiResponse.Candidates {
+		lg.Debug("gemini candidate details",
+			zap.String("model", modelName),
+			zap.Int("candidate_index", i),
+			zap.Int("parts_count", len(candidate.Content.Parts)),
+			zap.String("finish_reason", candidate.FinishReason),
+		)
+	}
+
 	fullTextResponse := responseGeminiChat2OpenAI(c, &geminiResponse)
 	fullTextResponse.Model = modelName
 
@@ -862,6 +919,10 @@ func Handler(c *gin.Context, resp *http.Response, promptTokens int, modelName st
 	return nil, &usage
 }
 
+// EmbeddingHandler processes embedding responses from the Gemini API and converts them to OpenAI-compatible format.
+// It reads the response body, unmarshals it into Gemini's embedding format, converts it to OpenAI's format,
+// and writes the response back to the client.
+// Returns an error if processing fails, and the usage statistics on success.
 func EmbeddingHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusCode, *model.Usage) {
 	var geminiEmbeddingResponse EmbeddingResponse
 	responseBody, err := io.ReadAll(resp.Body)

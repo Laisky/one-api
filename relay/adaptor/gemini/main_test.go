@@ -4,10 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"testing"
 	"time"
 
 	"github.com/Laisky/errors/v2"
+	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 
 	"github.com/songquanpeng/one-api/relay/model"
@@ -1265,4 +1267,439 @@ func TestUsageMetadataPriority(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestGetToolCalls_EmptyParts tests that getToolCalls handles empty Parts slice gracefully.
+// This is a regression test for the panic: "runtime error: index out of range [0] with length 0"
+// that occurred when Gemini returned candidates with empty Parts arrays.
+func TestGetToolCalls_EmptyParts(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name           string
+		candidate      ChatCandidate
+		expectedLength int
+	}{
+		{
+			name: "empty parts should return empty tool calls",
+			candidate: ChatCandidate{
+				Content: ChatContent{
+					Role:  "model",
+					Parts: []Part{}, // Empty Parts - this was causing the panic
+				},
+				FinishReason: "STOP",
+			},
+			expectedLength: 0,
+		},
+		{
+			name: "nil-like empty parts should return empty tool calls",
+			candidate: ChatCandidate{
+				Content: ChatContent{
+					Role:  "model",
+					Parts: nil, // nil Parts - defensive test
+				},
+				FinishReason: "STOP",
+			},
+			expectedLength: 0,
+		},
+		{
+			name: "parts with text only should return empty tool calls",
+			candidate: ChatCandidate{
+				Content: ChatContent{
+					Role: "model",
+					Parts: []Part{
+						{Text: "Hello, how can I help you?"},
+					},
+				},
+				FinishReason: "STOP",
+			},
+			expectedLength: 0,
+		},
+		{
+			name: "parts with function call should return one tool call",
+			candidate: ChatCandidate{
+				Content: ChatContent{
+					Role: "model",
+					Parts: []Part{
+						{
+							FunctionCall: &FunctionCall{
+								FunctionName: "get_weather",
+								Arguments:    map[string]any{"location": "New York"},
+							},
+						},
+					},
+				},
+				FinishReason: "STOP",
+			},
+			expectedLength: 1,
+		},
+		{
+			name: "parts with multiple function calls should return multiple tool calls",
+			candidate: ChatCandidate{
+				Content: ChatContent{
+					Role: "model",
+					Parts: []Part{
+						{
+							FunctionCall: &FunctionCall{
+								FunctionName: "get_weather",
+								Arguments:    map[string]any{"location": "New York"},
+							},
+						},
+						{
+							FunctionCall: &FunctionCall{
+								FunctionName: "get_time",
+								Arguments:    map[string]any{"timezone": "EST"},
+							},
+						},
+					},
+				},
+				FinishReason: "STOP",
+			},
+			expectedLength: 2,
+		},
+		{
+			name: "mixed parts with text and function call should return only function calls",
+			candidate: ChatCandidate{
+				Content: ChatContent{
+					Role: "model",
+					Parts: []Part{
+						{Text: "Let me check the weather for you."},
+						{
+							FunctionCall: &FunctionCall{
+								FunctionName: "get_weather",
+								Arguments:    map[string]any{"location": "New York"},
+							},
+						},
+					},
+				},
+				FinishReason: "STOP",
+			},
+			expectedLength: 1,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			// Create a test gin context
+			w := &mockResponseWriter{}
+			c, _ := gin.CreateTestContext(w)
+
+			// This should not panic
+			toolCalls := getToolCalls(c, &tt.candidate)
+
+			require.Len(t, toolCalls, tt.expectedLength,
+				"expected %d tool calls, got %d", tt.expectedLength, len(toolCalls))
+
+			// Verify tool call structure if we expect any
+			for _, tc := range toolCalls {
+				require.NotEmpty(t, tc.Id, "tool call ID should not be empty")
+				require.Equal(t, "function", tc.Type, "tool call type should be 'function'")
+				require.NotNil(t, tc.Function, "tool call function should not be nil")
+				require.NotEmpty(t, tc.Function.Name, "function name should not be empty")
+			}
+		})
+	}
+}
+
+// TestGetStreamingToolCalls_EmptyParts tests that getStreamingToolCalls handles empty Parts slice gracefully.
+func TestGetStreamingToolCalls_EmptyParts(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name           string
+		candidate      ChatCandidate
+		expectedLength int
+	}{
+		{
+			name: "empty parts should return empty tool calls",
+			candidate: ChatCandidate{
+				Content: ChatContent{
+					Role:  "model",
+					Parts: []Part{},
+				},
+				FinishReason: "STOP",
+			},
+			expectedLength: 0,
+		},
+		{
+			name: "nil parts should return empty tool calls",
+			candidate: ChatCandidate{
+				Content: ChatContent{
+					Role:  "model",
+					Parts: nil,
+				},
+				FinishReason: "STOP",
+			},
+			expectedLength: 0,
+		},
+		{
+			name: "parts with function call should return tool call with index",
+			candidate: ChatCandidate{
+				Content: ChatContent{
+					Role: "model",
+					Parts: []Part{
+						{
+							FunctionCall: &FunctionCall{
+								FunctionName: "get_weather",
+								Arguments:    map[string]any{"location": "Tokyo"},
+							},
+						},
+					},
+				},
+				FinishReason: "STOP",
+			},
+			expectedLength: 1,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			// Create a test gin context
+			w := &mockResponseWriter{}
+			c, _ := gin.CreateTestContext(w)
+
+			// This should not panic
+			toolCalls := getStreamingToolCalls(c, &tt.candidate)
+
+			require.Len(t, toolCalls, tt.expectedLength)
+
+			// Verify streaming-specific fields
+			for i, tc := range toolCalls {
+				require.NotNil(t, tc.Index, "streaming tool call should have index")
+				require.Equal(t, i, *tc.Index, "tool call index should match position")
+			}
+		})
+	}
+}
+
+// TestResponseGeminiChat2OpenAI_EmptyParts tests that responseGeminiChat2OpenAI handles
+// candidates with empty Parts arrays without panicking.
+func TestResponseGeminiChat2OpenAI_EmptyParts(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name            string
+		response        ChatResponse
+		expectedChoices int
+	}{
+		{
+			name: "candidate with empty parts should not panic",
+			response: ChatResponse{
+				Candidates: []ChatCandidate{
+					{
+						Content: ChatContent{
+							Role:  "model",
+							Parts: []Part{}, // This was causing the panic in production
+						},
+						FinishReason: "STOP",
+					},
+				},
+			},
+			expectedChoices: 1,
+		},
+		{
+			name: "candidate with nil parts should not panic",
+			response: ChatResponse{
+				Candidates: []ChatCandidate{
+					{
+						Content: ChatContent{
+							Role:  "model",
+							Parts: nil,
+						},
+						FinishReason: "SAFETY",
+					},
+				},
+			},
+			expectedChoices: 1,
+		},
+		{
+			name: "multiple candidates with mixed empty and populated parts",
+			response: ChatResponse{
+				Candidates: []ChatCandidate{
+					{
+						Content: ChatContent{
+							Role:  "model",
+							Parts: []Part{},
+						},
+						FinishReason: "STOP",
+					},
+					{
+						Content: ChatContent{
+							Role: "model",
+							Parts: []Part{
+								{Text: "Hello!"},
+							},
+						},
+						FinishReason: "STOP",
+					},
+				},
+			},
+			expectedChoices: 2,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			// Create a minimal gin context for the test
+			w := &mockResponseWriter{}
+			c, _ := gin.CreateTestContext(w)
+
+			// This should not panic
+			result := responseGeminiChat2OpenAI(c, &tt.response)
+
+			require.NotNil(t, result, "response should not be nil")
+			require.Len(t, result.Choices, tt.expectedChoices,
+				"expected %d choices, got %d", tt.expectedChoices, len(result.Choices))
+
+			// Verify each choice has proper structure
+			for i, choice := range result.Choices {
+				require.Equal(t, i, choice.Index, "choice index should match position")
+				require.Equal(t, "assistant", choice.Message.Role, "message role should be assistant")
+			}
+		})
+	}
+}
+
+// mockResponseWriter is a minimal implementation for testing
+type mockResponseWriter struct {
+	headers http.Header
+	body    []byte
+	status  int
+}
+
+func (m *mockResponseWriter) Header() http.Header {
+	if m.headers == nil {
+		m.headers = make(http.Header)
+	}
+	return m.headers
+}
+
+func (m *mockResponseWriter) Write(b []byte) (int, error) {
+	m.body = append(m.body, b...)
+	return len(b), nil
+}
+
+func (m *mockResponseWriter) WriteHeader(statusCode int) {
+	m.status = statusCode
+}
+
+// TestStreamResponseGeminiChat2OpenAI_EmptyParts tests that streamResponseGeminiChat2OpenAI
+// handles edge cases properly without panicking.
+func TestStreamResponseGeminiChat2OpenAI_EmptyParts(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name        string
+		response    ChatResponse
+		expectedNil bool
+	}{
+		{
+			name: "no candidates should return nil",
+			response: ChatResponse{
+				Candidates: []ChatCandidate{},
+			},
+			expectedNil: true,
+		},
+		{
+			name: "candidate with empty parts should return nil",
+			response: ChatResponse{
+				Candidates: []ChatCandidate{
+					{
+						Content: ChatContent{
+							Role:  "model",
+							Parts: []Part{},
+						},
+						FinishReason: "STOP",
+					},
+				},
+			},
+			expectedNil: true,
+		},
+		{
+			name: "candidate with text part should return response",
+			response: ChatResponse{
+				Candidates: []ChatCandidate{
+					{
+						Content: ChatContent{
+							Role: "model",
+							Parts: []Part{
+								{Text: "Hello!"},
+							},
+						},
+						FinishReason: "STOP",
+					},
+				},
+			},
+			expectedNil: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			w := &mockResponseWriter{}
+			c, _ := gin.CreateTestContext(w)
+
+			// This should not panic
+			result := streamResponseGeminiChat2OpenAI(c, &tt.response)
+
+			if tt.expectedNil {
+				require.Nil(t, result, "expected nil response for edge case")
+			} else {
+				require.NotNil(t, result, "expected non-nil response")
+			}
+		})
+	}
+}
+
+// TestGetToolCalls_MultipleFunctionCalls verifies that getToolCalls now processes
+// all function calls in the Parts array, not just the first one.
+func TestGetToolCalls_MultipleFunctionCalls(t *testing.T) {
+	t.Parallel()
+
+	candidate := ChatCandidate{
+		Content: ChatContent{
+			Role: "model",
+			Parts: []Part{
+				{Text: "I'll help you with that."},
+				{
+					FunctionCall: &FunctionCall{
+						FunctionName: "search_web",
+						Arguments:    map[string]any{"query": "weather"},
+					},
+				},
+				{Text: "Also checking news."},
+				{
+					FunctionCall: &FunctionCall{
+						FunctionName: "search_news",
+						Arguments:    map[string]any{"topic": "weather"},
+					},
+				},
+			},
+		},
+		FinishReason: "STOP",
+	}
+
+	// Create a test gin context
+	w := &mockResponseWriter{}
+	c, _ := gin.CreateTestContext(w)
+
+	toolCalls := getToolCalls(c, &candidate)
+
+	require.Len(t, toolCalls, 2, "should extract both function calls")
+
+	// Verify first tool call
+	require.Equal(t, "search_web", toolCalls[0].Function.Name)
+	require.Contains(t, toolCalls[0].Function.Arguments, "weather")
+
+	// Verify second tool call
+	require.Equal(t, "search_news", toolCalls[1].Function.Name)
+	require.Contains(t, toolCalls[1].Function.Arguments, "weather")
 }
