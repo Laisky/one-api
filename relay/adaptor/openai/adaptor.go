@@ -84,12 +84,12 @@ func normalizedModelName(modelName string) string {
 	return strings.ToLower(strings.TrimSpace(modelName))
 }
 
-func isWebSearchPreviewModel(lower string) bool {
-	if lower == "" {
-		return false
-	}
-	return strings.Contains(lower, "search-preview") || strings.Contains(lower, "web-search-preview")
-}
+// func isWebSearchPreviewModel(lower string) bool {
+// 	if lower == "" {
+// 		return false
+// 	}
+// 	return strings.Contains(lower, "search-preview") || strings.Contains(lower, "web-search-preview")
+// }
 
 func (a *Adaptor) Init(meta *meta.Meta) {
 	a.ChannelType = meta.ChannelType
@@ -1125,7 +1125,7 @@ func (a *Adaptor) ConvertResponseAPIToClaudeResponse(c *gin.Context, resp *http.
 }
 
 // convertStreamingToClaudeResponse converts a streaming OpenAI response to Claude format
-func (a *Adaptor) convertStreamingToClaudeResponse(c *gin.Context, resp *http.Response, body []byte) (*http.Response, *model.ErrorWithStatusCode) {
+func (a *Adaptor) convertStreamingToClaudeResponse(_ *gin.Context, resp *http.Response, body []byte) (*http.Response, *model.ErrorWithStatusCode) {
 	// For streaming responses, we need to convert each SSE event
 	// This is more complex and would require parsing SSE events and converting them
 	// For now, we'll create a simple streaming converter

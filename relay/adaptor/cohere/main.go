@@ -22,9 +22,9 @@ import (
 	"github.com/songquanpeng/one-api/relay/model"
 )
 
-var (
-	WebSearchConnector = Connector{ID: "web-search"}
-)
+// WebSearchConnector is the default web search connector configuration for Cohere models.
+// It enables web search capabilities when the "-internet" suffix is used with model names.
+var WebSearchConnector = Connector{ID: "web-search"}
 
 func stopReasonCohere2OpenAI(reason *string) string {
 	if reason == nil {
@@ -63,19 +63,20 @@ func ConvertRequest(textRequest model.GeneralOpenAIRequest) *Request {
 	}
 	for _, message := range textRequest.Messages {
 		if message.Role == "user" {
-			cohereRequest.Message = message.Content.(string)
+			cohereRequest.Message = message.StringContent()
 		} else {
 			var role string
-			if message.Role == "assistant" {
+			switch message.Role {
+			case "assistant":
 				role = "CHATBOT"
-			} else if message.Role == "system" {
+			case "system":
 				role = "SYSTEM"
-			} else {
+			default:
 				role = "USER"
 			}
 			cohereRequest.ChatHistory = append(cohereRequest.ChatHistory, ChatMessage{
 				Role:    role,
-				Message: message.Content.(string),
+				Message: message.StringContent(),
 			})
 		}
 	}

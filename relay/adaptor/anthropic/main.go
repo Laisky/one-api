@@ -447,14 +447,15 @@ func ConvertRequest(c *gin.Context, textRequest model.GeneralOpenAIRequest) (*Re
 		openaiContent := message.ParseContent()
 		for _, part := range openaiContent {
 			var content Content
-			if part.Type == model.ContentTypeText {
+			switch part.Type {
+			case model.ContentTypeText:
 				content.Type = "text"
 				if part.Text != nil && *part.Text != "" {
 					// Only add text content if it's not empty
 					content.Text = *part.Text
 					contents = append(contents, content)
 				}
-			} else if part.Type == model.ContentTypeImageURL {
+			case model.ContentTypeImageURL:
 				content.Type = "image"
 				content.Source = &ImageSource{
 					Type: "base64",

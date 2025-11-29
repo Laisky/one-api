@@ -107,7 +107,7 @@ func Handler(c *gin.Context, resp *http.Response, promptTokens int, modelName st
 	response.Model = modelName
 	var responseText string
 	for _, v := range response.Choices {
-		responseText += v.Message.Content.(string)
+		responseText += v.Message.StringContent()
 	}
 	usage := openai.ResponseText2Usage(responseText, modelName, promptTokens)
 	response.Usage = *usage

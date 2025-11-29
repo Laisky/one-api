@@ -21,8 +21,9 @@ jobs:
     steps:
       - name: Check if CI should be skipped
         id: check
+        env:
+          COMMIT_MSG: ${{ github.event.head_commit.message }}
         run: |
-          COMMIT_MSG="${{ github.event.head_commit.message }}"
           if [[ "$COMMIT_MSG" =~ ^(docs:|doc:|tests:|test:|ci:) ]]; then
             echo "should_skip=true" >> $GITHUB_OUTPUT
             echo "Skipping CI due to commit message prefix"
