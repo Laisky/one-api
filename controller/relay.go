@@ -423,19 +423,6 @@ func upstreamSuggestsRetry(err *model.ErrorWithStatusCode) bool {
 		"retry your request",
 		"please retry",
 		"try again",
-		"retry later",
-		"try later",
-		"temporarily unavailable",
-		"temporary failure",
-		"temporary error",
-		"overloaded",
-		"service is busy",
-		"server is busy",
-		"currently experiencing",
-		"experiencing high",
-		"high load",
-		"high traffic",
-		"capacity limit",
 	}
 
 	for _, pattern := range retryPatterns {
