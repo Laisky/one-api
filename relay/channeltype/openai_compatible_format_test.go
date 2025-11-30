@@ -1,6 +1,10 @@
 package channeltype
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/stretchr/testify/require"
+)
 
 func TestNormalizeOpenAICompatibleAPIFormat(t *testing.T) {
 	t.Parallel()
@@ -23,9 +27,7 @@ func TestNormalizeOpenAICompatibleAPIFormat(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			got := NormalizeOpenAICompatibleAPIFormat(tc.input)
-			if got != tc.expected {
-				t.Fatalf("expected %q, got %q", tc.expected, got)
-			}
+			require.Equal(t, tc.expected, got)
 		})
 	}
 }
@@ -33,11 +35,6 @@ func TestNormalizeOpenAICompatibleAPIFormat(t *testing.T) {
 func TestUseOpenAICompatibleResponseAPI(t *testing.T) {
 	t.Parallel()
 
-	if UseOpenAICompatibleResponseAPI("response") != true {
-		t.Fatal("expected response format to enable Response API")
-	}
-
-	if UseOpenAICompatibleResponseAPI("chat") {
-		t.Fatal("expected chat format to disable Response API")
-	}
+	require.True(t, UseOpenAICompatibleResponseAPI("response"), "expected response format to enable Response API")
+	require.False(t, UseOpenAICompatibleResponseAPI("chat"), "expected chat format to disable Response API")
 }

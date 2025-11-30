@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
+	"github.com/stretchr/testify/require"
 
 	"github.com/songquanpeng/one-api/common/config"
 )
@@ -21,9 +22,9 @@ func TestGetTokenKeyParts_ConfiguredPrefix(t *testing.T) {
 	c.Request = req
 
 	parts := GetTokenKeyParts(c)
-	if len(parts) < 2 || parts[0] != "abc" || parts[1] != "123" {
-		t.Fatalf("unexpected parts: %#v", parts)
-	}
+	require.GreaterOrEqual(t, len(parts), 2, "unexpected parts: %#v", parts)
+	require.Equal(t, "abc", parts[0], "unexpected parts: %#v", parts)
+	require.Equal(t, "123", parts[1], "unexpected parts: %#v", parts)
 }
 
 func TestGetTokenKeyParts_LegacyPrefix(t *testing.T) {
@@ -38,7 +39,7 @@ func TestGetTokenKeyParts_LegacyPrefix(t *testing.T) {
 	c.Request = req
 
 	parts := GetTokenKeyParts(c)
-	if len(parts) < 2 || parts[0] != "abc" || parts[1] != "456" {
-		t.Fatalf("unexpected parts for legacy: %#v", parts)
-	}
+	require.GreaterOrEqual(t, len(parts), 2, "unexpected parts for legacy: %#v", parts)
+	require.Equal(t, "abc", parts[0], "unexpected parts for legacy: %#v", parts)
+	require.Equal(t, "456", parts[1], "unexpected parts for legacy: %#v", parts)
 }

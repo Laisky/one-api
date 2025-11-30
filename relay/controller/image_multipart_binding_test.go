@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
+	"github.com/stretchr/testify/require"
 )
 
 func TestGetImageRequest_MultipartBindsModel(t *testing.T) {
@@ -15,15 +16,9 @@ func TestGetImageRequest_MultipartBindsModel(t *testing.T) {
 
 	var body bytes.Buffer
 	writer := multipart.NewWriter(&body)
-	if err := writer.WriteField("prompt", "a cat"); err != nil {
-		t.Fatalf("write prompt: %v", err)
-	}
-	if err := writer.WriteField("model", "gpt-image-1"); err != nil {
-		t.Fatalf("write model: %v", err)
-	}
-	if err := writer.Close(); err != nil {
-		t.Fatalf("close writer: %v", err)
-	}
+	require.NoError(t, writer.WriteField("prompt", "a cat"), "write prompt")
+	require.NoError(t, writer.WriteField("model", "gpt-image-1"), "write model")
+	require.NoError(t, writer.Close(), "close writer")
 
 	c, _ := gin.CreateTestContext(w)
 	req := httptest.NewRequest("POST", "/v1/images/generations", bytes.NewReader(body.Bytes()))
@@ -31,12 +26,9 @@ func TestGetImageRequest_MultipartBindsModel(t *testing.T) {
 	c.Request = req
 
 	imgReq, err := getImageRequest(c, 0)
-	if err != nil {
-		t.Fatalf("getImageRequest error: %v", err)
-	}
-	if imgReq == nil || imgReq.Model != "gpt-image-1" {
-		t.Fatalf("expected model 'gpt-image-1', got '%v'", imgReq)
-	}
+	require.NoError(t, err, "getImageRequest error")
+	require.NotNil(t, imgReq)
+	require.Equal(t, "gpt-image-1", imgReq.Model)
 }
 
 func TestGetImageRequest_MultipartBindsModelMini(t *testing.T) {
@@ -45,15 +37,9 @@ func TestGetImageRequest_MultipartBindsModelMini(t *testing.T) {
 
 	var body bytes.Buffer
 	writer := multipart.NewWriter(&body)
-	if err := writer.WriteField("prompt", "a cat"); err != nil {
-		t.Fatalf("write prompt: %v", err)
-	}
-	if err := writer.WriteField("model", "gpt-image-1-mini"); err != nil {
-		t.Fatalf("write model: %v", err)
-	}
-	if err := writer.Close(); err != nil {
-		t.Fatalf("close writer: %v", err)
-	}
+	require.NoError(t, writer.WriteField("prompt", "a cat"), "write prompt")
+	require.NoError(t, writer.WriteField("model", "gpt-image-1-mini"), "write model")
+	require.NoError(t, writer.Close(), "close writer")
 
 	c, _ := gin.CreateTestContext(w)
 	req := httptest.NewRequest("POST", "/v1/images/generations", bytes.NewReader(body.Bytes()))
@@ -61,10 +47,7 @@ func TestGetImageRequest_MultipartBindsModelMini(t *testing.T) {
 	c.Request = req
 
 	imgReq, err := getImageRequest(c, 0)
-	if err != nil {
-		t.Fatalf("getImageRequest error: %v", err)
-	}
-	if imgReq == nil || imgReq.Model != "gpt-image-1-mini" {
-		t.Fatalf("expected model 'gpt-image-1-mini', got '%v'", imgReq)
-	}
+	require.NoError(t, err, "getImageRequest error")
+	require.NotNil(t, imgReq)
+	require.Equal(t, "gpt-image-1-mini", imgReq.Model)
 }

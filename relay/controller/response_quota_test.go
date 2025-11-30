@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/songquanpeng/one-api/common/config"
+	"github.com/stretchr/testify/require"
 )
 
 func TestCalculateResponseAPIPreconsumeQuotaBackground(t *testing.T) {
@@ -18,9 +19,7 @@ func TestCalculateResponseAPIPreconsumeQuotaBackground(t *testing.T) {
 	quota := calculateResponseAPIPreconsumeQuota(200, &maxOutput, inputRatio, outputRatio, true)
 
 	expectedMin := int64(math.Ceil(float64(config.PreconsumeTokenForBackgroundRequest) * outputRatio))
-	if quota < expectedMin {
-		t.Fatalf("expected quota to be at least %d when background is enabled, got %d", expectedMin, quota)
-	}
+	require.GreaterOrEqual(t, quota, expectedMin, "expected quota to be at least %d when background is enabled", expectedMin)
 }
 
 func TestCalculateResponseAPIPreconsumeQuotaForeground(t *testing.T) {
@@ -33,9 +32,7 @@ func TestCalculateResponseAPIPreconsumeQuotaForeground(t *testing.T) {
 	quota := calculateResponseAPIPreconsumeQuota(200, &maxOutput, inputRatio, outputRatio, false)
 
 	expected := int64(float64(200+maxOutput) * inputRatio)
-	if quota != expected {
-		t.Fatalf("expected quota %d for foreground request, got %d", expected, quota)
-	}
+	require.Equal(t, expected, quota, "expected quota %d for foreground request", expected)
 }
 
 func TestCalculateResponseAPIPreconsumeQuotaBackgroundLargeEstimate(t *testing.T) {
@@ -50,10 +47,9 @@ func TestCalculateResponseAPIPreconsumeQuotaBackgroundLargeEstimate(t *testing.T
 
 	expectedBase := int64(float64(100+maxOutput) * inputRatio)
 	expectedMin := int64(math.Ceil(float64(config.PreconsumeTokenForBackgroundRequest) * outputRatio))
-	if quota != expectedBase {
-		if expectedBase < expectedMin {
-			t.Fatalf("expected quota to match background floor %d, got %d", expectedMin, quota)
-		}
-		t.Fatalf("expected quota to remain base estimate %d when it exceeds background floor %d, got %d", expectedBase, expectedMin, quota)
+	if expectedBase < expectedMin {
+		require.Equal(t, expectedMin, quota, "expected quota to match background floor")
+	} else {
+		require.Equal(t, expectedBase, quota, "expected quota to remain base estimate when it exceeds background floor %d", expectedMin)
 	}
 }

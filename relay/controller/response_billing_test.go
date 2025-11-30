@@ -2,6 +2,8 @@ package controller
 
 import (
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 // TestResponseAPIBillingIntegration tests that Response API billing follows DRY principle
@@ -35,9 +37,7 @@ func TestResponseAPIBillingIntegration(t *testing.T) {
 		}
 
 		// Verify the quota calculation
-		if calculatedQuota != expectedQuota {
-			t.Errorf("Expected quota %d, got %d", expectedQuota, calculatedQuota)
-		}
+		require.Equal(t, expectedQuota, calculatedQuota, "quota calculation mismatch")
 
 		t.Logf("Response API billing calculation test passed: quota=%d, promptTokens=%d, completionTokens=%d",
 			calculatedQuota, promptTokens, completionTokens)
@@ -48,9 +48,7 @@ func TestResponseAPIBillingIntegration(t *testing.T) {
 		quotaDelta := expectedQuota - preConsumedQuota
 
 		// Verify that quota delta calculation is correct
-		if quotaDelta != 33 { // 53 - 20 = 33 for our test data
-			t.Errorf("Expected quotaDelta to be 33, got %d", quotaDelta)
-		}
+		require.Equal(t, int64(33), quotaDelta, "quotaDelta should be 33 for our test data (53 - 20)")
 
 		t.Logf("Billing consistency test passed: quotaDelta=%d, totalQuota=%d", quotaDelta, expectedQuota)
 	})
@@ -83,14 +81,10 @@ func TestLegacyChatCompletionBilling(t *testing.T) {
 		}
 
 		// Verify the quota calculation
-		if calculatedQuota != expectedQuota {
-			t.Errorf("Expected quota %d, got %d", expectedQuota, calculatedQuota)
-		}
+		require.Equal(t, expectedQuota, calculatedQuota, "quota calculation mismatch")
 
 		// Expected: (25 + 50*1.2) * 1.5 * 0.8 + 5 = (25 + 60) * 1.2 + 5 = 85 * 1.2 + 5 = 102 + 5 = 107
-		if calculatedQuota != 107 {
-			t.Errorf("Expected quota to be 107, got %d", calculatedQuota)
-		}
+		require.Equal(t, int64(107), calculatedQuota, "quota should be 107")
 
 		t.Logf("ChatCompletion billing test passed: quota=%d, promptTokens=%d, completionTokens=%d",
 			calculatedQuota, promptTokens, completionTokens)
@@ -153,15 +147,11 @@ func TestBillingConsistency(t *testing.T) {
 			t.Logf("  Expected quota: %d", expectedQuota)
 
 			// Verify the calculation is reasonable
-			if expectedQuota <= 0 {
-				t.Errorf("Expected quota should be positive, got %d", expectedQuota)
-			}
+			require.Greater(t, expectedQuota, int64(0), "expected quota should be positive")
 
 			// Verify that tools cost is properly added
 			baseQuota := int64((float64(tc.promptTokens) + float64(tc.completionTokens)*tc.completionRatio) * ratio)
-			if expectedQuota != baseQuota+tc.toolsCost {
-				t.Errorf("Tools cost not properly added: expected %d, got %d", baseQuota+tc.toolsCost, expectedQuota)
-			}
+			require.Equal(t, baseQuota+tc.toolsCost, expectedQuota, "tools cost not properly added")
 		})
 	}
 }

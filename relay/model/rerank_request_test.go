@@ -1,6 +1,10 @@
 package model
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/stretchr/testify/require"
+)
 
 func TestRerankRequestNormalizeFromInput(t *testing.T) {
 	req := &RerankRequest{
@@ -9,19 +13,13 @@ func TestRerankRequestNormalizeFromInput(t *testing.T) {
 		Documents: []string{"doc1", "doc2"},
 	}
 
-	if err := req.Normalize(); err != nil {
-		t.Fatalf("expected normalize to succeed, got %v", err)
-	}
-	if req.Query != "example query" {
-		t.Fatalf("expected trimmed query, got %q", req.Query)
-	}
+	require.NoError(t, req.Normalize(), "expected normalize to succeed")
+	require.Equal(t, "example query", req.Query, "expected trimmed query")
 }
 
 func TestRerankRequestNormalizeRequiredFields(t *testing.T) {
 	req := &RerankRequest{Model: "rerank-test"}
-	if err := req.Normalize(); err == nil {
-		t.Fatalf("expected error when query missing")
-	}
+	require.Error(t, req.Normalize(), "expected error when query missing")
 }
 
 func TestRerankRequestClone(t *testing.T) {
@@ -33,11 +31,7 @@ func TestRerankRequestClone(t *testing.T) {
 	}
 
 	clone := req.Clone()
-	if clone == req {
-		t.Fatalf("expected clone to create new instance")
-	}
+	require.NotSame(t, req, clone, "expected clone to create new instance")
 	clone.Documents[0] = "mutated"
-	if req.Documents[0] == "mutated" {
-		t.Fatalf("expected clone to deep copy documents slice")
-	}
+	require.NotEqual(t, "mutated", req.Documents[0], "expected clone to deep copy documents slice")
 }

@@ -731,9 +731,7 @@ func TestProcessChannelRelayError(t *testing.T) {
 
 			// Verify the behavior based on status code
 			elapsed := time.Since(startTime)
-			if elapsed > 10*time.Millisecond {
-				t.Errorf("processChannelRelayError took too long: %v", elapsed)
-			}
+			require.LessOrEqual(t, elapsed, 10*time.Millisecond, "processChannelRelayError took too long: %v", elapsed)
 
 			// Test that we handle the error appropriately
 			if tt.statusCode == http.StatusBadRequest {
@@ -798,9 +796,7 @@ func TestShouldRetryLogic(t *testing.T) {
 			// Simulate the retry logic behavior
 			if tt.specificChannel {
 				// If specific channel is requested, no retry should happen
-				if tt.shouldRetry {
-					t.Error("Should not retry when specific channel is requested")
-				}
+				require.False(t, tt.shouldRetry, "Should not retry when specific channel is requested")
 			} else {
 				// For general requests, retry behavior depends on error type
 				if tt.statusCode == http.StatusBadRequest {
@@ -817,9 +813,7 @@ func TestShouldRetryLogic(t *testing.T) {
 			}
 
 			elapsed := time.Since(startTime)
-			if elapsed > 5*time.Millisecond {
-				t.Errorf("Retry logic test took too long: %v", elapsed)
-			}
+			require.LessOrEqual(t, elapsed, 5*time.Millisecond, "Retry logic test took too long: %v", elapsed)
 		})
 	}
 }
@@ -839,16 +833,12 @@ func TestRetryChannelExclusionLogic(t *testing.T) {
 	channelIds := getChannelIds(failedChannels)
 	expectedCount := 3
 
-	if len(channelIds) != expectedCount {
-		t.Errorf("Expected %d failed channels, got %d", expectedCount, len(channelIds))
-	}
+	require.Len(t, channelIds, expectedCount, "Expected %d failed channels", expectedCount)
 
 	// Verify all expected channel IDs are present
 	expectedIds := map[int]bool{1: true, 2: true, 3: true}
 	for _, id := range channelIds {
-		if !expectedIds[id] {
-			t.Errorf("Unexpected channel ID in failed channels: %d", id)
-		}
+		require.True(t, expectedIds[id], "Unexpected channel ID in failed channels: %d", id)
 	}
 
 	t.Logf("✓ Failed channel tracking works correctly with %d channels", len(channelIds))
@@ -862,14 +852,10 @@ func TestErrorHandlingWithProperWrapping(t *testing.T) {
 	originalErr := errors.New("original error")
 	wrappedErr := errors.Wrap(originalErr, "wrapped error")
 
-	if wrappedErr == nil {
-		t.Error("Error should not be nil after wrapping")
-	}
+	require.NotNil(t, wrappedErr, "Error should not be nil after wrapping")
 
 	// Test that the wrapped error contains the original message
-	if !errors.Is(wrappedErr, originalErr) {
-		t.Error("Wrapped error should contain the original error")
-	}
+	require.ErrorIs(t, wrappedErr, originalErr, "Wrapped error should contain the original error")
 
 	t.Logf("✓ Error wrapping works correctly with github.com/Laisky/errors/v2")
 }

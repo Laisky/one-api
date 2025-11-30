@@ -6,10 +6,10 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 
 	"github.com/gin-gonic/gin"
+	"github.com/stretchr/testify/require"
 
 	"github.com/songquanpeng/one-api/relay/meta"
 	"github.com/songquanpeng/one-api/relay/model"
@@ -39,9 +39,7 @@ func TestConvertNonStreamingToClaudeResponse_Basic(t *testing.T) {
 	}
 
 	bodyBytes, err := json.Marshal(geminiResp)
-	if err != nil {
-		t.Fatalf("marshal gemini response: %v", err)
-	}
+	require.NoError(t, err, "marshal gemini response")
 
 	resp := &http.Response{
 		StatusCode: http.StatusOK,
@@ -53,33 +51,20 @@ func TestConvertNonStreamingToClaudeResponse_Basic(t *testing.T) {
 	metaInfo := &meta.Meta{ActualModelName: "gemini-2.5-flash", PromptTokens: 5}
 
 	newResp, errResp := adaptor.convertNonStreamingToClaudeResponse(ctx, resp, bodyBytes, metaInfo)
-	if errResp != nil {
-		t.Fatalf("convert non-streaming returned error: %v", errResp.Error)
-	}
+	require.Nil(t, errResp, "convert non-streaming returned error")
 	defer newResp.Body.Close()
 
 	convertedBody, err := io.ReadAll(newResp.Body)
-	if err != nil {
-		t.Fatalf("read converted body: %v", err)
-	}
+	require.NoError(t, err, "read converted body")
 
 	var claudeResp model.ClaudeResponse
-	if err := json.Unmarshal(convertedBody, &claudeResp); err != nil {
-		t.Fatalf("unmarshal claude response: %v", err)
-	}
+	require.NoError(t, json.Unmarshal(convertedBody, &claudeResp), "unmarshal claude response")
 
-	if len(claudeResp.Content) == 0 || claudeResp.Content[0].Text != "Hello from Gemini" {
-		t.Fatalf("unexpected content: %+v", claudeResp.Content)
-	}
-	if claudeResp.StopReason != "end_turn" {
-		t.Fatalf("unexpected stop reason: %s", claudeResp.StopReason)
-	}
-	if claudeResp.Usage.InputTokens != 5 {
-		t.Fatalf("unexpected input tokens: %d", claudeResp.Usage.InputTokens)
-	}
-	if claudeResp.Usage.OutputTokens != 7 {
-		t.Fatalf("unexpected output tokens: %d", claudeResp.Usage.OutputTokens)
-	}
+	require.NotEmpty(t, claudeResp.Content, "content should not be empty")
+	require.Equal(t, "Hello from Gemini", claudeResp.Content[0].Text, "unexpected content")
+	require.Equal(t, "end_turn", claudeResp.StopReason, "unexpected stop reason")
+	require.Equal(t, 5, claudeResp.Usage.InputTokens, "unexpected input tokens")
+	require.Equal(t, 7, claudeResp.Usage.OutputTokens, "unexpected output tokens")
 }
 
 func TestConvertStreamingToClaudeResponse_Basic(t *testing.T) {
@@ -106,9 +91,7 @@ func TestConvertStreamingToClaudeResponse_Basic(t *testing.T) {
 	}
 
 	chunkBytes, err := json.Marshal(streamChunk)
-	if err != nil {
-		t.Fatalf("marshal stream chunk: %v", err)
-	}
+	require.NoError(t, err, "marshal stream chunk")
 
 	streamBuf := bytes.NewBuffer(nil)
 	streamBuf.WriteString("data: ")
@@ -126,34 +109,18 @@ func TestConvertStreamingToClaudeResponse_Basic(t *testing.T) {
 	metaInfo := &meta.Meta{ActualModelName: "gemini-2.5-flash", PromptTokens: 4}
 
 	newResp, errResp := adaptor.convertStreamingToClaudeResponse(ctx, resp, streamBuf.Bytes(), metaInfo)
-	if errResp != nil {
-		t.Fatalf("convert streaming returned error: %v", errResp.Error)
-	}
+	require.Nil(t, errResp, "convert streaming returned error")
 	defer newResp.Body.Close()
 
-	if ct := newResp.Header.Get("Content-Type"); ct != "text/event-stream" {
-		t.Fatalf("unexpected content type: %s", ct)
-	}
+	require.Equal(t, "text/event-stream", newResp.Header.Get("Content-Type"), "unexpected content type")
 
 	convertedBody, err := io.ReadAll(newResp.Body)
-	if err != nil {
-		t.Fatalf("read converted stream: %v", err)
-	}
+	require.NoError(t, err, "read converted stream")
 
 	converted := string(convertedBody)
-	if !strings.Contains(converted, "event: message_start") {
-		t.Fatalf("missing message_start event: %s", converted)
-	}
-	if !strings.Contains(converted, "\"text_delta\"") {
-		t.Fatalf("missing text delta: %s", converted)
-	}
-	if !strings.Contains(converted, "Hello from Gemini") {
-		t.Fatalf("missing response text: %s", converted)
-	}
-	if !strings.Contains(converted, "\"input_tokens\":4") {
-		t.Fatalf("missing usage input tokens: %s", converted)
-	}
-	if !strings.Contains(converted, "data: [DONE]") {
-		t.Fatalf("missing done marker: %s", converted)
-	}
+	require.Contains(t, converted, "event: message_start", "missing message_start event")
+	require.Contains(t, converted, "\"text_delta\"", "missing text delta")
+	require.Contains(t, converted, "Hello from Gemini", "missing response text")
+	require.Contains(t, converted, "\"input_tokens\":4", "missing usage input tokens")
+	require.Contains(t, converted, "data: [DONE]", "missing done marker")
 }

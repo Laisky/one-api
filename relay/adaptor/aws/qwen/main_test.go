@@ -11,6 +11,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/bedrockruntime"
 	"github.com/aws/aws-sdk-go-v2/service/bedrockruntime/types"
 	"github.com/gin-gonic/gin"
+	"github.com/stretchr/testify/require"
 
 	relaymodel "github.com/songquanpeng/one-api/relay/model"
 )
@@ -36,20 +37,12 @@ func TestConvertConverseResponseToQwenUsageMapping(t *testing.T) {
 	resp := convertConverseResponseToQwen(c, converse, "qwen.qwen3-coder-480b-a35b-v1:0")
 
 	b, err := json.Marshal(resp)
-	if err != nil {
-		t.Fatalf("marshal qwen response: %v", err)
-	}
+	require.NoError(t, err, "marshal qwen response")
 
 	js := string(b)
-	if want := "\"prompt_tokens\":11"; !strings.Contains(js, want) {
-		t.Fatalf("expected %s in json, got %s", want, js)
-	}
-	if want := "\"completion_tokens\":22"; !strings.Contains(js, want) {
-		t.Fatalf("expected %s in json, got %s", want, js)
-	}
-	if want := "\"total_tokens\":33"; !strings.Contains(js, want) {
-		t.Fatalf("expected %s in json, got %s", want, js)
-	}
+	require.True(t, strings.Contains(js, "\"prompt_tokens\":11"), "expected prompt_tokens:11 in json, got %s", js)
+	require.True(t, strings.Contains(js, "\"completion_tokens\":22"), "expected completion_tokens:22 in json, got %s", js)
+	require.True(t, strings.Contains(js, "\"total_tokens\":33"), "expected total_tokens:33 in json, got %s", js)
 }
 
 func TestConvertRequestMapsToolsAndReasoning(t *testing.T) {
@@ -90,48 +83,24 @@ func TestConvertRequestMapsToolsAndReasoning(t *testing.T) {
 	}
 
 	converted := ConvertRequest(req)
-	if converted == nil {
-		t.Fatalf("expected non-nil converted request")
-	}
-
-	if converted.MaxTokens != 4096 {
-		t.Fatalf("unexpected max tokens: %d", converted.MaxTokens)
-	}
-
-	if converted.Temperature == nil || *converted.Temperature != temp {
-		t.Fatalf("temperature not preserved: %+v", converted.Temperature)
-	}
-
-	if converted.TopP == nil || *converted.TopP != topP {
-		t.Fatalf("top_p not preserved: %+v", converted.TopP)
-	}
-
-	if !reflect.DeepEqual(converted.Stop, []string{"done", "halt"}) {
-		t.Fatalf("unexpected stop sequences: %+v", converted.Stop)
-	}
-
-	if converted.ReasoningEffort == nil || *converted.ReasoningEffort != reasoning {
-		t.Fatalf("reasoning effort not preserved: %+v", converted.ReasoningEffort)
-	}
-
-	if len(converted.Tools) != 1 {
-		t.Fatalf("expected 1 tool, got %d", len(converted.Tools))
-	}
-
-	if converted.Tools[0].Function.Name != "calculate" {
-		t.Fatalf("unexpected tool name: %s", converted.Tools[0].Function.Name)
-	}
+	require.NotNil(t, converted, "expected non-nil converted request")
+	require.Equal(t, 4096, converted.MaxTokens, "unexpected max tokens")
+	require.NotNil(t, converted.Temperature, "temperature should not be nil")
+	require.Equal(t, temp, *converted.Temperature, "temperature not preserved")
+	require.NotNil(t, converted.TopP, "top_p should not be nil")
+	require.Equal(t, topP, *converted.TopP, "top_p not preserved")
+	require.True(t, reflect.DeepEqual(converted.Stop, []string{"done", "halt"}), "unexpected stop sequences: %+v", converted.Stop)
+	require.NotNil(t, converted.ReasoningEffort, "reasoning effort should not be nil")
+	require.Equal(t, reasoning, *converted.ReasoningEffort, "reasoning effort not preserved")
+	require.Len(t, converted.Tools, 1, "expected 1 tool")
+	require.Equal(t, "calculate", converted.Tools[0].Function.Name, "unexpected tool name")
 
 	toolChoice, ok := converted.ToolChoice.(map[string]any)
-	if !ok {
-		t.Fatalf("expected tool choice map, got %T", converted.ToolChoice)
-	}
-	if toolChoice["type"] != "function" {
-		t.Fatalf("unexpected tool choice type: %v", toolChoice["type"])
-	}
-	if fn, ok := toolChoice["function"].(map[string]any); !ok || fn["name"] != "calculate" {
-		t.Fatalf("unexpected tool choice function: %+v", toolChoice["function"])
-	}
+	require.True(t, ok, "expected tool choice map, got %T", converted.ToolChoice)
+	require.Equal(t, "function", toolChoice["type"], "unexpected tool choice type")
+	fn, ok := toolChoice["function"].(map[string]any)
+	require.True(t, ok, "expected function map in tool choice")
+	require.Equal(t, "calculate", fn["name"], "unexpected tool choice function name")
 }
 
 func TestConvertMessagesMarshalsNonStringArguments(t *testing.T) {
@@ -153,22 +122,13 @@ func TestConvertMessagesMarshalsNonStringArguments(t *testing.T) {
 	}
 
 	converted := ConvertMessages(messages)
-	if len(converted) != 1 {
-		t.Fatalf("expected 1 message, got %d", len(converted))
-	}
-
-	if len(converted[0].ToolCalls) != 1 {
-		t.Fatalf("expected 1 tool call, got %d", len(converted[0].ToolCalls))
-	}
+	require.Len(t, converted, 1, "expected 1 message")
+	require.Len(t, converted[0].ToolCalls, 1, "expected 1 tool call")
 
 	var decoded map[string]any
-	if err := json.Unmarshal([]byte(converted[0].ToolCalls[0].Function.Arguments), &decoded); err != nil {
-		t.Fatalf("arguments should be json: %v", err)
-	}
-
-	if decoded["foo"] != "bar" {
-		t.Fatalf("unexpected tool arguments: %+v", decoded)
-	}
+	err := json.Unmarshal([]byte(converted[0].ToolCalls[0].Function.Arguments), &decoded)
+	require.NoError(t, err, "arguments should be json")
+	require.Equal(t, "bar", decoded["foo"], "unexpected tool arguments")
 }
 
 func TestConvertQwenToConverseRequestIncludesReasoningConfig(t *testing.T) {
@@ -200,36 +160,19 @@ func TestConvertQwenToConverseRequestIncludesReasoningConfig(t *testing.T) {
 	}
 
 	converseReq, err := convertQwenToConverseRequest(req, "qwen3-test")
-	if err != nil {
-		t.Fatalf("convert request: %v", err)
-	}
-
-	if converseReq.ToolConfig == nil {
-		t.Fatalf("expected tool config to be set")
-	}
-	if len(converseReq.ToolConfig.Tools) != 1 {
-		t.Fatalf("expected one tool specification, got %d", len(converseReq.ToolConfig.Tools))
-	}
+	require.NoError(t, err, "convert request")
+	require.NotNil(t, converseReq.ToolConfig, "expected tool config to be set")
+	require.Len(t, converseReq.ToolConfig.Tools, 1, "expected one tool specification")
 
 	toolSpec, ok := converseReq.ToolConfig.Tools[0].(*types.ToolMemberToolSpec)
-	if !ok {
-		t.Fatalf("unexpected tool type: %T", converseReq.ToolConfig.Tools[0])
-	}
-	if toolSpec.Value.Name == nil || *toolSpec.Value.Name != "calculate" {
-		t.Fatalf("unexpected tool name: %v", toolSpec.Value.Name)
-	}
-
-	if converseReq.AdditionalModelRequestFields == nil {
-		t.Fatalf("expected reasoning config to be included")
-	}
+	require.True(t, ok, "unexpected tool type: %T", converseReq.ToolConfig.Tools[0])
+	require.NotNil(t, toolSpec.Value.Name, "tool name should not be nil")
+	require.Equal(t, "calculate", *toolSpec.Value.Name, "unexpected tool name")
+	require.NotNil(t, converseReq.AdditionalModelRequestFields, "expected reasoning config to be included")
 
 	b, err := json.Marshal(converseReq.AdditionalModelRequestFields)
-	if err != nil {
-		t.Fatalf("marshal additional fields: %v", err)
-	}
-	if len(b) == 0 {
-		t.Fatalf("expected additional fields to marshal to json, got empty payload")
-	}
+	require.NoError(t, err, "marshal additional fields")
+	require.NotEmpty(t, b, "expected additional fields to marshal to json, got empty payload")
 }
 
 func TestConvertQwenToConverseRequestInvalidToolArguments(t *testing.T) {
@@ -252,7 +195,5 @@ func TestConvertQwenToConverseRequestInvalidToolArguments(t *testing.T) {
 	}
 
 	_, err := convertQwenToConverseRequest(req, "qwen3-test")
-	if err == nil {
-		t.Fatalf("expected error converting invalid tool arguments")
-	}
+	require.Error(t, err, "expected error converting invalid tool arguments")
 }

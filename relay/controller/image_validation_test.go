@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
+	"github.com/stretchr/testify/require"
 
 	metalib "github.com/songquanpeng/one-api/relay/meta"
 )
@@ -22,14 +23,10 @@ func TestValidateImageRequest_DALLE3_RejectAutoQuality(t *testing.T) {
 	c.Request = req
 
 	ir, err := getImageRequest(c, 0)
-	if err != nil {
-		t.Fatalf("getImageRequest error: %v", err)
-	}
+	require.NoError(t, err, "getImageRequest error")
 
 	// meta not used for validation currently
-	if got := validateImageRequest(ir, metalib.GetByContext(c), nil); got == nil {
-		t.Fatalf("expected validation error for quality=auto")
-	} else if got.StatusCode != http.StatusBadRequest {
-		t.Fatalf("expected 400, got %d", got.StatusCode)
-	}
+	got := validateImageRequest(ir, metalib.GetByContext(c), nil)
+	require.NotNil(t, got, "expected validation error for quality=auto")
+	require.Equal(t, http.StatusBadRequest, got.StatusCode)
 }

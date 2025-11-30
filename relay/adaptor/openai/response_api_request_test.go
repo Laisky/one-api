@@ -3,6 +3,8 @@ package openai
 import (
 	"encoding/json"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 // TestResponseAPIRequestParsing tests comprehensive parsing of ResponseAPIRequest
@@ -22,15 +24,9 @@ func TestResponseAPIRequestParsing(t *testing.T) {
 			}`,
 			expectError: false,
 			validate: func(t *testing.T, req *ResponseAPIRequest) {
-				if req.Model != "gpt-4.1" {
-					t.Errorf("Expected model 'gpt-4.1', got '%s'", req.Model)
-				}
-				if len(req.Input) != 1 {
-					t.Errorf("Expected input length 1, got %d", len(req.Input))
-				}
-				if req.Input[0] != "Write a one-sentence bedtime story about a unicorn." {
-					t.Errorf("Unexpected input content: %v", req.Input[0])
-				}
+				require.Equal(t, "gpt-4.1", req.Model, "Expected model 'gpt-4.1'")
+				require.Len(t, req.Input, 1, "Expected input length 1")
+				require.Equal(t, "Write a one-sentence bedtime story about a unicorn.", req.Input[0], "Unexpected input content")
 			},
 		},
 		{
@@ -42,12 +38,9 @@ func TestResponseAPIRequestParsing(t *testing.T) {
 			}`,
 			expectError: false,
 			validate: func(t *testing.T, req *ResponseAPIRequest) {
-				if req.Instructions == nil || *req.Instructions != "Talk like a pirate." {
-					t.Errorf("Expected instructions 'Talk like a pirate.', got %v", req.Instructions)
-				}
-				if req.Input[0] != "Are semicolons optional in JavaScript?" {
-					t.Errorf("Unexpected input content: %v", req.Input[0])
-				}
+				require.NotNil(t, req.Instructions, "Expected instructions to be set")
+				require.Equal(t, "Talk like a pirate.", *req.Instructions, "Expected instructions 'Talk like a pirate.'")
+				require.Equal(t, "Are semicolons optional in JavaScript?", req.Input[0], "Unexpected input content")
 			},
 		},
 		{
@@ -67,21 +60,12 @@ func TestResponseAPIRequestParsing(t *testing.T) {
 			}`,
 			expectError: false,
 			validate: func(t *testing.T, req *ResponseAPIRequest) {
-				if len(req.Input) != 2 {
-					t.Errorf("Expected input length 2, got %d", len(req.Input))
-				}
+				require.Len(t, req.Input, 2, "Expected input length 2")
 				// Verify first message
 				msg1, ok := req.Input[0].(map[string]any)
-				if !ok {
-					t.Errorf("Expected first input to be a message object")
-				} else {
-					if msg1["role"] != "developer" {
-						t.Errorf("Expected first message role 'developer', got '%v'", msg1["role"])
-					}
-					if msg1["content"] != "Talk like a pirate." {
-						t.Errorf("Expected first message content 'Talk like a pirate.', got '%v'", msg1["content"])
-					}
-				}
+				require.True(t, ok, "Expected first input to be a message object")
+				require.Equal(t, "developer", msg1["role"], "Expected first message role 'developer'")
+				require.Equal(t, "Talk like a pirate.", msg1["content"], "Expected first message content 'Talk like a pirate.'")
 			},
 		},
 		{
@@ -99,18 +83,11 @@ func TestResponseAPIRequestParsing(t *testing.T) {
 			}`,
 			expectError: false,
 			validate: func(t *testing.T, req *ResponseAPIRequest) {
-				if req.Prompt == nil {
-					t.Fatal("Expected prompt to be set")
-				}
-				if req.Prompt.Id != "pmpt_abc123" {
-					t.Errorf("Expected prompt id 'pmpt_abc123', got '%s'", req.Prompt.Id)
-				}
-				if req.Prompt.Version == nil || *req.Prompt.Version != "2" {
-					t.Errorf("Expected prompt version '2', got %v", req.Prompt.Version)
-				}
-				if req.Prompt.Variables["customer_name"] != "Jane Doe" {
-					t.Errorf("Expected customer_name 'Jane Doe', got '%v'", req.Prompt.Variables["customer_name"])
-				}
+				require.NotNil(t, req.Prompt, "Expected prompt to be set")
+				require.Equal(t, "pmpt_abc123", req.Prompt.Id, "Expected prompt id 'pmpt_abc123'")
+				require.NotNil(t, req.Prompt.Version, "Expected prompt version to be set")
+				require.Equal(t, "2", *req.Prompt.Version, "Expected prompt version '2'")
+				require.Equal(t, "Jane Doe", req.Prompt.Variables["customer_name"], "Expected customer_name 'Jane Doe'")
 			},
 		},
 		{
@@ -132,20 +109,12 @@ func TestResponseAPIRequestParsing(t *testing.T) {
 			}`,
 			expectError: false,
 			validate: func(t *testing.T, req *ResponseAPIRequest) {
-				if len(req.Input) != 1 {
-					t.Errorf("Expected input length 1, got %d", len(req.Input))
-				}
+				require.Len(t, req.Input, 1, "Expected input length 1")
 				msg, ok := req.Input[0].(map[string]any)
-				if !ok {
-					t.Fatal("Expected input to be a message object")
-				}
+				require.True(t, ok, "Expected input to be a message object")
 				content, ok := msg["content"].([]any)
-				if !ok {
-					t.Fatal("Expected content to be an array")
-				}
-				if len(content) != 2 {
-					t.Errorf("Expected content length 2, got %d", len(content))
-				}
+				require.True(t, ok, "Expected content to be an array")
+				require.Len(t, content, 2, "Expected content length 2")
 			},
 		},
 		{
@@ -167,28 +136,16 @@ func TestResponseAPIRequestParsing(t *testing.T) {
 			}`,
 			expectError: false,
 			validate: func(t *testing.T, req *ResponseAPIRequest) {
-				if len(req.Input) != 1 {
-					t.Errorf("Expected input length 1, got %d", len(req.Input))
-				}
+				require.Len(t, req.Input, 1, "Expected input length 1")
 				msg, ok := req.Input[0].(map[string]any)
-				if !ok {
-					t.Fatal("Expected input to be a message object")
-				}
+				require.True(t, ok, "Expected input to be a message object")
 				content, ok := msg["content"].([]any)
-				if !ok {
-					t.Fatal("Expected content to be an array")
-				}
-				if len(content) != 2 {
-					t.Errorf("Expected content length 2, got %d", len(content))
-				}
+				require.True(t, ok, "Expected content to be an array")
+				require.Len(t, content, 2, "Expected content length 2")
 				// Verify image content
 				imageContent, ok := content[1].(map[string]any)
-				if !ok {
-					t.Fatal("Expected second content item to be an object")
-				}
-				if imageContent["type"] != "input_image" {
-					t.Errorf("Expected type 'input_image', got '%v'", imageContent["type"])
-				}
+				require.True(t, ok, "Expected second content item to be an object")
+				require.Equal(t, "input_image", imageContent["type"], "Expected type 'input_image'")
 			},
 		},
 		{
@@ -210,25 +167,15 @@ func TestResponseAPIRequestParsing(t *testing.T) {
 			}`,
 			expectError: false,
 			validate: func(t *testing.T, req *ResponseAPIRequest) {
-				if len(req.Input) != 1 {
-					t.Errorf("Expected input length 1, got %d", len(req.Input))
-				}
+				require.Len(t, req.Input, 1, "Expected input length 1")
 				msg, ok := req.Input[0].(map[string]any)
-				if !ok {
-					t.Fatal("Expected input to be a message object")
-				}
+				require.True(t, ok, "Expected input to be a message object")
 				content, ok := msg["content"].([]any)
-				if !ok {
-					t.Fatal("Expected content to be an array")
-				}
+				require.True(t, ok, "Expected content to be an array")
 				// Verify image content with file_id
 				imageContent, ok := content[1].(map[string]any)
-				if !ok {
-					t.Fatal("Expected second content item to be an object")
-				}
-				if imageContent["file_id"] != "file-abc123" {
-					t.Errorf("Expected file_id 'file-abc123', got '%v'", imageContent["file_id"])
-				}
+				require.True(t, ok, "Expected second content item to be an object")
+				require.Equal(t, "file-abc123", imageContent["file_id"], "Expected file_id 'file-abc123'")
 			},
 		},
 		{
@@ -240,12 +187,8 @@ func TestResponseAPIRequestParsing(t *testing.T) {
 			}`,
 			expectError: false,
 			validate: func(t *testing.T, req *ResponseAPIRequest) {
-				if len(req.Tools) != 1 {
-					t.Errorf("Expected tools length 1, got %d", len(req.Tools))
-				}
-				if req.Tools[0].Type != "image_generation" {
-					t.Errorf("Expected tool type 'image_generation', got '%s'", req.Tools[0].Type)
-				}
+				require.Len(t, req.Tools, 1, "Expected tools length 1")
+				require.Equal(t, "image_generation", req.Tools[0].Type, "Expected tool type 'image_generation'")
 			},
 		},
 		{
@@ -274,22 +217,12 @@ func TestResponseAPIRequestParsing(t *testing.T) {
 			}`,
 			expectError: false,
 			validate: func(t *testing.T, req *ResponseAPIRequest) {
-				if len(req.Tools) != 1 {
-					t.Errorf("Expected tools length 1, got %d", len(req.Tools))
-				}
+				require.Len(t, req.Tools, 1, "Expected tools length 1")
 				tool := req.Tools[0]
-				if tool.Type != "function" {
-					t.Errorf("Expected tool type 'function', got '%s'", tool.Type)
-				}
-				if tool.Name != "get_weather" {
-					t.Errorf("Expected tool name 'get_weather', got '%s'", tool.Name)
-				}
-				if tool.Description != "Get current weather" {
-					t.Errorf("Expected tool description 'Get current weather', got '%s'", tool.Description)
-				}
-				if req.ToolChoice != "auto" {
-					t.Errorf("Expected tool_choice 'auto', got '%v'", req.ToolChoice)
-				}
+				require.Equal(t, "function", tool.Type, "Expected tool type 'function'")
+				require.Equal(t, "get_weather", tool.Name, "Expected tool name 'get_weather'")
+				require.Equal(t, "Get current weather", tool.Description, "Expected tool description 'Get current weather'")
+				require.Equal(t, "auto", req.ToolChoice, "Expected tool_choice 'auto'")
 			},
 		},
 		{
@@ -330,24 +263,13 @@ func TestResponseAPIRequestParsing(t *testing.T) {
 			}`,
 			expectError: false,
 			validate: func(t *testing.T, req *ResponseAPIRequest) {
-				if req.Text == nil {
-					t.Fatal("Expected text config to be set")
-				}
-				if req.Text.Format == nil {
-					t.Fatal("Expected text format to be set")
-				}
-				if req.Text.Format.Type != "json_schema" {
-					t.Errorf("Expected format type 'json_schema', got '%s'", req.Text.Format.Type)
-				}
-				if req.Text.Format.Name != "math_reasoning" {
-					t.Errorf("Expected format name 'math_reasoning', got '%s'", req.Text.Format.Name)
-				}
-				if req.Text.Format.Strict == nil || !*req.Text.Format.Strict {
-					t.Errorf("Expected strict mode to be true")
-				}
-				if req.Text.Format.Schema == nil {
-					t.Fatal("Expected schema to be set")
-				}
+				require.NotNil(t, req.Text, "Expected text config to be set")
+				require.NotNil(t, req.Text.Format, "Expected text format to be set")
+				require.Equal(t, "json_schema", req.Text.Format.Type, "Expected format type 'json_schema'")
+				require.Equal(t, "math_reasoning", req.Text.Format.Name, "Expected format name 'math_reasoning'")
+				require.NotNil(t, req.Text.Format.Strict, "Expected strict to be set")
+				require.True(t, *req.Text.Format.Strict, "Expected strict mode to be true")
+				require.NotNil(t, req.Text.Format.Schema, "Expected schema to be set")
 			},
 		},
 		{
@@ -362,15 +284,11 @@ func TestResponseAPIRequestParsing(t *testing.T) {
 			}`,
 			expectError: false,
 			validate: func(t *testing.T, req *ResponseAPIRequest) {
-				if req.Reasoning == nil {
-					t.Fatal("Expected reasoning config to be set")
-				}
-				if req.Reasoning.Effort == nil || *req.Reasoning.Effort != "high" {
-					t.Errorf("Expected reasoning effort 'high', got %v", req.Reasoning.Effort)
-				}
-				if req.Reasoning.Summary == nil || *req.Reasoning.Summary != "detailed" {
-					t.Errorf("Expected reasoning summary 'detailed', got %v", req.Reasoning.Summary)
-				}
+				require.NotNil(t, req.Reasoning, "Expected reasoning config to be set")
+				require.NotNil(t, req.Reasoning.Effort, "Expected reasoning effort to be set")
+				require.Equal(t, "high", *req.Reasoning.Effort, "Expected reasoning effort 'high'")
+				require.NotNil(t, req.Reasoning.Summary, "Expected reasoning summary to be set")
+				require.Equal(t, "detailed", *req.Reasoning.Summary, "Expected reasoning summary 'detailed'")
 			},
 		},
 		{
@@ -395,42 +313,29 @@ func TestResponseAPIRequestParsing(t *testing.T) {
 			}`,
 			expectError: false,
 			validate: func(t *testing.T, req *ResponseAPIRequest) {
-				if req.Background == nil || !*req.Background {
-					t.Errorf("Expected background to be true")
-				}
-				if len(req.Include) != 2 || req.Include[0] != "usage" || req.Include[1] != "metadata" {
-					t.Errorf("Expected include to be ['usage', 'metadata'], got %v", req.Include)
-				}
-				if req.MaxOutputTokens == nil || *req.MaxOutputTokens != 1000 {
-					t.Errorf("Expected max_output_tokens 1000, got %v", req.MaxOutputTokens)
-				}
-				if req.ParallelToolCalls == nil || !*req.ParallelToolCalls {
-					t.Errorf("Expected parallel_tool_calls to be true")
-				}
-				if req.PreviousResponseId == nil || *req.PreviousResponseId != "resp_456" {
-					t.Errorf("Expected previous_response_id 'resp_456', got %v", req.PreviousResponseId)
-				}
-				if req.ServiceTier == nil || *req.ServiceTier != "default" {
-					t.Errorf("Expected service_tier 'default', got %v", req.ServiceTier)
-				}
-				if req.Store == nil || !*req.Store {
-					t.Errorf("Expected store to be true")
-				}
-				if req.Stream == nil || *req.Stream {
-					t.Errorf("Expected stream to be false")
-				}
-				if req.Temperature == nil || *req.Temperature != 0.7 {
-					t.Errorf("Expected temperature 0.7, got %v", req.Temperature)
-				}
-				if req.TopP == nil || *req.TopP != 0.9 {
-					t.Errorf("Expected top_p 0.9, got %v", req.TopP)
-				}
-				if req.Truncation == nil || *req.Truncation != "auto" {
-					t.Errorf("Expected truncation 'auto', got %v", req.Truncation)
-				}
-				if req.User == nil || *req.User != "test_user" {
-					t.Errorf("Expected user 'test_user', got %v", req.User)
-				}
+				require.NotNil(t, req.Background, "Expected background to be set")
+				require.True(t, *req.Background, "Expected background to be true")
+				require.Equal(t, []string{"usage", "metadata"}, req.Include, "Expected include to be ['usage', 'metadata']")
+				require.NotNil(t, req.MaxOutputTokens, "Expected max_output_tokens to be set")
+				require.Equal(t, 1000, *req.MaxOutputTokens, "Expected max_output_tokens 1000")
+				require.NotNil(t, req.ParallelToolCalls, "Expected parallel_tool_calls to be set")
+				require.True(t, *req.ParallelToolCalls, "Expected parallel_tool_calls to be true")
+				require.NotNil(t, req.PreviousResponseId, "Expected previous_response_id to be set")
+				require.Equal(t, "resp_456", *req.PreviousResponseId, "Expected previous_response_id 'resp_456'")
+				require.NotNil(t, req.ServiceTier, "Expected service_tier to be set")
+				require.Equal(t, "default", *req.ServiceTier, "Expected service_tier 'default'")
+				require.NotNil(t, req.Store, "Expected store to be set")
+				require.True(t, *req.Store, "Expected store to be true")
+				require.NotNil(t, req.Stream, "Expected stream to be set")
+				require.False(t, *req.Stream, "Expected stream to be false")
+				require.NotNil(t, req.Temperature, "Expected temperature to be set")
+				require.Equal(t, 0.7, *req.Temperature, "Expected temperature 0.7")
+				require.NotNil(t, req.TopP, "Expected top_p to be set")
+				require.Equal(t, 0.9, *req.TopP, "Expected top_p 0.9")
+				require.NotNil(t, req.Truncation, "Expected truncation to be set")
+				require.Equal(t, "auto", *req.Truncation, "Expected truncation 'auto'")
+				require.NotNil(t, req.User, "Expected user to be set")
+				require.Equal(t, "test_user", *req.User, "Expected user 'test_user'")
 			},
 		},
 	}
@@ -440,10 +345,10 @@ func TestResponseAPIRequestParsing(t *testing.T) {
 			var request ResponseAPIRequest
 			err := json.Unmarshal([]byte(tt.jsonData), &request)
 
-			if tt.expectError && err == nil {
-				t.Errorf("Expected error but got none")
-			} else if !tt.expectError && err != nil {
-				t.Errorf("Unexpected error: %v", err)
+			if tt.expectError {
+				require.Error(t, err, "Expected error but got none")
+			} else {
+				require.NoError(t, err, "Unexpected error")
 			}
 
 			if err == nil && tt.validate != nil {
@@ -594,19 +499,17 @@ func TestResponseAPIRequestEdgeCases(t *testing.T) {
 			var request ResponseAPIRequest
 			err := json.Unmarshal([]byte(tt.jsonData), &request)
 
-			if tt.expectError && err == nil {
-				t.Errorf("Expected error but got none")
-			} else if !tt.expectError && err != nil {
-				t.Errorf("Unexpected error: %v", err)
+			if tt.expectError {
+				require.Error(t, err, "Expected error but got none")
+			} else {
+				require.NoError(t, err, "Unexpected error")
 			}
 
 			// Basic validation that the struct was populated correctly for successful cases
 			if err == nil {
 				// Verify that the request can be marshaled back to JSON
 				_, marshalErr := json.Marshal(request)
-				if marshalErr != nil {
-					t.Errorf("Failed to marshal request back to JSON: %v", marshalErr)
-				}
+				require.NoError(t, marshalErr, "Failed to marshal request back to JSON")
 			}
 		})
 	}
@@ -660,32 +563,23 @@ func TestResponseAPIInputMarshalUnmarshal(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			// Marshal to JSON
 			jsonData, err := json.Marshal(tt.input)
-			if err != nil {
-				t.Fatalf("Failed to marshal input: %v", err)
-			}
+			require.NoError(t, err, "Failed to marshal input")
 
 			// Unmarshal back
 			var result ResponseAPIInput
 			err = json.Unmarshal(jsonData, &result)
-			if err != nil {
-				t.Fatalf("Failed to unmarshal input: %v", err)
-			}
+			require.NoError(t, err, "Failed to unmarshal input")
 
 			// Verify length matches
-			if len(result) != len(tt.input) {
-				t.Errorf("Expected length %d, got %d", len(tt.input), len(result))
-			}
+			require.Len(t, result, len(tt.input), "Expected length to match")
 
 			// For single string case, verify it marshals as string not array
 			if len(tt.input) == 1 {
 				if str, ok := tt.input[0].(string); ok {
 					var directString string
 					err = json.Unmarshal(jsonData, &directString)
-					if err != nil {
-						t.Errorf("Single string should marshal as string, not array")
-					} else if directString != str {
-						t.Errorf("Expected string '%s', got '%s'", str, directString)
-					}
+					require.NoError(t, err, "Single string should marshal as string, not array")
+					require.Equal(t, str, directString, "Expected string to match")
 				}
 			}
 		})

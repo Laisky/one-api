@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
+	"github.com/stretchr/testify/require"
 
 	"github.com/songquanpeng/one-api/relay/model"
 )
@@ -40,29 +41,21 @@ func TestHandler_NonStream_ThinkingParam(t *testing.T) {
 		Body:       io.NopCloser(strings.NewReader(string(b))),
 	}
 
-	if err, _ := Handler(c, upstream, 0, "gpt-4"); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	err, _ := Handler(c, upstream, 0, "gpt-4")
+	require.Nil(t, err, "unexpected error")
 
 	// Decode written JSON
 	var out SlimTextResponse
-	if err := json.Unmarshal(w.Body.Bytes(), &out); err != nil {
-		t.Fatalf("failed to unmarshal out: %v", err)
-	}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &out), "failed to unmarshal out")
 
-	if len(out.Choices) != 1 {
-		t.Fatalf("expected 1 choice, got %d", len(out.Choices))
-	}
+	require.Len(t, out.Choices, 1, "expected 1 choice")
 	msg := out.Choices[0].Message
 
 	// Expect content cleaned of think tags
-	if got := msg.StringContent(); got != "before  after" {
-		t.Fatalf("unexpected cleaned content: %q", got)
-	}
+	require.Equal(t, "before  after", msg.StringContent(), "unexpected cleaned content")
 	// Expect reasoning mapped to reasoning_content field
-	if msg.ReasoningContent == nil || *msg.ReasoningContent != "xyz" {
-		t.Fatalf("expected reasoning_content=xyz, got %#v", msg.ReasoningContent)
-	}
+	require.NotNil(t, msg.ReasoningContent, "expected reasoning_content to be set")
+	require.Equal(t, "xyz", *msg.ReasoningContent, "expected reasoning_content=xyz")
 }
 
 // TestHandler_NonStream_ReasoningFormatThinking ensures reasoning_content is remapped when thinking format requested.
@@ -94,24 +87,16 @@ func TestHandler_NonStream_ReasoningFormatThinking(t *testing.T) {
 		Body:       io.NopCloser(strings.NewReader(string(body))),
 	}
 
-	if err, _ := Handler(c, upstream, 0, "kimi-k2-thinking"); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	handlerErr, _ := Handler(c, upstream, 0, "kimi-k2-thinking")
+	require.Nil(t, handlerErr, "unexpected error")
 
 	var out SlimTextResponse
-	if err := json.Unmarshal(w.Body.Bytes(), &out); err != nil {
-		t.Fatalf("failed to decode handler output: %v", err)
-	}
-	if len(out.Choices) != 1 {
-		t.Fatalf("expected single choice, got %d", len(out.Choices))
-	}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &out), "failed to decode handler output")
+	require.Len(t, out.Choices, 1, "expected single choice")
 	msg := out.Choices[0].Message
-	if msg.Thinking == nil || *msg.Thinking != "walkthrough" {
-		t.Fatalf("expected thinking field to carry reasoning, got %#v", msg.Thinking)
-	}
-	if msg.ReasoningContent != nil {
-		t.Fatalf("expected reasoning_content cleared, got %#v", msg.ReasoningContent)
-	}
+	require.NotNil(t, msg.Thinking, "expected thinking field to be set")
+	require.Equal(t, "walkthrough", *msg.Thinking, "expected thinking field to carry reasoning")
+	require.Nil(t, msg.ReasoningContent, "expected reasoning_content cleared")
 }
 
 // TestHandler_NonStream_OmitsEmptyErrorField verifies that the handler does not emit the error field
@@ -139,17 +124,13 @@ func TestHandler_NonStream_OmitsEmptyErrorField(t *testing.T) {
 		Body:       io.NopCloser(strings.NewReader(string(b))),
 	}
 
-	if err, _ := Handler(c, upstream, 0, "gpt-4"); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	handlerErr, _ := Handler(c, upstream, 0, "gpt-4")
+	require.Nil(t, handlerErr, "unexpected error")
 
 	var out map[string]any
-	if err := json.Unmarshal(w.Body.Bytes(), &out); err != nil {
-		t.Fatalf("failed to decode handler output: %v", err)
-	}
-	if _, exists := out["error"]; exists {
-		t.Fatalf("expected no error field in handler output, got %s", w.Body.String())
-	}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &out), "failed to decode handler output")
+	_, exists := out["error"]
+	require.False(t, exists, "expected no error field in handler output, got %s", w.Body.String())
 }
 
 // Helpers

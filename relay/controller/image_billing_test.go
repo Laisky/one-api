@@ -3,6 +3,8 @@ package controller
 import (
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
 	relaymodel "github.com/songquanpeng/one-api/relay/model"
 )
 
@@ -20,14 +22,10 @@ func TestImageQuotaNoExtraThousand(t *testing.T) {
 	// Old buggy math would do: int64(ratio*imageCostRatio) * 1000 → 20,000,000
 	// Correct math: no extra *1000
 	usedQuotaSingle := int64(ratio * imageCostRatio)
-	if usedQuotaSingle != 20000 {
-		t.Fatalf("unexpected single-image quota: got %d want %d", usedQuotaSingle, 20000)
-	}
+	require.Equal(t, int64(20000), usedQuotaSingle, "unexpected single-image quota")
 
 	// n images scale linearly
 	n := int64(3)
 	usedQuotaN := usedQuotaSingle * n
-	if usedQuotaN != 60000 {
-		t.Fatalf("unexpected n-image quota: got %d want %d", usedQuotaN, 60000)
-	}
+	require.Equal(t, int64(60000), usedQuotaN, "unexpected n-image quota")
 }

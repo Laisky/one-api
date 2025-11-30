@@ -152,16 +152,12 @@ func TestGetModelsDisplay_AnonymousUsesConfiguredModels(t *testing.T) {
 	info, ok := resp.Data[key]
 	require.True(t, ok, "expected channel %s in response", key)
 	require.Len(t, info.Models, 2)
-	if _, ok := info.Models["gpt-3.5-turbo"]; !ok {
-		t.Fatalf("expected gpt-3.5-turbo in models list: %+v", info.Models)
-	}
-	if _, ok := info.Models["gpt-4o-mini"]; !ok {
-		t.Fatalf("expected gpt-4o-mini in models list: %+v", info.Models)
-	}
+	_, ok = info.Models["gpt-3.5-turbo"]
+	require.True(t, ok, "expected gpt-3.5-turbo in models list: %+v", info.Models)
+	_, ok = info.Models["gpt-4o-mini"]
+	require.True(t, ok, "expected gpt-4o-mini in models list: %+v", info.Models)
 	for modelName := range info.Models {
-		if modelName != "gpt-3.5-turbo" && modelName != "gpt-4o-mini" {
-			t.Fatalf("unexpected model present: %s", modelName)
-		}
+		require.True(t, modelName == "gpt-3.5-turbo" || modelName == "gpt-4o-mini", "unexpected model present: %s", modelName)
 	}
 
 	convertRatioToPrice := func(r float64) float64 {
@@ -429,10 +425,8 @@ func TestGetModelsDisplay_LoggedInFiltersUnsupportedModels(t *testing.T) {
 	info, ok := resp.Data[key]
 	require.True(t, ok, "expected channel %s in response", key)
 	require.Len(t, info.Models, 1)
-	if _, ok := info.Models["gpt-3.5-turbo"]; !ok {
-		t.Fatalf("expected gpt-3.5-turbo for user; got %+v", info.Models)
-	}
-	if _, ok := info.Models["gpt-invalid-model"]; ok {
-		t.Fatalf("unexpected unsupported model exposed to user: %+v", info.Models)
-	}
+	_, ok = info.Models["gpt-3.5-turbo"]
+	require.True(t, ok, "expected gpt-3.5-turbo for user; got %+v", info.Models)
+	_, ok = info.Models["gpt-invalid-model"]
+	require.False(t, ok, "unexpected unsupported model exposed to user: %+v", info.Models)
 }

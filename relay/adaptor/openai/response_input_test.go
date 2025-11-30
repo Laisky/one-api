@@ -3,6 +3,8 @@ package openai
 import (
 	"encoding/json"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestResponseAPIInputUnmarshaling(t *testing.T) {
@@ -49,40 +51,28 @@ func TestResponseAPIInputUnmarshaling(t *testing.T) {
 			}
 
 			err := json.Unmarshal([]byte(tt.jsonData), &request)
-			if err != nil {
-				t.Fatalf("Failed to unmarshal JSON: %v", err)
-			}
-
-			if len(request.Input) != len(tt.expected) {
-				t.Errorf("Expected input length %d, got %d", len(tt.expected), len(request.Input))
-				return
-			}
+			require.NoError(t, err, "Failed to unmarshal JSON")
+			require.Len(t, request.Input, len(tt.expected), "Input length mismatch")
 
 			for i, expectedItem := range tt.expected {
 				actualItem := request.Input[i]
 
 				// For string comparison
 				if expectedStr, ok := expectedItem.(string); ok {
-					if actualStr, ok := actualItem.(string); ok {
-						if expectedStr != actualStr {
-							t.Errorf("Expected input[%d] to be %q, got %q", i, expectedStr, actualStr)
-						}
-					} else {
-						t.Errorf("Expected input[%d] to be string, got %T", i, actualItem)
-					}
+					actualStr, ok := actualItem.(string)
+					require.True(t, ok, "Expected input[%d] to be string, got %T", i, actualItem)
+					require.Equal(t, expectedStr, actualStr, "input[%d] mismatch", i)
 					continue
 				}
 
 				// For map comparison (simplified)
 				if expectedMap, ok := expectedItem.(map[string]any); ok {
-					if actualMap, ok := actualItem.(map[string]any); ok {
-						for key, expectedValue := range expectedMap {
-							if actualValue, exists := actualMap[key]; !exists || actualValue != expectedValue {
-								t.Errorf("Expected input[%d][%s] to be %v, got %v", i, key, expectedValue, actualValue)
-							}
-						}
-					} else {
-						t.Errorf("Expected input[%d] to be map, got %T", i, actualItem)
+					actualMap, ok := actualItem.(map[string]any)
+					require.True(t, ok, "Expected input[%d] to be map, got %T", i, actualItem)
+					for key, expectedValue := range expectedMap {
+						actualValue, exists := actualMap[key]
+						require.True(t, exists, "Expected key %s to exist in input[%d]", key, i)
+						require.Equal(t, expectedValue, actualValue, "input[%d][%s] mismatch", i, key)
 					}
 				}
 			}
@@ -147,17 +137,12 @@ func TestResponseAPIRequestValidation(t *testing.T) {
 			var request ResponseAPIRequest
 			err := json.Unmarshal([]byte(tt.jsonData), &request)
 
-			if tt.expectError && err == nil {
-				t.Errorf("Expected error but got none")
-			} else if !tt.expectError && err != nil {
-				t.Errorf("Unexpected error: %v", err)
-			}
-
-			// Basic validation that the struct was populated correctly
-			if err == nil {
-				if request.Model == "" {
-					t.Errorf("Model should not be empty")
-				}
+			if tt.expectError {
+				require.Error(t, err, "Expected error but got none")
+			} else {
+				require.NoError(t, err, "Unexpected error")
+				// Basic validation that the struct was populated correctly
+				require.NotEmpty(t, request.Model, "Model should not be empty")
 			}
 		})
 	}

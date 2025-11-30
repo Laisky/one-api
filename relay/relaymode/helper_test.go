@@ -1,21 +1,17 @@
 package relaymode
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/stretchr/testify/require"
+)
 
 func TestGetByPathRealtime(t *testing.T) {
-	if got := GetByPath("/v1/realtime"); got != Realtime {
-		t.Fatalf("expected Realtime, got %d", got)
-	}
-	if got := GetByPath("/v1/realtime?model=gpt-4o-realtime-preview"); got != Realtime {
-		t.Fatalf("expected Realtime with query, got %d", got)
-	}
+	require.Equal(t, Realtime, GetByPath("/v1/realtime"), "expected Realtime")
+	require.Equal(t, Realtime, GetByPath("/v1/realtime?model=gpt-4o-realtime-preview"), "expected Realtime with query")
 }
 
 func TestGetByPathVideos(t *testing.T) {
-	if got := GetByPath("/v1/videos"); got != Videos {
-		t.Fatalf("expected Videos, got %d", got)
-	}
-	if got := GetByPath("/v1/videos/video_123"); got != Videos {
-		t.Fatalf("expected Videos with path segment, got %d", got)
-	}
+	require.Equal(t, Videos, GetByPath("/v1/videos"), "expected Videos")
+	require.Equal(t, Videos, GetByPath("/v1/videos/video_123"), "expected Videos with path segment")
 }

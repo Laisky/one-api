@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
+	"github.com/stretchr/testify/require"
 
 	"github.com/songquanpeng/one-api/common/ctxkey"
 	"github.com/songquanpeng/one-api/relay/relaymode"
@@ -52,21 +53,14 @@ data: [DONE]`
 	resp.Header.Set("Content-Type", "text/event-stream")
 
 	err, aggregatedText, usage := ResponseAPIStreamHandler(c, resp, relaymode.ChatCompletions)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if aggregatedText != "Hello world" {
-		t.Fatalf("unexpected aggregated text: %q", aggregatedText)
-	}
-	if usage == nil || usage.TotalTokens != 3 {
-		t.Fatalf("unexpected usage: %v", usage)
-	}
+	require.Nil(t, err, "unexpected error")
+	require.Equal(t, "Hello world", aggregatedText, "unexpected aggregated text")
+	require.NotNil(t, usage, "usage should not be nil")
+	require.Equal(t, 3, usage.TotalTokens, "unexpected total tokens")
 
 	// Inspect emitted stream and ensure only one full-text chunk and one usage chunk
 	body := w.Body.String()
-	if !strings.Contains(body, "data: [DONE]") {
-		t.Fatalf("missing DONE in stream output; body=%q", body)
-	}
+	require.Contains(t, body, "data: [DONE]", "missing DONE in stream output")
 
 	t.Logf("stream body:\n%s", body)
 
@@ -108,18 +102,10 @@ data: [DONE]`
 
 	// No duplicate full-text chunks; zero or one is acceptable. Deltas should
 	// reconstruct the expected final text.
-	if fullTextChunks > 1 {
-		t.Fatalf("expected at most 1 full-text chunk, got %d", fullTextChunks)
-	}
-	if strings.TrimSpace(combined.String()) != "Hello world" {
-		t.Fatalf("combined delta content mismatch: expected %q, got %q", "Hello world", strings.TrimSpace(combined.String()))
-	}
-	if usageChunks != 1 {
-		t.Fatalf("expected exactly 1 usage chunk, got %d", usageChunks)
-	}
-	if finishCount != 1 {
-		t.Fatalf("expected exactly 1 finish_reason present, got %d", finishCount)
-	}
+	require.LessOrEqual(t, fullTextChunks, 1, "expected at most 1 full-text chunk")
+	require.Equal(t, "Hello world", strings.TrimSpace(combined.String()), "combined delta content mismatch")
+	require.Equal(t, 1, usageChunks, "expected exactly 1 usage chunk")
+	require.Equal(t, 1, finishCount, "expected exactly 1 finish_reason present")
 }
 
 func TestResponseAPIStreamHandlerWebSearchUsageFallback(t *testing.T) {
@@ -141,18 +127,13 @@ data: [DONE]`
 	resp.Header.Set("Content-Type", "text/event-stream")
 
 	err, _, usage := ResponseAPIStreamHandler(c, resp, relaymode.ChatCompletions)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if usage == nil || usage.TotalTokens != 7 {
-		t.Fatalf("unexpected usage: %v", usage)
-	}
+	require.Nil(t, err, "unexpected error")
+	require.NotNil(t, usage, "usage should not be nil")
+	require.Equal(t, 7, usage.TotalTokens, "unexpected total tokens")
 
 	countRaw, exists := c.Get(ctxkey.WebSearchCallCount)
-	if !exists {
-		t.Fatalf("expected web search count in context")
-	}
-	if count, ok := countRaw.(int); !ok || count != 3 {
-		t.Fatalf("expected web search count 3, got %v", countRaw)
-	}
+	require.True(t, exists, "expected web search count in context")
+	count, ok := countRaw.(int)
+	require.True(t, ok, "web search count should be int")
+	require.Equal(t, 3, count, "expected web search count 3")
 }

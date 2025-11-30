@@ -179,9 +179,7 @@ func setupTestDatabase(t *testing.T) {
 		InitDB()
 		InitLogDB()
 	}
-	if DB == nil {
-		t.Fatal("Database connection not available for testing after InitDB")
-	}
+	require.NotNil(t, DB, "Database connection not available for testing after InitDB")
 
 	// Clean up test data
 	DB.Exec("DELETE FROM users WHERE username LIKE 'test%' OR access_token LIKE 'test%'")

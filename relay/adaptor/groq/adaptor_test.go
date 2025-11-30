@@ -3,6 +3,8 @@ package groq
 import (
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/songquanpeng/one-api/relay/channeltype"
 	"github.com/songquanpeng/one-api/relay/meta"
 )
@@ -56,13 +58,8 @@ func TestGetRequestURL(t *testing.T) {
 			}
 
 			url, err := adaptor.GetRequestURL(meta)
-			if err != nil {
-				t.Fatalf("GetRequestURL failed: %v", err)
-			}
-
-			if url != tc.expectedURL {
-				t.Errorf("Expected URL %s, got %s", tc.expectedURL, url)
-			}
+			require.NoError(t, err, "GetRequestURL failed")
+			require.Equal(t, tc.expectedURL, url)
 		})
 	}
 }

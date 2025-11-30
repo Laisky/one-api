@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/songquanpeng/one-api/relay/model"
+	"github.com/stretchr/testify/require"
 )
 
 func float64PtrAli(v float64) *float64 {
@@ -18,13 +19,10 @@ func TestConvertRequestClampsTopP(t *testing.T) {
 	}
 
 	converted := ConvertRequest(req)
-	if converted.Parameters.TopP == nil {
-		t.Fatal("expected TopP to be populated")
-	}
+	require.NotNil(t, converted.Parameters.TopP, "expected TopP to be populated")
 
-	if diff := math.Abs(*converted.Parameters.TopP - 0.9999); diff > 1e-9 {
-		t.Fatalf("expected TopP to be clamped to 0.9999, got %v", *converted.Parameters.TopP)
-	}
+	diff := math.Abs(*converted.Parameters.TopP - 0.9999)
+	require.LessOrEqual(t, diff, 1e-9, "expected TopP to be clamped to 0.9999, got %v", *converted.Parameters.TopP)
 }
 
 func TestConvertRequestLeavesNilTopPUnchanged(t *testing.T) {
@@ -33,7 +31,5 @@ func TestConvertRequestLeavesNilTopPUnchanged(t *testing.T) {
 	}
 
 	converted := ConvertRequest(req)
-	if converted.Parameters.TopP != nil {
-		t.Fatalf("expected TopP to remain nil when not provided, got %v", *converted.Parameters.TopP)
-	}
+	require.Nil(t, converted.Parameters.TopP, "expected TopP to remain nil when not provided")
 }

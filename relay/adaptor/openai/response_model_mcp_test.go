@@ -7,6 +7,7 @@ import (
 
 	"github.com/songquanpeng/one-api/relay/adaptor/openai"
 	"github.com/songquanpeng/one-api/relay/model"
+	"github.com/stretchr/testify/require"
 )
 
 // TestMCPOutputItemSerialization tests that MCP-specific OutputItem fields are properly serialized
@@ -38,26 +39,17 @@ func TestMCPOutputItemSerialization(t *testing.T) {
 	}
 
 	jsonData, err := json.Marshal(mcpListTools)
-	if err != nil {
-		t.Fatalf("Failed to marshal mcp_list_tools: %v", err)
-	}
+	require.NoError(t, err, "Failed to marshal mcp_list_tools")
 
 	var result map[string]any
 	err = json.Unmarshal(jsonData, &result)
-	if err != nil {
-		t.Fatalf("Failed to unmarshal JSON: %v", err)
-	}
+	require.NoError(t, err, "Failed to unmarshal JSON")
 
 	// Verify MCP-specific fields
-	if result["type"] != "mcp_list_tools" {
-		t.Errorf("Expected type 'mcp_list_tools', got %v", result["type"])
-	}
-	if result["server_label"] != "deepwiki" {
-		t.Errorf("Expected server_label 'deepwiki', got %v", result["server_label"])
-	}
-	if tools, ok := result["tools"].([]any); !ok || len(tools) != 1 {
-		t.Errorf("Expected tools array with 1 item, got %v", result["tools"])
-	}
+	require.Equal(t, "mcp_list_tools", result["type"], "Expected type 'mcp_list_tools'")
+	require.Equal(t, "deepwiki", result["server_label"], "Expected server_label 'deepwiki'")
+	tools, ok := result["tools"].([]any)
+	require.True(t, ok && len(tools) == 1, "Expected tools array with 1 item, got %v", result["tools"])
 }
 
 // TestMCPCallOutputItem tests mcp_call output item serialization
@@ -73,29 +65,17 @@ func TestMCPCallOutputItem(t *testing.T) {
 	}
 
 	jsonData, err := json.Marshal(mcpCall)
-	if err != nil {
-		t.Fatalf("Failed to marshal mcp_call: %v", err)
-	}
+	require.NoError(t, err, "Failed to marshal mcp_call")
 
 	var result map[string]any
 	err = json.Unmarshal(jsonData, &result)
-	if err != nil {
-		t.Fatalf("Failed to unmarshal JSON: %v", err)
-	}
+	require.NoError(t, err, "Failed to unmarshal JSON")
 
 	// Verify fields
-	if result["type"] != "mcp_call" {
-		t.Errorf("Expected type 'mcp_call', got %v", result["type"])
-	}
-	if result["name"] != "ask_question" {
-		t.Errorf("Expected name 'ask_question', got %v", result["name"])
-	}
-	if result["server_label"] != "deepwiki" {
-		t.Errorf("Expected server_label 'deepwiki', got %v", result["server_label"])
-	}
-	if result["output"] == "" {
-		t.Error("Expected output to be present")
-	}
+	require.Equal(t, "mcp_call", result["type"], "Expected type 'mcp_call'")
+	require.Equal(t, "ask_question", result["name"], "Expected name 'ask_question'")
+	require.Equal(t, "deepwiki", result["server_label"], "Expected server_label 'deepwiki'")
+	require.NotEmpty(t, result["output"], "Expected output to be present")
 }
 
 // TestMCPCallWithError tests mcp_call output item with error
@@ -111,19 +91,13 @@ func TestMCPCallWithError(t *testing.T) {
 	}
 
 	jsonData, err := json.Marshal(mcpCallError)
-	if err != nil {
-		t.Fatalf("Failed to marshal mcp_call with error: %v", err)
-	}
+	require.NoError(t, err, "Failed to marshal mcp_call with error")
 
 	var result map[string]any
 	err = json.Unmarshal(jsonData, &result)
-	if err != nil {
-		t.Fatalf("Failed to unmarshal JSON: %v", err)
-	}
+	require.NoError(t, err, "Failed to unmarshal JSON")
 
-	if result["error"] != "Connection failed" {
-		t.Errorf("Expected error 'Connection failed', got %v", result["error"])
-	}
+	require.Equal(t, "Connection failed", result["error"], "Expected error 'Connection failed'")
 }
 
 // TestMCPApprovalRequest tests mcp_approval_request output item
@@ -137,23 +111,15 @@ func TestMCPApprovalRequest(t *testing.T) {
 	}
 
 	jsonData, err := json.Marshal(approvalRequest)
-	if err != nil {
-		t.Fatalf("Failed to marshal mcp_approval_request: %v", err)
-	}
+	require.NoError(t, err, "Failed to marshal mcp_approval_request")
 
 	var result map[string]any
 	err = json.Unmarshal(jsonData, &result)
-	if err != nil {
-		t.Fatalf("Failed to unmarshal JSON: %v", err)
-	}
+	require.NoError(t, err, "Failed to unmarshal JSON")
 
 	// Verify fields
-	if result["type"] != "mcp_approval_request" {
-		t.Errorf("Expected type 'mcp_approval_request', got %v", result["type"])
-	}
-	if result["server_label"] != "deepwiki" {
-		t.Errorf("Expected server_label 'deepwiki', got %v", result["server_label"])
-	}
+	require.Equal(t, "mcp_approval_request", result["type"], "Expected type 'mcp_approval_request'")
+	require.Equal(t, "deepwiki", result["server_label"], "Expected server_label 'deepwiki'")
 }
 
 // TestMCPApprovalResponseInput tests the MCP approval response input structure
@@ -165,43 +131,25 @@ func TestMCPApprovalResponseInput(t *testing.T) {
 	}
 
 	jsonData, err := json.Marshal(approvalResponse)
-	if err != nil {
-		t.Fatalf("Failed to marshal MCPApprovalResponseInput: %v", err)
-	}
+	require.NoError(t, err, "Failed to marshal MCPApprovalResponseInput")
 
 	var result map[string]any
 	err = json.Unmarshal(jsonData, &result)
-	if err != nil {
-		t.Fatalf("Failed to unmarshal JSON: %v", err)
-	}
+	require.NoError(t, err, "Failed to unmarshal JSON")
 
 	// Verify fields
-	if result["type"] != "mcp_approval_response" {
-		t.Errorf("Expected type 'mcp_approval_response', got %v", result["type"])
-	}
-	if result["approve"] != true {
-		t.Errorf("Expected approve true, got %v", result["approve"])
-	}
-	if result["approval_request_id"] != "mcpr_682d498e3bd4819196a0ce1664f8e77b04ad1e533afccbfa" {
-		t.Errorf("Expected correct approval_request_id, got %v", result["approval_request_id"])
-	}
+	require.Equal(t, "mcp_approval_response", result["type"], "Expected type 'mcp_approval_response'")
+	require.Equal(t, true, result["approve"], "Expected approve true")
+	require.Equal(t, "mcpr_682d498e3bd4819196a0ce1664f8e77b04ad1e533afccbfa", result["approval_request_id"], "Expected correct approval_request_id")
 
 	// Test deserialization
 	var deserializedResponse openai.MCPApprovalResponseInput
 	err = json.Unmarshal(jsonData, &deserializedResponse)
-	if err != nil {
-		t.Fatalf("Failed to deserialize MCPApprovalResponseInput: %v", err)
-	}
+	require.NoError(t, err, "Failed to deserialize MCPApprovalResponseInput")
 
-	if deserializedResponse.Type != "mcp_approval_response" {
-		t.Errorf("Expected type 'mcp_approval_response', got %s", deserializedResponse.Type)
-	}
-	if !deserializedResponse.Approve {
-		t.Error("Expected approve to be true")
-	}
-	if deserializedResponse.ApprovalRequestId != "mcpr_682d498e3bd4819196a0ce1664f8e77b04ad1e533afccbfa" {
-		t.Errorf("Expected correct approval_request_id, got %s", deserializedResponse.ApprovalRequestId)
-	}
+	require.Equal(t, "mcp_approval_response", deserializedResponse.Type, "Expected type 'mcp_approval_response'")
+	require.True(t, deserializedResponse.Approve, "Expected approve to be true")
+	require.Equal(t, "mcpr_682d498e3bd4819196a0ce1664f8e77b04ad1e533afccbfa", deserializedResponse.ApprovalRequestId, "Expected correct approval_request_id")
 }
 
 // TestResponseAPIResponseWithMCPOutput tests complete ResponseAPIResponse with MCP output items
@@ -239,37 +187,23 @@ func TestResponseAPIResponseWithMCPOutput(t *testing.T) {
 	}
 
 	jsonData, err := json.Marshal(response)
-	if err != nil {
-		t.Fatalf("Failed to marshal ResponseAPIResponse with MCP output: %v", err)
-	}
+	require.NoError(t, err, "Failed to marshal ResponseAPIResponse with MCP output")
 
 	var deserializedResponse openai.ResponseAPIResponse
 	err = json.Unmarshal(jsonData, &deserializedResponse)
-	if err != nil {
-		t.Fatalf("Failed to deserialize ResponseAPIResponse: %v", err)
-	}
+	require.NoError(t, err, "Failed to deserialize ResponseAPIResponse")
 
-	if len(deserializedResponse.Output) != 2 {
-		t.Errorf("Expected 2 output items, got %d", len(deserializedResponse.Output))
-	}
+	require.Len(t, deserializedResponse.Output, 2, "Expected 2 output items")
 
 	// Verify first output item (mcp_list_tools)
 	firstOutput := deserializedResponse.Output[0]
-	if firstOutput.Type != "mcp_list_tools" {
-		t.Errorf("Expected first output type 'mcp_list_tools', got %s", firstOutput.Type)
-	}
-	if len(firstOutput.Tools) != 1 {
-		t.Errorf("Expected 1 tool, got %d", len(firstOutput.Tools))
-	}
+	require.Equal(t, "mcp_list_tools", firstOutput.Type, "Expected first output type 'mcp_list_tools'")
+	require.Len(t, firstOutput.Tools, 1, "Expected 1 tool")
 
 	// Verify second output item (mcp_call)
 	secondOutput := deserializedResponse.Output[1]
-	if secondOutput.Type != "mcp_call" {
-		t.Errorf("Expected second output type 'mcp_call', got %s", secondOutput.Type)
-	}
-	if secondOutput.Output != "Test response" {
-		t.Errorf("Expected output 'Test response', got %s", secondOutput.Output)
-	}
+	require.Equal(t, "mcp_call", secondOutput.Type, "Expected second output type 'mcp_call'")
+	require.Equal(t, "Test response", secondOutput.Output, "Expected output 'Test response'")
 }
 
 // TestConvertResponseAPIToChatCompletionWithMCP tests MCP output conversion to ChatCompletion
@@ -309,31 +243,17 @@ func TestConvertResponseAPIToChatCompletionWithMCP(t *testing.T) {
 
 	chatResponse := openai.ConvertResponseAPIToChatCompletion(responseAPIResp)
 
-	if chatResponse == nil {
-		t.Fatal("Expected non-nil chat response")
-	}
-
-	if chatResponse.Id != "resp_mcp_test" {
-		t.Errorf("Expected ID 'resp_mcp_test', got %s", chatResponse.Id)
-	}
-
-	if len(chatResponse.Choices) != 1 {
-		t.Errorf("Expected 1 choice, got %d", len(chatResponse.Choices))
-	}
+	require.NotNil(t, chatResponse, "Expected non-nil chat response")
+	require.Equal(t, "resp_mcp_test", chatResponse.Id, "Expected ID 'resp_mcp_test'")
+	require.Len(t, chatResponse.Choices, 1, "Expected 1 choice")
 
 	choice := chatResponse.Choices[0]
 	content := choice.Message.Content.(string)
 
 	// Verify that MCP content was included in the response text
-	if !containsSubstring(content, "Hello! I'll help you with that.") {
-		t.Error("Expected original message content to be preserved")
-	}
-	if !containsSubstring(content, "MCP Server 'deepwiki' tools imported: 1 tools available") {
-		t.Error("Expected MCP list tools info to be included")
-	}
-	if !containsSubstring(content, "MCP Tool 'ask_question' result: The answer is 42") {
-		t.Error("Expected MCP call result to be included")
-	}
+	require.True(t, containsSubstring(content, "Hello! I'll help you with that."), "Expected original message content to be preserved")
+	require.True(t, containsSubstring(content, "MCP Server 'deepwiki' tools imported: 1 tools available"), "Expected MCP list tools info to be included")
+	require.True(t, containsSubstring(content, "MCP Tool 'ask_question' result: The answer is 42"), "Expected MCP call result to be included")
 }
 
 // Helper function to check if a string contains a substring.

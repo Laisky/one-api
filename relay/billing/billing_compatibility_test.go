@@ -5,6 +5,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
+
 	modelpkg "github.com/songquanpeng/one-api/model"
 )
 
@@ -19,7 +21,7 @@ func TestBackwardCompatibility(t *testing.T) {
 
 		defer func() {
 			if r := recover(); r != nil {
-				t.Errorf("PostConsumeQuotaDetailed panicked: %v", r)
+				require.Fail(t, "PostConsumeQuotaDetailed panicked", "%v", r)
 			}
 		}()
 
@@ -115,7 +117,7 @@ func TestInputValidation(t *testing.T) {
 			} else if !tc.shouldFail && result {
 				t.Logf("✓ %s: Function executed successfully with valid input", tc.description)
 			} else {
-				t.Errorf("✗ %s: Unexpected behavior", tc.description)
+				require.Fail(t, "Unexpected behavior", "✗ %s", tc.description)
 			}
 		})
 	}
@@ -187,13 +189,9 @@ func TestBillingConsistency(t *testing.T) {
 				expectedFloat := (float64(tc.promptTokens)+float64(tc.completionTokens)*tc.completionRatio)*tc.modelRatio*tc.groupRatio + float64(tc.toolsCost)
 				calculatedQuota = int64(expectedFloat)
 				// Should be 278 (truncated from 278.8)
-				if calculatedQuota != 278 {
-					t.Errorf("Expected quota to be 278, got %d", calculatedQuota)
-				}
+				require.Equal(t, int64(278), calculatedQuota, "Expected quota to be 278")
 			} else {
-				if calculatedQuota != tc.expectedQuota {
-					t.Errorf("Expected quota %d, got %d", tc.expectedQuota, calculatedQuota)
-				}
+				require.Equal(t, tc.expectedQuota, calculatedQuota, "Expected quota mismatch")
 			}
 
 			t.Logf("✓ Billing calculation test passed: %s - quota=%d", tc.name, calculatedQuota)

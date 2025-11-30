@@ -5,6 +5,7 @@ import (
 
 	"github.com/songquanpeng/one-api/common/config"
 	relaymodel "github.com/songquanpeng/one-api/relay/model"
+	"github.com/stretchr/testify/require"
 )
 
 func TestShouldDisableChannel_RespectsFlag(t *testing.T) {
@@ -21,13 +22,11 @@ func TestShouldDisableChannel_RespectsFlag(t *testing.T) {
 
 	// When flag is false, should not disable
 	config.AutomaticDisableChannelEnabled = false
-	if ShouldDisableChannel(err, 401) {
-		t.Fatalf("expected ShouldDisableChannel to be false when AutomaticDisableChannelEnabled is false")
-	}
+	require.False(t, ShouldDisableChannel(err, 401),
+		"expected ShouldDisableChannel to be false when AutomaticDisableChannelEnabled is false")
 
 	// When flag is true, should disable
 	config.AutomaticDisableChannelEnabled = true
-	if !ShouldDisableChannel(err, 401) {
-		t.Fatalf("expected ShouldDisableChannel to be true when AutomaticDisableChannelEnabled is true")
-	}
+	require.True(t, ShouldDisableChannel(err, 401),
+		"expected ShouldDisableChannel to be true when AutomaticDisableChannelEnabled is true")
 }

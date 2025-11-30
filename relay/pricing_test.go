@@ -7,6 +7,7 @@ import (
 	"github.com/songquanpeng/one-api/relay/adaptor/openrouter"
 	"github.com/songquanpeng/one-api/relay/adaptor/xai"
 	"github.com/songquanpeng/one-api/relay/apitype"
+	"github.com/stretchr/testify/require"
 )
 
 // TestAdapterPricingImplementations tests that all major adapters have proper pricing implementations
@@ -37,38 +38,27 @@ func TestAdapterPricingImplementations(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			adaptor := GetAdaptor(tc.apiType)
-			if adaptor == nil {
-				t.Fatalf("No adaptor found for %s (type: %d)", tc.name, tc.apiType)
-			}
+			require.NotNil(t, adaptor, "No adaptor found for %s (type: %d)", tc.name, tc.apiType)
 
 			// Test GetDefaultModelPricing
 			defaultPricing := adaptor.GetDefaultModelPricing()
 
 			if tc.expectEmpty {
-				if len(defaultPricing) != 0 {
-					t.Errorf("%s: Expected empty pricing map, got %d models", tc.name, len(defaultPricing))
-				}
+				require.Empty(t, defaultPricing, "%s: Expected empty pricing map, got %d models", tc.name, len(defaultPricing))
 				return // Skip further tests for adapters expected to have empty pricing
 			}
 
-			if len(defaultPricing) == 0 {
-				t.Errorf("%s: GetDefaultModelPricing returned empty map", tc.name)
-				return
-			}
+			require.NotEmpty(t, defaultPricing, "%s: GetDefaultModelPricing returned empty map", tc.name)
 
 			t.Logf("%s: Found %d models with pricing", tc.name, len(defaultPricing))
 
 			// Test GetModelRatio
 			ratio := adaptor.GetModelRatio(tc.sampleModel)
-			if ratio <= 0 {
-				t.Errorf("%s: GetModelRatio for %s returned invalid ratio: %f", tc.name, tc.sampleModel, ratio)
-			}
+			require.Greater(t, ratio, 0.0, "%s: GetModelRatio for %s returned invalid ratio: %f", tc.name, tc.sampleModel, ratio)
 
 			// Test GetCompletionRatio
 			completionRatio := adaptor.GetCompletionRatio(tc.sampleModel)
-			if completionRatio <= 0 {
-				t.Errorf("%s: GetCompletionRatio for %s returned invalid ratio: %f", tc.name, tc.sampleModel, completionRatio)
-			}
+			require.Greater(t, completionRatio, 0.0, "%s: GetCompletionRatio for %s returned invalid ratio: %f", tc.name, tc.sampleModel, completionRatio)
 
 			t.Logf("%s: Model %s - ratio=%.6f, completion_ratio=%.2f", tc.name, tc.sampleModel, ratio, completionRatio)
 		})
@@ -79,28 +69,20 @@ func TestAdapterPricingImplementations(t *testing.T) {
 func TestSpecificAdapterPricing(t *testing.T) {
 	t.Run("Ali_Pricing", func(t *testing.T) {
 		adaptor := GetAdaptor(apitype.Ali)
-		if adaptor == nil {
-			t.Fatal("Ali adaptor not found")
-		}
+		require.NotNil(t, adaptor, "Ali adaptor not found")
 
 		// Verify adapter pricing matches the authoritative ModelRatios table.
 		testModels := []string{"qwen-turbo", "qwen-plus", "qwen-max"}
 
 		for _, model := range testModels {
 			expectedConfig, ok := ali.ModelRatios[model]
-			if !ok {
-				t.Fatalf("Ali model %s missing from ModelRatios", model)
-			}
+			require.True(t, ok, "Ali model %s missing from ModelRatios", model)
 
 			ratio := adaptor.GetModelRatio(model)
 			completionRatio := adaptor.GetCompletionRatio(model)
 
-			if ratio != expectedConfig.Ratio {
-				t.Errorf("Ali %s: expected ratio %.6f, got %.6f", model, expectedConfig.Ratio, ratio)
-			}
-			if completionRatio != expectedConfig.CompletionRatio {
-				t.Errorf("Ali %s: expected completion ratio %.2f, got %.2f", model, expectedConfig.CompletionRatio, completionRatio)
-			}
+			require.Equal(t, expectedConfig.Ratio, ratio, "Ali %s: expected ratio %.6f, got %.6f", model, expectedConfig.Ratio, ratio)
+			require.Equal(t, expectedConfig.CompletionRatio, completionRatio, "Ali %s: expected completion ratio %.2f, got %.2f", model, expectedConfig.CompletionRatio, completionRatio)
 		}
 	})
 
@@ -110,9 +92,7 @@ func TestSpecificAdapterPricing(t *testing.T) {
 
 		// Test GetDefaultModelPricing
 		defaultPricing := adaptor.GetDefaultModelPricing()
-		if len(defaultPricing) == 0 {
-			t.Fatal("OpenRouter: GetDefaultModelPricing returned empty map")
-		}
+		require.NotEmpty(t, defaultPricing, "OpenRouter: GetDefaultModelPricing returned empty map")
 
 		t.Logf("OpenRouter: Found %d models with pricing", len(defaultPricing))
 
@@ -130,11 +110,11 @@ func TestSpecificAdapterPricing(t *testing.T) {
 			ratio := adaptor.GetModelRatio(model)
 			completionRatio := adaptor.GetCompletionRatio(model)
 
-			if expected.expectValidRatio && ratio <= 0 {
-				t.Errorf("OpenRouter %s: expected valid ratio, got %.6f", model, ratio)
+			if expected.expectValidRatio {
+				require.Greater(t, ratio, 0.0, "OpenRouter %s: expected valid ratio, got %.6f", model, ratio)
 			}
-			if expected.expectValidCompletion && completionRatio <= 0 {
-				t.Errorf("OpenRouter %s: expected valid completion ratio, got %.2f", model, completionRatio)
+			if expected.expectValidCompletion {
+				require.Greater(t, completionRatio, 0.0, "OpenRouter %s: expected valid completion ratio, got %.2f", model, completionRatio)
 			}
 
 			t.Logf("OpenRouter %s: ratio=%.6f, completion_ratio=%.2f", model, ratio, completionRatio)
@@ -143,9 +123,7 @@ func TestSpecificAdapterPricing(t *testing.T) {
 
 	t.Run("xAI_Pricing", func(t *testing.T) {
 		adaptor := GetAdaptor(apitype.XAI)
-		if adaptor == nil {
-			t.Fatal("xAI_Pricing not found")
-		}
+		require.NotNil(t, adaptor, "xAI_Pricing not found")
 
 		testModels := map[string]string{
 			"grok-code-fast-1":          "$0.20 input, $0.02 cached input, $1.50 output",
@@ -160,21 +138,15 @@ func TestSpecificAdapterPricing(t *testing.T) {
 
 		for model, description := range testModels {
 			expectedConfig, ok := xai.ModelRatios[model]
-			if !ok {
-				t.Fatalf("xAI model %s missing from ModelRatios", model)
-			}
+			require.True(t, ok, "xAI model %s missing from ModelRatios", model)
 
 			ratio := adaptor.GetModelRatio(model)
 			completionRatio := adaptor.GetCompletionRatio(model)
 
-			if ratio != expectedConfig.Ratio {
-				t.Errorf("xAI %s: expected ratio %.6f, got %.6f (%s)",
-					model, expectedConfig.Ratio, ratio, description)
-			}
-			if completionRatio != expectedConfig.CompletionRatio {
-				t.Errorf("xAI %s: expected completion ratio %.2f, got %.2f (%s)",
-					model, expectedConfig.CompletionRatio, completionRatio, description)
-			}
+			require.Equal(t, expectedConfig.Ratio, ratio, "xAI %s: expected ratio %.6f, got %.6f (%s)",
+				model, expectedConfig.Ratio, ratio, description)
+			require.Equal(t, expectedConfig.CompletionRatio, completionRatio, "xAI %s: expected completion ratio %.2f, got %.2f (%s)",
+				model, expectedConfig.CompletionRatio, completionRatio, description)
 
 			t.Logf("xAI %s: ratio=%.6f (expected %.6f), completion_ratio=%.2f (expected %.2f) - %s",
 				model, ratio, expectedConfig.Ratio, completionRatio, expectedConfig.CompletionRatio,
@@ -184,21 +156,15 @@ func TestSpecificAdapterPricing(t *testing.T) {
 		imageModels := []string{"grok-2-image-1212", "grok-2-image"}
 		for _, imageModel := range imageModels {
 			expectedImageConfig, ok := xai.ModelRatios[imageModel]
-			if !ok {
-				t.Fatalf("xAI image model %s missing from ModelRatios", imageModel)
-			}
+			require.True(t, ok, "xAI image model %s missing from ModelRatios", imageModel)
 
 			imageModelRatio := adaptor.GetModelRatio(imageModel)
 			imageModelCompletionRatio := adaptor.GetCompletionRatio(imageModel)
 
-			if imageModelRatio != expectedImageConfig.Ratio {
-				t.Errorf("xAI %s: expected ratio %.6f, got %.6f (Image model: $%.2f per image)",
-					imageModel, expectedImageConfig.Ratio, imageModelRatio, expectedImageConfig.Image.PricePerImageUsd)
-			}
-			if imageModelCompletionRatio != expectedImageConfig.CompletionRatio {
-				t.Errorf("xAI %s: expected completion ratio %.2f, got %.2f",
-					imageModel, expectedImageConfig.CompletionRatio, imageModelCompletionRatio)
-			}
+			require.Equal(t, expectedImageConfig.Ratio, imageModelRatio, "xAI %s: expected ratio %.6f, got %.6f (Image model: $%.2f per image)",
+				imageModel, expectedImageConfig.Ratio, imageModelRatio, expectedImageConfig.Image.PricePerImageUsd)
+			require.Equal(t, expectedImageConfig.CompletionRatio, imageModelCompletionRatio, "xAI %s: expected completion ratio %.2f, got %.2f",
+				imageModel, expectedImageConfig.CompletionRatio, imageModelCompletionRatio)
 
 			t.Logf("xAI %s: ratio=%.6f (expected %.6f), completion_ratio=%.2f (expected %.2f) - $%.2f per image",
 				imageModel, imageModelRatio, expectedImageConfig.Ratio, imageModelCompletionRatio, expectedImageConfig.CompletionRatio,
@@ -208,9 +174,7 @@ func TestSpecificAdapterPricing(t *testing.T) {
 
 	t.Run("Gemini_Pricing", func(t *testing.T) {
 		adaptor := GetAdaptor(apitype.Gemini)
-		if adaptor == nil {
-			t.Fatal("Gemini adaptor not found")
-		}
+		require.NotNil(t, adaptor, "Gemini adaptor not found")
 
 		// Gemini uses USD pricing with ratio.MilliTokensUsd = 0.5
 		testModels := map[string]struct {
@@ -226,20 +190,14 @@ func TestSpecificAdapterPricing(t *testing.T) {
 			ratio := adaptor.GetModelRatio(model)
 			completionRatio := adaptor.GetCompletionRatio(model)
 
-			if ratio != expected.expectedRatio {
-				t.Errorf("Gemini %s: expected ratio %.9f, got %.9f", model, expected.expectedRatio, ratio)
-			}
-			if completionRatio != expected.expectedCompletionRatio {
-				t.Errorf("Gemini %s: expected completion ratio %.2f, got %.2f", model, expected.expectedCompletionRatio, completionRatio)
-			}
+			require.Equal(t, expected.expectedRatio, ratio, "Gemini %s: expected ratio %.9f, got %.9f", model, expected.expectedRatio, ratio)
+			require.Equal(t, expected.expectedCompletionRatio, completionRatio, "Gemini %s: expected completion ratio %.2f, got %.2f", model, expected.expectedCompletionRatio, completionRatio)
 		}
 	})
 
 	t.Run("VertexAI_Pricing", func(t *testing.T) {
 		adaptor := GetAdaptor(apitype.VertexAI)
-		if adaptor == nil {
-			t.Fatal("VertexAI adaptor not found")
-		}
+		require.NotNil(t, adaptor, "VertexAI adaptor not found")
 
 		// VertexAI should have the same pricing as Gemini for shared models
 		testModels := []string{"gemini-2.5-pro", "gemini-2.5-flash", "gemini-2.0-flash"}
@@ -248,12 +206,8 @@ func TestSpecificAdapterPricing(t *testing.T) {
 			ratio := adaptor.GetModelRatio(model)
 			completionRatio := adaptor.GetCompletionRatio(model)
 
-			if ratio <= 0 {
-				t.Errorf("VertexAI %s: invalid ratio %.9f", model, ratio)
-			}
-			if completionRatio <= 0 {
-				t.Errorf("VertexAI %s: invalid completion ratio %.2f", model, completionRatio)
-			}
+			require.Greater(t, ratio, 0.0, "VertexAI %s: invalid ratio %.9f", model, ratio)
+			require.Greater(t, completionRatio, 0.0, "VertexAI %s: invalid completion ratio %.2f", model, completionRatio)
 
 			t.Logf("VertexAI %s: ratio=%.9f, completion_ratio=%.2f", model, ratio, completionRatio)
 		}
@@ -278,14 +232,10 @@ func TestPricingConsistency(t *testing.T) {
 	for _, adapter := range adapters {
 		t.Run(adapter.name+"_Consistency", func(t *testing.T) {
 			adaptor := GetAdaptor(adapter.apiType)
-			if adaptor == nil {
-				t.Fatalf("%s adaptor not found", adapter.name)
-			}
+			require.NotNil(t, adaptor, "%s adaptor not found", adapter.name)
 
 			defaultPricing := adaptor.GetDefaultModelPricing()
-			if len(defaultPricing) == 0 {
-				t.Fatalf("%s: No default pricing found", adapter.name)
-			}
+			require.NotEmpty(t, defaultPricing, "%s: No default pricing found", adapter.name)
 
 			// Test that GetModelRatio and GetCompletionRatio return consistent values
 			// with what's in GetDefaultModelPricing
@@ -293,15 +243,11 @@ func TestPricingConsistency(t *testing.T) {
 				actualRatio := adaptor.GetModelRatio(model)
 				actualCompletionRatio := adaptor.GetCompletionRatio(model)
 
-				if actualRatio != expectedPrice.Ratio {
-					t.Errorf("%s %s: GetModelRatio (%.9f) != DefaultModelPricing.Ratio (%.9f)",
-						adapter.name, model, actualRatio, expectedPrice.Ratio)
-				}
+				require.Equal(t, expectedPrice.Ratio, actualRatio, "%s %s: GetModelRatio (%.9f) != DefaultModelPricing.Ratio (%.9f)",
+					adapter.name, model, actualRatio, expectedPrice.Ratio)
 
-				if actualCompletionRatio != expectedPrice.CompletionRatio {
-					t.Errorf("%s %s: GetCompletionRatio (%.2f) != DefaultModelPricing.CompletionRatio (%.2f)",
-						adapter.name, model, actualCompletionRatio, expectedPrice.CompletionRatio)
-				}
+				require.Equal(t, expectedPrice.CompletionRatio, actualCompletionRatio, "%s %s: GetCompletionRatio (%.2f) != DefaultModelPricing.CompletionRatio (%.2f)",
+					adapter.name, model, actualCompletionRatio, expectedPrice.CompletionRatio)
 			}
 		})
 	}
@@ -328,21 +274,15 @@ func TestFallbackPricing(t *testing.T) {
 	for _, adapter := range adapters {
 		t.Run(adapter.name+"_Fallback", func(t *testing.T) {
 			adaptor := GetAdaptor(adapter.apiType)
-			if adaptor == nil {
-				t.Fatalf("%s adaptor not found", adapter.name)
-			}
+			require.NotNil(t, adaptor, "%s adaptor not found", adapter.name)
 
 			// Test fallback pricing for unknown model
 			ratio := adaptor.GetModelRatio(unknownModel)
 			completionRatio := adaptor.GetCompletionRatio(unknownModel)
 
-			if ratio <= 0 {
-				t.Errorf("%s: Fallback ratio for unknown model should be > 0, got %.9f", adapter.name, ratio)
-			}
+			require.Greater(t, ratio, 0.0, "%s: Fallback ratio for unknown model should be > 0, got %.9f", adapter.name, ratio)
 
-			if completionRatio <= 0 {
-				t.Errorf("%s: Fallback completion ratio for unknown model should be > 0, got %.2f", adapter.name, completionRatio)
-			}
+			require.Greater(t, completionRatio, 0.0, "%s: Fallback completion ratio for unknown model should be > 0, got %.2f", adapter.name, completionRatio)
 
 			t.Logf("%s fallback pricing: ratio=%.9f, completion_ratio=%.2f", adapter.name, ratio, completionRatio)
 		})

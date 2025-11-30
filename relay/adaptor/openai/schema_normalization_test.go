@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/songquanpeng/one-api/relay/channeltype"
+	"github.com/stretchr/testify/require"
 )
 
 func TestNormalizeStructuredJSONSchema_RemovesNumericBounds(t *testing.T) {
@@ -21,29 +22,20 @@ func TestNormalizeStructuredJSONSchema_RemovesNumericBounds(t *testing.T) {
 	}
 
 	normalized, changed := NormalizeStructuredJSONSchema(schema, channeltype.OpenAI)
-	if !changed {
-		t.Fatalf("expected schema normalization to report changes")
-	}
+	require.True(t, changed, "expected schema normalization to report changes")
 
 	props, ok := normalized["properties"].(map[string]any)
-	if !ok {
-		t.Fatalf("expected properties map, got %T", normalized["properties"])
-	}
+	require.True(t, ok, "expected properties map, got %T", normalized["properties"])
 
 	score, ok := props["score"].(map[string]any)
-	if !ok {
-		t.Fatalf("expected score map, got %T", props["score"])
-	}
+	require.True(t, ok, "expected score map, got %T", props["score"])
 
-	if _, exists := score["minimum"]; exists {
-		t.Fatalf("minimum key should be removed")
-	}
-	if _, exists := score["maximum"]; exists {
-		t.Fatalf("maximum key should be removed")
-	}
-	if _, exists := score["exclusiveMinimum"]; exists {
-		t.Fatalf("exclusiveMinimum key should be removed")
-	}
+	_, exists := score["minimum"]
+	require.False(t, exists, "minimum key should be removed")
+	_, exists = score["maximum"]
+	require.False(t, exists, "maximum key should be removed")
+	_, exists = score["exclusiveMinimum"]
+	require.False(t, exists, "exclusiveMinimum key should be removed")
 }
 
 func TestNormalizeStructuredJSONSchema_AzureAddsAdditionalProperties(t *testing.T) {
@@ -55,13 +47,11 @@ func TestNormalizeStructuredJSONSchema_AzureAddsAdditionalProperties(t *testing.
 	}
 
 	normalized, changed := NormalizeStructuredJSONSchema(schema, channeltype.Azure)
-	if !changed {
-		t.Fatalf("expected azure normalization to set additionalProperties=false")
-	}
+	require.True(t, changed, "expected azure normalization to set additionalProperties=false")
 
-	if val, ok := normalized["additionalProperties"].(bool); !ok || val {
-		t.Fatalf("expected additionalProperties=false, got %v (type %T)", normalized["additionalProperties"], normalized["additionalProperties"])
-	}
+	val, ok := normalized["additionalProperties"].(bool)
+	require.True(t, ok, "expected additionalProperties to be bool, got %T", normalized["additionalProperties"])
+	require.False(t, val, "expected additionalProperties=false")
 }
 
 func TestNormalizeStructuredJSONSchema_NoChangeWhenClean(t *testing.T) {
@@ -75,11 +65,6 @@ func TestNormalizeStructuredJSONSchema_NoChangeWhenClean(t *testing.T) {
 
 	copy := reflect.ValueOf(schema).Interface().(map[string]any)
 	normalized, changed := NormalizeStructuredJSONSchema(schema, channeltype.OpenAI)
-	if changed {
-		t.Fatalf("expected no changes for already clean schema")
-	}
-
-	if !reflect.DeepEqual(normalized, copy) {
-		t.Fatalf("schema should remain unchanged")
-	}
+	require.False(t, changed, "expected no changes for already clean schema")
+	require.True(t, reflect.DeepEqual(normalized, copy), "schema should remain unchanged")
 }

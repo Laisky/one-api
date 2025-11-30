@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestNormalizeClaudeToolChoice(t *testing.T) {
@@ -18,9 +19,7 @@ func TestNormalizeClaudeToolChoice(t *testing.T) {
 		converted := normalizeClaudeToolChoice(original)
 
 		choiceMap, ok := converted.(map[string]any)
-		if !ok {
-			t.Fatalf("expected map[string]any, got %T", converted)
-		}
+		require.True(t, ok, "expected map[string]any, got %T", converted)
 
 		assert.Equal(t, "function", choiceMap["type"], "type should be rewritten to function")
 		functionPayload, ok := choiceMap["function"].(map[string]any)

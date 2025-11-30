@@ -5,7 +5,6 @@ import (
 	"math"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 
 	"github.com/gin-gonic/gin"
@@ -349,27 +348,19 @@ func TestValidateResponseBuiltinTools_Disallowed(t *testing.T) {
 	}
 	meta := &metalib.Meta{ActualModelName: "gpt-4o"}
 	channel := &model.Channel{}
-	if err := channel.SetModelPriceConfigs(map[string]model.ModelConfigLocal{
+	require.NoError(t, channel.SetModelPriceConfigs(map[string]model.ModelConfigLocal{
 		"gpt-4o": {Ratio: 1},
-	}); err != nil {
-		t.Fatalf("set model configs: %v", err)
-	}
-	if err := channel.SetToolingConfig(&model.ChannelToolingConfig{
+	}))
+	require.NoError(t, channel.SetToolingConfig(&model.ChannelToolingConfig{
 		Whitelist: []string{"code_interpreter"},
 		Pricing: map[string]model.ToolPricingLocal{
 			"code_interpreter": {UsdPerCall: 0.03},
 		},
-	}); err != nil {
-		t.Fatalf("set tooling config: %v", err)
-	}
+	}))
 
 	err := ValidateResponseBuiltinTools(req, meta, channel, nil)
-	if err == nil {
-		t.Fatalf("expected error for disallowed web_search")
-	}
-	if !strings.Contains(err.Error(), "web_search") {
-		t.Fatalf("expected error mentioning web_search, got %v", err)
-	}
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "web_search")
 }
 
 func TestValidateResponseBuiltinTools_Allowed(t *testing.T) {
@@ -379,38 +370,28 @@ func TestValidateResponseBuiltinTools_Allowed(t *testing.T) {
 	}
 	meta := &metalib.Meta{ActualModelName: "gpt-4o"}
 	channel := &model.Channel{}
-	if err := channel.SetModelPriceConfigs(map[string]model.ModelConfigLocal{
+	require.NoError(t, channel.SetModelPriceConfigs(map[string]model.ModelConfigLocal{
 		"gpt-4o": {Ratio: 1},
-	}); err != nil {
-		t.Fatalf("set model configs: %v", err)
-	}
-	if err := channel.SetToolingConfig(&model.ChannelToolingConfig{
+	}))
+	require.NoError(t, channel.SetToolingConfig(&model.ChannelToolingConfig{
 		Whitelist: []string{"web_search"},
 		Pricing: map[string]model.ToolPricingLocal{
 			"web_search": {UsdPerCall: 0.01},
 		},
-	}); err != nil {
-		t.Fatalf("set tooling config: %v", err)
-	}
+	}))
 
-	if err := ValidateResponseBuiltinTools(req, meta, channel, nil); err != nil {
-		t.Fatalf("unexpected error allowing web_search: %v", err)
-	}
+	require.NoError(t, ValidateResponseBuiltinTools(req, meta, channel, nil))
 }
 
 func TestValidateRequestedBuiltins_DefaultsRespectAzure(t *testing.T) {
 	meta := &metalib.Meta{ChannelType: channeltype.Azure, ActualModelName: "azure-gpt-5-nano"}
 	channel := &model.Channel{Type: channeltype.Azure}
 	err := ValidateRequestedBuiltins("azure-gpt-5-nano", meta, channel, &openai.Adaptor{}, map[string]struct{}{"web_search": {}})
-	if err == nil {
-		t.Fatalf("expected azure channel to reject web_search when no tooling config is defined")
-	}
+	require.Error(t, err, "expected azure channel to reject web_search when no tooling config is defined")
 }
 
 func TestValidateRequestedBuiltins_OpenAIUsesProviderDefaults(t *testing.T) {
 	meta := &metalib.Meta{ChannelType: channeltype.OpenAI, ActualModelName: "gpt-4o"}
 	channel := &model.Channel{Type: channeltype.OpenAI}
-	if err := ValidateRequestedBuiltins("gpt-4o", meta, channel, &openai.Adaptor{}, map[string]struct{}{"web_search": {}}); err != nil {
-		t.Fatalf("expected openai channel to allow web_search by default, got %v", err)
-	}
+	require.NoError(t, ValidateRequestedBuiltins("gpt-4o", meta, channel, &openai.Adaptor{}, map[string]struct{}{"web_search": {}}))
 }

@@ -2,6 +2,8 @@ package openai
 
 import (
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestIsModelSupportedReasoning(t *testing.T) {
@@ -31,9 +33,7 @@ func TestIsModelSupportedReasoning(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			result := isModelSupportedReasoning(tc.model)
-			if result != tc.expected {
-				t.Errorf("isModelSupportedReasoning(%q) = %v, want %v", tc.model, result, tc.expected)
-			}
+			require.Equal(t, tc.expected, result, "isModelSupportedReasoning(%q)", tc.model)
 		})
 	}
 }
@@ -56,9 +56,7 @@ func TestReasoningModelMaxTokensHandling(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			result := isModelSupportedReasoning(tc.model)
-			if result != tc.isReasoningModel {
-				t.Errorf("isModelSupportedReasoning(%q) = %v, want %v", tc.model, result, tc.isReasoningModel)
-			}
+			require.Equal(t, tc.isReasoningModel, result, "isModelSupportedReasoning(%q)", tc.model)
 
 			// Verify the logic matches our expectations
 			if tc.isReasoningModel {

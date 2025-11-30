@@ -7,6 +7,7 @@ import (
 	relaymeta "github.com/songquanpeng/one-api/relay/meta"
 	"github.com/songquanpeng/one-api/relay/model"
 	"github.com/songquanpeng/one-api/relay/relaymode"
+	"github.com/stretchr/testify/require"
 )
 
 func float64PtrRT(v float64) *float64 {
@@ -47,39 +48,27 @@ func TestApplyRequestTransformations_ReasoningDefaults(t *testing.T) {
 				TopP:        float64PtrRT(0.9),
 			}
 
-			if err := adaptor.applyRequestTransformations(meta, req); err != nil {
-				t.Fatalf("applyRequestTransformations returned error: %v", err)
-			}
+			require.NoError(t, adaptor.applyRequestTransformations(meta, req), "applyRequestTransformations returned error")
 
-			if req.MaxTokens != 0 {
-				t.Errorf("expected MaxTokens to be zeroed, got %d", req.MaxTokens)
-			}
+			require.Zero(t, req.MaxTokens, "expected MaxTokens to be zeroed")
 
-			if req.MaxCompletionTokens == nil || *req.MaxCompletionTokens != 1500 {
-				t.Fatalf("expected MaxCompletionTokens to be set to 1500, got %v", req.MaxCompletionTokens)
-			}
+			require.NotNil(t, req.MaxCompletionTokens, "expected MaxCompletionTokens to be set")
+			require.Equal(t, 1500, *req.MaxCompletionTokens, "expected MaxCompletionTokens to be 1500")
 
 			if tc.expectNilTemp {
-				if req.Temperature != nil {
-					t.Fatalf("expected Temperature to be removed, got %v", req.Temperature)
-				}
+				require.Nil(t, req.Temperature, "expected Temperature to be removed")
 			} else {
-				if req.Temperature == nil || *req.Temperature != 1 {
-					t.Fatalf("expected Temperature to be forced to 1, got %v", req.Temperature)
-				}
+				require.NotNil(t, req.Temperature, "expected Temperature to be set")
+				require.Equal(t, float64(1), *req.Temperature, "expected Temperature to be forced to 1")
 			}
 
-			if req.TopP != nil {
-				t.Fatalf("expected TopP to be cleared for reasoning models, got %v", *req.TopP)
-			}
+			require.Nil(t, req.TopP, "expected TopP to be cleared for reasoning models")
 
-			if req.ReasoningEffort == nil || *req.ReasoningEffort != "medium" {
-				t.Fatalf("expected ReasoningEffort to default to 'medium', got %v", req.ReasoningEffort)
-			}
+			require.NotNil(t, req.ReasoningEffort, "expected ReasoningEffort to be set")
+			require.Equal(t, "medium", *req.ReasoningEffort, "expected ReasoningEffort to default to 'medium'")
 
-			if len(req.Messages) != 1 || req.Messages[0].Role != "user" {
-				t.Fatalf("expected system messages to be stripped for reasoning models, got %+v", req.Messages)
-			}
+			require.Len(t, req.Messages, 1, "expected system messages to be stripped for reasoning models")
+			require.Equal(t, "user", req.Messages[0].Role, "expected remaining message to be user role")
 		})
 	}
 }
@@ -99,9 +88,7 @@ func TestApplyRequestTransformations_DeepResearchAddsWebSearchTool(t *testing.T)
 		},
 	}
 
-	if err := adaptor.applyRequestTransformations(meta, req); err != nil {
-		t.Fatalf("applyRequestTransformations returned error: %v", err)
-	}
+	require.NoError(t, adaptor.applyRequestTransformations(meta, req), "applyRequestTransformations returned error")
 
 	count := 0
 	for _, tool := range req.Tools {
@@ -110,14 +97,10 @@ func TestApplyRequestTransformations_DeepResearchAddsWebSearchTool(t *testing.T)
 		}
 	}
 
-	if count != 1 {
-		t.Fatalf("expected exactly one web_search tool after transformation, got %d", count)
-	}
+	require.Equal(t, 1, count, "expected exactly one web_search tool after transformation")
 
 	// Running transformations again should not duplicate the tool
-	if err := adaptor.applyRequestTransformations(meta, req); err != nil {
-		t.Fatalf("second applyRequestTransformations returned error: %v", err)
-	}
+	require.NoError(t, adaptor.applyRequestTransformations(meta, req), "second applyRequestTransformations returned error")
 
 	count = 0
 	for _, tool := range req.Tools {
@@ -126,9 +109,7 @@ func TestApplyRequestTransformations_DeepResearchAddsWebSearchTool(t *testing.T)
 		}
 	}
 
-	if count != 1 {
-		t.Fatalf("expected web_search tool count to remain 1 after second pass, got %d", count)
-	}
+	require.Equal(t, 1, count, "expected web_search tool count to remain 1 after second pass")
 }
 
 func TestApplyRequestTransformations_WebSearchOptionsAddsWebSearchTool(t *testing.T) {
@@ -144,9 +125,7 @@ func TestApplyRequestTransformations_WebSearchOptionsAddsWebSearchTool(t *testin
 		WebSearchOptions: &model.WebSearchOptions{},
 	}
 
-	if err := adaptor.applyRequestTransformations(meta, req); err != nil {
-		t.Fatalf("applyRequestTransformations returned error: %v", err)
-	}
+	require.NoError(t, adaptor.applyRequestTransformations(meta, req), "applyRequestTransformations returned error")
 
 	count := 0
 	for _, tool := range req.Tools {
@@ -155,14 +134,10 @@ func TestApplyRequestTransformations_WebSearchOptionsAddsWebSearchTool(t *testin
 		}
 	}
 
-	if count != 1 {
-		t.Fatalf("expected exactly one web_search tool when web_search_options provided, got %d", count)
-	}
+	require.Equal(t, 1, count, "expected exactly one web_search tool when web_search_options provided")
 
 	// Running the transformation again should not duplicate the tool
-	if err := adaptor.applyRequestTransformations(meta, req); err != nil {
-		t.Fatalf("second applyRequestTransformations returned error: %v", err)
-	}
+	require.NoError(t, adaptor.applyRequestTransformations(meta, req), "second applyRequestTransformations returned error")
 
 	count = 0
 	for _, tool := range req.Tools {
@@ -171,9 +146,7 @@ func TestApplyRequestTransformations_WebSearchOptionsAddsWebSearchTool(t *testin
 		}
 	}
 
-	if count != 1 {
-		t.Fatalf("expected web_search tool count to remain 1 after second pass, got %d", count)
-	}
+	require.Equal(t, 1, count, "expected web_search tool count to remain 1 after second pass")
 }
 
 func TestApplyRequestTransformations_DeepResearchReasoningEffort(t *testing.T) {
@@ -191,13 +164,10 @@ func TestApplyRequestTransformations_DeepResearchReasoningEffort(t *testing.T) {
 		},
 	}
 
-	if err := adaptor.applyRequestTransformations(meta, req); err != nil {
-		t.Fatalf("applyRequestTransformations returned error: %v", err)
-	}
+	require.NoError(t, adaptor.applyRequestTransformations(meta, req), "applyRequestTransformations returned error")
 
-	if req.ReasoningEffort == nil || *req.ReasoningEffort != "medium" {
-		t.Fatalf("expected ReasoningEffort to default to 'medium', got %v", req.ReasoningEffort)
-	}
+	require.NotNil(t, req.ReasoningEffort, "expected ReasoningEffort to be set")
+	require.Equal(t, "medium", *req.ReasoningEffort, "expected ReasoningEffort to default to 'medium'")
 
 	// User-provided unsupported effort should be normalized to medium
 	req = &model.GeneralOpenAIRequest{
@@ -206,13 +176,10 @@ func TestApplyRequestTransformations_DeepResearchReasoningEffort(t *testing.T) {
 		Messages:        []model.Message{{Role: "user", Content: "analyze"}},
 	}
 
-	if err := adaptor.applyRequestTransformations(meta, req); err != nil {
-		t.Fatalf("applyRequestTransformations returned error: %v", err)
-	}
+	require.NoError(t, adaptor.applyRequestTransformations(meta, req), "applyRequestTransformations returned error")
 
-	if req.ReasoningEffort == nil || *req.ReasoningEffort != "medium" {
-		t.Fatalf("expected ReasoningEffort to be normalized to 'medium', got %v", req.ReasoningEffort)
-	}
+	require.NotNil(t, req.ReasoningEffort, "expected ReasoningEffort to be set")
+	require.Equal(t, "medium", *req.ReasoningEffort, "expected ReasoningEffort to be normalized to 'medium'")
 }
 
 func TestApplyRequestTransformations_ResponseAPIRemovesSampling(t *testing.T) {
@@ -233,17 +200,11 @@ func TestApplyRequestTransformations_ResponseAPIRemovesSampling(t *testing.T) {
 		TopP:        float64PtrRT(0.2),
 	}
 
-	if err := adaptor.applyRequestTransformations(meta, req); err != nil {
-		t.Fatalf("applyRequestTransformations returned error: %v", err)
-	}
+	require.NoError(t, adaptor.applyRequestTransformations(meta, req), "applyRequestTransformations returned error")
 
-	if req.Temperature != nil {
-		t.Fatalf("expected Temperature to be removed for Response API reasoning models, got %v", req.Temperature)
-	}
+	require.Nil(t, req.Temperature, "expected Temperature to be removed for Response API reasoning models")
 
-	if req.TopP != nil {
-		t.Fatalf("expected TopP to be removed for Response API reasoning models, got %v", req.TopP)
-	}
+	require.Nil(t, req.TopP, "expected TopP to be removed for Response API reasoning models")
 }
 
 func TestApplyRequestTransformations_ValidDataURLImage(t *testing.T) {
@@ -275,9 +236,7 @@ func TestApplyRequestTransformations_ValidDataURLImage(t *testing.T) {
 		},
 	}
 
-	if err := adaptor.applyRequestTransformations(meta, req); err != nil {
-		t.Fatalf("applyRequestTransformations returned error for valid data URL: %v", err)
-	}
+	require.NoError(t, adaptor.applyRequestTransformations(meta, req), "applyRequestTransformations returned error for valid data URL")
 }
 
 func TestApplyRequestTransformations_InvalidDataURLImage(t *testing.T) {
@@ -307,9 +266,7 @@ func TestApplyRequestTransformations_InvalidDataURLImage(t *testing.T) {
 		},
 	}
 
-	if err := adaptor.applyRequestTransformations(meta, req); err == nil {
-		t.Fatalf("expected error for invalid data URL image, got nil")
-	}
+	require.Error(t, adaptor.applyRequestTransformations(meta, req), "expected error for invalid data URL image")
 }
 
 func TestApplyRequestTransformations_PopulatesMetaActualModel(t *testing.T) {
@@ -327,17 +284,11 @@ func TestApplyRequestTransformations_PopulatesMetaActualModel(t *testing.T) {
 		},
 	}
 
-	if err := adaptor.applyRequestTransformations(meta, req); err != nil {
-		t.Fatalf("applyRequestTransformations returned error: %v", err)
-	}
+	require.NoError(t, adaptor.applyRequestTransformations(meta, req), "applyRequestTransformations returned error")
 
-	if meta.OriginModelName != "gpt-x" {
-		t.Fatalf("expected OriginModelName to be populated, got %q", meta.OriginModelName)
-	}
+	require.Equal(t, "gpt-x", meta.OriginModelName, "expected OriginModelName to be populated")
 
-	if meta.ActualModelName != "gpt-x-mapped" {
-		t.Fatalf("expected ActualModelName to use mapping, got %q", meta.ActualModelName)
-	}
+	require.Equal(t, "gpt-x-mapped", meta.ActualModelName, "expected ActualModelName to use mapping")
 }
 
 func TestApplyRequestTransformations_NormalizesToolChoice(t *testing.T) {
@@ -359,24 +310,15 @@ func TestApplyRequestTransformations_NormalizesToolChoice(t *testing.T) {
 		},
 	}
 
-	if err := adaptor.applyRequestTransformations(meta, req); err != nil {
-		t.Fatalf("applyRequestTransformations returned error: %v", err)
-	}
+	require.NoError(t, adaptor.applyRequestTransformations(meta, req), "applyRequestTransformations returned error")
 
 	toolChoice, ok := req.ToolChoice.(map[string]any)
-	if !ok {
-		t.Fatalf("expected tool_choice to be map after normalization, got %T", req.ToolChoice)
-	}
+	require.True(t, ok, "expected tool_choice to be map after normalization, got %T", req.ToolChoice)
 
-	if typ := toolChoice["type"]; typ != "function" {
-		t.Fatalf("expected normalized tool_choice type 'function', got %v", typ)
-	}
+	require.Equal(t, "function", toolChoice["type"], "expected normalized tool_choice type 'function'")
 
-	if name := toolChoice["name"]; name != "get_weather" {
-		t.Fatalf("expected top-level name 'get_weather', got %v", name)
-	}
+	require.Equal(t, "get_weather", toolChoice["name"], "expected top-level name 'get_weather'")
 
-	if _, exists := toolChoice["function"]; exists {
-		t.Fatalf("function block should be stripped for OpenAI upstream requests")
-	}
+	_, exists := toolChoice["function"]
+	require.False(t, exists, "function block should be stripped for OpenAI upstream requests")
 }

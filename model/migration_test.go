@@ -4,6 +4,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/stretchr/testify/require"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 
@@ -25,9 +26,7 @@ func TestMain(m *testing.M) {
 func setupMigrationTestDB(t *testing.T) *gorm.DB {
 	// Create in-memory SQLite database for testing
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-	if err != nil {
-		t.Fatalf("Failed to create test database: %v", err)
-	}
+	require.NoError(t, err, "Failed to create test database")
 
 	// Set database type flags
 	common.UsingSQLite.Store(true)
@@ -46,9 +45,7 @@ func TestMigrateChannelFieldsToText_SQLite(t *testing.T) {
 
 	// Test that SQLite migration is skipped
 	err := MigrateChannelFieldsToText()
-	if err != nil {
-		t.Errorf("SQLite field migration should not fail: %v", err)
-	}
+	require.NoError(t, err, "SQLite field migration should not fail")
 
 	// Verify that the migration was skipped (no actual schema changes needed for SQLite)
 	// This is expected behavior as documented in the function
@@ -64,9 +61,7 @@ func TestMigrateChannelFieldsToText_Idempotency(t *testing.T) {
 	// Run migration multiple times - should be idempotent
 	for i := range 3 {
 		err := MigrateChannelFieldsToText()
-		if err != nil {
-			t.Errorf("Migration run %d failed: %v", i+1, err)
-		}
+		require.NoError(t, err, "Migration run %d failed", i+1)
 	}
 }
 
@@ -77,9 +72,8 @@ func TestMigrateTraceURLColumnToText_SQLite(t *testing.T) {
 	DB = testDB
 	defer func() { DB = originalDB }()
 
-	if err := MigrateTraceURLColumnToText(); err != nil {
-		t.Errorf("SQLite trace URL migration should not fail: %v", err)
-	}
+	err := MigrateTraceURLColumnToText()
+	require.NoError(t, err, "SQLite trace URL migration should not fail")
 }
 
 func TestMigrateTraceURLColumnToText_Idempotency(t *testing.T) {
@@ -90,9 +84,8 @@ func TestMigrateTraceURLColumnToText_Idempotency(t *testing.T) {
 	defer func() { DB = originalDB }()
 
 	for i := range 3 {
-		if err := MigrateTraceURLColumnToText(); err != nil {
-			t.Errorf("Trace URL migration run %d failed: %v", i+1, err)
-		}
+		err := MigrateTraceURLColumnToText()
+		require.NoError(t, err, "Trace URL migration run %d failed", i+1)
 	}
 }
 
@@ -105,12 +98,8 @@ func TestCheckIfFieldMigrationNeeded_SQLite(t *testing.T) {
 
 	// For SQLite, migration should never be needed
 	needed, err := checkIfFieldMigrationNeeded()
-	if err != nil {
-		t.Errorf("checkIfFieldMigrationNeeded failed: %v", err)
-	}
-	if needed {
-		t.Error("SQLite should never need field migration")
-	}
+	require.NoError(t, err, "checkIfFieldMigrationNeeded failed")
+	require.False(t, needed, "SQLite should never need field migration")
 }
 
 func TestChannelModelConfigsMigration(t *testing.T) {
@@ -122,9 +111,7 @@ func TestChannelModelConfigsMigration(t *testing.T) {
 
 	// Create channels table
 	err := testDB.AutoMigrate(&Channel{})
-	if err != nil {
-		t.Fatalf("Failed to create channels table: %v", err)
-	}
+	require.NoError(t, err, "Failed to create channels table")
 
 	// Create test channel with old format ModelConfigs
 	oldFormatConfigs := `{"gpt-3.5-turbo":{"ratio":1.0,"completion_ratio":2.0,"max_tokens":4096}}`
@@ -137,43 +124,28 @@ func TestChannelModelConfigsMigration(t *testing.T) {
 	}
 
 	err = testDB.Create(testChannel).Error
-	if err != nil {
-		t.Fatalf("Failed to create test channel: %v", err)
-	}
+	require.NoError(t, err, "Failed to create test channel")
 
 	// Run the migration
 	err = MigrateAllChannelModelConfigs()
-	if err != nil {
-		t.Errorf("MigrateAllChannelModelConfigs failed: %v", err)
-	}
+	require.NoError(t, err, "MigrateAllChannelModelConfigs failed")
 
 	// Verify the channel still exists and has valid ModelConfigs
 	var migratedChannel Channel
 	err = testDB.First(&migratedChannel, testChannel.Id).Error
-	if err != nil {
-		t.Errorf("Failed to retrieve migrated channel: %v", err)
-	}
+	require.NoError(t, err, "Failed to retrieve migrated channel")
 
-	if migratedChannel.ModelConfigs == nil || *migratedChannel.ModelConfigs == "" {
-		t.Error("ModelConfigs should not be empty after migration")
-	}
+	require.NotNil(t, migratedChannel.ModelConfigs, "ModelConfigs should not be nil after migration")
+	require.NotEmpty(t, *migratedChannel.ModelConfigs, "ModelConfigs should not be empty after migration")
 
 	// Test that the migrated configs are valid
 	configs := migratedChannel.GetModelPriceConfigs()
-	if len(configs) == 0 {
-		t.Error("Migrated ModelConfigs should contain model configurations")
-	}
+	require.NotEmpty(t, configs, "Migrated ModelConfigs should contain model configurations")
 
-	if config, exists := configs["gpt-3.5-turbo"]; !exists {
-		t.Error("Expected gpt-3.5-turbo configuration to exist after migration")
-	} else {
-		if config.Ratio != 1.0 {
-			t.Errorf("Expected ratio 1.0, got %f", config.Ratio)
-		}
-		if config.CompletionRatio != 2.0 {
-			t.Errorf("Expected completion ratio 2.0, got %f", config.CompletionRatio)
-		}
-	}
+	config, exists := configs["gpt-3.5-turbo"]
+	require.True(t, exists, "Expected gpt-3.5-turbo configuration to exist after migration")
+	require.Equal(t, 1.0, config.Ratio, "Expected ratio 1.0")
+	require.Equal(t, 2.0, config.CompletionRatio, "Expected completion ratio 2.0")
 }
 
 func TestChannelModelConfigsMigration_EmptyData(t *testing.T) {
@@ -185,9 +157,7 @@ func TestChannelModelConfigsMigration_EmptyData(t *testing.T) {
 
 	// Create channels table
 	err := testDB.AutoMigrate(&Channel{})
-	if err != nil {
-		t.Fatalf("Failed to create channels table: %v", err)
-	}
+	require.NoError(t, err, "Failed to create channels table")
 
 	// Create test channel with no ModelConfigs
 	testChannel := &Channel{
@@ -198,15 +168,11 @@ func TestChannelModelConfigsMigration_EmptyData(t *testing.T) {
 	}
 
 	err = testDB.Create(testChannel).Error
-	if err != nil {
-		t.Fatalf("Failed to create test channel: %v", err)
-	}
+	require.NoError(t, err, "Failed to create test channel")
 
 	// Run the migration - should handle empty data gracefully
 	err = MigrateAllChannelModelConfigs()
-	if err != nil {
-		t.Errorf("MigrateAllChannelModelConfigs should handle empty data: %v", err)
-	}
+	require.NoError(t, err, "MigrateAllChannelModelConfigs should handle empty data")
 }
 
 func TestChannelModelConfigsMigration_InvalidJSON(t *testing.T) {
@@ -218,9 +184,7 @@ func TestChannelModelConfigsMigration_InvalidJSON(t *testing.T) {
 
 	// Create channels table
 	err := testDB.AutoMigrate(&Channel{})
-	if err != nil {
-		t.Fatalf("Failed to create channels table: %v", err)
-	}
+	require.NoError(t, err, "Failed to create channels table")
 
 	// Create test channel with invalid JSON
 	invalidJSON := `{"invalid": json}`
@@ -233,9 +197,7 @@ func TestChannelModelConfigsMigration_InvalidJSON(t *testing.T) {
 	}
 
 	err = testDB.Create(testChannel).Error
-	if err != nil {
-		t.Fatalf("Failed to create test channel: %v", err)
-	}
+	require.NoError(t, err, "Failed to create test channel")
 
 	// Run the migration - should handle invalid JSON gracefully
 	err = MigrateAllChannelModelConfigs()
@@ -254,9 +216,7 @@ func TestChannelNullHandling(t *testing.T) {
 
 	// Create channels table
 	err := testDB.AutoMigrate(&Channel{})
-	if err != nil {
-		t.Fatalf("Failed to create channels table: %v", err)
-	}
+	require.NoError(t, err, "Failed to create channels table")
 
 	// Test 1: Create channel with NULL ModelConfigs and ModelMapping
 	testChannel := &Channel{
@@ -269,50 +229,32 @@ func TestChannelNullHandling(t *testing.T) {
 	}
 
 	err = testDB.Create(testChannel).Error
-	if err != nil {
-		t.Fatalf("Failed to create test channel with NULL fields: %v", err)
-	}
+	require.NoError(t, err, "Failed to create test channel with NULL fields")
 
 	// Test 2: Verify NULL values are handled correctly by getter methods
 	configs := testChannel.GetModelPriceConfigs()
-	if configs != nil {
-		t.Error("GetModelPriceConfigs should return nil for NULL ModelConfigs")
-	}
+	require.Nil(t, configs, "GetModelPriceConfigs should return nil for NULL ModelConfigs")
 
 	mapping := testChannel.GetModelMapping()
-	if mapping != nil {
-		t.Error("GetModelMapping should return nil for NULL ModelMapping")
-	}
+	require.Nil(t, mapping, "GetModelMapping should return nil for NULL ModelMapping")
 
 	// Test 3: Verify setter methods handle NULL correctly
 	err = testChannel.SetModelPriceConfigs(nil)
-	if err != nil {
-		t.Errorf("SetModelPriceConfigs should handle nil input: %v", err)
-	}
+	require.NoError(t, err, "SetModelPriceConfigs should handle nil input")
 
-	if testChannel.ModelConfigs != nil {
-		t.Error("SetModelPriceConfigs(nil) should set ModelConfigs to nil")
-	}
+	require.Nil(t, testChannel.ModelConfigs, "SetModelPriceConfigs(nil) should set ModelConfigs to nil")
 
 	// Test 4: Verify migration handles NULL values correctly
 	err = MigrateAllChannelModelConfigs()
-	if err != nil {
-		t.Errorf("Migration should handle NULL values gracefully: %v", err)
-	}
+	require.NoError(t, err, "Migration should handle NULL values gracefully")
 
 	// Test 5: Verify database operations work with NULL values
 	var retrievedChannel Channel
 	err = testDB.First(&retrievedChannel, testChannel.Id).Error
-	if err != nil {
-		t.Errorf("Failed to retrieve channel with NULL fields: %v", err)
-	}
+	require.NoError(t, err, "Failed to retrieve channel with NULL fields")
 
 	// Verify NULL values are preserved
-	if retrievedChannel.ModelConfigs != nil {
-		t.Error("NULL ModelConfigs should remain NULL after database round-trip")
-	}
+	require.Nil(t, retrievedChannel.ModelConfigs, "NULL ModelConfigs should remain NULL after database round-trip")
 
-	if retrievedChannel.ModelMapping != nil {
-		t.Error("NULL ModelMapping should remain NULL after database round-trip")
-	}
+	require.Nil(t, retrievedChannel.ModelMapping, "NULL ModelMapping should remain NULL after database round-trip")
 }

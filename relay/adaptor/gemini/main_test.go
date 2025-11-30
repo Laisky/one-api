@@ -231,25 +231,16 @@ func TestCleanFunctionParameters(t *testing.T) {
 			result := cleanFunctionParameters(tt.input)
 			elapsed := time.Since(startTime)
 
-			if elapsed > 100*time.Millisecond {
-				t.Errorf("cleanFunctionParameters took too long: %v", elapsed)
-			}
+			require.Less(t, elapsed, 100*time.Millisecond, "cleanFunctionParameters took too long")
 
 			// Convert both to JSON for comparison
 			expectedJSON, err := json.Marshal(tt.expected)
-			if err != nil {
-				t.Fatalf("failed to marshal expected: %v", errors.WithStack(err))
-			}
+			require.NoError(t, err, "failed to marshal expected")
 
 			resultJSON, err := json.Marshal(result)
-			if err != nil {
-				t.Fatalf("failed to marshal result: %v", errors.WithStack(err))
-			}
+			require.NoError(t, err, "failed to marshal result")
 
-			if string(expectedJSON) != string(resultJSON) {
-				t.Errorf("cleanFunctionParameters() = %s, want %s",
-					string(resultJSON), string(expectedJSON))
-			}
+			require.JSONEq(t, string(expectedJSON), string(resultJSON), "cleanFunctionParameters() mismatch")
 		})
 	}
 }
@@ -418,25 +409,16 @@ func TestCleanJsonSchemaForGemini(t *testing.T) {
 			result := cleanJsonSchemaForGemini(tt.input)
 			elapsed := time.Since(startTime)
 
-			if elapsed > 100*time.Millisecond {
-				t.Errorf("cleanJsonSchemaForGemini took too long: %v", elapsed)
-			}
+			require.Less(t, elapsed, 100*time.Millisecond, "cleanJsonSchemaForGemini took too long")
 
 			// Convert both to JSON for comparison
 			expectedJSON, err := json.Marshal(tt.expected)
-			if err != nil {
-				t.Fatalf("failed to marshal expected: %v", errors.WithStack(err))
-			}
+			require.NoError(t, err, "failed to marshal expected")
 
 			resultJSON, err := json.Marshal(result)
-			if err != nil {
-				t.Fatalf("failed to marshal result: %v", errors.WithStack(err))
-			}
+			require.NoError(t, err, "failed to marshal result")
 
-			if string(expectedJSON) != string(resultJSON) {
-				t.Errorf("cleanJsonSchemaForGemini() = %s, want %s",
-					string(resultJSON), string(expectedJSON))
-			}
+			require.JSONEq(t, string(expectedJSON), string(resultJSON), "cleanJsonSchemaForGemini() mismatch")
 		})
 	}
 }
@@ -498,88 +480,64 @@ func TestConvertRequestWithToolsRegression(t *testing.T) {
 	geminiRequest := ConvertRequest(textRequest)
 	elapsed := time.Since(startTime)
 
-	if elapsed > 200*time.Millisecond {
-		t.Errorf("ConvertRequest took too long: %v", elapsed)
-	}
+	require.Less(t, elapsed, 200*time.Millisecond, "ConvertRequest took too long")
 
 	// Verify the request was converted successfully
-	if geminiRequest == nil {
-		t.Fatal("ConvertRequest returned nil")
-	}
-
-	if len(geminiRequest.Tools) != 1 {
-		t.Fatalf("Expected 1 tool, got %d", len(geminiRequest.Tools))
-	}
+	require.NotNil(t, geminiRequest, "ConvertRequest returned nil")
+	require.Len(t, geminiRequest.Tools, 1, "Expected 1 tool")
 
 	tool := geminiRequest.Tools[0]
 	functions, ok := tool.FunctionDeclarations.([]model.Function)
-	if !ok {
-		t.Fatal("FunctionDeclarations should be []model.Function")
-	}
-	if len(functions) != 1 {
-		t.Fatalf("Expected 1 function declaration, got %d", len(functions))
-	}
+	require.True(t, ok, "FunctionDeclarations should be []model.Function")
+	require.Len(t, functions, 1, "Expected 1 function declaration")
 
 	function := functions[0]
-	if function.Name != "search_crypto_news" {
-		t.Errorf("Expected function name 'search_crypto_news', got '%s'", function.Name)
-	}
+	require.Equal(t, "search_crypto_news", function.Name, "Expected function name 'search_crypto_news'")
 
 	// Verify that unsupported fields were removed
 	// Convert Parameters from any to map[string]interface{} before indexing
 	params, ok := function.Parameters.(map[string]any)
-	if !ok {
-		t.Fatal("function.Parameters should be map[string]interface{}")
-	}
+	require.True(t, ok, "function.Parameters should be map[string]interface{}")
 
 	// Check that additionalProperties was removed
-	if _, exists := params["additionalProperties"]; exists {
-		t.Error("additionalProperties should have been removed")
-	}
+	_, exists := params["additionalProperties"]
+	require.False(t, exists, "additionalProperties should have been removed")
 
 	// Check that description was removed (top level)
-	if _, exists := params["description"]; exists {
-		t.Error("description should have been removed at top level")
-	}
+	_, exists = params["description"]
+	require.False(t, exists, "description should have been removed at top level")
 
 	// Check that strict was removed (top level)
-	if _, exists := params["strict"]; exists {
-		t.Error("strict should have been removed at top level")
-	}
+	_, exists = params["strict"]
+	require.False(t, exists, "strict should have been removed at top level")
 
 	// Check that unsupported format values were converted - this is the key fix
-	if properties, ok := params["properties"].(map[string]any); ok {
-		if dateRange, ok := properties["dateRange"].(map[string]any); ok {
-			if dateRangeProps, ok := dateRange["properties"].(map[string]any); ok {
-				if startField, ok := dateRangeProps["start"].(map[string]any); ok {
-					if format, exists := startField["format"]; exists {
-						if format != "date-time" {
-							t.Errorf("unsupported format 'date' should have been converted to 'date-time', but found: %v", format)
-						}
-					} else {
-						t.Error("format should have been converted to 'date-time', but was missing")
-					}
-					// Description should be preserved in nested objects
-					if _, exists := startField["description"]; !exists {
-						t.Error("description should be preserved in nested objects")
-					}
-				}
-				if endField, ok := dateRangeProps["end"].(map[string]any); ok {
-					if format, exists := endField["format"]; exists {
-						if format != "date-time" {
-							t.Errorf("unsupported format 'date' should have been converted to 'date-time', but found: %v", format)
-						}
-					} else {
-						t.Error("format should have been converted to 'date-time', but was missing")
-					}
-					// Description should be preserved in nested objects
-					if _, exists := endField["description"]; !exists {
-						t.Error("description should be preserved in nested objects")
-					}
-				}
-			}
-		}
-	}
+	properties, ok := params["properties"].(map[string]any)
+	require.True(t, ok, "properties should exist")
+
+	dateRange, ok := properties["dateRange"].(map[string]any)
+	require.True(t, ok, "dateRange should exist")
+
+	dateRangeProps, ok := dateRange["properties"].(map[string]any)
+	require.True(t, ok, "dateRange.properties should exist")
+
+	startField, ok := dateRangeProps["start"].(map[string]any)
+	require.True(t, ok, "start field should exist")
+	format, exists := startField["format"]
+	require.True(t, exists, "format should have been converted to 'date-time', but was missing")
+	require.Equal(t, "date-time", format, "unsupported format 'date' should have been converted to 'date-time'")
+	// Description should be preserved in nested objects
+	_, exists = startField["description"]
+	require.True(t, exists, "description should be preserved in nested objects")
+
+	endField, ok := dateRangeProps["end"].(map[string]any)
+	require.True(t, ok, "end field should exist")
+	format, exists = endField["format"]
+	require.True(t, exists, "format should have been converted to 'date-time', but was missing")
+	require.Equal(t, "date-time", format, "unsupported format 'date' should have been converted to 'date-time'")
+	// Description should be preserved in nested objects
+	_, exists = endField["description"]
+	require.True(t, exists, "description should be preserved in nested objects")
 }
 
 func TestSupportedFormatsOnly(t *testing.T) {
@@ -610,21 +568,14 @@ func TestSupportedFormatsOnly(t *testing.T) {
 
 			result := cleanFunctionParameters(input)
 			resultMap, ok := result.(map[string]any)
-			if !ok {
-				t.Fatal("expected map result")
-			}
+			require.True(t, ok, "expected map result")
 
 			format, hasFormat := resultMap["format"]
 			if tc.supported {
-				if !hasFormat {
-					t.Errorf("format %s should be preserved/converted but was removed", tc.format)
-				} else if format != tc.expectedFormat {
-					t.Errorf("format %s should be converted to %s, got %s", tc.format, tc.expectedFormat, format)
-				}
+				require.True(t, hasFormat, "format %s should be preserved/converted but was removed", tc.format)
+				require.Equal(t, tc.expectedFormat, format, "format %s should be converted to %s", tc.format, tc.expectedFormat)
 			} else {
-				if hasFormat {
-					t.Errorf("unsupported format %s should be removed", tc.format)
-				}
+				require.False(t, hasFormat, "unsupported format %s should be removed", tc.format)
 			}
 		})
 	}
@@ -653,11 +604,9 @@ func TestErrorHandling(t *testing.T) {
 			result1 := cleanFunctionParameters(tc.input)
 			result2 := cleanJsonSchemaForGemini(tc.input)
 
-			if result1 == nil && tc.input != nil {
-				t.Error("cleanFunctionParameters should not return nil for non-nil input")
-			}
-			if result2 == nil && tc.input != nil {
-				t.Error("cleanJsonSchemaForGemini should not return nil for non-nil input")
+			if tc.input != nil {
+				require.NotNil(t, result1, "cleanFunctionParameters should not return nil for non-nil input")
+				require.NotNil(t, result2, "cleanJsonSchemaForGemini should not return nil for non-nil input")
 			}
 		})
 	}
@@ -720,21 +669,15 @@ func TestFormatConversionRegression(t *testing.T) {
 
 			result := cleanFunctionParameters(input)
 			resultMap, ok := result.(map[string]any)
-			if !ok {
-				t.Fatal("expected map result")
-			}
+			require.True(t, ok, "expected map result")
 
 			if tt.shouldKeep {
 				format, hasFormat := resultMap["format"]
-				if !hasFormat {
-					t.Errorf("format should be preserved but was removed")
-				} else if format != tt.expectedFormat {
-					t.Errorf("expected format %s, got %s", tt.expectedFormat, format)
-				}
+				require.True(t, hasFormat, "format should be preserved but was removed")
+				require.Equal(t, tt.expectedFormat, format, "expected format %s", tt.expectedFormat)
 			} else {
-				if _, hasFormat := resultMap["format"]; hasFormat {
-					t.Errorf("unsupported format %s should be removed", tt.inputFormat)
-				}
+				_, hasFormat := resultMap["format"]
+				require.False(t, hasFormat, "unsupported format %s should be removed", tt.inputFormat)
 			}
 		})
 	}
@@ -797,72 +740,51 @@ func TestOriginalErrorScenario(t *testing.T) {
 	geminiRequest := ConvertRequest(textRequest)
 	elapsed := time.Since(startTime)
 
-	if elapsed > 200*time.Millisecond {
-		t.Errorf("ConvertRequest took too long: %v", elapsed)
-	}
-
-	if geminiRequest == nil {
-		t.Fatal("ConvertRequest returned nil")
-	}
-
-	if len(geminiRequest.Tools) != 1 {
-		t.Fatalf("Expected 1 tool, got %d", len(geminiRequest.Tools))
-	}
+	require.Less(t, elapsed, 200*time.Millisecond, "ConvertRequest took too long")
+	require.NotNil(t, geminiRequest, "ConvertRequest returned nil")
+	require.Len(t, geminiRequest.Tools, 1, "Expected 1 tool")
 
 	tool := geminiRequest.Tools[0]
 	functions, ok := tool.FunctionDeclarations.([]model.Function)
-	if !ok {
-		t.Fatal("FunctionDeclarations should be []model.Function")
-	}
-	if len(functions) != 1 {
-		t.Fatalf("Expected 1 function declaration, got %d", len(functions))
-	}
+	require.True(t, ok, "FunctionDeclarations should be []model.Function")
+	require.Len(t, functions, 1, "Expected 1 function declaration")
 
 	function := functions[0]
 	// Convert Parameters from any to map[string]interface{} before indexing
 	params, ok := function.Parameters.(map[string]any)
-	if !ok {
-		t.Fatal("function.Parameters should be map[string]interface{}")
-	}
+	require.True(t, ok, "function.Parameters should be map[string]interface{}")
 
 	// Verify the critical fix: date format should be converted to date-time
-	if properties, ok := params["properties"].(map[string]any); ok {
-		if dateRange, ok := properties["dateRange"].(map[string]any); ok {
-			if dateRangeProps, ok := dateRange["properties"].(map[string]any); ok {
-				// Check start field
-				if startField, ok := dateRangeProps["start"].(map[string]any); ok {
-					if format, exists := startField["format"]; exists {
-						if format != "date-time" {
-							t.Errorf("start format should be converted to 'date-time', got: %v", format)
-						}
-					} else {
-						t.Error("start format should be present after conversion")
-					}
-				}
-				// Check end field
-				if endField, ok := dateRangeProps["end"].(map[string]any); ok {
-					if format, exists := endField["format"]; exists {
-						if format != "date-time" {
-							t.Errorf("end format should be converted to 'date-time', got: %v", format)
-						}
-					} else {
-						t.Error("end format should be present after conversion")
-					}
-				}
-			}
-		}
-	}
+	properties, ok := params["properties"].(map[string]any)
+	require.True(t, ok, "properties should exist")
+
+	dateRange, ok := properties["dateRange"].(map[string]any)
+	require.True(t, ok, "dateRange should exist")
+
+	dateRangeProps, ok := dateRange["properties"].(map[string]any)
+	require.True(t, ok, "dateRange.properties should exist")
+
+	// Check start field
+	startField, ok := dateRangeProps["start"].(map[string]any)
+	require.True(t, ok, "start field should exist")
+	format, exists := startField["format"]
+	require.True(t, exists, "start format should be present after conversion")
+	require.Equal(t, "date-time", format, "start format should be converted to 'date-time'")
+
+	// Check end field
+	endField, ok := dateRangeProps["end"].(map[string]any)
+	require.True(t, ok, "end field should exist")
+	format, exists = endField["format"]
+	require.True(t, exists, "end format should be present after conversion")
+	require.Equal(t, "date-time", format, "end format should be converted to 'date-time'")
 
 	// Verify other cleaning behaviors still work
-	if _, exists := params["additionalProperties"]; exists {
-		t.Error("additionalProperties should have been removed")
-	}
-	if _, exists := params["description"]; exists {
-		t.Error("description should have been removed at top level")
-	}
-	if _, exists := params["strict"]; exists {
-		t.Error("strict should have been removed at top level")
-	}
+	_, exists = params["additionalProperties"]
+	require.False(t, exists, "additionalProperties should have been removed")
+	_, exists = params["description"]
+	require.False(t, exists, "description should have been removed at top level")
+	_, exists = params["strict"]
+	require.False(t, exists, "strict should have been removed at top level")
 }
 
 func TestCleanJsonSchemaForGeminiFormatMapping(t *testing.T) {
@@ -893,18 +815,11 @@ func TestCleanJsonSchemaForGeminiFormatMapping(t *testing.T) {
 
 	result := cleanJsonSchemaForGemini(input)
 	resultMap, ok := result.(map[string]any)
-	if !ok {
-		t.Fatal("expected map result")
-	}
-
-	if resultMap["type"] != "OBJECT" {
-		t.Error("type should be converted to uppercase")
-	}
+	require.True(t, ok, "expected map result")
+	require.Equal(t, "OBJECT", resultMap["type"], "type should be converted to uppercase")
 
 	properties, ok := resultMap["properties"].(map[string]any)
-	if !ok {
-		t.Fatal("properties should be present")
-	}
+	require.True(t, ok, "properties should be present")
 
 	// Check format conversions
 	testCases := []struct {
@@ -918,17 +833,11 @@ func TestCleanJsonSchemaForGeminiFormatMapping(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		if field, ok := properties[tc.field].(map[string]any); ok {
-			if format, exists := field["format"]; exists {
-				if format != tc.expected {
-					t.Errorf("%s format should be %s, got %s", tc.field, tc.expected, format)
-				}
-			} else {
-				t.Errorf("%s format should be present", tc.field)
-			}
-		} else {
-			t.Errorf("%s field should be present", tc.field)
-		}
+		field, ok := properties[tc.field].(map[string]any)
+		require.True(t, ok, "%s field should be present", tc.field)
+		format, exists := field["format"]
+		require.True(t, exists, "%s format should be present", tc.field)
+		require.Equal(t, tc.expected, format, "%s format should be %s", tc.field, tc.expected)
 	}
 }
 
@@ -955,11 +864,9 @@ func TestErrorHandlingWithProperWrapping(t *testing.T) {
 			result1 := cleanFunctionParameters(tc.input)
 			result2 := cleanJsonSchemaForGemini(tc.input)
 
-			if result1 == nil && tc.input != nil {
-				t.Error("cleanFunctionParameters should not return nil for non-nil input")
-			}
-			if result2 == nil && tc.input != nil {
-				t.Error("cleanJsonSchemaForGemini should not return nil for non-nil input")
+			if tc.input != nil {
+				require.NotNil(t, result1, "cleanFunctionParameters should not return nil for non-nil input")
+				require.NotNil(t, result2, "cleanJsonSchemaForGemini should not return nil for non-nil input")
 			}
 		})
 	}
@@ -1004,29 +911,19 @@ func TestPerformanceWithUTCTiming(t *testing.T) {
 	result := cleanFunctionParameters(complexSchema)
 	elapsed := time.Since(startTime)
 
-	if elapsed > 50*time.Millisecond {
-		t.Errorf("Complex schema cleaning took too long: %v", elapsed)
-	}
-
-	if result == nil {
-		t.Error("Result should not be nil")
-	}
+	require.Less(t, elapsed, 50*time.Millisecond, "Complex schema cleaning took too long")
+	require.NotNil(t, result, "Result should not be nil")
 
 	// Verify the structure is maintained while cleaning
 	resultMap, ok := result.(map[string]any)
-	if !ok {
-		t.Fatal("Result should be a map")
-	}
+	require.True(t, ok, "Result should be a map")
 
-	if _, exists := resultMap["additionalProperties"]; exists {
-		t.Error("additionalProperties should be removed")
-	}
-	if _, exists := resultMap["description"]; exists {
-		t.Error("description should be removed at top level")
-	}
-	if _, exists := resultMap["strict"]; exists {
-		t.Error("strict should be removed at top level")
-	}
+	_, exists := resultMap["additionalProperties"]
+	require.False(t, exists, "additionalProperties should be removed")
+	_, exists = resultMap["description"]
+	require.False(t, exists, "description should be removed at top level")
+	_, exists = resultMap["strict"]
+	require.False(t, exists, "strict should be removed at top level")
 }
 
 // verifyNoAdditionalProperties recursively checks that no additionalProperties fields exist
@@ -1109,31 +1006,20 @@ func TestOriginalLogErrorFixed(t *testing.T) {
 	geminiRequest := ConvertRequest(openAIRequest)
 
 	// Verify the conversion worked
-	if geminiRequest == nil {
-		t.Fatal("ConvertRequest returned nil")
-	}
-
-	if len(geminiRequest.Tools) == 0 {
-		t.Fatal("Tools should not be empty")
-	}
+	require.NotNil(t, geminiRequest, "ConvertRequest returned nil")
+	require.NotEmpty(t, geminiRequest.Tools, "Tools should not be empty")
 
 	// Extract the function declarations to verify they're clean
 	tool := geminiRequest.Tools[0]
 	functions, ok := tool.FunctionDeclarations.([]model.Function)
-	if !ok {
-		t.Fatal("FunctionDeclarations should be []model.Function")
-	}
-
-	if len(functions) == 0 {
-		t.Fatal("FunctionDeclarations should not be empty")
-	}
+	require.True(t, ok, "FunctionDeclarations should be []model.Function")
+	require.NotEmpty(t, functions, "FunctionDeclarations should not be empty")
 
 	function := functions[0]
 
 	// Verify the function parameters no longer contain additionalProperties
-	if err := verifyNoAdditionalProperties(function.Parameters); err != nil {
-		t.Errorf("Function parameters still contain additionalProperties: %v", err)
-	}
+	err := verifyNoAdditionalProperties(function.Parameters)
+	require.NoError(t, err, "Function parameters still contain additionalProperties")
 
 	t.Logf("Successfully converted request without additionalProperties errors")
 }
@@ -1256,15 +1142,9 @@ func TestUsageMetadataPriority(t *testing.T) {
 			}
 
 			// Verify the usage matches expected values
-			if actualUsage.PromptTokens != tt.expected.PromptTokens {
-				t.Errorf("Expected PromptTokens %d, got %d", tt.expected.PromptTokens, actualUsage.PromptTokens)
-			}
-			if actualUsage.CompletionTokens != tt.expected.CompletionTokens {
-				t.Errorf("Expected CompletionTokens %d, got %d", tt.expected.CompletionTokens, actualUsage.CompletionTokens)
-			}
-			if actualUsage.TotalTokens != tt.expected.TotalTokens {
-				t.Errorf("Expected TotalTokens %d, got %d", tt.expected.TotalTokens, actualUsage.TotalTokens)
-			}
+			require.Equal(t, tt.expected.PromptTokens, actualUsage.PromptTokens, "PromptTokens mismatch")
+			require.Equal(t, tt.expected.CompletionTokens, actualUsage.CompletionTokens, "CompletionTokens mismatch")
+			require.Equal(t, tt.expected.TotalTokens, actualUsage.TotalTokens, "TotalTokens mismatch")
 		})
 	}
 }

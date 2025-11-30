@@ -3,6 +3,8 @@ package random_test
 import (
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/songquanpeng/one-api/common/random"
 )
 
@@ -81,11 +83,11 @@ func TestUniqueness(t *testing.T) {
 			dupRate := float64(duplicates) / float64(tt.iterations)
 
 			// Check if we found duplicates
-			if tt.expectedUniq && duplicates > 0 {
-				t.Errorf("Expected all unique values, but found %d duplicates out of %d iterations (%.4f%%)",
+			if tt.expectedUniq {
+				require.Zero(t, duplicates, "Expected all unique values, but found %d duplicates out of %d iterations (%.4f%%)",
 					duplicates, tt.iterations, dupRate*100)
-			} else if !tt.expectedUniq && dupRate > tt.allowDupsRate {
-				t.Errorf("Duplicate rate of %.4f%% exceeds allowable threshold of %.4f%%",
+			} else {
+				require.LessOrEqual(t, dupRate, tt.allowDupsRate, "Duplicate rate of %.4f%% exceeds allowable threshold of %.4f%%",
 					dupRate*100, tt.allowDupsRate*100)
 			}
 
@@ -109,10 +111,8 @@ func TestRandRangeDistribution(t *testing.T) {
 		counts[val]++
 
 		// Also verify the range constraint
-		if val < min || val >= max {
-			t.Errorf("RandRange(%d, %d) produced %d, which is outside the expected range",
-				min, max, val)
-		}
+		require.GreaterOrEqual(t, val, min, "RandRange(%d, %d) produced %d, which is below the minimum", min, max, val)
+		require.Less(t, val, max, "RandRange(%d, %d) produced %d, which is at or above the maximum", min, max, val)
 	}
 
 	// Check distribution (should be roughly even)
@@ -138,51 +138,36 @@ func TestRandRangeDistribution(t *testing.T) {
 func TestEdgeCases(t *testing.T) {
 	t.Run("GetRandomString zero length", func(t *testing.T) {
 		s := random.GetRandomString(0)
-		if s != "" {
-			t.Errorf("Expected empty string, got %q", s)
-		}
+		require.Empty(t, s, "Expected empty string")
 	})
 
 	t.Run("GetRandomNumberString zero length", func(t *testing.T) {
 		s := random.GetRandomNumberString(0)
-		if s != "" {
-			t.Errorf("Expected empty string, got %q", s)
-		}
+		require.Empty(t, s, "Expected empty string")
 	})
 
 	t.Run("GetRandomString negative length (should panic)", func(t *testing.T) {
-		defer func() {
-			if r := recover(); r == nil {
-				t.Errorf("Expected panic for negative length")
-			}
-		}()
-		_ = random.GetRandomString(-1)
+		require.Panics(t, func() {
+			_ = random.GetRandomString(-1)
+		}, "Expected panic for negative length")
 	})
 
 	t.Run("GetRandomNumberString negative length (should panic)", func(t *testing.T) {
-		defer func() {
-			if r := recover(); r == nil {
-				t.Errorf("Expected panic for negative length")
-			}
-		}()
-		_ = random.GetRandomNumberString(-5)
+		require.Panics(t, func() {
+			_ = random.GetRandomNumberString(-5)
+		}, "Expected panic for negative length")
 	})
 
 	t.Run("RandRange min == max (should always return min)", func(t *testing.T) {
 		for range 10 {
 			v := random.RandRange(5, 5)
-			if v != 5 {
-				t.Errorf("Expected 5, got %d", v)
-			}
+			require.Equal(t, 5, v, "Expected 5")
 		}
 	})
 
 	t.Run("RandRange min > max (should panic)", func(t *testing.T) {
-		defer func() {
-			if r := recover(); r == nil {
-				t.Errorf("Expected panic for min > max")
-			}
-		}()
-		_ = random.RandRange(10, 5)
+		require.Panics(t, func() {
+			_ = random.RandRange(10, 5)
+		}, "Expected panic for min > max")
 	})
 }

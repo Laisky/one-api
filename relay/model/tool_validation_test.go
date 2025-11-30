@@ -2,6 +2,8 @@ package model
 
 import (
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 // TestToolValidation tests the new validation methods
@@ -116,17 +118,12 @@ func TestToolValidation(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			err := tt.tool.Validate()
 			if tt.wantErr {
-				if err == nil {
-					t.Errorf("Expected error but got none")
-					return
-				}
-				if tt.errMsg != "" && err.Error() != tt.errMsg {
-					t.Errorf("Expected error message '%s', got '%s'", tt.errMsg, err.Error())
+				require.Error(t, err, "Expected error but got none")
+				if tt.errMsg != "" {
+					require.Equal(t, tt.errMsg, err.Error())
 				}
 			} else {
-				if err != nil {
-					t.Errorf("Expected no error but got: %v", err)
-				}
+				require.NoError(t, err)
 			}
 		})
 	}
@@ -143,9 +140,7 @@ func TestValidateFunction(t *testing.T) {
 	}
 
 	err := tool.ValidateFunction()
-	if err != nil {
-		t.Errorf("Expected no error for valid function tool, got: %v", err)
-	}
+	require.NoError(t, err, "Expected no error for valid function tool")
 }
 
 // TestValidateMCP tests the ValidateMCP method specifically
@@ -157,7 +152,5 @@ func TestValidateMCP(t *testing.T) {
 	}
 
 	err := tool.ValidateMCP()
-	if err != nil {
-		t.Errorf("Expected no error for valid MCP tool, got: %v", err)
-	}
+	require.NoError(t, err, "Expected no error for valid MCP tool")
 }

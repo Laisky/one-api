@@ -3,6 +3,8 @@ package validator_test
 import (
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/songquanpeng/one-api/relay/controller/validator"
 )
 
@@ -20,15 +22,11 @@ func TestGetKnownParameters(t *testing.T) {
 	}
 
 	for _, param := range expectedParams {
-		if !knownParams[param] {
-			t.Errorf("Expected parameter '%s' to be in known parameters", param)
-		}
+		require.True(t, knownParams[param], "Expected parameter '%s' to be in known parameters", param)
 	}
 
 	// Verify we have a reasonable number of parameters (should be 30+ from GeneralOpenAIRequest)
-	if len(knownParams) < 30 {
-		t.Errorf("Expected at least 30 known parameters, got %d", len(knownParams))
-	}
+	require.GreaterOrEqual(t, len(knownParams), 30, "Expected at least 30 known parameters")
 }
 
 func TestValidateUnknownParameters_NoUnknownParams(t *testing.T) {
@@ -41,9 +39,7 @@ func TestValidateUnknownParameters_NoUnknownParams(t *testing.T) {
 	}`
 
 	err := validator.ValidateUnknownParameters([]byte(validJSON))
-	if err != nil {
-		t.Errorf("Expected no error for valid parameters, got: %v", err)
-	}
+	require.NoError(t, err, "Expected no error for valid parameters")
 }
 
 func TestValidateUnknownParameters_GPT5Verbosity(t *testing.T) {
@@ -99,9 +95,7 @@ func TestValidateUnknownParameters_GPT5Verbosity(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			err := validator.ValidateUnknownParameters([]byte(tc.json))
-			if err != nil {
-				t.Errorf("Expected no error for GPT-5 verbosity parameter, got: %v", err)
-			}
+			require.NoError(t, err, "Expected no error for GPT-5 verbosity parameter")
 		})
 	}
 }
@@ -193,9 +187,7 @@ func TestValidateUnknownParameters_UnknownParamsAllowed(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			err := validator.ValidateUnknownParameters([]byte(tc.json))
-			if err != nil {
-				t.Errorf("Expected no error (unknown params should be silently ignored), got: %v", err)
-			}
+			require.NoError(t, err, "Expected no error (unknown params should be silently ignored)")
 		})
 	}
 }
@@ -205,9 +197,7 @@ func TestValidateUnknownParameters_InvalidJSON(t *testing.T) {
 	invalidJSON := `{invalid json`
 
 	err := validator.ValidateUnknownParameters([]byte(invalidJSON))
-	if err != nil {
-		t.Errorf("Expected no error for invalid JSON (should be handled by normal validation), got: %v", err)
-	}
+	require.NoError(t, err, "Expected no error for invalid JSON (should be handled by normal validation)")
 }
 
 func TestValidateUnknownParameters_EmptyJSON(t *testing.T) {
@@ -215,9 +205,7 @@ func TestValidateUnknownParameters_EmptyJSON(t *testing.T) {
 	emptyJSON := `{}`
 
 	err := validator.ValidateUnknownParameters([]byte(emptyJSON))
-	if err != nil {
-		t.Errorf("Expected no error for empty JSON, got: %v", err)
-	}
+	require.NoError(t, err, "Expected no error for empty JSON")
 }
 
 // TestFindUnknownParametersInternal tests the internal unknown param detection
@@ -231,9 +219,7 @@ func TestFindUnknownParametersInternal(t *testing.T) {
 		"verbosity", "reasoning_effort", "tools", "tool_choice",
 	}
 	for _, param := range expectedKnown {
-		if !knownParams[param] {
-			t.Errorf("Expected '%s' to be a known parameter", param)
-		}
+		require.True(t, knownParams[param], "Expected '%s' to be a known parameter", param)
 	}
 
 	// These should be unknown (would trigger DEBUG log warnings, but not errors)
@@ -241,8 +227,6 @@ func TestFindUnknownParametersInternal(t *testing.T) {
 		"unknown_param", "future_param", "typo_temperture",
 	}
 	for _, param := range expectedUnknown {
-		if knownParams[param] {
-			t.Errorf("Expected '%s' to be an unknown parameter", param)
-		}
+		require.False(t, knownParams[param], "Expected '%s' to be an unknown parameter", param)
 	}
 }

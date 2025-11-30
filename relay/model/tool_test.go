@@ -23,23 +23,17 @@ func TestToolIndexField(t *testing.T) {
 
 	// Serialize to JSON
 	jsonData, err := json.Marshal(streamingTool)
-	if err != nil {
-		t.Fatalf("Failed to marshal streaming tool: %v", err)
-	}
+	require.NoError(t, err, "Failed to marshal streaming tool")
 
 	// Verify that the index field is present in JSON
 	var result map[string]any
 	err = json.Unmarshal(jsonData, &result)
-	if err != nil {
-		t.Fatalf("Failed to unmarshal JSON: %v", err)
-	}
+	require.NoError(t, err, "Failed to unmarshal JSON")
 
 	// Check that index field exists and has correct value
-	if indexValue, exists := result["index"]; !exists {
-		t.Error("Index field is missing from JSON output")
-	} else if indexValue != float64(0) { // JSON numbers are float64
-		t.Errorf("Expected index to be 0, got %v", indexValue)
-	}
+	indexValue, exists := result["index"]
+	require.True(t, exists, "Index field is missing from JSON output")
+	require.Equal(t, float64(0), indexValue, "Expected index to be 0")
 
 	// Test non-streaming tool call without Index field
 	nonStreamingTool := Tool{
@@ -54,21 +48,16 @@ func TestToolIndexField(t *testing.T) {
 
 	// Serialize to JSON
 	jsonData2, err := json.Marshal(nonStreamingTool)
-	if err != nil {
-		t.Fatalf("Failed to marshal non-streaming tool: %v", err)
-	}
+	require.NoError(t, err, "Failed to marshal non-streaming tool")
 
 	// Verify that the index field is omitted in JSON (due to omitempty)
 	var result2 map[string]any
 	err = json.Unmarshal(jsonData2, &result2)
-	if err != nil {
-		t.Fatalf("Failed to unmarshal JSON: %v", err)
-	}
+	require.NoError(t, err, "Failed to unmarshal JSON")
 
 	// Check that index field does not exist
-	if _, exists := result2["index"]; exists {
-		t.Error("Index field should be omitted for non-streaming tool calls")
-	}
+	_, exists2 := result2["index"]
+	require.False(t, exists2, "Index field should be omitted for non-streaming tool calls")
 }
 
 // TestStreamingToolCallAccumulation tests the complete streaming tool call accumulation workflow
@@ -102,10 +91,7 @@ func TestStreamingToolCallAccumulation(t *testing.T) {
 	finalToolCalls := make(map[int]Tool)
 
 	for _, delta := range streamingDeltas {
-		if delta.Index == nil {
-			t.Error("Index field should be present in streaming tool call deltas")
-			continue
-		}
+		require.NotNil(t, delta.Index, "Index field should be present in streaming tool call deltas")
 
 		index := *delta.Index
 
@@ -123,24 +109,15 @@ func TestStreamingToolCallAccumulation(t *testing.T) {
 	}
 
 	// Verify the final accumulated tool call
-	if len(finalToolCalls) != 1 {
-		t.Fatalf("Expected 1 final tool call, got %d", len(finalToolCalls))
-	}
+	require.Len(t, finalToolCalls, 1, "Expected 1 final tool call")
 
 	finalTool := finalToolCalls[0]
 	expectedArgs := `{"location": "Paris"}`
 	actualArgs, _ := finalTool.Function.Arguments.(string)
-	if actualArgs != expectedArgs {
-		t.Errorf("Expected accumulated arguments '%s', got '%s'", expectedArgs, actualArgs)
-	}
-
-	if finalTool.Id != "call_123" {
-		t.Errorf("Expected tool call id 'call_123', got '%s'", finalTool.Id)
-	}
-
-	if finalTool.Function == nil || finalTool.Function.Name != "get_weather" {
-		t.Errorf("Expected function name 'get_weather', got '%v'", finalTool.Function)
-	}
+	require.Equal(t, expectedArgs, actualArgs, "Accumulated arguments mismatch")
+	require.Equal(t, "call_123", finalTool.Id, "Tool call id mismatch")
+	require.NotNil(t, finalTool.Function, "Function should not be nil")
+	require.Equal(t, "get_weather", finalTool.Function.Name, "Function name mismatch")
 }
 
 // Helper function to create int pointer
@@ -163,16 +140,11 @@ func TestToolIndexFieldDeserialization(t *testing.T) {
 
 	var streamingTool Tool
 	err := json.Unmarshal([]byte(streamingJSON), &streamingTool)
-	if err != nil {
-		t.Fatalf("Failed to unmarshal streaming tool JSON: %v", err)
-	}
+	require.NoError(t, err, "Failed to unmarshal streaming tool JSON")
 
 	// Verify index field is properly set
-	if streamingTool.Index == nil {
-		t.Error("Index field should not be nil for streaming tool")
-	} else if *streamingTool.Index != 1 {
-		t.Errorf("Expected index to be 1, got %d", *streamingTool.Index)
-	}
+	require.NotNil(t, streamingTool.Index, "Index field should not be nil for streaming tool")
+	require.Equal(t, 1, *streamingTool.Index, "Expected index to be 1")
 
 	// JSON without index field (non-streaming response)
 	nonStreamingJSON := `{
@@ -186,14 +158,10 @@ func TestToolIndexFieldDeserialization(t *testing.T) {
 
 	var nonStreamingTool Tool
 	err = json.Unmarshal([]byte(nonStreamingJSON), &nonStreamingTool)
-	if err != nil {
-		t.Fatalf("Failed to unmarshal non-streaming tool JSON: %v", err)
-	}
+	require.NoError(t, err, "Failed to unmarshal non-streaming tool JSON")
 
 	// Verify index field is nil
-	if nonStreamingTool.Index != nil {
-		t.Error("Index field should be nil for non-streaming tool")
-	}
+	require.Nil(t, nonStreamingTool.Index, "Index field should be nil for non-streaming tool")
 }
 
 // TestMCPToolSerialization tests that MCP tools are properly serialized with all MCP fields
@@ -214,34 +182,21 @@ func TestMCPToolSerialization(t *testing.T) {
 
 	// Serialize to JSON
 	jsonData, err := json.Marshal(mcpTool)
-	if err != nil {
-		t.Fatalf("Failed to marshal MCP tool: %v", err)
-	}
+	require.NoError(t, err, "Failed to marshal MCP tool")
 
 	// Verify all MCP fields are present
 	var result map[string]any
 	err = json.Unmarshal(jsonData, &result)
-	if err != nil {
-		t.Fatalf("Failed to unmarshal JSON: %v", err)
-	}
+	require.NoError(t, err, "Failed to unmarshal JSON")
 
 	// Check all MCP-specific fields
-	if serverLabel, exists := result["server_label"]; !exists || serverLabel != "deepwiki" {
-		t.Errorf("Expected server_label to be 'deepwiki', got %v", serverLabel)
-	}
-
-	if serverUrl, exists := result["server_url"]; !exists || serverUrl != "https://mcp.deepwiki.com/mcp" {
-		t.Errorf("Expected server_url to be 'https://mcp.deepwiki.com/mcp', got %v", serverUrl)
-	}
-
-	if requireApproval, exists := result["require_approval"]; !exists || requireApproval != "never" {
-		t.Errorf("Expected require_approval to be 'never', got %v", requireApproval)
-	}
+	require.Equal(t, "deepwiki", result["server_label"], "server_label mismatch")
+	require.Equal(t, "https://mcp.deepwiki.com/mcp", result["server_url"], "server_url mismatch")
+	require.Equal(t, "never", result["require_approval"], "require_approval mismatch")
 
 	// Verify function field is NOT present for MCP tools (since Function is a pointer and nil)
-	if _, exists := result["function"]; exists {
-		t.Error("Function field should not be present for MCP tools")
-	}
+	_, exists := result["function"]
+	require.False(t, exists, "Function field should not be present for MCP tools")
 }
 
 // TestMCPToolDeserialization tests that MCP tools can be properly deserialized
@@ -266,37 +221,20 @@ func TestMCPToolDeserialization(t *testing.T) {
 
 	var mcpTool Tool
 	err := json.Unmarshal([]byte(mcpJSON), &mcpTool)
-	if err != nil {
-		t.Fatalf("Failed to unmarshal MCP tool JSON: %v", err)
-	}
+	require.NoError(t, err, "Failed to unmarshal MCP tool JSON")
 
 	// Verify all fields are properly set
-	if mcpTool.Id != "mcp_002" {
-		t.Errorf("Expected id to be 'mcp_002', got '%s'", mcpTool.Id)
-	}
-
-	if mcpTool.Type != "mcp" {
-		t.Errorf("Expected type to be 'mcp', got '%s'", mcpTool.Type)
-	}
-
-	if mcpTool.ServerLabel != "stripe" {
-		t.Errorf("Expected server_label to be 'stripe', got '%s'", mcpTool.ServerLabel)
-	}
-
-	if mcpTool.ServerUrl != "https://mcp.stripe.com" {
-		t.Errorf("Expected server_url to be 'https://mcp.stripe.com', got '%s'", mcpTool.ServerUrl)
-	}
+	require.Equal(t, "mcp_002", mcpTool.Id, "id mismatch")
+	require.Equal(t, "mcp", mcpTool.Type, "type mismatch")
+	require.Equal(t, "stripe", mcpTool.ServerLabel, "server_label mismatch")
+	require.Equal(t, "https://mcp.stripe.com", mcpTool.ServerUrl, "server_url mismatch")
 
 	// Check allowed_tools slice
 	expectedTools := []string{"create_payment_link", "get_balance", "list_customers"}
-	if len(mcpTool.AllowedTools) != len(expectedTools) {
-		t.Errorf("Expected %d allowed tools, got %d", len(expectedTools), len(mcpTool.AllowedTools))
-	}
+	require.Len(t, mcpTool.AllowedTools, len(expectedTools), "allowed_tools length mismatch")
 
 	// Check headers map
-	if mcpTool.Headers["Authorization"] != "Bearer sk_test_123" {
-		t.Errorf("Expected Authorization header to be 'Bearer sk_test_123', got '%s'", mcpTool.Headers["Authorization"])
-	}
+	require.Equal(t, "Bearer sk_test_123", mcpTool.Headers["Authorization"], "Authorization header mismatch")
 }
 
 // TestMCPRequireApprovalVariations tests different RequireApproval configurations
@@ -331,26 +269,17 @@ func TestMCPRequireApprovalVariations(t *testing.T) {
 			}
 
 			jsonData, err := json.Marshal(mcpTool)
-			if err != nil {
-				t.Fatalf("Failed to marshal MCP tool: %v", err)
-			}
+			require.NoError(t, err, "Failed to marshal MCP tool")
 
 			// Verify the require_approval field is serialized correctly
 			var result map[string]any
 			err = json.Unmarshal(jsonData, &result)
-			if err != nil {
-				t.Fatalf("Failed to unmarshal JSON: %v", err)
-			}
+			require.NoError(t, err, "Failed to unmarshal JSON")
 
 			// Convert require_approval back to JSON to compare
 			approvalBytes, err := json.Marshal(result["require_approval"])
-			if err != nil {
-				t.Fatalf("Failed to marshal require_approval: %v", err)
-			}
-
-			if string(approvalBytes) != tc.jsonStr {
-				t.Errorf("Expected require_approval JSON to be %s, got %s", tc.jsonStr, string(approvalBytes))
-			}
+			require.NoError(t, err, "Failed to marshal require_approval")
+			require.Equal(t, tc.jsonStr, string(approvalBytes), "require_approval JSON mismatch")
 		})
 	}
 }
@@ -391,45 +320,27 @@ func TestMixedToolArray(t *testing.T) {
 
 	// Serialize the mixed array
 	jsonData, err := json.Marshal(tools)
-	if err != nil {
-		t.Fatalf("Failed to marshal mixed tool array: %v", err)
-	}
+	require.NoError(t, err, "Failed to marshal mixed tool array")
 
 	// Deserialize back
 	var deserializedTools []Tool
 	err = json.Unmarshal(jsonData, &deserializedTools)
-	if err != nil {
-		t.Fatalf("Failed to unmarshal mixed tool array: %v", err)
-	}
+	require.NoError(t, err, "Failed to unmarshal mixed tool array")
 
 	// Verify we have 2 tools
-	if len(deserializedTools) != 2 {
-		t.Fatalf("Expected 2 tools, got %d", len(deserializedTools))
-	}
+	require.Len(t, deserializedTools, 2, "Expected 2 tools")
 
 	// Verify function tool
 	funcTool := deserializedTools[0]
-	if funcTool.Type != "function" {
-		t.Errorf("Expected first tool type to be 'function', got '%s'", funcTool.Type)
-	}
-	if funcTool.Function.Name != "get_weather" {
-		t.Errorf("Expected function name to be 'get_weather', got '%s'", funcTool.Function.Name)
-	}
-	if funcTool.ServerLabel != "" {
-		t.Error("Function tool should not have server_label")
-	}
+	require.Equal(t, "function", funcTool.Type, "First tool type mismatch")
+	require.Equal(t, "get_weather", funcTool.Function.Name, "Function name mismatch")
+	require.Empty(t, funcTool.ServerLabel, "Function tool should not have server_label")
 
 	// Verify MCP tool
 	mcpTool := deserializedTools[1]
-	if mcpTool.Type != "mcp" {
-		t.Errorf("Expected second tool type to be 'mcp', got '%s'", mcpTool.Type)
-	}
-	if mcpTool.ServerLabel != "deepwiki" {
-		t.Errorf("Expected server_label to be 'deepwiki', got '%s'", mcpTool.ServerLabel)
-	}
-	if mcpTool.Function != nil {
-		t.Error("MCP tool should not have function definition")
-	}
+	require.Equal(t, "mcp", mcpTool.Type, "Second tool type mismatch")
+	require.Equal(t, "deepwiki", mcpTool.ServerLabel, "server_label mismatch")
+	require.Nil(t, mcpTool.Function, "MCP tool should not have function definition")
 }
 
 // TestMCPToolEdgeCases tests edge cases and validation scenarios for MCP tools
@@ -442,28 +353,22 @@ func TestMCPToolEdgeCases(t *testing.T) {
 	}
 
 	jsonData, err := json.Marshal(minimalMCP)
-	if err != nil {
-		t.Fatalf("Failed to marshal minimal MCP tool: %v", err)
-	}
+	require.NoError(t, err, "Failed to marshal minimal MCP tool")
 
 	var result map[string]any
 	err = json.Unmarshal(jsonData, &result)
-	if err != nil {
-		t.Fatalf("Failed to unmarshal JSON: %v", err)
-	}
+	require.NoError(t, err, "Failed to unmarshal JSON")
 
 	// Check that optional fields are omitted (except function which is always present as empty object)
 	optionalFields := []string{"require_approval", "allowed_tools", "headers", "id"}
 	for _, field := range optionalFields {
-		if _, exists := result[field]; exists {
-			t.Errorf("Field '%s' should be omitted for minimal MCP tool", field)
-		}
+		_, exists := result[field]
+		require.False(t, exists, "Field '%s' should be omitted for minimal MCP tool", field)
 	}
 
 	// Function field should NOT be present for MCP tools
-	if _, exists := result["function"]; exists {
-		t.Error("Function field should not be present for MCP tools")
-	}
+	_, exists := result["function"]
+	require.False(t, exists, "Function field should not be present for MCP tools")
 
 	// Test empty headers map is omitted
 	emptyHeadersMCP := Tool{
@@ -473,18 +378,13 @@ func TestMCPToolEdgeCases(t *testing.T) {
 	}
 
 	jsonData, err = json.Marshal(emptyHeadersMCP)
-	if err != nil {
-		t.Fatalf("Failed to marshal MCP tool with empty headers: %v", err)
-	}
+	require.NoError(t, err, "Failed to marshal MCP tool with empty headers")
 
 	err = json.Unmarshal(jsonData, &result)
-	if err != nil {
-		t.Fatalf("Failed to unmarshal JSON: %v", err)
-	}
+	require.NoError(t, err, "Failed to unmarshal JSON")
 
-	if _, exists := result["headers"]; exists {
-		t.Error("Empty headers map should be omitted")
-	}
+	_, exists = result["headers"]
+	require.False(t, exists, "Empty headers map should be omitted")
 
 	// Test empty allowed_tools slice is omitted
 	emptyToolsMCP := Tool{
@@ -494,18 +394,13 @@ func TestMCPToolEdgeCases(t *testing.T) {
 	}
 
 	jsonData, err = json.Marshal(emptyToolsMCP)
-	if err != nil {
-		t.Fatalf("Failed to marshal MCP tool with empty allowed_tools: %v", err)
-	}
+	require.NoError(t, err, "Failed to marshal MCP tool with empty allowed_tools")
 
 	err = json.Unmarshal(jsonData, &result)
-	if err != nil {
-		t.Fatalf("Failed to unmarshal JSON: %v", err)
-	}
+	require.NoError(t, err, "Failed to unmarshal JSON")
 
-	if _, exists := result["allowed_tools"]; exists {
-		t.Error("Empty allowed_tools slice should be omitted")
-	}
+	_, exists = result["allowed_tools"]
+	require.False(t, exists, "Empty allowed_tools slice should be omitted")
 }
 
 func TestToolUnmarshalFlattenedFunction(t *testing.T) {

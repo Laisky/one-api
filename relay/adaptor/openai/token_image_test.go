@@ -1,6 +1,10 @@
 package openai
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/stretchr/testify/require"
+)
 
 func TestCountImageTokens_HighDetail_Square_1024_4o(t *testing.T) {
 	// 1024x1024 => tiles = ceil(1024/512)*ceil(1024/512)=2*2=4
@@ -10,13 +14,9 @@ func TestCountImageTokens_HighDetail_Square_1024_4o(t *testing.T) {
 	defer func() { getImageSizeFn = old }()
 
 	got, err := countImageTokens("https://example.com/img.jpg", "high", "gpt-4.1")
-	if err != nil {
-		t.Fatalf("countImageTokens error: %v", err)
-	}
+	require.NoError(t, err)
 	want := 4*170 + 85
-	if got != want {
-		t.Fatalf("want %d, got %d", want, got)
-	}
+	require.Equal(t, want, got)
 }
 
 func TestCountImageTokens_HighDetail_2048x4096_4o(t *testing.T) {
@@ -26,32 +26,20 @@ func TestCountImageTokens_HighDetail_2048x4096_4o(t *testing.T) {
 	defer func() { getImageSizeFn = old }()
 
 	got, err := countImageTokens("u", "high", "gpt-4.1")
-	if err != nil {
-		t.Fatalf("err: %v", err)
-	}
+	require.NoError(t, err)
 	want := 6*170 + 85
-	if got != want {
-		t.Fatalf("want %d, got %d", want, got)
-	}
+	require.Equal(t, want, got)
 }
 
 func TestCountImageTokens_LowDetail_Flat(t *testing.T) {
 	// Low detail uses base only
 	got, err := countImageTokens("u", "low", "gpt-4.1")
-	if err != nil {
-		t.Fatalf("err: %v", err)
-	}
-	if got != 85 {
-		t.Fatalf("want 85, got %d", got)
-	}
+	require.NoError(t, err)
+	require.Equal(t, 85, got)
 
 	got, err = countImageTokens("u", "low", "gpt-4o-mini")
-	if err != nil {
-		t.Fatalf("err: %v", err)
-	}
-	if got != 2833 {
-		t.Fatalf("want 2833, got %d", got)
-	}
+	require.NoError(t, err)
+	require.Equal(t, 2833, got)
 }
 
 func TestCountImageTokens_ModelFamilies(t *testing.T) {
@@ -61,28 +49,16 @@ func TestCountImageTokens_ModelFamilies(t *testing.T) {
 
 	// gpt-5: base 70, tile 140 => 4*140+70=630
 	got, err := countImageTokens("u", "high", "gpt-5-chat-latest")
-	if err != nil {
-		t.Fatalf("err: %v", err)
-	}
-	if want := 4*140 + 70; got != want {
-		t.Fatalf("gpt-5 want %d, got %d", want, got)
-	}
+	require.NoError(t, err)
+	require.Equal(t, 4*140+70, got, "gpt-5")
 
 	// o1/o3: base 75, tile 150 => 4*150+75=675
 	got, err = countImageTokens("u", "high", "o3")
-	if err != nil {
-		t.Fatalf("err: %v", err)
-	}
-	if want := 4*150 + 75; got != want {
-		t.Fatalf("o3 want %d, got %d", want, got)
-	}
+	require.NoError(t, err)
+	require.Equal(t, 4*150+75, got, "o3")
 
 	// computer-use-preview: base 65, tile 129
 	got, err = countImageTokens("u", "high", "computer-use-preview")
-	if err != nil {
-		t.Fatalf("err: %v", err)
-	}
-	if want := 4*129 + 65; got != want {
-		t.Fatalf("cu want %d, got %d", want, got)
-	}
+	require.NoError(t, err)
+	require.Equal(t, 4*129+65, got, "computer-use-preview")
 }

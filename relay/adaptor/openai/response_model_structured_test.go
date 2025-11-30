@@ -56,58 +56,32 @@ func TestBidirectionalStructuredOutputConversion(t *testing.T) {
 	responseAPI := ConvertChatCompletionToResponseAPI(originalRequest)
 
 	// Verify all structured output fields are preserved
-	if responseAPI.Text == nil {
-		t.Fatal("Expected text config to be set")
-	}
-	if responseAPI.Text.Format == nil {
-		t.Fatal("Expected format to be set")
-	}
-	if responseAPI.Text.Format.Type != "json_schema" {
-		t.Errorf("Expected format type 'json_schema', got '%s'", responseAPI.Text.Format.Type)
-	}
-	if responseAPI.Text.Format.Name != "person_extraction" {
-		t.Errorf("Expected format name 'person_extraction', got '%s'", responseAPI.Text.Format.Name)
-	}
-	if responseAPI.Text.Format.Description != "Extract person information" {
-		t.Errorf("Expected format description to be preserved, got '%s'", responseAPI.Text.Format.Description)
-	}
-	if responseAPI.Text.Format.Schema == nil {
-		t.Fatal("Expected schema to be preserved")
-	}
-	if responseAPI.Text.Format.Strict == nil || !*responseAPI.Text.Format.Strict {
-		t.Error("Expected strict mode to be preserved")
-	}
+	require.NotNil(t, responseAPI.Text, "Expected text config to be set")
+	require.NotNil(t, responseAPI.Text.Format, "Expected format to be set")
+	require.Equal(t, "json_schema", responseAPI.Text.Format.Type, "Expected format type 'json_schema'")
+	require.Equal(t, "person_extraction", responseAPI.Text.Format.Name, "Expected format name 'person_extraction'")
+	require.Equal(t, "Extract person information", responseAPI.Text.Format.Description, "Expected format description to be preserved")
+	require.NotNil(t, responseAPI.Text.Format.Schema, "Expected schema to be preserved")
+	require.NotNil(t, responseAPI.Text.Format.Strict, "Expected strict mode to be set")
+	require.True(t, *responseAPI.Text.Format.Strict, "Expected strict mode to be true")
 
 	// Verify complex schema structure preservation
 	schema := responseAPI.Text.Format.Schema
 	properties, ok := schema["properties"].(map[string]any)
-	if !ok {
-		t.Fatal("Expected properties to be preserved in schema")
-	}
+	require.True(t, ok, "Expected properties to be preserved in schema")
 
 	nameProperty, ok := properties["name"].(map[string]any)
-	if !ok {
-		t.Fatal("Expected name property to be preserved")
-	}
-	if nameProperty["type"] != "string" {
-		t.Errorf("Expected name type 'string', got '%v'", nameProperty["type"])
-	}
-	if nameProperty["description"] != "The person's full name" {
-		t.Errorf("Expected name description to be preserved, got '%v'", nameProperty["description"])
-	}
+	require.True(t, ok, "Expected name property to be preserved")
+	require.Equal(t, "string", nameProperty["type"], "Expected name type 'string'")
+	require.Equal(t, "The person's full name", nameProperty["description"], "Expected name description to be preserved")
 
 	ageProperty, ok := properties["age"].(map[string]any)
-	if !ok {
-		t.Fatal("Expected age property to be preserved")
-	}
-	if ageProperty["minimum"] != 0 || ageProperty["maximum"] != 150 {
-		t.Errorf("Expected age constraints to be preserved, got min=%v max=%v", ageProperty["minimum"], ageProperty["maximum"])
-	}
+	require.True(t, ok, "Expected age property to be preserved")
+	require.Equal(t, 0, ageProperty["minimum"], "Expected age minimum constraint")
+	require.Equal(t, 150, ageProperty["maximum"], "Expected age maximum constraint")
 
 	required, ok := schema["required"].([]string)
-	if !ok || len(required) != 2 {
-		t.Errorf("Expected required fields to be preserved, got %v", schema["required"])
-	}
+	require.True(t, ok && len(required) == 2, "Expected required fields to be preserved")
 
 	// Simulate Response API response with structured JSON content
 	responseAPIResp := &ResponseAPIResponse{
@@ -141,42 +115,24 @@ func TestBidirectionalStructuredOutputConversion(t *testing.T) {
 	chatCompletion := ConvertResponseAPIToChatCompletion(responseAPIResp)
 
 	// Verify the reverse conversion preserves all data
-	if chatCompletion.Id != "resp_structured_test" {
-		t.Errorf("Expected id 'resp_structured_test', got '%s'", chatCompletion.Id)
-	}
-	if chatCompletion.Model != "gpt-4o-2024-08-06" {
-		t.Errorf("Expected model 'gpt-4o-2024-08-06', got '%s'", chatCompletion.Model)
-	}
-	if len(chatCompletion.Choices) != 1 {
-		t.Fatalf("Expected 1 choice, got %d", len(chatCompletion.Choices))
-	}
+	require.Equal(t, "resp_structured_test", chatCompletion.Id, "Expected id 'resp_structured_test'")
+	require.Equal(t, "gpt-4o-2024-08-06", chatCompletion.Model, "Expected model 'gpt-4o-2024-08-06'")
+	require.Len(t, chatCompletion.Choices, 1, "Expected 1 choice")
 
 	choice := chatCompletion.Choices[0]
-	if choice.FinishReason != "stop" {
-		t.Errorf("Expected finish_reason 'stop', got '%s'", choice.FinishReason)
-	}
+	require.Equal(t, "stop", choice.FinishReason, "Expected finish_reason 'stop'")
 
 	content, ok := choice.Message.Content.(string)
-	if !ok {
-		t.Fatal("Expected content to be string")
-	}
+	require.True(t, ok, "Expected content to be string")
 
 	// Verify the structured JSON content is valid and contains expected data
 	expectedContent := `{"name": "John Doe", "age": 30, "additional_info": "No additional information provided"}`
-	if content != expectedContent {
-		t.Errorf("Expected content '%s', got '%s'", expectedContent, content)
-	}
+	require.Equal(t, expectedContent, content, "Expected content to match")
 
 	// Verify usage is preserved
-	if chatCompletion.Usage.PromptTokens != 25 {
-		t.Errorf("Expected prompt_tokens 25, got %d", chatCompletion.Usage.PromptTokens)
-	}
-	if chatCompletion.Usage.CompletionTokens != 15 {
-		t.Errorf("Expected completion_tokens 15, got %d", chatCompletion.Usage.CompletionTokens)
-	}
-	if chatCompletion.Usage.TotalTokens != 40 {
-		t.Errorf("Expected total_tokens 40, got %d", chatCompletion.Usage.TotalTokens)
-	}
+	require.Equal(t, 25, chatCompletion.Usage.PromptTokens, "Expected prompt_tokens 25")
+	require.Equal(t, 15, chatCompletion.Usage.CompletionTokens, "Expected completion_tokens 15")
+	require.Equal(t, 40, chatCompletion.Usage.TotalTokens, "Expected total_tokens 40")
 }
 
 // TestStructuredOutputWithReasoningAndFunctionCalls tests complex scenarios
@@ -245,50 +201,31 @@ func TestStructuredOutputWithReasoningAndFunctionCalls(t *testing.T) {
 	chatCompletion := ConvertResponseAPIToChatCompletion(responseAPIResp)
 
 	// Verify complex conversion
-	if len(chatCompletion.Choices) != 1 {
-		t.Fatalf("Expected 1 choice, got %d", len(chatCompletion.Choices))
-	}
+	require.Len(t, chatCompletion.Choices, 1, "Expected 1 choice")
 
 	choice := chatCompletion.Choices[0]
 
 	// Verify reasoning is preserved
-	if choice.Message.Reasoning == nil {
-		t.Error("Expected reasoning to be preserved")
-	} else {
-		expectedReasoning := "The user is asking for structured data extraction. I need to analyze the input and extract the person's information in the specified JSON schema format."
-		if *choice.Message.Reasoning != expectedReasoning {
-			t.Errorf("Expected reasoning to be preserved, got '%s'", *choice.Message.Reasoning)
-		}
-	}
+	require.NotNil(t, choice.Message.Reasoning, "Expected reasoning to be preserved")
+	expectedReasoning := "The user is asking for structured data extraction. I need to analyze the input and extract the person's information in the specified JSON schema format."
+	require.Equal(t, expectedReasoning, *choice.Message.Reasoning, "Expected reasoning to match")
 
 	// Verify structured content
 	content, ok := choice.Message.Content.(string)
-	if !ok {
-		t.Fatal("Expected content to be string")
-	}
+	require.True(t, ok, "Expected content to be string")
 
 	expectedContent := `{"name": "Alice Smith", "age": 25, "occupation": "Software Engineer"}`
-	if content != expectedContent {
-		t.Errorf("Expected structured content '%s', got '%s'", expectedContent, content)
-	}
+	require.Equal(t, expectedContent, content, "Expected structured content to match")
 
 	// Verify function calls
-	if len(choice.Message.ToolCalls) != 1 {
-		t.Fatalf("Expected 1 tool call, got %d", len(choice.Message.ToolCalls))
-	}
+	require.Len(t, choice.Message.ToolCalls, 1, "Expected 1 tool call")
 
 	toolCall := choice.Message.ToolCalls[0]
-	if toolCall.Id != "call_validate_person" {
-		t.Errorf("Expected tool call id 'call_validate_person', got '%s'", toolCall.Id)
-	}
-	if toolCall.Function.Name != "validate_person_data" {
-		t.Errorf("Expected function name 'validate_person_data', got '%s'", toolCall.Function.Name)
-	}
+	require.Equal(t, "call_validate_person", toolCall.Id, "Expected tool call id 'call_validate_person'")
+	require.Equal(t, "validate_person_data", toolCall.Function.Name, "Expected function name 'validate_person_data'")
 
 	expectedArgs := `{"person": {"name": "Alice Smith", "age": 25}}`
-	if toolCall.Function.Arguments != expectedArgs {
-		t.Errorf("Expected function arguments '%s', got '%s'", expectedArgs, toolCall.Function.Arguments)
-	}
+	require.Equal(t, expectedArgs, toolCall.Function.Arguments, "Expected function arguments to match")
 
 	// Verify finish reason is set correctly (should be "tool_calls" when function calls are present)
 	if choice.FinishReason != "stop" {
@@ -393,42 +330,28 @@ func TestStreamingStructuredOutputWithEvents(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			chatStreamChunk := ConvertResponseAPIStreamToChatCompletion(tc.chunk)
 
-			if chatStreamChunk.Object != "chat.completion.chunk" {
-				t.Errorf("Expected object 'chat.completion.chunk', got '%s'", chatStreamChunk.Object)
-			}
-
-			if len(chatStreamChunk.Choices) != 1 {
-				t.Fatalf("Expected 1 choice, got %d", len(chatStreamChunk.Choices))
-			}
+			require.Equal(t, "chat.completion.chunk", chatStreamChunk.Object, "Expected object 'chat.completion.chunk'")
+			require.Len(t, chatStreamChunk.Choices, 1, "Expected 1 choice")
 
 			choice := chatStreamChunk.Choices[0]
 
 			// For in_progress status, finish_reason should be nil
-			if tc.chunk.Status == "in_progress" && choice.FinishReason != nil {
-				t.Errorf("Expected nil finish_reason for in_progress, got '%v'", choice.FinishReason)
+			if tc.chunk.Status == "in_progress" {
+				require.Nil(t, choice.FinishReason, "Expected nil finish_reason for in_progress")
 			}
 
 			// Check content
 			if tc.expected != "" {
 				deltaContent, ok := choice.Delta.Content.(string)
-				if !ok {
-					t.Fatal("Expected delta content to be string")
-				}
-				if deltaContent != tc.expected {
-					t.Errorf("Expected delta content '%s', got '%s'", tc.expected, deltaContent)
-				}
+				require.True(t, ok, "Expected delta content to be string")
+				require.Equal(t, tc.expected, deltaContent, "Expected delta content to match")
 			}
 
 			// Check reasoning for reasoning chunks
 			if tc.name == "reasoning_delta" {
-				if choice.Delta.Reasoning == nil {
-					t.Error("Expected reasoning to be set for reasoning chunk")
-				} else {
-					expectedReasoning := "Analyzing the input to extract structured data..."
-					if *choice.Delta.Reasoning != expectedReasoning {
-						t.Errorf("Expected reasoning '%s', got '%s'", expectedReasoning, *choice.Delta.Reasoning)
-					}
-				}
+				require.NotNil(t, choice.Delta.Reasoning, "Expected reasoning to be set for reasoning chunk")
+				expectedReasoning := "Analyzing the input to extract structured data..."
+				require.Equal(t, expectedReasoning, *choice.Delta.Reasoning, "Expected reasoning to match")
 			}
 		})
 	}
@@ -447,14 +370,11 @@ func TestStructuredOutputErrorHandling(t *testing.T) {
 		chatCompletion := ConvertResponseAPIToChatCompletion(responseAPIResp)
 
 		// Should still work but with empty content
-		if len(chatCompletion.Choices) != 1 {
-			t.Fatalf("Expected 1 choice even with empty output, got %d", len(chatCompletion.Choices))
-		}
+		require.Len(t, chatCompletion.Choices, 1, "Expected 1 choice even with empty output")
 
 		choice := chatCompletion.Choices[0]
-		if content, ok := choice.Message.Content.(string); !ok || content != "" {
-			t.Errorf("Expected empty content for empty output, got '%v'", choice.Message.Content)
-		}
+		content, ok := choice.Message.Content.(string)
+		require.True(t, ok && content == "", "Expected empty content for empty output")
 	})
 
 	// Test 2: Mixed content types
@@ -478,15 +398,11 @@ func TestStructuredOutputErrorHandling(t *testing.T) {
 		choice := chatCompletion.Choices[0]
 
 		content, ok := choice.Message.Content.(string)
-		if !ok {
-			t.Fatal("Expected content to be string")
-		}
+		require.True(t, ok, "Expected content to be string")
 
 		// Should concatenate all text parts
 		expected := `{"part1": "value1", "part2": "value2"}`
-		if content != expected {
-			t.Errorf("Expected concatenated content '%s', got '%s'", expected, content)
-		}
+		require.Equal(t, expected, content, "Expected concatenated content")
 	})
 
 	// Test 3: Response with error status
@@ -509,14 +425,10 @@ func TestStructuredOutputErrorHandling(t *testing.T) {
 		choice := chatCompletion.Choices[0]
 
 		// Should still convert but with appropriate finish reason
-		if choice.FinishReason != "stop" {
-			t.Errorf("Expected finish_reason 'stop' for failed status, got '%s'", choice.FinishReason)
-		}
+		require.Equal(t, "stop", choice.FinishReason, "Expected finish_reason 'stop' for failed status")
 
 		content, ok := choice.Message.Content.(string)
-		if !ok || content != "Error occurred" {
-			t.Errorf("Expected error content to be preserved, got '%v'", choice.Message.Content)
-		}
+		require.True(t, ok && content == "Error occurred", "Expected error content to be preserved")
 	})
 }
 
@@ -555,37 +467,21 @@ func TestJSONSchemaConversionDetailed(t *testing.T) {
 		responseAPI := ConvertChatCompletionToResponseAPI(chatRequest)
 
 		// Verify the conversion
-		if responseAPI.Text == nil {
-			t.Fatal("Expected text config to be set")
-		}
-		if responseAPI.Text.Format == nil {
-			t.Fatal("Expected format to be set")
-		}
-		if responseAPI.Text.Format.Type != "json_schema" {
-			t.Errorf("Expected type 'json_schema', got '%s'", responseAPI.Text.Format.Type)
-		}
-		if responseAPI.Text.Format.Name != "person_info" {
-			t.Errorf("Expected name 'person_info', got '%s'", responseAPI.Text.Format.Name)
-		}
-		if responseAPI.Text.Format.Schema == nil {
-			t.Fatal("Expected schema to be preserved")
-		}
+		require.NotNil(t, responseAPI.Text, "Expected text config to be set")
+		require.NotNil(t, responseAPI.Text.Format, "Expected format to be set")
+		require.Equal(t, "json_schema", responseAPI.Text.Format.Type, "Expected type 'json_schema'")
+		require.Equal(t, "person_info", responseAPI.Text.Format.Name, "Expected name 'person_info'")
+		require.NotNil(t, responseAPI.Text.Format.Schema, "Expected schema to be preserved")
 
 		// Verify nested schema structure
 		schema := responseAPI.Text.Format.Schema
-		if schema["type"] != "object" {
-			t.Errorf("Expected schema type 'object', got '%v'", schema["type"])
-		}
+		require.Equal(t, "object", schema["type"], "Expected schema type 'object'")
 
 		properties, ok := schema["properties"].(map[string]any)
-		if !ok {
-			t.Fatal("Expected properties to be a map")
-		}
+		require.True(t, ok, "Expected properties to be a map")
 
 		nameProperty, ok := properties["name"].(map[string]any)
-		if !ok || nameProperty["type"] != "string" {
-			t.Error("Expected name property to be string type")
-		}
+		require.True(t, ok && nameProperty["type"] == "string", "Expected name property to be string type")
 
 		// Test reverse conversion - simulate Response API response with structured content
 		responseAPIResp := &ResponseAPIResponse{
@@ -619,27 +515,18 @@ func TestJSONSchemaConversionDetailed(t *testing.T) {
 		chatCompletion := ConvertResponseAPIToChatCompletion(responseAPIResp)
 
 		// Verify the reverse conversion
-		if chatCompletion.Id != "resp_123" {
-			t.Errorf("Expected id 'resp_123', got '%s'", chatCompletion.Id)
-		}
-		if len(chatCompletion.Choices) != 1 {
-			t.Errorf("Expected 1 choice, got %d", len(chatCompletion.Choices))
-		}
+		require.Equal(t, "resp_123", chatCompletion.Id, "Expected id 'resp_123'")
+		require.Len(t, chatCompletion.Choices, 1, "Expected 1 choice")
 
 		content, ok := chatCompletion.Choices[0].Message.Content.(string)
-		if !ok {
-			t.Fatal("Expected content to be string")
-		}
+		require.True(t, ok, "Expected content to be string")
 
 		// Verify the structured JSON content
 		var parsed map[string]any
-		if err := json.Unmarshal([]byte(content), &parsed); err != nil {
-			t.Errorf("Expected valid JSON content: %v", err)
-		}
-
-		if parsed["name"] != "John Doe" || parsed["age"] != 30.0 {
-			t.Errorf("Expected structured content, got %v", parsed)
-		}
+		err := json.Unmarshal([]byte(content), &parsed)
+		require.NoError(t, err, "Expected valid JSON content")
+		require.Equal(t, "John Doe", parsed["name"], "Expected name 'John Doe'")
+		require.Equal(t, 30.0, parsed["age"], "Expected age 30")
 	})
 }
 
@@ -687,38 +574,22 @@ func TestComplexNestedSchemaConversion(t *testing.T) {
 	responseAPI := ConvertChatCompletionToResponseAPI(chatRequest)
 
 	// Verify complex schema preservation
-	if responseAPI.Text.Format.Schema == nil {
-		t.Fatal("Expected complex schema to be preserved")
-	}
+	require.NotNil(t, responseAPI.Text.Format.Schema, "Expected complex schema to be preserved")
 
 	schema := responseAPI.Text.Format.Schema
 	properties, ok := schema["properties"].(map[string]any)
-	if !ok {
-		t.Fatal("Expected properties in complex schema")
-	}
+	require.True(t, ok, "Expected properties in complex schema")
 
 	steps, ok := properties["steps"].(map[string]any)
-	if !ok {
-		t.Fatal("Expected steps property in complex schema")
-	}
-
-	if steps["type"] != "array" {
-		t.Errorf("Expected steps type 'array', got '%v'", steps["type"])
-	}
+	require.True(t, ok, "Expected steps property in complex schema")
+	require.Equal(t, "array", steps["type"], "Expected steps type 'array'")
 
 	items, ok := steps["items"].(map[string]any)
-	if !ok {
-		t.Fatal("Expected items in steps array")
-	}
+	require.True(t, ok, "Expected items in steps array")
 
 	itemProps, ok := items["properties"].(map[string]any)
-	if !ok {
-		t.Fatal("Expected properties in items")
-	}
-
-	if len(itemProps) != 2 {
-		t.Errorf("Expected 2 item properties, got %d", len(itemProps))
-	}
+	require.True(t, ok, "Expected properties in items")
+	require.Len(t, itemProps, 2, "Expected 2 item properties")
 }
 
 // TestStreamingStructuredOutput tests streaming conversion with structured content
@@ -750,28 +621,17 @@ func TestStreamingStructuredOutput(t *testing.T) {
 		chatStreamChunk := ConvertResponseAPIStreamToChatCompletion(streamChunk)
 
 		// Verify streaming conversion
-		if chatStreamChunk.Object != "chat.completion.chunk" {
-			t.Errorf("Expected object 'chat.completion.chunk', got '%s'", chatStreamChunk.Object)
-		}
-
-		if len(chatStreamChunk.Choices) != 1 {
-			t.Errorf("Expected 1 choice in stream, got %d", len(chatStreamChunk.Choices))
-		}
+		require.Equal(t, "chat.completion.chunk", chatStreamChunk.Object, "Expected object 'chat.completion.chunk'")
+		require.Len(t, chatStreamChunk.Choices, 1, "Expected 1 choice in stream")
 
 		choice := chatStreamChunk.Choices[0]
-		if choice.FinishReason != nil {
-			t.Errorf("Expected nil finish_reason for in_progress, got '%v'", choice.FinishReason)
-		}
+		require.Nil(t, choice.FinishReason, "Expected nil finish_reason for in_progress")
 
 		deltaContent, ok := choice.Delta.Content.(string)
-		if !ok {
-			t.Fatal("Expected delta content to be string")
-		}
+		require.True(t, ok, "Expected delta content to be string")
 
 		expectedContent := `{"steps": [{"explanation": "Start with equation"`
-		if deltaContent != expectedContent {
-			t.Errorf("Expected delta content '%s', got '%s'", expectedContent, deltaContent)
-		}
+		require.Equal(t, expectedContent, deltaContent, "Expected delta content to match")
 	})
 
 	t.Run("completed chunk", func(t *testing.T) {
@@ -800,9 +660,8 @@ func TestStreamingStructuredOutput(t *testing.T) {
 		chatStreamChunkCompleted := ConvertResponseAPIStreamToChatCompletion(streamChunk)
 		completedChoice := chatStreamChunkCompleted.Choices[0]
 
-		if completedChoice.FinishReason == nil || *completedChoice.FinishReason != "stop" {
-			t.Errorf("Expected finish_reason 'stop' for completed, got '%v'", completedChoice.FinishReason)
-		}
+		require.NotNil(t, completedChoice.FinishReason, "Expected finish_reason to be set")
+		require.Equal(t, "stop", *completedChoice.FinishReason, "Expected finish_reason 'stop' for completed")
 	})
 }
 
@@ -820,12 +679,9 @@ func TestStructuredOutputEdgeCases(t *testing.T) {
 		}
 
 		responseAPI := ConvertChatCompletionToResponseAPI(chatRequest)
-		if responseAPI.Text == nil || responseAPI.Text.Format == nil {
-			t.Fatal("Expected text format to be set even with empty schema")
-		}
-		if responseAPI.Text.Format.Type != "json_object" {
-			t.Errorf("Expected type 'json_object', got '%s'", responseAPI.Text.Format.Type)
-		}
+		require.NotNil(t, responseAPI.Text, "Expected text to be set")
+		require.NotNil(t, responseAPI.Text.Format, "Expected text format to be set even with empty schema")
+		require.Equal(t, "json_object", responseAPI.Text.Format.Type, "Expected type 'json_object'")
 	})
 
 	t.Run("nil response format", func(t *testing.T) {
@@ -837,9 +693,7 @@ func TestStructuredOutputEdgeCases(t *testing.T) {
 			ResponseFormat: nil,
 		}
 		responseAPI := ConvertChatCompletionToResponseAPI(chatRequest)
-		if responseAPI.Text != nil {
-			t.Error("Expected text to be nil when no response format")
-		}
+		require.Nil(t, responseAPI.Text, "Expected text to be nil when no response format")
 	})
 
 	t.Run("response without text field", func(t *testing.T) {
@@ -859,9 +713,7 @@ func TestStructuredOutputEdgeCases(t *testing.T) {
 		}
 
 		chatCompletion := ConvertResponseAPIToChatCompletion(responseAPIResp)
-		if len(chatCompletion.Choices) != 1 {
-			t.Error("Expected response conversion to work without text field")
-		}
+		require.Len(t, chatCompletion.Choices, 1, "Expected response conversion to work without text field")
 	})
 
 	t.Run("malformed JSON handling", func(t *testing.T) {
@@ -881,9 +733,7 @@ func TestStructuredOutputEdgeCases(t *testing.T) {
 		}
 		chatCompletion := ConvertResponseAPIToChatCompletion(responseAPIResp)
 		content, ok := chatCompletion.Choices[0].Message.Content.(string)
-		if !ok || content != `{"incomplete": json` {
-			t.Error("Expected malformed JSON to be preserved as-is")
-		}
+		require.True(t, ok && content == `{"incomplete": json`, "Expected malformed JSON to be preserved as-is")
 	})
 }
 
@@ -999,61 +849,38 @@ func TestAdvancedStructuredOutputScenarios(t *testing.T) {
 		responseAPI := ConvertChatCompletionToResponseAPI(chatRequest)
 
 		// Verify complex nested schema preservation
-		if responseAPI.Text == nil || responseAPI.Text.Format == nil {
-			t.Fatal("Expected text format to be set for complex schema")
-		}
+		require.NotNil(t, responseAPI.Text, "Expected text to be set for complex schema")
+		require.NotNil(t, responseAPI.Text.Format, "Expected text format to be set for complex schema")
 
 		schema := responseAPI.Text.Format.Schema
 		properties, ok := schema["properties"].(map[string]any)
-		if !ok {
-			t.Fatal("Expected properties in research schema")
-		}
+		require.True(t, ok, "Expected properties in research schema")
 
 		// Verify authors array structure
 		authors, ok := properties["authors"].(map[string]any)
-		if !ok {
-			t.Fatal("Expected authors property")
-		}
+		require.True(t, ok, "Expected authors property")
 
 		items, ok := authors["items"].(map[string]any)
-		if !ok {
-			t.Fatal("Expected items in authors array")
-		}
+		require.True(t, ok, "Expected items in authors array")
 
 		authorProps, ok := items["properties"].(map[string]any)
-		if !ok {
-			t.Fatal("Expected properties in author items")
-		}
-
-		if len(authorProps) != 3 { // name, affiliation, email
-			t.Errorf("Expected 3 author properties, got %d", len(authorProps))
-		}
+		require.True(t, ok, "Expected properties in author items")
+		require.Len(t, authorProps, 3, "Expected 3 author properties (name, affiliation, email)")
 
 		// Verify sections nested structure
 		sections, ok := properties["sections"].(map[string]any)
-		if !ok {
-			t.Fatal("Expected sections property")
-		}
+		require.True(t, ok, "Expected sections property")
 
 		sectionItems, ok := sections["items"].(map[string]any)
-		if !ok {
-			t.Fatal("Expected items in sections array")
-		}
+		require.True(t, ok, "Expected items in sections array")
 
 		sectionProps, ok := sectionItems["properties"].(map[string]any)
-		if !ok {
-			t.Fatal("Expected properties in section items")
-		}
+		require.True(t, ok, "Expected properties in section items")
 
 		// Verify subsections nested array
 		subsections, ok := sectionProps["subsections"].(map[string]any)
-		if !ok {
-			t.Fatal("Expected subsections property")
-		}
-
-		if subsections["type"] != "array" {
-			t.Errorf("Expected subsections type 'array', got '%v'", subsections["type"])
-		}
+		require.True(t, ok, "Expected subsections property")
+		require.Equal(t, "array", subsections["type"], "Expected subsections type 'array'")
 
 		// Test reverse conversion with complex data
 		complexResponseData := `{
@@ -1108,33 +935,20 @@ func TestAdvancedStructuredOutputScenarios(t *testing.T) {
 
 		chatCompletion := ConvertResponseAPIToChatCompletion(responseAPIResp)
 		content, ok := chatCompletion.Choices[0].Message.Content.(string)
-		if !ok {
-			t.Fatal("Expected content to be string")
-		}
+		require.True(t, ok, "Expected content to be string")
 
 		// Verify the complex JSON structure
 		var extracted map[string]any
-		if err := json.Unmarshal([]byte(content), &extracted); err != nil {
-			t.Fatalf("Failed to parse complex JSON: %v", err)
-		}
-
-		if extracted["title"] != "Quantum Machine Learning Applications" {
-			t.Errorf("Expected title to match, got '%v'", extracted["title"])
-		}
+		err := json.Unmarshal([]byte(content), &extracted)
+		require.NoError(t, err, "Failed to parse complex JSON")
+		require.Equal(t, "Quantum Machine Learning Applications", extracted["title"], "Expected title to match")
 
 		authorsArray, ok := extracted["authors"].([]any)
-		if !ok || len(authorsArray) != 1 {
-			t.Errorf("Expected 1 author, got %v", authorsArray)
-		}
+		require.True(t, ok && len(authorsArray) == 1, "Expected 1 author")
 
 		author, ok := authorsArray[0].(map[string]any)
-		if !ok {
-			t.Fatal("Expected author to be object")
-		}
-
-		if author["name"] != "Dr. Alice Quantum" {
-			t.Errorf("Expected author name to match, got '%v'", author["name"])
-		}
+		require.True(t, ok, "Expected author to be object")
+		require.Equal(t, "Dr. Alice Quantum", author["name"], "Expected author name to match")
 	})
 
 	t.Run("UI component generation with recursive schema", func(t *testing.T) {
@@ -1202,24 +1016,16 @@ func TestAdvancedStructuredOutputScenarios(t *testing.T) {
 		// Verify recursive schema handling
 		schema := responseAPI.Text.Format.Schema
 		properties, ok := schema["properties"].(map[string]any)
-		if !ok {
-			t.Fatal("Expected properties in UI schema")
-		}
+		require.True(t, ok, "Expected properties in UI schema")
 
 		children, ok := properties["children"].(map[string]any)
-		if !ok {
-			t.Fatal("Expected children property")
-		}
+		require.True(t, ok, "Expected children property")
 
 		items, ok := children["items"].(map[string]any)
-		if !ok {
-			t.Fatal("Expected items in children")
-		}
+		require.True(t, ok, "Expected items in children")
 
 		// Check for $ref (recursive reference)
-		if items["$ref"] != "#" {
-			t.Errorf("Expected recursive reference '#', got '%v'", items["$ref"])
-		}
+		require.Equal(t, "#", items["$ref"], "Expected recursive reference '#'")
 
 		// Test with complex nested UI structure
 		uiResponseData := `{
@@ -1277,34 +1083,22 @@ func TestAdvancedStructuredOutputScenarios(t *testing.T) {
 
 		chatCompletion := ConvertResponseAPIToChatCompletion(responseAPIResp)
 		content, ok := chatCompletion.Choices[0].Message.Content.(string)
-		if !ok {
-			t.Fatal("Expected UI content to be string")
-		}
+		require.True(t, ok, "Expected UI content to be string")
 
 		var uiComponent map[string]any
-		if err := json.Unmarshal([]byte(content), &uiComponent); err != nil {
-			t.Fatalf("Failed to parse UI JSON: %v", err)
-		}
-
-		if uiComponent["type"] != "form" {
-			t.Errorf("Expected type 'form', got '%v'", uiComponent["type"])
-		}
+		err := json.Unmarshal([]byte(content), &uiComponent)
+		require.NoError(t, err, "Failed to parse UI JSON")
+		require.Equal(t, "form", uiComponent["type"], "Expected type 'form'")
 
 		childrenArray, ok := uiComponent["children"].([]any)
-		if !ok || len(childrenArray) != 2 {
-			t.Errorf("Expected 2 children, got %v", childrenArray)
-		}
+		require.True(t, ok && len(childrenArray) == 2, "Expected 2 children")
 
 		// Verify nested structure
 		passwordSection, ok := childrenArray[1].(map[string]any)
-		if !ok {
-			t.Fatal("Expected password section to be object")
-		}
+		require.True(t, ok, "Expected password section to be object")
 
 		nestedChildren, ok := passwordSection["children"].([]any)
-		if !ok || len(nestedChildren) != 1 {
-			t.Errorf("Expected 1 nested child, got %v", nestedChildren)
-		}
+		require.True(t, ok && len(nestedChildren) == 1, "Expected 1 nested child")
 	})
 
 	t.Run("chain of thought with structured output", func(t *testing.T) {
@@ -1384,12 +1178,9 @@ func TestAdvancedStructuredOutputScenarios(t *testing.T) {
 		responseAPI := ConvertChatCompletionToResponseAPI(chatRequest)
 
 		// Verify reasoning effort is normalized to medium for medium-only models
-		if responseAPI.Reasoning == nil {
-			t.Fatal("Expected reasoning config to be set")
-		}
-		if responseAPI.Reasoning.Effort == nil || *responseAPI.Reasoning.Effort != "medium" {
-			t.Errorf("Expected reasoning effort 'medium', got '%v'", responseAPI.Reasoning.Effort)
-		}
+		require.NotNil(t, responseAPI.Reasoning, "Expected reasoning config to be set")
+		require.NotNil(t, responseAPI.Reasoning.Effort, "Expected reasoning effort to be set")
+		require.Equal(t, "medium", *responseAPI.Reasoning.Effort, "Expected reasoning effort 'medium'")
 
 		// Simulate response with reasoning and structured output
 		reasoningResponseData := `{
@@ -1451,39 +1242,25 @@ func TestAdvancedStructuredOutputScenarios(t *testing.T) {
 		chatCompletion := ConvertResponseAPIToChatCompletion(responseAPIResp)
 
 		// Verify reasoning is preserved
-		if len(chatCompletion.Choices) != 1 {
-			t.Errorf("Expected 1 choice, got %d", len(chatCompletion.Choices))
-		}
+		require.Len(t, chatCompletion.Choices, 1, "Expected 1 choice")
 
 		choice := chatCompletion.Choices[0]
-		if choice.Message.Reasoning == nil {
-			t.Fatal("Expected reasoning content to be preserved")
-		}
+		require.NotNil(t, choice.Message.Reasoning, "Expected reasoning content to be preserved")
 
 		expectedReasoning := "I need to solve the linear equation 3x + 7 = 22 step by step, showing each mathematical operation clearly."
-		if *choice.Message.Reasoning != expectedReasoning {
-			t.Errorf("Expected reasoning content to match, got '%s'", *choice.Message.Reasoning)
-		}
+		require.Equal(t, expectedReasoning, *choice.Message.Reasoning, "Expected reasoning content to match")
 
 		// Verify structured reasoning content
 		content, ok := choice.Message.Content.(string)
-		if !ok {
-			t.Fatal("Expected content to be string")
-		}
+		require.True(t, ok, "Expected content to be string")
 
 		var reasoning map[string]any
-		if err := json.Unmarshal([]byte(content), &reasoning); err != nil {
-			t.Fatalf("Failed to parse reasoning JSON: %v", err)
-		}
+		err := json.Unmarshal([]byte(content), &reasoning)
+		require.NoError(t, err, "Failed to parse reasoning JSON")
 
 		steps, ok := reasoning["steps"].([]any)
-		if !ok || len(steps) != 3 {
-			t.Errorf("Expected 3 reasoning steps, got %v", steps)
-		}
-
-		if reasoning["final_answer"] != "x = 5" {
-			t.Errorf("Expected final answer 'x = 5', got '%v'", reasoning["final_answer"])
-		}
+		require.True(t, ok && len(steps) == 3, "Expected 3 reasoning steps")
+		require.Equal(t, "x = 5", reasoning["final_answer"], "Expected final answer 'x = 5'")
 	})
 }
 
@@ -1497,17 +1274,11 @@ func TestConvertChatCompletionToResponseAPI_DeepResearchDefaultEffort(t *testing
 
 	responseAPI := ConvertChatCompletionToResponseAPI(chatRequest)
 
-	if responseAPI.Reasoning == nil {
-		t.Fatal("expected reasoning config to be set for deep research model")
-	}
-
-	if responseAPI.Reasoning.Effort == nil || *responseAPI.Reasoning.Effort != "medium" {
-		t.Fatalf("expected reasoning effort to default to 'medium', got %v", responseAPI.Reasoning.Effort)
-	}
-
-	if chatRequest.ReasoningEffort == nil || *chatRequest.ReasoningEffort != "medium" {
-		t.Fatalf("expected source request reasoning effort to be normalized to 'medium', got %v", chatRequest.ReasoningEffort)
-	}
+	require.NotNil(t, responseAPI.Reasoning, "expected reasoning config to be set for deep research model")
+	require.NotNil(t, responseAPI.Reasoning.Effort, "expected reasoning effort to be set")
+	require.Equal(t, "medium", *responseAPI.Reasoning.Effort, "expected reasoning effort to default to 'medium'")
+	require.NotNil(t, chatRequest.ReasoningEffort, "expected source request reasoning effort to be set")
+	require.Equal(t, "medium", *chatRequest.ReasoningEffort, "expected source request reasoning effort to be normalized to 'medium'")
 }
 
 func boolPtr(b bool) *bool {

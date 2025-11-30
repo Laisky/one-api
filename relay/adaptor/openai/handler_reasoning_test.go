@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
+	"github.com/stretchr/testify/require"
 
 	"github.com/songquanpeng/one-api/relay/model"
 )
@@ -38,9 +39,7 @@ func TestHandlerRemapsReasoningFormatThinking(t *testing.T) {
 	}
 
 	body, err := json.Marshal(respStruct)
-	if err != nil {
-		t.Fatalf("failed to marshal upstream response: %v", err)
-	}
+	require.NoError(t, err, "failed to marshal upstream response")
 
 	upstream := &http.Response{
 		StatusCode: http.StatusOK,
@@ -48,27 +47,16 @@ func TestHandlerRemapsReasoningFormatThinking(t *testing.T) {
 		Header:     http.Header{"Content-Type": []string{"application/json"}},
 	}
 
-	if errResp, _ := Handler(c, upstream, 0, "gpt-4o"); errResp != nil {
-		t.Fatalf("handler returned unexpected error: %v", errResp)
-	}
-
-	if w.Code != http.StatusOK {
-		t.Fatalf("unexpected status code: %d", w.Code)
-	}
+	errResp, _ := Handler(c, upstream, 0, "gpt-4o")
+	require.Nil(t, errResp, "handler returned unexpected error")
+	require.Equal(t, http.StatusOK, w.Code, "unexpected status code")
 
 	var out SlimTextResponse
-	if err := json.Unmarshal(w.Body.Bytes(), &out); err != nil {
-		t.Fatalf("failed to unmarshal handler output: %v", err)
-	}
-	if len(out.Choices) != 1 {
-		t.Fatalf("expected one choice, got %d", len(out.Choices))
-	}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &out), "failed to unmarshal handler output")
+	require.Len(t, out.Choices, 1, "expected one choice")
 
 	msg := out.Choices[0].Message
-	if msg.Thinking == nil || *msg.Thinking != "deep dive" {
-		t.Fatalf("expected thinking to contain reasoning text, got %#v", msg.Thinking)
-	}
-	if msg.ReasoningContent != nil {
-		t.Fatalf("expected reasoning_content cleared, got %#v", msg.ReasoningContent)
-	}
+	require.NotNil(t, msg.Thinking, "expected thinking to be set")
+	require.Equal(t, "deep dive", *msg.Thinking, "expected thinking to contain reasoning text")
+	require.Nil(t, msg.ReasoningContent, "expected reasoning_content cleared")
 }

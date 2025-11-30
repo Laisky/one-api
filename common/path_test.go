@@ -1,6 +1,10 @@
 package common
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/stretchr/testify/require"
+)
 
 func TestExpandLogDirPath(t *testing.T) {
 	t.Setenv("APP_ROOT", "/srv/app")
@@ -30,9 +34,7 @@ func TestExpandLogDirPath(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			got := expandLogDirPath(tc.input)
-			if got != tc.expected {
-				t.Fatalf("expandLogDirPath(%q) = %q, want %q", tc.input, got, tc.expected)
-			}
+			require.Equal(t, tc.expected, got, "expandLogDirPath(%q)", tc.input)
 		})
 	}
 }

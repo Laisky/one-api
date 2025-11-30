@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/songquanpeng/one-api/common/config"
 )
 
@@ -15,12 +17,9 @@ func TestTokenMarshalJSON_DefaultPrefix(t *testing.T) {
 
 	tok := Token{Id: 1, UserId: 2, Key: "abcdef"}
 	b, err := json.Marshal(tok)
-	if err != nil {
-		t.Fatalf("marshal error: %v", err)
-	}
-	if got := string(b); !containsJSONPair(got, `"key":"sk-abcdef"`) {
-		t.Fatalf("expected key with sk- prefix, got: %s", got)
-	}
+	require.NoError(t, err, "marshal error")
+	got := string(b)
+	require.True(t, containsJSONPair(got, `"key":"sk-abcdef"`), "expected key with sk- prefix, got: %s", got)
 }
 
 func TestTokenMarshalJSON_CustomPrefix(t *testing.T) {
@@ -30,12 +29,9 @@ func TestTokenMarshalJSON_CustomPrefix(t *testing.T) {
 
 	tok := Token{Id: 1, UserId: 2, Key: "abcdef"}
 	b, err := json.Marshal(tok)
-	if err != nil {
-		t.Fatalf("marshal error: %v", err)
-	}
-	if got := string(b); !containsJSONPair(got, `"key":"custom-abcdef"`) {
-		t.Fatalf("expected key with custom- prefix, got: %s", got)
-	}
+	require.NoError(t, err, "marshal error")
+	got := string(b)
+	require.True(t, containsJSONPair(got, `"key":"custom-abcdef"`), "expected key with custom- prefix, got: %s", got)
 }
 
 func TestTokenMarshalJSON_StripsLegacyPrefix(t *testing.T) {
@@ -45,12 +41,9 @@ func TestTokenMarshalJSON_StripsLegacyPrefix(t *testing.T) {
 
 	tok := Token{Id: 1, UserId: 2, Key: "sk-abcdef"}
 	b, err := json.Marshal(tok)
-	if err != nil {
-		t.Fatalf("marshal error: %v", err)
-	}
-	if got := string(b); !containsJSONPair(got, `"key":"sk-abcdef"`) {
-		t.Fatalf("expected single sk- prefix, got: %s", got)
-	}
+	require.NoError(t, err, "marshal error")
+	got := string(b)
+	require.True(t, containsJSONPair(got, `"key":"sk-abcdef"`), "expected single sk- prefix, got: %s", got)
 }
 
 // containsJSONPair is a tiny helper to avoid pulling extra deps

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/stretchr/testify/require"
 
 	"github.com/songquanpeng/one-api/common/config"
 	"github.com/songquanpeng/one-api/common/ctxkey"
@@ -40,22 +41,12 @@ func TestConvertRequest_DefaultMaxTokensWithThinking(t *testing.T) {
 	}
 
 	claudeRequest, err := ConvertRequest(c, textRequest)
-	if err != nil {
-		t.Fatalf("Expected no error, got %v", err)
-	}
-
-	if claudeRequest.MaxTokens != config.DefaultMaxToken {
-		t.Fatalf("Expected max tokens %d, got %d", config.DefaultMaxToken, claudeRequest.MaxTokens)
-	}
-
-	if claudeRequest.Thinking == nil {
-		t.Fatal("Expected thinking to be enabled when query parameter is present")
-	}
+	require.NoError(t, err, "Expected no error")
+	require.Equal(t, config.DefaultMaxToken, claudeRequest.MaxTokens, "Expected max tokens to match")
+	require.NotNil(t, claudeRequest.Thinking, "Expected thinking to be enabled when query parameter is present")
 
 	expectedBudget := int(math.Min(1024, float64(config.DefaultMaxToken/2)))
-	if claudeRequest.Thinking.BudgetTokens != expectedBudget {
-		t.Fatalf("Expected budget tokens %d, got %d", expectedBudget, claudeRequest.Thinking.BudgetTokens)
-	}
+	require.Equal(t, expectedBudget, claudeRequest.Thinking.BudgetTokens, "Expected budget tokens to match")
 }
 
 func TestStreamResponseClaude2OpenAI_ThinkingDelta(t *testing.T) {
@@ -75,27 +66,13 @@ func TestStreamResponseClaude2OpenAI_ThinkingDelta(t *testing.T) {
 
 	openaiResponse, response := StreamResponseClaude2OpenAI(c, claudeResponse)
 
-	if openaiResponse == nil {
-		t.Fatal("Expected OpenAI response, got nil")
-	}
-
-	if response != nil {
-		t.Fatal("Expected nil response for thinking_delta")
-	}
-
-	// Check that reasoning content is set
-	if len(openaiResponse.Choices) == 0 {
-		t.Fatal("Expected at least one choice")
-	}
+	require.NotNil(t, openaiResponse, "Expected OpenAI response")
+	require.Nil(t, response, "Expected nil response for thinking_delta")
+	require.NotEmpty(t, openaiResponse.Choices, "Expected at least one choice")
 
 	choice := openaiResponse.Choices[0]
-	if choice.Delta.ReasoningContent == nil {
-		t.Fatal("Expected reasoning content to be set")
-	}
-
-	if *choice.Delta.ReasoningContent != thinkingText {
-		t.Fatalf("Expected reasoning content %s, got %s", thinkingText, *choice.Delta.ReasoningContent)
-	}
+	require.NotNil(t, choice.Delta.ReasoningContent, "Expected reasoning content to be set")
+	require.Equal(t, thinkingText, *choice.Delta.ReasoningContent, "Expected reasoning content to match")
 }
 
 func TestStreamResponseClaude2OpenAI_SignatureDelta(t *testing.T) {
@@ -115,24 +92,13 @@ func TestStreamResponseClaude2OpenAI_SignatureDelta(t *testing.T) {
 
 	openaiResponse, response := StreamResponseClaude2OpenAI(c, claudeResponse)
 
-	if openaiResponse == nil {
-		t.Fatal("Expected OpenAI response, got nil")
-	}
-
-	if response != nil {
-		t.Fatal("Expected nil response for signature_delta")
-	}
-
-	// Signature should be cached but not exposed to client
-	if len(openaiResponse.Choices) == 0 {
-		t.Fatal("Expected at least one choice")
-	}
+	require.NotNil(t, openaiResponse, "Expected OpenAI response")
+	require.Nil(t, response, "Expected nil response for signature_delta")
+	require.NotEmpty(t, openaiResponse.Choices, "Expected at least one choice")
 
 	choice := openaiResponse.Choices[0]
 	// Signature should not be exposed in the OpenAI response
-	if choice.Delta.Signature != nil {
-		t.Fatal("Signature should not be exposed to OpenAI client")
-	}
+	require.Nil(t, choice.Delta.Signature, "Signature should not be exposed to OpenAI client")
 }
 
 func TestStreamResponseClaude2OpenAI_ContentBlockWithSignature(t *testing.T) {
@@ -155,28 +121,14 @@ func TestStreamResponseClaude2OpenAI_ContentBlockWithSignature(t *testing.T) {
 
 	openaiResponse, response := StreamResponseClaude2OpenAI(c, claudeResponse)
 
-	if openaiResponse == nil {
-		t.Fatal("Expected OpenAI response, got nil")
-	}
-
-	if response != nil {
-		t.Fatal("Expected nil response for content_block_start")
-	}
-
-	// Check reasoning content
-	if len(openaiResponse.Choices) == 0 {
-		t.Fatal("Expected at least one choice")
-	}
+	require.NotNil(t, openaiResponse, "Expected OpenAI response")
+	require.Nil(t, response, "Expected nil response for content_block_start")
+	require.NotEmpty(t, openaiResponse.Choices, "Expected at least one choice")
 
 	choice := openaiResponse.Choices[0]
-	if choice.Delta.ReasoningContent == nil || *choice.Delta.ReasoningContent != thinkingText {
-		t.Fatal("Expected reasoning content to match thinking text")
-	}
-
-	// Signature should not be exposed
-	if choice.Delta.Signature != nil {
-		t.Fatal("Signature should not be exposed to OpenAI client")
-	}
+	require.NotNil(t, choice.Delta.ReasoningContent, "Expected reasoning content to be set")
+	require.Equal(t, thinkingText, *choice.Delta.ReasoningContent, "Expected reasoning content to match thinking text")
+	require.Nil(t, choice.Delta.Signature, "Signature should not be exposed to OpenAI client")
 }
 
 func TestResponseClaude2OpenAI_ThinkingWithSignature(t *testing.T) {
@@ -206,29 +158,14 @@ func TestResponseClaude2OpenAI_ThinkingWithSignature(t *testing.T) {
 
 	openaiResponse := ResponseClaude2OpenAI(c, claudeResponse)
 
-	if openaiResponse == nil {
-		t.Fatal("Expected OpenAI response, got nil")
-	}
-
-	// Check that response text is correct
-	if len(openaiResponse.Choices) == 0 {
-		t.Fatal("Expected at least one choice")
-	}
+	require.NotNil(t, openaiResponse, "Expected OpenAI response")
+	require.NotEmpty(t, openaiResponse.Choices, "Expected at least one choice")
 
 	choice := openaiResponse.Choices[0]
-	if choice.Message.StringContent() != responseText {
-		t.Fatalf("Expected response text %s, got %s", responseText, choice.Message.StringContent())
-	}
-
-	// Check that reasoning content is set
-	if choice.Message.ReasoningContent == nil || *choice.Message.ReasoningContent != thinkingText {
-		t.Fatal("Expected reasoning content to match thinking text")
-	}
-
-	// Signature should not be exposed
-	if choice.Message.Signature != nil {
-		t.Fatal("Signature should not be exposed to OpenAI client")
-	}
+	require.Equal(t, responseText, choice.Message.StringContent(), "Expected response text to match")
+	require.NotNil(t, choice.Message.ReasoningContent, "Expected reasoning content to be set")
+	require.Equal(t, thinkingText, *choice.Message.ReasoningContent, "Expected reasoning content to match thinking text")
+	require.Nil(t, choice.Message.Signature, "Signature should not be exposed to OpenAI client")
 }
 
 func TestResponseClaude2OpenAI_RedactedThinking(t *testing.T) {
@@ -258,19 +195,12 @@ func TestResponseClaude2OpenAI_RedactedThinking(t *testing.T) {
 
 	openaiResponse := ResponseClaude2OpenAI(c, claudeResponse)
 
-	if openaiResponse == nil {
-		t.Fatal("Expected OpenAI response, got nil")
-	}
-
-	// Check that redacted thinking is handled like regular thinking
-	if len(openaiResponse.Choices) == 0 {
-		t.Fatal("Expected at least one choice")
-	}
+	require.NotNil(t, openaiResponse, "Expected OpenAI response")
+	require.NotEmpty(t, openaiResponse.Choices, "Expected at least one choice")
 
 	choice := openaiResponse.Choices[0]
-	if choice.Message.ReasoningContent == nil || *choice.Message.ReasoningContent != redactedThinkingText {
-		t.Fatal("Expected reasoning content to match redacted thinking text")
-	}
+	require.NotNil(t, choice.Message.ReasoningContent, "Expected reasoning content to be set")
+	require.Equal(t, redactedThinkingText, *choice.Message.ReasoningContent, "Expected reasoning content to match redacted thinking text")
 }
 
 func TestConvertRequest_ThinkingBlockOrdering(t *testing.T) {
@@ -305,35 +235,21 @@ func TestConvertRequest_ThinkingBlockOrdering(t *testing.T) {
 	GetSignatureCache().Store(cacheKey, testSignature)
 
 	claudeRequest, err := ConvertRequest(c, textRequest)
-	if err != nil {
-		t.Fatalf("Failed to convert request: %v", err)
-	}
-
-	// Check that the assistant message has thinking block first
-	if len(claudeRequest.Messages) < 2 {
-		t.Fatal("Expected at least 2 messages")
-	}
+	require.NoError(t, err, "Failed to convert request")
+	require.GreaterOrEqual(t, len(claudeRequest.Messages), 2, "Expected at least 2 messages")
 
 	assistantMessage := claudeRequest.Messages[1]
-	if len(assistantMessage.Content) < 2 {
-		t.Fatal("Expected assistant message to have at least 2 content blocks")
-	}
+	require.GreaterOrEqual(t, len(assistantMessage.Content), 2, "Expected assistant message to have at least 2 content blocks")
 
 	// First content block should be thinking
 	firstContent := assistantMessage.Content[0]
-	if firstContent.Type != "thinking" {
-		t.Fatalf("Expected first content block to be thinking, got %s", firstContent.Type)
-	}
-
-	if firstContent.Thinking == nil || *firstContent.Thinking != reasoningText {
-		t.Fatal("Expected thinking content to match reasoning text")
-	}
+	require.Equal(t, "thinking", firstContent.Type, "Expected first content block to be thinking")
+	require.NotNil(t, firstContent.Thinking, "Expected thinking content")
+	require.Equal(t, reasoningText, *firstContent.Thinking, "Expected thinking content to match reasoning text")
 
 	// Second content block should be text
 	secondContent := assistantMessage.Content[1]
-	if secondContent.Type != "text" {
-		t.Fatalf("Expected second content block to be text, got %s", secondContent.Type)
-	}
+	require.Equal(t, "text", secondContent.Type, "Expected second content block to be text")
 }
 
 func TestBackwardCompatibility_WithoutThinking(t *testing.T) {
@@ -361,24 +277,13 @@ func TestBackwardCompatibility_WithoutThinking(t *testing.T) {
 	}
 
 	claudeRequest, err := ConvertRequest(c, textRequest)
-	if err != nil {
-		t.Fatalf("Failed to convert request: %v", err)
-	}
-
-	// Should work normally without thinking blocks
-	if len(claudeRequest.Messages) != 2 {
-		t.Fatalf("Expected 2 messages, got %d", len(claudeRequest.Messages))
-	}
+	require.NoError(t, err, "Failed to convert request")
+	require.Len(t, claudeRequest.Messages, 2, "Expected 2 messages")
 
 	// Assistant message should have only text content
 	assistantMessage := claudeRequest.Messages[1]
-	if len(assistantMessage.Content) != 1 {
-		t.Fatalf("Expected 1 content block, got %d", len(assistantMessage.Content))
-	}
-
-	if assistantMessage.Content[0].Type != "text" {
-		t.Fatalf("Expected text content, got %s", assistantMessage.Content[0].Type)
-	}
+	require.Len(t, assistantMessage.Content, 1, "Expected 1 content block")
+	require.Equal(t, "text", assistantMessage.Content[0].Type, "Expected text content")
 }
 
 func TestBackwardCompatibility_StreamingWithoutThinking(t *testing.T) {
@@ -394,28 +299,13 @@ func TestBackwardCompatibility_StreamingWithoutThinking(t *testing.T) {
 
 	openaiResponse, response := StreamResponseClaude2OpenAI(c, claudeResponse)
 
-	if openaiResponse == nil {
-		t.Fatal("Expected OpenAI response, got nil")
-	}
-
-	if response != nil {
-		t.Fatal("Expected nil response for content_block_delta")
-	}
-
-	// Should work normally
-	if len(openaiResponse.Choices) == 0 {
-		t.Fatal("Expected at least one choice")
-	}
+	require.NotNil(t, openaiResponse, "Expected OpenAI response")
+	require.Nil(t, response, "Expected nil response for content_block_delta")
+	require.NotEmpty(t, openaiResponse.Choices, "Expected at least one choice")
 
 	choice := openaiResponse.Choices[0]
-	if choice.Delta.Content != "Hello world" {
-		t.Fatalf("Expected content 'Hello world', got %s", choice.Delta.Content)
-	}
-
-	// Should not have reasoning content
-	if choice.Delta.ReasoningContent != nil {
-		t.Fatalf("Expected no reasoning content for non-thinking response, got: %q", *choice.Delta.ReasoningContent)
-	}
+	require.Equal(t, "Hello world", choice.Delta.Content, "Expected content 'Hello world'")
+	require.Nil(t, choice.Delta.ReasoningContent, "Expected no reasoning content for non-thinking response")
 }
 
 func TestSignatureCachingIntegration(t *testing.T) {
@@ -453,9 +343,7 @@ func TestSignatureCachingIntegration(t *testing.T) {
 
 	// Process the response (this should cache the signature)
 	openaiResponse := ResponseClaude2OpenAI(c, claudeResponse)
-	if openaiResponse == nil {
-		t.Fatal("Expected OpenAI response")
-	}
+	require.NotNil(t, openaiResponse, "Expected OpenAI response")
 
 	// Step 2: Manually cache the signature with the correct message index for the follow-up request
 	// In the follow-up request, the assistant message will be at index 1
@@ -484,33 +372,17 @@ func TestSignatureCachingIntegration(t *testing.T) {
 
 	// Step 4: Convert the request (this should restore the signature)
 	claudeRequest, err := ConvertRequest(c, followUpRequest)
-	if err != nil {
-		t.Fatalf("Failed to convert follow-up request: %v", err)
-	}
-
-	// Step 5: Verify signature is restored in the thinking block
-	if len(claudeRequest.Messages) < 2 {
-		t.Fatal("Expected at least 2 messages in Claude request")
-	}
+	require.NoError(t, err, "Failed to convert follow-up request")
+	require.GreaterOrEqual(t, len(claudeRequest.Messages), 2, "Expected at least 2 messages in Claude request")
 
 	assistantMessage := claudeRequest.Messages[1]
-	if len(assistantMessage.Content) == 0 {
-		t.Fatal("Expected assistant message to have content")
-	}
+	require.NotEmpty(t, assistantMessage.Content, "Expected assistant message to have content")
 
 	// First content should be thinking block with restored signature
 	thinkingBlock := assistantMessage.Content[0]
-	if thinkingBlock.Type != "thinking" {
-		t.Fatalf("Expected thinking block, got %s", thinkingBlock.Type)
-	}
-
-	if thinkingBlock.Signature == nil {
-		t.Fatal("Expected signature to be restored in thinking block")
-	}
-
-	if *thinkingBlock.Signature != signatureText {
-		t.Fatalf("Expected restored signature %s, got %s", signatureText, *thinkingBlock.Signature)
-	}
+	require.Equal(t, "thinking", thinkingBlock.Type, "Expected thinking block")
+	require.NotNil(t, thinkingBlock.Signature, "Expected signature to be restored in thinking block")
+	require.Equal(t, signatureText, *thinkingBlock.Signature, "Expected restored signature to match")
 }
 
 func TestMultipleThinkingBlocks(t *testing.T) {
@@ -545,20 +417,14 @@ func TestMultipleThinkingBlocks(t *testing.T) {
 	}
 
 	openaiResponse := ResponseClaude2OpenAI(c, claudeResponse)
-	if openaiResponse == nil {
-		t.Fatal("Expected OpenAI response")
-	}
+	require.NotNil(t, openaiResponse, "Expected OpenAI response")
 
 	// Should combine thinking content
 	choice := openaiResponse.Choices[0]
-	if choice.Message.ReasoningContent == nil {
-		t.Fatal("Expected reasoning content")
-	}
+	require.NotNil(t, choice.Message.ReasoningContent, "Expected reasoning content")
 
 	expectedReasoning := thinking1 + thinking2
-	if *choice.Message.ReasoningContent != expectedReasoning {
-		t.Fatalf("Expected combined reasoning %s, got %s", expectedReasoning, *choice.Message.ReasoningContent)
-	}
+	require.Equal(t, expectedReasoning, *choice.Message.ReasoningContent, "Expected combined reasoning")
 }
 
 func TestCacheExpiration(t *testing.T) {
@@ -592,16 +458,14 @@ func TestCacheExpiration(t *testing.T) {
 	}
 
 	claudeRequest, err := ConvertRequest(c, followUpRequest)
-	if err != nil {
-		t.Fatalf("Failed to convert request: %v", err)
-	}
+	require.NoError(t, err, "Failed to convert request")
 
 	// Signature should not be restored due to expiration
 	assistantMessage := claudeRequest.Messages[1]
 	if len(assistantMessage.Content) > 0 {
 		thinkingBlock := assistantMessage.Content[0]
-		if thinkingBlock.Type == "thinking" && thinkingBlock.Signature != nil {
-			t.Fatal("Expired signature should not be restored")
+		if thinkingBlock.Type == "thinking" {
+			require.Nil(t, thinkingBlock.Signature, "Expired signature should not be restored")
 		}
 	}
 }
@@ -628,35 +492,19 @@ func TestSignatureFallbackMechanism(t *testing.T) {
 	}
 
 	claudeRequest, err := ConvertRequest(c, textRequest)
-	if err != nil {
-		t.Fatalf("Failed to convert request: %v", err)
-	}
-
-	// Check that the assistant message uses fallback format
-	if len(claudeRequest.Messages) < 2 {
-		t.Fatal("Expected at least 2 messages")
-	}
+	require.NoError(t, err, "Failed to convert request")
+	require.GreaterOrEqual(t, len(claudeRequest.Messages), 2, "Expected at least 2 messages")
 
 	assistantMessage := claudeRequest.Messages[1]
-	if len(assistantMessage.Content) == 0 {
-		t.Fatal("Expected assistant message to have content")
-	}
+	require.NotEmpty(t, assistantMessage.Content, "Expected assistant message to have content")
 
 	// Should have text content with <think> prefix, not a thinking block
 	textContent := assistantMessage.Content[0]
-	if textContent.Type != "text" {
-		t.Fatalf("Expected text content, got %s", textContent.Type)
-	}
+	require.Equal(t, "text", textContent.Type, "Expected text content")
 
 	expectedPrefix := fmt.Sprintf("<think>%s</think>\n\n", reasoningText)
-	if !strings.HasPrefix(textContent.Text, expectedPrefix) {
-		t.Fatalf("Expected text to start with %s, got %s", expectedPrefix, textContent.Text)
-	}
-
-	// Should contain the original response text after the thinking
-	if !strings.Contains(textContent.Text, "The answer is 42.") {
-		t.Fatal("Expected original response text to be preserved")
-	}
+	require.True(t, strings.HasPrefix(textContent.Text, expectedPrefix), "Expected text to start with thinking prefix")
+	require.Contains(t, textContent.Text, "The answer is 42.", "Expected original response text to be preserved")
 }
 
 func TestSignatureFallbackWithCachedSignature(t *testing.T) {
@@ -691,39 +539,22 @@ func TestSignatureFallbackWithCachedSignature(t *testing.T) {
 	}
 
 	claudeRequest, err := ConvertRequest(c, textRequest)
-	if err != nil {
-		t.Fatalf("Failed to convert request: %v", err)
-	}
+	require.NoError(t, err, "Failed to convert request")
 
 	// Check that the assistant message uses proper thinking block
 	assistantMessage := claudeRequest.Messages[1]
-	if len(assistantMessage.Content) < 2 {
-		t.Fatal("Expected at least 2 content blocks")
-	}
+	require.GreaterOrEqual(t, len(assistantMessage.Content), 2, "Expected at least 2 content blocks")
 
 	// First content should be thinking block with signature
 	thinkingBlock := assistantMessage.Content[0]
-	if thinkingBlock.Type != "thinking" {
-		t.Fatalf("Expected thinking block, got %s", thinkingBlock.Type)
-	}
-
-	if thinkingBlock.Signature == nil {
-		t.Fatal("Expected signature to be restored")
-	}
-
-	if *thinkingBlock.Signature != testSignature {
-		t.Fatalf("Expected signature %s, got %s", testSignature, *thinkingBlock.Signature)
-	}
+	require.Equal(t, "thinking", thinkingBlock.Type, "Expected thinking block")
+	require.NotNil(t, thinkingBlock.Signature, "Expected signature to be restored")
+	require.Equal(t, testSignature, *thinkingBlock.Signature, "Expected signature to match")
 
 	// Second content should be text without <think> prefix
 	textContent := assistantMessage.Content[1]
-	if textContent.Type != "text" {
-		t.Fatalf("Expected text content, got %s", textContent.Type)
-	}
-
-	if strings.Contains(textContent.Text, "<think>") {
-		t.Fatal("Text content should not contain <think> tags when signature is cached")
-	}
+	require.Equal(t, "text", textContent.Type, "Expected text content")
+	require.NotContains(t, textContent.Text, "<think>", "Text content should not contain <think> tags when signature is cached")
 }
 
 func TestSignatureFallbackEmptyTextContent(t *testing.T) {
@@ -748,25 +579,17 @@ func TestSignatureFallbackEmptyTextContent(t *testing.T) {
 	}
 
 	claudeRequest, err := ConvertRequest(c, textRequest)
-	if err != nil {
-		t.Fatalf("Failed to convert request: %v", err)
-	}
+	require.NoError(t, err, "Failed to convert request")
 
 	// Should create text content with thinking prefix
 	assistantMessage := claudeRequest.Messages[1]
-	if len(assistantMessage.Content) == 0 {
-		t.Fatal("Expected assistant message to have content")
-	}
+	require.NotEmpty(t, assistantMessage.Content, "Expected assistant message to have content")
 
 	textContent := assistantMessage.Content[0]
-	if textContent.Type != "text" {
-		t.Fatalf("Expected text content, got %s", textContent.Type)
-	}
+	require.Equal(t, "text", textContent.Type, "Expected text content")
 
 	expectedText := fmt.Sprintf("<think>%s</think>\n\n", reasoningText)
-	if textContent.Text != expectedText {
-		t.Fatalf("Expected text %s, got %s", expectedText, textContent.Text)
-	}
+	require.Equal(t, expectedText, textContent.Text, "Expected text to match thinking prefix")
 }
 
 func TestSignatureFallbackMultipleTextBlocks(t *testing.T) {
@@ -799,35 +622,22 @@ func TestSignatureFallbackMultipleTextBlocks(t *testing.T) {
 	}
 
 	claudeRequest, err := ConvertRequest(c, textRequest)
-	if err != nil {
-		t.Fatalf("Failed to convert request: %v", err)
-	}
+	require.NoError(t, err, "Failed to convert request")
 
 	// Check that thinking is prepended to first text block
 	assistantMsg := claudeRequest.Messages[1]
-	if len(assistantMsg.Content) < 2 {
-		t.Fatal("Expected at least 2 content blocks")
-	}
+	require.GreaterOrEqual(t, len(assistantMsg.Content), 2, "Expected at least 2 content blocks")
 
 	firstTextBlock := assistantMsg.Content[0]
-	if firstTextBlock.Type != "text" {
-		t.Fatalf("Expected first block to be text, got %s", firstTextBlock.Type)
-	}
+	require.Equal(t, "text", firstTextBlock.Type, "Expected first block to be text")
 
 	expectedPrefix := fmt.Sprintf("<think>%s</think>\n\n", reasoningText)
-	if !strings.HasPrefix(firstTextBlock.Text, expectedPrefix) {
-		t.Fatalf("Expected first text block to start with thinking prefix")
-	}
-
-	if !strings.Contains(firstTextBlock.Text, "First text block") {
-		t.Fatal("Expected original first text block content to be preserved")
-	}
+	require.True(t, strings.HasPrefix(firstTextBlock.Text, expectedPrefix), "Expected first text block to start with thinking prefix")
+	require.Contains(t, firstTextBlock.Text, "First text block", "Expected original first text block content to be preserved")
 
 	// Second text block should be unchanged
 	secondTextBlock := assistantMsg.Content[1]
-	if secondTextBlock.Text != "Second text block" {
-		t.Fatalf("Expected second text block to be unchanged, got %s", secondTextBlock.Text)
-	}
+	require.Equal(t, "Second text block", secondTextBlock.Text, "Expected second text block to be unchanged")
 }
 
 func TestBackwardCompatibilityWithFallback(t *testing.T) {
@@ -852,28 +662,14 @@ func TestBackwardCompatibilityWithFallback(t *testing.T) {
 	}
 
 	claudeRequest, err := ConvertRequest(c, normalRequest)
-	if err != nil {
-		t.Fatalf("Failed to convert normal request: %v", err)
-	}
+	require.NoError(t, err, "Failed to convert normal request")
 
 	// Should work exactly as before
 	assistantMessage := claudeRequest.Messages[1]
-	if len(assistantMessage.Content) != 1 {
-		t.Fatalf("Expected 1 content block, got %d", len(assistantMessage.Content))
-	}
-
-	if assistantMessage.Content[0].Type != "text" {
-		t.Fatalf("Expected text content, got %s", assistantMessage.Content[0].Type)
-	}
-
-	if assistantMessage.Content[0].Text != "Hi there!" {
-		t.Fatalf("Expected 'Hi there!', got %s", assistantMessage.Content[0].Text)
-	}
-
-	// Should not contain any <think> tags
-	if strings.Contains(assistantMessage.Content[0].Text, "<think>") {
-		t.Fatal("Normal messages should not contain <think> tags")
-	}
+	require.Len(t, assistantMessage.Content, 1, "Expected 1 content block")
+	require.Equal(t, "text", assistantMessage.Content[0].Type, "Expected text content")
+	require.Equal(t, "Hi there!", assistantMessage.Content[0].Text, "Expected 'Hi there!'")
+	require.NotContains(t, assistantMessage.Content[0].Text, "<think>", "Normal messages should not contain <think> tags")
 }
 
 func TestSignatureFallbackDisablesThinking(t *testing.T) {
@@ -902,35 +698,23 @@ func TestSignatureFallbackDisablesThinking(t *testing.T) {
 	}
 
 	claudeRequest, err := ConvertRequest(c, textRequest)
-	if err != nil {
-		t.Fatalf("Failed to convert request: %v", err)
-	}
+	require.NoError(t, err, "Failed to convert request")
 
 	// Check that thinking parameter is disabled due to fallback mode
-	if claudeRequest.Thinking != nil {
-		t.Fatal("Expected thinking parameter to be disabled when using fallback mode")
-	}
+	require.Nil(t, claudeRequest.Thinking, "Expected thinking parameter to be disabled when using fallback mode")
 
 	// Check that the assistant message uses fallback format
-	if len(claudeRequest.Messages) < 2 {
-		t.Fatal("Expected at least 2 messages")
-	}
+	require.GreaterOrEqual(t, len(claudeRequest.Messages), 2, "Expected at least 2 messages")
 
 	assistantMessage := claudeRequest.Messages[1]
-	if len(assistantMessage.Content) == 0 {
-		t.Fatal("Expected assistant message to have content")
-	}
+	require.NotEmpty(t, assistantMessage.Content, "Expected assistant message to have content")
 
 	// Should have text content with <think> prefix, not a thinking block
 	textContent := assistantMessage.Content[0]
-	if textContent.Type != "text" {
-		t.Fatalf("Expected text content, got %s", textContent.Type)
-	}
+	require.Equal(t, "text", textContent.Type, "Expected text content")
 
 	expectedPrefix := fmt.Sprintf("<think>%s</think>\n\n", reasoningText)
-	if !strings.HasPrefix(textContent.Text, expectedPrefix) {
-		t.Fatalf("Expected text to start with %s, got %s", expectedPrefix, textContent.Text)
-	}
+	require.True(t, strings.HasPrefix(textContent.Text, expectedPrefix), "Expected text to start with thinking prefix")
 }
 
 func TestSignatureFallbackKeepsThinkingWhenSignatureRestored(t *testing.T) {
@@ -969,40 +753,20 @@ func TestSignatureFallbackKeepsThinkingWhenSignatureRestored(t *testing.T) {
 	}
 
 	claudeRequest, err := ConvertRequest(c, textRequest)
-	if err != nil {
-		t.Fatalf("Failed to convert request: %v", err)
-	}
+	require.NoError(t, err, "Failed to convert request")
 
 	// Check that thinking parameter is preserved when signature is restored
-	if claudeRequest.Thinking == nil {
-		t.Fatal("Expected thinking parameter to be preserved when signature is restored")
-	}
-
-	if claudeRequest.Thinking.Type != "enabled" {
-		t.Fatalf("Expected thinking type 'enabled', got %s", claudeRequest.Thinking.Type)
-	}
-
-	if claudeRequest.Thinking.BudgetTokens != 512 {
-		t.Fatalf("Expected thinking budget tokens 512, got %d", claudeRequest.Thinking.BudgetTokens)
-	}
+	require.NotNil(t, claudeRequest.Thinking, "Expected thinking parameter to be preserved when signature is restored")
+	require.Equal(t, "enabled", claudeRequest.Thinking.Type, "Expected thinking type 'enabled'")
+	require.Equal(t, 512, claudeRequest.Thinking.BudgetTokens, "Expected thinking budget tokens 512")
 
 	// Check that the assistant message uses proper thinking block
 	assistantMessage := claudeRequest.Messages[1]
-	if len(assistantMessage.Content) < 2 {
-		t.Fatal("Expected at least 2 content blocks")
-	}
+	require.GreaterOrEqual(t, len(assistantMessage.Content), 2, "Expected at least 2 content blocks")
 
 	// First content should be thinking block with signature
 	thinkingBlock := assistantMessage.Content[0]
-	if thinkingBlock.Type != "thinking" {
-		t.Fatalf("Expected thinking block, got %s", thinkingBlock.Type)
-	}
-
-	if thinkingBlock.Signature == nil {
-		t.Fatal("Expected signature to be restored")
-	}
-
-	if *thinkingBlock.Signature != testSignature {
-		t.Fatalf("Expected signature %s, got %s", testSignature, *thinkingBlock.Signature)
-	}
+	require.Equal(t, "thinking", thinkingBlock.Type, "Expected thinking block")
+	require.NotNil(t, thinkingBlock.Signature, "Expected signature to be restored")
+	require.Equal(t, testSignature, *thinkingBlock.Signature, "Expected signature to match")
 }

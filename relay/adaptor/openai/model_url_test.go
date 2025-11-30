@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
+	"github.com/stretchr/testify/require"
 
 	"github.com/songquanpeng/one-api/relay/channeltype"
 	"github.com/songquanpeng/one-api/relay/meta"
@@ -66,14 +67,10 @@ func TestGetRequestURLWithModelSupport(t *testing.T) {
 
 			// Get the request URL
 			requestURL, err := adaptor.GetRequestURL(relayMeta)
-			if err != nil {
-				t.Fatalf("GetRequestURL failed: %v", err)
-			}
+			require.NoError(t, err, "GetRequestURL failed")
 
 			// Verify the URL matches expectation
-			if requestURL != tc.expectedURL {
-				t.Errorf("Expected URL %s, got %s", tc.expectedURL, requestURL)
-			}
+			require.Equal(t, tc.expectedURL, requestURL)
 
 			onlyChatCompletion := IsModelsOnlySupportedByChatCompletionAPI(tc.modelName)
 			t.Logf("✓ %s: URL=%s, OnlyChatCompletion=%v", tc.name, requestURL, onlyChatCompletion)
@@ -113,9 +110,7 @@ func TestModelSupportConsistencyBetweenURLAndConversion(t *testing.T) {
 
 			// Get URL decision
 			requestURL, err := adaptor.GetRequestURL(relayMeta)
-			if err != nil {
-				t.Fatalf("GetRequestURL failed: %v", err)
-			}
+			require.NoError(t, err, "GetRequestURL failed")
 
 			// Get conversion decision
 			onlyChatCompletion := IsModelsOnlySupportedByChatCompletionAPI(modelName)
@@ -126,9 +121,7 @@ func TestModelSupportConsistencyBetweenURLAndConversion(t *testing.T) {
 			}
 
 			// Check consistency
-			if requestURL != expectedURL {
-				t.Errorf("Expected endpoint %s, got %s", expectedURL, requestURL)
-			}
+			require.Equal(t, expectedURL, requestURL)
 
 			t.Logf("✓ Model %s: OnlyChat=%v, URL=%s", modelName, onlyChatCompletion, requestURL)
 		})
@@ -189,22 +182,17 @@ func TestGetRequestURLWithClaudeMessages(t *testing.T) {
 
 			// Get request URL
 			requestURL, err := adaptor.GetRequestURL(relayMeta)
-			if err != nil {
-				t.Fatalf("GetRequestURL failed: %v", err)
-			}
+			require.NoError(t, err, "GetRequestURL failed")
 
 			// Verify the URL matches expectation
-			if requestURL != tc.expectedURL {
-				t.Errorf("Expected URL %s, got %s", tc.expectedURL, requestURL)
-			}
+			require.Equal(t, tc.expectedURL, requestURL)
 
 			// Verify model support detection
 			onlyChatCompletion := IsModelsOnlySupportedByChatCompletionAPI(tc.modelName)
-			if tc.shouldConvert && onlyChatCompletion {
-				t.Errorf("Model %s should support Response API but IsModelsOnlySupportedByChatCompletionAPI returned true", tc.modelName)
-			}
-			if !tc.shouldConvert && !onlyChatCompletion {
-				t.Errorf("Model %s should only support ChatCompletion API but IsModelsOnlySupportedByChatCompletionAPI returned false", tc.modelName)
+			if tc.shouldConvert {
+				require.False(t, onlyChatCompletion, "Model %s should support Response API but IsModelsOnlySupportedByChatCompletionAPI returned true", tc.modelName)
+			} else {
+				require.True(t, onlyChatCompletion, "Model %s should only support ChatCompletion API but IsModelsOnlySupportedByChatCompletionAPI returned false", tc.modelName)
 			}
 
 			t.Logf("✓ %s: URL=%s, OnlyChatCompletion=%v", tc.name, requestURL, onlyChatCompletion)

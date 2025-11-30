@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
+	"github.com/stretchr/testify/require"
 )
 
 // TestConvertMultipartImageEditRequest ensures we can parse required fields from multipart form
@@ -21,31 +22,19 @@ func TestConvertMultipartImageEditRequest(t *testing.T) {
 
 	// required file parts
 	imgPart, err := writer.CreateFormFile("image", "img.png")
-	if err != nil {
-		t.Fatalf("create image part: %v", err)
-	}
+	require.NoError(t, err, "create image part")
 	_, _ = imgPart.Write([]byte("PNG"))
 
 	maskPart, err := writer.CreateFormFile("mask", "mask.png")
-	if err != nil {
-		t.Fatalf("create mask part: %v", err)
-	}
+	require.NoError(t, err, "create mask part")
 	_, _ = maskPart.Write([]byte("PNG"))
 
 	// required fields
-	if err := writer.WriteField("prompt", "Edit this image"); err != nil {
-		t.Fatalf("write prompt: %v", err)
-	}
-	if err := writer.WriteField("model", "imagen-3.0"); err != nil {
-		t.Fatalf("write model: %v", err)
-	}
-	if err := writer.WriteField("response_format", "b64_json"); err != nil {
-		t.Fatalf("write response_format: %v", err)
-	}
+	require.NoError(t, writer.WriteField("prompt", "Edit this image"), "write prompt")
+	require.NoError(t, writer.WriteField("model", "imagen-3.0"), "write model")
+	require.NoError(t, writer.WriteField("response_format", "b64_json"), "write response_format")
 
-	if err := writer.Close(); err != nil {
-		t.Fatalf("close writer: %v", err)
-	}
+	require.NoError(t, writer.Close(), "close writer")
 
 	c, _ := gin.CreateTestContext(w)
 	req := httptest.NewRequest("POST", "/v1/images/edits", bytes.NewReader(body.Bytes()))
@@ -53,10 +42,7 @@ func TestConvertMultipartImageEditRequest(t *testing.T) {
 	c.Request = req
 
 	converted, err := ConvertMultipartImageEditRequest(c)
-	if err != nil {
-		t.Fatalf("ConvertMultipartImageEditRequest error: %v", err)
-	}
-	if converted == nil || len(converted.Instances) == 0 {
-		t.Fatalf("expected non-nil converted request with instances")
-	}
+	require.NoError(t, err, "ConvertMultipartImageEditRequest error")
+	require.NotNil(t, converted, "expected non-nil converted request")
+	require.NotEmpty(t, converted.Instances, "expected converted request with instances")
 }

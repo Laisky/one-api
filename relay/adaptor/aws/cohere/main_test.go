@@ -10,6 +10,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/bedrockruntime"
 	"github.com/aws/aws-sdk-go-v2/service/bedrockruntime/types"
 	"github.com/gin-gonic/gin"
+	"github.com/stretchr/testify/require"
 )
 
 // Test that convertConverseResponseToCohere maps usage to relaymodel.Usage
@@ -36,19 +37,11 @@ func TestConvertConverseResponseToCohereUsageMapping(t *testing.T) {
 
 	// Marshal to JSON to assert field names
 	b, err := json.Marshal(resp)
-	if err != nil {
-		t.Fatalf("marshal cohere response: %v", err)
-	}
+	require.NoError(t, err, "marshal cohere response")
 
 	// Quick JSON string contains checks for usage keys and values
 	js := string(b)
-	if want := "\"prompt_tokens\":11"; !strings.Contains(js, want) {
-		t.Fatalf("expected %s in json, got %s", want, js)
-	}
-	if want := "\"completion_tokens\":22"; !strings.Contains(js, want) {
-		t.Fatalf("expected %s in json, got %s", want, js)
-	}
-	if want := "\"total_tokens\":33"; !strings.Contains(js, want) {
-		t.Fatalf("expected %s in json, got %s", want, js)
-	}
+	require.True(t, strings.Contains(js, "\"prompt_tokens\":11"), "expected prompt_tokens:11 in json, got %s", js)
+	require.True(t, strings.Contains(js, "\"completion_tokens\":22"), "expected completion_tokens:22 in json, got %s", js)
+	require.True(t, strings.Contains(js, "\"total_tokens\":33"), "expected total_tokens:33 in json, got %s", js)
 }

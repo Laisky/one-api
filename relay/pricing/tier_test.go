@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
+	"github.com/stretchr/testify/require"
 
 	"github.com/songquanpeng/one-api/relay/adaptor"
 	"github.com/songquanpeng/one-api/relay/meta"
@@ -59,15 +60,9 @@ func TestResolveEffectivePricing_BaseNoTiers(t *testing.T) {
 	}}
 
 	eff := ResolveEffectivePricing("m", 10, a)
-	if eff.InputRatio != 1.0 {
-		t.Fatalf("expected input ratio 1.0, got %v", eff.InputRatio)
-	}
-	if eff.OutputRatio != 2.0 {
-		t.Fatalf("expected output ratio 2.0, got %v", eff.OutputRatio)
-	}
-	if eff.AppliedTierThreshold != 0 {
-		t.Fatalf("expected base tier threshold 0, got %v", eff.AppliedTierThreshold)
-	}
+	require.Equal(t, 1.0, eff.InputRatio, "expected input ratio 1.0")
+	require.Equal(t, 2.0, eff.OutputRatio, "expected output ratio 2.0")
+	require.Equal(t, 0, eff.AppliedTierThreshold, "expected base tier threshold 0")
 }
 
 func TestResolveEffectivePricing_TierSelection(t *testing.T) {
@@ -85,29 +80,15 @@ func TestResolveEffectivePricing_TierSelection(t *testing.T) {
 
 	// Select first tier (>=1000)
 	eff := ResolveEffectivePricing("m", 1500, a)
-	if eff.InputRatio != 0.5 || eff.OutputRatio != 1.5 {
-		t.Fatalf("unexpected pricing: in=%v out=%v", eff.InputRatio, eff.OutputRatio)
-	}
-	if eff.AppliedTierThreshold != 1000 {
-		t.Fatalf("expected threshold 1000, got %v", eff.AppliedTierThreshold)
-	}
+	require.Equal(t, 0.5, eff.InputRatio, "unexpected input ratio")
+	require.Equal(t, 1.5, eff.OutputRatio, "unexpected output ratio")
+	require.Equal(t, 1000, eff.AppliedTierThreshold, "expected threshold 1000")
 
 	// Select second tier (>=5000)
 	eff = ResolveEffectivePricing("m", 6000, a)
-	if eff.InputRatio != 0.2 {
-		t.Fatalf("expected input ratio 0.2, got %v", eff.InputRatio)
-	}
+	require.Equal(t, 0.2, eff.InputRatio, "expected input ratio 0.2")
 	// Expect inherited completion ratio 3.0 from first tier since second does not set it
-	if abs(eff.OutputRatio-0.6) > 1e-8 {
-		t.Fatalf("expected output ratio 0.6 (0.2*3.0), got %v", eff.OutputRatio)
-	}
-}
-
-func abs(f float64) float64 {
-	if f < 0 {
-		return -f
-	}
-	return f
+	require.InDelta(t, 0.6, eff.OutputRatio, 1e-8, "expected output ratio 0.6 (0.2*3.0)")
 }
 
 func TestResolveEffectivePricing_CachedNegativeFree(t *testing.T) {
@@ -120,9 +101,7 @@ func TestResolveEffectivePricing_CachedNegativeFree(t *testing.T) {
 	}}
 
 	eff := ResolveEffectivePricing("m", 10, a)
-	if eff.CachedInputRatio >= 0 {
-		t.Fatalf("expected negative cached input (free), got %v", eff.CachedInputRatio)
-	}
+	require.Less(t, eff.CachedInputRatio, 0.0, "expected negative cached input (free)")
 	// No cached output pricing; nothing to assert here
 }
 
@@ -141,15 +120,9 @@ func TestResolveEffectivePricing_TierTransitionCacheIndependence(t *testing.T) {
 	}}
 
 	eff := ResolveEffectivePricing("tm", 6000, a) // tier2
-	if eff.InputRatio != 0.6 {
-		t.Fatalf("expected tier2 input ratio 0.6, got %v", eff.InputRatio)
-	}
-	if abs(eff.OutputRatio-1.2) > 1e-8 { // 0.6 * 2.0
-		t.Fatalf("expected output ratio 1.2, got %v", eff.OutputRatio)
-	}
+	require.Equal(t, 0.6, eff.InputRatio, "expected tier2 input ratio 0.6")
+	require.InDelta(t, 1.2, eff.OutputRatio, 1e-8, "expected output ratio 1.2 (0.6 * 2.0)")
 
 	// Cached input ratio should not affect output ratio
-	if abs(eff.CachedInputRatio-0.5) > 1e-9 {
-		t.Fatalf("expected cached input 0.5, got %v", eff.CachedInputRatio)
-	}
+	require.InDelta(t, 0.5, eff.CachedInputRatio, 1e-9, "expected cached input 0.5")
 }

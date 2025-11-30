@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
+	"github.com/stretchr/testify/require"
 
 	"github.com/songquanpeng/one-api/relay/adaptor"
 	"github.com/songquanpeng/one-api/relay/apitype"
@@ -102,18 +103,11 @@ func TestGlobalPricingManagerInitialization(t *testing.T) {
 	// Test initialization
 	InitializeGlobalPricingManager(mockGetAdaptor)
 
-	if globalPricingManager.getAdaptorFunc == nil {
-		t.Error("Expected adaptor function to be set")
-	}
-
-	if len(globalPricingManager.contributingAdapters) == 0 {
-		t.Error("Expected contributing adapters to be loaded from default configuration")
-	}
+	require.NotNil(t, globalPricingManager.getAdaptorFunc, "Expected adaptor function to be set")
+	require.NotEmpty(t, globalPricingManager.contributingAdapters, "Expected contributing adapters to be loaded from default configuration")
 
 	// Check that it matches the default adapters
-	if len(globalPricingManager.contributingAdapters) != len(DefaultGlobalPricingAdapters) {
-		t.Errorf("Expected %d adapters, got %d", len(DefaultGlobalPricingAdapters), len(globalPricingManager.contributingAdapters))
-	}
+	require.Len(t, globalPricingManager.contributingAdapters, len(DefaultGlobalPricingAdapters))
 }
 
 func TestGlobalPricingMerging(t *testing.T) {
@@ -132,29 +126,18 @@ func TestGlobalPricingMerging(t *testing.T) {
 	pricing := GetGlobalModelPricing()
 
 	// Check OpenAI models
-	if _, exists := pricing["gpt-3.5-turbo"]; !exists {
-		t.Error("Expected gpt-3.5-turbo from OpenAI to be in global pricing")
-	}
+	require.Contains(t, pricing, "gpt-3.5-turbo", "Expected gpt-3.5-turbo from OpenAI to be in global pricing")
 
 	// Check Anthropic models
-	if _, exists := pricing["claude-3-opus"]; !exists {
-		t.Error("Expected claude-3-opus from Anthropic to be in global pricing")
-	}
+	require.Contains(t, pricing, "claude-3-opus", "Expected claude-3-opus from Anthropic to be in global pricing")
 
 	// Check Gemini models
-	if _, exists := pricing["gemini-2.5-flash"]; !exists {
-		t.Error("Expected gemini-2.5-flash from Gemini to be in global pricing")
-	}
+	require.Contains(t, pricing, "gemini-2.5-flash", "Expected gemini-2.5-flash from Gemini to be in global pricing")
 
 	// Test conflict resolution (first adapter wins)
-	if gpt4Price, exists := pricing["gpt-4"]; exists {
-		expectedRatio := 30 * 0.000001 // OpenAI's pricing should win
-		if gpt4Price.Ratio != expectedRatio {
-			t.Errorf("Expected gpt-4 ratio to be %f (OpenAI), got %f", expectedRatio, gpt4Price.Ratio)
-		}
-	} else {
-		t.Error("Expected gpt-4 to be in global pricing")
-	}
+	require.Contains(t, pricing, "gpt-4", "Expected gpt-4 to be in global pricing")
+	expectedRatio := 30 * 0.000001 // OpenAI's pricing should win
+	require.Equal(t, expectedRatio, pricing["gpt-4"].Ratio, "Expected gpt-4 ratio to be OpenAI's pricing")
 }
 
 func TestGetGlobalModelRatio(t *testing.T) {
@@ -167,15 +150,11 @@ func TestGetGlobalModelRatio(t *testing.T) {
 	// Test existing model
 	ratio := GetGlobalModelRatio("gpt-3.5-turbo")
 	expectedRatio := 1.5 * 0.000001
-	if ratio != expectedRatio {
-		t.Errorf("Expected ratio %f, got %f", expectedRatio, ratio)
-	}
+	require.Equal(t, expectedRatio, ratio)
 
 	// Test non-existing model
 	ratio = GetGlobalModelRatio("non-existent-model")
-	if ratio != 0 {
-		t.Errorf("Expected 0 for non-existent model, got %f", ratio)
-	}
+	require.Equal(t, float64(0), ratio, "Expected 0 for non-existent model")
 }
 
 func TestGetGlobalCompletionRatio(t *testing.T) {
@@ -188,15 +167,11 @@ func TestGetGlobalCompletionRatio(t *testing.T) {
 	// Test existing model
 	ratio := GetGlobalCompletionRatio("claude-3-opus")
 	expectedRatio := 5.0
-	if ratio != expectedRatio {
-		t.Errorf("Expected completion ratio %f, got %f", expectedRatio, ratio)
-	}
+	require.Equal(t, expectedRatio, ratio)
 
 	// Test non-existing model
 	ratio = GetGlobalCompletionRatio("non-existent-model")
-	if ratio != 0 {
-		t.Errorf("Expected 0 for non-existent model, got %f", ratio)
-	}
+	require.Equal(t, float64(0), ratio, "Expected 0 for non-existent model")
 }
 
 func TestThreeLayerPricing(t *testing.T) {
@@ -214,31 +189,23 @@ func TestThreeLayerPricing(t *testing.T) {
 
 	ratio := GetModelRatioWithThreeLayers("gpt-4", channelOverrides, openaiAdaptor)
 	expectedRatio := 100 * 0.000001
-	if ratio != expectedRatio {
-		t.Errorf("Expected channel override ratio %f, got %f", expectedRatio, ratio)
-	}
+	require.Equal(t, expectedRatio, ratio, "Expected channel override ratio")
 
 	// Test Layer 2: Adapter pricing (second priority)
 	ratio = GetModelRatioWithThreeLayers("gpt-4", nil, openaiAdaptor)
 	expectedRatio = 30 * 0.000001 // OpenAI's pricing
-	if ratio != expectedRatio {
-		t.Errorf("Expected adapter ratio %f, got %f", expectedRatio, ratio)
-	}
+	require.Equal(t, expectedRatio, ratio, "Expected adapter ratio")
 
 	// Test Layer 3: Global pricing (third priority)
 	// Use a model that exists in global pricing but not in the current adapter
 	ratio = GetModelRatioWithThreeLayers("claude-3-opus", nil, openaiAdaptor)
 	expectedRatio = 15 * 0.000001 // From global pricing (Anthropic)
-	if ratio != expectedRatio {
-		t.Errorf("Expected global pricing ratio %f, got %f", expectedRatio, ratio)
-	}
+	require.Equal(t, expectedRatio, ratio, "Expected global pricing ratio")
 
 	// Test Layer 4: Final fallback
 	ratio = GetModelRatioWithThreeLayers("completely-unknown-model", nil, openaiAdaptor)
 	expectedRatio = 2.5 * 0.000001 // Final fallback
-	if ratio != expectedRatio {
-		t.Errorf("Expected fallback ratio %f, got %f", expectedRatio, ratio)
-	}
+	require.Equal(t, expectedRatio, ratio, "Expected fallback ratio")
 }
 
 func TestSetContributingAdapters(t *testing.T) {
@@ -251,18 +218,13 @@ func TestSetContributingAdapters(t *testing.T) {
 	SetContributingAdapters(newAdapters)
 
 	adapters := GetContributingAdapters()
-	if len(adapters) != 1 || adapters[0] != apitype.OpenAI {
-		t.Errorf("Expected [%d], got %v", apitype.OpenAI, adapters)
-	}
+	require.Len(t, adapters, 1)
+	require.Equal(t, apitype.OpenAI, adapters[0])
 
 	// Verify pricing is reloaded
 	pricing := GetGlobalModelPricing()
-	if _, exists := pricing["gpt-4"]; !exists {
-		t.Error("Expected gpt-4 to be in global pricing after adapter change")
-	}
-	if _, exists := pricing["claude-3-opus"]; exists {
-		t.Error("Expected claude-3-opus to NOT be in global pricing after removing Anthropic adapter")
-	}
+	require.Contains(t, pricing, "gpt-4", "Expected gpt-4 to be in global pricing after adapter change")
+	require.NotContains(t, pricing, "claude-3-opus", "Expected claude-3-opus to NOT be in global pricing after removing Anthropic adapter")
 }
 
 func TestGetGlobalPricingStats(t *testing.T) {
@@ -274,13 +236,8 @@ func TestGetGlobalPricingStats(t *testing.T) {
 
 	modelCount, adapterCount := GetGlobalPricingStats()
 
-	if adapterCount != 2 {
-		t.Errorf("Expected 2 adapters, got %d", adapterCount)
-	}
-
-	if modelCount == 0 {
-		t.Error("Expected some models in global pricing")
-	}
+	require.Equal(t, 2, adapterCount)
+	require.NotZero(t, modelCount, "Expected some models in global pricing")
 }
 
 func TestReloadGlobalPricing(t *testing.T) {
@@ -299,16 +256,12 @@ func TestReloadGlobalPricing(t *testing.T) {
 
 	// Check that more models are now available
 	newModelCount, _ := GetGlobalPricingStats()
-	if newModelCount <= initialModelCount {
-		t.Errorf("Expected more models after reload, initial: %d, new: %d", initialModelCount, newModelCount)
-	}
+	require.Greater(t, newModelCount, initialModelCount, "Expected more models after reload")
 }
 
 func TestDefaultGlobalPricingAdapters(t *testing.T) {
 	// Test that the default adapters slice is properly defined
-	if len(DefaultGlobalPricingAdapters) == 0 {
-		t.Error("DefaultGlobalPricingAdapters should not be empty")
-	}
+	require.NotEmpty(t, DefaultGlobalPricingAdapters, "DefaultGlobalPricingAdapters should not be empty")
 
 	// Test that core adapters with comprehensive pricing models are included
 	coreAdapters := []int{
@@ -328,33 +281,22 @@ func TestDefaultGlobalPricingAdapters(t *testing.T) {
 
 	// Verify that all core adapters are present
 	for _, expected := range coreAdapters {
-		if !adapterMap[expected] {
-			t.Errorf("Expected core adapter %d to be in DefaultGlobalPricingAdapters", expected)
-		}
+		require.True(t, adapterMap[expected], "Expected core adapter %d to be in DefaultGlobalPricingAdapters", expected)
 	}
 
 	// Test that we have a reasonable number of adapters (should be more than core but not excessive)
-	if len(DefaultGlobalPricingAdapters) < len(coreAdapters) {
-		t.Errorf("Expected at least %d adapters, got %d", len(coreAdapters), len(DefaultGlobalPricingAdapters))
-	}
-
-	if len(DefaultGlobalPricingAdapters) > 30 {
-		t.Errorf("Too many default adapters (%d), consider reducing the list", len(DefaultGlobalPricingAdapters))
-	}
+	require.GreaterOrEqual(t, len(DefaultGlobalPricingAdapters), len(coreAdapters))
+	require.LessOrEqual(t, len(DefaultGlobalPricingAdapters), 30, "Too many default adapters, consider reducing the list")
 }
 
 func TestIsGlobalPricingInitialized(t *testing.T) {
 	// Test uninitialized state
 	globalPricingManager = &GlobalPricingManager{}
-	if IsGlobalPricingInitialized() {
-		t.Error("Expected global pricing to be uninitialized")
-	}
+	require.False(t, IsGlobalPricingInitialized(), "Expected global pricing to be uninitialized")
 
 	// Test initialized state
 	InitializeGlobalPricingManager(mockGetAdaptor)
 	// Force initialization by accessing global pricing
 	GetGlobalModelRatio("test-model")
-	if !IsGlobalPricingInitialized() {
-		t.Error("Expected global pricing to be initialized")
-	}
+	require.True(t, IsGlobalPricingInitialized(), "Expected global pricing to be initialized")
 }

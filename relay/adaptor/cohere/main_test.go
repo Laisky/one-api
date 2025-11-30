@@ -160,7 +160,7 @@ func TestConvertRequest_ContentTypeHandling(t *testing.T) {
 			defer func() {
 				if r := recover(); r != nil {
 					if !tt.expectPanic {
-						t.Errorf("ConvertRequest panicked unexpectedly: %v", r)
+						require.Failf(t, "ConvertRequest panicked unexpectedly", "%v", r)
 					}
 				}
 			}()
@@ -169,7 +169,7 @@ func TestConvertRequest_ContentTypeHandling(t *testing.T) {
 			result := ConvertRequest(tt.request)
 
 			if tt.expectPanic {
-				t.Error("Expected panic but none occurred")
+				require.Fail(t, "Expected panic but none occurred")
 				return
 			}
 

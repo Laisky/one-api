@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/songquanpeng/one-api/relay/adaptor/openai"
 	"github.com/songquanpeng/one-api/relay/model"
 )
@@ -34,65 +36,36 @@ func TestConvertChatCompletionToResponseAPIWithMCP(t *testing.T) {
 	responseAPI := openai.ConvertChatCompletionToResponseAPI(chatRequest)
 
 	// Verify the conversion succeeded
-	if responseAPI == nil {
-		t.Fatal("ConvertChatCompletionToResponseAPI returned nil")
-	}
+	require.NotNil(t, responseAPI, "ConvertChatCompletionToResponseAPI returned nil")
 
 	// Verify tools were converted properly
-	if len(responseAPI.Tools) != 1 {
-		t.Fatalf("Expected 1 tool, got %d", len(responseAPI.Tools))
-	}
+	require.Len(t, responseAPI.Tools, 1, "Expected 1 tool")
 
 	tool := responseAPI.Tools[0]
 
 	// Verify MCP-specific fields are preserved
-	if tool.Type != "mcp" {
-		t.Errorf("Expected tool type 'mcp', got '%s'", tool.Type)
-	}
-
-	if tool.ServerLabel != "deepwiki" {
-		t.Errorf("Expected server_label 'deepwiki', got '%s'", tool.ServerLabel)
-	}
-
-	if tool.ServerUrl != "https://mcp.deepwiki.com/mcp" {
-		t.Errorf("Expected server_url 'https://mcp.deepwiki.com/mcp', got '%s'", tool.ServerUrl)
-	}
-
-	if tool.RequireApproval != "never" {
-		t.Errorf("Expected require_approval 'never', got %v", tool.RequireApproval)
-	}
+	require.Equal(t, "mcp", tool.Type, "Expected tool type 'mcp'")
+	require.Equal(t, "deepwiki", tool.ServerLabel, "Expected server_label 'deepwiki'")
+	require.Equal(t, "https://mcp.deepwiki.com/mcp", tool.ServerUrl, "Expected server_url 'https://mcp.deepwiki.com/mcp'")
+	require.Equal(t, "never", tool.RequireApproval, "Expected require_approval 'never'")
 
 	// Verify function-specific fields are empty for MCP tools
-	if tool.Name != "" {
-		t.Errorf("Expected empty name for MCP tool, got '%s'", tool.Name)
-	}
-
-	if tool.Description != "" {
-		t.Errorf("Expected empty description for MCP tool, got '%s'", tool.Description)
-	}
-
-	if tool.Parameters != nil {
-		t.Errorf("Expected nil parameters for MCP tool, got %v", tool.Parameters)
-	}
+	require.Empty(t, tool.Name, "Expected empty name for MCP tool")
+	require.Empty(t, tool.Description, "Expected empty description for MCP tool")
+	require.Nil(t, tool.Parameters, "Expected nil parameters for MCP tool")
 
 	// Verify the tool can be marshaled to JSON (important for the actual API request)
 	jsonData, err := json.Marshal(tool)
-	if err != nil {
-		t.Fatalf("Failed to marshal MCP tool to JSON: %v", err)
-	}
+	require.NoError(t, err, "Failed to marshal MCP tool to JSON")
 
 	// Verify the JSON contains the required server_label field
 	var result map[string]any
 	err = json.Unmarshal(jsonData, &result)
-	if err != nil {
-		t.Fatalf("Failed to unmarshal JSON: %v", err)
-	}
+	require.NoError(t, err, "Failed to unmarshal JSON")
 
-	if serverLabel, exists := result["server_label"]; !exists {
-		t.Error("server_label field is missing from JSON - this would cause the original error")
-	} else if serverLabel != "deepwiki" {
-		t.Errorf("Expected server_label 'deepwiki' in JSON, got %v", serverLabel)
-	}
+	serverLabel, exists := result["server_label"]
+	require.True(t, exists, "server_label field is missing from JSON - this would cause the original error")
+	require.Equal(t, "deepwiki", serverLabel, "Expected server_label 'deepwiki' in JSON")
 
 	t.Logf("Successfully converted MCP tool to Response API format: %s", string(jsonData))
 }
@@ -142,39 +115,21 @@ func TestConvertChatCompletionToResponseAPIWithMCPAndFunction(t *testing.T) {
 
 	responseAPI := openai.ConvertChatCompletionToResponseAPI(chatRequest)
 
-	if len(responseAPI.Tools) != 2 {
-		t.Fatalf("Expected 2 tools, got %d", len(responseAPI.Tools))
-	}
+	require.Len(t, responseAPI.Tools, 2, "Expected 2 tools")
 
 	// Verify function tool
 	functionTool := responseAPI.Tools[0]
-	if functionTool.Type != "function" {
-		t.Errorf("Expected first tool type 'function', got '%s'", functionTool.Type)
-	}
-	if functionTool.Name != "get_weather" {
-		t.Errorf("Expected function name 'get_weather', got '%s'", functionTool.Name)
-	}
-	if functionTool.ServerLabel != "" {
-		t.Error("Function tool should not have server_label")
-	}
+	require.Equal(t, "function", functionTool.Type, "Expected first tool type 'function'")
+	require.Equal(t, "get_weather", functionTool.Name, "Expected function name 'get_weather'")
+	require.Empty(t, functionTool.ServerLabel, "Function tool should not have server_label")
 
 	// Verify MCP tool
 	mcpTool := responseAPI.Tools[1]
-	if mcpTool.Type != "mcp" {
-		t.Errorf("Expected second tool type 'mcp', got '%s'", mcpTool.Type)
-	}
-	if mcpTool.ServerLabel != "stripe" {
-		t.Errorf("Expected server_label 'stripe', got '%s'", mcpTool.ServerLabel)
-	}
-	if len(mcpTool.AllowedTools) != 2 {
-		t.Errorf("Expected 2 allowed tools, got %d", len(mcpTool.AllowedTools))
-	}
-	if mcpTool.Headers["Authorization"] != "Bearer sk_test_123" {
-		t.Errorf("Expected Authorization header, got '%s'", mcpTool.Headers["Authorization"])
-	}
-	if mcpTool.Name != "" {
-		t.Error("MCP tool should not have function name")
-	}
+	require.Equal(t, "mcp", mcpTool.Type, "Expected second tool type 'mcp'")
+	require.Equal(t, "stripe", mcpTool.ServerLabel, "Expected server_label 'stripe'")
+	require.Len(t, mcpTool.AllowedTools, 2, "Expected 2 allowed tools")
+	require.Equal(t, "Bearer sk_test_123", mcpTool.Headers["Authorization"], "Expected Authorization header")
+	require.Empty(t, mcpTool.Name, "MCP tool should not have function name")
 }
 
 // TestMCPToolJSONSerialization tests that the converted MCP tool produces valid JSON
@@ -198,26 +153,18 @@ func TestMCPToolJSONSerialization(t *testing.T) {
 
 	// Marshal the entire request to JSON
 	jsonData, err := json.Marshal(responseAPI)
-	if err != nil {
-		t.Fatalf("Failed to marshal Response API request: %v", err)
-	}
+	require.NoError(t, err, "Failed to marshal Response API request")
 
 	// Verify it can be unmarshaled back
 	var unmarshaled openai.ResponseAPIRequest
 	err = json.Unmarshal(jsonData, &unmarshaled)
-	if err != nil {
-		t.Fatalf("Failed to unmarshal Response API request: %v", err)
-	}
+	require.NoError(t, err, "Failed to unmarshal Response API request")
 
 	// Verify MCP tool fields are preserved
-	if len(unmarshaled.Tools) != 1 {
-		t.Fatalf("Expected 1 tool after round-trip, got %d", len(unmarshaled.Tools))
-	}
+	require.Len(t, unmarshaled.Tools, 1, "Expected 1 tool after round-trip")
 
 	tool := unmarshaled.Tools[0]
-	if tool.ServerLabel != "deepwiki" {
-		t.Errorf("server_label lost during JSON round-trip: got '%s'", tool.ServerLabel)
-	}
+	require.Equal(t, "deepwiki", tool.ServerLabel, "server_label lost during JSON round-trip")
 
 	t.Logf("JSON serialization successful: %s", string(jsonData))
 }

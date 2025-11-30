@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
+	"github.com/stretchr/testify/require"
 )
 
 // TestHandlerUpdatesContentLengthAfterRewriting verifies Handler aligns Content-Length with the rewritten payload size.
@@ -30,25 +31,16 @@ func TestHandlerUpdatesContentLengthAfterRewriting(t *testing.T) {
 		},
 	}
 
-	if errResp, _ := Handler(c, upstream, 0, "gpt-4o"); errResp != nil {
-		t.Fatalf("handler returned unexpected error: %v", errResp)
-	}
+	errResp, _ := Handler(c, upstream, 0, "gpt-4o")
+	require.Nil(t, errResp, "handler returned unexpected error")
+	require.Equal(t, http.StatusOK, w.Code, "unexpected status code")
 
-	if w.Code != http.StatusOK {
-		t.Fatalf("unexpected status code: %d", w.Code)
-	}
-
-	if err := json.Unmarshal(w.Body.Bytes(), &SlimTextResponse{}); err != nil {
-		t.Fatalf("handler produced invalid JSON: %v", err)
-	}
+	var respBody SlimTextResponse
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &respBody), "handler produced invalid JSON")
 
 	bodyLen := len(w.Body.Bytes())
-	if bodyLen >= len(originalBody) {
-		t.Fatalf("expected rewritten body to be smaller than upstream payload")
-	}
+	require.Less(t, bodyLen, len(originalBody), "expected rewritten body to be smaller than upstream payload")
 
 	headerLen := w.Header().Get("Content-Length")
-	if headerLen != strconv.Itoa(bodyLen) {
-		t.Fatalf("content-length header %q does not match body size %d", headerLen, bodyLen)
-	}
+	require.Equal(t, strconv.Itoa(bodyLen), headerLen, "content-length header does not match body size")
 }

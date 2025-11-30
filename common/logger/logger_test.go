@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 
@@ -160,12 +159,8 @@ func TestSetupLoggerWritesToFile(t *testing.T) {
 
 	logPath := filepath.Join(dir, "oneapi.log")
 	content, err := os.ReadFile(logPath)
-	if err != nil {
-		t.Fatalf("failed to read log file: %v", err)
-	}
-	if !strings.Contains(string(content), "file logging test entry") {
-		t.Fatalf("log file %s does not contain expected log entry", logPath)
-	}
+	require.NoError(t, err, "failed to read log file")
+	require.Contains(t, string(content), "file logging test entry", "log file %s does not contain expected log entry", logPath)
 }
 
 func TestResetSetupLogOnceForTestsAllowsReconfiguration(t *testing.T) {
@@ -195,44 +190,36 @@ func TestResetSetupLogOnceForTestsAllowsReconfiguration(t *testing.T) {
 	_ = Logger.Sync()
 
 	firstLogPath := filepath.Join(firstDir, "oneapi.log")
-	if _, err := os.Stat(firstLogPath); err != nil {
-		t.Fatalf("expected log file in first dir: %v", err)
-	}
+	_, err := os.Stat(firstLogPath)
+	require.NoError(t, err, "expected log file in first dir")
 
 	LogDir = secondDir
 	SetupLogger()
 	secondLogPath := filepath.Join(secondDir, "oneapi.log")
-	if _, err := os.Stat(secondLogPath); err == nil {
-		t.Fatalf("log file %s should not exist before reset", secondLogPath)
-	} else if !os.IsNotExist(err) {
-		t.Fatalf("unexpected error checking %s: %v", secondLogPath, err)
-	}
+	_, err = os.Stat(secondLogPath)
+	require.True(t, os.IsNotExist(err), "log file %s should not exist before reset", secondLogPath)
 
 	ResetSetupLogOnceForTests()
 	SetupLogger()
 	Logger.Info("second directory setup complete after reset")
 	_ = Logger.Sync()
 
-	if _, err := os.Stat(secondLogPath); err != nil {
-		t.Fatalf("expected log file after reset: %v", err)
-	}
+	_, err = os.Stat(secondLogPath)
+	require.NoError(t, err, "expected log file after reset")
 }
 
 func TestStartLogRetentionCleaner(t *testing.T) {
 	dir := t.TempDir()
 	oldLog := filepath.Join(dir, "oneapi-20200101.log")
-	if err := os.WriteFile(oldLog, []byte("old"), 0o644); err != nil {
-		t.Fatalf("failed to create old log file: %v", err)
-	}
+	err := os.WriteFile(oldLog, []byte("old"), 0o644)
+	require.NoError(t, err, "failed to create old log file")
 	cutoff := time.Now().Add(-48 * time.Hour)
-	if err := os.Chtimes(oldLog, cutoff, cutoff); err != nil {
-		t.Fatalf("failed to set old log file times: %v", err)
-	}
+	err = os.Chtimes(oldLog, cutoff, cutoff)
+	require.NoError(t, err, "failed to set old log file times")
 
 	freshLog := filepath.Join(dir, "oneapi.log")
-	if err := os.WriteFile(freshLog, []byte("fresh"), 0o644); err != nil {
-		t.Fatalf("failed to create fresh log file: %v", err)
-	}
+	err = os.WriteFile(freshLog, []byte("fresh"), 0o644)
+	require.NoError(t, err, "failed to create fresh log file")
 
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(func() {
@@ -247,18 +234,12 @@ func TestStartLogRetentionCleaner(t *testing.T) {
 		if _, err := os.Stat(oldLog); os.IsNotExist(err) {
 			break
 		}
-		if time.Now().After(deadline) {
-			t.Fatalf("expired log file %s was not removed", oldLog)
-		}
+		require.True(t, time.Now().Before(deadline), "expired log file %s was not removed", oldLog)
 		time.Sleep(10 * time.Millisecond)
 	}
 
-	if _, err := os.Stat(freshLog); err != nil {
-		if os.IsNotExist(err) {
-			t.Fatalf("fresh log file %s should not be removed", freshLog)
-		}
-		t.Fatalf("unexpected error checking fresh log file: %v", err)
-	}
+	_, err = os.Stat(freshLog)
+	require.NoError(t, err, "fresh log file %s should not be removed", freshLog)
 }
 
 func TestDailyLogRotationCreatesNewFiles(t *testing.T) {

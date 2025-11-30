@@ -2,8 +2,9 @@ package openai
 
 import (
 	"encoding/json"
-	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 
 	"github.com/songquanpeng/one-api/relay/model"
 )
@@ -25,72 +26,51 @@ func TestResponseAPIFormat(t *testing.T) {
 
 	// Marshal to JSON to see the exact format
 	jsonData, err := json.Marshal(responseAPI)
-	if err != nil {
-		t.Fatalf("Failed to marshal ResponseAPIRequest: %v", err)
-	}
+	require.NoError(t, err, "Failed to marshal ResponseAPIRequest")
 
 	t.Logf("Generated Response API request: %s", string(jsonData))
 
 	// Verify the input structure
-	if len(responseAPI.Input) != 1 {
-		t.Errorf("Expected 1 input item, got %d", len(responseAPI.Input))
-	}
+	require.Len(t, responseAPI.Input, 1, "Expected 1 input item")
 
 	// Verify that input[0] is a direct message, not wrapped
 	inputMessage, ok := responseAPI.Input[0].(map[string]any)
-	if !ok {
-		t.Fatalf("Expected input[0] to be map[string]interface{}, got %T", responseAPI.Input[0])
-	}
+	require.True(t, ok, "Expected input[0] to be map[string]interface{}, got %T", responseAPI.Input[0])
 
 	// Verify the message has the correct role
-	if inputMessage["role"] != "user" {
-		t.Errorf("Expected role 'user', got '%v'", inputMessage["role"])
-	}
+	require.Equal(t, "user", inputMessage["role"], "Expected role 'user'")
 
 	// Verify the message has the correct content
 	expectedContent := "What is the weather like in Boston?"
-	if content, ok := inputMessage["content"].([]map[string]any); ok && len(content) > 0 {
-		if content[0]["text"] != expectedContent {
-			t.Errorf("Expected content '%s', got '%v'", expectedContent, content[0]["text"])
-		}
-	} else {
-		t.Error("Expected content to be []map[string]interface{}")
-	}
+	content, ok := inputMessage["content"].([]map[string]any)
+	require.True(t, ok && len(content) > 0, "Expected content to be []map[string]interface{}")
+	require.Equal(t, expectedContent, content[0]["text"], "Expected correct content text")
 
 	// Parse the JSON back to verify it's valid
 	var unmarshaled ResponseAPIRequest
-	if err := json.Unmarshal(jsonData, &unmarshaled); err != nil {
-		t.Fatalf("Failed to unmarshal ResponseAPIRequest: %v", err)
-	}
+	err = json.Unmarshal(jsonData, &unmarshaled)
+	require.NoError(t, err, "Failed to unmarshal ResponseAPIRequest")
 
 	// Verify the unmarshaled data matches expectations
-	if len(unmarshaled.Input) != 1 {
-		t.Errorf("After unmarshal: Expected 1 input item, got %d", len(unmarshaled.Input))
-	}
+	require.Len(t, unmarshaled.Input, 1, "After unmarshal: Expected 1 input item")
 
 	// The unmarshaled input will be map[string]interface{} due to JSON unmarshaling
 	inputMap, ok := unmarshaled.Input[0].(map[string]any)
-	if !ok {
-		t.Fatalf("After unmarshal: Expected input[0] to be map[string]interface{}, got %T", unmarshaled.Input[0])
-	}
+	require.True(t, ok, "After unmarshal: Expected input[0] to be map[string]interface{}, got %T", unmarshaled.Input[0])
 
 	// Verify the role in the map
-	if role, exists := inputMap["role"]; !exists || role != "user" {
-		t.Errorf("After unmarshal: Expected role 'user', got %v", role)
-	}
+	role, exists := inputMap["role"]
+	require.True(t, exists && role == "user", "After unmarshal: Expected role 'user', got %v", role)
 
 	// Verify the content in the map (should be array format after unmarshaling)
-	if content, exists := inputMap["content"]; !exists {
-		t.Error("After unmarshal: Expected content field to exist")
-	} else if contentArray, ok := content.([]any); !ok {
-		t.Errorf("After unmarshal: Expected content to be []interface{}, got %T", content)
-	} else if len(contentArray) != 1 {
-		t.Errorf("After unmarshal: Expected content array length 1, got %d", len(contentArray))
-	} else if contentItem, ok := contentArray[0].(map[string]any); !ok {
-		t.Errorf("After unmarshal: Expected content[0] to be map[string]interface{}, got %T", contentArray[0])
-	} else if contentItem["text"] != expectedContent {
-		t.Errorf("After unmarshal: Expected content text '%s', got %v", expectedContent, contentItem["text"])
-	}
+	contentField, exists := inputMap["content"]
+	require.True(t, exists, "After unmarshal: Expected content field to exist")
+	contentArray, ok := contentField.([]any)
+	require.True(t, ok, "After unmarshal: Expected content to be []interface{}, got %T", contentField)
+	require.Len(t, contentArray, 1, "After unmarshal: Expected content array length 1")
+	contentItem, ok := contentArray[0].(map[string]any)
+	require.True(t, ok, "After unmarshal: Expected content[0] to be map[string]interface{}, got %T", contentArray[0])
+	require.Equal(t, expectedContent, contentItem["text"], "After unmarshal: Expected correct content text")
 }
 
 func TestResponseAPIWithSystemMessage(t *testing.T) {
@@ -111,30 +91,21 @@ func TestResponseAPIWithSystemMessage(t *testing.T) {
 
 	// Marshal to JSON
 	jsonData, err := json.Marshal(responseAPI)
-	if err != nil {
-		t.Fatalf("Failed to marshal ResponseAPIRequest: %v", err)
-	}
+	require.NoError(t, err, "Failed to marshal ResponseAPIRequest")
 
 	t.Logf("Generated Response API request with system message: %s", string(jsonData))
 
 	// Verify system message is moved to instructions
-	if responseAPI.Instructions == nil || *responseAPI.Instructions != "You are a helpful assistant." {
-		t.Errorf("Expected instructions to be 'You are a helpful assistant.', got %v", responseAPI.Instructions)
-	}
+	require.NotNil(t, responseAPI.Instructions, "Expected instructions to be set")
+	require.Equal(t, "You are a helpful assistant.", *responseAPI.Instructions, "Expected correct instructions")
 
 	// Verify only user message remains in input
-	if len(responseAPI.Input) != 1 {
-		t.Errorf("Expected 1 input item after system message removal, got %d", len(responseAPI.Input))
-	}
+	require.Len(t, responseAPI.Input, 1, "Expected 1 input item after system message removal")
 
 	inputMessage, ok := responseAPI.Input[0].(map[string]any)
-	if !ok {
-		t.Fatalf("Expected input[0] to be map[string]interface{}, got %T", responseAPI.Input[0])
-	}
+	require.True(t, ok, "Expected input[0] to be map[string]interface{}, got %T", responseAPI.Input[0])
 
-	if inputMessage["role"] != "user" {
-		t.Errorf("Expected remaining message role 'user', got '%v'", inputMessage["role"])
-	}
+	require.Equal(t, "user", inputMessage["role"], "Expected remaining message role 'user'")
 }
 
 func TestResponseAPIImageURLFlattening(t *testing.T) {
@@ -164,45 +135,29 @@ func TestResponseAPIImageURLFlattening(t *testing.T) {
 
 	resp := ConvertChatCompletionToResponseAPI(chatRequest)
 	b, err := json.Marshal(resp)
-	if err != nil {
-		t.Fatalf("marshal response: %v", err)
-	}
+	require.NoError(t, err, "marshal response")
 
 	// Unmarshal generically to assert structure
 	var m map[string]any
-	if err := json.Unmarshal(b, &m); err != nil {
-		t.Fatalf("unmarshal response: %v", err)
-	}
+	err = json.Unmarshal(b, &m)
+	require.NoError(t, err, "unmarshal response")
 
 	input, ok := m["input"].([]any)
-	if !ok || len(input) != 1 {
-		t.Fatalf("input malformed: %#v", m["input"])
-	}
+	require.True(t, ok && len(input) == 1, "input malformed: %#v", m["input"])
 	msg, ok := input[0].(map[string]any)
-	if !ok {
-		t.Fatalf("input[0] not object: %T", input[0])
-	}
+	require.True(t, ok, "input[0] not object: %T", input[0])
 	content, ok := msg["content"].([]any)
-	if !ok || len(content) != 2 {
-		t.Fatalf("content malformed: %#v", msg["content"])
-	}
+	require.True(t, ok && len(content) == 2, "content malformed: %#v", msg["content"])
 	// Second item should be input_image with string image_url and preserved detail
 	item, ok := content[1].(map[string]any)
-	if !ok {
-		t.Fatalf("content[1] not object: %T", content[1])
-	}
-	if item["type"] != "input_image" {
-		t.Fatalf("expected type input_image, got %v", item["type"])
-	}
-	if _, isObj := item["image_url"].(map[string]any); isObj {
-		t.Fatalf("image_url should be string, got object: %#v", item["image_url"])
-	}
-	if urlStr, ok := item["image_url"].(string); !ok || urlStr == "" {
-		t.Fatalf("image_url should be non-empty string, got %#v", item["image_url"])
-	}
-	if gotDetail, ok := item["detail"].(string); !ok || gotDetail != detail {
-		t.Fatalf("detail should be preserved as '%s', got %#v", detail, item["detail"])
-	}
+	require.True(t, ok, "content[1] not object: %T", content[1])
+	require.Equal(t, "input_image", item["type"], "expected type input_image")
+	_, isObj := item["image_url"].(map[string]any)
+	require.False(t, isObj, "image_url should be string, got object: %#v", item["image_url"])
+	urlStr, ok := item["image_url"].(string)
+	require.True(t, ok && urlStr != "", "image_url should be non-empty string, got %#v", item["image_url"])
+	gotDetail, ok := item["detail"].(string)
+	require.True(t, ok && gotDetail == detail, "detail should be preserved as '%s', got %#v", detail, item["detail"])
 }
 
 func TestResponseAPIImageDataURLPreserved(t *testing.T) {
@@ -234,49 +189,29 @@ func TestResponseAPIImageDataURLPreserved(t *testing.T) {
 
 	resp := ConvertChatCompletionToResponseAPI(chatRequest)
 	data, err := json.Marshal(resp)
-	if err != nil {
-		t.Fatalf("marshal response: %v", err)
-	}
+	require.NoError(t, err, "marshal response")
 
 	var parsed map[string]any
-	if err := json.Unmarshal(data, &parsed); err != nil {
-		t.Fatalf("unmarshal response: %v", err)
-	}
+	err = json.Unmarshal(data, &parsed)
+	require.NoError(t, err, "unmarshal response")
 
 	input, ok := parsed["input"].([]any)
-	if !ok || len(input) != 1 {
-		t.Fatalf("input malformed: %#v", parsed["input"])
-	}
+	require.True(t, ok && len(input) == 1, "input malformed: %#v", parsed["input"])
 	msg, ok := input[0].(map[string]any)
-	if !ok {
-		t.Fatalf("input[0] not object: %T", input[0])
-	}
+	require.True(t, ok, "input[0] not object: %T", input[0])
 	content, ok := msg["content"].([]any)
-	if !ok || len(content) != 2 {
-		t.Fatalf("content malformed: %#v", msg["content"])
-	}
+	require.True(t, ok && len(content) == 2, "content malformed: %#v", msg["content"])
 	item, ok := content[1].(map[string]any)
-	if !ok {
-		t.Fatalf("content[1] not object: %T", content[1])
-	}
-	if item["type"] != "input_image" {
-		t.Fatalf("expected type input_image, got %v", item["type"])
-	}
+	require.True(t, ok, "content[1] not object: %T", content[1])
+	require.Equal(t, "input_image", item["type"], "expected type input_image")
 	gotURL, ok := item["image_url"].(string)
-	if !ok {
-		t.Fatalf("image_url missing or wrong type: %#v", item["image_url"])
-	}
-	if gotURL != prefix+payload {
-		t.Fatalf("image_url mismatch: expected %s, got %s", prefix+payload, gotURL)
-	}
-	if detailVal, ok := item["detail"].(string); !ok || detailVal != detail {
-		t.Fatalf("detail should be preserved as '%s', got %#v", detail, item["detail"])
-	}
+	require.True(t, ok, "image_url missing or wrong type: %#v", item["image_url"])
+	require.Equal(t, prefix+payload, gotURL, "image_url mismatch")
+	detailVal, ok := item["detail"].(string)
+	require.True(t, ok && detailVal == detail, "detail should be preserved as '%s', got %#v", detail, item["detail"])
 
 	// Ensure JSON still contains the data URI prefix as documented.
-	if !strings.Contains(string(data), prefix) {
-		t.Fatalf("serialized payload should include the data URI prefix; got %s", string(data))
-	}
+	require.Contains(t, string(data), prefix, "serialized payload should include the data URI prefix")
 }
 
 // TestVerbosityConversion tests the verbosity parameter conversion between
@@ -294,24 +229,14 @@ func TestVerbosityConversion(t *testing.T) {
 		}
 
 		responseAPI := ConvertChatCompletionToResponseAPI(chatRequest)
-		if responseAPI.Text == nil {
-			t.Fatal("Expected Text to be set for verbosity conversion")
-		}
-		if responseAPI.Text.Verbosity == nil {
-			t.Fatal("Expected Text.Verbosity to be set")
-		}
-		if *responseAPI.Text.Verbosity != verbosityLow {
-			t.Errorf("Expected verbosity '%s', got '%s'", verbosityLow, *responseAPI.Text.Verbosity)
-		}
+		require.NotNil(t, responseAPI.Text, "Expected Text to be set for verbosity conversion")
+		require.NotNil(t, responseAPI.Text.Verbosity, "Expected Text.Verbosity to be set")
+		require.Equal(t, verbosityLow, *responseAPI.Text.Verbosity, "Expected correct verbosity")
 
 		// Verify JSON serialization
 		jsonData, err := json.Marshal(responseAPI)
-		if err != nil {
-			t.Fatalf("Failed to marshal: %v", err)
-		}
-		if !strings.Contains(string(jsonData), `"verbosity":"low"`) {
-			t.Errorf("Expected verbosity in JSON, got: %s", string(jsonData))
-		}
+		require.NoError(t, err, "Failed to marshal")
+		require.Contains(t, string(jsonData), `"verbosity":"low"`, "Expected verbosity in JSON")
 	})
 
 	t.Run("ChatCompletion to Response API with verbosity and response_format", func(t *testing.T) {
@@ -329,21 +254,11 @@ func TestVerbosityConversion(t *testing.T) {
 		}
 
 		responseAPI := ConvertChatCompletionToResponseAPI(chatRequest)
-		if responseAPI.Text == nil {
-			t.Fatal("Expected Text to be set")
-		}
-		if responseAPI.Text.Format == nil {
-			t.Fatal("Expected Text.Format to be set")
-		}
-		if responseAPI.Text.Format.Type != "json_object" {
-			t.Errorf("Expected format type 'json_object', got '%s'", responseAPI.Text.Format.Type)
-		}
-		if responseAPI.Text.Verbosity == nil {
-			t.Fatal("Expected Text.Verbosity to be set")
-		}
-		if *responseAPI.Text.Verbosity != verbosityMedium {
-			t.Errorf("Expected verbosity '%s', got '%s'", verbosityMedium, *responseAPI.Text.Verbosity)
-		}
+		require.NotNil(t, responseAPI.Text, "Expected Text to be set")
+		require.NotNil(t, responseAPI.Text.Format, "Expected Text.Format to be set")
+		require.Equal(t, "json_object", responseAPI.Text.Format.Type, "Expected format type 'json_object'")
+		require.NotNil(t, responseAPI.Text.Verbosity, "Expected Text.Verbosity to be set")
+		require.Equal(t, verbosityMedium, *responseAPI.Text.Verbosity, "Expected correct verbosity")
 	})
 
 	t.Run("Response API to ChatCompletion with verbosity", func(t *testing.T) {
@@ -362,15 +277,9 @@ func TestVerbosityConversion(t *testing.T) {
 		}
 
 		chatReq, err := ConvertResponseAPIToChatCompletionRequest(responseAPIRequest)
-		if err != nil {
-			t.Fatalf("Conversion failed: %v", err)
-		}
-		if chatReq.Verbosity == nil {
-			t.Fatal("Expected Verbosity to be set")
-		}
-		if *chatReq.Verbosity != verbosityHigh {
-			t.Errorf("Expected verbosity '%s', got '%s'", verbosityHigh, *chatReq.Verbosity)
-		}
+		require.NoError(t, err, "Conversion failed")
+		require.NotNil(t, chatReq.Verbosity, "Expected Verbosity to be set")
+		require.Equal(t, verbosityHigh, *chatReq.Verbosity, "Expected correct verbosity")
 	})
 
 	t.Run("Response API to ChatCompletion with verbosity and format", func(t *testing.T) {
@@ -392,21 +301,11 @@ func TestVerbosityConversion(t *testing.T) {
 		}
 
 		chatReq, err := ConvertResponseAPIToChatCompletionRequest(responseAPIRequest)
-		if err != nil {
-			t.Fatalf("Conversion failed: %v", err)
-		}
-		if chatReq.Verbosity == nil {
-			t.Fatal("Expected Verbosity to be set")
-		}
-		if *chatReq.Verbosity != verbosityLow {
-			t.Errorf("Expected verbosity '%s', got '%s'", verbosityLow, *chatReq.Verbosity)
-		}
-		if chatReq.ResponseFormat == nil {
-			t.Fatal("Expected ResponseFormat to be set")
-		}
-		if chatReq.ResponseFormat.Type != "text" {
-			t.Errorf("Expected response format type 'text', got '%s'", chatReq.ResponseFormat.Type)
-		}
+		require.NoError(t, err, "Conversion failed")
+		require.NotNil(t, chatReq.Verbosity, "Expected Verbosity to be set")
+		require.Equal(t, verbosityLow, *chatReq.Verbosity, "Expected correct verbosity")
+		require.NotNil(t, chatReq.ResponseFormat, "Expected ResponseFormat to be set")
+		require.Equal(t, "text", chatReq.ResponseFormat.Type, "Expected response format type 'text'")
 	})
 
 	t.Run("ChatCompletion without verbosity should not set Text", func(t *testing.T) {
@@ -420,9 +319,7 @@ func TestVerbosityConversion(t *testing.T) {
 
 		responseAPI := ConvertChatCompletionToResponseAPI(chatRequest)
 		// Text should only be set if ResponseFormat or Verbosity is specified
-		if responseAPI.Text != nil && responseAPI.Text.Verbosity != nil {
-			t.Error("Text.Verbosity should be nil when not specified in request")
-		}
+		require.True(t, responseAPI.Text == nil || responseAPI.Text.Verbosity == nil, "Text.Verbosity should be nil when not specified in request")
 	})
 }
 

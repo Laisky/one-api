@@ -36,9 +36,7 @@ func TestVideoHandlerPassThroughJSON(t *testing.T) {
 	}
 
 	body, err := json.Marshal(original)
-	if err != nil {
-		t.Fatalf("failed to marshal upstream response: %v", err)
-	}
+	require.NoError(t, err, "failed to marshal upstream response")
 
 	upstream := &http.Response{
 		StatusCode: http.StatusAccepted,
@@ -49,23 +47,12 @@ func TestVideoHandlerPassThroughJSON(t *testing.T) {
 		},
 	}
 
-	if errResp, usage := VideoHandler(c, upstream); errResp != nil {
-		t.Fatalf("video handler returned unexpected error: %v", errResp)
-	} else if usage != nil {
-		t.Fatalf("expected nil usage, got %#v", usage)
-	}
-
-	if w.Code != http.StatusAccepted {
-		t.Fatalf("unexpected status code: %d", w.Code)
-	}
-
-	if headerVal := w.Header().Get("X-Video"); headerVal != "pass-through" {
-		t.Fatalf("header not forwarded: got %q", headerVal)
-	}
-
-	if !bytes.Equal(w.Body.Bytes(), body) {
-		t.Fatalf("response body mutated: got %s", w.Body.Bytes())
-	}
+	errResp, usage := VideoHandler(c, upstream)
+	require.Nil(t, errResp, "video handler returned unexpected error")
+	require.Nil(t, usage, "expected nil usage")
+	require.Equal(t, http.StatusAccepted, w.Code, "unexpected status code")
+	require.Equal(t, "pass-through", w.Header().Get("X-Video"), "header not forwarded")
+	require.Equal(t, body, w.Body.Bytes(), "response body mutated")
 }
 
 // TestVideoHandlerSurfaceError ensures upstream error payloads surface appropriately.
@@ -84,9 +71,7 @@ func TestVideoHandlerSurfaceError(t *testing.T) {
 	}
 
 	body, err := json.Marshal(errorBody)
-	if err != nil {
-		t.Fatalf("failed to marshal error response: %v", err)
-	}
+	require.NoError(t, err, "failed to marshal error response")
 
 	upstream := &http.Response{
 		StatusCode: http.StatusBadRequest,
@@ -95,15 +80,9 @@ func TestVideoHandlerSurfaceError(t *testing.T) {
 	}
 
 	errResp, usage := VideoHandler(c, upstream)
-	if errResp == nil {
-		t.Fatalf("expected error from video handler")
-	}
-	if errResp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("unexpected status: %d", errResp.StatusCode)
-	}
-	if usage != nil {
-		t.Fatalf("expected nil usage on error, got %#v", usage)
-	}
+	require.NotNil(t, errResp, "expected error from video handler")
+	require.Equal(t, http.StatusBadRequest, errResp.StatusCode, "unexpected status")
+	require.Nil(t, usage, "expected nil usage on error")
 }
 
 // TestVideoHandlerBinary ensures binary payloads stream without JSON parsing requirements.
@@ -125,19 +104,11 @@ func TestVideoHandlerBinary(t *testing.T) {
 		},
 	}
 
-	if errResp, usage := VideoHandler(c, upstream); errResp != nil {
-		t.Fatalf("video handler returned unexpected error: %v", errResp)
-	} else if usage != nil {
-		t.Fatalf("expected nil usage, got %#v", usage)
-	}
-
-	if w.Code != http.StatusOK {
-		t.Fatalf("unexpected status code: %d", w.Code)
-	}
-
-	if !bytes.Equal(w.Body.Bytes(), binaryBody) {
-		t.Fatalf("binary body mutated: %#v", w.Body.Bytes())
-	}
+	errResp, usage := VideoHandler(c, upstream)
+	require.Nil(t, errResp, "video handler returned unexpected error")
+	require.Nil(t, usage, "expected nil usage")
+	require.Equal(t, http.StatusOK, w.Code, "unexpected status code")
+	require.Equal(t, binaryBody, w.Body.Bytes(), "binary body mutated")
 }
 
 func TestVideoHandlerPersistsAsyncTask(t *testing.T) {

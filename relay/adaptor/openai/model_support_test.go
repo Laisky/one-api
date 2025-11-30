@@ -2,6 +2,8 @@ package openai
 
 import (
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestIsModelsOnlySupportedByChatCompletionAPI(t *testing.T) {
@@ -22,9 +24,7 @@ func TestIsModelsOnlySupportedByChatCompletionAPI(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			result := IsModelsOnlySupportedByChatCompletionAPI(tc.model)
-			if result != tc.expected {
-				t.Errorf("IsModelsOnlySupportedByChatCompletionAPI(%q) = %v, want %v", tc.model, result, tc.expected)
-			}
+			require.Equal(t, tc.expected, result, "IsModelsOnlySupportedByChatCompletionAPI(%q)", tc.model)
 		})
 	}
 }
@@ -42,8 +42,6 @@ func TestIsModelsOnlySupportedByChatCompletionAPI_DefaultBehavior(t *testing.T) 
 	}
 
 	for _, model := range models {
-		if IsModelsOnlySupportedByChatCompletionAPI(model) {
-			t.Errorf("IsModelsOnlySupportedByChatCompletionAPI(%q) should return false by default, got true", model)
-		}
+		require.False(t, IsModelsOnlySupportedByChatCompletionAPI(model), "IsModelsOnlySupportedByChatCompletionAPI(%q) should return false by default", model)
 	}
 }

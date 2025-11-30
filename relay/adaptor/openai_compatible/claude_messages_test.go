@@ -59,15 +59,13 @@ func TestConvertClaudeRequest_ToOpenAI(t *testing.T) {
 	assert.GreaterOrEqual(t, len(goReq.Messages), 4)
 	assert.NotNil(t, goReq.Tools)
 	assert.NotNil(t, goReq.ToolChoice)
-	if choiceMap, ok := goReq.ToolChoice.(map[string]any); ok {
-		assert.Equal(t, "function", choiceMap["type"])
-		fn, _ := choiceMap["function"].(map[string]any)
-		assert.Equal(t, "get_weather", fn["name"])
-		_, hasName := choiceMap["name"]
-		assert.False(t, hasName)
-	} else {
-		t.Fatalf("expected map tool_choice, got %T", goReq.ToolChoice)
-	}
+	choiceMap, ok := goReq.ToolChoice.(map[string]any)
+	require.True(t, ok, "expected map tool_choice, got %T", goReq.ToolChoice)
+	assert.Equal(t, "function", choiceMap["type"])
+	fn, _ := choiceMap["function"].(map[string]any)
+	assert.Equal(t, "get_weather", fn["name"])
+	_, hasName := choiceMap["name"]
+	assert.False(t, hasName)
 
 	var (
 		assistantSeen bool
@@ -166,11 +164,13 @@ func TestHandleClaudeMessagesResponse_NonStream_ConvertedResponse(t *testing.T) 
 	c.Set(ctxkey.ConvertedResponse, conv)
 
 	// Call
+	fallbackCalled := false
 	usage, errResp := HandleClaudeMessagesResponse(c, conv, m, func(*gin.Context, *http.Response, int, string) (*relaymodel.ErrorWithStatusCode, *relaymodel.Usage) {
 		// Should not be called in this path
-		t.Fatalf("fallback handler should not be invoked")
+		fallbackCalled = true
 		return nil, nil
 	})
+	require.False(t, fallbackCalled, "fallback handler should not be invoked")
 	require.Nil(t, errResp)
 	// Non-stream path returns nil usage and stores converted response in context for controller
 	assert.Nil(t, usage)

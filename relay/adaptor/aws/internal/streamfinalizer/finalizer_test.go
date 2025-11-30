@@ -7,6 +7,7 @@ import (
 	"github.com/Laisky/zap"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/bedrockruntime/types"
+	"github.com/stretchr/testify/require"
 
 	relaymodel "github.com/songquanpeng/one-api/relay/model"
 )
@@ -32,24 +33,16 @@ func TestFinalizerEmitsAfterStopAndMetadata(t *testing.T) {
 	f.SetID("chatcmpl-1")
 
 	stop := "stop"
-	if !f.RecordStop(&stop) {
-		t.Fatalf("record stop returned false")
-	}
-	if len(cap.payloads) != 0 {
-		t.Fatalf("expected no emission before metadata, got %d", len(cap.payloads))
-	}
+	require.True(t, f.RecordStop(&stop), "record stop returned false")
+	require.Empty(t, cap.payloads, "expected no emission before metadata")
 
 	meta := &types.TokenUsage{
 		InputTokens:  aws.Int32(10),
 		OutputTokens: aws.Int32(20),
 		TotalTokens:  aws.Int32(30),
 	}
-	if !f.RecordMetadata(meta) {
-		t.Fatalf("record metadata returned false")
-	}
-	if len(cap.payloads) != 1 {
-		t.Fatalf("expected one final chunk, got %d", len(cap.payloads))
-	}
+	require.True(t, f.RecordMetadata(meta), "record metadata returned false")
+	require.Len(t, cap.payloads, 1, "expected one final chunk")
 
 	var payload struct {
 		Usage struct {
@@ -61,15 +54,13 @@ func TestFinalizerEmitsAfterStopAndMetadata(t *testing.T) {
 			FinishReason *string `json:"finish_reason"`
 		} `json:"choices"`
 	}
-	if err := json.Unmarshal(cap.payloads[0], &payload); err != nil {
-		t.Fatalf("unmarshal: %v", err)
-	}
-	if payload.Usage.PromptTokens != 10 || payload.Usage.CompletionTokens != 20 || payload.Usage.TotalTokens != 30 {
-		t.Fatalf("unexpected usage: %+v", payload.Usage)
-	}
-	if len(payload.Choices) != 1 || payload.Choices[0].FinishReason == nil || *payload.Choices[0].FinishReason != "stop" {
-		t.Fatalf("unexpected finish reason: %+v", payload.Choices)
-	}
+	require.NoError(t, json.Unmarshal(cap.payloads[0], &payload), "unmarshal")
+	require.Equal(t, 10, payload.Usage.PromptTokens, "unexpected prompt_tokens")
+	require.Equal(t, 20, payload.Usage.CompletionTokens, "unexpected completion_tokens")
+	require.Equal(t, 30, payload.Usage.TotalTokens, "unexpected total_tokens")
+	require.Len(t, payload.Choices, 1, "expected one choice")
+	require.NotNil(t, payload.Choices[0].FinishReason, "expected finish_reason")
+	require.Equal(t, "stop", *payload.Choices[0].FinishReason, "unexpected finish reason")
 }
 
 func TestFinalizerMetadataBeforeStop(t *testing.T) {
@@ -79,20 +70,12 @@ func TestFinalizerMetadataBeforeStop(t *testing.T) {
 	f.SetID("chatcmpl-2")
 
 	meta := &types.TokenUsage{}
-	if !f.RecordMetadata(meta) {
-		t.Fatalf("record metadata returned false")
-	}
-	if len(cap.payloads) != 0 {
-		t.Fatalf("expected no chunk before stop, got %d", len(cap.payloads))
-	}
+	require.True(t, f.RecordMetadata(meta), "record metadata returned false")
+	require.Empty(t, cap.payloads, "expected no chunk before stop")
 
 	reason := "length"
-	if !f.RecordStop(&reason) {
-		t.Fatalf("record stop returned false")
-	}
-	if len(cap.payloads) != 1 {
-		t.Fatalf("expected final chunk after stop, got %d", len(cap.payloads))
-	}
+	require.True(t, f.RecordStop(&reason), "record stop returned false")
+	require.Len(t, cap.payloads, 1, "expected final chunk after stop")
 }
 
 func TestFinalizerFinalizeOnCloseWithoutMetadata(t *testing.T) {
@@ -102,29 +85,17 @@ func TestFinalizerFinalizeOnCloseWithoutMetadata(t *testing.T) {
 	f.SetID("chatcmpl-3")
 
 	reason := "stop"
-	if !f.RecordStop(&reason) {
-		t.Fatalf("record stop returned false")
-	}
-	if len(cap.payloads) != 0 {
-		t.Fatalf("expected no chunk until close, got %d", len(cap.payloads))
-	}
+	require.True(t, f.RecordStop(&reason), "record stop returned false")
+	require.Empty(t, cap.payloads, "expected no chunk until close")
 
-	if !f.FinalizeOnClose() {
-		t.Fatalf("finalize on close returned false")
-	}
-	if len(cap.payloads) != 1 {
-		t.Fatalf("expected one chunk on close, got %d", len(cap.payloads))
-	}
+	require.True(t, f.FinalizeOnClose(), "finalize on close returned false")
+	require.Len(t, cap.payloads, 1, "expected one chunk on close")
 
 	var payload struct {
 		Usage *struct{} `json:"usage"`
 	}
-	if err := json.Unmarshal(cap.payloads[0], &payload); err != nil {
-		t.Fatalf("unmarshal: %v", err)
-	}
-	if payload.Usage != nil {
-		t.Fatalf("expected no usage when metadata missing")
-	}
+	require.NoError(t, json.Unmarshal(cap.payloads[0], &payload), "unmarshal")
+	require.Nil(t, payload.Usage, "expected no usage when metadata missing")
 }
 
 func TestFinalizerFinalizeWithoutStop(t *testing.T) {
@@ -133,24 +104,17 @@ func TestFinalizerFinalizeWithoutStop(t *testing.T) {
 	f := NewFinalizer("test-model", 123, &usage, zap.NewNop(), cap.render)
 	f.SetID("chatcmpl-4")
 
-	if !f.FinalizeOnClose() {
-		t.Fatalf("finalize on close returned false")
-	}
-	if len(cap.payloads) != 1 {
-		t.Fatalf("expected chunk even without stop, got %d", len(cap.payloads))
-	}
+	require.True(t, f.FinalizeOnClose(), "finalize on close returned false")
+	require.Len(t, cap.payloads, 1, "expected chunk even without stop")
 
 	var payload struct {
 		Choices []struct {
 			FinishReason *string `json:"finish_reason"`
 		} `json:"choices"`
 	}
-	if err := json.Unmarshal(cap.payloads[0], &payload); err != nil {
-		t.Fatalf("unmarshal: %v", err)
-	}
-	if len(payload.Choices) != 1 || payload.Choices[0].FinishReason != nil {
-		t.Fatalf("expected nil finish reason, got %+v", payload.Choices)
-	}
+	require.NoError(t, json.Unmarshal(cap.payloads[0], &payload), "unmarshal")
+	require.Len(t, payload.Choices, 1, "expected one choice")
+	require.Nil(t, payload.Choices[0].FinishReason, "expected nil finish reason")
 }
 
 func TestFinalizerNotDuplicate(t *testing.T) {
@@ -163,14 +127,8 @@ func TestFinalizerNotDuplicate(t *testing.T) {
 	f.RecordStop(&reason)
 	meta := &types.TokenUsage{}
 	f.RecordMetadata(meta)
-	if len(cap.payloads) != 1 {
-		t.Fatalf("expected one chunk after first emit, got %d", len(cap.payloads))
-	}
+	require.Len(t, cap.payloads, 1, "expected one chunk after first emit")
 
-	if !f.FinalizeOnClose() {
-		t.Fatalf("finalize on close returned false")
-	}
-	if len(cap.payloads) != 1 {
-		t.Fatalf("expected no additional chunks, got %d", len(cap.payloads))
-	}
+	require.True(t, f.FinalizeOnClose(), "finalize on close returned false")
+	require.Len(t, cap.payloads, 1, "expected no additional chunks")
 }

@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/songquanpeng/one-api/relay"
 	"github.com/songquanpeng/one-api/relay/adaptor/openai"
 	"github.com/songquanpeng/one-api/relay/channeltype"
@@ -31,13 +33,9 @@ func TestPostConsumeQuota_OutputPricingIndependentOfCache(t *testing.T) {
 	modelName := "gpt-4o" // has explicit cached input pricing in OpenAI adapter
 	channelType := channeltype.OpenAI
 	adaptor := relay.GetAdaptor(channelType)
-	if adaptor == nil {
-		t.Fatalf("nil adaptor for channel %d", channelType)
-	}
+	require.NotNil(t, adaptor, "nil adaptor for channel %d", channelType)
 	modelRatio := adaptor.GetModelRatio(modelName)
-	if modelRatio <= 0 {
-		t.Fatalf("unexpected model ratio: %v", modelRatio)
-	}
+	require.Positive(t, modelRatio, "unexpected model ratio: %v", modelRatio)
 	// Resolve effective cached/input ratios at our prompt token scale (for tier handling)
 	// Use a large token count to minimize rounding effects from ceil()
 	promptTokens := 1_000_000
@@ -88,9 +86,8 @@ func TestPostConsumeQuota_OutputPricingIndependentOfCache(t *testing.T) {
 	actualDelta := quotaCached - quotaNoCache
 
 	// Allow for rounding differences (ceil applied twice) and potential +1 guard path; keep tight tolerance.
-	if absDiffI64(actualDelta, expectedDelta) > 2 {
-		t.Fatalf("unexpected quota delta: got %d, want ~%d (+/-2). no-cache=%d cached=%d", actualDelta, expectedDelta, quotaNoCache, quotaCached)
-	}
+	require.LessOrEqual(t, absDiffI64(actualDelta, expectedDelta), int64(2),
+		"unexpected quota delta: got %d, want ~%d (+/-2). no-cache=%d cached=%d", actualDelta, expectedDelta, quotaNoCache, quotaCached)
 }
 
 // Test that cache-write tokens only affect input buckets and never the output price.
@@ -98,9 +95,7 @@ func TestPostConsumeQuota_CacheWriteDoesNotAffectOutput(t *testing.T) {
 	modelName := "gpt-4o"
 	channelType := channeltype.OpenAI
 	adaptor := relay.GetAdaptor(channelType)
-	if adaptor == nil {
-		t.Fatalf("nil adaptor for channel %d", channelType)
-	}
+	require.NotNil(t, adaptor, "nil adaptor for channel %d", channelType)
 	modelRatio := adaptor.GetModelRatio(modelName)
 	groupRatio := 1.0
 
@@ -133,9 +128,8 @@ func TestPostConsumeQuota_CacheWriteDoesNotAffectOutput(t *testing.T) {
 	// Expected delta is purely input-side: write tokens shift from normalInputPrice to write5mPrice
 	expectedDelta := int64(math.Ceil(float64(write5m) * (write5mPrice - normalInputPrice)))
 	actualDelta := withWrite - base
-	if absDiffI64(actualDelta, expectedDelta) > 2 {
-		t.Fatalf("unexpected write quota delta: got %d, want ~%d (+/-2). base=%d withWrite=%d", actualDelta, expectedDelta, base, withWrite)
-	}
+	require.LessOrEqual(t, absDiffI64(actualDelta, expectedDelta), int64(2),
+		"unexpected write quota delta: got %d, want ~%d (+/-2). base=%d withWrite=%d", actualDelta, expectedDelta, base, withWrite)
 }
 
 // Response API: cached prompt tokens should follow cached-input pricing without affecting completion cost.
@@ -143,9 +137,7 @@ func TestPostConsumeResponseAPIQuota_UsesCachedInputPricing(t *testing.T) {
 	modelName := "gpt-4o"
 	channelType := channeltype.OpenAI
 	adaptor := relay.GetAdaptor(channelType)
-	if adaptor == nil {
-		t.Fatalf("nil adaptor for channel %d", channelType)
-	}
+	require.NotNil(t, adaptor, "nil adaptor for channel %d", channelType)
 	modelRatio := adaptor.GetModelRatio(modelName)
 	groupRatio := 1.0
 
@@ -169,9 +161,8 @@ func TestPostConsumeResponseAPIQuota_UsesCachedInputPricing(t *testing.T) {
 		GroupRatio:     groupRatio,
 		PricingAdaptor: adaptor,
 	})
-	if base != baseResult.TotalQuota {
-		t.Fatalf("postConsumeResponseAPIQuota mismatch with compute result: got %d, want %d", base, baseResult.TotalQuota)
-	}
+	require.Equal(t, baseResult.TotalQuota, base,
+		"postConsumeResponseAPIQuota mismatch with compute result: got %d, want %d", base, baseResult.TotalQuota)
 
 	// With cached prompt details present - expect delta only from input pricing change
 	cachedPrompt := int(float64(promptTokens) * 0.6)
@@ -184,9 +175,8 @@ func TestPostConsumeResponseAPIQuota_UsesCachedInputPricing(t *testing.T) {
 		GroupRatio:     groupRatio,
 		PricingAdaptor: adaptor,
 	})
-	if withCache != cachedResult.TotalQuota {
-		t.Fatalf("postConsumeResponseAPIQuota mismatch with compute result (cached): got %d, want %d", withCache, cachedResult.TotalQuota)
-	}
+	require.Equal(t, cachedResult.TotalQuota, withCache,
+		"postConsumeResponseAPIQuota mismatch with compute result (cached): got %d, want %d", withCache, cachedResult.TotalQuota)
 
 	normalInputPrice := baseResult.UsedModelRatio * groupRatio
 	cachedInputPrice := normalInputPrice
@@ -201,11 +191,9 @@ func TestPostConsumeResponseAPIQuota_UsesCachedInputPricing(t *testing.T) {
 
 	expectedDelta := int64(math.Ceil(float64(cachedPrompt) * (cachedInputPrice - normalInputPrice)))
 	actualDelta := withCache - base
-	if absDiffI64(actualDelta, expectedDelta) > 2 {
-		t.Fatalf("unexpected Response API cached quota delta: got %d, want ~%d (+/-2). base=%d cached=%d", actualDelta, expectedDelta, base, withCache)
-	}
+	require.LessOrEqual(t, absDiffI64(actualDelta, expectedDelta), int64(2),
+		"unexpected Response API cached quota delta: got %d, want ~%d (+/-2). base=%d cached=%d", actualDelta, expectedDelta, base, withCache)
 
-	if math.Abs(cachedResult.UsedCompletionRatio-baseResult.UsedCompletionRatio) > 1e-12 {
-		t.Fatalf("completion ratio changed due to cached prompt tokens: base=%.6f cached=%.6f", baseResult.UsedCompletionRatio, cachedResult.UsedCompletionRatio)
-	}
+	require.InDelta(t, baseResult.UsedCompletionRatio, cachedResult.UsedCompletionRatio, 1e-12,
+		"completion ratio changed due to cached prompt tokens: base=%.6f cached=%.6f", baseResult.UsedCompletionRatio, cachedResult.UsedCompletionRatio)
 }

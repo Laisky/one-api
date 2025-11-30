@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
+	"github.com/stretchr/testify/require"
 
 	"github.com/songquanpeng/one-api/relay/model"
 	"github.com/songquanpeng/one-api/relay/relaymode"
@@ -34,22 +35,16 @@ func TestConvertRequestClampsParametersV4(t *testing.T) {
 	c := newZhipuContext()
 
 	convertedAny, err := adaptor.ConvertRequest(c, relaymode.ChatCompletions, req)
-	if err != nil {
-		t.Fatalf("ConvertRequest returned error: %v", err)
-	}
+	require.NoError(t, err, "ConvertRequest returned error")
 
 	converted, ok := convertedAny.(*model.GeneralOpenAIRequest)
-	if !ok {
-		t.Fatalf("expected v4 conversion to return GeneralOpenAIRequest, got %T", convertedAny)
-	}
+	require.True(t, ok, "expected v4 conversion to return GeneralOpenAIRequest, got %T", convertedAny)
 
-	if converted.TopP == nil || *converted.TopP != 1 {
-		t.Fatalf("expected TopP to be clamped to 1, got %v", converted.TopP)
-	}
+	require.NotNil(t, converted.TopP, "expected TopP to be non-nil")
+	require.Equal(t, float64(1), *converted.TopP, "expected TopP to be clamped to 1")
 
-	if converted.Temperature == nil || *converted.Temperature != 0 {
-		t.Fatalf("expected Temperature to be clamped to 0, got %v", converted.Temperature)
-	}
+	require.NotNil(t, converted.Temperature, "expected Temperature to be non-nil")
+	require.Equal(t, float64(0), *converted.Temperature, "expected Temperature to be clamped to 0")
 }
 
 func TestConvertRequestClampsParametersV3(t *testing.T) {
@@ -63,20 +58,14 @@ func TestConvertRequestClampsParametersV3(t *testing.T) {
 	c := newZhipuContext()
 
 	convertedAny, err := adaptor.ConvertRequest(c, relaymode.ChatCompletions, req)
-	if err != nil {
-		t.Fatalf("ConvertRequest returned error: %v", err)
-	}
+	require.NoError(t, err, "ConvertRequest returned error")
 
 	converted, ok := convertedAny.(*Request)
-	if !ok {
-		t.Fatalf("expected v3 conversion to return *Request, got %T", convertedAny)
-	}
+	require.True(t, ok, "expected v3 conversion to return *Request, got %T", convertedAny)
 
-	if converted.TopP == nil || *converted.TopP != 0 {
-		t.Fatalf("expected TopP to be clamped to 0, got %v", converted.TopP)
-	}
+	require.NotNil(t, converted.TopP, "expected TopP to be non-nil")
+	require.Equal(t, float64(0), *converted.TopP, "expected TopP to be clamped to 0")
 
-	if converted.Temperature == nil || *converted.Temperature != 1 {
-		t.Fatalf("expected Temperature to be clamped to 1, got %v", converted.Temperature)
-	}
+	require.NotNil(t, converted.Temperature, "expected Temperature to be non-nil")
+	require.Equal(t, float64(1), *converted.Temperature, "expected Temperature to be clamped to 1")
 }

@@ -7,6 +7,7 @@ import (
 	"github.com/songquanpeng/one-api/common/config"
 	"github.com/songquanpeng/one-api/relay/model"
 	"github.com/songquanpeng/one-api/relay/relaymode"
+	"github.com/stretchr/testify/require"
 )
 
 func init() {
@@ -110,17 +111,15 @@ func TestGetPromptTokens(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			tokens := getPromptTokens(ctx, tt.request, tt.relayMode)
 
-			if tt.expectZero && tokens != 0 {
-				t.Errorf("Expected 0 tokens for %s, got %d", tt.name, tokens)
+			if tt.expectZero {
+				require.Zero(t, tokens, "Expected 0 tokens for %s", tt.name)
 			}
 
-			if !tt.expectZero && tokens == 0 {
-				t.Errorf("Expected non-zero tokens for %s, got %d", tt.name, tokens)
+			if !tt.expectZero {
+				require.NotZero(t, tokens, "Expected non-zero tokens for %s", tt.name)
 			}
 
-			if tokens < 0 {
-				t.Errorf("Token count should never be negative, got %d for %s", tokens, tt.name)
-			}
+			require.GreaterOrEqual(t, tokens, 0, "Token count should never be negative for %s", tt.name)
 		})
 	}
 }
@@ -165,12 +164,12 @@ func TestGetPromptTokensEmbeddingsSpecific(t *testing.T) {
 
 			tokens := getPromptTokens(ctx, request, relaymode.Embeddings)
 
-			if tc.expected && tokens == 0 {
-				t.Errorf("Expected tokens > 0 for %s, got %d", tc.name, tokens)
+			if tc.expected {
+				require.NotZero(t, tokens, "Expected tokens > 0 for %s", tc.name)
 			}
 
-			if !tc.expected && tokens > 0 {
-				t.Errorf("Expected tokens = 0 for %s, got %d", tc.name, tokens)
+			if !tc.expected {
+				require.Zero(t, tokens, "Expected tokens = 0 for %s", tc.name)
 			}
 		})
 	}

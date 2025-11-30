@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
+	"github.com/stretchr/testify/require"
 )
 
 // faultyWriter simulates a client disconnect by returning an error on Write
@@ -29,13 +30,8 @@ func TestHandlerReturnsUsageOnWriteFailure(t *testing.T) {
 	resp := &http.Response{StatusCode: 200, Body: io.NopCloser(bytes.NewReader(body)), Header: http.Header{}}
 
 	err, usage := Handler(c, resp, 5, "gpt-4o")
-	if err == nil {
-		t.Fatalf("expected error due to write failure, got nil")
-	}
-	if usage == nil {
-		t.Fatalf("expected usage to be returned on write failure")
-	}
-	if usage.PromptTokens != 5 || usage.CompletionTokens == 0 {
-		t.Fatalf("unexpected usage: %+v", *usage)
-	}
+	require.NotNil(t, err, "expected error due to write failure")
+	require.NotNil(t, usage, "expected usage to be returned on write failure")
+	require.Equal(t, 5, usage.PromptTokens, "unexpected prompt tokens")
+	require.NotZero(t, usage.CompletionTokens, "completion tokens should not be zero")
 }

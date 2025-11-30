@@ -6,6 +6,7 @@ import (
 	"github.com/songquanpeng/one-api/relay/channeltype"
 	relaymeta "github.com/songquanpeng/one-api/relay/meta"
 	"github.com/songquanpeng/one-api/relay/model"
+	"github.com/stretchr/testify/require"
 )
 
 func float64Ptr(v float64) *float64 {
@@ -30,9 +31,8 @@ func TestIsWebSearchModel(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := isWebSearchModel(tc.model); got != tc.expected {
-				t.Fatalf("isWebSearchModel(%q) = %v, want %v", tc.model, got, tc.expected)
-			}
+			got := isWebSearchModel(tc.model)
+			require.Equal(t, tc.expected, got, "isWebSearchModel(%q)", tc.model)
 		})
 	}
 }
@@ -53,27 +53,10 @@ func TestApplyRequestTransformations_WebSearchStripsUnsupportedParams(t *testing
 		ActualModelName: "gpt-4o-mini-search-preview",
 	}
 
-	if err := adaptor.applyRequestTransformations(m, req); err != nil {
-		t.Fatalf("applyRequestTransformations returned error: %v", err)
-	}
-
-	if req.Temperature != nil {
-		t.Errorf("expected Temperature to be nil for web search model, got %v", *req.Temperature)
-	}
-
-	if req.TopP != nil {
-		t.Errorf("expected TopP to be nil for web search model, got %v", *req.TopP)
-	}
-
-	if req.PresencePenalty != nil {
-		t.Errorf("expected PresencePenalty to be nil for web search model, got %v", *req.PresencePenalty)
-	}
-
-	if req.FrequencyPenalty != nil {
-		t.Errorf("expected FrequencyPenalty to be nil for web search model, got %v", *req.FrequencyPenalty)
-	}
-
-	if req.N != nil {
-		t.Errorf("expected N to be nil for web search model, got %v", *req.N)
-	}
+	require.NoError(t, adaptor.applyRequestTransformations(m, req), "applyRequestTransformations returned error")
+	require.Nil(t, req.Temperature, "expected Temperature to be nil for web search model")
+	require.Nil(t, req.TopP, "expected TopP to be nil for web search model")
+	require.Nil(t, req.PresencePenalty, "expected PresencePenalty to be nil for web search model")
+	require.Nil(t, req.FrequencyPenalty, "expected FrequencyPenalty to be nil for web search model")
+	require.Nil(t, req.N, "expected N to be nil for web search model")
 }

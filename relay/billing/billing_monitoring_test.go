@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/songquanpeng/one-api/common/metrics"
+	"github.com/stretchr/testify/require"
 )
 
 // MockMetricsRecorder for testing billing monitoring
@@ -121,29 +122,15 @@ func TestBillingMonitoring(t *testing.T) {
 	metrics.GlobalRecorder.RecordBillingOperation(startTime, "post_consume_detailed", true, userId, channelId, modelName, quotaAmount)
 
 	// Verify billing operation was recorded
-	if len(mockRecorder.BillingOperations) != 1 {
-		t.Errorf("Expected 1 billing operation record, got %d", len(mockRecorder.BillingOperations))
-	}
+	require.Len(t, mockRecorder.BillingOperations, 1, "Expected 1 billing operation record")
 
 	operation := mockRecorder.BillingOperations[0]
-	if operation.Operation != "post_consume_detailed" {
-		t.Errorf("Expected operation 'post_consume_detailed', got '%s'", operation.Operation)
-	}
-	if operation.Success != true {
-		t.Errorf("Expected successful operation, got %v", operation.Success)
-	}
-	if operation.UserId != userId {
-		t.Errorf("Expected userId %d, got %d", userId, operation.UserId)
-	}
-	if operation.ChannelId != channelId {
-		t.Errorf("Expected channelId %d, got %d", channelId, operation.ChannelId)
-	}
-	if operation.ModelName != modelName {
-		t.Errorf("Expected modelName '%s', got '%s'", modelName, operation.ModelName)
-	}
-	if operation.QuotaAmount != quotaAmount {
-		t.Errorf("Expected quotaAmount %f, got %f", quotaAmount, operation.QuotaAmount)
-	}
+	require.Equal(t, "post_consume_detailed", operation.Operation, "Expected operation 'post_consume_detailed'")
+	require.True(t, operation.Success, "Expected successful operation")
+	require.Equal(t, userId, operation.UserId, "Expected correct userId")
+	require.Equal(t, channelId, operation.ChannelId, "Expected correct channelId")
+	require.Equal(t, modelName, operation.ModelName, "Expected correct modelName")
+	require.Equal(t, quotaAmount, operation.QuotaAmount, "Expected correct quotaAmount")
 }
 
 func TestBillingErrorMonitoring(t *testing.T) {
@@ -163,26 +150,14 @@ func TestBillingErrorMonitoring(t *testing.T) {
 	metrics.GlobalRecorder.RecordBillingError("validation_error", "post_consume_detailed", userId, channelId, modelName)
 
 	// Verify billing error was recorded
-	if len(mockRecorder.BillingErrors) != 1 {
-		t.Errorf("Expected 1 billing error record, got %d", len(mockRecorder.BillingErrors))
-	}
+	require.Len(t, mockRecorder.BillingErrors, 1, "Expected 1 billing error record")
 
-	error := mockRecorder.BillingErrors[0]
-	if error.ErrorType != "validation_error" {
-		t.Errorf("Expected error type 'validation_error', got '%s'", error.ErrorType)
-	}
-	if error.Operation != "post_consume_detailed" {
-		t.Errorf("Expected operation 'post_consume_detailed', got '%s'", error.Operation)
-	}
-	if error.UserId != userId {
-		t.Errorf("Expected userId %d, got %d", userId, error.UserId)
-	}
-	if error.ChannelId != channelId {
-		t.Errorf("Expected channelId %d, got %d", channelId, error.ChannelId)
-	}
-	if error.ModelName != modelName {
-		t.Errorf("Expected modelName '%s', got '%s'", modelName, error.ModelName)
-	}
+	billingErr := mockRecorder.BillingErrors[0]
+	require.Equal(t, "validation_error", billingErr.ErrorType, "Expected error type 'validation_error'")
+	require.Equal(t, "post_consume_detailed", billingErr.Operation, "Expected operation 'post_consume_detailed'")
+	require.Equal(t, userId, billingErr.UserId, "Expected correct userId")
+	require.Equal(t, channelId, billingErr.ChannelId, "Expected correct channelId")
+	require.Equal(t, modelName, billingErr.ModelName, "Expected correct modelName")
 }
 
 func TestBillingTimeoutMonitoring(t *testing.T) {
@@ -204,24 +179,12 @@ func TestBillingTimeoutMonitoring(t *testing.T) {
 	metrics.GlobalRecorder.RecordBillingTimeout(userId, channelId, modelName, estimatedQuota, elapsedTime)
 
 	// Verify billing timeout was recorded
-	if len(mockRecorder.BillingTimeouts) != 1 {
-		t.Errorf("Expected 1 billing timeout record, got %d", len(mockRecorder.BillingTimeouts))
-	}
+	require.Len(t, mockRecorder.BillingTimeouts, 1, "Expected 1 billing timeout record")
 
 	timeout := mockRecorder.BillingTimeouts[0]
-	if timeout.UserId != userId {
-		t.Errorf("Expected userId %d, got %d", userId, timeout.UserId)
-	}
-	if timeout.ChannelId != channelId {
-		t.Errorf("Expected channelId %d, got %d", channelId, timeout.ChannelId)
-	}
-	if timeout.ModelName != modelName {
-		t.Errorf("Expected modelName '%s', got '%s'", modelName, timeout.ModelName)
-	}
-	if timeout.EstimatedQuota != estimatedQuota {
-		t.Errorf("Expected estimatedQuota %f, got %f", estimatedQuota, timeout.EstimatedQuota)
-	}
-	if timeout.ElapsedTime != elapsedTime {
-		t.Errorf("Expected elapsedTime %v, got %v", elapsedTime, timeout.ElapsedTime)
-	}
+	require.Equal(t, userId, timeout.UserId, "Expected correct userId")
+	require.Equal(t, channelId, timeout.ChannelId, "Expected correct channelId")
+	require.Equal(t, modelName, timeout.ModelName, "Expected correct modelName")
+	require.Equal(t, estimatedQuota, timeout.EstimatedQuota, "Expected correct estimatedQuota")
+	require.Equal(t, elapsedTime, timeout.ElapsedTime, "Expected correct elapsedTime")
 }

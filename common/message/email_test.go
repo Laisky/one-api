@@ -103,7 +103,7 @@ func TestSendEmailWithStartTLSFallback(t *testing.T) {
 		require.Contains(t, capture.message, "Subject: =?UTF-8?B?VGVzdA==?=")
 		require.Contains(t, capture.message, "hello world")
 	case <-time.After(5 * time.Second):
-		t.Fatal("timed out waiting for SMTP capture")
+		require.FailNow(t, "timed out waiting for SMTP capture")
 	}
 }
 
@@ -139,7 +139,7 @@ func TestSendEmailWithoutSTARTTLSNoAuth(t *testing.T) {
 		require.Contains(t, capture.message, "Subject: =?UTF-8?B?Tm9UTFM=?=")
 		require.Contains(t, capture.message, "body")
 	case <-time.After(5 * time.Second):
-		t.Fatal("timed out waiting for SMTP capture")
+		require.FailNow(t, "timed out waiting for SMTP capture")
 	}
 }
 
@@ -175,7 +175,7 @@ func TestSendEmailWithoutSTARTTLSAuthAllowed(t *testing.T) {
 		require.Contains(t, capture.message, "Subject: =?UTF-8?B?TGVnYWN5QXV0aA==?=")
 		require.Contains(t, capture.message, "legacy body")
 	case <-time.After(5 * time.Second):
-		t.Fatal("timed out waiting for SMTP capture")
+		require.FailNow(t, "timed out waiting for SMTP capture")
 	}
 }
 
@@ -236,7 +236,7 @@ func TestSendEmailAuthPlainPreferred(t *testing.T) {
 		require.Contains(t, capture.message, "Subject: =?UTF-8?B?VGVzdFBsYWlu?=")
 		require.Contains(t, capture.message, "ping")
 	case <-time.After(5 * time.Second):
-		t.Fatal("timed out waiting for SMTP capture")
+		require.FailNow(t, "timed out waiting for SMTP capture")
 	}
 }
 

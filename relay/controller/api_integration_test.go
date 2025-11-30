@@ -2,6 +2,8 @@ package controller
 
 import (
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 // TestAPIIntegration verifies that all APIs (Audio, ChatCompletion, Response) work correctly
@@ -36,9 +38,7 @@ func TestAPIIntegration(t *testing.T) {
 				// Audio API doesn't use completion ratios or tools cost
 				expectedQuota := tc.totalQuota
 
-				if expectedQuota != tc.totalQuota {
-					t.Errorf("Expected quota %d, got %d", tc.totalQuota, expectedQuota)
-				}
+				require.Equal(t, tc.totalQuota, expectedQuota, "Expected quota mismatch")
 
 				t.Logf("✓ Audio API test passed: %s - quota=%d", tc.name, expectedQuota)
 			})
@@ -117,13 +117,9 @@ func TestAPIIntegration(t *testing.T) {
 					expectedFloat := (float64(tc.promptTokens)+float64(tc.completionTokens)*tc.completionRatio)*tc.modelRatio*tc.groupRatio + float64(tc.toolsCost)
 					calculatedQuota = int64(expectedFloat)
 					// Should be 144 (truncated from 144.4)
-					if calculatedQuota != 144 {
-						t.Errorf("Expected quota to be 144, got %d", calculatedQuota)
-					}
+					require.Equal(t, int64(144), calculatedQuota, "Expected quota to be 144")
 				} else {
-					if calculatedQuota != tc.expectedQuota {
-						t.Errorf("Expected quota %d, got %d", tc.expectedQuota, calculatedQuota)
-					}
+					require.Equal(t, tc.expectedQuota, calculatedQuota, "Expected quota mismatch")
 				}
 
 				t.Logf("✓ ChatCompletion API test passed: %s - quota=%d", tc.name, calculatedQuota)
@@ -189,9 +185,7 @@ func TestAPIIntegration(t *testing.T) {
 				chatQuota := int64((float64(tc.inputTokens)+float64(tc.outputTokens)*tc.completionRatio)*tc.modelRatio*tc.groupRatio) + tc.toolsCost
 
 				// They should be identical
-				if responseQuota != chatQuota {
-					t.Errorf("Response API quota (%d) should match ChatCompletion quota (%d)", responseQuota, chatQuota)
-				}
+				require.Equal(t, chatQuota, responseQuota, "Response API quota should match ChatCompletion quota")
 
 				t.Logf("✓ Response API test passed: %s - quota=%d (matches ChatCompletion)", tc.name, responseQuota)
 			})
@@ -216,13 +210,8 @@ func TestAPIIntegration(t *testing.T) {
 		chatQuota := expectedQuota
 		responseQuota := expectedQuota
 
-		if chatQuota != responseQuota {
-			t.Errorf("ChatCompletion quota (%d) should match Response API quota (%d)", chatQuota, responseQuota)
-		}
-
-		if chatQuota != expectedQuota {
-			t.Errorf("Expected quota %d, got %d", expectedQuota, chatQuota)
-		}
+		require.Equal(t, responseQuota, chatQuota, "ChatCompletion quota should match Response API quota")
+		require.Equal(t, expectedQuota, chatQuota, "Expected quota mismatch")
 
 		t.Logf("✓ Cross-API consistency test passed: ChatCompletion=%d, Response=%d", chatQuota, responseQuota)
 	})

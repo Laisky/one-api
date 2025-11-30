@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/songquanpeng/one-api/relay/model"
+	"github.com/stretchr/testify/require"
 )
 
 func TestThinkingSignatureCache(t *testing.T) {
@@ -18,25 +19,17 @@ func TestThinkingSignatureCache(t *testing.T) {
 	cache.Store(key, signature)
 
 	result := cache.Get(key)
-	if result == nil {
-		t.Fatal("Expected signature to be found, got nil")
-	}
-	if *result != signature {
-		t.Fatalf("Expected signature %s, got %s", signature, *result)
-	}
+	require.NotNil(t, result, "Expected signature to be found, got nil")
+	require.Equal(t, signature, *result)
 
 	// Test non-existent key
 	nonExistentResult := cache.Get("non_existent_key")
-	if nonExistentResult != nil {
-		t.Fatal("Expected nil for non-existent key")
-	}
+	require.Nil(t, nonExistentResult, "Expected nil for non-existent key")
 
 	// Test Delete
 	cache.Delete(key)
 	deletedResult := cache.Get(key)
-	if deletedResult != nil {
-		t.Fatal("Expected nil after deletion")
-	}
+	require.Nil(t, deletedResult, "Expected nil after deletion")
 }
 
 func TestSignatureCacheTTL(t *testing.T) {
@@ -50,18 +43,15 @@ func TestSignatureCacheTTL(t *testing.T) {
 
 	// Should be available immediately
 	result := cache.Get(key)
-	if result == nil || *result != signature {
-		t.Fatal("Signature should be available immediately after storage")
-	}
+	require.NotNil(t, result, "Signature should be available immediately after storage")
+	require.Equal(t, signature, *result)
 
 	// Wait for TTL to expire
 	time.Sleep(150 * time.Millisecond)
 
 	// Should be expired now
 	expiredResult := cache.Get(key)
-	if expiredResult != nil {
-		t.Fatal("Signature should be expired after TTL")
-	}
+	require.Nil(t, expiredResult, "Signature should be expired after TTL")
 }
 
 func TestGenerateSignatureKey(t *testing.T) {
@@ -73,18 +63,14 @@ func TestGenerateSignatureKey(t *testing.T) {
 	expected := "thinking_sig:token_123:conv_abc:5:2"
 	result := generateSignatureKey(tokenID, conversationID, messageIndex, thinkingIndex)
 
-	if result != expected {
-		t.Fatalf("Expected key %s, got %s", expected, result)
-	}
+	require.Equal(t, expected, result)
 }
 
 func TestGenerateConversationID(t *testing.T) {
 	// Test with empty messages
 	emptyMessages := []model.Message{}
 	emptyResult := generateConversationID(emptyMessages)
-	if emptyResult == "" {
-		t.Fatal("Conversation ID should not be empty for empty messages")
-	}
+	require.NotEmpty(t, emptyResult, "Conversation ID should not be empty for empty messages")
 
 	// Test with user messages
 	messages := []model.Message{
@@ -94,24 +80,18 @@ func TestGenerateConversationID(t *testing.T) {
 	}
 
 	result1 := generateConversationID(messages)
-	if result1 == "" {
-		t.Fatal("Conversation ID should not be empty")
-	}
+	require.NotEmpty(t, result1, "Conversation ID should not be empty")
 
 	// Same messages should produce same ID
 	result2 := generateConversationID(messages)
-	if result1 != result2 {
-		t.Fatalf("Same messages should produce same conversation ID: %s != %s", result1, result2)
-	}
+	require.Equal(t, result1, result2, "Same messages should produce same conversation ID")
 
 	// Different messages should produce different ID
 	differentMessages := []model.Message{
 		{Role: "user", Content: "Different message"},
 	}
 	result3 := generateConversationID(differentMessages)
-	if result1 == result3 {
-		t.Fatal("Different messages should produce different conversation IDs")
-	}
+	require.NotEqual(t, result1, result3, "Different messages should produce different conversation IDs")
 }
 
 func TestTruncateForHash(t *testing.T) {
@@ -119,22 +99,16 @@ func TestTruncateForHash(t *testing.T) {
 	content := "This is a test message"
 	result := truncateForHash(content, 10)
 	expected := "This is a "
-	if result != expected {
-		t.Fatalf("Expected %s, got %s", expected, result)
-	}
+	require.Equal(t, expected, result)
 
 	// Test case where content is shorter than maxLen
 	shortContent := "Short"
 	result2 := truncateForHash(shortContent, 10)
-	if result2 != shortContent {
-		t.Fatalf("Expected %s, got %s", shortContent, result2)
-	}
+	require.Equal(t, shortContent, result2)
 
 	// Test empty content
 	emptyResult := truncateForHash("", 10)
-	if emptyResult != "" {
-		t.Fatal("Expected empty string for empty input")
-	}
+	require.Empty(t, emptyResult, "Expected empty string for empty input")
 }
 
 func TestGetTokenIDFromRequest(t *testing.T) {
@@ -142,34 +116,26 @@ func TestGetTokenIDFromRequest(t *testing.T) {
 	expected := "token_12345"
 	result := getTokenIDFromRequest(tokenID)
 
-	if result != expected {
-		t.Fatalf("Expected %s, got %s", expected, result)
-	}
+	require.Equal(t, expected, result)
 }
 
 func TestCacheSize(t *testing.T) {
 	cache := NewThinkingSignatureCache(time.Hour)
 
 	// Initially empty
-	if cache.Size() != 0 {
-		t.Fatal("Cache should be empty initially")
-	}
+	require.Equal(t, 0, cache.Size(), "Cache should be empty initially")
 
 	// Add some entries
 	cache.Store("key1", "sig1")
 	cache.Store("key2", "sig2")
 	cache.Store("key3", "sig3")
 
-	if cache.Size() != 3 {
-		t.Fatalf("Expected cache size 3, got %d", cache.Size())
-	}
+	require.Equal(t, 3, cache.Size())
 
 	// Delete one entry
 	cache.Delete("key2")
 
-	if cache.Size() != 2 {
-		t.Fatalf("Expected cache size 2 after deletion, got %d", cache.Size())
-	}
+	require.Equal(t, 2, cache.Size())
 }
 
 func TestCacheCleanup(t *testing.T) {
@@ -181,9 +147,7 @@ func TestCacheCleanup(t *testing.T) {
 	cache.Store("key2", "sig2")
 
 	// Verify they exist
-	if cache.Size() != 2 {
-		t.Fatal("Expected 2 entries before expiration")
-	}
+	require.Equal(t, 2, cache.Size(), "Expected 2 entries before expiration")
 
 	// Wait for expiration
 	time.Sleep(100 * time.Millisecond)
@@ -192,9 +156,7 @@ func TestCacheCleanup(t *testing.T) {
 	cache.cleanupExpired()
 
 	// Should be empty now
-	if cache.Size() != 0 {
-		t.Fatalf("Expected 0 entries after cleanup, got %d", cache.Size())
-	}
+	require.Equal(t, 0, cache.Size())
 }
 
 // Mock backend for testing
@@ -251,14 +213,13 @@ func TestCacheWithBackend(t *testing.T) {
 
 	// Should retrieve from backend
 	result := cache.Get(key)
-	if result == nil || *result != signature {
-		t.Fatal("Should retrieve signature from backend")
-	}
+	require.NotNil(t, result, "Should retrieve signature from backend")
+	require.Equal(t, signature, *result)
 
 	// Verify it's actually in the backend
-	if backendValue, exists := backend.data[key]; !exists || backendValue != signature {
-		t.Fatal("Signature should be stored in backend")
-	}
+	backendValue, exists := backend.data[key]
+	require.True(t, exists, "Signature should exist in backend")
+	require.Equal(t, signature, backendValue, "Signature should be stored in backend")
 }
 
 func TestCacheBackendFallback(t *testing.T) {
@@ -274,7 +235,6 @@ func TestCacheBackendFallback(t *testing.T) {
 
 	// Should fallback to in-memory cache
 	result := cache.Get(key)
-	if result == nil || *result != signature {
-		t.Fatal("Should fallback to in-memory cache when backend fails")
-	}
+	require.NotNil(t, result, "Should fallback to in-memory cache when backend fails")
+	require.Equal(t, signature, *result)
 }

@@ -70,38 +70,26 @@ func TestChannelSpecificConversion(t *testing.T) {
 
 			// Test URL generation
 			url, err := adaptor.GetRequestURL(testMeta)
-			if err != nil {
-				t.Fatalf("GetRequestURL failed: %v", err)
-			}
+			require.NoError(t, err, "GetRequestURL failed")
 
 			// Check if URL was converted to /responses
 			urlConverted := (url == "https://api.openai.com/v1/responses")
 
 			// Test request conversion
 			convertedReq, err := adaptor.ConvertRequest(c, relaymode.ChatCompletions, chatRequest)
-			if err != nil {
-				t.Fatalf("ConvertRequest failed: %v", err)
-			}
+			require.NoError(t, err, "ConvertRequest failed")
 
 			// Check if request was converted to ResponseAPIRequest
 			_, isResponseAPI := convertedReq.(*ResponseAPIRequest)
 
 			// Verify expectations
 			if tc.expectConversion {
-				if !urlConverted {
-					t.Errorf("Expected URL conversion for %s but got: %s", tc.name, url)
-				}
-				if !isResponseAPI {
-					t.Errorf("Expected request conversion for %s but request was not converted", tc.name)
-				}
+				require.True(t, urlConverted, "Expected URL conversion for %s but got: %s", tc.name, url)
+				require.True(t, isResponseAPI, "Expected request conversion for %s but request was not converted", tc.name)
 				t.Logf("✓ %s: Converted to Response API", tc.name)
 			} else {
-				if urlConverted {
-					t.Errorf("Did not expect URL conversion for %s but got: %s", tc.name, url)
-				}
-				if isResponseAPI {
-					t.Errorf("Did not expect request conversion for %s but request was converted", tc.name)
-				}
+				require.False(t, urlConverted, "Did not expect URL conversion for %s but got: %s", tc.name, url)
+				require.False(t, isResponseAPI, "Did not expect request conversion for %s but request was converted", tc.name)
 				t.Logf("✓ %s: Kept as native ChatCompletion payload", tc.name)
 			}
 		})
@@ -156,21 +144,15 @@ func TestModelSpecificConversion(t *testing.T) {
 
 			// Test request conversion
 			convertedReq, err := adaptor.ConvertRequest(c, relaymode.ChatCompletions, chatRequest)
-			if err != nil {
-				t.Fatalf("ConvertRequest failed: %v", err)
-			}
+			require.NoError(t, err, "ConvertRequest failed")
 
 			_, isResponseAPI := convertedReq.(*ResponseAPIRequest)
 
 			if tc.expectConversion {
-				if !isResponseAPI {
-					t.Errorf("Expected request conversion for model %s but request was not converted", tc.model)
-				}
+				require.True(t, isResponseAPI, "Expected request conversion for model %s but request was not converted", tc.model)
 				t.Logf("✓ Model %s: Converted to Response API", tc.model)
 			} else {
-				if isResponseAPI {
-					t.Errorf("Did not expect request conversion for model %s but request was converted", tc.model)
-				}
+				require.False(t, isResponseAPI, "Did not expect request conversion for model %s but request was converted", tc.model)
 				t.Logf("✓ Model %s: Kept as ChatCompletion payload", tc.model)
 			}
 		})
