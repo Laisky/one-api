@@ -45,9 +45,10 @@ func TestValidateUnknownParametersForRerank(t *testing.T) {
 		t.Fatalf("expected no unknown-parameter error for valid rerank payload, got: %v", err)
 	}
 
-	// Payload with an unexpected field should trigger unknown-parameter error
+	// Payload with an unexpected field should be silently ignored (not cause error)
+	// Unknown parameters are logged at DEBUG level but don't reject the request
 	invalid := []byte(`{"model":"rerank-v3.5","query":"x","documents":["a"],"unexpected_field":123}`)
-	if err := ValidateUnknownParameters(invalid); err == nil {
-		t.Fatalf("expected unknown-parameter error for payload with unexpected_field")
+	if err := ValidateUnknownParameters(invalid); err != nil {
+		t.Fatalf("expected no error for payload with unexpected_field (unknown params should be ignored), got: %v", err)
 	}
 }

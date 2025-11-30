@@ -2,12 +2,14 @@ package validator
 
 import (
 	"encoding/json"
-	"fmt"
 	"reflect"
 	"strings"
 
-	"github.com/Laisky/errors/v2"
+	gmw "github.com/Laisky/gin-middlewares/v7"
+	"github.com/Laisky/zap"
+	"github.com/gin-gonic/gin"
 
+	"github.com/songquanpeng/one-api/common/logger"
 	"github.com/songquanpeng/one-api/relay/model"
 )
 
@@ -44,8 +46,44 @@ func GetKnownParameters() map[string]bool {
 	return knownParams
 }
 
-// ValidateUnknownParameters checks for unknown parameters in the raw JSON request
+// ValidateUnknownParameters checks for unknown parameters in the raw JSON request.
+// Instead of rejecting requests with unknown parameters, it logs a warning and allows
+// the request to proceed. This ensures forward compatibility when upstream services
+// add new parameters that one-api hasn't explicitly added yet.
+//
+// Note: Unknown parameters will be dropped during deserialization since they're not
+// defined in the struct. If you need a new parameter to be passed through, add it
+// to the appropriate request struct (e.g., GeneralOpenAIRequest).
 func ValidateUnknownParameters(requestBody []byte) error {
+	unknownParams := findUnknownParameters(requestBody)
+	if len(unknownParams) > 0 {
+		// Log warning but don't reject the request
+		logger.Logger.Warn("request contains unknown parameters that will be ignored",
+			zap.Strings("unknown_params", unknownParams),
+		)
+	}
+
+	return nil
+}
+
+// ValidateUnknownParametersWithContext checks for unknown parameters and logs warnings
+// with request context. Use this variant when you have access to a gin.Context for
+// richer logging context.
+func ValidateUnknownParametersWithContext(c *gin.Context, requestBody []byte) error {
+	unknownParams := findUnknownParameters(requestBody)
+	if len(unknownParams) > 0 {
+		lg := gmw.GetLogger(c)
+		lg.Warn("request contains unknown parameters that will be ignored",
+			zap.Strings("unknown_params", unknownParams),
+		)
+	}
+
+	return nil
+}
+
+// findUnknownParameters identifies parameters in the request body that are not
+// defined in the known request structs.
+func findUnknownParameters(requestBody []byte) []string {
 	// Parse the JSON to extract field names
 	var rawRequest map[string]any
 	if err := json.Unmarshal(requestBody, &rawRequest); err != nil {
@@ -64,20 +102,5 @@ func ValidateUnknownParameters(requestBody []byte) error {
 		}
 	}
 
-	// If we found unknown parameters, return an error
-	if len(unknownParams) > 0 {
-		var errorMessage string
-		if len(unknownParams) == 1 {
-			errorMessage = fmt.Sprintf("unknown parameter '%s' is not supported", unknownParams[0])
-		} else {
-			errorMessage = "unknown parameters are not supported:"
-			for _, param := range unknownParams {
-				errorMessage += fmt.Sprintf(" %s", param)
-			}
-		}
-
-		return errors.New(errorMessage)
-	}
-
-	return nil
+	return unknownParams
 }

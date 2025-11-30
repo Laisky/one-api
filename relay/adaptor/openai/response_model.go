@@ -582,7 +582,8 @@ type WebSearchCallSource struct {
 
 // ResponseTextConfig represents the text configuration for Response API
 type ResponseTextConfig struct {
-	Format *ResponseTextFormat `json:"format,omitempty"` // Optional: Format configuration for structured outputs
+	Format    *ResponseTextFormat `json:"format,omitempty"`    // Optional: Format configuration for structured outputs
+	Verbosity *string             `json:"verbosity,omitempty"` // Optional: Verbosity level (low, medium, high)
 }
 
 // ResponseTextFormat represents the format configuration for Response API structured outputs
@@ -1094,6 +1095,15 @@ func ConvertChatCompletionToResponseAPI(request *model.GeneralOpenAIRequest) *Re
 		responseReq.Text = textConfig
 	}
 
+	// Handle verbosity parameter (GPT-5 series)
+	// In Response API, verbosity goes into text.verbosity
+	if request.Verbosity != nil {
+		if responseReq.Text == nil {
+			responseReq.Text = &ResponseTextConfig{}
+		}
+		responseReq.Text.Verbosity = request.Verbosity
+	}
+
 	// Handle system message as instructions
 	if len(request.Messages) > 0 && request.Messages[0].Role == "system" {
 		systemContent := request.Messages[0].StringContent()
@@ -1157,6 +1167,12 @@ func ConvertResponseAPIToChatCompletionRequest(request *ResponseAPIRequest) (*mo
 			}
 			chatReq.ResponseFormat.JsonSchema.Strict = nil
 		}
+	}
+
+	// Handle verbosity parameter (GPT-5 series)
+	// In Response API, verbosity is in text.verbosity; convert to top-level for ChatCompletion
+	if request.Text != nil && request.Text.Verbosity != nil {
+		chatReq.Verbosity = request.Text.Verbosity
 	}
 
 	if len(request.Tools) > 0 {

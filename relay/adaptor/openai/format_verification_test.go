@@ -279,4 +279,151 @@ func TestResponseAPIImageDataURLPreserved(t *testing.T) {
 	}
 }
 
+// TestVerbosityConversion tests the verbosity parameter conversion between
+// ChatCompletion and Response API formats.
+func TestVerbosityConversion(t *testing.T) {
+	t.Run("ChatCompletion to Response API with verbosity", func(t *testing.T) {
+		verbosityLow := "low"
+		chatRequest := &model.GeneralOpenAIRequest{
+			Model: "gpt-5",
+			Messages: []model.Message{
+				{Role: "user", Content: "Hello"},
+			},
+			Verbosity: &verbosityLow,
+			Stream:    true,
+		}
+
+		responseAPI := ConvertChatCompletionToResponseAPI(chatRequest)
+		if responseAPI.Text == nil {
+			t.Fatal("Expected Text to be set for verbosity conversion")
+		}
+		if responseAPI.Text.Verbosity == nil {
+			t.Fatal("Expected Text.Verbosity to be set")
+		}
+		if *responseAPI.Text.Verbosity != verbosityLow {
+			t.Errorf("Expected verbosity '%s', got '%s'", verbosityLow, *responseAPI.Text.Verbosity)
+		}
+
+		// Verify JSON serialization
+		jsonData, err := json.Marshal(responseAPI)
+		if err != nil {
+			t.Fatalf("Failed to marshal: %v", err)
+		}
+		if !strings.Contains(string(jsonData), `"verbosity":"low"`) {
+			t.Errorf("Expected verbosity in JSON, got: %s", string(jsonData))
+		}
+	})
+
+	t.Run("ChatCompletion to Response API with verbosity and response_format", func(t *testing.T) {
+		verbosityMedium := "medium"
+		chatRequest := &model.GeneralOpenAIRequest{
+			Model: "gpt-5",
+			Messages: []model.Message{
+				{Role: "user", Content: "What is 2+2?"},
+			},
+			Verbosity: &verbosityMedium,
+			ResponseFormat: &model.ResponseFormat{
+				Type: "json_object",
+			},
+			Stream: false,
+		}
+
+		responseAPI := ConvertChatCompletionToResponseAPI(chatRequest)
+		if responseAPI.Text == nil {
+			t.Fatal("Expected Text to be set")
+		}
+		if responseAPI.Text.Format == nil {
+			t.Fatal("Expected Text.Format to be set")
+		}
+		if responseAPI.Text.Format.Type != "json_object" {
+			t.Errorf("Expected format type 'json_object', got '%s'", responseAPI.Text.Format.Type)
+		}
+		if responseAPI.Text.Verbosity == nil {
+			t.Fatal("Expected Text.Verbosity to be set")
+		}
+		if *responseAPI.Text.Verbosity != verbosityMedium {
+			t.Errorf("Expected verbosity '%s', got '%s'", verbosityMedium, *responseAPI.Text.Verbosity)
+		}
+	})
+
+	t.Run("Response API to ChatCompletion with verbosity", func(t *testing.T) {
+		verbosityHigh := "high"
+		responseAPIRequest := &ResponseAPIRequest{
+			Model: "gpt-5",
+			Input: ResponseAPIInput{
+				map[string]any{
+					"role":    "user",
+					"content": "Test message",
+				},
+			},
+			Text: &ResponseTextConfig{
+				Verbosity: &verbosityHigh,
+			},
+		}
+
+		chatReq, err := ConvertResponseAPIToChatCompletionRequest(responseAPIRequest)
+		if err != nil {
+			t.Fatalf("Conversion failed: %v", err)
+		}
+		if chatReq.Verbosity == nil {
+			t.Fatal("Expected Verbosity to be set")
+		}
+		if *chatReq.Verbosity != verbosityHigh {
+			t.Errorf("Expected verbosity '%s', got '%s'", verbosityHigh, *chatReq.Verbosity)
+		}
+	})
+
+	t.Run("Response API to ChatCompletion with verbosity and format", func(t *testing.T) {
+		verbosityLow := "low"
+		responseAPIRequest := &ResponseAPIRequest{
+			Model: "gpt-5",
+			Input: ResponseAPIInput{
+				map[string]any{
+					"role":    "user",
+					"content": "Test message",
+				},
+			},
+			Text: &ResponseTextConfig{
+				Format: &ResponseTextFormat{
+					Type: "text",
+				},
+				Verbosity: &verbosityLow,
+			},
+		}
+
+		chatReq, err := ConvertResponseAPIToChatCompletionRequest(responseAPIRequest)
+		if err != nil {
+			t.Fatalf("Conversion failed: %v", err)
+		}
+		if chatReq.Verbosity == nil {
+			t.Fatal("Expected Verbosity to be set")
+		}
+		if *chatReq.Verbosity != verbosityLow {
+			t.Errorf("Expected verbosity '%s', got '%s'", verbosityLow, *chatReq.Verbosity)
+		}
+		if chatReq.ResponseFormat == nil {
+			t.Fatal("Expected ResponseFormat to be set")
+		}
+		if chatReq.ResponseFormat.Type != "text" {
+			t.Errorf("Expected response format type 'text', got '%s'", chatReq.ResponseFormat.Type)
+		}
+	})
+
+	t.Run("ChatCompletion without verbosity should not set Text", func(t *testing.T) {
+		chatRequest := &model.GeneralOpenAIRequest{
+			Model: "gpt-5",
+			Messages: []model.Message{
+				{Role: "user", Content: "Hello"},
+			},
+			Stream: false,
+		}
+
+		responseAPI := ConvertChatCompletionToResponseAPI(chatRequest)
+		// Text should only be set if ResponseFormat or Verbosity is specified
+		if responseAPI.Text != nil && responseAPI.Text.Verbosity != nil {
+			t.Error("Text.Verbosity should be nil when not specified in request")
+		}
+	})
+}
+
 func strPtr(s string) *string { return &s }

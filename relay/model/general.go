@@ -70,8 +70,12 @@ type GeneralOpenAIRequest struct {
 	// default to 1.
 	N *int `json:"n,omitempty" binding:"omitempty,min=0"`
 	// ReasoningEffort constrains effort on reasoning for reasoning models, reasoning models only.
-	ReasoningEffort *string `json:"reasoning_effort,omitempty" binding:"omitempty,oneof=low medium high"`
-	// Modalities currently the model only programmatically allows modalities = [“text”, “audio”]
+	// Supported values: low, medium, high, minimal (GPT-5 series also supports "minimal")
+	ReasoningEffort *string `json:"reasoning_effort,omitempty" binding:"omitempty,oneof=low medium high minimal"`
+	// Verbosity hints the model to be more or less expansive in its replies (GPT-5 series).
+	// Supported values: low, medium, high
+	Verbosity *string `json:"verbosity,omitempty" binding:"omitempty,oneof=low medium high"`
+	// Modalities currently the model only programmatically allows modalities = ["text", "audio"]
 	Modalities []string `json:"modalities,omitempty"`
 	Prediction any      `json:"prediction,omitempty"`
 	Audio      *Audio   `json:"audio,omitempty"`
