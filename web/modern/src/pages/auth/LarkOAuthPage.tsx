@@ -1,100 +1,116 @@
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { api } from '@/lib/api'
-import { useAuthStore } from '@/lib/stores/auth'
-import { useCallback, useEffect, useState } from 'react'
-import { useTranslation } from 'react-i18next'
-import { useNavigate, useSearchParams } from 'react-router-dom'
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { api } from "@/lib/api";
+import { useAuthStore } from "@/lib/stores/auth";
+import { useCallback, useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
+import { useNavigate, useSearchParams } from "react-router-dom";
 
 export function LarkOAuthPage() {
-  const [searchParams] = useSearchParams()
-  const { t } = useTranslation()
-  const [prompt, setPrompt] = useState(() => t('auth.oauth.lark.prompt.processing'))
-  const navigate = useNavigate()
-  const { login } = useAuthStore()
+  const [searchParams] = useSearchParams();
+  const { t } = useTranslation();
+  const [prompt, setPrompt] = useState(() =>
+    t("auth.oauth.lark.prompt.processing")
+  );
+  const navigate = useNavigate();
+  const { login } = useAuthStore();
 
-  const sendCode = useCallback(async (code: string, state: string, retryCount = 0): Promise<void> => {
-    try {
-      // Unified API call - complete URL with /api prefix
-      const response = await api.get(`/api/oauth/lark?code=${code}&state=${state}`)
-      const { success, message, data } = response.data
+  const sendCode = useCallback(
+    async (code: string, state: string, retryCount = 0): Promise<void> => {
+      try {
+        // Unified API call - complete URL with /api prefix
+        const response = await api.get(
+          `/api/oauth/lark?code=${code}&state=${state}`
+        );
+        const { success, message, data } = response.data;
 
-      if (success) {
-        if (message === 'bind') {
-          // Show success toast
-          navigate('/settings', {
-            state: { message: t('auth.oauth.lark.bind_success') }
-          })
-        } else {
-          login(data, '')
+        if (success) {
+          if (message === "bind") {
+            // Show success toast
+            navigate("/settings", {
+              state: { message: t("auth.oauth.lark.bind_success") },
+            });
+          } else {
+            login(data, "");
 
-          // Check for redirect_to parameter in the state
-          const redirectTo = state && state.includes('redirect_to=')
-            ? state.split('redirect_to=')[1]
-            : null;
+            // Check for redirect_to parameter in the state
+            const redirectTo =
+              state && state.includes("redirect_to=")
+                ? state.split("redirect_to=")[1]
+                : null;
 
-          if (redirectTo) {
-            try {
-              const decodedPath = decodeURIComponent(redirectTo);
-              if (decodedPath.startsWith("/")) {
-                navigate(decodedPath, {
-                  state: { message: t('auth.oauth.lark.login_success') }
-                });
-                return;
+            if (redirectTo) {
+              try {
+                const decodedPath = decodeURIComponent(redirectTo);
+                if (decodedPath.startsWith("/")) {
+                  navigate(decodedPath, {
+                    state: { message: t("auth.oauth.lark.login_success") },
+                  });
+                  return;
+                }
+              } catch (error) {
+                console.error("Invalid redirect_to parameter:", error);
               }
-            } catch (error) {
-              console.error("Invalid redirect_to parameter:", error);
             }
+
+            navigate("/", {
+              state: { message: t("auth.oauth.lark.login_success") },
+            });
           }
-
-          navigate('/', {
-            state: { message: t('auth.oauth.lark.login_success') }
-          })
+        } else {
+          throw new Error(message || t("auth.oauth.lark.failed"));
         }
-      } else {
-        throw new Error(message || t('auth.oauth.lark.failed'))
-      }
-    } catch (error) {
-      if (retryCount >= 3) {
-        setPrompt(t('auth.oauth.lark.prompt.failed'))
+      } catch (error) {
+        if (retryCount >= 3) {
+          setPrompt(t("auth.oauth.lark.prompt.failed"));
+          setTimeout(() => {
+            navigate("/login", {
+              state: { message: t("auth.oauth.lark.failed_redirect") },
+            });
+          }, 2000);
+          return;
+        }
+
+        const nextRetry = retryCount + 1;
+        setPrompt(t("auth.oauth.lark.prompt.retry", { retry: nextRetry }));
+
+        // Exponential backoff
+        const delay = nextRetry * 2000;
         setTimeout(() => {
-          navigate('/login', {
-            state: { message: t('auth.oauth.lark.failed_redirect') }
-          })
-        }, 2000)
-        return
+          sendCode(code, state, nextRetry);
+        }, delay);
       }
-
-      const nextRetry = retryCount + 1
-      setPrompt(t('auth.oauth.lark.prompt.retry', { retry: nextRetry }))
-
-      // Exponential backoff
-      const delay = nextRetry * 2000
-      setTimeout(() => {
-        sendCode(code, state, nextRetry)
-      }, delay)
-    }
-  }, [login, navigate, t])
+    },
+    [login, navigate, t]
+  );
 
   useEffect(() => {
-    const code = searchParams.get('code')
-    const state = searchParams.get('state')
+    const code = searchParams.get("code");
+    const state = searchParams.get("state");
 
     if (!code || !state) {
-      navigate('/login', {
-        state: { message: t('auth.oauth.lark.invalid_params') }
-      })
-      return
+      navigate("/login", {
+        state: { message: t("auth.oauth.lark.invalid_params") },
+      });
+      return;
     }
 
-    sendCode(code, state)
-  }, [searchParams, navigate, sendCode, t])
+    sendCode(code, state);
+  }, [searchParams, navigate, sendCode, t]);
 
   return (
     <div className="min-h-screen flex items-center justify-center p-4">
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
-          <CardTitle className="text-2xl">{t('auth.oauth.lark.title')}</CardTitle>
-          <CardDescription>{t('auth.oauth.lark.description')}</CardDescription>
+          <CardTitle className="text-2xl">
+            {t("auth.oauth.lark.title")}
+          </CardTitle>
+          <CardDescription>{t("auth.oauth.lark.description")}</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="flex items-center justify-center py-8">
@@ -104,7 +120,7 @@ export function LarkOAuthPage() {
         </CardContent>
       </Card>
     </div>
-  )
+  );
 }
 
-export default LarkOAuthPage
+export default LarkOAuthPage;

@@ -1,64 +1,66 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
-import { loadSystemStatus, type SystemStatus } from '@/lib/utils'
+import { useState, useEffect, useCallback, useRef } from "react";
+import { loadSystemStatus, type SystemStatus } from "@/lib/utils";
 
 const getInitialSystemStatus = (): SystemStatus => {
   try {
-    const cached = localStorage.getItem('status')
+    const cached = localStorage.getItem("status");
     if (cached) {
-      const parsed = JSON.parse(cached)
-      return parsed as SystemStatus
+      const parsed = JSON.parse(cached);
+      return parsed as SystemStatus;
     }
   } catch (error) {
-    console.error('Failed to parse system status from storage:', error)
+    console.error("Failed to parse system status from storage:", error);
   }
-  return {} as SystemStatus
-}
+  return {} as SystemStatus;
+};
 
 export interface UseSystemStatusResult {
-  systemStatus: SystemStatus
-  isSystemStatusLoading: boolean
-  refreshSystemStatus: () => Promise<SystemStatus | null>
+  systemStatus: SystemStatus;
+  isSystemStatusLoading: boolean;
+  refreshSystemStatus: () => Promise<SystemStatus | null>;
 }
 
 export const useSystemStatus = (): UseSystemStatusResult => {
-  const initialStatusRef = useRef<SystemStatus | null>(null)
+  const initialStatusRef = useRef<SystemStatus | null>(null);
   if (initialStatusRef.current === null) {
-    initialStatusRef.current = getInitialSystemStatus()
+    initialStatusRef.current = getInitialSystemStatus();
   }
 
-  const [systemStatus, setSystemStatus] = useState<SystemStatus>(initialStatusRef.current)
+  const [systemStatus, setSystemStatus] = useState<SystemStatus>(
+    initialStatusRef.current
+  );
   const [isSystemStatusLoading, setIsSystemStatusLoading] = useState<boolean>(
     () => Object.keys(initialStatusRef.current || {}).length === 0
-  )
-  const isMountedRef = useRef(true)
+  );
+  const isMountedRef = useRef(true);
 
   useEffect(() => {
     return () => {
-      isMountedRef.current = false
-    }
-  }, [])
+      isMountedRef.current = false;
+    };
+  }, []);
 
   const refreshSystemStatus = useCallback(async () => {
     if (!isMountedRef.current) {
-      return null
+      return null;
     }
-    setIsSystemStatusLoading(true)
+    setIsSystemStatusLoading(true);
     try {
-      const status = await loadSystemStatus()
+      const status = await loadSystemStatus();
       if (status && isMountedRef.current) {
-        setSystemStatus(status)
+        setSystemStatus(status);
       }
-      return status
+      return status;
     } finally {
       if (isMountedRef.current) {
-        setIsSystemStatusLoading(false)
+        setIsSystemStatusLoading(false);
       }
     }
-  }, [])
+  }, []);
 
   useEffect(() => {
-    refreshSystemStatus()
-  }, [refreshSystemStatus])
+    refreshSystemStatus();
+  }, [refreshSystemStatus]);
 
-  return { systemStatus, isSystemStatusLoading, refreshSystemStatus }
-}
+  return { systemStatus, isSystemStatusLoading, refreshSystemStatus };
+};

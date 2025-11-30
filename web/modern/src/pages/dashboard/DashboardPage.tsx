@@ -1,43 +1,48 @@
-import { useState, useLayoutEffect } from 'react'
-import { useTranslation } from 'react-i18next'
-import { ResponsivePageContainer } from '@/components/ui/responsive-container'
-import { TimestampDisplay } from '@/components/ui/timestamp'
-import { useAuthStore } from '@/lib/stores/auth'
-import { useDashboardData } from './hooks/useDashboardData'
-import { useDashboardCharts } from './hooks/useDashboardCharts'
-import { DashboardFilter } from './components/DashboardFilter'
-import { OverviewCards } from './components/OverviewCards'
-import { TopModels } from './components/TopModels'
-import { Insights } from './components/Insights'
-import { TimeSeriesCharts } from './components/TimeSeriesCharts'
-import { UsageCharts } from './components/UsageCharts'
+import { ResponsivePageContainer } from "@/components/ui/responsive-container";
+import { TimestampDisplay } from "@/components/ui/timestamp";
+import { useAuthStore } from "@/lib/stores/auth";
+import { useLayoutEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
+import { DashboardFilter } from "./components/DashboardFilter";
+import { Insights } from "./components/Insights";
+import { OverviewCards } from "./components/OverviewCards";
+import { TimeSeriesCharts } from "./components/TimeSeriesCharts";
+import { TopModels } from "./components/TopModels";
+import { UsageCharts } from "./components/UsageCharts";
+import { useDashboardCharts } from "./hooks/useDashboardCharts";
+import { useDashboardData } from "./hooks/useDashboardData";
 
 export function DashboardPage() {
-  const { t } = useTranslation()
-  const { user } = useAuthStore()
-  const [filtersReady, setFiltersReady] = useState(false)
-  const [statisticsMetric, setStatisticsMetric] = useState<'tokens' | 'requests' | 'expenses'>('tokens')
+  const { t } = useTranslation();
+  const { user } = useAuthStore();
+  const [filtersReady, setFiltersReady] = useState(false);
+  const [statisticsMetric, setStatisticsMetric] = useState<
+    "tokens" | "requests" | "expenses"
+  >("tokens");
 
   useLayoutEffect(() => {
-    if (typeof document === 'undefined') {
-      return
+    if (typeof document === "undefined") {
+      return;
     }
 
-    const active = document.activeElement as HTMLElement | null
-    if (active && ['INPUT', 'SELECT', 'TEXTAREA'].includes(active.tagName)) {
-      active.blur()
+    const active = document.activeElement as HTMLElement | null;
+    if (active && ["INPUT", "SELECT", "TEXTAREA"].includes(active.tagName)) {
+      active.blur();
     }
 
     if (!filtersReady) {
-      requestAnimationFrame(() => setFiltersReady(true))
+      requestAnimationFrame(() => setFiltersReady(true));
     }
-  }, [])
+  }, []);
 
   const {
     isAdmin,
-    fromDate, setFromDate,
-    toDate, setToDate,
-    dashUser, setDashUser,
+    fromDate,
+    setFromDate,
+    toDate,
+    setToDate,
+    dashUser,
+    setDashUser,
     userOptions,
     loading,
     lastUpdated,
@@ -48,8 +53,8 @@ export function DashboardPage() {
     loadStats,
     applyPreset,
     getMinDate,
-    getMaxDate
-  } = useDashboardData()
+    getMaxDate,
+  } = useDashboardData();
 
   const {
     timeSeries,
@@ -61,23 +66,29 @@ export function DashboardPage() {
     tokenStackedData,
     rangeTotals,
     modelLeaders,
-    rangeInsights
-  } = useDashboardCharts(rows, userRows, tokenRows, statisticsMetric)
+    rangeInsights,
+  } = useDashboardCharts(rows, userRows, tokenRows, statisticsMetric);
 
   if (!user) {
-    return <div>{t('dashboard.login_required')}</div>
+    return <div>{t("dashboard.login_required")}</div>;
   }
 
   return (
     <ResponsivePageContainer
-      title={t('dashboard.title')}
-      description={t('dashboard.description')}
+      title={t("dashboard.title")}
+      description={t("dashboard.description")}
     >
       {loading && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
-          <div className="flex flex-col items-center gap-3" role="status" aria-live="polite">
+          <div
+            className="flex flex-col items-center gap-3"
+            role="status"
+            aria-live="polite"
+          >
             <span className="h-10 w-10 animate-spin rounded-full border-4 border-primary/20 border-t-primary" />
-            <p className="text-sm text-muted-foreground">{t('dashboard.loading')}</p>
+            <p className="text-sm text-muted-foreground">
+              {t("dashboard.loading")}
+            </p>
           </div>
         </div>
       )}
@@ -109,28 +120,44 @@ export function DashboardPage() {
           aria-live="polite"
         >
           <div className="flex items-center gap-2">
-            <svg className="w-4 h-4 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            <svg
+              className="w-4 h-4 text-red-500"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+              aria-hidden="true"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+              />
             </svg>
-            <span className="text-sm font-medium text-red-800 dark:text-red-200">{t('dashboard.errors.label')}</span>
+            <span className="text-sm font-medium text-red-800 dark:text-red-200">
+              {t("dashboard.errors.label")}
+            </span>
           </div>
-          <p className="text-sm text-red-700 dark:text-red-300 mt-1">{dateError}</p>
+          <p className="text-sm text-red-700 dark:text-red-300 mt-1">
+            {dateError}
+          </p>
         </div>
       )}
 
       <div className="mb-6">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between mb-6">
           <div>
-            <h2 className="text-xl font-semibold">{t('dashboard.overview.title')}</h2>
-            <p className="text-sm text-muted-foreground">{t('dashboard.overview.subtitle')}</p>
+            <h2 className="text-xl font-semibold">
+              {t("dashboard.overview.title")}
+            </h2>
+            <p className="text-sm text-muted-foreground">
+              {t("dashboard.overview.subtitle")}
+            </p>
           </div>
           {lastUpdated && (
             <span className="text-xs text-muted-foreground flex items-center gap-1">
-              {t('dashboard.overview.updated')}
-              <TimestampDisplay
-                timestamp={lastUpdated}
-                className="font-mono"
-              />
+              {t("dashboard.overview.updated")}
+              <TimestampDisplay timestamp={lastUpdated} className="font-mono" />
             </span>
           )}
         </div>
@@ -168,7 +195,7 @@ export function DashboardPage() {
         />
       </div>
     </ResponsivePageContainer>
-  )
+  );
 }
 
-export default DashboardPage
+export default DashboardPage;

@@ -33,16 +33,17 @@ import {
 } from "react-router-dom";
 import * as z from "zod";
 
-const loginSchema = (t: (key: string) => string) => z.object({
-  username: z.string().min(1, t("auth.login.username_required")),
-  password: z.string().min(1, t("auth.login.password_required")),
-  totp_code: z
-    .string()
-    .optional()
-    .refine((val) => !val || val.length === 6, {
-      message: t("auth.login.totp_invalid"),
-    }),
-});
+const loginSchema = (t: (key: string) => string) =>
+  z.object({
+    username: z.string().min(1, t("auth.login.username_required")),
+    password: z.string().min(1, t("auth.login.password_required")),
+    totp_code: z
+      .string()
+      .optional()
+      .refine((val) => !val || val.length === 6, {
+        message: t("auth.login.totp_invalid"),
+      }),
+  });
 
 type LoginForm = z.infer<ReturnType<typeof loginSchema>>;
 
@@ -60,7 +61,8 @@ export function LoginPage() {
   const { login } = useAuthStore();
   const { systemStatus } = useSystemStatus();
   const turnstileEnabled = Boolean(systemStatus?.turnstile_check);
-  const turnstileRenderable = turnstileEnabled && Boolean(systemStatus?.turnstile_site_key);
+  const turnstileRenderable =
+    turnstileEnabled && Boolean(systemStatus?.turnstile_site_key);
 
   const form = useForm<LoginForm>({
     resolver: zodResolver(loginSchema(t)),
@@ -79,7 +81,6 @@ export function LoginPage() {
       // Clear the state to prevent showing the message on refresh
       window.history.replaceState({}, document.title);
     }
-
   }, [searchParams, location.state]);
 
   const onGitHubOAuth = async () => {
@@ -88,12 +89,20 @@ export function LoginPage() {
       // Request state from backend to prevent CSRF
       const state = await getOAuthState();
       const redirectUri = `${window.location.origin}/oauth/github`;
-      const url = buildGitHubOAuthUrl(systemStatus.github_client_id, state, redirectUri);
+      const url = buildGitHubOAuthUrl(
+        systemStatus.github_client_id,
+        state,
+        redirectUri
+      );
       window.location.href = url;
     } catch (e) {
       // Fallback: try without state if backend unavailable
       const redirectUri = `${window.location.origin}/oauth/github`;
-      const url = buildGitHubOAuthUrl(systemStatus.github_client_id, "", redirectUri);
+      const url = buildGitHubOAuthUrl(
+        systemStatus.github_client_id,
+        "",
+        redirectUri
+      );
       window.location.href = url;
     }
   };
@@ -179,7 +188,8 @@ export function LoginPage() {
       }
     } catch (error) {
       form.setError("root", {
-        message: error instanceof Error ? error.message : t("auth.login.failed"),
+        message:
+          error instanceof Error ? error.message : t("auth.login.failed"),
       });
     } finally {
       setIsLoading(false);
@@ -217,11 +227,11 @@ export function LoginPage() {
           )}
           <CardTitle className="text-2xl">
             {t("auth.login.title")}
-            {systemStatus.system_name ? ` ${t("common.to")} ${systemStatus.system_name}` : ""}
+            {systemStatus.system_name
+              ? ` ${t("common.to")} ${systemStatus.system_name}`
+              : ""}
           </CardTitle>
-          <CardDescription>
-            {t("auth.login.subtitle")}
-          </CardDescription>
+          <CardDescription>{t("auth.login.subtitle")}</CardDescription>
         </CardHeader>
         <CardContent>
           <Form {...form}>
@@ -235,9 +245,15 @@ export function LoginPage() {
                 name="username"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel htmlFor="login-username">{t("common.username")}</FormLabel>
+                    <FormLabel htmlFor="login-username">
+                      {t("common.username")}
+                    </FormLabel>
                     <FormControl>
-                      <Input id="login-username" {...field} disabled={totpRequired} />
+                      <Input
+                        id="login-username"
+                        {...field}
+                        disabled={totpRequired}
+                      />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -248,7 +264,9 @@ export function LoginPage() {
                 name="password"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel htmlFor="login-password">{t("common.password")}</FormLabel>
+                    <FormLabel htmlFor="login-password">
+                      {t("common.password")}
+                    </FormLabel>
                     <FormControl>
                       <Input
                         id="login-password"

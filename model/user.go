@@ -205,9 +205,10 @@ func (user *User) Update(updatePassword bool) error {
 			return errors.Wrapf(err, "failed to hash password for user update: id=%d, username=%s", user.Id, user.Username)
 		}
 	}
-	if user.Status == UserStatusDisabled {
+	switch user.Status {
+	case UserStatusDisabled:
 		blacklist.BanUser(user.Id)
-	} else if user.Status == UserStatusEnabled {
+	case UserStatusEnabled:
 		blacklist.UnbanUser(user.Id)
 	}
 	err = DB.Model(user).Updates(user).Error
@@ -576,11 +577,12 @@ func GetSiteWideQuotaStats() (totalQuota int64, usedQuota int64, status string, 
 	usedQuota = result.UsedQuota
 
 	// Determine overall status based on active vs total users
-	if result.ActiveUsers == 0 {
+	switch result.ActiveUsers {
+	case 0:
 		status = "No Active Users"
-	} else if result.ActiveUsers == result.TotalUsers {
+	case result.TotalUsers:
 		status = "All Active"
-	} else {
+	default:
 		status = fmt.Sprintf("%d/%d Active", result.ActiveUsers, result.TotalUsers)
 	}
 

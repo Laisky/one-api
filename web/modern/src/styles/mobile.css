@@ -1,5 +1,6 @@
 /* Enhanced Mobile-responsive table styles */
 @media (max-width: 768px) {
+
   /* Hide table headers on mobile */
   .mobile-table thead,
   table thead {
@@ -133,6 +134,7 @@
 
   /* Hide some pagination buttons on small screens */
   @media (max-width: 480px) {
+
     .pagination-mobile .pagination-controls button:first-child,
     .pagination-mobile .pagination-controls button:last-child {
       display: none;
@@ -142,7 +144,11 @@
 
 /* Enhanced touch targets and interactions */
 @media (hover: none) and (pointer: coarse) {
-  button, [role="button"], input[type="button"], input[type="submit"] {
+
+  button,
+  [role="button"],
+  input[type="button"],
+  input[type="submit"] {
     min-height: 44px;
     min-width: 44px;
     touch-action: manipulation;
@@ -201,10 +207,10 @@
     right: 0 !important;
     bottom: 0 !important;
     width: 100vw !important;
-  /* Use dynamic viewport height to avoid iOS/Android address bar issues creating extra scroll space */
-  height: 100dvh !important;
-  /* Fallback for older browsers */
-  min-height: 100vh !important;
+    /* Use dynamic viewport height to avoid iOS/Android address bar issues creating extra scroll space */
+    height: 100dvh !important;
+    /* Fallback for older browsers */
+    min-height: 100vh !important;
     max-height: none !important;
     border-radius: 0 !important;
     z-index: 50;
@@ -273,6 +279,7 @@
   0% {
     background-position: 200% 0;
   }
+
   100% {
     background-position: -200% 0;
   }
@@ -329,6 +336,7 @@ textarea:focus-visible {
 
 /* Additional responsive utilities */
 @layer utilities {
+
   /* Responsive text sizing */
   .text-responsive-xs {
     font-size: 0.75rem;
@@ -386,28 +394,28 @@ textarea:focus-visible {
   }
 
   /* Responsive spacing utilities */
-  .space-responsive-y > * + * {
+  .space-responsive-y>*+* {
     margin-top: 1rem;
   }
 
   @media (min-width: 768px) {
-    .space-responsive-y > * + * {
+    .space-responsive-y>*+* {
       margin-top: 1.5rem;
     }
   }
 
   @media (min-width: 1024px) {
-    .space-responsive-y > * + * {
+    .space-responsive-y>*+* {
       margin-top: 2rem;
     }
   }
 
-  .space-responsive-x > * + * {
+  .space-responsive-x>*+* {
     margin-left: 0.5rem;
   }
 
   @media (min-width: 768px) {
-    .space-responsive-x > * + * {
+    .space-responsive-x>*+* {
       margin-left: 1rem;
     }
   }

@@ -1,12 +1,12 @@
-import i18n from 'i18next';
-import { initReactI18next } from 'react-i18next';
-import LanguageDetector from 'i18next-browser-languagedetector';
+import i18n from "i18next";
+import { initReactI18next } from "react-i18next";
+import LanguageDetector from "i18next-browser-languagedetector";
 
-import en from './locales/en';
-import zh from './locales/zh';
-import fr from './locales/fr';
-import es from './locales/es';
-import ja from './locales/ja';
+import en from "./locales/en";
+import zh from "./locales/zh";
+import fr from "./locales/fr";
+import es from "./locales/es";
+import ja from "./locales/ja";
 
 // Define the resources
 const resources = {
@@ -25,8 +25,8 @@ i18n
   // Init i18next
   .init({
     resources,
-    fallbackLng: 'en', // Default fallback
-    debug: process.env.NODE_ENV === 'development',
+    fallbackLng: "en", // Default fallback
+    debug: process.env.NODE_ENV === "development",
 
     interpolation: {
       escapeValue: false, // React already safes from xss
@@ -34,11 +34,11 @@ i18n
 
     detection: {
       // Order and from where user language should be detected
-      order: ['localStorage', 'navigator'],
+      order: ["localStorage", "navigator"],
       // Keys or params to lookup language from
-      lookupLocalStorage: 'i18nextLng',
+      lookupLocalStorage: "i18nextLng",
       // Cache user language on
-      caches: ['localStorage'],
+      caches: ["localStorage"],
     },
   });
 
