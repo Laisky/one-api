@@ -694,28 +694,28 @@ export function EditUserPage() {
                 {/* Display timestamps for edit mode (read-only) */}
                 {isEdit && (createdAt || updatedAt) && (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-2 border-t">
-                    {createdAt && (
+                    {createdAt && createdAt > 0 && (
                       <div className="space-y-2">
                         <label className="text-sm font-medium text-muted-foreground">
                           {tr("fields.created_at.label", "Register Time")}
                         </label>
                         <div className="p-2 bg-muted rounded-md">
                           <TimestampDisplay
-                            timestamp={createdAt}
+                            timestamp={Math.floor(createdAt / 1000)}
                             className="text-sm"
                             fallback="-"
                           />
                         </div>
                       </div>
                     )}
-                    {updatedAt && (
+                    {updatedAt && updatedAt > 0 && (
                       <div className="space-y-2">
                         <label className="text-sm font-medium text-muted-foreground">
                           {tr("fields.updated_at.label", "Last Modified")}
                         </label>
                         <div className="p-2 bg-muted rounded-md">
                           <TimestampDisplay
-                            timestamp={updatedAt}
+                            timestamp={Math.floor(updatedAt / 1000)}
                             className="text-sm"
                             fallback="-"
                           />

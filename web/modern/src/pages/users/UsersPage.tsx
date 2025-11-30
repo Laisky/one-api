@@ -44,6 +44,7 @@ interface UserRow {
   used_quota: number;
   group: string;
   created_at?: number;
+  updated_at?: number;
 }
 
 export function UsersPage() {
@@ -279,13 +280,25 @@ export function UsersPage() {
     {
       header: tr("columns.register_time", "Register Time"),
       accessorKey: "created_at",
-      cell: ({ row }) => (
-        <TimestampDisplay
-          timestamp={row.original.created_at}
-          className="text-sm"
-          fallback="-"
-        />
-      ),
+      cell: ({ row }) => {
+        // Use created_at if valid, otherwise fallback to updated_at
+        // Note: User timestamps are stored in milliseconds, convert to seconds for display
+        const timestampMs =
+          row.original.created_at && row.original.created_at > 0
+            ? row.original.created_at
+            : row.original.updated_at;
+        const timestampSec =
+          timestampMs && timestampMs > 0
+            ? Math.floor(timestampMs / 1000)
+            : undefined;
+        return (
+          <TimestampDisplay
+            timestamp={timestampSec}
+            className="text-sm"
+            fallback="-"
+          />
+        );
+      },
     },
     {
       header: tr("columns.actions", "Actions"),
@@ -548,7 +561,7 @@ export function UsersPage() {
               "No users found. Add your first user to get started."
             )}
             mobileCardLayout={true}
-            hideColumnsOnMobile={["created_at"]}
+            hideColumnsOnMobile={[]}
             compactMode={isMobile}
           />
         </CardContent>
