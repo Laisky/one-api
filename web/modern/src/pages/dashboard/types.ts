@@ -24,9 +24,9 @@ export type UserOption = {
 
 export const CHART_CONFIG = {
   colors: {
-    requests: '#4318FF',
-    quota: '#00B5D8',
-    tokens: '#FF5E7D',
+    requests: '#6366F1',  // Soft indigo - modern, cool
+    quota: '#0EA5E9',     // Sky blue - tech-forward
+    tokens: '#8B5CF6',    // Soft violet - cool accent
   },
   gradients: {
     requests: 'url(#requestsGradient)',
@@ -47,22 +47,24 @@ export const CHART_CONFIG = {
       opacity: 0.2,
     },
   },
+  // Modern high-tech palette with cooler, less saturated tones
+  // Designed for good contrast in both light and dark modes
   barColors: [
-    '#4318FF', // Deep purple
-    '#00B5D8', // Cyan
-    '#6C63FF', // Purple
-    '#05CD99', // Green
-    '#FFB547', // Orange
-    '#FF5E7D', // Pink
-    '#41B883', // Emerald
-    '#7983FF', // Light Purple
-    '#FF8F6B', // Coral
-    '#49BEFF', // Sky Blue
-    '#8B5CF6', // Violet
-    '#F59E0B', // Amber
-    '#EF4444', // Red
-    '#10B981', // Emerald
-    '#3B82F6', // Blue
+    '#6366F1', // Indigo - primary cool tone
+    '#0EA5E9', // Sky blue - tech accent
+    '#8B5CF6', // Violet - soft purple
+    '#06B6D4', // Cyan - aqua tech
+    '#14B8A6', // Teal - balanced green-blue
+    '#64748B', // Slate - neutral gray-blue
+    '#7C3AED', // Purple - deeper accent
+    '#0284C7', // Dark sky - deeper blue
+    '#6D28D9', // Violet dark - rich purple
+    '#0891B2', // Dark cyan - ocean tone
+    '#4F46E5', // Indigo dark - primary variant
+    '#059669', // Emerald muted - cool green
+    '#7DD3FC', // Light sky - bright accent (dark mode friendly)
+    '#A78BFA', // Light violet - soft accent
+    '#22D3EE', // Light cyan - vibrant cool
   ],
 }
 
