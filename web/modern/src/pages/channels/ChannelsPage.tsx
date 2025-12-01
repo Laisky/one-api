@@ -7,6 +7,7 @@ import { ResponsiveActionGroup } from "@/components/ui/responsive-action-group";
 import { ResponsivePageContainer } from "@/components/ui/responsive-container";
 import { type SearchOption } from "@/components/ui/searchable-dropdown";
 import { TimestampDisplay } from "@/components/ui/timestamp";
+import { usePageSize, STORAGE_KEYS } from "@/hooks/usePersistentState";
 import { useResponsive } from "@/hooks/useResponsive";
 import { api } from "@/lib/api";
 import { cn, formatTimestamp } from "@/lib/utils";
@@ -112,7 +113,7 @@ export function ChannelsPage() {
   const [pageIndex, setPageIndex] = useState(
     Math.max(0, parseInt(searchParams.get("p") || "1") - 1)
   );
-  const [pageSize, setPageSize] = useState(10);
+  const [pageSize, setPageSize] = usePageSize(STORAGE_KEYS.PAGE_SIZE);
   const [total, setTotal] = useState(0);
   const [searchKeyword, setSearchKeyword] = useState("");
   const [searchOptions, setSearchOptions] = useState<SearchOption[]>([]);

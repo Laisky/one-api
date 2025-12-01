@@ -1,16 +1,11 @@
+import { AdvancedPagination } from "@/components/ui/advanced-pagination";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { useNotifications } from "@/components/ui/notifications";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { TimestampDisplay } from "@/components/ui/timestamp";
+import { usePageSize, STORAGE_KEYS } from "@/hooks/usePersistentState";
 import { useResponsive } from "@/hooks/useResponsive";
 import { api } from "@/lib/api";
 import {
@@ -18,8 +13,6 @@ import {
   AlertCircle,
   Calendar,
   CheckCircle,
-  ChevronLeft,
-  ChevronRight,
   Clock,
   RefreshCw,
   XCircle,
@@ -57,11 +50,13 @@ function StatusPageImpl() {
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState(0);
-  const [pageSize, setPageSize] = useState(9);
+  const [pageSize, setPageSize] = usePageSize(
+    STORAGE_KEYS.PAGE_SIZE,
+    10,
+    [10, 20, 30, 50, 100]  // Use standard page size options for consistency
+  );
   const [totalCount, setTotalCount] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
-
-  const pageSizeOptions = [9, 12, 18, 24, 30];
 
   const fetchStatusData = useCallback(
     async (page: number, size: number) => {
@@ -105,30 +100,18 @@ function StatusPageImpl() {
   };
 
   const handlePageChange = (newPage: number) => {
-    if (newPage >= 0 && newPage < totalPages) {
-      setCurrentPage(newPage);
+    // AdvancedPagination uses 1-based page numbers, but our state uses 0-based
+    const zeroBasedPage = newPage - 1;
+    if (zeroBasedPage >= 0 && zeroBasedPage < totalPages) {
+      setCurrentPage(zeroBasedPage);
     }
   };
 
-  const handlePreviousPage = () => {
-    if (currentPage > 0) {
-      handlePageChange(currentPage - 1);
+  const handlePageSizeChange = (newSize: number) => {
+    if (newSize !== pageSize) {
+      setCurrentPage(0);
+      setPageSize(newSize);
     }
-  };
-
-  const handleNextPage = () => {
-    if (currentPage < totalPages - 1) {
-      handlePageChange(currentPage + 1);
-    }
-  };
-
-  const handlePageSizeChange = (value: string) => {
-    const newSize = Number(value);
-    if (Number.isNaN(newSize) || newSize === pageSize) {
-      return;
-    }
-    setCurrentPage(0);
-    setPageSize(newSize);
   };
 
   useEffect(() => {
@@ -338,39 +321,15 @@ function StatusPageImpl() {
               className="w-full"
             />
           </div>
-          <div className="flex flex-col sm:flex-row gap-2 sm:items-center">
-            <div
-              className={`flex items-center gap-2 ${isMobile ? "w-full" : ""}`}
+          {searchTerm && (
+            <Button
+              variant="outline"
+              onClick={() => setSearchTerm("")}
+              className="whitespace-nowrap"
             >
-              <span className="text-sm text-muted-foreground whitespace-nowrap">
-                {t("status.controls.items_per_page")}
-              </span>
-              <Select
-                value={pageSize.toString()}
-                onValueChange={handlePageSizeChange}
-              >
-                <SelectTrigger className={isMobile ? "w-full" : "w-28"}>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {pageSizeOptions.map((option) => (
-                    <SelectItem key={option} value={option.toString()}>
-                      {option}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            {searchTerm && (
-              <Button
-                variant="outline"
-                onClick={() => setSearchTerm("")}
-                className="whitespace-nowrap"
-              >
-                {t("status.search.clear")}
-              </Button>
-            )}
-          </div>
+              {t("status.search.clear")}
+            </Button>
+          )}
         </div>
 
         {/* Channel Status Cards */}
@@ -458,79 +417,26 @@ function StatusPageImpl() {
           )}
         </div>
 
-        {/* Pagination Controls */}
-        {totalPages > 1 && !searchTerm && (
-          <div className="flex items-center justify-center space-x-4 mt-6">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handlePreviousPage}
-              disabled={currentPage === 0}
-              className="flex items-center gap-2"
-            >
-              <ChevronLeft className="w-4 h-4" />
-              {t("status.pagination.previous")}
-            </Button>
-
-            <div className="flex items-center space-x-2">
-              {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                let pageNum;
-                if (totalPages <= 5) {
-                  pageNum = i;
-                } else if (currentPage < 2) {
-                  pageNum = i;
-                } else if (currentPage >= totalPages - 2) {
-                  pageNum = totalPages - 5 + i;
-                } else {
-                  pageNum = currentPage - 2 + i;
-                }
-
-                return (
-                  <Button
-                    key={pageNum}
-                    variant={currentPage === pageNum ? "default" : "outline"}
-                    size="sm"
-                    onClick={() => handlePageChange(pageNum)}
-                    className="w-10 h-10 p-0"
-                  >
-                    {pageNum + 1}
-                  </Button>
-                );
-              })}
-            </div>
-
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleNextPage}
-              disabled={currentPage >= totalPages - 1}
-              className="flex items-center gap-2"
-            >
-              {t("status.pagination.next")}
-              <ChevronRight className="w-4 h-4" />
-            </Button>
-          </div>
+        {/* Pagination - using standard AdvancedPagination component */}
+        {!searchTerm && (
+          <AdvancedPagination
+            currentPage={currentPage + 1}
+            totalPages={totalPages}
+            pageSize={pageSize}
+            totalItems={totalCount}
+            onPageChange={handlePageChange}
+            onPageSizeChange={handlePageSizeChange}
+            loading={loading}
+          />
         )}
 
-        {/* Footer Info */}
-        {filteredChannels.length > 0 && (
+        {/* Footer Info for search results */}
+        {searchTerm && filteredChannels.length > 0 && (
           <div className="text-center text-sm text-muted-foreground">
-            {searchTerm
-              ? t("status.pagination.showing_filtered", {
-                  displayed: filteredChannels.length,
-                  total: totalCount,
-                })
-              : `${t("status.pagination.showing", {
-                  displayed: channelsData.length,
-                  total: totalCount,
-                })}${
-                  totalPages > 1
-                    ? t("status.pagination.page_info", {
-                        page: currentPage + 1,
-                        pages: totalPages,
-                      })
-                    : ""
-                }`}
+            {t("status.pagination.showing_filtered", {
+              displayed: filteredChannels.length,
+              total: totalCount,
+            })}
           </div>
         )}
       </div>

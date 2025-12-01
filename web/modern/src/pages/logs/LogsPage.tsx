@@ -29,6 +29,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { usePageSize, STORAGE_KEYS } from "@/hooks/usePersistentState";
 import { api } from "@/lib/api";
 import { LOG_TYPES, LOG_TYPE_OPTIONS } from "@/lib/constants/logs";
 import { useAuthStore } from "@/lib/stores/auth";
@@ -102,7 +103,7 @@ export function LogsPage() {
   const [pageIndex, setPageIndex] = useState(
     Math.max(0, parseInt(searchParams.get("p") || "1") - 1)
   );
-  const [pageSize, setPageSize] = useState(10);
+  const [pageSize, setPageSize] = usePageSize(STORAGE_KEYS.PAGE_SIZE);
   const [total, setTotal] = useState(0);
   const mounted = useRef(false);
 

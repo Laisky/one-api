@@ -55,6 +55,8 @@ const mockChannelsData = {
 describe('ChannelsPage Pagination', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    // Clear localStorage to ensure consistent page size defaults
+    localStorage.clear()
     mockApiGet.mockResolvedValue({ data: mockChannelsData })
   })
 
