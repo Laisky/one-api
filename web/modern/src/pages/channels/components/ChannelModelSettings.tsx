@@ -162,7 +162,7 @@ export const ChannelModelSettings = ({
 									size="sm"
 									onClick={fillRelatedModels}
 								>
-									{tr("models.fill_related", "Fill Related")}
+									{tr("models.fill_related", "Fill Related ({{count}})", { count: currentCatalogModels.length })}
 								</Button>
 								<Button
 									type="button"
@@ -170,7 +170,7 @@ export const ChannelModelSettings = ({
 									size="sm"
 									onClick={fillAllModels}
 								>
-									{tr("models.fill_all", "Fill All")}
+									{tr("models.fill_all", "Fill All ({{count}})", { count: availableModels.length })}
 								</Button>
 								<Button
 									type="button"

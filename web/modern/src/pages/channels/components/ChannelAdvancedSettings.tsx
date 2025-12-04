@@ -15,6 +15,7 @@ import { LabelWithHelp } from "./LabelWithHelp";
 
 interface ChannelAdvancedSettingsProps {
 	form: UseFormReturn<ChannelForm>;
+	normalizedChannelType: number | null;
 	tr: (
 		key: string,
 		defaultValue: string,
@@ -22,8 +23,12 @@ interface ChannelAdvancedSettingsProps {
 	) => string;
 }
 
+// AWS Bedrock channel type constant
+const AWS_BEDROCK_CHANNEL_TYPE = 33;
+
 export const ChannelAdvancedSettings = ({
 	form,
+	normalizedChannelType,
 	tr,
 }: ChannelAdvancedSettingsProps) => {
 	const fieldHasError = (name: string) =>
@@ -150,56 +155,59 @@ export const ChannelAdvancedSettings = ({
 				/>
 			</div>
 
-			<div className="col-span-1 md:col-span-3">
-				<FormField
-					control={form.control}
-					name="inference_profile_arn_map"
-					render={({ field }) => (
-						<FormItem>
-							<div className="flex items-center justify-between">
-								<LabelWithHelp
-									label={tr(
-										"inference_profile.label",
-										"Inference Profile ARN Map",
-									)}
-									help={tr(
-										"inference_profile.help",
-										"Map model names to AWS Inference Profile ARNs (JSON).",
-									)}
-								/>
-								<Button
-									type="button"
-									variant="ghost"
-									size="sm"
-									className="h-6 text-xs"
-									onClick={formatInferenceProfileArnMap}
-								>
-									{tr("common.format_json", "Format JSON")}
-								</Button>
-							</div>
-							<FormControl>
-								<Textarea
-									placeholder={tr(
-										"inference_profile.placeholder",
-										'{"anthropic.claude-3-5-sonnet-20240620-v1:0": "arn:aws:bedrock:..."}',
-										{
-											example: JSON.stringify(
-												INFERENCE_PROFILE_ARN_MAP_EXAMPLE,
-												null,
-												2,
-											),
-										},
-									)}
-									className={`font-mono text-xs min-h-[100px] ${errorClass("inference_profile_arn_map")}`}
-									{...field}
-									value={field.value || ""}
-								/>
-							</FormControl>
-							<FormMessage />
-						</FormItem>
-					)}
-				/>
-			</div>
+			{/* Inference Profile ARN Map - Only show for AWS Bedrock channel type */}
+			{normalizedChannelType === AWS_BEDROCK_CHANNEL_TYPE && (
+				<div className="col-span-1 md:col-span-3">
+					<FormField
+						control={form.control}
+						name="inference_profile_arn_map"
+						render={({ field }) => (
+							<FormItem>
+								<div className="flex items-center justify-between">
+									<LabelWithHelp
+										label={tr(
+											"inference_profile.label",
+											"Inference Profile ARN Map (AWS Bedrock)",
+										)}
+										help={tr(
+											"inference_profile.help",
+											"Map model names to AWS Inference Profile ARNs (JSON).",
+										)}
+									/>
+									<Button
+										type="button"
+										variant="ghost"
+										size="sm"
+										className="h-6 text-xs"
+										onClick={formatInferenceProfileArnMap}
+									>
+										{tr("common.format_json", "Format JSON")}
+									</Button>
+								</div>
+								<FormControl>
+									<Textarea
+										placeholder={tr(
+											"inference_profile.placeholder",
+											'{"anthropic.claude-3-5-sonnet-20240620-v1:0": "arn:aws:bedrock:..."}',
+											{
+												example: JSON.stringify(
+													INFERENCE_PROFILE_ARN_MAP_EXAMPLE,
+													null,
+													2,
+												),
+											},
+										)}
+										className={`font-mono text-xs min-h-[100px] ${errorClass("inference_profile_arn_map")}`}
+										{...field}
+										value={field.value || ""}
+									/>
+								</FormControl>
+								<FormMessage />
+							</FormItem>
+						)}
+					/>
+				</div>
+			)}
 		</div>
 	);
 };

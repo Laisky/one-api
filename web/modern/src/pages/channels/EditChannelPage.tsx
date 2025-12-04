@@ -191,7 +191,7 @@ export function EditChannelPage() {
                   notify={notify}
                 />
 
-                <ChannelAdvancedSettings form={form} tr={tr} />
+                <ChannelAdvancedSettings form={form} normalizedChannelType={normalizedChannelType} tr={tr} />
 
                 <ChannelToolingSettings
                   form={form}
