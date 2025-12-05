@@ -14,6 +14,7 @@ import { useEffect } from "react";
 
 import { ChannelAdvancedSettings } from "./components/ChannelAdvancedSettings";
 import { ChannelBasicInfo } from "./components/ChannelBasicInfo";
+import { ChannelEndpointSettings } from "./components/ChannelEndpointSettings";
 import { ChannelModelSettings } from "./components/ChannelModelSettings";
 import { ChannelSpecificConfig } from "./components/ChannelSpecificConfig";
 import { ChannelToolingSettings } from "./components/ChannelToolingSettings";
@@ -33,6 +34,8 @@ export function EditChannelPage() {
     defaultTooling,
     defaultBaseURL,
     baseURLEditable,
+    defaultEndpoints,
+    allEndpoints,
     formInitialized,
     normalizedChannelType,
     watchType,
@@ -191,7 +194,18 @@ export function EditChannelPage() {
                   notify={notify}
                 />
 
-                <ChannelAdvancedSettings form={form} normalizedChannelType={normalizedChannelType} tr={tr} />
+                <ChannelAdvancedSettings
+                  form={form}
+                  normalizedChannelType={normalizedChannelType}
+                  tr={tr}
+                />
+
+                <ChannelEndpointSettings
+                  form={form}
+                  allEndpoints={allEndpoints}
+                  defaultEndpoints={defaultEndpoints}
+                  tr={tr}
+                />
 
                 <ChannelToolingSettings
                   form={form}

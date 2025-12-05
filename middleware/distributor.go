@@ -15,10 +15,33 @@ import (
 	"github.com/songquanpeng/one-api/model"
 	"github.com/songquanpeng/one-api/relay/billing/ratio"
 	"github.com/songquanpeng/one-api/relay/channeltype"
+	"github.com/songquanpeng/one-api/relay/relaymode"
 )
 
 type ModelRequest struct {
 	Model string `json:"model" form:"model"`
+}
+
+// channelSupportsEndpoint checks if a channel supports the given relay mode (endpoint).
+// It first checks the channel's custom supported_endpoints configuration,
+// then falls back to the default endpoints for the channel type.
+func channelSupportsEndpoint(channel *model.Channel, relayMode int) bool {
+	// Get endpoint name for the relay mode
+	endpointName := channeltype.RelayModeToEndpointName(relayMode)
+	if endpointName == "" {
+		// Unknown relay mode, allow it (backward compatibility)
+		return true
+	}
+
+	// Check channel's custom supported endpoints
+	customEndpoints := channel.GetSupportedEndpoints()
+	if len(customEndpoints) > 0 {
+		return channeltype.IsEndpointSupportedByName(endpointName, customEndpoints)
+	}
+
+	// Fall back to default endpoints for channel type
+	defaultEndpoints := channeltype.DefaultEndpointNamesForChannelType(channel.Type)
+	return channeltype.IsEndpointSupportedByName(endpointName, defaultEndpoints)
 }
 
 func Distribute() func(c *gin.Context) {
@@ -28,6 +51,10 @@ func Distribute() func(c *gin.Context) {
 		ctx := gmw.Ctx(c)
 		userGroup, _ := model.CacheGetUserGroup(ctx, userId)
 		c.Set(ctxkey.Group, userGroup)
+
+		// Get relay mode for endpoint validation
+		relayMode := relaymode.GetByPath(c.Request.URL.Path)
+
 		var requestModel string
 		var channel *model.Channel
 		channelId := c.GetInt(ctxkey.SpecificChannelId)
@@ -48,6 +75,13 @@ func Distribute() func(c *gin.Context) {
 					errors.Errorf("Channel #%d does not support the requested model: %s", channelId, requestModel))
 				return
 			}
+			// Check endpoint support for specific channel
+			if !channelSupportsEndpoint(channel, relayMode) {
+				endpointName := channeltype.RelayModeToEndpointName(relayMode)
+				AbortWithError(c, http.StatusBadRequest,
+					errors.Errorf("Channel #%d does not support the requested endpoint: %s", channelId, endpointName))
+				return
+			}
 		} else {
 			requestModel = c.GetString(ctxkey.RequestModel)
 			selectChannel := func(ignoreFirstPriority bool, exclude map[int]bool) (*model.Channel, error) {
@@ -56,14 +90,25 @@ func Distribute() func(c *gin.Context) {
 					if err != nil {
 						return nil, errors.Wrap(err, "select channel from cache")
 					}
-					if requestModel == "" || candidate.SupportsModel(requestModel) {
-						return candidate, nil
+					// Check model support
+					if requestModel != "" && !candidate.SupportsModel(requestModel) {
+						exclude[candidate.Id] = true
+						lg.Warn("channel skipped - does not support requested model",
+							zap.Int("channel_id", candidate.Id),
+							zap.String("channel_name", candidate.Name),
+							zap.String("requested_model", requestModel))
+						continue
 					}
-					exclude[candidate.Id] = true
-					lg.Warn("channel skipped - does not support requested model",
-						zap.Int("channel_id", candidate.Id),
-						zap.String("channel_name", candidate.Name),
-						zap.String("requested_model", requestModel))
+					// Check endpoint support
+					if !channelSupportsEndpoint(candidate, relayMode) {
+						exclude[candidate.Id] = true
+						lg.Debug("channel skipped - does not support requested endpoint",
+							zap.Int("channel_id", candidate.Id),
+							zap.String("channel_name", candidate.Name),
+							zap.String("endpoint", channeltype.RelayModeToEndpointName(relayMode)))
+						continue
+					}
+					return candidate, nil
 				}
 			}
 

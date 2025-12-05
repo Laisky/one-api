@@ -78,6 +78,12 @@ type ChannelConfig struct {
 	AuthType          string                `json:"auth_type,omitempty"`
 	APIFormat         string                `json:"api_format,omitempty"`
 	Tooling           *ChannelToolingConfig `json:"tooling,omitempty"`
+	// SupportedEndpoints is a list of endpoint names that this channel supports.
+	// When nil or empty, the channel uses default endpoints for its type.
+	// Endpoint names: chat_completions, completions, embeddings, moderations,
+	// images_generations, images_edits, audio_speech, audio_transcription,
+	// audio_translation, rerank, response_api, claude_messages, realtime, videos.
+	SupportedEndpoints []string `json:"supported_endpoints,omitempty"`
 }
 
 type ModelConfig struct {
@@ -1459,6 +1465,25 @@ func (channel *Channel) LoadConfig() (ChannelConfig, error) {
 		return cfg, errors.Wrapf(err, "unmarshal channel %d config", channel.Id)
 	}
 	return cfg, nil
+}
+
+// GetSupportedEndpoints returns the effective supported endpoints for this channel.
+// If the channel has custom endpoints configured, those are returned.
+// Otherwise, the default endpoints for the channel type are returned.
+func (channel *Channel) GetSupportedEndpoints() []string {
+	cfg, err := channel.LoadConfig()
+	if err != nil {
+		logger.Logger.Error("failed to load channel config for endpoints",
+			zap.Int("channel_id", channel.Id),
+			zap.Error(err))
+		return nil
+	}
+	if len(cfg.SupportedEndpoints) > 0 {
+		return cfg.SupportedEndpoints
+	}
+	// Return nil to indicate default endpoints should be used
+	// The caller should use channeltype.DefaultEndpointNamesForChannelType(channel.Type)
+	return nil
 }
 
 // storeConfig persists the provided ChannelConfig into the serialized Config

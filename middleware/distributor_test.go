@@ -327,3 +327,227 @@ func TestDistributeAutoSkipsUnsupportedChannel(t *testing.T) {
 	selectedChannelId := c.GetInt(ctxkey.ChannelId)
 	assert.Equal(t, goodChannel.Id, selectedChannelId, "should select the channel that still supports the model")
 }
+
+// TestChannelSupportsEndpoint verifies the endpoint support checking logic.
+func TestChannelSupportsEndpoint(t *testing.T) {
+	// Test with default endpoints (no custom config)
+	t.Run("default_endpoints_openai", func(t *testing.T) {
+		channel := &model.Channel{
+			Id:     1,
+			Type:   channeltype.OpenAI,
+			Config: "",
+		}
+
+		// OpenAI should support chat completions by default
+		require.True(t, channelSupportsEndpoint(channel, 1), "OpenAI should support chat completions")
+
+		// OpenAI should support embeddings by default
+		require.True(t, channelSupportsEndpoint(channel, 3), "OpenAI should support embeddings")
+	})
+
+	t.Run("default_endpoints_cohere", func(t *testing.T) {
+		channel := &model.Channel{
+			Id:     2,
+			Type:   channeltype.Cohere,
+			Config: "",
+		}
+
+		// Cohere should support chat completions
+		require.True(t, channelSupportsEndpoint(channel, 1), "Cohere should support chat completions")
+
+		// Cohere should support rerank
+		require.True(t, channelSupportsEndpoint(channel, 14), "Cohere should support rerank")
+	})
+
+	t.Run("custom_endpoints", func(t *testing.T) {
+		// Channel with custom endpoints config
+		channel := &model.Channel{
+			Id:     3,
+			Type:   channeltype.OpenAI,
+			Config: `{"supported_endpoints": ["chat_completions", "embeddings"]}`,
+		}
+
+		// Should support configured endpoints
+		require.True(t, channelSupportsEndpoint(channel, 1), "should support chat completions")
+		require.True(t, channelSupportsEndpoint(channel, 3), "should support embeddings")
+
+		// Should NOT support endpoints not in custom list
+		require.False(t, channelSupportsEndpoint(channel, 14), "should not support rerank")
+	})
+
+	t.Run("unknown_relay_mode", func(t *testing.T) {
+		channel := &model.Channel{
+			Id:     4,
+			Type:   channeltype.OpenAI,
+			Config: "",
+		}
+
+		// Unknown relay mode should be allowed (backward compatibility)
+		require.True(t, channelSupportsEndpoint(channel, 0), "unknown relay mode should be allowed")
+	})
+}
+
+// TestEndpointValidationBackwardCompatibility verifies that existing channels without
+// endpoint configuration continue to work exactly as before.
+func TestEndpointValidationBackwardCompatibility(t *testing.T) {
+	t.Run("empty_config_uses_defaults", func(t *testing.T) {
+		// Channel with no config at all - should use defaults
+		channel := &model.Channel{
+			Id:     1,
+			Type:   channeltype.OpenAI,
+			Config: "",
+		}
+
+		// OpenAI default endpoints should be available
+		require.True(t, channelSupportsEndpoint(channel, 1), "chat_completions")
+		require.True(t, channelSupportsEndpoint(channel, 3), "embeddings")
+		require.True(t, channelSupportsEndpoint(channel, 15), "response_api")
+	})
+
+	t.Run("config_without_endpoints_uses_defaults", func(t *testing.T) {
+		// Channel with other config fields but no supported_endpoints
+		channel := &model.Channel{
+			Id:     2,
+			Type:   channeltype.Azure,
+			Config: `{"region": "eastus", "api_version": "2024-02-15"}`,
+		}
+
+		// Azure default endpoints should be available
+		require.True(t, channelSupportsEndpoint(channel, 1), "chat_completions")
+		require.True(t, channelSupportsEndpoint(channel, 3), "embeddings")
+	})
+
+	t.Run("empty_endpoints_array_uses_defaults", func(t *testing.T) {
+		// Channel with explicitly empty supported_endpoints array
+		channel := &model.Channel{
+			Id:     3,
+			Type:   channeltype.Anthropic,
+			Config: `{"supported_endpoints": []}`,
+		}
+
+		// Anthropic default endpoints should be available
+		require.True(t, channelSupportsEndpoint(channel, 1), "chat_completions")
+		require.True(t, channelSupportsEndpoint(channel, 18), "claude_messages") // ClaudeMessages = 18
+		// Anthropic doesn't support embeddings by default
+		require.False(t, channelSupportsEndpoint(channel, 3), "embeddings")
+	})
+}
+
+// TestEndpointValidationCustomConfig verifies custom endpoint configurations work correctly.
+func TestEndpointValidationCustomConfig(t *testing.T) {
+	t.Run("restrict_to_single_endpoint", func(t *testing.T) {
+		// Channel restricted to only chat completions
+		channel := &model.Channel{
+			Id:     1,
+			Type:   channeltype.OpenAI,
+			Config: `{"supported_endpoints": ["chat_completions"]}`,
+		}
+
+		require.True(t, channelSupportsEndpoint(channel, 1), "chat_completions")
+		require.False(t, channelSupportsEndpoint(channel, 3), "embeddings")
+		require.False(t, channelSupportsEndpoint(channel, 15), "response_api")
+	})
+
+	t.Run("expand_beyond_defaults", func(t *testing.T) {
+		// Anthropic channel with embeddings added (not in default)
+		channel := &model.Channel{
+			Id:     2,
+			Type:   channeltype.Anthropic,
+			Config: `{"supported_endpoints": ["chat_completions", "claude_messages", "embeddings"]}`,
+		}
+
+		require.True(t, channelSupportsEndpoint(channel, 1), "chat_completions")
+		require.True(t, channelSupportsEndpoint(channel, 18), "claude_messages") // ClaudeMessages = 18
+		require.True(t, channelSupportsEndpoint(channel, 3), "embeddings added")
+	})
+
+	t.Run("case_insensitive_endpoint_names", func(t *testing.T) {
+		// Test that endpoint name matching is case-insensitive
+		channel := &model.Channel{
+			Id:     3,
+			Type:   channeltype.OpenAI,
+			Config: `{"supported_endpoints": ["CHAT_COMPLETIONS", "Embeddings"]}`,
+		}
+
+		require.True(t, channelSupportsEndpoint(channel, 1), "CHAT_COMPLETIONS")
+		require.True(t, channelSupportsEndpoint(channel, 3), "Embeddings")
+	})
+}
+
+// TestEndpointRoutingIntegration tests the full routing flow with endpoint validation.
+func TestEndpointRoutingIntegration(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	logger.SetupLogger()
+
+	// Set up test database
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	require.NoError(t, err)
+	err = db.AutoMigrate(&model.User{}, &model.Token{}, &model.Channel{}, &model.Ability{})
+	require.NoError(t, err)
+	model.DB = db
+	common.UsingSQLite.Store(true)
+	config.MemoryCacheEnabled = true
+	model.InitChannelCache()
+
+	// Create test user
+	user := &model.User{
+		Username:    "endpoint-test-user",
+		DisplayName: "Test User",
+		Group:       "default",
+		Status:      1,
+	}
+	require.NoError(t, db.Create(user).Error)
+
+	t.Run("channel_skipped_for_unsupported_endpoint", func(t *testing.T) {
+		// Create a channel that doesn't support embeddings
+		priority := int64(100)
+		channel := &model.Channel{
+			Id:       500,
+			Name:     "no-embeddings",
+			Type:     channeltype.OpenAI,
+			Models:   "text-embedding-ada-002",
+			Group:    "default",
+			Status:   model.ChannelStatusEnabled,
+			Priority: &priority,
+			Config:   `{"supported_endpoints": ["chat_completions"]}`, // No embeddings!
+		}
+		require.NoError(t, db.Create(channel).Error)
+		require.NoError(t, channel.AddAbilities())
+
+		// Create a fallback channel that supports embeddings
+		fallbackPriority := int64(50)
+		fallbackChannel := &model.Channel{
+			Id:       501,
+			Name:     "with-embeddings",
+			Type:     channeltype.OpenAI,
+			Models:   "text-embedding-ada-002",
+			Group:    "default",
+			Status:   model.ChannelStatusEnabled,
+			Priority: &fallbackPriority,
+			Config:   `{"supported_endpoints": ["chat_completions", "embeddings"]}`,
+		}
+		require.NoError(t, db.Create(fallbackChannel).Error)
+		require.NoError(t, fallbackChannel.AddAbilities())
+
+		model.InitChannelCache()
+
+		// Request embeddings endpoint
+		req := httptest.NewRequest(http.MethodPost, "/v1/embeddings", bytes.NewBufferString(`{"model":"text-embedding-ada-002"}`))
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(rec)
+		c.Request = req
+
+		c.Set(ctxkey.Id, user.Id)
+		c.Set(ctxkey.RequestModel, "text-embedding-ada-002")
+		c.Set(ctxkey.TokenId, 888)
+		gmw.SetLogger(c, logger.Logger)
+
+		Distribute()(c)
+
+		// Should skip the first channel and select the fallback
+		assert.False(t, c.IsAborted(), "should not abort")
+		selectedChannelId := c.GetInt(ctxkey.ChannelId)
+		assert.Equal(t, fallbackChannel.Id, selectedChannelId, "should select fallback channel with embeddings support")
+	})
+}

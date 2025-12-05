@@ -32,6 +32,8 @@ export const channelSchema = z.object({
       api_format: z
         .enum(["chat_completion", "response"])
         .default("chat_completion"),
+      // Supported endpoints for this channel (empty means use defaults)
+      supported_endpoints: z.array(z.string()).optional(),
     })
     .default({}),
   inference_profile_arn_map: z.string().optional(),
@@ -52,4 +54,12 @@ export type ParsedToolingConfig = {
 
 export type NormalizedToolingConfig = ParsedToolingConfig & {
   whitelist: string[];
+};
+
+// Endpoint info returned from the API
+export type EndpointInfo = {
+  id: number;
+  name: string;
+  description: string;
+  path: string;
 };

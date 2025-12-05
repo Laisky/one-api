@@ -16,6 +16,7 @@ import {
 import {
   type ChannelConfigForm,
   type ChannelForm,
+  type EndpointInfo,
   channelSchema,
 } from "../schemas";
 
@@ -42,6 +43,8 @@ export const useChannelForm = () => {
   const [defaultTooling, setDefaultTooling] = useState<string>("");
   const [defaultBaseURL, setDefaultBaseURL] = useState<string>("");
   const [baseURLEditable, setBaseURLEditable] = useState<boolean>(true);
+  const [defaultEndpoints, setDefaultEndpoints] = useState<string[]>([]);
+  const [allEndpoints, setAllEndpoints] = useState<EndpointInfo[]>([]);
   const [formInitialized, setFormInitialized] = useState(!isEdit);
   const [loadedChannelType, setLoadedChannelType] = useState<number | null>(
     null
@@ -78,6 +81,7 @@ export const useChannelForm = () => {
         vertex_ai_adc: "",
         auth_type: "personal_access_token",
         api_format: "chat_completion",
+        supported_endpoints: [],
       },
       inference_profile_arn_map: "",
     },
@@ -174,6 +178,7 @@ export const useChannelForm = () => {
           vertex_ai_adc: "",
           auth_type: "personal_access_token",
           api_format: "chat_completion",
+          supported_endpoints: [],
         };
         if (
           data.config &&
@@ -191,6 +196,9 @@ export const useChannelForm = () => {
                 parsed.api_format === "response"
                   ? "response"
                   : "chat_completion",
+              supported_endpoints: Array.isArray(parsed.supported_endpoints)
+                ? parsed.supported_endpoints
+                : [],
             };
           } catch (e) {
             console.error("Failed to parse config JSON:", e);
@@ -351,15 +359,23 @@ export const useChannelForm = () => {
       try {
         setDefaultBaseURL("");
         setBaseURLEditable(true);
+        setDefaultEndpoints([]);
+        setAllEndpoints([]);
         if (normalizedChannelType === null) return;
         const res = await api.get(
           `/api/channel/metadata?type=${normalizedChannelType}`
         );
         const base = (res.data?.data?.default_base_url as string) || "";
         const editable = res.data?.data?.base_url_editable !== false;
+        const defEndpoints =
+          (res.data?.data?.default_endpoints as string[]) || [];
+        const allEndpointsData =
+          (res.data?.data?.all_endpoints as EndpointInfo[]) || [];
         if (!cancelled) {
           setDefaultBaseURL(base);
           setBaseURLEditable(editable);
+          setDefaultEndpoints(defEndpoints);
+          setAllEndpoints(allEndpointsData);
         }
       } catch (_) {
         // ignore
@@ -731,6 +747,8 @@ export const useChannelForm = () => {
     defaultTooling,
     defaultBaseURL,
     baseURLEditable,
+    defaultEndpoints,
+    allEndpoints,
     formInitialized,
     loadedChannelType,
     normalizedChannelType,

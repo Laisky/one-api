@@ -11,6 +11,24 @@
   - [Configuration knobs](#configuration-knobs)
   - [Operational guidance](#operational-guidance)
   - [Known limitations](#known-limitations)
+  - [API Endpoint Routing Architecture](#api-endpoint-routing-architecture)
+    - [Channel Type to API Type Mapping](#channel-type-to-api-type-mapping)
+    - [Adaptor Resolution Flow](#adaptor-resolution-flow)
+    - [Endpoint Interface Requirements](#endpoint-interface-requirements)
+    - [Rerank Endpoint Deep Dive](#rerank-endpoint-deep-dive)
+    - [URL Construction by Channel Type](#url-construction-by-channel-type)
+      - [OpenAI Adaptor (used by OpenAI, OpenAI-Compatible, Azure, etc.)](#openai-adaptor-used-by-openai-openai-compatible-azure-etc)
+      - [OpenAI-Compatible URL Helper](#openai-compatible-url-helper)
+    - [Audio/Video/Image Endpoints](#audiovideoimage-endpoints)
+    - [Endpoint Support Summary](#endpoint-support-summary)
+    - [Configurable Channel Endpoint Support](#configurable-channel-endpoint-support)
+      - [Configuration Storage](#configuration-storage)
+      - [Endpoint Validation Flow](#endpoint-validation-flow)
+      - [Default Endpoints by Channel Type](#default-endpoints-by-channel-type)
+      - [API Endpoints](#api-endpoints)
+      - [Frontend Integration](#frontend-integration)
+      - [Backward Compatibility](#backward-compatibility)
+    - [Implementation Gap: Rerank for OpenAI-Compatible](#implementation-gap-rerank-for-openai-compatible)
 
 ## Overview
 
@@ -336,6 +354,103 @@ if c.Request.Method != http.MethodPost {
 | Vertex AI         | ✅   | ✅         | ❌     | ❌    | ❌    | ❌     |
 | Ollama            | ✅   | ✅         | ❌     | ❌    | ❌    | ❌     |
 | Gemini            | ✅   | ✅         | ❌     | ❌    | ❌    | ❌     |
+
+Note: This table shows **default** endpoints per channel type. Administrators can customize supported endpoints per-channel (see below).
+
+### Configurable Channel Endpoint Support
+
+Channel endpoint support is now configurable on a per-channel basis. This allows administrators to:
+
+1. **Restrict endpoints**: Limit a channel to only specific endpoints (e.g., chat-only)
+2. **Expand endpoints**: Enable endpoints not in the channel type's default set
+3. **Override defaults**: Customize behavior for specific upstream providers
+
+#### Configuration Storage
+
+Endpoint configuration is stored in the `config` JSON field of the channel:
+
+```json
+{
+  "supported_endpoints": ["chat_completions", "embeddings", "response_api"]
+}
+```
+
+When `supported_endpoints` is empty or absent, the channel uses its type's default endpoints (backward compatible).
+
+#### Endpoint Validation Flow
+
+```text
+Request → Distributor Middleware → channelSupportsEndpoint() → Route or Skip
+```
+
+The `channelSupportsEndpoint()` function in `middleware/distributor.go`:
+
+```go
+func channelSupportsEndpoint(channel *model.Channel, relayMode int) bool {
+    // Get endpoint name from relay mode
+    endpointName := channeltype.RelayModeToEndpointName(relayMode)
+
+    // Get effective supported endpoints
+    supportedEndpoints := channel.GetEffectiveSupportedEndpoints()
+
+    // Check if endpoint is supported
+    return channeltype.IsEndpointSupportedByName(endpointName, supportedEndpoints)
+}
+```
+
+#### Default Endpoints by Channel Type
+
+Defined in `relay/channeltype/endpoints.go`:
+
+```go
+var defaultEndpointsMap = map[int][]Endpoint{
+    OpenAI: {
+        EndpointChatCompletions, EndpointCompletions, EndpointEmbeddings,
+        EndpointModerations, EndpointImagesGenerations, EndpointImagesEdits,
+        EndpointAudioSpeech, EndpointAudioTranscription, EndpointAudioTranslation,
+        EndpointResponseAPI, EndpointClaudeMessages, EndpointRealtime, EndpointVideos,
+    },
+    Cohere: {
+        EndpointChatCompletions, EndpointClaudeMessages, EndpointRerank,
+    },
+    Anthropic: {
+        EndpointChatCompletions, EndpointClaudeMessages,
+    },
+    // ... other channel types
+}
+```
+
+#### API Endpoints
+
+**GET `/api/channel/metadata?type={channelType}`** returns:
+
+```json
+{
+  "default_base_url": "https://api.openai.com",
+  "base_url_editable": true,
+  "default_endpoints": ["chat_completions", "embeddings", "response_api", ...],
+  "all_endpoints": [
+    {"id": 1, "name": "chat_completions", "description": "Chat Completions", "path": "/v1/chat/completions"},
+    {"id": 3, "name": "embeddings", "description": "Embeddings", "path": "/v1/embeddings"},
+    // ... all available endpoints
+  ]
+}
+```
+
+#### Frontend Integration
+
+The channel edit page (`web/modern/src/pages/channels/EditChannelPage.tsx`) includes:
+
+1. **ChannelEndpointSettings** component with checkbox toggles for each endpoint
+2. "Reset to Defaults" button to revert to channel type defaults
+3. "Select All" and "Minimal" quick actions
+4. Documentation modal with cURL examples for each endpoint
+
+#### Backward Compatibility
+
+- Existing channels without `supported_endpoints` in config use defaults
+- Empty array `[]` is treated as "use defaults" (not "no endpoints")
+- No database migration required—uses existing `config` JSON column
 
 ### Implementation Gap: Rerank for OpenAI-Compatible
 

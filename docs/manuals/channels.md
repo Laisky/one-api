@@ -23,12 +23,13 @@ This guide explains how One-API channels work, how to set them up, and what ever
   - [10. Best Practices](#10-best-practices)
   - [11. API Endpoint Forwarding \& Compatibility](#11-api-endpoint-forwarding--compatibility)
     - [11.1 How Endpoint Routing Works](#111-how-endpoint-routing-works)
-    - [11.2 Endpoint Support Matrix](#112-endpoint-support-matrix)
-    - [11.3 OpenAI-Compatible Channel Behavior](#113-openai-compatible-channel-behavior)
-    - [11.4 Setting Up Rerank with Custom Providers](#114-setting-up-rerank-with-custom-providers)
-    - [11.5 URL Path Construction](#115-url-path-construction)
-    - [11.6 Troubleshooting Endpoint Issues](#116-troubleshooting-endpoint-issues)
-    - [11.7 Future Considerations](#117-future-considerations)
+    - [11.2 Configurable Endpoint Support](#112-configurable-endpoint-support)
+    - [11.3 Endpoint Support Matrix](#113-endpoint-support-matrix)
+    - [11.4 OpenAI-Compatible Channel Behavior](#114-openai-compatible-channel-behavior)
+    - [11.5 Setting Up Rerank with Custom Providers](#115-setting-up-rerank-with-custom-providers)
+    - [11.6 URL Path Construction](#116-url-path-construction)
+    - [11.7 Troubleshooting Endpoint Issues](#117-troubleshooting-endpoint-issues)
+    - [11.8 Future Considerations](#118-future-considerations)
   - [12. Proxy Channel Type](#12-proxy-channel-type)
     - [12.1 How Proxy Channels Work](#121-how-proxy-channels-work)
     - [12.2 Setting Up a Proxy Channel](#122-setting-up-a-proxy-channel)
@@ -36,7 +37,6 @@ This guide explains how One-API channels work, how to set them up, and what ever
     - [12.4 Proxy Channel Limitations](#124-proxy-channel-limitations)
     - [12.5 Example: Forwarding to a Custom Embedding Service](#125-example-forwarding-to-a-custom-embedding-service)
     - [12.6 Security Considerations](#126-security-considerations)
-
 
 ## 1. Channel Fundamentals
 
@@ -198,11 +198,28 @@ When a request arrives at One-API, the system:
 2. **Maps the channel type to an API type** using internal adapter logic
 3. **Selects the appropriate adapter** based on the API type
 4. **Checks adapter capabilities** — some endpoints require adapters to implement specific interfaces (e.g., `RerankAdaptor`)
-5. **Constructs the upstream URL** using the channel's Base URL and the adapter's `GetRequestURL()` logic
+5. **Checks channel endpoint configuration** — each channel can have custom endpoint settings that override defaults
+6. **Constructs the upstream URL** using the channel's Base URL and the adapter's `GetRequestURL()` logic
 
-### 11.2 Endpoint Support Matrix
+### 11.2 Configurable Endpoint Support
 
-The following table shows which endpoints are supported by each channel type:
+Each channel type has default supported endpoints, but administrators can customize which endpoints a specific channel supports. This is useful when:
+
+- A custom upstream provider only supports a subset of endpoints
+- You want to restrict certain channels to specific use cases
+- You need to enable endpoints that aren't in the default set for a channel type
+
+**Configuration Options:**
+
+- **Use Defaults**: Leave the endpoint configuration empty to use the channel type's default endpoints
+- **Custom Selection**: Select specific endpoints to enable on the channel edit page
+- **Reset to Defaults**: Click "Reset to Defaults" to revert to the channel type's default endpoints
+
+**Backward Compatibility**: Existing channels without endpoint configuration will continue to work exactly as before, using the default endpoints for their channel type. No database migration is required.
+
+### 11.3 Endpoint Support Matrix
+
+The following table shows the **default** endpoints supported by each channel type:
 
 | Endpoint                                             | OpenAI | Azure | OpenAI-Compatible | Cohere | Ollama | AWS Bedrock | Vertex AI | Gemini |
 | ---------------------------------------------------- | ------ | ----- | ----------------- | ------ | ------ | ----------- | --------- | ------ |
@@ -218,17 +235,18 @@ The following table shows which endpoints are supported by each channel type:
 
 _Notes:_
 
-- ✅ = Fully supported with proper format conversion
-- ❌ = Not supported; requests will fail with "not supported by adaptor" error
+- ✅ = Supported by default
+- ❌ = Not supported by default
 - \* = OpenAI-Compatible Response API support depends on the `API Format` configuration
+- Administrators can override these defaults on a per-channel basis
 
-### 11.3 OpenAI-Compatible Channel Behavior
+### 11.4 OpenAI-Compatible Channel Behavior
 
 **Important**: When you create an **OpenAI-Compatible** channel with a custom Base URL, it uses the OpenAI adapter internally. This means:
 
 1. **Chat Completions, Embeddings, Audio, Images** → Requests are forwarded to `{Base URL}{request path}` (e.g., `https://your-api.com/v1/chat/completions`)
 
-2. **Rerank** → **NOT SUPPORTED**. Even if your upstream provider supports rerank at `/v1/rerank`, One-API's OpenAI adapter does not implement the `RerankAdaptor` interface. The request will fail with:
+2. **Rerank** → **NOT SUPPORTED BY DEFAULT**. Even if your upstream provider supports rerank at `/v1/rerank`, One-API's OpenAI adapter does not implement the `RerankAdaptor` interface. The request will fail with:
 
    ```text
    rerank requests are not supported by adaptor openai
@@ -236,16 +254,16 @@ _Notes:_
 
 3. **Response API** → Supported if you configure `API Format: response` in the channel settings. Otherwise, requests are converted to Chat Completions format.
 
-### 11.4 Setting Up Rerank with Custom Providers
+### 11.5 Setting Up Rerank with Custom Providers
 
 If you need to use rerank with a Cohere-compatible API at a custom URL:
 
 1. Create a **Cohere** channel (not OpenAI-Compatible)
 2. Set the **Base URL** to your provider's endpoint (e.g., `https://your-cohere-proxy.com`)
 3. Add your rerank models to the channel's model list
-4. The Cohere adapter will forward rerank requests to `{Base URL}/v2/rerank`
+4. The Cohere adapter will forward rerank requests to `{base URL}/v2/rerank`
 
-### 11.5 URL Path Construction
+### 11.6 URL Path Construction
 
 Different adapters construct upstream URLs differently:
 
@@ -257,7 +275,7 @@ Different adapters construct upstream URLs differently:
 | Cohere            | `{base}/v1/chat`                        | ❌                                             | `{base}/v2/rerank` |
 | Ollama            | `{base}/api/chat`                       | `{base}/api/embed`                             | ❌                 |
 
-### 11.6 Troubleshooting Endpoint Issues
+### 11.7 Troubleshooting Endpoint Issues
 
 | Symptom                                          | Cause                                                        | Solution                                                      |
 | ------------------------------------------------ | ------------------------------------------------------------ | ------------------------------------------------------------- |
@@ -266,7 +284,7 @@ Different adapters construct upstream URLs differently:
 | Embeddings work but rerank fails                 | OpenAI-Compatible channels support embeddings but not rerank | Create separate Cohere channel for rerank models              |
 | Audio/video endpoints return 404                 | Upstream provider doesn't support these endpoints            | Verify your provider offers these APIs                        |
 
-### 11.7 Future Considerations
+### 11.8 Future Considerations
 
 The endpoint support matrix is determined by each adapter's implementation. To add rerank support for OpenAI-Compatible channels, the adapter would need to:
 
