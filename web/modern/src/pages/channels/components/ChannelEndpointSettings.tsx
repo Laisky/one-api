@@ -33,7 +33,7 @@ const ENDPOINT_DOCS: Record<
   chat_completions: {
     description:
       "The Chat Completions API creates model responses for chat-based conversations. Send a list of messages and receive a model-generated reply. Supports both streaming and non-streaming modes.",
-    curlExample: `curl https://api.example.com/v1/chat/completions \\
+    curlExample: `curl https://oneapi.laisky.com/v1/chat/completions \\
   -H "Content-Type: application/json" \\
   -H "Authorization: Bearer YOUR_API_KEY" \\
   -d '{
@@ -47,7 +47,7 @@ const ENDPOINT_DOCS: Record<
   completions: {
     description:
       "The legacy Completions API generates text completions for a given prompt. This is the original text generation API, now largely superseded by Chat Completions.",
-    curlExample: `curl https://api.example.com/v1/completions \\
+    curlExample: `curl https://oneapi.laisky.com/v1/completions \\
   -H "Content-Type: application/json" \\
   -H "Authorization: Bearer YOUR_API_KEY" \\
   -d '{
@@ -59,7 +59,7 @@ const ENDPOINT_DOCS: Record<
   embeddings: {
     description:
       "The Embeddings API converts text into numerical vector representations. These vectors can be used for semantic search, clustering, and similarity comparisons.",
-    curlExample: `curl https://api.example.com/v1/embeddings \\
+    curlExample: `curl https://oneapi.laisky.com/v1/embeddings \\
   -H "Content-Type: application/json" \\
   -H "Authorization: Bearer YOUR_API_KEY" \\
   -d '{
@@ -70,7 +70,7 @@ const ENDPOINT_DOCS: Record<
   moderations: {
     description:
       "The Moderations API checks whether text violates content policies. It returns categories and scores indicating the likelihood of policy violations.",
-    curlExample: `curl https://api.example.com/v1/moderations \\
+    curlExample: `curl https://oneapi.laisky.com/v1/moderations \\
   -H "Content-Type: application/json" \\
   -H "Authorization: Bearer YOUR_API_KEY" \\
   -d '{
@@ -80,7 +80,7 @@ const ENDPOINT_DOCS: Record<
   images_generations: {
     description:
       "The Image Generation API creates images from text descriptions. Specify a prompt and receive one or more generated images in various formats and sizes.",
-    curlExample: `curl https://api.example.com/v1/images/generations \\
+    curlExample: `curl https://oneapi.laisky.com/v1/images/generations \\
   -H "Content-Type: application/json" \\
   -H "Authorization: Bearer YOUR_API_KEY" \\
   -d '{
@@ -93,7 +93,7 @@ const ENDPOINT_DOCS: Record<
   images_edits: {
     description:
       "The Image Edits API modifies existing images based on text instructions. Upload an image with a mask and prompt to generate edited versions.",
-    curlExample: `curl https://api.example.com/v1/images/edits \\
+    curlExample: `curl https://oneapi.laisky.com/v1/images/edits \\
   -H "Authorization: Bearer YOUR_API_KEY" \\
   -F image="@original.png" \\
   -F mask="@mask.png" \\
@@ -104,7 +104,7 @@ const ENDPOINT_DOCS: Record<
   audio_speech: {
     description:
       "The Text-to-Speech API converts text into spoken audio. Choose from multiple voices and output formats to generate natural-sounding speech.",
-    curlExample: `curl https://api.example.com/v1/audio/speech \\
+    curlExample: `curl https://oneapi.laisky.com/v1/audio/speech \\
   -H "Authorization: Bearer YOUR_API_KEY" \\
   -H "Content-Type: application/json" \\
   -d '{
@@ -116,7 +116,7 @@ const ENDPOINT_DOCS: Record<
   audio_transcription: {
     description:
       "The Audio Transcription API converts spoken audio into text. Upload an audio file to receive a transcript in the specified language.",
-    curlExample: `curl https://api.example.com/v1/audio/transcriptions \\
+    curlExample: `curl https://oneapi.laisky.com/v1/audio/transcriptions \\
   -H "Authorization: Bearer YOUR_API_KEY" \\
   -F file="@audio.mp3" \\
   -F model="whisper-1"`,
@@ -124,7 +124,7 @@ const ENDPOINT_DOCS: Record<
   audio_translation: {
     description:
       "The Audio Translation API translates spoken audio into English text. Upload an audio file in any supported language to receive an English transcript.",
-    curlExample: `curl https://api.example.com/v1/audio/translations \\
+    curlExample: `curl https://oneapi.laisky.com/v1/audio/translations \\
   -H "Authorization: Bearer YOUR_API_KEY" \\
   -F file="@french_audio.mp3" \\
   -F model="whisper-1"`,
@@ -132,7 +132,7 @@ const ENDPOINT_DOCS: Record<
   rerank: {
     description:
       "The Rerank API reorders a list of documents based on their relevance to a query. Useful for improving search results and retrieval-augmented generation (RAG) systems.",
-    curlExample: `curl https://api.example.com/v1/rerank \\
+    curlExample: `curl https://oneapi.laisky.com/v1/rerank \\
   -H "Content-Type: application/json" \\
   -H "Authorization: Bearer YOUR_API_KEY" \\
   -d '{
@@ -148,7 +148,7 @@ const ENDPOINT_DOCS: Record<
   response_api: {
     description:
       "The Response API is OpenAI's newer stateful API for multi-turn conversations. It manages conversation state server-side and supports advanced features like tools and structured output.",
-    curlExample: `curl https://api.example.com/v1/responses \\
+    curlExample: `curl https://oneapi.laisky.com/v1/responses \\
   -H "Content-Type: application/json" \\
   -H "Authorization: Bearer YOUR_API_KEY" \\
   -d '{
@@ -159,7 +159,7 @@ const ENDPOINT_DOCS: Record<
   claude_messages: {
     description:
       "The Claude Messages API is Anthropic's native format for interacting with Claude models. One-API converts this format to work with any supported backend.",
-    curlExample: `curl https://api.example.com/v1/messages \\
+    curlExample: `curl https://oneapi.laisky.com/v1/messages \\
   -H "Content-Type: application/json" \\
   -H "x-api-key: YOUR_API_KEY" \\
   -H "anthropic-version: 2023-06-01" \\
@@ -184,7 +184,7 @@ wscat -c "wss://api.example.com/v1/realtime?model=gpt-4o-realtime-preview" \\
   videos: {
     description:
       "The Video Generation API creates videos from text descriptions or images. Specify prompts and parameters to generate video content.",
-    curlExample: `curl https://api.example.com/v1/videos \\
+    curlExample: `curl https://oneapi.laisky.com/v1/videos \\
   -H "Content-Type: application/json" \\
   -H "Authorization: Bearer YOUR_API_KEY" \\
   -d '{

@@ -365,7 +365,7 @@ Creating MCP tools follows this pattern:
 mcpTool := model.Tool{
     Type:            "mcp",
     ServerLabel:     "my-server",
-    ServerUrl:       "https://api.example.com/mcp",
+    ServerUrl:       "https://mcp.laisky.com",
     RequireApproval: "never",
     AllowedTools:    []string{"tool1", "tool2"},
     Headers: map[string]string{
