@@ -37,6 +37,58 @@ func AbortWithError(c *gin.Context, statusCode int, err error) {
 	c.Abort()
 }
 
+// TokenInfo holds information about an API token for logging purposes.
+// All fields are masked or ID-based to avoid exposing sensitive data.
+type TokenInfo struct {
+	MaskedKey   string // Masked API key (prefix...suffix)
+	TokenId     int    // Token ID
+	TokenName   string // Token name
+	UserId      int    // User ID who owns the token
+	Username    string // Username (optional, may be empty)
+	RequestedAt string // Request model (optional)
+}
+
+// AbortWithTokenError aborts the request with an error message and logs detailed token information.
+// This function should be used when rejecting API key requests to provide more context in logs
+// for debugging purposes. The token information is safely masked to avoid exposing sensitive data.
+func AbortWithTokenError(c *gin.Context, statusCode int, err error, tokenInfo *TokenInfo) {
+	logger := gmw.GetLogger(c)
+	logFields := []zap.Field{
+		zap.Int("status_code", statusCode),
+		zap.Error(err),
+	}
+
+	// Add token info fields if available
+	if tokenInfo != nil {
+		logFields = append(logFields,
+			zap.String("api_key", tokenInfo.MaskedKey),
+			zap.Int("token_id", tokenInfo.TokenId),
+			zap.String("token_name", tokenInfo.TokenName),
+			zap.Int("user_id", tokenInfo.UserId),
+		)
+		if tokenInfo.Username != "" {
+			logFields = append(logFields, zap.String("username", tokenInfo.Username))
+		}
+		if tokenInfo.RequestedAt != "" {
+			logFields = append(logFields, zap.String("requested_model", tokenInfo.RequestedAt))
+		}
+	}
+
+	if ignoreServerError(err) {
+		logger.Warn("server abort", logFields...)
+	} else {
+		logger.Error("server abort", logFields...)
+	}
+
+	c.JSON(statusCode, gin.H{
+		"error": gin.H{
+			"message": helper.MessageWithRequestId(err.Error(), c.GetString(helper.RequestIdKey)),
+			"type":    string(model.ErrorTypeOneAPI),
+		},
+	})
+	c.Abort()
+}
+
 func ignoreServerError(err error) bool {
 	switch {
 	case strings.Contains(err.Error(), "token not found for key:"):

@@ -31,6 +31,7 @@ import (
 
 	"github.com/songquanpeng/one-api/common/blacklist"
 	"github.com/songquanpeng/one-api/common/ctxkey"
+	"github.com/songquanpeng/one-api/common/helper"
 	"github.com/songquanpeng/one-api/common/network"
 	"github.com/songquanpeng/one-api/model"
 )
@@ -150,10 +151,18 @@ func TokenAuth() func(c *gin.Context) {
 			return
 		}
 
+		// Build token info for error logging (masked key for security)
+		tokenInfo := &TokenInfo{
+			MaskedKey: helper.MaskAPIKey(key),
+			TokenId:   token.Id,
+			TokenName: token.Name,
+			UserId:    token.UserId,
+		}
+
 		// Check IP subnet restrictions (if configured for this token)
 		if token.Subnet != nil && *token.Subnet != "" {
 			if !network.IsIpInSubnets(ctx, c.ClientIP(), *token.Subnet) {
-				AbortWithError(c, http.StatusForbidden, errors.Errorf("This API key can only be used in the specified subnet: %s, current IP: %s", *token.Subnet, c.ClientIP()))
+				AbortWithTokenError(c, http.StatusForbidden, errors.Errorf("This API key can only be used in the specified subnet: %s, current IP: %s", *token.Subnet, c.ClientIP()), tokenInfo)
 				return
 			}
 		}
@@ -161,27 +170,28 @@ func TokenAuth() func(c *gin.Context) {
 		// Verify the token owner (user) is still enabled and not banned
 		userEnabled, err := model.CacheIsUserEnabled(ctx, token.UserId)
 		if err != nil {
-			AbortWithError(c, http.StatusInternalServerError, err)
+			AbortWithTokenError(c, http.StatusInternalServerError, err, tokenInfo)
 			return
 		}
 		if !userEnabled || blacklist.IsUserBanned(token.UserId) {
-			AbortWithError(c, http.StatusForbidden, errors.New("User has been banned"))
+			AbortWithTokenError(c, http.StatusForbidden, errors.New("User has been banned"), tokenInfo)
 			return
 		}
 
 		// Extract and validate the requested model (for AI/ML API endpoints)
 		requestModel, err := getRequestModel(c)
 		if err != nil && shouldCheckModel(c) {
-			AbortWithError(c, http.StatusBadRequest, err)
+			AbortWithTokenError(c, http.StatusBadRequest, err, tokenInfo)
 			return
 		}
 		c.Set(ctxkey.RequestModel, requestModel)
+		tokenInfo.RequestedAt = requestModel
 
 		// Check if token has model restrictions and validate access
 		if token.Models != nil && *token.Models != "" {
 			c.Set(ctxkey.AvailableModels, *token.Models)
 			if requestModel != "" && !isModelInList(requestModel, *token.Models) {
-				AbortWithError(c, http.StatusForbidden, errors.Errorf("This API key does not have permission to use the model: %s", requestModel))
+				AbortWithTokenError(c, http.StatusForbidden, errors.Errorf("This API key does not have permission to use the model: %s", requestModel), tokenInfo)
 				return
 			}
 		}
@@ -199,13 +209,13 @@ func TokenAuth() func(c *gin.Context) {
 			if model.IsAdmin(token.UserId) {
 				cid, err := strconv.Atoi(parts[1])
 				if err != nil {
-					AbortWithError(c, http.StatusBadRequest, errors.Errorf("Invalid Channel Id: %s", parts[1]))
+					AbortWithTokenError(c, http.StatusBadRequest, errors.Errorf("Invalid Channel Id: %s", parts[1]), tokenInfo)
 					return
 				}
 
 				c.Set(ctxkey.SpecificChannelId, cid)
 			} else {
-				AbortWithError(c, http.StatusForbidden, errors.New("Ordinary users do not support specifying channels"))
+				AbortWithTokenError(c, http.StatusForbidden, errors.New("Ordinary users do not support specifying channels"), tokenInfo)
 				return
 			}
 		}
@@ -214,7 +224,7 @@ func TokenAuth() func(c *gin.Context) {
 		if channelId := c.Param("channelid"); channelId != "" {
 			cid, err := strconv.Atoi(channelId)
 			if err != nil {
-				AbortWithError(c, http.StatusBadRequest, errors.Errorf("Invalid Channel Id: %s", channelId))
+				AbortWithTokenError(c, http.StatusBadRequest, errors.Errorf("Invalid Channel Id: %s", channelId), tokenInfo)
 				return
 			}
 
