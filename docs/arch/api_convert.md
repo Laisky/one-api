@@ -8,7 +8,28 @@ one-api provides transparent, bidirectional conversion across the three chat-sty
 
 Regardless of the entrypoint a caller chooses, the platform delivers the reply using the same format the caller used while freely routing the upstream call to whatever protocol the target model or channel actually understands.
 
----
+## Menu
+
+- [API Format Conversion Guide](#api-format-conversion-guide)
+  - [Menu](#menu)
+  - [1. Supported Conversions at a Glance](#1-supported-conversions-at-a-glance)
+  - [2. Request Routing Overview](#2-request-routing-overview)
+    - [2.1 Default Endpoint Configuration](#21-default-endpoint-configuration)
+  - [3. Automatic Format Detection](#3-automatic-format-detection)
+    - [3.1 Format Detection Logic](#31-format-detection-logic)
+    - [3.2 Configuration](#32-configuration)
+    - [3.3 Handling Modes](#33-handling-modes)
+    - [3.4 Implementation](#34-implementation)
+  - [4. Entry Point Details](#4-entry-point-details)
+    - [4.1 Chat Completions (`/v1/chat/completions`)](#41-chat-completions-v1chatcompletions)
+    - [4.2 Responses (`/v1/responses`)](#42-responses-v1responses)
+    - [4.3 Claude Messages (`/v1/messages`)](#43-claude-messages-v1messages)
+  - [5. Capability Detection \& Sanitisation](#5-capability-detection--sanitisation)
+  - [6. Streaming Behaviour](#6-streaming-behaviour)
+  - [7. Error Handling \& Billing](#7-error-handling--billing)
+  - [8. Context Keys \& Runtime Flags](#8-context-keys--runtime-flags)
+  - [9. Testing Coverage](#9-testing-coverage)
+  - [10. Summary \& Further Reading](#10-summary--further-reading)
 
 ## 1. Supported Conversions at a Glance
 
@@ -23,8 +44,6 @@ Key points:
 - Native-capable channels are contacted using their preferred protocol (for example, OpenAI GPT-4o via Responses, Anthropic Claude via Claude Messages).
 - Channels lacking native Responses support automatically fall back to Chat Completions while the controller rebuilds a Responses payload for the caller.
 - Cross-family access (Claude client → OpenAI model, OpenAI client → Claude model, etc.) works without user code changes.
-
----
 
 ## 2. Request Routing Overview
 
@@ -44,10 +63,19 @@ Important building blocks:
 - `relay/format` – fast format detection based on payload structure.
 - `middleware.APIFormatAutoDetect` – middleware that re-routes mismatched requests.
 - `meta.Meta` stores routing facts (channel, model mapping, URL path, fallback flags).
+- `relay/channeltype/endpoints.go` – defines default supported endpoints for each channel type.
 - Conversion utilities live primarily in `relay/adaptor/openai` and `relay/adaptor/openai_compatible`.
 - Controllers (`relay/controller/*.go`) coordinate conversion, quota, and response rewriting.
 
----
+### 2.1 Default Endpoint Configuration
+
+Every chat-capable channel type is configured with default endpoints in `relay/channeltype/endpoints.go`. The `DefaultEndpointsForChannelType` function returns the supported endpoints for each channel type. **All chat-capable channels support these three core APIs:**
+
+- `EndpointChatCompletions` – Chat Completions API (`/v1/chat/completions`)
+- `EndpointResponseAPI` – Response API (`/v1/responses`)
+- `EndpointClaudeMessages` – Claude Messages API (`/v1/messages`)
+
+This ensures users can freely call any of these three API formats regardless of the upstream channel type. The platform transparently converts requests and responses as needed.
 
 ## 3. Automatic Format Detection
 
@@ -87,8 +115,6 @@ The middleware (`middleware.APIFormatAutoDetect`) runs early in the request chai
 3. Compares with the expected format based on the URL path
 4. On mismatch, either re-routes transparently or returns a redirect
 
----
-
 ## 4. Entry Point Details
 
 ### 4.1 Chat Completions (`/v1/chat/completions`)
@@ -103,7 +129,12 @@ The middleware (`middleware.APIFormatAutoDetect`) runs early in the request chai
 
 1. The controller parses the JSON into `openai.ResponseAPIRequest`, then runs `sanitizeResponseAPIRequest` to clear unsupported parameters (for example, reasoning models drop `temperature`/`top_p`).
 2. `normalizeResponseAPIRawBody` rewrites the raw JSON in-place so that forbidden fields are removed before the request ever leaves the proxy. This keeps upstream validation errors from leaking to callers.
-3. `supportsNativeResponseAPI(meta)` decides whether the channel can speak Responses directly. It currently returns `true` only for official OpenAI endpoints (`api.openai.com`). All other channels, including GPT-OSS deployments and OpenAI-compatible vendors, opt into the Chat Completion fallback.
+3. `supportsNativeResponseAPI(meta)` decides whether the channel can speak Responses directly. Native Response API support is enabled for:
+   - Official OpenAI endpoints (`api.openai.com`)
+   - Azure channels using GPT-5 models (via `AzureRequiresResponseAPI`)
+   - XAI channels (native support)
+   - OpenAI-compatible channels with explicit `response_api` format configuration
+     All other channels fall back to Chat Completions.
 4. When falling back, the controller converts the request with `ConvertResponseAPIToChatCompletionRequest`, updates `meta.RequestURLPath` to `/v1/chat/completions`, and sets `meta.ResponseAPIFallback = true` to avoid recursive reconversion later in the pipeline.
 5. The adaptor call proceeds. If a fallback was used, the upstream Chat Completion response is transformed back into a Responses envelope via `ResponseAPIHandler` (non-streaming) or `ResponseAPIStreamHandler` (streaming). The helper registered under `ctxkey.ResponseRewriteHandler` performs the final rewrite before bytes are flushed to the client.
 6. `normalizeResponseAPIRawBody` also deletes `temperature`/`top_p` keys from the raw payload when the sanitized struct dropped them, ensuring double coverage for channels that reject those parameters outright.
@@ -116,21 +147,17 @@ The middleware (`middleware.APIFormatAutoDetect`) runs early in the request chai
 4. During response handling, adaptors check `ctxkey.ClaudeMessagesConversion`. When present, they transform the upstream response (or SSE stream) back into Claude Messages events using utilities such as `openai_compatible.HandleClaudeMessagesResponse` and `ConvertOpenAIStreamToClaudeSSE`.
 5. The controller always returns Claude-flavoured JSON/SSE to the caller, regardless of the intermediate protocols.
 
----
-
 ## 5. Capability Detection & Sanitisation
 
-| Concern                                 | Implementation                                                                        | Notes                                                                            |
-| --------------------------------------- | ------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
-| Model supports only Chat Completions    | `IsModelsOnlySupportedByChatCompletionAPI` (`relay/adaptor/openai/response_model.go`) | Matches search/audio GPT variants; skips Responses conversion.                   |
-| Channel supports native Responses       | `supportsNativeResponseAPI` (`relay/controller/response.go`)                          | Accepts only OpenAI first-party endpoints. Others use Chat fallback.             |
-| Reasoning models reject sampling params | `sanitizeResponseAPIRequest` + `sanitizeChatCompletionRequest`                        | Clears `temperature` and `top_p` for GPT-5 / o-series models.                    |
-| Raw payload must match sanitised struct | `normalizeResponseAPIRawBody`                                                         | Removes stripped keys from the outbound JSON to avoid upstream 400s.             |
-| Fallback recursion protection           | `meta.ResponseAPIFallback`                                                            | Prevents a Chat fallback request from being re-upgraded to Responses downstream. |
+| Concern                                 | Implementation                                                                        | Notes                                                                                             |
+| --------------------------------------- | ------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| Model supports only Chat Completions    | `IsModelsOnlySupportedByChatCompletionAPI` (`relay/adaptor/openai/response_model.go`) | Matches search/audio GPT variants; skips Responses conversion.                                    |
+| Channel supports native Responses       | `supportsNativeResponseAPI` (`relay/controller/response.go`)                          | OpenAI first-party, Azure GPT-5, XAI, and configured OpenAI-compatible. Others use Chat fallback. |
+| Reasoning models reject sampling params | `sanitizeResponseAPIRequest` + `sanitizeChatCompletionRequest`                        | Clears `temperature` and `top_p` for GPT-5 / o-series models.                                     |
+| Raw payload must match sanitised struct | `normalizeResponseAPIRawBody`                                                         | Removes stripped keys from the outbound JSON to avoid upstream 400s.                              |
+| Fallback recursion protection           | `meta.ResponseAPIFallback`                                                            | Prevents a Chat fallback request from being re-upgraded to Responses downstream.                  |
 
 These safeguards execute before every upstream call, so the same rules apply to retries and multi-channel failovers.
-
----
 
 ## 6. Streaming Behaviour
 
@@ -138,16 +165,12 @@ These safeguards execute before every upstream call, so the same rules apply to 
 - **Chat → Responses upgrade:** When `/v1/chat/completions` requests are upgraded to Responses, `ResponseAPIDirectStreamHandler` passes through upstream Responses SSE untouched.
 - **Claude Messages:** `ConvertOpenAIStreamToClaudeSSE` produces Claude-native event types (`message_start`, `content_block_delta`, …) while accumulating text and tool call arguments for billing.
 
----
-
 ## 7. Error Handling & Billing
 
 1. Controllers pre-consume quota using the same logic regardless of protocol. Response fallback calls use the Chat Completion quota helpers but reconcile against the final Responses usage once conversion completes.
 2. All adaptor errors are wrapped with `openai.ErrorWrapper` (or the channel equivalent) so HTTP status codes and machine-readable error bodies survive conversions.
 3. Token accounting prioritises upstream usage. When upstream omits it, the system estimates totals from streamed text, tool call arguments, and prompt size.
 4. Billing post-processing funnels through `billing.PostConsumeQuotaDetailed`, which now receives the original Responses model name even after a fallback path.
-
----
 
 ## 8. Context Keys & Runtime Flags
 
@@ -162,8 +185,6 @@ These safeguards execute before every upstream call, so the same rules apply to 
 
 Refer to `common/ctxkey/key.go` and `relay/meta/relay_meta.go` for the authoritative list.
 
----
-
 ## 9. Testing Coverage
 
 Relevant test suites validating the behaviour above:
@@ -176,6 +197,12 @@ Relevant test suites validating the behaviour above:
   - `TestNormalizeResponseAPIRawBody_RemovesUnsupportedParams` guards sanitisation.
 - `relay/adaptor/openai/response_model_test.go` – bidirectional conversion tests for Chat ↔ Responses, including function calling and streaming.
 - `relay/controller/claude_messages_test.go` plus adaptor-specific suites – validate Claude ↔ OpenAI/Gemini conversions.
+- `relay/channeltype/endpoints_test.go` – verifies default endpoint configuration for all channel types.
+- `test/adaptor_comprehensive_test.go` – comprehensive tests for all adaptors covering:
+  - `TestAdapterChatCompletionSupport` – validates ChatCompletion support for all adaptors.
+  - `TestAdapterClaudeMessagesSupport` – validates Claude Messages API support via `ConvertClaudeRequest`.
+  - `TestClaudeMessagesRequestConversion` – tests complex Claude request conversions.
+  - `TestResponseConversionIntegration` – end-to-end response conversion testing.
 - `cmd/test` regression sweep – cross-api smoke tests that hit every public adaptor.
 
 Run everything with:
@@ -185,8 +212,6 @@ GOFLAGS=-race go test ./...
 ```
 
 (Controllers and adaptors can also be targeted individually for faster iteration.)
-
----
 
 ## 10. Summary & Further Reading
 
@@ -200,6 +225,7 @@ For deeper implementation insight, explore:
 
 - `relay/format/detect.go` – format detection logic
 - `middleware/api_format_detect.go` – auto-detection middleware
+- `relay/channeltype/endpoints.go` – default endpoint configuration per channel type
 - `relay/controller/response.go`
 - `relay/adaptor/openai/adaptor.go`
 - `relay/controller/claude_messages.go`

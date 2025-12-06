@@ -169,12 +169,14 @@ func DefaultEndpointsForChannelType(channelType int) []Endpoint {
 
 	chatOnly := []Endpoint{
 		EndpointChatCompletions,
+		EndpointResponseAPI,
 		EndpointClaudeMessages,
 	}
 
 	chatAndEmbeddings := []Endpoint{
 		EndpointChatCompletions,
 		EndpointEmbeddings,
+		EndpointResponseAPI,
 		EndpointClaudeMessages,
 	}
 
@@ -189,6 +191,7 @@ func DefaultEndpointsForChannelType(channelType int) []Endpoint {
 	case Anthropic:
 		return []Endpoint{
 			EndpointChatCompletions,
+			EndpointResponseAPI,
 			EndpointClaudeMessages,
 		}
 	case PaLM:
@@ -200,6 +203,7 @@ func DefaultEndpointsForChannelType(channelType int) []Endpoint {
 			EndpointChatCompletions,
 			EndpointEmbeddings,
 			EndpointImagesGenerations,
+			EndpointResponseAPI,
 			EndpointClaudeMessages,
 		}
 	case Ali:
@@ -207,6 +211,7 @@ func DefaultEndpointsForChannelType(channelType int) []Endpoint {
 			EndpointChatCompletions,
 			EndpointEmbeddings,
 			EndpointImagesGenerations,
+			EndpointResponseAPI,
 			EndpointClaudeMessages,
 		}
 	case AliBailian:
@@ -216,12 +221,14 @@ func DefaultEndpointsForChannelType(channelType int) []Endpoint {
 			EndpointChatCompletions,
 			EndpointEmbeddings,
 			EndpointRerank,
+			EndpointResponseAPI,
 			EndpointClaudeMessages,
 		}
 	case BaiduV2:
 		return []Endpoint{
 			EndpointChatCompletions,
 			EndpointRerank,
+			EndpointResponseAPI,
 			EndpointClaudeMessages,
 		}
 	case Xunfei, XunfeiV2:
@@ -231,6 +238,7 @@ func DefaultEndpointsForChannelType(channelType int) []Endpoint {
 	case OpenRouter:
 		return []Endpoint{
 			EndpointChatCompletions,
+			EndpointResponseAPI,
 			EndpointClaudeMessages,
 		}
 	case AIProxyLibrary:
@@ -247,12 +255,14 @@ func DefaultEndpointsForChannelType(channelType int) []Endpoint {
 		return []Endpoint{
 			EndpointChatCompletions,
 			EndpointEmbeddings,
+			EndpointResponseAPI,
 			EndpointClaudeMessages,
 		}
 	case Groq:
 		return []Endpoint{
 			EndpointChatCompletions,
 			EndpointAudioTranscription,
+			EndpointResponseAPI,
 			EndpointClaudeMessages,
 		}
 	case Ollama:
@@ -265,6 +275,7 @@ func DefaultEndpointsForChannelType(channelType int) []Endpoint {
 		return []Endpoint{
 			EndpointChatCompletions,
 			EndpointEmbeddings,
+			EndpointResponseAPI,
 			EndpointClaudeMessages,
 		}
 	case Coze:
@@ -273,11 +284,13 @@ func DefaultEndpointsForChannelType(channelType int) []Endpoint {
 		return []Endpoint{
 			EndpointChatCompletions,
 			EndpointRerank,
+			EndpointResponseAPI,
 			EndpointClaudeMessages,
 		}
 	case DeepSeek:
 		return []Endpoint{
 			EndpointChatCompletions,
+			EndpointResponseAPI,
 			EndpointClaudeMessages,
 		}
 	case Cloudflare:
@@ -288,6 +301,7 @@ func DefaultEndpointsForChannelType(channelType int) []Endpoint {
 		return []Endpoint{
 			EndpointChatCompletions,
 			EndpointEmbeddings,
+			EndpointResponseAPI,
 			EndpointClaudeMessages,
 		}
 	case Doubao:
@@ -295,6 +309,7 @@ func DefaultEndpointsForChannelType(channelType int) []Endpoint {
 	case Novita:
 		return []Endpoint{
 			EndpointChatCompletions,
+			EndpointResponseAPI,
 			EndpointClaudeMessages,
 		}
 	case VertextAI:
@@ -302,6 +317,7 @@ func DefaultEndpointsForChannelType(channelType int) []Endpoint {
 			EndpointChatCompletions,
 			EndpointEmbeddings,
 			EndpointImagesGenerations,
+			EndpointResponseAPI,
 			EndpointClaudeMessages,
 		}
 	case Proxy:
@@ -311,6 +327,7 @@ func DefaultEndpointsForChannelType(channelType int) []Endpoint {
 		return []Endpoint{
 			EndpointChatCompletions,
 			EndpointEmbeddings,
+			EndpointResponseAPI,
 			EndpointClaudeMessages,
 		}
 	case XAI:
@@ -325,6 +342,8 @@ func DefaultEndpointsForChannelType(channelType int) []Endpoint {
 		return []Endpoint{
 			EndpointChatCompletions,
 			EndpointImagesGenerations,
+			EndpointResponseAPI,
+			EndpointClaudeMessages,
 		}
 	case Custom, OpenAICompatible:
 		return openAICompatibleBasic

@@ -94,6 +94,11 @@ func (a *Adaptor) ConvertImageRequest(_ *gin.Context, request *model.ImageReques
 	return nil, errors.Errorf("not implement")
 }
 
+// ConvertClaudeRequest returns the original Claude request for pass-through proxying
+func (a *Adaptor) ConvertClaudeRequest(_ *gin.Context, request *model.ClaudeRequest) (any, error) {
+	return request, nil
+}
+
 func (a *Adaptor) DoRequest(c *gin.Context, meta *meta.Meta, requestBody io.Reader) (*http.Response, error) {
 	return channelhelper.DoRequestHelper(a, c, meta, requestBody)
 }

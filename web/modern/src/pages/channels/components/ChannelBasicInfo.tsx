@@ -161,34 +161,38 @@ export const ChannelBasicInfo = ({
                       errorClass("type")
                     )}
                   >
-                      {selectedType ? (
-                        <span className="flex items-center gap-2">
-                          <span
-                            className="inline-block w-2 h-2 rounded-full flex-shrink-0"
-                            style={{ backgroundColor: selectedColorValue }}
-                          />
-                          {selectedType.text}
-                        </span>
-                      ) : (
-                        tr("type.placeholder", "Select a channel type")
-                      )}
-                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    {selectedType ? (
+                      <span className="flex items-center gap-2">
+                        <span
+                          className="inline-block w-2 h-2 rounded-full flex-shrink-0"
+                          style={{ backgroundColor: selectedColorValue }}
+                        />
+                        {selectedType.text}
+                      </span>
+                    ) : (
+                      tr("type.placeholder", "Select a channel type")
+                    )}
+                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                   </Button>
                 </PopoverTrigger>
-                <PopoverContent 
+                <PopoverContent
                   className="p-0 min-w-[12rem] max-w-[calc(100vw-2rem)] overflow-hidden"
                   align="start"
                 >
                   <Command
                     filter={(value, search) => {
                       // Use case-insensitive substring matching instead of fuzzy matching
-                      if (value.toLowerCase().includes(search.toLowerCase())) return 1;
+                      if (value.toLowerCase().includes(search.toLowerCase()))
+                        return 1;
                       return 0;
                     }}
                   >
                     <div className="[&_[cmdk-input]]:ring-0 [&_[cmdk-input]]:outline-none [&_[cmdk-input-wrapper]]:border-b-0">
                       <CommandInput
-                        placeholder={tr("type.search", "Search channel type...")}
+                        placeholder={tr(
+                          "type.search",
+                          "Search channel type..."
+                        )}
                       />
                     </div>
                     <CommandList>

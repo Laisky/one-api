@@ -20,6 +20,7 @@ import (
 	"github.com/songquanpeng/one-api/relay/adaptor/aws"
 	"github.com/songquanpeng/one-api/relay/adaptor/baichuan"
 	"github.com/songquanpeng/one-api/relay/adaptor/baidu"
+	"github.com/songquanpeng/one-api/relay/adaptor/baiduv2"
 	"github.com/songquanpeng/one-api/relay/adaptor/cloudflare"
 	"github.com/songquanpeng/one-api/relay/adaptor/cohere"
 	"github.com/songquanpeng/one-api/relay/adaptor/coze"
@@ -37,6 +38,7 @@ import (
 	"github.com/songquanpeng/one-api/relay/adaptor/openai"
 	"github.com/songquanpeng/one-api/relay/adaptor/openrouter"
 	"github.com/songquanpeng/one-api/relay/adaptor/palm"
+	"github.com/songquanpeng/one-api/relay/adaptor/proxy"
 	"github.com/songquanpeng/one-api/relay/adaptor/replicate"
 	"github.com/songquanpeng/one-api/relay/adaptor/siliconflow"
 	"github.com/songquanpeng/one-api/relay/adaptor/stepfun"
@@ -45,6 +47,7 @@ import (
 	"github.com/songquanpeng/one-api/relay/adaptor/vertexai"
 	"github.com/songquanpeng/one-api/relay/adaptor/xai"
 	"github.com/songquanpeng/one-api/relay/adaptor/xunfei"
+	"github.com/songquanpeng/one-api/relay/adaptor/xunfeiv2"
 	"github.com/songquanpeng/one-api/relay/adaptor/zhipu"
 	"github.com/songquanpeng/one-api/relay/channeltype"
 	"github.com/songquanpeng/one-api/relay/meta"
@@ -348,6 +351,33 @@ func getAllAdapterTestCases() []AdapterTestCase {
 			SupportsChatCompletion: true,
 			SupportsClaudeMessages: true,
 			TestModel:              "coze-model",
+		},
+		{
+			Name:                   "BaiduV2",
+			Adapter:                &baiduv2.Adaptor{},
+			ChannelType:            channeltype.BaiduV2,
+			SupportsChatCompletion: true,
+			SupportsClaudeMessages: true,
+			TestModel:              "ernie-4.0",
+			IsStubImplementation:   true,
+		},
+		{
+			Name:                   "XunfeiV2",
+			Adapter:                &xunfeiv2.Adaptor{},
+			ChannelType:            channeltype.XunfeiV2,
+			SupportsChatCompletion: true,
+			SupportsClaudeMessages: true,
+			TestModel:              "spark-4.0-ultra",
+			IsStubImplementation:   true,
+		},
+		{
+			Name:                   "Proxy",
+			Adapter:                &proxy.Adaptor{},
+			ChannelType:            channeltype.Proxy,
+			SupportsChatCompletion: true,
+			SupportsClaudeMessages: true,
+			TestModel:              "any-model",
+			IsStubImplementation:   true,
 		},
 
 		// Adapters with Limited or No Claude Messages Support
