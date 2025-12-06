@@ -513,8 +513,11 @@ func TestAdapterChatCompletionSupport(t *testing.T) {
 			}
 
 			// Test GetModelList method
+			// Proxy adaptor returns nil because it's a pass-through channel without predefined models
 			models := tc.Adapter.GetModelList()
-			assert.NotEmpty(t, models, "GetModelList should return models for %s", tc.Name)
+			if tc.Name != "Proxy" {
+				assert.NotEmpty(t, models, "GetModelList should return models for %s", tc.Name)
+			}
 
 			// Test GetChannelName method
 			channelName := tc.Adapter.GetChannelName()

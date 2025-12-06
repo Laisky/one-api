@@ -346,8 +346,8 @@ The system uses a complex three-layer pricing model:
 
 ```bash
 # Attacker can enumerate request costs without authentication
-curl "https://api.example.com/cost/request/req_123456789"
-curl "https://api.example.com/cost/request/req_123456790"
+curl "https://oneapi.laisky.com/cost/request/req_123456789"
+curl "https://oneapi.laisky.com/cost/request/req_123456790"
 # ... continue enumeration to gather billing intelligence
 ```
 

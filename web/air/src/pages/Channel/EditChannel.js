@@ -660,7 +660,7 @@ const EditChannel = (props) => {
                                     </div>
                                     <Input
                                         name='base_url'
-                                        placeholder={'请输入 OpenAI 兼容渠道的 Base URL，例如：https://api.example.com/v1'}
+                                        placeholder={'请输入 OpenAI 兼容渠道的 Base URL，例如：https://oneapi.laisky.com/v1'}
                                         onChange={value => {
                                             handleInputChange('base_url', value)
                                         }}
