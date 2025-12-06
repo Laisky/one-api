@@ -4,8 +4,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/songquanpeng/one-api/relay/model"
 	"github.com/stretchr/testify/require"
+
+	"github.com/songquanpeng/one-api/relay/model"
 )
 
 // TestCompleteResponseAPIStream tests the complete Response API streaming workflow

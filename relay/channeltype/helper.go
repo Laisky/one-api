@@ -7,6 +7,8 @@ func ToAPIType(channelType int) int {
 	switch channelType {
 	case Anthropic:
 		apiType = apitype.Anthropic
+	case ClaudeCompatible:
+		apiType = apitype.Anthropic
 	case Baidu:
 		apiType = apitype.Baidu
 	case PaLM:
@@ -96,6 +98,8 @@ func IdToName(channelType int) string {
 		return "aigc2d"
 	case Anthropic:
 		return "anthropic"
+	case ClaudeCompatible:
+		return "claudecompatible"
 	case Baidu:
 		return "baidu"
 	case Zhipu:

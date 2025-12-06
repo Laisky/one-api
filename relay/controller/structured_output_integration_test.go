@@ -3,10 +3,11 @@ package controller
 import (
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/songquanpeng/one-api/relay/billing/ratio"
 	"github.com/songquanpeng/one-api/relay/channeltype"
 	relaymodel "github.com/songquanpeng/one-api/relay/model"
-	"github.com/stretchr/testify/require"
 )
 
 func TestPostConsumeQuotaWithStructuredOutput(t *testing.T) {

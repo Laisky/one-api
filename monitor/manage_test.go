@@ -3,9 +3,10 @@ package monitor
 import (
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/songquanpeng/one-api/common/config"
 	relaymodel "github.com/songquanpeng/one-api/relay/model"
-	"github.com/stretchr/testify/require"
 )
 
 func TestShouldDisableChannel_RespectsFlag(t *testing.T) {

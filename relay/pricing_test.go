@@ -3,11 +3,12 @@ package relay
 import (
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/songquanpeng/one-api/relay/adaptor/ali"
 	"github.com/songquanpeng/one-api/relay/adaptor/openrouter"
 	"github.com/songquanpeng/one-api/relay/adaptor/xai"
 	"github.com/songquanpeng/one-api/relay/apitype"
-	"github.com/stretchr/testify/require"
 )
 
 // TestAdapterPricingImplementations tests that all major adapters have proper pricing implementations

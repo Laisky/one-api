@@ -161,6 +161,12 @@ func DefaultEndpointsForChannelType(channelType int) []Endpoint {
 		EndpointVideos,
 	}
 
+	claudeCompatible := []Endpoint{
+		EndpointChatCompletions,
+		EndpointResponseAPI,
+		EndpointClaudeMessages,
+	}
+
 	chatOnly := []Endpoint{
 		EndpointChatCompletions,
 		EndpointClaudeMessages,
@@ -322,6 +328,8 @@ func DefaultEndpointsForChannelType(channelType int) []Endpoint {
 		}
 	case Custom, OpenAICompatible:
 		return openAICompatibleBasic
+	case ClaudeCompatible:
+		return claudeCompatible
 	case Dummy:
 		return chatOnly
 	default:

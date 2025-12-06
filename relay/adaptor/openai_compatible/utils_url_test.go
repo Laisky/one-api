@@ -50,14 +50,14 @@ func TestGetFullRequestURL(t *testing.T) {
 			name:        "other-type",
 			base:        "https://api.example.com",
 			path:        "/v1/chat/completions",
-			expect:      "https://oneapi.laisky.com/v1/chat/completions",
+			expect:      "https://api.example.com/v1/chat/completions",
 			channelType: channeltype.OpenAI,
 		},
 		{
 			name:        "other-type-base-with-v1",
 			base:        "https://api.example.com/v1",
 			path:        "/v1/embeddings",
-			expect:      "https://oneapi.laisky.com/v1/embeddings",
+			expect:      "https://api.example.com/v1/embeddings",
 			channelType: channeltype.OpenAI,
 		},
 		{

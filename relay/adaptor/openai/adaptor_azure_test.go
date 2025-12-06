@@ -3,9 +3,10 @@ package openai
 import (
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/songquanpeng/one-api/relay/channeltype"
 	"github.com/songquanpeng/one-api/relay/meta"
-	"github.com/stretchr/testify/require"
 )
 
 func TestGetRequestURL_AzureRequiresModel(t *testing.T) {

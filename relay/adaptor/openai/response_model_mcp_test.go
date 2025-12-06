@@ -5,9 +5,10 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/songquanpeng/one-api/relay/adaptor/openai"
 	"github.com/songquanpeng/one-api/relay/model"
-	"github.com/stretchr/testify/require"
 )
 
 // TestMCPOutputItemSerialization tests that MCP-specific OutputItem fields are properly serialized

@@ -205,6 +205,8 @@ export const ChannelEndpointSettings = ({
     null
   );
   const currentEndpoints = form.watch("config.supported_endpoints") || [];
+  const endpointError = (form.formState.errors as any)?.config
+    ?.supported_endpoints?.message;
 
   // Determine if we're using custom endpoints or defaults
   const isUsingDefaults = currentEndpoints.length === 0;
@@ -403,6 +405,12 @@ export const ChannelEndpointSettings = ({
           );
         })}
       </div>
+
+      {endpointError && (
+        <div className="text-sm text-destructive">
+          {endpointError as string}
+        </div>
+      )}
     </div>
   );
 };

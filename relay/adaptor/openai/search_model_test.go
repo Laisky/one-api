@@ -3,10 +3,11 @@ package openai
 import (
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/songquanpeng/one-api/relay/channeltype"
 	relaymeta "github.com/songquanpeng/one-api/relay/meta"
 	"github.com/songquanpeng/one-api/relay/model"
-	"github.com/stretchr/testify/require"
 )
 
 func float64Ptr(v float64) *float64 {

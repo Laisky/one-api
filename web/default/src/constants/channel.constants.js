@@ -5,7 +5,6 @@ export const CHANNEL_OPTIONS = [
     text: 'OpenAI Compatible',
     value: 50,
     color: 'olive',
-    description: 'OpenAI compatible channel, supports custom Base URL',
   },
   { key: 14, text: 'Anthropic', value: 14, color: 'black' },
   { key: 33, text: 'AWS', value: 33, color: 'black' },
@@ -100,6 +99,10 @@ export const CHANNEL_OPTIONS = [
 ];
 
 export const COZE_AUTH_OPTIONS = [
-  { key: 'personal_access_token', text: 'personal_access_token', value: 'personal_access_token' },
+  {
+    key: 'personal_access_token',
+    text: 'personal_access_token',
+    value: 'personal_access_token',
+  },
   { key: 'oauth_jwt', text: 'oauth_jwt', value: 'oauth_jwt' },
 ];

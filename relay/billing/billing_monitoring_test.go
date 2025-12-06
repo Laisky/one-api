@@ -4,8 +4,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/songquanpeng/one-api/common/metrics"
 	"github.com/stretchr/testify/require"
+
+	"github.com/songquanpeng/one-api/common/metrics"
 )
 
 // MockMetricsRecorder for testing billing monitoring

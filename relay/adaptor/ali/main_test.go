@@ -4,8 +4,9 @@ import (
 	"math"
 	"testing"
 
-	"github.com/songquanpeng/one-api/relay/model"
 	"github.com/stretchr/testify/require"
+
+	"github.com/songquanpeng/one-api/relay/model"
 )
 
 func float64PtrAli(v float64) *float64 {

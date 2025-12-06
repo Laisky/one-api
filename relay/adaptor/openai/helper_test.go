@@ -24,19 +24,19 @@ func TestGetFullRequestURLForOpenAICompatible(t *testing.T) {
 			name:        "base-with-v1",
 			baseURL:     "https://api.example.com/v1",
 			requestPath: "/v1/chat/completions",
-			expect:      "https://oneapi.laisky.com/v1/chat/completions",
+			expect:      "https://api.example.com/v1/chat/completions",
 		},
 		{
 			name:        "base-without-v1",
 			baseURL:     "https://api.example.com",
 			requestPath: "/v1/chat/completions",
-			expect:      "https://oneapi.laisky.com/v1/chat/completions",
+			expect:      "https://api.example.com/v1/chat/completions",
 		},
 		{
 			name:        "non-v1-request",
 			baseURL:     "https://api.example.com/v1",
 			requestPath: "/dashboard/billing/subscription",
-			expect:      "https://oneapi.laisky.com/v1/dashboard/billing/subscription",
+			expect:      "https://api.example.com/v1/dashboard/billing/subscription",
 		},
 	}
 

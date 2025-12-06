@@ -526,6 +526,27 @@ export const useChannelForm = () => {
               });
               return;
             }
+
+            const selectedEndpoints = data.config.supported_endpoints || [];
+            const effectiveEndpoints =
+              selectedEndpoints.length === 0
+                ? defaultEndpoints
+                : selectedEndpoints;
+
+            if (effectiveEndpoints.length === 0) {
+              form.setError("config.supported_endpoints", {
+                message: "Select at least one endpoint",
+              });
+              notify({
+                type: "error",
+                title: tr("validation.error_title", "Validation error"),
+                message: tr(
+                  "validation.endpoints_required",
+                  "Enable at least one endpoint before saving."
+                ),
+              });
+              return;
+            }
           }
         } catch (error) {
           form.setError("key", {

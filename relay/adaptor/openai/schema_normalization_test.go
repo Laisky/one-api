@@ -4,8 +4,9 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/songquanpeng/one-api/relay/channeltype"
 	"github.com/stretchr/testify/require"
+
+	"github.com/songquanpeng/one-api/relay/channeltype"
 )
 
 func TestNormalizeStructuredJSONSchema_RemovesNumericBounds(t *testing.T) {

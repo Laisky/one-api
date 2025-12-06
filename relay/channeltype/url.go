@@ -63,6 +63,7 @@ var ChannelBaseURLConfigs = []ChannelBaseURLConfig{
 	{URL: "https://dashscope.aliyuncs.com", Editable: false},                           // 49 AliBailian
 	{URL: "", Editable: true},                                                          // 50 OpenAICompatible - user must provide
 	{URL: "https://generativelanguage.googleapis.com/v1beta/openai/", Editable: false}, // 51 GeminiOpenAICompatible
+	{URL: "", Editable: true},                                                          // 52 ClaudeCompatible - user must provide
 }
 
 // ChannelBaseURLs provides backward compatibility by returning only the URL strings.

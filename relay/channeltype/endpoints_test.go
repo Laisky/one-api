@@ -62,6 +62,7 @@ func TestDefaultEndpointsForChannelType(t *testing.T) {
 		DeepSeek,
 		XAI,
 		OpenAICompatible,
+		ClaudeCompatible,
 	}
 
 	for _, ct := range channelTypes {
@@ -172,6 +173,15 @@ func TestOpenAISupportsResponseAPI(t *testing.T) {
 		}
 	}
 	require.True(t, hasResponseAPI, "OpenAI should support Response API endpoint")
+}
+
+func TestClaudeCompatibleDefaults(t *testing.T) {
+	endpoints := DefaultEndpointsForChannelType(ClaudeCompatible)
+
+	require.Contains(t, endpoints, EndpointChatCompletions)
+	require.Contains(t, endpoints, EndpointResponseAPI)
+	require.Contains(t, endpoints, EndpointClaudeMessages)
+	require.NotContains(t, endpoints, EndpointEmbeddings)
 }
 
 // TestAnthropicDoesNotSupportEmbeddings verifies that Anthropic channel does not support embeddings.
