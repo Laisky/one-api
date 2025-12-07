@@ -19,10 +19,13 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 	"openai/gpt-oss-20b":           {Ratio: 0.1 * ratio.MilliTokensUsd, CachedInputRatio: 0.0375 * ratio.MilliTokensUsd, CompletionRatio: 0.5 / 0.1},
 
 	// Preview Models
-	"qwen/qwen3-32b":                                {Ratio: 0.29 * ratio.MilliTokensUsd, CompletionRatio: 0.59 / 0.29},
-	"moonshotai/kimi-k2-instruct-0905":              {Ratio: 1 * ratio.MilliTokensUsd, CachedInputRatio: 0.5 * ratio.MilliTokensUsd, CompletionRatio: 3},
-	"meta-llama/llama-4-maverick-17b-128e-instruct": {Ratio: 0.2 * ratio.MilliTokensUsd, CompletionRatio: 3},
+	"meta-llama/llama-4-maverick-17b-128e-instruct": {Ratio: 0.2 * ratio.MilliTokensUsd, CompletionRatio: 0.6 / 0.2},
 	"meta-llama/llama-4-scout-17b-16e-instruct":     {Ratio: 0.11 * ratio.MilliTokensUsd, CompletionRatio: 0.34 / 0.11},
+	"meta-llama/llama-prompt-guard-2-22m":           {Ratio: 0.03 * ratio.MilliTokensUsd, CompletionRatio: 1},
+	"meta-llama/llama-prompt-guard-2-86m":           {Ratio: 0.04 * ratio.MilliTokensUsd, CompletionRatio: 1},
+	"moonshotai/kimi-k2-instruct-0905":              {Ratio: 1 * ratio.MilliTokensUsd, CachedInputRatio: 0.5 * ratio.MilliTokensUsd, CompletionRatio: 3},
+	"openai/gpt-oss-safeguard-20b":                  {Ratio: 0.075 * ratio.MilliTokensUsd, CompletionRatio: 0.3 / 0.075},
+	"qwen/qwen3-32b":                                {Ratio: 0.29 * ratio.MilliTokensUsd, CompletionRatio: 0.59 / 0.29},
 }
 
 // ModelList derived from ModelRatios for backward compatibility
