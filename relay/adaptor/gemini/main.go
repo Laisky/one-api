@@ -406,14 +406,16 @@ func ConvertRequest(textRequest model.GeneralOpenAIRequest) *ChatRequest {
 		}
 		// Converting system prompt to prompt from user for the same reason
 		if content.Role == "system" {
-			shouldAddDummyModelMessage = true
 			if IsModelSupportSystemInstruction(textRequest.Model) {
 				geminiRequest.SystemInstruction = &content
 				geminiRequest.SystemInstruction.Role = ""
 				continue
-			} else {
-				content.Role = "user"
 			}
+			// Models without native system instruction support require an initial
+			// assistant turn between two user prompts to keep Gemini's turn
+			// alternation happy.
+			shouldAddDummyModelMessage = true
+			content.Role = "user"
 		}
 		// Handle tool responses - convert to user role with function response format
 		if content.Role == "tool" {

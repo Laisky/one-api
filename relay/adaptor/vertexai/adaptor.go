@@ -1,5 +1,3 @@
-// Note: This Vertex AI adapter has been refactored to be more easily leveraged and maintained.
-
 package vertexai
 
 import (

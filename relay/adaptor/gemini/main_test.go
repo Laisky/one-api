@@ -540,6 +540,54 @@ func TestConvertRequestWithToolsRegression(t *testing.T) {
 	require.True(t, exists, "description should be preserved in nested objects")
 }
 
+func TestConvertRequest_SystemInstructionSupportedNoDummy(t *testing.T) {
+	t.Parallel()
+
+	textRequest := model.GeneralOpenAIRequest{
+		Model: "gemini-3-pro-preview",
+		Messages: []model.Message{
+			{Role: "system", Content: "Act like a friendly engineer."},
+			{Role: "user", Content: "hi"},
+		},
+	}
+
+	gReq := ConvertRequest(textRequest)
+	require.NotNil(t, gReq)
+	require.NotNil(t, gReq.SystemInstruction, "supported models should keep system_instruction field")
+	require.Len(t, gReq.Contents, 1, "only the user prompt should be forwarded to contents")
+	require.Equal(t, "user", gReq.Contents[0].Role)
+	require.Len(t, gReq.Contents[0].Parts, 1)
+	require.Equal(t, "hi", gReq.Contents[0].Parts[0].Text)
+
+	lastRole := gReq.Contents[len(gReq.Contents)-1].Role
+	require.Equal(t, "user", lastRole, "streaming requests must end with a user turn when system_instruction is supported")
+}
+
+func TestConvertRequest_SystemInstructionFallbackAddsDummy(t *testing.T) {
+	t.Parallel()
+
+	textRequest := model.GeneralOpenAIRequest{
+		Model: "gemini-1.5-flash",
+		Messages: []model.Message{
+			{Role: "system", Content: "Fallback prompt"},
+			{Role: "user", Content: "Status?"},
+		},
+	}
+
+	gReq := ConvertRequest(textRequest)
+	require.NotNil(t, gReq)
+	require.Nil(t, gReq.SystemInstruction, "models without support should not set system_instruction")
+	require.GreaterOrEqual(t, len(gReq.Contents), 3, "system prompt, dummy model reply, and user question expected")
+	require.Equal(t, "user", gReq.Contents[0].Role)
+	require.Equal(t, "model", gReq.Contents[1].Role)
+	require.NotEmpty(t, gReq.Contents[1].Parts)
+	require.Equal(t, "Okay", gReq.Contents[1].Parts[0].Text)
+	require.Equal(t, "user", gReq.Contents[2].Role)
+
+	lastRole := gReq.Contents[len(gReq.Contents)-1].Role
+	require.Equal(t, "user", lastRole, "fallback conversation must still end with a user turn")
+}
+
 func TestSupportedFormatsOnly(t *testing.T) {
 	ctx := context.Background()
 	_ = ctx // Context for future use
