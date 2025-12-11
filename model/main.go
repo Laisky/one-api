@@ -140,7 +140,16 @@ func InitDB() {
 
 	logger.Logger.Info("database migration started")
 
-	// STEP 1: Pre-migrations
+	// STEP 0: Ensure GORM has created every table/column before bespoke migrations touch them.
+	// AutoMigrate adds any missing schema elements without attempting destructive changes, giving
+	// a stable baseline so subsequent migrations can safely assume column presence.
+	if err = migrateDB(); err != nil {
+		logger.Logger.Fatal("failed to ensure base database schema", zap.Error(err))
+		return
+	}
+	logger.Logger.Info("database base schema ensured")
+
+	// STEP 1: Schema normalization prior to the main AutoMigrate pass
 	// 1a) Normalize legacy ability suspend_until column types before AutoMigrate touches the table
 	if err = MigrateAbilitySuspendUntilColumn(); err != nil {
 		logger.Logger.Fatal("failed to migrate ability suspend_until column", zap.Error(err))
@@ -166,8 +175,7 @@ func InitDB() {
 		return
 	}
 
-	// STEP 2: Run GORM AutoMigrate on all models
-	// This will now work correctly since field types have been pre-migrated
+	// STEP 2: Run GORM AutoMigrate on all models to pick up any structural changes introduced above
 	if err = migrateDB(); err != nil {
 		logger.Logger.Fatal("failed to migrate database", zap.Error(err))
 		return
