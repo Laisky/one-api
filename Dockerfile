@@ -95,7 +95,7 @@ ARG ONEAPI_GID=10001
 RUN groupadd --system --gid ${ONEAPI_GID} oneapi && \
         useradd  --system --no-create-home --home /data --uid ${ONEAPI_UID} --gid ${ONEAPI_GID} \
                         --shell /usr/sbin/nologin oneapi && \
-        mkdir -p /data && chown oneapi:oneapi /one-api
+        mkdir -p /data && chown oneapi:oneapi /one-api /data
 
 # Add entrypoint script
 COPY scripts/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh

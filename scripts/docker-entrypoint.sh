@@ -32,20 +32,34 @@ done
 
 [ -n "$resolved_log_dir" ] || resolved_log_dir="$DEFAULT_LOG_DIR"
 
-# Only chown if owned by root (avoid expensive recursive chown every start)
-if [ -d "$DATA_DIR" ]; then
-  data_dir_owner=$(stat -c %u "$DATA_DIR" 2>/dev/null || echo -1)
-  if [ "$data_dir_owner" = "0" ]; then
-    echo "Adjusting ownership of $DATA_DIR to $USER_NAME ($USER_ID:$GROUP_ID)" >&2 || true
-    chown -R "$USER_ID:$GROUP_ID" "$DATA_DIR" || echo "Warning: could not chown $DATA_DIR" >&2
-  fi
-else
-  mkdir -p "$DATA_DIR"
-  chown "$USER_ID:$GROUP_ID" "$DATA_DIR" || true
-fi
+target_owner="$USER_ID:$GROUP_ID"
 
-mkdir -p "$resolved_log_dir" || true
-chown "$USER_ID:$GROUP_ID" "$resolved_log_dir" || true
+ensure_dir_owned() {
+  local path="$1"
+  local label="$2"
+
+  if [ -d "$path" ]; then
+    current_owner=$(stat -c %u:%g "$path" 2>/dev/null || echo "-1:-1")
+    if [ "$current_owner" != "$target_owner" ]; then
+      echo "Adjusting ownership of $label ($path) to $USER_NAME ($target_owner)" >&2 || true
+      chown -R "$USER_ID:$GROUP_ID" "$path" || echo "Warning: could not chown $path" >&2
+    fi
+  else
+    mkdir -p "$path" || true
+    chown "$USER_ID:$GROUP_ID" "$path" || true
+  fi
+}
+
+ensure_dir_owned "$DATA_DIR" "$DATA_DIR"
+ensure_dir_owned "$resolved_log_dir" "log directory"
+
+# Ensure SQLite directory exists and is owned by runtime user when SQL_DSN is unset
+if [ -z "${SQL_DSN:-}" ]; then
+  sqlite_path="${SQLITE_PATH:-one-api.db}"
+  sqlite_dir=$(dirname "$sqlite_path")
+  [ "$sqlite_dir" = "." ] && sqlite_dir="$DATA_DIR"
+  ensure_dir_owned "$sqlite_dir" "sqlite directory"
+fi
 
 # Drop privileges using gosu
 if [ "$(id -u)" = "0" ]; then

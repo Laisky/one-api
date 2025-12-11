@@ -3,6 +3,8 @@ package model
 import (
 	"database/sql"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -109,10 +111,47 @@ func openMySQL(dsn string) (*gorm.DB, error) {
 func openSQLite() (*gorm.DB, error) {
 	logger.Logger.Info("SQL_DSN not set, using SQLite as database")
 	common.UsingSQLite.Store(true)
-	dsn := fmt.Sprintf("%s?_busy_timeout=%d", common.SQLitePath, common.SQLiteBusyTimeout)
+	sqlitePath, err := ensureSQLitePath()
+	if err != nil {
+		return nil, errors.Wrap(err, "prepare sqlite path")
+	}
+
+	logger.Logger.Debug("using SQLite database", zap.String("path", sqlitePath), zap.Int("busy_timeout_ms", common.SQLiteBusyTimeout))
+
+	dsn := fmt.Sprintf("%s?_busy_timeout=%d", sqlitePath, common.SQLiteBusyTimeout)
 	return gorm.Open(sqlite.Open(dsn), &gorm.Config{
 		PrepareStmt: true, // precompile SQL
 	})
+}
+
+// ensureSQLitePath prepares the SQLite file path by creating the parent directory if needed
+// and verifying basic write access so startup can surface permission issues early.
+func ensureSQLitePath() (string, error) {
+	absPath, err := filepath.Abs(common.SQLitePath)
+	if err != nil {
+		return "", errors.Wrap(err, "resolve sqlite path")
+	}
+
+	parentDir := filepath.Dir(absPath)
+	if err = os.MkdirAll(parentDir, 0o770); err != nil {
+		return "", errors.Wrap(err, "create sqlite directory")
+	}
+
+	probeFile := filepath.Join(parentDir, ".sqlite-permission-check")
+	probe, err := os.OpenFile(probeFile, os.O_CREATE|os.O_RDWR, 0o660)
+	if err != nil {
+		return "", errors.Wrap(err, "sqlite directory not writable")
+	}
+
+	if closeErr := probe.Close(); closeErr != nil {
+		return "", errors.Wrap(closeErr, "close sqlite permission probe")
+	}
+
+	if rmErr := os.Remove(probeFile); rmErr != nil && !os.IsNotExist(rmErr) {
+		logger.Logger.Debug("failed to remove sqlite probe file", zap.Error(rmErr), zap.String("path", probeFile))
+	}
+
+	return absPath, nil
 }
 
 func InitDB() {
