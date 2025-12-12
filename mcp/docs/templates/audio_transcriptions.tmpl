@@ -1,0 +1,33 @@
+# Audio Transcriptions API
+
+## Endpoint
+POST {{.BaseURL}}/v1/audio/transcriptions
+
+## Description
+Transcribes audio into the input language.
+
+## Authentication
+Authorization: Bearer YOUR_API_KEY
+
+## Example Request
+```bash
+curl {{.BaseURL}}/v1/audio/transcriptions \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+{{- if .Parameters.file}}
+  -F file="@{{.Parameters.file}}" \
+{{- else}}
+  -F file="@audio.mp3" \
+{{- end}}
+{{- if .Parameters.model}}
+  -F model="{{.Parameters.model}}"{{if .Parameters.language}} \
+  -F language="{{.Parameters.language}}"{{end}}
+{{- else}}
+  -F model="whisper-1"{{if .Parameters.language}} \
+  -F language="{{.Parameters.language}}"{{end}}
+{{- end}}
+```
+
+## Parameters
+- **file** (required): Audio file{{if .Parameters.file}} - Current: `{{.Parameters.file}}`{{else}} (flac, mp3, mp4, mpeg, mpga, m4a, ogg, wav, webm){{end}}
+- **model** (required): Model identifier{{if .Parameters.model}} - Current: `{{.Parameters.model}}`{{else}} (whisper-1){{end}}
+- **language**: Language of input audio{{if .Parameters.language}} - Current: `{{.Parameters.language}}`{{else}} (ISO-639-1 format){{end}}
