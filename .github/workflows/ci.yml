@@ -54,47 +54,19 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Build and push latest
+      - name: Compute short sha
+        id: vars
+        shell: bash
+        run: echo "short_sha=${GITHUB_SHA::7}" >> $GITHUB_OUTPUT
+
+      - name: Build and push (latest + hash)
         uses: docker/build-push-action@v5
         with:
           context: .
           push: true
-          tags: ppcelery/one-api:latest
-          cache-from: type=gha
-          # cache-to: type=gha,mode=max
-
-  build_hash:
-    needs: check_skip
-    if: needs.check_skip.outputs.should_skip != 'true'
-    runs-on: ubuntu-latest
-    concurrency:
-      group: build_hash-${{ github.ref }}
-      cancel-in-progress: true
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Login to Docker Hub
-        uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-
-      - name: Add SHORT_SHA env property with commit short sha
-        run: echo "SHORT_SHA=`echo ${GITHUB_SHA} | cut -c1-7`" >> $GITHUB_ENV
-
-      - name: Build and push hash label
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          push: true
-          tags: ppcelery/one-api:${{ env.SHORT_SHA }}
+          tags: |
+            ppcelery/one-api:latest
+            ppcelery/one-api:${{ steps.vars.outputs.short_sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -142,52 +114,19 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Add SHORT_SHA env property with commit short sha
-        run: echo "SHORT_SHA=`echo ${GITHUB_SHA} | cut -c1-7`" >> $GITHUB_ENV
+      - name: Compute short sha
+        id: vars
+        shell: bash
+        run: echo "short_sha=${GITHUB_SHA::7}" >> $GITHUB_OUTPUT
 
-      - name: Build and push arm64 hash label
+      - name: Build and push arm64 (latest + hash)
         uses: docker/build-push-action@v5
         with:
           context: .
           push: true
-          tags: ppcelery/one-api:arm64-${{ env.SHORT_SHA }}
-          platforms: linux/arm64
-          build-args: |
-            TARGETARCH=arm64
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-  build_arm64_latest:
-    needs: check_skip
-    if: needs.check_skip.outputs.should_skip != 'true'
-    runs-on: ubuntu-latest
-    concurrency:
-      group: build_arm64_latest-${{ github.ref }}
-      cancel-in-progress: true
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-        with:
-          buildkitd-flags: --debug
-
-      - name: Login to Docker Hub
-        uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-
-      - name: Build and push arm64 latest
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          push: true
-          tags: ppcelery/one-api:arm64-latest
+          tags: |
+            ppcelery/one-api:arm64-latest
+            ppcelery/one-api:arm64-${{ steps.vars.outputs.short_sha }}
           platforms: linux/arm64
           build-args: |
             TARGETARCH=arm64
@@ -210,8 +149,9 @@ jobs:
         with:
           go-version: "1.25.0"
 
-      - name: Add SHORT_SHA env property with commit short sha
-        run: echo "SHORT_SHA=`echo ${GITHUB_SHA} | cut -c1-7`" >> $GITHUB_ENV
+      - name: Compute short sha
+        id: vars
+        run: echo "short_sha=${GITHUB_SHA::7}" >> $GITHUB_OUTPUT
         shell: bash
 
       - name: Build Windows executables
@@ -220,7 +160,7 @@ jobs:
           go build -trimpath -ldflags "-s -w" -o one-api.exe
 
           # Make a copy with the short SHA in the name
-          cp one-api.exe "one-api-${{ env.SHORT_SHA }}.exe"
+          cp one-api.exe "one-api-${{ steps.vars.outputs.short_sha }}.exe"
         shell: bash
 
       - name: Upload Windows executables
@@ -229,7 +169,7 @@ jobs:
           name: one-api-windows
           path: |
             one-api.exe
-            one-api-${{ env.SHORT_SHA }}.exe
+            one-api-${{ steps.vars.outputs.short_sha }}.exe
           retention-days: 90
 
   create_release:
@@ -244,9 +184,10 @@ jobs:
         id: extract_version
         run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
 
-      - name: Add SHORT_SHA env property with commit short sha
-        run: echo "SHORT_SHA=`echo ${GITHUB_SHA} | cut -c1-7`" >> $GITHUB_ENV
+      - name: Compute short sha
+        id: vars
         shell: bash
+        run: echo "short_sha=${GITHUB_SHA::7}" >> $GITHUB_OUTPUT
 
       - name: Download Windows artifacts
         uses: actions/download-artifact@v4
@@ -259,6 +200,6 @@ jobs:
           name: Release ${{ steps.extract_version.outputs.VERSION }}
           files: |
             one-api.exe
-            one-api-${{ env.SHORT_SHA }}.exe
+            one-api-${{ steps.vars.outputs.short_sha }}.exe
           draft: false
           prerelease: false
