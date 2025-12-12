@@ -140,8 +140,6 @@ func structuredPromotionDisabled(metaInfo *meta.Meta) bool {
 	switch metaInfo.ChannelType {
 	case channeltype.DeepSeek:
 		return true
-	case channeltype.Azure:
-		return strings.HasPrefix(lowerModel, "gpt-5")
 	case channeltype.OpenAICompatible:
 		if strings.Contains(lowerModel, "deepseek") {
 			return true

@@ -306,6 +306,58 @@ func TestConvertClaudeRequest_StructuredPromotionDisabledForDeepSeek(t *testing.
 	require.NotEmpty(t, converted.Tools)
 }
 
+func TestConvertClaudeRequest_StructuredPromotionEnabledForAzureGPT5(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+
+	meta.Set2Context(c, &meta.Meta{ChannelType: channeltype.Azure, ActualModelName: "gpt-5-nano"})
+
+	schema := map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"topic":      map[string]any{"type": "string"},
+			"confidence": map[string]any{"type": "number"},
+		},
+		"required": []any{"topic", "confidence"},
+	}
+	schema["additionalProperties"] = false
+
+	req := &relaymodel.ClaudeRequest{
+		Model:     "gpt-5-nano",
+		MaxTokens: 256,
+		Messages: []relaymodel.ClaudeMessage{
+			{
+				Role: "user",
+				Content: []any{
+					map[string]any{"type": "text", "text": "Provide structured topic and confidence JSON."},
+				},
+			},
+		},
+		Tools: []relaymodel.ClaudeTool{
+			{
+				Name:        "topic_classifier",
+				Description: "Return structured topic and confidence data",
+				InputSchema: schema,
+			},
+		},
+		ToolChoice: map[string]any{"type": "tool", "name": "topic_classifier"},
+	}
+
+	convertedAny, err := ConvertClaudeRequest(c, req)
+	require.NoError(t, err)
+	converted, ok := convertedAny.(*relaymodel.GeneralOpenAIRequest)
+	require.True(t, ok)
+
+	require.NotNil(t, converted.ResponseFormat)
+	require.NotNil(t, converted.ResponseFormat.JsonSchema)
+	assert.Equal(t, "json_schema", converted.ResponseFormat.Type)
+	assert.Equal(t, "topic_classifier", converted.ResponseFormat.JsonSchema.Name)
+	assert.Equal(t, schema, converted.ResponseFormat.JsonSchema.Schema)
+	assert.Nil(t, converted.ToolChoice)
+	assert.Empty(t, converted.Tools)
+}
+
 func TestConvertClaudeRequest_ToolNotPromoted(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	w := httptest.NewRecorder()

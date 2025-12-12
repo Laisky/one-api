@@ -208,8 +208,7 @@ func TestShouldSkipVariantStructuredGpt5Mini(t *testing.T) {
 		Expectation:   expectationStructuredOutput,
 	}
 	skipped, reason := shouldSkipVariant("gpt-5-mini", spec)
-	require.True(t, skipped, "expected gpt-5-mini structured variant to be skipped")
-	require.Contains(t, strings.ToLower(reason), "gpt-5 mini", "unexpected skip reason: %s", reason)
+	require.False(t, skipped, "expected gpt-5-mini structured variant to run, got skip: %s", reason)
 }
 
 func TestShouldSkipVariantClaudeToolHistoryAzure(t *testing.T) {
