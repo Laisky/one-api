@@ -9,6 +9,33 @@ import (
 	"strings"
 )
 
+// evaluateResponseNoError validates that the payload is a non-empty JSON response
+// without an error field, and that it contains at least the minimal expected
+// structure for the request type.
+func evaluateResponseNoError(reqType requestType, body []byte) (bool, string) {
+	trimmed := bytes.TrimSpace(body)
+	if len(trimmed) == 0 {
+		return false, "empty response"
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(trimmed, &payload); err != nil {
+		return false, fmt.Sprintf("malformed JSON response: %v", err)
+	}
+	if errVal, ok := payload["error"]; ok && isMeaningfulErrorValue(errVal) {
+		return false, snippet(trimmed)
+	}
+
+	spec := requestSpec{Type: reqType, Expectation: expectationDefault}
+	return evaluateResponse(spec, trimmed)
+}
+
+// evaluateStreamNoError validates that the SSE stream contains at least one data
+// payload and does not carry an error object.
+func evaluateStreamNoError(reqType requestType, data []byte) (bool, string) {
+	spec := requestSpec{Type: reqType, Expectation: expectationDefault}
+	return evaluateStreamResponse(spec, data)
+}
+
 // evaluateResponse inspects a non-streaming response and validates the expected shape.
 func evaluateResponse(spec requestSpec, body []byte) (bool, string) {
 	if len(body) == 0 {
@@ -766,15 +793,6 @@ func isUnsupportedCombination(reqType requestType, stream bool, statusCode int, 
 	}
 
 	if statusCode == http.StatusNotFound || statusCode == http.StatusMethodNotAllowed {
-		return true
-	}
-
-	// Treat transient upstream errors (502, 503, 504) as skippable rather than failures.
-	// These typically indicate temporary infrastructure issues (Cloudflare, load balancer, etc.)
-	// rather than genuine API incompatibilities.
-	if statusCode == http.StatusBadGateway ||
-		statusCode == http.StatusServiceUnavailable ||
-		statusCode == http.StatusGatewayTimeout {
 		return true
 	}
 

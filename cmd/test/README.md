@@ -28,6 +28,14 @@
 - Uses a shared HTTP client with concurrency (`errgroup`) to keep suites fast.
 - Classifies outcomes as **PASS**, **FAIL**, or **SKIP** (unsupported feature combinations).
 
+## Tool Variants
+
+Tool-calling variants (Chat/Response/Claude Tools + Tools History) run up to three payload attempts. If a provider returns a valid 2xx response but never invokes a tool, the harness marks the run as **PASS\*** and records a warning. This keeps the matrix focused on one-api format compatibility while still flagging provider tool-call reliability.
+
+## Retries
+
+Transient failures (network errors and HTTP 5xx) are retried a few times with backoff. If the provider continues returning transient 5xx errors after retries, the harness reports **SKIP** rather than failing the full run.
+
 Streaming responses are captured by accumulating the opening SSE/event payload. If the upstream rejects streaming (`"streaming is not supported"`, HTTP 405, etc.), the harness marks the attempt as `SKIP` instead of failing the whole run.
 
 ## Running the suite

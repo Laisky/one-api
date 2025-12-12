@@ -42,9 +42,11 @@ type testResult struct {
 	Stream        bool
 	Success       bool
 	Skipped       bool
+	AttemptCount  int
 	StatusCode    int
 	Duration      time.Duration
 	ErrorReason   string
+	Warning       string
 	RequestBody   string
 	ResponseBody  string
 }
@@ -56,6 +58,7 @@ type requestSpec struct {
 	Type          requestType
 	Path          string
 	Body          any
+	AttemptBodies []any
 	Stream        bool
 	Expectation   expectation
 }

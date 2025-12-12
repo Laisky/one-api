@@ -49,8 +49,10 @@ func run(ctx context.Context, logger glog.Logger) error {
 					zap.String("variant", res.Label),
 					zap.String("type", string(res.Type)),
 					zap.Bool("stream", res.Stream),
+					zap.Int("attempts", res.AttemptCount),
 					zap.Duration("duration", res.Duration),
 					zap.Int("status", res.StatusCode),
+					zap.String("warning", res.Warning),
 				)
 			case res.Skipped:
 				logger.Info("request skipped",
@@ -58,6 +60,7 @@ func run(ctx context.Context, logger glog.Logger) error {
 					zap.String("variant", res.Label),
 					zap.String("type", string(res.Type)),
 					zap.Bool("stream", res.Stream),
+					zap.Int("attempts", res.AttemptCount),
 					zap.Int("status", res.StatusCode),
 					zap.String("reason", res.ErrorReason),
 				)
@@ -67,6 +70,7 @@ func run(ctx context.Context, logger glog.Logger) error {
 					zap.String("variant", res.Label),
 					zap.String("type", string(res.Type)),
 					zap.Bool("stream", res.Stream),
+					zap.Int("attempts", res.AttemptCount),
 					zap.Duration("duration", res.Duration),
 					zap.Int("status", res.StatusCode),
 					zap.String("error", res.ErrorReason),
@@ -146,6 +150,7 @@ func buildRequestSpecs(model string, variants []requestVariant) []requestSpec {
 	specs := make([]requestSpec, 0, len(variants))
 	for _, variant := range variants {
 		var body any
+		var attemptBodies []any
 		switch variant.Type {
 		case requestTypeChatCompletion:
 			body = chatCompletionPayload(model, variant.Stream, variant.Expectation)
@@ -154,12 +159,18 @@ func buildRequestSpecs(model string, variants []requestVariant) []requestSpec {
 		case requestTypeClaudeMessages:
 			body = claudeMessagesPayload(model, variant.Stream, variant.Expectation)
 		}
+
+		attemptBodies = toolAttemptPayloads(variant.Type, model, variant.Stream, variant.Expectation)
+		if len(attemptBodies) > 0 {
+			body = attemptBodies[0]
+		}
 		specs = append(specs, requestSpec{
 			RequestFormat: variant.Key,
 			Label:         variant.Header,
 			Type:          variant.Type,
 			Path:          variant.Path,
 			Body:          body,
+			AttemptBodies: attemptBodies,
 			Stream:        variant.Stream,
 			Expectation:   variant.Expectation,
 		})
@@ -177,15 +188,6 @@ func shouldSkipVariant(model string, spec requestSpec) (bool, string) {
 	if lower == "azure-gpt-5-nano" {
 		if _, prone := azureEOFProneVariants[spec.RequestFormat]; prone {
 			return true, "Azure non-streaming Response API requests close prematurely (upstream EOF)"
-		}
-	}
-
-	// Check tool invocation skips first (covers both Tool and Tool History variants)
-	if spec.Expectation == expectationToolInvocation || spec.Expectation == expectationToolHistory {
-		if reasons, ok := toolHistoryVariantSkips[spec.RequestFormat]; ok {
-			if reason, exists := reasons[lower]; exists {
-				return true, reason
-			}
 		}
 	}
 

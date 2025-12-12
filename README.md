@@ -18,61 +18,52 @@ Also welcome to register and use my deployed one-api gateway, which supports var
 Try it at <https://oneapi.laisky.com>, login with `test` / `12345678`. 🚀
 
 ```plain
-=== One-API Compatibility Matrix 2025-11-28T22:05:53Z ===
+=== One-API Compatibility Matrix 2025-12-12T04:37:09Z ===
 
-Request Format                         gpt-4o-mini  gpt-5-mini                              claude-haiku-4-5  gemini-2.5-flash  openai/gpt-oss-20b  deepseek-chat  grok-4-fast-non-reasoning  azure-gpt-5-nano
-Chat (stream=false)                    PASS 8.81s   PASS 11.41s                             PASS 14.27s       PASS 2.96s        PASS 1.74s          PASS 9.25s     PASS 5.25s                 PASS 14.29s
-Chat (stream=true)                     PASS 9.44s   PASS 13.27s                             PASS 4.45s        PASS 6.05s        PASS 2.10s          PASS 9.62s     PASS 3.23s                 PASS 10.47s
-Chat Tools (stream=false)              PASS 9.74s   PASS 13.85s                             PASS 3.84s        SKIP              PASS 7.01s          SKIP           PASS 10.56s                SKIP
-Chat Tools (stream=true)               PASS 13.58s  PASS 9.00s                              PASS 5.12s        PASS 5.34s        PASS 5.57s          PASS 9.61s     PASS 6.12s                 PASS 13.95s
-Chat Tools History (stream=false)      PASS 7.37s   PASS 12.49s                             PASS 9.84s        PASS 13.12s       SKIP                PASS 16.89s    PASS 5.01s                 SKIP
-Chat Tools History (stream=true)       PASS 4.60s   SKIP                                    PASS 4.14s        PASS 6.80s        PASS 7.81s          PASS 11.95s    PASS 2.57s                 SKIP
-Chat Structured (stream=false)         PASS 11.89s  PASS 14.03s                             PASS 12.85s       PASS 6.08s        PASS 5.87s          PASS 37.34s    PASS 4.67s                 PASS 9.83s
-Chat Structured (stream=true)          PASS 9.58s   PASS 11.36s                             PASS 4.04s        PASS 3.33s        PASS 9.00s          PASS 28.40s    PASS 6.62s                 PASS 12.56s
-Response (stream=false)                PASS 8.74s   PASS 28.93s                             PASS 12.20s       PASS 6.35s        PASS 6.00s          PASS 30.73s    PASS 8.62s                 PASS 14.16s
-Response (stream=true)                 PASS 9.53s   PASS 14.59s                             PASS 7.80s        PASS 7.36s        PASS 10.23s         PASS 8.24s     PASS 9.50s                 PASS 15.41s
-Response Vision (stream=false)         PASS 9.62s   PASS 14.01s                             PASS 12.02s       PASS 8.84s        SKIP                SKIP           PASS 8.20s                 PASS 13.97s
-Response Vision (stream=true)          PASS 8.34s   PASS 8.34s                              PASS 3.70s        PASS 6.76s        SKIP                SKIP           PASS 8.07s                 PASS 13.52s
-Response Tools (stream=false)          PASS 11.71s  PASS 8.18s                              PASS 6.16s        PASS 10.37s       PASS 4.78s          PASS 6.71s     PASS 9.13s                 PASS 9.52s
-Response Tools (stream=true)           PASS 4.41s   PASS 13.48s                             PASS 11.03s       PASS 4.17s        PASS 2.68s          PASS 19.58s    PASS 10.05s                PASS 5.58s
-Response Tools History (stream=false)  PASS 5.62s   PASS 9.07s                              PASS 7.95s        PASS 10.99s       SKIP                PASS 13.50s    PASS 7.01s                 PASS 14.31s
-Response Tools History (stream=true)   PASS 6.36s   PASS 13.52s                             PASS 11.05s       PASS 13.25s       PASS 5.65s          PASS 9.96s     PASS 6.15s                 PASS 7.99s
-Response Structured (stream=false)     PASS 7.83s   PASS 15.24s                             PASS 3.85s        PASS 8.89s        PASS 8.67s          PASS 13.38s    PASS 5.70s                 PASS 12.46s
-Response Structured (stream=true)      PASS 4.98s   PASS 18.41s                             PASS 6.76s        PASS 3.28s        PASS 9.46s          PASS 20.16s    PASS 4.76s                 PASS 13.72s
-Claude (stream=false)                  PASS 3.88s   PASS 9.11s                              PASS 9.77s        PASS 3.33s        PASS 4.74s          PASS 6.78s     PASS 3.88s                 PASS 7.76s
-Claude (stream=true)                   PASS 6.26s   PASS 9.35s                              PASS 14.09s       PASS 6.76s        PASS 3.67s          PASS 6.44s     PASS 5.83s                 PASS 6.60s
-Claude Tools (stream=false)            PASS 14.22s  PASS 12.48s                             PASS 4.99s        PASS 2.75s        PASS 12.08s         PASS 14.25s    PASS 5.87s                 PASS 14.05s
-Claude Tools (stream=true)             PASS 6.03s   PASS 8.23s                              PASS 8.53s        SKIP              PASS 4.89s          PASS 7.33s     PASS 4.16s                 PASS 13.13s
-Claude Tools History (stream=false)    PASS 8.90s   FAIL response missing tool_use block …  PASS 8.46s        PASS 8.42s        SKIP                PASS 26.26s    PASS 6.21s                 PASS 14.64s
-Claude Tools History (stream=true)     PASS 7.96s   SKIP                                    PASS 7.32s        PASS 13.79s       PASS 4.51s          PASS 9.76s     PASS 3.61s                 PASS 19.42s
-Claude Structured (stream=false)       PASS 10.04s  SKIP                                    PASS 13.38s       PASS 6.82s        PASS 5.23s          PASS 13.79s    PASS 9.52s                 SKIP
-Claude Structured (stream=true)        PASS 5.23s   SKIP                                    PASS 5.72s        PASS 13.11s       PASS 3.80s          PASS 19.28s    PASS 1.82s                 SKIP
+Request Format                         gpt-4o-mini  gpt-5-mini   claude-haiku-4-5  gemini-2.5-flash  openai/gpt-oss-20b  deepseek-chat  grok-4-fast-non-reasoning  azure-gpt-5-nano
+Chat (stream=false)                    PASS 11.21s  PASS 13.10s  PASS 8.52s        PASS 4.64s        PASS 9.52s          PASS 7.08s     PASS 3.08s                 PASS 14.68s
+Chat (stream=true)                     PASS 13.23s  PASS 13.37s  PASS 2.31s        PASS 6.02s        PASS 4.56s          PASS 10.92s    PASS 9.72s                 PASS 15.30s
+Chat Tools (stream=false)              PASS 5.60s   PASS 12.94s  PASS 7.69s        PASS 7.11s        PASS 3.14s          PASS 8.71s     PASS 5.48s                 PASS* 35.02s
+Chat Tools (stream=true)               PASS 14.51s  PASS 18.90s  PASS 7.60s        PASS 4.36s        PASS 8.87s          PASS 7.56s     PASS 7.45s                 PASS 13.13s
+Chat Tools History (stream=false)      PASS 9.09s   PASS 14.28s  PASS 12.04s       PASS 7.45s        PASS 10.40s         PASS 9.52s     PASS 6.26s                 PASS 13.61s
+Chat Tools History (stream=true)       PASS 14.80s  PASS 25.49s  PASS 3.08s        PASS 11.24s       PASS 5.22s          PASS 4.97s     PASS 5.14s                 PASS 15.56s
+Chat Structured (stream=false)         PASS 10.51s  PASS 15.71s  PASS 12.66s       PASS 13.68s       PASS 8.24s          PASS 6.95s     PASS 13.42s                PASS 13.80s
+Chat Structured (stream=true)          PASS 11.26s  PASS 14.50s  PASS 6.07s        PASS 4.84s        PASS 6.97s          PASS 6.86s     PASS 4.51s                 PASS 14.04s
+Response (stream=false)                PASS 14.65s  PASS 15.31s  PASS 10.51s       PASS 3.03s        PASS 3.98s          PASS 12.83s    PASS 11.29s                PASS 15.70s
+Response (stream=true)                 PASS 8.91s   PASS 17.54s  PASS 6.51s        PASS 5.81s        PASS 5.26s          PASS 7.56s     PASS 9.51s                 PASS 15.66s
+Response Vision (stream=false)         PASS 12.32s  PASS 14.49s  PASS 14.12s       PASS 8.82s        SKIP                SKIP           PASS 8.74s                 PASS 16.59s
+Response Vision (stream=true)          PASS 11.04s  PASS 9.50s   PASS 10.75s       PASS 13.60s       SKIP                SKIP           PASS 9.05s                 PASS 11.51s
+Response Tools (stream=false)          PASS 11.02s  PASS 11.71s  PASS 7.68s        PASS 10.55s       PASS 4.04s          PASS 10.30s    PASS 10.15s                PASS 12.93s
+Response Tools (stream=true)           PASS 8.64s   PASS 14.40s  PASS 10.73s       PASS 13.20s       PASS 6.81s          PASS 7.62s     PASS 13.42s                PASS 12.03s
+Response Tools History (stream=false)  PASS 8.04s   PASS 14.45s  PASS 9.63s        PASS 5.54s        PASS 5.88s          PASS 9.30s     PASS 5.22s                 PASS 11.11s
+Response Tools History (stream=true)   PASS 9.89s   PASS 12.22s  PASS 6.58s        PASS 5.18s        PASS 7.40s          PASS 5.84s     PASS 4.50s                 PASS 16.86s
+Response Structured (stream=false)     PASS 14.35s  PASS 15.40s  PASS 13.74s       PASS 12.78s       PASS 7.59s          PASS 5.99s     PASS 12.10s                PASS 13.18s
+Response Structured (stream=true)      PASS 15.04s  PASS 12.68s  PASS 12.52s       PASS 7.83s        PASS 7.85s          PASS 3.81s     PASS 8.35s                 PASS 11.01s
+Claude (stream=false)                  PASS 4.78s   PASS 11.79s  PASS 12.18s       PASS 10.58s       PASS 8.75s          PASS 12.46s    PASS 9.66s                 PASS 14.93s
+Claude (stream=true)                   PASS 4.46s   PASS 9.82s   PASS 6.43s        PASS 14.37s       PASS 9.22s          PASS 12.17s    PASS 3.13s                 PASS 20.63s
+Claude Tools (stream=false)            PASS 9.20s   PASS 11.08s  PASS 11.79s       PASS 3.55s        PASS 7.39s          PASS 6.32s     PASS 12.71s                PASS 14.85s
+Claude Tools (stream=true)             PASS 3.01s   PASS 6.56s   PASS 14.15s       PASS 8.11s        PASS 9.11s          PASS 8.37s     PASS 4.16s                 PASS 12.80s
+Claude Tools History (stream=false)    PASS 9.67s   PASS 15.07s  PASS 7.45s        PASS 6.70s        PASS 8.47s          PASS 9.25s     PASS 13.92s                PASS 15.36s
+Claude Tools History (stream=true)     PASS 11.15s  PASS 19.37s  PASS 13.52s       PASS 8.90s        PASS 7.20s          PASS 8.89s     PASS 5.81s                 PASS 9.87s
+Claude Structured (stream=false)       PASS 5.39s   SKIP         PASS 7.89s        PASS 11.51s       PASS 13.30s         PASS 8.31s     PASS 6.16s                 SKIP
+Claude Structured (stream=true)        PASS 6.43s   SKIP         PASS 11.05s       PASS 9.62s        PASS 3.05s          PASS 4.64s     PASS 4.69s                 SKIP
 
-Totals  | Requests: 208 | Passed: 188 | Failed: 1 | Skipped: 19
+Totals  | Requests: 208 | Passed: 200 | Failed: 0 | Skipped: 8
 
-Failures:
-- gpt-5-mini - Claude Tools History (stream=false) -> response missing tool_use block or assistant text
+Warnings (passed with caveats):
+- azure-gpt-5-nano - Chat Tools (stream=false) -> tool was not invoked
 
 Skipped (unsupported combinations):
-- azure-gpt-5-nano - Chat Tools (stream=false) -> GPT-5 reasoning model inconsistently returns reasoning instead of tool calls
-- azure-gpt-5-nano - Chat Tools History (stream=false) -> Model returns reasoning text instead of tool calls
-- azure-gpt-5-nano - Chat Tools History (stream=true) -> Model returns reasoning text instead of tool calls when streaming
 - azure-gpt-5-nano - Claude Structured (stream=false) -> Azure GPT-5 nano does not return structured JSON for Claude messages (empty content)
 - azure-gpt-5-nano - Claude Structured (stream=true) -> Azure GPT-5 nano does not return structured JSON for Claude messages (empty content)
-- deepseek-chat - Chat Tools (stream=false) -> Model times out on non-streaming tool invocation requests
 - deepseek-chat - Response Vision (stream=false) -> vision input unsupported by model deepseek-chat
 - deepseek-chat - Response Vision (stream=true) -> vision input unsupported by model deepseek-chat
-- gemini-2.5-flash - Chat Tools (stream=false) -> Model returns text instead of tool invocations despite forced tool_choice
-- gemini-2.5-flash - Claude Tools (stream=true) -> Model returns text instead of tool invocations despite forced tool_choice
-- gpt-5-mini - Chat Tools History (stream=true) -> GPT-5 reasoning model inconsistently returns reasoning instead of tool calls when streaming
 - gpt-5-mini - Claude Structured (stream=false) -> GPT-5 mini returns empty content for Claude structured requests
 - gpt-5-mini - Claude Structured (stream=true) -> GPT-5 mini streams only usage deltas, never emitting structured JSON blocks
-- gpt-5-mini - Claude Tools History (stream=true) -> GPT-5 reasoning model inconsistently returns reasoning instead of tool calls
-- openai/gpt-oss-20b - Chat Tools History (stream=false) -> Model refuses forced tool_choice (upstream returns 400 tool_use_failed)
-- openai/gpt-oss-20b - Claude Tools History (stream=false) -> Model refuses forced tool_choice (upstream returns 400 tool_use_failed)
-- openai/gpt-oss-20b - Response Tools History (stream=false) -> Model refuses forced tool_choice (upstream returns 400 tool_use_failed)
 - openai/gpt-oss-20b - Response Vision (stream=false) -> vision input unsupported by model openai/gpt-oss-20b
 - openai/gpt-oss-20b - Response Vision (stream=true) -> vision input unsupported by model openai/gpt-oss-20b
+
+2025-12-12T04:37:09Z    INFO    oneapi-test     test/main.go:58 command completed       {"command": "run"}
 
 ```
 
