@@ -133,7 +133,16 @@ func cleanJsonSchemaForGemini(schema any) any {
 
 // cleanFunctionParameters recursively removes additionalProperties and other unsupported fields from function parameters
 func cleanFunctionParameters(params any) any {
-	return cleanFunctionParametersInternal(params, true)
+	cleaned := cleanFunctionParametersInternal(params, true)
+
+	// Gemini function declarations require parameters.type to be OBJECT (uppercase).
+	// Force the top-level schema type to OBJECT to avoid Vertex 400 errors.
+	if cleanedMap, ok := cleaned.(map[string]any); ok {
+		cleanedMap["type"] = "OBJECT"
+		return cleanedMap
+	}
+
+	return cleaned
 }
 
 // cleanFunctionParametersInternal recursively removes additionalProperties and other unsupported fields from function parameters

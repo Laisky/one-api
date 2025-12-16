@@ -59,6 +59,34 @@ func (a *Adaptor) ConvertRequest(c *gin.Context, relayMode int, request *model.G
 		zap.String("last_role", lastRole),
 		zap.Bool("has_system_instruction", geminiRequest.SystemInstruction != nil),
 	)
+
+	var functionNames []string
+	var parameterTypes []string
+	for _, tool := range geminiRequest.Tools {
+		functions, ok := tool.FunctionDeclarations.([]model.Function)
+		if !ok {
+			continue
+		}
+
+		for _, fn := range functions {
+			functionNames = append(functionNames, fn.Name)
+			if params, ok := fn.Parameters.(map[string]any); ok {
+				if typeVal, ok := params["type"].(string); ok {
+					parameterTypes = append(parameterTypes, typeVal)
+					continue
+				}
+			}
+			parameterTypes = append(parameterTypes, "")
+		}
+	}
+
+	if len(functionNames) > 0 {
+		lg.Debug("gemini vertex tools normalized",
+			zap.Int("function_count", len(functionNames)),
+			zap.Strings("function_names", functionNames),
+			zap.Strings("function_param_types", parameterTypes),
+		)
+	}
 	c.Set(ctxkey.RequestModel, request.Model)
 	c.Set(ctxkey.ConvertedRequest, geminiRequest)
 	return geminiRequest, nil

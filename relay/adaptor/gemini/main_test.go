@@ -37,7 +37,7 @@ func TestCleanFunctionParameters(t *testing.T) {
 				"additionalProperties": false,
 			},
 			expected: map[string]any{
-				"type": "object",
+				"type": "OBJECT",
 				"properties": map[string]any{
 					"name": map[string]any{
 						"type": "string",
@@ -65,7 +65,7 @@ func TestCleanFunctionParameters(t *testing.T) {
 				},
 			},
 			expected: map[string]any{
-				"type": "object",
+				"type": "OBJECT",
 				"properties": map[string]any{
 					"nested": map[string]any{
 						"type":        "object",
@@ -93,7 +93,7 @@ func TestCleanFunctionParameters(t *testing.T) {
 				},
 			},
 			expected: map[string]any{
-				"type": "object",
+				"type": "OBJECT",
 				"properties": map[string]any{
 					"city": map[string]any{
 						"type": "string",
@@ -134,7 +134,7 @@ func TestCleanFunctionParameters(t *testing.T) {
 				},
 			},
 			expected: map[string]any{
-				"type": "object",
+				"type": "OBJECT",
 				"properties": map[string]any{
 					"dateRange": map[string]any{
 						"type": "object",
@@ -196,7 +196,7 @@ func TestCleanFunctionParameters(t *testing.T) {
 				"strict":               true,
 			},
 			expected: map[string]any{
-				"type": "object",
+				"type": "OBJECT",
 				"properties": map[string]any{
 					"dateRange": map[string]any{
 						"description": "Date range for events",
@@ -221,6 +221,24 @@ func TestCleanFunctionParameters(t *testing.T) {
 				},
 				"required": []string{"query"},
 				// additionalProperties, description, strict removed at top level
+			},
+		},
+		{
+			name: "force object type when missing",
+			input: map[string]any{
+				"properties": map[string]any{
+					"query": map[string]any{
+						"type": "string",
+					},
+				},
+			},
+			expected: map[string]any{
+				"type": "OBJECT",
+				"properties": map[string]any{
+					"query": map[string]any{
+						"type": "string",
+					},
+				},
 			},
 		},
 	}
