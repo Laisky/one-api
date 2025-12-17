@@ -721,7 +721,9 @@ Response:
 
 #### Support gpt-image family for image generation & edits
 
-Support gpt-image-1 & gpt-image-1-mini for image generation and editing.
+Support gpt-image for image generation and editing.
+
+gpt-image-1 / gpt-image-1-mini / chatgpt-image-latest / gpt-image-1.5 / gpt-image-1.5-2025-12-16
 
 Draw image:
 

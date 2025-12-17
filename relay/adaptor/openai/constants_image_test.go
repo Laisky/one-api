@@ -25,3 +25,15 @@ func TestGptImage1MiniHasDualPricing(t *testing.T) {
 	require.NotNil(t, cfg.Image, "expected image config for gpt-image-1-mini")
 	require.Greater(t, cfg.Image.PricePerImageUsd, 0.0, "expected image price for gpt-image-1-mini")
 }
+
+func TestNewGptImageModelsPricing(t *testing.T) {
+	for _, model := range []string{"chatgpt-image-latest", "gpt-image-1.5", "gpt-image-1.5-2025-12-16"} {
+		cfg, ok := ModelRatios[model]
+		require.True(t, ok, "%s not found in ModelRatios", model)
+		require.InDelta(t, 5.0*ratio.MilliTokensUsd, cfg.Ratio, 1e-9, "unexpected input ratio for %s", model)
+		require.InDelta(t, 1.25*ratio.MilliTokensUsd, cfg.CachedInputRatio, 1e-9, "unexpected cached ratio for %s", model)
+		require.InDelta(t, 2.0, cfg.CompletionRatio, 1e-9, "unexpected completion ratio for %s", model)
+		require.NotNil(t, cfg.Image, "expected image config for %s", model)
+		require.Greater(t, cfg.Image.PricePerImageUsd, 0.0, "expected image price for %s", model)
+	}
+}

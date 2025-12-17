@@ -85,19 +85,18 @@ func applyImageDefaults(req *relaymodel.ImageRequest, cfg *relayadaptor.ImagePri
 
 	if req.Size == "" {
 		switch req.Model {
-		case "gpt-image-1", "gpt-image-1-mini":
+		case "gpt-image-1", "gpt-image-1-mini", "chatgpt-image-latest", "gpt-image-1.5", "gpt-image-1.5-2025-12-16":
 			req.Size = "1024x1536"
 		case "dall-e-2", "dall-e-3", "grok-2-image", "grok-2-image-1212":
 			req.Size = "1024x1024"
+		default:
+			req.Size = "1024x1024"
 		}
-	}
-	if req.Size == "" {
-		req.Size = "1024x1024"
 	}
 
 	if req.Quality == "" {
 		switch req.Model {
-		case "gpt-image-1", "gpt-image-1-mini":
+		case "gpt-image-1", "gpt-image-1-mini", "chatgpt-image-latest", "gpt-image-1.5", "gpt-image-1.5-2025-12-16":
 			req.Quality = "high"
 		case "dall-e-2", "dall-e-3":
 			req.Quality = "standard"
@@ -618,6 +617,29 @@ var gptImageTokenBucketPrices = map[string]gptImageTokenBucketPricing{
 		cachedInputImageUSD: 0.25,
 		outputImageUSD:      8.0,
 	},
+	// https://platform.openai.com/docs/models/chatgpt-image-latest
+	"chatgpt-image-latest": {
+		inputTextUSD:        5.0,
+		cachedInputTextUSD:  1.25,
+		inputImageUSD:       8.0,
+		cachedInputImageUSD: 2.0,
+		outputImageUSD:      32.0,
+	},
+	// https://platform.openai.com/docs/models/gpt-image-1.5
+	"gpt-image-1.5": {
+		inputTextUSD:        5.0,
+		cachedInputTextUSD:  1.25,
+		inputImageUSD:       8.0,
+		cachedInputImageUSD: 2.0,
+		outputImageUSD:      32.0,
+	},
+	"gpt-image-1.5-2025-12-16": {
+		inputTextUSD:        5.0,
+		cachedInputTextUSD:  1.25,
+		inputImageUSD:       8.0,
+		cachedInputImageUSD: 2.0,
+		outputImageUSD:      32.0,
+	},
 }
 
 // computeGptImageTokenQuota calculates quota for gpt-image-1 family models using five billing buckets:
@@ -685,7 +707,7 @@ func computeImageUsageQuota(modelName string, usage *relaymodel.Usage, groupRati
 		return 0
 	}
 	switch modelName {
-	case "gpt-image-1", "gpt-image-1-mini":
+	case "gpt-image-1", "gpt-image-1-mini", "chatgpt-image-latest", "gpt-image-1.5", "gpt-image-1.5-2025-12-16":
 		return computeGptImageTokenQuota(modelName, usage, groupRatio)
 	default:
 		// Add more models here as they publish token pricing for image buckets
@@ -789,6 +811,20 @@ func computeLegacyImageTokenQuota(modelName string, usage *relaymodel.Usage, gro
 			imageTokens = 0
 		}
 		quota := float64(textTokens)*5*billingratio.MilliTokensUsd + float64(imageTokens)*10*billingratio.MilliTokensUsd
+		if groupRatio > 0 {
+			quota *= groupRatio
+		}
+		return quota
+	case "chatgpt-image-latest", "gpt-image-1.5", "gpt-image-1.5-2025-12-16":
+		textTokens := usage.PromptTokensDetails.TextTokens
+		if textTokens < 0 {
+			textTokens = 0
+		}
+		imageTokens := usage.PromptTokensDetails.ImageTokens
+		if imageTokens < 0 {
+			imageTokens = 0
+		}
+		quota := float64(textTokens)*5*billingratio.MilliTokensUsd + float64(imageTokens)*8*billingratio.MilliTokensUsd
 		if groupRatio > 0 {
 			quota *= groupRatio
 		}

@@ -410,6 +410,126 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 			},
 		},
 	},
+	"chatgpt-image-latest": {
+		Ratio:            5.0 * ratio.MilliTokensUsd,
+		CachedInputRatio: 1.25 * ratio.MilliTokensUsd,
+		CompletionRatio:  2.0,
+		Image: &adaptor.ImagePricingConfig{
+			PricePerImageUsd: 0.009,
+			DefaultSize:      "1024x1536",
+			DefaultQuality:   "high",
+			PromptTokenLimit: 4000,
+			MinImages:        1,
+			MaxImages:        1,
+			QualitySizeMultipliers: map[string]map[string]float64{
+				"default": {
+					"1024x1024": 1,
+					"1024x1536": 13.0 / 9.0,
+					"1536x1024": 13.0 / 9.0,
+				},
+				"low": {
+					"1024x1024": 1,
+					"1024x1536": 13.0 / 9.0,
+					"1536x1024": 13.0 / 9.0,
+				},
+				"medium": {
+					"1024x1024": 34.0 / 9.0,
+					"1024x1536": 50.0 / 9.0,
+					"1536x1024": 50.0 / 9.0,
+				},
+				"high": {
+					"1024x1024": 133.0 / 9.0,
+					"1024x1536": 200.0 / 9.0,
+					"1536x1024": 200.0 / 9.0,
+				},
+				"auto": {
+					"1024x1024": 133.0 / 9.0,
+					"1024x1536": 200.0 / 9.0,
+					"1536x1024": 200.0 / 9.0,
+				},
+			},
+		},
+	},
+	"gpt-image-1.5": {
+		Ratio:            5.0 * ratio.MilliTokensUsd,
+		CachedInputRatio: 1.25 * ratio.MilliTokensUsd,
+		CompletionRatio:  2.0,
+		Image: &adaptor.ImagePricingConfig{
+			PricePerImageUsd: 0.009,
+			DefaultSize:      "1024x1536",
+			DefaultQuality:   "high",
+			PromptTokenLimit: 4000,
+			MinImages:        1,
+			MaxImages:        1,
+			QualitySizeMultipliers: map[string]map[string]float64{
+				"default": {
+					"1024x1024": 1,
+					"1024x1536": 13.0 / 9.0,
+					"1536x1024": 13.0 / 9.0,
+				},
+				"low": {
+					"1024x1024": 1,
+					"1024x1536": 13.0 / 9.0,
+					"1536x1024": 13.0 / 9.0,
+				},
+				"medium": {
+					"1024x1024": 34.0 / 9.0,
+					"1024x1536": 50.0 / 9.0,
+					"1536x1024": 50.0 / 9.0,
+				},
+				"high": {
+					"1024x1024": 133.0 / 9.0,
+					"1024x1536": 200.0 / 9.0,
+					"1536x1024": 200.0 / 9.0,
+				},
+				"auto": {
+					"1024x1024": 133.0 / 9.0,
+					"1024x1536": 200.0 / 9.0,
+					"1536x1024": 200.0 / 9.0,
+				},
+			},
+		},
+	},
+	"gpt-image-1.5-2025-12-16": {
+		Ratio:            5.0 * ratio.MilliTokensUsd,
+		CachedInputRatio: 1.25 * ratio.MilliTokensUsd,
+		CompletionRatio:  2.0,
+		Image: &adaptor.ImagePricingConfig{
+			PricePerImageUsd: 0.009,
+			DefaultSize:      "1024x1536",
+			DefaultQuality:   "high",
+			PromptTokenLimit: 4000,
+			MinImages:        1,
+			MaxImages:        1,
+			QualitySizeMultipliers: map[string]map[string]float64{
+				"default": {
+					"1024x1024": 1,
+					"1024x1536": 13.0 / 9.0,
+					"1536x1024": 13.0 / 9.0,
+				},
+				"low": {
+					"1024x1024": 1,
+					"1024x1536": 13.0 / 9.0,
+					"1536x1024": 13.0 / 9.0,
+				},
+				"medium": {
+					"1024x1024": 34.0 / 9.0,
+					"1024x1536": 50.0 / 9.0,
+					"1536x1024": 50.0 / 9.0,
+				},
+				"high": {
+					"1024x1024": 133.0 / 9.0,
+					"1024x1536": 200.0 / 9.0,
+					"1536x1024": 200.0 / 9.0,
+				},
+				"auto": {
+					"1024x1024": 133.0 / 9.0,
+					"1024x1536": 200.0 / 9.0,
+					"1536x1024": 200.0 / 9.0,
+				},
+			},
+		},
+	},
 
 	// Video Generation Models
 	// -------------------------------------
