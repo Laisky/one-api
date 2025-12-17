@@ -79,6 +79,16 @@ var (
 			CompletionRatio: 0.10 / 0.30,
 		},
 	}
+	gemini3FlashPricing = adaptor.ModelConfig{
+		Ratio:             0.50 * ratio.MilliTokensUsd,
+		CompletionRatio:   3.00 / 0.50,
+		CacheWrite5mRatio: 0.05 * ratio.MilliTokensUsd,
+		CacheWrite1hRatio: 0.05 * ratio.MilliTokensUsd,
+		Audio: &adaptor.AudioPricingConfig{
+			PromptRatio:     1.00 / 0.50,
+			CompletionRatio: 3.00 / 1.00,
+		},
+	}
 )
 
 // ModelRatios contains all supported models and their pricing ratios
@@ -113,6 +123,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 			},
 		},
 	},
+	"gemini-3-flash-preview": gemini3FlashPricing,
 	"gemini-3-pro-image-preview": {
 		Ratio:             2.0 * ratio.MilliTokensUsd,
 		CompletionRatio:   12.0 / 2.0,
@@ -209,6 +220,7 @@ const geminiWebSearchUsdPerCall = 35.0 / 1000.0
 // Source: https://ai.google.dev/gemini-api/docs/pricing (retrieved via https://r.jina.ai/https://ai.google.dev/gemini-api/docs/pricing)
 var geminiWebSearchModels = map[string]struct{}{
 	"gemini-3-pro-preview":                    {},
+	"gemini-3-flash-preview":                  {},
 	"gemini-2.5-pro":                          {},
 	"gemini-2.5-pro-preview":                  {},
 	"gemini-2.5-computer-use-preview":         {},

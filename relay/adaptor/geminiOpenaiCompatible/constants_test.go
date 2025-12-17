@@ -34,6 +34,16 @@ func TestGeminiFlashAudioPricing(t *testing.T) {
 	require.InDelta(t, 0.30, cfg.Audio.CompletionRatio, 1e-9)
 }
 
+func TestGemini3FlashPricing(t *testing.T) {
+	cfg, ok := ModelRatios["gemini-3-flash-preview"]
+	require.True(t, ok, "gemini-3-flash-preview missing from pricing map")
+	require.InDelta(t, 0.50*ratio.MilliTokensUsd, cfg.Ratio, 1e-12)
+	require.InDelta(t, 3.00/0.50, cfg.CompletionRatio, 1e-9)
+	require.NotNil(t, cfg.Audio, "gemini-3-flash-preview audio pricing missing")
+	require.InDelta(t, 1.00/0.50, cfg.Audio.PromptRatio, 1e-9)
+	require.InDelta(t, 3.00/1.00, cfg.Audio.CompletionRatio, 1e-9)
+}
+
 func TestGeminiEmbeddingConfig(t *testing.T) {
 	cfg, ok := ModelRatios["gemini-embedding-001"]
 	require.True(t, ok, "gemini-embedding-001 missing from pricing map")
