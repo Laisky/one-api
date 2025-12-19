@@ -781,8 +781,8 @@ var (
 	// (e.g., production, staging). Useful for filtering dashboards.
 	//
 	// Environment variable: OTEL_ENVIRONMENT
-	// Default: "production"
-	OpenTelemetryEnvironment = strings.TrimSpace(env.String("OTEL_ENVIRONMENT", "production"))
+	// Default: "debug"
+	OpenTelemetryEnvironment = strings.TrimSpace(env.String("OTEL_ENVIRONMENT", "debug"))
 )
 
 // =============================================================================
