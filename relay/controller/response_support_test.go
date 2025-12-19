@@ -51,6 +51,22 @@ func TestSupportsNativeResponseAPIAzureGpt5(t *testing.T) {
 	require.False(t, supportsNativeResponseAPI(metaInfo))
 }
 
+func TestSupportsNativeResponseAPISearchPreviewFallback(t *testing.T) {
+	t.Parallel()
+
+	metaInfo := &metalib.Meta{
+		ChannelType:     channeltype.OpenAI,
+		ActualModelName: "gpt-4o-mini-search-preview",
+	}
+	require.False(t, supportsNativeResponseAPI(metaInfo))
+
+	metaInfo.ActualModelName = ""
+	metaInfo.OriginModelName = "alias-search-preview"
+	metaInfo.ModelMapping = map[string]string{"alias-search-preview": "gpt-4o-mini-search-preview"}
+	metaInfo.ActualModelName = metalib.GetMappedModelName(metaInfo.OriginModelName, metaInfo.ModelMapping)
+	require.False(t, supportsNativeResponseAPI(metaInfo))
+}
+
 func TestIsReasoningModel(t *testing.T) {
 	t.Parallel()
 

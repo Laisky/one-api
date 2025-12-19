@@ -35,6 +35,7 @@ const (
 	fallbackChannelID           = 99003
 	fallbackCompatibleChannelID = 99004
 	fallbackAnthropicChannelID  = 99005
+	fallbackOpenAIChannelID     = 99006
 )
 
 func TestRenderChatResponseAsResponseAPI(t *testing.T) {
@@ -183,6 +184,109 @@ func TestRelayResponseAPIHelper_FallbackAzure(t *testing.T) {
 	require.Equal(t, "You are helpful.", chatReq.Messages[0].StringContent(), "system message not preserved")
 	require.Equal(t, "user", chatReq.Messages[1].Role, "expected user role")
 	require.Equal(t, "Hello via response API", chatReq.Messages[1].StringContent(), "user message not preserved")
+}
+
+func TestRelayResponseAPIHelper_FallbackSearchPreviewModel(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	ensureResponseFallbackFixtures(t)
+
+	prevRedis := common.IsRedisEnabled()
+	common.SetRedisEnabled(false)
+	t.Cleanup(func() { common.SetRedisEnabled(prevRedis) })
+
+	prevLogConsume := config.IsLogConsumeEnabled()
+	config.SetLogConsumeEnabled(false)
+	t.Cleanup(func() { config.SetLogConsumeEnabled(prevLogConsume) })
+
+	upstreamCalled := false
+	var upstreamPath string
+	var upstreamBody []byte
+
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		upstreamCalled = true
+		upstreamPath = r.URL.Path
+		if r.URL.RawQuery != "" {
+			upstreamPath += "?" + r.URL.RawQuery
+		}
+		body, err := io.ReadAll(r.Body)
+		require.NoError(t, err, "failed to read upstream body")
+		upstreamBody = body
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+		  "id": "chatcmpl-fallback-search",
+		  "object": "chat.completion",
+		  "created": 1741036800,
+		  "model": "gpt-4o-mini-search-preview",
+		  "choices": [
+		    {
+		      "index": 0,
+		      "message": {"role": "assistant", "content": "search fallback ok"},
+		      "finish_reason": "stop"
+		    }
+		  ],
+		  "usage": {"prompt_tokens": 10, "completion_tokens": 4, "total_tokens": 14}
+		}`))
+	}))
+	t.Cleanup(upstream.Close)
+
+	prevClient := client.HTTPClient
+	client.HTTPClient = upstream.Client()
+	t.Cleanup(func() { client.HTTPClient = prevClient })
+
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+
+	requestPayload := `{"model":"gpt-4o-mini-search-preview","stream":false,"instructions":"You are helpful.","input":[{"role":"user","content":[{"type":"input_text","text":"Hello via response API"}]}]}`
+	req := httptest.NewRequest(http.MethodPost, "/v1/responses", bytes.NewBufferString(requestPayload))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer openai-key")
+	c.Request = req
+
+	gmw.SetLogger(c, logger.Logger)
+
+	c.Set(ctxkey.Channel, channeltype.OpenAI)
+	c.Set(ctxkey.ChannelId, fallbackOpenAIChannelID)
+	c.Set(ctxkey.ChannelModel, &model.Channel{Id: fallbackOpenAIChannelID, Type: channeltype.OpenAI})
+	c.Set(ctxkey.TokenId, fallbackTokenID)
+	c.Set(ctxkey.TokenName, "fallback-token")
+	c.Set(ctxkey.Id, fallbackUserID)
+	c.Set(ctxkey.Group, "default")
+	c.Set(ctxkey.ModelMapping, map[string]string{})
+	c.Set(ctxkey.ChannelRatio, 1.0)
+	c.Set(ctxkey.RequestModel, "gpt-4o-mini-search-preview")
+	c.Set(ctxkey.BaseURL, upstream.URL)
+	c.Set(ctxkey.ContentType, "application/json")
+	c.Set(ctxkey.RequestId, "req_fallback_search_preview")
+	c.Set(ctxkey.TokenQuotaUnlimited, true)
+	c.Set(ctxkey.TokenQuota, int64(0))
+	c.Set(ctxkey.Username, "response-fallback")
+	c.Set(ctxkey.UserQuota, int64(1_000_000))
+	c.Set(ctxkey.Config, model.ChannelConfig{})
+
+	apiErr := RelayResponseAPIHelper(c)
+	require.Nil(t, apiErr, "RelayResponseAPIHelper returned error")
+
+	require.Equal(t, http.StatusOK, recorder.Code, "unexpected status code")
+	require.True(t, upstreamCalled, "expected upstream to be called")
+	require.Equal(t, "/v1/chat/completions", upstreamPath, "expected chat completions fallback for search-preview model")
+
+	var chatReq relaymodel.GeneralOpenAIRequest
+	err := json.Unmarshal(upstreamBody, &chatReq)
+	require.NoError(t, err, "failed to unmarshal upstream chat request")
+	require.Equal(t, "gpt-4o-mini-search-preview", chatReq.Model, "expected chat request model unchanged")
+	require.Len(t, chatReq.Messages, 2, "expected system+user messages")
+	require.Equal(t, "You are helpful.", chatReq.Messages[0].StringContent())
+	require.Equal(t, "Hello via response API", chatReq.Messages[1].StringContent())
+
+	var fallbackResp openai.ResponseAPIResponse
+	err = json.Unmarshal(recorder.Body.Bytes(), &fallbackResp)
+	require.NoError(t, err, "failed to unmarshal fallback response body")
+	require.Equal(t, "completed", fallbackResp.Status, "expected response status completed")
+	require.Len(t, fallbackResp.Output, 1, "expected single output item")
+	require.Equal(t, "message", fallbackResp.Output[0].Type)
+	require.Equal(t, "search fallback ok", fallbackResp.Output[0].Content[0].Text, "unexpected output content")
+	require.NotNil(t, fallbackResp.Usage)
+	require.Equal(t, 14, fallbackResp.Usage.TotalTokens, "unexpected usage total tokens")
 }
 
 func TestRelayResponseAPIHelper_FallbackBlocksDisallowedWebSearch(t *testing.T) {
@@ -707,6 +811,12 @@ func ensureResponseFallbackFixtures(t *testing.T) {
 	anthropicChannel := &model.Channel{Id: fallbackAnthropicChannelID, Type: channeltype.Anthropic, Name: "anthropic-fallback", Status: model.ChannelStatusEnabled}
 	err = model.DB.Create(anthropicChannel).Error
 	require.NoError(t, err, "failed to create anthropic channel fixture")
+
+	err = model.DB.Where("id = ?", fallbackOpenAIChannelID).Delete(&model.Channel{}).Error
+	require.NoError(t, err, "failed to clean openai channel fixture")
+	openaiChannel := &model.Channel{Id: fallbackOpenAIChannelID, Type: channeltype.OpenAI, Name: "openai-fallback", Status: model.ChannelStatusEnabled}
+	err = model.DB.Create(openaiChannel).Error
+	require.NoError(t, err, "failed to create openai channel fixture")
 }
 
 func ensureResponseFallbackDB(t *testing.T) {

@@ -60,6 +60,9 @@ func RelayResponseAPIHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 	if err != nil {
 		return openai.ErrorWrapper(err, "invalid_response_api_request", http.StatusBadRequest)
 	}
+	meta.OriginModelName = responseAPIRequest.Model
+	meta.ActualModelName = metalib.GetMappedModelName(meta.OriginModelName, meta.ModelMapping)
+	metalib.Set2Context(c, meta)
 	meta.IsStream = responseAPIRequest.Stream != nil && *responseAPIRequest.Stream
 	sanitizeResponseAPIRequest(responseAPIRequest, meta.ChannelType)
 	applyThinkingQueryToResponseRequest(c, responseAPIRequest, meta)
@@ -81,6 +84,12 @@ func RelayResponseAPIHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 
 	// Route channels without native Response API support through the ChatCompletion fallback
 	if !supportsNativeResponseAPI(meta) {
+		lg.Debug("response api request routed through chat fallback",
+			zap.String("origin_model", meta.OriginModelName),
+			zap.String("actual_model", meta.ActualModelName),
+			zap.Int("channel_id", meta.ChannelId),
+			zap.Int("channel_type", meta.ChannelType),
+		)
 		return relayResponseAPIThroughChat(c, meta, responseAPIRequest)
 	}
 
@@ -1014,6 +1023,14 @@ func sanitizeChatCompletionRequest(request *relaymodel.GeneralOpenAIRequest) {
 
 func supportsNativeResponseAPI(meta *metalib.Meta) bool {
 	if meta == nil {
+		return false
+	}
+
+	modelName := strings.TrimSpace(strings.ToLower(meta.ActualModelName))
+	if modelName == "" {
+		modelName = strings.TrimSpace(strings.ToLower(meta.OriginModelName))
+	}
+	if modelName != "" && openai.IsModelsOnlySupportedByChatCompletionAPI(modelName) {
 		return false
 	}
 
