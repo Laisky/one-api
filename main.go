@@ -21,12 +21,14 @@ import (
 	"github.com/gin-gonic/gin"
 	_ "github.com/joho/godotenv/autoload"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
 
 	"github.com/songquanpeng/one-api/common"
 	"github.com/songquanpeng/one-api/common/client"
 	"github.com/songquanpeng/one-api/common/config"
 	"github.com/songquanpeng/one-api/common/graceful"
 	"github.com/songquanpeng/one-api/common/logger"
+	"github.com/songquanpeng/one-api/common/telemetry"
 	"github.com/songquanpeng/one-api/controller"
 	"github.com/songquanpeng/one-api/middleware"
 	"github.com/songquanpeng/one-api/model"
@@ -50,10 +52,22 @@ func main() {
 	// Setup enhanced logger with alertPusher integration
 	logger.SetupEnhancedLogger(ctx)
 
+	var (
+		err           error
+		otelProviders *telemetry.ProviderBundle
+	)
+
 	logger.Logger.Info("One API started", zap.String("version", common.Version))
 
 	if config.GinMode != gin.DebugMode {
 		gin.SetMode(gin.ReleaseMode)
+	}
+
+	if config.OpenTelemetryEnabled {
+		otelProviders, err = telemetry.InitOpenTelemetry(ctx)
+		if err != nil {
+			logger.Logger.Fatal("failed to initialize OpenTelemetry", zap.Error(err))
+		}
 	}
 
 	// check theme
@@ -67,8 +81,6 @@ func main() {
 	model.InitLogDB()
 	model.StartTraceRetentionCleaner(ctx, config.TraceRetentionDays)
 	model.StartAsyncTaskRetentionCleaner(ctx, config.AsyncTaskRetentionDays)
-
-	var err error
 	err = model.CreateRootAccountIfNeed()
 	if err != nil {
 		logger.Logger.Fatal("database init error", zap.Error(err))
@@ -144,14 +156,22 @@ func main() {
 	// Initialize HTTP server
 	server := gin.New()
 	server.RedirectTrailingSlash = false
-	server.Use(
+	middlewares := []gin.HandlerFunc{
 		gin.Recovery(),
+	}
+
+	if otelProviders != nil {
+		middlewares = append(middlewares, otelgin.Middleware(config.OpenTelemetryServiceName))
+	}
+
+	middlewares = append(middlewares,
 		gmw.NewLoggerMiddleware(
 			gmw.WithLoggerMwColored(),
 			gmw.WithLevel(logLevel.String()),
 			gmw.WithLogger(logger.Logger.Named("gin")),
 		),
 	)
+	server.Use(middlewares...)
 	// This will cause SSE not to work!!!
 	//server.Use(gzip.Gzip(gzip.DefaultCompression))
 	server.Use(middleware.RequestId())
@@ -235,6 +255,12 @@ func main() {
 	// Drain critical background tasks (billing, refunds, etc.)
 	if err := graceful.Drain(shutdownCtx); err != nil {
 		logger.Logger.Error("graceful drain finished with timeout/error", zap.Error(err))
+	}
+
+	if otelProviders != nil {
+		if err := otelProviders.Shutdown(shutdownCtx); err != nil {
+			logger.Logger.Error("failed to shutdown OpenTelemetry", zap.Error(err))
+		}
 	}
 
 	// Close DB after all drains complete

@@ -141,6 +141,23 @@ func ValidateGeminiVersion(value string) error {
 	return nil
 }
 
+// ValidateOpenTelemetryConfig ensures OTEL_EXPORTER_OTLP_ENDPOINT is provided when OpenTelemetry is enabled.
+func ValidateOpenTelemetryConfig(enabled bool, endpoint string) error {
+	if !enabled {
+		return nil
+	}
+
+	if strings.TrimSpace(endpoint) == "" {
+		return &ConfigValidationError{
+			Variable:   "OTEL_EXPORTER_OTLP_ENDPOINT",
+			Value:      endpoint,
+			Constraint: "must be set when OTEL_ENABLED is true",
+		}
+	}
+
+	return nil
+}
+
 // =============================================================================
 // NUMERIC VALIDATORS
 // =============================================================================
@@ -280,6 +297,9 @@ func ValidateAllEnvVars() *ValidationResult {
 		result.Errors = append(result.Errors, err)
 	}
 	if err := ValidateGeminiVersion(GeminiVersion); err != nil {
+		result.Errors = append(result.Errors, err)
+	}
+	if err := ValidateOpenTelemetryConfig(OpenTelemetryEnabled, OpenTelemetryEndpoint); err != nil {
 		result.Errors = append(result.Errors, err)
 	}
 

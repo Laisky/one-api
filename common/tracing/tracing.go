@@ -6,13 +6,32 @@ import (
 	gmw "github.com/Laisky/gin-middlewares/v7"
 	"github.com/Laisky/zap"
 	"github.com/gin-gonic/gin"
+	oteltrace "go.opentelemetry.io/otel/trace"
 
 	"github.com/songquanpeng/one-api/common/logger"
 	"github.com/songquanpeng/one-api/model"
 )
 
+// traceIDFromContext extracts the OpenTelemetry trace ID from a context when available.
+func traceIDFromContext(ctx context.Context) string {
+	if ctx == nil {
+		return ""
+	}
+
+	spanCtx := oteltrace.SpanContextFromContext(ctx)
+	if spanCtx.IsValid() {
+		return spanCtx.TraceID().String()
+	}
+
+	return ""
+}
+
 // GetTraceID extracts the TraceID from gin context using gin-middlewares
 func GetTraceID(c *gin.Context) string {
+	if traceID := traceIDFromContext(gmw.Ctx(c)); traceID != "" {
+		return traceID
+	}
+
 	traceID, err := gmw.TraceID(c)
 	if err != nil {
 		gmw.GetLogger(c).Warn("failed to get trace ID from gin-middlewares", zap.Error(err))
@@ -25,6 +44,10 @@ func GetTraceID(c *gin.Context) string {
 // GetTraceIDFromContext extracts TraceID from standard context
 // This is useful when we only have context.Context and not gin.Context
 func GetTraceIDFromContext(ctx context.Context) string {
+	if traceID := traceIDFromContext(ctx); traceID != "" {
+		return traceID
+	}
+
 	if ginCtx, ok := gmw.GetGinCtxFromStdCtx(ctx); ok {
 		return GetTraceID(ginCtx)
 	}

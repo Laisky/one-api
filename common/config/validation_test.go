@@ -157,6 +157,30 @@ func TestValidateGeminiVersion(t *testing.T) {
 	}
 }
 
+func TestValidateOpenTelemetryConfig(t *testing.T) {
+	tests := []struct {
+		name     string
+		enabled  bool
+		endpoint string
+		wantErr  bool
+	}{
+		{"disabled ignores endpoint", false, "", false},
+		{"enabled requires endpoint", true, "", true},
+		{"enabled with endpoint", true, "collector:4318", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := ValidateOpenTelemetryConfig(tt.enabled, tt.endpoint)
+			if tt.wantErr {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+			}
+		})
+	}
+}
+
 func TestValidatePositiveInt(t *testing.T) {
 	tests := []struct {
 		name    string

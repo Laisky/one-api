@@ -736,6 +736,56 @@ var (
 )
 
 // =============================================================================
+// OPEN TELEMETRY
+// =============================================================================
+// Settings for exporting traces and metrics to an OpenTelemetry collector.
+// When enabled, the application will create OTLP HTTP exporters for traces
+// and metrics and attach middleware/instrumentation across Gin and GORM.
+
+var (
+	// OpenTelemetryEnabled toggles OpenTelemetry tracing and metrics export.
+	// When true, OTLP exporters are initialized using the settings below.
+	//
+	// Environment variable: OTEL_ENABLED
+	// Default: false
+	OpenTelemetryEnabled = env.Bool("OTEL_ENABLED", false)
+
+	// OpenTelemetryEndpoint sets the OTLP collector host:port for both traces
+	// and metrics. Accepts host:port without scheme (e.g., "localhost:4318").
+	//
+	// Environment variable: OTEL_EXPORTER_OTLP_ENDPOINT
+	// Default: ""
+	// Example: "100.97.108.34:4318"
+	OpenTelemetryEndpoint = func() string {
+		endpoint := strings.TrimSpace(env.String("OTEL_EXPORTER_OTLP_ENDPOINT", ""))
+		endpoint = strings.TrimPrefix(endpoint, "http://")
+		endpoint = strings.TrimPrefix(endpoint, "https://")
+		return endpoint
+	}()
+
+	// OpenTelemetryInsecure determines whether the OTLP exporters should skip
+	// TLS. Set to true for plain HTTP collectors (common for internal clusters).
+	//
+	// Environment variable: OTEL_EXPORTER_OTLP_INSECURE
+	// Default: true
+	OpenTelemetryInsecure = env.Bool("OTEL_EXPORTER_OTLP_INSECURE", true)
+
+	// OpenTelemetryServiceName labels emitted telemetry with the logical
+	// service identifier. This appears in tracing backends and metrics UIs.
+	//
+	// Environment variable: OTEL_SERVICE_NAME
+	// Default: "one-api"
+	OpenTelemetryServiceName = strings.TrimSpace(env.String("OTEL_SERVICE_NAME", "one-api"))
+
+	// OpenTelemetryEnvironment labels telemetry with the deployment environment
+	// (e.g., production, staging). Useful for filtering dashboards.
+	//
+	// Environment variable: OTEL_ENVIRONMENT
+	// Default: "production"
+	OpenTelemetryEnvironment = strings.TrimSpace(env.String("OTEL_ENVIRONMENT", "production"))
+)
+
+// =============================================================================
 // LOGGING CONFIGURATION
 // =============================================================================
 // Settings for application logging, log rotation, and log retention.

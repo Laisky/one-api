@@ -10,10 +10,12 @@ import (
 
 	"github.com/Laisky/errors/v2"
 	"github.com/Laisky/zap"
+	"go.opentelemetry.io/otel"
 	"gorm.io/driver/mysql"
 	"gorm.io/driver/postgres"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
+	"gorm.io/plugin/opentelemetry/tracing"
 
 	"github.com/songquanpeng/one-api/common"
 	"github.com/songquanpeng/one-api/common/config"
@@ -154,12 +156,40 @@ func ensureSQLitePath() (string, error) {
 	return absPath, nil
 }
 
+// enableGormOpenTelemetry attaches the OpenTelemetry plugin to the provided GORM DB instance.
+func enableGormOpenTelemetry(db *gorm.DB, dbName string) error {
+	if !config.OpenTelemetryEnabled {
+		return nil
+	}
+
+	if db == nil {
+		return errors.Errorf("gorm db is nil for OpenTelemetry registration (%s)", dbName)
+	}
+
+	plugin := tracing.NewPlugin(
+		tracing.WithTracerProvider(otel.GetTracerProvider()),
+	)
+
+	if err := db.Use(plugin); err != nil {
+		return errors.Wrapf(err, "attach OpenTelemetry plugin to %s database", dbName)
+	}
+
+	return nil
+}
+
 func InitDB() {
 	var err error
 	DB, err = chooseDB(config.SQLDSN)
 	if err != nil {
 		logger.Logger.Fatal("failed to initialize database", zap.Error(err))
 		return
+	}
+
+	if config.OpenTelemetryEnabled {
+		if err = enableGormOpenTelemetry(DB, "primary"); err != nil {
+			logger.Logger.Fatal("failed to enable OpenTelemetry for primary database", zap.Error(err))
+			return
+		}
 	}
 
 	if config.DebugSQLEnabled {
@@ -296,6 +326,13 @@ func InitLogDB() {
 	if err != nil {
 		logger.Logger.Fatal("failed to initialize secondary database", zap.Error(err))
 		return
+	}
+
+	if config.OpenTelemetryEnabled && LOG_DB != DB {
+		if err = enableGormOpenTelemetry(LOG_DB, "log"); err != nil {
+			logger.Logger.Fatal("failed to enable OpenTelemetry for log database", zap.Error(err))
+			return
+		}
 	}
 
 	setDBConns(LOG_DB)
