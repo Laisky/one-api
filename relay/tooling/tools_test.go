@@ -126,6 +126,64 @@ func TestApplyBuiltinToolCharges_ChannelOverrides(t *testing.T) {
 	require.Equal(t, int64(84), summary.CostByTool["web_search"])
 }
 
+func TestApplyBuiltinToolCharges_WebSearchPreviewPricing(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	tests := []struct {
+		name        string
+		counts      map[string]int
+		expectedUSD float64
+	}{
+		{
+			name:        "non reasoning preview",
+			counts:      map[string]int{"web_search_preview_non_reasoning": 1},
+			expectedUSD: 0.025,
+		},
+		{
+			name:        "reasoning preview",
+			counts:      map[string]int{"web_search_preview_reasoning": 2},
+			expectedUSD: 0.01 * 2,
+		},
+	}
+
+	provider := &adaptorStub{
+		pricing: map[string]adaptor.ModelConfig{
+			"gpt-4o-mini-search-preview": {},
+		},
+		tooling: adaptor.ChannelToolConfig{
+			Pricing: map[string]adaptor.ToolPricingConfig{
+				"web_search_preview_non_reasoning": {UsdPerCall: 0.025},
+				"web_search_preview_reasoning":     {UsdPerCall: 0.01},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			recorder := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(recorder)
+			c.Set(ctxkey.ToolInvocationCounts, tt.counts)
+
+			meta := &metalib.Meta{ActualModelName: "gpt-4o-mini-search-preview"}
+			usage := &relaymodel.Usage{PromptTokens: 5, CompletionTokens: 5}
+
+			ApplyBuiltinToolCharges(c, &usage, meta, nil, provider)
+
+			expectedQuota := int64(math.Ceil(tt.expectedUSD * float64(ratio.QuotaPerUsd)))
+			require.Equal(t, expectedQuota, usage.ToolsCost)
+
+			summaryAny, exists := c.Get(ctxkey.ToolInvocationSummary)
+			require.True(t, exists)
+			summary := summaryAny.(*model.ToolUsageSummary)
+			var toolName string
+			for name := range tt.counts {
+				toolName = name
+			}
+			require.Equal(t, expectedQuota, summary.CostByTool[toolName])
+		})
+	}
+}
+
 func TestValidateChatBuiltinTools_Disallowed(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	recorder := httptest.NewRecorder()
