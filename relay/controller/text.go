@@ -31,6 +31,7 @@ import (
 	metalib "github.com/songquanpeng/one-api/relay/meta"
 	relaymodel "github.com/songquanpeng/one-api/relay/model"
 	"github.com/songquanpeng/one-api/relay/pricing"
+	"github.com/songquanpeng/one-api/relay/relaymode"
 	"github.com/songquanpeng/one-api/relay/streaming"
 	"github.com/songquanpeng/one-api/relay/tooling"
 )
@@ -238,12 +239,23 @@ func RelayTextHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 		}
 
 		// Record relay request metrics with actual usage
+		apiFormat := c.GetString(ctxkey.APIFormat)
+		if apiFormat == "" {
+			apiFormat = "unknown"
+		}
+		apiType := relaymode.String(meta.Mode)
+		tokenId := strconv.Itoa(meta.TokenId)
+
 		metrics.GlobalRecorder.RecordRelayRequest(
 			meta.StartTime,
 			meta.ChannelId,
 			channeltype.IdToName(meta.ChannelType),
 			meta.ActualModelName,
 			userId,
+			group,
+			tokenId,
+			apiFormat,
+			apiType,
 			true,
 			usage.PromptTokens,
 			usage.CompletionTokens,

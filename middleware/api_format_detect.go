@@ -10,6 +10,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/songquanpeng/one-api/common/config"
+	"github.com/songquanpeng/one-api/common/ctxkey"
 	"github.com/songquanpeng/one-api/relay/format"
 )
 
@@ -68,8 +69,15 @@ func APIFormatAutoDetect(engine *gin.Engine) gin.HandlerFunc {
 		actualFormat, err := format.DetectFormat(bodyBytes)
 		if err != nil {
 			lg.Debug("failed to detect request format", zap.Error(err))
+			c.Set(ctxkey.APIFormat, expectedFormat.String())
 			c.Next()
 			return
+		}
+
+		if actualFormat != format.Unknown {
+			c.Set(ctxkey.APIFormat, actualFormat.String())
+		} else {
+			c.Set(ctxkey.APIFormat, expectedFormat.String())
 		}
 
 		// If format is unknown or matches expected, continue normally

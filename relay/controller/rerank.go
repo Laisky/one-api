@@ -33,6 +33,7 @@ import (
 	metalib "github.com/songquanpeng/one-api/relay/meta"
 	relaymodel "github.com/songquanpeng/one-api/relay/model"
 	"github.com/songquanpeng/one-api/relay/pricing"
+	"github.com/songquanpeng/one-api/relay/relaymode"
 )
 
 // RelayRerankHelper handles POST /v1/rerank requests using the dedicated DTO pipeline.
@@ -161,12 +162,23 @@ func RelayRerankHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 			group = "default"
 		}
 
+		apiFormat := c.GetString(ctxkey.APIFormat)
+		if apiFormat == "" {
+			apiFormat = "unknown"
+		}
+		apiType := relaymode.String(meta.Mode)
+		tokenId := strconv.Itoa(meta.TokenId)
+
 		metrics.GlobalRecorder.RecordRelayRequest(
 			meta.StartTime,
 			meta.ChannelId,
 			channeltype.IdToName(meta.ChannelType),
 			meta.ActualModelName,
 			userIdStr,
+			group,
+			tokenId,
+			apiFormat,
+			apiType,
 			true,
 			usage.PromptTokens,
 			usage.CompletionTokens,

@@ -37,22 +37,22 @@ var (
 		Name:    "one_api_relay_request_duration_seconds",
 		Help:    "Duration of API relay requests in seconds",
 		Buckets: []float64{.1, .25, .5, 1, 2.5, 5, 10, 30, 60, 120},
-	}, []string{"channel_id", "channel_type", "model", "user_id", "success"})
+	}, []string{"channel_id", "channel_type", "model", "user_id", "group", "token_id", "api_format", "api_type", "success"})
 
 	relayRequestsTotal = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "one_api_relay_requests_total",
 		Help: "Total number of API relay requests",
-	}, []string{"channel_id", "channel_type", "model", "user_id", "success"})
+	}, []string{"channel_id", "channel_type", "model", "user_id", "group", "token_id", "api_format", "api_type", "success"})
 
 	relayTokensUsed = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "one_api_relay_tokens_total",
 		Help: "Total number of tokens used in relay requests",
-	}, []string{"channel_id", "channel_type", "model", "user_id", "token_type"})
+	}, []string{"channel_id", "channel_type", "model", "user_id", "group", "token_id", "api_format", "api_type", "token_type"})
 
 	relayQuotaUsed = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "one_api_relay_quota_used_total",
 		Help: "Total quota used in relay requests",
-	}, []string{"channel_id", "channel_type", "model", "user_id"})
+	}, []string{"channel_id", "channel_type", "model", "user_id", "group", "token_id", "api_format", "api_type"})
 
 	// Channel metrics
 	channelStatus = promauto.NewGaugeVec(prometheus.GaugeOpts{
@@ -222,6 +222,27 @@ var (
 		Name: "one_api_billing_stats",
 		Help: "Current billing statistics",
 	}, []string{"stat_type"}) // stat_type: total_operations, successful_operations, failed_operations
+
+	// Site-wide statistics (Dashboard)
+	siteTotalQuota = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "one_api_site_total_quota",
+		Help: "Total quota across all users",
+	})
+
+	siteUsedQuota = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "one_api_site_used_quota",
+		Help: "Total used quota across all users",
+	})
+
+	siteTotalUsers = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "one_api_site_total_users",
+		Help: "Total number of users",
+	})
+
+	siteActiveUsers = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "one_api_site_active_users",
+		Help: "Number of active users",
+	})
 )
 
 // RecordHTTPRequest records HTTP request metrics
@@ -237,22 +258,22 @@ func (p *PrometheusRecorder) RecordHTTPActiveRequest(path, method string, delta 
 }
 
 // RecordRelayRequest records API relay request metrics
-func (p *PrometheusRecorder) RecordRelayRequest(startTime time.Time, channelId int, channelType, model, userId string, success bool, promptTokens, completionTokens int, quotaUsed float64) {
+func (p *PrometheusRecorder) RecordRelayRequest(startTime time.Time, channelId int, channelType, model, userId, group, tokenId, apiFormat, apiType string, success bool, promptTokens, completionTokens int, quotaUsed float64) {
 	duration := time.Since(startTime).Seconds()
 	channelIdStr := strconv.Itoa(channelId)
 	successStr := strconv.FormatBool(success)
 
-	relayRequestDuration.WithLabelValues(channelIdStr, channelType, model, userId, successStr).Observe(duration)
-	relayRequestsTotal.WithLabelValues(channelIdStr, channelType, model, userId, successStr).Inc()
+	relayRequestDuration.WithLabelValues(channelIdStr, channelType, model, userId, group, tokenId, apiFormat, apiType, successStr).Observe(duration)
+	relayRequestsTotal.WithLabelValues(channelIdStr, channelType, model, userId, group, tokenId, apiFormat, apiType, successStr).Inc()
 
 	if promptTokens > 0 {
-		relayTokensUsed.WithLabelValues(channelIdStr, channelType, model, userId, "prompt").Add(float64(promptTokens))
+		relayTokensUsed.WithLabelValues(channelIdStr, channelType, model, userId, group, tokenId, apiFormat, apiType, "prompt").Add(float64(promptTokens))
 	}
 	if completionTokens > 0 {
-		relayTokensUsed.WithLabelValues(channelIdStr, channelType, model, userId, "completion").Add(float64(completionTokens))
+		relayTokensUsed.WithLabelValues(channelIdStr, channelType, model, userId, group, tokenId, apiFormat, apiType, "completion").Add(float64(completionTokens))
 	}
 	if quotaUsed > 0 {
-		relayQuotaUsed.WithLabelValues(channelIdStr, channelType, model, userId).Add(quotaUsed)
+		relayQuotaUsed.WithLabelValues(channelIdStr, channelType, model, userId, group, tokenId, apiFormat, apiType).Add(quotaUsed)
 	}
 }
 
@@ -402,6 +423,14 @@ func (p *PrometheusRecorder) UpdateBillingStats(totalBillingOperations, successf
 func (p *PrometheusRecorder) InitSystemMetrics(version, buildTime, goVersion string, startTime time.Time) {
 	systemInfo.WithLabelValues(version, buildTime, goVersion).Set(1)
 	systemStartTime.Set(float64(startTime.Unix()))
+}
+
+// UpdateSiteWideStats updates site-wide statistics
+func (p *PrometheusRecorder) UpdateSiteWideStats(totalQuota, usedQuota int64, totalUsers, activeUsers int) {
+	siteTotalQuota.Set(float64(totalQuota))
+	siteUsedQuota.Set(float64(usedQuota))
+	siteTotalUsers.Set(float64(totalUsers))
+	siteActiveUsers.Set(float64(activeUsers))
 }
 
 // InitPrometheusRecorder initializes the Prometheus recorder and sets it as the global recorder

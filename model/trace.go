@@ -9,6 +9,8 @@ import (
 	gmw "github.com/Laisky/gin-middlewares/v7"
 	"github.com/Laisky/zap"
 	"github.com/gin-gonic/gin"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 	"gorm.io/gorm"
 
 	"github.com/songquanpeng/one-api/common"
@@ -77,7 +79,7 @@ func CreateTrace(ctx context.Context, traceId, url, method string, bodySize int6
 		return nil, errors.Wrapf(err, "failed to marshal trace timestamps for trace_id: %s", traceId)
 	}
 
-	trace := &Trace{
+	traceRecord := &Trace{
 		TraceId:    traceId,
 		URL:        urlToStore,
 		Method:     method,
@@ -85,9 +87,21 @@ func CreateTrace(ctx context.Context, traceId, url, method string, bodySize int6
 		Timestamps: string(timestampsJSON),
 	}
 
+	// Integrate with OpenTelemetry
+	span := trace.SpanFromContext(ctx)
+	if span.IsRecording() {
+		span.SetAttributes(
+			attribute.String("one_api.trace_id", traceId),
+			attribute.String("one_api.url", urlToStore),
+			attribute.String("one_api.method", method),
+			attribute.Int64("one_api.body_size", bodySize),
+		)
+		span.AddEvent(TimestampRequestReceived)
+	}
+
 	db := traceDBWithContext(ctx)
 
-	if err := db.Create(trace).Error; err != nil {
+	if err := db.Create(traceRecord).Error; err != nil {
 		lg.Error("failed to create trace record",
 			zap.Error(err),
 			zap.String("trace_id", traceId))
@@ -99,15 +113,15 @@ func CreateTrace(ctx context.Context, traceId, url, method string, bodySize int6
 		zap.String("url", urlToStore),
 		zap.String("method", method))
 
-	return trace, nil
+	return traceRecord, nil
 }
 
 // UpdateTraceTimestamp updates a specific timestamp in the trace record
 func UpdateTraceTimestamp(ctx *gin.Context, traceId, timestampKey string) error {
 	lg := gmw.GetLogger(ctx)
 	db := traceDBWithGin(ctx)
-	var trace Trace
-	if err := db.Where("trace_id = ?", traceId).First(&trace).Error; err != nil {
+	var traceRecord Trace
+	if err := db.Where("trace_id = ?", traceId).First(&traceRecord).Error; err != nil {
 		// For some internal flows (e.g., channel test helper using a synthetic gin.Context),
 		// trace IDs may not correspond to a persisted request trace. Treat not found as best-effort.
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -124,7 +138,7 @@ func UpdateTraceTimestamp(ctx *gin.Context, traceId, timestampKey string) error 
 	}
 
 	var timestamps TraceTimestamps
-	if err := json.Unmarshal([]byte(trace.Timestamps), &timestamps); err != nil {
+	if err := json.Unmarshal([]byte(traceRecord.Timestamps), &timestamps); err != nil {
 		lg.Error("failed to unmarshal trace timestamps",
 			zap.Error(err),
 			zap.String("trace_id", traceId))
@@ -132,6 +146,14 @@ func UpdateTraceTimestamp(ctx *gin.Context, traceId, timestampKey string) error 
 	}
 
 	now := time.Now().UnixMilli()
+
+	// Integrate with OpenTelemetry
+	if ctx != nil && ctx.Request != nil {
+		span := trace.SpanFromContext(ctx.Request.Context())
+		if span.IsRecording() {
+			span.AddEvent(timestampKey)
+		}
+	}
 
 	// Update the specific timestamp
 	switch timestampKey {
@@ -160,7 +182,7 @@ func UpdateTraceTimestamp(ctx *gin.Context, traceId, timestampKey string) error 
 		return errors.Wrapf(err, "failed to marshal updated trace timestamps for trace_id: %s", traceId)
 	}
 
-	if err := db.Model(&trace).Update("timestamps", string(timestampsJSON)).Error; err != nil {
+	if err := db.Model(&traceRecord).Update("timestamps", string(timestampsJSON)).Error; err != nil {
 		lg.Error("failed to update trace timestamp",
 			zap.Error(err),
 			zap.String("trace_id", traceId),
@@ -178,6 +200,13 @@ func UpdateTraceTimestamp(ctx *gin.Context, traceId, timestampKey string) error 
 // UpdateTraceStatus updates the HTTP status code for a trace
 func UpdateTraceStatus(ctx context.Context, traceId string, status int) error {
 	lg := gmw.GetLogger(ctx)
+
+	// Integrate with OpenTelemetry
+	span := trace.SpanFromContext(ctx)
+	if span.IsRecording() {
+		span.SetAttributes(attribute.Int("one_api.status", status))
+	}
+
 	// Use RowsAffected to determine if the record exists; treat 0 as best-effort no-op.
 	db := traceDBWithContext(ctx)
 	tx := db.Model(&Trace{}).Where("trace_id = ?", traceId).Update("status", status)
@@ -208,12 +237,12 @@ func GetTraceByTraceId(ctx context.Context, traceId string) (*Trace, error) {
 	if dbCtx == nil {
 		dbCtx = context.Background()
 	}
-	var trace Trace
+	var traceRecord Trace
 	db := traceDBWithContext(dbCtx)
-	if err := db.Where("trace_id = ?", traceId).First(&trace).Error; err != nil {
+	if err := db.Where("trace_id = ?", traceId).First(&traceRecord).Error; err != nil {
 		return nil, errors.Wrapf(err, "failed to get trace by trace_id: %s", traceId)
 	}
-	return &trace, nil
+	return &traceRecord, nil
 }
 
 // traceDBWithGin returns a gorm session suitable for trace operations. When running on

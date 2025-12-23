@@ -475,12 +475,23 @@ func relayResponseAPIThroughChat(c *gin.Context, meta *metalib.Meta, responseAPI
 			group = "default"
 		}
 
+		apiFormat := c.GetString(ctxkey.APIFormat)
+		if apiFormat == "" {
+			apiFormat = "unknown"
+		}
+		apiType := relaymode.String(meta.Mode)
+		tokenId := strconv.Itoa(meta.TokenId)
+
 		metrics.GlobalRecorder.RecordRelayRequest(
 			meta.StartTime,
 			meta.ChannelId,
 			channeltype.IdToName(meta.ChannelType),
 			meta.ActualModelName,
 			userId,
+			group,
+			tokenId,
+			apiFormat,
+			apiType,
 			true,
 			usage.PromptTokens,
 			usage.CompletionTokens,

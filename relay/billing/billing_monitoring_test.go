@@ -78,7 +78,7 @@ func (m *MockMetricsRecorder) RecordBillingError(errorType, operation string, us
 func (m *MockMetricsRecorder) RecordHTTPRequest(startTime time.Time, path, method, statusCode string) {
 }
 func (m *MockMetricsRecorder) RecordHTTPActiveRequest(path, method string, delta float64) {}
-func (m *MockMetricsRecorder) RecordRelayRequest(startTime time.Time, channelId int, channelType, model, userId string, success bool, promptTokens, completionTokens int, quotaUsed float64) {
+func (m *MockMetricsRecorder) RecordRelayRequest(startTime time.Time, channelId int, channelType, model, userId, group, tokenId, apiFormat, apiType string, success bool, promptTokens, completionTokens int, quotaUsed float64) {
 }
 func (m *MockMetricsRecorder) UpdateChannelMetrics(channelId int, channelName, channelType string, status int, balance float64, responseTimeMs int, successRate float64) {
 }
@@ -101,6 +101,8 @@ func (m *MockMetricsRecorder) RecordModelUsage(modelName, channelType string, la
 func (m *MockMetricsRecorder) UpdateBillingStats(totalBillingOperations, successfulBillingOperations, failedBillingOperations int64) {
 }
 func (m *MockMetricsRecorder) InitSystemMetrics(version, buildTime, goVersion string, startTime time.Time) {
+}
+func (m *MockMetricsRecorder) UpdateSiteWideStats(totalQuota, usedQuota int64, totalUsers, activeUsers int) {
 }
 
 func TestBillingMonitoring(t *testing.T) {

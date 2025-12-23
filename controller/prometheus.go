@@ -10,6 +10,7 @@ import (
 	"github.com/songquanpeng/one-api/common/metrics"
 	"github.com/songquanpeng/one-api/relay/channeltype"
 	"github.com/songquanpeng/one-api/relay/meta"
+	"github.com/songquanpeng/one-api/relay/relaymode"
 )
 
 // PrometheusRelayMonitor provides Prometheus monitoring for relay operations
@@ -31,8 +32,16 @@ func (p *PrometheusRelayMonitor) RecordRelayRequest(c *gin.Context, meta *meta.M
 	// Get channel information
 	channelType := channeltype.IdToName(meta.ChannelType)
 
+	// Get API format and type
+	apiFormat := c.GetString(ctxkey.APIFormat)
+	if apiFormat == "" {
+		apiFormat = "unknown"
+	}
+	apiType := relaymode.String(meta.Mode)
+	tokenId := strconv.Itoa(meta.TokenId)
+
 	// Record relay metrics
-	metrics.GlobalRecorder.RecordRelayRequest(startTime, meta.ChannelId, channelType, meta.ActualModelName, userId, success, promptTokens, completionTokens, quotaUsed)
+	metrics.GlobalRecorder.RecordRelayRequest(startTime, meta.ChannelId, channelType, meta.ActualModelName, userId, group, tokenId, apiFormat, apiType, success, promptTokens, completionTokens, quotaUsed)
 
 	// Record user metrics
 	userBalance := float64(c.GetInt64(ctxkey.UserQuota)) // Assuming we can get user balance from context

@@ -123,13 +123,13 @@ func main() {
 		logger.Logger.Info("metric enabled, will disable channel if too much request failed")
 	}
 
-	// Initialize Prometheus monitoring
-	if config.EnablePrometheusMetrics {
+	// Initialize monitoring
+	if config.EnablePrometheusMetrics || config.OpenTelemetryEnabled {
 		startTime := time.Unix(common.StartTime, 0)
-		if err := monitor.InitPrometheusMonitoring(common.Version, startTime.Format(time.RFC3339), runtime.Version(), startTime); err != nil {
-			logger.Logger.Fatal("failed to initialize Prometheus monitoring", zap.Error(err))
+		if err := monitor.InitMonitoring(common.Version, startTime.Format(time.RFC3339), runtime.Version(), startTime); err != nil {
+			logger.Logger.Fatal("failed to initialize monitoring", zap.Error(err))
 		}
-		logger.Logger.Info("Prometheus monitoring initialized")
+		logger.Logger.Info("monitoring initialized")
 
 		// Initialize database monitoring
 		if err := model.InitPrometheusDBMonitoring(); err != nil {

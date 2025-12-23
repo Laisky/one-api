@@ -254,4 +254,9 @@ const (
 	// Set in: relay/controller/text when initializing a streaming request.
 	// Read in: streaming adaptors to record completion progress and enforce quota limits mid-stream.
 	StreamingQuotaTracker = "streaming_quota_tracker"
+
+	// APIFormat is the detected API format of the request (OpenAI, Claude, Response API).
+	// Set in: middleware/api_format_detect.
+	// Read in: metrics for labeling.
+	APIFormat = "api_format"
 )

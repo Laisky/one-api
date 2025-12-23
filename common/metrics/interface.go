@@ -11,7 +11,7 @@ type MetricsRecorder interface {
 	RecordHTTPActiveRequest(path, method string, delta float64)
 
 	// Relay metrics
-	RecordRelayRequest(startTime time.Time, channelId int, channelType, model, userId string, success bool, promptTokens, completionTokens int, quotaUsed float64)
+	RecordRelayRequest(startTime time.Time, channelId int, channelType, model, userId, group, tokenId, apiFormat, apiType string, success bool, promptTokens, completionTokens int, quotaUsed float64)
 
 	// Channel metrics
 	UpdateChannelMetrics(channelId int, channelName, channelType string, status int, balance float64, responseTimeMs int, successRate float64)
@@ -50,6 +50,7 @@ type MetricsRecorder interface {
 
 	// System metrics
 	InitSystemMetrics(version, buildTime, goVersion string, startTime time.Time)
+	UpdateSiteWideStats(totalQuota, usedQuota int64, totalUsers, activeUsers int)
 }
 
 // GlobalRecorder holds the active metrics recorder implementation.
@@ -65,7 +66,7 @@ func (n *NoOpRecorder) RecordHTTPRequest(startTime time.Time, path, method, stat
 func (n *NoOpRecorder) RecordHTTPActiveRequest(path, method string, delta float64) {}
 
 // RecordRelayRequest implements MetricsRecorder.RecordRelayRequest without collecting any data.
-func (n *NoOpRecorder) RecordRelayRequest(startTime time.Time, channelId int, channelType, model, userId string, success bool, promptTokens, completionTokens int, quotaUsed float64) {
+func (n *NoOpRecorder) RecordRelayRequest(startTime time.Time, channelId int, channelType, model, userId, group, tokenId, apiFormat, apiType string, success bool, promptTokens, completionTokens int, quotaUsed float64) {
 }
 
 // UpdateChannelMetrics implements MetricsRecorder.UpdateChannelMetrics without collecting any data.
@@ -129,7 +130,169 @@ func (n *NoOpRecorder) UpdateBillingStats(totalBillingOperations, successfulBill
 // InitSystemMetrics implements MetricsRecorder.InitSystemMetrics without collecting any data.
 func (n *NoOpRecorder) InitSystemMetrics(version, buildTime, goVersion string, startTime time.Time) {}
 
+// UpdateSiteWideStats implements MetricsRecorder.UpdateSiteWideStats without collecting any data.
+func (n *NoOpRecorder) UpdateSiteWideStats(totalQuota, usedQuota int64, totalUsers, activeUsers int) {}
+
 // Initialize with no-op recorder by default
 func init() {
 	GlobalRecorder = &NoOpRecorder{}
+}
+
+// MultiRecorder wraps multiple MetricsRecorder implementations
+type MultiRecorder struct {
+	Recorders []MetricsRecorder
+}
+
+// RecordHTTPRequest implements MetricsRecorder.RecordHTTPRequest
+func (m *MultiRecorder) RecordHTTPRequest(startTime time.Time, path, method, statusCode string) {
+	for _, r := range m.Recorders {
+		r.RecordHTTPRequest(startTime, path, method, statusCode)
+	}
+}
+
+// RecordHTTPActiveRequest implements MetricsRecorder.RecordHTTPActiveRequest
+func (m *MultiRecorder) RecordHTTPActiveRequest(path, method string, delta float64) {
+	for _, r := range m.Recorders {
+		r.RecordHTTPActiveRequest(path, method, delta)
+	}
+}
+
+// RecordRelayRequest implements MetricsRecorder.RecordRelayRequest
+func (m *MultiRecorder) RecordRelayRequest(startTime time.Time, channelId int, channelType, model, userId, group, tokenId, apiFormat, apiType string, success bool, promptTokens, completionTokens int, quotaUsed float64) {
+	for _, r := range m.Recorders {
+		r.RecordRelayRequest(startTime, channelId, channelType, model, userId, group, tokenId, apiFormat, apiType, success, promptTokens, completionTokens, quotaUsed)
+	}
+}
+
+// UpdateChannelMetrics implements MetricsRecorder.UpdateChannelMetrics
+func (m *MultiRecorder) UpdateChannelMetrics(channelId int, channelName, channelType string, status int, balance float64, responseTimeMs int, successRate float64) {
+	for _, r := range m.Recorders {
+		r.UpdateChannelMetrics(channelId, channelName, channelType, status, balance, responseTimeMs, successRate)
+	}
+}
+
+// UpdateChannelRequestsInFlight implements MetricsRecorder.UpdateChannelRequestsInFlight
+func (m *MultiRecorder) UpdateChannelRequestsInFlight(channelId int, channelName, channelType string, delta float64) {
+	for _, r := range m.Recorders {
+		r.UpdateChannelRequestsInFlight(channelId, channelName, channelType, delta)
+	}
+}
+
+// RecordUserMetrics implements MetricsRecorder.RecordUserMetrics
+func (m *MultiRecorder) RecordUserMetrics(userId, username, group string, quotaUsed float64, promptTokens, completionTokens int, balance float64) {
+	for _, r := range m.Recorders {
+		r.RecordUserMetrics(userId, username, group, quotaUsed, promptTokens, completionTokens, balance)
+	}
+}
+
+// RecordDBQuery implements MetricsRecorder.RecordDBQuery
+func (m *MultiRecorder) RecordDBQuery(startTime time.Time, operation, table string, success bool) {
+	for _, r := range m.Recorders {
+		r.RecordDBQuery(startTime, operation, table, success)
+	}
+}
+
+// UpdateDBConnectionMetrics implements MetricsRecorder.UpdateDBConnectionMetrics
+func (m *MultiRecorder) UpdateDBConnectionMetrics(inUse, idle int) {
+	for _, r := range m.Recorders {
+		r.UpdateDBConnectionMetrics(inUse, idle)
+	}
+}
+
+// RecordRedisCommand implements MetricsRecorder.RecordRedisCommand
+func (m *MultiRecorder) RecordRedisCommand(startTime time.Time, command string, success bool) {
+	for _, r := range m.Recorders {
+		r.RecordRedisCommand(startTime, command, success)
+	}
+}
+
+// UpdateRedisConnectionMetrics implements MetricsRecorder.UpdateRedisConnectionMetrics
+func (m *MultiRecorder) UpdateRedisConnectionMetrics(active int) {
+	for _, r := range m.Recorders {
+		r.UpdateRedisConnectionMetrics(active)
+	}
+}
+
+// RecordRateLimitHit implements MetricsRecorder.RecordRateLimitHit
+func (m *MultiRecorder) RecordRateLimitHit(limitType, identifier string) {
+	for _, r := range m.Recorders {
+		r.RecordRateLimitHit(limitType, identifier)
+	}
+}
+
+// UpdateRateLimitRemaining implements MetricsRecorder.UpdateRateLimitRemaining
+func (m *MultiRecorder) UpdateRateLimitRemaining(limitType, identifier string, remaining int) {
+	for _, r := range m.Recorders {
+		r.UpdateRateLimitRemaining(limitType, identifier, remaining)
+	}
+}
+
+// RecordTokenAuth implements MetricsRecorder.RecordTokenAuth
+func (m *MultiRecorder) RecordTokenAuth(success bool) {
+	for _, r := range m.Recorders {
+		r.RecordTokenAuth(success)
+	}
+}
+
+// UpdateActiveTokens implements MetricsRecorder.UpdateActiveTokens
+func (m *MultiRecorder) UpdateActiveTokens(userId, tokenName string, count int) {
+	for _, r := range m.Recorders {
+		r.UpdateActiveTokens(userId, tokenName, count)
+	}
+}
+
+// RecordError implements MetricsRecorder.RecordError
+func (m *MultiRecorder) RecordError(errorType, component string) {
+	for _, r := range m.Recorders {
+		r.RecordError(errorType, component)
+	}
+}
+
+// RecordModelUsage implements MetricsRecorder.RecordModelUsage
+func (m *MultiRecorder) RecordModelUsage(modelName, channelType string, latency time.Duration) {
+	for _, r := range m.Recorders {
+		r.RecordModelUsage(modelName, channelType, latency)
+	}
+}
+
+// RecordBillingOperation implements MetricsRecorder.RecordBillingOperation
+func (m *MultiRecorder) RecordBillingOperation(startTime time.Time, operation string, success bool, userId int, channelId int, modelName string, quotaAmount float64) {
+	for _, r := range m.Recorders {
+		r.RecordBillingOperation(startTime, operation, success, userId, channelId, modelName, quotaAmount)
+	}
+}
+
+// RecordBillingTimeout implements MetricsRecorder.RecordBillingTimeout
+func (m *MultiRecorder) RecordBillingTimeout(userId int, channelId int, modelName string, estimatedQuota float64, elapsedTime time.Duration) {
+	for _, r := range m.Recorders {
+		r.RecordBillingTimeout(userId, channelId, modelName, estimatedQuota, elapsedTime)
+	}
+}
+
+// RecordBillingError implements MetricsRecorder.RecordBillingError
+func (m *MultiRecorder) RecordBillingError(errorType, operation string, userId int, channelId int, modelName string) {
+	for _, r := range m.Recorders {
+		r.RecordBillingError(errorType, operation, userId, channelId, modelName)
+	}
+}
+
+// UpdateBillingStats implements MetricsRecorder.UpdateBillingStats
+func (m *MultiRecorder) UpdateBillingStats(totalBillingOperations, successfulBillingOperations, failedBillingOperations int64) {
+	for _, r := range m.Recorders {
+		r.UpdateBillingStats(totalBillingOperations, successfulBillingOperations, failedBillingOperations)
+	}
+}
+
+// InitSystemMetrics implements MetricsRecorder.InitSystemMetrics
+func (m *MultiRecorder) InitSystemMetrics(version, buildTime, goVersion string, startTime time.Time) {
+	for _, r := range m.Recorders {
+		r.InitSystemMetrics(version, buildTime, goVersion, startTime)
+	}
+}
+
+// UpdateSiteWideStats implements MetricsRecorder.UpdateSiteWideStats
+func (m *MultiRecorder) UpdateSiteWideStats(totalQuota, usedQuota int64, totalUsers, activeUsers int) {
+	for _, r := range m.Recorders {
+		r.UpdateSiteWideStats(totalQuota, usedQuota, totalUsers, activeUsers)
+	}
 }
