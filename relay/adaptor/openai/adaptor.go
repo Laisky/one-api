@@ -291,13 +291,15 @@ func isDeepResearchModel(modelName string) bool {
 	return strings.Contains(modelName, "deep-research")
 }
 
+// isMediumOnlyReasoningModel returns true if the model only supports medium reasoning effort,
+// not support high.
 func isMediumOnlyReasoningModel(modelName string) bool {
 	lower := strings.ToLower(strings.TrimSpace(modelName))
 	if lower == "" {
 		return false
 	}
 
-	if strings.Contains(lower, "gpt-5.1-chat") {
+	if strings.HasPrefix(lower, "gpt-") && strings.HasSuffix(lower, "-chat") {
 		return true
 	}
 
@@ -310,13 +312,16 @@ func isMediumOnlyReasoningModel(modelName string) bool {
 
 // defaultReasoningEffortForModel returns the default reasoning effort level for the given model.
 func defaultReasoningEffortForModel(modelName string) string {
-	switch {
-	case isDeepResearchModel(modelName),
-		isMediumOnlyReasoningModel(modelName):
-		return "medium"
-	default:
-		return "high"
-	}
+	// some models do not support high reasoning effort, default to medium
+	return "medium"
+
+	// switch {
+	// case isDeepResearchModel(modelName),
+	// 	isMediumOnlyReasoningModel(modelName):
+	// 	return "medium"
+	// default:
+	// 	return "high"
+	// }
 }
 
 func isReasoningEffortAllowedForModel(modelName, effort string) bool {
