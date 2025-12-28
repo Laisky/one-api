@@ -51,6 +51,25 @@ func TestApplyRequestTransformationsClampsGpt51ChatEffort(t *testing.T) {
 	require.Equal(t, "medium", *request.ReasoningEffort)
 }
 
+func TestApplyRequestTransformationsDisablesGpt5ChatLatestReasoning(t *testing.T) {
+	adaptor := &Adaptor{}
+	metaInfo := &meta.Meta{
+		ActualModelName: "gpt-5-chat-latest",
+		ChannelType:     channeltype.OpenAI,
+		Mode:            relaymode.ChatCompletions,
+	}
+	effort := "high"
+	request := &model.GeneralOpenAIRequest{
+		Model:           "gpt-5-chat-latest",
+		Messages:        []model.Message{{Role: "user", Content: "hi"}},
+		ReasoningEffort: &effort,
+	}
+
+	err := adaptor.applyRequestTransformations(metaInfo, request)
+	require.NoError(t, err)
+	require.Nil(t, request.ReasoningEffort)
+}
+
 func TestConvertChatToResponseAPIPreservesEffort(t *testing.T) {
 	metaInfo := &meta.Meta{
 		ActualModelName: "o3-mini",

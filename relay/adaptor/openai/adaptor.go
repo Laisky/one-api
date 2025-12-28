@@ -8,6 +8,7 @@ import (
 	"io"
 	"maps"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/Laisky/errors/v2"
@@ -271,14 +272,47 @@ func (a *Adaptor) ConvertRequest(c *gin.Context, relayMode int, request *model.G
 }
 
 // isModelSupportedReasoning checks if the model supports reasoning features
-func isModelSupportedReasoning(modelName string) bool {
-	switch {
-	case strings.HasPrefix(modelName, "o"),
-		strings.HasPrefix(modelName, "gpt-5") && !strings.HasPrefix(modelName, "gpt-5-chat"):
-		return true
-	default:
-		return false
+// extractGptVersion returns the numeric GPT major/minor version if present in the model name.
+// It expects normalized lowercase model names and only parses names starting with "gpt-".
+func extractGptVersion(modelName string) (float64, bool) {
+	lower := normalizedModelName(modelName)
+	if !strings.HasPrefix(lower, "gpt-") {
+		return 0, false
 	}
+
+	remainder := strings.TrimPrefix(lower, "gpt-")
+	cutIdx := strings.IndexFunc(remainder, func(r rune) bool {
+		return !(r == '.' || (r >= '0' && r <= '9'))
+	})
+	if cutIdx == 0 {
+		return 0, false
+	}
+	if cutIdx > 0 {
+		remainder = remainder[:cutIdx]
+	}
+
+	version, err := strconv.ParseFloat(remainder, 64)
+	if err != nil {
+		return 0, false
+	}
+
+	return version, true
+}
+
+func isModelSupportedReasoning(modelName string) bool {
+	lower := normalizedModelName(modelName)
+	if strings.HasPrefix(lower, "o") {
+		return true
+	}
+
+	if version, ok := extractGptVersion(lower); ok && version >= 5 {
+		if strings.HasPrefix(lower, "gpt-5-chat-latest") || lower == "gpt-5-chat" {
+			return false
+		}
+		return true
+	}
+
+	return false
 }
 
 // isWebSearchModel returns true when the upstream OpenAI model uses the web search surface
@@ -294,17 +328,19 @@ func isDeepResearchModel(modelName string) bool {
 // isMediumOnlyReasoningModel returns true if the model only supports medium reasoning effort,
 // not support high.
 func isMediumOnlyReasoningModel(modelName string) bool {
-	lower := strings.ToLower(strings.TrimSpace(modelName))
+	lower := normalizedModelName(modelName)
 	if lower == "" {
 		return false
 	}
 
-	if strings.HasPrefix(lower, "gpt-") && strings.HasSuffix(lower, "-chat") {
+	if strings.HasPrefix(lower, "o") {
 		return true
 	}
 
-	if strings.HasPrefix(lower, "o") {
-		return true
+	if version, ok := extractGptVersion(lower); ok && version >= 5 {
+		if strings.Contains(lower, "-chat") {
+			return true
+		}
 	}
 
 	return false
@@ -519,9 +555,10 @@ func (a *Adaptor) applyRequestTransformations(meta *meta.Meta, request *model.Ge
 	if meta != nil {
 		channelType = meta.ChannelType
 	}
+	supportsReasoning := isModelSupportedReasoning(actualModel)
 
 	// o1/o3/o4/gpt-5 do not support system prompt/temperature variations
-	if isModelSupportedReasoning(actualModel) {
+	if supportsReasoning {
 		targetsResponseAPI := meta.Mode == relaymode.ResponseAPI ||
 			(meta.ChannelType == channeltype.OpenAI && !IsModelsOnlySupportedByChatCompletionAPI(actualModel))
 
@@ -544,6 +581,8 @@ func (a *Adaptor) applyRequestTransformations(meta *meta.Meta, request *model.Ge
 
 			return
 		}(request.Messages)
+	} else {
+		request.ReasoningEffort = nil
 	}
 
 	// web search models do not support system prompt/max_tokens/temperature overrides
