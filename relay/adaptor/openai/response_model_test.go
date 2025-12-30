@@ -274,6 +274,28 @@ func TestConvertResponseAPIToChatCompletionRequest(t *testing.T) {
 	require.Equal(t, reasoningEffort, *chatReq.Reasoning.Effort, "reasoning effort not preserved")
 }
 
+func TestConvertResponseAPIToChatCompletionRequest_DefaultsFunctionSchema(t *testing.T) {
+	stream := false
+	responseReq := &ResponseAPIRequest{
+		Model:  "claude-sonnet-4-5",
+		Stream: &stream,
+		Input:  ResponseAPIInput{"hi"},
+		Tools: []ResponseAPITool{
+			{Type: "function", Name: "how-to-subscribe", Description: "explain subscription"},
+		},
+	}
+
+	chatReq, err := ConvertResponseAPIToChatCompletionRequest(responseReq)
+	require.NoError(t, err)
+	require.NotNil(t, chatReq)
+	require.Len(t, chatReq.Tools, 1)
+	require.NotNil(t, chatReq.Tools[0].Function)
+
+	params, ok := chatReq.Tools[0].Function.Parameters.(map[string]any)
+	require.True(t, ok)
+	require.Equal(t, "object", params["type"])
+}
+
 func TestConvertResponseAPIToChatCompletionRequest_ToolHistoryRoundTrip(t *testing.T) {
 	stream := false
 	instructions := "You are a weather assistant."

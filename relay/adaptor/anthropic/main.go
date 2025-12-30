@@ -217,14 +217,17 @@ func ConvertRequest(c *gin.Context, textRequest model.GeneralOpenAIRequest) (*Re
 		}
 
 		params, ok := tool.Function.Parameters.(map[string]any)
-		if !ok {
-			return nil, errors.New("tool function parameters is not a map")
+		if !ok || params == nil {
+			params = map[string]any{}
 		}
 
 		var schema InputSchema
 		// Guarded extraction for 'type'
-		if t, ok := params["type"].(string); ok {
+		if t, ok := params["type"].(string); ok && strings.TrimSpace(t) != "" {
 			schema.Type = t
+		}
+		if schema.Type == "" {
+			schema.Type = "object"
 		}
 
 		// Assign 'properties' and 'required' directly if present

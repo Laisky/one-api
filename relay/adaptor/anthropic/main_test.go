@@ -113,6 +113,31 @@ func TestConvertRequest_ClearsTopPWhenTemperatureSpecified(t *testing.T) {
 	}
 }
 
+func TestConvertRequest_DefaultsMissingFunctionSchema(t *testing.T) {
+	c := newThinkingContext(t, "/v1/chat/completions")
+
+	request := model.GeneralOpenAIRequest{
+		Model:     "claude-3-5-sonnet",
+		MaxTokens: 2048,
+		Messages:  []model.Message{{Role: "user", Content: "hello"}},
+		Tools: []model.Tool{
+			{
+				Type: "function",
+				Function: &model.Function{
+					Name:        "how-to-subscribe",
+					Description: "explain subscription",
+				},
+			},
+		},
+	}
+
+	converted, err := ConvertRequest(c, request)
+	require.NoError(t, err)
+	require.NotNil(t, converted)
+	require.Len(t, converted.Tools, 1)
+	assert.Equal(t, "object", converted.Tools[0].InputSchema.Type)
+}
+
 func TestConvertRequest_EmptyAssistantMessageWithToolCalls(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 

@@ -1381,18 +1381,20 @@ func convertResponseAPITools(tools []ResponseAPITool) []model.Tool {
 				continue
 			}
 			fn.Strict = nil
+			paramsMap := map[string]any{}
 			if fn.Parameters != nil {
 				sanitized := sanitizeResponseAPIFunctionParameters(fn.Parameters)
-				if paramsMap, ok := sanitized.(map[string]any); ok {
-					if len(paramsMap) == 0 {
-						fn.Parameters = map[string]any{}
-					} else {
-						fn.Parameters = paramsMap
-					}
-				} else {
-					fn.Parameters = sanitized
+				if parsed, ok := sanitized.(map[string]any); ok && parsed != nil {
+					paramsMap = parsed
 				}
 			}
+
+			if _, ok := paramsMap["type"]; !ok {
+				paramsMap["type"] = "object"
+			} else if typeStr, ok := paramsMap["type"].(string); !ok || strings.TrimSpace(typeStr) == "" {
+				paramsMap["type"] = "object"
+			}
+			fn.Parameters = paramsMap
 			converted = append(converted, model.Tool{
 				Type:     "function",
 				Function: fn,
