@@ -29,7 +29,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { usePageSize, STORAGE_KEYS } from "@/hooks/usePersistentState";
+import { STORAGE_KEYS, usePageSize } from "@/hooks/usePersistentState";
 import { api } from "@/lib/api";
 import { LOG_TYPES, LOG_TYPE_OPTIONS } from "@/lib/constants/logs";
 import { useAuthStore } from "@/lib/stores/auth";
@@ -652,12 +652,12 @@ export function LogsPage() {
   };
 
   return (
-    <div className="container mx-auto px-4 py-8">
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
+    <div className="container mx-auto px-2 md:px-4 py-4 md:py-8">
+      <Card className="border-0 md:border shadow-none md:shadow-sm">
+        <CardHeader className="px-2 md:px-6">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div>
-              <CardTitle className="flex items-center gap-2">
+              <CardTitle className="flex items-center gap-2 text-xl md:text-2xl">
                 {t("logs.title")}
                 {showStat && (
                   <div className="text-sm font-normal text-muted-foreground">
@@ -682,11 +682,12 @@ export function LogsPage() {
               </CardTitle>
               <CardDescription>{t("logs.description")}</CardDescription>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 overflow-x-auto pb-2 md:pb-0">
               <Button
                 variant="outline"
                 onClick={toggleStatVisibility}
-                className="gap-2"
+                className="gap-2 whitespace-nowrap"
+                size="sm"
               >
                 {showStat ? (
                   <EyeOff className="h-4 w-4" />
@@ -700,22 +701,23 @@ export function LogsPage() {
               <Button
                 variant="outline"
                 onClick={handleExportLogs}
-                className="gap-2"
+                className="gap-2 whitespace-nowrap"
+                size="sm"
               >
                 <FileDown className="h-4 w-4" />
                 {t("logs.actions.export")}
               </Button>
               {isAdmin && (
-                <Button variant="destructive" onClick={handleClearLogs}>
+                <Button variant="destructive" onClick={handleClearLogs} size="sm" className="whitespace-nowrap">
                   {t("logs.actions.clear")}
                 </Button>
               )}
             </div>
           </div>
         </CardHeader>
-        <CardContent>
+        <CardContent className="px-2 md:px-6">
           {/* Filters */}
-          <div className="grid grid-cols-1 md:grid-cols-7 gap-3 md:gap-4 mb-6 p-4 border rounded-lg bg-muted/10">
+          <div className="grid grid-cols-1 md:grid-cols-7 gap-3 md:gap-4 mb-6 p-3 md:p-4 border-x-0 md:border border-y md:rounded-lg bg-muted/5 md:bg-muted/10">
             <div className="md:col-span-7 flex items-center gap-2 mb-1">
               <Filter className="h-4 w-4 text-muted-foreground" />
               <span className="text-sm font-medium">
@@ -839,7 +841,7 @@ export function LogsPage() {
                 </div>
               </>
             )}
-            <div className="md:col-span-2 grid grid-cols-2 gap-3">
+            <div className="md:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <Label className="text-xs">{t("logs.filters.start")}</Label>
                 <Input
