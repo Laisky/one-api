@@ -29,6 +29,7 @@ func absDiffI64(a, b int64) int64 {
 // We validate by computing the expected delta between cached and non-cached scenarios
 // using the adapter's cached-input pricing, and ensure postConsumeQuota matches it (within rounding tolerance).
 func TestPostConsumeQuota_OutputPricingIndependentOfCache(t *testing.T) {
+	t.Parallel()
 	// Arrange
 	modelName := "gpt-4o" // has explicit cached input pricing in OpenAI adapter
 	channelType := channeltype.OpenAI
@@ -92,6 +93,7 @@ func TestPostConsumeQuota_OutputPricingIndependentOfCache(t *testing.T) {
 
 // Test that cache-write tokens only affect input buckets and never the output price.
 func TestPostConsumeQuota_CacheWriteDoesNotAffectOutput(t *testing.T) {
+	t.Parallel()
 	modelName := "gpt-4o"
 	channelType := channeltype.OpenAI
 	adaptor := relay.GetAdaptor(channelType)
@@ -134,6 +136,7 @@ func TestPostConsumeQuota_CacheWriteDoesNotAffectOutput(t *testing.T) {
 
 // Response API: cached prompt tokens should follow cached-input pricing without affecting completion cost.
 func TestPostConsumeResponseAPIQuota_UsesCachedInputPricing(t *testing.T) {
+	t.Parallel()
 	modelName := "gpt-4o"
 	channelType := channeltype.OpenAI
 	adaptor := relay.GetAdaptor(channelType)

@@ -10,6 +10,7 @@ import (
 // to preserve backward compatibility. These payloads could be valid for
 // either ChatCompletion or Claude Messages, so we don't try to distinguish them.
 func TestDetectFormat_Ambiguous(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name string
 		body string
@@ -329,6 +330,7 @@ func TestDetectFormat_Ambiguous(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			format, err := DetectFormat([]byte(tt.body))
 			require.NoError(t, err)
 			require.Equal(t, Unknown, format, "ambiguous format should return Unknown for backward compatibility")
@@ -337,6 +339,7 @@ func TestDetectFormat_Ambiguous(t *testing.T) {
 }
 
 func TestDetectFormat_ResponseAPI(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name string
 		body string
@@ -383,6 +386,7 @@ func TestDetectFormat_ResponseAPI(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			format, err := DetectFormat([]byte(tt.body))
 			require.NoError(t, err)
 			require.Equal(t, ResponseAPI, format, "expected ResponseAPI format")
@@ -391,6 +395,7 @@ func TestDetectFormat_ResponseAPI(t *testing.T) {
 }
 
 func TestDetectFormat_ClaudeMessages(t *testing.T) {
+	t.Parallel()
 	// Only test Claude-EXCLUSIVE features that cannot be ChatCompletion
 	tests := []struct {
 		name string
@@ -444,6 +449,7 @@ func TestDetectFormat_ClaudeMessages(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			format, err := DetectFormat([]byte(tt.body))
 			require.NoError(t, err)
 			require.Equal(t, ClaudeMessages, format, "expected ClaudeMessages format for Claude-exclusive features")
@@ -452,6 +458,7 @@ func TestDetectFormat_ClaudeMessages(t *testing.T) {
 }
 
 func TestDetectFormat_Unknown(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name string
 		body string
@@ -468,6 +475,7 @@ func TestDetectFormat_Unknown(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			format, err := DetectFormat([]byte(tt.body))
 			require.NoError(t, err)
 			require.Equal(t, Unknown, format, "expected Unknown format")
@@ -476,6 +484,7 @@ func TestDetectFormat_Unknown(t *testing.T) {
 }
 
 func TestDetectFormat_Error(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name string
 		body string
@@ -492,6 +501,7 @@ func TestDetectFormat_Error(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			_, err := DetectFormat([]byte(tt.body))
 			require.Error(t, err)
 		})
@@ -499,6 +509,7 @@ func TestDetectFormat_Error(t *testing.T) {
 }
 
 func TestAPIFormat_String(t *testing.T) {
+	t.Parallel()
 	require.Equal(t, "chat_completion", ChatCompletion.String())
 	require.Equal(t, "response_api", ResponseAPI.String())
 	require.Equal(t, "claude_messages", ClaudeMessages.String())
@@ -506,6 +517,7 @@ func TestAPIFormat_String(t *testing.T) {
 }
 
 func TestAPIFormat_Endpoint(t *testing.T) {
+	t.Parallel()
 	require.Equal(t, "/v1/chat/completions", ChatCompletion.Endpoint())
 	require.Equal(t, "/v1/responses", ResponseAPI.Endpoint())
 	require.Equal(t, "/v1/messages", ClaudeMessages.Endpoint())
@@ -513,6 +525,7 @@ func TestAPIFormat_Endpoint(t *testing.T) {
 }
 
 func TestFormatFromPath(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		path     string
 		expected APIFormat
@@ -530,6 +543,7 @@ func TestFormatFromPath(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.path, func(t *testing.T) {
+			t.Parallel()
 			format := FormatFromPath(tt.path)
 			require.Equal(t, tt.expected, format)
 		})
@@ -539,6 +553,7 @@ func TestFormatFromPath(t *testing.T) {
 // TestDetectFormat_RealWorldCursor tests detection with real-world Cursor requests
 // that users have reported being sent to wrong endpoints.
 func TestDetectFormat_RealWorldCursor(t *testing.T) {
+	t.Parallel()
 	// Cursor sometimes sends Response API format to /v1/chat/completions
 	cursorResponseFormatRequest := `{
 		"model": "claude-3-5-sonnet-20241022",
@@ -556,6 +571,7 @@ func TestDetectFormat_RealWorldCursor(t *testing.T) {
 
 // TestDetectFormat_EdgeCases tests edge cases and ambiguous payloads.
 func TestDetectFormat_EdgeCases(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		body     string
@@ -582,6 +598,7 @@ func TestDetectFormat_EdgeCases(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			format, err := DetectFormat([]byte(tt.body))
 			require.NoError(t, err)
 			require.Equal(t, tt.expected, format)
@@ -592,6 +609,7 @@ func TestDetectFormat_EdgeCases(t *testing.T) {
 // TestDetectFormat_BackwardCompatibility ensures we don't break existing services
 // by incorrectly rerouting ambiguous requests.
 func TestDetectFormat_BackwardCompatibility(t *testing.T) {
+	t.Parallel()
 	// This is the exact example from the user - it should return Unknown
 	// because it could be valid for either ChatCompletion or Claude Messages
 	ambiguousRequest := `{

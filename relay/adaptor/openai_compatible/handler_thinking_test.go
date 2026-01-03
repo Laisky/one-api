@@ -16,6 +16,7 @@ import (
 
 // TestHandler_NonStream_ThinkingParam verifies non-stream handler respects thinking and reasoning_format
 func TestHandler_NonStream_ThinkingParam(t *testing.T) {
+	t.Parallel()
 	// Build a simple non-stream response with a single choice containing <think>
 	respStruct := SlimTextResponse{
 		Choices: []TextResponseChoice{
@@ -60,6 +61,7 @@ func TestHandler_NonStream_ThinkingParam(t *testing.T) {
 
 // TestHandler_NonStream_ReasoningFormatThinking ensures reasoning_content is remapped when thinking format requested.
 func TestHandler_NonStream_ReasoningFormatThinking(t *testing.T) {
+	t.Parallel()
 	reasoning := "walkthrough"
 	respStruct := SlimTextResponse{
 		Choices: []TextResponseChoice{
@@ -102,6 +104,7 @@ func TestHandler_NonStream_ReasoningFormatThinking(t *testing.T) {
 // TestHandler_NonStream_OmitsEmptyErrorField verifies that the handler does not emit the error field
 // when upstream responses omit it, preserving OpenAI compatibility for clients that gate on its presence.
 func TestHandler_NonStream_OmitsEmptyErrorField(t *testing.T) {
+	t.Parallel()
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
 	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)

@@ -17,6 +17,7 @@ func init() {
 }
 
 func TestGetPromptTokens(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 
 	tests := []struct {
@@ -110,6 +111,7 @@ func TestGetPromptTokens(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			tokens := getPromptTokens(ctx, tt.request, tt.relayMode)
 
 			if tt.expectZero {
@@ -126,6 +128,7 @@ func TestGetPromptTokens(t *testing.T) {
 }
 
 func TestGetPromptTokensEmbeddingsSpecific(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 
 	// Test different input formats for embeddings
@@ -158,6 +161,7 @@ func TestGetPromptTokensEmbeddingsSpecific(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			request := &model.GeneralOpenAIRequest{
 				Model: "text-embedding-ada-002",
 				Input: tc.input,

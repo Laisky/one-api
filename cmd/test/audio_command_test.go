@@ -13,6 +13,7 @@ import (
 )
 
 func TestParseAudioArgsDefault(t *testing.T) {
+	t.Parallel()
 	opts, err := parseAudioArgs(nil)
 	require.NoError(t, err)
 	require.Equal(t, defaultAudioSampleURL, opts.source)
@@ -20,6 +21,7 @@ func TestParseAudioArgsDefault(t *testing.T) {
 }
 
 func TestRunAudioProbeLocalFile(t *testing.T) {
+	t.Parallel()
 	tmp, err := os.CreateTemp("", "audio-probe-test-")
 	require.NoError(t, err)
 	data := []byte("fake audio data for probing")
@@ -59,6 +61,7 @@ func TestRunAudioProbeLocalFile(t *testing.T) {
 }
 
 func TestMaterializeAudioSourceRemote(t *testing.T) {
+	t.Parallel()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte("remote audio"))
 	}))
@@ -82,6 +85,7 @@ func TestMaterializeAudioSourceRemote(t *testing.T) {
 }
 
 func TestMaterializeAudioSourceLocal(t *testing.T) {
+	t.Parallel()
 	tmp, err := os.CreateTemp("", "audio-local-")
 	require.NoError(t, err)
 	_, err = tmp.Write([]byte("local audio"))

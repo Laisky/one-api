@@ -32,6 +32,7 @@ func (c *customFileHeader) Open() (multipart.File, error) {
 }
 
 func TestOpenaiImageEditRequest_toFluxRemixRequest(t *testing.T) {
+	t.Parallel()
 	// Create a simple image for testing
 	img := image.NewRGBA(image.Rect(0, 0, 10, 10))
 	draw.Draw(img, img.Bounds(), &image.Uniform{C: image.Black}, image.Point{}, draw.Src)

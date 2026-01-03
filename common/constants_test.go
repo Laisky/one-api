@@ -8,6 +8,7 @@ import (
 )
 
 func TestFinalizeVersionMetadataWithCommitAndTime(t *testing.T) {
+	t.Parallel()
 	info := &debug.BuildInfo{
 		Main: debug.Module{Version: "(devel)"},
 		Settings: []debug.BuildSetting{
@@ -24,6 +25,7 @@ func TestFinalizeVersionMetadataWithCommitAndTime(t *testing.T) {
 }
 
 func TestFinalizeVersionMetadataHonorsReleaseVersion(t *testing.T) {
+	t.Parallel()
 	info := &debug.BuildInfo{
 		Main: debug.Module{Version: "v1.2.3"},
 		Settings: []debug.BuildSetting{
@@ -40,6 +42,7 @@ func TestFinalizeVersionMetadataHonorsReleaseVersion(t *testing.T) {
 }
 
 func TestFinalizeVersionMetadataPrefersManualOverrides(t *testing.T) {
+	t.Parallel()
 	info := &debug.BuildInfo{
 		Main: debug.Module{Version: "v1.2.3"},
 		Settings: []debug.BuildSetting{

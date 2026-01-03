@@ -14,6 +14,7 @@ import (
 )
 
 func TestGetByContext_ChannelRetry(t *testing.T) {
+	t.Parallel()
 	gin.SetMode(gin.TestMode)
 
 	// Create a test context
@@ -74,6 +75,7 @@ func TestGetByContext_ChannelRetry(t *testing.T) {
 }
 
 func TestGetByContext_NoChannelChange(t *testing.T) {
+	t.Parallel()
 	gin.SetMode(gin.TestMode)
 
 	// Create a test context
@@ -116,6 +118,7 @@ func TestGetByContext_NoChannelChange(t *testing.T) {
 }
 
 func TestEnsureActualModelName(t *testing.T) {
+	t.Parallel()
 	meta := &Meta{
 		ModelMapping: map[string]string{"alias": "mapped"},
 	}

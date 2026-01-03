@@ -25,6 +25,7 @@ import (
 // TestChannelPriorityLogic tests the channel priority selection logic
 // This test verifies that priority fallback works correctly when high priority channels fail
 func TestChannelPriorityLogic(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name                 string
 		highPriorityChannels []*model.Channel
@@ -75,6 +76,7 @@ func TestChannelPriorityLogic(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			t.Logf("Testing: %s", tt.description)
 
 			// Simulate the channel selection logic from distributor middleware
@@ -111,7 +113,9 @@ func TestChannelPriorityLogic(t *testing.T) {
 
 // TestChannelPriorityFallbackScenario tests specific priority fallback scenarios
 func TestChannelPriorityFallbackScenario(t *testing.T) {
+	t.Parallel()
 	t.Run("rate_limit_suspension_fallback", func(t *testing.T) {
+		t.Parallel()
 		// Simulate a scenario where high priority channels are suspended due to 429 errors
 		// and the system should fallback to lower priority channels
 
@@ -330,8 +334,10 @@ func TestDistributeAutoSkipsUnsupportedChannel(t *testing.T) {
 
 // TestChannelSupportsEndpoint verifies the endpoint support checking logic.
 func TestChannelSupportsEndpoint(t *testing.T) {
+	t.Parallel()
 	// Test with default endpoints (no custom config)
 	t.Run("default_endpoints_openai", func(t *testing.T) {
+		t.Parallel()
 		channel := &model.Channel{
 			Id:     1,
 			Type:   channeltype.OpenAI,
@@ -346,6 +352,7 @@ func TestChannelSupportsEndpoint(t *testing.T) {
 	})
 
 	t.Run("default_endpoints_cohere", func(t *testing.T) {
+		t.Parallel()
 		channel := &model.Channel{
 			Id:     2,
 			Type:   channeltype.Cohere,
@@ -360,6 +367,7 @@ func TestChannelSupportsEndpoint(t *testing.T) {
 	})
 
 	t.Run("custom_endpoints", func(t *testing.T) {
+		t.Parallel()
 		// Channel with custom endpoints config
 		channel := &model.Channel{
 			Id:     3,
@@ -376,6 +384,7 @@ func TestChannelSupportsEndpoint(t *testing.T) {
 	})
 
 	t.Run("unknown_relay_mode", func(t *testing.T) {
+		t.Parallel()
 		channel := &model.Channel{
 			Id:     4,
 			Type:   channeltype.OpenAI,
@@ -390,7 +399,9 @@ func TestChannelSupportsEndpoint(t *testing.T) {
 // TestEndpointValidationBackwardCompatibility verifies that existing channels without
 // endpoint configuration continue to work exactly as before.
 func TestEndpointValidationBackwardCompatibility(t *testing.T) {
+	t.Parallel()
 	t.Run("empty_config_uses_defaults", func(t *testing.T) {
+		t.Parallel()
 		// Channel with no config at all - should use defaults
 		channel := &model.Channel{
 			Id:     1,
@@ -405,6 +416,7 @@ func TestEndpointValidationBackwardCompatibility(t *testing.T) {
 	})
 
 	t.Run("config_without_endpoints_uses_defaults", func(t *testing.T) {
+		t.Parallel()
 		// Channel with other config fields but no supported_endpoints
 		channel := &model.Channel{
 			Id:     2,
@@ -418,6 +430,7 @@ func TestEndpointValidationBackwardCompatibility(t *testing.T) {
 	})
 
 	t.Run("empty_endpoints_array_uses_defaults", func(t *testing.T) {
+		t.Parallel()
 		// Channel with explicitly empty supported_endpoints array
 		channel := &model.Channel{
 			Id:     3,
@@ -435,7 +448,9 @@ func TestEndpointValidationBackwardCompatibility(t *testing.T) {
 
 // TestEndpointValidationCustomConfig verifies custom endpoint configurations work correctly.
 func TestEndpointValidationCustomConfig(t *testing.T) {
+	t.Parallel()
 	t.Run("restrict_to_single_endpoint", func(t *testing.T) {
+		t.Parallel()
 		// Channel restricted to only chat completions
 		channel := &model.Channel{
 			Id:     1,
@@ -449,6 +464,7 @@ func TestEndpointValidationCustomConfig(t *testing.T) {
 	})
 
 	t.Run("expand_beyond_defaults", func(t *testing.T) {
+		t.Parallel()
 		// Anthropic channel with embeddings added (not in default)
 		channel := &model.Channel{
 			Id:     2,
@@ -462,6 +478,7 @@ func TestEndpointValidationCustomConfig(t *testing.T) {
 	})
 
 	t.Run("case_insensitive_endpoint_names", func(t *testing.T) {
+		t.Parallel()
 		// Test that endpoint name matching is case-insensitive
 		channel := &model.Channel{
 			Id:     3,

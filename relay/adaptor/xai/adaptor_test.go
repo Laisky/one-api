@@ -18,6 +18,7 @@ import (
 )
 
 func TestGetRequestURL(t *testing.T) {
+	t.Parallel()
 	adaptor := &Adaptor{}
 
 	tests := []struct {
@@ -59,6 +60,7 @@ func TestGetRequestURL(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			meta := &meta.Meta{
 				BaseURL:        "https://api.x.ai",
 				RequestURLPath: tt.requestPath,
@@ -73,6 +75,7 @@ func TestGetRequestURL(t *testing.T) {
 }
 
 func TestConvertRequest(t *testing.T) {
+	t.Parallel()
 	adaptor := &Adaptor{}
 
 	tests := []struct {
@@ -150,6 +153,7 @@ func TestConvertRequest(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			c, _ := gin.CreateTestContext(httptest.NewRecorder())
 			result, err := adaptor.ConvertRequest(c, relaymode.ChatCompletions, tt.inputRequest)
 			require.NoError(t, err)
@@ -167,6 +171,7 @@ func TestConvertRequest(t *testing.T) {
 }
 
 func TestConvertImageRequest(t *testing.T) {
+	t.Parallel()
 	adaptor := &Adaptor{}
 
 	tests := []struct {
@@ -203,6 +208,7 @@ func TestConvertImageRequest(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			c, _ := gin.CreateTestContext(httptest.NewRecorder())
 			result, err := adaptor.ConvertImageRequest(c, tt.inputRequest)
 			require.NoError(t, err)
@@ -220,9 +226,11 @@ func TestConvertImageRequest(t *testing.T) {
 }
 
 func TestConvertClaudeRequest(t *testing.T) {
+	t.Parallel()
 	adaptor := &Adaptor{}
 
 	t.Run("ConvertClaudeRequest delegates to openai_compatible", func(t *testing.T) {
+		t.Parallel()
 		c, _ := gin.CreateTestContext(httptest.NewRecorder())
 		claudeRequest := &model.ClaudeRequest{
 			Model: "claude-3-sonnet-20240229",
@@ -239,9 +247,11 @@ func TestConvertClaudeRequest(t *testing.T) {
 }
 
 func TestDoResponse(t *testing.T) {
+	t.Parallel()
 	adaptor := &Adaptor{}
 
 	t.Run("Image generation mode", func(t *testing.T) {
+		t.Parallel()
 		c, _ := gin.CreateTestContext(httptest.NewRecorder())
 
 		// Mock image response
@@ -274,6 +284,7 @@ func TestDoResponse(t *testing.T) {
 	})
 
 	t.Run("Claude Messages mode", func(t *testing.T) {
+		t.Parallel()
 		c, _ := gin.CreateTestContext(httptest.NewRecorder())
 
 		// Mock Chat Completion response
@@ -315,6 +326,7 @@ func TestDoResponse(t *testing.T) {
 }
 
 func TestResponseAPIUsage_ToModelUsage(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name          string
 		usage         *ResponseAPIUsage
@@ -371,6 +383,7 @@ func TestResponseAPIUsage_ToModelUsage(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result := tt.usage.ToModelUsage()
 			if tt.expectedUsage == nil {
 				assert.Nil(t, result)
@@ -398,9 +411,11 @@ func TestResponseAPIUsage_ToModelUsage(t *testing.T) {
 }
 
 func TestHandleResponseAPIResponse(t *testing.T) {
+	t.Parallel()
 	adaptor := &Adaptor{}
 
 	t.Run("Streaming Response API", func(t *testing.T) {
+		t.Parallel()
 		c, _ := gin.CreateTestContext(httptest.NewRecorder())
 		meta := &meta.Meta{IsStream: true}
 
@@ -417,11 +432,13 @@ func TestHandleResponseAPIResponse(t *testing.T) {
 }
 
 func TestGetChannelName(t *testing.T) {
+	t.Parallel()
 	adaptor := &Adaptor{}
 	assert.Equal(t, "xai", adaptor.GetChannelName())
 }
 
 func TestGetModelList(t *testing.T) {
+	t.Parallel()
 	adaptor := &Adaptor{}
 	models := adaptor.GetModelList()
 	assert.NotEmpty(t, models)
@@ -430,6 +447,7 @@ func TestGetModelList(t *testing.T) {
 }
 
 func TestGetDefaultModelPricing(t *testing.T) {
+	t.Parallel()
 	adaptor := &Adaptor{}
 	pricing := adaptor.GetDefaultModelPricing()
 	assert.NotNil(t, pricing)
@@ -437,6 +455,7 @@ func TestGetDefaultModelPricing(t *testing.T) {
 }
 
 func TestGetModelRatio(t *testing.T) {
+	t.Parallel()
 	adaptor := &Adaptor{}
 
 	// Test known model
@@ -449,6 +468,7 @@ func TestGetModelRatio(t *testing.T) {
 }
 
 func TestGetCompletionRatio(t *testing.T) {
+	t.Parallel()
 	adaptor := &Adaptor{}
 
 	// Test known model
@@ -461,6 +481,7 @@ func TestGetCompletionRatio(t *testing.T) {
 }
 
 func TestResponseAPIInputTokensDetails_UnmarshalJSON(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name        string
 		jsonInput   string
@@ -518,6 +539,7 @@ func TestResponseAPIInputTokensDetails_UnmarshalJSON(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			var result ResponseAPIInputTokensDetails
 			err := json.Unmarshal([]byte(tt.jsonInput), &result)
 
@@ -545,6 +567,7 @@ func TestResponseAPIInputTokensDetails_UnmarshalJSON(t *testing.T) {
 }
 
 func TestResponseAPIOutputTokensDetails_UnmarshalJSON(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name        string
 		jsonInput   string
@@ -606,6 +629,7 @@ func TestResponseAPIOutputTokensDetails_UnmarshalJSON(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			var result ResponseAPIOutputTokensDetails
 			err := json.Unmarshal([]byte(tt.jsonInput), &result)
 

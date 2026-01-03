@@ -8,6 +8,7 @@ import (
 
 // Ensure key Replicate image models have non-zero per-image pricing
 func TestReplicateImageModelPrices(t *testing.T) {
+	t.Parallel()
 	cases := []string{
 		"black-forest-labs/flux-schnell",
 		"black-forest-labs/flux-pro",

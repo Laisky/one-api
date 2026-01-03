@@ -20,6 +20,7 @@ import (
 )
 
 func TestConvertClaudeRequest_ToOpenAI(t *testing.T) {
+	t.Parallel()
 	gin.SetMode(gin.TestMode)
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
@@ -89,6 +90,7 @@ func TestConvertClaudeRequest_ToOpenAI(t *testing.T) {
 }
 
 func TestConvertClaudeRequest_ToolResultWithFollowupText(t *testing.T) {
+	t.Parallel()
 	gin.SetMode(gin.TestMode)
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
@@ -137,6 +139,7 @@ func TestConvertClaudeRequest_ToolResultWithFollowupText(t *testing.T) {
 }
 
 func TestHandleClaudeMessagesResponse_NonStream_ConvertedResponse(t *testing.T) {
+	t.Parallel()
 	// Validate the handler path where the adaptor provides a converted response (stored in context)
 	gin.SetMode(gin.TestMode)
 	w := httptest.NewRecorder()
@@ -181,6 +184,7 @@ func TestHandleClaudeMessagesResponse_NonStream_ConvertedResponse(t *testing.T) 
 }
 
 func TestHandler_NonStream_ComputeUsageFromContent(t *testing.T) {
+	t.Parallel()
 	gin.SetMode(gin.TestMode)
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
@@ -200,6 +204,7 @@ func TestHandler_NonStream_ComputeUsageFromContent(t *testing.T) {
 }
 
 func TestConvertClaudeRequest_StructuredToolPromoted(t *testing.T) {
+	t.Parallel()
 	gin.SetMode(gin.TestMode)
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
@@ -259,6 +264,7 @@ func TestConvertClaudeRequest_StructuredToolPromoted(t *testing.T) {
 }
 
 func TestConvertClaudeRequest_StructuredPromotionDisabledForDeepSeek(t *testing.T) {
+	t.Parallel()
 	gin.SetMode(gin.TestMode)
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
@@ -307,6 +313,7 @@ func TestConvertClaudeRequest_StructuredPromotionDisabledForDeepSeek(t *testing.
 }
 
 func TestConvertClaudeRequest_StructuredPromotionEnabledForAzureGPT5(t *testing.T) {
+	t.Parallel()
 	gin.SetMode(gin.TestMode)
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
@@ -359,6 +366,7 @@ func TestConvertClaudeRequest_StructuredPromotionEnabledForAzureGPT5(t *testing.
 }
 
 func TestConvertClaudeRequest_ToolNotPromoted(t *testing.T) {
+	t.Parallel()
 	gin.SetMode(gin.TestMode)
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)

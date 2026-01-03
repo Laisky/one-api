@@ -9,6 +9,7 @@ import (
 
 // TestToolIndexField tests that the Index field is properly serialized in streaming tool calls
 func TestToolIndexField(t *testing.T) {
+	t.Parallel()
 	// Test streaming tool call with Index field set
 	index := 0
 	streamingTool := Tool{
@@ -62,6 +63,7 @@ func TestToolIndexField(t *testing.T) {
 
 // TestStreamingToolCallAccumulation tests the complete streaming tool call accumulation workflow
 func TestStreamingToolCallAccumulation(t *testing.T) {
+	t.Parallel()
 	// Simulate streaming tool call deltas as they would come from the API
 	streamingDeltas := []Tool{
 		{
@@ -127,6 +129,7 @@ func intPtr(i int) *int {
 
 // TestToolIndexFieldDeserialization tests that the Index field can be properly deserialized
 func TestToolIndexFieldDeserialization(t *testing.T) {
+	t.Parallel()
 	// JSON with index field (streaming response)
 	streamingJSON := `{
 		"id": "call_789",
@@ -166,6 +169,7 @@ func TestToolIndexFieldDeserialization(t *testing.T) {
 
 // TestMCPToolSerialization tests that MCP tools are properly serialized with all MCP fields
 func TestMCPToolSerialization(t *testing.T) {
+	t.Parallel()
 	// Test MCP tool with all fields populated
 	mcpTool := Tool{
 		Id:              "mcp_001",
@@ -201,6 +205,7 @@ func TestMCPToolSerialization(t *testing.T) {
 
 // TestMCPToolDeserialization tests that MCP tools can be properly deserialized
 func TestMCPToolDeserialization(t *testing.T) {
+	t.Parallel()
 	// JSON for MCP tool
 	mcpJSON := `{
 		"id": "mcp_002",
@@ -239,6 +244,7 @@ func TestMCPToolDeserialization(t *testing.T) {
 
 // TestMCPRequireApprovalVariations tests different RequireApproval configurations
 func TestMCPRequireApprovalVariations(t *testing.T) {
+	t.Parallel()
 	testCases := []struct {
 		name     string
 		approval any
@@ -262,6 +268,7 @@ func TestMCPRequireApprovalVariations(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			mcpTool := Tool{
 				Type:            "mcp",
 				ServerLabel:     "test",
@@ -286,6 +293,7 @@ func TestMCPRequireApprovalVariations(t *testing.T) {
 
 // TestMixedToolArray tests arrays containing both function and MCP tools
 func TestMixedToolArray(t *testing.T) {
+	t.Parallel()
 	tools := []Tool{
 		{
 			Id:   "func_001",
@@ -345,6 +353,7 @@ func TestMixedToolArray(t *testing.T) {
 
 // TestMCPToolEdgeCases tests edge cases and validation scenarios for MCP tools
 func TestMCPToolEdgeCases(t *testing.T) {
+	t.Parallel()
 	// Test MCP tool with minimal fields
 	minimalMCP := Tool{
 		Type:        "mcp",
@@ -404,6 +413,7 @@ func TestMCPToolEdgeCases(t *testing.T) {
 }
 
 func TestToolUnmarshalFlattenedFunction(t *testing.T) {
+	t.Parallel()
 	jsonStr := `{
 		"type": "function",
 		"name": "get_weather",

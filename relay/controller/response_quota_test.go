@@ -10,6 +10,7 @@ import (
 )
 
 func TestCalculateResponseAPIPreconsumeQuotaBackground(t *testing.T) {
+	t.Parallel()
 	maxOutput := 1000
 	inputRatio := 1.0
 	completionMultiplier := 2.0
@@ -22,6 +23,7 @@ func TestCalculateResponseAPIPreconsumeQuotaBackground(t *testing.T) {
 }
 
 func TestCalculateResponseAPIPreconsumeQuotaForeground(t *testing.T) {
+	t.Parallel()
 	maxOutput := 500
 	inputRatio := 1.0
 	outputRatio := inputRatio
@@ -33,6 +35,7 @@ func TestCalculateResponseAPIPreconsumeQuotaForeground(t *testing.T) {
 }
 
 func TestCalculateResponseAPIPreconsumeQuotaBackgroundLargeEstimate(t *testing.T) {
+	t.Parallel()
 	maxOutput := 55000
 	inputRatio := 1.0
 	completionMultiplier := 0.5

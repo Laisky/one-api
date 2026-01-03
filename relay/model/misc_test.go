@@ -10,6 +10,7 @@ import (
 // TestErrorTypeJSONRoundTrip verifies that ErrorType values marshal and
 // unmarshal as their underlying string representations.
 func TestErrorTypeJSONRoundTrip(t *testing.T) {
+	t.Parallel()
 	t.Helper()
 
 	original := Error{

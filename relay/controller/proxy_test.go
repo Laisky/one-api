@@ -13,6 +13,7 @@ import (
 )
 
 func TestProxyTokenSummaryNilUsage(t *testing.T) {
+	t.Parallel()
 	gin.SetMode(gin.TestMode)
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
@@ -27,6 +28,7 @@ func TestProxyTokenSummaryNilUsage(t *testing.T) {
 }
 
 func TestProxyTokenSummaryWithUsage(t *testing.T) {
+	t.Parallel()
 	gin.SetMode(gin.TestMode)
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)

@@ -9,6 +9,7 @@ import (
 )
 
 func TestClaudeStructuredOutputCost_NoSurcharge(t *testing.T) {
+	t.Parallel()
 	completionTokens := 1000
 	modelRatio := 0.25
 

@@ -75,6 +75,7 @@ func TestRunWithSQLiteBusyRetrySkipsWhenNotSQLite(t *testing.T) {
 }
 
 func TestShouldRetrySQLiteBusy(t *testing.T) {
+	t.Parallel()
 	require.True(t, shouldRetrySQLiteBusy(errors.New("database is locked")))
 	require.True(t, shouldRetrySQLiteBusy(errors.New("database table is locked")))
 	require.True(t, shouldRetrySQLiteBusy(errors.New("database is busy")))

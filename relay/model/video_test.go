@@ -7,6 +7,7 @@ import (
 )
 
 func TestVideoRequestRequestedDurationSeconds(t *testing.T) {
+	t.Parallel()
 	seconds := 8.5
 	duration := 6.0
 	req := &VideoRequest{
@@ -25,6 +26,7 @@ func TestVideoRequestRequestedDurationSeconds(t *testing.T) {
 }
 
 func TestVideoRequestRequestedResolution(t *testing.T) {
+	t.Parallel()
 	req := &VideoRequest{Size: "1280x720"}
 	require.Equal(t, "1280x720", req.RequestedResolution(), "expected size resolution")
 

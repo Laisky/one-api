@@ -9,6 +9,7 @@ import (
 )
 
 func TestGetImageCostRatio_Dalle3Tiers(t *testing.T) {
+	t.Parallel()
 	// standard 1024x1024 -> 1x
 	r := &relaymodel.ImageRequest{Model: "dall-e-3", Size: "1024x1024", Quality: "standard"}
 	v, err := getImageCostRatio(r, nil)

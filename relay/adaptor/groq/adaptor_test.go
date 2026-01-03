@@ -10,6 +10,7 @@ import (
 )
 
 func TestGetRequestURL(t *testing.T) {
+	t.Parallel()
 	adaptor := &Adaptor{}
 
 	testCases := []struct {
@@ -51,6 +52,7 @@ func TestGetRequestURL(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			meta := &meta.Meta{
 				RequestURLPath: tc.requestURLPath,
 				BaseURL:        tc.baseURL,

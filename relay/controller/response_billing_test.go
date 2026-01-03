@@ -9,6 +9,7 @@ import (
 // TestResponseAPIBillingIntegration tests that Response API billing follows DRY principle
 // and produces the same billing results as ChatCompletion API
 func TestResponseAPIBillingIntegration(t *testing.T) {
+	t.Parallel()
 	// Test data
 	promptTokens := 18
 	completionTokens := 35
@@ -29,6 +30,7 @@ func TestResponseAPIBillingIntegration(t *testing.T) {
 
 	// Test the Response API billing calculation logic (without database operations)
 	t.Run("Response API Billing Calculation", func(t *testing.T) {
+		t.Parallel()
 		// Test the quota calculation formula directly
 		// This is the same formula used in postConsumeResponseAPIQuota
 		calculatedQuota := int64((float64(promptTokens)+float64(completionTokens)*completionRatio)*ratio) + toolsCost
@@ -45,6 +47,7 @@ func TestResponseAPIBillingIntegration(t *testing.T) {
 
 	// Test that the billing calculation is consistent
 	t.Run("Billing Consistency Check", func(t *testing.T) {
+		t.Parallel()
 		quotaDelta := expectedQuota - preConsumedQuota
 
 		// Verify that quota delta calculation is correct
@@ -56,6 +59,7 @@ func TestResponseAPIBillingIntegration(t *testing.T) {
 
 // TestLegacyChatCompletionBilling tests that legacy ChatCompletion API billing still works
 func TestLegacyChatCompletionBilling(t *testing.T) {
+	t.Parallel()
 	// Test data matching ChatCompletion API
 	promptTokens := 25
 	completionTokens := 50
@@ -74,6 +78,7 @@ func TestLegacyChatCompletionBilling(t *testing.T) {
 	}
 
 	t.Run("ChatCompletion Billing Calculation", func(t *testing.T) {
+		t.Parallel()
 		// Test the quota calculation formula used in ChatCompletion
 		calculatedQuota := int64((float64(promptTokens)+float64(completionTokens)*completionRatio)*ratio) + toolsCost
 		if ratio != 0 && calculatedQuota <= 0 {
@@ -93,6 +98,7 @@ func TestLegacyChatCompletionBilling(t *testing.T) {
 
 // TestBillingConsistency tests that Response API and ChatCompletion API produce consistent billing
 func TestBillingConsistency(t *testing.T) {
+	t.Parallel()
 	testCases := []struct {
 		name             string
 		promptTokens     int
@@ -133,6 +139,7 @@ func TestBillingConsistency(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			// Calculate quota using the billing formula
 			ratio := tc.modelRatio * tc.groupRatio
 			expectedQuota := int64((float64(tc.promptTokens)+float64(tc.completionTokens)*tc.completionRatio)*ratio) + tc.toolsCost

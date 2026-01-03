@@ -13,10 +13,12 @@ import (
 // TestZeroQuotaFix verifies that the billing functions handle zero quota correctly
 // This addresses the critical bug where requests with 0 quota were not being logged
 func TestZeroQuotaFix(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	validTime := time.Now()
 
 	t.Run("PostConsumeQuotaWithLog with zero quota should not panic on logging", func(t *testing.T) {
+		t.Parallel()
 		// This test verifies that the function doesn't return early when totalQuota is 0
 		// The function should attempt to log (which may fail due to database issues in test env)
 		// but should not panic due to the conditional check being removed
@@ -44,6 +46,7 @@ func TestZeroQuotaFix(t *testing.T) {
 	})
 
 	t.Run("PostConsumeQuotaDetailed with zero quota should not panic on logging", func(t *testing.T) {
+		t.Parallel()
 		defer func() {
 			if r := recover(); r != nil {
 				// Database operations will fail in test environment, but that's expected
@@ -79,6 +82,7 @@ func TestZeroQuotaFix(t *testing.T) {
 	})
 
 	t.Run("PostConsumeQuotaWithLog with positive quota should work normally", func(t *testing.T) {
+		t.Parallel()
 		defer func() {
 			if r := recover(); r != nil {
 				// Database operations will fail in test environment, but that's expected
@@ -96,6 +100,7 @@ func TestZeroQuotaFix(t *testing.T) {
 	})
 
 	t.Run("PostConsumeQuotaDetailed with positive quota should work normally", func(t *testing.T) {
+		t.Parallel()
 		defer func() {
 			if r := recover(); r != nil {
 				// Database operations will fail in test environment, but that's expected
@@ -130,12 +135,14 @@ func TestZeroQuotaFix(t *testing.T) {
 
 // TestZeroQuotaLogicFlow tests the logical flow of the billing functions
 func TestZeroQuotaLogicFlow(t *testing.T) {
+	t.Parallel()
 	// This test verifies that the logic flow is correct:
 	// 1. Always attempt to log (regardless of quota amount)
 	// 2. Only update user/channel quotas when totalQuota > 0
 	// 3. Log error when totalQuota <= 0
 
 	t.Run("Logic flow verification", func(t *testing.T) {
+		t.Parallel()
 		// We can't easily test the actual database operations in unit tests,
 		// but we can verify that the code structure is correct by examining
 		// the source code logic through this test

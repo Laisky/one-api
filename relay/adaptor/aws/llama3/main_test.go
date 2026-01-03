@@ -10,6 +10,7 @@ import (
 )
 
 func TestConvertRequest(t *testing.T) {
+	t.Parallel()
 	// Test basic message conversion
 	openaiReq := relaymodel.GeneralOpenAIRequest{
 		Messages: []relaymodel.Message{

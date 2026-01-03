@@ -11,6 +11,7 @@ import (
 )
 
 func TestParseModels(t *testing.T) {
+	t.Parallel()
 	cases := map[string][]string{
 		"gpt-4":                     {"gpt-4"},
 		"gpt-4,claude-3":            {"gpt-4", "claude-3"},
@@ -31,12 +32,14 @@ func TestParseModels(t *testing.T) {
 }
 
 func TestParseModelsEmpty(t *testing.T) {
+	t.Parallel()
 	got, err := parseModels("   ")
 	require.NoError(t, err, "parseModels empty error")
 	require.Empty(t, got, "parseModels empty length should be 0")
 }
 
 func TestEvaluateResponseChatCompletionSuccess(t *testing.T) {
+	t.Parallel()
 	body := []byte(`{"choices":[{"message":{"role":"assistant","content":"hello"}}]}`)
 	spec := requestSpec{Type: requestTypeChatCompletion, Expectation: expectationDefault}
 	success, reason := evaluateResponse(spec, body)
@@ -44,6 +47,7 @@ func TestEvaluateResponseChatCompletionSuccess(t *testing.T) {
 }
 
 func TestEvaluateResponseIgnoresEmptyErrorObject(t *testing.T) {
+	t.Parallel()
 	body := []byte(`{"choices":[{"message":{"role":"assistant","content":"hi"}}],"error":{"message":"","type":"","param":"","code":null}}`)
 	spec := requestSpec{Type: requestTypeChatCompletion, Expectation: expectationDefault}
 	success, reason := evaluateResponse(spec, body)
@@ -51,6 +55,7 @@ func TestEvaluateResponseIgnoresEmptyErrorObject(t *testing.T) {
 }
 
 func TestEvaluateResponseResponseAPIChoicesFallback(t *testing.T) {
+	t.Parallel()
 	body := []byte(`{"choices":[{"message":{"role":"assistant","content":"hi"}}],"object":"chat.completion"}`)
 	spec := requestSpec{Type: requestTypeResponseAPI, Expectation: expectationDefault}
 	success, reason := evaluateResponse(spec, body)
@@ -58,6 +63,7 @@ func TestEvaluateResponseResponseAPIChoicesFallback(t *testing.T) {
 }
 
 func TestEvaluateResponseChatToolInvocation(t *testing.T) {
+	t.Parallel()
 	body := []byte(`{"choices":[{"message":{"tool_calls":[{"id":"tool_1","type":"function","function":{"name":"get_weather","arguments":"{\"location\":\"San Francisco\"}"}}]}}]}`)
 	spec := requestSpec{Type: requestTypeChatCompletion, Expectation: expectationToolInvocation}
 	success, reason := evaluateResponse(spec, body)
@@ -65,6 +71,7 @@ func TestEvaluateResponseChatToolInvocation(t *testing.T) {
 }
 
 func TestEvaluateResponseChatToolHistory(t *testing.T) {
+	t.Parallel()
 	body := []byte(`{"choices":[{"message":{"tool_calls":[{"id":"tool_hist","type":"function","function":{"name":"get_weather","arguments":"{\"location\":\"San Francisco\"}"}}]}}]}`)
 	spec := requestSpec{Type: requestTypeChatCompletion, Expectation: expectationToolHistory}
 	success, reason := evaluateResponse(spec, body)
@@ -72,6 +79,7 @@ func TestEvaluateResponseChatToolHistory(t *testing.T) {
 }
 
 func TestEvaluateResponseResponseAPIToolInvocation(t *testing.T) {
+	t.Parallel()
 	body := []byte(`{"required_action":{"type":"submit_tool_outputs","submit_tool_outputs":{"tool_calls":[{"id":"call_1","name":"get_weather","arguments":"{\"location\":\"San Francisco\"}"}]}}}`)
 	spec := requestSpec{Type: requestTypeResponseAPI, Expectation: expectationToolInvocation}
 	success, reason := evaluateResponse(spec, body)
@@ -79,6 +87,7 @@ func TestEvaluateResponseResponseAPIToolInvocation(t *testing.T) {
 }
 
 func TestEvaluateResponseResponseAPIToolHistory(t *testing.T) {
+	t.Parallel()
 	body := []byte(`{"required_action":{"type":"submit_tool_outputs","submit_tool_outputs":{"tool_calls":[{"id":"call_hist","name":"get_weather","arguments":"{\"location\":\"San Francisco\"}"}]}}}`)
 	spec := requestSpec{Type: requestTypeResponseAPI, Expectation: expectationToolHistory}
 	success, reason := evaluateResponse(spec, body)
@@ -86,6 +95,7 @@ func TestEvaluateResponseResponseAPIToolHistory(t *testing.T) {
 }
 
 func TestEvaluateResponseClaudeToolInvocation(t *testing.T) {
+	t.Parallel()
 	body := []byte(`{"content":[{"type":"tool_use","name":"get_weather","input":{"location":"San Francisco"}}]}`)
 	spec := requestSpec{Type: requestTypeClaudeMessages, Expectation: expectationToolInvocation}
 	success, reason := evaluateResponse(spec, body)
@@ -93,6 +103,7 @@ func TestEvaluateResponseClaudeToolInvocation(t *testing.T) {
 }
 
 func TestEvaluateResponseClaudeToolHistory(t *testing.T) {
+	t.Parallel()
 	body := []byte(`{"content":[{"type":"tool_use","name":"get_weather","input":{"location":"San Francisco"}}]}`)
 	spec := requestSpec{Type: requestTypeClaudeMessages, Expectation: expectationToolHistory}
 	success, reason := evaluateResponse(spec, body)
@@ -100,6 +111,7 @@ func TestEvaluateResponseClaudeToolHistory(t *testing.T) {
 }
 
 func TestEvaluateResponseClaudeToolInvocationChoices(t *testing.T) {
+	t.Parallel()
 	body := []byte(`{"choices":[{"message":{"tool_calls":[{"type":"function","function":{"name":"get_weather"}}]}}]}`)
 	spec := requestSpec{Type: requestTypeClaudeMessages, Expectation: expectationToolInvocation}
 	success, reason := evaluateResponse(spec, body)
@@ -107,11 +119,13 @@ func TestEvaluateResponseClaudeToolInvocationChoices(t *testing.T) {
 }
 
 func TestIsUnsupportedCombinationResponse(t *testing.T) {
+	t.Parallel()
 	body := []byte("{\"error\":{\"message\":\"unknown field `messages`\"}}")
 	require.True(t, isUnsupportedCombination(requestTypeResponseAPI, false, http.StatusBadRequest, body, ""), "expected combination to be marked unsupported")
 }
 
 func TestEvaluateStreamResponseSuccess(t *testing.T) {
+	t.Parallel()
 	data := []byte("data: {\"id\":\"resp_123\",\"error\":null}\n\n")
 	spec := requestSpec{Type: requestTypeResponseAPI, Expectation: expectationDefault}
 	success, reason := evaluateStreamResponse(spec, data)
@@ -119,6 +133,7 @@ func TestEvaluateStreamResponseSuccess(t *testing.T) {
 }
 
 func TestEvaluateStreamResponseToolInvocationChat(t *testing.T) {
+	t.Parallel()
 	data := []byte("data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"id\":\"call_1\"}]}}]}\n\n")
 	spec := requestSpec{Type: requestTypeChatCompletion, Expectation: expectationToolInvocation}
 	success, reason := evaluateStreamResponse(spec, data)
@@ -126,6 +141,7 @@ func TestEvaluateStreamResponseToolInvocationChat(t *testing.T) {
 }
 
 func TestEvaluateStreamResponseToolHistoryChat(t *testing.T) {
+	t.Parallel()
 	data := []byte("data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"id\":\"call_hist\"}]}}]}\n\n")
 	spec := requestSpec{Type: requestTypeChatCompletion, Expectation: expectationToolHistory}
 	success, reason := evaluateStreamResponse(spec, data)
@@ -133,6 +149,7 @@ func TestEvaluateStreamResponseToolHistoryChat(t *testing.T) {
 }
 
 func TestEvaluateStreamResponseToolInvocationResponseAPIItem(t *testing.T) {
+	t.Parallel()
 	data := []byte("data: {\"type\":\"response.output_item.added\",\"item\":{\"type\":\"function_call\",\"name\":\"get_weather\"}}\n\n")
 	spec := requestSpec{Type: requestTypeResponseAPI, Expectation: expectationToolInvocation}
 	success, reason := evaluateStreamResponse(spec, data)
@@ -140,6 +157,7 @@ func TestEvaluateStreamResponseToolInvocationResponseAPIItem(t *testing.T) {
 }
 
 func TestEvaluateStreamResponseToolInvocationMissing(t *testing.T) {
+	t.Parallel()
 	data := []byte("data: {\"choices\":[{\"delta\":{}}]}\n\n")
 	spec := requestSpec{Type: requestTypeChatCompletion, Expectation: expectationToolInvocation}
 	success, reason := evaluateStreamResponse(spec, data)
@@ -148,16 +166,19 @@ func TestEvaluateStreamResponseToolInvocationMissing(t *testing.T) {
 }
 
 func TestIsUnsupportedCombinationStream(t *testing.T) {
+	t.Parallel()
 	body := []byte("streaming is not supported")
 	require.True(t, isUnsupportedCombination(requestTypeChatCompletion, true, http.StatusBadRequest, body, ""), "expected streaming combination to be marked unsupported")
 }
 
 func TestIsUnsupportedCombinationResponseFormatUnavailable(t *testing.T) {
+	t.Parallel()
 	body := []byte("{\"error\":{\"message\":\"This response_format type is unavailable now\"}}")
 	require.False(t, isUnsupportedCombination(requestTypeChatCompletion, false, http.StatusBadRequest, body, ""), "response_format unavailable should be treated as failure now")
 }
 
 func TestEvaluateStreamResponseStructuredSplitTokens(t *testing.T) {
+	t.Parallel()
 	partials := []string{
 		`{"topic"`,
 		`": "AI adoption"`,
@@ -203,6 +224,7 @@ func TestEvaluateStreamResponseStructuredSplitTokens(t *testing.T) {
 }
 
 func TestShouldSkipVariantStructuredGpt5Mini(t *testing.T) {
+	t.Parallel()
 	spec := requestSpec{
 		RequestFormat: "claude_structured_stream_false",
 		Expectation:   expectationStructuredOutput,
@@ -212,6 +234,7 @@ func TestShouldSkipVariantStructuredGpt5Mini(t *testing.T) {
 }
 
 func TestShouldSkipVariantClaudeToolHistoryAzure(t *testing.T) {
+	t.Parallel()
 	spec := requestSpec{
 		RequestFormat: "claude_tools_history_stream_false",
 		Expectation:   expectationToolHistory,
@@ -221,6 +244,7 @@ func TestShouldSkipVariantClaudeToolHistoryAzure(t *testing.T) {
 }
 
 func TestIsMaxTokensTruncated(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		name     string
 		payload  map[string]any
@@ -260,6 +284,7 @@ func TestIsMaxTokensTruncated(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			result := isMaxTokensTruncated(tc.payload)
 			require.Equal(t, tc.expected, result, "isMaxTokensTruncated(%v)", tc.payload)
 		})
@@ -267,6 +292,7 @@ func TestIsMaxTokensTruncated(t *testing.T) {
 }
 
 func TestEvaluateResponseMaxTokensTruncatedClaude(t *testing.T) {
+	t.Parallel()
 	// Claude response truncated due to max_tokens should be treated as success
 	body := []byte(`{"id":"msg_123","type":"message","role":"assistant","content":[],"stop_reason":"max_tokens","usage":{"input_tokens":82,"output_tokens":511}}`)
 	spec := requestSpec{Type: requestTypeClaudeMessages, Expectation: expectationStructuredOutput}
@@ -275,6 +301,7 @@ func TestEvaluateResponseMaxTokensTruncatedClaude(t *testing.T) {
 }
 
 func TestEvaluateResponseMaxTokensTruncatedChat(t *testing.T) {
+	t.Parallel()
 	// Chat completion response truncated due to length should be treated as success
 	body := []byte(`{"choices":[{"message":{"role":"assistant","content":""},"finish_reason":"length"}]}`)
 	spec := requestSpec{Type: requestTypeChatCompletion, Expectation: expectationStructuredOutput}

@@ -9,6 +9,7 @@ import (
 )
 
 func TestNormalizeMySQLDSNAddsParseTimeAndUTC(t *testing.T) {
+	t.Parallel()
 	normalized, err := NormalizeMySQLDSN("user:pass@tcp(localhost:3306)/oneapi")
 	require.NoError(t, err)
 
@@ -19,6 +20,7 @@ func TestNormalizeMySQLDSNAddsParseTimeAndUTC(t *testing.T) {
 }
 
 func TestNormalizeMySQLDSNRespectsExistingOptions(t *testing.T) {
+	t.Parallel()
 	normalized, err := NormalizeMySQLDSN("user:pass@tcp(localhost:3306)/oneapi?parseTime=false&loc=Asia%2FShanghai&charset=utf8mb4")
 	require.NoError(t, err)
 
@@ -30,6 +32,7 @@ func TestNormalizeMySQLDSNRespectsExistingOptions(t *testing.T) {
 }
 
 func TestNormalizeMySQLDSNHandlesURLFormat(t *testing.T) {
+	t.Parallel()
 	normalized, err := NormalizeMySQLDSN("mysql://user:pass@127.0.0.1:3306/oneapi?charset=utf8mb4")
 	require.NoError(t, err)
 

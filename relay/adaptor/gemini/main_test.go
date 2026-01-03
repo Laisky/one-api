@@ -16,6 +16,7 @@ import (
 )
 
 func TestCleanFunctionParameters(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	_ = ctx // Context for future use
 
@@ -245,6 +246,7 @@ func TestCleanFunctionParameters(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			startTime := time.Now()
 			result := cleanFunctionParameters(tt.input)
 			elapsed := time.Since(startTime)
@@ -320,6 +322,7 @@ func TestConvertToolChoiceToConfig(t *testing.T) {
 }
 
 func TestCleanJsonSchemaForGemini(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	_ = ctx // Context for future use
 
@@ -423,6 +426,7 @@ func TestCleanJsonSchemaForGemini(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			startTime := time.Now()
 			result := cleanJsonSchemaForGemini(tt.input)
 			elapsed := time.Since(startTime)
@@ -442,6 +446,7 @@ func TestCleanJsonSchemaForGemini(t *testing.T) {
 }
 
 func TestConvertRequestWithToolsRegression(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	_ = ctx // Context for future use
 
@@ -607,6 +612,7 @@ func TestConvertRequest_SystemInstructionFallbackAddsDummy(t *testing.T) {
 }
 
 func TestSupportedFormatsOnly(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	_ = ctx // Context for future use
 
@@ -627,6 +633,7 @@ func TestSupportedFormatsOnly(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(fmt.Sprintf("format_%s", tc.format), func(t *testing.T) {
+			t.Parallel()
 			input := map[string]any{
 				"type":   "string",
 				"format": tc.format,
@@ -648,6 +655,7 @@ func TestSupportedFormatsOnly(t *testing.T) {
 }
 
 func TestErrorHandling(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	_ = ctx // Context for future use
 
@@ -666,6 +674,7 @@ func TestErrorHandling(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			// These should not panic
 			result1 := cleanFunctionParameters(tc.input)
 			result2 := cleanJsonSchemaForGemini(tc.input)
@@ -679,6 +688,7 @@ func TestErrorHandling(t *testing.T) {
 }
 
 func TestFormatConversionRegression(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	_ = ctx
 
@@ -728,6 +738,7 @@ func TestFormatConversionRegression(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			input := map[string]any{
 				"type":   "string",
 				"format": tt.inputFormat,
@@ -750,6 +761,7 @@ func TestFormatConversionRegression(t *testing.T) {
 }
 
 func TestOriginalErrorScenario(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	_ = ctx
 
@@ -854,6 +866,7 @@ func TestOriginalErrorScenario(t *testing.T) {
 }
 
 func TestCleanJsonSchemaForGeminiFormatMapping(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	_ = ctx
 
@@ -908,6 +921,7 @@ func TestCleanJsonSchemaForGeminiFormatMapping(t *testing.T) {
 }
 
 func TestErrorHandlingWithProperWrapping(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	_ = ctx
 
@@ -926,6 +940,7 @@ func TestErrorHandlingWithProperWrapping(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			// These should not panic and should handle errors gracefully
 			result1 := cleanFunctionParameters(tc.input)
 			result2 := cleanJsonSchemaForGemini(tc.input)
@@ -939,6 +954,7 @@ func TestErrorHandlingWithProperWrapping(t *testing.T) {
 }
 
 func TestPerformanceWithUTCTiming(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	_ = ctx
 
@@ -1015,6 +1031,7 @@ func verifyNoAdditionalProperties(obj any) error {
 }
 
 func TestOriginalLogErrorFixed(t *testing.T) {
+	t.Parallel()
 	// This reproduces the exact case from the log that was failing:
 	// "Invalid JSON payload received. Unknown name \"additionalProperties\"
 	// at 'tools[0].function_declarations[0].parameters.properties[0].value': Cannot find field."
@@ -1091,6 +1108,7 @@ func TestOriginalLogErrorFixed(t *testing.T) {
 }
 
 func TestUsageMetadataPriority(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	_ = ctx
 
@@ -1181,6 +1199,7 @@ func TestUsageMetadataPriority(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			// Mock the responseGeminiChat2OpenAI and CountTokenText functions by creating usage manually
 			var actualUsage model.Usage
 

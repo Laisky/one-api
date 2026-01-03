@@ -12,6 +12,7 @@ import (
 )
 
 func TestApplyResponseAPIStreamParams(t *testing.T) {
+	t.Parallel()
 	gin.SetMode(gin.TestMode)
 
 	tests := []struct {
@@ -45,6 +46,7 @@ func TestApplyResponseAPIStreamParams(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			recorder := httptest.NewRecorder()
 			c, _ := gin.CreateTestContext(recorder)
 			req := httptest.NewRequest(http.MethodGet, tt.url, nil)

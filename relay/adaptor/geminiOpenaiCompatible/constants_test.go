@@ -9,6 +9,7 @@ import (
 )
 
 func TestGeminiWebSearchPricingApplied(t *testing.T) {
+	t.Parallel()
 	pricing, ok := geminiToolingDefaults.Pricing["web_search"]
 	require.True(t, ok, "web search pricing missing for gemini defaults")
 	require.InDelta(t, 0.035, pricing.UsdPerCall, 1e-9, "expected $0.035 per grounded search call")
@@ -16,6 +17,7 @@ func TestGeminiWebSearchPricingApplied(t *testing.T) {
 }
 
 func TestGeminiTieredPricingConfigured(t *testing.T) {
+	t.Parallel()
 	cfg, ok := ModelRatios["gemini-3-pro-preview"]
 	require.True(t, ok, "gemini-3-pro-preview missing from pricing map")
 	require.InDelta(t, 2.0*ratio.MilliTokensUsd, cfg.Ratio, 1e-12)
@@ -27,6 +29,7 @@ func TestGeminiTieredPricingConfigured(t *testing.T) {
 }
 
 func TestGeminiFlashAudioPricing(t *testing.T) {
+	t.Parallel()
 	cfg, ok := ModelRatios["gemini-2.5-flash"]
 	require.True(t, ok, "gemini-2.5-flash missing from pricing map")
 	require.NotNil(t, cfg.Audio, "gemini-2.5-flash audio pricing missing")
@@ -35,6 +38,7 @@ func TestGeminiFlashAudioPricing(t *testing.T) {
 }
 
 func TestGemini3FlashPricing(t *testing.T) {
+	t.Parallel()
 	cfg, ok := ModelRatios["gemini-3-flash-preview"]
 	require.True(t, ok, "gemini-3-flash-preview missing from pricing map")
 	require.InDelta(t, 0.50*ratio.MilliTokensUsd, cfg.Ratio, 1e-12)
@@ -45,12 +49,14 @@ func TestGemini3FlashPricing(t *testing.T) {
 }
 
 func TestGeminiEmbeddingConfig(t *testing.T) {
+	t.Parallel()
 	cfg, ok := ModelRatios["gemini-embedding-001"]
 	require.True(t, ok, "gemini-embedding-001 missing from pricing map")
 	require.InDelta(t, 0.15*ratio.MilliTokensUsd, cfg.Ratio, 1e-12)
 }
 
 func TestGemini3ProImagePreviewPricing(t *testing.T) {
+	t.Parallel()
 	cfg, ok := ModelRatios["gemini-3-pro-image-preview"]
 	require.True(t, ok, "gemini-3-pro-image-preview missing from pricing map")
 	require.InDelta(t, 2.0*ratio.MilliTokensUsd, cfg.Ratio, 1e-12)
@@ -64,6 +70,7 @@ func TestGemini3ProImagePreviewPricing(t *testing.T) {
 }
 
 func TestGetModelModalitiesGeminiVersionCutoff(t *testing.T) {
+	t.Parallel()
 	testCases := []struct {
 		name     string
 		model    string
@@ -81,6 +88,7 @@ func TestGetModelModalitiesGeminiVersionCutoff(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			modalities := GetModelModalities(tc.model)
 			require.Equal(t, tc.expected, modalities)
 		})
@@ -88,6 +96,7 @@ func TestGetModelModalitiesGeminiVersionCutoff(t *testing.T) {
 }
 
 func TestGeminiVersionAtLeast(t *testing.T) {
+	t.Parallel()
 	testCases := []struct {
 		model    string
 		min      float64

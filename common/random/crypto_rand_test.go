@@ -9,6 +9,7 @@ import (
 )
 
 func TestUniqueness(t *testing.T) {
+	t.Parallel()
 	// Table-driven test structure for uniqueness testing
 	tests := []struct {
 		name          string
@@ -66,6 +67,7 @@ func TestUniqueness(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			// Use a map to track unique values
 			seen := make(map[string]bool, tt.iterations)
 			duplicates := 0
@@ -100,6 +102,7 @@ func TestUniqueness(t *testing.T) {
 
 // TestRandRangeDistribution tests that RandRange produces values with a reasonable distribution
 func TestRandRangeDistribution(t *testing.T) {
+	t.Parallel()
 	// For RandRange, we're more interested in distribution than uniqueness
 	min, max := 1, 10
 	iterations := 100000
@@ -136,29 +139,35 @@ func TestRandRangeDistribution(t *testing.T) {
 }
 
 func TestEdgeCases(t *testing.T) {
+	t.Parallel()
 	t.Run("GetRandomString zero length", func(t *testing.T) {
+		t.Parallel()
 		s := random.GetRandomString(0)
 		require.Empty(t, s, "Expected empty string")
 	})
 
 	t.Run("GetRandomNumberString zero length", func(t *testing.T) {
+		t.Parallel()
 		s := random.GetRandomNumberString(0)
 		require.Empty(t, s, "Expected empty string")
 	})
 
 	t.Run("GetRandomString negative length (should panic)", func(t *testing.T) {
+		t.Parallel()
 		require.Panics(t, func() {
 			_ = random.GetRandomString(-1)
 		}, "Expected panic for negative length")
 	})
 
 	t.Run("GetRandomNumberString negative length (should panic)", func(t *testing.T) {
+		t.Parallel()
 		require.Panics(t, func() {
 			_ = random.GetRandomNumberString(-5)
 		}, "Expected panic for negative length")
 	})
 
 	t.Run("RandRange min == max (should always return min)", func(t *testing.T) {
+		t.Parallel()
 		for range 10 {
 			v := random.RandRange(5, 5)
 			require.Equal(t, 5, v, "Expected 5")
@@ -166,6 +175,7 @@ func TestEdgeCases(t *testing.T) {
 	})
 
 	t.Run("RandRange min > max (should panic)", func(t *testing.T) {
+		t.Parallel()
 		require.Panics(t, func() {
 			_ = random.RandRange(10, 5)
 		}, "Expected panic for min > max")

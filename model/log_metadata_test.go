@@ -8,6 +8,7 @@ import (
 
 // TestLogMetadataValue verifies that Value serializes metadata to JSON when populated.
 func TestLogMetadataValue(t *testing.T) {
+	t.Parallel()
 	var empty LogMetadata
 	v, err := empty.Value()
 	require.NoError(t, err)
@@ -23,6 +24,7 @@ func TestLogMetadataValue(t *testing.T) {
 
 // TestLogMetadataScan ensures Scan correctly deserializes JSON payloads.
 func TestLogMetadataScan(t *testing.T) {
+	t.Parallel()
 	var metadata LogMetadata
 	err := metadata.Scan([]byte(`{"bar": "baz"}`))
 	require.NoError(t, err)
@@ -40,6 +42,7 @@ func TestLogMetadataScan(t *testing.T) {
 
 // TestAppendCacheWriteTokensMetadata confirms cache write tokens are appended as expected.
 func TestAppendCacheWriteTokensMetadata(t *testing.T) {
+	t.Parallel()
 	metadata := AppendCacheWriteTokensMetadata(nil, 0, 0)
 	require.Nil(t, metadata)
 

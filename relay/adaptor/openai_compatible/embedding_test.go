@@ -16,6 +16,7 @@ import (
 )
 
 func TestEmbeddingHandler_Success(t *testing.T) {
+	t.Parallel()
 	gin.SetMode(gin.TestMode)
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
@@ -86,6 +87,7 @@ func TestEmbeddingHandler_Success(t *testing.T) {
 }
 
 func TestEmbeddingHandler_ErrorResponse(t *testing.T) {
+	t.Parallel()
 	gin.SetMode(gin.TestMode)
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
@@ -120,6 +122,7 @@ func TestEmbeddingHandler_ErrorResponse(t *testing.T) {
 }
 
 func TestEmbeddingHandler_EmptyResponseBody(t *testing.T) {
+	t.Parallel()
 	gin.SetMode(gin.TestMode)
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
@@ -141,6 +144,7 @@ func TestEmbeddingHandler_EmptyResponseBody(t *testing.T) {
 }
 
 func TestEmbeddingHandler_InvalidJSON(t *testing.T) {
+	t.Parallel()
 	gin.SetMode(gin.TestMode)
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
@@ -162,6 +166,7 @@ func TestEmbeddingHandler_InvalidJSON(t *testing.T) {
 }
 
 func TestEmbeddingHandler_NoEmbeddingData(t *testing.T) {
+	t.Parallel()
 	gin.SetMode(gin.TestMode)
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
@@ -198,6 +203,7 @@ func TestEmbeddingHandler_NoEmbeddingData(t *testing.T) {
 }
 
 func TestEmbeddingHandler_UsageTotalTokensCalculation(t *testing.T) {
+	t.Parallel()
 	gin.SetMode(gin.TestMode)
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
@@ -243,6 +249,7 @@ func TestEmbeddingHandler_UsageTotalTokensCalculation(t *testing.T) {
 }
 
 func TestEmbeddingHandler_ReadBodyError(t *testing.T) {
+	t.Parallel()
 	gin.SetMode(gin.TestMode)
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)

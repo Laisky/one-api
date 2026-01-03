@@ -8,6 +8,7 @@ import (
 )
 
 func TestIsIpInSubnet(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	ip1 := "192.168.0.5"
 	ip2 := "125.216.250.89"

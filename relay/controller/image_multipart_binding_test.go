@@ -11,6 +11,7 @@ import (
 )
 
 func TestGetImageRequest_MultipartBindsModel(t *testing.T) {
+	t.Parallel()
 	gin.SetMode(gin.TestMode)
 	w := httptest.NewRecorder()
 
@@ -32,6 +33,7 @@ func TestGetImageRequest_MultipartBindsModel(t *testing.T) {
 }
 
 func TestGetImageRequest_MultipartBindsModelMini(t *testing.T) {
+	t.Parallel()
 	gin.SetMode(gin.TestMode)
 	w := httptest.NewRecorder()
 

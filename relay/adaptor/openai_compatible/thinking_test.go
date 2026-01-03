@@ -8,6 +8,7 @@ import (
 )
 
 func TestExtractThinkingContent_SingleThinkTag(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name             string
 		input            string
@@ -60,6 +61,7 @@ func TestExtractThinkingContent_SingleThinkTag(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			thinking, regular := ExtractThinkingContent(tt.input)
 			require.Equal(t, tt.expectedThinking, thinking, "ExtractThinkingContent() thinking mismatch")
 			require.Equal(t, tt.expectedRegular, regular, "ExtractThinkingContent() regular mismatch")
@@ -68,6 +70,7 @@ func TestExtractThinkingContent_SingleThinkTag(t *testing.T) {
 }
 
 func TestExtractThinkingContent_MultipleThinkTags_SingleTagBehavior(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name             string
 		input            string
@@ -114,6 +117,7 @@ func TestExtractThinkingContent_MultipleThinkTags_SingleTagBehavior(t *testing.T
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			thinking, regular := ExtractThinkingContent(tt.input)
 			require.Equal(t, tt.expectedThinking, thinking, "ExtractThinkingContent() thinking mismatch - %s", tt.description)
 			require.Equal(t, tt.expectedRegular, regular, "ExtractThinkingContent() regular mismatch - %s", tt.description)
@@ -122,6 +126,7 @@ func TestExtractThinkingContent_MultipleThinkTags_SingleTagBehavior(t *testing.T
 }
 
 func TestExtractThinkingContent_EdgeCases(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name             string
 		input            string
@@ -175,6 +180,7 @@ func TestExtractThinkingContent_EdgeCases(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			thinking, regular := ExtractThinkingContent(tt.input)
 			require.Equal(t, tt.expectedThinking, thinking, "ExtractThinkingContent() thinking mismatch - %s", tt.description)
 			require.Equal(t, tt.expectedRegular, regular, "ExtractThinkingContent() regular mismatch - %s", tt.description)
@@ -183,6 +189,7 @@ func TestExtractThinkingContent_EdgeCases(t *testing.T) {
 }
 
 func TestExtractThinkingContent_PerformanceWithMultipleTags_SingleTagBehavior(t *testing.T) {
+	t.Parallel()
 	// Test performance characteristics with many think tags - only first should be processed
 	var builder strings.Builder
 	var expectedRegularBuilder strings.Builder
@@ -221,7 +228,9 @@ func TestExtractThinkingContent_PerformanceWithMultipleTags_SingleTagBehavior(t 
 
 // Test the improved behavior - now handles only 1 think tag, not multiple
 func TestThinkTagHandling_ImprovedSingleTagOnly(t *testing.T) {
+	t.Parallel()
 	t.Run("Verify only first think tag is processed, subsequent ones treated as regular content", func(t *testing.T) {
+		t.Parallel()
 		input := "Hello <think>first</think> world <think>second</think> end"
 		thinking, regular := ExtractThinkingContent(input)
 
@@ -231,6 +240,7 @@ func TestThinkTagHandling_ImprovedSingleTagOnly(t *testing.T) {
 	})
 
 	t.Run("Verify single think tag still works correctly", func(t *testing.T) {
+		t.Parallel()
 		input := "Hello <think>only one</think> world"
 		thinking, regular := ExtractThinkingContent(input)
 
@@ -239,6 +249,7 @@ func TestThinkTagHandling_ImprovedSingleTagOnly(t *testing.T) {
 	})
 
 	t.Run("Verify improvement: three think tags - only first processed", func(t *testing.T) {
+		t.Parallel()
 		input := "Start <think>first</think> middle <think>second</think> more <think>third</think> end"
 		thinking, regular := ExtractThinkingContent(input)
 
@@ -253,11 +264,13 @@ func TestThinkTagHandling_ImprovedSingleTagOnly(t *testing.T) {
 
 // Test streaming behavior to verify only first think tag is processed
 func TestStreamHandlerWithThinking_SingleTagBehavior(t *testing.T) {
+	t.Parallel()
 	// Note: This is a conceptual test structure since StreamHandlerWithThinking processes
 	// streaming chunks. The actual implementation would require mock HTTP responses and
 	// streaming chunk simulation. The key behavioral change is that the function now
 	// uses hasProcessedThinkTag flag to prevent processing of subsequent think tags.
 	t.Run("Streaming handler should only process first think tag", func(t *testing.T) {
+		t.Parallel()
 		// This test verifies the logic change in StreamHandlerWithThinking
 		// The function now includes:
 		// 1. hasProcessedThinkTag flag initialization
@@ -278,6 +291,7 @@ func TestStreamHandlerWithThinking_SingleTagBehavior(t *testing.T) {
 }
 
 func TestExtractThinkingContent_UnicodeThinkTags(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name             string
 		input            string
@@ -338,6 +352,7 @@ func TestExtractThinkingContent_UnicodeThinkTags(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			thinking, regular := ExtractThinkingContent(tt.input)
 			require.Equal(t, tt.expectedThinking, thinking, "ExtractThinkingContent() thinking mismatch - %s", tt.description)
 			require.Equal(t, tt.expectedRegular, regular, "ExtractThinkingContent() regular mismatch - %s", tt.description)

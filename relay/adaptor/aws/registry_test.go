@@ -9,6 +9,7 @@ import (
 )
 
 func TestGetAdaptorReturnsQwenAdaptor(t *testing.T) {
+	t.Parallel()
 	adaptor := GetAdaptor("qwen3-32b")
 	require.NotNil(t, adaptor, "expected non-nil adaptor for qwen model")
 

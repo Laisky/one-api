@@ -10,6 +10,7 @@ import (
 
 // Test classification helper directly
 func TestIsClientContextCancel(t *testing.T) {
+	t.Parallel()
 	require.True(t, isClientContextCancel(http.StatusInternalServerError, context.Canceled),
 		"expected true for context.Canceled")
 	require.True(t, isClientContextCancel(http.StatusInternalServerError, context.DeadlineExceeded),

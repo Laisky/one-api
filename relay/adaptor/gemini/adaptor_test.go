@@ -12,6 +12,7 @@ import (
 )
 
 func TestAdaptorGetRequestURLGeminiVersions(t *testing.T) {
+	t.Parallel()
 	adaptor := &Adaptor{}
 	baseURL := "https://generativelanguage.googleapis.com"
 	originalVersion := config.GeminiVersion
@@ -34,6 +35,7 @@ func TestAdaptorGetRequestURLGeminiVersions(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			metaInfo := &meta.Meta{
 				ActualModelName: tc.model,
 				Mode:            relaymode.ChatCompletions,

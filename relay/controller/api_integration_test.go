@@ -9,6 +9,7 @@ import (
 // TestAPIIntegration verifies that all APIs (Audio, ChatCompletion, Response) work correctly
 // after the billing refactor and maintain backward compatibility
 func TestAPIIntegration(t *testing.T) {
+	t.Parallel()
 
 	t.Run("Audio API Billing Compatibility", func(t *testing.T) {
 		// Test that Audio API still uses the simple billing function
@@ -34,6 +35,7 @@ func TestAPIIntegration(t *testing.T) {
 
 		for _, tc := range testCases {
 			t.Run(tc.name, func(t *testing.T) {
+				t.Parallel()
 				// Verify that the quota calculation is straightforward for audio
 				// Audio API doesn't use completion ratios or tools cost
 				expectedQuota := tc.totalQuota
@@ -109,6 +111,7 @@ func TestAPIIntegration(t *testing.T) {
 
 		for _, tc := range testCases {
 			t.Run(tc.name, func(t *testing.T) {
+				t.Parallel()
 				// Calculate quota using ChatCompletion formula
 				calculatedQuota := int64((float64(tc.promptTokens)+float64(tc.completionTokens)*tc.completionRatio)*tc.modelRatio*tc.groupRatio) + tc.toolsCost
 
@@ -177,6 +180,7 @@ func TestAPIIntegration(t *testing.T) {
 
 		for _, tc := range testCases {
 			t.Run(tc.name, func(t *testing.T) {
+				t.Parallel()
 				// Calculate quota using Response API formula (same as ChatCompletion)
 				// input_tokens maps to prompt_tokens, output_tokens maps to completion_tokens
 				responseQuota := int64((float64(tc.inputTokens)+float64(tc.outputTokens)*tc.completionRatio)*tc.modelRatio*tc.groupRatio) + tc.toolsCost
@@ -193,6 +197,7 @@ func TestAPIIntegration(t *testing.T) {
 	})
 
 	t.Run("Cross-API Consistency", func(t *testing.T) {
+		t.Parallel()
 		// Verify that ChatCompletion and Response API produce identical billing
 		// for the same token counts and ratios
 
@@ -219,8 +224,10 @@ func TestAPIIntegration(t *testing.T) {
 
 // TestBillingRefactorSafety verifies that the billing refactor maintains all safety guarantees
 func TestBillingRefactorSafety(t *testing.T) {
+	t.Parallel()
 
 	t.Run("Function Signature Compatibility", func(t *testing.T) {
+		t.Parallel()
 		// Verify that all billing function signatures are preserved
 		// This ensures that existing code continues to work
 
@@ -240,6 +247,7 @@ func TestBillingRefactorSafety(t *testing.T) {
 	})
 
 	t.Run("Input Validation Safety", func(t *testing.T) {
+		t.Parallel()
 		// Verify that both billing functions handle invalid inputs gracefully
 		// without panicking or causing system instability
 
@@ -258,6 +266,7 @@ func TestBillingRefactorSafety(t *testing.T) {
 	})
 
 	t.Run("Backward Compatibility Guarantee", func(t *testing.T) {
+		t.Parallel()
 		// Verify that existing APIs continue to work exactly as before
 
 		compatibilityChecks := []string{

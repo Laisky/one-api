@@ -11,6 +11,7 @@ import (
 // multi-turn tool history using the documented function_call and
 // function_call_output items that the upstream Response API expects.
 func TestResponseAPIToolHistoryPayload(t *testing.T) {
+	t.Parallel()
 	payloadAny := responseAPIPayload("gpt-4o-mini", false, expectationToolHistory)
 	payload, ok := payloadAny.(map[string]any)
 	require.True(t, ok, "payload should be a map")
@@ -56,6 +57,7 @@ func TestResponseAPIToolHistoryPayload(t *testing.T) {
 }
 
 func TestChatCompletionToolHistoryPayload(t *testing.T) {
+	t.Parallel()
 	payloadAny := chatCompletionPayload("gpt-4o-mini", false, expectationToolHistory)
 	payload, ok := payloadAny.(map[string]any)
 	require.True(t, ok)
@@ -92,6 +94,7 @@ func TestChatCompletionToolHistoryPayload(t *testing.T) {
 }
 
 func TestClaudeMessagesToolHistoryPayload(t *testing.T) {
+	t.Parallel()
 	payloadAny := claudeMessagesPayload("claude-3", false, expectationToolHistory)
 	payload, ok := payloadAny.(map[string]any)
 	require.True(t, ok)

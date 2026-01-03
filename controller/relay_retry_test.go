@@ -11,6 +11,7 @@ import (
 )
 
 func TestRelay429RetryLogic(t *testing.T) {
+	t.Parallel()
 	gin.SetMode(gin.TestMode)
 
 	tests := []struct {
@@ -32,6 +33,7 @@ func TestRelay429RetryLogic(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			// Test the retry priority logic directly
 			shouldTryLowerPriorityFirst := tt.initialError == http.StatusTooManyRequests
 			assert.Equal(t, tt.shouldTryLowerPriority, shouldTryLowerPriorityFirst,
@@ -41,6 +43,7 @@ func TestRelay429RetryLogic(t *testing.T) {
 }
 
 func TestChannelExclusionInRetry(t *testing.T) {
+	t.Parallel()
 	// Test that failed channels are properly excluded from subsequent retries
 
 	failedChannels := map[int]bool{
@@ -73,6 +76,7 @@ func TestChannelExclusionInRetry(t *testing.T) {
 
 // TestRetryPriorityLogic tests the core retry priority decision logic
 func TestRetryPriorityLogic(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name                   string
 		statusCode             int
@@ -122,6 +126,7 @@ func TestRetryPriorityLogic(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			shouldTryLowerPriorityFirst := tt.statusCode == http.StatusTooManyRequests
 			assert.Equal(t, tt.shouldTryLowerPriority, shouldTryLowerPriorityFirst,
 				"Status code %d should determine priority logic correctly", tt.statusCode)
@@ -131,6 +136,7 @@ func TestRetryPriorityLogic(t *testing.T) {
 
 // TestChannelExclusionLogic tests the channel exclusion functionality
 func TestChannelExclusionLogic(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name                string
 		failedChannelIds    map[int]bool
@@ -171,6 +177,7 @@ func TestChannelExclusionLogic(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			var actualChannelIds []int
 			for _, channelId := range tt.availableChannelIds {
 				if !tt.failedChannelIds[channelId] {

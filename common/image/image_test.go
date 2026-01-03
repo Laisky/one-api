@@ -100,6 +100,7 @@ func TestDecode(t *testing.T) {
 	// jpeg#01: 32805
 	for _, c := range cases {
 		t.Run("Decode:"+c.format, func(t *testing.T) {
+			t.Parallel()
 			t.Logf("testing %s", c.url)
 			resp, err := retryHTTPGet(c.url, 3)
 			require.NoError(t, err)
@@ -125,6 +126,7 @@ func TestDecode(t *testing.T) {
 	// jpeg#01: 4096
 	for _, c := range cases {
 		t.Run("DecodeConfig:"+c.format, func(t *testing.T) {
+			t.Parallel()
 			resp, err := retryHTTPGet(c.url, 3)
 			require.NoError(t, err)
 			defer resp.Body.Close()
@@ -152,6 +154,7 @@ func TestBase64(t *testing.T) {
 	// jpeg#01: 32805
 	for _, c := range cases {
 		t.Run("Decode:"+c.format, func(t *testing.T) {
+			t.Parallel()
 			resp, err := retryHTTPGet(c.url, 3)
 			require.NoError(t, err)
 			defer resp.Body.Close()
@@ -182,6 +185,7 @@ func TestBase64(t *testing.T) {
 	// jpeg#01: 3840
 	for _, c := range cases {
 		t.Run("DecodeConfig:"+c.format, func(t *testing.T) {
+			t.Parallel()
 			resp, err := retryHTTPGet(c.url, 3)
 			require.NoError(t, err)
 			defer resp.Body.Close()
@@ -203,6 +207,7 @@ func TestBase64(t *testing.T) {
 }
 
 func TestValidateDataURLImage(t *testing.T) {
+	t.Parallel()
 	validDataURL := "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
 	require.NoError(t, img.ValidateDataURLImage(validDataURL))
 
@@ -222,6 +227,7 @@ func TestGetImageSize(t *testing.T) {
 
 	for i, c := range cases {
 		t.Run("Decode:"+strconv.Itoa(i), func(t *testing.T) {
+			t.Parallel()
 			width, height, err := img.GetImageSize(c.url)
 			require.NoError(t, err)
 			require.Equal(t, c.width, width)
@@ -251,6 +257,7 @@ func TestGetImageSizeFromBase64(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			width, height, err := img.GetImageSizeFromBase64(tt.b64)
 			require.NoError(t, err)
 			require.Equal(t, tt.width, width)

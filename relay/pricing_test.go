@@ -13,6 +13,7 @@ import (
 
 // TestAdapterPricingImplementations tests that all major adapters have proper pricing implementations
 func TestAdapterPricingImplementations(t *testing.T) {
+	t.Parallel()
 	testCases := []struct {
 		name        string
 		apiType     int
@@ -38,6 +39,7 @@ func TestAdapterPricingImplementations(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			adaptor := GetAdaptor(tc.apiType)
 			require.NotNil(t, adaptor, "No adaptor found for %s (type: %d)", tc.name, tc.apiType)
 
@@ -68,7 +70,9 @@ func TestAdapterPricingImplementations(t *testing.T) {
 
 // TestSpecificAdapterPricing tests specific pricing for individual adapters
 func TestSpecificAdapterPricing(t *testing.T) {
+	t.Parallel()
 	t.Run("Ali_Pricing", func(t *testing.T) {
+		t.Parallel()
 		adaptor := GetAdaptor(apitype.Ali)
 		require.NotNil(t, adaptor, "Ali adaptor not found")
 
@@ -89,6 +93,7 @@ func TestSpecificAdapterPricing(t *testing.T) {
 
 	// H0llyW00dzZ: I'm writing this test myself now because this codebase is too complex.
 	t.Run("OpenRouter_Pricing", func(t *testing.T) {
+		t.Parallel()
 		adaptor := &openrouter.Adaptor{}
 
 		// Test GetDefaultModelPricing
@@ -123,6 +128,7 @@ func TestSpecificAdapterPricing(t *testing.T) {
 	})
 
 	t.Run("xAI_Pricing", func(t *testing.T) {
+		t.Parallel()
 		adaptor := GetAdaptor(apitype.XAI)
 		require.NotNil(t, adaptor, "xAI_Pricing not found")
 
@@ -174,6 +180,7 @@ func TestSpecificAdapterPricing(t *testing.T) {
 	})
 
 	t.Run("Gemini_Pricing", func(t *testing.T) {
+		t.Parallel()
 		adaptor := GetAdaptor(apitype.Gemini)
 		require.NotNil(t, adaptor, "Gemini adaptor not found")
 
@@ -197,6 +204,7 @@ func TestSpecificAdapterPricing(t *testing.T) {
 	})
 
 	t.Run("VertexAI_Pricing", func(t *testing.T) {
+		t.Parallel()
 		adaptor := GetAdaptor(apitype.VertexAI)
 		require.NotNil(t, adaptor, "VertexAI adaptor not found")
 
@@ -217,6 +225,7 @@ func TestSpecificAdapterPricing(t *testing.T) {
 
 // TestPricingConsistency tests that pricing methods are consistent
 func TestPricingConsistency(t *testing.T) {
+	t.Parallel()
 	adapters := []struct {
 		name    string
 		apiType int
@@ -232,6 +241,7 @@ func TestPricingConsistency(t *testing.T) {
 
 	for _, adapter := range adapters {
 		t.Run(adapter.name+"_Consistency", func(t *testing.T) {
+			t.Parallel()
 			adaptor := GetAdaptor(adapter.apiType)
 			require.NotNil(t, adaptor, "%s adaptor not found", adapter.name)
 
@@ -256,6 +266,7 @@ func TestPricingConsistency(t *testing.T) {
 
 // TestFallbackPricing tests that adapters return reasonable fallback pricing for unknown models
 func TestFallbackPricing(t *testing.T) {
+	t.Parallel()
 	adapters := []struct {
 		name    string
 		apiType int
@@ -274,6 +285,7 @@ func TestFallbackPricing(t *testing.T) {
 
 	for _, adapter := range adapters {
 		t.Run(adapter.name+"_Fallback", func(t *testing.T) {
+			t.Parallel()
 			adaptor := GetAdaptor(adapter.apiType)
 			require.NotNil(t, adaptor, "%s adaptor not found", adapter.name)
 

@@ -12,6 +12,7 @@ import (
 )
 
 func TestShouldRetry_ClientAndAuthMatrix(t *testing.T) {
+	t.Parallel()
 	gin.SetMode(gin.TestMode)
 
 	cases := []struct {
@@ -30,6 +31,7 @@ func TestShouldRetry_ClientAndAuthMatrix(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			c, _ := gin.CreateTestContext(nil)
 			c.Set(ctxkey.SpecificChannelId, 0)
 			err := shouldRetry(c, tc.status, nil)
@@ -48,9 +50,14 @@ func TestShouldRetry_ClientAndAuthMatrix(t *testing.T) {
 }
 
 func TestClassifyAuthLike(t *testing.T) {
-	t.Run("nil error", func(t *testing.T) { assert.False(t, classifyAuthLike(nil)) })
+	t.Parallel()
+	t.Run("nil error", func(t *testing.T) {
+		t.Parallel()
+		assert.False(t, classifyAuthLike(nil))
+	})
 
 	t.Run("401/403 direct", func(t *testing.T) {
+		t.Parallel()
 		e1 := &model.ErrorWithStatusCode{StatusCode: http.StatusUnauthorized}
 		e2 := &model.ErrorWithStatusCode{StatusCode: http.StatusForbidden}
 		assert.True(t, classifyAuthLike(e1))
@@ -58,6 +65,7 @@ func TestClassifyAuthLike(t *testing.T) {
 	})
 
 	t.Run("type-based", func(t *testing.T) {
+		t.Parallel()
 		for _, typ := range []model.ErrorType{
 			model.ErrorTypeAuthentication,
 			model.ErrorTypePermission,
@@ -70,6 +78,7 @@ func TestClassifyAuthLike(t *testing.T) {
 	})
 
 	t.Run("code-based", func(t *testing.T) {
+		t.Parallel()
 		for _, code := range []any{"invalid_api_key", "account_deactivated", "insufficient_quota"} {
 			e := &model.ErrorWithStatusCode{Error: model.Error{Code: code}}
 			assert.True(t, classifyAuthLike(e), code)
@@ -77,6 +86,7 @@ func TestClassifyAuthLike(t *testing.T) {
 	})
 
 	t.Run("message-based", func(t *testing.T) {
+		t.Parallel()
 		msgs := []string{
 			"API key not valid",
 			"API KEY EXPIRED",
@@ -91,6 +101,7 @@ func TestClassifyAuthLike(t *testing.T) {
 	})
 
 	t.Run("non-auth server error", func(t *testing.T) {
+		t.Parallel()
 		e := &model.ErrorWithStatusCode{StatusCode: http.StatusInternalServerError, Error: model.Error{Message: "internal error"}}
 		assert.False(t, classifyAuthLike(e))
 	})

@@ -9,6 +9,7 @@ import (
 )
 
 func TestGetTraceIDFromContextPrefersOpenTelemetrySpan(t *testing.T) {
+	t.Parallel()
 	tp := sdktrace.NewTracerProvider()
 	tracer := tp.Tracer("test")
 

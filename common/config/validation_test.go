@@ -7,6 +7,7 @@ import (
 )
 
 func TestValidateGinMode(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name    string
 		value   string
@@ -22,6 +23,7 @@ func TestValidateGinMode(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			err := ValidateGinMode(tt.value)
 			if tt.wantErr {
 				require.Error(t, err)
@@ -33,6 +35,7 @@ func TestValidateGinMode(t *testing.T) {
 }
 
 func TestValidateAutoDetectAPIFormatAction(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name    string
 		value   string
@@ -46,6 +49,7 @@ func TestValidateAutoDetectAPIFormatAction(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			err := ValidateAutoDetectAPIFormatAction(tt.value)
 			if tt.wantErr {
 				require.Error(t, err)
@@ -57,6 +61,7 @@ func TestValidateAutoDetectAPIFormatAction(t *testing.T) {
 }
 
 func TestValidateLogRotationInterval(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name    string
 		value   string
@@ -71,6 +76,7 @@ func TestValidateLogRotationInterval(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			err := ValidateLogRotationInterval(tt.value)
 			if tt.wantErr {
 				require.Error(t, err)
@@ -82,6 +88,7 @@ func TestValidateLogRotationInterval(t *testing.T) {
 }
 
 func TestValidateTheme(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name    string
 		value   string
@@ -97,6 +104,7 @@ func TestValidateTheme(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			err := ValidateTheme(tt.value)
 			if tt.wantErr {
 				require.Error(t, err)
@@ -108,6 +116,7 @@ func TestValidateTheme(t *testing.T) {
 }
 
 func TestValidateGeminiSafetySetting(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name    string
 		value   string
@@ -123,6 +132,7 @@ func TestValidateGeminiSafetySetting(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			err := ValidateGeminiSafetySetting(tt.value)
 			if tt.wantErr {
 				require.Error(t, err)
@@ -134,6 +144,7 @@ func TestValidateGeminiSafetySetting(t *testing.T) {
 }
 
 func TestValidateGeminiVersion(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name    string
 		value   string
@@ -147,6 +158,7 @@ func TestValidateGeminiVersion(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			err := ValidateGeminiVersion(tt.value)
 			if tt.wantErr {
 				require.Error(t, err)
@@ -158,6 +170,7 @@ func TestValidateGeminiVersion(t *testing.T) {
 }
 
 func TestValidateOpenTelemetryConfig(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		enabled  bool
@@ -171,6 +184,7 @@ func TestValidateOpenTelemetryConfig(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			err := ValidateOpenTelemetryConfig(tt.enabled, tt.endpoint)
 			if tt.wantErr {
 				require.Error(t, err)
@@ -182,6 +196,7 @@ func TestValidateOpenTelemetryConfig(t *testing.T) {
 }
 
 func TestValidatePositiveInt(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name    string
 		value   int
@@ -195,6 +210,7 @@ func TestValidatePositiveInt(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			err := ValidatePositiveInt("TEST_VAR", tt.value)
 			if tt.wantErr {
 				require.Error(t, err)
@@ -206,6 +222,7 @@ func TestValidatePositiveInt(t *testing.T) {
 }
 
 func TestValidateNonNegativeInt(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name    string
 		value   int
@@ -218,6 +235,7 @@ func TestValidateNonNegativeInt(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			err := ValidateNonNegativeInt("TEST_VAR", tt.value)
 			if tt.wantErr {
 				require.Error(t, err)
@@ -229,6 +247,7 @@ func TestValidateNonNegativeInt(t *testing.T) {
 }
 
 func TestValidateIntRange(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name    string
 		value   int
@@ -245,6 +264,7 @@ func TestValidateIntRange(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			err := ValidateIntRange("TEST_VAR", tt.value, tt.min, tt.max)
 			if tt.wantErr {
 				require.Error(t, err)
@@ -256,6 +276,7 @@ func TestValidateIntRange(t *testing.T) {
 }
 
 func TestValidateFloatRange(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name    string
 		value   float64
@@ -272,6 +293,7 @@ func TestValidateFloatRange(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			err := ValidateFloatRange("TEST_VAR", tt.value, tt.min, tt.max)
 			if tt.wantErr {
 				require.Error(t, err)
@@ -283,6 +305,7 @@ func TestValidateFloatRange(t *testing.T) {
 }
 
 func TestValidateURLFormat(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name    string
 		value   string
@@ -299,6 +322,7 @@ func TestValidateURLFormat(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			err := ValidateURLFormat("TEST_VAR", tt.value)
 			if tt.wantErr {
 				require.Error(t, err)
@@ -310,6 +334,7 @@ func TestValidateURLFormat(t *testing.T) {
 }
 
 func TestValidateTokenKeyPrefix(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name    string
 		value   string
@@ -323,6 +348,7 @@ func TestValidateTokenKeyPrefix(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			err := ValidateTokenKeyPrefix(tt.value)
 			if tt.wantErr {
 				require.Error(t, err)
@@ -334,7 +360,9 @@ func TestValidateTokenKeyPrefix(t *testing.T) {
 }
 
 func TestConfigValidationError(t *testing.T) {
+	t.Parallel()
 	t.Run("error with allowed values", func(t *testing.T) {
+		t.Parallel()
 		err := &ConfigValidationError{
 			Variable:    "TEST_VAR",
 			Value:       "invalid",
@@ -348,6 +376,7 @@ func TestConfigValidationError(t *testing.T) {
 	})
 
 	t.Run("error without allowed values", func(t *testing.T) {
+		t.Parallel()
 		err := &ConfigValidationError{
 			Variable:   "TEST_VAR",
 			Value:      -5,
@@ -361,13 +390,16 @@ func TestConfigValidationError(t *testing.T) {
 }
 
 func TestValidationResult(t *testing.T) {
+	t.Parallel()
 	t.Run("no errors", func(t *testing.T) {
+		t.Parallel()
 		result := &ValidationResult{}
 		require.False(t, result.HasErrors())
 		require.Empty(t, result.Error())
 	})
 
 	t.Run("with errors", func(t *testing.T) {
+		t.Parallel()
 		result := &ValidationResult{
 			Errors: []error{
 				&ConfigValidationError{Variable: "VAR1", Value: "bad", Constraint: "must be good"},
@@ -383,6 +415,7 @@ func TestValidationResult(t *testing.T) {
 }
 
 func TestValidateAllEnvVars(t *testing.T) {
+	t.Parallel()
 	// This test validates that the current configuration is valid
 	// (since init() already ran and didn't panic)
 	result := ValidateAllEnvVars()

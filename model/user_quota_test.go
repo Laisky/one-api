@@ -64,6 +64,7 @@ func TestIncreaseUserQuota_WithNilContext(t *testing.T) {
 
 // TestIncreaseUserQuota_NegativeQuota verifies that negative quota is rejected.
 func TestIncreaseUserQuota_NegativeQuota(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	err := IncreaseUserQuota(ctx, 1, -10)
 	require.Error(t, err)
@@ -124,6 +125,7 @@ func TestDecreaseUserQuota_WithNilContext(t *testing.T) {
 
 // TestDecreaseUserQuota_NegativeQuota verifies that negative quota is rejected.
 func TestDecreaseUserQuota_NegativeQuota(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	err := DecreaseUserQuota(ctx, 1, -10)
 	require.Error(t, err)

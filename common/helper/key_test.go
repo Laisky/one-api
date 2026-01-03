@@ -3,6 +3,7 @@ package helper
 import "testing"
 
 func TestMaskAPIKey(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		key      string
@@ -42,6 +43,7 @@ func TestMaskAPIKey(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result := MaskAPIKey(tt.key)
 			if result != tt.expected {
 				t.Errorf("MaskAPIKey(%q) = %q, expected %q", tt.key, result, tt.expected)

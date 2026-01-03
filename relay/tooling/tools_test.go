@@ -53,6 +53,7 @@ func (s *adaptorStub) GetCompletionRatio(string) float64                      { 
 func (s *adaptorStub) DefaultToolingConfig() adaptor.ChannelToolConfig        { return s.tooling }
 
 func TestApplyBuiltinToolCharges_ProviderPricing(t *testing.T) {
+	t.Parallel()
 	gin.SetMode(gin.TestMode)
 	recorder := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(recorder)
@@ -88,6 +89,7 @@ func TestApplyBuiltinToolCharges_ProviderPricing(t *testing.T) {
 }
 
 func TestApplyBuiltinToolCharges_ChannelOverrides(t *testing.T) {
+	t.Parallel()
 	gin.SetMode(gin.TestMode)
 	recorder := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(recorder)
@@ -127,6 +129,7 @@ func TestApplyBuiltinToolCharges_ChannelOverrides(t *testing.T) {
 }
 
 func TestApplyBuiltinToolCharges_WebSearchPreviewPricing(t *testing.T) {
+	t.Parallel()
 	gin.SetMode(gin.TestMode)
 
 	tests := []struct {
@@ -160,6 +163,7 @@ func TestApplyBuiltinToolCharges_WebSearchPreviewPricing(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			recorder := httptest.NewRecorder()
 			c, _ := gin.CreateTestContext(recorder)
 			c.Set(ctxkey.ToolInvocationCounts, tt.counts)
@@ -185,6 +189,7 @@ func TestApplyBuiltinToolCharges_WebSearchPreviewPricing(t *testing.T) {
 }
 
 func TestValidateChatBuiltinTools_Disallowed(t *testing.T) {
+	t.Parallel()
 	gin.SetMode(gin.TestMode)
 	recorder := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(recorder)
@@ -209,6 +214,7 @@ func TestValidateChatBuiltinTools_Disallowed(t *testing.T) {
 }
 
 func TestValidateChatBuiltinTools_AllowsPricedToolWithoutWhitelist(t *testing.T) {
+	t.Parallel()
 	gin.SetMode(gin.TestMode)
 	recorder := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(recorder)
@@ -233,6 +239,7 @@ func TestValidateChatBuiltinTools_AllowsPricedToolWithoutWhitelist(t *testing.T)
 }
 
 func TestValidateChatBuiltinTools_PricingFallback(t *testing.T) {
+	t.Parallel()
 	gin.SetMode(gin.TestMode)
 	recorder := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(recorder)
@@ -258,6 +265,7 @@ func TestValidateChatBuiltinTools_PricingFallback(t *testing.T) {
 }
 
 func TestValidateChatBuiltinTools_RejectsWhenNeitherWhitelistedNorPriced(t *testing.T) {
+	t.Parallel()
 	gin.SetMode(gin.TestMode)
 	recorder := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(recorder)
@@ -282,6 +290,7 @@ func TestValidateChatBuiltinTools_RejectsWhenNeitherWhitelistedNorPriced(t *test
 }
 
 func TestValidateChatBuiltinTools_WhitelistOverridesProviderPricing(t *testing.T) {
+	t.Parallel()
 	gin.SetMode(gin.TestMode)
 	recorder := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(recorder)
@@ -314,6 +323,7 @@ func TestValidateChatBuiltinTools_WhitelistOverridesProviderPricing(t *testing.T
 }
 
 func TestValidateChatBuiltinTools_MissingPricingBlocks(t *testing.T) {
+	t.Parallel()
 	gin.SetMode(gin.TestMode)
 	recorder := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(recorder)
@@ -335,6 +345,7 @@ func TestValidateChatBuiltinTools_MissingPricingBlocks(t *testing.T) {
 }
 
 func TestValidateChatBuiltinTools_WhitelistRequiresPricing(t *testing.T) {
+	t.Parallel()
 	gin.SetMode(gin.TestMode)
 	recorder := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(recorder)
@@ -359,6 +370,7 @@ func TestValidateChatBuiltinTools_WhitelistRequiresPricing(t *testing.T) {
 }
 
 func TestValidateChatBuiltinTools_WhitelistAllowsWithProviderPricing(t *testing.T) {
+	t.Parallel()
 	gin.SetMode(gin.TestMode)
 	recorder := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(recorder)
@@ -389,6 +401,7 @@ func TestValidateChatBuiltinTools_WhitelistAllowsWithProviderPricing(t *testing.
 }
 
 func TestCollectResponseBuiltins(t *testing.T) {
+	t.Parallel()
 	req := &openai.ResponseAPIRequest{
 		Tools: []openai.ResponseAPITool{
 			{Type: "web_search"},
@@ -400,6 +413,7 @@ func TestCollectResponseBuiltins(t *testing.T) {
 }
 
 func TestValidateResponseBuiltinTools_Disallowed(t *testing.T) {
+	t.Parallel()
 	req := &openai.ResponseAPIRequest{
 		Model: "gpt-4o",
 		Tools: []openai.ResponseAPITool{{Type: "web_search"}},
@@ -422,6 +436,7 @@ func TestValidateResponseBuiltinTools_Disallowed(t *testing.T) {
 }
 
 func TestValidateResponseBuiltinTools_Allowed(t *testing.T) {
+	t.Parallel()
 	req := &openai.ResponseAPIRequest{
 		Model: "gpt-4o",
 		Tools: []openai.ResponseAPITool{{Type: "web_search"}},
@@ -442,6 +457,7 @@ func TestValidateResponseBuiltinTools_Allowed(t *testing.T) {
 }
 
 func TestValidateRequestedBuiltins_DefaultsRespectAzure(t *testing.T) {
+	t.Parallel()
 	meta := &metalib.Meta{ChannelType: channeltype.Azure, ActualModelName: "azure-gpt-5-nano"}
 	channel := &model.Channel{Type: channeltype.Azure}
 	err := ValidateRequestedBuiltins("azure-gpt-5-nano", meta, channel, &openai.Adaptor{}, map[string]struct{}{"web_search": {}})
@@ -449,6 +465,7 @@ func TestValidateRequestedBuiltins_DefaultsRespectAzure(t *testing.T) {
 }
 
 func TestValidateRequestedBuiltins_OpenAIUsesProviderDefaults(t *testing.T) {
+	t.Parallel()
 	meta := &metalib.Meta{ChannelType: channeltype.OpenAI, ActualModelName: "gpt-4o"}
 	channel := &model.Channel{Type: channeltype.OpenAI}
 	require.NoError(t, ValidateRequestedBuiltins("gpt-4o", meta, channel, &openai.Adaptor{}, map[string]struct{}{"web_search": {}}))

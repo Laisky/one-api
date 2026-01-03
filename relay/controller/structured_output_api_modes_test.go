@@ -38,6 +38,7 @@ func baseJSONSchema() map[string]any {
 
 // TestStructuredOutputChatCompletionsVariants exercises structured output parsing for Chat Completions with both streaming modes.
 func TestStructuredOutputChatCompletionsVariants(t *testing.T) {
+	t.Parallel()
 	gin.SetMode(gin.TestMode)
 	strict := true
 
@@ -48,6 +49,7 @@ func TestStructuredOutputChatCompletionsVariants(t *testing.T) {
 
 	for name, stream := range cases {
 		t.Run(name, func(t *testing.T) {
+			t.Parallel()
 			payload := &relaymodel.GeneralOpenAIRequest{
 				Model: "gpt-4o-mini",
 				Messages: []relaymodel.Message{
@@ -107,6 +109,7 @@ func TestStructuredOutputChatCompletionsVariants(t *testing.T) {
 
 // TestStructuredOutputResponseAPIVariants verifies structured output conversion for the Response API fallback across stream modes.
 func TestStructuredOutputResponseAPIVariants(t *testing.T) {
+	t.Parallel()
 	strict := true
 
 	cases := map[string]bool{
@@ -116,6 +119,7 @@ func TestStructuredOutputResponseAPIVariants(t *testing.T) {
 
 	for name, stream := range cases {
 		t.Run(name, func(t *testing.T) {
+			t.Parallel()
 			req := &openai.ResponseAPIRequest{
 				Model:  "gpt-4o-mini",
 				Stream: boolPtr(stream),
@@ -167,6 +171,7 @@ func TestStructuredOutputResponseAPIVariants(t *testing.T) {
 
 // TestStructuredOutputClaudeVariants ensures structured Claude requests preserve tool schemas for both streaming options.
 func TestStructuredOutputClaudeVariants(t *testing.T) {
+	t.Parallel()
 	gin.SetMode(gin.TestMode)
 
 	toolSchema := func() map[string]any {
@@ -187,6 +192,7 @@ func TestStructuredOutputClaudeVariants(t *testing.T) {
 
 	for name, stream := range cases {
 		t.Run(name, func(t *testing.T) {
+			t.Parallel()
 			request := &ClaudeMessagesRequest{
 				Model:     "claude-3-sonnet-20240229",
 				MaxTokens: 256,

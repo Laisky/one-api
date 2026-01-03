@@ -10,6 +10,7 @@ import (
 
 // TestAllEndpointsConsistency verifies that all endpoint IDs match their corresponding relaymode constants.
 func TestAllEndpointsConsistency(t *testing.T) {
+	t.Parallel()
 	endpoints := AllEndpoints()
 	require.NotEmpty(t, endpoints, "AllEndpoints should return non-empty list")
 
@@ -23,6 +24,7 @@ func TestAllEndpointsConsistency(t *testing.T) {
 
 // TestEndpointNameConversion verifies name-to-ID and ID-to-name conversions.
 func TestEndpointNameConversion(t *testing.T) {
+	t.Parallel()
 	testCases := []struct {
 		name       string
 		expectedID Endpoint
@@ -38,6 +40,7 @@ func TestEndpointNameConversion(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			id := EndpointNameToID(tc.name)
 			require.Equal(t, tc.expectedID, id, "EndpointNameToID should return correct ID")
 
@@ -53,6 +56,7 @@ func TestEndpointNameConversion(t *testing.T) {
 
 // TestDefaultEndpointsForChannelType verifies that each channel type has default endpoints defined.
 func TestDefaultEndpointsForChannelType(t *testing.T) {
+	t.Parallel()
 	channelTypes := []int{
 		OpenAI,
 		Azure,
@@ -67,6 +71,7 @@ func TestDefaultEndpointsForChannelType(t *testing.T) {
 
 	for _, ct := range channelTypes {
 		t.Run(IdToName(ct), func(t *testing.T) {
+			t.Parallel()
 			endpoints := DefaultEndpointsForChannelType(ct)
 			require.NotEmpty(t, endpoints, "channel type should have default endpoints")
 
@@ -88,6 +93,7 @@ func TestDefaultEndpointsForChannelType(t *testing.T) {
 
 // TestDefaultEndpointNamesForChannelType verifies name conversion for defaults.
 func TestDefaultEndpointNamesForChannelType(t *testing.T) {
+	t.Parallel()
 	names := DefaultEndpointNamesForChannelType(OpenAI)
 	require.NotEmpty(t, names, "OpenAI should have default endpoint names")
 
@@ -99,6 +105,7 @@ func TestDefaultEndpointNamesForChannelType(t *testing.T) {
 
 // TestIsEndpointSupported verifies endpoint support checking.
 func TestIsEndpointSupported(t *testing.T) {
+	t.Parallel()
 	supported := []Endpoint{EndpointChatCompletions, EndpointEmbeddings}
 
 	require.True(t, IsEndpointSupported(relaymode.ChatCompletions, supported))
@@ -109,6 +116,7 @@ func TestIsEndpointSupported(t *testing.T) {
 
 // TestIsEndpointSupportedByName verifies name-based endpoint support checking.
 func TestIsEndpointSupportedByName(t *testing.T) {
+	t.Parallel()
 	supported := []string{"chat_completions", "embeddings", "Response_API"}
 
 	require.True(t, IsEndpointSupportedByName("chat_completions", supported))
@@ -120,6 +128,7 @@ func TestIsEndpointSupportedByName(t *testing.T) {
 
 // TestRelayModeToEndpointName verifies relay mode to name conversion.
 func TestRelayModeToEndpointName(t *testing.T) {
+	t.Parallel()
 	require.Equal(t, "chat_completions", RelayModeToEndpointName(relaymode.ChatCompletions))
 	require.Equal(t, "embeddings", RelayModeToEndpointName(relaymode.Embeddings))
 	require.Equal(t, "rerank", RelayModeToEndpointName(relaymode.Rerank))
@@ -130,6 +139,7 @@ func TestRelayModeToEndpointName(t *testing.T) {
 
 // TestParseEndpointList verifies endpoint list parsing.
 func TestParseEndpointList(t *testing.T) {
+	t.Parallel()
 	names := []string{"chat_completions", "invalid", "embeddings", "", "rerank"}
 	endpoints := ParseEndpointList(names)
 
@@ -141,6 +151,7 @@ func TestParseEndpointList(t *testing.T) {
 
 // TestEndpointListToNames verifies endpoint list to names conversion.
 func TestEndpointListToNames(t *testing.T) {
+	t.Parallel()
 	endpoints := []Endpoint{EndpointChatCompletions, EndpointEmbeddings, Endpoint(-1)}
 	names := EndpointListToNames(endpoints)
 
@@ -151,6 +162,7 @@ func TestEndpointListToNames(t *testing.T) {
 
 // TestCohereSupportsRerank verifies that Cohere channel supports rerank endpoint.
 func TestCohereSupportsRerank(t *testing.T) {
+	t.Parallel()
 	endpoints := DefaultEndpointsForChannelType(Cohere)
 	hasRerank := false
 	for _, ep := range endpoints {
@@ -164,6 +176,7 @@ func TestCohereSupportsRerank(t *testing.T) {
 
 // TestOpenAISupportsResponseAPI verifies that OpenAI channel supports Response API.
 func TestOpenAISupportsResponseAPI(t *testing.T) {
+	t.Parallel()
 	endpoints := DefaultEndpointsForChannelType(OpenAI)
 	hasResponseAPI := false
 	for _, ep := range endpoints {
@@ -176,6 +189,7 @@ func TestOpenAISupportsResponseAPI(t *testing.T) {
 }
 
 func TestClaudeCompatibleDefaults(t *testing.T) {
+	t.Parallel()
 	endpoints := DefaultEndpointsForChannelType(ClaudeCompatible)
 
 	require.Contains(t, endpoints, EndpointChatCompletions)
@@ -186,6 +200,7 @@ func TestClaudeCompatibleDefaults(t *testing.T) {
 
 // TestAnthropicDoesNotSupportEmbeddings verifies that Anthropic channel does not support embeddings.
 func TestAnthropicDoesNotSupportEmbeddings(t *testing.T) {
+	t.Parallel()
 	endpoints := DefaultEndpointsForChannelType(Anthropic)
 	hasEmbeddings := false
 	for _, ep := range endpoints {

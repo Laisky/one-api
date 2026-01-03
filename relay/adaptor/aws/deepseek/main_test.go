@@ -10,6 +10,7 @@ import (
 )
 
 func TestConvertMessages(t *testing.T) {
+	t.Parallel()
 	messages := []relaymodel.Message{
 		{
 			Role:    "system",
@@ -30,6 +31,7 @@ func TestConvertMessages(t *testing.T) {
 }
 
 func TestConvertRequest(t *testing.T) {
+	t.Parallel()
 	request := relaymodel.GeneralOpenAIRequest{
 		Messages: []relaymodel.Message{
 			{
@@ -55,6 +57,7 @@ func TestConvertRequest(t *testing.T) {
 }
 
 func TestConvertRequestWithStopSequence(t *testing.T) {
+	t.Parallel()
 	// Test with stop as []interface{} (typical API input)
 	request := relaymodel.GeneralOpenAIRequest{
 		Messages: []relaymodel.Message{
@@ -72,6 +75,7 @@ func TestConvertRequestWithStopSequence(t *testing.T) {
 }
 
 func TestConvertRequestWithStopString(t *testing.T) {
+	t.Parallel()
 	// Test with stop as string
 	request := relaymodel.GeneralOpenAIRequest{
 		Messages: []relaymodel.Message{
@@ -89,6 +93,7 @@ func TestConvertRequestWithStopString(t *testing.T) {
 }
 
 func TestAwsModelID(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		input    string
 		expected string
@@ -100,6 +105,7 @@ func TestAwsModelID(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.input, func(t *testing.T) {
+			t.Parallel()
 			// Note: awsModelID is not exported, so we can't test it directly
 			// This would need to be made public for testing or we'd need to test through the public interface
 			_ = test // Placeholder to avoid unused variable error
@@ -108,6 +114,7 @@ func TestAwsModelID(t *testing.T) {
 }
 
 func TestConvertStopReason(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		input    string
 		expected string
@@ -121,6 +128,7 @@ func TestConvertStopReason(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.input, func(t *testing.T) {
+			t.Parallel()
 			// Note: convertStopReason is not exported, so we can't test it directly
 			// This would need to be made public for testing or we'd need to test through the public interface
 			_ = test // Placeholder to avoid unused variable error

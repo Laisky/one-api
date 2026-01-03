@@ -10,6 +10,7 @@ import (
 
 // TestMigrationDebug_ChannelSpecificModels tests that migration only uses channel-specific data
 func TestMigrationDebug_ChannelSpecificModels(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name            string
 		channelType     int
@@ -54,6 +55,7 @@ func TestMigrationDebug_ChannelSpecificModels(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			channel := &Channel{
 				Id:              1,
 				Type:            tt.channelType,
@@ -91,6 +93,7 @@ func TestMigrationDebug_ChannelSpecificModels(t *testing.T) {
 
 // TestMigrationDebug_DataIntegrity tests that migrated data maintains integrity
 func TestMigrationDebug_DataIntegrity(t *testing.T) {
+	t.Parallel()
 	channel := &Channel{
 		Id:   1,
 		Type: 1, // OpenAI

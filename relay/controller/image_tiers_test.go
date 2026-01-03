@@ -17,6 +17,7 @@ import (
 // Sanity check: usd_per_image * QuotaPerUsd with $0.04 -> 0.04 * 500000 = 20000
 // We purposely do not call adapters; this guards controller math/unit consistency.
 func TestImageUsdToQuotaMath(t *testing.T) {
+	t.Parallel()
 	const quotaPerUsd = 500000.0
 	usd := 0.04
 	quotaPerImage := usd * quotaPerUsd
@@ -25,6 +26,7 @@ func TestImageUsdToQuotaMath(t *testing.T) {
 
 // Test tier table values align with legacy logic for key models/sizes/qualities.
 func TestImageTierTablesParity(t *testing.T) {
+	t.Parallel()
 	// DALL-E 3 hd 1024x1024 -> 2x; other sizes -> 1.5x
 	cases := []struct {
 		model   string
@@ -71,6 +73,7 @@ func TestImageTierTablesParity(t *testing.T) {
 }
 
 func TestAliImagePricingConfig(t *testing.T) {
+	t.Parallel()
 	cfg, ok := pricing.ResolveModelConfig("ali-stable-diffusion-xl", nil, &ali.Adaptor{})
 	require.True(t, ok && cfg.Image != nil, "expected ali-stable-diffusion-xl image pricing metadata")
 	require.Equal(t, 1, cfg.Image.MinImages, "unexpected MinImages")
@@ -79,6 +82,7 @@ func TestAliImagePricingConfig(t *testing.T) {
 }
 
 func TestXAIImagePricingConfig(t *testing.T) {
+	t.Parallel()
 	cfg, ok := pricing.ResolveModelConfig("grok-2-image", nil, &xai.Adaptor{})
 	require.True(t, ok && cfg.Image != nil, "expected grok-2-image pricing metadata")
 	require.InDelta(t, 0.07, cfg.Image.PricePerImageUsd, 1e-9, "expected image price 0.07")
@@ -86,12 +90,14 @@ func TestXAIImagePricingConfig(t *testing.T) {
 }
 
 func TestGeminiImagePricingConfig(t *testing.T) {
+	t.Parallel()
 	cfg, ok := pricing.ResolveModelConfig("gemini-2.5-flash-image", nil, &gemini.Adaptor{})
 	require.True(t, ok && cfg.Image != nil, "expected gemini-2.5-flash-image pricing metadata")
 	require.InDelta(t, 0.039, cfg.Image.PricePerImageUsd, 1e-9, "expected image price 0.039")
 }
 
 func TestVertexAIImagenPricingConfig(t *testing.T) {
+	t.Parallel()
 	cfg, ok := pricing.ResolveModelConfig("imagen-4.0-generate-001", nil, &vertexai.Adaptor{})
 	require.True(t, ok && cfg.Image != nil, "expected imagen-4.0-generate-001 pricing metadata")
 	require.InDelta(t, 0.04, cfg.Image.PricePerImageUsd, 1e-9, "expected image price 0.04")

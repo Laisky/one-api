@@ -9,6 +9,7 @@ import (
 )
 
 func TestGetKnownParameters(t *testing.T) {
+	t.Parallel()
 	knownParams := validator.GetKnownParameters()
 
 	// Test that some key parameters are present
@@ -30,6 +31,7 @@ func TestGetKnownParameters(t *testing.T) {
 }
 
 func TestValidateUnknownParameters_NoUnknownParams(t *testing.T) {
+	t.Parallel()
 	// Test with valid JSON containing only known parameters
 	validJSON := `{
 		"model": "gpt-3.5-turbo",
@@ -43,6 +45,7 @@ func TestValidateUnknownParameters_NoUnknownParams(t *testing.T) {
 }
 
 func TestValidateUnknownParameters_GPT5Verbosity(t *testing.T) {
+	t.Parallel()
 	// Test with GPT-5 verbosity parameter (should be valid - recognized as known parameter)
 	// https://cookbook.openai.com/examples/gpt-5/gpt-5_new_params_and_tools
 	testCases := []struct {
@@ -94,6 +97,7 @@ func TestValidateUnknownParameters_GPT5Verbosity(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			err := validator.ValidateUnknownParameters([]byte(tc.json))
 			require.NoError(t, err, "Expected no error for GPT-5 verbosity parameter")
 		})
@@ -104,6 +108,7 @@ func TestValidateUnknownParameters_GPT5Verbosity(t *testing.T) {
 // are silently ignored instead of causing errors. This ensures forward compatibility
 // when upstream services add new parameters before one-api has been updated.
 func TestValidateUnknownParameters_UnknownParamsAllowed(t *testing.T) {
+	t.Parallel()
 	testCases := []struct {
 		name string
 		json string
@@ -186,6 +191,7 @@ func TestValidateUnknownParameters_UnknownParamsAllowed(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			err := validator.ValidateUnknownParameters([]byte(tc.json))
 			require.NoError(t, err, "Expected no error (unknown params should be silently ignored)")
 		})
@@ -201,6 +207,7 @@ func TestValidateUnknownParameters_InvalidJSON(t *testing.T) {
 }
 
 func TestValidateUnknownParameters_EmptyJSON(t *testing.T) {
+	t.Parallel()
 	// Test with empty JSON object
 	emptyJSON := `{}`
 
@@ -211,6 +218,7 @@ func TestValidateUnknownParameters_EmptyJSON(t *testing.T) {
 // TestFindUnknownParametersInternal tests the internal unknown param detection
 // by using the GetKnownParameters function to verify what's known vs unknown.
 func TestFindUnknownParametersInternal(t *testing.T) {
+	t.Parallel()
 	knownParams := validator.GetKnownParameters()
 
 	// These should be known (not trigger warnings in logs)

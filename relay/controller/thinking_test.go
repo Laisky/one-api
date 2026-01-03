@@ -20,6 +20,7 @@ func init() {
 }
 
 func TestApplyThinkingQueryToChatRequestSetsReasoningEffort(t *testing.T) {
+	t.Parallel()
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
 	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions?thinking=true", nil)
@@ -35,6 +36,7 @@ func TestApplyThinkingQueryToChatRequestSetsReasoningEffort(t *testing.T) {
 }
 
 func TestApplyThinkingQueryClampsMediumOnlyReasoningModels(t *testing.T) {
+	t.Parallel()
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
 	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions?thinking=true&reasoning_effort=high", nil)
@@ -50,6 +52,7 @@ func TestApplyThinkingQueryClampsMediumOnlyReasoningModels(t *testing.T) {
 }
 
 func TestApplyThinkingQueryRespectsUserProvidedEffort(t *testing.T) {
+	t.Parallel()
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
 	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions?thinking=true", nil)
@@ -65,6 +68,7 @@ func TestApplyThinkingQueryRespectsUserProvidedEffort(t *testing.T) {
 }
 
 func TestApplyThinkingQueryHonorsReasoningEffortOverride(t *testing.T) {
+	t.Parallel()
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
 	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions?thinking=true&reasoning_effort=medium", nil)
@@ -80,6 +84,7 @@ func TestApplyThinkingQueryHonorsReasoningEffortOverride(t *testing.T) {
 }
 
 func TestApplyThinkingQuerySetsIncludeReasoningForOpenRouter(t *testing.T) {
+	t.Parallel()
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
 	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions?thinking=true", nil)
@@ -95,6 +100,7 @@ func TestApplyThinkingQuerySetsIncludeReasoningForOpenRouter(t *testing.T) {
 }
 
 func TestApplyThinkingQueryToResponseRequest(t *testing.T) {
+	t.Parallel()
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
 	req := httptest.NewRequest(http.MethodPost, "/v1/responses?thinking=true", nil)
@@ -111,6 +117,7 @@ func TestApplyThinkingQueryToResponseRequest(t *testing.T) {
 }
 
 func TestApplyThinkingQueryToResponseRequestClampsMediumOnlyModels(t *testing.T) {
+	t.Parallel()
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
 	req := httptest.NewRequest(http.MethodPost, "/v1/responses?thinking=true&reasoning_effort=high", nil)

@@ -8,6 +8,7 @@ import (
 )
 
 func TestCollectStreamBodyTerminatesOnResponseCompleted(t *testing.T) {
+	t.Parallel()
 	stream := strings.Join([]string{
 		"event: response.output_text.delta",
 		`data: {"type":"response.output_text.delta","delta":"hello"}`,

@@ -10,11 +10,13 @@ import (
 )
 
 func TestCalculateImageBaseQuotaPerImage(t *testing.T) {
+	t.Parallel()
 	baseQuota := calculateImageBaseQuota(0.005, 0, 7.2, 1.0, 2)
 	require.Equal(t, int64(36000), baseQuota)
 }
 
 func TestFinalizeImageQuotaAddsTokens(t *testing.T) {
+	t.Parallel()
 	usage := &relaymodel.Usage{
 		PromptTokens:     437,
 		CompletionTokens: 6208,
@@ -37,6 +39,7 @@ func TestFinalizeImageQuotaAddsTokens(t *testing.T) {
 }
 
 func TestFinalizeImageQuotaNoUsageKeepsBase(t *testing.T) {
+	t.Parallel()
 	baseQuota := calculateImageBaseQuota(0.005, 0, 7.2, 1.0, 1)
 	summary := finalizeImageQuota(baseQuota, true, "gpt-image-1-mini", "gpt-image-1-mini", nil, 1.0)
 
@@ -45,6 +48,7 @@ func TestFinalizeImageQuotaNoUsageKeepsBase(t *testing.T) {
 }
 
 func TestFormatImageBillingLogIncludesDetails(t *testing.T) {
+	t.Parallel()
 	params := imageBillingLogParams{
 		OriginModel:     "gpt-image-1-mini",
 		Model:           "gpt-image-1-mini",

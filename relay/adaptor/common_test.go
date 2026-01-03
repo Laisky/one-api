@@ -11,6 +11,7 @@ import (
 )
 
 func TestSetupCommonRequestHeader(t *testing.T) {
+	t.Parallel()
 	// 创建测试用的gin上下文
 	c, _ := gin.CreateTestContext(nil)
 	c.Request = &http.Request{

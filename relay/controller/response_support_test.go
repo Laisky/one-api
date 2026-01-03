@@ -11,6 +11,7 @@ import (
 )
 
 func TestSupportsNativeResponseAPIOpenAICompatible(t *testing.T) {
+	t.Parallel()
 	metaInfo := &metalib.Meta{
 		ChannelType: channeltype.OpenAICompatible,
 		Config:      model.ChannelConfig{APIFormat: channeltype.OpenAICompatibleAPIFormatResponse},
@@ -22,6 +23,7 @@ func TestSupportsNativeResponseAPIOpenAICompatible(t *testing.T) {
 }
 
 func TestSupportsNativeResponseAPIDeepSeekForcesFallback(t *testing.T) {
+	t.Parallel()
 	metaInfo := &metalib.Meta{
 		ChannelType:     channeltype.OpenAICompatible,
 		Config:          model.ChannelConfig{APIFormat: channeltype.OpenAICompatibleAPIFormatResponse},
@@ -35,6 +37,7 @@ func TestSupportsNativeResponseAPIDeepSeekForcesFallback(t *testing.T) {
 }
 
 func TestSupportsNativeResponseAPIAzureGpt5(t *testing.T) {
+	t.Parallel()
 	metaInfo := &metalib.Meta{
 		ChannelType:     channeltype.Azure,
 		ActualModelName: "gpt-5-nano",
@@ -46,6 +49,7 @@ func TestSupportsNativeResponseAPIAzureGpt5(t *testing.T) {
 }
 
 func TestSupportsNativeResponseAPISearchPreviewFallback(t *testing.T) {
+	t.Parallel()
 	metaInfo := &metalib.Meta{
 		ChannelType:     channeltype.OpenAI,
 		ActualModelName: "gpt-4o-mini-search-preview",
@@ -60,6 +64,7 @@ func TestSupportsNativeResponseAPISearchPreviewFallback(t *testing.T) {
 }
 
 func TestIsReasoningModel(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		modelName string
 		expected  bool
@@ -91,6 +96,7 @@ func TestIsReasoningModel(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.modelName, func(t *testing.T) {
+			t.Parallel()
 			result := isReasoningModel(tc.modelName)
 			require.Equal(t, tc.expected, result, "isReasoningModel(%q) = %v, want %v", tc.modelName, result, tc.expected)
 		})

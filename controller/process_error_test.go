@@ -12,6 +12,7 @@ import (
 )
 
 func TestUpstreamSuggestsRetry(t *testing.T) {
+	t.Parallel()
 	// Test cases for upstreamSuggestsRetry function
 	testCases := []struct {
 		name     string
@@ -127,6 +128,7 @@ func TestUpstreamSuggestsRetry(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			result := upstreamSuggestsRetry(tc.err)
 			require.Equal(t, tc.expected, result, "upstreamSuggestsRetry mismatch for: %s", tc.name)
 		})
@@ -242,6 +244,7 @@ func TestProcessError_Policies(t *testing.T) {
 }
 
 func TestProcessError_OpenAIRetryScenario(t *testing.T) {
+	t.Parallel()
 	// This test specifically covers the user's reported issue:
 	// OpenAI returns 500 with "You can retry your request" - should NOT suspend
 	err := &model.ErrorWithStatusCode{

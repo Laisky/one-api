@@ -8,6 +8,7 @@ import (
 
 // TestToolValidation tests the new validation methods
 func TestToolValidation(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name    string
 		tool    Tool
@@ -116,6 +117,7 @@ func TestToolValidation(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			err := tt.tool.Validate()
 			if tt.wantErr {
 				require.Error(t, err, "Expected error but got none")
@@ -131,6 +133,7 @@ func TestToolValidation(t *testing.T) {
 
 // TestValidateFunction tests the ValidateFunction method specifically
 func TestValidateFunction(t *testing.T) {
+	t.Parallel()
 	tool := Tool{
 		Type: "function",
 		Function: &Function{
@@ -145,6 +148,7 @@ func TestValidateFunction(t *testing.T) {
 
 // TestValidateMCP tests the ValidateMCP method specifically
 func TestValidateMCP(t *testing.T) {
+	t.Parallel()
 	tool := Tool{
 		Type:        "mcp",
 		ServerLabel: "test-server",

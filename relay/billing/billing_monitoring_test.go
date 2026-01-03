@@ -106,6 +106,7 @@ func (m *MockMetricsRecorder) UpdateSiteWideStats(totalQuota, usedQuota int64, t
 }
 
 func TestBillingMonitoring(t *testing.T) {
+	t.Parallel()
 	// Setup mock metrics recorder
 	mockRecorder := &MockMetricsRecorder{}
 	originalRecorder := metrics.GlobalRecorder
@@ -137,6 +138,7 @@ func TestBillingMonitoring(t *testing.T) {
 }
 
 func TestBillingErrorMonitoring(t *testing.T) {
+	t.Parallel()
 	// Setup mock metrics recorder
 	mockRecorder := &MockMetricsRecorder{}
 	originalRecorder := metrics.GlobalRecorder
@@ -164,6 +166,7 @@ func TestBillingErrorMonitoring(t *testing.T) {
 }
 
 func TestBillingTimeoutMonitoring(t *testing.T) {
+	t.Parallel()
 	// Setup mock metrics recorder
 	mockRecorder := &MockMetricsRecorder{}
 	originalRecorder := metrics.GlobalRecorder

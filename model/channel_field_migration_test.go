@@ -11,6 +11,7 @@ import (
 
 // TestChannelFieldsCanHandleLargeData tests that ModelConfigs and ModelMapping can handle large JSON data
 func TestChannelFieldsCanHandleLargeData(t *testing.T) {
+	t.Parallel()
 	// Create a large ModelConfigs JSON that would exceed 1024 characters
 	largeModelConfigs := make(map[string]ModelConfigLocal)
 

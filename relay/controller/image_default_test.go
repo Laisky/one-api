@@ -14,6 +14,7 @@ import (
 
 // Test that DALL-E 3 defaults quality to "standard" (not "auto").
 func TestGetImageRequest_DefaultQuality_DALLE3(t *testing.T) {
+	t.Parallel()
 	gin.SetMode(gin.TestMode)
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
@@ -36,6 +37,7 @@ func TestGetImageRequest_DefaultQuality_DALLE3(t *testing.T) {
 }
 
 func TestGetImageRequest_DefaultQuality_GPTImage1(t *testing.T) {
+	t.Parallel()
 	gin.SetMode(gin.TestMode)
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
@@ -58,6 +60,7 @@ func TestGetImageRequest_DefaultQuality_GPTImage1(t *testing.T) {
 }
 
 func TestGetImageRequest_DefaultQuality_GPTImage1Mini(t *testing.T) {
+	t.Parallel()
 	gin.SetMode(gin.TestMode)
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
@@ -80,6 +83,7 @@ func TestGetImageRequest_DefaultQuality_GPTImage1Mini(t *testing.T) {
 }
 
 func TestGetImageRequest_DefaultQuality_DALLE2(t *testing.T) {
+	t.Parallel()
 	gin.SetMode(gin.TestMode)
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)

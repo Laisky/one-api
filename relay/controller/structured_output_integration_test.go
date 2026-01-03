@@ -11,6 +11,7 @@ import (
 )
 
 func TestPostConsumeQuotaWithStructuredOutput(t *testing.T) {
+	t.Parallel()
 	// Test that the postConsumeQuota function correctly handles structured output costs
 	// when they are included in usage.ToolsCost
 
@@ -35,6 +36,7 @@ func TestPostConsumeQuotaWithStructuredOutput(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			// Create usage with structured output cost
 			usage := &relaymodel.Usage{
 				PromptTokens:     tt.promptTokens,
@@ -66,6 +68,7 @@ func TestPostConsumeQuotaWithStructuredOutput(t *testing.T) {
 
 // TestStructuredOutputCostIntegration tests the complete flow from request to cost calculation
 func TestStructuredOutputCostIntegration(t *testing.T) {
+	t.Parallel()
 	// This test verifies that structured output costs flow correctly through the system
 
 	textRequest := &relaymodel.GeneralOpenAIRequest{

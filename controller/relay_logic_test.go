@@ -10,6 +10,7 @@ import (
 )
 
 func TestShouldRetry429Logic(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name                   string
 		statusCode             int
@@ -38,6 +39,7 @@ func TestShouldRetry429Logic(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			// Simulate the logic from the Relay function
 			bizErr := &model.ErrorWithStatusCode{
 				StatusCode: tt.statusCode,
@@ -64,6 +66,7 @@ func TestShouldRetry429Logic(t *testing.T) {
 }
 
 func TestFailedChannelTrackingLogic(t *testing.T) {
+	t.Parallel()
 	// Test that failed channels are properly tracked
 	failedChannels := make(map[int]bool)
 

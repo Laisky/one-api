@@ -8,6 +8,7 @@ import (
 
 // TestParseContent_ImageDetailPreserved verifies that image detail survives parsing for billing accuracy.
 func TestParseContent_ImageDetailPreserved(t *testing.T) {
+	t.Parallel()
 	m := Message{
 		Role: "user",
 		Content: []any{
@@ -29,6 +30,7 @@ func TestParseContent_ImageDetailPreserved(t *testing.T) {
 
 // TestMessageStringContent_OutputJSON ensures JSON fragments are aggregated.
 func TestMessageStringContent_OutputJSON(t *testing.T) {
+	t.Parallel()
 	m := Message{
 		Role: "assistant",
 		Content: []any{
@@ -53,6 +55,7 @@ func TestMessageStringContent_OutputJSON(t *testing.T) {
 
 // TestSetReasoningContentThinking ensures thinking format only populates the thinking field.
 func TestSetReasoningContentThinking(t *testing.T) {
+	t.Parallel()
 	msg := Message{}
 	msg.Reasoning = stringPtr("legacy")
 
@@ -66,6 +69,7 @@ func TestSetReasoningContentThinking(t *testing.T) {
 
 // TestSetReasoningContentReasoningContent ensures reasoning_content format clears other representations.
 func TestSetReasoningContentReasoningContent(t *testing.T) {
+	t.Parallel()
 	msg := Message{
 		Reasoning:        stringPtr("legacy"),
 		Thinking:         stringPtr("chain"),
@@ -82,6 +86,7 @@ func TestSetReasoningContentReasoningContent(t *testing.T) {
 
 // TestSetReasoningContentDefault ensures unspecified format defaults to reasoning only.
 func TestSetReasoningContentDefault(t *testing.T) {
+	t.Parallel()
 	msg := Message{
 		Thinking: stringPtr("chain"),
 	}

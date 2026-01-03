@@ -7,6 +7,7 @@ import (
 )
 
 func TestRerankRequestNormalizeFromInput(t *testing.T) {
+	t.Parallel()
 	req := &RerankRequest{
 		Model:     "rerank-test",
 		Input:     "  example query  ",
@@ -18,11 +19,13 @@ func TestRerankRequestNormalizeFromInput(t *testing.T) {
 }
 
 func TestRerankRequestNormalizeRequiredFields(t *testing.T) {
+	t.Parallel()
 	req := &RerankRequest{Model: "rerank-test"}
 	require.Error(t, req.Normalize(), "expected error when query missing")
 }
 
 func TestRerankRequestClone(t *testing.T) {
+	t.Parallel()
 	docs := []string{"a", "b"}
 	req := &RerankRequest{
 		Model:     "rerank-test",

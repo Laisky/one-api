@@ -11,11 +11,13 @@ import (
 )
 
 func TestGetChannelMetadata(t *testing.T) {
+	t.Parallel()
 	gin.SetMode(gin.TestMode)
 	r := gin.Default()
 	r.GET("/api/channel/metadata", GetChannelMetadata)
 
 	t.Run("returns default_base_url and base_url_editable for OpenAI", func(t *testing.T) {
+		t.Parallel()
 		req, _ := http.NewRequest(http.MethodGet, "/api/channel/metadata?type=1", nil)
 		w := httptest.NewRecorder()
 		r.ServeHTTP(w, req)
@@ -33,6 +35,7 @@ func TestGetChannelMetadata(t *testing.T) {
 	})
 
 	t.Run("returns non-editable for fixed base URL channels", func(t *testing.T) {
+		t.Parallel()
 		// Channel type 11 (PaLM) has a fixed base URL
 		req, _ := http.NewRequest(http.MethodGet, "/api/channel/metadata?type=11", nil)
 		w := httptest.NewRecorder()
@@ -51,6 +54,7 @@ func TestGetChannelMetadata(t *testing.T) {
 	})
 
 	t.Run("returns error when type is missing", func(t *testing.T) {
+		t.Parallel()
 		req, _ := http.NewRequest(http.MethodGet, "/api/channel/metadata", nil)
 		w := httptest.NewRecorder()
 		r.ServeHTTP(w, req)
@@ -66,6 +70,7 @@ func TestGetChannelMetadata(t *testing.T) {
 	})
 
 	t.Run("returns error for invalid type", func(t *testing.T) {
+		t.Parallel()
 		req, _ := http.NewRequest(http.MethodGet, "/api/channel/metadata?type=abc", nil)
 		w := httptest.NewRecorder()
 		r.ServeHTTP(w, req)
@@ -81,6 +86,7 @@ func TestGetChannelMetadata(t *testing.T) {
 	})
 
 	t.Run("returns empty values for out-of-range type", func(t *testing.T) {
+		t.Parallel()
 		req, _ := http.NewRequest(http.MethodGet, "/api/channel/metadata?type=9999", nil)
 		w := httptest.NewRecorder()
 		r.ServeHTTP(w, req)

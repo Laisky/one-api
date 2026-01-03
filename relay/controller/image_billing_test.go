@@ -14,6 +14,7 @@ import (
 //
 // Note: This is a lightweight doc-test ensuring we don't reintroduce the old bug.
 func TestImageQuotaNoExtraThousand(t *testing.T) {
+	t.Parallel()
 	_ = relaymodel.Usage{} // reference package to avoid unused import if first test is modified
 	// Suppose adapter ratio encodes $0.04 per image → 0.04 * 500000 = 20000 quota/image
 	ratio := 20000.0 // quota per image

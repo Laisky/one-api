@@ -84,18 +84,23 @@ func TestShouldRetry(t *testing.T) {
 }
 
 func TestIsInternalInfraError(t *testing.T) {
+	t.Parallel()
 	t.Run("returns true for ffprobe unavailable", func(t *testing.T) {
+		t.Parallel()
 		err := errors.Wrap(helper.ErrFFProbeUnavailable, "ffprobe missing")
 		require.True(t, isInternalInfraError(errors.Wrap(err, "count audio tokens failed")))
 	})
 
 	t.Run("returns false for other errors", func(t *testing.T) {
+		t.Parallel()
 		require.False(t, isInternalInfraError(errors.New("some other error")))
 	})
 }
 
 func TestIsAdaptorInternalError(t *testing.T) {
+	t.Parallel()
 	t.Run("detects adaptor errors", func(t *testing.T) {
+		t.Parallel()
 		err := &model.ErrorWithStatusCode{
 			StatusCode: http.StatusInternalServerError,
 			Error:      model.Error{Type: model.ErrorTypeOneAPI},
@@ -104,6 +109,7 @@ func TestIsAdaptorInternalError(t *testing.T) {
 	})
 
 	t.Run("ignores non adaptor types", func(t *testing.T) {
+		t.Parallel()
 		err := &model.ErrorWithStatusCode{
 			StatusCode: http.StatusInternalServerError,
 			Error:      model.Error{Type: model.ErrorTypeServer},
@@ -112,6 +118,7 @@ func TestIsAdaptorInternalError(t *testing.T) {
 	})
 
 	t.Run("requires server error status", func(t *testing.T) {
+		t.Parallel()
 		err := &model.ErrorWithStatusCode{
 			StatusCode: http.StatusBadRequest,
 			Error:      model.Error{Type: model.ErrorTypeOneAPI},
@@ -749,6 +756,7 @@ func TestProcessChannelRelayError(t *testing.T) {
 }
 
 func TestShouldRetryLogic(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	_ = ctx
 
@@ -791,6 +799,7 @@ func TestShouldRetryLogic(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			startTime := time.Now().UTC()
 
 			// Simulate the retry logic behavior
@@ -819,6 +828,7 @@ func TestShouldRetryLogic(t *testing.T) {
 }
 
 func TestRetryChannelExclusionLogic(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	_ = ctx
 
@@ -845,6 +855,7 @@ func TestRetryChannelExclusionLogic(t *testing.T) {
 }
 
 func TestErrorHandlingWithProperWrapping(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	_ = ctx
 

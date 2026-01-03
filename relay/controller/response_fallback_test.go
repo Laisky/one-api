@@ -49,6 +49,7 @@ const (
 )
 
 func TestRenderChatResponseAsResponseAPI(t *testing.T) {
+	t.Parallel()
 	gin.SetMode(gin.TestMode)
 	recorder := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(recorder)
@@ -300,6 +301,7 @@ func TestRelayResponseAPIHelper_FallbackSearchPreviewModel(t *testing.T) {
 }
 
 func TestRelayResponseAPIHelper_FallbackBlocksDisallowedWebSearch(t *testing.T) {
+	t.Parallel()
 	gin.SetMode(gin.TestMode)
 	ensureResponseFallbackFixtures(t)
 
@@ -718,6 +720,7 @@ func TestRelayResponseAPIHelper_FallbackAnthropicStreamingHandled(t *testing.T) 
 }
 
 func TestNormalizeResponseAPIRawBody_RemovesUnsupportedParams(t *testing.T) {
+	t.Parallel()
 	temp := 0.7
 	topP := 0.9
 	req := &openai.ResponseAPIRequest{Model: "gpt-5-mini", Temperature: &temp, TopP: &topP}
@@ -734,6 +737,7 @@ func TestNormalizeResponseAPIRawBody_RemovesUnsupportedParams(t *testing.T) {
 }
 
 func TestNormalizeResponseAPIRawBody_NormalizesAssistantHistoryContentType(t *testing.T) {
+	t.Parallel()
 	raw := []byte(`{
 	  "model": "gpt-4o-mini",
 	  "input": [

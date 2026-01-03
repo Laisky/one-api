@@ -16,6 +16,7 @@ import (
 // TestComputeCachedInputPricing verifies that cached input tokens are billed using CachedInputRatio
 // while completion tokens always use Ratio * CompletionRatio irrespective of cache hits.
 func TestComputeCachedInputPricing(t *testing.T) {
+	t.Parallel()
 	modelName := "gpt-4o"
 	adaptor := relay.GetAdaptor(channeltype.OpenAI)
 	require.NotNil(t, adaptor, "nil adaptor for channel %d", channeltype.OpenAI)

@@ -13,6 +13,7 @@ import (
 // TestExtractAudioModelFromMultipart verifies that we correctly parse the `model` field
 // from multipart/form-data for audio transcription/translation requests.
 func TestExtractAudioModelFromMultipart(t *testing.T) {
+	t.Parallel()
 	gin.SetMode(gin.TestMode)
 	w := httptest.NewRecorder()
 

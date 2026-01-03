@@ -16,6 +16,7 @@ import (
 // Test that convertConverseResponseToCohere maps usage to relaymodel.Usage
 // with JSON fields: prompt_tokens, completion_tokens, total_tokens.
 func TestConvertConverseResponseToCohereUsageMapping(t *testing.T) {
+	t.Parallel()
 	gin.SetMode(gin.TestMode)
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)

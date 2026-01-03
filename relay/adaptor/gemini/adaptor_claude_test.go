@@ -16,6 +16,7 @@ import (
 )
 
 func TestConvertNonStreamingToClaudeResponse_Basic(t *testing.T) {
+	t.Parallel()
 	gin.SetMode(gin.TestMode)
 
 	adaptor := &Adaptor{}
@@ -68,6 +69,7 @@ func TestConvertNonStreamingToClaudeResponse_Basic(t *testing.T) {
 }
 
 func TestConvertStreamingToClaudeResponse_Basic(t *testing.T) {
+	t.Parallel()
 	gin.SetMode(gin.TestMode)
 
 	adaptor := &Adaptor{}

@@ -8,6 +8,7 @@ import (
 
 // TestGenerateVerificationCodeLength tests that GenerateVerificationCode returns a code of the requested length.
 func TestGenerateVerificationCodeLength(t *testing.T) {
+	t.Parallel()
 	lengths := []int{0, 1, 4, 8, 16, 32}
 	for _, length := range lengths {
 		code := GenerateVerificationCode(length)
@@ -22,6 +23,7 @@ func TestGenerateVerificationCodeLength(t *testing.T) {
 
 // TestGenerateVerificationCodeUniqueness tests that GenerateVerificationCode generates unique codes.
 func TestGenerateVerificationCodeUniqueness(t *testing.T) {
+	t.Parallel()
 	codes := make(map[string]struct{})
 	for range 100 {
 		code := GenerateVerificationCode(8)
@@ -33,6 +35,7 @@ func TestGenerateVerificationCodeUniqueness(t *testing.T) {
 
 // TestGenerateVerificationCodeZeroLength tests that length=0 returns a valid UUID.
 func TestGenerateVerificationCodeZeroLength(t *testing.T) {
+	t.Parallel()
 	code := GenerateVerificationCode(0)
 	require.Len(t, code, 32, "Expected UUID length 32 for length=0")
 }

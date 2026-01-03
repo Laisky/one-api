@@ -19,6 +19,7 @@ func setupTestEngine() *gin.Engine {
 }
 
 func TestRewriteClaudeMessagesPrefix(t *testing.T) {
+	t.Parallel()
 	engine := setupTestEngine()
 	engine.Use(RewriteClaudeMessagesPrefix("/v1/v1/messages", engine))
 	engine.Use(RewriteClaudeMessagesPrefix("/openai/v1/messages", engine))
@@ -42,6 +43,7 @@ func TestRewriteClaudeMessagesPrefix(t *testing.T) {
 }
 
 func TestRewriteNonMatchingPassThrough(t *testing.T) {
+	t.Parallel()
 	engine := setupTestEngine()
 	engine.Use(RewriteClaudeMessagesPrefix("/v1/v1/messages", engine))
 	// Register an unrelated route to ensure pass-through works

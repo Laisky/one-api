@@ -9,6 +9,7 @@ import (
 )
 
 func TestSanitizeRequestBodyForLoggingTruncatesStrings(t *testing.T) {
+	t.Parallel()
 	rawPayload := map[string]any{
 		"text": strings.Repeat("A", debugLogBodyLimit+100),
 		"nested": map[string]any{
@@ -51,6 +52,7 @@ func TestSanitizeRequestBodyForLoggingTruncatesStrings(t *testing.T) {
 }
 
 func TestSanitizeRequestBodyForLoggingFallback(t *testing.T) {
+	t.Parallel()
 	payload := strings.Repeat("X", debugLogBodyLimit+500)
 	sanitized, truncated := sanitizeRequestBodyForLogging([]byte(payload), debugLogBodyLimit)
 	require.True(t, truncated)

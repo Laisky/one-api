@@ -14,6 +14,7 @@ func float64PtrAli(v float64) *float64 {
 }
 
 func TestConvertRequestClampsTopP(t *testing.T) {
+	t.Parallel()
 	req := model.GeneralOpenAIRequest{
 		Model: "qwen-plus-internet",
 		TopP:  float64PtrAli(1.5),
@@ -27,6 +28,7 @@ func TestConvertRequestClampsTopP(t *testing.T) {
 }
 
 func TestConvertRequestLeavesNilTopPUnchanged(t *testing.T) {
+	t.Parallel()
 	req := model.GeneralOpenAIRequest{
 		Model: "qwen-plus",
 	}

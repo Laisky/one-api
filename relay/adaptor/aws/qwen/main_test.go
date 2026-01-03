@@ -17,6 +17,7 @@ import (
 )
 
 func TestConvertConverseResponseToQwenUsageMapping(t *testing.T) {
+	t.Parallel()
 	gin.SetMode(gin.TestMode)
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
@@ -46,6 +47,7 @@ func TestConvertConverseResponseToQwenUsageMapping(t *testing.T) {
 }
 
 func TestConvertRequestMapsToolsAndReasoning(t *testing.T) {
+	t.Parallel()
 	temp := 0.5
 	topP := 0.9
 	reasoning := "high"
@@ -104,6 +106,7 @@ func TestConvertRequestMapsToolsAndReasoning(t *testing.T) {
 }
 
 func TestConvertMessagesMarshalsNonStringArguments(t *testing.T) {
+	t.Parallel()
 	args := map[string]any{"foo": "bar"}
 	messages := []relaymodel.Message{
 		{
@@ -132,6 +135,7 @@ func TestConvertMessagesMarshalsNonStringArguments(t *testing.T) {
 }
 
 func TestConvertQwenToConverseRequestIncludesReasoningConfig(t *testing.T) {
+	t.Parallel()
 	reasoning := "medium"
 	req := &Request{
 		Messages: []Message{
@@ -176,6 +180,7 @@ func TestConvertQwenToConverseRequestIncludesReasoningConfig(t *testing.T) {
 }
 
 func TestConvertQwenToConverseRequestInvalidToolArguments(t *testing.T) {
+	t.Parallel()
 	req := &Request{
 		Messages: []Message{
 			{

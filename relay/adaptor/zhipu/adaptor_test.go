@@ -25,6 +25,7 @@ func newZhipuContext() *gin.Context {
 }
 
 func TestConvertRequestClampsParametersV4(t *testing.T) {
+	t.Parallel()
 	adaptor := &Adaptor{}
 	req := &model.GeneralOpenAIRequest{
 		Model:       "glm-4",
@@ -48,6 +49,7 @@ func TestConvertRequestClampsParametersV4(t *testing.T) {
 }
 
 func TestConvertRequestClampsParametersV3(t *testing.T) {
+	t.Parallel()
 	adaptor := &Adaptor{}
 	req := &model.GeneralOpenAIRequest{
 		Model:       "chatglm-3",

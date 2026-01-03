@@ -71,6 +71,7 @@ func createTestStreamResponseWithToolCalls(id string, toolArgs any) *ChatComplet
 
 // TestThinkingProcessor_ProcessThinkingContent tests the ThinkingProcessor functionality
 func TestThinkingProcessor_ProcessThinkingContent(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name              string
 		input             string
@@ -190,6 +191,7 @@ func TestThinkingProcessor_ProcessThinkingContent(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			tp := &ThinkingProcessor{}
 			if tt.setupFunc != nil {
 				tt.setupFunc(tp)
@@ -213,6 +215,7 @@ func TestThinkingProcessor_ProcessThinkingContent(t *testing.T) {
 
 // TestStreamingContext_NewStreamingContext tests context initialization
 func TestStreamingContext_NewStreamingContext(t *testing.T) {
+	t.Parallel()
 	logger := createTestLogger()
 
 	tests := []struct {
@@ -234,6 +237,7 @@ func TestStreamingContext_NewStreamingContext(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			ctx := NewStreamingContext(logger, tt.enableThinking)
 
 			require.NotNil(t, ctx, "expected non-nil context")
@@ -258,6 +262,7 @@ func TestStreamingContext_NewStreamingContext(t *testing.T) {
 
 // TestStreamingContext_ProcessStreamChunk tests chunk processing
 func TestStreamingContext_ProcessStreamChunk(t *testing.T) {
+	t.Parallel()
 	logger := createTestLogger()
 
 	tests := []struct {
@@ -304,6 +309,7 @@ func TestStreamingContext_ProcessStreamChunk(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			ctx := NewStreamingContext(logger, tt.enableThinking)
 			originalContent := ""
 			if len(tt.response.Choices) > 0 {
@@ -335,6 +341,7 @@ func TestStreamingContext_ProcessStreamChunk(t *testing.T) {
 
 // TestStreamingContext_ManageBufferCapacity tests buffer management
 func TestStreamingContext_ManageBufferCapacity(t *testing.T) {
+	t.Parallel()
 	logger := createTestLogger()
 	ctx := NewStreamingContext(logger, false)
 
@@ -370,6 +377,7 @@ func TestStreamingContext_ManageBufferCapacity(t *testing.T) {
 
 // TestStreamingContext_CalculateUsage tests usage calculation
 func TestStreamingContext_CalculateUsage(t *testing.T) {
+	t.Parallel()
 	logger := createTestLogger()
 
 	tests := []struct {
@@ -441,6 +449,7 @@ func TestStreamingContext_CalculateUsage(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			ctx := NewStreamingContext(logger, false)
 			if tt.setupFunc != nil {
 				tt.setupFunc(ctx)
@@ -458,6 +467,7 @@ func TestStreamingContext_CalculateUsage(t *testing.T) {
 
 // TestStreamingContext_ValidateStreamCompletion tests stream validation
 func TestStreamingContext_ValidateStreamCompletion(t *testing.T) {
+	t.Parallel()
 	logger := createTestLogger()
 
 	tests := []struct {
@@ -501,6 +511,7 @@ func TestStreamingContext_ValidateStreamCompletion(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			ctx := NewStreamingContext(logger, false)
 			if tt.setupFunc != nil {
 				tt.setupFunc(ctx)
@@ -521,6 +532,7 @@ func TestStreamingContext_ValidateStreamCompletion(t *testing.T) {
 
 // TestStreamingContext_Integration tests complete streaming workflow
 func TestStreamingContext_Integration(t *testing.T) {
+	t.Parallel()
 	logger := createTestLogger()
 	ctx := NewStreamingContext(logger, true) // Enable thinking
 
@@ -565,6 +577,7 @@ func TestStreamingContext_Integration(t *testing.T) {
 
 // TestBufferCapacityConstants tests the capacity constants
 func TestBufferCapacityConstants(t *testing.T) {
+	t.Parallel()
 	require.Equal(t, 4096, DefaultBuilderCapacity, "DefaultBuilderCapacity mismatch")
 	require.Equal(t, 65536, LargeBuilderCapacity, "LargeBuilderCapacity mismatch")
 	require.Equal(t, 1048576, MaxBuilderCapacity, "MaxBuilderCapacity mismatch")
@@ -582,6 +595,7 @@ func stringPtr(s string) *string {
 // TestUnifiedStreamProcessing_ThinkingMapping verifies that when thinking is enabled and reasoning_format
 // is set, the streamed chunks contain the reasoning in the requested field and avoid duplicates.
 func TestUnifiedStreamProcessing_ThinkingMapping(t *testing.T) {
+	t.Parallel()
 	// Prepare a gin test context with query params
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)

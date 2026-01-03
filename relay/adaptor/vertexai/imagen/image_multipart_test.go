@@ -13,6 +13,7 @@ import (
 // TestConvertMultipartImageEditRequest ensures we can parse required fields from multipart form
 // and construct an Imagen create request without panicking.
 func TestConvertMultipartImageEditRequest(t *testing.T) {
+	t.Parallel()
 	gin.SetMode(gin.TestMode)
 	w := httptest.NewRecorder()
 

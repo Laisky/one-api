@@ -12,6 +12,7 @@ import (
 )
 
 func TestGetAudioDuration(t *testing.T) {
+	t.Parallel()
 	// skip if there is no ffprobe installed
 	if _, err := exec.LookPath("ffprobe"); err != nil {
 		if _, altErr := exec.LookPath("avprobe"); altErr != nil {
@@ -20,6 +21,7 @@ func TestGetAudioDuration(t *testing.T) {
 	}
 
 	t.Run("should return correct duration for a valid audio file", func(t *testing.T) {
+		t.Parallel()
 		tmpFile, err := os.CreateTemp("", "test_audio*.mp3")
 		require.NoError(t, err)
 		defer os.Remove(tmpFile.Name())
@@ -45,12 +47,14 @@ func TestGetAudioDuration(t *testing.T) {
 	})
 
 	t.Run("should return an error for a non-existent file", func(t *testing.T) {
+		t.Parallel()
 		_, err := GetAudioDuration(context.Background(), "non_existent_file.mp3")
 		require.Error(t, err)
 	})
 }
 
 func TestGetAudioTokens(t *testing.T) {
+	t.Parallel()
 	if _, err := exec.LookPath("ffprobe"); err != nil {
 		if _, altErr := exec.LookPath("avprobe"); altErr != nil {
 			t.Skip("ffprobe not installed, skipping test")
@@ -58,6 +62,7 @@ func TestGetAudioTokens(t *testing.T) {
 	}
 
 	t.Run("should return correct tokens for a valid audio file", func(t *testing.T) {
+		t.Parallel()
 		// download test audio file
 		resp, err := http.Get("https://s3.laisky.com/uploads/2025/01/audio-sample.m4a")
 		if err != nil {
@@ -75,6 +80,7 @@ func TestGetAudioTokens(t *testing.T) {
 	})
 
 	t.Run("should return an error for a non-existent file", func(t *testing.T) {
+		t.Parallel()
 		_, err := GetAudioTokens(context.Background(), nil, 1)
 		require.Error(t, err)
 	})

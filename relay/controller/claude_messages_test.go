@@ -17,6 +17,7 @@ import (
 )
 
 func TestGetAndValidateClaudeMessagesRequest(t *testing.T) {
+	t.Parallel()
 	gin.SetMode(gin.TestMode)
 
 	tests := []struct {
@@ -96,6 +97,7 @@ func TestGetAndValidateClaudeMessagesRequest(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			w := httptest.NewRecorder()
 			c, _ := gin.CreateTestContext(w)
 
@@ -123,6 +125,7 @@ func TestGetAndValidateClaudeMessagesRequest(t *testing.T) {
 }
 
 func TestGetClaudeMessagesPromptTokens(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 
 	tests := []struct {
@@ -175,6 +178,7 @@ func TestGetClaudeMessagesPromptTokens(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result := getClaudeMessagesPromptTokens(ctx, tt.request)
 			assert.Equal(t, tt.expected, result)
 		})
@@ -182,6 +186,7 @@ func TestGetClaudeMessagesPromptTokens(t *testing.T) {
 }
 
 func TestClaudeMessagesRelayMode(t *testing.T) {
+	t.Parallel()
 	// Test that the relay mode is correctly detected for /v1/messages
 	mode := relaymode.GetByPath("/v1/messages")
 	assert.Equal(t, relaymode.ClaudeMessages, mode)
@@ -192,6 +197,7 @@ func TestClaudeMessagesRelayMode(t *testing.T) {
 }
 
 func TestClaudeMessagesRequestStructure(t *testing.T) {
+	t.Parallel()
 	// Test that the Claude Messages request structure can be properly marshaled/unmarshaled
 	originalRequest := &ClaudeMessagesRequest{
 		Model:     "claude-3-sonnet-20240229",

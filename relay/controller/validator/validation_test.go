@@ -9,6 +9,7 @@ import (
 )
 
 func TestValidateRerankRequest(t *testing.T) {
+	t.Parallel()
 	req := &model.RerankRequest{
 		Model:     "cohere-rerank",
 		Query:     "hello",
@@ -37,6 +38,7 @@ func TestValidateRerankRequest(t *testing.T) {
 }
 
 func TestValidateUnknownParametersForRerank(t *testing.T) {
+	t.Parallel()
 	// Valid rerank payload should not be considered unknown
 	valid := []byte(`{"model":"rerank-v3.5","query":"What is X?","documents":["a","b"],"top_n":2}`)
 	err := ValidateUnknownParameters(valid)

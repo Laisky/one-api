@@ -9,6 +9,7 @@ import (
 )
 
 func TestChannelSupportsModel(t *testing.T) {
+	t.Parallel()
 	priority := int64(10)
 	channel := &Channel{
 		Id:       1,
@@ -19,28 +20,34 @@ func TestChannelSupportsModel(t *testing.T) {
 	}
 
 	t.Run("listed model", func(t *testing.T) {
+		t.Parallel()
 		assert.True(t, channel.SupportsModel("gpt-4"))
 	})
 
 	t.Run("case insensitive match", func(t *testing.T) {
+		t.Parallel()
 		assert.True(t, channel.SupportsModel("GPT-4O-MINI"))
 	})
 
 	t.Run("unlisted model", func(t *testing.T) {
+		t.Parallel()
 		assert.False(t, channel.SupportsModel("gpt-5"))
 	})
 
 	t.Run("empty restriction", func(t *testing.T) {
+		t.Parallel()
 		openChannel := &Channel{Models: ""}
 		assert.True(t, openChannel.SupportsModel("anything"))
 	})
 
 	t.Run("empty model name", func(t *testing.T) {
+		t.Parallel()
 		assert.True(t, channel.SupportsModel(""))
 	})
 }
 
 func TestChannel_MigrateModelConfigsToModelPrice(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name            string
 		modelConfigs    *string
@@ -114,6 +121,7 @@ func TestChannel_MigrateModelConfigsToModelPrice(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			channel := &Channel{
 				Id:              1,
 				ModelConfigs:    tt.modelConfigs,
@@ -146,6 +154,7 @@ func TestChannel_MigrateModelConfigsToModelPrice(t *testing.T) {
 }
 
 func TestChannel_MigrateHistoricalPricingToModelConfigs(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name            string
 		modelConfigs    *string
@@ -218,6 +227,7 @@ func TestChannel_MigrateHistoricalPricingToModelConfigs(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			channel := &Channel{
 				Id:              1,
 				ModelConfigs:    tt.modelConfigs,
@@ -250,6 +260,7 @@ func TestChannel_MigrateHistoricalPricingToModelConfigs(t *testing.T) {
 }
 
 func TestChannel_GetModelPriceConfigs(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name         string
 		modelConfigs *string
@@ -290,6 +301,7 @@ func TestChannel_GetModelPriceConfigs(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			channel := &Channel{
 				Id:           1,
 				ModelConfigs: tt.modelConfigs,
@@ -320,6 +332,7 @@ func TestChannel_GetModelPriceConfig(t *testing.T) {
 }
 
 func TestChannel_GetModelRatioFromConfigs(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name         string
 		modelConfigs *string
@@ -352,6 +365,7 @@ func TestChannel_GetModelRatioFromConfigs(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			channel := &Channel{
 				Id:           1,
 				ModelConfigs: tt.modelConfigs,
@@ -364,6 +378,7 @@ func TestChannel_GetModelRatioFromConfigs(t *testing.T) {
 }
 
 func TestChannel_GetCompletionRatioFromConfigs(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name         string
 		modelConfigs *string
@@ -396,6 +411,7 @@ func TestChannel_GetCompletionRatioFromConfigs(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			channel := &Channel{
 				Id:           1,
 				ModelConfigs: tt.modelConfigs,
@@ -408,6 +424,7 @@ func TestChannel_GetCompletionRatioFromConfigs(t *testing.T) {
 }
 
 func TestChannel_GetModelConfig_UnifiedOnly(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name         string
 		modelConfigs *string
@@ -446,6 +463,7 @@ func TestChannel_GetModelConfig_UnifiedOnly(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			channel := &Channel{
 				Id:           1,
 				ModelConfigs: tt.modelConfigs,
@@ -458,6 +476,7 @@ func TestChannel_GetModelConfig_UnifiedOnly(t *testing.T) {
 }
 
 func TestChannel_SetModelPriceConfigs(t *testing.T) {
+	t.Parallel()
 	channel := &Channel{Id: 1}
 
 	// Test setting valid configs
@@ -499,6 +518,7 @@ func TestChannel_SetModelPriceConfigs(t *testing.T) {
 }
 
 func TestChannel_MigrateModelConfigsToModelPrice_EdgeCases(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name          string
 		modelConfigs  *string
@@ -571,6 +591,7 @@ func TestChannel_MigrateModelConfigsToModelPrice_EdgeCases(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			channel := &Channel{
 				Id:           1,
 				ModelConfigs: tt.modelConfigs,
@@ -592,6 +613,7 @@ func TestChannel_MigrateModelConfigsToModelPrice_EdgeCases(t *testing.T) {
 }
 
 func TestChannel_MigrateHistoricalPricingToModelConfigs_EdgeCases(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name            string
 		modelRatio      *string
@@ -633,6 +655,7 @@ func TestChannel_MigrateHistoricalPricingToModelConfigs_EdgeCases(t *testing.T) 
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			channel := &Channel{
 				Id:              1,
 				ModelRatio:      tt.modelRatio,
@@ -654,6 +677,7 @@ func TestChannel_MigrateHistoricalPricingToModelConfigs_EdgeCases(t *testing.T) 
 }
 
 func TestChannel_validateModelPriceConfigs(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name          string
 		configs       map[string]ModelConfigLocal
@@ -771,6 +795,7 @@ func TestChannel_validateModelPriceConfigs(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			channel := &Channel{Id: 1}
 			err := channel.validateModelPriceConfigs(tt.configs)
 

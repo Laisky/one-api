@@ -27,6 +27,7 @@ func (c *capturedRender) render(b []byte) bool {
 }
 
 func TestFinalizerEmitsAfterStopAndMetadata(t *testing.T) {
+	t.Parallel()
 	usage := relaymodel.Usage{}
 	cap := &capturedRender{allow: true}
 	f := NewFinalizer("test-model", 123, &usage, zap.NewNop(), cap.render)
@@ -64,6 +65,7 @@ func TestFinalizerEmitsAfterStopAndMetadata(t *testing.T) {
 }
 
 func TestFinalizerMetadataBeforeStop(t *testing.T) {
+	t.Parallel()
 	usage := relaymodel.Usage{}
 	cap := &capturedRender{allow: true}
 	f := NewFinalizer("test-model", 123, &usage, zap.NewNop(), cap.render)
@@ -79,6 +81,7 @@ func TestFinalizerMetadataBeforeStop(t *testing.T) {
 }
 
 func TestFinalizerFinalizeOnCloseWithoutMetadata(t *testing.T) {
+	t.Parallel()
 	usage := relaymodel.Usage{}
 	cap := &capturedRender{allow: true}
 	f := NewFinalizer("test-model", 123, &usage, zap.NewNop(), cap.render)
@@ -99,6 +102,7 @@ func TestFinalizerFinalizeOnCloseWithoutMetadata(t *testing.T) {
 }
 
 func TestFinalizerFinalizeWithoutStop(t *testing.T) {
+	t.Parallel()
 	usage := relaymodel.Usage{}
 	cap := &capturedRender{allow: true}
 	f := NewFinalizer("test-model", 123, &usage, zap.NewNop(), cap.render)
@@ -118,6 +122,7 @@ func TestFinalizerFinalizeWithoutStop(t *testing.T) {
 }
 
 func TestFinalizerNotDuplicate(t *testing.T) {
+	t.Parallel()
 	usage := relaymodel.Usage{}
 	cap := &capturedRender{allow: true}
 	f := NewFinalizer("test-model", 123, &usage, zap.NewNop(), cap.render)

@@ -11,6 +11,7 @@ import (
 )
 
 func TestGetRegionPrefix(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		region   string
@@ -31,6 +32,7 @@ func TestGetRegionPrefix(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result := getRegionPrefix(tt.region)
 			require.Equalf(t, tt.expected, result, "getRegionPrefix(%s)", tt.region)
 		})
@@ -38,6 +40,7 @@ func TestGetRegionPrefix(t *testing.T) {
 }
 
 func TestConvertModelID2CrossRegionProfile(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 
 	tests := []struct {
@@ -153,6 +156,7 @@ func TestConvertModelID2CrossRegionProfile(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result := ConvertModelID2CrossRegionProfile(ctx, tt.model, tt.region)
 			require.Equalf(t, tt.expected, result, "ConvertModelID2CrossRegionProfile(%s, %s)", tt.model, tt.region)
 		})
@@ -160,6 +164,7 @@ func TestConvertModelID2CrossRegionProfile(t *testing.T) {
 }
 
 func TestUpdateRegionHealthMetrics(t *testing.T) {
+	t.Parallel()
 	region := "us-east-1"
 
 	// Test successful operation
@@ -188,6 +193,7 @@ func TestUpdateRegionHealthMetrics(t *testing.T) {
 }
 
 func TestConvertModelID2CrossRegionProfileWithFallback(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	model := "anthropic.claude-3-haiku-20240307-v1:0"
 	region := "us-east-1"
@@ -203,6 +209,7 @@ func TestConvertModelID2CrossRegionProfileWithFallback(t *testing.T) {
 }
 
 func TestRegionMapping(t *testing.T) {
+	t.Parallel()
 	// Test that all regions in RegionMapping have valid prefixes
 	for region, prefixes := range RegionMapping {
 		require.NotEmptyf(t, prefixes, "RegionMapping entry for %s should define at least one prefix", region)
@@ -217,6 +224,7 @@ func TestRegionMapping(t *testing.T) {
 }
 
 func TestCrossRegionInferencesValidation(t *testing.T) {
+	t.Parallel()
 	// Test that all cross-region inference models have valid prefixes
 	validPrefixes := map[string]bool{
 		"us":     true,
@@ -241,6 +249,7 @@ func TestCrossRegionInferencesValidation(t *testing.T) {
 // TestGlobalProfileSourceRegionsConsistency verifies that all models in GlobalProfileSourceRegions
 // have corresponding entries in CrossRegionInferences with the global prefix.
 func TestGlobalProfileSourceRegionsConsistency(t *testing.T) {
+	t.Parallel()
 	for modelID := range GlobalProfileSourceRegions {
 		globalProfileID := "global." + modelID
 		require.Containsf(t, CrossRegionInferences, globalProfileID,
@@ -252,6 +261,7 @@ func TestGlobalProfileSourceRegionsConsistency(t *testing.T) {
 // TestClaudeOpus45RequiresGlobalProfile specifically tests that claude-opus-4-5 is configured
 // correctly to use the global inference profile, as AWS requires this for on-demand invocation.
 func TestClaudeOpus45RequiresGlobalProfile(t *testing.T) {
+	t.Parallel()
 	modelID := "anthropic.claude-opus-4-5-20251101-v1:0"
 	globalProfileID := "global." + modelID
 
