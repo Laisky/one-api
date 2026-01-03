@@ -1266,32 +1266,43 @@ func postConsumeResponseAPIQuota(ctx context.Context,
 
 // getResponseAPIRequestBody gets the request body for Response API requests
 func getResponseAPIRequestBody(c *gin.Context, meta *metalib.Meta, responseAPIRequest *openai.ResponseAPIRequest, adaptor adaptor.Adaptor) (io.Reader, error) {
+	lg := gmw.GetLogger(c)
 	// Prefer forwarding the exact user payload to avoid mutating vendor-specific fields
 	rawBody, err := common.GetRequestBody(c)
 	if err != nil {
 		return nil, errors.Wrap(err, "get raw Response API request body")
 	}
 
-	patched, err := normalizeResponseAPIRawBody(rawBody, responseAPIRequest)
+	patched, stats, changed, err := normalizeResponseAPIRawBody(rawBody, responseAPIRequest)
 	if err != nil {
 		return nil, errors.Wrap(err, "normalize Response API request body")
+	}
+	if config.DebugEnabled && changed {
+		// Avoid logging the payload; only emit shape/count diagnostics.
+		lg.Debug("normalized Response API request payload",
+			zap.Int("assistant_input_text_fixed", stats.AssistantInputTextFixed),
+			zap.Int("non_assistant_output_text_fixed", stats.NonAssistantOutputTextFixed),
+		)
 	}
 
 	return bytes.NewReader(patched), nil
 }
 
-func normalizeResponseAPIRawBody(rawBody []byte, request *openai.ResponseAPIRequest) ([]byte, error) {
+func normalizeResponseAPIRawBody(rawBody []byte, request *openai.ResponseAPIRequest) ([]byte, openai.ResponseAPIInputContentNormalizationStats, bool, error) {
+	var stats openai.ResponseAPIInputContentNormalizationStats
 	if request == nil {
-		return rawBody, nil
+		return rawBody, stats, false, nil
 	}
 
 	if len(rawBody) == 0 {
-		return json.Marshal(request)
+		patched, err := json.Marshal(request)
+		return patched, stats, err == nil, err
 	}
 
 	var root map[string]json.RawMessage
 	if err := json.Unmarshal(rawBody, &root); err != nil {
-		return json.Marshal(request)
+		patched, err2 := json.Marshal(request)
+		return patched, stats, err2 == nil, err2
 	}
 
 	changed := false
@@ -1299,7 +1310,7 @@ func normalizeResponseAPIRawBody(rawBody []byte, request *openai.ResponseAPIRequ
 	if request.Model != "" {
 		modelBytes, err := json.Marshal(request.Model)
 		if err != nil {
-			return nil, errors.Wrap(err, "marshal mapped model value")
+			return nil, stats, false, errors.Wrap(err, "marshal mapped model value")
 		}
 		if existing, ok := root["model"]; !ok || !bytes.Equal(existing, modelBytes) {
 			root["model"] = modelBytes
@@ -1315,7 +1326,7 @@ func normalizeResponseAPIRawBody(rawBody []byte, request *openai.ResponseAPIRequ
 	} else {
 		choiceBytes, err := json.Marshal(request.ToolChoice)
 		if err != nil {
-			return nil, errors.Wrap(err, "marshal request tool_choice")
+			return nil, stats, false, errors.Wrap(err, "marshal request tool_choice")
 		}
 		if existing, ok := root["tool_choice"]; !ok || !bytes.Equal(existing, choiceBytes) {
 			root["tool_choice"] = choiceBytes
@@ -1345,11 +1356,30 @@ func normalizeResponseAPIRawBody(rawBody []byte, request *openai.ResponseAPIRequ
 	} else {
 		textBytes, err := json.Marshal(request.Text)
 		if err != nil {
-			return nil, errors.Wrap(err, "marshal sanitized response text config")
+			return nil, stats, false, errors.Wrap(err, "marshal sanitized response text config")
 		}
 		if existing, ok := root["text"]; !ok || !bytes.Equal(existing, textBytes) {
 			root["text"] = textBytes
 			changed = true
+		}
+	}
+
+	// Backward-compat: normalize historical assistant/user message content item types.
+	// Some clients send assistant history with type=input_text, but OpenAI expects output_text (or refusal) for assistant.
+	if rawInput, ok := root["input"]; ok && len(rawInput) > 0 {
+		parsed := openai.ResponseAPIInput{}
+		if err := json.Unmarshal(rawInput, &parsed); err == nil {
+			inputStats, inputChanged := openai.NormalizeResponseAPIInputContentTypes(&parsed)
+			if inputChanged {
+				stats = inputStats
+				request.Input = parsed
+				inputBytes, err := json.Marshal(parsed)
+				if err != nil {
+					return nil, stats, false, errors.Wrap(err, "marshal normalized response input")
+				}
+				root["input"] = inputBytes
+				changed = true
+			}
 		}
 	}
 
@@ -1361,7 +1391,7 @@ func normalizeResponseAPIRawBody(rawBody []byte, request *openai.ResponseAPIRequ
 	} else {
 		toolsBytes, err := json.Marshal(request.Tools)
 		if err != nil {
-			return nil, errors.Wrap(err, "marshal sanitized response tools")
+			return nil, stats, false, errors.Wrap(err, "marshal sanitized response tools")
 		}
 		if existing, ok := root["tools"]; !ok || !bytes.Equal(existing, toolsBytes) {
 			root["tools"] = toolsBytes
@@ -1370,14 +1400,14 @@ func normalizeResponseAPIRawBody(rawBody []byte, request *openai.ResponseAPIRequ
 	}
 
 	if !changed {
-		return rawBody, nil
+		return rawBody, stats, false, nil
 	}
 
 	patched, err := json.Marshal(root)
 	if err != nil {
-		return nil, errors.Wrap(err, "marshal patched Response API request")
+		return nil, stats, false, errors.Wrap(err, "marshal patched Response API request")
 	}
-	return patched, nil
+	return patched, stats, true, nil
 }
 
 func applyResponseAPIStreamParams(c *gin.Context, meta *metalib.Meta) error {

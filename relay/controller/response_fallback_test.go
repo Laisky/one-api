@@ -2,13 +2,16 @@ package controller
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	gmw "github.com/Laisky/gin-middlewares/v7"
 	"github.com/gin-gonic/gin"
@@ -20,6 +23,7 @@ import (
 	"github.com/songquanpeng/one-api/common/client"
 	"github.com/songquanpeng/one-api/common/config"
 	"github.com/songquanpeng/one-api/common/ctxkey"
+	"github.com/songquanpeng/one-api/common/graceful"
 	"github.com/songquanpeng/one-api/common/logger"
 	"github.com/songquanpeng/one-api/model"
 	"github.com/songquanpeng/one-api/relay/adaptor/openai"
@@ -27,6 +31,12 @@ import (
 	"github.com/songquanpeng/one-api/relay/channeltype"
 	metalib "github.com/songquanpeng/one-api/relay/meta"
 	relaymodel "github.com/songquanpeng/one-api/relay/model"
+)
+
+var (
+	responseFallbackDBOnce      sync.Once
+	responseFallbackMigrateOnce sync.Once
+	responseFallbackFixtureMu   sync.Mutex
 )
 
 const (
@@ -717,10 +727,46 @@ func TestNormalizeResponseAPIRawBody_RemovesUnsupportedParams(t *testing.T) {
 	require.Nil(t, req.TopP, "expected top_p pointer to be nil after sanitization")
 
 	raw := []byte(`{"model":"gpt-5-mini","temperature":0.7,"top_p":0.9}`)
-	patched, err := normalizeResponseAPIRawBody(raw, req)
+	patched, _, _, err := normalizeResponseAPIRawBody(raw, req)
 	require.NoError(t, err, "normalizeResponseAPIRawBody failed")
 	require.False(t, bytes.Contains(patched, []byte(`"temperature"`)), "temperature should have been removed: %s", patched)
 	require.False(t, bytes.Contains(patched, []byte(`"top_p"`)), "top_p should have been removed: %s", patched)
+}
+
+func TestNormalizeResponseAPIRawBody_NormalizesAssistantHistoryContentType(t *testing.T) {
+	raw := []byte(`{
+	  "model": "gpt-4o-mini",
+	  "input": [
+	    {"role": "user", "content": [{"type": "input_text", "text": "hi"}]},
+	    {"role": "assistant", "content": [{"type": "input_text", "text": "hello"}]}
+	  ]
+	}`)
+
+	req := &openai.ResponseAPIRequest{Model: "gpt-4o-mini"}
+	err := json.Unmarshal(raw, req)
+	require.NoError(t, err, "failed to unmarshal request")
+
+	patched, stats, changed, err := normalizeResponseAPIRawBody(raw, req)
+	require.NoError(t, err, "normalizeResponseAPIRawBody failed")
+	require.True(t, changed, "expected raw body to be changed")
+	require.Equal(t, 1, stats.AssistantInputTextFixed, "expected assistant input_text to be rewritten")
+
+	var out map[string]any
+	err = json.Unmarshal(patched, &out)
+	require.NoError(t, err, "failed to unmarshal patched payload")
+
+	input, ok := out["input"].([]any)
+	require.True(t, ok, "expected input to be an array")
+	require.Len(t, input, 2)
+
+	assistant, ok := input[1].(map[string]any)
+	require.True(t, ok)
+	content, ok := assistant["content"].([]any)
+	require.True(t, ok)
+	require.NotEmpty(t, content)
+	part, ok := content[0].(map[string]any)
+	require.True(t, ok)
+	require.Equal(t, "output_text", part["type"], "expected assistant content type to be output_text")
 }
 
 type parsedSSE struct {
@@ -769,12 +815,23 @@ func parseSSEEvents(raw string) []parsedSSE {
 
 func ensureResponseFallbackFixtures(t *testing.T) {
 	t.Helper()
+	responseFallbackFixtureMu.Lock()
+	defer responseFallbackFixtureMu.Unlock()
+
+	// Tests in this package spawn post-response billing/logging tasks via graceful.GoCritical.
+	// Wait for them here to avoid SQLITE_BUSY errors when fixtures are reset between tests.
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	t.Cleanup(cancel)
+	require.NoError(t, graceful.Drain(ctx), "failed to drain critical tasks")
+
 	ensureResponseFallbackDB(t)
 
-	err := model.DB.AutoMigrate(&model.User{}, &model.Token{}, &model.Channel{}, &model.UserRequestCost{}, &model.Log{}, &model.Trace{})
-	require.NoError(t, err, "failed to migrate tables")
+	responseFallbackMigrateOnce.Do(func() {
+		err := model.DB.AutoMigrate(&model.User{}, &model.Token{}, &model.Channel{}, &model.UserRequestCost{}, &model.Log{}, &model.Trace{})
+		require.NoError(t, err, "failed to migrate tables")
+	})
 
-	err = model.DB.Where("id = ?", fallbackUserID).Delete(&model.User{}).Error
+	err := model.DB.Where("id = ?", fallbackUserID).Delete(&model.User{}).Error
 	require.NoError(t, err, "failed to clean user fixture")
 	user := &model.User{Id: fallbackUserID, Username: "response-fallback", Quota: 1_000_000, Status: model.UserStatusEnabled}
 	err = model.DB.Create(user).Error
@@ -821,14 +878,16 @@ func ensureResponseFallbackFixtures(t *testing.T) {
 
 func ensureResponseFallbackDB(t *testing.T) {
 	t.Helper()
-	if model.DB != nil {
-		if model.LOG_DB == nil {
-			model.LOG_DB = model.DB
+	responseFallbackDBOnce.Do(func() {
+		if model.DB != nil {
+			if model.LOG_DB == nil {
+				model.LOG_DB = model.DB
+			}
+			return
 		}
-		return
-	}
-	db, err := gorm.Open(sqlite.Open("file:response_fallback_tests?mode=memory&cache=shared"), &gorm.Config{})
-	require.NoError(t, err, "failed to open sqlite database")
-	model.DB = db
-	model.LOG_DB = db
+		db, err := gorm.Open(sqlite.Open("file:response_fallback_tests?mode=memory&cache=shared"), &gorm.Config{})
+		require.NoError(t, err, "failed to open sqlite database")
+		model.DB = db
+		model.LOG_DB = db
+	})
 }

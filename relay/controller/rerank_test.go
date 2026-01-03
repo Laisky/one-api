@@ -12,8 +12,6 @@ import (
 )
 
 func TestPostConsumeRerankQuotaPerCall(t *testing.T) {
-	t.Parallel()
-
 	usage := &relaymodel.Usage{PromptTokens: 42, CompletionTokens: 0}
 	meta := &metalib.Meta{
 		UserId:    1,
