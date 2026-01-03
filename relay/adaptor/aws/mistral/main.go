@@ -2,7 +2,6 @@ package aws
 
 import (
 	"encoding/json"
-	"fmt"
 	"io"
 	"net/http"
 	"time"
@@ -479,7 +478,7 @@ func handleStreamWithConverseAPI(c *gin.Context, awsCli *bedrockruntime.Client, 
 		switch v := event.(type) {
 		case *types.ConverseStreamOutputMemberMessageStart:
 			// Handle message start
-			id = fmt.Sprintf("chatcmpl-oneapi-%s", tracing.GetTraceIDFromContext(c))
+			id = tracing.GenerateChatCompletionIDFromContext(c)
 			finalizer.SetID(id)
 			return true
 

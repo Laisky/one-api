@@ -2,7 +2,6 @@ package aws
 
 import (
 	"encoding/json"
-	"fmt"
 	"io"
 	"net/http"
 
@@ -203,7 +202,7 @@ func StreamHandler(c *gin.Context, awsCli *bedrockruntime.Client) (*relaymodel.E
 		switch v := event.(type) {
 		case *types.ConverseStreamOutputMemberMessageStart:
 			// Handle message start
-			id = fmt.Sprintf("chatcmpl-oneapi-%s", tracing.GetTraceIDFromContext(c))
+			id = tracing.GenerateChatCompletionIDFromContext(c)
 			finalizer.SetID(id)
 			return true
 
@@ -473,7 +472,7 @@ func convertConverseResponseToOpenAI(c *gin.Context, awsResp *bedrockruntime.Con
 	}
 
 	response := &Response{
-		ID:      fmt.Sprintf("chatcmpl-oneapi-%s", tracing.GetTraceIDFromContext(c)),
+		ID:      tracing.GenerateChatCompletionIDFromContext(c),
 		Object:  "chat.completion",
 		Created: helper.GetTimestamp(),
 		Model:   modelName,

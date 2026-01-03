@@ -3,7 +3,6 @@ package openai_compatible
 import (
 	"bufio"
 	"encoding/json"
-	"fmt"
 	"io"
 	"net/http"
 	"strings"
@@ -1026,7 +1025,7 @@ func UnifiedStreamProcessing(c *gin.Context, resp *http.Response, promptTokens i
 		}
 
 		// Replace upstream ID with our trace ID
-		streamResponse.Id = fmt.Sprintf("chatcmpl-oneapi-%s", tracing.GetTraceID(c))
+		streamResponse.Id = tracing.GenerateChatCompletionID(c)
 
 		// Process chunk using unified logic
 		modifiedChunk := streamCtx.ProcessStreamChunk(&streamResponse)

@@ -102,6 +102,16 @@ func CreateTrace(ctx context.Context, traceId, url, method string, bodySize int6
 	db := traceDBWithContext(ctx)
 
 	if err := db.Create(traceRecord).Error; err != nil {
+		// Creating the trace record is best-effort. Under unusual client tracing setups
+		// (or retries), callers may attempt to create the same trace id twice.
+		// Treat duplicated key errors as a no-op so the request flow is not impacted.
+		if errors.Is(err, gorm.ErrDuplicatedKey) {
+			lg.Debug("trace record already exists (best-effort, skipping create)",
+				zap.String("trace_id", traceId),
+				zap.String("url", urlToStore),
+				zap.String("method", method))
+			return traceRecord, nil
+		}
 		lg.Error("failed to create trace record",
 			zap.Error(err),
 			zap.String("trace_id", traceId))

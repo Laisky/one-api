@@ -852,7 +852,7 @@ func convertConverseResponseToQwen(c *gin.Context, converseResp *bedrockruntime.
 	}
 
 	return &QwenResponse{
-		ID:      fmt.Sprintf("chatcmpl-oneapi-%s", getTraceIDSafe(c)),
+		ID:      tracing.GenerateChatCompletionID(c),
 		Object:  "chat.completion",
 		Created: helper.GetTimestamp(),
 		Model:   modelName,
@@ -878,7 +878,7 @@ func getTraceIDSafe(c *gin.Context) (traceID string) {
 			traceID = ""
 		}
 	}()
-	return tracing.GetTraceIDFromContext(c)
+	return tracing.GetTraceID(c)
 }
 
 // convertQwenToConverseStreamRequest converts Qwen request to AWS Converse API format for streaming.
