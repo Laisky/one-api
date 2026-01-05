@@ -261,8 +261,15 @@ func ConvertOpenAIStreamToClaudeSSE(c *gin.Context, resp *http.Response, promptT
 
 		// Process choices
 		for _, choice := range chunk.Choices {
-			// Thinking delta
+			// Thinking delta - try Thinking field first, fallback to ReasoningContent
+			var thinkingContent *string
 			if choice.Delta.Thinking != nil && *choice.Delta.Thinking != "" {
+				thinkingContent = choice.Delta.Thinking
+			} else if choice.Delta.ReasoningContent != nil && *choice.Delta.ReasoningContent != "" {
+				thinkingContent = choice.Delta.ReasoningContent
+			}
+
+			if thinkingContent != nil && *thinkingContent != "" {
 				if thinkingIndex == -1 {
 					// Start thinking block at next index
 					start := map[string]any{
@@ -279,7 +286,7 @@ func ConvertOpenAIStreamToClaudeSSE(c *gin.Context, resp *http.Response, promptT
 					thinkingIndex = nextIndex
 					nextIndex++
 				}
-				thinkingDelta := *choice.Delta.Thinking
+				thinkingDelta := *thinkingContent
 				accumThinking += thinkingDelta
 				delta := map[string]any{
 					"type":  "content_block_delta",
