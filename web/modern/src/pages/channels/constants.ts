@@ -38,6 +38,14 @@ export const CHANNEL_TYPES: ChannelType[] = [
       "Custom Claude Messages api_base; converts Chat/Response requests to Claude format upstream.",
   },
   {
+    key: 53,
+    text: "GitHub Copilot",
+    value: 53,
+    color: "black",
+    description:
+      "GitHub Copilot gateway; exchanges a GitHub access token for a short-lived Copilot API token and forwards OpenAI-style requests.",
+  },
+  {
     key: 14,
     text: "Anthropic",
     value: 14,

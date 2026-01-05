@@ -64,6 +64,7 @@ var ChannelBaseURLConfigs = []ChannelBaseURLConfig{
 	{URL: "", Editable: true},                                                          // 50 OpenAICompatible - user must provide
 	{URL: "https://generativelanguage.googleapis.com/v1beta/openai/", Editable: false}, // 51 GeminiOpenAICompatible
 	{URL: "", Editable: true},                                                          // 52 ClaudeCompatible - user must provide
+	{URL: "https://api.githubcopilot.com", Editable: true},                             // 53 Copilot
 }
 
 // ChannelBaseURLs provides backward compatibility by returning only the URL strings.

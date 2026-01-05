@@ -104,6 +104,10 @@
         },
         "51": {
           "description": "Gemini OpenAI compatible format"
+        },
+        "53": {
+          "description": "GitHub Copilot OpenAI-compatible surface (token exchanged via GitHub)",
+          "tip": "Channel Key should be a GitHub access token; Base URL defaults to https://api.githubcopilot.com"
         }
       },
       "cloudflare": {

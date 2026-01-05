@@ -180,6 +180,12 @@ func DefaultEndpointsForChannelType(channelType int) []Endpoint {
 		EndpointClaudeMessages,
 	}
 
+	copilotDefault := []Endpoint{
+		EndpointChatCompletions,
+		EndpointEmbeddings,
+		EndpointResponseAPI,
+	}
+
 	switch channelType {
 	case OpenAI:
 		return openAIFull
@@ -198,6 +204,8 @@ func DefaultEndpointsForChannelType(channelType int) []Endpoint {
 		return chatOnly
 	case Gemini, GeminiOpenAICompatible:
 		return chatAndEmbeddings
+	case Copilot:
+		return copilotDefault
 	case Zhipu:
 		return []Endpoint{
 			EndpointChatCompletions,

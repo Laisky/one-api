@@ -104,6 +104,10 @@
 				},
 				"51": {
 					"description": "Gemini OpenAI 兼容格式"
+				},
+				"53": {
+					"description": "GitHub Copilot OpenAI 兼容接口（通过 GitHub 交换短期 Token）",
+					"tip": "渠道密钥填写 GitHub access token；Base URL 默认为 https://api.githubcopilot.com"
 				}
 			},
 			"cloudflare": {

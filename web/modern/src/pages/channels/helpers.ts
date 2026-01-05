@@ -351,6 +351,8 @@ export const getKeyPrompt = (type: number) => {
       return "Please enter FastGPT API Key";
     case 23:
       return "Please enter Tencent SecretId and SecretKey in format: SECRET_ID|SECRET_KEY";
+    case 53:
+      return "Please enter a GitHub access token (PAT or OAuth token) with an active Copilot subscription";
     default:
       return "Please enter your API key";
   }

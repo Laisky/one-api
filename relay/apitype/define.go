@@ -26,6 +26,7 @@ const (
 	Moonshot
 	XAI
 	OpenRouter
+	Copilot
 
 	Dummy // this one is only for count, do not add any channel after this
 )

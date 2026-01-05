@@ -9,6 +9,7 @@ import (
 	"github.com/songquanpeng/one-api/relay/adaptor/baidu"
 	"github.com/songquanpeng/one-api/relay/adaptor/cloudflare"
 	"github.com/songquanpeng/one-api/relay/adaptor/cohere"
+	"github.com/songquanpeng/one-api/relay/adaptor/copilot"
 	"github.com/songquanpeng/one-api/relay/adaptor/coze"
 	"github.com/songquanpeng/one-api/relay/adaptor/deepl"
 	"github.com/songquanpeng/one-api/relay/adaptor/deepseek"
@@ -83,6 +84,8 @@ func GetAdaptor(apiType int) adaptor.Adaptor {
 		return &xai.Adaptor{}
 	case apitype.OpenRouter:
 		return &openrouter.Adaptor{}
+	case apitype.Copilot:
+		return &copilot.Adaptor{}
 	}
 
 	return nil

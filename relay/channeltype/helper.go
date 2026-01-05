@@ -53,6 +53,8 @@ func ToAPIType(channelType int) int {
 		apiType = apitype.Moonshot
 	case XAI:
 		apiType = apitype.XAI
+	case Copilot:
+		apiType = apitype.Copilot
 	}
 
 	return apiType
@@ -174,6 +176,8 @@ func IdToName(channelType int) string {
 		return "openaicompatible"
 	case GeminiOpenAICompatible:
 		return "geminiopenaicompatible"
+	case Copilot:
+		return "copilot"
 	case Dummy:
 		return "dummy"
 	default:
