@@ -131,7 +131,8 @@ func (n *NoOpRecorder) UpdateBillingStats(totalBillingOperations, successfulBill
 func (n *NoOpRecorder) InitSystemMetrics(version, buildTime, goVersion string, startTime time.Time) {}
 
 // UpdateSiteWideStats implements MetricsRecorder.UpdateSiteWideStats without collecting any data.
-func (n *NoOpRecorder) UpdateSiteWideStats(totalQuota, usedQuota int64, totalUsers, activeUsers int) {}
+func (n *NoOpRecorder) UpdateSiteWideStats(totalQuota, usedQuota int64, totalUsers, activeUsers int) {
+}
 
 // Initialize with no-op recorder by default
 func init() {

@@ -6,8 +6,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	glog "github.com/Laisky/go-utils/v6/log"
 	gmw "github.com/Laisky/gin-middlewares/v7"
+	glog "github.com/Laisky/go-utils/v6/log"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"

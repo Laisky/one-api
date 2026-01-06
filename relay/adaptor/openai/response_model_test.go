@@ -3,7 +3,9 @@ package openai
 import (
 	"strings"
 	"testing"
+
 	"github.com/stretchr/testify/require"
+
 	"github.com/songquanpeng/one-api/relay/model"
 )
 

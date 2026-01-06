@@ -82,11 +82,47 @@ func (a *Adaptor) SetupRequestHeader(c *gin.Context, req *http.Request, meta *me
 	return nil
 }
 
+// ConvertRequest converts a GeneralOpenAIRequest into a Groq-compatible request.
+//
+//   - reasoning: https://console.groq.com/docs/reasoning
 func (a *Adaptor) ConvertRequest(c *gin.Context, relayMode int, request *model.GeneralOpenAIRequest) (any, error) {
 	// Groq is OpenAI-compatible, so we can pass the request through with minimal changes
-	// Remove reasoning_effort as Groq doesn't support it
+	logger := gmw.GetLogger(c)
+
+	// Groq's OpenAI-compatible chat/completions endpoint does NOT accept the
+	// Responses-API-style `reasoning` object, but it DOES accept `reasoning_effort`
+	// for supported models (e.g. GPT-OSS).
+	//
+	// When requests come from the Response API fallback path, we may have
+	// `reasoning.effort` populated without `reasoning_effort`. Translate it so
+	// Groq can honor the user's intent.
+	var promotedEffort bool
+	if request.ReasoningEffort == nil && request.Reasoning != nil && request.Reasoning.Effort != nil {
+		request.ReasoningEffort = request.Reasoning.Effort
+		promotedEffort = true
+	}
+
+	// Normalize/guard: Groq GPT-OSS reasoning_effort supports {low, medium, high}.
+	// If callers send unsupported values (e.g. "minimal" from GPT-5 semantics),
+	// drop it to avoid upstream 400s.
 	if request.ReasoningEffort != nil {
-		request.ReasoningEffort = nil
+		val := strings.ToLower(strings.TrimSpace(*request.ReasoningEffort))
+		if val != "low" && val != "medium" && val != "high" {
+			logger.Debug("dropping unsupported groq reasoning_effort",
+				zap.String("model", request.Model),
+				zap.String("reasoning_effort", val),
+			)
+			request.ReasoningEffort = nil
+		}
+	}
+
+	if request.Reasoning != nil {
+		logger.Debug("dropping unsupported groq request field",
+			zap.String("model", request.Model),
+			zap.String("field", "reasoning"),
+			zap.Bool("promoted_effort", promotedEffort),
+		)
+		request.Reasoning = nil
 	}
 
 	request.TopK = nil // Groq does not support TopK
