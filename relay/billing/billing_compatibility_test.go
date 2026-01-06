@@ -12,13 +12,11 @@ import (
 
 // TestBackwardCompatibility ensures that the billing refactor doesn't break existing functionality
 func TestBackwardCompatibility(t *testing.T) {
-	t.Parallel()
 	// Test basic function signatures and validation without database operations
 
 	// Legacy PostConsumeQuota removed; unified PostConsumeQuotaWithLog covers audio API too.
 
 	t.Run("ChatCompletion/Response API - PostConsumeQuotaDetailed", func(t *testing.T) {
-		t.Parallel()
 		// Test that the new PostConsumeQuotaDetailed function works correctly
 
 		defer func() {
@@ -40,7 +38,6 @@ func TestBackwardCompatibility(t *testing.T) {
 
 // TestInputValidation tests that both billing functions properly validate inputs
 func TestInputValidation(t *testing.T) {
-	t.Parallel()
 	ctx := context.Background()
 	validTime := time.Now()
 
@@ -114,7 +111,6 @@ func TestInputValidation(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
 			result := tc.testFunc()
 			if tc.shouldFail && result {
 				t.Logf("✓ %s: Function handled invalid input gracefully", tc.description)
@@ -129,7 +125,6 @@ func TestInputValidation(t *testing.T) {
 
 // TestBillingConsistency ensures that both billing functions produce consistent results
 func TestBillingConsistency(t *testing.T) {
-	t.Parallel()
 	// Test that the billing calculation logic is consistent
 	testCases := []struct {
 		name             string
@@ -185,7 +180,6 @@ func TestBillingConsistency(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
 			// Calculate quota using the same formula used in the billing functions
 			calculatedQuota := int64((float64(tc.promptTokens)+float64(tc.completionTokens)*tc.completionRatio)*tc.modelRatio*tc.groupRatio) + tc.toolsCost
 
