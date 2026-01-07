@@ -96,6 +96,19 @@ func TestConvertChatToResponseAPIPreservesEffort(t *testing.T) {
 	require.Equal(t, "medium", *responsePayload.Reasoning.Effort)
 }
 
+func TestConvertChatToResponseAPIUsesDetailedSummaryForO4(t *testing.T) {
+	request := &model.GeneralOpenAIRequest{
+		Model:    "o4-mini",
+		Messages: []model.Message{{Role: "user", Content: "test"}},
+	}
+
+	responsePayload := ConvertChatCompletionToResponseAPI(request)
+	require.NotNil(t, responsePayload)
+	require.NotNil(t, responsePayload.Reasoning)
+	require.NotNil(t, responsePayload.Reasoning.Summary)
+	require.Equal(t, "detailed", *responsePayload.Reasoning.Summary)
+}
+
 func stringPtrReasoning(value string) *string {
 	return &value
 }

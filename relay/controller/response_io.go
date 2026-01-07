@@ -15,6 +15,7 @@ import (
 	"github.com/songquanpeng/one-api/common/config"
 	"github.com/songquanpeng/one-api/relay/adaptor"
 	"github.com/songquanpeng/one-api/relay/adaptor/openai"
+	"github.com/songquanpeng/one-api/relay/channeltype"
 	metalib "github.com/songquanpeng/one-api/relay/meta"
 )
 
@@ -110,7 +111,7 @@ func getResponseAPIRequestBody(c *gin.Context, meta *metalib.Meta, responseAPIRe
 		return nil, errors.Wrap(err, "get raw Response API request body")
 	}
 
-	patched, stats, changed, err := normalizeResponseAPIRawBody(rawBody, responseAPIRequest)
+	patched, stats, changed, err := normalizeResponseAPIRawBody(rawBody, responseAPIRequest, meta.ChannelType)
 	if err != nil {
 		return nil, errors.Wrap(err, "normalize Response API request body")
 	}
@@ -119,6 +120,7 @@ func getResponseAPIRequestBody(c *gin.Context, meta *metalib.Meta, responseAPIRe
 		lg.Debug("normalized Response API request payload",
 			zap.Int("assistant_input_text_fixed", stats.AssistantInputTextFixed),
 			zap.Int("non_assistant_output_text_fixed", stats.NonAssistantOutputTextFixed),
+			zap.Int("reasoning_summary_fixed", stats.ReasoningSummaryFixed),
 		)
 	}
 
@@ -126,7 +128,7 @@ func getResponseAPIRequestBody(c *gin.Context, meta *metalib.Meta, responseAPIRe
 }
 
 // normalizeResponseAPIRawBody normalizes the raw request body for Response API requests
-func normalizeResponseAPIRawBody(rawBody []byte, request *openai.ResponseAPIRequest) ([]byte, openai.ResponseAPIInputContentNormalizationStats, bool, error) {
+func normalizeResponseAPIRawBody(rawBody []byte, request *openai.ResponseAPIRequest, channelType int) ([]byte, openai.ResponseAPIInputContentNormalizationStats, bool, error) {
 	var stats openai.ResponseAPIInputContentNormalizationStats
 	if request == nil {
 		return rawBody, stats, false, nil
@@ -198,6 +200,32 @@ func normalizeResponseAPIRawBody(rawBody []byte, request *openai.ResponseAPIRequ
 		}
 		if existing, ok := root["text"]; !ok || !bytes.Equal(existing, textBytes) {
 			root["text"] = textBytes
+			changed = true
+		}
+	}
+
+	// Normalize reasoning.summary for channels that follow OpenAI's strict validation.
+	if request.Reasoning != nil && (channelType == channeltype.OpenAI || channelType == channeltype.Azure) {
+		norm := openai.NormalizeResponseReasoningSummaryForModel(request.Model, request.Reasoning)
+		if norm.Changed {
+			stats.ReasoningSummaryFixed++
+			reasoningMap := map[string]any{}
+			if rawReasoning, ok := root["reasoning"]; ok && len(rawReasoning) > 0 {
+				_ = json.Unmarshal(rawReasoning, &reasoningMap)
+				if reasoningMap == nil {
+					reasoningMap = map[string]any{}
+				}
+			}
+			if request.Reasoning.Summary == nil {
+				delete(reasoningMap, "summary")
+			} else {
+				reasoningMap["summary"] = *request.Reasoning.Summary
+			}
+			reasoningBytes, err := json.Marshal(reasoningMap)
+			if err != nil {
+				return nil, stats, false, errors.Wrap(err, "marshal normalized reasoning config")
+			}
+			root["reasoning"] = reasoningBytes
 			changed = true
 		}
 	}

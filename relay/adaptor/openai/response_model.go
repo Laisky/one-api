@@ -407,9 +407,11 @@ func ConvertChatCompletionToResponseAPI(request *model.GeneralOpenAIRequest) *Re
 		request.ReasoningEffort = normalizedEffort
 
 		if responseReq.Reasoning.Summary == nil {
-			reasoningSummary := "auto"
+			reasoningSummary := DefaultResponseReasoningSummaryForModel(request.Model)
 			responseReq.Reasoning.Summary = &reasoningSummary
 		}
+		// Ensure the default (or user-provided) summary is compatible with the target model.
+		_ = NormalizeResponseReasoningSummaryForModel(request.Model, responseReq.Reasoning)
 	} else {
 		request.ReasoningEffort = nil
 	}

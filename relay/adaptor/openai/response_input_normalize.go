@@ -7,6 +7,7 @@ import "strings"
 type ResponseAPIInputContentNormalizationStats struct {
 	AssistantInputTextFixed     int
 	NonAssistantOutputTextFixed int
+	ReasoningSummaryFixed       int
 }
 
 // NormalizeResponseAPIInputContentTypes rewrites Response API message content item
