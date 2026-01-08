@@ -130,6 +130,20 @@ func chatResponseToClaude(r *chatTextResponse) relaymodel.ClaudeResponse {
 	}
 
 	for _, choice := range r.Choices {
+		// Thinking/Reasoning content - try Thinking field first, fallback to ReasoningContent/Reasoning
+		var thinkingContent *string
+		if choice.Message.Thinking != nil && *choice.Message.Thinking != "" {
+			thinkingContent = choice.Message.Thinking
+		} else if choice.Message.ReasoningContent != nil && *choice.Message.ReasoningContent != "" {
+			thinkingContent = choice.Message.ReasoningContent
+		} else if choice.Message.Reasoning != nil && *choice.Message.Reasoning != "" {
+			thinkingContent = choice.Message.Reasoning
+		}
+
+		if thinkingContent != nil && *thinkingContent != "" {
+			out.Content = append(out.Content, relaymodel.ClaudeContent{Type: "thinking", Thinking: *thinkingContent})
+		}
+
 		// Text content
 		if choice.Message.Content != nil {
 			switch content := choice.Message.Content.(type) {
