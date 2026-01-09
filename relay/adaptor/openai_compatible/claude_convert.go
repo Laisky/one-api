@@ -275,12 +275,14 @@ func ConvertOpenAIStreamToClaudeSSE(c *gin.Context, resp *http.Response, promptT
 
 		// Process choices
 		for _, choice := range chunk.Choices {
-			// Thinking delta - try Thinking field first, fallback to ReasoningContent
+			// Thinking delta - try Thinking field first, fallback to ReasoningContent, then Reasoning
 			var thinkingContent *string
 			if choice.Delta.Thinking != nil && *choice.Delta.Thinking != "" {
 				thinkingContent = choice.Delta.Thinking
 			} else if choice.Delta.ReasoningContent != nil && *choice.Delta.ReasoningContent != "" {
 				thinkingContent = choice.Delta.ReasoningContent
+			} else if choice.Delta.Reasoning != nil && *choice.Delta.Reasoning != "" {
+				thinkingContent = choice.Delta.Reasoning
 			}
 
 			if thinkingContent != nil && *thinkingContent != "" {
