@@ -10,6 +10,7 @@ import (
 
 	"github.com/Laisky/errors/v2"
 	gmw "github.com/Laisky/gin-middlewares/v7"
+	"github.com/Laisky/zap"
 	"github.com/gin-gonic/gin"
 
 	"github.com/songquanpeng/one-api/common"
@@ -21,6 +22,12 @@ import (
 
 func ChatHandler(c *gin.Context, resp *http.Response) (
 	srvErr *model.ErrorWithStatusCode, usage *model.Usage) {
+	ctxMeta := meta.GetByContext(c)
+	gmw.GetLogger(c).Debug("replicate.ChatHandler",
+		zap.Int("status_code", resp.StatusCode),
+		zap.Bool("is_stream", ctxMeta.IsStream),
+	)
+
 	if resp.StatusCode != http.StatusCreated {
 		payload, _ := io.ReadAll(resp.Body)
 		return openai.ErrorWrapper(
@@ -48,7 +55,7 @@ func ChatHandler(c *gin.Context, resp *http.Response) (
 				return errors.Wrap(err, "new request")
 			}
 
-			taskReq.Header.Set("Authorization", "Bearer "+meta.GetByContext(c).APIKey)
+			taskReq.Header.Set("Authorization", "Bearer "+ctxMeta.APIKey)
 			taskResp, err := http.DefaultClient.Do(taskReq)
 			if err != nil {
 				return errors.Wrap(err, "get task")
@@ -71,6 +78,11 @@ func ChatHandler(c *gin.Context, resp *http.Response) (
 				return errors.Wrap(err, "decode task response")
 			}
 
+			gmw.GetLogger(c).Debug("replicate task status",
+				zap.String("id", taskData.ID),
+				zap.String("status", taskData.Status),
+			)
+
 			switch taskData.Status {
 			case "succeeded":
 			case "failed", "canceled":
@@ -80,19 +92,52 @@ func ChatHandler(c *gin.Context, resp *http.Response) (
 				return errNextLoop
 			}
 
-			if taskData.URLs.Stream == "" {
-				return errors.New("stream url is empty")
+			if ctxMeta.IsStream {
+				if taskData.URLs.Stream == "" {
+					return errors.New("stream url is empty")
+				}
+
+				// request stream url
+				responseText, err := chatStreamHandler(c, taskData.URLs.Stream)
+				if err != nil {
+					return errors.Wrap(err, "chat stream handler")
+				}
+
+				usage = openai.ResponseText2Usage(responseText,
+					ctxMeta.ActualModelName, ctxMeta.PromptTokens)
+				return nil
 			}
 
-			// request stream url
-			responseText, err := chatStreamHandler(c, taskData.URLs.Stream)
+			// Non-stream mode
+			output, err := taskData.GetOutput()
 			if err != nil {
-				return errors.Wrap(err, "chat stream handler")
+				return errors.Wrap(err, "get output")
+			}
+			responseText := strings.Join(output, "")
+
+			// Construct OpenAI response
+			openaiResp := openai.TextResponse{
+				Id:      taskData.ID,
+				Object:  "chat.completion",
+				Created: taskData.CreatedAt.Unix(),
+				Model:   ctxMeta.ActualModelName,
+				Choices: []openai.TextResponseChoice{
+					{
+						Index: 0,
+						Message: model.Message{
+							Role:    "assistant",
+							Content: responseText,
+						},
+						FinishReason: "stop",
+					},
+				},
 			}
 
-			ctxMeta := meta.GetByContext(c)
-			usage = openai.ResponseText2Usage(responseText,
-				ctxMeta.ActualModelName, ctxMeta.PromptTokens)
+			// Calculate usage
+			usage = openai.ResponseText2Usage(responseText, ctxMeta.ActualModelName, ctxMeta.PromptTokens)
+			openaiResp.Usage = *usage
+
+			c.JSON(http.StatusOK, openaiResp)
 			return nil
 		}()
 		if err != nil {

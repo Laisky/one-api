@@ -256,11 +256,36 @@ type ChatResponse struct {
 	Logs        string      `json:"logs"`
 	Metrics     FluxMetrics `json:"metrics"`
 	// Output could be `string` or `[]string`
-	Output    []string        `json:"output"`
+	Output    any             `json:"output"`
 	StartedAt time.Time       `json:"started_at"`
 	Status    string          `json:"status"`
 	URLs      ChatResponseUrl `json:"urls"`
 	Version   string          `json:"version"`
+}
+
+func (r *ChatResponse) GetOutput() ([]string, error) {
+	switch v := r.Output.(type) {
+	case string:
+		return []string{v}, nil
+	case []string:
+		return v, nil
+	case nil:
+		return nil, nil
+	case []any:
+		// convert []interface{} to []string
+		ret := make([]string, len(v))
+		for idx, vv := range v {
+			if vvv, ok := vv.(string); ok {
+				ret[idx] = vvv
+			} else {
+				return nil, errors.Errorf("unknown output type: [%T]%v", vv, vv)
+			}
+		}
+
+		return ret, nil
+	default:
+		return nil, errors.Errorf("unknown output type: [%T]%v", r.Output, r.Output)
+	}
 }
 
 // ChatResponseUrl is task urls of ChatResponse

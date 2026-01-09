@@ -96,10 +96,10 @@ func convertImageRemixRequest(c *gin.Context) (any, error) {
 
 // ConvertRequest converts the request to the format that the target API expects.
 func (a *Adaptor) ConvertRequest(c *gin.Context, relayMode int, request *model.GeneralOpenAIRequest) (any, error) {
-	if !request.Stream {
-		// TODO: support non-stream mode
-		return nil, errors.Errorf("replicate models only support stream mode now, please set stream=true")
-	}
+	gmw.GetLogger(c).Debug("replicate.ConvertRequest",
+		zap.String("model", request.Model),
+		zap.Bool("stream", request.Stream),
+	)
 
 	// Build the prompt from OpenAI messages
 	var promptBuilder strings.Builder
@@ -113,6 +113,11 @@ func (a *Adaptor) ConvertRequest(c *gin.Context, relayMode int, request *model.G
 		default:
 		}
 	}
+
+	// Image models are not supported via chat API
+	// if pricing, ok := ModelRatios[request.Model]; ok && pricing.Image != nil {
+	// 	return nil, errors.Errorf("model %s is an image model, please use image API", request.Model)
+	// }
 
 	replicateRequest := ReplicateChatRequest{
 		Input: ChatInput{
