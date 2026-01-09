@@ -647,7 +647,7 @@ func TestClaudeMessagesRequestConversion(t *testing.T) {
 	}{
 		{"OpenAI", &openai.Adaptor{}, channeltype.OpenAI, "gpt-4o-mini", false},
 		{"DeepSeek", &deepseek.Adaptor{}, channeltype.DeepSeek, "deepseek-chat", false},
-		{"Groq", &groq.Adaptor{}, channeltype.Groq, "llama3-8b-8192", false},
+		{"Groq", &groq.Adaptor{}, channeltype.Groq, "llama-3.1-8b-instant", false},
 		{"Anthropic", &anthropic.Adaptor{}, channeltype.Anthropic, "claude-3-sonnet-20240229", false},
 	}
 
