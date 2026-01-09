@@ -62,42 +62,42 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 	//
 	// https://replicate.com/collections/language-models
 	// -------------------------------------
-	"anthropic/claude-3.5-haiku":                {Ratio: 1.0 * ratio.MilliTokensUsd, CompletionRatio: 5.0},          // $1.0/$5.0 per 1M tokens
-	"anthropic/claude-3.5-sonnet":               {Ratio: 3.75 * ratio.MilliTokensUsd, CompletionRatio: 5.0},         // $3.75/$18.75 per 1M tokens
-	"anthropic/claude-3.7-sonnet":               {Ratio: 3.0 * ratio.MilliTokensUsd, CompletionRatio: 5.0},          // $3.0/$15.0 per 1M tokens
-	"anthropic/claude-4-sonnet":                 {Ratio: 3.0 * ratio.MilliTokensUsd, CompletionRatio: 5.0},          // $3.0/$15.0 per 1M tokens
-	"deepseek-ai/deepseek-r1":                   {Ratio: 3.75 * ratio.MilliTokensUsd, CompletionRatio: 2.666666667}, // $3.75/$10.0 per 1M tokens
-	"deepseek-ai/deepseek-v3":                   {Ratio: 1.45 * ratio.MilliTokensUsd, CompletionRatio: 1.0},         // $1.45/$1.45 per 1M tokens
-	"deepseek-ai/deepseek-v3.1":                 {Ratio: 0.672 * ratio.MilliTokensUsd, CompletionRatio: 3.0},        // $0.672/$2.016 per 1M tokens
-	"ibm-granite/granite-20b-code-instruct-8k":  {Ratio: 0.1 * ratio.MilliTokensUsd, CompletionRatio: 5.0},          // $0.1/$0.5 per 1M tokens
-	"ibm-granite/granite-3.0-2b-instruct":       {Ratio: 0.03 * ratio.MilliTokensUsd, CompletionRatio: 8.333333333}, // $0.03/$0.25 per 1M tokens
-	"ibm-granite/granite-3.0-8b-instruct":       {Ratio: 0.05 * ratio.MilliTokensUsd, CompletionRatio: 5.0},         // $0.05/$0.25 per 1M tokens
-	"ibm-granite/granite-3.1-2b-instruct":       {Ratio: 0.03 * ratio.MilliTokensUsd, CompletionRatio: 8.333333333}, // $0.03/$0.25 per 1M tokens
-	"ibm-granite/granite-3.1-8b-instruct":       {Ratio: 0.03 * ratio.MilliTokensUsd, CompletionRatio: 8.333333333}, // $0.03/$0.25 per 1M tokens
-	"ibm-granite/granite-3.2-8b-instruct":       {Ratio: 0.03 * ratio.MilliTokensUsd, CompletionRatio: 8.333333333}, // $0.03/$0.25 per 1M tokens
-	"ibm-granite/granite-3.3-8b-instruct":       {Ratio: 0.03 * ratio.MilliTokensUsd, CompletionRatio: 8.333333333}, // $0.03/$0.25 per 1M tokens
-	"ibm-granite/granite-4.0-h-small":           {Ratio: 0.06 * ratio.MilliTokensUsd, CompletionRatio: 4.166666667}, // $0.06/$0.25 per 1M tokens
-	"ibm-granite/granite-8b-code-instruct-128k": {Ratio: 0.05 * ratio.MilliTokensUsd, CompletionRatio: 5.0},         // $0.05/$0.25 per 1M tokens
-	"meta/llama-2-13b":                          {Ratio: 0.1 * ratio.MilliTokensUsd, CompletionRatio: 5.0},          // $0.1/$0.5 per 1M tokens
-	"meta/llama-2-13b-chat":                     {Ratio: 0.1 * ratio.MilliTokensUsd, CompletionRatio: 5.0},          // $0.1/$0.5 per 1M tokens
-	"meta/llama-2-70b":                          {Ratio: 0.65 * ratio.MilliTokensUsd, CompletionRatio: 4.230769231}, // $0.65/$2.75 per 1M tokens
-	"meta/llama-2-70b-chat":                     {Ratio: 0.65 * ratio.MilliTokensUsd, CompletionRatio: 4.230769231}, // $0.65/$2.75 per 1M tokens
-	"meta/llama-2-7b":                           {Ratio: 0.05 * ratio.MilliTokensUsd, CompletionRatio: 5.0},         // $0.05/$0.25 per 1M tokens
-	"meta/llama-2-7b-chat":                      {Ratio: 0.05 * ratio.MilliTokensUsd, CompletionRatio: 5.0},         // $0.05/$0.25 per 1M tokens
-	"meta/llama-4-maverick-instruct":            {Ratio: 1.2 * ratio.MilliTokensUsd, CompletionRatio: 3.166666667},  // $1.2/$3.8 per 1M tokens
-	"meta/llama-4-scout-instruct":               {Ratio: 0.17 * ratio.MilliTokensUsd, CompletionRatio: 3.823529412}, // $0.17/$0.65 per 1M tokens
-	"meta/meta-llama-3.1-405b-instruct":         {Ratio: 9.5 * ratio.MilliTokensUsd, CompletionRatio: 1.0},          // $9.5 per 1M tokens
-	"meta/meta-llama-3-70b":                     {Ratio: 0.65 * ratio.MilliTokensUsd, CompletionRatio: 4.230769231}, // $0.65/$2.75 per 1M tokens
-	"meta/meta-llama-3-70b-instruct":            {Ratio: 0.65 * ratio.MilliTokensUsd, CompletionRatio: 4.230769231}, // $0.65/$2.75 per 1M tokens
-	"meta/meta-llama-3-8b":                      {Ratio: 0.05 * ratio.MilliTokensUsd, CompletionRatio: 5.0},         // $0.05/$0.25 per 1M tokens
-	"meta/meta-llama-3-8b-instruct":             {Ratio: 0.05 * ratio.MilliTokensUsd, CompletionRatio: 5.0},         // $0.05/$0.25 per 1M tokens
-	"mistralai/mistral-7b-instruct-v0.2":        {Ratio: 0.05 * ratio.MilliTokensUsd, CompletionRatio: 5.0},         // $0.05/$0.25 per 1M tokens
-	"mistralai/mistral-7b-v0.1":                 {Ratio: 0.05 * ratio.MilliTokensUsd, CompletionRatio: 5.0},         // $0.05/$0.25 per 1M tokens
-	"openai/gpt-5":                              {Ratio: 1.25 * ratio.MilliTokensUsd, CompletionRatio: 8.0},         // $1.25/$10.0 per 1M tokens
-	"openai/gpt-5-mini":                         {Ratio: 0.25 * ratio.MilliTokensUsd, CompletionRatio: 8.0},         // $0.25/$2.0 per 1M tokens
-	"openai/gpt-5-nano":                         {Ratio: 0.05 * ratio.MilliTokensUsd, CompletionRatio: 8.0},         // $0.05/$0.40 per 1M tokens
-	"openai/gpt-5-structured":                   {Ratio: 1.25 * ratio.MilliTokensUsd, CompletionRatio: 8.0},         // $1.25/$10.0 per 1M tokens
-	"xai/grok-4":                                {Ratio: 7.2 * ratio.MilliTokensUsd, CompletionRatio: 5.0},          // $7.2/$36.0 per 1M tokens
+	"anthropic/claude-3.5-haiku":                {Ratio: 1.0 * ratio.MilliTokensUsd, CompletionRatio: 5.0 / 1.0},       // $1.0/$5.0 per 1M tokens
+	"anthropic/claude-3.5-sonnet":               {Ratio: 3.75 * ratio.MilliTokensUsd, CompletionRatio: 18.75 / 3.75},   // $3.75/$18.75 per 1M tokens
+	"anthropic/claude-3.7-sonnet":               {Ratio: 3.0 * ratio.MilliTokensUsd, CompletionRatio: 15.0 / 3.0},      // $3.0/$15.0 per 1M tokens
+	"anthropic/claude-4-sonnet":                 {Ratio: 3.0 * ratio.MilliTokensUsd, CompletionRatio: 15.0 / 3.0},      // $3.0/$15.0 per 1M tokens
+	"deepseek-ai/deepseek-r1":                   {Ratio: 3.75 * ratio.MilliTokensUsd, CompletionRatio: 10.0 / 3.75},    // $3.75/$10.0 per 1M tokens
+	"deepseek-ai/deepseek-v3":                   {Ratio: 1.45 * ratio.MilliTokensUsd, CompletionRatio: 1.0},            // $1.45/$1.45 per 1M tokens
+	"deepseek-ai/deepseek-v3.1":                 {Ratio: 0.672 * ratio.MilliTokensUsd, CompletionRatio: 2.016 / 0.672}, // $0.672/$2.016 per 1M tokens
+	"ibm-granite/granite-20b-code-instruct-8k":  {Ratio: 0.1 * ratio.MilliTokensUsd, CompletionRatio: 0.5 / 0.1},       // $0.1/$0.5 per 1M tokens
+	"ibm-granite/granite-3.0-2b-instruct":       {Ratio: 0.03 * ratio.MilliTokensUsd, CompletionRatio: 0.25 / 0.03},    // $0.03/$0.25 per 1M tokens
+	"ibm-granite/granite-3.0-8b-instruct":       {Ratio: 0.05 * ratio.MilliTokensUsd, CompletionRatio: 0.25 / 0.05},    // $0.05/$0.25 per 1M tokens
+	"ibm-granite/granite-3.1-2b-instruct":       {Ratio: 0.03 * ratio.MilliTokensUsd, CompletionRatio: 0.25 / 0.03},    // $0.03/$0.25 per 1M tokens
+	"ibm-granite/granite-3.1-8b-instruct":       {Ratio: 0.03 * ratio.MilliTokensUsd, CompletionRatio: 0.25 / 0.03},    // $0.03/$0.25 per 1M tokens
+	"ibm-granite/granite-3.2-8b-instruct":       {Ratio: 0.03 * ratio.MilliTokensUsd, CompletionRatio: 0.25 / 0.03},    // $0.03/$0.25 per 1M tokens
+	"ibm-granite/granite-3.3-8b-instruct":       {Ratio: 0.03 * ratio.MilliTokensUsd, CompletionRatio: 0.25 / 0.03},    // $0.03/$0.25 per 1M tokens
+	"ibm-granite/granite-4.0-h-small":           {Ratio: 0.06 * ratio.MilliTokensUsd, CompletionRatio: 0.25 / 0.06},    // $0.06/$0.25 per 1M tokens
+	"ibm-granite/granite-8b-code-instruct-128k": {Ratio: 0.05 * ratio.MilliTokensUsd, CompletionRatio: 0.25 / 0.05},    // $0.05/$0.25 per 1M tokens
+	"meta/llama-2-13b":                          {Ratio: 0.1 * ratio.MilliTokensUsd, CompletionRatio: 0.5 / 0.1},       // $0.1/$0.5 per 1M tokens
+	"meta/llama-2-13b-chat":                     {Ratio: 0.1 * ratio.MilliTokensUsd, CompletionRatio: 0.5 / 0.1},       // $0.1/$0.5 per 1M tokens
+	"meta/llama-2-70b":                          {Ratio: 0.65 * ratio.MilliTokensUsd, CompletionRatio: 2.75 / 0.65},    // $0.65/$2.75 per 1M tokens
+	"meta/llama-2-70b-chat":                     {Ratio: 0.65 * ratio.MilliTokensUsd, CompletionRatio: 2.75 / 0.65},    // $0.65/$2.75 per 1M tokens
+	"meta/llama-2-7b":                           {Ratio: 0.05 * ratio.MilliTokensUsd, CompletionRatio: 0.25 / 0.05},    // $0.05/$0.25 per 1M tokens
+	"meta/llama-2-7b-chat":                      {Ratio: 0.05 * ratio.MilliTokensUsd, CompletionRatio: 0.25 / 0.05},    // $0.05/$0.25 per 1M tokens
+	"meta/llama-4-maverick-instruct":            {Ratio: 1.2 * ratio.MilliTokensUsd, CompletionRatio: 3.8 / 1.2},       // $1.2/$3.8 per 1M tokens
+	"meta/llama-4-scout-instruct":               {Ratio: 0.17 * ratio.MilliTokensUsd, CompletionRatio: 0.65 / 0.17},    // $0.17/$0.65 per 1M tokens
+	"meta/meta-llama-3.1-405b-instruct":         {Ratio: 9.5 * ratio.MilliTokensUsd, CompletionRatio: 1.0},             // $9.5 per 1M tokens
+	"meta/meta-llama-3-70b":                     {Ratio: 0.65 * ratio.MilliTokensUsd, CompletionRatio: 2.75 / 0.65},    // $0.65/$2.75 per 1M tokens
+	"meta/meta-llama-3-70b-instruct":            {Ratio: 0.65 * ratio.MilliTokensUsd, CompletionRatio: 2.75 / 0.65},    // $0.65/$2.75 per 1M tokens
+	"meta/meta-llama-3-8b":                      {Ratio: 0.05 * ratio.MilliTokensUsd, CompletionRatio: 0.25 / 0.05},    // $0.05/$0.25 per 1M tokens
+	"meta/meta-llama-3-8b-instruct":             {Ratio: 0.05 * ratio.MilliTokensUsd, CompletionRatio: 0.25 / 0.05},    // $0.05/$0.25 per 1M tokens
+	"mistralai/mistral-7b-instruct-v0.2":        {Ratio: 0.05 * ratio.MilliTokensUsd, CompletionRatio: 0.25 / 0.05},    // $0.05/$0.25 per 1M tokens
+	"mistralai/mistral-7b-v0.1":                 {Ratio: 0.05 * ratio.MilliTokensUsd, CompletionRatio: 0.25 / 0.05},    // $0.05/$0.25 per 1M tokens
+	"openai/gpt-5":                              {Ratio: 1.25 * ratio.MilliTokensUsd, CompletionRatio: 10.0 / 1.25},    // $1.25/$10.0 per 1M tokens
+	"openai/gpt-5-mini":                         {Ratio: 0.25 * ratio.MilliTokensUsd, CompletionRatio: 2.0 / 0.25},     // $0.25/$2.0 per 1M tokens
+	"openai/gpt-5-nano":                         {Ratio: 0.05 * ratio.MilliTokensUsd, CompletionRatio: 0.40 / 0.05},    // $0.05/$0.40 per 1M tokens
+	"openai/gpt-5-structured":                   {Ratio: 1.25 * ratio.MilliTokensUsd, CompletionRatio: 10.0 / 1.25},    // $1.25/$10.0 per 1M tokens
+	"xai/grok-4":                                {Ratio: 7.2 * ratio.MilliTokensUsd, CompletionRatio: 36.0 / 7.2},      // $7.2/$36.0 per 1M tokens
 
 	// -------------------------------------
 	// Video Models (TODO: implement the adaptor)
