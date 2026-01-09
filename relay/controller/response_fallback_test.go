@@ -730,7 +730,7 @@ func TestNormalizeResponseAPIRawBody_RemovesUnsupportedParams(t *testing.T) {
 	require.Nil(t, req.TopP, "expected top_p pointer to be nil after sanitization")
 
 	raw := []byte(`{"model":"gpt-5-mini","temperature":0.7,"top_p":0.9}`)
-	patched, _, _, err := normalizeResponseAPIRawBody(raw, req)
+	patched, _, _, err := normalizeResponseAPIRawBody(raw, req, channeltype.OpenAI)
 	require.NoError(t, err, "normalizeResponseAPIRawBody failed")
 	require.False(t, bytes.Contains(patched, []byte(`"temperature"`)), "temperature should have been removed: %s", patched)
 	require.False(t, bytes.Contains(patched, []byte(`"top_p"`)), "top_p should have been removed: %s", patched)
@@ -750,7 +750,7 @@ func TestNormalizeResponseAPIRawBody_NormalizesAssistantHistoryContentType(t *te
 	err := json.Unmarshal(raw, req)
 	require.NoError(t, err, "failed to unmarshal request")
 
-	patched, stats, changed, err := normalizeResponseAPIRawBody(raw, req)
+	patched, stats, changed, err := normalizeResponseAPIRawBody(raw, req, channeltype.OpenAI)
 	require.NoError(t, err, "normalizeResponseAPIRawBody failed")
 	require.True(t, changed, "expected raw body to be changed")
 	require.Equal(t, 1, stats.AssistantInputTextFixed, "expected assistant input_text to be rewritten")

@@ -130,6 +130,20 @@ func chatResponseToClaude(r *chatTextResponse) relaymodel.ClaudeResponse {
 	}
 
 	for _, choice := range r.Choices {
+		// Thinking/Reasoning content - try Thinking field first, fallback to ReasoningContent/Reasoning
+		var thinkingContent *string
+		if choice.Message.Thinking != nil && *choice.Message.Thinking != "" {
+			thinkingContent = choice.Message.Thinking
+		} else if choice.Message.ReasoningContent != nil && *choice.Message.ReasoningContent != "" {
+			thinkingContent = choice.Message.ReasoningContent
+		} else if choice.Message.Reasoning != nil && *choice.Message.Reasoning != "" {
+			thinkingContent = choice.Message.Reasoning
+		}
+
+		if thinkingContent != nil && *thinkingContent != "" {
+			out.Content = append(out.Content, relaymodel.ClaudeContent{Type: "thinking", Thinking: *thinkingContent})
+		}
+
 		// Text content
 		if choice.Message.Content != nil {
 			switch content := choice.Message.Content.(type) {
@@ -261,8 +275,17 @@ func ConvertOpenAIStreamToClaudeSSE(c *gin.Context, resp *http.Response, promptT
 
 		// Process choices
 		for _, choice := range chunk.Choices {
-			// Thinking delta
+			// Thinking delta - try Thinking field first, fallback to ReasoningContent, then Reasoning
+			var thinkingContent *string
 			if choice.Delta.Thinking != nil && *choice.Delta.Thinking != "" {
+				thinkingContent = choice.Delta.Thinking
+			} else if choice.Delta.ReasoningContent != nil && *choice.Delta.ReasoningContent != "" {
+				thinkingContent = choice.Delta.ReasoningContent
+			} else if choice.Delta.Reasoning != nil && *choice.Delta.Reasoning != "" {
+				thinkingContent = choice.Delta.Reasoning
+			}
+
+			if thinkingContent != nil && *thinkingContent != "" {
 				if thinkingIndex == -1 {
 					// Start thinking block at next index
 					start := map[string]any{
@@ -279,7 +302,7 @@ func ConvertOpenAIStreamToClaudeSSE(c *gin.Context, resp *http.Response, promptT
 					thinkingIndex = nextIndex
 					nextIndex++
 				}
-				thinkingDelta := *choice.Delta.Thinking
+				thinkingDelta := *thinkingContent
 				accumThinking += thinkingDelta
 				delta := map[string]any{
 					"type":  "content_block_delta",
