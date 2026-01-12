@@ -154,6 +154,55 @@ func GetUserLogs(c *gin.Context) {
 	})
 }
 
+// GetTokenLogs lists logs associated with the specific token used for authentication,
+// scoped to its owning user.
+func GetTokenLogs(c *gin.Context) {
+	p, _ := strconv.Atoi(c.Query("p"))
+	if p < 0 {
+		p = 0
+	}
+	userId := c.GetInt(ctxkey.Id)
+	tokenName := c.GetString(ctxkey.TokenName)
+	logType, _ := strconv.Atoi(c.Query("type"))
+	startTimestamp, _ := strconv.ParseInt(c.Query("start_timestamp"), 10, 64)
+	endTimestamp, _ := strconv.ParseInt(c.Query("end_timestamp"), 10, 64)
+	modelName := c.Query("model_name")
+
+	// Get page size from query parameter, default to config value
+	size, err := strconv.Atoi(c.Query("size"))
+	if err != nil || size <= 0 {
+		size = config.DefaultItemsPerPage
+	}
+	if size > config.MaxItemsPerPage {
+		size = config.MaxItemsPerPage
+	}
+
+	logs, err := model.GetUserLogs(userId, logType, startTimestamp, endTimestamp, modelName, tokenName, p*size, size, "", "")
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": err.Error(),
+		})
+		return
+	}
+
+	totalCount, err := model.GetUserLogsCount(userId, logType, startTimestamp, endTimestamp, modelName, tokenName)
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "",
+		"data":    logs,
+		"total":   totalCount,
+	})
+}
+
 // SearchAllLogs performs full-text search across all logs and returns paginated results.
 func SearchAllLogs(c *gin.Context) {
 	keyword := c.Query("keyword")

@@ -908,3 +908,79 @@ func UpdateToken(c *gin.Context) {
 		"data":    cleanToken,
 	})
 }
+
+// GetTokenBalance retrieves the current quota status for the token authenticated in the request.
+// It returns remaining quota, used quota, and whether the quota is unlimited.
+func GetTokenBalance(c *gin.Context) {
+	tokenId := c.GetInt(ctxkey.TokenId)
+	token, err := model.GetTokenById(tokenId)
+	if err != nil {
+		helper.RespondError(c, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "",
+		"data": gin.H{
+			"remain_quota":    token.RemainQuota,
+			"used_quota":      token.UsedQuota,
+			"unlimited_quota": token.UnlimitedQuota,
+		},
+	})
+}
+
+// GetTokenTransactions returns a paginated history of external billing transactions
+// associated with the token currently authenticated.
+func GetTokenTransactions(c *gin.Context) {
+	tokenId := c.GetInt(ctxkey.TokenId)
+	p, _ := strconv.Atoi(c.Query("p"))
+	if p < 0 {
+		p = 0
+	}
+	size, _ := strconv.Atoi(c.Query("size"))
+	if size <= 0 {
+		size = 10
+	}
+	if size > config.MaxItemsPerPage {
+		size = config.MaxItemsPerPage
+	}
+
+	startIdx := p * size
+	if startIdx >= config.TokenTransactionsMaxHistory {
+		c.JSON(http.StatusOK, gin.H{
+			"success": true,
+			"message": "",
+			"data":    []any{},
+			"total":   config.TokenTransactionsMaxHistory,
+		})
+		return
+	}
+
+	if startIdx+size > config.TokenTransactionsMaxHistory {
+		size = config.TokenTransactionsMaxHistory - startIdx
+	}
+
+	ctx := gmw.Ctx(c)
+	txns, err := model.GetTokenTransactionsByTokenID(ctx, tokenId, startIdx, size)
+	if err != nil {
+		helper.RespondError(c, err)
+		return
+	}
+
+	totalCount, err := model.GetTokenTransactionCountByTokenID(ctx, tokenId)
+	if err != nil {
+		helper.RespondError(c, err)
+		return
+	}
+	if totalCount > int64(config.TokenTransactionsMaxHistory) {
+		totalCount = int64(config.TokenTransactionsMaxHistory)
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "",
+		"data":    txns,
+		"total":   totalCount,
+	})
+}

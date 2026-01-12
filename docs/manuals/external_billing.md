@@ -15,9 +15,12 @@ This guide explains how external services can report usage to One-API using the 
     - [2. Post-Consume Reconciliation](#2-post-consume-reconciliation)
     - [Optional: Cancel a Pending Reservation](#optional-cancel-a-pending-reservation)
   - [Single-Step Consumption (`phase":"single"`)](#single-step-consumption-phasesingle)
-  - [Request Payload Fields](#request-payload-fields)
-  - [Response Payload](#response-payload)
-    - [Sample `post` Response](#sample-post-response)
+    - [Request Payload Fields](#request-payload-fields)
+    - [Response Payload](#response-payload)
+      - [Sample `post` Response](#sample-post-response)
+  - [Balance Queries](#balance-queries)
+  - [Transaction Record Queries](#transaction-record-queries)
+  - [Usage Log Queries](#usage-log-queries)
   - [Flow Overview](#flow-overview)
   - [Timeout \& Auto-Confirmation Lifecycle](#timeout--auto-confirmation-lifecycle)
   - [Operational Considerations](#operational-considerations)
@@ -157,7 +160,7 @@ curl -X POST https://one-api.example.com/api/token/consume \
 
 The response includes a `transaction` object with status `confirmed` and the generated transaction ID for audit purposes.
 
-## Request Payload Fields
+### Request Payload Fields
 
 | Field              | Required For     | Description                                                                                              |
 | ------------------ | ---------------- | -------------------------------------------------------------------------------------------------------- |
@@ -169,7 +172,7 @@ The response includes a `transaction` object with status `confirmed` and the gen
 | `timeout_seconds`  | optional (`pre`) | Overrides the auto-confirm window (clamped to project configuration).                                    |
 | `elapsed_time_ms`  | optional         | Upstream processing latency captured in logs.                                                            |
 
-## Response Payload
+### Response Payload
 
 Every successful call returns the updated token snapshot in `data` and, when applicable, a `transaction` object describing the hold or reconciliation. The `transaction` object includes:
 
@@ -188,7 +191,7 @@ Every successful call returns the updated token snapshot in `data` and, when app
 | `log_id`                       | Associated audit log record, if any.                                                                                |
 | `elapsed_time_ms`              | Optional latency metric copied from the request (only persisted when > 0).                                          |
 
-### Sample `post` Response
+#### Sample `post` Response
 
 ```json
 {
@@ -211,6 +214,102 @@ Every successful call returns the updated token snapshot in `data` and, when app
     "reason": "async-transcode",
     "confirmed_at": 1735694100
   }
+}
+```
+
+## Balance Queries
+
+Authenticated services can query the current quota balance of the token by calling the `/api/token/balance` endpoint.
+
+```bash
+curl -X GET https://one-api.example.com/api/token/balance \
+  -H "Authorization: Bearer <ONE_API_TOKEN>"
+```
+
+**Successful response:**
+
+```json
+{
+  "success": true,
+  "message": "",
+  "data": {
+    "remain_quota": 9730,
+    "used_quota": 270,
+    "unlimited_quota": false
+  }
+}
+```
+
+## Transaction Record Queries
+
+To retrieve a history of external billing transactions associated with the token, use the `/api/token/transactions` endpoint. This endpoint supports pagination via `p` (page number, 0-indexed) and `size` (items per page) query parameters. The total number of retrievable records is capped (default 1000, configurable via `TOKEN_TRANSACTIONS_MAX_HISTORY`).
+
+```bash
+curl -X GET "https://one-api.example.com/api/token/transactions?p=0&size=10" \
+  -H "Authorization: Bearer <ONE_API_TOKEN>"
+```
+
+**Successful response:**
+
+```json
+{
+  "success": true,
+  "message": "",
+  "data": [
+    {
+      "id": 1,
+      "transaction_id": "8ac38e33-6c7f-4059-9cb3-f6d32df29f35",
+      "token_id": 1,
+      "user_id": 1,
+      "status": 2,
+      "pre_quota": 150,
+      "final_quota": 120,
+      "reason": "async-transcode",
+      "request_id": "req_123",
+      "trace_id": "trace_456",
+      "expires_at": 0,
+      "confirmed_at": 1735694100,
+      "canceled_at": null,
+      "auto_confirmed": false,
+      "log_id": 42,
+      "elapsed_time_ms": 10875,
+      "created_at": 1735694000000,
+      "updated_at": 1735694100000
+    }
+  ],
+  "total": 1
+}
+```
+
+## Usage Log Queries
+
+To retrieve general model usage logs (ChatCompletion, Embeddings, etc.) associated with the token, use the `/api/token/logs` endpoint. This filtered view only shows logs where the `token_name` matches current token.
+
+```bash
+curl -X GET "https://one-api.example.com/api/token/logs?p=0&size=10" \
+  -H "Authorization: Bearer <ONE_API_TOKEN>"
+```
+
+**Successful response:**
+
+```json
+{
+  "success": true,
+  "message": "",
+  "data": [
+    {
+      "id": 123,
+      "user_id": 1,
+      "created_at": 1735694000,
+      "type": 2,
+      "content": "Model chat completion",
+      "token_name": "transcode-token",
+      "model_name": "gpt-4o",
+      "quota": 100,
+      "request_id": "req_abc"
+    }
+  ],
+  "total": 1
 }
 ```
 

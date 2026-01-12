@@ -120,6 +120,9 @@ func SetApiRouter(router *gin.Engine) {
 			tokenRoute.PUT("/", controller.UpdateToken)
 			tokenRoute.DELETE("/:id", controller.DeleteToken)
 			apiRouter.POST("/token/consume", middleware.TokenAuth(), controller.ConsumeToken)
+			apiRouter.GET("/token/balance", middleware.TokenAuth(), controller.GetTokenBalance)
+			apiRouter.GET("/token/transactions", middleware.TokenAuth(), controller.GetTokenTransactions)
+			apiRouter.GET("/token/logs", middleware.TokenAuth(), controller.GetTokenLogs)
 		}
 		costRoute := apiRouter.Group("/cost")
 		{

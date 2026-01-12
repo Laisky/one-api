@@ -44,7 +44,7 @@ const (
 type TokenTransaction struct {
 	Id            int    `json:"id"`
 	TransactionID string `json:"transaction_id" gorm:"size:128;uniqueIndex:uidx_token_txn"`
-	TokenId       int    `json:"token_id" gorm:"uniqueIndex:uidx_token_txn"`
+	TokenId       int    `json:"token_id" gorm:"index;uniqueIndex:uidx_token_txn"`
 	UserId        int    `json:"user_id" gorm:"index"`
 	Status        int    `json:"status" gorm:"index"`
 	PreQuota      int64  `json:"pre_quota"`
@@ -190,4 +190,46 @@ func AutoConfirmExpiredTokenTransactions(ctx context.Context, tokenID int, now i
 	}
 
 	return pending, nil
+}
+
+// GetTokenTransactionsByTokenID retrieves a paginated list of transactions for a specific token.
+// Parameters:
+//   - ctx: request context for cancellation.
+//   - tokenID: token ID whose transactions to retrieve.
+//   - startIdx: offset for pagination.
+//   - num: number of records to return.
+//
+// Returns:
+//   - []*TokenTransaction: list of transaction records.
+//   - error: wrapped error if the query fails.
+func GetTokenTransactionsByTokenID(ctx context.Context, tokenID int, startIdx int, num int) ([]*TokenTransaction, error) {
+	var txns []*TokenTransaction
+	err := DB.WithContext(ctx).
+		Where("token_id = ?", tokenID).
+		Order("id desc").
+		Limit(num).Offset(startIdx).
+		Find(&txns).Error
+	if err != nil {
+		return nil, errors.Wrapf(err, "failed to fetch token transactions: token_id=%d", tokenID)
+	}
+	return txns, nil
+}
+
+// GetTokenTransactionCountByTokenID returns the total number of transactions recorded for a token.
+// Parameters:
+//   - ctx: request context for cancellation.
+//   - tokenID: token ID to query.
+//
+// Returns:
+//   - int64: total count.
+//   - error: wrapped error if the query fails.
+func GetTokenTransactionCountByTokenID(ctx context.Context, tokenID int) (int64, error) {
+	var count int64
+	err := DB.WithContext(ctx).Model(&TokenTransaction{}).
+		Where("token_id = ?", tokenID).
+		Count(&count).Error
+	if err != nil {
+		return 0, errors.Wrapf(err, "failed to count token transactions: token_id=%d", tokenID)
+	}
+	return count, nil
 }

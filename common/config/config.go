@@ -113,6 +113,14 @@ var (
 	// Default: 100
 	// Range: positive integer
 	MaxItemsPerPage = env.Int("MAX_ITEMS_PER_PAGE", 100)
+
+	// TokenTransactionsMaxHistory caps the maximum number of historical
+	// transactions retrievable for a token via the API.
+	//
+	// Environment variable: TOKEN_TRANSACTIONS_MAX_HISTORY
+	// Default: 1000
+	// Range: positive integer
+	TokenTransactionsMaxHistory = env.Int("TOKEN_TRANSACTIONS_MAX_HISTORY", 1000)
 )
 
 // =============================================================================
