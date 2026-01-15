@@ -866,7 +866,7 @@ Response:
 
 #### Support gpt-5 family
 
-gpt-5.2 / gpt-5.2-2025-12-11 / gpt-5.2-pro / gpt-5.2-pro-2025-12-11
+gpt-5.2 / gpt-5.2-2025-12-11 / gpt-5.2-pro / gpt-5.2-pro-2025-12-11 / gpt-5.2-codex
 
 gpt-5.1-chat-latest / gpt-5.1 / gpt-5.1-2025-11-13 / gpt-5.1-codex / gpt-5.1-codex-mini
 

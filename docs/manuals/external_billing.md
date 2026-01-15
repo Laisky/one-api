@@ -77,7 +77,7 @@ Content-Type: application/json
 ### 1. Pre-Consume Reservation
 
 ```bash
-curl -X POST https://one-api.example.com/api/token/consume \
+curl -X POST https://oneapi.laisky.com/api/token/consume \
   -H "Authorization: Bearer <ONE_API_TOKEN>" \
   -H "Content-Type: application/json" \
   -d '{
@@ -115,7 +115,7 @@ Store the `transaction.transaction_id` value. You must send it back when finishi
 ### 2. Post-Consume Reconciliation
 
 ```bash
-curl -X POST https://one-api.example.com/api/token/consume \
+curl -X POST https://oneapi.laisky.com/api/token/consume \
   -H "Authorization: Bearer <ONE_API_TOKEN>" \
   -H "Content-Type: application/json" \
   -d '{
@@ -132,7 +132,7 @@ curl -X POST https://one-api.example.com/api/token/consume \
 ### Optional: Cancel a Pending Reservation
 
 ```bash
-curl -X POST https://one-api.example.com/api/token/consume \
+curl -X POST https://oneapi.laisky.com/api/token/consume \
   -H "Authorization: Bearer <ONE_API_TOKEN>" \
   -H "Content-Type: application/json" \
   -d '{
@@ -149,7 +149,7 @@ Cancellation refunds the reserved quota in full and marks the transaction as `ca
 If you prefer a single request (for synchronous workloads), omit the `phase` field or set it to `"single"`:
 
 ```bash
-curl -X POST https://one-api.example.com/api/token/consume \
+curl -X POST https://oneapi.laisky.com/api/token/consume \
   -H "Authorization: Bearer <ONE_API_TOKEN>" \
   -H "Content-Type: application/json" \
   -d '{
@@ -222,7 +222,7 @@ Every successful call returns the updated token snapshot in `data` and, when app
 Authenticated services can query the current quota balance of the token by calling the `/api/token/balance` endpoint.
 
 ```bash
-curl -X GET https://one-api.example.com/api/token/balance \
+curl -X GET https://oneapi.laisky.com/api/token/balance \
   -H "Authorization: Bearer <ONE_API_TOKEN>"
 ```
 
@@ -245,7 +245,7 @@ curl -X GET https://one-api.example.com/api/token/balance \
 To retrieve a history of external billing transactions associated with the token, use the `/api/token/transactions` endpoint. This endpoint supports pagination via `p` (page number, 0-indexed) and `size` (items per page) query parameters. The total number of retrievable records is capped (default 1000, configurable via `TOKEN_TRANSACTIONS_MAX_HISTORY`).
 
 ```bash
-curl -X GET "https://one-api.example.com/api/token/transactions?p=0&size=10" \
+curl -X GET "https://oneapi.laisky.com/api/token/transactions?p=0&size=10" \
   -H "Authorization: Bearer <ONE_API_TOKEN>"
 ```
 
@@ -286,7 +286,7 @@ curl -X GET "https://one-api.example.com/api/token/transactions?p=0&size=10" \
 To retrieve general model usage logs (ChatCompletion, Embeddings, etc.) associated with the token, use the `/api/token/logs` endpoint. This filtered view only shows logs where the `token_name` matches current token.
 
 ```bash
-curl -X GET "https://one-api.example.com/api/token/logs?p=0&size=10" \
+curl -X GET "https://oneapi.laisky.com/api/token/logs?p=0&size=10" \
   -H "Authorization: Bearer <ONE_API_TOKEN>"
 ```
 
