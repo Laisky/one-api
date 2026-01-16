@@ -137,3 +137,28 @@ func TestBuildToolCandidates_SignatureDisambiguation(t *testing.T) {
 	require.Len(t, candidates, 1)
 	require.Equal(t, 1, candidates[0].ServerID)
 }
+
+func TestSignatureFromSchema_Canonicalization(t *testing.T) {
+	schemaA := map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"b": map[string]any{"type": "string"},
+			"a": map[string]any{"type": "number"},
+		},
+		"required": []any{"a", "b"},
+	}
+	schemaB := map[string]any{
+		"required": []any{"a", "b"},
+		"properties": map[string]any{
+			"a": map[string]any{"type": "number"},
+			"b": map[string]any{"type": "string"},
+		},
+		"type": "object",
+	}
+
+	signatureA, err := SignatureFromSchema(schemaA)
+	require.NoError(t, err)
+	signatureB, err := SignatureFromSchema(schemaB)
+	require.NoError(t, err)
+	require.Equal(t, signatureA, signatureB)
+}
