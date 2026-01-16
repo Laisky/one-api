@@ -117,6 +117,7 @@ flowchart LR
 - Convert `oneapi_builtin` to local tools before upstream dispatch.
 - Keep `channel_builtin` as built‑ins for upstream.
 - Preserve `user_local` as local tools and never execute them in one‑api.
+- When multiple MCP servers publish the same tool name, match by name + canonical parameter signature; if multiple matches remain, prefer the highest‑priority server and retry lower‑priority servers on failure.
 
 ### Execution loop
 
@@ -140,12 +141,12 @@ flowchart LR
 
 1. `mcp_servers`
 
-   - `id`, `name`, `description`, `status`, `base_url`, `protocol`, `auth_type`, `api_key`, `headers`
-   - `tool_whitelist`, `tool_blacklist`, `tool_pricing`
-   - `auto_sync_enabled`, `auto_sync_interval_minutes`
-   - `last_sync_at`, `last_sync_status`, `last_sync_error`
-   - `last_test_at`, `last_test_status`, `last_test_error`
-   - `created_at`, `updated_at`
+- `id`, `name`, `description`, `status`, `priority`, `base_url`, `protocol`, `auth_type`, `api_key`, `headers`
+- `tool_whitelist`, `tool_blacklist`, `tool_pricing`
+- `auto_sync_enabled`, `auto_sync_interval_minutes`
+- `last_sync_at`, `last_sync_status`, `last_sync_error`
+- `last_test_at`, `last_test_status`, `last_test_error`
+- `created_at`, `updated_at`
 
 2. `mcp_tools`
 
@@ -243,6 +244,7 @@ go get github.com/mark3labs/mcp-go@latest
 ### MCP Server Edit
 
 - Sections: Basic Info, Auth, Protocol, Tool Policy, Pricing Overrides.
+- Include priority input aligned with the channel priority UX.
 - Auto‑sync settings (default 60 minutes).
 - “Test Connection” button after auth inputs.
 - Tool management panel with allow/deny toggles, pricing, and missing‑price warning.

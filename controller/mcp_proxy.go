@@ -4,11 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"sort"
 	"strings"
 	"time"
 
 	"github.com/Laisky/errors/v2"
 	gmw "github.com/Laisky/gin-middlewares/v7"
+	"github.com/Laisky/zap"
 	"github.com/gin-gonic/gin"
 
 	"github.com/songquanpeng/one-api/common/ctxkey"
@@ -29,6 +31,7 @@ type mcpRPCRequest struct {
 type mcpCallParams struct {
 	Name      string         `json:"name"`
 	Arguments map[string]any `json:"arguments"`
+	Signature string         `json:"signature,omitempty"`
 }
 
 // MCPProxy handles MCP Streamable HTTP requests backed by configured MCP servers.
@@ -77,6 +80,13 @@ func listMCPToolsForUser(ctx context.Context, c *gin.Context) ([]mcp.ToolDescrip
 		return nil, err
 	}
 
+	sort.SliceStable(servers, func(i, j int) bool {
+		if servers[i].GetPriority() == servers[j].GetPriority() {
+			return servers[i].Id < servers[j].Id
+		}
+		return servers[i].GetPriority() > servers[j].GetPriority()
+	})
+
 	var descriptors []mcp.ToolDescriptor
 	for _, server := range servers {
 		tools, err := model.GetMCPToolsByServerID(server.Id)
@@ -108,35 +118,75 @@ func listMCPToolsForUser(ctx context.Context, c *gin.Context) ([]mcp.ToolDescrip
 
 // callMCPToolForUser invokes a MCP tool and applies billing/logging.
 func callMCPToolForUser(ctx context.Context, c *gin.Context, params mcpCallParams) (*mcp.CallToolResult, error) {
+	logger := gmw.GetLogger(c)
 	user, err := getUserFromContext(c)
 	if err != nil {
 		return nil, err
 	}
 
 	serverLabel, toolName := splitToolName(params.Name)
-	if serverLabel == "" || toolName == "" {
-		return nil, errors.New("tool name must include server prefix")
+	if toolName == "" {
+		toolName = strings.TrimSpace(params.Name)
+	}
+	if toolName == "" {
+		return nil, errors.New("tool name is required")
 	}
 
-	server, err := model.GetMCPServerByName(serverLabel)
+	var servers []*model.MCPServer
+	serverByID := make(map[int]*model.MCPServer)
+	if serverLabel != "" {
+		server, err := model.GetMCPServerByName(serverLabel)
+		if err != nil {
+			return nil, err
+		}
+		servers = []*model.MCPServer{server}
+		serverByID[server.Id] = server
+	} else {
+		servers, err = model.ListEnabledMCPServers()
+		if err != nil {
+			return nil, err
+		}
+		for _, server := range servers {
+			if server == nil {
+				continue
+			}
+			serverByID[server.Id] = server
+		}
+	}
+
+	toolsByServer := make(map[int][]*model.MCPTool, len(servers))
+	for _, server := range servers {
+		if server == nil {
+			continue
+		}
+		tools, err := model.GetMCPToolsByServerID(server.Id)
+		if err != nil {
+			return nil, err
+		}
+		toolsByServer[server.Id] = tools
+	}
+
+	candidates, err := mcp.BuildToolCandidates(servers, toolsByServer, nil, user.MCPToolBlacklist, []string{toolName}, toolName, params.Signature)
 	if err != nil {
 		return nil, err
 	}
-
-	tools, err := model.GetMCPToolsByServerID(server.Id)
-	if err != nil {
-		return nil, err
-	}
-	resolved, err := mcp.ResolveTools(server, tools, nil, user.MCPToolBlacklist, []string{toolName})
-	if err != nil {
-		return nil, err
-	}
-	if !isToolAllowed(resolved, toolName) {
-		return nil, errors.New("tool not allowed")
+	if len(candidates) == 0 {
+		return nil, errors.New("no eligible MCP tool found")
 	}
 
-	client := mcp.NewStreamableHTTPClient(server, nil, 20*time.Second)
-	result, err := client.CallTool(ctx, toolName, params.Arguments)
+	selected, result, err := mcp.CallWithFallback(ctx, candidates, func(ctx context.Context, candidate mcp.ToolCandidate) (*mcp.CallToolResult, error) {
+		server := serverByID[candidate.ServerID]
+		if server == nil {
+			return nil, errors.New("mcp server not loaded")
+		}
+		client := mcp.NewStreamableHTTPClient(server, nil, 20*time.Second)
+		callResult, err := client.CallTool(ctx, candidate.Tool.Name, params.Arguments)
+		if err != nil {
+			logger.Warn("mcp tool call failed", zap.Error(err), zap.Int("server_id", candidate.ServerID), zap.String("tool", candidate.Tool.Name))
+			return nil, err
+		}
+		return callResult, nil
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -145,13 +195,19 @@ func callMCPToolForUser(ctx context.Context, c *gin.Context, params mcpCallParam
 		return result, nil
 	}
 
-	cost := resolveToolCost(server, toolName)
+	server := serverByID[selected.ServerID]
+	if server == nil {
+		return nil, errors.New("mcp server not loaded")
+	}
+
+	cost := resolveToolCost(server, selected.Tool.Name)
 	if cost > 0 {
 		if err := model.DecreaseUserQuota(ctx, user.Id, cost); err != nil {
 			return nil, err
 		}
 		model.UpdateUserUsedQuotaAndRequestCount(user.Id, cost)
-		recordMCPToolLog(ctx, c, user.Id, server.Id, params.Name, cost)
+		qualifiedName := server.Name + "." + selected.Tool.Name
+		recordMCPToolLog(ctx, c, user.Id, server.Id, qualifiedName, cost)
 	}
 
 	return result, nil

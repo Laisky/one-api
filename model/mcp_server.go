@@ -37,6 +37,7 @@ type MCPServer struct {
 	Name                    string            `json:"name" gorm:"uniqueIndex;type:varchar(128);not null"`
 	Description             string            `json:"description" gorm:"type:text"`
 	Status                  int               `json:"status" gorm:"type:int;default:1"`
+	Priority                int64             `json:"priority" gorm:"bigint;default:0"`
 	BaseURL                 string            `json:"base_url" gorm:"type:text;not null"`
 	Protocol                string            `json:"protocol" gorm:"type:varchar(32);default:'streamable_http'"`
 	AuthType                string            `json:"auth_type" gorm:"type:varchar(32);default:'none'"`
@@ -55,6 +56,14 @@ type MCPServer struct {
 	LastTestError           string            `json:"last_test_error" gorm:"type:text"`
 	CreatedAt               int64             `json:"created_at" gorm:"bigint;autoCreateTime:milli"`
 	UpdatedAt               int64             `json:"updated_at" gorm:"bigint;autoUpdateTime:milli"`
+}
+
+// GetPriority returns the configured MCP server priority.
+func (s *MCPServer) GetPriority() int64 {
+	if s == nil {
+		return 0
+	}
+	return s.Priority
 }
 
 // NormalizeAndValidate ensures MCP server fields conform to policy expectations.

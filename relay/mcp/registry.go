@@ -1,6 +1,10 @@
 package mcp
 
 import (
+	"bytes"
+	"encoding/json"
+	"reflect"
+	"sort"
 	"strings"
 
 	"github.com/Laisky/errors/v2"
@@ -22,6 +26,13 @@ type ResolvedTool struct {
 	ServerLabel string
 	ServerURL   string
 	DisplayName string
+}
+
+// ToolCandidate represents a resolved MCP tool with signature and priority metadata.
+type ToolCandidate struct {
+	ResolvedTool
+	Signature      string
+	ServerPriority int64
 }
 
 // ResolveTools applies layered policies (server/channel/user/allowed list) to MCP tools.
@@ -81,6 +92,199 @@ func ResolveTools(server *model.MCPServer, tools []*model.MCPTool, channelBlackl
 	}
 
 	return resolved, nil
+}
+
+// BuildToolCandidates resolves MCP tools matching the name and signature across servers.
+func BuildToolCandidates(servers []*model.MCPServer, toolsByServer map[int][]*model.MCPTool, channelBlacklist []string, userBlacklist []string, allowedTools []string, toolName string, signature string) ([]ToolCandidate, error) {
+	normalizedName := normalizeToolName(toolName)
+	if normalizedName == "" {
+		return nil, errors.New("tool name is required")
+	}
+
+	normalizedSignature, err := normalizeSignature(signature)
+	if err != nil {
+		return nil, err
+	}
+
+	candidates := make([]ToolCandidate, 0)
+	for _, server := range servers {
+		if server == nil {
+			continue
+		}
+		tools := toolsByServer[server.Id]
+		if len(tools) == 0 {
+			continue
+		}
+		resolved, err := ResolveTools(server, tools, channelBlacklist, userBlacklist, allowedTools)
+		if err != nil {
+			return nil, err
+		}
+		for _, entry := range resolved {
+			if !entry.Policy.Allowed || entry.Tool == nil {
+				continue
+			}
+			if normalizeToolName(entry.Tool.Name) != normalizedName {
+				continue
+			}
+			toolSignature, err := SignatureFromJSON(entry.Tool.InputSchema)
+			if err != nil {
+				return nil, errors.Wrapf(err, "compute signature for %s", entry.Tool.Name)
+			}
+			if normalizedSignature != "" && toolSignature != normalizedSignature {
+				continue
+			}
+			candidates = append(candidates, ToolCandidate{
+				ResolvedTool:   entry,
+				Signature:      toolSignature,
+				ServerPriority: server.GetPriority(),
+			})
+		}
+	}
+
+	if err := enforceSignatureDisambiguation(candidates, normalizedSignature); err != nil {
+		return nil, err
+	}
+
+	sort.SliceStable(candidates, func(i, j int) bool {
+		if candidates[i].ServerPriority == candidates[j].ServerPriority {
+			return candidates[i].ServerID < candidates[j].ServerID
+		}
+		return candidates[i].ServerPriority > candidates[j].ServerPriority
+	})
+
+	return candidates, nil
+}
+
+// SignatureFromSchema canonicalizes the provided schema into a stable signature string.
+func SignatureFromSchema(schema any) (string, error) {
+	if schema == nil {
+		return "", nil
+	}
+	return CanonicalizeJSON(schema)
+}
+
+// SignatureFromJSON canonicalizes a JSON schema string into a stable signature string.
+func SignatureFromJSON(raw string) (string, error) {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return "", nil
+	}
+	var parsed any
+	if err := json.Unmarshal([]byte(trimmed), &parsed); err != nil {
+		return "", errors.Wrap(err, "parse tool signature json")
+	}
+	return SignatureFromSchema(parsed)
+}
+
+// CanonicalizeJSON renders JSON values with stable key ordering for signature comparison.
+func CanonicalizeJSON(value any) (string, error) {
+	var buf bytes.Buffer
+	if err := writeCanonicalJSON(&buf, value); err != nil {
+		return "", err
+	}
+	return buf.String(), nil
+}
+
+// writeCanonicalJSON writes a JSON value with deterministic key ordering.
+func writeCanonicalJSON(buf *bytes.Buffer, value any) error {
+	if buf == nil {
+		return errors.New("json buffer is nil")
+	}
+	if value == nil {
+		buf.WriteString("null")
+		return nil
+	}
+	if raw, ok := value.(json.RawMessage); ok {
+		var parsed any
+		if err := json.Unmarshal(raw, &parsed); err != nil {
+			return errors.Wrap(err, "parse raw json")
+		}
+		return writeCanonicalJSON(buf, parsed)
+	}
+
+	val := reflect.ValueOf(value)
+	switch val.Kind() {
+	case reflect.Map:
+		if val.Type().Key().Kind() != reflect.String {
+			encoded, err := json.Marshal(value)
+			if err != nil {
+				return errors.Wrap(err, "marshal non-string map")
+			}
+			buf.Write(encoded)
+			return nil
+		}
+		keys := val.MapKeys()
+		sort.Slice(keys, func(i, j int) bool {
+			return keys[i].String() < keys[j].String()
+		})
+		buf.WriteByte('{')
+		for i, key := range keys {
+			if i > 0 {
+				buf.WriteByte(',')
+			}
+			encodedKey, err := json.Marshal(key.String())
+			if err != nil {
+				return errors.Wrap(err, "marshal json key")
+			}
+			buf.Write(encodedKey)
+			buf.WriteByte(':')
+			if err := writeCanonicalJSON(buf, val.MapIndex(key).Interface()); err != nil {
+				return err
+			}
+		}
+		buf.WriteByte('}')
+		return nil
+	case reflect.Slice, reflect.Array:
+		buf.WriteByte('[')
+		for i := 0; i < val.Len(); i++ {
+			if i > 0 {
+				buf.WriteByte(',')
+			}
+			if err := writeCanonicalJSON(buf, val.Index(i).Interface()); err != nil {
+				return err
+			}
+		}
+		buf.WriteByte(']')
+		return nil
+	default:
+		encoded, err := json.Marshal(value)
+		if err != nil {
+			return errors.Wrap(err, "marshal json value")
+		}
+		buf.Write(encoded)
+		return nil
+	}
+}
+
+// normalizeSignature normalizes a signature string into a canonical form.
+func normalizeSignature(signature string) (string, error) {
+	trimmed := strings.TrimSpace(signature)
+	if trimmed == "" {
+		return "", nil
+	}
+	if strings.HasPrefix(trimmed, "{") || strings.HasPrefix(trimmed, "[") {
+		return SignatureFromJSON(trimmed)
+	}
+	return trimmed, nil
+}
+
+// enforceSignatureDisambiguation validates signature requirements when multiple tools share a name.
+func enforceSignatureDisambiguation(candidates []ToolCandidate, signature string) error {
+	if signature != "" {
+		return nil
+	}
+
+	unique := make(map[string]struct{})
+	for _, candidate := range candidates {
+		if candidate.Signature == "" {
+			continue
+		}
+		unique[candidate.Signature] = struct{}{}
+	}
+	if len(unique) > 1 {
+		return errors.New("multiple MCP tools share the same name; provide a server label or parameter signature")
+	}
+	return nil
 }
 
 // normalizeToolSet builds a canonical set of tool names.

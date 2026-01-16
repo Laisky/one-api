@@ -25,6 +25,7 @@ const serverSchema = z.object({
   name: z.string().min(1, 'Name is required'),
   description: z.string().optional(),
   status: z.coerce.number().int().default(1),
+  priority: z.coerce.number().int().default(0),
   base_url: z.string().min(1, 'Base URL is required'),
   protocol: z.string().default('streamable_http'),
   auth_type: z.string().default('none'),
@@ -55,6 +56,7 @@ export function EditMCPServerPage() {
       name: '',
       description: '',
       status: 1,
+      priority: 0,
       base_url: '',
       protocol: 'streamable_http',
       auth_type: 'none',
@@ -86,6 +88,7 @@ export function EditMCPServerPage() {
         name: data.name || '',
         description: data.description || '',
         status: data.status ?? 1,
+        priority: data.priority ?? 0,
         base_url: data.base_url || '',
         protocol: data.protocol || 'streamable_http',
         auth_type: data.auth_type || 'none',
@@ -152,6 +155,7 @@ export function EditMCPServerPage() {
         name: values.name,
         description: values.description,
         status: values.status,
+        priority: values.priority,
         base_url: values.base_url,
         protocol: values.protocol,
         auth_type: values.auth_type,
@@ -163,9 +167,7 @@ export function EditMCPServerPage() {
         auto_sync_enabled: values.auto_sync_enabled,
         auto_sync_interval_minutes: values.auto_sync_interval_minutes,
       };
-      const response = isEdit
-        ? await api.put(`/api/mcp_servers/${serverId}`, payload)
-        : await api.post('/api/mcp_servers', payload);
+      const response = isEdit ? await api.put(`/api/mcp_servers/${serverId}`, payload) : await api.post('/api/mcp_servers', payload);
       const { success, message } = response.data;
       if (!success) {
         notify({
@@ -209,11 +211,7 @@ export function EditMCPServerPage() {
     <div className="space-y-6">
       <Card>
         <CardHeader>
-          <CardTitle>
-            {isEdit
-              ? t('mcp.edit.title_edit', 'Edit MCP Server')
-              : t('mcp.edit.title_add', 'Add MCP Server')}
-          </CardTitle>
+          <CardTitle>{isEdit ? t('mcp.edit.title_edit', 'Edit MCP Server') : t('mcp.edit.title_add', 'Add MCP Server')}</CardTitle>
         </CardHeader>
         <CardContent>
           <Form {...form}>
@@ -280,11 +278,22 @@ export function EditMCPServerPage() {
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          <SelectItem value="streamable_http">
-                            {t('mcp.edit.fields.protocol_streamable', 'Streamable HTTP')}
-                          </SelectItem>
+                          <SelectItem value="streamable_http">{t('mcp.edit.fields.protocol_streamable', 'Streamable HTTP')}</SelectItem>
                         </SelectContent>
                       </Select>
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="priority"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>{t('mcp.edit.fields.priority', 'Priority')}</FormLabel>
+                      <FormControl>
+                        <Input type="number" {...field} disabled={loading} />
+                      </FormControl>
+                      <FormMessage />
                     </FormItem>
                   )}
                 />
@@ -318,18 +327,10 @@ export function EditMCPServerPage() {
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          <SelectItem value="none">
-                            {t('mcp.edit.fields.auth_type_none', 'None')}
-                          </SelectItem>
-                          <SelectItem value="bearer">
-                            {t('mcp.edit.fields.auth_type_bearer', 'Bearer')}
-                          </SelectItem>
-                          <SelectItem value="api_key">
-                            {t('mcp.edit.fields.auth_type_api_key', 'API Key')}
-                          </SelectItem>
-                          <SelectItem value="custom_headers">
-                            {t('mcp.edit.fields.auth_type_custom_headers', 'Custom headers')}
-                          </SelectItem>
+                          <SelectItem value="none">{t('mcp.edit.fields.auth_type_none', 'None')}</SelectItem>
+                          <SelectItem value="bearer">{t('mcp.edit.fields.auth_type_bearer', 'Bearer')}</SelectItem>
+                          <SelectItem value="api_key">{t('mcp.edit.fields.auth_type_api_key', 'API Key')}</SelectItem>
+                          <SelectItem value="custom_headers">{t('mcp.edit.fields.auth_type_custom_headers', 'Custom headers')}</SelectItem>
                         </SelectContent>
                       </Select>
                     </FormItem>
@@ -391,9 +392,7 @@ export function EditMCPServerPage() {
                       <Textarea {...field} className="font-mono text-xs" rows={5} disabled={loading} />
                     </FormControl>
                     <FormMessage />
-                    {toolPricingWarning() && (
-                      <p className="text-xs text-yellow-600">{toolPricingWarning()}</p>
-                    )}
+                    {toolPricingWarning() && <p className="text-xs text-yellow-600">{toolPricingWarning()}</p>}
                   </FormItem>
                 )}
               />
@@ -406,15 +405,10 @@ export function EditMCPServerPage() {
                     <FormItem className="flex items-center justify-between rounded-lg border p-3">
                       <div>
                         <FormLabel>{t('mcp.edit.fields.auto_sync', 'Auto sync')}</FormLabel>
-                        <p className="text-xs text-muted-foreground">
-                          {t('mcp.edit.fields.auto_sync_help', 'Sync tools on a schedule.')}
-                        </p>
+                        <p className="text-xs text-muted-foreground">{t('mcp.edit.fields.auto_sync_help', 'Sync tools on a schedule.')}</p>
                       </div>
                       <FormControl>
-                        <Checkbox
-                          checked={field.value}
-                          onCheckedChange={(checked) => field.onChange(Boolean(checked))}
-                        />
+                        <Checkbox checked={field.value} onCheckedChange={(checked) => field.onChange(Boolean(checked))} />
                       </FormControl>
                     </FormItem>
                   )}
@@ -444,9 +438,7 @@ export function EditMCPServerPage() {
                       {tools.map((tool) => (
                         <li key={tool.id} className="border rounded-md p-3">
                           <div className="font-medium">{tool.name}</div>
-                          {tool.description && (
-                            <p className="text-xs text-muted-foreground">{tool.description}</p>
-                          )}
+                          {tool.description && <p className="text-xs text-muted-foreground">{tool.description}</p>}
                         </li>
                       ))}
                     </ul>
@@ -456,9 +448,7 @@ export function EditMCPServerPage() {
 
               <div className="flex gap-2">
                 <Button type="submit">
-                  {isEdit
-                    ? t('mcp.edit.actions.update', 'Update Server')
-                    : t('mcp.edit.actions.create', 'Create Server')}
+                  {isEdit ? t('mcp.edit.actions.update', 'Update Server') : t('mcp.edit.actions.create', 'Create Server')}
                 </Button>
                 <Button type="button" variant="outline" onClick={() => navigate('/mcps')}>
                   {t('mcp.edit.actions.cancel', 'Cancel')}

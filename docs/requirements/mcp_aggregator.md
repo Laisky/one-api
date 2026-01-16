@@ -181,6 +181,7 @@ For each request, one‑api must build a tool registry and a tool call map conta
 - `display_name` (if exposed differently)
 - `source` (`user_local` | `oneapi_builtin` | `channel_builtin`)
 - `server_id`, `server_label`, `server_url` (for one‑api built‑ins)
+- `tool_signature` (canonical signature of tool parameters, when available)
 - `policy_snapshot` (allow/deny + pricing resolved at request start)
 
 The mapping must survive retries and multi‑round tool calls.
@@ -251,6 +252,7 @@ Core
 - `name`: required, unique within tenant
 - `description`: optional
 - `status`: enabled/disabled
+- `priority`: integer, default 0; higher means preferred for tool selection/retry
 - `base_url`: required, validated http/https
 - `protocol`: enum, default `streamable_http`
 - `auto_sync_enabled`: bool, default true
@@ -305,6 +307,7 @@ Capabilities
 Conflict resolution
 
 - Tools with same name across different MCP servers are namespaced internally as `{server_label}.{tool_name}` but may be exposed with a display alias to users.
+- When multiple servers expose the same tool name, the canonical parameter signature is used to disambiguate selection (see built‑in tool exposure rules).
 
 #### Tool availability policy resolution (server + channel + user)
 
@@ -358,6 +361,8 @@ Behavior
 - Policy filtering occurs before request conversion; disallowed tools are rejected with a clear error message.
 - One‑api must convert MCP built‑ins into local tools before upstream dispatch, then map tool calls back to MCP servers during tool execution.
 - One‑api must distinguish tool call ownership when upstream issues local tool calls and route them to user tools or MCP tools accordingly.
+- When multiple MCP servers export the same tool name, one‑api must match by both tool name and canonical parameter signature. If multiple matches remain, select the highest‑priority MCP server.
+- If a matched MCP tool call fails, one‑api should retry against the next lower‑priority MCP server that satisfies the same name + signature match.
 
 ### 4) Billing Integration
 
@@ -480,11 +485,11 @@ No new endpoints required; the existing log endpoints will surface tool usage me
 ### Pages
 
 1. MCPs List Page
-   - List of MCP servers with status, base URL, protocol, auth method, auth status, last sync time, tool count, auto sync interval.
+   - List of MCP servers with status, priority, base URL, protocol, auth method, auth status, last sync time, tool count, auto sync interval.
    - Actions: add, edit, delete, sync, view tools.
    - Search and pagination like Channels.
 2. MCP Server Edit Page
-   - Form sections: Basic Info, Auth, Protocol, Tool Policy, Pricing Overrides.
+   - Form sections: Basic Info, Auth, Protocol, Tool Policy, Pricing Overrides (including priority).
    - Auto sync configuration: enable/disable + interval (default 60 minutes).
    - Validate fields and show tool preview.
    - Supports “Test connection” action after auth inputs are set.
@@ -519,7 +524,7 @@ Shared UI component
 
 1. `mcp_servers`
 
-- `id`, `name`, `description`, `status`, `base_url`, `protocol`, `auth_type`, `api_key`, `headers`, `tool_whitelist`, `tool_blacklist`, `tool_pricing`, `auto_sync_enabled`, `auto_sync_interval_minutes`, `last_sync_at`, `last_sync_status`, `last_sync_error`, `last_test_at`, `last_test_status`, `last_test_error`, `created_at`, `updated_at`.
+- `id`, `name`, `description`, `status`, `priority`, `base_url`, `protocol`, `auth_type`, `api_key`, `headers`, `tool_whitelist`, `tool_blacklist`, `tool_pricing`, `auto_sync_enabled`, `auto_sync_interval_minutes`, `last_sync_at`, `last_sync_status`, `last_sync_error`, `last_test_at`, `last_test_status`, `last_test_error`, `created_at`, `updated_at`.
 
 2. `channels` (extension)
 
@@ -558,6 +563,8 @@ Notes
 5. Token or auth missing → reject with standard auth error.
 6. Upstream replays a tool call id → treat as idempotent; avoid double‑billing.
 7. Mixed user_local + oneapi_builtin calls in one round → resolve per tool; execute only oneapi_builtin tools.
+8. Ambiguous tool names across MCP servers → require parameter signature or server label; otherwise return a disambiguation error.
+9. MCP tool invocation failures → retry lower‑priority servers when available; do not retry on context cancellation/timeouts.
 
 ## Telemetry & Observability
 

@@ -16,6 +16,7 @@ interface MCPServer {
   id: number;
   name: string;
   status: number;
+  priority: number;
   base_url: string;
   protocol: string;
   auth_type: string;
@@ -42,9 +43,7 @@ export function MCPServersPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [data, setData] = useState<MCPServerRow[]>([]);
   const [loading, setLoading] = useState(false);
-  const [pageIndex, setPageIndex] = useState(
-    Math.max(0, parseInt(searchParams.get('p') || '1') - 1)
-  );
+  const [pageIndex, setPageIndex] = useState(Math.max(0, parseInt(searchParams.get('p') || '1') - 1));
   const [pageSize, setPageSize] = usePageSize(STORAGE_KEYS.PAGE_SIZE);
   const [total, setTotal] = useState(0);
   const [sortBy, setSortBy] = useState('id');
@@ -72,6 +71,10 @@ export function MCPServersPage() {
               {t('mcp.status.disabled', 'Disabled')}
             </span>
           ),
+      },
+      {
+        accessorKey: 'priority',
+        header: t('mcp.list.columns.priority', 'Priority'),
       },
       {
         accessorKey: 'base_url',
@@ -105,20 +108,10 @@ export function MCPServersPage() {
         header: t('mcp.list.columns.actions', 'Actions'),
         cell: ({ row }) => (
           <div className="flex items-center gap-2">
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => syncServer(row.original.id)}
-              aria-label={t('mcp.list.actions.sync', 'Sync')}
-            >
+            <Button variant="ghost" size="icon" onClick={() => syncServer(row.original.id)} aria-label={t('mcp.list.actions.sync', 'Sync')}>
               <RefreshCw className="h-4 w-4" />
             </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => testServer(row.original.id)}
-              aria-label={t('mcp.list.actions.test', 'Test')}
-            >
+            <Button variant="ghost" size="icon" onClick={() => testServer(row.original.id)} aria-label={t('mcp.list.actions.test', 'Test')}>
               <TestTube className="h-4 w-4" />
             </Button>
             <Button

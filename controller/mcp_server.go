@@ -23,6 +23,7 @@ type MCPServerUpsertRequest struct {
 	Name                    *string                           `json:"name"`
 	Description             *string                           `json:"description"`
 	Status                  *int                              `json:"status"`
+	Priority                *int64                            `json:"priority"`
 	BaseURL                 *string                           `json:"base_url"`
 	Protocol                *string                           `json:"protocol"`
 	AuthType                *string                           `json:"auth_type"`
@@ -290,6 +291,9 @@ func applyMCPServerPayload(server *model.MCPServer, payload MCPServerUpsertReque
 	}
 	if payload.Status != nil {
 		server.Status = *payload.Status
+	}
+	if payload.Priority != nil {
+		server.Priority = *payload.Priority
 	}
 	if payload.BaseURL != nil {
 		server.BaseURL = *payload.BaseURL
