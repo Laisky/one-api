@@ -24,6 +24,10 @@ This project has three different frontend templates: Modern, Default, Berry, and
 
 Modern is the most advanced template with the best user experience. Our focus is on developing new features for Modern. The three templates: Default, Berry, and Air, are kept for maintenance, ensuring that existing functionality continues to work.
 
+### I18n
+
+All UI content should support i18n language translation, and all language files should be defined. The language files are stored in `web/modern/src/i18n/locales/`.
+
 ## General
 
 ### Agents
