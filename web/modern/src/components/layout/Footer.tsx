@@ -1,9 +1,12 @@
 import { useResponsive } from '@/hooks/useResponsive'
 import { cn } from '@/lib/utils'
+import { useTranslation } from 'react-i18next'
 
 export function Footer() {
   const { isMobile } = useResponsive()
+  const { t } = useTranslation()
   const currentYear = new Date().getFullYear()
+  const version = import.meta.env.VITE_APP_VERSION || '1.0.0'
 
   return (
     <footer className="border-t bg-muted/30">
@@ -25,7 +28,7 @@ export function Footer() {
           {/* Optional additional footer links for desktop */}
           {!isMobile && (
             <div className="ml-auto flex items-center space-x-4 text-xs text-muted-foreground">
-              <span>Version: {process.env.REACT_APP_VERSION || '1.0.0'}</span>
+              <span>{t('common.version', 'Version')}: {version}</span>
             </div>
           )}
         </div>

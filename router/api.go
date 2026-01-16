@@ -164,6 +164,7 @@ func SetApiRouter(router *gin.Engine) {
 		mcpServerRoute.Use(middleware.AdminAuth())
 		{
 			mcpServerRoute.GET("/", controller.GetMCPServers)
+			mcpServerRoute.GET("", controller.GetMCPServers)
 			mcpServerRoute.GET("/:id", controller.GetMCPServer)
 			mcpServerRoute.POST("/", controller.CreateMCPServer)
 			mcpServerRoute.PUT("/:id", controller.UpdateMCPServer)
@@ -177,6 +178,7 @@ func SetApiRouter(router *gin.Engine) {
 		mcpToolRoute.Use(middleware.AdminAuth())
 		{
 			mcpToolRoute.GET("/", controller.GetMCPTools)
+			mcpToolRoute.GET("", controller.GetMCPTools)
 		}
 	}
 }
