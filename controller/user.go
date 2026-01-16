@@ -926,6 +926,22 @@ func UpdateUser(c *gin.Context) {
 			}
 			updates["group"] = group
 		}
+
+		if rawFieldPresent(raw, "mcp_tool_blacklist") {
+			if jsonRawIsNull(raw["mcp_tool_blacklist"]) {
+				updates["mcp_tool_blacklist"] = nil
+			} else {
+				var blacklist []string
+				if err := json.Unmarshal(raw["mcp_tool_blacklist"], &blacklist); err != nil {
+					c.JSON(http.StatusOK, gin.H{
+						"success": false,
+						"message": invalidParameterMessage,
+					})
+					return
+				}
+				updates["mcp_tool_blacklist"] = blacklist
+			}
+		}
 	}
 
 	if rawFieldPresent(raw, "quota") {

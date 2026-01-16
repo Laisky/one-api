@@ -83,6 +83,12 @@
         "format_json": "JSON を整形",
         "load_defaults": "デフォルトを読み込む"
       },
+      "mcp": {
+        "blacklist_label": "MCP tool blacklist",
+        "blacklist_description": "Block MCP tools for this channel. Use server.tool or tool name.",
+        "blacklist_placeholder": "server.tool_name",
+        "blacklist_add": "Add"
+      },
       "channel_type": {
         "15": {
           "tip": "Baidu コンソールから AK (API Key) と SK (Secret Key) を取得"
@@ -623,6 +629,7 @@
         "cancel": "キャンセル",
         "create": "ユーザーを作成",
         "creating": "作成中...",
+        "add": "Add",
         "update": "ユーザーを更新",
         "updating": "更新中..."
       },
@@ -658,6 +665,11 @@
           "help": "ユーザーグループはアクセスとモデル/チャンネルの可視性を制御します。",
           "label": "グループ *",
           "placeholder": "グループを選択"
+        },
+        "mcp_tool_blacklist": {
+          "help": "Block MCP tools for this user. Use server.tool or tool name.",
+          "label": "MCP tool blacklist",
+          "placeholder": "server.tool_name"
         },
         "password": {
           "help": "最小長はポリシーに依存します。変更しない場合は空のままにしてください。",

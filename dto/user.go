@@ -14,4 +14,5 @@ type UserAdminUpdatePayload struct {
 	Group       *string `json:"group"`
 	Role        *int    `json:"role"`
 	Status      *int    `json:"status"`
+	MCPToolBlacklist *[]string `json:"mcp_tool_blacklist"`
 }

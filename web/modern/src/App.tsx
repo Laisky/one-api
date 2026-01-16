@@ -19,6 +19,8 @@ import { ChannelsPage } from "@/pages/channels/ChannelsPage";
 import { EditChannelPage } from "@/pages/channels/EditChannelPage";
 import { DashboardPage } from "@/pages/dashboard/DashboardPage";
 import { LogsPage } from "@/pages/logs/LogsPage";
+import { EditMCPServerPage } from "@/pages/mcp/EditMCPServerPage";
+import { MCPServersPage } from "@/pages/mcp/MCPServersPage";
 import { ModelsPage } from "@/pages/models/ModelsPage";
 import { EditRedemptionPage } from "@/pages/redemptions/EditRedemptionPage";
 import { RedemptionsPage } from "@/pages/redemptions/RedemptionsPage";
@@ -103,6 +105,9 @@ function App() {
                       path="channels/edit/:id"
                       element={<EditChannelPage />}
                     />
+                    <Route path="mcps" element={<MCPServersPage />} />
+                    <Route path="mcps/add" element={<EditMCPServerPage />} />
+                    <Route path="mcps/edit/:id" element={<EditMCPServerPage />} />
                     <Route path="redemptions" element={<RedemptionsPage />} />
                     <Route
                       path="redemptions/add"

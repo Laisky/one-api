@@ -63,11 +63,21 @@ const (
 	LogMetadataKeyToolUsage = "tool_usage"
 )
 
+// ToolUsageEntry captures per-tool usage metadata for logging.
+type ToolUsageEntry struct {
+	Tool     string
+	Source   string
+	ServerID int
+	Count    int
+	Cost     int64
+}
+
 // ToolUsageSummary captures built-in tool invocation details for billing and logging purposes.
 type ToolUsageSummary struct {
 	TotalCost  int64            // Aggregated quota consumed by tools
 	Counts     map[string]int   // Invocation counts per tool
 	CostByTool map[string]int64 // Quota charged per tool
+	Entries    []ToolUsageEntry // Optional detailed entries
 }
 
 // Value converts LogMetadata to a driver-compatible JSON representation.
@@ -187,6 +197,19 @@ func AppendToolUsageMetadata(metadata LogMetadata, summary *ToolUsageSummary) Lo
 		costCopy := make(map[string]int64, len(summary.CostByTool))
 		maps.Copy(costCopy, summary.CostByTool)
 		entry["cost_by_tool"] = costCopy
+	}
+	if len(summary.Entries) > 0 {
+		entries := make([]map[string]any, 0, len(summary.Entries))
+		for _, item := range summary.Entries {
+			entries = append(entries, map[string]any{
+				"tool":      item.Tool,
+				"source":    item.Source,
+				"server_id": item.ServerID,
+				"count":     item.Count,
+				"cost":      item.Cost,
+			})
+		}
+		entry["entries"] = entries
 	}
 
 	metadata[LogMetadataKeyToolUsage] = entry

@@ -83,6 +83,12 @@
         "format_json": "Format JSON",
         "load_defaults": "Load Defaults"
       },
+      "mcp": {
+        "blacklist_label": "MCP tool blacklist",
+        "blacklist_description": "Block MCP tools for this channel. Use server.tool or tool name.",
+        "blacklist_placeholder": "server.tool_name",
+        "blacklist_add": "Add"
+      },
       "channel_type": {
         "15": {
           "tip": "Get AK (API Key) and SK (Secret Key) from Baidu console"
@@ -627,6 +633,7 @@
         "cancel": "Cancel",
         "create": "Create User",
         "creating": "Creating...",
+        "add": "Add",
         "update": "Update User",
         "updating": "Updating..."
       },
@@ -662,6 +669,11 @@
           "help": "User group controls access and model/channel visibility.",
           "label": "Group *",
           "placeholder": "Select a group"
+        },
+        "mcp_tool_blacklist": {
+          "help": "Block MCP tools for this user. Use server.tool or tool name.",
+          "label": "MCP tool blacklist",
+          "placeholder": "server.tool_name"
         },
         "password": {
           "help": "Minimum length depends on policy. Leave empty when editing to keep unchanged.",

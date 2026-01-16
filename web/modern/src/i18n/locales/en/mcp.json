@@ -1,0 +1,89 @@
+{
+  "mcp": {
+    "list": {
+      "title": "MCP Servers",
+      "subtitle": "Manage MCP server registry and tool sync",
+      "columns": {
+        "name": "Name",
+        "status": "Status",
+        "base_url": "Base URL",
+        "protocol": "Protocol",
+        "protocol_streamable": "Streamable HTTP",
+        "auth_type": "Auth",
+        "tool_count": "Tools",
+        "last_sync": "Last Sync",
+        "actions": "Actions"
+      },
+      "actions": {
+        "add": "Add MCP Server",
+        "refresh": "Refresh",
+        "sync": "Sync",
+        "test": "Test",
+        "delete": "Delete"
+      },
+      "labels": {
+        "never": "Never"
+      }
+    },
+    "edit": {
+      "title_edit": "Edit MCP Server",
+      "title_add": "Add MCP Server",
+      "fields": {
+        "name": "Name",
+        "description": "Description",
+        "status": "Status",
+        "base_url": "Base URL",
+        "protocol": "Protocol",
+        "auth_type": "Auth type",
+        "auth_type_none": "None",
+        "auth_type_bearer": "Bearer",
+        "auth_type_api_key": "API Key",
+        "auth_type_custom_headers": "Custom headers",
+        "api_key": "API key",
+        "headers": "Custom headers (JSON)",
+        "tool_whitelist": "Tool whitelist",
+        "tool_whitelist_help": "Only tools listed here will be enabled.",
+        "tool_whitelist_placeholder": "tool_name",
+        "tool_blacklist": "Tool blacklist",
+        "tool_blacklist_help": "Blocked tools will never be exposed.",
+        "tool_blacklist_placeholder": "tool_name",
+        "tool_pricing": "Tool pricing (JSON)",
+        "auto_sync": "Auto sync",
+        "auto_sync_help": "Sync tools on a schedule.",
+        "auto_sync_interval": "Sync interval (minutes)"
+      },
+      "actions": {
+        "add": "Add",
+        "update": "Update Server",
+        "create": "Create Server",
+        "cancel": "Cancel"
+      },
+      "pricing": {
+        "invalid": "Tool pricing JSON is invalid",
+        "missing": "Missing pricing for: {{tools}}"
+      },
+      "tools": {
+        "title": "Synced tools"
+      },
+      "notifications": {
+        "load_failed": "Failed to load MCP server",
+        "save_failed": "Save failed",
+        "save_success": "Saved"
+      }
+    },
+    "status": {
+      "enabled": "Enabled",
+      "disabled": "Disabled"
+    },
+    "notifications": {
+      "fetch_failed": "Failed to load MCP servers",
+      "sync_failed": "Sync failed",
+      "sync_success": "Sync complete",
+      "test_failed": "Test failed",
+      "test_success": "Connection OK",
+      "test_tools": "Tools: {{count}}",
+      "delete_failed": "Delete failed",
+      "delete_success": "Server deleted"
+    }
+  }
+}

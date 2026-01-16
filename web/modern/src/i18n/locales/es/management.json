@@ -106,6 +106,12 @@
           "description": "Formato compatible con Gemini OpenAI"
         }
       },
+        "mcp": {
+          "blacklist_label": "MCP tool blacklist",
+          "blacklist_description": "Block MCP tools for this channel. Use server.tool or tool name.",
+          "blacklist_placeholder": "server.tool_name",
+          "blacklist_add": "Add"
+        },
       "cloudflare": {
         "account": {
           "help": "Tu ID de cuenta de Cloudflare para la puerta de enlace de IA.",
@@ -623,6 +629,7 @@
         "cancel": "Cancelar",
         "create": "Crear usuario",
         "creating": "Creando...",
+        "add": "Add",
         "update": "Actualizar usuario",
         "updating": "Actualizando..."
       },
@@ -658,6 +665,11 @@
           "help": "El grupo de usuarios controla el acceso y la visibilidad de modelos/canales.",
           "label": "Grupo *",
           "placeholder": "Selecciona un grupo"
+        },
+        "mcp_tool_blacklist": {
+          "help": "Block MCP tools for this user. Use server.tool or tool name.",
+          "label": "MCP tool blacklist",
+          "placeholder": "server.tool_name"
         },
         "password": {
           "help": "La longitud mínima depende de la política. Deja vacío al editar para mantener sin cambios.",

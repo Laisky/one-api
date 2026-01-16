@@ -15,6 +15,7 @@ import { useEffect } from "react";
 import { ChannelAdvancedSettings } from "./components/ChannelAdvancedSettings";
 import { ChannelBasicInfo } from "./components/ChannelBasicInfo";
 import { ChannelEndpointSettings } from "./components/ChannelEndpointSettings";
+import { ChannelMCPSettings } from "./components/ChannelMCPSettings";
 import { ChannelModelSettings } from "./components/ChannelModelSettings";
 import { ChannelSpecificConfig } from "./components/ChannelSpecificConfig";
 import { ChannelToolingSettings } from "./components/ChannelToolingSettings";
@@ -213,6 +214,8 @@ export function EditChannelPage() {
                   tr={tr}
                   notify={notify}
                 />
+
+                <ChannelMCPSettings form={form} tr={tr} />
 
                 {form.formState.errors.root && (
                   <div className="text-sm text-destructive">

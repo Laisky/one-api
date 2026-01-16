@@ -32,6 +32,7 @@
 				"cancel": "取消",
 				"create": "创建渠道",
 				"creating": "正在创建...",
+				"add": "Add",
 				"test_channel": "测试渠道",
 				"update": "更新渠道",
 				"updating": "正在更新..."
@@ -110,6 +111,12 @@
 					"tip": "渠道密钥填写 GitHub access token；Base URL 默认为 https://api.githubcopilot.com"
 				}
 			},
+			"mcp": {
+				"blacklist_label": "MCP tool blacklist",
+				"blacklist_description": "Block MCP tools for this channel. Use server.tool or tool name.",
+				"blacklist_placeholder": "server.tool_name",
+				"blacklist_add": "Add"
+			},
 			"cloudflare": {
 				"account": {
 					"help": "AI 网关的 Cloudflare 账户 ID。",
@@ -187,6 +194,11 @@
 				"label": "分组 *"
 			},
 			"inference_profile": {
+				"mcp_tool_blacklist": {
+					"help": "Block MCP tools for this user. Use server.tool or tool name.",
+					"label": "MCP tool blacklist",
+					"placeholder": "server.tool_name"
+				},
 				"help": "模型名称到 AWS Bedrock 推理配置文件 ARN 的 JSON 映射。用于通过特定 Bedrock 推理配置文件路由某些模型。",
 				"label": "推理配置文件 ARN 映射 (AWS Bedrock)",
 				"note": "将模型名称映射到 AWS Bedrock 推理配置文件 ARN (可选)",

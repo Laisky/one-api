@@ -35,6 +35,7 @@ import (
 	"github.com/songquanpeng/one-api/monitor"
 	"github.com/songquanpeng/one-api/relay"
 	"github.com/songquanpeng/one-api/relay/adaptor/openai"
+	"github.com/songquanpeng/one-api/relay/mcp"
 	"github.com/songquanpeng/one-api/router"
 )
 
@@ -112,6 +113,7 @@ func main() {
 		go model.SyncOptions(config.SyncFrequency)
 		go model.SyncChannelCache(config.SyncFrequency)
 	}
+	mcp.StartAutoSync(ctx)
 	if config.ChannelTestFrequency > 0 {
 		go controller.AutomaticallyTestChannels(config.ChannelTestFrequency)
 	}

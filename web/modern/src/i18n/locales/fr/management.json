@@ -83,6 +83,12 @@
         "format_json": "Formater JSON",
         "load_defaults": "Charger les valeurs par défaut"
       },
+       "mcp": {
+         "blacklist_label": "MCP tool blacklist",
+        "add": "Ajouter",
+         "blacklist_placeholder": "server.tool_name",
+         "blacklist_add": "Add"
+       },
       "channel_type": {
         "15": {
           "tip": "Obtenez AK (Clé API) et SK (Clé secrète) depuis la console Baidu"
@@ -183,6 +189,11 @@
         "label": "Groupes *"
       },
       "inference_profile": {
+        "mcp_tool_blacklist": {
+          "help": "Bloquer les outils MCP pour cet utilisateur. Utilisez server.tool ou le nom de l'outil.",
+          "label": "Liste noire des outils MCP",
+          "placeholder": "server.tool_name"
+        },
         "help": "Carte JSON du nom du modèle vers l'ARN du profil d'inférence AWS Bedrock. Utilisez pour router certains modèles via des profils d'inférence Bedrock spécifiques.",
         "label": "Carte ARN de profil d'inférence (AWS Bedrock)",
         "note": "Mapper les noms de modèles aux ARN de profil d'inférence AWS Bedrock (facultatif)",
@@ -623,6 +634,7 @@
         "cancel": "Annuler",
         "create": "Créer l'utilisateur",
         "creating": "Création...",
+        "add": "Ajouter",
         "update": "Mettre à jour l'utilisateur",
         "updating": "Mise à jour..."
       },
@@ -658,6 +670,11 @@
           "help": "Le groupe d'utilisateurs contrôle l'accès et la visibilité des modèles/canaux.",
           "label": "Groupe *",
           "placeholder": "Sélectionnez un groupe"
+        },
+        "mcp_tool_blacklist": {
+          "help": "Bloquer les outils MCP pour cet utilisateur. Utilisez server.tool ou le nom de l'outil.",
+          "label": "Liste noire des outils MCP",
+          "placeholder": "server.tool_name"
         },
         "password": {
           "help": "La longueur minimale dépend de la politique. Laissez vide lors de la modification pour conserver inchangé.",

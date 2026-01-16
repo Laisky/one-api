@@ -82,6 +82,7 @@ export const useChannelForm = () => {
         auth_type: "personal_access_token",
         api_format: "chat_completion",
         supported_endpoints: [],
+        mcp_tool_blacklist: [],
       },
       inference_profile_arn_map: "",
     },
@@ -179,6 +180,7 @@ export const useChannelForm = () => {
           auth_type: "personal_access_token",
           api_format: "chat_completion",
           supported_endpoints: [],
+          mcp_tool_blacklist: [],
         };
         if (
           data.config &&
@@ -198,6 +200,9 @@ export const useChannelForm = () => {
                   : "chat_completion",
               supported_endpoints: Array.isArray(parsed.supported_endpoints)
                 ? parsed.supported_endpoints
+                : [],
+              mcp_tool_blacklist: Array.isArray(parsed.mcp_tool_blacklist)
+                ? parsed.mcp_tool_blacklist
                 : [],
             };
           } catch (e) {

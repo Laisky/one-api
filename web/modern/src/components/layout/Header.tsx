@@ -1,10 +1,6 @@
-import { Link, useLocation, useNavigate } from 'react-router-dom'
-import { useAuthStore } from '@/lib/stores/auth'
-import { api } from '@/lib/api'
-import { Button } from '@/components/ui/button'
-import { ThemeToggle } from '@/components/theme-toggle'
 import { LanguageSelector } from '@/components/LanguageSelector'
-import { NavigationDrawer } from '@/components/ui/mobile-drawer'
+import { ThemeToggle } from '@/components/theme-toggle'
+import { Button } from '@/components/ui/button'
 import {
   Dialog,
   DialogContent,
@@ -21,24 +17,29 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger
 } from '@/components/ui/dropdown-menu'
+import { NavigationDrawer } from '@/components/ui/mobile-drawer'
 import { useResponsive } from '@/hooks/useResponsive'
+import { api } from '@/lib/api'
+import { useAuthStore } from '@/lib/stores/auth'
 import {
-  Menu,
-  Home,
-  Settings,
-  Users,
-  CreditCard,
   BarChart3,
-  MessageSquare,
-  Info,
-  Zap,
-  Gift,
+  CreditCard,
   DollarSign,
   FileText,
-  LogOut
+  Gift,
+  Home,
+  Info,
+  LogOut,
+  Menu,
+  MessageSquare,
+  Server,
+  Settings,
+  Users,
+  Zap
 } from 'lucide-react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 
 // Icon mapping for navigation items
 const navigationIcons = {
@@ -53,6 +54,7 @@ const navigationIcons = {
   '/chat': MessageSquare,
   '/about': Info,
   '/settings': Settings,
+  '/mcps': Server,
 }
 
 export function Header() {
@@ -74,6 +76,7 @@ export function Header() {
     { name: t('common.tokens'), to: '/tokens', show: true },
     { name: t('common.logs'), to: '/logs', show: true },
     { name: t('common.users'), to: '/users', show: isAdmin },
+    { name: t('common.mcps'), to: '/mcps', show: isAdmin },
     { name: t('common.redemptions'), to: '/redemptions', show: isAdmin },
     { name: t('common.topup'), to: '/topup', show: true },
     { name: t('common.models'), to: '/models', show: true },
