@@ -3,11 +3,12 @@ import { Card } from '@/components/ui/card';
 import { EnhancedDataTable } from '@/components/ui/enhanced-data-table';
 import { useNotifications } from '@/components/ui/notifications';
 import { ResponsivePageContainer } from '@/components/ui/responsive-container';
+import type { SearchOption } from '@/components/ui/searchable-dropdown';
 import { TimestampDisplay } from '@/components/ui/timestamp';
 import { STORAGE_KEYS, usePageSize } from '@/hooks/usePersistentState';
 import { api } from '@/lib/api';
 import type { ColumnDef } from '@tanstack/react-table';
-import { CheckCircle, Plus, RefreshCw, TestTube, Trash2, XCircle } from 'lucide-react';
+import { CheckCircle, Plus, RefreshCw, Settings, TestTube, Trash2, XCircle } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useSearchParams } from 'react-router-dom';
@@ -46,6 +47,9 @@ export function MCPServersPage() {
   const [pageIndex, setPageIndex] = useState(Math.max(0, parseInt(searchParams.get('p') || '1') - 1));
   const [pageSize, setPageSize] = usePageSize(STORAGE_KEYS.PAGE_SIZE);
   const [total, setTotal] = useState(0);
+  const [searchKeyword, setSearchKeyword] = useState('');
+  const [searchOptions, setSearchOptions] = useState<SearchOption[]>([]);
+  const [searchLoading, setSearchLoading] = useState(false);
   const [sortBy, setSortBy] = useState('id');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const initializedRef = useRef(false);
@@ -108,16 +112,35 @@ export function MCPServersPage() {
         header: t('mcp.list.columns.actions', 'Actions'),
         cell: ({ row }) => (
           <div className="flex items-center gap-2">
-            <Button variant="ghost" size="icon" onClick={() => syncServer(row.original.id)} aria-label={t('mcp.list.actions.sync', 'Sync')}>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={(event) => {
+                event.stopPropagation();
+                syncServer(row.original.id);
+              }}
+              aria-label={t('mcp.list.actions.sync', 'Sync')}
+            >
               <RefreshCw className="h-4 w-4" />
             </Button>
-            <Button variant="ghost" size="icon" onClick={() => testServer(row.original.id)} aria-label={t('mcp.list.actions.test', 'Test')}>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={(event) => {
+                event.stopPropagation();
+                testServer(row.original.id);
+              }}
+              aria-label={t('mcp.list.actions.test', 'Test')}
+            >
               <TestTube className="h-4 w-4" />
             </Button>
             <Button
               variant="ghost"
               size="icon"
-              onClick={() => deleteServer(row.original.id)}
+              onClick={(event) => {
+                event.stopPropagation();
+                deleteServer(row.original.id);
+              }}
               aria-label={t('mcp.list.actions.delete', 'Delete')}
               className="text-destructive"
             >
@@ -176,6 +199,48 @@ export function MCPServersPage() {
       setLoading(false);
     }
   };
+
+  const searchServers = (query: string) => {
+    if (!query.trim()) {
+      setSearchOptions([]);
+      return;
+    }
+    setSearchLoading(true);
+    const keyword = query.trim().toLowerCase();
+    const options: SearchOption[] = data
+      .filter((server) =>
+        [server.name, server.base_url, server.protocol, server.auth_type]
+          .filter(Boolean)
+          .some((field) => field.toLowerCase().includes(keyword))
+      )
+      .map((server) => ({
+        key: server.id.toString(),
+        value: server.name,
+        text: server.name,
+        content: (
+          <div className="flex flex-col">
+            <div className="font-medium">{server.name}</div>
+            <div className="text-xs text-muted-foreground">
+              {server.base_url} • {server.protocol}
+            </div>
+          </div>
+        ),
+      }));
+    setSearchOptions(options);
+    setSearchLoading(false);
+  };
+
+  const filteredData = useMemo(() => {
+    if (!searchKeyword.trim()) return data;
+    const keyword = searchKeyword.trim().toLowerCase();
+    return data.filter((server) =>
+      [server.name, server.base_url, server.protocol, server.auth_type]
+        .filter(Boolean)
+        .some((field) => field.toLowerCase().includes(keyword))
+    );
+  }, [data, searchKeyword]);
+
+  const displayTotal = searchKeyword.trim() ? filteredData.length : total;
 
   const syncServer = async (id: number) => {
     try {
@@ -280,10 +345,6 @@ export function MCPServersPage() {
       description={t('mcp.list.subtitle', 'Manage MCP server registry and tool sync')}
       actions={
         <div className="flex gap-2">
-          <Button variant="outline" onClick={() => load(pageIndex, pageSize)}>
-            <RefreshCw className="h-4 w-4 mr-2" />
-            {t('mcp.list.actions.refresh', 'Refresh')}
-          </Button>
           <Button onClick={() => navigate('/mcps/add')}>
             <Plus className="h-4 w-4 mr-2" />
             {t('mcp.list.actions.add', 'Add MCP Server')}
@@ -294,20 +355,70 @@ export function MCPServersPage() {
       <Card>
         <EnhancedDataTable
           columns={columns}
-          data={data}
+          data={filteredData}
           loading={loading}
           pageIndex={pageIndex}
           pageSize={pageSize}
-          total={total}
+          total={displayTotal}
           onPageChange={handlePageChange}
           onPageSizeChange={(size) => handlePageChange(0, size)}
           onRowClick={(row) => navigate(`/mcps/edit/${row.id}`)}
+          floatingRowActions={(row) => (
+            <div className="flex items-center gap-1">
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => navigate(`/mcps/edit/${row.id}`)}
+                title={t('mcp.list.actions.edit', 'Edit')}
+                aria-label={t('mcp.list.actions.edit', 'Edit')}
+              >
+                <Settings className="h-4 w-4" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => syncServer(row.id)}
+                title={t('mcp.list.actions.sync', 'Sync')}
+                aria-label={t('mcp.list.actions.sync', 'Sync')}
+              >
+                <RefreshCw className="h-4 w-4" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => testServer(row.id)}
+                title={t('mcp.list.actions.test', 'Test')}
+                aria-label={t('mcp.list.actions.test', 'Test')}
+              >
+                <TestTube className="h-4 w-4" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => deleteServer(row.id)}
+                title={t('mcp.list.actions.delete', 'Delete')}
+                aria-label={t('mcp.list.actions.delete', 'Delete')}
+                className="text-destructive"
+              >
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            </div>
+          )}
           sortBy={sortBy}
           sortOrder={sortOrder}
           onSortChange={(nextSortBy, nextSortOrder) => {
             setSortBy(nextSortBy);
             setSortOrder(nextSortOrder as 'asc' | 'desc');
           }}
+          searchValue={searchKeyword}
+          searchOptions={searchOptions}
+          searchLoading={searchLoading}
+          onSearchChange={searchServers}
+          onSearchValueChange={setSearchKeyword}
+          onSearchSubmit={() => searchServers(searchKeyword)}
+          searchPlaceholder={t('mcp.list.search_placeholder', 'Search MCP servers...')}
+          allowSearchAdditions={true}
+          onRefresh={() => load(pageIndex, pageSize)}
         />
       </Card>
     </ResponsivePageContainer>

@@ -23,13 +23,22 @@
         "name": "Name",
         "priority": "Priority",
         "protocol": "Protocol",
+        "protocol_streamable": "Streamable HTTP",
         "status": "Status",
+        "tool_blacklist_empty": "No tools blocked",
         "tool_blacklist": "Tool blacklist",
         "tool_blacklist_help": "Blocked tools will never be exposed.",
+        "tool_blacklist_none": "No synced tools",
+        "tool_blacklist_selected": "Blocked Tools ({{count}})",
+        "tool_custom": "Add custom tool...",
         "tool_blacklist_placeholder": "tool_name",
         "tool_pricing": "Tool pricing (JSON)",
+        "tool_search": "Search tools...",
+        "tool_whitelist_empty": "No tools selected",
         "tool_whitelist": "Tool whitelist",
         "tool_whitelist_help": "Only tools listed here will be enabled.",
+        "tool_whitelist_none": "No synced tools",
+        "tool_whitelist_selected": "Selected Tools ({{count}})",
         "tool_whitelist_placeholder": "tool_name"
       },
       "notifications": {
@@ -50,6 +59,7 @@
     "list": {
       "actions": {
         "add": "Add MCP Server",
+        "edit": "Edit",
         "delete": "Delete",
         "refresh": "Refresh",
         "sync": "Sync",
@@ -70,6 +80,7 @@
       "labels": {
         "never": "Never"
       },
+      "search_placeholder": "Search MCP servers...",
       "subtitle": "Manage MCP server registry and tool sync",
       "title": "MCP Servers"
     },
