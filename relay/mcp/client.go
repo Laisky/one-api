@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -27,6 +28,13 @@ type StreamableHTTPClient struct {
 	Timeout time.Duration
 }
 
+const (
+	mcpProtocolVersionHeader = "mcp-protocol-version"
+	mcpSessionIDHeader       = "mcp-session-id"
+	mcpDefaultProtocolVersion = "2025-06-18"
+	mcpAcceptHeaderValue      = "application/json, text/event-stream"
+)
+
 // NewStreamableHTTPClient constructs a StreamableHTTPClient from MCP server metadata.
 func NewStreamableHTTPClient(server *model.MCPServer, headers map[string]string, timeout time.Duration) *StreamableHTTPClient {
 	merged := make(map[string]string)
@@ -35,6 +43,15 @@ func NewStreamableHTTPClient(server *model.MCPServer, headers map[string]string,
 	}
 	for k, v := range headers {
 		merged[k] = v
+	}
+	if _, ok := merged[mcpProtocolVersionHeader]; !ok {
+		merged[mcpProtocolVersionHeader] = mcpDefaultProtocolVersion
+	}
+	if _, ok := merged[mcpSessionIDHeader]; !ok {
+		merged[mcpSessionIDHeader] = "mcp-session-" + random.GetUUIDWithHyphens()
+	}
+	if _, ok := merged["Accept"]; !ok {
+		merged["Accept"] = mcpAcceptHeaderValue
 	}
 
 	switch strings.ToLower(server.AuthType) {
@@ -112,7 +129,11 @@ func (c *StreamableHTTPClient) doRPC(ctx context.Context, method string, params 
 	defer resp.Body.Close()
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return errors.Errorf("mcp request failed with status %d", resp.StatusCode)
+		body, readErr := io.ReadAll(resp.Body)
+		if readErr != nil {
+			return errors.Wrapf(readErr, "read mcp error response: status=%d", resp.StatusCode)
+		}
+		return errors.Errorf("mcp request failed with status %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
 	}
 
 	var envelope struct {
