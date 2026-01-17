@@ -629,6 +629,20 @@ var (
 	// Example: "http://proxy.example.com:8080"
 	RelayProxy = env.String("RELAY_PROXY", "")
 
+	// MCPMaxToolRounds bounds how many MCP tool execution rounds are allowed per request.
+	//
+	// Environment variable: MCP_MAX_TOOL_ROUNDS
+	// Default: 5
+	// Unit: rounds
+	MCPMaxToolRounds = env.Int("MCP_MAX_TOOL_ROUNDS", 5)
+
+	// MCPToolCallTimeoutSec limits how long one-api will wait for a single MCP tool call.
+	//
+	// Environment variable: MCP_TOOL_CALL_TIMEOUT
+	// Default: 20 seconds
+	// Unit: seconds
+	MCPToolCallTimeoutSec = env.Int("MCP_TOOL_CALL_TIMEOUT", 20)
+
 	// UserContentRequestProxy provides an HTTP proxy when fetching user-supplied
 	// assets like external images. Separate from relay proxy for security isolation.
 	//

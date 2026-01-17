@@ -65,6 +65,16 @@ func RelayResponseAPIHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 		}
 	}
 
+	if hasMCP, err := hasMCPBuiltinsInResponseRequest(c, channelRecord, responseAPIRequest); err != nil {
+		return openai.ErrorWrapper(err, "mcp_tool_registry_failed", http.StatusBadRequest)
+	} else if hasMCP {
+		lg.Debug("response api request routed through chat fallback for MCP tools",
+			zap.String("origin_model", meta.OriginModelName),
+			zap.String("actual_model", meta.ActualModelName),
+		)
+		return relayResponseAPIThroughChat(c, meta, responseAPIRequest)
+	}
+
 	// duplicated
 	// if reqBody, ok := c.Get(ctxkey.KeyRequestBody); ok {
 	// 	lg.Debug("get response api request", zap.ByteString("body", reqBody.([]byte)))

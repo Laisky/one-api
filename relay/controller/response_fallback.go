@@ -59,6 +59,31 @@ func relayResponseAPIThroughChat(c *gin.Context, meta *metalib.Meta, responseAPI
 	}
 	metalib.Set2Context(c, meta)
 
+	var channelRecord *model.Channel
+	if channelModel, ok := c.Get(ctxkey.ChannelModel); ok {
+		if channel, ok := channelModel.(*model.Channel); ok {
+			channelRecord = channel
+		}
+	}
+
+	registry, mcpToolNames, regErr := expandMCPBuiltinsInChatRequest(c, channelRecord, chatRequest)
+	if regErr != nil {
+		return openai.ErrorWrapper(regErr, "mcp_tool_registry_failed", http.StatusBadRequest)
+	}
+	if registry != nil {
+		responseAPIRequest.ToolChoice = normalizeMCPToolChoiceForResponse(responseAPIRequest.ToolChoice, mcpToolNames)
+		chatRequest.ToolChoice = normalizeChatToolChoiceForMCP(chatRequest.ToolChoice, mcpToolNames)
+		if chatRequest.Stream {
+			lg.Warn("mcp tool execution forces non-streaming response")
+			chatRequest.Stream = false
+			meta.IsStream = false
+			if responseAPIRequest.Stream != nil {
+				stream := false
+				responseAPIRequest.Stream = &stream
+			}
+		}
+	}
+
 	origWriter := c.Writer
 	var capture *responseCaptureWriter
 	if !meta.IsStream {
@@ -83,13 +108,6 @@ func relayResponseAPIThroughChat(c *gin.Context, meta *metalib.Meta, responseAPI
 			}
 			return renderChatResponseAsResponseAPI(gc, status, textResp, responseAPIRequest, meta)
 		})
-	}
-
-	var channelRecord *model.Channel
-	if channelModel, ok := c.Get(ctxkey.ChannelModel); ok {
-		if channel, ok := channelModel.(*model.Channel); ok {
-			channelRecord = channel
-		}
 	}
 
 	requestAdaptor := relay.GetAdaptor(meta.APIType)
@@ -121,6 +139,89 @@ func relayResponseAPIThroughChat(c *gin.Context, meta *metalib.Meta, responseAPI
 	}
 
 	requestAdaptor.Init(meta)
+	if registry != nil {
+		response, usage, mcpSummary, execErr := executeChatMCPToolLoop(c, meta, chatRequest, registry)
+		if execErr != nil {
+			billing.ReturnPreConsumedQuota(ctx, preConsumedQuota, meta.TokenId)
+			return execErr
+		}
+		tooling.ApplyBuiltinToolCharges(c, &usage, meta, channelRecord, requestAdaptor)
+		if mcpSummary != nil && mcpSummary.summary != nil {
+			var existing *model.ToolUsageSummary
+			if raw, ok := c.Get(ctxkey.ToolInvocationSummary); ok {
+				if summary, ok := raw.(*model.ToolUsageSummary); ok {
+					existing = summary
+				}
+			}
+			merged := mergeToolUsageSummaries(existing, mcpSummary.summary)
+			c.Set(ctxkey.ToolInvocationSummary, merged)
+		}
+
+		choices := make([]openai_compatible.TextResponseChoice, 0, len(response.Choices))
+		for _, choice := range response.Choices {
+			choices = append(choices, openai_compatible.TextResponseChoice{
+				Index:        choice.Index,
+				Message:      choice.Message,
+				FinishReason: choice.FinishReason,
+			})
+		}
+		if err := renderChatResponseAsResponseAPI(c, http.StatusOK, &openai_compatible.SlimTextResponse{Choices: choices, Usage: response.Usage}, responseAPIRequest, meta); err != nil {
+			billing.ReturnPreConsumedQuota(ctx, preConsumedQuota, meta.TokenId)
+			return openai.ErrorWrapper(err, "response_rewrite_failed", http.StatusInternalServerError)
+		}
+
+		// refund pre-consumed quota immediately before final billing reconciliation
+		billing.ReturnPreConsumedQuota(ctx, preConsumedQuota, meta.TokenId)
+
+		if usage != nil {
+			userId := strconv.Itoa(meta.UserId)
+			username := c.GetString(ctxkey.Username)
+			if username == "" {
+				username = "unknown"
+			}
+			group := meta.Group
+			if group == "" {
+				group = "default"
+			}
+
+			apiFormat := c.GetString(ctxkey.APIFormat)
+			if apiFormat == "" {
+				apiFormat = "unknown"
+			}
+			apiType := relaymode.String(meta.Mode)
+			tokenId := strconv.Itoa(meta.TokenId)
+
+			metrics.GlobalRecorder.RecordRelayRequest(
+				meta.StartTime,
+				meta.ChannelId,
+				channeltype.IdToName(meta.ChannelType),
+				meta.ActualModelName,
+				userId,
+				group,
+				tokenId,
+				apiFormat,
+				apiType,
+				true,
+				usage.PromptTokens,
+				usage.CompletionTokens,
+				0,
+			)
+
+			userBalance := float64(c.GetInt64(ctxkey.UserQuota))
+			metrics.GlobalRecorder.RecordUserMetrics(
+				userId,
+				username,
+				group,
+				0,
+				usage.PromptTokens,
+				usage.CompletionTokens,
+				userBalance,
+			)
+
+			metrics.GlobalRecorder.RecordModelUsage(meta.ActualModelName, channeltype.IdToName(meta.ChannelType), time.Since(meta.StartTime))
+		}
+		return nil
+	}
 
 	convertedRequest, err := requestAdaptor.ConvertRequest(c, relaymode.ChatCompletions, chatRequest)
 	if err != nil {

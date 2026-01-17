@@ -77,6 +77,19 @@ func RelayTextHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 		}
 	}
 
+	registry, mcpToolNames, regErr := expandMCPBuiltinsInChatRequest(c, channelRecord, textRequest)
+	if regErr != nil {
+		return openai.ErrorWrapper(regErr, "mcp_tool_registry_failed", http.StatusBadRequest)
+	}
+	if registry != nil {
+		textRequest.ToolChoice = normalizeChatToolChoiceForMCP(textRequest.ToolChoice, mcpToolNames)
+		if textRequest.Stream {
+			lg.Warn("mcp tool execution forces non-streaming response")
+			textRequest.Stream = false
+			meta.IsStream = false
+		}
+	}
+
 	requestAdaptor := relay.GetAdaptor(meta.APIType)
 	if requestAdaptor == nil {
 		return openai.ErrorWrapper(errors.Errorf("invalid api type: %d", meta.APIType), "invalid_api_type", http.StatusBadRequest)
@@ -125,6 +138,77 @@ func RelayTextHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 	}
 
 	requestAdaptor.Init(meta)
+	if registry != nil {
+		response, usage, mcpSummary, execErr := executeChatMCPToolLoop(c, meta, textRequest, registry)
+		if execErr != nil {
+			billing.ReturnPreConsumedQuota(ctx, preConsumedQuota, meta.TokenId)
+			return execErr
+		}
+		tooling.ApplyBuiltinToolCharges(c, &usage, meta, channelRecord, requestAdaptor)
+		if mcpSummary != nil && mcpSummary.summary != nil {
+			var existing *model.ToolUsageSummary
+			if raw, ok := c.Get(ctxkey.ToolInvocationSummary); ok {
+				if summary, ok := raw.(*model.ToolUsageSummary); ok {
+					existing = summary
+				}
+			}
+			merged := mergeToolUsageSummaries(existing, mcpSummary.summary)
+			c.Set(ctxkey.ToolInvocationSummary, merged)
+		}
+
+		c.JSON(http.StatusOK, response)
+
+		// refund pre-consumed quota immediately
+		billing.ReturnPreConsumedQuota(ctx, preConsumedQuota, meta.TokenId)
+		if usage != nil {
+			userId := strconv.Itoa(meta.UserId)
+			username := c.GetString(ctxkey.Username)
+			if username == "" {
+				username = "unknown"
+			}
+			group := meta.Group
+			if group == "" {
+				group = "default"
+			}
+
+			apiFormat := c.GetString(ctxkey.APIFormat)
+			if apiFormat == "" {
+				apiFormat = "unknown"
+			}
+			apiType := relaymode.String(meta.Mode)
+			tokenId := strconv.Itoa(meta.TokenId)
+
+			metrics.GlobalRecorder.RecordRelayRequest(
+				meta.StartTime,
+				meta.ChannelId,
+				channeltype.IdToName(meta.ChannelType),
+				meta.ActualModelName,
+				userId,
+				group,
+				tokenId,
+				apiFormat,
+				apiType,
+				true,
+				usage.PromptTokens,
+				usage.CompletionTokens,
+				0,
+			)
+
+			userBalance := float64(c.GetInt64(ctxkey.UserQuota))
+			metrics.GlobalRecorder.RecordUserMetrics(
+				userId,
+				username,
+				group,
+				0,
+				usage.PromptTokens,
+				usage.CompletionTokens,
+				userBalance,
+			)
+
+			metrics.GlobalRecorder.RecordModelUsage(meta.ActualModelName, channeltype.IdToName(meta.ChannelType), time.Since(meta.StartTime))
+		}
+		return nil
+	}
 
 	// Downgrade structured JSON schema for providers that reject response_format
 	if requiresJSONSchemaDowngrade(meta, textRequest) {
