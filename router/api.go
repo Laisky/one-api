@@ -167,6 +167,7 @@ func SetApiRouter(router *gin.Engine) {
 			mcpServerRoute.GET("", controller.GetMCPServers)
 			mcpServerRoute.GET("/:id", controller.GetMCPServer)
 			mcpServerRoute.POST("/", controller.CreateMCPServer)
+			mcpServerRoute.POST("", controller.CreateMCPServer)
 			mcpServerRoute.PUT("/:id", controller.UpdateMCPServer)
 			mcpServerRoute.DELETE("/:id", controller.DeleteMCPServer)
 			mcpServerRoute.POST("/:id/sync", controller.SyncMCPServer)

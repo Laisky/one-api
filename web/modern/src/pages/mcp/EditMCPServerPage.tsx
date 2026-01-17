@@ -167,7 +167,7 @@ export function EditMCPServerPage() {
         auto_sync_enabled: values.auto_sync_enabled,
         auto_sync_interval_minutes: values.auto_sync_interval_minutes,
       };
-      const response = isEdit ? await api.put(`/api/mcp_servers/${serverId}`, payload) : await api.post('/api/mcp_servers', payload);
+        const response = isEdit ? await api.put(`/api/mcp_servers/${serverId}`, payload) : await api.post('/api/mcp_servers/', payload);
       const { success, message } = response.data;
       if (!success) {
         notify({

@@ -314,7 +314,9 @@ func migrateDB() error {
 		return errors.Wrapf(err, "failed to migrate AsyncTaskBinding")
 	}
 	if err = DB.AutoMigrate(&MCPServer{}); err != nil {
-		return errors.Wrapf(err, "failed to migrate MCPServer")
+		if !shouldIgnoreDuplicateColumn(err, "priority") {
+			return errors.Wrapf(err, "failed to migrate MCPServer")
+		}
 	}
 	if err = DB.AutoMigrate(&MCPTool{}); err != nil {
 		return errors.Wrapf(err, "failed to migrate MCPTool")
