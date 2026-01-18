@@ -283,8 +283,12 @@ func ListMCPServerTools(c *gin.Context) {
 	}
 
 	matched := applyMCPToolPricingToTools(tools, server.ToolPricing)
+	normalizedSchemas := normalizeMCPToolInputSchemas(tools)
 	if logger != nil && len(server.ToolPricing) > 0 {
 		logger.Debug("mcp tool pricing applied", zap.Int("server_id", server.Id), zap.Int("pricing_entries", len(server.ToolPricing)), zap.Int("tool_count", len(tools)), zap.Int("matched", matched))
+	}
+	if logger != nil && normalizedSchemas > 0 {
+		logger.Debug("mcp tool schema normalized", zap.Int("server_id", server.Id), zap.Int("normalized", normalizedSchemas))
 	}
 
 	c.JSON(http.StatusOK, gin.H{
@@ -325,6 +329,28 @@ func applyMCPToolPricingToTools(tools []*model.MCPTool, pricing map[string]model
 		}
 	}
 	return matched
+}
+
+// normalizeMCPToolInputSchemas replaces serialized null schema strings with empty values.
+func normalizeMCPToolInputSchemas(tools []*model.MCPTool) int {
+	if len(tools) == 0 {
+		return 0
+	}
+	count := 0
+	for _, tool := range tools {
+		if tool == nil {
+			continue
+		}
+		trimmed := strings.TrimSpace(tool.InputSchema)
+		if trimmed == "" {
+			continue
+		}
+		if strings.EqualFold(trimmed, "null") {
+			tool.InputSchema = ""
+			count++
+		}
+	}
+	return count
 }
 
 // applyMCPServerPayload copies request fields into the MCP server model.

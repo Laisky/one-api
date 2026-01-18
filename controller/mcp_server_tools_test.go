@@ -62,7 +62,7 @@ func TestListMCPServerToolsAppliesPricing(t *testing.T) {
 	require.NoError(t, model.UpsertMCPTools(server.Id, []*model.MCPTool{
 		{Name: "web_fetch", DisplayName: "web_fetch"},
 		{Name: "web_search", DisplayName: "web_search"},
-		{Name: "free_tool", DisplayName: "free_tool"},
+		{Name: "free_tool", DisplayName: "free_tool", InputSchema: "null"},
 	}))
 
 	gin.SetMode(gin.TestMode)
@@ -90,9 +90,11 @@ func TestListMCPServerToolsAppliesPricing(t *testing.T) {
 	fetchPricing := model.ToolPricingLocal(tools["web_fetch"].DefaultPricing)
 	searchPricing := model.ToolPricingLocal(tools["web_search"].DefaultPricing)
 	freePricing := model.ToolPricingLocal(tools["free_tool"].DefaultPricing)
+	freeSchema := tools["free_tool"].InputSchema
 
 	require.InDelta(t, 0.001, fetchPricing.UsdPerCall, 1e-9)
 	require.InDelta(t, 0.01, searchPricing.UsdPerCall, 1e-9)
 	require.Equal(t, int64(0), freePricing.QuotaPerCall)
 	require.InDelta(t, 0.0, freePricing.UsdPerCall, 1e-9)
+	require.Equal(t, "", freeSchema)
 }
