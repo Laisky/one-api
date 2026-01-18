@@ -40,6 +40,11 @@ func relayResponseAPIThroughChat(c *gin.Context, meta *metalib.Meta, responseAPI
 	if err != nil {
 		return openai.ErrorWrapper(err, "convert_response_api_request_failed", http.StatusBadRequest)
 	}
+	originalChatTools := append([]relaymodel.Tool(nil), chatRequest.Tools...)
+	responseTools := responseToolsForMCP(responseAPIRequest)
+	if len(responseTools) > 0 {
+		chatRequest.Tools = append(chatRequest.Tools, responseTools...)
+	}
 
 	meta.Mode = relaymode.ChatCompletions
 	meta.IsStream = chatRequest.Stream
@@ -66,9 +71,17 @@ func relayResponseAPIThroughChat(c *gin.Context, meta *metalib.Meta, responseAPI
 		}
 	}
 
-	registry, mcpToolNames, regErr := expandMCPBuiltinsInChatRequest(c, channelRecord, chatRequest)
+	requestAdaptor := relay.GetAdaptor(meta.APIType)
+	if requestAdaptor == nil {
+		return openai.ErrorWrapper(errors.New("invalid api type"), "invalid_api_type", http.StatusBadRequest)
+	}
+
+	registry, mcpToolNames, regErr := expandMCPBuiltinsInChatRequest(c, meta, channelRecord, requestAdaptor, chatRequest)
 	if regErr != nil {
 		return openai.ErrorWrapper(regErr, "mcp_tool_registry_failed", http.StatusBadRequest)
+	}
+	if registry == nil && len(responseTools) > 0 {
+		chatRequest.Tools = originalChatTools
 	}
 	if registry != nil {
 		responseAPIRequest.ToolChoice = normalizeMCPToolChoiceForResponse(responseAPIRequest.ToolChoice, mcpToolNames)
@@ -110,11 +123,7 @@ func relayResponseAPIThroughChat(c *gin.Context, meta *metalib.Meta, responseAPI
 		})
 	}
 
-	requestAdaptor := relay.GetAdaptor(meta.APIType)
-	if requestAdaptor == nil {
-		return openai.ErrorWrapper(errors.New("invalid api type"), "invalid_api_type", http.StatusBadRequest)
-	}
-	if err := tooling.ValidateResponseBuiltinTools(responseAPIRequest, meta, channelRecord, requestAdaptor); err != nil {
+	if err := tooling.ValidateResponseBuiltinToolsWithExclusions(responseAPIRequest, meta, channelRecord, requestAdaptor, mcpToolNames); err != nil {
 		return openai.ErrorWrapper(err, "tool_not_allowed", http.StatusBadRequest)
 	}
 	if err := tooling.ValidateChatBuiltinTools(c, chatRequest, meta, channelRecord, requestAdaptor); err != nil {
@@ -140,6 +149,8 @@ func relayResponseAPIThroughChat(c *gin.Context, meta *metalib.Meta, responseAPI
 
 	requestAdaptor.Init(meta)
 	if registry != nil {
+		c.Set(ctxkey.ResponseRewriteHandler, nil)
+		c.Set(ctxkey.ResponseStreamRewriteHandler, nil)
 		response, usage, mcpSummary, execErr := executeChatMCPToolLoop(c, meta, chatRequest, registry)
 		if execErr != nil {
 			billing.ReturnPreConsumedQuota(ctx, preConsumedQuota, meta.TokenId)
@@ -164,6 +175,13 @@ func relayResponseAPIThroughChat(c *gin.Context, meta *metalib.Meta, responseAPI
 				Message:      choice.Message,
 				FinishReason: choice.FinishReason,
 			})
+		}
+		if capture != nil {
+			prevWriter := c.Writer
+			c.Writer = origWriter
+			defer func() {
+				c.Writer = prevWriter
+			}()
 		}
 		if err := renderChatResponseAsResponseAPI(c, http.StatusOK, &openai_compatible.SlimTextResponse{Choices: choices, Usage: response.Usage}, responseAPIRequest, meta); err != nil {
 			billing.ReturnPreConsumedQuota(ctx, preConsumedQuota, meta.TokenId)

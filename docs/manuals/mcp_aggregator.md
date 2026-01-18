@@ -25,6 +25,10 @@ This manual describes Model Context Protocol (MCP) support in one-api. It covers
   - [2) Administrator Guide: MCP Settings](#2-administrator-guide-mcp-settings)
     - [MCP Server configuration fields](#mcp-server-configuration-fields)
     - [Configuration examples](#configuration-examples)
+      - [Example A: bearer auth + whitelist + pricing overrides](#example-a-bearer-auth--whitelist--pricing-overrides)
+      - [Example B: custom headers + blacklist](#example-b-custom-headers--blacklist)
+      - [Example C: API key auth + JSON headers](#example-c-api-key-auth--json-headers)
+      - [Missing pricing behavior](#missing-pricing-behavior)
     - [Sync and test operations](#sync-and-test-operations)
     - [Policy resolution summary](#policy-resolution-summary)
   - [3) Downstream User Guide: MCP and Built-in Tools](#3-downstream-user-guide-mcp-and-built-in-tools)
@@ -33,6 +37,7 @@ This manual describes Model Context Protocol (MCP) support in one-api. It covers
     - [Using the MCP proxy endpoint](#using-the-mcp-proxy-endpoint)
     - [Best practices](#best-practices)
     - [OpenAI Response API (cURL)](#openai-response-api-curl)
+      - [Server-qualified tool name](#server-qualified-tool-name)
     - [Claude Messages API (cURL)](#claude-messages-api-curl)
 
 ## 1) MCP Concepts, Functions, and Domain Knowledge
@@ -67,20 +72,20 @@ For every request, one-api builds an internal tool registry and routes tool call
 2. **Classification**: Split tools into `user_local`, `channel_builtin`, and `oneapi_builtin`.
 3. **Pre-dispatch conversion**:
 
-- Keep `channel_builtin` tools as upstream built-ins.
+- Keep `channel_builtin` tools as upstream built-ins (when allowed by channel/provider tooling policy).
 - Convert `oneapi_builtin` tools into local tool definitions so upstream models can call them as standard tools.
 - Keep `user_local` tools as local tools (but one-api never executes them).
 
-4. **Upstream call**: Send the normalized request to the selected channel.
-5. **Tool call handling**:
+1. **Upstream call**: Send the normalized request to the selected channel.
+1. **Tool call handling**:
 
 - If the model requests a tool call, one-api resolves it in the registry.
 - `oneapi_builtin` → one-api invokes the MCP server and returns tool results to the model.
 - `user_local` → one-api passes the tool call back to the client (existing local tool flow).
 
-6. **Multi-round loop**: Continue until the model completes or the tool round limit is reached.
+1. **Multi-round loop**: Continue until the model completes or the tool round limit is reached.
 
-This registry is preserved across retries, ensuring idempotency and consistent billing.
+This registry is preserved across retries, ensuring idempotency and consistent billing. When MCP tools are executed, one-api switches to a non-streaming tool loop to guarantee tool execution ordering.
 
 ### Priority and retry behavior
 
@@ -135,7 +140,7 @@ If the whitelist is empty, no MCP tools from that server are available until exp
 
 Below are common MCP server configurations. These examples match the settings page fields and show the exact JSON shapes expected by the API.
 
-**Example A: bearer auth + whitelist + pricing overrides**
+#### Example A: bearer auth + whitelist + pricing overrides
 
 ```json
 {
@@ -159,7 +164,7 @@ Below are common MCP server configurations. These examples match the settings pa
 }
 ```
 
-**Example B: custom headers + blacklist**
+#### Example B: custom headers + blacklist
 
 ```json
 {
@@ -182,7 +187,7 @@ Below are common MCP server configurations. These examples match the settings pa
 }
 ```
 
-**Example C: API key auth + JSON headers**
+#### Example C: API key auth + JSON headers
 
 ```json
 {
@@ -206,7 +211,7 @@ Below are common MCP server configurations. These examples match the settings pa
 }
 ```
 
-**Missing pricing behavior**
+#### Missing pricing behavior
 
 If a tool is listed in `tool_whitelist` but no pricing exists in the server pricing map, the tool is free by default. The UI should highlight this state (for example, “No price set → will be free”).
 
@@ -234,6 +239,15 @@ Downstream users can include MCP tools in their requests as built-in tools. one-
 
 MCP tools are declared using `type: "mcp"` with `server_label` and `server_url`. Use `allowed_tools` to explicitly list the tools you want the model to see from that MCP server.
 
+For OpenAI Responses and Claude Messages, the tool `type` field is treated as the tool name for MCP matching. If a configured MCP tool has the same name, one-api will convert it to a local function tool before sending the request upstream.
+
+Implicit aliasing is also supported:
+
+- If a tool type matches a known MCP tool name, one-api converts it to an MCP tool **even when** the upstream built-in is allowed.
+- If no MCP tool matches, the request stays as an upstream built-in.
+
+Use explicit `type: "mcp"` or a server-qualified tool name (e.g., `acme-tools.weather.get`) to force a specific MCP server when multiple servers expose the same tool.
+
 ### Tool selection rules
 
 When a tool call is issued, one-api resolves the tool with these rules:
@@ -255,6 +269,7 @@ The `/mcp` endpoint exposes a Streamable HTTP MCP server backed by one-api’s c
 - Use server-qualified tool names when you need a specific server.
 - Keep tool parameters consistent with the published schema to avoid validation errors upstream.
 - Review logs for tool usage and costs to confirm billing behavior.
+- Expect streaming responses to be downgraded to non-streaming when MCP tools are executed.
 
 ### OpenAI Response API (cURL)
 
@@ -279,7 +294,7 @@ curl "https://oneapi.laisky.com/v1/responses" \
   }'
 ```
 
-**Server-qualified tool name**
+#### Server-qualified tool name
 
 If multiple MCP servers expose the same tool name, qualify the tool name in your tool call as `server_label.tool_name` when available. This avoids ambiguity and ensures the correct MCP server is selected.
 

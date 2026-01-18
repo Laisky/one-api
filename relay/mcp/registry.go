@@ -141,6 +141,25 @@ func BuildToolCandidates(servers []*model.MCPServer, toolsByServer map[int][]*mo
 		}
 	}
 
+	if signature == "" {
+		hasSignature := false
+		for _, candidate := range candidates {
+			if candidate.Signature != "" {
+				hasSignature = true
+				break
+			}
+		}
+		if hasSignature {
+			filtered := make([]ToolCandidate, 0, len(candidates))
+			for _, candidate := range candidates {
+				if candidate.Signature != "" {
+					filtered = append(filtered, candidate)
+				}
+			}
+			candidates = filtered
+		}
+	}
+
 	if err := enforceSignatureDisambiguation(candidates, normalizedSignature); err != nil {
 		return nil, err
 	}
@@ -172,6 +191,9 @@ func SignatureFromJSON(raw string) (string, error) {
 	var parsed any
 	if err := json.Unmarshal([]byte(trimmed), &parsed); err != nil {
 		return "", errors.Wrap(err, "parse tool signature json")
+	}
+	if parsed == nil {
+		return "", nil
 	}
 	return SignatureFromSchema(parsed)
 }

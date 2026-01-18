@@ -138,6 +138,23 @@ func TestBuildToolCandidates_SignatureDisambiguation(t *testing.T) {
 	require.Equal(t, 1, candidates[0].ServerID)
 }
 
+func TestBuildToolCandidates_PrefersNonEmptySignature(t *testing.T) {
+	servers := []*model.MCPServer{
+		{Id: 1, Name: "mcp_empty", Priority: 5, ToolWhitelist: model.JSONStringSlice{"tool_a"}},
+		{Id: 2, Name: "mcp_schema", Priority: 1, ToolWhitelist: model.JSONStringSlice{"tool_a"}},
+	}
+	toolsByServer := map[int][]*model.MCPTool{
+		1: {{Name: "tool_a", InputSchema: ""}},
+		2: {{Name: "tool_a", InputSchema: `{"type":"object","properties":{"q":{"type":"string"}}}`}},
+	}
+
+	candidates, err := BuildToolCandidates(servers, toolsByServer, nil, nil, []string{"tool_a"}, "tool_a", "")
+	require.NoError(t, err)
+	require.Len(t, candidates, 1)
+	require.Equal(t, 2, candidates[0].ServerID)
+	require.NotEmpty(t, candidates[0].Signature)
+}
+
 func TestSignatureFromSchema_Canonicalization(t *testing.T) {
 	schemaA := map[string]any{
 		"type": "object",
@@ -161,4 +178,10 @@ func TestSignatureFromSchema_Canonicalization(t *testing.T) {
 	signatureB, err := SignatureFromSchema(schemaB)
 	require.NoError(t, err)
 	require.Equal(t, signatureA, signatureB)
+}
+
+func TestSignatureFromJSON_NullReturnsEmpty(t *testing.T) {
+	signature, err := SignatureFromJSON("null")
+	require.NoError(t, err)
+	require.Equal(t, "", signature)
 }

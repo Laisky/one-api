@@ -456,6 +456,28 @@ func TestValidateResponseBuiltinTools_Allowed(t *testing.T) {
 	require.NoError(t, ValidateResponseBuiltinTools(req, meta, channel, nil))
 }
 
+func TestValidateResponseBuiltinTools_Excluded(t *testing.T) {
+	t.Parallel()
+	req := &openai.ResponseAPIRequest{
+		Model: "gpt-4o",
+		Tools: []openai.ResponseAPITool{{Type: "web_search"}},
+	}
+	meta := &metalib.Meta{ActualModelName: "gpt-4o"}
+	channel := &model.Channel{}
+	require.NoError(t, channel.SetModelPriceConfigs(map[string]model.ModelConfigLocal{
+		"gpt-4o": {Ratio: 1},
+	}))
+	require.NoError(t, channel.SetToolingConfig(&model.ChannelToolingConfig{
+		Whitelist: []string{"code_interpreter"},
+		Pricing: map[string]model.ToolPricingLocal{
+			"code_interpreter": {UsdPerCall: 0.03},
+		},
+	}))
+
+	excluded := map[string]struct{}{"web_search": {}}
+	require.NoError(t, ValidateResponseBuiltinToolsWithExclusions(req, meta, channel, nil, excluded))
+}
+
 func TestValidateRequestedBuiltins_DefaultsRespectAzure(t *testing.T) {
 	t.Parallel()
 	meta := &metalib.Meta{ChannelType: channeltype.Azure, ActualModelName: "azure-gpt-5-nano"}

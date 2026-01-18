@@ -268,10 +268,27 @@ func NormalizeBuiltinType(toolType string) string {
 
 // ValidateResponseBuiltinTools verifies built-in tool usage on Response API requests prior to fallback conversions.
 func ValidateResponseBuiltinTools(request *openai.ResponseAPIRequest, meta *metalib.Meta, channel *model.Channel, provider adaptor.Adaptor) error {
+	return ValidateResponseBuiltinToolsWithExclusions(request, meta, channel, provider, nil)
+}
+
+// ValidateResponseBuiltinToolsWithExclusions verifies Response API built-ins while skipping excluded tool names.
+func ValidateResponseBuiltinToolsWithExclusions(request *openai.ResponseAPIRequest, meta *metalib.Meta, channel *model.Channel, provider adaptor.Adaptor, excluded map[string]struct{}) error {
 	if request == nil {
 		return nil
 	}
 	requested := CollectResponseBuiltins(request)
+	if len(requested) == 0 {
+		return nil
+	}
+	if len(excluded) > 0 {
+		for name := range excluded {
+			canonical := strings.ToLower(strings.TrimSpace(name))
+			if canonical == "" {
+				continue
+			}
+			delete(requested, canonical)
+		}
+	}
 	if len(requested) == 0 {
 		return nil
 	}
@@ -306,6 +323,30 @@ func ValidateRequestedBuiltins(modelName string, meta *metalib.Meta, channel *mo
 	}
 
 	return nil
+}
+
+// IsBuiltinToolAllowed reports whether a single built-in tool is allowed by policy.
+func IsBuiltinToolAllowed(modelName string, meta *metalib.Meta, channel *model.Channel, provider adaptor.Adaptor, toolName string) bool {
+	canonical := strings.ToLower(strings.TrimSpace(toolName))
+	if canonical == "" {
+		return false
+	}
+
+	effectiveModel := resolveModelName(meta, modelName)
+	effectiveProvider := provider
+	if channel != nil {
+		switch channel.Type {
+		case channeltype.Azure:
+			effectiveProvider = nil
+		}
+	} else if meta != nil {
+		switch meta.ChannelType {
+		case channeltype.Azure:
+			effectiveProvider = nil
+		}
+	}
+	policy := buildToolPolicy(channel, effectiveProvider, effectiveModel)
+	return policy.isAllowed(canonical)
 }
 
 // toolPolicy models the effective allowlist and pricing for built-in tools.

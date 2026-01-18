@@ -83,18 +83,15 @@
         "format_json": "JSON を整形",
         "load_defaults": "デフォルトを読み込む"
       },
-      "mcp": {
-        "blacklist_label": "MCP tool blacklist",
-        "blacklist_description": "Block MCP tools for this channel. Use server.tool or tool name.",
-        "blacklist_placeholder": "server.tool_name",
-        "blacklist_add": "Add"
-      },
       "channel_type": {
         "15": {
           "tip": "Baidu コンソールから AK (API Key) と SK (Secret Key) を取得"
         },
         "18": {
           "tip": "WebSocket バージョン API"
+        },
+        "29": {
+          "description": "Groq-hosted LLaMA-style models via OpenAI schema."
         },
         "40": {
           "description": "旧 ByteDance Doubao"
@@ -118,6 +115,17 @@
           "label": "アカウント ID",
           "placeholder": "d8d7c61dbc334c32d3ced580e4bf42b4"
         }
+      },
+      "common": {
+        "add": "Add",
+        "base_url": {
+          "fixed_note": "Using default: {{url}}",
+          "help_editable": "Custom API base URL. Leave empty to use the default URL.",
+          "help_readonly": "The API base URL for this channel type is fixed and cannot be modified.",
+          "label": "API Base URL",
+          "placeholder": "https://api.example.com"
+        },
+        "format_json": "Format JSON"
       },
       "coze": {
         "auth_type": {
@@ -185,6 +193,7 @@
         }
       },
       "groups": {
+        "add_placeholder": "Add custom group...",
         "help": "特定のユーザーグループへのアクセスを制限します。空の場合はすべてのユーザーがアクセスできます。デフォルトグループは常に保持されます。",
         "label": "グループ *"
       },
@@ -194,13 +203,24 @@
         "note": "モデル名を AWS Bedrock 推論プロファイル ARN にマッピング (任意)",
         "placeholder": "AWS Bedrock 推論プロファイル ARN マッピング:\n{{example}}"
       },
+      "key": {
+        "help": "The API key for authentication with the provider.",
+        "label": "API Key"
+      },
       "loading": "チャンネルを読み込み中...",
+      "mcp": {
+        "blacklist_add": "Add",
+        "blacklist_description": "Block MCP tools for this channel. Use server.tool or tool name.",
+        "blacklist_label": "MCP tool blacklist",
+        "blacklist_placeholder": "server.tool_name"
+      },
       "model_configs": {
         "format_error": "model_configs を整形できません: {{error}}",
         "help": "モデルごとの統一設定。フィールド: ratio (入力価格乗数), completion_ratio (出力乗数), max_tokens (制限)。",
         "invalid": "無効なモデル設定フォーマット",
         "invalid_short": "✗ 無効な設定",
         "label": "モデル設定 (JSON)",
+        "load_default": "Load Default",
         "note": "モデルごとの価格と制限を設定 (任意)",
         "placeholder": "JSON 形式のモデル設定:\n{{example}}",
         "select_type_notice": "モデル設定を構成するにはチャンネルタイプを選択してください。",
@@ -214,6 +234,7 @@
       },
       "models": {
         "add_custom": "追加",
+        "clear": "Clear",
         "clear_all": "すべてクリア",
         "copy_title": "クリックしてモデル名をコピー",
         "custom_placeholder": "カスタムモデルを追加...",
@@ -221,8 +242,16 @@
         "fill_related": "関連モデルを入力 ({{count}})",
         "help": "このチャンネルで利用可能なモデル。すべてのプロバイダーモデルを許可するには空のままにしてください。ボタンを使用して関連/すべてのモデルを入力します。重複は削除されます。",
         "label": "サポートされているモデル *",
+        "no_match": "No models found",
+        "no_selection": "No models selected",
         "search_placeholder": "モデルを検索...",
-        "select_type_notice": "サポートされているモデルを構成するにはチャンネルタイプを選択してください。"
+        "select_type_notice": "サポートされているモデルを構成するにはチャンネルタイプを選択してください。",
+        "selected_count": "Selected Models ({{count}})"
+      },
+      "name": {
+        "help": "A descriptive name for this channel to identify it in logs and lists.",
+        "label": "Channel Name *",
+        "placeholder": "My Channel"
       },
       "openai_compatible": {
         "api_format": {
@@ -248,6 +277,14 @@
           "placeholder": "プラグイン固有のパラメータ"
         }
       },
+      "priority": {
+        "help": "Higher priority channels are tried first. Default is 0.",
+        "label": "Priority"
+      },
+      "ratelimit": {
+        "help": "Maximum requests per minute. 0 means unlimited.",
+        "label": "Rate Limit"
+      },
       "spark": {
         "version": {
           "help": "iFlytek Spark の API バージョンを選択します (例: v3.5)。",
@@ -265,6 +302,9 @@
         "edit": "チャンネルを編集"
       },
       "tooling": {
+        "add_custom": "Add custom tool...",
+        "available_tools": "Available Tools",
+        "editor_disabled": "Fix JSON error to enable editor",
         "errors": {
           "invalid_json_message": "ホワイトリストを編集する前にツール JSON を修正してください。",
           "invalid_json_title": "無効な JSON"
@@ -274,6 +314,7 @@
         "help": "チャンネル全体の組み込みツールポリシーを定義します。プロバイダーの組み込みツールのホワイトリストと呼び出しごとの価格を設定します。",
         "invalid": "無効なツール設定フォーマット",
         "label": "ツール設定 (JSON)",
+        "no_whitelist": "No tools whitelisted",
         "note": "組み込みツール許可リストと呼び出しごとの価格を設定 (任意)",
         "placeholder": "JSON 形式のツール設定:\n{{example}}",
         "whitelist": {
@@ -284,7 +325,23 @@
           "pricing_required": "\"{{tool}}\" のブロックを解除するには価格を設定してください。価格が設定されるまでリクエストはブロックされます。",
           "subtitle": "空のホワイトリストはすべてのプロバイダーツールを利用可能にします。",
           "title": "組み込みツールホワイトリスト"
-        }
+        },
+        "whitelist_editor": "Whitelist Editor",
+        "whitelisted_tools": "Whitelisted Tools ({{count}})"
+      },
+      "type": {
+        "help": "The provider type for this channel. Changing this may reset some fields.",
+        "label": "Channel Type *",
+        "not_found": "No channel type found.",
+        "placeholder": "Select a channel type",
+        "search": "Search channel type..."
+      },
+      "type_change": {
+        "cancel": "Cancel",
+        "confirm": "Change Type",
+        "description": "You are about to change the channel type from \"{{fromType}}\" to \"{{toType}}\".",
+        "title": "Change Channel Type?",
+        "warning": "Warning: This may reset some configuration fields specific to the previous channel type. Any unsaved changes may be lost."
       },
       "validation": {
         "api_key_required": "API キーは必須です。",
@@ -321,6 +378,10 @@
           "label": "リージョン *",
           "placeholder": "us-central1"
         }
+      },
+      "weight": {
+        "help": "Used for load balancing between channels of the same priority. Default is 0.",
+        "label": "Weight"
       }
     },
     "empty": "チャンネルが見つかりません。まずはチャンネルを作成してください。",
@@ -626,10 +687,10 @@
     },
     "edit": {
       "actions": {
+        "add": "Add",
         "cancel": "キャンセル",
         "create": "ユーザーを作成",
         "creating": "作成中...",
-        "add": "Add",
         "update": "ユーザーを更新",
         "updating": "更新中..."
       },

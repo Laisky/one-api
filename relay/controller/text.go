@@ -77,7 +77,12 @@ func RelayTextHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 		}
 	}
 
-	registry, mcpToolNames, regErr := expandMCPBuiltinsInChatRequest(c, channelRecord, textRequest)
+	requestAdaptor := relay.GetAdaptor(meta.APIType)
+	if requestAdaptor == nil {
+		return openai.ErrorWrapper(errors.Errorf("invalid api type: %d", meta.APIType), "invalid_api_type", http.StatusBadRequest)
+	}
+
+	registry, mcpToolNames, regErr := expandMCPBuiltinsInChatRequest(c, meta, channelRecord, requestAdaptor, textRequest)
 	if regErr != nil {
 		return openai.ErrorWrapper(regErr, "mcp_tool_registry_failed", http.StatusBadRequest)
 	}
@@ -88,11 +93,6 @@ func RelayTextHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 			textRequest.Stream = false
 			meta.IsStream = false
 		}
-	}
-
-	requestAdaptor := relay.GetAdaptor(meta.APIType)
-	if requestAdaptor == nil {
-		return openai.ErrorWrapper(errors.Errorf("invalid api type: %d", meta.APIType), "invalid_api_type", http.StatusBadRequest)
 	}
 
 	// get model ratio using three-layer pricing system

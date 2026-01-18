@@ -58,6 +58,11 @@ func RelayResponseAPIHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 		responseAPIRequest.ToolChoice = normalized
 	}
 
+	requestAdaptor := relay.GetAdaptor(meta.APIType)
+	if requestAdaptor == nil {
+		return openai.ErrorWrapper(errors.New("invalid api type"), "invalid_api_type", http.StatusBadRequest)
+	}
+
 	requestedBuiltins := make(map[string]struct{})
 	for _, tool := range responseAPIRequest.Tools {
 		if name := tooling.NormalizeBuiltinType(tool.Type); name != "" {
@@ -65,7 +70,7 @@ func RelayResponseAPIHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 		}
 	}
 
-	if hasMCP, err := hasMCPBuiltinsInResponseRequest(c, channelRecord, responseAPIRequest); err != nil {
+	if hasMCP, err := hasMCPBuiltinsInResponseRequest(c, meta, channelRecord, requestAdaptor, responseAPIRequest); err != nil {
 		return openai.ErrorWrapper(err, "mcp_tool_registry_failed", http.StatusBadRequest)
 	} else if hasMCP {
 		lg.Debug("response api request routed through chat fallback for MCP tools",
@@ -98,10 +103,6 @@ func RelayResponseAPIHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 	metalib.Set2Context(c, meta)
 	c.Set(ctxkey.ConvertedRequest, responseAPIRequest)
 
-	requestAdaptor := relay.GetAdaptor(meta.APIType)
-	if requestAdaptor == nil {
-		return openai.ErrorWrapper(errors.New("invalid api type"), "invalid_api_type", http.StatusBadRequest)
-	}
 	if pruned := tooling.PruneDisallowedResponseBuiltins(responseAPIRequest, meta, channelRecord, requestAdaptor); len(pruned) > 0 {
 		for _, name := range pruned {
 			delete(requestedBuiltins, name)

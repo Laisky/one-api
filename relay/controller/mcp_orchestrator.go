@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"encoding/json"
+	"strconv"
 	"strings"
 	"time"
 
@@ -47,19 +48,32 @@ type mcpExecutionSummary struct {
 }
 
 // hasMCPBuiltinsInResponseRequest determines whether a Response API request references MCP tools.
-func hasMCPBuiltinsInResponseRequest(c *gin.Context, channelRecord *model.Channel, request *openai.ResponseAPIRequest) (bool, error) {
+func hasMCPBuiltinsInResponseRequest(c *gin.Context, meta *metalib.Meta, channelRecord *model.Channel, provider adaptor.Adaptor, request *openai.ResponseAPIRequest) (bool, error) {
 	if request == nil {
 		return false, nil
 	}
-	chatRequest, err := openai.ConvertResponseAPIToChatCompletionRequest(request)
-	if err != nil {
-		return false, err
-	}
-	registry, _, err := expandMCPBuiltinsInChatRequest(c, channelRecord, chatRequest)
+	chatRequest := &relaymodel.GeneralOpenAIRequest{Model: request.Model, Tools: responseToolsForMCP(request)}
+	registry, _, err := expandMCPBuiltinsInChatRequest(c, meta, channelRecord, provider, chatRequest)
 	if err != nil {
 		return false, err
 	}
 	return registry != nil, nil
+}
+
+// responseToolsForMCP extracts non-function tools for MCP matching from a Response API request.
+func responseToolsForMCP(request *openai.ResponseAPIRequest) []relaymodel.Tool {
+	if request == nil {
+		return nil
+	}
+	tools := make([]relaymodel.Tool, 0, len(request.Tools))
+	for _, tool := range request.Tools {
+		toolType := strings.TrimSpace(tool.Type)
+		if toolType == "" || strings.EqualFold(toolType, "function") {
+			continue
+		}
+		tools = append(tools, relaymodel.Tool{Type: toolType})
+	}
+	return tools
 }
 
 type mcpToolCatalog struct {
@@ -106,10 +120,11 @@ func loadChannelMCPBlacklist(channelRecord *model.Channel) ([]string, error) {
 }
 
 // expandMCPBuiltinsInChatRequest replaces MCP built-ins with local function tools for upstream.
-func expandMCPBuiltinsInChatRequest(c *gin.Context, channelRecord *model.Channel, request *relaymodel.GeneralOpenAIRequest) (*mcpToolRegistry, map[string]struct{}, error) {
+func expandMCPBuiltinsInChatRequest(c *gin.Context, meta *metalib.Meta, channelRecord *model.Channel, provider adaptor.Adaptor, request *relaymodel.GeneralOpenAIRequest) (*mcpToolRegistry, map[string]struct{}, error) {
 	if request == nil {
 		return nil, nil, nil
 	}
+	lg := gmw.GetLogger(c)
 	user, err := getRelayUserFromContext(c)
 	if err != nil {
 		return nil, nil, err
@@ -152,19 +167,35 @@ func expandMCPBuiltinsInChatRequest(c *gin.Context, channelRecord *model.Channel
 			updatedTools = append(updatedTools, functionTools...)
 			continue
 		default:
-			if tooling.NormalizeBuiltinType(tool.Type) != "" {
-				updatedTools = append(updatedTools, tool)
-				continue
-			}
-
 			requested, functionTool, matched, err := expandAliasedMCPTool(catalog, channelBlacklist, user.MCPToolBlacklist, tool.Type)
 			if err != nil {
 				return nil, nil, err
 			}
 			if matched {
-				mcpNames[strings.ToLower(requested.Name)] = struct{}{}
-				registry.candidatesByName[strings.ToLower(requested.Name)] = requested.Candidates
+				name := strings.ToLower(requested.Name)
+				mcpNames[name] = struct{}{}
+				if builtin := tooling.NormalizeBuiltinType(tool.Type); builtin != "" {
+					mcpNames[builtin] = struct{}{}
+				}
+				registry.candidatesByName[name] = requested.Candidates
 				updatedTools = append(updatedTools, functionTool)
+				paramKeys := []string{}
+				if functionTool.Function != nil {
+					if params, ok := functionTool.Function.Parameters.(map[string]any); ok {
+						for key := range params {
+							paramKeys = append(paramKeys, key)
+						}
+					}
+				}
+				lg.Debug("converted tool to mcp",
+					zap.String("tool", tool.Type),
+					zap.Bool("has_parameters", functionTool.Function != nil && functionTool.Function.Parameters != nil),
+					zap.Strings("parameter_keys", paramKeys),
+				)
+				continue
+			}
+			if tooling.NormalizeBuiltinType(tool.Type) != "" {
+				updatedTools = append(updatedTools, tool)
 				continue
 			}
 		}
@@ -294,6 +325,9 @@ func buildFunctionToolFromMCP(candidate mcp.ToolCandidate) (relaymodel.Tool, err
 			return relaymodel.Tool{}, errors.Wrap(err, "parse mcp tool schema")
 		}
 	}
+	if len(schema) == 0 {
+		schema = map[string]any{"type": "object"}
+	}
 	return relaymodel.Tool{
 		Type: "function",
 		Function: &relaymodel.Function{
@@ -365,7 +399,22 @@ func executeChatMCPToolLoop(c *gin.Context, meta *metalib.Meta, request *relaymo
 			return response, accumulated, summary, nil
 		}
 
+		callNames := make([]string, 0, len(choice.Message.ToolCalls))
+		unmatched := make([]string, 0)
+		for _, call := range choice.Message.ToolCalls {
+			if call.Function == nil {
+				unmatched = append(unmatched, "<nil>")
+				continue
+			}
+			callNames = append(callNames, call.Function.Name)
+			if !registry.isMCPTool(call.Function.Name) {
+				unmatched = append(unmatched, call.Function.Name)
+			}
+		}
+		lg.Debug("mcp tool calls received", zap.Strings("tool_calls", callNames), zap.Strings("unmatched_tools", unmatched))
+
 		if !allMCPToolCalls(choice.Message.ToolCalls, registry) {
+			lg.Debug("skipping mcp execution due to non-mcp tool calls")
 			return response, accumulated, summary, nil
 		}
 
@@ -386,6 +435,7 @@ func executeChatMCPToolLoop(c *gin.Context, meta *metalib.Meta, request *relaymo
 
 // doChatRequestOnce executes one upstream chat request and captures the response.
 func doChatRequestOnce(c *gin.Context, meta *metalib.Meta, adaptorInstance adaptor.Adaptor, request *relaymodel.GeneralOpenAIRequest) (*openai.TextResponse, *relaymodel.Usage, *relaymodel.ErrorWithStatusCode) {
+	logMCPRequestToolSchemas(c, request)
 	convertedRequest, err := adaptorInstance.ConvertRequest(c, meta.Mode, request)
 	if err != nil {
 		return nil, nil, openai.ErrorWrapper(err, "convert_request_failed", 500)
@@ -416,7 +466,48 @@ func doChatRequestOnce(c *gin.Context, meta *metalib.Meta, adaptorInstance adapt
 	if err := json.Unmarshal(capture.BodyBytes(), &parsed); err != nil {
 		return nil, usage, openai.ErrorWrapper(err, "parse_chat_response_failed", 500)
 	}
+	if len(parsed.Choices) > 0 {
+		choice := parsed.Choices[0]
+		toolNames := make([]string, 0, len(choice.Message.ToolCalls))
+		for _, call := range choice.Message.ToolCalls {
+			if call.Function == nil {
+				toolNames = append(toolNames, "<nil>")
+				continue
+			}
+			toolNames = append(toolNames, call.Function.Name)
+		}
+		lg := gmw.GetLogger(c)
+		lg.Debug("upstream tool calls parsed", zap.Strings("tool_calls", toolNames))
+	}
 	return &parsed, usage, nil
+}
+
+// logMCPRequestToolSchemas records MCP tool schema presence before upstream dispatch.
+func logMCPRequestToolSchemas(c *gin.Context, request *relaymodel.GeneralOpenAIRequest) {
+	if c == nil || request == nil || len(request.Tools) == 0 {
+		return
+	}
+	lg := gmw.GetLogger(c)
+	entries := make([]zap.Field, 0, len(request.Tools))
+	for idx, tool := range request.Tools {
+		if tool.Function == nil {
+			entries = append(entries, zap.Bool("tool_"+strconv.Itoa(idx)+"_has_function", false))
+			entries = append(entries, zap.String("tool_"+strconv.Itoa(idx)+"_type", tool.Type))
+			continue
+		}
+		params, _ := tool.Function.Parameters.(map[string]any)
+		paramKeys := make([]string, 0, len(params))
+		for key := range params {
+			paramKeys = append(paramKeys, key)
+		}
+		entries = append(entries,
+			zap.String("tool_"+strconv.Itoa(idx)+"_type", tool.Type),
+			zap.String("tool_"+strconv.Itoa(idx)+"_name", tool.Function.Name),
+			zap.Bool("tool_"+strconv.Itoa(idx)+"_has_parameters", tool.Function.Parameters != nil),
+			zap.Strings("tool_"+strconv.Itoa(idx)+"_parameter_keys", paramKeys),
+		)
+	}
+	lg.Debug("mcp tool schema snapshot", entries...)
 }
 
 // firstChoice returns the first chat choice when available.
@@ -446,6 +537,7 @@ func allMCPToolCalls(calls []relaymodel.Tool, registry *mcpToolRegistry) bool {
 // executeMCPToolCalls invokes MCP tools and returns tool result messages.
 func executeMCPToolCalls(c *gin.Context, registry *mcpToolRegistry, calls []relaymodel.Tool, executed map[string]struct{}, summary *mcpExecutionSummary) ([]relaymodel.Message, error) {
 	results := make([]relaymodel.Message, 0, len(calls))
+	lg := gmw.GetLogger(c)
 	for _, call := range calls {
 		if call.Function == nil {
 			continue
@@ -474,6 +566,11 @@ func executeMCPToolCalls(c *gin.Context, registry *mcpToolRegistry, calls []rela
 			}
 			headers := registry.requestHeaders[strings.ToLower(name)]
 			client := mcp.NewStreamableHTTPClient(server, headers, time.Duration(config.MCPToolCallTimeoutSec)*time.Second)
+			lg.Debug("invoking mcp tool",
+				zap.String("tool", candidate.Tool.Name),
+				zap.Int("server_id", candidate.ServerID),
+				zap.String("server_label", candidate.ServerLabel),
+			)
 			return client.CallTool(ctx, candidate.Tool.Name, args)
 		})
 		if err != nil {

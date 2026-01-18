@@ -29,10 +29,10 @@
 		"description": "配置并管理 API 路由渠道",
 		"edit": {
 			"actions": {
+				"add": "Add",
 				"cancel": "取消",
 				"create": "创建渠道",
 				"creating": "正在创建...",
-				"add": "Add",
 				"test_channel": "测试渠道",
 				"update": "更新渠道",
 				"updating": "正在更新..."
@@ -91,6 +91,9 @@
 				"18": {
 					"tip": "WebSocket 版本 API"
 				},
+				"29": {
+					"description": "Groq-hosted LLaMA-style models via OpenAI schema."
+				},
 				"40": {
 					"description": "原字节跳动豆包"
 				},
@@ -111,18 +114,23 @@
 					"tip": "渠道密钥填写 GitHub access token；Base URL 默认为 https://api.githubcopilot.com"
 				}
 			},
-			"mcp": {
-				"blacklist_label": "MCP tool blacklist",
-				"blacklist_description": "Block MCP tools for this channel. Use server.tool or tool name.",
-				"blacklist_placeholder": "server.tool_name",
-				"blacklist_add": "Add"
-			},
 			"cloudflare": {
 				"account": {
 					"help": "AI 网关的 Cloudflare 账户 ID。",
 					"label": "账户 ID",
 					"placeholder": "d8d7c61dbc334c32d3ced580e4bf42b4"
 				}
+			},
+			"common": {
+				"add": "Add",
+				"base_url": {
+					"fixed_note": "Using default: {{url}}",
+					"help_editable": "Custom API base URL. Leave empty to use the default URL.",
+					"help_readonly": "The API base URL for this channel type is fixed and cannot be modified.",
+					"label": "API Base URL",
+					"placeholder": "https://api.example.com"
+				},
+				"format_json": "Format JSON"
 			},
 			"coze": {
 				"auth_type": {
@@ -190,27 +198,39 @@
 				}
 			},
 			"groups": {
+				"add_placeholder": "Add custom group...",
 				"help": "限制特定用户组的访问。留空表示所有用户都可以访问。默认分组始终保留。",
 				"label": "分组 *"
 			},
 			"inference_profile": {
+				"help": "模型名称到 AWS Bedrock 推理配置文件 ARN 的 JSON 映射。用于通过特定 Bedrock 推理配置文件路由某些模型。",
+				"label": "推理配置文件 ARN 映射 (AWS Bedrock)",
 				"mcp_tool_blacklist": {
 					"help": "Block MCP tools for this user. Use server.tool or tool name.",
 					"label": "MCP tool blacklist",
 					"placeholder": "server.tool_name"
 				},
-				"help": "模型名称到 AWS Bedrock 推理配置文件 ARN 的 JSON 映射。用于通过特定 Bedrock 推理配置文件路由某些模型。",
-				"label": "推理配置文件 ARN 映射 (AWS Bedrock)",
 				"note": "将模型名称映射到 AWS Bedrock 推理配置文件 ARN (可选)",
 				"placeholder": "AWS Bedrock 推理配置文件 ARN 映射:\n{{example}}"
 			},
+			"key": {
+				"help": "The API key for authentication with the provider.",
+				"label": "API Key"
+			},
 			"loading": "正在加载渠道...",
+			"mcp": {
+				"blacklist_add": "Add",
+				"blacklist_description": "Block MCP tools for this channel. Use server.tool or tool name.",
+				"blacklist_label": "MCP tool blacklist",
+				"blacklist_placeholder": "server.tool_name"
+			},
 			"model_configs": {
 				"format_error": "无法格式化 model_configs: {{error}}",
 				"help": "统一的每个模型设置。字段: ratio (输入定价乘数), completion_ratio (输出乘数), max_tokens (限制)。",
 				"invalid": "无效的模型配置格式",
 				"invalid_short": "✗ 无效配置",
 				"label": "模型配置 (JSON)",
+				"load_default": "Load Default",
 				"note": "配置每个模型的定价和限制 (可选)",
 				"placeholder": "JSON 格式的模型配置:\n{{example}}",
 				"select_type_notice": "选择渠道类型以配置模型配置。",
@@ -224,6 +244,7 @@
 			},
 			"models": {
 				"add_custom": "添加",
+				"clear": "Clear",
 				"clear_all": "全部清除",
 				"copy_title": "点击复制模型名称",
 				"custom_placeholder": "添加自定义模型...",
@@ -231,8 +252,16 @@
 				"fill_related": "填充相关模型 ({{count}})",
 				"help": "此渠道可用的模型。留空以允许所有提供商模型。使用按钮填充相关/所有模型；重复项将被删除。",
 				"label": "支持的模型 *",
+				"no_match": "No models found",
+				"no_selection": "No models selected",
 				"search_placeholder": "搜索模型...",
-				"select_type_notice": "选择渠道类型以配置支持的模型。"
+				"select_type_notice": "选择渠道类型以配置支持的模型。",
+				"selected_count": "Selected Models ({{count}})"
+			},
+			"name": {
+				"help": "A descriptive name for this channel to identify it in logs and lists.",
+				"label": "Channel Name *",
+				"placeholder": "My Channel"
 			},
 			"openai_compatible": {
 				"api_format": {
@@ -258,6 +287,14 @@
 					"placeholder": "插件特定参数"
 				}
 			},
+			"priority": {
+				"help": "Higher priority channels are tried first. Default is 0.",
+				"label": "Priority"
+			},
+			"ratelimit": {
+				"help": "Maximum requests per minute. 0 means unlimited.",
+				"label": "Rate Limit"
+			},
 			"spark": {
 				"version": {
 					"help": "选择讯飞星火的 API 版本 (例如 v3.5)。",
@@ -275,6 +312,9 @@
 				"edit": "编辑渠道"
 			},
 			"tooling": {
+				"add_custom": "Add custom tool...",
+				"available_tools": "Available Tools",
+				"editor_disabled": "Fix JSON error to enable editor",
 				"errors": {
 					"invalid_json_message": "在编辑白名单之前修复工具 JSON。",
 					"invalid_json_title": "无效 JSON"
@@ -284,6 +324,7 @@
 				"help": "定义渠道范围的内置工具策略。配置提供商内置工具的白名单和每次调用的定价。",
 				"invalid": "无效的工具配置格式",
 				"label": "工具配置 (JSON)",
+				"no_whitelist": "No tools whitelisted",
 				"note": "配置内置工具允许列表和每次调用的定价 (可选)",
 				"placeholder": "JSON 格式的工具配置:\n{{example}}",
 				"whitelist": {
@@ -294,7 +335,23 @@
 					"pricing_required": "设置定价以解锁 \"{{tool}}\"。请求将被阻止，直到配置定价。",
 					"subtitle": "空白白名单保留所有提供商工具可用。",
 					"title": "内置工具白名单"
-				}
+				},
+				"whitelist_editor": "Whitelist Editor",
+				"whitelisted_tools": "Whitelisted Tools ({{count}})"
+			},
+			"type": {
+				"help": "The provider type for this channel. Changing this may reset some fields.",
+				"label": "Channel Type *",
+				"not_found": "No channel type found.",
+				"placeholder": "Select a channel type",
+				"search": "Search channel type..."
+			},
+			"type_change": {
+				"cancel": "Cancel",
+				"confirm": "Change Type",
+				"description": "You are about to change the channel type from \"{{fromType}}\" to \"{{toType}}\".",
+				"title": "Change Channel Type?",
+				"warning": "Warning: This may reset some configuration fields specific to the previous channel type. Any unsaved changes may be lost."
 			},
 			"validation": {
 				"api_key_required": "API 密钥是必填项。",
@@ -331,6 +388,10 @@
 					"label": "区域 *",
 					"placeholder": "us-central1"
 				}
+			},
+			"weight": {
+				"help": "Used for load balancing between channels of the same priority. Default is 0.",
+				"label": "Weight"
 			}
 		},
 		"empty": "尚未找到渠道，请先创建一个渠道。",

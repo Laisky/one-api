@@ -54,6 +54,30 @@ export const ChannelModelSettings = ({
     form.setValue('model_mapping', formatted);
   };
 
+  /**
+   * formatModelConfigs formats the model_configs JSON for readability and updates the form value.
+   * @returns void
+   */
+  const formatModelConfigs = () => {
+    const current = form.getValues('model_configs');
+    const formatted = formatJSON(current);
+    form.setValue('model_configs', formatted);
+  };
+
+  /**
+   * loadDefaultModelConfigs applies the default pricing config to the model_configs field.
+   * @returns void
+   */
+  const loadDefaultModelConfigs = () => {
+    console.debug('[ChannelModelSettings] Load default model configs', {
+      hasDefaultPricing: Boolean(defaultPricing),
+    });
+    if (!defaultPricing) {
+      return;
+    }
+    form.setValue('model_configs', defaultPricing);
+  };
+
   return (
     <div className="space-y-6">
       <FormField

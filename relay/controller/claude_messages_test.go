@@ -124,6 +124,27 @@ func TestGetAndValidateClaudeMessagesRequest(t *testing.T) {
 	}
 }
 
+func TestBuildClaudeToolsForMCP(t *testing.T) {
+	req := &relaymodel.ClaudeRequest{
+		Tools: []relaymodel.ClaudeTool{
+			{Type: "web_search_20250305", Name: "web_search"},
+			{
+				Name:        "local_tool",
+				Description: "Local tool",
+				InputSchema: map[string]any{"type": "object"},
+			},
+		},
+	}
+
+	tools := buildClaudeToolsForMCP(req)
+	require.Len(t, tools, 2)
+	require.Equal(t, "web_search_20250305", tools[0].Type)
+	require.Nil(t, tools[0].Function)
+	require.Equal(t, "function", tools[1].Type)
+	require.NotNil(t, tools[1].Function)
+	require.Equal(t, "local_tool", tools[1].Function.Name)
+}
+
 func TestGetClaudeMessagesPromptTokens(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
