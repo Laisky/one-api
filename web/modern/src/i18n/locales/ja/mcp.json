@@ -1,0 +1,107 @@
+{
+  "mcp": {
+    "edit": {
+      "actions": {
+        "add": "Add",
+        "cancel": "Cancel",
+        "create": "Create Server",
+        "update": "Update Server"
+      },
+      "fields": {
+        "api_key": "API key",
+        "auth_type": "Auth type",
+        "auth_type_api_key": "API Key",
+        "auth_type_bearer": "Bearer",
+        "auth_type_custom_headers": "Custom headers",
+        "auth_type_none": "None",
+        "auto_sync": "Auto sync",
+        "auto_sync_help": "Sync tools on a schedule.",
+        "auto_sync_interval": "Sync interval (minutes)",
+        "base_url": "Base URL",
+        "description": "Description",
+        "headers": "Custom headers (JSON)",
+        "name": "Name",
+        "priority": "Priority",
+        "protocol": "Protocol",
+        "protocol_streamable": "Streamable HTTP",
+        "status": "Status",
+        "tool_blacklist": "Tool blacklist",
+        "tool_blacklist_empty": "No tools blocked",
+        "tool_blacklist_help": "Blocked tools will never be exposed.",
+        "tool_blacklist_none": "No synced tools",
+        "tool_blacklist_placeholder": "tool_name",
+        "tool_blacklist_selected": "Blocked Tools ({{count}})",
+        "tool_custom": "Add custom tool...",
+        "tool_pricing": "Tool pricing (JSON)",
+        "tool_pricing_placeholder": "{\n  \"web_search\": { \"usd_per_call\": 0.002 },\n  \"code_interpreter\": { \"quota_per_call\": 1000 }\n}",
+        "tool_search": "Search tools...",
+        "tool_whitelist": "Tool whitelist",
+        "tool_whitelist_empty": "No tools selected",
+        "tool_whitelist_help": "Only tools listed here will be enabled.",
+        "tool_whitelist_none": "No synced tools",
+        "tool_whitelist_placeholder": "tool_name",
+        "tool_whitelist_selected": "Selected Tools ({{count}})"
+      },
+      "notifications": {
+        "load_failed": "Failed to load MCP server",
+        "save_failed": "Save failed",
+        "save_success": "Saved"
+      },
+      "pricing": {
+        "invalid": "Tool pricing JSON is invalid",
+        "missing": "Missing pricing for: {{tools}}"
+      },
+      "title_add": "Add MCP Server",
+      "title_edit": "Edit MCP Server",
+      "tools": {
+        "title": "Synced tools"
+      }
+    },
+    "list": {
+      "actions": {
+        "add": "Add MCP Server",
+        "delete": "Delete",
+        "disable": "Disable",
+        "edit": "Edit",
+        "enable": "Enable",
+        "refresh": "Refresh",
+        "sync": "Sync",
+        "test": "Test"
+      },
+      "columns": {
+        "actions": "Actions",
+        "auth_type": "Auth",
+        "base_url": "Base URL",
+        "last_sync": "Last Sync",
+        "name": "Name",
+        "priority": "Priority",
+        "protocol": "Protocol",
+        "protocol_streamable": "Streamable HTTP",
+        "status": "Status",
+        "tool_count": "Tools"
+      },
+      "labels": {
+        "never": "Never"
+      },
+      "search_placeholder": "Search MCP servers...",
+      "subtitle": "Manage MCP server registry and tool sync",
+      "title": "MCP Servers"
+    },
+    "notifications": {
+      "delete_failed": "Delete failed",
+      "delete_success": "Server deleted",
+      "fetch_failed": "Failed to load MCP servers",
+      "status_failed": "Status update failed",
+      "status_success": "Status updated",
+      "sync_failed": "Sync failed",
+      "sync_success": "Sync complete",
+      "test_failed": "Test failed",
+      "test_success": "Connection OK",
+      "test_tools": "Tools: {{count}}"
+    },
+    "status": {
+      "disabled": "Disabled",
+      "enabled": "Enabled"
+    }
+  }
+}

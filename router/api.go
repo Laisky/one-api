@@ -159,5 +159,27 @@ func SetApiRouter(router *gin.Engine) {
 		{
 			groupRoute.GET("/", controller.GetGroups)
 		}
+
+		mcpServerRoute := apiRouter.Group("/mcp_servers")
+		mcpServerRoute.Use(middleware.AdminAuth())
+		{
+			mcpServerRoute.GET("/", controller.GetMCPServers)
+			mcpServerRoute.GET("", controller.GetMCPServers)
+			mcpServerRoute.GET("/:id", controller.GetMCPServer)
+			mcpServerRoute.POST("/", controller.CreateMCPServer)
+			mcpServerRoute.POST("", controller.CreateMCPServer)
+			mcpServerRoute.PUT("/:id", controller.UpdateMCPServer)
+			mcpServerRoute.DELETE("/:id", controller.DeleteMCPServer)
+			mcpServerRoute.POST("/:id/sync", controller.SyncMCPServer)
+			mcpServerRoute.POST("/:id/test", controller.TestMCPServer)
+			mcpServerRoute.GET("/:id/tools", controller.ListMCPServerTools)
+		}
+
+		mcpToolRoute := apiRouter.Group("/mcp_tools")
+		mcpToolRoute.Use(middleware.AdminAuth())
+		{
+			mcpToolRoute.GET("/", controller.GetMCPTools)
+			mcpToolRoute.GET("", controller.GetMCPTools)
+		}
 	}
 }

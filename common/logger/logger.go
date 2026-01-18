@@ -10,6 +10,7 @@ import (
 	"sync"
 
 	errors "github.com/Laisky/errors/v2"
+	gmw "github.com/Laisky/gin-middlewares/v7"
 	gutils "github.com/Laisky/go-utils/v6"
 	glog "github.com/Laisky/go-utils/v6/log"
 	"github.com/Laisky/zap"
@@ -117,6 +118,17 @@ func SetupLogger() {
 		}
 		Logger.Info("log sinks configured", fields...)
 	})
+}
+
+// FromContext returns a context-aware logger when available, otherwise the global logger.
+func FromContext(ctx context.Context) glog.Logger {
+	if ctx == nil {
+		return Logger
+	}
+	if lg := gmw.GetLogger(ctx); lg != nil {
+		return lg
+	}
+	return Logger
 }
 
 // configureGlobalLogger reinitializes the shared logger with the provided output paths.

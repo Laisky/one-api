@@ -90,6 +90,9 @@
         "18": {
           "tip": "API versión WebSocket"
         },
+        "29": {
+          "description": "Groq-hosted LLaMA-style models via OpenAI schema."
+        },
         "40": {
           "description": "Anteriormente ByteDance Doubao"
         },
@@ -112,6 +115,17 @@
           "label": "ID de cuenta",
           "placeholder": "d8d7c61dbc334c32d3ced580e4bf42b4"
         }
+      },
+      "common": {
+        "add": "Add",
+        "base_url": {
+          "fixed_note": "Using default: {{url}}",
+          "help_editable": "Custom API base URL. Leave empty to use the default URL.",
+          "help_readonly": "The API base URL for this channel type is fixed and cannot be modified.",
+          "label": "API Base URL",
+          "placeholder": "https://api.example.com"
+        },
+        "format_json": "Format JSON"
       },
       "coze": {
         "auth_type": {
@@ -179,6 +193,7 @@
         }
       },
       "groups": {
+        "add_placeholder": "Add custom group...",
         "help": "Restringir el acceso a grupos de usuarios específicos. Vacío significa que todos los usuarios pueden acceder. El grupo predeterminado siempre se mantiene.",
         "label": "Grupos *"
       },
@@ -188,13 +203,24 @@
         "note": "Mapear nombres de modelos a ARN de perfiles de inferencia de AWS Bedrock (opcional)",
         "placeholder": "Mapeo de ARN de perfil de inferencia de AWS Bedrock:\n{{example}}"
       },
+      "key": {
+        "help": "The API key for authentication with the provider.",
+        "label": "API Key"
+      },
       "loading": "Cargando canal...",
+      "mcp": {
+        "blacklist_add": "Add",
+        "blacklist_description": "Block MCP tools for this channel. Use server.tool or tool name.",
+        "blacklist_label": "MCP tool blacklist",
+        "blacklist_placeholder": "server.tool_name"
+      },
       "model_configs": {
         "format_error": "No se pudo formatear model_configs: {{error}}",
         "help": "Configuraciones unificadas por modelo. Campos: ratio (multiplicador de precio de entrada), completion_ratio (multiplicador de salida), max_tokens (límite).",
         "invalid": "Formato de configuraciones de modelos inválido",
         "invalid_short": "✗ Configuración inválida",
         "label": "Configuraciones de modelos (JSON)",
+        "load_default": "Load Default",
         "note": "Configurar precios y límites por modelo (opcional)",
         "placeholder": "Configuraciones de modelos en formato JSON:\n{{example}}",
         "select_type_notice": "Selecciona un tipo de canal para configurar las configuraciones de modelos.",
@@ -208,6 +234,7 @@
       },
       "models": {
         "add_custom": "Agregar",
+        "clear": "Clear",
         "clear_all": "Borrar todo",
         "copy_title": "Haz clic para copiar el nombre del modelo",
         "custom_placeholder": "Agregar modelo personalizado...",
@@ -215,8 +242,16 @@
         "fill_related": "Rellenar modelos relacionados ({{count}})",
         "help": "Modelos disponibles a través de este canal. Deja vacío para permitir todos los modelos del proveedor. Usa los botones para rellenar modelos relacionados/todos; se eliminan los duplicados.",
         "label": "Modelos compatibles *",
+        "no_match": "No models found",
+        "no_selection": "No models selected",
         "search_placeholder": "Buscar modelos...",
-        "select_type_notice": "Selecciona un tipo de canal para configurar los modelos compatibles."
+        "select_type_notice": "Selecciona un tipo de canal para configurar los modelos compatibles.",
+        "selected_count": "Selected Models ({{count}})"
+      },
+      "name": {
+        "help": "A descriptive name for this channel to identify it in logs and lists.",
+        "label": "Channel Name *",
+        "placeholder": "My Channel"
       },
       "openai_compatible": {
         "api_format": {
@@ -242,6 +277,14 @@
           "placeholder": "Parámetros específicos del plugin"
         }
       },
+      "priority": {
+        "help": "Higher priority channels are tried first. Default is 0.",
+        "label": "Priority"
+      },
+      "ratelimit": {
+        "help": "Maximum requests per minute. 0 means unlimited.",
+        "label": "Rate Limit"
+      },
       "spark": {
         "version": {
           "help": "Selecciona la versión de API para iFlytek Spark (ej. v3.5).",
@@ -259,6 +302,9 @@
         "edit": "Editar canal"
       },
       "tooling": {
+        "add_custom": "Add custom tool...",
+        "available_tools": "Available Tools",
+        "editor_disabled": "Fix JSON error to enable editor",
         "errors": {
           "invalid_json_message": "Corrige el JSON de herramientas antes de editar la lista blanca.",
           "invalid_json_title": "JSON inválido"
@@ -268,6 +314,7 @@
         "help": "Definir política de herramientas integradas en todo el canal. Configura la lista blanca y el precio por llamada para las herramientas integradas del proveedor.",
         "invalid": "Formato de configuración de herramientas inválido",
         "label": "Configuración de herramientas (JSON)",
+        "no_whitelist": "No tools whitelisted",
         "note": "Configurar listas blancas de herramientas integradas y precios por llamada (opcional)",
         "placeholder": "Configuración de herramientas en formato JSON:\n{{example}}",
         "whitelist": {
@@ -278,7 +325,23 @@
           "pricing_required": "Establece el precio para desbloquear \"{{tool}}\". Las solicitudes permanecen bloqueadas hasta que se configure el precio.",
           "subtitle": "La lista blanca vacía mantiene disponibles todas las herramientas del proveedor.",
           "title": "Lista blanca de herramientas integradas"
-        }
+        },
+        "whitelist_editor": "Whitelist Editor",
+        "whitelisted_tools": "Whitelisted Tools ({{count}})"
+      },
+      "type": {
+        "help": "The provider type for this channel. Changing this may reset some fields.",
+        "label": "Channel Type *",
+        "not_found": "No channel type found.",
+        "placeholder": "Select a channel type",
+        "search": "Search channel type..."
+      },
+      "type_change": {
+        "cancel": "Cancel",
+        "confirm": "Change Type",
+        "description": "You are about to change the channel type from \"{{fromType}}\" to \"{{toType}}\".",
+        "title": "Change Channel Type?",
+        "warning": "Warning: This may reset some configuration fields specific to the previous channel type. Any unsaved changes may be lost."
       },
       "validation": {
         "api_key_required": "La clave API es obligatoria.",
@@ -315,6 +378,10 @@
           "label": "Región *",
           "placeholder": "us-central1"
         }
+      },
+      "weight": {
+        "help": "Used for load balancing between channels of the same priority. Default is 0.",
+        "label": "Weight"
       }
     },
     "empty": "No se encontraron canales. Crea tu primer canal para comenzar.",
@@ -620,6 +687,7 @@
     },
     "edit": {
       "actions": {
+        "add": "Add",
         "cancel": "Cancelar",
         "create": "Crear usuario",
         "creating": "Creando...",
@@ -658,6 +726,11 @@
           "help": "El grupo de usuarios controla el acceso y la visibilidad de modelos/canales.",
           "label": "Grupo *",
           "placeholder": "Selecciona un grupo"
+        },
+        "mcp_tool_blacklist": {
+          "help": "Block MCP tools for this user. Use server.tool or tool name.",
+          "label": "MCP tool blacklist",
+          "placeholder": "server.tool_name"
         },
         "password": {
           "help": "La longitud mínima depende de la política. Deja vacío al editar para mantener sin cambios.",

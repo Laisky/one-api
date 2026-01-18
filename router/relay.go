@@ -32,6 +32,8 @@ func SetRelayRouter(router *gin.Engine) {
 		modelsRouter.GET("/:model", controller.RetrieveModel)
 	}
 
+	router.POST("/mcp", middleware.TokenAuth(), controller.MCPProxy)
+
 	relayMws := []gin.HandlerFunc{
 		// Track in-flight requests for graceful shutdown/drain
 		func(c *gin.Context) { done := graceful.BeginRequest(); defer done(); c.Next() },

@@ -1,3 +1,4 @@
+import { ToolListEditor } from "@/components/mcp/ToolListEditor";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -59,6 +60,7 @@ type UserForm = {
   email?: string;
   quota: number;
   group: string;
+  mcp_tool_blacklist: string[];
 };
 
 interface Group {
@@ -73,6 +75,7 @@ type UserSnapshot = {
   email: string;
   quota: number;
   group: string;
+  mcp_tool_blacklist: string[];
 };
 
 const snapshotUserForm = (values: UserForm): UserSnapshot => ({
@@ -81,6 +84,7 @@ const snapshotUserForm = (values: UserForm): UserSnapshot => ({
   email: (values.email ?? "").trim(),
   quota: values.quota,
   group: values.group,
+  mcp_tool_blacklist: values.mcp_tool_blacklist,
 });
 
 export function EditUserPage() {
@@ -161,6 +165,7 @@ export function EditUserPage() {
         group: z
           .string()
           .min(1, tr("validation.group_required", "Group is required")),
+        mcp_tool_blacklist: z.array(z.string()).optional().default([]),
       }),
     [tr]
   );
@@ -174,6 +179,7 @@ export function EditUserPage() {
       email: "",
       quota: 0,
       group: "default",
+      mcp_tool_blacklist: [],
     },
   });
 
@@ -200,6 +206,9 @@ export function EditUserPage() {
           email: (data.email ?? "") as string,
           quota: Number(data.quota ?? 0),
           group: (data.group ?? "default") as string,
+          mcp_tool_blacklist: Array.isArray(data.mcp_tool_blacklist)
+            ? data.mcp_tool_blacklist
+            : [],
         };
         form.reset(normalized);
         setInitialSnapshot(snapshotUserForm(normalized));
@@ -274,6 +283,13 @@ export function EditUserPage() {
         if (!previous || snapshot.group !== previous.group) {
           payload.group = snapshot.group;
         }
+        if (
+          !previous ||
+          JSON.stringify(snapshot.mcp_tool_blacklist) !==
+            JSON.stringify(previous.mcp_tool_blacklist)
+        ) {
+          payload.mcp_tool_blacklist = snapshot.mcp_tool_blacklist;
+        }
         if (data.password) {
           payload.password = data.password;
         }
@@ -286,6 +302,7 @@ export function EditUserPage() {
           email: snapshot.email,
           quota: snapshot.quota,
           group: snapshot.group,
+          mcp_tool_blacklist: snapshot.mcp_tool_blacklist,
         };
         if (data.password) {
           payload.password = data.password;
@@ -480,6 +497,33 @@ export function EditUserPage() {
                     )}
                   />
                 </div>
+
+                <FormField
+                  control={form.control}
+                  name="mcp_tool_blacklist"
+                  render={({ field }) => (
+                    <FormItem>
+                      <ToolListEditor
+                        label={tr(
+                          "fields.mcp_tool_blacklist.label",
+                          "MCP tool blacklist"
+                        )}
+                        description={tr(
+                          "fields.mcp_tool_blacklist.help",
+                          "Block MCP tools for this user. Use server.tool or tool name."
+                        )}
+                        value={Array.isArray(field.value) ? field.value : []}
+                        onChange={field.onChange}
+                        placeholder={tr(
+                          "fields.mcp_tool_blacklist.placeholder",
+                          "server.tool_name"
+                        )}
+                        addLabel={tr("actions.add", "Add")}
+                      />
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <FormField

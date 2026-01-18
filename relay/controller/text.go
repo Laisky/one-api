@@ -82,6 +82,19 @@ func RelayTextHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 		return openai.ErrorWrapper(errors.Errorf("invalid api type: %d", meta.APIType), "invalid_api_type", http.StatusBadRequest)
 	}
 
+	registry, mcpToolNames, regErr := expandMCPBuiltinsInChatRequest(c, meta, channelRecord, requestAdaptor, textRequest)
+	if regErr != nil {
+		return openai.ErrorWrapper(regErr, "mcp_tool_registry_failed", http.StatusBadRequest)
+	}
+	if registry != nil {
+		textRequest.ToolChoice = normalizeChatToolChoiceForMCP(textRequest.ToolChoice, mcpToolNames)
+		if textRequest.Stream {
+			lg.Warn("mcp tool execution forces non-streaming response")
+			textRequest.Stream = false
+			meta.IsStream = false
+		}
+	}
+
 	// get model ratio using three-layer pricing system
 	pricingAdaptor := relay.GetAdaptor(meta.ChannelType)
 	modelRatio := pricing.GetModelRatioWithThreeLayers(textRequest.Model, channelModelRatio, pricingAdaptor)
@@ -125,6 +138,117 @@ func RelayTextHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 	}
 
 	requestAdaptor.Init(meta)
+	if registry != nil {
+		response, usage, mcpSummary, incrementalCharged, execErr := executeChatMCPToolLoop(c, meta, textRequest, registry, preConsumedQuota)
+		if execErr != nil {
+			billing.ReturnPreConsumedQuota(ctx, preConsumedQuota, meta.TokenId)
+			return execErr
+		}
+		tooling.ApplyBuiltinToolCharges(c, &usage, meta, channelRecord, requestAdaptor)
+		if mcpSummary != nil && mcpSummary.summary != nil {
+			var existing *model.ToolUsageSummary
+			if raw, ok := c.Get(ctxkey.ToolInvocationSummary); ok {
+				if summary, ok := raw.(*model.ToolUsageSummary); ok {
+					existing = summary
+				}
+			}
+			merged := mergeToolUsageSummaries(existing, mcpSummary.summary)
+			c.Set(ctxkey.ToolInvocationSummary, merged)
+		}
+
+		c.JSON(http.StatusOK, response)
+
+		// refund pre-consumed quota immediately
+		billing.ReturnPreConsumedQuota(ctx, preConsumedQuota, meta.TokenId)
+		if usage != nil {
+			userId := strconv.Itoa(meta.UserId)
+			username := c.GetString(ctxkey.Username)
+			if username == "" {
+				username = "unknown"
+			}
+			group := meta.Group
+			if group == "" {
+				group = "default"
+			}
+
+			apiFormat := c.GetString(ctxkey.APIFormat)
+			if apiFormat == "" {
+				apiFormat = "unknown"
+			}
+			apiType := relaymode.String(meta.Mode)
+			tokenId := strconv.Itoa(meta.TokenId)
+
+			metrics.GlobalRecorder.RecordRelayRequest(
+				meta.StartTime,
+				meta.ChannelId,
+				channeltype.IdToName(meta.ChannelType),
+				meta.ActualModelName,
+				userId,
+				group,
+				tokenId,
+				apiFormat,
+				apiType,
+				true,
+				usage.PromptTokens,
+				usage.CompletionTokens,
+				0,
+			)
+
+			userBalance := float64(c.GetInt64(ctxkey.UserQuota))
+			metrics.GlobalRecorder.RecordUserMetrics(
+				userId,
+				username,
+				group,
+				0,
+				usage.PromptTokens,
+				usage.CompletionTokens,
+				userBalance,
+			)
+
+			metrics.GlobalRecorder.RecordModelUsage(meta.ActualModelName, channeltype.IdToName(meta.ChannelType), time.Since(meta.StartTime))
+		}
+
+		quotaId := c.GetInt(ctxkey.Id)
+		requestId := c.GetString(ctxkey.RequestId)
+		graceful.GoCritical(gmw.BackgroundCtx(c), "postBilling", func(ctx context.Context) {
+			baseBillingTimeout := time.Duration(config.BillingTimeoutSec) * time.Second
+			billingTimeout := baseBillingTimeout
+
+			ctx, cancel := context.WithTimeout(gmw.BackgroundCtx(c), billingTimeout)
+			defer cancel()
+
+			done := make(chan bool, 1)
+			var quota int64
+
+			go func() {
+				quota = postConsumeQuota(ctx, usage, meta, textRequest, ratio, preConsumedQuota, incrementalCharged, modelRatio, groupRatio, systemPromptReset, channelCompletionRatio)
+				if requestId != "" {
+					if err := model.UpdateUserRequestCostQuotaByRequestID(quotaId, requestId, quota); err != nil {
+						lg.Error("update user request cost failed", zap.Error(err), zap.String("request_id", requestId))
+					}
+				}
+				done <- true
+			}()
+
+			select {
+			case <-done:
+			case <-ctx.Done():
+				if ctx.Err() == context.DeadlineExceeded && usage != nil {
+					estimatedQuota := float64(usage.PromptTokens+usage.CompletionTokens) * ratio
+					elapsedTime := time.Since(meta.StartTime)
+					lg.Error("CRITICAL BILLING TIMEOUT",
+						zap.String("model", textRequest.Model),
+						zap.String("requestId", requestId),
+						zap.Int("userId", meta.UserId),
+						zap.Int64("estimatedQuota", int64(estimatedQuota)),
+						zap.Duration("elapsedTime", elapsedTime))
+
+					metrics.GlobalRecorder.RecordBillingTimeout(meta.UserId, meta.ChannelId, textRequest.Model, estimatedQuota, elapsedTime)
+				}
+			}
+		})
+		return nil
+	}
 
 	// Downgrade structured JSON schema for providers that reject response_format
 	if requiresJSONSchemaDowngrade(meta, textRequest) {

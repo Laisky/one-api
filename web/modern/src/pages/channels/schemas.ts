@@ -34,6 +34,7 @@ export const channelSchema = z.object({
         .default("chat_completion"),
       // Supported endpoints for this channel (empty means use defaults)
       supported_endpoints: z.array(z.string()).optional(),
+      mcp_tool_blacklist: z.array(z.string()).optional(),
     })
     .default({}),
   inference_profile_arn_map: z.string().optional(),

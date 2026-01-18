@@ -1,43 +1,4 @@
 {
-  "common": {
-    "about": "关于",
-    "back": "返回",
-    "cancel": "取消",
-    "channels": "渠道",
-    "confirm": "确认",
-    "dashboard": "仪表盘",
-    "email": "邮箱",
-    "language": "语言",
-    "login": "登录",
-    "logout": "登出",
-    "logs": "日志",
-    "models": "模型",
-    "or": "或",
-    "password": "密码",
-    "playground": "Playground",
-    "redemptions": "兑换",
-    "register": "注册",
-    "settings": "设置",
-    "status": "状态",
-    "submit": "提交",
-    "to": "到",
-    "tokens": "令牌",
-    "topup": "充值",
-    "username": "用户名",
-    "users": "用户",
-    "welcome": "欢迎使用 One API"
-  },
-  "header": {
-    "confirm_logout": "确认登出",
-    "log_out": "登出",
-    "logging_out": "正在登出...",
-    "logout_description": "您确定要登出吗？您需要重新登录才能访问仪表盘。",
-    "navigation": "导航",
-    "signed_in_as": "登录身份"
-  },
-  "home": {
-    "iframe_title": "首页"
-  },
   "about": {
     "cta_models": "查看支持的模型",
     "cta_repo": "GitHub 仓库",
@@ -57,6 +18,49 @@
     "fallback_error": "关于页面内容加载失败。",
     "iframe_title": "关于",
     "title": "关于"
+  },
+  "common": {
+    "about": "关于",
+    "back": "返回",
+    "cancel": "取消",
+    "channels": "渠道",
+    "confirm": "确认",
+    "dashboard": "仪表盘",
+    "email": "邮箱",
+    "language": "语言",
+    "login": "登录",
+    "logout": "登出",
+    "logs": "日志",
+    "mcps": "MCPs",
+    "models": "模型",
+    "no_items": "暂无内容",
+    "or": "或",
+    "password": "密码",
+    "playground": "Playground",
+    "redemptions": "兑换",
+    "register": "注册",
+    "settings": "设置",
+    "status": "状态",
+    "submit": "提交",
+    "to": "到",
+    "tokens": "令牌",
+    "tools": "工具",
+    "topup": "充值",
+    "username": "用户名",
+    "users": "用户",
+    "version": "版本",
+    "welcome": "欢迎使用 One API"
+  },
+  "header": {
+    "confirm_logout": "确认登出",
+    "log_out": "登出",
+    "logging_out": "正在登出...",
+    "logout_description": "您确定要登出吗？您需要重新登录才能访问仪表盘。",
+    "navigation": "导航",
+    "signed_in_as": "登录身份"
+  },
+  "home": {
+    "iframe_title": "首页"
   },
   "notFound": {
     "go_home": "立即回到首页",

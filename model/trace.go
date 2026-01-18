@@ -3,6 +3,7 @@ package model
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"time"
 
 	"github.com/Laisky/errors/v2"
@@ -29,14 +30,28 @@ type Trace struct {
 	UpdatedAt  int64  `json:"updated_at" gorm:"bigint;autoUpdateTime:milli"`
 }
 
+// TraceExternalCall records an external call made during a request.
+type TraceExternalCall struct {
+	Key         string `json:"key,omitempty"`
+	Source      string `json:"source,omitempty"`
+	Tool        string `json:"tool,omitempty"`
+	ServerID    int    `json:"server_id,omitempty"`
+	ServerLabel string `json:"server_label,omitempty"`
+	StartedAt   int64  `json:"started_at,omitempty"`
+	EndedAt     int64  `json:"ended_at,omitempty"`
+	DurationMs  int64  `json:"duration_ms,omitempty"`
+	IsError     bool   `json:"is_error,omitempty"`
+}
+
 // TraceTimestamps represents the structure of timestamps stored in the Trace.Timestamps field
 type TraceTimestamps struct {
-	RequestReceived       *int64 `json:"request_received,omitempty"`        // When request was received
-	RequestForwarded      *int64 `json:"request_forwarded,omitempty"`       // When request was forwarded to upstream
-	FirstUpstreamResponse *int64 `json:"first_upstream_response,omitempty"` // When first response received from upstream
-	FirstClientResponse   *int64 `json:"first_client_response,omitempty"`   // When first response sent to client
-	UpstreamCompleted     *int64 `json:"upstream_completed,omitempty"`      // When upstream response completed (for streaming)
-	RequestCompleted      *int64 `json:"request_completed,omitempty"`       // When entire request completed
+	RequestReceived       *int64              `json:"request_received,omitempty"`        // When request was received
+	RequestForwarded      *int64              `json:"request_forwarded,omitempty"`       // When request was forwarded to upstream
+	FirstUpstreamResponse *int64              `json:"first_upstream_response,omitempty"` // When first response received from upstream
+	FirstClientResponse   *int64              `json:"first_client_response,omitempty"`   // When first response sent to client
+	UpstreamCompleted     *int64              `json:"upstream_completed,omitempty"`      // When upstream response completed (for streaming)
+	RequestCompleted      *int64              `json:"request_completed,omitempty"`       // When entire request completed
+	ExternalCalls         []TraceExternalCall `json:"external_calls,omitempty"`          // External calls performed during the request
 }
 
 // Timestamp constants for consistent key naming
@@ -203,6 +218,76 @@ func UpdateTraceTimestamp(ctx *gin.Context, traceId, timestampKey string) error 
 	lg.Debug("updated trace timestamp",
 		zap.String("trace_id", traceId),
 		zap.String("timestamp_key", timestampKey))
+
+	return nil
+}
+
+// AppendTraceExternalCall appends an external call entry to the trace timestamps.
+func AppendTraceExternalCall(ctx *gin.Context, traceId string, call TraceExternalCall) error {
+	lg := gmw.GetLogger(ctx)
+	if traceId == "" {
+		return errors.New("trace id is empty")
+	}
+	if call.Source == "" {
+		call.Source = "external"
+	}
+	if call.StartedAt == 0 {
+		call.StartedAt = time.Now().UnixMilli()
+	}
+	if call.EndedAt == 0 {
+		call.EndedAt = call.StartedAt
+	}
+	if call.DurationMs == 0 && call.EndedAt >= call.StartedAt {
+		call.DurationMs = call.EndedAt - call.StartedAt
+	}
+	if call.Key == "" {
+		call.Key = fmt.Sprintf("%s:%d", call.Source, call.StartedAt)
+	}
+
+	db := traceDBWithGin(ctx)
+	var traceRecord Trace
+	if err := db.Where("trace_id = ?", traceId).First(&traceRecord).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			lg.Debug("trace record not found for external call update (best-effort, skipping)",
+				zap.String("trace_id", traceId))
+			return nil
+		}
+		lg.Error("failed to query trace record for external call update",
+			zap.Error(err),
+			zap.String("trace_id", traceId))
+		return errors.Wrapf(err, "failed to query trace record for external call, trace_id: %s", traceId)
+	}
+
+	var timestamps TraceTimestamps
+	if err := json.Unmarshal([]byte(traceRecord.Timestamps), &timestamps); err != nil {
+		lg.Error("failed to unmarshal trace timestamps for external call",
+			zap.Error(err),
+			zap.String("trace_id", traceId))
+		return errors.Wrapf(err, "failed to unmarshal trace timestamps for external call, trace_id: %s", traceId)
+	}
+
+	timestamps.ExternalCalls = append(timestamps.ExternalCalls, call)
+
+	timestampsJSON, err := json.Marshal(timestamps)
+	if err != nil {
+		lg.Error("failed to marshal trace timestamps for external call",
+			zap.Error(err),
+			zap.String("trace_id", traceId))
+		return errors.Wrapf(err, "failed to marshal trace timestamps for external call, trace_id: %s", traceId)
+	}
+
+	if err := db.Model(&traceRecord).Update("timestamps", string(timestampsJSON)).Error; err != nil {
+		lg.Error("failed to update trace external call",
+			zap.Error(err),
+			zap.String("trace_id", traceId))
+		return errors.Wrapf(err, "failed to update trace external call, trace_id: %s", traceId)
+	}
+
+	lg.Debug("updated trace external call",
+		zap.String("trace_id", traceId),
+		zap.String("call_key", call.Key),
+		zap.String("source", call.Source),
+		zap.String("tool", call.Tool))
 
 	return nil
 }

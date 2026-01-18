@@ -90,6 +90,9 @@
         "18": {
           "tip": "API version WebSocket"
         },
+        "29": {
+          "description": "Groq-hosted LLaMA-style models via OpenAI schema."
+        },
         "40": {
           "description": "Anciennement ByteDance Doubao"
         },
@@ -112,6 +115,17 @@
           "label": "ID de compte",
           "placeholder": "d8d7c61dbc334c32d3ced580e4bf42b4"
         }
+      },
+      "common": {
+        "add": "Add",
+        "base_url": {
+          "fixed_note": "Using default: {{url}}",
+          "help_editable": "Custom API base URL. Leave empty to use the default URL.",
+          "help_readonly": "The API base URL for this channel type is fixed and cannot be modified.",
+          "label": "API Base URL",
+          "placeholder": "https://api.example.com"
+        },
+        "format_json": "Format JSON"
       },
       "coze": {
         "auth_type": {
@@ -179,22 +193,39 @@
         }
       },
       "groups": {
+        "add_placeholder": "Add custom group...",
         "help": "Restreindre l'accès à des groupes d'utilisateurs spécifiques. Vide signifie que tous les utilisateurs peuvent y accéder. Le groupe par défaut est toujours conservé.",
         "label": "Groupes *"
       },
       "inference_profile": {
         "help": "Carte JSON du nom du modèle vers l'ARN du profil d'inférence AWS Bedrock. Utilisez pour router certains modèles via des profils d'inférence Bedrock spécifiques.",
         "label": "Carte ARN de profil d'inférence (AWS Bedrock)",
+        "mcp_tool_blacklist": {
+          "help": "Bloquer les outils MCP pour cet utilisateur. Utilisez server.tool ou le nom de l'outil.",
+          "label": "Liste noire des outils MCP",
+          "placeholder": "server.tool_name"
+        },
         "note": "Mapper les noms de modèles aux ARN de profil d'inférence AWS Bedrock (facultatif)",
         "placeholder": "Mappage ARN de profil d'inférence AWS Bedrock :\n{{example}}"
       },
+      "key": {
+        "help": "The API key for authentication with the provider.",
+        "label": "API Key"
+      },
       "loading": "Chargement du canal...",
+      "mcp": {
+        "add": "Ajouter",
+        "blacklist_add": "Add",
+        "blacklist_label": "MCP tool blacklist",
+        "blacklist_placeholder": "server.tool_name"
+      },
       "model_configs": {
         "format_error": "Impossible de formater model_configs : {{error}}",
         "help": "Paramètres unifiés par modèle. Champs : ratio (multiplicateur de prix d'entrée), completion_ratio (multiplicateur de sortie), max_tokens (limite).",
         "invalid": "Format de configurations de modèle invalide",
         "invalid_short": "✗ Configuration invalide",
         "label": "Configurations de modèle (JSON)",
+        "load_default": "Load Default",
         "note": "Configurer la tarification et les limites par modèle (facultatif)",
         "placeholder": "Configurations de modèle au format JSON :\n{{example}}",
         "select_type_notice": "Sélectionnez un type de canal pour configurer les configurations de modèle.",
@@ -208,6 +239,7 @@
       },
       "models": {
         "add_custom": "Ajouter",
+        "clear": "Clear",
         "clear_all": "Tout effacer",
         "copy_title": "Cliquez pour copier le nom du modèle",
         "custom_placeholder": "Ajouter un modèle personnalisé...",
@@ -215,8 +247,16 @@
         "fill_related": "Remplir les modèles associés ({{count}})",
         "help": "Modèles disponibles via ce canal. Laissez vide pour autoriser tous les modèles du fournisseur. Utilisez les boutons pour remplir les modèles associés/tous ; les doublons sont supprimés.",
         "label": "Modèles pris en charge *",
+        "no_match": "No models found",
+        "no_selection": "No models selected",
         "search_placeholder": "Rechercher des modèles...",
-        "select_type_notice": "Sélectionnez un type de canal pour configurer les modèles pris en charge."
+        "select_type_notice": "Sélectionnez un type de canal pour configurer les modèles pris en charge.",
+        "selected_count": "Selected Models ({{count}})"
+      },
+      "name": {
+        "help": "A descriptive name for this channel to identify it in logs and lists.",
+        "label": "Channel Name *",
+        "placeholder": "My Channel"
       },
       "openai_compatible": {
         "api_format": {
@@ -242,6 +282,14 @@
           "placeholder": "Paramètres spécifiques au plugin"
         }
       },
+      "priority": {
+        "help": "Higher priority channels are tried first. Default is 0.",
+        "label": "Priority"
+      },
+      "ratelimit": {
+        "help": "Maximum requests per minute. 0 means unlimited.",
+        "label": "Rate Limit"
+      },
       "spark": {
         "version": {
           "help": "Sélectionnez la version de l'API pour iFlytek Spark (ex: v3.5).",
@@ -259,6 +307,9 @@
         "edit": "Modifier le canal"
       },
       "tooling": {
+        "add_custom": "Add custom tool...",
+        "available_tools": "Available Tools",
+        "editor_disabled": "Fix JSON error to enable editor",
         "errors": {
           "invalid_json_message": "Corrigez le JSON des outils avant de modifier la liste blanche.",
           "invalid_json_title": "JSON invalide"
@@ -268,6 +319,7 @@
         "help": "Définir la politique des outils intégrés à l'échelle du canal. Configurez la liste blanche et la tarification par appel pour les outils intégrés du fournisseur.",
         "invalid": "Format de configuration des outils invalide",
         "label": "Configuration des outils (JSON)",
+        "no_whitelist": "No tools whitelisted",
         "note": "Configurer les listes blanches d'outils intégrés et la tarification par appel (facultatif)",
         "placeholder": "Configuration des outils au format JSON :\n{{example}}",
         "whitelist": {
@@ -278,7 +330,23 @@
           "pricing_required": "Définissez le prix pour débloquer \"{{tool}}\". Les requêtes restent bloquées jusqu'à ce que la tarification soit configurée.",
           "subtitle": "Une liste blanche vide garde tous les outils du fournisseur disponibles.",
           "title": "Liste blanche des outils intégrés"
-        }
+        },
+        "whitelist_editor": "Whitelist Editor",
+        "whitelisted_tools": "Whitelisted Tools ({{count}})"
+      },
+      "type": {
+        "help": "The provider type for this channel. Changing this may reset some fields.",
+        "label": "Channel Type *",
+        "not_found": "No channel type found.",
+        "placeholder": "Select a channel type",
+        "search": "Search channel type..."
+      },
+      "type_change": {
+        "cancel": "Cancel",
+        "confirm": "Change Type",
+        "description": "You are about to change the channel type from \"{{fromType}}\" to \"{{toType}}\".",
+        "title": "Change Channel Type?",
+        "warning": "Warning: This may reset some configuration fields specific to the previous channel type. Any unsaved changes may be lost."
       },
       "validation": {
         "api_key_required": "La clé API est requise.",
@@ -315,6 +383,10 @@
           "label": "Région *",
           "placeholder": "us-central1"
         }
+      },
+      "weight": {
+        "help": "Used for load balancing between channels of the same priority. Default is 0.",
+        "label": "Weight"
       }
     },
     "empty": "Aucun canal trouvé. Créez votre premier canal pour commencer.",
@@ -620,6 +692,7 @@
     },
     "edit": {
       "actions": {
+        "add": "Ajouter",
         "cancel": "Annuler",
         "create": "Créer l'utilisateur",
         "creating": "Création...",
@@ -658,6 +731,11 @@
           "help": "Le groupe d'utilisateurs contrôle l'accès et la visibilité des modèles/canaux.",
           "label": "Groupe *",
           "placeholder": "Sélectionnez un groupe"
+        },
+        "mcp_tool_blacklist": {
+          "help": "Bloquer les outils MCP pour cet utilisateur. Utilisez server.tool ou le nom de l'outil.",
+          "label": "Liste noire des outils MCP",
+          "placeholder": "server.tool_name"
         },
         "password": {
           "help": "La longueur minimale dépend de la politique. Laissez vide lors de la modification pour conserver inchangé.",

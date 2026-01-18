@@ -4,9 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"fmt"
 	"io"
-	"math"
 	"net/http"
 	"strings"
 	"time"
@@ -197,6 +195,42 @@ func RelayClaudeMessagesHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 	// do response - for direct passthrough, forward upstream JSON verbatim; otherwise let adaptor convert
 	var usage *relaymodel.Usage
 	var respErr *relaymodel.ErrorWithStatusCode
+	var mcpIncrementalCharged int64
+
+	// MCP tool loop handling for Claude Messages requests.
+	if mcpRegistry, mcpToolNames, mcpReq, mcpErr := detectClaudeMCPTools(c, meta, claudeRequest, adaptorInstance); mcpRegistry != nil || mcpErr != nil {
+		if mcpErr != nil {
+			billing.ReturnPreConsumedQuota(ctx, preConsumedQuota, c.GetInt(ctxkey.TokenId))
+			return openai.ErrorWrapper(mcpErr, "mcp_tool_registry_failed", http.StatusBadRequest)
+		}
+		mcpReq.ToolChoice = normalizeChatToolChoiceForMCP(mcpReq.ToolChoice, mcpToolNames)
+		if mcpReq.Stream {
+			mcpReq.Stream = false
+			meta.IsStream = false
+		}
+		response, mcpUsage, mcpSummary, incrementalCharged, execErr := executeChatMCPToolLoop(c, meta, mcpReq, mcpRegistry, preConsumedQuota)
+		if execErr != nil {
+			billing.ReturnPreConsumedQuota(ctx, preConsumedQuota, c.GetInt(ctxkey.TokenId))
+			return execErr
+		}
+		if mcpSummary != nil && mcpSummary.summary != nil {
+			var existing *model.ToolUsageSummary
+			if raw, ok := c.Get(ctxkey.ToolInvocationSummary); ok {
+				if summary, ok := raw.(*model.ToolUsageSummary); ok {
+					existing = summary
+				}
+			}
+			merged := mergeToolUsageSummaries(existing, mcpSummary.summary)
+			c.Set(ctxkey.ToolInvocationSummary, merged)
+		}
+		if errResp := renderClaudeMessagesFromChatResponse(c, response); errResp != nil {
+			billing.ReturnPreConsumedQuota(ctx, preConsumedQuota, c.GetInt(ctxkey.TokenId))
+			return errResp
+		}
+		usage = mcpUsage
+		mcpIncrementalCharged = incrementalCharged
+		goto postConsume
+	}
 
 	if passthrough, ok := c.Get(ctxkey.ClaudeDirectPassthrough); ok && passthrough.(bool) && meta.IsStream {
 		// Streaming direct passthrough: forward Claude SSE events verbatim
@@ -409,6 +443,8 @@ func RelayClaudeMessagesHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 		// Fall through to billing with available usage
 	}
 
+postConsume:
+
 	// post-consume quota
 	quotaId := c.GetInt(ctxkey.Id)
 	requestId := c.GetString(ctxkey.RequestId)
@@ -428,7 +464,7 @@ func RelayClaudeMessagesHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 		var quota int64
 
 		go func() {
-			quota = postConsumeClaudeMessagesQuotaWithTraceID(ctx, requestId, traceId, usage, meta, claudeRequest, ratio, preConsumedQuota, modelRatio, groupRatio, channelCompletionRatio)
+			quota = postConsumeClaudeMessagesQuotaWithTraceID(ctx, requestId, traceId, usage, meta, claudeRequest, ratio, preConsumedQuota, mcpIncrementalCharged, modelRatio, groupRatio, channelCompletionRatio)
 
 			// Reconcile request cost with final quota (override provisional value)
 			if quota != 0 {
@@ -463,535 +499,4 @@ func RelayClaudeMessagesHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 	})
 
 	return nil
-}
-
-// Removed redundant getChannelRatiosForClaude; use getChannelRatios from response.go to keep DRY.
-
-// sanitizeClaudeMessagesRequest enforces parameter constraints required by upstream providers.
-func sanitizeClaudeMessagesRequest(request *ClaudeMessagesRequest) {
-	if request == nil {
-		return
-	}
-	if request.Temperature != nil && request.TopP != nil {
-		request.TopP = nil
-	}
-}
-
-// rewriteClaudeRequestBody updates the raw JSON payload to reflect sanitized request fields.
-func rewriteClaudeRequestBody(raw []byte, request *ClaudeMessagesRequest) ([]byte, error) {
-	if len(raw) == 0 || request == nil {
-		return raw, nil
-	}
-	var obj map[string]any
-	if err := json.Unmarshal(raw, &obj); err != nil {
-		return nil, errors.Wrap(err, "unmarshal raw claude body for rewrite")
-	}
-	if request.Model != "" {
-		obj["model"] = request.Model
-	}
-	if request.TopP == nil {
-		delete(obj, "top_p")
-	}
-	out, err := json.Marshal(obj)
-	if err != nil {
-		return nil, errors.Wrap(err, "marshal rewritten claude body")
-	}
-	return out, nil
-}
-
-// getAndValidateClaudeMessagesRequest gets and validates Claude Messages API request
-func getAndValidateClaudeMessagesRequest(c *gin.Context) (*ClaudeMessagesRequest, error) {
-	claudeRequest := &ClaudeMessagesRequest{}
-	err := common.UnmarshalBodyReusable(c, claudeRequest)
-	if err != nil {
-		return nil, errors.Wrap(err, "unmarshal Claude messages request")
-	}
-
-	// Basic validation
-	if claudeRequest.Model == "" {
-		return nil, errors.New("model is required")
-	}
-	if claudeRequest.MaxTokens <= 0 {
-		return nil, errors.New("max_tokens must be greater than 0")
-	}
-	if len(claudeRequest.Messages) == 0 {
-		return nil, errors.New("messages array cannot be empty")
-	}
-
-	// Validate messages
-	for i, message := range claudeRequest.Messages {
-		if message.Role == "" {
-			return nil, errors.Errorf("message[%d].role is required", i)
-		}
-		if message.Role != "user" && message.Role != "assistant" {
-			return nil, errors.Errorf("message[%d].role must be 'user' or 'assistant'", i)
-		}
-		if message.Content == nil {
-			return nil, errors.Errorf("message[%d].content is required", i)
-		}
-		// Additional validation for content based on type
-		switch content := message.Content.(type) {
-		case string:
-			if content == "" {
-				return nil, errors.Errorf("message[%d].content cannot be empty string", i)
-			}
-		case []any:
-			if len(content) == 0 {
-				return nil, errors.Errorf("message[%d].content array cannot be empty", i)
-			}
-		default:
-			// Allow other content types (like structured content blocks)
-		}
-	}
-
-	return claudeRequest, nil
-}
-
-// getClaudeMessagesPromptTokens estimates the number of prompt tokens for Claude Messages API
-func getClaudeMessagesPromptTokens(ctx context.Context, request *ClaudeMessagesRequest) int {
-	logger := gmw.GetLogger(ctx)
-
-	// Convert Claude Messages to OpenAI format for accurate token counting
-	openaiRequest := convertClaudeToOpenAIForTokenCounting(request)
-
-	// Use simple character-based estimation for now to avoid tiktoken issues
-	// This can be improved later with proper tokenization
-	promptTokens := estimateTokensFromMessages(openaiRequest.Messages)
-
-	// Add tokens for tools if present
-	toolsTokens := 0
-	if len(request.Tools) > 0 {
-		toolsTokens = countClaudeToolsTokens(ctx, request.Tools, "gpt-3.5-turbo")
-		promptTokens += toolsTokens
-	}
-
-	// Add tokens for images using Claude-specific calculation
-	imageTokens := calculateClaudeImageTokens(ctx, request)
-	promptTokens += imageTokens
-
-	textTokens := promptTokens - imageTokens - toolsTokens
-
-	logger.Debug("estimated prompt tokens for Claude Messages",
-		zap.Int("total", promptTokens),
-		zap.Int("text", textTokens),
-		zap.Int("tools", toolsTokens),
-		zap.Int("images", imageTokens),
-	)
-	return promptTokens
-}
-
-// countClaudeToolsTokens estimates tokens for Claude tools
-func countClaudeToolsTokens(ctx context.Context, tools []relaymodel.ClaudeTool, model string) int {
-	totalTokens := 0
-
-	for _, tool := range tools {
-		// Count tokens for tool name and description
-		totalTokens += openai.CountTokenText(tool.Name, model)
-		totalTokens += openai.CountTokenText(tool.Description, model)
-
-		// Count tokens for input schema (convert to JSON string for counting)
-		if tool.InputSchema != nil {
-			if schemaBytes, err := json.Marshal(tool.InputSchema); err == nil {
-				totalTokens += openai.CountTokenText(string(schemaBytes), model)
-			}
-		}
-	}
-
-	return totalTokens
-}
-
-// convertClaudeToOpenAIForTokenCounting converts Claude Messages format to OpenAI format for token counting
-func convertClaudeToOpenAIForTokenCounting(request *ClaudeMessagesRequest) *relaymodel.GeneralOpenAIRequest {
-	openaiRequest := &relaymodel.GeneralOpenAIRequest{
-		Model:    request.Model,
-		Messages: []relaymodel.Message{},
-	}
-
-	// Convert system prompt
-	if request.System != nil {
-		switch system := request.System.(type) {
-		case string:
-			if system != "" {
-				openaiRequest.Messages = append(openaiRequest.Messages, relaymodel.Message{
-					Role:    "system",
-					Content: system,
-				})
-			}
-		case []any:
-			// For structured system content, extract text parts
-			var systemParts []string
-			for _, block := range system {
-				if blockMap, ok := block.(map[string]any); ok {
-					if text, exists := blockMap["text"]; exists {
-						if textStr, ok := text.(string); ok {
-							systemParts = append(systemParts, textStr)
-						}
-					}
-				}
-			}
-			if len(systemParts) > 0 {
-				systemText := strings.Join(systemParts, "\n")
-				openaiRequest.Messages = append(openaiRequest.Messages, relaymodel.Message{
-					Role:    "system",
-					Content: systemText,
-				})
-			}
-		}
-	}
-
-	// Convert messages
-	for _, msg := range request.Messages {
-		openaiMessage := relaymodel.Message{
-			Role: msg.Role,
-		}
-
-		// Convert content based on type
-		switch content := msg.Content.(type) {
-		case string:
-			// Simple string content
-			openaiMessage.Content = content
-		case []any:
-			// Structured content blocks - convert to OpenAI format
-			var contentParts []relaymodel.MessageContent
-			for _, block := range content {
-				if blockMap, ok := block.(map[string]any); ok {
-					if blockType, exists := blockMap["type"]; exists {
-						switch blockType {
-						case "text":
-							if text, exists := blockMap["text"]; exists {
-								if textStr, ok := text.(string); ok {
-									contentParts = append(contentParts, relaymodel.MessageContent{
-										Type: "text",
-										Text: &textStr,
-									})
-								}
-							}
-						case "image":
-							if source, exists := blockMap["source"]; exists {
-								if sourceMap, ok := source.(map[string]any); ok {
-									imageURL := relaymodel.ImageURL{}
-									if mediaType, exists := sourceMap["media_type"]; exists {
-										if data, exists := sourceMap["data"]; exists {
-											if dataStr, ok := data.(string); ok {
-												// Convert to data URL format for token counting
-												imageURL.Url = fmt.Sprintf("data:%s;base64,%s", mediaType, dataStr)
-											}
-										}
-									} else if url, exists := sourceMap["url"]; exists {
-										if urlStr, ok := url.(string); ok {
-											imageURL.Url = urlStr
-										}
-									}
-									contentParts = append(contentParts, relaymodel.MessageContent{
-										Type:     "image_url",
-										ImageURL: &imageURL,
-									})
-								}
-							}
-						}
-					}
-				}
-			}
-			if len(contentParts) > 0 {
-				openaiMessage.Content = contentParts
-			}
-		default:
-			// Fallback: convert to string
-			if contentBytes, err := json.Marshal(content); err == nil {
-				openaiMessage.Content = string(contentBytes)
-			}
-		}
-
-		openaiRequest.Messages = append(openaiRequest.Messages, openaiMessage)
-	}
-
-	return openaiRequest
-}
-
-// convertClaudeToolsToOpenAI converts Claude tools to OpenAI format for token counting
-func convertClaudeToolsToOpenAI(claudeTools []relaymodel.ClaudeTool) []relaymodel.Tool {
-	var openaiTools []relaymodel.Tool
-
-	for _, tool := range claudeTools {
-		openaiTool := relaymodel.Tool{
-			Type: "function",
-			Function: &relaymodel.Function{
-				Name:        tool.Name,
-				Description: tool.Description,
-			},
-		}
-
-		// Convert input schema
-		if tool.InputSchema != nil {
-			if schemaMap, ok := tool.InputSchema.(map[string]any); ok {
-				openaiTool.Function.Parameters = schemaMap
-			}
-		}
-
-		openaiTools = append(openaiTools, openaiTool)
-	}
-
-	return openaiTools
-}
-
-// calculateClaudeStructuredOutputCost calculates additional cost for structured output in Claude Messages API
-func calculateClaudeStructuredOutputCost(_ *ClaudeMessagesRequest, _ int, _ float64, _ float64) int64 {
-	// No surcharge for structured outputs
-	return 0
-}
-
-// calculateClaudeImageTokens calculates tokens for images in Claude Messages API
-// According to Claude documentation: tokens = (width px * height px) / 750
-func calculateClaudeImageTokens(ctx context.Context, request *ClaudeMessagesRequest) int {
-	logger := gmw.GetLogger(ctx)
-	totalImageTokens := 0
-
-	// Process messages for images
-	for _, message := range request.Messages {
-		switch content := message.Content.(type) {
-		case []any:
-			// Handle content blocks (text, image, etc.)
-			for _, block := range content {
-				if blockMap, ok := block.(map[string]any); ok {
-					if blockType, exists := blockMap["type"]; exists && blockType == "image" {
-						imageTokens := calculateSingleImageTokens(ctx, blockMap)
-						totalImageTokens += imageTokens
-					}
-				}
-			}
-		}
-	}
-
-	// Process system prompt for images (if it contains structured content)
-	if request.System != nil {
-		if systemBlocks, ok := request.System.([]any); ok {
-			for _, block := range systemBlocks {
-				if blockMap, ok := block.(map[string]any); ok {
-					if blockType, exists := blockMap["type"]; exists && blockType == "image" {
-						imageTokens := calculateSingleImageTokens(ctx, blockMap)
-						totalImageTokens += imageTokens
-					}
-				}
-			}
-		}
-	}
-
-	logger.Debug("calculated image tokens for Claude Messages", zap.Int("image_tokens", totalImageTokens))
-	return totalImageTokens
-}
-
-// calculateSingleImageTokens calculates tokens for a single image block
-func calculateSingleImageTokens(ctx context.Context, imageBlock map[string]any) int {
-	logger := gmw.GetLogger(ctx)
-
-	source, exists := imageBlock["source"]
-	if !exists {
-		return 0
-	}
-
-	sourceMap, ok := source.(map[string]any)
-	if !ok {
-		return 0
-	}
-
-	sourceType, exists := sourceMap["type"]
-	if !exists {
-		return 0
-	}
-
-	switch sourceType {
-	case "base64":
-		if data, exists := sourceMap["data"]; exists {
-			if dataStr, ok := data.(string); ok {
-				estimatedTokens := min(max(len(dataStr)/1000, 50), 2000)
-				logger.Debug("estimated tokens for base64 image",
-					zap.Int("tokens", estimatedTokens),
-					zap.Int("data_length", len(dataStr)),
-				)
-				return estimatedTokens
-			}
-		}
-
-	case "url":
-		estimatedTokens := 853
-		logger.Debug("estimated tokens for URL image", zap.Int("tokens", estimatedTokens))
-		return estimatedTokens
-
-	case "file":
-		estimatedTokens := 853
-		logger.Debug("estimated tokens for file image", zap.Int("tokens", estimatedTokens))
-		return estimatedTokens
-	}
-
-	return 0
-}
-
-// estimateTokensFromMessages provides a simple character-based token estimation
-// This is a fallback when proper tokenization is not available
-func estimateTokensFromMessages(messages []relaymodel.Message) int {
-	totalChars := 0
-
-	for _, message := range messages {
-		// Count role characters
-		totalChars += len(message.Role)
-
-		// Count content characters
-		switch content := message.Content.(type) {
-		case string:
-			totalChars += len(content)
-		case []relaymodel.MessageContent:
-			for _, part := range content {
-				if part.Type == "text" && part.Text != nil {
-					totalChars += len(*part.Text)
-				}
-				// Images are counted separately in calculateClaudeImageTokens
-			}
-		default:
-			// Fallback: convert to string and count
-			if contentBytes, err := json.Marshal(content); err == nil {
-				totalChars += len(contentBytes)
-			}
-		}
-	}
-
-	// Rough estimation: 4 characters per token (this is a simplification)
-	estimatedTokens := max(totalChars/4, 1)
-	return estimatedTokens
-}
-
-// preConsumeClaudeMessagesQuota pre-consumes quota for Claude Messages API requests
-func preConsumeClaudeMessagesQuota(c *gin.Context, request *ClaudeMessagesRequest, promptTokens int, ratio float64, meta *metalib.Meta) (int64, *relaymodel.ErrorWithStatusCode) {
-	// Use similar logic to ChatCompletion pre-consumption
-	ctx := gmw.Ctx(c)
-	preConsumedTokens := int64(promptTokens)
-	if request.MaxTokens > 0 {
-		preConsumedTokens += int64(request.MaxTokens)
-	}
-
-	baseQuota := int64(float64(preConsumedTokens) * ratio)
-	if ratio != 0 && baseQuota <= 0 {
-		baseQuota = 1
-	}
-
-	// Check user quota first
-	tokenQuota := c.GetInt64(ctxkey.TokenQuota)
-	tokenQuotaUnlimited := c.GetBool(ctxkey.TokenQuotaUnlimited)
-	userQuota, err := model.CacheGetUserQuota(ctx, meta.UserId)
-	if err != nil {
-		return baseQuota, openai.ErrorWrapper(err, "get_user_quota_failed", http.StatusInternalServerError)
-	}
-	if userQuota-baseQuota < 0 {
-		return baseQuota, openai.ErrorWrapper(errors.New("user quota is not enough"), "insufficient_user_quota", http.StatusForbidden)
-	}
-	err = model.CacheDecreaseUserQuota(ctx, meta.UserId, baseQuota)
-	if err != nil {
-		return baseQuota, openai.ErrorWrapper(err, "decrease_user_quota_failed", http.StatusInternalServerError)
-	}
-	if userQuota > 100*baseQuota &&
-		(tokenQuotaUnlimited || tokenQuota > 100*baseQuota) {
-		// in this case, we do not pre-consume quota
-		// because the user and token have enough quota
-		baseQuota = 0
-		gmw.GetLogger(c).Info(fmt.Sprintf("user %d has enough quota %d, trusted and no need to pre-consume", meta.UserId, userQuota))
-	}
-	if baseQuota > 0 {
-		err := model.PreConsumeTokenQuota(ctx, meta.TokenId, baseQuota)
-		if err != nil {
-			return baseQuota, openai.ErrorWrapper(err, "pre_consume_token_quota_failed", http.StatusForbidden)
-		}
-	}
-
-	gmw.GetLogger(c).Debug("pre-consumed quota for Claude Messages",
-		zap.Int64("quota", baseQuota),
-		zap.Int("tokens", int(preConsumedTokens)),
-		zap.Float64("ratio", ratio))
-	return baseQuota, nil
-}
-
-// postConsumeClaudeMessagesQuotaWithTraceID calculates and applies final quota consumption for Claude Messages API with explicit trace ID
-func postConsumeClaudeMessagesQuotaWithTraceID(ctx context.Context, requestId string, traceId string, usage *relaymodel.Usage, meta *metalib.Meta, request *ClaudeMessagesRequest, ratio float64, preConsumedQuota int64, modelRatio float64, groupRatio float64, channelCompletionRatio map[string]float64) int64 {
-	if usage == nil {
-		// Context may be detached; log with context if available
-		gmw.GetLogger(ctx).Warn("usage is nil for Claude Messages API")
-		return 0
-	}
-
-	// Use three-layer pricing system for completion ratio
-	pricingAdaptor := relay.GetAdaptor(meta.ChannelType)
-	completionRatio := pricing.GetCompletionRatioWithThreeLayers(request.Model, channelCompletionRatio, pricingAdaptor)
-	promptTokens := usage.PromptTokens
-	completionTokens := usage.CompletionTokens
-
-	// Calculate base quota
-	baseQuota := int64(math.Ceil((float64(promptTokens) + float64(completionTokens)*completionRatio) * ratio))
-
-	// No structured output surcharge
-	quota := baseQuota + usage.ToolsCost
-	if ratio != 0 && quota <= 0 {
-		quota = 1
-	}
-
-	totalTokens := promptTokens + completionTokens
-	if totalTokens == 0 {
-		// in this case, must be some error happened
-		// we cannot just return, because we may have to return the pre-consumed quota
-		quota = 0
-	}
-
-	// Extract cache token counts from usage details
-	cachedPromptTokens := 0
-	if usage.PromptTokensDetails != nil {
-		cachedPromptTokens = usage.PromptTokensDetails.CachedTokens
-	}
-	cachedCompletionTokens := 0
-	if usage.CompletionTokensDetails != nil {
-		cachedCompletionTokens = usage.CompletionTokensDetails.CachedTokens
-	}
-
-	cacheWrite5mTokens := usage.CacheWrite5mTokens
-	cacheWrite1hTokens := usage.CacheWrite1hTokens
-	metadata := model.AppendCacheWriteTokensMetadata(nil, cacheWrite5mTokens, cacheWrite1hTokens)
-
-	// Use centralized detailed billing function with explicit trace ID
-	quotaDelta := quota - preConsumedQuota
-	// If requestId somehow empty, try derive from ctx (best-effort)
-	if requestId == "" {
-		if ginCtx, ok := gmw.GetGinCtxFromStdCtx(ctx); ok {
-			requestId = ginCtx.GetString(ctxkey.RequestId)
-		}
-	}
-	billing.PostConsumeQuotaDetailed(billing.QuotaConsumeDetail{
-		Ctx:                    ctx,
-		TokenId:                meta.TokenId,
-		QuotaDelta:             quotaDelta,
-		TotalQuota:             quota,
-		UserId:                 meta.UserId,
-		ChannelId:              meta.ChannelId,
-		PromptTokens:           promptTokens,
-		CompletionTokens:       completionTokens,
-		ModelRatio:             modelRatio,
-		GroupRatio:             groupRatio,
-		ModelName:              request.Model,
-		TokenName:              meta.TokenName,
-		IsStream:               meta.IsStream,
-		StartTime:              meta.StartTime,
-		SystemPromptReset:      false,
-		CompletionRatio:        completionRatio,
-		ToolsCost:              usage.ToolsCost,
-		CachedPromptTokens:     cachedPromptTokens,
-		CachedCompletionTokens: cachedCompletionTokens,
-		CacheWrite5mTokens:     cacheWrite5mTokens,
-		CacheWrite1hTokens:     cacheWrite1hTokens,
-		Metadata:               metadata,
-		RequestId:              requestId,
-		TraceId:                traceId,
-	})
-
-	// Log with context if available
-	gmw.GetLogger(ctx).Debug("Claude Messages quota with trace ID",
-		zap.Int64("pre_consumed", preConsumedQuota),
-		zap.Int64("actual", quota),
-		zap.Int64("difference", quotaDelta),
-	)
-	return quota
 }

@@ -1,43 +1,4 @@
 {
-  "common": {
-    "about": "概要",
-    "back": "戻る",
-    "cancel": "キャンセル",
-    "channels": "チャンネル",
-    "confirm": "確認",
-    "dashboard": "ダッシュボード",
-    "email": "メール",
-    "language": "言語",
-    "login": "ログイン",
-    "logout": "ログアウト",
-    "logs": "ログ",
-    "models": "モデル",
-    "or": "または",
-    "password": "パスワード",
-    "playground": "プレイグラウンド",
-    "redemptions": "引き換え",
-    "register": "登録",
-    "settings": "設定",
-    "status": "ステータス",
-    "submit": "送信",
-    "to": "へ",
-    "tokens": "トークン",
-    "topup": "チャージ",
-    "username": "ユーザー名",
-    "users": "ユーザー",
-    "welcome": "One APIへようこそ"
-  },
-  "header": {
-    "confirm_logout": "ログアウトの確認",
-    "log_out": "ログアウト",
-    "logging_out": "ログアウト中...",
-    "logout_description": "ログアウトしてもよろしいですか？ダッシュボードにアクセスするには再度ログインする必要があります。",
-    "navigation": "ナビゲーション",
-    "signed_in_as": "ログイン中:"
-  },
-  "home": {
-    "iframe_title": "ホーム"
-  },
   "about": {
     "cta_models": "対応モデルを見る",
     "cta_repo": "GitHub リポジトリ",
@@ -57,6 +18,49 @@
     "fallback_error": "概要ページの読み込みに失敗しました。",
     "iframe_title": "概要",
     "title": "概要"
+  },
+  "common": {
+    "about": "概要",
+    "back": "戻る",
+    "cancel": "キャンセル",
+    "channels": "チャンネル",
+    "confirm": "確認",
+    "dashboard": "ダッシュボード",
+    "email": "メール",
+    "language": "言語",
+    "login": "ログイン",
+    "logout": "ログアウト",
+    "logs": "ログ",
+    "mcps": "MCPs",
+    "models": "モデル",
+    "no_items": "項目がありません",
+    "or": "または",
+    "password": "パスワード",
+    "playground": "プレイグラウンド",
+    "redemptions": "引き換え",
+    "register": "登録",
+    "settings": "設定",
+    "status": "ステータス",
+    "submit": "送信",
+    "to": "へ",
+    "tokens": "トークン",
+    "tools": "ツール",
+    "topup": "チャージ",
+    "username": "ユーザー名",
+    "users": "ユーザー",
+    "version": "バージョン",
+    "welcome": "One APIへようこそ"
+  },
+  "header": {
+    "confirm_logout": "ログアウトの確認",
+    "log_out": "ログアウト",
+    "logging_out": "ログアウト中...",
+    "logout_description": "ログアウトしてもよろしいですか？ダッシュボードにアクセスするには再度ログインする必要があります。",
+    "navigation": "ナビゲーション",
+    "signed_in_as": "ログイン中:"
+  },
+  "home": {
+    "iframe_title": "ホーム"
   },
   "notFound": {
     "go_home": "今すぐホームへ",

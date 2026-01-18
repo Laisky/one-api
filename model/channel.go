@@ -78,6 +78,7 @@ type ChannelConfig struct {
 	AuthType          string                `json:"auth_type,omitempty"`
 	APIFormat         string                `json:"api_format,omitempty"`
 	Tooling           *ChannelToolingConfig `json:"tooling,omitempty"`
+	MCPToolBlacklist  []string              `json:"mcp_tool_blacklist,omitempty"`
 	// SupportedEndpoints is a list of endpoint names that this channel supports.
 	// When nil or empty, the channel uses default endpoints for its type.
 	// Endpoint names: chat_completions, completions, embeddings, moderations,

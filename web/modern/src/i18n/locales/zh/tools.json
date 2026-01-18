@@ -1,0 +1,27 @@
+{
+    "tools": {
+        "clear_filters": "清除筛选",
+        "description": "浏览从 MCP 服务器同步的工具，按服务器分组展示定价与结构信息。",
+        "found": "在 {{servers}} 个服务器中找到 {{count}} 个工具",
+        "labels": {
+            "free": "免费",
+            "quota": "额度"
+        },
+        "loading": "正在加载工具...",
+        "no_tools": "未找到工具",
+        "no_tools_desc": "请尝试调整搜索或筛选条件。",
+        "search": "搜索工具...",
+        "status": {
+            "disabled": "已禁用",
+            "enabled": "已启用"
+        },
+        "table": {
+            "description": "描述",
+            "pricing": "定价",
+            "schema": "输入 Schema",
+            "status": "状态",
+            "tool": "工具"
+        },
+        "title": "MCP 工具"
+    }
+}

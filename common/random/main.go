@@ -19,6 +19,11 @@ func GetUUID() string {
 	return code
 }
 
+// GetUUIDWithHyphens generates a UUID string that preserves hyphens.
+func GetUUIDWithHyphens() string {
+	return gutils.UUID7()
+}
+
 const keyChars = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
 const keyNumbers = "0123456789"
 

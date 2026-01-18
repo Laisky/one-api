@@ -8,12 +8,12 @@ import (
 	"github.com/Laisky/zap"
 	"github.com/gin-gonic/gin"
 
-	"github.com/songquanpeng/one-api/common/logger"
 	"github.com/songquanpeng/one-api/model"
 )
 
 // GetTraceByTraceId retrieves tracing information for a specific trace ID
 func GetTraceByTraceId(c *gin.Context) {
+	lg := gmw.GetLogger(c)
 	traceId := c.Param("trace_id")
 	if traceId == "" {
 		c.JSON(http.StatusBadRequest, gin.H{
@@ -30,7 +30,7 @@ func GetTraceByTraceId(c *gin.Context) {
 
 	trace, err := model.GetTraceByTraceId(ctx, traceId)
 	if err != nil {
-		logger.Logger.Error("failed to get trace by trace ID",
+		lg.Error("failed to get trace by trace ID",
 			zap.Error(err),
 			zap.String("trace_id", traceId))
 		c.JSON(http.StatusNotFound, gin.H{
@@ -43,7 +43,7 @@ func GetTraceByTraceId(c *gin.Context) {
 	// Parse timestamps for easier frontend consumption
 	timestamps, err := trace.GetTraceTimestamps()
 	if err != nil {
-		logger.Logger.Error("failed to parse trace timestamps",
+		lg.Error("failed to parse trace timestamps",
 			zap.Error(err),
 			zap.String("trace_id", traceId))
 		c.JSON(http.StatusInternalServerError, gin.H{
@@ -74,6 +74,7 @@ func GetTraceByTraceId(c *gin.Context) {
 
 // GetTraceByLogId retrieves tracing information for a log entry
 func GetTraceByLogId(c *gin.Context) {
+	lg := gmw.GetLogger(c)
 	logIdStr := c.Param("log_id")
 	if logIdStr == "" {
 		c.JSON(http.StatusBadRequest, gin.H{
@@ -95,7 +96,7 @@ func GetTraceByLogId(c *gin.Context) {
 	// Get the log entry to find the trace_id
 	log, err := model.GetLogById(logId)
 	if err != nil {
-		logger.Logger.Error("failed to get log by ID",
+		lg.Error("failed to get log by ID",
 			zap.Error(err),
 			zap.Int("log_id", logId))
 		c.JSON(http.StatusNotFound, gin.H{
@@ -121,7 +122,7 @@ func GetTraceByLogId(c *gin.Context) {
 
 	trace, err := model.GetTraceByTraceId(ctx, log.TraceId)
 	if err != nil {
-		logger.Logger.Error("failed to get trace by trace ID from log",
+		lg.Error("failed to get trace by trace ID from log",
 			zap.Error(err),
 			zap.String("trace_id", log.TraceId),
 			zap.Int("log_id", logId))
@@ -135,7 +136,7 @@ func GetTraceByLogId(c *gin.Context) {
 	// Parse timestamps for easier frontend consumption
 	timestamps, err := trace.GetTraceTimestamps()
 	if err != nil {
-		logger.Logger.Error("failed to parse trace timestamps from log",
+		lg.Error("failed to parse trace timestamps from log",
 			zap.Error(err),
 			zap.String("trace_id", log.TraceId),
 			zap.Int("log_id", logId))

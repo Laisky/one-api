@@ -103,12 +103,20 @@ func ConvertClaudeRequest(c *gin.Context, request *model.ClaudeRequest) (any, er
 	if !promoteStructured && len(request.Tools) > 0 {
 		var tools []model.Tool
 		for _, claudeTool := range request.Tools {
+			if strings.TrimSpace(claudeTool.Type) != "" && claudeTool.InputSchema == nil {
+				tools = append(tools, model.Tool{Type: strings.TrimSpace(claudeTool.Type)})
+				continue
+			}
+			parameters, ok := claudeTool.InputSchema.(map[string]any)
+			if !ok {
+				parameters = map[string]any{}
+			}
 			tool := model.Tool{
 				Type: "function",
 				Function: &model.Function{
 					Name:        claudeTool.Name,
 					Description: claudeTool.Description,
-					Parameters:  claudeTool.InputSchema.(map[string]any),
+					Parameters:  parameters,
 				},
 			}
 			tools = append(tools, tool)
@@ -584,7 +592,7 @@ func collectClaudeText(content any, parts *[]string) {
 		if text, ok := val["text"].(string); ok && strings.TrimSpace(text) != "" {
 			*parts = append(*parts, text)
 		}
-		if content, ok := val["content"].(any); ok {
+		if content, ok := val["content"]; ok {
 			collectClaudeText(content, parts)
 		}
 	}

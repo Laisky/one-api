@@ -55,7 +55,7 @@ func GetTraceIDFromContext(ctx context.Context) string {
 	if traceID := otelTraceIDFromContext(ctx); traceID != "" {
 		return traceID
 	}
-	logger.Logger.Warn("failed to get gin context from standard context for trace ID extraction")
+	logger.FromContext(ctx).Warn("failed to get gin context from standard context for trace ID extraction")
 	return ""
 }
 
@@ -117,6 +117,19 @@ func RecordTraceTimestamp(c *gin.Context, timestampKey string) {
 	err := model.UpdateTraceTimestamp(c, traceID, timestampKey)
 	if err != nil {
 		lg.Error("failed to update trace timestamp", zap.Error(err))
+	}
+}
+
+// RecordTraceExternalCall appends an external call entry to the trace timeline.
+func RecordTraceExternalCall(c *gin.Context, call model.TraceExternalCall) {
+	traceID := GetTraceID(c)
+	lg := gmw.GetLogger(c)
+	if traceID == "" {
+		lg.Warn("empty trace ID, skipping external call record")
+		return
+	}
+	if err := model.AppendTraceExternalCall(c, traceID, call); err != nil {
+		lg.Error("failed to append trace external call", zap.Error(err))
 	}
 }
 

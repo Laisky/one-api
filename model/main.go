@@ -285,7 +285,9 @@ func migrateDB() error {
 		return errors.Wrapf(err, "failed to migrate Token")
 	}
 	if err = DB.AutoMigrate(&User{}); err != nil {
-		return errors.Wrapf(err, "failed to migrate User")
+		if !shouldIgnoreDuplicateColumn(err, "mcp_tool_blacklist") {
+			return errors.Wrapf(err, "failed to migrate User")
+		}
 	}
 	if err = DB.AutoMigrate(&Option{}); err != nil {
 		return errors.Wrapf(err, "failed to migrate Option")
@@ -311,7 +313,25 @@ func migrateDB() error {
 	if err = DB.AutoMigrate(&AsyncTaskBinding{}); err != nil {
 		return errors.Wrapf(err, "failed to migrate AsyncTaskBinding")
 	}
+	if err = DB.AutoMigrate(&MCPServer{}); err != nil {
+		if !shouldIgnoreDuplicateColumn(err, "priority") {
+			return errors.Wrapf(err, "failed to migrate MCPServer")
+		}
+	}
+	if err = DB.AutoMigrate(&MCPTool{}); err != nil {
+		return errors.Wrapf(err, "failed to migrate MCPTool")
+	}
 	return nil
+}
+
+// shouldIgnoreDuplicateColumn reports whether a migration error can be ignored.
+// This avoids startup failures when a column already exists.
+func shouldIgnoreDuplicateColumn(err error, column string) bool {
+	if err == nil || strings.TrimSpace(column) == "" {
+		return false
+	}
+	message := strings.ToLower(err.Error())
+	return strings.Contains(message, "duplicate column") && strings.Contains(message, strings.ToLower(column))
 }
 
 func InitLogDB() {

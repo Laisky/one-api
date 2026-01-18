@@ -1,44 +1,39 @@
-import { Link, useLocation, useNavigate } from 'react-router-dom'
-import { useAuthStore } from '@/lib/stores/auth'
-import { api } from '@/lib/api'
-import { Button } from '@/components/ui/button'
-import { ThemeToggle } from '@/components/theme-toggle'
-import { LanguageSelector } from '@/components/LanguageSelector'
-import { NavigationDrawer } from '@/components/ui/mobile-drawer'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle
-} from '@/components/ui/dialog'
+import { LanguageSelector } from '@/components/LanguageSelector';
+import { ThemeToggle } from '@/components/theme-toggle';
+import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
-  DropdownMenuTrigger
-} from '@/components/ui/dropdown-menu'
-import { useResponsive } from '@/hooks/useResponsive'
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { NavigationDrawer } from '@/components/ui/mobile-drawer';
+import { useResponsive } from '@/hooks/useResponsive';
+import { api } from '@/lib/api';
+import { useAuthStore } from '@/lib/stores/auth';
 import {
-  Menu,
-  Home,
-  Settings,
-  Users,
-  CreditCard,
   BarChart3,
-  MessageSquare,
-  Info,
-  Zap,
-  Gift,
+  CreditCard,
   DollarSign,
   FileText,
-  LogOut
-} from 'lucide-react'
-import { useState } from 'react'
-import { useTranslation } from 'react-i18next'
+  Gift,
+  Home,
+  Info,
+  LogOut,
+  Menu,
+  MessageSquare,
+  Server,
+  Settings,
+  Users,
+  Wrench,
+  Zap,
+} from 'lucide-react';
+import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 
 // Icon mapping for navigation items
 const navigationIcons = {
@@ -53,20 +48,22 @@ const navigationIcons = {
   '/chat': MessageSquare,
   '/about': Info,
   '/settings': Settings,
-}
+  '/mcps': Server,
+  '/tools': Wrench,
+};
 
 export function Header() {
-  const { t } = useTranslation()
-  const { user, logout } = useAuthStore()
-  const location = useLocation()
-  const navigate = useNavigate()
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
-  const [isLogoutDialogOpen, setLogoutDialogOpen] = useState(false)
-  const [isLoggingOut, setIsLoggingOut] = useState(false)
-  const { isMobile, isTablet } = useResponsive()
+  const { t } = useTranslation();
+  const { user, logout } = useAuthStore();
+  const location = useLocation();
+  const navigate = useNavigate();
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [isLogoutDialogOpen, setLogoutDialogOpen] = useState(false);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const { isMobile, isTablet } = useResponsive();
 
-  const isAdmin = user?.role >= 10
-  const chatLink = localStorage.getItem('chat_link')
+  const isAdmin = user?.role >= 10;
+  const chatLink = localStorage.getItem('chat_link');
 
   const navigationItems = [
     { name: t('common.dashboard'), to: '/dashboard', show: true },
@@ -74,6 +71,8 @@ export function Header() {
     { name: t('common.tokens'), to: '/tokens', show: true },
     { name: t('common.logs'), to: '/logs', show: true },
     { name: t('common.users'), to: '/users', show: isAdmin },
+    { name: t('common.mcps'), to: '/mcps', show: isAdmin },
+    { name: t('common.tools'), to: '/tools', show: isAdmin },
     { name: t('common.redemptions'), to: '/redemptions', show: isAdmin },
     { name: t('common.topup'), to: '/topup', show: true },
     { name: t('common.models'), to: '/models', show: true },
@@ -81,30 +80,32 @@ export function Header() {
     { name: t('common.playground'), to: '/chat', show: true },
     { name: t('common.about'), to: '/about', show: true },
     { name: t('common.settings'), to: '/settings', show: isAdmin },
-  ].filter(item => item.show).map(item => ({
-    ...item,
-    href: item.to,
-    icon: navigationIcons[item.to as keyof typeof navigationIcons],
-    isActive: location.pathname === item.to
-  }))
+  ]
+    .filter((item) => item.show)
+    .map((item) => ({
+      ...item,
+      href: item.to,
+      icon: navigationIcons[item.to as keyof typeof navigationIcons],
+      isActive: location.pathname === item.to,
+    }));
 
-  const isActivePage = (path: string) => location.pathname === path
+  const isActivePage = (path: string) => location.pathname === path;
 
   const performLogout = async () => {
-    setIsLoggingOut(true)
+    setIsLoggingOut(true);
     try {
       // Unified API call - complete URL with /api prefix
-      await api.get('/api/user/logout')
+      await api.get('/api/user/logout');
     } catch (error) {
-      console.error('Logout failed:', error)
+      console.error('Logout failed:', error);
     } finally {
-      setLogoutDialogOpen(false)
-      setIsLoggingOut(false)
+      setLogoutDialogOpen(false);
+      setIsLoggingOut(false);
       // Force logout even if API call fails
-      logout()
-      navigate('/login')
+      logout();
+      navigate('/login');
     }
-  }
+  };
 
   return (
     <>
@@ -113,10 +114,7 @@ export function Header() {
           <div className="flex items-center justify-between h-16">
             {/* Logo and Brand */}
             <div className="flex items-center space-x-4">
-              <Link
-                to="/"
-                className="text-xl font-bold hover:text-primary transition-colors truncate max-w-[55vw] sm:max-w-none"
-              >
+              <Link to="/" className="text-xl font-bold hover:text-primary transition-colors truncate max-w-[55vw] sm:max-w-none">
                 {localStorage.getItem('system_name') || 'OneAPI'}
               </Link>
 
@@ -127,10 +125,11 @@ export function Header() {
                     <Link
                       key={item.to}
                       to={item.to}
-                      className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${isActivePage(item.to)
-                        ? 'bg-primary text-primary-foreground'
-                        : 'text-muted-foreground hover:text-foreground hover:bg-muted'
-                        }`}
+                      className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                        isActivePage(item.to)
+                          ? 'bg-primary text-primary-foreground'
+                          : 'text-muted-foreground hover:text-foreground hover:bg-muted'
+                      }`}
                     >
                       {item.name}
                     </Link>
@@ -147,20 +146,13 @@ export function Header() {
               {user ? (
                 <>
                   {/* User Welcome - Hide on mobile */}
-                  <span className="hidden md:inline text-sm text-muted-foreground truncate max-w-32">
-                    {user.username}
-                  </span>
+                  <span className="hidden md:inline text-sm text-muted-foreground truncate max-w-32">{user.username}</span>
 
                   {/* Desktop hamburger menu for account actions */}
                   {!isMobile && !isTablet && (
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="hidden lg:inline-flex touch-target"
-                          aria-label="Open account menu"
-                        >
+                        <Button variant="ghost" size="icon" className="hidden lg:inline-flex touch-target" aria-label="Open account menu">
                           <Menu className="h-5 w-5" />
                         </Button>
                       </DropdownMenuTrigger>
@@ -170,10 +162,7 @@ export function Header() {
                           <span className="font-medium truncate">{user.username}</span>
                         </DropdownMenuLabel>
                         <DropdownMenuSeparator />
-                        <DropdownMenuItem
-                          onSelect={() => setLogoutDialogOpen(true)}
-                          className="flex items-center gap-2"
-                        >
+                        <DropdownMenuItem onSelect={() => setLogoutDialogOpen(true)} className="flex items-center gap-2">
                           <LogOut className="h-4 w-4" />
                           {t('common.logout')}
                         </DropdownMenuItem>
@@ -198,19 +187,12 @@ export function Header() {
                 <div className="flex items-center space-x-2">
                   <Link
                     to="/register"
-                    className={`font-medium text-muted-foreground hover:text-primary transition-colors ${isMobile ? 'text-sm' : 'text-sm'
-                      }`}
+                    className={`font-medium text-muted-foreground hover:text-primary transition-colors ${isMobile ? 'text-sm' : 'text-sm'}`}
                   >
                     {t('common.register')}
                   </Link>
-                  <Button
-                    asChild
-                    size="sm"
-                    className="touch-target"
-                  >
-                    <Link to="/login">
-                      {t('common.login')}
-                    </Link>
+                  <Button asChild size="sm" className="touch-target">
+                    <Link to="/login">{t('common.login')}</Link>
                   </Button>
                 </div>
               )}
@@ -225,19 +207,19 @@ export function Header() {
             onClose={() => setMobileMenuOpen(false)}
             navigationItems={navigationItems}
             title={t('header.navigation')}
-            footer={(
+            footer={
               <Button
                 variant="outline"
                 className="w-full touch-target gap-2"
                 onClick={() => {
-                  setMobileMenuOpen(false)
-                  setLogoutDialogOpen(true)
+                  setMobileMenuOpen(false);
+                  setLogoutDialogOpen(true);
                 }}
               >
                 <LogOut className="h-4 w-4" />
                 {t('common.logout')}
               </Button>
-            )}
+            }
           />
         )}
       </header>
@@ -246,28 +228,18 @@ export function Header() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>{t('header.confirm_logout')}</DialogTitle>
-            <DialogDescription>
-              {t('header.logout_description')}
-            </DialogDescription>
+            <DialogDescription>{t('header.logout_description')}</DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setLogoutDialogOpen(false)}
-              disabled={isLoggingOut}
-            >
+            <Button variant="outline" onClick={() => setLogoutDialogOpen(false)} disabled={isLoggingOut}>
               {t('common.cancel')}
             </Button>
-            <Button
-              variant="destructive"
-              onClick={performLogout}
-              disabled={isLoggingOut}
-            >
+            <Button variant="destructive" onClick={performLogout} disabled={isLoggingOut}>
               {isLoggingOut ? t('header.logging_out') : t('header.log_out')}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
     </>
-  )
+  );
 }

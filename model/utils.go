@@ -113,6 +113,7 @@ func InitBatchUpdater() {
 //
 // Call this function after graceful.SetDraining() but before closing the database.
 func StopBatchUpdater(ctx context.Context) {
+	lg := logger.FromContext(ctx)
 	if batchUpdaterStop == nil {
 		// Batch updater was never started
 		return
@@ -125,9 +126,9 @@ func StopBatchUpdater(ctx context.Context) {
 		// Wait for the updater to complete its final flush
 		select {
 		case <-ctx.Done():
-			logger.Logger.Warn("batch updater shutdown context expired before final flush completed")
+			lg.Warn("batch updater shutdown context expired before final flush completed")
 		case <-batchUpdaterDone:
-			logger.Logger.Info("batch updater shutdown completed successfully")
+			lg.Info("batch updater shutdown completed successfully")
 		}
 	})
 }
@@ -157,11 +158,12 @@ func addNewRecord(type_ int, id int, value int64) {
 // If the context is canceled or times out, ongoing database operations will be
 // interrupted (if the database driver supports context cancellation).
 func batchUpdate(ctx context.Context) {
-	logger.Logger.Info("batch update started")
+	lg := logger.FromContext(ctx)
+	lg.Info("batch update started")
 	for i := range BatchUpdateTypeCount {
 		// Check context before processing each type
 		if ctx.Err() != nil {
-			logger.Logger.Warn("batch update interrupted by context cancellation",
+			lg.Warn("batch update interrupted by context cancellation",
 				zap.Error(ctx.Err()),
 				zap.Int("remaining_types", BatchUpdateTypeCount-i))
 			return
@@ -175,7 +177,7 @@ func batchUpdate(ctx context.Context) {
 		for key, value := range store {
 			// Check context before each database operation
 			if ctx.Err() != nil {
-				logger.Logger.Warn("batch update interrupted during store processing",
+				lg.Warn("batch update interrupted during store processing",
 					zap.Error(ctx.Err()),
 					zap.Int("type", i),
 					zap.Int("remaining_items", len(store)))
@@ -186,7 +188,7 @@ func batchUpdate(ctx context.Context) {
 			case BatchUpdateTypeUserQuota:
 				err := increaseUserQuota(ctx, key, value)
 				if err != nil {
-					logger.Logger.Error("failed to batch update user quota",
+					lg.Error("failed to batch update user quota",
 						zap.Int("user_id", key),
 						zap.Int64("value", value),
 						zap.Error(err))
@@ -194,7 +196,7 @@ func batchUpdate(ctx context.Context) {
 			case BatchUpdateTypeTokenQuota:
 				err := increaseTokenQuota(ctx, key, value)
 				if err != nil {
-					logger.Logger.Error("failed to batch update token quota",
+					lg.Error("failed to batch update token quota",
 						zap.Int("token_id", key),
 						zap.Int64("value", value),
 						zap.Error(err))
@@ -208,5 +210,5 @@ func batchUpdate(ctx context.Context) {
 			}
 		}
 	}
-	logger.Logger.Info("batch update finished")
+	lg.Info("batch update finished")
 }

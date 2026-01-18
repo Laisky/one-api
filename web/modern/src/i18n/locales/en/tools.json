@@ -1,0 +1,27 @@
+{
+    "tools": {
+        "clear_filters": "Clear Filters",
+        "description": "Browse tools synced from MCP servers, grouped by server with pricing and schema details.",
+        "found": "Found {{count}} tools in {{servers}} servers",
+        "labels": {
+            "free": "Free",
+            "quota": "quota"
+        },
+        "loading": "Loading tools...",
+        "no_tools": "No tools found",
+        "no_tools_desc": "Try adjusting your search terms or filters.",
+        "search": "Search tools...",
+        "status": {
+            "disabled": "Disabled",
+            "enabled": "Enabled"
+        },
+        "table": {
+            "description": "Description",
+            "pricing": "Pricing",
+            "schema": "Input Schema",
+            "status": "Status",
+            "tool": "Tool"
+        },
+        "title": "MCP Tools"
+    }
+}

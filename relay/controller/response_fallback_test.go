@@ -831,7 +831,16 @@ func ensureResponseFallbackFixtures(t *testing.T) {
 	ensureResponseFallbackDB(t)
 
 	responseFallbackMigrateOnce.Do(func() {
-		err := model.DB.AutoMigrate(&model.User{}, &model.Token{}, &model.Channel{}, &model.UserRequestCost{}, &model.Log{}, &model.Trace{})
+		err := model.DB.AutoMigrate(
+			&model.User{},
+			&model.Token{},
+			&model.Channel{},
+			&model.UserRequestCost{},
+			&model.Log{},
+			&model.Trace{},
+			&model.MCPServer{},
+			&model.MCPTool{},
+		)
 		require.NoError(t, err, "failed to migrate tables")
 	})
 

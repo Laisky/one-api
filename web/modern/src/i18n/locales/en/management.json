@@ -90,6 +90,9 @@
         "18": {
           "tip": "WebSocket version API"
         },
+        "29": {
+          "description": "Groq-hosted LLaMA-style models via OpenAI schema."
+        },
         "40": {
           "description": "Formerly ByteDance Doubao"
         },
@@ -116,6 +119,17 @@
           "label": "Account ID",
           "placeholder": "d8d7c61dbc334c32d3ced580e4bf42b4"
         }
+      },
+      "common": {
+        "add": "Add",
+        "base_url": {
+          "fixed_note": "Using default: {{url}}",
+          "help_editable": "Custom API base URL. Leave empty to use the default URL.",
+          "help_readonly": "The API base URL for this channel type is fixed and cannot be modified.",
+          "label": "API Base URL",
+          "placeholder": "https://api.example.com"
+        },
+        "format_json": "Format JSON"
       },
       "coze": {
         "auth_type": {
@@ -183,6 +197,7 @@
         }
       },
       "groups": {
+        "add_placeholder": "Add custom group...",
         "help": "Restrict access to specific user groups. Empty means all users can access. The default group is always kept.",
         "label": "Groups *"
       },
@@ -192,13 +207,24 @@
         "note": "Map model names to AWS Bedrock inference profile ARNs (optional)",
         "placeholder": "AWS Bedrock inference profile ARN mapping:\n{{example}}"
       },
+      "key": {
+        "help": "The API key for authentication with the provider.",
+        "label": "API Key"
+      },
       "loading": "Loading channel...",
+      "mcp": {
+        "blacklist_add": "Add",
+        "blacklist_description": "Block MCP tools for this channel. Use server.tool or tool name.",
+        "blacklist_label": "MCP tool blacklist",
+        "blacklist_placeholder": "server.tool_name"
+      },
       "model_configs": {
         "format_error": "Unable to format model_configs: {{error}}",
         "help": "Unified per-model settings. Fields: ratio (input pricing multiplier), completion_ratio (output multiplier), max_tokens (limit).",
         "invalid": "Invalid model configs format",
         "invalid_short": "✗ Invalid Config",
         "label": "Model Configs (JSON)",
+        "load_default": "Load Default",
         "note": "Configure pricing and limits per model (optional)",
         "placeholder": "Model configurations in JSON format:\n{{example}}",
         "select_type_notice": "Select a channel type to configure Model Configs.",
@@ -212,6 +238,7 @@
       },
       "models": {
         "add_custom": "Add",
+        "clear": "Clear",
         "clear_all": "Clear All",
         "copy_title": "Click to copy model name",
         "custom_placeholder": "Add custom model...",
@@ -219,8 +246,16 @@
         "fill_related": "Fill Related Models ({{count}})",
         "help": "Models available through this channel. Leave empty to allow all provider models. Use the buttons to fill related/all models; duplicates are removed.",
         "label": "Supported Models *",
+        "no_match": "No models found",
+        "no_selection": "No models selected",
         "search_placeholder": "Search models...",
-        "select_type_notice": "Select a channel type to configure Supported Models."
+        "select_type_notice": "Select a channel type to configure Supported Models.",
+        "selected_count": "Selected Models ({{count}})"
+      },
+      "name": {
+        "help": "A descriptive name for this channel to identify it in logs and lists.",
+        "label": "Channel Name *",
+        "placeholder": "My Channel"
       },
       "openai_compatible": {
         "api_format": {
@@ -246,6 +281,14 @@
           "placeholder": "Plugin-specific parameters"
         }
       },
+      "priority": {
+        "help": "Higher priority channels are tried first. Default is 0.",
+        "label": "Priority"
+      },
+      "ratelimit": {
+        "help": "Maximum requests per minute. 0 means unlimited.",
+        "label": "Rate Limit"
+      },
       "spark": {
         "version": {
           "help": "Select the API version for iFlytek Spark (e.g., v3.5).",
@@ -263,6 +306,9 @@
         "edit": "Edit Channel"
       },
       "tooling": {
+        "add_custom": "Add custom tool...",
+        "available_tools": "Available Tools",
+        "editor_disabled": "Fix JSON error to enable editor",
         "errors": {
           "invalid_json_message": "Fix tooling JSON before editing the whitelist.",
           "invalid_json_title": "Invalid JSON"
@@ -272,6 +318,7 @@
         "help": "Define channel-wide built-in tool policy. Configure the whitelist and per-call pricing for provider built-in tools.",
         "invalid": "Invalid tooling config format",
         "label": "Tooling Config (JSON)",
+        "no_whitelist": "No tools whitelisted",
         "note": "Configure built-in tool allowlists and per-call pricing (optional)",
         "placeholder": "Tooling configuration in JSON format:\n{{example}}",
         "whitelist": {
@@ -282,7 +329,23 @@
           "pricing_required": "Set pricing to unblock \"{{tool}}\". Requests remain blocked until pricing is configured.",
           "subtitle": "Empty whitelist keeps all provider tools available.",
           "title": "Built-in Tool Whitelist"
-        }
+        },
+        "whitelist_editor": "Whitelist Editor",
+        "whitelisted_tools": "Whitelisted Tools ({{count}})"
+      },
+      "type": {
+        "help": "The provider type for this channel. Changing this may reset some fields.",
+        "label": "Channel Type *",
+        "not_found": "No channel type found.",
+        "placeholder": "Select a channel type",
+        "search": "Search channel type..."
+      },
+      "type_change": {
+        "cancel": "Cancel",
+        "confirm": "Change Type",
+        "description": "You are about to change the channel type from \"{{fromType}}\" to \"{{toType}}\".",
+        "title": "Change Channel Type?",
+        "warning": "Warning: This may reset some configuration fields specific to the previous channel type. Any unsaved changes may be lost."
       },
       "validation": {
         "api_key_required": "API key is required.",
@@ -319,6 +382,10 @@
           "label": "Region *",
           "placeholder": "us-central1"
         }
+      },
+      "weight": {
+        "help": "Used for load balancing between channels of the same priority. Default is 0.",
+        "label": "Weight"
       }
     },
     "empty": "No channels found. Create your first channel to get started.",
@@ -624,6 +691,7 @@
     },
     "edit": {
       "actions": {
+        "add": "Add",
         "cancel": "Cancel",
         "create": "Create User",
         "creating": "Creating...",
@@ -662,6 +730,11 @@
           "help": "User group controls access and model/channel visibility.",
           "label": "Group *",
           "placeholder": "Select a group"
+        },
+        "mcp_tool_blacklist": {
+          "help": "Block MCP tools for this user. Use server.tool or tool name.",
+          "label": "MCP tool blacklist",
+          "placeholder": "server.tool_name"
         },
         "password": {
           "help": "Minimum length depends on policy. Leave empty when editing to keep unchanged.",

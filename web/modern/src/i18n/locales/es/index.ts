@@ -4,9 +4,11 @@ import common from "./common.json";
 import dashboard from "./dashboard.json";
 import logs from "./logs.json";
 import management from "./management.json";
+import mcp from "./mcp.json";
 import models from "./models.json";
 import playground from "./playground.json";
 import settings from "./settings.json";
+import tools from "./tools.json";
 
 const translations = {
 	...common,
@@ -18,6 +20,8 @@ const translations = {
 	...models,
 	...billing,
 	...logs,
+	...mcp,
+	...tools,
 };
 
 export default translations;

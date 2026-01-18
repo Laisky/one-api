@@ -5,13 +5,14 @@ package dto
 // still allowing explicit zero values (such as empty strings or zero quotas).
 // Only the user identifier is mandatory; all other attributes are optional.
 type UserAdminUpdatePayload struct {
-	Id          int     `json:"id"`
-	Username    *string `json:"username"`
-	DisplayName *string `json:"display_name"`
-	Password    *string `json:"password"`
-	Email       *string `json:"email"`
-	Quota       *int64  `json:"quota"`
-	Group       *string `json:"group"`
-	Role        *int    `json:"role"`
-	Status      *int    `json:"status"`
+	Id               int       `json:"id"`
+	Username         *string   `json:"username"`
+	DisplayName      *string   `json:"display_name"`
+	Password         *string   `json:"password"`
+	Email            *string   `json:"email"`
+	Quota            *int64    `json:"quota"`
+	Group            *string   `json:"group"`
+	Role             *int      `json:"role"`
+	Status           *int      `json:"status"`
+	MCPToolBlacklist *[]string `json:"mcp_tool_blacklist"`
 }

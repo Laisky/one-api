@@ -1,43 +1,4 @@
 {
-  "common": {
-    "about": "Acerca de",
-    "back": "Atrás",
-    "cancel": "Cancelar",
-    "channels": "Canales",
-    "confirm": "Confirmar",
-    "dashboard": "Panel de control",
-    "email": "Correo electrónico",
-    "language": "Idioma",
-    "login": "Iniciar sesión",
-    "logout": "Cerrar sesión",
-    "logs": "Registros",
-    "models": "Modelos",
-    "or": "O",
-    "password": "Contraseña",
-    "playground": "Playground",
-    "redemptions": "Canjes",
-    "register": "Registrarse",
-    "settings": "Configuración",
-    "status": "Estado",
-    "submit": "Enviar",
-    "to": "a",
-    "tokens": "Tokens",
-    "topup": "Recargar",
-    "username": "Nombre de usuario",
-    "users": "Usuarios",
-    "welcome": "Bienvenido a One API"
-  },
-  "header": {
-    "confirm_logout": "Confirmar cierre de sesión",
-    "log_out": "Cerrar sesión",
-    "logging_out": "Cerrando sesión...",
-    "logout_description": "¿Estás seguro de que quieres cerrar sesión? Tendrás que volver a iniciar sesión para acceder a tu panel de control.",
-    "navigation": "Navegación",
-    "signed_in_as": "Iniciado sesión como"
-  },
-  "home": {
-    "iframe_title": "Inicio"
-  },
   "about": {
     "cta_models": "Ver modelos compatibles",
     "cta_repo": "Repositorio de GitHub",
@@ -57,6 +18,49 @@
     "fallback_error": "No se pudo cargar el contenido de la página Acerca de.",
     "iframe_title": "Acerca de",
     "title": "Acerca de"
+  },
+  "common": {
+    "about": "Acerca de",
+    "back": "Atrás",
+    "cancel": "Cancelar",
+    "channels": "Canales",
+    "confirm": "Confirmar",
+    "dashboard": "Panel de control",
+    "email": "Correo electrónico",
+    "language": "Idioma",
+    "login": "Iniciar sesión",
+    "logout": "Cerrar sesión",
+    "logs": "Registros",
+    "mcps": "MCPs",
+    "models": "Modelos",
+    "no_items": "Sin elementos",
+    "or": "O",
+    "password": "Contraseña",
+    "playground": "Playground",
+    "redemptions": "Canjes",
+    "register": "Registrarse",
+    "settings": "Configuración",
+    "status": "Estado",
+    "submit": "Enviar",
+    "to": "a",
+    "tokens": "Tokens",
+    "tools": "Tools",
+    "topup": "Recargar",
+    "username": "Nombre de usuario",
+    "users": "Usuarios",
+    "version": "Versión",
+    "welcome": "Bienvenido a One API"
+  },
+  "header": {
+    "confirm_logout": "Confirmar cierre de sesión",
+    "log_out": "Cerrar sesión",
+    "logging_out": "Cerrando sesión...",
+    "logout_description": "¿Estás seguro de que quieres cerrar sesión? Tendrás que volver a iniciar sesión para acceder a tu panel de control.",
+    "navigation": "Navegación",
+    "signed_in_as": "Iniciado sesión como"
+  },
+  "home": {
+    "iframe_title": "Inicio"
   },
   "notFound": {
     "go_home": "Ir al inicio ahora",
