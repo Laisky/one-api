@@ -359,19 +359,7 @@ tool := model.Tool{
 
 ### For New MCP Tools
 
-Creating MCP tools follows this pattern:
-
-````go
-mcpTool := model.Tool{
-    Type:            "mcp",
-    ServerLabel:     "my-server",
-    ServerUrl:       "https://mcp.laisky.com",
-    RequireApproval: "never",
-    AllowedTools:    []string{"tool1", "tool2"},
-    Headers: map[string]string{
-        "Authorization": "Bearer token",
-    },
-}
+Register MCP tools through the admin MCP server registry. Client requests should **not** declare `type: "mcp"`; they must use standard built-in tool types.
 
 ## How-to-Use
 
@@ -379,7 +367,7 @@ This section provides concrete examples for invoking Remote MCP tools through on
 
 ### 1. OpenAI ChatCompletion API
 
-Send MCP tools in the `tools` array. Each MCP tool has `type: "mcp"` and MCP-specific fields. Example:
+Send standard built-in tools in the `tools` array. one-api matches tool `type` to MCP tools when names align. Example:
 
 ```bash
 curl $ONE_API_BASE/v1/chat/completions \
@@ -391,21 +379,16 @@ curl $ONE_API_BASE/v1/chat/completions \
             {"role": "user", "content": "What transport protocols are in the 2025-03-26 MCP spec?"}
         ],
         "tools": [
-            {
-                "type": "mcp",
-                "server_label": "deepwiki",
-                "server_url": "https://mcp.deepwiki.com/mcp",
-                "require_approval": "never"
-            }
+            { "type": "web_search" }
         ]
     }'
-````
+```
 
-The model may emit MCP output (e.g. `mcp_list_tools`, followed by `mcp_call`). Once you receive a tool call answer rendered inside assistant content, you can continue the conversation normally. If an approval request appears ( `mcp_approval_request` ), reply with another ChatCompletion call including an approval response content block (currently surfaced as plain text summary in ChatCompletion fallback layer – UI clients can build structured approval flows using the Response API form below).
+The model will emit standard tool calls. one-api executes MCP tools transparently and returns results using standard tool result messages.
 
 ### 2. OpenAI Response API
 
-When the model supports the Response API, one-api converts ChatCompletion requests. You can also call the Response API directly to get structured MCP output items.
+When the model supports the Response API, one-api converts ChatCompletion requests. You can also call the Response API directly with standard tool types.
 
 ```bash
 curl $ONE_API_BASE/v1/responses \
@@ -413,65 +396,20 @@ curl $ONE_API_BASE/v1/responses \
     -H "Content-Type: application/json" \
     -d '{
         "model": "gpt-4o",
-        "input": [ {"role": "user", "content": "List available deepwiki tools"} ],
-        "tools": [ { "type": "mcp", "server_label": "deepwiki", "server_url": "https://mcp.deepwiki.com/mcp", "require_approval": "never" } ]
+                "input": [ {"role": "user", "content": "Find a positive news story"} ],
+                "tools": [ { "type": "web_search" } ]
     }'
 ```
 
-Example MCP output items you may see:
-
-```json
-{
-  "output": [
-    {
-      "type": "message",
-      "role": "assistant",
-      "content": [{ "type": "output_text", "text": "Importing tools..." }]
-    },
-    {
-      "type": "mcp_list_tools",
-      "server_label": "deepwiki",
-      "tools": [{ "type": "function", "function": { "name": "ask_question" } }]
-    },
-    {
-      "type": "mcp_call",
-      "server_label": "deepwiki",
-      "name": "ask_question",
-      "arguments": "{...}",
-      "output": "Answer text"
-    }
-  ]
-}
-```
-
-If an approval is required you will get:
-
-```json
-{
-  "type": "mcp_approval_request",
-  "server_label": "billing",
-  "name": "create_payment_link",
-  "arguments": "{...}"
-}
-```
-
-Approve by sending a follow-up Response API call including an approval response item in `input`:
-
-```json
-{
-  "type": "mcp_approval_response",
-  "approve": true,
-  "approval_request_id": "<id>"
-}
-```
+Tool calls appear as standard function tool calls in OpenAI Responses output items.
 
 ### 3. Claude Messages API
 
-Currently Claude does not directly transport MCP tool definitions; to use the same remote tools via Claude you must expose them as regular function tools on the Claude side or proxy them through OpenAI-compatible endpoints. The MCP additions do not break existing Claude Messages flows. All existing function tools remain unchanged (pointer migration is transparent). If Anthropic adds MCP parity later, extend the Claude adapter mirroring the OpenAI `ResponseAPITool` handling.
+Use the standard Claude tool types. If an MCP tool named `web_search_20250305` is configured, one-api will route the Claude tool call through MCP execution.
 
 ### 4. Mixed Tools
 
-You can mix standard function tools with MCP tools. Example (ChatCompletion-style):
+You can mix standard function tools with MCP-backed built-in tools. Example (ChatCompletion-style):
 
 ```json
 {
@@ -487,12 +425,7 @@ You can mix standard function tools with MCP tools. Example (ChatCompletion-styl
         }
       }
     },
-    {
-      "type": "mcp",
-      "server_label": "deepwiki",
-      "server_url": "https://mcp.deepwiki.com/mcp",
-      "require_approval": "never"
-    }
+    { "type": "web_search" }
   ]
 }
 ```
@@ -507,7 +440,7 @@ if err := tool.Validate(); err != nil { /* reject */ }
 
 ### 6. Error Handling
 
-MCP transport / server errors appear inside `mcp_call` items: `error` field populated and `output` empty. In ChatCompletion fallback these are appended to assistant text as: `MCP Tool '<name>' error: <message>`.
+MCP transport / server errors appear as standard tool result errors. In ChatCompletion fallback these are appended to assistant text as: `MCP Tool '<name>' error: <message>`.
 
 ### 7. Security Recommendations
 
@@ -518,12 +451,11 @@ MCP transport / server errors appear inside `mcp_call` items: `error` field popu
 
 ### 8. Troubleshooting
 
-| Symptom                               | Cause                                                         | Fix                                                   |
-| ------------------------------------- | ------------------------------------------------------------- | ----------------------------------------------------- |
-| server_label missing in upstream JSON | Tool serialized as function not MCP                           | Ensure `type: "mcp"` spelled correctly                |
-| Panic on nil function                 | Old code constructing `Tool{Function: model.Function{...}}`   | Update to pointer: `Function: &model.Function{...}`   |
-| No MCP output visible                 | Using ChatCompletion model that only supports legacy endpoint | Check model; Response API offers richer MCP semantics |
-| Approval loop                         | Not sending `mcp_approval_response` item                      | Include approval response in next call (Response API) |
+| Symptom                | Cause                                                       | Fix                                                    |
+| ---------------------- | ----------------------------------------------------------- | ------------------------------------------------------ |
+| Tool not routed to MCP | No MCP tool matches tool type                               | Confirm MCP tool name matches built-in tool type       |
+| Panic on nil function  | Old code constructing `Tool{Function: model.Function{...}}` | Update to pointer: `Function: &model.Function{...}`    |
+| No MCP output visible  | MCP tool not configured or disallowed by policy             | Check MCP server whitelist/blacklist and channel rules |
 
 ### 9. Migration Checklist
 

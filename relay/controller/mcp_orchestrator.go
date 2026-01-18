@@ -153,19 +153,7 @@ func expandMCPBuiltinsInChatRequest(c *gin.Context, meta *metalib.Meta, channelR
 				continue
 			}
 		case "mcp":
-			requested, functionTools, err := expandExplicitMCPTool(catalog, channelBlacklist, user.MCPToolBlacklist, tool)
-			if err != nil {
-				return nil, nil, err
-			}
-			for _, req := range requested {
-				mcpNames[strings.ToLower(req.Name)] = struct{}{}
-				registry.candidatesByName[strings.ToLower(req.Name)] = req.Candidates
-				if len(req.Headers) > 0 {
-					registry.requestHeaders[strings.ToLower(req.Name)] = req.Headers
-				}
-			}
-			updatedTools = append(updatedTools, functionTools...)
-			continue
+			return nil, nil, errors.New("explicit mcp tool definitions are not supported; use standard built-in tool types instead")
 		default:
 			requested, functionTool, matched, err := expandAliasedMCPTool(catalog, channelBlacklist, user.MCPToolBlacklist, tool.Type)
 			if err != nil {

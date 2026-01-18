@@ -37,7 +37,7 @@ This manual describes Model Context Protocol (MCP) support in one-api. It covers
     - [Using the MCP proxy endpoint](#using-the-mcp-proxy-endpoint)
     - [Best practices](#best-practices)
     - [OpenAI Response API (cURL)](#openai-response-api-curl)
-      - [Server-qualified tool name](#server-qualified-tool-name)
+      - [Tool name ambiguity](#tool-name-ambiguity)
     - [Claude Messages API (cURL)](#claude-messages-api-curl)
 
 ## 1) MCP Concepts, Functions, and Domain Knowledge
@@ -235,18 +235,9 @@ If a tool is denied by any layer, it is unavailable.
 
 ### Using MCP tools as built-ins
 
-Downstream users can include MCP tools in their requests as built-in tools. one-api converts MCP built-ins into local tool definitions before dispatching requests upstream, then executes MCP calls when the model requests them.
+Downstream users can include MCP tools in their requests using the **standard built-in tool formats** from OpenAI or Claude. one-api matches the tool `type` (or Claude tool `type`) to the MCP catalog and, when a match is found, converts it to a local function tool before sending the request upstream.
 
-MCP tools are declared using `type: "mcp"` with `server_label` and `server_url`. Use `allowed_tools` to explicitly list the tools you want the model to see from that MCP server.
-
-For OpenAI Responses and Claude Messages, the tool `type` field is treated as the tool name for MCP matching. If a configured MCP tool has the same name, one-api will convert it to a local function tool before sending the request upstream.
-
-Implicit aliasing is also supported:
-
-- If a tool type matches a known MCP tool name, one-api converts it to an MCP tool **even when** the upstream built-in is allowed.
-- If no MCP tool matches, the request stays as an upstream built-in.
-
-Use explicit `type: "mcp"` or a server-qualified tool name (e.g., `acme-tools.weather.get`) to force a specific MCP server when multiple servers expose the same tool.
+If a tool type matches a known MCP tool name, one-api routes it through MCP execution **even when** the upstream built-in is available. If no MCP tool matches, the request stays as an upstream built-in.
 
 ### Tool selection rules
 
@@ -257,7 +248,7 @@ When a tool call is issued, one-api resolves the tool with these rules:
 3. If multiple matches remain, select the highest-priority server.
 4. If the call fails, retry lower-priority servers that match the same name and signature.
 
-If the tool name is ambiguous and no signature is available, one-api returns a disambiguation error and asks for a server label or signature match.
+If the tool name is ambiguous and no signature is available, one-api returns a disambiguation error and operators must adjust server priority or tool schemas.
 
 ### Using the MCP proxy endpoint
 
@@ -266,14 +257,13 @@ The `/mcp` endpoint exposes a Streamable HTTP MCP server backed by one-api’s c
 ### Best practices
 
 - Prefer explicit tool definitions with complete input schemas so one-api can compute signatures accurately.
-- Use server-qualified tool names when you need a specific server.
 - Keep tool parameters consistent with the published schema to avoid validation errors upstream.
 - Review logs for tool usage and costs to confirm billing behavior.
 - Expect streaming responses to be downgraded to non-streaming when MCP tools are executed.
 
 ### OpenAI Response API (cURL)
 
-The following example calls one-api using the Responses API format and exposes MCP tools as built-ins. The model can choose whether to call the tools.
+The following example calls one-api using the Responses API format and standard tool types. If an MCP tool named `web_search` is configured, one-api will route the tool call through MCP execution.
 
 ```bash
 curl "https://oneapi.laisky.com/v1/responses" \
@@ -283,24 +273,19 @@ curl "https://oneapi.laisky.com/v1/responses" \
     "model": "gpt-5",
     "input": "Find the weather in Paris and summarize it.",
     "tools": [
-      {
-        "type": "mcp",
-        "server_label": "acme-tools",
-        "server_url": "https://mcp.acme.ai",
-        "allowed_tools": ["weather.get"]
-      }
+      { "type": "web_search" }
     ],
     "tool_choice": "auto"
   }'
 ```
 
-#### Server-qualified tool name
+#### Tool name ambiguity
 
-If multiple MCP servers expose the same tool name, qualify the tool name in your tool call as `server_label.tool_name` when available. This avoids ambiguity and ensures the correct MCP server is selected.
+If multiple MCP servers expose the same tool name, one-api resolves by parameter signature first and then server priority. If ambiguity remains, the request is rejected.
 
 ### Claude Messages API (cURL)
 
-This example uses the Claude Messages API format and includes the same MCP tool declaration. one-api will normalize and route the tool call as needed.
+This example uses the Claude Messages API format and standard Claude tool type. If an MCP tool named `web_search_20250305` is configured, one-api will route the tool call through MCP execution.
 
 ```bash
 curl "https://oneapi.laisky.com/v1/messages" \
@@ -317,10 +302,9 @@ curl "https://oneapi.laisky.com/v1/messages" \
     ],
     "tools": [
       {
-        "type": "mcp",
-        "server_label": "acme-tools",
-        "server_url": "https://mcp.acme.ai",
-        "allowed_tools": ["news.search"]
+        "type": "web_search_20250305",
+        "name": "web_search",
+        "max_uses": 1
       }
     ]
   }'
