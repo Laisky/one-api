@@ -371,7 +371,7 @@ func executeChatMCPToolLoop(c *gin.Context, meta *metalib.Meta, request *relaymo
 
 	maxRounds := config.MCPMaxToolRounds
 	if maxRounds <= 0 {
-		maxRounds = 5
+		maxRounds = 10
 	}
 
 	channelModelRatio, channelCompletionRatio := getChannelRatios(c)
