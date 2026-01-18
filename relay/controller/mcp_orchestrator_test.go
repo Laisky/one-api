@@ -249,3 +249,35 @@ func TestEstimateMCPRoundPreConsumeQuota_UsesMaxCompletionTokens(t *testing.T) {
 	quota := estimateMCPRoundPreConsumeQuota(request, 10, 1.5)
 	require.Equal(t, int64(float64(10+maxCompletion)*1.5), quota)
 }
+
+// TestMCPToolRegistry_RebuildRequestTools_UsesSelectedSchema verifies tool definitions rebuild from selected candidates.
+func TestMCPToolRegistry_RebuildRequestTools_UsesSelectedSchema(t *testing.T) {
+	schemaA := `{"type":"object","properties":{"query":{"type":"string"}},"required":["query"]}`
+	schemaB := `{"type":"object","properties":{"url":{"type":"string"}},"required":["url"]}`
+	toolA := &model.MCPTool{Name: "web_fetch", Description: "fetch", InputSchema: schemaA}
+	toolB := &model.MCPTool{Name: "web_fetch", Description: "fetch", InputSchema: schemaB}
+
+	registry := &mcpToolRegistry{
+		candidatesByName: map[string][]mcp.ToolCandidate{
+			"web_fetch": {
+				{ResolvedTool: mcp.ResolvedTool{Tool: toolA}},
+				{ResolvedTool: mcp.ResolvedTool{Tool: toolB}},
+			},
+		},
+		originalTools:  []relaymodel.Tool{{Type: "web_fetch"}},
+		toolNameByType: map[string]string{"web_fetch": "web_fetch"},
+		selectedIndex:  map[string]int{"web_fetch": 1},
+	}
+	request := &relaymodel.GeneralOpenAIRequest{Tools: []relaymodel.Tool{{Type: "web_fetch"}}}
+
+	err := registry.rebuildRequestTools(request)
+	require.NoError(t, err)
+	require.Len(t, request.Tools, 1)
+	require.Equal(t, "function", request.Tools[0].Type)
+	require.NotNil(t, request.Tools[0].Function)
+	params, ok := request.Tools[0].Function.Parameters.(map[string]any)
+	require.True(t, ok)
+	properties, ok := params["properties"].(map[string]any)
+	require.True(t, ok)
+	require.Contains(t, properties, "url")
+}

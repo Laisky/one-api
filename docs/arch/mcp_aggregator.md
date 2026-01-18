@@ -120,7 +120,7 @@ flowchart LR
 
 2. **Tool conversion**
 
-- Matched MCP tools are converted into local `function` tools for upstream providers.
+- Matched MCP tools are converted into local `function` tools for upstream providers using the **synced MCP JSON schema** (`input_schema` or `inputSchema`) stored in the tool catalog.
 - Tool choice is normalized to `function` when it targets an MCP tool name.
 
 3. **Execution loop**
@@ -128,6 +128,7 @@ flowchart LR
 - Upstream tool calls are parsed; MCP tool calls are executed by one‑api and appended as `tool` messages.
 - If any tool call is **not** MCP‑owned, one‑api returns the response without executing MCP tools.
 - The loop continues until no tool calls remain or `MCPMaxToolRounds` is reached.
+- If a lower‑priority MCP tool with the same name is retried after a failure, one‑api validates the tool call arguments against the fallback schema. When the arguments are incompatible, one‑api rebuilds the tool definition from the fallback schema and **reissues the previous upstream round**.
 
 4. **Response API fallback**
 
@@ -153,7 +154,7 @@ flowchart LR
 - Convert `oneapi_builtin` to local tools before upstream dispatch.
 - Keep `channel_builtin` as built‑ins for upstream.
 - Preserve `user_local` as local tools and never execute them in one‑api.
-- When multiple MCP servers publish the same tool name, match by name + canonical parameter signature; if multiple matches remain, prefer the highest‑priority server and retry lower‑priority servers on failure.
+- When multiple MCP servers publish the same tool name, match by name + canonical parameter signature; if multiple matches remain, prefer the highest‑priority server and retry lower‑priority servers on failure. If fallback schemas are incompatible with the upstream tool call arguments, reissue the upstream round using the fallback schema.
 
 ### Execution loop
 
@@ -166,6 +167,7 @@ flowchart LR
 
 - Deduplicate by `tool_call_id` to avoid double execution.
 - Append MCP tool results as `tool` role messages (raw JSON preserved).
+- Validate tool arguments against fallback schemas before retrying on lower‑priority tools.
 
 7. Repeat until no tool calls remain or `MCPMaxToolRounds` is exceeded (default 5).
 8. Record tool usage summary for billing/log metadata.
@@ -191,6 +193,7 @@ flowchart LR
    - `id`, `server_id`, `name`, `display_name`, `description`, `input_schema`
 
 - `default_pricing` (per‑tool USD/quota hints from MCP server), `status`, `created_at`, `updated_at`
+  - `input_schema` stores the full JSON schema synchronized from MCP (`input_schema`/`inputSchema`) and is used to generate upstream function tools.
 
 3. `channels` extension
 
@@ -345,6 +348,15 @@ one‑api ships an internal Streamable HTTP MCP client in [relay/mcp/client.go](
 - MCP request/response debug logs redact sensitive headers and suppress binary payloads.
 
 ## 10) Observability
+
+- MCP schema conversions log tool names, schema presence, and schema signatures at DEBUG level.
+- Fallback schema mismatches log only tool identifiers and argument keys (no sensitive values).
+
+## Billing and quota reconciliation
+
+- Each upstream MCP tool round pre‑consumes quota and records a provisional request cost snapshot.
+- MCP tool calls add per‑tool costs to usage summaries, and cost deltas are applied after each round.
+- When fallback schemas trigger an upstream reissue, the new upstream request gets its own pre‑consume/post‑consume records.
 
 - Track sync failures with structured logs.
 - Add tracing tags for MCP tool usage (server, tool, cost).

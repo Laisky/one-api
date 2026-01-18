@@ -31,12 +31,21 @@ func SyncServerTools(ctx context.Context, server *model.MCPServer) (int, error) 
 		if tool.Name == "" {
 			continue
 		}
-		schemaBytes, _ := json.Marshal(tool.InputSchema)
+		inputSchema := ""
+		if tool.InputSchema != nil {
+			schemaBytes, err := json.Marshal(tool.InputSchema)
+			if err != nil {
+				return 0, errors.Wrap(err, "marshal mcp tool schema")
+			}
+			if string(schemaBytes) != "null" {
+				inputSchema = string(schemaBytes)
+			}
+		}
 		stored = append(stored, &model.MCPTool{
 			Name:        tool.Name,
 			DisplayName: tool.Name,
 			Description: tool.Description,
-			InputSchema: string(schemaBytes),
+			InputSchema: inputSchema,
 			Status:      1,
 		})
 	}
