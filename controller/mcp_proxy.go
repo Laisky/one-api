@@ -179,7 +179,7 @@ func callMCPToolForUser(ctx context.Context, c *gin.Context, params mcpCallParam
 		if server == nil {
 			return nil, errors.New("mcp server not loaded")
 		}
-		client := mcp.NewStreamableHTTPClient(server, nil, 20*time.Second)
+		client := mcp.NewStreamableHTTPClientWithLogger(server, nil, 20*time.Second, logger)
 		callResult, err := client.CallTool(ctx, candidate.Tool.Name, params.Arguments)
 		if err != nil {
 			logger.Warn("mcp tool call failed", zap.Error(err), zap.Int("server_id", candidate.ServerID), zap.String("tool", candidate.Tool.Name))

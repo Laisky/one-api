@@ -19,9 +19,9 @@ import (
 	"github.com/songquanpeng/one-api/relay/adaptor"
 	"github.com/songquanpeng/one-api/relay/adaptor/openai"
 	"github.com/songquanpeng/one-api/relay/billing/ratio"
+	"github.com/songquanpeng/one-api/relay/mcp"
 	metalib "github.com/songquanpeng/one-api/relay/meta"
 	relaymodel "github.com/songquanpeng/one-api/relay/model"
-	"github.com/songquanpeng/one-api/relay/mcp"
 	"github.com/songquanpeng/one-api/relay/tooling"
 )
 
@@ -553,7 +553,7 @@ func executeMCPToolCalls(c *gin.Context, registry *mcpToolRegistry, calls []rela
 				return nil, errors.New("mcp server not loaded")
 			}
 			headers := registry.requestHeaders[strings.ToLower(name)]
-			client := mcp.NewStreamableHTTPClient(server, headers, time.Duration(config.MCPToolCallTimeoutSec)*time.Second)
+			client := mcp.NewStreamableHTTPClientWithLogger(server, headers, time.Duration(config.MCPToolCallTimeoutSec)*time.Second, lg)
 			lg.Debug("invoking mcp tool",
 				zap.String("tool", candidate.Tool.Name),
 				zap.Int("server_id", candidate.ServerID),
@@ -610,6 +610,10 @@ func buildToolResultMessage(callID string, result *mcp.CallToolResult) (relaymod
 	message := relaymodel.Message{Role: "tool", ToolCallId: callID}
 	if result == nil {
 		message.Content = ""
+		return message, nil
+	}
+	if len(result.Raw) > 0 {
+		message.Content = string(result.Raw)
 		return message, nil
 	}
 	payload := map[string]any{"content": result.Content}

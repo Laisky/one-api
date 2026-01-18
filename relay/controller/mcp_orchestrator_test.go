@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"encoding/json"
 	"net/http/httptest"
 	"testing"
 
@@ -10,14 +11,14 @@ import (
 	"github.com/songquanpeng/one-api/common/ctxkey"
 	"github.com/songquanpeng/one-api/model"
 	"github.com/songquanpeng/one-api/relay/channeltype"
+	"github.com/songquanpeng/one-api/relay/mcp"
 	metalib "github.com/songquanpeng/one-api/relay/meta"
 	relaymodel "github.com/songquanpeng/one-api/relay/model"
-	"github.com/songquanpeng/one-api/relay/mcp"
 )
 
 // TestNormalizeChatToolChoiceForMCP verifies MCP tool choices are normalized to function.
 func TestNormalizeChatToolChoiceForMCP(t *testing.T) {
-	mcpNames := map[string]struct{}{ "web_search_20250305": {} }
+	mcpNames := map[string]struct{}{"web_search_20250305": {}}
 	choice := map[string]any{"type": "web_search_20250305"}
 
 	normalized := normalizeChatToolChoiceForMCP(choice, mcpNames)
@@ -31,7 +32,7 @@ func TestNormalizeChatToolChoiceForMCP(t *testing.T) {
 
 // TestNormalizeMCPToolChoiceForResponse verifies Response API tool_choice normalization for MCP tools.
 func TestNormalizeMCPToolChoiceForResponse(t *testing.T) {
-	mcpNames := map[string]struct{}{ "web_search_20250305": {} }
+	mcpNames := map[string]struct{}{"web_search_20250305": {}}
 	choice := map[string]any{"type": "web_search_20250305"}
 
 	normalized := normalizeMCPToolChoiceForResponse(choice, mcpNames)
@@ -44,7 +45,7 @@ func TestNormalizeMCPToolChoiceForResponse(t *testing.T) {
 // TestMergeToolUsageSummaries merges MCP usage entries into existing summaries.
 func TestMergeToolUsageSummaries(t *testing.T) {
 	base := &model.ToolUsageSummary{
-		TotalCost: 10,
+		TotalCost:  10,
 		Counts:     map[string]int{"web_search": 1},
 		CostByTool: map[string]int64{"web_search": 10},
 		Entries: []model.ToolUsageEntry{
@@ -52,7 +53,7 @@ func TestMergeToolUsageSummaries(t *testing.T) {
 		},
 	}
 	addition := &model.ToolUsageSummary{
-		TotalCost: 5,
+		TotalCost:  5,
 		Counts:     map[string]int{"mcp.search": 1},
 		CostByTool: map[string]int64{"mcp.search": 5},
 		Entries: []model.ToolUsageEntry{
@@ -84,6 +85,10 @@ func TestExpandMCPBuiltinsInChatRequest_MCPPrecedence(t *testing.T) {
 	}
 	err = model.DB.Create(server).Error
 	require.NoError(t, err, "failed to create mcp server fixture")
+	t.Cleanup(func() {
+		cleanupErr := model.DB.Where("id = ?", server.Id).Delete(&model.MCPServer{}).Error
+		require.NoError(t, cleanupErr, "failed to clean mcp server fixture")
+	})
 
 	tool := &model.MCPTool{
 		ServerId:    server.Id,
@@ -93,6 +98,10 @@ func TestExpandMCPBuiltinsInChatRequest_MCPPrecedence(t *testing.T) {
 	}
 	err = model.DB.Create(tool).Error
 	require.NoError(t, err, "failed to create mcp tool fixture")
+	t.Cleanup(func() {
+		cleanupErr := model.DB.Where("id = ?", tool.Id).Delete(&model.MCPTool{}).Error
+		require.NoError(t, cleanupErr, "failed to clean mcp tool fixture")
+	})
 
 	recorder := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(recorder)
@@ -134,6 +143,10 @@ func TestExpandMCPBuiltinsInChatRequest_PreviewBuiltinAlias(t *testing.T) {
 	}
 	err = model.DB.Create(server).Error
 	require.NoError(t, err, "failed to create mcp server fixture")
+	t.Cleanup(func() {
+		cleanupErr := model.DB.Where("id = ?", server.Id).Delete(&model.MCPServer{}).Error
+		require.NoError(t, cleanupErr, "failed to clean mcp server fixture")
+	})
 
 	tool := &model.MCPTool{
 		ServerId:    server.Id,
@@ -143,6 +156,10 @@ func TestExpandMCPBuiltinsInChatRequest_PreviewBuiltinAlias(t *testing.T) {
 	}
 	err = model.DB.Create(tool).Error
 	require.NoError(t, err, "failed to create mcp tool fixture")
+	t.Cleanup(func() {
+		cleanupErr := model.DB.Where("id = ?", tool.Id).Delete(&model.MCPTool{}).Error
+		require.NoError(t, cleanupErr, "failed to clean mcp tool fixture")
+	})
 
 	recorder := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(recorder)
@@ -173,4 +190,21 @@ func TestBuildFunctionToolFromMCP_DefaultSchema(t *testing.T) {
 	params, ok := converted.Function.Parameters.(map[string]any)
 	require.True(t, ok)
 	require.Equal(t, "object", params["type"])
+}
+
+// TestBuildToolResultMessage_UsesRawPayload verifies full MCP payload forwarding.
+func TestBuildToolResultMessage_UsesRawPayload(t *testing.T) {
+	raw := `{"content":[{"type":"text","text":"ok"}],"is_error":false,"results":[{"url":"https://example.com","title":"Example"}]}`
+	var result mcp.CallToolResult
+	err := json.Unmarshal([]byte(raw), &result)
+	require.NoError(t, err)
+
+	msg, err := buildToolResultMessage("call-1", &result)
+	require.NoError(t, err)
+
+	var payload map[string]any
+	err = json.Unmarshal([]byte(msg.Content.(string)), &payload)
+	require.NoError(t, err)
+	require.Contains(t, payload, "results")
+	require.Contains(t, payload, "content")
 }
