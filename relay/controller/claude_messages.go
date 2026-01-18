@@ -195,6 +195,7 @@ func RelayClaudeMessagesHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 	// do response - for direct passthrough, forward upstream JSON verbatim; otherwise let adaptor convert
 	var usage *relaymodel.Usage
 	var respErr *relaymodel.ErrorWithStatusCode
+	var mcpIncrementalCharged int64
 
 	// MCP tool loop handling for Claude Messages requests.
 	if mcpRegistry, mcpToolNames, mcpReq, mcpErr := detectClaudeMCPTools(c, meta, claudeRequest, adaptorInstance); mcpRegistry != nil || mcpErr != nil {
@@ -207,7 +208,7 @@ func RelayClaudeMessagesHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 			mcpReq.Stream = false
 			meta.IsStream = false
 		}
-		response, mcpUsage, mcpSummary, execErr := executeChatMCPToolLoop(c, meta, mcpReq, mcpRegistry)
+		response, mcpUsage, mcpSummary, incrementalCharged, execErr := executeChatMCPToolLoop(c, meta, mcpReq, mcpRegistry, preConsumedQuota)
 		if execErr != nil {
 			billing.ReturnPreConsumedQuota(ctx, preConsumedQuota, c.GetInt(ctxkey.TokenId))
 			return execErr
@@ -227,6 +228,7 @@ func RelayClaudeMessagesHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 			return errResp
 		}
 		usage = mcpUsage
+		mcpIncrementalCharged = incrementalCharged
 		goto postConsume
 	}
 
@@ -462,7 +464,7 @@ postConsume:
 		var quota int64
 
 		go func() {
-			quota = postConsumeClaudeMessagesQuotaWithTraceID(ctx, requestId, traceId, usage, meta, claudeRequest, ratio, preConsumedQuota, modelRatio, groupRatio, channelCompletionRatio)
+			quota = postConsumeClaudeMessagesQuotaWithTraceID(ctx, requestId, traceId, usage, meta, claudeRequest, ratio, preConsumedQuota, mcpIncrementalCharged, modelRatio, groupRatio, channelCompletionRatio)
 
 			// Reconcile request cost with final quota (override provisional value)
 			if quota != 0 {

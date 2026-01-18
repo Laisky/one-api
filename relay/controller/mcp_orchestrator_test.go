@@ -208,3 +208,44 @@ func TestBuildToolResultMessage_UsesRawPayload(t *testing.T) {
 	require.Contains(t, payload, "results")
 	require.Contains(t, payload, "content")
 }
+
+// TestApplyMCPToolCostDelta_NewUsage verifies MCP tool costs initialize usage when nil.
+func TestApplyMCPToolCostDelta_NewUsage(t *testing.T) {
+	summary := &mcpExecutionSummary{summary: &model.ToolUsageSummary{TotalCost: 12}}
+	updated := applyMCPToolCostDelta(nil, 0, summary)
+	require.NotNil(t, updated)
+	require.Equal(t, int64(12), updated.ToolsCost)
+}
+
+// TestApplyMCPToolCostDelta_Accumulates verifies MCP tool cost deltas accumulate on existing usage.
+func TestApplyMCPToolCostDelta_Accumulates(t *testing.T) {
+	summary := &mcpExecutionSummary{summary: &model.ToolUsageSummary{TotalCost: 20}}
+	usage := &relaymodel.Usage{PromptTokens: 3, CompletionTokens: 4, ToolsCost: 5}
+	updated := applyMCPToolCostDelta(usage, 12, summary)
+	require.Equal(t, int64(13), updated.ToolsCost)
+	require.Equal(t, 7, updated.TotalTokens)
+}
+
+// TestApplyMCPToolCostDelta_NoChange verifies zero or negative deltas do not mutate usage.
+func TestApplyMCPToolCostDelta_NoChange(t *testing.T) {
+	summary := &mcpExecutionSummary{summary: &model.ToolUsageSummary{TotalCost: 5}}
+	usage := &relaymodel.Usage{ToolsCost: 7}
+	updated := applyMCPToolCostDelta(usage, 5, summary)
+	require.Equal(t, int64(7), updated.ToolsCost)
+}
+
+// TestEstimateMCPRoundPreConsumeQuota verifies per-round pre-consume estimation.
+func TestEstimateMCPRoundPreConsumeQuota(t *testing.T) {
+	maxTokens := 120
+	request := &relaymodel.GeneralOpenAIRequest{MaxTokens: maxTokens}
+	quota := estimateMCPRoundPreConsumeQuota(request, 80, 2.0)
+	require.Equal(t, int64((80+maxTokens)*2), quota)
+}
+
+// TestEstimateMCPRoundPreConsumeQuota_UsesMaxCompletionTokens verifies max_completion_tokens take precedence.
+func TestEstimateMCPRoundPreConsumeQuota_UsesMaxCompletionTokens(t *testing.T) {
+	maxCompletion := 64
+	request := &relaymodel.GeneralOpenAIRequest{MaxTokens: 120, MaxCompletionTokens: &maxCompletion}
+	quota := estimateMCPRoundPreConsumeQuota(request, 10, 1.5)
+	require.Equal(t, int64(float64(10+maxCompletion)*1.5), quota)
+}

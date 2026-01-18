@@ -18,10 +18,13 @@ import (
 	"github.com/songquanpeng/one-api/relay"
 	"github.com/songquanpeng/one-api/relay/adaptor"
 	"github.com/songquanpeng/one-api/relay/adaptor/openai"
+	"github.com/songquanpeng/one-api/relay/billing"
 	"github.com/songquanpeng/one-api/relay/billing/ratio"
 	"github.com/songquanpeng/one-api/relay/mcp"
 	metalib "github.com/songquanpeng/one-api/relay/meta"
 	relaymodel "github.com/songquanpeng/one-api/relay/model"
+	"github.com/songquanpeng/one-api/relay/pricing"
+	quotautil "github.com/songquanpeng/one-api/relay/quota"
 	"github.com/songquanpeng/one-api/relay/tooling"
 )
 
@@ -355,14 +358,14 @@ func normalizeChatToolChoiceForMCP(choice any, mcpNames map[string]struct{}) any
 }
 
 // executeChatMCPToolLoop runs a multi-round tool execution loop for MCP tools.
-func executeChatMCPToolLoop(c *gin.Context, meta *metalib.Meta, request *relaymodel.GeneralOpenAIRequest, registry *mcpToolRegistry) (*openai.TextResponse, *relaymodel.Usage, *mcpExecutionSummary, *relaymodel.ErrorWithStatusCode) {
+func executeChatMCPToolLoop(c *gin.Context, meta *metalib.Meta, request *relaymodel.GeneralOpenAIRequest, registry *mcpToolRegistry, basePreConsumedQuota int64) (*openai.TextResponse, *relaymodel.Usage, *mcpExecutionSummary, int64, *relaymodel.ErrorWithStatusCode) {
 	if request == nil || registry == nil {
-		return nil, nil, nil, nil
+		return nil, nil, nil, 0, nil
 	}
 	lg := gmw.GetLogger(c)
 	adaptorInstance := relay.GetAdaptor(meta.APIType)
 	if adaptorInstance == nil {
-		return nil, nil, nil, openai.ErrorWrapper(errors.New("invalid api type"), "invalid_api_type", 400)
+		return nil, nil, nil, 0, openai.ErrorWrapper(errors.New("invalid api type"), "invalid_api_type", 400)
 	}
 	adaptorInstance.Init(meta)
 
@@ -371,20 +374,43 @@ func executeChatMCPToolLoop(c *gin.Context, meta *metalib.Meta, request *relaymo
 		maxRounds = 5
 	}
 
+	channelModelRatio, channelCompletionRatio := getChannelRatios(c)
+	pricingAdaptor := relay.GetAdaptor(meta.ChannelType)
+	modelRatio := pricing.GetModelRatioWithThreeLayers(request.Model, channelModelRatio, pricingAdaptor)
+	groupRatio := c.GetFloat64(ctxkey.ChannelRatio)
+	ratio := modelRatio * groupRatio
+
 	var accumulated *relaymodel.Usage
+	var incrementalCharged int64
 	executedToolCalls := make(map[string]struct{})
 	summary := &mcpExecutionSummary{summary: &model.ToolUsageSummary{Counts: map[string]int{}, CostByTool: map[string]int64{}}}
 
 	for round := 0; round < maxRounds; round++ {
-		response, usage, err := doChatRequestOnce(c, meta, adaptorInstance, request)
+		promptTokens := getPromptTokens(gmw.Ctx(c), request, meta.Mode)
+		roundQuota, err := preConsumeMCPRoundQuota(c, meta, request, promptTokens, ratio)
 		if err != nil {
-			return nil, accumulated, summary, err
+			return nil, accumulated, summary, incrementalCharged, openai.ErrorWrapper(err, "pre_consume_mcp_round_failed", 403)
+		}
+		if roundQuota > 0 {
+			incrementalCharged += roundQuota
+			updateMCPRequestCostProvisional(c, meta, basePreConsumedQuota+incrementalCharged)
+		}
+
+		response, usage, respErr := doChatRequestOnce(c, meta, adaptorInstance, request)
+		if respErr != nil {
+			if roundQuota > 0 {
+				billing.ReturnPreConsumedQuota(gmw.Ctx(c), roundQuota, meta.TokenId)
+				incrementalCharged -= roundQuota
+				updateMCPRequestCostProvisional(c, meta, basePreConsumedQuota+incrementalCharged)
+			}
+			return nil, accumulated, summary, incrementalCharged, respErr
 		}
 		accumulated = mergeUsage(accumulated, usage)
+		updateMCPRequestCostEstimate(c, meta, accumulated, request.Model, modelRatio, groupRatio, channelCompletionRatio, pricingAdaptor)
 
 		choice, ok := firstChoice(response)
 		if !ok || len(choice.Message.ToolCalls) == 0 {
-			return response, accumulated, summary, nil
+			return response, accumulated, summary, incrementalCharged, nil
 		}
 
 		callNames := make([]string, 0, len(choice.Message.ToolCalls))
@@ -403,22 +429,25 @@ func executeChatMCPToolLoop(c *gin.Context, meta *metalib.Meta, request *relaymo
 
 		if !allMCPToolCalls(choice.Message.ToolCalls, registry) {
 			lg.Debug("skipping mcp execution due to non-mcp tool calls")
-			return response, accumulated, summary, nil
+			return response, accumulated, summary, incrementalCharged, nil
 		}
 
 		request.Messages = append(request.Messages, choice.Message)
+		previousCost := resolveMCPToolCostSnapshot(summary)
 		results, execErr := executeMCPToolCalls(c, registry, choice.Message.ToolCalls, executedToolCalls, summary)
 		if execErr != nil {
-			return nil, accumulated, summary, openai.ErrorWrapper(execErr, "mcp_tool_call_failed", 500)
+			return nil, accumulated, summary, incrementalCharged, openai.ErrorWrapper(execErr, "mcp_tool_call_failed", 500)
 		}
+		accumulated = applyMCPToolCostDelta(accumulated, previousCost, summary)
+		updateMCPRequestCostEstimate(c, meta, accumulated, request.Model, modelRatio, groupRatio, channelCompletionRatio, pricingAdaptor)
 		if len(results) == 0 {
-			return response, accumulated, summary, nil
+			return response, accumulated, summary, incrementalCharged, nil
 		}
 		request.Messages = append(request.Messages, results...)
 		lg.Debug("mcp tool round completed", zap.Int("round", round+1))
 	}
 
-	return nil, accumulated, summary, openai.ErrorWrapper(errors.New("mcp tool rounds exceeded"), "mcp_tool_rounds_exceeded", 400)
+	return nil, accumulated, summary, incrementalCharged, openai.ErrorWrapper(errors.New("mcp tool rounds exceeded"), "mcp_tool_rounds_exceeded", 400)
 }
 
 // doChatRequestOnce executes one upstream chat request and captures the response.
@@ -642,6 +671,127 @@ func mergeUsage(base *relaymodel.Usage, next *relaymodel.Usage) *relaymodel.Usag
 	base.TotalTokens += next.TotalTokens
 	base.ToolsCost += next.ToolsCost
 	return base
+}
+
+// estimateMCPRoundPreConsumeQuota calculates the quota to pre-consume for a single MCP upstream round.
+// Parameters: request is the chat request being sent, promptTokens is the estimated prompt token count, ratio is the pricing ratio.
+// Returns: the quota amount that should be pre-consumed for the round.
+func estimateMCPRoundPreConsumeQuota(request *relaymodel.GeneralOpenAIRequest, promptTokens int, ratio float64) int64 {
+	if request == nil {
+		return 0
+	}
+	preConsumedTokens := int64(promptTokens)
+	if request.MaxCompletionTokens != nil && *request.MaxCompletionTokens > 0 {
+		preConsumedTokens += int64(*request.MaxCompletionTokens)
+	} else if request.MaxTokens > 0 {
+		preConsumedTokens += int64(request.MaxTokens)
+	}
+	baseQuota := int64(float64(preConsumedTokens) * ratio)
+	if ratio != 0 && baseQuota <= 0 && preConsumedTokens > 0 {
+		baseQuota = 1
+	}
+	return baseQuota
+}
+
+// preConsumeMCPRoundQuota pre-consumes quota before each MCP upstream request.
+// Parameters: c is the Gin context, meta provides request metadata, request is the upstream chat request, promptTokens is the estimated prompt tokens, ratio is the pricing ratio.
+// Returns: the quota that was pre-consumed and any error encountered.
+func preConsumeMCPRoundQuota(c *gin.Context, meta *metalib.Meta, request *relaymodel.GeneralOpenAIRequest, promptTokens int, ratio float64) (int64, error) {
+	if c == nil || meta == nil {
+		return 0, errors.New("context or meta is nil")
+	}
+	ctx := gmw.Ctx(c)
+	preConsumedQuota := estimateMCPRoundPreConsumeQuota(request, promptTokens, ratio)
+	if preConsumedQuota <= 0 {
+		return 0, nil
+	}
+	userQuota, err := model.CacheGetUserQuota(ctx, meta.UserId)
+	if err != nil {
+		return preConsumedQuota, err
+	}
+	if userQuota-preConsumedQuota < 0 {
+		return preConsumedQuota, errors.New("user quota is not enough")
+	}
+	if err := model.CacheDecreaseUserQuota(ctx, meta.UserId, preConsumedQuota); err != nil {
+		return preConsumedQuota, err
+	}
+	if err := model.PreConsumeTokenQuota(ctx, meta.TokenId, preConsumedQuota); err != nil {
+		return preConsumedQuota, err
+	}
+	return preConsumedQuota, nil
+}
+
+// updateMCPRequestCostProvisional stores a provisional cost snapshot for the request.
+// Parameters: c is the Gin context, meta provides request metadata, quota is the provisional quota value to store.
+// Returns: none.
+func updateMCPRequestCostProvisional(c *gin.Context, meta *metalib.Meta, quota int64) {
+	if c == nil || meta == nil {
+		return
+	}
+	requestId := c.GetString(ctxkey.RequestId)
+	if requestId == "" {
+		return
+	}
+	quotaId := c.GetInt(ctxkey.Id)
+	if err := model.UpdateUserRequestCostQuotaByRequestID(quotaId, requestId, quota); err != nil {
+		gmw.GetLogger(c).Warn("record provisional mcp request cost failed", zap.Error(err), zap.String("request_id", requestId))
+	}
+}
+
+// updateMCPRequestCostEstimate updates request cost based on accumulated usage after each round.
+// Parameters: c is the Gin context, meta provides request metadata, usage is the accumulated usage, modelName/modelRatio/groupRatio/channelCompletionRatio/pricingAdaptor drive pricing.
+// Returns: none.
+func updateMCPRequestCostEstimate(c *gin.Context, meta *metalib.Meta, usage *relaymodel.Usage, modelName string, modelRatio float64, groupRatio float64, channelCompletionRatio map[string]float64, pricingAdaptor adaptor.Adaptor) {
+	if c == nil || meta == nil || usage == nil {
+		return
+	}
+	requestId := c.GetString(ctxkey.RequestId)
+	if requestId == "" {
+		return
+	}
+	quotaId := c.GetInt(ctxkey.Id)
+	computeResult := quotautil.Compute(quotautil.ComputeInput{
+		Usage:                  usage,
+		ModelName:              modelName,
+		ModelRatio:             modelRatio,
+		GroupRatio:             groupRatio,
+		ChannelCompletionRatio: channelCompletionRatio,
+		PricingAdaptor:         pricingAdaptor,
+	})
+	quota := computeResult.TotalQuota + usage.ToolsCost
+	if quota < 0 {
+		quota = 0
+	}
+	if err := model.UpdateUserRequestCostQuotaByRequestID(quotaId, requestId, quota); err != nil {
+		gmw.GetLogger(c).Warn("record mcp request cost estimate failed", zap.Error(err), zap.String("request_id", requestId))
+	}
+}
+
+// resolveMCPToolCostSnapshot returns the current total MCP tool cost for delta calculations.
+func resolveMCPToolCostSnapshot(summary *mcpExecutionSummary) int64 {
+	if summary == nil || summary.summary == nil {
+		return 0
+	}
+	return summary.summary.TotalCost
+}
+
+// applyMCPToolCostDelta applies incremental MCP tool costs to usage for billing.
+func applyMCPToolCostDelta(usage *relaymodel.Usage, previousCost int64, summary *mcpExecutionSummary) *relaymodel.Usage {
+	if summary == nil || summary.summary == nil {
+		return usage
+	}
+	costDelta := summary.summary.TotalCost - previousCost
+	if costDelta <= 0 {
+		return usage
+	}
+	if usage == nil {
+		return &relaymodel.Usage{ToolsCost: costDelta}
+	}
+	usage.ToolsCost += costDelta
+	if usage.TotalTokens == 0 && (usage.PromptTokens != 0 || usage.CompletionTokens != 0) {
+		usage.TotalTokens = usage.PromptTokens + usage.CompletionTokens
+	}
+	return usage
 }
 
 // recordMCPToolUsage updates tool usage summary for MCP tool calls.

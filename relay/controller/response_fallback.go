@@ -151,7 +151,7 @@ func relayResponseAPIThroughChat(c *gin.Context, meta *metalib.Meta, responseAPI
 	if registry != nil {
 		c.Set(ctxkey.ResponseRewriteHandler, nil)
 		c.Set(ctxkey.ResponseStreamRewriteHandler, nil)
-		response, usage, mcpSummary, execErr := executeChatMCPToolLoop(c, meta, chatRequest, registry)
+		response, usage, mcpSummary, incrementalCharged, execErr := executeChatMCPToolLoop(c, meta, chatRequest, registry, preConsumedQuota)
 		if execErr != nil {
 			billing.ReturnPreConsumedQuota(ctx, preConsumedQuota, meta.TokenId)
 			return execErr
@@ -238,6 +238,45 @@ func relayResponseAPIThroughChat(c *gin.Context, meta *metalib.Meta, responseAPI
 
 			metrics.GlobalRecorder.RecordModelUsage(meta.ActualModelName, channeltype.IdToName(meta.ChannelType), time.Since(meta.StartTime))
 		}
+
+		quotaId := c.GetInt(ctxkey.Id)
+		requestId := c.GetString(ctxkey.RequestId)
+		graceful.GoCritical(gmw.BackgroundCtx(c), "postBilling", func(ctx context.Context) {
+			baseBillingTimeout := time.Duration(config.BillingTimeoutSec) * time.Second
+			billingTimeout := baseBillingTimeout
+
+			ctx, cancel := context.WithTimeout(gmw.BackgroundCtx(c), billingTimeout)
+			defer cancel()
+
+			done := make(chan bool, 1)
+			var quota int64
+
+			go func() {
+				quota = postConsumeQuota(ctx, usage, meta, chatRequest, ratio, preConsumedQuota, incrementalCharged, modelRatio, groupRatio, false, channelCompletionRatio)
+				if requestId != "" {
+					if err := model.UpdateUserRequestCostQuotaByRequestID(quotaId, requestId, quota); err != nil {
+						lg.Error("update user request cost failed", zap.Error(err), zap.String("request_id", requestId))
+					}
+				}
+				done <- true
+			}()
+
+			select {
+			case <-done:
+			case <-ctx.Done():
+				if ctx.Err() == context.DeadlineExceeded && usage != nil {
+					estimatedQuota := float64(usage.PromptTokens+usage.CompletionTokens) * ratio
+					elapsedTime := time.Since(meta.StartTime)
+					lg.Error("CRITICAL BILLING TIMEOUT",
+						zap.String("model", chatRequest.Model),
+						zap.String("requestId", requestId),
+						zap.Int("userId", meta.UserId),
+						zap.Int64("estimatedQuota", int64(estimatedQuota)),
+						zap.Duration("elapsedTime", elapsedTime))
+					metrics.GlobalRecorder.RecordBillingTimeout(meta.UserId, meta.ChannelId, chatRequest.Model, estimatedQuota, elapsedTime)
+				}
+			}
+		})
 		return nil
 	}
 

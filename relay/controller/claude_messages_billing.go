@@ -71,7 +71,9 @@ func preConsumeClaudeMessagesQuota(c *gin.Context, request *ClaudeMessagesReques
 }
 
 // postConsumeClaudeMessagesQuotaWithTraceID calculates and applies final quota consumption for Claude Messages API with explicit trace ID.
-func postConsumeClaudeMessagesQuotaWithTraceID(ctx context.Context, requestId string, traceId string, usage *relaymodel.Usage, meta *metalib.Meta, request *ClaudeMessagesRequest, ratio float64, preConsumedQuota int64, modelRatio float64, groupRatio float64, channelCompletionRatio map[string]float64) int64 {
+// Parameters: ctx/requestId/traceId identify the request, usage/meta/request carry usage metadata, ratio/preConsumedQuota/incrementalCharged/modelRatio/groupRatio/channelCompletionRatio drive billing.
+// Returns: the final quota charged for the request.
+func postConsumeClaudeMessagesQuotaWithTraceID(ctx context.Context, requestId string, traceId string, usage *relaymodel.Usage, meta *metalib.Meta, request *ClaudeMessagesRequest, ratio float64, preConsumedQuota int64, incrementalCharged int64, modelRatio float64, groupRatio float64, channelCompletionRatio map[string]float64) int64 {
 	if usage == nil {
 		// Context may be detached; log with context if available
 		gmw.GetLogger(ctx).Warn("usage is nil for Claude Messages API")
@@ -115,7 +117,7 @@ func postConsumeClaudeMessagesQuotaWithTraceID(ctx context.Context, requestId st
 	metadata := model.AppendCacheWriteTokensMetadata(nil, cacheWrite5mTokens, cacheWrite1hTokens)
 
 	// Use centralized detailed billing function with explicit trace ID
-	quotaDelta := quota - preConsumedQuota
+	quotaDelta := quota - preConsumedQuota - incrementalCharged
 	// If requestId somehow empty, try derive from ctx (best-effort)
 	if requestId == "" {
 		if ginCtx, ok := gmw.GetGinCtxFromStdCtx(ctx); ok {
