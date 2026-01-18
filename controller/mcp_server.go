@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/Laisky/errors/v2"
@@ -262,7 +263,14 @@ func TestMCPServer(c *gin.Context) {
 
 // ListMCPServerTools returns tools for a MCP server.
 func ListMCPServerTools(c *gin.Context) {
+	logger := gmw.GetLogger(c)
 	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		helper.RespondError(c, err)
+		return
+	}
+
+	server, err := model.GetMCPServerByID(id)
 	if err != nil {
 		helper.RespondError(c, err)
 		return
@@ -274,11 +282,49 @@ func ListMCPServerTools(c *gin.Context) {
 		return
 	}
 
+	matched := applyMCPToolPricingToTools(tools, server.ToolPricing)
+	if logger != nil && len(server.ToolPricing) > 0 {
+		logger.Debug("mcp tool pricing applied", zap.Int("server_id", server.Id), zap.Int("pricing_entries", len(server.ToolPricing)), zap.Int("tool_count", len(tools)), zap.Int("matched", matched))
+	}
+
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
 		"data":    tools,
 	})
+}
+
+// applyMCPToolPricingToTools applies MCP server pricing to tool records for response rendering.
+func applyMCPToolPricingToTools(tools []*model.MCPTool, pricing map[string]model.ToolPricingLocal) int {
+	if len(tools) == 0 || len(pricing) == 0 {
+		return 0
+	}
+	normalized := make(map[string]model.ToolPricingLocal, len(pricing))
+	for name, entry := range pricing {
+		trimmed := strings.TrimSpace(name)
+		if trimmed == "" {
+			continue
+		}
+		normalized[strings.ToLower(trimmed)] = entry
+	}
+	if len(normalized) == 0 {
+		return 0
+	}
+	matched := 0
+	for _, tool := range tools {
+		if tool == nil {
+			continue
+		}
+		toolName := strings.TrimSpace(tool.Name)
+		if toolName == "" {
+			continue
+		}
+		if entry, ok := normalized[strings.ToLower(toolName)]; ok {
+			tool.DefaultPricing = model.ToolPricingLocalJSON(entry)
+			matched++
+		}
+	}
+	return matched
 }
 
 // applyMCPServerPayload copies request fields into the MCP server model.
