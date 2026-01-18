@@ -1719,13 +1719,17 @@ func verifyTotpCode(ctx context.Context, uid int, secret, code string) bool {
 	if ctx == nil {
 		ctx = context.Background()
 	}
+	lg := gmw.GetLogger(ctx)
+	if lg == nil {
+		lg = logger.Logger
+	}
 	if code == "" || secret == "" {
 		return false
 	}
 
 	// Check if this TOTP code has been used recently (replay protection)
 	if common.IsTotpCodeUsed(ctx, uid, code) {
-		logger.Logger.Warn(fmt.Sprintf("TOTP code replay attempt detected for user %d", uid))
+		lg.Warn(fmt.Sprintf("TOTP code replay attempt detected for user %d", uid))
 		return false
 	}
 
@@ -1745,7 +1749,7 @@ func verifyTotpCode(ctx context.Context, uid int, secret, code string) bool {
 	// Mark the code as used to prevent replay attacks
 	err = common.MarkTotpCodeAsUsed(ctx, uid, code)
 	if err != nil {
-		logger.Logger.Error("Failed to mark TOTP code as used", zap.Error(err))
+		lg.Error("Failed to mark TOTP code as used", zap.Error(err))
 		// Don't fail the verification if we can't mark it as used
 		// This ensures the system remains functional even if Redis/cache fails
 	}

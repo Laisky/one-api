@@ -53,7 +53,7 @@ func MarkTotpCodeAsUsed(ctx context.Context, userId int, totpCode string) error 
 func isRedisKeyExists(ctx context.Context, key string) bool {
 	exists, err := RDB.Exists(ctx, key).Result()
 	if err != nil {
-		logger.Logger.Error("Redis exists check failed", zap.Error(err))
+		logger.FromContext(ctx).Error("Redis exists check failed", zap.Error(err))
 		return false
 	}
 	return exists > 0

@@ -55,7 +55,7 @@ func GetTraceIDFromContext(ctx context.Context) string {
 	if traceID := otelTraceIDFromContext(ctx); traceID != "" {
 		return traceID
 	}
-	logger.Logger.Warn("failed to get gin context from standard context for trace ID extraction")
+	logger.FromContext(ctx).Warn("failed to get gin context from standard context for trace ID extraction")
 	return ""
 }
 

@@ -19,7 +19,6 @@ import (
 	"golang.org/x/image/webp"
 	"golang.org/x/sync/errgroup"
 
-	"github.com/songquanpeng/one-api/common/logger"
 	"github.com/songquanpeng/one-api/relay/adaptor/openai"
 	"github.com/songquanpeng/one-api/relay/meta"
 	"github.com/songquanpeng/one-api/relay/model"
@@ -30,6 +29,7 @@ var errNextLoop = errors.New("next_loop")
 // ImageHandler handles the response from the image creation or remix request
 func ImageHandler(c *gin.Context, resp *http.Response) (
 	*model.ErrorWithStatusCode, *model.Usage) {
+	lg := gmw.GetLogger(c)
 	if resp.StatusCode != http.StatusCreated {
 		payload, _ := io.ReadAll(resp.Body)
 		return openai.ErrorWrapper(
@@ -151,7 +151,9 @@ func ImageHandler(c *gin.Context, resp *http.Response) (
 					return errors.WithStack(err)
 				}
 
-				logger.Logger.Error("some images failed to download", zap.Error(err))
+				if lg != nil {
+					lg.Error("some images failed to download", zap.Error(err))
+				}
 			}
 
 			c.JSON(http.StatusOK, respBody)

@@ -431,7 +431,8 @@ func GetLogOrderClause(sortBy string, sortOrder string) string {
 // We need a systematic audit of every function that attempts to fetch values
 // from `context.Context` and change the design to pass those values explicitly
 // as parameters, rather than trying to read them from a generic `context.Context`.
-func recordLogHelper(_ context.Context, log *Log) {
+func recordLogHelper(ctx context.Context, log *Log) {
+	lg := logger.FromContext(ctx)
 	// IDs must be pre-populated by the caller from gin.Context
 	ensureLogContent(log)
 
@@ -439,7 +440,7 @@ func recordLogHelper(_ context.Context, log *Log) {
 	if err != nil {
 		// For billing logs (consume type), this is critical as it means we sent upstream request but failed to log it
 		if log.Type == LogTypeConsume {
-			logger.Logger.Error("failed to record billing log - audit trail incomplete",
+			lg.Error("failed to record billing log - audit trail incomplete",
 				zap.Error(err),
 				zap.Int("userId", log.UserId),
 				zap.Int("channelId", log.ChannelId),
@@ -448,13 +449,13 @@ func recordLogHelper(_ context.Context, log *Log) {
 				zap.String("requestId", log.RequestId),
 				zap.String("note", "billing completed successfully but log recording failed"))
 		} else {
-			logger.Logger.Error("failed to record log", zap.Error(err))
+			lg.Error("failed to record log", zap.Error(err))
 		}
 
 		return
 	}
 
-	logger.Logger.Info("record log",
+	lg.Info("record log",
 		zap.Int("user_id", log.UserId),
 		zap.String("username", log.Username),
 		zap.Int64("created_at", log.CreatedAt),

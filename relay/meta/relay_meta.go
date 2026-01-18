@@ -4,11 +4,11 @@ import (
 	"strings"
 	"time"
 
+	gmw "github.com/Laisky/gin-middlewares/v7"
 	"github.com/Laisky/zap"
 	"github.com/gin-gonic/gin"
 
 	"github.com/songquanpeng/one-api/common/ctxkey"
-	"github.com/songquanpeng/one-api/common/logger"
 	"github.com/songquanpeng/one-api/model"
 	"github.com/songquanpeng/one-api/relay/channeltype"
 	"github.com/songquanpeng/one-api/relay/relaymode"
@@ -56,13 +56,16 @@ func GetMappedModelName(modelName string, mapping map[string]string) string {
 }
 
 func GetByContext(c *gin.Context) *Meta {
+	lg := gmw.GetLogger(c)
 	if v, ok := c.Get(ctxkey.Meta); ok {
 		existingMeta := v.(*Meta)
 		// Check if channel information has changed (indicating a retry with new channel)
 		currentChannelId := c.GetInt(ctxkey.ChannelId)
 		if existingMeta.ChannelId != currentChannelId && currentChannelId != 0 {
 			// Channel has changed, update the cached meta with new channel information
-			logger.Logger.Info("Channel changed during retry", zap.Int("from", existingMeta.ChannelId), zap.Int("to", currentChannelId), zap.String("action", "updating meta"))
+			if lg != nil {
+				lg.Info("Channel changed during retry", zap.Int("from", existingMeta.ChannelId), zap.Int("to", currentChannelId), zap.String("action", "updating meta"))
+			}
 			existingMeta.ChannelType = c.GetInt(ctxkey.Channel)
 			existingMeta.ChannelId = currentChannelId
 			existingMeta.BaseURL = c.GetString(ctxkey.BaseURL)

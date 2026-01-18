@@ -50,7 +50,7 @@ func SyncServerTools(ctx context.Context, server *model.MCPServer) (int, error) 
 
 // StartAutoSync triggers MCP server tool syncs on a periodic schedule.
 func StartAutoSync(ctx context.Context) {
-	log := logger.Logger
+	log := logger.FromContext(ctx)
 	if log == nil {
 		return
 	}

@@ -25,21 +25,22 @@
         "protocol": "Protocol",
         "protocol_streamable": "Streamable HTTP",
         "status": "Status",
-        "tool_blacklist_empty": "No tools blocked",
         "tool_blacklist": "Tool blacklist",
+        "tool_blacklist_empty": "No tools blocked",
         "tool_blacklist_help": "Blocked tools will never be exposed.",
         "tool_blacklist_none": "No synced tools",
+        "tool_blacklist_placeholder": "tool_name",
         "tool_blacklist_selected": "Blocked Tools ({{count}})",
         "tool_custom": "Add custom tool...",
-        "tool_blacklist_placeholder": "tool_name",
         "tool_pricing": "Tool pricing (JSON)",
+        "tool_pricing_placeholder": "{\n  \"web_search\": { \"usd_per_call\": 0.002 },\n  \"code_interpreter\": { \"quota_per_call\": 1000 }\n}",
         "tool_search": "Search tools...",
-        "tool_whitelist_empty": "No tools selected",
         "tool_whitelist": "Tool whitelist",
+        "tool_whitelist_empty": "No tools selected",
         "tool_whitelist_help": "Only tools listed here will be enabled.",
         "tool_whitelist_none": "No synced tools",
-        "tool_whitelist_selected": "Selected Tools ({{count}})",
-        "tool_whitelist_placeholder": "tool_name"
+        "tool_whitelist_placeholder": "tool_name",
+        "tool_whitelist_selected": "Selected Tools ({{count}})"
       },
       "notifications": {
         "load_failed": "Failed to load MCP server",
@@ -59,8 +60,8 @@
     "list": {
       "actions": {
         "add": "Add MCP Server",
-        "edit": "Edit",
         "delete": "Delete",
+        "edit": "Edit",
         "refresh": "Refresh",
         "sync": "Sync",
         "test": "Test"

@@ -418,7 +418,16 @@ export function EditMCPServerPage() {
                     <FormItem>
                       <FormLabel>{t('mcp.edit.fields.tool_pricing', 'Tool pricing (JSON)')}</FormLabel>
                       <FormControl>
-                        <Textarea {...field} className="font-mono text-xs" rows={5} disabled={loading} />
+                        <Textarea
+                          {...field}
+                          className="font-mono text-xs"
+                          rows={5}
+                          disabled={loading}
+                          placeholder={t(
+                            'mcp.edit.fields.tool_pricing_placeholder',
+                            '{\n  "web_search": { "usd_per_call": 0.002 },\n  "code_interpreter": { "quota_per_call": 1000 }\n}'
+                          )}
+                        />
                       </FormControl>
                       <FormMessage />
                       {toolPricingWarning() && <p className="text-xs text-yellow-600">{toolPricingWarning()}</p>}

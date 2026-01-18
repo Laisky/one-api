@@ -8,12 +8,13 @@ import (
 	"strconv"
 	"strings"
 
+	gmw "github.com/Laisky/gin-middlewares/v7"
+	glog "github.com/Laisky/go-utils/v6/log"
 	"github.com/Laisky/zap"
 	"github.com/gin-gonic/gin"
 
 	"github.com/songquanpeng/one-api/common/config"
 	"github.com/songquanpeng/one-api/common/helper"
-	"github.com/songquanpeng/one-api/common/logger"
 	"github.com/songquanpeng/one-api/model"
 	"github.com/songquanpeng/one-api/relay"
 	"github.com/songquanpeng/one-api/relay/adaptor"
@@ -89,7 +90,7 @@ func convertAdaptorVideoPricing(cfg *adaptor.VideoPricingConfig) *model.VideoPri
 	return local
 }
 
-func buildChannelResponsePayload(channel *model.Channel) any {
+func buildChannelResponsePayload(lg glog.Logger, channel *model.Channel) any {
 	response := struct {
 		*model.Channel
 		Tooling *string `json:"tooling,omitempty"`
@@ -99,8 +100,8 @@ func buildChannelResponsePayload(channel *model.Channel) any {
 		if data, err := json.Marshal(tooling); err == nil {
 			toolingStr := string(data)
 			response.Tooling = &toolingStr
-		} else {
-			logger.Logger.Error("failed to marshal tooling config", zap.Int("channel_id", channel.Id), zap.Error(err))
+		} else if lg != nil {
+			lg.Error("failed to marshal tooling config", zap.Int("channel_id", channel.Id), zap.Error(err))
 		}
 	}
 
@@ -182,6 +183,7 @@ func SearchChannels(c *gin.Context) {
 
 // GetChannel retrieves a single channel by ID and returns its full configuration.
 func GetChannel(c *gin.Context) {
+	lg := gmw.GetLogger(c)
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{
@@ -201,7 +203,7 @@ func GetChannel(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
-		"data":    buildChannelResponsePayload(channel),
+		"data":    buildChannelResponsePayload(lg, channel),
 	})
 }
 
@@ -344,6 +346,7 @@ func DeleteDisabledChannel(c *gin.Context) {
 
 // UpdateChannel updates the channel configuration or status based on the posted payload.
 func UpdateChannel(c *gin.Context) {
+	lg := gmw.GetLogger(c)
 	statusOnly := c.Query("status_only")
 	channel, toolingRaw, err := bindChannelPayload(c)
 	if err != nil {
@@ -413,12 +416,13 @@ func UpdateChannel(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
-		"data":    buildChannelResponsePayload(channel),
+		"data":    buildChannelResponsePayload(lg, channel),
 	})
 }
 
 // GetChannelPricing returns the pricing configuration associated with the specified channel.
 func GetChannelPricing(c *gin.Context) {
+	lg := gmw.GetLogger(c)
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{
@@ -450,7 +454,9 @@ func GetChannelPricing(c *gin.Context) {
 		for modelName := range modelConfigs {
 			modelNames = append(modelNames, modelName)
 		}
-		logger.Logger.Info("Channel returning model configs", zap.Int("id", channel.Id), zap.Int("type", channel.Type), zap.Any("models", modelNames))
+		if lg != nil {
+			lg.Info("Channel returning model configs", zap.Int("id", channel.Id), zap.Int("type", channel.Type), zap.Any("models", modelNames))
+		}
 	}
 
 	c.JSON(http.StatusOK, gin.H{
