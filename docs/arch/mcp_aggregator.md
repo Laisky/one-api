@@ -51,6 +51,7 @@ This document provides a detailed architecture and implementation plan for the M
     - [Shared UI component](#shared-ui-component)
   - [9) Security and Compliance](#9-security-and-compliance)
   - [10) Observability](#10-observability)
+  - [Billing and quota reconciliation](#billing-and-quota-reconciliation)
   - [11) Work Schedule Planning](#11-work-schedule-planning)
     - [Phase 1: Foundations (Week 1)](#phase-1-foundations-week-1)
     - [Phase 2: Core orchestration (Week 2)](#phase-2-core-orchestration-week-2)
@@ -351,17 +352,16 @@ one‑api ships an internal Streamable HTTP MCP client in [relay/mcp/client.go](
 
 - MCP schema conversions log tool names, schema presence, and schema signatures at DEBUG level.
 - Fallback schema mismatches log only tool identifiers and argument keys (no sensitive values).
+- Track sync failures with structured logs.
+- Add tracing tags for MCP tool usage (server, tool, cost).
+- Store per‑tool usage metadata in logs (`tool_usage.entries`).
+- Emit DEBUG logs for MCP outbound/inbound payloads (metadata + sanitized bodies).
 
 ## Billing and quota reconciliation
 
 - Each upstream MCP tool round pre‑consumes quota and records a provisional request cost snapshot.
 - MCP tool calls add per‑tool costs to usage summaries, and cost deltas are applied after each round.
 - When fallback schemas trigger an upstream reissue, the new upstream request gets its own pre‑consume/post‑consume records.
-
-- Track sync failures with structured logs.
-- Add tracing tags for MCP tool usage (server, tool, cost).
-- Store per‑tool usage metadata in logs (`tool_usage.entries`).
-- Emit DEBUG logs for MCP outbound/inbound payloads (metadata + sanitized bodies).
 
 ## 11) Work Schedule Planning
 

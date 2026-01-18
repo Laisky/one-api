@@ -61,7 +61,9 @@
       "actions": {
         "add": "Add MCP Server",
         "delete": "Delete",
+        "disable": "Disable",
         "edit": "Edit",
+        "enable": "Enable",
         "refresh": "Refresh",
         "sync": "Sync",
         "test": "Test"
@@ -89,6 +91,8 @@
       "delete_failed": "Delete failed",
       "delete_success": "Server deleted",
       "fetch_failed": "Failed to load MCP servers",
+      "status_failed": "Status update failed",
+      "status_success": "Status updated",
       "sync_failed": "Sync failed",
       "sync_success": "Sync complete",
       "test_failed": "Test failed",

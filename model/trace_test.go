@@ -3,10 +3,12 @@ package model
 import (
 	"context"
 	"encoding/json"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
 	gmw "github.com/Laisky/gin-middlewares/v7"
+	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 
 	"github.com/songquanpeng/one-api/common"
@@ -113,4 +115,43 @@ func TestUpdateTraceStatusWithCanceledContext(t *testing.T) {
 	var stored Trace
 	require.NoError(t, DB.Where("trace_id = ?", traceID).First(&stored).Error)
 	require.Equal(t, 207, stored.Status)
+}
+
+// TestAppendTraceExternalCall verifies external call entries are appended to trace timestamps.
+func TestAppendTraceExternalCall(t *testing.T) {
+	setupTestDatabase(t)
+
+	const traceID = "test-trace-external-call"
+	require.NoError(t, DB.Exec("DELETE FROM traces WHERE trace_id = ?", traceID).Error)
+
+	trace := &Trace{
+		TraceId:    traceID,
+		URL:        "/api/test",
+		Method:     "GET",
+		Timestamps: `{"request_received": 1}`,
+	}
+	require.NoError(t, DB.Create(trace).Error)
+
+	recorder := httptest.NewRecorder()
+	ginCtx, _ := gin.CreateTestContext(recorder)
+	ginCtx.Request = httptest.NewRequest("GET", "/api/test", nil)
+
+	call := TraceExternalCall{
+		Source:     "mcp",
+		Tool:       "web_search",
+		ServerID:   7,
+		StartedAt:  100,
+		EndedAt:    220,
+		DurationMs: 120,
+	}
+	require.NoError(t, AppendTraceExternalCall(ginCtx, traceID, call))
+
+	var stored Trace
+	require.NoError(t, DB.Where("trace_id = ?", traceID).First(&stored).Error)
+
+	var parsed TraceTimestamps
+	require.NoError(t, json.Unmarshal([]byte(stored.Timestamps), &parsed))
+	require.Len(t, parsed.ExternalCalls, 1)
+	require.Equal(t, "mcp", parsed.ExternalCalls[0].Source)
+	require.Equal(t, "web_search", parsed.ExternalCalls[0].Tool)
 }

@@ -13,6 +13,8 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/songquanpeng/one-api/common/config"
+	"github.com/songquanpeng/one-api/common/tracing"
+	"github.com/songquanpeng/one-api/model"
 	"github.com/songquanpeng/one-api/relay/mcp"
 	relaymodel "github.com/songquanpeng/one-api/relay/model"
 )
@@ -160,6 +162,9 @@ func callMCPToolWithFallback(c *gin.Context, registry *mcpToolRegistry, nameKey 
 			break
 		}
 	}
+	if lastErr == nil {
+		return mcp.ToolCandidate{}, nil, errors.New("mcp tool call failed: no candidates executed")
+	}
 	return mcp.ToolCandidate{}, nil, errors.Wrap(lastErr, "mcp tool call failed after retries")
 }
 
@@ -177,7 +182,19 @@ func invokeMCPTool(c *gin.Context, registry *mcpToolRegistry, nameKey string, ca
 		zap.Int("server_id", candidate.ServerID),
 		zap.String("server_label", candidate.ServerLabel),
 	)
+	start := time.Now().UTC().UnixMilli()
 	result, err := client.CallTool(gmw.Ctx(c), candidate.Tool.Name, args)
+	end := time.Now().UTC().UnixMilli()
+	tracing.RecordTraceExternalCall(c, model.TraceExternalCall{
+		Source:      "mcp",
+		Tool:        candidate.Tool.Name,
+		ServerID:    candidate.ServerID,
+		ServerLabel: candidate.ServerLabel,
+		StartedAt:   start,
+		EndedAt:     end,
+		DurationMs:  end - start,
+		IsError:     err != nil,
+	})
 	if err != nil {
 		return mcp.ToolCandidate{}, nil, err
 	}

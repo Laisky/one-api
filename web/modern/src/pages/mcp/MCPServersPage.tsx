@@ -8,7 +8,7 @@ import { TimestampDisplay } from '@/components/ui/timestamp';
 import { STORAGE_KEYS, usePageSize } from '@/hooks/usePersistentState';
 import { api } from '@/lib/api';
 import type { ColumnDef } from '@tanstack/react-table';
-import { CheckCircle, Plus, RefreshCw, Settings, TestTube, Trash2, XCircle } from 'lucide-react';
+import { Ban, CheckCircle, Plus, RefreshCw, Settings, TestTube, Trash2, XCircle } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useSearchParams } from 'react-router-dom';
@@ -325,6 +325,34 @@ export function MCPServersPage() {
     }
   };
 
+  const toggleStatus = async (server: MCPServerRow) => {
+    const nextStatus = server.status === 1 ? 0 : 1;
+    try {
+      const response = await api.put(`/api/mcp_servers/${server.id}`, { status: nextStatus });
+      const { success, message } = response.data;
+      if (!success) {
+        notify({
+          type: 'error',
+          title: t('mcp.notifications.status_failed', 'Status update failed'),
+          message: message || '',
+        });
+        return;
+      }
+      notify({
+        type: 'success',
+        title: t('mcp.notifications.status_success', 'Status updated'),
+        message: '',
+      });
+      load(pageIndex, pageSize);
+    } catch (error) {
+      notify({
+        type: 'error',
+        title: t('mcp.notifications.status_failed', 'Status update failed'),
+        message: error instanceof Error ? error.message : String(error),
+      });
+    }
+  };
+
   useEffect(() => {
     const currentPage = Math.max(0, parseInt(searchParams.get('p') || '1') - 1);
     setPageIndex(currentPage);
@@ -373,6 +401,16 @@ export function MCPServersPage() {
                 aria-label={t('mcp.list.actions.edit', 'Edit')}
               >
                 <Settings className="h-4 w-4" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => toggleStatus(row)}
+                title={row.status === 1 ? t('mcp.list.actions.disable', 'Disable') : t('mcp.list.actions.enable', 'Enable')}
+                aria-label={row.status === 1 ? t('mcp.list.actions.disable', 'Disable') : t('mcp.list.actions.enable', 'Enable')}
+                className={row.status === 1 ? 'text-amber-600' : 'text-emerald-600'}
+              >
+                {row.status === 1 ? <Ban className="h-4 w-4" /> : <CheckCircle className="h-4 w-4" />}
               </Button>
               <Button
                 variant="ghost"

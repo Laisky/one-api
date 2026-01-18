@@ -120,6 +120,19 @@ func RecordTraceTimestamp(c *gin.Context, timestampKey string) {
 	}
 }
 
+// RecordTraceExternalCall appends an external call entry to the trace timeline.
+func RecordTraceExternalCall(c *gin.Context, call model.TraceExternalCall) {
+	traceID := GetTraceID(c)
+	lg := gmw.GetLogger(c)
+	if traceID == "" {
+		lg.Warn("empty trace ID, skipping external call record")
+		return
+	}
+	if err := model.AppendTraceExternalCall(c, traceID, call); err != nil {
+		lg.Error("failed to append trace external call", zap.Error(err))
+	}
+}
+
 // RecordTraceTimestampFromContext updates a timestamp using standard context
 // func RecordTraceTimestampFromContext(ctx context.Context, timestampKey string) {
 // 	traceID := GetTraceIDFromContext(ctx)

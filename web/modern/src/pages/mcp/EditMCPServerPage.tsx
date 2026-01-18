@@ -160,8 +160,8 @@ export function EditMCPServerPage() {
       const payload: Record<string, any> = {
         name: values.name,
         description: values.description,
-        status: values.status,
-        priority: values.priority,
+        status: Number(values.status),
+        priority: Number(values.priority),
         base_url: values.base_url,
         protocol: values.protocol,
         auth_type: values.auth_type,
@@ -171,7 +171,7 @@ export function EditMCPServerPage() {
         tool_blacklist: values.tool_blacklist,
         tool_pricing: pricing,
         auto_sync_enabled: values.auto_sync_enabled,
-        auto_sync_interval_minutes: values.auto_sync_interval_minutes,
+        auto_sync_interval_minutes: Number(values.auto_sync_interval_minutes),
       };
       const response = isEdit ? await api.put(`/api/mcp_servers/${serverId}`, payload) : await api.post('/api/mcp_servers/', payload);
       const { success, message } = response.data;
@@ -258,7 +258,7 @@ export function EditMCPServerPage() {
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>{t('mcp.edit.fields.status', 'Status')}</FormLabel>
-                        <Select onValueChange={field.onChange} value={String(field.value)}>
+                        <Select onValueChange={(value) => field.onChange(Number(value))} value={String(field.value)}>
                           <FormControl>
                             <SelectTrigger>
                               <SelectValue />
