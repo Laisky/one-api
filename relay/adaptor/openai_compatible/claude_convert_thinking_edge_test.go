@@ -7,9 +7,10 @@ import (
 	"strings"
 	"testing"
 
-	relaymodel "github.com/songquanpeng/one-api/relay/model"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	relaymodel "github.com/songquanpeng/one-api/relay/model"
 )
 
 func TestThinkingFieldPrecedence_AllFieldsPresent(t *testing.T) {

@@ -33,29 +33,29 @@ const (
 // User if you add sensitive fields, don't forget to clean them in setupLogin function.
 // Otherwise, the sensitive information will be saved on local storage in plain text!
 type User struct {
-	Id               int    `json:"id"`
-	Username         string `json:"username" gorm:"unique;index" validate:"max=30"`
-	Password         string `json:"password" gorm:"not null;" validate:"min=8,max=20"`
-	DisplayName      string `json:"display_name" gorm:"index" validate:"max=20"`
-	Role             int    `json:"role" gorm:"type:int;default:1"`   // admin, util
-	Status           int    `json:"status" gorm:"type:int;default:1"` // enabled, disabled
-	Email            string `json:"email" gorm:"index" validate:"max=50"`
-	GitHubId         string `json:"github_id" gorm:"column:github_id;index"`
-	WeChatId         string `json:"wechat_id" gorm:"column:wechat_id;index"`
-	LarkId           string `json:"lark_id" gorm:"column:lark_id;index"`
-	OidcId           string `json:"oidc_id" gorm:"column:oidc_id;index"`
-	VerificationCode string `json:"verification_code" gorm:"-:all"`                                    // this field is only for Email verification, don't save it to database!
-	AccessToken      string `json:"access_token" gorm:"type:char(32);column:access_token;uniqueIndex"` // this token is for system management
-	TotpSecret       string `json:"totp_secret,omitempty" gorm:"type:varchar(64);column:totp_secret"`  // TOTP secret for 2FA, omit from JSON when empty
-	Quota            int64  `json:"quota" gorm:"bigint;default:0"`
-	UsedQuota        int64  `json:"used_quota" gorm:"bigint;default:0;column:used_quota"` // used quota
-	RequestCount     int    `json:"request_count" gorm:"type:int;default:0;"`             // request number
-	Group            string `json:"group" gorm:"type:varchar(32);default:'default'"`
-	AffCode          string `json:"aff_code" gorm:"type:varchar(32);column:aff_code;uniqueIndex"`
-	InviterId        int    `json:"inviter_id" gorm:"type:int;column:inviter_id;index"`
+	Id               int             `json:"id"`
+	Username         string          `json:"username" gorm:"unique;index" validate:"max=30"`
+	Password         string          `json:"password" gorm:"not null;" validate:"min=8,max=20"`
+	DisplayName      string          `json:"display_name" gorm:"index" validate:"max=20"`
+	Role             int             `json:"role" gorm:"type:int;default:1"`   // admin, util
+	Status           int             `json:"status" gorm:"type:int;default:1"` // enabled, disabled
+	Email            string          `json:"email" gorm:"index" validate:"max=50"`
+	GitHubId         string          `json:"github_id" gorm:"column:github_id;index"`
+	WeChatId         string          `json:"wechat_id" gorm:"column:wechat_id;index"`
+	LarkId           string          `json:"lark_id" gorm:"column:lark_id;index"`
+	OidcId           string          `json:"oidc_id" gorm:"column:oidc_id;index"`
+	VerificationCode string          `json:"verification_code" gorm:"-:all"`                                    // this field is only for Email verification, don't save it to database!
+	AccessToken      string          `json:"access_token" gorm:"type:char(32);column:access_token;uniqueIndex"` // this token is for system management
+	TotpSecret       string          `json:"totp_secret,omitempty" gorm:"type:varchar(64);column:totp_secret"`  // TOTP secret for 2FA, omit from JSON when empty
+	Quota            int64           `json:"quota" gorm:"bigint;default:0"`
+	UsedQuota        int64           `json:"used_quota" gorm:"bigint;default:0;column:used_quota"` // used quota
+	RequestCount     int             `json:"request_count" gorm:"type:int;default:0;"`             // request number
+	Group            string          `json:"group" gorm:"type:varchar(32);default:'default'"`
+	AffCode          string          `json:"aff_code" gorm:"type:varchar(32);column:aff_code;uniqueIndex"`
+	InviterId        int             `json:"inviter_id" gorm:"type:int;column:inviter_id;index"`
 	MCPToolBlacklist JSONStringSlice `json:"mcp_tool_blacklist" gorm:"type:text"`
-	CreatedAt        int64  `json:"created_at" gorm:"bigint;autoCreateTime:milli"`
-	UpdatedAt        int64  `json:"updated_at" gorm:"bigint;autoUpdateTime:milli"`
+	CreatedAt        int64           `json:"created_at" gorm:"bigint;autoCreateTime:milli"`
+	UpdatedAt        int64           `json:"updated_at" gorm:"bigint;autoUpdateTime:milli"`
 }
 
 func GetMaxUserId() int {
