@@ -1,0 +1,27 @@
+{
+    "tools": {
+        "clear_filters": "フィルターをクリア",
+        "description": "MCP サーバーから同期されたツールを、サーバーごとに料金とスキーマ情報付きで表示します。",
+        "found": "{{servers}} サーバーに {{count}} 件のツールが見つかりました",
+        "labels": {
+            "free": "無料",
+            "quota": "クォータ"
+        },
+        "loading": "ツールを読み込み中...",
+        "no_tools": "ツールが見つかりません",
+        "no_tools_desc": "検索やフィルターを調整してください。",
+        "search": "ツールを検索...",
+        "status": {
+            "disabled": "無効",
+            "enabled": "有効"
+        },
+        "table": {
+            "description": "説明",
+            "pricing": "料金",
+            "schema": "入力スキーマ",
+            "status": "ステータス",
+            "tool": "ツール"
+        },
+        "title": "MCP ツール"
+    }
+}

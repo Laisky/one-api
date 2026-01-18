@@ -1,0 +1,27 @@
+{
+    "tools": {
+        "clear_filters": "Effacer les filtres",
+        "description": "Parcourez les outils synchronisés depuis les serveurs MCP, regroupés par serveur avec les détails de tarification et de schéma.",
+        "found": "{{count}} outils trouvés sur {{servers}} serveurs",
+        "labels": {
+            "free": "Gratuit",
+            "quota": "quota"
+        },
+        "loading": "Chargement des outils...",
+        "no_tools": "Aucun outil trouvé",
+        "no_tools_desc": "Essayez d'ajuster votre recherche ou vos filtres.",
+        "search": "Rechercher des outils...",
+        "status": {
+            "disabled": "Désactivé",
+            "enabled": "Activé"
+        },
+        "table": {
+            "description": "Description",
+            "pricing": "Tarification",
+            "schema": "Schéma d'entrée",
+            "status": "Statut",
+            "tool": "Outil"
+        },
+        "title": "Outils MCP"
+    }
+}

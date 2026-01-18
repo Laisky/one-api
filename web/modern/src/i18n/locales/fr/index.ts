@@ -8,6 +8,7 @@ import mcp from './mcp.json';
 import models from "./models.json";
 import playground from "./playground.json";
 import settings from "./settings.json";
+import tools from './tools.json';
 
 const translations = {
 	...common,
@@ -20,6 +21,7 @@ const translations = {
 	...billing,
 	...logs,
 	...mcp,
+	...tools,
 };
 
 export default translations;
