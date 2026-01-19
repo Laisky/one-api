@@ -639,9 +639,9 @@ var (
 	// MCPToolCallTimeoutSec limits how long one-api will wait for a single MCP tool call.
 	//
 	// Environment variable: MCP_TOOL_CALL_TIMEOUT
-	// Default: 30 seconds
+	// Default: 60 seconds
 	// Unit: seconds
-	MCPToolCallTimeoutSec = env.Int("MCP_TOOL_CALL_TIMEOUT", 30)
+	MCPToolCallTimeoutSec = env.Int("MCP_TOOL_CALL_TIMEOUT", 60)
 
 	// UserContentRequestProxy provides an HTTP proxy when fetching user-supplied
 	// assets like external images. Separate from relay proxy for security isolation.

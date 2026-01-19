@@ -3,9 +3,11 @@ package mcp
 import (
 	"bytes"
 	"encoding/json"
+	"math/rand"
 	"reflect"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/Laisky/errors/v2"
 
@@ -141,29 +143,6 @@ func BuildToolCandidates(servers []*model.MCPServer, toolsByServer map[int][]*mo
 		}
 	}
 
-	if signature == "" {
-		hasSignature := false
-		for _, candidate := range candidates {
-			if candidate.Signature != "" {
-				hasSignature = true
-				break
-			}
-		}
-		if hasSignature {
-			filtered := make([]ToolCandidate, 0, len(candidates))
-			for _, candidate := range candidates {
-				if candidate.Signature != "" {
-					filtered = append(filtered, candidate)
-				}
-			}
-			candidates = filtered
-		}
-	}
-
-	if err := enforceSignatureDisambiguation(candidates, normalizedSignature); err != nil {
-		return nil, err
-	}
-
 	sort.SliceStable(candidates, func(i, j int) bool {
 		if candidates[i].ServerPriority == candidates[j].ServerPriority {
 			return candidates[i].ServerID < candidates[j].ServerID
@@ -171,7 +150,30 @@ func BuildToolCandidates(servers []*model.MCPServer, toolsByServer map[int][]*mo
 		return candidates[i].ServerPriority > candidates[j].ServerPriority
 	})
 
+	shuffleCandidatesByPriority(candidates)
+
 	return candidates, nil
+}
+
+// shuffleCandidatesByPriority randomizes candidate order within each priority group.
+func shuffleCandidatesByPriority(candidates []ToolCandidate) {
+	if len(candidates) < 2 {
+		return
+	}
+	rng := rand.New(rand.NewSource(time.Now().UTC().UnixNano()))
+	start := 0
+	for start < len(candidates) {
+		end := start + 1
+		for end < len(candidates) && candidates[end].ServerPriority == candidates[start].ServerPriority {
+			end++
+		}
+		if end-start > 1 {
+			rng.Shuffle(end-start, func(i, j int) {
+				candidates[start+i], candidates[start+j] = candidates[start+j], candidates[start+i]
+			})
+		}
+		start = end
+	}
 }
 
 // SignatureFromSchema canonicalizes the provided schema into a stable signature string.

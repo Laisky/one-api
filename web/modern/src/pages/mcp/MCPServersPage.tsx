@@ -1,6 +1,7 @@
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { EnhancedDataTable } from '@/components/ui/enhanced-data-table';
+import { ListActionButton } from '@/components/ui/list-action-button';
 import { useNotifications } from '@/components/ui/notifications';
 import { ResponsivePageContainer } from '@/components/ui/responsive-container';
 import type { SearchOption } from '@/components/ui/searchable-dropdown';
@@ -8,7 +9,7 @@ import { TimestampDisplay } from '@/components/ui/timestamp';
 import { STORAGE_KEYS, usePageSize } from '@/hooks/usePersistentState';
 import { api } from '@/lib/api';
 import type { ColumnDef } from '@tanstack/react-table';
-import { Ban, CheckCircle, Plus, RefreshCw, Settings, TestTube, Trash2, XCircle } from 'lucide-react';
+import { Ban, CheckCircle, FlaskConical, Plus, RefreshCw, Settings, Trash2, XCircle } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useSearchParams } from 'react-router-dom';
@@ -112,40 +113,39 @@ export function MCPServersPage() {
         header: t('mcp.list.columns.actions', 'Actions'),
         cell: ({ row }) => (
           <div className="flex items-center gap-2">
-            <Button
-              variant="ghost"
-              size="icon"
+            <ListActionButton
+              onClick={(event) => {
+                event.stopPropagation();
+                navigate(`/mcps/edit/${row.original.id}`);
+              }}
+              aria-label={t('mcp.list.actions.edit', 'Edit')}
+              icon={<Settings className="h-4 w-4" />}
+            />
+            <ListActionButton
               onClick={(event) => {
                 event.stopPropagation();
                 syncServer(row.original.id);
               }}
               aria-label={t('mcp.list.actions.sync', 'Sync')}
-            >
-              <RefreshCw className="h-4 w-4" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
+              icon={<RefreshCw className="h-4 w-4" />}
+            />
+            <ListActionButton
               onClick={(event) => {
                 event.stopPropagation();
                 testServer(row.original.id);
               }}
               aria-label={t('mcp.list.actions.test', 'Test')}
-            >
-              <TestTube className="h-4 w-4" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
+              icon={<FlaskConical className="h-4 w-4" />}
+            />
+            <ListActionButton
               onClick={(event) => {
                 event.stopPropagation();
                 deleteServer(row.original.id);
               }}
               aria-label={t('mcp.list.actions.delete', 'Delete')}
               className="text-destructive"
-            >
-              <Trash2 className="h-4 w-4" />
-            </Button>
+              icon={<Trash2 className="h-4 w-4" />}
+            />
           </div>
         ),
       },
@@ -393,53 +393,38 @@ export function MCPServersPage() {
           onRowClick={(row) => navigate(`/mcps/edit/${row.id}`)}
           floatingRowActions={(row) => (
             <div className="flex items-center gap-1">
-              <Button
-                variant="ghost"
-                size="icon"
+              <ListActionButton
                 onClick={() => navigate(`/mcps/edit/${row.id}`)}
                 title={t('mcp.list.actions.edit', 'Edit')}
                 aria-label={t('mcp.list.actions.edit', 'Edit')}
-              >
-                <Settings className="h-4 w-4" />
-              </Button>
-              <Button
-                variant="ghost"
-                size="icon"
+                icon={<Settings className="h-4 w-4" />}
+              />
+              <ListActionButton
                 onClick={() => toggleStatus(row)}
                 title={row.status === 1 ? t('mcp.list.actions.disable', 'Disable') : t('mcp.list.actions.enable', 'Enable')}
                 aria-label={row.status === 1 ? t('mcp.list.actions.disable', 'Disable') : t('mcp.list.actions.enable', 'Enable')}
                 className={row.status === 1 ? 'text-amber-600' : 'text-emerald-600'}
-              >
-                {row.status === 1 ? <Ban className="h-4 w-4" /> : <CheckCircle className="h-4 w-4" />}
-              </Button>
-              <Button
-                variant="ghost"
-                size="icon"
+                icon={row.status === 1 ? <Ban className="h-4 w-4" /> : <CheckCircle className="h-4 w-4" />}
+              />
+              <ListActionButton
                 onClick={() => syncServer(row.id)}
                 title={t('mcp.list.actions.sync', 'Sync')}
                 aria-label={t('mcp.list.actions.sync', 'Sync')}
-              >
-                <RefreshCw className="h-4 w-4" />
-              </Button>
-              <Button
-                variant="ghost"
-                size="icon"
+                icon={<RefreshCw className="h-4 w-4" />}
+              />
+              <ListActionButton
                 onClick={() => testServer(row.id)}
                 title={t('mcp.list.actions.test', 'Test')}
                 aria-label={t('mcp.list.actions.test', 'Test')}
-              >
-                <TestTube className="h-4 w-4" />
-              </Button>
-              <Button
-                variant="ghost"
-                size="icon"
+                icon={<FlaskConical className="h-4 w-4" />}
+              />
+              <ListActionButton
                 onClick={() => deleteServer(row.id)}
                 title={t('mcp.list.actions.delete', 'Delete')}
                 aria-label={t('mcp.list.actions.delete', 'Delete')}
                 className="text-destructive"
-              >
-                <Trash2 className="h-4 w-4" />
-              </Button>
+                icon={<Trash2 className="h-4 w-4" />}
+              />
             </div>
           )}
           sortBy={sortBy}

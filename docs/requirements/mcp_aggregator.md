@@ -55,7 +55,7 @@
 
 ## Summary
 
-Build a first‑class MCP aggregation layer that lets administrators register multiple remote MCP Servers and expose their tools to end users as built‑in tools, with unified policy control, billing, and logging. The solution must fit the existing one‑api routing, tool policy, and billing pipeline without breaking current built‑in tools (e.g., web search) or Response/Claude conversions. One‑api must differentiate three tool categories internally: user‑defined local tools, upstream channel built‑in tools, and one‑api built‑in tools aggregated from MCP servers. For downstream users, upstream built‑ins and one‑api built‑ins appear identical, but one‑api must handle them differently in the orchestration pipeline.
+Build a first‑class MCP aggregation layer that lets administrators register multiple remote MCP Servers and expose their tools to end users as built‑in tools, with unified policy control, billing, and logging. The solution must fit the existing one‑api routing, tool policy, and billing pipeline without breaking current built‑in tools (e.g., web search) or Response/Claude conversions. One‑api must differentiate three tool categories internally: user‑defined local tools, upstream channel built‑in tools, and one‑api built‑in tools aggregated from MCP servers. For downstream users, upstream built‑ins and one‑api built‑ins appear identical, but one‑api must handle them differently in the orchestration pipeline. Built‑in tool `type` values (Claude/Response) are treated as canonical tool names for MCP matching; if that name exists in the MCP catalog, one‑api replaces the built‑in with a local function tool definition and executes it via MCP.
 
 ## Tool Taxonomy & Compatibility Contract
 
@@ -79,6 +79,7 @@ Build a first‑class MCP aggregation layer that lets administrators register mu
 
 - Users submit tool definitions normally (ChatCompletion/Response/Claude).
 - Upstream built‑ins and one‑api built‑ins appear identical to the client (same tool schema / invocation semantics).
+- For Claude Messages and the OpenAI Response API, the tool `type` field is treated as the canonical tool name for MCP matching.
 - One‑api must **separate upstream built‑ins vs one‑api built‑ins before dispatching to upstream**.
 - One‑api must **convert one‑api built‑ins into local tool definitions** when sending requests upstream, so upstream models request tool calls in standard local‑tool form.
 
@@ -169,7 +170,7 @@ One‑api must orchestrate local tool calls across multiple rounds while differe
 #### Routing rules
 
 - **Upstream built‑ins** are sent as built‑ins to upstream and billed by existing tooling policy.
-- **One‑api built‑ins (MCP)** are converted into **local tool definitions** before sending upstream. The upstream model will request them as local tool calls.
+- **One‑api built‑ins (MCP)** are detected by tool name. For Claude/Response tools, the `type` field is treated as the tool name. When matched, they are converted into **local tool definitions** before sending upstream. The upstream model will request them as local tool calls.
 - **User‑defined local tools** are forwarded as local tools; one‑api does not execute them.
 
 #### Required internal mapping
@@ -199,8 +200,10 @@ The mapping must survive retries and multi‑round tool calls.
    - When upstream returns tool calls, resolve each tool call by name → tool registry entry.
    - If `source=user_local`, return tool call output to the client or invoke user tool execution hooks (depending on existing flow).
    - If `source=oneapi_builtin`, invoke MCP tool via registered server; append tool result into the upstream conversation as a tool result; continue upstream call.
-6. **Multi‑round tool calls**: repeat steps 4‑5 until upstream finishes or hits max tool rounds.
-7. **Billing/logging**: count tool invocations by source; apply pricing only to one‑api built‑ins and upstream built‑ins as configured.
+6. **Schema‑mismatch fallback**:
+   - If a tool call fails and the next fallback tool’s schema does not satisfy the tool call arguments, rebuild the tool schema for that tool name, resend the upstream request, and let the upstream model regenerate tool calls.
+7. **Multi‑round tool calls**: repeat steps 4‑6 until upstream finishes or hits max tool rounds.
+8. **Billing/logging**: count tool invocations by source; apply pricing only to one‑api built‑ins and upstream built‑ins as configured. Each external upstream request must have complete pre‑consume and post‑consume cost records.
 
 #### Tool call result handling
 
@@ -307,7 +310,8 @@ Capabilities
 Conflict resolution
 
 - Tools with same name across different MCP servers are namespaced internally as `{server_label}.{tool_name}` but may be exposed with a display alias to users.
-- When multiple servers expose the same tool name, the canonical parameter signature is used to disambiguate selection (see built‑in tool exposure rules).
+- When multiple servers expose the same tool name, they form a fallback set. Selection order is by server priority (high → low); tools with identical priority are chosen at random.
+- If a fallback tool’s schema cannot satisfy the upstream tool call arguments, one‑api must rebuild the tool schema using the fallback tool and re‑issue the upstream request.
 
 #### Tool availability policy resolution (server + channel + user)
 
@@ -356,13 +360,13 @@ Users can reference MCP tools as built‑in tools for:
 
 Behavior
 
-- Incoming requests may specify MCP tools explicitly using type `mcp` with `server_label` + `server_url`.
-- Alternatively, the system can inject MCP tools as built‑ins using server configuration; the selection strategy must be documented.
+- Incoming requests must use standard built‑in tool definitions (Claude/Response tool `type` fields or OpenAI built‑ins). The tool `type` value is treated as the MCP tool name for matching.
 - Policy filtering occurs before request conversion; disallowed tools are rejected with a clear error message.
+- When the tool name exists in the MCP catalog, one‑api must replace the built‑in tool with a local function tool definition before upstream dispatch, ensuring the upstream built‑in is not used.
 - One‑api must convert MCP built‑ins into local tools before upstream dispatch, then map tool calls back to MCP servers during tool execution.
 - One‑api must distinguish tool call ownership when upstream issues local tool calls and route them to user tools or MCP tools accordingly.
-- When multiple MCP servers export the same tool name, one‑api must match by both tool name and canonical parameter signature. If multiple matches remain, select the highest‑priority MCP server.
-- If a matched MCP tool call fails, one‑api should retry against the next lower‑priority MCP server that satisfies the same name + signature match.
+- When multiple MCP servers export the same tool name, one‑api must choose the highest‑priority server first; if priorities tie, select randomly and treat remaining servers as fallback candidates.
+- If a matched MCP tool call fails, one‑api should retry against the next lower‑priority MCP server. If the fallback tool’s schema does not satisfy the tool call arguments, one‑api must rebuild the tool schema and re‑issue the upstream request.
 
 ### 4) Billing Integration
 
@@ -547,7 +551,7 @@ Notes
 
 1. Admin registers MCP server → persisted in `mcp_servers`.
 2. Admin syncs tools → stored in `mcp_tools`.
-3. End user submits request with tools list containing `mcp` tools or tool aliases.
+3. End user submits request with tools list containing standard built‑in tool types (Claude/Response/OpenAI).
 4. One‑api builds per‑request tool registry (user_local / channel_builtin / oneapi_builtin).
 5. One‑api converts oneapi_builtin tools into local tool definitions and sends request upstream.
 6. Upstream may return tool calls; one‑api resolves ownership and executes MCP tools while leaving user tools to the existing user flow.
@@ -563,8 +567,8 @@ Notes
 5. Token or auth missing → reject with standard auth error.
 6. Upstream replays a tool call id → treat as idempotent; avoid double‑billing.
 7. Mixed user_local + oneapi_builtin calls in one round → resolve per tool; execute only oneapi_builtin tools.
-8. Ambiguous tool names across MCP servers → require parameter signature or server label; otherwise return a disambiguation error.
-9. MCP tool invocation failures → retry lower‑priority servers when available; do not retry on context cancellation/timeouts.
+8. Ambiguous tool names across MCP servers → treat as fallback candidates ordered by priority; if a fallback schema does not satisfy tool call arguments, rebuild the tool schema and retry upstream.
+9. MCP tool invocation failures → retry lower‑priority servers when available; if priorities tie, pick randomly; do not retry on context cancellation/timeouts.
 
 ## Telemetry & Observability
 

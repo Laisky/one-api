@@ -82,7 +82,7 @@ This document provides a detailed architecture and implementation plan for the M
 
 ### MCP primer
 
-Model Context Protocol (MCP) is an open standard for connecting AI applications with external tools and data sources. In one‑api it provides a uniform way for upstream models to invoke external tools without vendor‑specific integrations. one‑api treats MCP tools as **oneapi_builtin** tools that are mapped from standard built‑in tool types (for example `web_search`). Explicit tool objects with `type: "mcp"` are rejected; clients must continue to use standard built‑ins so requests remain portable across providers.
+Model Context Protocol (MCP) is an open standard for connecting AI applications with external tools and data sources. In one‑api it provides a uniform way for upstream models to invoke external tools without vendor‑specific integrations. one‑api treats MCP tools as **oneapi_builtin** tools that are mapped from standard built‑in tool types (for example `web_search`). Explicit tool objects with `type: "mcp"` are rejected; clients must continue to use standard built‑ins so requests remain portable across providers. For Claude Messages and the OpenAI Response API, the tool `type` field is treated as the canonical MCP tool name.
 
 ### High‑level components
 
@@ -121,7 +121,7 @@ flowchart LR
 
 2. **Tool conversion**
 
-- Matched MCP tools are converted into local `function` tools for upstream providers using the **synced MCP JSON schema** (`input_schema` or `inputSchema`) stored in the tool catalog.
+- Matched MCP tools are converted into local `function` tools for upstream providers using the **synced MCP JSON schema** (`input_schema` or `inputSchema`) stored in the tool catalog. When a tool name exists in the MCP catalog, the upstream built‑in is not used.
 - Tool choice is normalized to `function` when it targets an MCP tool name.
 
 3. **Execution loop**
@@ -155,7 +155,7 @@ flowchart LR
 - Convert `oneapi_builtin` to local tools before upstream dispatch.
 - Keep `channel_builtin` as built‑ins for upstream.
 - Preserve `user_local` as local tools and never execute them in one‑api.
-- When multiple MCP servers publish the same tool name, match by name + canonical parameter signature; if multiple matches remain, prefer the highest‑priority server and retry lower‑priority servers on failure. If fallback schemas are incompatible with the upstream tool call arguments, reissue the upstream round using the fallback schema.
+- When multiple MCP servers publish the same tool name, select the highest‑priority server first; tools with identical priority are chosen at random. Retry lower‑priority servers on failure. If fallback schemas are incompatible with the upstream tool call arguments, reissue the upstream round using the fallback schema.
 
 ### Execution loop
 
@@ -170,7 +170,7 @@ flowchart LR
 - Append MCP tool results as `tool` role messages (raw JSON preserved).
 - Validate tool arguments against fallback schemas before retrying on lower‑priority tools.
 
-7. Repeat until no tool calls remain or `MCPMaxToolRounds` is exceeded (default 5).
+7. Repeat until no tool calls remain or `MCPMaxToolRounds` is exceeded (default 10).
 8. Record tool usage summary for billing/log metadata.
 
 ### Idempotency rules

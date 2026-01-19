@@ -13,6 +13,7 @@ import (
 	"github.com/Laisky/zap"
 	"github.com/gin-gonic/gin"
 
+	"github.com/songquanpeng/one-api/common/config"
 	"github.com/songquanpeng/one-api/common/ctxkey"
 	"github.com/songquanpeng/one-api/common/helper"
 	"github.com/songquanpeng/one-api/common/tracing"
@@ -179,7 +180,7 @@ func callMCPToolForUser(ctx context.Context, c *gin.Context, params mcpCallParam
 		if server == nil {
 			return nil, errors.New("mcp server not loaded")
 		}
-		client := mcp.NewStreamableHTTPClientWithLogger(server, nil, 20*time.Second, logger)
+		client := mcp.NewStreamableHTTPClientWithLogger(server, nil, time.Duration(config.MCPToolCallTimeoutSec)*time.Second, logger)
 		callResult, err := client.CallTool(ctx, candidate.Tool.Name, params.Arguments)
 		if err != nil {
 			logger.Warn("mcp tool call failed", zap.Error(err), zap.Int("server_id", candidate.ServerID), zap.String("tool", candidate.Tool.Name))

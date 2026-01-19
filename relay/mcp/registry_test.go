@@ -100,7 +100,7 @@ func TestBuildToolCandidates_PriorityOrdering(t *testing.T) {
 	require.Equal(t, 2, candidates[1].ServerID)
 }
 
-func TestBuildToolCandidates_SignatureDisambiguation(t *testing.T) {
+func TestBuildToolCandidates_AllowsMultipleSchemasWithoutSignature(t *testing.T) {
 	schemaA := map[string]any{
 		"type": "object",
 		"properties": map[string]any{
@@ -129,16 +129,17 @@ func TestBuildToolCandidates_SignatureDisambiguation(t *testing.T) {
 		2: {{Name: "tool_a", InputSchema: string(schemaBytesB)}},
 	}
 
-	_, err = BuildToolCandidates(servers, toolsByServer, nil, nil, []string{"tool_a"}, "tool_a", "")
-	require.Error(t, err)
+	candidates, err := BuildToolCandidates(servers, toolsByServer, nil, nil, []string{"tool_a"}, "tool_a", "")
+	require.NoError(t, err)
+	require.Len(t, candidates, 2)
 
-	candidates, err := BuildToolCandidates(servers, toolsByServer, nil, nil, []string{"tool_a"}, "tool_a", signatureA)
+	candidates, err = BuildToolCandidates(servers, toolsByServer, nil, nil, []string{"tool_a"}, "tool_a", signatureA)
 	require.NoError(t, err)
 	require.Len(t, candidates, 1)
 	require.Equal(t, 1, candidates[0].ServerID)
 }
 
-func TestBuildToolCandidates_PrefersNonEmptySignature(t *testing.T) {
+func TestBuildToolCandidates_IncludesEmptySignatureCandidates(t *testing.T) {
 	servers := []*model.MCPServer{
 		{Id: 1, Name: "mcp_empty", Priority: 5, ToolWhitelist: model.JSONStringSlice{"tool_a"}},
 		{Id: 2, Name: "mcp_schema", Priority: 1, ToolWhitelist: model.JSONStringSlice{"tool_a"}},
@@ -150,9 +151,9 @@ func TestBuildToolCandidates_PrefersNonEmptySignature(t *testing.T) {
 
 	candidates, err := BuildToolCandidates(servers, toolsByServer, nil, nil, []string{"tool_a"}, "tool_a", "")
 	require.NoError(t, err)
-	require.Len(t, candidates, 1)
-	require.Equal(t, 2, candidates[0].ServerID)
-	require.NotEmpty(t, candidates[0].Signature)
+	require.Len(t, candidates, 2)
+	require.Equal(t, 1, candidates[0].ServerID)
+	require.Equal(t, 2, candidates[1].ServerID)
 }
 
 func TestSignatureFromSchema_Canonicalization(t *testing.T) {

@@ -217,6 +217,27 @@ func TestApplyMCPToolCostDelta_NewUsage(t *testing.T) {
 	require.Equal(t, int64(12), updated.ToolsCost)
 }
 
+// TestRecordMCPToolUsage_QualifiedName verifies MCP tool usage is recorded with server-qualified names.
+func TestRecordMCPToolUsage_QualifiedName(t *testing.T) {
+	summary := &mcpExecutionSummary{summary: &model.ToolUsageSummary{Counts: map[string]int{}, CostByTool: map[string]int64{}}}
+	candidate := mcp.ToolCandidate{ResolvedTool: mcp.ResolvedTool{
+		Tool:        &model.MCPTool{Name: "search"},
+		Policy:      mcp.ToolPolicySnapshot{Pricing: model.ToolPricingLocal{QuotaPerCall: 7}},
+		ServerID:    9,
+		ServerLabel: "mcp",
+	}}
+
+	recordMCPToolUsage(summary, candidate, "search")
+
+	require.Equal(t, int64(7), summary.summary.TotalCost)
+	require.Equal(t, 1, summary.summary.Counts["mcp.search"])
+	require.Equal(t, int64(7), summary.summary.CostByTool["mcp.search"])
+	require.Len(t, summary.summary.Entries, 1)
+	require.Equal(t, "mcp.search", summary.summary.Entries[0].Tool)
+	require.Equal(t, "oneapi_builtin", summary.summary.Entries[0].Source)
+	require.Equal(t, 9, summary.summary.Entries[0].ServerID)
+}
+
 // TestApplyMCPToolCostDelta_Accumulates verifies MCP tool cost deltas accumulate on existing usage.
 func TestApplyMCPToolCostDelta_Accumulates(t *testing.T) {
 	summary := &mcpExecutionSummary{summary: &model.ToolUsageSummary{TotalCost: 20}}

@@ -408,7 +408,9 @@ export function LogDetailsModal({ open, onOpenChange, log }: LogDetailsModalProp
 
     const activeEvents = [...baseEvents, ...externalEvents].sort((a, b) => {
       if (!a || !b) return 0;
-      return (a.timestamp || 0) - (b.timestamp || 0);
+      const aTimestamp = typeof a.timestamp === 'number' ? a.timestamp : Number(a.timestamp || 0);
+      const bTimestamp = typeof b.timestamp === 'number' ? b.timestamp : Number(b.timestamp || 0);
+      return aTimestamp - bTimestamp;
     });
 
     if (activeEvents.length === 0) {
