@@ -93,6 +93,7 @@ The original author stopped maintaining the project, leaving critical PRs and ne
         - [Reasoning Format - reasoning-content](#reasoning-format---reasoning-content)
         - [Reasoning Format - reasoning](#reasoning-format---reasoning)
         - [Reasoning Format - thinking](#reasoning-format---thinking)
+      - [MCP Aggregators](#mcp-aggregators)
     - [OpenAI Features](#openai-features)
       - [Support whisper](#support-whisper)
       - [Support openai images edits](#support-openai-images-edits)
@@ -169,9 +170,9 @@ oneapi:
   image: ppcelery/one-api:latest
   restart: unless-stopped
   logging:
-    driver: "json-file"
+    driver: 'json-file'
     options:
-      max-size: "10m"
+      max-size: '10m'
   volumes:
     - /var/lib/oneapi:/data
   ports:
@@ -456,6 +457,36 @@ Response:
     }
   }
 }
+```
+
+#### MCP Aggregators
+
+Supports adding MCP servers as tool aggregators, which are then provided to downstream models as built-in tools. This enables clients to call any MCP tool with any model.
+
+Features include MCP server addition, automatic MCP tool synchronization, billing, load balancing, automatic retries, and logging.
+
+Additionally, one-api itself can act as an MCP server, aggregating all MCP tools via the `/mcp` endpoint.
+
+[Read Mode...](./docs/manuals/mcp_aggregator.md)
+
+```sh
+# MCP servers integrate the web_search and web_fetch tools, allowing any model that supports tools to invoke them
+curl --location 'https://oneapi.laisky.com/v1/responses' \
+--header 'Content-Type: application/json' \
+--header 'Authorization: Bearer sk-xxxxxxx' \
+--data '{
+  "model": "openai/gpt-oss-120b",
+  "max_output_tokens": 10000,
+  "tools": [
+    {
+      "type": "web_search"
+    },
+    {
+      "type": "web_fetch"
+    }
+  ],
+  "input": "what'\''s the weather in ottawa canada?"
+}'
 ```
 
 ### OpenAI Features
