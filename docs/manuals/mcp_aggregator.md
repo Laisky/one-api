@@ -52,6 +52,8 @@ Model Context Protocol (MCP) defines a standardized way for AI models and client
 - **MCP Tool**: A tool definition synchronized from an MCP server. It includes the tool name, description, and input schema.
 - **Tool catalog**: The merged list of tools from all enabled MCP servers, filtered by policy.
 
+![](https://s3.laisky.com/uploads/2026/01/one-mcp-2.png)
+
 ### Tool ownership model
 
 one-api distinguishes tool ownership to ensure correct routing and billing:
@@ -87,6 +89,8 @@ For every request, one-api builds an internal tool registry and routes tool call
 
 This registry is preserved across retries, ensuring idempotency and consistent billing. When MCP tools are executed, one-api switches to a non-streaming tool loop to guarantee tool execution ordering.
 
+![](https://s3.laisky.com/uploads/2026/01/one-mcp-3.png)
+
 ### Priority and retry behavior
 
 When multiple MCP servers provide the same tool name (and signature), one-api prefers the server with the highest priority. If a tool invocation fails, one-api retries the next lower-priority server that matches the same name and signature. This mirrors channel priority and retry behavior.
@@ -94,6 +98,8 @@ When multiple MCP servers provide the same tool name (and signature), one-api pr
 ### Billing and logging
 
 Tool usage is billed per call according to per-server pricing rules. The billing pipeline records per-tool usage and costs in the existing tool usage metadata. Logs include MCP tool entries with server identifiers and costs.
+
+![](https://s3.laisky.com/uploads/2026/01/one-mcp-1.png)
 
 ### Policy layers and allow/deny logic
 
@@ -135,6 +141,8 @@ If the whitelist is empty, no MCP tools from that server are available until exp
 - **Tool pricing**: Per-tool pricing map. `usd_per_call` and `quota_per_call` are supported.
 - **Auto sync enabled**: Whether to periodically sync the tool catalog.
 - **Auto sync interval**: Minutes between syncs (default 60, bounded 5–1440).
+
+![](https://s3.laisky.com/uploads/2026/01/one-mcp-4.png)
 
 ### Configuration examples
 
