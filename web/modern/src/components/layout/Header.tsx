@@ -34,6 +34,7 @@ import {
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { HeaderNav } from './HeaderNav';
 
 // Icon mapping for navigation items
 const navigationIcons = {
@@ -67,15 +68,15 @@ export function Header() {
 
   const navigationItems = [
     { name: t('common.dashboard'), to: '/dashboard', show: true },
-    { name: t('common.channels'), to: '/channels', show: isAdmin },
     { name: t('common.tokens'), to: '/tokens', show: true },
     { name: t('common.logs'), to: '/logs', show: true },
     { name: t('common.users'), to: '/users', show: isAdmin },
+    { name: t('common.channels'), to: '/channels', show: isAdmin },
     { name: t('common.mcps'), to: '/mcps', show: isAdmin },
-    { name: t('common.tools'), to: '/tools', show: isAdmin },
     { name: t('common.redemptions'), to: '/redemptions', show: isAdmin },
     { name: t('common.topup'), to: '/topup', show: true },
     { name: t('common.models'), to: '/models', show: true },
+    { name: t('common.tools'), to: '/tools', show: isAdmin },
     { name: t('common.status'), to: '/status', show: true },
     { name: t('common.playground'), to: '/chat', show: true },
     { name: t('common.about'), to: '/about', show: true },
@@ -111,35 +112,19 @@ export function Header() {
     <>
       <header className="border-b bg-background/95 backdrop-blur-sm sticky top-0 z-50 w-full max-w-full">
         <div className="mx-auto px-3 sm:px-4 w-full max-w-full">
-          <div className="flex items-center justify-between h-16">
+          <div className="flex items-center justify-between h-16 gap-4">
             {/* Logo and Brand */}
-            <div className="flex items-center space-x-4">
-              <Link to="/" className="text-xl font-bold hover:text-primary transition-colors truncate max-w-[55vw] sm:max-w-none">
+            <div className="flex items-center flex-shrink-0">
+              <Link to="/" className="text-xl font-bold hover:text-primary transition-colors truncate max-w-[55vw] sm:max-w-none mr-4">
                 {localStorage.getItem('system_name') || 'OneAPI'}
               </Link>
-
-              {/* Desktop Navigation - Only show on large screens */}
-              {user && !isMobile && !isTablet && (
-                <nav className="hidden lg:flex items-center space-x-1">
-                  {navigationItems.map((item) => (
-                    <Link
-                      key={item.to}
-                      to={item.to}
-                      className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-                        isActivePage(item.to)
-                          ? 'bg-primary text-primary-foreground'
-                          : 'text-muted-foreground hover:text-foreground hover:bg-muted'
-                      }`}
-                    >
-                      {item.name}
-                    </Link>
-                  ))}
-                </nav>
-              )}
             </div>
 
+            {/* Navigation - Collapses items dynamically */}
+            {user && !isMobile && <HeaderNav items={navigationItems} />}
+
             {/* Actions and User Menu */}
-            <div className="flex items-center space-x-2 min-w-0">
+            <div className="flex items-center space-x-2 flex-shrink-0">
               <LanguageSelector />
               <ThemeToggle />
 
@@ -149,10 +134,10 @@ export function Header() {
                   <span className="hidden md:inline text-sm text-muted-foreground truncate max-w-32">{user.username}</span>
 
                   {/* Desktop hamburger menu for account actions */}
-                  {!isMobile && !isTablet && (
+                  {!isMobile && (
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon" className="hidden lg:inline-flex touch-target" aria-label="Open account menu">
+                        <Button variant="ghost" size="icon" className="inline-flex touch-target" aria-label="Open account menu">
                           <Menu className="h-5 w-5" />
                         </Button>
                       </DropdownMenuTrigger>
@@ -170,13 +155,13 @@ export function Header() {
                     </DropdownMenu>
                   )}
 
-                  {/* Mobile menu button - Show when navigation is hidden */}
-                  {(isMobile || isTablet) && (
+                  {/* Mobile menu button - Show on mobile screens only */}
+                  {isMobile && (
                     <Button
                       variant="ghost"
                       size="sm"
                       onClick={() => setMobileMenuOpen(true)}
-                      className="lg:hidden touch-target"
+                      className="touch-target"
                       aria-label="Open navigation menu"
                     >
                       <Menu className="h-5 w-5" />
