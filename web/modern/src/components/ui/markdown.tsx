@@ -2,6 +2,7 @@ import React from 'react';
 import ReactMarkdown from 'react-markdown';
 import rehypeHighlight from 'rehype-highlight';
 import rehypeKatex from 'rehype-katex';
+import rehypeRaw from 'rehype-raw';
 import rehypeSanitize from 'rehype-sanitize';
 import remarkEmoji from 'remark-emoji';
 import remarkGfm from 'remark-gfm';
@@ -47,7 +48,7 @@ export const MarkdownRenderer = React.memo<{
     >
       <ReactMarkdown
         remarkPlugins={[remarkMath, remarkGfm, remarkEmoji]}
-        rehypePlugins={[rehypeSanitize, rehypeHighlight, rehypeKatex]}
+        rehypePlugins={[rehypeRaw, rehypeSanitize, rehypeHighlight, rehypeKatex]}
         components={{
           // Use GitHub-style task lists
           input: ({ node, ...props }) => {
