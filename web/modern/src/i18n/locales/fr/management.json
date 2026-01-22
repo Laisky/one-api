@@ -200,11 +200,6 @@
       "inference_profile": {
         "help": "Carte JSON du nom du modèle vers l'ARN du profil d'inférence AWS Bedrock. Utilisez pour router certains modèles via des profils d'inférence Bedrock spécifiques.",
         "label": "Carte ARN de profil d'inférence (AWS Bedrock)",
-        "mcp_tool_blacklist": {
-          "help": "Bloquer les outils MCP pour cet utilisateur. Utilisez server.tool ou le nom de l'outil.",
-          "label": "Liste noire des outils MCP",
-          "placeholder": "server.tool_name"
-        },
         "note": "Mapper les noms de modèles aux ARN de profil d'inférence AWS Bedrock (facultatif)",
         "placeholder": "Mappage ARN de profil d'inférence AWS Bedrock :\n{{example}}"
       },
@@ -214,10 +209,10 @@
       },
       "loading": "Chargement du canal...",
       "mcp": {
-        "add": "Ajouter",
-        "blacklist_add": "Add",
-        "blacklist_label": "MCP tool blacklist",
-        "blacklist_placeholder": "server.tool_name"
+        "blacklist_add": "Ajouter",
+        "blacklist_description": "Bloquer les outils MCP pour ce canal. Utilisez serveur.outil ou le nom de l'outil.",
+        "blacklist_label": "Liste noire des outils MCP",
+        "blacklist_placeholder": "serveur.nom_outil"
       },
       "model_configs": {
         "format_error": "Impossible de formater model_configs : {{error}}",

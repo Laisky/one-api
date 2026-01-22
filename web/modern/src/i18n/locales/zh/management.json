@@ -205,11 +205,6 @@
 			"inference_profile": {
 				"help": "模型名称到 AWS Bedrock 推理配置文件 ARN 的 JSON 映射。用于通过特定 Bedrock 推理配置文件路由某些模型。",
 				"label": "推理配置文件 ARN 映射 (AWS Bedrock)",
-				"mcp_tool_blacklist": {
-					"help": "Block MCP tools for this user. Use server.tool or tool name.",
-					"label": "MCP tool blacklist",
-					"placeholder": "server.tool_name"
-				},
 				"note": "将模型名称映射到 AWS Bedrock 推理配置文件 ARN (可选)",
 				"placeholder": "AWS Bedrock 推理配置文件 ARN 映射:\n{{example}}"
 			},
@@ -219,9 +214,9 @@
 			},
 			"loading": "正在加载渠道...",
 			"mcp": {
-				"blacklist_add": "Add",
-				"blacklist_description": "Block MCP tools for this channel. Use server.tool or tool name.",
-				"blacklist_label": "MCP tool blacklist",
+				"blacklist_add": "添加",
+				"blacklist_description": "屏蔽该渠道的 MCP 工具。使用 server.tool 或工具名称。",
+				"blacklist_label": "MCP 工具黑名单",
 				"blacklist_placeholder": "server.tool_name"
 			},
 			"model_configs": {
@@ -735,6 +730,11 @@
 					"help": "用户分组控制访问权限和模型/渠道可见性。",
 					"label": "分组 *",
 					"placeholder": "选择一个分组"
+				},
+				"mcp_tool_blacklist": {
+					"help": "屏蔽该用户的 MCP 工具。使用 server.tool 或工具名称。",
+					"label": "MCP 工具黑名单",
+					"placeholder": "server.tool_name"
 				},
 				"password": {
 					"help": "最小长度取决于策略。编辑时留空以保持不变。",

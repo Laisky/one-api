@@ -285,7 +285,9 @@ export function EditMCPServerPage() {
                             </SelectTrigger>
                           </FormControl>
                           <SelectContent>
-                            <SelectItem value="streamable_http">{t('mcp.edit.fields.protocol_streamable', 'Streamable HTTP')}</SelectItem>
+                            <SelectItem value="streamable_http">
+                              {t('mcp.edit.fields.protocol_streamable_http', 'Streamable HTTP')}
+                            </SelectItem>
                           </SelectContent>
                         </Select>
                       </FormItem>

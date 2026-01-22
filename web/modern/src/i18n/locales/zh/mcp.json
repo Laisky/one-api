@@ -2,106 +2,107 @@
   "mcp": {
     "edit": {
       "actions": {
-        "add": "Add",
-        "cancel": "Cancel",
-        "create": "Create Server",
-        "update": "Update Server"
+        "add": "添加",
+        "cancel": "取消",
+        "create": "创建服务器",
+        "update": "更新服务器"
       },
       "fields": {
-        "api_key": "API key",
-        "auth_type": "Auth type",
-        "auth_type_api_key": "API Key",
-        "auth_type_bearer": "Bearer",
-        "auth_type_custom_headers": "Custom headers",
-        "auth_type_none": "None",
-        "auto_sync": "Auto sync",
-        "auto_sync_help": "Sync tools on a schedule.",
-        "auto_sync_interval": "Sync interval (minutes)",
-        "base_url": "Base URL",
-        "description": "Description",
-        "headers": "Custom headers (JSON)",
-        "name": "Name",
-        "priority": "Priority",
-        "protocol": "Protocol",
-        "protocol_streamable": "Streamable HTTP",
-        "status": "Status",
-        "tool_blacklist": "Tool blacklist",
-        "tool_blacklist_empty": "No tools blocked",
-        "tool_blacklist_help": "Blocked tools will never be exposed.",
-        "tool_blacklist_none": "No synced tools",
-        "tool_blacklist_placeholder": "tool_name",
-        "tool_blacklist_selected": "Blocked Tools ({{count}})",
-        "tool_custom": "Add custom tool...",
-        "tool_pricing": "Tool pricing (JSON)",
+        "api_key": "API 密钥",
+        "auth_type": "认证类型",
+        "auth_type_api_key": "API 密钥",
+        "auth_type_bearer": "Bearer 令牌",
+        "auth_type_custom_headers": "自定义请求头",
+        "auth_type_none": "无认证",
+        "auto_sync": "自动同步",
+        "auto_sync_help": "按照设定的时间间隔同步工具。",
+        "auto_sync_interval": "同步间隔 (分钟)",
+        "base_url": "基础 URL",
+        "description": "描述",
+        "headers": "自定义请求头 (JSON)",
+        "name": "名称",
+        "priority": "优先级",
+        "protocol": "协议",
+        "protocol_streamable": "可流式 HTTP",
+        "protocol_streamable_http": "可流式 HTTP",
+        "status": "状态",
+        "tool_blacklist": "工具黑名单",
+        "tool_blacklist_empty": "未屏蔽任何工具",
+        "tool_blacklist_help": "被屏蔽的工具将永远不会公开。",
+        "tool_blacklist_none": "暂无同步工具",
+        "tool_blacklist_placeholder": "工具名称",
+        "tool_blacklist_selected": "已屏蔽工具 ({{count}})",
+        "tool_custom": "添加自定义工具...",
+        "tool_pricing": "工具计费 (JSON)",
         "tool_pricing_placeholder": "{\n  \"web_search\": { \"usd_per_call\": 0.002 },\n  \"code_interpreter\": { \"quota_per_call\": 1000 }\n}",
-        "tool_search": "Search tools...",
-        "tool_whitelist": "Tool whitelist",
-        "tool_whitelist_empty": "No tools selected",
-        "tool_whitelist_help": "Only tools listed here will be enabled.",
-        "tool_whitelist_none": "No synced tools",
-        "tool_whitelist_placeholder": "tool_name",
-        "tool_whitelist_selected": "Selected Tools ({{count}})"
+        "tool_search": "搜索工具...",
+        "tool_whitelist": "工具白名单",
+        "tool_whitelist_empty": "未选择任何工具",
+        "tool_whitelist_help": "只有在这里列出的工具会被启用。",
+        "tool_whitelist_none": "暂无同步工具",
+        "tool_whitelist_placeholder": "工具名称",
+        "tool_whitelist_selected": "已选工具 ({{count}})"
       },
       "notifications": {
-        "load_failed": "Failed to load MCP server",
-        "save_failed": "Save failed",
-        "save_success": "Saved"
+        "load_failed": "加载 MCP 服务器失败",
+        "save_failed": "保存失败",
+        "save_success": "已保存"
       },
       "pricing": {
-        "invalid": "Tool pricing JSON is invalid",
-        "missing": "Missing pricing for: {{tools}}"
+        "invalid": "工具定价 JSON 格式无效",
+        "missing": "缺失以下工具定价：{{tools}}"
       },
-      "title_add": "Add MCP Server",
-      "title_edit": "Edit MCP Server",
+      "title_add": "添加 MCP 服务器",
+      "title_edit": "编辑 MCP 服务器",
       "tools": {
-        "title": "Synced tools"
+        "title": "已同步工具"
       }
     },
     "list": {
       "actions": {
-        "add": "Add MCP Server",
-        "delete": "Delete",
-        "disable": "Disable",
-        "edit": "Edit",
-        "enable": "Enable",
-        "refresh": "Refresh",
-        "sync": "Sync",
-        "test": "Test"
+        "add": "添加 MCP 服务器",
+        "delete": "删除",
+        "disable": "禁用",
+        "edit": "编辑",
+        "enable": "启用",
+        "refresh": "刷新",
+        "sync": "同步",
+        "test": "测试"
       },
       "columns": {
-        "actions": "Actions",
-        "auth_type": "Auth",
-        "base_url": "Base URL",
-        "last_sync": "Last Sync",
-        "name": "Name",
-        "priority": "Priority",
-        "protocol": "Protocol",
-        "protocol_streamable": "Streamable HTTP",
-        "status": "Status",
-        "tool_count": "Tools"
+        "actions": "操作",
+        "auth_type": "认证类型",
+        "base_url": "基础 URL",
+        "last_sync": "最近同步",
+        "name": "名称",
+        "priority": "优先级",
+        "protocol": "协议",
+        "protocol_streamable": "可流式 HTTP",
+        "status": "状态",
+        "tool_count": "工具数"
       },
       "labels": {
-        "never": "Never"
+        "never": "从不"
       },
-      "search_placeholder": "Search MCP servers...",
-      "subtitle": "Manage MCP server registry and tool sync",
-      "title": "MCP Servers"
+      "search_placeholder": "搜索 MCP 服务器...",
+      "subtitle": "管理 MCP 服务器注册与工具同步",
+      "title": "MCP 服务器"
     },
     "notifications": {
-      "delete_failed": "Delete failed",
-      "delete_success": "Server deleted",
-      "fetch_failed": "Failed to load MCP servers",
-      "status_failed": "Status update failed",
-      "status_success": "Status updated",
-      "sync_failed": "Sync failed",
-      "sync_success": "Sync complete",
-      "test_failed": "Test failed",
-      "test_success": "Connection OK",
-      "test_tools": "Tools: {{count}}"
+      "delete_failed": "删除失败",
+      "delete_success": "服务器已删除",
+      "fetch_failed": "加载 MCP 服务器失败",
+      "status_failed": "状态更新失败",
+      "status_success": "状态已更新",
+      "sync_failed": "同步失败",
+      "sync_success": "同步完成",
+      "test_failed": "测试失败",
+      "test_success": "连接正常",
+      "test_tools": "发现工具：{{count}}"
     },
     "status": {
-      "disabled": "Disabled",
-      "enabled": "Enabled"
+      "disabled": "已禁用",
+      "enabled": "已启用"
     }
   }
 }

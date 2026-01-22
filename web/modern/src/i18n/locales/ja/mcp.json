@@ -2,106 +2,107 @@
   "mcp": {
     "edit": {
       "actions": {
-        "add": "Add",
-        "cancel": "Cancel",
-        "create": "Create Server",
-        "update": "Update Server"
+        "add": "追加",
+        "cancel": "キャンセル",
+        "create": "サーバーを作成",
+        "update": "サーバーを更新"
       },
       "fields": {
-        "api_key": "API key",
-        "auth_type": "Auth type",
-        "auth_type_api_key": "API Key",
+        "api_key": "API キー",
+        "auth_type": "認証タイプ",
+        "auth_type_api_key": "API キー",
         "auth_type_bearer": "Bearer",
-        "auth_type_custom_headers": "Custom headers",
-        "auth_type_none": "None",
-        "auto_sync": "Auto sync",
-        "auto_sync_help": "Sync tools on a schedule.",
-        "auto_sync_interval": "Sync interval (minutes)",
-        "base_url": "Base URL",
-        "description": "Description",
-        "headers": "Custom headers (JSON)",
-        "name": "Name",
-        "priority": "Priority",
-        "protocol": "Protocol",
-        "protocol_streamable": "Streamable HTTP",
-        "status": "Status",
-        "tool_blacklist": "Tool blacklist",
-        "tool_blacklist_empty": "No tools blocked",
-        "tool_blacklist_help": "Blocked tools will never be exposed.",
-        "tool_blacklist_none": "No synced tools",
-        "tool_blacklist_placeholder": "tool_name",
-        "tool_blacklist_selected": "Blocked Tools ({{count}})",
-        "tool_custom": "Add custom tool...",
-        "tool_pricing": "Tool pricing (JSON)",
+        "auth_type_custom_headers": "カスタムヘッダー",
+        "auth_type_none": "なし",
+        "auto_sync": "自動同期",
+        "auto_sync_help": "スケジュールに従ってツールを同期します。",
+        "auto_sync_interval": "同期の間隔 (分)",
+        "base_url": "ベース URL",
+        "description": "説明",
+        "headers": "カスタムヘッダー (JSON)",
+        "name": "名前",
+        "priority": "優先度",
+        "protocol": "プロトコル",
+        "protocol_streamable": "ストリーマブル HTTP",
+        "protocol_streamable_http": "ストリーマブル HTTP",
+        "status": "ステータス",
+        "tool_blacklist": "ツールのブラックリスト",
+        "tool_blacklist_empty": "ブロックされたツールはありません",
+        "tool_blacklist_help": "ブロックされたツールは公開されません。",
+        "tool_blacklist_none": "同期されたツールはありません",
+        "tool_blacklist_placeholder": "ツール名",
+        "tool_blacklist_selected": "ブロックされたツール ({{count}})",
+        "tool_custom": "カスタムツールを追加...",
+        "tool_pricing": "ツールの料金設定 (JSON)",
         "tool_pricing_placeholder": "{\n  \"web_search\": { \"usd_per_call\": 0.002 },\n  \"code_interpreter\": { \"quota_per_call\": 1000 }\n}",
-        "tool_search": "Search tools...",
-        "tool_whitelist": "Tool whitelist",
-        "tool_whitelist_empty": "No tools selected",
-        "tool_whitelist_help": "Only tools listed here will be enabled.",
-        "tool_whitelist_none": "No synced tools",
-        "tool_whitelist_placeholder": "tool_name",
-        "tool_whitelist_selected": "Selected Tools ({{count}})"
+        "tool_search": "ツールを検索...",
+        "tool_whitelist": "ツールのホワイトリスト",
+        "tool_whitelist_empty": "ツールが選択されていません",
+        "tool_whitelist_help": "ここにリストされたツールのみが有効になります。",
+        "tool_whitelist_none": "同期されたツールはありません",
+        "tool_whitelist_placeholder": "ツール名",
+        "tool_whitelist_selected": "選択されたツール ({{count}})"
       },
       "notifications": {
-        "load_failed": "Failed to load MCP server",
-        "save_failed": "Save failed",
-        "save_success": "Saved"
+        "load_failed": "MCP サーバーの読み込みに失敗しました",
+        "save_failed": "保存に失敗しました",
+        "save_success": "保存しました"
       },
       "pricing": {
-        "invalid": "Tool pricing JSON is invalid",
-        "missing": "Missing pricing for: {{tools}}"
+        "invalid": "ツールの料金設定 JSON が無効です",
+        "missing": "以下の料金設定が不足しています: {{tools}}"
       },
-      "title_add": "Add MCP Server",
-      "title_edit": "Edit MCP Server",
+      "title_add": "MCP サーバーを追加",
+      "title_edit": "MCP サーバーを編集",
       "tools": {
-        "title": "Synced tools"
+        "title": "同期されたツール"
       }
     },
     "list": {
       "actions": {
-        "add": "Add MCP Server",
-        "delete": "Delete",
-        "disable": "Disable",
-        "edit": "Edit",
-        "enable": "Enable",
-        "refresh": "Refresh",
-        "sync": "Sync",
-        "test": "Test"
+        "add": "MCP サーバーを追加",
+        "delete": "削除",
+        "disable": "無効化",
+        "edit": "編集",
+        "enable": "有効化",
+        "refresh": "更新",
+        "sync": "同期",
+        "test": "テスト"
       },
       "columns": {
-        "actions": "Actions",
-        "auth_type": "Auth",
-        "base_url": "Base URL",
-        "last_sync": "Last Sync",
-        "name": "Name",
-        "priority": "Priority",
-        "protocol": "Protocol",
-        "protocol_streamable": "Streamable HTTP",
-        "status": "Status",
-        "tool_count": "Tools"
+        "actions": "操作",
+        "auth_type": "認証",
+        "base_url": "ベース URL",
+        "last_sync": "最終同期",
+        "name": "名前",
+        "priority": "優先度",
+        "protocol": "プロトコル",
+        "protocol_streamable": "ストリーマブル HTTP",
+        "status": "ステータス",
+        "tool_count": "ツール数"
       },
       "labels": {
-        "never": "Never"
+        "never": "未同期"
       },
-      "search_placeholder": "Search MCP servers...",
-      "subtitle": "Manage MCP server registry and tool sync",
-      "title": "MCP Servers"
+      "search_placeholder": "MCP サーバーを検索...",
+      "subtitle": "MCP サーバーのレジストリとツールの同期を管理",
+      "title": "MCP サーバー"
     },
     "notifications": {
-      "delete_failed": "Delete failed",
-      "delete_success": "Server deleted",
-      "fetch_failed": "Failed to load MCP servers",
-      "status_failed": "Status update failed",
-      "status_success": "Status updated",
-      "sync_failed": "Sync failed",
-      "sync_success": "Sync complete",
-      "test_failed": "Test failed",
-      "test_success": "Connection OK",
-      "test_tools": "Tools: {{count}}"
+      "delete_failed": "削除に失敗しました",
+      "delete_success": "サーバーを削除しました",
+      "fetch_failed": "MCP サーバーの取得に失敗しました",
+      "status_failed": "ステータスの更新に失敗しました",
+      "status_success": "ステータスを更新しました",
+      "sync_failed": "同期に失敗しました",
+      "sync_success": "同期が完了しました",
+      "test_failed": "テストに失敗しました",
+      "test_success": "接続 OK",
+      "test_tools": "ツール数: {{count}}"
     },
     "status": {
-      "disabled": "Disabled",
-      "enabled": "Enabled"
+      "disabled": "無効",
+      "enabled": "有効"
     }
   }
 }

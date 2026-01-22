@@ -24,6 +24,7 @@
         "priority": "Priority",
         "protocol": "Protocol",
         "protocol_streamable": "Streamable HTTP",
+        "protocol_streamable_http": "Streamable HTTP",
         "status": "Status",
         "tool_blacklist": "Tool blacklist",
         "tool_blacklist_empty": "No tools blocked",

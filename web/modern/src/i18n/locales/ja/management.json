@@ -209,9 +209,9 @@
       },
       "loading": "チャンネルを読み込み中...",
       "mcp": {
-        "blacklist_add": "Add",
-        "blacklist_description": "Block MCP tools for this channel. Use server.tool or tool name.",
-        "blacklist_label": "MCP tool blacklist",
+        "blacklist_add": "追加",
+        "blacklist_description": "このチャンネルの MCP ツールをブロックします。server.tool またはツール名を使用します。",
+        "blacklist_label": "MCP ツールブラックリスト",
         "blacklist_placeholder": "server.tool_name"
       },
       "model_configs": {
@@ -728,8 +728,8 @@
           "placeholder": "グループを選択"
         },
         "mcp_tool_blacklist": {
-          "help": "Block MCP tools for this user. Use server.tool or tool name.",
-          "label": "MCP tool blacklist",
+          "help": "このユーザーの MCP ツールをブロックします。server.tool またはツール名を使用します。",
+          "label": "MCP ツールブラックリスト",
           "placeholder": "server.tool_name"
         },
         "password": {

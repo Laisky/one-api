@@ -7,6 +7,7 @@ import { cn } from '@/lib/utils';
 import { Info, X } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 // SelectionListOption describes a selectable option displayed in the manager.
 export interface SelectionListOption {
@@ -88,9 +89,11 @@ export function SelectionListManager({
     onChange(normalizedSelected.filter((item) => item !== value));
   };
 
+  const { t } = useTranslation();
+
   const selectedSummary = selectedSummaryLabel
     ? selectedSummaryLabel(normalizedSelected.length)
-    : `Selected (${normalizedSelected.length})`;
+    : t('common.selected_count', 'Selected ({{count}})', { count: normalizedSelected.length });
 
   return (
     <TooltipProvider>
@@ -170,7 +173,7 @@ export function SelectionListManager({
                   type="button"
                   onClick={() => removeSelected(item)}
                   className="ml-1 inline-flex"
-                  aria-label={`Remove ${item}`}
+                  aria-label={t('common.remove_item', 'Remove {{item}}', { item })}
                   disabled={disabled}
                 >
                   <X className="h-3 w-3" />

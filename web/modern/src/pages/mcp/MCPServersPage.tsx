@@ -88,10 +88,18 @@ export function MCPServersPage() {
       {
         accessorKey: 'protocol',
         header: t('mcp.list.columns.protocol', 'Protocol'),
+        cell: ({ row }) => {
+          const protocol = row.original.protocol;
+          return t(`mcp.edit.fields.protocol_${protocol}`, protocol);
+        },
       },
       {
         accessorKey: 'auth_type',
         header: t('mcp.list.columns.auth_type', 'Auth'),
+        cell: ({ row }) => {
+          const authType = row.original.auth_type;
+          return t(`mcp.edit.fields.auth_type_${authType}`, authType);
+        },
       },
       {
         accessorKey: 'tool_count',
@@ -221,7 +229,7 @@ export function MCPServersPage() {
           <div className="flex flex-col">
             <div className="font-medium">{server.name}</div>
             <div className="text-xs text-muted-foreground">
-              {server.base_url} • {server.protocol}
+              {server.base_url} • {t(`mcp.edit.fields.protocol_${server.protocol}`, server.protocol)}
             </div>
           </div>
         ),

@@ -2,106 +2,107 @@
   "mcp": {
     "edit": {
       "actions": {
-        "add": "Add",
-        "cancel": "Cancel",
-        "create": "Create Server",
-        "update": "Update Server"
+        "add": "Agregar",
+        "cancel": "Cancelar",
+        "create": "Crear servidor",
+        "update": "Actualizar servidor"
       },
       "fields": {
-        "api_key": "API key",
-        "auth_type": "Auth type",
-        "auth_type_api_key": "API Key",
+        "api_key": "Clave API",
+        "auth_type": "Tipo de autenticación",
+        "auth_type_api_key": "Clave API",
         "auth_type_bearer": "Bearer",
-        "auth_type_custom_headers": "Custom headers",
-        "auth_type_none": "None",
-        "auto_sync": "Auto sync",
-        "auto_sync_help": "Sync tools on a schedule.",
-        "auto_sync_interval": "Sync interval (minutes)",
-        "base_url": "Base URL",
-        "description": "Description",
-        "headers": "Custom headers (JSON)",
-        "name": "Name",
-        "priority": "Priority",
-        "protocol": "Protocol",
-        "protocol_streamable": "Streamable HTTP",
-        "status": "Status",
-        "tool_blacklist": "Tool blacklist",
-        "tool_blacklist_empty": "No tools blocked",
-        "tool_blacklist_help": "Blocked tools will never be exposed.",
-        "tool_blacklist_none": "No synced tools",
-        "tool_blacklist_placeholder": "tool_name",
-        "tool_blacklist_selected": "Blocked Tools ({{count}})",
-        "tool_custom": "Add custom tool...",
-        "tool_pricing": "Tool pricing (JSON)",
+        "auth_type_custom_headers": "Encabezados personalizados",
+        "auth_type_none": "Ninguno",
+        "auto_sync": "Sincronización automática",
+        "auto_sync_help": "Sincronizar herramientas según un horario.",
+        "auto_sync_interval": "Intervalo de sincronización (minutos)",
+        "base_url": "URL base",
+        "description": "Descripción",
+        "headers": "Encabezados personalizados (JSON)",
+        "name": "Nombre",
+        "priority": "Prioridad",
+        "protocol": "Protocolo",
+        "protocol_streamable": "HTTP con flujo (Streamable)",
+        "protocol_streamable_http": "HTTP con flujo (Streamable)",
+        "status": "Estado",
+        "tool_blacklist": "Lista negra de herramientas",
+        "tool_blacklist_empty": "No hay herramientas bloqueadas",
+        "tool_blacklist_help": "Las herramientas bloqueadas nunca se expondrán.",
+        "tool_blacklist_none": "No hay herramientas sincronizadas",
+        "tool_blacklist_placeholder": "nombre_herramienta",
+        "tool_blacklist_selected": "Herramientas bloqueadas ({{count}})",
+        "tool_custom": "Agregar herramienta personalizada...",
+        "tool_pricing": "Precios de herramientas (JSON)",
         "tool_pricing_placeholder": "{\n  \"web_search\": { \"usd_per_call\": 0.002 },\n  \"code_interpreter\": { \"quota_per_call\": 1000 }\n}",
-        "tool_search": "Search tools...",
-        "tool_whitelist": "Tool whitelist",
-        "tool_whitelist_empty": "No tools selected",
-        "tool_whitelist_help": "Only tools listed here will be enabled.",
-        "tool_whitelist_none": "No synced tools",
-        "tool_whitelist_placeholder": "tool_name",
-        "tool_whitelist_selected": "Selected Tools ({{count}})"
+        "tool_search": "Buscar herramientas...",
+        "tool_whitelist": "Lista blanca de herramientas",
+        "tool_whitelist_empty": "No se seleccionaron herramientas",
+        "tool_whitelist_help": "Solo se habilitarán las herramientas enumeradas aquí.",
+        "tool_whitelist_none": "No hay herramientas sincronizadas",
+        "tool_whitelist_placeholder": "nombre_herramienta",
+        "tool_whitelist_selected": "Herramientas seleccionadas ({{count}})"
       },
       "notifications": {
-        "load_failed": "Failed to load MCP server",
-        "save_failed": "Save failed",
-        "save_success": "Saved"
+        "load_failed": "Error al cargar el servidor MCP",
+        "save_failed": "Error al guardar",
+        "save_success": "Guardado"
       },
       "pricing": {
-        "invalid": "Tool pricing JSON is invalid",
-        "missing": "Missing pricing for: {{tools}}"
+        "invalid": "El JSON de precios de herramientas no es válido",
+        "missing": "Falta el precio para: {{tools}}"
       },
-      "title_add": "Add MCP Server",
-      "title_edit": "Edit MCP Server",
+      "title_add": "Agregar servidor MCP",
+      "title_edit": "Editar servidor MCP",
       "tools": {
-        "title": "Synced tools"
+        "title": "Herramientas sincronizadas"
       }
     },
     "list": {
       "actions": {
-        "add": "Add MCP Server",
-        "delete": "Delete",
-        "disable": "Disable",
-        "edit": "Edit",
-        "enable": "Enable",
-        "refresh": "Refresh",
-        "sync": "Sync",
-        "test": "Test"
+        "add": "Agregar servidor MCP",
+        "delete": "Eliminar",
+        "disable": "Deshabilitar",
+        "edit": "Editar",
+        "enable": "Habilitar",
+        "refresh": "Actualizar",
+        "sync": "Sincronizar",
+        "test": "Probar"
       },
       "columns": {
-        "actions": "Actions",
-        "auth_type": "Auth",
-        "base_url": "Base URL",
-        "last_sync": "Last Sync",
-        "name": "Name",
-        "priority": "Priority",
-        "protocol": "Protocol",
-        "protocol_streamable": "Streamable HTTP",
-        "status": "Status",
-        "tool_count": "Tools"
+        "actions": "Acciones",
+        "auth_type": "Autenticación",
+        "base_url": "URL base",
+        "last_sync": "Última sincronización",
+        "name": "Nombre",
+        "priority": "Prioridad",
+        "protocol": "Protocolo",
+        "protocol_streamable": "HTTP con flujo",
+        "status": "Estado",
+        "tool_count": "Herramientas"
       },
       "labels": {
-        "never": "Never"
+        "never": "Nunca"
       },
-      "search_placeholder": "Search MCP servers...",
-      "subtitle": "Manage MCP server registry and tool sync",
-      "title": "MCP Servers"
+      "search_placeholder": "Buscar servidores MCP...",
+      "subtitle": "Administrar el registro de servidores MCP y la sincronización de herramientas",
+      "title": "Servidores MCP"
     },
     "notifications": {
-      "delete_failed": "Delete failed",
-      "delete_success": "Server deleted",
-      "fetch_failed": "Failed to load MCP servers",
-      "status_failed": "Status update failed",
-      "status_success": "Status updated",
-      "sync_failed": "Sync failed",
-      "sync_success": "Sync complete",
-      "test_failed": "Test failed",
-      "test_success": "Connection OK",
-      "test_tools": "Tools: {{count}}"
+      "delete_failed": "Error al eliminar",
+      "delete_success": "Servidor eliminado",
+      "fetch_failed": "Error al cargar los servidores MCP",
+      "status_failed": "Error al actualizar el estado",
+      "status_success": "Estado actualizado",
+      "sync_failed": "Sincronización fallida",
+      "sync_success": "Sincronización completa",
+      "test_failed": "Prueba fallida",
+      "test_success": "Conexión OK",
+      "test_tools": "Herramientas: {{count}}"
     },
     "status": {
-      "disabled": "Disabled",
-      "enabled": "Enabled"
+      "disabled": "Deshabilitado",
+      "enabled": "Habilitado"
     }
   }
 }

@@ -16,21 +16,11 @@ interface ToolListEditorProps {
   addLabel?: string;
 }
 
-export function ToolListEditor({
-  label,
-  description,
-  value,
-  onChange,
-  placeholder,
-  disabled,
-  addLabel,
-}: ToolListEditorProps) {
+export function ToolListEditor({ label, description, value, onChange, placeholder, disabled, addLabel }: ToolListEditorProps) {
   const [draft, setDraft] = useState('');
   const { t } = useTranslation();
 
-  const normalized = value
-    .map((item) => item.trim())
-    .filter((item) => item.length > 0);
+  const normalized = value.map((item) => item.trim()).filter((item) => item.length > 0);
 
   const addItem = () => {
     const next = draft.trim();
@@ -49,9 +39,7 @@ export function ToolListEditor({
     <div className="space-y-2">
       <div>
         <Label className="text-sm font-medium">{label}</Label>
-        {description && (
-          <p className="text-xs text-muted-foreground mt-1">{description}</p>
-        )}
+        {description && <p className="text-xs text-muted-foreground mt-1">{description}</p>}
       </div>
       <div className="flex gap-2">
         <Input
@@ -71,11 +59,7 @@ export function ToolListEditor({
         </Button>
       </div>
       <div className="flex flex-wrap gap-2">
-        {normalized.length === 0 && (
-          <span className="text-xs text-muted-foreground">
-            {t('common.no_items', 'No items')}
-          </span>
-        )}
+        {normalized.length === 0 && <span className="text-xs text-muted-foreground">{t('common.no_items', 'No items')}</span>}
         {normalized.map((item) => (
           <Badge key={item} variant="secondary" className="gap-1">
             {item}
@@ -83,7 +67,7 @@ export function ToolListEditor({
               type="button"
               onClick={() => removeItem(item)}
               className="ml-1 inline-flex"
-              aria-label={`Remove ${item}`}
+              aria-label={t('common.remove_item', 'Remove {{item}}', { item })}
               disabled={disabled}
             >
               <X className="h-3 w-3" />
