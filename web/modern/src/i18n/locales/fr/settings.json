@@ -98,6 +98,72 @@
       "view_releases": "Voir les publications GitHub"
     }
   },
+  "personal_settings": {
+    "access_token": {
+      "description": "Générez des tokens d'accès et des liens d'invitation.",
+      "generate_token": "Générer un token d'accès",
+      "get_invite_link": "Obtenir un lien d'invitation",
+      "title": "Token d'accès et invitation"
+    },
+    "profile_info": {
+      "description": "Mettez à jour vos informations personnelles et paramètres de compte.",
+      "display_name": "Nom d'affichage",
+      "display_name_placeholder": "Saisissez un nom d'affichage",
+      "email": "E-mail",
+      "email_placeholder": "Saisissez un e-mail",
+      "failed": "Échec de la mise à jour",
+      "password": "Nouveau mot de passe (laisser vide pour conserver l'actuel)",
+      "password_placeholder": "Saisissez un nouveau mot de passe",
+      "success": "Profil mis à jour avec succès",
+      "title": "Informations du profil",
+      "update_button": "Mettre à jour le profil",
+      "updating": "Mise à jour...",
+      "username": "Nom d'utilisateur"
+    },
+    "totp": {
+      "cancel": "Annuler",
+      "confirm": "Confirmer",
+      "description": "Renforcez la sécurité de votre compte grâce à l'authentification à deux facteurs.",
+      "disable_button": "Désactiver TOTP",
+      "disable_placeholder": "Saisissez le code TOTP pour désactiver",
+      "disabled_desc": "Activez l'authentification à deux facteurs pour sécuriser votre compte.",
+      "disabled_title": "TOTP n'est pas activé",
+      "enable_button": "Activer TOTP",
+      "enabled_desc": "Votre compte est protégé par l'authentification à deux facteurs.",
+      "enabled_title": "TOTP est activé",
+      "errors": {
+        "confirm_failed": "Impossible de confirmer le TOTP",
+        "disable_failed": "Impossible de désactiver le TOTP",
+        "invalid_code": "Saisissez un code valide à 6 chiffres",
+        "load_status": "Impossible de charger l'état TOTP",
+        "missing_code": "Veuillez saisir le code TOTP pour désactiver",
+        "setup_failed": "Échec de la configuration TOTP"
+      },
+      "processing": "Traitement...",
+      "secret_key": "Clé secrète (saisie manuelle)",
+      "setup_desc": "Suivez ces étapes pour protéger votre compte avec TOTP.",
+      "setup_instructions_title": "Instructions de configuration",
+      "setup_step1": "Installez une application d'authentification (Google Authenticator, Authy, etc.)",
+      "setup_step2": "Scannez le QR code ci-dessous ou saisissez la clé secrète manuellement",
+      "setup_step3": "Entrez le code à 6 chiffres fourni par l'application",
+      "setup_step4": "Cliquez sur \"Confirmer\" pour activer TOTP",
+      "setup_title": "Configurer l'authentification à deux facteurs",
+      "title": "Authentification à deux facteurs (TOTP)",
+      "verify_code": "Code de vérification",
+      "verify_placeholder": "Entrez le code à 6 chiffres de votre application",
+      "verify_placeholder_mobile": "Entrez un code à 6 chiffres"
+    }
+  },
+  "settings": {
+    "description": "Configurez votre compte et les paramètres du système",
+    "tabs": {
+      "operation": "Opération",
+      "other": "Autres",
+      "personal": "Personnel",
+      "system": "Système"
+    },
+    "title": "Paramètres"
+  },
   "system_settings": {
     "description": "Configurer les paramètres et options globaux du système.",
     "descriptions": {
@@ -211,71 +277,5 @@
     "saving": "Enregistrement...",
     "sensitive_hint": "La valeur stockée est masquée. Saisissez une nouvelle valeur pour remplacer le secret existant.",
     "title": "Paramètres système"
-  },
-  "settings": {
-    "description": "Configurez votre compte et les paramètres du système",
-    "tabs": {
-      "operation": "Opération",
-      "other": "Autres",
-      "personal": "Personnel",
-      "system": "Système"
-    },
-    "title": "Paramètres"
-  },
-  "personal_settings": {
-    "access_token": {
-      "description": "Générez des tokens d'accès et des liens d'invitation.",
-      "generate_token": "Générer un token d'accès",
-      "get_invite_link": "Obtenir un lien d'invitation",
-      "title": "Token d'accès et invitation"
-    },
-    "profile_info": {
-      "description": "Mettez à jour vos informations personnelles et paramètres de compte.",
-      "display_name": "Nom d'affichage",
-      "display_name_placeholder": "Saisissez un nom d'affichage",
-      "email": "E-mail",
-      "email_placeholder": "Saisissez un e-mail",
-      "failed": "Échec de la mise à jour",
-      "password": "Nouveau mot de passe (laisser vide pour conserver l'actuel)",
-      "password_placeholder": "Saisissez un nouveau mot de passe",
-      "success": "Profil mis à jour avec succès",
-      "title": "Informations du profil",
-      "update_button": "Mettre à jour le profil",
-      "updating": "Mise à jour...",
-      "username": "Nom d'utilisateur"
-    },
-    "totp": {
-      "cancel": "Annuler",
-      "confirm": "Confirmer",
-      "description": "Renforcez la sécurité de votre compte grâce à l'authentification à deux facteurs.",
-      "disable_button": "Désactiver TOTP",
-      "disable_placeholder": "Saisissez le code TOTP pour désactiver",
-      "disabled_desc": "Activez l'authentification à deux facteurs pour sécuriser votre compte.",
-      "disabled_title": "TOTP n'est pas activé",
-      "enable_button": "Activer TOTP",
-      "enabled_desc": "Votre compte est protégé par l'authentification à deux facteurs.",
-      "enabled_title": "TOTP est activé",
-      "errors": {
-        "confirm_failed": "Impossible de confirmer le TOTP",
-        "disable_failed": "Impossible de désactiver le TOTP",
-        "invalid_code": "Saisissez un code valide à 6 chiffres",
-        "load_status": "Impossible de charger l'état TOTP",
-        "missing_code": "Veuillez saisir le code TOTP pour désactiver",
-        "setup_failed": "Échec de la configuration TOTP"
-      },
-      "processing": "Traitement...",
-      "secret_key": "Clé secrète (saisie manuelle)",
-      "setup_desc": "Suivez ces étapes pour protéger votre compte avec TOTP.",
-      "setup_instructions_title": "Instructions de configuration",
-      "setup_step1": "Installez une application d'authentification (Google Authenticator, Authy, etc.)",
-      "setup_step2": "Scannez le QR code ci-dessous ou saisissez la clé secrète manuellement",
-      "setup_step3": "Entrez le code à 6 chiffres fourni par l'application",
-      "setup_step4": "Cliquez sur \"Confirmer\" pour activer TOTP",
-      "setup_title": "Configurer l'authentification à deux facteurs",
-      "title": "Authentification à deux facteurs (TOTP)",
-      "verify_code": "Code de vérification",
-      "verify_placeholder": "Entrez le code à 6 chiffres de votre application",
-      "verify_placeholder_mobile": "Entrez un code à 6 chiffres"
-    }
   }
 }

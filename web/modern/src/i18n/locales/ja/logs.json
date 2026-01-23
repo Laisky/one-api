@@ -1,151 +1,151 @@
 {
-	"logs": {
-		"actions": {
-			"clear": "クリア",
-			"export": "エクスポート",
-			"hide_stats": "統計を隠す",
-			"show_stats": "統計を表示"
-		},
-		"confirm": {
-			"delete_before": "{{timestamp}} 以前のログを削除してもよろしいですか？"
-		},
-		"description": "API利用ログの閲覧と検索",
-		"details": {
-			"cache_write_1h": "キャッシュ書き込み 1h トークン",
-			"cache_write_5m": "キャッシュ書き込み 5m トークン",
-			"channel": "チャンネル",
-			"completion_tokens_cached": "補完トークン (キャッシュ済み)",
-			"completion_tokens_output": "補完トークン (出力)",
-			"content": "コンテンツ",
-			"copied": "コピーしました！",
-			"copy_trace": "クリックしてトレースIDをコピー",
-			"events": {
-				"first_client_response": "最初のクライアントレスポンス",
-				"first_client_response_desc": "クライアントに送信された最初のレスポンス",
-				"first_upstream_response": "最初のアップストリームレスポンス",
-				"first_upstream_response_desc": "アップストリームから受信した最初のレスポンス",
-				"mcp_call": "MCP Call",
-				"mcp_call_desc": "MCP tool call",
-				"mcp_call_server": "Server: {{server}}",
-				"mcp_call_tool": "Tool: {{tool}}",
-				"request_completed": "リクエスト完了",
-				"request_completed_desc": "リクエストが完全に完了しました",
-				"request_forwarded": "アップストリームへ転送",
-				"request_forwarded_desc": "リクエストがアップストリームサービスへ転送されました",
-				"request_received": "リクエスト受信",
-				"request_received_desc": "ゲートウェイが初期リクエストを受信しました",
-				"upstream_completed": "アップストリーム完了",
-				"upstream_completed_desc": "アップストリームレスポンスが完了しました (ストリーミング)"
-			},
-			"flags": "フラグ",
-			"identifiers": "識別子",
-			"latency": "レイテンシ",
-			"load_failed": "トレース情報の読み込みに失敗しました。",
-			"log_id": "ログID",
-			"metadata": "メタデータ",
-			"method_status": "メソッド & ステータス",
-			"model": "モデル",
-			"no_content": "コンテンツは記録されていません。",
-			"no_timeline": "このトレースのタイムラインデータはありません。",
-			"no_tracing": "このログエントリのトレースデータはありません。",
-			"prompt_tokens_cached": "プロンプトトークン (キャッシュ済み)",
-			"prompt_tokens_input": "プロンプトトークン (入力)",
-			"quota": "クォータ",
-			"quota_raw": "クォータ (生単位)",
-			"recorded_at": "記録日時",
-			"request_id": "リクエストID",
-			"request_info": "リクエスト情報",
-			"request_size": "リクエストサイズ",
-			"select_hint": "ログエントリを選択して詳細を表示します。",
-			"stream": "ストリーム",
-			"summary": "概要",
-			"system_reset": "システムリセット",
-			"timeline": "リクエストタイムライン",
-			"title": "ログエントリ詳細",
-			"token": "トークン",
-			"total_cached_tokens": "合計キャッシュトークン",
-			"total_time": "合計リクエスト時間",
-			"total_tokens": "合計トークン",
-			"trace_id": "トレースID",
-			"tracing": "トレース",
-			"type": "タイプ",
-			"url": "URL",
-			"user": "ユーザー"
-		},
-		"export": {
-			"headers": {
-				"cache_write_1h": "キャッシュ書き込み (1h)",
-				"cache_write_5m": "キャッシュ書き込み (5m)",
-				"cached_completion_tokens": "キャッシュ済み補完トークン",
-				"cached_prompt_tokens": "キャッシュ済みプロンプトトークン",
-				"completion_tokens": "補完トークン",
-				"content": "コンテンツ",
-				"latency": "レイテンシ",
-				"model": "モデル",
-				"prompt_tokens": "プロンプトトークン",
-				"quota": "クォータ",
-				"time": "時間",
-				"token": "トークン",
-				"type": "タイプ",
-				"username": "ユーザー名"
-			}
-		},
-		"filters": {
-			"apply": "フィルターを適用",
-			"channel": "チャンネル",
-			"channel_placeholder": "チャンネルIDを入力",
-			"end": "終了時間",
-			"model": "モデル",
-			"model_placeholder": "モデルを選択",
-			"start": "開始時間",
-			"title": "フィルター",
-			"token": "トークン",
-			"token_placeholder": "トークンを選択",
-			"type": "タイプ",
-			"type_placeholder": "タイプを選択",
-			"username": "ユーザー名",
-			"username_placeholder": "ユーザーを選択"
-		},
-		"labels": {
-			"missing": "不明",
-			"not_available": "N/A"
-		},
-		"search": {
-			"log_entry": "ログエントリ",
-			"quota": "クォータ: {{value}}"
-		},
-		"stats": {
-			"total_quota": "合計クォータ: {{value}}"
-		},
-		"table": {
-			"channel": "チャンネル",
-			"completion": "補完",
-			"cost": "コスト",
-			"empty": "条件に一致するログは見つかりませんでした。",
-			"latency": "レイテンシ",
-			"model": "モデル",
-			"prompt": "プロンプト",
-			"time": "時間",
-			"token": "トークン",
-			"type": "タイプ",
-			"user": "ユーザー"
-		},
-		"title": "ログ",
-		"tooltip": {
-			"cache_write_1h": "キャッシュ書き込み (1h): {{value}}",
-			"cache_write_5m": "キャッシュ書き込み (5m): {{value}}",
-			"cached_tokens": "キャッシュ済み: {{value}}",
-			"input_tokens": "入力: {{value}}",
-			"output_tokens": "出力: {{value}}"
-		},
-		"types": {
-			"all": "すべて",
-			"consume": "消費",
-			"manage": "管理",
-			"system": "システム",
-			"test": "テスト",
-			"topup": "チャージ",
-			"unknown": "不明"
-		}
-	}
+  "logs": {
+    "actions": {
+      "clear": "クリア",
+      "export": "エクスポート",
+      "hide_stats": "統計を隠す",
+      "show_stats": "統計を表示"
+    },
+    "confirm": {
+      "delete_before": "{{timestamp}} 以前のログを削除してもよろしいですか？"
+    },
+    "description": "API利用ログの閲覧と検索",
+    "details": {
+      "cache_write_1h": "キャッシュ書き込み 1h トークン",
+      "cache_write_5m": "キャッシュ書き込み 5m トークン",
+      "channel": "チャンネル",
+      "completion_tokens_cached": "補完トークン (キャッシュ済み)",
+      "completion_tokens_output": "補完トークン (出力)",
+      "content": "コンテンツ",
+      "copied": "コピーしました！",
+      "copy_trace": "クリックしてトレースIDをコピー",
+      "events": {
+        "first_client_response": "最初のクライアントレスポンス",
+        "first_client_response_desc": "クライアントに送信された最初のレスポンス",
+        "first_upstream_response": "最初のアップストリームレスポンス",
+        "first_upstream_response_desc": "アップストリームから受信した最初のレスポンス",
+        "mcp_call": "MCP Call",
+        "mcp_call_desc": "MCP tool call",
+        "mcp_call_server": "Server: {{server}}",
+        "mcp_call_tool": "Tool: {{tool}}",
+        "request_completed": "リクエスト完了",
+        "request_completed_desc": "リクエストが完全に完了しました",
+        "request_forwarded": "アップストリームへ転送",
+        "request_forwarded_desc": "リクエストがアップストリームサービスへ転送されました",
+        "request_received": "リクエスト受信",
+        "request_received_desc": "ゲートウェイが初期リクエストを受信しました",
+        "upstream_completed": "アップストリーム完了",
+        "upstream_completed_desc": "アップストリームレスポンスが完了しました (ストリーミング)"
+      },
+      "flags": "フラグ",
+      "identifiers": "識別子",
+      "latency": "レイテンシ",
+      "load_failed": "トレース情報の読み込みに失敗しました。",
+      "log_id": "ログID",
+      "metadata": "メタデータ",
+      "method_status": "メソッド \u0026 ステータス",
+      "model": "モデル",
+      "no_content": "コンテンツは記録されていません。",
+      "no_timeline": "このトレースのタイムラインデータはありません。",
+      "no_tracing": "このログエントリのトレースデータはありません。",
+      "prompt_tokens_cached": "プロンプトトークン (キャッシュ済み)",
+      "prompt_tokens_input": "プロンプトトークン (入力)",
+      "quota": "クォータ",
+      "quota_raw": "クォータ (生単位)",
+      "recorded_at": "記録日時",
+      "request_id": "リクエストID",
+      "request_info": "リクエスト情報",
+      "request_size": "リクエストサイズ",
+      "select_hint": "ログエントリを選択して詳細を表示します。",
+      "stream": "ストリーム",
+      "summary": "概要",
+      "system_reset": "システムリセット",
+      "timeline": "リクエストタイムライン",
+      "title": "ログエントリ詳細",
+      "token": "トークン",
+      "total_cached_tokens": "合計キャッシュトークン",
+      "total_time": "合計リクエスト時間",
+      "total_tokens": "合計トークン",
+      "trace_id": "トレースID",
+      "tracing": "トレース",
+      "type": "タイプ",
+      "url": "URL",
+      "user": "ユーザー"
+    },
+    "export": {
+      "headers": {
+        "cache_write_1h": "キャッシュ書き込み (1h)",
+        "cache_write_5m": "キャッシュ書き込み (5m)",
+        "cached_completion_tokens": "キャッシュ済み補完トークン",
+        "cached_prompt_tokens": "キャッシュ済みプロンプトトークン",
+        "completion_tokens": "補完トークン",
+        "content": "コンテンツ",
+        "latency": "レイテンシ",
+        "model": "モデル",
+        "prompt_tokens": "プロンプトトークン",
+        "quota": "クォータ",
+        "time": "時間",
+        "token": "トークン",
+        "type": "タイプ",
+        "username": "ユーザー名"
+      }
+    },
+    "filters": {
+      "apply": "フィルターを適用",
+      "channel": "チャンネル",
+      "channel_placeholder": "チャンネルIDを入力",
+      "end": "終了時間",
+      "model": "モデル",
+      "model_placeholder": "モデルを選択",
+      "start": "開始時間",
+      "title": "フィルター",
+      "token": "トークン",
+      "token_placeholder": "トークンを選択",
+      "type": "タイプ",
+      "type_placeholder": "タイプを選択",
+      "username": "ユーザー名",
+      "username_placeholder": "ユーザーを選択"
+    },
+    "labels": {
+      "missing": "不明",
+      "not_available": "N/A"
+    },
+    "search": {
+      "log_entry": "ログエントリ",
+      "quota": "クォータ: {{value}}"
+    },
+    "stats": {
+      "total_quota": "合計クォータ: {{value}}"
+    },
+    "table": {
+      "channel": "チャンネル",
+      "completion": "補完",
+      "cost": "コスト",
+      "empty": "条件に一致するログは見つかりませんでした。",
+      "latency": "レイテンシ",
+      "model": "モデル",
+      "prompt": "プロンプト",
+      "time": "時間",
+      "token": "トークン",
+      "type": "タイプ",
+      "user": "ユーザー"
+    },
+    "title": "ログ",
+    "tooltip": {
+      "cache_write_1h": "キャッシュ書き込み (1h): {{value}}",
+      "cache_write_5m": "キャッシュ書き込み (5m): {{value}}",
+      "cached_tokens": "キャッシュ済み: {{value}}",
+      "input_tokens": "入力: {{value}}",
+      "output_tokens": "出力: {{value}}"
+    },
+    "types": {
+      "all": "すべて",
+      "consume": "消費",
+      "manage": "管理",
+      "system": "システム",
+      "test": "テスト",
+      "topup": "チャージ",
+      "unknown": "不明"
+    }
+  }
 }

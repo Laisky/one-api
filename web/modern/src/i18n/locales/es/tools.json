@@ -1,27 +1,27 @@
 {
-    "tools": {
-        "clear_filters": "Limpiar filtros",
-        "description": "Explora las herramientas sincronizadas desde servidores MCP, agrupadas por servidor con detalles de precios y esquema.",
-        "found": "Se encontraron {{count}} herramientas en {{servers}} servidores",
-        "labels": {
-            "free": "Gratis",
-            "quota": "cuota"
-        },
-        "loading": "Cargando herramientas...",
-        "no_tools": "No se encontraron herramientas",
-        "no_tools_desc": "Intenta ajustar la búsqueda o los filtros.",
-        "search": "Buscar herramientas...",
-        "status": {
-            "disabled": "Deshabilitado",
-            "enabled": "Habilitado"
-        },
-        "table": {
-            "description": "Descripción",
-            "pricing": "Precios",
-            "schema": "Esquema de entrada",
-            "status": "Estado",
-            "tool": "Herramienta"
-        },
-        "title": "Herramientas MCP"
-    }
+  "tools": {
+    "clear_filters": "Limpiar filtros",
+    "description": "Explora las herramientas sincronizadas desde servidores MCP, agrupadas por servidor con detalles de precios y esquema.",
+    "found": "Se encontraron {{count}} herramientas en {{servers}} servidores",
+    "labels": {
+      "free": "Gratis",
+      "quota": "cuota"
+    },
+    "loading": "Cargando herramientas...",
+    "no_tools": "No se encontraron herramientas",
+    "no_tools_desc": "Intenta ajustar la búsqueda o los filtros.",
+    "search": "Buscar herramientas...",
+    "status": {
+      "disabled": "Deshabilitado",
+      "enabled": "Habilitado"
+    },
+    "table": {
+      "description": "Descripción",
+      "pricing": "Precios",
+      "schema": "Esquema de entrada",
+      "status": "Estado",
+      "tool": "Herramienta"
+    },
+    "title": "Herramientas MCP"
+  }
 }

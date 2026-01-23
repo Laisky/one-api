@@ -1,151 +1,151 @@
 {
-	"logs": {
-		"actions": {
-			"clear": "Limpiar",
-			"export": "Exportar",
-			"hide_stats": "Ocultar estadísticas",
-			"show_stats": "Mostrar estadísticas"
-		},
-		"confirm": {
-			"delete_before": "¿Estás seguro de que quieres eliminar los registros anteriores a {{timestamp}}?"
-		},
-		"description": "Ver y buscar registros de uso de la API",
-		"details": {
-			"cache_write_1h": "Tokens de escritura en caché 1h",
-			"cache_write_5m": "Tokens de escritura en caché 5m",
-			"channel": "Canal",
-			"completion_tokens_cached": "Tokens de completado (en caché)",
-			"completion_tokens_output": "Tokens de completado (salida)",
-			"content": "Contenido",
-			"copied": "¡Copiado!",
-			"copy_trace": "Haz clic para copiar el ID de rastreo",
-			"events": {
-				"first_client_response": "Primera respuesta al cliente",
-				"first_client_response_desc": "Primera respuesta enviada al cliente",
-				"first_upstream_response": "Primera respuesta upstream",
-				"first_upstream_response_desc": "Primera respuesta recibida de upstream",
-				"mcp_call": "MCP Call",
-				"mcp_call_desc": "MCP tool call",
-				"mcp_call_server": "Server: {{server}}",
-				"mcp_call_tool": "Tool: {{tool}}",
-				"request_completed": "Solicitud completada",
-				"request_completed_desc": "Solicitud completamente finalizada",
-				"request_forwarded": "Reenviado a upstream",
-				"request_forwarded_desc": "Solicitud reenviada al servicio upstream",
-				"request_received": "Solicitud recibida",
-				"request_received_desc": "Solicitud inicial recibida por la puerta de enlace",
-				"upstream_completed": "Upstream completado",
-				"upstream_completed_desc": "Respuesta upstream completada (streaming)"
-			},
-			"flags": "Banderas",
-			"identifiers": "Identificadores",
-			"latency": "Latencia",
-			"load_failed": "Error al cargar la información de rastreo.",
-			"log_id": "ID de registro",
-			"metadata": "Metadatos",
-			"method_status": "Método y Estado",
-			"model": "Modelo",
-			"no_content": "No hay contenido registrado.",
-			"no_timeline": "Los datos de la línea de tiempo no están disponibles para este rastreo.",
-			"no_tracing": "Los datos de rastreo no están disponibles para esta entrada de registro.",
-			"prompt_tokens_cached": "Tokens de prompt (en caché)",
-			"prompt_tokens_input": "Tokens de prompt (entrada)",
-			"quota": "Cuota",
-			"quota_raw": "Cuota (unidades brutas)",
-			"recorded_at": "Registrado el",
-			"request_id": "ID de solicitud",
-			"request_info": "Información de la solicitud",
-			"request_size": "Tamaño de la solicitud",
-			"select_hint": "Selecciona una entrada de registro para ver los detalles completos.",
-			"stream": "Flujo",
-			"summary": "Resumen",
-			"system_reset": "Reinicio del sistema",
-			"timeline": "Línea de tiempo de la solicitud",
-			"title": "Detalles de la entrada de registro",
-			"token": "Token",
-			"total_cached_tokens": "Tokens totales en caché",
-			"total_time": "Tiempo total de la solicitud",
-			"total_tokens": "Tokens totales",
-			"trace_id": "ID de rastreo",
-			"tracing": "Rastreo",
-			"type": "Tipo",
-			"url": "URL",
-			"user": "Usuario"
-		},
-		"export": {
-			"headers": {
-				"cache_write_1h": "Escritura en caché (1h)",
-				"cache_write_5m": "Escritura en caché (5m)",
-				"cached_completion_tokens": "Tokens de completado en caché",
-				"cached_prompt_tokens": "Tokens de prompt en caché",
-				"completion_tokens": "Tokens de completado",
-				"content": "Contenido",
-				"latency": "Latencia",
-				"model": "Modelo",
-				"prompt_tokens": "Tokens de prompt",
-				"quota": "Cuota",
-				"time": "Hora",
-				"token": "Token",
-				"type": "Tipo",
-				"username": "Nombre de usuario"
-			}
-		},
-		"filters": {
-			"apply": "Aplicar filtros",
-			"channel": "Canal",
-			"channel_placeholder": "Introduce ID del canal",
-			"end": "Hora de fin",
-			"model": "Modelo",
-			"model_placeholder": "Seleccionar modelo",
-			"start": "Hora de inicio",
-			"title": "Filtros",
-			"token": "Token",
-			"token_placeholder": "Seleccionar token",
-			"type": "Tipo",
-			"type_placeholder": "Seleccionar tipo",
-			"username": "Nombre de usuario",
-			"username_placeholder": "Seleccionar usuario"
-		},
-		"labels": {
-			"missing": "Desconocido",
-			"not_available": "N/D"
-		},
-		"search": {
-			"log_entry": "Entrada de registro",
-			"quota": "Cuota: {{value}}"
-		},
-		"stats": {
-			"total_quota": "Cuota total: {{value}}"
-		},
-		"table": {
-			"channel": "Canal",
-			"completion": "Completado",
-			"cost": "Costo",
-			"empty": "No se encontraron registros que coincidan con tus criterios.",
-			"latency": "Latencia",
-			"model": "Modelo",
-			"prompt": "Prompt",
-			"time": "Hora",
-			"token": "Token",
-			"type": "Tipo",
-			"user": "Usuario"
-		},
-		"title": "Registros",
-		"tooltip": {
-			"cache_write_1h": "Escritura en caché (1h): {{value}}",
-			"cache_write_5m": "Escritura en caché (5m): {{value}}",
-			"cached_tokens": "En caché: {{value}}",
-			"input_tokens": "Entrada: {{value}}",
-			"output_tokens": "Salida: {{value}}"
-		},
-		"types": {
-			"all": "Todos",
-			"consume": "Consumo",
-			"manage": "Gestión",
-			"system": "Sistema",
-			"test": "Prueba",
-			"topup": "Recarga",
-			"unknown": "Desconocido"
-		}
-	}
+  "logs": {
+    "actions": {
+      "clear": "Limpiar",
+      "export": "Exportar",
+      "hide_stats": "Ocultar estadísticas",
+      "show_stats": "Mostrar estadísticas"
+    },
+    "confirm": {
+      "delete_before": "¿Estás seguro de que quieres eliminar los registros anteriores a {{timestamp}}?"
+    },
+    "description": "Ver y buscar registros de uso de la API",
+    "details": {
+      "cache_write_1h": "Tokens de escritura en caché 1h",
+      "cache_write_5m": "Tokens de escritura en caché 5m",
+      "channel": "Canal",
+      "completion_tokens_cached": "Tokens de completado (en caché)",
+      "completion_tokens_output": "Tokens de completado (salida)",
+      "content": "Contenido",
+      "copied": "¡Copiado!",
+      "copy_trace": "Haz clic para copiar el ID de rastreo",
+      "events": {
+        "first_client_response": "Primera respuesta al cliente",
+        "first_client_response_desc": "Primera respuesta enviada al cliente",
+        "first_upstream_response": "Primera respuesta upstream",
+        "first_upstream_response_desc": "Primera respuesta recibida de upstream",
+        "mcp_call": "MCP Call",
+        "mcp_call_desc": "MCP tool call",
+        "mcp_call_server": "Server: {{server}}",
+        "mcp_call_tool": "Tool: {{tool}}",
+        "request_completed": "Solicitud completada",
+        "request_completed_desc": "Solicitud completamente finalizada",
+        "request_forwarded": "Reenviado a upstream",
+        "request_forwarded_desc": "Solicitud reenviada al servicio upstream",
+        "request_received": "Solicitud recibida",
+        "request_received_desc": "Solicitud inicial recibida por la puerta de enlace",
+        "upstream_completed": "Upstream completado",
+        "upstream_completed_desc": "Respuesta upstream completada (streaming)"
+      },
+      "flags": "Banderas",
+      "identifiers": "Identificadores",
+      "latency": "Latencia",
+      "load_failed": "Error al cargar la información de rastreo.",
+      "log_id": "ID de registro",
+      "metadata": "Metadatos",
+      "method_status": "Método y Estado",
+      "model": "Modelo",
+      "no_content": "No hay contenido registrado.",
+      "no_timeline": "Los datos de la línea de tiempo no están disponibles para este rastreo.",
+      "no_tracing": "Los datos de rastreo no están disponibles para esta entrada de registro.",
+      "prompt_tokens_cached": "Tokens de prompt (en caché)",
+      "prompt_tokens_input": "Tokens de prompt (entrada)",
+      "quota": "Cuota",
+      "quota_raw": "Cuota (unidades brutas)",
+      "recorded_at": "Registrado el",
+      "request_id": "ID de solicitud",
+      "request_info": "Información de la solicitud",
+      "request_size": "Tamaño de la solicitud",
+      "select_hint": "Selecciona una entrada de registro para ver los detalles completos.",
+      "stream": "Flujo",
+      "summary": "Resumen",
+      "system_reset": "Reinicio del sistema",
+      "timeline": "Línea de tiempo de la solicitud",
+      "title": "Detalles de la entrada de registro",
+      "token": "Token",
+      "total_cached_tokens": "Tokens totales en caché",
+      "total_time": "Tiempo total de la solicitud",
+      "total_tokens": "Tokens totales",
+      "trace_id": "ID de rastreo",
+      "tracing": "Rastreo",
+      "type": "Tipo",
+      "url": "URL",
+      "user": "Usuario"
+    },
+    "export": {
+      "headers": {
+        "cache_write_1h": "Escritura en caché (1h)",
+        "cache_write_5m": "Escritura en caché (5m)",
+        "cached_completion_tokens": "Tokens de completado en caché",
+        "cached_prompt_tokens": "Tokens de prompt en caché",
+        "completion_tokens": "Tokens de completado",
+        "content": "Contenido",
+        "latency": "Latencia",
+        "model": "Modelo",
+        "prompt_tokens": "Tokens de prompt",
+        "quota": "Cuota",
+        "time": "Hora",
+        "token": "Token",
+        "type": "Tipo",
+        "username": "Nombre de usuario"
+      }
+    },
+    "filters": {
+      "apply": "Aplicar filtros",
+      "channel": "Canal",
+      "channel_placeholder": "Introduce ID del canal",
+      "end": "Hora de fin",
+      "model": "Modelo",
+      "model_placeholder": "Seleccionar modelo",
+      "start": "Hora de inicio",
+      "title": "Filtros",
+      "token": "Token",
+      "token_placeholder": "Seleccionar token",
+      "type": "Tipo",
+      "type_placeholder": "Seleccionar tipo",
+      "username": "Nombre de usuario",
+      "username_placeholder": "Seleccionar usuario"
+    },
+    "labels": {
+      "missing": "Desconocido",
+      "not_available": "N/D"
+    },
+    "search": {
+      "log_entry": "Entrada de registro",
+      "quota": "Cuota: {{value}}"
+    },
+    "stats": {
+      "total_quota": "Cuota total: {{value}}"
+    },
+    "table": {
+      "channel": "Canal",
+      "completion": "Completado",
+      "cost": "Costo",
+      "empty": "No se encontraron registros que coincidan con tus criterios.",
+      "latency": "Latencia",
+      "model": "Modelo",
+      "prompt": "Prompt",
+      "time": "Hora",
+      "token": "Token",
+      "type": "Tipo",
+      "user": "Usuario"
+    },
+    "title": "Registros",
+    "tooltip": {
+      "cache_write_1h": "Escritura en caché (1h): {{value}}",
+      "cache_write_5m": "Escritura en caché (5m): {{value}}",
+      "cached_tokens": "En caché: {{value}}",
+      "input_tokens": "Entrada: {{value}}",
+      "output_tokens": "Salida: {{value}}"
+    },
+    "types": {
+      "all": "Todos",
+      "consume": "Consumo",
+      "manage": "Gestión",
+      "system": "Sistema",
+      "test": "Prueba",
+      "topup": "Recarga",
+      "unknown": "Desconocido"
+    }
+  }
 }

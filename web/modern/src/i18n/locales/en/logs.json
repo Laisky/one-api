@@ -1,151 +1,151 @@
 {
-	"logs": {
-		"actions": {
-			"clear": "Clear",
-			"export": "Export",
-			"hide_stats": "Hide Stats",
-			"show_stats": "Show Stats"
-		},
-		"confirm": {
-			"delete_before": "Are you sure you want to delete logs before {{timestamp}}?"
-		},
-		"description": "View and search API usage logs",
-		"details": {
-			"cache_write_1h": "Cache Write 1h Tokens",
-			"cache_write_5m": "Cache Write 5m Tokens",
-			"channel": "Channel",
-			"completion_tokens_cached": "Completion Tokens (cached)",
-			"completion_tokens_output": "Completion Tokens (output)",
-			"content": "Content",
-			"copied": "Copied!",
-			"copy_trace": "Click to copy trace ID",
-			"events": {
-				"first_client_response": "First Client Response",
-				"first_client_response_desc": "First response sent to client",
-				"first_upstream_response": "First Upstream Response",
-				"first_upstream_response_desc": "First response received from upstream",
-				"mcp_call": "MCP Call",
-				"mcp_call_desc": "MCP tool call",
-				"mcp_call_server": "Server: {{server}}",
-				"mcp_call_tool": "Tool: {{tool}}",
-				"request_completed": "Request Completed",
-				"request_completed_desc": "Request fully completed",
-				"request_forwarded": "Forwarded to Upstream",
-				"request_forwarded_desc": "Request forwarded to upstream service",
-				"request_received": "Request Received",
-				"request_received_desc": "Initial request received by the gateway",
-				"upstream_completed": "Upstream Completed",
-				"upstream_completed_desc": "Upstream response completed (streaming)"
-			},
-			"flags": "Flags",
-			"identifiers": "Identifiers",
-			"latency": "Latency",
-			"load_failed": "Failed to load trace information.",
-			"log_id": "Log ID",
-			"metadata": "Metadata",
-			"method_status": "Method & Status",
-			"model": "Model",
-			"no_content": "No content recorded.",
-			"no_timeline": "Timeline data is not available for this trace.",
-			"no_tracing": "Tracing data is not available for this log entry.",
-			"prompt_tokens_cached": "Prompt Tokens (cached)",
-			"prompt_tokens_input": "Prompt Tokens (input)",
-			"quota": "Quota",
-			"quota_raw": "Quota (raw units)",
-			"recorded_at": "Recorded at",
-			"request_id": "Request ID",
-			"request_info": "Request Information",
-			"request_size": "Request Size",
-			"select_hint": "Select a log entry to view full details.",
-			"stream": "Stream",
-			"summary": "Summary",
-			"system_reset": "System Reset",
-			"timeline": "Request Timeline",
-			"title": "Log Entry Details",
-			"token": "Token",
-			"total_cached_tokens": "Total Cached Tokens",
-			"total_time": "Total Request Time",
-			"total_tokens": "Total Tokens",
-			"trace_id": "Trace ID",
-			"tracing": "Tracing",
-			"type": "Type",
-			"url": "URL",
-			"user": "User"
-		},
-		"export": {
-			"headers": {
-				"cache_write_1h": "Cache Write (1h)",
-				"cache_write_5m": "Cache Write (5m)",
-				"cached_completion_tokens": "Cached Completion Tokens",
-				"cached_prompt_tokens": "Cached Prompt Tokens",
-				"completion_tokens": "Completion Tokens",
-				"content": "Content",
-				"latency": "Latency",
-				"model": "Model",
-				"prompt_tokens": "Prompt Tokens",
-				"quota": "Quota",
-				"time": "Time",
-				"token": "Token",
-				"type": "Type",
-				"username": "Username"
-			}
-		},
-		"filters": {
-			"apply": "Apply Filters",
-			"channel": "Channel",
-			"channel_placeholder": "Enter channel ID",
-			"end": "End Time",
-			"model": "Model",
-			"model_placeholder": "Select model",
-			"start": "Start Time",
-			"title": "Filters",
-			"token": "Token",
-			"token_placeholder": "Select token",
-			"type": "Type",
-			"type_placeholder": "Select type",
-			"username": "Username",
-			"username_placeholder": "Select user"
-		},
-		"labels": {
-			"missing": "Unknown",
-			"not_available": "N/A"
-		},
-		"search": {
-			"log_entry": "Log Entry",
-			"quota": "Quota: {{value}}"
-		},
-		"stats": {
-			"total_quota": "Total Quota: {{value}}"
-		},
-		"table": {
-			"channel": "Channel",
-			"completion": "Completion",
-			"cost": "Cost",
-			"empty": "No logs found matching your criteria.",
-			"latency": "Latency",
-			"model": "Model",
-			"prompt": "Prompt",
-			"time": "Time",
-			"token": "Token",
-			"type": "Type",
-			"user": "User"
-		},
-		"title": "Logs",
-		"tooltip": {
-			"cache_write_1h": "Cache Write (1h): {{value}}",
-			"cache_write_5m": "Cache Write (5m): {{value}}",
-			"cached_tokens": "Cached: {{value}}",
-			"input_tokens": "Input: {{value}}",
-			"output_tokens": "Output: {{value}}"
-		},
-		"types": {
-			"all": "All",
-			"consume": "Consume",
-			"manage": "Manage",
-			"system": "System",
-			"test": "Test",
-			"topup": "Top Up",
-			"unknown": "Unknown"
-		}
-	}
+  "logs": {
+    "actions": {
+      "clear": "Clear",
+      "export": "Export",
+      "hide_stats": "Hide Stats",
+      "show_stats": "Show Stats"
+    },
+    "confirm": {
+      "delete_before": "Are you sure you want to delete logs before {{timestamp}}?"
+    },
+    "description": "View and search API usage logs",
+    "details": {
+      "cache_write_1h": "Cache Write 1h Tokens",
+      "cache_write_5m": "Cache Write 5m Tokens",
+      "channel": "Channel",
+      "completion_tokens_cached": "Completion Tokens (cached)",
+      "completion_tokens_output": "Completion Tokens (output)",
+      "content": "Content",
+      "copied": "Copied!",
+      "copy_trace": "Click to copy trace ID",
+      "events": {
+        "first_client_response": "First Client Response",
+        "first_client_response_desc": "First response sent to client",
+        "first_upstream_response": "First Upstream Response",
+        "first_upstream_response_desc": "First response received from upstream",
+        "mcp_call": "MCP Call",
+        "mcp_call_desc": "MCP tool call",
+        "mcp_call_server": "Server: {{server}}",
+        "mcp_call_tool": "Tool: {{tool}}",
+        "request_completed": "Request Completed",
+        "request_completed_desc": "Request fully completed",
+        "request_forwarded": "Forwarded to Upstream",
+        "request_forwarded_desc": "Request forwarded to upstream service",
+        "request_received": "Request Received",
+        "request_received_desc": "Initial request received by the gateway",
+        "upstream_completed": "Upstream Completed",
+        "upstream_completed_desc": "Upstream response completed (streaming)"
+      },
+      "flags": "Flags",
+      "identifiers": "Identifiers",
+      "latency": "Latency",
+      "load_failed": "Failed to load trace information.",
+      "log_id": "Log ID",
+      "metadata": "Metadata",
+      "method_status": "Method \u0026 Status",
+      "model": "Model",
+      "no_content": "No content recorded.",
+      "no_timeline": "Timeline data is not available for this trace.",
+      "no_tracing": "Tracing data is not available for this log entry.",
+      "prompt_tokens_cached": "Prompt Tokens (cached)",
+      "prompt_tokens_input": "Prompt Tokens (input)",
+      "quota": "Quota",
+      "quota_raw": "Quota (raw units)",
+      "recorded_at": "Recorded at",
+      "request_id": "Request ID",
+      "request_info": "Request Information",
+      "request_size": "Request Size",
+      "select_hint": "Select a log entry to view full details.",
+      "stream": "Stream",
+      "summary": "Summary",
+      "system_reset": "System Reset",
+      "timeline": "Request Timeline",
+      "title": "Log Entry Details",
+      "token": "Token",
+      "total_cached_tokens": "Total Cached Tokens",
+      "total_time": "Total Request Time",
+      "total_tokens": "Total Tokens",
+      "trace_id": "Trace ID",
+      "tracing": "Tracing",
+      "type": "Type",
+      "url": "URL",
+      "user": "User"
+    },
+    "export": {
+      "headers": {
+        "cache_write_1h": "Cache Write (1h)",
+        "cache_write_5m": "Cache Write (5m)",
+        "cached_completion_tokens": "Cached Completion Tokens",
+        "cached_prompt_tokens": "Cached Prompt Tokens",
+        "completion_tokens": "Completion Tokens",
+        "content": "Content",
+        "latency": "Latency",
+        "model": "Model",
+        "prompt_tokens": "Prompt Tokens",
+        "quota": "Quota",
+        "time": "Time",
+        "token": "Token",
+        "type": "Type",
+        "username": "Username"
+      }
+    },
+    "filters": {
+      "apply": "Apply Filters",
+      "channel": "Channel",
+      "channel_placeholder": "Enter channel ID",
+      "end": "End Time",
+      "model": "Model",
+      "model_placeholder": "Select model",
+      "start": "Start Time",
+      "title": "Filters",
+      "token": "Token",
+      "token_placeholder": "Select token",
+      "type": "Type",
+      "type_placeholder": "Select type",
+      "username": "Username",
+      "username_placeholder": "Select user"
+    },
+    "labels": {
+      "missing": "Unknown",
+      "not_available": "N/A"
+    },
+    "search": {
+      "log_entry": "Log Entry",
+      "quota": "Quota: {{value}}"
+    },
+    "stats": {
+      "total_quota": "Total Quota: {{value}}"
+    },
+    "table": {
+      "channel": "Channel",
+      "completion": "Completion",
+      "cost": "Cost",
+      "empty": "No logs found matching your criteria.",
+      "latency": "Latency",
+      "model": "Model",
+      "prompt": "Prompt",
+      "time": "Time",
+      "token": "Token",
+      "type": "Type",
+      "user": "User"
+    },
+    "title": "Logs",
+    "tooltip": {
+      "cache_write_1h": "Cache Write (1h): {{value}}",
+      "cache_write_5m": "Cache Write (5m): {{value}}",
+      "cached_tokens": "Cached: {{value}}",
+      "input_tokens": "Input: {{value}}",
+      "output_tokens": "Output: {{value}}"
+    },
+    "types": {
+      "all": "All",
+      "consume": "Consume",
+      "manage": "Manage",
+      "system": "System",
+      "test": "Test",
+      "topup": "Top Up",
+      "unknown": "Unknown"
+    }
+  }
 }

@@ -98,6 +98,72 @@
       "view_releases": "GitHub のリリースを見る"
     }
   },
+  "personal_settings": {
+    "access_token": {
+      "description": "アクセストークンと招待リンクを生成します。",
+      "generate_token": "アクセストークンを生成",
+      "get_invite_link": "招待リンクを取得",
+      "title": "アクセストークンと招待"
+    },
+    "profile_info": {
+      "description": "個人情報とアカウント設定を更新します。",
+      "display_name": "表示名",
+      "display_name_placeholder": "表示名を入力",
+      "email": "メールアドレス",
+      "email_placeholder": "メールアドレスを入力",
+      "failed": "更新に失敗しました",
+      "password": "新しいパスワード（変更しない場合は空欄）",
+      "password_placeholder": "新しいパスワードを入力",
+      "success": "プロフィールを更新しました",
+      "title": "プロフィール情報",
+      "update_button": "プロフィールを更新",
+      "updating": "更新中...",
+      "username": "ユーザー名"
+    },
+    "totp": {
+      "cancel": "キャンセル",
+      "confirm": "確認",
+      "description": "2 要素認証でアカウントの安全性を強化します。",
+      "disable_button": "TOTP を無効化",
+      "disable_placeholder": "無効化する TOTP コードを入力",
+      "disabled_desc": "アカウント保護のため 2 要素認証を有効にしましょう。",
+      "disabled_title": "TOTP は無効です",
+      "enable_button": "TOTP を有効化",
+      "enabled_desc": "アカウントは 2 要素認証で保護されています。",
+      "enabled_title": "TOTP は有効です",
+      "errors": {
+        "confirm_failed": "TOTP の確認に失敗しました",
+        "disable_failed": "TOTP を無効化できませんでした",
+        "invalid_code": "6 桁の正しいコードを入力してください",
+        "load_status": "TOTP 状態の取得に失敗しました",
+        "missing_code": "無効化するには TOTP コードを入力してください",
+        "setup_failed": "TOTP の設定に失敗しました"
+      },
+      "processing": "処理中...",
+      "secret_key": "シークレットキー（手入力用）",
+      "setup_desc": "以下の手順で TOTP を設定し、アカウントを保護します。",
+      "setup_instructions_title": "設定手順",
+      "setup_step1": "認証アプリ（Google Authenticator、Authy など）をインストール",
+      "setup_step2": "下の QR コードをスキャンするか、シークレットキーを手入力",
+      "setup_step3": "認証アプリに表示される 6 桁コードを入力",
+      "setup_step4": "\"確認\" をクリックして TOTP を有効化",
+      "setup_title": "二要素認証の設定",
+      "title": "二要素認証 (TOTP)",
+      "verify_code": "確認コード",
+      "verify_placeholder": "認証アプリの 6 桁コードを入力",
+      "verify_placeholder_mobile": "6 桁コードを入力"
+    }
+  },
+  "settings": {
+    "description": "アカウントおよびシステムの設定を構成します",
+    "tabs": {
+      "operation": "運用",
+      "other": "その他",
+      "personal": "個人",
+      "system": "システム"
+    },
+    "title": "設定"
+  },
   "system_settings": {
     "description": "システム全体の設定とオプションを管理します。",
     "descriptions": {
@@ -211,71 +277,5 @@
     "saving": "保存中...",
     "sensitive_hint": "保存済みの値は非表示です。上書きする場合は新しい値を入力してください。",
     "title": "システム設定"
-  },
-  "settings": {
-    "description": "アカウントおよびシステムの設定を構成します",
-    "tabs": {
-      "operation": "運用",
-      "other": "その他",
-      "personal": "個人",
-      "system": "システム"
-    },
-    "title": "設定"
-  },
-  "personal_settings": {
-    "access_token": {
-      "description": "アクセストークンと招待リンクを生成します。",
-      "generate_token": "アクセストークンを生成",
-      "get_invite_link": "招待リンクを取得",
-      "title": "アクセストークンと招待"
-    },
-    "profile_info": {
-      "description": "個人情報とアカウント設定を更新します。",
-      "display_name": "表示名",
-      "display_name_placeholder": "表示名を入力",
-      "email": "メールアドレス",
-      "email_placeholder": "メールアドレスを入力",
-      "failed": "更新に失敗しました",
-      "password": "新しいパスワード（変更しない場合は空欄）",
-      "password_placeholder": "新しいパスワードを入力",
-      "success": "プロフィールを更新しました",
-      "title": "プロフィール情報",
-      "update_button": "プロフィールを更新",
-      "updating": "更新中...",
-      "username": "ユーザー名"
-    },
-    "totp": {
-      "cancel": "キャンセル",
-      "confirm": "確認",
-      "description": "2 要素認証でアカウントの安全性を強化します。",
-      "disable_button": "TOTP を無効化",
-      "disable_placeholder": "無効化する TOTP コードを入力",
-      "disabled_desc": "アカウント保護のため 2 要素認証を有効にしましょう。",
-      "disabled_title": "TOTP は無効です",
-      "enable_button": "TOTP を有効化",
-      "enabled_desc": "アカウントは 2 要素認証で保護されています。",
-      "enabled_title": "TOTP は有効です",
-      "errors": {
-        "confirm_failed": "TOTP の確認に失敗しました",
-        "disable_failed": "TOTP を無効化できませんでした",
-        "invalid_code": "6 桁の正しいコードを入力してください",
-        "load_status": "TOTP 状態の取得に失敗しました",
-        "missing_code": "無効化するには TOTP コードを入力してください",
-        "setup_failed": "TOTP の設定に失敗しました"
-      },
-      "processing": "処理中...",
-      "secret_key": "シークレットキー（手入力用）",
-      "setup_desc": "以下の手順で TOTP を設定し、アカウントを保護します。",
-      "setup_instructions_title": "設定手順",
-      "setup_step1": "認証アプリ（Google Authenticator、Authy など）をインストール",
-      "setup_step2": "下の QR コードをスキャンするか、シークレットキーを手入力",
-      "setup_step3": "認証アプリに表示される 6 桁コードを入力",
-      "setup_step4": "\"確認\" をクリックして TOTP を有効化",
-      "setup_title": "二要素認証の設定",
-      "title": "二要素認証 (TOTP)",
-      "verify_code": "確認コード",
-      "verify_placeholder": "認証アプリの 6 桁コードを入力",
-      "verify_placeholder_mobile": "6 桁コードを入力"
-    }
   }
 }

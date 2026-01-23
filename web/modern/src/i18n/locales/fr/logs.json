@@ -1,151 +1,151 @@
 {
-	"logs": {
-		"actions": {
-			"clear": "Effacer",
-			"export": "Exporter",
-			"hide_stats": "Masquer les stats",
-			"show_stats": "Afficher les stats"
-		},
-		"confirm": {
-			"delete_before": "Voulez-vous vraiment supprimer les journaux avant {{timestamp}} ?"
-		},
-		"description": "Afficher et rechercher les journaux d'utilisation de l'API",
-		"details": {
-			"cache_write_1h": "Jetons écriture cache 1h",
-			"cache_write_5m": "Jetons écriture cache 5m",
-			"channel": "Canal",
-			"completion_tokens_cached": "Jetons de complétion (mis en cache)",
-			"completion_tokens_output": "Jetons de complétion (sortie)",
-			"content": "Contenu",
-			"copied": "Copié !",
-			"copy_trace": "Cliquez pour copier l'ID de trace",
-			"events": {
-				"first_client_response": "Première réponse client",
-				"first_client_response_desc": "Première réponse envoyée au client",
-				"first_upstream_response": "Première réponse en amont",
-				"first_upstream_response_desc": "Première réponse reçue de l'amont",
-				"mcp_call": "MCP Call",
-				"mcp_call_desc": "MCP tool call",
-				"mcp_call_server": "Server: {{server}}",
-				"mcp_call_tool": "Tool: {{tool}}",
-				"request_completed": "Requête terminée",
-				"request_completed_desc": "Requête entièrement terminée",
-				"request_forwarded": "Transmis en amont",
-				"request_forwarded_desc": "Requête transmise au service en amont",
-				"request_received": "Requête reçue",
-				"request_received_desc": "Requête initiale reçue par la passerelle",
-				"upstream_completed": "Amont terminé",
-				"upstream_completed_desc": "Réponse en amont terminée (streaming)"
-			},
-			"flags": "Drapeaux",
-			"identifiers": "Identifiants",
-			"latency": "Latence",
-			"load_failed": "Échec du chargement des informations de trace.",
-			"log_id": "ID de journal",
-			"metadata": "Métadonnées",
-			"method_status": "Méthode & Statut",
-			"model": "Modèle",
-			"no_content": "Aucun contenu enregistré.",
-			"no_timeline": "Les données de chronologie ne sont pas disponibles pour cette trace.",
-			"no_tracing": "Les données de traçage ne sont pas disponibles pour cette entrée de journal.",
-			"prompt_tokens_cached": "Jetons d'invite (mis en cache)",
-			"prompt_tokens_input": "Jetons d'invite (entrée)",
-			"quota": "Quota",
-			"quota_raw": "Quota (unités brutes)",
-			"recorded_at": "Enregistré à",
-			"request_id": "ID de requête",
-			"request_info": "Informations sur la requête",
-			"request_size": "Taille de la requête",
-			"select_hint": "Sélectionnez une entrée de journal pour voir tous les détails.",
-			"stream": "Flux",
-			"summary": "Résumé",
-			"system_reset": "Réinitialisation système",
-			"timeline": "Chronologie de la requête",
-			"title": "Détails de l'entrée de journal",
-			"token": "Jeton",
-			"total_cached_tokens": "Total des jetons mis en cache",
-			"total_time": "Temps total de la requête",
-			"total_tokens": "Total des jetons",
-			"trace_id": "ID de trace",
-			"tracing": "Traçage",
-			"type": "Type",
-			"url": "URL",
-			"user": "Utilisateur"
-		},
-		"export": {
-			"headers": {
-				"cache_write_1h": "Écriture cache (1h)",
-				"cache_write_5m": "Écriture cache (5m)",
-				"cached_completion_tokens": "Jetons de complétion mis en cache",
-				"cached_prompt_tokens": "Jetons d'invite mis en cache",
-				"completion_tokens": "Jetons de complétion",
-				"content": "Contenu",
-				"latency": "Latence",
-				"model": "Modèle",
-				"prompt_tokens": "Jetons d'invite",
-				"quota": "Quota",
-				"time": "Heure",
-				"token": "Jeton",
-				"type": "Type",
-				"username": "Nom d'utilisateur"
-			}
-		},
-		"filters": {
-			"apply": "Appliquer les filtres",
-			"channel": "Canal",
-			"channel_placeholder": "Entrer l'ID du canal",
-			"end": "Heure de fin",
-			"model": "Modèle",
-			"model_placeholder": "Sélectionner le modèle",
-			"start": "Heure de début",
-			"title": "Filtres",
-			"token": "Jeton",
-			"token_placeholder": "Sélectionner le jeton",
-			"type": "Type",
-			"type_placeholder": "Sélectionner le type",
-			"username": "Nom d'utilisateur",
-			"username_placeholder": "Sélectionner l'utilisateur"
-		},
-		"labels": {
-			"missing": "Inconnu",
-			"not_available": "N/D"
-		},
-		"search": {
-			"log_entry": "Entrée de journal",
-			"quota": "Quota : {{value}}"
-		},
-		"stats": {
-			"total_quota": "Quota total : {{value}}"
-		},
-		"table": {
-			"channel": "Canal",
-			"completion": "Complétion",
-			"cost": "Coût",
-			"empty": "Aucun journal trouvé correspondant à vos critères.",
-			"latency": "Latence",
-			"model": "Modèle",
-			"prompt": "Invite",
-			"time": "Heure",
-			"token": "Jeton",
-			"type": "Type",
-			"user": "Utilisateur"
-		},
-		"title": "Journaux",
-		"tooltip": {
-			"cache_write_1h": "Écriture cache (1h) : {{value}}",
-			"cache_write_5m": "Écriture cache (5m) : {{value}}",
-			"cached_tokens": "Mis en cache : {{value}}",
-			"input_tokens": "Entrée : {{value}}",
-			"output_tokens": "Sortie : {{value}}"
-		},
-		"types": {
-			"all": "Tous",
-			"consume": "Consommation",
-			"manage": "Gestion",
-			"system": "Système",
-			"test": "Test",
-			"topup": "Recharge",
-			"unknown": "Inconnu"
-		}
-	}
+  "logs": {
+    "actions": {
+      "clear": "Effacer",
+      "export": "Exporter",
+      "hide_stats": "Masquer les stats",
+      "show_stats": "Afficher les stats"
+    },
+    "confirm": {
+      "delete_before": "Voulez-vous vraiment supprimer les journaux avant {{timestamp}} ?"
+    },
+    "description": "Afficher et rechercher les journaux d'utilisation de l'API",
+    "details": {
+      "cache_write_1h": "Jetons écriture cache 1h",
+      "cache_write_5m": "Jetons écriture cache 5m",
+      "channel": "Canal",
+      "completion_tokens_cached": "Jetons de complétion (mis en cache)",
+      "completion_tokens_output": "Jetons de complétion (sortie)",
+      "content": "Contenu",
+      "copied": "Copié !",
+      "copy_trace": "Cliquez pour copier l'ID de trace",
+      "events": {
+        "first_client_response": "Première réponse client",
+        "first_client_response_desc": "Première réponse envoyée au client",
+        "first_upstream_response": "Première réponse en amont",
+        "first_upstream_response_desc": "Première réponse reçue de l'amont",
+        "mcp_call": "MCP Call",
+        "mcp_call_desc": "MCP tool call",
+        "mcp_call_server": "Server: {{server}}",
+        "mcp_call_tool": "Tool: {{tool}}",
+        "request_completed": "Requête terminée",
+        "request_completed_desc": "Requête entièrement terminée",
+        "request_forwarded": "Transmis en amont",
+        "request_forwarded_desc": "Requête transmise au service en amont",
+        "request_received": "Requête reçue",
+        "request_received_desc": "Requête initiale reçue par la passerelle",
+        "upstream_completed": "Amont terminé",
+        "upstream_completed_desc": "Réponse en amont terminée (streaming)"
+      },
+      "flags": "Drapeaux",
+      "identifiers": "Identifiants",
+      "latency": "Latence",
+      "load_failed": "Échec du chargement des informations de trace.",
+      "log_id": "ID de journal",
+      "metadata": "Métadonnées",
+      "method_status": "Méthode \u0026 Statut",
+      "model": "Modèle",
+      "no_content": "Aucun contenu enregistré.",
+      "no_timeline": "Les données de chronologie ne sont pas disponibles pour cette trace.",
+      "no_tracing": "Les données de traçage ne sont pas disponibles pour cette entrée de journal.",
+      "prompt_tokens_cached": "Jetons d'invite (mis en cache)",
+      "prompt_tokens_input": "Jetons d'invite (entrée)",
+      "quota": "Quota",
+      "quota_raw": "Quota (unités brutes)",
+      "recorded_at": "Enregistré à",
+      "request_id": "ID de requête",
+      "request_info": "Informations sur la requête",
+      "request_size": "Taille de la requête",
+      "select_hint": "Sélectionnez une entrée de journal pour voir tous les détails.",
+      "stream": "Flux",
+      "summary": "Résumé",
+      "system_reset": "Réinitialisation système",
+      "timeline": "Chronologie de la requête",
+      "title": "Détails de l'entrée de journal",
+      "token": "Jeton",
+      "total_cached_tokens": "Total des jetons mis en cache",
+      "total_time": "Temps total de la requête",
+      "total_tokens": "Total des jetons",
+      "trace_id": "ID de trace",
+      "tracing": "Traçage",
+      "type": "Type",
+      "url": "URL",
+      "user": "Utilisateur"
+    },
+    "export": {
+      "headers": {
+        "cache_write_1h": "Écriture cache (1h)",
+        "cache_write_5m": "Écriture cache (5m)",
+        "cached_completion_tokens": "Jetons de complétion mis en cache",
+        "cached_prompt_tokens": "Jetons d'invite mis en cache",
+        "completion_tokens": "Jetons de complétion",
+        "content": "Contenu",
+        "latency": "Latence",
+        "model": "Modèle",
+        "prompt_tokens": "Jetons d'invite",
+        "quota": "Quota",
+        "time": "Heure",
+        "token": "Jeton",
+        "type": "Type",
+        "username": "Nom d'utilisateur"
+      }
+    },
+    "filters": {
+      "apply": "Appliquer les filtres",
+      "channel": "Canal",
+      "channel_placeholder": "Entrer l'ID du canal",
+      "end": "Heure de fin",
+      "model": "Modèle",
+      "model_placeholder": "Sélectionner le modèle",
+      "start": "Heure de début",
+      "title": "Filtres",
+      "token": "Jeton",
+      "token_placeholder": "Sélectionner le jeton",
+      "type": "Type",
+      "type_placeholder": "Sélectionner le type",
+      "username": "Nom d'utilisateur",
+      "username_placeholder": "Sélectionner l'utilisateur"
+    },
+    "labels": {
+      "missing": "Inconnu",
+      "not_available": "N/D"
+    },
+    "search": {
+      "log_entry": "Entrée de journal",
+      "quota": "Quota : {{value}}"
+    },
+    "stats": {
+      "total_quota": "Quota total : {{value}}"
+    },
+    "table": {
+      "channel": "Canal",
+      "completion": "Complétion",
+      "cost": "Coût",
+      "empty": "Aucun journal trouvé correspondant à vos critères.",
+      "latency": "Latence",
+      "model": "Modèle",
+      "prompt": "Invite",
+      "time": "Heure",
+      "token": "Jeton",
+      "type": "Type",
+      "user": "Utilisateur"
+    },
+    "title": "Journaux",
+    "tooltip": {
+      "cache_write_1h": "Écriture cache (1h) : {{value}}",
+      "cache_write_5m": "Écriture cache (5m) : {{value}}",
+      "cached_tokens": "Mis en cache : {{value}}",
+      "input_tokens": "Entrée : {{value}}",
+      "output_tokens": "Sortie : {{value}}"
+    },
+    "types": {
+      "all": "Tous",
+      "consume": "Consommation",
+      "manage": "Gestion",
+      "system": "Système",
+      "test": "Test",
+      "topup": "Recharge",
+      "unknown": "Inconnu"
+    }
+  }
 }

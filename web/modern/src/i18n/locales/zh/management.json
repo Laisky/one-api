@@ -1,845 +1,845 @@
 {
-	"channels": {
-		"actions": {
-			"add": "新增渠道",
-			"add_mobile": "新增渠道",
-			"delete": "删除",
-			"disable": "禁用",
-			"edit": "编辑",
-			"enable": "启用",
-			"test": "测试"
-		},
-		"columns": {
-			"actions": "操作",
-			"created": "创建时间",
-			"group": "分组",
-			"id": "ID",
-			"name": "名称",
-			"priority": "优先级",
-			"response": "响应",
-			"status": "状态",
-			"testing_model": "测试模型",
-			"type": "类型",
-			"weight": "权重"
-		},
-		"confirm": {
-			"delete": "确定要删除该渠道吗？",
-			"delete_disabled": "确定要删除所有禁用渠道吗？此操作无法撤销。"
-		},
-		"description": "配置并管理 API 路由渠道",
-		"edit": {
-			"actions": {
-				"add": "Add",
-				"cancel": "取消",
-				"create": "创建渠道",
-				"creating": "正在创建...",
-				"test_channel": "测试渠道",
-				"update": "更新渠道",
-				"updating": "正在更新..."
-			},
-			"ai_proxy": {
-				"knowledge": {
-					"help": "AI Proxy 知识检索的知识库标识符。",
-					"label": "知识库 ID",
-					"placeholder": "知识库 ID"
-				}
-			},
-			"aws": {
-				"ak": {
-					"help": "具有调用 Bedrock 权限的 AWS 访问密钥 ID。",
-					"label": "访问密钥 *",
-					"placeholder": "AKIA..."
-				},
-				"heading": "AWS Bedrock 配置",
-				"note": "最终 API 密钥将构造为: AK|SK|Region",
-				"region": {
-					"help": "Bedrock 的 AWS 区域 (例如 us-east-1)。必须与您的模型/配置文件所在位置匹配。",
-					"label": "区域 *",
-					"placeholder": "us-east-1"
-				},
-				"sk": {
-					"help": "上述访问密钥 ID 的 AWS 秘密访问密钥。",
-					"label": "秘密密钥 *",
-					"placeholder": "秘密密钥"
-				}
-			},
-			"azure": {
-				"endpoint": {
-					"help": "您的资源端点，例如 https://your-resource.openai.azure.com",
-					"label": "Azure OpenAI 端点 *",
-					"placeholder": "https://your-resource.openai.azure.com"
-				},
-				"heading": "Azure OpenAI 配置",
-				"version": {
-					"help": "当请求未指定时使用的默认 API 版本 (例如 2024-03-01-preview)。",
-					"label": "API 版本",
-					"note": "默认: 2024-03-01-preview。这可以通过请求查询参数覆盖。",
-					"placeholder": "2024-03-01-preview",
-					"warning_label": "重要:",
-					"warning_text": "模型名称应该是您的部署名称，而不是原始模型名称。"
-				}
-			},
-			"buttons": {
-				"fill_template": "填充模板",
-				"format_json": "格式化 JSON",
-				"load_defaults": "加载默认值"
-			},
-			"channel_type": {
-				"15": {
-					"tip": "从百度控制台获取 AK (API Key) 和 SK (Secret Key)"
-				},
-				"18": {
-					"tip": "WebSocket 版本 API"
-				},
-				"29": {
-					"description": "Groq-hosted LLaMA-style models via OpenAI schema."
-				},
-				"40": {
-					"description": "原字节跳动豆包"
-				},
-				"47": {
-					"tip": "对于 V2 推理服务，从百度 IAM 获取 API Key"
-				},
-				"48": {
-					"tip": "HTTP 版本 API"
-				},
-				"50": {
-					"description": "OpenAI 兼容渠道，支持自定义 Base URL"
-				},
-				"51": {
-					"description": "Gemini OpenAI 兼容格式"
-				},
-				"53": {
-					"description": "GitHub Copilot OpenAI 兼容接口（通过 GitHub 交换短期 Token）",
-					"tip": "渠道密钥填写 GitHub access token；Base URL 默认为 https://api.githubcopilot.com"
-				}
-			},
-			"cloudflare": {
-				"account": {
-					"help": "AI 网关的 Cloudflare 账户 ID。",
-					"label": "账户 ID",
-					"placeholder": "d8d7c61dbc334c32d3ced580e4bf42b4"
-				}
-			},
-			"common": {
-				"add": "Add",
-				"base_url": {
-					"fixed_note": "Using default: {{url}}",
-					"help_editable": "Custom API base URL. Leave empty to use the default URL.",
-					"help_readonly": "The API base URL for this channel type is fixed and cannot be modified.",
-					"label": "API Base URL",
-					"placeholder": "https://api.example.com"
-				},
-				"format_json": "Format JSON"
-			},
-			"coze": {
-				"auth_type": {
-					"help": "选择如何向 Coze 认证: 个人访问令牌或 OAuth JWT。",
-					"label": "认证类型",
-					"placeholder": "选择认证类型"
-				},
-				"heading": "Coze 配置",
-				"jwt": {
-					"help": "Coze OAuth JWT 的 JSON 配置: client_type, client_id, coze_www_base, coze_api_base, private_key, public_key_id。",
-					"label": "OAuth JWT 配置 *",
-					"placeholder": "JSON 格式的 OAuth JWT 配置:\n{{example}}",
-					"required": "必填字段: client_type, client_id, coze_www_base, coze_api_base, private_key, public_key_id"
-				},
-				"pat": {
-					"help": "您的 Coze 个人访问令牌 (pat_...)。",
-					"label": "个人访问令牌 *",
-					"placeholder": "pat_..."
-				},
-				"user": {
-					"help": "用于机器人操作的可选 Coze 用户 ID (如果您的设置需要)。",
-					"label": "用户 ID",
-					"placeholder": "用于机器人操作的用户 ID"
-				}
-			},
-			"description": {
-				"create": "创建一个新的 API 渠道",
-				"edit": "更新渠道配置"
-			},
-			"errors": {
-				"operation_failed": "操作失败",
-				"request_failed_title": "请求失败",
-				"unexpected_title": "意外错误"
-			},
-			"fields": {
-				"api_key": {
-					"help": "所选提供商的凭据。加密存储。编辑时留空以保持现有。",
-					"label": "API 密钥",
-					"note": "当前 API 密钥已隐藏以确保安全。仅在您想更新时输入新密钥。",
-					"placeholder_create": "输入 API 密钥",
-					"placeholder_edit": "留空以保持现有密钥"
-				},
-				"base_url": {
-					"help": "提供商 API 端点 (例如 https://api.openai.com)。留空以使用所选提供商的默认值。",
-					"label": "Base URL (可选)",
-					"placeholder": "例如 https://api.openai.com"
-				},
-				"name": {
-					"help": "可读标识符。在名称中使用提供商/环境，例如 \"OpenAI GPT-4 Production\"。",
-					"label": "渠道名称 *",
-					"placeholder": "输入渠道名称"
-				},
-				"priority": {
-					"help": "当多个渠道支持同一模型时，数字越小越先尝试。",
-					"label": "优先级"
-				},
-				"type": {
-					"help": "选择上游提供商。这决定了模型、认证方法和默认 Base URL。",
-					"label": "渠道类型 *",
-					"placeholder": "选择渠道类型"
-				},
-				"weight": {
-					"help": "具有相同优先级的渠道之间的负载均衡权重。权重越高，接收的请求越多。",
-					"label": "权重"
-				}
-			},
-			"groups": {
-				"add_placeholder": "Add custom group...",
-				"help": "限制特定用户组的访问。留空表示所有用户都可以访问。默认分组始终保留。",
-				"label": "分组 *"
-			},
-			"inference_profile": {
-				"help": "模型名称到 AWS Bedrock 推理配置文件 ARN 的 JSON 映射。用于通过特定 Bedrock 推理配置文件路由某些模型。",
-				"label": "推理配置文件 ARN 映射 (AWS Bedrock)",
-				"note": "将模型名称映射到 AWS Bedrock 推理配置文件 ARN (可选)",
-				"placeholder": "AWS Bedrock 推理配置文件 ARN 映射:\n{{example}}"
-			},
-			"key": {
-				"help": "The API key for authentication with the provider.",
-				"label": "API Key"
-			},
-			"loading": "正在加载渠道...",
-			"mcp": {
-				"blacklist_add": "添加",
-				"blacklist_description": "屏蔽该渠道的 MCP 工具。使用 server.tool 或工具名称。",
-				"blacklist_label": "MCP 工具黑名单",
-				"blacklist_placeholder": "server.tool_name"
-			},
-			"model_configs": {
-				"format_error": "无法格式化 model_configs: {{error}}",
-				"help": "统一的每个模型设置。字段: ratio (输入定价乘数), completion_ratio (输出乘数), max_tokens (限制)。",
-				"invalid": "无效的模型配置格式",
-				"invalid_short": "✗ 无效配置",
-				"label": "模型配置 (JSON)",
-				"load_default": "Load Default",
-				"note": "配置每个模型的定价和限制 (可选)",
-				"placeholder": "JSON 格式的模型配置:\n{{example}}",
-				"select_type_notice": "选择渠道类型以配置模型配置。",
-				"valid": "✓ 有效配置"
-			},
-			"model_mapping": {
-				"help": "将外部/旧模型名称映射到此提供商的实际模型名称。JSON 对象: { \"from\": \"to\" }。",
-				"label": "模型映射 (JSON)",
-				"note": "为此渠道映射模型名称 (可选)",
-				"placeholder": "JSON 格式的模型名称映射:\n{{example}}"
-			},
-			"models": {
-				"add_custom": "添加",
-				"clear": "Clear",
-				"clear_all": "全部清除",
-				"copy_title": "点击复制模型名称",
-				"custom_placeholder": "添加自定义模型...",
-				"fill_all": "填充所有支持的模型 ({{count}})",
-				"fill_related": "填充相关模型 ({{count}})",
-				"help": "此渠道可用的模型。留空以允许所有提供商模型。使用按钮填充相关/所有模型；重复项将被删除。",
-				"label": "支持的模型 *",
-				"no_match": "No models found",
-				"no_selection": "No models selected",
-				"search_placeholder": "搜索模型...",
-				"select_type_notice": "选择渠道类型以配置支持的模型。",
-				"selected_count": "Selected Models ({{count}})"
-			},
-			"name": {
-				"help": "A descriptive name for this channel to identify it in logs and lists.",
-				"label": "Channel Name *",
-				"placeholder": "My Channel"
-			},
-			"openai_compatible": {
-				"api_format": {
-					"help": "选择哪个上游 API 表面应处理请求。ChatCompletion 是历史默认值；当上游期望 OpenAI Response API 负载时选择 Response。",
-					"label": "上游 API 格式 *",
-					"option": {
-						"chat_completion": "ChatCompletion (默认)",
-						"response": "Response"
-					},
-					"placeholder": "选择上游 API 格式"
-				},
-				"base_url": {
-					"help": "OpenAI 兼容端点的 Base URL，例如 https://api.your-provider.com。需要时会自动附加 /v1。",
-					"label": "Base URL *",
-					"placeholder": "https://api.your-provider.com"
-				},
-				"heading": "OpenAI 兼容配置"
-			},
-			"plugin": {
-				"params": {
-					"help": "如果需要，提供商/插件特定的参数。",
-					"label": "插件参数",
-					"placeholder": "插件特定参数"
-				}
-			},
-			"priority": {
-				"help": "Higher priority channels are tried first. Default is 0.",
-				"label": "Priority"
-			},
-			"ratelimit": {
-				"help": "Maximum requests per minute. 0 means unlimited.",
-				"label": "Rate Limit"
-			},
-			"spark": {
-				"version": {
-					"help": "选择讯飞星火的 API 版本 (例如 v3.5)。",
-					"label": "Spark 版本",
-					"placeholder": "选择 Spark 版本"
-				}
-			},
-			"system_prompt": {
-				"help": "作为系统消息预置到通过此渠道发送的每个请求的可选文本。用于护栏或风格。客户端仍可以使用自己的系统消息覆盖。",
-				"label": "系统提示",
-				"placeholder": "预置到所有请求的可选系统提示"
-			},
-			"title": {
-				"create": "创建渠道",
-				"edit": "编辑渠道"
-			},
-			"tooling": {
-				"add_custom": "Add custom tool...",
-				"available_tools": "Available Tools",
-				"editor_disabled": "Fix JSON error to enable editor",
-				"errors": {
-					"invalid_json_message": "在编辑白名单之前修复工具 JSON。",
-					"invalid_json_title": "无效 JSON"
-				},
-				"fix_json_notice": "修复上面的工具 JSON 以管理内置工具白名单。",
-				"format_error": "无法格式化工具配置: {{error}}",
-				"help": "定义渠道范围的内置工具策略。配置提供商内置工具的白名单和每次调用的定价。",
-				"invalid": "无效的工具配置格式",
-				"label": "工具配置 (JSON)",
-				"no_whitelist": "No tools whitelisted",
-				"note": "配置内置工具允许列表和每次调用的定价 (可选)",
-				"placeholder": "JSON 格式的工具配置:\n{{example}}",
-				"whitelist": {
-					"add_tool": "添加工具",
-					"custom_placeholder": "自定义工具名称",
-					"empty": "未固定工具。所有内置工具保持可用。",
-					"known": "已知工具:",
-					"pricing_required": "设置定价以解锁 \"{{tool}}\"。请求将被阻止，直到配置定价。",
-					"subtitle": "空白白名单保留所有提供商工具可用。",
-					"title": "内置工具白名单"
-				},
-				"whitelist_editor": "Whitelist Editor",
-				"whitelisted_tools": "Whitelisted Tools ({{count}})"
-			},
-			"type": {
-				"help": "The provider type for this channel. Changing this may reset some fields.",
-				"label": "Channel Type *",
-				"not_found": "No channel type found.",
-				"placeholder": "Select a channel type",
-				"search": "Search channel type..."
-			},
-			"type_change": {
-				"cancel": "Cancel",
-				"confirm": "Change Type",
-				"description": "You are about to change the channel type from \"{{fromType}}\" to \"{{toType}}\".",
-				"title": "Change Channel Type?",
-				"warning": "Warning: This may reset some configuration fields specific to the previous channel type. Any unsaved changes may be lost."
-			},
-			"validation": {
-				"api_key_required": "API 密钥是必填项。",
-				"base_url_required": "此渠道类型需要 Base URL。",
-				"error_title": "验证错误",
-				"inference_profile_invalid": "推理配置文件 ARN 映射包含无效 JSON。",
-				"invalid_json": "无效 JSON 格式",
-				"invalid_json_short": "✗ 无效 JSON",
-				"invalid_json_title": "无效 JSON",
-				"model_configs_message": "模型配置无效。",
-				"model_configs_title": "无效配置",
-				"model_mapping_invalid": "模型映射包含无效 JSON。",
-				"oauth_invalid_json": "OAuth JWT 配置 JSON 无效。",
-				"oauth_missing_field_message": "OAuth JWT 配置缺少: {{field}}",
-				"oauth_missing_field_title": "缺少字段",
-				"oauth_parse_message": "OAuth JWT 解析错误: {{error}}",
-				"oauth_parse_title": "解析错误",
-				"valid_json": "✓ 有效 JSON"
-			},
-			"vertex": {
-				"credentials": {
-					"help": "粘贴具有 Vertex AI 权限的服务账户的 JSON。",
-					"label": "服务账户凭据 *",
-					"placeholder": "Google 服务账户 JSON 凭据"
-				},
-				"heading": "Vertex AI 配置",
-				"project": {
-					"help": "托管 Vertex AI 资源的 GCP 项目 ID。",
-					"label": "项目 ID *",
-					"placeholder": "my-project-id"
-				},
-				"region": {
-					"help": "Vertex AI 资源的 Google Cloud 区域 (例如 us-central1)。",
-					"label": "区域 *",
-					"placeholder": "us-central1"
-				}
-			},
-			"weight": {
-				"help": "Used for load balancing between channels of the same priority. Default is 0.",
-				"label": "Weight"
-			}
-		},
-		"empty": "尚未找到渠道，请先创建一个渠道。",
-		"group_default": "default",
-		"notifications": {
-			"bulk_test_failed_title": "批量测试失败",
-			"bulk_test_started": "已开始批量渠道测试。",
-			"delete_disabled_success": "已删除禁用渠道。",
-			"delete_failed_message": "未知错误",
-			"delete_failed_title": "删除失败",
-			"test_failed_message": "未知错误",
-			"test_failed_title": "渠道测试失败",
-			"test_success": "渠道测试成功。",
-			"testing_model_failed_message": "更新测试模型失败",
-			"testing_model_failed_title": "保存失败",
-			"testing_model_saved": "测试模型已保存。"
-		},
-		"response": {
-			"not_tested": "尚未测试",
-			"prefix": "响应时间:",
-			"tested_at": "测试时间：{{local}} / {{utc}}Z"
-		},
-		"search": {
-			"id_label": "ID",
-			"placeholder": "按名称、类型或分组搜索渠道..."
-		},
-		"status": {
-			"active": "运行中",
-			"disabled": "已禁用",
-			"paused": "已暂停"
-		},
-		"testing": {
-			"auto": "自动最便宜"
-		},
-		"title": "渠道",
-		"toolbar": {
-			"delete_disabled": "删除禁用",
-			"delete_disabled_mobile": "删除所有禁用",
-			"test_all": "测试全部",
-			"test_all_mobile": "测试所有渠道"
-		},
-		"type_unknown": "类型 {{type}}"
-	},
-	"redemptions": {
-		"actions": {
-			"add": "添加兑换码",
-			"cancel": "取消",
-			"close": "关闭",
-			"create": "创建兑换码",
-			"creating": "正在创建...",
-			"delete": "删除",
-			"disable": "禁用",
-			"edit": "编辑",
-			"enable": "启用",
-			"generate": "生成",
-			"refresh": "刷新",
-			"search": "搜索",
-			"update": "更新兑换码",
-			"updating": "正在更新..."
-		},
-		"columns": {
-			"actions": "操作",
-			"code": "代码",
-			"created": "创建时间",
-			"id": "ID",
-			"name": "名称",
-			"quota": "额度",
-			"status": "状态"
-		},
-		"description": "管理充值代码",
-		"dialog": {
-			"generated_codes": "生成的代码:",
-			"title": "生成兑换码"
-		},
-		"edit": {
-			"description": {
-				"create": "创建一个新的兑换码",
-				"edit": "更新兑换码设置"
-			},
-			"loading": "正在加载兑换码...",
-			"notifications": {
-				"create_success": "兑换码创建成功",
-				"failed": "操作失败",
-				"update_success": "兑换码更新成功"
-			},
-			"title": {
-				"create": "创建兑换码",
-				"edit": "编辑兑换码"
-			},
-			"validation": {
-				"count_max": "数量不能超过 100",
-				"count_min": "数量必须为正数",
-				"name_max": "最多 20 个字符",
-				"name_required": "名称是必填项",
-				"quota_min": "额度不能为负数"
-			}
-		},
-		"fields": {
-			"count": {
-				"label": "数量 (1-100)"
-			},
-			"name": {
-				"label": "名称",
-				"placeholder": "输入兑换码名称"
-			},
-			"quota": {
-				"label": "额度"
-			}
-		},
-		"search": {
-			"dropdown_placeholder": "输入兑换码名称...",
-			"placeholder": "按名称搜索兑换码..."
-		},
-		"status": {
-			"disabled": "已禁用",
-			"unknown": "未知",
-			"unused": "未使用",
-			"used": "已使用"
-		},
-		"title": "兑换",
-		"toolbar": {
-			"created_time": "创建时间",
-			"default": "默认",
-			"id": "ID",
-			"name": "名称",
-			"quota": "额度",
-			"redeemed_time": "兑换时间",
-			"status": "状态"
-		}
-	},
-	"tokens": {
-		"edit": {
-			"actions": {
-				"cancel": "取消",
-				"create": "创建令牌",
-				"creating": "正在创建...",
-				"update": "更新令牌",
-				"updating": "正在更新..."
-			},
-			"aria": {
-				"help_label": "帮助: {{label}}"
-			},
-			"description": {
-				"create": "创建一个新的 API 令牌",
-				"edit": "更新令牌设置"
-			},
-			"errors": {
-				"operation_failed": "操作失败",
-				"request_failed_title": "请求失败",
-				"unexpected_title": "意外错误"
-			},
-			"fields": {
-				"expired_time": {
-					"day": "1 天",
-					"help": "设置此令牌何时过期。留空表示永不过期。使用快速按钮选择常用时长。",
-					"hour": "1 小时",
-					"label": "过期时间",
-					"minute": "1 分钟",
-					"month": "1 个月",
-					"never": "永不过期"
-				},
-				"name": {
-					"help": "此令牌的可读标识符。",
-					"label": "令牌名称",
-					"placeholder": "输入令牌名称"
-				},
-				"remain_quota": {
-					"help": "额度以令牌为单位。USD 是基于管理员配置的单位定价的估算值。",
-					"label": "剩余额度",
-					"usd_hint": "约剩余 {{usd}} USD"
-				},
-				"subnet": {
-					"help": "仅允许来自这些 IP 或 CIDR 范围的请求 (例如 192.168.1.0/24)。多个条目用逗号分隔。",
-					"label": "IP 限制 (可选)",
-					"placeholder": "例如 192.168.1.0/24 或 10.0.0.1"
-				},
-				"unlimited": {
-					"help": "如果启用，此令牌将忽略剩余额度检查。",
-					"label": "无限额度"
-				}
-			},
-			"loading": "正在加载令牌...",
-			"models": {
-				"help": "限制此令牌只能访问特定模型。留空以允许用户/组可用的所有模型。",
-				"label": "允许的模型",
-				"search_placeholder": "搜索模型..."
-			},
-			"notifications": {
-				"create_success": "令牌创建成功",
-				"update_success": "令牌更新成功"
-			},
-			"title": {
-				"create": "创建令牌",
-				"edit": "编辑令牌"
-			},
-			"validation": {
-				"error_title": "验证错误",
-				"fix_fields": "请更正高亮显示的字段。",
-				"invalid_expiration": "无效的过期时间"
-			}
-		},
-		"page": {
-			"actions": {
-				"add": "添加令牌",
-				"add_mobile": "添加新令牌",
-				"delete": "删除",
-				"disable": "禁用",
-				"edit": "编辑",
-				"enable": "启用"
-			},
-			"columns": {
-				"actions": "操作",
-				"created": "创建时间",
-				"expires": "过期时间",
-				"id": "ID",
-				"key": "密钥",
-				"last_access": "最后访问",
-				"name": "名称",
-				"never": "永不过期",
-				"no_value": "—",
-				"remaining_quota": "剩余额度",
-				"remaining_title": "剩余: {{label}}",
-				"remaining_tooltip": "此令牌保留的额度多于您的账户分配。",
-				"status": "状态",
-				"used_quota": "已用额度",
-				"used_title": "已用: {{label}}"
-			},
-			"confirm": {
-				"delete": "确定要删除令牌 \"{{label}}\" 吗？"
-			},
-			"description": "管理您的 API 访问令牌",
-			"dialog": {
-				"close": "关闭",
-				"manual_copy_description": "剪贴板访问不可用。请手动复制下面的 API 密钥以继续使用。",
-				"manual_copy_title": "需要手动复制"
-			},
-			"empty": "未找到令牌。创建您的第一个令牌以开始使用。",
-			"key": {
-				"copied": "已复制！",
-				"copy": "复制令牌"
-			},
-			"quota": {
-				"unlimited": "无限"
-			},
-			"search": {
-				"id_label": "ID: {{id}}",
-				"placeholder": "按名称搜索令牌...",
-				"quota_label": "额度: {{quota}}"
-			},
-			"status": {
-				"disabled": "已禁用",
-				"enabled": "已启用",
-				"exhausted": "已耗尽",
-				"expired": "已过期",
-				"unknown": "未知"
-			},
-			"table": {
-				"id_placeholder": "(ID {{id}})"
-			},
-			"title": "令牌"
-		}
-	},
-	"users": {
-		"dialogs": {
-			"create": {
-				"actions": {
-					"close": "关闭",
-					"create": "创建"
-				},
-				"fields": {
-					"display_name": {
-						"label": "显示名称",
-						"placeholder": "输入显示名称"
-					},
-					"password": {
-						"label": "密码",
-						"placeholder": "输入密码"
-					},
-					"username": {
-						"label": "用户名",
-						"placeholder": "输入用户名"
-					}
-				},
-				"title": "创建用户"
-			},
-			"topup": {
-				"actions": {
-					"close": "关闭",
-					"submit": "提交"
-				},
-				"fields": {
-					"quota": {
-						"label": "额度",
-						"placeholder": "输入额度变更"
-					},
-					"remark": {
-						"label": "备注",
-						"placeholder": "可选"
-					}
-				},
-				"title": "充值 {{username}}"
-			}
-		},
-		"edit": {
-			"actions": {
-				"cancel": "取消",
-				"create": "创建用户",
-				"creating": "正在创建...",
-				"update": "更新用户",
-				"updating": "正在更新..."
-			},
-			"aria": {
-				"help_display_name": "帮助: 显示名称",
-				"help_email": "帮助: 邮箱",
-				"help_group": "帮助: 分组",
-				"help_password": "帮助: 密码",
-				"help_quota": "帮助: 额度",
-				"help_username": "帮助: 用户名"
-			},
-			"description": {
-				"create": "创建一个新用户账户",
-				"edit": "更新用户信息"
-			},
-			"errors": {
-				"operation_failed": "操作失败",
-				"request_failed_title": "请求失败",
-				"unexpected_title": "意外错误"
-			},
-			"fields": {
-				"display_name": {
-					"help": "UI 中显示的可选可读名称。",
-					"label": "显示名称",
-					"placeholder": "输入显示名称"
-				},
-				"email": {
-					"help": "用于密码重置和通知的可选联系地址。",
-					"label": "邮箱",
-					"placeholder": "输入邮箱"
-				},
-				"group": {
-					"help": "用户分组控制访问权限和模型/渠道可见性。",
-					"label": "分组 *",
-					"placeholder": "选择一个分组"
-				},
-				"mcp_tool_blacklist": {
-					"help": "屏蔽该用户的 MCP 工具。使用 server.tool 或工具名称。",
-					"label": "MCP 工具黑名单",
-					"placeholder": "server.tool_name"
-				},
-				"password": {
-					"help": "最小长度取决于策略。编辑时留空以保持不变。",
-					"label_create": "密码 *",
-					"label_edit": "新密码 (留空以保持当前密码)",
-					"placeholder": "输入密码"
-				},
-				"quota": {
-					"help": "额度单位为令牌。USD 估算值使用管理员配置的单位比率。",
-					"label": "额度 ({{usd}})"
-				},
-				"username": {
-					"help": "唯一登录名。至少 3 个字符。",
-					"label": "用户名 *",
-					"placeholder": "输入用户名"
-				}
-			},
-			"loading": "正在加载用户...",
-			"notifications": {
-				"create_success": "用户创建成功",
-				"update_success": "用户更新成功"
-			},
-			"title": {
-				"create": "创建用户",
-				"edit": "编辑用户"
-			},
-			"validation": {
-				"display_name_max": "显示名称最多 20 个字符",
-				"email_invalid": "需要有效的邮箱",
-				"email_max": "邮箱最多 50 个字符",
-				"error_title": "验证错误",
-				"fix_fields": "请更正高亮显示的字段。",
-				"group_required": "分组是必填项",
-				"quota_min": "额度必须为非负数",
-				"username_max": "用户名最多 30 个字符",
-				"username_min": "用户名至少需要 3 个字符"
-			}
-		},
-		"page": {
-			"actions": {
-				"delete": "删除",
-				"disable": "禁用",
-				"edit": "编辑",
-				"enable": "启用",
-				"topup": "充值"
-			},
-			"columns": {
-				"actions": "操作",
-				"display_name": "显示名称",
-				"group": "分组",
-				"id": "ID",
-				"remaining_quota": "剩余额度",
-				"role": "角色",
-				"status": "状态",
-				"used_quota": "已用额度",
-				"username": "用户名"
-			},
-			"description": "管理用户",
-			"empty": "未找到用户。添加您的第一个用户以开始使用。",
-			"notifications": {
-				"action_failed_message": "无法应用更改。",
-				"action_failed_title": "操作失败",
-				"load_failed_message": "加载用户失败。",
-				"load_failed_title": "访问被拒绝",
-				"search_failed_message": "搜索失败。",
-				"search_failed_title": "搜索失败"
-			},
-			"search": {
-				"id_label": "ID: {{id}}",
-				"placeholder": "按用户名搜索用户...",
-				"role_label": "角色: {{role}}",
-				"status_label": "状态: {{status}}"
-			},
-			"table": {
-				"quota": {
-					"unlimited": "无限"
-				},
-				"remaining_quota_title": "剩余: {{quota}}",
-				"role": {
-					"admin": "管理员",
-					"super_admin": "超级管理员",
-					"user": "用户"
-				},
-				"status": {
-					"disabled": "已禁用",
-					"enabled": "已启用"
-				},
-				"used_quota_title": "已用: {{quota}}"
-			},
-			"title": "用户",
-			"toolbar": {
-				"add_user": "添加用户",
-				"sort": {
-					"created_time": "创建时间",
-					"default": "默认",
-					"id": "ID",
-					"quota": "剩余额度",
-					"used_quota": "已用额度",
-					"username": "用户名"
-				},
-				"sort_order": {
-					"asc": "升序",
-					"desc": "降序"
-				}
-			}
-		}
-	}
+  "channels": {
+    "actions": {
+      "add": "新增渠道",
+      "add_mobile": "新增渠道",
+      "delete": "删除",
+      "disable": "禁用",
+      "edit": "编辑",
+      "enable": "启用",
+      "test": "测试"
+    },
+    "columns": {
+      "actions": "操作",
+      "created": "创建时间",
+      "group": "分组",
+      "id": "ID",
+      "name": "名称",
+      "priority": "优先级",
+      "response": "响应",
+      "status": "状态",
+      "testing_model": "测试模型",
+      "type": "类型",
+      "weight": "权重"
+    },
+    "confirm": {
+      "delete": "确定要删除该渠道吗？",
+      "delete_disabled": "确定要删除所有禁用渠道吗？此操作无法撤销。"
+    },
+    "description": "配置并管理 API 路由渠道",
+    "edit": {
+      "actions": {
+        "add": "Add",
+        "cancel": "取消",
+        "create": "创建渠道",
+        "creating": "正在创建...",
+        "test_channel": "测试渠道",
+        "update": "更新渠道",
+        "updating": "正在更新..."
+      },
+      "ai_proxy": {
+        "knowledge": {
+          "help": "AI Proxy 知识检索的知识库标识符。",
+          "label": "知识库 ID",
+          "placeholder": "知识库 ID"
+        }
+      },
+      "aws": {
+        "ak": {
+          "help": "具有调用 Bedrock 权限的 AWS 访问密钥 ID。",
+          "label": "访问密钥 *",
+          "placeholder": "AKIA..."
+        },
+        "heading": "AWS Bedrock 配置",
+        "note": "最终 API 密钥将构造为: AK|SK|Region",
+        "region": {
+          "help": "Bedrock 的 AWS 区域 (例如 us-east-1)。必须与您的模型/配置文件所在位置匹配。",
+          "label": "区域 *",
+          "placeholder": "us-east-1"
+        },
+        "sk": {
+          "help": "上述访问密钥 ID 的 AWS 秘密访问密钥。",
+          "label": "秘密密钥 *",
+          "placeholder": "秘密密钥"
+        }
+      },
+      "azure": {
+        "endpoint": {
+          "help": "您的资源端点，例如 https://your-resource.openai.azure.com",
+          "label": "Azure OpenAI 端点 *",
+          "placeholder": "https://your-resource.openai.azure.com"
+        },
+        "heading": "Azure OpenAI 配置",
+        "version": {
+          "help": "当请求未指定时使用的默认 API 版本 (例如 2024-03-01-preview)。",
+          "label": "API 版本",
+          "note": "默认: 2024-03-01-preview。这可以通过请求查询参数覆盖。",
+          "placeholder": "2024-03-01-preview",
+          "warning_label": "重要:",
+          "warning_text": "模型名称应该是您的部署名称，而不是原始模型名称。"
+        }
+      },
+      "buttons": {
+        "fill_template": "填充模板",
+        "format_json": "格式化 JSON",
+        "load_defaults": "加载默认值"
+      },
+      "channel_type": {
+        "15": {
+          "tip": "从百度控制台获取 AK (API Key) 和 SK (Secret Key)"
+        },
+        "18": {
+          "tip": "WebSocket 版本 API"
+        },
+        "29": {
+          "description": "Groq-hosted LLaMA-style models via OpenAI schema."
+        },
+        "40": {
+          "description": "原字节跳动豆包"
+        },
+        "47": {
+          "tip": "对于 V2 推理服务，从百度 IAM 获取 API Key"
+        },
+        "48": {
+          "tip": "HTTP 版本 API"
+        },
+        "50": {
+          "description": "OpenAI 兼容渠道，支持自定义 Base URL"
+        },
+        "51": {
+          "description": "Gemini OpenAI 兼容格式"
+        },
+        "53": {
+          "description": "GitHub Copilot OpenAI 兼容接口（通过 GitHub 交换短期 Token）",
+          "tip": "渠道密钥填写 GitHub access token；Base URL 默认为 https://api.githubcopilot.com"
+        }
+      },
+      "cloudflare": {
+        "account": {
+          "help": "AI 网关的 Cloudflare 账户 ID。",
+          "label": "账户 ID",
+          "placeholder": "d8d7c61dbc334c32d3ced580e4bf42b4"
+        }
+      },
+      "common": {
+        "add": "Add",
+        "base_url": {
+          "fixed_note": "Using default: {{url}}",
+          "help_editable": "Custom API base URL. Leave empty to use the default URL.",
+          "help_readonly": "The API base URL for this channel type is fixed and cannot be modified.",
+          "label": "API Base URL",
+          "placeholder": "https://api.example.com"
+        },
+        "format_json": "Format JSON"
+      },
+      "coze": {
+        "auth_type": {
+          "help": "选择如何向 Coze 认证: 个人访问令牌或 OAuth JWT。",
+          "label": "认证类型",
+          "placeholder": "选择认证类型"
+        },
+        "heading": "Coze 配置",
+        "jwt": {
+          "help": "Coze OAuth JWT 的 JSON 配置: client_type, client_id, coze_www_base, coze_api_base, private_key, public_key_id。",
+          "label": "OAuth JWT 配置 *",
+          "placeholder": "JSON 格式的 OAuth JWT 配置:\n{{example}}",
+          "required": "必填字段: client_type, client_id, coze_www_base, coze_api_base, private_key, public_key_id"
+        },
+        "pat": {
+          "help": "您的 Coze 个人访问令牌 (pat_...)。",
+          "label": "个人访问令牌 *",
+          "placeholder": "pat_..."
+        },
+        "user": {
+          "help": "用于机器人操作的可选 Coze 用户 ID (如果您的设置需要)。",
+          "label": "用户 ID",
+          "placeholder": "用于机器人操作的用户 ID"
+        }
+      },
+      "description": {
+        "create": "创建一个新的 API 渠道",
+        "edit": "更新渠道配置"
+      },
+      "errors": {
+        "operation_failed": "操作失败",
+        "request_failed_title": "请求失败",
+        "unexpected_title": "意外错误"
+      },
+      "fields": {
+        "api_key": {
+          "help": "所选提供商的凭据。加密存储。编辑时留空以保持现有。",
+          "label": "API 密钥",
+          "note": "当前 API 密钥已隐藏以确保安全。仅在您想更新时输入新密钥。",
+          "placeholder_create": "输入 API 密钥",
+          "placeholder_edit": "留空以保持现有密钥"
+        },
+        "base_url": {
+          "help": "提供商 API 端点 (例如 https://api.openai.com)。留空以使用所选提供商的默认值。",
+          "label": "Base URL (可选)",
+          "placeholder": "例如 https://api.openai.com"
+        },
+        "name": {
+          "help": "可读标识符。在名称中使用提供商/环境，例如 \"OpenAI GPT-4 Production\"。",
+          "label": "渠道名称 *",
+          "placeholder": "输入渠道名称"
+        },
+        "priority": {
+          "help": "当多个渠道支持同一模型时，数字越小越先尝试。",
+          "label": "优先级"
+        },
+        "type": {
+          "help": "选择上游提供商。这决定了模型、认证方法和默认 Base URL。",
+          "label": "渠道类型 *",
+          "placeholder": "选择渠道类型"
+        },
+        "weight": {
+          "help": "具有相同优先级的渠道之间的负载均衡权重。权重越高，接收的请求越多。",
+          "label": "权重"
+        }
+      },
+      "groups": {
+        "add_placeholder": "Add custom group...",
+        "help": "限制特定用户组的访问。留空表示所有用户都可以访问。默认分组始终保留。",
+        "label": "分组 *"
+      },
+      "inference_profile": {
+        "help": "模型名称到 AWS Bedrock 推理配置文件 ARN 的 JSON 映射。用于通过特定 Bedrock 推理配置文件路由某些模型。",
+        "label": "推理配置文件 ARN 映射 (AWS Bedrock)",
+        "note": "将模型名称映射到 AWS Bedrock 推理配置文件 ARN (可选)",
+        "placeholder": "AWS Bedrock 推理配置文件 ARN 映射:\n{{example}}"
+      },
+      "key": {
+        "help": "The API key for authentication with the provider.",
+        "label": "API Key"
+      },
+      "loading": "正在加载渠道...",
+      "mcp": {
+        "blacklist_add": "添加",
+        "blacklist_description": "屏蔽该渠道的 MCP 工具。使用 server.tool 或工具名称。",
+        "blacklist_label": "MCP 工具黑名单",
+        "blacklist_placeholder": "server.tool_name"
+      },
+      "model_configs": {
+        "format_error": "无法格式化 model_configs: {{error}}",
+        "help": "统一的每个模型设置。字段: ratio (输入定价乘数), completion_ratio (输出乘数), max_tokens (限制)。",
+        "invalid": "无效的模型配置格式",
+        "invalid_short": "✗ 无效配置",
+        "label": "模型配置 (JSON)",
+        "load_default": "Load Default",
+        "note": "配置每个模型的定价和限制 (可选)",
+        "placeholder": "JSON 格式的模型配置:\n{{example}}",
+        "select_type_notice": "选择渠道类型以配置模型配置。",
+        "valid": "✓ 有效配置"
+      },
+      "model_mapping": {
+        "help": "将外部/旧模型名称映射到此提供商的实际模型名称。JSON 对象: { \"from\": \"to\" }。",
+        "label": "模型映射 (JSON)",
+        "note": "为此渠道映射模型名称 (可选)",
+        "placeholder": "JSON 格式的模型名称映射:\n{{example}}"
+      },
+      "models": {
+        "add_custom": "添加",
+        "clear": "Clear",
+        "clear_all": "全部清除",
+        "copy_title": "点击复制模型名称",
+        "custom_placeholder": "添加自定义模型...",
+        "fill_all": "填充所有支持的模型 ({{count}})",
+        "fill_related": "填充相关模型 ({{count}})",
+        "help": "此渠道可用的模型。留空以允许所有提供商模型。使用按钮填充相关/所有模型；重复项将被删除。",
+        "label": "支持的模型 *",
+        "no_match": "No models found",
+        "no_selection": "No models selected",
+        "search_placeholder": "搜索模型...",
+        "select_type_notice": "选择渠道类型以配置支持的模型。",
+        "selected_count": "Selected Models ({{count}})"
+      },
+      "name": {
+        "help": "A descriptive name for this channel to identify it in logs and lists.",
+        "label": "Channel Name *",
+        "placeholder": "My Channel"
+      },
+      "openai_compatible": {
+        "api_format": {
+          "help": "选择哪个上游 API 表面应处理请求。ChatCompletion 是历史默认值；当上游期望 OpenAI Response API 负载时选择 Response。",
+          "label": "上游 API 格式 *",
+          "option": {
+            "chat_completion": "ChatCompletion (默认)",
+            "response": "Response"
+          },
+          "placeholder": "选择上游 API 格式"
+        },
+        "base_url": {
+          "help": "OpenAI 兼容端点的 Base URL，例如 https://api.your-provider.com。需要时会自动附加 /v1。",
+          "label": "Base URL *",
+          "placeholder": "https://api.your-provider.com"
+        },
+        "heading": "OpenAI 兼容配置"
+      },
+      "plugin": {
+        "params": {
+          "help": "如果需要，提供商/插件特定的参数。",
+          "label": "插件参数",
+          "placeholder": "插件特定参数"
+        }
+      },
+      "priority": {
+        "help": "Higher priority channels are tried first. Default is 0.",
+        "label": "Priority"
+      },
+      "ratelimit": {
+        "help": "Maximum requests per minute. 0 means unlimited.",
+        "label": "Rate Limit"
+      },
+      "spark": {
+        "version": {
+          "help": "选择讯飞星火的 API 版本 (例如 v3.5)。",
+          "label": "Spark 版本",
+          "placeholder": "选择 Spark 版本"
+        }
+      },
+      "system_prompt": {
+        "help": "作为系统消息预置到通过此渠道发送的每个请求的可选文本。用于护栏或风格。客户端仍可以使用自己的系统消息覆盖。",
+        "label": "系统提示",
+        "placeholder": "预置到所有请求的可选系统提示"
+      },
+      "title": {
+        "create": "创建渠道",
+        "edit": "编辑渠道"
+      },
+      "tooling": {
+        "add_custom": "Add custom tool...",
+        "available_tools": "Available Tools",
+        "editor_disabled": "Fix JSON error to enable editor",
+        "errors": {
+          "invalid_json_message": "在编辑白名单之前修复工具 JSON。",
+          "invalid_json_title": "无效 JSON"
+        },
+        "fix_json_notice": "修复上面的工具 JSON 以管理内置工具白名单。",
+        "format_error": "无法格式化工具配置: {{error}}",
+        "help": "定义渠道范围的内置工具策略。配置提供商内置工具的白名单和每次调用的定价。",
+        "invalid": "无效的工具配置格式",
+        "label": "工具配置 (JSON)",
+        "no_whitelist": "No tools whitelisted",
+        "note": "配置内置工具允许列表和每次调用的定价 (可选)",
+        "placeholder": "JSON 格式的工具配置:\n{{example}}",
+        "whitelist": {
+          "add_tool": "添加工具",
+          "custom_placeholder": "自定义工具名称",
+          "empty": "未固定工具。所有内置工具保持可用。",
+          "known": "已知工具:",
+          "pricing_required": "设置定价以解锁 \"{{tool}}\"。请求将被阻止，直到配置定价。",
+          "subtitle": "空白白名单保留所有提供商工具可用。",
+          "title": "内置工具白名单"
+        },
+        "whitelist_editor": "Whitelist Editor",
+        "whitelisted_tools": "Whitelisted Tools ({{count}})"
+      },
+      "type": {
+        "help": "The provider type for this channel. Changing this may reset some fields.",
+        "label": "Channel Type *",
+        "not_found": "No channel type found.",
+        "placeholder": "Select a channel type",
+        "search": "Search channel type..."
+      },
+      "type_change": {
+        "cancel": "Cancel",
+        "confirm": "Change Type",
+        "description": "You are about to change the channel type from \"{{fromType}}\" to \"{{toType}}\".",
+        "title": "Change Channel Type?",
+        "warning": "Warning: This may reset some configuration fields specific to the previous channel type. Any unsaved changes may be lost."
+      },
+      "validation": {
+        "api_key_required": "API 密钥是必填项。",
+        "base_url_required": "此渠道类型需要 Base URL。",
+        "error_title": "验证错误",
+        "inference_profile_invalid": "推理配置文件 ARN 映射包含无效 JSON。",
+        "invalid_json": "无效 JSON 格式",
+        "invalid_json_short": "✗ 无效 JSON",
+        "invalid_json_title": "无效 JSON",
+        "model_configs_message": "模型配置无效。",
+        "model_configs_title": "无效配置",
+        "model_mapping_invalid": "模型映射包含无效 JSON。",
+        "oauth_invalid_json": "OAuth JWT 配置 JSON 无效。",
+        "oauth_missing_field_message": "OAuth JWT 配置缺少: {{field}}",
+        "oauth_missing_field_title": "缺少字段",
+        "oauth_parse_message": "OAuth JWT 解析错误: {{error}}",
+        "oauth_parse_title": "解析错误",
+        "valid_json": "✓ 有效 JSON"
+      },
+      "vertex": {
+        "credentials": {
+          "help": "粘贴具有 Vertex AI 权限的服务账户的 JSON。",
+          "label": "服务账户凭据 *",
+          "placeholder": "Google 服务账户 JSON 凭据"
+        },
+        "heading": "Vertex AI 配置",
+        "project": {
+          "help": "托管 Vertex AI 资源的 GCP 项目 ID。",
+          "label": "项目 ID *",
+          "placeholder": "my-project-id"
+        },
+        "region": {
+          "help": "Vertex AI 资源的 Google Cloud 区域 (例如 us-central1)。",
+          "label": "区域 *",
+          "placeholder": "us-central1"
+        }
+      },
+      "weight": {
+        "help": "Used for load balancing between channels of the same priority. Default is 0.",
+        "label": "Weight"
+      }
+    },
+    "empty": "尚未找到渠道，请先创建一个渠道。",
+    "group_default": "default",
+    "notifications": {
+      "bulk_test_failed_title": "批量测试失败",
+      "bulk_test_started": "已开始批量渠道测试。",
+      "delete_disabled_success": "已删除禁用渠道。",
+      "delete_failed_message": "未知错误",
+      "delete_failed_title": "删除失败",
+      "test_failed_message": "未知错误",
+      "test_failed_title": "渠道测试失败",
+      "test_success": "渠道测试成功。",
+      "testing_model_failed_message": "更新测试模型失败",
+      "testing_model_failed_title": "保存失败",
+      "testing_model_saved": "测试模型已保存。"
+    },
+    "response": {
+      "not_tested": "尚未测试",
+      "prefix": "响应时间:",
+      "tested_at": "测试时间：{{local}} / {{utc}}Z"
+    },
+    "search": {
+      "id_label": "ID",
+      "placeholder": "按名称、类型或分组搜索渠道..."
+    },
+    "status": {
+      "active": "运行中",
+      "disabled": "已禁用",
+      "paused": "已暂停"
+    },
+    "testing": {
+      "auto": "自动最便宜"
+    },
+    "title": "渠道",
+    "toolbar": {
+      "delete_disabled": "删除禁用",
+      "delete_disabled_mobile": "删除所有禁用",
+      "test_all": "测试全部",
+      "test_all_mobile": "测试所有渠道"
+    },
+    "type_unknown": "类型 {{type}}"
+  },
+  "redemptions": {
+    "actions": {
+      "add": "添加兑换码",
+      "cancel": "取消",
+      "close": "关闭",
+      "create": "创建兑换码",
+      "creating": "正在创建...",
+      "delete": "删除",
+      "disable": "禁用",
+      "edit": "编辑",
+      "enable": "启用",
+      "generate": "生成",
+      "refresh": "刷新",
+      "search": "搜索",
+      "update": "更新兑换码",
+      "updating": "正在更新..."
+    },
+    "columns": {
+      "actions": "操作",
+      "code": "代码",
+      "created": "创建时间",
+      "id": "ID",
+      "name": "名称",
+      "quota": "额度",
+      "status": "状态"
+    },
+    "description": "管理充值代码",
+    "dialog": {
+      "generated_codes": "生成的代码:",
+      "title": "生成兑换码"
+    },
+    "edit": {
+      "description": {
+        "create": "创建一个新的兑换码",
+        "edit": "更新兑换码设置"
+      },
+      "loading": "正在加载兑换码...",
+      "notifications": {
+        "create_success": "兑换码创建成功",
+        "failed": "操作失败",
+        "update_success": "兑换码更新成功"
+      },
+      "title": {
+        "create": "创建兑换码",
+        "edit": "编辑兑换码"
+      },
+      "validation": {
+        "count_max": "数量不能超过 100",
+        "count_min": "数量必须为正数",
+        "name_max": "最多 20 个字符",
+        "name_required": "名称是必填项",
+        "quota_min": "额度不能为负数"
+      }
+    },
+    "fields": {
+      "count": {
+        "label": "数量 (1-100)"
+      },
+      "name": {
+        "label": "名称",
+        "placeholder": "输入兑换码名称"
+      },
+      "quota": {
+        "label": "额度"
+      }
+    },
+    "search": {
+      "dropdown_placeholder": "输入兑换码名称...",
+      "placeholder": "按名称搜索兑换码..."
+    },
+    "status": {
+      "disabled": "已禁用",
+      "unknown": "未知",
+      "unused": "未使用",
+      "used": "已使用"
+    },
+    "title": "兑换",
+    "toolbar": {
+      "created_time": "创建时间",
+      "default": "默认",
+      "id": "ID",
+      "name": "名称",
+      "quota": "额度",
+      "redeemed_time": "兑换时间",
+      "status": "状态"
+    }
+  },
+  "tokens": {
+    "edit": {
+      "actions": {
+        "cancel": "取消",
+        "create": "创建令牌",
+        "creating": "正在创建...",
+        "update": "更新令牌",
+        "updating": "正在更新..."
+      },
+      "aria": {
+        "help_label": "帮助: {{label}}"
+      },
+      "description": {
+        "create": "创建一个新的 API 令牌",
+        "edit": "更新令牌设置"
+      },
+      "errors": {
+        "operation_failed": "操作失败",
+        "request_failed_title": "请求失败",
+        "unexpected_title": "意外错误"
+      },
+      "fields": {
+        "expired_time": {
+          "day": "1 天",
+          "help": "设置此令牌何时过期。留空表示永不过期。使用快速按钮选择常用时长。",
+          "hour": "1 小时",
+          "label": "过期时间",
+          "minute": "1 分钟",
+          "month": "1 个月",
+          "never": "永不过期"
+        },
+        "name": {
+          "help": "此令牌的可读标识符。",
+          "label": "令牌名称",
+          "placeholder": "输入令牌名称"
+        },
+        "remain_quota": {
+          "help": "额度以令牌为单位。USD 是基于管理员配置的单位定价的估算值。",
+          "label": "剩余额度",
+          "usd_hint": "约剩余 {{usd}} USD"
+        },
+        "subnet": {
+          "help": "仅允许来自这些 IP 或 CIDR 范围的请求 (例如 192.168.1.0/24)。多个条目用逗号分隔。",
+          "label": "IP 限制 (可选)",
+          "placeholder": "例如 192.168.1.0/24 或 10.0.0.1"
+        },
+        "unlimited": {
+          "help": "如果启用，此令牌将忽略剩余额度检查。",
+          "label": "无限额度"
+        }
+      },
+      "loading": "正在加载令牌...",
+      "models": {
+        "help": "限制此令牌只能访问特定模型。留空以允许用户/组可用的所有模型。",
+        "label": "允许的模型",
+        "search_placeholder": "搜索模型..."
+      },
+      "notifications": {
+        "create_success": "令牌创建成功",
+        "update_success": "令牌更新成功"
+      },
+      "title": {
+        "create": "创建令牌",
+        "edit": "编辑令牌"
+      },
+      "validation": {
+        "error_title": "验证错误",
+        "fix_fields": "请更正高亮显示的字段。",
+        "invalid_expiration": "无效的过期时间"
+      }
+    },
+    "page": {
+      "actions": {
+        "add": "添加令牌",
+        "add_mobile": "添加新令牌",
+        "delete": "删除",
+        "disable": "禁用",
+        "edit": "编辑",
+        "enable": "启用"
+      },
+      "columns": {
+        "actions": "操作",
+        "created": "创建时间",
+        "expires": "过期时间",
+        "id": "ID",
+        "key": "密钥",
+        "last_access": "最后访问",
+        "name": "名称",
+        "never": "永不过期",
+        "no_value": "—",
+        "remaining_quota": "剩余额度",
+        "remaining_title": "剩余: {{label}}",
+        "remaining_tooltip": "此令牌保留的额度多于您的账户分配。",
+        "status": "状态",
+        "used_quota": "已用额度",
+        "used_title": "已用: {{label}}"
+      },
+      "confirm": {
+        "delete": "确定要删除令牌 \"{{label}}\" 吗？"
+      },
+      "description": "管理您的 API 访问令牌",
+      "dialog": {
+        "close": "关闭",
+        "manual_copy_description": "剪贴板访问不可用。请手动复制下面的 API 密钥以继续使用。",
+        "manual_copy_title": "需要手动复制"
+      },
+      "empty": "未找到令牌。创建您的第一个令牌以开始使用。",
+      "key": {
+        "copied": "已复制！",
+        "copy": "复制令牌"
+      },
+      "quota": {
+        "unlimited": "无限"
+      },
+      "search": {
+        "id_label": "ID: {{id}}",
+        "placeholder": "按名称搜索令牌...",
+        "quota_label": "额度: {{quota}}"
+      },
+      "status": {
+        "disabled": "已禁用",
+        "enabled": "已启用",
+        "exhausted": "已耗尽",
+        "expired": "已过期",
+        "unknown": "未知"
+      },
+      "table": {
+        "id_placeholder": "(ID {{id}})"
+      },
+      "title": "令牌"
+    }
+  },
+  "users": {
+    "dialogs": {
+      "create": {
+        "actions": {
+          "close": "关闭",
+          "create": "创建"
+        },
+        "fields": {
+          "display_name": {
+            "label": "显示名称",
+            "placeholder": "输入显示名称"
+          },
+          "password": {
+            "label": "密码",
+            "placeholder": "输入密码"
+          },
+          "username": {
+            "label": "用户名",
+            "placeholder": "输入用户名"
+          }
+        },
+        "title": "创建用户"
+      },
+      "topup": {
+        "actions": {
+          "close": "关闭",
+          "submit": "提交"
+        },
+        "fields": {
+          "quota": {
+            "label": "额度",
+            "placeholder": "输入额度变更"
+          },
+          "remark": {
+            "label": "备注",
+            "placeholder": "可选"
+          }
+        },
+        "title": "充值 {{username}}"
+      }
+    },
+    "edit": {
+      "actions": {
+        "cancel": "取消",
+        "create": "创建用户",
+        "creating": "正在创建...",
+        "update": "更新用户",
+        "updating": "正在更新..."
+      },
+      "aria": {
+        "help_display_name": "帮助: 显示名称",
+        "help_email": "帮助: 邮箱",
+        "help_group": "帮助: 分组",
+        "help_password": "帮助: 密码",
+        "help_quota": "帮助: 额度",
+        "help_username": "帮助: 用户名"
+      },
+      "description": {
+        "create": "创建一个新用户账户",
+        "edit": "更新用户信息"
+      },
+      "errors": {
+        "operation_failed": "操作失败",
+        "request_failed_title": "请求失败",
+        "unexpected_title": "意外错误"
+      },
+      "fields": {
+        "display_name": {
+          "help": "UI 中显示的可选可读名称。",
+          "label": "显示名称",
+          "placeholder": "输入显示名称"
+        },
+        "email": {
+          "help": "用于密码重置和通知的可选联系地址。",
+          "label": "邮箱",
+          "placeholder": "输入邮箱"
+        },
+        "group": {
+          "help": "用户分组控制访问权限和模型/渠道可见性。",
+          "label": "分组 *",
+          "placeholder": "选择一个分组"
+        },
+        "mcp_tool_blacklist": {
+          "help": "屏蔽该用户的 MCP 工具。使用 server.tool 或工具名称。",
+          "label": "MCP 工具黑名单",
+          "placeholder": "server.tool_name"
+        },
+        "password": {
+          "help": "最小长度取决于策略。编辑时留空以保持不变。",
+          "label_create": "密码 *",
+          "label_edit": "新密码 (留空以保持当前密码)",
+          "placeholder": "输入密码"
+        },
+        "quota": {
+          "help": "额度单位为令牌。USD 估算值使用管理员配置的单位比率。",
+          "label": "额度 ({{usd}})"
+        },
+        "username": {
+          "help": "唯一登录名。至少 3 个字符。",
+          "label": "用户名 *",
+          "placeholder": "输入用户名"
+        }
+      },
+      "loading": "正在加载用户...",
+      "notifications": {
+        "create_success": "用户创建成功",
+        "update_success": "用户更新成功"
+      },
+      "title": {
+        "create": "创建用户",
+        "edit": "编辑用户"
+      },
+      "validation": {
+        "display_name_max": "显示名称最多 20 个字符",
+        "email_invalid": "需要有效的邮箱",
+        "email_max": "邮箱最多 50 个字符",
+        "error_title": "验证错误",
+        "fix_fields": "请更正高亮显示的字段。",
+        "group_required": "分组是必填项",
+        "quota_min": "额度必须为非负数",
+        "username_max": "用户名最多 30 个字符",
+        "username_min": "用户名至少需要 3 个字符"
+      }
+    },
+    "page": {
+      "actions": {
+        "delete": "删除",
+        "disable": "禁用",
+        "edit": "编辑",
+        "enable": "启用",
+        "topup": "充值"
+      },
+      "columns": {
+        "actions": "操作",
+        "display_name": "显示名称",
+        "group": "分组",
+        "id": "ID",
+        "remaining_quota": "剩余额度",
+        "role": "角色",
+        "status": "状态",
+        "used_quota": "已用额度",
+        "username": "用户名"
+      },
+      "description": "管理用户",
+      "empty": "未找到用户。添加您的第一个用户以开始使用。",
+      "notifications": {
+        "action_failed_message": "无法应用更改。",
+        "action_failed_title": "操作失败",
+        "load_failed_message": "加载用户失败。",
+        "load_failed_title": "访问被拒绝",
+        "search_failed_message": "搜索失败。",
+        "search_failed_title": "搜索失败"
+      },
+      "search": {
+        "id_label": "ID: {{id}}",
+        "placeholder": "按用户名搜索用户...",
+        "role_label": "角色: {{role}}",
+        "status_label": "状态: {{status}}"
+      },
+      "table": {
+        "quota": {
+          "unlimited": "无限"
+        },
+        "remaining_quota_title": "剩余: {{quota}}",
+        "role": {
+          "admin": "管理员",
+          "super_admin": "超级管理员",
+          "user": "用户"
+        },
+        "status": {
+          "disabled": "已禁用",
+          "enabled": "已启用"
+        },
+        "used_quota_title": "已用: {{quota}}"
+      },
+      "title": "用户",
+      "toolbar": {
+        "add_user": "添加用户",
+        "sort": {
+          "created_time": "创建时间",
+          "default": "默认",
+          "id": "ID",
+          "quota": "剩余额度",
+          "used_quota": "已用额度",
+          "username": "用户名"
+        },
+        "sort_order": {
+          "asc": "升序",
+          "desc": "降序"
+        }
+      }
+    }
+  }
 }

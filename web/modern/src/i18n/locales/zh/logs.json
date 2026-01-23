@@ -1,151 +1,151 @@
 {
-	"logs": {
-		"actions": {
-			"clear": "清除",
-			"export": "导出",
-			"hide_stats": "隐藏统计",
-			"show_stats": "显示统计"
-		},
-		"confirm": {
-			"delete_before": "确定要删除 {{timestamp}} 之前的日志吗？"
-		},
-		"description": "查看和搜索 API 使用日志",
-		"details": {
-			"cache_write_1h": "缓存写入 1h 令牌",
-			"cache_write_5m": "缓存写入 5m 令牌",
-			"channel": "渠道",
-			"completion_tokens_cached": "补全令牌 (缓存)",
-			"completion_tokens_output": "补全令牌 (输出)",
-			"content": "内容",
-			"copied": "已复制！",
-			"copy_trace": "点击复制追踪 ID",
-			"events": {
-				"first_client_response": "首个客户端响应",
-				"first_client_response_desc": "发送给客户端的首个响应",
-				"first_upstream_response": "首个上游响应",
-				"first_upstream_response_desc": "收到上游的首个响应",
-				"mcp_call": "MCP Call",
-				"mcp_call_desc": "MCP tool call",
-				"mcp_call_server": "Server: {{server}}",
-				"mcp_call_tool": "Tool: {{tool}}",
-				"request_completed": "请求完成",
-				"request_completed_desc": "请求完全完成",
-				"request_forwarded": "转发到上游",
-				"request_forwarded_desc": "请求转发到上游服务",
-				"request_received": "收到请求",
-				"request_received_desc": "网关收到初始请求",
-				"upstream_completed": "上游完成",
-				"upstream_completed_desc": "上游响应完成 (流式)"
-			},
-			"flags": "标志",
-			"identifiers": "标识符",
-			"latency": "延迟",
-			"load_failed": "加载追踪信息失败。",
-			"log_id": "日志 ID",
-			"metadata": "元数据",
-			"method_status": "方法 & 状态",
-			"model": "模型",
-			"no_content": "未记录内容。",
-			"no_timeline": "此追踪没有时间轴数据。",
-			"no_tracing": "此日志条目没有追踪数据。",
-			"prompt_tokens_cached": "提示令牌 (缓存)",
-			"prompt_tokens_input": "提示令牌 (输入)",
-			"quota": "额度",
-			"quota_raw": "额度 (原始单位)",
-			"recorded_at": "记录于",
-			"request_id": "请求 ID",
-			"request_info": "请求信息",
-			"request_size": "请求大小",
-			"select_hint": "选择一个日志条目以查看完整详情。",
-			"stream": "流式",
-			"summary": "摘要",
-			"system_reset": "系统重置",
-			"timeline": "请求时间轴",
-			"title": "日志条目详情",
-			"token": "令牌",
-			"total_cached_tokens": "总缓存令牌",
-			"total_time": "总请求时间",
-			"total_tokens": "总令牌",
-			"trace_id": "追踪 ID",
-			"tracing": "追踪",
-			"type": "类型",
-			"url": "URL",
-			"user": "用户"
-		},
-		"export": {
-			"headers": {
-				"cache_write_1h": "缓存写入 (1h)",
-				"cache_write_5m": "缓存写入 (5m)",
-				"cached_completion_tokens": "缓存补全令牌",
-				"cached_prompt_tokens": "缓存提示令牌",
-				"completion_tokens": "补全令牌",
-				"content": "内容",
-				"latency": "延迟",
-				"model": "模型",
-				"prompt_tokens": "提示令牌",
-				"quota": "额度",
-				"time": "时间",
-				"token": "令牌",
-				"type": "类型",
-				"username": "用户名"
-			}
-		},
-		"filters": {
-			"apply": "应用筛选",
-			"channel": "渠道",
-			"channel_placeholder": "输入渠道 ID",
-			"end": "结束时间",
-			"model": "模型",
-			"model_placeholder": "选择模型",
-			"start": "开始时间",
-			"title": "筛选",
-			"token": "令牌",
-			"token_placeholder": "选择令牌",
-			"type": "类型",
-			"type_placeholder": "选择类型",
-			"username": "用户名",
-			"username_placeholder": "选择用户"
-		},
-		"labels": {
-			"missing": "未知",
-			"not_available": "N/A"
-		},
-		"search": {
-			"log_entry": "日志条目",
-			"quota": "额度: {{value}}"
-		},
-		"stats": {
-			"total_quota": "总额度: {{value}}"
-		},
-		"table": {
-			"channel": "渠道",
-			"completion": "补全",
-			"cost": "成本",
-			"empty": "未找到符合条件的日志。",
-			"latency": "延迟",
-			"model": "模型",
-			"prompt": "提示",
-			"time": "时间",
-			"token": "令牌",
-			"type": "类型",
-			"user": "用户"
-		},
-		"title": "日志",
-		"tooltip": {
-			"cache_write_1h": "缓存写入 (1h): {{value}}",
-			"cache_write_5m": "缓存写入 (5m): {{value}}",
-			"cached_tokens": "缓存: {{value}}",
-			"input_tokens": "输入: {{value}}",
-			"output_tokens": "输出: {{value}}"
-		},
-		"types": {
-			"all": "全部",
-			"consume": "消费",
-			"manage": "管理",
-			"system": "系统",
-			"test": "测试",
-			"topup": "充值",
-			"unknown": "未知"
-		}
-	}
+  "logs": {
+    "actions": {
+      "clear": "清除",
+      "export": "导出",
+      "hide_stats": "隐藏统计",
+      "show_stats": "显示统计"
+    },
+    "confirm": {
+      "delete_before": "确定要删除 {{timestamp}} 之前的日志吗？"
+    },
+    "description": "查看和搜索 API 使用日志",
+    "details": {
+      "cache_write_1h": "缓存写入 1h 令牌",
+      "cache_write_5m": "缓存写入 5m 令牌",
+      "channel": "渠道",
+      "completion_tokens_cached": "补全令牌 (缓存)",
+      "completion_tokens_output": "补全令牌 (输出)",
+      "content": "内容",
+      "copied": "已复制！",
+      "copy_trace": "点击复制追踪 ID",
+      "events": {
+        "first_client_response": "首个客户端响应",
+        "first_client_response_desc": "发送给客户端的首个响应",
+        "first_upstream_response": "首个上游响应",
+        "first_upstream_response_desc": "收到上游的首个响应",
+        "mcp_call": "MCP Call",
+        "mcp_call_desc": "MCP tool call",
+        "mcp_call_server": "Server: {{server}}",
+        "mcp_call_tool": "Tool: {{tool}}",
+        "request_completed": "请求完成",
+        "request_completed_desc": "请求完全完成",
+        "request_forwarded": "转发到上游",
+        "request_forwarded_desc": "请求转发到上游服务",
+        "request_received": "收到请求",
+        "request_received_desc": "网关收到初始请求",
+        "upstream_completed": "上游完成",
+        "upstream_completed_desc": "上游响应完成 (流式)"
+      },
+      "flags": "标志",
+      "identifiers": "标识符",
+      "latency": "延迟",
+      "load_failed": "加载追踪信息失败。",
+      "log_id": "日志 ID",
+      "metadata": "元数据",
+      "method_status": "方法 \u0026 状态",
+      "model": "模型",
+      "no_content": "未记录内容。",
+      "no_timeline": "此追踪没有时间轴数据。",
+      "no_tracing": "此日志条目没有追踪数据。",
+      "prompt_tokens_cached": "提示令牌 (缓存)",
+      "prompt_tokens_input": "提示令牌 (输入)",
+      "quota": "额度",
+      "quota_raw": "额度 (原始单位)",
+      "recorded_at": "记录于",
+      "request_id": "请求 ID",
+      "request_info": "请求信息",
+      "request_size": "请求大小",
+      "select_hint": "选择一个日志条目以查看完整详情。",
+      "stream": "流式",
+      "summary": "摘要",
+      "system_reset": "系统重置",
+      "timeline": "请求时间轴",
+      "title": "日志条目详情",
+      "token": "令牌",
+      "total_cached_tokens": "总缓存令牌",
+      "total_time": "总请求时间",
+      "total_tokens": "总令牌",
+      "trace_id": "追踪 ID",
+      "tracing": "追踪",
+      "type": "类型",
+      "url": "URL",
+      "user": "用户"
+    },
+    "export": {
+      "headers": {
+        "cache_write_1h": "缓存写入 (1h)",
+        "cache_write_5m": "缓存写入 (5m)",
+        "cached_completion_tokens": "缓存补全令牌",
+        "cached_prompt_tokens": "缓存提示令牌",
+        "completion_tokens": "补全令牌",
+        "content": "内容",
+        "latency": "延迟",
+        "model": "模型",
+        "prompt_tokens": "提示令牌",
+        "quota": "额度",
+        "time": "时间",
+        "token": "令牌",
+        "type": "类型",
+        "username": "用户名"
+      }
+    },
+    "filters": {
+      "apply": "应用筛选",
+      "channel": "渠道",
+      "channel_placeholder": "输入渠道 ID",
+      "end": "结束时间",
+      "model": "模型",
+      "model_placeholder": "选择模型",
+      "start": "开始时间",
+      "title": "筛选",
+      "token": "令牌",
+      "token_placeholder": "选择令牌",
+      "type": "类型",
+      "type_placeholder": "选择类型",
+      "username": "用户名",
+      "username_placeholder": "选择用户"
+    },
+    "labels": {
+      "missing": "未知",
+      "not_available": "N/A"
+    },
+    "search": {
+      "log_entry": "日志条目",
+      "quota": "额度: {{value}}"
+    },
+    "stats": {
+      "total_quota": "总额度: {{value}}"
+    },
+    "table": {
+      "channel": "渠道",
+      "completion": "补全",
+      "cost": "成本",
+      "empty": "未找到符合条件的日志。",
+      "latency": "延迟",
+      "model": "模型",
+      "prompt": "提示",
+      "time": "时间",
+      "token": "令牌",
+      "type": "类型",
+      "user": "用户"
+    },
+    "title": "日志",
+    "tooltip": {
+      "cache_write_1h": "缓存写入 (1h): {{value}}",
+      "cache_write_5m": "缓存写入 (5m): {{value}}",
+      "cached_tokens": "缓存: {{value}}",
+      "input_tokens": "输入: {{value}}",
+      "output_tokens": "输出: {{value}}"
+    },
+    "types": {
+      "all": "全部",
+      "consume": "消费",
+      "manage": "管理",
+      "system": "系统",
+      "test": "测试",
+      "topup": "充值",
+      "unknown": "未知"
+    }
+  }
 }

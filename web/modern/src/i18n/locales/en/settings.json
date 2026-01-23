@@ -1,14 +1,4 @@
 {
-  "settings": {
-    "description": "Configure your account and system settings",
-    "tabs": {
-      "operation": "Operation",
-      "other": "Other",
-      "personal": "Personal",
-      "system": "System"
-    },
-    "title": "Settings"
-  },
   "operation_settings": {
     "general": {
       "approximate_token": "Enable Approximate Token Counting",
@@ -51,7 +41,7 @@
       "quota_remind_threshold": "Quota Remind Threshold",
       "quota_remind_threshold_desc": "When remaining quota falls below this value, users will be reminded.",
       "save": "Save Monitoring Settings",
-      "title": "Monitoring & Channel Settings"
+      "title": "Monitoring \u0026 Channel Settings"
     },
     "quota": {
       "description": "Configure user quota and invitation rewards",
@@ -113,7 +103,7 @@
       "description": "Generate access tokens and invitation links.",
       "generate_token": "Generate Access Token",
       "get_invite_link": "Get Invitation Link",
-      "title": "Access Token & Invitation"
+      "title": "Access Token \u0026 Invitation"
     },
     "profile_info": {
       "description": "Update your personal information and account settings.",
@@ -163,6 +153,16 @@
       "verify_placeholder": "Enter 6-digit code from your authenticator app",
       "verify_placeholder_mobile": "Enter 6-digit code"
     }
+  },
+  "settings": {
+    "description": "Configure your account and system settings",
+    "tabs": {
+      "operation": "Operation",
+      "other": "Other",
+      "personal": "Personal",
+      "system": "System"
+    },
+    "title": "Settings"
   },
   "system_settings": {
     "description": "Configure system-wide settings and options.",
@@ -228,15 +228,15 @@
     "groups": {
       "authentication": {
         "description": "Control how users sign up and sign in to your workspace.",
-        "title": "Authentication & Registration"
+        "title": "Authentication \u0026 Registration"
       },
       "branding": {
         "description": "Customize the look and feel of the product experience.",
-        "title": "Branding & Content"
+        "title": "Branding \u0026 Content"
       },
       "channels": {
         "description": "Automatically react to upstream channel health and retry behavior.",
-        "title": "Channels & Reliability"
+        "title": "Channels \u0026 Reliability"
       },
       "email": {
         "description": "Set up outbound email delivery.",
@@ -248,7 +248,7 @@
       },
       "logging": {
         "description": "Tune observability and downstream integrations.",
-        "title": "Logging, Metrics & Integrations"
+        "title": "Logging, Metrics \u0026 Integrations"
       },
       "oauth": {
         "description": "Connect third-party identity providers for seamless sign-in.",
@@ -260,11 +260,11 @@
       },
       "quota": {
         "description": "Manage quotas, billing ratios, and currency presentation.",
-        "title": "Quota & Billing"
+        "title": "Quota \u0026 Billing"
       },
       "security": {
         "description": "Configure bot protection and security checks.",
-        "title": "Anti-bot & Security"
+        "title": "Anti-bot \u0026 Security"
       }
     },
     "loading": "Loading options...",
