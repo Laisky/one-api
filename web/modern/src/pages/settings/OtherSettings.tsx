@@ -152,7 +152,7 @@ export function OtherSettings() {
                         {t('other_settings.branding.system_name')}
                         <Tooltip>
                           <TooltipTrigger asChild>
-                            <button type="button" className="text-muted-foreground hover:text-foreground" aria-label="About System Name">
+                            <button type="button" className="text-muted-foreground hover:text-foreground" aria-label={t('common.info')}>
                               <Info className="h-4 w-4" />
                             </button>
                           </TooltipTrigger>
@@ -181,7 +181,7 @@ export function OtherSettings() {
                         {t('other_settings.branding.logo_url')}
                         <Tooltip>
                           <TooltipTrigger asChild>
-                            <button type="button" className="text-muted-foreground hover:text-foreground" aria-label="About Logo URL">
+                            <button type="button" className="text-muted-foreground hover:text-foreground" aria-label={t('common.info')}>
                               <Info className="h-4 w-4" />
                             </button>
                           </TooltipTrigger>
@@ -210,7 +210,7 @@ export function OtherSettings() {
                         {t('other_settings.branding.theme')}
                         <Tooltip>
                           <TooltipTrigger asChild>
-                            <button type="button" className="text-muted-foreground hover:text-foreground" aria-label="About Theme">
+                            <button type="button" className="text-muted-foreground hover:text-foreground" aria-label={t('common.info')}>
                               <Info className="h-4 w-4" />
                             </button>
                           </TooltipTrigger>
@@ -252,7 +252,7 @@ export function OtherSettings() {
                         {t('other_settings.content.notice')}
                         <Tooltip>
                           <TooltipTrigger asChild>
-                            <button type="button" className="text-muted-foreground hover:text-foreground" aria-label="About Notice">
+                            <button type="button" className="text-muted-foreground hover:text-foreground" aria-label={t('common.info')}>
                               <Info className="h-4 w-4" />
                             </button>
                           </TooltipTrigger>
@@ -281,11 +281,7 @@ export function OtherSettings() {
                         {t('other_settings.content.about')}
                         <Tooltip>
                           <TooltipTrigger asChild>
-                            <button
-                              type="button"
-                              className="text-muted-foreground hover:text-foreground"
-                              aria-label="About About Page Content"
-                            >
+                            <button type="button" className="text-muted-foreground hover:text-foreground" aria-label={t('common.info')}>
                               <Info className="h-4 w-4" />
                             </button>
                           </TooltipTrigger>
@@ -314,11 +310,7 @@ export function OtherSettings() {
                         {t('other_settings.content.home_page')}
                         <Tooltip>
                           <TooltipTrigger asChild>
-                            <button
-                              type="button"
-                              className="text-muted-foreground hover:text-foreground"
-                              aria-label="About Home Page Content"
-                            >
+                            <button type="button" className="text-muted-foreground hover:text-foreground" aria-label={t('common.info')}>
                               <Info className="h-4 w-4" />
                             </button>
                           </TooltipTrigger>
@@ -347,7 +339,7 @@ export function OtherSettings() {
                         {t('other_settings.content.footer')}
                         <Tooltip>
                           <TooltipTrigger asChild>
-                            <button type="button" className="text-muted-foreground hover:text-foreground" aria-label="About Footer Content">
+                            <button type="button" className="text-muted-foreground hover:text-foreground" aria-label={t('common.info')}>
                               <Info className="h-4 w-4" />
                             </button>
                           </TooltipTrigger>

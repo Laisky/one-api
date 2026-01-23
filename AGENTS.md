@@ -18,6 +18,8 @@ Use `yarn` for managing packages. Avoid using `npm` to prevent potential conflic
 
 When debugging, add targeted DEBUG logs that include essential details to help developers pinpoint hard‑to‑diagnose issues. After debugging, retain any logs that could be useful for future troubleshooting, but **never** include sensitive data like API keys or passwords in those logs.
 
+Every project needs a global logger as the foundation. As the request moves through the code, middleware (or something similar) should automatically add a context aware log handler that carries the important context data—think zap logger’s `With` method. When you write the business logic, pull that context aware logger from the context and use it for logging, not the global logger.
+
 ### Frontend Templates
 
 This project has three different frontend templates: Modern, Default, Berry, and Air.

@@ -208,12 +208,12 @@
       "QuotaRemindThreshold": "When remaining quota falls below this value, users will be reminded.",
       "RegisterEnabled": "Master switch for user registration. Turn off to stop all new sign-ups.",
       "RetryTimes": "Automatic retry attempts for upstream requests on transient errors.",
-      "ServerAddress": "Public base URL of this server (used in links/callbacks).",
       "SMTPAccount": "SMTP username or account email used to authenticate.",
       "SMTPFrom": "From address used in outgoing emails (e.g., no-reply@yourdomain).",
       "SMTPPort": "SMTP server port (e.g., 587 for STARTTLS, 465 for SMTPS).",
       "SMTPServer": "SMTP server hostname for sending emails.",
       "SMTPToken": "SMTP password or application token used to authenticate. Stored securely and never displayed.",
+      "ServerAddress": "Public base URL of this server (used in links/callbacks).",
       "SystemName": "System display name shown in the UI and emails.",
       "Theme": "UI theme (default, berry, air, modern).",
       "TopUpLink": "External link for users to purchase or top up quota.",
@@ -225,6 +225,8 @@
       "WeChatServerAddress": "WeChat login forwarder/server base URL.",
       "WeChatServerToken": "Verification token for your WeChat server integration. Stored securely and never displayed."
     },
+    "disabled": "Disabled",
+    "enabled": "Enabled",
     "groups": {
       "authentication": {
         "description": "Control how users sign up and sign in to your workspace.",
@@ -267,15 +269,20 @@
         "title": "Anti-bot \u0026 Security"
       }
     },
+    "info_about": "Info about {{key}}",
     "loading": "Loading options...",
+    "no_description": "No description available for this setting yet.",
     "no_options": "No options available or insufficient permissions.",
+    "option_value_aria": "{{key}} value",
     "refresh": "Refresh",
     "save": "Save",
     "save_failed": "Save failed",
     "saved_message": "{{key}} updated successfully.",
     "saved_success": "Setting saved",
     "saving": "Saving...",
+    "select_value": "Select value",
     "sensitive_hint": "Stored value is hidden. Enter a new value to overwrite the existing secret.",
+    "sensitive_placeholder": "Value hidden; enter to update",
     "title": "System Settings"
   }
 }

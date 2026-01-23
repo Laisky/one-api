@@ -208,12 +208,12 @@
       "QuotaRemindThreshold": "Se notifica a los usuarios cuando la cuota restante baja de este valor.",
       "RegisterEnabled": "Interruptor maestro para los registros. Desactívalo para bloquear nuevos registros.",
       "RetryTimes": "Reintentos automáticos ante errores transitorios aguas arriba.",
-      "ServerAddress": "URL base pública del servidor (para enlaces y callbacks).",
       "SMTPAccount": "Usuario o correo SMTP usado para autenticarse.",
       "SMTPFrom": "Dirección del remitente para correos salientes.",
       "SMTPPort": "Puerto del servidor SMTP (p. ej. 587 para STARTTLS, 465 para SMTPS).",
       "SMTPServer": "Nombre de host del servidor SMTP.",
       "SMTPToken": "Contraseña o token SMTP usado para autenticarse (se almacena de forma segura).",
+      "ServerAddress": "URL base pública del servidor (para enlaces y callbacks).",
       "SystemName": "Nombre del sistema mostrado en la interfaz y correos.",
       "Theme": "Tema de la UI (default, berry, air, modern).",
       "TopUpLink": "Enlace externo para comprar o recargar cuota.",
@@ -225,6 +225,8 @@
       "WeChatServerAddress": "Base URL del reenviador/servidor de WeChat.",
       "WeChatServerToken": "Token de verificación para la integración con WeChat (se almacena de forma segura)."
     },
+    "disabled": "Desactivado",
+    "enabled": "Activado",
     "groups": {
       "authentication": {
         "description": "Controla cómo los usuarios se registran e inician sesión en tu espacio de trabajo.",
@@ -267,15 +269,20 @@
         "title": "Anti-bot y seguridad"
       }
     },
+    "info_about": "Información sobre {{key}}",
     "loading": "Cargando opciones...",
+    "no_description": "Aún no hay una descripción para esta opción.",
     "no_options": "No hay opciones disponibles o faltan permisos.",
+    "option_value_aria": "Valor de {{key}}",
     "refresh": "Actualizar",
     "save": "Guardar",
     "save_failed": "Error al guardar",
     "saved_message": "{{key}} se actualizó correctamente.",
     "saved_success": "Ajuste guardado",
     "saving": "Guardando...",
+    "select_value": "Seleccionar valor",
     "sensitive_hint": "El valor almacenado está oculto. Ingresa un valor nuevo para reemplazar el secreto existente.",
+    "sensitive_placeholder": "Valor oculto; escribe para actualizar",
     "title": "Ajustes del sistema"
   }
 }

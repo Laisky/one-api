@@ -35,6 +35,16 @@
     "models": "Modelos",
     "no_items": "Sin elementos",
     "or": "O",
+    "pagination": {
+      "first_page": "Primera página",
+      "last_page": "Última página",
+      "next_page": "Siguiente página",
+      "page_num": "Página {{page}}",
+      "per_page": "Por página:",
+      "previous_page": "Página anterior",
+      "rows_per_page": "Filas por página:",
+      "showing": "Mostrando {{start}}-{{end}} de {{total}} elementos"
+    },
     "password": "Contraseña",
     "playground": "Playground",
     "redemptions": "Canjes",

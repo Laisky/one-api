@@ -35,6 +35,16 @@
     "models": "モデル",
     "no_items": "項目がありません",
     "or": "または",
+    "pagination": {
+      "first_page": "最初のページ",
+      "last_page": "最後のページ",
+      "next_page": "次のページ",
+      "page_num": "{{page}} ページ",
+      "per_page": "1ページあたり:",
+      "previous_page": "前のページ",
+      "rows_per_page": "ページあたりの行数:",
+      "showing": "{{total}} 件中 {{start}}-{{end}} 件を表示"
+    },
     "password": "パスワード",
     "playground": "プレイグラウンド",
     "redemptions": "引き換え",

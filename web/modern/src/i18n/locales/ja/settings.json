@@ -208,12 +208,12 @@
       "QuotaRemindThreshold": "残りクォータがこの値を下回ると通知します。",
       "RegisterEnabled": "ユーザー登録のマスタースイッチです。オフにすると新規登録が停止します。",
       "RetryTimes": "上流への再試行回数を自動制御します。",
-      "ServerAddress": "このサーバーの公開ベース URL（リンクやコールバックで使用）。",
       "SMTPAccount": "SMTP 認証に使用するユーザー名／メールアドレス。",
       "SMTPFrom": "送信メールに使用する送信元アドレス。",
       "SMTPPort": "SMTP サーバーのポート（例: STARTTLS=587, SMTPS=465）。",
       "SMTPServer": "メール送信に使用する SMTP サーバーのホスト名。",
       "SMTPToken": "SMTP 認証用パスワード／アプリトークン（安全に保存）。",
+      "ServerAddress": "このサーバーの公開ベース URL（リンクやコールバックで使用）。",
       "SystemName": "UI やメールに表示されるシステム名。",
       "Theme": "UI テーマ（default / berry / air / modern）。",
       "TopUpLink": "ユーザーがクォータを購入・チャージするための外部リンク。",
@@ -225,6 +225,8 @@
       "WeChatServerAddress": "WeChat ログインリレー／サーバーのベース URL。",
       "WeChatServerToken": "WeChat 連携の検証トークン（安全に保管）。"
     },
+    "disabled": "無効",
+    "enabled": "有効",
     "groups": {
       "authentication": {
         "description": "ワークスペースでのユーザー登録とログイン方法を制御します。",
@@ -267,15 +269,20 @@
         "title": "ボット対策とセキュリティ"
       }
     },
+    "info_about": "{{key}} の情報",
     "loading": "オプションを読み込み中...",
+    "no_description": "この設定の説明はまだありません。",
     "no_options": "利用可能なオプションがないか、権限が不足しています。",
+    "option_value_aria": "{{key}} の値",
     "refresh": "更新",
     "save": "保存",
     "save_failed": "保存に失敗しました",
     "saved_message": "{{key}} を更新しました。",
     "saved_success": "設定を保存しました",
     "saving": "保存中...",
+    "select_value": "値を選択",
     "sensitive_hint": "保存済みの値は非表示です。上書きする場合は新しい値を入力してください。",
+    "sensitive_placeholder": "値は非表示です。更新するには入力してください",
     "title": "システム設定"
   }
 }

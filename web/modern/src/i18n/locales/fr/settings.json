@@ -208,12 +208,12 @@
       "QuotaRemindThreshold": "Seuil de rappel lorsque le quota restant est inférieur à la valeur indiquée.",
       "RegisterEnabled": "Interrupteur principal des inscriptions utilisateur. Désactivez pour bloquer les nouveaux comptes.",
       "RetryTimes": "Nombre de tentatives automatiques pour les erreurs amont transitoires.",
-      "ServerAddress": "URL publique de ce serveur (utilisée dans les liens/rappels).",
       "SMTPAccount": "Nom d'utilisateur ou adresse e-mail SMTP utilisé pour l'authentification.",
       "SMTPFrom": "Adresse d'expéditeur utilisée pour les e-mails sortants.",
       "SMTPPort": "Port du serveur SMTP (ex. 587 pour STARTTLS, 465 pour SMTPS).",
       "SMTPServer": "Nom d'hôte du serveur SMTP pour l'envoi d'e-mails.",
       "SMTPToken": "Mot de passe ou jeton SMTP utilisé pour s'authentifier (stocké de façon sécurisée).",
+      "ServerAddress": "URL publique de ce serveur (utilisée dans les liens/rappels).",
       "SystemName": "Nom d'affichage du système dans l'interface et les e-mails.",
       "Theme": "Thème UI (default, berry, air, modern).",
       "TopUpLink": "Lien externe permettant d'acheter ou recharger du quota.",
@@ -225,6 +225,8 @@
       "WeChatServerAddress": "URL de base du relais/serveur WeChat.",
       "WeChatServerToken": "Jeton de vérification pour l'intégration WeChat (stocké de façon sécurisée)."
     },
+    "disabled": "Désactivé",
+    "enabled": "Activé",
     "groups": {
       "authentication": {
         "description": "Contrôlez la façon dont les utilisateurs s'inscrivent et se connectent à votre espace de travail.",
@@ -267,15 +269,20 @@
         "title": "Anti-bot et sécurité"
       }
     },
+    "info_about": "Infos sur {{key}}",
     "loading": "Chargement des options...",
+    "no_description": "Aucune description disponible pour ce paramètre pour l’instant.",
     "no_options": "Aucune option disponible ou permissions insuffisantes.",
+    "option_value_aria": "Valeur de {{key}}",
     "refresh": "Actualiser",
     "save": "Enregistrer",
     "save_failed": "Échec de l'enregistrement",
     "saved_message": "{{key}} mis à jour avec succès.",
     "saved_success": "Paramètre enregistré",
     "saving": "Enregistrement...",
+    "select_value": "Sélectionner une valeur",
     "sensitive_hint": "La valeur stockée est masquée. Saisissez une nouvelle valeur pour remplacer le secret existant.",
+    "sensitive_placeholder": "Valeur masquée ; saisir pour mettre à jour",
     "title": "Paramètres système"
   }
 }

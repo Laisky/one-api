@@ -35,6 +35,16 @@
     "models": "Modèles",
     "no_items": "Aucun élément",
     "or": "Ou",
+    "pagination": {
+      "first_page": "Première page",
+      "last_page": "Dernière page",
+      "next_page": "Page suivante",
+      "page_num": "Page {{page}}",
+      "per_page": "Par page :",
+      "previous_page": "Page précédente",
+      "rows_per_page": "Lignes par page :",
+      "showing": "Affichage de {{start}}-{{end}} sur {{total}} éléments"
+    },
     "password": "Mot de passe",
     "playground": "Playground",
     "redemptions": "Remboursements",

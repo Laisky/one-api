@@ -208,12 +208,12 @@
       "QuotaRemindThreshold": "当剩余配额低于此值时，将提醒用户。",
       "RegisterEnabled": "用户注册总开关。关闭以停止所有新注册。",
       "RetryTimes": "上游请求出现瞬时错误时的自动重试次数。",
-      "ServerAddress": "此服务器的公共 Base URL（用于链接/回调）。",
       "SMTPAccount": "用于认证的 SMTP 用户名或帐户邮箱。",
       "SMTPFrom": "外发邮件中使用的发件人地址（例如 no-reply@yourdomain）。",
       "SMTPPort": "SMTP 服务器端口（例如 STARTTLS 为 587，SMTPS 为 465）。",
       "SMTPServer": "用于发送邮件的 SMTP 服务器主机名。",
       "SMTPToken": "用于认证的 SMTP 密码或应用令牌。安全存储，从不显示。",
+      "ServerAddress": "此服务器的公共 Base URL（用于链接/回调）。",
       "SystemName": "在 UI 和邮件中显示的系统显示名称。",
       "Theme": "UI 主题（default, berry, air, modern）。",
       "TopUpLink": "用户购买或充值配额的外部链接。",
@@ -225,6 +225,8 @@
       "WeChatServerAddress": "微信登录转发器/服务器 Base URL。",
       "WeChatServerToken": "微信服务器集成的验证令牌。安全存储，从不显示。"
     },
+    "disabled": "已禁用",
+    "enabled": "已启用",
     "groups": {
       "authentication": {
         "description": "控制用户如何注册和登录您的工作区。",
@@ -267,15 +269,20 @@
         "title": "反机器人与安全"
       }
     },
+    "info_about": "{{key}} 的说明",
     "loading": "正在加载选项...",
+    "no_description": "此设置暂无说明。",
     "no_options": "没有可用选项或权限不足。",
+    "option_value_aria": "{{key}} 的值",
     "refresh": "刷新",
     "save": "保存",
     "save_failed": "保存失败",
     "saved_message": "{{key}} 更新成功。",
     "saved_success": "设置已保存",
     "saving": "正在保存...",
+    "select_value": "选择值",
     "sensitive_hint": "存储的值已隐藏。输入新值以覆盖现有密钥。",
+    "sensitive_placeholder": "值已隐藏；输入以更新",
     "title": "系统设置"
   }
 }
