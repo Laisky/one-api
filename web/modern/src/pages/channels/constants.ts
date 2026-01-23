@@ -392,7 +392,9 @@ export const CHANNEL_TYPES: ChannelType[] = [
 export const CHANNEL_TYPES_WITH_DEDICATED_BASE_URL = new Set<number>([
   3, 50, 52,
 ]);
-export const CHANNEL_TYPES_WITH_CUSTOM_KEY_FIELD = new Set<number>([34]);
+export const CHANNEL_TYPES_WITH_CUSTOM_KEY_FIELD = new Set<number>([
+  33, 34, 42,
+]);
 
 export const OPENAI_COMPATIBLE_API_FORMAT_OPTIONS = [
   { value: "chat_completion", label: "ChatCompletion (default)" },

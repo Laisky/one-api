@@ -1,27 +1,21 @@
-import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { Form } from "@/components/ui/form";
-import { TooltipProvider } from "@/components/ui/tooltip";
-import { logEditPageLayout } from "@/dev/layout-debug";
-import { AlertCircle, Info } from "lucide-react";
-import { useEffect } from "react";
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Form } from '@/components/ui/form';
+import { TooltipProvider } from '@/components/ui/tooltip';
+import { logEditPageLayout } from '@/dev/layout-debug';
+import { AlertCircle, Info } from 'lucide-react';
+import { useEffect } from 'react';
 
-import { ChannelAdvancedSettings } from "./components/ChannelAdvancedSettings";
-import { ChannelBasicInfo } from "./components/ChannelBasicInfo";
-import { ChannelEndpointSettings } from "./components/ChannelEndpointSettings";
-import { ChannelMCPSettings } from "./components/ChannelMCPSettings";
-import { ChannelModelSettings } from "./components/ChannelModelSettings";
-import { ChannelSpecificConfig } from "./components/ChannelSpecificConfig";
-import { ChannelToolingSettings } from "./components/ChannelToolingSettings";
-import { ChannelTypeChangeDialog } from "./components/ChannelTypeChangeDialog";
-import { CHANNEL_TYPES } from "./constants";
-import { useChannelForm } from "./hooks/useChannelForm";
+import { ChannelAdvancedSettings } from './components/ChannelAdvancedSettings';
+import { ChannelBasicInfo } from './components/ChannelBasicInfo';
+import { ChannelEndpointSettings } from './components/ChannelEndpointSettings';
+import { ChannelMCPSettings } from './components/ChannelMCPSettings';
+import { ChannelModelSettings } from './components/ChannelModelSettings';
+import { ChannelSpecificConfig } from './components/ChannelSpecificConfig';
+import { ChannelToolingSettings } from './components/ChannelToolingSettings';
+import { ChannelTypeChangeDialog } from './components/ChannelTypeChangeDialog';
+import { CHANNEL_TYPES } from './constants';
+import { useChannelForm } from './hooks/useChannelForm';
 
 export function EditChannelPage() {
   const {
@@ -51,15 +45,13 @@ export function EditChannelPage() {
     cancelTypeChange,
   } = useChannelForm();
 
-  const selectedChannelType = CHANNEL_TYPES.find(
-    (t) => t.value === normalizedChannelType
-  );
+  const selectedChannelType = CHANNEL_TYPES.find((t) => t.value === normalizedChannelType);
   const shouldShowLoading = loading || (isEdit && !formInitialized);
 
   // Layout diagnostics
   useEffect(() => {
     if (!shouldShowLoading) {
-      logEditPageLayout("EditChannelPage");
+      logEditPageLayout('EditChannelPage');
     }
   }, [shouldShowLoading, watchType]);
 
@@ -69,7 +61,7 @@ export function EditChannelPage() {
         <Card>
           <CardContent className="flex items-center justify-center py-12">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-            <span className="ml-3">{tr("loading", "Loading channel...")}</span>
+            <span className="ml-3">{tr('loading', 'Loading channel...')}</span>
           </CardContent>
         </Card>
       </div>
@@ -85,18 +77,15 @@ export function EditChannelPage() {
   // RHF invalid handler
   const onInvalid = (errors: any) => {
     const firstKey = Object.keys(errors)[0];
-    const firstMsg =
-      errors[firstKey]?.message || "Please correct the highlighted fields.";
+    const firstMsg = errors[firstKey]?.message || 'Please correct the highlighted fields.';
     notify({
-      type: "error",
-      title: tr("validation.error_title", "Validation error"),
+      type: 'error',
+      title: tr('validation.error_title', 'Validation error'),
       message: String(firstMsg),
     });
-    const el = document.querySelector(
-      `[name="${firstKey}"]`
-    ) as HTMLElement | null;
+    const el = document.querySelector(`[name="${firstKey}"]`) as HTMLElement | null;
     if (el) {
-      el.scrollIntoView({ behavior: "smooth", block: "center" });
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
       (el as any).focus?.();
     }
   };
@@ -116,36 +105,23 @@ export function EditChannelPage() {
           onOpenChange={(open) => {
             if (!open) cancelTypeChange();
           }}
-          fromType={
-            pendingTypeChange ? getTypeName(pendingTypeChange.fromType) : ""
-          }
-          toType={
-            pendingTypeChange ? getTypeName(pendingTypeChange.toType) : ""
-          }
+          fromType={pendingTypeChange ? getTypeName(pendingTypeChange.fromType) : ''}
+          toType={pendingTypeChange ? getTypeName(pendingTypeChange.toType) : ''}
           onConfirm={confirmTypeChange}
           onCancel={cancelTypeChange}
           tr={tr}
         />
         <Card>
           <CardHeader>
-            <CardTitle>
-              {isEdit
-                ? tr("title.edit", "Edit Channel")
-                : tr("title.create", "Create Channel")}
-            </CardTitle>
+            <CardTitle>{isEdit ? tr('title.edit', 'Edit Channel') : tr('title.create', 'Create Channel')}</CardTitle>
             <CardDescription>
-              {isEdit
-                ? tr("description.edit", "Update channel configuration")
-                : tr("description.create", "Create a new API channel")}
+              {isEdit ? tr('description.edit', 'Update channel configuration') : tr('description.create', 'Create a new API channel')}
             </CardDescription>
             {selectedChannelType?.description && (
               <div className="flex items-center gap-2 p-3 bg-blue-50 border border-blue-200 rounded-lg">
                 <Info className="h-4 w-4 text-blue-600" />
                 <span className="text-sm text-blue-800">
-                  {tr(
-                    `channel_type.${selectedChannelType.value}.description`,
-                    selectedChannelType.description
-                  )}
+                  {tr(`channel_type.${selectedChannelType.value}.description`, selectedChannelType.description)}
                 </span>
               </div>
             )}
@@ -155,10 +131,7 @@ export function EditChannelPage() {
                 <span
                   className="text-sm text-yellow-800"
                   dangerouslySetInnerHTML={{
-                    __html: tr(
-                      `channel_type.${selectedChannelType.value}.tip`,
-                      selectedChannelType.tip
-                    ),
+                    __html: tr(`channel_type.${selectedChannelType.value}.tip`, selectedChannelType.tip),
                   }}
                 />
               </div>
@@ -166,10 +139,7 @@ export function EditChannelPage() {
           </CardHeader>
           <CardContent>
             <Form {...form}>
-              <form
-                onSubmit={form.handleSubmit(onSubmit, onInvalid)}
-                className="space-y-6"
-              >
+              <form onSubmit={form.handleSubmit(onSubmit, onInvalid)} className="space-y-6">
                 <ChannelBasicInfo
                   form={form}
                   groups={groups}
@@ -195,60 +165,33 @@ export function EditChannelPage() {
                   notify={notify}
                 />
 
-                <ChannelAdvancedSettings
-                  form={form}
-                  normalizedChannelType={normalizedChannelType}
-                  tr={tr}
-                />
+                <ChannelAdvancedSettings form={form} normalizedChannelType={normalizedChannelType} tr={tr} />
 
-                <ChannelEndpointSettings
-                  form={form}
-                  allEndpoints={allEndpoints}
-                  defaultEndpoints={defaultEndpoints}
-                  tr={tr}
-                />
+                <ChannelEndpointSettings form={form} allEndpoints={allEndpoints} defaultEndpoints={defaultEndpoints} tr={tr} />
 
-                <ChannelToolingSettings
-                  form={form}
-                  defaultTooling={defaultTooling}
-                  tr={tr}
-                  notify={notify}
-                />
+                <ChannelToolingSettings form={form} defaultTooling={defaultTooling} tr={tr} notify={notify} />
 
                 <ChannelMCPSettings form={form} tr={tr} />
 
-                {form.formState.errors.root && (
-                  <div className="text-sm text-destructive">
-                    {form.formState.errors.root.message}
-                  </div>
-                )}
+                {form.formState.errors.root && <div className="text-sm text-destructive">{form.formState.errors.root.message}</div>}
 
                 <div className="flex gap-2">
                   <Button type="submit" disabled={isSubmitting}>
                     {isSubmitting
                       ? isEdit
-                        ? tr("actions.updating", "Updating...")
-                        : tr("actions.creating", "Creating...")
+                        ? tr('actions.updating', 'Updating...')
+                        : tr('actions.creating', 'Creating...')
                       : isEdit
-                        ? tr("actions.update", "Update Channel")
-                        : tr("actions.create", "Create Channel")}
+                        ? tr('actions.update', 'Update Channel')
+                        : tr('actions.create', 'Create Channel')}
                   </Button>
                   {isEdit && (
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      onClick={testChannel}
-                      disabled={isSubmitting}
-                    >
-                      {tr("actions.test_channel", "Test Channel")}
+                    <Button type="button" variant="secondary" onClick={testChannel} disabled={isSubmitting}>
+                      {tr('actions.test_channel', 'Test Channel')}
                     </Button>
                   )}
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => window.history.back()}
-                  >
-                    {tr("actions.cancel", "Cancel")}
+                  <Button type="button" variant="outline" onClick={() => window.history.back()}>
+                    {tr('actions.cancel', 'Cancel')}
                   </Button>
                 </div>
               </form>
