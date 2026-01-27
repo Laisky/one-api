@@ -8,6 +8,8 @@ This manual provides instructions for configuring and using OpenTelemetry (otel)
   - [Menu](#menu)
   - [Configuration](#configuration)
     - [Example Setup](#example-setup)
+    - [Production Environment (Current)](#production-environment-current)
+    - [Data Flow Verification (Admin Checklist)](#data-flow-verification-admin-checklist)
   - [Metrics Reference](#metrics-reference)
     - [Relay Metrics](#relay-metrics)
     - [Channel Metrics](#channel-metrics)
@@ -17,9 +19,11 @@ This manual provides instructions for configuring and using OpenTelemetry (otel)
   - [Tracing Integration](#tracing-integration)
   - [Grafana Integration](#grafana-integration)
     - [1. Data Source Setup](#1-data-source-setup)
-    - [2. Dashboard Queries (Matching One-API Dashboard)](#2-dashboard-queries-matching-one-api-dashboard)
-    - [3. Visualization Tips](#3-visualization-tips)
-    - [3. Dashboard Template](#3-dashboard-template)
+    - [2. One-API Observability Dashboard](#2-one-api-observability-dashboard)
+      - [Dashboard Coverage Notes](#dashboard-coverage-notes)
+    - [3. Logs \& Traces (VictoriaLogs/VictoriaTraces)](#3-logs--traces-victorialogsvictoriatraces)
+    - [4. Dashboard Queries (Matching One-API Dashboard)](#4-dashboard-queries-matching-one-api-dashboard)
+    - [5. Visualization Tips](#5-visualization-tips)
 
 ## Configuration
 
@@ -43,6 +47,42 @@ export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
 export OTEL_SERVICE_NAME=one-api-prod
 export OTEL_ENVIRONMENT=production
 ```
+
+### Production Environment (Current)
+
+Use the production configuration below when deploying one-api in production:
+
+```bash
+export OTEL_ENABLED=true
+export OTEL_EXPORTER_OTLP_ENDPOINT=http://100.97.108.34:4318
+export OTEL_SERVICE_NAME=one-api
+export OTEL_ENVIRONMENT=production
+```
+
+### Data Flow Verification (Admin Checklist)
+
+Use this checklist to ensure one-api is emitting enough telemetry data for dashboards and alerts:
+
+1. **Confirm OTEL exporter availability**
+
+- The OTLP HTTP collector must accept data at `OTEL_EXPORTER_OTLP_ENDPOINT`.
+
+2. **Confirm metrics backend availability**
+
+- VictoriaMetrics (or Prometheus-compatible backend) must be reachable by Grafana.
+- Grafana data source should point to `http://<victoriametrics-host>:8428`.
+
+3. **Confirm metrics presence**
+
+- Query `one_api_relay_requests_total` and `one_api_http_requests_total` for recent data.
+
+4. **Confirm tracing presence**
+
+- Verify traces appear in the tracing backend (e.g., VictoriaTraces/Jaeger/Tempo).
+
+5. **Confirm log ingestion (optional)**
+
+- one-api logs are stored under `./logs/`. Ship them to VictoriaLogs/Loki to enable log panels.
 
 ## Metrics Reference
 
@@ -112,8 +152,54 @@ Additional attributes like `one_api.trace_id`, `one_api.url`, `one_api.method`, 
 
 1.  Install the **OpenTelemetry** or **Prometheus** data source in Grafana (depending on your backend, e.g., VictoriaMetrics or Jaeger).
 2.  If using VictoriaMetrics (recommended), add it as a Prometheus data source pointing to `http://<victoriametrics-host>:8428`.
+3.  (Optional) Add a tracing data source (VictoriaTraces/Jaeger/Tempo) for span and trace panels.
+4.  (Optional) Add a logging data source (VictoriaLogs/Loki) if you want to visualize request logs.
 
-### 2. Dashboard Queries (Matching One-API Dashboard)
+### 2. One-API Observability Dashboard
+
+The Grafana dashboard **One-API Observability (OTel)** provides a unified view of:
+
+- **Tenant usage**: tokens, quota consumption, usage by user and model.
+- **Relay performance**: request rates, success ratios, and latency percentiles.
+- **HTTP service health**: request counts, error rate, latency, and status code distribution.
+
+Open the dashboard in Grafana and ensure panels are not showing "No data". If they are, verify the data flow checklist above.
+
+#### Dashboard Coverage Notes
+
+The dashboard uses the following core metrics to approximate quota and usage where direct quota metrics are not available per user/model:
+
+- **User usage trend:** `one_api_user_tokens_total` (token consumption over time).
+- **User balance (remaining):** `one_api_user_balance` (current balance per user).
+- **Model usage trend:** `one_api_relay_tokens_total` (token usage by model).
+
+If you need strict quota accounting per user/model, ensure the backend emits per-user and per-model quota metrics and update the queries accordingly.
+
+### 3. Logs & Traces (VictoriaLogs/VictoriaTraces)
+
+To make request logs and traces visible in Grafana:
+
+1. **Install Grafana data source plugins**
+
+- VictoriaLogs data source plugin (for LogsQL queries).
+- VictoriaTraces data source plugin (or expose a Jaeger/Tempo-compatible query endpoint).
+
+2. **Configure data sources**
+
+- VictoriaLogs URL: `http://100.97.108.34:9428`
+- VictoriaTraces URL: `http://100.97.108.34:10428`
+
+3. **Retention policy (recommended)**
+
+- Set a retention period in the VictoriaLogs container, e.g. `-retentionPeriod=7d` or as required by compliance.
+
+Once the data sources are available, add panels for:
+
+- Log volume by level (info/warn/error).
+- Log search and drill-down (click to view raw log entries).
+- Trace overview (request latency distribution, trace samples by endpoint).
+
+### 4. Dashboard Queries (Matching One-API Dashboard)
 
 - **Total Requests (Overview Card):** `sum(increase(one_api_relay_requests_total[24h]))`
 - **Total Quota Used (Overview Card):** `sum(increase(one_api_relay_quota_used_total[24h]))`
@@ -121,425 +207,9 @@ Additional attributes like `one_api.trace_id`, `one_api.url`, `one_api.method`, 
 - **Usage by User (Stacked Chart):** `sum(increase(one_api_relay_requests_total[24h])) by (user_id)`
 - **Site Quota Usage Ratio:** `one_api_site_used_quota / one_api_site_total_quota`
 
-### 3. Visualization Tips
+### 5. Visualization Tips
 
 - **Request Volume by Model:** `sum(rate(one_api_relay_requests_total[5m])) by (model)`
 - **Success Rate by Channel:** `sum(rate(one_api_relay_requests_total{success="true"}[5m])) by (channel_id) / sum(rate(one_api_relay_requests_total[5m])) by (channel_id)`
 - **Token Usage Over Time:** `sum(rate(one_api_relay_tokens_total[5m])) by (token_type)`
 - **P95 Latency:** `histogram_quantile(0.95, sum(rate(one_api_relay_request_duration_seconds_bucket[5m])) by (le, model))`
-
-### 3. Dashboard Template
-
-You can import the following JSON as a starting point for your One-API dashboard. This dashboard includes both HTTP service metrics and business-specific relay/quota metrics.
-
-<details>
-<summary>Click to expand Dashboard JSON</summary>
-
-```json
-{
-  "annotations": {
-    "list": [
-      {
-        "builtIn": 1,
-        "datasource": {
-          "type": "grafana",
-          "uid": "-- Grafana --"
-        },
-        "enable": true,
-        "hide": true,
-        "iconColor": "rgba(0, 211, 255, 1)",
-        "name": "Annotations & Alerts",
-        "type": "dashboard"
-      }
-    ]
-  },
-  "editable": true,
-  "fiscalYearStartMonth": 0,
-  "graphTooltip": 1,
-  "links": [],
-  "panels": [
-    {
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
-      "id": 100,
-      "title": "Site Overview",
-      "type": "row"
-    },
-    {
-      "datasource": "VictoriaMetrics",
-      "fieldConfig": {
-        "defaults": {
-          "color": { "mode": "thresholds" },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [{ "color": "green", "value": null }]
-          },
-          "unit": "none"
-        }
-      },
-      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 1 },
-      "id": 101,
-      "options": {
-        "colorMode": "value",
-        "graphMode": "area",
-        "justifyMode": "auto",
-        "orientation": "auto",
-        "reduceOptions": {
-          "calcs": ["lastNotNull"],
-          "fields": "",
-          "values": false
-        },
-        "textMode": "auto"
-      },
-      "targets": [
-        {
-          "expr": "one_api_site_total_users",
-          "legendFormat": "Total Users",
-          "refId": "A"
-        }
-      ],
-      "title": "Total Users",
-      "type": "stat"
-    },
-    {
-      "datasource": "VictoriaMetrics",
-      "fieldConfig": {
-        "defaults": {
-          "color": { "mode": "thresholds" },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [{ "color": "green", "value": null }]
-          },
-          "unit": "none"
-        }
-      },
-      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 1 },
-      "id": 102,
-      "options": {
-        "colorMode": "value",
-        "graphMode": "area",
-        "justifyMode": "auto",
-        "orientation": "auto",
-        "reduceOptions": {
-          "calcs": ["lastNotNull"],
-          "fields": "",
-          "values": false
-        },
-        "textMode": "auto"
-      },
-      "targets": [
-        {
-          "expr": "one_api_site_active_users",
-          "legendFormat": "Active Users",
-          "refId": "A"
-        }
-      ],
-      "title": "Active Users",
-      "type": "stat"
-    },
-    {
-      "datasource": "VictoriaMetrics",
-      "fieldConfig": {
-        "defaults": {
-          "color": { "mode": "thresholds" },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              { "color": "green", "value": null },
-              { "color": "yellow", "value": 70 },
-              { "color": "red", "value": 90 }
-            ]
-          },
-          "unit": "percentunit"
-        }
-      },
-      "gridPos": { "h": 4, "w": 12, "x": 12, "y": 1 },
-      "id": 103,
-      "options": {
-        "orientation": "horizontal",
-        "reduceOptions": {
-          "calcs": ["lastNotNull"],
-          "fields": "",
-          "values": false
-        },
-        "showThresholdLabels": false,
-        "showThresholdMarkers": true
-      },
-      "targets": [
-        {
-          "expr": "one_api_site_used_quota / one_api_site_total_quota",
-          "legendFormat": "Quota Usage",
-          "refId": "A"
-        }
-      ],
-      "title": "Site Quota Usage Ratio",
-      "type": "gauge"
-    },
-    {
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 5 },
-      "id": 200,
-      "title": "Relay Performance",
-      "type": "row"
-    },
-    {
-      "datasource": "VictoriaMetrics",
-      "fieldConfig": {
-        "defaults": {
-          "color": { "mode": "palette-classic" },
-          "custom": { "drawStyle": "line", "fillOpacity": 10, "lineWidth": 2 },
-          "unit": "ops"
-        }
-      },
-      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 6 },
-      "id": 201,
-      "options": {
-        "legend": { "displayMode": "list", "placement": "bottom" },
-        "tooltip": { "mode": "multi" }
-      },
-      "targets": [
-        {
-          "expr": "sum(rate(one_api_relay_requests_total{model=~\"$model\"}[5m])) by (model)",
-          "legendFormat": "{{model}}",
-          "refId": "A"
-        }
-      ],
-      "title": "Relay RPS by Model",
-      "type": "timeseries"
-    },
-    {
-      "datasource": "VictoriaMetrics",
-      "fieldConfig": {
-        "defaults": {
-          "color": { "mode": "thresholds" },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              { "color": "red", "value": null },
-              { "color": "yellow", "value": 95 },
-              { "color": "green", "value": 99 }
-            ]
-          },
-          "unit": "percent"
-        }
-      },
-      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 6 },
-      "id": 202,
-      "options": {
-        "legend": { "displayMode": "list", "placement": "bottom" }
-      },
-      "targets": [
-        {
-          "expr": "sum(rate(one_api_relay_requests_total{success=\"true\", model=~\"$model\"}[5m])) by (model) / sum(rate(one_api_relay_requests_total{model=~\"$model\"}[5m])) by (model) * 100",
-          "legendFormat": "{{model}}",
-          "refId": "A"
-        }
-      ],
-      "title": "Relay Success Rate (%)",
-      "type": "timeseries"
-    },
-    {
-      "datasource": "VictoriaMetrics",
-      "fieldConfig": {
-        "defaults": {
-          "color": { "mode": "palette-classic" },
-          "unit": "s"
-        }
-      },
-      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 6 },
-      "id": 203,
-      "options": {
-        "legend": { "displayMode": "list", "placement": "bottom" }
-      },
-      "targets": [
-        {
-          "expr": "histogram_quantile(0.95, sum(rate(one_api_relay_request_duration_seconds_bucket{model=~\"$model\"}[5m])) by (le, model))",
-          "legendFormat": "{{model}} (P95)",
-          "refId": "A"
-        }
-      ],
-      "title": "Relay P95 Latency",
-      "type": "timeseries"
-    },
-    {
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 14 },
-      "id": 300,
-      "title": "Usage & Billing",
-      "type": "row"
-    },
-    {
-      "datasource": "VictoriaMetrics",
-      "fieldConfig": {
-        "defaults": {
-          "color": { "mode": "palette-classic" },
-          "custom": { "stacking": { "mode": "normal" } },
-          "unit": "short"
-        }
-      },
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 15 },
-      "id": 301,
-      "options": {
-        "legend": { "displayMode": "table", "placement": "right" }
-      },
-      "targets": [
-        {
-          "expr": "sum(rate(one_api_relay_tokens_total{model=~\"$model\"}[5m])) by (token_type)",
-          "legendFormat": "{{token_type}}",
-          "refId": "A"
-        }
-      ],
-      "title": "Token Usage (Prompt vs Completion)",
-      "type": "timeseries"
-    },
-    {
-      "datasource": "VictoriaMetrics",
-      "fieldConfig": {
-        "defaults": {
-          "color": { "mode": "palette-classic" },
-          "unit": "decbytes"
-        }
-      },
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 15 },
-      "id": 302,
-      "options": {
-        "legend": { "displayMode": "table", "placement": "right" }
-      },
-      "targets": [
-        {
-          "expr": "sum(rate(one_api_relay_quota_used_total{model=~\"$model\"}[5m])) by (model)",
-          "legendFormat": "{{model}}",
-          "refId": "A"
-        }
-      ],
-      "title": "Quota Consumption by Model",
-      "type": "timeseries"
-    },
-    {
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 23 },
-      "id": 400,
-      "title": "HTTP Service Overview",
-      "type": "row"
-    },
-    {
-      "datasource": "VictoriaMetrics",
-      "fieldConfig": {
-        "defaults": {
-          "color": { "mode": "palette-classic" },
-          "unit": "ops"
-        }
-      },
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 24 },
-      "id": 1,
-      "targets": [
-        {
-          "expr": "sum(rate(http_server_request_duration_seconds_count{service_name=\"one-api\", http_route=~\"$route\"}[5m]))",
-          "legendFormat": "RPS",
-          "refId": "A"
-        }
-      ],
-      "title": "HTTP Requests per Second",
-      "type": "timeseries"
-    },
-    {
-      "datasource": "VictoriaMetrics",
-      "fieldConfig": {
-        "defaults": {
-          "color": { "mode": "thresholds" },
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              { "color": "green", "value": null },
-              { "color": "red", "value": 5 }
-            ]
-          },
-          "unit": "percent"
-        }
-      },
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 24 },
-      "id": 2,
-      "targets": [
-        {
-          "expr": "sum(rate(http_server_request_duration_seconds_count{service_name=\"one-api\", http_response_status_code=~\"5..\"}[5m])) / sum(rate(http_server_request_duration_seconds_count{service_name=\"one-api\"}[5m])) * 100",
-          "legendFormat": "5xx %",
-          "refId": "A"
-        }
-      ],
-      "title": "HTTP Error Rate (%)",
-      "type": "timeseries"
-    },
-    {
-      "datasource": "VictoriaMetrics",
-      "fieldConfig": {
-        "defaults": {
-          "color": { "mode": "palette-classic" },
-          "unit": "ms"
-        }
-      },
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 32 },
-      "id": 3,
-      "targets": [
-        {
-          "expr": "sum(rate(http_server_request_duration_seconds_sum{service_name=\"one-api\", http_route=~\"$route\"}[5m])) / sum(rate(http_server_request_duration_seconds_count{service_name=\"one-api\", http_route=~\"$route\"}[5m])) * 1000",
-          "legendFormat": "{{http_route}}",
-          "refId": "A"
-        }
-      ],
-      "title": "Average HTTP Latency (ms)",
-      "type": "timeseries"
-    },
-    {
-      "datasource": "VictoriaMetrics",
-      "fieldConfig": {
-        "defaults": {
-          "color": { "mode": "palette-classic" },
-          "unit": "ops"
-        }
-      },
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 32 },
-      "id": 6,
-      "targets": [
-        {
-          "expr": "sum(rate(http_server_request_duration_seconds_count{service_name=\"one-api\"}[5m])) by (http_response_status_code)",
-          "legendFormat": "{{http_response_status_code}}",
-          "refId": "A"
-        }
-      ],
-      "title": "Status Code Distribution",
-      "type": "timeseries"
-    }
-  ],
-  "refresh": "10s",
-  "schemaVersion": 40,
-  "tags": ["one-api", "opentelemetry", "business"],
-  "templating": {
-    "list": [
-      {
-        "datasource": "VictoriaMetrics",
-        "includeAll": true,
-        "multi": true,
-        "name": "route",
-        "query": "label_values(http_server_request_duration_seconds_count{service_name=\"one-api\"}, http_route)",
-        "refresh": 1,
-        "type": "query"
-      },
-      {
-        "datasource": "VictoriaMetrics",
-        "includeAll": true,
-        "multi": true,
-        "name": "model",
-        "query": "label_values(one_api_relay_requests_total, model)",
-        "refresh": 1,
-        "type": "query"
-      }
-    ]
-  },
-  "time": { "from": "now-24h", "to": "now" },
-  "title": "One-API Comprehensive Overview",
-  "uid": "one-api-comprehensive",
-  "version": 1
-}
-```
-
-</details>
