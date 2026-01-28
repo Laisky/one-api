@@ -106,6 +106,8 @@ func getPromptTokens(ctx context.Context, textRequest *relaymodel.GeneralOpenAIR
 	return 0
 }
 
+// getPreConsumedQuota calculates the estimated pre-consumed quota given a GeneralOpenAIRequest,
+// promptTokens, ratio, and completionRatio and returns the computed int64 quota.
 func getPreConsumedQuota(textRequest *relaymodel.GeneralOpenAIRequest, promptTokens int, ratio float64, completionRatio float64) int64 {
 	promptQuota := float64(config.PreConsumedQuota+int64(promptTokens)) * ratio
 	completionQuota := 0.0
@@ -119,6 +121,9 @@ func getPreConsumedQuota(textRequest *relaymodel.GeneralOpenAIRequest, promptTok
 	return int64(promptQuota + completionQuota)
 }
 
+// preConsumeQuota handles pre-consuming quota using gin.Context, the GeneralOpenAIRequest,
+// promptTokens, ratio, completionRatio, and meta.Meta, and returns the preConsumed int64
+// and a possible *relaymodel.ErrorWithStatusCode.
 func preConsumeQuota(c *gin.Context, textRequest *relaymodel.GeneralOpenAIRequest, promptTokens int, ratio float64, completionRatio float64, meta *meta.Meta) (int64, *relaymodel.ErrorWithStatusCode) {
 	ctx := gmw.Ctx(c)
 	lg := gmw.GetLogger(c)

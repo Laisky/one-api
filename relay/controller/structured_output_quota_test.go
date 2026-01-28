@@ -23,6 +23,8 @@ func getTestModelRatio(modelName string, channelType int) float64 {
 	return 2.5 * 0.5 // Default quota pricing (2.5 * MilliTokensUsd)
 }
 
+// getTestCompletionRatio returns the completion ratio for the given model and channel type in tests,
+// defaulting to 1.0 when no adaptor is found.
 func getTestCompletionRatio(modelName string, channelType int) float64 {
 	apiType := channeltype.ToAPIType(channelType)
 	if adaptor := relay.GetAdaptor(apiType); adaptor != nil {

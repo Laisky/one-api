@@ -2,7 +2,6 @@ package controller
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 
 	"github.com/Laisky/errors/v2"
@@ -21,9 +20,13 @@ import (
 )
 
 // preConsumeClaudeMessagesQuota pre-consumes quota for Claude Messages API requests.
+// Parameters: request is the Claude request, promptTokens is the estimated prompt token count,
+// ratio is the model pricing ratio, completionRatio is the output/input price multiplier, meta contains request metadata.
+// Returns: the pre-consumed quota amount and any error encountered.
 func preConsumeClaudeMessagesQuota(c *gin.Context, request *ClaudeMessagesRequest, promptTokens int, ratio float64, completionRatio float64, meta *metalib.Meta) (int64, *relaymodel.ErrorWithStatusCode) {
 	// Use similar logic to ChatCompletion pre-consumption
 	ctx := gmw.Ctx(c)
+	lg := gmw.GetLogger(c)
 	promptQuota := float64(promptTokens) * ratio
 	completionQuota := 0.0
 	if request.MaxTokens > 0 {
@@ -54,7 +57,9 @@ func preConsumeClaudeMessagesQuota(c *gin.Context, request *ClaudeMessagesReques
 		// in this case, we do not pre-consume quota
 		// because the user and token have enough quota
 		baseQuota = 0
-		gmw.GetLogger(c).Info(fmt.Sprintf("user %d has enough quota %d, trusted and no need to pre-consume", meta.UserId, userQuota))
+		lg.Info("user has enough quota, trusted and no need to pre-consume",
+			zap.Int("user_id", meta.UserId),
+			zap.Int64("user_quota", userQuota))
 	}
 	if baseQuota > 0 {
 		err := model.PreConsumeTokenQuota(ctx, meta.TokenId, baseQuota)
@@ -63,7 +68,7 @@ func preConsumeClaudeMessagesQuota(c *gin.Context, request *ClaudeMessagesReques
 		}
 	}
 
-	gmw.GetLogger(c).Debug("pre-consumed quota for Claude Messages",
+	lg.Debug("pre-consumed quota for Claude Messages",
 		zap.Int64("quota", baseQuota),
 		zap.Float64("ratio", ratio))
 	return baseQuota, nil
@@ -73,9 +78,10 @@ func preConsumeClaudeMessagesQuota(c *gin.Context, request *ClaudeMessagesReques
 // Parameters: ctx/requestId/traceId identify the request, usage/meta/request carry usage metadata, ratio/preConsumedQuota/incrementalCharged/modelRatio/groupRatio/channelCompletionRatio drive billing.
 // Returns: the final quota charged for the request.
 func postConsumeClaudeMessagesQuotaWithTraceID(ctx context.Context, requestId string, traceId string, usage *relaymodel.Usage, meta *metalib.Meta, request *ClaudeMessagesRequest, ratio float64, preConsumedQuota int64, incrementalCharged int64, modelRatio float64, groupRatio float64, channelCompletionRatio map[string]float64) int64 {
+	lg := gmw.GetLogger(ctx)
 	if usage == nil {
 		// Context may be detached; log with context if available
-		gmw.GetLogger(ctx).Warn("usage is nil for Claude Messages API")
+		lg.Warn("usage is nil for Claude Messages API")
 		return 0
 	}
 
@@ -133,7 +139,7 @@ func postConsumeClaudeMessagesQuotaWithTraceID(ctx context.Context, requestId st
 	})
 
 	// Log with context if available
-	gmw.GetLogger(ctx).Debug("Claude Messages quota with trace ID",
+	lg.Debug("Claude Messages quota with trace ID",
 		zap.Int64("pre_consumed", preConsumedQuota),
 		zap.Int64("actual", quota),
 		zap.Int64("difference", quotaDelta),
