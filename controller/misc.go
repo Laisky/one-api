@@ -7,6 +7,8 @@ import (
 	"strconv"
 	"strings"
 
+	gmw "github.com/Laisky/gin-middlewares/v7"
+	"github.com/Laisky/zap"
 	"github.com/gin-gonic/gin"
 
 	"github.com/songquanpeng/one-api/common"
@@ -143,7 +145,9 @@ func SendEmailVerification(c *gin.Context) {
 }
 
 // SendPasswordResetEmail sends a password reset link to the supplied email address when registered.
+// It returns a success response regardless of whether the email is registered to prevent user enumeration.
 func SendPasswordResetEmail(c *gin.Context) {
+	lg := gmw.GetLogger(c)
 	email := c.Query("email")
 	if err := common.Validate.Var(email, "required,email"); err != nil {
 		c.JSON(http.StatusOK, gin.H{
@@ -152,20 +156,15 @@ func SendPasswordResetEmail(c *gin.Context) {
 		})
 		return
 	}
-	if !model.IsEmailAlreadyTaken(email) {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": "The email address is not registered",
-		})
-		return
-	}
-	code := common.GenerateVerificationCode(0)
-	common.RegisterVerificationCodeWithKey(email, code, common.PasswordResetPurpose)
-	link := fmt.Sprintf("%s/user/reset?email=%s&token=%s", config.ServerAddress, email, code)
-	subject := fmt.Sprintf("%s 密码重置", config.SystemName)
-	content := message.EmailTemplate(
-		subject,
-		fmt.Sprintf(`
+
+	if model.IsEmailAlreadyTaken(email) {
+		code := common.GenerateVerificationCode(0)
+		common.RegisterVerificationCodeWithKey(email, code, common.PasswordResetPurpose)
+		link := fmt.Sprintf("%s/user/reset?email=%s&token=%s", config.ServerAddress, email, code)
+		subject := fmt.Sprintf("%s 密码重置", config.SystemName)
+		content := message.EmailTemplate(
+			subject,
+			fmt.Sprintf(`
 			<p>Hello!</p>
 			<p>You are resetting your password for %s.</p>
 			<p>Please click the button below to reset your password:</p>
@@ -176,15 +175,19 @@ func SendPasswordResetEmail(c *gin.Context) {
 			<p style="background-color: #f8f8f8; padding: 10px; border-radius: 4px; word-break: break-all;">%s</p>
 			<p style="color: #666;">The reset link is valid for %d minutes. If you didn't request this, please ignore.</p>
 		`, config.SystemName, link, link, common.VerificationValidMinutes),
-	)
-	err := message.SendEmail(subject, email, content)
-	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": sendEmailFailedPrefix + err.Error(),
-		})
-		return
+		)
+
+		// Send email in a goroutine to prevent timing attacks and improve responsiveness.
+		go func() {
+			err := message.SendEmail(subject, email, content)
+			if err != nil {
+				lg.Error("failed to send password reset email", zap.Error(err), zap.String("email", email))
+			}
+		}()
+	} else {
+		lg.Info("password reset requested for non-existent email", zap.String("email", email))
 	}
+
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
