@@ -60,17 +60,17 @@ func TestCountTokenMessages_AudioAccumulationBug(t *testing.T) {
 	// Roles: user(1), assistant(1), user(1) = 3
 	// Contents:
 	//   msg 1: audio (100 tokens)
-	//   msg 2: "Hello" (1 token)
+	//   msg 2: "Hello" (2 tokens)
 	//   msg 3: "How are you?" (3 tokens)
-	// Total content tokens: 100 + 1 + 3 = 104
+	// Total content tokens: 100 + 2 + 3 = 105
 	// Prime: 3
-	// Total: 9 + 3 + 104 + 3 = 119
+	// Total: 9 + 3 + 105 + 3 = 120
 	//
 	// BUT because of the bug:
 	// Msg 1: tokenNum += 3. audioTokens = 100. totalAudioTokens = 100. tokenNum += 100. role = 1. -> 104
-	// Msg 2: tokenNum += 3. "Hello" = 1. totalAudioTokens = 100. tokenNum += 100. role = 1. -> 104 + 105 = 209
-	// Msg 3: tokenNum += 3. "How are you?" = 3. totalAudioTokens = 100. tokenNum += 100. role = 1. -> 209 + 107 = 316
-	// Total: 316 + 3 = 319
+	// Msg 2: tokenNum += 3. "Hello" = 2. totalAudioTokens = 100. tokenNum += 100. role = 1. -> 104 + 106 = 210
+	// Msg 3: tokenNum += 3. "How are you?" = 3. totalAudioTokens = 100. tokenNum += 100. role = 1. -> 210 + 107 = 317
+	// Total: 317 + 3 = 320
 
 	ctx := context.Background()
 	tokenCount := CountTokenMessages(ctx, messages, "gpt-4o")
