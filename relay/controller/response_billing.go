@@ -60,12 +60,13 @@ func preConsumeResponseAPIQuota(
 
 // calculateResponseAPIPreconsumeQuota calculates the estimated quota to pre-consume for Response API requests
 func calculateResponseAPIPreconsumeQuota(promptTokens int, maxOutputTokens *int, inputRatio float64, outputRatio float64, background bool) int64 {
-	preConsumedTokens := int64(promptTokens)
+	promptQuota := float64(promptTokens) * inputRatio
+	completionQuota := 0.0
 	if maxOutputTokens != nil {
-		preConsumedTokens += int64(*maxOutputTokens)
+		completionQuota = float64(*maxOutputTokens) * outputRatio
 	}
 
-	baseQuota := int64(float64(preConsumedTokens) * inputRatio)
+	baseQuota := int64(promptQuota + completionQuota)
 	if inputRatio != 0 && baseQuota <= 0 {
 		baseQuota = 1
 	}

@@ -133,12 +133,13 @@ func relayResponseAPIThroughChat(c *gin.Context, meta *metalib.Meta, responseAPI
 	channelModelRatio, channelCompletionRatio := getChannelRatios(c)
 	pricingAdaptor := relay.GetAdaptor(meta.ChannelType)
 	modelRatio := pricing.GetModelRatioWithThreeLayers(chatRequest.Model, channelModelRatio, pricingAdaptor)
+	completionRatio := pricing.GetCompletionRatioWithThreeLayers(chatRequest.Model, channelCompletionRatio, pricingAdaptor)
 	groupRatio := c.GetFloat64(ctxkey.ChannelRatio)
 	ratio := modelRatio * groupRatio
 
 	promptTokens := getPromptTokens(gmw.Ctx(c), chatRequest, meta.Mode)
 	meta.PromptTokens = promptTokens
-	preConsumedQuota, bizErr := preConsumeQuota(c, chatRequest, promptTokens, ratio, meta)
+	preConsumedQuota, bizErr := preConsumeQuota(c, chatRequest, promptTokens, ratio, completionRatio, meta)
 	if bizErr != nil {
 		lg.Warn("preConsumeQuota failed",
 			zap.Error(bizErr.RawError),
@@ -304,7 +305,7 @@ func relayResponseAPIThroughChat(c *gin.Context, meta *metalib.Meta, responseAPI
 	// Record provisional quota usage for reconciliation
 	if requestId := c.GetString(ctxkey.RequestId); requestId != "" {
 		quotaId := c.GetInt(ctxkey.Id)
-		estimated := getPreConsumedQuota(chatRequest, promptTokens, ratio)
+		estimated := getPreConsumedQuota(chatRequest, promptTokens, ratio, completionRatio)
 		if err := model.UpdateUserRequestCostQuotaByRequestID(quotaId, requestId, estimated); err != nil {
 			lg.Warn("record provisional user request cost failed", zap.Error(err), zap.String("request_id", requestId))
 		}

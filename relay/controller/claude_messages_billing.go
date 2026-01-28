@@ -3,7 +3,6 @@ package controller
 import (
 	"context"
 	"fmt"
-	"math"
 	"net/http"
 
 	"github.com/Laisky/errors/v2"
@@ -18,19 +17,20 @@ import (
 	"github.com/songquanpeng/one-api/relay/billing"
 	metalib "github.com/songquanpeng/one-api/relay/meta"
 	relaymodel "github.com/songquanpeng/one-api/relay/model"
-	"github.com/songquanpeng/one-api/relay/pricing"
+	quotautil "github.com/songquanpeng/one-api/relay/quota"
 )
 
 // preConsumeClaudeMessagesQuota pre-consumes quota for Claude Messages API requests.
-func preConsumeClaudeMessagesQuota(c *gin.Context, request *ClaudeMessagesRequest, promptTokens int, ratio float64, meta *metalib.Meta) (int64, *relaymodel.ErrorWithStatusCode) {
+func preConsumeClaudeMessagesQuota(c *gin.Context, request *ClaudeMessagesRequest, promptTokens int, ratio float64, completionRatio float64, meta *metalib.Meta) (int64, *relaymodel.ErrorWithStatusCode) {
 	// Use similar logic to ChatCompletion pre-consumption
 	ctx := gmw.Ctx(c)
-	preConsumedTokens := int64(promptTokens)
+	promptQuota := float64(promptTokens) * ratio
+	completionQuota := 0.0
 	if request.MaxTokens > 0 {
-		preConsumedTokens += int64(request.MaxTokens)
+		completionQuota = float64(request.MaxTokens) * ratio * completionRatio
 	}
 
-	baseQuota := int64(float64(preConsumedTokens) * ratio)
+	baseQuota := int64(promptQuota + completionQuota)
 	if ratio != 0 && baseQuota <= 0 {
 		baseQuota = 1
 	}
@@ -65,7 +65,6 @@ func preConsumeClaudeMessagesQuota(c *gin.Context, request *ClaudeMessagesReques
 
 	gmw.GetLogger(c).Debug("pre-consumed quota for Claude Messages",
 		zap.Int64("quota", baseQuota),
-		zap.Int("tokens", int(preConsumedTokens)),
 		zap.Float64("ratio", ratio))
 	return baseQuota, nil
 }
@@ -80,41 +79,23 @@ func postConsumeClaudeMessagesQuotaWithTraceID(ctx context.Context, requestId st
 		return 0
 	}
 
-	// Use three-layer pricing system for completion ratio
 	pricingAdaptor := relay.GetAdaptor(meta.ChannelType)
-	completionRatio := pricing.GetCompletionRatioWithThreeLayers(request.Model, channelCompletionRatio, pricingAdaptor)
-	promptTokens := usage.PromptTokens
-	completionTokens := usage.CompletionTokens
+	computeResult := quotautil.Compute(quotautil.ComputeInput{
+		Usage:                  usage,
+		ModelName:              request.Model,
+		ModelRatio:             modelRatio,
+		GroupRatio:             groupRatio,
+		ChannelCompletionRatio: channelCompletionRatio,
+		PricingAdaptor:         pricingAdaptor,
+	})
 
-	// Calculate base quota
-	baseQuota := int64(math.Ceil((float64(promptTokens) + float64(completionTokens)*completionRatio) * ratio))
-
-	// No structured output surcharge
-	quota := baseQuota + usage.ToolsCost
-	if ratio != 0 && quota <= 0 {
-		quota = 1
-	}
-
-	totalTokens := promptTokens + completionTokens
+	quota := computeResult.TotalQuota
+	totalTokens := computeResult.PromptTokens + computeResult.CompletionTokens
 	if totalTokens == 0 {
-		// in this case, must be some error happened
-		// we cannot just return, because we may have to return the pre-consumed quota
 		quota = 0
 	}
 
-	// Extract cache token counts from usage details
-	cachedPromptTokens := 0
-	if usage.PromptTokensDetails != nil {
-		cachedPromptTokens = usage.PromptTokensDetails.CachedTokens
-	}
-	cachedCompletionTokens := 0
-	if usage.CompletionTokensDetails != nil {
-		cachedCompletionTokens = usage.CompletionTokensDetails.CachedTokens
-	}
-
-	cacheWrite5mTokens := usage.CacheWrite5mTokens
-	cacheWrite1hTokens := usage.CacheWrite1hTokens
-	metadata := model.AppendCacheWriteTokensMetadata(nil, cacheWrite5mTokens, cacheWrite1hTokens)
+	metadata := model.AppendCacheWriteTokensMetadata(nil, usage.CacheWrite5mTokens, usage.CacheWrite1hTokens)
 
 	// Use centralized detailed billing function with explicit trace ID
 	quotaDelta := quota - preConsumedQuota - incrementalCharged
@@ -131,21 +112,21 @@ func postConsumeClaudeMessagesQuotaWithTraceID(ctx context.Context, requestId st
 		TotalQuota:             quota,
 		UserId:                 meta.UserId,
 		ChannelId:              meta.ChannelId,
-		PromptTokens:           promptTokens,
-		CompletionTokens:       completionTokens,
-		ModelRatio:             modelRatio,
+		PromptTokens:           computeResult.PromptTokens,
+		CompletionTokens:       computeResult.CompletionTokens,
+		ModelRatio:             computeResult.UsedModelRatio,
 		GroupRatio:             groupRatio,
 		ModelName:              request.Model,
 		TokenName:              meta.TokenName,
 		IsStream:               meta.IsStream,
 		StartTime:              meta.StartTime,
 		SystemPromptReset:      false,
-		CompletionRatio:        completionRatio,
+		CompletionRatio:        computeResult.UsedCompletionRatio,
 		ToolsCost:              usage.ToolsCost,
-		CachedPromptTokens:     cachedPromptTokens,
-		CachedCompletionTokens: cachedCompletionTokens,
-		CacheWrite5mTokens:     cacheWrite5mTokens,
-		CacheWrite1hTokens:     cacheWrite1hTokens,
+		CachedPromptTokens:     computeResult.CachedPromptTokens,
+		CachedCompletionTokens: computeResult.CachedCompletionTokens,
+		CacheWrite5mTokens:     usage.CacheWrite5mTokens,
+		CacheWrite1hTokens:     usage.CacheWrite1hTokens,
 		Metadata:               metadata,
 		RequestId:              requestId,
 		TraceId:                traceId,

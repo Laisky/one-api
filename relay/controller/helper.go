@@ -106,23 +106,23 @@ func getPromptTokens(ctx context.Context, textRequest *relaymodel.GeneralOpenAIR
 	return 0
 }
 
-func getPreConsumedQuota(textRequest *relaymodel.GeneralOpenAIRequest, promptTokens int, ratio float64) int64 {
-	preConsumedTokens := config.PreConsumedQuota + int64(promptTokens)
+func getPreConsumedQuota(textRequest *relaymodel.GeneralOpenAIRequest, promptTokens int, ratio float64, completionRatio float64) int64 {
+	promptQuota := float64(config.PreConsumedQuota+int64(promptTokens)) * ratio
+	completionQuota := 0.0
 	// Prefer max_completion_tokens; fall back to deprecated max_tokens
 	if textRequest.MaxCompletionTokens != nil && *textRequest.MaxCompletionTokens > 0 {
-		preConsumedTokens += int64(*textRequest.MaxCompletionTokens)
+		completionQuota = float64(*textRequest.MaxCompletionTokens) * ratio * completionRatio
 	} else if textRequest.MaxTokens != 0 {
-		preConsumedTokens += int64(textRequest.MaxTokens)
+		completionQuota = float64(textRequest.MaxTokens) * ratio * completionRatio
 	}
 
-	baseQuota := int64(float64(preConsumedTokens) * ratio)
-	return baseQuota
+	return int64(promptQuota + completionQuota)
 }
 
-func preConsumeQuota(c *gin.Context, textRequest *relaymodel.GeneralOpenAIRequest, promptTokens int, ratio float64, meta *meta.Meta) (int64, *relaymodel.ErrorWithStatusCode) {
+func preConsumeQuota(c *gin.Context, textRequest *relaymodel.GeneralOpenAIRequest, promptTokens int, ratio float64, completionRatio float64, meta *meta.Meta) (int64, *relaymodel.ErrorWithStatusCode) {
 	ctx := gmw.Ctx(c)
 	lg := gmw.GetLogger(c)
-	preConsumedQuota := getPreConsumedQuota(textRequest, promptTokens, ratio)
+	preConsumedQuota := getPreConsumedQuota(textRequest, promptTokens, ratio, completionRatio)
 
 	tokenQuota := c.GetInt64(ctxkey.TokenQuota)
 	tokenQuotaUnlimited := c.GetBool(ctxkey.TokenQuotaUnlimited)

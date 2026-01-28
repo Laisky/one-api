@@ -67,6 +67,7 @@ func RelayClaudeMessagesHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 	// get model ratio using three-layer pricing system
 	pricingAdaptor := relay.GetAdaptor(meta.ChannelType)
 	modelRatio := pricing.GetModelRatioWithThreeLayers(claudeRequest.Model, channelModelRatio, pricingAdaptor)
+	completionRatio := pricing.GetCompletionRatioWithThreeLayers(claudeRequest.Model, channelCompletionRatio, pricingAdaptor)
 	groupRatio := c.GetFloat64(ctxkey.ChannelRatio)
 
 	ratio := modelRatio * groupRatio
@@ -74,7 +75,7 @@ func RelayClaudeMessagesHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 	// pre-consume quota based on estimated input tokens
 	promptTokens := getClaudeMessagesPromptTokens(gmw.Ctx(c), claudeRequest)
 	meta.PromptTokens = promptTokens
-	preConsumedQuota, bizErr := preConsumeClaudeMessagesQuota(c, claudeRequest, promptTokens, ratio, meta)
+	preConsumedQuota, bizErr := preConsumeClaudeMessagesQuota(c, claudeRequest, promptTokens, ratio, completionRatio, meta)
 	if bizErr != nil {
 		lg.Warn("preConsumeClaudeMessagesQuota failed",
 			zap.Int("status_code", bizErr.StatusCode),
@@ -160,11 +161,12 @@ func RelayClaudeMessagesHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 	{
 		quotaId := c.GetInt(ctxkey.Id)
 		requestId := c.GetString(ctxkey.RequestId)
-		estimatedTokens := int64(promptTokens)
+		promptQuota := float64(promptTokens) * ratio
+		completionQuota := 0.0
 		if claudeRequest.MaxTokens > 0 {
-			estimatedTokens += int64(claudeRequest.MaxTokens)
+			completionQuota = float64(claudeRequest.MaxTokens) * ratio * completionRatio
 		}
-		estimated := int64(float64(estimatedTokens) * ratio)
+		estimated := int64(promptQuota + completionQuota)
 		if estimated <= 0 {
 			estimated = preConsumedQuota
 		}

@@ -157,43 +157,46 @@ func TestGetClaudeMessagesPromptTokens(t *testing.T) {
 		{
 			name: "simple text message",
 			request: &ClaudeMessagesRequest{
+				Model: "gpt-3.5-turbo",
 				Messages: []relaymodel.ClaudeMessage{
 					{
 						Role:    "user",
-						Content: "Hello, how are you today?", // 24 chars -> 6 tokens
+						Content: "Hello, how are you today?",
 					},
 				},
 			},
-			expected: 7, // "user" (4) + "Hello, how are you today?" (24) = 28 chars / 4 = 7 tokens
+			expected: 16,
 		},
 		{
 			name: "multiple messages",
 			request: &ClaudeMessagesRequest{
+				Model: "gpt-3.5-turbo",
 				Messages: []relaymodel.ClaudeMessage{
 					{
 						Role:    "user",
-						Content: "Hello", // 5 chars
+						Content: "Hello",
 					},
 					{
 						Role:    "assistant",
-						Content: "Hi there!", // 9 chars
+						Content: "Hi there!",
 					},
 				},
 			},
-			expected: 6, // "user" (4) + "Hello" (5) + "assistant" (9) + "Hi there!" (9) = 27 chars / 4 = 6.75 -> 6 tokens
+			expected: 17,
 		},
 		{
 			name: "with system prompt",
 			request: &ClaudeMessagesRequest{
-				System: "You are a helpful assistant.", // 28 chars
+				Model:  "gpt-3.5-turbo",
+				System: "You are a helpful assistant.",
 				Messages: []relaymodel.ClaudeMessage{
 					{
 						Role:    "user",
-						Content: "Hello", // 5 chars
+						Content: "Hello",
 					},
 				},
 			},
-			expected: 10, // System: "You are a helpful assistant." (28) + "user" (4) + "Hello" (5) = 37 chars / 4 = 9.25 -> 10 tokens
+			expected: 23,
 		},
 	}
 

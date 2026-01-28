@@ -43,7 +43,7 @@ func TestCalculateResponseAPIPreconsumeQuotaBackgroundLargeEstimate(t *testing.T
 
 	quota := calculateResponseAPIPreconsumeQuota(100, &maxOutput, inputRatio, outputRatio, true)
 
-	expectedBase := int64(float64(100+maxOutput) * inputRatio)
+	expectedBase := int64(float64(100)*inputRatio + float64(maxOutput)*outputRatio)
 	expectedMin := int64(math.Ceil(float64(config.PreconsumeTokenForBackgroundRequest) * outputRatio))
 	if expectedBase < expectedMin {
 		require.Equal(t, expectedMin, quota, "expected quota to match background floor")

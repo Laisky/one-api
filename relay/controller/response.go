@@ -173,11 +173,12 @@ func RelayResponseAPIHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 	{
 		quotaId := c.GetInt(ctxkey.Id)
 		requestId := c.GetString(ctxkey.RequestId)
-		estimatedTokens := int64(promptTokens)
+		promptQuota := float64(promptTokens) * ratio
+		completionQuota := 0.0
 		if responseAPIRequest.MaxOutputTokens != nil {
-			estimatedTokens += int64(*responseAPIRequest.MaxOutputTokens)
+			completionQuota = float64(*responseAPIRequest.MaxOutputTokens) * outputRatio
 		}
-		estimated := int64(float64(estimatedTokens) * ratio)
+		estimated := int64(promptQuota + completionQuota)
 		if estimated <= 0 {
 			estimated = preConsumedQuota
 		}
