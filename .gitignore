@@ -26,3 +26,4 @@ errlog
 
 # test
 /cmd/test/generated/*
+docs/requirements/observability.md

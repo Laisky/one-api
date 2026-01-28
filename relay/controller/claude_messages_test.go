@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/songquanpeng/one-api/relay/adaptor/openai"
 	relaymodel "github.com/songquanpeng/one-api/relay/model"
 	"github.com/songquanpeng/one-api/relay/relaymode"
 )
@@ -207,6 +208,38 @@ func TestGetClaudeMessagesPromptTokens(t *testing.T) {
 			assert.Equal(t, tt.expected, result)
 		})
 	}
+}
+
+// TestGetClaudeMessagesPromptTokens_FileImageFallback verifies file-based image blocks apply fallback tokens.
+// Parameters: t is the test handler.
+// Returns: nothing.
+func TestGetClaudeMessagesPromptTokens_FileImageFallback(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	request := &ClaudeMessagesRequest{
+		Model: "gpt-3.5-turbo",
+		Messages: []relaymodel.ClaudeMessage{
+			{
+				Role: "user",
+				Content: []any{
+					map[string]any{
+						"type": "image",
+						"source": map[string]any{
+							"type":    "file",
+							"file_id": "file-123",
+						},
+					},
+				},
+			},
+		},
+	}
+
+	openaiRequest := convertClaudeToOpenAIForTokenCounting(request)
+	baseTokens := openai.CountTokenMessages(ctx, openaiRequest.Messages, request.Model)
+	result := getClaudeMessagesPromptTokens(ctx, request)
+
+	require.Equal(t, baseTokens+claudeFileImageFallbackTokens, result)
 }
 
 func TestClaudeMessagesRelayMode(t *testing.T) {

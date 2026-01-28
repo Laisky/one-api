@@ -13,6 +13,8 @@ import (
 	relaymodel "github.com/songquanpeng/one-api/relay/model"
 )
 
+const claudeFileImageFallbackTokens = 853
+
 // getClaudeMessagesPromptTokens estimates the number of prompt tokens for Claude Messages API.
 func getClaudeMessagesPromptTokens(ctx context.Context, request *ClaudeMessagesRequest) int {
 	logger := gmw.GetLogger(ctx)
@@ -28,11 +30,85 @@ func getClaudeMessagesPromptTokens(ctx context.Context, request *ClaudeMessagesR
 		promptTokens += countClaudeToolsTokens(ctx, request.Tools, request.Model)
 	}
 
+	fileImageTokens := countClaudeFileImageTokens(request)
+	if fileImageTokens > 0 {
+		promptTokens += fileImageTokens
+	}
+
 	logger.Debug("estimated prompt tokens for Claude Messages",
 		zap.Int("total", promptTokens),
 		zap.String("model", request.Model),
+		zap.Int("image_fallback", fileImageTokens),
 	)
 	return promptTokens
+}
+
+// countClaudeFileImageTokens estimates tokens for image blocks that reference file-based sources.
+// Parameters: request is the Claude Messages API request.
+// Returns: the estimated token count for file-based images.
+func countClaudeFileImageTokens(request *ClaudeMessagesRequest) int {
+	if request == nil {
+		return 0
+	}
+
+	total := 0
+	for _, message := range request.Messages {
+		total += countClaudeFileImageTokensFromContent(message.Content)
+	}
+	if request.System != nil {
+		if systemBlocks, ok := request.System.([]any); ok {
+			total += countClaudeFileImageTokensFromBlocks(systemBlocks)
+		}
+	}
+	return total
+}
+
+// countClaudeFileImageTokensFromContent walks a Claude message content and counts file-based images.
+// Parameters: content is the Claude message content (string or blocks).
+// Returns: the estimated token count for file-based images in the content.
+func countClaudeFileImageTokensFromContent(content any) int {
+	switch typed := content.(type) {
+	case []any:
+		return countClaudeFileImageTokensFromBlocks(typed)
+	default:
+		return 0
+	}
+}
+
+// countClaudeFileImageTokensFromBlocks counts file-based image blocks in structured content blocks.
+// Parameters: blocks is the list of structured content blocks.
+// Returns: the estimated token count for file-based images in the blocks.
+func countClaudeFileImageTokensFromBlocks(blocks []any) int {
+	total := 0
+	for _, block := range blocks {
+		blockMap, ok := block.(map[string]any)
+		if !ok {
+			continue
+		}
+		blockType, _ := blockMap["type"].(string)
+		if blockType != "image" {
+			continue
+		}
+		source, ok := blockMap["source"].(map[string]any)
+		if !ok {
+			continue
+		}
+		sourceType, _ := source["type"].(string)
+		if sourceType == "file" {
+			total += claudeFileImageFallbackTokens
+			continue
+		}
+		if sourceType == "" {
+			if _, exists := source["file_id"]; exists {
+				total += claudeFileImageFallbackTokens
+				continue
+			}
+			if _, exists := source["file"]; exists {
+				total += claudeFileImageFallbackTokens
+			}
+		}
+	}
+	return total
 }
 
 // countClaudeToolsTokens estimates tokens for Claude tools.
@@ -137,10 +213,15 @@ func convertClaudeToOpenAIForTokenCounting(request *ClaudeMessagesRequest) *rela
 											imageURL.Url = urlStr
 										}
 									}
-									contentParts = append(contentParts, relaymodel.MessageContent{
-										Type:     "image_url",
-										ImageURL: &imageURL,
-									})
+									if detail, ok := sourceMap["detail"].(string); ok {
+										imageURL.Detail = detail
+									}
+									if imageURL.Url != "" {
+										contentParts = append(contentParts, relaymodel.MessageContent{
+											Type:     "image_url",
+											ImageURL: &imageURL,
+										})
+									}
 								}
 							}
 						}

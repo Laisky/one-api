@@ -34,6 +34,21 @@ func TestCalculateResponseAPIPreconsumeQuotaForeground(t *testing.T) {
 	require.Equal(t, expected, quota, "expected quota %d for foreground request", expected)
 }
 
+// TestCalculateResponseAPIPreconsumeQuotaForegroundOutputRatio verifies output ratio scaling is applied.
+// Parameters: t is the test handler.
+// Returns: nothing.
+func TestCalculateResponseAPIPreconsumeQuotaForegroundOutputRatio(t *testing.T) {
+	t.Parallel()
+	maxOutput := 300
+	inputRatio := 1.0
+	outputRatio := 2.0
+
+	quota := calculateResponseAPIPreconsumeQuota(100, &maxOutput, inputRatio, outputRatio, false)
+
+	expected := int64(float64(100)*inputRatio + float64(maxOutput)*outputRatio)
+	require.Equal(t, expected, quota, "expected quota %d for output ratio scaling", expected)
+}
+
 func TestCalculateResponseAPIPreconsumeQuotaBackgroundLargeEstimate(t *testing.T) {
 	t.Parallel()
 	maxOutput := 55000
