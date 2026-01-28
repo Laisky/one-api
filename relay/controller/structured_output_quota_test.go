@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"math"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -20,6 +21,14 @@ func getTestModelRatio(modelName string, channelType int) float64 {
 	}
 	// Fallback for tests
 	return 2.5 * 0.5 // Default quota pricing (2.5 * MilliTokensUsd)
+}
+
+func getTestCompletionRatio(modelName string, channelType int) float64 {
+	apiType := channeltype.ToAPIType(channelType)
+	if adaptor := relay.GetAdaptor(apiType); adaptor != nil {
+		return adaptor.GetCompletionRatio(modelName)
+	}
+	return 1.0
 }
 
 func TestPreConsumedQuotaWithStructuredOutput(t *testing.T) {
@@ -101,16 +110,18 @@ func TestPreConsumedQuotaWithStructuredOutput(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			preConsumedQuota := getPreConsumedQuota(tt.textRequest, tt.promptTokens, tt.ratio)
+			compRatio := getTestCompletionRatio(tt.textRequest.Model, channeltype.OpenAI)
+			preConsumedQuota := getPreConsumedQuota(tt.textRequest, tt.promptTokens, tt.ratio, compRatio)
 
 			// Calculate what the quota would be without structured output
-			basePreConsumedTokens := config.PreConsumedQuota + int64(tt.promptTokens)
+			promptQuota := float64(config.PreConsumedQuota+int64(tt.promptTokens)) * tt.ratio
+			completionQuota := 0.0
 			if tt.textRequest.MaxCompletionTokens != nil && *tt.textRequest.MaxCompletionTokens > 0 {
-				basePreConsumedTokens += int64(*tt.textRequest.MaxCompletionTokens)
+				completionQuota = float64(*tt.textRequest.MaxCompletionTokens) * tt.ratio * compRatio
 			} else if tt.textRequest.MaxTokens != 0 {
-				basePreConsumedTokens += int64(tt.textRequest.MaxTokens)
+				completionQuota = float64(tt.textRequest.MaxTokens) * tt.ratio * compRatio
 			}
-			baseQuota := int64(float64(basePreConsumedTokens) * tt.ratio)
+			baseQuota := int64(promptQuota + completionQuota)
 
 			// Should not have additional cost
 			require.Equal(t, baseQuota, preConsumedQuota, "Expected pre-consumed quota %d (no surcharge), got %d", baseQuota, preConsumedQuota)
@@ -137,9 +148,10 @@ func TestStructuredOutputQuotaConsistency(t *testing.T) {
 	promptTokens := 100000     // Use larger token count to get non-zero quota
 	completionTokens := 400000 // Less than max tokens
 	modelRatio := getTestModelRatio("gpt-4o", channeltype.OpenAI)
+	compRatio := getTestCompletionRatio("gpt-4o", channeltype.OpenAI)
 
 	// Calculate pre-consumed quota
-	preConsumedQuota := getPreConsumedQuota(textRequest, promptTokens, modelRatio)
+	preConsumedQuota := getPreConsumedQuota(textRequest, promptTokens, modelRatio, compRatio)
 
 	// Simulate post-consumption calculation (no structured output surcharge)
 	// Get completion ratio using the new two-layer approach
@@ -148,7 +160,7 @@ func TestStructuredOutputQuotaConsistency(t *testing.T) {
 	if adaptor := relay.GetAdaptor(apiType); adaptor != nil {
 		completionRatio = adaptor.GetCompletionRatio("gpt-4o")
 	}
-	basePostQuota := int64(float64(promptTokens)+float64(completionTokens)*completionRatio) * int64(modelRatio)
+	basePostQuota := int64(math.Ceil((float64(promptTokens) + float64(completionTokens)*completionRatio) * modelRatio))
 	actualPostQuota := basePostQuota
 
 	// Pre-consumption should be higher (conservative) but not excessively so

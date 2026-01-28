@@ -178,14 +178,13 @@ func CountTokenMessages(ctx context.Context,
 			}
 		}
 
-		tokenNum += int(math.Ceil(totalAudioTokens))
-
 		tokenNum += getTokenNum(tokenEncoder, message.Role)
 		if message.Name != nil {
 			tokenNum += tokensPerName
 			tokenNum += getTokenNum(tokenEncoder, *message.Name)
 		}
 	}
+	tokenNum += int(math.Ceil(totalAudioTokens))
 	tokenNum += 3 // Every reply is primed with <|start|>assistant<|message|>
 	return tokenNum
 }
