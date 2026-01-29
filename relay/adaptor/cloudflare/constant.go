@@ -7,7 +7,7 @@ import (
 
 // ModelRatios contains all supported models and their pricing ratios
 // Model list is derived from the keys of this map, eliminating redundancy
-// Based on Cloudflare Workers AI pricing - updated 2026-01-09
+// Based on Cloudflare Workers AI pricing - updated 2026-01-28
 // Source: https://developers.cloudflare.com/workers-ai/platform/pricing/
 var ModelRatios = map[string]adaptor.ModelConfig{
 	// Meta Llama Models
@@ -82,6 +82,12 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 	"@cf/baai/bge-m3":               {Ratio: 0.012 * ratio.MilliTokensUsd, CompletionRatio: 1},
 	"@cf/pfnet/plamo-embedding-1b":  {Ratio: 0.019 * ratio.MilliTokensUsd, CompletionRatio: 1},
 	"@cf/qwen/qwen3-embedding-0.6b": {Ratio: 0.012 * ratio.MilliTokensUsd, CompletionRatio: 1},
+
+	// Audio Models
+	"@cf/openai/whisper":                {Audio: &adaptor.AudioPricingConfig{UsdPerSecond: 0.0005 / 60}},
+	"@cf/openai/whisper-large-v3-turbo": {Audio: &adaptor.AudioPricingConfig{UsdPerSecond: 0.0005 / 60}},
+	"@cf/deepgram/nova-3":               {Audio: &adaptor.AudioPricingConfig{UsdPerSecond: 0.0052 / 60}},
+	"@cf/pipecat-ai/smart-turn-v2":      {Audio: &adaptor.AudioPricingConfig{UsdPerSecond: 0.00033795 / 60}},
 
 	// Specialized Models
 	"@cf/defog/sqlcoder-7b-2":                {Ratio: 0.1 * ratio.MilliTokensUsd, CompletionRatio: 1},
