@@ -4,9 +4,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"runtime/debug"
 	"strconv"
 	"strings"
 
+	gmw "github.com/Laisky/gin-middlewares/v7"
+	"github.com/Laisky/zap"
 	"github.com/gin-gonic/gin"
 
 	"github.com/songquanpeng/one-api/common"
@@ -83,6 +86,8 @@ func GetHomePageContent(c *gin.Context) {
 }
 
 // SendEmailVerification issues a verification code to the provided email address.
+// To mitigate user enumeration and timing attacks, it always returns success immediately
+// and performs the registration check and email transmission in the background.
 func SendEmailVerification(c *gin.Context) {
 	email := c.Query("email")
 	if err := common.Validate.Var(email, "required,email"); err != nil {
@@ -108,41 +113,51 @@ func SendEmailVerification(c *gin.Context) {
 			return
 		}
 	}
-	if model.IsEmailAlreadyTaken(email) {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": "Email address is occupied",
-		})
-		return
-	}
-	code := common.GenerateVerificationCode(6)
-	common.RegisterVerificationCodeWithKey(email, code, common.EmailVerificationPurpose)
-	subject := fmt.Sprintf("%s Email Verification", config.SystemName)
-	content := message.EmailTemplate(
-		subject,
-		fmt.Sprintf(`
+
+	// Always return success to prevent user enumeration
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "",
+	})
+
+	// Perform actual work in background to prevent timing attacks
+	lg := gmw.GetLogger(c).With(zap.String("email", email))
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				lg.Error("recovered from panic in SendEmailVerification background goroutine",
+					zap.Any("panic", r),
+					zap.String("stack", string(debug.Stack())))
+			}
+		}()
+
+		if model.IsEmailAlreadyTaken(email) {
+			return
+		}
+
+		code := common.GenerateVerificationCode(6)
+		common.RegisterVerificationCodeWithKey(email, code, common.EmailVerificationPurpose)
+		subject := fmt.Sprintf("%s Email Verification", config.SystemName)
+		content := message.EmailTemplate(
+			subject,
+			fmt.Sprintf(`
 			<p>Hello!</p>
 			<p>You are verifying your email for %s.</p>
 			<p>Your verification code is:</p>
 			<p style="font-size: 24px; font-weight: bold; color: #333; background-color: #f8f8f8; padding: 10px; text-align: center; border-radius: 4px;">%s</p>
 			<p style="color: #666;">The verification code is valid for %d minutes. If you did not request this, please ignore.</p>
 		`, config.SystemName, code, common.VerificationValidMinutes),
-	)
-	err := message.SendEmail(subject, email, content)
-	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
-		return
-	}
-	c.JSON(http.StatusOK, gin.H{
-		"success": true,
-		"message": "",
-	})
+		)
+		err := message.SendEmail(subject, email, content)
+		if err != nil {
+			lg.Error("failed to send email verification", zap.Error(err))
+		}
+	}()
 }
 
-// SendPasswordResetEmail sends a password reset link to the supplied email address when registered.
+// SendPasswordResetEmail sends a password reset link to the supplied email address.
+// To mitigate user enumeration and timing attacks, it always returns success immediately
+// and performs the registration check and email transmission in the background.
 func SendPasswordResetEmail(c *gin.Context) {
 	email := c.Query("email")
 	if err := common.Validate.Var(email, "required,email"); err != nil {
@@ -152,20 +167,35 @@ func SendPasswordResetEmail(c *gin.Context) {
 		})
 		return
 	}
-	if !model.IsEmailAlreadyTaken(email) {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": "The email address is not registered",
-		})
-		return
-	}
-	code := common.GenerateVerificationCode(0)
-	common.RegisterVerificationCodeWithKey(email, code, common.PasswordResetPurpose)
-	link := fmt.Sprintf("%s/user/reset?email=%s&token=%s", config.ServerAddress, email, code)
-	subject := fmt.Sprintf("%s 密码重置", config.SystemName)
-	content := message.EmailTemplate(
-		subject,
-		fmt.Sprintf(`
+
+	// Always return success to prevent user enumeration
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "",
+	})
+
+	// Perform actual work in background to prevent timing attacks
+	lg := gmw.GetLogger(c).With(zap.String("email", email))
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				lg.Error("recovered from panic in SendPasswordResetEmail background goroutine",
+					zap.Any("panic", r),
+					zap.String("stack", string(debug.Stack())))
+			}
+		}()
+
+		if !model.IsEmailAlreadyTaken(email) {
+			return
+		}
+
+		code := common.GenerateVerificationCode(0)
+		common.RegisterVerificationCodeWithKey(email, code, common.PasswordResetPurpose)
+		link := fmt.Sprintf("%s/user/reset?email=%s&token=%s", config.ServerAddress, email, code)
+		subject := fmt.Sprintf("%s 密码重置", config.SystemName)
+		content := message.EmailTemplate(
+			subject,
+			fmt.Sprintf(`
 			<p>Hello!</p>
 			<p>You are resetting your password for %s.</p>
 			<p>Please click the button below to reset your password:</p>
@@ -176,19 +206,12 @@ func SendPasswordResetEmail(c *gin.Context) {
 			<p style="background-color: #f8f8f8; padding: 10px; border-radius: 4px; word-break: break-all;">%s</p>
 			<p style="color: #666;">The reset link is valid for %d minutes. If you didn't request this, please ignore.</p>
 		`, config.SystemName, link, link, common.VerificationValidMinutes),
-	)
-	err := message.SendEmail(subject, email, content)
-	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": sendEmailFailedPrefix + err.Error(),
-		})
-		return
-	}
-	c.JSON(http.StatusOK, gin.H{
-		"success": true,
-		"message": "",
-	})
+		)
+
+		if err := message.SendEmail(subject, email, content); err != nil {
+			lg.Error("failed to send password reset email", zap.Error(err))
+		}
+	}()
 }
 
 type PasswordResetRequest struct {
