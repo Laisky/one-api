@@ -19,6 +19,7 @@ import (
 	"github.com/songquanpeng/one-api/common"
 	"github.com/songquanpeng/one-api/common/conv"
 	"github.com/songquanpeng/one-api/common/ctxkey"
+	"github.com/songquanpeng/one-api/common/helper"
 	"github.com/songquanpeng/one-api/common/render"
 	"github.com/songquanpeng/one-api/common/tracing"
 	relaymodel "github.com/songquanpeng/one-api/model"
@@ -115,8 +116,7 @@ func StreamHandler(c *gin.Context, resp *http.Response, relayMode int) (*model.E
 
 	// Set up scanner for reading the stream line by line
 	scanner := bufio.NewScanner(resp.Body)
-	buffer := make([]byte, 1024*1024) // 1MB buffer for large messages
-	scanner.Buffer(buffer, len(buffer))
+	helper.ConfigureScannerBuffer(scanner)
 	scanner.Split(bufio.ScanLines)
 
 	// Set response headers for SSE
@@ -288,7 +288,7 @@ streamLoop:
 
 	// Check for scanner errors
 	if err := scanner.Err(); err != nil && trackerErr == nil {
-		lg.Error("error reading stream", zap.Error(err))
+		lg.Error("error reading stream", zap.Error(err), zap.Int("scanner_max_token_size", helper.DefaultScannerMaxTokenSize))
 	}
 
 	// Ensure stream termination is sent to client
@@ -870,8 +870,7 @@ func ResponseAPIStreamHandler(c *gin.Context, resp *http.Response, relayMode int
 
 	// Set up scanner for reading the stream line by line
 	scanner := bufio.NewScanner(resp.Body)
-	buffer := make([]byte, 1024*1024) // 1MB buffer for large messages
-	scanner.Buffer(buffer, len(buffer))
+	helper.ConfigureScannerBuffer(scanner)
 	scanner.Split(bufio.ScanLines)
 
 	// Set response headers for SSE
@@ -1407,8 +1406,7 @@ func ResponseAPIDirectStreamHandler(c *gin.Context, resp *http.Response, relayMo
 
 	// Set up scanner for reading the stream line by line
 	scanner := bufio.NewScanner(resp.Body)
-	buffer := make([]byte, 1024*1024) // 1MB buffer for large messages
-	scanner.Buffer(buffer, len(buffer))
+	helper.ConfigureScannerBuffer(scanner)
 	scanner.Split(bufio.ScanLines)
 
 	// Set response headers for SSE

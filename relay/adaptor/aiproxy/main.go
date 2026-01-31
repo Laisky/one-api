@@ -96,6 +96,7 @@ func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusC
 	var usage model.Usage
 	var documents []LibraryDocument
 	scanner := bufio.NewScanner(resp.Body)
+	helper.ConfigureScannerBuffer(scanner)
 	scanner.Split(func(data []byte, atEOF bool) (advance int, token []byte, err error) {
 		if atEOF && len(data) == 0 {
 			return 0, nil, nil
@@ -136,7 +137,7 @@ func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusC
 	}
 
 	if err := scanner.Err(); err != nil {
-		lg.Error("error reading stream", zap.Error(err))
+		lg.Error("error reading stream", zap.Error(err), zap.Int("scanner_max_token_size", helper.DefaultScannerMaxTokenSize))
 	}
 
 	response := documentsAIProxyLibrary(c, documents)

@@ -14,6 +14,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/songquanpeng/one-api/common"
+	"github.com/songquanpeng/one-api/common/helper"
 	"github.com/songquanpeng/one-api/common/render"
 	"github.com/songquanpeng/one-api/relay/adaptor/openai"
 	"github.com/songquanpeng/one-api/relay/meta"
@@ -183,6 +184,7 @@ func chatStreamHandler(c *gin.Context, streamUrl string) (responseText string, e
 	}
 
 	scanner := bufio.NewScanner(resp.Body)
+	helper.ConfigureScannerBuffer(scanner)
 	scanner.Split(bufio.ScanLines)
 
 	common.SetEventStreamHeaders(c)

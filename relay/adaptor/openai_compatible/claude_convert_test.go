@@ -191,6 +191,28 @@ func TestConvertOpenAIStreamToClaudeSSE_BasicsAndUsage(t *testing.T) {
 	assert.Contains(t, out, "data: [DONE]")
 }
 
+// TestConvertOpenAIStreamToClaudeSSE_LargePayload verifies large SSE lines are handled without scanner errors.
+func TestConvertOpenAIStreamToClaudeSSE_LargePayload(t *testing.T) {
+	t.Parallel()
+	c, w := newGinTestContext()
+
+	largeContent := strings.Repeat("a", 2*1024*1024)
+	chunks := []string{
+		"data: {\"choices\":[{\"delta\":{\"content\":\"" + largeContent + "\"}}]}",
+		"data: [DONE]",
+	}
+	body := strings.Join(chunks, "\n\n") + "\n\n"
+	resp := &http.Response{StatusCode: 200, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(body))}
+
+	usage, errResp := ConvertOpenAIStreamToClaudeSSE(c, resp, 10, "test-model")
+	require.Nil(t, errResp)
+	require.NotNil(t, usage)
+
+	out := w.Body.String()
+	assert.Contains(t, out, "\"type\":\"content_block_delta\"")
+	assert.Contains(t, out, largeContent[:1024])
+}
+
 func TestConvertOpenAIStreamToClaudeSSE_NoUpstreamUsage_Computed(t *testing.T) {
 	t.Parallel()
 	c, w := newGinTestContext()

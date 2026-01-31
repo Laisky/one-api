@@ -18,6 +18,7 @@ import (
 
 	"github.com/songquanpeng/one-api/common/config"
 	"github.com/songquanpeng/one-api/common/ctxkey"
+	"github.com/songquanpeng/one-api/common/helper"
 	"github.com/songquanpeng/one-api/common/image"
 	imgutil "github.com/songquanpeng/one-api/common/image"
 	"github.com/songquanpeng/one-api/relay/adaptor"
@@ -1288,7 +1289,8 @@ func (a *Adaptor) ConvertResponseAPIToClaudeResponse(c *gin.Context, resp *http.
 }
 
 // convertStreamingToClaudeResponse converts a streaming OpenAI response to Claude format
-func (a *Adaptor) convertStreamingToClaudeResponse(_ *gin.Context, resp *http.Response, body []byte) (*http.Response, *model.ErrorWithStatusCode) {
+func (a *Adaptor) convertStreamingToClaudeResponse(c *gin.Context, resp *http.Response, body []byte) (*http.Response, *model.ErrorWithStatusCode) {
+	lg := gmw.GetLogger(c)
 	// For streaming responses, we need to convert each SSE event
 	// This is more complex and would require parsing SSE events and converting them
 	// For now, we'll create a simple streaming converter
@@ -1300,6 +1302,7 @@ func (a *Adaptor) convertStreamingToClaudeResponse(_ *gin.Context, resp *http.Re
 
 		// Parse SSE events from the body and convert them
 		scanner := bufio.NewScanner(bytes.NewReader(body))
+		helper.ConfigureScannerBuffer(scanner)
 		for scanner.Scan() {
 			line := scanner.Text()
 
@@ -1338,6 +1341,11 @@ func (a *Adaptor) convertStreamingToClaudeResponse(_ *gin.Context, resp *http.Re
 					}
 				}
 			}
+		}
+		if err := scanner.Err(); err != nil {
+			lg.Debug("error scanning OpenAI stream for Claude conversion",
+				zap.Error(err),
+				zap.Int("scanner_max_token_size", helper.DefaultScannerMaxTokenSize))
 		}
 	}()
 

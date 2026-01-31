@@ -144,6 +144,7 @@ func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusC
 	createdTime := helper.GetTimestamp()
 	lg := gmw.GetLogger(c)
 	scanner := bufio.NewScanner(resp.Body)
+	helper.ConfigureScannerBuffer(scanner)
 	scanner.Split(bufio.ScanLines)
 
 	common.SetEventStreamHeaders(c)
@@ -181,7 +182,7 @@ func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusC
 	}
 
 	if err := scanner.Err(); err != nil {
-		lg.Error("error reading stream", zap.Error(err))
+		lg.Error("error reading stream", zap.Error(err), zap.Int("scanner_max_token_size", helper.DefaultScannerMaxTokenSize))
 	}
 
 	render.Done(c)

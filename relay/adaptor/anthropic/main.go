@@ -795,6 +795,7 @@ func ClaudeNativeStreamHandler(c *gin.Context, resp *http.Response) (*model.Erro
 	logger := gmw.GetLogger(c)
 
 	scanner := bufio.NewScanner(resp.Body)
+	helper.ConfigureScannerBuffer(scanner)
 	scanner.Split(func(data []byte, atEOF bool) (advance int, token []byte, err error) {
 		if atEOF && len(data) == 0 {
 			return 0, nil, nil
@@ -861,7 +862,7 @@ func ClaudeNativeStreamHandler(c *gin.Context, resp *http.Response) (*model.Erro
 	}
 
 	if err := scanner.Err(); err != nil {
-		logger.Error("error reading stream", zap.Error(err))
+		logger.Error("error reading stream", zap.Error(err), zap.Int("scanner_max_token_size", helper.DefaultScannerMaxTokenSize))
 	}
 
 	// Send final data: [DONE] to close the stream
@@ -879,6 +880,7 @@ func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusC
 	logger := gmw.GetLogger(c)
 	createdTime := helper.GetTimestamp()
 	scanner := bufio.NewScanner(resp.Body)
+	helper.ConfigureScannerBuffer(scanner)
 	scanner.Split(func(data []byte, atEOF bool) (advance int, token []byte, err error) {
 		if atEOF && len(data) == 0 {
 			return 0, nil, nil
@@ -1033,7 +1035,7 @@ func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusC
 	}
 
 	if err := scanner.Err(); err != nil {
-		logger.Error("error reading stream", zap.Error(err))
+		logger.Error("error reading stream", zap.Error(err), zap.Int("scanner_max_token_size", helper.DefaultScannerMaxTokenSize))
 	}
 
 	if streamRewriter != nil {
