@@ -152,20 +152,28 @@ func SendPasswordResetEmail(c *gin.Context) {
 		})
 		return
 	}
-	if !model.IsEmailAlreadyTaken(email) {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": "The email address is not registered",
-		})
-		return
-	}
-	code := common.GenerateVerificationCode(0)
-	common.RegisterVerificationCodeWithKey(email, code, common.PasswordResetPurpose)
-	link := fmt.Sprintf("%s/user/reset?email=%s&token=%s", config.ServerAddress, email, code)
-	subject := fmt.Sprintf("%s 密码重置", config.SystemName)
-	content := message.EmailTemplate(
-		subject,
-		fmt.Sprintf(`
+
+	// Always return a uniform success response to mitigate user enumeration
+	// and timing attacks. The actual email sending is performed asynchronously.
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "",
+	})
+
+	go func() {
+		// To prevent timing attacks, we perform the email existence check
+		// and the actual email sending in a background goroutine.
+		if !model.IsEmailAlreadyTaken(email) {
+			return
+		}
+
+		code := common.GenerateVerificationCode(0)
+		common.RegisterVerificationCodeWithKey(email, code, common.PasswordResetPurpose)
+		link := fmt.Sprintf("%s/user/reset?email=%s&token=%s", config.ServerAddress, email, code)
+		subject := fmt.Sprintf("%s Password Reset", config.SystemName)
+		content := message.EmailTemplate(
+			subject,
+			fmt.Sprintf(`
 			<p>Hello!</p>
 			<p>You are resetting your password for %s.</p>
 			<p>Please click the button below to reset your password:</p>
@@ -176,19 +184,10 @@ func SendPasswordResetEmail(c *gin.Context) {
 			<p style="background-color: #f8f8f8; padding: 10px; border-radius: 4px; word-break: break-all;">%s</p>
 			<p style="color: #666;">The reset link is valid for %d minutes. If you didn't request this, please ignore.</p>
 		`, config.SystemName, link, link, common.VerificationValidMinutes),
-	)
-	err := message.SendEmail(subject, email, content)
-	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": sendEmailFailedPrefix + err.Error(),
-		})
-		return
-	}
-	c.JSON(http.StatusOK, gin.H{
-		"success": true,
-		"message": "",
-	})
+		)
+
+		_ = message.SendEmail(subject, email, content)
+	}()
 }
 
 type PasswordResetRequest struct {
