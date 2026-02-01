@@ -145,6 +145,9 @@ func RelayTextHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 			billing.ReturnPreConsumedQuota(ctx, preConsumedQuota, meta.TokenId)
 			return execErr
 		}
+		applyOutputImageCharges(c, &usage, meta)
+		applyOutputAudioCharges(c, &usage, meta)
+		applyOutputVideoCharges(c, &usage, meta)
 		tooling.ApplyBuiltinToolCharges(c, &usage, meta, channelRecord, requestAdaptor)
 		if mcpSummary != nil && mcpSummary.summary != nil {
 			var existing *model.ToolUsageSummary
@@ -345,6 +348,9 @@ func RelayTextHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 		}
 	}
 
+	applyOutputImageCharges(c, &usage, meta)
+	applyOutputAudioCharges(c, &usage, meta)
+	applyOutputVideoCharges(c, &usage, meta)
 	tooling.ApplyBuiltinToolCharges(c, &usage, meta, channelRecord, requestAdaptor)
 
 	// post-consume quota

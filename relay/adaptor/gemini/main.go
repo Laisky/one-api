@@ -15,6 +15,7 @@ import (
 
 	"github.com/songquanpeng/one-api/common"
 	"github.com/songquanpeng/one-api/common/config"
+	"github.com/songquanpeng/one-api/common/ctxkey"
 	"github.com/songquanpeng/one-api/common/helper"
 	"github.com/songquanpeng/one-api/common/image"
 	"github.com/songquanpeng/one-api/common/random"
@@ -782,6 +783,44 @@ func embeddingResponseGemini2OpenAI(response *EmbeddingResponse) *openai.Embeddi
 	return &openAIEmbeddingResponse
 }
 
+// countGeminiInlineImages counts inline image parts in a Gemini chat response.
+// Parameters: response is the parsed Gemini ChatResponse payload.
+// Returns: the number of inlineData parts that contain non-empty image data.
+func countGeminiInlineImages(response *ChatResponse) int {
+	if response == nil {
+		return 0
+	}
+	count := 0
+	for _, candidate := range response.Candidates {
+		for _, part := range candidate.Content.Parts {
+			if part.InlineData == nil {
+				continue
+			}
+			if part.InlineData.Data == "" {
+				continue
+			}
+			count++
+		}
+	}
+	return count
+}
+
+// recordGeminiOutputImageCount accumulates output image counts in the Gin context.
+// Parameters: c is the Gin context for the request; count is the number of images to add.
+// Returns: nothing; the aggregated count is stored under ctxkey.OutputImageCount.
+func recordGeminiOutputImageCount(c *gin.Context, count int) {
+	if c == nil || count <= 0 {
+		return
+	}
+	if raw, ok := c.Get(ctxkey.OutputImageCount); ok {
+		if existing, ok := raw.(int); ok {
+			c.Set(ctxkey.OutputImageCount, existing+count)
+			return
+		}
+	}
+	c.Set(ctxkey.OutputImageCount, count)
+}
+
 // StreamHandler processes streaming responses from the Gemini API and converts them to OpenAI-compatible
 // Server-Sent Events (SSE) format. It reads the response body line by line, unmarshals each chunk,
 // converts it to OpenAI format, and streams it to the client.
@@ -789,6 +828,7 @@ func embeddingResponseGemini2OpenAI(response *EmbeddingResponse) *openai.Embeddi
 func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusCode, string) {
 	lg := gmw.GetLogger(c)
 	responseText := ""
+	outputImageCount := 0
 	scanner := bufio.NewScanner(resp.Body)
 	helper.ConfigureScannerBuffer(scanner)
 	scanner.Split(bufio.ScanLines)
@@ -813,6 +853,8 @@ func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusC
 			continue
 		}
 
+		outputImageCount += countGeminiInlineImages(&geminiResponse)
+
 		response := streamResponseGeminiChat2OpenAI(c, &geminiResponse)
 		if response == nil {
 			continue
@@ -830,6 +872,15 @@ func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusC
 		lg.Error("error reading stream",
 			zap.Error(errors.Wrap(err, "scanner stream")),
 			zap.Int("scanner_max_token_size", helper.DefaultScannerMaxTokenSize))
+	}
+
+	if outputImageCount > 0 {
+		recordGeminiOutputImageCount(c, outputImageCount)
+		modelName := c.GetString(ctxkey.RequestModel)
+		lg.Debug("gemini stream output images counted",
+			zap.String("model", modelName),
+			zap.Int("image_count", outputImageCount),
+		)
 	}
 
 	render.Done(c)
@@ -891,6 +942,15 @@ func Handler(c *gin.Context, resp *http.Response, promptTokens int, modelName st
 			zap.Int("candidate_index", i),
 			zap.Int("parts_count", len(candidate.Content.Parts)),
 			zap.String("finish_reason", candidate.FinishReason),
+		)
+	}
+
+	outputImageCount := countGeminiInlineImages(&geminiResponse)
+	if outputImageCount > 0 {
+		recordGeminiOutputImageCount(c, outputImageCount)
+		lg.Debug("gemini output images counted",
+			zap.String("model", modelName),
+			zap.Int("image_count", outputImageCount),
 		)
 	}
 

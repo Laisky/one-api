@@ -2,10 +2,13 @@ package controller
 
 import (
 	"context"
+	"encoding/json"
 	"strconv"
 	"strings"
 
 	"github.com/Laisky/errors/v2"
+	gmw "github.com/Laisky/gin-middlewares/v7"
+	"github.com/Laisky/zap"
 	"github.com/gin-gonic/gin"
 
 	"github.com/songquanpeng/one-api/common"
@@ -55,53 +58,262 @@ func getAndValidateResponseAPIRequest(c *gin.Context) (*openai.ResponseAPIReques
 	return responseAPIRequest, nil
 }
 
-// getResponseAPIPromptTokens estimates prompt tokens for Response API requests
+// getResponseAPIPromptTokens estimates prompt tokens for Response API requests.
 func getResponseAPIPromptTokens(ctx context.Context, responseAPIRequest *openai.ResponseAPIRequest) int {
-	// For now, use a simple estimation based on input content
-	// This will be improved with proper token counting
+	if responseAPIRequest == nil {
+		return 0
+	}
 	totalTokens := 0
-
-	// Count tokens from input array (if present)
-	for _, input := range responseAPIRequest.Input {
-		switch v := input.(type) {
-		case map[string]any:
-			if content, ok := v["content"].(string); ok {
-				// Simple estimation: ~4 characters per token
-				totalTokens += len(content) / 4
-			}
-		case string:
-			totalTokens += len(v) / 4
-		}
-	}
-
-	// Count tokens from prompt template (if present)
+	totalTokens += countResponseAPIInstructionsTokens(ctx, responseAPIRequest)
+	totalTokens += countResponseAPIInputTokens(ctx, responseAPIRequest.Input, responseAPIRequest.Model)
 	if responseAPIRequest.Prompt != nil {
-		// Estimate tokens for prompt template ID (small fixed cost)
-		totalTokens += 10
-
-		// Count tokens from prompt variables
-		for _, value := range responseAPIRequest.Prompt.Variables {
-			switch v := value.(type) {
-			case string:
-				totalTokens += len(v) / 4
-			case map[string]any:
-				// For complex variables like input_file, add a fixed cost
-				totalTokens += 20
-			}
-		}
+		totalTokens += countResponseAPIPromptTemplateTokens(ctx, responseAPIRequest.Prompt, responseAPIRequest.Model)
 	}
 
-	// Add instruction tokens if present
-	if responseAPIRequest.Instructions != nil {
-		totalTokens += len(*responseAPIRequest.Instructions) / 4
-	}
-
-	// Minimum token count
 	if totalTokens < 10 {
 		totalTokens = 10
 	}
-
 	return totalTokens
+}
+
+// countResponseAPIInstructionsTokens counts tokens in the instructions field.
+// Parameters: ctx is the request context; request is the Response API request.
+// Returns: the token count for instructions, or 0 if absent.
+func countResponseAPIInstructionsTokens(ctx context.Context, request *openai.ResponseAPIRequest) int {
+	if request == nil || request.Instructions == nil || strings.TrimSpace(*request.Instructions) == "" {
+		return 0
+	}
+	return openai.CountTokenText(*request.Instructions, request.Model)
+}
+
+// countResponseAPIPromptTemplateTokens counts tokens for prompt templates and variables.
+// Parameters: ctx is the request context; prompt is the prompt template; model is the target model name.
+// Returns: the estimated token count for the prompt template.
+func countResponseAPIPromptTemplateTokens(ctx context.Context, prompt *openai.ResponseAPIPrompt, model string) int {
+	if prompt == nil {
+		return 0
+	}
+	total := 0
+	if prompt.Id != "" {
+		total += openai.CountTokenText(prompt.Id, model)
+	}
+	for _, value := range prompt.Variables {
+		total += countResponseAPIValueTokens(ctx, value, model)
+	}
+	return total
+}
+
+// countResponseAPIInputTokens counts tokens for Response API input items.
+// Parameters: ctx is the request context; input is the Response API input list; model is the target model name.
+// Returns: the estimated token count for the input payload.
+func countResponseAPIInputTokens(ctx context.Context, input openai.ResponseAPIInput, model string) int {
+	total := 0
+	for _, item := range input {
+		total += countResponseAPIInputItemTokens(ctx, item, model)
+	}
+	return total
+}
+
+// countResponseAPIInputItemTokens counts tokens for a single Response API input item.
+// Parameters: ctx is the request context; item is the input element; model is the target model name.
+// Returns: the estimated token count for the item.
+func countResponseAPIInputItemTokens(ctx context.Context, item any, model string) int {
+	switch v := item.(type) {
+	case string:
+		return openai.CountTokenText(v, model)
+	case map[string]any:
+		return countResponseAPIInputMapTokens(ctx, v, model)
+	default:
+		return countResponseAPIValueTokens(ctx, v, model)
+	}
+}
+
+// countResponseAPIInputMapTokens counts tokens for map-shaped Response API input items.
+// Parameters: ctx is the request context; itemMap is the input object; model is the target model name.
+// Returns: the estimated token count for the input object.
+func countResponseAPIInputMapTokens(ctx context.Context, itemMap map[string]any, model string) int {
+	total := 0
+	role, _ := itemMap["role"].(string)
+	name, _ := itemMap["name"].(string)
+	if role != "" {
+		tokensPerMessage, tokensPerName := responseMessageTokenOverhead(model)
+		total += tokensPerMessage
+		total += openai.CountTokenText(role, model)
+		if name != "" {
+			total += tokensPerName
+			total += openai.CountTokenText(name, model)
+		}
+	}
+
+	if typeVal, ok := itemMap["type"].(string); ok {
+		switch strings.ToLower(typeVal) {
+		case "function_call":
+			if nameVal, ok := itemMap["name"].(string); ok && nameVal != "" {
+				total += openai.CountTokenText(nameVal, model)
+			}
+			if args, ok := itemMap["arguments"]; ok {
+				total += countResponseAPIValueTokens(ctx, args, model)
+			}
+			return total
+		case "function_call_output":
+			if output, ok := itemMap["output"]; ok {
+				total += countResponseAPIValueTokens(ctx, output, model)
+			} else if content, ok := itemMap["content"]; ok {
+				total += countResponseAPIValueTokens(ctx, content, model)
+			}
+			return total
+		}
+	}
+
+	if content, ok := itemMap["content"]; ok {
+		total += countResponseAPIContentTokens(ctx, content, model)
+		return total
+	}
+
+	if typeVal, ok := itemMap["type"].(string); ok {
+		partTokens := countResponseAPIContentPartTokens(ctx, itemMap, typeVal, model)
+		if partTokens > 0 {
+			total += partTokens
+			return total
+		}
+	}
+
+	total += countResponseAPIValueTokens(ctx, itemMap, model)
+	return total
+}
+
+// countResponseAPIContentTokens counts tokens for a Response API content field.
+// Parameters: ctx is the request context; content is the content payload; model is the target model name.
+// Returns: the estimated token count for the content payload.
+func countResponseAPIContentTokens(ctx context.Context, content any, model string) int {
+	switch v := content.(type) {
+	case string:
+		return openai.CountTokenText(v, model)
+	case []any:
+		total := 0
+		for _, raw := range v {
+			if partMap, ok := raw.(map[string]any); ok {
+				typeStr, _ := partMap["type"].(string)
+				total += countResponseAPIContentPartTokens(ctx, partMap, typeStr, model)
+				continue
+			}
+			total += countResponseAPIValueTokens(ctx, raw, model)
+		}
+		return total
+	default:
+		return countResponseAPIValueTokens(ctx, v, model)
+	}
+}
+
+// countResponseAPIContentPartTokens counts tokens for a single content part item.
+// Parameters: ctx is the request context; partMap is the content part map; partType is the declared type; model is the target model name.
+// Returns: the estimated token count for the content part.
+func countResponseAPIContentPartTokens(ctx context.Context, partMap map[string]any, partType string, model string) int {
+	typeStr := strings.ToLower(strings.TrimSpace(partType))
+	switch typeStr {
+	case "input_text", "output_text":
+		if text, ok := partMap["text"].(string); ok && text != "" {
+			return openai.CountTokenText(text, model)
+		}
+	case "input_image":
+		url, _ := partMap["image_url"].(string)
+		detail, _ := partMap["detail"].(string)
+		return countResponseAPIImageTokens(ctx, url, detail, model)
+	case "input_audio":
+		if inputAudio, ok := partMap["input_audio"].(map[string]any); ok {
+			if data, ok := inputAudio["data"].(string); ok && data != "" {
+				return countResponseAPIAudioTokens(ctx, data, model)
+			}
+		}
+	}
+	if text, ok := partMap["text"].(string); ok && text != "" {
+		return openai.CountTokenText(text, model)
+	}
+	return countResponseAPIValueTokens(ctx, partMap, model)
+}
+
+// countResponseAPIImageTokens counts tokens for an input image.
+// Parameters: ctx is the request context; url is the image URL; detail is the image detail level; model is the target model name.
+// Returns: the estimated token count for the image input.
+func countResponseAPIImageTokens(ctx context.Context, url string, detail string, model string) int {
+	if url == "" {
+		return 0
+	}
+	lg := gmw.GetLogger(ctx)
+	tokens, err := openai.CountImageTokens(url, detail, model)
+	if err != nil {
+		isDataURL := strings.HasPrefix(url, "data:image/")
+		b64Len := 0
+		if isDataURL {
+			if idx := strings.Index(url, ","); idx >= 0 && idx+1 < len(url) {
+				b64Len = len(url[idx+1:])
+			}
+		}
+		if lg != nil {
+			lg.Debug("response api image token count failed",
+				zap.Error(err),
+				zap.String("model", model),
+				zap.Bool("data_url", isDataURL),
+				zap.Int("base64_len", b64Len),
+				zap.String("detail", detail),
+			)
+		}
+		return 0
+	}
+	return tokens
+}
+
+// countResponseAPIAudioTokens counts tokens for base64 audio inputs.
+// Parameters: ctx is the request context; base64Data is the audio payload; model is the target model name.
+// Returns: the estimated token count for the audio input.
+func countResponseAPIAudioTokens(ctx context.Context, base64Data string, model string) int {
+	lg := gmw.GetLogger(ctx)
+	tokens, err := openai.CountInputAudioTokens(ctx, base64Data, model)
+	if err != nil {
+		if lg != nil {
+			lg.Debug("response api audio token count failed",
+				zap.Error(err),
+				zap.String("model", model),
+			)
+		}
+		return 0
+	}
+	return tokens
+}
+
+// countResponseAPIValueTokens counts tokens for arbitrary values by serializing to JSON when needed.
+// Parameters: ctx is the request context; value is the payload; model is the target model name.
+// Returns: the estimated token count for the value.
+func countResponseAPIValueTokens(ctx context.Context, value any, model string) int {
+	lg := gmw.GetLogger(ctx)
+	switch v := value.(type) {
+	case string:
+		return openai.CountTokenText(v, model)
+	case nil:
+		return 0
+	default:
+		raw, err := json.Marshal(v)
+		if err != nil {
+			if lg != nil {
+				lg.Debug("response api value token count fallback",
+					zap.Error(err),
+					zap.String("model", model),
+				)
+			}
+			return 0
+		}
+		return openai.CountTokenText(string(raw), model)
+	}
+}
+
+// responseMessageTokenOverhead returns per-message overhead values for chat-like inputs.
+// Parameters: model is the target model name.
+// Returns: tokensPerMessage and tokensPerName to approximate chat-style overhead.
+func responseMessageTokenOverhead(model string) (int, int) {
+	if model == "gpt-3.5-turbo-0301" {
+		return 4, -1
+	}
+	return 3, 1
 }
 
 // sanitizeResponseAPIRequest sanitizes Response API request by removing parameters not supported by reasoning models

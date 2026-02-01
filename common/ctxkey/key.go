@@ -82,6 +82,27 @@ const (
 	// Read in: response handlers that need to inspect the converted structure.
 	ImageRequest = "image_request"
 
+	// OutputImageCount stores the number of output images observed in upstream responses.
+	// Set by: adaptors that parse image outputs (e.g., Gemini inlineData).
+	// Read in: controllers to apply per-image billing for image-capable models.
+	OutputImageCount = "output_image_count"
+	// OutputAudioSeconds stores the total output audio duration in seconds for billing.
+	// Set by: adaptors that parse output audio payloads (e.g., base64 audio responses).
+	// Read in: controllers to apply per-second audio billing when output audio is produced.
+	OutputAudioSeconds = "output_audio_seconds"
+	// OutputAudioTokens stores the output audio token count when per-token billing is required.
+	// Set by: adaptors that parse output audio usage details.
+	// Read in: controllers to apply fallback audio billing when duration is unavailable.
+	OutputAudioTokens = "output_audio_tokens"
+	// OutputVideoSeconds stores the total output video duration in seconds for billing.
+	// Set by: adaptors that parse video generation outputs.
+	// Read in: controllers to apply per-second video billing.
+	OutputVideoSeconds = "output_video_seconds"
+	// OutputVideoResolution stores the output video resolution string (e.g., "1920x1080") for pricing multipliers.
+	// Set by: adaptors that parse video generation outputs.
+	// Read in: controllers to apply resolution-based video pricing multipliers.
+	OutputVideoResolution = "output_video_resolution"
+
 	// WebSearchCallCount stores the number of OpenAI web search tool invocations observed in the upstream
 	// response. Set by adaptors after parsing provider responses and consumed during billing adjustments.
 	WebSearchCallCount = "web_search_call_count"
