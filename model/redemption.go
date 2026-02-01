@@ -31,6 +31,17 @@ type Redemption struct {
 	UpdatedAt    int64  `json:"updated_at" gorm:"bigint;autoUpdateTime:milli"`
 }
 
+var redemptionSortFields = map[string]string{
+	"id":            "id",
+	"name":          "name",
+	"status":        "status",
+	"quota":         "quota",
+	"created_time":  "created_time",
+	"redeemed_time": "redeemed_time",
+	"created_at":    "created_at",
+	"updated_at":    "updated_at",
+}
+
 func GetAllRedemptions(startIdx int, num int) ([]*Redemption, error) {
 	var redemptions []*Redemption
 	var err error
@@ -48,17 +59,7 @@ func SearchRedemptions(keyword string, startIdx int, num int, sortBy string, sor
 	if keyword != "" {
 		db = db.Where("id = ? or name LIKE ?", keyword, keyword+"%")
 	}
-	if sortBy != "" {
-		orderClause := sortBy
-		if sortOrder == "asc" {
-			orderClause += " asc"
-		} else {
-			orderClause += " desc"
-		}
-		db = db.Order(orderClause)
-	} else {
-		db = db.Order("id desc")
-	}
+	db = db.Order(ValidateOrderClause(sortBy, sortOrder, redemptionSortFields, "id desc"))
 	err = db.Count(&total).Limit(num).Offset(startIdx).Find(&redemptions).Error
 	return redemptions, total, err
 }

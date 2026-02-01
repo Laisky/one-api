@@ -42,6 +42,17 @@ type Token struct {
 	Subnet         *string `json:"subnet" gorm:"default:''"` // allowed subnet
 }
 
+var tokenSortFields = map[string]string{
+	"id":           "id",
+	"name":         "name",
+	"status":       "status",
+	"expired_time": "expired_time",
+	"remain_quota": "remain_quota",
+	"used_quota":   "used_quota",
+	"created_at":   "created_at",
+	"updated_at":   "updated_at",
+}
+
 // MarshalJSON ensures that any token serialized to JSON will include the configured key prefix.
 // This does not modify the stored key; it's applied only at response time.
 func (t Token) MarshalJSON() ([]byte, error) {
@@ -110,13 +121,7 @@ func GetAllUserTokens(userId int, startIdx int, num int, order string, sortBy st
 
 	// Handle new sorting parameters first
 	if sortBy != "" {
-		orderClause := sortBy
-		if sortOrder == "asc" {
-			orderClause += " asc"
-		} else {
-			orderClause += " desc"
-		}
-		query = query.Order(orderClause)
+		query = query.Order(ValidateOrderClause(sortBy, sortOrder, tokenSortFields, "id desc"))
 	} else {
 		// Fallback to legacy order parameter for backward compatibility
 		switch order {
@@ -143,14 +148,7 @@ func SearchUserTokens(userId int, keyword string, startIdx int, num int, sortBy 
 	if keyword != "" {
 		db = db.Where("name LIKE ?", keyword+"%")
 	}
-	orderClause := "id desc"
-	if sortBy != "" {
-		if sortOrder == "asc" {
-			orderClause = sortBy + " asc"
-		} else {
-			orderClause = sortBy + " desc"
-		}
-	}
+	orderClause := ValidateOrderClause(sortBy, sortOrder, tokenSortFields, "id desc")
 	db = db.Order(orderClause)
 	err = db.Count(&total).Limit(num).Offset(startIdx).Find(&tokens).Error
 	return tokens, total, err

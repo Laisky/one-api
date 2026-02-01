@@ -58,6 +58,20 @@ type User struct {
 	UpdatedAt        int64           `json:"updated_at" gorm:"bigint;autoUpdateTime:milli"`
 }
 
+var userSortFields = map[string]string{
+	"id":            "id",
+	"username":      "username",
+	"email":         "email",
+	"display_name":  "display_name",
+	"role":          "role",
+	"status":        "status",
+	"quota":         "quota",
+	"used_quota":    "used_quota",
+	"request_count": "request_count",
+	"created_at":    "created_at",
+	"updated_at":    "updated_at",
+}
+
 func GetMaxUserId() int {
 	var user User
 	DB.Last(&user)
@@ -69,13 +83,7 @@ func GetAllUsers(startIdx int, num int, order string, sortBy string, sortOrder s
 
 	// Handle new sorting parameters first
 	if sortBy != "" {
-		orderClause := sortBy
-		if sortOrder == "asc" {
-			orderClause += " asc"
-		} else {
-			orderClause += " desc"
-		}
-		query = query.Order(orderClause)
+		query = query.Order(ValidateOrderClause(sortBy, sortOrder, userSortFields, "id desc"))
 	} else {
 		// Fallback to legacy order parameter for backward compatibility
 		switch order {
@@ -100,15 +108,7 @@ func GetUserCount() (count int64, err error) {
 }
 
 func SearchUsers(keyword string, sortBy string, sortOrder string) (users []*User, err error) {
-	// Default sorting
-	orderClause := "id desc"
-	if sortBy != "" {
-		if sortOrder == "asc" {
-			orderClause = sortBy + " asc"
-		} else {
-			orderClause = sortBy + " desc"
-		}
-	}
+	orderClause := ValidateOrderClause(sortBy, sortOrder, userSortFields, "id desc")
 
 	if !common.UsingPostgreSQL.Load() {
 		err = DB.Omit("password").Where("id = ? or username LIKE ? or email LIKE ? or display_name LIKE ?", keyword, keyword+"%", keyword+"%", keyword+"%").Order(orderClause).Find(&users).Error

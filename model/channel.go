@@ -65,6 +65,20 @@ type Channel struct {
 	InferenceProfileArnMap *string `json:"inference_profile_arn_map" gorm:"type:text"` // JSON string mapping model names to AWS Bedrock Inference Profile ARNs
 }
 
+var channelSortFields = map[string]string{
+	"id":            "id",
+	"name":          "name",
+	"type":          "type",
+	"status":        "status",
+	"response_time": "response_time",
+	"test_time":     "test_time",
+	"priority":      "priority",
+	"weight":        "weight",
+	"used_quota":    "used_quota",
+	"created_at":    "created_at",
+	"updated_at":    "updated_at",
+}
+
 type ChannelConfig struct {
 	Region            string                `json:"region,omitempty"`
 	SK                string                `json:"sk,omitempty"`
@@ -299,15 +313,7 @@ func GetAllChannels(startIdx int, num int, scope string, sortBy string, sortOrde
 	var channels []*Channel
 	var err error
 
-	// Default sorting
-	orderClause := "id desc"
-	if sortBy != "" {
-		if sortOrder == "asc" {
-			orderClause = sortBy + " asc"
-		} else {
-			orderClause = sortBy + " desc"
-		}
-	}
+	orderClause := ValidateOrderClause(sortBy, sortOrder, channelSortFields, "id desc")
 
 	switch scope {
 	case "all":
@@ -358,15 +364,7 @@ func GetEnabledChannelsVersionSignature() (string, error) {
 }
 
 func SearchChannels(keyword string, sortBy string, sortOrder string) (channels []*Channel, err error) {
-	// Default sorting
-	orderClause := "id desc"
-	if sortBy != "" {
-		if sortOrder == "asc" {
-			orderClause = sortBy + " asc"
-		} else {
-			orderClause = sortBy + " desc"
-		}
-	}
+	orderClause := ValidateOrderClause(sortBy, sortOrder, channelSortFields, "id desc")
 
 	err = DB.Omit("key").Where("id = ? or name LIKE ?", helper.String2Int(keyword), keyword+"%").Order(orderClause).Find(&channels).Error
 	return channels, err

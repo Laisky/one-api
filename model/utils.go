@@ -154,6 +154,24 @@ func addNewRecord(type_ int, id int, value int64) {
 // It swaps out the in-memory stores atomically (per type) to allow concurrent
 // accumulation while writing to the database.
 //
+// ValidateOrderClause ensures that the sort field and order are valid to prevent SQL injection.
+// It returns a sanitized ORDER BY clause string.
+func ValidateOrderClause(sortBy, sortOrder string, allowed map[string]string, defaultClause string) string {
+	if sortOrder != "asc" && sortOrder != "desc" {
+		sortOrder = "desc"
+	}
+
+	if col, ok := allowed[sortBy]; ok {
+		return col + " " + sortOrder
+	}
+
+	return defaultClause
+}
+
+// batchUpdate flushes all accumulated changes to the database.
+// It swaps out the in-memory stores atomically (per type) to allow concurrent
+// accumulation while writing to the database.
+//
 // ctx is used to propagate cancellation/timeout to database operations.
 // If the context is canceled or times out, ongoing database operations will be
 // interrupted (if the database driver supports context cancellation).
