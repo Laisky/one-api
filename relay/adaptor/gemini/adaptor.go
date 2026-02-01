@@ -400,9 +400,8 @@ func (a *Adaptor) convertStreamingToClaudeResponse(c *gin.Context, resp *http.Re
 	lg := gmw.GetLogger(c)
 
 	scanner := bufio.NewScanner(bytes.NewReader(body))
+	helper.ConfigureScannerBuffer(scanner)
 	scanner.Split(bufio.ScanLines)
-	buffer := make([]byte, 1024*1024)
-	scanner.Buffer(buffer, len(buffer))
 
 	var textBuilder strings.Builder
 	type toolUse struct {
@@ -484,7 +483,7 @@ func (a *Adaptor) convertStreamingToClaudeResponse(c *gin.Context, resp *http.Re
 	}
 
 	if err := scanner.Err(); err != nil {
-		lg.Warn("error scanning Gemini stream for Claude conversion", zap.Error(errors.Wrap(err, "scan stream")))
+		lg.Warn("error scanning Gemini stream for Claude conversion", zap.Error(errors.Wrap(err, "scan stream")), zap.Int("scanner_max_token_size", helper.DefaultScannerMaxTokenSize))
 	}
 
 	var toolArgsText strings.Builder

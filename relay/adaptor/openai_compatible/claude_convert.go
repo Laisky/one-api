@@ -16,6 +16,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/songquanpeng/one-api/common"
+	"github.com/songquanpeng/one-api/common/helper"
 	relaymodel "github.com/songquanpeng/one-api/relay/model"
 )
 
@@ -225,8 +226,7 @@ func ConvertOpenAIStreamToClaudeSSE(c *gin.Context, resp *http.Response, promptT
 	common.SetEventStreamHeaders(c)
 
 	scanner := bufio.NewScanner(resp.Body)
-	buffer := make([]byte, 1024*1024)
-	scanner.Buffer(buffer, len(buffer))
+	helper.ConfigureScannerBuffer(scanner)
 	scanner.Split(bufio.ScanLines)
 
 	accumText := ""

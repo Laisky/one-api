@@ -15,6 +15,7 @@ import (
 
 	"github.com/songquanpeng/one-api/common"
 	"github.com/songquanpeng/one-api/common/config"
+	"github.com/songquanpeng/one-api/common/ctxkey"
 	"github.com/songquanpeng/one-api/common/helper"
 	"github.com/songquanpeng/one-api/common/image"
 	"github.com/songquanpeng/one-api/common/random"
@@ -659,9 +660,19 @@ func responseGeminiChat2OpenAI(c *gin.Context, response *ChatResponse) *openai.T
 					})
 				}
 
-				if part.InlineData != nil && part.InlineData.MimeType != "" && part.InlineData.Data != "" {
+				if part.InlineData != nil && part.InlineData.Data != "" && part.InlineData.MimeType != "" &&
+					isGeminiImageMimeType(part.InlineData.MimeType) {
 					imageURL := &model.ImageURL{
 						Url: fmt.Sprintf("data:%s;base64,%s", part.InlineData.MimeType, part.InlineData.Data),
+					}
+					structured = append(structured, model.MessageContent{
+						Type:     model.ContentTypeImageURL,
+						ImageURL: imageURL,
+					})
+				}
+				if part.FileData != nil && part.FileData.FileURI != "" && isGeminiImageMimeType(part.FileData.MimeType) {
+					imageURL := &model.ImageURL{
+						Url: part.FileData.FileURI,
 					}
 					structured = append(structured, model.MessageContent{
 						Type:     model.ContentTypeImageURL,
@@ -715,10 +726,14 @@ func streamResponseGeminiChat2OpenAI(c *gin.Context, geminiResponse *ChatRespons
 		}
 
 		// Handle image content
-		if part.InlineData != nil && part.InlineData.MimeType != "" && part.InlineData.Data != "" {
-			// Create a structured response for image content
-			imageUrl := fmt.Sprintf("data:%s;base64,%s", part.InlineData.MimeType, part.InlineData.Data)
-
+		imageURL := ""
+		if part.InlineData != nil && part.InlineData.Data != "" && part.InlineData.MimeType != "" &&
+			isGeminiImageMimeType(part.InlineData.MimeType) {
+			imageURL = fmt.Sprintf("data:%s;base64,%s", part.InlineData.MimeType, part.InlineData.Data)
+		} else if part.FileData != nil && part.FileData.FileURI != "" && isGeminiImageMimeType(part.FileData.MimeType) {
+			imageURL = part.FileData.FileURI
+		}
+		if imageURL != "" {
 			// If we already have text content, create a mixed content response
 			if strContent, ok := choice.Delta.Content.(string); ok && strContent != "" {
 				// Convert the existing text content and add the image
@@ -730,7 +745,7 @@ func streamResponseGeminiChat2OpenAI(c *gin.Context, geminiResponse *ChatRespons
 					{
 						Type: model.ContentTypeImageURL,
 						ImageURL: &model.ImageURL{
-							Url: imageUrl,
+							Url: imageURL,
 						},
 					},
 				}
@@ -741,7 +756,7 @@ func streamResponseGeminiChat2OpenAI(c *gin.Context, geminiResponse *ChatRespons
 					{
 						Type: model.ContentTypeImageURL,
 						ImageURL: &model.ImageURL{
-							Url: imageUrl,
+							Url: imageURL,
 						},
 					},
 				}
@@ -782,6 +797,62 @@ func embeddingResponseGemini2OpenAI(response *EmbeddingResponse) *openai.Embeddi
 	return &openAIEmbeddingResponse
 }
 
+// geminiOutputImageCounts aggregates image counts for Gemini output parts.
+type geminiOutputImageCounts struct {
+	Total  int
+	Inline int
+	File   int
+}
+
+// isGeminiImageMimeType reports whether the MIME type should be treated as an image.
+// Parameters: mimeType is the MIME type string from Gemini output.
+// Returns: true when the MIME type is empty or starts with "image/".
+func isGeminiImageMimeType(mimeType string) bool {
+	if mimeType == "" {
+		return true
+	}
+	return strings.HasPrefix(strings.ToLower(mimeType), "image/")
+}
+
+// countGeminiOutputImages counts image parts (inline data and file references) in a Gemini chat response.
+// Parameters: response is the parsed Gemini ChatResponse payload.
+// Returns: aggregated image counts by representation and total.
+func countGeminiOutputImages(response *ChatResponse) geminiOutputImageCounts {
+	if response == nil {
+		return geminiOutputImageCounts{}
+	}
+	var counts geminiOutputImageCounts
+	for _, candidate := range response.Candidates {
+		for _, part := range candidate.Content.Parts {
+			if part.InlineData != nil && part.InlineData.Data != "" && isGeminiImageMimeType(part.InlineData.MimeType) {
+				counts.Inline++
+				counts.Total++
+			}
+			if part.FileData != nil && part.FileData.FileURI != "" && isGeminiImageMimeType(part.FileData.MimeType) {
+				counts.File++
+				counts.Total++
+			}
+		}
+	}
+	return counts
+}
+
+// recordGeminiOutputImageCount accumulates output image counts in the Gin context.
+// Parameters: c is the Gin context for the request; count is the number of images to add.
+// Returns: nothing; the aggregated count is stored under ctxkey.OutputImageCount.
+func recordGeminiOutputImageCount(c *gin.Context, count int) {
+	if c == nil || count <= 0 {
+		return
+	}
+	if raw, ok := c.Get(ctxkey.OutputImageCount); ok {
+		if existing, ok := raw.(int); ok {
+			c.Set(ctxkey.OutputImageCount, existing+count)
+			return
+		}
+	}
+	c.Set(ctxkey.OutputImageCount, count)
+}
+
 // StreamHandler processes streaming responses from the Gemini API and converts them to OpenAI-compatible
 // Server-Sent Events (SSE) format. It reads the response body line by line, unmarshals each chunk,
 // converts it to OpenAI format, and streams it to the client.
@@ -789,11 +860,12 @@ func embeddingResponseGemini2OpenAI(response *EmbeddingResponse) *openai.Embeddi
 func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusCode, string) {
 	lg := gmw.GetLogger(c)
 	responseText := ""
+	outputImageCount := 0
+	inlineImageCount := 0
+	fileImageCount := 0
 	scanner := bufio.NewScanner(resp.Body)
+	helper.ConfigureScannerBuffer(scanner)
 	scanner.Split(bufio.ScanLines)
-
-	buffer := make([]byte, 10*1024*1024) // 10MB buffer
-	scanner.Buffer(buffer, len(buffer))
 
 	common.SetEventStreamHeaders(c)
 
@@ -815,6 +887,11 @@ func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusC
 			continue
 		}
 
+		chunkCounts := countGeminiOutputImages(&geminiResponse)
+		outputImageCount += chunkCounts.Total
+		inlineImageCount += chunkCounts.Inline
+		fileImageCount += chunkCounts.File
+
 		response := streamResponseGeminiChat2OpenAI(c, &geminiResponse)
 		if response == nil {
 			continue
@@ -830,7 +907,19 @@ func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusC
 	}
 	if err := scanner.Err(); err != nil {
 		lg.Error("error reading stream",
-			zap.Error(errors.Wrap(err, "scanner stream")))
+			zap.Error(errors.Wrap(err, "scanner stream")),
+			zap.Int("scanner_max_token_size", helper.DefaultScannerMaxTokenSize))
+	}
+
+	if outputImageCount > 0 {
+		recordGeminiOutputImageCount(c, outputImageCount)
+		modelName := c.GetString(ctxkey.RequestModel)
+		lg.Debug("gemini stream output images counted",
+			zap.String("model", modelName),
+			zap.Int("image_count", outputImageCount),
+			zap.Int("inline_image_count", inlineImageCount),
+			zap.Int("file_image_count", fileImageCount),
+		)
 	}
 
 	render.Done(c)
@@ -892,6 +981,17 @@ func Handler(c *gin.Context, resp *http.Response, promptTokens int, modelName st
 			zap.Int("candidate_index", i),
 			zap.Int("parts_count", len(candidate.Content.Parts)),
 			zap.String("finish_reason", candidate.FinishReason),
+		)
+	}
+
+	outputCounts := countGeminiOutputImages(&geminiResponse)
+	if outputCounts.Total > 0 {
+		recordGeminiOutputImageCount(c, outputCounts.Total)
+		lg.Debug("gemini output images counted",
+			zap.String("model", modelName),
+			zap.Int("image_count", outputCounts.Total),
+			zap.Int("inline_image_count", outputCounts.Inline),
+			zap.Int("file_image_count", outputCounts.File),
 		)
 	}
 

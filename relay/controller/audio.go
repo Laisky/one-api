@@ -404,6 +404,7 @@ func getTextFromVerboseJSON(body []byte) (string, error) {
 
 func getTextFromSRT(body []byte) (string, error) {
 	scanner := bufio.NewScanner(strings.NewReader(string(body)))
+	helper.ConfigureScannerBuffer(scanner)
 	var builder strings.Builder
 	var textLine bool
 	for scanner.Scan() {

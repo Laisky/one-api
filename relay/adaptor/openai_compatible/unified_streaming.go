@@ -15,6 +15,7 @@ import (
 
 	"github.com/songquanpeng/one-api/common"
 	"github.com/songquanpeng/one-api/common/ctxkey"
+	"github.com/songquanpeng/one-api/common/helper"
 	"github.com/songquanpeng/one-api/common/render"
 	"github.com/songquanpeng/one-api/common/tracing"
 	"github.com/songquanpeng/one-api/relay/model"
@@ -969,8 +970,7 @@ func UnifiedStreamProcessing(c *gin.Context, resp *http.Response, promptTokens i
 	}
 
 	scanner := bufio.NewScanner(resp.Body)
-	buffer := make([]byte, 1024*1024) // 1MB buffer
-	scanner.Buffer(buffer, len(buffer))
+	helper.ConfigureScannerBuffer(scanner)
 	scanner.Split(bufio.ScanLines)
 
 	common.SetEventStreamHeaders(c)

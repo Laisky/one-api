@@ -38,6 +38,7 @@ func ConvertCompletionsRequest(textRequest model.GeneralOpenAIRequest) *Request 
 func StreamHandler(c *gin.Context, resp *http.Response, promptTokens int, modelName string) (*model.ErrorWithStatusCode, *model.Usage) {
 	lg := gmw.GetLogger(c)
 	scanner := bufio.NewScanner(resp.Body)
+	helper.ConfigureScannerBuffer(scanner)
 	scanner.Split(bufio.ScanLines)
 
 	common.SetEventStreamHeaders(c)

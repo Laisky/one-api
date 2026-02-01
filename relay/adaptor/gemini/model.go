@@ -57,6 +57,13 @@ type InlineData struct {
 	Data     string `json:"data"`
 }
 
+// FileData represents a file reference returned by Gemini responses.
+// It includes the MIME type and the URI where the file can be retrieved.
+type FileData struct {
+	MimeType string `json:"mimeType,omitempty"`
+	FileURI  string `json:"fileUri,omitempty"`
+}
+
 type FunctionCall struct {
 	FunctionName string `json:"name"`
 	Arguments    any    `json:"args"`
@@ -65,6 +72,7 @@ type FunctionCall struct {
 type Part struct {
 	Text         string        `json:"text,omitempty"`
 	InlineData   *InlineData   `json:"inlineData,omitempty"`
+	FileData     *FileData     `json:"fileData,omitempty"`
 	FunctionCall *FunctionCall `json:"functionCall,omitempty"`
 }
 

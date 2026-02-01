@@ -225,6 +225,9 @@ func RelayResponseAPIHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 		// Fall through to billing with available usage
 	}
 
+	applyOutputImageCharges(c, &usage, meta)
+	applyOutputAudioCharges(c, &usage, meta)
+	applyOutputVideoCharges(c, &usage, meta)
 	tooling.ApplyBuiltinToolCharges(c, &usage, meta, channelRecord, requestAdaptor)
 
 	// post-consume quota

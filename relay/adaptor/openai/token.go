@@ -351,6 +351,36 @@ func countImageTokens(url string, detail string, model string) (_ int, err error
 	}
 }
 
+// CountImageTokens counts token usage for an image URL in vision-capable prompts.
+// Parameters: url is the image URL or data URL; detail is "low", "high", or "auto"; model is the target model name.
+// Returns: the estimated token count and any error encountered while inspecting the image size.
+func CountImageTokens(url string, detail string, model string) (int, error) {
+	return countImageTokens(url, detail, model)
+}
+
+// CountInputAudioTokens estimates prompt tokens for base64-encoded input audio.
+// Parameters: ctx is the request context; base64Data is the audio payload; model is the target model name.
+// Returns: the estimated token count for the audio input and any decoding/processing error.
+func CountInputAudioTokens(ctx context.Context, base64Data string, model string) (int, error) {
+	audioData, err := base64.StdEncoding.DecodeString(base64Data)
+	if err != nil {
+		return 0, errors.Wrap(err, "decode input audio base64")
+	}
+
+	audioTokensPerSecond := pricing.DefaultAudioPromptTokensPerSecond
+	audioCfg, found := pricing.ResolveAudioPricing(model, nil, &Adaptor{})
+	if found && audioCfg != nil && audioCfg.PromptTokensPerSecond > 0 {
+		audioTokensPerSecond = audioCfg.PromptTokensPerSecond
+	}
+
+	audioTokens, err := helper.GetAudioTokens(ctx, bytes.NewReader(audioData), audioTokensPerSecond)
+	if err != nil {
+		return 0, errors.Wrap(err, "count input audio tokens")
+	}
+
+	return int(math.Ceil(audioTokens)), nil
+}
+
 func CountTokenInput(input any, model string) int {
 	switch v := input.(type) {
 	case string:

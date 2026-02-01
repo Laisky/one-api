@@ -157,6 +157,9 @@ func relayResponseAPIThroughChat(c *gin.Context, meta *metalib.Meta, responseAPI
 			billing.ReturnPreConsumedQuota(ctx, preConsumedQuota, meta.TokenId)
 			return execErr
 		}
+		applyOutputImageCharges(c, &usage, meta)
+		applyOutputAudioCharges(c, &usage, meta)
+		applyOutputVideoCharges(c, &usage, meta)
 		tooling.ApplyBuiltinToolCharges(c, &usage, meta, channelRecord, requestAdaptor)
 		if mcpSummary != nil && mcpSummary.summary != nil {
 			var existing *model.ToolUsageSummary
@@ -333,6 +336,9 @@ func relayResponseAPIThroughChat(c *gin.Context, meta *metalib.Meta, responseAPI
 		}
 	}
 
+	applyOutputImageCharges(c, &usage, meta)
+	applyOutputAudioCharges(c, &usage, meta)
+	applyOutputVideoCharges(c, &usage, meta)
 	tooling.ApplyBuiltinToolCharges(c, &usage, meta, channelRecord, requestAdaptor)
 
 	if respErr == nil && capture != nil {
