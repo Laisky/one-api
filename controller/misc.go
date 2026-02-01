@@ -157,7 +157,7 @@ func SendPasswordResetEmail(c *gin.Context) {
 	// and timing attacks. The actual email sending is performed asynchronously.
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
-		"message": "",
+		"message": "If the email is registered, you will receive a password reset link shortly.",
 	})
 
 	go func() {
