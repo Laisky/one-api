@@ -41,9 +41,12 @@ func UnmarshalBodyReusable(c *gin.Context, v any) error {
 
 	logger := gmw.GetLogger(c)
 	if _, ok := c.Get(ctxkey.RequestModel); !ok {
+		preview, truncated := SanitizePayloadForLogging(requestBody, DefaultLogBodyLimit)
 		logger.Debug("receive user request",
 			zap.String("method", c.Request.Method),
-			zap.ByteString("request", requestBody))
+			zap.Int("body_bytes", len(requestBody)),
+			zap.Bool("body_truncated", truncated),
+			zap.ByteString("request", preview))
 	}
 
 	// check v should be a pointer
