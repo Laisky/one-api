@@ -42,6 +42,10 @@ Should use TODOs tool to track tasks and progress.
 
 After making any code changes, always verify that the code is correct: the syntax must be valid, the project should still build successfully(via `go vet ./...`, `go test -race ./...` or `make build-frontend-modern`), and all unit tests must pass. If any test fails, investigate whether the problem lies in the implementation or the test itself, and, respecting the user's specifications, fix the issue carefully.
 
+### Security
+
+Always use constant time comparison for sensitive data. Follow OWASP recommendations for password hashing iterations (minimum 10,000 in this context).
+
 ### TimeZone
 
 Always use UTC for time handling in servers, databases, and APIs.
