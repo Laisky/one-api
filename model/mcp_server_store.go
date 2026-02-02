@@ -8,7 +8,7 @@ import (
 	"github.com/songquanpeng/one-api/common"
 )
 
-// MCPServerSortFields enumerates sortable columns for MCP server lists.
+// MCPServerSortFields enumerates whitelisted columns for MCP server sorting.
 var MCPServerSortFields = map[string]string{
 	"id":         "id",
 	"name":       "name",
@@ -28,18 +28,8 @@ func ListMCPServers(offset int, limit int, sortBy string, sortOrder string) ([]*
 		query = query.Offset(offset)
 	}
 
-	if sortBy == "" {
-		sortBy = "id"
-	}
-	column, ok := MCPServerSortFields[strings.ToLower(sortBy)]
-	if !ok {
-		column = "id"
-	}
-	order := "desc"
-	if strings.ToLower(sortOrder) == "asc" {
-		order = "asc"
-	}
-	query = query.Order(column + " " + order)
+	orderClause := ValidateOrderClause(sortBy, sortOrder, MCPServerSortFields, "id desc")
+	query = query.Order(orderClause)
 
 	var servers []*MCPServer
 	if err := query.Find(&servers).Error; err != nil {

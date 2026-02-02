@@ -46,6 +46,8 @@ After making any code changes, always verify that the code is correct: the synta
 
 Always use constant time comparison for sensitive data. Follow OWASP recommendations for password hashing iterations (minimum 10,000 in this context).
 
+Never use user input directly in database queries to prevent SQL injection attacks. Always sanitize and validate user inputs before using them in queries.
+
 ### TimeZone
 
 Always use UTC for time handling in servers, databases, and APIs.

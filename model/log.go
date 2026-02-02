@@ -52,6 +52,17 @@ type Log struct {
 // new adaptor-specific fields appear.
 type LogMetadata map[string]any
 
+// logSortFields enumerates whitelisted columns for log sorting.
+var logSortFields = map[string]string{
+	"id":                "id",
+	"created_time":      "created_at",
+	"created_at":        "created_at",
+	"prompt_tokens":     "prompt_tokens",
+	"completion_tokens": "completion_tokens",
+	"quota":             "quota",
+	"elapsed_time":      "elapsed_time",
+}
+
 const (
 	// LogMetadataKeyCacheWriteTokens groups cache write token counts recorded for billing transparency.
 	LogMetadataKeyCacheWriteTokens = "cache_write_tokens"
@@ -402,26 +413,7 @@ func buildGenericContent(log *Log) string {
 
 // GetLogOrderClause converts frontend sort preferences into a SQL ORDER clause.
 func GetLogOrderClause(sortBy string, sortOrder string) string {
-	// Validate sort order
-	if sortOrder != "asc" && sortOrder != "desc" {
-		sortOrder = "desc"
-	}
-
-	// Map frontend field names to database column names and validate
-	switch sortBy {
-	case "created_time":
-		return "created_at " + sortOrder
-	case "prompt_tokens":
-		return "prompt_tokens " + sortOrder
-	case "completion_tokens":
-		return "completion_tokens " + sortOrder
-	case "quota":
-		return "quota " + sortOrder
-	case "elapsed_time":
-		return "elapsed_time " + sortOrder
-	default:
-		return "id desc" // Default sorting
-	}
+	return ValidateOrderClause(sortBy, sortOrder, logSortFields, "id desc")
 }
 
 // BUG: Session‑related variables like RequestId and TraceId are kept in `gin.Context`.

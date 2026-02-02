@@ -253,3 +253,17 @@ func TestBatchUpdateFlushesAllTypes(t *testing.T) {
 	assert.Equal(t, int64(50), updatedUser.UsedQuota, "used quota should be updated")
 	assert.Equal(t, 5, updatedUser.RequestCount, "request count should be updated")
 }
+
+// TestValidateOrderClause verifies order clause normalization and whitelisting.
+func TestValidateOrderClause(t *testing.T) {
+	allowed := map[string]string{
+		"id":           "id",
+		"name":         "name",
+		"created_time": "created_at",
+	}
+
+	require.Equal(t, "name asc", ValidateOrderClause(" Name ", "ASC", allowed, "id desc"))
+	require.Equal(t, "created_at desc", ValidateOrderClause("created_time", "desc", allowed, "id desc"))
+	require.Equal(t, "id desc", ValidateOrderClause("invalid", "asc", allowed, "id desc"))
+	require.Equal(t, "id desc", ValidateOrderClause("", "", allowed, "id desc"))
+}

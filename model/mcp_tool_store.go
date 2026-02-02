@@ -1,12 +1,10 @@
 package model
 
 import (
-	"strings"
-
 	"github.com/Laisky/errors/v2"
 )
 
-// MCPToolSortFields enumerates sortable columns for MCP tool lists.
+// MCPToolSortFields enumerates whitelisted columns for MCP tool sorting.
 var MCPToolSortFields = map[string]string{
 	"id":         "id",
 	"name":       "name",
@@ -31,18 +29,8 @@ func ListMCPTools(serverID int, status *int, offset int, limit int, sortBy strin
 		query = query.Offset(offset)
 	}
 
-	if sortBy == "" {
-		sortBy = "id"
-	}
-	column, ok := MCPToolSortFields[strings.ToLower(sortBy)]
-	if !ok {
-		column = "id"
-	}
-	order := "desc"
-	if strings.ToLower(sortOrder) == "asc" {
-		order = "asc"
-	}
-	query = query.Order(column + " " + order)
+	orderClause := ValidateOrderClause(sortBy, sortOrder, MCPToolSortFields, "id desc")
+	query = query.Order(orderClause)
 
 	var tools []*MCPTool
 	if err := query.Find(&tools).Error; err != nil {
