@@ -39,6 +39,25 @@ func getOutputImageCount(c *gin.Context) int {
 	return 0
 }
 
+// hasLocalImagePricing reports whether the channel-level image pricing config has any data.
+// Parameters: local is the channel-scoped image pricing config (may be nil).
+// Returns: true when any billing-related field is present.
+func hasLocalImagePricing(local *model.ImagePricingLocal) bool {
+	if local == nil {
+		return false
+	}
+	if local.PricePerImageUsd > 0 || local.PromptRatio > 0 || local.PromptTokenLimit > 0 || local.MinImages > 0 || local.MaxImages > 0 {
+		return true
+	}
+	if local.DefaultSize != "" || local.DefaultQuality != "" {
+		return true
+	}
+	if len(local.SizeMultipliers) > 0 || len(local.QualityMultipliers) > 0 || len(local.QualitySizeMultipliers) > 0 {
+		return true
+	}
+	return false
+}
+
 // getChannelModelPricingFromContext extracts channel-scoped model ratios and pricing configs from context.
 // Parameters: c is the Gin context for the current request.
 // Returns: the model ratio overrides map and model pricing config map (either may be nil).
@@ -84,9 +103,37 @@ func applyOutputImageCharges(c *gin.Context, usagePtr **relaymodel.Usage, meta *
 	imagePricing, ok := pricing.ResolveImagePricing(billingCtx.ModelName, billingCtx.ChannelModelConfigs, billingCtx.PricingAdaptor)
 	if !ok || imagePricing == nil || imagePricing.PricePerImageUsd <= 0 {
 		if billingCtx.Logger != nil {
+			channelHasConfig := false
+			channelHasImage := false
+			if billingCtx.ChannelModelConfigs != nil {
+				if cfg, exists := billingCtx.ChannelModelConfigs[billingCtx.ModelName]; exists {
+					channelHasConfig = true
+					channelHasImage = hasLocalImagePricing(cfg.Image)
+				}
+			}
+			providerHasImage := false
+			if billingCtx.PricingAdaptor != nil {
+				if defaults := billingCtx.PricingAdaptor.GetDefaultModelPricing(); defaults != nil {
+					if cfg, exists := defaults[billingCtx.ModelName]; exists {
+						if cfg.Image != nil && cfg.Image.HasData() {
+							providerHasImage = true
+						}
+					}
+				}
+			}
+			globalHasImage := false
+			if cfg, exists := pricing.GetGlobalModelConfig(billingCtx.ModelName); exists {
+				if cfg.Image != nil && cfg.Image.HasData() {
+					globalHasImage = true
+				}
+			}
 			billingCtx.Logger.Debug("output image billing skipped due to missing pricing metadata",
 				zap.String("model", billingCtx.ModelName),
 				zap.Int("image_count", imageCount),
+				zap.Bool("channel_has_config", channelHasConfig),
+				zap.Bool("channel_has_image", channelHasImage),
+				zap.Bool("provider_has_image", providerHasImage),
+				zap.Bool("global_has_image", globalHasImage),
 			)
 		}
 		return

@@ -40,29 +40,67 @@ func ResolveModelConfig(modelName string, channelConfigs map[string]model.ModelC
 	return adaptor.ModelConfig{}, false
 }
 
-// ResolveAudioPricing resolves audio pricing metadata using the same precedence
-// as ResolveModelConfig. It returns nil when no audio metadata is defined.
+// ResolveAudioPricing resolves audio pricing metadata with three-layer precedence:
+// channel overrides (when they include audio pricing), provider defaults, then global pricing.
+// It returns nil when no audio metadata is defined in any layer.
 func ResolveAudioPricing(modelName string, channelConfigs map[string]model.ModelConfigLocal, provider adaptor.Adaptor) (*adaptor.AudioPricingConfig, bool) {
-	cfg, ok := ResolveModelConfig(modelName, channelConfigs, provider)
-	if !ok {
-		return nil, false
+	if channelConfigs != nil {
+		if local, ok := channelConfigs[modelName]; ok {
+			cfg := convertLocalModelConfig(local)
+			if cfg.Audio != nil && cfg.Audio.HasData() {
+				return cfg.Audio.Clone(), true
+			}
+		}
 	}
-	if cfg.Audio != nil && cfg.Audio.HasData() {
-		return cfg.Audio.Clone(), true
+
+	if provider != nil {
+		if defaults := provider.GetDefaultModelPricing(); defaults != nil {
+			if cfg, ok := defaults[modelName]; ok {
+				if cfg.Audio != nil && cfg.Audio.HasData() {
+					return cfg.Audio.Clone(), true
+				}
+			}
+		}
 	}
+
+	if cfg, ok := GetGlobalModelConfig(modelName); ok {
+		if cfg.Audio != nil && cfg.Audio.HasData() {
+			return cfg.Audio.Clone(), true
+		}
+	}
+
 	return nil, false
 }
 
-// ResolveImagePricing resolves image pricing metadata using the same precedence
-// as ResolveModelConfig. It returns nil when no image metadata is defined.
+// ResolveImagePricing resolves image pricing metadata with three-layer precedence:
+// channel overrides (when they include image pricing), provider defaults, then global pricing.
+// It returns nil when no image metadata is defined in any layer.
 func ResolveImagePricing(modelName string, channelConfigs map[string]model.ModelConfigLocal, provider adaptor.Adaptor) (*adaptor.ImagePricingConfig, bool) {
-	cfg, ok := ResolveModelConfig(modelName, channelConfigs, provider)
-	if !ok {
-		return nil, false
+	if channelConfigs != nil {
+		if local, ok := channelConfigs[modelName]; ok {
+			cfg := convertLocalModelConfig(local)
+			if cfg.Image != nil && cfg.Image.HasData() {
+				return cfg.Image.Clone(), true
+			}
+		}
 	}
-	if cfg.Image != nil && cfg.Image.HasData() {
-		return cfg.Image.Clone(), true
+
+	if provider != nil {
+		if defaults := provider.GetDefaultModelPricing(); defaults != nil {
+			if cfg, ok := defaults[modelName]; ok {
+				if cfg.Image != nil && cfg.Image.HasData() {
+					return cfg.Image.Clone(), true
+				}
+			}
+		}
 	}
+
+	if cfg, ok := GetGlobalModelConfig(modelName); ok {
+		if cfg.Image != nil && cfg.Image.HasData() {
+			return cfg.Image.Clone(), true
+		}
+	}
+
 	return nil, false
 }
 

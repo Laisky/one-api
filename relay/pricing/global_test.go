@@ -208,6 +208,22 @@ func TestThreeLayerPricing(t *testing.T) {
 	require.Equal(t, expectedRatio, ratio, "Expected fallback ratio")
 }
 
+// TestGetCompletionRatioWithThreeLayers verifies completion ratio fallback across layers.
+func TestGetCompletionRatioWithThreeLayers(t *testing.T) {
+	globalPricingManager = &GlobalPricingManager{
+		contributingAdapters: []int{apitype.OpenAI, apitype.Anthropic},
+	}
+	InitializeGlobalPricingManager(mockGetAdaptor)
+
+	openaiAdaptor := mockGetAdaptor(apitype.OpenAI)
+
+	ratio := GetCompletionRatioWithThreeLayers("gpt-4", nil, openaiAdaptor)
+	require.InDelta(t, 2.0, ratio, 0.0000001, "expected adapter completion ratio")
+
+	ratio = GetCompletionRatioWithThreeLayers("claude-3-opus", nil, openaiAdaptor)
+	require.InDelta(t, 5.0, ratio, 0.0000001, "expected global completion ratio")
+}
+
 func TestSetContributingAdapters(t *testing.T) {
 	// Setup
 	globalPricingManager = &GlobalPricingManager{}
