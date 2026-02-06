@@ -82,9 +82,9 @@ const TokensTable = () => {
 
   // Function to toggle key visibility
   const toggleKeyVisibility = (tokenId) => {
-    setShowKeys(prev => ({
+    setShowKeys((prev) => ({
       ...prev,
-      [tokenId]: !prev[tokenId]
+      [tokenId]: !prev[tokenId],
     }));
   };
 
@@ -107,9 +107,21 @@ const TokensTable = () => {
     { key: 'id', text: t('tokens.sort.id', 'ID'), value: 'id' },
     { key: 'name', text: t('tokens.sort.name', 'Name'), value: 'name' },
     { key: 'status', text: t('tokens.sort.status', 'Status'), value: 'status' },
-    { key: 'used_quota', text: t('tokens.sort.used_quota', 'Used Quota'), value: 'used_quota' },
-    { key: 'remain_quota', text: t('tokens.sort.remain_quota', 'Remaining Quota'), value: 'remain_quota' },
-    { key: 'created_time', text: t('tokens.sort.created_time', 'Created Time'), value: 'created_time' },
+    {
+      key: 'used_quota',
+      text: t('tokens.sort.used_quota', 'Used Quota'),
+      value: 'used_quota',
+    },
+    {
+      key: 'remain_quota',
+      text: t('tokens.sort.remain_quota', 'Remaining Quota'),
+      value: 'remain_quota',
+    },
+    {
+      key: 'created_time',
+      text: t('tokens.sort.created_time', 'Created Time'),
+      value: 'created_time',
+    },
   ];
 
   const loadTokens = async (page = 0, sortBy = '', sortOrder = 'desc') => {
@@ -187,20 +199,19 @@ const TokensTable = () => {
       const res = await API.get(`/api/token/search?keyword=${searchQuery}`);
       const { success, data } = res.data;
       if (success) {
-        const options = data.map(token => ({
+        const options = data.map((token) => ({
           key: token.id,
           value: token.name,
           text: `${token.name}`,
           content: (
             <div style={{ display: 'flex', flexDirection: 'column' }}>
-              <div style={{ fontWeight: 'bold' }}>
-                {token.name}
-              </div>
+              <div style={{ fontWeight: 'bold' }}>{token.name}</div>
               <div style={{ fontSize: '0.9em', color: '#666' }}>
-                ID: {token.id} • Status: {token.status === 1 ? 'Enabled' : 'Disabled'}
+                ID: {token.id} • Status:{' '}
+                {token.status === 1 ? 'Enabled' : 'Disabled'}
               </div>
             </div>
-          )
+          ),
         }));
         setTokenOptions(options);
       }
@@ -232,7 +243,8 @@ const TokensTable = () => {
   };
 
   const sortToken = async (key) => {
-    const newSortOrder = sortBy === key && sortOrder === 'desc' ? 'asc' : 'desc';
+    const newSortOrder =
+      sortBy === key && sortOrder === 'desc' ? 'asc' : 'desc';
     setSortBy(key);
     setSortOrder(newSortOrder);
     await loadTokens(activePage - 1, key, newSortOrder);
@@ -240,7 +252,7 @@ const TokensTable = () => {
 
   const getSortIcon = (columnKey) => {
     if (sortBy !== columnKey) {
-      return <Icon name="sort" style={{ opacity: 0.5 }} />;
+      return <Icon name='sort' style={{ opacity: 0.5 }} />;
     }
     return <Icon name={sortOrder === 'asc' ? 'sort up' : 'sort down'} />;
   };
@@ -348,10 +360,15 @@ const TokensTable = () => {
               search
               clearable
               allowAdditions
-              placeholder={t('tokens.search.placeholder', 'Search by token name...')}
+              placeholder={t(
+                'tokens.search.placeholder',
+                'Search by token name...',
+              )}
               value={searchKeyword}
               options={tokenOptions}
-              onSearchChange={(_, { searchQuery }) => searchTokensByName(searchQuery)}
+              onSearchChange={(_, { searchQuery }) =>
+                searchTokensByName(searchQuery)
+              }
               onChange={(_, { value }) => setSearchKeyword(value)}
               loading={tokenSearchLoading}
               noResultsMessage={t('tokens.no_tokens_found', 'No tokens found')}
@@ -360,7 +377,7 @@ const TokensTable = () => {
                 const newOption = {
                   key: value,
                   value: value,
-                  text: value
+                  text: value,
                 };
                 setTokenOptions([...tokenOptions, newOption]);
               }}
@@ -390,59 +407,76 @@ const TokensTable = () => {
           if (token.deleted) return null;
           return (
             <Table.Row key={token.id}>
-              <Table.Cell data-label="ID">{token.id}</Table.Cell>
-              <Table.Cell data-label="Name">
+              <Table.Cell data-label='ID'>{token.id}</Table.Cell>
+              <Table.Cell data-label='Name'>
                 {cleanDisplay(token.name)}
               </Table.Cell>
-              <Table.Cell data-label="Key">
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Table.Cell data-label='Key'>
+                <div
+                  style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
+                >
                   <span style={{ fontFamily: 'monospace', fontSize: '0.9em' }}>
                     {showKeys[token.id] ? token.key : maskKey(token.key)}
                   </span>
                   <Popup
                     trigger={
                       <Button
-                        size="mini"
+                        size='mini'
                         icon
                         onClick={() => toggleKeyVisibility(token.id)}
+                        aria-label={
+                          showKeys[token.id]
+                            ? t('common:hide', 'Hide')
+                            : t('common:show', 'Show')
+                        }
                       >
                         <Icon name={showKeys[token.id] ? 'eye slash' : 'eye'} />
                       </Button>
                     }
-                    content={showKeys[token.id] ? t('common:hide') : t('common:show')}
+                    content={
+                      showKeys[token.id]
+                        ? t('common:hide', 'Hide')
+                        : t('common:show', 'Show')
+                    }
                     basic
                     inverted
                   />
                   <Popup
                     trigger={
                       <Button
-                        size="mini"
+                        size='mini'
                         icon
                         onClick={() => copyTokenKey(token.key)}
+                        aria-label={t('common:copy', 'Copy')}
                       >
-                        <Icon name="copy" />
+                        <Icon name='copy' />
                       </Button>
                     }
-                    content={t('common:copy')}
+                    content={t('common:copy', 'Copy')}
                     basic
                     inverted
                   />
                 </div>
               </Table.Cell>
-              <Table.Cell data-label="Status">{renderTokenStatus(token.status, t)}</Table.Cell>
-              <Table.Cell data-label="Used Quota">
+              <Table.Cell data-label='Status'>
+                {renderTokenStatus(token.status, t)}
+              </Table.Cell>
+              <Table.Cell data-label='Used Quota'>
                 {token.used_quota ? renderQuota(token.used_quota) : '$0.00'}
               </Table.Cell>
-              <Table.Cell data-label="Remaining Quota">
-                {token.remain_quota === 0 || token.remain_quota === null || token.remain_quota === undefined
-                  ? token.unlimited_quota ? t('common:unlimited') : '$0.00'
-                  : renderQuota(token.remain_quota)
-                }
+              <Table.Cell data-label='Remaining Quota'>
+                {token.remain_quota === 0 ||
+                token.remain_quota === null ||
+                token.remain_quota === undefined
+                  ? token.unlimited_quota
+                    ? t('common:unlimited')
+                    : '$0.00'
+                  : renderQuota(token.remain_quota)}
               </Table.Cell>
-              <Table.Cell data-label="Created Time">
+              <Table.Cell data-label='Created Time'>
                 {renderTimestamp(token.created_time)}
               </Table.Cell>
-              <Table.Cell data-label="Actions">
+              <Table.Cell data-label='Actions'>
                 <div>
                   <Popup
                     trigger={
@@ -454,9 +488,14 @@ const TokensTable = () => {
                           manageToken(
                             token.id,
                             token.status === 1 ? 'disable' : 'enable',
-                            idx
+                            idx,
                           );
                         }}
+                        aria-label={
+                          token.status === 1
+                            ? t('common:disable', 'Disable')
+                            : t('common:enable', 'Enable')
+                        }
                       >
                         {token.status === 1 ? (
                           <Icon name='pause' />
@@ -467,8 +506,8 @@ const TokensTable = () => {
                     }
                     content={
                       token.status === 1
-                        ? t('common:disable')
-                        : t('common:enable')
+                        ? t('common:disable', 'Disable')
+                        : t('common:enable', 'Enable')
                     }
                     basic
                     inverted
@@ -480,11 +519,12 @@ const TokensTable = () => {
                         color='blue'
                         as={Link}
                         to={'/token/edit/' + token.id}
+                        aria-label={t('common:edit', 'Edit')}
                       >
                         <Icon name='edit' />
                       </Button>
                     }
-                    content={t('common:edit')}
+                    content={t('common:edit', 'Edit')}
                     basic
                     inverted
                   />
@@ -493,17 +533,24 @@ const TokensTable = () => {
                       <Button
                         size='small'
                         negative
-                        onClick={() => {
-                          manageToken(token.id, 'delete', idx);
-                        }}
+                        aria-label={t('common:delete', 'Delete')}
                       >
                         <Icon name='trash' />
                       </Button>
                     }
-                    content={t('common:delete')}
-                    basic
-                    inverted
-                  />
+                    on='click'
+                    flowing
+                    hoverable
+                  >
+                    <Button
+                      negative
+                      onClick={() => {
+                        manageToken(token.id, 'delete', idx);
+                      }}
+                    >
+                      {t('token.confirm_delete', 'Delete Token')}
+                    </Button>
+                  </Popup>
                 </div>
               </Table.Cell>
             </Table.Row>
