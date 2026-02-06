@@ -6,7 +6,10 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
+	gmw "github.com/Laisky/gin-middlewares/v7"
+	"github.com/Laisky/zap"
 	"github.com/gin-gonic/gin"
 
 	"github.com/songquanpeng/one-api/common"
@@ -92,54 +95,58 @@ func SendEmailVerification(c *gin.Context) {
 		})
 		return
 	}
-	if config.EmailDomainRestrictionEnabled {
-		allowed := false
-		for _, domain := range config.EmailDomainWhitelist {
-			if strings.HasSuffix(email, "@"+domain) {
-				allowed = true
-				break
+
+	// Simulate processing time to mitigate timing attacks
+	time.Sleep(time.Second)
+
+	// Always return a uniform success response to mitigate user enumeration
+	// and timing attacks. The actual verification process and email sending
+	// are performed asynchronously.
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "If the email is valid and not already registered, you will receive a verification code shortly.",
+	})
+
+	lg := gmw.GetLogger(gmw.BackgroundCtx(c))
+	go func() {
+		// Perform domain whitelist check and email occupancy check in the
+		// background to prevent timing attacks.
+		if config.EmailDomainRestrictionEnabled {
+			allowed := false
+			for _, domain := range config.EmailDomainWhitelist {
+				if strings.HasSuffix(email, "@"+domain) {
+					allowed = true
+					break
+				}
+			}
+			if !allowed {
+				return
 			}
 		}
-		if !allowed {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": "Administrator has enabled email domain whitelist, your email domain is not in the whitelist",
-			})
+
+		if model.IsEmailAlreadyTaken(email) {
 			return
 		}
-	}
-	if model.IsEmailAlreadyTaken(email) {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": "Email address is occupied",
-		})
-		return
-	}
-	code := common.GenerateVerificationCode(6)
-	common.RegisterVerificationCodeWithKey(email, code, common.EmailVerificationPurpose)
-	subject := fmt.Sprintf("%s Email Verification", config.SystemName)
-	content := message.EmailTemplate(
-		subject,
-		fmt.Sprintf(`
+
+		code := common.GenerateVerificationCode(6)
+		common.RegisterVerificationCodeWithKey(email, code, common.EmailVerificationPurpose)
+		subject := fmt.Sprintf("%s Email Verification", config.SystemName)
+		content := message.EmailTemplate(
+			subject,
+			fmt.Sprintf(`
 			<p>Hello!</p>
 			<p>You are verifying your email for %s.</p>
 			<p>Your verification code is:</p>
 			<p style="font-size: 24px; font-weight: bold; color: #333; background-color: #f8f8f8; padding: 10px; text-align: center; border-radius: 4px;">%s</p>
 			<p style="color: #666;">The verification code is valid for %d minutes. If you did not request this, please ignore.</p>
 		`, config.SystemName, code, common.VerificationValidMinutes),
-	)
-	err := message.SendEmail(subject, email, content)
-	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
-		return
-	}
-	c.JSON(http.StatusOK, gin.H{
-		"success": true,
-		"message": "",
-	})
+		)
+
+		err := message.SendEmail(subject, email, content)
+		if err != nil {
+			lg.Error("failed to send email verification", zap.Error(err))
+		}
+	}()
 }
 
 // SendPasswordResetEmail sends a password reset link to the supplied email address when registered.
