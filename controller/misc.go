@@ -7,6 +7,8 @@ import (
 	"strconv"
 	"strings"
 
+	gmw "github.com/Laisky/gin-middlewares/v7"
+	"github.com/Laisky/zap"
 	"github.com/gin-gonic/gin"
 
 	"github.com/songquanpeng/one-api/common"
@@ -101,6 +103,7 @@ func SendEmailVerification(c *gin.Context) {
 		"message": "If the email is valid and not already registered, you will receive a verification code shortly.",
 	})
 
+	lg := gmw.GetLogger(gmw.BackgroundCtx(c))
 	go func() {
 		// Perform domain whitelist check and email occupancy check in the
 		// background to prevent timing attacks.
@@ -135,7 +138,10 @@ func SendEmailVerification(c *gin.Context) {
 		`, config.SystemName, code, common.VerificationValidMinutes),
 		)
 
-		_ = message.SendEmail(subject, email, content)
+		err := message.SendEmail(subject, email, content)
+		if err != nil {
+			lg.Error("failed to send email verification", zap.Error(err))
+		}
 	}()
 }
 
