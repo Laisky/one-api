@@ -90,15 +90,7 @@ func Distribute() func(c *gin.Context) {
 					if err != nil {
 						return nil, errors.Wrap(err, "select channel from cache")
 					}
-					// Check model support
-					if requestModel != "" && !candidate.SupportsModel(requestModel) {
-						exclude[candidate.Id] = true
-						lg.Warn("channel skipped - does not support requested model",
-							zap.Int("channel_id", candidate.Id),
-							zap.String("channel_name", candidate.Name),
-							zap.String("requested_model", requestModel))
-						continue
-					}
+
 					// Check endpoint support
 					if !channelSupportsEndpoint(candidate, relayMode) {
 						exclude[candidate.Id] = true
