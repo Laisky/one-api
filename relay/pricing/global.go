@@ -300,10 +300,8 @@ func GetModelRatioWithThreeLayers(modelName string, channelOverrides map[string]
 
 	// Layer 3: Global model pricing (merged from selected adapters)
 	// Respect explicit zero pricing by checking existence, not value.
-	if globalPricing := GetGlobalModelPricing(); globalPricing != nil {
-		if cfg, exists := globalPricing[modelName]; exists {
-			return cfg.Ratio
-		}
+	if cfg, exists := GetGlobalModelConfig(modelName); exists {
+		return cfg.Ratio
 	}
 
 	// Layer 4: Final fallback - reasonable default
@@ -331,10 +329,8 @@ func GetCompletionRatioWithThreeLayers(modelName string, channelOverrides map[st
 
 	// Layer 3: Global model pricing (merged from selected adapters)
 	// Respect explicit zero pricing by checking existence, not value.
-	if globalPricing := GetGlobalModelPricing(); globalPricing != nil {
-		if cfg, exists := globalPricing[modelName]; exists {
-			return cfg.CompletionRatio
-		}
+	if cfg, exists := GetGlobalModelConfig(modelName); exists {
+		return cfg.CompletionRatio
 	}
 
 	// Layer 4: Final fallback - reasonable default
@@ -356,11 +352,9 @@ func GetVideoPricingWithThreeLayers(modelName string, channelOverride *adaptor.V
 		}
 	}
 
-	if global := GetGlobalModelPricing(); global != nil {
-		if cfg, exists := global[modelName]; exists {
-			if cfg.Video != nil && cfg.Video.HasData() {
-				return cfg.Video.Clone()
-			}
+	if cfg, exists := GetGlobalModelConfig(modelName); exists {
+		if cfg.Video != nil && cfg.Video.HasData() {
+			return cfg.Video
 		}
 	}
 

@@ -417,7 +417,7 @@ func RelayImageHelper(c *gin.Context, relayMode int) *relaymodel.ErrorWithStatus
 		imagePriceUsd = resolvedConfig.Image.PricePerImageUsd
 	}
 	if imagePriceUsd == 0 {
-		if pm, ok := pricing.GetGlobalModelPricing()[imageModel]; ok && pm.Image != nil {
+		if pm, ok := pricing.GetGlobalModelConfig(imageModel); ok && pm.Image != nil {
 			imagePriceUsd = pm.Image.PricePerImageUsd
 		}
 	}
