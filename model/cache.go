@@ -348,7 +348,7 @@ func CacheGetRandomSatisfiedChannel(group string, model string, ignoreFirstPrior
 		return GetRandomSatisfiedChannel(group, model, ignoreFirstPriority)
 	}
 	channelSyncLock.RLock()
-	// It's important to make a copy if we're going to modify or iterate outside lock,
+	// It is important to make a copy if we are going to modify or iterate outside lock,
 	// or ensure operations are safe. Here, we are just reading.
 	channelsFromCache := group2model2channels[group][model]
 
@@ -367,12 +367,8 @@ func CacheGetRandomSatisfiedChannel(group string, model string, ignoreFirstPrior
 	}
 
 	// Make a copy to safely work with outside the lock for selection logic
-	candidateChannels := make([]*Channel, 0, len(channelsFromCache))
-	for _, ch := range channelsFromCache {
-		if model == "" || ch.SupportsModel(model) {
-			candidateChannels = append(candidateChannels, ch)
-		}
-	}
+	candidateChannels := make([]*Channel, len(channelsFromCache))
+	copy(candidateChannels, channelsFromCache)
 	channelSyncLock.RUnlock()
 
 	if len(candidateChannels) == 0 {
@@ -423,11 +419,12 @@ func CacheGetRandomSatisfiedChannel(group string, model string, ignoreFirstPrior
 		}
 	}
 
-	idx := rand.Intn(endIdx)
-	if ignoreFirstPriority {
-		if endIdx < len(candidateChannels) { // which means there are more than one priority
-			idx = random.RandRange(endIdx, len(candidateChannels))
-		} else {
+	var idx int
+	if ignoreFirstPriority && endIdx < len(candidateChannels) {
+		idx = random.RandRange(endIdx, len(candidateChannels))
+	} else {
+		idx = rand.Intn(endIdx)
+		if ignoreFirstPriority {
 			// All channels have the same highest priority, or only one priority level exists.
 			// If ignoreFirstPriority is true, and we only have one priority level,
 			// it means we cannot satisfy "ignoreFirstPriority".
@@ -496,14 +493,6 @@ func CacheGetRandomSatisfiedChannelExcluding(group string, model string, ignoreF
 		candidateChannels = LargerMaxTokensSizeChannels
 	}
 	channelSyncLock.RUnlock()
-
-	filtered := make([]*Channel, 0, len(candidateChannels))
-	for _, ch := range candidateChannels {
-		if model == "" || ch.SupportsModel(model) {
-			filtered = append(filtered, ch)
-		}
-	}
-	candidateChannels = filtered
 
 	if len(candidateChannels) == 0 {
 		return nil, errors.Errorf("no available channels support model %s after exclusions", model)
