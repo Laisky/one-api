@@ -36,6 +36,17 @@ func relayResponseAPIThroughChat(c *gin.Context, meta *metalib.Meta, responseAPI
 	lg := gmw.GetLogger(c)
 	ctx := gmw.Ctx(c)
 
+	inputStats, inputChanged := openai.NormalizeResponseAPIInputContentTypes(&responseAPIRequest.Input)
+	dataURLStats, dataURLChanged := openai.NormalizeResponseAPIInputEmbeddedImageDataURLs(&responseAPIRequest.Input)
+	if config.DebugEnabled && (inputChanged || dataURLChanged) {
+		lg.Debug("normalized Response API input for chat fallback",
+			zap.Int("assistant_input_text_fixed", inputStats.AssistantInputTextFixed),
+			zap.Int("non_assistant_output_text_fixed", inputStats.NonAssistantOutputTextFixed),
+			zap.Int("embedded_image_dataurl_redacted", dataURLStats.DataURLRedacted),
+			zap.Int("embedded_image_dataurl_redacted_bytes", dataURLStats.DataURLRedactedBytes),
+		)
+	}
+
 	chatRequest, err := openai.ConvertResponseAPIToChatCompletionRequest(responseAPIRequest)
 	if err != nil {
 		return openai.ErrorWrapper(err, "convert_response_api_request_failed", http.StatusBadRequest)

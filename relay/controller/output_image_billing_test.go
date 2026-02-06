@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/songquanpeng/one-api/common/ctxkey"
+	"github.com/songquanpeng/one-api/model"
 	"github.com/songquanpeng/one-api/relay/apitype"
 	"github.com/songquanpeng/one-api/relay/channeltype"
 	metalib "github.com/songquanpeng/one-api/relay/meta"
@@ -35,6 +36,35 @@ func TestApplyOutputImageCharges(t *testing.T) {
 		TotalTokens:      12,
 	}
 
+	applyOutputImageCharges(c, &usage, meta)
+
+	expected := calculateImageBaseQuota(0.039, 0, 1.0, 1.0, 1)
+	require.Equal(t, expected, usage.ToolsCost)
+}
+
+// TestApplyOutputImageCharges_ChannelConfigMissingImageFallback verifies channel configs without image metadata fall back to provider pricing.
+func TestApplyOutputImageCharges_ChannelConfigMissingImageFallback(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	writer := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(writer)
+	c.Set(ctxkey.ChannelRatio, 1.0)
+	c.Set(ctxkey.OutputImageCount, 1)
+
+	channel := &model.Channel{}
+	configs := map[string]model.ModelConfigLocal{
+		"gemini-2.5-flash-image-preview": {Ratio: 0.15},
+	}
+	require.NoError(t, channel.SetModelPriceConfigs(configs))
+	c.Set(ctxkey.ChannelModel, channel)
+
+	meta := &metalib.Meta{
+		ActualModelName: "gemini-2.5-flash-image-preview",
+		ChannelType:     channeltype.VertextAI,
+		APIType:         apitype.VertexAI,
+		PromptTokens:    4,
+	}
+
+	usage := &relaymodel.Usage{PromptTokens: 4}
 	applyOutputImageCharges(c, &usage, meta)
 
 	expected := calculateImageBaseQuota(0.039, 0, 1.0, 1.0, 1)

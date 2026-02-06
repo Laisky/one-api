@@ -121,6 +121,8 @@ func getResponseAPIRequestBody(c *gin.Context, meta *metalib.Meta, responseAPIRe
 			zap.Int("assistant_input_text_fixed", stats.AssistantInputTextFixed),
 			zap.Int("non_assistant_output_text_fixed", stats.NonAssistantOutputTextFixed),
 			zap.Int("reasoning_summary_fixed", stats.ReasoningSummaryFixed),
+			zap.Int("embedded_image_dataurl_redacted", stats.DataURLRedacted),
+			zap.Int("embedded_image_dataurl_redacted_bytes", stats.DataURLRedactedBytes),
 		)
 	}
 
@@ -236,8 +238,12 @@ func normalizeResponseAPIRawBody(rawBody []byte, request *openai.ResponseAPIRequ
 		parsed := openai.ResponseAPIInput{}
 		if err := json.Unmarshal(rawInput, &parsed); err == nil {
 			inputStats, inputChanged := openai.NormalizeResponseAPIInputContentTypes(&parsed)
-			if inputChanged {
-				stats = inputStats
+			dataURLStats, dataURLChanged := openai.NormalizeResponseAPIInputEmbeddedImageDataURLs(&parsed)
+			if inputChanged || dataURLChanged {
+				stats.AssistantInputTextFixed += inputStats.AssistantInputTextFixed
+				stats.NonAssistantOutputTextFixed += inputStats.NonAssistantOutputTextFixed
+				stats.DataURLRedacted += dataURLStats.DataURLRedacted
+				stats.DataURLRedactedBytes += dataURLStats.DataURLRedactedBytes
 				request.Input = parsed
 				inputBytes, err := json.Marshal(parsed)
 				if err != nil {
