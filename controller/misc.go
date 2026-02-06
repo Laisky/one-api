@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	gmw "github.com/Laisky/gin-middlewares/v7"
 	"github.com/Laisky/zap"
@@ -94,6 +95,9 @@ func SendEmailVerification(c *gin.Context) {
 		})
 		return
 	}
+
+	// Simulate processing time to mitigate timing attacks
+	time.Sleep(time.Second)
 
 	// Always return a uniform success response to mitigate user enumeration
 	// and timing attacks. The actual verification process and email sending
