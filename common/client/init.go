@@ -76,7 +76,7 @@ func Init() {
 	} else {
 		UserContentRequestHTTPClient = &http.Client{
 			Transport: createTransport(nil, config.BlockInternalUserContentRequests),
-			Timeout:   30 * time.Second, // Set a reasonable default timeout
+			Timeout:   time.Second * time.Duration(config.UserContentRequestTimeout),
 		}
 	}
 	var transport http.RoundTripper
