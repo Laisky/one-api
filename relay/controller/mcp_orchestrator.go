@@ -358,7 +358,7 @@ func executeChatMCPToolLoop(c *gin.Context, meta *metalib.Meta, request *relaymo
 	}
 
 	channelModelRatio, channelCompletionRatio := getChannelRatios(c)
-	pricingAdaptor := relay.GetAdaptor(meta.ChannelType)
+	pricingAdaptor := resolvePricingAdaptor(meta)
 	modelRatio := pricing.GetModelRatioWithThreeLayers(request.Model, channelModelRatio, pricingAdaptor)
 	groupRatio := c.GetFloat64(ctxkey.ChannelRatio)
 	ratio := modelRatio * groupRatio

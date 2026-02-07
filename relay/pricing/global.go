@@ -354,7 +354,7 @@ func GetVideoPricingWithThreeLayers(modelName string, channelOverride *adaptor.V
 
 	if cfg, exists := GetGlobalModelConfig(modelName); exists {
 		if cfg.Video != nil && cfg.Video.HasData() {
-			return cfg.Video
+			return cfg.Video.Clone()
 		}
 	}
 

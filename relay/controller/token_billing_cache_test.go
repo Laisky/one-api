@@ -10,6 +10,7 @@ import (
 
 	"github.com/songquanpeng/one-api/relay"
 	"github.com/songquanpeng/one-api/relay/adaptor/openai"
+	"github.com/songquanpeng/one-api/relay/apitype"
 	"github.com/songquanpeng/one-api/relay/channeltype"
 	metalib "github.com/songquanpeng/one-api/relay/meta"
 	relaymodel "github.com/songquanpeng/one-api/relay/model"
@@ -33,8 +34,8 @@ func TestPostConsumeQuota_OutputPricingIndependentOfCache(t *testing.T) {
 	// Arrange
 	modelName := "gpt-4o" // has explicit cached input pricing in OpenAI adapter
 	channelType := channeltype.OpenAI
-	adaptor := relay.GetAdaptor(channelType)
-	require.NotNil(t, adaptor, "nil adaptor for channel %d", channelType)
+	adaptor := relay.GetAdaptor(apitype.OpenAI)
+	require.NotNil(t, adaptor, "nil adaptor for api type %d", apitype.OpenAI)
 	modelRatio := adaptor.GetModelRatio(modelName)
 	require.Positive(t, modelRatio, "unexpected model ratio: %v", modelRatio)
 	// Resolve effective cached/input ratios at our prompt token scale (for tier handling)
@@ -96,8 +97,8 @@ func TestPostConsumeQuota_CacheWriteDoesNotAffectOutput(t *testing.T) {
 	t.Parallel()
 	modelName := "gpt-4o"
 	channelType := channeltype.OpenAI
-	adaptor := relay.GetAdaptor(channelType)
-	require.NotNil(t, adaptor, "nil adaptor for channel %d", channelType)
+	adaptor := relay.GetAdaptor(apitype.OpenAI)
+	require.NotNil(t, adaptor, "nil adaptor for api type %d", apitype.OpenAI)
 	modelRatio := adaptor.GetModelRatio(modelName)
 	groupRatio := 1.0
 
@@ -139,8 +140,8 @@ func TestPostConsumeResponseAPIQuota_UsesCachedInputPricing(t *testing.T) {
 	t.Parallel()
 	modelName := "gpt-4o"
 	channelType := channeltype.OpenAI
-	adaptor := relay.GetAdaptor(channelType)
-	require.NotNil(t, adaptor, "nil adaptor for channel %d", channelType)
+	adaptor := relay.GetAdaptor(apitype.OpenAI)
+	require.NotNil(t, adaptor, "nil adaptor for api type %d", apitype.OpenAI)
 	modelRatio := adaptor.GetModelRatio(modelName)
 	groupRatio := 1.0
 

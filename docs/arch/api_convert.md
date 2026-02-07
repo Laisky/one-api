@@ -171,6 +171,7 @@ These safeguards execute before every upstream call, so the same rules apply to 
 2. All adaptor errors are wrapped with `openai.ErrorWrapper` (or the channel equivalent) so HTTP status codes and machine-readable error bodies survive conversions.
 3. Token accounting prioritises upstream usage. When upstream omits it, the system estimates totals from streamed text, tool call arguments, and prompt size.
 4. Billing post-processing funnels through `billing.PostConsumeQuotaDetailed`, which now receives the original Responses model name even after a fallback path.
+5. Pricing adaptor resolution is API-first: we resolve by `APIType` before `ChannelType` so pricing defaults follow the protocol family (OpenAI, Claude, Gemini, etc.). This avoids mismatches when a channel type is a generic proxy or does not map 1:1 to a pricing table.
 
 ## 8. Context Keys & Runtime Flags
 
