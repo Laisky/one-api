@@ -12,3 +12,8 @@
 **Vulnerability:** Initial SSRF protection implementation had a fail-open gap where unparseable IP addresses were allowed, and it used inconsistent error handling.
 **Learning:** Security controls must "fail-closed"—if an input (like an IP address) cannot be validated, access must be denied. Additionally, adhering to project-specific error wrapping guidelines (using `Laisky/errors/v2`) ensures consistent stack traces and contextual information for security events.
 **Prevention:** Always ensure security validation logic explicitly handles cases where input parsing or validation fails by denying the request.
+
+## 2025-05-22 - [SSRF Protection: Proxy Handling and DNS Rebinding]
+**Vulnerability:** Initial SSRF protection blocked connections to explicitly configured internal proxies and was perceived as potentially vulnerable to DNS rebinding if checks were only done at the URL level.
+**Learning:** Using `net.Dialer.Control` is effective against DNS rebinding because it intercepts the actual IP addresses being dialed after resolution. However, when a proxy is used, the dialer connects to the proxy, not the target. Therefore, the configured proxy must be exempted from the internal IP check to avoid breaking legitimate deployments using local egress proxies.
+**Prevention:** In `dialer.Control`, check if the dialed address matches the explicitly configured proxy (host or resolved IPs) and allow it if it does.

@@ -36,12 +36,32 @@ func Init() {
 			KeepAlive: 30 * time.Second,
 		}
 
+		var proxyIPs []string
+		if proxyURL != nil {
+			proxyHost := proxyURL.Hostname()
+			proxyIPs = append(proxyIPs, proxyHost)
+			if ips, err := net.LookupIP(proxyHost); err == nil {
+				for _, ip := range ips {
+					proxyIPs = append(proxyIPs, ip.String())
+				}
+			}
+		}
+
 		if blockInternal {
 			dialer.Control = func(networkName, address string, c syscall.RawConn) error {
 				host, _, err := net.SplitHostPort(address)
 				if err != nil {
 					return errors.Wrapf(err, "failed to split host port: %s", address)
 				}
+
+				// If a proxy is used, the dialer connects to the proxy address.
+				// We allow connections to the explicitly configured proxy even if it's an internal IP.
+				for _, pip := range proxyIPs {
+					if host == pip {
+						return nil
+					}
+				}
+
 				ip := net.ParseIP(host)
 				if ip == nil {
 					return errors.Errorf("SSRF protection: failed to parse IP address: %s", host)

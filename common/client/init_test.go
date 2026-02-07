@@ -2,6 +2,7 @@ package client
 
 import (
 	"net/http"
+	"github.com/songquanpeng/one-api/common/config"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -30,14 +31,50 @@ func TestInit(t *testing.T) {
 }
 
 func TestUserContentRequestHTTPClient_SSRF(t *testing.T) {
-	// Test that UserContentRequestHTTPClient blocks internal IPs
+	// 1. Test that UserContentRequestHTTPClient blocks internal IPs by default
+	config.BlockInternalUserContentRequests = true
 	Init()
 
-	// Try to fetch from localhost (which is an internal IP)
-	// We use a random port that is likely not listening to avoid connection refused
-	// but the DialControl should block it before it even tries to connect.
+	// Try to fetch from literal internal IP
 	_, err := UserContentRequestHTTPClient.Get("http://127.0.0.1:12345")
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "SSRF protection")
-	require.Contains(t, err.Error(), "blocked")
+
+	// Try to fetch from hostname resolving to internal IP (localhost)
+	_, err = UserContentRequestHTTPClient.Get("http://localhost:12345")
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "SSRF protection")
+
+	// 2. Test that protection can be disabled
+	config.BlockInternalUserContentRequests = false
+	Init()
+	_, err = UserContentRequestHTTPClient.Get("http://127.0.0.1:12345")
+	// Should fail with connection refused or timeout, not SSRF protection error
+	require.Error(t, err)
+	require.NotContains(t, err.Error(), "SSRF protection")
+
+	// Cleanup
+	config.BlockInternalUserContentRequests = true
+	Init()
+}
+
+func TestUserContentRequestHTTPClient_ProxyExemption(t *testing.T) {
+	// Test that connections to a configured internal proxy are allowed
+	config.UserContentRequestProxy = "http://127.0.0.1:8080"
+	config.BlockInternalUserContentRequests = true
+	Init()
+
+	// Try to fetch through the proxy
+	// The dialer will try to connect to 127.0.0.1:8080.
+	// Our Control should allow it because it matches the proxy.
+	_, err := UserContentRequestHTTPClient.Get("http://example.com")
+
+	// We expect a connection error (since no proxy is running),
+	// but it should NOT be an SSRF protection error.
+	require.Error(t, err)
+	require.NotContains(t, err.Error(), "SSRF protection")
+
+	// Cleanup
+	config.UserContentRequestProxy = ""
+	Init()
 }
