@@ -297,7 +297,10 @@
     "enable": "Enable",
     "disable": "Disable",
     "test": "Test",
-    "unknown": "Unknown"
+    "unknown": "Unknown",
+    "copy": "Copy",
+    "hide": "Hide",
+    "show": "Show"
   },
   "redemption": {
     "title": "Redemption Management",

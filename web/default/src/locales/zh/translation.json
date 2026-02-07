@@ -297,7 +297,10 @@
     "enable": "启用",
     "disable": "禁用",
     "test": "测试",
-    "unknown": "未知"
+    "unknown": "未知",
+    "copy": "复制",
+    "hide": "隐藏",
+    "show": "显示"
   },
   "redemption": {
     "title": "兑换管理",
@@ -443,7 +446,14 @@
       "used_quota": "已用额度",
       "request_count": "请求次数",
       "role": "角色",
-      "status": "状态",
+      "status": {
+        "active": "已激活",
+        "banned": "已封禁",
+        "pending": "待激活",
+        "unknown": "未知状态",
+        "enabled": "已启用",
+        "disabled": "已禁用"
+      },
       "role_types": {
         "normal": "普通用户",
         "admin": "管理员",
@@ -454,14 +464,6 @@
         "activated": "已激活",
         "banned": "已封禁",
         "unknown": "未知状态"
-      },
-      "status": {
-        "active": "已激活",
-        "banned": "已封禁",
-        "pending": "待激活",
-        "unknown": "未知状态",
-        "enabled": "已启用",
-        "disabled": "已禁用"
       },
       "sort": {
         "default": "默认排序",
