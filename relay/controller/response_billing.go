@@ -14,7 +14,6 @@ import (
 	"github.com/songquanpeng/one-api/common/ctxkey"
 	"github.com/songquanpeng/one-api/common/tracing"
 	"github.com/songquanpeng/one-api/model"
-	"github.com/songquanpeng/one-api/relay"
 	"github.com/songquanpeng/one-api/relay/adaptor/openai"
 	"github.com/songquanpeng/one-api/relay/billing"
 	metalib "github.com/songquanpeng/one-api/relay/meta"
@@ -101,7 +100,7 @@ func postConsumeResponseAPIQuota(ctx context.Context,
 		return
 	}
 
-	pricingAdaptor := relay.GetAdaptor(meta.ChannelType)
+	pricingAdaptor := resolvePricingAdaptor(meta)
 	computeResult := quotautil.Compute(quotautil.ComputeInput{
 		Usage:                  usage,
 		ModelName:              responseAPIRequest.Model,

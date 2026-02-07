@@ -8,7 +8,6 @@ import (
 
 	"github.com/songquanpeng/one-api/common/ctxkey"
 	"github.com/songquanpeng/one-api/model"
-	"github.com/songquanpeng/one-api/relay"
 	"github.com/songquanpeng/one-api/relay/adaptor"
 	metalib "github.com/songquanpeng/one-api/relay/meta"
 )
@@ -30,10 +29,7 @@ func outputBillingContextFromRequest(c *gin.Context, meta *metalib.Meta) (output
 	lg := gmw.GetLogger(c)
 
 	channelModelRatio, channelModelConfigs := getChannelModelPricingFromContext(c)
-	pricingAdaptor := relay.GetAdaptor(meta.ChannelType)
-	if pricingAdaptor == nil && meta.APIType != 0 {
-		pricingAdaptor = relay.GetAdaptor(meta.APIType)
-	}
+	pricingAdaptor := resolvePricingAdaptor(meta)
 	if pricingAdaptor == nil {
 		lg.Debug("output billing skipped due to missing pricing adaptor",
 			zap.String("model", meta.ActualModelName),

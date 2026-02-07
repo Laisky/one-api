@@ -323,8 +323,7 @@ func RelayImageHelper(c *gin.Context, relayMode int) *relaymodel.ErrorWithStatus
 		return openai.ErrorWrapper(errors.Errorf("invalid api type: %d", meta.APIType), "invalid_api_type", http.StatusBadRequest)
 	}
 
-	resolvedConfig, _ := pricing.ResolveModelConfig(imageRequest.Model, channelModelConfigs, adaptor)
-	imagePricingCfg := resolvedConfig.Image
+	imagePricingCfg, _ := pricing.ResolveImagePricing(imageRequest.Model, channelModelConfigs, adaptor)
 	applyImageDefaults(imageRequest, imagePricingCfg)
 
 	bizErr := validateImageRequest(imageRequest, meta, imagePricingCfg)
@@ -413,13 +412,8 @@ func RelayImageHelper(c *gin.Context, relayMode int) *relaymodel.ErrorWithStatus
 
 	// Determine if this model is billed per image (Image.PricePerImageUsd) or per token (Ratio)
 	imagePriceUsd := 0.0
-	if resolvedConfig.Image != nil {
-		imagePriceUsd = resolvedConfig.Image.PricePerImageUsd
-	}
-	if imagePriceUsd == 0 {
-		if pm, ok := pricing.GetGlobalModelPricing()[imageModel]; ok && pm.Image != nil {
-			imagePriceUsd = pm.Image.PricePerImageUsd
-		}
+	if imagePricingCfg != nil {
+		imagePriceUsd = imagePricingCfg.PricePerImageUsd
 	}
 
 	ratio := modelRatio * groupRatio

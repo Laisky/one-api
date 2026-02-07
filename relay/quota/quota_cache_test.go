@@ -7,7 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/songquanpeng/one-api/relay"
-	"github.com/songquanpeng/one-api/relay/channeltype"
+	"github.com/songquanpeng/one-api/relay/apitype"
 	relaymodel "github.com/songquanpeng/one-api/relay/model"
 	"github.com/songquanpeng/one-api/relay/pricing"
 	quotautil "github.com/songquanpeng/one-api/relay/quota"
@@ -18,8 +18,8 @@ import (
 func TestComputeCachedInputPricing(t *testing.T) {
 	t.Parallel()
 	modelName := "gpt-4o"
-	adaptor := relay.GetAdaptor(channeltype.OpenAI)
-	require.NotNil(t, adaptor, "nil adaptor for channel %d", channeltype.OpenAI)
+	adaptor := relay.GetAdaptor(apitype.OpenAI)
+	require.NotNil(t, adaptor, "nil adaptor for api type %d", apitype.OpenAI)
 
 	modelRatio := adaptor.GetModelRatio(modelName)
 	require.Greater(t, modelRatio, 0.0, "unexpected model ratio: %v", modelRatio)

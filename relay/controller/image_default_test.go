@@ -8,6 +8,8 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 
+	"github.com/songquanpeng/one-api/model"
+	"github.com/songquanpeng/one-api/relay/adaptor/gemini"
 	"github.com/songquanpeng/one-api/relay/adaptor/openai"
 	"github.com/songquanpeng/one-api/relay/pricing"
 )
@@ -103,4 +105,25 @@ func TestGetImageRequest_DefaultQuality_DALLE2(t *testing.T) {
 	require.True(t, ok && cfg.Image != nil, "expected pricing config for dall-e-2")
 	applyImageDefaults(ir, cfg.Image)
 	require.Equal(t, "standard", ir.Quality, "expected default quality 'standard' for dall-e-2")
+}
+
+// TestResolveImagePricing_ChannelModelWithoutImage verifies image pricing resolution
+// falls back to provider defaults when channel model config exists but omits image metadata.
+func TestResolveImagePricing_ChannelModelWithoutImage(t *testing.T) {
+	t.Parallel()
+
+	const imageModel = "gemini-2.5-flash-image"
+	channelConfigs := map[string]model.ModelConfigLocal{
+		imageModel: {
+			Ratio: 0.15,
+		},
+	}
+
+	imagePricingCfg, ok := pricing.ResolveImagePricing(imageModel, channelConfigs, &gemini.Adaptor{})
+	require.True(t, ok, "expected image pricing resolution to succeed")
+
+	require.NotNil(t, imagePricingCfg, "expected resolved image pricing config")
+	require.InDelta(t, 0.039, imagePricingCfg.PricePerImageUsd, 1e-9, "expected provider default per-image pricing")
+	require.Equal(t, "1024x1024", imagePricingCfg.DefaultSize, "expected provider default size")
+	require.Equal(t, "standard", imagePricingCfg.DefaultQuality, "expected provider default quality")
 }

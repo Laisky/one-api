@@ -4,6 +4,7 @@ import (
 	"context"
 	"math"
 	"net/http/httptest"
+	"sort"
 	"testing"
 
 	"github.com/gin-gonic/gin"
@@ -17,6 +18,7 @@ import (
 	"github.com/songquanpeng/one-api/relay/channeltype"
 	metalib "github.com/songquanpeng/one-api/relay/meta"
 	relaymodel "github.com/songquanpeng/one-api/relay/model"
+	"github.com/songquanpeng/one-api/relay/pricing"
 )
 
 const testImageDataURL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
@@ -43,6 +45,42 @@ func newTestGinContext(t *testing.T) *gin.Context {
 	writer := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(writer)
 	return c
+}
+
+// firstOpenAIModelWithAudioPricing returns a deterministic OpenAI model that has audio pricing metadata.
+// Parameters: t is the test handle.
+// Returns: the model name with audio pricing metadata.
+func firstOpenAIModelWithAudioPricing(t *testing.T) string {
+	t.Helper()
+
+	defaults := (&openai.Adaptor{}).GetDefaultModelPricing()
+	models := make([]string, 0, len(defaults))
+	for modelName, cfg := range defaults {
+		if cfg.Audio != nil && cfg.Audio.HasData() {
+			models = append(models, modelName)
+		}
+	}
+	sort.Strings(models)
+	require.NotEmpty(t, models, "expected at least one OpenAI model with audio pricing")
+	return models[0]
+}
+
+// firstOpenAIModelWithVideoPricing returns a deterministic OpenAI model that has video pricing metadata.
+// Parameters: t is the test handle.
+// Returns: the model name with video pricing metadata.
+func firstOpenAIModelWithVideoPricing(t *testing.T) string {
+	t.Helper()
+
+	defaults := (&openai.Adaptor{}).GetDefaultModelPricing()
+	models := make([]string, 0, len(defaults))
+	for modelName, cfg := range defaults {
+		if cfg.Video != nil && cfg.Video.HasData() {
+			models = append(models, modelName)
+		}
+	}
+	sort.Strings(models)
+	require.NotEmpty(t, models, "expected at least one OpenAI model with video pricing")
+	return models[0]
 }
 
 // TestApplyOutputAudioCharges_UsdPerSecond verifies audio output billing via per-second pricing.
@@ -102,6 +140,48 @@ func TestApplyOutputAudioCharges_TokensFallback(t *testing.T) {
 	require.Equal(t, expected, usage.ToolsCost)
 }
 
+// TestApplyOutputAudioCharges_ChannelConfigMissingAudioFallback verifies provider audio defaults are used
+// when channel model config exists but omits audio pricing metadata.
+func TestApplyOutputAudioCharges_ChannelConfigMissingAudioFallback(t *testing.T) {
+	modelName := firstOpenAIModelWithAudioPricing(t)
+	channel := buildTestChannelWithMediaPricing(t, modelName, model.ModelConfigLocal{
+		Image: &model.ImagePricingLocal{
+			PricePerImageUsd: 0.01,
+		},
+	})
+
+	c := newTestGinContext(t)
+	c.Set(ctxkey.ChannelRatio, 1.3)
+	c.Set(ctxkey.OutputAudioTokens, 120)
+	c.Set(ctxkey.ChannelModel, channel)
+
+	meta := &metalib.Meta{
+		ActualModelName: modelName,
+		ChannelType:     channeltype.OpenAI,
+		APIType:         apitype.OpenAI,
+	}
+	usage := &relaymodel.Usage{}
+
+	applyOutputAudioCharges(c, &usage, meta)
+
+	audioPricingCfg, ok := pricing.ResolveAudioPricing(modelName, nil, &openai.Adaptor{})
+	require.True(t, ok)
+	require.NotNil(t, audioPricingCfg)
+
+	modelRatio := pricing.GetModelRatioWithThreeLayers(modelName, nil, &openai.Adaptor{})
+	promptRatio := pricing.DefaultAudioPromptRatio
+	completionRatio := pricing.DefaultAudioCompletionRatio
+	if audioPricingCfg.PromptRatio > 0 {
+		promptRatio = audioPricingCfg.PromptRatio
+	}
+	if audioPricingCfg.CompletionRatio > 0 {
+		completionRatio = audioPricingCfg.CompletionRatio
+	}
+
+	expected := int64(math.Ceil(float64(120) * promptRatio * completionRatio * modelRatio * 1.3))
+	require.Equal(t, expected, usage.ToolsCost)
+}
+
 // TestApplyOutputVideoCharges_ResolutionMultiplier verifies video output billing with resolution multipliers.
 func TestApplyOutputVideoCharges_ResolutionMultiplier(t *testing.T) {
 	modelName := "media-test-model"
@@ -131,6 +211,48 @@ func TestApplyOutputVideoCharges_ResolutionMultiplier(t *testing.T) {
 	applyOutputVideoCharges(c, &usage, meta)
 
 	expected := int64(math.Ceil(0.1 * 2.0 * 4.0 * ratio.QuotaPerUsd))
+	require.Equal(t, expected, usage.ToolsCost)
+}
+
+// TestApplyOutputVideoCharges_ChannelConfigMissingVideoFallback verifies provider video defaults are used
+// when channel model config exists but omits video pricing metadata.
+func TestApplyOutputVideoCharges_ChannelConfigMissingVideoFallback(t *testing.T) {
+	modelName := firstOpenAIModelWithVideoPricing(t)
+	channel := buildTestChannelWithMediaPricing(t, modelName, model.ModelConfigLocal{
+		Audio: &model.AudioPricingLocal{
+			PromptRatio: 1.0,
+		},
+	})
+
+	videoPricing := pricing.GetVideoPricingWithThreeLayers(modelName, nil, &openai.Adaptor{})
+	require.NotNil(t, videoPricing, "expected provider video pricing")
+
+	resolution := videoPricing.BaseResolution
+	if resolution == "" {
+		resolution = "default"
+	}
+	seconds := 3.0
+	multiplier := videoPricing.EffectiveMultiplier(resolution)
+	if multiplier <= 0 {
+		multiplier = 1.0
+	}
+
+	c := newTestGinContext(t)
+	c.Set(ctxkey.ChannelRatio, 1.1)
+	c.Set(ctxkey.OutputVideoSeconds, seconds)
+	c.Set(ctxkey.OutputVideoResolution, resolution)
+	c.Set(ctxkey.ChannelModel, channel)
+
+	meta := &metalib.Meta{
+		ActualModelName: modelName,
+		ChannelType:     channeltype.OpenAI,
+		APIType:         apitype.OpenAI,
+	}
+	usage := &relaymodel.Usage{}
+
+	applyOutputVideoCharges(c, &usage, meta)
+
+	expected := int64(math.Ceil(videoPricing.PerSecondUsd * multiplier * seconds * ratio.QuotaPerUsd * 1.1))
 	require.Equal(t, expected, usage.ToolsCost)
 }
 
