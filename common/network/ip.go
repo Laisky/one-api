@@ -55,3 +55,8 @@ func IsIpInSubnets(ctx context.Context, ip string, subnets string) bool {
 	}
 	return false
 }
+
+// IsInternalIP returns true if the IP is a loopback, link-local, private, or unspecified address.
+func IsInternalIP(ip net.IP) bool {
+	return ip.IsLoopback() || ip.IsLinkLocalUnicast() || ip.IsPrivate() || ip.IsUnspecified()
+}

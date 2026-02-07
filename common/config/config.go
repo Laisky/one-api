@@ -659,6 +659,14 @@ var (
 	// Unit: seconds
 	UserContentRequestTimeout = env.Int("USER_CONTENT_REQUEST_TIMEOUT", 30)
 
+	// BlockInternalUserContentRequests determines whether to block requests to
+	// internal network addresses (localhost, private IPs) when fetching
+	// user-supplied content. This is a critical security feature to prevent SSRF.
+	//
+	// Environment variable: BLOCK_INTERNAL_USER_CONTENT_REQUESTS
+	// Default: true
+	BlockInternalUserContentRequests = env.Bool("BLOCK_INTERNAL_USER_CONTENT_REQUESTS", true)
+
 	// MaxInlineImageSizeMB limits the size of images that can be inlined as base64
 	// to prevent oversized payloads from overwhelming upstream providers.
 	//

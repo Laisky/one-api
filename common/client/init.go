@@ -3,14 +3,17 @@ package client
 import (
 	"crypto/tls"
 	"fmt"
+	"net"
 	"net/http"
 	"net/url"
+	"syscall"
 	"time"
 
 	"github.com/Laisky/zap"
 
 	"github.com/songquanpeng/one-api/common/config"
 	"github.com/songquanpeng/one-api/common/logger"
+	"github.com/songquanpeng/one-api/common/network"
 )
 
 // HTTPClient is the default outbound client used for relay requests.
@@ -24,9 +27,30 @@ var UserContentRequestHTTPClient *http.Client
 
 // Init builds the shared HTTP clients with proxy and timeout settings derived from configuration.
 func Init() {
-	// Create a transport with HTTP/2 disabled to avoid stream errors in CI environments
-	createTransport := func(proxyURL *url.URL) *http.Transport {
+	// Create a transport with HTTP/2 disabled to avoid stream errors in CI environments.
+	// Optionally blocks internal IP addresses to mitigate SSRF risks.
+	createTransport := func(proxyURL *url.URL, blockInternal bool) *http.Transport {
+		dialer := &net.Dialer{
+			Timeout:   30 * time.Second,
+			KeepAlive: 30 * time.Second,
+		}
+
+		if blockInternal {
+			dialer.Control = func(networkName, address string, c syscall.RawConn) error {
+				host, _, err := net.SplitHostPort(address)
+				if err != nil {
+					return err
+				}
+				ip := net.ParseIP(host)
+				if ip != nil && network.IsInternalIP(ip) {
+					return fmt.Errorf("SSRF protection: internal IP %s is blocked", ip)
+				}
+				return nil
+			}
+		}
+
 		transport := &http.Transport{
+			DialContext:  dialer.DialContext,
 			TLSNextProto: make(map[string]func(authority string, c *tls.Conn) http.RoundTripper), // Disable HTTP/2
 		}
 		if proxyURL != nil {
@@ -42,12 +66,12 @@ func Init() {
 			logger.Logger.Fatal(fmt.Sprintf("USER_CONTENT_REQUEST_PROXY set but invalid: %s", config.UserContentRequestProxy))
 		}
 		UserContentRequestHTTPClient = &http.Client{
-			Transport: createTransport(proxyURL),
+			Transport: createTransport(proxyURL, config.BlockInternalUserContentRequests),
 			Timeout:   time.Second * time.Duration(config.UserContentRequestTimeout),
 		}
 	} else {
 		UserContentRequestHTTPClient = &http.Client{
-			Transport: createTransport(nil),
+			Transport: createTransport(nil, config.BlockInternalUserContentRequests),
 			Timeout:   30 * time.Second, // Set a reasonable default timeout
 		}
 	}
@@ -58,9 +82,9 @@ func Init() {
 		if err != nil {
 			logger.Logger.Fatal(fmt.Sprintf("RELAY_PROXY set but invalid: %s", config.RelayProxy))
 		}
-		transport = createTransport(proxyURL)
+		transport = createTransport(proxyURL, false)
 	} else {
-		transport = createTransport(nil)
+		transport = createTransport(nil, false)
 	}
 
 	if config.RelayTimeout == 0 {

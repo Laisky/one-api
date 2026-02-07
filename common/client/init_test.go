@@ -28,3 +28,16 @@ func TestInit(t *testing.T) {
 	require.NotNil(t, HTTPClient)
 	require.NotNil(t, ImpatientHTTPClient)
 }
+
+func TestUserContentRequestHTTPClient_SSRF(t *testing.T) {
+	// Test that UserContentRequestHTTPClient blocks internal IPs
+	Init()
+
+	// Try to fetch from localhost (which is an internal IP)
+	// We use a random port that is likely not listening to avoid connection refused
+	// but the DialControl should block it before it even tries to connect.
+	_, err := UserContentRequestHTTPClient.Get("http://127.0.0.1:12345")
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "SSRF protection")
+	require.Contains(t, err.Error(), "blocked")
+}
