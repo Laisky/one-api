@@ -21,6 +21,7 @@ import (
 	_ "golang.org/x/image/webp"
 
 	"github.com/songquanpeng/one-api/common/client"
+	"github.com/songquanpeng/one-api/common/config"
 	img "github.com/songquanpeng/one-api/common/image"
 )
 
@@ -349,6 +350,36 @@ func TestGetImageFromUrl(t *testing.T) {
 	}
 }
 
+// TestGetImageFromUrl_DataURLSizeLimit ensures oversized data URLs are rejected early.
+func TestGetImageFromUrl_DataURLSizeLimit(t *testing.T) {
+	prevMax := config.MaxInlineImageSizeMB
+	config.MaxInlineImageSizeMB = 1
+	t.Cleanup(func() { config.MaxInlineImageSizeMB = prevMax })
+
+	payload := make([]byte, 1024*1024+1)
+	encoded := base64.StdEncoding.EncodeToString(payload)
+	dataURL := "data:image/png;base64," + encoded
+
+	_, _, err := img.GetImageFromUrl(dataURL)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "image size should not exceed")
+}
+
+// TestValidateDataURLImage_SizeLimit verifies oversized data URLs fail validation before decode.
+func TestValidateDataURLImage_SizeLimit(t *testing.T) {
+	prevMax := config.MaxInlineImageSizeMB
+	config.MaxInlineImageSizeMB = 1
+	t.Cleanup(func() { config.MaxInlineImageSizeMB = prevMax })
+
+	payload := make([]byte, 1024*1024+1)
+	encoded := base64.StdEncoding.EncodeToString(payload)
+	dataURL := "data:image/png;base64," + encoded
+
+	err := img.ValidateDataURLImage(dataURL)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "image size should not exceed")
+}
+
 func TestGenerateTextImage(t *testing.T) {
 	t.Parallel()
 
@@ -659,8 +690,9 @@ func TestGenerateTextImageSizeLimit(t *testing.T) {
 
 		// Create text that should be large but still within limits
 		// Based on the previous test failure, 1000 lines exceeded 30MB (~33.8MB)
-		// Let's use 500 lines to stay comfortably under the limit
-		mediumText := strings.Repeat(strings.Repeat("B", 50)+"\n", 500) // 500 lines should be under limit
+		// With 16MB limit, 500 lines exceeded (~16.9MB)
+		// Let's use 400 lines to stay comfortably under the limit
+		mediumText := strings.Repeat(strings.Repeat("B", 50)+"\n", 400) // 400 lines should be under limit
 
 		imageData, mimeType, err := img.GenerateTextImage(mediumText)
 

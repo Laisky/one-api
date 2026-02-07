@@ -663,10 +663,10 @@ var (
 	// to prevent oversized payloads from overwhelming upstream providers.
 	//
 	// Environment variable: MAX_INLINE_IMAGE_SIZE_MB
-	// Default: 30 MB
+	// Default: 16 MB
 	// Unit: megabytes
 	MaxInlineImageSizeMB = func() int {
-		v := env.Int("MAX_INLINE_IMAGE_SIZE_MB", 30)
+		v := env.Int("MAX_INLINE_IMAGE_SIZE_MB", 16)
 		if v < 0 {
 			panic("MAX_INLINE_IMAGE_SIZE_MB must not be negative")
 		}

@@ -2,6 +2,7 @@ package image
 
 import (
 	"bytes"
+	"context"
 	"encoding/base64"
 	"image"
 	"image/color"
@@ -10,6 +11,7 @@ import (
 	_ "image/jpeg"
 	"image/png"
 	_ "image/png"
+	"io"
 	"math"
 	"net/http"
 	"regexp"
@@ -24,6 +26,7 @@ import (
 
 	"github.com/songquanpeng/one-api/common/client"
 	"github.com/songquanpeng/one-api/common/config"
+	netutil "github.com/songquanpeng/one-api/common/network"
 )
 
 // Regex to match data URL pattern
@@ -31,6 +34,11 @@ var dataURLPattern = regexp.MustCompile(`data:image/([^;]+);base64,(.*)`)
 
 // IsImageUrl performs a lightweight check to confirm the URL points to a fetchable image within the configured size limit.
 func IsImageUrl(url string) (bool, error) {
+	// Enforce public-only URLs to prevent SSRF against internal hosts.
+	if _, err := netutil.ValidateExternalURL(context.Background(), url); err != nil {
+		return false, errors.Wrap(err, "image URL is not allowed")
+	}
+
 	resp, err := client.UserContentRequestHTTPClient.Head(url)
 	if err != nil {
 		return false, errors.Wrapf(err, "failed to fetch image URL: %s", url)
@@ -50,7 +58,8 @@ func IsImageUrl(url string) (bool, error) {
 		return false, errors.Errorf("failed to fetch image URL: %s, status code: %d", url, resp.StatusCode)
 	}
 
-	maxSize := int64(config.MaxInlineImageSizeMB) * 1024 * 1024
+	// Cap declared size to mitigate DoS via oversized content.
+	maxSize := MaxInlineImageBytes()
 	if resp.ContentLength > maxSize {
 		return false, errors.Errorf("image size should not exceed %dMB: %s, size: %d", config.MaxInlineImageSizeMB, url, resp.ContentLength)
 	}
@@ -80,7 +89,9 @@ func GetImageSizeFromUrl(url string) (width int, height int, err error) {
 	}
 	defer resp.Body.Close()
 
-	img, _, err := image.DecodeConfig(resp.Body)
+	maxSize := MaxInlineImageBytes()
+	limited := &io.LimitedReader{R: resp.Body, N: maxSize + 1}
+	img, _, err := image.DecodeConfig(limited)
 	if err != nil {
 		return 0, 0, errors.Wrap(err, "failed to decode image")
 	}
@@ -93,6 +104,9 @@ func GetImageFromUrl(url string) (mimeType string, data string, err error) {
 	matches := dataURLPattern.FindStringSubmatch(url)
 	if len(matches) == 3 {
 		// URL is a data URL
+		if err := ValidateInlineImageBase64Size(matches[2]); err != nil {
+			return "", "", errors.Wrap(err, "inline image exceeds size limit")
+		}
 		mimeType = "image/" + matches[1]
 		data = matches[2]
 		return
@@ -115,15 +129,19 @@ func GetImageFromUrl(url string) (mimeType string, data string, err error) {
 	if resp.StatusCode != http.StatusOK {
 		return mimeType, data, errors.Errorf("failed to fetch image URL: %s, status code: %d", url, resp.StatusCode)
 	}
-	maxSize := int64(config.MaxInlineImageSizeMB) * 1024 * 1024
+	maxSize := MaxInlineImageBytes()
 	if resp.ContentLength > maxSize {
 		return mimeType, data, errors.Errorf("image size should not exceed %dMB: %s, size: %d", config.MaxInlineImageSizeMB, url, resp.ContentLength)
 	}
 
 	buffer := bytes.NewBuffer(nil)
-	_, err = buffer.ReadFrom(resp.Body)
+	limited := io.LimitReader(resp.Body, maxSize+1)
+	_, err = buffer.ReadFrom(limited)
 	if err != nil {
 		return mimeType, data, errors.Wrap(err, "failed to read image data from response")
+	}
+	if int64(buffer.Len()) > maxSize {
+		return mimeType, data, errors.Errorf("image size should not exceed %dMB: %s", config.MaxInlineImageSizeMB, url)
 	}
 
 	mimeType = resp.Header.Get("Content-Type")
@@ -143,7 +161,11 @@ var readerPool = sync.Pool{
 
 // GetImageSizeFromBase64 decodes the base64 image data to determine its dimensions.
 func GetImageSizeFromBase64(encoded string) (width int, height int, err error) {
-	decoded, err := base64.StdEncoding.DecodeString(reg.ReplaceAllString(encoded, ""))
+	stripped := reg.ReplaceAllString(encoded, "")
+	if err := ValidateInlineImageBase64Size(stripped); err != nil {
+		return 0, 0, errors.Wrap(err, "inline image exceeds size limit")
+	}
+	decoded, err := base64.StdEncoding.DecodeString(stripped)
 	if err != nil {
 		return 0, 0, err
 	}
@@ -209,7 +231,7 @@ func GenerateTextImage(text string) (imageData []byte, mimeType string, err erro
 	// Estimate PNG size: RGBA (4 bytes per pixel) + PNG overhead (~20% compression ratio)
 	estimatedSizeBytes := int64(imageWidth * imageHeight * 4)          // RGBA pixels
 	estimatedSizeBytes = estimatedSizeBytes + (estimatedSizeBytes / 5) // Add ~20% for PNG overhead
-	maxSizeBytes := int64(config.MaxInlineImageSizeMB) * 1024 * 1024
+	maxSizeBytes := MaxInlineImageBytes()
 
 	if estimatedSizeBytes > maxSizeBytes {
 		return nil, "", errors.Errorf("generated image size would exceed %dMB limit: estimated %d bytes for text length %d",
