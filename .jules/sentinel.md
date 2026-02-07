@@ -7,3 +7,8 @@
 **Vulnerability:** The application fetched user-supplied resources (like images) using a standard HTTP client without restricting access to internal network addresses.
 **Learning:** Even with a proxy, direct outbound requests from the server to user-controlled URLs pose an SSRF risk. Differentiating between "relay" requests (trusted/admin-configured) and "user-content" requests (untrusted) allows applying stricter security controls where needed without breaking core functionality.
 **Prevention:** Implement a custom `net.Dialer.Control` function to block connections to internal/private IP ranges (RFC 1918, etc.) for clients that handle untrusted URLs.
+
+## 2025-05-22 - [SSRF Protection: Fail-Closed and Error Handling]
+**Vulnerability:** Initial SSRF protection implementation had a fail-open gap where unparseable IP addresses were allowed, and it used inconsistent error handling.
+**Learning:** Security controls must "fail-closed"—if an input (like an IP address) cannot be validated, access must be denied. Additionally, adhering to project-specific error wrapping guidelines (using `Laisky/errors/v2`) ensures consistent stack traces and contextual information for security events.
+**Prevention:** Always ensure security validation logic explicitly handles cases where input parsing or validation fails by denying the request.

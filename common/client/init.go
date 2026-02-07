@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/Laisky/zap"
+	"github.com/Laisky/errors/v2"
 
 	"github.com/songquanpeng/one-api/common/config"
 	"github.com/songquanpeng/one-api/common/logger"
@@ -39,11 +40,14 @@ func Init() {
 			dialer.Control = func(networkName, address string, c syscall.RawConn) error {
 				host, _, err := net.SplitHostPort(address)
 				if err != nil {
-					return err
+					return errors.Wrapf(err, "failed to split host port: %s", address)
 				}
 				ip := net.ParseIP(host)
-				if ip != nil && network.IsInternalIP(ip) {
-					return fmt.Errorf("SSRF protection: internal IP %s is blocked", ip)
+				if ip == nil {
+					return errors.Errorf("SSRF protection: failed to parse IP address: %s", host)
+				}
+				if network.IsInternalIP(ip) {
+					return errors.Errorf("SSRF protection: internal IP %s is blocked", ip)
 				}
 				return nil
 			}
