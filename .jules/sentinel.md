@@ -2,3 +2,8 @@
 **Vulnerability:** The password reset endpoint explicitly indicated whether an email was registered and performed network-bound email sending synchronously.
 **Learning:** Returning specific error messages for non-existent accounts allows attackers to enumerate users. Synchronous email sending allows timing attacks to distinguish between existing and non-existing accounts.
 **Prevention:** Always return a uniform success response for public endpoints that accept identifiers (e.g., password reset, registration). Perform latency-heavy operations like email sending in a background goroutine to ensure consistent response times.
+
+## 2026-02-18 - [IP Spoofing Protection via Gin Trusted Proxies]
+**Vulnerability:** Gin defaults to trusting all proxy headers (X-Forwarded-For, etc.), allowing anyone to spoof their IP address.
+**Learning:** This vulnerability can bypass IP-based rate limits and subnet restrictions. Implementing SetTrustedProxies with a secure default is essential for production deployments.
+**Prevention:** Always explicitly configure trusted proxies in Gin applications and default to an empty list (trust none) if not provided. Validate the IP/CIDR formats of the trusted proxies list.

@@ -421,3 +421,35 @@ func TestValidateAllEnvVars(t *testing.T) {
 	result := ValidateAllEnvVars()
 	require.False(t, result.HasErrors(), "Current configuration should be valid: %s", result.Error())
 }
+
+func TestValidateTrustedProxies(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name    string
+		value   []string
+		wantErr bool
+	}{
+		{"empty list is valid", []string{}, false},
+		{"single IP is valid", []string{"192.168.1.1"}, false},
+		{"multiple IPs are valid", []string{"192.168.1.1", "10.0.0.1"}, false},
+		{"CIDR is valid", []string{"10.0.0.0/8"}, false},
+		{"IPv6 is valid", []string{"::1"}, false},
+		{"mixed IP and CIDR is valid", []string{"127.0.0.1", "192.168.0.0/24"}, false},
+		{"invalid IP is invalid", []string{"999.999.999.999"}, true},
+		{"invalid CIDR is invalid", []string{"10.0.0.0/99"}, true},
+		{"hostname is invalid", []string{"localhost"}, true},
+		{"empty string in list is ignored", []string{"", "127.0.0.1"}, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			err := ValidateTrustedProxies(tt.value)
+			if tt.wantErr {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+			}
+		})
+	}
+}

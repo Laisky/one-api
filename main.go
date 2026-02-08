@@ -158,6 +158,14 @@ func main() {
 	// Initialize HTTP server
 	server := gin.New()
 	server.RedirectTrailingSlash = false
+	if len(config.TrustedProxies) > 0 {
+		if err := server.SetTrustedProxies(config.TrustedProxies); err != nil {
+			logger.Logger.Fatal("failed to set trusted proxies", zap.Error(err))
+		}
+	} else {
+		_ = server.SetTrustedProxies([]string{})
+		logger.Logger.Warn("TRUSTED_PROXIES is not set, Gin will not trust any proxy headers (X-Forwarded-For, etc.)")
+	}
 	middlewares := []gin.HandlerFunc{
 		gin.Recovery(),
 	}

@@ -7,6 +7,7 @@
 package config
 
 import (
+	"net"
 	"fmt"
 	"slices"
 	"strings"
@@ -244,6 +245,27 @@ func ValidateTokenKeyPrefix(value string) error {
 	}
 	return nil
 }
+// ValidateTrustedProxies ensures that each entry in the trusted proxies list
+// is a valid IP address or CIDR subnet.
+func ValidateTrustedProxies(proxies []string) error {
+	for _, proxy := range proxies {
+		if proxy == "" {
+			continue
+		}
+		if net.ParseIP(proxy) == nil {
+			_, _, err := net.ParseCIDR(proxy)
+			if err != nil {
+				return &ConfigValidationError{
+					Variable:   "TRUSTED_PROXIES",
+					Value:      proxy,
+					Constraint: "must be a valid IP address or CIDR subnet",
+				}
+			}
+		}
+	}
+	return nil
+}
+
 
 // =============================================================================
 // BATCH VALIDATION
@@ -414,6 +436,11 @@ func ValidateAllEnvVars() *ValidationResult {
 		result.Errors = append(result.Errors, err)
 	}
 	if err := ValidateURLFormat("API_BASE", APIBase); err != nil {
+		result.Errors = append(result.Errors, err)
+	}
+
+	// Trusted proxies validator
+	if err := ValidateTrustedProxies(TrustedProxies); err != nil {
 		result.Errors = append(result.Errors, err)
 	}
 

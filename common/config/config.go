@@ -79,6 +79,29 @@ var (
 	// Allowed values: "debug", "release", "test"
 	GinMode = strings.TrimSpace(env.String("GIN_MODE", "release"))
 
+	// TrustedProxies defines a list of trusted proxy IP addresses or subnets.
+	// When configured, Gin will trust the X-Forwarded-For header from these sources.
+	// This prevents IP spoofing when One API is behind a reverse proxy.
+	//
+	// Environment variable: TRUSTED_PROXIES
+	// Default: [] (trust none)
+	// Example: "192.168.1.1,10.0.0.0/8"
+	TrustedProxies = func() []string {
+		val := strings.TrimSpace(env.String("TRUSTED_PROXIES", ""))
+		if val == "" {
+			return []string{}
+		}
+		parts := strings.Split(val, ",")
+		var res []string
+		for _, p := range parts {
+			p = strings.TrimSpace(p)
+			if p != "" {
+				res = append(res, p)
+			}
+		}
+		return res
+	}()
+
 	// IsMasterNode determines whether this process should serve the web UI.
 	// In multi-node deployments, only master nodes serve the dashboard while
 	// slave nodes handle only API traffic.
