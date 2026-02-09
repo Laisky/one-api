@@ -3,6 +3,7 @@ package groq
 import (
 	"io"
 	"net/http"
+	"slices"
 	"strings"
 
 	"github.com/Laisky/errors/v2"
@@ -18,6 +19,12 @@ import (
 
 type Adaptor struct {
 	adaptor.DefaultPricingMethods
+}
+
+type groqUnsupportedContent struct {
+	messageIndex int
+	role         string
+	contentTypes []string
 }
 
 func (a *Adaptor) GetChannelName() string {
@@ -125,6 +132,26 @@ func (a *Adaptor) ConvertRequest(c *gin.Context, relayMode int, request *model.G
 		request.Reasoning = nil
 	}
 
+	// GPT-OSS on Groq accepts text-only chat content. Reject image/audio parts early
+	// so callers get a deterministic 4xx with actionable guidance.
+	if isGroqTextOnlyModel(request.Model) {
+		if unsupported := firstUnsupportedGroqContent(request.Messages); unsupported != nil {
+			logger.Debug("rejecting unsupported groq multimodal request content",
+				zap.String("model", request.Model),
+				zap.Int("message_index", unsupported.messageIndex),
+				zap.String("message_role", unsupported.role),
+				zap.Strings("content_types", unsupported.contentTypes),
+			)
+			return nil, errors.Errorf(
+				"validation failed: groq model %q only supports text content in chat messages; messages[%d] (role=%q) contains unsupported content types: %s",
+				request.Model,
+				unsupported.messageIndex,
+				unsupported.role,
+				strings.Join(unsupported.contentTypes, ","),
+			)
+		}
+	}
+
 	request.TopK = nil // Groq does not support TopK
 
 	return request, nil
@@ -165,4 +192,111 @@ func (a *Adaptor) DoResponse(c *gin.Context, resp *http.Response, meta *meta.Met
 		}
 		return openai_compatible.Handler(c, resp, promptTokens, modelName)
 	})
+}
+
+// isGroqTextOnlyModel reports whether the target Groq model currently accepts text-only
+// chat content blocks.
+func isGroqTextOnlyModel(modelName string) bool {
+	normalized := strings.ToLower(strings.TrimSpace(modelName))
+	return strings.HasPrefix(normalized, "openai/gpt-oss")
+}
+
+// firstUnsupportedGroqContent finds the first message that includes non-text content
+// parts for models that require text-only content.
+func firstUnsupportedGroqContent(messages []model.Message) *groqUnsupportedContent {
+	for idx, msg := range messages {
+		contentTypes := nonTextGroqContentTypes(msg.Content)
+		if len(contentTypes) == 0 {
+			continue
+		}
+		role := strings.TrimSpace(msg.Role)
+		if role == "" {
+			role = "unknown"
+		}
+		return &groqUnsupportedContent{
+			messageIndex: idx,
+			role:         role,
+			contentTypes: contentTypes,
+		}
+	}
+
+	return nil
+}
+
+// nonTextGroqContentTypes returns non-text content types observed in a message content
+// payload, deduplicated and sorted for stable logging/error output.
+func nonTextGroqContentTypes(content any) []string {
+	var nonText []string
+
+	addNonText := func(partType string) {
+		normalized := normalizeGroqContentType(partType)
+		if normalized == "" || normalized == model.ContentTypeText {
+			return
+		}
+		nonText = append(nonText, normalized)
+	}
+
+	switch typed := content.(type) {
+	case nil, string:
+		// text-only by definition.
+	case []model.MessageContent:
+		for _, part := range typed {
+			partType := strings.TrimSpace(part.Type)
+			switch {
+			case partType == "" && part.Text != nil:
+				addNonText(model.ContentTypeText)
+			case partType == "" && part.ImageURL != nil:
+				addNonText(model.ContentTypeImageURL)
+			case partType == "" && part.InputAudio != nil:
+				addNonText(model.ContentTypeInputAudio)
+			default:
+				addNonText(partType)
+			}
+		}
+	case []any:
+		for _, rawPart := range typed {
+			partMap, ok := rawPart.(map[string]any)
+			if !ok {
+				addNonText("unknown")
+				continue
+			}
+
+			partType, _ := partMap["type"].(string)
+			partType = strings.TrimSpace(partType)
+			switch {
+			case partType == "" && partMap["text"] != nil:
+				addNonText(model.ContentTypeText)
+			case partType == "" && partMap["image_url"] != nil:
+				addNonText(model.ContentTypeImageURL)
+			case partType == "" && partMap["input_audio"] != nil:
+				addNonText(model.ContentTypeInputAudio)
+			case partType == "":
+				addNonText("unknown")
+			default:
+				addNonText(partType)
+			}
+		}
+	default:
+		addNonText("unknown")
+	}
+
+	if len(nonText) == 0 {
+		return nil
+	}
+
+	slices.Sort(nonText)
+	return slices.Compact(nonText)
+}
+
+// normalizeGroqContentType normalizes OpenAI/Responses content type names to Groq chat
+// content type names for validation.
+func normalizeGroqContentType(partType string) string {
+	switch strings.ToLower(strings.TrimSpace(partType)) {
+	case "", "text", "input_text", "output_text":
+		return model.ContentTypeText
+	case "input_image":
+		return model.ContentTypeImageURL
+	default:
+		return strings.ToLower(strings.TrimSpace(partType))
+	}
 }
