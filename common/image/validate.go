@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 
 	"github.com/Laisky/errors/v2"
+
 	"github.com/songquanpeng/one-api/common/config"
 )
 

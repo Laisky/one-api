@@ -76,7 +76,7 @@ func TestListMCPServerToolsAppliesPricing(t *testing.T) {
 	require.Equal(t, http.StatusOK, response.Code)
 
 	var payload struct {
-		Success bool           `json:"success"`
+		Success bool            `json:"success"`
 		Data    []model.MCPTool `json:"data"`
 	}
 	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &payload))
