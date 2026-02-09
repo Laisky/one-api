@@ -188,33 +188,33 @@ func (gpm *GlobalPricingManager) mergeAdapterPricing(apiType int) bool {
 }
 
 // GetGlobalModelRatio returns the global model ratio for a given model
-// Returns 0 if the model is not found in global pricing
-func GetGlobalModelRatio(modelName string) float64 {
+// and a boolean indicating whether the model exists in global pricing.
+func GetGlobalModelRatio(modelName string) (float64, bool) {
 	globalPricingManager.mu.RLock()
 	defer globalPricingManager.mu.RUnlock()
 
 	globalPricingManager.ensureInitialized()
 
 	if price, exists := globalPricingManager.globalModelPricing[modelName]; exists {
-		return price.Ratio
+		return price.Ratio, true
 	}
 
-	return 0 // Not found in global pricing
+	return 0, false
 }
 
 // GetGlobalCompletionRatio returns the global completion ratio for a given model
-// Returns 0 if the model is not found in global pricing
-func GetGlobalCompletionRatio(modelName string) float64 {
+// and a boolean indicating whether the model exists in global pricing.
+func GetGlobalCompletionRatio(modelName string) (float64, bool) {
 	globalPricingManager.mu.RLock()
 	defer globalPricingManager.mu.RUnlock()
 
 	globalPricingManager.ensureInitialized()
 
 	if price, exists := globalPricingManager.globalModelPricing[modelName]; exists {
-		return price.CompletionRatio
+		return price.CompletionRatio, true
 	}
 
-	return 0 // Not found in global pricing
+	return 0, false
 }
 
 // GetGlobalModelPricing returns a copy of the entire global pricing map
@@ -245,6 +245,48 @@ func GetGlobalModelConfig(modelName string) (adaptor.ModelConfig, bool) {
 		return cloneModelConfig(cfg), true
 	}
 	return adaptor.ModelConfig{}, false
+}
+
+// GetGlobalVideoPricing returns the global video pricing configuration for a given model.
+// The returned configuration is cloned to prevent external mutation of the cache.
+func GetGlobalVideoPricing(modelName string) *adaptor.VideoPricingConfig {
+	globalPricingManager.mu.RLock()
+	defer globalPricingManager.mu.RUnlock()
+
+	globalPricingManager.ensureInitialized()
+
+	if cfg, exists := globalPricingManager.globalModelPricing[modelName]; exists {
+		return cfg.Video.Clone()
+	}
+	return nil
+}
+
+// GetGlobalAudioPricing returns the global audio pricing configuration for a given model.
+// The returned configuration is cloned to prevent external mutation of the cache.
+func GetGlobalAudioPricing(modelName string) *adaptor.AudioPricingConfig {
+	globalPricingManager.mu.RLock()
+	defer globalPricingManager.mu.RUnlock()
+
+	globalPricingManager.ensureInitialized()
+
+	if cfg, exists := globalPricingManager.globalModelPricing[modelName]; exists {
+		return cfg.Audio.Clone()
+	}
+	return nil
+}
+
+// GetGlobalImagePricing returns the global image pricing configuration for a given model.
+// The returned configuration is cloned to prevent external mutation of the cache.
+func GetGlobalImagePricing(modelName string) *adaptor.ImagePricingConfig {
+	globalPricingManager.mu.RLock()
+	defer globalPricingManager.mu.RUnlock()
+
+	globalPricingManager.ensureInitialized()
+
+	if cfg, exists := globalPricingManager.globalModelPricing[modelName]; exists {
+		return cfg.Image.Clone()
+	}
+	return nil
 }
 
 // ReloadGlobalPricing forces a reload of the global pricing from contributing adapters
@@ -300,8 +342,8 @@ func GetModelRatioWithThreeLayers(modelName string, channelOverrides map[string]
 
 	// Layer 3: Global model pricing (merged from selected adapters)
 	// Respect explicit zero pricing by checking existence, not value.
-	if cfg, exists := GetGlobalModelConfig(modelName); exists {
-		return cfg.Ratio
+	if ratio, exists := GetGlobalModelRatio(modelName); exists {
+		return ratio
 	}
 
 	// Layer 4: Final fallback - reasonable default
@@ -329,8 +371,8 @@ func GetCompletionRatioWithThreeLayers(modelName string, channelOverrides map[st
 
 	// Layer 3: Global model pricing (merged from selected adapters)
 	// Respect explicit zero pricing by checking existence, not value.
-	if cfg, exists := GetGlobalModelConfig(modelName); exists {
-		return cfg.CompletionRatio
+	if ratio, exists := GetGlobalCompletionRatio(modelName); exists {
+		return ratio
 	}
 
 	// Layer 4: Final fallback - reasonable default
@@ -352,9 +394,9 @@ func GetVideoPricingWithThreeLayers(modelName string, channelOverride *adaptor.V
 		}
 	}
 
-	if cfg, exists := GetGlobalModelConfig(modelName); exists {
-		if cfg.Video != nil && cfg.Video.HasData() {
-			return cfg.Video.Clone()
+	if cfg := GetGlobalVideoPricing(modelName); cfg != nil {
+		if cfg.HasData() {
+			return cfg
 		}
 	}
 

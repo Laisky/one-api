@@ -63,9 +63,9 @@ func ResolveAudioPricing(modelName string, channelConfigs map[string]model.Model
 		}
 	}
 
-	if cfg, ok := GetGlobalModelConfig(modelName); ok {
-		if cfg.Audio != nil && cfg.Audio.HasData() {
-			return cfg.Audio.Clone(), true
+	if cfg := GetGlobalAudioPricing(modelName); cfg != nil {
+		if cfg.HasData() {
+			return cfg, true
 		}
 	}
 
@@ -95,9 +95,9 @@ func ResolveImagePricing(modelName string, channelConfigs map[string]model.Model
 		}
 	}
 
-	if cfg, ok := GetGlobalModelConfig(modelName); ok {
-		if cfg.Image != nil && cfg.Image.HasData() {
-			return cfg.Image.Clone(), true
+	if cfg := GetGlobalImagePricing(modelName); cfg != nil {
+		if cfg.HasData() {
+			return cfg, true
 		}
 	}
 

@@ -148,12 +148,14 @@ func TestGetGlobalModelRatio(t *testing.T) {
 	InitializeGlobalPricingManager(mockGetAdaptor)
 
 	// Test existing model
-	ratio := GetGlobalModelRatio("gpt-3.5-turbo")
+	ratio, exists := GetGlobalModelRatio("gpt-3.5-turbo")
 	expectedRatio := 1.5 * 0.000001
+	require.True(t, exists)
 	require.Equal(t, expectedRatio, ratio)
 
 	// Test non-existing model
-	ratio = GetGlobalModelRatio("non-existent-model")
+	ratio, exists = GetGlobalModelRatio("non-existent-model")
+	require.False(t, exists)
 	require.Equal(t, float64(0), ratio, "Expected 0 for non-existent model")
 }
 
@@ -165,12 +167,14 @@ func TestGetGlobalCompletionRatio(t *testing.T) {
 	InitializeGlobalPricingManager(mockGetAdaptor)
 
 	// Test existing model
-	ratio := GetGlobalCompletionRatio("claude-3-opus")
+	ratio, exists := GetGlobalCompletionRatio("claude-3-opus")
 	expectedRatio := 5.0
+	require.True(t, exists)
 	require.Equal(t, expectedRatio, ratio)
 
 	// Test non-existing model
-	ratio = GetGlobalCompletionRatio("non-existent-model")
+	ratio, exists = GetGlobalCompletionRatio("non-existent-model")
+	require.False(t, exists)
 	require.Equal(t, float64(0), ratio, "Expected 0 for non-existent model")
 }
 
@@ -313,6 +317,6 @@ func TestIsGlobalPricingInitialized(t *testing.T) {
 	// Test initialized state
 	InitializeGlobalPricingManager(mockGetAdaptor)
 	// Force initialization by accessing global pricing
-	GetGlobalModelRatio("test-model")
+	GetGlobalModelRatio("test-model") // trigger init
 	require.True(t, IsGlobalPricingInitialized(), "Expected global pricing to be initialized")
 }

@@ -1243,9 +1243,9 @@ func GetModelRatioWithThreeLayers(modelName string, channelOverrides map[string]
     }
 
     // Layer 3: Global model pricing (merged from selected adapters)
-    globalRatio := GetGlobalModelRatio(modelName)
-    if globalRatio > 0 {
-        return globalRatio
+    // Respect explicit zero pricing by checking existence, not value.
+    if ratio, exists := GetGlobalModelRatio(modelName); exists {
+        return ratio
     }
 
     // Layer 4: Final fallback - reasonable default
