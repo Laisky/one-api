@@ -8,7 +8,7 @@ Local tools and debugging related sensitive information is saved in .github/inst
 
 ### Codes
 
-All code must be written in English. Avoid using any other languages in code, comments, or documentation.
+No matter what language you receive, keep using English for all code, comments, thinking/reasoning, planning and documentation.
 
 Every single code file should not exceed 800 lines. If a file exceeds this limit, please split it into smaller files based on functionality. Automatically generated files are exempt from this rule.
 

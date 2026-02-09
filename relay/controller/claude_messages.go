@@ -92,16 +92,7 @@ func RelayClaudeMessagesHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 	// convert request using adaptor's ConvertClaudeRequest method
 	convertedRequest, err := adaptorInstance.ConvertClaudeRequest(c, claudeRequest)
 	if err != nil {
-		// Check if this is a validation error and preserve the correct HTTP status code
-		//
-		// This is for AWS, which must be different from other providers that are
-		// based on proprietary systems such as OpenAI, etc.
-		switch {
-		case strings.Contains(err.Error(), "does not support the v1/messages endpoint"):
-			return openai.ErrorWrapper(err, "invalid_request_error", http.StatusBadRequest)
-		default:
-			return openai.ErrorWrapper(err, "convert_request_failed", http.StatusInternalServerError)
-		}
+		return wrapConvertRequestError(err)
 	}
 
 	// Determine request body:

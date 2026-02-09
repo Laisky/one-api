@@ -298,7 +298,7 @@ func relayResponseAPIThroughChat(c *gin.Context, meta *metalib.Meta, responseAPI
 	convertedRequest, err := requestAdaptor.ConvertRequest(c, relaymode.ChatCompletions, chatRequest)
 	if err != nil {
 		billing.ReturnPreConsumedQuota(ctx, preConsumedQuota, meta.TokenId)
-		return openai.ErrorWrapper(err, "convert_request_failed", http.StatusInternalServerError)
+		return wrapConvertRequestError(err)
 	}
 	c.Set(ctxkey.ConvertedRequest, convertedRequest)
 
