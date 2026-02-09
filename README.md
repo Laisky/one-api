@@ -11,7 +11,7 @@ Open‑source version of OpenRouter, managed through a unified gateway that hand
 5. Supporting multi‑tenant management, allowing each tenant to set distinct quotas and permissions.
 6. Supporting generation of sub‑API Keys; each tenant can create multiple sub‑API Keys, each of which can be bound to different models and quotas.
 
-![](https://s3.laisky.com/uploads/2025/07/oneapi.drawio.png)
+![](https://s3.laisky.com/uploads/2026/02/one-api.png)
 
 Also welcome to register and use my deployed one-api gateway, which supports various mainstream models. For usage instructions, please refer to <https://wiki.laisky.com/projects/gpt/pay/>.
 
