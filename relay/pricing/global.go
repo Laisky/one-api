@@ -331,12 +331,9 @@ func GetModelRatioWithThreeLayers(modelName string, channelOverrides map[string]
 
 	// Layer 2: Channel default ratio (adapter's default pricing)
 	if adaptor != nil {
-		ratio := adaptor.GetModelRatio(modelName)
-		// Check if the adapter actually has pricing for this model
-		// If GetModelRatio returns the default fallback, we should try global pricing
-		defaultPricing := adaptor.GetDefaultModelPricing()
-		if _, hasSpecificPricing := defaultPricing[modelName]; hasSpecificPricing {
-			return ratio
+		// Use GetDefaultModelPricing directly to avoid redundant lookups and function calls
+		if price, exists := adaptor.GetDefaultModelPricing()[modelName]; exists {
+			return price.Ratio
 		}
 	}
 
@@ -361,11 +358,9 @@ func GetCompletionRatioWithThreeLayers(modelName string, channelOverrides map[st
 
 	// Layer 2: Channel default ratio (adapter's default pricing)
 	if adaptor != nil {
-		ratio := adaptor.GetCompletionRatio(modelName)
-		// Check if the adapter actually has pricing for this model
-		defaultPricing := adaptor.GetDefaultModelPricing()
-		if _, hasSpecificPricing := defaultPricing[modelName]; hasSpecificPricing {
-			return ratio
+		// Use GetDefaultModelPricing directly to avoid redundant lookups and function calls
+		if price, exists := adaptor.GetDefaultModelPricing()[modelName]; exists {
+			return price.CompletionRatio
 		}
 	}
 
