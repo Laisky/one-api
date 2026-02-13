@@ -157,10 +157,11 @@ func sanitizeResponseAPIContentItem(item map[string]any, textContentType string)
 	}
 
 	itemType, _ := item["type"].(string)
+	normalizedType := strings.ToLower(strings.TrimSpace(itemType))
 
 	// Reasoning items from non-OpenAI providers may carry encrypted payloads that OpenAI cannot verify.
 	// Convert them into plain text summaries to preserve user-visible context while avoiding upstream errors.
-	if itemType == "reasoning" {
+	if normalizedType == "reasoning" {
 		if summaryText := extractReasoningSummaryText(item); summaryText != "" {
 			return []map[string]any{{
 				"type": textContentType,
@@ -177,12 +178,126 @@ func sanitizeResponseAPIContentItem(item map[string]any, textContentType string)
 		return nil
 	}
 
-	// openai do not support encrypted_content in reasoning history,
-	// could cause 400 error
-	delete(item, "encrypted_content")
+	if textItem := sanitizeResponseAPITextContent(item, normalizedType, textContentType); textItem != nil {
+		return []map[string]any{textItem}
+	}
 
-	return []map[string]any{item}
+	if imageItem := sanitizeResponseAPIImageContent(item, normalizedType); imageItem != nil {
+		return []map[string]any{imageItem}
+	}
+
+	if audioItem := sanitizeResponseAPIAudioContent(item, normalizedType); audioItem != nil {
+		return []map[string]any{audioItem}
+	}
+
+	if fileItem := sanitizeResponseAPIFileContent(item, normalizedType); fileItem != nil {
+		return []map[string]any{fileItem}
+	}
+
+	if text, ok := item["text"].(string); ok && strings.TrimSpace(text) != "" {
+		return []map[string]any{{
+			"type": textContentType,
+			"text": text,
+		}}
+	}
+
+	return nil
 }
+
+// sanitizeResponseAPITextContent returns a Response API compatible text content item.
+func sanitizeResponseAPITextContent(item map[string]any, normalizedType, textContentType string) map[string]any {
+	if normalizedType != "input_text" && normalizedType != "output_text" && normalizedType != "text" {
+		return nil
+	}
+
+	text, _ := item["text"].(string)
+	if strings.TrimSpace(text) == "" {
+		return nil
+	}
+
+	targetType := normalizedType
+	if normalizedType == "text" || targetType == "" {
+		targetType = textContentType
+	}
+
+	return map[string]any{
+		"type": targetType,
+		"text": text,
+	}
+}
+
+// sanitizeResponseAPIImageContent returns a Response API compatible image content item.
+func sanitizeResponseAPIImageContent(item map[string]any, normalizedType string) map[string]any {
+	if normalizedType != "input_image" && normalizedType != "image_url" {
+		return nil
+	}
+
+	sanitized := map[string]any{"type": "input_image"}
+
+	if imageURL, ok := item["image_url"].(string); ok && strings.TrimSpace(imageURL) != "" {
+		sanitized["image_url"] = imageURL
+	}
+	if fileID, ok := item["file_id"].(string); ok && strings.TrimSpace(fileID) != "" {
+		sanitized["file_id"] = fileID
+	}
+	if detail, ok := item["detail"].(string); ok && strings.TrimSpace(detail) != "" {
+		sanitized["detail"] = detail
+	}
+
+	if _, hasImageURL := sanitized["image_url"]; hasImageURL {
+		return sanitized
+	}
+	if _, hasFileID := sanitized["file_id"]; hasFileID {
+		return sanitized
+	}
+
+	return nil
+}
+
+// sanitizeResponseAPIAudioContent returns a Response API compatible audio content item.
+func sanitizeResponseAPIAudioContent(item map[string]any, normalizedType string) map[string]any {
+	if normalizedType != "input_audio" {
+		return nil
+	}
+
+	inputAudio, exists := item["input_audio"]
+	if !exists || inputAudio == nil {
+		return nil
+	}
+
+	return map[string]any{
+		"type":        "input_audio",
+		"input_audio": inputAudio,
+	}
+}
+
+// sanitizeResponseAPIFileContent returns a Response API compatible file content item.
+func sanitizeResponseAPIFileContent(item map[string]any, normalizedType string) map[string]any {
+	if normalizedType != "input_file" {
+		return nil
+	}
+
+	sanitized := map[string]any{"type": "input_file"}
+	if fileID, ok := item["file_id"].(string); ok && strings.TrimSpace(fileID) != "" {
+		sanitized["file_id"] = fileID
+	}
+	if fileURL, ok := item["file_url"].(string); ok && strings.TrimSpace(fileURL) != "" {
+		sanitized["file_url"] = fileURL
+	}
+	if fileData, ok := item["file_data"].(string); ok && strings.TrimSpace(fileData) != "" {
+		sanitized["file_data"] = fileData
+	}
+	if fileName, ok := item["filename"].(string); ok && strings.TrimSpace(fileName) != "" {
+		sanitized["filename"] = fileName
+	}
+
+	if len(sanitized) == 1 {
+		return nil
+	}
+
+	return sanitized
+}
+
 func extractReasoningSummaryText(item map[string]any) string {
 	summary, ok := item["summary"].([]any)
 	if !ok {

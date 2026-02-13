@@ -6,19 +6,11 @@ The purpose of the one‑api project is to let users freely use any of the ChatC
 
 Local tools and debugging related sensitive information is saved in .github/instructions/laisky.instructions.md.
 
-### Codes
-
-No matter what language you receive, keep using English for all code, comments, thinking/reasoning, planning and documentation.
-
-Every single code file should not exceed 800 lines. If a file exceeds this limit, please split it into smaller files based on functionality. Automatically generated files are exempt from this rule.
-
 ### Package Management
 
 Use `yarn` for managing packages. Avoid using `npm` to prevent potential conflicts in the `yarn.lock` file.
 
 ### Debug & Logging
-
-When debugging, add targeted DEBUG logs that include essential details to help developers pinpoint hard‑to‑diagnose issues. After debugging, retain any logs that could be useful for future troubleshooting, but **never** include sensitive data like API keys or passwords in those logs.
 
 Every project needs a global logger as the foundation. As the request moves through the code, middleware (or something similar) should automatically add a context aware log handler that carries the important context data—think zap logger’s `With` method. When you write the business logic, pull that context aware logger from the context and use it for logging, not the global logger.
 
@@ -33,6 +25,12 @@ Modern is the most advanced template with the best user experience. Our focus is
 All UI content should support i18n language translation, and all language files should be defined. The language files are stored in `web/modern/src/i18n/locales/`.
 
 ## General
+
+No matter what language you receive, you should only use English everywhere, except for the i18n language files.
+
+Every single code file should not exceed 800 lines. If a file exceeds this limit, please split it into smaller files based on functionality. Automatically generated files are exempt from this rule.
+
+When debugging, add targeted DEBUG logs that include essential details to help developers pinpoint hard‑to‑diagnose issues. After debugging, retain any logs that could be useful for future troubleshooting, but **never** include sensitive data like API keys or passwords in those logs.
 
 ### Agents
 

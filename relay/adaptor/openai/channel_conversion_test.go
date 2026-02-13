@@ -197,3 +197,50 @@ func TestAzureGPT5ConversionToResponseAPI(t *testing.T) {
 	require.True(t, ok)
 	require.IsType(t, &ResponseAPIRequest{}, stored)
 }
+
+func TestConvertRequest_ResponseAPIModeBypassesConversionSanitization(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	req := &model.GeneralOpenAIRequest{
+		Model: "gpt-4.1-nano",
+		Messages: []model.Message{
+			{
+				Role: "user",
+				Content: []any{
+					map[string]any{
+						"type": "input_text",
+						"text": "hello",
+						"cache_control": map[string]any{
+							"type": "ephemeral",
+						},
+					},
+				},
+			},
+		},
+	}
+
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = &http.Request{}
+
+	metaInfo := &meta.Meta{
+		Mode:            relaymode.ResponseAPI,
+		ChannelType:     channeltype.OpenAI,
+		BaseURL:         "https://api.openai.com",
+		RequestURLPath:  "/v1/responses",
+		ActualModelName: req.Model,
+	}
+	c.Set(ctxkey.Meta, metaInfo)
+
+	adaptor := &Adaptor{}
+	converted, err := adaptor.ConvertRequest(c, relaymode.ResponseAPI, req)
+	require.NoError(t, err)
+	require.Same(t, req, converted, "Response API mode should pass through request object")
+
+	content, ok := req.Messages[0].Content.([]any)
+	require.True(t, ok)
+	firstItem, ok := content[0].(map[string]any)
+	require.True(t, ok)
+	_, hasCacheControl := firstItem["cache_control"]
+	require.True(t, hasCacheControl, "cache_control must remain untouched in direct Response API mode")
+}
