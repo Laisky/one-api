@@ -1,4 +1,6 @@
-# Repository Guidelines
+# Agents Guidelines
+
+**No matter what language you receive, Only using English as output for codes, comments, chat, documents and everything else.**
 
 ## This Project
 
@@ -25,8 +27,6 @@ Modern is the most advanced template with the best user experience. Our focus is
 All UI content should support i18n language translation, and all language files should be defined. The language files are stored in `web/modern/src/i18n/locales/`.
 
 ## General
-
-No matter what language you receive, you should only use English everywhere, except for the i18n language files.
 
 Every single code file should not exceed 800 lines. If a file exceeds this limit, please split it into smaller files based on functionality. Automatically generated files are exempt from this rule.
 
