@@ -1104,7 +1104,7 @@ You can use any model you like for Claude Code, even if the model doesn’t nati
 
 ![](https://s3.laisky.com/uploads/2025/09/claude-sonnet-4-5.png)
 
-claude-opus-4-0 / claude-opus-4-1 / claude-opus-4-5 / claude-sonnet-4-0 / claude-sonnet-4-5 / claude-haiku-4-5
+claude-opus-4-0 / claude-opus-4-1 / claude-opus-4-5 / claude-opus-4-5 / claude-sonnet-4-0 / claude-sonnet-4-5 / claude-sonnet-4-6 / claude-haiku-4-5
 
 ### Google (Gemini & Vertex) Features
 

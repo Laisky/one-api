@@ -92,6 +92,12 @@ func TestConvertModelID2CrossRegionProfile(t *testing.T) {
 			expected: "global.anthropic.claude-sonnet-4-5-20250929-v1:0",
 		},
 		{
+			name:     "Claude Sonnet 4.6 in us-east-1 uses global profile",
+			model:    "anthropic.claude-sonnet-4-6",
+			region:   "us-east-1",
+			expected: "global.anthropic.claude-sonnet-4-6",
+		},
+		{
 			name:     "Unsupported model returns original",
 			model:    "unsupported.model-v1:0",
 			region:   "us-east-1",
@@ -151,6 +157,12 @@ func TestConvertModelID2CrossRegionProfile(t *testing.T) {
 			model:    "anthropic.claude-opus-4-5-20251101-v1:0",
 			region:   "ca-central-1",
 			expected: "global.anthropic.claude-opus-4-5-20251101-v1:0",
+		},
+		{
+			name:     "claude-opus-4-6 in us-east-1 uses global profile",
+			model:    "anthropic.claude-opus-4-6-v1",
+			region:   "us-east-1",
+			expected: "global.anthropic.claude-opus-4-6-v1",
 		},
 	}
 
