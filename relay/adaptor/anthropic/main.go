@@ -313,9 +313,24 @@ func ConvertRequest(c *gin.Context, textRequest model.GeneralOpenAIRequest) (*Re
 		claudeRequest.TopP = nil
 	}
 
+	systemMessageCount := 0
+	emptySystemMessageCount := 0
+	systemPrompts := make([]string, 0)
+
 	for _, message := range textRequest.Messages {
-		if message.Role == "system" && claudeRequest.System == "" {
-			claudeRequest.System = message.StringContent()
+		if message.Role == "system" {
+			systemMessageCount++
+
+			systemContent := strings.TrimSpace(message.StringContent())
+			if systemContent == "" {
+				emptySystemMessageCount++
+				logger.Debug("skip empty system message during Anthropic conversion",
+					zap.Int("system_message_index", systemMessageCount-1),
+				)
+				continue
+			}
+
+			systemPrompts = append(systemPrompts, systemContent)
 			continue
 		}
 
@@ -592,6 +607,18 @@ func ConvertRequest(c *gin.Context, textRequest model.GeneralOpenAIRequest) (*Re
 		}
 
 		claudeRequest.Messages = append(claudeRequest.Messages, claudeMessage)
+	}
+
+	if len(systemPrompts) > 0 {
+		claudeRequest.System = strings.Join(systemPrompts, "\n\n")
+	}
+
+	if systemMessageCount > 0 {
+		logger.Debug("processed system messages for Anthropic conversion",
+			zap.Int("system_messages_total", systemMessageCount),
+			zap.Int("system_messages_merged", len(systemPrompts)),
+			zap.Int("system_messages_empty", emptySystemMessageCount),
+		)
 	}
 
 	// If fallback mode was used, disable thinking to avoid Claude validation errors

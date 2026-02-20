@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -136,6 +137,79 @@ func TestConvertRequest_DefaultsMissingFunctionSchema(t *testing.T) {
 	require.NotNil(t, converted)
 	require.Len(t, converted.Tools, 1)
 	assert.Equal(t, "object", converted.Tools[0].InputSchema.Type)
+}
+
+// TestConvertRequest_MergesAllSystemMessagesToTopLevel verifies all OpenAI system messages are consolidated into Anthropic top-level system.
+func TestConvertRequest_MergesAllSystemMessagesToTopLevel(t *testing.T) {
+	c := newThinkingContext(t, "/v1/chat/completions")
+
+	request := model.GeneralOpenAIRequest{
+		Model:     "claude-sonnet-4-5",
+		MaxTokens: 300,
+		Messages: []model.Message{
+			{Role: "system", Content: "You are a roleplay assistant."},
+			{Role: "user", Content: "hi"},
+			{Role: "system", Content: "Keep the tone warm and short."},
+			{Role: "assistant", Content: "Hello!"},
+		},
+	}
+
+	converted, err := ConvertRequest(c, request)
+	require.NoError(t, err)
+	require.NotNil(t, converted)
+
+	require.Equal(t, "You are a roleplay assistant.\n\nKeep the tone warm and short.", converted.System)
+	require.Len(t, converted.Messages, 2)
+	require.Equal(t, "user", converted.Messages[0].Role)
+	require.Equal(t, "assistant", converted.Messages[1].Role)
+
+	for _, message := range converted.Messages {
+		require.NotEqual(t, "system", message.Role)
+	}
+}
+
+// TestConvertRequest_UserProvidedPayload_SystemMovedOutOfMessages verifies the user-provided request shape does not leak system role into Anthropic messages.
+func TestConvertRequest_UserProvidedPayload_SystemMovedOutOfMessages(t *testing.T) {
+	c := newThinkingContext(t, "/v1/chat/completions")
+
+	const rawRequest = `{
+		"frequency_penalty": 0,
+		"model": "claude-sonnet-4-5",
+		"max_tokens": 300,
+		"messages": [
+			{
+				"content": "Write Seraphina's next reply in a fictional chat between Seraphina and 林舒白.",
+				"role": "system"
+			},
+			{
+				"content": "林舒白: \"What is the glade?\"\\nSeraphina: *Seraphina smiles softly.*",
+				"role": "user"
+			}
+		]
+	}`
+
+	var request model.GeneralOpenAIRequest
+	err := json.Unmarshal([]byte(rawRequest), &request)
+	require.NoError(t, err)
+
+	converted, err := ConvertRequest(c, request)
+	require.NoError(t, err)
+	require.NotNil(t, converted)
+
+	require.Equal(t, "Write Seraphina's next reply in a fictional chat between Seraphina and 林舒白.", converted.System)
+	require.Len(t, converted.Messages, 1)
+	require.Equal(t, "user", converted.Messages[0].Role)
+	require.NotContains(t, strings.ToLower(mustMarshalString(t, converted.Messages)), `"role":"system"`)
+}
+
+// mustMarshalString marshals value to JSON text and fails the test on error.
+func mustMarshalString(t *testing.T, value any) string {
+	t.Helper()
+
+	raw, err := json.Marshal(value)
+	require.NoError(t, err)
+
+	return string(raw)
 }
 
 func TestConvertRequest_EmptyAssistantMessageWithToolCalls(t *testing.T) {
