@@ -208,6 +208,8 @@ func ConvertClaudeRequest(c *gin.Context, claudeRequest model.ClaudeRequest) (*R
 }
 
 func ConvertRequest(c *gin.Context, textRequest model.GeneralOpenAIRequest) (*Request, error) {
+	logger := gmw.GetLogger(c)
+
 	claudeTools := make([]Tool, 0, len(textRequest.Tools))
 
 	for _, tool := range textRequest.Tools {
@@ -316,6 +318,40 @@ func ConvertRequest(c *gin.Context, textRequest model.GeneralOpenAIRequest) (*Re
 			claudeRequest.System = message.StringContent()
 			continue
 		}
+
+		if message.Role == "tool" {
+			toolResultContent := message.StringContent()
+			if toolResultContent == "" {
+				for _, part := range message.ParseContent() {
+					if part.Type == model.ContentTypeText && part.Text != nil {
+						toolResultContent += *part.Text
+					}
+				}
+			}
+
+			logger.Debug("convert OpenAI tool role to Anthropic tool_result",
+				zap.Int("message_index", len(claudeRequest.Messages)),
+				zap.Bool("has_tool_call_id", message.ToolCallId != ""),
+				zap.Bool("string_content", message.IsStringContent()),
+				zap.Int("tool_calls_count", len(message.ToolCalls)),
+			)
+			if message.ToolCallId == "" {
+				logger.Debug("tool role message missing tool_call_id during Anthropic conversion",
+					zap.Int("message_index", len(claudeRequest.Messages)),
+				)
+			}
+
+			claudeRequest.Messages = append(claudeRequest.Messages, Message{
+				Role: "user",
+				Content: []Content{{
+					Type:      "tool_result",
+					Content:   toolResultContent,
+					ToolUseId: message.ToolCallId,
+				}},
+			})
+			continue
+		}
+
 		claudeMessage := Message{
 			Role: message.Role,
 		}
@@ -323,13 +359,7 @@ func ConvertRequest(c *gin.Context, textRequest model.GeneralOpenAIRequest) (*Re
 		if message.IsStringContent() {
 			stringContent := message.StringContent()
 
-			if message.Role == "tool" {
-				claudeMessage.Role = "user"
-				content.Type = "tool_result"
-				content.Content = stringContent
-				content.ToolUseId = message.ToolCallId
-				claudeMessage.Content = append(claudeMessage.Content, content)
-			} else if stringContent != "" {
+			if stringContent != "" {
 				// For assistant messages with thinking enabled, check if we need to add thinking block
 				if message.Role == "assistant" && claudeRequest.Thinking != nil {
 					// Check if this message has reasoning content that should be converted to thinking block

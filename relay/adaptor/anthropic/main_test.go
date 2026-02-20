@@ -258,6 +258,94 @@ func TestConvertRequest_EmptyAssistantMessageWithToolCalls(t *testing.T) {
 	assert.Equal(t, "call_123", toolMessage.Content[0].ToolUseId)
 }
 
+func TestConvertRequest_ToolRoleWithStructuredContent(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	req := httptest.NewRequest("POST", "/v1/chat/completions", nil)
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = req
+
+	openaiRequest := model.GeneralOpenAIRequest{
+		Model:     "claude-3.5-sonnet",
+		MaxTokens: 4096,
+		Messages: []model.Message{
+			{
+				Role:    "user",
+				Content: "Create a markdown file with an introduction.",
+			},
+			{
+				Role:    "assistant",
+				Content: "I'll create the file for you.",
+				ToolCalls: []model.Tool{
+					{
+						Id:   "call_001",
+						Type: "function",
+						Function: &model.Function{
+							Name:      "write_file",
+							Arguments: `{"file_path":"/tmp/a.md","content":"hello"}`,
+						},
+					},
+				},
+			},
+			{
+				Role: "tool",
+				Content: []any{
+					map[string]any{
+						"type": "text",
+						"text": "Successfully created and wrote to new file: /tmp/a.md.",
+					},
+				},
+				ToolCallId: "call_001",
+			},
+		},
+		Tools: []model.Tool{
+			{
+				Type: "function",
+				Function: &model.Function{
+					Name:        "write_file",
+					Description: "Write content to a file",
+					Parameters: map[string]any{
+						"type": "object",
+						"properties": map[string]any{
+							"file_path": map[string]any{"type": "string"},
+							"content":   map[string]any{"type": "string"},
+						},
+						"required": []string{"file_path", "content"},
+					},
+				},
+			},
+		},
+	}
+
+	claudeRequest, err := ConvertRequest(c, openaiRequest)
+	require.NoError(t, err)
+
+	for _, message := range claudeRequest.Messages {
+		assert.NotEqual(t, "tool", message.Role)
+	}
+
+	var toolResultMessage *Message
+	for i := range claudeRequest.Messages {
+		if claudeRequest.Messages[i].Role != "user" {
+			continue
+		}
+		if len(claudeRequest.Messages[i].Content) == 0 {
+			continue
+		}
+		if claudeRequest.Messages[i].Content[0].Type == "tool_result" {
+			toolResultMessage = &claudeRequest.Messages[i]
+			break
+		}
+	}
+
+	require.NotNil(t, toolResultMessage)
+	require.Len(t, toolResultMessage.Content, 1)
+	assert.Equal(t, "tool_result", toolResultMessage.Content[0].Type)
+	assert.Equal(t, "call_001", toolResultMessage.Content[0].ToolUseId)
+	assert.Equal(t, "Successfully created and wrote to new file: /tmp/a.md.", toolResultMessage.Content[0].Content)
+}
+
 func TestConvertRequest_AssistantMessageWithTextAndToolCalls(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
