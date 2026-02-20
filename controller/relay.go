@@ -134,8 +134,8 @@ func Relay(c *gin.Context) {
 	retryTimes := config.RetryTimes
 	if err := shouldRetry(c, bizErr.StatusCode, bizErr.RawError); err != nil {
 		// Downgrade to WARN if the failure is caused by caller's context cancellation/deadline exceeded
-		if isClientContextCancel(bizErr.StatusCode, bizErr.RawError) || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-			lg.Warn("relay aborted by client (context canceled/deadline), won't retry", zap.Int("status_code", bizErr.StatusCode), zap.Error(err))
+		if isClientContextCancel(bizErr.StatusCode, bizErr.RawError) || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) || isUserOriginatedRelayError(bizErr) {
+			lg.Warn("relay user-side failure, won't retry", zap.Int("status_code", bizErr.StatusCode), zap.Error(err))
 		} else {
 			lg.Error("relay error happen, won't retry", zap.Int("status_code", bizErr.StatusCode), zap.Error(err))
 		}
@@ -554,8 +554,9 @@ type processChannelRelayErrorParams struct {
 func processChannelRelayError(ctx context.Context, params processChannelRelayErrorParams) {
 	// Always use a local logger variable
 	lg := gmw.GetLogger(ctx)
+	isUserError := isUserOriginatedRelayError(&params.Err)
 
-	// Downgrade to WARN for client-side cancellations/timeouts to avoid noisy alerts
+	// Downgrade to WARN for client-side cancellations/timeouts and user-originated errors
 	if isClientContextCancel(params.Err.StatusCode, params.Err.RawError) {
 		lg.Warn("relay aborted by client (context canceled/deadline)",
 			zap.Int("channel_id", params.ChannelId),
@@ -563,6 +564,18 @@ func processChannelRelayError(ctx context.Context, params processChannelRelayErr
 			zap.Int("user_id", params.UserId),
 			zap.String("group", params.Group),
 			zap.String("model", params.OriginalModel),
+			zap.Int("status_code", params.Err.StatusCode),
+			zap.Any("error_code", params.Err.Code),
+			zap.Error(params.Err.RawError))
+	} else if isUserError {
+		lg.Warn("user-originated request error",
+			zap.Int("channel_id", params.ChannelId),
+			zap.String("channel_name", params.ChannelName),
+			zap.Int("user_id", params.UserId),
+			zap.String("group", params.Group),
+			zap.String("model", params.OriginalModel),
+			zap.Int("status_code", params.Err.StatusCode),
+			zap.Any("error_code", params.Err.Code),
 			zap.Error(params.Err.RawError))
 	} else {
 		lg.Error("relay error",
@@ -591,6 +604,22 @@ func processChannelRelayError(ctx context.Context, params processChannelRelayErr
 			zap.String("group", params.Group),
 			zap.String("model", params.OriginalModel),
 			zap.Int("status_code", params.Err.StatusCode),
+		)
+		monitor.Emit(params.ChannelId, false)
+		return
+	}
+
+	if isUserError {
+		lg.Warn("user-originated request error, skipping channel suspension",
+			zap.Int("channel_id", params.ChannelId),
+			zap.String("channel_name", params.ChannelName),
+			zap.Int("user_id", params.UserId),
+			zap.String("group", params.Group),
+			zap.String("model", params.OriginalModel),
+			zap.Int("status_code", params.Err.StatusCode),
+			zap.String("upstream_error", params.Err.Message),
+			zap.Any("error_code", params.Err.Code),
+			zap.String("error_type", string(params.Err.Type)),
 		)
 		monitor.Emit(params.ChannelId, false)
 		return
@@ -748,6 +777,62 @@ func processChannelRelayError(ctx context.Context, params processChannelRelayErr
 	} else {
 		monitor.Emit(params.ChannelId, false)
 	}
+}
+
+// isUserOriginatedRelayError reports whether a relay failure was caused by caller-side
+// request or quota conditions rather than upstream/channel health.
+//
+// Return values:
+//   - true: user-originated and should not trigger channel suspension/disable.
+//   - false: may be upstream/channel/system failure and can follow normal error policy.
+func isUserOriginatedRelayError(e *model.ErrorWithStatusCode) bool {
+	if e == nil {
+		return false
+	}
+
+	if isClientContextCancel(e.StatusCode, e.RawError) {
+		return true
+	}
+
+	if e.StatusCode == http.StatusBadRequest && e.Type == model.ErrorTypeOneAPI {
+		return true
+	}
+
+	if e.StatusCode != http.StatusForbidden && e.StatusCode != http.StatusUnauthorized {
+		return false
+	}
+
+	if e.Type != model.ErrorTypeOneAPI {
+		return false
+	}
+
+	code := ""
+	switch v := e.Code.(type) {
+	case string:
+		code = strings.ToLower(v)
+	}
+
+	if code == "insufficient_user_quota" || code == "insufficient_token_quota" ||
+		code == "invalid_api_key" || code == "token_expired" || code == "token_disabled" || code == "token_not_found" ||
+		code == "model_not_allowed" || code == "model_not_available" || code == "tool_not_allowed" {
+		return true
+	}
+
+	msg := strings.ToLower(e.Message)
+	if code == "pre_consume_token_quota_failed" &&
+		(strings.Contains(msg, "insufficient user quota") || strings.Contains(msg, "insufficient token quota") || strings.Contains(msg, "user quota is not enough") || strings.Contains(msg, "token quota is not enough")) {
+		return true
+	}
+
+	if strings.Contains(msg, "token has expired") || strings.Contains(msg, "token is not enabled") ||
+		strings.Contains(msg, "api key is invalid") || strings.Contains(msg, "api key has been disabled") ||
+		strings.Contains(msg, "model not allowed") || strings.Contains(msg, "model is not available") || strings.Contains(msg, "not allowed for this token") ||
+		strings.Contains(msg, "token model") || strings.Contains(msg, "quota has been exhausted") || strings.Contains(msg, "token quota exhausted") ||
+		strings.Contains(msg, "whitelist") || strings.Contains(msg, "blacklist") {
+		return true
+	}
+
+	return false
 }
 
 func RelayNotImplemented(c *gin.Context) {

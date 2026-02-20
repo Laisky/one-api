@@ -106,3 +106,128 @@ func TestClassifyAuthLike(t *testing.T) {
 		assert.False(t, classifyAuthLike(e))
 	})
 }
+
+func TestIsUserOriginatedRelayError(t *testing.T) {
+	t.Parallel()
+
+	t.Run("nil error", func(t *testing.T) {
+		t.Parallel()
+		assert.False(t, isUserOriginatedRelayError(nil))
+	})
+
+	t.Run("oneapi bad request", func(t *testing.T) {
+		t.Parallel()
+		err := &model.ErrorWithStatusCode{
+			StatusCode: http.StatusBadRequest,
+			Error: model.Error{
+				Type: model.ErrorTypeOneAPI,
+				Code: "invalid_text_request",
+			},
+		}
+		assert.True(t, isUserOriginatedRelayError(err))
+	})
+
+	t.Run("insufficient user quota", func(t *testing.T) {
+		t.Parallel()
+		err := &model.ErrorWithStatusCode{
+			StatusCode: http.StatusForbidden,
+			Error: model.Error{
+				Type:    model.ErrorTypeOneAPI,
+				Code:    "insufficient_user_quota",
+				Message: "user quota is not enough",
+			},
+		}
+		assert.True(t, isUserOriginatedRelayError(err))
+	})
+
+	t.Run("insufficient token quota from pre consume", func(t *testing.T) {
+		t.Parallel()
+		err := &model.ErrorWithStatusCode{
+			StatusCode: http.StatusForbidden,
+			Error: model.Error{
+				Type:    model.ErrorTypeOneAPI,
+				Code:    "pre_consume_token_quota_failed",
+				Message: "insufficient token quota: required=100, available=0, tokenId=1",
+			},
+		}
+		assert.True(t, isUserOriginatedRelayError(err))
+	})
+
+	t.Run("non-user pre consume failure", func(t *testing.T) {
+		t.Parallel()
+		err := &model.ErrorWithStatusCode{
+			StatusCode: http.StatusForbidden,
+			Error: model.Error{
+				Type:    model.ErrorTypeOneAPI,
+				Code:    "pre_consume_token_quota_failed",
+				Message: "failed to get token for pre-consume: tokenId=1",
+			},
+		}
+		assert.False(t, isUserOriginatedRelayError(err))
+	})
+
+	t.Run("upstream auth failure should not be treated as user-originated", func(t *testing.T) {
+		t.Parallel()
+		err := &model.ErrorWithStatusCode{
+			StatusCode: http.StatusForbidden,
+			Error: model.Error{
+				Type:    model.ErrorTypeAuthentication,
+				Code:    "invalid_api_key",
+				Message: "invalid api key",
+			},
+		}
+		assert.False(t, isUserOriginatedRelayError(err))
+	})
+
+	t.Run("oneapi token expired should be user-originated", func(t *testing.T) {
+		t.Parallel()
+		err := &model.ErrorWithStatusCode{
+			StatusCode: http.StatusUnauthorized,
+			Error: model.Error{
+				Type:    model.ErrorTypeOneAPI,
+				Code:    "token_expired",
+				Message: "token has expired",
+			},
+		}
+		assert.True(t, isUserOriginatedRelayError(err))
+	})
+
+	t.Run("oneapi model whitelist restriction should be user-originated", func(t *testing.T) {
+		t.Parallel()
+		err := &model.ErrorWithStatusCode{
+			StatusCode: http.StatusForbidden,
+			Error: model.Error{
+				Type:    model.ErrorTypeOneAPI,
+				Code:    "model_not_allowed",
+				Message: "model not allowed by token whitelist",
+			},
+		}
+		assert.True(t, isUserOriginatedRelayError(err))
+	})
+
+	t.Run("oneapi token model permission message should be user-originated", func(t *testing.T) {
+		t.Parallel()
+		err := &model.ErrorWithStatusCode{
+			StatusCode: http.StatusForbidden,
+			Error: model.Error{
+				Type:    model.ErrorTypeOneAPI,
+				Code:    "forbidden",
+				Message: "model not allowed for this token",
+			},
+		}
+		assert.True(t, isUserOriginatedRelayError(err))
+	})
+
+	t.Run("oneapi token balance exhausted message should be user-originated", func(t *testing.T) {
+		t.Parallel()
+		err := &model.ErrorWithStatusCode{
+			StatusCode: http.StatusForbidden,
+			Error: model.Error{
+				Type:    model.ErrorTypeOneAPI,
+				Code:    "forbidden",
+				Message: "API key quota has been exhausted",
+			},
+		}
+		assert.True(t, isUserOriginatedRelayError(err))
+	})
+}

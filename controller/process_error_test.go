@@ -265,3 +265,45 @@ func TestProcessError_OpenAIRetryScenario(t *testing.T) {
 	shouldSuspend := is5xx && !suggestsRetry
 	require.False(t, shouldSuspend, "should NOT suspend when upstream suggests retry")
 }
+
+func TestProcessError_UserOriginatedPolicy(t *testing.T) {
+	t.Parallel()
+
+	t.Run("insufficient user quota should be treated as user-originated", func(t *testing.T) {
+		t.Parallel()
+		err := model.ErrorWithStatusCode{
+			StatusCode: http.StatusForbidden,
+			Error: model.Error{
+				Type:    model.ErrorTypeOneAPI,
+				Code:    "insufficient_user_quota",
+				Message: "user quota is not enough",
+			},
+		}
+
+		isUserOriginated := isUserOriginatedRelayError(&err)
+		isAuthLike := classifyAuthLike(&err)
+		gotAuthSuspension := isAuthLike && !isUserOriginated
+
+		require.True(t, isUserOriginated, "expected user-originated classification")
+		require.False(t, gotAuthSuspension, "user-originated error must not enter auth suspension path")
+	})
+
+	t.Run("token model permission denied should be treated as user-originated", func(t *testing.T) {
+		t.Parallel()
+		err := model.ErrorWithStatusCode{
+			StatusCode: http.StatusForbidden,
+			Error: model.Error{
+				Type:    model.ErrorTypeOneAPI,
+				Code:    "model_not_allowed",
+				Message: "model not allowed for this token",
+			},
+		}
+
+		isUserOriginated := isUserOriginatedRelayError(&err)
+		isAuthLike := classifyAuthLike(&err)
+		gotAuthSuspension := isAuthLike && !isUserOriginated
+
+		require.True(t, isUserOriginated, "expected user-originated classification")
+		require.False(t, gotAuthSuspension, "user-originated error must not enter auth suspension path")
+	})
+}
