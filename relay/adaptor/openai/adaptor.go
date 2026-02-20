@@ -237,6 +237,9 @@ func (a *Adaptor) ConvertRequest(c *gin.Context, relayMode int, request *model.G
 
 	metaInfo := meta.GetByContext(c)
 	lg := gmw.GetLogger(c)
+	if shouldNormalizeToolMessageContentForDeepSeek(metaInfo, request) {
+		normalizeDeepSeekToolMessageContent(lg, request)
+	}
 	// Add debug info for conversion path
 	// This helps diagnose cases where model name may be missing or conversion selects Response API unexpectedly.
 	// Note: use request.Model for origin field and meta.ActualModelName for resolved model.
@@ -404,6 +407,107 @@ func normalizeReasoningEffortForModel(modelName string, effort *string) *string 
 
 func stringRef(value string) *string {
 	return &value
+}
+
+type deepSeekToolNormalizeLogger interface {
+	Debug(msg string, fields ...zap.Field)
+}
+
+// shouldNormalizeToolMessageContentForDeepSeek reports whether tool message content should
+// be normalized to string for DeepSeek-compatible upstreams.
+//
+// Parameters:
+//   - metaInfo: relay metadata including channel/base URL/model.
+//   - request: current Chat Completions request payload.
+//
+// Returns:
+//   - true when the upstream is identified as DeepSeek-compatible.
+func shouldNormalizeToolMessageContentForDeepSeek(metaInfo *meta.Meta, request *model.GeneralOpenAIRequest) bool {
+	if metaInfo != nil {
+		if metaInfo.ChannelType == channeltype.DeepSeek {
+			return true
+		}
+		if strings.Contains(strings.ToLower(strings.TrimSpace(metaInfo.BaseURL)), "deepseek") {
+			return true
+		}
+		if strings.HasPrefix(strings.ToLower(strings.TrimSpace(metaInfo.ActualModelName)), "deepseek-") {
+			return true
+		}
+	}
+
+	if request != nil {
+		if strings.HasPrefix(strings.ToLower(strings.TrimSpace(request.Model)), "deepseek-") {
+			return true
+		}
+	}
+
+	return false
+}
+
+// normalizeDeepSeekToolMessageContent converts non-string tool message content into strings.
+//
+// Parameters:
+//   - lg: request-scoped logger used for DEBUG diagnostics.
+//   - request: request payload to normalize in place.
+//
+// Returns:
+//   - None. The request is mutated in place.
+func normalizeDeepSeekToolMessageContent(lg deepSeekToolNormalizeLogger, request *model.GeneralOpenAIRequest) {
+	if request == nil {
+		return
+	}
+
+	toolMessageCount := 0
+	normalizedCount := 0
+
+	for idx := range request.Messages {
+		message := &request.Messages[idx]
+		if message.Role != "tool" {
+			continue
+		}
+
+		toolMessageCount++
+		if _, ok := message.Content.(string); ok {
+			continue
+		}
+
+		normalized := message.StringContent()
+		if normalized == "" {
+			if message.Content == nil {
+				normalized = ""
+			} else {
+				encoded, err := json.Marshal(message.Content)
+				if err != nil {
+					normalized = fmt.Sprintf("%v", message.Content)
+					if lg != nil {
+						lg.Debug("deepseek tool message fallback marshal failed",
+							zap.Int("message_index", idx),
+							zap.String("original_content_type", fmt.Sprintf("%T", message.Content)),
+							zap.Error(err),
+						)
+					}
+				} else {
+					normalized = string(encoded)
+				}
+			}
+		}
+
+		message.Content = normalized
+		normalizedCount++
+		if lg != nil {
+			lg.Debug("normalized deepseek tool message content",
+				zap.Int("message_index", idx),
+				zap.Int("normalized_content_length", len(normalized)),
+			)
+		}
+	}
+
+	if lg != nil && toolMessageCount > 0 {
+		lg.Debug("deepseek tool message normalization summary",
+			zap.Int("tool_message_count", toolMessageCount),
+			zap.Int("normalized_count", normalizedCount),
+		)
+	}
 }
 
 func generalToolSummary(tools []model.Tool) (bool, []string) {
@@ -721,6 +825,9 @@ func (a *Adaptor) ConvertClaudeRequest(c *gin.Context, request *model.ClaudeRequ
 	openaiRequest.Thinking = request.Thinking
 
 	metaInfo := meta.GetByContext(c)
+	if shouldNormalizeToolMessageContentForDeepSeek(metaInfo, openaiRequest) {
+		normalizeDeepSeekToolMessageContent(gmw.GetLogger(c), openaiRequest)
+	}
 	if shouldForceResponseAPI(metaInfo) {
 		if err := a.applyRequestTransformations(metaInfo, openaiRequest); err != nil {
 			return nil, errors.Wrap(err, "apply request transformations for Claude conversion")
