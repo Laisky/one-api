@@ -46,9 +46,10 @@ func ResolveModelConfig(modelName string, channelConfigs map[string]model.ModelC
 func ResolveAudioPricing(modelName string, channelConfigs map[string]model.ModelConfigLocal, provider adaptor.Adaptor) (*adaptor.AudioPricingConfig, bool) {
 	if channelConfigs != nil {
 		if local, ok := channelConfigs[modelName]; ok {
-			cfg := convertLocalModelConfig(local)
-			if cfg.Audio != nil && cfg.Audio.HasData() {
-				return cfg.Audio.Clone(), true
+			// Optimization: Only convert audio config from local instead of everything.
+			// No clone needed as convertLocalAudio returns a fresh object.
+			if audio := convertLocalAudio(local.Audio); audio != nil && audio.HasData() {
+				return audio, true
 			}
 		}
 	}
@@ -78,9 +79,10 @@ func ResolveAudioPricing(modelName string, channelConfigs map[string]model.Model
 func ResolveImagePricing(modelName string, channelConfigs map[string]model.ModelConfigLocal, provider adaptor.Adaptor) (*adaptor.ImagePricingConfig, bool) {
 	if channelConfigs != nil {
 		if local, ok := channelConfigs[modelName]; ok {
-			cfg := convertLocalModelConfig(local)
-			if cfg.Image != nil && cfg.Image.HasData() {
-				return cfg.Image.Clone(), true
+			// Optimization: Only convert image config from local instead of everything.
+			// No clone needed as convertLocalImage returns a fresh object.
+			if image := convertLocalImage(local.Image); image != nil && image.HasData() {
+				return image, true
 			}
 		}
 	}

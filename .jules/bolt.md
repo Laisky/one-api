@@ -18,3 +18,11 @@
 ## 2026-02-10 - [Remove Redundant Map Lookups in Three-Layer Pricing]
 **Learning:** Redundant map lookups in the hot path of pricing resolution (`GetModelRatioWithThreeLayers` and `GetCompletionRatioWithThreeLayers`) introduced unnecessary overhead (~21ns per op). This was caused by calling `adaptor.GetModelRatio(modelName)` (which performs a lookup) and then calling `adaptor.GetDefaultModelPricing()[modelName]` again to verify if the model was specifically defined in the adapter.
 **Action:** Use `adaptor.GetDefaultModelPricing()` directly to perform a single lookup and retrieve the ratio. This simple change provided a ~44% speedup in benchmarks for these core functions.
+
+## 2026-02-20 - [Redundant Clones and Over-eager Conversion in Media Pricing]
+**Learning:** Resolving Audio/Image pricing from channel overrides previously converted the entire model configuration and then cloned the result again. This resulted in redundant heap allocations and unnecessary CPU cycles for converting unused media types (e.g., converting Video/Image when only Audio was needed).
+**Action:** Use targeted conversion functions (e.g., ) and remove redundant clones when the object is already a freshly created local copy. This streamlines the pricing resolution path for media-heavy requests.
+
+## 2026-02-20 - [Redundant Clones and Over-eager Conversion in Media Pricing]
+**Learning:** Resolving Audio/Image pricing from channel overrides previously converted the entire model configuration and then cloned the result again. This resulted in redundant heap allocations and unnecessary CPU cycles for converting unused media types (e.g., converting Video/Image when only Audio was needed).
+**Action:** Use targeted conversion functions (e.g., `convertLocalAudio`) and remove redundant clones when the object is already a freshly created local copy. This streamlines the pricing resolution path for media-heavy requests.
