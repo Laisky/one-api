@@ -108,6 +108,36 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 	"aqa":                  {Ratio: 1, CompletionRatio: 1},
 
 	// Gemini 3 Models
+	"gemini-3.1-pro-preview": {
+		Ratio:             2.0 * ratio.MilliTokensUsd,
+		CompletionRatio:   12.0 / 2.0,
+		CacheWrite5mRatio: 0.20 * ratio.MilliTokensUsd,
+		CacheWrite1hRatio: 0.20 * ratio.MilliTokensUsd,
+		Tiers: []adaptor.ModelRatioTier{
+			{
+				Ratio:               4.0 * ratio.MilliTokensUsd,
+				CompletionRatio:     18.0 / 4.0,
+				CacheWrite5mRatio:   0.40 * ratio.MilliTokensUsd,
+				CacheWrite1hRatio:   0.40 * ratio.MilliTokensUsd,
+				InputTokenThreshold: 200001,
+			},
+		},
+	},
+	"gemini-3.1-pro-preview-customtools": {
+		Ratio:             2.0 * ratio.MilliTokensUsd,
+		CompletionRatio:   12.0 / 2.0,
+		CacheWrite5mRatio: 0.20 * ratio.MilliTokensUsd,
+		CacheWrite1hRatio: 0.20 * ratio.MilliTokensUsd,
+		Tiers: []adaptor.ModelRatioTier{
+			{
+				Ratio:               4.0 * ratio.MilliTokensUsd,
+				CompletionRatio:     18.0 / 4.0,
+				CacheWrite5mRatio:   0.40 * ratio.MilliTokensUsd,
+				CacheWrite1hRatio:   0.40 * ratio.MilliTokensUsd,
+				InputTokenThreshold: 200001,
+			},
+		},
+	},
 	"gemini-3-pro-preview": {
 		Ratio:             2.0 * ratio.MilliTokensUsd,
 		CompletionRatio:   12.0 / 2.0,
@@ -159,7 +189,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		CompletionRatio: 2.0 / 0.50,
 		Audio: &adaptor.AudioPricingConfig{
 			PromptRatio:     3.0 / 0.50,
-			CompletionRatio: 1,
+			CompletionRatio: 12.0 / 2.0,
 		},
 	},
 	"gemini-2.5-flash-native-audio-preview-09-2025": {
@@ -167,7 +197,15 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		CompletionRatio: 2.0 / 0.50,
 		Audio: &adaptor.AudioPricingConfig{
 			PromptRatio:     3.0 / 0.50,
-			CompletionRatio: 1,
+			CompletionRatio: 12.0 / 2.0,
+		},
+	},
+	"gemini-2.5-flash-native-audio-preview-12-2025": {
+		Ratio:           0.50 * ratio.MilliTokensUsd,
+		CompletionRatio: 2.0 / 0.50,
+		Audio: &adaptor.AudioPricingConfig{
+			PromptRatio:     3.0 / 0.50,
+			CompletionRatio: 12.0 / 2.0,
 		},
 	},
 	"gemini-2.5-flash-image":         {Ratio: 0.30 * ratio.MilliTokensUsd, CompletionRatio: 2.5 / 0.30, Image: geminiImageConfig(0.039)},
@@ -219,6 +257,8 @@ const geminiWebSearchUsdPerCall = 35.0 / 1000.0
 // geminiWebSearchModels enumerates Gemini models with grounded web search pricing in Google documentation.
 // Source: https://ai.google.dev/gemini-api/docs/pricing (retrieved via https://r.jina.ai/https://ai.google.dev/gemini-api/docs/pricing)
 var geminiWebSearchModels = map[string]struct{}{
+	"gemini-3.1-pro-preview":                  {},
+	"gemini-3.1-pro-preview-customtools":      {},
 	"gemini-3-pro-preview":                    {},
 	"gemini-3-flash-preview":                  {},
 	"gemini-2.5-pro":                          {},
