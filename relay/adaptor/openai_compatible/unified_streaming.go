@@ -987,9 +987,9 @@ func UnifiedStreamProcessing(c *gin.Context, resp *http.Response, promptTokens i
 
 	for scanner.Scan() {
 		data := NormalizeDataLine(scanner.Text())
-		logger.Debug("processing streaming chunk",
-			zap.String("chunk_data", data),
-			zap.Int("chunks_processed", streamCtx.chunksProcessed))
+		// logger.Debug("processing streaming chunk",
+		// 	zap.String("chunk_data", data),
+		// 	zap.Int("chunks_processed", streamCtx.chunksProcessed))
 
 		if len(data) < DataPrefixLength {
 			continue
