@@ -24,6 +24,9 @@ import (
 // RelayProxyHelper is a helper function to proxy the request to the upstream service
 func RelayProxyHelper(c *gin.Context, relayMode int) *relaymodel.ErrorWithStatusCode {
 	meta := metalib.GetByContext(c)
+	if err := logClientRequestPayload(c, "proxy"); err != nil {
+		return openai.ErrorWrapper(err, "invalid_proxy_request", http.StatusBadRequest)
+	}
 
 	adaptor := relay.GetAdaptor(meta.APIType)
 	if adaptor == nil {

@@ -39,14 +39,8 @@ func UnmarshalBodyReusable(c *gin.Context, v any) error {
 		return errors.Wrap(err, "get request body failed")
 	}
 
-	logger := gmw.GetLogger(c)
-	if _, ok := c.Get(ctxkey.RequestModel); !ok {
-		preview, truncated := SanitizePayloadForLogging(requestBody, DefaultLogBodyLimit)
-		logger.Debug("receive user request",
-			zap.String("method", c.Request.Method),
-			zap.Int("body_bytes", len(requestBody)),
-			zap.Bool("body_truncated", truncated),
-			zap.ByteString("request", preview))
+	if err = LogClientRequestPayload(c, "", DefaultLogBodyLimit); err != nil {
+		return errors.Wrap(err, "log client request payload failed")
 	}
 
 	// check v should be a pointer
@@ -67,6 +61,38 @@ func UnmarshalBodyReusable(c *gin.Context, v any) error {
 
 	// Reset request body
 	c.Request.Body = io.NopCloser(bytes.NewBuffer(requestBody))
+	return nil
+}
+
+// LogClientRequestPayload emits a DEBUG log for inbound request payload once per request.
+// It truncates oversized values using SanitizePayloadForLogging and restores request body for reuse.
+func LogClientRequestPayload(c *gin.Context, label string, limit int) error {
+	if logged, ok := c.Get(ctxkey.ClientRequestPayloadLogged); ok {
+		if loggedFlag, ok := logged.(bool); ok && loggedFlag {
+			return nil
+		}
+	}
+
+	body, err := GetRequestBody(c)
+	if err != nil {
+		return errors.Wrap(err, "get request body failed")
+	}
+
+	preview, truncated := SanitizePayloadForLogging(body, limit)
+	fields := []zap.Field{
+		zap.String("method", c.Request.Method),
+		zap.String("url", c.Request.URL.String()),
+		zap.Int("body_bytes", len(body)),
+		zap.Bool("body_truncated", truncated),
+		zap.ByteString("body_preview", preview),
+	}
+	if label != "" {
+		fields = append(fields, zap.String("label", label))
+	}
+
+	gmw.GetLogger(c).Debug("client request received", fields...)
+	c.Set(ctxkey.ClientRequestPayloadLogged, true)
+	c.Request.Body = io.NopCloser(bytes.NewBuffer(body))
 	return nil
 }
 

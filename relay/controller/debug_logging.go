@@ -105,21 +105,7 @@ func LogClientResponse(c *gin.Context, message string) {
 }
 
 func logClientRequestPayload(c *gin.Context, label string) error {
-	lg := gmw.GetLogger(c)
-	body, err := common.GetRequestBody(c)
-	if err != nil {
-		return err
-	}
-	preview, truncated := sanitizeRequestBodyForLogging(body, debugLogBodyLimit)
-	lg.Debug("client request received",
-		zap.String("label", label),
-		zap.String("method", c.Request.Method),
-		zap.String("url", c.Request.URL.String()),
-		zap.Int("body_bytes", len(body)),
-		zap.Bool("body_truncated", truncated),
-		zap.ByteString("body_preview", preview),
-	)
-	return nil
+	return common.LogClientRequestPayload(c, label, debugLogBodyLimit)
 }
 
 func logUpstreamResponseFromCapture(lg glog.Logger, resp *http.Response, capture *loggingReadCloser, label string) {

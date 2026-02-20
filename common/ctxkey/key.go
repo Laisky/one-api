@@ -174,6 +174,11 @@ const (
 	// Read in: controllers (e.g., response/claude_messages) for debugging/logging.
 	KeyRequestBody = gin.BodyBytesKey
 
+	// ClientRequestPayloadLogged marks whether the inbound client payload has already been logged.
+	// Set in: common.LogClientRequestPayload.
+	// Read in: common.LogClientRequestPayload to avoid duplicate request-body logs in middleware/controllers.
+	ClientRequestPayloadLogged = "client_request_payload_logged"
+
 	// AsyncTaskRequestMetadata stores a sanitized snapshot of asynchronous task request parameters (e.g., /v1/videos POST payload).
 	// Set in: RelayVideoHelper after parsing the incoming request.
 	// Read in: async task persistence to capture request context for later diagnostics.

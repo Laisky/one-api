@@ -49,10 +49,6 @@ func RelayClaudeMessagesHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 	}
 	meta.IsStream = claudeRequest.Stream != nil && *claudeRequest.Stream
 
-	if reqBody, ok := c.Get(ctxkey.KeyRequestBody); ok {
-		lg.Debug("get claude messages request", zap.ByteString("body", reqBody.([]byte)))
-	}
-
 	// map model name
 	meta.OriginModelName = claudeRequest.Model
 	claudeRequest.Model = meta.ActualModelName

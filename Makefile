@@ -1,7 +1,7 @@
 .PHONY: install
 install:
-	# go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
-	curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/HEAD/install.sh | sh -s -- -b $(go env GOPATH)/bin v2.4.0
+	# https://golangci-lint.run/docs/welcome/install/local/
+	curl -sSfL https://golangci-lint.run/install.sh | sh -s -- -b $(go env GOPATH)/bin v2.10.1
 
 	go install golang.org/x/tools/cmd/goimports@latest
 	go install golang.org/x/vuln/cmd/govulncheck@latest
