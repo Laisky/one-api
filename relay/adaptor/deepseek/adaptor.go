@@ -13,6 +13,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/songquanpeng/one-api/relay/adaptor"
+	"github.com/songquanpeng/one-api/relay/adaptor/common/deepseekcompat"
 	"github.com/songquanpeng/one-api/relay/adaptor/common/structuredjson"
 	"github.com/songquanpeng/one-api/relay/adaptor/openai_compatible"
 	"github.com/songquanpeng/one-api/relay/meta"
@@ -92,6 +93,8 @@ func (a *Adaptor) ConvertRequest(c *gin.Context, relayMode int, request *model.G
 		request.ReasoningEffort = nil
 	}
 
+	normalizeDeepSeekThinkingConfig(c, request)
+
 	normalizeDeepSeekToolMessageContent(c, request)
 
 	if request.ResponseFormat != nil {
@@ -102,6 +105,28 @@ func (a *Adaptor) ConvertRequest(c *gin.Context, relayMode int, request *model.G
 	}
 
 	return request, nil
+}
+
+// normalizeDeepSeekThinkingConfig coerces thinking.type into values accepted by DeepSeek.
+// DeepSeek chat completion currently supports only enabled/disabled.
+func normalizeDeepSeekThinkingConfig(c *gin.Context, request *model.GeneralOpenAIRequest) {
+	if request == nil || request.Thinking == nil {
+		return
+	}
+
+	originalType := request.Thinking.Type
+	normalizedType, changed := deepseekcompat.NormalizeThinkingType(originalType, request.Thinking.BudgetTokens)
+	if !changed {
+		return
+	}
+
+	request.Thinking.Type = normalizedType
+	gmw.GetLogger(c).Debug("normalized deepseek thinking type for provider compatibility",
+		zap.String("model", request.Model),
+		zap.String("original_type", originalType),
+		zap.String("normalized_type", normalizedType),
+		zap.Int("budget_tokens", request.Thinking.BudgetTokens),
+	)
 }
 
 // normalizeDeepSeekToolMessageContent converts non-string tool message content into strings for DeepSeek compatibility.

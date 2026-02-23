@@ -5,8 +5,11 @@ import (
 	"net/http"
 
 	"github.com/Laisky/errors/v2"
+	gmw "github.com/Laisky/gin-middlewares/v7"
+	"github.com/Laisky/zap"
 	"github.com/gin-gonic/gin"
 
+	"github.com/songquanpeng/one-api/relay/adaptor/common/deepseekcompat"
 	openai_compatible "github.com/songquanpeng/one-api/relay/adaptor/openai_compatible"
 	"github.com/songquanpeng/one-api/relay/meta"
 	"github.com/songquanpeng/one-api/relay/model"
@@ -40,7 +43,30 @@ func (a *Adaptor) ConvertRequest(c *gin.Context, relayMode int, request *model.G
 	// Clear max_completion_tokens to avoid conflicts
 	deepseekRequest.MaxCompletionTokens = nil
 
+	normalizeVertexDeepSeekThinkingConfig(c, &deepseekRequest)
+
 	return &deepseekRequest, nil
+}
+
+// normalizeVertexDeepSeekThinkingConfig coerces thinking.type into values accepted by Vertex DeepSeek.
+func normalizeVertexDeepSeekThinkingConfig(c *gin.Context, request *model.GeneralOpenAIRequest) {
+	if request == nil || request.Thinking == nil {
+		return
+	}
+
+	originalType := request.Thinking.Type
+	normalizedType, changed := deepseekcompat.NormalizeThinkingType(originalType, request.Thinking.BudgetTokens)
+	if !changed {
+		return
+	}
+
+	request.Thinking.Type = normalizedType
+	gmw.GetLogger(c).Debug("normalized vertex deepseek thinking type for provider compatibility",
+		zap.String("model", request.Model),
+		zap.String("original_type", originalType),
+		zap.String("normalized_type", normalizedType),
+		zap.Int("budget_tokens", request.Thinking.BudgetTokens),
+	)
 }
 
 // ConvertImageRequest handles image generation requests for DeepSeek.

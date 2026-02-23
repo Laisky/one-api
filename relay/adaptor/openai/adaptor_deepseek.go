@@ -7,12 +7,18 @@ import (
 
 	"github.com/Laisky/zap"
 
+	"github.com/songquanpeng/one-api/relay/adaptor/common/deepseekcompat"
 	"github.com/songquanpeng/one-api/relay/channeltype"
 	"github.com/songquanpeng/one-api/relay/meta"
 	"github.com/songquanpeng/one-api/relay/model"
 )
 
 type deepSeekToolNormalizeLogger interface {
+	Debug(msg string, fields ...zap.Field)
+}
+
+// deepSeekThinkingNormalizeLogger defines the logger interface used by DeepSeek thinking normalization.
+type deepSeekThinkingNormalizeLogger interface {
 	Debug(msg string, fields ...zap.Field)
 }
 
@@ -95,6 +101,30 @@ func normalizeDeepSeekToolMessageContent(lg deepSeekToolNormalizeLogger, request
 		lg.Debug("deepseek tool message normalization summary",
 			zap.Int("tool_message_count", toolMessageCount),
 			zap.Int("normalized_count", normalizedCount),
+		)
+	}
+}
+
+// normalizeClaudeThinkingForDeepSeek coerces Claude thinking payloads into DeepSeek-compatible values.
+// DeepSeek currently accepts only `enabled` or `disabled` for thinking.type.
+func normalizeClaudeThinkingForDeepSeek(lg deepSeekThinkingNormalizeLogger, request *model.GeneralOpenAIRequest) {
+	if request == nil || request.Thinking == nil {
+		return
+	}
+
+	originalType := request.Thinking.Type
+	normalizedType, changed := deepseekcompat.NormalizeThinkingType(originalType, request.Thinking.BudgetTokens)
+	if !changed {
+		return
+	}
+
+	request.Thinking.Type = normalizedType
+	if lg != nil {
+		lg.Debug("normalized claude thinking type for deepseek compatibility",
+			zap.String("model", request.Model),
+			zap.String("original_type", originalType),
+			zap.String("normalized_type", normalizedType),
+			zap.Int("budget_tokens", request.Thinking.BudgetTokens),
 		)
 	}
 }
