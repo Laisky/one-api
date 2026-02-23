@@ -18,7 +18,7 @@ import (
 // AbortWithError aborts the request with an error message
 func AbortWithError(c *gin.Context, statusCode int, err error) {
 	logger := gmw.GetLogger(c)
-	if ignoreServerError(err) {
+	if shouldLogAsWarning(statusCode, err) {
 		logger.Warn("server abort",
 			zap.Int("status_code", statusCode),
 			zap.Error(err))
@@ -74,7 +74,7 @@ func AbortWithTokenError(c *gin.Context, statusCode int, err error, tokenInfo *T
 		}
 	}
 
-	if ignoreServerError(err) {
+	if shouldLogAsWarning(statusCode, err) {
 		logger.Warn("server abort", logFields...)
 	} else {
 		logger.Error("server abort", logFields...)
@@ -89,7 +89,24 @@ func AbortWithTokenError(c *gin.Context, statusCode int, err error, tokenInfo *T
 	c.Abort()
 }
 
-func ignoreServerError(err error) bool {
+// shouldLogAsWarning determines whether an abort should be logged as WARN.
+//
+// Parameters:
+//   - statusCode: HTTP status code returned to client.
+//   - err: the error that triggers abort.
+//
+// Returns:
+//   - true if this is a client-caused or intentionally ignored case.
+//   - false if this is a server-side failure that should be logged as ERROR.
+func shouldLogAsWarning(statusCode int, err error) bool {
+	if statusCode >= 400 && statusCode < 500 {
+		return true
+	}
+
+	if err == nil {
+		return false
+	}
+
 	switch {
 	case strings.Contains(err.Error(), "token not found for key:"):
 		return true
