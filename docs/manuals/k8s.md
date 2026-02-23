@@ -45,25 +45,25 @@ metadata:
   namespace: one-api
 data:
   # Basic configuration
-  SESSION_SECRET: "your-session-secret-here"
-  DEBUG: "false"
-  DEBUG_SQL: "false"
+  SESSION_SECRET: 'your-session-secret-here'
+  DEBUG: 'false'
+  DEBUG_SQL: 'false'
   # Rate limiting
-  GLOBAL_API_RATE_LIMIT: "1000"
-  GLOBAL_WEB_RATE_LIMIT: "1000"
-  GLOBAL_RELAY_RATE_LIMIT: "1000"
-  GLOBAL_CHANNEL_RATE_LIMIT: "1"
+  GLOBAL_API_RATE_LIMIT: '1000'
+  GLOBAL_WEB_RATE_LIMIT: '1000'
+  GLOBAL_RELAY_RATE_LIMIT: '1000'
+  GLOBAL_CHANNEL_RATE_LIMIT: '1'
   # Token settings
-  DEFAULT_MAX_TOKEN: "2048"
-  MAX_INLINE_IMAGE_SIZE_MB: "30"
-  MAX_ITEMS_PER_PAGE: "10"
+  DEFAULT_MAX_TOKEN: '2048'
+  MAX_INLINE_IMAGE_SIZE_MB: '30'
+  MAX_ITEMS_PER_PAGE: '10'
 
   # Channel settings
-  CHANNEL_SUSPEND_SECONDS_FOR_429: "60"
-  OPENROUTER_PROVIDER_SORT: "throughput"
+  CHANNEL_SUSPEND_SECONDS_FOR_429: '60'
+  OPENROUTER_PROVIDER_SORT: 'throughput'
 
   # Usage enforcement
-  ENFORCE_INCLUDE_USAGE: "true"
+  ENFORCE_INCLUDE_USAGE: 'true'
 ```
 
 ```bash
@@ -122,11 +122,11 @@ spec:
               mountPath: /data
           resources:
             requests:
-              memory: "256Mi"
-              cpu: "250m"
+              memory: '256Mi'
+              cpu: '250m'
             limits:
-              memory: "1Gi"
-              cpu: "1000m"
+              memory: '1Gi'
+              cpu: '1000m'
           livenessProbe:
             httpGet:
               path: /api/status
@@ -193,7 +193,7 @@ spec:
           image: postgres:15
           env:
             - name: POSTGRES_DB
-              value: "oneapi"
+              value: 'oneapi'
             - name: POSTGRES_USER
               valueFrom:
                 secretKeyRef:
@@ -213,11 +213,11 @@ spec:
               mountPath: /var/lib/postgresql/data
           resources:
             requests:
-              memory: "256Mi"
-              cpu: "250m"
+              memory: '256Mi'
+              cpu: '250m'
             limits:
-              memory: "1Gi"
-              cpu: "500m"
+              memory: '1Gi'
+              cpu: '500m'
       volumes:
         - name: postgresql-storage
           persistentVolumeClaim:
@@ -298,7 +298,7 @@ spec:
           image: mysql:8.0
           env:
             - name: MYSQL_DATABASE
-              value: "oneapi"
+              value: 'oneapi'
             - name: MYSQL_USER
               valueFrom:
                 secretKeyRef:
@@ -321,11 +321,11 @@ spec:
               mountPath: /var/lib/mysql
           resources:
             requests:
-              memory: "256Mi"
-              cpu: "250m"
+              memory: '256Mi'
+              cpu: '250m'
             limits:
-              memory: "1Gi"
-              cpu: "500m"
+              memory: '1Gi'
+              cpu: '500m'
       volumes:
         - name: mysql-storage
           persistentVolumeClaim:
@@ -412,9 +412,9 @@ spec:
           args:
             - redis-server
             - --appendonly
-            - "yes"
+            - 'yes'
             - --requirepass
-            - "$(REDIS_PASSWORD)"
+            - '$(REDIS_PASSWORD)'
           env:
             - name: REDIS_PASSWORD
               valueFrom:
@@ -426,11 +426,11 @@ spec:
               mountPath: /data
           resources:
             requests:
-              memory: "64Mi"
-              cpu: "100m"
+              memory: '64Mi'
+              cpu: '100m'
             limits:
-              memory: "256Mi"
-              cpu: "200m"
+              memory: '256Mi'
+              cpu: '200m'
       volumes:
         - name: redis-storage
           persistentVolumeClaim:
@@ -650,33 +650,33 @@ metadata:
     app.kubernetes.io/part-of: ingress-nginx
 data:
   # Increase proxy buffer sizes for large requests
-  proxy-buffer-size: "16k"
-  proxy-buffers-number: "8"
+  proxy-buffer-size: '16k'
+  proxy-buffers-number: '8'
   # Enable compression
-  use-gzip: "true"
-  gzip-level: "6"
-  gzip-types: "text/plain text/css application/json application/javascript text/xml application/xml application/xml+rss text/javascript"
+  use-gzip: 'true'
+  gzip-level: '6'
+  gzip-types: 'text/plain text/css application/json application/javascript text/xml application/xml application/xml+rss text/javascript'
 
   # Security headers
-  add-base-url: "true"
-  enable-real-ip: "true"
+  add-base-url: 'true'
+  enable-real-ip: 'true'
 
   # Connection settings
-  keep-alive-requests: "10000"
-  upstream-keepalive-connections: "50"
-  upstream-keepalive-requests: "100"
+  keep-alive-requests: '10000'
+  upstream-keepalive-connections: '50'
+  upstream-keepalive-requests: '100'
 
   # Rate limiting (optional)
-  rate-limit-rpm: "300"
-  rate-limit-connections: "10"
+  rate-limit-rpm: '300'
+  rate-limit-connections: '10'
 
   # Client settings
-  client-max-body-size: "100m"
-  client-body-buffer-size: "1m"
+  client-max-body-size: '100m'
+  client-body-buffer-size: '1m'
 
   # SSL settings
-  ssl-protocols: "TLSv1.2 TLSv1.3"
-  ssl-ciphers: "ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305"
+  ssl-protocols: 'TLSv1.2 TLSv1.3'
+  ssl-ciphers: 'ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305'
 ```
 
 ```bash
@@ -851,7 +851,6 @@ Common issues and solutions:
    ```
 
 2. **External IP pending (for LoadBalancer)**:
-
    - On cloud providers: Check if LoadBalancer service is supported
    - On bare metal: Install MetalLB or use NodePort service type
 
@@ -899,12 +898,12 @@ metadata:
   namespace: one-api
   annotations:
     kubernetes.io/ingress.class: nginx
-    nginx.ingress.kubernetes.io/ssl-redirect: "true"
-    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
-    nginx.ingress.kubernetes.io/proxy-body-size: "100m"
-    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
-    nginx.ingress.kubernetes.io/proxy-send-timeout: "300"
-    cert-manager.io/cluster-issuer: "letsencrypt-prod" # If using cert-manager
+    nginx.ingress.kubernetes.io/ssl-redirect: 'true'
+    nginx.ingress.kubernetes.io/force-ssl-redirect: 'true'
+    nginx.ingress.kubernetes.io/proxy-body-size: '100m'
+    nginx.ingress.kubernetes.io/proxy-read-timeout: '300'
+    nginx.ingress.kubernetes.io/proxy-send-timeout: '300'
+    cert-manager.io/cluster-issuer: 'letsencrypt-prod' # If using cert-manager
 spec:
   tls:
     - hosts:
@@ -935,7 +934,7 @@ metadata:
   annotations:
     kubernetes.io/ingress.class: traefik
     traefik.ingress.kubernetes.io/router.entrypoints: websecure
-    traefik.ingress.kubernetes.io/router.tls: "true"
+    traefik.ingress.kubernetes.io/router.tls: 'true'
     traefik.ingress.kubernetes.io/router.middlewares: default-redirect-https@kubernetescrd
 spec:
   tls:
@@ -1048,7 +1047,7 @@ metadata:
 spec:
   provider:
     onepassword:
-      connectHost: "https://your-connect-host"
+      connectHost: 'https://your-connect-host'
       vaults:
         Production: 1
       auth:
@@ -1074,7 +1073,7 @@ spec:
   data:
     - secretKey: dsn
       remoteRef:
-        key: "One API Database"
+        key: 'One API Database'
         property: dsn
 ```
 

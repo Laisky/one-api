@@ -826,11 +826,7 @@ const logsFilterSchema = z.object({
 });
 
 // Form component
-const LogsFilterForm = ({
-  onFilter,
-}: {
-  onFilter: (data: LogsFilterData) => void;
-}) => {
+const LogsFilterForm = ({ onFilter }: { onFilter: (data: LogsFilterData) => void }) => {
   const form = useForm<LogsFilterData>({
     resolver: zodResolver(logsFilterSchema),
   });
@@ -897,11 +893,9 @@ const LogsFilterForm = ({
 ### Phase 1: Foundation Setup (Week 1-2)
 
 1. **Vite Migration**
-
    - Configure Tailwind CSS
 
 2. **shadcn/ui Installation**
-
    - Create custom design tokens
 
 3. **Core Infrastructure**
@@ -911,7 +905,6 @@ const LogsFilterForm = ({
 ### Phase 2: Layout & Navigation (Week 3)
 
 1. **Header Component**
-
    - Improve mobile menu
 
 2. **Layout System**
@@ -921,7 +914,6 @@ const LogsFilterForm = ({
 ### Phase 3: Data Table System (Week 4-5)
 
 1. **Universal Data Table**
-
    - Ensure mobile responsiveness
 
 2. **Table Migrations**
@@ -931,7 +923,6 @@ const LogsFilterForm = ({
 ### Phase 4: Forms & Modals (Week 6)
 
 1. **Form System**
-
    - Setup error handling
 
 2. **Modal System**
@@ -941,7 +932,6 @@ const LogsFilterForm = ({
 ### Phase 5: Feature Pages (Week 7-8)
 
 1. **Authentication Pages**
-
    - Password reset
 
 2. **Management Pages**
@@ -951,11 +941,9 @@ const LogsFilterForm = ({
 ### Phase 6: Advanced Features (Week 9-10)
 
 1. **Enhanced UX**
-
    - Skeleton loading
 
 2. **Accessibility**
-
    - Focus management
 
 3. **Performance Optimization**
@@ -1230,20 +1218,17 @@ export function ChannelEditForm({ channel, onSubmit }: ChannelEditFormProps) {
 ## Key Benefits of Migration
 
 1. **Better Developer Experience**
-
    - Type-safe API interactions
    - Reusable component library
    - Hot reloading and fast builds
 
 2. **Improved User Experience**
-
    - Consistent design language
    - Better accessibility
    - Mobile-first responsive design
    - Faster loading times
 
 3. **Maintainability**
-
    - Modular component architecture
    - Clear separation of concerns
    - Comprehensive error handling
@@ -1289,7 +1274,6 @@ This document outlines a comprehensive plan to modernize the One-API default tem
 ### Identified Limitations
 
 1. **Semantic UI Constraints**:
-
    - Limited customization capabilities
    - Heavy CSS bundle size (~500KB)
    - Inconsistent theming system
@@ -1298,7 +1282,6 @@ This document outlines a comprehensive plan to modernize the One-API default tem
    - Difficult to maintain custom overrides
 
 2. **Code Structure Issues**:
-
    - Monolithic component files (LogsTable.js: 800+ lines)
    - Inconsistent styling approaches
    - Poor component reusability
@@ -1604,14 +1587,12 @@ const LogsFilterForm = ({
 ### Phase 1: Foundation Setup (Week 1-2)
 
 1. **Vite Migration**
-
    - Create new Vite project structure
    - Migrate CRA configuration
    - Setup TypeScript configuration
    - Configure Tailwind CSS
 
 2. **shadcn/ui Installation**
-
    - Initialize shadcn/ui
    - Setup base components (Button, Input, Table, etc.)
    - Configure theme system
@@ -1626,7 +1607,6 @@ const LogsFilterForm = ({
 ### Phase 2: Layout & Navigation (Week 3)
 
 1. **Header Component**
-
    - Migrate to shadcn/ui components
    - Implement responsive navigation
    - Add command palette (Cmd+K)
@@ -1641,7 +1621,6 @@ const LogsFilterForm = ({
 ### Phase 3: Data Table System (Week 4-5)
 
 1. **Universal Data Table**
-
    - Create reusable DataTable component
    - Implement sorting, filtering, pagination
    - Add search functionality
@@ -1657,7 +1636,6 @@ const LogsFilterForm = ({
 ### Phase 4: Forms & Modals (Week 6)
 
 1. **Form System**
-
    - Create reusable form components
    - Implement validation schemas
    - Add form field components
@@ -1672,7 +1650,6 @@ const LogsFilterForm = ({
 ### Phase 5: Feature Pages (Week 7-8)
 
 1. **Authentication Pages**
-
    - Login form
    - Registration form
    - Password reset
@@ -1685,14 +1662,12 @@ const LogsFilterForm = ({
 ### Phase 6: Advanced Features (Week 9-10)
 
 1. **Enhanced UX**
-
    - Loading states
    - Error boundaries
    - Empty states
    - Skeleton loading
 
 2. **Accessibility**
-
    - ARIA labels
    - Keyboard navigation
    - Screen reader support
@@ -1750,21 +1725,18 @@ export const LogsTable = () => {
 ### Universal DataTable Features
 
 1. **Server-side Operations**
-
    - Pagination
    - Sorting
    - Filtering
    - Search
 
 2. **Client-side Features**
-
    - Column visibility toggle
    - Column resizing
    - Row selection
    - Bulk actions
 
 3. **Mobile Optimization**
-
    - Responsive design
    - Card view for mobile
    - Touch-friendly controls
@@ -2025,19 +1997,15 @@ const loadChannel = async () => {
   const res = await API.get(`/api/channel/${channelId}?_cb=${Date.now()}`);
   if (success) {
     // Auto-populate all form fields
-    if (data.models === "") data.models = [];
-    else data.models = data.models.split(",");
+    if (data.models === '') data.models = [];
+    else data.models = data.models.split(',');
 
-    if (data.group === "") data.groups = [];
-    else data.groups = data.group.split(",");
+    if (data.group === '') data.groups = [];
+    else data.groups = data.group.split(',');
 
     // Format JSON fields for display
-    if (data.model_mapping !== "") {
-      data.model_mapping = JSON.stringify(
-        JSON.parse(data.model_mapping),
-        null,
-        2
-      );
+    if (data.model_mapping !== '') {
+      data.model_mapping = JSON.stringify(JSON.parse(data.model_mapping), null, 2);
     }
 
     setInputs(data); // Populate entire form state
@@ -2067,21 +2035,14 @@ const loadChannel = async () => {
 ```javascript
 // LogsTable.js - Advanced statistics with real-time updates
 const getLogStat = async () => {
-  const res = await API.get(
-    `/api/log/stat?type=${logType}&username=${username}...`
-  );
+  const res = await API.get(`/api/log/stat?type=${logType}&username=${username}...`);
   if (success) setStat(data);
 };
 
 // Rich statistics display
 <Header>
   Usage Details (Total Quota: {renderQuota(stat.quota)}
-  <Button
-    circular
-    icon="refresh"
-    onClick={handleStatRefresh}
-    loading={isStatRefreshing}
-  />
+  <Button circular icon="refresh" onClick={handleStatRefresh} loading={isStatRefreshing} />
   {!showStat && <span onClick={handleEyeClick}>Click to view</span>}
 </Header>;
 ```
@@ -2104,12 +2065,10 @@ const getLogStat = async () => {
 // Expandable content with stream indicators
 function ExpandableDetail({ content, isStream, systemPromptReset }) {
   return (
-    <div style={{ maxWidth: "300px" }}>
-      <div className={expanded ? "" : "truncate"}>
+    <div style={{ maxWidth: '300px' }}>
+      <div className={expanded ? '' : 'truncate'}>
         {expanded ? content : content.slice(0, maxLength)}
-        <Button onClick={() => setExpanded(!expanded)}>
-          {expanded ? "Show Less" : "Show More"}
-        </Button>
+        <Button onClick={() => setExpanded(!expanded)}>{expanded ? 'Show Less' : 'Show More'}</Button>
       </div>
       {isStream && <Label color="pink">Stream</Label>}
       {systemPromptReset && <Label color="red">System Prompt Reset</Label>}
@@ -2136,7 +2095,7 @@ function ExpandableDetail({ content, isStream, systemPromptReset }) {
 // EditChannel.js - Dynamic behavior based on channel type
 const handleInputChange = (e, { name, value }) => {
   setInputs((inputs) => ({ ...inputs, [name]: value }));
-  if (name === "type") {
+  if (name === 'type') {
     // Fetch channel-specific models for selected type
     fetchChannelSpecificModels(value).then((channelSpecificModels) => {
       setBasicModels(channelSpecificModels);
@@ -2172,14 +2131,12 @@ const handleInputChange = (e, { name, value }) => {
       size="small"
       positive={token.status === 1}
       negative={token.status !== 1}
-      onClick={() =>
-        manageToken(token.id, token.status === 1 ? "disable" : "enable", idx)
-      }
+      onClick={() => manageToken(token.id, token.status === 1 ? 'disable' : 'enable', idx)}
     >
       {token.status === 1 ? <Icon name="pause" /> : <Icon name="play" />}
     </Button>
   }
-  content={token.status === 1 ? "Disable" : "Enable"}
+  content={token.status === 1 ? 'Disable' : 'Enable'}
   basic
   inverted
 />
@@ -2203,11 +2160,7 @@ const handleInputChange = (e, { name, value }) => {
 // data-label attributes for mobile card view
 <Table.Cell data-label="Name">
   <strong>{cleanDisplay(channel.name)}</strong>
-  {channel.group && (
-    <div style={{ fontSize: "0.9em", color: "#666" }}>
-      {renderGroup(channel.group)}
-    </div>
-  )}
+  {channel.group && <div style={{ fontSize: '0.9em', color: '#666' }}>{renderGroup(channel.group)}</div>}
 </Table.Cell>
 ```
 
@@ -2606,24 +2559,28 @@ useEffect(() => {
 All advanced features identified in the original requirements have been successfully implemented:
 
 ### **Advanced Search System** ✅ COMPLETED
+
 - ✅ SearchableDropdown component with real-time API search
 - ✅ Rich result display with metadata
 - ✅ Loading states and error handling
 - ✅ All table search fields using enhanced component
 
 ### **Full Pagination System** ✅ COMPLETED
+
 - ✅ Comprehensive numbered pagination with first/last page buttons
 - ✅ Page jumping functionality
 - ✅ Page size selection (10, 20, 50, 100 options)
 - ✅ Server-side pagination for all large datasets
 
 ### **Form Auto-Population** ✅ COMPLETED
+
 - ✅ Comprehensive Channel Edit page with dynamic loading
 - ✅ Model loading based on channel type selection
 - ✅ JSON field formatting and validation with visual indicators
 - ✅ Auto-population patterns implemented across all edit forms
 
 ### **Table Enhancement Features** ✅ COMPLETED
+
 - ✅ Server-side sorting with visual indicators
 - ✅ Advanced filtering with date ranges and multi-select options
 - ✅ Export functionality for data analysis
@@ -2657,7 +2614,6 @@ All advanced features identified in the original requirements have been successf
 #### 🎉 **CRITICAL MISSING FEATURES** - ALL RESOLVED!
 
 1. **Server-side Column Sorting** ✅ **COMPLETED**
-
    - Status: ✅ FULLY IMPLEMENTED
    - Solution: Enhanced DataTable component with click-to-sort headers
    - Features: Sort indicators, server-side API integration, all tables updated
@@ -2773,6 +2729,7 @@ The modern template is now **production-ready** and can fully replace the defaul
 ### **✅ ALL CRITICAL ISSUES RESOLVED**
 
 #### **1. Night Mode Support** ✅ COMPLETED
+
 - **Issue**: No dark mode toggle or theme system
 - **Status**: ✅ **FULLY IMPLEMENTED**
 - **Features**:
@@ -2783,6 +2740,7 @@ The modern template is now **production-ready** and can fully replace the defaul
   - Theme toggle in header navigation
 
 #### **2. Table Column Sorting** ✅ COMPLETED
+
 - **Issue**: Column sorting non-functional across all management pages
 - **Status**: ✅ **FULLY FUNCTIONAL**
 - **Fixed Pages**:
@@ -2793,6 +2751,7 @@ The modern template is now **production-ready** and can fully replace the defaul
   - RedemptionsPage: Complete sorting implementation
 
 #### **3. Channel Edit Page Auto-Fill** ✅ COMPLETED
+
 - **Issue**: Channel type and API key fields showing empty
 - **Status**: ✅ **FULLY RESOLVED**
 - **Solutions**:
@@ -2803,6 +2762,7 @@ The modern template is now **production-ready** and can fully replace the defaul
   - Fixed form reset timing and data population
 
 #### **4. User Page Quota Display** ✅ COMPLETED
+
 - **Issue**: Raw quota values instead of USD amounts
 - **Status**: ✅ **FULLY FUNCTIONAL**
 - **Features**:
@@ -2812,6 +2772,7 @@ The modern template is now **production-ready** and can fully replace the defaul
   - Consistent formatting across all pages
 
 #### **5. Build System** ✅ COMPLETED
+
 - **Issue**: TypeScript compilation errors preventing builds
 - **Status**: ✅ **BUILD SUCCESSFUL**
 - **Resolved**:
@@ -2823,6 +2784,7 @@ The modern template is now **production-ready** and can fully replace the defaul
 ### **🚀 COMPREHENSIVE FEATURE PARITY ACHIEVED**
 
 #### **Core Management Features** ✅
+
 - **Channel Management**: Complete CRUD with channel testing, type-specific configurations
 - **Token Management**: Full lifecycle management with quota controls and model restrictions
 - **User Management**: Admin functionality with role management and quota tracking
@@ -2830,6 +2792,7 @@ The modern template is now **production-ready** and can fully replace the defaul
 - **Redemption Management**: Code generation, tracking, and usage monitoring
 
 #### **Advanced UI/UX Features** ✅
+
 - **Dark/Light Theme**: System-aware automatic switching
 - **Table Functionality**: Server-side pagination, sorting, filtering, search
 - **Form Systems**: Real-time validation, JSON formatting, auto-completion
@@ -2837,12 +2800,14 @@ The modern template is now **production-ready** and can fully replace the defaul
 - **Accessibility**: ARIA support, keyboard navigation, screen reader compatibility
 
 #### **System Integration** ✅
+
 - **API Integration**: All endpoints properly connected with error handling
 - **Security**: Proper key handling, authentication flows, permission controls
 - **Settings Management**: System configuration with localStorage persistence
 - **State Management**: Consistent state handling across all components
 
 #### **Developer Experience** ✅
+
 - **TypeScript**: Full type safety without compilation errors
 - **Modern Tooling**: Vite build system with hot reload
 - **Component System**: shadcn/ui with consistent design tokens

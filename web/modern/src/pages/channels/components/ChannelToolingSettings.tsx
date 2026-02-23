@@ -56,7 +56,7 @@ export const ChannelToolingSettings = ({
 			name="tooling"
 			render={({ field }) => (
 				<FormItem>
-					<div className="flex items-center justify-between">
+					<div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
 						<LabelWithHelp
 							label={tr("tooling.label", "Tooling Config")}
 							help={tr(
@@ -68,7 +68,7 @@ export const ChannelToolingSettings = ({
 							type="button"
 							variant="ghost"
 							size="sm"
-							className="h-6 text-xs"
+							className="h-6 text-xs self-start sm:self-auto"
 							onClick={formatToolingConfig}
 						>
 							{tr("common.format_json", "Format JSON")}
@@ -89,7 +89,7 @@ export const ChannelToolingSettings = ({
 					<FormMessage />
 
 					<div className="mt-4 space-y-4 border rounded-md p-4 bg-muted/5">
-						<div className="flex items-center justify-between">
+						<div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
 							<h4 className="text-sm font-medium">
 								{tr("tooling.whitelist_editor", "Whitelist Editor")}
 							</h4>
@@ -172,10 +172,10 @@ export const ChannelToolingSettings = ({
 									</span>
 								)}
 								{currentToolWhitelist.map((tool) => (
-									<Badge key={tool} variant="secondary" className="gap-1">
-										{tool}
+									<Badge key={tool} variant="secondary" className="gap-1 max-w-full">
+										<span className="truncate" title={tool}>{tool}</span>
 										<span
-											className="cursor-pointer ml-1 hover:text-destructive"
+											className="cursor-pointer ml-1 hover:text-destructive shrink-0"
 											onClick={() => removeToolFromWhitelist(tool)}
 										>
 											×

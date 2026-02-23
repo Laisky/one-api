@@ -133,12 +133,12 @@ export const ChannelModelSettings = ({
           name="model_mapping"
           render={({ field }) => (
             <FormItem>
-              <div className="flex items-center justify-between">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                 <LabelWithHelp
                   label={tr('model_mapping.label', 'Model Mapping')}
                   help={tr('model_mapping.help', 'Map request model names to upstream model names (JSON).')}
                 />
-                <Button type="button" variant="ghost" size="sm" className="h-6 text-xs" onClick={formatModelMapping}>
+                <Button type="button" variant="ghost" size="sm" className="h-6 text-xs self-start sm:self-auto" onClick={formatModelMapping}>
                   {tr('common.format_json', 'Format JSON')}
                 </Button>
               </div>
@@ -162,12 +162,12 @@ export const ChannelModelSettings = ({
           name="model_configs"
           render={({ field }) => (
             <FormItem>
-              <div className="flex items-center justify-between">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                 <LabelWithHelp
                   label={tr('model_configs.label', 'Model Configs')}
                   help={tr('model_configs.help', 'Custom pricing and limits for specific models (JSON).')}
                 />
-                <div className="flex gap-2">
+                <div className="flex flex-wrap gap-2 self-start sm:self-auto">
                   <Button
                     type="button"
                     variant="ghost"

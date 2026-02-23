@@ -160,7 +160,6 @@ This section provides concrete edits and touch points. Keep error handling with 
 Create `common/graceful/graceful.go`:
 
 - Expose:
-
   - `func BeginRequest() func()` — increments in‑flight; returns a `done()` to defer in the handler.
   - `func GoCritical(ctx context.Context, name string, fn func(context.Context))` — increments WG and runs `fn`; decrements on finish; logs start/end/errors.
   - `func Drain(ctx context.Context) error` — waits for WG to zero; logs remaining tasks on timeout.
@@ -177,11 +176,9 @@ Create `common/graceful/graceful.go`:
 ### 5.3 Wrap critical goroutines
 
 - In `controller/relay.go` where `go processChannelRelayError(...)` is launched, replace with:
-
   - `graceful.GoCritical(gmw.BackgroundCtx(c), "processChannelRelayError", func(ctx context.Context) { processChannelRelayError(ctx, ...) })`
 
 - In `relay/controller/text.go` and `relay/controller/response.go`:
-
   - Replace the bare `go func(){ ... }()` post‑billing goroutines with `graceful.GoCritical(...)` wrappers.
   - For `billing.ReturnPreConsumedQuota(...)`, either:
     - Change it to accept a `graceful.GoCritical` callback; or

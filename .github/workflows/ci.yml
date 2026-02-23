@@ -3,9 +3,9 @@ name: ci
 on:
   push:
     branches:
-      - "master"
-      - "main"
-      - "test/ci"
+      - 'master'
+      - 'main'
+      - 'test/ci'
     paths-ignore:
       - 'docs/**'
       - 'doc/**'
@@ -147,7 +147,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: "1.25.0"
+          go-version: '1.25.0'
 
       - name: Compute short sha
         id: vars

@@ -4,7 +4,7 @@ URL: https://aws.amazon.com/blogs/machine-learning/getting-started-with-cross-re
 
 With the advent of [generative AI solutions](https://aws.amazon.com/generative-ai/), a paradigm shift is underway across industries, driven by organizations embracing foundation models to unlock unprecedented opportunities. [Amazon Bedrock](https://aws.amazon.com/bedrock/) has emerged as the preferred choice for numerous customers seeking to innovate and launch generative AI applications, leading to an exponential surge in demand for model inference capabilities. Bedrock customers aim to scale their worldwide applications to accommodate growth, and require additional burst capacity to handle unexpected surges in traffic. Currently, users might have to engineer their applications to handle scenarios involving traffic spikes that can use service quotas from multiple regions by implementing complex techniques such as client-side load balancing between AWS regions, where Amazon Bedrock service is supported. However, this dynamic nature of demand is difficult to predict, increases operational overhead, introduces potential points of failure, and might hinder businesses from achieving continuous service availability.
 
-**Today**, we are happy to announce the general availability of ***cross-region inference,*** a powerful feature allowing automatic cross-region inference routing for requests coming to Amazon Bedrock. This offers developers using on-demand inference mode, a seamless solution for getting higher throughput and performance, while managing incoming traffic spikes of applications powered by Amazon Bedrock. By opting in, developers no longer have to spend time and effort predicting demand fluctuations. Instead, cross-region inference dynamically routes traffic across multiple regions. Moreover, this capability prioritizes the connected Amazon Bedrock API source region when possible, helping to minimize latency and improve responsiveness. As a result, customers can enhance their applications’ reliability, performance, and efficiency.
+**Today**, we are happy to announce the general availability of **_cross-region inference,_** a powerful feature allowing automatic cross-region inference routing for requests coming to Amazon Bedrock. This offers developers using on-demand inference mode, a seamless solution for getting higher throughput and performance, while managing incoming traffic spikes of applications powered by Amazon Bedrock. By opting in, developers no longer have to spend time and effort predicting demand fluctuations. Instead, cross-region inference dynamically routes traffic across multiple regions. Moreover, this capability prioritizes the connected Amazon Bedrock API source region when possible, helping to minimize latency and improve responsiveness. As a result, customers can enhance their applications’ reliability, performance, and efficiency.
 
 Let us dig deeper into this feature where we will cover:
 
@@ -39,7 +39,7 @@ The below image would help to understand how this feature works. Amazon Bedrock 
 4. You can choose whether to use Foundation Models directly via their respective model identifier or use the model via the cross-region inference mechanism. Any inferences performed via this feature will consider on-demand capacity from all of its pre-configured regions to maximize application throughput and performance.
 5. There will be additional latency incurred when re-routing happens and, in our testing, it has been a double-digit milliseconds latency add.
 6. All terms applicable to the use of a particular model, including any end user license agreement, still apply when using cross-region inference.
-7. When using this feature, your ***throughput can reach up to double the default in-region quotas*** in the region that the inference profile is in. The increase in throughput only applies to invocation performed via inference profiles, the regular quota still applies if you opt for in-region model invocation request. To see quotas for on-demand throughput, refer to the **Runtime quotas** section in [Quotas for Amazon Bedrock](https://docs.aws.amazon.com/bedrock/latest/userguide/quotas.html) or use the Service Quotas console.
+7. When using this feature, your **_throughput can reach up to double the default in-region quotas_** in the region that the inference profile is in. The increase in throughput only applies to invocation performed via inference profiles, the regular quota still applies if you opt for in-region model invocation request. To see quotas for on-demand throughput, refer to the **Runtime quotas** section in [Quotas for Amazon Bedrock](https://docs.aws.amazon.com/bedrock/latest/userguide/quotas.html) or use the Service Quotas console.
 
 Let us dive deep into a few important aspects:
 
@@ -125,36 +125,35 @@ With Amazon CloudWatch Logs, you can create [metrics](https://docs.aws.amazon.co
 
 ## Getting started with Cross-region inference
 
-To get started with cross-region inference, you make use of ***Inference Profiles*** in Amazon Bedrock. An inference profile for a model, configures different model ARNs from respective AWS regions and abstracts them behind a unified model identifier (both id and ARN). Just by simply using this new inference profile identifier with the `InvokeModel` or `Converse` API, you can use the cross-region inference feature.
+To get started with cross-region inference, you make use of **_Inference Profiles_** in Amazon Bedrock. An inference profile for a model, configures different model ARNs from respective AWS regions and abstracts them behind a unified model identifier (both id and ARN). Just by simply using this new inference profile identifier with the `InvokeModel` or `Converse` API, you can use the cross-region inference feature.
 
 For the models available in your region and via cross-region inference you can start using these models via the method below. But you should also request access to the models available only via cross-region inference as well. For example, to gain access to make calls to the Anthropic’s Claude 3 Haiku inference profile from the US West (Oregon) Region, go to the model access page in `us-west-2` Amazon Bedrock console to grant access. Refer to [Prerequisites for cross-region inference](https://docs.aws.amazon.com/bedrock/latest/userguide/cross-region-inference-prereq.html) for more details.
 
 Here are the steps to start using cross-region inference with the help of inference profiles:
 
 1. **List Inference Profiles** You can list the inference profiles available in your region by either signing in to Amazon Bedrock AWS console or API.
-    - Console
-        1. From the left-hand pane, select “Cross-region Inference”
-        2. You can explore different inference profiles available for your region(s).
-        3. Copy the inference profile ID and use it in your application, as described in the section below
-    - API It is also possible to list the inference profiles available in your region via boto3 SDK or AWS CLI.
+   - Console
+     1. From the left-hand pane, select “Cross-region Inference”
+     2. You can explore different inference profiles available for your region(s).
+     3. Copy the inference profile ID and use it in your application, as described in the section below
+   - API It is also possible to list the inference profiles available in your region via boto3 SDK or AWS CLI.
 
-        ```
-        aws bedrock list-inference-profiles
-        ```
-
+     ```
+     aws bedrock list-inference-profiles
+     ```
 
 You can observe how different inference profiles have been configured for various geo locations comprising of multiple AWS regions. For example, the models with the prefix us. are configured for AWS regions in USA, whereas models with `eu`. are configured with the regions in European Union (EU).
 
 1. **Modify Your Application**
-    1. Update your application to use the inference profile ID/ARN from console or from the API response as `modelId` in your requests via `InvokeModel` or `Converse` API.
-    2. This new inference profile will automatically manage inference throttling and re-route your request(s) across multiple AWS Regions (as per configuration).
+   1. Update your application to use the inference profile ID/ARN from console or from the API response as `modelId` in your requests via `InvokeModel` or `Converse` API.
+   2. This new inference profile will automatically manage inference throttling and re-route your request(s) across multiple AWS Regions (as per configuration).
 2. **Monitor and Adjust**
-    1. Use Amazon CloudWatch to monitor your inference traffic and latency across regions.
-    2. Adjust the use of inference profile vs FMs directly based on your observed traffic patterns and performance requirements.
+   1. Use Amazon CloudWatch to monitor your inference traffic and latency across regions.
+   2. Adjust the use of inference profile vs FMs directly based on your observed traffic patterns and performance requirements.
 
 ## Code example to leverage Inference Profiles
 
-Use of ***inference profiles*** is similar to that of foundation models in Amazon Bedrock using the `InvokeModel` or `Converse` API, the only difference between the `modelId` is addition of a prefix such as `us`. or `eu`.
+Use of **_inference profiles_** is similar to that of foundation models in Amazon Bedrock using the `InvokeModel` or `Converse` API, the only difference between the `modelId` is addition of a prefix such as `us`. or `eu`.
 
 ### Foundation Model
 

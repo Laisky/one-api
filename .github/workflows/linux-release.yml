@@ -32,7 +32,7 @@ jobs:
           node-version: 16
       - name: Build Frontend
         env:
-          CI: ""
+          CI: ''
         run: |
           cd web
           git describe --tags > VERSION

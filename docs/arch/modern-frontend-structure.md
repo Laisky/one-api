@@ -4,10 +4,10 @@ The Modern template now follows a strict upper bound of **800 lines per source f
 
 ## Current Audit Snapshot
 
-| Path | Lines |
-| --- | ---: |
-| `web/modern/src/pages/chat/PlaygroundPage.tsx` | 1322 |
-| `web/modern/src/pages/dashboard/DashboardPage.tsx` | 1212 |
+| Path                                               | Lines |
+| -------------------------------------------------- | ----: |
+| `web/modern/src/pages/chat/PlaygroundPage.tsx`     |  1322 |
+| `web/modern/src/pages/dashboard/DashboardPage.tsx` |  1212 |
 
 All other Modern source files are under the threshold. The items above are being split immediately as outlined below.
 

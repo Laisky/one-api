@@ -317,7 +317,7 @@ export const ChannelEndpointSettings = ({
         </DialogContent>
       </Dialog>
 
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
         <LabelWithHelp
           label={tr("endpoints.label", "Supported Endpoints")}
           help={tr(
@@ -325,7 +325,7 @@ export const ChannelEndpointSettings = ({
             "Select which API endpoints this channel supports. Click on an endpoint's info icon for details and usage examples."
           )}
         />
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {!isUsingDefaults && (
             <Button
               type="button"

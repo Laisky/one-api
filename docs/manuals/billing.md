@@ -23,7 +23,6 @@ One-API’s billing layer is built for multi-tenant deployments that broker requ
   - [Reference API Surface](#reference-api-surface)
   - [Operational Tips](#operational-tips)
 
-
 ## Design Goals
 
 - **Predictable costs**: Every adapter publishes per-1M-token pricing so downstream quotas map directly to currency budgets.

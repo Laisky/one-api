@@ -61,12 +61,12 @@ export function ToolListEditor({ label, description, value, onChange, placeholde
       <div className="flex flex-wrap gap-2">
         {normalized.length === 0 && <span className="text-xs text-muted-foreground">{t('common.no_items', 'No items')}</span>}
         {normalized.map((item) => (
-          <Badge key={item} variant="secondary" className="gap-1">
-            {item}
+          <Badge key={item} variant="secondary" className="gap-1 max-w-full">
+            <span className="truncate" title={item}>{item}</span>
             <button
               type="button"
               onClick={() => removeItem(item)}
-              className="ml-1 inline-flex"
+              className="ml-1 inline-flex shrink-0"
               aria-label={t('common.remove_item', 'Remove {{item}}', { item })}
               disabled={disabled}
             >

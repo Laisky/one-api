@@ -150,10 +150,10 @@ export function SelectionListManager({
                 <Badge
                   key={option.value}
                   variant={isSelected ? 'default' : 'outline'}
-                  className={cn('cursor-pointer hover:bg-primary/90', disabled && 'opacity-60')}
+                  className={cn('cursor-pointer hover:bg-primary/90 max-w-full', disabled && 'opacity-60')}
                   onClick={() => toggleOption(option.value)}
                 >
-                  {option.label ?? option.value}
+                  <span className="truncate" title={option.label ?? option.value}>{option.label ?? option.value}</span>
                 </Badge>
               );
             })}
@@ -167,12 +167,12 @@ export function SelectionListManager({
               <span className="text-sm text-muted-foreground italic p-1">{emptySelectedLabel || 'No selections'}</span>
             )}
             {normalizedSelected.map((item) => (
-              <Badge key={item} variant="secondary" className="gap-1">
-                {item}
+              <Badge key={item} variant="secondary" className="gap-1 max-w-full">
+                <span className="truncate" title={item}>{item}</span>
                 <button
                   type="button"
                   onClick={() => removeSelected(item)}
-                  className="ml-1 inline-flex"
+                  className="ml-1 inline-flex shrink-0"
                   aria-label={t('common.remove_item', 'Remove {{item}}', { item })}
                   disabled={disabled}
                 >

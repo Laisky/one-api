@@ -1,9 +1,9 @@
 ---
 name: Bug Report
 about: Use concise and detailed language to describe the issue you encountered
-title: ""
+title: ''
 labels: bug
-assignees: ""
+assignees: ''
 ---
 
 ## Routine Check

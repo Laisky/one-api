@@ -310,7 +310,6 @@ When you create a Proxy channel:
 ### 12.2 Setting Up a Proxy Channel
 
 1. **Create the channel**:
-
    - Channel Type: `Proxy`
    - Base URL: The target upstream service (e.g., `https://internal-api.example.com`)
    - API Key: The authorization token to use with the upstream service

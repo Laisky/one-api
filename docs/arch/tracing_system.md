@@ -9,6 +9,7 @@ The request tracing system provides comprehensive tracking of API requests throu
 ### 1. Core Components
 
 #### TraceID Standardization
+
 - **Source**: gin-middlewares `TraceID(ctx *gin.Context)` function
 - **Format**: JaegerTracingID string representation
 - **Usage**: Unified across all logging and tracing operations
@@ -16,6 +17,7 @@ The request tracing system provides comprehensive tracking of API requests throu
 #### Database Schema
 
 **Traces Table**:
+
 ```sql
 CREATE TABLE traces (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -31,12 +33,14 @@ CREATE TABLE traces (
 ```
 
 **Logs Table Enhancement**:
+
 ```sql
 ALTER TABLE logs ADD COLUMN trace_id VARCHAR(64);
 CREATE INDEX idx_logs_trace_id ON logs(trace_id);
 ```
 
 #### Timestamp Structure
+
 ```json
 {
   "request_received": 1640995200000,
@@ -51,26 +55,31 @@ CREATE INDEX idx_logs_trace_id ON logs(trace_id);
 ### 2. Implementation Layers
 
 #### Model Layer (`model/trace.go`)
+
 - `Trace` struct with GORM annotations
 - `TraceTimestamps` struct for JSON parsing
 - CRUD operations: `CreateTrace`, `UpdateTraceTimestamp`, `UpdateTraceStatus`
 - Helper functions: `GetTraceByTraceId`, `GetTraceTimestamps`
 
 #### Helper Layer (`common/helper/helper.go`)
+
 - `GetTraceIDFromContext(ctx context.Context)` - Extract TraceID from standard context
 - Integration with existing `GetRequestID` functionality
 
 #### Tracing Utilities (`common/tracing/tracing.go`)
+
 - `GetTraceID(c *gin.Context)` - Extract TraceID from gin context
 - `RecordTraceStart`, `RecordTraceTimestamp`, `RecordTraceEnd` - Lifecycle tracking
 - `WithTraceID` - Add TraceID to structured logging
 
 #### Middleware Layer (`middleware/tracing.go`)
+
 - `TracingMiddleware()` - Gin middleware for automatic tracing
 - Custom response writer to capture first response timing
 - Automatic trace lifecycle management
 
 #### Controller Layer (`controller/tracing.go`)
+
 - `GetTraceByTraceId` - API endpoint for trace retrieval
 - `GetTraceByLogId` - API endpoint linking logs to traces
 - Duration calculations for performance metrics
@@ -80,22 +89,27 @@ CREATE INDEX idx_logs_trace_id ON logs(trace_id);
 #### Request Lifecycle Instrumentation
 
 **Request Start** (`middleware/tracing.go`):
+
 - Automatic trace creation with initial timestamp
 - URL, method, and body size capture
 
 **Upstream Forwarding** (`relay/adaptor/common.go`):
+
 - `DoRequestHelper`: Record forwarding timestamp
 - `DoRequest`: Record first upstream response timestamp
 
 **Streaming Completion** (`relay/adaptor/openai/main.go`):
+
 - Multiple streaming handlers instrumented
 - Upstream completion timestamp recording
 
 **Response Handling** (`middleware/tracing.go`):
+
 - Custom response writer captures first client response
 - Final completion and status recording
 
 #### Logging Integration (`model/log.go`)
+
 - All log entries automatically include `trace_id`
 - Backward compatibility with existing `request_id`
 - Enhanced structured logging with trace context
@@ -103,16 +117,19 @@ CREATE INDEX idx_logs_trace_id ON logs(trace_id);
 ### 4. Frontend Components
 
 #### Default Template (`web/default/src/components/`)
+
 - `TracingModal.js` - Modern React modal with Semantic UI
 - `LogsTable.js` - Clickable rows with tracing integration
 - Timeline visualization with duration calculations
 
 #### Berry Template (`web/berry/src/views/Log/`)
+
 - `TracingModal.js` - Material-UI based modal
 - `TableRow.js` - Clickable rows with hover effects
 - Chinese localization and modern design
 
 #### Air Template (`web/air/src/components/`)
+
 - `TracingModal.js` - Semi-UI based modal
 - `LogsTable.js` - Semi Design table integration
 - Consistent API integration across templates
@@ -120,9 +137,11 @@ CREATE INDEX idx_logs_trace_id ON logs(trace_id);
 ## API Endpoints
 
 ### GET /api/trace/:trace_id
+
 Retrieve tracing information by trace ID.
 
 **Response**:
+
 ```json
 {
   "success": true,
@@ -141,9 +160,11 @@ Retrieve tracing information by trace ID.
 ```
 
 ### GET /api/trace/log/:log_id
+
 Retrieve tracing information for a specific log entry.
 
 **Response**:
+
 ```json
 {
   "success": true,
@@ -169,16 +190,19 @@ Retrieve tracing information for a specific log entry.
 ## Performance Considerations
 
 ### Database Optimization
+
 - Indexed `trace_id` columns for fast lookups
 - JSON timestamps for flexible schema evolution
 - Automatic cleanup policies for old trace data
 
 ### Memory Usage
+
 - Minimal memory footprint with structured timestamps
 - Efficient JSON marshaling/unmarshaling
 - Context-aware logging to prevent memory leaks
 
 ### Network Overhead
+
 - Lazy loading of trace data in frontend
 - Compressed JSON responses
 - Efficient API design with minimal round trips
@@ -186,11 +210,13 @@ Retrieve tracing information for a specific log entry.
 ## Security and Privacy
 
 ### Access Control
+
 - User authentication required for trace access
 - Users can only access traces for their own requests
 - Admin users have full trace visibility
 
 ### Data Retention
+
 - Configurable trace data retention policies (`TRACE_RETENTION_DAYS`, default 30; set to 0 to disable cleanup)
 - Automatic cleanup of old trace records via the daily trace retention worker
 - Privacy-compliant data handling
@@ -198,16 +224,19 @@ Retrieve tracing information for a specific log entry.
 ## Monitoring and Observability
 
 ### Metrics Collection
+
 - Trace creation success/failure rates
 - API endpoint performance metrics
 - Frontend modal usage analytics
 
 ### Error Handling
+
 - Graceful degradation when tracing fails
 - Comprehensive error logging
 - User-friendly error messages in UI
 
 ### Debugging Support
+
 - Detailed trace information for troubleshooting
 - Request correlation across system components
 - Performance bottleneck identification
@@ -215,16 +244,19 @@ Retrieve tracing information for a specific log entry.
 ## Future Enhancements
 
 ### Distributed Tracing
+
 - Integration with OpenTelemetry
 - Cross-service trace correlation
 - Jaeger/Zipkin compatibility
 
 ### Advanced Analytics
+
 - Performance trend analysis
 - Anomaly detection
 - Automated alerting
 
 ### Enhanced UI Features
+
 - Real-time trace updates
 - Advanced filtering and search
 - Export capabilities for trace data

@@ -35,7 +35,6 @@ Key principles:
 ## Interfaces and Endpoints
 
 - Public relay entry: `GET /v1/realtime` (WebSocket upgrade)
-
   - Query: `model` (required). Example: `gpt-4o-realtime-preview-2025-06-03`, `gpt-4o-mini-realtime-preview-2024-12-17`.
   - Headers from client:
     - `Authorization: Bearer <one-api-token>` (required; one-api TokenAuth)
@@ -64,7 +63,6 @@ This section maps required changes into this repository’s existing patterns to
 ### 2) Router and controller
 
 - Router: extend `router/relay.go`
-
   - In the `/v1` group (protected by TokenAuth + Distribute + rate limits), add a WebSocket endpoint:
     - `relayV1Router.GET("/realtime", controller.RelayRealtime)`
   - Keep consistent middlewares: `RelayPanicRecover`, `TokenAuth`, `Distribute`, `GlobalRelayRateLimit`, `ChannelRateLimit`.
@@ -79,7 +77,6 @@ This section maps required changes into this repository’s existing patterns to
 ### 3) OpenAI adaptor (upstream pass-through)
 
 - New handler in `relay/adaptor/openai` (e.g., `realtime.go`) with two main functions:
-
   - `RealtimeHandler(c *gin.Context, meta *meta.Meta) (*model.ErrorWithStatusCode, *model.Usage)`
     - Upgrade the client connection to a WebSocket (via `gorilla/websocket`).
     - Create an upstream WebSocket client to OpenAI Realtime endpoint with the selected channel’s base URL and API key.
@@ -99,13 +96,11 @@ This section maps required changes into this repository’s existing patterns to
 ### 4) Billing and pricing
 
 - Pricing source: `relay/adaptor/openai/constants.go` already includes realtime models, for example:
-
   - `gpt-4o-realtime-preview[-2025-06-03]`
   - `gpt-4o-mini-realtime-preview[-2024-12-17]`
     These use the standardized “per 1M tokens” ratios and integrate with the global pricing map.
 
 - Usage accumulation:
-
   - Prefer upstream-provided usage fields from Realtime events (e.g., final response completed/summary). If present, map to `Usage.PromptTokens` and `Usage.CompletionTokens`; compute `TotalTokens` accordingly.
   - If upstream usage isn’t delivered in the session, bill 0 for Phase 1 (explicit design trade-off to avoid guessing). This is consistent with the philosophy of not over-billing. Operators may configure a minimum charge via channel overrides if desired.
   - Prompt caching (Claude-specific) does not apply to OpenAI Realtime; treat cached fields as zero.
@@ -128,7 +123,6 @@ This section maps required changes into this repository’s existing patterns to
 ### 7) Testing strategy
 
 - Unit tests:
-
   - Mode mapping: `/v1/realtime` → `relaymode.Realtime`.
   - Router integration: ensures the handler is registered and protected by TokenAuth and rate limits.
   - Usage parsing: synthetic upstream events with usage fields map into `model.Usage` correctly.
@@ -155,9 +149,8 @@ This section maps required changes into this repository’s existing patterns to
 Pseudo-code (client connects to one-api, not OpenAI directly):
 
 ```javascript
-const url =
-  "wss://<your-one-api-host>/v1/realtime?model=gpt-4o-realtime-preview-2025-06-03";
-const ws = new WebSocket(url, ["openai-realtime-v1"], {
+const url = 'wss://<your-one-api-host>/v1/realtime?model=gpt-4o-realtime-preview-2025-06-03';
+const ws = new WebSocket(url, ['openai-realtime-v1'], {
   headers: { Authorization: `Bearer ${ONE_API_TOKEN}` },
 });
 

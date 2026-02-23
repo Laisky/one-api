@@ -163,7 +163,7 @@ export const ChannelAdvancedSettings = ({
 						name="inference_profile_arn_map"
 						render={({ field }) => (
 							<FormItem>
-								<div className="flex items-center justify-between">
+								<div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
 									<LabelWithHelp
 										label={tr(
 											"inference_profile.label",
@@ -178,7 +178,7 @@ export const ChannelAdvancedSettings = ({
 										type="button"
 										variant="ghost"
 										size="sm"
-										className="h-6 text-xs"
+										className="h-6 text-xs self-start sm:self-auto"
 										onClick={formatInferenceProfileArnMap}
 									>
 										{tr("common.format_json", "Format JSON")}
