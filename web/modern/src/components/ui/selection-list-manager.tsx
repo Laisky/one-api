@@ -153,7 +153,7 @@ export function SelectionListManager({
                   className={cn('cursor-pointer hover:bg-primary/90 max-w-full', disabled && 'opacity-60')}
                   onClick={() => toggleOption(option.value)}
                 >
-                  <span className="truncate" title={option.label ?? option.value}>{option.label ?? option.value}</span>
+                  <span className="truncate min-w-0" title={option.label ?? option.value}>{option.label ?? option.value}</span>
                 </Badge>
               );
             })}
@@ -168,7 +168,7 @@ export function SelectionListManager({
             )}
             {normalizedSelected.map((item) => (
               <Badge key={item} variant="secondary" className="gap-1 max-w-full">
-                <span className="truncate" title={item}>{item}</span>
+                <span className="truncate min-w-0" title={item}>{item}</span>
                 <button
                   type="button"
                   onClick={() => removeSelected(item)}

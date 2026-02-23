@@ -295,7 +295,7 @@ export const ChannelBasicInfo = ({
             <div className="flex flex-wrap gap-2 mt-2">
               {form.watch("groups").map((group) => (
                 <Badge key={group} variant="secondary" className="gap-1 max-w-full">
-                  <span className="truncate" title={group}>{group}</span>
+                  <span className="truncate min-w-0" title={group}>{group}</span>
                   <span
                     className="cursor-pointer ml-1 hover:text-destructive shrink-0"
                     onClick={() => removeGroup(group)}

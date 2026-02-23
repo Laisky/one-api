@@ -173,7 +173,7 @@ export const ChannelToolingSettings = ({
 								)}
 								{currentToolWhitelist.map((tool) => (
 									<Badge key={tool} variant="secondary" className="gap-1 max-w-full">
-										<span className="truncate" title={tool}>{tool}</span>
+										<span className="truncate min-w-0" title={tool}>{tool}</span>
 										<span
 											className="cursor-pointer ml-1 hover:text-destructive shrink-0"
 											onClick={() => removeToolFromWhitelist(tool)}
