@@ -53,6 +53,24 @@ func TestGetChannelMetadata(t *testing.T) {
 		require.False(t, data["base_url_editable"].(bool))
 	})
 
+	t.Run("returns editable base URL for MiniMax", func(t *testing.T) {
+		t.Parallel()
+		req, _ := http.NewRequest(http.MethodGet, "/api/channel/metadata?type=27", nil)
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, req)
+
+		require.Equal(t, http.StatusOK, w.Code)
+
+		var response map[string]interface{}
+		err := json.Unmarshal(w.Body.Bytes(), &response)
+		require.NoError(t, err)
+
+		require.True(t, response["success"].(bool))
+		data := response["data"].(map[string]interface{})
+		require.Equal(t, "https://api.minimax.chat", data["default_base_url"])
+		require.True(t, data["base_url_editable"].(bool))
+	})
+
 	t.Run("returns error when type is missing", func(t *testing.T) {
 		t.Parallel()
 		req, _ := http.NewRequest(http.MethodGet, "/api/channel/metadata", nil)
