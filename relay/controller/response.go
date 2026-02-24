@@ -31,6 +31,11 @@ func RelayResponseAPIHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 	lg := gmw.GetLogger(c)
 	ctx := gmw.Ctx(c)
 	meta := metalib.GetByContext(c)
+	if handled, wsErr := maybeHandleResponseAPIWebSocket(c, meta); wsErr != nil {
+		return wsErr
+	} else if handled {
+		return nil
+	}
 	if err := logClientRequestPayload(c, "response_api"); err != nil {
 		return openai.ErrorWrapper(err, "invalid_response_api_request", http.StatusBadRequest)
 	}

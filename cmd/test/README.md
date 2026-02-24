@@ -58,6 +58,23 @@ go run ./cmd/test audio --source https://example.com/sample.wav
 
 The probe logs the measured duration and the token estimate, helping confirm that One-API audio helpers work inside the current environment.
 
+### Probing Response API WebSocket support
+
+Run `go run ./cmd/test chat response --ws` to perform an end-to-end websocket probe against a Response API endpoint.
+
+```bash
+API_TOKEN=sk-... go run ./cmd/test chat response --ws
+API_TOKEN=sk-... go run ./cmd/test chat response --ws --endpoint https://oneapi.laisky.com/v1/responses --model gpt-5-mini
+API_TOKEN=sk-... go run ./cmd/test chat response --ws --endpoint https://custom.example.com/v1/responses --timeout 30s --prompt "Reply with pong"
+```
+
+Behavior:
+
+- Builds a websocket URL from the provided endpoint (`https -> wss`, `http -> ws`).
+- Sends a `response.create` event to the target endpoint.
+- Waits for terminal events such as `response.completed` or `response.error`.
+- Returns non-zero when websocket handshake fails, upstream returns websocket error events, or the probe times out.
+
 ### Capturing payload samples
 
 Use the `generate` subcommand to execute the configured variants and write request/response artefacts to `cmd/test/generated`:

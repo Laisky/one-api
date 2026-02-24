@@ -3,6 +3,7 @@ package middleware
 import (
 	"fmt"
 	"net/http"
+	"slices"
 	"strings"
 
 	"github.com/Laisky/errors/v2"
@@ -10,6 +11,7 @@ import (
 	gutils "github.com/Laisky/go-utils/v6"
 	"github.com/Laisky/zap"
 	"github.com/gin-gonic/gin"
+	"github.com/gorilla/websocket"
 
 	"github.com/songquanpeng/one-api/common/ctxkey"
 	"github.com/songquanpeng/one-api/model"
@@ -20,6 +22,126 @@ import (
 
 type ModelRequest struct {
 	Model string `json:"model" form:"model"`
+}
+
+// isResponseAPIWebSocketHandshake reports whether current request is the websocket
+// handshake for `/v1/responses`.
+//
+// Parameters:
+//   - c: current gin context.
+//   - relayMode: resolved relay mode for this request path.
+//
+// Returns:
+//   - bool: true when request is a Response API websocket handshake.
+func isResponseAPIWebSocketHandshake(c *gin.Context, relayMode int) bool {
+	if c == nil || c.Request == nil {
+		return false
+	}
+
+	return relayMode == relaymode.ResponseAPI &&
+		c.Request.Method == http.MethodGet &&
+		websocket.IsWebSocketUpgrade(c.Request)
+}
+
+// channelSupportsGroup reports whether channel serves the given group.
+//
+// Parameters:
+//   - channel: channel candidate to validate.
+//   - userGroup: caller's resolved group.
+//
+// Returns:
+//   - bool: true when channel declares the user group.
+func channelSupportsGroup(channel *model.Channel, userGroup string) bool {
+	if channel == nil {
+		return false
+	}
+
+	targetGroup := strings.TrimSpace(userGroup)
+	if targetGroup == "" {
+		return false
+	}
+
+	for grp := range strings.SplitSeq(channel.Group, ",") {
+		if strings.EqualFold(strings.TrimSpace(grp), targetGroup) {
+			return true
+		}
+	}
+
+	return false
+}
+
+// selectResponseWebSocketChannelWithoutModel selects a channel for Response API
+// websocket handshakes where model is unavailable during HTTP upgrade.
+//
+// Parameters:
+//   - userGroup: caller's resolved group.
+//   - relayMode: resolved relay mode.
+//   - ignoreFirstPriority: whether to skip highest-priority tier.
+//
+// Returns:
+//   - *model.Channel: selected channel.
+//   - error: selection error when no channel matches.
+func selectResponseWebSocketChannelWithoutModel(userGroup string, relayMode int, ignoreFirstPriority bool) (*model.Channel, error) {
+	channels, err := model.GetAllEnabledChannels()
+	if err != nil {
+		return nil, errors.Wrap(err, "list enabled channels")
+	}
+
+	if len(channels) == 0 {
+		return nil, errors.New("no enabled channels")
+	}
+
+	var candidates []*model.Channel
+	for _, candidate := range channels {
+		if candidate == nil {
+			continue
+		}
+		if !channelSupportsGroup(candidate, userGroup) {
+			continue
+		}
+		if !channelSupportsEndpoint(candidate, relayMode) {
+			continue
+		}
+		if !channelSupportsResponseWebSocket(candidate, relayMode, true) {
+			continue
+		}
+
+		candidates = append(candidates, candidate)
+	}
+
+	if len(candidates) == 0 {
+		return nil, errors.New("no endpoint-compatible channel found for websocket request")
+	}
+
+	slices.SortStableFunc(candidates, func(a, b *model.Channel) int {
+		switch {
+		case a.GetPriority() > b.GetPriority():
+			return -1
+		case a.GetPriority() < b.GetPriority():
+			return 1
+		default:
+			if a.Id < b.Id {
+				return -1
+			}
+			if a.Id > b.Id {
+				return 1
+			}
+			return 0
+		}
+	})
+
+	highestPriority := candidates[0].GetPriority()
+	if ignoreFirstPriority {
+		for _, candidate := range candidates {
+			if candidate.GetPriority() < highestPriority {
+				return candidate, nil
+			}
+		}
+
+		return nil, errors.New("no lower-priority websocket channel available")
+	}
+
+	return candidates[0], nil
 }
 
 // channelSupportsEndpoint checks if a channel supports the given relay mode (endpoint).
@@ -42,6 +164,28 @@ func channelSupportsEndpoint(channel *model.Channel, relayMode int) bool {
 	// Fall back to default endpoints for channel type
 	defaultEndpoints := channeltype.DefaultEndpointNamesForChannelType(channel.Type)
 	return channeltype.IsEndpointSupportedByName(endpointName, defaultEndpoints)
+}
+
+// channelSupportsResponseWebSocket reports whether channel can serve Response API
+// websocket transport.
+//
+// Parameters:
+//   - channel: candidate channel.
+//   - relayMode: resolved relay mode.
+//   - isResponseWSHandshake: whether current request is a response websocket handshake.
+//
+// Returns:
+//   - bool: true when channel supports current transport constraints.
+func channelSupportsResponseWebSocket(channel *model.Channel, relayMode int, isResponseWSHandshake bool) bool {
+	if !isResponseWSHandshake {
+		return true
+	}
+
+	if relayMode != relaymode.ResponseAPI {
+		return true
+	}
+
+	return channel != nil && channel.Type == channeltype.OpenAI
 }
 
 func Distribute() func(c *gin.Context) {
@@ -75,6 +219,13 @@ func Distribute() func(c *gin.Context) {
 					errors.Errorf("Channel #%d does not support the requested model: %s", channelId, requestModel))
 				return
 			}
+			isResponseWSHandshake := isResponseAPIWebSocketHandshake(c, relayMode)
+			if !channelSupportsResponseWebSocket(channel, relayMode, isResponseWSHandshake) {
+				AbortWithError(c, http.StatusBadRequest,
+					errors.Errorf("Channel #%d does not support Response API websocket transport", channelId))
+				return
+			}
+
 			// Check endpoint support for specific channel
 			if !channelSupportsEndpoint(channel, relayMode) {
 				endpointName := channeltype.RelayModeToEndpointName(relayMode)
@@ -84,7 +235,24 @@ func Distribute() func(c *gin.Context) {
 			}
 		} else {
 			requestModel = c.GetString(ctxkey.RequestModel)
+			isResponseWSHandshake := isResponseAPIWebSocketHandshake(c, relayMode)
+			if requestModel == "" && isResponseWSHandshake {
+				if hintedModel := strings.TrimSpace(c.Query("model")); hintedModel != "" {
+					requestModel = hintedModel
+					c.Set(ctxkey.RequestModel, hintedModel)
+					lg.Debug("response websocket handshake uses query model hint",
+						zap.String("model", hintedModel),
+					)
+				} else {
+					lg.Debug("response websocket handshake has no model in pre-upgrade request; selecting channel by group+endpoint")
+				}
+			}
+
 			selectChannel := func(ignoreFirstPriority bool, exclude map[int]bool) (*model.Channel, error) {
+				if requestModel == "" && isResponseWSHandshake {
+					return selectResponseWebSocketChannelWithoutModel(userGroup, relayMode, ignoreFirstPriority)
+				}
+
 				for {
 					candidate, err := model.CacheGetRandomSatisfiedChannelExcluding(userGroup, requestModel, ignoreFirstPriority, exclude, false)
 					if err != nil {
@@ -98,6 +266,14 @@ func Distribute() func(c *gin.Context) {
 							zap.Int("channel_id", candidate.Id),
 							zap.String("channel_name", candidate.Name),
 							zap.String("endpoint", channeltype.RelayModeToEndpointName(relayMode)))
+						continue
+					}
+					if !channelSupportsResponseWebSocket(candidate, relayMode, isResponseWSHandshake) {
+						exclude[candidate.Id] = true
+						lg.Debug("channel skipped - does not support response websocket transport",
+							zap.Int("channel_id", candidate.Id),
+							zap.String("channel_name", candidate.Name),
+							zap.Int("channel_type", candidate.Type))
 						continue
 					}
 					return candidate, nil

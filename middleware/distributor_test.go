@@ -568,3 +568,179 @@ func TestEndpointRoutingIntegration(t *testing.T) {
 		assert.Equal(t, fallbackChannel.Id, selectedChannelId, "should select fallback channel with embeddings support")
 	})
 }
+
+func TestDistributeResponseWebSocketWithoutModelSelectsEndpointChannel(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	db, cleanup := setupDistributorTestDB(t)
+	defer cleanup()
+
+	originalMemoryCache := config.MemoryCacheEnabled
+	config.MemoryCacheEnabled = false
+	defer func() { config.MemoryCacheEnabled = originalMemoryCache }()
+
+	user := &model.User{
+		Id:       66,
+		Username: "ws-user",
+		Password: "hashed",
+		Group:    "default",
+		Status:   model.UserStatusEnabled,
+	}
+	require.NoError(t, db.Create(user).Error)
+
+	unsupportedPriority := int64(200)
+	unsupported := &model.Channel{
+		Id:       601,
+		Name:     "chat-only",
+		Type:     channeltype.OpenAI,
+		Models:   "gpt-5-mini",
+		Group:    "default",
+		Status:   model.ChannelStatusEnabled,
+		Priority: &unsupportedPriority,
+		Config:   `{"supported_endpoints": ["chat_completions"]}`,
+	}
+	require.NoError(t, db.Create(unsupported).Error)
+	require.NoError(t, unsupported.AddAbilities())
+
+	supportedPriority := int64(100)
+	supported := &model.Channel{
+		Id:       602,
+		Name:     "response-ws",
+		Type:     channeltype.OpenAI,
+		Models:   "gpt-5-mini",
+		Group:    "default",
+		Status:   model.ChannelStatusEnabled,
+		Priority: &supportedPriority,
+		Config:   `{"supported_endpoints": ["response_api"]}`,
+	}
+	require.NoError(t, db.Create(supported).Error)
+	require.NoError(t, supported.AddAbilities())
+
+	req := httptest.NewRequest(http.MethodGet, "/v1/responses", nil)
+	req.Header.Set("Connection", "Upgrade")
+	req.Header.Set("Upgrade", "websocket")
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = req
+
+	c.Set(ctxkey.Id, user.Id)
+	c.Set(ctxkey.TokenId, 501)
+	gmw.SetLogger(c, logger.Logger)
+
+	Distribute()(c)
+
+	assert.False(t, c.IsAborted(), "websocket handshake should be routable without pre-upgrade model")
+	assert.Equal(t, supported.Id, c.GetInt(ctxkey.ChannelId), "should select endpoint-compatible channel")
+}
+
+func TestDistributeResponseWebSocketWithoutModelReturns503WhenNoEndpointSupport(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	db, cleanup := setupDistributorTestDB(t)
+	defer cleanup()
+
+	originalMemoryCache := config.MemoryCacheEnabled
+	config.MemoryCacheEnabled = false
+	defer func() { config.MemoryCacheEnabled = originalMemoryCache }()
+
+	user := &model.User{
+		Id:       67,
+		Username: "ws-user-2",
+		Password: "hashed",
+		Group:    "default",
+		Status:   model.UserStatusEnabled,
+	}
+	require.NoError(t, db.Create(user).Error)
+
+	priority := int64(100)
+	chatOnly := &model.Channel{
+		Id:       603,
+		Name:     "chat-only",
+		Type:     channeltype.OpenAI,
+		Models:   "gpt-5-mini",
+		Group:    "default",
+		Status:   model.ChannelStatusEnabled,
+		Priority: &priority,
+		Config:   `{"supported_endpoints": ["chat_completions"]}`,
+	}
+	require.NoError(t, db.Create(chatOnly).Error)
+	require.NoError(t, chatOnly.AddAbilities())
+
+	req := httptest.NewRequest(http.MethodGet, "/v1/responses", nil)
+	req.Header.Set("Connection", "Upgrade")
+	req.Header.Set("Upgrade", "websocket")
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = req
+
+	c.Set(ctxkey.Id, user.Id)
+	c.Set(ctxkey.TokenId, 502)
+	gmw.SetLogger(c, logger.Logger)
+
+	Distribute()(c)
+
+	assert.True(t, c.IsAborted(), "middleware should abort when no endpoint-compatible channel exists")
+	assert.Equal(t, http.StatusServiceUnavailable, rec.Code)
+	assert.Contains(t, rec.Body.String(), "No available channels")
+}
+
+func TestDistributeResponseWebSocketSkipsNonOpenAIChannel(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	db, cleanup := setupDistributorTestDB(t)
+	defer cleanup()
+
+	originalMemoryCache := config.MemoryCacheEnabled
+	config.MemoryCacheEnabled = false
+	defer func() { config.MemoryCacheEnabled = originalMemoryCache }()
+
+	user := &model.User{
+		Id:       68,
+		Username: "ws-user-3",
+		Password: "hashed",
+		Group:    "default",
+		Status:   model.UserStatusEnabled,
+	}
+	require.NoError(t, db.Create(user).Error)
+
+	nonOpenAIPriority := int64(300)
+	nonOpenAI := &model.Channel{
+		Id:       604,
+		Name:     "ca-channel",
+		Type:     channeltype.Anthropic,
+		Models:   "claude-3-5-sonnet",
+		Group:    "default",
+		Status:   model.ChannelStatusEnabled,
+		Priority: &nonOpenAIPriority,
+		Config:   `{"supported_endpoints": ["response_api"]}`,
+	}
+	require.NoError(t, db.Create(nonOpenAI).Error)
+	require.NoError(t, nonOpenAI.AddAbilities())
+
+	openAIPriority := int64(100)
+	openAI := &model.Channel{
+		Id:       605,
+		Name:     "openai-channel",
+		Type:     channeltype.OpenAI,
+		Models:   "gpt-5-mini",
+		Group:    "default",
+		Status:   model.ChannelStatusEnabled,
+		Priority: &openAIPriority,
+		Config:   `{"supported_endpoints": ["response_api"]}`,
+	}
+	require.NoError(t, db.Create(openAI).Error)
+	require.NoError(t, openAI.AddAbilities())
+
+	req := httptest.NewRequest(http.MethodGet, "/v1/responses", nil)
+	req.Header.Set("Connection", "Upgrade")
+	req.Header.Set("Upgrade", "websocket")
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = req
+
+	c.Set(ctxkey.Id, user.Id)
+	c.Set(ctxkey.TokenId, 503)
+	gmw.SetLogger(c, logger.Logger)
+
+	Distribute()(c)
+
+	assert.False(t, c.IsAborted(), "websocket handshake should continue when OpenAI channel exists")
+	assert.Equal(t, openAI.Id, c.GetInt(ctxkey.ChannelId), "should skip non-OpenAI channel even if it has higher priority")
+}
