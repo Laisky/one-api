@@ -26,7 +26,6 @@ import (
 	"github.com/songquanpeng/one-api/relay/adaptor/common/structuredjson"
 	"github.com/songquanpeng/one-api/relay/adaptor/openai"
 	"github.com/songquanpeng/one-api/relay/apitype"
-	"github.com/songquanpeng/one-api/relay/billing"
 	"github.com/songquanpeng/one-api/relay/channeltype"
 	metalib "github.com/songquanpeng/one-api/relay/meta"
 	relaymodel "github.com/songquanpeng/one-api/relay/model"
@@ -142,7 +141,7 @@ func RelayTextHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 	if registry != nil {
 		response, usage, mcpSummary, incrementalCharged, execErr := executeChatMCPToolLoop(c, meta, textRequest, registry, preConsumedQuota)
 		if execErr != nil {
-			billing.ReturnPreConsumedQuota(ctx, preConsumedQuota, meta.TokenId)
+			_ = returnPreConsumedQuotaConservative(ctx, c, preConsumedQuota, meta.TokenId, "mcp_tool_loop_failed")
 			return execErr
 		}
 		applyOutputImageCharges(c, &usage, meta)
@@ -163,7 +162,7 @@ func RelayTextHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 		c.JSON(http.StatusOK, response)
 
 		// refund pre-consumed quota immediately
-		billing.ReturnPreConsumedQuota(ctx, preConsumedQuota, meta.TokenId)
+		_ = returnPreConsumedQuotaConservative(ctx, c, preConsumedQuota, meta.TokenId, "pre_billing_reconcile_mcp")
 		if usage != nil {
 			userId := strconv.Itoa(meta.UserId)
 			username := c.GetString(ctxkey.Username)
@@ -294,7 +293,7 @@ func RelayTextHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 	if isErrorHappened(meta, resp) {
 		// refund pre-consumed quota under lifecycle management so shutdown waits for it
 		graceful.GoCritical(ctx, "returnPreConsumedQuota", func(cctx context.Context) {
-			billing.ReturnPreConsumedQuota(cctx, preConsumedQuota, meta.TokenId)
+			_ = returnPreConsumedQuotaConservative(cctx, c, preConsumedQuota, meta.TokenId, "upstream_http_error")
 		})
 		// Reconcile provisional record to 0 since upstream returned error
 		quotaId := c.GetInt(ctxkey.Id)
@@ -318,7 +317,7 @@ func RelayTextHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 		// proceed to billing to ensure forwarded requests are charged; do not refund pre-consumed quota.
 		// Otherwise, refund pre-consumed quota and return error.
 		if usage == nil {
-			billing.ReturnPreConsumedQuota(ctx, preConsumedQuota, meta.TokenId)
+			_ = returnPreConsumedQuotaConservative(ctx, c, preConsumedQuota, meta.TokenId, "do_response_failed_without_usage")
 			return respErr
 		}
 		// Fall through to billing with available usage
@@ -330,10 +329,10 @@ func RelayTextHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 		usage, incrementalCharged, trackerErr = tracker.Finalize(usage)
 		if trackerErr != nil {
 			if errors.Is(trackerErr, streaming.ErrQuotaExceeded) {
-				billing.ReturnPreConsumedQuota(ctx, preConsumedQuota, meta.TokenId)
+				_ = returnPreConsumedQuotaConservative(ctx, c, preConsumedQuota, meta.TokenId, "streaming_quota_exceeded")
 				return openai.ErrorWrapper(errors.New("user quota is not enough"), "insufficient_user_quota", http.StatusForbidden)
 			}
-			billing.ReturnPreConsumedQuota(ctx, preConsumedQuota, meta.TokenId)
+			_ = returnPreConsumedQuotaConservative(ctx, c, preConsumedQuota, meta.TokenId, "streaming_billing_finalize_failed")
 			return openai.ErrorWrapper(trackerErr, "streaming_billing_failed", http.StatusInternalServerError)
 		}
 	}
@@ -346,7 +345,7 @@ func RelayTextHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 	// post-consume quota
 	quotaId := c.GetInt(ctxkey.Id)
 	// refund pre-consumed quota immediately
-	billing.ReturnPreConsumedQuota(ctx, preConsumedQuota, meta.TokenId)
+	_ = returnPreConsumedQuotaConservative(ctx, c, preConsumedQuota, meta.TokenId, "pre_billing_reconcile")
 	if usage != nil {
 		// Get user information for metrics
 		userId := strconv.Itoa(meta.UserId)

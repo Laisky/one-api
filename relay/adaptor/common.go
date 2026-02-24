@@ -118,6 +118,7 @@ func DoRequestHelper(a Adaptor, c *gin.Context, meta *meta.Meta, requestBody io.
 
 	// Optionally: Record when request is forwarded to upstream (non-standard event)
 	tracing.RecordTraceTimestamp(c, model.TimestampRequestForwarded)
+	c.Set(ctxkey.UpstreamRequestPossiblyForwarded, true)
 
 	resp, err := DoRequest(c, req)
 	if err != nil {

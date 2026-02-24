@@ -22,7 +22,6 @@ import (
 	"github.com/songquanpeng/one-api/relay/adaptor/openai"
 	"github.com/songquanpeng/one-api/relay/adaptor/openai_compatible"
 	"github.com/songquanpeng/one-api/relay/apitype"
-	"github.com/songquanpeng/one-api/relay/billing"
 	"github.com/songquanpeng/one-api/relay/channeltype"
 	metalib "github.com/songquanpeng/one-api/relay/meta"
 	relaymodel "github.com/songquanpeng/one-api/relay/model"
@@ -165,7 +164,7 @@ func relayResponseAPIThroughChat(c *gin.Context, meta *metalib.Meta, responseAPI
 		c.Set(ctxkey.ResponseStreamRewriteHandler, nil)
 		response, usage, mcpSummary, incrementalCharged, execErr := executeChatMCPToolLoop(c, meta, chatRequest, registry, preConsumedQuota)
 		if execErr != nil {
-			billing.ReturnPreConsumedQuota(ctx, preConsumedQuota, meta.TokenId)
+			_ = returnPreConsumedQuotaConservative(ctx, c, preConsumedQuota, meta.TokenId, "mcp_tool_loop_failed")
 			return execErr
 		}
 		applyOutputImageCharges(c, &usage, meta)
@@ -199,12 +198,12 @@ func relayResponseAPIThroughChat(c *gin.Context, meta *metalib.Meta, responseAPI
 			}()
 		}
 		if err := renderChatResponseAsResponseAPI(c, http.StatusOK, &openai_compatible.SlimTextResponse{Choices: choices, Usage: response.Usage}, responseAPIRequest, meta); err != nil {
-			billing.ReturnPreConsumedQuota(ctx, preConsumedQuota, meta.TokenId)
+			_ = returnPreConsumedQuotaConservative(ctx, c, preConsumedQuota, meta.TokenId, "response_rewrite_failed_mcp")
 			return openai.ErrorWrapper(err, "response_rewrite_failed", http.StatusInternalServerError)
 		}
 
 		// refund pre-consumed quota immediately before final billing reconciliation
-		billing.ReturnPreConsumedQuota(ctx, preConsumedQuota, meta.TokenId)
+		_ = returnPreConsumedQuotaConservative(ctx, c, preConsumedQuota, meta.TokenId, "pre_billing_reconcile_mcp")
 
 		if usage != nil {
 			userId := strconv.Itoa(meta.UserId)
@@ -297,21 +296,21 @@ func relayResponseAPIThroughChat(c *gin.Context, meta *metalib.Meta, responseAPI
 
 	convertedRequest, err := requestAdaptor.ConvertRequest(c, relaymode.ChatCompletions, chatRequest)
 	if err != nil {
-		billing.ReturnPreConsumedQuota(ctx, preConsumedQuota, meta.TokenId)
+		_ = returnPreConsumedQuotaConservative(ctx, c, preConsumedQuota, meta.TokenId, "convert_request_failed")
 		return wrapConvertRequestError(err)
 	}
 	c.Set(ctxkey.ConvertedRequest, convertedRequest)
 
 	jsonData, err := json.Marshal(convertedRequest)
 	if err != nil {
-		billing.ReturnPreConsumedQuota(ctx, preConsumedQuota, meta.TokenId)
+		_ = returnPreConsumedQuotaConservative(ctx, c, preConsumedQuota, meta.TokenId, "marshal_converted_request_failed")
 		return openai.ErrorWrapper(err, "marshal_converted_request_failed", http.StatusInternalServerError)
 	}
 	requestBody := bytes.NewBuffer(jsonData)
 
 	resp, err := requestAdaptor.DoRequest(c, meta, requestBody)
 	if err != nil {
-		billing.ReturnPreConsumedQuota(ctx, preConsumedQuota, meta.TokenId)
+		_ = returnPreConsumedQuotaConservative(ctx, c, preConsumedQuota, meta.TokenId, "do_request_failed")
 		return openai.ErrorWrapper(err, "do_request_failed", http.StatusInternalServerError)
 	}
 	upstreamCapture := wrapUpstreamResponse(resp)
@@ -327,7 +326,7 @@ func relayResponseAPIThroughChat(c *gin.Context, meta *metalib.Meta, responseAPI
 
 	if isErrorHappened(meta, resp) {
 		graceful.GoCritical(ctx, "returnPreConsumedQuota", func(cctx context.Context) {
-			billing.ReturnPreConsumedQuota(cctx, preConsumedQuota, meta.TokenId)
+			_ = returnPreConsumedQuotaConservative(cctx, c, preConsumedQuota, meta.TokenId, "upstream_http_error")
 		})
 		return RelayErrorHandlerWithContext(c, resp)
 	}
@@ -341,7 +340,7 @@ func relayResponseAPIThroughChat(c *gin.Context, meta *metalib.Meta, responseAPI
 	if respErr != nil {
 		if usage == nil {
 			graceful.GoCritical(ctx, "returnPreConsumedQuota", func(cctx context.Context) {
-				billing.ReturnPreConsumedQuota(cctx, preConsumedQuota, meta.TokenId)
+				_ = returnPreConsumedQuotaConservative(cctx, c, preConsumedQuota, meta.TokenId, "do_response_failed_without_usage")
 			})
 			return respErr
 		}
@@ -361,7 +360,7 @@ func relayResponseAPIThroughChat(c *gin.Context, meta *metalib.Meta, responseAPI
 				var slim openai_compatible.SlimTextResponse
 				if err := json.Unmarshal(body, &slim); err == nil && len(slim.Choices) > 0 {
 					if err := renderChatResponseAsResponseAPI(c, statusCode, &slim, responseAPIRequest, meta); err != nil {
-						billing.ReturnPreConsumedQuota(ctx, preConsumedQuota, meta.TokenId)
+						_ = returnPreConsumedQuotaConservative(ctx, c, preConsumedQuota, meta.TokenId, "response_rewrite_failed")
 						return openai.ErrorWrapper(err, "response_rewrite_failed", http.StatusInternalServerError)
 					}
 				} else {
@@ -370,7 +369,7 @@ func relayResponseAPIThroughChat(c *gin.Context, meta *metalib.Meta, responseAPI
 					}
 					if len(body) > 0 {
 						if _, err := c.Writer.Write(body); err != nil {
-							billing.ReturnPreConsumedQuota(ctx, preConsumedQuota, meta.TokenId)
+							_ = returnPreConsumedQuotaConservative(ctx, c, preConsumedQuota, meta.TokenId, "write_response_failed")
 							return openai.ErrorWrapper(err, "write_response_body_failed", http.StatusInternalServerError)
 						}
 					}
@@ -386,7 +385,7 @@ func relayResponseAPIThroughChat(c *gin.Context, meta *metalib.Meta, responseAPI
 	}
 
 	// Refund pre-consumed quota immediately before final billing reconciliation
-	billing.ReturnPreConsumedQuota(ctx, preConsumedQuota, meta.TokenId)
+	_ = returnPreConsumedQuotaConservative(ctx, c, preConsumedQuota, meta.TokenId, "pre_billing_reconcile")
 
 	if usage != nil {
 		userId := strconv.Itoa(meta.UserId)

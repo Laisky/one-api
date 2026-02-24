@@ -461,7 +461,15 @@ func RelayImageHelper(c *gin.Context, relayMode int) *relaymodel.ErrorWithStatus
 		// ErrorWrapper will log the error, so we don't need to log it here
 		// Refund any pre-consumed quota if request failed
 		if preConsumedQuota > 0 {
-			_ = model.PostConsumeTokenQuota(ctx, meta.TokenId, -preConsumedQuota)
+			if shouldSkipPreConsumedRefund(c) {
+				lg.Warn("skip pre-consumed refund to prevent underbilling",
+					zap.Int64("pre_consumed_quota", preConsumedQuota),
+					zap.Int("token_id", meta.TokenId),
+					zap.String("reason", "do_request_failed"),
+				)
+			} else {
+				_ = model.PostConsumeTokenQuota(ctx, meta.TokenId, -preConsumedQuota)
+			}
 		}
 		return openai.ErrorWrapper(err, "do_request_failed", http.StatusInternalServerError)
 	}
@@ -479,7 +487,15 @@ func RelayImageHelper(c *gin.Context, relayMode int) *relaymodel.ErrorWithStatus
 			resp.StatusCode != http.StatusOK {
 			// Refund pre-consumed quota when upstream not successful
 			if preConsumedQuota > 0 {
-				_ = model.PostConsumeTokenQuota(bgCtx, meta.TokenId, -preConsumedQuota)
+				if shouldSkipPreConsumedRefund(c) {
+					lg.Warn("skip pre-consumed refund to prevent underbilling",
+						zap.Int64("pre_consumed_quota", preConsumedQuota),
+						zap.Int("token_id", meta.TokenId),
+						zap.String("reason", "upstream_http_error"),
+					)
+				} else {
+					_ = model.PostConsumeTokenQuota(bgCtx, meta.TokenId, -preConsumedQuota)
+				}
 			}
 			// Reconcile provisional record to 0
 			if err := model.UpdateUserRequestCostQuotaByRequestID(

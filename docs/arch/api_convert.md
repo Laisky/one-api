@@ -139,6 +139,24 @@ The middleware (`middleware.APIFormatAutoDetect`) runs early in the request chai
 5. The adaptor call proceeds. If a fallback was used, the upstream Chat Completion response is transformed back into a Responses envelope via `ResponseAPIHandler` (non-streaming) or `ResponseAPIStreamHandler` (streaming). The helper registered under `ctxkey.ResponseRewriteHandler` performs the final rewrite before bytes are flushed to the client.
 6. `normalizeResponseAPIRawBody` also deletes `temperature`/`top_p` keys from the raw payload when the sanitized struct dropped them, ensuring double coverage for channels that reject those parameters outright.
 
+### 4.2.1 OpenAI Upstream WebSocket Transport (Default)
+
+For official OpenAI upstream channels, `/v1/responses` requests now default to the Responses WebSocket mode for lower continuation overhead:
+
+- The adaptor sends a `response.create` event to the upstream `wss://.../v1/responses` endpoint.
+- For `stream=true`, upstream WebSocket events are bridged into SSE lines so existing stream handlers and billing remain unchanged.
+- For `stream=false`, events are aggregated until completion and materialized into a standard JSON response body.
+
+Fallback and guardrails:
+
+- Requests with `background=true` continue to use HTTP (WebSocket transport is skipped by design).
+- Non-JSON request bodies or unsupported payload shapes fall back to HTTP.
+- Upstream WebSocket `error` events are converted into normal HTTP error responses for existing controller handling.
+
+Operational observability:
+
+- The OpenAI adaptor logs explicit transport decisions (`websocket` vs fallback `http`) and WebSocket lifecycle events, so operators can verify path selection from server logs during rollout.
+
 ### 4.3 Claude Messages (`/v1/messages`)
 
 1. `RelayClaudeMessagesHelper` inspects the requested model to determine the target channel.

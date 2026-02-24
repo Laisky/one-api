@@ -281,6 +281,12 @@ const (
 	// Read in: streaming adaptors to record completion progress and enforce quota limits mid-stream.
 	StreamingQuotaTracker = "streaming_quota_tracker"
 
+	// UpstreamRequestPossiblyForwarded indicates the request may already have been
+	// forwarded to upstream (or accepted by upstream transport). Controllers use this
+	// to apply conservative no-underbilling policy on ambiguous failures by avoiding
+	// automatic pre-consume refunds once forwarding has started.
+	UpstreamRequestPossiblyForwarded = "upstream_request_possibly_forwarded"
+
 	// APIFormat is the detected API format of the request (OpenAI, Claude, Response API).
 	// Set in: middleware/api_format_detect.
 	// Read in: metrics for labeling.

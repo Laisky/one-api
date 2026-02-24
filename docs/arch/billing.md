@@ -638,7 +638,9 @@ To prevent lost billing in early client disconnect scenarios, controllers now re
 Flow:
 
 1. After `DoRequest` succeeds, write a provisional `UserRequestCost` for the `request_id` using the estimated pre-consumed quota (prompt tokens + max output tokens × pricing), even if physical pre-consume is skipped for trusted users/tokens.
-2. If upstream responds with a non-success HTTP status, refund pre-consumed quota (if any) and set the provisional `UserRequestCost` to `0`.
+2. If upstream responds with a non-success HTTP status, apply conservative reconciliation:
+    - if the request was not forwarded upstream, refund pre-consumed quota and set provisional `UserRequestCost` to `0`;
+    - if the request may already have reached upstream, skip refund to avoid underbilling and rely on post-consume/provisional reconciliation.
 3. When usage arrives, compute the final quota using the detailed pricing formula and reconcile the record by overwriting the provisional value. Token/user/channel updates use the delta between pre- and post-consumption.
 
 Controllers:
@@ -744,7 +746,8 @@ The billing system now implements a universal, robust two-step billing process f
 
 **5. Logging and Quota Management:**
 
-- All quota operations (pre-consume, post-consume, refund) are logged with clear context, and quota is always refunded if the request fails.
+- All quota operations (pre-consume, post-consume, refund/skip-refund) are logged with clear context.
+- Refund behavior follows no-underbilling priority: once a request may have been forwarded upstream, refund is skipped on ambiguous failures to prevent leakage (overcharge risk is accepted and can be reconciled later).
 
 **6. Example (gpt-image-1 / gpt-image-1-mini):**
 

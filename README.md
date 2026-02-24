@@ -854,6 +854,8 @@ Response:
 
 #### Support OpenAI Response API
 
+Also support websocket for OpenAI Response API.
+
 ```sh
 curl --location 'https://oneapi.laisky.com/v1/responses' \
   --header 'Content-Type: application/json' \
