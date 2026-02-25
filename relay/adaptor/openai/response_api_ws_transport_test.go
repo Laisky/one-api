@@ -6,12 +6,17 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
 	"github.com/stretchr/testify/require"
+	"gorm.io/driver/sqlite"
+	"gorm.io/gorm"
 
+	dbmodel "github.com/songquanpeng/one-api/model"
 	"github.com/songquanpeng/one-api/relay/channeltype"
 	"github.com/songquanpeng/one-api/relay/meta"
 	"github.com/songquanpeng/one-api/relay/relaymode"
@@ -218,4 +223,156 @@ func TestDoResponseAPIRequestViaWebSocket_FallbackForBackground(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, handled)
 	require.Nil(t, resp)
+}
+
+// TestAdaptorDoRequest_ResponseAPIWebSocketNormalCloseFallback verifies that when the
+// upstream websocket closes normally before emitting any event, adaptor falls back to
+// HTTP transport and preserves the request payload.
+//
+// Parameters:
+//   - t: Go testing handle.
+func TestAdaptorDoRequest_ResponseAPIWebSocketNormalCloseFallback(t *testing.T) {
+	t.Helper()
+	gin.SetMode(gin.TestMode)
+
+	originalDB := dbmodel.DB
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	require.NoError(t, err)
+	dbmodel.DB = db
+	t.Cleanup(func() {
+		dbmodel.DB = originalDB
+	})
+
+	var websocketAttempted atomic.Bool
+	var httpFallbackCalled atomic.Bool
+
+	upgrader := websocket.Upgrader{CheckOrigin: func(r *http.Request) bool { return true }}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/responses" {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+
+		if websocket.IsWebSocketUpgrade(r) {
+			websocketAttempted.Store(true)
+			conn, err := upgrader.Upgrade(w, r, nil)
+			require.NoError(t, err)
+			defer conn.Close()
+
+			_, _, err = conn.ReadMessage()
+			require.NoError(t, err)
+			require.NoError(t, conn.WriteControl(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, "upstream normal close"), time.Now().Add(time.Second)))
+			return
+		}
+
+		httpFallbackCalled.Store(true)
+		body, err := io.ReadAll(r.Body)
+		require.NoError(t, err)
+		require.Contains(t, string(body), "\"model\":\"gpt-5.2\"")
+		require.Contains(t, string(body), "\"input\"")
+
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":"resp_http_fallback_1","object":"response","status":"completed","model":"gpt-5.2","output":[],"usage":{"input_tokens":1,"output_tokens":1,"total_tokens":2}}`))
+	}))
+	defer server.Close()
+
+	requestPayload := []byte(`{"model":"gpt-5.2","stream":false,"input":[{"type":"message","role":"user","content":[{"type":"input_text","text":"ping"}]}]}`)
+
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	ctx.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
+
+	metaInfo := &meta.Meta{
+		Mode:            relaymode.ResponseAPI,
+		ChannelType:     channeltype.OpenAI,
+		BaseURL:         server.URL,
+		APIKey:          "test-key",
+		RequestURLPath:  "/v1/responses",
+		ActualModelName: "gpt-5.2",
+	}
+
+	a := &Adaptor{}
+	a.Init(metaInfo)
+	resp, err := a.DoRequest(ctx, metaInfo, bytes.NewReader(requestPayload))
+	require.NoError(t, err)
+	require.True(t, websocketAttempted.Load())
+	require.True(t, httpFallbackCalled.Load())
+	require.NotNil(t, resp)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	require.Contains(t, resp.Header.Get("Content-Type"), "application/json")
+
+	body, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+	require.NoError(t, resp.Body.Close())
+
+	var finalResp ResponseAPIResponse
+	require.NoError(t, json.Unmarshal(body, &finalResp))
+	require.Equal(t, "resp_http_fallback_1", finalResp.Id)
+	require.Equal(t, "completed", finalResp.Status)
+}
+
+// TestAdaptorDoRequest_ResponseAPIWebSocketBackgroundFallbackHTTPBody verifies that
+// background=true keeps HTTP transport and still forwards a non-empty request body.
+//
+// Parameters:
+//   - t: Go testing handle.
+func TestAdaptorDoRequest_ResponseAPIWebSocketBackgroundFallbackHTTPBody(t *testing.T) {
+	t.Helper()
+	gin.SetMode(gin.TestMode)
+
+	originalDB := dbmodel.DB
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	require.NoError(t, err)
+	dbmodel.DB = db
+	t.Cleanup(func() {
+		dbmodel.DB = originalDB
+	})
+
+	var httpCalls atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/responses" {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+
+		httpCalls.Add(1)
+		body, err := io.ReadAll(r.Body)
+		require.NoError(t, err)
+		require.NotEmpty(t, body)
+		require.Contains(t, string(body), "\"background\":true")
+
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":"resp_background_http_1","object":"response","status":"completed","model":"gpt-5.2","output":[],"usage":{"input_tokens":1,"output_tokens":1,"total_tokens":2}}`))
+	}))
+	defer server.Close()
+
+	requestPayload := []byte(`{"model":"gpt-5.2","stream":false,"background":true,"input":[{"type":"message","role":"user","content":[{"type":"input_text","text":"ping"}]}]}`)
+
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	ctx.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
+
+	metaInfo := &meta.Meta{
+		Mode:            relaymode.ResponseAPI,
+		ChannelType:     channeltype.OpenAI,
+		BaseURL:         server.URL,
+		APIKey:          "test-key",
+		RequestURLPath:  "/v1/responses",
+		ActualModelName: "gpt-5.2",
+	}
+
+	a := &Adaptor{}
+	a.Init(metaInfo)
+	resp, err := a.DoRequest(ctx, metaInfo, bytes.NewReader(requestPayload))
+	require.NoError(t, err)
+	require.Equal(t, int32(1), httpCalls.Load())
+	require.NotNil(t, resp)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+
+	body, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+	require.NoError(t, resp.Body.Close())
+
+	var finalResp ResponseAPIResponse
+	require.NoError(t, json.Unmarshal(body, &finalResp))
+	require.Equal(t, "resp_background_http_1", finalResp.Id)
+	require.Equal(t, "completed", finalResp.Status)
 }

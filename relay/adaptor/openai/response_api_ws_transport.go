@@ -3,6 +3,7 @@ package openai
 import (
 	"bytes"
 	"encoding/json"
+	stderrors "errors"
 	"io"
 	"net/http"
 	"net/url"
@@ -157,6 +158,24 @@ func doResponseAPIRequestViaWebSocket(
 
 	firstMessage, firstErr := readNextWebSocketTextMessage(upstreamConn)
 	if firstErr != nil {
+		if closeCode, closeReason, normalClosure := extractNormalWebSocketClose(firstErr); normalClosure {
+			lg.Debug("openai response api websocket closed before first event; fallback to http",
+				zap.String("model", metaInfo.ActualModelName),
+				zap.Int("close_code", closeCode),
+				zap.String("close_reason", closeReason),
+			)
+			_ = upstreamConn.Close()
+			return nil, false, nil
+		}
+
+		if closeCode, closeReason, hasClose := extractWebSocketCloseDetails(firstErr); hasClose {
+			lg.Debug("openai response api websocket read failed on first event",
+				zap.String("model", metaInfo.ActualModelName),
+				zap.Int("close_code", closeCode),
+				zap.String("close_reason", closeReason),
+			)
+		}
+
 		_ = upstreamConn.Close()
 		return nil, true, errors.Wrap(firstErr, "read first websocket response event")
 	}
@@ -269,6 +288,51 @@ func readNextWebSocketTextMessage(conn *websocket.Conn) ([]byte, error) {
 	}
 }
 
+// extractWebSocketCloseDetails extracts close code and reason from websocket errors,
+// including wrapped errors.
+//
+// Parameters:
+//   - err: websocket read/write error.
+//
+// Returns:
+//   - int: close code when available.
+//   - string: close reason text.
+//   - bool: true when the error chain contains websocket.CloseError.
+func extractWebSocketCloseDetails(err error) (int, string, bool) {
+	if err == nil {
+		return 0, "", false
+	}
+
+	var closeErr *websocket.CloseError
+	if !stderrors.As(err, &closeErr) {
+		return 0, "", false
+	}
+
+	return closeErr.Code, closeErr.Text, true
+}
+
+// extractNormalWebSocketClose reports whether an error is a normal websocket
+// closure (`1000` or `1001`) and returns close details when present.
+//
+// Parameters:
+//   - err: websocket read/write error.
+//
+// Returns:
+//   - int: close code when available.
+//   - string: close reason text.
+//   - bool: true when the error is a normal closure.
+func extractNormalWebSocketClose(err error) (int, string, bool) {
+	closeCode, closeReason, hasClose := extractWebSocketCloseDetails(err)
+	if !hasClose {
+		return 0, "", false
+	}
+	if closeCode == websocket.CloseNormalClosure || closeCode == websocket.CloseGoingAway {
+		return closeCode, closeReason, true
+	}
+
+	return closeCode, closeReason, false
+}
+
 // tryBuildWebSocketErrorResponse converts a websocket error event into a synthesized
 // HTTP error response compatible with existing relay error handling.
 //
@@ -340,7 +404,7 @@ func buildStreamingWebSocketHTTPResponse(conn *websocket.Conn, firstMessage []by
 		for {
 			message, err := readNextWebSocketTextMessage(conn)
 			if err != nil {
-				if websocket.IsCloseError(err, websocket.CloseNormalClosure, websocket.CloseGoingAway) {
+				if _, _, normalClosure := extractNormalWebSocketClose(err); normalClosure {
 					writeSSEDone(writer)
 					return
 				}

@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/Laisky/errors/v2"
 	gmw "github.com/Laisky/gin-middlewares/v7"
 	"github.com/Laisky/zap"
 	"github.com/gin-gonic/gin"
@@ -29,13 +30,22 @@ func (a *Adaptor) DoRequest(c *gin.Context,
 	requestBody io.Reader) (*http.Response, error) {
 	lg := gmw.GetLogger(c)
 	if shouldUseResponseAPIWebSocket(meta, c.Request.Method) {
+		var requestPayload []byte
+		if requestBody != nil {
+			payload, err := io.ReadAll(requestBody)
+			if err != nil {
+				return nil, errors.Wrap(err, "read request payload before websocket transport decision")
+			}
+			requestPayload = payload
+		}
+
 		lg.Debug("openai response api transport decision",
 			zap.String("transport", "websocket"),
 			zap.Int("channel_type", meta.ChannelType),
 			zap.String("request_path", meta.RequestURLPath),
 			zap.String("model", meta.ActualModelName),
 		)
-		response, handled, err := doResponseAPIRequestViaWebSocket(c, a, meta, requestBody)
+		response, handled, err := doResponseAPIRequestViaWebSocket(c, a, meta, bytes.NewReader(requestPayload))
 		if err != nil {
 			lg.Warn("openai response api websocket request failed",
 				zap.Error(err),
@@ -55,6 +65,7 @@ func (a *Adaptor) DoRequest(c *gin.Context,
 			zap.String("request_path", meta.RequestURLPath),
 			zap.String("model", meta.ActualModelName),
 		)
+		return adaptor.DoRequestHelper(a, c, meta, bytes.NewReader(requestPayload))
 	}
 
 	return adaptor.DoRequestHelper(a, c, meta, requestBody)
