@@ -34,6 +34,7 @@ type responseAPIWSErrorPayload struct {
 }
 
 const wsErrorCodeConnectionLimitReached = "websocket_connection_limit_reached"
+const wsErrorMessageConnectionLimitReached = "create a new websocket connection"
 
 // doResponseAPIRequestViaWebSocket attempts to execute an OpenAI Responses request via
 // WebSocket transport and synthesizes an HTTP-like response object for the existing relay pipeline.
@@ -186,7 +187,16 @@ func doResponseAPIRequestViaWebSocket(
 	}
 
 	if errResp, ok := tryBuildWebSocketErrorResponse(firstMessage); ok {
-		if shouldFallbackToHTTPForWebSocketError(firstMessage) {
+		fallbackToHTTP := shouldFallbackToHTTPForWebSocketError(firstMessage)
+		lg.Debug("openai response api websocket first event classified as upstream error",
+			zap.String("model", metaInfo.ActualModelName),
+			zap.Int("status_code", errResp.StatusCode),
+			zap.String("error_code", readWebSocketErrorCode(firstMessage)),
+			zap.String("error_type", readWebSocketErrorType(firstMessage)),
+			zap.String("error_message", readWebSocketErrorMessage(firstMessage)),
+			zap.Bool("fallback_to_http", fallbackToHTTP),
+		)
+		if fallbackToHTTP {
 			lg.Debug("openai response api websocket upstream requested reconnection; fallback to http",
 				zap.String("model", metaInfo.ActualModelName),
 				zap.String("fallback_reason", wsErrorCodeConnectionLimitReached),
@@ -356,27 +366,24 @@ func extractNormalWebSocketClose(err error) (int, string, bool) {
 //   - *http.Response: synthesized non-200 error response.
 //   - bool: true if the payload is a websocket error event.
 func tryBuildWebSocketErrorResponse(message []byte) (*http.Response, bool) {
-	var payload responseAPIWSErrorPayload
-	if err := json.Unmarshal(message, &payload); err != nil {
-		return nil, false
-	}
-	if !strings.EqualFold(payload.Type, "error") {
+	errPayload, ok := parseWebSocketErrorPayload(message)
+	if !ok {
 		return nil, false
 	}
 
-	status := payload.Status
+	status := errPayload.Status
 	if status <= 0 {
 		status = http.StatusBadRequest
 	}
 
-	if payload.Error == nil {
-		payload.Error = map[string]any{
+	if errPayload.Error == nil {
+		errPayload.Error = map[string]any{
 			"message": "upstream websocket returned error",
 			"type":    "invalid_request_error",
 		}
 	}
 
-	body, err := json.Marshal(map[string]any{"error": payload.Error})
+	body, err := json.Marshal(map[string]any{"error": errPayload.Error})
 	if err != nil {
 		body = []byte(`{"error":{"message":"upstream websocket returned error","type":"invalid_request_error"}}`)
 	}
@@ -400,7 +407,17 @@ func tryBuildWebSocketErrorResponse(message []byte) (*http.Response, bool) {
 // Returns:
 //   - bool: true when HTTP fallback should be used.
 func shouldFallbackToHTTPForWebSocketError(message []byte) bool {
-	return strings.EqualFold(readWebSocketErrorCode(message), wsErrorCodeConnectionLimitReached)
+	code := strings.ToLower(strings.TrimSpace(readWebSocketErrorCode(message)))
+	if code == wsErrorCodeConnectionLimitReached {
+		return true
+	}
+
+	messageLower := strings.ToLower(strings.TrimSpace(readWebSocketErrorMessage(message)))
+	if strings.Contains(messageLower, wsErrorMessageConnectionLimitReached) {
+		return true
+	}
+
+	return false
 }
 
 // readWebSocketErrorCode extracts the error.code field from a websocket error event.
@@ -411,8 +428,8 @@ func shouldFallbackToHTTPForWebSocketError(message []byte) bool {
 // Returns:
 //   - string: normalized error code, or empty string when unavailable.
 func readWebSocketErrorCode(message []byte) string {
-	errPayload := parseWebSocketErrorPayload(message)
-	if errPayload == nil || errPayload.Error == nil {
+	errPayload, ok := parseWebSocketErrorPayload(message)
+	if !ok || errPayload.Error == nil {
 		return ""
 	}
 
@@ -432,8 +449,8 @@ func readWebSocketErrorCode(message []byte) string {
 // Returns:
 //   - string: normalized error type, or empty string when unavailable.
 func readWebSocketErrorType(message []byte) string {
-	errPayload := parseWebSocketErrorPayload(message)
-	if errPayload == nil || errPayload.Error == nil {
+	errPayload, ok := parseWebSocketErrorPayload(message)
+	if !ok || errPayload.Error == nil {
 		return ""
 	}
 
@@ -445,6 +462,27 @@ func readWebSocketErrorType(message []byte) string {
 	return strings.TrimSpace(typ)
 }
 
+// readWebSocketErrorMessage extracts the error.message field from a websocket error event.
+//
+// Parameters:
+//   - message: raw websocket text payload.
+//
+// Returns:
+//   - string: normalized error message, or empty string when unavailable.
+func readWebSocketErrorMessage(message []byte) string {
+	errPayload, ok := parseWebSocketErrorPayload(message)
+	if !ok || errPayload.Error == nil {
+		return ""
+	}
+
+	errMessage, ok := errPayload.Error["message"].(string)
+	if !ok {
+		return ""
+	}
+
+	return strings.TrimSpace(errMessage)
+}
+
 // parseWebSocketErrorPayload parses a websocket payload as an error event payload.
 //
 // Parameters:
@@ -452,17 +490,43 @@ func readWebSocketErrorType(message []byte) string {
 //
 // Returns:
 //   - *responseAPIWSErrorPayload: parsed payload when message is an error event.
-func parseWebSocketErrorPayload(message []byte) *responseAPIWSErrorPayload {
+func parseWebSocketErrorPayload(message []byte) (*responseAPIWSErrorPayload, bool) {
 	var payload responseAPIWSErrorPayload
 	if err := json.Unmarshal(message, &payload); err != nil {
-		return nil
+		return nil, false
 	}
 
-	if !strings.EqualFold(payload.Type, "error") {
-		return nil
+	if strings.EqualFold(payload.Type, "error") {
+		return &payload, true
 	}
 
-	return &payload
+	if strings.EqualFold(payload.Type, "response.failed") {
+		var generic map[string]any
+		if err := json.Unmarshal(message, &generic); err != nil {
+			return nil, false
+		}
+		responseObj, _ := generic["response"].(map[string]any)
+		if responseObj == nil {
+			return nil, false
+		}
+		errorObj, _ := responseObj["error"].(map[string]any)
+		if errorObj == nil {
+			return nil, false
+		}
+
+		status := payload.Status
+		if status <= 0 {
+			status = http.StatusBadRequest
+		}
+
+		return &responseAPIWSErrorPayload{
+			Type:   payload.Type,
+			Status: status,
+			Error:  errorObj,
+		}, true
+	}
+
+	return nil, false
 }
 
 // buildStreamingWebSocketHTTPResponse bridges websocket events to an SSE body that existing

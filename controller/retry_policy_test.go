@@ -231,3 +231,42 @@ func TestIsUserOriginatedRelayError(t *testing.T) {
 		assert.True(t, isUserOriginatedRelayError(err))
 	})
 }
+
+func TestIsRetryableUpstreamClientError(t *testing.T) {
+	t.Parallel()
+
+	t.Run("websocket connection limit code is retryable", func(t *testing.T) {
+		t.Parallel()
+		err := &model.ErrorWithStatusCode{
+			StatusCode: http.StatusBadRequest,
+			Error: model.Error{
+				Code:    "websocket_connection_limit_reached",
+				Message: "Responses websocket connection limit reached (60 minutes).",
+			},
+		}
+		assert.True(t, isRetryableUpstreamClientError(err))
+	})
+
+	t.Run("websocket reconnection message is retryable", func(t *testing.T) {
+		t.Parallel()
+		err := &model.ErrorWithStatusCode{
+			StatusCode: http.StatusBadRequest,
+			Error: model.Error{
+				Message: "Create a new websocket connection to continue.",
+			},
+		}
+		assert.True(t, isRetryableUpstreamClientError(err))
+	})
+
+	t.Run("normal bad request is not retryable", func(t *testing.T) {
+		t.Parallel()
+		err := &model.ErrorWithStatusCode{
+			StatusCode: http.StatusBadRequest,
+			Error: model.Error{
+				Code:    "invalid_request_error",
+				Message: "tool schema invalid",
+			},
+		}
+		assert.False(t, isRetryableUpstreamClientError(err))
+	})
+}

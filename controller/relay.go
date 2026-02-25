@@ -132,14 +132,23 @@ func Relay(c *gin.Context) {
 
 	requestId := c.GetString(helper.RequestIdKey)
 	retryTimes := config.RetryTimes
+	retryableClientError := isRetryableUpstreamClientError(bizErr)
 	if err := shouldRetry(c, bizErr.StatusCode, bizErr.RawError); err != nil {
-		// Downgrade to WARN if the failure is caused by caller's context cancellation/deadline exceeded
-		if isClientContextCancel(bizErr.StatusCode, bizErr.RawError) || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) || isUserOriginatedRelayError(bizErr) {
-			lg.Warn("relay user-side failure, won't retry", zap.Int("status_code", bizErr.StatusCode), zap.Error(err))
+		if retryableClientError {
+			lg.Debug("retryable upstream client error detected; keeping retry logic enabled",
+				zap.Int("status_code", bizErr.StatusCode),
+				zap.String("error_type", string(bizErr.Type)),
+				zap.String("error_code", strings.TrimSpace(fmt.Sprint(bizErr.Code))),
+			)
 		} else {
-			lg.Error("relay error happen, won't retry", zap.Int("status_code", bizErr.StatusCode), zap.Error(err))
+		// Downgrade to WARN if the failure is caused by caller's context cancellation/deadline exceeded
+			if isClientContextCancel(bizErr.StatusCode, bizErr.RawError) || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) || isUserOriginatedRelayError(bizErr) {
+				lg.Warn("relay user-side failure, won't retry", zap.Int("status_code", bizErr.StatusCode), zap.Error(err))
+			} else {
+				lg.Error("relay error happen, won't retry", zap.Int("status_code", bizErr.StatusCode), zap.Error(err))
+			}
+			retryTimes = 0
 		}
-		retryTimes = 0
 	}
 
 	// For 429 errors, increase retry attempts to exhaust all available channels
@@ -361,6 +370,38 @@ func shouldRetry(c *gin.Context, statusCode int, rawErr error) error {
 	}
 
 	return nil
+}
+
+// isRetryableUpstreamClientError reports whether a nominal 4xx upstream error should
+// still be considered retryable by one-api.
+//
+// Parameters:
+//   - relayErr: normalized relay error from upstream/adaptor.
+//
+// Returns:
+//   - bool: true when this is a known transient upstream-client error shape.
+func isRetryableUpstreamClientError(relayErr *model.ErrorWithStatusCode) bool {
+	if relayErr == nil {
+		return false
+	}
+
+	if relayErr.StatusCode < http.StatusBadRequest || relayErr.StatusCode >= http.StatusInternalServerError {
+		return false
+	}
+
+	code := strings.ToLower(strings.TrimSpace(fmt.Sprint(relayErr.Code)))
+	message := strings.ToLower(strings.TrimSpace(relayErr.Message))
+
+	if code == "websocket_connection_limit_reached" {
+		return true
+	}
+
+	if strings.Contains(message, "websocket connection limit reached") ||
+		strings.Contains(message, "create a new websocket connection") {
+		return true
+	}
+
+	return false
 }
 
 // isClientContextCancel returns true if the error is caused by the caller's context

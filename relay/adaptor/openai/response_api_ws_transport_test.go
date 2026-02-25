@@ -534,3 +534,44 @@ func TestDoResponseAPIRequestViaWebSocket_ErrorEventPassThrough(t *testing.T) {
 	require.NoError(t, resp.Body.Close())
 	require.Contains(t, string(body), "some_other_error")
 }
+
+// TestShouldFallbackToHTTPForWebSocketError_MessageOnly verifies fallback detection
+// works when upstream omits error.code but provides reconnection instructions.
+//
+// Parameters:
+//   - t: Go testing handle.
+func TestShouldFallbackToHTTPForWebSocketError_MessageOnly(t *testing.T) {
+	t.Helper()
+
+	payload := []byte(`{"type":"error","status":400,"error":{"type":"invalid_request_error","message":"Responses websocket connection limit reached (60 minutes). Create a new websocket connection to continue."}}`)
+	require.True(t, shouldFallbackToHTTPForWebSocketError(payload))
+
+	errResp, ok := tryBuildWebSocketErrorResponse(payload)
+	require.True(t, ok)
+	require.NotNil(t, errResp)
+	require.Equal(t, http.StatusBadRequest, errResp.StatusCode)
+}
+
+// TestParseWebSocketErrorPayload_ResponseFailed verifies nested error payloads from
+// response.failed events are converted to synthesized HTTP error responses.
+//
+// Parameters:
+//   - t: Go testing handle.
+func TestParseWebSocketErrorPayload_ResponseFailed(t *testing.T) {
+	t.Helper()
+
+	payload := []byte(`{"type":"response.failed","response":{"id":"resp_123","status":"failed","error":{"type":"invalid_request_error","code":"websocket_connection_limit_reached","message":"Responses websocket connection limit reached (60 minutes). Create a new websocket connection to continue."}}}`)
+
+	require.Equal(t, wsErrorCodeConnectionLimitReached, readWebSocketErrorCode(payload))
+	require.True(t, shouldFallbackToHTTPForWebSocketError(payload))
+
+	errResp, ok := tryBuildWebSocketErrorResponse(payload)
+	require.True(t, ok)
+	require.NotNil(t, errResp)
+	require.Equal(t, http.StatusBadRequest, errResp.StatusCode)
+
+	body, err := io.ReadAll(errResp.Body)
+	require.NoError(t, err)
+	require.NoError(t, errResp.Body.Close())
+	require.Contains(t, string(body), wsErrorCodeConnectionLimitReached)
+}
