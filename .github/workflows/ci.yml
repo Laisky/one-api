@@ -68,6 +68,30 @@ jobs:
             ppcelery/one-api:latest
             ppcelery/one-api:${{ steps.vars.outputs.short_sha }}
           cache-from: type=gha
+
+  build_latest_cache:
+    needs: [check_skip, build_latest]
+    if: needs.check_skip.outputs.should_skip != 'true'
+    runs-on: ubuntu-latest
+    concurrency:
+      group: build_latest_cache-${{ github.ref }}
+      cancel-in-progress: true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and export cache only
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: false
+          cache-from: type=gha
           cache-to: type=gha,mode=max
 
   deploy:
