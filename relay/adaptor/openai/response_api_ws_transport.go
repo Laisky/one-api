@@ -33,6 +33,8 @@ type responseAPIWSErrorPayload struct {
 	Raw    map[string]interface{} `json:"-"`
 }
 
+const wsErrorCodeConnectionLimitReached = "websocket_connection_limit_reached"
+
 // doResponseAPIRequestViaWebSocket attempts to execute an OpenAI Responses request via
 // WebSocket transport and synthesizes an HTTP-like response object for the existing relay pipeline.
 //
@@ -184,9 +186,20 @@ func doResponseAPIRequestViaWebSocket(
 	}
 
 	if errResp, ok := tryBuildWebSocketErrorResponse(firstMessage); ok {
+		if shouldFallbackToHTTPForWebSocketError(firstMessage) {
+			lg.Debug("openai response api websocket upstream requested reconnection; fallback to http",
+				zap.String("model", metaInfo.ActualModelName),
+				zap.String("fallback_reason", wsErrorCodeConnectionLimitReached),
+			)
+			_ = upstreamConn.Close()
+			return nil, false, nil
+		}
+
 		lg.Warn("openai response api websocket returned upstream error event",
 			zap.Int("status_code", errResp.StatusCode),
 			zap.String("model", metaInfo.ActualModelName),
+			zap.String("error_code", readWebSocketErrorCode(firstMessage)),
+			zap.String("error_type", readWebSocketErrorType(firstMessage)),
 		)
 		_ = upstreamConn.Close()
 		return errResp, true, nil
@@ -375,6 +388,81 @@ func tryBuildWebSocketErrorResponse(message []byte) (*http.Response, bool) {
 		},
 		Body: io.NopCloser(bytes.NewReader(body)),
 	}, true
+}
+
+// shouldFallbackToHTTPForWebSocketError reports whether a websocket error event
+// should trigger transport fallback to HTTP instead of returning the synthesized
+// error directly.
+//
+// Parameters:
+//   - message: raw websocket text payload.
+//
+// Returns:
+//   - bool: true when HTTP fallback should be used.
+func shouldFallbackToHTTPForWebSocketError(message []byte) bool {
+	return strings.EqualFold(readWebSocketErrorCode(message), wsErrorCodeConnectionLimitReached)
+}
+
+// readWebSocketErrorCode extracts the error.code field from a websocket error event.
+//
+// Parameters:
+//   - message: raw websocket text payload.
+//
+// Returns:
+//   - string: normalized error code, or empty string when unavailable.
+func readWebSocketErrorCode(message []byte) string {
+	errPayload := parseWebSocketErrorPayload(message)
+	if errPayload == nil || errPayload.Error == nil {
+		return ""
+	}
+
+	code, ok := errPayload.Error["code"].(string)
+	if !ok {
+		return ""
+	}
+
+	return strings.TrimSpace(code)
+}
+
+// readWebSocketErrorType extracts the error.type field from a websocket error event.
+//
+// Parameters:
+//   - message: raw websocket text payload.
+//
+// Returns:
+//   - string: normalized error type, or empty string when unavailable.
+func readWebSocketErrorType(message []byte) string {
+	errPayload := parseWebSocketErrorPayload(message)
+	if errPayload == nil || errPayload.Error == nil {
+		return ""
+	}
+
+	typ, ok := errPayload.Error["type"].(string)
+	if !ok {
+		return ""
+	}
+
+	return strings.TrimSpace(typ)
+}
+
+// parseWebSocketErrorPayload parses a websocket payload as an error event payload.
+//
+// Parameters:
+//   - message: raw websocket text payload.
+//
+// Returns:
+//   - *responseAPIWSErrorPayload: parsed payload when message is an error event.
+func parseWebSocketErrorPayload(message []byte) *responseAPIWSErrorPayload {
+	var payload responseAPIWSErrorPayload
+	if err := json.Unmarshal(message, &payload); err != nil {
+		return nil
+	}
+
+	if !strings.EqualFold(payload.Type, "error") {
+		return nil
+	}
+
+	return &payload
 }
 
 // buildStreamingWebSocketHTTPResponse bridges websocket events to an SSE body that existing
