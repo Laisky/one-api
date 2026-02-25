@@ -116,48 +116,46 @@ func TestAdaptorDoRequest_ResponseAPIWebSocketStream(t *testing.T) {
 	require.Contains(t, string(body), "data: [DONE]")
 }
 
-// TestAdaptorDoRequest_ResponseAPIWebSocketNonStream verifies that OpenAI Response API
-// requests with stream=false are executed via websocket and materialized back into a
-// single JSON response payload.
+// TestAdaptorDoRequest_ResponseAPINonStreamUsesHTTP verifies that OpenAI Response API
+// requests with stream=false always use HTTP transport and skip websocket upgrades.
 //
 // Parameters:
 //   - t: Go testing handle.
-func TestAdaptorDoRequest_ResponseAPIWebSocketNonStream(t *testing.T) {
+func TestAdaptorDoRequest_ResponseAPINonStreamUsesHTTP(t *testing.T) {
 	t.Helper()
 	gin.SetMode(gin.TestMode)
 
+	originalDB := dbmodel.DB
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	require.NoError(t, err)
+	dbmodel.DB = db
+	t.Cleanup(func() {
+		dbmodel.DB = originalDB
+	})
+
+	var websocketAttempted atomic.Bool
+	var httpHandled atomic.Bool
 	upgrader := websocket.Upgrader{CheckOrigin: func(r *http.Request) bool { return true }}
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/v1/responses" {
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}
-		conn, err := upgrader.Upgrade(w, r, nil)
-		require.NoError(t, err)
-		defer conn.Close()
 
-		_, _, err = conn.ReadMessage()
-		require.NoError(t, err)
-
-		completed := map[string]any{
-			"type": "response.completed",
-			"response": map[string]any{
-				"id":     "resp_non_stream_1",
-				"object": "response",
-				"status": "completed",
-				"model":  "gpt-5.2",
-				"output": []map[string]any{
-					{
-						"type":    "message",
-						"role":    "assistant",
-						"content": []map[string]any{{"type": "output_text", "text": "ok"}},
-					},
-				},
-				"usage": map[string]any{"input_tokens": 1, "output_tokens": 1, "total_tokens": 2},
-			},
+		if websocket.IsWebSocketUpgrade(r) {
+			websocketAttempted.Store(true)
+			_, err = upgrader.Upgrade(w, r, nil)
+			require.NoError(t, err)
+			return
 		}
-		payload, _ := json.Marshal(completed)
-		require.NoError(t, conn.WriteMessage(websocket.TextMessage, payload))
+
+		httpHandled.Store(true)
+		body, err := io.ReadAll(r.Body)
+		require.NoError(t, err)
+		require.Contains(t, string(body), `"stream":false`)
+
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":"resp_non_stream_http_1","object":"response","status":"completed","model":"gpt-5.2","output":[],"usage":{"input_tokens":1,"output_tokens":1,"total_tokens":2}}`))
 	}))
 	defer server.Close()
 
@@ -179,6 +177,8 @@ func TestAdaptorDoRequest_ResponseAPIWebSocketNonStream(t *testing.T) {
 	a.Init(metaInfo)
 	resp, err := a.DoRequest(ctx, metaInfo, bytes.NewReader(requestPayload))
 	require.NoError(t, err)
+	require.False(t, websocketAttempted.Load())
+	require.True(t, httpHandled.Load())
 	require.NotNil(t, resp)
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 	require.Contains(t, resp.Header.Get("Content-Type"), "application/json")
@@ -189,7 +189,7 @@ func TestAdaptorDoRequest_ResponseAPIWebSocketNonStream(t *testing.T) {
 
 	var finalResp ResponseAPIResponse
 	require.NoError(t, json.Unmarshal(body, &finalResp))
-	require.Equal(t, "resp_non_stream_1", finalResp.Id)
+	require.Equal(t, "resp_non_stream_http_1", finalResp.Id)
 	require.Equal(t, "response", finalResp.Object)
 	require.Equal(t, "completed", finalResp.Status)
 }
@@ -276,7 +276,7 @@ func TestAdaptorDoRequest_ResponseAPIWebSocketNormalCloseFallback(t *testing.T) 
 	}))
 	defer server.Close()
 
-	requestPayload := []byte(`{"model":"gpt-5.2","stream":false,"input":[{"type":"message","role":"user","content":[{"type":"input_text","text":"ping"}]}]}`)
+	requestPayload := []byte(`{"model":"gpt-5.2","stream":true,"input":[{"type":"message","role":"user","content":[{"type":"input_text","text":"ping"}]}]}`)
 
 	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
 	ctx.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
@@ -435,7 +435,7 @@ func TestAdaptorDoRequest_ResponseAPIWebSocketConnectionLimitErrorFallback(t *te
 	}))
 	defer server.Close()
 
-	requestPayload := []byte(`{"model":"gpt-5.2","stream":false,"input":[{"type":"message","role":"user","content":[{"type":"input_text","text":"ping"}]}]}`)
+	requestPayload := []byte(`{"model":"gpt-5.2","stream":true,"input":[{"type":"message","role":"user","content":[{"type":"input_text","text":"ping"}]}]}`)
 
 	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
 	ctx.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
@@ -506,7 +506,7 @@ func TestDoResponseAPIRequestViaWebSocket_ErrorEventPassThrough(t *testing.T) {
 	}))
 	defer server.Close()
 
-	requestPayload := []byte(`{"model":"gpt-5.2","stream":false,"input":[{"type":"message","role":"user","content":[{"type":"input_text","text":"ping"}]}]}`)
+	requestPayload := []byte(`{"model":"gpt-5.2","stream":true,"input":[{"type":"message","role":"user","content":[{"type":"input_text","text":"ping"}]}]}`)
 
 	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
 	ctx.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
@@ -575,3 +575,9 @@ func TestParseWebSocketErrorPayload_ResponseFailed(t *testing.T) {
 	require.NoError(t, errResp.Body.Close())
 	require.Contains(t, string(body), wsErrorCodeConnectionLimitReached)
 }
+
+// TestShouldFallbackToHTTPForWebSocketClose verifies transient websocket close
+// errors are classified for HTTP fallback while terminal protocol errors are not.
+//
+// Parameters:
+//   - t: Go testing handle.

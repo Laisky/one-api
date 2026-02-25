@@ -92,6 +92,13 @@ func doResponseAPIRequestViaWebSocket(
 
 	streamingRequested, _ := requestMap["stream"].(bool)
 	backgroundRequested, _ := requestMap["background"].(bool)
+	if !streamingRequested {
+		lg.Debug("openai response api websocket skipped",
+			zap.String("reason", "non_stream_requires_http"),
+			zap.String("model", metaInfo.ActualModelName),
+		)
+		return nil, false, nil
+	}
 	if backgroundRequested {
 		lg.Debug("openai response api websocket skipped",
 			zap.String("reason", "background_true_requires_http"),
@@ -356,6 +363,16 @@ func extractNormalWebSocketClose(err error) (int, string, bool) {
 	return closeCode, closeReason, false
 }
 
+// shouldFallbackToHTTPForWebSocketClose reports whether a websocket close error
+// should trigger transport fallback to HTTP instead of returning an adaptor error.
+//
+// Parameters:
+//   - err: websocket read/write error.
+//
+// Returns:
+//   - int: close code when available.
+//   - string: close reason text.
+//   - bool: true when HTTP fallback should be used.
 // tryBuildWebSocketErrorResponse converts a websocket error event into a synthesized
 // HTTP error response compatible with existing relay error handling.
 //
