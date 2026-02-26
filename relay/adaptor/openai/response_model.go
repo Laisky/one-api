@@ -381,9 +381,8 @@ func ConvertChatCompletionToResponseAPI(request *model.GeneralOpenAIRequest) *Re
 			if callID != "" {
 				item["call_id"] = callID
 			}
-			if output := message.StringContent(); output != "" {
-				item["output"] = output
-			}
+			output := message.StringContent()
+			item["output"] = output
 			responseReq.Input = append(responseReq.Input, item)
 		default:
 			if convertedMsg := convertMessageToResponseAPIFormat(message); convertedMsg != nil {
