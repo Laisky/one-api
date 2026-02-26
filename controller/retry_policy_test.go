@@ -6,6 +6,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/songquanpeng/one-api/common/ctxkey"
 	"github.com/songquanpeng/one-api/relay/model"
@@ -229,6 +230,84 @@ func TestIsUserOriginatedRelayError(t *testing.T) {
 			},
 		}
 		assert.True(t, isUserOriginatedRelayError(err))
+	})
+
+	t.Run("upstream malformed tool arguments should be user-originated", func(t *testing.T) {
+		t.Parallel()
+		err := &model.ErrorWithStatusCode{
+			StatusCode: http.StatusBadRequest,
+			Error: model.Error{
+				Type:    model.ErrorTypeInvalidRequest,
+				Code:    "tool_use_failed",
+				Message: "Failed to parse tool call arguments as JSON",
+			},
+		}
+		require.True(t, isUserOriginatedRelayError(err))
+	})
+
+	t.Run("generic upstream bad request is not user-originated", func(t *testing.T) {
+		t.Parallel()
+		err := &model.ErrorWithStatusCode{
+			StatusCode: http.StatusBadRequest,
+			Error: model.Error{
+				Type:    model.ErrorTypeInvalidRequest,
+				Code:    "invalid_request_error",
+				Message: "tool schema invalid",
+			},
+		}
+		require.False(t, isUserOriginatedRelayError(err))
+	})
+}
+
+func TestIsUpstreamMalformedToolCallError(t *testing.T) {
+	t.Parallel()
+
+	t.Run("tool_use_failed code", func(t *testing.T) {
+		t.Parallel()
+		err := &model.ErrorWithStatusCode{
+			StatusCode: http.StatusBadRequest,
+			Error: model.Error{
+				Code:    "tool_use_failed",
+				Message: "any message",
+			},
+		}
+		require.True(t, isUpstreamMalformedToolCallError(err))
+	})
+
+	t.Run("invalid_request message signature", func(t *testing.T) {
+		t.Parallel()
+		err := &model.ErrorWithStatusCode{
+			StatusCode: http.StatusBadRequest,
+			Error: model.Error{
+				Code:    "invalid_request_error",
+				Message: "Failed to parse tool call arguments as JSON",
+			},
+		}
+		require.True(t, isUpstreamMalformedToolCallError(err))
+	})
+
+	t.Run("non-tool malformed request", func(t *testing.T) {
+		t.Parallel()
+		err := &model.ErrorWithStatusCode{
+			StatusCode: http.StatusBadRequest,
+			Error: model.Error{
+				Code:    "invalid_request_error",
+				Message: "tool schema invalid",
+			},
+		}
+		require.False(t, isUpstreamMalformedToolCallError(err))
+	})
+
+	t.Run("non-400 status", func(t *testing.T) {
+		t.Parallel()
+		err := &model.ErrorWithStatusCode{
+			StatusCode: http.StatusInternalServerError,
+			Error: model.Error{
+				Code:    "tool_use_failed",
+				Message: "Failed to parse tool call arguments as JSON",
+			},
+		}
+		require.False(t, isUpstreamMalformedToolCallError(err))
 	})
 }
 

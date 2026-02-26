@@ -141,7 +141,17 @@ func Relay(c *gin.Context) {
 				zap.String("error_code", strings.TrimSpace(fmt.Sprint(bizErr.Code))),
 			)
 		} else {
-		// Downgrade to WARN if the failure is caused by caller's context cancellation/deadline exceeded
+			errorMessagePreview := strings.TrimSpace(bizErr.Message)
+			if len(errorMessagePreview) > 240 {
+				errorMessagePreview = errorMessagePreview[:240] + "..."
+			}
+			lg.Debug("non-retry relay decision details",
+				zap.Int("status_code", bizErr.StatusCode),
+				zap.String("error_type", string(bizErr.Type)),
+				zap.String("error_code", strings.TrimSpace(fmt.Sprint(bizErr.Code))),
+				zap.String("error_message_preview", errorMessagePreview),
+			)
+			// Downgrade to WARN if the failure is caused by caller's context cancellation/deadline exceeded
 			if isClientContextCancel(bizErr.StatusCode, bizErr.RawError) || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) || isUserOriginatedRelayError(bizErr) {
 				lg.Warn("relay user-side failure, won't retry", zap.Int("status_code", bizErr.StatusCode), zap.Error(err))
 			} else {
@@ -839,6 +849,10 @@ func isUserOriginatedRelayError(e *model.ErrorWithStatusCode) bool {
 		return true
 	}
 
+	if isUpstreamMalformedToolCallError(e) {
+		return true
+	}
+
 	if e.StatusCode != http.StatusForbidden && e.StatusCode != http.StatusUnauthorized {
 		return false
 	}
@@ -871,6 +885,35 @@ func isUserOriginatedRelayError(e *model.ErrorWithStatusCode) bool {
 		strings.Contains(msg, "token model") || strings.Contains(msg, "quota has been exhausted") || strings.Contains(msg, "token quota exhausted") ||
 		strings.Contains(msg, "whitelist") || strings.Contains(msg, "blacklist") {
 		return true
+	}
+
+	return false
+}
+
+// isUpstreamMalformedToolCallError reports whether a 400 upstream error indicates
+// the model produced malformed tool-call arguments JSON.
+//
+// These errors are user/request-side outcomes (prompt/model generation mismatch),
+// not channel health failures, so they should use user-originated handling.
+func isUpstreamMalformedToolCallError(e *model.ErrorWithStatusCode) bool {
+	if e == nil || e.StatusCode != http.StatusBadRequest {
+		return false
+	}
+
+	code := strings.ToLower(strings.TrimSpace(fmt.Sprint(e.Code)))
+	message := strings.ToLower(strings.TrimSpace(e.Message))
+
+	if code == "tool_use_failed" {
+		return true
+	}
+
+	if code == "invalid_request_error" || code == "" {
+		if strings.Contains(message, "failed to parse tool call arguments as json") {
+			return true
+		}
+		if strings.Contains(message, "tool call arguments") && strings.Contains(message, "json") {
+			return true
+		}
 	}
 
 	return false
