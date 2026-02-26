@@ -132,13 +132,14 @@ func Relay(c *gin.Context) {
 
 	requestId := c.GetString(helper.RequestIdKey)
 	retryTimes := config.RetryTimes
-	retryableClientError := isRetryableUpstreamClientError(bizErr)
+	retryableClientError, retryableClientReason := classifyRetryableUpstreamClientError(bizErr)
 	if err := shouldRetry(c, bizErr.StatusCode, bizErr.RawError); err != nil {
 		if retryableClientError {
 			lg.Debug("retryable upstream client error detected; keeping retry logic enabled",
 				zap.Int("status_code", bizErr.StatusCode),
 				zap.String("error_type", string(bizErr.Type)),
 				zap.String("error_code", strings.TrimSpace(fmt.Sprint(bizErr.Code))),
+				zap.String("retry_reason", retryableClientReason),
 			)
 		} else {
 			errorMessagePreview := strings.TrimSpace(bizErr.Message)
@@ -391,27 +392,49 @@ func shouldRetry(c *gin.Context, statusCode int, rawErr error) error {
 // Returns:
 //   - bool: true when this is a known transient upstream-client error shape.
 func isRetryableUpstreamClientError(relayErr *model.ErrorWithStatusCode) bool {
+	retryable, _ := classifyRetryableUpstreamClientError(relayErr)
+	return retryable
+}
+
+// classifyRetryableUpstreamClientError evaluates whether a nominal 4xx error is
+// actually retryable and returns a stable reason string for diagnostics.
+//
+// Parameters:
+//   - relayErr: normalized relay error from upstream/adaptor.
+//
+// Returns:
+//   - bool: true when this is a known transient upstream-client error shape.
+//   - string: retry reason identifier for debug logging.
+func classifyRetryableUpstreamClientError(relayErr *model.ErrorWithStatusCode) (bool, string) {
 	if relayErr == nil {
-		return false
+		return false, ""
 	}
 
 	if relayErr.StatusCode < http.StatusBadRequest || relayErr.StatusCode >= http.StatusInternalServerError {
-		return false
+		return false, ""
 	}
 
 	code := strings.ToLower(strings.TrimSpace(fmt.Sprint(relayErr.Code)))
 	message := strings.ToLower(strings.TrimSpace(relayErr.Message))
 
 	if code == "websocket_connection_limit_reached" {
-		return true
+		return true, "websocket_connection_limit_reached"
+	}
+
+	if code == "output_parse_failed" {
+		return true, "output_parse_failed"
 	}
 
 	if strings.Contains(message, "websocket connection limit reached") ||
 		strings.Contains(message, "create a new websocket connection") {
-		return true
+		return true, "websocket_reconnect_hint"
 	}
 
-	return false
+	if strings.Contains(message, "generated output that could not be parsed") {
+		return true, "upstream_generated_unparseable_output"
+	}
+
+	return false, ""
 }
 
 // isClientContextCancel returns true if the error is caused by the caller's context

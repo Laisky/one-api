@@ -337,6 +337,30 @@ func TestIsRetryableUpstreamClientError(t *testing.T) {
 		assert.True(t, isRetryableUpstreamClientError(err))
 	})
 
+	t.Run("output parse failed code is retryable", func(t *testing.T) {
+		t.Parallel()
+		err := &model.ErrorWithStatusCode{
+			StatusCode: http.StatusBadRequest,
+			Error: model.Error{
+				Code:    "output_parse_failed",
+				Message: "Parsing failed. The model generated output that could not be parsed.",
+			},
+		}
+		assert.True(t, isRetryableUpstreamClientError(err))
+	})
+
+	t.Run("unparseable model output message is retryable", func(t *testing.T) {
+		t.Parallel()
+		err := &model.ErrorWithStatusCode{
+			StatusCode: http.StatusBadRequest,
+			Error: model.Error{
+				Code:    "invalid_request_error",
+				Message: "The model generated output that could not be parsed. Please adjust your prompt.",
+			},
+		}
+		assert.True(t, isRetryableUpstreamClientError(err))
+	})
+
 	t.Run("normal bad request is not retryable", func(t *testing.T) {
 		t.Parallel()
 		err := &model.ErrorWithStatusCode{
