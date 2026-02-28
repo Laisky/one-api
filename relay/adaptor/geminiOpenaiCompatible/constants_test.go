@@ -69,6 +69,23 @@ func TestGemini3ProImagePreviewPricing(t *testing.T) {
 	require.InDelta(t, gemini3ProImage4KPrice/gemini3ProImageBasePrice, cfg.Image.SizeMultipliers["4096x4096"], 1e-12)
 }
 
+func TestGemini31FlashImagePreviewPricing(t *testing.T) {
+	t.Parallel()
+	cfg, ok := ModelRatios["gemini-3.1-flash-image-preview"]
+	require.True(t, ok, "gemini-3.1-flash-image-preview missing from pricing map")
+	require.InDelta(t, 0.25*ratio.MilliTokensUsd, cfg.Ratio, 1e-12)
+	require.InDelta(t, 1.50/0.25, cfg.CompletionRatio, 1e-9)
+	require.NotNil(t, cfg.Image, "expected image pricing metadata for gemini-3.1-flash-image-preview")
+	require.InDelta(t, gemini31FlashImage1KPrice, cfg.Image.PricePerImageUsd, 1e-12)
+	require.Contains(t, cfg.Image.SizeMultipliers, "512x512")
+	require.Contains(t, cfg.Image.SizeMultipliers, "1024x1024")
+	require.Contains(t, cfg.Image.SizeMultipliers, "2048x2048")
+	require.Contains(t, cfg.Image.SizeMultipliers, "4096x4096")
+	require.InDelta(t, gemini31FlashImage512Price/gemini31FlashImage1KPrice, cfg.Image.SizeMultipliers["512x512"], 1e-12)
+	require.InDelta(t, gemini31FlashImage2KPrice/gemini31FlashImage1KPrice, cfg.Image.SizeMultipliers["2048x2048"], 1e-12)
+	require.InDelta(t, gemini31FlashImage4KPrice/gemini31FlashImage1KPrice, cfg.Image.SizeMultipliers["4096x4096"], 1e-12)
+}
+
 func TestGetModelModalitiesGeminiVersionCutoff(t *testing.T) {
 	t.Parallel()
 	testCases := []struct {

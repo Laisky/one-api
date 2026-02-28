@@ -27,6 +27,11 @@ func geminiImageConfig(pricePerImage float64) *adaptor.ImagePricingConfig {
 const (
 	gemini3ProImageBasePrice = 0.134
 	gemini3ProImage4KPrice   = 0.24
+
+	gemini31FlashImage512Price = 0.045
+	gemini31FlashImage1KPrice  = 0.067
+	gemini31FlashImage2KPrice  = 0.101
+	gemini31FlashImage4KPrice  = 0.151
 )
 
 func gemini3ProImageConfig() *adaptor.ImagePricingConfig {
@@ -39,6 +44,23 @@ func gemini3ProImageConfig() *adaptor.ImagePricingConfig {
 			"1024x1024": 1,
 			"2048x2048": 1,
 			"4096x4096": gemini3ProImage4KPrice / gemini3ProImageBasePrice,
+		},
+	}
+}
+
+// gemini31FlashImageConfig encodes the image-size tiered pricing Google published for Gemini 3.1 Flash Image Preview.
+// 512/1K/2K/4K outputs are billed at $0.045/$0.067/$0.101/$0.151 per image.
+func gemini31FlashImageConfig() *adaptor.ImagePricingConfig {
+	return &adaptor.ImagePricingConfig{
+		PricePerImageUsd: gemini31FlashImage1KPrice,
+		DefaultSize:      "1024x1024",
+		DefaultQuality:   "standard",
+		MinImages:        1,
+		SizeMultipliers: map[string]float64{
+			"512x512":   gemini31FlashImage512Price / gemini31FlashImage1KPrice,
+			"1024x1024": 1,
+			"2048x2048": gemini31FlashImage2KPrice / gemini31FlashImage1KPrice,
+			"4096x4096": gemini31FlashImage4KPrice / gemini31FlashImage1KPrice,
 		},
 	}
 }
@@ -137,6 +159,11 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 				InputTokenThreshold: 200001,
 			},
 		},
+	},
+	"gemini-3.1-flash-image-preview": {
+		Ratio:           0.25 * ratio.MilliTokensUsd,
+		CompletionRatio: 1.50 / 0.25,
+		Image:           gemini31FlashImageConfig(),
 	},
 	"gemini-3-pro-preview": {
 		Ratio:             2.0 * ratio.MilliTokensUsd,
@@ -259,6 +286,7 @@ const geminiWebSearchUsdPerCall = 35.0 / 1000.0
 var geminiWebSearchModels = map[string]struct{}{
 	"gemini-3.1-pro-preview":                  {},
 	"gemini-3.1-pro-preview-customtools":      {},
+	"gemini-3.1-flash-image-preview":          {},
 	"gemini-3-pro-preview":                    {},
 	"gemini-3-flash-preview":                  {},
 	"gemini-2.5-pro":                          {},
