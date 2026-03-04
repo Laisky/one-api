@@ -161,9 +161,19 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		},
 	},
 	"gemini-3.1-flash-image-preview": {
-		Ratio:           0.25 * ratio.MilliTokensUsd,
-		CompletionRatio: 1.50 / 0.25,
+		Ratio:           0.50 * ratio.MilliTokensUsd,
+		CompletionRatio: 3.00 / 0.50,
 		Image:           gemini31FlashImageConfig(),
+	},
+	"gemini-3.1-flash-lite-preview": {
+		Ratio:             0.25 * ratio.MilliTokensUsd,
+		CompletionRatio:   1.50 / 0.25,
+		CacheWrite5mRatio: 0.025 * ratio.MilliTokensUsd,
+		CacheWrite1hRatio: 0.025 * ratio.MilliTokensUsd,
+		Audio: &adaptor.AudioPricingConfig{
+			PromptRatio:     0.50 / 0.25,
+			CompletionRatio: 0.25 / 0.50,
+		},
 	},
 	"gemini-3-pro-preview": {
 		Ratio:             2.0 * ratio.MilliTokensUsd,
@@ -287,6 +297,7 @@ var geminiWebSearchModels = map[string]struct{}{
 	"gemini-3.1-pro-preview":                  {},
 	"gemini-3.1-pro-preview-customtools":      {},
 	"gemini-3.1-flash-image-preview":          {},
+	"gemini-3.1-flash-lite-preview":           {},
 	"gemini-3-pro-preview":                    {},
 	"gemini-3-flash-preview":                  {},
 	"gemini-2.5-pro":                          {},
