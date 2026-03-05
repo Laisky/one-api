@@ -6,6 +6,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/songquanpeng/one-api/model"
 	"github.com/songquanpeng/one-api/relay"
 	"github.com/songquanpeng/one-api/relay/apitype"
 	relaymodel "github.com/songquanpeng/one-api/relay/model"
@@ -188,4 +189,57 @@ func TestComputeLegacyPromptIncludesCacheBuckets(t *testing.T) {
 	))
 
 	require.Equal(t, expected, result.TotalQuota)
+}
+
+// TestComputeChannelTierPricingWithInheritedBase verifies channel tier overrides
+// are effective even when channel base ratio/completion are omitted (zero values).
+func TestComputeChannelTierPricingWithInheritedBase(t *testing.T) {
+	t.Parallel()
+
+	modelName := "gpt-4o"
+	adaptor := relay.GetAdaptor(apitype.OpenAI)
+	require.NotNil(t, adaptor, "nil adaptor for api type %d", apitype.OpenAI)
+
+	baseModelRatio := adaptor.GetModelRatio(modelName)
+	baseCompletionRatio := adaptor.GetCompletionRatio(modelName)
+	require.Greater(t, baseModelRatio, 0.0, "unexpected model ratio: %v", baseModelRatio)
+	require.Greater(t, baseCompletionRatio, 0.0, "unexpected completion ratio: %v", baseCompletionRatio)
+
+	usage := &relaymodel.Usage{
+		PromptTokens:     120,
+		CompletionTokens: 50,
+	}
+
+	channelModelConfigs := map[string]model.ModelConfigLocal{
+		modelName: {
+			// Keep base values zero to mimic inherited legacy behavior.
+			Tiers: []model.ModelRatioTierLocal{
+				{
+					InputTokenThreshold: 100,
+					Ratio:               baseModelRatio * 2,
+					CompletionRatio:     3,
+				},
+			},
+		},
+	}
+
+	result := quotautil.Compute(quotautil.ComputeInput{
+		Usage:               usage,
+		ModelName:           modelName,
+		ModelRatio:          baseModelRatio,
+		GroupRatio:          1.0,
+		ChannelModelConfigs: channelModelConfigs,
+		PricingAdaptor:      adaptor,
+	})
+
+	expectedInputRatio := baseModelRatio * 2
+	expectedCompletionRatio := 3.0
+	expectedQuota := int64(math.Ceil(
+		float64(usage.PromptTokens)*expectedInputRatio +
+			float64(usage.CompletionTokens)*expectedInputRatio*expectedCompletionRatio,
+	))
+
+	require.InDelta(t, expectedInputRatio, result.UsedModelRatio, 1e-12)
+	require.InDelta(t, expectedCompletionRatio, result.UsedCompletionRatio, 1e-12)
+	require.Equal(t, expectedQuota, result.TotalQuota)
 }

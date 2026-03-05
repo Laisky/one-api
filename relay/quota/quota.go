@@ -52,22 +52,28 @@ func Compute(input ComputeInput) ComputeResult {
 	eff := pricing.ResolveEffectivePricing(input.ModelName, promptTokens, pricingAdaptor)
 	resolvedModelCfg, hasResolvedModelCfg := pricing.ResolveModelConfig(input.ModelName, input.ChannelModelConfigs, pricingAdaptor)
 	if hasResolvedModelCfg {
+		// Preserve legacy fallback behavior: when channel config omits base ratio/completion
+		// (keeps zero values), continue using the resolved three-layer ratios as base values.
+		if resolvedModelCfg.Ratio == 0 {
+			resolvedModelCfg.Ratio = input.ModelRatio
+		}
+		if resolvedModelCfg.CompletionRatio == 0 {
+			resolvedModelCfg.CompletionRatio = completionRatioResolved
+		}
 		eff = pricing.ResolveEffectivePricingFromConfig(promptTokens, resolvedModelCfg)
 	}
 
 	usedModelRatio := input.ModelRatio
 	usedCompletionRatio := completionRatioResolved
 	if hasResolvedModelCfg {
-		if math.Abs(input.ModelRatio-resolvedModelCfg.Ratio) < 1e-12 {
-			usedModelRatio = eff.InputRatio
-			baseComp := eff.OutputRatio
-			if eff.InputRatio != 0 {
-				baseComp = eff.OutputRatio / eff.InputRatio
-			} else {
-				baseComp = 1.0
-			}
-			usedCompletionRatio = baseComp
+		usedModelRatio = eff.InputRatio
+		baseComp := eff.OutputRatio
+		if eff.InputRatio != 0 {
+			baseComp = eff.OutputRatio / eff.InputRatio
+		} else {
+			baseComp = 1.0
 		}
+		usedCompletionRatio = baseComp
 	} else if pricingAdaptor != nil {
 		if _, ok := pricingAdaptor.GetDefaultModelPricing()[input.ModelName]; ok {
 			adaptorBase := pricingAdaptor.GetModelRatio(input.ModelName)

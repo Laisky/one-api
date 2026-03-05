@@ -142,8 +142,8 @@ Field meaning (runtime tier object):
 Important implementation constraints:
 
 1. Tier pricing is fully supported by runtime billing (`ResolveEffectivePricing` + `quota.Compute`).
-2. Channel persisted `model_configs` currently does **not** store `tiers` or cache ratio fields.
-3. Therefore, admin UI/API channel overrides cannot define tier tables today; tier tables come from provider defaults/global pricing (or code-level adapter updates).
+2. Channel persisted `model_configs` supports cache and tier fields (`cached_input_ratio`, `cache_write_5m_ratio`, `cache_write_1h_ratio`, `tiers`).
+3. Channel overrides can define tier tables directly. When channel base `ratio`/`completion_ratio` is omitted, runtime falls back to resolved three-layer base values and still applies tier/cache overrides.
 
 ## Settings Reference by Admin Page
 
@@ -167,6 +167,10 @@ In Modern UI (`web/modern/src/pages/channels`), billing-relevant fields are:
    - Supported persisted fields in current channel model:
      - `ratio`
      - `completion_ratio`
+     - `cached_input_ratio`
+     - `cache_write_5m_ratio`
+     - `cache_write_1h_ratio`
+     - `tiers`
      - `max_tokens`
      - `video` (`per_second_usd`, `base_resolution`, `resolution_multipliers`)
      - `audio` (`prompt_ratio`, `completion_ratio`, `prompt_tokens_per_second`, `completion_tokens_per_second`, `usd_per_second`)
@@ -197,6 +201,16 @@ Per-model object keys currently accepted/persisted by channel config (`model.Mod
 
 - `ratio` (`number`, `>=0`): base input ratio.
 - `completion_ratio` (`number`, `>=0`): output/input multiplier.
+- `cached_input_ratio` (`number`): cached-read input price ratio.
+- `cache_write_5m_ratio` (`number`, `>=0`): cache-write 5m price ratio. Zero falls back to normal input price.
+- `cache_write_1h_ratio` (`number`, `>=0`): cache-write 1h price ratio. Zero falls back to normal input price.
+- `tiers` (`array`): tiered pricing entries, each containing:
+  - `input_token_threshold` (`integer`, `>=0`)
+  - `ratio` (`number`, optional)
+  - `completion_ratio` (`number`, optional)
+  - `cached_input_ratio` (`number`, optional)
+  - `cache_write_5m_ratio` (`number`, optional)
+  - `cache_write_1h_ratio` (`number`, optional)
 - `max_tokens` (`integer`, `>=0`): optional model max token cap metadata.
 - `video` (`object`):
   - `per_second_usd` (`number`, `>=0`): base USD/sec equivalent metadata.
@@ -576,9 +590,9 @@ Two-phase example:
 
 ## Implementation Caveats (Important)
 
-1. **Channel `model_configs` does not currently persist tier/cache ratio fields**
-   - Current channel-side struct (`model.ModelConfigLocal`) has no `tiers`, `cached_input_ratio`, `cache_write_5m_ratio`, `cache_write_1h_ratio` fields.
-   - Those fields still exist in adapter/global defaults and are used by runtime billing.
+1. **Channel `model_configs` now persists tier/cache ratio fields**
+  - Channel-side struct (`model.ModelConfigLocal`) includes `tiers`, `cached_input_ratio`, `cache_write_5m_ratio`, `cache_write_1h_ratio`.
+  - Runtime billing applies these overrides with channel-first precedence and retains three-layer fallback when base ratio/completion is omitted.
 
 2. **`GET /api/channel/default-pricing` response shape is stringified JSON**
    - `model_ratio`, `completion_ratio`, `model_configs`, and `tooling` are returned as strings.

@@ -829,6 +829,37 @@ func TestChannel_validateModelPriceConfigs(t *testing.T) {
 			expectError:   true,
 			errorContains: "must be positive",
 		},
+		{
+			name: "negative cache write ratios are rejected",
+			configs: map[string]ModelConfigLocal{
+				"claude-4.6-sonnet": {
+					Ratio:             1.0,
+					CompletionRatio:   1.0,
+					CacheWrite5mRatio: -1.0,
+					CacheWrite1hRatio: -1.0,
+				},
+			},
+			expectError:   true,
+			errorContains: "negative cache_write_5m_ratio",
+		},
+		{
+			name: "negative tier cache write ratios are rejected",
+			configs: map[string]ModelConfigLocal{
+				"claude-4.6-sonnet": {
+					Ratio:           1.0,
+					CompletionRatio: 1.0,
+					Tiers: []ModelRatioTierLocal{
+						{
+							InputTokenThreshold: 1000,
+							Ratio:               1.1,
+							CacheWrite5mRatio:   -1.0,
+						},
+					},
+				},
+			},
+			expectError:   true,
+			errorContains: "negative tier cache_write_5m_ratio",
+		},
 	}
 
 	for _, tt := range tests {
