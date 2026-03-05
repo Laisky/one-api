@@ -1,6 +1,8 @@
 package pricing
 
 import (
+	"sort"
+
 	"github.com/songquanpeng/one-api/model"
 	"github.com/songquanpeng/one-api/relay/adaptor"
 )
@@ -127,6 +129,9 @@ func convertLocalModelConfig(local model.ModelConfigLocal) adaptor.ModelConfig {
 				InputTokenThreshold: t.InputTokenThreshold,
 			})
 		}
+		sort.Slice(cfg.Tiers, func(i, j int) bool {
+			return cfg.Tiers[i].InputTokenThreshold < cfg.Tiers[j].InputTokenThreshold
+		})
 	}
 	if local.Video != nil {
 		cfg.Video = convertLocalVideo(local.Video)

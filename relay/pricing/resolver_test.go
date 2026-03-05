@@ -131,3 +131,37 @@ func TestResolveModelConfig_ChannelOverridePreservesCacheAndTiers(t *testing.T) 
 	require.InDelta(t, 3.086, cfg.Tiers[0].CacheWrite5mRatio, 0.0000001)
 	require.InDelta(t, 3.086, cfg.Tiers[0].CacheWrite1hRatio, 0.0000001)
 }
+
+func TestResolveModelConfig_ChannelOverrideSortsUnorderedTiers(t *testing.T) {
+	const modelName = "tier-ordering-test"
+	var channelConfigs map[string]model.ModelConfigLocal
+	err := json.Unmarshal([]byte(`{
+		"tier-ordering-test": {
+			"ratio": 1.0,
+			"completion_ratio": 2.0,
+			"tiers": [
+				{
+					"input_token_threshold": 5000,
+					"ratio": 0.5
+				},
+				{
+					"input_token_threshold": 1000,
+					"ratio": 0.8,
+					"completion_ratio": 3.0
+				}
+			]
+		}
+	}`), &channelConfigs)
+	require.NoError(t, err)
+
+	cfg, ok := ResolveModelConfig(modelName, channelConfigs, nil)
+	require.True(t, ok)
+	require.Len(t, cfg.Tiers, 2)
+	require.Equal(t, 1000, cfg.Tiers[0].InputTokenThreshold)
+	require.Equal(t, 5000, cfg.Tiers[1].InputTokenThreshold)
+
+	eff := ResolveEffectivePricingFromConfig(6000, cfg)
+	require.InDelta(t, 0.5, eff.InputRatio, 0.0000001)
+	require.InDelta(t, 1.5, eff.OutputRatio, 0.0000001)
+	require.Equal(t, 5000, eff.AppliedTierThreshold)
+}
