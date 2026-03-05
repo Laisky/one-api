@@ -47,24 +47,35 @@ func Compute(input ComputeInput) ComputeResult {
 	completionTokens := usage.CompletionTokens
 
 	pricingAdaptor := input.PricingAdaptor
+	// Resolve model config once (ratio only) to avoid redundant deep clones and lookups.
+	resolvedModelCfg, hasResolvedModelCfg := pricing.ResolveModelConfigRatioOnly(input.ModelName, input.ChannelModelConfigs, pricingAdaptor)
+
+	// Layer 1 & 2 fallback for base ratios
+	baseRatio := input.ModelRatio
 	completionRatioResolved := pricing.GetCompletionRatioWithThreeLayers(input.ModelName, input.ChannelCompletionRatio, pricingAdaptor)
 
-	eff := pricing.ResolveEffectivePricing(input.ModelName, promptTokens, pricingAdaptor)
-	resolvedModelCfg, hasResolvedModelCfg := pricing.ResolveModelConfig(input.ModelName, input.ChannelModelConfigs, pricingAdaptor)
 	if hasResolvedModelCfg {
 		// Preserve legacy fallback behavior: when channel config omits base ratio/completion
 		// (keeps zero values), continue using the resolved three-layer ratios as base values.
 		if resolvedModelCfg.Ratio == 0 {
-			resolvedModelCfg.Ratio = input.ModelRatio
+			resolvedModelCfg.Ratio = baseRatio
 		}
 		if resolvedModelCfg.CompletionRatio == 0 {
 			resolvedModelCfg.CompletionRatio = completionRatioResolved
 		}
-		eff = pricing.ResolveEffectivePricingFromConfig(promptTokens, resolvedModelCfg)
+	} else {
+		// Build a minimal config from resolved base ratios if no config was found.
+		resolvedModelCfg = adaptor.ModelConfig{
+			Ratio:           baseRatio,
+			CompletionRatio: completionRatioResolved,
+		}
 	}
 
-	usedModelRatio := input.ModelRatio
+	eff := pricing.ResolveEffectivePricingFromConfig(promptTokens, resolvedModelCfg)
+
+	usedModelRatio := baseRatio
 	usedCompletionRatio := completionRatioResolved
+
 	if hasResolvedModelCfg {
 		usedModelRatio = eff.InputRatio
 		baseComp := eff.OutputRatio
@@ -75,18 +86,18 @@ func Compute(input ComputeInput) ComputeResult {
 		}
 		usedCompletionRatio = baseComp
 	} else if pricingAdaptor != nil {
-		if _, ok := pricingAdaptor.GetDefaultModelPricing()[input.ModelName]; ok {
-			adaptorBase := pricingAdaptor.GetModelRatio(input.ModelName)
-			if math.Abs(input.ModelRatio-adaptorBase) < 1e-12 {
-				usedModelRatio = eff.InputRatio
-				baseComp := eff.OutputRatio
-				if eff.InputRatio != 0 {
-					baseComp = eff.OutputRatio / eff.InputRatio
-				} else {
-					baseComp = 1.0
-				}
-				usedCompletionRatio = baseComp
+		// Optimized check: only use effective pricing if the input model ratio matches the adaptor base.
+		// This avoids extra GetDefaultModelPricing() map lookups when not needed.
+		adaptorBase := pricingAdaptor.GetModelRatio(input.ModelName)
+		if math.Abs(baseRatio-adaptorBase) < 1e-12 {
+			usedModelRatio = eff.InputRatio
+			baseComp := eff.OutputRatio
+			if eff.InputRatio != 0 {
+				baseComp = eff.OutputRatio / eff.InputRatio
+			} else {
+				baseComp = 1.0
 			}
+			usedCompletionRatio = baseComp
 		}
 	}
 

@@ -212,3 +212,64 @@ func convertLocalImage(local *model.ImagePricingLocal) *adaptor.ImagePricingConf
 	}
 	return cfg
 }
+
+// ResolveModelConfigRatioOnly returns a shallow configuration by applying
+// channel overrides first, then adaptor defaults, then global fallbacks.
+// It omits media metadata to optimize for token-only billing paths.
+func ResolveModelConfigRatioOnly(modelName string, channelConfigs map[string]model.ModelConfigLocal, provider adaptor.Adaptor) (adaptor.ModelConfig, bool) {
+	if channelConfigs != nil {
+		if local, ok := channelConfigs[modelName]; ok {
+			cfg := convertLocalModelConfigRatioOnly(local)
+			return cfg, true
+		}
+	}
+
+	if provider != nil {
+		if defaults := provider.GetDefaultModelPricing(); defaults != nil {
+			if cfg, ok := defaults[modelName]; ok {
+				clone := cfg
+				if len(cfg.Tiers) > 0 {
+					clone.Tiers = append([]adaptor.ModelRatioTier(nil), cfg.Tiers...)
+				}
+				clone.Video = nil
+				clone.Audio = nil
+				clone.Image = nil
+				return clone, true
+			}
+		}
+	}
+
+	if cfg, ok := GetGlobalModelConfigRatioOnly(modelName); ok {
+		return cfg, true
+	}
+
+	return adaptor.ModelConfig{}, false
+}
+
+func convertLocalModelConfigRatioOnly(local model.ModelConfigLocal) adaptor.ModelConfig {
+	cfg := adaptor.ModelConfig{
+		Ratio:             local.Ratio,
+		CompletionRatio:   local.CompletionRatio,
+		CachedInputRatio:  local.CachedInputRatio,
+		CacheWrite5mRatio: local.CacheWrite5mRatio,
+		CacheWrite1hRatio: local.CacheWrite1hRatio,
+		MaxTokens:         local.MaxTokens,
+	}
+	if len(local.Tiers) > 0 {
+		cfg.Tiers = make([]adaptor.ModelRatioTier, 0, len(local.Tiers))
+		for _, t := range local.Tiers {
+			cfg.Tiers = append(cfg.Tiers, adaptor.ModelRatioTier{
+				Ratio:               t.Ratio,
+				CompletionRatio:     t.CompletionRatio,
+				CachedInputRatio:    t.CachedInputRatio,
+				CacheWrite5mRatio:   t.CacheWrite5mRatio,
+				CacheWrite1hRatio:   t.CacheWrite1hRatio,
+				InputTokenThreshold: t.InputTokenThreshold,
+			})
+		}
+		sort.Slice(cfg.Tiers, func(i, j int) bool {
+			return cfg.Tiers[i].InputTokenThreshold < cfg.Tiers[j].InputTokenThreshold
+		})
+	}
+	return cfg
+}
