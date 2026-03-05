@@ -2,6 +2,7 @@ package quota
 
 import (
 	"math"
+	"strings"
 
 	"github.com/songquanpeng/one-api/relay/adaptor"
 	relaymodel "github.com/songquanpeng/one-api/relay/model"
@@ -68,10 +69,11 @@ func Compute(input ComputeInput) ComputeResult {
 	}
 
 	cachedPrompt := 0
+	cachedPromptRaw := 0
 	if usage.PromptTokensDetails != nil {
-		cachedPrompt = min(max(usage.PromptTokensDetails.CachedTokens, 0), promptTokens)
+		cachedPromptRaw = max(usage.PromptTokensDetails.CachedTokens, 0)
 	}
-	nonCachedPrompt := promptTokens - cachedPrompt
+	nonCachedPrompt := max(promptTokens, 0)
 	nonCachedCompletion := completionTokens
 
 	normalInputPrice := usedModelRatio * input.GroupRatio
@@ -92,22 +94,35 @@ func Compute(input ComputeInput) ComputeResult {
 	if write1h < 0 {
 		write1h = 0
 	}
-	if write5m+write1h > nonCachedPrompt {
-		writeExcess := write5m + write1h - nonCachedPrompt
-		if write1h >= writeExcess {
-			write1h -= writeExcess
-		} else {
-			writeExcess -= write1h
-			write1h = 0
-			if write5m >= writeExcess {
-				write5m -= writeExcess
-			} else {
-				write5m = 0
-			}
-		}
-		nonCachedPrompt = 0
+
+	isClaudeModel := strings.Contains(strings.ToLower(input.ModelName), "claude")
+
+	// Some providers (e.g. Anthropic Claude prompt caching) report prompt tokens as
+	// post-breakpoint input only, while cache-read/write tokens are separate buckets.
+	// In that case, we should not clamp or subtract cache buckets from prompt tokens.
+	promptExcludesCacheBuckets := isClaudeModel || cachedPromptRaw > promptTokens || write5m+write1h > promptTokens
+	if promptExcludesCacheBuckets {
+		cachedPrompt = cachedPromptRaw
 	} else {
-		nonCachedPrompt -= write5m + write1h
+		cachedPrompt = min(cachedPromptRaw, promptTokens)
+		nonCachedPrompt = promptTokens - cachedPrompt
+		if write5m+write1h > nonCachedPrompt {
+			writeExcess := write5m + write1h - nonCachedPrompt
+			if write1h >= writeExcess {
+				write1h -= writeExcess
+			} else {
+				writeExcess -= write1h
+				write1h = 0
+				if write5m >= writeExcess {
+					write5m -= writeExcess
+				} else {
+					write5m = 0
+				}
+			}
+			nonCachedPrompt = 0
+		} else {
+			nonCachedPrompt -= write5m + write1h
+		}
 	}
 
 	write5mPrice := normalInputPrice

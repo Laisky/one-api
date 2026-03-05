@@ -2,6 +2,7 @@ package anthropic
 
 import (
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -330,6 +331,75 @@ func TestConvertRequest_EmptyAssistantMessageWithToolCalls(t *testing.T) {
 	assert.Equal(t, "tool_result", toolMessage.Content[0].Type)
 	assert.Equal(t, "It's sunny and 72F", toolMessage.Content[0].Content)
 	assert.Equal(t, "call_123", toolMessage.Content[0].ToolUseId)
+}
+
+func TestClaudeNativeHandler_MapsCacheCreationSplit(t *testing.T) {
+	t.Parallel()
+	c := newThinkingContext(t, "/v1/messages")
+
+	body := `{
+		"id":"msg_1",
+		"type":"message",
+		"role":"assistant",
+		"model":"claude-4.6-sonnet",
+		"content":[{"type":"text","text":"ok"}],
+		"stop_reason":"end_turn",
+		"usage":{
+			"input_tokens":1,
+			"output_tokens":8,
+			"cache_read_input_tokens":1024,
+			"cache_creation":{
+				"ephemeral_5m_input_tokens":63277,
+				"ephemeral_1h_input_tokens":17
+			}
+		}
+	}`
+	resp := &http.Response{
+		StatusCode: http.StatusOK,
+		Header:     http.Header{"Content-Type": []string{"application/json"}},
+		Body:       io.NopCloser(strings.NewReader(body)),
+	}
+
+	errResp, usage := ClaudeNativeHandler(c, resp, 1, "claude-4.6-sonnet")
+	require.Nil(t, errResp)
+	require.NotNil(t, usage)
+	require.NotNil(t, usage.PromptTokensDetails)
+	assert.Equal(t, 1024, usage.PromptTokensDetails.CachedTokens)
+	assert.Equal(t, 63277, usage.CacheWrite5mTokens)
+	assert.Equal(t, 17, usage.CacheWrite1hTokens)
+}
+
+func TestHandler_MapsCacheCreationLegacyFallback(t *testing.T) {
+	t.Parallel()
+	c := newThinkingContext(t, "/v1/messages")
+
+	body := `{
+		"id":"msg_2",
+		"type":"message",
+		"role":"assistant",
+		"model":"claude-4.6-sonnet",
+		"content":[{"type":"text","text":"ok"}],
+		"stop_reason":"end_turn",
+		"usage":{
+			"input_tokens":3,
+			"output_tokens":5,
+			"cache_read_input_tokens":21,
+			"cache_creation_input_tokens":88
+		}
+	}`
+	resp := &http.Response{
+		StatusCode: http.StatusOK,
+		Header:     http.Header{"Content-Type": []string{"application/json"}},
+		Body:       io.NopCloser(strings.NewReader(body)),
+	}
+
+	errResp, usage := Handler(c, resp, 3, "claude-4.6-sonnet")
+	require.Nil(t, errResp)
+	require.NotNil(t, usage)
+	require.NotNil(t, usage.PromptTokensDetails)
+	assert.Equal(t, 21, usage.PromptTokensDetails.CachedTokens)
+	assert.Equal(t, 88, usage.CacheWrite5mTokens)
+	assert.Equal(t, 0, usage.CacheWrite1hTokens)
 }
 
 func TestConvertRequest_ToolRoleWithStructuredContent(t *testing.T) {

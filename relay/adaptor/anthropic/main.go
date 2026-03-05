@@ -1160,20 +1160,28 @@ func ClaudeNativeHandler(c *gin.Context, resp *http.Response, promptTokens int, 
 		TotalTokens:      claudeResponse.Usage.InputTokens + claudeResponse.Usage.OutputTokens,
 	}
 
-	// Map Anthropic cache tokens to UsagePromptTokensDetails
-	if claudeResponse.Usage.CacheReadInputTokens > 0 || claudeResponse.Usage.CacheCreationInputTokens > 0 {
+	if claudeResponse.Usage.CacheReadInputTokens > 0 {
 		usage.PromptTokensDetails = &model.UsagePromptTokensDetails{
 			CachedTokens: claudeResponse.Usage.CacheReadInputTokens,
 		}
-		// Map cache creation tokens to CacheWrite fields
-		if claudeResponse.Usage.CacheCreation != nil {
-			usage.CacheWrite5mTokens = claudeResponse.Usage.CacheCreation.Ephemeral5mInputTokens
-			usage.CacheWrite1hTokens = claudeResponse.Usage.CacheCreation.Ephemeral1hInputTokens
-		} else if claudeResponse.Usage.CacheCreationInputTokens > 0 {
-			// Fallback: if CacheCreation object not present but CacheCreationInputTokens is set
-			usage.CacheWrite5mTokens = claudeResponse.Usage.CacheCreationInputTokens
-		}
 	}
+
+	// Map cache creation tokens to CacheWrite fields.
+	if claudeResponse.Usage.CacheCreation != nil {
+		usage.CacheWrite5mTokens = claudeResponse.Usage.CacheCreation.Ephemeral5mInputTokens
+		usage.CacheWrite1hTokens = claudeResponse.Usage.CacheCreation.Ephemeral1hInputTokens
+	} else if claudeResponse.Usage.CacheCreationInputTokens > 0 {
+		// Backward compatibility: legacy field carries total cache-write tokens.
+		usage.CacheWrite5mTokens = claudeResponse.Usage.CacheCreationInputTokens
+	}
+
+	logger.Debug("mapped Claude native usage for billing",
+		zap.Int("input_tokens", usage.PromptTokens),
+		zap.Int("output_tokens", usage.CompletionTokens),
+		zap.Int("cache_read_input_tokens", claudeResponse.Usage.CacheReadInputTokens),
+		zap.Int("cache_write_5m_tokens", usage.CacheWrite5mTokens),
+		zap.Int("cache_write_1h_tokens", usage.CacheWrite1hTokens),
+	)
 
 	jsonResponse, err := json.Marshal(claudeResponse)
 	if err != nil {
@@ -1227,23 +1235,13 @@ func Handler(c *gin.Context, resp *http.Response, promptTokens int, modelName st
 		ServiceTier:      claudeResponse.Usage.ServiceTier,
 	}
 
-	// Map Anthropic cache tokens to UsagePromptTokensDetails
-	if claudeResponse.Usage.CacheReadInputTokens > 0 || claudeResponse.Usage.CacheCreationInputTokens > 0 {
+	if claudeResponse.Usage.CacheReadInputTokens > 0 {
 		usage.PromptTokensDetails = &model.UsagePromptTokensDetails{
 			CachedTokens: claudeResponse.Usage.CacheReadInputTokens,
 		}
-
-		// Map cache creation tokens to CacheWrite fields
-		if claudeResponse.Usage.CacheCreation != nil {
-			usage.CacheWrite5mTokens = claudeResponse.Usage.CacheCreation.Ephemeral5mInputTokens
-			usage.CacheWrite1hTokens = claudeResponse.Usage.CacheCreation.Ephemeral1hInputTokens
-		} else if claudeResponse.Usage.CacheCreationInputTokens > 0 {
-			// Fallback: if CacheCreation object not present but CacheCreationInputTokens is set
-			usage.CacheWrite5mTokens = claudeResponse.Usage.CacheCreationInputTokens
-		}
 	}
 
-	// Map cache-write tokens for precise billing
+	// Map cache-write tokens for precise billing.
 	if claudeResponse.Usage.CacheCreation != nil {
 		usage.CacheWrite5mTokens = claudeResponse.Usage.CacheCreation.Ephemeral5mInputTokens
 		usage.CacheWrite1hTokens = claudeResponse.Usage.CacheCreation.Ephemeral1hInputTokens
@@ -1251,6 +1249,14 @@ func Handler(c *gin.Context, resp *http.Response, promptTokens int, modelName st
 		// Backward compatibility: treat all as 5m cache write if duration unspecified
 		usage.CacheWrite5mTokens = claudeResponse.Usage.CacheCreationInputTokens
 	}
+
+	logger.Debug("mapped Claude converted usage for billing",
+		zap.Int("input_tokens", usage.PromptTokens),
+		zap.Int("output_tokens", usage.CompletionTokens),
+		zap.Int("cache_read_input_tokens", claudeResponse.Usage.CacheReadInputTokens),
+		zap.Int("cache_write_5m_tokens", usage.CacheWrite5mTokens),
+		zap.Int("cache_write_1h_tokens", usage.CacheWrite1hTokens),
+	)
 
 	fullTextResponse.Usage = usage
 	jsonResponse, err := json.Marshal(fullTextResponse)

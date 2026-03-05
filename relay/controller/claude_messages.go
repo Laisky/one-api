@@ -328,7 +328,29 @@ func RelayClaudeMessagesHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 							PromptTokens:     claudeResp.Usage.InputTokens,
 							CompletionTokens: claudeResp.Usage.OutputTokens,
 							TotalTokens:      claudeResp.Usage.InputTokens + claudeResp.Usage.OutputTokens,
+							CacheWrite5mTokens: func() int {
+								if claudeResp.Usage.CacheCreation != nil {
+									return claudeResp.Usage.CacheCreation.Ephemeral5mInputTokens
+								}
+								return claudeResp.Usage.CacheCreationInputTokens
+							}(),
+							CacheWrite1hTokens: func() int {
+								if claudeResp.Usage.CacheCreation != nil {
+									return claudeResp.Usage.CacheCreation.Ephemeral1hInputTokens
+								}
+								return 0
+							}(),
 						}
+						if claudeResp.Usage.CacheReadInputTokens > 0 {
+							usage.PromptTokensDetails = &relaymodel.UsagePromptTokensDetails{CachedTokens: claudeResp.Usage.CacheReadInputTokens}
+						}
+						lg.Debug("using converted Claude usage for billing",
+							zap.Int("input_tokens", usage.PromptTokens),
+							zap.Int("output_tokens", usage.CompletionTokens),
+							zap.Int("cache_read_input_tokens", claudeResp.Usage.CacheReadInputTokens),
+							zap.Int("cache_write_5m_tokens", usage.CacheWrite5mTokens),
+							zap.Int("cache_write_1h_tokens", usage.CacheWrite1hTokens),
+						)
 					} else {
 						// No usage provided: compute completion tokens from content text
 						accumulated := ""

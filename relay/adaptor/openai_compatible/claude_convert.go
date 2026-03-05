@@ -65,8 +65,18 @@ func responseAPIResponseToClaude(r *responseAPIResponse) relaymodel.ClaudeRespon
 
 	if r.Usage != nil {
 		out.Usage = relaymodel.ClaudeUsage{
-			InputTokens:  r.Usage.InputTokens,
-			OutputTokens: r.Usage.OutputTokens,
+			InputTokens:              r.Usage.InputTokens,
+			OutputTokens:             r.Usage.OutputTokens,
+			CacheCreationInputTokens: r.Usage.CacheWrite5mTokens + r.Usage.CacheWrite1hTokens,
+		}
+		if r.Usage.InputTokensDetails != nil && r.Usage.InputTokensDetails.CachedTokens > 0 {
+			out.Usage.CacheReadInputTokens = r.Usage.InputTokensDetails.CachedTokens
+		}
+		if r.Usage.CacheWrite5mTokens > 0 || r.Usage.CacheWrite1hTokens > 0 {
+			out.Usage.CacheCreation = &relaymodel.ClaudeCacheCreation{
+				Ephemeral5mInputTokens: r.Usage.CacheWrite5mTokens,
+				Ephemeral1hInputTokens: r.Usage.CacheWrite1hTokens,
+			}
 		}
 	}
 
@@ -125,9 +135,19 @@ func chatResponseToClaude(r *chatTextResponse) relaymodel.ClaudeResponse {
 		Content:    []relaymodel.ClaudeContent{},
 		StopReason: "end_turn",
 		Usage: relaymodel.ClaudeUsage{
-			InputTokens:  r.Usage.PromptTokens,
-			OutputTokens: r.Usage.CompletionTokens,
+			InputTokens:              r.Usage.PromptTokens,
+			OutputTokens:             r.Usage.CompletionTokens,
+			CacheCreationInputTokens: r.Usage.CacheWrite5mTokens + r.Usage.CacheWrite1hTokens,
 		},
+	}
+	if r.Usage.PromptTokensDetails != nil && r.Usage.PromptTokensDetails.CachedTokens > 0 {
+		out.Usage.CacheReadInputTokens = r.Usage.PromptTokensDetails.CachedTokens
+	}
+	if r.Usage.CacheWrite5mTokens > 0 || r.Usage.CacheWrite1hTokens > 0 {
+		out.Usage.CacheCreation = &relaymodel.ClaudeCacheCreation{
+			Ephemeral5mInputTokens: r.Usage.CacheWrite5mTokens,
+			Ephemeral1hInputTokens: r.Usage.CacheWrite1hTokens,
+		}
 	}
 
 	for _, choice := range r.Choices {
@@ -451,12 +471,23 @@ func ConvertOpenAIStreamToClaudeSSE(c *gin.Context, resp *http.Response, promptT
 		// Usage delta
 		if chunk.Usage != nil {
 			usage = chunk.Usage
+			usageDelta := map[string]any{
+				"input_tokens":  usage.PromptTokens,
+				"output_tokens": usage.CompletionTokens,
+			}
+			if usage.PromptTokensDetails != nil && usage.PromptTokensDetails.CachedTokens > 0 {
+				usageDelta["cache_read_input_tokens"] = usage.PromptTokensDetails.CachedTokens
+			}
+			if usage.CacheWrite5mTokens > 0 || usage.CacheWrite1hTokens > 0 {
+				usageDelta["cache_creation_input_tokens"] = usage.CacheWrite5mTokens + usage.CacheWrite1hTokens
+				usageDelta["cache_creation"] = map[string]any{
+					"ephemeral_5m_input_tokens": usage.CacheWrite5mTokens,
+					"ephemeral_1h_input_tokens": usage.CacheWrite1hTokens,
+				}
+			}
 			msgDelta := map[string]any{
-				"type": "message_delta",
-				"usage": map[string]any{
-					"input_tokens":  usage.PromptTokens,
-					"output_tokens": usage.CompletionTokens,
-				},
+				"type":  "message_delta",
+				"usage": usageDelta,
 			}
 			if b, e := json.Marshal(msgDelta); e == nil {
 				c.Writer.Write([]byte("data: "))
@@ -672,9 +703,17 @@ func responseAPIUsageToModel(usage *responseAPIUsage) *relaymodel.Usage {
 		total = usage.InputTokens + usage.OutputTokens
 	}
 	return &relaymodel.Usage{
-		PromptTokens:     usage.InputTokens,
-		CompletionTokens: usage.OutputTokens,
-		TotalTokens:      total,
+		PromptTokens:       usage.InputTokens,
+		CompletionTokens:   usage.OutputTokens,
+		TotalTokens:        total,
+		CacheWrite5mTokens: usage.CacheWrite5mTokens,
+		CacheWrite1hTokens: usage.CacheWrite1hTokens,
+		PromptTokensDetails: func() *relaymodel.UsagePromptTokensDetails {
+			if usage.InputTokensDetails == nil || usage.InputTokensDetails.CachedTokens <= 0 {
+				return nil
+			}
+			return &relaymodel.UsagePromptTokensDetails{CachedTokens: usage.InputTokensDetails.CachedTokens}
+		}(),
 	}
 }
 
@@ -995,9 +1034,16 @@ type responseAPIResponse struct {
 }
 
 type responseAPIUsage struct {
-	InputTokens  int `json:"input_tokens"`
-	OutputTokens int `json:"output_tokens"`
-	TotalTokens  int `json:"total_tokens"`
+	InputTokens        int                            `json:"input_tokens"`
+	OutputTokens       int                            `json:"output_tokens"`
+	TotalTokens        int                            `json:"total_tokens"`
+	InputTokensDetails *responseAPIInputTokensDetails `json:"input_tokens_details,omitempty"`
+	CacheWrite5mTokens int                            `json:"cache_write_5m_tokens,omitempty"`
+	CacheWrite1hTokens int                            `json:"cache_write_1h_tokens,omitempty"`
+}
+
+type responseAPIInputTokensDetails struct {
+	CachedTokens int `json:"cached_tokens,omitempty"`
 }
 
 type responseAPIOutput struct {

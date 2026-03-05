@@ -373,6 +373,7 @@ func extractNormalWebSocketClose(err error) (int, string, bool) {
 //   - int: close code when available.
 //   - string: close reason text.
 //   - bool: true when HTTP fallback should be used.
+//
 // tryBuildWebSocketErrorResponse converts a websocket error event into a synthesized
 // HTTP error response compatible with existing relay error handling.
 //

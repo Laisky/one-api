@@ -161,8 +161,8 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		},
 	},
 	"gemini-3.1-flash-image-preview": {
-		Ratio:           0.50 * ratio.MilliTokensUsd,
-		CompletionRatio: 3.00 / 0.50,
+		Ratio:           0.25 * ratio.MilliTokensUsd,
+		CompletionRatio: 1.50 / 0.25,
 		Image:           gemini31FlashImageConfig(),
 	},
 	"gemini-3.1-flash-lite-preview": {

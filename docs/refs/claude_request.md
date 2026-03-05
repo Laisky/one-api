@@ -12,6 +12,51 @@ The Messages API can be used for either single queries or stateless multi-turn c
 
 Learn more about the Messages API in our [user guide](https://docs.claude.com/en/docs/initial-setup)
 
+### Prompt Caching Notes
+
+Prompt caching can be enabled in two ways:
+
+- Top-level automatic mode:
+
+  ```json
+  { "cache_control": { "type": "ephemeral" } }
+  ```
+
+- Explicit block mode: add `cache_control` on specific `tools` / `system` / `messages` content blocks.
+
+TTL:
+
+- `5m` (default)
+- `1h` (higher write price)
+
+Token accounting in Claude usage is bucketed:
+
+- `input_tokens`: uncached tokens after the last cache breakpoint.
+- `cache_read_input_tokens`: tokens read from cache (cache hit).
+- `cache_creation_input_tokens`: legacy total cache-write tokens.
+- `cache_creation.ephemeral_5m_input_tokens`: 5-minute cache-write tokens.
+- `cache_creation.ephemeral_1h_input_tokens`: 1-hour cache-write tokens.
+
+For cost and reconciliation, total input should be interpreted as:
+
+```text
+total_input_tokens = input_tokens + cache_read_input_tokens + cache_creation_input_tokens
+```
+
+When `cache_creation` exists, `cache_creation_input_tokens` is the sum of `ephemeral_5m_input_tokens + ephemeral_1h_input_tokens`.
+
+Pricing follows Anthropic multipliers (relative to base input price):
+
+- cache read: `0.1x`
+- cache write 5m: `1.25x`
+- cache write 1h: `2.0x`
+
+Important implementation note for billing correctness:
+
+- Claude `input_tokens` does not include cache-read/cache-write buckets.
+- Cache buckets must be billed independently instead of being clamped against `input_tokens`.
+- For mixed providers, keep this rule specific to Claude-style usage semantics.
+
 ### Body Parameters
 
 - `max_tokens: number`

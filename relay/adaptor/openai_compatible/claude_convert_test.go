@@ -48,7 +48,14 @@ func TestConvertOpenAIResponseToClaudeResponse_ChatCompletions(t *testing.T) {
             },
             "finish_reason":"tool_calls"
         }],
-        "usage": {"prompt_tokens":5, "completion_tokens":7, "total_tokens":12}
+		"usage": {
+			"prompt_tokens":5,
+			"completion_tokens":7,
+			"total_tokens":12,
+			"prompt_tokens_details":{"cached_tokens":3},
+			"cache_write_5m_tokens":11,
+			"cache_write_1h_tokens":13
+		}
     }`
 
 	resp := &http.Response{
@@ -70,6 +77,11 @@ func TestConvertOpenAIResponseToClaudeResponse_ChatCompletions(t *testing.T) {
 	assert.Equal(t, "gpt-test", cr.Model)
 	assert.Equal(t, 5, cr.Usage.InputTokens)
 	assert.Equal(t, 7, cr.Usage.OutputTokens)
+	assert.Equal(t, 3, cr.Usage.CacheReadInputTokens)
+	assert.Equal(t, 24, cr.Usage.CacheCreationInputTokens)
+	require.NotNil(t, cr.Usage.CacheCreation)
+	assert.Equal(t, 11, cr.Usage.CacheCreation.Ephemeral5mInputTokens)
+	assert.Equal(t, 13, cr.Usage.CacheCreation.Ephemeral1hInputTokens)
 	assert.Equal(t, "tool_use", cr.StopReason)
 	// Expect text and tool_use blocks
 	hasText := false
@@ -98,7 +110,14 @@ func TestConvertOpenAIResponseToClaudeResponse_ResponseAPI(t *testing.T) {
             {"type":"reasoning","summary":[{"type":"summary_text","text":"think"}]},
             {"type":"function_call","call_id":"call_2","name":"foo","arguments":"{\"x\":1}"}
         ],
-        "usage":{"input_tokens":3,"output_tokens":4,"total_tokens":7},
+		"usage":{
+			"input_tokens":3,
+			"output_tokens":4,
+			"total_tokens":7,
+			"input_tokens_details":{"cached_tokens":2},
+			"cache_write_5m_tokens":5,
+			"cache_write_1h_tokens":6
+		},
         "created_at": 1,
         "status":"completed"
     }`
@@ -114,6 +133,11 @@ func TestConvertOpenAIResponseToClaudeResponse_ResponseAPI(t *testing.T) {
 	assert.Equal(t, "gpt-resp", cr.Model)
 	assert.Equal(t, 3, cr.Usage.InputTokens)
 	assert.Equal(t, 4, cr.Usage.OutputTokens)
+	assert.Equal(t, 2, cr.Usage.CacheReadInputTokens)
+	assert.Equal(t, 11, cr.Usage.CacheCreationInputTokens)
+	require.NotNil(t, cr.Usage.CacheCreation)
+	assert.Equal(t, 5, cr.Usage.CacheCreation.Ephemeral5mInputTokens)
+	assert.Equal(t, 6, cr.Usage.CacheCreation.Ephemeral1hInputTokens)
 
 	// Expect text, thinking, and tool_use blocks
 	types := make(map[string]int)
@@ -167,7 +191,7 @@ func TestConvertOpenAIStreamToClaudeSSE_BasicsAndUsage(t *testing.T) {
 		`data: {"choices":[{"delta":{"content":"Hel"}}]}`,
 		`data: {"choices":[{"delta":{"tool_calls":[{"id":"call_1","type":"function","function":{"name":"get_weather","arguments":"{\\"city\\":\\"SF\\"}"}}]}}]}`,
 		`data: {"choices":[{"delta":{"content":"lo"}}]}`,
-		`data: {"usage":{"prompt_tokens":12,"completion_tokens":3,"total_tokens":15}}`,
+		`data: {"usage":{"prompt_tokens":12,"completion_tokens":3,"total_tokens":15,"prompt_tokens_details":{"cached_tokens":4},"cache_write_5m_tokens":20,"cache_write_1h_tokens":30}}`,
 		`data: [DONE]`,
 	}
 	body := strings.Join(chunks, "\n\n") + "\n\n"
@@ -181,12 +205,19 @@ func TestConvertOpenAIStreamToClaudeSSE_BasicsAndUsage(t *testing.T) {
 	assert.Equal(t, 12, usage.PromptTokens)
 	assert.Equal(t, 3, usage.CompletionTokens)
 	assert.Equal(t, 15, usage.TotalTokens)
+	require.NotNil(t, usage.PromptTokensDetails)
+	assert.Equal(t, 4, usage.PromptTokensDetails.CachedTokens)
+	assert.Equal(t, 20, usage.CacheWrite5mTokens)
+	assert.Equal(t, 30, usage.CacheWrite1hTokens)
 
 	out := w.Body.String()
 	// Should include Claude-native SSE events
 	assert.Contains(t, out, "\"type\":\"message_start\"")
 	assert.Contains(t, out, "\"type\":\"content_block_start\"")
 	assert.Contains(t, out, "\"type\":\"content_block_delta\"")
+	assert.Contains(t, out, "\"cache_read_input_tokens\":4")
+	assert.Contains(t, out, "\"ephemeral_5m_input_tokens\":20")
+	assert.Contains(t, out, "\"ephemeral_1h_input_tokens\":30")
 	assert.Contains(t, out, "\"type\":\"message_stop\"")
 	assert.Contains(t, out, "data: [DONE]")
 }
