@@ -128,6 +128,8 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 	// GPT-5 Models
 	// -------------------------------------
 
+	"gpt-5.4":                {Ratio: 1.75 * ratio.MilliTokensUsd, CompletionRatio: 14 / 1.75, CachedInputRatio: 0.175 * ratio.MilliTokensUsd},
+	"gpt-5.4-pro":            {Ratio: 21 * ratio.MilliTokensUsd, CompletionRatio: 168 / 21.0},
 	"gpt-5.2":                {Ratio: 1.75 * ratio.MilliTokensUsd, CompletionRatio: 14 / 1.75, CachedInputRatio: 0.175 * ratio.MilliTokensUsd},
 	"gpt-5.2-2025-12-11":     {Ratio: 1.75 * ratio.MilliTokensUsd, CompletionRatio: 14 / 1.75, CachedInputRatio: 0.175 * ratio.MilliTokensUsd},
 	"gpt-5.2-codex":          {Ratio: 1.75 * ratio.MilliTokensUsd, CompletionRatio: 14 / 1.75, CachedInputRatio: 0.175 * ratio.MilliTokensUsd},
@@ -552,11 +554,11 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 // ModelList derived from ModelRatios for backward compatibility
 var ModelList = adaptor.GetModelListFromPricing(ModelRatios)
 
-// OpenAIToolingDefaults enumerates OpenAI's built-in tool whitelist and pricing (retrieved 2025-11-11).
+// OpenAIToolingDefaults enumerates OpenAI's built-in tool whitelist and pricing (retrieved 2026-03-05).
 // Source: https://r.jina.ai/https://platform.openai.com/docs/pricing#built-in-tools
 var OpenAIToolingDefaults = adaptor.ChannelToolConfig{
 	Pricing: map[string]adaptor.ToolPricingConfig{
-		"code_interpreter":                 {UsdPerCall: 0.03},   // $0.03 per container session
+		"code_interpreter":                 {UsdPerCall: 0.03},   // $0.03 per default-tier container session (20-minute billing begins 2026-03-31)
 		"file_search":                      {UsdPerCall: 0.0025}, // $2.50 per 1K tool calls
 		"web_search":                       {UsdPerCall: 0.01},   // $10 per 1K tool calls
 		"web_search_preview_reasoning":     {UsdPerCall: 0.01},   // Preview tier for reasoning models, $10 per 1K tool calls
