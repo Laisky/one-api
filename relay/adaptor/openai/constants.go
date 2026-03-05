@@ -130,6 +130,8 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 
 	"gpt-5.4":                {Ratio: 1.75 * ratio.MilliTokensUsd, CompletionRatio: 14 / 1.75, CachedInputRatio: 0.175 * ratio.MilliTokensUsd},
 	"gpt-5.4-pro":            {Ratio: 21 * ratio.MilliTokensUsd, CompletionRatio: 168 / 21.0},
+	"gpt-5.3-chat-latest":    {Ratio: 1.75 * ratio.MilliTokensUsd, CompletionRatio: 14 / 1.75, CachedInputRatio: 0.175 * ratio.MilliTokensUsd},
+	"gpt-5.3-codex":          {Ratio: 1.75 * ratio.MilliTokensUsd, CompletionRatio: 14 / 1.75, CachedInputRatio: 0.175 * ratio.MilliTokensUsd},
 	"gpt-5.2":                {Ratio: 1.75 * ratio.MilliTokensUsd, CompletionRatio: 14 / 1.75, CachedInputRatio: 0.175 * ratio.MilliTokensUsd},
 	"gpt-5.2-2025-12-11":     {Ratio: 1.75 * ratio.MilliTokensUsd, CompletionRatio: 14 / 1.75, CachedInputRatio: 0.175 * ratio.MilliTokensUsd},
 	"gpt-5.2-codex":          {Ratio: 1.75 * ratio.MilliTokensUsd, CompletionRatio: 14 / 1.75, CachedInputRatio: 0.175 * ratio.MilliTokensUsd},
