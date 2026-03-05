@@ -162,6 +162,7 @@ func postConsumeQuota(ctx context.Context,
 	modelRatio float64,
 	groupRatio float64,
 	systemPromptReset bool,
+	channelModelConfigs map[string]model.ModelConfigLocal,
 	channelCompletionRatio map[string]float64) (quota int64) {
 	if usage == nil {
 		gmw.GetLogger(ctx).Error("usage is nil, which is unexpected")
@@ -174,6 +175,7 @@ func postConsumeQuota(ctx context.Context,
 		ModelName:              textRequest.Model,
 		ModelRatio:             modelRatio,
 		GroupRatio:             groupRatio,
+		ChannelModelConfigs:    channelModelConfigs,
 		ChannelCompletionRatio: channelCompletionRatio,
 		PricingAdaptor:         pricingAdaptor,
 	})
@@ -252,6 +254,7 @@ func postConsumeQuotaWithTraceID(ctx context.Context, traceId string,
 	modelRatio float64,
 	groupRatio float64,
 	systemPromptReset bool,
+	channelModelConfigs map[string]model.ModelConfigLocal,
 	channelCompletionRatio map[string]float64) (quota int64) {
 	if usage == nil {
 		gmw.GetLogger(ctx).Error("usage is nil, which is unexpected")
@@ -264,6 +267,7 @@ func postConsumeQuotaWithTraceID(ctx context.Context, traceId string,
 		ModelName:              textRequest.Model,
 		ModelRatio:             modelRatio,
 		GroupRatio:             groupRatio,
+		ChannelModelConfigs:    channelModelConfigs,
 		ChannelCompletionRatio: channelCompletionRatio,
 		PricingAdaptor:         pricingAdaptor,
 	})

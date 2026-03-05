@@ -30,6 +30,7 @@ type QuotaTrackerParams struct {
 	ModelRatio             float64
 	GroupRatio             float64
 	PreConsumedQuota       int64
+	ChannelModelConfigs    map[string]model.ModelConfigLocal
 	ChannelCompletionRatio map[string]float64
 	PricingAdaptor         adaptor.Adaptor
 	FlushInterval          time.Duration
@@ -223,6 +224,7 @@ func (t *QuotaTracker) computeTargetQuotaLocked() int64 {
 		ModelName:              t.params.ModelName,
 		ModelRatio:             t.params.ModelRatio,
 		GroupRatio:             t.params.GroupRatio,
+		ChannelModelConfigs:    t.params.ChannelModelConfigs,
 		ChannelCompletionRatio: t.params.ChannelCompletionRatio,
 		PricingAdaptor:         t.params.PricingAdaptor,
 	})

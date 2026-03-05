@@ -4,6 +4,7 @@ import (
 	"math"
 	"strings"
 
+	modelcfg "github.com/songquanpeng/one-api/model"
 	"github.com/songquanpeng/one-api/relay/adaptor"
 	relaymodel "github.com/songquanpeng/one-api/relay/model"
 	"github.com/songquanpeng/one-api/relay/pricing"
@@ -16,6 +17,7 @@ type ComputeInput struct {
 	ModelName              string
 	ModelRatio             float64
 	GroupRatio             float64
+	ChannelModelConfigs    map[string]modelcfg.ModelConfigLocal
 	ChannelCompletionRatio map[string]float64
 	PricingAdaptor         adaptor.Adaptor
 }
@@ -48,12 +50,32 @@ func Compute(input ComputeInput) ComputeResult {
 	completionRatioResolved := pricing.GetCompletionRatioWithThreeLayers(input.ModelName, input.ChannelCompletionRatio, pricingAdaptor)
 
 	eff := pricing.ResolveEffectivePricing(input.ModelName, promptTokens, pricingAdaptor)
+	resolvedModelCfg, hasResolvedModelCfg := pricing.ResolveModelConfig(input.ModelName, input.ChannelModelConfigs, pricingAdaptor)
+	if hasResolvedModelCfg {
+		// Preserve legacy fallback behavior: when channel config omits base ratio/completion
+		// (keeps zero values), continue using the resolved three-layer ratios as base values.
+		if resolvedModelCfg.Ratio == 0 {
+			resolvedModelCfg.Ratio = input.ModelRatio
+		}
+		if resolvedModelCfg.CompletionRatio == 0 {
+			resolvedModelCfg.CompletionRatio = completionRatioResolved
+		}
+		eff = pricing.ResolveEffectivePricingFromConfig(promptTokens, resolvedModelCfg)
+	}
 
 	usedModelRatio := input.ModelRatio
 	usedCompletionRatio := completionRatioResolved
-	if pricingAdaptor != nil {
-		defaultPricing := pricingAdaptor.GetDefaultModelPricing()
-		if _, ok := defaultPricing[input.ModelName]; ok {
+	if hasResolvedModelCfg {
+		usedModelRatio = eff.InputRatio
+		baseComp := eff.OutputRatio
+		if eff.InputRatio != 0 {
+			baseComp = eff.OutputRatio / eff.InputRatio
+		} else {
+			baseComp = 1.0
+		}
+		usedCompletionRatio = baseComp
+	} else if pricingAdaptor != nil {
+		if _, ok := pricingAdaptor.GetDefaultModelPricing()[input.ModelName]; ok {
 			adaptorBase := pricingAdaptor.GetModelRatio(input.ModelName)
 			if math.Abs(input.ModelRatio-adaptorBase) < 1e-12 {
 				usedModelRatio = eff.InputRatio

@@ -358,6 +358,7 @@ func executeChatMCPToolLoop(c *gin.Context, meta *metalib.Meta, request *relaymo
 	}
 
 	channelModelRatio, channelCompletionRatio := getChannelRatios(c)
+	channelModelConfigs := getChannelModelConfigs(c)
 	pricingAdaptor := resolvePricingAdaptor(meta)
 	modelRatio := pricing.GetModelRatioWithThreeLayers(request.Model, channelModelRatio, pricingAdaptor)
 	groupRatio := c.GetFloat64(ctxkey.ChannelRatio)
@@ -389,7 +390,7 @@ func executeChatMCPToolLoop(c *gin.Context, meta *metalib.Meta, request *relaymo
 			return nil, accumulated, summary, incrementalCharged, respErr
 		}
 		accumulated = mergeUsage(accumulated, usage)
-		updateMCPRequestCostEstimate(c, meta, accumulated, request.Model, modelRatio, groupRatio, channelCompletionRatio, pricingAdaptor)
+		updateMCPRequestCostEstimate(c, meta, accumulated, request.Model, modelRatio, groupRatio, channelModelConfigs, channelCompletionRatio, pricingAdaptor)
 
 		choice, ok := firstChoice(response)
 		if !ok || len(choice.Message.ToolCalls) == 0 {
@@ -440,7 +441,7 @@ func executeChatMCPToolLoop(c *gin.Context, meta *metalib.Meta, request *relaymo
 			return nil, accumulated, summary, incrementalCharged, openai.ErrorWrapper(execErr, "mcp_tool_call_failed", 500)
 		}
 		accumulated = applyMCPToolCostDelta(accumulated, previousCost, summary)
-		updateMCPRequestCostEstimate(c, meta, accumulated, request.Model, modelRatio, groupRatio, channelCompletionRatio, pricingAdaptor)
+		updateMCPRequestCostEstimate(c, meta, accumulated, request.Model, modelRatio, groupRatio, channelModelConfigs, channelCompletionRatio, pricingAdaptor)
 		if len(results) == 0 {
 			return response, accumulated, summary, incrementalCharged, nil
 		}

@@ -111,12 +111,25 @@ type ModelConfig struct {
 // ModelConfigLocal represents the local definition of ModelConfig to avoid import cycles
 // This should match the structure in relay/adaptor/interface.go
 type ModelConfigLocal struct {
-	Ratio           float64            `json:"ratio"`
-	CompletionRatio float64            `json:"completion_ratio,omitempty"`
-	MaxTokens       int32              `json:"max_tokens,omitempty"`
-	Video           *VideoPricingLocal `json:"video,omitempty"`
-	Audio           *AudioPricingLocal `json:"audio,omitempty"`
-	Image           *ImagePricingLocal `json:"image,omitempty"`
+	Ratio             float64               `json:"ratio"`
+	CompletionRatio   float64               `json:"completion_ratio,omitempty"`
+	CachedInputRatio  float64               `json:"cached_input_ratio,omitempty"`
+	CacheWrite5mRatio float64               `json:"cache_write_5m_ratio,omitempty"`
+	CacheWrite1hRatio float64               `json:"cache_write_1h_ratio,omitempty"`
+	Tiers             []ModelRatioTierLocal `json:"tiers,omitempty"`
+	MaxTokens         int32                 `json:"max_tokens,omitempty"`
+	Video             *VideoPricingLocal    `json:"video,omitempty"`
+	Audio             *AudioPricingLocal    `json:"audio,omitempty"`
+	Image             *ImagePricingLocal    `json:"image,omitempty"`
+}
+
+type ModelRatioTierLocal struct {
+	Ratio               float64 `json:"ratio"`
+	CompletionRatio     float64 `json:"completion_ratio,omitempty"`
+	CachedInputRatio    float64 `json:"cached_input_ratio,omitempty"`
+	CacheWrite5mRatio   float64 `json:"cache_write_5m_ratio,omitempty"`
+	CacheWrite1hRatio   float64 `json:"cache_write_1h_ratio,omitempty"`
+	InputTokenThreshold int     `json:"input_token_threshold"`
 }
 
 // VideoPricingLocal represents channel-scoped video pricing metadata stored alongside model configs.
@@ -264,9 +277,15 @@ func normalizeModelConfigLocal(cfg ModelConfigLocal) (ModelConfigLocal, error) {
 	}
 
 	normalized := ModelConfigLocal{
-		Ratio:           cfg.Ratio,
-		CompletionRatio: cfg.CompletionRatio,
-		MaxTokens:       cfg.MaxTokens,
+		Ratio:             cfg.Ratio,
+		CompletionRatio:   cfg.CompletionRatio,
+		CachedInputRatio:  cfg.CachedInputRatio,
+		CacheWrite5mRatio: cfg.CacheWrite5mRatio,
+		CacheWrite1hRatio: cfg.CacheWrite1hRatio,
+		MaxTokens:         cfg.MaxTokens,
+	}
+	if len(cfg.Tiers) > 0 {
+		normalized.Tiers = append([]ModelRatioTierLocal(nil), cfg.Tiers...)
 	}
 	if video != nil {
 		normalized.Video = video
@@ -716,6 +735,29 @@ func (channel *Channel) validateModelPriceConfigs(configs map[string]ModelConfig
 		if config.CompletionRatio < 0 {
 			return errors.Errorf("negative completion ratio for model %s: %f", modelName, config.CompletionRatio)
 		}
+		if config.CacheWrite5mRatio < 0 {
+			return errors.Errorf("negative cache_write_5m_ratio for model %s: %f", modelName, config.CacheWrite5mRatio)
+		}
+		if config.CacheWrite1hRatio < 0 {
+			return errors.Errorf("negative cache_write_1h_ratio for model %s: %f", modelName, config.CacheWrite1hRatio)
+		}
+		for _, tier := range config.Tiers {
+			if tier.InputTokenThreshold < 0 {
+				return errors.Errorf("negative input_token_threshold for model %s tier: %d", modelName, tier.InputTokenThreshold)
+			}
+			if tier.Ratio < 0 {
+				return errors.Errorf("negative tier ratio for model %s: %f", modelName, tier.Ratio)
+			}
+			if tier.CompletionRatio < 0 {
+				return errors.Errorf("negative tier completion ratio for model %s: %f", modelName, tier.CompletionRatio)
+			}
+			if tier.CacheWrite5mRatio < 0 {
+				return errors.Errorf("negative tier cache_write_5m_ratio for model %s: %f", modelName, tier.CacheWrite5mRatio)
+			}
+			if tier.CacheWrite1hRatio < 0 {
+				return errors.Errorf("negative tier cache_write_1h_ratio for model %s: %f", modelName, tier.CacheWrite1hRatio)
+			}
+		}
 
 		// Validate MaxTokens
 		if config.MaxTokens < 0 {
@@ -736,7 +778,16 @@ func (channel *Channel) validateModelPriceConfigs(configs map[string]ModelConfig
 		}
 
 		// Validate that at least one field has meaningful data
-		if config.Ratio == 0 && config.CompletionRatio == 0 && config.MaxTokens == 0 && !hasVideoData && !hasAudioData && !hasImageData {
+		if config.Ratio == 0 &&
+			config.CompletionRatio == 0 &&
+			config.CachedInputRatio == 0 &&
+			config.CacheWrite5mRatio == 0 &&
+			config.CacheWrite1hRatio == 0 &&
+			len(config.Tiers) == 0 &&
+			config.MaxTokens == 0 &&
+			!hasVideoData &&
+			!hasAudioData &&
+			!hasImageData {
 			return errors.Errorf("model %s has no meaningful configuration data", modelName)
 		}
 	}
