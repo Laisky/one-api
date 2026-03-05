@@ -31,6 +31,11 @@ func getChannelRatios(c *gin.Context) (map[string]float64, map[string]float64) {
 	return modelRatios, completionRatios
 }
 
+func getChannelModelConfigs(c *gin.Context) map[string]model.ModelConfigLocal {
+	channel := c.MustGet(ctxkey.ChannelModel).(*model.Channel)
+	return channel.GetModelPriceConfigs()
+}
+
 // getAndValidateResponseAPIRequest gets and validates Response API request
 func getAndValidateResponseAPIRequest(c *gin.Context) (*openai.ResponseAPIRequest, error) {
 	responseAPIRequest := &openai.ResponseAPIRequest{}

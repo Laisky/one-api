@@ -92,6 +92,7 @@ func postConsumeResponseAPIQuota(ctx context.Context,
 	preConsumedQuota int64,
 	modelRatio float64,
 	groupRatio float64,
+	channelModelConfigs map[string]model.ModelConfigLocal,
 	channelCompletionRatio map[string]float64) (quota int64) {
 
 	if usage == nil {
@@ -106,6 +107,7 @@ func postConsumeResponseAPIQuota(ctx context.Context,
 		ModelName:              responseAPIRequest.Model,
 		ModelRatio:             modelRatio,
 		GroupRatio:             groupRatio,
+		ChannelModelConfigs:    channelModelConfigs,
 		ChannelCompletionRatio: channelCompletionRatio,
 		PricingAdaptor:         pricingAdaptor,
 	})

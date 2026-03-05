@@ -181,7 +181,7 @@ func updateMCPRequestCostProvisional(c *gin.Context, meta *metalib.Meta, quota i
 // updateMCPRequestCostEstimate updates request cost based on accumulated usage after each round.
 // Parameters: c is the Gin context, meta provides request metadata, usage is the accumulated usage, modelName/modelRatio/groupRatio/channelCompletionRatio/pricingAdaptor drive pricing.
 // Returns: none.
-func updateMCPRequestCostEstimate(c *gin.Context, meta *metalib.Meta, usage *relaymodel.Usage, modelName string, modelRatio float64, groupRatio float64, channelCompletionRatio map[string]float64, pricingAdaptor adaptor.Adaptor) {
+func updateMCPRequestCostEstimate(c *gin.Context, meta *metalib.Meta, usage *relaymodel.Usage, modelName string, modelRatio float64, groupRatio float64, channelModelConfigs map[string]model.ModelConfigLocal, channelCompletionRatio map[string]float64, pricingAdaptor adaptor.Adaptor) {
 	if c == nil || meta == nil || usage == nil {
 		return
 	}
@@ -195,6 +195,7 @@ func updateMCPRequestCostEstimate(c *gin.Context, meta *metalib.Meta, usage *rel
 		ModelName:              modelName,
 		ModelRatio:             modelRatio,
 		GroupRatio:             groupRatio,
+		ChannelModelConfigs:    channelModelConfigs,
 		ChannelCompletionRatio: channelCompletionRatio,
 		PricingAdaptor:         pricingAdaptor,
 	})

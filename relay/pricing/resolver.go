@@ -108,9 +108,25 @@ func ResolveImagePricing(modelName string, channelConfigs map[string]model.Model
 
 func convertLocalModelConfig(local model.ModelConfigLocal) adaptor.ModelConfig {
 	cfg := adaptor.ModelConfig{
-		Ratio:           local.Ratio,
-		CompletionRatio: local.CompletionRatio,
-		MaxTokens:       local.MaxTokens,
+		Ratio:             local.Ratio,
+		CompletionRatio:   local.CompletionRatio,
+		CachedInputRatio:  local.CachedInputRatio,
+		CacheWrite5mRatio: local.CacheWrite5mRatio,
+		CacheWrite1hRatio: local.CacheWrite1hRatio,
+		MaxTokens:         local.MaxTokens,
+	}
+	if len(local.Tiers) > 0 {
+		cfg.Tiers = make([]adaptor.ModelRatioTier, 0, len(local.Tiers))
+		for _, t := range local.Tiers {
+			cfg.Tiers = append(cfg.Tiers, adaptor.ModelRatioTier{
+				Ratio:               t.Ratio,
+				CompletionRatio:     t.CompletionRatio,
+				CachedInputRatio:    t.CachedInputRatio,
+				CacheWrite5mRatio:   t.CacheWrite5mRatio,
+				CacheWrite1hRatio:   t.CacheWrite1hRatio,
+				InputTokenThreshold: t.InputTokenThreshold,
+			})
+		}
 	}
 	if local.Video != nil {
 		cfg.Video = convertLocalVideo(local.Video)

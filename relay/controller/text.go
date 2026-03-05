@@ -66,12 +66,14 @@ func RelayTextHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 	// get channel-specific pricing if available
 	var channelRecord *model.Channel
 	var channelModelRatio map[string]float64
+	var channelModelConfigs map[string]model.ModelConfigLocal
 	var channelCompletionRatio map[string]float64
 	if channelModel, ok := c.Get(ctxkey.ChannelModel); ok {
 		if channel, ok := channelModel.(*model.Channel); ok {
 			channelRecord = channel
 			// Get from unified ModelConfigs only (after migration)
 			channelModelRatio = channel.GetModelRatioFromConfigs()
+			channelModelConfigs = channel.GetModelPriceConfigs()
 			channelCompletionRatio = channel.GetCompletionRatioFromConfigs()
 		}
 	}
@@ -129,6 +131,7 @@ func RelayTextHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 			ModelRatio:             modelRatio,
 			GroupRatio:             groupRatio,
 			PreConsumedQuota:       preConsumedQuota,
+			ChannelModelConfigs:    channelModelConfigs,
 			ChannelCompletionRatio: channelCompletionRatio,
 			PricingAdaptor:         pricingAdaptor,
 			FlushInterval:          time.Duration(config.StreamingBillingIntervalSec) * time.Second,
@@ -224,7 +227,7 @@ func RelayTextHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 			var quota int64
 
 			go func() {
-				quota = postConsumeQuota(ctx, usage, meta, textRequest, ratio, preConsumedQuota, incrementalCharged, modelRatio, groupRatio, systemPromptReset, channelCompletionRatio)
+				quota = postConsumeQuota(ctx, usage, meta, textRequest, ratio, preConsumedQuota, incrementalCharged, modelRatio, groupRatio, systemPromptReset, channelModelConfigs, channelCompletionRatio)
 				if requestId != "" {
 					if err := model.UpdateUserRequestCostQuotaByRequestID(quotaId, requestId, quota); err != nil {
 						lg.Error("update user request cost failed", zap.Error(err), zap.String("request_id", requestId))
@@ -412,7 +415,7 @@ func RelayTextHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 
 		requestId := c.GetString(ctxkey.RequestId)
 		go func() {
-			quota = postConsumeQuota(ctx, usage, meta, textRequest, ratio, preConsumedQuota, incrementalCharged, modelRatio, groupRatio, systemPromptReset, channelCompletionRatio)
+			quota = postConsumeQuota(ctx, usage, meta, textRequest, ratio, preConsumedQuota, incrementalCharged, modelRatio, groupRatio, systemPromptReset, channelModelConfigs, channelCompletionRatio)
 
 			// Reconcile request cost with final quota (override provisional pre-consumed value)
 			if requestId == "" {

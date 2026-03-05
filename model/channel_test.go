@@ -313,6 +313,44 @@ func TestChannel_GetModelPriceConfigs(t *testing.T) {
 	}
 }
 
+func TestChannel_GetModelPriceConfigs_PreservesCacheAndTierFields(t *testing.T) {
+	t.Parallel()
+	channel := &Channel{
+		Id: 1,
+		ModelConfigs: stringPtr(`{
+			"claude-4.6-sonnet": {
+				"ratio": 1.543,
+				"completion_ratio": 7.715,
+				"cached_input_ratio": 1.543,
+				"cache_write_5m_ratio": 1.543,
+				"cache_write_1h_ratio": 1.543,
+				"tiers": [
+					{
+						"input_token_threshold": 200000,
+						"ratio": 3.086,
+						"completion_ratio": 11.571,
+						"cached_input_ratio": 3.086,
+						"cache_write_5m_ratio": 3.086,
+						"cache_write_1h_ratio": 3.086
+					}
+				]
+			}
+		}`),
+	}
+
+	configs := channel.GetModelPriceConfigs()
+	require.Contains(t, configs, "claude-4.6-sonnet")
+
+	data, err := json.Marshal(configs["claude-4.6-sonnet"])
+	require.NoError(t, err)
+	var decoded map[string]any
+	require.NoError(t, json.Unmarshal(data, &decoded))
+	require.Contains(t, decoded, "cached_input_ratio")
+	require.Contains(t, decoded, "cache_write_5m_ratio")
+	require.Contains(t, decoded, "cache_write_1h_ratio")
+	require.Contains(t, decoded, "tiers")
+}
+
 func TestChannel_GetModelPriceConfig(t *testing.T) {
 	channel := &Channel{
 		Id:           1,

@@ -438,36 +438,37 @@ type EffectivePricing struct {
 // - If tiers exist, finds the tier whose InputTokenThreshold <= inputTokens and is the highest such threshold.
 // - Optional tier fields inherit from base if zero. Negative cached ratios mean free.
 func ResolveEffectivePricing(modelName string, inputTokens int, adaptor adaptor.Adaptor) EffectivePricing {
-	eff := EffectivePricing{}
 	if adaptor == nil {
-		// Fallback to defaults if adaptor missing
 		baseIn := 2.5 * 0.000001
 		baseComp := 1.0
-		eff.InputRatio = baseIn
-		eff.OutputRatio = baseIn * baseComp
-		eff.CachedInputRatio = 0
-		eff.CacheWrite5mRatio = 0
-		eff.CacheWrite1hRatio = 0
-		eff.AppliedTierThreshold = 0
-		return eff
+		return EffectivePricing{
+			InputRatio:            baseIn,
+			OutputRatio:           baseIn * baseComp,
+			CachedInputRatio:      0,
+			CacheWrite5mRatio:     0,
+			CacheWrite1hRatio:     0,
+			AppliedTierThreshold:  0,
+		}
 	}
 
-	pricing := adaptor.GetDefaultModelPricing()
-	base, ok := pricing[modelName]
-	if !ok {
-		// Use adaptor fallbacks
-		baseRatio := adaptor.GetModelRatio(modelName)
-		baseComp := adaptor.GetCompletionRatio(modelName)
-		eff.InputRatio = baseRatio
-		eff.OutputRatio = baseRatio * baseComp
-		eff.CachedInputRatio = base.CachedInputRatio // will be zero, as base not exists
-		eff.CacheWrite5mRatio = base.CacheWrite5mRatio
-		eff.CacheWrite1hRatio = base.CacheWrite1hRatio
-		eff.AppliedTierThreshold = 0
-		return eff
+	modelPricing := adaptor.GetDefaultModelPricing()
+	if base, ok := modelPricing[modelName]; ok {
+		return ResolveEffectivePricingFromConfig(inputTokens, base)
 	}
 
-	// Start with base
+	baseRatio := adaptor.GetModelRatio(modelName)
+	baseComp := adaptor.GetCompletionRatio(modelName)
+	return EffectivePricing{
+		InputRatio:            baseRatio,
+		OutputRatio:           baseRatio * baseComp,
+		CachedInputRatio:      0,
+		CacheWrite5mRatio:     0,
+		CacheWrite1hRatio:     0,
+		AppliedTierThreshold:  0,
+	}
+}
+
+func ResolveEffectivePricingFromConfig(inputTokens int, base adaptor.ModelConfig) EffectivePricing {
 	in := base.Ratio
 	comp := base.CompletionRatio
 	cachedIn := base.CachedInputRatio
@@ -475,39 +476,36 @@ func ResolveEffectivePricing(modelName string, inputTokens int, adaptor adaptor.
 	cw1 := base.CacheWrite1hRatio
 	appliedThreshold := 0
 
-	// Find applicable tier (tiers are sorted ascending by threshold)
 	if len(base.Tiers) > 0 {
 		for _, t := range base.Tiers {
-			if inputTokens >= t.InputTokenThreshold {
-				// Apply overrides from this tier
-				if t.Ratio != 0 {
-					in = t.Ratio
-				}
-				if t.CompletionRatio != 0 {
-					comp = t.CompletionRatio
-				}
-				if t.CachedInputRatio != 0 {
-					cachedIn = t.CachedInputRatio
-				}
-				if t.CacheWrite5mRatio != 0 {
-					cw5 = t.CacheWrite5mRatio
-				}
-				if t.CacheWrite1hRatio != 0 {
-					cw1 = t.CacheWrite1hRatio
-				}
-				appliedThreshold = t.InputTokenThreshold
-			} else {
+			if inputTokens < t.InputTokenThreshold {
 				break
 			}
+			if t.Ratio != 0 {
+				in = t.Ratio
+			}
+			if t.CompletionRatio != 0 {
+				comp = t.CompletionRatio
+			}
+			if t.CachedInputRatio != 0 {
+				cachedIn = t.CachedInputRatio
+			}
+			if t.CacheWrite5mRatio != 0 {
+				cw5 = t.CacheWrite5mRatio
+			}
+			if t.CacheWrite1hRatio != 0 {
+				cw1 = t.CacheWrite1hRatio
+			}
+			appliedThreshold = t.InputTokenThreshold
 		}
 	}
 
-	eff.InputRatio = in
-	// Allow completion ratio to be zero if explicitly configured (means free completion tokens)
-	eff.OutputRatio = in * comp
-	eff.CachedInputRatio = cachedIn
-	eff.CacheWrite5mRatio = cw5
-	eff.CacheWrite1hRatio = cw1
-	eff.AppliedTierThreshold = appliedThreshold
-	return eff
+	return EffectivePricing{
+		InputRatio:            in,
+		OutputRatio:           in * comp,
+		CachedInputRatio:      cachedIn,
+		CacheWrite5mRatio:     cw5,
+		CacheWrite1hRatio:     cw1,
+		AppliedTierThreshold:  appliedThreshold,
+	}
 }
