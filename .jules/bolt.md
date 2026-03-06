@@ -32,3 +32,9 @@
 
 **Learning:** Resolving Audio/Image pricing from channel overrides previously converted the entire model configuration and then cloned the result again. This resulted in redundant heap allocations and unnecessary CPU cycles for converting unused media types (e.g., converting Video/Image when only Audio was needed).
 **Action:** Use targeted conversion functions (e.g., `convertLocalAudio`) and remove redundant clones when the object is already a freshly created local copy. This streamlines the pricing resolution path for media-heavy requests.
+
+## 2026-03-05 - [Redundant pricing lookups and deep-cloning in quota calculation]
+
+**Learning:** The `quota.Compute` function, a critical hot path for every request, was performing multiple redundant lookups (`GetCompletionRatioWithThreeLayers`, `ResolveEffectivePricing`, `ResolveModelConfig`) that each performed similar map lookups and expensive deep-cloning of `ModelConfig` objects. These objects contain large nested structures for media pricing (Image, Audio, Video) that are entirely unused during standard token-based quota calculation.
+
+**Action:** Consolidate pricing resolution into a single `ResolveModelConfigRatioOnly` call that performs a shallow clone of the base struct and a targeted clone of the `Tiers` slice, while omitting media metadata. This reduced the `BenchmarkCompute` execution time by ~19% (2313ns -> 1874ns). Always use "RatioOnly" or targeted lookup functions when full configuration metadata is not required in high-throughput paths.

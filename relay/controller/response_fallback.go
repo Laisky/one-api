@@ -267,7 +267,7 @@ func relayResponseAPIThroughChat(c *gin.Context, meta *metalib.Meta, responseAPI
 			var quota int64
 
 			go func() {
-				quota = postConsumeQuota(ctx, usage, meta, chatRequest, ratio, preConsumedQuota, incrementalCharged, modelRatio, groupRatio, false, channelModelConfigs, channelCompletionRatio)
+				quota = postConsumeQuota(ctx, usage, meta, chatRequest, ratio, preConsumedQuota, incrementalCharged, modelRatio, channelModelRatio, groupRatio, false, channelModelConfigs, channelCompletionRatio)
 				if requestId != "" {
 					if err := model.UpdateUserRequestCostQuotaByRequestID(quotaId, requestId, quota); err != nil {
 						lg.Error("update user request cost failed", zap.Error(err), zap.String("request_id", requestId))
@@ -450,7 +450,7 @@ func relayResponseAPIThroughChat(c *gin.Context, meta *metalib.Meta, responseAPI
 		var quota int64
 
 		go func() {
-			quota = postConsumeQuota(ctx, usage, meta, chatRequest, ratio, preConsumedQuota, 0, modelRatio, groupRatio, false, channelModelConfigs, channelCompletionRatio)
+			quota = postConsumeQuota(ctx, usage, meta, chatRequest, ratio, preConsumedQuota, 0, modelRatio, channelModelRatio, groupRatio, false, channelModelConfigs, channelCompletionRatio)
 			if requestId != "" {
 				if err := model.UpdateUserRequestCostQuotaByRequestID(quotaId, requestId, quota); err != nil {
 					lg.Error("update user request cost failed", zap.Error(err), zap.String("request_id", requestId))

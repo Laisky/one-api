@@ -247,8 +247,28 @@ func GetGlobalModelConfig(modelName string) (adaptor.ModelConfig, bool) {
 	return adaptor.ModelConfig{}, false
 }
 
-// GetGlobalVideoPricing returns the global video pricing configuration for a given model.
-// The returned configuration is cloned to prevent external mutation of the cache.
+// GetGlobalModelConfigRatioOnly returns a shallow copy of the global model configuration.
+// It specifically omits deep-cloning of media metadata (Video, Audio, Image) to reduce
+// allocations in hot paths like quota calculation.
+func GetGlobalModelConfigRatioOnly(modelName string) (adaptor.ModelConfig, bool) {
+	globalPricingManager.mu.RLock()
+	defer globalPricingManager.mu.RUnlock()
+
+	globalPricingManager.ensureInitialized()
+
+	if cfg, exists := globalPricingManager.globalModelPricing[modelName]; exists {
+		clone := cfg
+		if len(cfg.Tiers) > 0 {
+			clone.Tiers = append([]adaptor.ModelRatioTier(nil), cfg.Tiers...)
+		}
+		clone.Video = nil
+		clone.Audio = nil
+		clone.Image = nil
+		return clone, true
+	}
+	return adaptor.ModelConfig{}, false
+}
+
 func GetGlobalVideoPricing(modelName string) *adaptor.VideoPricingConfig {
 	globalPricingManager.mu.RLock()
 	defer globalPricingManager.mu.RUnlock()

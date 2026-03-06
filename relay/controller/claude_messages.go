@@ -475,7 +475,7 @@ postConsume:
 		var quota int64
 
 		go func() {
-			quota = postConsumeClaudeMessagesQuotaWithTraceID(ctx, requestId, traceId, usage, meta, claudeRequest, ratio, preConsumedQuota, mcpIncrementalCharged, modelRatio, groupRatio, channelModelConfigs, channelCompletionRatio)
+			quota = postConsumeClaudeMessagesQuotaWithTraceID(ctx, requestId, traceId, usage, meta, claudeRequest, ratio, preConsumedQuota, mcpIncrementalCharged, modelRatio, channelModelRatio, groupRatio, channelModelConfigs, channelCompletionRatio)
 
 			// Reconcile request cost with final quota (override provisional value)
 			if quota != 0 {
