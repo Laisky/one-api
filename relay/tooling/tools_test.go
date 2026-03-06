@@ -492,3 +492,61 @@ func TestValidateRequestedBuiltins_OpenAIUsesProviderDefaults(t *testing.T) {
 	channel := &model.Channel{Type: channeltype.OpenAI}
 	require.NoError(t, ValidateRequestedBuiltins("gpt-4o", meta, channel, &openai.Adaptor{}, map[string]struct{}{"web_search": {}}))
 }
+
+func TestNormalizeBuiltinType_ToolSearchAliases(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		input  string
+		expect string
+	}{
+		{name: "canonical web search", input: "web_search", expect: "web_search"},
+		{name: "preview alias", input: "web_search_preview", expect: "web_search"},
+		{name: "dash alias", input: "web-search", expect: "web_search"},
+		{name: "regex tool search", input: "tool_search_tool_regex_20251119", expect: "web_search"},
+		{name: "bm25 tool search", input: "tool_search_tool_bm25_20251119", expect: "web_search"},
+		{name: "unknown stays empty", input: "tool_search_custom", expect: ""},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, tt.expect, NormalizeBuiltinType(tt.input))
+		})
+	}
+}
+
+func TestApplyBuiltinToolCharges_ToolSearchCountsCanonicalized(t *testing.T) {
+	t.Parallel()
+	gin.SetMode(gin.TestMode)
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Set(ctxkey.ToolInvocationCounts, map[string]int{"tool_search_tool_regex_20251119": 2})
+
+	meta := &metalib.Meta{ActualModelName: "claude-sonnet-4-5"}
+	usage := &relaymodel.Usage{PromptTokens: 10, CompletionTokens: 5}
+
+	provider := &adaptorStub{
+		pricing: map[string]adaptor.ModelConfig{
+			"claude-sonnet-4-5": {},
+		},
+		tooling: adaptor.ChannelToolConfig{
+			Pricing: map[string]adaptor.ToolPricingConfig{
+				"web_search": {UsdPerCall: 0.01},
+			},
+		},
+	}
+
+	ApplyBuiltinToolCharges(c, &usage, meta, nil, provider)
+
+	expectedPerCall := int64(math.Ceil(0.01 * float64(ratio.QuotaPerUsd)))
+	require.Equal(t, expectedPerCall*2, usage.ToolsCost)
+
+	summaryAny, exists := c.Get(ctxkey.ToolInvocationSummary)
+	require.True(t, exists)
+	summary := summaryAny.(*model.ToolUsageSummary)
+	require.Equal(t, 2, summary.Counts["web_search"])
+	require.Equal(t, expectedPerCall*2, summary.CostByTool["web_search"])
+}

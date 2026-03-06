@@ -24,6 +24,7 @@
     - [Caching Strategy](#caching-strategy)
       - [Key Files](#key-files-2)
   - [Pricing System](#pricing-system)
+    - [Built-in Tool Alias Normalization (Anthropic Tool Search)](#built-in-tool-alias-normalization-anthropic-tool-search)
     - [Pricing Hierarchy](#pricing-hierarchy)
     - [Pricing Constants](#pricing-constants)
     - [Model Pricing Structure](#model-pricing-structure)
@@ -429,6 +430,18 @@ graph LR
 
 ## Pricing System
 
+### Built-in Tool Alias Normalization (Anthropic Tool Search)
+
+Built-in tool charging and allowlist checks use canonical tool names. For Anthropic Tool Search,
+the following aliases are normalized to `web_search` before policy checks and cost calculation:
+
+- `tool_search_tool_regex`
+- `tool_search_tool_bm25`
+- versioned variants such as `tool_search_tool_regex_20251119` and `tool_search_tool_bm25_20251119`
+
+This ensures one-api applies a single pricing and permission policy for search calls regardless of
+the upstream provider-specific identifier format.
+
 ### Pricing Hierarchy
 
 The system uses a **comprehensive four-layer pricing hierarchy** to handle custom channels and unknown models:
@@ -639,8 +652,8 @@ Flow:
 
 1. After `DoRequest` succeeds, write a provisional `UserRequestCost` for the `request_id` using the estimated pre-consumed quota (prompt tokens + max output tokens × pricing), even if physical pre-consume is skipped for trusted users/tokens.
 2. If upstream responds with a non-success HTTP status, apply conservative reconciliation:
-    - if the request was not forwarded upstream, refund pre-consumed quota and set provisional `UserRequestCost` to `0`;
-    - if the request may already have reached upstream, skip refund to avoid underbilling and rely on post-consume/provisional reconciliation.
+   - if the request was not forwarded upstream, refund pre-consumed quota and set provisional `UserRequestCost` to `0`;
+   - if the request may already have reached upstream, skip refund to avoid underbilling and rely on post-consume/provisional reconciliation.
 3. When usage arrives, compute the final quota using the detailed pricing formula and reconcile the record by overwriting the provisional value. Token/user/channel updates use the delta between pre- and post-consumption.
 
 Controllers:
