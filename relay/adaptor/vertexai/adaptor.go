@@ -301,6 +301,7 @@ const (
 	EndpointTypeOpenAI
 	EndpointTypeQwen
 	EndpointTypeImagen
+	EndpointTypeVeo
 	EndpointTypeClaude
 	EndpointTypeGemini
 )
@@ -316,6 +317,8 @@ func getModelEndpointType(modelName string) ModelEndpointType {
 		return EndpointTypeQwen
 	case isImagenModel(modelName):
 		return EndpointTypeImagen
+	case isVeoModel(modelName):
+		return EndpointTypeVeo
 	case strings.Contains(modelName, "claude"):
 		return EndpointTypeClaude
 	default:
@@ -340,6 +343,8 @@ func (a *Adaptor) GetRequestURL(meta *meta.Meta) (string, error) {
 		return a.buildQwenURL(meta)
 	case EndpointTypeImagen:
 		return a.buildImagenURL(meta)
+	case EndpointTypeVeo:
+		return a.buildVeoURL(meta)
 	case EndpointTypeClaude:
 		return a.buildClaudeURL(meta)
 	case EndpointTypeGemini:
@@ -393,6 +398,16 @@ func (a *Adaptor) buildImagenURL(meta *meta.Meta) (string, error) {
 	baseHost, location := a.getDefaultHostAndLocation(meta)
 
 	return fmt.Sprintf("https://%s/v1/projects/%s/locations/%s/publishers/google/models/%s:predict",
+		baseHost, meta.Config.VertexAIProjectID, location, meta.ActualModelName), nil
+}
+
+// buildVeoURL builds URL for Veo video generation models.
+func (a *Adaptor) buildVeoURL(meta *meta.Meta) (string, error) {
+	// Veo models use the long-running predict endpoint.
+	// Docs: https://cloud.google.com/vertex-ai/generative-ai/docs/model-reference/veo-video-generation
+	baseHost, location := a.getDefaultHostAndLocation(meta)
+
+	return fmt.Sprintf("https://%s/v1/projects/%s/locations/%s/publishers/google/models/%s:predictLongRunning",
 		baseHost, meta.Config.VertexAIProjectID, location, meta.ActualModelName), nil
 }
 
@@ -469,6 +484,14 @@ func isImagenModel(model string) bool {
 		return false
 	}
 	return strings.HasPrefix(model, "imagen-") || strings.HasPrefix(model, "imagegeneration@")
+}
+
+// isVeoModel returns true if the model name belongs to Vertex AI Veo family.
+func isVeoModel(model string) bool {
+	if model == "" {
+		return false
+	}
+	return strings.HasPrefix(model, "veo-")
 }
 
 // isDeepSeekModel returns true if the model name belongs to DeepSeek family.

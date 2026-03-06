@@ -16,6 +16,15 @@ import (
 	"github.com/songquanpeng/one-api/relay/model"
 )
 
+const (
+	claudeToolTypeWebSearch            = "web_search"
+	claudeToolTypeWebSearchPreview     = "web_search_preview"
+	claudeToolTypeToolSearchRegex      = "tool_search_tool_regex"
+	claudeToolTypeToolSearchBM25       = "tool_search_tool_bm25"
+	claudeToolTypeToolSearchRegexAlias = "tool_search_tool_regex_"
+	claudeToolTypeToolSearchBM25Alias  = "tool_search_tool_bm25_"
+)
+
 // ConvertClaudeRequest converts Claude Messages API request to OpenAI format for OpenAI-compatible adapters
 func ConvertClaudeRequest(c *gin.Context, request *model.ClaudeRequest) (any, error) {
 	if request == nil {
@@ -104,7 +113,7 @@ func ConvertClaudeRequest(c *gin.Context, request *model.ClaudeRequest) (any, er
 		var tools []model.Tool
 		for _, claudeTool := range request.Tools {
 			if strings.TrimSpace(claudeTool.Type) != "" && claudeTool.InputSchema == nil {
-				tools = append(tools, model.Tool{Type: strings.TrimSpace(claudeTool.Type)})
+				tools = append(tools, model.Tool{Type: normalizeClaudeBuiltinToolType(claudeTool.Type)})
 				continue
 			}
 			parameters, ok := claudeTool.InputSchema.(map[string]any)
@@ -155,6 +164,29 @@ func structuredPromotionDisabled(metaInfo *meta.Meta) bool {
 	}
 
 	return false
+}
+
+// normalizeClaudeBuiltinToolType maps Anthropic server-tool identifiers to
+// OpenAI-compatible built-in types while preserving unknown tool names.
+func normalizeClaudeBuiltinToolType(toolType string) string {
+	normalized := strings.TrimSpace(toolType)
+	if normalized == "" {
+		return normalized
+	}
+
+	lower := strings.ToLower(normalized)
+	switch lower {
+	case claudeToolTypeWebSearch,
+		claudeToolTypeWebSearchPreview,
+		claudeToolTypeToolSearchRegex,
+		claudeToolTypeToolSearchBM25:
+		return claudeToolTypeWebSearch
+	}
+	if strings.HasPrefix(lower, claudeToolTypeToolSearchRegexAlias) || strings.HasPrefix(lower, claudeToolTypeToolSearchBM25Alias) {
+		return claudeToolTypeWebSearch
+	}
+
+	return normalized
 }
 
 type pendingOpenAIMessage struct {
@@ -245,6 +277,24 @@ func convertClaudeBlocks(role string, blocks []any) []model.Message {
 				}
 			}
 		case "tool_use":
+			id, _ := blockMap["id"].(string)
+			name, _ := blockMap["name"].(string)
+			msg := ensurePending()
+			var argsStr string
+			if input := blockMap["input"]; input != nil {
+				if inputBytes, err := json.Marshal(input); err == nil {
+					argsStr = string(inputBytes)
+				}
+			}
+			msg.message.ToolCalls = append(msg.message.ToolCalls, model.Tool{
+				Id:   id,
+				Type: "function",
+				Function: &model.Function{
+					Name:      name,
+					Arguments: argsStr,
+				},
+			})
+		case "server_tool_use":
 			id, _ := blockMap["id"].(string)
 			name, _ := blockMap["name"].(string)
 			msg := ensurePending()
@@ -473,7 +523,10 @@ func containsClaudeToolUsage(messages []model.ClaudeMessage) bool {
 					continue
 				}
 				typeStr, _ := block["type"].(string)
-				if strings.EqualFold(typeStr, "tool_use") || strings.EqualFold(typeStr, "tool_result") {
+				if strings.EqualFold(typeStr, "tool_use") ||
+					strings.EqualFold(typeStr, "tool_result") ||
+					strings.EqualFold(typeStr, "server_tool_use") ||
+					strings.EqualFold(typeStr, "tool_search_tool_result") {
 					return true
 				}
 			}

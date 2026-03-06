@@ -227,6 +227,12 @@ const (
 	// Read in: controller/claude_messages to choose passthrough paths.
 	ClaudeDirectPassthrough = "claude_direct_passthrough"
 
+	// ClaudeToolSearchEnabled marks that the current Claude request includes Anthropic
+	// Tool Search built-ins and should attach corresponding Anthropic beta headers.
+	// Set in: anthropic adaptor during Claude request conversion.
+	// Read in: anthropic adaptor SetupRequestHeader.
+	ClaudeToolSearchEnabled = "claude_tool_search_enabled"
+
 	// ConversationId is a deterministic id derived from messages for Claude "thinking"
 	// signature caching and response verification.
 	// Set in: anthropic adaptor when building/thinking with signatures.

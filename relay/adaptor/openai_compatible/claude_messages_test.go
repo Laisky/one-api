@@ -417,3 +417,83 @@ func TestConvertClaudeRequest_ToolNotPromoted(t *testing.T) {
 	require.NotNil(t, converted.MaxCompletionTokens)
 	assert.Equal(t, 2048, *converted.MaxCompletionTokens)
 }
+
+func TestConvertClaudeRequest_ToolSearchBuiltinMappedToWebSearch(t *testing.T) {
+	t.Parallel()
+	gin.SetMode(gin.TestMode)
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+
+	req := &relaymodel.ClaudeRequest{
+		Model:     "claude-sonnet-4-5",
+		MaxTokens: 512,
+		Messages: []relaymodel.ClaudeMessage{
+			{Role: "user", Content: "Find relevant tools for this task."},
+		},
+		Tools: []relaymodel.ClaudeTool{
+			{
+				Type: "tool_search_tool_regex_20251119",
+				Name: "tool_search_tool_regex",
+			},
+		},
+	}
+
+	convertedAny, err := ConvertClaudeRequest(c, req)
+	require.NoError(t, err)
+	converted, ok := convertedAny.(*relaymodel.GeneralOpenAIRequest)
+	require.True(t, ok)
+	require.Len(t, converted.Tools, 1)
+	assert.Equal(t, "web_search", converted.Tools[0].Type)
+}
+
+func TestConvertClaudeRequest_StructuredToolNotPromotedWithServerToolUse(t *testing.T) {
+	t.Parallel()
+	gin.SetMode(gin.TestMode)
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+
+	schema := map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"topic": map[string]any{"type": "string"},
+		},
+		"required":             []any{"topic"},
+		"additionalProperties": false,
+	}
+
+	req := &relaymodel.ClaudeRequest{
+		Model:     "claude-structured",
+		MaxTokens: 256,
+		Messages: []relaymodel.ClaudeMessage{
+			{
+				Role: "assistant",
+				Content: []any{
+					map[string]any{"type": "server_tool_use", "id": "srvtoolu_1", "name": "tool_search_tool_regex", "input": map[string]any{"query": "topic"}},
+				},
+			},
+			{
+				Role: "user",
+				Content: []any{
+					map[string]any{"type": "text", "text": "Continue with the tool result."},
+				},
+			},
+		},
+		Tools: []relaymodel.ClaudeTool{
+			{
+				Name:        "topic_classifier",
+				Description: "Return structured topic and confidence data",
+				InputSchema: schema,
+			},
+		},
+		ToolChoice: map[string]any{"type": "tool", "name": "topic_classifier"},
+	}
+
+	convertedAny, err := ConvertClaudeRequest(c, req)
+	require.NoError(t, err)
+	converted, ok := convertedAny.(*relaymodel.GeneralOpenAIRequest)
+	require.True(t, ok)
+
+	assert.Nil(t, converted.ResponseFormat)
+	require.NotNil(t, converted.ToolChoice)
+	require.NotEmpty(t, converted.Tools)
+}

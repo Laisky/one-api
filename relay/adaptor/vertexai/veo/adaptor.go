@@ -26,9 +26,103 @@ import (
 // Model list is derived from the keys of this map, eliminating redundancy
 // Based on VertexAI Veo pricing: https://cloud.google.com/vertex-ai/generative-ai/pricing
 var ModelRatios = map[string]adaptor.ModelConfig{
-	// Veo Video Generation Models
-	"veo-2.0-generate-001":     {Ratio: 0.1 * ratio.QuotaPerUsd, CompletionRatio: 1},  // $0.1 per video (scaled by unit)
-	"veo-3.0-generate-preview": {Ratio: 0.15 * ratio.QuotaPerUsd, CompletionRatio: 1}, // $0.15 per video (scaled by unit)
+	// Veo 2 pricing: $0.50 per second.
+	// Covers GA and preview variants that share the Veo 2 generation SKU.
+	"veo-2.0-generate-001": {
+		Ratio:           veoRatioFromUsdPerSecond(0.50),
+		CompletionRatio: 1,
+		Video:           veoVideoPricingConfig(0.50),
+	},
+	"veo-2.0-generate-exp": {
+		Ratio:           veoRatioFromUsdPerSecond(0.50),
+		CompletionRatio: 1,
+		Video:           veoVideoPricingConfig(0.50),
+	},
+	"veo-2.0-generate-preview": {
+		Ratio:           veoRatioFromUsdPerSecond(0.50),
+		CompletionRatio: 1,
+		Video:           veoVideoPricingConfig(0.50),
+	},
+
+	// Veo 3 pricing baseline (video-only 720p/1080p): $0.20 per second.
+	// Audio and 4k add-ons are provider-side options not modeled in generic OpenAI video fields yet.
+	"veo-3.0-generate-001": {
+		Ratio:           veoRatioFromUsdPerSecond(0.20),
+		CompletionRatio: 1,
+		Video:           veoVideoPricingConfig(0.20),
+	},
+	"veo-3.0-generate-preview": {
+		Ratio:           veoRatioFromUsdPerSecond(0.20),
+		CompletionRatio: 1,
+		Video:           veoVideoPricingConfig(0.20),
+	},
+
+	// Veo 3 Fast pricing baseline (video-only 720p/1080p): $0.10 per second.
+	"veo-3.0-fast-generate-001": {
+		Ratio:           veoRatioFromUsdPerSecond(0.10),
+		CompletionRatio: 1,
+		Video:           veoVideoPricingConfig(0.10),
+	},
+	"veo-3.0-fast-generate-preview": {
+		Ratio:           veoRatioFromUsdPerSecond(0.10),
+		CompletionRatio: 1,
+		Video:           veoVideoPricingConfig(0.10),
+	},
+
+	// Veo 3.1 pricing baseline (video-only 720p/1080p): $0.20 per second.
+	// 4k requests are billed at $0.40 per second (2x multiplier).
+	"veo-3.1-generate-001": {
+		Ratio:           veoRatioFromUsdPerSecond(0.20),
+		CompletionRatio: 1,
+		Video: veoVideoPricingConfig(0.20, map[string]float64{
+			"4k": 2,
+		}),
+	},
+	"veo-3.1-generate-preview": {
+		Ratio:           veoRatioFromUsdPerSecond(0.20),
+		CompletionRatio: 1,
+		Video: veoVideoPricingConfig(0.20, map[string]float64{
+			"4k": 2,
+		}),
+	},
+
+	// Veo 3.1 Fast pricing baseline (video-only 720p/1080p): $0.10 per second.
+	// 4k requests are billed at $0.30 per second (3x multiplier).
+	"veo-3.1-fast-generate-001": {
+		Ratio:           veoRatioFromUsdPerSecond(0.10),
+		CompletionRatio: 1,
+		Video: veoVideoPricingConfig(0.10, map[string]float64{
+			"4k": 3,
+		}),
+	},
+	"veo-3.1-fast-generate-preview": {
+		Ratio:           veoRatioFromUsdPerSecond(0.10),
+		CompletionRatio: 1,
+		Video: veoVideoPricingConfig(0.10, map[string]float64{
+			"4k": 3,
+		}),
+	},
+}
+
+// veoRatioFromUsdPerSecond converts a per-second USD price into a per-token ratio.
+// Billing for this adaptor reports completion tokens as durationSeconds * ratio.TokensPerSec.
+func veoRatioFromUsdPerSecond(usdPerSecond float64) float64 {
+	return usdPerSecond * ratio.QuotaPerUsd / float64(ratio.TokensPerSec)
+}
+
+// veoVideoPricingConfig builds video pricing metadata consumed by /v1/videos billing.
+func veoVideoPricingConfig(perSecondUsd float64, multipliers ...map[string]float64) *adaptor.VideoPricingConfig {
+	cfg := &adaptor.VideoPricingConfig{
+		PerSecondUsd:   perSecondUsd,
+		BaseResolution: "720p",
+	}
+	if len(multipliers) > 0 && len(multipliers[0]) > 0 {
+		cfg.ResolutionMultipliers = make(map[string]float64, len(multipliers[0]))
+		for k, v := range multipliers[0] {
+			cfg.ResolutionMultipliers[k] = v
+		}
+	}
+	return cfg
 }
 
 // ModelList derived from ModelRatios for backward compatibility

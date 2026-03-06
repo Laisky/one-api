@@ -23,7 +23,9 @@ Regardless of the entrypoint a caller chooses, the platform delivers the reply u
   - [4. Entry Point Details](#4-entry-point-details)
     - [4.1 Chat Completions (`/v1/chat/completions`)](#41-chat-completions-v1chatcompletions)
     - [4.2 Responses (`/v1/responses`)](#42-responses-v1responses)
+    - [4.2.1 OpenAI Upstream WebSocket Transport (Default)](#421-openai-upstream-websocket-transport-default)
     - [4.3 Claude Messages (`/v1/messages`)](#43-claude-messages-v1messages)
+    - [4.3.1 Anthropic Tool Search Support](#431-anthropic-tool-search-support)
   - [5. Capability Detection \& Sanitisation](#5-capability-detection--sanitisation)
   - [6. Streaming Behaviour](#6-streaming-behaviour)
   - [7. Error Handling \& Billing](#7-error-handling--billing)
@@ -164,6 +166,18 @@ Operational observability:
 3. OpenAI-compatible, Gemini, and other providers convert the Claude payload into their preferred format via adaptor-specific `ConvertClaudeRequest` implementations. Most OpenAI compatibles share `openai_compatible.ConvertClaudeRequest`.
 4. During response handling, adaptors check `ctxkey.ClaudeMessagesConversion`. When present, they transform the upstream response (or SSE stream) back into Claude Messages events using utilities such as `openai_compatible.HandleClaudeMessagesResponse` and `ConvertOpenAIStreamToClaudeSSE`.
 5. The controller always returns Claude-flavoured JSON/SSE to the caller, regardless of the intermediate protocols.
+
+### 4.3.1 Anthropic Tool Search Support
+
+The Claude Messages path now supports Anthropic Tool Search in both northbound and southbound flows.
+
+- Northbound Claude requests recognize Tool Search built-ins and aliases:
+  - `tool_search_tool_regex`
+  - `tool_search_tool_bm25`
+  - versioned forms such as `tool_search_tool_regex_20251119` and `tool_search_tool_bm25_20251119`
+- During Claude -> OpenAI-compatible conversion, Tool Search built-ins are normalized to canonical `web_search` tool type so policy validation and billing remain consistent across providers.
+- Structured-output promotion is explicitly blocked when Claude messages already contain tool activity blocks, including `server_tool_use` and `tool_search_tool_result`.
+- Southbound native Anthropic passthrough sets `ctxkey.ClaudeToolSearchEnabled` whenever Tool Search tools are present; `SetupRequestHeader` then adds `advanced-tool-use-2025-11-20` to `anthropic-beta` while preserving caller-provided beta tokens and model-specific beta headers.
 
 ## 5. Capability Detection & Sanitisation
 

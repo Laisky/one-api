@@ -170,7 +170,7 @@ func collectInvocationCounts(c *gin.Context) map[string]int {
 	}
 
 	if raw, ok := c.Get(ctxkey.WebSearchCallCount); ok {
-		counts["web_search"] += toInt(raw)
+		counts[canonicalBuiltinInvocationName("web_search")] += toInt(raw)
 	}
 
 	// Remove zero or negative entries to keep downstream handling simple.
@@ -183,24 +183,53 @@ func collectInvocationCounts(c *gin.Context) map[string]int {
 	return counts
 }
 
+// canonicalBuiltinInvocationName normalizes invocation counter keys so aliases
+// map to a single billing key while preserving unknown provider-specific names.
+func canonicalBuiltinInvocationName(toolName string) string {
+	trimmed := strings.TrimSpace(toolName)
+	if trimmed == "" {
+		return ""
+	}
+	if builtin := NormalizeBuiltinType(trimmed); builtin != "" {
+		return builtin
+	}
+	return strings.ToLower(trimmed)
+}
+
 // mergeToolCounts merges arbitrary typed maps containing tool invocation counters into the accumulator map.
 func mergeToolCounts(dst map[string]int, src any) {
 	switch typed := src.(type) {
 	case map[string]int:
 		for name, count := range typed {
-			dst[strings.ToLower(name)] += count
+			canonical := canonicalBuiltinInvocationName(name)
+			if canonical == "" {
+				continue
+			}
+			dst[canonical] += count
 		}
 	case map[string]int64:
 		for name, count := range typed {
-			dst[strings.ToLower(name)] += int(count)
+			canonical := canonicalBuiltinInvocationName(name)
+			if canonical == "" {
+				continue
+			}
+			dst[canonical] += int(count)
 		}
 	case map[string]float64:
 		for name, count := range typed {
-			dst[strings.ToLower(name)] += int(count)
+			canonical := canonicalBuiltinInvocationName(name)
+			if canonical == "" {
+				continue
+			}
+			dst[canonical] += int(count)
 		}
 	case map[string]any:
 		for name, value := range typed {
-			dst[strings.ToLower(name)] += toInt(value)
+			canonical := canonicalBuiltinInvocationName(name)
+			if canonical == "" {
+				continue
+			}
+			dst[canonical] += toInt(value)
 		}
 	}
 }
@@ -256,14 +285,23 @@ func CollectResponseBuiltins(request *openai.ResponseAPIRequest) map[string]stru
 
 // NormalizeBuiltinType normalizes known built-in tool identifiers (case-insensitive). Unknown tools return "".
 func NormalizeBuiltinType(toolType string) string {
-	switch strings.ToLower(strings.TrimSpace(toolType)) {
+	normalized := strings.ToLower(strings.TrimSpace(toolType))
+	switch normalized {
 	case "web_search":
 		return "web_search"
 	case "web_search_preview":
 		return "web_search"
-	default:
-		return ""
+	case "web-search":
+		return "web_search"
+	case "tool_search_tool_regex", "tool_search_tool_bm25":
+		return "web_search"
 	}
+
+	if strings.HasPrefix(normalized, "tool_search_tool_regex_") || strings.HasPrefix(normalized, "tool_search_tool_bm25_") {
+		return "web_search"
+	}
+
+	return ""
 }
 
 // ValidateResponseBuiltinTools verifies built-in tool usage on Response API requests prior to fallback conversions.

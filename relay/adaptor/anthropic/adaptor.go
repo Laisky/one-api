@@ -38,15 +38,23 @@ func (a *Adaptor) GetRequestURL(meta *meta.Meta) (string, error) {
 func (a *Adaptor) SetupRequestHeader(c *gin.Context, req *http.Request, meta *meta.Meta) error {
 	adaptor.SetupCommonRequestHeader(c, req, meta)
 	req.Header.Set("x-api-key", meta.APIKey)
-	anthropicVersion := c.Request.Header.Get("anthropic-version")
+
+	var inboundVersion string
+	if c != nil && c.Request != nil {
+		inboundVersion = c.Request.Header.Get("anthropic-version")
+	}
+	anthropicVersion := strings.TrimSpace(inboundVersion)
 	if anthropicVersion == "" {
-		anthropicVersion = "2023-06-01"
+		anthropicVersion = AnthropicVersionDefault
 	}
 	req.Header.Set("anthropic-version", anthropicVersion)
-	req.Header.Set("anthropic-beta", "messages-2023-12-15")
 
-	// set beta headers for specific models
+	// Start with any inbound beta headers to preserve explicit caller configuration.
 	var betaHeaders []string
+	if c != nil && c.Request != nil {
+		betaHeaders = append(betaHeaders, strings.Split(c.Request.Header.Get("anthropic-beta"), ",")...)
+	}
+	betaHeaders = append(betaHeaders, AnthropicBetaMessages)
 
 	// https://docs.anthropic.com/en/docs/about-claude/models/overview
 	// claude-3-7-sonnet can support 128k context
@@ -61,8 +69,17 @@ func (a *Adaptor) SetupRequestHeader(c *gin.Context, req *http.Request, meta *me
 		betaHeaders = append(betaHeaders, "interleaved-thinking-2025-05-14")
 	}
 
-	if len(betaHeaders) > 0 {
-		req.Header.Set("anthropic-beta", strings.Join(betaHeaders, ","))
+	if c != nil {
+		if enabled, ok := c.Get(ctxkey.ClaudeToolSearchEnabled); ok {
+			if enabledBool, ok := enabled.(bool); ok && enabledBool {
+				betaHeaders = append(betaHeaders, AnthropicBetaAdvancedToolUse)
+			}
+		}
+	}
+
+	mergedBeta := mergeAnthropicBetaHeaders(betaHeaders)
+	if len(mergedBeta) > 0 {
+		req.Header.Set("anthropic-beta", strings.Join(mergedBeta, ","))
 	}
 
 	return nil
@@ -99,6 +116,7 @@ func (a *Adaptor) ConvertClaudeRequest(c *gin.Context, request *model.ClaudeRequ
 	c.Set(ctxkey.ClaudeMessagesNative, true)
 	// Set flag to use direct pass-through instead of conversion
 	c.Set(ctxkey.ClaudeDirectPassthrough, true)
+	c.Set(ctxkey.ClaudeToolSearchEnabled, hasClaudeToolSearchTools(request))
 
 	// Still parse the request for billing purposes, but we won't use the converted result
 	// The original request body will be forwarded directly for better compatibility
@@ -109,6 +127,48 @@ func (a *Adaptor) ConvertClaudeRequest(c *gin.Context, request *model.ClaudeRequ
 
 	// Return the original request - this won't be marshaled since we use direct pass-through
 	return request, nil
+}
+
+// hasClaudeToolSearchTools reports whether the Claude request declares Anthropic
+// Tool Search built-in tools.
+func hasClaudeToolSearchTools(request *model.ClaudeRequest) bool {
+	if request == nil {
+		return false
+	}
+	for _, tool := range request.Tools {
+		typeName := strings.ToLower(strings.TrimSpace(tool.Type))
+		if typeName == ToolTypeToolSearchRegex ||
+			typeName == ToolTypeToolSearchBM25 ||
+			strings.HasPrefix(typeName, ToolTypeToolSearchRegexPrefix) ||
+			strings.HasPrefix(typeName, ToolTypeToolSearchBM25Prefix) {
+			return true
+		}
+	}
+	return false
+}
+
+// mergeAnthropicBetaHeaders trims, deduplicates, and preserves insertion order
+// for Anthropic beta header tokens.
+func mergeAnthropicBetaHeaders(headers []string) []string {
+	if len(headers) == 0 {
+		return nil
+	}
+	seen := make(map[string]struct{}, len(headers))
+	merged := make([]string, 0, len(headers))
+	for _, raw := range headers {
+		for _, token := range strings.Split(raw, ",") {
+			normalized := strings.ToLower(strings.TrimSpace(token))
+			if normalized == "" {
+				continue
+			}
+			if _, ok := seen[normalized]; ok {
+				continue
+			}
+			seen[normalized] = struct{}{}
+			merged = append(merged, normalized)
+		}
+	}
+	return merged
 }
 
 func (a *Adaptor) DoRequest(c *gin.Context, meta *meta.Meta, requestBody io.Reader) (*http.Response, error) {

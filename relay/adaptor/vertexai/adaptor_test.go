@@ -46,6 +46,35 @@ func TestAdaptor_GetRequestURL(t *testing.T) {
 			}
 		})
 
+		Convey("veo models should use predictLongRunning endpoint", func() {
+			veoTests := []struct {
+				model  string
+				region string
+			}{
+				{"veo-3.1-generate-001", "us-central1"},
+				{"veo-3.1-fast-generate-preview", "europe-west4"},
+				{"veo-2.0-generate-preview", "asia-southeast1"},
+			}
+
+			for _, tc := range veoTests {
+				Convey(tc.model+" predictLongRunning", func() {
+					meta := &meta.Meta{
+						ActualModelName: tc.model,
+						IsStream:        false,
+						Config: model.ChannelConfig{
+							Region:            tc.region,
+							VertexAIProjectID: "test-project",
+						},
+					}
+
+					url, err := adaptor.GetRequestURL(meta)
+					So(err, ShouldBeNil)
+					expectedURL := "https://" + tc.region + "-aiplatform.googleapis.com/v1/projects/test-project/locations/" + tc.region + "/publishers/google/models/" + tc.model + ":predictLongRunning"
+					So(url, ShouldEqual, expectedURL)
+				})
+			}
+		})
+
 		Convey("gemini models >=2.5 should use global endpoint", func() {
 			testCases := []struct {
 				name           string
@@ -442,6 +471,27 @@ func TestIsOpenAIModel(t *testing.T) {
 		for _, c := range cases {
 			Convey("model "+c.model, func() {
 				So(isOpenAIModel(c.model), ShouldEqual, c.expected)
+			})
+		}
+	})
+}
+
+func TestIsVeoModel(t *testing.T) {
+	Convey("isVeoModel", t, func() {
+		cases := []struct {
+			model    string
+			expected bool
+		}{
+			{"veo-3.1-generate-001", true},
+			{"veo-3.0-fast-generate-preview", true},
+			{"veo-2.0-generate-exp", true},
+			{"imagen-4.0-generate-001", false},
+			{"gemini-2.5-pro", false},
+			{"", false},
+		}
+		for _, c := range cases {
+			Convey("model "+c.model, func() {
+				So(isVeoModel(c.model), ShouldEqual, c.expected)
 			})
 		}
 	})

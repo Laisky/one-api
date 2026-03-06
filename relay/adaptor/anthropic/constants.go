@@ -5,6 +5,30 @@ import (
 	"github.com/songquanpeng/one-api/relay/billing/ratio"
 )
 
+const (
+	// AnthropicVersionDefault is Anthropic's default API version header.
+	AnthropicVersionDefault = "2023-06-01"
+	// AnthropicBetaMessages is the baseline messages beta header used by Anthropic adaptor.
+	AnthropicBetaMessages = "messages-2023-12-15"
+	// AnthropicBetaAdvancedToolUse gates Anthropic's advanced tool-use features, including Tool Search.
+	AnthropicBetaAdvancedToolUse = "advanced-tool-use-2025-11-20"
+
+	// ToolTypeWebSearch is the canonical web-search built-in identifier.
+	ToolTypeWebSearch = "web_search"
+	// ToolTypeWebSearchPreview is an alias used by some OpenAI-compatible providers.
+	ToolTypeWebSearchPreview = "web_search_preview"
+
+	// ToolTypeToolSearchRegex is Anthropic Tool Search regex tool identifier.
+	ToolTypeToolSearchRegex = "tool_search_tool_regex"
+	// ToolTypeToolSearchBM25 is Anthropic Tool Search BM25 tool identifier.
+	ToolTypeToolSearchBM25 = "tool_search_tool_bm25"
+
+	// ToolTypeToolSearchRegexPrefix matches versioned Anthropic regex Tool Search identifiers.
+	ToolTypeToolSearchRegexPrefix = "tool_search_tool_regex_"
+	// ToolTypeToolSearchBM25Prefix matches versioned Anthropic BM25 Tool Search identifiers.
+	ToolTypeToolSearchBM25Prefix = "tool_search_tool_bm25_"
+)
+
 // ModelRatios contains all supported models and their pricing ratios.
 //
 //   - https://docs.claude.com/en/docs/about-claude/models/overview
@@ -62,6 +86,6 @@ const anthropicWebSearchUsdPerCall = 10.0 / 1000.0
 // Source: https://r.jina.ai/https://docs.claude.com/en/docs/build-with-claude/tool-use/web-search-tool
 var AnthropicToolingDefaults = adaptor.ChannelToolConfig{
 	Pricing: map[string]adaptor.ToolPricingConfig{
-		"web_search": {UsdPerCall: anthropicWebSearchUsdPerCall},
+		ToolTypeWebSearch: {UsdPerCall: anthropicWebSearchUsdPerCall},
 	},
 }
