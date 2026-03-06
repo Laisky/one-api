@@ -16,6 +16,7 @@ type ComputeInput struct {
 	Usage                  *relaymodel.Usage
 	ModelName              string
 	ModelRatio             float64
+	ChannelModelRatio      map[string]float64
 	GroupRatio             float64
 	ChannelModelConfigs    map[string]modelcfg.ModelConfigLocal
 	ChannelCompletionRatio map[string]float64
@@ -49,6 +50,10 @@ func Compute(input ComputeInput) ComputeResult {
 	pricingAdaptor := input.PricingAdaptor
 	// Resolve model config once (ratio only) to avoid redundant deep clones and lookups.
 	resolvedModelCfg, hasResolvedModelCfg := pricing.ResolveModelConfigRatioOnly(input.ModelName, input.ChannelModelConfigs, pricingAdaptor)
+	hasChannelModelRatioOverride := input.ChannelModelRatio != nil
+	if hasChannelModelRatioOverride {
+		_, hasChannelModelRatioOverride = input.ChannelModelRatio[input.ModelName]
+	}
 
 	// Layer 1 & 2 fallback for base ratios
 	baseRatio := input.ModelRatio
@@ -77,10 +82,25 @@ func Compute(input ComputeInput) ComputeResult {
 	usedCompletionRatio := completionRatioResolved
 
 	if hasResolvedModelCfg {
-		usedModelRatio = eff.InputRatio
+		if !hasChannelModelRatioOverride {
+			usedModelRatio = eff.InputRatio
+		}
 		baseComp := eff.OutputRatio
-		if eff.InputRatio != 0 {
-			baseComp = eff.OutputRatio / eff.InputRatio
+		completionBaseRatio := eff.InputRatio
+		if hasChannelModelRatioOverride {
+			completionBaseRatio = usedModelRatio
+			baseComp = usedModelRatio * completionRatioResolved
+			for _, tier := range resolvedModelCfg.Tiers {
+				if promptTokens < tier.InputTokenThreshold {
+					break
+				}
+				if tier.CompletionRatio != 0 {
+					baseComp = usedModelRatio * tier.CompletionRatio
+				}
+			}
+		}
+		if completionBaseRatio != 0 {
+			baseComp = baseComp / completionBaseRatio
 		} else {
 			baseComp = 1.0
 		}

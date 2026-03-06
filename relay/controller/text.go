@@ -129,6 +129,7 @@ func RelayTextHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 			ModelName:              textRequest.Model,
 			PromptTokens:           promptTokens,
 			ModelRatio:             modelRatio,
+			ChannelModelRatio:      channelModelRatio,
 			GroupRatio:             groupRatio,
 			PreConsumedQuota:       preConsumedQuota,
 			ChannelModelConfigs:    channelModelConfigs,
@@ -227,7 +228,7 @@ func RelayTextHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 			var quota int64
 
 			go func() {
-				quota = postConsumeQuota(ctx, usage, meta, textRequest, ratio, preConsumedQuota, incrementalCharged, modelRatio, groupRatio, systemPromptReset, channelModelConfigs, channelCompletionRatio)
+				quota = postConsumeQuota(ctx, usage, meta, textRequest, ratio, preConsumedQuota, incrementalCharged, modelRatio, channelModelRatio, groupRatio, systemPromptReset, channelModelConfigs, channelCompletionRatio)
 				if requestId != "" {
 					if err := model.UpdateUserRequestCostQuotaByRequestID(quotaId, requestId, quota); err != nil {
 						lg.Error("update user request cost failed", zap.Error(err), zap.String("request_id", requestId))
@@ -415,7 +416,7 @@ func RelayTextHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 
 		requestId := c.GetString(ctxkey.RequestId)
 		go func() {
-			quota = postConsumeQuota(ctx, usage, meta, textRequest, ratio, preConsumedQuota, incrementalCharged, modelRatio, groupRatio, systemPromptReset, channelModelConfigs, channelCompletionRatio)
+			quota = postConsumeQuota(ctx, usage, meta, textRequest, ratio, preConsumedQuota, incrementalCharged, modelRatio, channelModelRatio, groupRatio, systemPromptReset, channelModelConfigs, channelCompletionRatio)
 
 			// Reconcile request cost with final quota (override provisional pre-consumed value)
 			if requestId == "" {

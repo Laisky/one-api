@@ -254,7 +254,7 @@ func RelayResponseAPIHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 		go func() {
 			// Attach IDs into context using a lightweight wrapper struct in meta if needed; for now,
 			// we keep postConsumeResponseAPIQuota signature and rely on it to read IDs from outer scope.
-			quota = postConsumeResponseAPIQuota(ctx, usage, meta, responseAPIRequest, preConsumedQuota, modelRatio, groupRatio, channelModelConfigs, channelCompletionRatio)
+			quota = postConsumeResponseAPIQuota(ctx, usage, meta, responseAPIRequest, preConsumedQuota, modelRatio, channelModelRatio, groupRatio, channelModelConfigs, channelCompletionRatio)
 
 			// Reconcile request cost with final quota (override provisional pre-consumed value)
 			if requestId == "" {

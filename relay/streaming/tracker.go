@@ -28,6 +28,7 @@ type QuotaTrackerParams struct {
 	ModelName              string
 	PromptTokens           int
 	ModelRatio             float64
+	ChannelModelRatio      map[string]float64
 	GroupRatio             float64
 	PreConsumedQuota       int64
 	ChannelModelConfigs    map[string]model.ModelConfigLocal
@@ -223,6 +224,7 @@ func (t *QuotaTracker) computeTargetQuotaLocked() int64 {
 		Usage:                  usage,
 		ModelName:              t.params.ModelName,
 		ModelRatio:             t.params.ModelRatio,
+		ChannelModelRatio:      t.params.ChannelModelRatio,
 		GroupRatio:             t.params.GroupRatio,
 		ChannelModelConfigs:    t.params.ChannelModelConfigs,
 		ChannelCompletionRatio: t.params.ChannelCompletionRatio,
