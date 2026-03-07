@@ -147,16 +147,16 @@ flowchart LR
 
 ## Canonical Artifact Model
 
-| Subject | Format | Primary Location | Verification Tooling |
-| --- | --- | --- | --- |
-| Container image | OCI image index | `ghcr.io/<owner>/one-api` | `cosign verify`, `gh attestation verify` |
-| Container build provenance | in-toto SLSA provenance | GHCR OCI referrer and GitHub attestation store | `gh attestation verify` |
-| Container SBOM | SPDX JSON attestation | GHCR OCI referrer and GitHub attestation store | `gh attestation verify`, `docker buildx imagetools inspect` |
-| Standalone image SBOM | SPDX JSON file | workflow artifact and release asset | diff tools, scanners, auditors |
-| Release binaries | files plus checksums | GitHub Releases | `gh release verify`, `gh release verify-asset` |
-| Binary provenance | in-toto SLSA provenance | GitHub attestation store | `gh attestation verify` |
-| Binary SBOM | SPDX JSON file and attestation | GitHub attestation store and release assets | `gh attestation verify` |
-| Repository dependency inventory | SPDX JSON | GitHub dependency graph export | audit/compliance tooling |
+| Subject                         | Format                         | Primary Location                               | Verification Tooling                                        |
+| ------------------------------- | ------------------------------ | ---------------------------------------------- | ----------------------------------------------------------- |
+| Container image                 | OCI image index                | `ghcr.io/<owner>/one-api`                      | `cosign verify`, `gh attestation verify`                    |
+| Container build provenance      | in-toto SLSA provenance        | GHCR OCI referrer and GitHub attestation store | `gh attestation verify`                                     |
+| Container SBOM                  | SPDX JSON attestation          | GHCR OCI referrer and GitHub attestation store | `gh attestation verify`, `docker buildx imagetools inspect` |
+| Standalone image SBOM           | SPDX JSON file                 | workflow artifact and release asset            | diff tools, scanners, auditors                              |
+| Release binaries                | files plus checksums           | GitHub Releases                                | `gh release verify`, `gh release verify-asset`              |
+| Binary provenance               | in-toto SLSA provenance        | GitHub attestation store                       | `gh attestation verify`                                     |
+| Binary SBOM                     | SPDX JSON file and attestation | GitHub attestation store and release assets    | `gh attestation verify`                                     |
+| Repository dependency inventory | SPDX JSON                      | GitHub dependency graph export                 | audit/compliance tooling                                    |
 
 ## Trust Model
 
@@ -487,14 +487,14 @@ This file is useful for code review and diffing, external vulnerability scanners
 After the image is pushed, install Cosign and sign the digest:
 
 ```yaml
-      - name: Install Cosign
-        uses: sigstore/cosign-installer@v4
+- name: Install Cosign
+  uses: sigstore/cosign-installer@v4
 
-      - name: Sign image digest
-        env:
-          IMAGE_DIGEST: ${{ steps.build.outputs.digest }}
-          IMAGE_NAME: ${{ env.IMAGE_NAME }}
-        run: cosign sign --yes ${IMAGE_NAME}@${IMAGE_DIGEST}
+- name: Sign image digest
+  env:
+    IMAGE_DIGEST: ${{ steps.build.outputs.digest }}
+    IMAGE_NAME: ${{ env.IMAGE_NAME }}
+  run: cosign sign --yes ${IMAGE_NAME}@${IMAGE_DIGEST}
 ```
 
 ### Step 2. Verify In The Same Workflow
@@ -502,14 +502,14 @@ After the image is pushed, install Cosign and sign the digest:
 Fail fast if the signature is not immediately verifiable:
 
 ```yaml
-      - name: Verify image signature
-        env:
-          IMAGE_DIGEST: ${{ steps.build.outputs.digest }}
-          IMAGE_NAME: ${{ env.IMAGE_NAME }}
-        run: >
-          cosign verify ${IMAGE_NAME}@${IMAGE_DIGEST}
-          --certificate-identity-regexp='^https://github.com/<owner>/one-api/.github/workflows/release-container.yml@refs/(heads/main|tags/v.*)$'
-          --certificate-oidc-issuer=https://token.actions.githubusercontent.com
+- name: Verify image signature
+  env:
+    IMAGE_DIGEST: ${{ steps.build.outputs.digest }}
+    IMAGE_NAME: ${{ env.IMAGE_NAME }}
+  run: >
+    cosign verify ${IMAGE_NAME}@${IMAGE_DIGEST}
+    --certificate-identity-regexp='^https://github.com/<owner>/one-api/.github/workflows/release-container.yml@refs/(heads/main|tags/v.*)$'
+    --certificate-oidc-issuer=https://token.actions.githubusercontent.com
 ```
 
 ### Step 3. Sign Mirror References Only If Needed
