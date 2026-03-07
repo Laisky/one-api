@@ -1,4 +1,92 @@
-# Requirement: SBOM, Sigstore Container Signing, and Verifiable Release Pipeline
+# Requirement: SBOM, SCA, Sigstore Container Signing, and Verifiable Release Pipeline
+
+## Menu
+
+- [Requirement: SBOM, SCA, Sigstore Container Signing, and Verifiable Release Pipeline](#requirement-sbom-sca-sigstore-container-signing-and-verifiable-release-pipeline)
+  - [Menu](#menu)
+  - [Summary](#summary)
+  - [Current Gaps In This Repository](#current-gaps-in-this-repository)
+  - [Goals](#goals)
+  - [Non-Goals](#non-goals)
+  - [Principles](#principles)
+    - [1. Build Once, Promote By Digest](#1-build-once-promote-by-digest)
+    - [2. Sign Identities, Not Just Bytes](#2-sign-identities-not-just-bytes)
+    - [3. Verification Must Gate Delivery](#3-verification-must-gate-delivery)
+    - [4. Use Short-Lived Identity, Not Long-Lived Secrets](#4-use-short-lived-identity-not-long-lived-secrets)
+    - [5. SBOMs Exist At Multiple Layers](#5-sboms-exist-at-multiple-layers)
+    - [6. Prefer Build-Time Evidence Over Post-Hoc Scanning](#6-prefer-build-time-evidence-over-post-hoc-scanning)
+    - [7. Pin Inputs, Make Outputs Immutable](#7-pin-inputs-make-outputs-immutable)
+    - [8. Avoid Secret Leakage In Provenance](#8-avoid-secret-leakage-in-provenance)
+    - [9. Separate Canonical Registry From Mirror Registry](#9-separate-canonical-registry-from-mirror-registry)
+    - [10. Favor Incremental Hardening](#10-favor-incremental-hardening)
+  - [Target Architecture](#target-architecture)
+  - [High-Level Flow](#high-level-flow)
+  - [Canonical Artifact Model](#canonical-artifact-model)
+  - [Trust Model](#trust-model)
+    - [Canonical Trust Source](#canonical-trust-source)
+    - [Mirror Registry](#mirror-registry)
+    - [Signer Identity](#signer-identity)
+    - [Storage And Audit Trail](#storage-and-audit-trail)
+  - [Required Components](#required-components)
+  - [CI/CD Components](#cicd-components)
+    - [1. Canonical Container Release Workflow](#1-canonical-container-release-workflow)
+    - [2. Reusable Binary Release Workflow](#2-reusable-binary-release-workflow)
+    - [3. Verification Workflow Or Job](#3-verification-workflow-or-job)
+    - [4. Deployment Workflow](#4-deployment-workflow)
+  - [Tooling Components](#tooling-components)
+    - [Docker Buildx And BuildKit](#docker-buildx-and-buildkit)
+    - [GitHub Artifact Attestation Actions](#github-artifact-attestation-actions)
+    - [Cosign](#cosign)
+    - [Syft](#syft)
+    - [GitHub Dependency Graph SBOM Export](#github-dependency-graph-sbom-export)
+    - [SCA Baseline](#sca-baseline)
+    - [Immutable Releases](#immutable-releases)
+    - [Optional Higher-Assurance Components](#optional-higher-assurance-components)
+  - [Recommended Workflow Topology](#recommended-workflow-topology)
+  - [1. `pr.yml`](#1-pryml)
+  - [2. `release-container.yml`](#2-release-containeryml)
+  - [3. `release-binaries.yml`](#3-release-binariesyml)
+  - [4. `deploy.yml`](#4-deployyml)
+  - [Manual](#manual)
+  - [Phase 0: Normalize The Supply Chain Before Signing](#phase-0-normalize-the-supply-chain-before-signing)
+    - [Step 1. Choose The Canonical Image Name](#step-1-choose-the-canonical-image-name)
+    - [Step 2. Remove Non-Reproducible Inputs](#step-2-remove-non-reproducible-inputs)
+    - [Step 3. Enable GitHub Features](#step-3-enable-github-features)
+    - [Step 4. Turn On SCA Baseline](#step-4-turn-on-sca-baseline)
+    - [Step 5. Standardize Release Evidence](#step-5-standardize-release-evidence)
+  - [Phase 1: Add Container Provenance And SBOM](#phase-1-add-container-provenance-and-sbom)
+    - [Step 1. Build And Push With BuildKit Attestations](#step-1-build-and-push-with-buildkit-attestations)
+    - [Step 2. Keep The Standalone SBOM](#step-2-keep-the-standalone-sbom)
+  - [Phase 2: Add Sigstore Container Signing](#phase-2-add-sigstore-container-signing)
+    - [Step 1. Sign The Canonical Digest](#step-1-sign-the-canonical-digest)
+    - [Step 2. Verify In The Same Workflow](#step-2-verify-in-the-same-workflow)
+    - [Step 3. Sign Mirror References Only If Needed](#step-3-sign-mirror-references-only-if-needed)
+  - [Phase 3: Add Release Binary Provenance And SBOM](#phase-3-add-release-binary-provenance-and-sbom)
+    - [Step 1. Build Stable Release Assets](#step-1-build-stable-release-assets)
+    - [Step 2. Attest Checksummed Outputs](#step-2-attest-checksummed-outputs)
+    - [Step 3. Generate Binary SBOMs](#step-3-generate-binary-sboms)
+    - [Step 4. Optionally Sign Checksums As A Blob](#step-4-optionally-sign-checksums-as-a-blob)
+    - [Step 5. Publish Immutable Releases](#step-5-publish-immutable-releases)
+  - [Phase 4: Gate Deployment On Verification](#phase-4-gate-deployment-on-verification)
+    - [Step 1. Pass The Verified Digest To Deploy](#step-1-pass-the-verified-digest-to-deploy)
+    - [Step 2. Verify Before Pull](#step-2-verify-before-pull)
+    - [Step 3. Pull And Run By Digest](#step-3-pull-and-run-by-digest)
+  - [Phase 5: Increase Verifiability And Auditability Further](#phase-5-increase-verifiability-and-auditability-further)
+    - [1. Export Repository Dependency SBOM Periodically](#1-export-repository-dependency-sbom-periodically)
+    - [2. Submit Build-Resolved Dependencies When Needed](#2-submit-build-resolved-dependencies-when-needed)
+    - [3. Adopt Reusable Trusted Builders](#3-adopt-reusable-trusted-builders)
+    - [4. Move To Policy Enforcement If Deployment Evolves](#4-move-to-policy-enforcement-if-deployment-evolves)
+  - [Verification Commands For Operators And Consumers](#verification-commands-for-operators-and-consumers)
+  - [Verify Container Signature](#verify-container-signature)
+  - [Verify Container Provenance](#verify-container-provenance)
+  - [Verify Container SBOM Attestation](#verify-container-sbom-attestation)
+  - [Extract OCI-Attached SBOM](#extract-oci-attached-sbom)
+  - [Verify Immutable Release](#verify-immutable-release)
+  - [Retention And Audit Record Requirements](#retention-and-audit-record-requirements)
+  - [Acceptance Criteria](#acceptance-criteria)
+  - [Implementation Order For This Repository](#implementation-order-for-this-repository)
+  - [References](#references)
+
 
 ## Summary
 
@@ -8,6 +96,7 @@ As of March 7, 2026, the best-practice baseline for an OSS project with GitHub A
 
 - Generate build-time provenance for every published artifact.
 - Generate SBOMs for every published artifact.
+- Run continuous Software Composition Analysis (SCA) on pull requests, the default branch, and published artifacts.
 - Sign container images with Sigstore keyless signing via GitHub OIDC.
 - Verify signatures and attestations before promotion or deployment.
 - Publish immutable release records and keep an auditable chain from source commit to deployed digest.
@@ -16,18 +105,22 @@ For this repository, that means:
 
 - Every published container image must have a digest, a signature, a provenance attestation, and an SBOM attestation.
 - Every GitHub release asset must have checksums, provenance, and an SBOM.
+- Dependency changes must be reviewed before merge and monitored continuously after merge.
 - Deployment must consume verified digests, not mutable tags like `latest`.
 - GHCR should become the canonical trust source, while Docker Hub can remain a mirror for convenience.
 
 ## Current Gaps In This Repository
 
-The current repository state has several issues that reduce verifiability and auditability:
+After the legacy workflow cleanup, the repository currently keeps only `.github/workflows/ci.yml`, `.github/workflows/pr.yml`, and `.github/workflows/lint.yml`.
 
-- `.github/workflows/ci.yml` publishes `ppcelery/one-api`, while `.github/workflows/docker-image.yml` publishes `justsong/one-api` and `ghcr.io/...`. This creates multiple competing artifact identities.
+The current repository state still has several issues that reduce verifiability and auditability:
+
+- `.github/workflows/ci.yml` publishes only `ppcelery/one-api` to Docker Hub. There is still no canonical GHCR publication path for signed and attested images.
 - `.github/workflows/ci.yml` deploys by pulling `ppcelery/one-api:latest`. A mutable tag is not a safe deployment identifier.
 - `Dockerfile` uses floating base image references, including `linuxserver/ffmpeg:latest`. Floating inputs weaken provenance and reproducibility.
 - `Dockerfile` injects `date +%s` into the frontend build, which means the same source can produce different artifacts across builds.
-- Some release workflows use loosely pinned toolchains such as `go-version: '>=1.18.0'`, which makes rebuilds and incident review harder.
+- Tagged release logic is still mixed into `ci.yml`, and today it only publishes Windows binaries. Container, Linux, macOS, checksums, SBOM, and provenance release evidence are still missing from a dedicated release path.
+- There is no explicit SCA control plane yet: no dependency review gate in `pr.yml`, no documented Dependabot policy, and no artifact-level vulnerability scan tied to the generated SBOMs.
 - There is currently no image signing, no OCI-attached provenance, no OCI-attached SBOM, no release checksums, no release SBOMs, and no deployment-time verification step.
 
 ## Goals
@@ -35,6 +128,7 @@ The current repository state has several issues that reduce verifiability and au
 - Establish a single canonical artifact identity for containers.
 - Generate and publish verifiable provenance for containers and release binaries.
 - Generate and publish SBOMs for runtime images, release binaries, and repository dependency inventory.
+- Continuously detect known vulnerable dependencies before merge and after disclosure.
 - Enforce deployment by digest only.
 - Preserve an auditable record in GitHub attestations, OCI referrers, GitHub releases, and Rekor.
 - Make verification simple for humans, automation, and downstream consumers.
@@ -86,6 +180,8 @@ No single SBOM answers every question.
 - Repository dependency SBOM answers: what dependencies are declared in source control?
 - Image SBOM answers: what packages and OS components are in the runtime artifact?
 - Release asset SBOM answers: what is inside the shipped binary or archive?
+
+An SBOM is inventory. SCA is the continuous process that uses that inventory, advisory data, and policy to decide whether a dependency change or artifact is acceptable.
 
 ### 6. Prefer Build-Time Evidence Over Post-Hoc Scanning
 
@@ -287,6 +383,17 @@ The standalone SBOM should exist even if BuildKit already attached an SBOM to th
 
 Use GitHub dependency graph export to generate a repository-level SPDX SBOM. This is supplemental evidence, not a replacement for build-time image or binary SBOMs.
 
+### SCA Baseline
+
+Use layered SCA rather than a single scanner:
+
+- GitHub dependency graph plus dependency review for PR-time visibility on manifest and lockfile changes.
+- Dependabot alerts and Dependabot security updates for newly disclosed vulnerabilities on the default branch.
+- `govulncheck ./...` in PR and CI because this repository is Go-first and `govulncheck` is call-aware.
+- One SBOM-capable artifact scanner for published images and release SBOMs, preferably run from the generated SPDX SBOM so findings are tied to release evidence.
+
+GitHub-native SCA is strongest for source dependency changes. SBOM-fed SCA is strongest for built artifacts. This repository should use both.
+
 ### Immutable Releases
 
 Enable GitHub immutable releases so published tags and release assets cannot be changed after publication.
@@ -307,10 +414,12 @@ Keep this as the pre-merge quality gate and add:
 
 - workflow action pinning checks
 - policy checks that release workflows are not modified without review
+- dependency review with `actions/dependency-review-action`
+- `govulncheck ./...` or equivalent Go vulnerability analysis
 
 ## 2. `release-container.yml`
 
-Create a new canonical container workflow and retire the current dual-publication pattern across `ci.yml` and `docker-image.yml`.
+Create a new canonical container workflow by splitting the current container build and deploy responsibilities out of `ci.yml`.
 
 This workflow should publish:
 
@@ -345,7 +454,11 @@ Recommended:
 - canonical: `ghcr.io/<owner>/one-api`
 - mirror: `index.docker.io/<namespace>/one-api`
 
-Do not keep publishing the same release under unrelated names such as `ppcelery/one-api` and `justsong/one-api` unless there is an explicit migration plan.
+Because the live workflow currently publishes `ppcelery/one-api`, the migration to GHCR should be explicit:
+
+- decide whether `ppcelery/one-api` stays as a mirror or is retired
+- publish the same digest to both registries during migration if compatibility is required
+- update deployment and documentation to treat only one registry as canonical
 
 ### Step 2. Remove Non-Reproducible Inputs
 
@@ -355,20 +468,35 @@ Before signatures are added, reduce avoidable build drift:
 - pin `node` and `golang` builder images by digest
 - replace timestamp-based frontend versioning with commit SHA, tag, or `SOURCE_DATE_EPOCH`
 - pin GitHub Actions to full commit SHAs in the actual workflow implementation
-- replace version ranges such as `>=1.18.0` with exact toolchain versions
+- replace any remaining version ranges or floating tool selectors with exact toolchain versions
 
 ### Step 3. Enable GitHub Features
 
 Enable:
 
 - dependency graph
+- dependency review
+- Dependabot alerts
+- Dependabot security updates
 - artifact attestations
 - linked artifacts support through `artifact-metadata: write`
 - immutable releases
 - branch protection for `main`
 - protected release tag rules if available in the hosting plan
 
-### Step 4. Standardize Release Evidence
+### Step 4. Turn On SCA Baseline
+
+Add an explicit SCA baseline before signing rollout:
+
+- enable `actions/dependency-review-action` in `pr.yml`
+- enable Dependabot alerts at the repository or organization level
+- add `.github/dependabot.yml` for `gomod` and each maintained frontend package manifest directory
+- keep `govulncheck ./...` as a required CI check and fail on actionable findings
+- run one SBOM-fed vulnerability scan for published images or generated SPDX files and store the results as workflow artifacts
+
+Because this repository contains multiple frontend templates, SCA coverage should include every maintained package directory or explicitly document why a directory is excluded.
+
+### Step 5. Standardize Release Evidence
 
 Every release should eventually include:
 
@@ -630,34 +758,19 @@ This is useful for:
 - declared dependency review
 - change audits across releases
 - compliance reporting
+- feeding periodic SCA snapshots for default-branch review
 
-### 2. Adopt Reusable Trusted Builders
+### 2. Submit Build-Resolved Dependencies When Needed
+
+If GitHub cannot fully infer transitive dependencies from manifests alone, submit build-resolved dependencies or SBOM snapshots to the dependency submission API so Dependabot alerts and dependency review see the same dependency picture that CI actually built.
+
+### 3. Adopt Reusable Trusted Builders
 
 GitHub recommends reusable workflows for stronger builder identity and better SLSA verification. Use a reusable workflow for container builds and binary builds so verifiers can pin `--signer-workflow` to a trusted build entrypoint.
 
-### 3. Add OpenSSF Scorecard
-
-Run OpenSSF Scorecard in CI to continuously track:
-
-- branch protection
-- dangerous workflow usage
-- token permissions
-- packaging
-- signed releases
-
-This is not a substitute for signatures or SBOMs, but it improves governance visibility.
-
-### 4. Sign Maintainer Tags And Commits
-
-Use `gitsign` for maintainers who cut releases. This improves source-side auditability beyond artifact-side attestations.
-
-### 5. Move To Policy Enforcement If Deployment Evolves
+### 4. Move To Policy Enforcement If Deployment Evolves
 
 If deployment later moves to Kubernetes, enforce provenance and attestation policy with Sigstore policy-controller or GitHub's admission-controller based flow.
-
-### 6. Monitor Rekor Entries
-
-Rekor is an append-only transparency log. Add simple monitoring or scheduled checks for this repository's workflow identities to detect unexpected signing activity.
 
 ## Verification Commands For Operators And Consumers
 
@@ -727,6 +840,8 @@ The audit trail should make it possible to answer:
 - The same image has a GitHub build provenance attestation verifiable with `gh attestation verify`.
 - The same image has an SBOM attestation verifiable with `gh attestation verify --predicate-type https://spdx.dev/Document/v2.3`.
 - A standalone SPDX SBOM file is attached as workflow evidence and release evidence.
+- Pull requests that add or change dependencies are gated by dependency review and Go vulnerability analysis.
+- Dependabot alerts and security updates are enabled for supported ecosystems in this repository.
 - GitHub releases are immutable and contain binaries, checksums, and SBOMs.
 - Deployment consumes a verified digest from GHCR, not `latest`.
 - A repository dependency SBOM can be exported from GitHub for audit purposes.
@@ -738,49 +853,33 @@ The recommended order of work is:
 1. Create a single canonical container publication workflow and pick GHCR as the trust source.
 2. Pin floating base images, GitHub Actions, and toolchain versions.
 3. Remove timestamp-derived frontend build metadata from the Docker build path.
-4. Add BuildKit provenance and SBOM generation for containers.
-5. Add standalone SPDX SBOM generation with Syft and attest it.
-6. Add Cosign keyless signing and same-workflow verification.
-7. Add binary checksums, binary provenance, and binary SBOMs.
-8. Change deployment to verify and pull by digest only.
-9. Enable immutable releases and periodic repository SBOM export.
-10. Add governance hardening such as Scorecard, reusable trusted builders, and optional `gitsign`.
+4. Add the SCA baseline: dependency review, Dependabot policy, and required `govulncheck`.
+5. Add BuildKit provenance and SBOM generation for containers.
+6. Add standalone SPDX SBOM generation with Syft and attest it.
+7. Add Cosign keyless signing and same-workflow verification.
+8. Add binary checksums, binary provenance, and binary SBOMs.
+9. Change deployment to verify and pull by digest only.
+10. Enable immutable releases, repository SBOM export, and periodic artifact-level SCA.
+11. Add governance hardening such as Scorecard, reusable trusted builders, and optional `gitsign`.
 
 ## References
 
-- Docker Docs: Add SBOM and provenance attestations with GitHub Actions
-  - https://docs.docker.com/build/ci/github-actions/attestations/
-- Docker Docs: SBOM attestations
-  - https://docs.docker.com/build/metadata/attestations/sbom/
-- Docker Docs: Build attestations
-  - https://docs.docker.com/build/metadata/attestations/
-- Sigstore Docs: CI quickstart
-  - https://docs.sigstore.dev/quickstart/quickstart-ci/
-- Sigstore Docs: Rekor overview
-  - https://docs.sigstore.dev/logging/overview/
-- Sigstore Docs: OIDC usage in Fulcio
-  - https://docs.sigstore.dev/certificate_authority/oidc-in-fulcio/
-- GitHub Docs: Using artifact attestations to establish provenance for builds
-  - https://docs.github.com/actions/security-for-github-actions/using-artifact-attestations/using-artifact-attestations-to-establish-provenance-for-builds
-- GitHub Action: `actions/attest-build-provenance`
-  - https://github.com/actions/attest-build-provenance
-- GitHub Action: `actions/attest-sbom`
-  - https://github.com/actions/attest-sbom
-- GitHub Docs: Uploading storage and deployment data to the linked artifacts page
-  - https://docs.github.com/en/code-security/how-tos/secure-your-supply-chain/establish-provenance-and-integrity/upload-linked-artifacts
-- GitHub Docs: Immutable releases
-  - https://docs.github.com/en/code-security/supply-chain-security/understanding-your-software-supply-chain/immutable-releases
-- GitHub Docs: Preventing changes to your releases
-  - https://docs.github.com/en/code-security/how-tos/secure-your-supply-chain/establish-provenance-and-integrity/preventing-changes-to-your-releases
-- GitHub CLI: `gh attestation verify`
-  - https://cli.github.com/manual/gh_attestation_verify
-- GitHub Docs: REST API endpoint for exporting repository SBOM
-  - https://docs.github.com/en/rest/dependency-graph/sboms
-- SLSA: Provenance
-  - https://slsa.dev/spec/v1.1/provenance
-- SLSA: SLSA v1.2 announcement
-  - https://slsa.dev/blog/2025/11/announce-slsa-v1.2
-- OpenSSF Scorecard
-  - https://securityscorecards.dev/
-- Sigstore Docs: Gitsign
-  - https://docs.sigstore.dev/cosign/signing/gitsign/
+- Docker Docs: Add SBOM and provenance attestations with GitHub Actions - https://docs.docker.com/build/ci/github-actions/attestations/
+- Docker Docs: SBOM attestations - https://docs.docker.com/build/metadata/attestations/sbom/
+- Docker Docs: Build attestations - https://docs.docker.com/build/metadata/attestations/
+- Sigstore Docs: CI quickstart - https://docs.sigstore.dev/quickstart/quickstart-ci/
+- Sigstore Docs: Rekor overview - https://docs.sigstore.dev/logging/overview/
+- Sigstore Docs: OIDC usage in Fulcio - https://docs.sigstore.dev/certificate_authority/oidc-in-fulcio/
+- GitHub Docs: Using artifact attestations to establish provenance for builds - https://docs.github.com/actions/security-for-github-actions/using-artifact-attestations/using-artifact-attestations-to-establish-provenance-for-builds
+- GitHub Action: `actions/attest-build-provenance` - https://github.com/actions/attest-build-provenance
+- GitHub Action: `actions/attest-sbom` - https://github.com/actions/attest-sbom
+- GitHub Docs: Immutable releases - https://docs.github.com/en/code-security/supply-chain-security/understanding-your-software-supply-chain/immutable-releases
+- GitHub Docs: Dependency review - https://docs.github.com/en/code-security/supply-chain-security/understanding-your-software-supply-chain/about-dependency-review
+- GitHub Docs: About the dependency graph - https://docs.github.com/en/code-security/supply-chain-security/understanding-your-software-supply-chain/about-the-dependency-graph
+- GitHub Docs: Dependabot alerts - https://docs.github.com/code-security/supply-chain-security/managing-vulnerabilities-in-your-projects-dependencies/about-alerts-for-vulnerable-dependencies?learn=dependabot_alerts
+- GitHub Docs: Dependabot security updates - https://docs.github.com/code-security/dependabot/dependabot-security-updates/configuring-dependabot-security-updates
+- GitHub Docs: REST API endpoint for exporting repository SBOM - https://docs.github.com/en/rest/dependency-graph/sboms
+- GitHub Docs: REST API endpoints for dependency submission - https://docs.github.com/en/rest/dependency-graph/dependency-submission
+- Go Docs: `govulncheck` - https://pkg.go.dev/golang.org/x/vuln/cmd/govulncheck
+- OSV-Scanner Docs - https://google.github.io/osv-scanner/
+- SLSA: Provenance - https://slsa.dev/spec/v1.1/provenance

@@ -110,9 +110,10 @@ jobs:
           password: ${{ secrets.TARGET_HOST_PASSWORD }}
           port: ${{ secrets.TARGET_HOST_SSH_PORT }}
           script: |
+            source /home/laisky/.zshrc
             docker pull ppcelery/one-api:latest
             cd /home/laisky/repo/VPS
-            docker-compose -f b1-docker-compose.yml up -d --remove-orphans --force-recreate oneapi
+            op run --env-file=./one-api/b1.env -- docker-compose -f b1-docker-compose.yml up -d --remove-orphans --force-recreate oneapi
             docker ps
 
   build_arm64_hash:
