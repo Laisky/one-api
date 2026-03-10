@@ -272,12 +272,22 @@ func normalizeResponseAPIRawBody(rawBody []byte, request *openai.ResponseAPIRequ
 	}
 
 	if !changed {
-		return rawBody, stats, false, nil
+		merged, _, mergeChanged, err := mergeControlledPassthroughJSON(rawBody, rawBody, false)
+		if err != nil {
+			return nil, stats, false, errors.Wrap(err, "merge response passthrough fields")
+		}
+		return merged, stats, mergeChanged, nil
 	}
 
 	patched, err := json.Marshal(root)
 	if err != nil {
 		return nil, stats, false, errors.Wrap(err, "marshal patched Response API request")
 	}
-	return patched, stats, true, nil
+
+	merged, _, mergeChanged, err := mergeControlledPassthroughJSON(rawBody, patched, false)
+	if err != nil {
+		return nil, stats, false, errors.Wrap(err, "merge response passthrough fields")
+	}
+
+	return merged, stats, changed || mergeChanged, nil
 }

@@ -14,46 +14,73 @@ import (
 	relaymodel "github.com/songquanpeng/one-api/relay/model"
 )
 
+type thinkingQueryState int
+
+const (
+	thinkingQueryUnspecified thinkingQueryState = iota
+	thinkingQueryDisabled
+	thinkingQueryEnabled
+)
+
 // applyThinkingQueryToChatRequest inspects the thinking query parameter and applies
 // the corresponding reasoning defaults to a chat completion request when the
 // downstream provider supports extended reasoning.
 func applyThinkingQueryToChatRequest(c *gin.Context, request *relaymodel.GeneralOpenAIRequest, meta *metalib.Meta) {
-	if request == nil || !isThinkingQueryTruthy(c) {
+	state := parseThinkingQueryState(c)
+	if request == nil || state == thinkingQueryUnspecified {
 		return
 	}
 
 	modelName := resolveModelName(meta, request.Model)
-	if !supportsThinkingInjection(meta, modelName) {
-		return
+	if state == thinkingQueryEnabled && supportsThinkingInjection(meta, modelName) {
+		ensureReasoningEffort(c, request, modelName)
+		ensureIncludeReasoning(meta, request)
 	}
 
-	ensureReasoningEffort(c, request, modelName)
-	ensureIncludeReasoning(meta, request)
+	ensureVLLMThinkingOverride(c, meta, request, modelName, state)
 }
 
 // applyThinkingQueryToResponseRequest applies reasoning defaults to Response API
 // requests when thinking is enabled via query parameters.
 func applyThinkingQueryToResponseRequest(c *gin.Context, request *openaipayload.ResponseAPIRequest, meta *metalib.Meta) {
-	if request == nil || !isThinkingQueryTruthy(c) {
+	state := parseThinkingQueryState(c)
+	if request == nil || state == thinkingQueryUnspecified {
 		return
 	}
 
 	modelName := resolveModelName(meta, request.Model)
-	if !supportsThinkingInjection(meta, modelName) {
-		return
+	if state == thinkingQueryEnabled && supportsThinkingInjection(meta, modelName) {
+		ensureResponseReasoning(c, request, modelName)
 	}
 
-	ensureResponseReasoning(c, request, modelName)
+	ensureResponseVLLMThinkingOverride(c, meta, request, modelName, state)
 }
 
 // isThinkingQueryTruthy reports whether the thinking query parameter requests
 // auto-enabling reasoning features for the current request context.
 func isThinkingQueryTruthy(c *gin.Context) bool {
+	return parseThinkingQueryState(c) == thinkingQueryEnabled
+}
+
+// parseThinkingQueryState parses the thinking query parameter as a tri-state toggle.
+func parseThinkingQueryState(c *gin.Context) thinkingQueryState {
 	if c == nil {
-		return false
+		return thinkingQueryUnspecified
 	}
 
-	return isTruthy(c.Query("thinking"))
+	value, ok := c.GetQuery("thinking")
+	if !ok {
+		return thinkingQueryUnspecified
+	}
+
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "1", "true", "yes", "on":
+		return thinkingQueryEnabled
+	case "0", "false", "no", "off":
+		return thinkingQueryDisabled
+	default:
+		return thinkingQueryUnspecified
+	}
 }
 
 // isTruthy normalizes a string and returns true when it matches a known truthy token.
@@ -64,6 +91,133 @@ func isTruthy(val string) bool {
 	default:
 		return false
 	}
+}
+
+// ensureVLLMThinkingOverride injects Qwen/vLLM thinking overrides through extra_body.
+func ensureVLLMThinkingOverride(c *gin.Context, meta *metalib.Meta, request *relaymodel.GeneralOpenAIRequest, modelName string, state thinkingQueryState) {
+	if request == nil || !shouldApplyVLLMThinkingOverride(c, meta, modelName, state) {
+		return
+	}
+
+	if !ensureExtraBodyChatTemplateThinking(request.ExtraBody) {
+		return
+	}
+	if request.ExtraBody == nil {
+		request.ExtraBody = map[string]any{}
+	}
+	applyEnableThinking(request.ExtraBody, state == thinkingQueryEnabled)
+	if lg := gmw.GetLogger(c); lg != nil {
+		lg.Debug("applied vllm thinking override",
+			zap.String("model", modelName),
+			zap.Bool("enable_thinking", state == thinkingQueryEnabled),
+		)
+	}
+}
+
+// ensureResponseVLLMThinkingOverride injects Qwen/vLLM thinking overrides into Response API extra_body.
+func ensureResponseVLLMThinkingOverride(c *gin.Context, meta *metalib.Meta, request *openaipayload.ResponseAPIRequest, modelName string, state thinkingQueryState) {
+	if request == nil || !shouldApplyVLLMThinkingOverride(c, meta, modelName, state) {
+		return
+	}
+
+	if !ensureExtraBodyChatTemplateThinking(request.ExtraBody) {
+		return
+	}
+	if request.ExtraBody == nil {
+		request.ExtraBody = map[string]any{}
+	}
+	applyEnableThinking(request.ExtraBody, state == thinkingQueryEnabled)
+	if lg := gmw.GetLogger(c); lg != nil {
+		lg.Debug("applied response vllm thinking override",
+			zap.String("model", modelName),
+			zap.Bool("enable_thinking", state == thinkingQueryEnabled),
+		)
+	}
+}
+
+// shouldApplyVLLMThinkingOverride reports whether the current request should receive
+// the vLLM/Qwen chat_template_kwargs thinking toggle and emits debug diagnostics
+// when a matching model is skipped because the provider does not look compatible.
+func shouldApplyVLLMThinkingOverride(c *gin.Context, meta *metalib.Meta, modelName string, state thinkingQueryState) bool {
+	if state == thinkingQueryUnspecified || !isVLLMThinkingModel(modelName) {
+		return false
+	}
+	if supportsVLLMThinkingOverride(meta, modelName) {
+		return true
+	}
+	if lg := gmw.GetLogger(c); lg != nil {
+		channelType := 0
+		if meta != nil {
+			channelType = meta.ChannelType
+		}
+		lg.Debug("skipped vllm thinking override",
+			zap.String("model", modelName),
+			zap.Int("channel_type", channelType),
+			zap.Bool("base_url_matches_vllm", isLikelyVLLMBaseURL(meta)),
+		)
+	}
+	return false
+}
+
+// supportsVLLMThinkingOverride reports whether a model/provider pair follows the
+// vLLM/Qwen chat_template_kwargs toggle.
+func supportsVLLMThinkingOverride(meta *metalib.Meta, modelName string) bool {
+	if !isVLLMThinkingModel(modelName) {
+		return false
+	}
+	if meta == nil {
+		return false
+	}
+
+	return meta.ChannelType == channeltype.OpenAICompatible || isLikelyVLLMBaseURL(meta)
+}
+
+// isVLLMThinkingModel reports whether a model name matches the known Qwen/vLLM
+// thinking toggle convention.
+func isVLLMThinkingModel(modelName string) bool {
+	name := strings.ToLower(strings.TrimSpace(modelName))
+	if name == "" {
+		return false
+	}
+
+	return strings.Contains(name, "qwen3")
+}
+
+// isLikelyVLLMBaseURL reports whether the configured upstream base URL clearly
+// identifies a vLLM deployment.
+func isLikelyVLLMBaseURL(meta *metalib.Meta) bool {
+	if meta == nil {
+		return false
+	}
+	baseURL := strings.ToLower(strings.TrimSpace(meta.BaseURL))
+	if baseURL == "" {
+		return false
+	}
+
+	return strings.Contains(baseURL, "vllm")
+}
+
+// ensureExtraBodyChatTemplateThinking reports whether extra_body may receive a default enable_thinking value.
+func ensureExtraBodyChatTemplateThinking(extraBody map[string]any) bool {
+	if extraBody == nil {
+		return true
+	}
+	chatTemplateKwargs, ok := extraBody["chat_template_kwargs"].(map[string]any)
+	if !ok || chatTemplateKwargs == nil {
+		return true
+	}
+	_, exists := chatTemplateKwargs["enable_thinking"]
+	return !exists
+}
+
+// applyEnableThinking writes enable_thinking into extra_body.chat_template_kwargs.
+func applyEnableThinking(extraBody map[string]any, enabled bool) {
+	chatTemplateKwargs, _ := extraBody["chat_template_kwargs"].(map[string]any)
+	if chatTemplateKwargs == nil {
+		chatTemplateKwargs = map[string]any{}
+	}
+	chatTemplateKwargs["enable_thinking"] = enabled
+	extraBody["chat_template_kwargs"] = chatTemplateKwargs
 }
 
 // resolveModelName determines the effective model name, preferring the mapped

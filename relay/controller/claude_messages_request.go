@@ -31,6 +31,7 @@ func rewriteClaudeRequestBody(raw []byte, request *ClaudeMessagesRequest) ([]byt
 	if request.Model != "" {
 		obj["model"] = request.Model
 	}
+	delete(obj, "extra_body")
 	if request.TopP == nil {
 		delete(obj, "top_p")
 	}

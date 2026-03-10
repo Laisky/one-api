@@ -34,6 +34,7 @@ func ConvertClaudeRequest(c *gin.Context, request *model.ClaudeRequest) (any, er
 	// Convert Claude Messages API request to OpenAI format first
 	openaiRequest := &model.GeneralOpenAIRequest{
 		Model:               request.Model,
+		ExtraBody:           maps.Clone(request.ExtraBody),
 		MaxCompletionTokens: &request.MaxTokens,
 		Temperature:         request.Temperature,
 		TopP:                request.TopP,

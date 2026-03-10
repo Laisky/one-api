@@ -462,12 +462,12 @@ func ResolveEffectivePricing(modelName string, inputTokens int, adaptor adaptor.
 		baseIn := 2.5 * 0.000001
 		baseComp := 1.0
 		return EffectivePricing{
-			InputRatio:            baseIn,
-			OutputRatio:           baseIn * baseComp,
-			CachedInputRatio:      0,
-			CacheWrite5mRatio:     0,
-			CacheWrite1hRatio:     0,
-			AppliedTierThreshold:  0,
+			InputRatio:           baseIn,
+			OutputRatio:          baseIn * baseComp,
+			CachedInputRatio:     0,
+			CacheWrite5mRatio:    0,
+			CacheWrite1hRatio:    0,
+			AppliedTierThreshold: 0,
 		}
 	}
 
@@ -479,12 +479,12 @@ func ResolveEffectivePricing(modelName string, inputTokens int, adaptor adaptor.
 	baseRatio := adaptor.GetModelRatio(modelName)
 	baseComp := adaptor.GetCompletionRatio(modelName)
 	return EffectivePricing{
-		InputRatio:            baseRatio,
-		OutputRatio:           baseRatio * baseComp,
-		CachedInputRatio:      0,
-		CacheWrite5mRatio:     0,
-		CacheWrite1hRatio:     0,
-		AppliedTierThreshold:  0,
+		InputRatio:           baseRatio,
+		OutputRatio:          baseRatio * baseComp,
+		CachedInputRatio:     0,
+		CacheWrite5mRatio:    0,
+		CacheWrite1hRatio:    0,
+		AppliedTierThreshold: 0,
 	}
 }
 
@@ -521,11 +521,11 @@ func ResolveEffectivePricingFromConfig(inputTokens int, base adaptor.ModelConfig
 	}
 
 	return EffectivePricing{
-		InputRatio:            in,
-		OutputRatio:           in * comp,
-		CachedInputRatio:      cachedIn,
-		CacheWrite5mRatio:     cw5,
-		CacheWrite1hRatio:     cw1,
-		AppliedTierThreshold:  appliedThreshold,
+		InputRatio:           in,
+		OutputRatio:          in * comp,
+		CachedInputRatio:     cachedIn,
+		CacheWrite5mRatio:    cw5,
+		CacheWrite1hRatio:    cw1,
+		AppliedTierThreshold: appliedThreshold,
 	}
 }

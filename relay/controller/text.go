@@ -466,7 +466,28 @@ func getRequestBody(c *gin.Context, meta *metalib.Meta, textRequest *relaymodel.
 		meta.ChannelType != channeltype.Baichuan &&
 		meta.ForcedSystemPrompt == "" {
 		c.Set(ctxkey.ConvertedRequest, textRequest)
-		return bytes.NewBuffer(originalBody), nil
+		if (c.Request == nil || c.Request.URL == nil || !c.Request.URL.Query().Has("thinking")) && !bytes.Contains(originalBody, []byte(`"extra_body"`)) {
+			return bytes.NewBuffer(originalBody), nil
+		}
+		jsonData, err := json.Marshal(textRequest)
+		if err != nil {
+			return nil, errors.Wrap(err, "marshal chat request for passthrough normalization")
+		}
+		merged, stats, changed, mergeErr := mergeControlledPassthroughJSON(originalBody, jsonData, true)
+		if mergeErr != nil {
+			return nil, errors.Wrap(mergeErr, "normalize passthrough request fields")
+		}
+		if config.DebugEnabled && changed && hasPassthroughDiagnostics(stats) {
+			lg := gmw.GetLogger(c)
+			lg.Debug("normalized chat passthrough request payload",
+				zap.Int("unknown_preserved", stats.UnknownPreserved),
+				zap.Int("allowed_root_preserved", stats.AllowedRootPreserved),
+				zap.Int("extra_body_merged", stats.ExtraBodyMerged),
+				zap.Int("extra_body_skipped", stats.ExtraBodySkipped),
+				zap.Int("extra_body_rejected", stats.ExtraBodyRejected),
+			)
+		}
+		return bytes.NewBuffer(merged), nil
 	}
 
 	convertedRequest, err := adaptor.ConvertRequest(c, meta.Mode, textRequest)
@@ -483,13 +504,21 @@ func getRequestBody(c *gin.Context, meta *metalib.Meta, textRequest *relaymodel.
 	// When upstream expects the native OpenAI chat payload and we didn't rewrite the
 	// system prompt, merge unknown user fields (e.g. encrypted extensions) back into
 	// the converted JSON so we can preserve pass-through semantics.
-	if _, isChatPayload := convertedRequest.(*relaymodel.GeneralOpenAIRequest); isChatPayload &&
-		meta.APIType == apitype.OpenAI &&
-		meta.ChannelType == channeltype.OpenAI &&
-		!config.EnforceIncludeUsage &&
-		!systemPromptReset {
-		if merged, mergeErr := mergeJSONPreservingUnknown(originalBody, jsonData); mergeErr == nil {
+	if _, isChatPayload := convertedRequest.(*relaymodel.GeneralOpenAIRequest); isChatPayload && meta.APIType == apitype.OpenAI {
+		allowUnknown := meta.ChannelType == channeltype.OpenAI && !config.EnforceIncludeUsage && !systemPromptReset
+		if merged, stats, changed, mergeErr := mergeControlledPassthroughJSON(originalBody, jsonData, allowUnknown); mergeErr == nil {
 			jsonData = merged
+			if config.DebugEnabled && changed && hasPassthroughDiagnostics(stats) {
+				lg := gmw.GetLogger(c)
+				lg.Debug("merged chat request passthrough fields",
+					zap.Bool("allow_unknown", allowUnknown),
+					zap.Int("unknown_preserved", stats.UnknownPreserved),
+					zap.Int("allowed_root_preserved", stats.AllowedRootPreserved),
+					zap.Int("extra_body_merged", stats.ExtraBodyMerged),
+					zap.Int("extra_body_skipped", stats.ExtraBodySkipped),
+					zap.Int("extra_body_rejected", stats.ExtraBodyRejected),
+				)
+			}
 		} else {
 			return nil, errors.Wrap(mergeErr, "merge original request fields")
 		}
@@ -523,32 +552,4 @@ func requiresJSONSchemaDowngrade(meta *metalib.Meta, request *relaymodel.General
 	}
 
 	return false
-}
-
-func mergeJSONPreservingUnknown(original, updated []byte) ([]byte, error) {
-	if len(original) == 0 {
-		return updated, nil
-	}
-
-	var originalMap map[string]json.RawMessage
-	if err := json.Unmarshal(original, &originalMap); err != nil {
-		return nil, err
-	}
-
-	var updatedMap map[string]json.RawMessage
-	if err := json.Unmarshal(updated, &updatedMap); err != nil {
-		return nil, err
-	}
-
-	for key, value := range originalMap {
-		if _, exists := updatedMap[key]; !exists {
-			updatedMap[key] = value
-		}
-	}
-
-	merged, err := json.Marshal(updatedMap)
-	if err != nil {
-		return nil, err
-	}
-	return merged, nil
 }

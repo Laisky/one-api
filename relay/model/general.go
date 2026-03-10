@@ -51,9 +51,12 @@ type GeneralOpenAIRequest struct {
 	// https://platform.openai.com/docs/api-reference/chat/create
 	Messages []Message `json:"messages,omitempty"`
 	Model    string    `json:"model,omitempty"`
-	Arn      string    `json:"arn,omitempty"` // for aws arn
-	Store    *bool     `json:"store,omitempty"`
-	Metadata any       `json:"metadata,omitempty"`
+	// ExtraBody stores allowlisted provider-specific parameters that should be
+	// merged into the upstream root payload without overriding explicit fields.
+	ExtraBody map[string]any `json:"extra_body,omitempty"`
+	Arn       string         `json:"arn,omitempty"` // for aws arn
+	Store     *bool          `json:"store,omitempty"`
+	Metadata  any            `json:"metadata,omitempty"`
 	// FrequencyPenalty is a number between -2.0 and 2.0 that penalizes
 	// new tokens based on their existing frequency in the text so far,
 	// default is 0.
@@ -219,7 +222,10 @@ type OpenaiImageEditRequest struct {
 // ClaudeRequest represents a Claude Messages API request
 // This is a flexible structure that can handle both simple and complex content
 type ClaudeRequest struct {
-	Model         string          `json:"model" binding:"required"`
+	Model string `json:"model" binding:"required"`
+	// ExtraBody stores allowlisted provider-specific parameters that should be
+	// merged into the upstream root payload after Claude-to-OpenAI conversion.
+	ExtraBody     map[string]any  `json:"extra_body,omitempty"`
 	MaxTokens     int             `json:"max_tokens" binding:"required"`
 	Messages      []ClaudeMessage `json:"messages" binding:"required"`
 	System        any             `json:"system,omitempty"`

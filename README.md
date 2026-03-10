@@ -281,6 +281,8 @@ Supports two URL parameters: `thinking` and `reasoning_format`.
   - `reasoning`: OpenRouter format, returned in the `reasoning` field.
   - `thinking`: Claude format, returned in the `thinking` field.
 
+OpenAI Chat Completions, Response API, and Claude Messages requests also accept an `extra_body` object for allowlisted provider-specific passthrough fields. OneAPI flattens allowlisted keys into the upstream root payload, preserves explicit top-level request fields, and rejects malformed or non-allowlisted entries.
+
 ##### Reasoning Format - reasoning-content
 
 ```sh

@@ -132,3 +132,99 @@ func TestApplyThinkingQueryToResponseRequestClampsMediumOnlyModels(t *testing.T)
 	require.NotNil(t, payload.Reasoning.Effort)
 	require.Equal(t, "medium", *payload.Reasoning.Effort)
 }
+
+func TestApplyThinkingQueryToChatRequestSetsQwenDisableOverride(t *testing.T) {
+	t.Parallel()
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions?thinking=false", nil)
+	c.Request = req
+
+	meta := &metalib.Meta{ActualModelName: "Qwen/Qwen3.5-35B-A3B", APIType: apitype.OpenAI, ChannelType: channeltype.OpenAICompatible}
+	payload := &relaymodel.GeneralOpenAIRequest{Model: "Qwen/Qwen3.5-35B-A3B"}
+
+	applyThinkingQueryToChatRequest(c, payload, meta)
+
+	kwargs := payload.ExtraBody["chat_template_kwargs"].(map[string]any)
+	require.Equal(t, false, kwargs["enable_thinking"])
+	require.Nil(t, payload.ReasoningEffort)
+}
+
+func TestApplyThinkingQueryToChatRequestPreservesExistingQwenOverride(t *testing.T) {
+	t.Parallel()
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions?thinking=true", nil)
+	c.Request = req
+
+	meta := &metalib.Meta{ActualModelName: "Qwen/Qwen3.5-35B-A3B", APIType: apitype.OpenAI, ChannelType: channeltype.OpenAICompatible}
+	payload := &relaymodel.GeneralOpenAIRequest{
+		Model: "Qwen/Qwen3.5-35B-A3B",
+		ExtraBody: map[string]any{
+			"chat_template_kwargs": map[string]any{"enable_thinking": false},
+		},
+	}
+
+	applyThinkingQueryToChatRequest(c, payload, meta)
+
+	kwargs := payload.ExtraBody["chat_template_kwargs"].(map[string]any)
+	require.Equal(t, false, kwargs["enable_thinking"])
+}
+
+func TestApplyThinkingQueryToResponseRequestSetsQwenEnableOverride(t *testing.T) {
+	t.Parallel()
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	req := httptest.NewRequest(http.MethodPost, "/v1/responses?thinking=true", nil)
+	c.Request = req
+
+	meta := &metalib.Meta{ActualModelName: "Qwen/Qwen3.5-35B-A3B", APIType: apitype.OpenAI, ChannelType: channeltype.OpenAICompatible}
+	payload := &openaipayload.ResponseAPIRequest{Model: "Qwen/Qwen3.5-35B-A3B"}
+
+	applyThinkingQueryToResponseRequest(c, payload, meta)
+
+	kwargs := payload.ExtraBody["chat_template_kwargs"].(map[string]any)
+	require.Equal(t, true, kwargs["enable_thinking"])
+}
+
+func TestApplyThinkingQueryToChatRequestSkipsQwenOverrideForHostedProviders(t *testing.T) {
+	t.Parallel()
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions?thinking=false", nil)
+	c.Request = req
+
+	meta := &metalib.Meta{
+		ActualModelName: "Qwen/Qwen3.5-35B-A3B",
+		APIType:         apitype.OpenAI,
+		ChannelType:     channeltype.OpenAI,
+		BaseURL:         "https://api.openai.com",
+	}
+	payload := &relaymodel.GeneralOpenAIRequest{Model: "Qwen/Qwen3.5-35B-A3B"}
+
+	applyThinkingQueryToChatRequest(c, payload, meta)
+
+	require.Nil(t, payload.ExtraBody)
+	require.Nil(t, payload.ReasoningEffort)
+}
+
+func TestApplyThinkingQueryToChatRequestAllowsQwenOverrideForVLLMBaseURL(t *testing.T) {
+	t.Parallel()
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions?thinking=true", nil)
+	c.Request = req
+
+	meta := &metalib.Meta{
+		ActualModelName: "Qwen/Qwen3.5-35B-A3B",
+		APIType:         apitype.OpenAI,
+		ChannelType:     channeltype.OpenAI,
+		BaseURL:         "http://vllm.internal:8000/v1",
+	}
+	payload := &relaymodel.GeneralOpenAIRequest{Model: "Qwen/Qwen3.5-35B-A3B"}
+
+	applyThinkingQueryToChatRequest(c, payload, meta)
+
+	kwargs := payload.ExtraBody["chat_template_kwargs"].(map[string]any)
+	require.Equal(t, true, kwargs["enable_thinking"])
+}

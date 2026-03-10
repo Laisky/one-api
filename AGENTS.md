@@ -1,180 +1,48 @@
-# Agents Guidelines
-
-**No matter what language you receive, Only using English as output for codes, comments, chat, documents and everything else.**
-
-## This Project
-
-The purpose of the one‑api project is to let users freely use any of the ChatCompletion API, Response API, or Claude Messages API formats to request any model on any channel. one‑api transparently handles the request and response format conversions. Please make sure that all adapters support conversion among the three API formats.
-
-Local tools and debugging related sensitive information is saved in .github/instructions/laisky.instructions.md.
-
-### Package Management
-
-Use `yarn` for managing packages. Avoid using `npm` to prevent potential conflicts in the `yarn.lock` file.
-
-### Debug & Logging
-
-Every project needs a global logger as the foundation. As the request moves through the code, middleware (or something similar) should automatically add a context aware log handler that carries the important context data—think zap logger’s `With` method. When you write the business logic, pull that context aware logger from the context and use it for logging, not the global logger.
-
-### Frontend Templates
-
-This project has three different frontend templates: Modern, Default, Berry, and Air.
-
-Modern is the most advanced template with the best user experience. Our focus is on developing new features for Modern. The three templates: Default, Berry, and Air, are kept for maintenance, ensuring that existing functionality continues to work.
-
-### I18n
-
-All UI content should support i18n language translation, and all language files should be defined. The language files are stored in `web/modern/src/i18n/locales/`.
-
-## General
-
-Every single code file should not exceed 800 lines. If a file exceeds this limit, please split it into smaller files based on functionality. Automatically generated files are exempt from this rule.
-
-When debugging, add targeted DEBUG logs that include essential details to help developers pinpoint hard‑to‑diagnose issues. After debugging, retain any logs that could be useful for future troubleshooting, but **never** include sensitive data like API keys or passwords in those logs.
-
-### Agents
-
-Multiple agents might be modifying the code at the same time. If you come across changes that aren't yours, preserve them and avoid interfering with other agents' work. Only halt the task and inform me when you encounter an irreconcilable conflict.
-
-Should use TODOs tool to track tasks and progress.
-
-After making any code changes, always verify that the code is correct: the syntax must be valid, the project should still build successfully(via `go vet ./...`, `go test -race ./...` or `make build-frontend-modern`), and all unit tests must pass. If any test fails, investigate whether the problem lies in the implementation or the test itself, and, respecting the user's specifications, fix the issue carefully.
-
-### Security
-
-Always use constant time comparison for sensitive data. Follow OWASP recommendations for password hashing iterations (minimum 10,000 in this context).
-
-Never directly use user input or any untrusted external input to build a database query or allocate memory, to prevent injection or DoS attacks. Always sanitize and validate user inputs before using them in queries.
-
-### TimeZone
-
-Always use UTC for time handling in servers, databases, and APIs.
-
-### Date Range
-
-For any date‑range query, the handling of the ending date must encompass the entire final day. That means the database query should terminate **just before** 00:00 on the next day, ensuring that all hours of the last day are included.
-
-### Testing
-
-Please create suitable unit tests based on the current project circumstances. Whenever a new issue arises, update the unit tests during the fix to ensure thorough coverage of the problem by the test cases. Avoid creating temporary, one-off test scripts, and focus on continuously enhancing the unit test cases.
-
-Use `"github.com/stretchr/testify/require"` for assertions in tests.
-
-### Comments
-
-Every function/interface must have a comment explaining its purpose, parameters, and return values. This is crucial for maintaining code clarity and facilitating future maintenance.
-The comment should start with the function/interface name and be in complete sentences.
-
-## Golang Style
-
-This project is developed and run using Go 1.25. Please use the newest Go syntax and features as much as possible.
-
-Ideally, a single file should not exceed 600 lines. Please split the overly long files according to their functionality.
-
-### Context
-
-Whenever feasible, utilize context to manage the lifecycle of the call chain.
-
-### Golang Error Handling
-
-All errors should be handled, and the error handling should be as close to the source of the error as possible.
-
-Never use `err == nil` to avoid shadowing the error variable.
-
-Use `github.com/Laisky/errors/v2`, its interface is as same as `github.com/Laisky/errors/v2`. Never return bare error, always wrap it by `errors.Wrap`/`errors.Wrapf`/`errors.WithStack`, check all files
-
-Every error must be processed a single time—either returned or logged—but never both.
-
-Avoid returning raw errors; wrap them with errors.Wrap, errors.Wrapf, or errors.WithStack to preserve essential stack traces and contextual information.
-
-### Golang ORM
-
-Use `gorm.io/gorm`, never use `gorm.io/gorm/clause`/`Preload`.
-
-The performance of ORMs is often quite inefficient. Therefore, adopt the data reading method that puts the least pressure on the database whenever possible. my philosophy is to use SQL for reading and reserve ORM for writing or modifying data.
-
-Example:
-
-```go
-// When retrieving data, utilize Model/Find/First as much as possible,
-// and rely on SQL for query conditions whenever you can.
-db.Model(&User{}).
-    Joins("JOIN emails ON emails.user_id = users.id AND emails.email = ?", "jinzhu@example.org").
-    Joins("JOIN credit_cards ON credit_cards.user_id = users.id").Where("credit_cards.number = ?", "411111111111").
-    Find(&user)
-
-// Use Scan only when the data being read does not align with the database table structure.
-db.Model(&User{}).
-    Select("users.name AS name, emails.email AS email").
-    Joins("left join emails on emails.user_id = users.id").
-    Scan(&result{})
-
-```
-
-### Logging
-
-All code paths invoked by a request must use `gmw.GetLogger(c)` to retrieve the logger instead of the global `logger.Logger`. The logger returned by `gmw.GetLogger(c)` embeds rich call‑specific context.
-
-Adopt these logger and error‑handling best practices:
-
-1. Call `gmw.GetLogger(c)` only once per function and store the result in a local variable.
-2. Use `zap.Error(err)` rather than `err.Error()` when logging errors.
-3. Prefer the structured Zap logger over `fmt.Sprintf` for log messages.
-4. Never swallow errors silently; every error should be returned or recorded in the logs.
-
-## CSS Style
-
-Avoid using `!important` in CSS. If you find yourself needing to use it, consider whether the CSS can be refactored to avoid this necessity.
-
-Avoid inline styles in HTML or JSX. Instead, use CSS classes to manage styles. This approach promotes better maintainability and separation of concerns in your codebase.
-
-## Web
-
-When using the web console for debugging, avoid logging objects—they’re hard to copy. Strive to log only strings, making it simple for me to copy all the output and analyze it.
-
-## Philosophy
-
-You are a very strong reasoner and planner. Use these critical instructions to structure your plans, thoughts, and responses.
-
-Before taking any action (either tool calls _or_ responses to the user), you must proactively, methodically, and independently plan and reason about:
-
-1.  **Logical dependencies and constraints:** Analyze the intended action against the following conflicts in order of importance:
-    1.  Policy-based rules, mandatory prerequisites, and constraints.
-    2.  Order of operations: Ensure taking an action does not prevent a subsequent necessary action.
-        1.  The user may request actions in a random order, but you may need to **reorder** operations to maximize successful completion of the task.
-    3.  Other prerequisites (information and/or actions needed).
-    4.  Explicit user constraints or preferences.
-
-2.  **Risk assessment:** What are the consequences of taking this action? Will it cause any future issues?
-    1.  For exploratory tasks (like searches), missing _optional_ parameters is a **LOW** risk.
-    2.  **Prefer calling the tool with the available information over asking the user, unless** your 'Rule 1' (Logical Dependencies) reasoning determines that optional information is required for a later step in your plan.
-
-3.  **Abductive reasoning and hypothesis exploration:** At each step, identify the most logical and likely reason for any problem encountered.
-    1.  Look beyond immediate or obvious causes. The most likely reason may be the simplest and may require deeper inference.
-    2.  Hypotheses may require additional research. Each hypothesis may take multiple steps to test.
-    3.  Prioritize hypotheses based on likelihood, but do not discard less likely ones prematurely. A low-probability event may still be the root cause.
-
-4.  **Outcome evaluation and adaptability:** Does the previous observation (based on gathered info) require any changes to your plan?
-    1.  If your initial hypotheses are disproven, actively generate new ones.
-
-5.  **Information availability:** Incorporate all applicable and alternative sources of information, including:
-    1.  Using available tools and their capabilities.
-    2.  All policies, rules, checklists, and constraints.
-    3.  Previous observations and conversation history.
-    4.  Information only available by asking the user.
-
-6.  **Precision and Grounding:** Ensure your reasoning is extremely precise and relevant to the exact ongoing situation.
-    1.  Verify your claims by quoting the exact applicable information (including policies) when referring to them.
-
-7.  **Completeness:** Ensure that all requirements, constraints, options, and preferences are exhaustively incorporated into your plan.
-    1.  Resolve conflicts using the order of importance in Rule #1.
-    2.  Avoid premature conclusions: There may be multiple relevant options for a given situation.
-        1.  To check for whether an option is relevant, reason from Rule #5.
-        2.  You may need to consult the user to even know whether something is applicable. Do not assume it is not applicable without checking.
-    3.  Review applicable sources of information from Rule #5 to confirm which are relevant to the current state.
-
-8.  **Persistence and patience:** Do not give up unless all the reasoning above is exhausted.
-    1.  Don't be dissuaded by time taken or user frustration.
-    2.  This persistence must be intelligent: On _transient_ errors (e.g., "please try again"), you **must** retry **unless an explicit retry limit (e.g., max x tries) has been reached**. If such a limit is hit, you _must_ stop. On _other_ errors, you must change your strategy or arguments, not repeat the same action.
-
-9.  **Inhibit your response:** Only take an action after all the above reasoning is completed. Once you've taken an action, you cannot take it back.
+# Agent Instructions
+
+- **English only:** Always output **English** for all code, comments, chat, documents, logs, and UI text regardless of input language.
+- **Project purpose:** one‑api must let users call ChatCompletion API, Response API, or Claude Messages API formats and transparently convert among these three formats; ensure all adapters support conversion between the three.
+- **Sensitive local info:** Local tools and debugging sensitive information is stored in `.github/instructions/laisky.instructions.md`; treat it as sensitive and never leak it.
+- **Package manager:** Use **yarn** for package management; avoid `npm` to prevent `yarn.lock` conflicts.
+- **Frontend templates:** Project ships Modern, Default, Berry, and Air templates; prioritize development and new features for **Modern**; maintain others for compatibility.
+- **I18n:** All UI content must support internationalization; language files live in `web/modern/src/i18n/locales/`.
+- **File length limits:** No manually written code file may exceed **800 lines**; for Go prefer files ≤**600 lines**; split by responsibility when needed; generated files are exempt.
+- **Build and test checks:** After changes ensure syntax and build/tests pass: `go vet ./...`, `go test -race ./...`, and `make build-frontend-modern` (or equivalent CI checks).
+- **Debug logging discipline:** Add targeted DEBUG logs to aid diagnosis, keep useful logs after debugging, and **never** include secrets (API keys, passwords, tokens) in logs or outputs.
+- **Global logger and request context:** Provide a global logger foundation; middleware must attach a context-aware logger; business logic must pull the context-aware logger from `context.Context` rather than using a global logger.
+- **Request-scoped logger usage:** For request paths use `gmw.GetLogger(c)` (not global logger); call it **once per function** and store locally.
+- **Structured logging:** Use structured Zap logging and `zap.Error(err)` for errors; avoid `fmt.Sprintf` for log messages.
+- **Multiple agents:** Multiple agents may edit code concurrently; **preserve others’ changes**, avoid overwriting, and only halt and notify when an irreconcilable conflict occurs.
+- **Task tracking:** Use the TODOs tool to track tasks and progress; keep TODOs current and actionable.
+- **Secrets handling:** Treat any API keys or secrets in repo/instructions as sensitive; never echo, log, commit, or expose them.
+- **Security—constant time:** Use constant‑time comparisons for sensitive values (tokens, signatures, etc.).
+- **Security—password hashing:** Follow OWASP recommendations for password hashing; use at least **10,000** iterations in this context.
+- **Security—input handling:** Never use untrusted user input directly to build DB queries or allocate memory; always **validate and sanitize** inputs to prevent SQL injection and DoS.
+- **Time handling:** Use **UTC** for all server, database, and API time handling.
+- **Date-range semantics:** Date‑range queries must include the entire final day; queries should end **just before 00:00 of the next day**.
+- **Testing policy:** Create and update unit tests for new features and bug fixes; avoid one‑off scripts; continuously improve test coverage.
+- **Test assertions:** Use `github.com/stretchr/testify/require` for assertions in tests.
+- **Comments requirement:** Every function and interface must have a comment that starts with the function/interface name and describes purpose, parameters, and return values in complete sentences.
+- **Go version and style:** Target **Go 1.25**; use modern Go syntax and features where appropriate.
+- **Context propagation:** Thread `context.Context` through call chains whenever feasible to manage lifecycles and cancellations.
+- **Error handling—proximity:** Handle errors as close to their source as possible; never ignore errors.
+- **Error handling—avoid `err == nil` pitfalls:** Avoid patterns that risk shadowing; be explicit and clear when checking errors.
+- **Error wrapping library:** Use `github.com/Laisky/errors/v2` for wrapping; never return bare errors—wrap with `errors.Wrap`, `errors.Wrapf`, or `errors.WithStack`.
+- **Error single-processing rule:** Each error must be processed exactly once—either **returned** or **logged**, but never both.
+- **Golang ORM guidance:** Use `gorm.io/gorm` (do not use `gorm.io/gorm/clause` or `Preload`); prefer SQL for reads and use ORM primarily for writes/updates; use `Scan` only when result shapes differ from table structures.
+- **DB performance philosophy:** Minimize DB pressure: prefer explicit SQL for complex read conditions and joins; use ORM convenience for modifications.
+- **Never swallow errors:** Always return or log errors; do not silently ignore failures.
+- **CSS rules:** Avoid `!important`; avoid inline styles in HTML/JSX; use CSS classes for maintainability.
+- **Web console logging:** When debugging in browser consoles, log **strings only** (not objects) to make output easy to copy and analyze.
+- **I18n completeness:** Ensure all UI strings are present in locale files and that translations are wired into the Modern frontend.
+- **Frontend build/dev:** Follow Modern template build/dev conventions and ensure `make build-frontend-modern` succeeds after changes.
+- **Preserve CI expectations:** Any change must respect CI and linting rules; fix tests or implementation as needed, but do not bypass checks.
+- **Planning discipline (pre-action):** Before any action, independently plan: check policy constraints and prerequisites, reorder operations if needed, and ensure required info/tools are available.
+- **Risk assessment:** Evaluate consequences of actions and prefer calling tools with available info rather than blocking on optional details unless required by dependencies.
+- **Hypothesis exploration:** When debugging, generate and prioritize hypotheses, test the most likely causes first, and iterate if disproven.
+- **Outcome adaptability:** If observations disprove hypotheses, update the plan and generate new hypotheses.
+- **Information sources:** Use all applicable sources: tools, policies, history, and user-provided info; ask the user only when missing info is required for the next step.
+- **Precision and grounding:** Be precise and ground claims in exact applicable instructions or evidence when referencing rules.
+- **Completeness:** Exhaustively incorporate requirements and options; resolve conflicts by rule priority and avoid premature conclusions.
+- **Persistence and retries:** Persist intelligently; retry transient errors until a reasonable limit, and change strategy for non‑transient failures.
+- **Action finality:** Only take actions after completing the above reasoning; actions are final once executed.
