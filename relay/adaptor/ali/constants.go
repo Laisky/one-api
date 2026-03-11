@@ -150,7 +150,109 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 	"text-embedding-async-v2": {Ratio: 0.5 * ratio.MilliTokensRmb, CompletionRatio: 1},
 	"text-embedding-async-v1": {Ratio: 0.5 * ratio.MilliTokensRmb, CompletionRatio: 1},
 
-	// Image Generation Models
+	// Qwen-Image Models (synchronous multimodal-generation endpoint)
+	// Pricing: https://help.aliyun.com/zh/model-studio/qwen-image-api
+	// qwen-image-2.0-pro: 0.06 RMB/image (1024x1024)
+	"qwen-image-2.0-pro": {
+		Ratio:           60 * ratio.MilliTokensRmb,
+		CompletionRatio: 1,
+		Image: &adaptor.ImagePricingConfig{
+			DefaultSize:      "1024x1024",
+			DefaultQuality:   "standard",
+			PromptTokenLimit: 800,
+			MinImages:        1,
+			MaxImages:        6,
+			SizeMultipliers: map[string]float64{
+				"512x512":   0.25,
+				"512x1024":  0.5,
+				"1024x512":  0.5,
+				"1024x1024": 1,
+				"1024x2048": 2,
+				"2048x1024": 2,
+				"2048x2048": 4,
+			},
+		},
+	},
+	// qwen-image-2.0: 0.02 RMB/image (1024x1024)
+	"qwen-image-2.0": {
+		Ratio:           20 * ratio.MilliTokensRmb,
+		CompletionRatio: 1,
+		Image: &adaptor.ImagePricingConfig{
+			DefaultSize:      "1024x1024",
+			DefaultQuality:   "standard",
+			PromptTokenLimit: 800,
+			MinImages:        1,
+			MaxImages:        6,
+			SizeMultipliers: map[string]float64{
+				"512x512":   0.25,
+				"512x1024":  0.5,
+				"1024x512":  0.5,
+				"1024x1024": 1,
+				"1024x2048": 2,
+				"2048x1024": 2,
+				"2048x2048": 4,
+			},
+		},
+	},
+	// qwen-image-max: 0.16 RMB/image
+	"qwen-image-max": {
+		Ratio:           160 * ratio.MilliTokensRmb,
+		CompletionRatio: 1,
+		Image: &adaptor.ImagePricingConfig{
+			DefaultSize:      "1024x1024",
+			DefaultQuality:   "standard",
+			PromptTokenLimit: 800,
+			MinImages:        1,
+			MaxImages:        1,
+			SizeMultipliers: map[string]float64{
+				"1664x928":  1,
+				"1472x1104": 1,
+				"1328x1328": 1,
+				"1104x1472": 1,
+				"928x1664":  1,
+			},
+		},
+	},
+	// qwen-image-plus (async): 0.04 RMB/image
+	"qwen-image-plus": {
+		Ratio:           40 * ratio.MilliTokensRmb,
+		CompletionRatio: 1,
+		Image: &adaptor.ImagePricingConfig{
+			DefaultSize:      "1024x1024",
+			DefaultQuality:   "standard",
+			PromptTokenLimit: 500,
+			MinImages:        1,
+			MaxImages:        1,
+			SizeMultipliers: map[string]float64{
+				"1664x928":  1,
+				"1472x1104": 1,
+				"1328x1328": 1,
+				"1104x1472": 1,
+				"928x1664":  1,
+			},
+		},
+	},
+	// qwen-image (async): 0.04 RMB/image
+	"qwen-image": {
+		Ratio:           40 * ratio.MilliTokensRmb,
+		CompletionRatio: 1,
+		Image: &adaptor.ImagePricingConfig{
+			DefaultSize:      "1024x1024",
+			DefaultQuality:   "standard",
+			PromptTokenLimit: 500,
+			MinImages:        1,
+			MaxImages:        1,
+			SizeMultipliers: map[string]float64{
+				"1664x928":  1,
+				"1472x1104": 1,
+				"1328x1328": 1,
+				"1104x1472": 1,
+				"928x1664":  1,
+			},
+		},
+	},
+
+	// Legacy Image Generation Models
 	"ali-stable-diffusion-xl": {
 		Ratio:           8 * ratio.MilliTokensRmb,
 		CompletionRatio: 1,

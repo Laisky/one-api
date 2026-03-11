@@ -172,6 +172,66 @@ func responseAli2OpenAIImage(response *TaskResponse, responseFormat string) *ope
 	return &imageResponse
 }
 
+// QwenImageSyncHandler handles responses from the qwen-image-2.0 synchronous endpoint.
+func QwenImageSyncHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusCode, *model.Usage) {
+	responseFormat := c.GetString("response_format")
+
+	responseBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return openai.ErrorWrapper(err, "read_response_body_failed", http.StatusInternalServerError), nil
+	}
+	_ = resp.Body.Close()
+
+	var qwenResp QwenImageSyncResponse
+	if err := json.Unmarshal(responseBody, &qwenResp); err != nil {
+		return openai.ErrorWrapper(err, "unmarshal_response_body_failed", http.StatusInternalServerError), nil
+	}
+
+	if qwenResp.Code != "" {
+		return &model.ErrorWithStatusCode{
+			Error: model.Error{
+				Message:  qwenResp.Message,
+				Type:     model.ErrorTypeAli,
+				Code:     qwenResp.Code,
+				RawError: errors.New(qwenResp.Message),
+			},
+			StatusCode: resp.StatusCode,
+		}, nil
+	}
+
+	imageResponse := openai.ImageResponse{
+		Created: helper.GetTimestamp(),
+	}
+	for _, choice := range qwenResp.Output.Choices {
+		for _, content := range choice.Message.Content {
+			if content.Image == "" {
+				continue
+			}
+			imgData := openai.ImageData{
+				Url: content.Image,
+			}
+			if responseFormat == "b64_json" {
+				raw, dlErr := getImageData(content.Image)
+				if dlErr != nil {
+					continue
+				}
+				imgData.B64Json = Base64Encode(raw)
+				imgData.Url = ""
+			}
+			imageResponse.Data = append(imageResponse.Data, imgData)
+		}
+	}
+
+	jsonResponse, err := json.Marshal(imageResponse)
+	if err != nil {
+		return openai.ErrorWrapper(err, "marshal_response_body_failed", http.StatusInternalServerError), nil
+	}
+	c.Writer.Header().Set("Content-Type", "application/json")
+	c.Writer.WriteHeader(resp.StatusCode)
+	_, _ = c.Writer.Write(jsonResponse)
+	return nil, nil
+}
+
 func getImageData(url string) ([]byte, error) {
 	response, err := http.Get(url)
 	if err != nil {

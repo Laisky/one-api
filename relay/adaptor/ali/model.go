@@ -152,3 +152,59 @@ type ChatResponse struct {
 	Usage  Usage  `json:"usage"`
 	Error
 }
+
+// QwenImageSyncRequest is the request format for qwen-image-2.0 series models
+// using the synchronous multimodal-generation/generation endpoint.
+// Ref: https://help.aliyun.com/zh/model-studio/qwen-image-api
+type QwenImageSyncRequest struct {
+	Model      string                      `json:"model"`
+	Input      QwenImageSyncInput          `json:"input"`
+	Parameters QwenImageSyncParameters     `json:"parameters,omitempty"`
+}
+
+type QwenImageSyncInput struct {
+	Messages []QwenImageSyncMessage `json:"messages"`
+}
+
+type QwenImageSyncMessage struct {
+	Role    string                       `json:"role"`
+	Content []QwenImageSyncContentPart   `json:"content"`
+}
+
+type QwenImageSyncContentPart struct {
+	Text string `json:"text,omitempty"`
+}
+
+type QwenImageSyncParameters struct {
+	Size           string `json:"size,omitempty"`
+	N              int    `json:"n,omitempty"`
+	PromptExtend   *bool  `json:"prompt_extend,omitempty"`
+	Watermark      *bool  `json:"watermark,omitempty"`
+	Seed           int    `json:"seed,omitempty"`
+	NegativePrompt string `json:"negative_prompt,omitempty"`
+}
+
+// QwenImageSyncResponse is the response from qwen-image-2.0 series synchronous endpoint.
+type QwenImageSyncResponse struct {
+	RequestId string `json:"request_id,omitempty"`
+	Code      string `json:"code,omitempty"`
+	Message   string `json:"message,omitempty"`
+	Output    struct {
+		Choices []QwenImageSyncChoice `json:"choices,omitempty"`
+	} `json:"output"`
+	Usage struct {
+		ImageCount int `json:"image_count,omitempty"`
+	} `json:"usage"`
+}
+
+type QwenImageSyncChoice struct {
+	Message QwenImageSyncChoiceMessage `json:"message"`
+}
+
+type QwenImageSyncChoiceMessage struct {
+	Content []QwenImageSyncResponseContent `json:"content"`
+}
+
+type QwenImageSyncResponseContent struct {
+	Image string `json:"image,omitempty"`
+}

@@ -89,6 +89,39 @@ func ConvertImageRequest(request model.ImageRequest) *ImageRequest {
 	return &imageRequest
 }
 
+// ConvertQwenImageSyncRequest converts an OpenAI image request to the
+// qwen-image-2.0 synchronous multimodal-generation format.
+func ConvertQwenImageSyncRequest(request model.ImageRequest) *QwenImageSyncRequest {
+	size := strings.Replace(request.Size, "x", "*", -1)
+	if size == "" {
+		size = "1024*1024"
+	}
+	n := request.N
+	if n == 0 {
+		n = 1
+	}
+	watermark := false
+
+	return &QwenImageSyncRequest{
+		Model: request.Model,
+		Input: QwenImageSyncInput{
+			Messages: []QwenImageSyncMessage{
+				{
+					Role: "user",
+					Content: []QwenImageSyncContentPart{
+						{Text: request.Prompt},
+					},
+				},
+			},
+		},
+		Parameters: QwenImageSyncParameters{
+			Size:      size,
+			N:         n,
+			Watermark: &watermark,
+		},
+	}
+}
+
 func EmbeddingHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusCode, *model.Usage) {
 	var aliResponse EmbeddingResponse
 	err := json.NewDecoder(resp.Body).Decode(&aliResponse)

@@ -19,6 +19,20 @@ import (
 
 // https://help.aliyun.com/zh/dashscope/developer-reference/api-details
 
+// qwenImageSyncModels lists models that use the synchronous multimodal-generation endpoint.
+// Ref: https://help.aliyun.com/zh/model-studio/qwen-image-api
+var qwenImageSyncModels = map[string]bool{
+	"qwen-image-2.0-pro": true,
+	"qwen-image-2.0":     true,
+	"qwen-image-max":     true,
+}
+
+// isQwenImageSyncModel returns true for qwen-image-2.0 series models
+// that use the synchronous multimodal-generation/generation endpoint.
+func isQwenImageSyncModel(modelName string) bool {
+	return qwenImageSyncModels[modelName]
+}
+
 type Adaptor struct {
 	meta *meta.Meta
 }
@@ -33,7 +47,13 @@ func (a *Adaptor) GetRequestURL(meta *meta.Meta) (string, error) {
 	case relaymode.Embeddings:
 		fullRequestURL = fmt.Sprintf("%s/api/v1/services/embeddings/text-embedding/text-embedding", meta.BaseURL)
 	case relaymode.ImagesGenerations:
-		fullRequestURL = fmt.Sprintf("%s/api/v1/services/aigc/text2image/image-synthesis", meta.BaseURL)
+		if isQwenImageSyncModel(meta.ActualModelName) {
+			// qwen-image-2.0 series uses synchronous multimodal-generation endpoint
+			fullRequestURL = fmt.Sprintf("%s/api/v1/services/aigc/multimodal-generation/generation", meta.BaseURL)
+		} else {
+			// Legacy models (qwen-image-plus, wanx-v1, etc.) use async text2image endpoint
+			fullRequestURL = fmt.Sprintf("%s/api/v1/services/aigc/text2image/image-synthesis", meta.BaseURL)
+		}
 	default:
 		fullRequestURL = fmt.Sprintf("%s/api/v1/services/aigc/text-generation/generation", meta.BaseURL)
 	}
@@ -49,7 +69,9 @@ func (a *Adaptor) SetupRequestHeader(c *gin.Context, req *http.Request, meta *me
 	}
 	req.Header.Set("Authorization", "Bearer "+meta.APIKey)
 
-	if meta.Mode == relaymode.ImagesGenerations {
+	if meta.Mode == relaymode.ImagesGenerations && !isQwenImageSyncModel(meta.ActualModelName) {
+		// Only set async header for legacy image models (qwen-image-plus, wanx-v1, etc.)
+		// qwen-image-2.0 series uses synchronous calls
 		req.Header.Set("X-DashScope-Async", "enable")
 	}
 	if a.meta.Config.Plugin != "" {
@@ -75,6 +97,10 @@ func (a *Adaptor) ConvertRequest(c *gin.Context, relayMode int, request *model.G
 func (a *Adaptor) ConvertImageRequest(_ *gin.Context, request *model.ImageRequest) (any, error) {
 	if request == nil {
 		return nil, errors.New("request is nil")
+	}
+
+	if isQwenImageSyncModel(request.Model) {
+		return ConvertQwenImageSyncRequest(*request), nil
 	}
 
 	aliRequest := ConvertImageRequest(*request)
@@ -235,7 +261,11 @@ func (a *Adaptor) DoResponse(c *gin.Context, resp *http.Response, meta *meta.Met
 		case relaymode.Embeddings:
 			err, usage = EmbeddingHandler(c, resp)
 		case relaymode.ImagesGenerations:
-			err, usage = ImageHandler(c, resp)
+			if isQwenImageSyncModel(meta.ActualModelName) {
+				err, usage = QwenImageSyncHandler(c, resp)
+			} else {
+				err, usage = ImageHandler(c, resp)
+			}
 		default:
 			err, usage = Handler(c, resp)
 		}
