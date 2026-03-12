@@ -2,7 +2,6 @@ package quota
 
 import (
 	"math"
-	"strings"
 
 	modelcfg "github.com/songquanpeng/one-api/model"
 	"github.com/songquanpeng/one-api/relay/adaptor"
@@ -49,16 +48,10 @@ func Compute(input ComputeInput) ComputeResult {
 	completionTokens := usage.CompletionTokens
 
 	pricingAdaptor := input.PricingAdaptor
-	// Resolve model config once (ratio only) to avoid redundant deep clones and lookups.
 	resolvedModelCfg, hasResolvedModelCfg := pricing.ResolveModelConfigRatioOnly(input.ModelName, input.ChannelModelConfigs, pricingAdaptor)
-	hasChannelModelRatioOverride := input.ChannelModelRatio != nil
-	if hasChannelModelRatioOverride {
-		_, hasChannelModelRatioOverride = input.ChannelModelRatio[input.ModelName]
-	}
-
-	// Layer 1 & 2 fallback for base ratios
+	hasChannelModelRatioOverride := hasOverrideForModel(input.ModelName, input.ChannelModelRatio)
 	baseRatio := input.ModelRatio
-	completionRatioResolved := pricing.GetCompletionRatioWithThreeLayers(input.ModelName, input.ChannelCompletionRatio, pricingAdaptor)
+	completionRatioResolved := resolveCompletionRatio(input.ModelName, resolvedModelCfg, hasResolvedModelCfg, input.ChannelCompletionRatio, pricingAdaptor)
 
 	if hasResolvedModelCfg {
 		// Preserve legacy fallback behavior: when channel config omits base ratio/completion
@@ -149,7 +142,7 @@ func Compute(input ComputeInput) ComputeResult {
 		write1h = 0
 	}
 
-	isClaudeModel := strings.Contains(strings.ToLower(input.ModelName), "claude")
+	isClaudeModel := isClaudeModelName(input.ModelName)
 
 	// Some providers (e.g. Anthropic Claude prompt caching) report prompt tokens as
 	// post-breakpoint input only, while cache-read/write tokens are separate buckets.
@@ -218,6 +211,80 @@ func Compute(input ComputeInput) ComputeResult {
 		UsedModelRatio:         usedModelRatio,
 		UsedCompletionRatio:    usedCompletionRatio,
 	}
+}
+
+// hasOverrideForModel reports whether overrides contains modelName, preserving explicit zero values.
+func hasOverrideForModel(modelName string, overrides map[string]float64) bool {
+	if overrides == nil {
+		return false
+	}
+	_, ok := overrides[modelName]
+	return ok
+}
+
+// resolveCompletionRatio returns the effective completion ratio for modelName.
+// Parameters: resolvedModelCfg is the already-loaded model config and hasResolvedModelCfg reports whether it exists.
+// Returns: the completion ratio after applying channel overrides, config values, and fallback pricing lookup.
+func resolveCompletionRatio(
+	modelName string,
+	resolvedModelCfg adaptor.ModelConfig,
+	hasResolvedModelCfg bool,
+	channelOverrides map[string]float64,
+	provider adaptor.Adaptor,
+) float64 {
+	if override, ok := channelOverrides[modelName]; ok {
+		return override
+	}
+	if hasResolvedModelCfg && resolvedModelCfg.CompletionRatio != 0 {
+		return resolvedModelCfg.CompletionRatio
+	}
+	return pricing.GetCompletionRatioWithThreeLayers(modelName, channelOverrides, provider)
+}
+
+// isClaudeModelName reports whether modelName contains the ASCII token "claude" regardless of case.
+func isClaudeModelName(modelName string) bool {
+	return containsASCIIFold(modelName, "claude")
+}
+
+// containsASCIIFold reports whether s contains substr using ASCII-only case folding.
+// Parameters: s is the model name and substr is the lowercase ASCII token to match.
+// Returns: true when substr appears in s without allocating a normalized copy.
+func containsASCIIFold(s string, substr string) bool {
+	if len(substr) == 0 {
+		return true
+	}
+	if len(s) < len(substr) {
+		return false
+	}
+
+	last := len(s) - len(substr)
+	for i := 0; i <= last; i++ {
+		if asciiLower(s[i]) != substr[0] {
+			continue
+		}
+
+		matched := true
+		for j := 1; j < len(substr); j++ {
+			if asciiLower(s[i+j]) != substr[j] {
+				matched = false
+				break
+			}
+		}
+		if matched {
+			return true
+		}
+	}
+	return false
+}
+
+// asciiLower converts ASCII uppercase bytes to lowercase.
+// Parameter: b is the byte to normalize.
+// Returns: the lowercase byte when b is an ASCII uppercase letter, otherwise b unchanged.
+func asciiLower(b byte) byte {
+	if b >= 'A' && b <= 'Z' {
+		return b + ('a' - 'A')
+	}
+	return b
 }
 
 // computeEmbeddingPromptCost calculates modality-aware prompt billing for embedding models.

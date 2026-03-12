@@ -20,7 +20,8 @@ import (
 )
 
 type stubQuotaAdaptor struct {
-	pricing map[string]adaptor.ModelConfig
+	pricing             map[string]adaptor.ModelConfig
+	defaultPricingCalls int
 }
 
 // Init initializes the adaptor.
@@ -66,7 +67,10 @@ func (s *stubQuotaAdaptor) GetModelList() []string { return nil }
 func (s *stubQuotaAdaptor) GetChannelName() string { return "stub" }
 
 // GetDefaultModelPricing returns the test pricing map.
-func (s *stubQuotaAdaptor) GetDefaultModelPricing() map[string]adaptor.ModelConfig { return s.pricing }
+func (s *stubQuotaAdaptor) GetDefaultModelPricing() map[string]adaptor.ModelConfig {
+	s.defaultPricingCalls++
+	return s.pricing
+}
 
 // GetModelRatio returns the configured base model ratio.
 func (s *stubQuotaAdaptor) GetModelRatio(modelName string) float64 { return s.pricing[modelName].Ratio }
@@ -298,6 +302,48 @@ func TestComputeClaudePromptExcludesCacheBuckets(t *testing.T) {
 	require.Equal(t, expected, result.TotalQuota)
 }
 
+// TestComputeClaudePromptExcludesCacheBucketsCaseInsensitive verifies Claude model detection remains case-insensitive without lowercasing allocations.
+func TestComputeClaudePromptExcludesCacheBucketsCaseInsensitive(t *testing.T) {
+	t.Parallel()
+
+	const modelName = "ClAuDe-hot-path-test"
+	provider := &stubQuotaAdaptor{pricing: map[string]adaptor.ModelConfig{
+		modelName: {
+			Ratio:             3,
+			CompletionRatio:   5,
+			CachedInputRatio:  1,
+			CacheWrite5mRatio: 2,
+		},
+	}}
+
+	usage := &relaymodel.Usage{
+		PromptTokens:     2,
+		CompletionTokens: 4,
+		PromptTokensDetails: &relaymodel.UsagePromptTokensDetails{
+			CachedTokens: 3,
+		},
+		CacheWrite5mTokens: 7,
+	}
+
+	result := quotautil.Compute(quotautil.ComputeInput{
+		Usage:          usage,
+		ModelName:      modelName,
+		ModelRatio:     3,
+		GroupRatio:     1,
+		PricingAdaptor: provider,
+	})
+
+	expected := int64(math.Ceil(
+		float64(usage.PromptTokens)*3 +
+			float64(usage.CompletionTokens)*3*5 +
+			float64(usage.PromptTokensDetails.CachedTokens)*1 +
+			float64(usage.CacheWrite5mTokens)*2,
+	))
+
+	require.Equal(t, expected, result.TotalQuota)
+	require.Equal(t, usage.PromptTokensDetails.CachedTokens, result.CachedPromptTokens)
+}
+
 // TestComputeLegacyPromptIncludesCacheBuckets verifies overlap clamping remains intact for
 // providers whose prompt_tokens already include cache-read/write buckets.
 func TestComputeLegacyPromptIncludesCacheBuckets(t *testing.T) {
@@ -409,6 +455,68 @@ func TestComputeChannelTierPricingWithInheritedBase(t *testing.T) {
 	require.InDelta(t, expectedInputRatio, result.UsedModelRatio, 1e-12)
 	require.InDelta(t, expectedCompletionRatio, result.UsedCompletionRatio, 1e-12)
 	require.Equal(t, expectedQuota, result.TotalQuota)
+}
+
+// TestComputeChannelZeroConfigInheritsProviderCompletionRatio verifies zero-valued channel config completion falls back to provider defaults.
+func TestComputeChannelZeroConfigInheritsProviderCompletionRatio(t *testing.T) {
+	t.Parallel()
+
+	const modelName = "provider-fallback-model"
+	provider := &stubQuotaAdaptor{pricing: map[string]adaptor.ModelConfig{
+		modelName: {
+			Ratio:           2,
+			CompletionRatio: 4,
+		},
+	}}
+
+	result := quotautil.Compute(quotautil.ComputeInput{
+		Usage: &relaymodel.Usage{
+			PromptTokens:     10,
+			CompletionTokens: 5,
+		},
+		ModelName:  modelName,
+		ModelRatio: 2,
+		GroupRatio: 1,
+		ChannelModelConfigs: map[string]model.ModelConfigLocal{
+			modelName: {
+				Ratio:           0,
+				CompletionRatio: 0,
+			},
+		},
+		PricingAdaptor: provider,
+	})
+
+	require.InDelta(t, 2.0, result.UsedModelRatio, 1e-12)
+	require.InDelta(t, 4.0, result.UsedCompletionRatio, 1e-12)
+	require.Equal(t, int64(math.Ceil(10*2+5*2*4)), result.TotalQuota)
+}
+
+// TestComputeUsesSinglePricingLookupWhenConfigProvidesCompletionRatio verifies Compute reuses the resolved config instead of repeating pricing-table traversal.
+func TestComputeUsesSinglePricingLookupWhenConfigProvidesCompletionRatio(t *testing.T) {
+	t.Parallel()
+
+	const modelName = "single-lookup-model"
+	provider := &stubQuotaAdaptor{pricing: map[string]adaptor.ModelConfig{
+		modelName: {
+			Ratio:           2,
+			CompletionRatio: 3,
+		},
+	}}
+
+	result := quotautil.Compute(quotautil.ComputeInput{
+		Usage: &relaymodel.Usage{
+			PromptTokens:     8,
+			CompletionTokens: 2,
+		},
+		ModelName:      modelName,
+		ModelRatio:     2,
+		GroupRatio:     1,
+		PricingAdaptor: provider,
+	})
+
+	require.InDelta(t, 2.0, result.UsedModelRatio, 1e-12)
+	require.InDelta(t, 3.0, result.UsedCompletionRatio, 1e-12)
+	require.Equal(t, 1, provider.defaultPricingCalls)
 }
 
 // TestComputeRetainsChannelModelRatioOverride verifies that a higher-priority channel ratio override
