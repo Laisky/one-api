@@ -58,7 +58,7 @@ func Compute(input ComputeInput) ComputeResult {
 
 	// Layer 1 & 2 fallback for base ratios
 	baseRatio := input.ModelRatio
-	completionRatioResolved := pricing.GetCompletionRatioWithThreeLayers(input.ModelName, input.ChannelCompletionRatio, pricingAdaptor)
+	var completionRatioResolved float64
 
 	if hasResolvedModelCfg {
 		// Preserve legacy fallback behavior: when channel config omits base ratio/completion
@@ -67,9 +67,13 @@ func Compute(input ComputeInput) ComputeResult {
 			resolvedModelCfg.Ratio = baseRatio
 		}
 		if resolvedModelCfg.CompletionRatio == 0 {
+			completionRatioResolved = pricing.GetCompletionRatioWithThreeLayers(input.ModelName, input.ChannelCompletionRatio, pricingAdaptor)
 			resolvedModelCfg.CompletionRatio = completionRatioResolved
+		} else {
+			completionRatioResolved = resolvedModelCfg.CompletionRatio
 		}
 	} else {
+		completionRatioResolved = pricing.GetCompletionRatioWithThreeLayers(input.ModelName, input.ChannelCompletionRatio, pricingAdaptor)
 		// Build a minimal config from resolved base ratios if no config was found.
 		resolvedModelCfg = adaptor.ModelConfig{
 			Ratio:           baseRatio,
@@ -149,7 +153,7 @@ func Compute(input ComputeInput) ComputeResult {
 		write1h = 0
 	}
 
-	isClaudeModel := strings.Contains(strings.ToLower(input.ModelName), "claude")
+	isClaudeModel := strings.Contains(input.ModelName, "claude") || strings.Contains(input.ModelName, "Claude")
 
 	// Some providers (e.g. Anthropic Claude prompt caching) report prompt tokens as
 	// post-breakpoint input only, while cache-read/write tokens are separate buckets.
