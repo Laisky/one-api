@@ -4,13 +4,64 @@ import (
 	"testing"
 
 	. "github.com/smartystreets/goconvey/convey"
+	"github.com/stretchr/testify/require"
 
 	"github.com/songquanpeng/one-api/model"
+	"github.com/songquanpeng/one-api/relay/adaptor/geminiOpenaiCompatible"
 	"github.com/songquanpeng/one-api/relay/adaptor/vertexai/deepseek"
 	"github.com/songquanpeng/one-api/relay/adaptor/vertexai/qwen"
+	"github.com/songquanpeng/one-api/relay/billing/ratio"
 	"github.com/songquanpeng/one-api/relay/meta"
 	relayModel "github.com/songquanpeng/one-api/relay/model"
+	"github.com/songquanpeng/one-api/relay/relaymode"
 )
+
+func TestGetDefaultModelPricingIncludesGeminiEmbeddingPreview(t *testing.T) {
+	t.Parallel()
+
+	a := &Adaptor{}
+	pricing := a.GetDefaultModelPricing()
+
+	cfg, ok := pricing["gemini-embedding-2-preview"]
+	require.True(t, ok, "gemini-embedding-2-preview missing from Vertex AI pricing map")
+	require.InDelta(t, 0.20*ratio.MilliTokensUsd, cfg.Ratio, 1e-12)
+	require.InDelta(t, 1.0, cfg.CompletionRatio, 1e-12)
+	require.Equal(t, geminiOpenaiCompatible.ModelRatios["gemini-embedding-2-preview"], cfg)
+}
+
+func TestGetModelListIncludesGeminiEmbeddingPreviewOnce(t *testing.T) {
+	t.Parallel()
+
+	a := &Adaptor{}
+	models := a.GetModelList()
+
+	count := 0
+	for _, model := range models {
+		if model == "gemini-embedding-2-preview" {
+			count++
+		}
+	}
+
+	require.Equal(t, 1, count, "expected gemini-embedding-2-preview exactly once in Vertex AI model list")
+}
+
+// TestBuildGeminiURLUsesBatchEmbedContents verifies Vertex AI Gemini embeddings use the batch embedding endpoint.
+// Parameters: t coordinates the test case execution. Returns: no values.
+func TestBuildGeminiURLUsesBatchEmbedContents(t *testing.T) {
+	t.Parallel()
+
+	adaptor := &Adaptor{}
+	url, err := adaptor.buildGeminiURL(&meta.Meta{
+		ActualModelName: "gemini-embedding-2-preview",
+		Mode:            relaymode.Embeddings,
+		Config: model.ChannelConfig{
+			Region:            "us-central1",
+			VertexAIProjectID: "test-project",
+		},
+	})
+	require.NoError(t, err)
+	require.Equal(t, "https://us-central1-aiplatform.googleapis.com/v1/projects/test-project/locations/us-central1/publishers/google/models/gemini-embedding-2-preview:batchEmbedContents", url)
+}
 
 func TestAdaptor_GetRequestURL(t *testing.T) {
 	Convey("GetRequestURL", t, func() {

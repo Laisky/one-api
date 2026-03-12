@@ -264,6 +264,9 @@ func GetGlobalModelConfigRatioOnly(modelName string) (adaptor.ModelConfig, bool)
 		clone.Video = nil
 		clone.Audio = nil
 		clone.Image = nil
+		if cfg.Embedding != nil {
+			clone.Embedding = cfg.Embedding.Clone()
+		}
 		return clone, true
 	}
 	return adaptor.ModelConfig{}, false
@@ -431,6 +434,9 @@ func cloneModelConfig(src adaptor.ModelConfig) adaptor.ModelConfig {
 	}
 	if src.Image != nil {
 		clone.Image = src.Image.Clone()
+	}
+	if src.Embedding != nil {
+		clone.Embedding = src.Embedding.Clone()
 	}
 	return clone
 }

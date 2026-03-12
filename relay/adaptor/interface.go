@@ -46,6 +46,42 @@ type ModelConfig struct {
 	Audio *AudioPricingConfig `json:"audio,omitempty"`
 	// Image captures pricing metadata for image prompt and render billing.
 	Image *ImagePricingConfig `json:"image,omitempty"`
+	// Embedding captures modality-specific pricing metadata for embedding requests.
+	Embedding *EmbeddingPricingConfig `json:"embedding,omitempty"`
+}
+
+// EmbeddingPricingConfig captures modality-specific pricing metadata for embedding requests.
+// Token ratios are expressed per input token, while the USD-per-unit fields are used when
+// the relay only has image counts, audio durations, or video frame counts available.
+type EmbeddingPricingConfig struct {
+	TextTokenRatio     float64 `json:"text_token_ratio,omitempty"`
+	ImageTokenRatio    float64 `json:"image_token_ratio,omitempty"`
+	AudioTokenRatio    float64 `json:"audio_token_ratio,omitempty"`
+	VideoTokenRatio    float64 `json:"video_token_ratio,omitempty"`
+	DocumentTokenRatio float64 `json:"document_token_ratio,omitempty"`
+	UsdPerImage        float64 `json:"usd_per_image,omitempty"`
+	UsdPerAudioSecond  float64 `json:"usd_per_audio_second,omitempty"`
+	UsdPerVideoFrame   float64 `json:"usd_per_video_frame,omitempty"`
+	UsdPerDocumentPage float64 `json:"usd_per_document_page,omitempty"`
+}
+
+// HasData reports whether the embedding configuration contains any pricing metadata.
+func (cfg *EmbeddingPricingConfig) HasData() bool {
+	if cfg == nil {
+		return false
+	}
+	return cfg.TextTokenRatio != 0 || cfg.ImageTokenRatio != 0 || cfg.AudioTokenRatio != 0 ||
+		cfg.VideoTokenRatio != 0 || cfg.DocumentTokenRatio != 0 || cfg.UsdPerImage != 0 ||
+		cfg.UsdPerAudioSecond != 0 || cfg.UsdPerVideoFrame != 0 || cfg.UsdPerDocumentPage != 0
+}
+
+// Clone returns a copy of the embedding pricing configuration.
+func (cfg *EmbeddingPricingConfig) Clone() *EmbeddingPricingConfig {
+	if cfg == nil {
+		return nil
+	}
+	clone := *cfg
+	return &clone
 }
 
 // VideoPricingConfig captures pricing metadata for video generation requests.

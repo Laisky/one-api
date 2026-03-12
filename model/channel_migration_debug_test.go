@@ -248,3 +248,42 @@ func TestMigrationDebug_InvalidData(t *testing.T) {
 		})
 	}
 }
+
+func TestGetModelPriceConfigs_BackwardCompatibleWithoutEmbeddingField(t *testing.T) {
+	t.Parallel()
+
+	legacyJSON := `{"gemini-embedding-2-preview":{"ratio":0.1,"completion_ratio":1,"max_tokens":8192,"audio":{"prompt_ratio":2}}}`
+	channel := &Channel{
+		Id:           1,
+		ModelConfigs: stringPtr(legacyJSON),
+	}
+
+	configs := channel.GetModelPriceConfigs()
+	require.NotNil(t, configs)
+	config, ok := configs["gemini-embedding-2-preview"]
+	require.True(t, ok)
+	assert.Equal(t, 0.1, config.Ratio)
+	assert.Equal(t, 1.0, config.CompletionRatio)
+	assert.Equal(t, int32(8192), config.MaxTokens)
+	require.NotNil(t, config.Audio)
+	assert.Equal(t, 2.0, config.Audio.PromptRatio)
+	assert.Nil(t, config.Embedding, "legacy JSON without embedding field should still parse with nil embedding config")
+}
+
+func TestSetModelPriceConfigs_OmitsEmptyEmbeddingField(t *testing.T) {
+	t.Parallel()
+
+	channel := &Channel{Id: 1}
+	err := channel.SetModelPriceConfigs(map[string]ModelConfigLocal{
+		"gemini-embedding-2-preview": {
+			Ratio:           0.1,
+			CompletionRatio: 1,
+		},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, channel.ModelConfigs)
+	assert.NotContains(t, *channel.ModelConfigs, `"embedding"`, "empty embedding metadata should not be serialized into persisted channel configs")
+	configs := channel.GetModelPriceConfigs()
+	require.NotNil(t, configs)
+	assert.Nil(t, configs["gemini-embedding-2-preview"].Embedding)
+}

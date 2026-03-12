@@ -92,8 +92,14 @@ type UsagePromptTokensDetails struct {
 	CachedTokens int `json:"cached_tokens"`
 	AudioTokens  int `json:"audio_tokens"`
 	// TextTokens could be zero for pure text chats
-	TextTokens  int `json:"text_tokens"`
-	ImageTokens int `json:"image_tokens"`
+	TextTokens     int     `json:"text_tokens"`
+	ImageTokens    int     `json:"image_tokens"`
+	VideoTokens    int     `json:"video_tokens,omitempty"`
+	DocumentTokens int     `json:"document_tokens,omitempty"`
+	ImageCount     int     `json:"image_count,omitempty"`
+	AudioSeconds   float64 `json:"audio_seconds,omitempty"`
+	VideoFrames    int     `json:"video_frames,omitempty"`
+	DocumentPages  int     `json:"document_pages,omitempty"`
 }
 
 // UsageCompletionTokensDetails contains details about the completion tokens used in a request.

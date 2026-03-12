@@ -76,6 +76,111 @@ func (s *stubQuotaAdaptor) GetCompletionRatio(modelName string) float64 {
 	return s.pricing[modelName].CompletionRatio
 }
 
+// TestComputeEmbeddingPromptCostUsesModalityTokenRatios verifies modality-specific token ratios override the base input ratio for multimodal embedding billing.
+func TestComputeEmbeddingPromptCostUsesModalityTokenRatios(t *testing.T) {
+	t.Parallel()
+
+	usage := &relaymodel.Usage{
+		PromptTokens: 100,
+		PromptTokensDetails: &relaymodel.UsagePromptTokensDetails{
+			TextTokens:  60,
+			ImageTokens: 30,
+			AudioTokens: 10,
+		},
+	}
+
+	pricingAdaptor := &stubQuotaAdaptor{pricing: map[string]adaptor.ModelConfig{
+		"gemini-embedding-2-preview": {
+			Ratio: 0.20 * 0.5,
+			Embedding: &adaptor.EmbeddingPricingConfig{
+				TextTokenRatio:  0.20 * 0.5,
+				ImageTokenRatio: 0.45 * 0.5,
+				AudioTokenRatio: 6.50 * 0.5,
+			},
+		},
+	}}
+
+	result := quotautil.Compute(quotautil.ComputeInput{
+		Usage:          usage,
+		ModelName:      "gemini-embedding-2-preview",
+		ModelRatio:     0.20 * 0.5,
+		GroupRatio:     1,
+		PricingAdaptor: pricingAdaptor,
+	})
+
+	expected := int64(math.Ceil((60 * 0.20 * 0.5) + (30 * 0.45 * 0.5) + (10 * 6.50 * 0.5)))
+	require.Equal(t, expected, result.TotalQuota)
+	require.Equal(t, 100, result.PromptTokens)
+}
+
+// TestComputeEmbeddingPromptCostUsesPerUnitFallbacks verifies direct per-unit embedding prices are used when token breakdowns are unavailable.
+func TestComputeEmbeddingPromptCostUsesPerUnitFallbacks(t *testing.T) {
+	t.Parallel()
+
+	usage := &relaymodel.Usage{
+		PromptTokens: 0,
+		PromptTokensDetails: &relaymodel.UsagePromptTokensDetails{
+			ImageCount:   2,
+			AudioSeconds: 5,
+			VideoFrames:  3,
+		},
+	}
+
+	pricingAdaptor := &stubQuotaAdaptor{pricing: map[string]adaptor.ModelConfig{
+		"gemini-embedding-2-preview": {
+			Ratio: 0.20 * 0.5,
+			Embedding: &adaptor.EmbeddingPricingConfig{
+				TextTokenRatio:    0.20 * 0.5,
+				UsdPerImage:       0.00012,
+				UsdPerAudioSecond: 0.00016,
+				UsdPerVideoFrame:  0.00079,
+			},
+		},
+	}}
+
+	result := quotautil.Compute(quotautil.ComputeInput{
+		Usage:          usage,
+		ModelName:      "gemini-embedding-2-preview",
+		ModelRatio:     0.20 * 0.5,
+		GroupRatio:     1,
+		PricingAdaptor: pricingAdaptor,
+	})
+
+	expected := int64(math.Ceil((2*0.00012 + 5*0.00016 + 3*0.00079) * 500000))
+	require.Equal(t, expected, result.TotalQuota)
+}
+
+// TestComputeEmbeddingPromptCostFallsBackWithoutDetails verifies legacy usage payloads remain billed with the base ratio.
+func TestComputeEmbeddingPromptCostFallsBackWithoutDetails(t *testing.T) {
+	t.Parallel()
+
+	usage := &relaymodel.Usage{
+		PromptTokens: 100,
+	}
+
+	pricingAdaptor := &stubQuotaAdaptor{pricing: map[string]adaptor.ModelConfig{
+		"gemini-embedding-2-preview": {
+			Ratio: 0.20 * 0.5,
+			Embedding: &adaptor.EmbeddingPricingConfig{
+				TextTokenRatio:  0.20 * 0.5,
+				ImageTokenRatio: 0.45 * 0.5,
+				AudioTokenRatio: 6.50 * 0.5,
+			},
+		},
+	}}
+
+	result := quotautil.Compute(quotautil.ComputeInput{
+		Usage:          usage,
+		ModelName:      "gemini-embedding-2-preview",
+		ModelRatio:     0.20 * 0.5,
+		GroupRatio:     1,
+		PricingAdaptor: pricingAdaptor,
+	})
+
+	expected := int64(math.Ceil(100 * 0.20 * 0.5))
+	require.Equal(t, expected, result.TotalQuota)
+}
+
 // TestComputeCachedInputPricing verifies that cached input tokens are billed using CachedInputRatio
 // while completion tokens always use Ratio * CompletionRatio irrespective of cache hits.
 func TestComputeCachedInputPricing(t *testing.T) {

@@ -223,9 +223,6 @@ func (a *Adaptor) GetModelList() []string {
 	models = append(models, adaptor.GetModelListFromPricing(openai.ModelRatios)...)
 	models = append(models, adaptor.GetModelListFromPricing(qwen.ModelRatios)...)
 
-	// Add VertexAI-specific models
-	models = append(models, "gemini-embedding-001", "aqa")
-
 	return models
 }
 
@@ -259,13 +256,6 @@ func (a *Adaptor) GetDefaultModelPricing() map[string]adaptor.ModelConfig {
 
 	// Import Qwen models from qwen subadaptor
 	maps.Copy(pricing, qwen.ModelRatios)
-
-	// Add VertexAI-specific models that don't belong to subadaptors
-	// Using global ratio.MilliTokensUsd = 0.5 for consistent quota-based pricing
-
-	// VertexAI-specific models
-	pricing["gemini-embedding-001"] = adaptor.ModelConfig{Ratio: 0.15 * ratio.MilliTokensUsd, CompletionRatio: 1}
-	pricing["aqa"] = adaptor.ModelConfig{Ratio: 1, CompletionRatio: 1}
 
 	return pricing
 }
@@ -424,7 +414,9 @@ func (a *Adaptor) buildClaudeURL(meta *meta.Meta) (string, error) {
 func (a *Adaptor) buildGeminiURL(meta *meta.Meta) (string, error) {
 	// Gemini (and other text models) use generateContent / streamGenerateContent
 	var suffix string
-	if meta.IsStream {
+	if meta.Mode == relaymode.Embeddings {
+		suffix = "batchEmbedContents"
+	} else if meta.IsStream {
 		suffix = "streamGenerateContent?alt=sse"
 	} else {
 		suffix = "generateContent"

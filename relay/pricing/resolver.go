@@ -142,6 +142,9 @@ func convertLocalModelConfig(local model.ModelConfigLocal) adaptor.ModelConfig {
 	if local.Image != nil {
 		cfg.Image = convertLocalImage(local.Image)
 	}
+	if local.Embedding != nil {
+		cfg.Embedding = convertLocalEmbedding(local.Embedding)
+	}
 	return cfg
 }
 
@@ -213,6 +216,24 @@ func convertLocalImage(local *model.ImagePricingLocal) *adaptor.ImagePricingConf
 	return cfg
 }
 
+// convertLocalEmbedding converts the persisted local embedding pricing metadata into adaptor form.
+func convertLocalEmbedding(local *model.EmbeddingPricingLocal) *adaptor.EmbeddingPricingConfig {
+	if local == nil {
+		return nil
+	}
+	return &adaptor.EmbeddingPricingConfig{
+		TextTokenRatio:     local.TextTokenRatio,
+		ImageTokenRatio:    local.ImageTokenRatio,
+		AudioTokenRatio:    local.AudioTokenRatio,
+		VideoTokenRatio:    local.VideoTokenRatio,
+		DocumentTokenRatio: local.DocumentTokenRatio,
+		UsdPerImage:        local.UsdPerImage,
+		UsdPerAudioSecond:  local.UsdPerAudioSecond,
+		UsdPerVideoFrame:   local.UsdPerVideoFrame,
+		UsdPerDocumentPage: local.UsdPerDocumentPage,
+	}
+}
+
 // ResolveModelConfigRatioOnly returns a shallow configuration by applying
 // channel overrides first, then adaptor defaults, then global fallbacks.
 // It omits media metadata to optimize for token-only billing paths.
@@ -234,6 +255,9 @@ func ResolveModelConfigRatioOnly(modelName string, channelConfigs map[string]mod
 				clone.Video = nil
 				clone.Audio = nil
 				clone.Image = nil
+				if cfg.Embedding != nil {
+					clone.Embedding = cfg.Embedding.Clone()
+				}
 				return clone, true
 			}
 		}

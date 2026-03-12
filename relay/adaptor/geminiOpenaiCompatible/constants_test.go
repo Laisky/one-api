@@ -50,9 +50,33 @@ func TestGemini3FlashPricing(t *testing.T) {
 
 func TestGeminiEmbeddingConfig(t *testing.T) {
 	t.Parallel()
-	cfg, ok := ModelRatios["gemini-embedding-001"]
-	require.True(t, ok, "gemini-embedding-001 missing from pricing map")
-	require.InDelta(t, 0.15*ratio.MilliTokensUsd, cfg.Ratio, 1e-12)
+	testCases := []struct {
+		model         string
+		expectedRatio float64
+	}{
+		{model: "gemini-embedding-001", expectedRatio: geminiEmbedding001TextPrice * ratio.MilliTokensUsd},
+		{model: "gemini-embedding-2-preview", expectedRatio: geminiEmbedding2PreviewTextPrice * ratio.MilliTokensUsd},
+	}
+
+	for _, tc := range testCases {
+		tc := tc
+		t.Run(tc.model, func(t *testing.T) {
+			t.Parallel()
+			cfg, ok := ModelRatios[tc.model]
+			require.True(t, ok, "%s missing from pricing map", tc.model)
+			require.InDelta(t, tc.expectedRatio, cfg.Ratio, 1e-12)
+			require.InDelta(t, 1.0, cfg.CompletionRatio, 1e-12)
+			if tc.model == "gemini-embedding-2-preview" {
+				require.NotNil(t, cfg.Embedding, "expected multimodal embedding pricing metadata")
+				require.InDelta(t, geminiEmbedding2PreviewImagePrice*ratio.MilliTokensUsd, cfg.Embedding.ImageTokenRatio, 1e-12)
+				require.InDelta(t, geminiEmbedding2PreviewAudioPrice*ratio.MilliTokensUsd, cfg.Embedding.AudioTokenRatio, 1e-12)
+				require.InDelta(t, geminiEmbedding2PreviewVideoPrice*ratio.MilliTokensUsd, cfg.Embedding.VideoTokenRatio, 1e-12)
+				require.InDelta(t, geminiEmbedding2PreviewUsdPerImage, cfg.Embedding.UsdPerImage, 1e-12)
+				require.InDelta(t, geminiEmbedding2PreviewUsdPerAudioSecond, cfg.Embedding.UsdPerAudioSecond, 1e-12)
+				require.InDelta(t, geminiEmbedding2PreviewUsdPerVideoFrame, cfg.Embedding.UsdPerVideoFrame, 1e-12)
+			}
+		})
+	}
 }
 
 func TestGemini3ProImagePreviewPricing(t *testing.T) {

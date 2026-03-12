@@ -6,6 +6,7 @@ import (
 
 	modelcfg "github.com/songquanpeng/one-api/model"
 	"github.com/songquanpeng/one-api/relay/adaptor"
+	billingratio "github.com/songquanpeng/one-api/relay/billing/ratio"
 	relaymodel "github.com/songquanpeng/one-api/relay/model"
 	"github.com/songquanpeng/one-api/relay/pricing"
 )
@@ -192,7 +193,14 @@ func Compute(input ComputeInput) ComputeResult {
 		write1hPrice = eff.CacheWrite1hRatio * input.GroupRatio
 	}
 
-	cost := float64(nonCachedPrompt)*normalInputPrice + float64(cachedPrompt)*cachedInputPrice +
+	promptCost := float64(nonCachedPrompt) * normalInputPrice
+	if hasResolvedModelCfg {
+		if multimodalPromptCost, ok := computeEmbeddingPromptCost(nonCachedPrompt, usage.PromptTokensDetails, resolvedModelCfg.Embedding, input.GroupRatio, normalInputPrice); ok {
+			promptCost = multimodalPromptCost
+		}
+	}
+
+	cost := promptCost + float64(cachedPrompt)*cachedInputPrice +
 		float64(nonCachedCompletion)*normalOutputPrice +
 		float64(write5m)*write5mPrice + float64(write1h)*write1hPrice
 
@@ -210,4 +218,66 @@ func Compute(input ComputeInput) ComputeResult {
 		UsedModelRatio:         usedModelRatio,
 		UsedCompletionRatio:    usedCompletionRatio,
 	}
+}
+
+// computeEmbeddingPromptCost calculates modality-aware prompt billing for embedding models.
+// It returns false when the usage snapshot does not contain multimodal embedding details.
+func computeEmbeddingPromptCost(promptTokens int, details *relaymodel.UsagePromptTokensDetails, cfg *adaptor.EmbeddingPricingConfig, groupRatio float64, fallbackTokenPrice float64) (float64, bool) {
+	if cfg == nil || !cfg.HasData() || details == nil {
+		return 0, false
+	}
+
+	hasDetailedUsage := details.TextTokens > 0 || details.ImageTokens > 0 || details.AudioTokens > 0 ||
+		details.VideoTokens > 0 || details.DocumentTokens > 0 || details.ImageCount > 0 || details.AudioSeconds > 0 ||
+		details.VideoFrames > 0 || details.DocumentPages > 0
+	if !hasDetailedUsage {
+		return 0, false
+	}
+
+	textRatio := cfg.TextTokenRatio
+	if textRatio == 0 {
+		if groupRatio == 0 {
+			textRatio = 0
+		} else {
+			textRatio = fallbackTokenPrice / groupRatio
+		}
+	}
+	imageRatio := resolveEmbeddingTokenRatio(cfg.ImageTokenRatio, textRatio)
+	audioRatio := resolveEmbeddingTokenRatio(cfg.AudioTokenRatio, textRatio)
+	videoRatio := resolveEmbeddingTokenRatio(cfg.VideoTokenRatio, textRatio)
+	documentRatio := resolveEmbeddingTokenRatio(cfg.DocumentTokenRatio, textRatio)
+
+	countedPromptTokens := max(details.TextTokens, 0) + max(details.ImageTokens, 0) +
+		max(details.AudioTokens, 0) + max(details.VideoTokens, 0) + max(details.DocumentTokens, 0)
+	remainingPromptTokens := max(promptTokens-countedPromptTokens, 0)
+
+	cost := float64(max(details.TextTokens, 0))*textRatio*groupRatio +
+		float64(max(details.ImageTokens, 0))*imageRatio*groupRatio +
+		float64(max(details.AudioTokens, 0))*audioRatio*groupRatio +
+		float64(max(details.VideoTokens, 0))*videoRatio*groupRatio +
+		float64(max(details.DocumentTokens, 0))*documentRatio*groupRatio +
+		float64(remainingPromptTokens)*documentRatio*groupRatio
+
+	if details.ImageTokens == 0 && details.ImageCount > 0 && cfg.UsdPerImage > 0 {
+		cost += float64(details.ImageCount) * cfg.UsdPerImage * billingratio.QuotaPerUsd * groupRatio
+	}
+	if details.AudioTokens == 0 && details.AudioSeconds > 0 && cfg.UsdPerAudioSecond > 0 {
+		cost += details.AudioSeconds * cfg.UsdPerAudioSecond * billingratio.QuotaPerUsd * groupRatio
+	}
+	if details.VideoTokens == 0 && details.VideoFrames > 0 && cfg.UsdPerVideoFrame > 0 {
+		cost += float64(details.VideoFrames) * cfg.UsdPerVideoFrame * billingratio.QuotaPerUsd * groupRatio
+	}
+	if details.DocumentPages > 0 && cfg.UsdPerDocumentPage > 0 {
+		cost += float64(details.DocumentPages) * cfg.UsdPerDocumentPage * billingratio.QuotaPerUsd * groupRatio
+	}
+
+	return cost, true
+}
+
+// resolveEmbeddingTokenRatio returns fallback when the modality-specific embedding token ratio is unset.
+func resolveEmbeddingTokenRatio(value float64, fallback float64) float64 {
+	if value != 0 {
+		return value
+	}
+	return fallback
 }

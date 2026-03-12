@@ -194,6 +194,11 @@ const (
 	// Read widely anywhere Meta is needed (billing, adaptors, response handling).
 	Meta = "meta"
 
+	// EmbeddingPromptTokensDetails stores preflight embedding modality token details.
+	// Set in: text/response controllers after provider-side token counting.
+	// Read in: embedding adaptors and quota billing to preserve multimodal costs.
+	EmbeddingPromptTokensDetails = "embedding_prompt_tokens_details"
+
 	// RateLimit is the per-channel request-per-minute limit (integer).
 	// Set in: middleware/distributor based on channel.RateLimit (or 0 if disabled).
 	// Read in: middleware/rate-limit to enforce QPS/RPM limits.

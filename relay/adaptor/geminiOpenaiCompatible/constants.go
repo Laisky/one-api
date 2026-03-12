@@ -32,7 +32,29 @@ const (
 	gemini31FlashImage1KPrice  = 0.067
 	gemini31FlashImage2KPrice  = 0.101
 	gemini31FlashImage4KPrice  = 0.151
+
+	geminiEmbedding001TextPrice              = 0.15
+	geminiEmbedding2PreviewTextPrice         = 0.20
+	geminiEmbedding2PreviewImagePrice        = 0.45
+	geminiEmbedding2PreviewAudioPrice        = 6.50
+	geminiEmbedding2PreviewVideoPrice        = 12.00
+	geminiEmbedding2PreviewUsdPerImage       = 0.00012
+	geminiEmbedding2PreviewUsdPerAudioSecond = 0.00016
+	geminiEmbedding2PreviewUsdPerVideoFrame  = 0.00079
 )
+
+// geminiEmbedding2PreviewConfig returns the multimodal embedding pricing metadata Google publishes for Gemini embedding preview.
+func geminiEmbedding2PreviewConfig() *adaptor.EmbeddingPricingConfig {
+	return &adaptor.EmbeddingPricingConfig{
+		TextTokenRatio:    geminiEmbedding2PreviewTextPrice * ratio.MilliTokensUsd,
+		ImageTokenRatio:   geminiEmbedding2PreviewImagePrice * ratio.MilliTokensUsd,
+		AudioTokenRatio:   geminiEmbedding2PreviewAudioPrice * ratio.MilliTokensUsd,
+		VideoTokenRatio:   geminiEmbedding2PreviewVideoPrice * ratio.MilliTokensUsd,
+		UsdPerImage:       geminiEmbedding2PreviewUsdPerImage,
+		UsdPerAudioSecond: geminiEmbedding2PreviewUsdPerAudioSecond,
+		UsdPerVideoFrame:  geminiEmbedding2PreviewUsdPerVideoFrame,
+	}
+}
 
 func gemini3ProImageConfig() *adaptor.ImagePricingConfig {
 	return &adaptor.ImagePricingConfig{
@@ -126,8 +148,12 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 	"gemma-3-27b-it": {Ratio: 0.35 * ratio.MilliTokensUsd, CompletionRatio: 1.4},
 
 	// Embedding & evaluation models
-	"gemini-embedding-001": {Ratio: 0.15 * ratio.MilliTokensUsd, CompletionRatio: 1},
-	"aqa":                  {Ratio: 1, CompletionRatio: 1},
+	// gemini-embedding-2-preview is multimodal upstream, but the current OpenAI-compatible
+	// embeddings request path falls back to the text ratio unless modality-specific usage
+	// details are available for quota reconciliation.
+	"gemini-embedding-001":       {Ratio: geminiEmbedding001TextPrice * ratio.MilliTokensUsd, CompletionRatio: 1},
+	"gemini-embedding-2-preview": {Ratio: geminiEmbedding2PreviewTextPrice * ratio.MilliTokensUsd, CompletionRatio: 1, Embedding: geminiEmbedding2PreviewConfig()},
+	"aqa":                        {Ratio: 1, CompletionRatio: 1},
 
 	// Gemini 3 Models
 	"gemini-3.1-pro-preview": {

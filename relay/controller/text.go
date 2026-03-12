@@ -109,9 +109,17 @@ func RelayTextHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 	}
 
 	// pre-consume quota
-	promptTokens := getPromptTokens(gmw.Ctx(c), textRequest, meta.Mode)
+	promptUsage, bizErr := estimatePromptUsage(c, meta, textRequest)
+	if bizErr != nil {
+		lg.Warn("estimatePromptUsage failed",
+			zap.Error(bizErr.RawError),
+			zap.Int("status_code", bizErr.StatusCode),
+			zap.String("err_msg", bizErr.Message))
+		return bizErr
+	}
+	promptTokens := promptUsage.PromptTokens
 	meta.PromptTokens = promptTokens
-	preConsumedQuota, bizErr := preConsumeQuota(c, textRequest, promptTokens, ratio, completionRatio, meta)
+	preConsumedQuota, bizErr := preConsumeQuota(c, textRequest, promptUsage, modelRatio, completionRatio, channelModelRatio, groupRatio, channelModelConfigs, channelCompletionRatio, meta)
 	if bizErr != nil {
 		lg.Warn("preConsumeQuota failed",
 			zap.Error(bizErr.RawError),
@@ -286,7 +294,7 @@ func RelayTextHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 	{
 		quotaId := c.GetInt(ctxkey.Id)
 		requestId := c.GetString(ctxkey.RequestId)
-		estimated := getPreConsumedQuota(textRequest, promptTokens, ratio, completionRatio)
+		estimated := estimatePreConsumedQuota(textRequest, promptUsage, modelRatio, completionRatio, channelModelRatio, groupRatio, channelModelConfigs, channelCompletionRatio, meta)
 		if requestId == "" {
 			lg.Warn("request id missing when recording provisional user request cost",
 				zap.Int("user_id", quotaId))

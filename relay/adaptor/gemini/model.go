@@ -46,6 +46,15 @@ type EmbeddingResponse struct {
 	Error      *Error          `json:"error,omitempty"`
 }
 
+// CountTokensResponse captures Gemini countTokens output for embedding preflight.
+// It includes the aggregate prompt token total and an optional modality breakdown.
+type CountTokensResponse struct {
+	TotalTokens             int                   `json:"totalTokens,omitempty"`
+	CachedContentTokenCount int                   `json:"cachedContentTokenCount,omitempty"`
+	PromptTokensDetails     []PromptTokensDetails `json:"promptTokensDetails,omitempty"`
+	Error                   *Error                `json:"error,omitempty"`
+}
+
 type Error struct {
 	Code    int    `json:"code,omitempty"`
 	Message string `json:"message,omitempty"`

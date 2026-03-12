@@ -8,6 +8,7 @@ import (
 
 	"github.com/songquanpeng/one-api/common/config"
 	"github.com/songquanpeng/one-api/relay/meta"
+	relaymodel "github.com/songquanpeng/one-api/relay/model"
 	"github.com/songquanpeng/one-api/relay/relaymode"
 )
 
@@ -48,4 +49,45 @@ func TestAdaptorGetRequestURLGeminiVersions(t *testing.T) {
 			require.Equal(t, expected, url)
 		})
 	}
+}
+
+// TestAdaptorConvertRequestEmbeddingsSupportsMultimodal verifies Gemini embedding conversion preserves multimodal parts.
+// Parameters: t coordinates the test case execution. Returns: no values.
+func TestAdaptorConvertRequestEmbeddingsSupportsMultimodal(t *testing.T) {
+	t.Parallel()
+
+	adaptor := &Adaptor{}
+
+	converted, err := adaptor.ConvertRequest(nil, relaymode.Embeddings, &relaymodel.GeneralOpenAIRequest{
+		Model: "gemini-embedding-2-preview",
+		Input: []any{"hello", "world"},
+	})
+	require.NoError(t, err)
+
+	batch, ok := converted.(*BatchEmbeddingRequest)
+	require.True(t, ok, "expected BatchEmbeddingRequest")
+	require.Len(t, batch.Requests, 2)
+
+	converted, err = adaptor.ConvertRequest(nil, relaymode.Embeddings, &relaymodel.GeneralOpenAIRequest{
+		Model: "gemini-embedding-2-preview",
+		Input: map[string]any{
+			"parts": []any{
+				map[string]any{"text": "An image of a cat"},
+				map[string]any{
+					"inline_data": map[string]any{
+						"mime_type": "image/png",
+						"data":      "ZmFrZQ==",
+					},
+				},
+			},
+		},
+	})
+	require.NoError(t, err)
+
+	batch, ok = converted.(*BatchEmbeddingRequest)
+	require.True(t, ok, "expected BatchEmbeddingRequest")
+	require.Len(t, batch.Requests, 1)
+	require.Len(t, batch.Requests[0].Content.Parts, 2)
+	require.Equal(t, "An image of a cat", batch.Requests[0].Content.Parts[0].Text)
+	require.NotNil(t, batch.Requests[0].Content.Parts[1].InlineData)
 }

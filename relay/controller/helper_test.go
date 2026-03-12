@@ -7,6 +7,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/songquanpeng/one-api/common/config"
+	"github.com/songquanpeng/one-api/relay/apitype"
+	"github.com/songquanpeng/one-api/relay/meta"
 	"github.com/songquanpeng/one-api/relay/model"
 	"github.com/songquanpeng/one-api/relay/relaymode"
 )
@@ -178,4 +180,44 @@ func TestGetPromptTokensEmbeddingsSpecific(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestEstimatePreConsumedQuotaUsesEmbeddingDetails verifies embedding pre-consume uses modality-aware pricing when prompt token details are available.
+// Parameters: t coordinates the test case execution. Returns: no values.
+func TestEstimatePreConsumedQuotaUsesEmbeddingDetails(t *testing.T) {
+	t.Parallel()
+
+	request := &model.GeneralOpenAIRequest{
+		Model: "gemini-embedding-2-preview",
+	}
+	promptUsage := &model.Usage{
+		PromptTokens: 100,
+		TotalTokens:  100,
+		PromptTokensDetails: &model.UsagePromptTokensDetails{
+			TextTokens:  10,
+			ImageTokens: 90,
+		},
+	}
+	metaInfo := &meta.Meta{
+		Mode:    relaymode.Embeddings,
+		APIType: apitype.Gemini,
+	}
+
+	pricingAdaptor := resolvePricingAdaptor(metaInfo)
+	modelRatio := pricingAdaptor.GetModelRatio(request.Model)
+
+	quota := estimatePreConsumedQuota(
+		request,
+		promptUsage,
+		modelRatio,
+		1,
+		nil,
+		1,
+		nil,
+		nil,
+		metaInfo,
+	)
+	legacyQuota := getPreConsumedQuota(request, promptUsage.PromptTokens, modelRatio, 1)
+
+	require.Greater(t, quota, legacyQuota)
 }

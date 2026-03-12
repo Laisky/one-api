@@ -35,48 +35,72 @@ import (
 type Adaptor struct {
 }
 
+// ConvertRequest converts an OpenAI-compatible request into the Vertex AI Gemini payload expected by the selected relay mode.
+// Parameters: c is the request context, relayMode selects the endpoint family, and request is the validated OpenAI-compatible request.
+// Returns: the converted Vertex AI Gemini payload or an error when conversion fails.
 func (a *Adaptor) ConvertRequest(c *gin.Context, relayMode int, request *model.GeneralOpenAIRequest) (any, error) {
 	if request == nil {
 		return nil, errors.New("request is nil")
 	}
 
-	geminiRequest := gemini.ConvertRequest(*request)
+	var (
+		convertedRequest any
+		geminiRequest    *gemini.ChatRequest
+	)
+	if relayMode == relaymode.Embeddings {
+		embeddingRequest, err := gemini.ConvertEmbeddingRequest(*request)
+		if err != nil {
+			return nil, err
+		}
+		convertedRequest = embeddingRequest
+	} else {
+		geminiRequest = gemini.ConvertRequest(*request)
+		convertedRequest = geminiRequest
+	}
+
 	lg := gmw.GetLogger(c)
-	if geminiRequest == nil {
+	if convertedRequest == nil {
 		lg.Error("gemini request conversion returned nil",
 			zap.String("model", request.Model))
 		return nil, errors.New("converted request is nil")
 	}
 
 	lastRole := ""
-	if len(geminiRequest.Contents) > 0 {
+	if geminiRequest != nil && len(geminiRequest.Contents) > 0 {
 		lastRole = geminiRequest.Contents[len(geminiRequest.Contents)-1].Role
 	}
 
 	lg.Debug("gemini vertex convert summary",
 		zap.String("model", request.Model),
-		zap.Int("content_count", len(geminiRequest.Contents)),
+		zap.Int("content_count", func() int {
+			if geminiRequest == nil {
+				return 0
+			}
+			return len(geminiRequest.Contents)
+		}()),
 		zap.String("last_role", lastRole),
-		zap.Bool("has_system_instruction", geminiRequest.SystemInstruction != nil),
+		zap.Bool("has_system_instruction", geminiRequest != nil && geminiRequest.SystemInstruction != nil),
 	)
 
 	var functionNames []string
 	var parameterTypes []string
-	for _, tool := range geminiRequest.Tools {
-		functions, ok := tool.FunctionDeclarations.([]model.Function)
-		if !ok {
-			continue
-		}
-
-		for _, fn := range functions {
-			functionNames = append(functionNames, fn.Name)
-			if params, ok := fn.Parameters.(map[string]any); ok {
-				if typeVal, ok := params["type"].(string); ok {
-					parameterTypes = append(parameterTypes, typeVal)
-					continue
-				}
+	if geminiRequest != nil {
+		for _, tool := range geminiRequest.Tools {
+			functions, ok := tool.FunctionDeclarations.([]model.Function)
+			if !ok {
+				continue
 			}
-			parameterTypes = append(parameterTypes, "")
+
+			for _, fn := range functions {
+				functionNames = append(functionNames, fn.Name)
+				if params, ok := fn.Parameters.(map[string]any); ok {
+					if typeVal, ok := params["type"].(string); ok {
+						parameterTypes = append(parameterTypes, typeVal)
+						continue
+					}
+				}
+				parameterTypes = append(parameterTypes, "")
+			}
 		}
 	}
 
@@ -88,8 +112,8 @@ func (a *Adaptor) ConvertRequest(c *gin.Context, relayMode int, request *model.G
 		)
 	}
 	c.Set(ctxkey.RequestModel, request.Model)
-	c.Set(ctxkey.ConvertedRequest, geminiRequest)
-	return geminiRequest, nil
+	c.Set(ctxkey.ConvertedRequest, convertedRequest)
+	return convertedRequest, nil
 }
 
 func (a *Adaptor) ConvertImageRequest(c *gin.Context, request *model.ImageRequest) (any, error) {
@@ -104,7 +128,7 @@ func (a *Adaptor) DoResponse(c *gin.Context, resp *http.Response, meta *meta.Met
 	} else {
 		switch meta.Mode {
 		case relaymode.Embeddings:
-			err, usage = gemini.EmbeddingHandler(c, resp)
+			err, usage = gemini.EmbeddingHandler(c, resp, meta.PromptTokens)
 		default:
 			err, usage = gemini.Handler(c, resp, meta.PromptTokens, meta.ActualModelName)
 		}

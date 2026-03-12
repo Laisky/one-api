@@ -36,14 +36,7 @@ func (a *Adaptor) Init(meta *meta.Meta) {
 }
 
 func (a *Adaptor) GetRequestURL(meta *meta.Meta) (string, error) {
-	defaultVersion := config.GeminiVersion
-	modelName := strings.ToLower(meta.ActualModelName)
-	if geminiOpenaiCompatible.GeminiVersionAtLeast(modelName, 1.5) ||
-		strings.Contains(modelName, "gemma-3") {
-		defaultVersion = "v1beta"
-	}
-
-	version := helper.AssignOrDefault(meta.Config.APIVersion, defaultVersion)
+	version := resolveGeminiAPIVersion(meta.ActualModelName, meta.Config.APIVersion)
 	action := ""
 	switch meta.Mode {
 	case relaymode.Embeddings:
@@ -59,6 +52,21 @@ func (a *Adaptor) GetRequestURL(meta *meta.Meta) (string, error) {
 	return fmt.Sprintf("%s/%s/models/%s:%s", meta.BaseURL, version, meta.ActualModelName, action), nil
 }
 
+// resolveGeminiAPIVersion selects the Gemini API version for the requested model.
+// Parameters: modelName is the target upstream model and configuredVersion is the optional channel override.
+// Returns: the API version string that should be used for Gemini requests.
+func resolveGeminiAPIVersion(modelName string, configuredVersion string) string {
+	defaultVersion := config.GeminiVersion
+	modelName = strings.ToLower(modelName)
+	if geminiOpenaiCompatible.GeminiVersionAtLeast(modelName, 1.5) ||
+		strings.Contains(modelName, "preview") ||
+		strings.Contains(modelName, "gemma-3") {
+		defaultVersion = "v1beta"
+	}
+
+	return helper.AssignOrDefault(configuredVersion, defaultVersion)
+}
+
 func (a *Adaptor) SetupRequestHeader(c *gin.Context, req *http.Request, meta *meta.Meta) error {
 	channelhelper.SetupCommonRequestHeader(c, req, meta)
 	req.Header.Set("x-goog-api-key", meta.APIKey)
@@ -66,13 +74,19 @@ func (a *Adaptor) SetupRequestHeader(c *gin.Context, req *http.Request, meta *me
 	return nil
 }
 
+// ConvertRequest converts an OpenAI-compatible request into Gemini-native payloads for the selected relay mode.
+// Parameters: c is the request context, relayMode selects the endpoint family, and request is the validated OpenAI-compatible request.
+// Returns: the converted Gemini payload or an error when conversion fails.
 func (a *Adaptor) ConvertRequest(c *gin.Context, relayMode int, request *model.GeneralOpenAIRequest) (any, error) {
 	if request == nil {
 		return nil, errors.New("request is nil")
 	}
 	switch relayMode {
 	case relaymode.Embeddings:
-		geminiEmbeddingRequest := ConvertEmbeddingRequest(*request)
+		geminiEmbeddingRequest, err := ConvertEmbeddingRequest(*request)
+		if err != nil {
+			return nil, err
+		}
 		return geminiEmbeddingRequest, nil
 	default:
 		geminiRequest := ConvertRequest(*request)
@@ -257,7 +271,7 @@ func (a *Adaptor) DoResponse(c *gin.Context, resp *http.Response, meta *meta.Met
 	} else {
 		switch meta.Mode {
 		case relaymode.Embeddings:
-			err, usage = EmbeddingHandler(c, resp)
+			err, usage = EmbeddingHandler(c, resp, meta.PromptTokens)
 		default:
 			err, usage = Handler(c, resp, meta.PromptTokens, meta.ActualModelName)
 		}

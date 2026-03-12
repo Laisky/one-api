@@ -15,7 +15,10 @@ import (
 	"github.com/songquanpeng/one-api/common/ctxkey"
 	"github.com/songquanpeng/one-api/common/tracing"
 	"github.com/songquanpeng/one-api/model"
+	"github.com/songquanpeng/one-api/relay/adaptor/gemini"
 	"github.com/songquanpeng/one-api/relay/adaptor/openai"
+	vertexaiadaptor "github.com/songquanpeng/one-api/relay/adaptor/vertexai"
+	"github.com/songquanpeng/one-api/relay/apitype"
 	"github.com/songquanpeng/one-api/relay/billing"
 	"github.com/songquanpeng/one-api/relay/billing/ratio"
 	"github.com/songquanpeng/one-api/relay/channeltype"
@@ -118,10 +121,106 @@ func getPreConsumedQuota(textRequest *relaymodel.GeneralOpenAIRequest, promptTok
 	return int64(promptQuota + completionQuota)
 }
 
-func preConsumeQuota(c *gin.Context, textRequest *relaymodel.GeneralOpenAIRequest, promptTokens int, ratio float64, completionRatio float64, meta *meta.Meta) (int64, *relaymodel.ErrorWithStatusCode) {
+// estimatePromptUsage computes the prompt-side usage snapshot used for quota reservation.
+// Parameters: c is the current request context, meta contains routing information, and textRequest is the validated upstream payload.
+// Returns: the prompt usage snapshot or an API error when a safe estimate cannot be produced.
+func estimatePromptUsage(c *gin.Context, meta *meta.Meta, textRequest *relaymodel.GeneralOpenAIRequest) (*relaymodel.Usage, *relaymodel.ErrorWithStatusCode) {
+	if meta.Mode == relaymode.Embeddings {
+		return estimateEmbeddingPromptUsage(c, meta, textRequest)
+	}
+
+	promptTokens := getPromptTokens(gmw.Ctx(c), textRequest, meta.Mode)
+	return &relaymodel.Usage{
+		PromptTokens: promptTokens,
+		TotalTokens:  promptTokens,
+	}, nil
+}
+
+// estimateEmbeddingPromptUsage computes preflight embedding usage, preferring Google countTokens for Gemini-backed channels.
+// Parameters: c is the current request context, meta contains routing information, and textRequest is the validated embeddings payload.
+// Returns: the prompt usage snapshot or an API error when a safe estimate cannot be produced.
+func estimateEmbeddingPromptUsage(c *gin.Context, meta *meta.Meta, textRequest *relaymodel.GeneralOpenAIRequest) (*relaymodel.Usage, *relaymodel.ErrorWithStatusCode) {
+	var (
+		usage  *relaymodel.Usage
+		bizErr *relaymodel.ErrorWithStatusCode
+	)
+
+	switch meta.APIType {
+	case apitype.Gemini:
+		usage, _, bizErr = gemini.EstimateEmbeddingPromptUsage(c, meta, textRequest)
+	case apitype.VertexAI:
+		usage, _, bizErr = vertexaiadaptor.EstimateGeminiEmbeddingPromptUsage(c, meta, textRequest)
+	default:
+		promptTokens := getPromptTokens(gmw.Ctx(c), textRequest, meta.Mode)
+		usage = &relaymodel.Usage{
+			PromptTokens: promptTokens,
+			TotalTokens:  promptTokens,
+		}
+	}
+	if bizErr != nil {
+		return nil, bizErr
+	}
+	if usage != nil && usage.PromptTokensDetails != nil {
+		c.Set(ctxkey.EmbeddingPromptTokensDetails, usage.PromptTokensDetails)
+	}
+	return usage, nil
+}
+
+// estimatePreConsumedQuota derives the quota reservation amount before dispatching the upstream request.
+// Parameters: textRequest is the validated payload, promptUsage is the preflight prompt usage, pricing arguments resolve effective rates, and meta identifies the request mode.
+// Returns: the quota amount to reserve before forwarding the request.
+func estimatePreConsumedQuota(
+	textRequest *relaymodel.GeneralOpenAIRequest,
+	promptUsage *relaymodel.Usage,
+	modelRatio float64,
+	completionRatio float64,
+	channelModelRatio map[string]float64,
+	groupRatio float64,
+	channelModelConfigs map[string]model.ModelConfigLocal,
+	channelCompletionRatio map[string]float64,
+	meta *meta.Meta,
+) int64 {
+	promptTokens := 0
+	if promptUsage != nil {
+		promptTokens = promptUsage.PromptTokens
+	}
+
+	if meta != nil && meta.Mode == relaymode.Embeddings && promptUsage != nil {
+		computeResult := quotautil.Compute(quotautil.ComputeInput{
+			Usage:                  promptUsage,
+			ModelName:              textRequest.Model,
+			ModelRatio:             modelRatio,
+			ChannelModelRatio:      channelModelRatio,
+			GroupRatio:             groupRatio,
+			ChannelModelConfigs:    channelModelConfigs,
+			ChannelCompletionRatio: channelCompletionRatio,
+			PricingAdaptor:         resolvePricingAdaptor(meta),
+		})
+		bufferQuota := int64(float64(config.PreConsumedQuota) * modelRatio * groupRatio)
+		return computeResult.TotalQuota + bufferQuota
+	}
+
+	return getPreConsumedQuota(textRequest, promptTokens, modelRatio*groupRatio, completionRatio)
+}
+
+// preConsumeQuota reserves quota before the upstream request is sent.
+// Parameters: c is the request context, textRequest is the validated payload, promptUsage is the prompt usage estimate, pricing arguments resolve reservation cost, and meta identifies the active channel.
+// Returns: the reserved quota amount and an API error when the user or token lacks sufficient balance.
+func preConsumeQuota(
+	c *gin.Context,
+	textRequest *relaymodel.GeneralOpenAIRequest,
+	promptUsage *relaymodel.Usage,
+	modelRatio float64,
+	completionRatio float64,
+	channelModelRatio map[string]float64,
+	groupRatio float64,
+	channelModelConfigs map[string]model.ModelConfigLocal,
+	channelCompletionRatio map[string]float64,
+	meta *meta.Meta,
+) (int64, *relaymodel.ErrorWithStatusCode) {
 	ctx := gmw.Ctx(c)
 	lg := gmw.GetLogger(c)
-	preConsumedQuota := getPreConsumedQuota(textRequest, promptTokens, ratio, completionRatio)
+	preConsumedQuota := estimatePreConsumedQuota(textRequest, promptUsage, modelRatio, completionRatio, channelModelRatio, groupRatio, channelModelConfigs, channelCompletionRatio, meta)
 
 	tokenQuota := c.GetInt64(ctxkey.TokenQuota)
 	tokenQuotaUnlimited := c.GetBool(ctxkey.TokenQuotaUnlimited)

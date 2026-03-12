@@ -490,28 +490,27 @@ func convertToolChoiceToConfig(toolChoice any) *ToolConfig {
 }
 
 // ConvertEmbeddingRequest converts an OpenAI-compatible embedding request to Gemini's BatchEmbeddingRequest format.
-// It transforms input text(s) into the format expected by Gemini's embedding API.
-func ConvertEmbeddingRequest(request model.GeneralOpenAIRequest) *BatchEmbeddingRequest {
-	inputs := request.ParseInput()
-	requests := make([]EmbeddingRequest, len(inputs))
+// Parameters: request is the OpenAI-compatible embeddings request.
+// Returns: the Gemini batch embedding request or an error when the input cannot be normalized into Gemini contents.
+func ConvertEmbeddingRequest(request model.GeneralOpenAIRequest) (*BatchEmbeddingRequest, error) {
+	contents, _, err := BuildEmbeddingContents(request.Input)
+	if err != nil {
+		return nil, err
+	}
+
+	requests := make([]EmbeddingRequest, len(contents))
 	model := fmt.Sprintf("models/%s", request.Model)
 
-	for i, input := range inputs {
+	for i, content := range contents {
 		requests[i] = EmbeddingRequest{
-			Model: model,
-			Content: ChatContent{
-				Parts: []Part{
-					{
-						Text: input,
-					},
-				},
-			},
+			Model:   model,
+			Content: content,
 		}
 	}
 
 	return &BatchEmbeddingRequest{
 		Requests: requests,
-	}
+	}, nil
 }
 
 type ChatResponse struct {
@@ -780,12 +779,19 @@ func streamResponseGeminiChat2OpenAI(c *gin.Context, geminiResponse *ChatRespons
 	return &response
 }
 
-func embeddingResponseGemini2OpenAI(response *EmbeddingResponse) *openai.EmbeddingResponse {
+// embeddingResponseGemini2OpenAI converts Gemini embedding results into OpenAI format.
+// Parameters: response is the parsed Gemini embedding response, promptTokens is the locally counted input token total, and details is the optional modality breakdown from preflight countTokens.
+// Returns: an OpenAI-compatible embedding response populated with a billing-safe usage fallback.
+func embeddingResponseGemini2OpenAI(response *EmbeddingResponse, promptTokens int, details *model.UsagePromptTokensDetails) *openai.EmbeddingResponse {
 	openAIEmbeddingResponse := openai.EmbeddingResponse{
 		Object: "list",
 		Data:   make([]openai.EmbeddingResponseItem, 0, len(response.Embeddings)),
 		Model:  "gemini-embedding",
-		Usage:  model.Usage{TotalTokens: 0},
+		Usage: model.Usage{
+			PromptTokens:        promptTokens,
+			TotalTokens:         promptTokens,
+			PromptTokensDetails: details,
+		},
 	}
 	for _, item := range response.Embeddings {
 		openAIEmbeddingResponse.Data = append(openAIEmbeddingResponse.Data, openai.EmbeddingResponseItem{
@@ -795,6 +801,25 @@ func embeddingResponseGemini2OpenAI(response *EmbeddingResponse) *openai.Embeddi
 		})
 	}
 	return &openAIEmbeddingResponse
+}
+
+// embeddingPromptTokensDetailsFromContext returns preflight embedding modality details stored in the request context.
+// Parameters: c is the current request context.
+// Returns: the stored prompt token details or nil when no preflight details were captured.
+func embeddingPromptTokensDetailsFromContext(c *gin.Context) *model.UsagePromptTokensDetails {
+	if c == nil {
+		return nil
+	}
+	raw, exists := c.Get(ctxkey.EmbeddingPromptTokensDetails)
+	if !exists {
+		return nil
+	}
+
+	details, ok := raw.(*model.UsagePromptTokensDetails)
+	if !ok {
+		return nil
+	}
+	return details
 }
 
 // geminiOutputImageCounts aggregates image counts for Gemini output parts.
@@ -1031,10 +1056,9 @@ func Handler(c *gin.Context, resp *http.Response, promptTokens int, modelName st
 }
 
 // EmbeddingHandler processes embedding responses from the Gemini API and converts them to OpenAI-compatible format.
-// It reads the response body, unmarshals it into Gemini's embedding format, converts it to OpenAI's format,
-// and writes the response back to the client.
-// Returns an error if processing fails, and the usage statistics on success.
-func EmbeddingHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusCode, *model.Usage) {
+// Parameters: c is the current request context, resp is the upstream Gemini HTTP response, and promptTokens is the preflight input token total used as a fallback when Gemini omits usage.
+// Returns: an API error when processing fails, otherwise the usage statistics written back to the client response.
+func EmbeddingHandler(c *gin.Context, resp *http.Response, promptTokens int) (*model.ErrorWithStatusCode, *model.Usage) {
 	var geminiEmbeddingResponse EmbeddingResponse
 	responseBody, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -1060,7 +1084,7 @@ func EmbeddingHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStat
 			StatusCode: resp.StatusCode,
 		}, nil
 	}
-	fullTextResponse := embeddingResponseGemini2OpenAI(&geminiEmbeddingResponse)
+	fullTextResponse := embeddingResponseGemini2OpenAI(&geminiEmbeddingResponse, promptTokens, embeddingPromptTokensDetailsFromContext(c))
 	jsonResponse, err := json.Marshal(fullTextResponse)
 	if err != nil {
 		return openai.ErrorWrapper(errors.Wrap(err, "marshal_response_body_failed"), "marshal_response_body_failed", http.StatusInternalServerError), nil

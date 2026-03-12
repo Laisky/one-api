@@ -111,16 +111,17 @@ type ModelConfig struct {
 // ModelConfigLocal represents the local definition of ModelConfig to avoid import cycles
 // This should match the structure in relay/adaptor/interface.go
 type ModelConfigLocal struct {
-	Ratio             float64               `json:"ratio"`
-	CompletionRatio   float64               `json:"completion_ratio,omitempty"`
-	CachedInputRatio  float64               `json:"cached_input_ratio,omitempty"`
-	CacheWrite5mRatio float64               `json:"cache_write_5m_ratio,omitempty"`
-	CacheWrite1hRatio float64               `json:"cache_write_1h_ratio,omitempty"`
-	Tiers             []ModelRatioTierLocal `json:"tiers,omitempty"`
-	MaxTokens         int32                 `json:"max_tokens,omitempty"`
-	Video             *VideoPricingLocal    `json:"video,omitempty"`
-	Audio             *AudioPricingLocal    `json:"audio,omitempty"`
-	Image             *ImagePricingLocal    `json:"image,omitempty"`
+	Ratio             float64                `json:"ratio"`
+	CompletionRatio   float64                `json:"completion_ratio,omitempty"`
+	CachedInputRatio  float64                `json:"cached_input_ratio,omitempty"`
+	CacheWrite5mRatio float64                `json:"cache_write_5m_ratio,omitempty"`
+	CacheWrite1hRatio float64                `json:"cache_write_1h_ratio,omitempty"`
+	Tiers             []ModelRatioTierLocal  `json:"tiers,omitempty"`
+	MaxTokens         int32                  `json:"max_tokens,omitempty"`
+	Video             *VideoPricingLocal     `json:"video,omitempty"`
+	Audio             *AudioPricingLocal     `json:"audio,omitempty"`
+	Image             *ImagePricingLocal     `json:"image,omitempty"`
+	Embedding         *EmbeddingPricingLocal `json:"embedding,omitempty"`
 }
 
 type ModelRatioTierLocal struct {
@@ -160,6 +161,19 @@ type ImagePricingLocal struct {
 	SizeMultipliers        map[string]float64            `json:"size_multipliers,omitempty"`
 	QualityMultipliers     map[string]float64            `json:"quality_multipliers,omitempty"`
 	QualitySizeMultipliers map[string]map[string]float64 `json:"quality_size_multipliers,omitempty"`
+}
+
+// EmbeddingPricingLocal mirrors adaptor.EmbeddingPricingConfig for persistence.
+type EmbeddingPricingLocal struct {
+	TextTokenRatio     float64 `json:"text_token_ratio,omitempty"`
+	ImageTokenRatio    float64 `json:"image_token_ratio,omitempty"`
+	AudioTokenRatio    float64 `json:"audio_token_ratio,omitempty"`
+	VideoTokenRatio    float64 `json:"video_token_ratio,omitempty"`
+	DocumentTokenRatio float64 `json:"document_token_ratio,omitempty"`
+	UsdPerImage        float64 `json:"usd_per_image,omitempty"`
+	UsdPerAudioSecond  float64 `json:"usd_per_audio_second,omitempty"`
+	UsdPerVideoFrame   float64 `json:"usd_per_video_frame,omitempty"`
+	UsdPerDocumentPage float64 `json:"usd_per_document_page,omitempty"`
 }
 
 // ToolPricingLocal is the channel-scoped representation of adaptor.ToolPricingConfig.
