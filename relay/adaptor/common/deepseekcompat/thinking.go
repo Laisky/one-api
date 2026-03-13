@@ -11,8 +11,9 @@ import "strings"
 // Returns:
 //   - normalized: normalized DeepSeek-compatible value, always either enabled or disabled.
 //   - changed: true when normalization changed the original effective value.
-func NormalizeThinkingType(rawType string, budgetTokens int) (normalized string, changed bool) {
+func NormalizeThinkingType(rawType string, budgetTokens *int) (normalized string, changed bool) {
 	typeValue := strings.ToLower(strings.TrimSpace(rawType))
+	hasBudget := budgetTokens != nil && *budgetTokens > 0
 	switch typeValue {
 	case "enabled", "disabled":
 		if rawType == typeValue {
@@ -22,12 +23,12 @@ func NormalizeThinkingType(rawType string, budgetTokens int) (normalized string,
 	case "adaptive":
 		return "enabled", true
 	case "":
-		if budgetTokens > 0 {
+		if hasBudget {
 			return "enabled", true
 		}
 		return "disabled", true
 	default:
-		if budgetTokens > 0 {
+		if hasBudget {
 			return "enabled", true
 		}
 		return "disabled", true

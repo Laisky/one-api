@@ -268,15 +268,22 @@ func ConvertRequest(c *gin.Context, textRequest model.GeneralOpenAIRequest) (*Re
 
 	if isModelSupportThinking(textRequest.Model) &&
 		c.Request.URL.Query().Has("thinking") && claudeRequest.Thinking == nil {
+		budgetTokens := int(math.Min(1024, float64(claudeRequest.MaxTokens/2)))
 		claudeRequest.Thinking = &model.Thinking{
 			Type:         "enabled",
-			BudgetTokens: int(math.Min(1024, float64(claudeRequest.MaxTokens/2))),
+			BudgetTokens: &budgetTokens,
 		}
 	}
 
 	if isModelSupportThinking(textRequest.Model) &&
 		claudeRequest.Thinking != nil {
-		if claudeRequest.MaxTokens <= 1024 {
+		// For adaptive thinking, budget_tokens must not be present
+		if claudeRequest.Thinking.Type == "adaptive" {
+			claudeRequest.Thinking.BudgetTokens = nil
+			logger.Debug("using adaptive thinking mode, stripped budget_tokens")
+		}
+
+		if claudeRequest.Thinking.Type != "adaptive" && claudeRequest.MaxTokens <= 1024 {
 			return nil, errors.New("max_tokens must be greater than 1024 when using extended thinking")
 		}
 

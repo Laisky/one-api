@@ -24,15 +24,15 @@ func TestNormalizeDeepSeekThinkingType(t *testing.T) {
 	testCases := []struct {
 		name         string
 		rawType      string
-		budgetTokens int
+		budgetTokens *int
 		expectedType string
 		expectedEdit bool
 	}{
-		{name: "already enabled", rawType: "enabled", budgetTokens: 0, expectedType: "enabled", expectedEdit: false},
-		{name: "adaptive to enabled", rawType: "adaptive", budgetTokens: 4096, expectedType: "enabled", expectedEdit: true},
-		{name: "unknown with budget to enabled", rawType: "auto", budgetTokens: 1024, expectedType: "enabled", expectedEdit: true},
-		{name: "unknown without budget to disabled", rawType: "auto", budgetTokens: 0, expectedType: "disabled", expectedEdit: true},
-		{name: "empty with budget to enabled", rawType: "", budgetTokens: 2048, expectedType: "enabled", expectedEdit: true},
+		{name: "already enabled", rawType: "enabled", budgetTokens: nil, expectedType: "enabled", expectedEdit: false},
+		{name: "adaptive to enabled", rawType: "adaptive", budgetTokens: relaymodel.IntPtr(4096), expectedType: "enabled", expectedEdit: true},
+		{name: "unknown with budget to enabled", rawType: "auto", budgetTokens: relaymodel.IntPtr(1024), expectedType: "enabled", expectedEdit: true},
+		{name: "unknown without budget to disabled", rawType: "auto", budgetTokens: nil, expectedType: "disabled", expectedEdit: true},
+		{name: "empty with budget to enabled", rawType: "", budgetTokens: relaymodel.IntPtr(2048), expectedType: "enabled", expectedEdit: true},
 	}
 
 	for _, testCase := range testCases {
@@ -58,7 +58,7 @@ func TestConvertClaudeRequest_NormalizesAdaptiveThinkingForDeepSeek(t *testing.T
 		Messages: []relaymodel.ClaudeMessage{
 			{Role: "user", Content: "hello"},
 		},
-		Thinking: &relaymodel.Thinking{Type: "adaptive", BudgetTokens: 2048},
+		Thinking: &relaymodel.Thinking{Type: "adaptive", BudgetTokens: relaymodel.IntPtr(2048)},
 	}
 
 	recorder := httptest.NewRecorder()
@@ -81,7 +81,7 @@ func TestConvertClaudeRequest_NormalizesAdaptiveThinkingForDeepSeek(t *testing.T
 	require.True(t, ok)
 	require.NotNil(t, converted.Thinking)
 	require.Equal(t, "enabled", converted.Thinking.Type)
-	require.Equal(t, 2048, converted.Thinking.BudgetTokens)
+	require.Equal(t, 2048, *converted.Thinking.BudgetTokens)
 }
 
 // TestConvertClaudeRequest_PreservesAdaptiveThinkingForNonDeepSeek ensures non-DeepSeek routes remain unchanged
@@ -96,7 +96,7 @@ func TestConvertClaudeRequest_PreservesAdaptiveThinkingForNonDeepSeek(t *testing
 		Messages: []relaymodel.ClaudeMessage{
 			{Role: "user", Content: "hello"},
 		},
-		Thinking: &relaymodel.Thinking{Type: "adaptive", BudgetTokens: 1024},
+		Thinking: &relaymodel.Thinking{Type: "adaptive", BudgetTokens: relaymodel.IntPtr(1024)},
 	}
 
 	recorder := httptest.NewRecorder()
@@ -119,7 +119,7 @@ func TestConvertClaudeRequest_PreservesAdaptiveThinkingForNonDeepSeek(t *testing
 	require.True(t, ok)
 	require.NotNil(t, converted.Thinking)
 	require.Equal(t, "adaptive", converted.Thinking.Type)
-	require.Equal(t, 1024, converted.Thinking.BudgetTokens)
+	require.Equal(t, 1024, *converted.Thinking.BudgetTokens)
 }
 
 // TestConvertRequest_NormalizesAdaptiveThinkingForDeepSeek ensures direct chat-completions payloads routed
@@ -133,7 +133,7 @@ func TestConvertRequest_NormalizesAdaptiveThinkingForDeepSeek(t *testing.T) {
 		Messages: []relaymodel.Message{
 			{Role: "user", Content: "hello"},
 		},
-		Thinking: &relaymodel.Thinking{Type: "adaptive", BudgetTokens: 1536},
+		Thinking: &relaymodel.Thinking{Type: "adaptive", BudgetTokens: relaymodel.IntPtr(1536)},
 	}
 
 	recorder := httptest.NewRecorder()
@@ -156,5 +156,5 @@ func TestConvertRequest_NormalizesAdaptiveThinkingForDeepSeek(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, converted.Thinking)
 	require.Equal(t, "enabled", converted.Thinking.Type)
-	require.Equal(t, 1536, converted.Thinking.BudgetTokens)
+	require.Equal(t, 1536, *converted.Thinking.BudgetTokens)
 }

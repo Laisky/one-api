@@ -50,8 +50,140 @@ func TestConvertRequest_ThinkingEnabledViaQuery(t *testing.T) {
 
 	if assert.NotNil(t, converted.Thinking) {
 		assert.Equal(t, "enabled", converted.Thinking.Type)
-		assert.Equal(t, 1024, converted.Thinking.BudgetTokens)
+		assert.Equal(t, 1024, *converted.Thinking.BudgetTokens)
 	}
+}
+
+// TestConvertRequest_AdaptiveThinkingStripsBudgetTokens verifies that when thinking type
+// is "adaptive", budget_tokens is stripped from the request to avoid Anthropic API rejection.
+// This is the exact scenario from the bug: user sends {"thinking":{"type":"adaptive"}}
+// and the converted request must NOT include budget_tokens.
+func TestConvertRequest_AdaptiveThinkingStripsBudgetTokens(t *testing.T) {
+	c := newThinkingContext(t, "/v1/chat/completions")
+
+	request := model.GeneralOpenAIRequest{
+		Model:     "claude-opus-4-6",
+		MaxTokens: 8192,
+		Thinking: &model.Thinking{
+			Type: "adaptive",
+		},
+	}
+
+	converted, err := ConvertRequest(c, request)
+	require.NoError(t, err)
+	require.NotNil(t, converted)
+
+	if assert.NotNil(t, converted.Thinking) {
+		assert.Equal(t, "adaptive", converted.Thinking.Type)
+		assert.Nil(t, converted.Thinking.BudgetTokens, "budget_tokens must be nil for adaptive thinking")
+	}
+
+	// Verify JSON serialization does not include budget_tokens
+	jsonBytes, err := json.Marshal(converted.Thinking)
+	require.NoError(t, err)
+	assert.NotContains(t, string(jsonBytes), "budget_tokens",
+		"JSON output must not contain budget_tokens for adaptive thinking")
+}
+
+// TestConvertRequest_AdaptiveThinkingWithExplicitBudgetTokensStripped verifies that even
+// if a client mistakenly sends budget_tokens with adaptive type, it gets stripped.
+func TestConvertRequest_AdaptiveThinkingWithExplicitBudgetTokensStripped(t *testing.T) {
+	c := newThinkingContext(t, "/v1/chat/completions")
+
+	request := model.GeneralOpenAIRequest{
+		Model:     "claude-opus-4-6",
+		MaxTokens: 8192,
+		Thinking: &model.Thinking{
+			Type:         "adaptive",
+			BudgetTokens: model.IntPtr(4096),
+		},
+	}
+
+	converted, err := ConvertRequest(c, request)
+	require.NoError(t, err)
+	require.NotNil(t, converted)
+
+	if assert.NotNil(t, converted.Thinking) {
+		assert.Equal(t, "adaptive", converted.Thinking.Type)
+		assert.Nil(t, converted.Thinking.BudgetTokens, "budget_tokens must be stripped for adaptive thinking")
+	}
+}
+
+// TestConvertRequest_AdaptiveThinkingDoesNotRequireMaxTokensOver1024 verifies that
+// adaptive thinking mode does not enforce the max_tokens > 1024 constraint
+// (which only applies to enabled thinking with explicit budget).
+func TestConvertRequest_AdaptiveThinkingDoesNotRequireMaxTokensOver1024(t *testing.T) {
+	c := newThinkingContext(t, "/v1/chat/completions")
+
+	request := model.GeneralOpenAIRequest{
+		Model:     "claude-opus-4-6",
+		MaxTokens: 512,
+		Thinking: &model.Thinking{
+			Type: "adaptive",
+		},
+	}
+
+	converted, err := ConvertRequest(c, request)
+	require.NoError(t, err)
+	require.NotNil(t, converted)
+	assert.NotNil(t, converted.Thinking)
+	assert.Equal(t, "adaptive", converted.Thinking.Type)
+}
+
+// TestConvertRequest_EnabledThinkingPreservesBudgetTokens verifies that enabled thinking
+// type continues to work with budget_tokens as before (backward compatibility).
+func TestConvertRequest_EnabledThinkingPreservesBudgetTokens(t *testing.T) {
+	c := newThinkingContext(t, "/v1/chat/completions")
+
+	request := model.GeneralOpenAIRequest{
+		Model:     "claude-opus-4-6",
+		MaxTokens: 8192,
+		Thinking: &model.Thinking{
+			Type:         "enabled",
+			BudgetTokens: model.IntPtr(4096),
+		},
+	}
+
+	converted, err := ConvertRequest(c, request)
+	require.NoError(t, err)
+	require.NotNil(t, converted)
+
+	if assert.NotNil(t, converted.Thinking) {
+		assert.Equal(t, "enabled", converted.Thinking.Type)
+		require.NotNil(t, converted.Thinking.BudgetTokens)
+		assert.Equal(t, 4096, *converted.Thinking.BudgetTokens)
+	}
+
+	// Verify JSON serialization includes budget_tokens for enabled type
+	jsonBytes, err := json.Marshal(converted.Thinking)
+	require.NoError(t, err)
+	assert.Contains(t, string(jsonBytes), "budget_tokens",
+		"JSON output must contain budget_tokens for enabled thinking")
+}
+
+// TestConvertRequest_AdaptiveThinkingClearsMutuallyExclusiveParameters verifies that
+// adaptive thinking also clears temperature, top_k, and top_p like enabled thinking.
+func TestConvertRequest_AdaptiveThinkingClearsMutuallyExclusiveParameters(t *testing.T) {
+	c := newThinkingContext(t, "/v1/chat/completions")
+
+	request := model.GeneralOpenAIRequest{
+		Model:     "claude-opus-4-6",
+		MaxTokens: 8192,
+		Thinking: &model.Thinking{
+			Type: "adaptive",
+		},
+		Temperature: float64Ptr(0.7),
+		TopP:        float64Ptr(0.5),
+		TopK:        intPtr(32),
+	}
+
+	converted, err := ConvertRequest(c, request)
+	require.NoError(t, err)
+	require.NotNil(t, converted)
+
+	assert.Nil(t, converted.Temperature, "temperature must be nil with adaptive thinking")
+	assert.Nil(t, converted.TopP, "top_p must be nil with adaptive thinking")
+	assert.Nil(t, converted.TopK, "top_k must be nil with adaptive thinking")
 }
 
 func TestConvertRequest_RejectsThinkingWhenMaxTokensTooSmall(t *testing.T) {
@@ -62,7 +194,7 @@ func TestConvertRequest_RejectsThinkingWhenMaxTokensTooSmall(t *testing.T) {
 		MaxTokens: 1024,
 		Thinking: &model.Thinking{
 			Type:         "enabled",
-			BudgetTokens: 1024,
+			BudgetTokens: model.IntPtr(1024),
 		},
 	}
 
@@ -79,7 +211,7 @@ func TestConvertRequest_ClearsMutuallyExclusiveParametersWhenThinkingEnabled(t *
 		MaxTokens: 4096,
 		Thinking: &model.Thinking{
 			Type:         "enabled",
-			BudgetTokens: 2048,
+			BudgetTokens: model.IntPtr(2048),
 		},
 		Temperature: float64Ptr(0.7),
 		TopP:        float64Ptr(0.5),
@@ -748,7 +880,7 @@ func TestConvertRequest_ThinkingBlocksConversion(t *testing.T) {
 		MaxTokens: 2048,
 		Thinking: &model.Thinking{
 			Type:         "enabled",
-			BudgetTokens: 1024,
+			BudgetTokens: model.IntPtr(1024),
 		},
 		Messages: []model.Message{
 			{
@@ -818,7 +950,7 @@ func TestConvertRequest_ThinkingBlocksConversion(t *testing.T) {
 	// Verify thinking is enabled in the request
 	require.NotNil(t, claudeRequest.Thinking)
 	assert.Equal(t, "enabled", claudeRequest.Thinking.Type)
-	assert.Equal(t, 1024, claudeRequest.Thinking.BudgetTokens)
+	assert.Equal(t, 1024, *claudeRequest.Thinking.BudgetTokens)
 
 	// Find the assistant message
 	var assistantMessage *Message
@@ -886,7 +1018,7 @@ func TestConvertRequest_ThinkingBlocksWithComplexContent(t *testing.T) {
 		MaxTokens: 2048,
 		Thinking: &model.Thinking{
 			Type:         "enabled",
-			BudgetTokens: 1024,
+			BudgetTokens: model.IntPtr(1024),
 		},
 		Messages: []model.Message{
 			{
@@ -1088,7 +1220,7 @@ func TestConvertRequest_BugScenario_FullWorkflow(t *testing.T) {
 		MaxTokens: 2048,
 		Thinking: &model.Thinking{
 			Type:         "enabled",
-			BudgetTokens: 1024,
+			BudgetTokens: model.IntPtr(1024),
 		},
 		Messages: []model.Message{
 			{
@@ -1147,7 +1279,7 @@ func TestConvertRequest_BugScenario_FullWorkflow(t *testing.T) {
 		MaxTokens: 2048,
 		Thinking: &model.Thinking{
 			Type:         "enabled",
-			BudgetTokens: 1024,
+			BudgetTokens: model.IntPtr(1024),
 		},
 		Messages: []model.Message{
 			{

@@ -181,7 +181,12 @@ type UserLocationApproximate struct {
 // https://docs.anthropic.com/en/docs/build-with-claude/extended-thinking#implementing-extended-thinking
 type Thinking struct {
 	Type         string `json:"type"`
-	BudgetTokens int    `json:"budget_tokens" binding:"omitempty,min=1024"`
+	BudgetTokens *int   `json:"budget_tokens,omitempty" binding:"omitempty,min=1024"`
+}
+
+// IntPtr is a helper to create a pointer to an int value.
+func IntPtr(v int) *int {
+	return &v
 }
 
 func (r GeneralOpenAIRequest) ParseInput() []string {

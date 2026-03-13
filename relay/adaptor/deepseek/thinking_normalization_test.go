@@ -23,7 +23,7 @@ func TestConvertRequest_NormalizesAdaptiveThinkingType(t *testing.T) {
 		Messages: []relaymodel.Message{
 			{Role: "user", Content: "hello"},
 		},
-		Thinking: &relaymodel.Thinking{Type: "adaptive", BudgetTokens: 2048},
+		Thinking: &relaymodel.Thinking{Type: "adaptive", BudgetTokens: relaymodel.IntPtr(2048)},
 	}
 
 	recorder := httptest.NewRecorder()
@@ -38,7 +38,7 @@ func TestConvertRequest_NormalizesAdaptiveThinkingType(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, converted.Thinking)
 	require.Equal(t, "enabled", converted.Thinking.Type)
-	require.Equal(t, 2048, converted.Thinking.BudgetTokens)
+	require.Equal(t, 2048, *converted.Thinking.BudgetTokens)
 }
 
 // TestConvertRequest_PreservesSupportedThinkingType verifies already-supported values are unchanged.
@@ -51,7 +51,7 @@ func TestConvertRequest_PreservesSupportedThinkingType(t *testing.T) {
 		Messages: []relaymodel.Message{
 			{Role: "user", Content: "hello"},
 		},
-		Thinking: &relaymodel.Thinking{Type: "enabled", BudgetTokens: 1024},
+		Thinking: &relaymodel.Thinking{Type: "enabled", BudgetTokens: relaymodel.IntPtr(1024)},
 	}
 
 	recorder := httptest.NewRecorder()
@@ -66,5 +66,5 @@ func TestConvertRequest_PreservesSupportedThinkingType(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, converted.Thinking)
 	require.Equal(t, "enabled", converted.Thinking.Type)
-	require.Equal(t, 1024, converted.Thinking.BudgetTokens)
+	require.Equal(t, 1024, *converted.Thinking.BudgetTokens)
 }

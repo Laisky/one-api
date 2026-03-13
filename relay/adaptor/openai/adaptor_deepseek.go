@@ -124,7 +124,7 @@ func normalizeClaudeThinkingForDeepSeek(lg deepSeekThinkingNormalizeLogger, requ
 			zap.String("model", request.Model),
 			zap.String("original_type", originalType),
 			zap.String("normalized_type", normalizedType),
-			zap.Int("budget_tokens", request.Thinking.BudgetTokens),
+			zap.Intp("budget_tokens", request.Thinking.BudgetTokens),
 		)
 	}
 }
