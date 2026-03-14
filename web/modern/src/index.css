@@ -32,6 +32,22 @@
 		--chart-4: 43 74% 66%;
 		--chart-5: 27 87% 67%;
 		--radius: 0.5rem;
+
+		/* Semantic status colors */
+		--success: 142 71% 45%;
+		--success-foreground: 144 61% 20%;
+		--success-muted: 138 76% 97%;
+		--success-border: 142 69% 82%;
+
+		--warning: 38 92% 50%;
+		--warning-foreground: 32 95% 22%;
+		--warning-muted: 48 96% 95%;
+		--warning-border: 46 97% 72%;
+
+		--info: 217 91% 60%;
+		--info-foreground: 224 76% 24%;
+		--info-muted: 214 95% 97%;
+		--info-border: 214 83% 80%;
 	}
 
 	.dark {
@@ -59,6 +75,22 @@
 		--chart-3: 30 80% 55%;
 		--chart-4: 280 65% 60%;
 		--chart-5: 340 75% 55%;
+
+		/* Semantic status colors */
+		--success: 142 71% 45%;
+		--success-foreground: 142 72% 82%;
+		--success-muted: 144 50% 10%;
+		--success-border: 143 50% 22%;
+
+		--warning: 38 92% 50%;
+		--warning-foreground: 46 87% 80%;
+		--warning-muted: 40 50% 10%;
+		--warning-border: 40 50% 22%;
+
+		--info: 217 91% 60%;
+		--info-foreground: 214 83% 80%;
+		--info-muted: 220 50% 10%;
+		--info-border: 220 50% 22%;
 	}
 }
 
@@ -67,10 +99,10 @@
 	html,
 	body,
 	#root {
-		/* Ensure the app uses dynamic viewport height on mobile to prevent extra blank space */
-		min-height: 100dvh;
 		/* Fallback for older browsers */
 		min-height: 100vh;
+		/* Override with dynamic viewport height on mobile to prevent extra blank space */
+		min-height: 100dvh;
 		height: auto;
 		margin: 0;
 	}
@@ -169,15 +201,15 @@
 /* Form enhancements */
 @layer components {
 	.form-grid {
-		@apply grid grid-cols-1 md: grid-cols-2 lg:grid-cols-3 gap-4;
+		@apply grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4;
 	}
 
 	.form-row {
-		@apply flex flex-col md: flex-row gap-4;
+		@apply flex flex-col md:flex-row gap-4;
 	}
 
 	.form-actions {
-		@apply flex flex-col md: flex-row gap-2 pt-4;
+		@apply flex flex-col md:flex-row gap-2 pt-4;
 	}
 
 	.json-editor {
@@ -185,11 +217,11 @@
 	}
 
 	.json-valid {
-		@apply border-green-300 bg-green-50;
+		@apply border-success-border bg-success-muted;
 	}
 
 	.json-invalid {
-		@apply border-red-300 bg-red-50;
+		@apply border-destructive/30 bg-destructive/5;
 	}
 
 	/* Date picker icon fixes for dark theme */

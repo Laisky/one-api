@@ -94,25 +94,25 @@ export function TokensPage() {
       switch (status) {
         case TOKEN_STATUS.ENABLED:
           return (
-            <Badge variant="default" className="bg-green-100 text-green-800">
+            <Badge variant="default" className="bg-success-muted text-success-foreground">
               {tr('status.enabled', 'Enabled')}
             </Badge>
           );
         case TOKEN_STATUS.DISABLED:
           return (
-            <Badge variant="secondary" className="bg-gray-100 text-gray-800">
+            <Badge variant="secondary" className="bg-muted text-muted-foreground">
               {tr('status.disabled', 'Disabled')}
             </Badge>
           );
         case TOKEN_STATUS.EXPIRED:
           return (
-            <Badge variant="destructive" className="bg-red-100 text-red-800">
+            <Badge variant="destructive" className="bg-destructive/10 text-destructive">
               {tr('status.expired', 'Expired')}
             </Badge>
           );
         case TOKEN_STATUS.EXHAUSTED:
           return (
-            <Badge variant="destructive" className="bg-yellow-100 text-yellow-800">
+            <Badge variant="destructive" className="bg-warning-muted text-warning-foreground">
               {tr('status.exhausted', 'Exhausted')}
             </Badge>
           );
@@ -328,7 +328,7 @@ export function TokensPage() {
               disabled={!!copiedTokens[token.id]}
               title={copiedTokens[token.id] ? tr('key.copied', 'Copied!') : tr('key.copy', 'Copy token')}
             >
-              {copiedTokens[token.id] ? <Check className="h-3 w-3 text-green-600" /> : <Copy className="h-3 w-3" />}
+              {copiedTokens[token.id] ? <Check className="h-3 w-3 text-success" /> : <Copy className="h-3 w-3" />}
             </Button>
           </div>
         );
@@ -346,7 +346,7 @@ export function TokensPage() {
         const token = row.original;
         const quotaLabel = formatQuotaLabel(token.remain_quota, token.unlimited_quota);
         const highlight = shouldHighlightTokenQuota(token, userQuota);
-        const quotaClasses = cn('font-mono text-sm', highlight && 'text-amber-600 font-semibold');
+        const quotaClasses = cn('font-mono text-sm', highlight && 'text-warning font-semibold');
 
         if (!highlight) {
           return (
@@ -438,7 +438,7 @@ export function TokensPage() {
               onClick={() => manage(token.id, token.status === TOKEN_STATUS.ENABLED ? 'disable' : 'enable')}
               className={cn(
                 'touch-target',
-                token.status === TOKEN_STATUS.ENABLED ? 'text-orange-600 hover:text-orange-700' : 'text-green-600 hover:text-green-700'
+                token.status === TOKEN_STATUS.ENABLED ? 'text-warning hover:text-warning/80' : 'text-success hover:text-success/80'
               )}
             >
               {token.status === TOKEN_STATUS.ENABLED ? tr('actions.disable', 'Disable') : tr('actions.enable', 'Enable')}
@@ -522,7 +522,7 @@ export function TokensPage() {
                     onClick={() => manage(row.id, row.status === TOKEN_STATUS.ENABLED ? 'disable' : 'enable')}
                     title={row.status === TOKEN_STATUS.ENABLED ? tr('actions.disable', 'Disable') : tr('actions.enable', 'Enable')}
                     className={
-                      row.status === TOKEN_STATUS.ENABLED ? 'text-orange-600 hover:text-orange-700' : 'text-green-600 hover:text-green-700'
+                      row.status === TOKEN_STATUS.ENABLED ? 'text-warning hover:text-warning/80' : 'text-success hover:text-success/80'
                     }
                     icon={row.status === TOKEN_STATUS.ENABLED ? <Ban className="h-4 w-4" /> : <CheckCircle className="h-4 w-4" />}
                   />

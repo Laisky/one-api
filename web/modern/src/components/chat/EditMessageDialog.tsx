@@ -134,8 +134,8 @@ export function EditMessageDialog({
     switch (messageRole) {
       case 'user': return 'text-primary'
       case 'assistant': return 'text-secondary-foreground'
-      case 'system': return 'text-indigo-600 dark:text-indigo-400'
-      case 'error': return 'text-red-600 dark:text-red-400'
+      case 'system': return 'text-info'
+      case 'error': return 'text-destructive'
       default: return 'text-foreground'
     }
   }
@@ -172,8 +172,8 @@ export function EditMessageDialog({
                   {editedContent.trim() ? editedContent.trim().split(/\s+/).length : 0} {t('playground.edit.stats.words')}
                 </span>
                 {hasChanges && (
-                  <span className="flex items-center gap-1 text-orange-600 dark:text-orange-400">
-                    <span className="w-2 h-2 bg-orange-500 rounded-full animate-pulse"></span>
+                  <span className="flex items-center gap-1 text-warning">
+                    <span className="w-2 h-2 bg-warning rounded-full animate-pulse"></span>
                     {t('playground.edit.stats.modified')}
                   </span>
                 )}

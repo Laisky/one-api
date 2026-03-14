@@ -270,7 +270,7 @@
 
 /* Loading states */
 .loading-skeleton {
-  background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+  background: linear-gradient(90deg, hsl(var(--muted)) 25%, hsl(var(--border)) 50%, hsl(var(--muted)) 75%);
   background-size: 200% 100%;
   animation: loading 1.5s infinite;
 }
@@ -314,24 +314,22 @@ button:focus-visible,
 input:focus-visible,
 select:focus-visible,
 textarea:focus-visible {
-  outline: 2px solid #3b82f6;
+  outline: 2px solid hsl(var(--ring));
   outline-offset: 2px;
 }
 
-/* Dark mode adjustments */
-@media (prefers-color-scheme: dark) {
-  .mobile-table tbody tr {
-    background-color: #1f2937;
-    border-color: #374151;
-  }
+/* Dark mode adjustments — uses class-based dark mode to match ThemeProvider */
+.dark .mobile-table tbody tr {
+  background-color: hsl(var(--card));
+  border-color: hsl(var(--border));
+}
 
-  .mobile-table tbody td:before {
-    color: #d1d5db;
-  }
+.dark .mobile-table tbody td:before {
+  color: hsl(var(--muted-foreground));
+}
 
-  .mobile-table tbody td:last-child {
-    border-top-color: #374151;
-  }
+.dark .mobile-table tbody td:last-child {
+  border-top-color: hsl(var(--border));
 }
 
 /* Additional responsive utilities */

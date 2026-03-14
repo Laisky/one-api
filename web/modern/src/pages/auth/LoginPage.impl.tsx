@@ -110,7 +110,7 @@ export function LoginPage() {
   const onLarkOAuth = () => {
     if (systemStatus.lark_client_id) {
       const redirectUri = `${window.location.origin}/oauth/lark`;
-      window.location.href = `https://open.larksuite.com/open-apis/authen/v1/index?app_id=${systemStatus.lark_client_id}&redirect_uri=${redirectUri}`;
+      window.location.href = `https://open.larksuite.com/open-apis/authen/v1/index?app_id=${encodeURIComponent(systemStatus.lark_client_id)}&redirect_uri=${encodeURIComponent(redirectUri)}`;
     }
   };
 
@@ -202,7 +202,6 @@ export function LoginPage() {
 
   const hasOAuthOptions =
     systemStatus.github_oauth ||
-    systemStatus.wechat_login ||
     systemStatus.lark_client_id;
 
   const handleTurnstileVerify = (token: string) => {
@@ -222,7 +221,7 @@ export function LoginPage() {
         <CardHeader className="text-center">
           {systemStatus.logo && (
             <div className="flex justify-center mb-4">
-              <img src={systemStatus.logo} alt="Logo" className="h-12 w-auto" />
+              <img src={systemStatus.logo} alt={systemStatus.system_name ? `${systemStatus.system_name} logo` : 'Site logo'} className="h-12 w-auto" />
             </div>
           )}
           <CardTitle className="text-2xl">
@@ -306,7 +305,7 @@ export function LoginPage() {
                 />
               )}
               {successMessage && (
-                <div className="text-sm text-green-600 bg-green-50 p-3 rounded-md border border-green-200">
+                <div className="text-sm text-success-foreground bg-success-muted p-3 rounded-md border border-success-border">
                   {successMessage}
                 </div>
               )}
@@ -386,37 +385,21 @@ export function LoginPage() {
                         className="w-4 h-4 mr-2"
                         viewBox="0 0 24 24"
                         fill="currentColor"
+                        aria-hidden="true"
                       >
                         <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z" />
                       </svg>
                       GitHub
                     </Button>
                   )}
-                  {systemStatus.wechat_login && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() =>
-                        console.log("WeChat OAuth not implemented")
-                      }
-                    >
-                      <svg
-                        className="w-4 h-4 mr-2"
-                        viewBox="0 0 24 24"
-                        fill="currentColor"
-                      >
-                        <path d="M8.691 2.188C3.891 2.188 0 5.476 0 9.53c0 2.212 1.146 4.203 2.943 5.652-.171.171-.684 1.026-.684 1.026s.342.171.684 0c.342-.171 1.368-.684 1.539-.855 1.368.342 2.736.513 4.209.513.342 0 .684 0 1.026-.171-.171-.342-.171-.684-.171-1.026 0-3.55 3.038-6.417 6.759-6.417.513 0 .855 0 1.368.171C16.187 4.741 12.809 2.188 8.691 2.188zM6.297 7.701c-.513 0-.855-.513-.855-1.026s.342-1.026.855-1.026c.513 0 .855.513.855 1.026s-.342 1.026-.855 1.026zm4.55 0c-.513 0-.855-.513-.855-1.026s.342-1.026.855-1.026c.513 0 .855.513.855 1.026s-.342 1.026-.855 1.026z" />
-                        <path d="M15.733 9.36c-3.721 0-6.588 2.526-6.588 5.652 0 3.125 2.867 5.652 6.588 5.652 1.197 0 2.394-.342 3.42-.855.342.171 1.026.513 1.368.684.171.171.513 0 .513 0s-.342-.684-.513-1.026c1.539-1.197 2.526-2.867 2.526-4.721 0-3.125-2.867-5.652-6.588-5.652zM13.852 13.422c-.342 0-.684-.342-.684-.684s.342-.684.684-.684c.342 0 .684.342.684.684s-.342.684-.684.684zm3.42 0c-.342 0-.684-.342-.684-.684s.342-.684.684-.684c.342 0 .684.342.684.684s-.342.684-.684.684z" />
-                      </svg>
-                      WeChat
-                    </Button>
-                  )}
+                  {/* WeChat OAuth: hidden until implementation is complete */}
                   {systemStatus.lark_client_id && (
                     <Button variant="outline" size="sm" onClick={onLarkOAuth}>
                       <svg
                         className="w-4 h-4 mr-2"
                         viewBox="0 0 24 24"
                         fill="currentColor"
+                        aria-hidden="true"
                       >
                         <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z" />
                       </svg>

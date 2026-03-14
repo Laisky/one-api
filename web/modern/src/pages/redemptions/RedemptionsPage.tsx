@@ -43,9 +43,9 @@ export function RedemptionsPage() {
   const renderStatus = useCallback(
     (status: number) => {
       const map: Record<number, { text: string; cls: string }> = {
-        1: { text: tr('status.unused', 'Unused'), cls: 'text-green-600' },
-        2: { text: tr('status.disabled', 'Disabled'), cls: 'text-red-600' },
-        3: { text: tr('status.used', 'Used'), cls: 'text-gray-600' },
+        1: { text: tr('status.unused', 'Unused'), cls: 'text-success' },
+        2: { text: tr('status.disabled', 'Disabled'), cls: 'text-destructive' },
+        3: { text: tr('status.used', 'Used'), cls: 'text-muted-foreground' },
       };
       const v = map[status] || {
         text: tr('status.unknown', 'Unknown'),

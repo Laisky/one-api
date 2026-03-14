@@ -60,9 +60,9 @@ const formatLatency = (ms?: number) => {
 
 const getLatencyColor = (ms?: number) => {
   if (!ms) return '';
-  if (ms < 1000) return 'text-green-600';
-  if (ms < 3000) return 'text-yellow-600';
-  return 'text-red-600';
+  if (ms < 1000) return 'text-success';
+  if (ms < 3000) return 'text-warning';
+  return 'text-destructive';
 };
 
 const DetailItem = ({ label, value }: { label: string; value: ReactNode }) => (
@@ -131,27 +131,27 @@ const formatDuration = (milliseconds?: number): string => {
 };
 
 const getStatusColor = (status: number): string => {
-  if (status >= 200 && status < 300) return 'bg-green-500 text-white';
-  if (status >= 300 && status < 400) return 'bg-yellow-500 text-white';
-  if (status >= 400 && status < 500) return 'bg-orange-500 text-white';
-  if (status >= 500) return 'bg-red-500 text-white';
-  return 'bg-gray-500 text-white';
+  if (status >= 200 && status < 300) return 'bg-success text-white';
+  if (status >= 300 && status < 400) return 'bg-warning text-white';
+  if (status >= 400 && status < 500) return 'bg-warning text-white';
+  if (status >= 500) return 'bg-destructive text-destructive-foreground';
+  return 'bg-muted text-muted-foreground';
 };
 
 const getMethodColor = (method: string): string => {
   switch (method.toUpperCase()) {
     case 'GET':
-      return 'bg-blue-500 text-white';
+      return 'bg-info text-white';
     case 'POST':
-      return 'bg-green-500 text-white';
+      return 'bg-success text-white';
     case 'PUT':
-      return 'bg-yellow-500 text-white';
+      return 'bg-warning text-white';
     case 'DELETE':
-      return 'bg-red-500 text-white';
+      return 'bg-destructive text-destructive-foreground';
     case 'PATCH':
-      return 'bg-purple-500 text-white';
+      return 'bg-accent text-accent-foreground';
     default:
-      return 'bg-gray-500 text-white';
+      return 'bg-muted text-muted-foreground';
   }
 };
 
@@ -175,42 +175,42 @@ export function LogDetailsModal({ open, onOpenChange, log }: LogDetailsModalProp
         key: 'request_received' as keyof TraceTimestamps,
         title: t('logs.details.events.request_received', 'Request Received'),
         icon: Play,
-        color: 'text-blue-500',
+        color: 'text-info',
         description: t('logs.details.events.request_received_desc', 'Initial request received by the gateway'),
       },
       {
         key: 'request_forwarded' as keyof TraceTimestamps,
         title: t('logs.details.events.request_forwarded', 'Forwarded to Upstream'),
         icon: ArrowRight,
-        color: 'text-teal-500',
+        color: 'text-info',
         description: t('logs.details.events.request_forwarded_desc', 'Request forwarded to upstream service'),
       },
       {
         key: 'first_upstream_response' as keyof TraceTimestamps,
         title: t('logs.details.events.first_upstream_response', 'First Upstream Response'),
         icon: Reply,
-        color: 'text-purple-500',
+        color: 'text-primary',
         description: t('logs.details.events.first_upstream_response_desc', 'First response received from upstream'),
       },
       {
         key: 'first_client_response' as keyof TraceTimestamps,
         title: t('logs.details.events.first_client_response', 'First Client Response'),
         icon: Send,
-        color: 'text-orange-500',
+        color: 'text-warning',
         description: t('logs.details.events.first_client_response_desc', 'First response sent to client'),
       },
       {
         key: 'upstream_completed' as keyof TraceTimestamps,
         title: t('logs.details.events.upstream_completed', 'Upstream Completed'),
         icon: CheckCircle,
-        color: 'text-green-500',
+        color: 'text-success',
         description: t('logs.details.events.upstream_completed_desc', 'Upstream response completed (streaming)'),
       },
       {
         key: 'request_completed' as keyof TraceTimestamps,
         title: t('logs.details.events.request_completed', 'Request Completed'),
         icon: Flag,
-        color: 'text-green-600',
+        color: 'text-success',
         description: t('logs.details.events.request_completed_desc', 'Request fully completed'),
       },
     ],
@@ -398,7 +398,7 @@ export function LogDetailsModal({ open, onOpenChange, log }: LogDetailsModalProp
           key: call.key || `mcp_call_${index}`,
           title: t('logs.details.events.mcp_call', 'MCP Call'),
           icon: Plug,
-          color: call.is_error ? 'text-red-500' : 'text-indigo-500',
+          color: call.is_error ? 'text-destructive' : 'text-info',
           description: descriptionParts.join(' • '),
           timestamp: call.started_at,
           duration,

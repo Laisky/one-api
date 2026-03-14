@@ -53,7 +53,7 @@ export const MarkdownRenderer = React.memo<{
           // Use GitHub-style task lists
           input: ({ node, ...props }) => {
             if (props.type === 'checkbox') {
-              return <input {...props} className="w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary" />;
+              return <input {...props} className="w-4 h-4 rounded border-border text-primary focus:ring-primary" />;
             }
             return <input {...props} />;
           },

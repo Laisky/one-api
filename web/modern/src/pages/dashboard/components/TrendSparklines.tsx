@@ -56,7 +56,7 @@ interface SparklineCardProps {
 }
 
 const SparklineCard = ({ title, color, dataKey, data }: SparklineCardProps) => (
-  <div className="bg-white dark:bg-gray-900 rounded-lg border p-4">
+  <div className="bg-card rounded-lg border p-4">
     <h3 className="font-medium mb-4" style={{ color }}>
       {title}
     </h3>

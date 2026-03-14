@@ -86,7 +86,6 @@ export function OtherSettings() {
       setLoading(true);
       // Unified API call - complete URL with /api prefix
       await api.put('/api/option/', { key, value });
-      console.log(`Updated ${key}`);
     } catch (error) {
       console.error(`Error updating ${key}:`, error);
     } finally {

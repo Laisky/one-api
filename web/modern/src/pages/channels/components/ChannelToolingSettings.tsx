@@ -142,12 +142,12 @@ export const ChannelToolingSettings = ({
 										<Badge
 											key={tool}
 											variant={isSelected ? "default" : "outline"}
-											className={`cursor-pointer hover:bg-primary/90 ${hasPricing ? "border-blue-200" : ""}`}
+											className={`cursor-pointer hover:bg-primary/90 ${hasPricing ? "border-info-border" : ""}`}
 											onClick={() => !isSelected && addToolToWhitelist(tool)}
 										>
 											{tool}
 											{hasPricing && (
-												<span className="ml-1 text-[10px] text-blue-500">
+												<span className="ml-1 text-[10px] text-info">
 													($)
 												</span>
 											)}

@@ -94,7 +94,7 @@ export function CopyButton({
             variant={variant}
             size={size}
             onClick={handleCopy}
-            className={`${className} transition-colors duration-200 ${copied ? 'text-green-600 hover:text-green-700' : ''
+            className={`${className} transition-colors duration-200 ${copied ? 'text-success hover:text-success/80' : ''
               }`}
             disabled={copying}
             title="Copy to clipboard"

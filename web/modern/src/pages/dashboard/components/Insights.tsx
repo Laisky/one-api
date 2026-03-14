@@ -19,7 +19,7 @@ export function Insights({
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-      <div className="bg-white dark:bg-gray-900 rounded-lg border p-4">
+      <div className="bg-card rounded-lg border p-4">
         <div className="text-sm text-muted-foreground">
           {t("dashboard.insights.busiest_day")}
         </div>
@@ -36,7 +36,7 @@ export function Insights({
           </div>
         )}
       </div>
-      <div className="bg-white dark:bg-gray-900 rounded-lg border p-4">
+      <div className="bg-card rounded-lg border p-4">
         <div className="text-sm text-muted-foreground">
           {t("dashboard.insights.peak_token_day")}
         </div>
@@ -53,7 +53,7 @@ export function Insights({
           </div>
         )}
       </div>
-      <div className="bg-white dark:bg-gray-900 rounded-lg border p-4">
+      <div className="bg-card rounded-lg border p-4">
         <div className="text-sm text-muted-foreground">
           {t("dashboard.insights.models_in_use")}
         </div>

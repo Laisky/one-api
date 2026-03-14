@@ -432,7 +432,7 @@ export function EditMCPServerPage() {
                         />
                       </FormControl>
                       <FormMessage />
-                      {toolPricingWarning() && <p className="text-xs text-yellow-600">{toolPricingWarning()}</p>}
+                      {toolPricingWarning() && <p className="text-xs text-warning">{toolPricingWarning()}</p>}
                     </FormItem>
                   )}
                 />

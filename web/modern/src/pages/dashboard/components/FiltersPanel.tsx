@@ -48,7 +48,7 @@ export const FiltersPanel = ({
 }: FiltersPanelProps) => {
   if (!filtersReady) {
     return (
-      <div className="bg-white dark:bg-gray-900 rounded-lg border p-4 mb-6">
+      <div className="bg-card rounded-lg border p-4 mb-6">
         <div className="flex flex-col gap-3 animate-pulse">
           <div className="h-4 bg-muted/30 rounded w-24" />
           <div className="h-11 bg-muted/30 rounded" />
@@ -60,7 +60,7 @@ export const FiltersPanel = ({
   }
 
   return (
-    <div className="bg-white dark:bg-gray-900 rounded-lg border p-4 mb-6">
+    <div className="bg-card rounded-lg border p-4 mb-6">
       <div className="flex flex-col lg:flex-row gap-4 items-start lg:items-end w-full">
         <div className="flex flex-col sm:flex-row gap-3 flex-1 w-full">
           <div className="flex-1 min-w-0">
@@ -73,7 +73,7 @@ export const FiltersPanel = ({
               min={getMinDate()}
               max={getMaxDate()}
               onChange={(e) => onFromDateChange(e.target.value)}
-              className={cn("h-10", dateError ? "border-red-500" : "")}
+              className={cn("h-10", dateError ? "border-destructive" : "")}
               aria-label={t("dashboard.filters.from_aria")}
             />
           </div>
@@ -87,7 +87,7 @@ export const FiltersPanel = ({
               min={getMinDate()}
               max={getMaxDate()}
               onChange={(e) => onToDateChange(e.target.value)}
-              className={cn("h-10", dateError ? "border-red-500" : "")}
+              className={cn("h-10", dateError ? "border-destructive" : "")}
               aria-label={t("dashboard.filters.to_aria")}
             />
           </div>

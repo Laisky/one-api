@@ -89,7 +89,7 @@ export const OverviewSection = ({
       </Card>
     </div>
 
-    <div className="bg-white dark:bg-gray-900 rounded-lg border p-6 mb-6">
+    <div className="bg-card rounded-lg border p-6 mb-6">
       <h3 className="text-lg font-semibold mb-4">
         {t("dashboard.top_models.title")}
       </h3>
@@ -185,7 +185,7 @@ const Card = ({
   value: string;
   children: ReactNode;
 }) => (
-  <div className="bg-white dark:bg-gray-900 rounded-lg border p-4">
+  <div className="bg-card rounded-lg border p-4">
     <div className="text-sm text-muted-foreground">{title}</div>
     <div className="text-2xl font-bold mt-1">{value}</div>
     <div className="text-xs text-muted-foreground mt-2">{children}</div>
@@ -201,7 +201,7 @@ const LeaderCard = ({
   value: string;
   helper: string;
 }) => (
-  <div className="rounded-lg border bg-white dark:bg-gray-900/70 p-4">
+  <div className="rounded-lg border bg-card/70 p-4">
     <div className="text-sm text-muted-foreground">{label}</div>
     <div className="text-xl font-semibold mt-1">{value}</div>
     {helper && (
@@ -219,7 +219,7 @@ const InsightCard = ({
   value: string;
   helper: string;
 }) => (
-  <div className="bg-white dark:bg-gray-900 rounded-lg border p-4">
+  <div className="bg-card rounded-lg border p-4">
     <div className="text-sm text-muted-foreground">{label}</div>
     <div className="text-lg font-semibold mt-1">{value}</div>
     {helper && (

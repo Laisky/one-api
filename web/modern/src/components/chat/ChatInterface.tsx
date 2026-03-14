@@ -195,8 +195,8 @@ export function ChatInterface({
                   </div>
                 )}
                 {isStreaming && (
-                  <Badge variant="outline" className="animate-pulse border-green-500 text-green-600 text-xs flex-shrink-0 self-start sm:ml-auto">
-                    <div className="w-1.5 h-1.5 bg-green-500 rounded-full mr-1 animate-pulse"></div>
+                  <Badge variant="outline" className="animate-pulse border-success text-success text-xs flex-shrink-0 self-start sm:ml-auto">
+                    <div className="w-1.5 h-1.5 bg-success rounded-full mr-1 animate-pulse"></div>
                     {isMobile ? t('playground.chat.generating_mobile') : t('playground.chat.generating')}
                   </Badge>
                 )}
@@ -259,10 +259,10 @@ export function ChatInterface({
 
       {/* Preview Message Card */}
       {showPreview && currentMessage.trim() && (
-        <Card className="flex-shrink-0 border-2 border-blue-200 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-900/20">
+        <Card className="flex-shrink-0 border-2 border-info-border bg-info-muted/50">
           <CardContent className="p-4">
             <div className="flex items-center gap-2 mb-3">
-              <Badge variant="outline" className="text-xs border-blue-300 text-blue-600 dark:border-blue-600 dark:text-blue-400">
+              <Badge variant="outline" className="text-xs border-info-border text-info">
                 {t('playground.chat.preview')}
               </Badge>
               <span className="text-xs text-muted-foreground">

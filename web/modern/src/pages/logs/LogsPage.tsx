@@ -72,9 +72,9 @@ const formatLatency = (ms?: number, fallback: string = "-") => {
 
 const getLatencyColor = (ms?: number) => {
   if (!ms) return "";
-  if (ms < 1000) return "text-green-600";
-  if (ms < 3000) return "text-yellow-600";
-  return "text-red-600";
+  if (ms < 1000) return "text-success";
+  if (ms < 3000) return "text-warning";
+  return "text-destructive";
 };
 
 const coerceTokenCount = (value: unknown) => {
@@ -156,15 +156,15 @@ export function LogsPage() {
     const label = getLogTypeLabelText(typeValue);
     switch (typeValue) {
       case LOG_TYPES.TOPUP:
-        return <Badge className="bg-green-100 text-green-800">{label}</Badge>;
+        return <Badge className="bg-success-muted text-success-foreground">{label}</Badge>;
       case LOG_TYPES.CONSUME:
-        return <Badge className="bg-blue-100 text-blue-800">{label}</Badge>;
+        return <Badge className="bg-info-muted text-info-foreground">{label}</Badge>;
       case LOG_TYPES.MANAGE:
-        return <Badge className="bg-purple-100 text-purple-800">{label}</Badge>;
+        return <Badge className="bg-accent text-accent-foreground">{label}</Badge>;
       case LOG_TYPES.SYSTEM:
-        return <Badge className="bg-gray-100 text-gray-800">{label}</Badge>;
+        return <Badge className="bg-muted text-muted-foreground">{label}</Badge>;
       case LOG_TYPES.TEST:
-        return <Badge className="bg-yellow-100 text-yellow-800">{label}</Badge>;
+        return <Badge className="bg-warning-muted text-warning-foreground">{label}</Badge>;
       default:
         return <Badge variant="outline">{label}</Badge>;
     }

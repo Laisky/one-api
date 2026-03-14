@@ -43,7 +43,7 @@ export function HomePage() {
 
   // If home is a URL, render as iframe to allow embedding an external page
   if (home.startsWith('https://')) {
-    return <iframe src={home} className="w-full h-screen border-0" title={t('home.iframe_title')} />;
+    return <iframe src={home} className="w-full h-screen border-0" title={t('home.iframe_title')} sandbox="allow-scripts allow-same-origin allow-popups" />;
   }
 
   // If custom content exists (Markdown), render it

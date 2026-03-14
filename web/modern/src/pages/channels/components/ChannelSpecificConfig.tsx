@@ -119,8 +119,8 @@ export const ChannelSpecificConfig = ({
     switch (normalizedChannelType) {
       case 3: // Azure OpenAI
         return (
-          <div className="space-y-4 p-4 border rounded-lg bg-blue-50/50">
-            <h4 className="font-medium text-blue-900">
+          <div className="space-y-4 p-4 border rounded-lg bg-info-muted/50">
+            <h4 className="font-medium text-info-foreground">
               {tr("azure.heading", "Azure OpenAI Configuration")}
             </h4>
             <FormField
@@ -188,10 +188,10 @@ export const ChannelSpecificConfig = ({
                 </FormItem>
               )}
             />
-            <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+            <div className="p-3 bg-warning-muted border border-warning-border rounded-lg">
               <div className="flex items-center gap-2">
-                <AlertCircle className="h-4 w-4 text-yellow-600" />
-                <span className="text-sm text-yellow-800">
+                <AlertCircle className="h-4 w-4 text-warning" />
+                <span className="text-sm text-warning-foreground">
                   <strong>
                     {tr("azure.version.warning_label", "Important:")}
                   </strong>{" "}
@@ -207,8 +207,8 @@ export const ChannelSpecificConfig = ({
 
       case 33: // AWS Bedrock
         return (
-          <div className="space-y-4 p-4 border rounded-lg bg-orange-50/50">
-            <h4 className="font-medium text-orange-900">
+          <div className="space-y-4 p-4 border rounded-lg bg-warning-muted">
+            <h4 className="font-medium text-warning-foreground">
               {tr("aws.heading", "AWS Bedrock Configuration")}
             </h4>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -294,8 +294,8 @@ export const ChannelSpecificConfig = ({
 
       case 34: // Coze
         return (
-          <div className="space-y-4 p-4 border rounded-lg bg-blue-50/50">
-            <h4 className="font-medium text-blue-900">
+          <div className="space-y-4 p-4 border rounded-lg bg-info-muted/50">
+            <h4 className="font-medium text-info-foreground">
               {tr("coze.heading", "Coze Configuration")}
             </h4>
             <Controller
@@ -433,8 +433,8 @@ export const ChannelSpecificConfig = ({
 
       case 42: // Vertex AI
         return (
-          <div className="space-y-4 p-4 border rounded-lg bg-green-50/50">
-            <h4 className="font-medium text-green-900">
+          <div className="space-y-4 p-4 border rounded-lg bg-success-muted/50">
+            <h4 className="font-medium text-success-foreground">
               {tr("vertex.heading", "Vertex AI Configuration")}
             </h4>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -653,8 +653,8 @@ export const ChannelSpecificConfig = ({
 
       case 50: // OpenAI Compatible
         return (
-          <div className="space-y-4 p-4 border rounded-lg bg-purple-50/50">
-            <h4 className="font-medium text-purple-900">
+          <div className="space-y-4 p-4 border rounded-lg bg-info-muted">
+            <h4 className="font-medium text-info-foreground">
               {tr(
                 "openai_compatible.heading",
                 "OpenAI Compatible Configuration"
@@ -739,8 +739,8 @@ export const ChannelSpecificConfig = ({
 
       case 52: // Claude Compatible
         return (
-          <div className="space-y-4 p-4 border rounded-lg bg-amber-50/50">
-            <h4 className="font-medium text-amber-900">
+          <div className="space-y-4 p-4 border rounded-lg bg-warning-muted/50">
+            <h4 className="font-medium text-warning-foreground">
               {tr(
                 "claude_compatible.heading",
                 "Claude Compatible Configuration"

@@ -30,13 +30,6 @@ const renderQuotaWithPrompt = (quota: number): string => {
   const usd =
     Number.isFinite(quota) && quotaPerUnit > 0 ? quota / quotaPerUnit : NaN;
   const usdValue = Number.isFinite(usd) ? usd.toFixed(2) : "0.00";
-  console.log("[QUOTA_DEBUG][Redemption] renderQuotaWithPrompt", {
-    quota,
-    quotaPerUnitRaw,
-    quotaPerUnit,
-    usd,
-    usdValue,
-  });
   return `$${usdValue}`;
 };
 
@@ -241,10 +234,6 @@ export function EditRedemptionPage() {
                           step="1"
                           {...field}
                           onChange={(e) => {
-                            console.log(
-                              "[QUOTA_DEBUG][Redemption] Input onChange",
-                              { value: e.target.value }
-                            );
                             // Pass original event to RHF to keep name & target intact
                             field.onChange(e);
                           }}

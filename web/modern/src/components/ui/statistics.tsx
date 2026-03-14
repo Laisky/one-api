@@ -68,9 +68,9 @@ export function Statistics({
   const getTrendIcon = (trend?: 'up' | 'down' | 'neutral') => {
     switch (trend) {
       case 'up':
-        return <TrendingUp className="h-3 w-3 text-green-500" />
+        return <TrendingUp className="h-3 w-3 text-success" />
       case 'down':
-        return <TrendingDown className="h-3 w-3 text-red-500" />
+        return <TrendingDown className="h-3 w-3 text-destructive" />
       default:
         return null
     }

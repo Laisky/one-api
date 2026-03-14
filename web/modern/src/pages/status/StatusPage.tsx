@@ -129,7 +129,7 @@ function StatusPageImpl() {
       return (
         <Badge
           variant="default"
-          className="bg-green-100 text-green-800 hover:bg-green-200 dark:bg-green-900 dark:text-green-200"
+          className="bg-success-muted text-success-foreground hover:bg-success-muted/80"
         >
           <CheckCircle className="w-3 h-3 mr-1" />
           {t("status.badges.enabled")}
@@ -139,7 +139,7 @@ function StatusPageImpl() {
       return (
         <Badge
           variant="secondary"
-          className="bg-yellow-100 text-yellow-800 hover:bg-yellow-200 dark:bg-yellow-900 dark:text-yellow-200"
+          className="bg-warning-muted text-warning-foreground hover:bg-warning-muted/80"
         >
           <AlertCircle className="w-3 h-3 mr-1" />
           {t("status.badges.manually_disabled")}
@@ -149,7 +149,7 @@ function StatusPageImpl() {
       return (
         <Badge
           variant="destructive"
-          className="bg-red-100 text-red-800 hover:bg-red-200 dark:bg-red-900 dark:text-red-200"
+          className="bg-destructive/10 text-destructive hover:bg-destructive/20"
         >
           <XCircle className="w-3 h-3 mr-1" />
           {t("status.badges.auto_disabled")}
@@ -159,7 +159,7 @@ function StatusPageImpl() {
       return (
         <Badge
           variant="outline"
-          className="bg-gray-100 text-gray-800 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-200"
+          className="bg-muted text-muted-foreground hover:bg-muted/80"
         >
           <AlertCircle className="w-3 h-3 mr-1" />
           {t("status.badges.unknown")}
@@ -177,7 +177,7 @@ function StatusPageImpl() {
       return (
         <Badge
           variant="default"
-          className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200"
+          className="bg-success-muted text-success-foreground"
         >
           {t("status.speed.fast")}
         </Badge>
@@ -186,7 +186,7 @@ function StatusPageImpl() {
       return (
         <Badge
           variant="secondary"
-          className="bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200"
+          className="bg-warning-muted text-warning-foreground"
         >
           {t("status.speed.normal")}
         </Badge>
@@ -195,7 +195,7 @@ function StatusPageImpl() {
       return (
         <Badge
           variant="destructive"
-          className="bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200"
+          className="bg-destructive/10 text-destructive"
         >
           {t("status.speed.slow")}
         </Badge>
@@ -265,9 +265,9 @@ function StatusPageImpl() {
           <Card>
             <CardContent className="p-6">
               <div className="flex items-center space-x-2">
-                <CheckCircle className="w-5 h-5 text-green-600" />
+                <CheckCircle className="w-5 h-5 text-success" />
                 <div>
-                  <p className="text-2xl font-bold text-green-600">
+                  <p className="text-2xl font-bold text-success">
                     {enabledChannels}
                   </p>
                   <p className="text-sm text-muted-foreground">
@@ -280,9 +280,9 @@ function StatusPageImpl() {
           <Card>
             <CardContent className="p-6">
               <div className="flex items-center space-x-2">
-                <XCircle className="w-5 h-5 text-red-600" />
+                <XCircle className="w-5 h-5 text-destructive" />
                 <div>
-                  <p className="text-2xl font-bold text-red-600">
+                  <p className="text-2xl font-bold text-destructive">
                     {disabledChannels}
                   </p>
                   <p className="text-sm text-muted-foreground">
@@ -295,9 +295,9 @@ function StatusPageImpl() {
           <Card>
             <CardContent className="p-6">
               <div className="flex items-center space-x-2">
-                <Activity className="w-5 h-5 text-blue-600" />
+                <Activity className="w-5 h-5 text-info" />
                 <div>
-                  <p className="text-2xl font-bold text-blue-600">
+                  <p className="text-2xl font-bold text-info">
                     {searchTerm ? displayedChannels : totalCount}
                   </p>
                   <p className="text-sm text-muted-foreground">

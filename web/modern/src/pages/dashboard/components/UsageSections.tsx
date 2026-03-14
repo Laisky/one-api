@@ -46,7 +46,7 @@ export const ModelUsageSection = ({
   onMetricChange,
   t,
 }: ModelUsageProps) => (
-  <div className="bg-white dark:bg-gray-900 rounded-lg border p-6 mb-6">
+  <div className="bg-card rounded-lg border p-6 mb-6">
     <div className="flex items-center justify-between mb-6">
       <h3 className="text-lg font-semibold">{title}</h3>
       <Select
@@ -90,7 +90,7 @@ export const EntityUsageSection = ({
   tickFormatter,
   tooltipContent,
 }: BaseUsageProps) => (
-  <div className="bg-white dark:bg-gray-900 rounded-lg border p-6 mb-6">
+  <div className="bg-card rounded-lg border p-6 mb-6">
     <div className="flex items-center justify-between mb-6">
       <h3 className="text-lg font-semibold">{title}</h3>
       {subtitle && (

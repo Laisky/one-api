@@ -61,10 +61,9 @@ export function Header() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [isLogoutDialogOpen, setLogoutDialogOpen] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
-  const { isMobile, isTablet } = useResponsive();
+  const { isMobile } = useResponsive();
 
   const isAdmin = user?.role >= 10;
-  const chatLink = localStorage.getItem('chat_link');
 
   const navigationItems = [
     { name: t('common.dashboard'), to: '/dashboard', show: true },
@@ -89,8 +88,6 @@ export function Header() {
       icon: navigationIcons[item.to as keyof typeof navigationIcons],
       isActive: location.pathname === item.to,
     }));
-
-  const isActivePage = (path: string) => location.pathname === path;
 
   const performLogout = async () => {
     setIsLoggingOut(true);
@@ -172,7 +169,7 @@ export function Header() {
                 <div className="flex items-center space-x-2">
                   <Link
                     to="/register"
-                    className={`font-medium text-muted-foreground hover:text-primary transition-colors ${isMobile ? 'text-sm' : 'text-sm'}`}
+                    className="font-medium text-sm text-muted-foreground hover:text-primary transition-colors"
                   >
                     {t('common.register')}
                   </Link>

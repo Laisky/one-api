@@ -156,7 +156,7 @@ export function UsageCharts({
 
   return (
     <>
-      <div className="bg-white dark:bg-gray-900 rounded-lg border p-6 mb-6">
+      <div className="bg-card rounded-lg border p-6 mb-6">
         <div className="flex items-center justify-between mb-6">
           <h3 className="text-lg font-semibold">
             {t("dashboard.sections.model_usage")}
@@ -216,7 +216,7 @@ export function UsageCharts({
         </ResponsiveContainer>
       </div>
 
-      <div className="bg-white dark:bg-gray-900 rounded-lg border p-6 mb-6">
+      <div className="bg-card rounded-lg border p-6 mb-6">
         <div className="flex items-center justify-between mb-6">
           <h3 className="text-lg font-semibold">
             {t("dashboard.sections.user_usage")}
@@ -256,7 +256,7 @@ export function UsageCharts({
         </ResponsiveContainer>
       </div>
 
-      <div className="bg-white dark:bg-gray-900 rounded-lg border p-6 mb-6">
+      <div className="bg-card rounded-lg border p-6 mb-6">
         <div className="flex items-center justify-between mb-6">
           <h3 className="text-lg font-semibold">
             {t("dashboard.sections.token_usage")}

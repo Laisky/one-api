@@ -42,4 +42,11 @@ i18n
     },
   });
 
+// Sync the <html lang> attribute with the current i18next language
+const syncHtmlLang = (lng: string) => {
+  document.documentElement.lang = lng;
+};
+syncHtmlLang(i18n.language);
+i18n.on("languageChanged", syncHtmlLang);
+
 export default i18n;

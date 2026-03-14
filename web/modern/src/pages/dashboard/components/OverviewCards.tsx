@@ -39,7 +39,7 @@ export function OverviewCards({
 
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 mb-6">
-      <div className="bg-white dark:bg-gray-900 rounded-lg border p-4">
+      <div className="bg-card rounded-lg border p-4">
         <div className="text-sm text-muted-foreground">
           {t("dashboard.cards.total_requests")}
         </div>
@@ -52,7 +52,7 @@ export function OverviewCards({
           })}
         </div>
       </div>
-      <div className="bg-white dark:bg-gray-900 rounded-lg border p-4">
+      <div className="bg-card rounded-lg border p-4">
         <div className="text-sm text-muted-foreground">
           {t("dashboard.cards.quota_used")}
         </div>
@@ -63,7 +63,7 @@ export function OverviewCards({
           })}
         </div>
       </div>
-      <div className="bg-white dark:bg-gray-900 rounded-lg border p-4">
+      <div className="bg-card rounded-lg border p-4">
         <div className="text-sm text-muted-foreground">
           {t("dashboard.cards.tokens_consumed")}
         </div>
@@ -76,7 +76,7 @@ export function OverviewCards({
           })}
         </div>
       </div>
-      <div className="bg-white dark:bg-gray-900 rounded-lg border p-4">
+      <div className="bg-card rounded-lg border p-4">
         <div className="text-sm text-muted-foreground">
           {t("dashboard.cards.avg_cost")}
         </div>

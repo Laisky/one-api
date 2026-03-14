@@ -86,7 +86,7 @@ const CHANNEL_TYPES: Record<number, { name: string; color: string }> = {
 
 const formatResponseTime = (time?: number) => {
   if (!time) return '-';
-  const color = time < 1000 ? 'text-green-600' : time < 3000 ? 'text-yellow-600' : 'text-red-600';
+  const color = time < 1000 ? 'text-success' : time < 3000 ? 'text-warning' : 'text-destructive';
   return <span className={cn('font-mono text-sm', color)}>{time}ms</span>;
 };
 
@@ -130,13 +130,13 @@ export function ChannelsPage() {
     }
     if ((priority ?? 0) < 0) {
       return (
-        <Badge variant="secondary" className="bg-yellow-100 text-yellow-800">
+        <Badge variant="secondary" className="bg-warning-muted text-warning-foreground">
           {t('channels.status.paused')}
         </Badge>
       );
     }
     return (
-      <Badge variant="default" className="bg-green-100 text-green-800">
+      <Badge variant="default" className="bg-success-muted text-success-foreground">
         {t('channels.status.active')}
       </Badge>
     );
@@ -525,7 +525,7 @@ export function ChannelsPage() {
               onClick={() => manage(channel.id, channel.status === 1 ? 'disable' : 'enable')}
               className={cn(
                 'gap-1',
-                channel.status === 1 ? 'text-orange-600 hover:text-orange-700' : 'text-green-600 hover:text-green-700'
+                channel.status === 1 ? 'text-warning hover:text-warning/80' : 'text-success hover:text-success/80'
               )}
             >
               {channel.status === 1 ? t('channels.actions.disable') : t('channels.actions.enable')}
@@ -639,7 +639,7 @@ export function ChannelsPage() {
                   onClick={() => manage(row.id, row.status === 1 ? 'disable' : 'enable')}
                   title={row.status === 1 ? t('channels.actions.disable') : t('channels.actions.enable')}
                   aria-label={row.status === 1 ? t('channels.actions.disable') : t('channels.actions.enable')}
-                  className={row.status === 1 ? 'text-orange-600 hover:text-orange-700' : 'text-green-600 hover:text-green-700'}
+                  className={row.status === 1 ? 'text-warning hover:text-warning/80' : 'text-success hover:text-success/80'}
                   icon={row.status === 1 ? <Ban className="h-4 w-4" /> : <CheckCircle className="h-4 w-4" />}
                 />
                 <ListActionButton

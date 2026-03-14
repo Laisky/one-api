@@ -120,7 +120,6 @@ export function OperationSettings() {
     try {
       // Unified API call - complete URL with /api prefix
       await api.put('/api/option/', { key, value: String(value) });
-      console.log(`Updated ${key}: ${value}`);
     } catch (error) {
       console.error(`Error updating ${key}:`, error);
     }
@@ -157,7 +156,7 @@ export function OperationSettings() {
       const res = await api.delete(`/api/log/?target_timestamp=${timestamp}`);
       const { success, message, data } = res.data;
       if (success) {
-        console.log(t('operation_settings.logs.cleared_success', { count: data }));
+        // Log clearing succeeded
       } else {
         console.error(t('operation_settings.logs.clear_failed', { message }));
       }

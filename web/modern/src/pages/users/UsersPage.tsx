@@ -244,7 +244,7 @@ export function UsersPage() {
               quota: quotaLabel,
             })}
           >
-            {row.original.quota === -1 ? <span className="text-green-600 font-semibold">{quotaLabel}</span> : quotaLabel}
+            {row.original.quota === -1 ? <span className="text-success font-semibold">{quotaLabel}</span> : quotaLabel}
           </span>
         );
       },
@@ -398,7 +398,7 @@ export function UsersPage() {
                     manage(row.id, row.status === 1 ? 'disable' : 'enable', idx);
                   }}
                   title={row.status === 1 ? tr('actions.disable', 'Disable') : tr('actions.enable', 'Enable')}
-                  className={row.status === 1 ? 'text-orange-600 hover:text-orange-700' : 'text-green-600 hover:text-green-700'}
+                  className={row.status === 1 ? 'text-warning hover:text-warning/80' : 'text-success hover:text-success/80'}
                   icon={row.status === 1 ? <Ban className="h-4 w-4" /> : <CheckCircle className="h-4 w-4" />}
                 />
                 <ListActionButton

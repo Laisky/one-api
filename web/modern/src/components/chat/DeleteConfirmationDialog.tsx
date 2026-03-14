@@ -60,8 +60,8 @@ export function DeleteConfirmationDialog({
     switch (messageRole) {
       case 'user': return 'text-primary'
       case 'assistant': return 'text-secondary-foreground'
-      case 'system': return 'text-indigo-600 dark:text-indigo-400'
-      case 'error': return 'text-red-600 dark:text-red-400'
+      case 'system': return 'text-info'
+      case 'error': return 'text-destructive'
       default: return 'text-foreground'
     }
   }

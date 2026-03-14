@@ -43,9 +43,6 @@ const renderQuotaWithPrompt = (quota: number): string => {
   const usd =
     Number.isFinite(quota) && quotaPerUnit > 0 ? quota / quotaPerUnit : NaN;
   const usdValue = Number.isFinite(usd) ? usd.toFixed(2) : "0.00";
-  console.log(
-    `[QUOTA_DEBUG] renderQuota quota=${String(quota)} ratioRaw=${String(quotaPerUnitRaw)} ratio=${String(quotaPerUnit)} usd=${String(usd)} usdValue=${usdValue}`
-  );
   return `$${usdValue}`;
 };
 
@@ -104,11 +101,6 @@ export function EditTokenPage() {
 
   const watchUnlimitedQuota = form.watch("unlimited_quota");
   const watchRemainQuota = form.watch("remain_quota");
-  useEffect(() => {
-    console.log(
-      `[QUOTA_DEBUG] watchRemainQuota=${String(watchRemainQuota)} type=${typeof watchRemainQuota}`
-    );
-  }, [watchRemainQuota]);
 
   const loadToken = async () => {
     if (!tokenId) return;
@@ -641,9 +633,6 @@ export function EditTokenPage() {
                         Number.isFinite(numeric) && numeric >= 0
                           ? renderQuotaWithPrompt(numeric)
                           : "$0.00";
-                      console.log(
-                        `[QUOTA_DEBUG] remainQuota raw=${String(raw)} fallback=${String(fallback)} current=${String(current)} numeric=${String(numeric)} usd=${usdLabel} type=${typeof raw}`
-                      );
                       return (
                         <FormItem>
                           <LabelWithHelp
@@ -667,9 +656,6 @@ export function EditTokenPage() {
                               className={errorClass("remain_quota")}
                               {...field}
                               onChange={(e) => {
-                                console.log(
-                                  `[QUOTA_DEBUG] onChange remain_quota value=${String(e.target.value)}`
-                                );
                                 // Pass original event to RHF (prevents libs reading value.name from breaking)
                                 field.onChange(e);
                               }}

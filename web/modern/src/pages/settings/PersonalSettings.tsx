@@ -331,8 +331,6 @@ export function PersonalSettings() {
       const response = await api.put("/api/user/self", payload);
       const { success, message } = response.data;
       if (success) {
-        // Show success message
-        console.log(t("personal_settings.profile_info.success"));
         // Update the form to clear password
         form.setValue("password", "");
       } else {
@@ -513,10 +511,10 @@ export function PersonalSettings() {
             </div>
           )}
           {totpEnabled ? (
-            <Alert className="bg-green-50 dark:bg-green-950/30 border-green-200 dark:border-green-900">
+            <Alert className="bg-success-muted border-success-border">
               <div className="flex flex-col space-y-4">
                 <div>
-                  <AlertTitle className="text-green-800 dark:text-green-300">
+                  <AlertTitle className="text-success-foreground">
                     {t("personal_settings.totp.enabled_title")}
                   </AlertTitle>
                   <AlertDescription>
@@ -550,10 +548,10 @@ export function PersonalSettings() {
               </div>
             </Alert>
           ) : (
-            <Alert className="bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-900">
+            <Alert className="bg-info-muted border-info-border">
               <div className="flex flex-col space-y-4">
                 <div>
-                  <AlertTitle className="text-blue-800 dark:text-blue-300">
+                  <AlertTitle className="text-info-foreground">
                     {t("personal_settings.totp.disabled_title")}
                   </AlertTitle>
                   <AlertDescription>

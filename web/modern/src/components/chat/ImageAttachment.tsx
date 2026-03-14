@@ -610,7 +610,7 @@ export function ImageAttachmentComponent({
 
       {/* Processing progress bar */}
       {isProcessing && (
-        <div className="w-full bg-gray-200 rounded-full h-2 dark:bg-gray-700">
+        <div className="w-full bg-muted rounded-full h-2">
           <div
             className="bg-primary h-2 rounded-full transition-all duration-300 ease-out"
             style={{ width: `${processingProgress}%` }}
@@ -621,7 +621,7 @@ export function ImageAttachmentComponent({
       {/* Validation Errors Display */}
       {validationErrors.length > 0 && (
         <div className="space-y-2">
-          <div className="flex items-center gap-2 text-red-600 dark:text-red-400">
+          <div className="flex items-center gap-2 text-destructive">
             <AlertCircle className="h-4 w-4" />
             <span className="text-sm font-medium">
               {validationErrors.length === 1 ? 'File validation error:' : `${validationErrors.length} file validation errors:`}
@@ -629,15 +629,15 @@ export function ImageAttachmentComponent({
           </div>
           <div className="space-y-2 max-h-32 overflow-y-auto">
             {validationErrors.map((error, index) => (
-              <Card key={index} className="border-red-200 bg-red-50 dark:border-red-800 dark:bg-red-950/20">
+              <Card key={index} className="border-destructive/20 bg-destructive/5">
                 <CardContent className="p-3">
                   <div className="flex items-start gap-2">
-                    <FileX className="h-4 w-4 text-red-500 mt-0.5 flex-shrink-0" />
+                    <FileX className="h-4 w-4 text-destructive mt-0.5 flex-shrink-0" />
                     <div className="flex-1 min-w-0">
-                      <div className="text-sm font-medium text-red-800 dark:text-red-200 truncate" title={error.fileName}>
+                      <div className="text-sm font-medium text-destructive truncate" title={error.fileName}>
                         {error.fileName}
                       </div>
-                      <div className="text-xs text-red-600 dark:text-red-400 mt-1">
+                      <div className="text-xs text-destructive/80 mt-1">
                         {error.reason}
                       </div>
                     </div>
@@ -645,7 +645,7 @@ export function ImageAttachmentComponent({
                       variant="ghost"
                       size="sm"
                       onClick={() => setValidationErrors(prev => prev.filter((_, i) => i !== index))}
-                      className="h-6 w-6 p-0 text-red-500 hover:text-red-700 hover:bg-red-100 dark:hover:bg-red-900/20"
+                      className="h-6 w-6 p-0 text-destructive hover:text-destructive/80 hover:bg-destructive/10"
                       title="Dismiss error"
                     >
                       <X className="h-3 w-3" />

@@ -66,12 +66,12 @@ export function MCPServersPage() {
         header: t('mcp.list.columns.status', 'Status'),
         cell: ({ row }) =>
           row.original.status === 1 ? (
-            <span className="inline-flex items-center gap-1 text-green-600">
+            <span className="inline-flex items-center gap-1 text-success">
               <CheckCircle className="h-4 w-4" />
               {t('mcp.status.enabled', 'Enabled')}
             </span>
           ) : (
-            <span className="inline-flex items-center gap-1 text-red-600">
+            <span className="inline-flex items-center gap-1 text-destructive">
               <XCircle className="h-4 w-4" />
               {t('mcp.status.disabled', 'Disabled')}
             </span>
@@ -411,7 +411,7 @@ export function MCPServersPage() {
                 onClick={() => toggleStatus(row)}
                 title={row.status === 1 ? t('mcp.list.actions.disable', 'Disable') : t('mcp.list.actions.enable', 'Enable')}
                 aria-label={row.status === 1 ? t('mcp.list.actions.disable', 'Disable') : t('mcp.list.actions.enable', 'Enable')}
-                className={row.status === 1 ? 'text-amber-600' : 'text-emerald-600'}
+                className={row.status === 1 ? 'text-warning' : 'text-success'}
                 icon={row.status === 1 ? <Ban className="h-4 w-4" /> : <CheckCircle className="h-4 w-4" />}
               />
               <ListActionButton

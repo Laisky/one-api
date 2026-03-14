@@ -26,12 +26,12 @@ export function TopModels({ modelLeaders }: TopModelsProps) {
   const { t } = useTranslation();
 
   return (
-    <div className="bg-white dark:bg-gray-900 rounded-lg border p-6 mb-6">
+    <div className="bg-card rounded-lg border p-6 mb-6">
       <h3 className="text-lg font-semibold mb-4">
         {t("dashboard.top_models.title")}
       </h3>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="rounded-lg border bg-white dark:bg-gray-900/70 p-4">
+        <div className="rounded-lg border bg-card/70 p-4">
           <div className="text-sm text-muted-foreground">
             {t("dashboard.top_models.most_requests")}
           </div>
@@ -48,7 +48,7 @@ export function TopModels({ modelLeaders }: TopModelsProps) {
             </div>
           )}
         </div>
-        <div className="rounded-lg border bg-white dark:bg-gray-900/70 p-4">
+        <div className="rounded-lg border bg-card/70 p-4">
           <div className="text-sm text-muted-foreground">
             {t("dashboard.top_models.most_tokens")}
           </div>
@@ -65,7 +65,7 @@ export function TopModels({ modelLeaders }: TopModelsProps) {
             </div>
           )}
         </div>
-        <div className="rounded-lg border bg-white dark:bg-gray-900/70 p-4">
+        <div className="rounded-lg border bg-card/70 p-4">
           <div className="text-sm text-muted-foreground">
             {t("dashboard.top_models.highest_cost")}
           </div>

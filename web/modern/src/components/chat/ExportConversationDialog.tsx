@@ -170,7 +170,7 @@ export function ExportConversationDialog({
               variant="outline"
               className="flex flex-col items-center justify-center gap-2 h-28 w-48"
             >
-              <FileJson className="h-8 w-8 text-green-600" />
+              <FileJson className="h-8 w-8 text-success" />
               <div className="text-center">
                 <div className="font-medium">{t('playground.export.button_label')}</div>
                 <div className="text-xs text-muted-foreground">{t('playground.export.button_sublabel')}</div>

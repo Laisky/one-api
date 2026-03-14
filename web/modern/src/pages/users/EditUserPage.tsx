@@ -47,9 +47,6 @@ const renderQuotaWithPrompt = (quota: number): string => {
   const usd =
     Number.isFinite(quota) && quotaPerUnit > 0 ? quota / quotaPerUnit : NaN;
   const usdValue = Number.isFinite(usd) ? usd.toFixed(2) : "0.00";
-  console.log(
-    `[QUOTA_DEBUG][User] renderQuotaWithPrompt quota=${String(quota)} ratioRaw=${String(quotaPerUnitRaw)} ratio=${String(quotaPerUnit)} usd=${String(usd)} usdValue=${usdValue}`
-  );
   return `$${usdValue}`;
 };
 
@@ -184,11 +181,6 @@ export function EditUserPage() {
   });
 
   const watchQuota = useWatch({ control: form.control, name: "quota" });
-  useEffect(() => {
-    console.log(
-      `[QUOTA_DEBUG][User] watchQuota=${String(watchQuota)} type=${typeof watchQuota}`
-    );
-  }, [watchQuota]);
 
   const loadUser = async () => {
     if (!userId) return;
@@ -668,9 +660,6 @@ export function EditUserPage() {
                             className={errorClass("quota")}
                             {...field}
                             onChange={(e) => {
-                              console.log(
-                                `[QUOTA_DEBUG][User] onChange value=${String(e.target.value)}`
-                              );
                               field.onChange(e);
                             }}
                           />

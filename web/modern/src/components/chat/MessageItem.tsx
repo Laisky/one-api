@@ -382,7 +382,7 @@ export function MessageItem({
             {/* Header section with error icon and actions */}
             <div className="flex items-center justify-between mb-2">
               <div className="flex items-center gap-2">
-                <div className="w-8 h-8 bg-red-500 rounded-full flex items-center justify-center">
+                <div className="w-8 h-8 bg-destructive rounded-full flex items-center justify-center">
                   <AlertCircle className="h-4 w-4 text-white" />
                 </div>
                 <div className="text-xs text-muted-foreground font-medium">
@@ -394,7 +394,7 @@ export function MessageItem({
               <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-200">
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" size="sm" className="h-6 w-6 p-0 text-red-500/70 hover:text-red-500">
+                    <Button variant="ghost" size="sm" className="h-6 w-6 p-0 text-destructive/70 hover:text-destructive">
                       <MoreHorizontal className="h-3 w-3" />
                     </Button>
                   </DropdownMenuTrigger>
@@ -424,7 +424,7 @@ export function MessageItem({
             </div>
 
             {/* Error message content card */}
-            <div className="rounded-lg px-4 py-3 bg-red-50 border border-red-200 text-red-800 dark:bg-red-900/20 dark:border-red-800 dark:text-red-300 shadow-md">
+            <div className="rounded-lg px-4 py-3 bg-destructive/5 border border-destructive/20 text-destructive shadow-md">
               <div className="whitespace-pre-wrap">{getMessageStringContent(message.content)}</div>
             </div>
           </div>

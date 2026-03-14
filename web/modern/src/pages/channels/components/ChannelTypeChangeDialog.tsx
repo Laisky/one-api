@@ -48,7 +48,7 @@ export function ChannelTypeChangeDialog({
       <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <AlertTriangle className="h-5 w-5 text-yellow-500" />
+            <AlertTriangle className="h-5 w-5 text-warning" />
             {tr('type_change.title', 'Change Channel Type?')}
           </DialogTitle>
           <DialogDescription className="space-y-2 pt-2">
@@ -59,7 +59,7 @@ export function ChannelTypeChangeDialog({
                 { fromType, toType }
               )}
             </p>
-            <p className="text-yellow-600 font-medium">
+            <p className="text-warning font-medium">
               {tr(
                 'type_change.warning',
                 'Warning: This may reset some configuration fields specific to the previous channel type. Any unsaved changes may be lost.'

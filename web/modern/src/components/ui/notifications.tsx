@@ -136,10 +136,10 @@ export const NotificationsViewport: React.FC<{
           key={n.id}
           className={[
             'group relative w-full rounded-md border px-4 py-3 shadow-sm transition',
-            n.type === 'success' && 'border-green-300 bg-green-50 text-green-900',
-            n.type === 'error' && 'border-red-300 bg-red-50 text-red-900',
-            n.type === 'warning' && 'border-yellow-300 bg-yellow-50 text-yellow-900',
-            n.type === 'info' && 'border-blue-300 bg-blue-50 text-blue-900',
+            n.type === 'success' && 'border-success-border bg-success-muted text-success-foreground',
+            n.type === 'error' && 'border-destructive/30 bg-destructive/5 text-destructive',
+            n.type === 'warning' && 'border-warning-border bg-warning-muted text-warning-foreground',
+            n.type === 'info' && 'border-info-border bg-info-muted text-info-foreground',
           ].join(' ')}
           aria-live="polite"
         >
@@ -171,10 +171,10 @@ export const NotificationsViewport: React.FC<{
             <div
               className={[
                 'h-0.5 w-full origin-left animate-[shrink_3s_linear_forwards]',
-                n.type === 'success' && 'bg-green-500',
-                n.type === 'error' && 'bg-red-500',
-                n.type === 'warning' && 'bg-yellow-500',
-                n.type === 'info' && 'bg-blue-500',
+                n.type === 'success' && 'bg-success',
+                n.type === 'error' && 'bg-destructive',
+                n.type === 'warning' && 'bg-warning',
+                n.type === 'info' && 'bg-info',
               ].join(' ')}
               style={{ animationDuration: `${n.durationMs}ms` }}
             />

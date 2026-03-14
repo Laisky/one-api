@@ -48,45 +48,16 @@ export function ThemeProvider({
       }
     }
 
-    // Apply theme immediately
     applyTheme()
 
-    // Set up system theme monitoring for "system" mode
-    let intervalId: NodeJS.Timeout | null = null
-    let mediaQuery: MediaQueryList | null = null
+    // Listen for OS theme changes when in "system" mode
+    if (theme !== "system") return
 
-    if (theme === "system") {
-      // Check every second for system preference changes
-      intervalId = setInterval(applyTheme, 1000)
+    const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)")
+    const handleChange = () => applyTheme()
 
-      // Also listen for immediate changes via media query
-      mediaQuery = window.matchMedia("(prefers-color-scheme: dark)")
-      const handleChange = () => applyTheme()
-
-      // Use the modern API if available, fallback to legacy
-      if (mediaQuery.addEventListener) {
-        mediaQuery.addEventListener("change", handleChange)
-      } else {
-        // Legacy browsers
-        mediaQuery.addListener(handleChange)
-      }
-    }
-
-    // Cleanup function
-    return () => {
-      if (intervalId) {
-        clearInterval(intervalId)
-      }
-      if (mediaQuery) {
-        const handleChange = () => applyTheme()
-        if (mediaQuery.removeEventListener) {
-          mediaQuery.removeEventListener("change", handleChange)
-        } else {
-          // Legacy browsers
-          mediaQuery.removeListener(handleChange)
-        }
-      }
-    }
+    mediaQuery.addEventListener("change", handleChange)
+    return () => mediaQuery.removeEventListener("change", handleChange)
   }, [theme])
 
   const value = {
