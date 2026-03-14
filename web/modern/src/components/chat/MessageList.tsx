@@ -2,7 +2,7 @@ import { MessageItem } from '@/components/chat/MessageItem'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Message } from '@/lib/utils'
 import { Bot } from 'lucide-react'
-import { useEffect, useRef } from 'react'
+import { useCallback, useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 
 interface MessageListProps {
@@ -36,23 +36,23 @@ export function MessageList({
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
   // Scroll to bottom when new messages arrive - use ScrollArea's viewport for proper containment
-  const scrollToBottom = () => {
+  const scrollToBottom = useCallback(() => {
     if (scrollAreaRef.current) {
       const viewport = scrollAreaRef.current.querySelector('[data-radix-scroll-area-viewport]')
       if (viewport) {
-        // Use scrollTop to scroll within the ScrollArea viewport, not the entire page
-        setTimeout(() => {
+        // Use requestAnimationFrame to scroll after content is rendered
+        requestAnimationFrame(() => {
           viewport.scrollTop = viewport.scrollHeight
-        }, 100) // Small delay to ensure content is rendered
+        })
       }
     }
-  }
+  }, [])
 
   // Focus mode: Auto-scroll to bottom continuously while streaming
   useEffect(() => {
     if (!focusModeEnabled || !isStreaming) return
     scrollToBottom()
-  }, [messages])
+  }, [messages, focusModeEnabled, isStreaming, scrollToBottom])
 
   return (
     <ScrollArea ref={scrollAreaRef} className="h-full p-4">

@@ -17,16 +17,16 @@ interface TimeSeriesChartsProps {
 const GradientDefs = () => (
   <defs>
     <linearGradient id="requestsGradient" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stopColor="#6366F1" stopOpacity={0.8} />
-      <stop offset="100%" stopColor="#6366F1" stopOpacity={0.1} />
+      <stop offset="0%" stopColor="#2A7A82" stopOpacity={0.8} />
+      <stop offset="100%" stopColor="#2A7A82" stopOpacity={0.1} />
     </linearGradient>
     <linearGradient id="quotaGradient" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stopColor="#0EA5E9" stopOpacity={0.8} />
-      <stop offset="100%" stopColor="#0EA5E9" stopOpacity={0.1} />
+      <stop offset="0%" stopColor="#C27530" stopOpacity={0.8} />
+      <stop offset="100%" stopColor="#C27530" stopOpacity={0.1} />
     </linearGradient>
     <linearGradient id="tokensGradient" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stopColor="#8B5CF6" stopOpacity={0.8} />
-      <stop offset="100%" stopColor="#8B5CF6" stopOpacity={0.1} />
+      <stop offset="0%" stopColor="#4A7A5C" stopOpacity={0.8} />
+      <stop offset="100%" stopColor="#4A7A5C" stopOpacity={0.1} />
     </linearGradient>
   </defs>
 );
@@ -37,7 +37,7 @@ export function TimeSeriesCharts({ timeSeries }: TimeSeriesChartsProps) {
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
       <div className="bg-card rounded-lg border p-4">
-        <h3 className="font-medium mb-4 text-indigo-500 dark:text-indigo-400">
+        <h3 className="font-medium mb-4 text-primary">
           {t("dashboard.labels.requests")}
         </h3>
         <ResponsiveContainer width="100%" height={140}>
@@ -67,7 +67,7 @@ export function TimeSeriesCharts({ timeSeries }: TimeSeriesChartsProps) {
       </div>
 
       <div className="bg-card rounded-lg border p-4">
-        <h3 className="font-medium mb-4 text-sky-500 dark:text-sky-400">
+        <h3 className="font-medium mb-4 text-[#C27530]">
           {t("dashboard.labels.quota")}
         </h3>
         <ResponsiveContainer width="100%" height={140}>
@@ -97,7 +97,7 @@ export function TimeSeriesCharts({ timeSeries }: TimeSeriesChartsProps) {
       </div>
 
       <div className="bg-card rounded-lg border p-4">
-        <h3 className="font-medium mb-4 text-violet-500 dark:text-violet-400">
+        <h3 className="font-medium mb-4 text-[#4A7A5C]">
           {t("dashboard.labels.tokens")}
         </h3>
         <ResponsiveContainer width="100%" height={140}>

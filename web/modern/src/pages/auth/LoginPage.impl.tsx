@@ -221,7 +221,7 @@ export function LoginPage() {
         <CardHeader className="text-center">
           {systemStatus.logo && (
             <div className="flex justify-center mb-4">
-              <img src={systemStatus.logo} alt={systemStatus.system_name ? `${systemStatus.system_name} logo` : 'Site logo'} className="h-12 w-auto" />
+              <img src={systemStatus.logo} alt={systemStatus.system_name ? `${systemStatus.system_name} logo` : 'Site logo'} className="h-12 w-auto" decoding="async" />
             </div>
           )}
           <CardTitle className="text-2xl">

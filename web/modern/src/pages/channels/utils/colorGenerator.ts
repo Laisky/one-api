@@ -4,25 +4,25 @@
  * without needing hard-coded color values.
  */
 
-// HSL-based rainbow palette for better visual distribution
+// Professional earthy palette — no purple, no neon
 const RAINBOW_PALETTE = [
-  '#ef4444', // red-500
-  '#f97316', // orange-500
-  '#f59e0b', // amber-500
-  '#eab308', // yellow-500
-  '#84cc16', // lime-500
-  '#22c55e', // green-500
-  '#10b981', // emerald-500
-  '#14b8a6', // teal-500
-  '#06b6d4', // cyan-500
-  '#0ea5e9', // sky-500
-  '#3b82f6', // blue-500
-  '#6366f1', // indigo-500
-  '#8b5cf6', // violet-500
-  '#a855f7', // purple-500
-  '#d946ef', // fuchsia-500
-  '#ec4899', // pink-500
-  '#f43f5e', // rose-500
+  '#2A7A82', // teal
+  '#C27530', // amber
+  '#4A7A5C', // sage
+  '#5A7A9A', // steel blue
+  '#B85C4A', // terracotta
+  '#3D8B6E', // forest
+  '#8B7355', // bronze
+  '#6A8FA0', // dusty blue
+  '#A0785A', // sienna
+  '#7A8D5C', // olive
+  '#2E8B8B', // dark teal
+  '#64748B', // slate
+  '#4A9090', // cyan-teal
+  '#5A8A6A', // muted green
+  '#7A6B5A', // warm gray
+  '#9A6B4A', // copper
+  '#3A7070', // deep teal
 ]
 
 /**
@@ -64,19 +64,19 @@ export function getChannelTypeHSL(
  * Used as a fallback for channels that still have string color definitions.
  */
 export const LEGACY_COLOR_MAP: Record<string, string> = {
-  green: '#22c55e',
-  olive: '#84cc16',
+  green: '#4A7A5C',
+  olive: '#7A8D5C',
   black: '#374151',
-  orange: '#f97316',
-  blue: '#3b82f6',
-  purple: '#a855f7',
-  violet: '#8b5cf6',
-  red: '#ef4444',
-  teal: '#14b8a6',
-  yellow: '#eab308',
-  pink: '#ec4899',
-  brown: '#92400e',
-  gray: '#6b7280',
+  orange: '#C27530',
+  blue: '#5A7A9A',
+  purple: '#6A8FA0',
+  violet: '#64748B',
+  red: '#B85C4A',
+  teal: '#2A7A82',
+  yellow: '#A0785A',
+  pink: '#9A6B4A',
+  brown: '#8B7355',
+  gray: '#64748B',
 }
 
 /**

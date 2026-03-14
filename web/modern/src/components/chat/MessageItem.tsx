@@ -299,22 +299,22 @@ export function MessageItem({
         <div className="flex justify-center mb-6 group">
           <div className="flex gap-3 max-w-4xl w-full">
             <div className="flex-shrink-0">
-              <div className="w-8 h-8 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-full flex items-center justify-center shadow-sm">
-                <Settings className="h-4 w-4 text-white" />
+              <div className="w-8 h-8 bg-primary rounded-full flex items-center justify-center shadow-sm">
+                <Settings className="h-4 w-4 text-primary-foreground" />
               </div>
             </div>
-            <div className="flex-1 rounded-lg px-4 py-3 bg-gradient-to-r from-indigo-50/80 to-purple-50/80 dark:from-indigo-950/40 dark:to-purple-950/40 border border-indigo-200/50 dark:border-indigo-800/50 shadow-sm backdrop-blur-sm">
+            <div className="flex-1 rounded-lg px-4 py-3 bg-muted/60 border border-border shadow-sm">
               <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center gap-2">
-                  <Settings className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
-                  <span className="font-medium text-sm text-indigo-800 dark:text-indigo-200">{t('playground.roles.system_message')}</span>
+                  <Settings className="h-4 w-4 text-primary" />
+                  <span className="font-medium text-sm text-foreground">{t('playground.roles.system_message')}</span>
                 </div>
 
                 {/* Message Actions */}
                 <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-200">
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="sm" className="h-6 w-6 p-0 text-indigo-600/70 dark:text-indigo-400/70 hover:text-indigo-600 dark:hover:text-indigo-400">
+                      <Button variant="ghost" size="sm" className="h-6 w-6 p-0 text-muted-foreground hover:text-foreground">
                         <MoreHorizontal className="h-3 w-3" />
                       </Button>
                     </DropdownMenuTrigger>
@@ -342,7 +342,7 @@ export function MessageItem({
                   </DropdownMenu>
                 </div>
               </div>
-              <div className="text-indigo-900 dark:text-indigo-100">
+              <div className="text-foreground">
                 <MarkdownRenderer
                   content={getMessageStringContent(message.content)}
                   className="text-sm [&>*:first-child]:mt-0 [&>*:last-child]:mb-0"
