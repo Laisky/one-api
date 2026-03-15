@@ -47,7 +47,7 @@ function SimpleImage({ src, alt, className = '', onDelete }: SimpleImageProps) {
           size="icon"
           onClick={onDelete}
           className="absolute top-2 right-2 h-8 w-8 p-0 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity duration-200 shadow-lg rounded-full"
-          title="Delete image"
+          aria-label="Delete image"
         >
           <X className="h-4 w-4" />
         </Button>
@@ -314,7 +314,7 @@ export function MessageItem({
                 <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-200">
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="sm" className="h-6 w-6 p-0 text-muted-foreground hover:text-foreground">
+                      <Button variant="ghost" size="sm" className="h-6 w-6 p-0 text-muted-foreground hover:text-foreground" aria-label={t('playground.actions.message_options')}>
                         <MoreHorizontal className="h-3 w-3" />
                       </Button>
                     </DropdownMenuTrigger>
@@ -394,7 +394,7 @@ export function MessageItem({
               <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-200">
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" size="sm" className="h-6 w-6 p-0 text-destructive/70 hover:text-destructive">
+                    <Button variant="ghost" size="sm" className="h-6 w-6 p-0 text-destructive/70 hover:text-destructive" aria-label={t('playground.actions.message_options')}>
                       <MoreHorizontal className="h-3 w-3" />
                     </Button>
                   </DropdownMenuTrigger>

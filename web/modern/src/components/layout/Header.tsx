@@ -12,6 +12,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { NavigationDrawer } from '@/components/ui/mobile-drawer';
 import { useResponsive } from '@/hooks/useResponsive';
+import { useSystemStatus } from '@/hooks/useSystemStatus';
 import { api } from '@/lib/api';
 import { useAuthStore } from '@/lib/stores/auth';
 import {
@@ -62,6 +63,7 @@ export function Header() {
   const [isLogoutDialogOpen, setLogoutDialogOpen] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const { isMobile } = useResponsive();
+  const { systemStatus } = useSystemStatus();
 
   const isAdmin = user?.role >= 10;
 
@@ -113,7 +115,7 @@ export function Header() {
             {/* Logo and Brand */}
             <div className="flex items-center flex-shrink-0">
               <Link to="/" className="text-xl font-bold hover:text-primary transition-colors truncate max-w-[55vw] sm:max-w-none mr-4">
-                {localStorage.getItem('system_name') || 'OneAPI'}
+                {systemStatus.system_name || 'OneAPI'}
               </Link>
             </div>
 

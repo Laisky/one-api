@@ -15,13 +15,13 @@
     border: 1px solid hsl(var(--border));
     border-radius: 0.5rem;
     background-color: hsl(var(--card));
-    box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1);
+    box-shadow: 0 1px 3px 0 hsl(0 0% 0% / 0.1);
     transition: box-shadow 0.2s ease-in-out;
   }
 
   .mobile-table tbody tr:hover,
   .mobile-table-row:hover {
-    box-shadow: 0 4px 12px 0 rgba(0, 0, 0, 0.15);
+    box-shadow: 0 4px 12px 0 hsl(0 0% 0% / 0.15);
   }
 
   /* Style table cells as label-value pairs */

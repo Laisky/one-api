@@ -67,7 +67,7 @@ export function PasswordResetPage() {
 
   if (isEmailSent) {
     return (
-      <div className="min-h-screen flex items-center justify-center p-4">
+      <main className="min-h-screen flex items-center justify-center p-4">
         <Card className="w-full max-w-md">
           <CardHeader className="text-center">
             <CardTitle className="text-2xl">
@@ -88,12 +88,12 @@ export function PasswordResetPage() {
             </Link>
           </CardContent>
         </Card>
-      </div>
+      </main>
     );
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4">
+    <main className="min-h-screen flex items-center justify-center p-4">
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
           <CardTitle className="text-2xl">{t("auth.reset.title")}</CardTitle>
@@ -142,7 +142,7 @@ export function PasswordResetPage() {
           </Form>
         </CardContent>
       </Card>
-    </div>
+    </main>
   );
 }
 

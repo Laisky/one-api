@@ -37,19 +37,8 @@ const UsersPage = lazy(() => import('@/pages/users/UsersPage').then(m => ({ defa
 const PlaygroundPage = lazy(() => import('@/pages/chat/PlaygroundPage'));
 
 // Dev tools — lazy loaded, tree-shaken in production
-const DevTools = lazy(() => Promise.all([
-  import('@/components/dev/responsive-debugger'),
-  import('@/components/dev/responsive-validator'),
-]).then(([debugger_, validator]) => ({
-  default: function DevToolsWrapper() {
-    return (
-      <>
-        <debugger_.ResponsiveDebugger />
-        <validator.ResponsiveValidator />
-      </>
-    );
-  },
-})));
+const ResponsiveDebugger = lazy(() => import('@/components/dev/responsive-debugger').then(m => ({ default: m.ResponsiveDebugger })));
+const ResponsiveValidator = lazy(() => import('@/components/dev/responsive-validator').then(m => ({ default: m.ResponsiveValidator })));
 
 // Minimal loading fallback — keeps layout stable during chunk load
 function PageLoader() {
@@ -146,7 +135,8 @@ function App() {
           {/* Development tools — tree-shaken in production by Vite's dead code elimination */}
           {process.env.NODE_ENV === 'development' && (
             <Suspense fallback={null}>
-              <DevTools />
+              <ResponsiveDebugger />
+              <ResponsiveValidator />
             </Suspense>
           )}
         </Router>

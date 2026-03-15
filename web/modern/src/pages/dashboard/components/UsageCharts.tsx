@@ -94,13 +94,9 @@ export function UsageCharts({
         }
       };
 
-      const isDark =
-        typeof document !== "undefined" &&
-        document.documentElement.classList.contains("dark");
-      const tooltipBg = isDark ? "rgba(17,24,39,1)" : "rgba(255,255,255,1)";
-      const tooltipText = isDark
-        ? "rgba(255,255,255,0.95)"
-        : "rgba(17,24,39,0.9)";
+      const root = typeof document !== "undefined" ? getComputedStyle(document.documentElement) : null;
+      const tooltipBg = root ? `hsl(${root.getPropertyValue("--popover").trim()})` : "#fff";
+      const tooltipText = root ? `hsl(${root.getPropertyValue("--popover-foreground").trim()})` : "#000";
 
       return (
         <div
@@ -111,7 +107,7 @@ export function UsageCharts({
             padding: "12px 16px",
             fontSize: "12px",
             color: tooltipText,
-            boxShadow: "0 8px 32px rgba(0, 0, 0, 0.12)",
+            boxShadow: "0 8px 32px hsl(0 0% 0% / 0.12)",
           }}
         >
           <div

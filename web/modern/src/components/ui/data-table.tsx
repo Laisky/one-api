@@ -143,8 +143,9 @@ export function DataTable<TData, TValue>({
               table.getRowModel().rows.map((row) => (
                 <TableRow key={row.id} data-state={row.getIsSelected() && 'selected'} className="mobile-table-row">
                   {row.getVisibleCells().map((cell) => {
+                    const meta = cell.column.columnDef.meta as { mobileLabel?: string } | undefined
                     const headerDef = cell.column.columnDef.header
-                    const label = typeof headerDef === 'string' ? headerDef : (cell.column.id || '')
+                    const label = meta?.mobileLabel || (typeof headerDef === 'string' ? headerDef : (cell.column.id || ''))
                     return (
                       <TableCell key={cell.id} data-label={label} className="mobile-table-cell break-words break-all">
                         {flexRender(cell.column.columnDef.cell, cell.getContext())}

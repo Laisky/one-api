@@ -128,12 +128,9 @@ export function EditChannelPage() {
             {selectedChannelType?.tip && (
               <div className="flex items-center gap-2 p-3 bg-warning-muted border border-warning-border rounded-lg">
                 <AlertCircle className="h-4 w-4 text-warning" />
-                <span
-                  className="text-sm text-warning-foreground"
-                  dangerouslySetInnerHTML={{
-                    __html: tr(`channel_type.${selectedChannelType.value}.tip`, selectedChannelType.tip),
-                  }}
-                />
+                <span className="text-sm text-warning-foreground">
+                  {tr(`channel_type.${selectedChannelType.value}.tip`, selectedChannelType.tip)}
+                </span>
               </div>
             )}
           </CardHeader>

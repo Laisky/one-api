@@ -216,7 +216,7 @@ export function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4">
+    <main className="min-h-screen flex items-center justify-center p-4">
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
           {systemStatus.logo && (
@@ -412,7 +412,7 @@ export function LoginPage() {
           )}
         </CardContent>
       </Card>
-    </div>
+    </main>
   );
 }
 

@@ -2,7 +2,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { MarkdownRenderer } from '@/components/ui/markdown';
 import { api } from '@/lib/api';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 
@@ -14,7 +14,7 @@ export function AboutPage() {
     returnObjects: true,
   }) as string[];
 
-  const loadAbout = async () => {
+  const loadAbout = useCallback(async () => {
     try {
       // Load cached content first
       setAbout(localStorage.getItem('about') || '');
@@ -24,37 +24,23 @@ export function AboutPage() {
       const { success, data } = res.data;
 
       if (success && data) {
-        let aboutContent = data;
-
-        // If it's not a URL, assume it's markdown and convert it
-        if (!data.startsWith('https://')) {
-          // For now, we'll just use the content as HTML
-          // In a real implementation, you might want to use a markdown parser
-          aboutContent = data;
-        }
-
-        setAbout(aboutContent);
-        localStorage.setItem('about', aboutContent);
+        setAbout(data);
+        localStorage.setItem('about', data);
       } else {
         console.error('Failed to load about content');
-        if (!about) {
-          setAbout(t('about.fallback_error'));
-        }
+        setAbout((prev) => prev || t('about.fallback_error'));
       }
     } catch (error) {
       console.error('Error loading about content:', error);
-      if (!about) {
-        setAbout(t('about.fallback_error'));
-      }
+      setAbout((prev) => prev || t('about.fallback_error'));
     } finally {
       setAboutLoaded(true);
     }
-  };
+  }, [t]);
 
   useEffect(() => {
     loadAbout();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [t]);
+  }, [loadAbout]);
 
   // If about is a URL, render as iframe
   if (about.startsWith('https://')) {

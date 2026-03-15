@@ -474,7 +474,7 @@ export function LogDetailsModal({ open, onOpenChange, log }: LogDetailsModalProp
     <div className="flex items-center gap-2">
       <span className="font-mono text-xs bg-muted rounded px-2 py-1 break-all flex-1">{value || '—'}</span>
       {value && (
-        <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => handleCopy(value)}>
+        <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => handleCopy(value)} aria-label="Copy to clipboard">
           <Copy className="h-3.5 w-3.5" />
         </Button>
       )}

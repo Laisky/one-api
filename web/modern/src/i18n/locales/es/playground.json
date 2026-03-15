@@ -9,6 +9,7 @@
       "copy": "Copiar",
       "delete": "Eliminar",
       "edit": "Editar",
+      "message_options": "Opciones del mensaje",
       "retry": "Reintentar"
     },
     "chat": {
