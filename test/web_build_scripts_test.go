@@ -19,9 +19,8 @@ func TestCreateReactThemesCleanupBuildOutput(t *testing.T) {
 	t.Parallel()
 
 	themes := map[string]string{
-		"default": "../build/default",
-		"berry":   "../build/berry",
-		"air":     "../build/air",
+		"berry": "../build/berry",
+		"air":   "../build/air",
 	}
 
 	for theme, expectedTarget := range themes {

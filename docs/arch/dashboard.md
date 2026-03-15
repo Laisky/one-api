@@ -162,7 +162,7 @@ Display the following summary statistics, calculated for the selected date range
 
 ## 12. References
 
-- See `web/default/src/pages/Dashboard/index.js` for implementation details.
+- See `web/modern/src/pages/Dashboard/` for implementation details.
 - Chart color palette and gradients are defined in the `chartConfig` object.
 
 ---

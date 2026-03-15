@@ -220,7 +220,7 @@ export function OtherSettings() {
                       </FormLabel>
                       <div className="flex gap-2">
                         <FormControl>
-                          <Input placeholder="default" {...field} />
+                          <Input placeholder="modern" {...field} />
                         </FormControl>
                         <Button onClick={() => submitField('Theme')}>{t('other_settings.branding.save')}</Button>
                       </div>

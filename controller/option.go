@@ -46,6 +46,10 @@ func UpdateOption(c *gin.Context) {
 	}
 	switch option.Key {
 	case "Theme":
+		// Backward compatibility: redirect "default" to "modern"
+		if option.Value == "default" {
+			option.Value = "modern"
+		}
 		if !config.ValidThemes[option.Value] {
 			c.JSON(http.StatusOK, gin.H{
 				"success": false,

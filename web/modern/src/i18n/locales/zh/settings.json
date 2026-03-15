@@ -66,7 +66,7 @@
       "system_name": "系统名称",
       "system_name_desc": "在 UI 和邮件中显示的系统显示名称。",
       "theme": "主题",
-      "theme_desc": "UI 主题名称。支持：default, berry, air, modern。",
+      "theme_desc": "UI 主题名称。支持：berry, air, modern。",
       "title": "系统品牌"
     },
     "content": {
@@ -215,7 +215,7 @@
       "SMTPToken": "用于认证的 SMTP 密码或应用令牌。安全存储，从不显示。",
       "ServerAddress": "此服务器的公共 Base URL（用于链接/回调）。",
       "SystemName": "在 UI 和邮件中显示的系统显示名称。",
-      "Theme": "UI 主题（default, berry, air, modern）。",
+      "Theme": "UI 主题（berry, air, modern）。",
       "TopUpLink": "用户购买或充值配额的外部链接。",
       "TurnstileCheckEnabled": "在关键操作（注册/重置）上启用 Cloudflare Turnstile。",
       "TurnstileSecretKey": "服务器使用的 Cloudflare Turnstile 密钥。请保密。",

@@ -1,6 +1,10 @@
 # UI Modernization & Restructuring Plan with shadcn/ui
 
-The current ./web/default template utilizes Semantic, and during debugging, I've noticed that its functionality is very limited, with low extensibility and challenging maintenance. I recommend completely restructuring the default template using modern engineering tools like shadcn, aiming for a complete modernization of both the code structure and the UI implementation.
+> **Note**: This migration is complete. The `web/default` template has been removed from the codebase.
+> The "modern" template (`web/modern/`) is now the primary and default frontend.
+> Users who still specify `THEME=default` are automatically redirected to "modern".
+
+The former `./web/default` template utilized Semantic, and during debugging, it was found that its functionality was very limited, with low extensibility and challenging maintenance. The default template was completely replaced by the modern template using modern engineering tools like shadcn, achieving a complete modernization of both the code structure and the UI implementation.
 
 Keep in mind that while the UI can be enhanced, all existing functionalities provided within the UI, including the displayed content in various tables and the querying and filtering features, must be preserved.
 

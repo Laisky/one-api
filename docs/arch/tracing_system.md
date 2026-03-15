@@ -116,12 +116,6 @@ CREATE INDEX idx_logs_trace_id ON logs(trace_id);
 
 ### 4. Frontend Components
 
-#### Default Template (`web/default/src/components/`)
-
-- `TracingModal.js` - Modern React modal with Semantic UI
-- `LogsTable.js` - Clickable rows with tracing integration
-- Timeline visualization with duration calculations
-
 #### Berry Template (`web/berry/src/views/Log/`)
 
 - `TracingModal.js` - Material-UI based modal

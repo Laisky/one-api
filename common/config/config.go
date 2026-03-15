@@ -950,13 +950,14 @@ var (
 	//
 	// Environment variable: THEME
 	// Default: "modern"
-	// Allowed values: "default", "berry", "air", "modern"
+	// Allowed values: "berry", "air", "modern"
+	// Note: "default" is no longer supported and will be automatically
+	// redirected to "modern" for backward compatibility.
 	Theme = env.String("THEME", "modern")
 
 	// ValidThemes enumerates the built-in frontend themes.
 	// Used for validation when changing themes.
 	ValidThemes = map[string]bool{
-		"default": true,
 		"berry":   true,
 		"air":     true,
 		"modern":  true,

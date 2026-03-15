@@ -66,7 +66,7 @@
       "system_name": "Nombre del sistema",
       "system_name_desc": "Nombre que se muestra en la interfaz y en los correos.",
       "theme": "Tema",
-      "theme_desc": "Nombre del tema de la UI. Soportados: default, berry, air, modern.",
+      "theme_desc": "Nombre del tema de la UI. Soportados: berry, air, modern.",
       "title": "Identidad del sistema"
     },
     "content": {
@@ -215,7 +215,7 @@
       "SMTPToken": "Contraseña o token SMTP usado para autenticarse (se almacena de forma segura).",
       "ServerAddress": "URL base pública del servidor (para enlaces y callbacks).",
       "SystemName": "Nombre del sistema mostrado en la interfaz y correos.",
-      "Theme": "Tema de la UI (default, berry, air, modern).",
+      "Theme": "Tema de la UI (berry, air, modern).",
       "TopUpLink": "Enlace externo para comprar o recargar cuota.",
       "TurnstileCheckEnabled": "Activar Cloudflare Turnstile en acciones críticas (registro/restablecimiento).",
       "TurnstileSecretKey": "Clave secreta de Turnstile usada por el servidor (mantener privada).",

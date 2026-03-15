@@ -66,7 +66,7 @@
       "system_name": "システム名",
       "system_name_desc": "UI やメールに表示されるシステムの表示名です。",
       "theme": "テーマ",
-      "theme_desc": "UI テーマ名（default / berry / air / modern）。",
+      "theme_desc": "UI テーマ名（berry / air / modern）。",
       "title": "システムブランディング"
     },
     "content": {
@@ -215,7 +215,7 @@
       "SMTPToken": "SMTP 認証用パスワード／アプリトークン（安全に保存）。",
       "ServerAddress": "このサーバーの公開ベース URL（リンクやコールバックで使用）。",
       "SystemName": "UI やメールに表示されるシステム名。",
-      "Theme": "UI テーマ（default / berry / air / modern）。",
+      "Theme": "UI テーマ（berry / air / modern）。",
       "TopUpLink": "ユーザーがクォータを購入・チャージするための外部リンク。",
       "TurnstileCheckEnabled": "重要操作（登録／リセット）で Cloudflare Turnstile を使用します。",
       "TurnstileSecretKey": "サーバー側で使用する Turnstile シークレットキー（厳重に管理してください）。",

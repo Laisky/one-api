@@ -18,14 +18,12 @@ go build -trimpath -ldflags "-s -w" -o one-api
 
 # Frontend builds (multiple templates available)
 make build-frontend-modern      # Primary template (React + TypeScript + Vite)
-make build-frontend-default     # Legacy template
 make build-frontend-air         # Alternative template
 make build-frontend-berry       # Alternative template
 make build-all-templates        # All templates
 
 # Development servers
 make dev-modern                 # Port 3001 (primary)
-make dev-default               # Port 3001
 make dev-air                   # Port 3002
 make dev-berry                 # Port 3003
 ```
@@ -137,9 +135,10 @@ FRONTEND_BASE_URL=https://...      # For slave nodes
 ### Multi-Template Frontend System
 
 - **Modern**: Primary template (React + TypeScript + Vite + Tailwind)
-- **Default/Air/Berry**: Alternative UI themes
+- **Air/Berry**: Alternative UI themes (no longer actively maintained)
 - Each template has independent build system and development server
 - Templates share the same backend API
+- Note: The "default" template has been removed. Users specifying "default" are automatically redirected to "modern".
 
 ## Development Practices
 

@@ -66,7 +66,7 @@
       "system_name": "Nom du système",
       "system_name_desc": "Nom d'affichage du système utilisé dans l'interface et les e-mails.",
       "theme": "Thème",
-      "theme_desc": "Nom du thème UI (default, berry, air, modern).",
+      "theme_desc": "Nom du thème UI (berry, air, modern).",
       "title": "Image de marque du système"
     },
     "content": {
@@ -215,7 +215,7 @@
       "SMTPToken": "Mot de passe ou jeton SMTP utilisé pour s'authentifier (stocké de façon sécurisée).",
       "ServerAddress": "URL publique de ce serveur (utilisée dans les liens/rappels).",
       "SystemName": "Nom d'affichage du système dans l'interface et les e-mails.",
-      "Theme": "Thème UI (default, berry, air, modern).",
+      "Theme": "Thème UI (berry, air, modern).",
       "TopUpLink": "Lien externe permettant d'acheter ou recharger du quota.",
       "TurnstileCheckEnabled": "Activer Cloudflare Turnstile sur les actions critiques (inscription/réinitialisation).",
       "TurnstileSecretKey": "Clé secrète Turnstile utilisée côté serveur (à conserver confidentielle).",

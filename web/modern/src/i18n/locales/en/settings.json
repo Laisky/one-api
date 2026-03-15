@@ -66,7 +66,7 @@
       "system_name": "System Name",
       "system_name_desc": "System display name shown in the UI and emails.",
       "theme": "Theme",
-      "theme_desc": "UI theme name. Supported: default, berry, air, modern.",
+      "theme_desc": "UI theme name. Supported: berry, air, modern.",
       "title": "System Branding"
     },
     "content": {
@@ -215,7 +215,7 @@
       "SMTPToken": "SMTP password or application token used to authenticate. Stored securely and never displayed.",
       "ServerAddress": "Public base URL of this server (used in links/callbacks).",
       "SystemName": "System display name shown in the UI and emails.",
-      "Theme": "UI theme (default, berry, air, modern).",
+      "Theme": "UI theme (berry, air, modern).",
       "TopUpLink": "External link for users to purchase or top up quota.",
       "TurnstileCheckEnabled": "Enable Cloudflare Turnstile on critical actions (registration/reset).",
       "TurnstileSecretKey": "Cloudflare Turnstile secret key used by the server. Keep this confidential.",

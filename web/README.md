@@ -4,8 +4,12 @@
 > Each folder represents a theme/template, and we welcome your theme submissions
 
 > [!WARNING]
-> 不是每一个主题都及时同步了所有功能，由于精力有限，优先更新默认主题，其他主题欢迎 & 期待 PR
-> Not every theme is synchronized with all features in a timely manner. Due to limited resources, the default theme is updated first. PRs for other themes are welcomed & expected.
+> 不是每一个主题都及时同步了所有功能，由于精力有限，优先更新 modern 主题，其他主题欢迎 & 期待 PR
+> Not every theme is synchronized with all features in a timely manner. Due to limited resources, the modern theme is updated first. PRs for other themes are welcomed & expected.
+
+> [!NOTE]
+> `default` 主题已被移除，设置 `THEME=default` 会自动切换为 `modern`。
+> The `default` theme has been removed. Setting `THEME=default` will automatically switch to `modern`.
 
 ## 开发指南 / Development Guide
 
@@ -13,7 +17,7 @@
 
 | 模板 / Template | UI框架 / Framework | 端口 / Port | 目录 / Directory |
 |----------------|-------------------|------------|------------------|
-| **Default** | Semantic UI React | 3001 | `./default/` |
+| **Modern** | React + TypeScript + Vite + Tailwind | 3001 | `./modern/` |
 | **Air** | Semi UI | 3002 | `./air/` |
 | **Berry** | Material UI | 3003 | `./berry/` |
 
@@ -30,19 +34,14 @@ go run main.go
 
 ```bash
 # 从项目根目录 / From project root
-./dev.sh default dev    # Default template on port 3001
-./dev.sh air dev        # Air template on port 3002
-./dev.sh berry dev      # Berry template on port 3003
-
-# 或使用make / Or use make:
-make dev-default        # Default template
-make dev-air           # Air template
-make dev-berry         # Berry template
+make dev-modern        # Modern template (primary) on port 3001
+make dev-air           # Air template on port 3002
+make dev-berry         # Berry template on port 3003
 ```
 
 ### 开发地址 / Development URLs
 
-- **Default Template**: http://localhost:3001
+- **Modern Template**: http://localhost:3001
 - **Air Template**: http://localhost:3002
 - **Berry Template**: http://localhost:3003
 
@@ -53,9 +52,9 @@ All templates automatically proxy API calls to Go backend: `http://100.113.170.1
 
 ```bash
 # 构建单个模板 / Build individual template
-./dev.sh default build     # or: make build-frontend-default
-./dev.sh air build         # or: make build-frontend-air
-./dev.sh berry build       # or: make build-frontend-berry
+make build-frontend-modern     # Modern template (primary)
+make build-frontend-air        # Air template
+make build-frontend-berry      # Berry template
 
 # 构建所有模板 / Build all templates
 make build-all-templates
@@ -70,19 +69,15 @@ For detailed development guide, see: [`../docs/DEVELOPMENT.md`](../docs/DEVELOPM
 
 1. 在 `web` 文件夹下新建一个文件夹，文件夹名为主题名。
 2. 把你的主题文件放到这个文件夹下。
-3. 修改你的 `package.json` 文件，把 `build` 命令改为：`"build": "react-scripts build && mv -f build ../build/default"`，其中 `default` 为你的主题名。
+3. 修改你的 `package.json` 文件，把 `build` 命令改为：`"build": "react-scripts build && mv -f build ../build/<theme_name>"`，其中 `<theme_name>` 为你的主题名。
 4. 修改 `common/config/config.go` 中的 `ValidThemes`，把你的主题名称注册进去。
 5. 修改 `web/THEMES` 文件，这里也需要同步修改。
 
 ## 主题列表
 
-### 主题：default
+### 主题：modern
 
-默认主题，由 [JustSong](https://github.com/songquanpeng) 开发。
-
-预览：
-|![image](https://github.com/songquanpeng/one-api/assets/39998050/ccfbc668-3a7f-4bc1-87da-7eacfd7bf371)|![image](https://github.com/songquanpeng/one-api/assets/39998050/a63ed547-44b9-45db-b43a-ecea07d60840)|
-|:---:|:---:|
+主要主题 (React + TypeScript + Vite + Tailwind)。
 
 ### 主题：berry
 

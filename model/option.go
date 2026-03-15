@@ -251,6 +251,10 @@ func updateOptionMap(key string, value string) (err error) {
 	case "QuotaPerUnit":
 		config.QuotaPerUnit, _ = strconv.ParseFloat(value, 64)
 	case "Theme":
+		// Backward compatibility: redirect "default" to "modern"
+		if value == "default" {
+			value = "modern"
+		}
 		config.Theme = value
 	}
 	if err != nil {
