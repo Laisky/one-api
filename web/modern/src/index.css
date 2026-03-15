@@ -7,112 +7,114 @@
 
 @layer base {
 	:root {
-		/* Warm-neutral professional palette with deep teal accent */
-		--background: 40 15% 98.5%;
-		--foreground: 30 12% 10%;
-		--card: 40 10% 99.2%;
-		--card-foreground: 30 12% 10%;
-		--popover: 40 10% 99.2%;
-		--popover-foreground: 30 12% 10%;
-		--primary: 192 40% 24%;
-		--primary-foreground: 40 15% 98%;
-		--secondary: 36 10% 94%;
-		--secondary-foreground: 30 12% 12%;
-		--muted: 36 8% 93.5%;
-		--muted-foreground: 25 6% 46%;
-		--accent: 36 10% 94%;
-		--accent-foreground: 30 12% 12%;
-		--destructive: 4 60% 52%;
-		--destructive-foreground: 40 15% 98%;
-		--border: 30 10% 89.5%;
-		--input: 30 10% 89.5%;
-		--ring: 192 40% 24%;
-		--chart-1: 192 40% 35%;
-		--chart-2: 28 65% 52%;
-		--chart-3: 160 30% 42%;
-		--chart-4: 210 25% 48%;
-		--chart-5: 6 50% 55%;
-		--chart-6: 215 16% 47%;
-		--chart-7: 180 50% 36%;
-		--chart-8: 31 25% 44%;
-		--chart-9: 156 39% 39%;
-		--chart-10: 85 21% 46%;
-		--chart-11: 199 22% 52%;
-		--chart-12: 25 28% 49%;
-		--chart-13: 180 32% 43%;
-		--chart-14: 32 15% 41%;
-		--chart-15: 140 21% 45%;
+		/* Slate & Teal — clean, modern, data-forward */
+		--background: 220 10% 98%;
+		--foreground: 220 15% 10%;
+		--card: 220 8% 99%;
+		--card-foreground: 220 15% 10%;
+		--popover: 220 8% 99%;
+		--popover-foreground: 220 15% 10%;
+		--primary: 220 15% 28%;
+		--primary-foreground: 220 10% 98%;
+		--secondary: 220 8% 94%;
+		--secondary-foreground: 220 15% 14%;
+		--muted: 220 6% 93%;
+		--muted-foreground: 220 5% 44%;
+		--accent: 172 60% 40%;
+		--accent-foreground: 220 15% 10%;
+		--destructive: 4 62% 50%;
+		--destructive-foreground: 0 0% 100%;
+		--border: 220 8% 89%;
+		--input: 220 8% 89%;
+		--ring: 172 60% 40%;
+		/* Chart: vivid, well-separated across the color wheel */
+		--chart-1: 172 65% 38%;
+		--chart-2: 24 80% 52%;
+		--chart-3: 220 60% 52%;
+		--chart-4: 350 65% 55%;
+		--chart-5: 45 78% 48%;
+		--chart-6: 262 45% 55%;
+		--chart-7: 190 70% 42%;
+		--chart-8: 14 68% 48%;
+		--chart-9: 145 55% 40%;
+		--chart-10: 200 55% 48%;
+		--chart-11: 330 50% 52%;
+		--chart-12: 80 50% 44%;
+		--chart-13: 280 40% 50%;
+		--chart-14: 35 60% 46%;
+		--chart-15: 160 50% 42%;
 		--radius: 0.5rem;
 
 		/* Semantic status colors */
-		--success: 158 40% 42%;
-		--success-foreground: 160 45% 18%;
-		--success-muted: 155 30% 96%;
-		--success-border: 158 30% 80%;
+		--success: 158 50% 40%;
+		--success-foreground: 160 55% 16%;
+		--success-muted: 155 35% 96%;
+		--success-border: 158 35% 78%;
 
-		--warning: 32 78% 48%;
-		--warning-foreground: 28 75% 20%;
-		--warning-muted: 38 65% 96%;
-		--warning-border: 35 55% 76%;
+		--warning: 38 80% 48%;
+		--warning-foreground: 32 75% 18%;
+		--warning-muted: 40 65% 96%;
+		--warning-border: 38 55% 76%;
 
-		--info: 205 50% 48%;
-		--info-foreground: 210 55% 20%;
-		--info-muted: 208 45% 97%;
-		--info-border: 205 40% 80%;
+		--info: 210 55% 48%;
+		--info-foreground: 215 60% 18%;
+		--info-muted: 212 50% 97%;
+		--info-border: 210 42% 80%;
 	}
 
 	.dark {
-		/* Warm dark palette */
-		--background: 30 10% 7.5%;
-		--foreground: 36 10% 91%;
-		--card: 30 8% 9.5%;
-		--card-foreground: 36 10% 91%;
-		--popover: 30 8% 9.5%;
-		--popover-foreground: 36 10% 91%;
-		--primary: 186 38% 52%;
-		--primary-foreground: 30 10% 7%;
-		--secondary: 30 6% 15%;
-		--secondary-foreground: 36 10% 91%;
-		--muted: 30 6% 15%;
-		--muted-foreground: 30 8% 56%;
-		--accent: 30 6% 15%;
-		--accent-foreground: 36 10% 91%;
-		--destructive: 4 50% 38%;
-		--destructive-foreground: 36 10% 91%;
-		--border: 30 6% 17.5%;
-		--input: 30 6% 17.5%;
-		--ring: 186 38% 52%;
-		--chart-1: 186 45% 48%;
-		--chart-2: 30 70% 56%;
-		--chart-3: 155 35% 48%;
-		--chart-4: 210 30% 55%;
-		--chart-5: 8 55% 58%;
-		--chart-6: 215 20% 55%;
-		--chart-7: 180 50% 45%;
-		--chart-8: 31 30% 52%;
-		--chart-9: 156 39% 48%;
-		--chart-10: 85 25% 54%;
-		--chart-11: 199 25% 58%;
-		--chart-12: 25 32% 56%;
-		--chart-13: 180 35% 50%;
-		--chart-14: 32 18% 50%;
-		--chart-15: 140 25% 52%;
+		/* Slate & Teal — dark mode */
+		--background: 220 12% 8%;
+		--foreground: 220 8% 92%;
+		--card: 220 10% 10%;
+		--card-foreground: 220 8% 92%;
+		--popover: 220 10% 10%;
+		--popover-foreground: 220 8% 92%;
+		--primary: 172 50% 50%;
+		--primary-foreground: 220 12% 8%;
+		--secondary: 220 8% 16%;
+		--secondary-foreground: 220 8% 92%;
+		--muted: 220 8% 16%;
+		--muted-foreground: 220 6% 55%;
+		--accent: 172 50% 50%;
+		--accent-foreground: 220 12% 8%;
+		--destructive: 4 55% 42%;
+		--destructive-foreground: 220 8% 92%;
+		--border: 220 8% 18%;
+		--input: 220 8% 18%;
+		--ring: 172 50% 50%;
+		/* Chart: boosted lightness for dark backgrounds */
+		--chart-1: 172 60% 50%;
+		--chart-2: 24 75% 58%;
+		--chart-3: 220 55% 60%;
+		--chart-4: 350 60% 62%;
+		--chart-5: 45 72% 55%;
+		--chart-6: 262 42% 62%;
+		--chart-7: 190 60% 52%;
+		--chart-8: 14 62% 56%;
+		--chart-9: 145 50% 50%;
+		--chart-10: 200 50% 56%;
+		--chart-11: 330 45% 60%;
+		--chart-12: 80 45% 52%;
+		--chart-13: 280 38% 58%;
+		--chart-14: 35 55% 54%;
+		--chart-15: 160 45% 50%;
 
 		/* Semantic status colors */
-		--success: 158 40% 45%;
-		--success-foreground: 155 35% 80%;
+		--success: 158 45% 48%;
+		--success-foreground: 155 40% 82%;
 		--success-muted: 160 30% 12%;
-		--success-border: 158 25% 24%;
+		--success-border: 158 28% 25%;
 
-		--warning: 32 78% 50%;
-		--warning-foreground: 36 65% 80%;
-		--warning-muted: 35 35% 12%;
-		--warning-border: 35 35% 24%;
+		--warning: 38 75% 52%;
+		--warning-foreground: 36 65% 82%;
+		--warning-muted: 38 35% 12%;
+		--warning-border: 38 35% 25%;
 
-		--info: 205 50% 55%;
-		--info-foreground: 208 45% 80%;
-		--info-muted: 210 30% 12%;
-		--info-border: 210 30% 24%;
+		--info: 210 52% 58%;
+		--info-foreground: 212 48% 82%;
+		--info-muted: 215 30% 12%;
+		--info-border: 215 30% 25%;
 	}
 }
 

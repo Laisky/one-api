@@ -4,25 +4,25 @@
  * without needing hard-coded color values.
  */
 
-// Professional earthy palette — no purple, no neon
+// Slate & Teal palette — vivid, well-separated across color wheel
 const RAINBOW_PALETTE = [
-  '#2A7A82', // teal
-  '#C27530', // amber
-  '#4A7A5C', // sage
-  '#5A7A9A', // steel blue
-  '#B85C4A', // terracotta
-  '#3D8B6E', // forest
-  '#8B7355', // bronze
-  '#6A8FA0', // dusty blue
-  '#A0785A', // sienna
-  '#7A8D5C', // olive
-  '#2E8B8B', // dark teal
-  '#64748B', // slate
-  '#4A9090', // cyan-teal
-  '#5A8A6A', // muted green
-  '#7A6B5A', // warm gray
-  '#9A6B4A', // copper
-  '#3A7070', // deep teal
+  '#22a392', // teal
+  '#d47a1e', // orange
+  '#4272c4', // blue
+  '#d04a5e', // rose
+  '#3a9e5c', // green
+  '#b89418', // gold
+  '#1e8fa8', // cyan
+  '#c85530', // burnt orange
+  '#7e5daa', // violet
+  '#3a8ab8', // steel blue
+  '#c44e80', // pink
+  '#6a9a28', // lime
+  '#b87a20', // amber
+  '#349e78', // sea green
+  '#64748b', // slate
+  '#8868b0', // muted violet
+  '#5a8a6a', // sage
 ]
 
 /**
@@ -64,19 +64,19 @@ export function getChannelTypeHSL(
  * Used as a fallback for channels that still have string color definitions.
  */
 export const LEGACY_COLOR_MAP: Record<string, string> = {
-  green: '#4A7A5C',
-  olive: '#7A8D5C',
+  green: '#3a9e5c',
+  olive: '#6a9a28',
   black: '#374151',
-  orange: '#C27530',
-  blue: '#5A7A9A',
-  purple: '#6A8FA0',
-  violet: '#64748B',
-  red: '#B85C4A',
-  teal: '#2A7A82',
-  yellow: '#A0785A',
-  pink: '#9A6B4A',
-  brown: '#8B7355',
-  gray: '#64748B',
+  orange: '#d47a1e',
+  blue: '#4272c4',
+  purple: '#7e5daa',
+  violet: '#8868b0',
+  red: '#d04a5e',
+  teal: '#22a392',
+  yellow: '#b89418',
+  pink: '#c44e80',
+  brown: '#b87a20',
+  gray: '#64748b',
 }
 
 /**

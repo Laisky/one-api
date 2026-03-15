@@ -31,21 +31,21 @@ export type UserOption = {
  * Matches the HSL values defined in index.css :root at default (light) theme.
  */
 const FALLBACK_COLORS: string[] = [
-  "#3d8a8f", // chart-1
-  "#d49235", // chart-2
-  "#4b8b6e", // chart-3
-  "#5b7a9a", // chart-4
-  "#c06a54", // chart-5
-  "#6b7a8b", // chart-6
-  "#2d8b8b", // chart-7
-  "#8b7355", // chart-8
-  "#3d8b6e", // chart-9
-  "#7a8d5c", // chart-10
-  "#6a8fa0", // chart-11
-  "#a0785a", // chart-12
-  "#4a9090", // chart-13
-  "#7a6b5a", // chart-14
-  "#5a8a6a", // chart-15
+  "#22a392", // chart-1  teal
+  "#d47a1e", // chart-2  orange
+  "#4272c4", // chart-3  blue
+  "#d04a5e", // chart-4  rose
+  "#b89418", // chart-5  gold
+  "#7e5daa", // chart-6  purple-ish
+  "#1e8fa8", // chart-7  cyan
+  "#c85530", // chart-8  burnt orange
+  "#3a9e5c", // chart-9  green
+  "#3a8ab8", // chart-10 steel blue
+  "#c44e80", // chart-11 pink
+  "#6a9a28", // chart-12 lime
+  "#8868b0", // chart-13 muted violet
+  "#b87a20", // chart-14 amber
+  "#349e78", // chart-15 sea green
 ];
 
 /**
