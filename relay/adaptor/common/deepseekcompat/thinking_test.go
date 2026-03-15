@@ -14,11 +14,11 @@ func TestNormalizeThinkingType(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name             string
-		rawType          string
-		budgetTokens     *int
-		expectedNorm     string
-		expectedChanged  bool
+		name            string
+		rawType         string
+		budgetTokens    *int
+		expectedNorm    string
+		expectedChanged bool
 	}{
 		{name: "enabled unchanged", rawType: "enabled", budgetTokens: intPtr(1024), expectedNorm: "enabled", expectedChanged: false},
 		{name: "disabled unchanged", rawType: "disabled", budgetTokens: nil, expectedNorm: "disabled", expectedChanged: false},

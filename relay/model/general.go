@@ -253,10 +253,11 @@ type ClaudeMessage struct {
 
 // ClaudeTool represents a tool definition in the Claude Messages API
 type ClaudeTool struct {
-	Type        string `json:"type,omitempty"`
-	Name        string `json:"name" binding:"required"`
-	Description string `json:"description,omitempty"`
-	InputSchema any    `json:"input_schema,omitempty"`
+	Type         string `json:"type,omitempty"`
+	Name         string `json:"name" binding:"required"`
+	Description  string `json:"description,omitempty"`
+	InputSchema  any    `json:"input_schema,omitempty"`
+	DeferLoading *bool  `json:"defer_loading,omitempty"`
 }
 
 // Claude Messages API Response Types

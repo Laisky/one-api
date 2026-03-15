@@ -958,9 +958,9 @@ var (
 	// ValidThemes enumerates the built-in frontend themes.
 	// Used for validation when changing themes.
 	ValidThemes = map[string]bool{
-		"berry":   true,
-		"air":     true,
-		"modern":  true,
+		"berry":  true,
+		"air":    true,
+		"modern": true,
 	}
 )
 

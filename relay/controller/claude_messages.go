@@ -85,8 +85,69 @@ func RelayClaudeMessagesHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 	}
 	adaptorInstance.Init(meta)
 
+	// Declare response variables early so goto postConsume does not skip over them.
+	var (
+		usage                 *relaymodel.Usage
+		respErr               *relaymodel.ErrorWithStatusCode
+		mcpIncrementalCharged int64
+		resp                  *http.Response
+		origResp              *http.Response
+		upstreamCapture       *loggingReadCloser
+		requestBody           io.Reader
+		convertedRequest      any
+	)
+
+	// Tool Search + MCP integration: when the request contains a tool_search_tool and
+	// there are MCP tools in the catalog, inject them as deferred tools and run a
+	// Claude-native MCP execution loop that handles tool discovery and execution.
+	if hasToolSearchInClaudeRequest(claudeRequest) && !meta.IsStream {
+		toolSearchRegistry, tsErr := injectDeferredMCPToolsForToolSearch(c, claudeRequest)
+		if tsErr != nil {
+			return openai.ErrorWrapper(tsErr, "tool_search_mcp_inject_failed", http.StatusInternalServerError)
+		}
+		if toolSearchRegistry != nil {
+			lg.Debug("tool search with MCP tools detected, using Claude-native MCP loop")
+
+			// Convert request to set pass-through flags (for headers etc.)
+			if _, cerr := adaptorInstance.ConvertClaudeRequest(c, claudeRequest); cerr != nil {
+				return wrapConvertRequestError(cerr)
+			}
+
+			// Disable streaming for the MCP loop
+			noStream := false
+			claudeRequest.Stream = &noStream
+
+			response, mcpUsage, mcpSummary, incrementalCharged, execErr := executeClaudeToolSearchMCPLoop(
+				c, meta, claudeRequest, toolSearchRegistry, adaptorInstance, preConsumedQuota,
+			)
+			if execErr != nil {
+				_ = returnPreConsumedQuotaConservative(ctx, c, preConsumedQuota, c.GetInt(ctxkey.TokenId), "tool_search_mcp_loop_failed")
+				return execErr
+			}
+			if mcpSummary != nil && mcpSummary.summary != nil {
+				var existing *model.ToolUsageSummary
+				if raw, ok := c.Get(ctxkey.ToolInvocationSummary); ok {
+					if summary, ok := raw.(*model.ToolUsageSummary); ok {
+						existing = summary
+					}
+				}
+				merged := mergeToolUsageSummaries(existing, mcpSummary.summary)
+				c.Set(ctxkey.ToolInvocationSummary, merged)
+			}
+			if response != nil {
+				if errResp := writeClaudeResponse(c, response); errResp != nil {
+					_ = returnPreConsumedQuotaConservative(ctx, c, preConsumedQuota, c.GetInt(ctxkey.TokenId), "write_tool_search_response_failed")
+					return openai.ErrorWrapper(errResp, "write_tool_search_response_failed", http.StatusInternalServerError)
+				}
+			}
+			usage = mcpUsage
+			mcpIncrementalCharged = incrementalCharged
+			goto postConsume
+		}
+	}
+
 	// convert request using adaptor's ConvertClaudeRequest method
-	convertedRequest, err := adaptorInstance.ConvertClaudeRequest(c, claudeRequest)
+	convertedRequest, err = adaptorInstance.ConvertClaudeRequest(c, claudeRequest)
 	if err != nil {
 		return wrapConvertRequestError(err)
 	}
@@ -95,7 +156,7 @@ func RelayClaudeMessagesHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 	// - If adaptor marks direct pass-through, forward the Claude Messages payload
 	//   but ensure the mapped model name is applied to the raw JSON
 	// - Otherwise, marshal the converted request
-	var requestBody io.Reader
+	// requestBody declared above
 	if passthrough, ok := c.Get(ctxkey.ClaudeDirectPassthrough); ok && passthrough.(bool) {
 		rawBody, gerr := common.GetRequestBody(c)
 		if gerr != nil {
@@ -115,34 +176,35 @@ func RelayClaudeMessagesHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 	}
 
 	// for debug
-	requestBodyBytes, _ := io.ReadAll(requestBody)
-	// Attempt to log outgoing model for diagnostics without printing the entire payload
-	var outgoing struct {
-		Model string `json:"model"`
+	{
+		requestBodyBytes, _ := io.ReadAll(requestBody)
+		var outgoing struct {
+			Model string `json:"model"`
+		}
+		_ = json.Unmarshal(requestBodyBytes, &outgoing)
+		lg.Debug("prepared Claude upstream request",
+			zap.Bool("passthrough", func() bool {
+				if v, ok := c.Get(ctxkey.ClaudeDirectPassthrough); ok {
+					b, _ := v.(bool)
+					return b
+				}
+				return false
+			}()),
+			zap.String("origin_model", meta.OriginModelName),
+			zap.String("mapped_model", meta.ActualModelName),
+			zap.String("outgoing_model", outgoing.Model),
+		)
+		requestBody = bytes.NewReader(requestBodyBytes)
 	}
-	_ = json.Unmarshal(requestBodyBytes, &outgoing)
-	lg.Debug("prepared Claude upstream request",
-		zap.Bool("passthrough", func() bool {
-			if v, ok := c.Get(ctxkey.ClaudeDirectPassthrough); ok {
-				b, _ := v.(bool)
-				return b
-			}
-			return false
-		}()),
-		zap.String("origin_model", meta.OriginModelName),
-		zap.String("mapped_model", meta.ActualModelName),
-		zap.String("outgoing_model", outgoing.Model),
-	)
-	requestBody = bytes.NewReader(requestBodyBytes)
 
 	// do request
-	resp, err := adaptorInstance.DoRequest(c, meta, requestBody)
+	resp, err = adaptorInstance.DoRequest(c, meta, requestBody)
 	if err != nil {
 		// ErrorWrapper will log the error, so we don't need to log it here
 		return openai.ErrorWrapper(err, "do_request_failed", http.StatusInternalServerError)
 	}
-	origResp := resp
-	upstreamCapture := wrapUpstreamResponse(resp)
+	origResp = resp
+	upstreamCapture = wrapUpstreamResponse(resp)
 	// Immediately record a provisional request cost using estimated base quota
 	// even if the trusted path skipped physical pre-consume.
 	{
@@ -182,9 +244,6 @@ func RelayClaudeMessagesHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 	c.Set(ctxkey.ClaudeMessagesNative, true)
 
 	// do response - for direct passthrough, forward upstream JSON verbatim; otherwise let adaptor convert
-	var usage *relaymodel.Usage
-	var respErr *relaymodel.ErrorWithStatusCode
-	var mcpIncrementalCharged int64
 
 	// MCP tool loop handling for Claude Messages requests.
 	if mcpRegistry, mcpToolNames, mcpReq, mcpErr := detectClaudeMCPTools(c, meta, claudeRequest, adaptorInstance); mcpRegistry != nil || mcpErr != nil {

@@ -112,10 +112,16 @@ func countClaudeFileImageTokensFromBlocks(blocks []any) int {
 }
 
 // countClaudeToolsTokens estimates tokens for Claude tools.
+// Tools with DeferLoading=true are skipped as they are not loaded into context.
 func countClaudeToolsTokens(ctx context.Context, tools []relaymodel.ClaudeTool, model string) int {
 	totalTokens := 0
 
 	for _, tool := range tools {
+		// Skip deferred tools - they are not loaded into context
+		if tool.DeferLoading != nil && *tool.DeferLoading {
+			continue
+		}
+
 		// Count tokens for tool name and description
 		totalTokens += openai.CountTokenText(tool.Name, model)
 		totalTokens += openai.CountTokenText(tool.Description, model)
