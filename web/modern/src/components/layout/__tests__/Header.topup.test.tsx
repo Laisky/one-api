@@ -6,7 +6,7 @@ import { Header } from '../Header'
 describe('Header mobile overflow prevention', () => {
 	it('renders header with no horizontal overflow and truncates brand text', () => {
 		// Ensure a deterministic brand name so the query is unique
-		localStorage.setItem('system_name', 'One API Test Brand')
+		localStorage.setItem('status', JSON.stringify({ system_name: 'One API Test Brand' }))
 		render(
 			<MemoryRouter initialEntries={["/"]}>
 				<Header />
