@@ -64,6 +64,15 @@
     "version": "バージョン",
     "welcome": "One APIへようこそ"
   },
+  "footer": {
+    "copyright": "\u00a9 {{year}} One API. All rights reserved."
+  },
+  "theme": {
+    "toggle": "テーマを切り替え",
+    "light": "ライト",
+    "dark": "ダーク",
+    "system": "システム"
+  },
   "header": {
     "confirm_logout": "ログアウトの確認",
     "log_out": "ログアウト",

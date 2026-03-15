@@ -1,4 +1,5 @@
 import { Check, Laptop, Moon, Sun, type LucideIcon } from "lucide-react"
+import { useTranslation } from "react-i18next"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -10,28 +11,21 @@ import {
 import { cn } from "@/lib/utils"
 import { useTheme } from "./theme-provider"
 
-type ThemeOption = {
-  value: "light" | "dark" | "system"
-  label: string
-  Icon: LucideIcon
+type ThemeValue = "light" | "dark" | "system"
+
+const THEME_ICONS: Record<ThemeValue, LucideIcon> = {
+  light: Sun,
+  dark: Moon,
+  system: Laptop,
 }
 
-const THEME_OPTIONS: ThemeOption[] = [
-  { value: "light", label: "Light", Icon: Sun },
-  { value: "dark", label: "Dark", Icon: Moon },
-  { value: "system", label: "System", Icon: Laptop },
-]
+const THEME_VALUES: ThemeValue[] = ["light", "dark", "system"]
 
 // ThemeToggle renders a minimal dropdown to switch between light, dark, and system themes.
 export function ThemeToggle() {
   const { theme, setTheme } = useTheme()
-  const activeOption =
-    THEME_OPTIONS.find((option) => option.value === theme) ?? THEME_OPTIONS[0]
-  const ActiveIcon = activeOption.Icon
-
-  const handleSelect = (value: ThemeOption["value"]) => {
-    setTheme(value)
-  }
+  const { t } = useTranslation()
+  const ActiveIcon = THEME_ICONS[theme] ?? THEME_ICONS.system
 
   return (
     <DropdownMenu>
@@ -39,21 +33,23 @@ export function ThemeToggle() {
         <Button
           variant="ghost"
           size="icon"
-          aria-label="Toggle theme"
+          aria-label={t("theme.toggle")}
           className="h-9 w-9"
         >
           <ActiveIcon className="h-[1.2rem] w-[1.2rem]" aria-hidden="true" />
-          <span className="sr-only">Toggle theme</span>
+          <span className="sr-only">{t("theme.toggle")}</span>
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-44">
-        {THEME_OPTIONS.map(({ value, label, Icon }) => {
+        {THEME_VALUES.map((value) => {
           const isActive = value === theme
+          const Icon = THEME_ICONS[value]
+          const label = t(`theme.${value}`)
 
           return (
             <DropdownMenuItem
               key={value}
-              onSelect={() => handleSelect(value)}
+              onSelect={() => setTheme(value)}
               className={cn(
                 "flex items-center gap-2",
                 isActive && "bg-muted text-foreground focus:bg-muted"

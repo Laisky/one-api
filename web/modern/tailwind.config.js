@@ -85,7 +85,17 @@ export default {
 					'2': 'hsl(var(--chart-2))',
 					'3': 'hsl(var(--chart-3))',
 					'4': 'hsl(var(--chart-4))',
-					'5': 'hsl(var(--chart-5))'
+					'5': 'hsl(var(--chart-5))',
+					'6': 'hsl(var(--chart-6))',
+					'7': 'hsl(var(--chart-7))',
+					'8': 'hsl(var(--chart-8))',
+					'9': 'hsl(var(--chart-9))',
+					'10': 'hsl(var(--chart-10))',
+					'11': 'hsl(var(--chart-11))',
+					'12': 'hsl(var(--chart-12))',
+					'13': 'hsl(var(--chart-13))',
+					'14': 'hsl(var(--chart-14))',
+					'15': 'hsl(var(--chart-15))'
 				},
 				success: {
 					DEFAULT: 'hsl(var(--success))',

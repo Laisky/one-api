@@ -1,16 +1,14 @@
 /* Enhanced Mobile-responsive table styles */
 @media (max-width: 768px) {
 
-  /* Hide table headers on mobile */
-  .mobile-table thead,
-  table thead {
+  /* Hide table headers on mobile — scoped to .mobile-table only */
+  .mobile-table thead {
     display: none;
   }
 
   /* Convert table rows to cards on mobile */
   .mobile-table tbody tr,
-  .mobile-table-row,
-  table tbody tr {
+  .mobile-table-row {
     display: block;
     margin-bottom: 1rem;
     padding: 1rem;
@@ -22,15 +20,13 @@
   }
 
   .mobile-table tbody tr:hover,
-  .mobile-table-row:hover,
-  table tbody tr:hover {
+  .mobile-table-row:hover {
     box-shadow: 0 4px 12px 0 rgba(0, 0, 0, 0.15);
   }
 
   /* Style table cells as label-value pairs */
   .mobile-table tbody td,
-  .mobile-table-cell,
-  table tbody td {
+  .mobile-table-cell {
     display: block;
     text-align: left !important;
     padding: 0.5rem 0;
@@ -41,8 +37,7 @@
 
   /* Add labels before content using data-label attribute */
   .mobile-table tbody td:before,
-  .mobile-table-cell:before,
-  table tbody td:before {
+  .mobile-table-cell:before {
     content: attr(data-label) ': ';
     font-weight: 600;
     color: hsl(var(--muted-foreground));
@@ -54,16 +49,14 @@
 
   /* Special handling for action buttons */
   .mobile-table tbody td:last-child,
-  .mobile-table-cell:last-child,
-  table tbody td:last-child {
+  .mobile-table-cell:last-child {
     padding-top: 1rem;
     margin-top: 0.5rem;
     border-top: 1px solid hsl(var(--border));
   }
 
   .mobile-table tbody td:last-child:before,
-  .mobile-table-cell:last-child:before,
-  table tbody td:last-child:before {
+  .mobile-table-cell:last-child:before {
     content: '';
     display: none;
   }
@@ -86,8 +79,7 @@
 
   /* Touch-friendly button sizing */
   .mobile-table button,
-  .mobile-table-cell button,
-  table button {
+  .mobile-table-cell button {
     min-height: 44px;
     min-width: 44px;
     font-size: 0.875rem;
@@ -181,13 +173,6 @@
   [role="button"]:focus-visible {
     outline: 3px solid hsl(var(--ring));
     outline-offset: 2px;
-  }
-
-  /* Remove hover effects on touch devices */
-  button:hover,
-  [role="button"]:hover {
-    background-color: initial;
-    color: initial;
   }
 
   /* Enhanced active states for better feedback */

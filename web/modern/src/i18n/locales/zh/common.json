@@ -64,6 +64,15 @@
     "version": "版本",
     "welcome": "欢迎使用 One API"
   },
+  "footer": {
+    "copyright": "\u00a9 {{year}} One API. 保留所有权利。"
+  },
+  "theme": {
+    "toggle": "切换主题",
+    "light": "浅色",
+    "dark": "深色",
+    "system": "跟随系统"
+  },
   "header": {
     "confirm_logout": "确认登出",
     "log_out": "登出",

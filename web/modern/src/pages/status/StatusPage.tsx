@@ -350,8 +350,8 @@ function StatusPageImpl() {
             </Card>
           ) : (
             <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
-              {filteredChannels.map((channel, index) => (
-                <Card key={index} className="hover:shadow-md transition-shadow">
+              {filteredChannels.map((channel) => (
+                <Card key={channel.name} className="hover:shadow-md transition-shadow">
                   <CardHeader className="pb-3">
                     <div className="flex items-center justify-between">
                       <CardTitle className="text-lg truncate">

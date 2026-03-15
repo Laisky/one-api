@@ -79,17 +79,15 @@ export function DashboardPage() {
       description={t("dashboard.description")}
     >
       {loading && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
-          <div
-            className="flex flex-col items-center gap-3"
-            role="status"
-            aria-live="polite"
-          >
-            <span className="h-10 w-10 animate-spin rounded-full border-4 border-primary/20 border-t-primary" />
-            <p className="text-sm text-muted-foreground">
-              {t("dashboard.loading")}
-            </p>
-          </div>
+        <div
+          className="flex items-center gap-3 mb-4 p-3 rounded-md border bg-muted/30"
+          role="status"
+          aria-live="polite"
+        >
+          <span className="h-5 w-5 animate-spin rounded-full border-2 border-primary/20 border-t-primary flex-shrink-0" />
+          <p className="text-sm text-muted-foreground">
+            {t("dashboard.loading")}
+          </p>
         </div>
       )}
 

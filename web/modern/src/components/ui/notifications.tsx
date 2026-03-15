@@ -1,3 +1,4 @@
+import { Copy, X } from 'lucide-react'
 import React, { createContext, useCallback, useContext, useMemo, useRef, useState } from 'react'
 
 // Helper function to copy text to clipboard
@@ -151,19 +152,19 @@ export const NotificationsViewport: React.FC<{
             <div className="flex shrink-0 gap-1">
               <button
                 onClick={(e) => handleCopy(e, n)}
-                className="rounded p-1 text-xs text-current/70 hover:text-current focus:outline-none focus:ring-2 focus:ring-current focus:ring-offset-1"
+                className="rounded p-1 text-current/70 hover:text-current focus:outline-none focus:ring-2 focus:ring-current focus:ring-offset-1"
                 aria-label="Copy notification"
                 title="Copy notification content"
               >
-                📋
+                <Copy className="h-3.5 w-3.5" aria-hidden="true" />
               </button>
               <button
                 onClick={() => onClose(n.id)}
-                className="rounded p-1 text-xs text-current/70 hover:text-current focus:outline-none focus:ring-2 focus:ring-current focus:ring-offset-1"
+                className="rounded p-1 text-current/70 hover:text-current focus:outline-none focus:ring-2 focus:ring-current focus:ring-offset-1"
                 aria-label="Dismiss"
                 title="Dismiss notification"
               >
-                ✕
+                <X className="h-3.5 w-3.5" aria-hidden="true" />
               </button>
             </div>
           </div>

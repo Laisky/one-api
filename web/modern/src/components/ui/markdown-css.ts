@@ -24,58 +24,30 @@ export const codeBlockStyles = `
     text-align: center;
   }
 
-  /* Light mode KaTeX styling - use specific dark colors for good contrast */
-  .prose .katex {
-    color: #24292e !important;
-  }
-
-  .prose .katex .base {
-    color: #24292e !important;
-  }
-
+  /* KaTeX styling - inherit from design system foreground token */
+  .prose .katex,
+  .prose .katex .base,
   .prose .katex .mord,
   .prose .katex .mop,
   .prose .katex .mrel,
   .prose .katex .mbin,
   .prose .katex .mpunct,
   .prose .katex .minner {
-    color: #24292e !important;
+    color: hsl(var(--foreground)) !important;
   }
 
-  /* Dark mode KaTeX styling - use light colors for good contrast */
-  .dark .prose .katex {
-    color: #f6f8fa !important;
-  }
-
-  .dark .prose .katex .base {
-    color: #f6f8fa !important;
-  }
-
-  .dark .prose .katex .mord,
-  .dark .prose .katex .mop,
-  .dark .prose .katex .mrel,
-  .dark .prose .katex .mbin,
-  .dark .prose .katex .mpunct,
-  .dark .prose .katex .minner {
-    color: #f6f8fa !important;
-  }
+  /* Dark mode inherits automatically via --foreground */
 
   /* Special handling for user messages with primary background */
-  .prose-invert .katex {
-    color: #ffffff !important;
-  }
-
-  .prose-invert .katex .base {
-    color: #ffffff !important;
-  }
-
+  .prose-invert .katex,
+  .prose-invert .katex .base,
   .prose-invert .katex .mord,
   .prose-invert .katex .mop,
   .prose-invert .katex .mrel,
   .prose-invert .katex .mbin,
   .prose-invert .katex .mpunct,
   .prose-invert .katex .minner {
-    color: #ffffff !important;
+    color: hsl(var(--primary-foreground)) !important;
   }
 
   /* Input field math rendering */

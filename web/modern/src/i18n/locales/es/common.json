@@ -64,6 +64,15 @@
     "version": "Versión",
     "welcome": "Bienvenido a One API"
   },
+  "footer": {
+    "copyright": "\u00a9 {{year}} One API. Todos los derechos reservados."
+  },
+  "theme": {
+    "toggle": "Cambiar tema",
+    "light": "Claro",
+    "dark": "Oscuro",
+    "system": "Sistema"
+  },
   "header": {
     "confirm_logout": "Confirmar cierre de sesión",
     "log_out": "Cerrar sesión",

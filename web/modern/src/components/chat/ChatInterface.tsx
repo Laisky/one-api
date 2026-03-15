@@ -133,8 +133,7 @@ export function ChatInterface({
 
                 <div className="flex items-center gap-2 flex-shrink-0">
                   <Bot className="h-4 w-4 text-primary" />
-                  <CardTitle className={`font-semibold bg-gradient-to-r from-primary to-primary/80 bg-clip-text text-transparent ${isMobile ? 'text-base' : 'text-lg'
-                    }`}>
+                  <CardTitle className={`font-semibold text-primary ${isMobile ? 'text-base' : 'text-lg'}`}>
                     {t('playground.title')}
                   </CardTitle>
                 </div>
@@ -203,32 +202,32 @@ export function ChatInterface({
               </div>
 
               {/* Mobile action buttons - show only on mobile */}
-              <div className="flex sm:hidden items-center gap-2">
+              <div className="flex sm:hidden items-center gap-1">
                 <Button
                   variant={focusModeEnabled ? "default" : "outline"}
-                  size="sm"
+                  size="icon"
                   onClick={() => onFocusModeChange(!focusModeEnabled)}
-                  className={`flex-shrink-0 p-2 ${focusModeEnabled ? 'bg-primary/10 border-primary/50 text-primary' : 'hover:bg-primary/10'}`}
+                  className={`flex-shrink-0 touch-target ${focusModeEnabled ? 'bg-primary/10 border-primary/50 text-primary' : 'hover:bg-primary/10'}`}
                   title={focusModeEnabled ? t('playground.chat.disable_focus') : t('playground.chat.enable_focus')}
                 >
                   {focusModeEnabled ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </Button>
                 <Button
                   variant="outline"
-                  size="sm"
+                  size="icon"
                   onClick={onExportConversation}
                   disabled={messages.length === 0}
-                  className="hover:bg-primary/10 flex-shrink-0 p-2"
+                  className="hover:bg-primary/10 flex-shrink-0 touch-target"
                   title={t('playground.chat.export')}
                 >
                   <Download className="h-4 w-4" />
                 </Button>
                 <Button
                   variant="outline"
-                  size="sm"
+                  size="icon"
                   onClick={onClearConversation}
                   disabled={messages.length === 0 || isStreaming}
-                  className="hover:bg-destructive/10 hover:text-destructive hover:border-destructive/50 flex-shrink-0 p-2"
+                  className="hover:bg-destructive/10 hover:text-destructive hover:border-destructive/50 flex-shrink-0 touch-target"
                   title={t('playground.chat.clear')}
                 >
                   <Trash2 className="h-4 w-4" />
@@ -321,7 +320,7 @@ export function ChatInterface({
               <div className={`
                 absolute flex items-center justify-center
                 ${isMobile || isTablet
-                  ? 'bottom-3 right-3 h-8 w-8'
+                  ? 'bottom-2 right-2 h-10 w-10'
                   : 'bottom-3 right-5 h-10 w-12'
                 }
               `}>
@@ -331,9 +330,9 @@ export function ChatInterface({
                     variant="outline"
                     size={isMobile || isTablet ? "sm" : "md"}
                     className={`
-                      ${isMobile || isTablet ? 'h-8 w-8 p-0' : 'h-10 w-12 px-3'}
+                      ${isMobile || isTablet ? 'h-10 w-10 p-0' : 'h-10 w-12 px-3'}
                       hover:bg-destructive/10 hover:text-destructive hover:border-destructive/50
-                      bg-background/95 backdrop-blur-sm border-border/50
+                      bg-background/95 border-border/50
                       ${isTouchDevice ? 'active:scale-95' : ''}
                       transition-all duration-200
                     `}
@@ -350,7 +349,7 @@ export function ChatInterface({
                     disabled={(!currentMessage.trim() && attachedImages.length === 0) || !selectedModel || !selectedToken}
                     size={isMobile || isTablet ? "sm" : "md"}
                     className={`
-                      ${isMobile || isTablet ? 'h-8 w-8 p-0' : 'h-10 w-12 px-3'}
+                      ${isMobile || isTablet ? 'h-10 w-10 p-0' : 'h-10 w-12 px-3'}
                       bg-primary hover:bg-primary/90 disabled:opacity-50
                       ${isTouchDevice ? 'active:scale-95' : ''}
                       transition-all duration-200
