@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { useNotifications } from "@/components/ui/notifications";
+import { ResponsivePageContainer } from "@/components/ui/responsive-container";
 import {
   Select,
   SelectContent,
@@ -371,34 +372,36 @@ export function EditUserPage() {
 
   if (loading) {
     return (
-      <div className="container mx-auto px-4 py-8">
-        <Card>
+      <ResponsivePageContainer
+        title={isEdit ? tr("title.edit", "Edit User") : tr("title.create", "Create User")}
+        description={
+          isEdit
+            ? tr("description.edit", "Update user information")
+            : tr("description.create", "Create a new user account")
+        }
+      >
+        <Card className="border-0 shadow-none md:border md:shadow-sm">
           <CardContent className="flex items-center justify-center py-12">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
             <span className="ml-3">{tr("loading", "Loading user...")}</span>
           </CardContent>
         </Card>
-      </div>
+      </ResponsivePageContainer>
     );
   }
 
   return (
-    <div className="container mx-auto px-4 py-8">
+    <ResponsivePageContainer
+      title={isEdit ? tr("title.edit", "Edit User") : tr("title.create", "Create User")}
+      description={
+        isEdit
+          ? tr("description.edit", "Update user information")
+          : tr("description.create", "Create a new user account")
+      }
+    >
       <TooltipProvider>
-        <Card>
-          <CardHeader>
-            <CardTitle>
-              {isEdit
-                ? tr("title.edit", "Edit User")
-                : tr("title.create", "Create User")}
-            </CardTitle>
-            <CardDescription>
-              {isEdit
-                ? tr("description.edit", "Update user information")
-                : tr("description.create", "Create a new user account")}
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
+        <Card className="border-0 shadow-none md:border md:shadow-sm">
+          <CardContent className="p-4 sm:p-6">
             <Form {...form}>
               <form
                 onSubmit={form.handleSubmit(onSubmit, onInvalid)}
@@ -764,8 +767,16 @@ export function EditUserPage() {
                   </div>
                 )}
 
-                <div className="flex gap-2">
-                  <Button type="submit" disabled={isSubmitting}>
+                <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => navigate("/users")}
+                    className="w-full sm:w-auto"
+                  >
+                    {tr("actions.cancel", "Cancel")}
+                  </Button>
+                  <Button type="submit" disabled={isSubmitting} className="w-full sm:w-auto">
                     {isSubmitting
                       ? isEdit
                         ? tr("actions.updating", "Updating...")
@@ -774,20 +785,13 @@ export function EditUserPage() {
                         ? tr("actions.update", "Update User")
                         : tr("actions.create", "Create User")}
                   </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => navigate("/users")}
-                  >
-                    {tr("actions.cancel", "Cancel")}
-                  </Button>
                 </div>
               </form>
             </Form>
           </CardContent>
         </Card>
       </TooltipProvider>
-    </div>
+    </ResponsivePageContainer>
   );
 }
 

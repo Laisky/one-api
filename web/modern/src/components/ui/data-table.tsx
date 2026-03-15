@@ -5,6 +5,8 @@ import {
   useReactTable,
 } from '@tanstack/react-table'
 import type { ColumnDef, SortingState } from '@tanstack/react-table'
+import { useResponsive } from '@/hooks/useResponsive'
+import { cn } from '@/lib/utils'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Button } from '@/components/ui/button'
 import { AdvancedPagination } from '@/components/ui/advanced-pagination'
@@ -40,6 +42,7 @@ export function DataTable<TData, TValue>({
   loading = false,
 }: DataTableProps<TData, TValue>) {
   const { t } = useTranslation()
+  const { isMobile } = useResponsive()
   // Client-side sorting state (for display only when no server-side sorting)
   const [sorting, setSorting] = React.useState<SortingState>([])
 
@@ -117,52 +120,85 @@ export function DataTable<TData, TValue>({
 
   return (
     <div className="space-y-2">
-      <div className="relative rounded-md border overflow-x-auto">
+      <div className="relative">
         {/* Loading overlay to prevent repeated actions */}
         {loading && (
-          <div className="absolute inset-0 z-10 flex items-center justify-center bg-background/60 backdrop-blur-sm">
+          <div className="absolute inset-0 z-10 flex items-center justify-center rounded-xl bg-background/60 backdrop-blur-sm">
             <div className="text-sm text-muted-foreground">{t('common.loading', 'Loading...')}</div>
           </div>
         )}
-        <Table className={loading ? 'pointer-events-none opacity-60' : ''}>
-          <TableHeader>
-            {table.getHeaderGroups().map((headerGroup) => (
-              <TableRow key={headerGroup.id}>
-                {headerGroup.headers.map((header) => (
-                  <TableHead key={header.id} className="text-left mobile:whitespace-normal mobile:break-words">
-                    {header.isPlaceholder
-                      ? null
-                      : flexRender(header.column.columnDef.header, header.getContext())}
-                  </TableHead>
-                ))}
-              </TableRow>
-            ))}
-          </TableHeader>
-          <TableBody>
+        {isMobile ? (
+          <div className={cn('space-y-3', loading && 'pointer-events-none opacity-60')}>
             {table.getRowModel().rows?.length ? (
               table.getRowModel().rows.map((row) => (
-                <TableRow key={row.id} data-state={row.getIsSelected() && 'selected'} className="mobile-table-row">
+                <section key={row.id} className="rounded-xl border bg-card p-4 shadow-sm">
                   {row.getVisibleCells().map((cell) => {
                     const meta = cell.column.columnDef.meta as { mobileLabel?: string } | undefined
                     const headerDef = cell.column.columnDef.header
                     const label = meta?.mobileLabel || (typeof headerDef === 'string' ? headerDef : (cell.column.id || ''))
+
                     return (
-                      <TableCell key={cell.id} data-label={label} className="mobile-table-cell break-words break-all">
-                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                      </TableCell>
+                      <div key={cell.id} className="grid gap-1 border-b border-border/60 py-3 first:pt-0 last:border-b-0 last:pb-0">
+                        <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                          {label}
+                        </span>
+                        <div className="text-sm text-foreground break-words break-all">
+                          {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                        </div>
+                      </div>
                     )
                   })}
-                </TableRow>
+                </section>
               ))
             ) : (
-              <TableRow>
-                <TableCell colSpan={columns.length} className="h-24 text-center">
-                  {loading ? t('common.loading', 'Loading...') : t('common.no_data', 'No results.')}
-                </TableCell>
-              </TableRow>
+              <div className="rounded-xl border bg-card px-4 py-10 text-center text-sm text-muted-foreground shadow-sm">
+                {loading ? t('common.loading', 'Loading...') : t('common.no_data', 'No results.')}
+              </div>
             )}
-          </TableBody>
-        </Table>
+          </div>
+        ) : (
+          <div className="rounded-md border overflow-x-auto">
+            <Table className={loading ? 'pointer-events-none opacity-60' : ''}>
+              <TableHeader>
+                {table.getHeaderGroups().map((headerGroup) => (
+                  <TableRow key={headerGroup.id}>
+                    {headerGroup.headers.map((header) => (
+                      <TableHead key={header.id} className="text-left mobile:whitespace-normal mobile:break-words">
+                        {header.isPlaceholder
+                          ? null
+                          : flexRender(header.column.columnDef.header, header.getContext())}
+                      </TableHead>
+                    ))}
+                  </TableRow>
+                ))}
+              </TableHeader>
+              <TableBody>
+                {table.getRowModel().rows?.length ? (
+                  table.getRowModel().rows.map((row) => (
+                    <TableRow key={row.id} data-state={row.getIsSelected() && 'selected'}>
+                      {row.getVisibleCells().map((cell) => {
+                        const meta = cell.column.columnDef.meta as { mobileLabel?: string } | undefined
+                        const headerDef = cell.column.columnDef.header
+                        const label = meta?.mobileLabel || (typeof headerDef === 'string' ? headerDef : (cell.column.id || ''))
+                        return (
+                          <TableCell key={cell.id} data-label={label} className="mobile-table-cell break-words break-all">
+                            {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                          </TableCell>
+                        )
+                      })}
+                    </TableRow>
+                  ))
+                ) : (
+                  <TableRow>
+                    <TableCell colSpan={columns.length} className="h-24 text-center">
+                      {loading ? t('common.loading', 'Loading...') : t('common.no_data', 'No results.')}
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        )}
       </div>
 
       {/* Advanced Pagination */}

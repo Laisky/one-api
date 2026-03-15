@@ -1,6 +1,7 @@
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { MarkdownRenderer } from '@/components/ui/markdown';
+import { ResponsivePageContainer } from '@/components/ui/responsive-container';
 import { api } from '@/lib/api';
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -50,21 +51,22 @@ export function AboutPage() {
   // If no about content is configured, show default
   if (aboutLoaded && !about) {
     return (
-      <div className="container mx-auto px-4 py-8">
-        <Card>
-          <CardHeader>
-            <CardTitle>{t('about.title')}</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-6">
+      <ResponsivePageContainer
+        title={t('about.title')}
+        actions={
+          <Button asChild className="w-full sm:w-auto">
+            <Link to="/models">{t('about.cta_models')}</Link>
+          </Button>
+        }
+      >
+        <Card className="border-0 shadow-none md:border md:shadow-sm">
+          <CardContent className="space-y-6 p-4 sm:p-6">
             <div>
               <h2 className="text-xl font-semibold mb-4">{t('about.default.heading')}</h2>
               <p className="text-muted-foreground mb-4">{t('about.default.description')}</p>
             </div>
 
-            <div className="flex gap-4">
-              <Button asChild>
-                <Link to="/models">{t('about.cta_models')}</Link>
-              </Button>
+            <div className="flex flex-col gap-3 sm:flex-row">
               <Button variant="outline" asChild>
                 <a href="https://github.com/Laisky/one-api" target="_blank" rel="noopener noreferrer">
                   {t('about.cta_repo')}
@@ -82,27 +84,26 @@ export function AboutPage() {
             </div>
           </CardContent>
         </Card>
-      </div>
+      </ResponsivePageContainer>
     );
   }
 
   // Render custom about content
   return (
-    <div className="container mx-auto px-4 py-8">
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <CardTitle>{t('about.title')}</CardTitle>
-            <Button asChild>
-              <Link to="/models">{t('about.cta_models')}</Link>
-            </Button>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <MarkdownRenderer content={about} compact={false} className="prose-base lg:prose-lg" />
+    <ResponsivePageContainer
+      title={t('about.title')}
+      actions={
+        <Button asChild className="w-full sm:w-auto">
+          <Link to="/models">{t('about.cta_models')}</Link>
+        </Button>
+      }
+    >
+      <Card className="border-0 shadow-none md:border md:shadow-sm">
+        <CardContent className="p-4 sm:p-6">
+          <MarkdownRenderer content={about} compact={false} className="prose-base max-w-none break-words [&_a]:break-all lg:prose-lg" />
         </CardContent>
       </Card>
-    </div>
+    </ResponsivePageContainer>
   );
 }
 

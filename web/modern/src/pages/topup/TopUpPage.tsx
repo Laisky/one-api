@@ -15,6 +15,7 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import { ResponsivePageContainer } from "@/components/ui/responsive-container";
 import { api } from "@/lib/api";
 import { useAuthStore } from "@/lib/stores/auth";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -165,14 +166,12 @@ export function TopUpPage() {
   }, []);
 
   return (
-    <div className="container mx-auto px-4 py-8">
-      <div className="max-w-4xl mx-auto space-y-6">
-        <div className="text-center">
-          <h1 className="text-2xl font-bold mb-2">{tr("title", "Top Up")}</h1>
-          <p className="text-muted-foreground">
-            {tr("description", "Manage your account balance and redeem codes")}
-          </p>
-        </div>
+    <ResponsivePageContainer
+      title={tr("title", "Top Up")}
+      description={tr("description", "Manage your account balance and redeem codes")}
+      className="max-w-4xl"
+    >
+      <div className="space-y-6">
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {/* Current Balance */}
@@ -318,7 +317,7 @@ export function TopUpPage() {
           </CardContent>
         </Card>
       </div>
-    </div>
+    </ResponsivePageContainer>
   );
 }
 

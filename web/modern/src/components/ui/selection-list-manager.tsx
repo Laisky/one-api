@@ -110,18 +110,22 @@ export function SelectionListManager({
           )}
         </div>
 
-        {actions && <div className="flex flex-wrap gap-2">{actions}</div>}
+        {actions && (
+          <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap [&>*]:w-full sm:[&>*]:w-auto">
+            {actions}
+          </div>
+        )}
 
-        <div className="flex gap-2 flex-wrap">
+        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
           <Input
             value={searchTerm}
             onChange={(event) => setSearchTerm(event.target.value)}
             placeholder={searchPlaceholder}
             disabled={disabled}
-            className="flex-1 min-w-[220px]"
+            className="w-full sm:flex-1 sm:min-w-[220px]"
           />
           {customPlaceholder && (
-            <div className="flex gap-2 flex-1 min-w-[260px]">
+            <div className="flex w-full flex-col gap-2 sm:flex-1 sm:min-w-[260px] sm:flex-row">
               <Input
                 value={customValue}
                 onChange={(event) => setCustomValue(event.target.value)}
@@ -134,14 +138,14 @@ export function SelectionListManager({
                   }
                 }}
               />
-              <Button type="button" variant="secondary" onClick={addCustomValue} disabled={disabled}>
+              <Button type="button" variant="secondary" onClick={addCustomValue} disabled={disabled} className="w-full sm:w-auto">
                 {addLabel || 'Add'}
               </Button>
             </div>
           )}
         </div>
 
-        <div className="max-h-[200px] overflow-y-auto border rounded p-2 bg-muted/10">
+        <div className="max-h-[220px] overflow-y-auto rounded-lg border bg-muted/10 p-3">
           <div className="flex flex-wrap gap-2">
             {filteredOptions.length === 0 && <span className="text-xs text-muted-foreground">{noOptionsLabel || 'No options'}</span>}
             {filteredOptions.map((option) => {
@@ -162,13 +166,13 @@ export function SelectionListManager({
 
         <div className="space-y-2">
           <div className="text-sm font-medium text-muted-foreground">{selectedSummary}</div>
-          <div className="flex flex-wrap gap-2 min-h-[40px] p-2 border rounded bg-background">
+          <div className="flex min-h-[52px] flex-wrap gap-2 rounded-lg border bg-background p-3">
             {normalizedSelected.length === 0 && (
               <span className="text-sm text-muted-foreground italic p-1">{emptySelectedLabel || 'No selections'}</span>
             )}
             {normalizedSelected.map((item) => (
-              <Badge key={item} variant="secondary" className="gap-1 max-w-full">
-                <span className="truncate min-w-0" title={item}>{item}</span>
+              <Badge key={item} variant="secondary" className="max-w-full gap-1 overflow-hidden px-2 py-1.5">
+                <span className="min-w-0 truncate" title={item}>{item}</span>
                 <button
                   type="button"
                   onClick={() => removeSelected(item)}

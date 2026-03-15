@@ -326,7 +326,11 @@ export function EnhancedDataTable<TData, TValue>({
                             table.getRowModel().rows.map((row) => (
                                 <div
                                     key={row.id}
-                                    className="bg-card border rounded-lg p-3 space-y-2 shadow-sm"
+                                    className={cn(
+                                        'bg-card border rounded-lg p-3 space-y-2 shadow-sm',
+                                        onRowClick && 'cursor-pointer transition-colors hover:bg-muted/40'
+                                    )}
+                                    onClick={() => onRowClick?.(row.original)}
                                 >
                                     {row.getVisibleCells().map((cell) => {
                                         const headerDef = cell.column.columnDef.header;

@@ -1,9 +1,10 @@
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { useNotifications } from '@/components/ui/notifications';
+import { ResponsivePageContainer } from '@/components/ui/responsive-container';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { SelectionListManager } from '@/components/ui/selection-list-manager';
 import { Textarea } from '@/components/ui/textarea';
@@ -215,12 +216,16 @@ export function EditMCPServerPage() {
 
   return (
     <TooltipProvider>
-      <div className="space-y-6">
-        <Card>
-          <CardHeader>
-            <CardTitle>{isEdit ? t('mcp.edit.title_edit', 'Edit MCP Server') : t('mcp.edit.title_add', 'Add MCP Server')}</CardTitle>
-          </CardHeader>
-          <CardContent>
+      <ResponsivePageContainer
+        title={isEdit ? t('mcp.edit.title_edit', 'Edit MCP Server') : t('mcp.edit.title_add', 'Add MCP Server')}
+        description={
+          isEdit
+            ? t('mcp.edit.description_edit', 'Update MCP server connection, sync, and tool exposure settings.')
+            : t('mcp.edit.description_add', 'Add a new MCP server and configure how its tools are exposed.')
+        }
+      >
+        <Card className="border-0 shadow-none md:border md:shadow-sm">
+          <CardContent className="p-4 sm:p-6">
             <Form {...form}>
               <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
                 <FormField
@@ -478,19 +483,19 @@ export function EditMCPServerPage() {
                   />
                 </div>
 
-                <div className="flex gap-2">
-                  <Button type="submit">
-                    {isEdit ? t('mcp.edit.actions.update', 'Update Server') : t('mcp.edit.actions.create', 'Create Server')}
-                  </Button>
-                  <Button type="button" variant="outline" onClick={() => navigate('/mcps')}>
+                <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                  <Button type="button" variant="outline" onClick={() => navigate('/mcps')} className="w-full sm:w-auto">
                     {t('mcp.edit.actions.cancel', 'Cancel')}
+                  </Button>
+                  <Button type="submit" className="w-full sm:w-auto">
+                    {isEdit ? t('mcp.edit.actions.update', 'Update Server') : t('mcp.edit.actions.create', 'Create Server')}
                   </Button>
                 </div>
               </form>
             </Form>
           </CardContent>
         </Card>
-      </div>
+      </ResponsivePageContainer>
     </TooltipProvider>
   );
 }

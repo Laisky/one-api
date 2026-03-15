@@ -8,12 +8,14 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { ResponsivePageContainer } from "@/components/ui/responsive-container";
 import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { useResponsive } from "@/hooks/useResponsive";
 import { api } from "@/lib/api";
 import { Info } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
@@ -36,6 +38,7 @@ interface ModelsData {
 }
 
 export function ModelsPage() {
+  const { isMobile } = useResponsive();
   const [modelsData, setModelsData] = useState<ModelsData>({});
   const [filteredData, setFilteredData] = useState<ModelsData>({});
   const [loading, setLoading] = useState(true);
@@ -164,91 +167,109 @@ export function ModelsPage() {
       }));
 
     return (
-      <Card key={channelName} className="mb-6">
+      <Card key={channelName} className="mb-6 border-0 shadow-none md:border md:shadow-sm">
         <CardHeader>
           <CardTitle className="text-lg">
             {formatChannelName(channelName)} ({models.length} models)
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b">
-                  <th className="text-left py-2 px-3 font-medium">
-                    {tr("table.model", "Model")}
-                  </th>
-                  <th className="text-left py-2 px-3 font-medium">
-                    {tr("table.input_price", "Input Price (per 1M tokens)")}
-                  </th>
-                  <th className="text-left py-2 px-3 font-medium">
-                    {tr("table.cached_input_price", "Cached Input Price")}
-                  </th>
-                  <th className="text-left py-2 px-3 font-medium">
-                    {tr("table.output_price", "Output Price")}
-                  </th>
-                  <th className="text-left py-2 px-3 font-medium">
-                    {tr("table.image_price", "Image Price (per image)")}
-                  </th>
-                  <th className="text-left py-2 px-3 font-medium">
-                    <span className="inline-flex items-center gap-1">
-                      {tr("table.max_tokens", "Max Tokens")}
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <button
-                            type="button"
-                            className="inline-flex items-center text-muted-foreground hover:text-foreground focus:outline-none"
-                            aria-label="What does max tokens mean?"
+          {isMobile ? (
+            <div className="space-y-3">
+              {models.map((model) => (
+                <div key={model.model} className="rounded-xl border bg-card p-4 shadow-sm space-y-3">
+                  <div>
+                    <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">{tr("table.model", "Model")}</div>
+                    <div className="font-mono text-sm break-all">{model.model}</div>
+                  </div>
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <div>
+                      <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">{tr("table.input_price", "Input Price")}</div>
+                      <div className="text-sm">{formatPrice(model.inputPrice)}</div>
+                    </div>
+                    <div>
+                      <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">{tr("table.cached_input_price", "Cached Input Price")}</div>
+                      <div className="text-sm">{formatPrice(model.cachedInputPrice)}</div>
+                    </div>
+                    <div>
+                      <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">{tr("table.output_price", "Output Price")}</div>
+                      <div className="text-sm">{formatPrice(model.outputPrice)}</div>
+                    </div>
+                    <div>
+                      <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">{tr("table.image_price", "Image Price")}</div>
+                      <div className="text-sm">{model.imagePrice && model.imagePrice > 0 ? formatPrice(model.imagePrice) : "-"}</div>
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">{tr("table.max_tokens", "Max Tokens")}</div>
+                    <div className="text-sm">{formatMaxTokens(model.maxTokens)}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b">
+                    <th className="text-left py-2 px-3 font-medium">
+                      {tr("table.model", "Model")}
+                    </th>
+                    <th className="text-left py-2 px-3 font-medium">
+                      {tr("table.input_price", "Input Price (per 1M tokens)")}
+                    </th>
+                    <th className="text-left py-2 px-3 font-medium">
+                      {tr("table.cached_input_price", "Cached Input Price")}
+                    </th>
+                    <th className="text-left py-2 px-3 font-medium">
+                      {tr("table.output_price", "Output Price")}
+                    </th>
+                    <th className="text-left py-2 px-3 font-medium">
+                      {tr("table.image_price", "Image Price (per image)")}
+                    </th>
+                    <th className="text-left py-2 px-3 font-medium">
+                      <span className="inline-flex items-center gap-1">
+                        {tr("table.max_tokens", "Max Tokens")}
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <button
+                              type="button"
+                              className="inline-flex items-center text-muted-foreground hover:text-foreground focus:outline-none"
+                              aria-label="What does max tokens mean?"
+                            >
+                              <Info className="h-4 w-4" aria-hidden="true" />
+                            </button>
+                          </TooltipTrigger>
+                          <TooltipContent
+                            side="top"
+                            align="start"
+                            className="max-w-xs text-sm"
                           >
-                            <Info className="h-4 w-4" aria-hidden="true" />
-                          </button>
-                        </TooltipTrigger>
-                        <TooltipContent
-                          side="top"
-                          align="start"
-                          className="max-w-xs text-sm"
-                        >
-                          {tr(
-                            "table.max_tokens_tooltip",
-                            "Maximum total tokens this channel allows per request for the model, including prompt and completion tokens. A value of 0 means the provider does not advertise a fixed limit."
-                          )}
-                        </TooltipContent>
-                      </Tooltip>
-                    </span>
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {models.map((model) => (
-                  <tr key={model.model} className="border-b hover:bg-muted/50">
-                    <td
-                      className="py-2 px-3 font-mono text-sm"
-                      data-label="Model"
-                    >
-                      {model.model}
-                    </td>
-                    <td className="py-2 px-3" data-label="Input Price">
-                      {formatPrice(model.inputPrice)}
-                    </td>
-                    <td className="py-2 px-3" data-label="Cached Input Price">
-                      {formatPrice(model.cachedInputPrice)}
-                    </td>
-                    <td className="py-2 px-3" data-label="Output Price">
-                      {formatPrice(model.outputPrice)}
-                    </td>
-                    <td className="py-2 px-3" data-label="Image Price">
-                      {model.imagePrice && model.imagePrice > 0
-                        ? formatPrice(model.imagePrice)
-                        : "-"}
-                    </td>
-                    <td className="py-2 px-3" data-label="Max Tokens">
-                      {formatMaxTokens(model.maxTokens)}
-                    </td>
+                            {tr(
+                              "table.max_tokens_tooltip",
+                              "Maximum total tokens this channel allows per request for the model, including prompt and completion tokens. A value of 0 means the provider does not advertise a fixed limit."
+                            )}
+                          </TooltipContent>
+                        </Tooltip>
+                      </span>
+                    </th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {models.map((model) => (
+                    <tr key={model.model} className="border-b hover:bg-muted/50">
+                      <td className="py-2 px-3 font-mono text-sm">{model.model}</td>
+                      <td className="py-2 px-3">{formatPrice(model.inputPrice)}</td>
+                      <td className="py-2 px-3">{formatPrice(model.cachedInputPrice)}</td>
+                      <td className="py-2 px-3">{formatPrice(model.outputPrice)}</td>
+                      <td className="py-2 px-3">{model.imagePrice && model.imagePrice > 0 ? formatPrice(model.imagePrice) : "-"}</td>
+                      <td className="py-2 px-3">{formatMaxTokens(model.maxTokens)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </CardContent>
       </Card>
     );
@@ -256,14 +277,14 @@ export function ModelsPage() {
 
   if (loading) {
     return (
-      <div className="container mx-auto px-4 py-8">
-        <Card>
+      <ResponsivePageContainer title={tr("title", "Supported Models")} description={tr("description", "Browse all models supported by the server.")}>
+        <Card className="border-0 shadow-none md:border md:shadow-sm">
           <CardContent className="flex items-center justify-center py-12">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
             <span className="ml-3">{tr("loading", "Loading models...")}</span>
           </CardContent>
         </Card>
-      </div>
+      </ResponsivePageContainer>
     );
   }
 
@@ -276,19 +297,17 @@ export function ModelsPage() {
 
   return (
     <TooltipProvider delayDuration={150}>
-      <div className="container mx-auto px-4 py-8">
-        <Card className="mb-6">
+      <ResponsivePageContainer
+        title={tr("title", "Supported Models")}
+        description={tr("description", "Browse all models supported by the server, grouped by channel/adaptor with pricing information.")}
+      >
+        <Card className="mb-6 border-0 shadow-none md:border md:shadow-sm">
           <CardHeader>
-            <CardTitle>{tr("title", "Supported Models")}</CardTitle>
-            <CardDescription>
-              {tr(
-                "description",
-                "Browse all models supported by the server, grouped by channel/adaptor with pricing information."
-              )}
-            </CardDescription>
+            <CardTitle className="text-lg">{tr("filters.title", "Filter Models")}</CardTitle>
+            <CardDescription>{tr("filters.description", "Search by model name or narrow the list by channel.")}</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-3 mb-6">
               <div className="md:col-span-1">
                 <Input
                   placeholder={tr("search", "Search models...")}
@@ -306,7 +325,7 @@ export function ModelsPage() {
                           ? "default"
                           : "outline"
                       }
-                      className="cursor-pointer"
+                      className="cursor-pointer break-all"
                       onClick={() => toggleChannelFilter(channelName)}
                     >
                       {formatChannelName(channelName)} (
@@ -361,7 +380,7 @@ export function ModelsPage() {
             )}
           </CardContent>
         </Card>
-      </div>
+      </ResponsivePageContainer>
     </TooltipProvider>
   );
 }

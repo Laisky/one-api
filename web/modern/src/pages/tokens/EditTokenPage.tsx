@@ -19,6 +19,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useNotifications } from "@/components/ui/notifications";
+import { ResponsivePageContainer } from "@/components/ui/responsive-container";
 import {
   Tooltip,
   TooltipContent,
@@ -392,14 +393,21 @@ export function EditTokenPage() {
 
   if (loading) {
     return (
-      <div className="container mx-auto px-4 py-8">
-        <Card>
+      <ResponsivePageContainer
+        title={isEdit ? tr("title.edit", "Edit Token") : tr("title.create", "Create Token")}
+        description={
+          isEdit
+            ? tr("description.edit", "Update token settings")
+            : tr("description.create", "Create a new API token")
+        }
+      >
+        <Card className="border-0 shadow-none md:border md:shadow-sm">
           <CardContent className="flex items-center justify-center py-12">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
             <span className="ml-3">{tr("loading", "Loading token...")}</span>
           </CardContent>
         </Card>
-      </div>
+      </ResponsivePageContainer>
     );
   }
 
@@ -411,22 +419,17 @@ export function EditTokenPage() {
         logEditPageLayout("EditTokenPage");
         return null;
       })()}
-      <div className="container mx-auto px-4 py-8">
+      <ResponsivePageContainer
+        title={isEdit ? tr("title.edit", "Edit Token") : tr("title.create", "Create Token")}
+        description={
+          isEdit
+            ? tr("description.edit", "Update token settings")
+            : tr("description.create", "Create a new API token")
+        }
+      >
         <TooltipProvider>
-          <Card>
-            <CardHeader>
-              <CardTitle>
-                {isEdit
-                  ? tr("title.edit", "Edit Token")
-                  : tr("title.create", "Create Token")}
-              </CardTitle>
-              <CardDescription>
-                {isEdit
-                  ? tr("description.edit", "Update token settings")
-                  : tr("description.create", "Create a new API token")}
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
+          <Card className="border-0 shadow-none md:border md:shadow-sm">
+            <CardContent className="p-4 sm:p-6">
               <Form {...form}>
                 <form
                   onSubmit={form.handleSubmit(onSubmit, onInvalid)}
@@ -673,8 +676,16 @@ export function EditTokenPage() {
                     </div>
                   )}
 
-                  <div className="flex gap-2">
-                    <Button type="submit" disabled={isSubmitting}>
+                  <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => navigate("/tokens")}
+                      className="w-full sm:w-auto"
+                    >
+                      {tr("actions.cancel", "Cancel")}
+                    </Button>
+                    <Button type="submit" disabled={isSubmitting} className="w-full sm:w-auto">
                       {isSubmitting
                         ? isEdit
                           ? tr("actions.updating", "Updating...")
@@ -683,20 +694,13 @@ export function EditTokenPage() {
                           ? tr("actions.update", "Update Token")
                           : tr("actions.create", "Create Token")}
                     </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() => navigate("/tokens")}
-                    >
-                      {tr("actions.cancel", "Cancel")}
-                    </Button>
                   </div>
                 </form>
               </Form>
             </CardContent>
           </Card>
         </TooltipProvider>
-      </div>
+      </ResponsivePageContainer>
     </>
   );
 }

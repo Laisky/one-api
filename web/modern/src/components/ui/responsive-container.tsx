@@ -120,7 +120,7 @@ export function ResponsivePageContainer({
                             <div
                                 className={cn(
                                     'flex items-center gap-2',
-                                    isMobile ? 'w-full overflow-x-auto pb-1' : 'flex-shrink-0'
+                                    isMobile ? 'w-full flex-col items-stretch gap-2' : 'flex-shrink-0'
                                 )}
                             >
                                 {actions}

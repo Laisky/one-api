@@ -2,6 +2,8 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { ResponsivePageContainer } from '@/components/ui/responsive-container';
+import { useResponsive } from '@/hooks/useResponsive';
 import { api } from '@/lib/api';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -46,6 +48,7 @@ type ToolsData = Record<string, ToolsByServer>;
 
 export function ToolsPage() {
   const { t } = useTranslation();
+  const { isMobile } = useResponsive();
   const [toolsData, setToolsData] = useState<ToolsData>({});
   const [filteredData, setFilteredData] = useState<ToolsData>({});
   const [loading, setLoading] = useState(true);
@@ -173,28 +176,29 @@ export function ToolsPage() {
 
   if (loading) {
     return (
-      <div className="container mx-auto px-4 py-8">
-        <Card>
+      <ResponsivePageContainer title={tr('title', 'MCP Tools')} description={tr('description', 'Browse tools synced from MCP servers.') }>
+        <Card className="border-0 shadow-none md:border md:shadow-sm">
           <CardContent className="flex items-center justify-center py-12">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
             <span className="ml-3">{tr('loading', 'Loading tools...')}</span>
           </CardContent>
         </Card>
-      </div>
+      </ResponsivePageContainer>
     );
   }
 
   return (
-    <div className="container mx-auto px-4 py-8">
-      <Card className="mb-6">
+    <ResponsivePageContainer
+      title={tr('title', 'MCP Tools')}
+      description={tr('description', 'Browse tools synced from MCP servers, grouped by server with pricing and schema details.')}
+    >
+      <Card className="mb-6 border-0 shadow-none md:border md:shadow-sm">
         <CardHeader>
-          <CardTitle>{tr('title', 'MCP Tools')}</CardTitle>
-          <CardDescription>
-            {tr('description', 'Browse tools synced from MCP servers, grouped by server with pricing and schema details.')}
-          </CardDescription>
+          <CardTitle className="text-lg">{tr('filters.title', 'Filter Tools')}</CardTitle>
+          <CardDescription>{tr('filters.description', 'Search by tool name, description, or server.')}</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-3 mb-6">
             <div className="md:col-span-1">
               <Input placeholder={tr('search', 'Search tools...')} value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
             </div>
@@ -204,7 +208,7 @@ export function ToolsPage() {
                   <Badge
                     key={serverName}
                     variant={selectedServers.includes(serverName) ? 'default' : 'outline'}
-                    className="cursor-pointer"
+                    className="cursor-pointer break-all"
                     onClick={() => toggleServerFilter(serverName)}
                   >
                     {serverName} ({toolsData[serverName].tools.length})
@@ -241,56 +245,78 @@ export function ToolsPage() {
                   const entry = filteredData[serverName];
                   const tools = [...entry.tools].sort((a, b) => a.name.localeCompare(b.name));
                   return (
-                    <Card key={serverName} className="mb-6">
+                    <Card key={serverName} className="mb-6 border-0 shadow-none md:border md:shadow-sm">
                       <CardHeader>
                         <CardTitle className="text-lg">
                           {serverName} ({tools.length} tools)
                         </CardTitle>
                       </CardHeader>
                       <CardContent>
-                        <div className="overflow-x-auto">
-                          <table className="w-full text-sm">
-                            <thead>
-                              <tr className="border-b">
-                                <th className="text-left py-2 px-3 font-medium">{tr('table.tool', 'Tool')}</th>
-                                <th className="text-left py-2 px-3 font-medium">{tr('table.description', 'Description')}</th>
-                                <th className="text-left py-2 px-3 font-medium">{tr('table.status', 'Status')}</th>
-                                <th className="text-left py-2 px-3 font-medium">{tr('table.pricing', 'Pricing')}</th>
-                                <th className="text-left py-2 px-3 font-medium">{tr('table.schema', 'Input Schema')}</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {tools.map((tool) => {
-                                const schema = tool.input_schema || '';
-                                return (
-                                  <tr key={`${serverName}-${tool.name}`} className="border-b hover:bg-muted/50">
-                                    <td className="py-2 px-3 font-mono text-sm" data-label="Tool">
-                                      {tool.name}
-                                    </td>
-                                    <td className="py-2 px-3" data-label="Description">
-                                      {tool.description || '-'}
-                                    </td>
-                                    <td className="py-2 px-3" data-label="Status">
-                                      {tool.status === 1 ? tr('status.enabled', 'Enabled') : tr('status.disabled', 'Disabled')}
-                                    </td>
-                                    <td className="py-2 px-3" data-label="Pricing">
-                                      {formatPricing(tool.default_pricing)}
-                                    </td>
-                                    <td className="py-2 px-3" data-label="Input Schema">
-                                      {schema ? (
-                                        <span className="block max-w-xs truncate font-mono text-xs" title={schema}>
-                                          {schema}
-                                        </span>
-                                      ) : (
-                                        '-'
-                                      )}
-                                    </td>
-                                  </tr>
-                                );
-                              })}
-                            </tbody>
-                          </table>
-                        </div>
+                        {isMobile ? (
+                          <div className="space-y-3">
+                            {tools.map((tool) => {
+                              const schema = tool.input_schema || '';
+                              return (
+                                <div key={`${serverName}-${tool.name}`} className="rounded-xl border bg-card p-4 shadow-sm space-y-3">
+                                  <div>
+                                    <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">{tr('table.tool', 'Tool')}</div>
+                                    <div className="font-mono text-sm break-all">{tool.name}</div>
+                                  </div>
+                                  <div>
+                                    <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">{tr('table.description', 'Description')}</div>
+                                    <div className="text-sm text-muted-foreground break-words">{tool.description || '-'}</div>
+                                  </div>
+                                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                                    <div>
+                                      <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">{tr('table.status', 'Status')}</div>
+                                      <div className="text-sm">{tool.status === 1 ? tr('status.enabled', 'Enabled') : tr('status.disabled', 'Disabled')}</div>
+                                    </div>
+                                    <div>
+                                      <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">{tr('table.pricing', 'Pricing')}</div>
+                                      <div className="text-sm">{formatPricing(tool.default_pricing)}</div>
+                                    </div>
+                                  </div>
+                                  <div>
+                                    <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">{tr('table.schema', 'Input Schema')}</div>
+                                    {schema ? (
+                                      <pre className="mt-1 max-h-40 overflow-auto rounded-lg bg-muted/40 p-3 text-xs break-all whitespace-pre-wrap">{schema}</pre>
+                                    ) : (
+                                      <div className="text-sm text-muted-foreground">-</div>
+                                    )}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        ) : (
+                          <div className="overflow-x-auto">
+                            <table className="w-full text-sm">
+                              <thead>
+                                <tr className="border-b">
+                                  <th className="text-left py-2 px-3 font-medium">{tr('table.tool', 'Tool')}</th>
+                                  <th className="text-left py-2 px-3 font-medium">{tr('table.description', 'Description')}</th>
+                                  <th className="text-left py-2 px-3 font-medium">{tr('table.status', 'Status')}</th>
+                                  <th className="text-left py-2 px-3 font-medium">{tr('table.pricing', 'Pricing')}</th>
+                                  <th className="text-left py-2 px-3 font-medium">{tr('table.schema', 'Input Schema')}</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {tools.map((tool) => {
+                                  const schema = tool.input_schema || '';
+                                  return (
+                                    <tr key={`${serverName}-${tool.name}`} className="border-b hover:bg-muted/50">
+                                      <td className="py-2 px-3 font-mono text-sm">{tool.name}</td>
+                                      <td className="py-2 px-3">{tool.description || '-'}</td>
+                                      <td className="py-2 px-3">{tool.status === 1 ? tr('status.enabled', 'Enabled') : tr('status.disabled', 'Disabled')}</td>
+                                      <td className="py-2 px-3">{formatPricing(tool.default_pricing)}</td>
+                                      <td className="py-2 px-3">{schema ? <span className="block max-w-xs truncate font-mono text-xs" title={schema}>{schema}</span> : '-'}</td>
+                                    </tr>
+                                  );
+                                })}
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
                       </CardContent>
                     </Card>
                   );
@@ -299,7 +325,7 @@ export function ToolsPage() {
           )}
         </CardContent>
       </Card>
-    </div>
+    </ResponsivePageContainer>
   );
 }
 

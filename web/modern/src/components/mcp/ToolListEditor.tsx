@@ -41,7 +41,7 @@ export function ToolListEditor({ label, description, value, onChange, placeholde
         <Label className="text-sm font-medium">{label}</Label>
         {description && <p className="text-xs text-muted-foreground mt-1">{description}</p>}
       </div>
-      <div className="flex gap-2">
+      <div className="flex flex-col gap-2 sm:flex-row">
         <Input
           value={draft}
           onChange={(event) => setDraft(event.target.value)}
@@ -54,14 +54,14 @@ export function ToolListEditor({ label, description, value, onChange, placeholde
             }
           }}
         />
-        <Button type="button" variant="secondary" onClick={addItem} disabled={disabled}>
+        <Button type="button" variant="secondary" onClick={addItem} disabled={disabled} className="w-full sm:w-auto">
           {addLabel || 'Add'}
         </Button>
       </div>
-      <div className="flex flex-wrap gap-2">
+      <div className="flex min-h-[44px] flex-wrap gap-2 rounded-lg border bg-background p-3">
         {normalized.length === 0 && <span className="text-xs text-muted-foreground">{t('common.no_items', 'No items')}</span>}
         {normalized.map((item) => (
-          <Badge key={item} variant="secondary" className="gap-1 max-w-full">
+          <Badge key={item} variant="secondary" className="max-w-full gap-1 overflow-hidden px-2 py-1.5">
             <span className="truncate min-w-0" title={item}>{item}</span>
             <button
               type="button"

@@ -219,7 +219,7 @@ export function RedemptionsPage() {
       title={tr('title', 'Redemptions')}
       description={tr('description', 'Manage recharge codes')}
       actions={
-        <div className={cn('flex gap-2 flex-wrap', isMobile ? 'w-full overflow-x-auto pb-1' : 'items-center')}>
+        <div className={cn('flex gap-2 flex-wrap max-w-full', isMobile ? 'w-full flex-col' : 'items-center')}>
           <Button
             onClick={() => navigate('/redemptions/add')}
             className={cn('whitespace-nowrap', isMobile ? 'w-full touch-target' : '')}
@@ -247,8 +247,8 @@ export function RedemptionsPage() {
       }
     >
       <Card className="border-0 md:border shadow-none md:shadow-sm">
-        <CardContent className={cn(isMobile ? 'p-2' : 'p-6')}>
-          <div className={cn('flex gap-2 mb-3 flex-wrap', isMobile ? 'w-full' : 'items-center')}>
+        <CardContent className={cn(isMobile ? 'p-3' : 'p-6')}>
+          <div className={cn('flex gap-2 mb-3 flex-wrap', isMobile ? 'w-full flex-col' : 'items-center')}>
             <SearchableDropdown
               value={searchKeyword}
               placeholder={tr('search.placeholder', 'Search redemptions by name...')}

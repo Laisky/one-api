@@ -561,7 +561,7 @@ export function LogDetailsModal({ open, onOpenChange, log }: LogDetailsModalProp
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl max-h-[90vh]">
+      <DialogContent className="max-h-[92vh] w-[calc(100vw-1rem)] max-w-[calc(100vw-1rem)] p-4 sm:max-w-3xl sm:p-6">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <FileText className="h-5 w-5" />
@@ -580,7 +580,7 @@ export function LogDetailsModal({ open, onOpenChange, log }: LogDetailsModalProp
           )}
         </DialogHeader>
 
-        <ScrollArea className="max-h-[calc(90vh-8rem)] pr-2">
+        <ScrollArea className="max-h-[calc(92vh-7.5rem)] pr-1 sm:pr-2">
           <div className="space-y-6">
             {!log && (
               <p className="text-sm text-muted-foreground">{t('logs.details.select_hint', 'Select a log entry to view full details.')}</p>
@@ -634,7 +634,7 @@ export function LogDetailsModal({ open, onOpenChange, log }: LogDetailsModalProp
                     {t('logs.details.content', 'Content')}
                   </h3>
                   <div className="rounded border bg-muted/40 p-3">
-                    <pre className="whitespace-pre-wrap text-sm leading-relaxed">
+                    <pre className="whitespace-pre-wrap break-words text-sm leading-relaxed">
                       {log.content || t('logs.details.no_content', 'No content recorded.')}
                     </pre>
                   </div>
@@ -646,7 +646,7 @@ export function LogDetailsModal({ open, onOpenChange, log }: LogDetailsModalProp
                       {t('logs.details.metadata', 'Metadata')}
                     </h3>
                     <div className="rounded border bg-muted/40 p-3">
-                      <pre className="whitespace-pre-wrap text-sm leading-relaxed">{metadataJSON}</pre>
+                      <pre className="whitespace-pre-wrap break-all text-sm leading-relaxed">{metadataJSON}</pre>
                     </div>
                   </section>
                 )}
