@@ -101,6 +101,7 @@ export function HeaderNav({ items, className }: HeaderNavProps) {
             key={item.to}
             to={item.to}
             ref={(el) => (itemsRef.current[index] = el)}
+            aria-current={item.isActive ? 'page' : undefined}
             className={cn(
               'px-3 py-2 rounded-md text-sm font-medium transition-colors whitespace-nowrap flex-shrink-0',
               item.isActive ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground hover:bg-muted',

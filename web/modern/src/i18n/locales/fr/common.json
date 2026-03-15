@@ -81,13 +81,19 @@
     "navigation": "Navigation",
     "signed_in_as": "Connecté en tant que"
   },
+  "a11y": {
+    "close": "Fermer",
+    "close_drawer": "Fermer le tiroir",
+    "select_language": "Choisir la langue"
+  },
   "home": {
     "iframe_title": "Accueil"
   },
   "notFound": {
     "go_home": "Retourner à l’accueil",
     "message": "Page introuvable",
-    "redirecting": "Redirection vers l’accueil dans {{seconds}} s..."
+    "redirecting": "Redirection vers l’accueil dans {{seconds}} s...",
+    "stay_here": "Rester sur cette page"
   },
   "status": {
     "badges": {

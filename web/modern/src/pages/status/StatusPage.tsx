@@ -4,10 +4,12 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { useNotifications } from "@/components/ui/notifications";
+import { ResponsivePageContainer } from "@/components/ui/responsive-container";
 import { TimestampDisplay } from "@/components/ui/timestamp";
 import { usePageSize, STORAGE_KEYS } from "@/hooks/usePersistentState";
 import { useResponsive } from "@/hooks/useResponsive";
 import { api } from "@/lib/api";
+import { cn } from "@/lib/utils";
 import {
   Activity,
   AlertCircle,
@@ -224,223 +226,216 @@ function StatusPageImpl() {
 
   if (loading) {
     return (
-      <div className="container mx-auto p-4 max-w-7xl">
-        <div className="space-y-6">
+      <ResponsivePageContainer>
+        <div className="flex items-center justify-center py-16">
           <div className="text-center space-y-2">
-            <div className="animate-spin mx-auto w-8 h-8">
-              <RefreshCw className="w-8 h-8" />
-            </div>
+            <span className="h-8 w-8 animate-spin rounded-full border-4 border-primary/20 border-t-primary inline-block" />
             <p className="text-muted-foreground">{t("status.loading")}</p>
           </div>
         </div>
-      </div>
+      </ResponsivePageContainer>
     );
   }
 
   return (
-    <div className="container mx-auto p-4 max-w-7xl">
-      <div className="space-y-6">
-        {/* Header */}
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <h1 className="text-3xl font-bold">{t("status.title")}</h1>
-            <Button
-              onClick={handleRefresh}
-              disabled={refreshing}
-              variant="outline"
-              size="sm"
-              className="flex items-center gap-2"
-            >
-              <RefreshCw
-                className={`w-4 h-4 ${refreshing ? "animate-spin" : ""}`}
-              />
-              {refreshing ? t("status.refreshing") : t("status.refresh")}
-            </Button>
-          </div>
-          <p className="text-muted-foreground">{t("status.subtitle")}</p>
-        </div>
-
-        {/* Statistics Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-          <Card>
-            <CardContent className="p-6">
-              <div className="flex items-center space-x-2">
-                <CheckCircle className="w-5 h-5 text-success" />
-                <div>
-                  <p className="text-2xl font-bold text-success">
-                    {enabledChannels}
-                  </p>
-                  <p className="text-sm text-muted-foreground">
-                    {t("status.stats.enabled")}
-                  </p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="p-6">
-              <div className="flex items-center space-x-2">
-                <XCircle className="w-5 h-5 text-destructive" />
-                <div>
-                  <p className="text-2xl font-bold text-destructive">
-                    {disabledChannels}
-                  </p>
-                  <p className="text-sm text-muted-foreground">
-                    {t("status.stats.disabled")}
-                  </p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="p-6">
-              <div className="flex items-center space-x-2">
-                <Activity className="w-5 h-5 text-info" />
-                <div>
-                  <p className="text-2xl font-bold text-info">
-                    {searchTerm ? displayedChannels : totalCount}
-                  </p>
-                  <p className="text-sm text-muted-foreground">
-                    {searchTerm
-                      ? t("status.stats.found")
-                      : t("status.stats.total")}
-                  </p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Search and Controls */}
-        <div className="flex flex-col sm:flex-row gap-4">
-          <div className="flex-1">
-            <Input
-              placeholder={t("status.search.placeholder")}
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full"
-            />
-          </div>
-          {searchTerm && (
-            <Button
-              variant="outline"
-              onClick={() => setSearchTerm("")}
-              className="whitespace-nowrap"
-            >
-              {t("status.search.clear")}
-            </Button>
-          )}
-        </div>
-
-        {/* Channel Status Cards */}
-        <div className="space-y-4">
-          {filteredChannels.length === 0 ? (
-            <Card>
-              <CardContent className="p-8 text-center">
-                <Activity className="w-12 h-12 mx-auto mb-4 text-muted-foreground" />
-                <h3 className="text-lg font-semibold mb-2">
-                  {t("status.empty.title")}
-                </h3>
-                <p className="text-muted-foreground">
-                  {searchTerm
-                    ? t("status.empty.search", { term: searchTerm })
-                    : t("status.empty.none")}
-                </p>
-              </CardContent>
-            </Card>
-          ) : (
-            <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
-              {filteredChannels.map((channel) => (
-                <Card key={channel.name} className="hover:shadow-md transition-shadow">
-                  <CardHeader className="pb-3">
-                    <div className="flex items-center justify-between">
-                      <CardTitle className="text-lg truncate">
-                        {channel.name}
-                      </CardTitle>
-                      {getStatusBadge(channel.status, channel.enabled)}
-                    </div>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    {/* Response Time */}
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center space-x-2">
-                        <Clock className="w-4 h-4 text-muted-foreground" />
-                        <span className="text-sm text-muted-foreground">
-                          {t("status.details.response_time")}
-                        </span>
-                      </div>
-                      <div className="flex items-center space-x-2">
-                        <span className="font-mono text-sm">
-                          {formatResponseTime(
-                            channel.response.response_time_ms
-                          )}
-                        </span>
-                        {getResponseTimeBadge(
-                          channel.response.response_time_ms
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Test Time */}
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center space-x-2">
-                        <Zap className="w-4 h-4 text-muted-foreground" />
-                        <span className="text-sm text-muted-foreground">
-                          {t("status.details.last_test")}
-                        </span>
-                      </div>
-                      <TimestampDisplay
-                        timestamp={channel.response.test_time || null}
-                        className="text-sm font-mono"
-                        fallback={t("status.labels.never")}
-                      />
-                    </div>
-
-                    {/* Created Time */}
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center space-x-2">
-                        <Calendar className="w-4 h-4 text-muted-foreground" />
-                        <span className="text-sm text-muted-foreground">
-                          {t("status.details.created")}
-                        </span>
-                      </div>
-                      <TimestampDisplay
-                        timestamp={channel.response.created_time || null}
-                        className="text-sm font-mono"
-                        fallback={t("status.labels.never")}
-                      />
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* Pagination - using standard AdvancedPagination component */}
-        {!searchTerm && (
-          <AdvancedPagination
-            currentPage={currentPage + 1}
-            totalPages={totalPages}
-            pageSize={pageSize}
-            totalItems={totalCount}
-            onPageChange={handlePageChange}
-            onPageSizeChange={handlePageSizeChange}
-            loading={loading}
+    <ResponsivePageContainer
+      title={t("status.title")}
+      description={t("status.subtitle")}
+      actions={
+        <Button
+          onClick={handleRefresh}
+          disabled={refreshing}
+          variant="outline"
+          size="sm"
+          className={cn("flex items-center gap-2", isMobile && "w-full touch-target")}
+        >
+          <RefreshCw
+            className={cn("w-4 h-4", refreshing && "animate-spin")}
           />
-        )}
+          {refreshing ? t("status.refreshing") : t("status.refresh")}
+        </Button>
+      }
+    >
+      {/* Statistics Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <Card>
+          <CardContent className={cn(isMobile ? "p-4" : "p-6")}>
+            <div className="flex items-center space-x-2">
+              <CheckCircle className="w-5 h-5 text-success flex-shrink-0" />
+              <div>
+                <p className="text-2xl font-bold text-success">
+                  {enabledChannels}
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  {t("status.stats.enabled")}
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className={cn(isMobile ? "p-4" : "p-6")}>
+            <div className="flex items-center space-x-2">
+              <XCircle className="w-5 h-5 text-destructive flex-shrink-0" />
+              <div>
+                <p className="text-2xl font-bold text-destructive">
+                  {disabledChannels}
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  {t("status.stats.disabled")}
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className={cn(isMobile ? "p-4" : "p-6")}>
+            <div className="flex items-center space-x-2">
+              <Activity className="w-5 h-5 text-info flex-shrink-0" />
+              <div>
+                <p className="text-2xl font-bold text-info">
+                  {searchTerm ? displayedChannels : totalCount}
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  {searchTerm
+                    ? t("status.stats.found")
+                    : t("status.stats.total")}
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
 
-        {/* Footer Info for search results */}
-        {searchTerm && filteredChannels.length > 0 && (
-          <div className="text-center text-sm text-muted-foreground">
-            {t("status.pagination.showing_filtered", {
-              displayed: filteredChannels.length,
-              total: totalCount,
-            })}
-          </div>
+      {/* Search and Controls */}
+      <div className="flex flex-col sm:flex-row gap-4">
+        <div className="flex-1">
+          <Input
+            placeholder={t("status.search.placeholder")}
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-full"
+          />
+        </div>
+        {searchTerm && (
+          <Button
+            variant="outline"
+            onClick={() => setSearchTerm("")}
+            className={cn("whitespace-nowrap", isMobile && "touch-target")}
+          >
+            {t("status.search.clear")}
+          </Button>
         )}
       </div>
-    </div>
+
+      {/* Channel Status Cards */}
+      {filteredChannels.length === 0 ? (
+        <Card>
+          <CardContent className="p-8 text-center">
+            <Activity className="w-12 h-12 mx-auto mb-4 text-muted-foreground" />
+            <h2 className="text-lg font-semibold mb-2">
+              {t("status.empty.title")}
+            </h2>
+            <p className="text-muted-foreground">
+              {searchTerm
+                ? t("status.empty.search", { term: searchTerm })
+                : t("status.empty.none")}
+            </p>
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+          {filteredChannels.map((channel) => (
+            <Card key={channel.name} className="hover:shadow-md transition-shadow">
+              <CardHeader className="pb-3">
+                <div className="flex items-center justify-between gap-2">
+                  <CardTitle className="text-lg truncate min-w-0">
+                    {channel.name}
+                  </CardTitle>
+                  <div className="flex-shrink-0">
+                    {getStatusBadge(channel.status, channel.enabled)}
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {/* Response Time */}
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center space-x-2 min-w-0">
+                    <Clock className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                    <span className="text-sm text-muted-foreground truncate">
+                      {t("status.details.response_time")}
+                    </span>
+                  </div>
+                  <div className="flex items-center space-x-2 flex-shrink-0">
+                    <span className="font-mono text-sm">
+                      {formatResponseTime(
+                        channel.response.response_time_ms
+                      )}
+                    </span>
+                    {getResponseTimeBadge(
+                      channel.response.response_time_ms
+                    )}
+                  </div>
+                </div>
+
+                {/* Test Time */}
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center space-x-2 min-w-0">
+                    <Zap className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                    <span className="text-sm text-muted-foreground truncate">
+                      {t("status.details.last_test")}
+                    </span>
+                  </div>
+                  <TimestampDisplay
+                    timestamp={channel.response.test_time || null}
+                    className="text-sm font-mono flex-shrink-0"
+                    fallback={t("status.labels.never")}
+                  />
+                </div>
+
+                {/* Created Time */}
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center space-x-2 min-w-0">
+                    <Calendar className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                    <span className="text-sm text-muted-foreground truncate">
+                      {t("status.details.created")}
+                    </span>
+                  </div>
+                  <TimestampDisplay
+                    timestamp={channel.response.created_time || null}
+                    className="text-sm font-mono flex-shrink-0"
+                    fallback={t("status.labels.never")}
+                  />
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
+
+      {/* Pagination - using standard AdvancedPagination component */}
+      {!searchTerm && (
+        <AdvancedPagination
+          currentPage={currentPage + 1}
+          totalPages={totalPages}
+          pageSize={pageSize}
+          totalItems={totalCount}
+          onPageChange={handlePageChange}
+          onPageSizeChange={handlePageSizeChange}
+          loading={loading}
+        />
+      )}
+
+      {/* Footer Info for search results */}
+      {searchTerm && filteredChannels.length > 0 && (
+        <div className="text-center text-sm text-muted-foreground">
+          {t("status.pagination.showing_filtered", {
+            displayed: filteredChannels.length,
+            total: totalCount,
+          })}
+        </div>
+      )}
+    </ResponsivePageContainer>
   );
 }
 

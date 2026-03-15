@@ -18,7 +18,7 @@ const languages = [
 ];
 
 export function LanguageSelector() {
-  const { i18n } = useTranslation();
+  const { i18n, t } = useTranslation();
 
   const handleLanguageChange = (value: string) => {
     i18n.changeLanguage(value);
@@ -30,11 +30,11 @@ export function LanguageSelector() {
         <Button
           variant="ghost"
           size="icon"
-          aria-label="Select language"
+          aria-label={t("a11y.select_language")}
           className="h-9 w-9"
         >
           <Languages className="h-[1.2rem] w-[1.2rem]" aria-hidden="true" />
-          <span className="sr-only">Select language</span>
+          <span className="sr-only">{t("a11y.select_language")}</span>
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-44">

@@ -81,13 +81,19 @@
     "navigation": "Navegación",
     "signed_in_as": "Iniciado sesión como"
   },
+  "a11y": {
+    "close": "Cerrar",
+    "close_drawer": "Cerrar cajón",
+    "select_language": "Seleccionar idioma"
+  },
   "home": {
     "iframe_title": "Inicio"
   },
   "notFound": {
     "go_home": "Ir al inicio ahora",
     "message": "Página no encontrada",
-    "redirecting": "Redirigiendo al inicio en {{seconds}} s..."
+    "redirecting": "Redirigiendo al inicio en {{seconds}} s...",
+    "stay_here": "Quedarse en esta página"
   },
   "status": {
     "badges": {

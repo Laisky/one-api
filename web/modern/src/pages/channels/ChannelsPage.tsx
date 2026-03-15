@@ -1,6 +1,7 @@
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
+import { useConfirmDialog } from '@/components/ui/confirm-dialog';
 import { EnhancedDataTable } from '@/components/ui/enhanced-data-table';
 import { ListActionButton } from '@/components/ui/list-action-button';
 import { useNotifications } from '@/components/ui/notifications';
@@ -96,6 +97,7 @@ export function ChannelsPage() {
   const { isMobile } = useResponsive();
   const { notify } = useNotifications();
   const { t } = useTranslation();
+  const [confirmAction, ConfirmActionDialog] = useConfirmDialog();
   const [data, setData] = useState<Channel[]>([]);
   const [loading, setLoading] = useState(false);
   const [pageIndex, setPageIndex] = useState(Math.max(0, parseInt(searchParams.get('p') || '1') - 1));
@@ -268,7 +270,11 @@ export function ChannelsPage() {
   const manage = async (id: number, action: 'enable' | 'disable' | 'delete' | 'test', index?: number) => {
     try {
       if (action === 'delete') {
-        if (!confirm(t('channels.confirm.delete'))) return;
+        const confirmed = await confirmAction({
+          title: t('channels.confirm.delete_title', 'Delete Channel'),
+          description: t('channels.confirm.delete'),
+        });
+        if (!confirmed) return;
         // Unified API call - complete URL with /api prefix
         const res = await api.delete(`/api/channel/${id}`);
         if (res.data?.success) {
@@ -384,7 +390,11 @@ export function ChannelsPage() {
   };
 
   const handleDeleteDisabled = async () => {
-    if (!confirm(t('channels.confirm.delete_disabled'))) return;
+    const confirmed = await confirmAction({
+      title: t('channels.confirm.delete_disabled_title', 'Delete Disabled Channels'),
+      description: t('channels.confirm.delete_disabled'),
+    });
+    if (!confirmed) return;
 
     try {
       // Unified API call - complete URL with /api prefix
@@ -608,6 +618,7 @@ export function ChannelsPage() {
   );
 
   return (
+    <>
     <ResponsivePageContainer
       title={t('channels.title')}
       description={t('channels.description')}
@@ -680,5 +691,8 @@ export function ChannelsPage() {
         </CardContent>
       </Card>
     </ResponsivePageContainer>
+
+    <ConfirmActionDialog />
+    </>
   );
 }

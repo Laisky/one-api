@@ -81,13 +81,19 @@
     "navigation": "ナビゲーション",
     "signed_in_as": "ログイン中:"
   },
+  "a11y": {
+    "close": "閉じる",
+    "close_drawer": "ドロワーを閉じる",
+    "select_language": "言語を選択"
+  },
   "home": {
     "iframe_title": "ホーム"
   },
   "notFound": {
     "go_home": "今すぐホームへ",
     "message": "ページが見つかりません",
-    "redirecting": "{{seconds}} 秒後にホームへリダイレクトします..."
+    "redirecting": "{{seconds}} 秒後にホームへリダイレクトします...",
+    "stay_here": "このページに留まる"
   },
   "status": {
     "badges": {

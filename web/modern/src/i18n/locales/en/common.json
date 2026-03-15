@@ -81,13 +81,19 @@
     "navigation": "Navigation",
     "signed_in_as": "Signed in as"
   },
+  "a11y": {
+    "close": "Close",
+    "close_drawer": "Close drawer",
+    "select_language": "Select language"
+  },
   "home": {
     "iframe_title": "Home"
   },
   "notFound": {
     "go_home": "Go Home Now",
     "message": "Page not found",
-    "redirecting": "Redirecting to home in {{seconds}}s..."
+    "redirecting": "Redirecting to home in {{seconds}}s...",
+    "stay_here": "Stay on this page"
   },
   "status": {
     "badges": {

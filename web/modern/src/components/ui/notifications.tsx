@@ -1,5 +1,6 @@
 import { Copy, X } from 'lucide-react'
 import React, { createContext, useCallback, useContext, useMemo, useRef, useState } from 'react'
+import { cn } from '@/lib/utils'
 
 // Helper function to copy text to clipboard
 const copyToClipboard = async (text: string): Promise<boolean> => {
@@ -135,13 +136,13 @@ export const NotificationsViewport: React.FC<{
       {items.map((n) => (
         <div
           key={n.id}
-          className={[
+          className={cn(
             'group relative w-full rounded-md border px-4 py-3 shadow-sm transition',
             n.type === 'success' && 'border-success-border bg-success-muted text-success-foreground',
             n.type === 'error' && 'border-destructive/30 bg-destructive/5 text-destructive',
             n.type === 'warning' && 'border-warning-border bg-warning-muted text-warning-foreground',
             n.type === 'info' && 'border-info-border bg-info-muted text-info-foreground',
-          ].join(' ')}
+          )}
           aria-live="polite"
         >
           <div className="flex items-start gap-3">
@@ -170,23 +171,18 @@ export const NotificationsViewport: React.FC<{
           </div>
           <div className="absolute inset-x-0 -bottom-[1px]">
             <div
-              className={[
+              className={cn(
                 'h-0.5 w-full origin-left animate-[shrink_3s_linear_forwards]',
                 n.type === 'success' && 'bg-success',
                 n.type === 'error' && 'bg-destructive',
                 n.type === 'warning' && 'bg-warning',
                 n.type === 'info' && 'bg-info',
-              ].join(' ')}
+              )}
               style={{ animationDuration: `${n.durationMs}ms` }}
             />
           </div>
         </div>
       ))}
-
-      {/* keyframes for progress bar */}
-      <style>{`
-        @keyframes shrink { from { transform: scaleX(1); } to { transform: scaleX(0); } }
-      `}</style>
     </div>
   )
 }

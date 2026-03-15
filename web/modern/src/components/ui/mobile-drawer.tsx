@@ -1,6 +1,7 @@
 import { ReactNode, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { X } from 'lucide-react'
+import { Link } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { useTranslation } from 'react-i18next'
@@ -159,8 +160,8 @@ export function MobileDrawer({
                 variant="ghost"
                 size="sm"
                 onClick={onClose}
-                className="h-8 w-8 p-0 ml-auto"
-                aria-label="Close drawer"
+                className="h-9 w-9 p-0 ml-auto touch-target"
+                aria-label={t('a11y.close_drawer')}
               >
                 <X className="h-4 w-4" />
               </Button>
@@ -216,9 +217,10 @@ export function NavigationDrawer({
     >
       <nav className="space-y-1">
         {navigationItems.map((item) => (
-          <a
+          <Link
             key={item.href}
-            href={item.href}
+            to={item.href}
+            aria-current={item.isActive ? 'page' : undefined}
             className={cn(
               'flex items-center space-x-3 px-3 py-2 rounded-md text-sm font-medium transition-colors',
               item.isActive
@@ -229,7 +231,7 @@ export function NavigationDrawer({
           >
             {item.icon && <item.icon className="h-5 w-5 flex-shrink-0" />}
             <span>{item.name}</span>
-          </a>
+          </Link>
         ))}
       </nav>
 

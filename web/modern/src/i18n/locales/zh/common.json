@@ -81,13 +81,19 @@
     "navigation": "导航",
     "signed_in_as": "登录身份"
   },
+  "a11y": {
+    "close": "关闭",
+    "close_drawer": "关闭抽屉",
+    "select_language": "选择语言"
+  },
   "home": {
     "iframe_title": "首页"
   },
   "notFound": {
     "go_home": "立即回到首页",
     "message": "页面不存在",
-    "redirecting": "将在 {{seconds}} 秒后返回首页..."
+    "redirecting": "将在 {{seconds}} 秒后返回首页...",
+    "stay_here": "留在此页"
   },
   "status": {
     "badges": {

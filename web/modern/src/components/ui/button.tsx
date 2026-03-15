@@ -10,7 +10,7 @@ type ButtonProps = React.ButtonHTMLAttributes<HTMLButtonElement> & {
 
 export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
   ({ className, variant = 'default', size = 'md', asChild = false, ...props }, ref) => {
-    const base = 'inline-flex items-center justify-center rounded-md transition-colors disabled:opacity-50 disabled:pointer-events-none'
+    const base = 'inline-flex items-center justify-center rounded-md transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none'
     const variants: Record<string, string> = {
   // Use CSS variable-based foregrounds for proper contrast in dark mode
   default: 'bg-primary text-primary-foreground hover:opacity-90',

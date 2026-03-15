@@ -1,6 +1,7 @@
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
+import { useConfirmDialog } from '@/components/ui/confirm-dialog';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { EnhancedDataTable } from '@/components/ui/enhanced-data-table';
 import { ListActionButton } from '@/components/ui/list-action-button';
@@ -63,6 +64,7 @@ export function TokensPage() {
   const { isMobile } = useResponsive();
   const userQuota = useAuthStore((state) => state.user?.quota ?? null);
   const { t } = useTranslation();
+  const [confirmDelete, ConfirmDeleteDialog] = useConfirmDialog();
   const tr = useCallback(
     (key: string, defaultValue: string, options?: Record<string, unknown>) => t(`tokens.page.${key}`, { defaultValue, ...options }),
     [t]
@@ -317,18 +319,19 @@ export function TokensPage() {
         return (
           <div className="flex items-center gap-2">
             <span className="font-mono text-xs">{isVisible ? token.key : maskKey(token.key)}</span>
-            <Button variant="ghost" size="sm" onClick={() => toggleKeyVisibility(token.id)} className="h-6 w-6 p-0">
-              {isVisible ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
+            <Button variant="ghost" size="icon" onClick={() => toggleKeyVisibility(token.id)} className="h-8 w-8 touch-target" aria-label={isVisible ? tr('key.hide', 'Hide key') : tr('key.show', 'Show key')}>
+              {isVisible ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
             </Button>
             <Button
               variant="ghost"
-              size="sm"
+              size="icon"
               onClick={() => copyToClipboard(token)}
-              className="h-6 w-6 p-0"
+              className="h-8 w-8 touch-target"
               disabled={!!copiedTokens[token.id]}
+              aria-label={copiedTokens[token.id] ? tr('key.copied', 'Copied!') : tr('key.copy', 'Copy token')}
               title={copiedTokens[token.id] ? tr('key.copied', 'Copied!') : tr('key.copy', 'Copy token')}
             >
-              {copiedTokens[token.id] ? <Check className="h-3 w-3 text-success" /> : <Copy className="h-3 w-3" />}
+              {copiedTokens[token.id] ? <Check className="h-3.5 w-3.5 text-success" /> : <Copy className="h-3.5 w-3.5" />}
             </Button>
           </div>
         );
@@ -446,11 +449,13 @@ export function TokensPage() {
             <Button
               variant="destructive"
               size="sm"
-              onClick={() => {
+              onClick={async () => {
                 const label = formatTokenLabel(token);
-                if (confirm(tr('confirm.delete', 'Are you sure you want to delete token "{{label}}"?', { label }))) {
-                  manage(token.id, 'delete');
-                }
+                const confirmed = await confirmDelete({
+                  title: tr('confirm.delete_title', 'Delete Token'),
+                  description: tr('confirm.delete', 'Are you sure you want to delete token "{{label}}"?', { label }),
+                });
+                if (confirmed) manage(token.id, 'delete');
               }}
               className="touch-target"
             >
@@ -527,15 +532,17 @@ export function TokensPage() {
                     icon={row.status === TOKEN_STATUS.ENABLED ? <Ban className="h-4 w-4" /> : <CheckCircle className="h-4 w-4" />}
                   />
                   <ListActionButton
-                    onClick={() => {
+                    onClick={async () => {
                       const label =
                         row.name ||
                         tr('table.id_placeholder', '(ID {{id}})', {
                           id: row.id,
                         });
-                      if (confirm(tr('confirm.delete', 'Are you sure you want to delete token "{{label}}"?', { label }))) {
-                        manage(row.id, 'delete');
-                      }
+                      const confirmed = await confirmDelete({
+                        title: tr('confirm.delete_title', 'Delete Token'),
+                        description: tr('confirm.delete', 'Are you sure you want to delete token "{{label}}"?', { label }),
+                      });
+                      if (confirmed) manage(row.id, 'delete');
                     }}
                     title={tr('actions.delete', 'Delete')}
                     icon={<Trash2 className="h-4 w-4" />}
@@ -568,6 +575,8 @@ export function TokensPage() {
           </CardContent>
         </Card>
       </ResponsivePageContainer>
+
+      <ConfirmDeleteDialog />
 
       <Dialog
         open={!!manualCopyToken}

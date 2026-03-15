@@ -21,7 +21,8 @@ export function FormControl({ className, ...props }: React.HTMLAttributes<HTMLDi
   return <div className={cn('space-y-2', className)} {...props} />
 }
 export function FormMessage({ className, children, ...props }: React.HTMLAttributes<HTMLParagraphElement>) {
-  return <p className={cn('text-xs text-destructive', className)} {...props}>{children}</p>
+  if (!children) return null
+  return <p role="alert" className={cn('text-xs text-destructive', className)} {...props}>{children}</p>
 }
 type FormFieldProps<
   TFieldValues extends FieldValues = FieldValues,
