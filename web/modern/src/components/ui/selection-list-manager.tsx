@@ -132,6 +132,7 @@ export function SelectionListManager({
                 placeholder={customPlaceholder}
                 disabled={disabled}
                 onKeyDown={(event) => {
+                  if (event.nativeEvent.isComposing || event.keyCode === 229) return;
                   if (event.key === 'Enter') {
                     event.preventDefault();
                     addCustomValue();

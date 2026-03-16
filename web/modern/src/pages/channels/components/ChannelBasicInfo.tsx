@@ -281,6 +281,7 @@ export const ChannelBasicInfo = ({
                   "Add custom group..."
                 )}
                 onKeyDown={(e) => {
+                  if (e.nativeEvent.isComposing || e.keyCode === 229) return;
                   if (e.key === "Enter") {
                     e.preventDefault();
                     const val = (e.target as HTMLInputElement).value.trim();

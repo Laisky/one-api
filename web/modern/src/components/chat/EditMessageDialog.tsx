@@ -108,6 +108,7 @@ export function EditMessageDialog({
   }
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.nativeEvent.isComposing || e.keyCode === 229) return
     // Save on Ctrl/Cmd + Enter
     if ((e.ctrlKey || e.metaKey) && e.key === 'Enter' && hasChanges) {
       e.preventDefault()

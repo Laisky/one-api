@@ -166,6 +166,7 @@ const AutosuggestInput: React.FC<AutosuggestInputProps> = ({
   }
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (event.nativeEvent.isComposing || event.keyCode === 229) return
     if (event.key === 'Enter' && suggestions.length > 0) {
       event.preventDefault()
       onSelect(suggestions[0].key)

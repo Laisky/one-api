@@ -48,6 +48,7 @@ export function ToolListEditor({ label, description, value, onChange, placeholde
           placeholder={placeholder}
           disabled={disabled}
           onKeyDown={(event) => {
+            if (event.nativeEvent.isComposing || event.keyCode === 229) return;
             if (event.key === 'Enter') {
               event.preventDefault();
               addItem();

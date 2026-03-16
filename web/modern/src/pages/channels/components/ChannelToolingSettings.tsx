@@ -108,11 +108,13 @@ export const ChannelToolingSettings = ({
 								placeholder={tr("tooling.add_custom", "Add custom tool...")}
 								value={customTool}
 								onChange={(e) => setCustomTool(e.target.value)}
-								onKeyDown={(e) =>
-									e.key === "Enter" &&
-									(e.preventDefault(),
-									addToolToWhitelist(customTool, { isCustom: true }))
-								}
+								onKeyDown={(e) => {
+									if (e.nativeEvent.isComposing || e.keyCode === 229) return;
+									if (e.key === "Enter") {
+										e.preventDefault();
+										addToolToWhitelist(customTool, { isCustom: true });
+									}
+								}}
 								disabled={toolEditorDisabled}
 								className="flex-1"
 							/>
