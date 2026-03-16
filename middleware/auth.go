@@ -107,6 +107,44 @@ func UserAuth() func(c *gin.Context) {
 	}
 }
 
+// OptionalUserAuth returns a middleware that tries to authenticate the user from
+// session or access token but does NOT reject the request when no credentials are
+// present.  If authentication succeeds the usual context keys (Id, Username, Role)
+// are populated; otherwise the request continues anonymously (Id defaults to 0).
+func OptionalUserAuth() func(c *gin.Context) {
+	return func(c *gin.Context) {
+		session := sessions.Default(c)
+		username := session.Get("username")
+		role := session.Get("role")
+		id := session.Get("id")
+		status := session.Get("status")
+
+		if username == nil {
+			// Try Authorization header as fallback
+			accessToken := c.Request.Header.Get("Authorization")
+			if accessToken != "" {
+				if user := model.ValidateAccessToken(accessToken); user != nil && user.Username != "" {
+					username = user.Username
+					role = user.Role
+					id = user.Id
+					status = user.Status
+				}
+			}
+		}
+
+		// If we resolved a user, validate and set context
+		if username != nil && status != nil {
+			if status.(int) != model.UserStatusDisabled && !blacklist.IsUserBanned(id.(int)) {
+				c.Set(ctxkey.Username, username)
+				c.Set(ctxkey.Role, role)
+				c.Set(ctxkey.Id, id)
+			}
+		}
+
+		c.Next()
+	}
+}
+
 // AdminAuth returns a middleware function that requires administrator privileges.
 // This restricts access to admin users and root users only.
 // Use this for management endpoints that regular users shouldn't access.

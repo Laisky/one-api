@@ -67,7 +67,8 @@ export function Header() {
 
   const isAdmin = user?.role >= 10;
 
-  const navigationItems = [
+  // Navigation items visible to logged-in users
+  const authenticatedNavItems = user ? [
     { name: t('common.dashboard'), to: '/dashboard', show: true },
     { name: t('common.tokens'), to: '/tokens', show: true },
     { name: t('common.logs'), to: '/logs', show: true },
@@ -77,12 +78,19 @@ export function Header() {
     { name: t('common.redemptions'), to: '/redemptions', show: isAdmin },
     { name: t('common.topup'), to: '/topup', show: true },
     { name: t('common.models'), to: '/models', show: true },
-    { name: t('common.tools'), to: '/tools', show: isAdmin },
+    { name: t('common.tools'), to: '/tools', show: true },
     { name: t('common.status'), to: '/status', show: true },
     { name: t('common.playground'), to: '/chat', show: true },
     { name: t('common.about'), to: '/about', show: true },
     { name: t('common.settings'), to: '/settings', show: isAdmin },
-  ]
+  ] : [
+    // Public navigation for anonymous users
+    { name: t('common.models'), to: '/models', show: true },
+    { name: t('common.tools'), to: '/tools', show: true },
+    { name: t('common.status'), to: '/status', show: true },
+  ];
+
+  const navigationItems = authenticatedNavItems
     .filter((item) => item.show)
     .map((item) => ({
       ...item,
@@ -120,7 +128,7 @@ export function Header() {
             </div>
 
             {/* Navigation - Collapses items dynamically */}
-            {user && !isMobile && <HeaderNav items={navigationItems} />}
+            {!isMobile && <HeaderNav items={navigationItems} />}
 
             {/* Actions and User Menu */}
             <div className="flex items-center space-x-2 flex-shrink-0">
@@ -169,6 +177,17 @@ export function Header() {
                 </>
               ) : (
                 <div className="flex items-center space-x-2">
+                  {isMobile && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setMobileMenuOpen(true)}
+                      className="touch-target"
+                      aria-label="Open navigation menu"
+                    >
+                      <Menu className="h-5 w-5" />
+                    </Button>
+                  )}
                   <Link
                     to="/register"
                     className="font-medium text-sm text-muted-foreground hover:text-primary transition-colors"
@@ -185,13 +204,13 @@ export function Header() {
         </div>
 
         {/* Mobile Navigation Drawer */}
-        {user && (
-          <NavigationDrawer
-            isOpen={mobileMenuOpen}
-            onClose={() => setMobileMenuOpen(false)}
-            navigationItems={navigationItems}
-            title={t('header.navigation')}
-            footer={
+        <NavigationDrawer
+          isOpen={mobileMenuOpen}
+          onClose={() => setMobileMenuOpen(false)}
+          navigationItems={navigationItems}
+          title={t('header.navigation')}
+          footer={
+            user ? (
               <Button
                 variant="outline"
                 className="w-full touch-target gap-2"
@@ -203,9 +222,9 @@ export function Header() {
                 <LogOut className="h-4 w-4" />
                 {t('common.logout')}
               </Button>
-            }
-          />
-        )}
+            ) : undefined
+          }
+        />
       </header>
 
       <Dialog open={isLogoutDialogOpen} onOpenChange={setLogoutDialogOpen}>

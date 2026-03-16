@@ -88,16 +88,17 @@ function App() {
                 <Route path="/oauth/github" element={<GitHubOAuthPage />} />
                 <Route path="/oauth/lark" element={<LarkOAuthPage />} />
 
-                {/* Public route(s) with layout */}
+                {/* Public routes with layout */}
                 <Route path="/" element={<Layout />}>
+                  <Route index element={<HomePage />} />
                   <Route path="models" element={<ModelsPage />} />
+                  <Route path="tools" element={<ToolsPage />} />
                   <Route path="status" element={<StatusPage />} />
                 </Route>
 
                 {/* Protected routes */}
                 <Route element={<ProtectedRoute />}>
                   <Route path="/" element={<Layout />}>
-                    <Route index element={<HomePage />} />
                     <Route path="dashboard" element={<DashboardPage />} />
                     <Route path="tokens" element={<TokensPage />} />
                     <Route path="tokens/add" element={<EditTokenPage />} />
@@ -113,7 +114,6 @@ function App() {
                     <Route path="mcps" element={<MCPServersPage />} />
                     <Route path="mcps/add" element={<EditMCPServerPage />} />
                     <Route path="mcps/edit/:id" element={<EditMCPServerPage />} />
-                    <Route path="tools" element={<ToolsPage />} />
                     <Route path="redemptions" element={<RedemptionsPage />} />
                     <Route path="redemptions/add" element={<EditRedemptionPage />} />
                     <Route path="redemptions/edit/:id" element={<EditRedemptionPage />} />

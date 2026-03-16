@@ -72,7 +72,7 @@ api.interceptors.response.use(
         message.includes("not logged in");
 
       // Do not redirect for known public endpoints
-      const isPublicEndpoint = url.startsWith("/api/models/display");
+      const isPublicEndpoint = url.startsWith("/api/models/display") || url.startsWith("/api/tools/display");
 
       if (isAuthError && !isPublicEndpoint) {
         handleAuthFailure();

@@ -298,6 +298,73 @@ func ListMCPServerTools(c *gin.Context) {
 	})
 }
 
+// ToolsDisplayServerEntry represents a MCP server with its tools for the public display page.
+type ToolsDisplayServerEntry struct {
+	Server *MCPServerDisplayInfo `json:"server"`
+	Tools  []*model.MCPTool     `json:"tools"`
+}
+
+// MCPServerDisplayInfo is a sanitized view of MCPServer for public display (no secrets).
+type MCPServerDisplayInfo struct {
+	Id       int    `json:"id"`
+	Name     string `json:"name"`
+	Status   int    `json:"status"`
+	Protocol string `json:"protocol"`
+}
+
+// GetToolsDisplay returns all enabled MCP servers and their enabled tools for the public tools page.
+// Anonymous users see all enabled tools; logged-in users see the same (no per-user tool filtering yet).
+func GetToolsDisplay(c *gin.Context) {
+	servers, err := model.ListEnabledMCPServers()
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": "Failed to load MCP servers: " + err.Error(),
+		})
+		return
+	}
+
+	result := make([]ToolsDisplayServerEntry, 0, len(servers))
+	for _, server := range servers {
+		tools, err := model.GetMCPToolsByServerID(server.Id)
+		if err != nil {
+			continue
+		}
+
+		// Apply server-level pricing overrides and normalize schemas
+		applyMCPToolPricingToTools(tools, server.ToolPricing)
+		normalizeMCPToolInputSchemas(tools)
+
+		// Filter to enabled tools only
+		enabledTools := make([]*model.MCPTool, 0, len(tools))
+		for _, tool := range tools {
+			if tool != nil && tool.Status == 1 {
+				enabledTools = append(enabledTools, tool)
+			}
+		}
+
+		if len(enabledTools) == 0 {
+			continue
+		}
+
+		result = append(result, ToolsDisplayServerEntry{
+			Server: &MCPServerDisplayInfo{
+				Id:       server.Id,
+				Name:     server.Name,
+				Status:   server.Status,
+				Protocol: server.Protocol,
+			},
+			Tools: enabledTools,
+		})
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "",
+		"data":    result,
+	})
+}
+
 // applyMCPToolPricingToTools applies MCP server pricing to tool records for response rendering.
 func applyMCPToolPricingToTools(tools []*model.MCPTool, pricing map[string]model.ToolPricingLocal) int {
 	if len(tools) == 0 || len(pricing) == 0 {

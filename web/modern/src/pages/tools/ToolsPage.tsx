@@ -24,23 +24,20 @@ interface MCPTool {
   status?: number;
 }
 
-interface MCPServer {
+interface MCPServerDisplay {
   id: number;
   name: string;
   status: number;
-  priority: number;
-  base_url: string;
   protocol: string;
-  auth_type: string;
 }
 
-interface MCPServerListItem {
-  server: MCPServer;
-  tool_count: number;
+interface ToolsDisplayEntry {
+  server: MCPServerDisplay;
+  tools: MCPTool[];
 }
 
 interface ToolsByServer {
-  server: MCPServer;
+  server: MCPServerDisplay;
   tools: MCPTool[];
 }
 
@@ -63,28 +60,16 @@ export function ToolsPage() {
   const fetchToolsData = async () => {
     try {
       setLoading(true);
-      const res = await api.get('/api/mcp_servers?p=0&size=200&sort=id&order=asc');
+      const res = await api.get('/api/tools/display');
       const { success, message, data } = res.data;
       if (!success) {
-        console.error('Failed to fetch MCP servers:', message);
+        console.error('Failed to fetch tools:', message);
         return;
       }
-      const servers = (data as MCPServerListItem[]).map((item) => item.server);
-      const toolsByServer = await Promise.all(
-        servers.map(async (server) => {
-          const response = await api.get(`/api/mcp_servers/${server.id}/tools`);
-          const payload = response.data;
-          const tools = payload?.success ? (payload.data as MCPTool[]) : [];
-          return { server, tools };
-        })
-      );
 
       const aggregated: ToolsData = {};
-      toolsByServer.forEach(({ server, tools }) => {
-        aggregated[server.name] = {
-          server,
-          tools,
-        };
+      (data as ToolsDisplayEntry[]).forEach(({ server, tools }) => {
+        aggregated[server.name] = { server, tools };
       });
 
       setToolsData(aggregated);
