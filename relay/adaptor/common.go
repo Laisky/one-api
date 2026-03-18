@@ -66,7 +66,7 @@ func DoRequestHelper(a Adaptor, c *gin.Context, meta *meta.Meta, requestBody io.
 			_, _ = seeker.Seek(currentPos, io.SeekStart)
 			buf := make([]byte, requestPreviewLimit+1)
 			n, err := seeker.Read(buf)
-			if err != nil && err != io.EOF {
+			if err != nil && !errors.Is(err, io.EOF) {
 				n = 0
 			}
 			if n > requestPreviewLimit {

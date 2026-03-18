@@ -229,7 +229,7 @@ func main() {
 	// Start server in background
 	go func() {
 		logger.Logger.Info("server started", zap.String("address", "http://localhost:"+port))
-		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			logger.Logger.Fatal("failed to start HTTP server", zap.Error(err))
 		}
 	}()

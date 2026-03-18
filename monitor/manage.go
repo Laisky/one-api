@@ -23,6 +23,8 @@ func ShouldDisableChannel(err *model.Error, statusCode int) bool {
 	switch err.Type {
 	case model.ErrorTypeInsufficientQuota, model.ErrorTypeAuthentication, model.ErrorTypePermission, model.ErrorTypeForbidden:
 		return true
+	default:
+		break
 	}
 	if err.Code == "invalid_api_key" || err.Code == "account_deactivated" {
 		return true

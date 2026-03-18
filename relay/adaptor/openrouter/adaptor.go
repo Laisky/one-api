@@ -82,8 +82,7 @@ func (a *Adaptor) SetupRequestHeader(c *gin.Context, req *http.Request, meta *me
 	// Apply common headers like Content-Type, Accept, and any X- prefixed custom headers
 	adaptor.SetupCommonRequestHeader(c, req, meta)
 
-	// Set the Authorization header with Bearer token format required by OpenRouter
-	// OpenRouter uses standard Bearer token authentication with the API key
+	// OpenRouter uses standard Bearer token authentication with the API key.
 	req.Header.Set("Authorization", "Bearer "+meta.APIKey)
 	// Note: This may need to be modified for the identifier "openrouter".
 	req.Header.Set("HTTP-Referer", "https://github.com/Laisky/one-api")

@@ -330,7 +330,8 @@ func isMySQLDataTooLongErr(err error) bool {
 	if err == nil {
 		return false
 	}
-	if merr, ok := err.(*mysql_driver.MySQLError); ok {
+	var merr *mysql_driver.MySQLError
+	if errors.As(err, &merr) {
 		if merr.Number == 1406 { // ER_DATA_TOO_LONG
 			return true
 		}

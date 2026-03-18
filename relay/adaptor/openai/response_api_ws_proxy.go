@@ -151,7 +151,8 @@ func copyResponseAPIWSUpstreamToClient(src, dst *websocket.Conn, usage *rmodel.U
 	for {
 		mt, msg, err := src.ReadMessage()
 		if err != nil {
-			if closeErr, ok := err.(*websocket.CloseError); ok {
+			var closeErr *websocket.CloseError
+			if errors.As(err, &closeErr) {
 				_ = dst.WriteControl(
 					websocket.CloseMessage,
 					websocket.FormatCloseMessage(closeErr.Code, closeErr.Text),

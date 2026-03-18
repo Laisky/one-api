@@ -248,7 +248,7 @@ func RelayTextHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 			select {
 			case <-done:
 			case <-ctx.Done():
-				if ctx.Err() == context.DeadlineExceeded && usage != nil {
+				if errors.Is(ctx.Err(), context.DeadlineExceeded) && usage != nil {
 					estimatedQuota := float64(usage.PromptTokens+usage.CompletionTokens) * ratio
 					elapsedTime := time.Since(meta.StartTime)
 					lg.Error("CRITICAL BILLING TIMEOUT",
@@ -440,7 +440,7 @@ func RelayTextHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 		case <-done:
 			// Billing completed successfully
 		case <-ctx.Done():
-			if ctx.Err() == context.DeadlineExceeded {
+			if errors.Is(ctx.Err(), context.DeadlineExceeded) {
 				estimatedQuota := float64(usage.PromptTokens+usage.CompletionTokens) * ratio
 				elapsedTime := time.Since(meta.StartTime)
 

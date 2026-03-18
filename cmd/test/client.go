@@ -21,6 +21,8 @@ const (
 	maxRetryBackoff     = 2 * time.Second
 )
 
+var errNoStreamDataReceived = errors.New("no stream data received")
+
 // performRequest sends a request variant, optionally trying multiple payload attempts,
 // and returns the aggregated result.
 func performRequest(ctx context.Context, client *http.Client, baseURL, token string, spec requestSpec, model string) (result testResult) {
@@ -330,7 +332,7 @@ func collectStreamBody(body io.Reader, limit int) ([]byte, error) {
 	}
 
 	if buffer.Len() == 0 {
-		return buffer.Bytes(), fmt.Errorf("no stream data received")
+		return buffer.Bytes(), errNoStreamDataReceived
 	}
 
 	return buffer.Bytes(), nil

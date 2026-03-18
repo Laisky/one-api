@@ -220,7 +220,7 @@ func RelayRerankHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 		select {
 		case <-done:
 		case <-bctx.Done():
-			if bctx.Err() == context.DeadlineExceeded && usage != nil {
+			if errors.Is(bctx.Err(), context.DeadlineExceeded) && usage != nil {
 				estimatedQuota := float64(totalQuota)
 				elapsedTime := time.Since(meta.StartTime)
 				lg.Error("CRITICAL BILLING TIMEOUT",

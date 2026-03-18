@@ -31,6 +31,8 @@ import (
 	"github.com/songquanpeng/one-api/relay/streaming"
 )
 
+var errUpstreamEmbeddingResponse = stdErrors.New("upstream embedding response error")
+
 type responseStreamToolCallState struct {
 	name     string
 	index    int
@@ -542,7 +544,7 @@ func EmbeddingHandler(c *gin.Context, resp *http.Response, promptTokens int, mod
 
 	if embeddingResponse.Error != nil && embeddingResponse.Error.Type != "" {
 		if embeddingResponse.Error.RawError == nil && embeddingResponse.Error.Message != "" {
-			embeddingResponse.Error.RawError = stdErrors.New(embeddingResponse.Error.Message)
+			embeddingResponse.Error.RawError = errors.Wrap(errUpstreamEmbeddingResponse, embeddingResponse.Error.Message)
 		}
 		logger.Debug("upstream returned embedding error response",
 			zap.String("error_type", string(embeddingResponse.Error.Type)),

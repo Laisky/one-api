@@ -287,7 +287,7 @@ func relayResponseAPIThroughChat(c *gin.Context, meta *metalib.Meta, responseAPI
 			select {
 			case <-done:
 			case <-ctx.Done():
-				if ctx.Err() == context.DeadlineExceeded && usage != nil {
+				if errors.Is(ctx.Err(), context.DeadlineExceeded) && usage != nil {
 					estimatedQuota := float64(usage.PromptTokens+usage.CompletionTokens) * ratio
 					elapsedTime := time.Since(meta.StartTime)
 					lg.Error("CRITICAL BILLING TIMEOUT",
@@ -470,7 +470,7 @@ func relayResponseAPIThroughChat(c *gin.Context, meta *metalib.Meta, responseAPI
 		select {
 		case <-done:
 		case <-ctx.Done():
-			if ctx.Err() == context.DeadlineExceeded && usage != nil {
+			if errors.Is(ctx.Err(), context.DeadlineExceeded) && usage != nil {
 				estimatedQuota := float64(usage.PromptTokens+usage.CompletionTokens) * ratio
 				elapsedTime := time.Since(meta.StartTime)
 				lg.Error("CRITICAL BILLING TIMEOUT",
