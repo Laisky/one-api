@@ -1477,3 +1477,152 @@ func TestConvertClaudeRequest_ClearsTopPWhenTemperatureProvided(t *testing.T) {
 	assert.NotNil(t, converted.Temperature, "temperature should be preserved")
 	assert.Nil(t, converted.TopP, "top_p should be cleared when temperature is provided")
 }
+
+func TestConvertClaudeRequest_PreservesThinkingAndSignature(t *testing.T) {
+	t.Parallel()
+	c := newThinkingContext(t, "/v1/messages")
+
+	signature := "ErQCCkYICxgCKkAshzhbP3C4+/base64=="
+	thinkingText := "I need to think about <html> & special chars"
+
+	claudeRequest := model.ClaudeRequest{
+		Model:     "claude-opus-4-6",
+		MaxTokens: 8192,
+		Messages: []model.ClaudeMessage{
+			{Role: "user", Content: "Hello"},
+			{
+				Role: "assistant",
+				Content: []any{
+					map[string]any{
+						"type":      "thinking",
+						"thinking":  thinkingText,
+						"signature": signature,
+					},
+					map[string]any{
+						"type": "text",
+						"text": "Hi there!",
+					},
+				},
+			},
+			{Role: "user", Content: "Follow up"},
+		},
+	}
+
+	converted, err := ConvertClaudeRequest(c, claudeRequest)
+	require.NoError(t, err)
+	require.NotNil(t, converted)
+
+	// Message 1 (index 1) is the assistant message with thinking block
+	assistantMsg := converted.Messages[1]
+	require.Len(t, assistantMsg.Content, 2)
+
+	// First content block should be thinking with signature preserved
+	thinkingBlock := assistantMsg.Content[0]
+	assert.Equal(t, "thinking", thinkingBlock.Type)
+	require.NotNil(t, thinkingBlock.Thinking)
+	assert.Equal(t, thinkingText, *thinkingBlock.Thinking)
+	require.NotNil(t, thinkingBlock.Signature)
+	assert.Equal(t, signature, *thinkingBlock.Signature)
+
+	// Second content block should be text
+	textBlock := assistantMsg.Content[1]
+	assert.Equal(t, "text", textBlock.Type)
+	assert.Equal(t, "Hi there!", textBlock.Text)
+}
+
+func TestConvertClaudeRequest_PreservesToolUseFields(t *testing.T) {
+	t.Parallel()
+	c := newThinkingContext(t, "/v1/messages")
+
+	claudeRequest := model.ClaudeRequest{
+		Model:     "claude-opus-4-6",
+		MaxTokens: 1024,
+		Messages: []model.ClaudeMessage{
+			{
+				Role: "assistant",
+				Content: []any{
+					map[string]any{
+						"type":  "tool_use",
+						"id":    "toolu_123",
+						"name":  "get_weather",
+						"input": map[string]any{"location": "NYC"},
+					},
+				},
+			},
+			{
+				Role: "user",
+				Content: []any{
+					map[string]any{
+						"type":        "tool_result",
+						"tool_use_id": "toolu_123",
+						"content":     "Sunny, 72°F",
+					},
+				},
+			},
+		},
+	}
+
+	converted, err := ConvertClaudeRequest(c, claudeRequest)
+	require.NoError(t, err)
+
+	// Assistant message with tool_use
+	toolUseBlock := converted.Messages[0].Content[0]
+	assert.Equal(t, "tool_use", toolUseBlock.Type)
+	assert.Equal(t, "toolu_123", toolUseBlock.Id)
+	assert.Equal(t, "get_weather", toolUseBlock.Name)
+	assert.NotNil(t, toolUseBlock.Input)
+
+	// User message with tool_result
+	toolResultBlock := converted.Messages[1].Content[0]
+	assert.Equal(t, "tool_result", toolResultBlock.Type)
+	assert.Equal(t, "toolu_123", toolResultBlock.ToolUseId)
+	assert.Equal(t, "Sunny, 72°F", toolResultBlock.Content)
+}
+
+func TestConvertClaudeRequest_PreservesMultipleThinkingSignatures(t *testing.T) {
+	t.Parallel()
+	c := newThinkingContext(t, "/v1/messages")
+
+	claudeRequest := model.ClaudeRequest{
+		Model:     "claude-opus-4-6",
+		MaxTokens: 8192,
+		Messages: []model.ClaudeMessage{
+			{Role: "user", Content: "Q1"},
+			{
+				Role: "assistant",
+				Content: []any{
+					map[string]any{"type": "thinking", "thinking": "thought1", "signature": "sig1=="},
+					map[string]any{"type": "text", "text": "A1"},
+				},
+			},
+			{Role: "user", Content: "Q2"},
+			{
+				Role: "assistant",
+				Content: []any{
+					map[string]any{"type": "thinking", "thinking": "thought2", "signature": "sig2=="},
+					map[string]any{"type": "text", "text": "A2"},
+					map[string]any{"type": "tool_use", "id": "t1", "name": "fn", "input": map[string]any{}},
+				},
+			},
+		},
+	}
+
+	converted, err := ConvertClaudeRequest(c, claudeRequest)
+	require.NoError(t, err)
+
+	// First assistant (index 1): thinking + text
+	msg1 := converted.Messages[1]
+	require.Len(t, msg1.Content, 2)
+	assert.Equal(t, "thinking", msg1.Content[0].Type)
+	require.NotNil(t, msg1.Content[0].Signature)
+	assert.Equal(t, "sig1==", *msg1.Content[0].Signature)
+
+	// Second assistant (index 3): thinking + text + tool_use
+	msg3 := converted.Messages[3]
+	require.Len(t, msg3.Content, 3)
+	assert.Equal(t, "thinking", msg3.Content[0].Type)
+	require.NotNil(t, msg3.Content[0].Signature)
+	assert.Equal(t, "sig2==", *msg3.Content[0].Signature)
+	assert.Equal(t, "tool_use", msg3.Content[2].Type)
+	assert.Equal(t, "t1", msg3.Content[2].Id)
+}

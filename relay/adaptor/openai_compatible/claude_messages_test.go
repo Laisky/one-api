@@ -497,3 +497,90 @@ func TestConvertClaudeRequest_StructuredToolNotPromotedWithServerToolUse(t *test
 	require.NotNil(t, converted.ToolChoice)
 	require.NotEmpty(t, converted.Tools)
 }
+
+func TestConvertClaudeBlocks_ThinkingMappedToReasoning(t *testing.T) {
+	t.Parallel()
+
+	blocks := []any{
+		map[string]any{
+			"type":      "thinking",
+			"thinking":  "Let me analyze this with <code> & logic",
+			"signature": "sigABC123==",
+		},
+		map[string]any{
+			"type": "text",
+			"text": "Here is my answer",
+		},
+	}
+
+	messages := convertClaudeBlocks("assistant", blocks)
+	require.Len(t, messages, 1)
+
+	msg := messages[0]
+	assert.Equal(t, "assistant", msg.Role)
+	// Thinking should be mapped to the Thinking field, not dumped as JSON text
+	require.NotNil(t, msg.Thinking)
+	assert.Equal(t, "Let me analyze this with <code> & logic", *msg.Thinking)
+
+	// Should have text content part
+	contentParts, ok := msg.Content.([]relaymodel.MessageContent)
+	require.True(t, ok)
+	require.Len(t, contentParts, 1)
+	assert.Equal(t, "text", string(contentParts[0].Type))
+	assert.Equal(t, "Here is my answer", *contentParts[0].Text)
+}
+
+func TestConvertClaudeBlocks_RedactedThinkingHandled(t *testing.T) {
+	t.Parallel()
+
+	blocks := []any{
+		map[string]any{
+			"type":      "redacted_thinking",
+			"thinking":  "",
+			"signature": "sigRedacted==",
+		},
+		map[string]any{
+			"type": "text",
+			"text": "response",
+		},
+	}
+
+	messages := convertClaudeBlocks("assistant", blocks)
+	require.Len(t, messages, 1)
+
+	msg := messages[0]
+	// Redacted thinking with empty content should not set Thinking
+	assert.Nil(t, msg.Thinking)
+}
+
+func TestConvertClaudeBlocks_ThinkingWithToolUse(t *testing.T) {
+	t.Parallel()
+
+	blocks := []any{
+		map[string]any{
+			"type":      "thinking",
+			"thinking":  "I need to use a tool",
+			"signature": "sigTool==",
+		},
+		map[string]any{
+			"type": "text",
+			"text": "Let me check",
+		},
+		map[string]any{
+			"type":  "tool_use",
+			"id":    "toolu_456",
+			"name":  "search",
+			"input": map[string]any{"query": "test"},
+		},
+	}
+
+	messages := convertClaudeBlocks("assistant", blocks)
+	require.Len(t, messages, 1)
+
+	msg := messages[0]
+	require.NotNil(t, msg.Thinking)
+	assert.Equal(t, "I need to use a tool", *msg.Thinking)
+	require.Len(t, msg.ToolCalls, 1)
+	assert.Equal(t, "toolu_456", msg.ToolCalls[0].Id)
+	assert.Equal(t, "search", msg.ToolCalls[0].Function.Name)
+}

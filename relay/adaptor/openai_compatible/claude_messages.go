@@ -313,6 +313,15 @@ func convertClaudeBlocks(role string, blocks []any) []model.Message {
 					Arguments: argsStr,
 				},
 			})
+		case "thinking", "redacted_thinking":
+			// Map Claude thinking blocks to OpenAI reasoning content.
+			// Signatures are intentionally not carried over since the OpenAI
+			// format has no equivalent field; the upstream OpenAI-compatible
+			// provider will generate its own reasoning tokens.
+			if thinking, ok := blockMap["thinking"].(string); ok && thinking != "" {
+				msg := ensurePending()
+				msg.message.Thinking = &thinking
+			}
 		case "tool_result":
 			flush()
 			if toolMsg := convertClaudeToolResultBlock(blockMap); toolMsg != nil {

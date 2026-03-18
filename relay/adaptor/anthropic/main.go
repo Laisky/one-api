@@ -118,6 +118,42 @@ func ConvertClaudeRequest(c *gin.Context, claudeRequest model.ClaudeRequest) (*R
 							contentBlock.Text = textStr
 						}
 					}
+					// Handle thinking blocks (extended thinking feature)
+					if thinking, exists := blockMap["thinking"]; exists {
+						if thinkingStr, ok := thinking.(string); ok {
+							contentBlock.Thinking = &thinkingStr
+						}
+					}
+					if signature, exists := blockMap["signature"]; exists {
+						if sigStr, ok := signature.(string); ok {
+							contentBlock.Signature = &sigStr
+						}
+					}
+					// Handle tool_use blocks
+					if id, exists := blockMap["id"]; exists {
+						if idStr, ok := id.(string); ok {
+							contentBlock.Id = idStr
+						}
+					}
+					if name, exists := blockMap["name"]; exists {
+						if nameStr, ok := name.(string); ok {
+							contentBlock.Name = nameStr
+						}
+					}
+					if input, exists := blockMap["input"]; exists {
+						contentBlock.Input = input
+					}
+					// Handle tool_result blocks
+					if contentVal, exists := blockMap["content"]; exists {
+						if contentStr, ok := contentVal.(string); ok {
+							contentBlock.Content = contentStr
+						}
+					}
+					if toolUseId, exists := blockMap["tool_use_id"]; exists {
+						if toolUseIdStr, ok := toolUseId.(string); ok {
+							contentBlock.ToolUseId = toolUseIdStr
+						}
+					}
 					// Handle image content
 					if source, exists := blockMap["source"]; exists {
 						if sourceMap, ok := source.(map[string]any); ok {
