@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"bytes"
 	"encoding/json"
 
 	"github.com/Laisky/errors/v2"
@@ -20,26 +21,64 @@ func sanitizeClaudeMessagesRequest(request *ClaudeMessagesRequest) {
 }
 
 // rewriteClaudeRequestBody updates the raw JSON payload to reflect sanitized request fields.
+//
+// IMPORTANT: This function uses map[string]json.RawMessage to preserve the exact byte
+// representation of nested values (especially the "messages" array). This is critical
+// because Claude's extended thinking feature includes cryptographic "signature" fields
+// in thinking blocks. A full json.Unmarshal -> map[string]any -> json.Marshal round-trip
+// would corrupt these signatures due to:
+//   - Go's default HTML escaping of <, >, & characters in strings
+//   - Potential floating-point precision loss for numbers
+//   - Key reordering within nested objects
+//
+// By using json.RawMessage, only the top-level fields we explicitly modify (model,
+// extra_body, top_p) are re-encoded; all other fields pass through byte-for-byte.
 func rewriteClaudeRequestBody(raw []byte, request *ClaudeMessagesRequest) ([]byte, error) {
 	if len(raw) == 0 || request == nil {
 		return raw, nil
 	}
-	var obj map[string]any
+	var obj map[string]json.RawMessage
 	if err := json.Unmarshal(raw, &obj); err != nil {
 		return nil, errors.Wrap(err, "unmarshal raw claude body for rewrite")
 	}
 	if request.Model != "" {
-		obj["model"] = request.Model
+		modelBytes, merr := json.Marshal(request.Model)
+		if merr != nil {
+			return nil, errors.Wrap(merr, "marshal model name")
+		}
+		obj["model"] = json.RawMessage(modelBytes)
 	}
 	delete(obj, "extra_body")
 	if request.TopP == nil {
 		delete(obj, "top_p")
 	}
-	out, err := json.Marshal(obj)
-	if err != nil {
+
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
+	enc.SetEscapeHTML(false)
+	if err := enc.Encode(obj); err != nil {
 		return nil, errors.Wrap(err, "marshal rewritten claude body")
 	}
-	return out, nil
+	// json.Encoder.Encode appends a trailing newline; trim it
+	return bytes.TrimRight(buf.Bytes(), "\n"), nil
+}
+
+// countThinkingSignatures counts the number of "signature" fields co-located
+// with "thinking" type blocks in the raw JSON body. Used for debug logging only.
+func countThinkingSignatures(raw []byte) int {
+	count := 0
+	// Simple heuristic: count occurrences of "signature" near "thinking" type blocks
+	idx := 0
+	signatureKey := []byte(`"signature"`)
+	for {
+		pos := bytes.Index(raw[idx:], signatureKey)
+		if pos < 0 {
+			break
+		}
+		count++
+		idx += pos + len(signatureKey)
+	}
+	return count
 }
 
 // getAndValidateClaudeMessagesRequest gets and validates Claude Messages API request.

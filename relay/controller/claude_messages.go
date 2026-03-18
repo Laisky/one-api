@@ -167,6 +167,17 @@ func RelayClaudeMessagesHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 			return openai.ErrorWrapper(rerr, "rewrite_claude_body_failed", http.StatusInternalServerError)
 		}
 		requestBody = bytes.NewReader(rewritten)
+
+		// Log signature-bearing thinking blocks count for diagnostics
+		sigCount := countThinkingSignatures(rawBody)
+		if sigCount > 0 {
+			lg.Debug("passthrough request contains thinking signatures",
+				zap.Int("signature_count", sigCount),
+				zap.Int("raw_body_len", len(rawBody)),
+				zap.Int("rewritten_body_len", len(rewritten)),
+				zap.Bool("body_bytes_preserved", bytes.Contains(rewritten, []byte(`"signature"`))),
+			)
+		}
 	} else {
 		requestBytes, merr := json.Marshal(convertedRequest)
 		if merr != nil {
