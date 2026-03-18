@@ -414,3 +414,44 @@ func TestRewriteClaudeRequestBody_BackwardCompatibility(t *testing.T) {
 	_, hasTools := parsed["tools"]
 	assert.True(t, hasTools)
 }
+
+func TestStripClaudeThinkingFromAssistantHistory(t *testing.T) {
+	t.Parallel()
+
+	rawBody := `{"model":"claude-opus-4-6","thinking":{"type":"adaptive"},"metadata":{"trace":"abc"},"messages":[{"role":"user","content":"Hello"},{"role":"assistant","content":[{"type":"thinking","thinking":"plan","signature":"sig1=="},{"type":"text","text":"Answer"},{"type":"tool_use","id":"toolu_1","name":"lookup","input":{"q":"x"}}]},{"role":"assistant","content":[{"type":"redacted_thinking","data":"opaque","signature":"sig2=="}]},{"role":"user","content":"Follow up"}]}`
+
+	sanitized, stats, err := stripClaudeThinkingFromAssistantHistory([]byte(rawBody))
+	require.NoError(t, err)
+	require.True(t, json.Valid(sanitized))
+	assert.Equal(t, 2, stats.RemovedThinkingBlocks)
+	assert.Equal(t, 1, stats.RemovedAssistantMessages)
+	assert.NotContains(t, string(sanitized), `"type":"thinking"`)
+	assert.NotContains(t, string(sanitized), `"type":"redacted_thinking"`)
+	assert.Contains(t, string(sanitized), `"type":"text","text":"Answer"`)
+	assert.Contains(t, string(sanitized), `"type":"tool_use","id":"toolu_1"`)
+	assert.Contains(t, string(sanitized), `"metadata":{"trace":"abc"}`)
+	assert.Contains(t, string(sanitized), `"thinking":{"type":"adaptive"}`)
+
+	var parsed map[string]json.RawMessage
+	require.NoError(t, json.Unmarshal(sanitized, &parsed))
+	var messages []map[string]any
+	require.NoError(t, json.Unmarshal(parsed["messages"], &messages))
+	require.Len(t, messages, 3)
+	assert.Equal(t, "assistant", messages[1]["role"])
+	content := messages[1]["content"].([]any)
+	require.Len(t, content, 2)
+	firstBlock := content[0].(map[string]any)
+	assert.Equal(t, "text", firstBlock["type"])
+}
+
+func TestStripClaudeThinkingFromAssistantHistory_NoThinkingBlocks(t *testing.T) {
+	t.Parallel()
+
+	rawBody := `{"model":"claude-opus-4-6","messages":[{"role":"user","content":"Hello"},{"role":"assistant","content":[{"type":"text","text":"Answer"}]}]}`
+
+	sanitized, stats, err := stripClaudeThinkingFromAssistantHistory([]byte(rawBody))
+	require.NoError(t, err)
+	assert.Equal(t, rawBody, string(sanitized))
+	assert.Equal(t, 0, stats.RemovedThinkingBlocks)
+	assert.Equal(t, 0, stats.RemovedAssistantMessages)
+}

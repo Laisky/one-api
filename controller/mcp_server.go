@@ -301,7 +301,7 @@ func ListMCPServerTools(c *gin.Context) {
 // ToolsDisplayServerEntry represents a MCP server with its tools for the public display page.
 type ToolsDisplayServerEntry struct {
 	Server *MCPServerDisplayInfo `json:"server"`
-	Tools  []*model.MCPTool     `json:"tools"`
+	Tools  []*model.MCPTool      `json:"tools"`
 }
 
 // MCPServerDisplayInfo is a sanitized view of MCPServer for public display (no secrets).

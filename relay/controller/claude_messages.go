@@ -32,6 +32,49 @@ import (
 // ClaudeMessagesRequest is an alias for the model.ClaudeRequest to follow DRY principle
 type ClaudeMessagesRequest = relaymodel.ClaudeRequest
 
+type claudeUpstreamErrorEnvelope struct {
+	Type  string `json:"type"`
+	Error struct {
+		Type    string `json:"type"`
+		Message string `json:"message"`
+	} `json:"error"`
+}
+
+// shouldRetryClaudeInvalidThinkingSignature reports whether the upstream failure matches Anthropic's invalid replayed thinking signature error.
+// shouldRetryClaudeInvalidThinkingSignature returns true only for the specific invalid-request signature failure we can safely recover from.
+func shouldRetryClaudeInvalidThinkingSignature(statusCode int, responseBody []byte) bool {
+	if statusCode != http.StatusBadRequest || len(responseBody) == 0 {
+		return false
+	}
+
+	var envelope claudeUpstreamErrorEnvelope
+	if err := json.Unmarshal(responseBody, &envelope); err == nil {
+		if strings.EqualFold(strings.TrimSpace(envelope.Error.Type), "invalid_request_error") &&
+			strings.Contains(envelope.Error.Message, "Invalid `signature` in `thinking` block") {
+			return true
+		}
+	}
+
+	return bytes.Contains(responseBody, []byte("Invalid `signature` in `thinking` block"))
+}
+
+// readAndRestoreResponseBody reads an HTTP response body and restores it for subsequent consumers.
+// readAndRestoreResponseBody returns the full body bytes or an error if the response body cannot be read.
+func readAndRestoreResponseBody(resp *http.Response) ([]byte, error) {
+	if resp == nil || resp.Body == nil {
+		return nil, nil
+	}
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, errors.Wrap(err, "read upstream response body")
+	}
+	if err := resp.Body.Close(); err != nil {
+		return nil, errors.Wrap(err, "close upstream response body")
+	}
+	resp.Body = io.NopCloser(bytes.NewReader(body))
+	return body, nil
+}
+
 // RelayClaudeMessagesHelper handles Claude Messages API requests with direct pass-through
 func RelayClaudeMessagesHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 	lg := gmw.GetLogger(c)
@@ -95,6 +138,7 @@ func RelayClaudeMessagesHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 		upstreamCapture       *loggingReadCloser
 		requestBody           io.Reader
 		convertedRequest      any
+		passthroughBody       []byte
 	)
 
 	// Tool Search + MCP integration: when the request contains a tool_search_tool and
@@ -166,6 +210,7 @@ func RelayClaudeMessagesHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 		if rerr != nil {
 			return openai.ErrorWrapper(rerr, "rewrite_claude_body_failed", http.StatusInternalServerError)
 		}
+		passthroughBody = rewritten
 		requestBody = bytes.NewReader(rewritten)
 
 		// Log signature-bearing thinking blocks count for diagnostics
@@ -239,6 +284,65 @@ func RelayClaudeMessagesHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 
 	// Check for HTTP errors when an HTTP response is returned by the adaptor
 	if resp != nil && resp.StatusCode != http.StatusOK {
+		if passthrough, ok := c.Get(ctxkey.ClaudeDirectPassthrough); ok && passthrough.(bool) && len(passthroughBody) > 0 {
+			responseBody, bodyErr := readAndRestoreResponseBody(resp)
+			if bodyErr != nil {
+				lg.Debug("failed to inspect Claude passthrough error response for signature retry",
+					zap.Error(bodyErr),
+					zap.Int("status_code", resp.StatusCode),
+				)
+			} else if shouldRetryClaudeInvalidThinkingSignature(resp.StatusCode, responseBody) {
+				logUpstreamResponseFromBytes(lg, resp, responseBody, "claude_messages_signature_rejected")
+
+				retryBody, retryStats, retryBodyErr := stripClaudeThinkingFromAssistantHistory(passthroughBody)
+				if retryBodyErr != nil {
+					lg.Debug("failed to build Claude signature retry payload",
+						zap.Error(retryBodyErr),
+						zap.Int("status_code", resp.StatusCode),
+					)
+				} else if retryStats.RemovedThinkingBlocks > 0 {
+					lg.Debug("retrying Claude passthrough after invalid thinking signature",
+						zap.Int("status_code", resp.StatusCode),
+						zap.Int("removed_thinking_blocks", retryStats.RemovedThinkingBlocks),
+						zap.Int("removed_assistant_messages", retryStats.RemovedAssistantMessages),
+					)
+
+					resp, err = adaptorInstance.DoRequest(c, meta, bytes.NewReader(retryBody))
+					if err != nil {
+						return openai.ErrorWrapper(err, "retry_claude_request_failed", http.StatusInternalServerError)
+					}
+					origResp = resp
+					upstreamCapture = wrapUpstreamResponse(resp)
+
+					if resp != nil && resp.StatusCode != http.StatusOK {
+						retryResponseBody, retryReadErr := readAndRestoreResponseBody(resp)
+						if retryReadErr != nil {
+							lg.Debug("failed to inspect Claude signature retry response",
+								zap.Error(retryReadErr),
+								zap.Int("status_code", resp.StatusCode),
+							)
+						} else {
+							logUpstreamResponseFromBytes(lg, resp, retryResponseBody, "claude_messages_signature_retry_failed")
+							lg.Debug("Claude passthrough signature retry still failed",
+								zap.Int("status_code", resp.StatusCode),
+								zap.Int("removed_thinking_blocks", retryStats.RemovedThinkingBlocks),
+								zap.Int("removed_assistant_messages", retryStats.RemovedAssistantMessages),
+							)
+						}
+					} else {
+						lg.Debug("Claude passthrough signature retry succeeded",
+							zap.Int("removed_thinking_blocks", retryStats.RemovedThinkingBlocks),
+							zap.Int("removed_assistant_messages", retryStats.RemovedAssistantMessages),
+						)
+					}
+				}
+			}
+		}
+
+		if resp != nil && resp.StatusCode == http.StatusOK {
+			goto handleResponse
+		}
+
 		graceful.GoCritical(ctx, "returnPreConsumedQuota", func(cctx context.Context) {
 			_ = returnPreConsumedQuotaConservative(cctx, c, preConsumedQuota, c.GetInt(ctxkey.TokenId), "upstream_http_error")
 		})
@@ -255,6 +359,8 @@ func RelayClaudeMessagesHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 	c.Set(ctxkey.ClaudeMessagesNative, true)
 
 	// do response - for direct passthrough, forward upstream JSON verbatim; otherwise let adaptor convert
+
+handleResponse:
 
 	// MCP tool loop handling for Claude Messages requests.
 	if mcpRegistry, mcpToolNames, mcpReq, mcpErr := detectClaudeMCPTools(c, meta, claudeRequest, adaptorInstance); mcpRegistry != nil || mcpErr != nil {

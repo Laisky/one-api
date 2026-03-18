@@ -3,6 +3,7 @@ package controller
 import (
 	"bytes"
 	"encoding/json"
+	"strings"
 
 	"github.com/Laisky/errors/v2"
 	"github.com/gin-gonic/gin"
@@ -79,6 +80,166 @@ func countThinkingSignatures(raw []byte) int {
 		idx += pos + len(signatureKey)
 	}
 	return count
+}
+
+type claudeSignatureRetryStats struct {
+	RemovedThinkingBlocks    int
+	RemovedAssistantMessages int
+}
+
+// encodeClaudeRawJSONArray marshals an array of raw JSON values without altering retained elements.
+// encodeClaudeRawJSONArray returns a valid JSON array containing each raw element in order.
+func encodeClaudeRawJSONArray(items []json.RawMessage) ([]byte, error) {
+	var buf bytes.Buffer
+	buf.WriteByte('[')
+	for i, item := range items {
+		if i > 0 {
+			buf.WriteByte(',')
+		}
+		buf.Write(item)
+	}
+	buf.WriteByte(']')
+	return buf.Bytes(), nil
+}
+
+// encodeClaudeRawJSONObject marshals a map of raw JSON fields while preserving nested raw payloads.
+// encodeClaudeRawJSONObject returns a valid JSON object with HTML escaping disabled.
+func encodeClaudeRawJSONObject(obj map[string]json.RawMessage) ([]byte, error) {
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
+	enc.SetEscapeHTML(false)
+	if err := enc.Encode(obj); err != nil {
+		return nil, errors.Wrap(err, "marshal Claude raw object")
+	}
+	return bytes.TrimRight(buf.Bytes(), "\n"), nil
+}
+
+// stripClaudeThinkingFromAssistantMessage removes replayed thinking blocks from an assistant message.
+// stripClaudeThinkingFromAssistantMessage returns the rewritten message, removal stats, whether the message should be kept, and any error.
+func stripClaudeThinkingFromAssistantMessage(messageRaw json.RawMessage) ([]byte, claudeSignatureRetryStats, bool, error) {
+	var stats claudeSignatureRetryStats
+	var message map[string]json.RawMessage
+	if err := json.Unmarshal(messageRaw, &message); err != nil {
+		return nil, stats, false, errors.Wrap(err, "unmarshal Claude message")
+	}
+
+	var role string
+	if rawRole, ok := message["role"]; ok {
+		if err := json.Unmarshal(rawRole, &role); err != nil {
+			return nil, stats, false, errors.Wrap(err, "unmarshal Claude message role")
+		}
+	}
+	if role != "assistant" {
+		return messageRaw, stats, true, nil
+	}
+
+	rawContent, ok := message["content"]
+	if !ok || len(rawContent) == 0 || rawContent[0] != '[' {
+		return messageRaw, stats, true, nil
+	}
+
+	var contentBlocks []json.RawMessage
+	if err := json.Unmarshal(rawContent, &contentBlocks); err != nil {
+		return nil, stats, false, errors.Wrap(err, "unmarshal Claude message content blocks")
+	}
+
+	keptBlocks := make([]json.RawMessage, 0, len(contentBlocks))
+	for _, blockRaw := range contentBlocks {
+		var block map[string]json.RawMessage
+		if err := json.Unmarshal(blockRaw, &block); err != nil {
+			return nil, stats, false, errors.Wrap(err, "unmarshal Claude content block")
+		}
+
+		var blockType string
+		if rawType, exists := block["type"]; exists {
+			if err := json.Unmarshal(rawType, &blockType); err != nil {
+				return nil, stats, false, errors.Wrap(err, "unmarshal Claude content block type")
+			}
+		}
+
+		normalizedType := strings.ToLower(strings.TrimSpace(blockType))
+		if normalizedType == "thinking" || normalizedType == "redacted_thinking" {
+			stats.RemovedThinkingBlocks++
+			continue
+		}
+
+		keptBlocks = append(keptBlocks, blockRaw)
+	}
+
+	if stats.RemovedThinkingBlocks == 0 {
+		return messageRaw, stats, true, nil
+	}
+	if len(keptBlocks) == 0 {
+		stats.RemovedAssistantMessages++
+		return nil, stats, false, nil
+	}
+
+	encodedBlocks, err := encodeClaudeRawJSONArray(keptBlocks)
+	if err != nil {
+		return nil, stats, false, errors.Wrap(err, "marshal sanitized Claude content blocks")
+	}
+	message["content"] = json.RawMessage(encodedBlocks)
+
+	encodedMessage, err := encodeClaudeRawJSONObject(message)
+	if err != nil {
+		return nil, stats, false, errors.Wrap(err, "marshal sanitized Claude message")
+	}
+
+	return encodedMessage, stats, true, nil
+}
+
+// stripClaudeThinkingFromAssistantHistory removes replayed thinking blocks from assistant history in a raw Claude Messages request.
+// stripClaudeThinkingFromAssistantHistory preserves untouched fields where possible and returns the rewritten payload plus removal stats.
+func stripClaudeThinkingFromAssistantHistory(raw []byte) ([]byte, claudeSignatureRetryStats, error) {
+	var stats claudeSignatureRetryStats
+	if len(raw) == 0 {
+		return raw, stats, nil
+	}
+
+	var obj map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &obj); err != nil {
+		return nil, stats, errors.Wrap(err, "unmarshal Claude request for signature retry")
+	}
+
+	rawMessages, ok := obj["messages"]
+	if !ok {
+		return raw, stats, nil
+	}
+
+	var messages []json.RawMessage
+	if err := json.Unmarshal(rawMessages, &messages); err != nil {
+		return nil, stats, errors.Wrap(err, "unmarshal Claude request messages for signature retry")
+	}
+
+	keptMessages := make([]json.RawMessage, 0, len(messages))
+	for _, messageRaw := range messages {
+		sanitizedMessage, messageStats, keepMessage, err := stripClaudeThinkingFromAssistantMessage(messageRaw)
+		if err != nil {
+			return nil, stats, errors.Wrap(err, "sanitize Claude assistant message for signature retry")
+		}
+		stats.RemovedThinkingBlocks += messageStats.RemovedThinkingBlocks
+		stats.RemovedAssistantMessages += messageStats.RemovedAssistantMessages
+		if keepMessage {
+			keptMessages = append(keptMessages, sanitizedMessage)
+		}
+	}
+
+	if stats.RemovedThinkingBlocks == 0 {
+		return raw, stats, nil
+	}
+
+	encodedMessages, err := encodeClaudeRawJSONArray(keptMessages)
+	if err != nil {
+		return nil, stats, errors.Wrap(err, "marshal sanitized Claude request messages")
+	}
+	obj["messages"] = json.RawMessage(encodedMessages)
+
+	encodedRequest, err := encodeClaudeRawJSONObject(obj)
+	if err != nil {
+		return nil, stats, errors.Wrap(err, "marshal sanitized Claude request")
+	}
+
+	return encodedRequest, stats, nil
 }
 
 // getAndValidateClaudeMessagesRequest gets and validates Claude Messages API request.
