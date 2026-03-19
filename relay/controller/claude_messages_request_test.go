@@ -455,3 +455,39 @@ func TestStripClaudeThinkingFromAssistantHistory_NoThinkingBlocks(t *testing.T) 
 	assert.Equal(t, 0, stats.RemovedThinkingBlocks)
 	assert.Equal(t, 0, stats.RemovedAssistantMessages)
 }
+
+func TestStripClaudeUnsignedThinkingFromAssistantHistory(t *testing.T) {
+	t.Parallel()
+
+	rawBody := `{"model":"claude-opus-4-6","messages":[{"role":"user","content":"Hello"},{"role":"assistant","content":[{"type":"thinking","thinking":"signed","signature":"sig1=="},{"type":"text","text":"Answer 1"}]},{"role":"assistant","content":[{"type":"thinking","thinking":"missing signature"},{"type":"text","text":"Answer 2"},{"type":"tool_use","id":"toolu_1","name":"lookup","input":{"q":"x"}}]},{"role":"assistant","content":[{"type":"redacted_thinking","data":"opaque"}]},{"role":"user","content":"Follow up"}]}`
+
+	sanitized, stats, err := stripClaudeUnsignedThinkingFromAssistantHistory([]byte(rawBody))
+	require.NoError(t, err)
+	require.True(t, json.Valid(sanitized))
+	assert.Equal(t, 2, stats.RemovedThinkingBlocks)
+	assert.Equal(t, 1, stats.RemovedAssistantMessages)
+	assert.Equal(t, []string{"messages[2].content[0]", "messages[3].content[0]"}, stats.Locations)
+	assert.Contains(t, string(sanitized), `"signature":"sig1=="`)
+	assert.Contains(t, string(sanitized), `"type":"tool_use","id":"toolu_1"`)
+	assert.NotContains(t, string(sanitized), `"thinking":"missing signature"`)
+	assert.NotContains(t, string(sanitized), `"type":"redacted_thinking","data":"opaque"`)
+
+	var parsed map[string]json.RawMessage
+	require.NoError(t, json.Unmarshal(sanitized, &parsed))
+	var messages []map[string]any
+	require.NoError(t, json.Unmarshal(parsed["messages"], &messages))
+	require.Len(t, messages, 4)
+}
+
+func TestStripClaudeUnsignedThinkingFromAssistantHistory_NoUnsignedThinking(t *testing.T) {
+	t.Parallel()
+
+	rawBody := `{"model":"claude-opus-4-6","messages":[{"role":"assistant","content":[{"type":"thinking","thinking":"signed","signature":"sig1=="},{"type":"text","text":"Answer"}]}]}`
+
+	sanitized, stats, err := stripClaudeUnsignedThinkingFromAssistantHistory([]byte(rawBody))
+	require.NoError(t, err)
+	assert.Equal(t, rawBody, string(sanitized))
+	assert.Equal(t, 0, stats.RemovedThinkingBlocks)
+	assert.Equal(t, 0, stats.RemovedAssistantMessages)
+	assert.Empty(t, stats.Locations)
+}

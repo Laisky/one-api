@@ -19,6 +19,11 @@ func TestShouldRetryClaudeInvalidThinkingSignature(t *testing.T) {
 		assert.False(t, shouldRetryClaudeInvalidThinkingSignature(400, body))
 	})
 
+	t.Run("matches missing thinking signature error", func(t *testing.T) {
+		body := []byte(`{"type":"error","error":{"type":"invalid_request_error","message":"messages.11.content.0.thinking.signature: Field required"}}`)
+		assert.True(t, shouldRetryClaudeInvalidThinkingSignature(400, body))
+	})
+
 	t.Run("ignores non 400 status", func(t *testing.T) {
 		body := []byte(`{"type":"error","error":{"type":"invalid_request_error","message":"messages.1.content.0: Invalid ` + "`signature`" + ` in ` + "`thinking`" + ` block"}}`)
 		assert.False(t, shouldRetryClaudeInvalidThinkingSignature(500, body))

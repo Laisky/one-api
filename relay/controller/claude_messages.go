@@ -50,12 +50,14 @@ func shouldRetryClaudeInvalidThinkingSignature(statusCode int, responseBody []by
 	var envelope claudeUpstreamErrorEnvelope
 	if err := json.Unmarshal(responseBody, &envelope); err == nil {
 		if strings.EqualFold(strings.TrimSpace(envelope.Error.Type), "invalid_request_error") &&
-			strings.Contains(envelope.Error.Message, "Invalid `signature` in `thinking` block") {
+			(strings.Contains(envelope.Error.Message, "Invalid `signature` in `thinking` block") ||
+				strings.Contains(envelope.Error.Message, ".thinking.signature: Field required")) {
 			return true
 		}
 	}
 
-	return bytes.Contains(responseBody, []byte("Invalid `signature` in `thinking` block"))
+	return bytes.Contains(responseBody, []byte("Invalid `signature` in `thinking` block")) ||
+		bytes.Contains(responseBody, []byte(".thinking.signature: Field required"))
 }
 
 // readAndRestoreResponseBody reads an HTTP response body and restores it for subsequent consumers.
@@ -210,18 +212,29 @@ func RelayClaudeMessagesHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 		if rerr != nil {
 			return openai.ErrorWrapper(rerr, "rewrite_claude_body_failed", http.StatusInternalServerError)
 		}
-		passthroughBody = rewritten
-		requestBody = bytes.NewReader(rewritten)
+		sanitizedBody, unsignedThinkingStats, serr := stripClaudeUnsignedThinkingFromAssistantHistory(rewritten)
+		if serr != nil {
+			return openai.ErrorWrapper(serr, "sanitize_claude_thinking_failed", http.StatusInternalServerError)
+		}
+		passthroughBody = sanitizedBody
+		requestBody = bytes.NewReader(sanitizedBody)
 
 		// Log signature-bearing thinking blocks count for diagnostics
 		sigCount := countThinkingSignatures(rawBody)
-		if sigCount > 0 {
-			lg.Debug("passthrough request contains thinking signatures",
+		if sigCount > 0 || unsignedThinkingStats.RemovedThinkingBlocks > 0 {
+			fields := []zap.Field{
 				zap.Int("signature_count", sigCount),
+				zap.Int("removed_unsigned_thinking_blocks", unsignedThinkingStats.RemovedThinkingBlocks),
+				zap.Int("removed_empty_assistant_messages", unsignedThinkingStats.RemovedAssistantMessages),
 				zap.Int("raw_body_len", len(rawBody)),
 				zap.Int("rewritten_body_len", len(rewritten)),
-				zap.Bool("body_bytes_preserved", bytes.Contains(rewritten, []byte(`"signature"`))),
-			)
+				zap.Int("sanitized_body_len", len(sanitizedBody)),
+				zap.Bool("body_bytes_preserved", bytes.Contains(sanitizedBody, []byte(`"signature"`))),
+			}
+			if len(unsignedThinkingStats.Locations) > 0 {
+				fields = append(fields, zap.Strings("removed_unsigned_thinking_locations", unsignedThinkingStats.Locations))
+			}
+			lg.Debug("analyzed Claude passthrough thinking blocks", fields...)
 		}
 	} else {
 		requestBytes, merr := json.Marshal(convertedRequest)

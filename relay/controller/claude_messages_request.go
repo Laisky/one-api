@@ -3,6 +3,7 @@ package controller
 import (
 	"bytes"
 	"encoding/json"
+	"strconv"
 	"strings"
 
 	"github.com/Laisky/errors/v2"
@@ -85,6 +86,12 @@ func countThinkingSignatures(raw []byte) int {
 type claudeSignatureRetryStats struct {
 	RemovedThinkingBlocks    int
 	RemovedAssistantMessages int
+}
+
+type claudeUnsignedThinkingStats struct {
+	RemovedThinkingBlocks    int
+	RemovedAssistantMessages int
+	Locations                []string
 }
 
 // encodeClaudeRawJSONArray marshals an array of raw JSON values without altering retained elements.
@@ -240,6 +247,152 @@ func stripClaudeThinkingFromAssistantHistory(raw []byte) ([]byte, claudeSignatur
 	}
 
 	return encodedRequest, stats, nil
+}
+
+// stripClaudeUnsignedThinkingFromAssistantMessage removes assistant thinking blocks that cannot be replayed because they lack signatures.
+// stripClaudeUnsignedThinkingFromAssistantMessage returns the rewritten message, removal stats, whether the message should be kept, and any error.
+func stripClaudeUnsignedThinkingFromAssistantMessage(messageRaw json.RawMessage, messageIndex int) ([]byte, claudeUnsignedThinkingStats, bool, error) {
+	var stats claudeUnsignedThinkingStats
+	var message map[string]json.RawMessage
+	if err := json.Unmarshal(messageRaw, &message); err != nil {
+		return nil, stats, false, errors.Wrap(err, "unmarshal Claude message")
+	}
+
+	var role string
+	if rawRole, ok := message["role"]; ok {
+		if err := json.Unmarshal(rawRole, &role); err != nil {
+			return nil, stats, false, errors.Wrap(err, "unmarshal Claude message role")
+		}
+	}
+	if role != "assistant" {
+		return messageRaw, stats, true, nil
+	}
+
+	rawContent, ok := message["content"]
+	if !ok || len(rawContent) == 0 || rawContent[0] != '[' {
+		return messageRaw, stats, true, nil
+	}
+
+	var contentBlocks []json.RawMessage
+	if err := json.Unmarshal(rawContent, &contentBlocks); err != nil {
+		return nil, stats, false, errors.Wrap(err, "unmarshal Claude message content blocks")
+	}
+
+	keptBlocks := make([]json.RawMessage, 0, len(contentBlocks))
+	for blockIndex, blockRaw := range contentBlocks {
+		var block map[string]json.RawMessage
+		if err := json.Unmarshal(blockRaw, &block); err != nil {
+			return nil, stats, false, errors.Wrap(err, "unmarshal Claude content block")
+		}
+
+		var blockType string
+		if rawType, exists := block["type"]; exists {
+			if err := json.Unmarshal(rawType, &blockType); err != nil {
+				return nil, stats, false, errors.Wrap(err, "unmarshal Claude content block type")
+			}
+		}
+
+		normalizedType := strings.ToLower(strings.TrimSpace(blockType))
+		if normalizedType != "thinking" && normalizedType != "redacted_thinking" {
+			keptBlocks = append(keptBlocks, blockRaw)
+			continue
+		}
+
+		var signature string
+		if rawSignature, exists := block["signature"]; exists {
+			if err := json.Unmarshal(rawSignature, &signature); err != nil {
+				return nil, stats, false, errors.Wrap(err, "unmarshal Claude thinking signature")
+			}
+		}
+
+		if strings.TrimSpace(signature) == "" {
+			stats.RemovedThinkingBlocks++
+			stats.Locations = append(stats.Locations, messageLocation(messageIndex, blockIndex))
+			continue
+		}
+
+		keptBlocks = append(keptBlocks, blockRaw)
+	}
+
+	if stats.RemovedThinkingBlocks == 0 {
+		return messageRaw, stats, true, nil
+	}
+	if len(keptBlocks) == 0 {
+		stats.RemovedAssistantMessages++
+		return nil, stats, false, nil
+	}
+
+	encodedBlocks, err := encodeClaudeRawJSONArray(keptBlocks)
+	if err != nil {
+		return nil, stats, false, errors.Wrap(err, "marshal sanitized Claude content blocks")
+	}
+	message["content"] = json.RawMessage(encodedBlocks)
+
+	encodedMessage, err := encodeClaudeRawJSONObject(message)
+	if err != nil {
+		return nil, stats, false, errors.Wrap(err, "marshal sanitized Claude message")
+	}
+
+	return encodedMessage, stats, true, nil
+}
+
+// stripClaudeUnsignedThinkingFromAssistantHistory removes replayed assistant thinking blocks that are missing required signatures.
+// stripClaudeUnsignedThinkingFromAssistantHistory preserves untouched fields where possible and returns the rewritten payload plus removal stats.
+func stripClaudeUnsignedThinkingFromAssistantHistory(raw []byte) ([]byte, claudeUnsignedThinkingStats, error) {
+	var stats claudeUnsignedThinkingStats
+	if len(raw) == 0 {
+		return raw, stats, nil
+	}
+
+	var obj map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &obj); err != nil {
+		return nil, stats, errors.Wrap(err, "unmarshal Claude request for unsigned thinking sanitization")
+	}
+
+	rawMessages, ok := obj["messages"]
+	if !ok {
+		return raw, stats, nil
+	}
+
+	var messages []json.RawMessage
+	if err := json.Unmarshal(rawMessages, &messages); err != nil {
+		return nil, stats, errors.Wrap(err, "unmarshal Claude request messages for unsigned thinking sanitization")
+	}
+
+	keptMessages := make([]json.RawMessage, 0, len(messages))
+	for messageIndex, messageRaw := range messages {
+		sanitizedMessage, messageStats, keepMessage, err := stripClaudeUnsignedThinkingFromAssistantMessage(messageRaw, messageIndex)
+		if err != nil {
+			return nil, stats, errors.Wrap(err, "sanitize Claude assistant message for unsigned thinking")
+		}
+		stats.RemovedThinkingBlocks += messageStats.RemovedThinkingBlocks
+		stats.RemovedAssistantMessages += messageStats.RemovedAssistantMessages
+		stats.Locations = append(stats.Locations, messageStats.Locations...)
+		if keepMessage {
+			keptMessages = append(keptMessages, sanitizedMessage)
+		}
+	}
+
+	if stats.RemovedThinkingBlocks == 0 {
+		return raw, stats, nil
+	}
+
+	encodedMessages, err := encodeClaudeRawJSONArray(keptMessages)
+	if err != nil {
+		return nil, stats, errors.Wrap(err, "marshal sanitized Claude request messages")
+	}
+	obj["messages"] = json.RawMessage(encodedMessages)
+
+	encodedRequest, err := encodeClaudeRawJSONObject(obj)
+	if err != nil {
+		return nil, stats, errors.Wrap(err, "marshal sanitized Claude request")
+	}
+
+	return encodedRequest, stats, nil
+}
+
+func messageLocation(messageIndex, blockIndex int) string {
+	return "messages[" + strconv.Itoa(messageIndex) + "].content[" + strconv.Itoa(blockIndex) + "]"
 }
 
 // getAndValidateClaudeMessagesRequest gets and validates Claude Messages API request.
