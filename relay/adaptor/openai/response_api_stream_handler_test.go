@@ -57,6 +57,7 @@ data: [DONE]`
 	require.Equal(t, "Hello world", aggregatedText, "unexpected aggregated text")
 	require.NotNil(t, usage, "usage should not be nil")
 	require.Equal(t, 3, usage.TotalTokens, "unexpected total tokens")
+	require.True(t, w.Flushed, "expected converted response api stream to flush downstream chunks")
 
 	// Inspect emitted stream and ensure only one full-text chunk and one usage chunk
 	body := w.Body.String()
@@ -130,10 +131,63 @@ data: [DONE]`
 	require.Nil(t, err, "unexpected error")
 	require.NotNil(t, usage, "usage should not be nil")
 	require.Equal(t, 7, usage.TotalTokens, "unexpected total tokens")
+	require.True(t, w.Flushed, "expected converted response api stream to flush downstream chunks")
 
 	countRaw, exists := c.Get(ctxkey.WebSearchCallCount)
 	require.True(t, exists, "expected web search count in context")
 	count, ok := countRaw.(int)
 	require.True(t, ok, "web search count should be int")
 	require.Equal(t, 3, count, "expected web search count 3")
+}
+
+func TestResponseAPIDirectStreamHandler_FlushesAndPassesThrough(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
+
+	sse := `event: response.created
+data: {"type":"response.created","response":{"id":"resp_direct","object":"response","created_at":1741290958,"status":"in_progress"}}
+
+event: keepalive
+data: {"type":"keepalive","sequence_number":1}
+
+event: response.output_text.delta
+data: {"type":"response.output_text.delta","item_id":"msg_direct","output_index":0,"content_index":0,"delta":"Hello"}
+
+event: response.output_text.delta
+data: {"type":"response.output_text.delta","item_id":"msg_direct","output_index":0,"content_index":0,"delta":" world"}
+
+event: response.completed
+data: {"type":"response.completed","response":{"id":"resp_direct","object":"response","created_at":1741290958,"status":"completed","output":[{"id":"msg_direct","type":"message","status":"completed","role":"assistant","content":[{"type":"output_text","text":"Hello world"}]}],"usage":{"input_tokens":5,"output_tokens":2,"total_tokens":7}}}
+
+data: [DONE]`
+
+	resp := &http.Response{
+		StatusCode: http.StatusOK,
+		Body:       io.NopCloser(strings.NewReader(sse)),
+		Header:     make(http.Header),
+	}
+	resp.Header.Set("Content-Type", "text/event-stream")
+
+	err, aggregatedText, usage := ResponseAPIDirectStreamHandler(c, resp, relaymode.ResponseAPI)
+	require.Nil(t, err, "unexpected error")
+	require.Equal(t, "Hello world", aggregatedText, "unexpected aggregated text")
+	require.NotNil(t, usage, "usage should not be nil")
+	require.Equal(t, 7, usage.TotalTokens, "unexpected total tokens")
+	require.True(t, w.Flushed, "expected native response api stream to flush downstream chunks")
+
+	body := w.Body.String()
+	require.Contains(t, body, `"type":"response.created"`, "expected response.created to pass through")
+	require.Contains(t, body, `"type":"keepalive"`, "expected keepalive to pass through")
+	require.Contains(t, body, `"type":"response.completed"`, "expected response.completed to pass through")
+	require.Contains(t, body, "data: [DONE]", "expected DONE event")
+
+	convertedRaw, ok := c.Get(ctxkey.ConvertedResponse)
+	require.True(t, ok, "expected converted response in context")
+	converted, ok := convertedRaw.(ResponseAPIResponse)
+	require.True(t, ok, "expected converted response type ResponseAPIResponse")
+	require.Equal(t, "completed", converted.Status, "expected completed status in converted response")
+	require.NotNil(t, converted.Usage, "expected usage in converted response")
+	require.Equal(t, 7, converted.Usage.TotalTokens, "unexpected converted response usage")
 }

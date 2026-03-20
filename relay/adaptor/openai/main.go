@@ -846,6 +846,7 @@ func ResponseAPIHandler(c *gin.Context, resp *http.Response, promptTokens int, m
 // This function follows the same pattern as StreamHandler but handles Response API streaming responses
 // Returns error (if any), accumulated response text, and token usage information
 func ResponseAPIStreamHandler(c *gin.Context, resp *http.Response, relayMode int) (*model.ErrorWithStatusCode, string, *model.Usage) {
+	lg := gmw.GetLogger(c)
 	// Initialize accumulators for the response
 	responseText := ""
 	reasoningText := ""
@@ -854,6 +855,10 @@ func ResponseAPIStreamHandler(c *gin.Context, resp *http.Response, relayMode int
 	webSearchSeen := make(map[string]struct{})
 	webSearchCount := 0
 	toolStates := make(map[string]*responseStreamToolCallState)
+	flushSupported := false
+	if _, ok := any(c.Writer).(http.Flusher); ok {
+		flushSupported = true
+	}
 
 	// Track output item IDs for which we've already forwarded delta content.
 	seenOutputItems := make(map[string]struct{})
@@ -877,14 +882,19 @@ func ResponseAPIStreamHandler(c *gin.Context, resp *http.Response, relayMode int
 
 	// Set response headers for SSE
 	common.SetEventStreamHeaders(c)
+	lg.Debug("forwarding response api converted stream to client",
+		zap.Int("relay_mode", relayMode),
+		zap.Bool("flush_supported", flushSupported),
+	)
 
 	doneRendered := false
+	forwardedChunks := 0
 
 	// Process each line from the stream
 	for scanner.Scan() {
 		data := openai_compatible.NormalizeDataLine(scanner.Text())
 
-		gmw.GetLogger(c).Debug("receive stream event", zap.String("event", data))
+		lg.Debug("receive stream event", zap.String("event", data))
 
 		if !strings.HasPrefix(data, dataPrefix) {
 			continue
@@ -893,7 +903,7 @@ func ResponseAPIStreamHandler(c *gin.Context, resp *http.Response, relayMode int
 
 		if data == done {
 			if !doneRendered {
-				c.Render(-1, common.CustomEvent{Data: "data: " + done})
+				render.Done(c)
 				doneRendered = true
 			}
 			break
@@ -903,7 +913,7 @@ func ResponseAPIStreamHandler(c *gin.Context, resp *http.Response, relayMode int
 		fullResponse, streamEvent, err := ParseResponseAPIStreamEvent([]byte(data))
 		if err != nil {
 			// Log the error with more context but continue processing
-			gmw.GetLogger(c).Debug("skipping unparseable stream chunk", zap.String("chunk", data), zap.Error(err))
+			lg.Debug("skipping unparseable stream chunk", zap.String("chunk", data), zap.Error(err))
 			continue
 		}
 
@@ -1191,12 +1201,15 @@ func ResponseAPIStreamHandler(c *gin.Context, resp *http.Response, relayMode int
 			if shouldSendChunk {
 				jsonStr, err := json.Marshal(chatCompletionChunk)
 				if err != nil {
-					lg := gmw.GetLogger(c)
 					lg.Error("error marshalling stream chunk", zap.Error(err))
 					continue
 				}
 
-				c.Render(-1, common.CustomEvent{Data: "data: " + string(jsonStr)})
+				render.StringData(c, string(jsonStr))
+				forwardedChunks++
+				if forwardedChunks == 1 {
+					lg.Debug("first response api converted stream chunk flushed to client")
+				}
 			} else if eventType == "response.completed" && responseAPIChunk.Usage != nil {
 				// Special handling for response.completed when no terminal chunk was
 				// emitted above. Emit a single terminal chunk that includes the
@@ -1248,13 +1261,16 @@ func ResponseAPIStreamHandler(c *gin.Context, resp *http.Response, relayMode int
 
 					jsonStr, err := json.Marshal(usageChunk)
 					if err != nil {
-						lg := gmw.GetLogger(c)
 						lg.Error("error marshalling usage chunk", zap.Error(err))
 						continue
 					}
 
-					c.Render(-1, common.CustomEvent{Data: "data: " + string(jsonStr)})
-					gmw.GetLogger(c).Debug("sent usage chunk from response.completed", zap.ByteString("chunk", jsonStr))
+					render.StringData(c, string(jsonStr))
+					forwardedChunks++
+					if forwardedChunks == 1 {
+						lg.Debug("first response api converted stream chunk flushed to client")
+					}
+					lg.Debug("sent usage chunk from response.completed", zap.ByteString("chunk", jsonStr))
 				}
 			}
 			// ALL other events (done events, in_progress events, etc.) are discarded to avoid duplicate content leakage
@@ -1267,7 +1283,7 @@ func ResponseAPIStreamHandler(c *gin.Context, resp *http.Response, relayMode int
 	}
 
 	if !doneRendered {
-		c.Render(-1, common.CustomEvent{Data: "data: " + done})
+		render.Done(c)
 	}
 
 	if err := resp.Body.Close(); err != nil {
@@ -1284,6 +1300,10 @@ func ResponseAPIStreamHandler(c *gin.Context, resp *http.Response, relayMode int
 
 	// Record when upstream streaming is completed
 	recordUpstreamCompleted(c)
+	lg.Debug("completed response api converted stream forwarding",
+		zap.Int("forwarded_chunks", forwardedChunks),
+		zap.Bool("done_rendered", doneRendered),
+	)
 
 	return nil, responseText, usage
 }
@@ -1398,6 +1418,7 @@ func ResponseAPIDirectHandler(c *gin.Context, resp *http.Response, promptTokens 
 // This function is used for direct Response API streaming requests that don't need conversion back to ChatCompletion format
 // Returns error (if any), accumulated response text, and token usage information
 func ResponseAPIDirectStreamHandler(c *gin.Context, resp *http.Response, relayMode int) (*model.ErrorWithStatusCode, string, *model.Usage) {
+	lg := gmw.GetLogger(c)
 	// Initialize accumulators for the response
 	responseText := ""
 	var usage *model.Usage
@@ -1405,6 +1426,10 @@ func ResponseAPIDirectStreamHandler(c *gin.Context, resp *http.Response, relayMo
 	webSearchSeen := make(map[string]struct{})
 	webSearchCount := 0
 	var lastFullResponse *ResponseAPIResponse
+	flushSupported := false
+	if _, ok := any(c.Writer).(http.Flusher); ok {
+		flushSupported = true
+	}
 
 	// Set up scanner for reading the stream line by line
 	scanner := bufio.NewScanner(resp.Body)
@@ -1413,14 +1438,19 @@ func ResponseAPIDirectStreamHandler(c *gin.Context, resp *http.Response, relayMo
 
 	// Set response headers for SSE
 	common.SetEventStreamHeaders(c)
+	lg.Debug("forwarding response api native stream to client",
+		zap.Int("relay_mode", relayMode),
+		zap.Bool("flush_supported", flushSupported),
+	)
 
 	doneRendered := false
+	forwardedChunks := 0
 
 	// Process each line from the stream
 	for scanner.Scan() {
 		data := openai_compatible.NormalizeDataLine(scanner.Text())
 
-		gmw.GetLogger(c).Debug("receive stream event", zap.String("event", data))
+		lg.Debug("receive stream event", zap.String("event", data))
 
 		if !strings.HasPrefix(data, dataPrefix) {
 			continue
@@ -1429,7 +1459,7 @@ func ResponseAPIDirectStreamHandler(c *gin.Context, resp *http.Response, relayMo
 
 		if data == done {
 			if !doneRendered {
-				c.Render(-1, common.CustomEvent{Data: "data: " + done})
+				render.Done(c)
 				doneRendered = true
 			}
 			break
@@ -1439,7 +1469,7 @@ func ResponseAPIDirectStreamHandler(c *gin.Context, resp *http.Response, relayMo
 		fullResponse, streamEvent, err := ParseResponseAPIStreamEvent([]byte(data))
 		if err != nil {
 			// Log the error with more context but continue processing
-			gmw.GetLogger(c).Debug("skipping unparseable stream chunk", zap.String("chunk", data), zap.Error(err))
+			lg.Debug("skipping unparseable stream chunk", zap.String("chunk", data), zap.Error(err))
 			continue
 		}
 
@@ -1477,7 +1507,11 @@ func ResponseAPIDirectStreamHandler(c *gin.Context, resp *http.Response, relayMo
 		}
 
 		// Pass through the original Response API event directly to client
-		c.Render(-1, common.CustomEvent{Data: "data: " + string(data)})
+		render.StringData(c, string(data))
+		forwardedChunks++
+		if forwardedChunks == 1 {
+			lg.Debug("first response api native stream chunk flushed to client")
+		}
 	}
 
 	if err := scanner.Err(); err != nil {
@@ -1486,7 +1520,7 @@ func ResponseAPIDirectStreamHandler(c *gin.Context, resp *http.Response, relayMo
 	}
 
 	if !doneRendered {
-		c.Render(-1, common.CustomEvent{Data: "data: " + done})
+		render.Done(c)
 	}
 
 	if err := resp.Body.Close(); err != nil {
@@ -1503,6 +1537,10 @@ func ResponseAPIDirectStreamHandler(c *gin.Context, resp *http.Response, relayMo
 
 	// Record when upstream streaming is completed
 	recordUpstreamCompleted(c)
+	lg.Debug("completed response api native stream forwarding",
+		zap.Int("forwarded_chunks", forwardedChunks),
+		zap.Bool("done_rendered", doneRendered),
+	)
 
 	if lastFullResponse != nil {
 		c.Set(ctxkey.ConvertedResponse, *lastFullResponse)
