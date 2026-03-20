@@ -106,6 +106,10 @@ func postConsumeClaudeMessagesQuotaWithTraceID(ctx context.Context, requestId st
 			requestId = ginCtx.GetString(ctxkey.RequestId)
 		}
 	}
+	// For Claude models, upstream reports non-cached input tokens as PromptTokens
+	// and cached tokens separately. Sum them so the log shows the total prompt tokens.
+	logPromptTokens := computeResult.PromptTokens + computeResult.CachedPromptTokens
+
 	billing.PostConsumeQuotaDetailed(billing.QuotaConsumeDetail{
 		Ctx:                    ctx,
 		TokenId:                meta.TokenId,
@@ -113,7 +117,7 @@ func postConsumeClaudeMessagesQuotaWithTraceID(ctx context.Context, requestId st
 		TotalQuota:             quota,
 		UserId:                 meta.UserId,
 		ChannelId:              meta.ChannelId,
-		PromptTokens:           computeResult.PromptTokens,
+		PromptTokens:           logPromptTokens,
 		CompletionTokens:       computeResult.CompletionTokens,
 		ModelRatio:             computeResult.UsedModelRatio,
 		GroupRatio:             groupRatio,

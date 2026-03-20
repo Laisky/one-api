@@ -65,6 +65,72 @@ func rewriteClaudeRequestBody(raw []byte, request *ClaudeMessagesRequest) ([]byt
 	return bytes.TrimRight(buf.Bytes(), "\n"), nil
 }
 
+// rewriteAndSanitizeClaudeRequestBody combines rewriteClaudeRequestBody and
+// stripClaudeUnsignedThinkingFromAssistantHistory into a single JSON parse/encode pass.
+// This avoids parsing the (potentially very large) request body twice.
+func rewriteAndSanitizeClaudeRequestBody(raw []byte, request *ClaudeMessagesRequest) ([]byte, claudeUnsignedThinkingStats, error) {
+	var stats claudeUnsignedThinkingStats
+	if len(raw) == 0 || request == nil {
+		return raw, stats, nil
+	}
+
+	var obj map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &obj); err != nil {
+		return nil, stats, errors.Wrap(err, "unmarshal raw claude body for rewrite+sanitize")
+	}
+
+	// --- rewrite phase (model, extra_body, top_p) ---
+	if request.Model != "" {
+		modelBytes, merr := json.Marshal(request.Model)
+		if merr != nil {
+			return nil, stats, errors.Wrap(merr, "marshal model name")
+		}
+		obj["model"] = json.RawMessage(modelBytes)
+	}
+	delete(obj, "extra_body")
+	if request.TopP == nil {
+		delete(obj, "top_p")
+	}
+
+	// --- sanitize phase (strip unsigned thinking blocks) ---
+	rawMessages, hasMessages := obj["messages"]
+	if hasMessages {
+		var messages []json.RawMessage
+		if err := json.Unmarshal(rawMessages, &messages); err != nil {
+			return nil, stats, errors.Wrap(err, "unmarshal messages for unsigned thinking sanitization")
+		}
+
+		keptMessages := make([]json.RawMessage, 0, len(messages))
+		for messageIndex, messageRaw := range messages {
+			sanitizedMessage, messageStats, keepMessage, err := stripClaudeUnsignedThinkingFromAssistantMessage(messageRaw, messageIndex)
+			if err != nil {
+				return nil, stats, errors.Wrap(err, "sanitize Claude assistant message for unsigned thinking")
+			}
+			stats.RemovedThinkingBlocks += messageStats.RemovedThinkingBlocks
+			stats.RemovedAssistantMessages += messageStats.RemovedAssistantMessages
+			stats.Locations = append(stats.Locations, messageStats.Locations...)
+			if keepMessage {
+				keptMessages = append(keptMessages, sanitizedMessage)
+			}
+		}
+
+		if stats.RemovedThinkingBlocks > 0 {
+			encodedMessages, err := encodeClaudeRawJSONArray(keptMessages)
+			if err != nil {
+				return nil, stats, errors.Wrap(err, "marshal sanitized messages")
+			}
+			obj["messages"] = json.RawMessage(encodedMessages)
+		}
+	}
+
+	// --- encode final result ---
+	result, err := encodeClaudeRawJSONObject(obj)
+	if err != nil {
+		return nil, stats, errors.Wrap(err, "marshal rewritten+sanitized claude body")
+	}
+	return result, stats, nil
+}
+
 // countThinkingSignatures counts the number of "signature" fields co-located
 // with "thinking" type blocks in the raw JSON body. Used for debug logging only.
 func countThinkingSignatures(raw []byte) int {

@@ -113,8 +113,12 @@ func RelayClaudeMessagesHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 
 	ratio := modelRatio * groupRatio
 
-	// pre-consume quota based on estimated input tokens
-	promptTokens := getClaudeMessagesPromptTokens(gmw.Ctx(c), claudeRequest)
+	// pre-consume quota based on estimated input tokens.
+	// For large request bodies, use a fast byte-based estimation (body_size / 4)
+	// instead of full token counting which requires parsing all message content.
+	// The actual token count from the upstream response is used for final billing.
+	rawBodyForEstimate, _ := common.GetRequestBody(c)
+	promptTokens := estimateClaudeMessagesPromptTokens(gmw.Ctx(c), claudeRequest, len(rawBodyForEstimate))
 	meta.PromptTokens = promptTokens
 	preConsumedQuota, bizErr := preConsumeClaudeMessagesQuota(c, claudeRequest, promptTokens, ratio, completionRatio, meta)
 	if bizErr != nil {
@@ -208,13 +212,9 @@ func RelayClaudeMessagesHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 		if gerr != nil {
 			return openai.ErrorWrapper(gerr, "get_original_body_failed", http.StatusInternalServerError)
 		}
-		rewritten, rerr := rewriteClaudeRequestBody(rawBody, claudeRequest)
-		if rerr != nil {
-			return openai.ErrorWrapper(rerr, "rewrite_claude_body_failed", http.StatusInternalServerError)
-		}
-		sanitizedBody, unsignedThinkingStats, serr := stripClaudeUnsignedThinkingFromAssistantHistory(rewritten)
+		sanitizedBody, unsignedThinkingStats, serr := rewriteAndSanitizeClaudeRequestBody(rawBody, claudeRequest)
 		if serr != nil {
-			return openai.ErrorWrapper(serr, "sanitize_claude_thinking_failed", http.StatusInternalServerError)
+			return openai.ErrorWrapper(serr, "rewrite_sanitize_claude_body_failed", http.StatusInternalServerError)
 		}
 		passthroughBody = sanitizedBody
 		requestBody = bytes.NewReader(sanitizedBody)
@@ -227,7 +227,6 @@ func RelayClaudeMessagesHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 				zap.Int("removed_unsigned_thinking_blocks", unsignedThinkingStats.RemovedThinkingBlocks),
 				zap.Int("removed_empty_assistant_messages", unsignedThinkingStats.RemovedAssistantMessages),
 				zap.Int("raw_body_len", len(rawBody)),
-				zap.Int("rewritten_body_len", len(rewritten)),
 				zap.Int("sanitized_body_len", len(sanitizedBody)),
 				zap.Bool("body_bytes_preserved", bytes.Contains(sanitizedBody, []byte(`"signature"`))),
 			}
@@ -244,27 +243,18 @@ func RelayClaudeMessagesHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 		requestBody = bytes.NewReader(requestBytes)
 	}
 
-	// for debug
-	{
-		requestBodyBytes, _ := io.ReadAll(requestBody)
-		var outgoing struct {
-			Model string `json:"model"`
-		}
-		_ = json.Unmarshal(requestBodyBytes, &outgoing)
-		lg.Debug("prepared Claude upstream request",
-			zap.Bool("passthrough", func() bool {
-				if v, ok := c.Get(ctxkey.ClaudeDirectPassthrough); ok {
-					b, _ := v.(bool)
-					return b
-				}
-				return false
-			}()),
-			zap.String("origin_model", meta.OriginModelName),
-			zap.String("mapped_model", meta.ActualModelName),
-			zap.String("outgoing_model", outgoing.Model),
-		)
-		requestBody = bytes.NewReader(requestBodyBytes)
-	}
+	lg.Debug("prepared Claude upstream request",
+		zap.Bool("passthrough", func() bool {
+			if v, ok := c.Get(ctxkey.ClaudeDirectPassthrough); ok {
+				b, _ := v.(bool)
+				return b
+			}
+			return false
+		}()),
+		zap.String("origin_model", meta.OriginModelName),
+		zap.String("mapped_model", meta.ActualModelName),
+		zap.String("outgoing_model", meta.ActualModelName),
+	)
 
 	// do request
 	resp, err = adaptorInstance.DoRequest(c, meta, requestBody)

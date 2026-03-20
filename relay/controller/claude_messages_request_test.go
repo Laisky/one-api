@@ -479,6 +479,43 @@ func TestStripClaudeUnsignedThinkingFromAssistantHistory(t *testing.T) {
 	require.Len(t, messages, 4)
 }
 
+func TestRewriteAndSanitizeClaudeRequestBody(t *testing.T) {
+	t.Parallel()
+
+	// Body with model to rewrite, extra_body to remove, and unsigned thinking to strip
+	rawBody := `{"model":"old-model","extra_body":{"foo":"bar"},"messages":[{"role":"user","content":"Hello"},{"role":"assistant","content":[{"type":"thinking","thinking":"signed","signature":"sig1=="},{"type":"text","text":"Answer 1"}]},{"role":"assistant","content":[{"type":"thinking","thinking":"missing signature"},{"type":"text","text":"Answer 2"}]}]}`
+
+	request := &ClaudeMessagesRequest{Model: "new-model"}
+	result, stats, err := rewriteAndSanitizeClaudeRequestBody([]byte(rawBody), request)
+	require.NoError(t, err)
+	require.True(t, json.Valid(result))
+
+	// Verify rewrite: model changed, extra_body removed
+	assert.Contains(t, string(result), `"new-model"`)
+	assert.NotContains(t, string(result), `"old-model"`)
+	assert.NotContains(t, string(result), `"extra_body"`)
+
+	// Verify sanitize: unsigned thinking removed, signed preserved
+	assert.Equal(t, 1, stats.RemovedThinkingBlocks)
+	assert.Contains(t, string(result), `"signature":"sig1=="`)
+	assert.NotContains(t, string(result), `"thinking":"missing signature"`)
+}
+
+func TestRewriteAndSanitizeClaudeRequestBody_NoThinkingToStrip(t *testing.T) {
+	t.Parallel()
+
+	rawBody := `{"model":"old-model","messages":[{"role":"user","content":"Hello"},{"role":"assistant","content":[{"type":"thinking","thinking":"signed","signature":"sig1=="},{"type":"text","text":"Answer"}]}]}`
+
+	request := &ClaudeMessagesRequest{Model: "new-model"}
+	result, stats, err := rewriteAndSanitizeClaudeRequestBody([]byte(rawBody), request)
+	require.NoError(t, err)
+	require.True(t, json.Valid(result))
+
+	assert.Contains(t, string(result), `"new-model"`)
+	assert.Equal(t, 0, stats.RemovedThinkingBlocks)
+	assert.Contains(t, string(result), `"signature":"sig1=="`)
+}
+
 func TestStripClaudeUnsignedThinkingFromAssistantHistory_NoUnsignedThinking(t *testing.T) {
 	t.Parallel()
 
