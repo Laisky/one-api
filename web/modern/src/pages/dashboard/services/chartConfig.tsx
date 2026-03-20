@@ -1,10 +1,8 @@
-import { formatNumber } from "@/lib/utils";
-import { getChartColor, barColor as barColorFromTypes } from "../types";
+import { formatNumber } from '@/lib/utils';
+import { getChartColor, barColor as barColorFromTypes } from '../types';
 
-export const getQuotaPerUnit = () =>
-  parseFloat(localStorage.getItem("quota_per_unit") || "500000");
-export const getDisplayInCurrency = () =>
-  localStorage.getItem("display_in_currency") === "true";
+export const getQuotaPerUnit = () => parseFloat(localStorage.getItem('quota_per_unit') || '500000');
+export const getDisplayInCurrency = () => localStorage.getItem('display_in_currency') === 'true';
 
 export const renderQuota = (quota: number, precision: number = 2): string => {
   const displayInCurrency = getDisplayInCurrency();

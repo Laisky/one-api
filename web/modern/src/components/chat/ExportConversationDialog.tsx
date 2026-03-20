@@ -1,31 +1,20 @@
-import { Button } from '@/components/ui/button'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import {
-  Message,
-  formatTimestamp,
-  generateSHA256Digest
-} from '@/lib/utils'
-import { FileDown, FileJson } from 'lucide-react'
-import React, { useState } from 'react'
-import { useTranslation } from 'react-i18next'
+import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Message, formatTimestamp, generateSHA256Digest } from '@/lib/utils';
+import { FileDown, FileJson } from 'lucide-react';
+import React, { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 interface ExportConversationDialogProps {
-  isOpen: boolean
-  onClose: () => void
-  messages: Message[]
-  selectedModel?: string
-  conversationId?: string
-  conversationCreated?: number
-  conversationCreatedBy?: string
+  isOpen: boolean;
+  onClose: () => void;
+  messages: Message[];
+  selectedModel?: string;
+  conversationId?: string;
+  conversationCreated?: number;
+  conversationCreatedBy?: string;
 }
 
 export function ExportConversationDialog({
@@ -35,19 +24,19 @@ export function ExportConversationDialog({
   selectedModel,
   conversationId,
   conversationCreated,
-  conversationCreatedBy
+  conversationCreatedBy,
 }: ExportConversationDialogProps) {
-  const { t } = useTranslation()
-  const [customFilename, setCustomFilename] = useState('')
-  const [isExporting, setIsExporting] = useState(false)
+  const { t } = useTranslation();
+  const [customFilename, setCustomFilename] = useState('');
+  const [isExporting, setIsExporting] = useState(false);
 
   const handleExport = async () => {
-    if (messages.length === 0) return
+    if (messages.length === 0) return;
 
-    setIsExporting(true)
+    setIsExporting(true);
     try {
       // Current date formatted as YYYY-MM-DD
-      const currentDate = new Date().toISOString().split('T')[0]
+      const currentDate = new Date().toISOString().split('T')[0];
 
       // Export to JSON with full message structure
       const jsonData = {
@@ -64,63 +53,63 @@ export function ExportConversationDialog({
           timestamp: msg.timestamp,
           formattedTime: formatTimestamp(msg.timestamp),
           model: msg.model,
-          reasoning_content: msg.reasoning_content,  // Now properly handles null values
-          error: msg.error
-        }))
-      }
+          reasoning_content: msg.reasoning_content, // Now properly handles null values
+          error: msg.error,
+        })),
+      };
 
-      const content = JSON.stringify(jsonData, null, 2)
-      const mimeType = 'application/json'
-      const fileExtension = 'json'
+      const content = JSON.stringify(jsonData, null, 2);
+      const mimeType = 'application/json';
+      const fileExtension = 'json';
 
       // Generate digest from content using SHA-256
-      const digest = await generateSHA256Digest(content)
+      const digest = await generateSHA256Digest(content);
 
       // Determine filename
-      let filename: string
+      let filename: string;
       if (customFilename.trim()) {
         // Remove any existing extension from custom filename
-        const baseFilename = customFilename.replace(/\.json$/i, '')
-        filename = `${baseFilename}_${currentDate}_${digest}.${fileExtension}`
+        const baseFilename = customFilename.replace(/\.json$/i, '');
+        filename = `${baseFilename}_${currentDate}_${digest}.${fileExtension}`;
       } else {
-        filename = `conversation_${currentDate}_${digest}.${fileExtension}`
+        filename = `conversation_${currentDate}_${digest}.${fileExtension}`;
       }
 
       // Create and download file
-      const blob = new Blob([content], { type: mimeType })
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = filename
-      document.body.appendChild(a)
-      a.click()
-      document.body.removeChild(a)
-      URL.revokeObjectURL(url)
+      const blob = new Blob([content], { type: mimeType });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
 
       // Close dialog after successful export
-      onClose()
-      setCustomFilename('')
+      onClose();
+      setCustomFilename('');
     } catch (error) {
-      console.error('Export failed:', error)
+      console.error('Export failed:', error);
     } finally {
-      setIsExporting(false)
+      setIsExporting(false);
     }
-  }
+  };
 
   const handleClose = () => {
     if (!isExporting) {
-      onClose()
-      setCustomFilename('')
+      onClose();
+      setCustomFilename('');
     }
-  }
+  };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     // Close on Escape if not exporting
     if (e.key === 'Escape' && !isExporting) {
-      e.preventDefault()
-      handleClose()
+      e.preventDefault();
+      handleClose();
     }
-  }
+  };
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && handleClose()}>
@@ -131,9 +120,7 @@ export function ExportConversationDialog({
             {t('playground.export.title')}
           </DialogTitle>
           <DialogDescription className="space-y-2">
-            <div>
-              {t('playground.export.description')}
-            </div>
+            <div>{t('playground.export.description')}</div>
             {messages.length > 0 && (
               <div className="text-sm text-muted-foreground">
                 {t('playground.export.ready_to_export', { count: messages.length, plural: messages.length === 1 ? '' : 's' })}
@@ -157,9 +144,7 @@ export function ExportConversationDialog({
               disabled={isExporting}
               className="text-sm"
             />
-            <p className="text-xs text-muted-foreground">
-              {t('playground.export.filename_hint')}
-            </p>
+            <p className="text-xs text-muted-foreground">{t('playground.export.filename_hint')}</p>
           </div>
 
           {/* Export button */}
@@ -187,15 +172,11 @@ export function ExportConversationDialog({
         </div>
 
         <DialogFooter className="gap-2">
-          <Button
-            variant="secondary"
-            onClick={handleClose}
-            disabled={isExporting}
-          >
+          <Button variant="secondary" onClick={handleClose} disabled={isExporting}>
             {t('playground.export.cancel')}
           </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
-  )
+  );
 }

@@ -1,21 +1,10 @@
-import { Button } from "@/components/ui/button";
-import {
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-} from "@/components/ui/command";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
-import { api } from "@/lib/api";
-import { cn } from "@/lib/utils";
-import { Check, ChevronsUpDown, Loader2, Plus, X } from "lucide-react";
-import * as React from "react";
+import { Button } from '@/components/ui/button';
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { api } from '@/lib/api';
+import { cn } from '@/lib/utils';
+import { Check, ChevronsUpDown, Loader2, Plus, X } from 'lucide-react';
+import * as React from 'react';
 
 export interface SearchOption {
   key: string;
@@ -47,15 +36,15 @@ interface SearchableDropdownProps {
 
 export function SearchableDropdown({
   value,
-  placeholder = "Select option...",
-  searchPlaceholder = "Search...",
+  placeholder = 'Select option...',
+  searchPlaceholder = 'Search...',
   options: initialOptions,
   onSearchChange,
   onChange,
   onAddItem,
   loading = false,
-  noResultsMessage = "No results found",
-  additionLabel = "Add: ",
+  noResultsMessage = 'No results found',
+  additionLabel = 'Add: ',
   allowAdditions = false,
   clearable = false,
   className,
@@ -65,29 +54,20 @@ export function SearchableDropdown({
   minQueryLength = 2,
 }: SearchableDropdownProps) {
   const [open, setOpen] = React.useState(false);
-  const [searchValue, setSearchValue] = React.useState("");
+  const [searchValue, setSearchValue] = React.useState('');
   const [apiOptions, setApiOptions] = React.useState<SearchOption[]>([]);
   const [apiLoading, setApiLoading] = React.useState(false);
   const searchTimeoutRef = React.useRef<NodeJS.Timeout>();
 
   // Use API options if available, otherwise use initial options
-  const options =
-    searchEndpoint && searchValue.length >= minQueryLength
-      ? apiOptions
-      : initialOptions;
+  const options = searchEndpoint && searchValue.length >= minQueryLength ? apiOptions : initialOptions;
 
-  const selectedOption = [...initialOptions, ...apiOptions].find(
-    (option) => option.value === value
-  );
+  const selectedOption = [...initialOptions, ...apiOptions].find((option) => option.value === value);
 
   // API search with debouncing - now uses unified api wrapper
   const performApiSearch = React.useCallback(
     async (query: string) => {
-      if (
-        !searchEndpoint ||
-        !transformResponse ||
-        query.length < minQueryLength
-      ) {
+      if (!searchEndpoint || !transformResponse || query.length < minQueryLength) {
         setApiOptions([]);
         return;
       }
@@ -95,17 +75,14 @@ export function SearchableDropdown({
       setApiLoading(true);
       try {
         // Use unified api wrapper - caller provides complete URL including /api prefix
-        const response = await api.get(
-          `${searchEndpoint}?keyword=${encodeURIComponent(query)}`,
-          {
-            // Redundant safeguard: interceptor already adds these, but explicit for clarity
-            headers: {
-              "Cache-Control": "no-cache, no-store, must-revalidate",
-              Pragma: "no-cache",
-              Expires: "0",
-            },
-          }
-        );
+        const response = await api.get(`${searchEndpoint}?keyword=${encodeURIComponent(query)}`, {
+          // Redundant safeguard: interceptor already adds these, but explicit for clarity
+          headers: {
+            'Cache-Control': 'no-cache, no-store, must-revalidate',
+            Pragma: 'no-cache',
+            Expires: '0',
+          },
+        });
         const result = response.data;
 
         if (result.success && result.data) {
@@ -115,7 +92,7 @@ export function SearchableDropdown({
           setApiOptions([]);
         }
       } catch (error) {
-        console.error("API search failed:", error);
+        console.error('API search failed:', error);
         setApiOptions([]);
       } finally {
         setApiLoading(false);
@@ -143,26 +120,26 @@ export function SearchableDropdown({
 
   const handleSelect = (selectedValue: string) => {
     if (selectedValue === value && clearable) {
-      onChange?.("");
+      onChange?.('');
     } else {
       onChange?.(selectedValue);
     }
     setOpen(false);
-    setSearchValue(""); // Clear search when selecting
+    setSearchValue(''); // Clear search when selecting
   };
 
   const handleAddItem = () => {
     if (searchValue && allowAdditions && onAddItem) {
       onAddItem(searchValue);
       onChange?.(searchValue);
-      setSearchValue("");
+      setSearchValue('');
       setOpen(false);
     }
   };
 
   const handleClear = (e: React.MouseEvent) => {
     e.stopPropagation();
-    onChange?.("");
+    onChange?.('');
   };
 
   // Local filtering for initial options when not using API search
@@ -170,17 +147,12 @@ export function SearchableDropdown({
     if (searchEndpoint || !searchValue) return options;
     return options.filter(
       (option) =>
-        option.text.toLowerCase().includes(searchValue.toLowerCase()) ||
-        option.value.toLowerCase().includes(searchValue.toLowerCase())
+        option.text.toLowerCase().includes(searchValue.toLowerCase()) || option.value.toLowerCase().includes(searchValue.toLowerCase())
     );
   }, [options, searchValue, searchEndpoint]);
 
   const showAddition =
-    allowAdditions &&
-    searchValue &&
-    !filteredOptions.some(
-      (option) => option.value.toLowerCase() === searchValue.toLowerCase()
-    );
+    allowAdditions && searchValue && !filteredOptions.some((option) => option.value.toLowerCase() === searchValue.toLowerCase());
 
   const currentLoading = loading || apiLoading;
 
@@ -196,24 +168,14 @@ export function SearchableDropdown({
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <Button
-          variant="outline"
-          role="combobox"
-          aria-expanded={open}
-          className={cn("w-full justify-between", className)}
-        >
+        <Button variant="outline" role="combobox" aria-expanded={open} className={cn('w-full justify-between', className)}>
           {selectedOption ? (
             <span className="truncate">{selectedOption.text}</span>
           ) : (
             <span className="text-muted-foreground">{placeholder}</span>
           )}
           <div className="flex items-center ml-2 shrink-0">
-            {clearable && selectedOption && (
-              <X
-                className="h-4 w-4 opacity-50 hover:opacity-100 mr-1"
-                onClick={handleClear}
-              />
-            )}
+            {clearable && selectedOption && <X className="h-4 w-4 opacity-50 hover:opacity-100 mr-1" onClick={handleClear} />}
             <ChevronsUpDown className="h-4 w-4 opacity-50" />
           </div>
         </Button>
@@ -222,23 +184,17 @@ export function SearchableDropdown({
         className={cn(
           // Avoid horizontal overflow on small screens: don't use w-full (which equals 100vw in portal)
           // Instead, cap width to viewport with padding and allow it to size naturally on larger screens
-          "p-0 min-w-[12rem] max-w-[calc(100vw-2rem)] sm:w-auto"
+          'p-0 min-w-[12rem] max-w-[calc(100vw-2rem)] sm:w-auto'
         )}
         align="start"
       >
         <Command shouldFilter={!searchEndpoint}>
-          <CommandInput
-            placeholder={searchPlaceholder}
-            value={searchValue}
-            onValueChange={handleSearchChange}
-          />
+          <CommandInput placeholder={searchPlaceholder} value={searchValue} onValueChange={handleSearchChange} />
           <CommandList>
             {currentLoading ? (
               <div className="flex items-center justify-center py-6">
                 <Loader2 className="h-4 w-4 animate-spin" />
-                <span className="ml-2 text-sm text-muted-foreground">
-                  Searching...
-                </span>
+                <span className="ml-2 text-sm text-muted-foreground">Searching...</span>
               </div>
             ) : (
               <>
@@ -251,32 +207,15 @@ export function SearchableDropdown({
                 ) : (
                   <CommandGroup>
                     {filteredOptions.map((option) => (
-                      <CommandItem
-                        key={option.key}
-                        value={option.value}
-                        onSelect={handleSelect}
-                        className="cursor-pointer"
-                      >
-                        <Check
-                          className={cn(
-                            "mr-2 h-4 w-4",
-                            value === option.value ? "opacity-100" : "opacity-0"
-                          )}
-                        />
-                        <div className="flex-1">
-                          {option.content || option.text}
-                        </div>
+                      <CommandItem key={option.key} value={option.value} onSelect={handleSelect} className="cursor-pointer">
+                        <Check className={cn('mr-2 h-4 w-4', value === option.value ? 'opacity-100' : 'opacity-0')} />
+                        <div className="flex-1">{option.content || option.text}</div>
                       </CommandItem>
                     ))}
                     {showAddition && (
-                      <CommandItem
-                        onSelect={handleAddItem}
-                        className="cursor-pointer"
-                      >
+                      <CommandItem onSelect={handleAddItem} className="cursor-pointer">
                         <Plus className="mr-2 h-4 w-4" />
-                        <span className="text-muted-foreground">
-                          {additionLabel}
-                        </span>
+                        <span className="text-muted-foreground">{additionLabel}</span>
                         <span className="font-medium">{searchValue}</span>
                       </CommandItem>
                     )}

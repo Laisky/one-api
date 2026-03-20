@@ -1,11 +1,6 @@
-import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { cn } from "@/lib/utils";
+import { Button } from '@/components/ui/button';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { cn } from '@/lib/utils';
 import { Check, Languages } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
@@ -27,14 +22,9 @@ export function LanguageSelector() {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button
-          variant="ghost"
-          size="icon"
-          aria-label={t("a11y.select_language")}
-          className="h-9 w-9"
-        >
+        <Button variant="ghost" size="icon" aria-label={t('a11y.select_language')} className="h-9 w-9">
           <Languages className="h-[1.2rem] w-[1.2rem]" aria-hidden="true" />
-          <span className="sr-only">{t("a11y.select_language")}</span>
+          <span className="sr-only">{t('a11y.select_language')}</span>
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-44">
@@ -45,15 +35,10 @@ export function LanguageSelector() {
             <DropdownMenuItem
               key={lang.code}
               onSelect={() => handleLanguageChange(lang.code)}
-              className={cn(
-                "flex items-center gap-2",
-                isActive && "bg-muted text-foreground focus:bg-muted"
-              )}
+              className={cn('flex items-center gap-2', isActive && 'bg-muted text-foreground focus:bg-muted')}
             >
               <span className="flex-1 text-left">{lang.label}</span>
-              {isActive && (
-                <Check className="h-4 w-4 text-primary" aria-hidden="true" />
-              )}
+              {isActive && <Check className="h-4 w-4 text-primary" aria-hidden="true" />}
             </DropdownMenuItem>
           );
         })}

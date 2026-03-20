@@ -65,25 +65,22 @@ Responses API
 Generate an image
 
 ```javascript
-import OpenAI from "openai";
+import OpenAI from 'openai';
 const openai = new OpenAI();
 
 const response = await openai.responses.create({
-  model: "gpt-5",
-  input:
-    "Generate an image of gray tabby cat hugging an otter with an orange scarf",
-  tools: [{ type: "image_generation" }],
+  model: 'gpt-5',
+  input: 'Generate an image of gray tabby cat hugging an otter with an orange scarf',
+  tools: [{ type: 'image_generation' }],
 });
 
 // Save the image to a file
-const imageData = response.output
-  .filter((output) => output.type === "image_generation_call")
-  .map((output) => output.result);
+const imageData = response.output.filter((output) => output.type === 'image_generation_call').map((output) => output.result);
 
 if (imageData.length > 0) {
   const imageBase64 = imageData[0];
-  const fs = await import("fs");
-  fs.writeFileSync("otter.png", Buffer.from(imageBase64, "base64"));
+  const fs = await import('fs');
+  fs.writeFileSync('otter.png', Buffer.from(imageBase64, 'base64'));
 }
 ```
 
@@ -117,8 +114,8 @@ Image API
 Generate an image
 
 ```javascript
-import OpenAI from "openai";
-import fs from "fs";
+import OpenAI from 'openai';
+import fs from 'fs';
 const openai = new OpenAI();
 
 const prompt = `
@@ -127,14 +124,14 @@ listen to the heartbeat of a baby otter.
 `;
 
 const result = await openai.images.generate({
-  model: "gpt-image-1",
+  model: 'gpt-image-1',
   prompt,
 });
 
 // Save the image to a file
 const image_base64 = result.data[0].b64_json;
-const image_bytes = Buffer.from(image_base64, "base64");
-fs.writeFileSync("otter.png", image_bytes);
+const image_bytes = Buffer.from(image_base64, 'base64');
+fs.writeFileSync('otter.png', image_bytes);
 ```
 
 ```python
@@ -179,46 +176,38 @@ Using previous response ID
 Multi-turn image generation
 
 ```javascript
-import OpenAI from "openai";
+import OpenAI from 'openai';
 const openai = new OpenAI();
 
 const response = await openai.responses.create({
-  model: "gpt-5",
-  input:
-    "Generate an image of gray tabby cat hugging an otter with an orange scarf",
-  tools: [{ type: "image_generation" }],
+  model: 'gpt-5',
+  input: 'Generate an image of gray tabby cat hugging an otter with an orange scarf',
+  tools: [{ type: 'image_generation' }],
 });
 
-const imageData = response.output
-  .filter((output) => output.type === "image_generation_call")
-  .map((output) => output.result);
+const imageData = response.output.filter((output) => output.type === 'image_generation_call').map((output) => output.result);
 
 if (imageData.length > 0) {
   const imageBase64 = imageData[0];
-  const fs = await import("fs");
-  fs.writeFileSync("cat_and_otter.png", Buffer.from(imageBase64, "base64"));
+  const fs = await import('fs');
+  fs.writeFileSync('cat_and_otter.png', Buffer.from(imageBase64, 'base64'));
 }
 
 // Follow up
 
 const response_fwup = await openai.responses.create({
-  model: "gpt-5",
+  model: 'gpt-5',
   previous_response_id: response.id,
-  input: "Now make it look realistic",
-  tools: [{ type: "image_generation" }],
+  input: 'Now make it look realistic',
+  tools: [{ type: 'image_generation' }],
 });
 
-const imageData_fwup = response_fwup.output
-  .filter((output) => output.type === "image_generation_call")
-  .map((output) => output.result);
+const imageData_fwup = response_fwup.output.filter((output) => output.type === 'image_generation_call').map((output) => output.result);
 
 if (imageData_fwup.length > 0) {
   const imageBase64 = imageData_fwup[0];
-  const fs = await import("fs");
-  fs.writeFileSync(
-    "cat_and_otter_realistic.png",
-    Buffer.from(imageBase64, "base64")
-  );
+  const fs = await import('fs');
+  fs.writeFileSync('cat_and_otter_realistic.png', Buffer.from(imageBase64, 'base64'));
 }
 ```
 
@@ -272,56 +261,48 @@ Using image ID
 Multi-turn image generation
 
 ```javascript
-import OpenAI from "openai";
+import OpenAI from 'openai';
 const openai = new OpenAI();
 
 const response = await openai.responses.create({
-  model: "gpt-5",
-  input:
-    "Generate an image of gray tabby cat hugging an otter with an orange scarf",
-  tools: [{ type: "image_generation" }],
+  model: 'gpt-5',
+  input: 'Generate an image of gray tabby cat hugging an otter with an orange scarf',
+  tools: [{ type: 'image_generation' }],
 });
 
-const imageGenerationCalls = response.output.filter(
-  (output) => output.type === "image_generation_call"
-);
+const imageGenerationCalls = response.output.filter((output) => output.type === 'image_generation_call');
 
 const imageData = imageGenerationCalls.map((output) => output.result);
 
 if (imageData.length > 0) {
   const imageBase64 = imageData[0];
-  const fs = await import("fs");
-  fs.writeFileSync("cat_and_otter.png", Buffer.from(imageBase64, "base64"));
+  const fs = await import('fs');
+  fs.writeFileSync('cat_and_otter.png', Buffer.from(imageBase64, 'base64'));
 }
 
 // Follow up
 
 const response_fwup = await openai.responses.create({
-  model: "gpt-5",
+  model: 'gpt-5',
   input: [
     {
-      role: "user",
-      content: [{ type: "input_text", text: "Now make it look realistic" }],
+      role: 'user',
+      content: [{ type: 'input_text', text: 'Now make it look realistic' }],
     },
     {
-      type: "image_generation_call",
+      type: 'image_generation_call',
       id: imageGenerationCalls[0].id,
     },
   ],
-  tools: [{ type: "image_generation" }],
+  tools: [{ type: 'image_generation' }],
 });
 
-const imageData_fwup = response_fwup.output
-  .filter((output) => output.type === "image_generation_call")
-  .map((output) => output.result);
+const imageData_fwup = response_fwup.output.filter((output) => output.type === 'image_generation_call').map((output) => output.result);
 
 if (imageData_fwup.length > 0) {
   const imageBase64 = imageData_fwup[0];
-  const fs = await import("fs");
-  fs.writeFileSync(
-    "cat_and_otter_realistic.png",
-    Buffer.from(imageBase64, "base64")
-  );
+  const fs = await import('fs');
+  fs.writeFileSync('cat_and_otter_realistic.png', Buffer.from(imageBase64, 'base64'));
 }
 ```
 
@@ -397,23 +378,22 @@ Responses API
 Stream an image
 
 ```javascript
-import OpenAI from "openai";
-import fs from "fs";
+import OpenAI from 'openai';
+import fs from 'fs';
 const openai = new OpenAI();
 
 const stream = await openai.responses.create({
-  model: "gpt-4.1",
-  input:
-    "Draw a gorgeous image of a river made of white owl feathers, snaking its way through a serene winter landscape",
+  model: 'gpt-4.1',
+  input: 'Draw a gorgeous image of a river made of white owl feathers, snaking its way through a serene winter landscape',
   stream: true,
-  tools: [{ type: "image_generation", partial_images: 2 }],
+  tools: [{ type: 'image_generation', partial_images: 2 }],
 });
 
 for await (const event of stream) {
-  if (event.type === "response.image_generation_call.partial_image") {
+  if (event.type === 'response.image_generation_call.partial_image') {
     const idx = event.partial_image_index;
     const imageBase64 = event.partial_image_b64;
-    const imageBuffer = Buffer.from(imageBase64, "base64");
+    const imageBuffer = Buffer.from(imageBase64, 'base64');
     fs.writeFileSync(`river${idx}.png`, imageBuffer);
   }
 }
@@ -446,25 +426,24 @@ Image API
 Stream an image
 
 ```javascript
-import fs from "fs";
-import OpenAI from "openai";
+import fs from 'fs';
+import OpenAI from 'openai';
 
 const openai = new OpenAI();
 
-const prompt =
-  "Draw a gorgeous image of a river made of white owl feathers, snaking its way through a serene winter landscape";
+const prompt = 'Draw a gorgeous image of a river made of white owl feathers, snaking its way through a serene winter landscape';
 const stream = await openai.images.generate({
   prompt: prompt,
-  model: "gpt-image-1",
+  model: 'gpt-image-1',
   stream: true,
   partial_images: 2,
 });
 
 for await (const event of stream) {
-  if (event.type === "image_generation.partial_image") {
+  if (event.type === 'image_generation.partial_image') {
     const idx = event.partial_image_index;
     const imageBase64 = event.b64_json;
-    const imageBuffer = Buffer.from(imageBase64, "base64");
+    const imageBuffer = Buffer.from(imageBase64, 'base64');
     fs.writeFileSync(`river${idx}.png`, imageBuffer);
   }
 }
@@ -561,8 +540,8 @@ def create_file(file_path):
 ```
 
 ```javascript
-import fs from "fs";
-import OpenAI from "openai";
+import fs from 'fs';
+import OpenAI from 'openai';
 
 const openai = new OpenAI();
 
@@ -570,7 +549,7 @@ async function createFile(filePath) {
   const fileContent = fs.createReadStream(filePath);
   const result = await openai.files.create({
     file: fileContent,
-    purpose: "vision",
+    purpose: 'vision',
   });
   return result.id;
 }
@@ -589,7 +568,7 @@ def encode_image(file_path):
 
 ```javascript
 function encodeImage(filePath) {
-  const base64Image = fs.readFileSync(filePath, "base64");
+  const base64Image = fs.readFileSync(filePath, 'base64');
   return base64Image;
 }
 ```
@@ -657,8 +636,8 @@ else:
 ```
 
 ```javascript
-import fs from "fs";
-import OpenAI from "openai";
+import fs from 'fs';
+import OpenAI from 'openai';
 
 const openai = new OpenAI();
 
@@ -666,48 +645,46 @@ const prompt = `Generate a photorealistic image of a gift basket on a white back
 labeled 'Relax & Unwind' with a ribbon and handwriting-like font,
 containing all the items in the reference pictures.`;
 
-const base64Image1 = encodeImage("body-lotion.png");
-const base64Image2 = encodeImage("soap.png");
-const fileId1 = await createFile("body-lotion.png");
-const fileId2 = await createFile("incense-kit.png");
+const base64Image1 = encodeImage('body-lotion.png');
+const base64Image2 = encodeImage('soap.png');
+const fileId1 = await createFile('body-lotion.png');
+const fileId2 = await createFile('incense-kit.png');
 
 const response = await openai.responses.create({
-  model: "gpt-4.1",
+  model: 'gpt-4.1',
   input: [
     {
-      role: "user",
+      role: 'user',
       content: [
-        { type: "input_text", text: prompt },
+        { type: 'input_text', text: prompt },
         {
-          type: "input_image",
+          type: 'input_image',
           image_url: `data:image/jpeg;base64,${base64Image1}`,
         },
         {
-          type: "input_image",
+          type: 'input_image',
           image_url: `data:image/jpeg;base64,${base64Image2}`,
         },
         {
-          type: "input_image",
+          type: 'input_image',
           file_id: fileId1,
         },
         {
-          type: "input_image",
+          type: 'input_image',
           file_id: fileId2,
         },
       ],
     },
   ],
-  tools: [{ type: "image_generation" }],
+  tools: [{ type: 'image_generation' }],
 });
 
-const imageData = response.output
-  .filter((output) => output.type === "image_generation_call")
-  .map((output) => output.result);
+const imageData = response.output.filter((output) => output.type === 'image_generation_call').map((output) => output.result);
 
 if (imageData.length > 0) {
   const imageBase64 = imageData[0];
-  const fs = await import("fs");
-  fs.writeFileSync("gift-basket.png", Buffer.from(imageBase64, "base64"));
+  const fs = await import('fs');
+  fs.writeFileSync('gift-basket.png', Buffer.from(imageBase64, 'base64'));
 } else {
   console.log(response.output.content);
 }
@@ -748,8 +725,8 @@ with open("gift-basket.png", "wb") as f:
 ```
 
 ```javascript
-import fs from "fs";
-import OpenAI, { toFile } from "openai";
+import fs from 'fs';
+import OpenAI, { toFile } from 'openai';
 
 const client = new OpenAI();
 
@@ -759,32 +736,27 @@ labeled 'Relax & Unwind' with a ribbon and handwriting-like font,
 containing all the items in the reference pictures.
 `;
 
-const imageFiles = [
-  "bath-bomb.png",
-  "body-lotion.png",
-  "incense-kit.png",
-  "soap.png",
-];
+const imageFiles = ['bath-bomb.png', 'body-lotion.png', 'incense-kit.png', 'soap.png'];
 
 const images = await Promise.all(
   imageFiles.map(
     async (file) =>
       await toFile(fs.createReadStream(file), null, {
-        type: "image/png",
+        type: 'image/png',
       })
   )
 );
 
 const response = await client.images.edit({
-  model: "gpt-image-1",
+  model: 'gpt-image-1',
   image: images,
   prompt,
 });
 
 // Save the image to a file
 const image_base64 = response.data[0].b64_json;
-const image_bytes = Buffer.from(image_base64, "base64");
-fs.writeFileSync("basket.png", image_bytes);
+const image_bytes = Buffer.from(image_base64, 'base64');
+fs.writeFileSync('basket.png', image_bytes);
 ```
 
 ```bash
@@ -862,24 +834,24 @@ if image_data:
 ```
 
 ```javascript
-import OpenAI from "openai";
+import OpenAI from 'openai';
 const openai = new OpenAI();
 
-const fileId = await createFile("sunlit_lounge.png");
-const maskId = await createFile("mask.png");
+const fileId = await createFile('sunlit_lounge.png');
+const maskId = await createFile('mask.png');
 
 const response = await openai.responses.create({
-  model: "gpt-4o",
+  model: 'gpt-4o',
   input: [
     {
-      role: "user",
+      role: 'user',
       content: [
         {
-          type: "input_text",
-          text: "generate an image of the same sunlit indoor lounge area with a pool but the pool should contain a flamingo",
+          type: 'input_text',
+          text: 'generate an image of the same sunlit indoor lounge area with a pool but the pool should contain a flamingo',
         },
         {
-          type: "input_image",
+          type: 'input_image',
           file_id: fileId,
         },
       ],
@@ -887,8 +859,8 @@ const response = await openai.responses.create({
   ],
   tools: [
     {
-      type: "image_generation",
-      quality: "high",
+      type: 'image_generation',
+      quality: 'high',
       input_image_mask: {
         file_id: maskId,
       },
@@ -896,14 +868,12 @@ const response = await openai.responses.create({
   ],
 });
 
-const imageData = response.output
-  .filter((output) => output.type === "image_generation_call")
-  .map((output) => output.result);
+const imageData = response.output.filter((output) => output.type === 'image_generation_call').map((output) => output.result);
 
 if (imageData.length > 0) {
   const imageBase64 = imageData[0];
-  const fs = await import("fs");
-  fs.writeFileSync("lounge.png", Buffer.from(imageBase64, "base64"));
+  const fs = await import('fs');
+  fs.writeFileSync('lounge.png', Buffer.from(imageBase64, 'base64'));
 }
 ```
 
@@ -931,26 +901,26 @@ with open("composition.png", "wb") as f:
 ```
 
 ```javascript
-import fs from "fs";
-import OpenAI, { toFile } from "openai";
+import fs from 'fs';
+import OpenAI, { toFile } from 'openai';
 
 const client = new OpenAI();
 
 const rsp = await client.images.edit({
-  model: "gpt-image-1",
-  image: await toFile(fs.createReadStream("sunlit_lounge.png"), null, {
-    type: "image/png",
+  model: 'gpt-image-1',
+  image: await toFile(fs.createReadStream('sunlit_lounge.png'), null, {
+    type: 'image/png',
   }),
-  mask: await toFile(fs.createReadStream("mask.png"), null, {
-    type: "image/png",
+  mask: await toFile(fs.createReadStream('mask.png'), null, {
+    type: 'image/png',
   }),
-  prompt: "A sunlit indoor lounge area with a pool containing a flamingo",
+  prompt: 'A sunlit indoor lounge area with a pool containing a flamingo',
 });
 
 // Save the image to a file
 const image_base64 = rsp.data[0].b64_json;
-const image_bytes = Buffer.from(image_base64, "base64");
-fs.writeFileSync("lounge.png", image_bytes);
+const image_bytes = Buffer.from(image_base64, 'base64');
+fs.writeFileSync('lounge.png', image_bytes);
 ```
 
 ```bash
@@ -1019,43 +989,40 @@ Responses API
 Generate an image with high input fidelity
 
 ```javascript
-import fs from "fs";
-import OpenAI from "openai";
+import fs from 'fs';
+import OpenAI from 'openai';
 
 const openai = new OpenAI();
 const response = await openai.responses.create({
-  model: "gpt-4.1",
+  model: 'gpt-4.1',
   input: [
     {
-      role: "user",
+      role: 'user',
       content: [
         {
-          type: "input_text",
+          type: 'input_text',
           text: "Add the logo to the woman's top, as if stamped into the fabric.",
         },
         {
-          type: "input_image",
-          image_url:
-            "https://cdn.openai.com/API/docs/images/woman_futuristic.jpg",
+          type: 'input_image',
+          image_url: 'https://cdn.openai.com/API/docs/images/woman_futuristic.jpg',
         },
         {
-          type: "input_image",
-          image_url: "https://cdn.openai.com/API/docs/images/brain_logo.png",
+          type: 'input_image',
+          image_url: 'https://cdn.openai.com/API/docs/images/brain_logo.png',
         },
       ],
     },
   ],
-  tools: [{ type: "image_generation", input_fidelity: "high" }],
+  tools: [{ type: 'image_generation', input_fidelity: 'high' }],
 });
 
 // Extract the edited image
-const imageBase64 = response.output.find(
-  (o) => o.type === "image_generation_call"
-)?.result;
+const imageBase64 = response.output.find((o) => o.type === 'image_generation_call')?.result;
 
 if (imageBase64) {
-  const imageBuffer = Buffer.from(imageBase64, "base64");
-  fs.writeFileSync("woman_with_logo.png", imageBuffer);
+  const imageBuffer = Buffer.from(imageBase64, 'base64');
+  fs.writeFileSync('woman_with_logo.png', imageBuffer);
 }
 ```
 
@@ -1104,23 +1071,22 @@ Image API
 Generate an image with high input fidelity
 
 ```javascript
-import fs from "fs";
-import OpenAI from "openai";
+import fs from 'fs';
+import OpenAI from 'openai';
 
 const openai = new OpenAI();
-const prompt =
-  "Add the logo to the woman's top, as if stamped into the fabric.";
+const prompt = "Add the logo to the woman's top, as if stamped into the fabric.";
 const result = await openai.images.edit({
-  model: "gpt-image-1",
-  image: [fs.createReadStream("woman.jpg"), fs.createReadStream("logo.png")],
+  model: 'gpt-image-1',
+  image: [fs.createReadStream('woman.jpg'), fs.createReadStream('logo.png')],
   prompt,
-  input_fidelity: "high",
+  input_fidelity: 'high',
 });
 
 // Save the image to a file
 const image_base64 = result.data[0].b64_json;
-const image_bytes = Buffer.from(image_base64, "base64");
-fs.writeFileSync("woman_with_logo.png", image_bytes);
+const image_bytes = Buffer.from(image_base64, 'base64');
+fs.writeFileSync('woman_with_logo.png', image_bytes);
 ```
 
 ```python
@@ -1221,31 +1187,29 @@ if image_data:
 ```
 
 ```javascript
-import fs from "fs";
-import OpenAI from "openai";
+import fs from 'fs';
+import OpenAI from 'openai';
 
 const client = new OpenAI();
 
 const response = await client.responses.create({
-  model: "gpt-5",
-  input: "Draw a 2D pixel art style sprite sheet of a tabby gray cat",
+  model: 'gpt-5',
+  input: 'Draw a 2D pixel art style sprite sheet of a tabby gray cat',
   tools: [
     {
-      type: "image_generation",
-      background: "transparent",
-      quality: "high",
+      type: 'image_generation',
+      background: 'transparent',
+      quality: 'high',
     },
   ],
 });
 
-const imageData = response.output
-  .filter((output) => output.type === "image_generation_call")
-  .map((output) => output.result);
+const imageData = response.output.filter((output) => output.type === 'image_generation_call').map((output) => output.result);
 
 if (imageData.length > 0) {
   const imageBase64 = imageData[0];
-  const imageBuffer = Buffer.from(imageBase64, "base64");
-  fs.writeFileSync("sprite.png", imageBuffer);
+  const imageBuffer = Buffer.from(imageBase64, 'base64');
+  fs.writeFileSync('sprite.png', imageBuffer);
 }
 ```
 
@@ -1254,22 +1218,22 @@ Image API
 Generate an image with a transparent background
 
 ```javascript
-import OpenAI from "openai";
-import fs from "fs";
+import OpenAI from 'openai';
+import fs from 'fs';
 const openai = new OpenAI();
 
 const result = await openai.images.generate({
-  model: "gpt-image-1",
-  prompt: "Draw a 2D pixel art style sprite sheet of a tabby gray cat",
-  size: "1024x1024",
-  background: "transparent",
-  quality: "high",
+  model: 'gpt-image-1',
+  prompt: 'Draw a 2D pixel art style sprite sheet of a tabby gray cat',
+  size: '1024x1024',
+  background: 'transparent',
+  quality: 'high',
 });
 
 // Save the image to a file
 const image_base64 = result.data[0].b64_json;
-const image_bytes = Buffer.from(image_base64, "base64");
-fs.writeFileSync("sprite.png", image_bytes);
+const image_bytes = Buffer.from(image_base64, 'base64');
+fs.writeFileSync('sprite.png', image_bytes);
 ```
 
 ```python

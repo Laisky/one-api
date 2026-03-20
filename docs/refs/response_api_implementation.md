@@ -22,6 +22,7 @@ This document describes the implementation of conversion from Response API forma
 ### Request Flow
 
 1. **Request Processing** (`adaptor.go:112-122`)
+
    ```go
    if relayMode == relaymode.ChatCompletions {
        // Convert to Response API format
@@ -35,6 +36,7 @@ This document describes the implementation of conversion from Response API forma
    ```
 
 2. **Response Detection** (`adaptor.go:233-249`)
+
    ```go
    case relaymode.ChatCompletions:
        // Check if we need to convert Response API response back
@@ -84,11 +86,13 @@ type OutputItem struct {
 ```
 
 **Supported Output Item Types:**
+
 - `"message"` - Regular assistant messages with text content
 - `"reasoning"` - Reasoning/thinking content (for reasoning models)
 - `"function_call"` - Function calls with call ID, name, and arguments
 
 #### Response API Response Format
+
 ```json
 {
   "id": "resp_123",
@@ -120,6 +124,7 @@ type OutputItem struct {
 ```
 
 #### ChatCompletion Response Format (Output)
+
 ```json
 {
   "id": "resp_123",
@@ -147,6 +152,7 @@ type OutputItem struct {
 #### Function Calling Response Formats
 
 **Response API Function Call Format:**
+
 ```json
 {
   "id": "resp_123",
@@ -173,6 +179,7 @@ type OutputItem struct {
 ```
 
 **ChatCompletion Function Call Format (Output):**
+
 ```json
 {
   "id": "resp_123",
@@ -209,14 +216,15 @@ type OutputItem struct {
 
 ### Status Mapping
 
-| Response API Status | ChatCompletion finish_reason | Notes |
-|-------------------|------------------------------|-------|
-| `completed`       | `stop` or `tool_calls`       | `tool_calls` when function calls present |
-| `failed`          | `stop`                       | |
-| `incomplete`      | `length`                     | |
-| `cancelled`       | `stop`                       | |
+| Response API Status | ChatCompletion finish_reason | Notes                                    |
+| ------------------- | ---------------------------- | ---------------------------------------- |
+| `completed`         | `stop` or `tool_calls`       | `tool_calls` when function calls present |
+| `failed`            | `stop`                       |                                          |
+| `incomplete`        | `length`                     |                                          |
+| `cancelled`         | `stop`                       |                                          |
 
 **Function Call Detection:**
+
 - When output contains items with `type: "function_call"`, the finish reason is set to `tool_calls`
 - Function calls are converted to `tool_calls` array in the message
 - Both regular messages and function calls can be present in the same response
@@ -283,6 +291,7 @@ Comprehensive test suite added to `response_model_test.go`:
 - Function call mapping verification
 
 All existing tests continue to pass, ensuring no regressions. The function calling tests verify:
+
 - Proper conversion of `function_call` output items to `tool_calls`
 - Correct mapping of call ID, function name, and arguments
 - Appropriate finish reason setting (`tool_calls` vs `stop`)

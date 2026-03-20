@@ -1,38 +1,25 @@
-import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { FormControl, FormField, FormItem } from "@/components/ui/form";
-import { Info } from "lucide-react";
-import { useState } from "react";
-import type { UseFormReturn } from "react-hook-form";
-import type { ChannelForm, EndpointInfo } from "../schemas";
-import { LabelWithHelp } from "./LabelWithHelp";
+import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { FormControl, FormField, FormItem } from '@/components/ui/form';
+import { Info } from 'lucide-react';
+import { useState } from 'react';
+import type { UseFormReturn } from 'react-hook-form';
+import type { ChannelForm, EndpointInfo } from '../schemas';
+import { LabelWithHelp } from './LabelWithHelp';
 
 interface ChannelEndpointSettingsProps {
   form: UseFormReturn<ChannelForm>;
   allEndpoints: EndpointInfo[];
   defaultEndpoints: string[];
-  tr: (
-    key: string,
-    defaultValue: string,
-    options?: Record<string, unknown>
-  ) => string;
+  tr: (key: string, defaultValue: string, options?: Record<string, unknown>) => string;
 }
 
 // Endpoint documentation with descriptions and curl examples
-const ENDPOINT_DOCS: Record<
-  string,
-  { description: string; curlExample: string }
-> = {
+const ENDPOINT_DOCS: Record<string, { description: string; curlExample: string }> = {
   chat_completions: {
     description:
-      "The Chat Completions API creates model responses for chat-based conversations. Send a list of messages and receive a model-generated reply. Supports both streaming and non-streaming modes.",
+      'The Chat Completions API creates model responses for chat-based conversations. Send a list of messages and receive a model-generated reply. Supports both streaming and non-streaming modes.',
     curlExample: `curl https://oneapi.laisky.com/v1/chat/completions \\
   -H "Content-Type: application/json" \\
   -H "Authorization: Bearer YOUR_API_KEY" \\
@@ -46,7 +33,7 @@ const ENDPOINT_DOCS: Record<
   },
   completions: {
     description:
-      "The legacy Completions API generates text completions for a given prompt. This is the original text generation API, now largely superseded by Chat Completions.",
+      'The legacy Completions API generates text completions for a given prompt. This is the original text generation API, now largely superseded by Chat Completions.',
     curlExample: `curl https://oneapi.laisky.com/v1/completions \\
   -H "Content-Type: application/json" \\
   -H "Authorization: Bearer YOUR_API_KEY" \\
@@ -58,7 +45,7 @@ const ENDPOINT_DOCS: Record<
   },
   embeddings: {
     description:
-      "The Embeddings API converts text into numerical vector representations. These vectors can be used for semantic search, clustering, and similarity comparisons.",
+      'The Embeddings API converts text into numerical vector representations. These vectors can be used for semantic search, clustering, and similarity comparisons.',
     curlExample: `curl https://oneapi.laisky.com/v1/embeddings \\
   -H "Content-Type: application/json" \\
   -H "Authorization: Bearer YOUR_API_KEY" \\
@@ -69,7 +56,7 @@ const ENDPOINT_DOCS: Record<
   },
   moderations: {
     description:
-      "The Moderations API checks whether text violates content policies. It returns categories and scores indicating the likelihood of policy violations.",
+      'The Moderations API checks whether text violates content policies. It returns categories and scores indicating the likelihood of policy violations.',
     curlExample: `curl https://oneapi.laisky.com/v1/moderations \\
   -H "Content-Type: application/json" \\
   -H "Authorization: Bearer YOUR_API_KEY" \\
@@ -79,7 +66,7 @@ const ENDPOINT_DOCS: Record<
   },
   images_generations: {
     description:
-      "The Image Generation API creates images from text descriptions. Specify a prompt and receive one or more generated images in various formats and sizes.",
+      'The Image Generation API creates images from text descriptions. Specify a prompt and receive one or more generated images in various formats and sizes.',
     curlExample: `curl https://oneapi.laisky.com/v1/images/generations \\
   -H "Content-Type: application/json" \\
   -H "Authorization: Bearer YOUR_API_KEY" \\
@@ -92,7 +79,7 @@ const ENDPOINT_DOCS: Record<
   },
   images_edits: {
     description:
-      "The Image Edits API modifies existing images based on text instructions. Upload an image with a mask and prompt to generate edited versions.",
+      'The Image Edits API modifies existing images based on text instructions. Upload an image with a mask and prompt to generate edited versions.',
     curlExample: `curl https://oneapi.laisky.com/v1/images/edits \\
   -H "Authorization: Bearer YOUR_API_KEY" \\
   -F image="@original.png" \\
@@ -103,7 +90,7 @@ const ENDPOINT_DOCS: Record<
   },
   audio_speech: {
     description:
-      "The Text-to-Speech API converts text into spoken audio. Choose from multiple voices and output formats to generate natural-sounding speech.",
+      'The Text-to-Speech API converts text into spoken audio. Choose from multiple voices and output formats to generate natural-sounding speech.',
     curlExample: `curl https://oneapi.laisky.com/v1/audio/speech \\
   -H "Authorization: Bearer YOUR_API_KEY" \\
   -H "Content-Type: application/json" \\
@@ -115,7 +102,7 @@ const ENDPOINT_DOCS: Record<
   },
   audio_transcription: {
     description:
-      "The Audio Transcription API converts spoken audio into text. Upload an audio file to receive a transcript in the specified language.",
+      'The Audio Transcription API converts spoken audio into text. Upload an audio file to receive a transcript in the specified language.',
     curlExample: `curl https://oneapi.laisky.com/v1/audio/transcriptions \\
   -H "Authorization: Bearer YOUR_API_KEY" \\
   -F file="@audio.mp3" \\
@@ -123,7 +110,7 @@ const ENDPOINT_DOCS: Record<
   },
   audio_translation: {
     description:
-      "The Audio Translation API translates spoken audio into English text. Upload an audio file in any supported language to receive an English transcript.",
+      'The Audio Translation API translates spoken audio into English text. Upload an audio file in any supported language to receive an English transcript.',
     curlExample: `curl https://oneapi.laisky.com/v1/audio/translations \\
   -H "Authorization: Bearer YOUR_API_KEY" \\
   -F file="@french_audio.mp3" \\
@@ -131,7 +118,7 @@ const ENDPOINT_DOCS: Record<
   },
   rerank: {
     description:
-      "The Rerank API reorders a list of documents based on their relevance to a query. Useful for improving search results and retrieval-augmented generation (RAG) systems.",
+      'The Rerank API reorders a list of documents based on their relevance to a query. Useful for improving search results and retrieval-augmented generation (RAG) systems.',
     curlExample: `curl https://oneapi.laisky.com/v1/rerank \\
   -H "Content-Type: application/json" \\
   -H "Authorization: Bearer YOUR_API_KEY" \\
@@ -173,7 +160,7 @@ const ENDPOINT_DOCS: Record<
   },
   realtime: {
     description:
-      "The Realtime API enables low-latency, bidirectional communication via WebSocket. Ideal for voice assistants and real-time interactive applications.",
+      'The Realtime API enables low-latency, bidirectional communication via WebSocket. Ideal for voice assistants and real-time interactive applications.',
     curlExample: `# WebSocket connection (use wscat or similar tool)
 wscat -c "wss://api.example.com/v1/realtime?model=gpt-4o-realtime-preview" \\
   -H "Authorization: Bearer YOUR_API_KEY"
@@ -183,7 +170,7 @@ wscat -c "wss://api.example.com/v1/realtime?model=gpt-4o-realtime-preview" \\
   },
   videos: {
     description:
-      "The Video Generation API creates videos from text descriptions or images. Specify prompts and parameters to generate video content.",
+      'The Video Generation API creates videos from text descriptions or images. Specify prompts and parameters to generate video content.',
     curlExample: `curl https://oneapi.laisky.com/v1/videos \\
   -H "Content-Type: application/json" \\
   -H "Authorization: Bearer YOUR_API_KEY" \\
@@ -195,62 +182,48 @@ wscat -c "wss://api.example.com/v1/realtime?model=gpt-4o-realtime-preview" \\
   },
 };
 
-export const ChannelEndpointSettings = ({
-  form,
-  allEndpoints,
-  defaultEndpoints,
-  tr,
-}: ChannelEndpointSettingsProps) => {
-  const [selectedEndpoint, setSelectedEndpoint] = useState<EndpointInfo | null>(
-    null
-  );
-  const currentEndpoints = form.watch("config.supported_endpoints") || [];
-  const endpointError = (form.formState.errors as any)?.config
-    ?.supported_endpoints?.message;
+export const ChannelEndpointSettings = ({ form, allEndpoints, defaultEndpoints, tr }: ChannelEndpointSettingsProps) => {
+  const [selectedEndpoint, setSelectedEndpoint] = useState<EndpointInfo | null>(null);
+  const currentEndpoints = form.watch('config.supported_endpoints') || [];
+  const endpointError = (form.formState.errors as any)?.config?.supported_endpoints?.message;
 
   // Determine if we're using custom endpoints or defaults
   const isUsingDefaults = currentEndpoints.length === 0;
 
   // Get the effective endpoints (either custom or defaults)
-  const effectiveEndpoints = isUsingDefaults
-    ? defaultEndpoints
-    : currentEndpoints;
+  const effectiveEndpoints = isUsingDefaults ? defaultEndpoints : currentEndpoints;
 
   const handleEndpointToggle = (endpointName: string, checked: boolean) => {
     // If currently using defaults and user makes a change, switch to custom mode
     let newEndpoints: string[];
     if (isUsingDefaults) {
       // Initialize with current defaults, then apply the change
-      newEndpoints = checked
-        ? [...defaultEndpoints, endpointName]
-        : defaultEndpoints.filter((e) => e !== endpointName);
+      newEndpoints = checked ? [...defaultEndpoints, endpointName] : defaultEndpoints.filter((e) => e !== endpointName);
     } else {
       // Already in custom mode
-      newEndpoints = checked
-        ? [...currentEndpoints, endpointName]
-        : currentEndpoints.filter((e) => e !== endpointName);
+      newEndpoints = checked ? [...currentEndpoints, endpointName] : currentEndpoints.filter((e) => e !== endpointName);
     }
-    form.setValue("config.supported_endpoints", newEndpoints, {
+    form.setValue('config.supported_endpoints', newEndpoints, {
       shouldDirty: true,
     });
   };
 
   const resetToDefaults = () => {
-    form.setValue("config.supported_endpoints", [], {
+    form.setValue('config.supported_endpoints', [], {
       shouldDirty: true,
     });
   };
 
   const selectAll = () => {
     form.setValue(
-      "config.supported_endpoints",
+      'config.supported_endpoints',
       allEndpoints.map((e) => e.name),
       { shouldDirty: true }
     );
   };
 
   const selectNone = () => {
-    form.setValue("config.supported_endpoints", ["chat_completions"], {
+    form.setValue('config.supported_endpoints', ['chat_completions'], {
       shouldDirty: true,
     });
   };
@@ -262,8 +235,8 @@ export const ChannelEndpointSettings = ({
   const getEndpointDoc = (name: string) => {
     return (
       ENDPOINT_DOCS[name] || {
-        description: "No detailed documentation available for this endpoint.",
-        curlExample: "# No example available",
+        description: 'No detailed documentation available for this endpoint.',
+        curlExample: '# No example available',
       }
     );
   };
@@ -271,44 +244,27 @@ export const ChannelEndpointSettings = ({
   return (
     <div className="space-y-4">
       {/* Documentation Modal */}
-      <Dialog
-        open={!!selectedEndpoint}
-        onOpenChange={(open) => !open && setSelectedEndpoint(null)}
-      >
+      <Dialog open={!!selectedEndpoint} onOpenChange={(open) => !open && setSelectedEndpoint(null)}>
         <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
           {selectedEndpoint && (
             <>
               <DialogHeader>
                 <DialogTitle className="flex items-center gap-2">
-                  {tr(
-                    `endpoints.${selectedEndpoint.name}.label`,
-                    selectedEndpoint.description
-                  )}
+                  {tr(`endpoints.${selectedEndpoint.name}.label`, selectedEndpoint.description)}
                 </DialogTitle>
-                <DialogDescription className="font-mono text-xs">
-                  {selectedEndpoint.path}
-                </DialogDescription>
+                <DialogDescription className="font-mono text-xs">{selectedEndpoint.path}</DialogDescription>
               </DialogHeader>
               <div className="space-y-4 mt-4">
                 <div>
-                  <h4 className="font-medium mb-2">
-                    {tr("endpoints.modal.description", "Description")}
-                  </h4>
+                  <h4 className="font-medium mb-2">{tr('endpoints.modal.description', 'Description')}</h4>
                   <p className="text-sm text-muted-foreground">
-                    {tr(
-                      `endpoints.${selectedEndpoint.name}.description`,
-                      getEndpointDoc(selectedEndpoint.name).description
-                    )}
+                    {tr(`endpoints.${selectedEndpoint.name}.description`, getEndpointDoc(selectedEndpoint.name).description)}
                   </p>
                 </div>
                 <div>
-                  <h4 className="font-medium mb-2">
-                    {tr("endpoints.modal.example", "cURL Example")}
-                  </h4>
+                  <h4 className="font-medium mb-2">{tr('endpoints.modal.example', 'cURL Example')}</h4>
                   <pre className="bg-muted p-4 rounded-md overflow-x-auto text-xs">
-                    <code>
-                      {getEndpointDoc(selectedEndpoint.name).curlExample}
-                    </code>
+                    <code>{getEndpointDoc(selectedEndpoint.name).curlExample}</code>
                   </pre>
                 </div>
               </div>
@@ -319,33 +275,23 @@ export const ChannelEndpointSettings = ({
 
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
         <LabelWithHelp
-          label={tr("endpoints.label", "Supported Endpoints")}
+          label={tr('endpoints.label', 'Supported Endpoints')}
           help={tr(
-            "endpoints.help",
+            'endpoints.help',
             "Select which API endpoints this channel supports. Click on an endpoint's info icon for details and usage examples."
           )}
         />
         <div className="flex flex-wrap items-center gap-2">
           {!isUsingDefaults && (
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={resetToDefaults}
-            >
-              {tr("endpoints.reset_defaults", "Reset to Defaults")}
+            <Button type="button" variant="outline" size="sm" onClick={resetToDefaults}>
+              {tr('endpoints.reset_defaults', 'Reset to Defaults')}
             </Button>
           )}
           <Button type="button" variant="outline" size="sm" onClick={selectAll}>
-            {tr("endpoints.select_all", "Select All")}
+            {tr('endpoints.select_all', 'Select All')}
           </Button>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={selectNone}
-          >
-            {tr("endpoints.select_none", "Minimal")}
+          <Button type="button" variant="outline" size="sm" onClick={selectNone}>
+            {tr('endpoints.select_none', 'Minimal')}
           </Button>
         </div>
       </div>
@@ -363,25 +309,15 @@ export const ChannelEndpointSettings = ({
               render={() => (
                 <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md border p-4">
                   <FormControl>
-                    <Checkbox
-                      checked={isChecked}
-                      onCheckedChange={(checked) =>
-                        handleEndpointToggle(endpoint.name, checked === true)
-                      }
-                    />
+                    <Checkbox checked={isChecked} onCheckedChange={(checked) => handleEndpointToggle(endpoint.name, checked === true)} />
                   </FormControl>
                   <div className="space-y-1 leading-none flex-1">
                     <div className="flex items-center justify-between gap-2">
-                      <span className="font-medium text-sm">
-                        {tr(
-                          `endpoints.${endpoint.name}.label`,
-                          endpoint.description
-                        )}
-                      </span>
+                      <span className="font-medium text-sm">{tr(`endpoints.${endpoint.name}.label`, endpoint.description)}</span>
                       <div className="flex items-center gap-1">
                         {isDefault && (
                           <span className="text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
-                            {tr("endpoints.default_badge", "default")}
+                            {tr('endpoints.default_badge', 'default')}
                           </span>
                         )}
                         <Button
@@ -395,9 +331,7 @@ export const ChannelEndpointSettings = ({
                         </Button>
                       </div>
                     </div>
-                    <p className="text-xs text-muted-foreground font-mono">
-                      {endpoint.path}
-                    </p>
+                    <p className="text-xs text-muted-foreground font-mono">{endpoint.path}</p>
                   </div>
                 </FormItem>
               )}
@@ -406,11 +340,7 @@ export const ChannelEndpointSettings = ({
         })}
       </div>
 
-      {endpointError && (
-        <div className="text-sm text-destructive">
-          {endpointError as string}
-        </div>
-      )}
+      {endpointError && <div className="text-sm text-destructive">{endpointError as string}</div>}
     </div>
   );
 };

@@ -154,7 +154,7 @@ The following example shows how to initialize a [WebRTC session](https://webrtc.
 ```javascript
 async function init() {
   // Get an ephemeral key from your server - see server code below
-  const tokenResponse = await fetch("/session");
+  const tokenResponse = await fetch('/session');
   const data = await tokenResponse.json();
   const EPHEMERAL_KEY = data.client_secret.value;
 
@@ -162,7 +162,7 @@ async function init() {
   const pc = new RTCPeerConnection();
 
   // Set up to play remote audio from the model
-  const audioEl = document.createElement("audio");
+  const audioEl = document.createElement('audio');
   audioEl.autoplay = true;
   pc.ontrack = (e) => (audioEl.srcObject = e.streams[0]);
 
@@ -173,8 +173,8 @@ async function init() {
   pc.addTrack(ms.getTracks()[0]);
 
   // Set up data channel for sending and receiving events
-  const dc = pc.createDataChannel("oai-events");
-  dc.addEventListener("message", (e) => {
+  const dc = pc.createDataChannel('oai-events');
+  dc.addEventListener('message', (e) => {
     // Realtime server events appear here!
     console.log(e);
   });
@@ -183,19 +183,19 @@ async function init() {
   const offer = await pc.createOffer();
   await pc.setLocalDescription(offer);
 
-  const baseUrl = "https://api.openai.com/v1/realtime";
-  const model = "gpt-4o-realtime-preview-2025-06-03";
+  const baseUrl = 'https://api.openai.com/v1/realtime';
+  const model = 'gpt-4o-realtime-preview-2025-06-03';
   const sdpResponse = await fetch(`${baseUrl}?model=${model}`, {
-    method: "POST",
+    method: 'POST',
     body: offer.sdp,
     headers: {
       Authorization: `Bearer ${EPHEMERAL_KEY}`,
-      "Content-Type": "application/sdp",
+      'Content-Type': 'application/sdp',
     },
   });
 
   const answer = {
-    type: "answer",
+    type: 'answer',
     sdp: await sdpResponse.text(),
   };
   await pc.setRemoteDescription(answer);
@@ -213,22 +213,22 @@ To create an ephemeral token to use on the client-side, you will need to build a
 Below is an example of a simple Node.js [express](https://expressjs.com/) server which mints an ephemeral API key using the REST API:
 
 ```javascript
-import express from "express";
+import express from 'express';
 
 const app = express();
 
 // An endpoint which would work with the client code above - it returns
 // the contents of a REST API request to this protected endpoint
-app.get("/session", async (req, res) => {
-  const r = await fetch("https://api.openai.com/v1/realtime/sessions", {
-    method: "POST",
+app.get('/session', async (req, res) => {
+  const r = await fetch('https://api.openai.com/v1/realtime/sessions', {
+    method: 'POST',
     headers: {
       Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
-      "Content-Type": "application/json",
+      'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      model: "gpt-4o-realtime-preview-2025-06-03",
-      voice: "verse",
+      model: 'gpt-4o-realtime-preview-2025-06-03',
+      voice: 'verse',
     }),
   });
   const data = await r.json();
@@ -277,22 +277,21 @@ ws module (Node.js)
 Connect using the ws module (Node.js)
 
 ```javascript
-import WebSocket from "ws";
+import WebSocket from 'ws';
 
-const url =
-  "wss://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview-2024-12-17";
+const url = 'wss://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview-2024-12-17';
 const ws = new WebSocket(url, {
   headers: {
-    Authorization: "Bearer " + process.env.OPENAI_API_KEY,
-    "OpenAI-Beta": "realtime=v1",
+    Authorization: 'Bearer ' + process.env.OPENAI_API_KEY,
+    'OpenAI-Beta': 'realtime=v1',
   },
 });
 
-ws.on("open", function open() {
-  console.log("Connected to server.");
+ws.on('open', function open() {
+  console.log('Connected to server.');
 });
 
-ws.on("message", function incoming(message) {
+ws.on('message', function incoming(message) {
   console.log(JSON.parse(message.toString()));
 });
 ```
@@ -346,25 +345,22 @@ WebSocket interface in browser-like environments like Deno and
 Cloudflare Workers.
 */
 
-const ws = new WebSocket(
-  "wss://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview-2024-12-17",
-  [
-    "realtime",
-    // Auth
-    "openai-insecure-api-key." + OPENAI_API_KEY,
-    // Optional
-    "openai-organization." + OPENAI_ORG_ID,
-    "openai-project." + OPENAI_PROJECT_ID,
-    // Beta protocol, required
-    "openai-beta.realtime-v1",
-  ]
-);
+const ws = new WebSocket('wss://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview-2024-12-17', [
+  'realtime',
+  // Auth
+  'openai-insecure-api-key.' + OPENAI_API_KEY,
+  // Optional
+  'openai-organization.' + OPENAI_ORG_ID,
+  'openai-project.' + OPENAI_PROJECT_ID,
+  // Beta protocol, required
+  'openai-beta.realtime-v1',
+]);
 
-ws.on("open", function open() {
-  console.log("Connected to server.");
+ws.on('open', function open() {
+  console.log('Connected to server.');
 });
 
-ws.on("message", function incoming(message) {
+ws.on('message', function incoming(message) {
   console.log(message.data);
 });
 ```
@@ -388,21 +384,21 @@ ws module (Node.js)
 Connect using the ws module (Node.js)
 
 ```javascript
-import WebSocket from "ws";
+import WebSocket from 'ws';
 
-const url = "wss://api.openai.com/v1/realtime?intent=transcription";
+const url = 'wss://api.openai.com/v1/realtime?intent=transcription';
 const ws = new WebSocket(url, {
   headers: {
-    Authorization: "Bearer " + process.env.OPENAI_API_KEY,
-    "OpenAI-Beta": "realtime=v1",
+    Authorization: 'Bearer ' + process.env.OPENAI_API_KEY,
+    'OpenAI-Beta': 'realtime=v1',
   },
 });
 
-ws.on("open", function open() {
-  console.log("Connected to server.");
+ws.on('open', function open() {
+  console.log('Connected to server.');
 });
 
-ws.on("message", function incoming(message) {
+ws.on('message', function incoming(message) {
   console.log(JSON.parse(message.toString()));
 });
 ```
@@ -453,25 +449,22 @@ WebSocket interface in browser-like environments like Deno and
 Cloudflare Workers.
 */
 
-const ws = new WebSocket(
-  "wss://api.openai.com/v1/realtime?intent=transcription",
-  [
-    "realtime",
-    // Auth
-    "openai-insecure-api-key." + OPENAI_API_KEY,
-    // Optional
-    "openai-organization." + OPENAI_ORG_ID,
-    "openai-project." + OPENAI_PROJECT_ID,
-    // Beta protocol, required
-    "openai-beta.realtime-v1",
-  ]
-);
+const ws = new WebSocket('wss://api.openai.com/v1/realtime?intent=transcription', [
+  'realtime',
+  // Auth
+  'openai-insecure-api-key.' + OPENAI_API_KEY,
+  // Optional
+  'openai-organization.' + OPENAI_ORG_ID,
+  'openai-project.' + OPENAI_PROJECT_ID,
+  // Beta protocol, required
+  'openai-beta.realtime-v1',
+]);
 
-ws.on("open", function open() {
-  console.log("Connected to server.");
+ws.on('open', function open() {
+  console.log('Connected to server.');
 });
 
-ws.on("message", function incoming(message) {
+ws.on('message', function incoming(message) {
   console.log(message.data);
 });
 ```
@@ -518,7 +511,7 @@ Update the system instructions used by the model in this session
 
 ```javascript
 const event = {
-  type: "session.update",
+  type: 'session.update',
   session: {
     instructions: "Never use the word 'moist' in your responses!",
   },
@@ -553,14 +546,14 @@ Create a conversation item with user input
 
 ```javascript
 const event = {
-  type: "conversation.item.create",
+  type: 'conversation.item.create',
   item: {
-    type: "message",
-    role: "user",
+    type: 'message',
+    role: 'user',
     content: [
       {
-        type: "input_text",
-        text: "What Prince album sold the most copies?",
+        type: 'input_text',
+        text: 'What Prince album sold the most copies?',
       },
     ],
   },
@@ -593,9 +586,9 @@ Generate a text-only response
 
 ```javascript
 const event = {
-  type: "response.create",
+  type: 'response.create',
   response: {
-    modalities: ["text"],
+    modalities: ['text'],
   },
 };
 
@@ -620,13 +613,13 @@ Listen for response.done to see the final results
 ```javascript
 function handleEvent(e) {
   const serverEvent = JSON.parse(e.data);
-  if (serverEvent.type === "response.done") {
+  if (serverEvent.type === 'response.done') {
     console.log(serverEvent.response.output[0]);
   }
 }
 
 // Listen for server messages (WebRTC)
-dataChannel.addEventListener("message", handleEvent);
+dataChannel.addEventListener('message', handleEvent);
 
 // Listen for server messages (WebSocket)
 // ws.on("message", handleEvent);
@@ -663,7 +656,7 @@ The example code from the [WebRTC connection guide](/docs/guides/realtime-webrtc
 const pc = new RTCPeerConnection();
 
 // Set up to play remote audio from the model
-const audioEl = document.createElement("audio");
+const audioEl = document.createElement('audio');
 audioEl.autoplay = true;
 pc.ontrack = (e) => (audioEl.srcObject = e.streams[0]);
 
@@ -810,16 +803,16 @@ It is also possible to create conversation messages that are full audio recordin
 Create full audio input conversation items
 
 ```javascript
-const fullAudio = "<a base64-encoded string of audio bytes>";
+const fullAudio = '<a base64-encoded string of audio bytes>';
 
 const event = {
-  type: "conversation.item.create",
+  type: 'conversation.item.create',
   item: {
-    type: "message",
-    role: "user",
+    type: 'message',
+    role: 'user',
     content: [
       {
-        type: "input_audio",
+        type: 'input_audio',
         audio: fullAudio,
       },
     ],
@@ -868,14 +861,14 @@ Listen for response.audio.delta events
 ```javascript
 function handleEvent(e) {
   const serverEvent = JSON.parse(e.data);
-  if (serverEvent.type === "response.audio.delta") {
+  if (serverEvent.type === 'response.audio.delta') {
     // Access Base64-encoded audio chunks
     // console.log(serverEvent.delta);
   }
 }
 
 // Listen for server messages (WebSocket)
-ws.on("message", handleEvent);
+ws.on('message', handleEvent);
 ```
 
 ```python
@@ -925,17 +918,17 @@ Analyze the conversation so far. If it is related to support, output
 `;
 
 const event = {
-  type: "response.create",
+  type: 'response.create',
   response: {
     // Setting to "none" indicates the response is out of band
     // and will not be added to the default conversation
-    conversation: "none",
+    conversation: 'none',
 
     // Set metadata to help identify responses sent back from the model
-    metadata: { topic: "classification" },
+    metadata: { topic: 'classification' },
 
     // Set any other available response fields
-    modalities: ["text"],
+    modalities: ['text'],
     instructions: prompt,
   },
 };
@@ -976,17 +969,14 @@ Create an out-of-band model response
 ```javascript
 function handleEvent(e) {
   const serverEvent = JSON.parse(e.data);
-  if (
-    serverEvent.type === "response.done" &&
-    serverEvent.response.metadata?.topic === "classification"
-  ) {
+  if (serverEvent.type === 'response.done' && serverEvent.response.metadata?.topic === 'classification') {
     // this server event pertained to our OOB model response
     console.log(serverEvent.response.output[0]);
   }
 }
 
 // Listen for server messages (WebRTC)
-dataChannel.addEventListener("message", handleEvent);
+dataChannel.addEventListener('message', handleEvent);
 
 // Listen for server messages (WebSocket)
 // ws.on("message", handleEvent);
@@ -1016,27 +1006,27 @@ Listen for out-of-band model response with custom context
 
 ```javascript
 const event = {
-  type: "response.create",
+  type: 'response.create',
   response: {
-    conversation: "none",
-    metadata: { topic: "pizza" },
-    modalities: ["text"],
+    conversation: 'none',
+    metadata: { topic: 'pizza' },
+    modalities: ['text'],
 
     // Create a custom input array for this request with whatever context
     // is appropriate
     input: [
       // potentially include existing conversation items:
       {
-        type: "item_reference",
-        id: "some_conversation_item_id",
+        type: 'item_reference',
+        id: 'some_conversation_item_id',
       },
       {
-        type: "message",
-        role: "user",
+        type: 'message',
+        role: 'user',
         content: [
           {
-            type: "input_text",
-            text: "Is it okay to put pineapple on pizza?",
+            type: 'input_text',
+            text: 'Is it okay to put pineapple on pizza?',
           },
         ],
       },
@@ -1097,7 +1087,7 @@ This is my handle, this is my spout!
 `;
 
 const event = {
-  type: "response.create",
+  type: 'response.create',
   response: {
     // An empty input array removes existing context
     input: [],
@@ -1320,8 +1310,8 @@ Unlike HTTP requests and responses, where a response is implicitly tied to a req
 
 ```javascript
 const event = {
-  event_id: "my_awesome_event",
-  type: "scooby.dooby.doo",
+  event_id: 'my_awesome_event',
+  type: 'scooby.dooby.doo',
 };
 
 dataChannel.send(JSON.stringify(event));

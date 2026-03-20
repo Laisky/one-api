@@ -1,17 +1,17 @@
-import { useState, useEffect, useRef } from 'react'
-import { Button } from '@/components/ui/button'
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
-import { Copy, Check } from 'lucide-react'
-import { copyToClipboard } from '@/lib/utils'
+import { useState, useEffect, useRef } from 'react';
+import { Button } from '@/components/ui/button';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { Copy, Check } from 'lucide-react';
+import { copyToClipboard } from '@/lib/utils';
 
 interface CopyButtonProps {
-  text: string
-  variant?: 'ghost' | 'outline' | 'default' | 'destructive' | 'secondary'
-  size?: 'sm' | 'md' | 'lg' | 'icon'
-  className?: string
-  successMessage?: string
-  onCopySuccess?: () => void
-  onCopyError?: (error: Error) => void
+  text: string;
+  variant?: 'ghost' | 'outline' | 'default' | 'destructive' | 'secondary';
+  size?: 'sm' | 'md' | 'lg' | 'icon';
+  className?: string;
+  successMessage?: string;
+  onCopySuccess?: () => void;
+  onCopyError?: (error: Error) => void;
 }
 
 export function CopyButton({
@@ -23,59 +23,59 @@ export function CopyButton({
   onCopySuccess,
   onCopyError,
 }: CopyButtonProps) {
-  const [copied, setCopied] = useState(false)
-  const [copying, setCopying] = useState(false)
-  const [tooltipOpen, setTooltipOpen] = useState(false)
-  const timeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const [copied, setCopied] = useState(false);
+  const [copying, setCopying] = useState(false);
+  const [tooltipOpen, setTooltipOpen] = useState(false);
+  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Effect to manage icon revert timer and tooltip
   useEffect(() => {
     if (copied) {
       // Clear any existing timeout
       if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current)
+        clearTimeout(timeoutRef.current);
       }
 
       // Show tooltip immediately when copied
-      setTooltipOpen(true)
+      setTooltipOpen(true);
 
       // Set new timeout to revert icon back to copy and hide tooltip after 2 seconds
       timeoutRef.current = setTimeout(() => {
-        setCopied(false)
-        setTooltipOpen(false)
-        timeoutRef.current = null
-      }, 2000)
+        setCopied(false);
+        setTooltipOpen(false);
+        timeoutRef.current = null;
+      }, 2000);
     }
 
     // Cleanup function to clear timeout on unmount or when copied state changes
     return () => {
       if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current)
-        timeoutRef.current = null
+        clearTimeout(timeoutRef.current);
+        timeoutRef.current = null;
       }
-    }
-  }, [copied])
+    };
+  }, [copied]);
 
   const handleCopy = async (e: React.MouseEvent) => {
-    e.stopPropagation() // Prevent row selection or other parent click handlers
+    e.stopPropagation(); // Prevent row selection or other parent click handlers
 
-    if (copying || copied) return
+    if (copying || copied) return;
 
-    setCopying(true)
+    setCopying(true);
     try {
-      await copyToClipboard(text)
+      await copyToClipboard(text);
 
       // Show success icon immediately after successful copy
-      setCopied(true)
+      setCopied(true);
 
-      onCopySuccess?.()
+      onCopySuccess?.();
     } catch (error) {
-      console.error('Failed to copy to clipboard:', error)
-      onCopyError?.(error instanceof Error ? error : new Error('Copy failed'))
+      console.error('Failed to copy to clipboard:', error);
+      onCopyError?.(error instanceof Error ? error : new Error('Copy failed'));
     } finally {
-      setCopying(false)
+      setCopying(false);
     }
-  }
+  };
 
   return (
     <TooltipProvider>
@@ -85,7 +85,7 @@ export function CopyButton({
           // Only allow closing the tooltip, not opening it manually
           // Tooltip should only open programmatically when copy succeeds
           if (!open) {
-            setTooltipOpen(false)
+            setTooltipOpen(false);
           }
         }}
       >
@@ -94,16 +94,11 @@ export function CopyButton({
             variant={variant}
             size={size}
             onClick={handleCopy}
-            className={`${className} transition-colors duration-200 ${copied ? 'text-success hover:text-success/80' : ''
-              }`}
+            className={`${className} transition-colors duration-200 ${copied ? 'text-success hover:text-success/80' : ''}`}
             disabled={copying}
             title="Copy to clipboard"
           >
-            {copied ? (
-              <Check className="h-3 w-3" />
-            ) : (
-              <Copy className="h-3 w-3" />
-            )}
+            {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
           </Button>
         </TooltipTrigger>
         <TooltipContent className="flex items-center gap-1">
@@ -112,7 +107,7 @@ export function CopyButton({
         </TooltipContent>
       </Tooltip>
     </TooltipProvider>
-  )
+  );
 }
 
-export default CopyButton
+export default CopyButton;

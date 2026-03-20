@@ -167,10 +167,12 @@ func SendPasswordResetEmail(c *gin.Context) {
 		"message": "If the email is registered, you will receive a password reset link shortly.",
 	})
 
+	lg := gmw.GetLogger(c)
 	go func() {
 		// To prevent timing attacks, we perform the email existence check
 		// and the actual email sending in a background goroutine.
 		if !model.IsEmailAlreadyTaken(email) {
+			lg.Debug("password reset requested for unregistered email")
 			return
 		}
 
@@ -193,20 +195,37 @@ func SendPasswordResetEmail(c *gin.Context) {
 		`, config.SystemName, link, link, common.VerificationValidMinutes),
 		)
 
-		_ = message.SendEmail(subject, email, content)
+		if err := message.SendEmail(subject, email, content); err != nil {
+			lg.Error("failed to send password reset email", zap.Error(err))
+		} else {
+			lg.Debug("password reset email sent successfully")
+		}
 	}()
 }
 
 type PasswordResetRequest struct {
-	Email string `json:"email"`
-	Token string `json:"token"`
+	Email    string `json:"email"`
+	Token    string `json:"token"`
+	Password string `json:"password"`
 }
 
 // ResetPassword validates the reset token and assigns a new random password to the account.
 func ResetPassword(c *gin.Context) {
+	lg := gmw.GetLogger(c)
 	var req PasswordResetRequest
 	err := json.NewDecoder(c.Request.Body).Decode(&req)
+	if err != nil {
+		lg.Debug("failed to decode password reset request", zap.Error(err))
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": invalidParameterMessage,
+		})
+		return
+	}
 	if req.Email == "" || req.Token == "" {
+		lg.Debug("password reset request missing email or token",
+			zap.Bool("email_empty", req.Email == ""),
+			zap.Bool("token_empty", req.Token == ""))
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
 			"message": invalidParameterMessage,
@@ -214,15 +233,25 @@ func ResetPassword(c *gin.Context) {
 		return
 	}
 	if !common.VerifyCodeWithKey(req.Email, req.Token, common.PasswordResetPurpose) {
+		lg.Debug("password reset token verification failed",
+			zap.String("email", req.Email))
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
 			"message": "Reset link is illegal or expired",
 		})
 		return
 	}
-	password := common.GenerateVerificationCode(12)
+
+	// Use user-provided password if present; otherwise generate a random one
+	// for backward compatibility with legacy frontends.
+	password := req.Password
+	if password == "" {
+		password = common.GenerateVerificationCode(12)
+	}
+
 	err = model.ResetUserPasswordByEmail(req.Email, password)
 	if err != nil {
+		lg.Error("failed to reset password", zap.String("email", req.Email), zap.Error(err))
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
 			"message": err.Error(),
@@ -230,6 +259,8 @@ func ResetPassword(c *gin.Context) {
 		return
 	}
 	common.DeleteKey(req.Email, common.PasswordResetPurpose)
+	lg.Info("password reset successful", zap.String("email", req.Email),
+		zap.Bool("user_provided_password", req.Password != ""))
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",

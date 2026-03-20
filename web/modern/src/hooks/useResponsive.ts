@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect } from 'react';
 
 const MOBILE_BREAKPOINT = 768;
 const TABLET_BREAKPOINT = 1024;
@@ -10,13 +10,13 @@ interface ViewportSize {
 }
 
 function getSafeViewport(): ViewportSize {
-  if (typeof window === "undefined") {
+  if (typeof window === 'undefined') {
     return { width: 0, height: 0 };
   }
 
   const visualViewport = window.visualViewport;
-  const doc = typeof document !== "undefined" ? document.documentElement : null;
-  const screen = typeof window.screen !== "undefined" ? window.screen : null;
+  const doc = typeof document !== 'undefined' ? document.documentElement : null;
+  const screen = typeof window.screen !== 'undefined' ? window.screen : null;
 
   const widthCandidates = [window.innerWidth];
   const heightCandidates = [window.innerHeight];
@@ -32,30 +32,22 @@ function getSafeViewport(): ViewportSize {
   }
 
   if (screen) {
-    if (typeof screen.width === "number") {
+    if (typeof screen.width === 'number') {
       widthCandidates.push(screen.width);
     }
-    if (typeof screen.height === "number") {
+    if (typeof screen.height === 'number') {
       heightCandidates.push(screen.height);
     }
-    if (typeof screen.availWidth === "number") {
+    if (typeof screen.availWidth === 'number') {
       widthCandidates.push(screen.availWidth);
     }
-    if (typeof screen.availHeight === "number") {
+    if (typeof screen.availHeight === 'number') {
       heightCandidates.push(screen.availHeight);
     }
   }
 
-  const width = Math.min(
-    ...widthCandidates.filter(
-      (v): v is number => typeof v === "number" && v > 0
-    )
-  );
-  const height = Math.min(
-    ...heightCandidates.filter(
-      (v): v is number => typeof v === "number" && v > 0
-    )
-  );
+  const width = Math.min(...widthCandidates.filter((v): v is number => typeof v === 'number' && v > 0));
+  const height = Math.min(...heightCandidates.filter((v): v is number => typeof v === 'number' && v > 0));
 
   return {
     width: Math.round(width),
@@ -68,14 +60,14 @@ interface BreakpointState {
   isTablet: boolean;
   isDesktop: boolean;
   isLarge: boolean;
-  currentBreakpoint: "mobile" | "tablet" | "desktop" | "large";
+  currentBreakpoint: 'mobile' | 'tablet' | 'desktop' | 'large';
   width: number;
   height: number;
 }
 
 export function useResponsive(): BreakpointState {
   const [state, setState] = useState<BreakpointState>(() => {
-    if (typeof window !== "undefined") {
+    if (typeof window !== 'undefined') {
       const { width, height } = getSafeViewport();
       return {
         width,
@@ -85,13 +77,7 @@ export function useResponsive(): BreakpointState {
         isDesktop: width >= TABLET_BREAKPOINT && width < DESKTOP_BREAKPOINT,
         isLarge: width >= DESKTOP_BREAKPOINT,
         currentBreakpoint:
-          width < MOBILE_BREAKPOINT
-            ? "mobile"
-            : width < TABLET_BREAKPOINT
-              ? "tablet"
-              : width < DESKTOP_BREAKPOINT
-                ? "desktop"
-                : "large",
+          width < MOBILE_BREAKPOINT ? 'mobile' : width < TABLET_BREAKPOINT ? 'tablet' : width < DESKTOP_BREAKPOINT ? 'desktop' : 'large',
       };
     }
 
@@ -103,7 +89,7 @@ export function useResponsive(): BreakpointState {
       isTablet: false,
       isDesktop: true,
       isLarge: false,
-      currentBreakpoint: "desktop",
+      currentBreakpoint: 'desktop',
     };
   });
 
@@ -124,13 +110,7 @@ export function useResponsive(): BreakpointState {
           isDesktop: width >= TABLET_BREAKPOINT && width < DESKTOP_BREAKPOINT,
           isLarge: width >= DESKTOP_BREAKPOINT,
           currentBreakpoint:
-            width < MOBILE_BREAKPOINT
-              ? "mobile"
-              : width < TABLET_BREAKPOINT
-                ? "tablet"
-                : width < DESKTOP_BREAKPOINT
-                  ? "desktop"
-                  : "large",
+            width < MOBILE_BREAKPOINT ? 'mobile' : width < TABLET_BREAKPOINT ? 'tablet' : width < DESKTOP_BREAKPOINT ? 'desktop' : 'large',
         };
       });
     };
@@ -147,14 +127,14 @@ export function useResponsive(): BreakpointState {
       timeoutId = setTimeout(updateState, 100);
     };
 
-    window.addEventListener("resize", debouncedUpdate);
-    window.visualViewport?.addEventListener("resize", debouncedUpdate);
-    window.visualViewport?.addEventListener("scroll", debouncedUpdate);
+    window.addEventListener('resize', debouncedUpdate);
+    window.visualViewport?.addEventListener('resize', debouncedUpdate);
+    window.visualViewport?.addEventListener('scroll', debouncedUpdate);
 
     return () => {
-      window.removeEventListener("resize", debouncedUpdate);
-      window.visualViewport?.removeEventListener("resize", debouncedUpdate);
-      window.visualViewport?.removeEventListener("scroll", debouncedUpdate);
+      window.removeEventListener('resize', debouncedUpdate);
+      window.visualViewport?.removeEventListener('resize', debouncedUpdate);
+      window.visualViewport?.removeEventListener('scroll', debouncedUpdate);
       if (timeoutId) {
         clearTimeout(timeoutId);
       }
@@ -183,7 +163,7 @@ export function useIsDesktop(): boolean {
 // Hook for media query matching
 export function useMediaQuery(query: string): boolean {
   const [matches, setMatches] = useState(() => {
-    if (typeof window !== "undefined") {
+    if (typeof window !== 'undefined') {
       return window.matchMedia(query).matches;
     }
     return false;
@@ -195,10 +175,10 @@ export function useMediaQuery(query: string): boolean {
       setMatches(event.matches);
     };
 
-    mediaQuery.addEventListener("change", handler);
+    mediaQuery.addEventListener('change', handler);
     setMatches(mediaQuery.matches);
 
-    return () => mediaQuery.removeEventListener("change", handler);
+    return () => mediaQuery.removeEventListener('change', handler);
   }, [query]);
 
   return matches;
@@ -206,21 +186,21 @@ export function useMediaQuery(query: string): boolean {
 
 // Predefined media query hooks
 export function useIsTouchDevice(): boolean {
-  return useMediaQuery("(hover: none) and (pointer: coarse)");
+  return useMediaQuery('(hover: none) and (pointer: coarse)');
 }
 
 export function usePrefersReducedMotion(): boolean {
-  return useMediaQuery("(prefers-reduced-motion: reduce)");
+  return useMediaQuery('(prefers-reduced-motion: reduce)');
 }
 
 export function usePrefersDarkMode(): boolean {
-  return useMediaQuery("(prefers-color-scheme: dark)");
+  return useMediaQuery('(prefers-color-scheme: dark)');
 }
 
 export function useIsLandscape(): boolean {
-  return useMediaQuery("(orientation: landscape)");
+  return useMediaQuery('(orientation: landscape)');
 }
 
 export function useIsPortrait(): boolean {
-  return useMediaQuery("(orientation: portrait)");
+  return useMediaQuery('(orientation: portrait)');
 }

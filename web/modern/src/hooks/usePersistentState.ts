@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback, useEffect, useRef } from 'react';
 
 /**
  * Storage keys for persistent UI settings.
@@ -6,7 +6,7 @@ import { useState, useCallback, useEffect, useRef } from "react";
  */
 export const STORAGE_KEYS = {
   // Global page size shared across all tables
-  PAGE_SIZE: "oneapi_page_size",
+  PAGE_SIZE: 'oneapi_page_size',
 } as const;
 
 export type StorageKey = (typeof STORAGE_KEYS)[keyof typeof STORAGE_KEYS];
@@ -22,17 +22,14 @@ export type StorageKey = (typeof STORAGE_KEYS)[keyof typeof STORAGE_KEYS];
  * @param defaultValue - The default value if no persisted value exists
  * @returns A tuple of [value, setValue] similar to useState
  */
-export function usePersistentState<T>(
-  key: string,
-  defaultValue: T
-): [T, (value: T | ((prev: T) => T)) => void] {
+export function usePersistentState<T>(key: string, defaultValue: T): [T, (value: T | ((prev: T) => T)) => void] {
   // Use a ref to track if we've initialized from localStorage
   const initialized = useRef(false);
 
   // Initialize state from localStorage or use default
   const [value, setValueInternal] = useState<T>(() => {
     // Only access localStorage on the client side
-    if (typeof window === "undefined") {
+    if (typeof window === 'undefined') {
       return defaultValue;
     }
 
@@ -52,7 +49,7 @@ export function usePersistentState<T>(
 
   // Persist value to localStorage whenever it changes
   useEffect(() => {
-    if (typeof window === "undefined") return;
+    if (typeof window === 'undefined') return;
 
     try {
       localStorage.setItem(key, JSON.stringify(value));
@@ -65,10 +62,7 @@ export function usePersistentState<T>(
   const setValue = useCallback(
     (newValue: T | ((prev: T) => T)) => {
       setValueInternal((prev) => {
-        const resolved =
-          typeof newValue === "function"
-            ? (newValue as (prev: T) => T)(prev)
-            : newValue;
+        const resolved = typeof newValue === 'function' ? (newValue as (prev: T) => T)(prev) : newValue;
         return resolved;
       });
     },
@@ -95,10 +89,7 @@ export function usePageSize(
   defaultSize: number = 10,
   validSizes: number[] = [10, 20, 30, 50, 100]
 ): [number, (size: number) => void] {
-  const [pageSize, setPageSizeInternal] = usePersistentState<number>(
-    storageKey,
-    defaultSize
-  );
+  const [pageSize, setPageSizeInternal] = usePersistentState<number>(storageKey, defaultSize);
 
   // Validate and sanitize the page size
   const setPageSize = useCallback(
@@ -113,9 +104,7 @@ export function usePageSize(
           setPageSizeInternal(sanitized);
         } else {
           // Find the nearest valid size
-          const nearest = validSizes.reduce((prev, curr) =>
-            Math.abs(curr - sanitized) < Math.abs(prev - sanitized) ? curr : prev
-          );
+          const nearest = validSizes.reduce((prev, curr) => (Math.abs(curr - sanitized) < Math.abs(prev - sanitized) ? curr : prev));
           setPageSizeInternal(nearest);
         }
       } else {
@@ -139,7 +128,7 @@ export function usePageSize(
  * @returns The stored page size or default value
  */
 export function getStoredPageSize(key: string, defaultValue: number = 10): number {
-  if (typeof window === "undefined") return defaultValue;
+  if (typeof window === 'undefined') return defaultValue;
 
   try {
     const stored = localStorage.getItem(key);

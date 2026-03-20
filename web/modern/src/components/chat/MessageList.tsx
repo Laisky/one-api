@@ -1,22 +1,22 @@
-import { MessageItem } from '@/components/chat/MessageItem'
-import { ScrollArea } from '@/components/ui/scroll-area'
-import { Message } from '@/lib/utils'
-import { Bot } from 'lucide-react'
-import { useCallback, useEffect, useRef } from 'react'
-import { useTranslation } from 'react-i18next'
+import { MessageItem } from '@/components/chat/MessageItem';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Message } from '@/lib/utils';
+import { Bot } from 'lucide-react';
+import { useCallback, useEffect, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 
 interface MessageListProps {
-  messages: Message[]
-  isStreaming: boolean
-  showReasoningContent: boolean
-  expandedReasonings: Record<number, boolean>
-  onToggleReasoning: (messageIndex: number) => void
-  focusModeEnabled: boolean
+  messages: Message[];
+  isStreaming: boolean;
+  showReasoningContent: boolean;
+  expandedReasonings: Record<number, boolean>;
+  onToggleReasoning: (messageIndex: number) => void;
+  focusModeEnabled: boolean;
   // Message actions
-  onCopyMessage?: (messageIndex: number, content: string) => void
-  onRegenerateMessage?: (messageIndex: number) => void
-  onEditMessage?: (messageIndex: number, newContent: string) => void
-  onDeleteMessage?: (messageIndex: number) => void
+  onCopyMessage?: (messageIndex: number, content: string) => void;
+  onRegenerateMessage?: (messageIndex: number) => void;
+  onEditMessage?: (messageIndex: number, newContent: string) => void;
+  onDeleteMessage?: (messageIndex: number) => void;
 }
 
 export function MessageList({
@@ -29,30 +29,30 @@ export function MessageList({
   onCopyMessage,
   onRegenerateMessage,
   onEditMessage,
-  onDeleteMessage
+  onDeleteMessage,
 }: MessageListProps) {
-  const { t } = useTranslation()
-  const scrollAreaRef = useRef<HTMLDivElement>(null)
-  const messagesEndRef = useRef<HTMLDivElement>(null)
+  const { t } = useTranslation();
+  const scrollAreaRef = useRef<HTMLDivElement>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Scroll to bottom when new messages arrive - use ScrollArea's viewport for proper containment
   const scrollToBottom = useCallback(() => {
     if (scrollAreaRef.current) {
-      const viewport = scrollAreaRef.current.querySelector('[data-radix-scroll-area-viewport]')
+      const viewport = scrollAreaRef.current.querySelector('[data-radix-scroll-area-viewport]');
       if (viewport) {
         // Use requestAnimationFrame to scroll after content is rendered
         requestAnimationFrame(() => {
-          viewport.scrollTop = viewport.scrollHeight
-        })
+          viewport.scrollTop = viewport.scrollHeight;
+        });
       }
     }
-  }, [])
+  }, []);
 
   // Focus mode: Auto-scroll to bottom continuously while streaming
   useEffect(() => {
-    if (!focusModeEnabled || !isStreaming) return
-    scrollToBottom()
-  }, [messages, focusModeEnabled, isStreaming, scrollToBottom])
+    if (!focusModeEnabled || !isStreaming) return;
+    scrollToBottom();
+  }, [messages, focusModeEnabled, isStreaming, scrollToBottom]);
 
   return (
     <ScrollArea ref={scrollAreaRef} className="h-full p-4">
@@ -68,10 +68,15 @@ export function MessageList({
         {messages.map((message, index) => (
           <div
             key={index}
-            className={`${message.role === 'user' ? 'flex justify-end' :
-              message.role === 'error' ? 'space-y-2' :
-                message.role === 'assistant' ? 'space-y-2' : 'flex justify-start'
-              }`}
+            className={`${
+              message.role === 'user'
+                ? 'flex justify-end'
+                : message.role === 'error'
+                  ? 'space-y-2'
+                  : message.role === 'assistant'
+                    ? 'space-y-2'
+                    : 'flex justify-start'
+            }`}
           >
             <MessageItem
               message={message}
@@ -91,5 +96,5 @@ export function MessageList({
         <div ref={messagesEndRef} />
       </div>
     </ScrollArea>
-  )
+  );
 }

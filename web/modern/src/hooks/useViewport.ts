@@ -1,23 +1,23 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback } from 'react';
 
 interface ViewportState {
   width: number;
   height: number;
   scrollX: number;
   scrollY: number;
-  orientation: "portrait" | "landscape";
+  orientation: 'portrait' | 'landscape';
   devicePixelRatio: number;
 }
 
 export function useViewport(): ViewportState {
   const [viewport, setViewport] = useState<ViewportState>(() => {
-    if (typeof window === "undefined") {
+    if (typeof window === 'undefined') {
       return {
         width: 0,
         height: 0,
         scrollX: 0,
         scrollY: 0,
-        orientation: "portrait",
+        orientation: 'portrait',
         devicePixelRatio: 1,
       };
     }
@@ -27,8 +27,7 @@ export function useViewport(): ViewportState {
       height: window.innerHeight,
       scrollX: window.scrollX,
       scrollY: window.scrollY,
-      orientation:
-        window.innerWidth > window.innerHeight ? "landscape" : "portrait",
+      orientation: window.innerWidth > window.innerHeight ? 'landscape' : 'portrait',
       devicePixelRatio: window.devicePixelRatio || 1,
     };
   });
@@ -39,8 +38,7 @@ export function useViewport(): ViewportState {
       height: window.innerHeight,
       scrollX: window.scrollX,
       scrollY: window.scrollY,
-      orientation:
-        window.innerWidth > window.innerHeight ? "landscape" : "portrait",
+      orientation: window.innerWidth > window.innerHeight ? 'landscape' : 'portrait',
       devicePixelRatio: window.devicePixelRatio || 1,
     });
   }, []);
@@ -53,14 +51,14 @@ export function useViewport(): ViewportState {
       timeoutId = setTimeout(updateViewport, 100);
     };
 
-    window.addEventListener("resize", debouncedUpdate);
-    window.addEventListener("scroll", debouncedUpdate);
-    window.addEventListener("orientationchange", debouncedUpdate);
+    window.addEventListener('resize', debouncedUpdate);
+    window.addEventListener('scroll', debouncedUpdate);
+    window.addEventListener('orientationchange', debouncedUpdate);
 
     return () => {
-      window.removeEventListener("resize", debouncedUpdate);
-      window.removeEventListener("scroll", debouncedUpdate);
-      window.removeEventListener("orientationchange", debouncedUpdate);
+      window.removeEventListener('resize', debouncedUpdate);
+      window.removeEventListener('scroll', debouncedUpdate);
+      window.removeEventListener('orientationchange', debouncedUpdate);
       clearTimeout(timeoutId);
     };
   }, [updateViewport]);
@@ -83,12 +81,10 @@ export function useBreakpointChange(
   callback: (currentBreakpoint: string, previousBreakpoint: string) => void
 ) {
   const { width } = useViewport();
-  const [currentBreakpoint, setCurrentBreakpoint] = useState<string>("");
+  const [currentBreakpoint, setCurrentBreakpoint] = useState<string>('');
 
   useEffect(() => {
-    const sortedBreakpoints = Object.entries(breakpoints).sort(
-      ([, a], [, b]) => a - b
-    );
+    const sortedBreakpoints = Object.entries(breakpoints).sort(([, a], [, b]) => a - b);
 
     let newBreakpoint = sortedBreakpoints[0][0];
 
@@ -123,28 +119,20 @@ export function useSafeAreaInsets() {
     const updateInsets = () => {
       const style = getComputedStyle(document.documentElement);
       setInsets({
-        top: parseInt(
-          style.getPropertyValue("env(safe-area-inset-top)") || "0"
-        ),
-        right: parseInt(
-          style.getPropertyValue("env(safe-area-inset-right)") || "0"
-        ),
-        bottom: parseInt(
-          style.getPropertyValue("env(safe-area-inset-bottom)") || "0"
-        ),
-        left: parseInt(
-          style.getPropertyValue("env(safe-area-inset-left)") || "0"
-        ),
+        top: parseInt(style.getPropertyValue('env(safe-area-inset-top)') || '0'),
+        right: parseInt(style.getPropertyValue('env(safe-area-inset-right)') || '0'),
+        bottom: parseInt(style.getPropertyValue('env(safe-area-inset-bottom)') || '0'),
+        left: parseInt(style.getPropertyValue('env(safe-area-inset-left)') || '0'),
       });
     };
 
     updateInsets();
-    window.addEventListener("resize", updateInsets);
-    window.addEventListener("orientationchange", updateInsets);
+    window.addEventListener('resize', updateInsets);
+    window.addEventListener('orientationchange', updateInsets);
 
     return () => {
-      window.removeEventListener("resize", updateInsets);
-      window.removeEventListener("orientationchange", updateInsets);
+      window.removeEventListener('resize', updateInsets);
+      window.removeEventListener('orientationchange', updateInsets);
     };
   }, []);
 
@@ -159,27 +147,20 @@ export function useDeviceCapabilities() {
     hasPointerFine: false,
     hasPointerCoarse: false,
     prefersReducedMotion: false,
-    prefersColorScheme: "light" as "light" | "dark",
-    prefersContrast: "normal" as "normal" | "high",
+    prefersColorScheme: 'light' as 'light' | 'dark',
+    prefersContrast: 'normal' as 'normal' | 'high',
   });
 
   useEffect(() => {
     const updateCapabilities = () => {
       setCapabilities({
-        hasTouch: "ontouchstart" in window || navigator.maxTouchPoints > 0,
-        hasHover: window.matchMedia("(hover: hover)").matches,
-        hasPointerFine: window.matchMedia("(pointer: fine)").matches,
-        hasPointerCoarse: window.matchMedia("(pointer: coarse)").matches,
-        prefersReducedMotion: window.matchMedia(
-          "(prefers-reduced-motion: reduce)"
-        ).matches,
-        prefersColorScheme: window.matchMedia("(prefers-color-scheme: dark)")
-          .matches
-          ? "dark"
-          : "light",
-        prefersContrast: window.matchMedia("(prefers-contrast: high)").matches
-          ? "high"
-          : "normal",
+        hasTouch: 'ontouchstart' in window || navigator.maxTouchPoints > 0,
+        hasHover: window.matchMedia('(hover: hover)').matches,
+        hasPointerFine: window.matchMedia('(pointer: fine)').matches,
+        hasPointerCoarse: window.matchMedia('(pointer: coarse)').matches,
+        prefersReducedMotion: window.matchMedia('(prefers-reduced-motion: reduce)').matches,
+        prefersColorScheme: window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light',
+        prefersContrast: window.matchMedia('(prefers-contrast: high)').matches ? 'high' : 'normal',
       });
     };
 
@@ -187,23 +168,23 @@ export function useDeviceCapabilities() {
 
     // Listen for changes in media queries
     const mediaQueries = [
-      "(hover: hover)",
-      "(pointer: fine)",
-      "(pointer: coarse)",
-      "(prefers-reduced-motion: reduce)",
-      "(prefers-color-scheme: dark)",
-      "(prefers-contrast: high)",
+      '(hover: hover)',
+      '(pointer: fine)',
+      '(pointer: coarse)',
+      '(prefers-reduced-motion: reduce)',
+      '(prefers-color-scheme: dark)',
+      '(prefers-contrast: high)',
     ];
 
     const listeners = mediaQueries.map((query) => {
       const mq = window.matchMedia(query);
-      mq.addEventListener("change", updateCapabilities);
+      mq.addEventListener('change', updateCapabilities);
       return { mq, handler: updateCapabilities };
     });
 
     return () => {
       listeners.forEach(({ mq, handler }) => {
-        mq.removeEventListener("change", handler);
+        mq.removeEventListener('change', handler);
       });
     };
   }, []);
@@ -242,7 +223,7 @@ export function useContainerQuery(query: string) {
   const [elementRef, setElementRef] = useState<HTMLElement | null>(null);
 
   useEffect(() => {
-    if (!elementRef || !("ResizeObserver" in window)) return;
+    if (!elementRef || !('ResizeObserver' in window)) return;
 
     const resizeObserver = new ResizeObserver((entries) => {
       for (const entry of entries) {
@@ -268,9 +249,7 @@ export function useContainerQuery(query: string) {
 }
 
 // Hook for intersection observer
-export function useIntersectionObserver(
-  options: IntersectionObserverInit = {}
-) {
+export function useIntersectionObserver(options: IntersectionObserverInit = {}) {
   const [isIntersecting, setIsIntersecting] = useState(false);
   const [elementRef, setElementRef] = useState<HTMLElement | null>(null);
 

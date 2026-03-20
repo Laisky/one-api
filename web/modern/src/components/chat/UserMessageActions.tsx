@@ -1,24 +1,20 @@
-import { Button } from '@/components/ui/button'
+import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
-import { Copy, Edit2, MoreHorizontal, Trash2 } from 'lucide-react'
+} from '@/components/ui/dropdown-menu';
+import { Copy, Edit2, MoreHorizontal, Trash2 } from 'lucide-react';
 
 interface UserMessageActionsProps {
-  onCopyMessage: () => void
-  onEditMessage?: () => void
-  onDeleteMessage?: () => void
+  onCopyMessage: () => void;
+  onEditMessage?: () => void;
+  onDeleteMessage?: () => void;
 }
 
-export function UserMessageActions({
-  onCopyMessage,
-  onEditMessage,
-  onDeleteMessage
-}: UserMessageActionsProps) {
+export function UserMessageActions({ onCopyMessage, onEditMessage, onDeleteMessage }: UserMessageActionsProps) {
   return (
     <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-200">
       <DropdownMenu>
@@ -55,5 +51,5 @@ export function UserMessageActions({
         </DropdownMenuContent>
       </DropdownMenu>
     </div>
-  )
+  );
 }

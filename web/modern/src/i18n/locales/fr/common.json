@@ -1,4 +1,9 @@
 {
+  "a11y": {
+    "close": "Fermer",
+    "close_drawer": "Fermer le tiroir",
+    "select_language": "Choisir la langue"
+  },
   "about": {
     "cta_models": "Voir les modèles pris en charge",
     "cta_repo": "Dépôt GitHub",
@@ -67,24 +72,14 @@
   "footer": {
     "copyright": "\u00a9 {{year}} One API. Tous droits r\u00e9serv\u00e9s."
   },
-  "theme": {
-    "toggle": "Changer le th\u00e8me",
-    "light": "Clair",
-    "dark": "Sombre",
-    "system": "Syst\u00e8me"
-  },
   "header": {
     "confirm_logout": "Confirmer la déconnexion",
     "log_out": "Se déconnecter",
     "logging_out": "Déconnexion...",
     "logout_description": "Êtes-vous sûr de vouloir vous déconnecter ? Vous devrez vous reconnecter pour accéder à votre tableau de bord.",
     "navigation": "Navigation",
+    "profile": "Profil",
     "signed_in_as": "Connecté en tant que"
-  },
-  "a11y": {
-    "close": "Fermer",
-    "close_drawer": "Fermer le tiroir",
-    "select_language": "Choisir la langue"
   },
   "home": {
     "iframe_title": "Accueil"
@@ -151,5 +146,11 @@
     },
     "subtitle": "Surveillez l’état et les performances de tous les canaux",
     "title": "Statut des canaux"
+  },
+  "theme": {
+    "dark": "Sombre",
+    "light": "Clair",
+    "system": "Syst\u00e8me",
+    "toggle": "Changer le th\u00e8me"
   }
 }

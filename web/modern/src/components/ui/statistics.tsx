@@ -1,30 +1,30 @@
-import * as React from 'react'
-import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { RefreshCw, Eye, EyeOff, TrendingUp, TrendingDown } from 'lucide-react'
-import { renderQuota } from '@/lib/utils'
+import * as React from 'react';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { RefreshCw, Eye, EyeOff, TrendingUp, TrendingDown } from 'lucide-react';
+import { renderQuota } from '@/lib/utils';
 
 interface StatisticsData {
-  quota: number
-  token?: number
-  request_count?: number
-  [key: string]: any
+  quota: number;
+  token?: number;
+  request_count?: number;
+  [key: string]: any;
 }
 
 interface StatisticsProps {
-  title?: string
-  data: StatisticsData
-  loading?: boolean
-  onRefresh?: () => void
-  visible?: boolean
-  onToggleVisibility?: () => void
+  title?: string;
+  data: StatisticsData;
+  loading?: boolean;
+  onRefresh?: () => void;
+  visible?: boolean;
+  onToggleVisibility?: () => void;
   additionalStats?: Array<{
-    label: string
-    value: string | number
-    icon?: React.ReactNode
-    trend?: 'up' | 'down' | 'neutral'
-  }>
-  className?: string
+    label: string;
+    value: string | number;
+    icon?: React.ReactNode;
+    trend?: 'up' | 'down' | 'neutral';
+  }>;
+  className?: string;
 }
 
 export function Statistics({
@@ -40,41 +40,36 @@ export function Statistics({
   if (!visible) {
     return (
       <div className={className}>
-        <Button
-          size="sm"
-          variant="ghost"
-          onClick={onToggleVisibility}
-          className="flex items-center gap-2 text-muted-foreground"
-        >
+        <Button size="sm" variant="ghost" onClick={onToggleVisibility} className="flex items-center gap-2 text-muted-foreground">
           <Eye className="h-4 w-4" />
           Click to view {title.toLowerCase()}
         </Button>
       </div>
-    )
+    );
   }
 
   const formatStatValue = (value: string | number): string => {
     if (typeof value === 'number') {
       if (value >= 1000000) {
-        return (value / 1000000).toFixed(1) + 'M'
+        return (value / 1000000).toFixed(1) + 'M';
       } else if (value >= 1000) {
-        return (value / 1000).toFixed(1) + 'K'
+        return (value / 1000).toFixed(1) + 'K';
       }
-      return value.toString()
+      return value.toString();
     }
-    return value
-  }
+    return value;
+  };
 
   const getTrendIcon = (trend?: 'up' | 'down' | 'neutral') => {
     switch (trend) {
       case 'up':
-        return <TrendingUp className="h-3 w-3 text-success" />
+        return <TrendingUp className="h-3 w-3 text-success" />;
       case 'down':
-        return <TrendingDown className="h-3 w-3 text-destructive" />
+        return <TrendingDown className="h-3 w-3 text-destructive" />;
       default:
-        return null
+        return null;
     }
-  }
+  };
 
   return (
     <Card className={className}>
@@ -83,25 +78,12 @@ export function Statistics({
           <span>{title}</span>
           <div className="flex items-center gap-2">
             {onRefresh && (
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={onRefresh}
-                disabled={loading}
-                className="h-6 w-6 p-0"
-                title="Refresh statistics"
-              >
+              <Button size="sm" variant="ghost" onClick={onRefresh} disabled={loading} className="h-6 w-6 p-0" title="Refresh statistics">
                 <RefreshCw className={`h-3 w-3 ${loading ? 'animate-spin' : ''}`} />
               </Button>
             )}
             {onToggleVisibility && (
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={onToggleVisibility}
-                className="h-6 w-6 p-0"
-                title="Hide statistics"
-              >
+              <Button size="sm" variant="ghost" onClick={onToggleVisibility} className="h-6 w-6 p-0" title="Hide statistics">
                 <EyeOff className="h-3 w-3" />
               </Button>
             )}
@@ -113,18 +95,14 @@ export function Statistics({
           {/* Primary quota statistic */}
           <div className="flex flex-col">
             <span className="text-sm text-muted-foreground">Total Quota</span>
-            <span className="text-2xl font-semibold text-primary">
-              {renderQuota(data.quota)}
-            </span>
+            <span className="text-2xl font-semibold text-primary">{renderQuota(data.quota)}</span>
           </div>
 
           {/* Token count if available */}
           {data.token !== undefined && (
             <div className="flex flex-col">
               <span className="text-sm text-muted-foreground">Total Tokens</span>
-              <span className="text-2xl font-semibold">
-                {formatStatValue(data.token)}
-              </span>
+              <span className="text-2xl font-semibold">{formatStatValue(data.token)}</span>
             </div>
           )}
 
@@ -132,9 +110,7 @@ export function Statistics({
           {data.request_count !== undefined && (
             <div className="flex flex-col">
               <span className="text-sm text-muted-foreground">Total Requests</span>
-              <span className="text-2xl font-semibold">
-                {formatStatValue(data.request_count)}
-              </span>
+              <span className="text-2xl font-semibold">{formatStatValue(data.request_count)}</span>
             </div>
           )}
 
@@ -154,12 +130,8 @@ export function Statistics({
         </div>
 
         {/* Loading state */}
-        {loading && (
-          <div className="mt-4 p-2 bg-muted/50 rounded text-center text-sm text-muted-foreground">
-            Refreshing statistics...
-          </div>
-        )}
+        {loading && <div className="mt-4 p-2 bg-muted/50 rounded text-center text-sm text-muted-foreground">Refreshing statistics...</div>}
       </CardContent>
     </Card>
-  )
+  );
 }

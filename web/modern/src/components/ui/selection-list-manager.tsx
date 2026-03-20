@@ -110,11 +110,7 @@ export function SelectionListManager({
           )}
         </div>
 
-        {actions && (
-          <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap [&>*]:w-full sm:[&>*]:w-auto">
-            {actions}
-          </div>
-        )}
+        {actions && <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap [&>*]:w-full sm:[&>*]:w-auto">{actions}</div>}
 
         <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
           <Input
@@ -158,7 +154,9 @@ export function SelectionListManager({
                   className={cn('cursor-pointer hover:bg-primary/90 max-w-full', disabled && 'opacity-60')}
                   onClick={() => toggleOption(option.value)}
                 >
-                  <span className="truncate min-w-0" title={option.label ?? option.value}>{option.label ?? option.value}</span>
+                  <span className="truncate min-w-0" title={option.label ?? option.value}>
+                    {option.label ?? option.value}
+                  </span>
                 </Badge>
               );
             })}
@@ -173,7 +171,9 @@ export function SelectionListManager({
             )}
             {normalizedSelected.map((item) => (
               <Badge key={item} variant="secondary" className="max-w-full gap-1 overflow-hidden px-2 py-1.5">
-                <span className="min-w-0 truncate" title={item}>{item}</span>
+                <span className="min-w-0 truncate" title={item}>
+                  {item}
+                </span>
                 <button
                   type="button"
                   onClick={() => removeSelected(item)}

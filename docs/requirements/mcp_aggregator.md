@@ -62,12 +62,10 @@ Build a first‑class MCP aggregation layer that lets administrators register mu
 ### Tool categories (internal)
 
 1. **User‑defined local tools**
-
    - Provided directly in user requests (OpenAI tools/functions, Claude tools).
    - Executed by the user’s own tool executor, not by one‑api.
 
 2. **Upstream channel built‑in tools**
-
    - Tools natively supported by the target upstream model/provider (e.g., web search).
    - Validated and billed using existing tooling policy (`relay/tooling/tools.go`).
 
@@ -500,11 +498,9 @@ No new endpoints required; the existing log endpoints will surface tool usage me
    - Tool management panel: list tools per server with metadata (name, description, status, default fee, last synced), sync now, and per‑tool allow/deny toggles.
    - Bulk allow/deny actions (if policy is allow/deny list mode).
 3. Log Details Enhancements
-
    - Show MCP tool usage summary and per‑tool costs.
 
 4. Channel Edit Enhancements
-
    - Add a channel-level MCP tool blacklist.
    - The UI must offer all MCP tools for selection (via merged catalog) and allow manual input.
 

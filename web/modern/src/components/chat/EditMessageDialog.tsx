@@ -1,145 +1,142 @@
-import { Button } from '@/components/ui/button'
-import { Card, CardContent } from '@/components/ui/card'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
-import { Label } from '@/components/ui/label'
-import { Textarea } from '@/components/ui/textarea'
-import { Edit2, Image as ImageIcon, X } from 'lucide-react'
-import React, { useEffect, useState } from 'react'
-import { Trans, useTranslation } from 'react-i18next'
+import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import { Edit2, Image as ImageIcon, X } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { Trans, useTranslation } from 'react-i18next';
 
 interface EditMessageDialogProps {
-  isOpen: boolean
-  onClose: () => void
-  onSave: (newContent: string | any[]) => void
-  currentContent: string
-  originalContent: string | any[] // The full message content including attachments
-  messageRole: 'user' | 'assistant' | 'system' | 'error'
+  isOpen: boolean;
+  onClose: () => void;
+  onSave: (newContent: string | any[]) => void;
+  currentContent: string;
+  originalContent: string | any[]; // The full message content including attachments
+  messageRole: 'user' | 'assistant' | 'system' | 'error';
 }
 
-export function EditMessageDialog({
-  isOpen,
-  onClose,
-  onSave,
-  currentContent,
-  originalContent,
-  messageRole
-}: EditMessageDialogProps) {
-  const { t } = useTranslation()
-  const [editedContent, setEditedContent] = useState(currentContent)
-  const [editedAttachments, setEditedAttachments] = useState<any[]>([])
-  const [hasChanges, setHasChanges] = useState(false)
+export function EditMessageDialog({ isOpen, onClose, onSave, currentContent, originalContent, messageRole }: EditMessageDialogProps) {
+  const { t } = useTranslation();
+  const [editedContent, setEditedContent] = useState(currentContent);
+  const [editedAttachments, setEditedAttachments] = useState<any[]>([]);
+  const [hasChanges, setHasChanges] = useState(false);
 
   // Update edited content when dialog opens with new content
   useEffect(() => {
-    setEditedContent(currentContent)
+    setEditedContent(currentContent);
 
     // Extract attachments from originalContent
     if (Array.isArray(originalContent)) {
-      const attachments = originalContent.filter(item => item?.type === 'image_url')
-      setEditedAttachments(attachments)
+      const attachments = originalContent.filter((item) => item?.type === 'image_url');
+      setEditedAttachments(attachments);
     } else {
-      setEditedAttachments([])
+      setEditedAttachments([]);
     }
 
-    setHasChanges(false)
-  }, [currentContent, originalContent, isOpen])
+    setHasChanges(false);
+  }, [currentContent, originalContent, isOpen]);
 
   // Track changes
   useEffect(() => {
-    const textChanged = editedContent.trim() !== currentContent.trim()
-    const attachmentsChanged = Array.isArray(originalContent) &&
-      JSON.stringify(editedAttachments) !== JSON.stringify(originalContent.filter(item => item?.type === 'image_url'))
+    const textChanged = editedContent.trim() !== currentContent.trim();
+    const attachmentsChanged =
+      Array.isArray(originalContent) &&
+      JSON.stringify(editedAttachments) !== JSON.stringify(originalContent.filter((item) => item?.type === 'image_url'));
 
-    setHasChanges(textChanged || attachmentsChanged)
-  }, [editedContent, currentContent, editedAttachments, originalContent])
+    setHasChanges(textChanged || attachmentsChanged);
+  }, [editedContent, currentContent, editedAttachments, originalContent]);
 
   const handleSave = () => {
-    const trimmedContent = editedContent.trim()
+    const trimmedContent = editedContent.trim();
 
     // Always save if there are changes (text or attachments)
     if (hasChanges) {
       // Create the new content structure
       if (editedAttachments.length > 0) {
         // Mixed content: combine text and attachments
-        const newContent: any[] = []
+        const newContent: any[] = [];
 
         if (trimmedContent) {
           newContent.push({
             type: 'text',
-            text: trimmedContent
-          })
+            text: trimmedContent,
+          });
         }
 
         // Add attachments
-        editedAttachments.forEach(attachment => {
-          newContent.push(attachment)
-        })
+        editedAttachments.forEach((attachment) => {
+          newContent.push(attachment);
+        });
 
-        onSave(newContent)
+        onSave(newContent);
       } else if (trimmedContent) {
         // Text only
-        onSave(trimmedContent)
+        onSave(trimmedContent);
       } else {
         // Edge case: no text and no attachments (shouldn't happen with hasChanges check)
         // But handle it gracefully by saving empty string
-        onSave('')
+        onSave('');
       }
     }
 
-    onClose()
-  }
+    onClose();
+  };
 
   const handleCancel = () => {
-    setEditedContent(currentContent)
-    setHasChanges(false)
-    onClose()
-  }
+    setEditedContent(currentContent);
+    setHasChanges(false);
+    onClose();
+  };
 
   const handleDeleteAttachment = (attachmentIndex: number) => {
-    const updatedAttachments = editedAttachments.filter((_, index) => index !== attachmentIndex)
-    setEditedAttachments(updatedAttachments)
-  }
+    const updatedAttachments = editedAttachments.filter((_, index) => index !== attachmentIndex);
+    setEditedAttachments(updatedAttachments);
+  };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.nativeEvent.isComposing || e.keyCode === 229) return
+    if (e.nativeEvent.isComposing || e.keyCode === 229) return;
     // Save on Ctrl/Cmd + Enter
     if ((e.ctrlKey || e.metaKey) && e.key === 'Enter' && hasChanges) {
-      e.preventDefault()
-      handleSave()
+      e.preventDefault();
+      handleSave();
     }
     // Cancel on Escape
     if (e.key === 'Escape') {
-      e.preventDefault()
-      handleCancel()
+      e.preventDefault();
+      handleCancel();
     }
-  }
+  };
 
   const getRoleDisplayName = () => {
     switch (messageRole) {
-      case 'user': return t('playground.roles.user')
-      case 'assistant': return t('playground.roles.assistant')
-      case 'system': return t('playground.roles.system')
-      case 'error': return t('playground.roles.error')
-      default: return t('playground.roles.message')
+      case 'user':
+        return t('playground.roles.user');
+      case 'assistant':
+        return t('playground.roles.assistant');
+      case 'system':
+        return t('playground.roles.system');
+      case 'error':
+        return t('playground.roles.error');
+      default:
+        return t('playground.roles.message');
     }
-  }
+  };
 
   const getRoleColor = () => {
     switch (messageRole) {
-      case 'user': return 'text-primary'
-      case 'assistant': return 'text-secondary-foreground'
-      case 'system': return 'text-info'
-      case 'error': return 'text-destructive'
-      default: return 'text-foreground'
+      case 'user':
+        return 'text-primary';
+      case 'assistant':
+        return 'text-secondary-foreground';
+      case 'system':
+        return 'text-info';
+      case 'error':
+        return 'text-destructive';
+      default:
+        return 'text-foreground';
     }
-  }
+  };
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && handleCancel()}>
@@ -151,9 +148,8 @@ export function EditMessageDialog({
           </DialogTitle>
           <DialogDescription>
             <Trans i18nKey="playground.edit.description">
-              Make changes to the message content. You can use{' '}
-              <kbd className="px-1.5 py-0.5 text-xs bg-muted rounded">Ctrl+Enter</kbd> to save or{' '}
-              <kbd className="px-1.5 py-0.5 text-xs bg-muted rounded">Esc</kbd> to cancel.
+              Make changes to the message content. You can use <kbd className="px-1.5 py-0.5 text-xs bg-muted rounded">Ctrl+Enter</kbd> to
+              save or <kbd className="px-1.5 py-0.5 text-xs bg-muted rounded">Esc</kbd> to cancel.
             </Trans>
           </DialogDescription>
         </DialogHeader>
@@ -240,30 +236,20 @@ export function EditMessageDialog({
                   ))}
                 </div>
               </div>
-              <div className="text-xs text-muted-foreground">
-                {t('playground.edit.attachments_hint')}
-              </div>
+              <div className="text-xs text-muted-foreground">{t('playground.edit.attachments_hint')}</div>
             </div>
           )}
         </div>
 
         <DialogFooter className="gap-2 sm:gap-3">
-          <Button
-            variant="outline"
-            onClick={handleCancel}
-            className="px-3 py-2 text-sm"
-          >
+          <Button variant="outline" onClick={handleCancel} className="px-3 py-2 text-sm">
             {t('playground.edit.cancel')}
           </Button>
-          <Button
-            onClick={handleSave}
-            disabled={!hasChanges}
-            className="px-3 py-2 text-sm"
-          >
+          <Button onClick={handleSave} disabled={!hasChanges} className="px-3 py-2 text-sm">
             {t('playground.edit.save')}
           </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
-  )
+  );
 }

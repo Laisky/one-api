@@ -1,10 +1,10 @@
-import * as z from "zod";
+import * as z from 'zod';
 
 // Enhanced channel schema with comprehensive validation
 export const channelSchema = z.object({
-  name: z.string().min(1, "Channel name is required"),
+  name: z.string().min(1, 'Channel name is required'),
   // Coerce because Select returns string
-  type: z.coerce.number().int().min(1, "Channel type is required"),
+  type: z.coerce.number().int().min(1, 'Channel type is required'),
   // key optional on edit; we enforce presence only on create in submit handler
   key: z.string().optional(),
   base_url: z.string().optional(),
@@ -14,7 +14,7 @@ export const channelSchema = z.object({
   model_configs: z.string().optional(),
   tooling: z.string().optional(),
   system_prompt: z.string().optional(),
-  groups: z.array(z.string()).default(["default"]),
+  groups: z.array(z.string()).default(['default']),
   // Coerce because inputs emit strings; enforce integers for these numeric fields
   priority: z.coerce.number().int().default(0),
   weight: z.coerce.number().int().default(0),
@@ -28,10 +28,8 @@ export const channelSchema = z.object({
       user_id: z.string().optional(),
       vertex_ai_project_id: z.string().optional(),
       vertex_ai_adc: z.string().optional(),
-      auth_type: z.string().default("personal_access_token"),
-      api_format: z
-        .enum(["chat_completion", "response"])
-        .default("chat_completion"),
+      auth_type: z.string().default('personal_access_token'),
+      api_format: z.enum(['chat_completion', 'response']).default('chat_completion'),
       // Supported endpoints for this channel (empty means use defaults)
       supported_endpoints: z.array(z.string()).optional(),
       mcp_tool_blacklist: z.array(z.string()).optional(),
@@ -41,7 +39,7 @@ export const channelSchema = z.object({
 });
 
 export type ChannelForm = z.infer<typeof channelSchema>;
-export type ChannelConfigForm = NonNullable<ChannelForm["config"]>;
+export type ChannelConfigForm = NonNullable<ChannelForm['config']>;
 
 export type ToolPricingEntry = {
   usd_per_call?: number;

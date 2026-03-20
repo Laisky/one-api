@@ -591,8 +591,9 @@ Two-phase example:
 ## Implementation Caveats (Important)
 
 1. **Channel `model_configs` now persists tier/cache ratio fields**
-  - Channel-side struct (`model.ModelConfigLocal`) includes `tiers`, `cached_input_ratio`, `cache_write_5m_ratio`, `cache_write_1h_ratio`.
-  - Runtime billing applies these overrides with channel-first precedence and retains three-layer fallback when base ratio/completion is omitted.
+
+- Channel-side struct (`model.ModelConfigLocal`) includes `tiers`, `cached_input_ratio`, `cache_write_5m_ratio`, `cache_write_1h_ratio`.
+- Runtime billing applies these overrides with channel-first precedence and retains three-layer fallback when base ratio/completion is omitted.
 
 2. **`GET /api/channel/default-pricing` response shape is stringified JSON**
    - `model_ratio`, `completion_ratio`, `model_configs`, and `tooling` are returned as strings.

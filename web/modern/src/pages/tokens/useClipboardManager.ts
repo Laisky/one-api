@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 /**
  * ClipboardManagerToken describes the minimal token fields required to manage clipboard feedback.
@@ -24,11 +24,8 @@ export interface ClipboardManagerResult {
  */
 export function useClipboardManager(): ClipboardManagerResult {
   const [copiedTokens, setCopiedTokens] = useState<Record<number, boolean>>({});
-  const [manualCopyToken, setManualCopyToken] =
-    useState<ClipboardManagerToken | null>(null);
-  const resetTimersRef = useRef<Record<number, ReturnType<typeof setTimeout>>>(
-    {}
-  );
+  const [manualCopyToken, setManualCopyToken] = useState<ClipboardManagerToken | null>(null);
+  const resetTimersRef = useRef<Record<number, ReturnType<typeof setTimeout>>>({});
 
   const handleCopySuccess = useCallback((tokenId: number) => {
     setCopiedTokens((prev) => ({

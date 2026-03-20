@@ -1,4 +1,9 @@
 {
+  "a11y": {
+    "close": "Close",
+    "close_drawer": "Close drawer",
+    "select_language": "Select language"
+  },
   "about": {
     "cta_models": "View Supported Models",
     "cta_repo": "GitHub Repository",
@@ -67,24 +72,14 @@
   "footer": {
     "copyright": "\u00a9 {{year}} One API. All rights reserved."
   },
-  "theme": {
-    "toggle": "Toggle theme",
-    "light": "Light",
-    "dark": "Dark",
-    "system": "System"
-  },
   "header": {
     "confirm_logout": "Confirm logout",
     "log_out": "Log out",
     "logging_out": "Logging out...",
     "logout_description": "Are you sure you want to log out? You'll need to sign in again to access your dashboard.",
     "navigation": "Navigation",
+    "profile": "Profile",
     "signed_in_as": "Signed in as"
-  },
-  "a11y": {
-    "close": "Close",
-    "close_drawer": "Close drawer",
-    "select_language": "Select language"
   },
   "home": {
     "iframe_title": "Home"
@@ -151,5 +146,11 @@
     },
     "subtitle": "Monitor the status and performance of all channels",
     "title": "Channel Status"
+  },
+  "theme": {
+    "dark": "Dark",
+    "light": "Light",
+    "system": "System",
+    "toggle": "Toggle theme"
   }
 }

@@ -8,7 +8,7 @@ import { Suspense, lazy, useEffect } from 'react';
 import { Route, BrowserRouter as Router, Routes } from 'react-router-dom';
 
 // Route-based code splitting: each page loads on demand
-const HomePage = lazy(() => import('@/pages/HomePage').then(m => ({ default: m.HomePage })));
+const HomePage = lazy(() => import('@/pages/HomePage').then((m) => ({ default: m.HomePage })));
 const NotFoundPage = lazy(() => import('@/pages/NotFoundPage'));
 const AboutPage = lazy(() => import('@/pages/about/AboutPage'));
 const GitHubOAuthPage = lazy(() => import('@/pages/auth/GitHubOAuthPage'));
@@ -17,15 +17,15 @@ const LoginPage = lazy(() => import('@/pages/auth/LoginPage'));
 const PasswordResetConfirmPage = lazy(() => import('@/pages/auth/PasswordResetConfirmPage'));
 const PasswordResetPage = lazy(() => import('@/pages/auth/PasswordResetPage'));
 const RegisterPage = lazy(() => import('@/pages/auth/RegisterPage'));
-const ChannelsPage = lazy(() => import('@/pages/channels/ChannelsPage').then(m => ({ default: m.ChannelsPage })));
+const ChannelsPage = lazy(() => import('@/pages/channels/ChannelsPage').then((m) => ({ default: m.ChannelsPage })));
 const EditChannelPage = lazy(() => import('@/pages/channels/EditChannelPage'));
 const DashboardPage = lazy(() => import('@/pages/dashboard/DashboardPage'));
-const LogsPage = lazy(() => import('@/pages/logs/LogsPage').then(m => ({ default: m.LogsPage })));
-const EditMCPServerPage = lazy(() => import('@/pages/mcp/EditMCPServerPage').then(m => ({ default: m.EditMCPServerPage })));
-const MCPServersPage = lazy(() => import('@/pages/mcp/MCPServersPage').then(m => ({ default: m.MCPServersPage })));
+const LogsPage = lazy(() => import('@/pages/logs/LogsPage').then((m) => ({ default: m.LogsPage })));
+const EditMCPServerPage = lazy(() => import('@/pages/mcp/EditMCPServerPage').then((m) => ({ default: m.EditMCPServerPage })));
+const MCPServersPage = lazy(() => import('@/pages/mcp/MCPServersPage').then((m) => ({ default: m.MCPServersPage })));
 const ModelsPage = lazy(() => import('@/pages/models/ModelsPage'));
 const EditRedemptionPage = lazy(() => import('@/pages/redemptions/EditRedemptionPage'));
-const RedemptionsPage = lazy(() => import('@/pages/redemptions/RedemptionsPage').then(m => ({ default: m.RedemptionsPage })));
+const RedemptionsPage = lazy(() => import('@/pages/redemptions/RedemptionsPage').then((m) => ({ default: m.RedemptionsPage })));
 const SettingsPage = lazy(() => import('@/pages/settings/SettingsPage'));
 const StatusPage = lazy(() => import('@/pages/status/StatusPage'));
 const EditTokenPage = lazy(() => import('@/pages/tokens/EditTokenPage'));
@@ -33,12 +33,12 @@ const TokensPage = lazy(() => import('@/pages/tokens/TokensPage'));
 const ToolsPage = lazy(() => import('@/pages/tools/ToolsPage'));
 const TopUpPage = lazy(() => import('@/pages/topup/TopUpPage'));
 const EditUserPage = lazy(() => import('@/pages/users/EditUserPage'));
-const UsersPage = lazy(() => import('@/pages/users/UsersPage').then(m => ({ default: m.UsersPage })));
+const UsersPage = lazy(() => import('@/pages/users/UsersPage').then((m) => ({ default: m.UsersPage })));
 const PlaygroundPage = lazy(() => import('@/pages/chat/PlaygroundPage'));
 
 // Dev tools — lazy loaded, tree-shaken in production
-const ResponsiveDebugger = lazy(() => import('@/components/dev/responsive-debugger').then(m => ({ default: m.ResponsiveDebugger })));
-const ResponsiveValidator = lazy(() => import('@/components/dev/responsive-validator').then(m => ({ default: m.ResponsiveValidator })));
+const ResponsiveDebugger = lazy(() => import('@/components/dev/responsive-debugger').then((m) => ({ default: m.ResponsiveDebugger })));
+const ResponsiveValidator = lazy(() => import('@/components/dev/responsive-validator').then((m) => ({ default: m.ResponsiveValidator })));
 
 // Minimal loading fallback — keeps layout stable during chunk load
 function PageLoader() {

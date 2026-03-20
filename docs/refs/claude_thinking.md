@@ -98,31 +98,30 @@ for block in response.content:
 ```
 
 ```typescript TypeScript
-import Anthropic from "@anthropic-ai/sdk";
+import Anthropic from '@anthropic-ai/sdk';
 
 const client = new Anthropic();
 
 const response = await client.messages.create({
-  model: "claude-sonnet-4-20250514",
+  model: 'claude-sonnet-4-20250514',
   max_tokens: 16000,
   thinking: {
-    type: "enabled",
+    type: 'enabled',
     budget_tokens: 10000,
   },
   messages: [
     {
-      role: "user",
-      content:
-        "Are there an infinite number of prime numbers such that n mod 4 == 3?",
+      role: 'user',
+      content: 'Are there an infinite number of prime numbers such that n mod 4 == 3?',
     },
   ],
 });
 
 // The response will contain summarized thinking blocks and text blocks
 for (const block of response.content) {
-  if (block.type === "thinking") {
+  if (block.type === 'thinking') {
     console.log(`\nThinking summary: ${block.thinking}`);
-  } else if (block.type === "text") {
+  } else if (block.type === 'text') {
     console.log(`\nResponse: ${block.text}`);
   }
 }
@@ -250,21 +249,21 @@ with client.messages.stream(
 ```
 
 ```typescript TypeScript
-import Anthropic from "@anthropic-ai/sdk";
+import Anthropic from '@anthropic-ai/sdk';
 
 const client = new Anthropic();
 
 const stream = await client.messages.stream({
-  model: "claude-opus-4-20250514",
+  model: 'claude-opus-4-20250514',
   max_tokens: 16000,
   thinking: {
-    type: "enabled",
+    type: 'enabled',
     budget_tokens: 10000,
   },
   messages: [
     {
-      role: "user",
-      content: "What is 27 * 453?",
+      role: 'user',
+      content: 'What is 27 * 453?',
     },
   ],
 });
@@ -273,27 +272,27 @@ let thinkingStarted = false;
 let responseStarted = false;
 
 for await (const event of stream) {
-  if (event.type === "content_block_start") {
+  if (event.type === 'content_block_start') {
     console.log(`\nStarting ${event.content_block.type} block...`);
     // Reset flags for each new block
     thinkingStarted = false;
     responseStarted = false;
-  } else if (event.type === "content_block_delta") {
-    if (event.delta.type === "thinking_delta") {
+  } else if (event.type === 'content_block_delta') {
+    if (event.delta.type === 'thinking_delta') {
       if (!thinkingStarted) {
-        process.stdout.write("Thinking: ");
+        process.stdout.write('Thinking: ');
         thinkingStarted = true;
       }
       process.stdout.write(event.delta.thinking);
-    } else if (event.delta.type === "text_delta") {
+    } else if (event.delta.type === 'text_delta') {
       if (!responseStarted) {
-        process.stdout.write("Response: ");
+        process.stdout.write('Response: ');
         responseStarted = true;
       }
       process.stdout.write(event.delta.text);
     }
-  } else if (event.type === "content_block_stop") {
-    console.log("\nBlock complete.");
+  } else if (event.type === 'content_block_stop') {
+    console.log('\nBlock complete.');
   }
 }
 ```
@@ -2667,6 +2666,7 @@ The gateway implements a **transparent signature caching solution with intellige
 #### Core Architecture
 
 **Principle**: The gateway acts as an intelligent bridge that:
+
 1. **Captures and stores** signatures from Claude responses automatically
 2. **Restores signatures** when converting OpenAI requests back to Claude format
 3. **Maintains this process invisibly** to OpenAI clients
@@ -2687,12 +2687,14 @@ OpenAI Client → Gateway → Claude Upstream
 
 **1. Cache Key Strategy**:
 Uses a hierarchical key structure that uniquely identifies each thinking block:
+
 - `token_id`: Isolates signatures per API token (direct context, no user lookup needed)
 - `conversation_id`: Generated deterministically from message history hash
 - `message_index`: Position in conversation history
 - `thinking_block_index`: Handles multiple thinking blocks per message
 
 **2. Conversation ID Generation**:
+
 ```go
 func generateConversationID(messages []model.Message) string {
     var signature strings.Builder
@@ -2714,6 +2716,7 @@ func generateConversationID(messages []model.Message) string {
 ```
 
 **Why Hash-based Conversation ID?**
+
 - **Universal Compatibility**: Works with any OpenAI client without custom headers
 - **Deterministic**: Same conversation structure always generates same ID
 - **Stateless**: No server-side conversation state required
@@ -2744,6 +2747,7 @@ case "content_block_start":
 ```
 
 **2. Non-Streaming Response Handling**:
+
 ```go
 case "thinking", "redacted_thinking":
     if v.Thinking != nil {
@@ -2759,6 +2763,7 @@ case "thinking", "redacted_thinking":
 ```
 
 **Key Points**:
+
 - Signatures are **never exposed** to OpenAI clients
 - Both `thinking` and `redacted_thinking` blocks are supported
 - Caching happens transparently during response processing
@@ -2869,22 +2874,26 @@ if useFallbackMode && claudeRequest.Thinking != nil {
 #### Key Benefits of This Implementation
 
 **1. Transparent Operation**:
+
 - OpenAI clients work unchanged - no API modifications needed
 - Maintains full backward compatibility with existing OpenAI clients
 - Preserves existing OpenAI API contract
 
 **2. Robust Signature Management**:
+
 - Automatic signature caching during response processing
 - Intelligent signature restoration during request conversion
 - Graceful fallback when signatures unavailable
 
 **3. Production-Ready Architecture**:
+
 - Hash-based conversation ID generation (no custom headers required)
 - TokenID-based isolation (direct context, no user lookups)
 - TTL-based cache management with automatic cleanup
 - Optional Redis backend support for distributed deployments
 
 **4. Comprehensive Edge Case Handling**:
+
 - Cache expiration scenarios
 - Server restart situations
 - Distributed deployment support
@@ -2892,6 +2901,7 @@ if useFallbackMode && claudeRequest.Thinking != nil {
 - Memory pressure situations
 
 **5. Enhanced Fallback Mechanism**:
+
 - Converts thinking content to `<think>` format when signatures missing
 - Automatically disables `thinking` parameter to prevent Claude validation errors
 - Maintains thinking content availability for Claude reasoning

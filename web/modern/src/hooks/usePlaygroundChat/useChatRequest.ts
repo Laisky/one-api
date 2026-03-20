@@ -1,10 +1,7 @@
-import { useCallback } from "react";
-import {
-  getModelCapabilities,
-  isOpenAIMediumOnlyReasoningModel,
-} from "@/lib/model-capabilities";
-import type { Message } from "@/lib/utils";
-import type { ChatRequestConfig } from "./types";
+import { useCallback } from 'react';
+import { getModelCapabilities, isOpenAIMediumOnlyReasoningModel } from '@/lib/model-capabilities';
+import type { Message } from '@/lib/utils';
+import type { ChatRequestConfig } from './types';
 
 interface ChatCallbacks {
   onUpdate: (content: string, reasoning: string) => void;
@@ -14,11 +11,7 @@ interface ChatCallbacks {
 
 export const useChatRequest = (config: ChatRequestConfig) => {
   const makeRequest = useCallback(
-    async (
-      messages: Message[],
-      signal: AbortSignal,
-      callbacks: ChatCallbacks
-    ) => {
+    async (messages: Message[], signal: AbortSignal, callbacks: ChatCallbacks) => {
       const {
         selectedToken,
         selectedModel,
@@ -40,38 +33,31 @@ export const useChatRequest = (config: ChatRequestConfig) => {
         // Get model capabilities to determine which parameters to include
         const capabilities = getModelCapabilities(selectedModel);
         const effectiveReasoningEffort =
-          capabilities.supportsReasoningEffort &&
-          reasoningEffort &&
-          reasoningEffort !== "none"
+          capabilities.supportsReasoningEffort && reasoningEffort && reasoningEffort !== 'none'
             ? selectedModel && isOpenAIMediumOnlyReasoningModel(selectedModel)
-              ? "medium"
+              ? 'medium'
               : reasoningEffort
             : undefined;
 
-        const response = await fetch("/v1/chat/completions", {
-          method: "POST",
+        const response = await fetch('/v1/chat/completions', {
+          method: 'POST',
           headers: {
             Authorization: `Bearer ${selectedToken}`,
-            "Content-Type": "application/json",
-            Accept: "text/event-stream",
+            'Content-Type': 'application/json',
+            Accept: 'text/event-stream',
           },
           body: JSON.stringify({
             messages: (() => {
               // Filter out error messages
               const filteredMessages = messages
-                .filter((msg) => msg.role !== "error")
+                .filter((msg) => msg.role !== 'error')
                 .map((msg) => ({ role: msg.role, content: msg.content }));
 
               // Prepend system message if it exists and isn't already at the start
               if (systemMessage.trim()) {
-                const hasSystemMessage = filteredMessages.some(
-                  (msg) => msg.role === "system"
-                );
+                const hasSystemMessage = filteredMessages.some((msg) => msg.role === 'system');
                 if (!hasSystemMessage) {
-                  return [
-                    { role: "system", content: systemMessage.trim() },
-                    ...filteredMessages,
-                  ];
+                  return [{ role: 'system', content: systemMessage.trim() }, ...filteredMessages];
                 }
               }
 
@@ -100,7 +86,7 @@ export const useChatRequest = (config: ChatRequestConfig) => {
             ...(capabilities.supportsStop &&
               stopSequences && {
                 stop: stopSequences
-                  .split(",")
+                  .split(',')
                   .map((s) => s.trim())
                   .filter((s) => s),
               }),
@@ -112,7 +98,7 @@ export const useChatRequest = (config: ChatRequestConfig) => {
             ...(capabilities.supportsThinking &&
               thinkingEnabled && {
                 thinking: {
-                  type: "enabled",
+                  type: 'enabled',
                   budget_tokens: thinkingBudgetTokens[0],
                 },
               }),
@@ -132,10 +118,7 @@ export const useChatRequest = (config: ChatRequestConfig) => {
                 // Extract detailed error message from various possible JSON structures
                 if (errorJson.error?.message) {
                   errorMessage = errorJson.error.message;
-                } else if (
-                  errorJson.error &&
-                  typeof errorJson.error === "string"
-                ) {
+                } else if (errorJson.error && typeof errorJson.error === 'string') {
                   errorMessage = errorJson.error;
                 } else if (errorJson.message) {
                   errorMessage = errorJson.message;
@@ -154,7 +137,7 @@ export const useChatRequest = (config: ChatRequestConfig) => {
             }
           } catch (readError) {
             // If we can't read the response body, fall back to status
-            console.warn("Failed to read error response body:", readError);
+            console.warn('Failed to read error response body:', readError);
           }
           throw new Error(errorMessage);
         }
@@ -163,11 +146,11 @@ export const useChatRequest = (config: ChatRequestConfig) => {
         const decoder = new TextDecoder();
 
         if (!reader) {
-          throw new Error("No response body");
+          throw new Error('No response body');
         }
 
-        let assistantContent = "";
-        let reasoningContent = "";
+        let assistantContent = '';
+        let reasoningContent = '';
 
         while (true) {
           const { done, value } = await reader.read();
@@ -178,21 +161,21 @@ export const useChatRequest = (config: ChatRequestConfig) => {
           }
 
           const chunk = decoder.decode(value);
-          const lines = chunk.split("\n");
+          const lines = chunk.split('\n');
 
           for (const line of lines) {
-            if (line.startsWith("data: ")) {
+            if (line.startsWith('data: ')) {
               const data = line.slice(6);
 
-              if (data === "[DONE]") {
+              if (data === '[DONE]') {
                 continue;
               }
 
               try {
                 const parsed = JSON.parse(data);
 
-                if (parsed.type === "error") {
-                  const errorMsg = parsed.error || "Stream error";
+                if (parsed.type === 'error') {
+                  const errorMsg = parsed.error || 'Stream error';
                   throw new Error(errorMsg);
                 }
 
@@ -202,28 +185,19 @@ export const useChatRequest = (config: ChatRequestConfig) => {
                   // Handle regular content
                   if (delta.content) {
                     // Check if content is a string (normal content) or array (Mistral thinking format)
-                    if (typeof delta.content === "string") {
+                    if (typeof delta.content === 'string') {
                       assistantContent += delta.content;
                     } else if (Array.isArray(delta.content)) {
                       // Handle Mistral's content array format
                       for (const contentItem of delta.content) {
-                        if (
-                          contentItem.type === "thinking" &&
-                          contentItem.thinking
-                        ) {
+                        if (contentItem.type === 'thinking' && contentItem.thinking) {
                           // Extract thinking content from Mistral format
                           for (const thinkingItem of contentItem.thinking) {
-                            if (
-                              thinkingItem.type === "text" &&
-                              thinkingItem.text
-                            ) {
+                            if (thinkingItem.type === 'text' && thinkingItem.text) {
                               reasoningContent += thinkingItem.text;
                             }
                           }
-                        } else if (
-                          contentItem.type === "text" &&
-                          contentItem.text
-                        ) {
+                        } else if (contentItem.type === 'text' && contentItem.text) {
                           // Regular text content
                           assistantContent += contentItem.text;
                         }
@@ -248,7 +222,7 @@ export const useChatRequest = (config: ChatRequestConfig) => {
                   callbacks.onUpdate(assistantContent, reasoningContent);
                 }
               } catch (parseError) {
-                console.warn("Failed to parse SSE data:", parseError);
+                console.warn('Failed to parse SSE data:', parseError);
               }
             }
           }

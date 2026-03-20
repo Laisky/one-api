@@ -161,7 +161,7 @@ export function ToolsPage() {
 
   if (loading) {
     return (
-      <ResponsivePageContainer title={tr('title', 'MCP Tools')} description={tr('description', 'Browse tools synced from MCP servers.') }>
+      <ResponsivePageContainer title={tr('title', 'MCP Tools')} description={tr('description', 'Browse tools synced from MCP servers.')}>
         <Card className="border-0 shadow-none md:border md:shadow-sm">
           <CardContent className="flex items-center justify-center py-12">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
@@ -244,27 +244,41 @@ export function ToolsPage() {
                               return (
                                 <div key={`${serverName}-${tool.name}`} className="rounded-xl border bg-card p-4 shadow-sm space-y-3">
                                   <div>
-                                    <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">{tr('table.tool', 'Tool')}</div>
+                                    <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                                      {tr('table.tool', 'Tool')}
+                                    </div>
                                     <div className="font-mono text-sm break-all">{tool.name}</div>
                                   </div>
                                   <div>
-                                    <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">{tr('table.description', 'Description')}</div>
+                                    <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                                      {tr('table.description', 'Description')}
+                                    </div>
                                     <div className="text-sm text-muted-foreground break-words">{tool.description || '-'}</div>
                                   </div>
                                   <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                                     <div>
-                                      <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">{tr('table.status', 'Status')}</div>
-                                      <div className="text-sm">{tool.status === 1 ? tr('status.enabled', 'Enabled') : tr('status.disabled', 'Disabled')}</div>
+                                      <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                                        {tr('table.status', 'Status')}
+                                      </div>
+                                      <div className="text-sm">
+                                        {tool.status === 1 ? tr('status.enabled', 'Enabled') : tr('status.disabled', 'Disabled')}
+                                      </div>
                                     </div>
                                     <div>
-                                      <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">{tr('table.pricing', 'Pricing')}</div>
+                                      <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                                        {tr('table.pricing', 'Pricing')}
+                                      </div>
                                       <div className="text-sm">{formatPricing(tool.default_pricing)}</div>
                                     </div>
                                   </div>
                                   <div>
-                                    <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">{tr('table.schema', 'Input Schema')}</div>
+                                    <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                                      {tr('table.schema', 'Input Schema')}
+                                    </div>
                                     {schema ? (
-                                      <pre className="mt-1 max-h-40 overflow-auto rounded-lg bg-muted/40 p-3 text-xs break-all whitespace-pre-wrap">{schema}</pre>
+                                      <pre className="mt-1 max-h-40 overflow-auto rounded-lg bg-muted/40 p-3 text-xs break-all whitespace-pre-wrap">
+                                        {schema}
+                                      </pre>
                                     ) : (
                                       <div className="text-sm text-muted-foreground">-</div>
                                     )}
@@ -292,9 +306,19 @@ export function ToolsPage() {
                                     <tr key={`${serverName}-${tool.name}`} className="border-b hover:bg-muted/50">
                                       <td className="py-2 px-3 font-mono text-sm">{tool.name}</td>
                                       <td className="py-2 px-3">{tool.description || '-'}</td>
-                                      <td className="py-2 px-3">{tool.status === 1 ? tr('status.enabled', 'Enabled') : tr('status.disabled', 'Disabled')}</td>
+                                      <td className="py-2 px-3">
+                                        {tool.status === 1 ? tr('status.enabled', 'Enabled') : tr('status.disabled', 'Disabled')}
+                                      </td>
                                       <td className="py-2 px-3">{formatPricing(tool.default_pricing)}</td>
-                                      <td className="py-2 px-3">{schema ? <span className="block max-w-xs truncate font-mono text-xs" title={schema}>{schema}</span> : '-'}</td>
+                                      <td className="py-2 px-3">
+                                        {schema ? (
+                                          <span className="block max-w-xs truncate font-mono text-xs" title={schema}>
+                                            {schema}
+                                          </span>
+                                        ) : (
+                                          '-'
+                                        )}
+                                      </td>
                                     </tr>
                                   );
                                 })}

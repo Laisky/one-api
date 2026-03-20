@@ -6,290 +6,287 @@
 @tailwind utilities;
 
 @layer base {
-	:root {
-		/* Slate & Teal — clean, modern, data-forward */
-		--background: 220 10% 98%;
-		--foreground: 220 15% 10%;
-		--card: 220 8% 99%;
-		--card-foreground: 220 15% 10%;
-		--popover: 220 8% 99%;
-		--popover-foreground: 220 15% 10%;
-		--primary: 220 15% 28%;
-		--primary-foreground: 220 10% 98%;
-		--secondary: 220 8% 94%;
-		--secondary-foreground: 220 15% 14%;
-		--muted: 220 6% 93%;
-		--muted-foreground: 220 5% 44%;
-		--accent: 172 60% 40%;
-		--accent-foreground: 220 15% 10%;
-		--destructive: 4 62% 50%;
-		--destructive-foreground: 0 0% 100%;
-		--border: 220 8% 89%;
-		--input: 220 8% 89%;
-		--ring: 172 60% 40%;
-		/* Chart: vivid, well-separated across the color wheel */
-		--chart-1: 172 65% 38%;
-		--chart-2: 24 80% 52%;
-		--chart-3: 220 60% 52%;
-		--chart-4: 350 65% 55%;
-		--chart-5: 45 78% 48%;
-		--chart-6: 262 45% 55%;
-		--chart-7: 190 70% 42%;
-		--chart-8: 14 68% 48%;
-		--chart-9: 145 55% 40%;
-		--chart-10: 200 55% 48%;
-		--chart-11: 330 50% 52%;
-		--chart-12: 80 50% 44%;
-		--chart-13: 280 40% 50%;
-		--chart-14: 35 60% 46%;
-		--chart-15: 160 50% 42%;
-		--radius: 0.5rem;
+  :root {
+    /* Slate & Teal — clean, modern, data-forward */
+    --background: 220 10% 98%;
+    --foreground: 220 15% 10%;
+    --card: 220 8% 99%;
+    --card-foreground: 220 15% 10%;
+    --popover: 220 8% 99%;
+    --popover-foreground: 220 15% 10%;
+    --primary: 220 15% 28%;
+    --primary-foreground: 220 10% 98%;
+    --secondary: 220 8% 94%;
+    --secondary-foreground: 220 15% 14%;
+    --muted: 220 6% 93%;
+    --muted-foreground: 220 5% 44%;
+    --accent: 172 60% 40%;
+    --accent-foreground: 220 15% 10%;
+    --destructive: 4 62% 50%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 220 8% 89%;
+    --input: 220 8% 89%;
+    --ring: 172 60% 40%;
+    /* Chart: vivid, well-separated across the color wheel */
+    --chart-1: 172 65% 38%;
+    --chart-2: 24 80% 52%;
+    --chart-3: 220 60% 52%;
+    --chart-4: 350 65% 55%;
+    --chart-5: 45 78% 48%;
+    --chart-6: 262 45% 55%;
+    --chart-7: 190 70% 42%;
+    --chart-8: 14 68% 48%;
+    --chart-9: 145 55% 40%;
+    --chart-10: 200 55% 48%;
+    --chart-11: 330 50% 52%;
+    --chart-12: 80 50% 44%;
+    --chart-13: 280 40% 50%;
+    --chart-14: 35 60% 46%;
+    --chart-15: 160 50% 42%;
+    --radius: 0.5rem;
 
-		/* Semantic status colors */
-		--success: 158 50% 40%;
-		--success-foreground: 160 55% 16%;
-		--success-muted: 155 35% 96%;
-		--success-border: 158 35% 78%;
+    /* Semantic status colors */
+    --success: 158 50% 40%;
+    --success-foreground: 160 55% 16%;
+    --success-muted: 155 35% 96%;
+    --success-border: 158 35% 78%;
 
-		--warning: 38 80% 48%;
-		--warning-foreground: 32 75% 18%;
-		--warning-muted: 40 65% 96%;
-		--warning-border: 38 55% 76%;
+    --warning: 38 80% 48%;
+    --warning-foreground: 32 75% 18%;
+    --warning-muted: 40 65% 96%;
+    --warning-border: 38 55% 76%;
 
-		--info: 210 55% 48%;
-		--info-foreground: 215 60% 18%;
-		--info-muted: 212 50% 97%;
-		--info-border: 210 42% 80%;
-	}
+    --info: 210 55% 48%;
+    --info-foreground: 215 60% 18%;
+    --info-muted: 212 50% 97%;
+    --info-border: 210 42% 80%;
+  }
 
-	.dark {
-		/* Slate & Teal — dark mode */
-		--background: 220 12% 8%;
-		--foreground: 220 8% 92%;
-		--card: 220 10% 10%;
-		--card-foreground: 220 8% 92%;
-		--popover: 220 10% 10%;
-		--popover-foreground: 220 8% 92%;
-		--primary: 172 50% 50%;
-		--primary-foreground: 220 12% 8%;
-		--secondary: 220 8% 16%;
-		--secondary-foreground: 220 8% 92%;
-		--muted: 220 8% 16%;
-		--muted-foreground: 220 6% 55%;
-		--accent: 172 50% 50%;
-		--accent-foreground: 220 12% 8%;
-		--destructive: 4 55% 42%;
-		--destructive-foreground: 220 8% 92%;
-		--border: 220 8% 18%;
-		--input: 220 8% 18%;
-		--ring: 172 50% 50%;
-		/* Chart: boosted lightness for dark backgrounds */
-		--chart-1: 172 60% 50%;
-		--chart-2: 24 75% 58%;
-		--chart-3: 220 55% 60%;
-		--chart-4: 350 60% 62%;
-		--chart-5: 45 72% 55%;
-		--chart-6: 262 42% 62%;
-		--chart-7: 190 60% 52%;
-		--chart-8: 14 62% 56%;
-		--chart-9: 145 50% 50%;
-		--chart-10: 200 50% 56%;
-		--chart-11: 330 45% 60%;
-		--chart-12: 80 45% 52%;
-		--chart-13: 280 38% 58%;
-		--chart-14: 35 55% 54%;
-		--chart-15: 160 45% 50%;
+  .dark {
+    /* Slate & Teal — dark mode */
+    --background: 220 12% 8%;
+    --foreground: 220 8% 92%;
+    --card: 220 10% 10%;
+    --card-foreground: 220 8% 92%;
+    --popover: 220 10% 10%;
+    --popover-foreground: 220 8% 92%;
+    --primary: 172 50% 50%;
+    --primary-foreground: 220 12% 8%;
+    --secondary: 220 8% 16%;
+    --secondary-foreground: 220 8% 92%;
+    --muted: 220 8% 16%;
+    --muted-foreground: 220 6% 55%;
+    --accent: 172 50% 50%;
+    --accent-foreground: 220 12% 8%;
+    --destructive: 4 55% 42%;
+    --destructive-foreground: 220 8% 92%;
+    --border: 220 8% 18%;
+    --input: 220 8% 18%;
+    --ring: 172 50% 50%;
+    /* Chart: boosted lightness for dark backgrounds */
+    --chart-1: 172 60% 50%;
+    --chart-2: 24 75% 58%;
+    --chart-3: 220 55% 60%;
+    --chart-4: 350 60% 62%;
+    --chart-5: 45 72% 55%;
+    --chart-6: 262 42% 62%;
+    --chart-7: 190 60% 52%;
+    --chart-8: 14 62% 56%;
+    --chart-9: 145 50% 50%;
+    --chart-10: 200 50% 56%;
+    --chart-11: 330 45% 60%;
+    --chart-12: 80 45% 52%;
+    --chart-13: 280 38% 58%;
+    --chart-14: 35 55% 54%;
+    --chart-15: 160 45% 50%;
 
-		/* Semantic status colors */
-		--success: 158 45% 48%;
-		--success-foreground: 155 40% 82%;
-		--success-muted: 160 30% 12%;
-		--success-border: 158 28% 25%;
+    /* Semantic status colors */
+    --success: 158 45% 48%;
+    --success-foreground: 155 40% 82%;
+    --success-muted: 160 30% 12%;
+    --success-border: 158 28% 25%;
 
-		--warning: 38 75% 52%;
-		--warning-foreground: 36 65% 82%;
-		--warning-muted: 38 35% 12%;
-		--warning-border: 38 35% 25%;
+    --warning: 38 75% 52%;
+    --warning-foreground: 36 65% 82%;
+    --warning-muted: 38 35% 12%;
+    --warning-border: 38 35% 25%;
 
-		--info: 210 52% 58%;
-		--info-foreground: 212 48% 82%;
-		--info-muted: 215 30% 12%;
-		--info-border: 215 30% 25%;
-	}
+    --info: 210 52% 58%;
+    --info-foreground: 212 48% 82%;
+    --info-muted: 215 30% 12%;
+    --info-border: 215 30% 25%;
+  }
 }
 
 @layer base {
+  html,
+  body,
+  #root {
+    /* Fallback for older browsers */
+    min-height: 100vh;
+    /* Override with dynamic viewport height on mobile to prevent extra blank space */
+    min-height: 100dvh;
+    height: auto;
+    margin: 0;
+  }
 
-	html,
-	body,
-	#root {
-		/* Fallback for older browsers */
-		min-height: 100vh;
-		/* Override with dynamic viewport height on mobile to prevent extra blank space */
-		min-height: 100dvh;
-		height: auto;
-		margin: 0;
-	}
+  * {
+    @apply border-border;
+  }
 
-	* {
-		@apply border-border;
-	}
+  body {
+    @apply bg-background text-foreground;
+    /* Do not force overflow-x hidden globally; allow tables and toolbars to scroll when needed */
 
-	body {
-		@apply bg-background text-foreground;
-		/* Do not force overflow-x hidden globally; allow tables and toolbars to scroll when needed */
+    text-autospace: normal;
+  }
 
-		text-autospace: normal;
-	}
+  input,
+  select,
+  textarea {
+    font-size: 1rem;
+    line-height: 1.5;
+  }
 
-	input,
-	select,
-	textarea {
-		font-size: 1rem;
-		line-height: 1.5;
-	}
+  @media (min-width: 640px) {
+    input,
+    select,
+    textarea {
+      font-size: 0.875rem;
+    }
+  }
 
-	@media (min-width: 640px) {
+  input[type='date'],
+  input[type='time'],
+  input[type='datetime-local'] {
+    font-size: 1rem;
+  }
 
-		input,
-		select,
-		textarea {
-			font-size: 0.875rem;
-		}
-	}
+  input[type='date']::-webkit-date-and-time-value,
+  input[type='time']::-webkit-date-and-time-value,
+  input[type='datetime-local']::-webkit-date-and-time-value {
+    min-height: 2.75rem;
+    line-height: 1.5;
+    font-size: 1rem;
+  }
 
-	input[type='date'],
-	input[type='time'],
-	input[type='datetime-local'] {
-		font-size: 1rem;
-	}
-
-	input[type='date']::-webkit-date-and-time-value,
-	input[type='time']::-webkit-date-and-time-value,
-	input[type='datetime-local']::-webkit-date-and-time-value {
-		min-height: 2.75rem;
-		line-height: 1.5;
-		font-size: 1rem;
-	}
-
-	input[type='date']::-webkit-datetime-edit,
-	input[type='date']::-webkit-datetime-edit-fields-wrapper,
-	input[type='date']::-webkit-datetime-edit-text,
-	input[type='date']::-webkit-datetime-edit-month-field,
-	input[type='date']::-webkit-datetime-edit-day-field,
-	input[type='date']::-webkit-datetime-edit-year-field,
-	input[type='time']::-webkit-datetime-edit,
-	input[type='time']::-webkit-datetime-edit-fields-wrapper,
-	input[type='time']::-webkit-datetime-edit-text,
-	input[type='time']::-webkit-datetime-edit-hour-field,
-	input[type='time']::-webkit-datetime-edit-minute-field,
-	input[type='datetime-local']::-webkit-datetime-edit,
-	input[type='datetime-local']::-webkit-datetime-edit-fields-wrapper,
-	input[type='datetime-local']::-webkit-datetime-edit-text,
-	input[type='datetime-local']::-webkit-datetime-edit-month-field,
-	input[type='datetime-local']::-webkit-datetime-edit-day-field,
-	input[type='datetime-local']::-webkit-datetime-edit-year-field,
-	input[type='datetime-local']::-webkit-datetime-edit-hour-field,
-	input[type='datetime-local']::-webkit-datetime-edit-minute-field {
-		font-size: 1rem;
-		line-height: 1.5;
-	}
+  input[type='date']::-webkit-datetime-edit,
+  input[type='date']::-webkit-datetime-edit-fields-wrapper,
+  input[type='date']::-webkit-datetime-edit-text,
+  input[type='date']::-webkit-datetime-edit-month-field,
+  input[type='date']::-webkit-datetime-edit-day-field,
+  input[type='date']::-webkit-datetime-edit-year-field,
+  input[type='time']::-webkit-datetime-edit,
+  input[type='time']::-webkit-datetime-edit-fields-wrapper,
+  input[type='time']::-webkit-datetime-edit-text,
+  input[type='time']::-webkit-datetime-edit-hour-field,
+  input[type='time']::-webkit-datetime-edit-minute-field,
+  input[type='datetime-local']::-webkit-datetime-edit,
+  input[type='datetime-local']::-webkit-datetime-edit-fields-wrapper,
+  input[type='datetime-local']::-webkit-datetime-edit-text,
+  input[type='datetime-local']::-webkit-datetime-edit-month-field,
+  input[type='datetime-local']::-webkit-datetime-edit-day-field,
+  input[type='datetime-local']::-webkit-datetime-edit-year-field,
+  input[type='datetime-local']::-webkit-datetime-edit-hour-field,
+  input[type='datetime-local']::-webkit-datetime-edit-minute-field {
+    font-size: 1rem;
+    line-height: 1.5;
+  }
 }
 
 /* Enhanced data table styles */
 @layer components {
-	.data-table {
-		@apply w-full border-collapse;
-	}
+  .data-table {
+    @apply w-full border-collapse;
+  }
 
-	.data-table th {
-		@apply bg-muted/50 font-medium text-left px-4 py-3 border-b;
-	}
+  .data-table th {
+    @apply bg-muted/50 font-medium text-left px-4 py-3 border-b;
+  }
 
-	.data-table td {
-		@apply px-4 py-3 border-b;
-	}
+  .data-table td {
+    @apply px-4 py-3 border-b;
+  }
 
-	.data-table tbody tr:hover {
-		@apply bg-muted/30;
-	}
+  .data-table tbody tr:hover {
+    @apply bg-muted/30;
+  }
 
-	/* Mobile table enhancements */
-	@media (max-width: 768px) {
-		.data-table {
-			@apply mobile-table;
-		}
-	}
+  /* Mobile table enhancements */
+  @media (max-width: 768px) {
+    .data-table {
+      @apply mobile-table;
+    }
+  }
 }
 
 /* Form enhancements */
 @layer components {
-	.form-grid {
-		@apply grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4;
-	}
+  .form-grid {
+    @apply grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4;
+  }
 
-	.form-row {
-		@apply flex flex-col md:flex-row gap-4;
-	}
+  .form-row {
+    @apply flex flex-col md:flex-row gap-4;
+  }
 
-	.form-actions {
-		@apply flex flex-col md:flex-row gap-2 pt-4;
-	}
+  .form-actions {
+    @apply flex flex-col md:flex-row gap-2 pt-4;
+  }
 
-	.json-editor {
-		@apply font-mono text-sm bg-muted/20 border rounded-md p-3;
-	}
+  .json-editor {
+    @apply font-mono text-sm bg-muted/20 border rounded-md p-3;
+  }
 
-	.json-valid {
-		@apply border-success-border bg-success-muted;
-	}
+  .json-valid {
+    @apply border-success-border bg-success-muted;
+  }
 
-	.json-invalid {
-		@apply border-destructive/30 bg-destructive/5;
-	}
+  .json-invalid {
+    @apply border-destructive/30 bg-destructive/5;
+  }
 
-	/* Date picker icon fixes for dark theme */
-	.dark input[type="date"]::-webkit-calendar-picker-indicator {
-		filter: invert(1);
-		opacity: 0.8;
-	}
+  /* Date picker icon fixes for dark theme */
+  .dark input[type='date']::-webkit-calendar-picker-indicator {
+    filter: invert(1);
+    opacity: 0.8;
+  }
 
-	.dark input[type="time"]::-webkit-calendar-picker-indicator {
-		filter: invert(1);
-		opacity: 0.8;
-	}
+  .dark input[type='time']::-webkit-calendar-picker-indicator {
+    filter: invert(1);
+    opacity: 0.8;
+  }
 
-	.dark input[type="datetime-local"]::-webkit-calendar-picker-indicator {
-		filter: invert(1);
-		opacity: 0.8;
-	}
+  .dark input[type='datetime-local']::-webkit-calendar-picker-indicator {
+    filter: invert(1);
+    opacity: 0.8;
+  }
 
-	/* Firefox date picker icon fix for dark theme */
-	@supports (-moz-appearance: none) {
+  /* Firefox date picker icon fix for dark theme */
+  @supports (-moz-appearance: none) {
+    .dark input[type='date'],
+    .dark input[type='time'],
+    .dark input[type='datetime-local'] {
+      color-scheme: dark;
+    }
+  }
 
-		.dark input[type="date"],
-		.dark input[type="time"],
-		.dark input[type="datetime-local"] {
-			color-scheme: dark;
-		}
-	}
-
-	/* Prevent absolutely-positioned descendants (e.g., injected inputs) from stretching document height */
-	.bounded-abs *[style*="position: absolute"],
-	.bounded-abs input[type="checkbox"][style*="position: absolute"] {
-		position: absolute !important;
-		inset: auto auto auto auto;
-		/* do not push layout */
-	}
+  /* Prevent absolutely-positioned descendants (e.g., injected inputs) from stretching document height */
+  .bounded-abs *[style*='position: absolute'],
+  .bounded-abs input[type='checkbox'][style*='position: absolute'] {
+    position: absolute !important;
+    inset: auto auto auto auto;
+    /* do not push layout */
+  }
 }
 
 /* Notification progress bar animation */
 @keyframes shrink {
-	from {
-		transform: scaleX(1);
-	}
+  from {
+    transform: scaleX(1);
+  }
 
-	to {
-		transform: scaleX(0);
-	}
+  to {
+    transform: scaleX(0);
+  }
 }

@@ -1,19 +1,19 @@
-import { Button } from '@/components/ui/button'
+import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
-import { Copy, Edit2, MoreHorizontal, RotateCcw, Trash2 } from 'lucide-react'
+} from '@/components/ui/dropdown-menu';
+import { Copy, Edit2, MoreHorizontal, RotateCcw, Trash2 } from 'lucide-react';
 
 interface AssistantMessageActionsProps {
-  onCopyMessage: () => void
-  onRegenerateMessage?: () => void
-  onEditMessage?: () => void
-  onDeleteMessage?: () => void
-  isStreaming?: boolean
+  onCopyMessage: () => void;
+  onRegenerateMessage?: () => void;
+  onEditMessage?: () => void;
+  onDeleteMessage?: () => void;
+  isStreaming?: boolean;
 }
 
 export function AssistantMessageActions({
@@ -21,7 +21,7 @@ export function AssistantMessageActions({
   onRegenerateMessage,
   onEditMessage,
   onDeleteMessage,
-  isStreaming = false
+  isStreaming = false,
 }: AssistantMessageActionsProps) {
   return (
     <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-200">
@@ -65,5 +65,5 @@ export function AssistantMessageActions({
         </DropdownMenuContent>
       </DropdownMenu>
     </div>
-  )
+  );
 }

@@ -1,408 +1,413 @@
-import { useNotifications } from '@/components/ui/notifications'
-import { api } from '@/lib/api'
-import { STORAGE_KEYS } from '@/lib/storage'
-import { loadFromStorage, saveToStorage } from '@/lib/utils'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useTranslation } from 'react-i18next'
-import { PlaygroundModel, SuggestionOption, Token, TOKEN_STATUS } from '../types'
+import { useNotifications } from '@/components/ui/notifications';
+import { api } from '@/lib/api';
+import { STORAGE_KEYS } from '@/lib/storage';
+import { loadFromStorage, saveToStorage } from '@/lib/utils';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import { PlaygroundModel, SuggestionOption, Token, TOKEN_STATUS } from '../types';
 
 const formatChannelName = (channelName: string): string => {
-  const colonIndex = channelName.indexOf(':')
+  const colonIndex = channelName.indexOf(':');
   if (colonIndex !== -1 && colonIndex < channelName.length - 1) {
-    return channelName.slice(colonIndex + 1)
+    return channelName.slice(colonIndex + 1);
   }
-  return channelName
-}
+  return channelName;
+};
 
 export const usePlaygroundData = () => {
-  const { t } = useTranslation()
-  const { notify } = useNotifications()
+  const { t } = useTranslation();
+  const { notify } = useNotifications();
 
-  const [models, setModels] = useState<PlaygroundModel[]>([])
-  const [selectedModel, setSelectedModel] = useState('')
-  const [isLoadingModels, setIsLoadingModels] = useState(true)
-  const selectedModelRef = useRef(selectedModel)
+  const [models, setModels] = useState<PlaygroundModel[]>([]);
+  const [selectedModel, setSelectedModel] = useState('');
+  const [isLoadingModels, setIsLoadingModels] = useState(true);
+  const selectedModelRef = useRef(selectedModel);
 
-  const [tokens, setTokens] = useState<Token[]>([])
-  const [selectedToken, setSelectedToken] = useState('')
-  const [isLoadingTokens, setIsLoadingTokens] = useState(true)
+  const [tokens, setTokens] = useState<Token[]>([]);
+  const [selectedToken, setSelectedToken] = useState('');
+  const [isLoadingTokens, setIsLoadingTokens] = useState(true);
 
-  const [channelModelMap, setChannelModelMap] = useState<Record<string, string[]>>({})
-  const [isLoadingChannels, setIsLoadingChannels] = useState(true)
-  const [channelInputValue, setChannelInputValue] = useState('')
-  const [selectedChannel, setSelectedChannel] = useState('')
-  const [modelInputValue, setModelInputValue] = useState('')
-  const channelErrorRef = useRef<string | null>(null)
+  const [channelModelMap, setChannelModelMap] = useState<Record<string, string[]>>({});
+  const [isLoadingChannels, setIsLoadingChannels] = useState(true);
+  const [channelInputValue, setChannelInputValue] = useState('');
+  const [selectedChannel, setSelectedChannel] = useState('');
+  const [modelInputValue, setModelInputValue] = useState('');
+  const channelErrorRef = useRef<string | null>(null);
 
-  const userAvailableModelsCache = useRef<string[] | null>(null)
+  const userAvailableModelsCache = useRef<string[] | null>(null);
 
-  selectedModelRef.current = selectedModel
+  selectedModelRef.current = selectedModel;
 
   const fetchUserAvailableModels = useCallback(async (): Promise<string[]> => {
     if (userAvailableModelsCache.current !== null) {
-      return userAvailableModelsCache.current
+      return userAvailableModelsCache.current;
     }
 
     try {
-      const response = await api.get('/api/user/available_models')
-      const payload = response.data
+      const response = await api.get('/api/user/available_models');
+      const payload = response.data;
 
       if (payload?.success && Array.isArray(payload.data)) {
         const normalized = (payload.data as Array<unknown>)
           .map((model) => (typeof model === 'string' ? model.trim() : ''))
-          .filter((model): model is string => model.length > 0)
-        const uniqueModels: string[] = Array.from(new Set(normalized))
-        userAvailableModelsCache.current = uniqueModels
-        return uniqueModels
+          .filter((model): model is string => model.length > 0);
+        const uniqueModels: string[] = Array.from(new Set(normalized));
+        userAvailableModelsCache.current = uniqueModels;
+        return uniqueModels;
       }
     } catch {
       // Swallow fetch errors
     }
 
-    userAvailableModelsCache.current = []
-    return []
-  }, [])
+    userAvailableModelsCache.current = [];
+    return [];
+  }, []);
 
   useEffect(() => {
     const fetchChannelModels = async () => {
-      setIsLoadingChannels(true)
+      setIsLoadingChannels(true);
       try {
-        const response = await api.get('/api/models/display')
-        const payload = response.data
+        const response = await api.get('/api/models/display');
+        const payload = response.data;
 
         if (payload?.success && payload.data && typeof payload.data === 'object') {
-          const normalized: Record<string, string[]> = {}
+          const normalized: Record<string, string[]> = {};
           Object.entries(payload.data as Record<string, unknown>).forEach(([channelName, rawInfo]) => {
             if (rawInfo && typeof rawInfo === 'object' && 'models' in rawInfo) {
-              const modelsInfo = (rawInfo as { models?: Record<string, unknown> }).models
+              const modelsInfo = (rawInfo as { models?: Record<string, unknown> }).models;
               if (modelsInfo && typeof modelsInfo === 'object') {
-                normalized[channelName] = Object.keys(modelsInfo)
+                normalized[channelName] = Object.keys(modelsInfo);
               }
             }
-          })
-          setChannelModelMap(normalized)
+          });
+          setChannelModelMap(normalized);
         } else {
-          setChannelModelMap({})
+          setChannelModelMap({});
           notify({
             title: t('playground.notifications.error_title'),
             message: t('playground.notifications.channel_metadata_error'),
-            type: 'error'
-          })
+            type: 'error',
+          });
         }
       } catch {
-        setChannelModelMap({})
+        setChannelModelMap({});
         notify({
           title: t('playground.notifications.error_title'),
           message: t('playground.notifications.channel_metadata_error'),
-          type: 'error'
-        })
+          type: 'error',
+        });
       } finally {
-        setIsLoadingChannels(false)
+        setIsLoadingChannels(false);
       }
-    }
+    };
 
-    fetchChannelModels()
-  }, [notify, t])
+    fetchChannelModels();
+  }, [notify, t]);
 
   const channelLabelMap = useMemo(() => {
-    const map = new Map<string, string>()
+    const map = new Map<string, string>();
     Object.keys(channelModelMap).forEach((channelName) => {
-      map.set(channelName, formatChannelName(channelName))
-    })
-    return map
-  }, [channelModelMap])
+      map.set(channelName, formatChannelName(channelName));
+    });
+    return map;
+  }, [channelModelMap]);
 
   const channelOptions = useMemo<SuggestionOption[]>(() => {
     return Array.from(channelLabelMap.entries())
       .map(([key, label]) => ({ key, label }))
-      .sort((a, b) => a.label.localeCompare(b.label))
-  }, [channelLabelMap])
+      .sort((a, b) => a.label.localeCompare(b.label));
+  }, [channelLabelMap]);
 
   const channelSuggestions = useMemo<SuggestionOption[]>(() => {
     if (channelOptions.length === 0) {
-      return []
+      return [];
     }
 
-    const query = channelInputValue.trim().toLowerCase()
+    const query = channelInputValue.trim().toLowerCase();
     if (!query) {
-      return channelOptions.slice(0, 12)
+      return channelOptions.slice(0, 12);
     }
 
     const scored = channelOptions
       .map((option) => {
-        const labelLower = option.label.toLowerCase()
-        const keyLower = option.key.toLowerCase()
-        const labelIndex = labelLower.indexOf(query)
-        const keyIndex = keyLower.indexOf(query)
+        const labelLower = option.label.toLowerCase();
+        const keyLower = option.key.toLowerCase();
+        const labelIndex = labelLower.indexOf(query);
+        const keyIndex = keyLower.indexOf(query);
         if (labelIndex === -1 && keyIndex === -1) {
-          return null
+          return null;
         }
         const score = Math.min(
           labelIndex === -1 ? Number.POSITIVE_INFINITY : labelIndex,
           keyIndex === -1 ? Number.POSITIVE_INFINITY : keyIndex
-        )
-        return { option, score }
+        );
+        return { option, score };
       })
-      .filter((entry): entry is { option: SuggestionOption; score: number } => entry !== null)
+      .filter((entry): entry is { option: SuggestionOption; score: number } => entry !== null);
 
     scored.sort((a, b) => {
       if (a.score !== b.score) {
-        return a.score - b.score
+        return a.score - b.score;
       }
-      return a.option.label.localeCompare(b.option.label)
-    })
+      return a.option.label.localeCompare(b.option.label);
+    });
 
-    return scored.slice(0, 12).map((entry) => entry.option)
-  }, [channelOptions, channelInputValue])
+    return scored.slice(0, 12).map((entry) => entry.option);
+  }, [channelOptions, channelInputValue]);
 
   const modelSuggestions = useMemo<SuggestionOption[]>(() => {
     if (models.length === 0) {
-      return []
+      return [];
     }
 
     const options: SuggestionOption[] = models.map((model) => {
-      const label = model.label ?? model.id
-      let description: string | undefined
+      const label = model.label ?? model.id;
+      let description: string | undefined;
 
       if (!selectedChannel && model.channels && model.channels.length > 0) {
-        const visibleChannels = model.channels.slice(0, 3)
-        const remaining = model.channels.length - visibleChannels.length
+        const visibleChannels = model.channels.slice(0, 3);
+        const remaining = model.channels.length - visibleChannels.length;
         if (visibleChannels.length > 0) {
-          const base = visibleChannels.join(', ')
-          const summary = remaining > 0
-            ? `${base}, ${t('playground.parameters.model.more_channels', { count: remaining })}`
-            : base
-          description = t('playground.parameters.model.channels_label', { channels: summary })
+          const base = visibleChannels.join(', ');
+          const summary = remaining > 0 ? `${base}, ${t('playground.parameters.model.more_channels', { count: remaining })}` : base;
+          description = t('playground.parameters.model.channels_label', { channels: summary });
         }
       }
 
       return {
         key: model.id,
         label,
-        description
-      }
-    })
+        description,
+      };
+    });
 
-    const sortedOptions = options.slice().sort((a, b) => a.label.localeCompare(b.label))
+    const sortedOptions = options.slice().sort((a, b) => a.label.localeCompare(b.label));
 
-    const query = modelInputValue.trim().toLowerCase()
+    const query = modelInputValue.trim().toLowerCase();
     if (!query) {
-      return sortedOptions
+      return sortedOptions;
     }
 
     const filtered = sortedOptions.filter((option) => {
-      const labelLower = option.label.toLowerCase()
-      const keyLower = option.key.toLowerCase()
-      return labelLower.includes(query) || keyLower.includes(query)
-    })
+      const labelLower = option.label.toLowerCase();
+      const keyLower = option.key.toLowerCase();
+      return labelLower.includes(query) || keyLower.includes(query);
+    });
 
-    return filtered
-  }, [models, modelInputValue, selectedChannel, t])
+    return filtered;
+  }, [models, modelInputValue, selectedChannel, t]);
 
   const handleModelQueryChange = useCallback((value: string) => {
-    setModelInputValue(value)
+    setModelInputValue(value);
     if (value.trim().length === 0) {
-      setSelectedModel('')
+      setSelectedModel('');
     }
-  }, [])
+  }, []);
 
-  const handleModelSelect = useCallback((modelId: string) => {
-    const match = models.find((model) => model.id === modelId)
-    const label = match?.label ?? modelId
-    setSelectedModel(modelId)
-    setModelInputValue(label)
-  }, [models])
+  const handleModelSelect = useCallback(
+    (modelId: string) => {
+      const match = models.find((model) => model.id === modelId);
+      const label = match?.label ?? modelId;
+      setSelectedModel(modelId);
+      setModelInputValue(label);
+    },
+    [models]
+  );
 
   const handleModelClear = useCallback(() => {
-    setSelectedModel('')
-    setModelInputValue('')
-  }, [])
+    setSelectedModel('');
+    setModelInputValue('');
+  }, []);
 
-  const handleChannelQueryChange = useCallback((value: string) => {
-    setChannelInputValue(value)
-    if (selectedChannel) {
-      setSelectedChannel('')
-    }
-    channelErrorRef.current = null
-  }, [selectedChannel])
+  const handleChannelQueryChange = useCallback(
+    (value: string) => {
+      setChannelInputValue(value);
+      if (selectedChannel) {
+        setSelectedChannel('');
+      }
+      channelErrorRef.current = null;
+    },
+    [selectedChannel]
+  );
 
-  const handleChannelSelect = useCallback((channelKey: string) => {
-    if (!channelKey) {
-      setSelectedChannel('')
-      setChannelInputValue('')
-      channelErrorRef.current = null
-      return
-    }
-    setSelectedChannel(channelKey)
-    setChannelInputValue(channelLabelMap.get(channelKey) ?? formatChannelName(channelKey))
-    channelErrorRef.current = null
-  }, [channelLabelMap])
+  const handleChannelSelect = useCallback(
+    (channelKey: string) => {
+      if (!channelKey) {
+        setSelectedChannel('');
+        setChannelInputValue('');
+        channelErrorRef.current = null;
+        return;
+      }
+      setSelectedChannel(channelKey);
+      setChannelInputValue(channelLabelMap.get(channelKey) ?? formatChannelName(channelKey));
+      channelErrorRef.current = null;
+    },
+    [channelLabelMap]
+  );
 
   const handleChannelClear = useCallback(() => {
-    handleChannelSelect('')
-  }, [handleChannelSelect])
+    handleChannelSelect('');
+  }, [handleChannelSelect]);
 
   useEffect(() => {
     if (selectedChannel && !channelModelMap[selectedChannel]) {
-      setSelectedChannel('')
-      setChannelInputValue('')
-      channelErrorRef.current = null
+      setSelectedChannel('');
+      setChannelInputValue('');
+      channelErrorRef.current = null;
     }
-  }, [selectedChannel, channelModelMap])
+  }, [selectedChannel, channelModelMap]);
 
   useEffect(() => {
     if (selectedModel) {
-      saveToStorage(STORAGE_KEYS.MODEL, selectedModel)
+      saveToStorage(STORAGE_KEYS.MODEL, selectedModel);
     }
-  }, [selectedModel])
+  }, [selectedModel]);
 
   useEffect(() => {
     if (selectedToken) {
-      saveToStorage(STORAGE_KEYS.TOKEN, selectedToken)
+      saveToStorage(STORAGE_KEYS.TOKEN, selectedToken);
     }
-  }, [selectedToken])
+  }, [selectedToken]);
 
   useEffect(() => {
-    const savedModel = loadFromStorage(STORAGE_KEYS.MODEL, '')
-    const savedToken = loadFromStorage(STORAGE_KEYS.TOKEN, '')
-    setSelectedModel(savedModel)
-    setModelInputValue(savedModel)
-    setSelectedToken(savedToken)
-  }, [])
+    const savedModel = loadFromStorage(STORAGE_KEYS.MODEL, '');
+    const savedToken = loadFromStorage(STORAGE_KEYS.TOKEN, '');
+    setSelectedModel(savedModel);
+    setModelInputValue(savedModel);
+    setSelectedToken(savedToken);
+  }, []);
 
   const loadTokens = useCallback(async () => {
-    setIsLoadingTokens(true)
+    setIsLoadingTokens(true);
     try {
-      const res = await api.get('/api/token/?p=0&size=5')
-      const data = res.data
+      const res = await api.get('/api/token/?p=0&size=5');
+      const data = res.data;
 
       if (data.success && data.data) {
-        const enabledTokens = data.data.filter((t: Token) => t.status === TOKEN_STATUS.ENABLED)
-        setTokens(enabledTokens)
+        const enabledTokens = data.data.filter((t: Token) => t.status === TOKEN_STATUS.ENABLED);
+        setTokens(enabledTokens);
 
         if (enabledTokens.length > 0 && !selectedToken) {
-          setSelectedToken(enabledTokens[0].key)
+          setSelectedToken(enabledTokens[0].key);
         }
       } else {
-        setTokens([])
+        setTokens([]);
       }
     } catch (error) {
       notify({
         title: t('playground.notifications.error_title'),
         message: t('playground.notifications.load_tokens_error'),
-        type: 'error'
-      })
-      setTokens([])
+        type: 'error',
+      });
+      setTokens([]);
     } finally {
-      setIsLoadingTokens(false)
+      setIsLoadingTokens(false);
     }
-  }, [selectedToken, notify, t])
+  }, [selectedToken, notify, t]);
 
   useEffect(() => {
-    loadTokens()
-  }, [])
+    loadTokens();
+  }, []);
 
   useEffect(() => {
     const loadModels = async () => {
-      setIsLoadingModels(true)
+      setIsLoadingModels(true);
       try {
         if (!selectedToken) {
-          setModels([])
-          setSelectedModel('')
-          setModelInputValue('')
-          return
+          setModels([]);
+          setSelectedModel('');
+          setModelInputValue('');
+          return;
         }
 
-        const token = tokens.find((t) => t.key === selectedToken)
+        const token = tokens.find((t) => t.key === selectedToken);
         if (!token) {
-          setModels([])
-          setSelectedModel('')
-          setModelInputValue('')
-          return
+          setModels([]);
+          setSelectedModel('');
+          setModelInputValue('');
+          return;
         }
 
-        const rawModels = typeof token.models === 'string' ? token.models : ''
+        const rawModels = typeof token.models === 'string' ? token.models : '';
         let modelNames = rawModels
           .split(',')
           .map((name) => name.trim())
-          .filter((name) => name.length > 0)
+          .filter((name) => name.length > 0);
 
-        let ownedBy = 'token-restricted'
+        let ownedBy = 'token-restricted';
         if (modelNames.length === 0) {
-          const fallbackModels = await fetchUserAvailableModels()
-          modelNames = fallbackModels
-          ownedBy = 'user-entitlement'
+          const fallbackModels = await fetchUserAvailableModels();
+          modelNames = fallbackModels;
+          ownedBy = 'user-entitlement';
         }
 
-        const baseModels = new Set(modelNames.filter((name) => name.length > 0))
+        const baseModels = new Set(modelNames.filter((name) => name.length > 0));
         if (baseModels.size === 0) {
-          setModels([])
-          setSelectedModel('')
-          setModelInputValue('')
-          channelErrorRef.current = null
+          setModels([]);
+          setSelectedModel('');
+          setModelInputValue('');
+          channelErrorRef.current = null;
           notify({
             title: t('playground.notifications.no_models_title'),
             message: t('playground.notifications.no_models_token_error'),
-            type: 'error'
-          })
-          return
+            type: 'error',
+          });
+          return;
         }
 
-        const hasChannelData = Object.keys(channelModelMap).length > 0
-        let transformedModels: PlaygroundModel[] = []
+        const hasChannelData = Object.keys(channelModelMap).length > 0;
+        let transformedModels: PlaygroundModel[] = [];
 
         if (hasChannelData) {
-          const relevantChannelKeys = selectedChannel
-            ? [selectedChannel]
-            : Object.keys(channelModelMap)
+          const relevantChannelKeys = selectedChannel ? [selectedChannel] : Object.keys(channelModelMap);
 
-          const modelChannelLabels = new Map<string, Set<string>>()
+          const modelChannelLabels = new Map<string, Set<string>>();
 
           for (const channelKey of relevantChannelKeys) {
-            const channelModels = channelModelMap[channelKey] ?? []
+            const channelModels = channelModelMap[channelKey] ?? [];
             if (!Array.isArray(channelModels) || channelModels.length === 0) {
-              continue
+              continue;
             }
 
-            const channelLabel = channelLabelMap.get(channelKey) ?? formatChannelName(channelKey)
+            const channelLabel = channelLabelMap.get(channelKey) ?? formatChannelName(channelKey);
             for (const modelName of channelModels) {
               if (!baseModels.has(modelName)) {
-                continue
+                continue;
               }
               if (!modelChannelLabels.has(modelName)) {
-                modelChannelLabels.set(modelName, new Set<string>())
+                modelChannelLabels.set(modelName, new Set<string>());
               }
-              modelChannelLabels.get(modelName)?.add(channelLabel)
+              modelChannelLabels.get(modelName)?.add(channelLabel);
             }
           }
 
           const buildLabel = (modelName: string, channelNames: string[]): string => {
             if (channelNames.length === 0) {
-              return modelName
+              return modelName;
             }
 
             if (selectedChannel || channelNames.length === 1) {
-              return `${modelName} (${channelNames[0]})`
+              return `${modelName} (${channelNames[0]})`;
             }
 
             if (channelNames.length === 2) {
-              return `${modelName} (${channelNames[0]} · ${channelNames[1]})`
+              return `${modelName} (${channelNames[0]} · ${channelNames[1]})`;
             }
 
-            const visible = channelNames.slice(0, 2).join(' · ')
-            return `${modelName} (${visible} +${channelNames.length - 2} more)`
-          }
+            const visible = channelNames.slice(0, 2).join(' · ');
+            return `${modelName} (${visible} +${channelNames.length - 2} more)`;
+          };
 
           transformedModels = Array.from(modelChannelLabels.entries()).map(([modelName, channelSet]) => {
-            const channelNames = Array.from(channelSet).sort((a, b) => a.localeCompare(b))
+            const channelNames = Array.from(channelSet).sort((a, b) => a.localeCompare(b));
             return {
               id: modelName,
               object: 'model',
               owned_by: ownedBy,
               label: buildLabel(modelName, channelNames),
-              channels: channelNames
-            }
-          })
+              channels: channelNames,
+            };
+          });
 
           if (!selectedChannel) {
             for (const modelName of baseModels) {
@@ -411,13 +416,13 @@ export const usePlaygroundData = () => {
                   id: modelName,
                   object: 'model',
                   owned_by: ownedBy,
-                  label: modelName
-                })
+                  label: modelName,
+                });
               }
             }
           }
 
-          transformedModels.sort((a, b) => (a.label ?? a.id).localeCompare(b.label ?? b.id))
+          transformedModels.sort((a, b) => (a.label ?? a.id).localeCompare(b.label ?? b.id));
         } else {
           transformedModels = Array.from(baseModels)
             .sort()
@@ -425,107 +430,111 @@ export const usePlaygroundData = () => {
               id: modelName,
               object: 'model',
               owned_by: ownedBy,
-              label: modelName
-            }))
+              label: modelName,
+            }));
         }
 
         if (selectedChannel && transformedModels.length === 0) {
           if (channelErrorRef.current !== selectedChannel) {
-            const channelLabel = channelLabelMap.get(selectedChannel) ?? formatChannelName(selectedChannel)
+            const channelLabel = channelLabelMap.get(selectedChannel) ?? formatChannelName(selectedChannel);
             notify({
               title: t('playground.notifications.no_models_title'),
               message: t('playground.notifications.no_models_channel_error', { channel: channelLabel }),
-              type: 'error'
-            })
-            channelErrorRef.current = selectedChannel
+              type: 'error',
+            });
+            channelErrorRef.current = selectedChannel;
           }
-          setModels([])
-          setSelectedModel('')
-          setModelInputValue('')
-          return
+          setModels([]);
+          setSelectedModel('');
+          setModelInputValue('');
+          return;
         }
 
-        channelErrorRef.current = null
+        channelErrorRef.current = null;
 
         if (transformedModels.length === 0) {
-          setModels([])
-          setSelectedModel('')
-          setModelInputValue('')
-          return
+          setModels([]);
+          setSelectedModel('');
+          setModelInputValue('');
+          return;
         }
 
-        setModels(transformedModels)
+        setModels(transformedModels);
 
-        const availableIds = new Set(transformedModels.map((model) => model.id))
+        const availableIds = new Set(transformedModels.map((model) => model.id));
 
         const resolveLabel = (modelId: string): string => {
-          const match = transformedModels.find((model) => model.id === modelId)
-          return match?.label ?? modelId
-        }
+          const match = transformedModels.find((model) => model.id === modelId);
+          return match?.label ?? modelId;
+        };
 
         if (selectedModelRef.current && availableIds.has(selectedModelRef.current)) {
-          setModelInputValue(resolveLabel(selectedModelRef.current))
-          return
+          setModelInputValue(resolveLabel(selectedModelRef.current));
+          return;
         }
 
-        const savedModel = loadFromStorage(STORAGE_KEYS.MODEL, '')
+        const savedModel = loadFromStorage(STORAGE_KEYS.MODEL, '');
         if (savedModel && availableIds.has(savedModel)) {
-          setSelectedModel(savedModel)
-          setModelInputValue(resolveLabel(savedModel))
-          return
+          setSelectedModel(savedModel);
+          setModelInputValue(resolveLabel(savedModel));
+          return;
         }
 
-        const fallbackModelId = transformedModels[0].id
-        setSelectedModel(fallbackModelId)
-        setModelInputValue(resolveLabel(fallbackModelId))
+        const fallbackModelId = transformedModels[0].id;
+        setSelectedModel(fallbackModelId);
+        setModelInputValue(resolveLabel(fallbackModelId));
       } catch {
         notify({
           title: t('playground.notifications.error_title'),
           message: t('playground.notifications.load_models_error'),
-          type: 'error'
-        })
-        setModels([])
-        setSelectedModel('')
-        setModelInputValue('')
+          type: 'error',
+        });
+        setModels([]);
+        setSelectedModel('');
+        setModelInputValue('');
       } finally {
-        setIsLoadingModels(false)
+        setIsLoadingModels(false);
       }
-    }
+    };
 
     if (tokens.length > 0) {
-      void loadModels()
+      void loadModels();
     } else if (!isLoadingTokens) {
-      setIsLoadingModels(false)
-      setModels([])
-      setSelectedModel('')
-      setModelInputValue('')
+      setIsLoadingModels(false);
+      setModels([]);
+      setSelectedModel('');
+      setModelInputValue('');
       notify({
         title: t('playground.notifications.no_tokens_title'),
         message: t('playground.notifications.no_tokens_error'),
-        type: 'error'
-      })
+        type: 'error',
+      });
     }
-  }, [
-    selectedToken,
-    tokens,
-    isLoadingTokens,
-    notify,
-    fetchUserAvailableModels,
-    selectedChannel,
-    channelModelMap,
-    channelLabelMap,
-    t
-  ])
+  }, [selectedToken, tokens, isLoadingTokens, notify, fetchUserAvailableModels, selectedChannel, channelModelMap, channelLabelMap, t]);
 
   return {
-    models, selectedModel, setSelectedModel, isLoadingModels,
-    tokens, selectedToken, setSelectedToken, isLoadingTokens,
+    models,
+    selectedModel,
+    setSelectedModel,
+    isLoadingModels,
+    tokens,
+    selectedToken,
+    setSelectedToken,
+    isLoadingTokens,
     isLoadingChannels,
-    channelInputValue, setChannelInputValue,
-    selectedChannel, setSelectedChannel,
-    modelInputValue, setModelInputValue,
-    channelSuggestions, modelSuggestions,
-    handleModelQueryChange, handleModelSelect, handleModelClear,
-    handleChannelQueryChange, handleChannelSelect, handleChannelClear
-  }
-}
+    channelInputValue,
+    setChannelInputValue,
+    selectedChannel,
+    setSelectedChannel,
+    modelInputValue,
+    setModelInputValue,
+    channelSuggestions,
+    modelSuggestions,
+    handleModelQueryChange,
+    handleModelSelect,
+    handleModelClear,
+    handleChannelQueryChange,
+    handleChannelSelect,
+    handleChannelClear,
+  };
+};

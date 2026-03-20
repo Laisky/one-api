@@ -319,7 +319,13 @@ export function TokensPage() {
         return (
           <div className="flex items-center gap-2">
             <span className="font-mono text-xs">{isVisible ? token.key : maskKey(token.key)}</span>
-            <Button variant="ghost" size="icon" onClick={() => toggleKeyVisibility(token.id)} className="h-8 w-8 touch-target" aria-label={isVisible ? tr('key.hide', 'Hide key') : tr('key.show', 'Show key')}>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => toggleKeyVisibility(token.id)}
+              className="h-8 w-8 touch-target"
+              aria-label={isVisible ? tr('key.hide', 'Hide key') : tr('key.show', 'Show key')}
+            >
               {isVisible ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
             </Button>
             <Button

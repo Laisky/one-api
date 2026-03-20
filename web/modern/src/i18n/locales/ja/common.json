@@ -1,4 +1,9 @@
 {
+  "a11y": {
+    "close": "閉じる",
+    "close_drawer": "ドロワーを閉じる",
+    "select_language": "言語を選択"
+  },
   "about": {
     "cta_models": "対応モデルを見る",
     "cta_repo": "GitHub リポジトリ",
@@ -67,24 +72,14 @@
   "footer": {
     "copyright": "\u00a9 {{year}} One API. All rights reserved."
   },
-  "theme": {
-    "toggle": "テーマを切り替え",
-    "light": "ライト",
-    "dark": "ダーク",
-    "system": "システム"
-  },
   "header": {
     "confirm_logout": "ログアウトの確認",
     "log_out": "ログアウト",
     "logging_out": "ログアウト中...",
     "logout_description": "ログアウトしてもよろしいですか？ダッシュボードにアクセスするには再度ログインする必要があります。",
     "navigation": "ナビゲーション",
+    "profile": "プロフィール",
     "signed_in_as": "ログイン中:"
-  },
-  "a11y": {
-    "close": "閉じる",
-    "close_drawer": "ドロワーを閉じる",
-    "select_language": "言語を選択"
   },
   "home": {
     "iframe_title": "ホーム"
@@ -151,5 +146,11 @@
     },
     "subtitle": "すべてのチャネルの状態とパフォーマンスを監視",
     "title": "チャネル状態"
+  },
+  "theme": {
+    "dark": "ダーク",
+    "light": "ライト",
+    "system": "システム",
+    "toggle": "テーマを切り替え"
   }
 }

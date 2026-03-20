@@ -1,15 +1,15 @@
-import { useState, useEffect, useCallback, useRef } from "react";
-import { loadSystemStatus, type SystemStatus } from "@/lib/utils";
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { loadSystemStatus, type SystemStatus } from '@/lib/utils';
 
 const getInitialSystemStatus = (): SystemStatus => {
   try {
-    const cached = localStorage.getItem("status");
+    const cached = localStorage.getItem('status');
     if (cached) {
       const parsed = JSON.parse(cached);
       return parsed as SystemStatus;
     }
   } catch (error) {
-    console.error("Failed to parse system status from storage:", error);
+    console.error('Failed to parse system status from storage:', error);
   }
   return {} as SystemStatus;
 };
@@ -26,9 +26,7 @@ export const useSystemStatus = (): UseSystemStatusResult => {
     initialStatusRef.current = getInitialSystemStatus();
   }
 
-  const [systemStatus, setSystemStatus] = useState<SystemStatus>(
-    initialStatusRef.current
-  );
+  const [systemStatus, setSystemStatus] = useState<SystemStatus>(initialStatusRef.current);
   const [isSystemStatusLoading, setIsSystemStatusLoading] = useState<boolean>(
     () => Object.keys(initialStatusRef.current || {}).length === 0
   );

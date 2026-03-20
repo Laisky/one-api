@@ -1,25 +1,18 @@
-import { useState, useCallback, useRef } from 'react'
-import { Button } from '@/components/ui/button'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
-import { useTranslation } from 'react-i18next'
+import { useState, useCallback, useRef } from 'react';
+import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { useTranslation } from 'react-i18next';
 
 interface ConfirmOptions {
-  title: string
-  description: string
-  confirmLabel?: string
-  cancelLabel?: string
-  variant?: 'default' | 'destructive'
+  title: string;
+  description: string;
+  confirmLabel?: string;
+  cancelLabel?: string;
+  variant?: 'default' | 'destructive';
 }
 
 interface ConfirmState extends ConfirmOptions {
-  resolve: (confirmed: boolean) => void
+  resolve: (confirmed: boolean) => void;
 }
 
 /**
@@ -27,28 +20,33 @@ interface ConfirmState extends ConfirmOptions {
  * Returns [confirm, ConfirmDialog] -- call confirm() to show the dialog, render <ConfirmDialog />.
  */
 export function useConfirmDialog() {
-  const [state, setState] = useState<ConfirmState | null>(null)
-  const resolveRef = useRef<((v: boolean) => void) | null>(null)
+  const [state, setState] = useState<ConfirmState | null>(null);
+  const resolveRef = useRef<((v: boolean) => void) | null>(null);
 
   const confirm = useCallback((options: ConfirmOptions): Promise<boolean> => {
     return new Promise<boolean>((resolve) => {
-      resolveRef.current = resolve
-      setState({ ...options, resolve })
-    })
-  }, [])
+      resolveRef.current = resolve;
+      setState({ ...options, resolve });
+    });
+  }, []);
 
   const handleClose = useCallback((confirmed: boolean) => {
-    resolveRef.current?.(confirmed)
-    resolveRef.current = null
-    setState(null)
-  }, [])
+    resolveRef.current?.(confirmed);
+    resolveRef.current = null;
+    setState(null);
+  }, []);
 
   const ConfirmDialogComponent = useCallback(() => {
-    const { t } = useTranslation()
-    if (!state) return null
+    const { t } = useTranslation();
+    if (!state) return null;
 
     return (
-      <Dialog open onOpenChange={(open) => { if (!open) handleClose(false) }}>
+      <Dialog
+        open
+        onOpenChange={(open) => {
+          if (!open) handleClose(false);
+        }}
+      >
         <DialogContent>
           <DialogHeader>
             <DialogTitle>{state.title}</DialogTitle>
@@ -58,17 +56,14 @@ export function useConfirmDialog() {
             <Button variant="outline" onClick={() => handleClose(false)}>
               {state.cancelLabel || t('common.cancel')}
             </Button>
-            <Button
-              variant={state.variant || 'destructive'}
-              onClick={() => handleClose(true)}
-            >
+            <Button variant={state.variant || 'destructive'} onClick={() => handleClose(true)}>
               {state.confirmLabel || t('common.confirm')}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    )
-  }, [state, handleClose])
+    );
+  }, [state, handleClose]);
 
-  return [confirm, ConfirmDialogComponent] as const
+  return [confirm, ConfirmDialogComponent] as const;
 }

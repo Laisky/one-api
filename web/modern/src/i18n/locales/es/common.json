@@ -1,4 +1,9 @@
 {
+  "a11y": {
+    "close": "Cerrar",
+    "close_drawer": "Cerrar cajón",
+    "select_language": "Seleccionar idioma"
+  },
   "about": {
     "cta_models": "Ver modelos compatibles",
     "cta_repo": "Repositorio de GitHub",
@@ -67,24 +72,14 @@
   "footer": {
     "copyright": "\u00a9 {{year}} One API. Todos los derechos reservados."
   },
-  "theme": {
-    "toggle": "Cambiar tema",
-    "light": "Claro",
-    "dark": "Oscuro",
-    "system": "Sistema"
-  },
   "header": {
     "confirm_logout": "Confirmar cierre de sesión",
     "log_out": "Cerrar sesión",
     "logging_out": "Cerrando sesión...",
     "logout_description": "¿Estás seguro de que quieres cerrar sesión? Tendrás que volver a iniciar sesión para acceder a tu panel de control.",
     "navigation": "Navegación",
+    "profile": "Perfil",
     "signed_in_as": "Iniciado sesión como"
-  },
-  "a11y": {
-    "close": "Cerrar",
-    "close_drawer": "Cerrar cajón",
-    "select_language": "Seleccionar idioma"
   },
   "home": {
     "iframe_title": "Inicio"
@@ -151,5 +146,11 @@
     },
     "subtitle": "Supervisa el estado y el rendimiento de todos los canales",
     "title": "Estado de los canales"
+  },
+  "theme": {
+    "dark": "Oscuro",
+    "light": "Claro",
+    "system": "Sistema",
+    "toggle": "Cambiar tema"
   }
 }

@@ -1,7 +1,7 @@
-import { getModelCapabilities } from "@/lib/model-capabilities";
-import { STORAGE_KEYS } from "@/lib/storage";
-import { loadFromStorage, saveToStorage } from "@/lib/utils";
-import { useCallback, useEffect, useState } from "react";
+import { getModelCapabilities } from '@/lib/model-capabilities';
+import { STORAGE_KEYS } from '@/lib/storage';
+import { loadFromStorage, saveToStorage } from '@/lib/utils';
+import { useCallback, useEffect, useState } from 'react';
 
 export function usePlaygroundParameters(selectedModel: string) {
   const [temperature, setTemperature] = useState<number[]>([0.7]);
@@ -10,18 +10,13 @@ export function usePlaygroundParameters(selectedModel: string) {
   const [topK, setTopK] = useState<number[]>([40]);
   const [frequencyPenalty, setFrequencyPenalty] = useState<number[]>([0.0]);
   const [presencePenalty, setPresencePenalty] = useState<number[]>([0.0]);
-  const [maxCompletionTokens, setMaxCompletionTokens] = useState<number[]>([
-    4096,
-  ]);
-  const [stopSequences, setStopSequences] = useState<string>("");
-  const [reasoningEffort, setReasoningEffort] = useState<string>("high");
+  const [maxCompletionTokens, setMaxCompletionTokens] = useState<number[]>([4096]);
+  const [stopSequences, setStopSequences] = useState<string>('');
+  const [reasoningEffort, setReasoningEffort] = useState<string>('high');
   const [thinkingEnabled, setThinkingEnabled] = useState<boolean>(false);
-  const [thinkingBudgetTokens, setThinkingBudgetTokens] = useState<number[]>([
-    10000,
-  ]);
-  const [systemMessage, setSystemMessage] = useState<string>("");
-  const [showReasoningContent, setShowReasoningContent] =
-    useState<boolean>(true);
+  const [thinkingBudgetTokens, setThinkingBudgetTokens] = useState<number[]>([10000]);
+  const [systemMessage, setSystemMessage] = useState<string>('');
+  const [showReasoningContent, setShowReasoningContent] = useState<boolean>(true);
   const [focusModeEnabled, setFocusModeEnabled] = useState<boolean>(false);
 
   const modelCapabilities = getModelCapabilities(selectedModel);
@@ -34,26 +29,16 @@ export function usePlaygroundParameters(selectedModel: string) {
       if (savedParams.maxTokens) setMaxTokens(savedParams.maxTokens);
       if (savedParams.topP) setTopP(savedParams.topP);
       if (savedParams.topK) setTopK(savedParams.topK);
-      if (savedParams.frequencyPenalty)
-        setFrequencyPenalty(savedParams.frequencyPenalty);
-      if (savedParams.presencePenalty)
-        setPresencePenalty(savedParams.presencePenalty);
-      if (savedParams.maxCompletionTokens)
-        setMaxCompletionTokens(savedParams.maxCompletionTokens);
-      if (savedParams.stopSequences)
-        setStopSequences(savedParams.stopSequences);
-      if (savedParams.reasoningEffort)
-        setReasoningEffort(savedParams.reasoningEffort);
-      if (savedParams.thinkingEnabled !== undefined)
-        setThinkingEnabled(savedParams.thinkingEnabled);
-      if (savedParams.thinkingBudgetTokens)
-        setThinkingBudgetTokens(savedParams.thinkingBudgetTokens);
-      if (savedParams.systemMessage)
-        setSystemMessage(savedParams.systemMessage);
-      if (savedParams.showReasoningContent !== undefined)
-        setShowReasoningContent(savedParams.showReasoningContent);
-      if (savedParams.focusModeEnabled !== undefined)
-        setFocusModeEnabled(savedParams.focusModeEnabled);
+      if (savedParams.frequencyPenalty) setFrequencyPenalty(savedParams.frequencyPenalty);
+      if (savedParams.presencePenalty) setPresencePenalty(savedParams.presencePenalty);
+      if (savedParams.maxCompletionTokens) setMaxCompletionTokens(savedParams.maxCompletionTokens);
+      if (savedParams.stopSequences) setStopSequences(savedParams.stopSequences);
+      if (savedParams.reasoningEffort) setReasoningEffort(savedParams.reasoningEffort);
+      if (savedParams.thinkingEnabled !== undefined) setThinkingEnabled(savedParams.thinkingEnabled);
+      if (savedParams.thinkingBudgetTokens) setThinkingBudgetTokens(savedParams.thinkingBudgetTokens);
+      if (savedParams.systemMessage) setSystemMessage(savedParams.systemMessage);
+      if (savedParams.showReasoningContent !== undefined) setShowReasoningContent(savedParams.showReasoningContent);
+      if (savedParams.focusModeEnabled !== undefined) setFocusModeEnabled(savedParams.focusModeEnabled);
     }
   }, []);
 
@@ -76,19 +61,13 @@ export function usePlaygroundParameters(selectedModel: string) {
       hasChanges = true;
     }
 
-    if (
-      !modelCapabilities.supportsReasoningEffort &&
-      reasoningEffort !== "high"
-    ) {
-      setReasoningEffort("high");
-      updates.reasoningEffort = "high";
+    if (!modelCapabilities.supportsReasoningEffort && reasoningEffort !== 'high') {
+      setReasoningEffort('high');
+      updates.reasoningEffort = 'high';
       hasChanges = true;
     }
 
-    if (
-      !modelCapabilities.supportsMaxCompletionTokens &&
-      maxCompletionTokens[0] !== 4096
-    ) {
+    if (!modelCapabilities.supportsMaxCompletionTokens && maxCompletionTokens[0] !== 4096) {
       setMaxCompletionTokens([4096]);
       updates.maxCompletionTokens = [4096];
       hasChanges = true;
@@ -98,14 +77,7 @@ export function usePlaygroundParameters(selectedModel: string) {
       const currentParams = loadFromStorage(STORAGE_KEYS.PARAMETERS, {});
       saveToStorage(STORAGE_KEYS.PARAMETERS, { ...currentParams, ...updates });
     }
-  }, [
-    selectedModel,
-    modelCapabilities,
-    topK,
-    thinkingEnabled,
-    reasoningEffort,
-    maxCompletionTokens,
-  ]);
+  }, [selectedModel, modelCapabilities, topK, thinkingEnabled, reasoningEffort, maxCompletionTokens]);
 
   // Save parameters to storage
   useEffect(() => {

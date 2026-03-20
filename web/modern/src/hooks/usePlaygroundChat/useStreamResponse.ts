@@ -1,5 +1,5 @@
-import { useCallback } from "react";
-import { extractTextAndReasoningFromOutput } from "./helpers";
+import { useCallback } from 'react';
+import { extractTextAndReasoningFromOutput } from './helpers';
 
 export interface StreamResponseResult {
   assistantContent: string;
@@ -15,23 +15,15 @@ interface UseStreamResponseProps {
   updateThrottleRef: React.MutableRefObject<number | null>;
 }
 
-export const useStreamResponse = ({
-  selectedToken,
-  scheduleUpdate,
-  throttledUpdateMessage,
-  updateThrottleRef,
-}: UseStreamResponseProps) => {
+export const useStreamResponse = ({ selectedToken, scheduleUpdate, throttledUpdateMessage, updateThrottleRef }: UseStreamResponseProps) => {
   const streamResponse = useCallback(
-    async (
-      requestBody: Record<string, unknown>,
-      signal: AbortSignal
-    ): Promise<StreamResponseResult> => {
-      const response = await fetch("/v1/responses", {
-        method: "POST",
+    async (requestBody: Record<string, unknown>, signal: AbortSignal): Promise<StreamResponseResult> => {
+      const response = await fetch('/v1/responses', {
+        method: 'POST',
         headers: {
           Authorization: `Bearer ${selectedToken}`,
-          "Content-Type": "application/json",
-          Accept: "text/event-stream",
+          'Content-Type': 'application/json',
+          Accept: 'text/event-stream',
         },
         body: JSON.stringify(requestBody),
         signal,
@@ -46,7 +38,7 @@ export const useStreamResponse = ({
               const errorJson = JSON.parse(errorBody);
               if (errorJson.error?.message) {
                 errorMessage = errorJson.error.message;
-              } else if (typeof errorJson.error === "string") {
+              } else if (typeof errorJson.error === 'string') {
                 errorMessage = errorJson.error;
               } else if (errorJson.message) {
                 errorMessage = errorJson.message;
@@ -69,13 +61,13 @@ export const useStreamResponse = ({
 
       const reader = response.body?.getReader();
       if (!reader) {
-        throw new Error("No response body");
+        throw new Error('No response body');
       }
 
       const decoder = new TextDecoder();
-      let buffer = "";
-      let assistantContent = "";
-      let reasoningContent = "";
+      let buffer = '';
+      let assistantContent = '';
+      let reasoningContent = '';
       let finalStatus: string | null = null;
       let incompleteDetails: unknown = null;
 
@@ -97,20 +89,18 @@ export const useStreamResponse = ({
 
       // biome-ignore lint/suspicious/noExplicitAny: payload is dynamic
       const applyResponsePayload = (payload: any) => {
-        if (!payload || typeof payload !== "object") {
+        if (!payload || typeof payload !== 'object') {
           return;
         }
 
-        if (typeof payload.status === "string") {
+        if (typeof payload.status === 'string') {
           finalStatus = payload.status;
         }
         if (payload.incomplete_details) {
           incompleteDetails = payload.incomplete_details;
         }
 
-        const { text, reasoning } = extractTextAndReasoningFromOutput(
-          payload.output
-        );
+        const { text, reasoning } = extractTextAndReasoningFromOutput(payload.output);
         if (text !== null) {
           assistantContent = text;
           scheduleUpdate(assistantContent, reasoningContent);
@@ -122,33 +112,33 @@ export const useStreamResponse = ({
       };
 
       const processEvent = (rawEvent: string): boolean => {
-        const sanitized = rawEvent.replace(/\r/g, "");
-        const lines = sanitized.split("\n");
-        let eventType = "";
+        const sanitized = rawEvent.replace(/\r/g, '');
+        const lines = sanitized.split('\n');
+        let eventType = '';
         const dataLines: string[] = [];
 
         for (const line of lines) {
-          if (line.startsWith("event:")) {
+          if (line.startsWith('event:')) {
             eventType = line.slice(6).trim();
             continue;
           }
-          if (line.startsWith("data:")) {
+          if (line.startsWith('data:')) {
             let value = line.slice(5);
-            if (value.startsWith(" ")) {
+            if (value.startsWith(' ')) {
               value = value.slice(1);
             }
             dataLines.push(value);
             continue;
           }
-          if (line.startsWith(":")) {
+          if (line.startsWith(':')) {
           }
         }
 
-        const dataString = dataLines.join("\n");
-        if (dataString === "") {
+        const dataString = dataLines.join('\n');
+        if (dataString === '') {
           return false;
         }
-        if (dataString === "[DONE]") {
+        if (dataString === '[DONE]') {
           return true;
         }
 
@@ -157,32 +147,27 @@ export const useStreamResponse = ({
         try {
           payload = JSON.parse(dataString);
         } catch (parseError) {
-          console.warn("Failed to parse SSE data:", parseError);
+          console.warn('Failed to parse SSE data:', parseError);
           return false;
         }
 
-        const resolvedType =
-          eventType || (typeof payload?.type === "string" ? payload.type : "");
+        const resolvedType = eventType || (typeof payload?.type === 'string' ? payload.type : '');
 
         switch (resolvedType) {
-          case "response.output_text.delta":
-            appendTextDelta(
-              typeof payload.delta === "string" ? payload.delta : undefined
-            );
+          case 'response.output_text.delta':
+            appendTextDelta(typeof payload.delta === 'string' ? payload.delta : undefined);
             if (payload.response) {
               applyResponsePayload(payload.response);
             }
             break;
-          case "response.reasoning_summary_text.delta":
-            appendReasoningDelta(
-              typeof payload.delta === "string" ? payload.delta : undefined
-            );
+          case 'response.reasoning_summary_text.delta':
+            appendReasoningDelta(typeof payload.delta === 'string' ? payload.delta : undefined);
             if (payload.response) {
               applyResponsePayload(payload.response);
             }
             break;
-          case "response.output_text.done":
-            if (typeof payload.text === "string") {
+          case 'response.output_text.done':
+            if (typeof payload.text === 'string') {
               assistantContent = payload.text;
               scheduleUpdate(assistantContent, reasoningContent);
             }
@@ -190,8 +175,8 @@ export const useStreamResponse = ({
               applyResponsePayload(payload.response);
             }
             break;
-          case "response.reasoning_summary_text.done":
-            if (typeof payload.text === "string") {
+          case 'response.reasoning_summary_text.done':
+            if (typeof payload.text === 'string') {
               reasoningContent = payload.text;
               scheduleUpdate(assistantContent, reasoningContent);
             }
@@ -199,12 +184,10 @@ export const useStreamResponse = ({
               applyResponsePayload(payload.response);
             }
             break;
-          case "response.output_item.done":
-          case "response.content_part.done":
+          case 'response.output_item.done':
+          case 'response.content_part.done':
             if (payload.item) {
-              const { text, reasoning } = extractTextAndReasoningFromOutput([
-                payload.item,
-              ]);
+              const { text, reasoning } = extractTextAndReasoningFromOutput([payload.item]);
               if (text !== null) {
                 assistantContent = text;
                 scheduleUpdate(assistantContent, reasoningContent);
@@ -218,27 +201,25 @@ export const useStreamResponse = ({
               applyResponsePayload(payload.response);
             }
             break;
-          case "response.completed":
+          case 'response.completed':
             if (payload.response) {
               applyResponsePayload(payload.response);
             }
             break;
-          case "response.error": {
+          case 'response.error': {
             const errorMessage =
-              typeof payload?.error?.message === "string"
+              typeof payload?.error?.message === 'string'
                 ? payload.error.message
-                : typeof payload?.error === "string"
+                : typeof payload?.error === 'string'
                   ? payload.error
-                  : "Stream error";
+                  : 'Stream error';
             throw new Error(errorMessage);
           }
           default:
             if (payload?.response) {
               applyResponsePayload(payload.response);
             } else if (payload?.output) {
-              const { text, reasoning } = extractTextAndReasoningFromOutput(
-                payload.output
-              );
+              const { text, reasoning } = extractTextAndReasoningFromOutput(payload.output);
               if (text !== null) {
                 assistantContent = text;
                 scheduleUpdate(assistantContent, reasoningContent);
@@ -256,7 +237,7 @@ export const useStreamResponse = ({
 
       const processPendingEvents = (): boolean => {
         let shouldStop = false;
-        let boundary = buffer.indexOf("\n\n");
+        let boundary = buffer.indexOf('\n\n');
         while (boundary !== -1) {
           const rawEvent = buffer.slice(0, boundary);
           buffer = buffer.slice(boundary + 2);
@@ -266,7 +247,7 @@ export const useStreamResponse = ({
               break;
             }
           }
-          boundary = buffer.indexOf("\n\n");
+          boundary = buffer.indexOf('\n\n');
         }
         return shouldStop;
       };

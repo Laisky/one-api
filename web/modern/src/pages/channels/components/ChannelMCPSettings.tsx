@@ -17,10 +17,7 @@ export function ChannelMCPSettings({ form, tr }: ChannelMCPSettingsProps) {
         <FormItem>
           <ToolListEditor
             label={tr('mcp.blacklist_label', 'MCP tool blacklist')}
-            description={tr(
-              'mcp.blacklist_description',
-              'Block MCP tools for this channel. Use server.tool or tool name.'
-            )}
+            description={tr('mcp.blacklist_description', 'Block MCP tools for this channel. Use server.tool or tool name.')}
             value={Array.isArray(field.value) ? field.value : []}
             onChange={field.onChange}
             placeholder={tr('mcp.blacklist_placeholder', 'server.tool_name')}

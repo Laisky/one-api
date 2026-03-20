@@ -1,10 +1,10 @@
-import { useNotifications } from "@/components/ui/notifications";
-import { api } from "@/lib/api";
-import { STORAGE_KEYS } from "@/lib/storage";
-import { loadFromStorage } from "@/lib/utils";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useTranslation } from "react-i18next";
-import type { PlaygroundModel, SuggestionOption, Token } from "./types";
+import { useNotifications } from '@/components/ui/notifications';
+import { api } from '@/lib/api';
+import { STORAGE_KEYS } from '@/lib/storage';
+import { loadFromStorage } from '@/lib/utils';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import type { PlaygroundModel, SuggestionOption, Token } from './types';
 
 export function usePlaygroundModels(
   selectedToken: string,
@@ -17,9 +17,9 @@ export function usePlaygroundModels(
   const { t } = useTranslation();
   const { notify } = useNotifications();
   const [models, setModels] = useState<PlaygroundModel[]>([]);
-  const [selectedModel, setSelectedModel] = useState("");
+  const [selectedModel, setSelectedModel] = useState('');
   const [isLoadingModels, setIsLoadingModels] = useState(true);
-  const [modelInputValue, setModelInputValue] = useState("");
+  const [modelInputValue, setModelInputValue] = useState('');
   const selectedModelRef = useRef(selectedModel);
   const userAvailableModelsCache = useRef<string[] | null>(null);
 
@@ -31,12 +31,12 @@ export function usePlaygroundModels(
     }
 
     try {
-      const response = await api.get("/api/user/available_models");
+      const response = await api.get('/api/user/available_models');
       const payload = response.data;
 
       if (payload?.success && Array.isArray(payload.data)) {
         const normalized = (payload.data as Array<unknown>)
-          .map((model) => (typeof model === "string" ? model.trim() : ""))
+          .map((model) => (typeof model === 'string' ? model.trim() : ''))
           .filter((model): model is string => model.length > 0);
         const uniqueModels: string[] = Array.from(new Set(normalized));
         userAvailableModelsCache.current = uniqueModels;
@@ -54,8 +54,8 @@ export function usePlaygroundModels(
     const loadModels = async () => {
       if (!selectedToken) {
         setModels([]);
-        setSelectedModel("");
-        setModelInputValue("");
+        setSelectedModel('');
+        setModelInputValue('');
         setIsLoadingModels(false);
         return;
       }
@@ -64,72 +64,63 @@ export function usePlaygroundModels(
       try {
         const token = tokens.find((t) => t.key === selectedToken);
         if (!token) {
-          throw new Error("Token not found");
+          throw new Error('Token not found');
         }
 
         let availableModels: string[] = [];
 
         if (token.models) {
-          availableModels = token.models.split(",").map((m) => m.trim());
+          availableModels = token.models.split(',').map((m) => m.trim());
         } else {
           availableModels = await fetchUserAvailableModels();
         }
 
         if (selectedChannel) {
           const channelModels = channelModelMap[selectedChannel] || [];
-          availableModels = availableModels.filter((m) =>
-            channelModels.includes(m)
-          );
+          availableModels = availableModels.filter((m) => channelModels.includes(m));
         }
 
-        const transformedModels: PlaygroundModel[] = availableModels.map(
-          (modelId) => {
-            const channels: string[] = [];
-            Object.entries(channelModelMap).forEach(([channelName, models]) => {
-              if (models.includes(modelId)) {
-                const label = channelLabelMap.get(channelName) || channelName;
-                channels.push(label);
-              }
-            });
-            channels.sort((a, b) => a.localeCompare(b));
+        const transformedModels: PlaygroundModel[] = availableModels.map((modelId) => {
+          const channels: string[] = [];
+          Object.entries(channelModelMap).forEach(([channelName, models]) => {
+            if (models.includes(modelId)) {
+              const label = channelLabelMap.get(channelName) || channelName;
+              channels.push(label);
+            }
+          });
+          channels.sort((a, b) => a.localeCompare(b));
 
-            return {
-              id: modelId,
-              object: "model",
-              owned_by: "system",
-              label: modelId,
-              channels,
-            };
-          }
-        );
+          return {
+            id: modelId,
+            object: 'model',
+            owned_by: 'system',
+            label: modelId,
+            channels,
+          };
+        });
 
         if (transformedModels.length === 0) {
           setModels([]);
-          setSelectedModel("");
-          setModelInputValue("");
+          setSelectedModel('');
+          setModelInputValue('');
           return;
         }
 
         setModels(transformedModels);
 
-        const availableIds = new Set(
-          transformedModels.map((model) => model.id)
-        );
+        const availableIds = new Set(transformedModels.map((model) => model.id));
 
         const resolveLabel = (modelId: string): string => {
           const match = transformedModels.find((model) => model.id === modelId);
           return match?.label ?? modelId;
         };
 
-        if (
-          selectedModelRef.current &&
-          availableIds.has(selectedModelRef.current)
-        ) {
+        if (selectedModelRef.current && availableIds.has(selectedModelRef.current)) {
           setModelInputValue(resolveLabel(selectedModelRef.current));
           return;
         }
 
-        const savedModel = loadFromStorage(STORAGE_KEYS.MODEL, "");
+        const savedModel = loadFromStorage(STORAGE_KEYS.MODEL, '');
         if (savedModel && availableIds.has(savedModel)) {
           setSelectedModel(savedModel);
           setModelInputValue(resolveLabel(savedModel));
@@ -141,13 +132,13 @@ export function usePlaygroundModels(
         setModelInputValue(resolveLabel(fallbackModelId));
       } catch {
         notify({
-          title: t("playground.notifications.error_title"),
-          message: t("playground.notifications.load_models_error"),
-          type: "error",
+          title: t('playground.notifications.error_title'),
+          message: t('playground.notifications.load_models_error'),
+          type: 'error',
         });
         setModels([]);
-        setSelectedModel("");
-        setModelInputValue("");
+        setSelectedModel('');
+        setModelInputValue('');
       } finally {
         setIsLoadingModels(false);
       }
@@ -158,25 +149,15 @@ export function usePlaygroundModels(
     } else if (!isLoadingTokens) {
       setIsLoadingModels(false);
       setModels([]);
-      setSelectedModel("");
-      setModelInputValue("");
+      setSelectedModel('');
+      setModelInputValue('');
       notify({
-        title: t("playground.notifications.no_tokens_title"),
-        message: t("playground.notifications.no_tokens_error"),
-        type: "error",
+        title: t('playground.notifications.no_tokens_title'),
+        message: t('playground.notifications.no_tokens_error'),
+        type: 'error',
       });
     }
-  }, [
-    selectedToken,
-    tokens,
-    isLoadingTokens,
-    notify,
-    fetchUserAvailableModels,
-    selectedChannel,
-    channelModelMap,
-    channelLabelMap,
-    t,
-  ]);
+  }, [selectedToken, tokens, isLoadingTokens, notify, fetchUserAvailableModels, selectedChannel, channelModelMap, channelLabelMap, t]);
 
   const modelSuggestions = useMemo<SuggestionOption[]>(() => {
     if (models.length === 0) {
@@ -191,12 +172,9 @@ export function usePlaygroundModels(
         const visibleChannels = model.channels.slice(0, 3);
         const remaining = model.channels.length - visibleChannels.length;
         if (visibleChannels.length > 0) {
-          const base = visibleChannels.join(", ");
-          const summary =
-            remaining > 0
-              ? `${base}, ${t("playground.parameters.model.more_channels", { count: remaining })}`
-              : base;
-          description = t("playground.parameters.model.channels_label", {
+          const base = visibleChannels.join(', ');
+          const summary = remaining > 0 ? `${base}, ${t('playground.parameters.model.more_channels', { count: remaining })}` : base;
+          description = t('playground.parameters.model.channels_label', {
             channels: summary,
           });
         }
@@ -209,9 +187,7 @@ export function usePlaygroundModels(
       };
     });
 
-    const sortedOptions = options
-      .slice()
-      .sort((a, b) => a.label.localeCompare(b.label));
+    const sortedOptions = options.slice().sort((a, b) => a.label.localeCompare(b.label));
 
     const query = modelInputValue.trim().toLowerCase();
     if (!query) {
@@ -230,7 +206,7 @@ export function usePlaygroundModels(
   const handleModelQueryChange = useCallback((value: string) => {
     setModelInputValue(value);
     if (value.trim().length === 0) {
-      setSelectedModel("");
+      setSelectedModel('');
     }
   }, []);
 
@@ -245,8 +221,8 @@ export function usePlaygroundModels(
   );
 
   const handleModelClear = useCallback(() => {
-    setSelectedModel("");
-    setModelInputValue("");
+    setSelectedModel('');
+    setModelInputValue('');
   }, []);
 
   return {

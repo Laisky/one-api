@@ -1,34 +1,22 @@
-import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-} from "@/components/ui/card";
-import {
-  Form,
-  FormControl,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from "@/components/ui/form";
-import { Input } from "@/components/ui/input";
-import { ResponsivePageContainer } from "@/components/ui/responsive-container";
-import { api } from "@/lib/api";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { useCallback, useEffect, useState } from "react";
-import { useForm } from "react-hook-form";
-import { useTranslation } from "react-i18next";
-import { useNavigate, useParams } from "react-router-dom";
-import * as z from "zod";
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription } from '@/components/ui/card';
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
+import { Input } from '@/components/ui/input';
+import { ResponsivePageContainer } from '@/components/ui/responsive-container';
+import { api } from '@/lib/api';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { useCallback, useEffect, useState } from 'react';
+import { useForm } from 'react-hook-form';
+import { useTranslation } from 'react-i18next';
+import { useNavigate, useParams } from 'react-router-dom';
+import * as z from 'zod';
 
 // Helper function to render quota with USD conversion (USD only)
 const renderQuotaWithPrompt = (quota: number): string => {
-  const quotaPerUnitRaw = localStorage.getItem("quota_per_unit");
-  const quotaPerUnit = parseFloat(quotaPerUnitRaw || "500000");
-  const usd =
-    Number.isFinite(quota) && quotaPerUnit > 0 ? quota / quotaPerUnit : NaN;
-  const usdValue = Number.isFinite(usd) ? usd.toFixed(2) : "0.00";
+  const quotaPerUnitRaw = localStorage.getItem('quota_per_unit');
+  const quotaPerUnit = parseFloat(quotaPerUnitRaw || '500000');
+  const usd = Number.isFinite(quota) && quotaPerUnit > 0 ? quota / quotaPerUnit : NaN;
+  const usdValue = Number.isFinite(usd) ? usd.toFixed(2) : '0.00';
   return `$${usdValue}`;
 };
 
@@ -39,8 +27,7 @@ export function EditRedemptionPage() {
   const navigate = useNavigate();
   const { t } = useTranslation();
   const tr = useCallback(
-    (key: string, defaultValue: string, options?: Record<string, unknown>) =>
-      t(`redemptions.edit.${key}`, { defaultValue, ...options }),
+    (key: string, defaultValue: string, options?: Record<string, unknown>) => t(`redemptions.edit.${key}`, { defaultValue, ...options }),
     [t]
   );
 
@@ -48,20 +35,14 @@ export function EditRedemptionPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const redemptionSchema = z.object({
-    name: z
-      .string()
-      .min(1, tr("validation.name_required", "Name is required"))
-      .max(20, tr("validation.name_max", "Max 20 chars")),
+    name: z.string().min(1, tr('validation.name_required', 'Name is required')).max(20, tr('validation.name_max', 'Max 20 chars')),
     // Coerce numeric fields so typing works and validation runs
-    quota: z.coerce
-      .number()
-      .int()
-      .min(0, tr("validation.quota_min", "Quota cannot be negative")),
+    quota: z.coerce.number().int().min(0, tr('validation.quota_min', 'Quota cannot be negative')),
     count: z.coerce
       .number()
       .int()
-      .min(1, tr("validation.count_min", "Count must be positive"))
-      .max(100, tr("validation.count_max", "Count cannot exceed 100"))
+      .min(1, tr('validation.count_min', 'Count must be positive'))
+      .max(100, tr('validation.count_max', 'Count cannot exceed 100'))
       .default(1),
   });
 
@@ -70,13 +51,13 @@ export function EditRedemptionPage() {
   const form = useForm<RedemptionForm>({
     resolver: zodResolver(redemptionSchema),
     defaultValues: {
-      name: "",
+      name: '',
       quota: 0,
       count: 1,
     },
   });
 
-  const watchQuota = form.watch("quota");
+  const watchQuota = form.watch('quota');
 
   const loadRedemption = async () => {
     if (!redemptionId) return;
@@ -89,10 +70,10 @@ export function EditRedemptionPage() {
       if (success && data) {
         form.reset(data);
       } else {
-        throw new Error(message || "Failed to load redemption");
+        throw new Error(message || 'Failed to load redemption');
       }
     } catch (error) {
-      console.error("Error loading redemption:", error);
+      console.error('Error loading redemption:', error);
     } finally {
       setLoading(false);
     }
@@ -112,40 +93,31 @@ export function EditRedemptionPage() {
       let response;
       if (isEdit && redemptionId) {
         // Unified API call - complete URL with /api prefix
-        response = await api.put("/api/redemption/", {
+        response = await api.put('/api/redemption/', {
           ...data,
           id: parseInt(redemptionId),
         });
       } else {
-        response = await api.post("/api/redemption/", data);
+        response = await api.post('/api/redemption/', data);
       }
 
       const { success, message } = response.data;
       if (success) {
-        navigate("/redemptions", {
+        navigate('/redemptions', {
           state: {
             message: isEdit
-              ? tr(
-                  "notifications.update_success",
-                  "Redemption updated successfully"
-                )
-              : tr(
-                  "notifications.create_success",
-                  "Redemption created successfully"
-                ),
+              ? tr('notifications.update_success', 'Redemption updated successfully')
+              : tr('notifications.create_success', 'Redemption created successfully'),
           },
         });
       } else {
-        form.setError("root", {
-          message: message || tr("notifications.failed", "Operation failed"),
+        form.setError('root', {
+          message: message || tr('notifications.failed', 'Operation failed'),
         });
       }
     } catch (error) {
-      form.setError("root", {
-        message:
-          error instanceof Error
-            ? error.message
-            : tr("notifications.failed", "Operation failed"),
+      form.setError('root', {
+        message: error instanceof Error ? error.message : tr('notifications.failed', 'Operation failed'),
       });
     } finally {
       setIsSubmitting(false);
@@ -155,19 +127,15 @@ export function EditRedemptionPage() {
   if (loading) {
     return (
       <ResponsivePageContainer
-        title={isEdit ? tr("title.edit", "Edit Redemption") : tr("title.create", "Create Redemption")}
+        title={isEdit ? tr('title.edit', 'Edit Redemption') : tr('title.create', 'Create Redemption')}
         description={
-          isEdit
-            ? tr("description.edit", "Update redemption code settings")
-            : tr("description.create", "Create a new redemption code")
+          isEdit ? tr('description.edit', 'Update redemption code settings') : tr('description.create', 'Create a new redemption code')
         }
       >
         <Card className="border-0 shadow-none md:border md:shadow-sm">
           <CardContent className="flex items-center justify-center py-12">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-            <span className="ml-3">
-              {tr("loading", "Loading redemption...")}
-            </span>
+            <span className="ml-3">{tr('loading', 'Loading redemption...')}</span>
           </CardContent>
         </Card>
       </ResponsivePageContainer>
@@ -176,11 +144,9 @@ export function EditRedemptionPage() {
 
   return (
     <ResponsivePageContainer
-      title={isEdit ? tr("title.edit", "Edit Redemption") : tr("title.create", "Create Redemption")}
+      title={isEdit ? tr('title.edit', 'Edit Redemption') : tr('title.create', 'Create Redemption')}
       description={
-        isEdit
-          ? tr("description.edit", "Update redemption code settings")
-          : tr("description.create", "Create a new redemption code")
+        isEdit ? tr('description.edit', 'Update redemption code settings') : tr('description.create', 'Create a new redemption code')
       }
     >
       <Card className="border-0 shadow-none md:border md:shadow-sm">
@@ -192,17 +158,9 @@ export function EditRedemptionPage() {
                 name="name"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>
-                      {t("redemptions.fields.name.label", "Name")}
-                    </FormLabel>
+                    <FormLabel>{t('redemptions.fields.name.label', 'Name')}</FormLabel>
                     <FormControl>
-                      <Input
-                        placeholder={t(
-                          "redemptions.fields.name.placeholder",
-                          "Enter redemption name"
-                        )}
-                        {...field}
-                      />
+                      <Input placeholder={t('redemptions.fields.name.placeholder', 'Enter redemption name')} {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -217,15 +175,10 @@ export function EditRedemptionPage() {
                     <FormItem>
                       <FormLabel>
                         {(() => {
-                          const current = (watchQuota ??
-                            field.value ??
-                            0) as any;
+                          const current = (watchQuota ?? field.value ?? 0) as any;
                           const numeric = Number(current);
-                          const usdLabel =
-                            Number.isFinite(numeric) && numeric >= 0
-                              ? renderQuotaWithPrompt(numeric)
-                              : "$0.00";
-                          return `${t("redemptions.fields.quota.label", "Quota")} (${usdLabel})`;
+                          const usdLabel = Number.isFinite(numeric) && numeric >= 0 ? renderQuotaWithPrompt(numeric) : '$0.00';
+                          return `${t('redemptions.fields.quota.label', 'Quota')} (${usdLabel})`;
                         })()}
                       </FormLabel>
                       <FormControl>
@@ -250,9 +203,7 @@ export function EditRedemptionPage() {
                   name="count"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>
-                        {t("redemptions.fields.count.label", "Count")}
-                      </FormLabel>
+                      <FormLabel>{t('redemptions.fields.count.label', 'Count')}</FormLabel>
                       <FormControl>
                         <Input
                           type="number"
@@ -271,29 +222,20 @@ export function EditRedemptionPage() {
                 />
               </div>
 
-              {form.formState.errors.root && (
-                <div className="text-sm text-destructive">
-                  {form.formState.errors.root.message}
-                </div>
-              )}
+              {form.formState.errors.root && <div className="text-sm text-destructive">{form.formState.errors.root.message}</div>}
 
               <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => navigate("/redemptions")}
-                  className="w-full sm:w-auto"
-                >
-                  {t("redemptions.actions.cancel", "Cancel")}
+                <Button type="button" variant="outline" onClick={() => navigate('/redemptions')} className="w-full sm:w-auto">
+                  {t('redemptions.actions.cancel', 'Cancel')}
                 </Button>
                 <Button type="submit" disabled={isSubmitting} className="w-full sm:w-auto">
                   {isSubmitting
                     ? isEdit
-                      ? t("redemptions.actions.updating", "Updating...")
-                      : t("redemptions.actions.creating", "Creating...")
+                      ? t('redemptions.actions.updating', 'Updating...')
+                      : t('redemptions.actions.creating', 'Creating...')
                     : isEdit
-                      ? t("redemptions.actions.update", "Update Redemption")
-                      : t("redemptions.actions.create", "Create Redemption")}
+                      ? t('redemptions.actions.update', 'Update Redemption')
+                      : t('redemptions.actions.create', 'Create Redemption')}
                 </Button>
               </div>
             </form>

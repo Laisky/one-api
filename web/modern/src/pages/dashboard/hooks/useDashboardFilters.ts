@@ -1,12 +1,6 @@
-import type { TFunction } from "i18next";
-import {
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useMemo,
-  useState,
-} from "react";
-import { api } from "@/lib/api";
+import type { TFunction } from 'i18next';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from 'react';
+import { api } from '@/lib/api';
 
 interface UserOption {
   id: number;
@@ -24,14 +18,11 @@ interface ApplyPresetResult {
   to: string;
 }
 
-export const useDashboardFilters = ({
-  isAdmin,
-  t,
-}: UseDashboardFiltersArgs) => {
+export const useDashboardFilters = ({ isAdmin, t }: UseDashboardFiltersArgs) => {
   const [filtersReady, setFiltersReady] = useState(false);
-  const [dashUser, setDashUser] = useState<string>("all");
+  const [dashUser, setDashUser] = useState<string>('all');
   const [userOptions, setUserOptions] = useState<UserOption[]>([]);
-  const [dateError, setDateError] = useState("");
+  const [dateError, setDateError] = useState('');
 
   const fmt = useCallback((d: Date) => d.toISOString().slice(0, 10), []);
   const today = useMemo(() => new Date(), []);
@@ -45,12 +36,12 @@ export const useDashboardFilters = ({
   const [toDate, setToDate] = useState(fmt(today));
 
   useLayoutEffect(() => {
-    if (typeof document === "undefined") {
+    if (typeof document === 'undefined') {
       return;
     }
 
     const active = document.activeElement as HTMLElement | null;
-    if (active && ["INPUT", "SELECT", "TEXTAREA"].includes(active.tagName)) {
+    if (active && ['INPUT', 'SELECT', 'TEXTAREA'].includes(active.tagName)) {
       active.blur();
     }
 
@@ -61,23 +52,23 @@ export const useDashboardFilters = ({
 
   const getMaxDate = useCallback(() => {
     const now = new Date();
-    return now.toISOString().split("T")[0];
+    return now.toISOString().split('T')[0];
   }, []);
 
   const getMinDate = useCallback(() => {
     if (isAdmin) {
       const oneYearAgo = new Date();
       oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
-      return oneYearAgo.toISOString().split("T")[0];
+      return oneYearAgo.toISOString().split('T')[0];
     }
     const sevenDaysAgo = new Date();
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-    return sevenDaysAgo.toISOString().split("T")[0];
+    return sevenDaysAgo.toISOString().split('T')[0];
   }, [isAdmin]);
 
   const validateDateRange = useCallback(
     (from: string, to: string): string => {
-      if (!from || !to) return "";
+      if (!from || !to) return '';
 
       const fromDateObj = new Date(from);
       const toDateObj = new Date(to);
@@ -85,43 +76,37 @@ export const useDashboardFilters = ({
       const minDate = new Date(getMinDate());
 
       if (fromDateObj > toDateObj) {
-        return t("dashboard.errors.range_order");
+        return t('dashboard.errors.range_order');
       }
 
       if (toDateObj > todayObj) {
-        return t("dashboard.errors.future");
+        return t('dashboard.errors.future');
       }
 
       if (fromDateObj < minDate) {
-        return isAdmin
-          ? t("dashboard.errors.too_old_admin")
-          : t("dashboard.errors.too_old_user");
+        return isAdmin ? t('dashboard.errors.too_old_admin') : t('dashboard.errors.too_old_user');
       }
 
-      const daysDiff = Math.ceil(
-        (toDateObj.getTime() - fromDateObj.getTime()) / (1000 * 60 * 60 * 24)
-      );
+      const daysDiff = Math.ceil((toDateObj.getTime() - fromDateObj.getTime()) / (1000 * 60 * 60 * 24));
       const maxDays = isAdmin ? 365 : 7;
 
       if (daysDiff > maxDays) {
-        return isAdmin
-          ? t("dashboard.errors.range_limit_admin")
-          : t("dashboard.errors.range_limit_user");
+        return isAdmin ? t('dashboard.errors.range_limit_admin') : t('dashboard.errors.range_limit_user');
       }
 
-      return "";
+      return '';
     },
     [getMinDate, isAdmin, t]
   );
 
   const applyPreset = useCallback(
-    (preset: "today" | "7d" | "30d"): ApplyPresetResult => {
+    (preset: 'today' | '7d' | '30d'): ApplyPresetResult => {
       const now = new Date();
       const start = new Date(now);
 
-      if (preset === "today") {
+      if (preset === 'today') {
         start.setDate(now.getDate());
-      } else if (preset === "7d") {
+      } else if (preset === '7d') {
         start.setDate(now.getDate() - 6);
       } else {
         start.setDate(now.getDate() - 29);
@@ -140,7 +125,7 @@ export const useDashboardFilters = ({
       return;
     }
     try {
-      const res = await api.get("/api/user/dashboard/users");
+      const res = await api.get('/api/user/dashboard/users');
       if (res.data?.success) {
         setUserOptions(res.data.data || []);
       }

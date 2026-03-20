@@ -60,9 +60,7 @@ export function EditChannelPage() {
     return (
       <ResponsivePageContainer
         title={isEdit ? tr('title.edit', 'Edit Channel') : tr('title.create', 'Create Channel')}
-        description={
-          isEdit ? tr('description.edit', 'Update channel configuration') : tr('description.create', 'Create a new API channel')
-        }
+        description={isEdit ? tr('description.edit', 'Update channel configuration') : tr('description.create', 'Create a new API channel')}
       >
         <Card className="border-0 shadow-none md:border md:shadow-sm">
           <CardContent className="flex items-center justify-center py-12">

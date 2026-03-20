@@ -1,9 +1,9 @@
 /// <reference types="vitest" />
-import { defineConfig } from 'vite'
-import react from '@vitejs/plugin-react'
-import path from 'node:path'
-import { fileURLToPath } from 'node:url'
-const __dirname = path.dirname(fileURLToPath(import.meta.url))
+import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 export default defineConfig(({ mode }) => ({
   plugins: [react()],
@@ -60,21 +60,16 @@ export default defineConfig(({ mode }) => ({
             '@radix-ui/react-dialog',
             '@radix-ui/react-dropdown-menu',
             '@radix-ui/react-popover',
-            '@radix-ui/react-tooltip'
+            '@radix-ui/react-tooltip',
           ],
-          'radix-ui-forms': [
-            '@radix-ui/react-checkbox',
-            '@radix-ui/react-label',
-            '@radix-ui/react-select',
-            '@radix-ui/react-switch'
-          ],
+          'radix-ui-forms': ['@radix-ui/react-checkbox', '@radix-ui/react-label', '@radix-ui/react-select', '@radix-ui/react-switch'],
           'radix-ui-layout': [
             '@radix-ui/react-scroll-area',
             '@radix-ui/react-separator',
             '@radix-ui/react-slot',
             '@radix-ui/react-tabs',
             '@radix-ui/react-toast',
-            '@radix-ui/react-hover-card'
+            '@radix-ui/react-hover-card',
           ],
 
           // Markdown processing and syntax highlighting - heavy libraries
@@ -89,13 +84,7 @@ export default defineConfig(({ mode }) => ({
           charts: ['recharts'],
 
           // Icons and UI utilities
-          'ui-utils': [
-            'lucide-react',
-            'class-variance-authority',
-            'clsx',
-            'tailwind-merge',
-            'cmdk'
-          ],
+          'ui-utils': ['lucide-react', 'class-variance-authority', 'clsx', 'tailwind-merge', 'cmdk'],
 
           // Form handling
           forms: ['react-hook-form', '@hookform/resolvers', 'zod'],
@@ -109,10 +98,7 @@ export default defineConfig(({ mode }) => ({
           network: ['axios'],
 
           // Specialized utilities
-          'misc-utils': [
-            'qrcode',
-            'zustand'
-          ],
+          'misc-utils': ['qrcode', 'zustand'],
         },
       },
     },
@@ -128,4 +114,4 @@ export default defineConfig(({ mode }) => ({
     environment: 'jsdom',
     setupFiles: ['./src/test/setup.ts'],
   },
-}))
+}));

@@ -1,8 +1,8 @@
-import { describe, expect, it } from "vitest";
-import { barColor } from "./types";
+import { describe, expect, it } from 'vitest';
+import { barColor } from './types';
 
-describe("Dashboard helpers", () => {
-  it("barColor wraps palette", () => {
+describe('Dashboard helpers', () => {
+  it('barColor wraps palette', () => {
     const a = barColor(0);
     const b = barColor(15);
     const c = barColor(16);

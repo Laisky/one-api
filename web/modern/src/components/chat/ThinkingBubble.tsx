@@ -1,17 +1,17 @@
-import { Badge } from '@/components/ui/badge'
-import { MarkdownRenderer } from '@/components/ui/markdown'
-import { Brain, ChevronDown, ChevronRight } from 'lucide-react'
-import React from 'react'
+import { Badge } from '@/components/ui/badge';
+import { MarkdownRenderer } from '@/components/ui/markdown';
+import { Brain, ChevronDown, ChevronRight } from 'lucide-react';
+import React from 'react';
 
 export interface ThinkingBubbleProps {
-  content: string | null
-  isExpanded: boolean
-  onToggle: () => void
-  isStreaming: boolean
+  content: string | null;
+  isExpanded: boolean;
+  onToggle: () => void;
+  isStreaming: boolean;
 }
 
 export const ThinkingBubble: React.FC<ThinkingBubbleProps> = ({ content, isExpanded, onToggle, isStreaming }) => {
-  if (!content || !content.trim()) return null
+  if (!content || !content.trim()) return null;
 
   return (
     <div className="mb-4 relative">
@@ -47,9 +47,7 @@ export const ThinkingBubble: React.FC<ThinkingBubbleProps> = ({ content, isExpan
           </div>
 
           <div className="flex items-center gap-2">
-            {isStreaming && (
-              <div className="text-xs text-muted-foreground animate-pulse">Processing...</div>
-            )}
+            {isStreaming && <div className="text-xs text-muted-foreground animate-pulse">Processing...</div>}
             {isExpanded ? (
               <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform group-hover:scale-110" />
             ) : (
@@ -61,16 +59,13 @@ export const ThinkingBubble: React.FC<ThinkingBubbleProps> = ({ content, isExpan
         {isExpanded && (
           <div className="px-4 pb-4 border-t border-border/50">
             <div className="mt-3 p-4 bg-background/80 rounded-lg border border-border/40">
-              <MarkdownRenderer
-                content={content}
-                className="text-sm text-foreground [&>*:first-child]:mt-0 [&>*:last-child]:mb-0"
-              />
+              <MarkdownRenderer content={content} className="text-sm text-foreground [&>*:first-child]:mt-0 [&>*:last-child]:mb-0" />
             </div>
           </div>
         )}
       </div>
     </div>
-  )
-}
+  );
+};
 
-export default ThinkingBubble
+export default ThinkingBubble;

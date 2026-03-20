@@ -99,16 +99,16 @@ GitHub Copilot’s backend API is not officially documented for public use, but 
 
 **Key Benefits:**
 
--   **Unified API:** Use standard OpenAI endpoints (`/v1/chat/completions`, `/v1/models`) for Copilot.
--   **Local Control:** Run the proxy on your own machine, keeping data private.
--   **Client Compatibility:** Integrate with OpenAI SDKs and tools without modification.
--   **Security:** Manage tokens and secrets locally, with full control over authentication and access.
+- **Unified API:** Use standard OpenAI endpoints (`/v1/chat/completions`, `/v1/models`) for Copilot.
+- **Local Control:** Run the proxy on your own machine, keeping data private.
+- **Client Compatibility:** Integrate with OpenAI SDKs and tools without modification.
+- **Security:** Manage tokens and secrets locally, with full control over authentication and access.
 
 **Caveats:**
 
--   **Unofficial Use:** This method uses undocumented Copilot endpoints and may violate GitHub’s terms of service. It is not recommended for production use.
--   **Token Expiry:** Copilot tokens expire every 25 minutes and must be refreshed proactively.
--   **Rate Limits:** GitHub enforces rate limits; excessive usage may result in throttling or bans. [4][5][6]
+- **Unofficial Use:** This method uses undocumented Copilot endpoints and may violate GitHub’s terms of service. It is not recommended for production use.
+- **Token Expiry:** Copilot tokens expire every 25 minutes and must be refreshed proactively.
+- **Rate Limits:** GitHub enforces rate limits; excessive usage may result in throttling or bans. [4][5][6]
 
 ## 2. Authentication: Obtaining Copilot Tokens via GitHub Device Flow
 
@@ -169,9 +169,9 @@ func getCopilotToken(accessToken string) (copilotToken string, expiry int64, err
 
 **Best Practices:**
 
--   Store tokens securely in memory or encrypted files.
--   Never hardcode tokens in source code or commit them to version control.
--   Use environment variables for token injection in CI/CD or containerized environments. [4][5][7][8][2]
+- Store tokens securely in memory or encrypted files.
+- Never hardcode tokens in source code or commit them to version control.
+- Use environment variables for token injection in CI/CD or containerized environments. [4][5][7][8][2]
 
 ## 3. Proxy Architecture: Design Patterns for OpenAI-Compatible Local Proxies in Go
 
@@ -179,33 +179,33 @@ func getCopilotToken(accessToken string) (copilotToken string, expiry int64, err
 
 A robust proxy should:
 
--   Accept OpenAI-compatible requests from clients.
--   Authenticate and inject Copilot tokens.
--   Forward requests to Copilot’s backend API.
--   Transform requests/responses as needed for schema compatibility.
--   Support streaming responses.
--   Enforce rate limits and quotas.
--   Log and monitor activity.
--   Securely manage secrets and tokens.
+- Accept OpenAI-compatible requests from clients.
+- Authenticate and inject Copilot tokens.
+- Forward requests to Copilot’s backend API.
+- Transform requests/responses as needed for schema compatibility.
+- Support streaming responses.
+- Enforce rate limits and quotas.
+- Log and monitor activity.
+- Securely manage secrets and tokens.
 
 **Reference Implementations:**
 
--   `Alorse/copilot-to-api` (Node.js/Python)
--   `chf2000/openai-copilot` (Go)
--   `oceanplexian/go-openai-proxy` (Go)
--   `aashari/go-generative-api-router` (Go)
--   `anothrNick/openai-proxy` (Go) [9]
+- `Alorse/copilot-to-api` (Node.js/Python)
+- `chf2000/openai-copilot` (Go)
+- `oceanplexian/go-openai-proxy` (Go)
+- `aashari/go-generative-api-router` (Go)
+- `anothrNick/openai-proxy` (Go) [9]
 
 ### 3.2. Recommended Go Libraries
 
--   `net/http`: Standard HTTP server and client.
--   `net/http/httputil`: Reverse proxy utilities.
--   `github.com/sashabaranov/go-openai`: OpenAI API client (for compatibility and schema reference) [10][1]
--   `golang.org/x/time/rate`: Token bucket rate limiting [11]
--   `github.com/joho/godotenv`: Environment variable loading from .env files [7]
--   `github.com/uber-go/zap`: Structured logging.
--   `github.com/stretchr/testify`: Testing utilities.
--   `github.com/cucumber/godog`: BDD integration testing [12][13]
+- `net/http`: Standard HTTP server and client.
+- `net/http/httputil`: Reverse proxy utilities.
+- `github.com/sashabaranov/go-openai`: OpenAI API client (for compatibility and schema reference) [10][1]
+- `golang.org/x/time/rate`: Token bucket rate limiting [11]
+- `github.com/joho/godotenv`: Environment variable loading from .env files [7]
+- `github.com/uber-go/zap`: Structured logging.
+- `github.com/stretchr/testify`: Testing utilities.
+- `github.com/cucumber/godog`: BDD integration testing [12][13]
 
 ## 4. Request Forwarding: Implementing HTTP Proxying and Request Transformation in Go
 
@@ -242,17 +242,17 @@ func main() {
 
 **Key Points:**
 
--   The `Director` function rewrites the request URL and injects required headers.
--   Removing `Accept-Encoding` ensures Go’s HTTP client can handle chunked responses transparently [14].
--   For streaming, ensure the proxy supports `Transfer-Encoding: chunked` and forwards data as it arrives [15][16][17].
+- The `Director` function rewrites the request URL and injects required headers.
+- Removing `Accept-Encoding` ensures Go’s HTTP client can handle chunked responses transparently [14].
+- For streaming, ensure the proxy supports `Transfer-Encoding: chunked` and forwards data as it arrives [15][16][17].
 
 ### 4.2. Advanced Request Transformation
 
 To ensure OpenAI schema compatibility, transform incoming requests to match Copilot’s expected format:
 
--   Map `/v1/chat/completions` to `/chat/completions`.
--   Translate request body fields (e.g., `messages`, `max_tokens`, `temperature`, `stream`).
--   Validate and sanitize input to prevent schema mismatches.
+- Map `/v1/chat/completions` to `/chat/completions`.
+- Translate request body fields (e.g., `messages`, `max_tokens`, `temperature`, `stream`).
+- Validate and sanitize input to prevent schema mismatches.
 
 **Example Transformation:**
 
@@ -269,9 +269,9 @@ func transformOpenAIToCopilot(req *http.Request) (*http.Request, error) {
 
 **Best Practices:**
 
--   Store tokens in memory, encrypted files, or secure vaults.
--   Use environment variables for injection in CI/CD or Docker.
--   Never log or expose tokens in plaintext.
+- Store tokens in memory, encrypted files, or secure vaults.
+- Use environment variables for injection in CI/CD or Docker.
+- Never log or expose tokens in plaintext.
 
 **Go Example:**
 
@@ -291,9 +291,9 @@ func getCopilotToken() string {
 
 Copilot tokens expire every 25 minutes. Implement proactive refresh logic:
 
--   Monitor token expiry before each request.
--   Refresh token if expiry is within a threshold (e.g., 5 minutes).
--   Use exponential backoff for retrying failed refresh attempts.
+- Monitor token expiry before each request.
+- Refresh token if expiry is within a threshold (e.g., 5 minutes).
+- Use exponential backoff for retrying failed refresh attempts.
 
 **Go Example:**
 
@@ -326,9 +326,9 @@ See _Token Lifecycle Management in github-copilot-svcs_ for detailed state machi
 
 Inject the following headers for Copilot API requests:
 
--   `Authorization: Bearer <COPILOT_API_TOKEN>`
--   `Copilot-Integration-Id: vscode-chat`
--   Remove `Accept-Encoding` to avoid compressed responses issues.
+- `Authorization: Bearer <COPILOT_API_TOKEN>`
+- `Copilot-Integration-Id: vscode-chat`
+- Remove `Accept-Encoding` to avoid compressed responses issues.
 
 ## 6. Streaming Support: Handling OpenAI-Style Streaming Responses in Go
 
@@ -338,9 +338,9 @@ OpenAI’s API supports streaming via Server-Sent Events (SSE) or HTTP chunked t
 
 **Proxy Requirements:**
 
--   Forward streaming requests from client to Copilot.
--   Relay streamed chunks to the client as they arrive.
--   Ensure compatibility with OpenAI client libraries.
+- Forward streaming requests from client to Copilot.
+- Relay streamed chunks to the client as they arrive.
+- Ensure compatibility with OpenAI client libraries.
 
 ### 6.2. Go Implementation
 
@@ -370,9 +370,9 @@ func streamHandler(w http.ResponseWriter, req *http.Request) {
 
 **Notes:**
 
--   Use `io.Copy` to stream data from Copilot to the client.
--   Set `Content-Type: text/event-stream` for SSE compatibility.
--   Ensure the proxy does not buffer the response; disable proxy buffering in NGINX or other load balancers [16][15].
+- Use `io.Copy` to stream data from Copilot to the client.
+- Set `Content-Type: text/event-stream` for SSE compatibility.
+- Ensure the proxy does not buffer the response; disable proxy buffering in NGINX or other load balancers [16][15].
 
 ## 7. Error Handling and Retries: Exponential Backoff and Rate-Limit Handling in Go
 
@@ -380,9 +380,9 @@ func streamHandler(w http.ResponseWriter, req *http.Request) {
 
 Handle errors gracefully:
 
--   Return appropriate HTTP status codes (e.g., 401 for unauthorized, 429 for rate limit).
--   Log errors with context, but avoid leaking sensitive data.
--   Provide informative error messages to clients.
+- Return appropriate HTTP status codes (e.g., 401 for unauthorized, 429 for rate limit).
+- Log errors with context, but avoid leaking sensitive data.
+- Provide informative error messages to clients.
 
 ### 7.2. Exponential Backoff for Retries
 
@@ -411,10 +411,10 @@ func exponentialBackoff(attempt int) time.Duration {
 
 **Best Practices:**
 
--   Retry only on transient errors (5xx, 429, network).
--   Respect `Retry-After` headers from upstream.
--   Cap the number of retries and delay duration.
--   Ensure requests are idempotent before retrying [18][19][20].
+- Retry only on transient errors (5xx, 429, network).
+- Respect `Retry-After` headers from upstream.
+- Cap the number of retries and delay duration.
+- Ensure requests are idempotent before retrying [18][19][20].
 
 ## 8. Rate Limiting: Implementing Client-Side Throttling and Per-User Quotas
 
@@ -440,24 +440,24 @@ func rateLimitedHandler(w http.ResponseWriter, r *http.Request) {
 
 **Per-User Rate Limiting:**
 
--   Maintain a map of user/client IDs to individual limiters.
--   Use request headers or tokens to identify users.
+- Maintain a map of user/client IDs to individual limiters.
+- Use request headers or tokens to identify users.
 
 **Advanced:**
 
--   Implement dynamic rate adjustment, burst control, and monitoring.
--   Use distributed rate limiting for multi-node deployments [21][11][20].
+- Implement dynamic rate adjustment, burst control, and monitoring.
+- Use distributed rate limiting for multi-node deployments [21][11][20].
 
 ### 8.2. Handling OpenAI Rate Limit Headers
 
 Parse and respect rate limit headers from Copilot/OpenAI responses:
 
--   `x-ratelimit-limit-requests`
--   `x-ratelimit-limit-tokens`
--   `x-ratelimit-remaining-requests`
--   `x-ratelimit-remaining-tokens`
--   `x-ratelimit-reset-requests`
--   `x-ratelimit-reset-tokens`
+- `x-ratelimit-limit-requests`
+- `x-ratelimit-limit-tokens`
+- `x-ratelimit-remaining-requests`
+- `x-ratelimit-remaining-tokens`
+- `x-ratelimit-reset-requests`
+- `x-ratelimit-reset-tokens`
 
 Adjust client-side throttling based on these values to avoid hitting limits.
 
@@ -477,47 +477,47 @@ func getAPIKey() string {
 }
 ```
 
--   Use `.env` files for local development, loaded via `github.com/joho/godotenv`.
--   Add `.env` to `.gitignore` to prevent accidental commits.
--   For production, use secret management services (Vault, AWS Secrets Manager) [7][2][8].
+- Use `.env` files for local development, loaded via `github.com/joho/godotenv`.
+- Add `.env` to `.gitignore` to prevent accidental commits.
+- For production, use secret management services (Vault, AWS Secrets Manager) [7][2][8].
 
 ### 9.2. Encryption and Rotation
 
--   Encrypt secrets at rest.
--   Rotate tokens and keys regularly.
--   Implement instant revocation for compromised keys.
--   Use per-user or per-client keys for traceability and auditability.
+- Encrypt secrets at rest.
+- Rotate tokens and keys regularly.
+- Implement instant revocation for compromised keys.
+- Use per-user or per-client keys for traceability and auditability.
 
 ### 9.3. Secure Logging
 
--   Mask sensitive data in logs.
--   Avoid logging tokens, API keys, or user data.
--   Use structured logging for observability.
+- Mask sensitive data in logs.
+- Avoid logging tokens, API keys, or user data.
+- Use structured logging for observability.
 
 ## 10. Compatibility: Ensuring OpenAI API Schema Compatibility and Request Validation
 
 ### 10.1. Schema Mapping
 
--   Map OpenAI endpoints (`/v1/chat/completions`, `/v1/models`) to Copilot equivalents.
--   Validate request bodies for required fields (`model`, `messages`, `max_tokens`, `temperature`, `stream`).
--   Transform responses to match OpenAI’s schema (`choices`, `usage`, etc.).
+- Map OpenAI endpoints (`/v1/chat/completions`, `/v1/models`) to Copilot equivalents.
+- Validate request bodies for required fields (`model`, `messages`, `max_tokens`, `temperature`, `stream`).
+- Transform responses to match OpenAI’s schema (`choices`, `usage`, etc.).
 
 **Reference:**
 [OpenAI API Reference and OpenAPI Specification] [22][23][1]
 
 ### 10.2. Request Validation
 
--   Reject invalid requests with clear error messages.
--   Enforce limits on input size, token count, and parameter values.
--   Use JSON schema validation for request bodies.
+- Reject invalid requests with clear error messages.
+- Enforce limits on input size, token count, and parameter values.
+- Use JSON schema validation for request bodies.
 
 ## 11. Streaming Proxying: Forwarding Streaming Responses from Copilot to OpenAI Clients
 
 ### 11.1. Streaming Patterns
 
--   Use HTTP chunked transfer encoding or SSE for streaming.
--   Relay Copilot’s streamed chunks to the client in real time.
--   Ensure compatibility with OpenAI client libraries’ streaming interfaces.
+- Use HTTP chunked transfer encoding or SSE for streaming.
+- Relay Copilot’s streamed chunks to the client in real time.
+- Ensure compatibility with OpenAI client libraries’ streaming interfaces.
 
 **Go Example:**
 
@@ -531,17 +531,17 @@ func streamProxy(w http.ResponseWriter, req *http.Request) {
 
 **Frontend Considerations:**
 
--   Clients must handle chunked responses or SSE.
--   For browser clients, use `ReadableStream` and `TextDecoder` to process chunks [16][17][15].
+- Clients must handle chunked responses or SSE.
+- For browser clients, use `ReadableStream` and `TextDecoder` to process chunks [16][17][15].
 
 ## 12. Token Expiry and Refresh: Handling Copilot Token Short Lifetimes (25 Minutes)
 
 ### 12.1. Proactive Refresh Strategy
 
--   Monitor token expiry before each request.
--   Refresh token if expiry is within a threshold (e.g., 5 minutes).
--   Use exponential backoff for retrying failed refresh attempts.
--   Fallback to full device flow authentication if refresh fails.
+- Monitor token expiry before each request.
+- Refresh token if expiry is within a threshold (e.g., 5 minutes).
+- Use exponential backoff for retrying failed refresh attempts.
+- Fallback to full device flow authentication if refresh fails.
 
 **Go Example:**
 
@@ -576,16 +576,16 @@ CMD ["./copilot-proxy"]
 ```yaml
 version: '3'
 services:
-    copilot-proxy:
-        build: .
-        ports:
-            - '8080:8080'
-        environment:
-            - COPILOT_API_TOKEN=your_token
-            - TLS_CERT_FILE=/certs/cert.pem
-            - TLS_KEY_FILE=/certs/key.pem
-        volumes:
-            - ./certs:/certs
+  copilot-proxy:
+    build: .
+    ports:
+      - '8080:8080'
+    environment:
+      - COPILOT_API_TOKEN=your_token
+      - TLS_CERT_FILE=/certs/cert.pem
+      - TLS_KEY_FILE=/certs/key.pem
+    volumes:
+      - ./certs:/certs
 ```
 
 ### 13.2. TLS and Self-Signed Certificates
@@ -604,30 +604,30 @@ http.ListenAndServeTLS(":8080", "cert.pem", "key.pem", handler)
 
 **Best Practices:**
 
--   Use HTTPS for all communications, even locally.
--   Store certificates securely.
--   Rotate certificates regularly.
+- Use HTTPS for all communications, even locally.
+- Store certificates securely.
+- Rotate certificates regularly.
 
 ## 14. Logging and Monitoring: Observability for Proxy Services
 
--   Use structured logging (zap, logrus) for request/response tracking.
--   Mask sensitive data in logs.
--   Monitor rate limits, errors, and latency.
--   Expose health check endpoints (`/health`) for monitoring.
--   Integrate with observability platforms (Prometheus, Grafana) for metrics.
+- Use structured logging (zap, logrus) for request/response tracking.
+- Mask sensitive data in logs.
+- Monitor rate limits, errors, and latency.
+- Expose health check endpoints (`/health`) for monitoring.
+- Integrate with observability platforms (Prometheus, Grafana) for metrics.
 
 ## 15. Testing and Validation: Unit Tests, Integration Tests, and End-to-End Checks
 
 ### 15.1. Unit Testing
 
--   Test request transformation, token management, error handling.
--   Use `testing` and `testify` for assertions.
+- Test request transformation, token management, error handling.
+- Use `testing` and `testify` for assertions.
 
 ### 15.2. Integration Testing
 
--   Use `godog` (Cucumber for Go) and `testcontainers-go` for BDD integration tests.
--   Spin up containers for proxy, database, and mock Copilot API.
--   Write feature files to describe expected behavior.
+- Use `godog` (Cucumber for Go) and `testcontainers-go` for BDD integration tests.
+- Spin up containers for proxy, database, and mock Copilot API.
+- Write feature files to describe expected behavior.
 
 **Example:**
 
@@ -642,16 +642,16 @@ func TestProxyIntegration(t *testing.T) {
 
 ### 15.3. End-to-End Testing
 
--   Use OpenAI client libraries (Go, Python, JS) to send requests to the proxy.
--   Validate streaming, error handling, and rate limiting.
+- Use OpenAI client libraries (Go, Python, JS) to send requests to the proxy.
+- Validate streaming, error handling, and rate limiting.
 
 ## 16. Examples and Reference Implementations: Existing Open-Source Projects to Study
 
--   **`Alorse/copilot-to-api`**: Node.js/Python proxy for Copilot to OpenAI API
--   **`chf2000/openai-copilot`**: Go proxy for OpenAI API compatibility
--   **`oceanplexian/go-openai-proxy`**: Go proxy with streaming support
--   **`aashari/go-generative-api-router`**: Go microservice for multi-vendor OpenAI-compatible proxying
--   **`anothrNick/openai-proxy`**: Go proxy for streaming OpenAI chat completions [9]
+- **`Alorse/copilot-to-api`**: Node.js/Python proxy for Copilot to OpenAI API
+- **`chf2000/openai-copilot`**: Go proxy for OpenAI API compatibility
+- **`oceanplexian/go-openai-proxy`**: Go proxy with streaming support
+- **`aashari/go-generative-api-router`**: Go microservice for multi-vendor OpenAI-compatible proxying
+- **`anothrNick/openai-proxy`**: Go proxy for streaming OpenAI chat completions [9]
 
 ## 17. Client Integration: Using OpenAI Client Libraries with Local Proxy (Go, Python, JS)
 
@@ -707,13 +707,13 @@ print(response.choices[0].message.content)
 import OpenAI from 'openai';
 
 const openai = new OpenAI({
-    baseURL: 'http://localhost:8080/v1',
-    apiKey: 'dummy-key',
+  baseURL: 'http://localhost:8080/v1',
+  apiKey: 'dummy-key',
 });
 
 const response = await openai.chat.completions.create({
-    model: 'gpt-4o',
-    messages: [{ role: 'user', content: 'Hello!' }],
+  model: 'gpt-4o',
+  messages: [{ role: 'user', content: 'Hello!' }],
 });
 console.log(response.choices[0].message.content);
 ```
@@ -722,9 +722,9 @@ console.log(response.choices[0].message.content);
 
 ## 18. Operational Concerns: Rate-Limit Headers, Billing, and Legal Considerations
 
--   **Rate-Limit Headers:** Parse and respect rate-limit headers from Copilot/OpenAI responses. Adjust client-side throttling accordingly.
--   **Billing:** Monitor token usage and request counts for cost control.
--   **Legal:** Using undocumented Copilot endpoints may violate GitHub’s terms of service. Not recommended for production use. Use at your own risk.
+- **Rate-Limit Headers:** Parse and respect rate-limit headers from Copilot/OpenAI responses. Adjust client-side throttling accordingly.
+- **Billing:** Monitor token usage and request counts for cost control.
+- **Legal:** Using undocumented Copilot endpoints may violate GitHub’s terms of service. Not recommended for production use. Use at your own risk.
 
 ## 19. Environment Variables: Required Variables and Their Purposes
 
@@ -857,15 +857,15 @@ This approach uses undocumented Copilot endpoints and may violate GitHub’s ter
 **References:**
 This guide synthesizes insights from open-source projects, official documentation, technical blogs, and expert analyses, including but not limited to:
 
--   [Alorse/copilot-to-api](#)
--   [chf2000/openai-copilot](#)
--   [sashabaranov/go-openai](#) [10][1]
--   [oceanplexian/go-openai-proxy](#)
--   [aashari/go-generative-api-router](#)
--   [anothrNick/openai-proxy](#) [9]
--   [Token Lifecycle Management in github-copilot-svcs](#) [5]
--   [OpenAI API Reference and OpenAPI Specification](#) [22][23]
--   [Go Reverse Proxy Documentation](#) [26][27]
--   [Security Best Practices](#) [7][8][2]
--   [Rate Limiting and Exponential Backoff](#) [18][21][11][20]
--   [Integration Testing in Go](#) [12][13]
+- [Alorse/copilot-to-api](#)
+- [chf2000/openai-copilot](#)
+- [sashabaranov/go-openai](#) [10][1]
+- [oceanplexian/go-openai-proxy](#)
+- [aashari/go-generative-api-router](#)
+- [anothrNick/openai-proxy](#) [9]
+- [Token Lifecycle Management in github-copilot-svcs](#) [5]
+- [OpenAI API Reference and OpenAPI Specification](#) [22][23]
+- [Go Reverse Proxy Documentation](#) [26][27]
+- [Security Best Practices](#) [7][8][2]
+- [Rate Limiting and Exponential Backoff](#) [18][21][11][20]
+- [Integration Testing in Go](#) [12][13]

@@ -15,11 +15,11 @@
 
 ### 可用模板 / Available Templates
 
-| 模板 / Template | UI框架 / Framework | 端口 / Port | 目录 / Directory |
-|----------------|-------------------|------------|------------------|
-| **Modern** | React + TypeScript + Vite + Tailwind | 3001 | `./modern/` |
-| **Air** | Semi UI | 3002 | `./air/` |
-| **Berry** | Material UI | 3003 | `./berry/` |
+| 模板 / Template | UI框架 / Framework                   | 端口 / Port | 目录 / Directory |
+| --------------- | ------------------------------------ | ----------- | ---------------- |
+| **Modern**      | React + TypeScript + Vite + Tailwind | 3001        | `./modern/`      |
+| **Air**         | Semi UI                              | 3002        | `./air/`         |
+| **Berry**       | Material UI                          | 3003        | `./berry/`       |
 
 ### 快速开发启动 / Quick Development Start
 
@@ -91,10 +91,10 @@ For detailed development guide, see: [`../docs/DEVELOPMENT.md`](../docs/DEVELOPM
 |![image](https://github.com/songquanpeng/one-api/assets/42402987/6d3b22e0-436b-4e26-8911-bcc993c6a2bd)|![image](https://github.com/songquanpeng/one-api/assets/42402987/eef1e224-7245-44d7-804e-9d1c8fa3f29c)|
 
 ### 主题：air
+
 由 [Calon](https://github.com/Calcium-Ion) 开发。
 |![image](https://github.com/songquanpeng/songquanpeng.github.io/assets/39998050/1ddb274b-a715-4e81-858b-857d520b6ff4)|![image](https://github.com/songquanpeng/songquanpeng.github.io/assets/39998050/163b0b8e-1f73-49cb-b632-3dcb986b56d5)|
 |:---:|:---:|
-
 
 #### 开发说明
 

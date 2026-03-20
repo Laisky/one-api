@@ -138,7 +138,13 @@ export const ChannelModelSettings = ({
                   label={tr('model_mapping.label', 'Model Mapping')}
                   help={tr('model_mapping.help', 'Map request model names to upstream model names (JSON).')}
                 />
-                <Button type="button" variant="ghost" size="sm" className="h-6 text-xs self-start sm:self-auto" onClick={formatModelMapping}>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 text-xs self-start sm:self-auto"
+                  onClick={formatModelMapping}
+                >
                   {tr('common.format_json', 'Format JSON')}
                 </Button>
               </div>

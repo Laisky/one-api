@@ -1,4 +1,9 @@
 {
+  "a11y": {
+    "close": "关闭",
+    "close_drawer": "关闭抽屉",
+    "select_language": "选择语言"
+  },
   "about": {
     "cta_models": "查看支持的模型",
     "cta_repo": "GitHub 仓库",
@@ -67,24 +72,14 @@
   "footer": {
     "copyright": "\u00a9 {{year}} One API. 保留所有权利。"
   },
-  "theme": {
-    "toggle": "切换主题",
-    "light": "浅色",
-    "dark": "深色",
-    "system": "跟随系统"
-  },
   "header": {
     "confirm_logout": "确认登出",
     "log_out": "登出",
     "logging_out": "正在登出...",
     "logout_description": "您确定要登出吗？您需要重新登录才能访问仪表盘。",
     "navigation": "导航",
+    "profile": "个人设置",
     "signed_in_as": "登录身份"
-  },
-  "a11y": {
-    "close": "关闭",
-    "close_drawer": "关闭抽屉",
-    "select_language": "选择语言"
   },
   "home": {
     "iframe_title": "首页"
@@ -151,5 +146,11 @@
     },
     "subtitle": "监控所有通道的状态与性能",
     "title": "通道状态"
+  },
+  "theme": {
+    "dark": "深色",
+    "light": "浅色",
+    "system": "跟随系统",
+    "toggle": "切换主题"
   }
 }

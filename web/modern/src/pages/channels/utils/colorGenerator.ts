@@ -23,7 +23,7 @@ const RAINBOW_PALETTE = [
   '#64748b', // slate
   '#8868b0', // muted violet
   '#5a8a6a', // sage
-]
+];
 
 /**
  * Generates a deterministic color from the rainbow palette based on a numeric ID.
@@ -34,9 +34,9 @@ const RAINBOW_PALETTE = [
  */
 export function getChannelTypeColor(id: number): string {
   // Use a prime multiplier to better distribute colors for sequential IDs
-  const primeMultiplier = 7
-  const index = Math.abs((id * primeMultiplier) % RAINBOW_PALETTE.length)
-  return RAINBOW_PALETTE[index]
+  const primeMultiplier = 7;
+  const index = Math.abs((id * primeMultiplier) % RAINBOW_PALETTE.length);
+  return RAINBOW_PALETTE[index];
 }
 
 /**
@@ -48,15 +48,11 @@ export function getChannelTypeColor(id: number): string {
  * @param lightness - Lightness percentage (default: 50)
  * @returns An HSL color string
  */
-export function getChannelTypeHSL(
-  id: number,
-  saturation = 70,
-  lightness = 50
-): string {
+export function getChannelTypeHSL(id: number, saturation = 70, lightness = 50): string {
   // Use golden angle approximation for better color distribution
-  const goldenAngle = 137.508
-  const hue = (id * goldenAngle) % 360
-  return `hsl(${Math.round(hue)}, ${saturation}%, ${lightness}%)`
+  const goldenAngle = 137.508;
+  const hue = (id * goldenAngle) % 360;
+  return `hsl(${Math.round(hue)}, ${saturation}%, ${lightness}%)`;
 }
 
 /**
@@ -77,7 +73,7 @@ export const LEGACY_COLOR_MAP: Record<string, string> = {
   pink: '#c44e80',
   brown: '#b87a20',
   gray: '#64748b',
-}
+};
 
 /**
  * Resolves a color for a channel type, falling back to auto-generated if not found.
@@ -86,12 +82,9 @@ export const LEGACY_COLOR_MAP: Record<string, string> = {
  * @param channelTypeId - The channel type ID for fallback generation
  * @returns A CSS color string
  */
-export function resolveChannelColor(
-  legacyColor: string | undefined,
-  channelTypeId: number
-): string {
+export function resolveChannelColor(legacyColor: string | undefined, channelTypeId: number): string {
   if (legacyColor && LEGACY_COLOR_MAP[legacyColor]) {
-    return LEGACY_COLOR_MAP[legacyColor]
+    return LEGACY_COLOR_MAP[legacyColor];
   }
-  return getChannelTypeHSL(channelTypeId)
+  return getChannelTypeHSL(channelTypeId);
 }

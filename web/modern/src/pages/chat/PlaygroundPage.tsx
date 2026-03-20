@@ -1,15 +1,15 @@
-import { ChatInterface } from '@/components/chat/ChatInterface'
-import { ExportConversationDialog } from '@/components/chat/ExportConversationDialog'
-import { ParametersPanel } from '@/components/chat/ParametersPanel'
-import { codeBlockStyles } from '@/components/ui/markdown-css'
-import { usePlaygroundChat } from '@/hooks/usePlaygroundChat'
-import { getModelCapabilities } from '@/lib/model-capabilities'
-import 'highlight.js/styles/a11y-dark.css'
-import 'katex/dist/katex.min.css'
-import { useEffect, useState } from 'react'
-import { usePlaygroundActions } from './hooks/usePlaygroundActions'
-import { usePlaygroundData } from './hooks/usePlaygroundData'
-import { usePlaygroundState } from './hooks/usePlaygroundState'
+import { ChatInterface } from '@/components/chat/ChatInterface';
+import { ExportConversationDialog } from '@/components/chat/ExportConversationDialog';
+import { ParametersPanel } from '@/components/chat/ParametersPanel';
+import { codeBlockStyles } from '@/components/ui/markdown-css';
+import { usePlaygroundChat } from '@/hooks/usePlaygroundChat';
+import { getModelCapabilities } from '@/lib/model-capabilities';
+import 'highlight.js/styles/a11y-dark.css';
+import 'katex/dist/katex.min.css';
+import { useEffect, useState } from 'react';
+import { usePlaygroundActions } from './hooks/usePlaygroundActions';
+import { usePlaygroundData } from './hooks/usePlaygroundData';
+import { usePlaygroundState } from './hooks/usePlaygroundState';
 
 // Inject styles into document head
 if (typeof document !== 'undefined') {
@@ -20,54 +20,89 @@ if (typeof document !== 'undefined') {
 
 export function PlaygroundPage() {
   const {
-    messages, setMessages,
+    messages,
+    setMessages,
     conversationId,
     conversationCreated,
     conversationCreatedBy,
-    currentMessage, setCurrentMessage,
-    temperature, setTemperature,
-    maxTokens, setMaxTokens,
-    topP, setTopP,
-    topK, setTopK,
-    frequencyPenalty, setFrequencyPenalty,
-    presencePenalty, setPresencePenalty,
-    maxCompletionTokens, setMaxCompletionTokens,
-    stopSequences, setStopSequences,
-    reasoningEffort, setReasoningEffort,
-    thinkingEnabled, setThinkingEnabled,
-    thinkingBudgetTokens, setThinkingBudgetTokens,
-    systemMessage, setSystemMessage,
-    showReasoningContent, setShowReasoningContent,
-    focusModeEnabled, setFocusModeEnabled,
-    isMobileSidebarOpen, setIsMobileSidebarOpen,
-    expandedReasonings, setExpandedReasonings,
-    showPreview, setShowPreview,
-    exportDialogOpen, setExportDialogOpen,
-    attachedImages, setAttachedImages,
+    currentMessage,
+    setCurrentMessage,
+    temperature,
+    setTemperature,
+    maxTokens,
+    setMaxTokens,
+    topP,
+    setTopP,
+    topK,
+    setTopK,
+    frequencyPenalty,
+    setFrequencyPenalty,
+    presencePenalty,
+    setPresencePenalty,
+    maxCompletionTokens,
+    setMaxCompletionTokens,
+    stopSequences,
+    setStopSequences,
+    reasoningEffort,
+    setReasoningEffort,
+    thinkingEnabled,
+    setThinkingEnabled,
+    thinkingBudgetTokens,
+    setThinkingBudgetTokens,
+    systemMessage,
+    setSystemMessage,
+    showReasoningContent,
+    setShowReasoningContent,
+    focusModeEnabled,
+    setFocusModeEnabled,
+    isMobileSidebarOpen,
+    setIsMobileSidebarOpen,
+    expandedReasonings,
+    setExpandedReasonings,
+    showPreview,
+    setShowPreview,
+    exportDialogOpen,
+    setExportDialogOpen,
+    attachedImages,
+    setAttachedImages,
     clearConversation,
-    defaultSystemPrompt
-  } = usePlaygroundState()
+    defaultSystemPrompt,
+  } = usePlaygroundState();
 
   const {
-    models, selectedModel, setSelectedModel, isLoadingModels,
-    tokens, selectedToken, setSelectedToken, isLoadingTokens,
+    models,
+    selectedModel,
+    setSelectedModel,
+    isLoadingModels,
+    tokens,
+    selectedToken,
+    setSelectedToken,
+    isLoadingTokens,
     isLoadingChannels,
-    channelInputValue, setChannelInputValue,
-    selectedChannel, setSelectedChannel,
-    modelInputValue, setModelInputValue,
-    channelSuggestions, modelSuggestions,
-    handleModelQueryChange, handleModelSelect, handleModelClear,
-    handleChannelQueryChange, handleChannelSelect, handleChannelClear
-  } = usePlaygroundData()
+    channelInputValue,
+    setChannelInputValue,
+    selectedChannel,
+    setSelectedChannel,
+    modelInputValue,
+    setModelInputValue,
+    channelSuggestions,
+    modelSuggestions,
+    handleModelQueryChange,
+    handleModelSelect,
+    handleModelClear,
+    handleChannelQueryChange,
+    handleChannelSelect,
+    handleChannelClear,
+  } = usePlaygroundData();
 
-  const [modelCapabilities, setModelCapabilities] = useState<Record<string, any>>({})
+  const [modelCapabilities, setModelCapabilities] = useState<Record<string, any>>({});
 
   useEffect(() => {
     if (selectedModel) {
-      const capabilities = getModelCapabilities(selectedModel)
-      setModelCapabilities(capabilities)
+      const capabilities = getModelCapabilities(selectedModel);
+      setModelCapabilities(capabilities);
     }
-  }, [selectedModel])
+  }, [selectedModel]);
 
   const { isStreaming, sendMessage, regenerateMessage, stopGeneration } = usePlaygroundChat({
     selectedToken,
@@ -87,8 +122,8 @@ export function PlaygroundPage() {
     messages,
     setMessages,
     expandedReasonings,
-    setExpandedReasonings
-  })
+    setExpandedReasonings,
+  });
 
   const {
     exportConversation,
@@ -98,7 +133,7 @@ export function PlaygroundPage() {
     handleCopyMessage,
     handleRegenerateMessage,
     handleEditMessage,
-    handleDeleteMessage
+    handleDeleteMessage,
   } = usePlaygroundActions({
     messages,
     setMessages,
@@ -107,17 +142,12 @@ export function PlaygroundPage() {
     regenerateMessage,
     isStreaming,
     setExpandedReasonings,
-    setExportDialogOpen
-  })
+    setExportDialogOpen,
+  });
 
   return (
     <div className="flex h-screen bg-gradient-to-br from-background to-muted/20 relative">
-      {isMobileSidebarOpen && (
-        <div
-          className="fixed inset-0 bg-black/50 z-40 lg:hidden"
-          onClick={() => setIsMobileSidebarOpen(false)}
-        />
-      )}
+      {isMobileSidebarOpen && <div className="fixed inset-0 bg-black/50 z-40 lg:hidden" onClick={() => setIsMobileSidebarOpen(false)} />}
 
       <ParametersPanel
         isMobileSidebarOpen={isMobileSidebarOpen}
@@ -208,7 +238,7 @@ export function PlaygroundPage() {
         conversationCreatedBy={conversationCreatedBy}
       />
     </div>
-  )
+  );
 }
 
-export default PlaygroundPage
+export default PlaygroundPage;

@@ -1,6 +1,6 @@
-import { formatNumber } from "@/lib/utils";
-import { useTranslation } from "react-i18next";
-import { getDisplayInCurrency, getQuotaPerUnit } from "../types";
+import { formatNumber } from '@/lib/utils';
+import { useTranslation } from 'react-i18next';
+import { getDisplayInCurrency, getQuotaPerUnit } from '../types';
 
 interface TopModelsProps {
   modelLeaders: {
@@ -27,56 +27,42 @@ export function TopModels({ modelLeaders }: TopModelsProps) {
 
   return (
     <div className="bg-card rounded-lg border p-6 mb-6">
-      <h3 className="text-lg font-semibold mb-4">
-        {t("dashboard.top_models.title")}
-      </h3>
+      <h3 className="text-lg font-semibold mb-4">{t('dashboard.top_models.title')}</h3>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div className="rounded-lg border bg-card/70 p-4">
-          <div className="text-sm text-muted-foreground">
-            {t("dashboard.top_models.most_requests")}
-          </div>
+          <div className="text-sm text-muted-foreground">{t('dashboard.top_models.most_requests')}</div>
           <div className="text-xl font-semibold mt-1">
-            {modelLeaders.mostRequested
-              ? modelLeaders.mostRequested.model
-              : t("dashboard.labels.no_data")}
+            {modelLeaders.mostRequested ? modelLeaders.mostRequested.model : t('dashboard.labels.no_data')}
           </div>
           {modelLeaders.mostRequested && (
             <div className="text-xs text-muted-foreground mt-2">
-              {t("dashboard.labels.requests_value", {
+              {t('dashboard.labels.requests_value', {
                 value: formatNumber(modelLeaders.mostRequested.requests),
               })}
             </div>
           )}
         </div>
         <div className="rounded-lg border bg-card/70 p-4">
-          <div className="text-sm text-muted-foreground">
-            {t("dashboard.top_models.most_tokens")}
-          </div>
+          <div className="text-sm text-muted-foreground">{t('dashboard.top_models.most_tokens')}</div>
           <div className="text-xl font-semibold mt-1">
-            {modelLeaders.mostTokens
-              ? modelLeaders.mostTokens.model
-              : t("dashboard.labels.no_data")}
+            {modelLeaders.mostTokens ? modelLeaders.mostTokens.model : t('dashboard.labels.no_data')}
           </div>
           {modelLeaders.mostTokens && (
             <div className="text-xs text-muted-foreground mt-2">
-              {t("dashboard.labels.tokens_value", {
+              {t('dashboard.labels.tokens_value', {
                 value: formatNumber(modelLeaders.mostTokens.tokens),
               })}
             </div>
           )}
         </div>
         <div className="rounded-lg border bg-card/70 p-4">
-          <div className="text-sm text-muted-foreground">
-            {t("dashboard.top_models.highest_cost")}
-          </div>
+          <div className="text-sm text-muted-foreground">{t('dashboard.top_models.highest_cost')}</div>
           <div className="text-xl font-semibold mt-1">
-            {modelLeaders.mostQuota
-              ? modelLeaders.mostQuota.model
-              : t("dashboard.labels.no_data")}
+            {modelLeaders.mostQuota ? modelLeaders.mostQuota.model : t('dashboard.labels.no_data')}
           </div>
           {modelLeaders.mostQuota && (
             <div className="text-xs text-muted-foreground mt-2">
-              {t("dashboard.labels.quota_consumed", {
+              {t('dashboard.labels.quota_consumed', {
                 value: renderQuota(modelLeaders.mostQuota.quota),
               })}
             </div>

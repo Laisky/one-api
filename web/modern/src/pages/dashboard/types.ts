@@ -31,21 +31,21 @@ export type UserOption = {
  * Matches the HSL values defined in index.css :root at default (light) theme.
  */
 const FALLBACK_COLORS: string[] = [
-  "#22a392", // chart-1  teal
-  "#d47a1e", // chart-2  orange
-  "#4272c4", // chart-3  blue
-  "#d04a5e", // chart-4  rose
-  "#b89418", // chart-5  gold
-  "#7e5daa", // chart-6  purple-ish
-  "#1e8fa8", // chart-7  cyan
-  "#c85530", // chart-8  burnt orange
-  "#3a9e5c", // chart-9  green
-  "#3a8ab8", // chart-10 steel blue
-  "#c44e80", // chart-11 pink
-  "#6a9a28", // chart-12 lime
-  "#8868b0", // chart-13 muted violet
-  "#b87a20", // chart-14 amber
-  "#349e78", // chart-15 sea green
+  '#22a392', // chart-1  teal
+  '#d47a1e', // chart-2  orange
+  '#4272c4', // chart-3  blue
+  '#d04a5e', // chart-4  rose
+  '#b89418', // chart-5  gold
+  '#7e5daa', // chart-6  purple-ish
+  '#1e8fa8', // chart-7  cyan
+  '#c85530', // chart-8  burnt orange
+  '#3a9e5c', // chart-9  green
+  '#3a8ab8', // chart-10 steel blue
+  '#c44e80', // chart-11 pink
+  '#6a9a28', // chart-12 lime
+  '#8868b0', // chart-13 muted violet
+  '#b87a20', // chart-14 amber
+  '#349e78', // chart-15 sea green
 ];
 
 /**
@@ -54,11 +54,9 @@ const FALLBACK_COLORS: string[] = [
  * Must be called at render time to respect the current theme.
  */
 export function resolveChartVar(name: string): string {
-  if (typeof document === "undefined") return "#888";
-  const hsl = getComputedStyle(document.documentElement)
-    .getPropertyValue(name)
-    .trim();
-  return hsl ? `hsl(${hsl})` : "";
+  if (typeof document === 'undefined') return '#888';
+  const hsl = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  return hsl ? `hsl(${hsl})` : '';
 }
 
 /** Return the resolved color for --chart-{index} (1-based). */
@@ -80,9 +78,9 @@ export const CHART_CONFIG = {
     };
   },
   gradients: {
-    requests: "url(#requestsGradient)",
-    quota: "url(#quotaGradient)",
-    tokens: "url(#tokensGradient)",
+    requests: 'url(#requestsGradient)',
+    quota: 'url(#quotaGradient)',
+    tokens: 'url(#tokensGradient)',
   },
   lineChart: {
     strokeWidth: 3,
@@ -90,7 +88,7 @@ export const CHART_CONFIG = {
     activeDot: {
       r: 6,
       strokeWidth: 2,
-      filter: "drop-shadow(0 2px 4px rgba(0,0,0,0.1))",
+      filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.1))',
     },
     grid: {
       vertical: false,
@@ -101,10 +99,8 @@ export const CHART_CONFIG = {
   paletteSize: CHART_PALETTE_SIZE,
 };
 
-export const getQuotaPerUnit = () =>
-  parseFloat(localStorage.getItem("quota_per_unit") || "500000");
-export const getDisplayInCurrency = () =>
-  localStorage.getItem("display_in_currency") === "true";
+export const getQuotaPerUnit = () => parseFloat(localStorage.getItem('quota_per_unit') || '500000');
+export const getDisplayInCurrency = () => localStorage.getItem('display_in_currency') === 'true';
 
 /** Return the theme-aware bar color for index i (wraps around the palette). */
 export const barColor = (i: number): string => {

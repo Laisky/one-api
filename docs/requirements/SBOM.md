@@ -87,7 +87,6 @@
   - [Implementation Order For This Repository](#implementation-order-for-this-repository)
   - [References](#references)
 
-
 ## Summary
 
 `one-api` should publish verifiable release artifacts instead of only publishable artifacts.

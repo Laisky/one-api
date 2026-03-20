@@ -1,22 +1,15 @@
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
-import { Button } from '@/components/ui/button'
-import { AlertTriangle } from 'lucide-react'
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
+import { AlertTriangle } from 'lucide-react';
 
 interface ChannelTypeChangeDialogProps {
-  open: boolean
-  onOpenChange: (open: boolean) => void
-  fromType: string
-  toType: string
-  onConfirm: () => void
-  onCancel: () => void
-  tr: (key: string, defaultValue: string, options?: Record<string, unknown>) => string
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  fromType: string;
+  toType: string;
+  onConfirm: () => void;
+  onCancel: () => void;
+  tr: (key: string, defaultValue: string, options?: Record<string, unknown>) => string;
 }
 
 /**
@@ -24,24 +17,16 @@ interface ChannelTypeChangeDialogProps {
  * the channel type during editing. This warns about potential data loss since different
  * channel types may have different configuration requirements.
  */
-export function ChannelTypeChangeDialog({
-  open,
-  onOpenChange,
-  fromType,
-  toType,
-  onConfirm,
-  onCancel,
-  tr,
-}: ChannelTypeChangeDialogProps) {
+export function ChannelTypeChangeDialog({ open, onOpenChange, fromType, toType, onConfirm, onCancel, tr }: ChannelTypeChangeDialogProps) {
   const handleCancel = () => {
-    onCancel()
-    onOpenChange(false)
-  }
+    onCancel();
+    onOpenChange(false);
+  };
 
   const handleConfirm = () => {
-    onConfirm()
-    onOpenChange(false)
-  }
+    onConfirm();
+    onOpenChange(false);
+  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -53,11 +38,10 @@ export function ChannelTypeChangeDialog({
           </DialogTitle>
           <DialogDescription className="space-y-2 pt-2">
             <p>
-              {tr(
-                'type_change.description',
-                'You are about to change the channel type from "{{fromType}}" to "{{toType}}".',
-                { fromType, toType }
-              )}
+              {tr('type_change.description', 'You are about to change the channel type from "{{fromType}}" to "{{toType}}".', {
+                fromType,
+                toType,
+              })}
             </p>
             <p className="text-warning font-medium">
               {tr(
@@ -77,5 +61,5 @@ export function ChannelTypeChangeDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
-  )
+  );
 }

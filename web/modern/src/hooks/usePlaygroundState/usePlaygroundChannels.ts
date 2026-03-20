@@ -1,11 +1,11 @@
-import { useNotifications } from "@/components/ui/notifications";
-import { api } from "@/lib/api";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useTranslation } from "react-i18next";
-import type { SuggestionOption } from "./types";
+import { useNotifications } from '@/components/ui/notifications';
+import { api } from '@/lib/api';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import type { SuggestionOption } from './types';
 
 const formatChannelName = (channelName: string): string => {
-  const colonIndex = channelName.indexOf(":");
+  const colonIndex = channelName.indexOf(':');
   if (colonIndex !== -1 && colonIndex < channelName.length - 1) {
     return channelName.slice(colonIndex + 1);
   }
@@ -15,58 +15,44 @@ const formatChannelName = (channelName: string): string => {
 export function usePlaygroundChannels() {
   const { t } = useTranslation();
   const { notify } = useNotifications();
-  const [channelModelMap, setChannelModelMap] = useState<
-    Record<string, string[]>
-  >({});
+  const [channelModelMap, setChannelModelMap] = useState<Record<string, string[]>>({});
   const [isLoadingChannels, setIsLoadingChannels] = useState(true);
-  const [channelInputValue, setChannelInputValue] = useState("");
-  const [selectedChannel, setSelectedChannel] = useState("");
+  const [channelInputValue, setChannelInputValue] = useState('');
+  const [selectedChannel, setSelectedChannel] = useState('');
   const channelErrorRef = useRef<string | null>(null);
 
   useEffect(() => {
     const fetchChannelModels = async () => {
       setIsLoadingChannels(true);
       try {
-        const response = await api.get("/api/models/display");
+        const response = await api.get('/api/models/display');
         const payload = response.data;
 
-        if (
-          payload?.success &&
-          payload.data &&
-          typeof payload.data === "object"
-        ) {
+        if (payload?.success && payload.data && typeof payload.data === 'object') {
           const normalized: Record<string, string[]> = {};
-          Object.entries(payload.data as Record<string, unknown>).forEach(
-            ([channelName, rawInfo]) => {
-              if (
-                rawInfo &&
-                typeof rawInfo === "object" &&
-                "models" in rawInfo
-              ) {
-                const modelsInfo = (
-                  rawInfo as { models?: Record<string, unknown> }
-                ).models;
-                if (modelsInfo && typeof modelsInfo === "object") {
-                  normalized[channelName] = Object.keys(modelsInfo);
-                }
+          Object.entries(payload.data as Record<string, unknown>).forEach(([channelName, rawInfo]) => {
+            if (rawInfo && typeof rawInfo === 'object' && 'models' in rawInfo) {
+              const modelsInfo = (rawInfo as { models?: Record<string, unknown> }).models;
+              if (modelsInfo && typeof modelsInfo === 'object') {
+                normalized[channelName] = Object.keys(modelsInfo);
               }
             }
-          );
+          });
           setChannelModelMap(normalized);
         } else {
           setChannelModelMap({});
           notify({
-            title: t("playground.notifications.error_title"),
-            message: t("playground.notifications.channel_metadata_error"),
-            type: "error",
+            title: t('playground.notifications.error_title'),
+            message: t('playground.notifications.channel_metadata_error'),
+            type: 'error',
           });
         }
       } catch {
         setChannelModelMap({});
         notify({
-          title: t("playground.notifications.error_title"),
-          message: t("playground.notifications.channel_metadata_error"),
-          type: "error",
+          title: t('playground.notifications.error_title'),
+          message: t('playground.notifications.channel_metadata_error'),
+          type: 'error',
         });
       } finally {
         setIsLoadingChannels(false);
@@ -115,10 +101,7 @@ export function usePlaygroundChannels() {
         );
         return { option, score };
       })
-      .filter(
-        (entry): entry is { option: SuggestionOption; score: number } =>
-          entry !== null
-      );
+      .filter((entry): entry is { option: SuggestionOption; score: number } => entry !== null);
 
     scored.sort((a, b) => {
       if (a.score !== b.score) {
@@ -134,7 +117,7 @@ export function usePlaygroundChannels() {
     (value: string) => {
       setChannelInputValue(value);
       if (selectedChannel) {
-        setSelectedChannel("");
+        setSelectedChannel('');
       }
       channelErrorRef.current = null;
     },
@@ -144,28 +127,26 @@ export function usePlaygroundChannels() {
   const handleChannelSelect = useCallback(
     (channelKey: string) => {
       if (!channelKey) {
-        setSelectedChannel("");
-        setChannelInputValue("");
+        setSelectedChannel('');
+        setChannelInputValue('');
         channelErrorRef.current = null;
         return;
       }
       setSelectedChannel(channelKey);
-      setChannelInputValue(
-        channelLabelMap.get(channelKey) ?? formatChannelName(channelKey)
-      );
+      setChannelInputValue(channelLabelMap.get(channelKey) ?? formatChannelName(channelKey));
       channelErrorRef.current = null;
     },
     [channelLabelMap]
   );
 
   const handleChannelClear = useCallback(() => {
-    handleChannelSelect("");
+    handleChannelSelect('');
   }, [handleChannelSelect]);
 
   useEffect(() => {
     if (selectedChannel && !channelModelMap[selectedChannel]) {
-      setSelectedChannel("");
-      setChannelInputValue("");
+      setSelectedChannel('');
+      setChannelInputValue('');
       channelErrorRef.current = null;
     }
   }, [selectedChannel, channelModelMap]);

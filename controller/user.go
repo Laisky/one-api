@@ -926,21 +926,21 @@ func UpdateUser(c *gin.Context) {
 			}
 			updates["group"] = group
 		}
+	}
 
-		if rawFieldPresent(raw, "mcp_tool_blacklist") {
-			if jsonRawIsNull(raw["mcp_tool_blacklist"]) {
-				updates["mcp_tool_blacklist"] = nil
-			} else {
-				var blacklist []string
-				if err := json.Unmarshal(raw["mcp_tool_blacklist"], &blacklist); err != nil {
-					c.JSON(http.StatusOK, gin.H{
-						"success": false,
-						"message": invalidParameterMessage,
-					})
-					return
-				}
-				updates["mcp_tool_blacklist"] = blacklist
+	if rawFieldPresent(raw, "mcp_tool_blacklist") {
+		if jsonRawIsNull(raw["mcp_tool_blacklist"]) {
+			updates["mcp_tool_blacklist"] = nil
+		} else {
+			var blacklist model.JSONStringSlice
+			if err := json.Unmarshal(raw["mcp_tool_blacklist"], &blacklist); err != nil {
+				c.JSON(http.StatusOK, gin.H{
+					"success": false,
+					"message": invalidParameterMessage,
+				})
+				return
 			}
+			updates["mcp_tool_blacklist"] = blacklist
 		}
 	}
 
@@ -1096,6 +1096,28 @@ func UpdateSelf(c *gin.Context) {
 		})
 		return
 	}
+
+	// When frontend sends only a subset of fields (e.g. password-only update),
+	// fill in missing username/display_name from the current user record so that
+	// partial updates don't fail with "cannot be empty" errors.
+	userId := c.GetInt(ctxkey.Id)
+	if strings.TrimSpace(user.Username) == "" || strings.TrimSpace(user.DisplayName) == "" {
+		currentUser, fetchErr := model.GetUserById(userId, false)
+		if fetchErr != nil {
+			c.JSON(http.StatusOK, gin.H{
+				"success": false,
+				"message": fetchErr.Error(),
+			})
+			return
+		}
+		if strings.TrimSpace(user.Username) == "" {
+			user.Username = currentUser.Username
+		}
+		if strings.TrimSpace(user.DisplayName) == "" {
+			user.DisplayName = currentUser.DisplayName
+		}
+	}
+
 	if user.Password == "" {
 		user.Password = "$I_LOVE_U" // make Validator happy :)
 	}
@@ -1107,18 +1129,8 @@ func UpdateSelf(c *gin.Context) {
 		return
 	}
 
-	// Disallow empty username/display name
-	if strings.TrimSpace(user.Username) == "" {
-		c.JSON(http.StatusOK, gin.H{"success": false, "message": "Username cannot be empty"})
-		return
-	}
-	if strings.TrimSpace(user.DisplayName) == "" {
-		c.JSON(http.StatusOK, gin.H{"success": false, "message": "Display name cannot be empty"})
-		return
-	}
-
 	cleanUser := model.User{
-		Id:          c.GetInt(ctxkey.Id),
+		Id:          userId,
 		Username:    user.Username,
 		Password:    user.Password,
 		DisplayName: user.DisplayName,
@@ -1205,6 +1217,7 @@ func DeleteSelf(c *gin.Context) {
 
 func CreateUser(c *gin.Context) {
 	ctx := gmw.Ctx(c)
+	lg := gmw.GetLogger(c)
 	var user model.User
 	err := json.NewDecoder(c.Request.Body).Decode(&user)
 	if err != nil || user.Username == "" || user.Password == "" {
@@ -1246,6 +1259,7 @@ func CreateUser(c *gin.Context) {
 		Username:    user.Username,
 		Password:    user.Password,
 		DisplayName: user.DisplayName,
+		Email:       user.Email,
 	}
 	if err := cleanUser.Insert(ctx, 0); err != nil {
 		c.JSON(http.StatusOK, gin.H{
@@ -1253,6 +1267,21 @@ func CreateUser(c *gin.Context) {
 			"message": err.Error(),
 		})
 		return
+	}
+
+	// Apply admin-specified quota and group after Insert, which resets them to defaults.
+	postUpdates := map[string]any{}
+	if user.Quota > 0 {
+		postUpdates["quota"] = user.Quota
+	}
+	if user.Group != "" {
+		postUpdates["group"] = user.Group
+	}
+	if len(postUpdates) > 0 {
+		if err := model.DB.Model(&model.User{}).Where("id = ?", cleanUser.Id).Updates(postUpdates).Error; err != nil {
+			lg.Error("failed to apply admin overrides on created user",
+				zap.Int("user_id", cleanUser.Id), zap.Error(err))
+		}
 	}
 
 	c.JSON(http.StatusOK, gin.H{

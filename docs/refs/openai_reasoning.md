@@ -15,7 +15,7 @@ Call the [Responses API](/docs/api-reference/responses/create) and specify your 
 Using a reasoning model in the Responses API
 
 ```javascript
-import OpenAI from "openai";
+import OpenAI from 'openai';
 
 const openai = new OpenAI();
 
@@ -25,11 +25,11 @@ format '[1,2],[3,4],[5,6]' and prints the transpose in the same format.
 `;
 
 const response = await openai.responses.create({
-  model: "gpt-5",
-  reasoning: { effort: "medium" },
+  model: 'gpt-5',
+  reasoning: { effort: 'medium' },
   input: [
     {
-      role: "user",
+      role: 'user',
       content: prompt,
     },
   ],
@@ -127,7 +127,7 @@ To prevent this, ensure there's sufficient space in the context window or adjust
 Handling incomplete responses
 
 ```javascript
-import OpenAI from "openai";
+import OpenAI from 'openai';
 
 const openai = new OpenAI();
 
@@ -137,26 +137,23 @@ format '[1,2],[3,4],[5,6]' and prints the transpose in the same format.
 `;
 
 const response = await openai.responses.create({
-  model: "gpt-5",
-  reasoning: { effort: "medium" },
+  model: 'gpt-5',
+  reasoning: { effort: 'medium' },
   input: [
     {
-      role: "user",
+      role: 'user',
       content: prompt,
     },
   ],
   max_output_tokens: 300,
 });
 
-if (
-  response.status === "incomplete" &&
-  response.incomplete_details.reason === "max_output_tokens"
-) {
-  console.log("Ran out of tokens");
+if (response.status === 'incomplete' && response.incomplete_details.reason === 'max_output_tokens') {
+  console.log('Ran out of tokens');
   if (response.output_text?.length > 0) {
-    console.log("Partial output:", response.output_text);
+    console.log('Partial output:', response.output_text);
   } else {
-    console.log("Ran out of tokens during reasoning");
+    console.log('Ran out of tokens during reasoning');
   }
 }
 ```
@@ -233,15 +230,15 @@ The example below shows how to make an API request that includes a reasoning sum
 Include a reasoning summary with the API response
 
 ```javascript
-import OpenAI from "openai";
+import OpenAI from 'openai';
 const openai = new OpenAI();
 
 const response = await openai.responses.create({
-  model: "gpt-5",
-  input: "What is the capital of France?",
+  model: 'gpt-5',
+  input: 'What is the capital of France?',
   reasoning: {
-    effort: "low",
-    summary: "auto",
+    effort: 'low',
+    summary: 'auto',
   },
 });
 
@@ -329,7 +326,7 @@ OpenAI o-series models are able to implement complex algorithms and produce code
 Refactor code
 
 ```javascript
-import OpenAI from "openai";
+import OpenAI from 'openai';
 
 const openai = new OpenAI();
 
@@ -362,10 +359,10 @@ export default function BookList() {
 `.trim();
 
 const response = await openai.responses.create({
-  model: "gpt-5",
+  model: 'gpt-5',
   input: [
     {
-      role: "user",
+      role: 'user',
       content: prompt,
     },
   ],
@@ -427,7 +424,7 @@ OpenAI o-series models are also adept in creating multi-step plans. This example
 Plan and create a Python project
 
 ```javascript
-import OpenAI from "openai";
+import OpenAI from 'openai';
 
 const openai = new OpenAI();
 
@@ -442,10 +439,10 @@ your reasoning at the beginning and end, not throughout the code.
 `.trim();
 
 const response = await openai.responses.create({
-  model: "gpt-5",
+  model: 'gpt-5',
   input: [
     {
-      role: "user",
+      role: 'user',
       content: prompt,
     },
   ],
@@ -489,7 +486,7 @@ OpenAI o-series models have shown excellent performance in STEM research. Prompt
 Ask questions related to basic scientific research
 
 ```javascript
-import OpenAI from "openai";
+import OpenAI from 'openai';
 
 const openai = new OpenAI();
 
@@ -500,10 +497,10 @@ them?
 `;
 
 const response = await openai.responses.create({
-  model: "gpt-5",
+  model: 'gpt-5',
   input: [
     {
-      role: "user",
+      role: 'user',
       content: prompt,
     },
   ],

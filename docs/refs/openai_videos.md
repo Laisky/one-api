@@ -51,16 +51,16 @@ Start by calling `POST /videos` with a text prompt and the required parameters. 
 Create a video
 
 ```javascript
-import OpenAI from "openai";
+import OpenAI from 'openai';
 
 const openai = new OpenAI();
 
 let video = await openai.videos.create({
-  model: "sora-2",
+  model: 'sora-2',
   prompt: "A video of the words 'Thank you' in sparkling letters",
 });
 
-console.log("Video generation started: ", video);
+console.log('Video generation started: ', video);
 ```
 
 ```python
@@ -136,20 +136,20 @@ Typical states are `queued`, `in_progress`, `completed`, and `failed`. Poll at a
 Poll the status endpoint
 
 ```javascript
-import OpenAI from "openai";
+import OpenAI from 'openai';
 
 const openai = new OpenAI();
 
 async function main() {
   const video = await openai.videos.createAndPoll({
-    model: "sora-2",
+    model: 'sora-2',
     prompt: "A video of the words 'Thank you' in sparkling letters",
   });
 
-  if (video.status === "completed") {
-    console.log("Video successfully completed: ", video);
+  if (video.status === 'completed') {
+    console.log('Video successfully completed: ', video);
   } else {
-    console.log("Video creation failed. Status: ", video.status);
+    console.log('Video creation failed. Status: ', video.status);
   }
 }
 
@@ -221,19 +221,19 @@ Once the job reaches status `completed`, fetch the MP4 with `GET /videos/{video_
 Download the MP4
 
 ```javascript
-import OpenAI from "openai";
+import OpenAI from 'openai';
 
 const openai = new OpenAI();
 
 let video = await openai.videos.create({
-  model: "sora-2",
+  model: 'sora-2',
   prompt: "A video of the words 'Thank you' in sparkling letters",
 });
 
-console.log("Video generation started: ", video);
+console.log('Video generation started: ', video);
 let progress = video.progress ?? 0;
 
-while (video.status === "in_progress" || video.status === "queued") {
+while (video.status === 'in_progress' || video.status === 'queued') {
   video = await openai.videos.retrieve(video.id);
   progress = video.progress ?? 0;
 
@@ -241,8 +241,8 @@ while (video.status === "in_progress" || video.status === "queued") {
   const barLength = 30;
   const filledLength = Math.floor((progress / 100) * barLength);
   // Simple ASCII progress visualization for terminal output
-  const bar = "=".repeat(filledLength) + "-".repeat(barLength - filledLength);
-  const statusText = video.status === "queued" ? "Queued" : "Processing";
+  const bar = '='.repeat(filledLength) + '-'.repeat(barLength - filledLength);
+  const statusText = video.status === 'queued' ? 'Queued' : 'Processing';
 
   process.stdout.write(`${statusText}: [${bar}] ${progress.toFixed(1)}%`);
 
@@ -250,25 +250,25 @@ while (video.status === "in_progress" || video.status === "queued") {
 }
 
 // Clear the progress line and show completion
-process.stdout.write("\n");
+process.stdout.write('\n');
 
-if (video.status === "failed") {
-  console.error("Video generation failed");
+if (video.status === 'failed') {
+  console.error('Video generation failed');
   return;
 }
 
-console.log("Video generation completed: ", video);
+console.log('Video generation completed: ', video);
 
-console.log("Downloading video content...");
+console.log('Downloading video content...');
 
 const content = await openai.videos.downloadContent(video.id);
 
 const body = content.arrayBuffer();
 const buffer = Buffer.from(await body);
 
-require("fs").writeFileSync("video.mp4", buffer);
+require('fs').writeFileSync('video.mp4', buffer);
 
-console.log("Wrote video.mp4");
+console.log('Wrote video.mp4');
 ```
 
 ```bash

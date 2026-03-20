@@ -1,27 +1,17 @@
-import { useMemo } from "react";
-import { useTranslation } from "react-i18next";
-import {
-  BaseMetricRow,
-  getDisplayInCurrency,
-  getQuotaPerUnit,
-  ModelRow,
-  TokenRow,
-  UserRow,
-} from "../types";
+import { useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
+import { BaseMetricRow, getDisplayInCurrency, getQuotaPerUnit, ModelRow, TokenRow, UserRow } from '../types';
 
 export const useDashboardCharts = (
   rows: ModelRow[],
   userRows: UserRow[],
   tokenRows: TokenRow[],
-  statisticsMetric: "tokens" | "requests" | "expenses"
+  statisticsMetric: 'tokens' | 'requests' | 'expenses'
 ) => {
   const { t } = useTranslation();
 
   const dailyAgg = useMemo(() => {
-    const map: Record<
-      string,
-      { date: string; requests: number; quota: number; tokens: number }
-    > = {};
+    const map: Record<string, { date: string; requests: number; quota: number; tokens: number }> = {};
     for (const r of rows) {
       if (!map[r.day]) {
         map[r.day] = { date: r.day, requests: 0, quota: 0, tokens: 0 };
@@ -64,11 +54,7 @@ export const useDashboardCharts = (
     }));
   }, [dailyAgg]);
 
-  const computeStackedSeries = <T extends BaseMetricRow>(
-    rowsSource: T[],
-    daysList: string[],
-    labelFn: (row: T) => string | null
-  ) => {
+  const computeStackedSeries = <T extends BaseMetricRow>(rowsSource: T[], daysList: string[], labelFn: (row: T) => string | null) => {
     const quotaPerUnit = getQuotaPerUnit();
     const displayInCurrency = getDisplayInCurrency();
     const dayToValues: Record<string, Record<string, number>> = {};
@@ -96,16 +82,16 @@ export const useDashboardCharts = (
 
       let value: number;
       switch (statisticsMetric) {
-        case "requests":
+        case 'requests':
           value = row.request_count || 0;
           break;
-        case "expenses":
+        case 'expenses':
           value = row.quota || 0;
           if (displayInCurrency) {
             value = value / quotaPerUnit;
           }
           break;
-        case "tokens":
+        case 'tokens':
         default:
           value = (row.prompt_tokens || 0) + (row.completion_tokens || 0);
           break;
@@ -123,32 +109,20 @@ export const useDashboardCharts = (
   };
 
   const { uniqueKeys: modelKeys, stackedData: modelStackedData } = useMemo(
-    () =>
-      computeStackedSeries(rows, xAxisDays, (row) =>
-        row.model_name ? row.model_name : t("dashboard.fallbacks.model")
-      ),
+    () => computeStackedSeries(rows, xAxisDays, (row) => (row.model_name ? row.model_name : t('dashboard.fallbacks.model'))),
     [rows, xAxisDays, statisticsMetric, t]
   );
 
   const { uniqueKeys: userKeys, stackedData: userStackedData } = useMemo(
-    () =>
-      computeStackedSeries(userRows, xAxisDays, (row) =>
-        row.username ? row.username : t("dashboard.fallbacks.user")
-      ),
+    () => computeStackedSeries(userRows, xAxisDays, (row) => (row.username ? row.username : t('dashboard.fallbacks.user'))),
     [userRows, xAxisDays, statisticsMetric, t]
   );
 
   const { uniqueKeys: tokenKeys, stackedData: tokenStackedData } = useMemo(
     () =>
       computeStackedSeries(tokenRows, xAxisDays, (row) => {
-        const token =
-          row.token_name && row.token_name.trim().length > 0
-            ? row.token_name
-            : t("dashboard.fallbacks.token");
-        const owner =
-          row.username && row.username.trim().length > 0
-            ? row.username
-            : t("dashboard.fallbacks.owner");
+        const token = row.token_name && row.token_name.trim().length > 0 ? row.token_name : t('dashboard.fallbacks.token');
+        const owner = row.username && row.username.trim().length > 0 ? row.username : t('dashboard.fallbacks.owner');
         return `${token}(${owner})`;
       }),
     [tokenRows, xAxisDays, statisticsMetric, t]
@@ -191,10 +165,7 @@ export const useDashboardCharts = (
   }, [rows, dailyAgg]);
 
   const byModel = useMemo(() => {
-    const mm: Record<
-      string,
-      { model: string; requests: number; quota: number; tokens: number }
-    > = {};
+    const mm: Record<string, { model: string; requests: number; quota: number; tokens: number }> = {};
     for (const r of rows) {
       const key = r.model_name;
       if (!mm[key]) mm[key] = { model: key, requests: 0, quota: 0, tokens: 0 };
@@ -214,9 +185,7 @@ export const useDashboardCharts = (
       };
     }
 
-    const mostRequested = [...byModel].sort(
-      (a, b) => b.requests - a.requests
-    )[0];
+    const mostRequested = [...byModel].sort((a, b) => b.requests - a.requests)[0];
     const mostTokens = [...byModel].sort((a, b) => b.tokens - a.tokens)[0];
     const mostQuota = [...byModel].sort((a, b) => b.quota - a.quota)[0];
 

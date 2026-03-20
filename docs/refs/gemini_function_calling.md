@@ -74,28 +74,26 @@ This process can be repeated over multiple turns, allowing for complex interacti
 Define a function and its declaration within your application code that allows users to set light values and make an API request. This function could call external services or APIs.
 
 ```js
-import { Type } from "@google/genai";
+import { Type } from '@google/genai';
 
 // Define a function that the model can call to control smart lights
 const setLightValuesFunctionDeclaration = {
-  name: "set_light_values",
-  description: "Sets the brightness and color temperature of a light.",
+  name: 'set_light_values',
+  description: 'Sets the brightness and color temperature of a light.',
   parameters: {
     type: Type.OBJECT,
     properties: {
       brightness: {
         type: Type.NUMBER,
-        description:
-          "Light level from 0 to 100. Zero is off and 100 is full brightness",
+        description: 'Light level from 0 to 100. Zero is off and 100 is full brightness',
       },
       color_temp: {
         type: Type.STRING,
-        enum: ["daylight", "cool", "warm"],
-        description:
-          "Color temperature of the light fixture, which can be `daylight`, `cool` or `warm`.",
+        enum: ['daylight', 'cool', 'warm'],
+        description: 'Color temperature of the light fixture, which can be `daylight`, `cool` or `warm`.',
       },
     },
-    required: ["brightness", "color_temp"],
+    required: ['brightness', 'color_temp'],
   },
 };
 
@@ -119,7 +117,7 @@ function setLightValues(brightness, color_temp) {
 Once you have defined your function declarations, you can prompt the model to use them. It analyzes the prompt and function declarations and decides whether to respond directly or to call a function. If a function is called, the response object will contain a function call suggestion.
 
 ```js
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenAI } from '@google/genai';
 
 // Generation Config with Function Declaration
 const config = {
@@ -136,14 +134,14 @@ const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 // Define user prompt
 const contents = [
   {
-    role: "user",
-    parts: [{ text: "Turn the lights down to a romantic level" }],
+    role: 'user',
+    parts: [{ text: 'Turn the lights down to a romantic level' }],
   },
 ];
 
 // Send request with function declarations
 const response = await ai.models.generateContent({
-  model: "gemini-2.0-flash",
+  model: 'gemini-2.0-flash',
   contents: contents,
   config: config,
 });
@@ -169,7 +167,7 @@ Extract the function call details from the model's response, parse the arguments
 const tool_call = response.functionCalls[0];
 
 let result;
-if (tool_call.name === "set_light_values") {
+if (tool_call.name === 'set_light_values') {
   result = setLightValues(tool_call.args.brightness, tool_call.args.color_temp);
   console.log(`Function execution result: ${JSON.stringify(result)}`);
 }
@@ -189,13 +187,13 @@ const function_response_part = {
 // Append function call and result of the function execution to contents
 contents.push(response.candidates[0].content);
 contents.push({
-  role: "user",
+  role: 'user',
   parts: [{ functionResponse: function_response_part }],
 });
 
 // Get the final response from the model
 const final_response = await ai.models.generateContent({
-  model: "gemini-2.0-flash",
+  model: 'gemini-2.0-flash',
   contents: contents,
   config: config,
 });
@@ -222,54 +220,54 @@ required (array): An array of strings listing the parameter names that are manda
 In addition to single turn function calling, you can also call multiple functions at once. Parallel function calling lets you execute multiple functions at once and is used when the functions are not dependent on each other. This is useful in scenarios like gathering data from multiple independent sources, such as retrieving customer details from different databases or checking inventory levels across various warehouses or performing multiple actions such as converting your apartment into a disco.
 
 ```js
-import { Type } from "@google/genai";
+import { Type } from '@google/genai';
 
 const powerDiscoBall = {
-  name: "power_disco_ball",
-  description: "Powers the spinning disco ball.",
+  name: 'power_disco_ball',
+  description: 'Powers the spinning disco ball.',
   parameters: {
     type: Type.OBJECT,
     properties: {
       power: {
         type: Type.BOOLEAN,
-        description: "Whether to turn the disco ball on or off.",
+        description: 'Whether to turn the disco ball on or off.',
       },
     },
-    required: ["power"],
+    required: ['power'],
   },
 };
 
 const startMusic = {
-  name: "start_music",
-  description: "Play some music matching the specified parameters.",
+  name: 'start_music',
+  description: 'Play some music matching the specified parameters.',
   parameters: {
     type: Type.OBJECT,
     properties: {
       energetic: {
         type: Type.BOOLEAN,
-        description: "Whether the music is energetic or not.",
+        description: 'Whether the music is energetic or not.',
       },
       loud: {
         type: Type.BOOLEAN,
-        description: "Whether the music is loud or not.",
+        description: 'Whether the music is loud or not.',
       },
     },
-    required: ["energetic", "loud"],
+    required: ['energetic', 'loud'],
   },
 };
 
 const dimLights = {
-  name: "dim_lights",
-  description: "Dim the lights.",
+  name: 'dim_lights',
+  description: 'Dim the lights.',
   parameters: {
     type: Type.OBJECT,
     properties: {
       brightness: {
         type: Type.NUMBER,
-        description: "The brightness of the lights, 0.0 is off, 1.0 is full.",
+        description: 'The brightness of the lights, 0.0 is off, 1.0 is full.',
       },
     },
-    required: ["brightness"],
+    required: ['brightness'],
   },
 };
 ```
@@ -277,7 +275,7 @@ const dimLights = {
 Configure the function calling mode to allow using all of the specified tools. To learn more, you can read about configuring function calling.
 
 ```js
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenAI } from '@google/genai';
 
 // Set up function declarations
 const houseFns = [powerDiscoBall, startMusic, dimLights];
@@ -291,7 +289,7 @@ const config = {
   // Force the model to call 'any' function, instead of chatting.
   toolConfig: {
     functionCallingConfig: {
-      mode: "any",
+      mode: 'any',
     },
   },
 };
@@ -301,19 +299,19 @@ const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
 // Create a chat session
 const chat = ai.chats.create({
-  model: "gemini-2.0-flash",
+  model: 'gemini-2.0-flash',
   config: config,
 });
 const response = await chat.sendMessage({
-  message: "Turn this place into a party!",
+  message: 'Turn this place into a party!',
 });
 
 // Print out each of the function calls requested from this single call
-console.log("Example 1: Forced function calling");
+console.log('Example 1: Forced function calling');
 for (const fn of response.functionCalls) {
   const args = Object.entries(fn.args)
     .map(([key, val]) => `${key}=${val}`)
-    .join(", ");
+    .join(', ');
   console.log(`${fn.name}(${args})`);
 }
 ```
@@ -326,7 +324,7 @@ The following example demonstrates how to implement compositional function calli
 
 ```js
 // This example shows how to use JavaScript/TypeScript SDK to do comopositional function calling using a manual execution loop.
-import { GoogleGenAI, Type } from "@google/genai";
+import { GoogleGenAI, Type } from '@google/genai';
 
 // Configure the client
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
@@ -336,16 +334,14 @@ function get_weather_forecast({ location }) {
   console.log(`Tool Call: get_weather_forecast(location=${location})`);
   // TODO: Make API call
   console.log("Tool Response: {'temperature': 25, 'unit': 'celsius'}");
-  return { temperature: 25, unit: "celsius" };
+  return { temperature: 25, unit: 'celsius' };
 }
 
 function set_thermostat_temperature({ temperature }) {
-  console.log(
-    `Tool Call: set_thermostat_temperature(temperature=${temperature})`
-  );
+  console.log(`Tool Call: set_thermostat_temperature(temperature=${temperature})`);
   // TODO: Make API call
   console.log("Tool Response: {'status': 'success'}");
-  return { status: "success" };
+  return { status: 'success' };
 }
 
 const toolFunctions = {
@@ -357,9 +353,8 @@ const tools = [
   {
     functionDeclarations: [
       {
-        name: "get_weather_forecast",
-        description:
-          "Gets the current weather temperature for a given location.",
+        name: 'get_weather_forecast',
+        description: 'Gets the current weather temperature for a given location.',
         parameters: {
           type: Type.OBJECT,
           properties: {
@@ -367,12 +362,12 @@ const tools = [
               type: Type.STRING,
             },
           },
-          required: ["location"],
+          required: ['location'],
         },
       },
       {
-        name: "set_thermostat_temperature",
-        description: "Sets the thermostat to a desired temperature.",
+        name: 'set_thermostat_temperature',
+        description: 'Sets the thermostat to a desired temperature.',
         parameters: {
           type: Type.OBJECT,
           properties: {
@@ -380,7 +375,7 @@ const tools = [
               type: Type.NUMBER,
             },
           },
-          required: ["temperature"],
+          required: ['temperature'],
         },
       },
     ],
@@ -390,7 +385,7 @@ const tools = [
 // Prompt for the model
 let contents = [
   {
-    role: "user",
+    role: 'user',
     parts: [
       {
         text: "If it's warmer than 20°C in London, set the thermostat to 20°C, otherwise set it to 18°C.",
@@ -402,7 +397,7 @@ let contents = [
 // Loop until the model has no more function calls to make
 while (true) {
   const result = await ai.models.generateContent({
-    model: "gemini-2.0-flash",
+    model: 'gemini-2.0-flash',
     contents,
     config: { tools },
   });
@@ -428,7 +423,7 @@ while (true) {
 
     // Send the function response back to the model.
     contents.push({
-      role: "model",
+      role: 'model',
       parts: [
         {
           functionCall: functionCall,
@@ -436,7 +431,7 @@ while (true) {
       ],
     });
     contents.push({
-      role: "user",
+      role: 'user',
       parts: [
         {
           functionResponse: functionResponsePart,
@@ -455,19 +450,16 @@ Compositional function calling is a native Live API feature. This means Live API
 
 ```js
 // Light control schemas
-const turnOnTheLightsSchema = { name: "turn_on_the_lights" };
-const turnOffTheLightsSchema = { name: "turn_off_the_lights" };
+const turnOnTheLightsSchema = { name: 'turn_on_the_lights' };
+const turnOffTheLightsSchema = { name: 'turn_off_the_lights' };
 
 const prompt = `
   Hey, can you write run some python code to turn on the lights, wait 10s and then turn off the lights?
 `;
 
-const tools = [
-  { codeExecution: {} },
-  { functionDeclarations: [turnOnTheLightsSchema, turnOffTheLightsSchema] },
-];
+const tools = [{ codeExecution: {} }, { functionDeclarations: [turnOnTheLightsSchema, turnOffTheLightsSchema] }];
 
-await run(prompt, (tools = tools), (modality = "AUDIO"));
+await run(prompt, (tools = tools), (modality = 'AUDIO'));
 ```
 
 ## Function Calling Modes
@@ -479,13 +471,13 @@ The Gemini API lets you control how the model uses the provided tools (function 
 - NONE: The model is prohibited from making function calls. This is equivalent to sending a request without any function declarations. Use this to temporarily disable function calling without removing your tool definitions.
 
 ```js
-import { FunctionCallingConfigMode } from "@google/genai";
+import { FunctionCallingConfigMode } from '@google/genai';
 
 // Configure function calling mode
 const toolConfig = {
   functionCallingConfig: {
     mode: FunctionCallingConfigMode.ANY,
-    allowedFunctionNames: ["get_current_temperature"],
+    allowedFunctionNames: ['get_current_temperature'],
   },
 };
 
@@ -521,7 +513,7 @@ const tools = [
 ];
 
 // Execute the prompt with specified tools in audio modality
-await run(prompt, { tools: tools, modality: "AUDIO" });
+await run(prompt, { tools: tools, modality: 'AUDIO' });
 ```
 
 ## Model Context Protocol (MCP)
@@ -537,23 +529,19 @@ npm install @modelcontextprotocol/sdk
 ```
 
 ```js
-import {
-  GoogleGenAI,
-  FunctionCallingConfigMode,
-  mcpToTool,
-} from "@google/genai";
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
+import { GoogleGenAI, FunctionCallingConfigMode, mcpToTool } from '@google/genai';
+import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 
 // Create server parameters for stdio connection
 const serverParams = new StdioClientTransport({
-  command: "npx", // Executable
-  args: ["-y", "@philschmid/weather-mcp"], // MCP Server
+  command: 'npx', // Executable
+  args: ['-y', '@philschmid/weather-mcp'], // MCP Server
 });
 
 const client = new Client({
-  name: "example-client",
-  version: "1.0.0",
+  name: 'example-client',
+  version: '1.0.0',
 });
 
 // Configure the client
@@ -564,7 +552,7 @@ await client.connect(serverParams);
 
 // Send request to the model with MCP tools
 const response = await ai.models.generateContent({
-  model: "gemini-2.0-flash",
+  model: 'gemini-2.0-flash',
   contents: `What is the weather in London in ${new Date().toLocaleDateString()}?`,
   config: {
     tools: [mcpToTool(client)], // uses the session, will automatically call the tool

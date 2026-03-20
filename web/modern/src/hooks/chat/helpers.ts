@@ -1,47 +1,47 @@
-import { Message } from '@/lib/utils'
-import { ResponseStreamSummary } from './types'
+import { Message } from '@/lib/utils';
+import { ResponseStreamSummary } from './types';
 
 export const extractTextAndReasoningFromOutput = (output: any[] | undefined): ResponseStreamSummary => {
   if (!Array.isArray(output)) {
-    return { text: null, reasoning: null }
+    return { text: null, reasoning: null };
   }
 
-  const textParts: string[] = []
-  const reasoningParts: string[] = []
+  const textParts: string[] = [];
+  const reasoningParts: string[] = [];
 
   for (const item of output) {
     if (!item || typeof item !== 'object') {
-      continue
+      continue;
     }
 
-    const itemType = String(item.type || '').toLowerCase()
+    const itemType = String(item.type || '').toLowerCase();
 
     if (itemType === 'message') {
-      const contentArray = Array.isArray(item.content) ? item.content : []
+      const contentArray = Array.isArray(item.content) ? item.content : [];
       for (const contentEntry of contentArray) {
         if (!contentEntry || typeof contentEntry !== 'object') {
-          continue
+          continue;
         }
-        const entryType = String(contentEntry.type || '').toLowerCase()
-        const entryText = typeof contentEntry.text === 'string' ? contentEntry.text : ''
+        const entryType = String(contentEntry.type || '').toLowerCase();
+        const entryText = typeof contentEntry.text === 'string' ? contentEntry.text : '';
         if (entryType === 'output_text' && entryText) {
-          textParts.push(entryText)
+          textParts.push(entryText);
         }
         if ((entryType === 'reasoning' || entryType === 'summary_text') && entryText) {
-          reasoningParts.push(entryText)
+          reasoningParts.push(entryText);
         }
       }
     }
 
     if (itemType === 'reasoning') {
-      const summaryArray = Array.isArray(item.summary) ? item.summary : []
+      const summaryArray = Array.isArray(item.summary) ? item.summary : [];
       for (const summaryEntry of summaryArray) {
         if (!summaryEntry || typeof summaryEntry !== 'object') {
-          continue
+          continue;
         }
-        const entryText = typeof summaryEntry.text === 'string' ? summaryEntry.text : ''
+        const entryText = typeof summaryEntry.text === 'string' ? summaryEntry.text : '';
         if (entryText) {
-          reasoningParts.push(entryText)
+          reasoningParts.push(entryText);
         }
       }
     }
@@ -49,108 +49,106 @@ export const extractTextAndReasoningFromOutput = (output: any[] | undefined): Re
 
   return {
     text: textParts.length > 0 ? textParts.join('') : null,
-    reasoning: reasoningParts.length > 0 ? reasoningParts.join('\n') : null
-  }
-}
+    reasoning: reasoningParts.length > 0 ? reasoningParts.join('\n') : null,
+  };
+};
 
 export const convertMessageToResponseInput = (message: Message): Record<string, any> | null => {
   if (!message || message.role === 'error') {
-    return null
+    return null;
   }
 
-  const role = message.role === 'assistant' ? 'assistant' : message.role === 'user' ? 'user' : message.role
+  const role = message.role === 'assistant' ? 'assistant' : message.role === 'user' ? 'user' : message.role;
 
   if (role === 'system') {
-    return null
+    return null;
   }
 
-  const textType = role === 'assistant' ? 'output_text' : 'input_text'
-  const contentParts: any[] = []
+  const textType = role === 'assistant' ? 'output_text' : 'input_text';
+  const contentParts: any[] = [];
 
   const appendText = (text: string | undefined) => {
     if (!text) {
-      return
+      return;
     }
-    const normalized = String(text)
+    const normalized = String(text);
     if (normalized.trim().length === 0) {
-      return
+      return;
     }
-    contentParts.push({ type: textType, text: normalized })
-  }
+    contentParts.push({ type: textType, text: normalized });
+  };
 
   const appendImage = (raw: any) => {
     if (role !== 'user' || !raw) {
-      return
+      return;
     }
 
     if (typeof raw === 'string') {
-      contentParts.push({ type: 'input_image', image_url: raw })
-      return
+      contentParts.push({ type: 'input_image', image_url: raw });
+      return;
     }
 
     if (typeof raw === 'object') {
-      const url = typeof raw.url === 'string' ? raw.url : typeof raw.image_url === 'string' ? raw.image_url : ''
+      const url = typeof raw.url === 'string' ? raw.url : typeof raw.image_url === 'string' ? raw.image_url : '';
       if (!url) {
-        return
+        return;
       }
-      const part: Record<string, any> = { type: 'input_image', image_url: url }
-      const detail = typeof raw.detail === 'string' ? raw.detail : undefined
+      const part: Record<string, any> = { type: 'input_image', image_url: url };
+      const detail = typeof raw.detail === 'string' ? raw.detail : undefined;
       if (detail && detail.trim().length > 0) {
-        part.detail = detail.trim()
+        part.detail = detail.trim();
       }
-      contentParts.push(part)
+      contentParts.push(part);
     }
-  }
+  };
 
   if (typeof message.content === 'string') {
-    appendText(message.content)
+    appendText(message.content);
   } else if (Array.isArray(message.content)) {
     for (const entry of message.content) {
       if (!entry) {
-        continue
+        continue;
       }
       if (typeof entry === 'string') {
-        appendText(entry)
-        continue
+        appendText(entry);
+        continue;
       }
 
-      const entryType = typeof entry.type === 'string' ? entry.type.toLowerCase() : ''
+      const entryType = typeof entry.type === 'string' ? entry.type.toLowerCase() : '';
 
       if (entryType === 'text' || entryType === 'input_text') {
-        appendText(typeof entry.text === 'string' ? entry.text : undefined)
-        continue
+        appendText(typeof entry.text === 'string' ? entry.text : undefined);
+        continue;
       }
 
       if (entryType === 'image_url' || entryType === 'input_image') {
-        appendImage(entry.image_url ?? entry)
-        continue
+        appendImage(entry.image_url ?? entry);
+        continue;
       }
 
       if (typeof entry.text === 'string') {
-        appendText(entry.text)
+        appendText(entry.text);
       }
     }
   }
 
   if (role === 'assistant' && typeof message.reasoning_content === 'string') {
-    const trimmed = message.reasoning_content.trim()
+    const trimmed = message.reasoning_content.trim();
     if (trimmed.length > 0) {
-      contentParts.push({ type: 'reasoning', text: trimmed })
+      contentParts.push({ type: 'reasoning', text: trimmed });
     }
   }
 
   if (contentParts.length === 0) {
-    return null
+    return null;
   }
 
   return {
     role,
-    content: contentParts
-  }
-}
+    content: contentParts,
+  };
+};
 
 export const buildResponseInputFromMessages = (messages: Message[]): any[] => {
-  return messages
-    .map(convertMessageToResponseInput)
-    .filter((entry): entry is Record<string, any> => entry !== null)
-}
+  return messages.map(convertMessageToResponseInput).filter((entry): entry is Record<string, any> => entry !== null);
+};

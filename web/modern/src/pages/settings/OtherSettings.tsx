@@ -100,10 +100,9 @@ export function OtherSettings() {
 
   const checkUpdate = async () => {
     try {
-      // Unified API call - complete URL with /api prefix
-      const res = await api.get('/api/option/update');
-      const { success, data } = res.data;
-      if (success && data) {
+      const res = await fetch('https://api.github.com/repos/Laisky/one-api/releases/latest');
+      const data = await res.json();
+      if (data.tag_name) {
         setUpdateData(data);
       }
     } catch (error) {

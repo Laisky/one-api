@@ -1,131 +1,134 @@
-import { Copy, X } from 'lucide-react'
-import React, { createContext, useCallback, useContext, useMemo, useRef, useState } from 'react'
-import { cn } from '@/lib/utils'
+import { Copy, X } from 'lucide-react';
+import React, { createContext, useCallback, useContext, useMemo, useRef, useState } from 'react';
+import { cn } from '@/lib/utils';
 
 // Helper function to copy text to clipboard
 const copyToClipboard = async (text: string): Promise<boolean> => {
   try {
     if (navigator.clipboard && window.isSecureContext) {
-      await navigator.clipboard.writeText(text)
-      return true
+      await navigator.clipboard.writeText(text);
+      return true;
     } else {
       // Fallback for older browsers
-      const textArea = document.createElement('textarea')
-      textArea.value = text
-      textArea.style.position = 'fixed'
-      textArea.style.left = '-999999px'
-      textArea.style.top = '-999999px'
-      document.body.appendChild(textArea)
-      textArea.focus()
-      textArea.select()
-      const result = document.execCommand('copy')
-      document.body.removeChild(textArea)
-      return result
+      const textArea = document.createElement('textarea');
+      textArea.value = text;
+      textArea.style.position = 'fixed';
+      textArea.style.left = '-999999px';
+      textArea.style.top = '-999999px';
+      document.body.appendChild(textArea);
+      textArea.focus();
+      textArea.select();
+      const result = document.execCommand('copy');
+      document.body.removeChild(textArea);
+      return result;
     }
   } catch (err) {
-    console.error('Failed to copy text to clipboard:', err)
-    return false
+    console.error('Failed to copy text to clipboard:', err);
+    return false;
   }
-}
+};
 
-type NotificationType = 'success' | 'error' | 'info' | 'warning'
+type NotificationType = 'success' | 'error' | 'info' | 'warning';
 
 export interface NotificationOptions {
-  id?: string
-  title?: string
-  message: string
-  type?: NotificationType
-  durationMs?: number // defaults to 3000ms
+  id?: string;
+  title?: string;
+  message: string;
+  type?: NotificationType;
+  durationMs?: number; // defaults to 3000ms
 }
 
 interface Notification extends Required<Omit<NotificationOptions, 'durationMs'>> {
-  durationMs: number
+  durationMs: number;
 }
 
 export interface NotificationsContextValue {
-  notify: (opts: NotificationOptions) => string
-  dismiss: (id: string) => void
+  notify: (opts: NotificationOptions) => string;
+  dismiss: (id: string) => void;
 }
 
-const NotificationsContext = createContext<NotificationsContextValue | null>(null)
+const NotificationsContext = createContext<NotificationsContextValue | null>(null);
 
 export function useNotifications(): NotificationsContextValue {
-  const ctx = useContext(NotificationsContext)
-  if (!ctx) throw new Error('useNotifications must be used within NotificationsProvider')
-  return ctx
+  const ctx = useContext(NotificationsContext);
+  if (!ctx) throw new Error('useNotifications must be used within NotificationsProvider');
+  return ctx;
 }
 
 function genId() {
   // Use crypto.randomUUID() if available for secure ID generation
   if (typeof crypto !== 'undefined' && crypto.randomUUID) {
-    return crypto.randomUUID()
+    return crypto.randomUUID();
   }
 
   // Fallback to crypto.getRandomValues() for secure random bytes
   if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
-    const array = new Uint8Array(16)
-    crypto.getRandomValues(array)
-    return Array.from(array, byte => byte.toString(36)).join('').slice(0, 11)
+    const array = new Uint8Array(16);
+    crypto.getRandomValues(array);
+    return Array.from(array, (byte) => byte.toString(36))
+      .join('')
+      .slice(0, 11);
   }
 
   // Final fallback to Math.random() (should rarely be needed in modern browsers)
-  return Math.random().toString(36).slice(2)
+  return Math.random().toString(36).slice(2);
 }
 
 export const NotificationsProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [items, setItems] = useState<Notification[]>([])
-  const timers = useRef<Record<string, any>>({})
+  const [items, setItems] = useState<Notification[]>([]);
+  const timers = useRef<Record<string, any>>({});
 
   const dismiss = useCallback((id: string) => {
-    setItems((prev) => prev.filter((n) => n.id !== id))
+    setItems((prev) => prev.filter((n) => n.id !== id));
     if (timers.current[id]) {
-      clearTimeout(timers.current[id])
-      delete timers.current[id]
+      clearTimeout(timers.current[id]);
+      delete timers.current[id];
     }
-  }, [])
+  }, []);
 
-  const notify = useCallback((opts: NotificationOptions) => {
-    const id = opts.id || genId()
-    const n: Notification = {
-      id,
-      title: opts.title ?? '',
-      message: opts.message,
-      type: opts.type ?? 'info',
-      durationMs: opts.durationMs ?? 3000,
-    }
-    setItems((prev) => [...prev, n])
-    // auto-dismiss
-    timers.current[id] = setTimeout(() => dismiss(id), n.durationMs)
-    return id
-  }, [dismiss])
+  const notify = useCallback(
+    (opts: NotificationOptions) => {
+      const id = opts.id || genId();
+      const n: Notification = {
+        id,
+        title: opts.title ?? '',
+        message: opts.message,
+        type: opts.type ?? 'info',
+        durationMs: opts.durationMs ?? 3000,
+      };
+      setItems((prev) => [...prev, n]);
+      // auto-dismiss
+      timers.current[id] = setTimeout(() => dismiss(id), n.durationMs);
+      return id;
+    },
+    [dismiss]
+  );
 
-  const value = useMemo(() => ({ notify, dismiss }), [notify, dismiss])
+  const value = useMemo(() => ({ notify, dismiss }), [notify, dismiss]);
 
   return (
     <NotificationsContext.Provider value={value}>
       {children}
       <NotificationsViewport items={items} onClose={dismiss} />
     </NotificationsContext.Provider>
-  )
-}
+  );
+};
 
 export const NotificationsViewport: React.FC<{
-  items: Notification[]
-  onClose: (id: string) => void
+  items: Notification[];
+  onClose: (id: string) => void;
 }> = ({ items, onClose }) => {
   const handleCopy = async (e: React.MouseEvent, notification: Notification) => {
-    e.preventDefault()
-    e.stopPropagation()
+    e.preventDefault();
+    e.stopPropagation();
 
     // Create the text to copy (include both title and message if both exist)
-    const textToCopy = notification.title
-      ? `${notification.title}: ${notification.message}`
-      : notification.message
+    const textToCopy = notification.title ? `${notification.title}: ${notification.message}` : notification.message;
 
-    const success = await copyToClipboard(textToCopy)
+    const success = await copyToClipboard(textToCopy);
 
     // Provide feedback - success is handled silently since the user gets immediate clipboard access
-  }
+  };
 
   return (
     <div
@@ -141,7 +144,7 @@ export const NotificationsViewport: React.FC<{
             n.type === 'success' && 'border-success-border bg-success-muted text-success-foreground',
             n.type === 'error' && 'border-destructive/30 bg-destructive/5 text-destructive',
             n.type === 'warning' && 'border-warning-border bg-warning-muted text-warning-foreground',
-            n.type === 'info' && 'border-info-border bg-info-muted text-info-foreground',
+            n.type === 'info' && 'border-info-border bg-info-muted text-info-foreground'
           )}
           aria-live="polite"
         >
@@ -176,7 +179,7 @@ export const NotificationsViewport: React.FC<{
                 n.type === 'success' && 'bg-success',
                 n.type === 'error' && 'bg-destructive',
                 n.type === 'warning' && 'bg-warning',
-                n.type === 'info' && 'bg-info',
+                n.type === 'info' && 'bg-info'
               )}
               style={{ animationDuration: `${n.durationMs}ms` }}
             />
@@ -184,5 +187,5 @@ export const NotificationsViewport: React.FC<{
         </div>
       ))}
     </div>
-  )
-}
+  );
+};

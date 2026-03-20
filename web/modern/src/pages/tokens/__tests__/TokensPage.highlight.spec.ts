@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest'
-import { shouldHighlightTokenQuota, type Token } from '../TokensPage.impl'
+import { describe, expect, it } from 'vitest';
+import { shouldHighlightTokenQuota, type Token } from '../TokensPage.impl';
 
 const makeToken = (overrides: Partial<Token> = {}): Token => ({
   id: 1,
@@ -15,31 +15,31 @@ const makeToken = (overrides: Partial<Token> = {}): Token => ({
   models: undefined,
   subnet: undefined,
   ...overrides,
-})
+});
 
 describe('shouldHighlightTokenQuota', () => {
   it('returns false when user quota is unavailable', () => {
-    const token = makeToken({ remain_quota: 500 })
-    expect(shouldHighlightTokenQuota(token, null)).toBe(false)
-  })
+    const token = makeToken({ remain_quota: 500 });
+    expect(shouldHighlightTokenQuota(token, null)).toBe(false);
+  });
 
   it('returns false when user quota is unlimited', () => {
-    const token = makeToken({ remain_quota: 500 })
-    expect(shouldHighlightTokenQuota(token, -1)).toBe(false)
-  })
+    const token = makeToken({ remain_quota: 500 });
+    expect(shouldHighlightTokenQuota(token, -1)).toBe(false);
+  });
 
   it('returns true when token quota exceeds user quota', () => {
-    const token = makeToken({ remain_quota: 600 })
-    expect(shouldHighlightTokenQuota(token, 500)).toBe(true)
-  })
+    const token = makeToken({ remain_quota: 600 });
+    expect(shouldHighlightTokenQuota(token, 500)).toBe(true);
+  });
 
   it('returns false when token quota does not exceed user quota', () => {
-    const token = makeToken({ remain_quota: 400 })
-    expect(shouldHighlightTokenQuota(token, 500)).toBe(false)
-  })
+    const token = makeToken({ remain_quota: 400 });
+    expect(shouldHighlightTokenQuota(token, 500)).toBe(false);
+  });
 
   it('returns true for unlimited tokens when user quota is finite', () => {
-    const token = makeToken({ unlimited_quota: true, remain_quota: -1 })
-    expect(shouldHighlightTokenQuota(token, 500)).toBe(true)
-  })
-})
+    const token = makeToken({ unlimited_quota: true, remain_quota: -1 });
+    expect(shouldHighlightTokenQuota(token, 500)).toBe(true);
+  });
+});

@@ -1,5 +1,5 @@
-import type { ImageAttachment as ImageAttachmentType } from "@/components/chat/ImageAttachment";
-import type { Message } from "@/lib/utils";
+import type { ImageAttachment as ImageAttachmentType } from '@/components/chat/ImageAttachment';
+import type { Message } from '@/lib/utils';
 
 export interface UsePlaygroundChatProps {
   selectedToken: string;
@@ -19,19 +19,12 @@ export interface UsePlaygroundChatProps {
   messages: Message[];
   setMessages: (messages: Message[] | ((prev: Message[]) => Message[])) => void;
   expandedReasonings: Record<number, boolean>;
-  setExpandedReasonings: (
-    expanded:
-      | Record<number, boolean>
-      | ((prev: Record<number, boolean>) => Record<number, boolean>)
-  ) => void;
+  setExpandedReasonings: (expanded: Record<number, boolean> | ((prev: Record<number, boolean>) => Record<number, boolean>)) => void;
 }
 
 export interface UsePlaygroundChatReturn {
   isStreaming: boolean;
-  sendMessage: (
-    messageContent: string,
-    images?: ImageAttachmentType[]
-  ) => Promise<void>;
+  sendMessage: (messageContent: string, images?: ImageAttachmentType[]) => Promise<void>;
   regenerateMessage: (messages: Message[]) => Promise<void>;
   stopGeneration: () => void;
   addErrorMessage: (errorText: string) => void;

@@ -252,12 +252,12 @@ Here's a simple example using the [Responses API](/docs/api-reference/responses)
 Generate text from a simple prompt
 
 ```javascript
-import OpenAI from "openai";
+import OpenAI from 'openai';
 const client = new OpenAI();
 
 const response = await client.responses.create({
-  model: "gpt-4.1",
-  input: "Write a one-sentence bedtime story about a unicorn.",
+  model: 'gpt-4.1',
+  input: 'Write a one-sentence bedtime story about a unicorn.',
 });
 
 console.log(response.output_text);
@@ -342,13 +342,13 @@ The `instructions` parameter gives the model high-level instructions on how it s
 Generate text with instructions
 
 ```javascript
-import OpenAI from "openai";
+import OpenAI from 'openai';
 const client = new OpenAI();
 
 const response = await client.responses.create({
-  model: "gpt-4.1",
-  instructions: "Talk like a pirate.",
-  input: "Are semicolons optional in JavaScript?",
+  model: 'gpt-4.1',
+  instructions: 'Talk like a pirate.',
+  input: 'Are semicolons optional in JavaScript?',
 });
 
 console.log(response.output_text);
@@ -383,19 +383,19 @@ The example above is roughly equivalent to using the following input messages in
 Generate text with messages using different roles
 
 ```javascript
-import OpenAI from "openai";
+import OpenAI from 'openai';
 const client = new OpenAI();
 
 const response = await client.responses.create({
-  model: "gpt-4.1",
+  model: 'gpt-4.1',
   input: [
     {
-      role: "developer",
-      content: "Talk like a pirate.",
+      role: 'developer',
+      content: 'Talk like a pirate.',
     },
     {
-      role: "user",
-      content: "Are semicolons optional in JavaScript?",
+      role: 'user',
+      content: 'Are semicolons optional in JavaScript?',
     },
   ],
 });
@@ -475,17 +475,17 @@ String variables
 Generate text with a prompt template
 
 ```javascript
-import OpenAI from "openai";
+import OpenAI from 'openai';
 const client = new OpenAI();
 
 const response = await client.responses.create({
-  model: "gpt-4.1",
+  model: 'gpt-4.1',
   prompt: {
-    id: "pmpt_abc123",
-    version: "2",
+    id: 'pmpt_abc123',
+    version: '2',
     variables: {
-      customer_name: "Jane Doe",
-      product: "40oz juice box",
+      customer_name: 'Jane Doe',
+      product: '40oz juice box',
     },
   },
 });
@@ -534,24 +534,24 @@ Variables with file input
 Prompt template with file input variable
 
 ```javascript
-import fs from "fs";
-import OpenAI from "openai";
+import fs from 'fs';
+import OpenAI from 'openai';
 const client = new OpenAI();
 
 // Upload a PDF we will reference in the prompt variables
 const file = await client.files.create({
-  file: fs.createReadStream("draconomicon.pdf"),
-  purpose: "user_data",
+  file: fs.createReadStream('draconomicon.pdf'),
+  purpose: 'user_data',
 });
 
 const response = await client.responses.create({
-  model: "gpt-4.1",
+  model: 'gpt-4.1',
   prompt: {
-    id: "pmpt_abc123",
+    id: 'pmpt_abc123',
     variables: {
-      topic: "Dragons",
+      topic: 'Dragons',
       reference_pdf: {
-        type: "input_file",
+        type: 'input_file',
         file_id: file.id,
       },
     },
@@ -657,16 +657,16 @@ API request
 Send a prompt to generate code through the API
 
 ```javascript
-import fs from "fs/promises";
-import OpenAI from "openai";
+import fs from 'fs/promises';
+import OpenAI from 'openai';
 const client = new OpenAI();
 
-const instructions = await fs.readFile("prompt.txt", "utf-8");
+const instructions = await fs.readFile('prompt.txt', 'utf-8');
 
 const response = await client.responses.create({
-  model: "gpt-4.1",
+  model: 'gpt-4.1',
   instructions,
-  input: "How would I declare a variable for a last name?",
+  input: 'How would I declare a variable for a last name?',
 });
 
 console.log(response.output_text);
@@ -971,20 +971,20 @@ Passing a URL
 Analyze the content of an image
 
 ```javascript
-import OpenAI from "openai";
+import OpenAI from 'openai';
 const openai = new OpenAI();
 
 const response = await openai.chat.completions.create({
-  model: "gpt-4.1-mini",
+  model: 'gpt-4.1-mini',
   messages: [
     {
-      role: "user",
+      role: 'user',
       content: [
-        { type: "text", text: "What is in this image?" },
+        { type: 'text', text: 'What is in this image?' },
         {
-          type: "image_url",
+          type: 'image_url',
           image_url: {
-            url: "https://upload.wikimedia.org/wikipedia/commons/thumb/d/dd/Gfp-wisconsin-madison-the-nature-boardwalk.jpg/2560px-Gfp-wisconsin-madison-the-nature-boardwalk.jpg",
+            url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/d/dd/Gfp-wisconsin-madison-the-nature-boardwalk.jpg/2560px-Gfp-wisconsin-madison-the-nature-boardwalk.jpg',
           },
         },
       ],
@@ -1050,23 +1050,23 @@ Passing a Base64 encoded image
 Analyze the content of an image
 
 ```javascript
-import fs from "fs";
-import OpenAI from "openai";
+import fs from 'fs';
+import OpenAI from 'openai';
 
 const openai = new OpenAI();
 
-const imagePath = "path_to_your_image.jpg";
-const base64Image = fs.readFileSync(imagePath, "base64");
+const imagePath = 'path_to_your_image.jpg';
+const base64Image = fs.readFileSync(imagePath, 'base64');
 
 const completion = await openai.chat.completions.create({
-  model: "gpt-4.1-mini",
+  model: 'gpt-4.1-mini',
   messages: [
     {
-      role: "user",
+      role: 'user',
       content: [
-        { type: "text", text: "what's in this image?" },
+        { type: 'text', text: "what's in this image?" },
         {
-          type: "image_url",
+          type: 'image_url',
           image_url: {
             url: `data:image/jpeg;base64,${base64Image}`,
           },
@@ -1315,9 +1315,9 @@ In addition to supporting JSON Schema in the REST API, the OpenAI SDKs for [Pyth
 Getting a structured response
 
 ```javascript
-import OpenAI from "openai";
-import { zodTextFormat } from "openai/helpers/zod";
-import { z } from "zod";
+import OpenAI from 'openai';
+import { zodTextFormat } from 'openai/helpers/zod';
+import { z } from 'zod';
 
 const openai = new OpenAI();
 
@@ -1328,16 +1328,16 @@ const CalendarEvent = z.object({
 });
 
 const response = await openai.responses.parse({
-  model: "gpt-4o-2024-08-06",
+  model: 'gpt-4o-2024-08-06',
   input: [
-    { role: "system", content: "Extract the event information." },
+    { role: 'system', content: 'Extract the event information.' },
     {
-      role: "user",
-      content: "Alice and Bob are going to a science fair on Friday.",
+      role: 'user',
+      content: 'Alice and Bob are going to a science fair on Friday.',
     },
   ],
   text: {
-    format: zodTextFormat(CalendarEvent, "event"),
+    format: zodTextFormat(CalendarEvent, 'event'),
   },
 });
 
@@ -1422,9 +1422,9 @@ You can ask the model to output an answer in a structured, step-by-step way, to 
 Structured Outputs for chain-of-thought math tutoring
 
 ```javascript
-import OpenAI from "openai";
-import { zodTextFormat } from "openai/helpers/zod";
-import { z } from "zod";
+import OpenAI from 'openai';
+import { zodTextFormat } from 'openai/helpers/zod';
+import { z } from 'zod';
 
 const openai = new OpenAI();
 
@@ -1439,17 +1439,16 @@ const MathReasoning = z.object({
 });
 
 const response = await openai.responses.parse({
-  model: "gpt-4o-2024-08-06",
+  model: 'gpt-4o-2024-08-06',
   input: [
     {
-      role: "system",
-      content:
-        "You are a helpful math tutor. Guide the user through the solution step by step.",
+      role: 'system',
+      content: 'You are a helpful math tutor. Guide the user through the solution step by step.',
     },
-    { role: "user", content: "how can I solve 8x + 7 = -23" },
+    { role: 'user', content: 'how can I solve 8x + 7 = -23' },
   ],
   text: {
-    format: zodTextFormat(MathReasoning, "math_reasoning"),
+    format: zodTextFormat(MathReasoning, 'math_reasoning'),
   },
 });
 
@@ -1570,9 +1569,9 @@ You can define structured fields to extract from unstructured input data, such a
 Extracting data from research papers using Structured Outputs
 
 ```javascript
-import OpenAI from "openai";
-import { zodTextFormat } from "openai/helpers/zod";
-import { z } from "zod";
+import OpenAI from 'openai';
+import { zodTextFormat } from 'openai/helpers/zod';
+import { z } from 'zod';
 
 const openai = new OpenAI();
 
@@ -1584,17 +1583,17 @@ const ResearchPaperExtraction = z.object({
 });
 
 const response = await openai.responses.parse({
-  model: "gpt-4o-2024-08-06",
+  model: 'gpt-4o-2024-08-06',
   input: [
     {
-      role: "system",
+      role: 'system',
       content:
-        "You are an expert at structured data extraction. You will be given unstructured text from a research paper and should convert it into the given structure.",
+        'You are an expert at structured data extraction. You will be given unstructured text from a research paper and should convert it into the given structure.',
     },
-    { role: "user", content: "..." },
+    { role: 'user', content: '...' },
   ],
   text: {
-    format: zodTextFormat(ResearchPaperExtraction, "research_paper_extraction"),
+    format: zodTextFormat(ResearchPaperExtraction, 'research_paper_extraction'),
   },
 });
 
@@ -1698,15 +1697,15 @@ You can generate valid HTML by representing it as recursive data structures with
 Generating HTML using Structured Outputs
 
 ```javascript
-import OpenAI from "openai";
-import { zodTextFormat } from "openai/helpers/zod";
-import { z } from "zod";
+import OpenAI from 'openai';
+import { zodTextFormat } from 'openai/helpers/zod';
+import { z } from 'zod';
 
 const openai = new OpenAI();
 
 const UI = z.lazy(() =>
   z.object({
-    type: z.enum(["div", "button", "header", "section", "field", "form"]),
+    type: z.enum(['div', 'button', 'header', 'section', 'field', 'form']),
     label: z.string(),
     children: z.array(UI),
     attributes: z.array(
@@ -1719,19 +1718,19 @@ const UI = z.lazy(() =>
 );
 
 const response = await openai.responses.parse({
-  model: "gpt-4o-2024-08-06",
+  model: 'gpt-4o-2024-08-06',
   input: [
     {
-      role: "system",
-      content: "You are a UI generator AI. Convert the user input into a UI.",
+      role: 'system',
+      content: 'You are a UI generator AI. Convert the user input into a UI.',
     },
     {
-      role: "user",
-      content: "Make a User Profile Form",
+      role: 'user',
+      content: 'Make a User Profile Form',
     },
   ],
   text: {
-    format: zodTextFormat(UI, "ui"),
+    format: zodTextFormat(UI, 'ui'),
   },
 });
 
@@ -1938,33 +1937,32 @@ You can classify inputs on multiple categories, which is a common way of doing m
 Moderation using Structured Outputs
 
 ```javascript
-import OpenAI from "openai";
-import { zodTextFormat } from "openai/helpers/zod";
-import { z } from "zod";
+import OpenAI from 'openai';
+import { zodTextFormat } from 'openai/helpers/zod';
+import { z } from 'zod';
 
 const openai = new OpenAI();
 
 const ContentCompliance = z.object({
   is_violating: z.boolean(),
-  category: z.enum(["violence", "sexual", "self_harm"]).nullable(),
+  category: z.enum(['violence', 'sexual', 'self_harm']).nullable(),
   explanation_if_violating: z.string().nullable(),
 });
 
 const response = await openai.responses.parse({
-  model: "gpt-4o-2024-08-06",
+  model: 'gpt-4o-2024-08-06',
   input: [
     {
-      role: "system",
-      content:
-        "Determine if the user input violates specific guidelines and explain if they do.",
+      role: 'system',
+      content: 'Determine if the user input violates specific guidelines and explain if they do.',
     },
     {
-      role: "user",
-      content: "How do I prepare for a job interview?",
+      role: 'user',
+      content: 'How do I prepare for a job interview?',
     },
   ],
   text: {
-    format: zodTextFormat(ContentCompliance, "content_compliance"),
+    format: zodTextFormat(ContentCompliance, 'content_compliance'),
   },
 });
 
@@ -2129,37 +2127,36 @@ print(response.output_text)
 
 ```javascript
 const response = await openai.responses.create({
-  model: "gpt-4o-2024-08-06",
+  model: 'gpt-4o-2024-08-06',
   input: [
     {
-      role: "system",
-      content:
-        "You are a helpful math tutor. Guide the user through the solution step by step.",
+      role: 'system',
+      content: 'You are a helpful math tutor. Guide the user through the solution step by step.',
     },
-    { role: "user", content: "how can I solve 8x + 7 = -23" },
+    { role: 'user', content: 'how can I solve 8x + 7 = -23' },
   ],
   text: {
     format: {
-      type: "json_schema",
-      name: "math_response",
+      type: 'json_schema',
+      name: 'math_response',
       schema: {
-        type: "object",
+        type: 'object',
         properties: {
           steps: {
-            type: "array",
+            type: 'array',
             items: {
-              type: "object",
+              type: 'object',
               properties: {
-                explanation: { type: "string" },
-                output: { type: "string" },
+                explanation: { type: 'string' },
+                output: { type: 'string' },
               },
-              required: ["explanation", "output"],
+              required: ['explanation', 'output'],
               additionalProperties: false,
             },
           },
-          final_answer: { type: "string" },
+          final_answer: { type: 'string' },
         },
-        required: ["steps", "final_answer"],
+        required: ['steps', 'final_answer'],
         additionalProperties: false,
       },
       strict: true,
@@ -2227,47 +2224,46 @@ This can happen in the case of a refusal, if the model refuses to answer for saf
 ```javascript
 try {
   const response = await openai.responses.create({
-    model: "gpt-4o-2024-08-06",
+    model: 'gpt-4o-2024-08-06',
     input: [
       {
-        role: "system",
-        content:
-          "You are a helpful math tutor. Guide the user through the solution step by step.",
+        role: 'system',
+        content: 'You are a helpful math tutor. Guide the user through the solution step by step.',
       },
       {
-        role: "user",
-        content: "how can I solve 8x + 7 = -23",
+        role: 'user',
+        content: 'how can I solve 8x + 7 = -23',
       },
     ],
     max_output_tokens: 50,
     text: {
       format: {
-        type: "json_schema",
-        name: "math_response",
+        type: 'json_schema',
+        name: 'math_response',
         schema: {
-          type: "object",
+          type: 'object',
           properties: {
             steps: {
-              type: "array",
+              type: 'array',
               items: {
-                type: "object",
+                type: 'object',
                 properties: {
                   explanation: {
-                    type: "string",
+                    type: 'string',
                   },
                   output: {
-                    type: "string",
+                    type: 'string',
                   },
                 },
-                required: ["explanation", "output"],
+                required: ['explanation', 'output'],
                 additionalProperties: false,
               },
             },
             final_answer: {
-              type: "string",
+              type: 'string',
             },
           },
-          required: ["steps", "final_answer"],
+          required: ['steps', 'final_answer'],
           additionalProperties: false,
         },
         strict: true,
@@ -2275,23 +2271,20 @@ try {
     },
   });
 
-  if (
-    response.status === "incomplete" &&
-    response.incomplete_details.reason === "max_output_tokens"
-  ) {
+  if (response.status === 'incomplete' && response.incomplete_details.reason === 'max_output_tokens') {
     // Handle the case where the model did not return a complete response
-    throw new Error("Incomplete response");
+    throw new Error('Incomplete response');
   }
 
   const math_response = response.output[0].content[0];
 
-  if (math_response.type === "refusal") {
+  if (math_response.type === 'refusal') {
     // handle refusal
     console.log(math_response.refusal);
-  } else if (math_response.type === "output_text") {
+  } else if (math_response.type === 'output_text') {
     console.log(math_response.text);
   } else {
-    throw new Error("No response content");
+    throw new Error('No response content');
   }
 } catch (e) {
   // Handle edge cases
@@ -2389,16 +2382,15 @@ const MathReasoning = z.object({
 });
 
 const completion = await openai.chat.completions.parse({
-  model: "gpt-4o-2024-08-06",
+  model: 'gpt-4o-2024-08-06',
   messages: [
     {
-      role: "system",
-      content:
-        "You are a helpful math tutor. Guide the user through the solution step by step.",
+      role: 'system',
+      content: 'You are a helpful math tutor. Guide the user through the solution step by step.',
     },
-    { role: "user", content: "how can I solve 8x + 7 = -23" },
+    { role: 'user', content: 'how can I solve 8x + 7 = -23' },
   ],
-  response_format: zodResponseFormat(MathReasoning, "math_reasoning"),
+  response_format: zodResponseFormat(MathReasoning, 'math_reasoning'),
 });
 
 const math_reasoning = completion.choices[0].message;
@@ -2517,9 +2509,9 @@ with client.responses.stream(
 ```
 
 ```javascript
-import { OpenAI } from "openai";
-import { zodTextFormat } from "openai/helpers/zod";
-import { z } from "zod";
+import { OpenAI } from 'openai';
+import { zodTextFormat } from 'openai/helpers/zod';
+import { z } from 'zod';
 
 const EntitiesSchema = z.object({
   attributes: z.array(z.string()),
@@ -2530,24 +2522,22 @@ const EntitiesSchema = z.object({
 const openai = new OpenAI();
 const stream = openai.responses
   .stream({
-    model: "gpt-4.1",
-    input: [
-      { role: "user", content: "What's the weather like in Paris today?" },
-    ],
+    model: 'gpt-4.1',
+    input: [{ role: 'user', content: "What's the weather like in Paris today?" }],
     text: {
-      format: zodTextFormat(EntitiesSchema, "entities"),
+      format: zodTextFormat(EntitiesSchema, 'entities'),
     },
   })
-  .on("response.refusal.delta", (event) => {
+  .on('response.refusal.delta', (event) => {
     process.stdout.write(event.delta);
   })
-  .on("response.output_text.delta", (event) => {
+  .on('response.output_text.delta', (event) => {
     process.stdout.write(event.delta);
   })
-  .on("response.output_text.done", () => {
-    process.stdout.write("\n");
+  .on('response.output_text.done', () => {
+    process.stdout.write('\n');
   })
-  .on("response.error", (event) => {
+  .on('response.error', (event) => {
     console.error(event.error);
   });
 
@@ -2674,8 +2664,8 @@ Note these constraints are [not yet supported for fine-tuned models](#some-type-
 Note that the root level object of a schema must be an object, and not use `anyOf`. A pattern that appears in Zod (as one example) is using a discriminated union, which produces an `anyOf` at the top level. So code such as the following won't work:
 
 ```javascript
-import { z } from "zod";
-import { zodResponseFormat } from "openai/helpers/zod";
+import { z } from 'zod';
+import { zodResponseFormat } from 'openai/helpers/zod';
 
 const BaseResponseSchema = z.object({
   /* ... */
@@ -2684,13 +2674,10 @@ const UnsuccessfulResponseSchema = z.object({
   /* ... */
 });
 
-const finalSchema = z.discriminatedUnion("status", [
-  BaseResponseSchema,
-  UnsuccessfulResponseSchema,
-]);
+const finalSchema = z.discriminatedUnion('status', [BaseResponseSchema, UnsuccessfulResponseSchema]);
 
 // Invalid JSON Schema for Structured Outputs
-const json = zodResponseFormat(finalSchema, "final_schema");
+const json = zodResponseFormat(finalSchema, 'final_schema');
 ```
 
 #### All fields must be `required`
@@ -3012,45 +2999,38 @@ const we_did_not_specify_stop_tokens = true;
 
 try {
   const response = await openai.responses.create({
-    model: "gpt-3.5-turbo-0125",
+    model: 'gpt-3.5-turbo-0125',
     input: [
       {
-        role: "system",
-        content: "You are a helpful assistant designed to output JSON.",
+        role: 'system',
+        content: 'You are a helpful assistant designed to output JSON.',
       },
       {
-        role: "user",
-        content:
-          "Who won the world series in 2020? Please respond in the format {winner: ...}",
+        role: 'user',
+        content: 'Who won the world series in 2020? Please respond in the format {winner: ...}',
       },
     ],
-    text: { format: { type: "json_object" } },
+    text: { format: { type: 'json_object' } },
   });
 
   // Check if the conversation was too long for the context window, resulting in incomplete JSON
-  if (
-    response.status === "incomplete" &&
-    response.incomplete_details.reason === "max_output_tokens"
-  ) {
+  if (response.status === 'incomplete' && response.incomplete_details.reason === 'max_output_tokens') {
     // your code should handle this error case
   }
 
   // Check if the OpenAI safety system refused the request and generated a refusal instead
-  if (response.output[0].content[0].type === "refusal") {
+  if (response.output[0].content[0].type === 'refusal') {
     // your code should handle this error case
     // In this case, the .content field will contain the explanation (if any) that the model generated for why it is refusing
     console.log(response.output[0].content[0].refusal);
   }
 
   // Check if the model's output included restricted content, so the generation of JSON was halted and may be partial
-  if (
-    response.status === "incomplete" &&
-    response.incomplete_details.reason === "content_filter"
-  ) {
+  if (response.status === 'incomplete' && response.incomplete_details.reason === 'content_filter') {
     // your code should handle this error case
   }
 
-  if (response.status === "completed") {
+  if (response.status === 'completed') {
     // In this case the model has either successfully finished generating the JSON object according to your schema, or the model generated one of the tokens you provided as a "stop token"
 
     if (we_did_not_specify_stop_tokens) {
@@ -3162,34 +3142,32 @@ print(response.output)
 ```
 
 ```javascript
-import { OpenAI } from "openai";
+import { OpenAI } from 'openai';
 
 const openai = new OpenAI();
 
 const tools = [
   {
-    type: "function",
-    name: "get_weather",
-    description: "Get current temperature for a given location.",
+    type: 'function',
+    name: 'get_weather',
+    description: 'Get current temperature for a given location.',
     parameters: {
-      type: "object",
+      type: 'object',
       properties: {
         location: {
-          type: "string",
-          description: "City and country e.g. Bogotá, Colombia",
+          type: 'string',
+          description: 'City and country e.g. Bogotá, Colombia',
         },
       },
-      required: ["location"],
+      required: ['location'],
       additionalProperties: false,
     },
   },
 ];
 
 const response = await openai.responses.create({
-  model: "gpt-4.1",
-  input: [
-    { role: "user", content: "What is the weather like in Paris today?" },
-  ],
+  model: 'gpt-4.1',
+  input: [{ role: 'user', content: 'What is the weather like in Paris today?' }],
   tools,
 });
 
@@ -3288,45 +3266,43 @@ print(response.output)
 ```
 
 ```javascript
-import { OpenAI } from "openai";
+import { OpenAI } from 'openai';
 
 const openai = new OpenAI();
 
 const tools = [
   {
-    type: "function",
-    name: "send_email",
-    description:
-      "Send an email to a given recipient with a subject and message.",
+    type: 'function',
+    name: 'send_email',
+    description: 'Send an email to a given recipient with a subject and message.',
     parameters: {
-      type: "object",
+      type: 'object',
       properties: {
         to: {
-          type: "string",
-          description: "The recipient email address.",
+          type: 'string',
+          description: 'The recipient email address.',
         },
         subject: {
-          type: "string",
-          description: "Email subject line.",
+          type: 'string',
+          description: 'Email subject line.',
         },
         body: {
-          type: "string",
-          description: "Body of the email message.",
+          type: 'string',
+          description: 'Body of the email message.',
         },
       },
-      required: ["to", "subject", "body"],
+      required: ['to', 'subject', 'body'],
       additionalProperties: false,
     },
   },
 ];
 
 const response = await openai.responses.create({
-  model: "gpt-4.1",
+  model: 'gpt-4.1',
   input: [
     {
-      role: "user",
-      content:
-        "Can you send an email to ilan@example.com and katia@example.com saying hi?",
+      role: 'user',
+      content: 'Can you send an email to ilan@example.com and katia@example.com saying hi?',
     },
   ],
   tools,
@@ -3470,57 +3446,55 @@ print(response.output)
 ```
 
 ```javascript
-import { OpenAI } from "openai";
+import { OpenAI } from 'openai';
 
 const openai = new OpenAI();
 
 const tools = [
   {
-    type: "function",
-    name: "search_knowledge_base",
-    description: "Query a knowledge base to retrieve relevant info on a topic.",
+    type: 'function',
+    name: 'search_knowledge_base',
+    description: 'Query a knowledge base to retrieve relevant info on a topic.',
     parameters: {
-      type: "object",
+      type: 'object',
       properties: {
         query: {
-          type: "string",
-          description: "The user question or search query.",
+          type: 'string',
+          description: 'The user question or search query.',
         },
         options: {
-          type: "object",
+          type: 'object',
           properties: {
             num_results: {
-              type: "number",
-              description: "Number of top results to return.",
+              type: 'number',
+              description: 'Number of top results to return.',
             },
             domain_filter: {
-              type: ["string", "null"],
-              description:
-                "Optional domain to narrow the search (e.g. 'finance', 'medical'). Pass null if not needed.",
+              type: ['string', 'null'],
+              description: "Optional domain to narrow the search (e.g. 'finance', 'medical'). Pass null if not needed.",
             },
             sort_by: {
-              type: ["string", "null"],
-              enum: ["relevance", "date", "popularity", "alphabetical"],
-              description: "How to sort results. Pass null if not needed.",
+              type: ['string', 'null'],
+              enum: ['relevance', 'date', 'popularity', 'alphabetical'],
+              description: 'How to sort results. Pass null if not needed.',
             },
           },
-          required: ["num_results", "domain_filter", "sort_by"],
+          required: ['num_results', 'domain_filter', 'sort_by'],
           additionalProperties: false,
         },
       },
-      required: ["query", "options"],
+      required: ['query', 'options'],
       additionalProperties: false,
     },
   },
 ];
 
 const response = await openai.responses.create({
-  model: "gpt-4.1",
+  model: 'gpt-4.1',
   input: [
     {
-      role: "user",
-      content:
-        "Can you find information about ChatGPT in the AI knowledge base?",
+      role: 'user',
+      content: 'Can you find information about ChatGPT in the AI knowledge base?',
     },
   ],
   tools,
@@ -3691,22 +3665,22 @@ response = client.responses.create(
 ```
 
 ```javascript
-import { OpenAI } from "openai";
+import { OpenAI } from 'openai';
 
 const openai = new OpenAI();
 
 const tools = [
   {
-    type: "function",
-    name: "get_weather",
-    description: "Get current temperature for provided coordinates in celsius.",
+    type: 'function',
+    name: 'get_weather',
+    description: 'Get current temperature for provided coordinates in celsius.',
     parameters: {
-      type: "object",
+      type: 'object',
       properties: {
-        latitude: { type: "number" },
-        longitude: { type: "number" },
+        latitude: { type: 'number' },
+        longitude: { type: 'number' },
       },
-      required: ["latitude", "longitude"],
+      required: ['latitude', 'longitude'],
       additionalProperties: false,
     },
     strict: true,
@@ -3715,13 +3689,13 @@ const tools = [
 
 const input = [
   {
-    role: "user",
+    role: 'user',
     content: "What's the weather like in Paris today?",
   },
 ];
 
 const response = await openai.responses.create({
-  model: "gpt-4.1",
+  model: 'gpt-4.1',
   input,
   tools,
 });
@@ -3785,13 +3759,13 @@ print(response_2.output_text)
 input.push(toolCall); // append model's function call message
 input.push({
   // append result message
-  type: "function_call_output",
+  type: 'function_call_output',
   call_id: toolCall.call_id,
   output: result.toString(),
 });
 
 const response2 = await openai.responses.create({
-  model: "gpt-4.1",
+  model: 'gpt-4.1',
   input,
   tools,
   store: true,
@@ -3854,29 +3828,24 @@ Because the `parameters` are defined by a [JSON schema](https://json-schema.org/
 ### Best practices for defining functions
 
 1.  **Write clear and detailed function names, parameter descriptions, and instructions.**
-
     - **Explicitly describe the purpose of the function and each parameter** (and its format), and what the output represents.
     - **Use the system prompt to describe when (and when not) to use each function.** Generally, tell the model _exactly_ what to do.
     - **Include examples and edge cases**, especially to rectify any recurring failures. (**Note:** Adding examples may hurt performance for [reasoning models](/docs/guides/reasoning).)
 
 2.  **Apply software engineering best practices.**
-
     - **Make the functions obvious and intuitive**. ([principle of least surprise](https://en.wikipedia.org/wiki/Principle_of_least_astonishment))
     - **Use enums** and object structure to make invalid states unrepresentable. (e.g. `toggle_light(on: bool, off: bool)` allows for invalid calls)
     - **Pass the intern test.** Can an intern/human correctly use the function given nothing but what you gave the model? (If not, what questions do they ask you? Add the answers to the prompt.)
 
 3.  **Offload the burden from the model and use code where possible.**
-
     - **Don't make the model fill arguments you already know.** For example, if you already have an `order_id` based on a previous menu, don't have an `order_id` param – instead, have no params `submit_refund()` and pass the `order_id` with code.
     - **Combine functions that are always called in sequence.** For example, if you always call `mark_location()` after `query_location()`, just move the marking logic into the query function call.
 
 4.  **Keep the number of functions small for higher accuracy.**
-
     - **Evaluate your performance** with different numbers of functions.
     - **Aim for fewer than 20 functions** at any one time, though this is just a soft suggestion.
 
 5.  **Leverage OpenAI resources.**
-
     - **Generate and iterate on function schemas** in the [Playground](/playground).
     - **Consider [fine-tuning](https://platform.openai.com/docs/guides/fine-tuning) to increase function calling accuracy** for large numbers of functions or difficult tasks. ([cookbook](https://cookbook.openai.com/examples/fine_tuning_for_function_calling))
 
@@ -3940,7 +3909,7 @@ for tool_call in response.output:
 
 ```javascript
 for (const toolCall of response.output) {
-  if (toolCall.type !== "function_call") {
+  if (toolCall.type !== 'function_call') {
     continue;
   }
 
@@ -3949,7 +3918,7 @@ for (const toolCall of response.output) {
 
   const result = callFunction(name, args);
   input.push({
-    type: "function_call_output",
+    type: 'function_call_output',
     call_id: toolCall.call_id,
     output: result.toString(),
   });
@@ -3970,10 +3939,10 @@ def call_function(name, args):
 
 ```javascript
 const callFunction = async (name, args) => {
-  if (name === "get_weather") {
+  if (name === 'get_weather') {
     return getWeather(args.latitude, args.longitude);
   }
-  if (name === "send_email") {
+  if (name === 'send_email') {
     return sendEmail(args.to, args.body);
   }
 };
@@ -4001,7 +3970,7 @@ response = client.responses.create(
 
 ```javascript
 const response = await openai.responses.create({
-  model: "gpt-4.1",
+  model: 'gpt-4.1',
   input,
   tools,
 });
@@ -4154,22 +4123,22 @@ for event in stream:
 ```
 
 ```javascript
-import { OpenAI } from "openai";
+import { OpenAI } from 'openai';
 
 const openai = new OpenAI();
 
 const tools = [
   {
-    type: "function",
-    name: "get_weather",
-    description: "Get current temperature for provided coordinates in celsius.",
+    type: 'function',
+    name: 'get_weather',
+    description: 'Get current temperature for provided coordinates in celsius.',
     parameters: {
-      type: "object",
+      type: 'object',
       properties: {
-        latitude: { type: "number" },
-        longitude: { type: "number" },
+        latitude: { type: 'number' },
+        longitude: { type: 'number' },
       },
-      required: ["latitude", "longitude"],
+      required: ['latitude', 'longitude'],
       additionalProperties: false,
     },
     strict: true,
@@ -4177,8 +4146,8 @@ const tools = [
 ];
 
 const stream = await openai.responses.create({
-  model: "gpt-4.1",
-  input: [{ role: "user", content: "What's the weather like in Paris today?" }],
+  model: 'gpt-4.1',
+  input: [{ role: 'user', content: "What's the weather like in Paris today?" }],
   tools,
   stream: true,
   store: true,
@@ -4244,9 +4213,9 @@ for event in stream:
 const finalToolCalls = {};
 
 for await (const event of stream) {
-  if (event.type === "response.output_item.added") {
+  if (event.type === 'response.output_item.added') {
     finalToolCalls[event.output_index] = event.item;
-  } else if (event.type === "response.function_call_arguments.delta") {
+  } else if (event.type === 'response.function_call_arguments.delta') {
     const index = event.output_index;
 
     if (finalToolCalls[index]) {

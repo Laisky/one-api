@@ -311,11 +311,11 @@ receivers:
         endpoint: 0.0.0.0:4318
 
   postgresql:
-    endpoint: "localhost:5432"
+    endpoint: 'localhost:5432'
     transport: tcp
-    username: "otel_monitor"
-    password: "your_password"
-    databases: ["your_db"]
+    username: 'otel_monitor'
+    password: 'your_password'
+    databases: ['your_db']
     collection_interval: 10s
     tls:
       insecure: true
@@ -330,21 +330,21 @@ processors:
 
 exporters:
   otlphttp/victoriametrics:
-    metrics_endpoint: "http://victoriametrics:8428/opentelemetry/v1/metrics"
+    metrics_endpoint: 'http://victoriametrics:8428/opentelemetry/v1/metrics'
     compression: gzip
     encoding: proto
     tls:
       insecure: true
 
   otlphttp/victorialogs:
-    logs_endpoint: "http://victorialogs:9428/insert/opentelemetry/v1/logs"
+    logs_endpoint: 'http://victorialogs:9428/insert/opentelemetry/v1/logs'
     compression: gzip
     encoding: proto
     tls:
       insecure: true
 
   otlphttp/victoriatraces:
-    traces_endpoint: "http://victoriatraces:10428/insert/opentelemetry/v1/traces"
+    traces_endpoint: 'http://victoriatraces:10428/insert/opentelemetry/v1/traces'
     compression: gzip
     encoding: proto
     tls:
@@ -459,13 +459,13 @@ The OpenTelemetry Collector uses the `otlphttp` exporter. Ensure your `otel-coll
 ```yaml
 exporters:
   otlphttp/victoriametrics:
-    metrics_endpoint: "http://victoria-metrics:8428/opentelemetry/v1/metrics"
+    metrics_endpoint: 'http://victoria-metrics:8428/opentelemetry/v1/metrics'
     # ... options
   otlphttp/victorialogs:
-    logs_endpoint: "http://victoria-logs:9428/insert/opentelemetry/v1/logs"
+    logs_endpoint: 'http://victoria-logs:9428/insert/opentelemetry/v1/logs'
     # ... options
   otlphttp/victoriatraces:
-    traces_endpoint: "http://victoria-traces:10428/insert/opentelemetry/v1/traces"
+    traces_endpoint: 'http://victoria-traces:10428/insert/opentelemetry/v1/traces'
     # ... options
 ```
 
@@ -563,49 +563,45 @@ datasources:
 Below is a simplified `docker-compose.yml`:
 
 ```yaml
-version: "3.7"
+version: '3.7'
 services:
   otel-collector:
     image: otel/opentelemetry-collector-contrib:latest
     volumes:
       - ./otel-collector-config.yaml:/etc/otel-collector-config.yaml
     ports:
-      - "4317:4317"
-      - "4318:4318"
-    command: ["--config=/etc/otel-collector-config.yaml"]
+      - '4317:4317'
+      - '4318:4318'
+    command: ['--config=/etc/otel-collector-config.yaml']
 
   victoria-metrics:
     image: victoriametrics/victoria-metrics:v1.132.0
     volumes:
       - ./victoria-metrics-data:/victoria-metrics-data
     ports:
-      - "8428:8428"
-    command:
-      [
-        "--storageDataPath=/victoria-metrics-data",
-        "--opentelemetry.usePrometheusNaming=true",
-      ]
+      - '8428:8428'
+    command: ['--storageDataPath=/victoria-metrics-data', '--opentelemetry.usePrometheusNaming=true']
 
   victoria-logs:
     image: victoriametrics/victoria-logs:v1.41.0
     volumes:
       - ./victoria-logs-data:/victoria-logs-data
     ports:
-      - "9428:9428"
-    command: ["-storageDataPath=victoria-logs-data"]
+      - '9428:9428'
+    command: ['-storageDataPath=victoria-logs-data']
 
   victoria-traces:
     image: victoriametrics/victoria-traces:latest
     volumes:
       - ./victoria-traces-data:/victoria-traces-data
     ports:
-      - "10428:10428"
-    command: ["-storageDataPath=victoria-traces-data"]
+      - '10428:10428'
+    command: ['-storageDataPath=victoria-traces-data']
 
   grafana:
     image: grafana/grafana:latest
     ports:
-      - "3000:3000"
+      - '3000:3000'
     volumes:
       - ./grafana/provisioning:/etc/grafana/provisioning
 ```

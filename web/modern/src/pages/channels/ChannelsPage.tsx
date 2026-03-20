@@ -295,7 +295,7 @@ export function ChannelsPage() {
           const newData = [...data];
           newData[index] = {
             ...newData[index],
-            response_time: time,
+            response_time: time * 1000,
             test_time: Date.now(),
           };
           setData(newData);
@@ -533,10 +533,7 @@ export function ChannelsPage() {
               variant="outline"
               size="sm"
               onClick={() => manage(channel.id, channel.status === 1 ? 'disable' : 'enable')}
-              className={cn(
-                'gap-1',
-                channel.status === 1 ? 'text-warning hover:text-warning/80' : 'text-success hover:text-success/80'
-              )}
+              className={cn('gap-1', channel.status === 1 ? 'text-warning hover:text-warning/80' : 'text-success hover:text-success/80')}
             >
               {channel.status === 1 ? t('channels.actions.disable') : t('channels.actions.enable')}
             </ListActionButton>
@@ -619,80 +616,80 @@ export function ChannelsPage() {
 
   return (
     <>
-    <ResponsivePageContainer
-      title={t('channels.title')}
-      description={t('channels.description')}
-      actions={
-        <Button
-          onClick={() => navigate('/channels/add')}
-          className={cn('gap-2 whitespace-nowrap', isMobile ? 'w-full touch-target' : '')}
-          size={isMobile ? 'sm' : 'md'}
-        >
-          <Plus className="h-4 w-4" />
-          {isMobile ? t('channels.actions.add_mobile') : t('channels.actions.add')}
-        </Button>
-      }
-    >
-      <Card className="border-0 md:border shadow-none md:shadow-sm">
-        <CardContent className={cn(isMobile ? 'p-2' : 'p-6')}>
-          <EnhancedDataTable
-            columns={columns}
-            data={data}
-            floatingRowActions={(row) => (
-              <div className="flex items-center gap-1">
-                <ListActionButton
-                  onClick={() => navigate(`/channels/edit/${row.id}`)}
-                  title={t('channels.actions.edit')}
-                  aria-label={t('channels.actions.edit')}
-                  icon={<Settings className="h-4 w-4" />}
-                />
-                <ListActionButton
-                  onClick={() => manage(row.id, row.status === 1 ? 'disable' : 'enable')}
-                  title={row.status === 1 ? t('channels.actions.disable') : t('channels.actions.enable')}
-                  aria-label={row.status === 1 ? t('channels.actions.disable') : t('channels.actions.enable')}
-                  className={row.status === 1 ? 'text-warning hover:text-warning/80' : 'text-success hover:text-success/80'}
-                  icon={row.status === 1 ? <Ban className="h-4 w-4" /> : <CheckCircle className="h-4 w-4" />}
-                />
-                <ListActionButton
-                  onClick={() => {
-                    const idx = data.findIndex((c) => c.id === row.id);
-                    manage(row.id, 'test', idx !== -1 ? idx : undefined);
-                  }}
-                  title={t('channels.actions.test')}
-                  aria-label={t('channels.actions.test')}
-                  icon={<FlaskConical className="h-4 w-4" />}
-                />
-              </div>
-            )}
-            pageIndex={pageIndex}
-            pageSize={pageSize}
-            total={total}
-            onPageChange={handlePageChange}
-            onPageSizeChange={handlePageSizeChange}
-            sortBy={sortBy}
-            sortOrder={sortOrder}
-            onSortChange={handleSortChange}
-            searchValue={searchKeyword}
-            searchOptions={searchOptions}
-            searchLoading={searchLoading}
-            onSearchChange={searchChannels}
-            onSearchValueChange={setSearchKeyword}
-            onSearchSubmit={performSearch}
-            searchPlaceholder={t('channels.search.placeholder')}
-            allowSearchAdditions={true}
-            toolbarActions={toolbarActions}
-            onRefresh={refresh}
-            loading={loading}
-            emptyMessage={t('channels.empty')}
-            mobileCardLayout={true}
-            hideColumnsOnMobile={['created_time', 'response_time']}
-            compactMode={isMobile}
-          />
-        </CardContent>
-      </Card>
-    </ResponsivePageContainer>
+      <ResponsivePageContainer
+        title={t('channels.title')}
+        description={t('channels.description')}
+        actions={
+          <Button
+            onClick={() => navigate('/channels/add')}
+            className={cn('gap-2 whitespace-nowrap', isMobile ? 'w-full touch-target' : '')}
+            size={isMobile ? 'sm' : 'md'}
+          >
+            <Plus className="h-4 w-4" />
+            {isMobile ? t('channels.actions.add_mobile') : t('channels.actions.add')}
+          </Button>
+        }
+      >
+        <Card className="border-0 md:border shadow-none md:shadow-sm">
+          <CardContent className={cn(isMobile ? 'p-2' : 'p-6')}>
+            <EnhancedDataTable
+              columns={columns}
+              data={data}
+              floatingRowActions={(row) => (
+                <div className="flex items-center gap-1">
+                  <ListActionButton
+                    onClick={() => navigate(`/channels/edit/${row.id}`)}
+                    title={t('channels.actions.edit')}
+                    aria-label={t('channels.actions.edit')}
+                    icon={<Settings className="h-4 w-4" />}
+                  />
+                  <ListActionButton
+                    onClick={() => manage(row.id, row.status === 1 ? 'disable' : 'enable')}
+                    title={row.status === 1 ? t('channels.actions.disable') : t('channels.actions.enable')}
+                    aria-label={row.status === 1 ? t('channels.actions.disable') : t('channels.actions.enable')}
+                    className={row.status === 1 ? 'text-warning hover:text-warning/80' : 'text-success hover:text-success/80'}
+                    icon={row.status === 1 ? <Ban className="h-4 w-4" /> : <CheckCircle className="h-4 w-4" />}
+                  />
+                  <ListActionButton
+                    onClick={() => {
+                      const idx = data.findIndex((c) => c.id === row.id);
+                      manage(row.id, 'test', idx !== -1 ? idx : undefined);
+                    }}
+                    title={t('channels.actions.test')}
+                    aria-label={t('channels.actions.test')}
+                    icon={<FlaskConical className="h-4 w-4" />}
+                  />
+                </div>
+              )}
+              pageIndex={pageIndex}
+              pageSize={pageSize}
+              total={total}
+              onPageChange={handlePageChange}
+              onPageSizeChange={handlePageSizeChange}
+              sortBy={sortBy}
+              sortOrder={sortOrder}
+              onSortChange={handleSortChange}
+              searchValue={searchKeyword}
+              searchOptions={searchOptions}
+              searchLoading={searchLoading}
+              onSearchChange={searchChannels}
+              onSearchValueChange={setSearchKeyword}
+              onSearchSubmit={performSearch}
+              searchPlaceholder={t('channels.search.placeholder')}
+              allowSearchAdditions={true}
+              toolbarActions={toolbarActions}
+              onRefresh={refresh}
+              loading={loading}
+              emptyMessage={t('channels.empty')}
+              mobileCardLayout={true}
+              hideColumnsOnMobile={['created_time', 'response_time']}
+              compactMode={isMobile}
+            />
+          </CardContent>
+        </Card>
+      </ResponsivePageContainer>
 
-    <ConfirmActionDialog />
+      <ConfirmActionDialog />
     </>
   );
 }

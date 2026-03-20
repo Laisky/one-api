@@ -45,7 +45,14 @@ export function AboutPage() {
 
   // If about is a URL, render as iframe
   if (about.startsWith('https://')) {
-    return <iframe src={about} className="w-full h-screen border-0" title={t('about.iframe_title')} sandbox="allow-scripts allow-same-origin allow-popups" />;
+    return (
+      <iframe
+        src={about}
+        className="w-full h-screen border-0"
+        title={t('about.iframe_title')}
+        sandbox="allow-scripts allow-same-origin allow-popups"
+      />
+    );
   }
 
   // If no about content is configured, show default

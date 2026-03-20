@@ -1,5 +1,5 @@
-import { useCallback, useMemo, useState } from "react";
-import type { UseFormReturn } from "react-hook-form";
+import { useCallback, useMemo, useState } from 'react';
+import type { UseFormReturn } from 'react-hook-form';
 import {
   cloneNormalizedToolingConfig,
   clonePricingMap,
@@ -7,40 +7,29 @@ import {
   normalizeToolingConfigShape,
   prepareToolingConfigForSet,
   stringifyToolingConfig,
-} from "../helpers";
-import type {
-  ChannelForm,
-  NormalizedToolingConfig,
-  ToolPricingEntry,
-} from "../schemas";
+} from '../helpers';
+import type { ChannelForm, NormalizedToolingConfig, ToolPricingEntry } from '../schemas';
 
 export const useChannelTooling = (
   form: UseFormReturn<ChannelForm>,
   defaultTooling: string,
   notify: (options: any) => void,
-  tr: (
-    key: string,
-    defaultValue: string,
-    options?: Record<string, unknown>
-  ) => string
+  tr: (key: string, defaultValue: string, options?: Record<string, unknown>) => string
 ) => {
-  const [customTool, setCustomTool] = useState("");
-  const watchTooling = form.watch("tooling") ?? "";
+  const [customTool, setCustomTool] = useState('');
+  const watchTooling = form.watch('tooling') ?? '';
 
   const showToolingJSONError = useCallback(() => {
     notify({
-      type: "error",
-      title: tr("tooling.errors.invalid_json_title", "Invalid JSON"),
-      message: tr(
-        "tooling.errors.invalid_json_message",
-        "Fix tooling JSON before editing the whitelist."
-      ),
+      type: 'error',
+      title: tr('tooling.errors.invalid_json_title', 'Invalid JSON'),
+      message: tr('tooling.errors.invalid_json_message', 'Fix tooling JSON before editing the whitelist.'),
     });
   }, [notify, tr]);
 
   const parsedToolingConfig = useMemo<NormalizedToolingConfig | null>(() => {
-    const raw = (watchTooling ?? "").trim();
-    if (raw === "") {
+    const raw = (watchTooling ?? '').trim();
+    if (raw === '') {
       return normalizeToolingConfigShape({});
     }
     try {
@@ -52,7 +41,7 @@ export const useChannelTooling = (
   }, [watchTooling]);
 
   const parsedDefaultTooling = useMemo<NormalizedToolingConfig | null>(() => {
-    if (!defaultTooling || defaultTooling.trim() === "") {
+    if (!defaultTooling || defaultTooling.trim() === '') {
       return null;
     }
     try {
@@ -70,7 +59,7 @@ export const useChannelTooling = (
   const pricedToolSet = useMemo(() => {
     const result = new Set<string>();
     const collectPricing = (pricing?: Record<string, ToolPricingEntry>) => {
-      if (!pricing || typeof pricing !== "object") {
+      if (!pricing || typeof pricing !== 'object') {
         return;
       }
       Object.keys(pricing).forEach((tool) => {
@@ -105,7 +94,7 @@ export const useChannelTooling = (
       });
     };
     const collectPricingKeys = (pricing?: Record<string, ToolPricingEntry>) => {
-      if (!pricing || typeof pricing !== "object") {
+      if (!pricing || typeof pricing !== 'object') {
         return;
       }
       Object.keys(pricing).forEach((tool) => {
@@ -131,19 +120,15 @@ export const useChannelTooling = (
   const toolEditorDisabled = parsedToolingConfig === null;
 
   const mutateToolWhitelist = useCallback(
-    (
-      transform: (
-        config: NormalizedToolingConfig
-      ) => NormalizedToolingConfig | null
-    ) => {
+    (transform: (config: NormalizedToolingConfig) => NormalizedToolingConfig | null) => {
       if (parsedToolingConfig === null) {
         showToolingJSONError();
         return;
       }
-      const raw = watchTooling ?? "";
+      const raw = watchTooling ?? '';
       let configs: NormalizedToolingConfig;
       try {
-        if (!raw || raw.trim() === "") {
+        if (!raw || raw.trim() === '') {
           configs = normalizeToolingConfigShape({});
         } else {
           const parsed = JSON.parse(raw);
@@ -163,7 +148,7 @@ export const useChannelTooling = (
       const normalizedResult = normalizeToolingConfigShape(updatedConfig);
       const prepared = prepareToolingConfigForSet(normalizedResult);
 
-      form.setValue("tooling", stringifyToolingConfig(prepared), {
+      form.setValue('tooling', stringifyToolingConfig(prepared), {
         shouldDirty: true,
         shouldValidate: true,
       });
@@ -200,25 +185,12 @@ export const useChannelTooling = (
         });
 
         if (!Object.hasOwn(nextPricing, trimmed)) {
-          const { entry: existingEntry } = findPricingEntryCaseInsensitive(
-            config.pricing,
-            trimmed
-          );
-          const { entry: defaultEntry } = findPricingEntryCaseInsensitive(
-            parsedDefaultTooling?.pricing,
-            trimmed
-          );
-          const pricingEntry = existingEntry
-            ? { ...existingEntry }
-            : defaultEntry
-              ? { ...defaultEntry }
-              : { usd_per_call: 0.1 };
+          const { entry: existingEntry } = findPricingEntryCaseInsensitive(config.pricing, trimmed);
+          const { entry: defaultEntry } = findPricingEntryCaseInsensitive(parsedDefaultTooling?.pricing, trimmed);
+          const pricingEntry = existingEntry ? { ...existingEntry } : defaultEntry ? { ...defaultEntry } : { usd_per_call: 0.1 };
 
           // Ensure custom tools always have a sensible default even without prior pricing
-          nextPricing[trimmed] =
-            isCustomTool && !existingEntry && !defaultEntry
-              ? { usd_per_call: 0.1 }
-              : pricingEntry;
+          nextPricing[trimmed] = isCustomTool && !existingEntry && !defaultEntry ? { usd_per_call: 0.1 } : pricingEntry;
         }
 
         const hasPricingEntries = Object.keys(nextPricing).length > 0;
@@ -229,7 +201,7 @@ export const useChannelTooling = (
           ...(hasPricingEntries ? { pricing: nextPricing } : {}),
         };
       });
-      setCustomTool("");
+      setCustomTool('');
     },
     [mutateToolWhitelist, parsedDefaultTooling, parsedToolingConfig]
   );
@@ -241,9 +213,7 @@ export const useChannelTooling = (
       }
       const canonical = toolName.toLowerCase();
       mutateToolWhitelist((config) => {
-        const filtered = config.whitelist.filter(
-          (item) => item.toLowerCase() !== canonical
-        );
+        const filtered = config.whitelist.filter((item) => item.toLowerCase() !== canonical);
         if (filtered.length === config.whitelist.length) {
           return null;
         }
@@ -268,33 +238,25 @@ export const useChannelTooling = (
   );
 
   const formatToolingConfig = () => {
-    const value = form.getValues("tooling");
-    if (!value || value.trim() === "") {
-      form.setValue(
-        "tooling",
-        stringifyToolingConfig({ whitelist: [], pricing: {} }),
-        {
-          shouldDirty: true,
-          shouldValidate: true,
-        }
-      );
+    const value = form.getValues('tooling');
+    if (!value || value.trim() === '') {
+      form.setValue('tooling', stringifyToolingConfig({ whitelist: [], pricing: {} }), {
+        shouldDirty: true,
+        shouldValidate: true,
+      });
       return;
     }
     try {
       const parsed = JSON.parse(value);
-      form.setValue("tooling", stringifyToolingConfig(parsed), {
+      form.setValue('tooling', stringifyToolingConfig(parsed), {
         shouldDirty: true,
         shouldValidate: true,
       });
     } catch (error) {
       notify({
-        type: "error",
-        title: tr("validation.invalid_json_title", "Invalid JSON"),
-        message: tr(
-          "tooling.format_error",
-          "Unable to format tooling config: {{error}}",
-          { error: (error as Error).message }
-        ),
+        type: 'error',
+        title: tr('validation.invalid_json_title', 'Invalid JSON'),
+        message: tr('tooling.format_error', 'Unable to format tooling config: {{error}}', { error: (error as Error).message }),
       });
     }
   };

@@ -63,7 +63,9 @@ export function ToolListEditor({ label, description, value, onChange, placeholde
         {normalized.length === 0 && <span className="text-xs text-muted-foreground">{t('common.no_items', 'No items')}</span>}
         {normalized.map((item) => (
           <Badge key={item} variant="secondary" className="max-w-full gap-1 overflow-hidden px-2 py-1.5">
-            <span className="truncate min-w-0" title={item}>{item}</span>
+            <span className="truncate min-w-0" title={item}>
+              {item}
+            </span>
             <button
               type="button"
               onClick={() => removeItem(item)}

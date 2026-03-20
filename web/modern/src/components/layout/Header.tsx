@@ -28,6 +28,7 @@ import {
   MessageSquare,
   Server,
   Settings,
+  User,
   Users,
   Wrench,
   Zap,
@@ -68,27 +69,29 @@ export function Header() {
   const isAdmin = user?.role >= 10;
 
   // Navigation items visible to logged-in users
-  const authenticatedNavItems = user ? [
-    { name: t('common.dashboard'), to: '/dashboard', show: true },
-    { name: t('common.tokens'), to: '/tokens', show: true },
-    { name: t('common.logs'), to: '/logs', show: true },
-    { name: t('common.users'), to: '/users', show: isAdmin },
-    { name: t('common.channels'), to: '/channels', show: isAdmin },
-    { name: t('common.mcps'), to: '/mcps', show: isAdmin },
-    { name: t('common.redemptions'), to: '/redemptions', show: isAdmin },
-    { name: t('common.topup'), to: '/topup', show: true },
-    { name: t('common.models'), to: '/models', show: true },
-    { name: t('common.tools'), to: '/tools', show: true },
-    { name: t('common.status'), to: '/status', show: true },
-    { name: t('common.playground'), to: '/chat', show: true },
-    { name: t('common.about'), to: '/about', show: true },
-    { name: t('common.settings'), to: '/settings', show: isAdmin },
-  ] : [
-    // Public navigation for anonymous users
-    { name: t('common.models'), to: '/models', show: true },
-    { name: t('common.tools'), to: '/tools', show: true },
-    { name: t('common.status'), to: '/status', show: true },
-  ];
+  const authenticatedNavItems = user
+    ? [
+        { name: t('common.dashboard'), to: '/dashboard', show: true },
+        { name: t('common.tokens'), to: '/tokens', show: true },
+        { name: t('common.logs'), to: '/logs', show: true },
+        { name: t('common.users'), to: '/users', show: isAdmin },
+        { name: t('common.channels'), to: '/channels', show: isAdmin },
+        { name: t('common.mcps'), to: '/mcps', show: isAdmin },
+        { name: t('common.redemptions'), to: '/redemptions', show: isAdmin },
+        { name: t('common.topup'), to: '/topup', show: true },
+        { name: t('common.models'), to: '/models', show: true },
+        { name: t('common.tools'), to: '/tools', show: true },
+        { name: t('common.status'), to: '/status', show: true },
+        { name: t('common.playground'), to: '/chat', show: true },
+        { name: t('common.about'), to: '/about', show: true },
+        { name: t('common.settings'), to: '/settings', show: isAdmin },
+      ]
+    : [
+        // Public navigation for anonymous users
+        { name: t('common.models'), to: '/models', show: true },
+        { name: t('common.tools'), to: '/tools', show: true },
+        { name: t('common.status'), to: '/status', show: true },
+      ];
 
   const navigationItems = authenticatedNavItems
     .filter((item) => item.show)
@@ -154,6 +157,10 @@ export function Header() {
                           <span className="font-medium truncate">{user.username}</span>
                         </DropdownMenuLabel>
                         <DropdownMenuSeparator />
+                        <DropdownMenuItem onSelect={() => navigate('/settings')} className="flex items-center gap-2">
+                          <User className="h-4 w-4" />
+                          {t('header.profile')}
+                        </DropdownMenuItem>
                         <DropdownMenuItem onSelect={() => setLogoutDialogOpen(true)} className="flex items-center gap-2">
                           <LogOut className="h-4 w-4" />
                           {t('common.logout')}
@@ -188,10 +195,7 @@ export function Header() {
                       <Menu className="h-5 w-5" />
                     </Button>
                   )}
-                  <Link
-                    to="/register"
-                    className="font-medium text-sm text-muted-foreground hover:text-primary transition-colors"
-                  >
+                  <Link to="/register" className="font-medium text-sm text-muted-foreground hover:text-primary transition-colors">
                     {t('common.register')}
                   </Link>
                   <Button asChild size="sm" className="touch-target">
@@ -211,17 +215,30 @@ export function Header() {
           title={t('header.navigation')}
           footer={
             user ? (
-              <Button
-                variant="outline"
-                className="w-full touch-target gap-2"
-                onClick={() => {
-                  setMobileMenuOpen(false);
-                  setLogoutDialogOpen(true);
-                }}
-              >
-                <LogOut className="h-4 w-4" />
-                {t('common.logout')}
-              </Button>
+              <div className="flex flex-col gap-2">
+                <Button
+                  variant="outline"
+                  className="w-full touch-target gap-2"
+                  onClick={() => {
+                    setMobileMenuOpen(false);
+                    navigate('/settings');
+                  }}
+                >
+                  <User className="h-4 w-4" />
+                  {t('header.profile')}
+                </Button>
+                <Button
+                  variant="outline"
+                  className="w-full touch-target gap-2"
+                  onClick={() => {
+                    setMobileMenuOpen(false);
+                    setLogoutDialogOpen(true);
+                  }}
+                >
+                  <LogOut className="h-4 w-4" />
+                  {t('common.logout')}
+                </Button>
+              </div>
             ) : undefined
           }
         />

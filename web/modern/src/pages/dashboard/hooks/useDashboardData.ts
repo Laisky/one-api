@@ -1,8 +1,8 @@
-import { api } from "@/lib/api";
-import { useAuthStore } from "@/lib/stores/auth";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useTranslation } from "react-i18next";
-import { ModelRow, TokenRow, UserOption, UserRow } from "../types";
+import { api } from '@/lib/api';
+import { useAuthStore } from '@/lib/stores/auth';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import { ModelRow, TokenRow, UserOption, UserRow } from '../types';
 
 export const useDashboardData = () => {
   const { t } = useTranslation();
@@ -18,11 +18,11 @@ export const useDashboardData = () => {
 
   const [fromDate, setFromDate] = useState(fmt(last7));
   const [toDate, setToDate] = useState(fmt(today));
-  const [dashUser, setDashUser] = useState<string>("all");
+  const [dashUser, setDashUser] = useState<string>('all');
   const [userOptions, setUserOptions] = useState<UserOption[]>([]);
   const [loading, setLoading] = useState(false);
   const [lastUpdated, setLastUpdated] = useState<number | null>(null);
-  const [dateError, setDateError] = useState<string>("");
+  const [dateError, setDateError] = useState<string>('');
 
   const [rows, setRows] = useState<ModelRow[]>([]);
   const [userRows, setUserRows] = useState<UserRow[]>([]);
@@ -31,7 +31,7 @@ export const useDashboardData = () => {
   // Date validation functions
   const getMaxDate = () => {
     const today = new Date();
-    return today.toISOString().split("T")[0];
+    return today.toISOString().split('T')[0];
   };
 
   const getMinDate = () => {
@@ -39,18 +39,18 @@ export const useDashboardData = () => {
       // Admin users can go back 1 year
       const oneYearAgo = new Date();
       oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
-      return oneYearAgo.toISOString().split("T")[0];
+      return oneYearAgo.toISOString().split('T')[0];
     } else {
       // Regular users can only go back 7 days from today
       const sevenDaysAgo = new Date();
       sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-      return sevenDaysAgo.toISOString().split("T")[0];
+      return sevenDaysAgo.toISOString().split('T')[0];
     }
   };
 
   // Date validation
   const validateDateRange = (from: string, to: string): string => {
-    if (!from || !to) return "";
+    if (!from || !to) return '';
 
     const fromDate = new Date(from);
     const toDate = new Date(to);
@@ -58,36 +58,30 @@ export const useDashboardData = () => {
     const minDate = new Date(getMinDate());
 
     if (fromDate > toDate) {
-      return t("dashboard.errors.range_order");
+      return t('dashboard.errors.range_order');
     }
 
     if (toDate > today) {
-      return t("dashboard.errors.future");
+      return t('dashboard.errors.future');
     }
 
     if (fromDate < minDate) {
-      return isAdmin
-        ? t("dashboard.errors.too_old_admin")
-        : t("dashboard.errors.too_old_user");
+      return isAdmin ? t('dashboard.errors.too_old_admin') : t('dashboard.errors.too_old_user');
     }
 
-    const daysDiff = Math.ceil(
-      (toDate.getTime() - fromDate.getTime()) / (1000 * 60 * 60 * 24)
-    );
+    const daysDiff = Math.ceil((toDate.getTime() - fromDate.getTime()) / (1000 * 60 * 60 * 24));
     const maxDays = isAdmin ? 365 : 7;
 
     if (daysDiff > maxDays) {
-      return isAdmin
-        ? t("dashboard.errors.range_limit_admin")
-        : t("dashboard.errors.range_limit_user");
+      return isAdmin ? t('dashboard.errors.range_limit_admin') : t('dashboard.errors.range_limit_user');
     }
 
-    return "";
+    return '';
   };
 
   const loadUsers = async () => {
     if (!isAdmin) return;
-    const res = await api.get("/api/user/dashboard/users");
+    const res = await api.get('/api/user/dashboard/users');
     if (res.data?.success) {
       setUserOptions(res.data.data || []);
     }
@@ -111,15 +105,15 @@ export const useDashboardData = () => {
     abortControllerRef.current = abortController;
 
     setLoading(true);
-    setDateError("");
+    setDateError('');
     try {
       const params = new URLSearchParams();
-      params.set("from_date", fromDate);
-      params.set("to_date", toDate);
+      params.set('from_date', fromDate);
+      params.set('to_date', toDate);
       if (isAdmin) {
-        params.set("user_id", dashUser || "all");
+        params.set('user_id', dashUser || 'all');
       }
-      const res = await api.get("/api/user/dashboard?" + params.toString(), {
+      const res = await api.get('/api/user/dashboard?' + params.toString(), {
         signal: abortController.signal,
       });
 
@@ -168,20 +162,20 @@ export const useDashboardData = () => {
         );
 
         setLastUpdated(Math.floor(Date.now() / 1000));
-        setDateError("");
+        setDateError('');
       } else {
-        setDateError(message || t("dashboard.errors.fetch_failed"));
+        setDateError(message || t('dashboard.errors.fetch_failed'));
         setRows([]);
         setUserRows([]);
         setTokenRows([]);
       }
     } catch (error: any) {
       // Ignore abort errors
-      if (error.name === "AbortError" || error.name === "CanceledError") {
+      if (error.name === 'AbortError' || error.name === 'CanceledError') {
         return;
       }
-      console.error("Failed to fetch dashboard data:", error);
-      setDateError(t("dashboard.errors.fetch_failed"));
+      console.error('Failed to fetch dashboard data:', error);
+      setDateError(t('dashboard.errors.fetch_failed'));
       setRows([]);
       setUserRows([]);
       setTokenRows([]);
@@ -198,12 +192,12 @@ export const useDashboardData = () => {
     loadStats();
   }, [isAdmin]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const applyPreset = (preset: "today" | "7d" | "30d") => {
+  const applyPreset = (preset: 'today' | '7d' | '30d') => {
     const today = new Date();
     const start = new Date(today);
-    if (preset === "today") start.setDate(today.getDate());
-    if (preset === "7d") start.setDate(today.getDate() - 6);
-    if (preset === "30d") start.setDate(today.getDate() - 29);
+    if (preset === 'today') start.setDate(today.getDate());
+    if (preset === '7d') start.setDate(today.getDate() - 6);
+    if (preset === '30d') start.setDate(today.getDate() - 29);
 
     const newFromDate = fmt(start);
     const newToDate = fmt(today);
@@ -227,12 +221,12 @@ export const useDashboardData = () => {
   };
 
   // Refactored applyPreset to trigger fetch
-  const applyPresetAndFetch = async (preset: "today" | "7d" | "30d") => {
+  const applyPresetAndFetch = async (preset: 'today' | '7d' | '30d') => {
     const today = new Date();
     const start = new Date(today);
-    if (preset === "today") start.setDate(today.getDate());
-    if (preset === "7d") start.setDate(today.getDate() - 6);
-    if (preset === "30d") start.setDate(today.getDate() - 29);
+    if (preset === 'today') start.setDate(today.getDate());
+    if (preset === '7d') start.setDate(today.getDate() - 6);
+    if (preset === '30d') start.setDate(today.getDate() - 29);
 
     const newFromDate = fmt(start);
     const newToDate = fmt(today);
