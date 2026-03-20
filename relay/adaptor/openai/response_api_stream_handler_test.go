@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/songquanpeng/one-api/common/ctxkey"
+	relaymodel "github.com/songquanpeng/one-api/relay/model"
 	"github.com/songquanpeng/one-api/relay/relaymode"
 )
 
@@ -185,9 +186,22 @@ data: [DONE]`
 
 	convertedRaw, ok := c.Get(ctxkey.ConvertedResponse)
 	require.True(t, ok, "expected converted response in context")
-	converted, ok := convertedRaw.(ResponseAPIResponse)
-	require.True(t, ok, "expected converted response type ResponseAPIResponse")
-	require.Equal(t, "completed", converted.Status, "expected completed status in converted response")
-	require.NotNil(t, converted.Usage, "expected usage in converted response")
-	require.Equal(t, 7, converted.Usage.TotalTokens, "unexpected converted response usage")
+	switch converted := convertedRaw.(type) {
+	case ResponseAPIResponse:
+		require.Equal(t, "completed", converted.Status, "expected completed status in converted response")
+		require.NotNil(t, converted.Usage, "expected usage in converted response")
+		require.Equal(t, 7, converted.Usage.TotalTokens, "unexpected converted response usage")
+	case map[string]any:
+		streamValue, ok := converted["stream"].(bool)
+		require.True(t, ok, "expected stream flag in converted response summary")
+		require.True(t, streamValue, "expected stream flag to be true")
+		contentValue, ok := converted["content"].(string)
+		require.True(t, ok, "expected content string in converted response summary")
+		require.Equal(t, "Hello world", contentValue, "unexpected converted response summary content")
+		usageValue, ok := converted["usage"].(*relaymodel.Usage)
+		require.True(t, ok, "expected usage pointer in converted response summary")
+		require.Equal(t, 7, usageValue.TotalTokens, "unexpected converted response summary usage")
+	default:
+		t.Fatalf("unexpected converted response type %T", convertedRaw)
+	}
 }
