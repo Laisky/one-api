@@ -181,12 +181,20 @@ func RelayAudioHelper(c *gin.Context, relayMode int) *relaymodel.ErrorWithStatus
 		if err != nil {
 			return openai.ErrorWrapper(err, "pre_consume_token_quota_failed", http.StatusForbidden)
 		}
+
+		// Billing audit safety net
+		markPreConsumed(c, preConsumedQuota)
+		defer billingAuditSafetyNet(c)
+
+		provisionalLogId := recordProvisionalLog(c, meta, audioModel, preConsumedQuota)
+		c.Set(ctxkey.ProvisionalLogId, provisionalLogId)
 	}
 	succeed := false
 	defer func() {
 		if succeed {
 			return
 		}
+		markBillingReconciled(c)
 		if preConsumedQuota > 0 {
 			// we need to roll back the pre-consumed quota under lifecycle tracking
 			defer func() {
@@ -336,6 +344,7 @@ func RelayAudioHelper(c *gin.Context, relayMode int) *relaymodel.ErrorWithStatus
 	}
 
 	succeed = true
+	markBillingReconciled(c)
 	quotaDelta := quota - preConsumedQuota
 
 	// Capture trace ID from gin context now; the background context will not carry gin

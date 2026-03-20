@@ -77,6 +77,11 @@ func RelayRerankHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 			zap.String("err_msg", bizErr.Message))
 		return bizErr
 	}
+	markPreConsumed(c, preConsumedQuota)
+	defer billingAuditSafetyNet(c)
+
+	provisionalLogId := recordProvisionalLog(c, meta, rerankRequest.Model, preConsumedQuota)
+	c.Set(ctxkey.ProvisionalLogId, provisionalLogId)
 
 	adaptorImpl := relay.GetAdaptor(meta.APIType)
 	if adaptorImpl == nil {
@@ -199,6 +204,7 @@ func RelayRerankHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 		metrics.GlobalRecorder.RecordModelUsage(meta.ActualModelName, channeltype.IdToName(meta.ChannelType), time.Since(meta.StartTime))
 	}
 
+	markBillingReconciled(c)
 	graceful.GoCritical(gmw.BackgroundCtx(c), "postBillingRerank", func(bctx context.Context) {
 		baseBillingTimeout := time.Duration(config.BillingTimeoutSec) * time.Second
 		bctx, cancel := context.WithTimeout(gmw.BackgroundCtx(c), baseBillingTimeout)

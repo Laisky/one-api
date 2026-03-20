@@ -447,7 +447,17 @@ func RelayImageHelper(c *gin.Context, relayMode int) *relaymodel.ErrorWithStatus
 		if err := model.PreConsumeTokenQuota(ctx, meta.TokenId, preConsumedQuota); err != nil {
 			return openai.ErrorWrapper(err, "pre_consume_failed", http.StatusInternalServerError)
 		}
-		// Record provisional request cost so user-cancel before upstream usage still gets tracked
+
+		// Billing audit safety net: track pre-consumed quota for audit reconciliation
+		markPreConsumed(c, preConsumedQuota)
+		defer billingAuditSafetyNet(c)
+
+		// Record provisional consume log immediately so that every pre-consume
+		// has an audit trail in the logs table.
+		provisionalLogId := recordProvisionalLog(c, meta, meta.ActualModelName, preConsumedQuota)
+		c.Set(ctxkey.ProvisionalLogId, provisionalLogId)
+
+		// Record provisional request cost
 		quotaId := c.GetInt(ctxkey.Id)
 		requestId := c.GetString(ctxkey.RequestId)
 		if err := model.UpdateUserRequestCostQuotaByRequestID(quotaId, requestId, preConsumedQuota); err != nil {
@@ -460,6 +470,7 @@ func RelayImageHelper(c *gin.Context, relayMode int) *relaymodel.ErrorWithStatus
 	if err != nil {
 		// ErrorWrapper will log the error, so we don't need to log it here
 		// Refund any pre-consumed quota if request failed
+		markBillingReconciled(c)
 		if preConsumedQuota > 0 {
 			if shouldSkipPreConsumedRefund(c) {
 				lg.Warn("skip pre-consumed refund to prevent underbilling",
@@ -486,6 +497,7 @@ func RelayImageHelper(c *gin.Context, relayMode int) *relaymodel.ErrorWithStatus
 			resp.StatusCode != http.StatusCreated && // replicate returns 201
 			resp.StatusCode != http.StatusOK {
 			// Refund pre-consumed quota when upstream not successful
+			markBillingReconciled(c)
 			if preConsumedQuota > 0 {
 				if shouldSkipPreConsumedRefund(c) {
 					lg.Warn("skip pre-consumed refund to prevent underbilling",
@@ -508,7 +520,8 @@ func RelayImageHelper(c *gin.Context, relayMode int) *relaymodel.ErrorWithStatus
 			return
 		}
 
-		// Apply delta if we pre-consumed; otherwise apply full usage
+		// Post-billing: reconcile pre-consumed quota with actual usage
+		markBillingReconciled(c)
 		quotaDelta := usedQuota
 		if preConsumedQuota > 0 {
 			quotaDelta = usedQuota - preConsumedQuota

@@ -151,6 +151,13 @@ func RelayVideoHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 			if err := model.PreConsumeTokenQuota(ctx, tokenId, preConsumedQuota); err != nil {
 				return openai.ErrorWrapper(err, "pre_consume_token_quota_failed", http.StatusForbidden)
 			}
+
+			// Billing audit safety net
+			markPreConsumed(c, preConsumedQuota)
+			defer billingAuditSafetyNet(c)
+
+			provisionalLogId := recordProvisionalLog(c, meta, videoRequest.Model, preConsumedQuota)
+			c.Set(ctxkey.ProvisionalLogId, provisionalLogId)
 		}
 	}
 
@@ -160,6 +167,7 @@ func RelayVideoHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 
 	defer func() {
 		if !succeed {
+			markBillingReconciled(c)
 			if preConsumedQuota > 0 {
 				quotaToReturn := preConsumedQuota
 				graceful.GoCritical(ctx, "videoRollbackPreConsumed", func(bgctx context.Context) {
@@ -245,6 +253,7 @@ func RelayVideoHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 	}
 
 	succeed = true
+	markBillingReconciled(c)
 	return nil
 }
 
