@@ -614,6 +614,14 @@ func ReconcileConsumeLog(ctx context.Context, logID int, finalQuota int64, conte
 
 	lg := logger.FromContext(ctx)
 
+	// Log context state for diagnostics — helps identify context cancellation issues
+	if ctx.Err() != nil {
+		lg.Debug("ReconcileConsumeLog called with errored context",
+			zap.Error(ctx.Err()),
+			zap.Int("log_id", logID),
+		)
+	}
+
 	updates := map[string]any{
 		"quota":             int(finalQuota),
 		"content":           content,
@@ -641,6 +649,7 @@ func ReconcileConsumeLog(ctx context.Context, logID int, finalQuota int64, conte
 			zap.Error(err),
 			zap.Int("log_id", logID),
 			zap.Int64("final_quota", finalQuota),
+			zap.NamedError("ctx_err", ctx.Err()),
 		)
 		return errors.Wrapf(err, "failed to reconcile consume log: id=%d", logID)
 	}

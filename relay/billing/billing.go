@@ -13,19 +13,33 @@ import (
 	"github.com/songquanpeng/one-api/model"
 )
 
+// billingOpsTimeout is the maximum time allowed for all database operations
+// within a single PostConsumeQuotaWithLog call. This is independent of the
+// caller's context timeout and acts as a safety net against indefinite hangs
+// after the parent context is detached from cancellation.
+const billingOpsTimeout = 60 * time.Second
+
 // PostConsumeQuotaWithLog is the unified billing entry that consumes quota, updates caches,
 // records a consume log, and updates user/channel aggregates.
 // Caller must provide a pre-filled log entry (including RequestId/TraceId if desired).
 func PostConsumeQuotaWithLog(ctx context.Context, tokenId int, quotaDelta int64, totalQuota int64, logEntry *model.Log, provisionalLogId ...int) {
-	billingStartTime := time.Now()
-	billingSuccess := true
-	lg := logger.FromContext(ctx)
-
 	if ctx == nil || logEntry == nil {
+		lg := logger.FromContext(ctx)
 		lg.Error("PostConsumeQuotaWithLog: invalid args", zap.Bool("ctx_nil", ctx == nil), zap.Bool("log_nil", logEntry == nil))
 		metrics.GlobalRecorder.RecordBillingError("validation_error", "post_consume_with_log", 0, 0, "")
 		return
 	}
+
+	// Billing operations are critical and must complete even after the HTTP
+	// request context is canceled (e.g., client disconnect, handler return).
+	// Detach from parent cancellation while preserving context values (logger,
+	// trace ID) and apply a dedicated timeout.
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), billingOpsTimeout)
+	defer cancel()
+
+	billingStartTime := time.Now()
+	billingSuccess := true
+	lg := logger.FromContext(ctx)
 	if tokenId <= 0 {
 		lg.Error("PostConsumeQuotaWithLog: invalid tokenId", zap.Int("token_id", tokenId))
 		metrics.GlobalRecorder.RecordBillingError("validation_error", "post_consume_with_log", logEntry.UserId, logEntry.ChannelId, logEntry.ModelName)

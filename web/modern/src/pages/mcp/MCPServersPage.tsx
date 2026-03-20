@@ -446,6 +446,7 @@ export function MCPServersPage() {
           searchLoading={searchLoading}
           onSearchChange={searchServers}
           onSearchValueChange={setSearchKeyword}
+          onSearchSelect={(key) => navigate(`/mcps/edit/${key}`)}
           onSearchSubmit={() => searchServers(searchKeyword)}
           searchPlaceholder={t('mcp.list.search_placeholder', 'Search MCP servers...')}
           allowSearchAdditions={true}

@@ -6,8 +6,8 @@ require (
 	cloud.google.com/go/iam v1.5.3
 	github.com/DATA-DOG/go-sqlmock v1.5.0
 	github.com/Laisky/errors/v2 v2.0.1
-	github.com/Laisky/gin-middlewares/v7 v7.0.2
-	github.com/Laisky/go-utils/v6 v6.2.3-0.20260318142825-ade7c95fb502
+	github.com/Laisky/gin-middlewares/v7 v7.0.3-0.20260320133617-ccf155d4ffea
+	github.com/Laisky/go-utils/v6 v6.2.3-0.20260319234920-4574d62cf3a4
 	github.com/Laisky/zap v1.27.1-0.20260318034917-6e5a9fb2b3d1
 	github.com/aws/aws-sdk-go-v2 v1.41.4
 	github.com/aws/aws-sdk-go-v2/config v1.32.12
@@ -101,7 +101,6 @@ require (
 	github.com/go-playground/universal-translator v0.18.1 // indirect
 	github.com/goccy/go-json v0.10.6 // indirect
 	github.com/goccy/go-yaml v1.19.2 // indirect
-	github.com/golang-jwt/jwt/v4 v4.5.2 // indirect
 	github.com/google/go-cpy v0.0.0-20211218193943-a9c933c06932 // indirect
 	github.com/google/s2a-go v0.1.9 // indirect
 	github.com/google/uuid v1.6.0 // indirect

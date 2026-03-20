@@ -440,6 +440,7 @@ export function UsersPage() {
             onSearchChange={searchUsers}
             onSearchValueChange={setSearchKeyword}
             onSearchSubmit={search}
+            onSearchSelect={(key) => navigate(`/users/edit/${key}`)}
             searchPlaceholder={tr('search.placeholder', 'Search users by username...')}
             allowSearchAdditions={true}
             onRefresh={() => load(pageIndex, pageSize)}

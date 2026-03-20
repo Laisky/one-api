@@ -674,6 +674,7 @@ export function ChannelsPage() {
               searchLoading={searchLoading}
               onSearchChange={searchChannels}
               onSearchValueChange={setSearchKeyword}
+              onSearchSelect={(key) => navigate(`/channels/edit/${key}`)}
               onSearchSubmit={performSearch}
               searchPlaceholder={t('channels.search.placeholder')}
               allowSearchAdditions={true}

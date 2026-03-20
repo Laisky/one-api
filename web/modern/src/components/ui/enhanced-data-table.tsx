@@ -32,6 +32,7 @@ export interface EnhancedDataTableProps<TData, TValue> {
   onSearchChange?: (query: string) => void;
   onSearchValueChange?: (value: string) => void;
   onSearchSubmit?: () => void;
+  onSearchSelect?: (key: string) => void;
   searchPlaceholder?: string;
   allowSearchAdditions?: boolean;
 
@@ -70,6 +71,7 @@ export function EnhancedDataTable<TData, TValue>({
   onSearchChange,
   onSearchValueChange,
   onSearchSubmit,
+  onSearchSelect,
   searchPlaceholder,
   allowSearchAdditions = true,
   toolbarActions,
@@ -226,6 +228,7 @@ export function EnhancedDataTable<TData, TValue>({
                     options={searchOptions}
                     onSearchChange={onSearchChange}
                     onChange={onSearchValueChange}
+                    onSelect={onSearchSelect}
                     onAddItem={allowSearchAdditions ? handleSearchAddition : undefined}
                     loading={searchLoading}
                     noResultsMessage={t('common.no_results', 'No results found')}

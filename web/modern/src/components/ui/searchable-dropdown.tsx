@@ -20,6 +20,7 @@ interface SearchableDropdownProps {
   options: SearchOption[];
   onSearchChange?: (query: string) => void;
   onChange?: (value: string) => void;
+  onSelect?: (key: string) => void;
   onAddItem?: (value: string) => void;
   loading?: boolean;
   noResultsMessage?: string;
@@ -41,6 +42,7 @@ export function SearchableDropdown({
   options: initialOptions,
   onSearchChange,
   onChange,
+  onSelect,
   onAddItem,
   loading = false,
   noResultsMessage = 'No results found',
@@ -119,6 +121,15 @@ export function SearchableDropdown({
   };
 
   const handleSelect = (selectedValue: string) => {
+    // Find the selected option to get its key (ID)
+    const selectedOption = [...initialOptions, ...apiOptions].find((option) => option.value === selectedValue);
+    if (onSelect && selectedOption) {
+      onSelect(selectedOption.key);
+      setOpen(false);
+      setSearchValue('');
+      return;
+    }
+
     if (selectedValue === value && clearable) {
       onChange?.('');
     } else {
