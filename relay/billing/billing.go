@@ -16,7 +16,7 @@ import (
 // PostConsumeQuotaWithLog is the unified billing entry that consumes quota, updates caches,
 // records a consume log, and updates user/channel aggregates.
 // Caller must provide a pre-filled log entry (including RequestId/TraceId if desired).
-func PostConsumeQuotaWithLog(ctx context.Context, tokenId int, quotaDelta int64, totalQuota int64, logEntry *model.Log) {
+func PostConsumeQuotaWithLog(ctx context.Context, tokenId int, quotaDelta int64, totalQuota int64, logEntry *model.Log, provisionalLogId ...int) {
 	billingStartTime := time.Now()
 	billingSuccess := true
 	lg := logger.FromContext(ctx)
@@ -69,7 +69,24 @@ func PostConsumeQuotaWithLog(ctx context.Context, tokenId int, quotaDelta int64,
 
 	// Force quota onto log entry for consistency
 	logEntry.Quota = int(totalQuota)
-	model.RecordConsumeLog(ctx, logEntry)
+
+	// If a provisional log entry was created at pre-consume time, reconcile it
+	// with the final billing data instead of creating a new log entry.
+	var provLogID int
+	if len(provisionalLogId) > 0 {
+		provLogID = provisionalLogId[0]
+	}
+	if provLogID > 0 {
+		if err := model.ReconcileConsumeLog(ctx, provLogID, totalQuota,
+			logEntry.Content, logEntry.PromptTokens, logEntry.CompletionTokens,
+			logEntry.ElapsedTime, logEntry.Metadata); err != nil {
+			lg.Error("failed to reconcile provisional log, falling back to new log entry",
+				zap.Error(err), zap.Int("provisional_log_id", provLogID))
+			model.RecordConsumeLog(ctx, logEntry)
+		}
+	} else {
+		model.RecordConsumeLog(ctx, logEntry)
+	}
 
 	// Update aggregates only when there is actual consumption.
 	// Zero totalQuota is allowed (e.g., free groups or zero ratios) and should not be treated as an error.
@@ -135,6 +152,10 @@ type QuotaConsumeDetail struct {
 	// Explicit IDs propagated from gin.Context
 	RequestId string
 	TraceId   string
+	// ProvisionalLogId is the database ID of the provisional log entry created at
+	// pre-consume time. When non-zero, post-billing reconciles this entry instead
+	// of creating a new one.
+	ProvisionalLogId int
 }
 
 // PostConsumeQuotaDetailed handles detailed billing for ChatCompletion and Response API requests
@@ -208,7 +229,7 @@ func PostConsumeQuotaDetailed(detail QuotaConsumeDetail) {
 		entry.Metadata = metadata
 	}
 
-	PostConsumeQuotaWithLog(detail.Ctx, detail.TokenId, detail.QuotaDelta, detail.TotalQuota, entry)
+	PostConsumeQuotaWithLog(detail.Ctx, detail.TokenId, detail.QuotaDelta, detail.TotalQuota, entry, detail.ProvisionalLogId)
 }
 
 // Removed PostConsumeQuotaDetailedWithTraceID; use QuotaConsumeDetail.TraceId instead

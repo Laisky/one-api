@@ -226,7 +226,7 @@ func doResponseAPIRequestViaWebSocket(
 		lg.Debug("openai response api websocket stream bridge enabled",
 			zap.String("model", metaInfo.ActualModelName),
 		)
-		streamResp := buildStreamingWebSocketHTTPResponse(upstreamConn, firstMessage)
+		streamResp := buildStreamingWebSocketHTTPResponse(c, upstreamConn, firstMessage)
 		return streamResp, true, nil
 	}
 
@@ -547,16 +547,23 @@ func parseWebSocketErrorPayload(message []byte) (*responseAPIWSErrorPayload, boo
 	return nil, false
 }
 
+// wsReadIdleTimeout is the maximum duration the WebSocket reader will wait
+// for the next message before giving up. This prevents goroutine leaks when
+// the upstream doesn't close the connection after a terminal event.
+const wsReadIdleTimeout = 30 * time.Second
+
 // buildStreamingWebSocketHTTPResponse bridges websocket events to an SSE body that existing
 // stream handlers can consume unchanged.
 //
 // Parameters:
+//   - c: gin context for cancellation propagation.
 //   - conn: connected upstream websocket.
 //   - firstMessage: first already-read text event.
 //
 // Returns:
 //   - *http.Response: synthetic 200 response with text/event-stream body.
-func buildStreamingWebSocketHTTPResponse(conn *websocket.Conn, firstMessage []byte) *http.Response {
+func buildStreamingWebSocketHTTPResponse(c *gin.Context, conn *websocket.Conn, firstMessage []byte) *http.Response {
+	lg := gmw.GetLogger(c)
 	reader, writer := io.Pipe()
 
 	go func() {
@@ -565,25 +572,51 @@ func buildStreamingWebSocketHTTPResponse(conn *websocket.Conn, firstMessage []by
 			_ = writer.Close()
 		}()
 
+		// Monitor gin context cancellation (client disconnect / server shutdown)
+		// and close the WebSocket to unblock any pending reads.
+		done := make(chan struct{})
+		defer close(done)
+		go func() {
+			select {
+			case <-c.Request.Context().Done():
+				lg.Debug("websocket stream bridge: client context cancelled, closing upstream websocket")
+				_ = conn.Close()
+			case <-done:
+			}
+		}()
+
 		writeWebSocketMessageAsSSE(writer, firstMessage)
 		if isWebSocketResponseTerminalEvent(firstMessage) {
+			lg.Debug("websocket stream bridge: first message is terminal event")
 			writeSSEDone(writer)
 			return
 		}
 
 		for {
+			// Set a read deadline so we don't block forever if the upstream
+			// fails to close the WebSocket after a terminal event.
+			_ = conn.SetReadDeadline(time.Now().Add(wsReadIdleTimeout))
+
 			message, err := readNextWebSocketTextMessage(conn)
 			if err != nil {
-				if _, _, normalClosure := extractNormalWebSocketClose(err); normalClosure {
+				if closeCode, closeReason, normalClosure := extractNormalWebSocketClose(err); normalClosure {
+					lg.Debug("websocket stream bridge: upstream closed normally",
+						zap.Int("close_code", closeCode),
+						zap.String("close_reason", closeReason),
+					)
 					writeSSEDone(writer)
 					return
 				}
+				lg.Debug("websocket stream bridge: upstream read error, ending stream",
+					zap.Error(err),
+				)
 				writeSSEDone(writer)
 				return
 			}
 
 			writeWebSocketMessageAsSSE(writer, message)
 			if isWebSocketResponseTerminalEvent(message) {
+				lg.Debug("websocket stream bridge: terminal event received, ending stream")
 				writeSSEDone(writer)
 				return
 			}
@@ -636,17 +669,35 @@ func isWebSocketResponseTerminalEvent(message []byte) bool {
 	}
 
 	eventType, _ := payload["type"].(string)
-	switch eventType {
-	case "response.completed", "response.failed", "error":
+	if eventType == "error" || isTerminalStreamEventType(eventType) {
 		return true
 	}
 
 	if object, _ := payload["object"].(string); object == "response" {
-		if status, _ := payload["status"].(string); status == "completed" || status == "failed" {
+		status, _ := payload["status"].(string)
+		if isTerminalResponseStatus(status) {
 			return true
 		}
 	}
 
+	return false
+}
+
+// isTerminalResponseStatus reports whether a response status indicates the response lifecycle is over.
+func isTerminalResponseStatus(status string) bool {
+	switch status {
+	case "completed", "failed", "incomplete", "cancelled":
+		return true
+	}
+	return false
+}
+
+// isTerminalStreamEventType reports whether a stream event type indicates the response lifecycle is over.
+func isTerminalStreamEventType(eventType string) bool {
+	switch strings.ToLower(eventType) {
+	case "response.completed", "response.failed", "response.incomplete", "response.cancelled":
+		return true
+	}
 	return false
 }
 
@@ -721,18 +772,16 @@ func extractFinalResponseFromWebSocketMessage(message []byte) (*ResponseAPIRespo
 		return nil, false
 	}
 	if fullResponse != nil {
-		terminal := fullResponse.Status == "completed" || fullResponse.Status == "failed"
+		terminal := isTerminalResponseStatus(fullResponse.Status)
 		return fullResponse, terminal
 	}
 	if streamEvent == nil {
 		return nil, false
 	}
 	if streamEvent.Response != nil {
-		terminal := strings.EqualFold(streamEvent.Type, "response.completed") ||
-			strings.EqualFold(streamEvent.Type, "response.failed") ||
-			streamEvent.Response.Status == "completed" ||
-			streamEvent.Response.Status == "failed"
+		terminal := isTerminalStreamEventType(streamEvent.Type) ||
+			isTerminalResponseStatus(streamEvent.Response.Status)
 		return streamEvent.Response, terminal
 	}
-	return nil, strings.EqualFold(streamEvent.Type, "response.completed") || strings.EqualFold(streamEvent.Type, "response.failed")
+	return nil, isTerminalStreamEventType(streamEvent.Type)
 }

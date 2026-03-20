@@ -102,12 +102,21 @@ func RealtimeHandler(c *gin.Context, meta *rmeta.Meta) (*rmodel.ErrorWithStatusC
 	// Bi-directional pump
 	errc := make(chan error, 2)
 	usage := &rmodel.Usage{}
-	go func() { errc <- copyWSUpstreamToClient(upstreamConn, clientConn, usage) }()
+	countedResponseIDs := map[string]struct{}{}
+	go func() { errc <- copyWSUpstreamToClient(upstreamConn, clientConn, usage, countedResponseIDs) }()
 	go func() { errc <- copyWS(clientConn, upstreamConn) }()
 
-	// Wait for either direction to error/close
+	// Wait for one direction to finish, then close both connections
+	// to unblock the other goroutine.
 	if e := <-errc; e != nil {
-		lg.Debug("realtime ws closed", zap.String("error", e.Error()))
+		lg.Debug("realtime ws first direction closed", zap.Error(e))
+	}
+	_ = clientConn.Close()
+	_ = upstreamConn.Close()
+
+	// Drain the second goroutine to avoid data race on usage.
+	if e := <-errc; e != nil {
+		lg.Debug("realtime ws second direction closed", zap.Error(e))
 	}
 
 	// Compute total tokens if we have parts
@@ -156,6 +165,16 @@ func copyWS(src, dst *websocket.Conn) error {
 	for {
 		mt, msg, err := src.ReadMessage()
 		if err != nil {
+			// Propagate close frame to the other side so it gets a clean shutdown.
+			var closeErr *websocket.CloseError
+			if errors.As(err, &closeErr) {
+				_ = dst.WriteControl(
+					websocket.CloseMessage,
+					websocket.FormatCloseMessage(closeErr.Code, closeErr.Text),
+					time.Now().Add(time.Second),
+				)
+				return nil
+			}
 			return errors.WithStack(err)
 		}
 		// Mirror frame type
@@ -166,14 +185,24 @@ func copyWS(src, dst *websocket.Conn) error {
 }
 
 // copyWSUpstreamToClient forwards frames and tries best-effort to parse usage from upstream JSON text messages.
-func copyWSUpstreamToClient(src, dst *websocket.Conn, usage *rmodel.Usage) error {
+func copyWSUpstreamToClient(src, dst *websocket.Conn, usage *rmodel.Usage, countedResponseIDs map[string]struct{}) error {
 	for {
 		mt, msg, err := src.ReadMessage()
 		if err != nil {
+			// Propagate close frame to the other side.
+			var closeErr *websocket.CloseError
+			if errors.As(err, &closeErr) {
+				_ = dst.WriteControl(
+					websocket.CloseMessage,
+					websocket.FormatCloseMessage(closeErr.Code, closeErr.Text),
+					time.Now().Add(time.Second),
+				)
+				return nil
+			}
 			return errors.WithStack(err)
 		}
 		if mt == websocket.TextMessage {
-			maybeParseRealtimeUsage(msg, usage)
+			maybeParseRealtimeUsage(msg, usage, countedResponseIDs)
 		}
 		if werr := dst.WriteMessage(mt, msg); werr != nil {
 			return errors.WithStack(werr)
@@ -182,7 +211,8 @@ func copyWSUpstreamToClient(src, dst *websocket.Conn, usage *rmodel.Usage) error
 }
 
 // maybeParseRealtimeUsage attempts to extract token usage from response.done-like events.
-func maybeParseRealtimeUsage(msg []byte, u *rmodel.Usage) {
+// It deduplicates by response ID to avoid double-counting.
+func maybeParseRealtimeUsage(msg []byte, u *rmodel.Usage, countedResponseIDs map[string]struct{}) {
 	// Avoid heavy processing if no accumulator
 	if u == nil || len(msg) == 0 {
 		return
@@ -201,6 +231,16 @@ func maybeParseRealtimeUsage(msg []byte, u *rmodel.Usage) {
 	if usageObj == nil {
 		return
 	}
+
+	// Deduplicate by response ID to prevent double-counting
+	responseID, _ := resp["id"].(string)
+	if responseID != "" && countedResponseIDs != nil {
+		if _, exists := countedResponseIDs[responseID]; exists {
+			return
+		}
+		countedResponseIDs[responseID] = struct{}{}
+	}
+
 	// input_tokens / output_tokens are preferred
 	if v, ok := usageObj["input_tokens"].(float64); ok {
 		u.PromptTokens += int(v)

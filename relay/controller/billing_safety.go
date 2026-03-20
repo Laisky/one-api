@@ -8,7 +8,11 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/songquanpeng/one-api/common/ctxkey"
+	"github.com/songquanpeng/one-api/common/graceful"
+	"github.com/songquanpeng/one-api/common/tracing"
+	"github.com/songquanpeng/one-api/model"
 	"github.com/songquanpeng/one-api/relay/billing"
+	metalib "github.com/songquanpeng/one-api/relay/meta"
 )
 
 // shouldSkipPreConsumedRefund reports whether a refund should be skipped because
@@ -61,10 +65,104 @@ func returnPreConsumedQuotaConservative(
 				zap.Int("token_id", tokenID),
 				zap.String("reason", reason),
 			)
+			// Even though we skip refund, mark reconciled so the safety net
+			// doesn't try to refund again (this is an intentional no-refund).
+			markBillingReconciled(c)
 			return false
 		}
+		markBillingReconciled(c)
 	}
 
 	billing.ReturnPreConsumedQuota(ctx, preConsumedQuota, tokenID)
 	return true
+}
+
+// markPreConsumed records the pre-consumed quota amount in the gin context
+// for the billing audit safety net.
+func markPreConsumed(c *gin.Context, amount int64) {
+	c.Set(ctxkey.PreConsumedQuotaAmount, amount)
+}
+
+// markBillingReconciled marks that post-billing or refund has been completed,
+// clearing the audit safety net flag.
+func markBillingReconciled(c *gin.Context) {
+	c.Set(ctxkey.BillingReconciled, true)
+}
+
+// billingAuditSafetyNet should be deferred at the start of each relay handler
+// (after pre-consume). It detects cases where pre-consumed quota was never
+// reconciled (post-billed or refunded) and logs a CRITICAL warning for audit.
+// If the request was NOT forwarded upstream, it also attempts to refund the quota.
+func billingAuditSafetyNet(c *gin.Context) {
+	reconciled, _ := c.Get(ctxkey.BillingReconciled)
+	if reconciled != nil {
+		if r, ok := reconciled.(bool); ok && r {
+			return
+		}
+	}
+
+	preConsumedAny, exists := c.Get(ctxkey.PreConsumedQuotaAmount)
+	if !exists {
+		return
+	}
+	preConsumed, ok := preConsumedAny.(int64)
+	if !ok || preConsumed <= 0 {
+		return
+	}
+
+	lg := gmw.GetLogger(c)
+	userId := c.GetInt(ctxkey.Id)
+	tokenId := c.GetInt(ctxkey.TokenId)
+	requestId := c.GetString(ctxkey.RequestId)
+	channelId := c.GetInt(ctxkey.ChannelId)
+
+	lg.Error("CRITICAL BILLING AUDIT: pre-consumed quota was not reconciled (no post-billing or refund)",
+		zap.Int64("pre_consumed_quota", preConsumed),
+		zap.Int("user_id", userId),
+		zap.Int("token_id", tokenId),
+		zap.Int("channel_id", channelId),
+		zap.String("request_id", requestId),
+	)
+
+	// Attempt emergency refund if the request was NOT forwarded upstream
+	if !shouldSkipPreConsumedRefund(c) {
+		lg.Warn("billing audit safety net: attempting emergency refund of unreconciled pre-consumed quota",
+			zap.Int64("pre_consumed_quota", preConsumed),
+			zap.Int("user_id", userId),
+			zap.String("request_id", requestId),
+		)
+		graceful.GoCritical(gmw.BackgroundCtx(c), "billingAuditRefund", func(ctx context.Context) {
+			billing.ReturnPreConsumedQuota(ctx, preConsumed, tokenId)
+		})
+	} else {
+		lg.Error("CRITICAL BILLING AUDIT: cannot refund - request was possibly forwarded upstream, manual reconciliation required",
+			zap.Int64("pre_consumed_quota", preConsumed),
+			zap.Int("user_id", userId),
+			zap.String("request_id", requestId),
+		)
+	}
+}
+
+// recordProvisionalLog writes a provisional consume log entry at pre-consume time.
+// This ensures every quota deduction has an audit trail in the logs table,
+// even if post-billing never runs. Returns the log ID for later reconciliation.
+func recordProvisionalLog(c *gin.Context, meta *metalib.Meta, modelName string, estimatedQuota int64) int {
+	if estimatedQuota <= 0 || meta == nil {
+		return 0
+	}
+
+	requestId := c.GetString(ctxkey.RequestId)
+	traceId := tracing.GetTraceIDFromContext(gmw.Ctx(c))
+
+	logEntry := &model.Log{
+		UserId:    meta.UserId,
+		ChannelId: meta.ChannelId,
+		ModelName: modelName,
+		TokenName: meta.TokenName,
+		IsStream:  meta.IsStream,
+		RequestId: requestId,
+		TraceId:   traceId,
+	}
+
+	return model.RecordProvisionalConsumeLog(gmw.Ctx(c), logEntry, estimatedQuota)
 }

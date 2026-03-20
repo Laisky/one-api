@@ -127,6 +127,11 @@ func RelayTextHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 			zap.String("err_msg", bizErr.Message))
 		return bizErr
 	}
+	markPreConsumed(c, preConsumedQuota)
+	defer billingAuditSafetyNet(c)
+
+	provisionalLogId := recordProvisionalLog(c, meta, textRequest.Model, preConsumedQuota)
+	c.Set(ctxkey.ProvisionalLogId, provisionalLogId)
 
 	var tracker *streaming.QuotaTracker
 	if textRequest.Stream {
@@ -225,6 +230,7 @@ func RelayTextHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 
 		quotaId := c.GetInt(ctxkey.Id)
 		requestId := c.GetString(ctxkey.RequestId)
+		markBillingReconciled(c)
 		graceful.GoCritical(gmw.BackgroundCtx(c), "postBilling", func(ctx context.Context) {
 			baseBillingTimeout := time.Duration(config.BillingTimeoutSec) * time.Second
 			billingTimeout := baseBillingTimeout
@@ -410,6 +416,7 @@ func RelayTextHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 		metrics.GlobalRecorder.RecordModelUsage(meta.ActualModelName, channeltype.IdToName(meta.ChannelType), time.Since(meta.StartTime))
 	}
 
+	markBillingReconciled(c)
 	graceful.GoCritical(gmw.BackgroundCtx(c), "postBilling", func(ctx context.Context) {
 		// Use configurable billing timeout with model-specific adjustments
 		baseBillingTimeout := time.Duration(config.BillingTimeoutSec) * time.Second

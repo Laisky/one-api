@@ -10,7 +10,6 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/Laisky/errors/v2"
 	gmw "github.com/Laisky/gin-middlewares/v7"
 	"github.com/Laisky/zap"
 	"github.com/gin-gonic/gin"
@@ -19,7 +18,6 @@ import (
 	"github.com/songquanpeng/one-api/common/helper"
 	"github.com/songquanpeng/one-api/relay/adaptor"
 	"github.com/songquanpeng/one-api/relay/adaptor/openai_compatible"
-	"github.com/songquanpeng/one-api/relay/channeltype"
 	"github.com/songquanpeng/one-api/relay/meta"
 	"github.com/songquanpeng/one-api/relay/model"
 	"github.com/songquanpeng/one-api/relay/relaymode"
@@ -28,80 +26,12 @@ import (
 func (a *Adaptor) DoRequest(c *gin.Context,
 	meta *meta.Meta,
 	requestBody io.Reader) (*http.Response, error) {
-	lg := gmw.GetLogger(c)
-	if shouldUseResponseAPIWebSocket(meta, c.Request.Method) {
-		var requestPayload []byte
-		if requestBody != nil {
-			payload, err := io.ReadAll(requestBody)
-			if err != nil {
-				return nil, errors.Wrap(err, "read request payload before websocket transport decision")
-			}
-			requestPayload = payload
-		}
-
-		lg.Debug("openai response api transport decision",
-			zap.String("transport", "websocket"),
-			zap.Int("channel_type", meta.ChannelType),
-			zap.String("request_path", meta.RequestURLPath),
-			zap.String("model", meta.ActualModelName),
-		)
-		response, handled, err := doResponseAPIRequestViaWebSocket(c, a, meta, bytes.NewReader(requestPayload))
-		if err != nil {
-			lg.Warn("openai response api websocket request failed",
-				zap.Error(err),
-				zap.String("request_path", meta.RequestURLPath),
-				zap.String("model", meta.ActualModelName),
-			)
-			return nil, err
-		}
-		if handled {
-			lg.Debug("openai response api websocket request handled",
-				zap.String("request_path", meta.RequestURLPath),
-				zap.String("model", meta.ActualModelName),
-			)
-			return response, nil
-		}
-		lg.Debug("openai response api websocket skipped; fallback to http",
-			zap.String("request_path", meta.RequestURLPath),
-			zap.String("model", meta.ActualModelName),
-		)
-		return adaptor.DoRequestHelper(a, c, meta, bytes.NewReader(requestPayload))
-	}
-
+	// WebSocket proxying for /v1/responses is handled at the controller layer
+	// (maybeHandleResponseAPIWebSocket) only when the downstream client itself
+	// initiates a WebSocket upgrade. For regular HTTP POST requests we always
+	// use the standard HTTP transport — it is more stable and avoids the extra
+	// complexity of a WS→SSE bridge.
 	return adaptor.DoRequestHelper(a, c, meta, requestBody)
-}
-
-// shouldUseResponseAPIWebSocket reports whether the request should use the OpenAI
-// Responses WebSocket transport.
-//
-// Parameters:
-//   - meta: request metadata containing channel and mode information.
-//   - method: downstream HTTP method.
-//
-// Returns:
-//   - bool: true when this request targets OpenAI upstream /v1/responses via POST.
-func shouldUseResponseAPIWebSocket(meta *meta.Meta, method string) bool {
-	if meta == nil {
-		return false
-	}
-	if meta.ChannelType != channeltype.OpenAI {
-		return false
-	}
-	if !strings.EqualFold(strings.TrimSpace(method), http.MethodPost) {
-		return false
-	}
-	requestPath := strings.TrimSpace(meta.RequestURLPath)
-	if requestPath == "" {
-		requestPath = "/v1/chat/completions"
-	}
-	pathOnly := requestPath
-	if idx := strings.Index(pathOnly, "?"); idx >= 0 {
-		pathOnly = pathOnly[:idx]
-	}
-	if pathOnly == "/v1/responses" {
-		return true
-	}
-	return meta.Mode == relaymode.ResponseAPI
 }
 
 func (a *Adaptor) DoResponse(c *gin.Context,

@@ -72,6 +72,9 @@ const (
 	LogMetadataKeyCacheWrite1h = "ephemeral_1h"
 	// LogMetadataKeyToolUsage stores structured metadata about built-in tool usage and charges.
 	LogMetadataKeyToolUsage = "tool_usage"
+	// LogMetadataKeyProvisional marks a consume log entry as provisional (pre-consumed, awaiting reconciliation).
+	// Post-billing removes this flag when the log is reconciled with actual usage.
+	LogMetadataKeyProvisional = "provisional"
 )
 
 // ToolUsageEntry captures per-tool usage metadata for logging.
@@ -543,6 +546,114 @@ func RecordConsumeLog(ctx context.Context, log *Log) {
 	recordLogHelper(ctx, log)
 }
 
+// RecordProvisionalConsumeLog creates a consume log entry at pre-consume time
+// with an estimated quota amount. The entry is marked as provisional via metadata
+// so that post-billing can later reconcile it with the actual amount.
+//
+// Returns the log ID so that post-billing can update the record.
+// If the log cannot be created (e.g., logging disabled), returns 0.
+func RecordProvisionalConsumeLog(ctx context.Context, log *Log, estimatedQuota int64) int {
+	if estimatedQuota <= 0 {
+		return 0
+	}
+	if !config.IsLogConsumeEnabled() {
+		return 0
+	}
+
+	log.Username = GetUsernameById(log.UserId)
+	log.CreatedAt = helper.GetTimestamp()
+	log.Type = LogTypeConsume
+	log.Quota = int(estimatedQuota)
+
+	// Mark as provisional in metadata so it's visible in audit
+	if log.Metadata == nil {
+		log.Metadata = make(LogMetadata)
+	}
+	log.Metadata[LogMetadataKeyProvisional] = true
+
+	// Append "[provisional]" to content for visibility
+	if log.Content == "" {
+		log.Content = "[provisional] pre-consumed quota, awaiting reconciliation"
+	} else {
+		log.Content = "[provisional] " + log.Content
+	}
+
+	ensureLogContent(log)
+	lg := logger.FromContext(ctx)
+	err := LOG_DB.Create(log).Error
+	if err != nil {
+		lg.Error("failed to record provisional billing log",
+			zap.Error(err),
+			zap.Int("userId", log.UserId),
+			zap.Int("channelId", log.ChannelId),
+			zap.String("model", log.ModelName),
+			zap.Int("quota", log.Quota),
+			zap.String("requestId", log.RequestId),
+		)
+		return 0
+	}
+
+	lg.Debug("recorded provisional consume log",
+		zap.Int("log_id", log.Id),
+		zap.Int("user_id", log.UserId),
+		zap.Int64("estimated_quota", estimatedQuota),
+		zap.String("model", log.ModelName),
+		zap.String("request_id", log.RequestId),
+	)
+
+	return log.Id
+}
+
+// ReconcileConsumeLog updates a provisional consume log entry with the final
+// billing details after post-billing completes. This removes the provisional
+// marker and updates quota, content, tokens, and elapsed_time.
+func ReconcileConsumeLog(ctx context.Context, logID int, finalQuota int64, content string, promptTokens int, completionTokens int, elapsedTime int64, metadata LogMetadata) error {
+	if logID <= 0 {
+		return nil // No provisional log to reconcile (e.g., logging disabled)
+	}
+
+	lg := logger.FromContext(ctx)
+
+	updates := map[string]any{
+		"quota":             int(finalQuota),
+		"content":           content,
+		"prompt_tokens":     promptTokens,
+		"completion_tokens": completionTokens,
+		"elapsed_time":      elapsedTime,
+	}
+
+	// Remove the provisional flag from metadata
+	if metadata == nil {
+		metadata = make(LogMetadata)
+	}
+	delete(metadata, LogMetadataKeyProvisional)
+	metadataJSON, err := metadata.Value()
+	if err != nil {
+		lg.Warn("failed to serialize metadata for log reconciliation", zap.Error(err))
+	} else {
+		updates["metadata"] = metadataJSON
+	}
+
+	if err := LOG_DB.WithContext(ctx).Model(&Log{}).
+		Where("id = ?", logID).
+		Updates(updates).Error; err != nil {
+		lg.Error("CRITICAL: failed to reconcile provisional consume log",
+			zap.Error(err),
+			zap.Int("log_id", logID),
+			zap.Int64("final_quota", finalQuota),
+		)
+		return errors.Wrapf(err, "failed to reconcile consume log: id=%d", logID)
+	}
+
+	lg.Debug("reconciled provisional consume log",
+		zap.Int("log_id", logID),
+		zap.Int64("final_quota", finalQuota),
+		zap.Int("prompt_tokens", promptTokens),
+		zap.Int("completion_tokens", completionTokens),
+	)
+	return nil
+}
+
 // RecordConsumeLogWithTraceID removed: pass IDs directly and call RecordConsumeLog
 
 // RecordTestLog persists a synthetic channel test log entry.
@@ -569,9 +680,12 @@ func RecordTestLogWithIDs(ctx context.Context, log *Log, requestId string, trace
 //
 // Returns an error if the update fails.
 var allowedConsumeLogUpdateFields = map[string]struct{}{
-	"quota":        {},
-	"content":      {},
-	"elapsed_time": {},
+	"quota":             {},
+	"content":           {},
+	"elapsed_time":      {},
+	"prompt_tokens":     {},
+	"completion_tokens": {},
+	"metadata":          {},
 }
 
 func UpdateConsumeLogByID(ctx context.Context, logID int, updates map[string]any) error {

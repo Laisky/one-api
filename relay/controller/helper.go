@@ -269,6 +269,23 @@ func postConsumeQuota(ctx context.Context,
 		return
 	}
 
+	// !! ZERO-USAGE GUARD !!
+	//
+	// Some upstream transports do not reliably return token usage. If we reconcile
+	// with zero usage, the result is quotaDelta = 0 - preConsumedQuota, which
+	// REFUNDS the pre-consumed amount and makes the request free. This is incorrect.
+	//
+	// When usage is zero and pre-consumed quota exists, we return the pre-consumed
+	// amount as the final charge.
+	if usage.PromptTokens == 0 && usage.CompletionTokens == 0 && preConsumedQuota > 0 {
+		gmw.GetLogger(ctx).Warn("postConsumeQuota: usage is zero but pre-consumed quota exists, keeping pre-consumed quota",
+			zap.Int64("pre_consumed_quota", preConsumedQuota),
+			zap.String("model", textRequest.Model),
+		)
+		quota = preConsumedQuota
+		return
+	}
+
 	pricingAdaptor := resolvePricingAdaptor(meta)
 	computeResult := quotautil.Compute(quotautil.ComputeInput{
 		Usage:                  usage,
@@ -288,10 +305,12 @@ func postConsumeQuota(ctx context.Context,
 	}
 
 	quotaDelta := quota - preConsumedQuota - incrementallyCharged
-	// Derive RequestId/TraceId from std context if possible (gin ctx embedded by gmw.BackgroundCtx)
+	// Derive RequestId/TraceId/ProvisionalLogId from std context if possible (gin ctx embedded by gmw.BackgroundCtx)
 	var requestId string
+	var provisionalLogId int
 	if ginCtx, ok := gmw.GetGinCtxFromStdCtx(ctx); ok {
 		requestId = ginCtx.GetString(ctxkey.RequestId)
+		provisionalLogId = ginCtx.GetInt(ctxkey.ProvisionalLogId)
 	}
 	traceId := tracing.GetTraceIDFromContext(ctx)
 	if meta.TokenId > 0 && meta.UserId > 0 && meta.ChannelId > 0 {
@@ -331,6 +350,7 @@ func postConsumeQuota(ctx context.Context,
 			Metadata:               metadata,
 			RequestId:              requestId,
 			TraceId:                traceId,
+			ProvisionalLogId:       provisionalLogId,
 		})
 	} else {
 		gmw.GetLogger(ctx).Error("meta information incomplete, cannot post consume quota",
@@ -363,6 +383,23 @@ func postConsumeQuotaWithTraceID(ctx context.Context, traceId string,
 		return
 	}
 
+	// !! ZERO-USAGE GUARD !!
+	//
+	// Some upstream transports do not reliably return token usage. If we reconcile
+	// with zero usage, the result is quotaDelta = 0 - preConsumedQuota, which
+	// REFUNDS the pre-consumed amount and makes the request free. This is incorrect.
+	//
+	// When usage is zero and pre-consumed quota exists, we return the pre-consumed
+	// amount as the final charge.
+	if usage.PromptTokens == 0 && usage.CompletionTokens == 0 && preConsumedQuota > 0 {
+		gmw.GetLogger(ctx).Warn("postConsumeQuota: usage is zero but pre-consumed quota exists, keeping pre-consumed quota",
+			zap.Int64("pre_consumed_quota", preConsumedQuota),
+			zap.String("model", textRequest.Model),
+		)
+		quota = preConsumedQuota
+		return
+	}
+
 	pricingAdaptor := resolvePricingAdaptor(meta)
 	computeResult := quotautil.Compute(quotautil.ComputeInput{
 		Usage:                  usage,
@@ -383,8 +420,10 @@ func postConsumeQuotaWithTraceID(ctx context.Context, traceId string,
 
 	quotaDelta := quota - preConsumedQuota
 	var requestId string
+	var provisionalLogId int
 	if ginCtx, ok := gmw.GetGinCtxFromStdCtx(ctx); ok {
 		requestId = ginCtx.GetString(ctxkey.RequestId)
+		provisionalLogId = ginCtx.GetInt(ctxkey.ProvisionalLogId)
 	}
 	if meta.TokenId > 0 && meta.UserId > 0 && meta.ChannelId > 0 {
 		var toolSummary *model.ToolUsageSummary
@@ -423,6 +462,7 @@ func postConsumeQuotaWithTraceID(ctx context.Context, traceId string,
 			Metadata:               metadata,
 			RequestId:              requestId,
 			TraceId:                traceId,
+			ProvisionalLogId:       provisionalLogId,
 		})
 	} else {
 		gmw.GetLogger(ctx).Error("meta information incomplete, cannot post consume quota",

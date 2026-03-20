@@ -88,6 +88,7 @@ func ResponseAPIWebSocketHandler(c *gin.Context, meta *rmeta.Meta) (*rmodel.Erro
 		requestHeader.Set("Sec-WebSocket-Protocol", sp)
 	}
 	requestHeader.Set("Authorization", "Bearer "+meta.APIKey)
+	requestHeader.Set("OpenAI-Beta", "responses-api=v1")
 
 	dialer := websocket.Dialer{HandshakeTimeout: 10 * time.Second, Proxy: http.ProxyFromEnvironment}
 	upstreamConn, _, dialErr := dialer.Dial(fullRequestURL, requestHeader)
@@ -105,8 +106,17 @@ func ResponseAPIWebSocketHandler(c *gin.Context, meta *rmeta.Meta) (*rmodel.Erro
 	go func() { errc <- copyWS(clientConn, upstreamConn) }()
 	go func() { errc <- copyResponseAPIWSUpstreamToClient(upstreamConn, clientConn, usage) }()
 
+	// Wait for one direction to finish, then close both connections
+	// to unblock the other goroutine.
 	if proxyErr := <-errc; proxyErr != nil {
-		gmw.GetLogger(c).Debug("response websocket proxy closed", zap.String("error", proxyErr.Error()))
+		gmw.GetLogger(c).Debug("response websocket proxy first direction closed", zap.Error(proxyErr))
+	}
+	_ = clientConn.Close()
+	_ = upstreamConn.Close()
+
+	// Drain the second goroutine to avoid data race on usage.
+	if proxyErr := <-errc; proxyErr != nil {
+		gmw.GetLogger(c).Debug("response websocket proxy second direction closed", zap.Error(proxyErr))
 	}
 
 	if usage.TotalTokens == 0 {

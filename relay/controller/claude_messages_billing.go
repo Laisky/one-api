@@ -101,10 +101,12 @@ func postConsumeClaudeMessagesQuotaWithTraceID(ctx context.Context, requestId st
 	// Use centralized detailed billing function with explicit trace ID
 	quotaDelta := quota - preConsumedQuota - incrementalCharged
 	// If requestId somehow empty, try derive from ctx (best-effort)
-	if requestId == "" {
-		if ginCtx, ok := gmw.GetGinCtxFromStdCtx(ctx); ok {
+	var provisionalLogId int
+	if ginCtx, ok := gmw.GetGinCtxFromStdCtx(ctx); ok {
+		if requestId == "" {
 			requestId = ginCtx.GetString(ctxkey.RequestId)
 		}
+		provisionalLogId = ginCtx.GetInt(ctxkey.ProvisionalLogId)
 	}
 	// For Claude models, upstream reports non-cached input tokens as PromptTokens
 	// and cached tokens separately. Sum them so the log shows the total prompt tokens.
@@ -135,6 +137,7 @@ func postConsumeClaudeMessagesQuotaWithTraceID(ctx context.Context, requestId st
 		Metadata:               metadata,
 		RequestId:              requestId,
 		TraceId:                traceId,
+		ProvisionalLogId:       provisionalLogId,
 	})
 
 	// Log with context if available

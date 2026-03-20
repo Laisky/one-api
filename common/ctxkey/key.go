@@ -302,4 +302,20 @@ const (
 	// Set in: middleware/api_format_detect.
 	// Read in: metrics for labeling.
 	APIFormat = "api_format"
+
+	// BillingReconciled is set to true when post-billing or refund has been completed
+	// for pre-consumed quota. Used by the billing audit safety net to detect leaked quota.
+	// Set in: billing.PostConsumeQuotaDetailed, returnPreConsumedQuotaConservative.
+	// Read in: billing audit defer in relay handlers.
+	BillingReconciled = "billing_reconciled"
+
+	// PreConsumedQuotaAmount stores the pre-consumed quota amount for billing audit.
+	// Set in: preConsumeQuota, preConsumeResponseAPIQuota, preConsumeClaudeMessagesQuota.
+	// Read in: billing audit defer in relay handlers.
+	PreConsumedQuotaAmount = "pre_consumed_quota_amount"
+
+	// ProvisionalLogId stores the database ID of the provisional consume log entry
+	// created at pre-consume time. Post-billing uses this to reconcile the log
+	// with actual usage data.
+	ProvisionalLogId = "provisional_log_id"
 )

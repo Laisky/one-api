@@ -102,6 +102,26 @@ func postConsumeResponseAPIQuota(ctx context.Context,
 		return
 	}
 
+	// !! ZERO-USAGE GUARD !!
+	//
+	// Some upstream transports (notably OpenAI WebSocket Response API) do not
+	// reliably return token usage. If we reconcile with zero usage, the result
+	// is quotaDelta = 0 - preConsumedQuota, which REFUNDS the pre-consumed
+	// amount and makes the request effectively free. This is incorrect.
+	//
+	// When usage is zero and pre-consumed quota exists, we return the
+	// pre-consumed amount as the final charge. The provisional log entry
+	// remains with the estimated amount for audit visibility.
+	if usage.PromptTokens == 0 && usage.CompletionTokens == 0 {
+		lg := gmw.GetLogger(ctx)
+		lg.Warn("postConsumeResponseAPIQuota: usage is zero, keeping pre-consumed quota",
+			zap.Int64("pre_consumed_quota", preConsumedQuota),
+			zap.String("model", responseAPIRequest.Model),
+		)
+		quota = preConsumedQuota
+		return
+	}
+
 	pricingAdaptor := resolvePricingAdaptor(meta)
 	computeResult := quotautil.Compute(quotautil.ComputeInput{
 		Usage:                  usage,
@@ -134,10 +154,12 @@ func postConsumeResponseAPIQuota(ctx context.Context,
 		usedCompletionRatio = pricing.GetCompletionRatioWithThreeLayers(responseAPIRequest.Model, channelCompletionRatio, pricingAdaptor)
 	}
 
-	// Derive RequestId/TraceId from std context if possible
+	// Derive RequestId/TraceId/ProvisionalLogId from std context if possible
 	var requestId string
+	var provisionalLogId int
 	if ginCtx, ok := gmw.GetGinCtxFromStdCtx(ctx); ok {
 		requestId = ginCtx.GetString(ctxkey.RequestId)
+		provisionalLogId = ginCtx.GetInt(ctxkey.ProvisionalLogId)
 	}
 	traceId := tracing.GetTraceIDFromContext(ctx)
 	if meta.TokenId > 0 && meta.UserId > 0 && meta.ChannelId > 0 {
@@ -177,6 +199,7 @@ func postConsumeResponseAPIQuota(ctx context.Context,
 			Metadata:               metadata,
 			RequestId:              requestId,
 			TraceId:                traceId,
+			ProvisionalLogId:       provisionalLogId,
 		})
 	} else {
 		// Should not happen; log for investigation
