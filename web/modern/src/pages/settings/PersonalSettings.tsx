@@ -1,9 +1,11 @@
+import Turnstile from '@/components/Turnstile';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
+import { useNotifications } from '@/components/ui/notifications';
 import { useResponsive } from '@/hooks/useResponsive';
 import { api } from '@/lib/api';
 import { useAuthStore } from '@/lib/stores/auth';
@@ -26,7 +28,8 @@ type PersonalForm = z.infer<typeof personalSchema>;
 
 export function PersonalSettings() {
   const { t } = useTranslation();
-  const { user } = useAuthStore();
+  const { user, updateUser } = useAuthStore();
+  const { notify } = useNotifications();
   const [loading, setLoading] = useState(false);
   const [systemToken, setSystemToken] = useState('');
   const [affLink, setAffLink] = useState('');
@@ -46,6 +49,13 @@ export function PersonalSettings() {
 
   // System status state
   const [systemStatus, setSystemStatus] = useState<SystemStatus>({});
+  const [emailVerificationCode, setEmailVerificationCode] = useState('');
+  const [emailAction, setEmailAction] = useState<'send' | 'bind' | null>(null);
+  const [emailVerificationError, setEmailVerificationError] = useState('');
+  const [turnstileToken, setTurnstileToken] = useState('');
+
+  const turnstileEnabled = Boolean(systemStatus.turnstile_check);
+  const turnstileRenderable = turnstileEnabled && Boolean(systemStatus.turnstile_site_key);
 
   // Load system status
   const loadStatus = async () => {
@@ -69,6 +79,54 @@ export function PersonalSettings() {
     },
   });
 
+  const syncProfile = (profile: PersonalForm) => {
+    updateUser(profile);
+    form.reset({
+      username: profile.username || '',
+      display_name: profile.display_name || '',
+      email: profile.email || '',
+      password: '',
+    });
+    setEmailVerificationCode('');
+    setEmailVerificationError('');
+  };
+
+  const loadProfile = async (showNotification = false) => {
+    try {
+      const response = await api.get('/api/user/self');
+      const { success, message, data } = response.data;
+      if (success && data) {
+        syncProfile({
+          username: data.username || '',
+          display_name: data.display_name || '',
+          email: data.email || '',
+          password: '',
+        });
+        return true;
+      }
+
+      const errorMessage = message || t('personal_settings.profile_info.load_failed');
+      form.setError('root', { message: errorMessage });
+      if (showNotification) {
+        notify({
+          type: 'error',
+          message: errorMessage,
+        });
+      }
+      return false;
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : t('personal_settings.profile_info.load_failed');
+      form.setError('root', { message: errorMessage });
+      if (showNotification) {
+        notify({
+          type: 'error',
+          message: errorMessage,
+        });
+      }
+      return false;
+    }
+  };
+
   // Load TOTP status when component mounts
   const loadTotpStatus = async () => {
     try {
@@ -87,6 +145,7 @@ export function PersonalSettings() {
   useEffect(() => {
     loadStatus();
     loadTotpStatus();
+    loadProfile();
   }, []);
 
   // Setup TOTP for the user
@@ -256,6 +315,98 @@ export function PersonalSettings() {
     }
   };
 
+  const sendEmailVerificationCode = async () => {
+    const email = form.getValues('email')?.trim() || '';
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+    if (!emailRegex.test(email)) {
+      form.setError('email', {
+        message: t('auth.register.email_invalid'),
+      });
+      return;
+    }
+
+    if (turnstileEnabled && !turnstileToken) {
+      form.setError('email', {
+        message: t('auth.login.turnstile_required'),
+      });
+      return;
+    }
+
+    setEmailAction('send');
+    setEmailVerificationError('');
+
+    try {
+      const turnstileParam = turnstileEnabled && turnstileToken ? `&turnstile=${encodeURIComponent(turnstileToken)}` : '';
+      const response = await api.get(`/api/verification?email=${encodeURIComponent(email)}${turnstileParam}`);
+      const { success, message } = response.data;
+
+      if (success) {
+        form.clearErrors('email');
+        notify({
+          type: 'success',
+          message: message || t('personal_settings.profile_info.send_code_success'),
+        });
+        if (turnstileEnabled) {
+          setTurnstileToken('');
+        }
+        return;
+      }
+
+      form.setError('email', {
+        message: message || t('personal_settings.profile_info.failed'),
+      });
+    } catch (error) {
+      form.setError('email', {
+        message: error instanceof Error ? error.message : t('personal_settings.profile_info.failed'),
+      });
+    } finally {
+      setEmailAction(null);
+    }
+  };
+
+  const bindEmail = async () => {
+    const email = form.getValues('email')?.trim() || '';
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+    if (!emailRegex.test(email)) {
+      form.setError('email', {
+        message: t('auth.register.email_invalid'),
+      });
+      return;
+    }
+
+    if (!emailVerificationCode.trim()) {
+      setEmailVerificationError(t('auth.register.verification_code_required'));
+      return;
+    }
+
+    setEmailAction('bind');
+    setEmailVerificationError('');
+
+    try {
+      const response = await api.get(
+        `/api/oauth/email/bind?email=${encodeURIComponent(email)}&code=${encodeURIComponent(emailVerificationCode.trim())}`
+      );
+      const { success, message } = response.data;
+
+      if (success) {
+        await loadProfile();
+        notify({
+          type: 'success',
+          message: t('personal_settings.profile_info.bind_success'),
+        });
+        return;
+      }
+
+      setEmailVerificationError(message || t('personal_settings.profile_info.failed'));
+    } catch (error) {
+      setEmailVerificationError(error instanceof Error ? error.message : t('personal_settings.profile_info.failed'));
+    } finally {
+      setEmailAction(null);
+    }
+  };
+
   const onSubmit = async (data: PersonalForm) => {
     setLoading(true);
     try {
@@ -264,15 +415,20 @@ export function PersonalSettings() {
       if (!payload.password) {
         delete payload.password;
       }
-      // Email cannot be changed via UpdateSelf; use email bind flow instead.
       delete (payload as Record<string, unknown>).email;
 
       // Unified API call - complete URL with /api prefix
       const response = await api.put('/api/user/self', payload);
       const { success, message } = response.data;
       if (success) {
-        // Update the form to clear password
-        form.setValue('password', '');
+        const refreshed = await loadProfile();
+        if (!refreshed) {
+          syncProfile({ ...data, password: '' });
+        }
+        notify({
+          type: 'success',
+          message: message || t('personal_settings.profile_info.success'),
+        });
       } else {
         form.setError('root', {
           message: message || t('personal_settings.profile_info.failed'),
@@ -332,11 +488,53 @@ export function PersonalSettings() {
                   control={form.control}
                   name="email"
                   render={({ field }) => (
-                    <FormItem>
+                    <FormItem className="space-y-3">
                       <FormLabel>{t('personal_settings.profile_info.email')}</FormLabel>
                       <FormControl>
                         <Input type="email" placeholder={t('personal_settings.profile_info.email_placeholder')} {...field} />
                       </FormControl>
+                      <div className="flex flex-col gap-3">
+                        <p className="text-sm text-muted-foreground">{t('personal_settings.profile_info.email_help')}</p>
+                        <div className="flex flex-col gap-3 md:flex-row items-end">
+                          <div className="flex-1 w-full space-y-1">
+                            <Input
+                              value={emailVerificationCode}
+                              onChange={(e) => {
+                                setEmailVerificationCode(e.target.value);
+                                if (emailVerificationError) {
+                                  setEmailVerificationError('');
+                                }
+                              }}
+                              placeholder={t('personal_settings.profile_info.email_verification_code_placeholder')}
+                            />
+                          </div>
+                          <div className="flex flex-col gap-2 sm:flex-row flex-shrink-0">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              onClick={sendEmailVerificationCode}
+                              disabled={emailAction !== null || (turnstileEnabled && !turnstileToken)}
+                            >
+                              {emailAction === 'send'
+                                ? t('personal_settings.profile_info.sending_code')
+                                : t('personal_settings.profile_info.send_code')}
+                            </Button>
+                            <Button type="button" onClick={bindEmail} disabled={emailAction !== null}>
+                              {emailAction === 'bind'
+                                ? t('personal_settings.profile_info.binding_email')
+                                : t('personal_settings.profile_info.bind_email')}
+                            </Button>
+                          </div>
+                        </div>
+                        {turnstileRenderable && systemStatus.turnstile_site_key && (
+                          <Turnstile
+                            siteKey={systemStatus.turnstile_site_key}
+                            onVerify={(token) => setTurnstileToken(token)}
+                            onExpire={() => setTurnstileToken('')}
+                          />
+                        )}
+                        {emailVerificationError && <div className="text-sm text-destructive">{emailVerificationError}</div>}
+                      </div>
                       <FormMessage />
                     </FormItem>
                   )}
