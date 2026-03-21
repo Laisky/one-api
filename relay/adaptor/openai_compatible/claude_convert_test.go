@@ -905,3 +905,108 @@ func TestConvertOpenAIStreamToClaudeSSE_ToolCallNoFunction(t *testing.T) {
 	assert.Contains(t, out, `"type":"tool_use"`)
 	assert.Contains(t, out, `"id":"call_nofn"`)
 }
+
+// ---------------------------------------------------------------------------
+// Gap-fill: Claude ← Response API conversion path tests
+// ---------------------------------------------------------------------------
+
+// TestConvertOpenAIStreamToClaudeSSE_ResponseAPIReasoningToThinking verifies
+// that Response API reasoning_summary_text.delta events are converted to
+// Claude "thinking" content blocks.
+func TestConvertOpenAIStreamToClaudeSSE_ResponseAPIReasoningToThinking(t *testing.T) {
+	t.Parallel()
+	c, w := newGinTestContext()
+
+	chunks := []string{
+		// Response API reasoning events
+		`data: {"type":"response.reasoning_summary_text.delta","item_id":"rs_1","output_index":0,"delta":"Let me think","summary_index":0}`,
+		`data: {"type":"response.reasoning_summary_text.delta","item_id":"rs_1","output_index":0,"delta":" about this","summary_index":0}`,
+		// Response API text events
+		`data: {"type":"response.output_text.delta","item_id":"msg_1","output_index":1,"content_index":0,"delta":"The answer is 42"}`,
+		`data: {"type":"response.completed","response":{"id":"resp_r","object":"response","model":"o1","status":"completed","usage":{"input_tokens":10,"output_tokens":20,"total_tokens":30}}}`,
+		`data: [DONE]`,
+	}
+	body := strings.Join(chunks, "\n\n") + "\n\n"
+	resp := &http.Response{StatusCode: 200, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(body))}
+
+	usage, errResp := ConvertOpenAIStreamToClaudeSSE(c, resp, 10, "o1")
+	require.Nil(t, errResp)
+	require.NotNil(t, usage)
+
+	out := w.Body.String()
+	// Reasoning should produce thinking content blocks
+	assert.Contains(t, out, `"type":"thinking"`, "should have thinking content_block_start")
+	assert.Contains(t, out, `"type":"thinking_delta"`, "should have thinking_delta events")
+	assert.Contains(t, out, "Let me think")
+	assert.Contains(t, out, " about this")
+	// Text should also be present
+	assert.Contains(t, out, "The answer is 42")
+	assert.Contains(t, out, `"type":"text_delta"`)
+	// Should have message_stop (upstream sent [DONE])
+	assert.Contains(t, out, "event: message_stop")
+}
+
+// TestConvertOpenAIStreamToClaudeSSE_ResponseAPIUpstreamDrop verifies that
+// when Response API upstream drops without [DONE], no message_stop is emitted
+// in the Claude output.
+func TestConvertOpenAIStreamToClaudeSSE_ResponseAPIUpstreamDrop(t *testing.T) {
+	t.Parallel()
+	c, w := newGinTestContext()
+
+	// Response API events without [DONE] at end
+	chunks := []string{
+		`data: {"type":"response.output_text.delta","item_id":"msg_1","output_index":0,"content_index":0,"delta":"partial"}`,
+	}
+	body := strings.Join(chunks, "\n\n") + "\n\n"
+	resp := &http.Response{StatusCode: 200, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(body))}
+
+	_, errResp := ConvertOpenAIStreamToClaudeSSE(c, resp, 5, "gpt-4o")
+	require.Nil(t, errResp)
+
+	out := w.Body.String()
+	assert.Contains(t, out, "partial", "content should still be present")
+	assert.NotContains(t, out, "message_stop", "no message_stop when upstream drops")
+}
+
+// TestConvertOpenAIStreamToClaudeSSE_ResponseAPIKeepalive verifies that
+// Response API keepalive events are silently ignored (not converted to any
+// Claude event).
+func TestConvertOpenAIStreamToClaudeSSE_ResponseAPIKeepalive(t *testing.T) {
+	t.Parallel()
+	c, w := newGinTestContext()
+
+	chunks := []string{
+		`data: {"type":"keepalive","sequence_number":1}`,
+		`data: {"type":"response.output_text.delta","item_id":"msg_1","output_index":0,"content_index":0,"delta":"hello"}`,
+		`data: [DONE]`,
+	}
+	body := strings.Join(chunks, "\n\n") + "\n\n"
+	resp := &http.Response{StatusCode: 200, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(body))}
+
+	_, errResp := ConvertOpenAIStreamToClaudeSSE(c, resp, 5, "gpt-4o")
+	require.Nil(t, errResp)
+
+	out := w.Body.String()
+	assert.Contains(t, out, "hello")
+	assert.NotContains(t, out, "keepalive", "keepalive should not appear in Claude output")
+	assert.Contains(t, out, "event: message_stop")
+}
+
+// TestConvertOpenAIStreamToClaudeSSE_ResponseAPIEmptyStream verifies that
+// a Response API stream with only [DONE] produces message_start + message_stop.
+func TestConvertOpenAIStreamToClaudeSSE_ResponseAPIEmptyStream(t *testing.T) {
+	t.Parallel()
+	c, w := newGinTestContext()
+
+	body := "data: [DONE]\n\n"
+	resp := &http.Response{StatusCode: 200, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(body))}
+
+	_, errResp := ConvertOpenAIStreamToClaudeSSE(c, resp, 0, "gpt-4o")
+	require.Nil(t, errResp)
+
+	out := w.Body.String()
+	assert.Contains(t, out, "event: message_start")
+	assert.Contains(t, out, "event: message_stop")
+	// No content blocks should be started
+	assert.NotContains(t, out, "content_block_start")
+}

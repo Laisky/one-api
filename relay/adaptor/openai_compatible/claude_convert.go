@@ -271,9 +271,9 @@ func ConvertOpenAIStreamToClaudeSSE(c *gin.Context, resp *http.Response, promptT
 		if eventType != "" {
 			c.Writer.Write([]byte("event: " + eventType + "\n")) //nolint:errcheck
 		}
-		c.Writer.Write([]byte("data: "))   //nolint:errcheck
-		c.Writer.Write(b)                   //nolint:errcheck
-		c.Writer.Write([]byte("\n\n"))      //nolint:errcheck
+		c.Writer.Write([]byte("data: ")) //nolint:errcheck
+		c.Writer.Write(b)                //nolint:errcheck
+		c.Writer.Write([]byte("\n\n"))   //nolint:errcheck
 		c.Writer.(http.Flusher).Flush()
 	}
 

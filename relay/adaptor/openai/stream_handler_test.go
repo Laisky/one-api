@@ -369,7 +369,7 @@ func TestStreamHandler_StreamRewriter(t *testing.T) {
 	errResp, responseText, usage := StreamHandler(c, resp, relaymode.ChatCompletions)
 
 	require.Nil(t, errResp)
-	assert.Equal(t, "first" + "second", responseText)
+	assert.Equal(t, "first"+"second", responseText)
 
 	// Verify rewriter was called
 	assert.Equal(t, 3, rewriter.chunks, "HandleChunk called for each parsed chunk")
@@ -702,8 +702,9 @@ func TestStreamHandler_WithTracker(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// 21. Tracker with reasoning content: exercises tracker delta tokens path
+//  21. Tracker with reasoning content: exercises tracker delta tokens path
 //     for both content and reasoning
+//
 // ---------------------------------------------------------------------------
 func TestStreamHandler_TrackerWithReasoning(t *testing.T) {
 	ensureTokenEncoders()
@@ -909,8 +910,9 @@ func TestStreamHandler_RewriterNotHandledNoDone(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// 26. Tracker quota exceeded in ChatCompletions mode
+//  26. Tracker quota exceeded in ChatCompletions mode
 //     Pre-set abortErr on the tracker so RecordCompletionTokens fails immediately.
+//
 // ---------------------------------------------------------------------------
 func TestStreamHandler_TrackerQuotaExceeded(t *testing.T) {
 	ensureTokenEncoders()
@@ -1053,4 +1055,3 @@ func TestStreamHandler_CompletionsTrackerGenericError(t *testing.T) {
 	body := w.Body.String()
 	assert.Contains(t, body, "streaming_billing_failed")
 }
-
