@@ -489,6 +489,7 @@ func RelayImageHelper(c *gin.Context, relayMode int) *relaymodel.ErrorWithStatus
 	// Capture IDs from gin context before switching to a background context in defer
 	requestId := c.GetString(ctxkey.RequestId)
 	traceId := tracing.GetTraceID(c)
+	provLogID := c.GetInt(ctxkey.ProvisionalLogId)
 	defer func() {
 		bgCtx, cancel := context.WithTimeout(gmw.BackgroundCtx(c), time.Minute)
 		defer cancel()
@@ -507,6 +508,14 @@ func RelayImageHelper(c *gin.Context, relayMode int) *relaymodel.ErrorWithStatus
 					)
 				} else {
 					_ = model.PostConsumeTokenQuota(bgCtx, meta.TokenId, -preConsumedQuota)
+				}
+			}
+			// Reconcile provisional log to 0 on upstream error
+			if provLogID > 0 {
+				if err := model.ReconcileConsumeLog(bgCtx, provLogID, 0,
+					"upstream error, refunded", 0, 0, 0, nil); err != nil {
+					lg.Warn("failed to reconcile provisional log on upstream error",
+						zap.Error(err), zap.Int("provisional_log_id", provLogID))
 				}
 			}
 			// Reconcile provisional record to 0
@@ -555,20 +564,43 @@ func RelayImageHelper(c *gin.Context, relayMode int) *relaymodel.ErrorWithStatus
 				GroupRatio:      groupRatio,
 				ModelRatio:      modelRatio,
 			})
-			// Record log with RequestId/TraceId set directly on the log
-			model.RecordConsumeLog(bgCtx, &model.Log{
-				UserId:           meta.UserId,
-				ChannelId:        meta.ChannelId,
-				PromptTokens:     promptTokens,
-				CompletionTokens: completionTokens,
-				ModelName:        imageRequest.Model,
-				TokenName:        tokenName,
-				Quota:            int(usedQuota),
-				Content:          logContent,
-				ElapsedTime:      helper.CalcElapsedTime(meta.StartTime),
-				RequestId:        requestId,
-				TraceId:          traceId,
-			})
+			// Reconcile provisional log if one exists, otherwise create a new log entry.
+			elapsedTime := helper.CalcElapsedTime(meta.StartTime)
+			if provLogID > 0 {
+				if err := model.ReconcileConsumeLog(bgCtx, provLogID, usedQuota,
+					logContent, promptTokens, completionTokens,
+					elapsedTime, nil); err != nil {
+					lg.Error("failed to reconcile provisional log, falling back to new log entry",
+						zap.Error(err), zap.Int("provisional_log_id", provLogID))
+					model.RecordConsumeLog(bgCtx, &model.Log{
+						UserId:           meta.UserId,
+						ChannelId:        meta.ChannelId,
+						PromptTokens:     promptTokens,
+						CompletionTokens: completionTokens,
+						ModelName:        imageRequest.Model,
+						TokenName:        tokenName,
+						Quota:            int(usedQuota),
+						Content:          logContent,
+						ElapsedTime:      elapsedTime,
+						RequestId:        requestId,
+						TraceId:          traceId,
+					})
+				}
+			} else {
+				model.RecordConsumeLog(bgCtx, &model.Log{
+					UserId:           meta.UserId,
+					ChannelId:        meta.ChannelId,
+					PromptTokens:     promptTokens,
+					CompletionTokens: completionTokens,
+					ModelName:        imageRequest.Model,
+					TokenName:        tokenName,
+					Quota:            int(usedQuota),
+					Content:          logContent,
+					ElapsedTime:      elapsedTime,
+					RequestId:        requestId,
+					TraceId:          traceId,
+				})
+			}
 			model.UpdateUserUsedQuotaAndRequestCount(meta.UserId, usedQuota)
 			channelId := c.GetInt(ctxkey.ChannelId)
 			model.UpdateChannelUsedQuota(channelId, usedQuota)

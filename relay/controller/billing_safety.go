@@ -2,6 +2,7 @@ package controller
 
 import (
 	"context"
+	"fmt"
 
 	gmw "github.com/Laisky/gin-middlewares/v7"
 	"github.com/Laisky/zap"
@@ -71,6 +72,15 @@ func returnPreConsumedQuotaConservative(
 			return false
 		}
 		markBillingReconciled(c)
+
+		// Reconcile provisional log to 0 so it doesn't appear as a duplicate entry
+		if provLogID := c.GetInt(ctxkey.ProvisionalLogId); provLogID > 0 {
+			if err := model.ReconcileConsumeLog(ctx, provLogID, 0,
+				fmt.Sprintf("refunded: %s", reason), 0, 0, 0, nil); err != nil {
+				gmw.GetLogger(c).Warn("failed to reconcile provisional log on refund",
+					zap.Error(err), zap.Int("provisional_log_id", provLogID))
+			}
+		}
 	}
 
 	billing.ReturnPreConsumedQuota(ctx, preConsumedQuota, tokenID)

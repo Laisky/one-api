@@ -164,6 +164,7 @@ func RelayVideoHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 	succeed := false
 	requestId := c.GetString(ctxkey.RequestId)
 	traceId := tracing.GetTraceID(c)
+	provLogID := c.GetInt(ctxkey.ProvisionalLogId)
 
 	defer func() {
 		if !succeed {
@@ -175,6 +176,13 @@ func RelayVideoHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 						gmw.GetLogger(bgctx).Error("error rolling back pre-consumed quota", zap.Error(err))
 					}
 				})
+			}
+			if provLogID > 0 {
+				if err := model.ReconcileConsumeLog(ctx, provLogID, 0,
+					"upstream error, refunded", 0, 0, 0, nil); err != nil {
+					lg.Warn("failed to reconcile provisional log on error",
+						zap.Error(err), zap.Int("provisional_log_id", provLogID))
+				}
 			}
 			if usedQuota > 0 {
 				if err := model.UpdateUserRequestCostQuotaByRequestID(userId, requestId, 0); err != nil {
@@ -201,7 +209,7 @@ func RelayVideoHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 		bgctx, cancel := context.WithTimeout(gmw.BackgroundCtx(c), time.Minute)
 		defer cancel()
 		graceful.GoCritical(bgctx, "videoPostConsume", func(cctx context.Context) {
-			billing.PostConsumeQuotaWithLog(cctx, tokenId, quotaDelta, usedQuota, entry)
+			billing.PostConsumeQuotaWithLog(cctx, tokenId, quotaDelta, usedQuota, entry, provLogID)
 		})
 
 		if err := model.UpdateUserRequestCostQuotaByRequestID(userId, requestId, usedQuota); err != nil {

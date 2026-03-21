@@ -355,8 +355,10 @@ func postConsumeRerankQuota(ctx context.Context,
 	quotaDelta := quota - preConsumedQuota
 
 	var requestId string
+	var provLogID int
 	if ginCtx, ok := gmw.GetGinCtxFromStdCtx(ctx); ok {
 		requestId = ginCtx.GetString(ctxkey.RequestId)
+		provLogID = ginCtx.GetInt(ctxkey.ProvisionalLogId)
 	}
 	traceId := tracing.GetTraceIDFromContext(ctx)
 
@@ -380,7 +382,7 @@ func postConsumeRerankQuota(ctx context.Context,
 			RequestId:        requestId,
 			TraceId:          traceId,
 		}
-		billing.PostConsumeQuotaWithLog(ctx, meta.TokenId, quotaDelta, quota, logEntry)
+		billing.PostConsumeQuotaWithLog(ctx, meta.TokenId, quotaDelta, quota, logEntry, provLogID)
 	} else {
 		gmw.GetLogger(ctx).Error("meta information incomplete, cannot post consume rerank quota",
 			zap.Int("token_id", meta.TokenId),

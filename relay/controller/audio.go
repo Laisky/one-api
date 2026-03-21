@@ -189,6 +189,7 @@ func RelayAudioHelper(c *gin.Context, relayMode int) *relaymodel.ErrorWithStatus
 		provisionalLogId := recordProvisionalLog(c, meta, audioModel, preConsumedQuota)
 		c.Set(ctxkey.ProvisionalLogId, provisionalLogId)
 	}
+	provLogID := c.GetInt(ctxkey.ProvisionalLogId)
 	succeed := false
 	defer func() {
 		if succeed {
@@ -336,6 +337,14 @@ func RelayAudioHelper(c *gin.Context, relayMode int) *relaymodel.ErrorWithStatus
 	// }
 
 	if resp.StatusCode != http.StatusOK {
+		// Reconcile provisional log to 0 since upstream returned error
+		if provLogID > 0 {
+			if err := model.ReconcileConsumeLog(ctx, provLogID, 0,
+				"upstream error, refunded", 0, 0, 0, nil); err != nil {
+				lg.Warn("failed to reconcile provisional log on upstream error",
+					zap.Error(err), zap.Int("provisional_log_id", provLogID))
+			}
+		}
 		// Reconcile provisional record to 0 since upstream returned error
 		if err := model.UpdateUserRequestCostQuotaByRequestID(userId, c.GetString(ctxkey.RequestId), 0); err != nil {
 			lg.Warn("update user request cost to zero failed", zap.Error(err))
@@ -372,7 +381,7 @@ func RelayAudioHelper(c *gin.Context, relayMode int) *relaymodel.ErrorWithStatus
 			ElapsedTime:      helper.CalcElapsedTime(meta.StartTime), // capture request latency in ms
 		}
 		graceful.GoCritical(bgctx, "audioPostConsumeWithLog", func(cctx context.Context) {
-			billing.PostConsumeQuotaWithLog(cctx, tokenId, quotaDelta, quota, entry)
+			billing.PostConsumeQuotaWithLog(cctx, tokenId, quotaDelta, quota, entry, provLogID)
 		})
 
 		// Reconcile user request cost to final quota (override provisional value)
