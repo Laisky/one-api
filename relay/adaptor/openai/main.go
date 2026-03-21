@@ -293,7 +293,8 @@ streamLoop:
 		lg.Error("error reading stream", zap.Error(err), zap.Int("scanner_max_token_size", helper.DefaultScannerMaxTokenSize))
 	}
 
-	// Ensure stream termination is sent to client
+	// Let the streamRewriter finalize if present, but do NOT fabricate a
+	// [DONE] when the upstream didn't send one — be an honest proxy.
 	if streamRewriter != nil {
 		streamRewriter.FinalizeUsage(usage)
 		handled, handledDone := streamRewriter.HandleDone(c)
@@ -302,12 +303,10 @@ streamLoop:
 				doneRendered = true
 			}
 		} else if !doneRendered {
-			render.Done(c)
-			doneRendered = true
+			lg.Warn("upstream chat completion stream ended without sending [DONE]")
 		}
 	} else if !doneRendered {
-		render.Done(c)
-		doneRendered = true
+		lg.Warn("upstream chat completion stream ended without sending [DONE]")
 	}
 
 	// Clean up resources
@@ -1282,8 +1281,13 @@ func ResponseAPIStreamHandler(c *gin.Context, resp *http.Response, relayMode int
 		return ErrorWrapper(err, "read_stream_failed", http.StatusInternalServerError), responseText, usage
 	}
 
+	// Do NOT fabricate a [DONE] if the upstream didn't send one.
+	// An honest proxy must let the client observe the same stream termination
+	// behaviour as the upstream API.
 	if !doneRendered {
-		render.Done(c)
+		lg.Warn("upstream response api stream ended without sending [DONE]",
+			zap.Int("forwarded_chunks", forwardedChunks),
+		)
 	}
 
 	if err := resp.Body.Close(); err != nil {
@@ -1446,9 +1450,23 @@ func ResponseAPIDirectStreamHandler(c *gin.Context, resp *http.Response, relayMo
 	doneRendered := false
 	forwardedChunks := 0
 
+	// pendingEventType tracks the SSE "event:" line that precedes each "data:" line.
+	// The Responses API uses typed SSE events (e.g. "event: response.output_text.delta")
+	// and we must forward them faithfully so the client sees the same wire format as the
+	// upstream official API.
+	pendingEventType := ""
+
 	// Process each line from the stream
 	for scanner.Scan() {
-		data := openai_compatible.NormalizeDataLine(scanner.Text())
+		line := scanner.Text()
+
+		// Capture SSE "event:" lines to forward alongside the subsequent "data:" line.
+		if strings.HasPrefix(line, "event:") {
+			pendingEventType = strings.TrimSpace(strings.TrimPrefix(line, "event:"))
+			continue
+		}
+
+		data := openai_compatible.NormalizeDataLine(line)
 
 		lg.Debug("receive stream event", zap.String("event", data))
 
@@ -1470,6 +1488,11 @@ func ResponseAPIDirectStreamHandler(c *gin.Context, resp *http.Response, relayMo
 		if err != nil {
 			// Log the error with more context but continue processing
 			lg.Debug("skipping unparseable stream chunk", zap.String("chunk", data), zap.Error(err))
+			// Still forward the raw event to the client even if we can't parse it
+			// internally — be a faithful proxy.
+			render.SSEEvent(c, pendingEventType, data)
+			pendingEventType = ""
+			forwardedChunks++
 			continue
 		}
 
@@ -1482,7 +1505,10 @@ func ResponseAPIDirectStreamHandler(c *gin.Context, resp *http.Response, relayMo
 			// Convert streaming event to ResponseAPIResponse for processing
 			responseAPIChunk = ConvertStreamEventToResponse(streamEvent)
 		} else {
-			// Skip this chunk if we can't parse it
+			// Still forward — don't silently drop events the client expects.
+			render.SSEEvent(c, pendingEventType, data)
+			pendingEventType = ""
+			forwardedChunks++
 			continue
 		}
 
@@ -1506,8 +1532,10 @@ func ResponseAPIDirectStreamHandler(c *gin.Context, resp *http.Response, relayMo
 			}
 		}
 
-		// Pass through the original Response API event directly to client
-		render.StringData(c, string(data))
+		// Pass through the original Response API event directly to client,
+		// including the SSE event type to match upstream wire format.
+		render.SSEEvent(c, pendingEventType, data)
+		pendingEventType = ""
 		forwardedChunks++
 		if forwardedChunks == 1 {
 			lg.Debug("first response api native stream chunk flushed to client")
@@ -1519,8 +1547,14 @@ func ResponseAPIDirectStreamHandler(c *gin.Context, resp *http.Response, relayMo
 		return ErrorWrapper(err, "read_stream_failed", http.StatusInternalServerError), responseText, usage
 	}
 
+	// Do NOT fabricate a [DONE] if the upstream didn't send one.
+	// An honest proxy must let the client observe the same stream termination
+	// behaviour as the upstream API: if the upstream connection dropped before
+	// sending [DONE], the client should see the connection close without it.
 	if !doneRendered {
-		render.Done(c)
+		lg.Warn("upstream stream ended without sending [DONE]",
+			zap.Int("forwarded_chunks", forwardedChunks),
+		)
 	}
 
 	if err := resp.Body.Close(); err != nil {

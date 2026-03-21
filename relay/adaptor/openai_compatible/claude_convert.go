@@ -240,7 +240,7 @@ func marshalClaudeHTTPResponse(orig *http.Response, payload relaymodel.ClaudeRes
 // ConvertOpenAIStreamToClaudeSSE reads an OpenAI-compatible chat completion/response-api SSE stream
 // and writes Claude-native SSE events to the client, returning computed usage.
 func ConvertOpenAIStreamToClaudeSSE(c *gin.Context, resp *http.Response, promptTokens int, modelName string) (*relaymodel.Usage, *relaymodel.ErrorWithStatusCode) {
-	_ = gmw.GetLogger(c)
+	lg := gmw.GetLogger(c)
 
 	// Prepare client for SSE
 	common.SetEventStreamHeaders(c)
@@ -260,8 +260,25 @@ func ConvertOpenAIStreamToClaudeSSE(c *gin.Context, resp *http.Response, promptT
 	textIndex := -1
 	toolStarted := map[string]int{} // tool_call_id -> index
 
+	// writeClaudeSSE writes a Claude-format SSE event: "event: <type>\ndata: <json>\n\n".
+	// The event type is extracted from the "type" field of the payload.
+	writeClaudeSSE := func(event map[string]any) {
+		b, err := json.Marshal(event)
+		if err != nil {
+			return
+		}
+		eventType, _ := event["type"].(string)
+		if eventType != "" {
+			c.Writer.Write([]byte("event: " + eventType + "\n")) //nolint:errcheck
+		}
+		c.Writer.Write([]byte("data: "))   //nolint:errcheck
+		c.Writer.Write(b)                   //nolint:errcheck
+		c.Writer.Write([]byte("\n\n"))      //nolint:errcheck
+		c.Writer.(http.Flusher).Flush()
+	}
+
 	// Emit message_start
-	msgStart := map[string]any{
+	writeClaudeSSE(map[string]any{
 		"type": "message_start",
 		"message": map[string]any{
 			"type":    "message",
@@ -269,14 +286,9 @@ func ConvertOpenAIStreamToClaudeSSE(c *gin.Context, resp *http.Response, promptT
 			"model":   modelName,
 			"content": []any{},
 		},
-	}
-	if b, err := json.Marshal(msgStart); err == nil {
-		c.Writer.Write([]byte("data: "))
-		c.Writer.Write(b)
-		c.Writer.Write([]byte("\n\n"))
-		c.Writer.(http.Flusher).Flush()
-	}
+	})
 
+	upstreamDone := false
 	for scanner.Scan() {
 		line := scanner.Text()
 		if !strings.HasPrefix(line, "data:") {
@@ -284,6 +296,7 @@ func ConvertOpenAIStreamToClaudeSSE(c *gin.Context, resp *http.Response, promptT
 		}
 		payload := strings.TrimSpace(strings.TrimPrefix(line, "data:"))
 		if payload == "[DONE]" {
+			upstreamDone = true
 			break
 		}
 
@@ -307,99 +320,59 @@ func ConvertOpenAIStreamToClaudeSSE(c *gin.Context, resp *http.Response, promptT
 
 			if thinkingContent != nil && *thinkingContent != "" {
 				if thinkingIndex == -1 {
-					// Start thinking block at next index
-					start := map[string]any{
+					writeClaudeSSE(map[string]any{
 						"type":          "content_block_start",
 						"index":         nextIndex,
 						"content_block": map[string]any{"type": "thinking", "thinking": ""},
-					}
-					if b, e := json.Marshal(start); e == nil {
-						c.Writer.Write([]byte("data: "))
-						c.Writer.Write(b)
-						c.Writer.Write([]byte("\n\n"))
-						c.Writer.(http.Flusher).Flush()
-					}
+					})
 					thinkingIndex = nextIndex
 					nextIndex++
 				}
 				thinkingDelta := *thinkingContent
 				accumThinking += thinkingDelta
-				delta := map[string]any{
+				writeClaudeSSE(map[string]any{
 					"type":  "content_block_delta",
 					"index": thinkingIndex,
 					"delta": map[string]any{"type": "thinking_delta", "thinking": thinkingDelta},
-				}
-				if b, e := json.Marshal(delta); e == nil {
-					c.Writer.Write([]byte("data: "))
-					c.Writer.Write(b)
-					c.Writer.Write([]byte("\n\n"))
-					c.Writer.(http.Flusher).Flush()
-				}
+				})
 			}
 
 			// Signature delta (attached to thinking block)
 			if choice.Delta.Signature != nil && *choice.Delta.Signature != "" {
 				if thinkingIndex == -1 {
-					// Start thinking block to attach signature
-					start := map[string]any{
+					writeClaudeSSE(map[string]any{
 						"type":          "content_block_start",
 						"index":         nextIndex,
 						"content_block": map[string]any{"type": "thinking", "thinking": ""},
-					}
-					if b, e := json.Marshal(start); e == nil {
-						c.Writer.Write([]byte("data: "))
-						c.Writer.Write(b)
-						c.Writer.Write([]byte("\n\n"))
-						c.Writer.(http.Flusher).Flush()
-					}
+					})
 					thinkingIndex = nextIndex
 					nextIndex++
 				}
-				sig := *choice.Delta.Signature
-				delta := map[string]any{
+				writeClaudeSSE(map[string]any{
 					"type":  "content_block_delta",
 					"index": thinkingIndex,
-					"delta": map[string]any{"type": "signature_delta", "signature": sig},
-				}
-				if b, e := json.Marshal(delta); e == nil {
-					c.Writer.Write([]byte("data: "))
-					c.Writer.Write(b)
-					c.Writer.Write([]byte("\n\n"))
-					c.Writer.(http.Flusher).Flush()
-				}
+					"delta": map[string]any{"type": "signature_delta", "signature": *choice.Delta.Signature},
+				})
 			}
 
 			// Text delta
 			deltaText := choice.Delta.StringContent()
 			if deltaText != "" {
 				if textIndex == -1 {
-					// Start text content block at next index
-					start := map[string]any{
+					writeClaudeSSE(map[string]any{
 						"type":          "content_block_start",
 						"index":         nextIndex,
 						"content_block": map[string]any{"type": "text", "text": ""},
-					}
-					if b, e := json.Marshal(start); e == nil {
-						c.Writer.Write([]byte("data: "))
-						c.Writer.Write(b)
-						c.Writer.Write([]byte("\n\n"))
-						c.Writer.(http.Flusher).Flush()
-					}
+					})
 					textIndex = nextIndex
 					nextIndex++
 				}
 				accumText += deltaText
-				delta := map[string]any{
+				writeClaudeSSE(map[string]any{
 					"type":  "content_block_delta",
 					"index": textIndex,
 					"delta": map[string]any{"type": "text_delta", "text": deltaText},
-				}
-				if b, e := json.Marshal(delta); e == nil {
-					c.Writer.Write([]byte("data: "))
-					c.Writer.Write(b)
-					c.Writer.Write([]byte("\n\n"))
-					c.Writer.(http.Flusher).Flush()
-				}
+				})
 			}
 
 			// Tool call deltas
@@ -411,11 +384,10 @@ func ConvertOpenAIStreamToClaudeSSE(c *gin.Context, resp *http.Response, promptT
 					}
 					idx, exists := toolStarted[id]
 					if !exists {
-						// Start a new tool_use block
 						idx = nextIndex
 						toolStarted[id] = idx
 						nextIndex++
-						start := map[string]any{
+						writeClaudeSSE(map[string]any{
 							"type":  "content_block_start",
 							"index": idx,
 							"content_block": map[string]any{
@@ -429,16 +401,9 @@ func ConvertOpenAIStreamToClaudeSSE(c *gin.Context, resp *http.Response, promptT
 								}(),
 								"input": map[string]any{},
 							},
-						}
-						if b, e := json.Marshal(start); e == nil {
-							c.Writer.Write([]byte("data: "))
-							c.Writer.Write(b)
-							c.Writer.Write([]byte("\n\n"))
-							c.Writer.(http.Flusher).Flush()
-						}
+						})
 					}
 
-					// Delta arguments
 					var argStr string
 					if tc.Function != nil && tc.Function.Arguments != nil {
 						switch v := tc.Function.Arguments.(type) {
@@ -452,17 +417,11 @@ func ConvertOpenAIStreamToClaudeSSE(c *gin.Context, resp *http.Response, promptT
 					}
 					if argStr != "" {
 						accumToolArgs += argStr
-						delta := map[string]any{
+						writeClaudeSSE(map[string]any{
 							"type":  "content_block_delta",
 							"index": idx,
 							"delta": map[string]any{"type": "input_json_delta", "partial_json": argStr},
-						}
-						if b, e := json.Marshal(delta); e == nil {
-							c.Writer.Write([]byte("data: "))
-							c.Writer.Write(b)
-							c.Writer.Write([]byte("\n\n"))
-							c.Writer.(http.Flusher).Flush()
-						}
+						})
 					}
 				}
 			}
@@ -485,46 +444,22 @@ func ConvertOpenAIStreamToClaudeSSE(c *gin.Context, resp *http.Response, promptT
 					"ephemeral_1h_input_tokens": usage.CacheWrite1hTokens,
 				}
 			}
-			msgDelta := map[string]any{
+			writeClaudeSSE(map[string]any{
 				"type":  "message_delta",
 				"usage": usageDelta,
-			}
-			if b, e := json.Marshal(msgDelta); e == nil {
-				c.Writer.Write([]byte("data: "))
-				c.Writer.Write(b)
-				c.Writer.Write([]byte("\n\n"))
-				c.Writer.(http.Flusher).Flush()
-			}
+			})
 		}
 	}
 
-	// Close any started blocks
+	// Close any started content blocks.
 	if thinkingIndex >= 0 {
-		stop := map[string]any{"type": "content_block_stop", "index": thinkingIndex}
-		if b, e := json.Marshal(stop); e == nil {
-			c.Writer.Write([]byte("data: "))
-			c.Writer.Write(b)
-			c.Writer.Write([]byte("\n\n"))
-			c.Writer.(http.Flusher).Flush()
-		}
+		writeClaudeSSE(map[string]any{"type": "content_block_stop", "index": thinkingIndex})
 	}
 	if textIndex >= 0 {
-		stop := map[string]any{"type": "content_block_stop", "index": textIndex}
-		if b, e := json.Marshal(stop); e == nil {
-			c.Writer.Write([]byte("data: "))
-			c.Writer.Write(b)
-			c.Writer.Write([]byte("\n\n"))
-			c.Writer.(http.Flusher).Flush()
-		}
+		writeClaudeSSE(map[string]any{"type": "content_block_stop", "index": textIndex})
 	}
 	for _, idx := range toolStarted {
-		stop := map[string]any{"type": "content_block_stop", "index": idx}
-		if b, e := json.Marshal(stop); e == nil {
-			c.Writer.Write([]byte("data: "))
-			c.Writer.Write(b)
-			c.Writer.Write([]byte("\n\n"))
-			c.Writer.(http.Flusher).Flush()
-		}
+		writeClaudeSSE(map[string]any{"type": "content_block_stop", "index": idx})
 	}
 
 	// Finalize usage if upstream omitted
@@ -535,16 +470,15 @@ func ConvertOpenAIStreamToClaudeSSE(c *gin.Context, resp *http.Response, promptT
 		usage.TotalTokens = usage.PromptTokens + usage.CompletionTokens
 	}
 
-	// message_stop and [DONE]
-	msgStop := map[string]any{"type": "message_stop"}
-	if b, e := json.Marshal(msgStop); e == nil {
-		c.Writer.Write([]byte("data: "))
-		c.Writer.Write(b)
-		c.Writer.Write([]byte("\n\n"))
-		c.Writer.(http.Flusher).Flush()
+	// Only emit terminal message_stop when the upstream completed normally.
+	// The Claude Messages API does NOT use [DONE] — the stream simply closes
+	// after message_stop. If upstream dropped, do not fabricate message_stop;
+	// let the client observe the connection close without it (honest proxy).
+	if upstreamDone {
+		writeClaudeSSE(map[string]any{"type": "message_stop"})
+	} else {
+		lg.Warn("upstream stream ended without [DONE], not emitting message_stop for Claude SSE conversion")
 	}
-	c.Writer.Write([]byte("data: [DONE]\n\n"))
-	c.Writer.(http.Flusher).Flush()
 	_ = resp.Body.Close()
 	return usage, nil
 }

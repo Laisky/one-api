@@ -72,7 +72,11 @@ func TestDoResponseClaudeStreamingSkipsConversion(t *testing.T) {
 
 	_, exists := c.Get(ctxkey.ConvertedResponse)
 	require.False(t, exists)
-	require.Contains(t, recorder.Body.String(), "data: [DONE]")
+	// Claude Messages API does not use [DONE]; the stream ends after message_stop.
+	body := recorder.Body.String()
+	require.Contains(t, body, "event: message_start")
+	require.Contains(t, body, "event: message_stop")
+	require.NotContains(t, body, "[DONE]")
 }
 
 func TestDoResponseClaudeStreamingConvertsToClaudeSSE(t *testing.T) {
@@ -111,10 +115,14 @@ func TestDoResponseClaudeStreamingConvertsToClaudeSSE(t *testing.T) {
 	require.Greater(t, usage.TotalTokens, 0)
 
 	body := recorder.Body.String()
+	require.Contains(t, body, "event: message_start")
 	require.Contains(t, body, "\"type\":\"message_start\"")
+	require.Contains(t, body, "event: content_block_delta")
 	require.Contains(t, body, "\"type\":\"content_block_delta\"")
 	require.Contains(t, body, "Hello")
-	require.Contains(t, body, "data: [DONE]")
+	require.Contains(t, body, "event: message_stop")
+	// Claude Messages API does not use [DONE].
+	require.NotContains(t, body, "[DONE]")
 }
 
 func TestDoResponseClaudeNonStreamDefersToConverter(t *testing.T) {

@@ -32,3 +32,22 @@ func ObjectData(c *gin.Context, object any) error {
 func Done(c *gin.Context) {
 	StringData(c, "[DONE]")
 }
+
+// SSEEvent writes a complete SSE event with an optional event type prefix and data payload.
+// This produces the standard SSE wire format used by the Responses API:
+//
+//	event: <type>\n
+//	data: <payload>\n\n
+//
+// If eventType is empty, only the data line is written (same as StringData).
+func SSEEvent(c *gin.Context, eventType string, data string) {
+	data = strings.TrimPrefix(data, "data: ")
+	data = strings.TrimSuffix(data, "\r")
+	if eventType != "" {
+		// Write the event type line directly; event types are single-line
+		// tokens that need no escaping.
+		c.Writer.Write([]byte("event: " + eventType + "\n")) //nolint:errcheck
+	}
+	c.Render(-1, common.CustomEvent{Data: "data: " + data})
+	c.Writer.Flush()
+}
