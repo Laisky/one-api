@@ -319,7 +319,7 @@ export function PersonalSettings() {
         return;
       }
 
-      const attResp = await startRegistration({ optionsJSON: beginRes.data.data });
+      const attResp = await startRegistration({ optionsJSON: beginRes.data.data.publicKey });
 
       const finishRes = await api.post(
         `/api/user/passkey/register/finish?name=${encodeURIComponent(name)}`,

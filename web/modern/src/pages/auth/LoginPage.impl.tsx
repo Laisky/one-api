@@ -60,7 +60,7 @@ export function LoginPage() {
       }
 
       // Step 2: Authenticate via browser WebAuthn API
-      const assertionResp = await startAuthentication({ optionsJSON: beginRes.data.data });
+      const assertionResp = await startAuthentication({ optionsJSON: beginRes.data.data.publicKey });
 
       // Step 3: Send assertion to server
       const finishRes = await api.post('/api/user/passkey/login/finish', assertionResp);
