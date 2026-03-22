@@ -280,6 +280,9 @@ func PasskeyLoginFinish(c *gin.Context) {
 	}
 
 	// The handler resolves the user from the credential's userHandle.
+	// We capture the resolved user in the closure so we can use it after FinishDiscoverableLogin,
+	// because sessionData.UserID is empty for discoverable login (no user is known at begin time).
+	var resolvedUser *model.User
 	handler := func(rawID, userHandle []byte) (webauthn.User, error) {
 		if len(userHandle) < 8 {
 			return nil, errors.New("invalid user handle")
@@ -292,6 +295,7 @@ func PasskeyLoginFinish(c *gin.Context) {
 		if user.Status != model.UserStatusEnabled {
 			return nil, errors.New("user account is disabled")
 		}
+		resolvedUser = user
 		wUser, err := model.NewWebAuthnUser(user)
 		if err != nil {
 			return nil, err
@@ -311,16 +315,8 @@ func PasskeyLoginFinish(c *gin.Context) {
 		model.UpdatePasskeyAfterLogin(dbCred.Id, credential.Authenticator.SignCount, credential.Flags.BackupState)
 	}
 
-	// Resolve the user and set up the session.
-	userHandle := sessionData.UserID
-	if len(userHandle) < 8 {
-		respondError(c, "invalid user handle in session")
-		return
-	}
-	userId := int(binary.BigEndian.Uint64(userHandle))
-	user, err := model.GetUserById(userId, false)
-	if err != nil {
-		respondError(c, "user not found")
+	if resolvedUser == nil {
+		respondError(c, "failed to resolve user from credential")
 		return
 	}
 
@@ -329,7 +325,7 @@ func PasskeyLoginFinish(c *gin.Context) {
 	_ = session.Save()
 
 	// Use the same login setup as password login.
-	SetupLogin(user, c)
+	SetupLogin(resolvedUser, c)
 }
 
 // ------------------------------------------------------------------

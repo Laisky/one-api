@@ -129,10 +129,11 @@ sequenceDiagram
     F->>+B: navigator.credentials.get(options)
     B-->>-F: User selects Passkey & completes verification
     F->>+S: POST /login/finish
-    S->>+D: Parse userHandle, load user & cred
+    S->>S: Invoke handler callback to resolve user from credential's userHandle
+    S->>+D: Load user & credential by userHandle
     D-->>-S: user & credential data
     S->>S: Verify signature & check signCount
-    S->>S: Establish session
+    S->>S: Use resolved user (from handler closure) to establish session
     S-->>-F: user data + cookie
     deactivate F
 ```
@@ -278,6 +279,8 @@ WebAuthn ceremony challenge data is stored in Gin's cookie-based session:
 
 Data is serialized as JSON and stored in the session, read and deleted during the finish step.
 
+**Important caveat for discoverable login**: `BeginDiscoverableLogin` does not know which user will authenticate, so `sessionData.UserID` is **empty** after deserialization. The user is resolved inside the `FinishDiscoverableLogin` handler callback (which receives the credential's `userHandle`). The finish handler must capture the resolved user via a closure variable — do **not** read `sessionData.UserID` to determine the logged-in user.
+
 ### 6.4 Security Considerations
 
 1. **Origin validation**: go-webauthn library automatically validates `rpId` and `origin` match
@@ -338,7 +341,8 @@ curl -X POST http://localhost:3000/api/user/passkey/login/begin
 | "WebAuthn not available"                                  | `webauthn.New()` initialization failed                                                                                                 | Check `WEBAUTHN_RP_ID` and `WEBAUTHN_RP_ORIGINS` config                                                                                           |
 | Browser does not prompt for authentication                | WebAuthn not supported or not HTTPS                                                                                                    | Use localhost or configure HTTPS                                                                                                                  |
 | "registration failed: origin mismatch"                    | Frontend origin does not match backend config                                                                                          | Ensure `WEBAUTHN_RP_ORIGINS` includes the actual origin                                                                                           |
-| "invalid user handle"                                     | userHandle decode failed                                                                                                               | Check for DB ID encoding issues                                                                                                                   |
+| "invalid user handle in session"                          | Code reads `sessionData.UserID` after discoverable login, but it is empty because `BeginDiscoverableLogin` doesn't know the user upfront | Resolve the user inside the `FinishDiscoverableLogin` handler callback and capture it via closure; never rely on `sessionData.UserID` for discoverable login. See §6.3 |
+| "invalid user handle"                                     | userHandle in credential is shorter than 8 bytes                                                                                       | Check for DB ID encoding issues                                                                                                                   |
 | Passkey option not shown on login                         | `browserSupportsWebAuthn()` returns false                                                                                              | Upgrade browser or use one that supports WebAuthn                                                                                                 |
 | signCount not incrementing                                | Some authenticators do not support signCount                                                                                           | Normal, does not affect security                                                                                                                  |
 
