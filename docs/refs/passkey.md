@@ -37,6 +37,8 @@ This project implements Passkey (passwordless) authentication based on the **Web
                                    │  attestation_type    │
                                    │  aaguid              │
                                    │  sign_count          │
+                                   │  backup_eligible     │
+                                   │  backup_state        │
                                    │  transport           │
                                    │  created_at          │
                                    │  updated_at          │
@@ -189,11 +191,12 @@ if (!browserSupportsWebAuthn()) {
 }
 
 // 2. Get registration options
+// IMPORTANT: go-webauthn returns { publicKey: { challenge, rp, user, ... } }
+// but @simplewebauthn/browser expects the inner publicKey object directly.
 const beginRes = await api.post('/api/user/passkey/register/begin');
-const options = beginRes.data.data;
 
-// 3. Call browser WebAuthn API
-const attResp = await startRegistration({ optionsJSON: options });
+// 3. Call browser WebAuthn API — must pass .publicKey, not the wrapper object
+const attResp = await startRegistration({ optionsJSON: beginRes.data.data.publicKey });
 
 // 4. Send attestation to server
 const finishRes = await api.post(`/api/user/passkey/register/finish?name=${encodeURIComponent(name)}`, attResp);
@@ -205,10 +208,12 @@ const finishRes = await api.post(`/api/user/passkey/register/finish?name=${encod
 import { startAuthentication } from '@simplewebauthn/browser';
 
 // 1. Get assertion options
+// IMPORTANT: go-webauthn returns { publicKey: { challenge, rpId, ... } }
+// but @simplewebauthn/browser expects the inner publicKey object directly.
 const beginRes = await api.post('/api/user/passkey/login/begin');
 
-// 2. Call browser WebAuthn API
-const assertionResp = await startAuthentication({ optionsJSON: beginRes.data.data });
+// 2. Call browser WebAuthn API — must pass .publicKey, not the wrapper object
+const assertionResp = await startAuthentication({ optionsJSON: beginRes.data.data.publicKey });
 
 // 3. Send assertion to server
 const finishRes = await api.post('/api/user/passkey/login/finish', assertionResp);
@@ -233,7 +238,7 @@ if (finishRes.data.success) {
 
 ### 6.1 File Structure
 
-```
+```text
 controller/passkey.go           # HTTP 处理函数（注册/登录/管理）
 model/passkey.go                # PasskeyCredential 数据模型和 CRUD
 model/passkey_webauthn.go       # WebAuthn User 接口适配器
@@ -278,9 +283,10 @@ Data is serialized as JSON and stored in the session, read and deleted during th
 1. **Origin validation**: go-webauthn library automatically validates `rpId` and `origin` match
 2. **One-time challenge**: Each begin generates a new challenge, deleted after finish
 3. **signCount increment check**: Updates sign_count after each successful authentication, library auto-detects cloning
-4. **Resident Key requirement**: Set `ResidentKeyRequirementRequired` during registration to ensure discoverable credential
-5. **Exclude existing credentials**: Use `excludeCredentials` during registration to prevent duplicate registration of the same authenticator
-6. **User status check**: Verify user `Status == UserStatusEnabled` during login
+4. **Backup flags tracking**: Stores `BackupEligible` (BE) and `BackupState` (BS) flags per credential; BS is updated after each login via `UpdatePasskeyAfterLogin`
+5. **Resident Key requirement**: Set `ResidentKeyRequirementRequired` during registration to ensure discoverable credential
+6. **Exclude existing credentials**: Use `excludeCredentials` during registration to prevent duplicate registration of the same authenticator
+7. **User status check**: Verify user `Status == UserStatusEnabled` during login
 
 ## 7. i18n Translation
 
@@ -326,14 +332,15 @@ curl -X POST http://localhost:3000/api/user/passkey/login/begin
 
 ## 9. Troubleshooting
 
-| Issue                                      | Cause                                         | Solution                                                |
-| ------------------------------------------ | --------------------------------------------- | ------------------------------------------------------- |
-| "WebAuthn not available"                   | `webauthn.New()` initialization failed        | Check `WEBAUTHN_RP_ID` and `WEBAUTHN_RP_ORIGINS` config |
-| Browser does not prompt for authentication | WebAuthn not supported or not HTTPS           | Use localhost or configure HTTPS                        |
-| "registration failed: origin mismatch"     | Frontend origin does not match backend config | Ensure `WEBAUTHN_RP_ORIGINS` includes the actual origin |
-| "invalid user handle"                      | userHandle decode failed                      | Check for DB ID encoding issues                         |
-| Passkey option not shown on login          | `browserSupportsWebAuthn()` returns false     | Upgrade browser or use one that supports WebAuthn       |
-| signCount not incrementing                 | Some authenticators do not support signCount  | Normal, does not affect security                        |
+| Issue                                                     | Cause                                                                                                                                  | Solution                                                                                                                                          |
+| --------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Cannot read properties of undefined (reading 'replace')` | Frontend passes the raw go-webauthn response object to `@simplewebauthn/browser`, but the library expects the inner `publicKey` object | Pass `response.data.data.publicKey` (not `response.data.data`) as `optionsJSON` to `startRegistration` / `startAuthentication`. See §5.2 and §5.3 |
+| "WebAuthn not available"                                  | `webauthn.New()` initialization failed                                                                                                 | Check `WEBAUTHN_RP_ID` and `WEBAUTHN_RP_ORIGINS` config                                                                                           |
+| Browser does not prompt for authentication                | WebAuthn not supported or not HTTPS                                                                                                    | Use localhost or configure HTTPS                                                                                                                  |
+| "registration failed: origin mismatch"                    | Frontend origin does not match backend config                                                                                          | Ensure `WEBAUTHN_RP_ORIGINS` includes the actual origin                                                                                           |
+| "invalid user handle"                                     | userHandle decode failed                                                                                                               | Check for DB ID encoding issues                                                                                                                   |
+| Passkey option not shown on login                         | `browserSupportsWebAuthn()` returns false                                                                                              | Upgrade browser or use one that supports WebAuthn                                                                                                 |
+| signCount not incrementing                                | Some authenticators do not support signCount                                                                                           | Normal, does not affect security                                                                                                                  |
 
 ## 10. References
 
