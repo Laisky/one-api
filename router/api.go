@@ -42,6 +42,8 @@ func SetApiRouter(router *gin.Engine) {
 		{
 			userRoute.POST("/register", middleware.CriticalRateLimit(), middleware.TurnstileCheck(), controller.Register)
 			userRoute.POST("/login", middleware.CriticalRateLimit(), middleware.TurnstileCheck(), controller.Login)
+			userRoute.POST("/passkey/login/begin", middleware.CriticalRateLimit(), controller.PasskeyLoginBegin)
+			userRoute.POST("/passkey/login/finish", middleware.CriticalRateLimit(), controller.PasskeyLoginFinish)
 			userRoute.GET("/logout", controller.Logout)
 
 			selfRoute := userRoute.Group("/")
@@ -60,6 +62,13 @@ func SetApiRouter(router *gin.Engine) {
 				selfRoute.GET("/totp/setup", controller.SetupTotp)
 				selfRoute.POST("/totp/confirm", controller.ConfirmTotp)
 				selfRoute.POST("/totp/disable", controller.DisableTotp)
+
+				// Passkey (WebAuthn) management – authenticated users
+				selfRoute.GET("/passkey", controller.PasskeyList)
+				selfRoute.POST("/passkey/register/begin", controller.PasskeyRegisterBegin)
+				selfRoute.POST("/passkey/register/finish", controller.PasskeyRegisterFinish)
+				selfRoute.DELETE("/passkey/:id", controller.PasskeyDelete)
+				selfRoute.PUT("/passkey/:id", controller.PasskeyRename)
 			}
 
 			adminRoute := userRoute.Group("/")

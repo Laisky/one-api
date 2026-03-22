@@ -105,6 +105,33 @@
       "get_invite_link": "Obtener enlace de invitación",
       "title": "Token de acceso e invitación"
     },
+    "passkey": {
+      "delete_button": "Eliminar",
+      "delete_confirm": "¿Estás seguro de que deseas eliminar esta passkey?",
+      "description": "Usa la biometría, llaves de seguridad o tu dispositivo para iniciar sesión sin contraseña.",
+      "errors": {
+        "delete_failed": "Error al eliminar la passkey",
+        "load_failed": "Error al cargar las passkeys",
+        "not_supported": "Las passkeys no son compatibles con este navegador",
+        "register_failed": "Error al registrar la passkey",
+        "rename_failed": "Error al renombrar la passkey",
+        "webauthn_unavailable": "WebAuthn no está disponible"
+      },
+      "list_title": "Tus Passkeys",
+      "name_label": "Nombre de la Passkey",
+      "name_placeholder": "p. ej. MacBook Touch ID",
+      "no_passkeys": "No hay passkeys registradas.",
+      "no_passkeys_desc": "Agrega una passkey para habilitar el inicio de sesión sin contraseña con biometría o una llave de seguridad.",
+      "not_supported_desc": "Tu navegador no es compatible con passkeys. Prueba con un navegador moderno como Chrome, Safari o Edge.",
+      "processing": "Procesando...",
+      "recommended": "Recomendado",
+      "register_button": "Agregar Passkey",
+      "registered": "Registrada",
+      "rename_button": "Renombrar",
+      "rename_placeholder": "Introduce el nuevo nombre",
+      "sign_count": "Número de usos",
+      "title": "Passkeys (WebAuthn)"
+    },
     "profile_info": {
       "bind_email": "Bind Email",
       "bind_success": "Email updated successfully",
@@ -118,8 +145,6 @@
       "email_verification_code_placeholder": "Enter email verification code",
       "failed": "La actualización falló",
       "load_failed": "Failed to load profile information",
-      "password": "Nueva contraseña (deja vacío para mantener la actual)",
-      "password_placeholder": "Introduce una nueva contraseña",
       "send_code": "Send Verification Code",
       "send_code_success": "Verification code sent. Check your inbox.",
       "sending_code": "Sending code...",
@@ -128,6 +153,32 @@
       "update_button": "Actualizar perfil",
       "updating": "Actualizando...",
       "username": "Nombre de usuario"
+    },
+    "security": {
+      "description": "Gestiona cómo inicias sesión y protege tu cuenta.",
+      "password": {
+        "confirm_password": "Confirmar contraseña",
+        "confirm_password_placeholder": "Vuelve a introducir la nueva contraseña",
+        "description": "Usa una contraseña segura y única como método alternativo de inicio de sesión.",
+        "failed": "Error al actualizar la contraseña",
+        "mismatch": "Las contraseñas no coinciden",
+        "new_password": "Nueva contraseña",
+        "new_password_placeholder": "Introduce la nueva contraseña",
+        "success": "Contraseña actualizada correctamente",
+        "title": "Contraseña",
+        "update_button": "Actualizar contraseña",
+        "updating": "Actualizando..."
+      },
+      "status": {
+        "passkey_off": "Sin passkey",
+        "passkey_on": "Passkey habilitada",
+        "password_off": "Sin contraseña",
+        "password_on": "Contraseña establecida",
+        "title": "Resumen de seguridad",
+        "totp_off": "Sin TOTP",
+        "totp_on": "TOTP habilitado"
+      },
+      "title": "Seguridad de la cuenta"
     },
     "totp": {
       "cancel": "Cancelar",
@@ -217,12 +268,12 @@
       "QuotaRemindThreshold": "Se notifica a los usuarios cuando la cuota restante baja de este valor.",
       "RegisterEnabled": "Interruptor maestro para los registros. Desactívalo para bloquear nuevos registros.",
       "RetryTimes": "Reintentos automáticos ante errores transitorios aguas arriba.",
-      "ServerAddress": "URL base pública del servidor (para enlaces y callbacks).",
       "SMTPAccount": "Usuario o correo SMTP usado para autenticarse.",
       "SMTPFrom": "Dirección del remitente para correos salientes.",
       "SMTPPort": "Puerto del servidor SMTP (p. ej. 587 para STARTTLS, 465 para SMTPS).",
       "SMTPServer": "Nombre de host del servidor SMTP.",
       "SMTPToken": "Contraseña o token SMTP usado para autenticarse (se almacena de forma segura).",
+      "ServerAddress": "URL base pública del servidor (para enlaces y callbacks).",
       "SystemName": "Nombre del sistema mostrado en la interfaz y correos.",
       "Theme": "Tema de la UI (berry, air, modern).",
       "TopUpLink": "Enlace externo para comprar o recargar cuota.",

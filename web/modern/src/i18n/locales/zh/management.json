@@ -29,7 +29,6 @@
     "description": "配置并管理 API 路由渠道",
     "edit": {
       "actions": {
-        "add": "Add",
         "cancel": "取消",
         "create": "创建渠道",
         "creating": "正在创建...",
@@ -692,6 +691,7 @@
     },
     "edit": {
       "actions": {
+        "add": "添加",
         "cancel": "取消",
         "create": "创建用户",
         "creating": "正在创建...",

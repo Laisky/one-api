@@ -107,6 +107,10 @@
         },
         "51": {
           "description": "Formato compatible con Gemini OpenAI"
+        },
+        "53": {
+          "description": "Superficie compatible con OpenAI de GitHub Copilot (token intercambiado vía GitHub)",
+          "tip": "La clave del canal debe ser un token de acceso de GitHub; la URL base predeterminada es https://api.githubcopilot.com"
         }
       },
       "cloudflare": {

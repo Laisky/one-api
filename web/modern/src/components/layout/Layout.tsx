@@ -1,8 +1,9 @@
-import { Outlet } from 'react-router-dom';
-import { Header } from './Header';
-import { Footer } from './Footer';
+import { PasskeyPromptBanner } from '@/components/auth/PasskeyPromptBanner';
 import { useResponsive } from '@/hooks/useResponsive';
 import { cn } from '@/lib/utils';
+import { Outlet } from 'react-router-dom';
+import { Footer } from './Footer';
+import { Header } from './Header';
 
 export function Layout() {
   const { isMobile } = useResponsive();
@@ -19,6 +20,7 @@ export function Layout() {
       )}
     >
       <Header />
+      <PasskeyPromptBanner />
 
       <main
         className={cn(

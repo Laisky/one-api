@@ -1,16 +1,19 @@
 import Turnstile from '@/components/Turnstile';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { useNotifications } from '@/components/ui/notifications';
+import { Separator } from '@/components/ui/separator';
 import { useResponsive } from '@/hooks/useResponsive';
 import { api } from '@/lib/api';
 import { useAuthStore } from '@/lib/stores/auth';
 import { loadSystemStatus, type SystemStatus } from '@/lib/utils';
 import { zodResolver } from '@hookform/resolvers/zod';
+import { browserSupportsWebAuthn, startRegistration } from '@simplewebauthn/browser';
 import QRCode from 'qrcode';
 import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
@@ -21,7 +24,6 @@ const personalSchema = z.object({
   username: z.string().min(1, 'Username is required'),
   display_name: z.string().optional(),
   email: z.string().email('Valid email is required').optional(),
-  password: z.string().optional(),
 });
 
 type PersonalForm = z.infer<typeof personalSchema>;
@@ -46,6 +48,26 @@ export function PersonalSettings() {
   const [setupTotpError, setSetupTotpError] = useState('');
   const [confirmTotpError, setConfirmTotpError] = useState('');
   const [disableTotpError, setDisableTotpError] = useState('');
+
+  // Passkey related state
+  interface PasskeyInfo {
+    id: number;
+    credential_name: string;
+    sign_count: number;
+    created_at: number;
+  }
+  const [passkeys, setPasskeys] = useState<PasskeyInfo[]>([]);
+  const [passkeyLoading, setPasskeyLoading] = useState(false);
+  const [passkeyError, setPasskeyError] = useState('');
+  const [showPasskeyName, setShowPasskeyName] = useState(false);
+  const [passkeyName, setPasskeyName] = useState('');
+  const passkeySupported = typeof window !== 'undefined' && browserSupportsWebAuthn();
+
+  // Password change state
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [passwordLoading, setPasswordLoading] = useState(false);
+  const [passwordError, setPasswordError] = useState('');
 
   // System status state
   const [systemStatus, setSystemStatus] = useState<SystemStatus>({});
@@ -75,7 +97,6 @@ export function PersonalSettings() {
       username: user?.username || '',
       display_name: user?.display_name || '',
       email: user?.email || '',
-      password: '',
     },
   });
 
@@ -85,7 +106,6 @@ export function PersonalSettings() {
       username: profile.username || '',
       display_name: profile.display_name || '',
       email: profile.email || '',
-      password: '',
     });
     setEmailVerificationCode('');
     setEmailVerificationError('');
@@ -100,7 +120,6 @@ export function PersonalSettings() {
           username: data.username || '',
           display_name: data.display_name || '',
           email: data.email || '',
-          password: '',
         });
         return true;
       }
@@ -130,7 +149,7 @@ export function PersonalSettings() {
   // Load TOTP status when component mounts
   const loadTotpStatus = async () => {
     try {
-      setTotpError(''); // Clear previous error
+      setTotpError('');
       const res = await api.get('/api/user/totp/status');
       if (res.data.success) {
         setTotpEnabled(res.data.data.totp_enabled);
@@ -146,23 +165,22 @@ export function PersonalSettings() {
     loadStatus();
     loadTotpStatus();
     loadProfile();
+    loadPasskeys();
   }, []);
 
   // Setup TOTP for the user
   const setupTotp = async () => {
     setTotpLoading(true);
-    setSetupTotpError(''); // Clear previous error
+    setSetupTotpError('');
     try {
       const res = await api.get('/api/user/totp/setup');
       if (res.data.success) {
         setTotpSecret(res.data.data.secret);
-        // Generate QR code from URI
         const qrCodeDataURL = await QRCode.toDataURL(res.data.data.qr_code, {
           width: 256,
           margin: 2,
         });
 
-        // Create composite image with system name text on top
         const systemName = systemStatus.system_name || 'One API';
         const compositeImage = await createQRCodeWithText(qrCodeDataURL, systemName);
         setTotpQRCode(compositeImage);
@@ -184,32 +202,26 @@ export function PersonalSettings() {
       const img = new Image();
 
       img.onload = () => {
-        // Set canvas size with extra space for text
         const padding = 30;
         const textHeight = 40;
         canvas.width = img.width + padding * 2;
         canvas.height = img.height + textHeight + padding * 2;
 
-        // Fill white background
         ctx.fillStyle = '#ffffff';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-        // Draw system name text at top
         ctx.fillStyle = '#000000';
         ctx.font = 'bold 18px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         ctx.fillText(text, canvas.width / 2, padding + 10);
 
-        // Draw subtitle
         ctx.font = '12px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
         ctx.fillStyle = '#666666';
         ctx.fillText('Two-Factor Authentication', canvas.width / 2, padding + 28);
 
-        // Draw QR code below text
         ctx.drawImage(img, padding, padding + textHeight, img.width, img.height);
 
-        // Convert to data URL
         resolve(canvas.toDataURL('image/png'));
       };
 
@@ -219,7 +231,7 @@ export function PersonalSettings() {
 
   // Confirm TOTP setup with verification code
   const confirmTotp = async () => {
-    setConfirmTotpError(''); // Clear previous error
+    setConfirmTotpError('');
     if (!/^\d{6}$/.test(totpCode)) {
       setConfirmTotpError(t('personal_settings.totp.errors.invalid_code'));
       return;
@@ -232,7 +244,6 @@ export function PersonalSettings() {
       });
 
       if (res.data.success) {
-        // Success - clear error and update state
         setConfirmTotpError('');
         setTotpEnabled(true);
         setShowTotpSetup(false);
@@ -248,9 +259,10 @@ export function PersonalSettings() {
       setTotpLoading(false);
     }
   };
+
   // Disable TOTP for the user
   const disableTotp = async () => {
-    setDisableTotpError(''); // Clear previous error
+    setDisableTotpError('');
     if (!totpCode) {
       setDisableTotpError(t('personal_settings.totp.errors.missing_code'));
       return;
@@ -263,7 +275,6 @@ export function PersonalSettings() {
       });
 
       if (res.data.success) {
-        // Success - clear error and update state
         setDisableTotpError('');
         setTotpEnabled(false);
         setTotpCode('');
@@ -276,17 +287,117 @@ export function PersonalSettings() {
     setTotpLoading(false);
   };
 
+  // Load passkey list
+  const loadPasskeys = async () => {
+    try {
+      setPasskeyError('');
+      const res = await api.get('/api/user/passkey');
+      if (res.data.success) {
+        setPasskeys(res.data.data || []);
+      } else {
+        setPasskeyError(res.data.message || t('personal_settings.passkey.errors.load_failed'));
+      }
+    } catch (error) {
+      setPasskeyError(error instanceof Error ? error.message : t('personal_settings.passkey.errors.load_failed'));
+    }
+  };
+
+  // Register a new passkey
+  const registerPasskey = async () => {
+    if (!passkeySupported) {
+      setPasskeyError(t('personal_settings.passkey.errors.not_supported'));
+      return;
+    }
+
+    const name = passkeyName.trim() || 'Passkey';
+    setPasskeyLoading(true);
+    setPasskeyError('');
+    try {
+      const beginRes = await api.post('/api/user/passkey/register/begin');
+      if (!beginRes.data.success) {
+        setPasskeyError(beginRes.data.message || t('personal_settings.passkey.errors.register_failed'));
+        return;
+      }
+
+      const attResp = await startRegistration({ optionsJSON: beginRes.data.data });
+
+      const finishRes = await api.post(
+        `/api/user/passkey/register/finish?name=${encodeURIComponent(name)}`,
+        attResp
+      );
+      if (finishRes.data.success) {
+        setShowPasskeyName(false);
+        setPasskeyName('');
+        await loadPasskeys();
+      } else {
+        setPasskeyError(finishRes.data.message || t('personal_settings.passkey.errors.register_failed'));
+      }
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : t('personal_settings.passkey.errors.register_failed');
+      if (!msg.includes('cancelled') && !msg.includes('AbortError')) {
+        setPasskeyError(msg);
+      }
+    } finally {
+      setPasskeyLoading(false);
+    }
+  };
+
+  // Delete a passkey
+  const deletePasskey = async (id: number) => {
+    if (!confirm(t('personal_settings.passkey.delete_confirm'))) return;
+    setPasskeyLoading(true);
+    try {
+      const res = await api.delete(`/api/user/passkey/${id}`);
+      if (res.data.success) {
+        await loadPasskeys();
+      } else {
+        setPasskeyError(res.data.message || t('personal_settings.passkey.errors.delete_failed'));
+      }
+    } catch (error) {
+      setPasskeyError(error instanceof Error ? error.message : t('personal_settings.passkey.errors.delete_failed'));
+    } finally {
+      setPasskeyLoading(false);
+    }
+  };
+
+  // Update password
+  const updatePassword = async () => {
+    setPasswordError('');
+    if (!newPassword) return;
+    if (newPassword !== confirmPassword) {
+      setPasswordError(t('personal_settings.security.password.mismatch'));
+      return;
+    }
+
+    setPasswordLoading(true);
+    try {
+      const response = await api.put('/api/user/self', { password: newPassword });
+      const { success, message } = response.data;
+      if (success) {
+        setNewPassword('');
+        setConfirmPassword('');
+        notify({
+          type: 'success',
+          message: t('personal_settings.security.password.success'),
+        });
+      } else {
+        setPasswordError(message || t('personal_settings.security.password.failed'));
+      }
+    } catch (error) {
+      setPasswordError(error instanceof Error ? error.message : t('personal_settings.security.password.failed'));
+    } finally {
+      setPasswordLoading(false);
+    }
+  };
+
   const generateAccessToken = async () => {
     try {
-      // Unified API call - complete URL with /api prefix
       const res = await api.get('/api/user/token');
       const { success, message, data } = res.data;
       if (success) {
         setSystemToken(data);
         setAffLink('');
-        // Copy to clipboard
         await navigator.clipboard.writeText(data);
-        // Show success message
       } else {
         console.error('Failed to generate token:', message);
       }
@@ -297,16 +408,13 @@ export function PersonalSettings() {
 
   const getAffLink = async () => {
     try {
-      // Unified API call - complete URL with /api prefix
       const res = await api.get('/api/user/aff');
       const { success, message, data } = res.data;
       if (success) {
         const link = `${window.location.origin}/register?aff=${data}`;
         setAffLink(link);
         setSystemToken('');
-        // Copy to clipboard
         await navigator.clipboard.writeText(link);
-        // Show success message
       } else {
         console.error('Failed to get aff link:', message);
       }
@@ -411,19 +519,14 @@ export function PersonalSettings() {
     setLoading(true);
     try {
       const payload = { ...data };
-      // Don't send empty password
-      if (!payload.password) {
-        delete payload.password;
-      }
       delete (payload as Record<string, unknown>).email;
 
-      // Unified API call - complete URL with /api prefix
       const response = await api.put('/api/user/self', payload);
       const { success, message } = response.data;
       if (success) {
         const refreshed = await loadProfile();
         if (!refreshed) {
-          syncProfile({ ...data, password: '' });
+          syncProfile({ ...data });
         }
         notify({
           type: 'success',
@@ -443,8 +546,13 @@ export function PersonalSettings() {
     }
   };
 
+  // Security status indicators
+  const hasPasskeys = passkeys.length > 0;
+  const securityScore = (hasPasskeys ? 1 : 0) + (totpEnabled ? 1 : 0) + 1; // password always counts as 1
+
   return (
     <div className="space-y-6">
+      {/* Profile Information Card */}
       <Card>
         <CardHeader>
           <CardTitle>{t('personal_settings.profile_info.title')}</CardTitle>
@@ -483,77 +591,61 @@ export function PersonalSettings() {
                 />
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <FormField
-                  control={form.control}
-                  name="email"
-                  render={({ field }) => (
-                    <FormItem className="space-y-3">
-                      <FormLabel>{t('personal_settings.profile_info.email')}</FormLabel>
-                      <FormControl>
-                        <Input type="email" placeholder={t('personal_settings.profile_info.email_placeholder')} {...field} />
-                      </FormControl>
-                      <div className="flex flex-col gap-3">
-                        <p className="text-sm text-muted-foreground">{t('personal_settings.profile_info.email_help')}</p>
-                        <div className="flex flex-col gap-3 md:flex-row items-end">
-                          <div className="flex-1 w-full space-y-1">
-                            <Input
-                              value={emailVerificationCode}
-                              onChange={(e) => {
-                                setEmailVerificationCode(e.target.value);
-                                if (emailVerificationError) {
-                                  setEmailVerificationError('');
-                                }
-                              }}
-                              placeholder={t('personal_settings.profile_info.email_verification_code_placeholder')}
-                            />
-                          </div>
-                          <div className="flex flex-col gap-2 sm:flex-row flex-shrink-0">
-                            <Button
-                              type="button"
-                              variant="outline"
-                              onClick={sendEmailVerificationCode}
-                              disabled={emailAction !== null || (turnstileEnabled && !turnstileToken)}
-                            >
-                              {emailAction === 'send'
-                                ? t('personal_settings.profile_info.sending_code')
-                                : t('personal_settings.profile_info.send_code')}
-                            </Button>
-                            <Button type="button" onClick={bindEmail} disabled={emailAction !== null}>
-                              {emailAction === 'bind'
-                                ? t('personal_settings.profile_info.binding_email')
-                                : t('personal_settings.profile_info.bind_email')}
-                            </Button>
-                          </div>
-                        </div>
-                        {turnstileRenderable && systemStatus.turnstile_site_key && (
-                          <Turnstile
-                            siteKey={systemStatus.turnstile_site_key}
-                            onVerify={(token) => setTurnstileToken(token)}
-                            onExpire={() => setTurnstileToken('')}
+              <FormField
+                control={form.control}
+                name="email"
+                render={({ field }) => (
+                  <FormItem className="space-y-3">
+                    <FormLabel>{t('personal_settings.profile_info.email')}</FormLabel>
+                    <FormControl>
+                      <Input type="email" placeholder={t('personal_settings.profile_info.email_placeholder')} {...field} />
+                    </FormControl>
+                    <div className="flex flex-col gap-3">
+                      <p className="text-sm text-muted-foreground">{t('personal_settings.profile_info.email_help')}</p>
+                      <div className="flex flex-col gap-3 md:flex-row items-end">
+                        <div className="flex-1 w-full space-y-1">
+                          <Input
+                            value={emailVerificationCode}
+                            onChange={(e) => {
+                              setEmailVerificationCode(e.target.value);
+                              if (emailVerificationError) {
+                                setEmailVerificationError('');
+                              }
+                            }}
+                            placeholder={t('personal_settings.profile_info.email_verification_code_placeholder')}
                           />
-                        )}
-                        {emailVerificationError && <div className="text-sm text-destructive">{emailVerificationError}</div>}
+                        </div>
+                        <div className="flex flex-col gap-2 sm:flex-row flex-shrink-0">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            onClick={sendEmailVerificationCode}
+                            disabled={emailAction !== null || (turnstileEnabled && !turnstileToken)}
+                          >
+                            {emailAction === 'send'
+                              ? t('personal_settings.profile_info.sending_code')
+                              : t('personal_settings.profile_info.send_code')}
+                          </Button>
+                          <Button type="button" onClick={bindEmail} disabled={emailAction !== null}>
+                            {emailAction === 'bind'
+                              ? t('personal_settings.profile_info.binding_email')
+                              : t('personal_settings.profile_info.bind_email')}
+                          </Button>
+                        </div>
                       </div>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="password"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>{t('personal_settings.profile_info.password')}</FormLabel>
-                      <FormControl>
-                        <Input type="password" placeholder={t('personal_settings.profile_info.password_placeholder')} {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
+                      {turnstileRenderable && systemStatus.turnstile_site_key && (
+                        <Turnstile
+                          siteKey={systemStatus.turnstile_site_key}
+                          onVerify={(token) => setTurnstileToken(token)}
+                          onExpire={() => setTurnstileToken('')}
+                        />
+                      )}
+                      {emailVerificationError && <div className="text-sm text-destructive">{emailVerificationError}</div>}
+                    </div>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
 
               {form.formState.errors.root && <div className="text-sm text-destructive">{form.formState.errors.root.message}</div>}
 
@@ -565,6 +657,7 @@ export function PersonalSettings() {
         </CardContent>
       </Card>
 
+      {/* Access Token & Invitation Card */}
       <Card>
         <CardHeader>
           <CardTitle>{t('personal_settings.access_token.title')}</CardTitle>
@@ -589,49 +682,208 @@ export function PersonalSettings() {
         </CardContent>
       </Card>
 
+      {/* ========== Account Security Card ========== */}
       <Card>
         <CardHeader>
-          <CardTitle>{t('personal_settings.totp.title')}</CardTitle>
-          <CardDescription>{t('personal_settings.totp.description')}</CardDescription>
+          <CardTitle>{t('personal_settings.security.title')}</CardTitle>
+          <CardDescription>{t('personal_settings.security.description')}</CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
-          {totpError && <div className="text-sm text-destructive font-medium mb-2">{totpError}</div>}
-          {totpEnabled ? (
-            <Alert className="bg-success-muted border-success-border">
-              <div className="flex flex-col space-y-4">
-                <div>
-                  <AlertTitle className="text-success-foreground">{t('personal_settings.totp.enabled_title')}</AlertTitle>
-                  <AlertDescription>{t('personal_settings.totp.enabled_desc')}</AlertDescription>
-                </div>
-                <div className="flex flex-col space-y-2">
-                  <Input
-                    placeholder={t('personal_settings.totp.disable_placeholder')}
-                    value={totpCode}
-                    onChange={(e) => setTotpCode(e.target.value)}
-                  />
-                  {disableTotpError && <div className="text-sm text-destructive font-medium">{disableTotpError}</div>}
-                  <Button variant="destructive" onClick={disableTotp} disabled={totpLoading} className="w-full md:w-auto">
-                    {totpLoading ? t('personal_settings.totp.processing') : t('personal_settings.totp.disable_button')}
+        <CardContent className="space-y-6">
+
+          {/* --- Security Status Overview --- */}
+          <div className="rounded-lg border bg-muted/30 p-4">
+            <h4 className="text-sm font-medium mb-3">{t('personal_settings.security.status.title')}</h4>
+            <div className="flex flex-wrap gap-2">
+              {hasPasskeys ? (
+                <Badge className="bg-emerald-100 text-emerald-800 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-400 dark:border-emerald-800">
+                  {t('personal_settings.security.status.passkey_on')}
+                </Badge>
+              ) : (
+                <Badge variant="outline" className="text-muted-foreground border-dashed">
+                  {t('personal_settings.security.status.passkey_off')}
+                </Badge>
+              )}
+              {totpEnabled ? (
+                <Badge className="bg-emerald-100 text-emerald-800 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-400 dark:border-emerald-800">
+                  {t('personal_settings.security.status.totp_on')}
+                </Badge>
+              ) : (
+                <Badge variant="outline" className="text-muted-foreground border-dashed">
+                  {t('personal_settings.security.status.totp_off')}
+                </Badge>
+              )}
+              <Badge className="bg-emerald-100 text-emerald-800 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-400 dark:border-emerald-800">
+                {t('personal_settings.security.status.password_on')}
+              </Badge>
+            </div>
+            {securityScore < 3 && (
+              <p className="text-xs text-muted-foreground mt-2">
+                {securityScore === 1
+                  ? t('personal_settings.passkey.no_passkeys_desc')
+                  : ''}
+              </p>
+            )}
+          </div>
+
+          <Separator />
+
+          {/* --- Passkeys Section (Primary / Recommended) --- */}
+          <div className="space-y-4">
+            <div className="flex items-center gap-2">
+              <h3 className="text-base font-semibold">{t('personal_settings.passkey.title')}</h3>
+              <Badge className="bg-primary/10 text-primary border-primary/20 text-xs">
+                {t('personal_settings.passkey.recommended')}
+              </Badge>
+            </div>
+            <p className="text-sm text-muted-foreground">{t('personal_settings.passkey.description')}</p>
+
+            {passkeyError && <div className="text-sm text-destructive font-medium">{passkeyError}</div>}
+
+            {!passkeySupported ? (
+              <Alert>
+                <AlertTitle>{t('personal_settings.passkey.errors.not_supported')}</AlertTitle>
+                <AlertDescription>{t('personal_settings.passkey.not_supported_desc')}</AlertDescription>
+              </Alert>
+            ) : (
+              <>
+                {passkeys.length > 0 ? (
+                  <div className="space-y-2">
+                    {passkeys.map((pk) => (
+                      <div key={pk.id} className="flex items-center justify-between p-3 border rounded-lg bg-background">
+                        <div className="flex-1 min-w-0">
+                          <div className="font-medium truncate">{pk.credential_name}</div>
+                          <div className="text-xs text-muted-foreground">
+                            {t('personal_settings.passkey.registered')}: {new Date(pk.created_at).toLocaleDateString()}
+                            {' · '}
+                            {t('personal_settings.passkey.sign_count')}: {pk.sign_count}
+                          </div>
+                        </div>
+                        <Button
+                          variant="destructive"
+                          size="sm"
+                          onClick={() => deletePasskey(pk.id)}
+                          disabled={passkeyLoading}
+                        >
+                          {t('personal_settings.passkey.delete_button')}
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <Alert className="bg-info-muted border-info-border">
+                    <AlertTitle className="text-info-foreground">{t('personal_settings.passkey.no_passkeys')}</AlertTitle>
+                    <AlertDescription>{t('personal_settings.passkey.no_passkeys_desc')}</AlertDescription>
+                  </Alert>
+                )}
+
+                {showPasskeyName ? (
+                  <div className="flex flex-col space-y-2">
+                    <FormLabel>{t('personal_settings.passkey.name_label')}</FormLabel>
+                    <Input
+                      placeholder={t('personal_settings.passkey.name_placeholder')}
+                      value={passkeyName}
+                      onChange={(e) => setPasskeyName(e.target.value)}
+                      maxLength={128}
+                    />
+                    <div className="flex gap-2">
+                      <Button onClick={registerPasskey} disabled={passkeyLoading}>
+                        {passkeyLoading ? t('personal_settings.passkey.processing') : t('personal_settings.passkey.register_button')}
+                      </Button>
+                      <Button variant="outline" onClick={() => { setShowPasskeyName(false); setPasskeyName(''); }} disabled={passkeyLoading}>
+                        {t('personal_settings.totp.cancel')}
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <Button onClick={() => setShowPasskeyName(true)} disabled={passkeyLoading} className="w-full md:w-auto">
+                    {t('personal_settings.passkey.register_button')}
                   </Button>
+                )}
+              </>
+            )}
+          </div>
+
+          <Separator />
+
+          {/* --- TOTP Section --- */}
+          <div className="space-y-4">
+            <h3 className="text-base font-semibold">{t('personal_settings.totp.title')}</h3>
+            <p className="text-sm text-muted-foreground">{t('personal_settings.totp.description')}</p>
+
+            {totpError && <div className="text-sm text-destructive font-medium">{totpError}</div>}
+
+            {totpEnabled ? (
+              <Alert className="bg-success-muted border-success-border">
+                <div className="flex flex-col space-y-3">
+                  <div>
+                    <AlertTitle className="text-success-foreground">{t('personal_settings.totp.enabled_title')}</AlertTitle>
+                    <AlertDescription>{t('personal_settings.totp.enabled_desc')}</AlertDescription>
+                  </div>
+                  <div className="flex flex-col space-y-2">
+                    <Input
+                      placeholder={t('personal_settings.totp.disable_placeholder')}
+                      value={totpCode}
+                      onChange={(e) => setTotpCode(e.target.value)}
+                    />
+                    {disableTotpError && <div className="text-sm text-destructive font-medium">{disableTotpError}</div>}
+                    <Button variant="destructive" onClick={disableTotp} disabled={totpLoading} className="w-full md:w-auto">
+                      {totpLoading ? t('personal_settings.totp.processing') : t('personal_settings.totp.disable_button')}
+                    </Button>
+                  </div>
                 </div>
-              </div>
-            </Alert>
-          ) : (
-            <Alert className="bg-info-muted border-info-border">
-              <div className="flex flex-col space-y-4">
-                <div>
-                  <AlertTitle className="text-info-foreground">{t('personal_settings.totp.disabled_title')}</AlertTitle>
-                  <AlertDescription>{t('personal_settings.totp.disabled_desc')}</AlertDescription>
-                </div>
+              </Alert>
+            ) : (
+              <div className="space-y-2">
                 {setupTotpError && <div className="text-sm text-destructive font-medium">{setupTotpError}</div>}
-                <div>
-                  <Button variant="default" onClick={setupTotp} disabled={totpLoading} className="w-full md:w-auto">
-                    {totpLoading ? t('personal_settings.totp.processing') : t('personal_settings.totp.enable_button')}
-                  </Button>
-                </div>
+                <Button variant="default" onClick={setupTotp} disabled={totpLoading} className="w-full md:w-auto">
+                  {totpLoading ? t('personal_settings.totp.processing') : t('personal_settings.totp.enable_button')}
+                </Button>
               </div>
-            </Alert>
-          )}
+            )}
+          </div>
+
+          <Separator />
+
+          {/* --- Password Section (Legacy / Fallback) --- */}
+          <div className="space-y-4">
+            <h3 className="text-base font-semibold">{t('personal_settings.security.password.title')}</h3>
+            <p className="text-sm text-muted-foreground">{t('personal_settings.security.password.description')}</p>
+
+            {passwordError && <div className="text-sm text-destructive font-medium">{passwordError}</div>}
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-1">
+                <FormLabel>{t('personal_settings.security.password.new_password')}</FormLabel>
+                <Input
+                  type="password"
+                  placeholder={t('personal_settings.security.password.new_password_placeholder')}
+                  value={newPassword}
+                  onChange={(e) => {
+                    setNewPassword(e.target.value);
+                    if (passwordError) setPasswordError('');
+                  }}
+                />
+              </div>
+              <div className="space-y-1">
+                <FormLabel>{t('personal_settings.security.password.confirm_password')}</FormLabel>
+                <Input
+                  type="password"
+                  placeholder={t('personal_settings.security.password.confirm_password_placeholder')}
+                  value={confirmPassword}
+                  onChange={(e) => {
+                    setConfirmPassword(e.target.value);
+                    if (passwordError) setPasswordError('');
+                  }}
+                />
+              </div>
+            </div>
+            <Button onClick={updatePassword} disabled={passwordLoading || !newPassword} className="w-full md:w-auto">
+              {passwordLoading
+                ? t('personal_settings.security.password.updating')
+                : t('personal_settings.security.password.update_button')}
+            </Button>
+          </div>
+
         </CardContent>
       </Card>
 

@@ -169,6 +169,30 @@ var (
 )
 
 // =============================================================================
+// WEBAUTHN / PASSKEY CONFIGURATION
+// =============================================================================
+// Settings for WebAuthn (Passkey) authentication.  The Relying Party (RP)
+// values must match the domain that serves the login page.
+
+var (
+	// WebAuthnRPID is the Relying Party Identifier, typically the domain
+	// name without port (e.g. "example.com").  When empty the RP ID is
+	// derived from ServerAddress at runtime.
+	//
+	// Environment variable: WEBAUTHN_RP_ID
+	// Default: "" (derived from ServerAddress)
+	WebAuthnRPID = strings.TrimSpace(env.String("WEBAUTHN_RP_ID", ""))
+
+	// WebAuthnRPOrigins lists the allowed origins for WebAuthn ceremonies,
+	// comma-separated (e.g. "https://example.com,https://www.example.com").
+	// When empty the origin is derived from ServerAddress at runtime.
+	//
+	// Environment variable: WEBAUTHN_RP_ORIGINS
+	// Default: "" (derived from ServerAddress)
+	WebAuthnRPOrigins = strings.TrimSpace(env.String("WEBAUTHN_RP_ORIGINS", ""))
+)
+
+// =============================================================================
 // DATABASE CONFIGURATION
 // =============================================================================
 // Settings for the primary database and optional logging database connections.

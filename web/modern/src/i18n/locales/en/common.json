@@ -70,7 +70,7 @@
     "welcome": "Welcome to One API"
   },
   "footer": {
-    "copyright": "\u00a9 {{year}} One API. All rights reserved."
+    "copyright": "© {{year}} One API. All rights reserved."
   },
   "header": {
     "confirm_logout": "Confirm logout",
@@ -89,6 +89,11 @@
     "message": "Page not found",
     "redirecting": "Redirecting to home in {{seconds}}s...",
     "stay_here": "Stay on this page"
+  },
+  "passkey_prompt": {
+    "dismiss": "Dismiss",
+    "message": "Enhance your account security — set up a passkey for fast, passwordless sign-in.",
+    "setup_button": "Set up Passkey"
   },
   "status": {
     "badges": {

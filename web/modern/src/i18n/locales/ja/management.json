@@ -107,6 +107,10 @@
         },
         "51": {
           "description": "Gemini OpenAI 互換フォーマット"
+        },
+        "53": {
+          "description": "GitHub Copilot の OpenAI 互換サーフェス（GitHub 経由でトークン交換）",
+          "tip": "チャネルキーには GitHub アクセストークンを指定してください。ベース URL のデフォルトは https://api.githubcopilot.com です"
         }
       },
       "cloudflare": {

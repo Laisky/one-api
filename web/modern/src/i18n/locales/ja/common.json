@@ -70,7 +70,7 @@
     "welcome": "One APIへようこそ"
   },
   "footer": {
-    "copyright": "\u00a9 {{year}} One API. All rights reserved."
+    "copyright": "© {{year}} One API. All rights reserved."
   },
   "header": {
     "confirm_logout": "ログアウトの確認",
@@ -89,6 +89,11 @@
     "message": "ページが見つかりません",
     "redirecting": "{{seconds}} 秒後にホームへリダイレクトします...",
     "stay_here": "このページに留まる"
+  },
+  "passkey_prompt": {
+    "dismiss": "閉じる",
+    "message": "アカウントのセキュリティを強化 — パスキーを設定して、パスワードなしで素早くログインできます。",
+    "setup_button": "パスキーを設定"
   },
   "status": {
     "badges": {

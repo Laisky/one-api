@@ -107,6 +107,10 @@
         },
         "51": {
           "description": "Format compatible Gemini OpenAI"
+        },
+        "53": {
+          "description": "Surface compatible OpenAI de GitHub Copilot (jeton échangé via GitHub)",
+          "tip": "La clé du canal doit être un jeton d'accès GitHub ; l'URL de base est par défaut https://api.githubcopilot.com"
         }
       },
       "cloudflare": {

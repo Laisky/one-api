@@ -105,6 +105,33 @@
       "get_invite_link": "招待リンクを取得",
       "title": "アクセストークンと招待"
     },
+    "passkey": {
+      "delete_button": "削除",
+      "delete_confirm": "このパスキーを削除してもよろしいですか？",
+      "description": "生体認証、セキュリティキー、またはデバイスを使用してパスワードなしでログインできます。",
+      "errors": {
+        "delete_failed": "パスキーの削除に失敗しました",
+        "load_failed": "パスキーの読み込みに失敗しました",
+        "not_supported": "このブラウザはパスキーに対応していません",
+        "register_failed": "パスキーの登録に失敗しました",
+        "rename_failed": "パスキーの名前変更に失敗しました",
+        "webauthn_unavailable": "WebAuthn は利用できません"
+      },
+      "list_title": "登録済みパスキー",
+      "name_label": "パスキー名",
+      "name_placeholder": "例: MacBook Touch ID",
+      "no_passkeys": "パスキーは登録されていません。",
+      "no_passkeys_desc": "パスキーを追加して、生体認証またはセキュリティキーによるパスワードなしログインを有効にしましょう。",
+      "not_supported_desc": "お使いのブラウザはパスキーに対応していません。Chrome、Safari、Edge などの最新ブラウザをお試しください。",
+      "processing": "処理中...",
+      "recommended": "おすすめ",
+      "register_button": "パスキーを追加",
+      "registered": "登録日",
+      "rename_button": "名前を変更",
+      "rename_placeholder": "新しい名前を入力",
+      "sign_count": "使用回数",
+      "title": "パスキー (WebAuthn)"
+    },
     "profile_info": {
       "bind_email": "Bind Email",
       "bind_success": "Email updated successfully",
@@ -118,8 +145,6 @@
       "email_verification_code_placeholder": "Enter email verification code",
       "failed": "更新に失敗しました",
       "load_failed": "Failed to load profile information",
-      "password": "新しいパスワード（変更しない場合は空欄）",
-      "password_placeholder": "新しいパスワードを入力",
       "send_code": "Send Verification Code",
       "send_code_success": "Verification code sent. Check your inbox.",
       "sending_code": "Sending code...",
@@ -128,6 +153,32 @@
       "update_button": "プロフィールを更新",
       "updating": "更新中...",
       "username": "ユーザー名"
+    },
+    "security": {
+      "description": "ログイン方法とアカウント保護を管理します。",
+      "password": {
+        "confirm_password": "パスワードの確認",
+        "confirm_password_placeholder": "新しいパスワードを再入力",
+        "description": "予備のログイン方法として、強力でユニークなパスワードを使用してください。",
+        "failed": "パスワードの更新に失敗しました",
+        "mismatch": "パスワードが一致しません",
+        "new_password": "新しいパスワード",
+        "new_password_placeholder": "新しいパスワードを入力",
+        "success": "パスワードを更新しました",
+        "title": "パスワード",
+        "update_button": "パスワードを更新",
+        "updating": "更新中..."
+      },
+      "status": {
+        "passkey_off": "パスキーなし",
+        "passkey_on": "パスキー有効",
+        "password_off": "パスワードなし",
+        "password_on": "パスワード設定済み",
+        "title": "セキュリティ概要",
+        "totp_off": "TOTP なし",
+        "totp_on": "TOTP 有効"
+      },
+      "title": "アカウントセキュリティ"
     },
     "totp": {
       "cancel": "キャンセル",
@@ -217,12 +268,12 @@
       "QuotaRemindThreshold": "残りクォータがこの値を下回ると通知します。",
       "RegisterEnabled": "ユーザー登録のマスタースイッチです。オフにすると新規登録が停止します。",
       "RetryTimes": "上流への再試行回数を自動制御します。",
-      "ServerAddress": "このサーバーの公開ベース URL（リンクやコールバックで使用）。",
       "SMTPAccount": "SMTP 認証に使用するユーザー名／メールアドレス。",
       "SMTPFrom": "送信メールに使用する送信元アドレス。",
       "SMTPPort": "SMTP サーバーのポート（例: STARTTLS=587, SMTPS=465）。",
       "SMTPServer": "メール送信に使用する SMTP サーバーのホスト名。",
       "SMTPToken": "SMTP 認証用パスワード／アプリトークン（安全に保存）。",
+      "ServerAddress": "このサーバーの公開ベース URL（リンクやコールバックで使用）。",
       "SystemName": "UI やメールに表示されるシステム名。",
       "Theme": "UI テーマ（berry / air / modern）。",
       "TopUpLink": "ユーザーがクォータを購入・チャージするための外部リンク。",

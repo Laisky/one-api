@@ -321,6 +321,9 @@ func migrateDB() error {
 	if err = DB.AutoMigrate(&MCPTool{}); err != nil {
 		return errors.Wrapf(err, "failed to migrate MCPTool")
 	}
+	if err = DB.AutoMigrate(&PasskeyCredential{}); err != nil {
+		return errors.Wrapf(err, "failed to migrate PasskeyCredential")
+	}
 	return nil
 }
 

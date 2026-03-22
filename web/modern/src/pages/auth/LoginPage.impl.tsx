@@ -9,6 +9,7 @@ import { api } from '@/lib/api';
 import { buildGitHubOAuthUrl, getOAuthState } from '@/lib/oauth';
 import { useAuthStore } from '@/lib/stores/auth';
 import { zodResolver } from '@hookform/resolvers/zod';
+import { browserSupportsWebAuthn, startAuthentication } from '@simplewebauthn/browser';
 import { useEffect, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { useTranslation } from 'react-i18next';
@@ -44,6 +45,57 @@ export function LoginPage() {
   const { systemStatus } = useSystemStatus();
   const turnstileEnabled = Boolean(systemStatus?.turnstile_check);
   const turnstileRenderable = turnstileEnabled && Boolean(systemStatus?.turnstile_site_key);
+  const [passkeyLoading, setPasskeyLoading] = useState(false);
+  const passkeySupported = typeof window !== 'undefined' && browserSupportsWebAuthn();
+
+  const onPasskeyLogin = async () => {
+    setPasskeyLoading(true);
+    form.clearErrors('root');
+    try {
+      // Step 1: Get assertion options
+      const beginRes = await api.post('/api/user/passkey/login/begin');
+      if (!beginRes.data.success) {
+        form.setError('root', { message: beginRes.data.message || t('auth.login.passkey_failed') });
+        return;
+      }
+
+      // Step 2: Authenticate via browser WebAuthn API
+      const assertionResp = await startAuthentication({ optionsJSON: beginRes.data.data });
+
+      // Step 3: Send assertion to server
+      const finishRes = await api.post('/api/user/passkey/login/finish', assertionResp);
+      const { success, message, data: respData } = finishRes.data;
+
+      if (success) {
+        login(respData, '');
+        const redirectTo = searchParams.get('redirect_to');
+        if (redirectTo) {
+          try {
+            const decodedPath = decodeURIComponent(redirectTo);
+            if (decodedPath.startsWith('/')) {
+              navigate(decodedPath);
+            } else {
+              navigate('/dashboard');
+            }
+          } catch {
+            navigate('/dashboard');
+          }
+        } else {
+          navigate('/dashboard');
+        }
+      } else {
+        form.setError('root', { message: message || t('auth.login.passkey_failed') });
+      }
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : t('auth.login.passkey_failed');
+      // Don't show error if user cancelled
+      if (!msg.includes('cancelled') && !msg.includes('AbortError')) {
+        form.setError('root', { message: msg });
+      }
+    } finally {
+      setPasskeyLoading(false);
+    }
+  };
 
   const form = useForm<LoginForm>({
     resolver: zodResolver(loginSchema(t)),
@@ -292,6 +344,32 @@ export function LoginPage() {
                 >
                   {t('auth.login.back_to_login')}
                 </Button>
+              )}
+
+              {passkeySupported && !totpRequired && (
+                <>
+                  <div className="relative my-2">
+                    <div className="absolute inset-0 flex items-center">
+                      <span className="w-full border-t" />
+                    </div>
+                    <div className="relative flex justify-center text-xs uppercase">
+                      <span className="bg-card px-2 text-muted-foreground">{t('auth.login.or_use_passkey')}</span>
+                    </div>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="w-full"
+                    onClick={onPasskeyLogin}
+                    disabled={passkeyLoading || isLoading}
+                  >
+                    <svg className="w-4 h-4 mr-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                      <path d="M2 18v3c0 .6.4 1 1 1h4v-3h3v-3h2l1.4-1.4a6.5 6.5 0 1 0-4-4Z" />
+                      <circle cx="16.5" cy="7.5" r=".5" />
+                    </svg>
+                    {passkeyLoading ? t('auth.login.passkey_signing_in') : t('auth.login.passkey_login')}
+                  </Button>
+                </>
               )}
 
               <div className="text-center text-sm space-y-2">

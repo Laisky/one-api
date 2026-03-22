@@ -105,6 +105,33 @@
       "get_invite_link": "Obtenir un lien d'invitation",
       "title": "Token d'accès et invitation"
     },
+    "passkey": {
+      "delete_button": "Supprimer",
+      "delete_confirm": "Êtes-vous sûr de vouloir supprimer ce passkey ?",
+      "description": "Utilisez la biométrie, les clés de sécurité ou votre appareil pour vous connecter sans mot de passe.",
+      "errors": {
+        "delete_failed": "Échec de la suppression du passkey",
+        "load_failed": "Échec du chargement des passkeys",
+        "not_supported": "Les passkeys ne sont pas pris en charge dans ce navigateur",
+        "register_failed": "Échec de l'enregistrement du passkey",
+        "rename_failed": "Échec du renommage du passkey",
+        "webauthn_unavailable": "WebAuthn n'est pas disponible"
+      },
+      "list_title": "Vos Passkeys",
+      "name_label": "Nom du Passkey",
+      "name_placeholder": "p. ex. MacBook Touch ID",
+      "no_passkeys": "Aucun passkey enregistré.",
+      "no_passkeys_desc": "Ajoutez un passkey pour activer la connexion sans mot de passe avec la biométrie ou une clé de sécurité.",
+      "not_supported_desc": "Votre navigateur ne prend pas en charge les passkeys. Essayez un navigateur moderne comme Chrome, Safari ou Edge.",
+      "processing": "Traitement...",
+      "recommended": "Recommandé",
+      "register_button": "Ajouter un Passkey",
+      "registered": "Enregistré",
+      "rename_button": "Renommer",
+      "rename_placeholder": "Entrez le nouveau nom",
+      "sign_count": "Nombre de connexions",
+      "title": "Passkeys (WebAuthn)"
+    },
     "profile_info": {
       "bind_email": "Bind Email",
       "bind_success": "Email updated successfully",
@@ -118,8 +145,6 @@
       "email_verification_code_placeholder": "Enter email verification code",
       "failed": "Échec de la mise à jour",
       "load_failed": "Failed to load profile information",
-      "password": "Nouveau mot de passe (laisser vide pour conserver l'actuel)",
-      "password_placeholder": "Saisissez un nouveau mot de passe",
       "send_code": "Send Verification Code",
       "send_code_success": "Verification code sent. Check your inbox.",
       "sending_code": "Sending code...",
@@ -128,6 +153,32 @@
       "update_button": "Mettre à jour le profil",
       "updating": "Mise à jour...",
       "username": "Nom d'utilisateur"
+    },
+    "security": {
+      "description": "Gérez vos méthodes de connexion et la protection de votre compte.",
+      "password": {
+        "confirm_password": "Confirmer le mot de passe",
+        "confirm_password_placeholder": "Saisissez à nouveau le nouveau mot de passe",
+        "description": "Utilisez un mot de passe fort et unique comme méthode de connexion de secours.",
+        "failed": "Échec de la mise à jour du mot de passe",
+        "mismatch": "Les mots de passe ne correspondent pas",
+        "new_password": "Nouveau mot de passe",
+        "new_password_placeholder": "Saisissez un nouveau mot de passe",
+        "success": "Mot de passe mis à jour avec succès",
+        "title": "Mot de passe",
+        "update_button": "Mettre à jour le mot de passe",
+        "updating": "Mise à jour..."
+      },
+      "status": {
+        "passkey_off": "Pas de passkey",
+        "passkey_on": "Passkey activé",
+        "password_off": "Pas de mot de passe",
+        "password_on": "Mot de passe défini",
+        "title": "Aperçu de la sécurité",
+        "totp_off": "Pas de TOTP",
+        "totp_on": "TOTP activé"
+      },
+      "title": "Sécurité du compte"
     },
     "totp": {
       "cancel": "Annuler",
@@ -217,12 +268,12 @@
       "QuotaRemindThreshold": "Seuil de rappel lorsque le quota restant est inférieur à la valeur indiquée.",
       "RegisterEnabled": "Interrupteur principal des inscriptions utilisateur. Désactivez pour bloquer les nouveaux comptes.",
       "RetryTimes": "Nombre de tentatives automatiques pour les erreurs amont transitoires.",
-      "ServerAddress": "URL publique de ce serveur (utilisée dans les liens/rappels).",
       "SMTPAccount": "Nom d'utilisateur ou adresse e-mail SMTP utilisé pour l'authentification.",
       "SMTPFrom": "Adresse d'expéditeur utilisée pour les e-mails sortants.",
       "SMTPPort": "Port du serveur SMTP (ex. 587 pour STARTTLS, 465 pour SMTPS).",
       "SMTPServer": "Nom d'hôte du serveur SMTP pour l'envoi d'e-mails.",
       "SMTPToken": "Mot de passe ou jeton SMTP utilisé pour s'authentifier (stocké de façon sécurisée).",
+      "ServerAddress": "URL publique de ce serveur (utilisée dans les liens/rappels).",
       "SystemName": "Nom d'affichage du système dans l'interface et les e-mails.",
       "Theme": "Thème UI (berry, air, modern).",
       "TopUpLink": "Lien externe permettant d'acheter ou recharger du quota.",
