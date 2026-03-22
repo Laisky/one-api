@@ -36,6 +36,7 @@ func fakeUpstream(sse string) *http.Response {
 // TestResponseAPIDirectStreamHandler_DataForwarded verifies that data lines
 // from the upstream are forwarded to the client (event: lines are skipped).
 func TestResponseAPIDirectStreamHandler_DataForwarded(t *testing.T) {
+	t.Parallel()
 	c, w := newDirectStreamContext()
 
 	sse := "event: response.created\n" +
@@ -59,6 +60,7 @@ func TestResponseAPIDirectStreamHandler_DataForwarded(t *testing.T) {
 // TestResponseAPIDirectStreamHandler_NormalCompletion tests a full stream with
 // response.created -> deltas -> response.completed -> [DONE].
 func TestResponseAPIDirectStreamHandler_NormalCompletion(t *testing.T) {
+	t.Parallel()
 	c, w := newDirectStreamContext()
 
 	sse := "event: response.created\n" +
@@ -95,6 +97,7 @@ func TestResponseAPIDirectStreamHandler_NormalCompletion(t *testing.T) {
 // upstream stream ends without sending [DONE], the handler still renders [DONE]
 // (via the !doneRendered fallback at the end of the function).
 func TestResponseAPIDirectStreamHandler_UpstreamDropsNoDone(t *testing.T) {
+	t.Parallel()
 	c, w := newDirectStreamContext()
 
 	// Stream ends abruptly without [DONE]
@@ -117,6 +120,7 @@ func TestResponseAPIDirectStreamHandler_UpstreamDropsNoDone(t *testing.T) {
 // malformed JSON in data lines is skipped (not forwarded) but doesn't break
 // the stream.
 func TestResponseAPIDirectStreamHandler_UnparseableEventsSkipped(t *testing.T) {
+	t.Parallel()
 	c, w := newDirectStreamContext()
 
 	sse := "data: {this is not valid json}\n" +
@@ -140,6 +144,7 @@ func TestResponseAPIDirectStreamHandler_UnparseableEventsSkipped(t *testing.T) {
 // TestResponseAPIDirectStreamHandler_UsageAccumulation tests that usage from
 // a response.completed event is correctly extracted and returned.
 func TestResponseAPIDirectStreamHandler_UsageAccumulation(t *testing.T) {
+	t.Parallel()
 	c, _ := newDirectStreamContext()
 
 	sse := "event: response.completed\n" +
@@ -158,6 +163,7 @@ func TestResponseAPIDirectStreamHandler_UsageAccumulation(t *testing.T) {
 // TestResponseAPIDirectStreamHandler_TextAccumulation verifies that delta events
 // accumulate responseText correctly.
 func TestResponseAPIDirectStreamHandler_TextAccumulation(t *testing.T) {
+	t.Parallel()
 	c, _ := newDirectStreamContext()
 
 	sse := "event: response.output_text.delta\n" +
@@ -179,6 +185,7 @@ func TestResponseAPIDirectStreamHandler_TextAccumulation(t *testing.T) {
 // TestResponseAPIDirectStreamHandler_EmptyEventType verifies that data lines
 // without a preceding event: line are still forwarded (they just have data: prefix).
 func TestResponseAPIDirectStreamHandler_EmptyEventType(t *testing.T) {
+	t.Parallel()
 	c, w := newDirectStreamContext()
 
 	// Data line with no preceding event: line - still a valid response object
@@ -197,6 +204,7 @@ func TestResponseAPIDirectStreamHandler_EmptyEventType(t *testing.T) {
 // TestResponseAPIDirectStreamHandler_WebSearchTracking tests that web_search_call
 // output items are counted and stored in context.
 func TestResponseAPIDirectStreamHandler_WebSearchTracking(t *testing.T) {
+	t.Parallel()
 	c, _ := newDirectStreamContext()
 
 	// response.completed with a web_search_call in output
@@ -218,6 +226,7 @@ func TestResponseAPIDirectStreamHandler_WebSearchTracking(t *testing.T) {
 // as a ResponseAPIResponse. Events where the "id" field is at the top level
 // (not nested inside "response") are parsed as fullResponse objects.
 func TestResponseAPIDirectStreamHandler_ConvertedResponseSet(t *testing.T) {
+	t.Parallel()
 	c, _ := newDirectStreamContext()
 
 	// Use a response.created event which has "id" at the top level of the
@@ -245,6 +254,7 @@ func TestResponseAPIDirectStreamHandler_ConvertedResponseSet(t *testing.T) {
 // that a response.completed event (where id is nested) still sets
 // ConvertedResponse via the fallback map path.
 func TestResponseAPIDirectStreamHandler_ConvertedResponseFromCompleted(t *testing.T) {
+	t.Parallel()
 	c, _ := newDirectStreamContext()
 
 	sse := "event: response.output_text.delta\n" +
@@ -273,6 +283,7 @@ func TestResponseAPIDirectStreamHandler_ConvertedResponseFromCompleted(t *testin
 // when there is no full response event but there is text/usage, a fallback
 // map is stored in ConvertedResponse.
 func TestResponseAPIDirectStreamHandler_ConvertedResponseFallback(t *testing.T) {
+	t.Parallel()
 	c, _ := newDirectStreamContext()
 
 	// Only delta events, no response.completed
@@ -298,6 +309,7 @@ func TestResponseAPIDirectStreamHandler_ConvertedResponseFallback(t *testing.T) 
 // events (which don't have a response ID or parseable structure) are skipped
 // by the parser but don't cause errors.
 func TestResponseAPIDirectStreamHandler_KeepaliveSkipped(t *testing.T) {
+	t.Parallel()
 	c, w := newDirectStreamContext()
 
 	sse := "event: keepalive\n" +
@@ -321,6 +333,7 @@ func TestResponseAPIDirectStreamHandler_KeepaliveSkipped(t *testing.T) {
 // TestResponseAPIDirectStreamHandler_MultipleUsageUpdates verifies that the
 // handler takes the last usage value when multiple events contain usage.
 func TestResponseAPIDirectStreamHandler_MultipleUsageUpdates(t *testing.T) {
+	t.Parallel()
 	c, _ := newDirectStreamContext()
 
 	sse := "event: response.created\n" +
@@ -343,6 +356,7 @@ func TestResponseAPIDirectStreamHandler_MultipleUsageUpdates(t *testing.T) {
 // TestResponseAPIDirectStreamHandler_EmptyStream verifies behavior with an
 // empty stream (no data lines at all).
 func TestResponseAPIDirectStreamHandler_EmptyStream(t *testing.T) {
+	t.Parallel()
 	c, w := newDirectStreamContext()
 
 	sse := ""
@@ -360,6 +374,7 @@ func TestResponseAPIDirectStreamHandler_EmptyStream(t *testing.T) {
 // TestResponseAPIDirectStreamHandler_OnlyDone verifies behavior when the
 // upstream sends only [DONE] with no data events.
 func TestResponseAPIDirectStreamHandler_OnlyDone(t *testing.T) {
+	t.Parallel()
 	c, w := newDirectStreamContext()
 
 	sse := "data: [DONE]\n"
@@ -376,6 +391,7 @@ func TestResponseAPIDirectStreamHandler_OnlyDone(t *testing.T) {
 // TestResponseAPIDirectStreamHandler_FlushOccurs verifies that the recorder
 // is flushed (indicating streaming output was sent).
 func TestResponseAPIDirectStreamHandler_FlushOccurs(t *testing.T) {
+	t.Parallel()
 	c, w := newDirectStreamContext()
 
 	sse := "event: response.created\n" +
@@ -396,6 +412,7 @@ func TestResponseAPIDirectStreamHandler_FlushOccurs(t *testing.T) {
 // "event:" lines from upstream are forwarded to the client, matching the
 // official Response API wire format: "event: <type>\ndata: <json>\n\n".
 func TestResponseAPIDirectStreamHandler_EventLinesForwarded(t *testing.T) {
+	t.Parallel()
 	c, w := newDirectStreamContext()
 
 	sse := "event: response.created\n" +
@@ -420,6 +437,7 @@ func TestResponseAPIDirectStreamHandler_EventLinesForwarded(t *testing.T) {
 // TestResponseAPIDirectStreamHandler_ReasoningPassthrough verifies that
 // reasoning summary events are forwarded faithfully including event: lines.
 func TestResponseAPIDirectStreamHandler_ReasoningPassthrough(t *testing.T) {
+	t.Parallel()
 	c, w := newDirectStreamContext()
 
 	sse := "event: response.output_item.added\n" +
@@ -452,6 +470,7 @@ func TestResponseAPIDirectStreamHandler_ReasoningPassthrough(t *testing.T) {
 // TestResponseAPIDirectStreamHandler_ToolCallPassthrough verifies that
 // function_call events are forwarded faithfully.
 func TestResponseAPIDirectStreamHandler_ToolCallPassthrough(t *testing.T) {
+	t.Parallel()
 	c, w := newDirectStreamContext()
 
 	sse := "event: response.output_item.added\n" +

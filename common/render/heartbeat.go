@@ -2,6 +2,7 @@ package render
 
 import (
 	"bufio"
+	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -52,6 +53,7 @@ type HeartbeatScanner struct {
 	done     chan struct{}
 	interval time.Duration
 	text     string
+	mu       sync.Mutex
 	err      error
 	closed   bool
 }
@@ -96,7 +98,9 @@ func (h *HeartbeatScanner) readLoop(scanner *bufio.Scanner) {
 	}
 	// Set err before closing the channel so the caller sees it after
 	// the channel-close receive.
+	h.mu.Lock()
 	h.err = scanner.Err()
+	h.mu.Unlock()
 }
 
 // Scan advances to the next line from the upstream scanner. While waiting
@@ -128,6 +132,8 @@ func (h *HeartbeatScanner) Text() string {
 
 // Err returns the first non-EOF error encountered by the underlying scanner.
 func (h *HeartbeatScanner) Err() error {
+	h.mu.Lock()
+	defer h.mu.Unlock()
 	return h.err
 }
 
