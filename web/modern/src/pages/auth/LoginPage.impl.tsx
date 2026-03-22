@@ -37,6 +37,7 @@ export function LoginPage() {
   const [successMessage, setSuccessMessage] = useState<string>('');
   const [totpValue, setTotpValue] = useState('');
   const [turnstileToken, setTurnstileToken] = useState('');
+  const [turnstileRequired, setTurnstileRequired] = useState(false);
   const totpRef = useRef<HTMLInputElement | null>(null);
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -44,7 +45,8 @@ export function LoginPage() {
   const { login } = useAuthStore();
   const { systemStatus } = useSystemStatus();
   const turnstileEnabled = Boolean(systemStatus?.turnstile_check);
-  const turnstileRenderable = turnstileEnabled && Boolean(systemStatus?.turnstile_site_key);
+  // Only show Turnstile after the server tells us it's required (i.e. after a failed login attempt).
+  const turnstileRenderable = turnstileRequired && turnstileEnabled && Boolean(systemStatus?.turnstile_site_key);
   const [passkeyLoading, setPasskeyLoading] = useState(false);
   const passkeySupported = typeof window !== 'undefined' && browserSupportsWebAuthn();
 
@@ -140,7 +142,8 @@ export function LoginPage() {
   };
 
   const onSubmit = async (data: LoginForm) => {
-    if (turnstileEnabled && !turnstileToken) {
+    // Only gate on Turnstile if it's been required (after a prior failed attempt).
+    if (turnstileRequired && turnstileEnabled && !turnstileToken) {
       form.setError('root', { message: t('auth.login.turnstile_required') });
       return;
     }
@@ -151,8 +154,8 @@ export function LoginPage() {
         password: data.password,
       };
       if (totpRequired && totpValue) payload.totp_code = totpValue;
-      // Unified API call - complete URL with /api prefix
-      const query = turnstileEnabled && turnstileToken ? `?turnstile=${encodeURIComponent(turnstileToken)}` : '';
+      // Only include Turnstile token when it's required and available.
+      const query = turnstileRequired && turnstileToken ? `?turnstile=${encodeURIComponent(turnstileToken)}` : '';
       const response = await api.post(`/api/user/login${query}`, payload);
       const { success, message, data: respData } = response.data;
       const m = typeof message === 'string' ? message.trim().toLowerCase() : '';
@@ -161,6 +164,12 @@ export function LoginPage() {
         (respData.totp_required === true || respData.totp_required === 'true' || respData.totp_required === 1)
       );
       const needsTotp = !success && (dataTotp || m === 'totp_required' || m.includes('totp'));
+
+      // Check if the server is now requiring Turnstile (after failed login).
+      if (!success && respData?.turnstile_required) {
+        setTurnstileRequired(true);
+        setTurnstileToken('');
+      }
 
       if (needsTotp) {
         setTotpRequired(true);
@@ -316,7 +325,7 @@ export function LoginPage() {
               <Button
                 type="submit"
                 className="w-full"
-                disabled={isLoading || (totpRequired && totpValue.length !== 6) || (turnstileEnabled && !turnstileToken)}
+                disabled={isLoading || (totpRequired && totpValue.length !== 6) || (turnstileRequired && turnstileEnabled && !turnstileToken)}
               >
                 {isLoading ? t('auth.login.signing_in') : totpRequired ? t('auth.login.verify_totp') : t('auth.login.title')}
               </Button>

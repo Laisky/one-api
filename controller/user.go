@@ -58,6 +58,7 @@ func jsonRawIsNull(raw json.RawMessage) bool {
 
 func Login(c *gin.Context) {
 	ctx := gmw.Ctx(c)
+
 	var loginRequest LoginRequest
 	err := json.NewDecoder(c.Request.Body).Decode(&loginRequest)
 	if err != nil {
@@ -76,16 +77,40 @@ func Login(c *gin.Context) {
 		})
 		return
 	}
+
+	// If this username has had a recent failed login and Turnstile is enabled, require verification.
+	turnstileRequired := config.TurnstileCheckEnabled && middleware.HasLoginFailure(username)
+	if turnstileRequired {
+		if err := middleware.VerifyTurnstileToken(c.Query("turnstile"), c.ClientIP()); err != nil {
+			c.JSON(http.StatusOK, gin.H{
+				"success": false,
+				"message": err.Error(),
+				"data": gin.H{
+					"turnstile_required": true,
+				},
+			})
+			return
+		}
+	}
+
 	user := model.User{
 		Username: username,
 		Password: password,
 	}
 	err = user.ValidateAndFill()
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
+		// Record failed attempt so next login for this username requires Turnstile.
+		middleware.RecordLoginFailure(username)
+		resp := gin.H{
 			"message": err.Error(),
 			"success": false,
-		})
+		}
+		if config.TurnstileCheckEnabled {
+			resp["data"] = gin.H{
+				"turnstile_required": true,
+			}
+		}
+		c.JSON(http.StatusOK, resp)
 		return
 	}
 
@@ -99,7 +124,6 @@ func Login(c *gin.Context) {
 				"message": "totp_required",
 				"data": gin.H{
 					"totp_required": true,
-					"user_id":       user.Id,
 				},
 			})
 			return
@@ -124,6 +148,8 @@ func Login(c *gin.Context) {
 		}
 	}
 
+	// Successful login — clear any failed login records for this username.
+	middleware.ClearLoginFailure(username)
 	SetupLogin(&user, c)
 }
 

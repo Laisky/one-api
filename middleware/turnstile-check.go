@@ -16,6 +16,31 @@ type turnstileCheckResponse struct {
 	Success bool `json:"success"`
 }
 
+// VerifyTurnstileToken validates a Turnstile token against the Cloudflare API.
+// Returns nil on success, or an error describing the failure.
+func VerifyTurnstileToken(token, clientIP string) error {
+	if token == "" {
+		return errors.New("Turnstile token is empty")
+	}
+	rawRes, err := http.PostForm("https://challenges.cloudflare.com/turnstile/v0/siteverify", url.Values{
+		"secret":   {config.TurnstileSecretKey},
+		"response": {token},
+		"remoteip": {clientIP},
+	})
+	if err != nil {
+		return errors.Wrap(err, "turnstile check request failed")
+	}
+	defer rawRes.Body.Close()
+	var res turnstileCheckResponse
+	if err = json.NewDecoder(rawRes.Body).Decode(&res); err != nil {
+		return errors.Wrap(err, "turnstile response decode failed")
+	}
+	if !res.Success {
+		return errors.New("turnstile verification failed")
+	}
+	return nil
+}
+
 func TurnstileCheck() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if config.TurnstileCheckEnabled {
@@ -25,37 +50,16 @@ func TurnstileCheck() gin.HandlerFunc {
 				c.Next()
 				return
 			}
-			response := c.Query("turnstile")
-			if response == "" {
+			if err := VerifyTurnstileToken(c.Query("turnstile"), c.ClientIP()); err != nil {
 				c.JSON(http.StatusOK, gin.H{
 					"success": false,
-					"message": "Turnstile token is empty",
+					"message": err.Error(),
 				})
 				c.Abort()
 				return
 			}
-			rawRes, err := http.PostForm("https://challenges.cloudflare.com/turnstile/v0/siteverify", url.Values{
-				"secret":   {config.TurnstileSecretKey},
-				"response": {response},
-				"remoteip": {c.ClientIP()},
-			})
-			if err != nil {
-				AbortWithError(c, http.StatusOK, errors.Wrap(err, "turnstile check request failed"))
-				return
-			}
-			defer rawRes.Body.Close()
-			var res turnstileCheckResponse
-			err = json.NewDecoder(rawRes.Body).Decode(&res)
-			if err != nil {
-				AbortWithError(c, http.StatusOK, errors.Wrap(err, "turnstile response decode failed"))
-				return
-			}
-			if !res.Success {
-				AbortWithError(c, http.StatusOK, errors.New("turnstile verification failed"))
-				return
-			}
 			session.Set("turnstile", true)
-			err = session.Save()
+			err := session.Save()
 			if err != nil {
 				AbortWithError(c, http.StatusOK, errors.Wrap(err, "unable to save turnstile session information"))
 				return
