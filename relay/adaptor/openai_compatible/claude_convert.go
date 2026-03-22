@@ -17,6 +17,7 @@ import (
 
 	"github.com/songquanpeng/one-api/common"
 	"github.com/songquanpeng/one-api/common/helper"
+	"github.com/songquanpeng/one-api/common/render"
 	relaymodel "github.com/songquanpeng/one-api/relay/model"
 )
 
@@ -249,6 +250,10 @@ func ConvertOpenAIStreamToClaudeSSE(c *gin.Context, resp *http.Response, promptT
 	helper.ConfigureScannerBuffer(scanner)
 	scanner.Split(bufio.ScanLines)
 
+	// Wrap scanner with heartbeat to prevent reverse-proxy timeouts (e.g. Cloudflare 524)
+	hbs := render.NewHeartbeatScanner(c, scanner, render.DefaultHeartbeatInterval)
+	defer hbs.Close()
+
 	accumText := ""
 	accumThinking := ""
 	accumToolArgs := ""
@@ -289,8 +294,8 @@ func ConvertOpenAIStreamToClaudeSSE(c *gin.Context, resp *http.Response, promptT
 	})
 
 	upstreamDone := false
-	for scanner.Scan() {
-		line := scanner.Text()
+	for hbs.Scan() {
+		line := hbs.Text()
 		if !strings.HasPrefix(line, "data:") {
 			continue
 		}

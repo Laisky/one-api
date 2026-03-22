@@ -910,10 +910,14 @@ func ClaudeNativeStreamHandler(c *gin.Context, resp *http.Response) (*model.Erro
 	})
 	common.SetEventStreamHeaders(c)
 
+	// Wrap scanner with heartbeat to prevent reverse-proxy timeouts (e.g. Cloudflare 524)
+	hbs := render.NewHeartbeatScanner(c, scanner, render.DefaultHeartbeatInterval)
+	defer hbs.Close()
+
 	var usage model.Usage
 
-	for scanner.Scan() {
-		data := scanner.Text()
+	for hbs.Scan() {
+		data := hbs.Text()
 		if len(data) < 6 || !strings.HasPrefix(data, "data:") {
 			continue
 		}
@@ -961,7 +965,7 @@ func ClaudeNativeStreamHandler(c *gin.Context, resp *http.Response) (*model.Erro
 		}
 	}
 
-	if err := scanner.Err(); err != nil {
+	if err := hbs.Err(); err != nil {
 		logger.Error("error reading stream", zap.Error(err), zap.Int("scanner_max_token_size", helper.DefaultScannerMaxTokenSize))
 	}
 
@@ -995,6 +999,10 @@ func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusC
 	})
 	common.SetEventStreamHeaders(c)
 
+	// Wrap scanner with heartbeat to prevent reverse-proxy timeouts (e.g. Cloudflare 524)
+	hbs := render.NewHeartbeatScanner(c, scanner, render.DefaultHeartbeatInterval)
+	defer hbs.Close()
+
 	var usage model.Usage
 	var modelName string
 	var id string
@@ -1007,8 +1015,8 @@ func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusC
 	}
 	doneRendered := false
 
-	for scanner.Scan() {
-		data := scanner.Text()
+	for hbs.Scan() {
+		data := hbs.Text()
 		if len(data) < 6 || !strings.HasPrefix(data, "data:") {
 			continue
 		}
@@ -1134,7 +1142,7 @@ func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusC
 		}
 	}
 
-	if err := scanner.Err(); err != nil {
+	if err := hbs.Err(); err != nil {
 		logger.Error("error reading stream", zap.Error(err), zap.Int("scanner_max_token_size", helper.DefaultScannerMaxTokenSize))
 	}
 

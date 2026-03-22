@@ -124,6 +124,10 @@ func StreamHandler(c *gin.Context, resp *http.Response, relayMode int) (*model.E
 	// Set response headers for SSE
 	common.SetEventStreamHeaders(c)
 
+	// Wrap scanner with heartbeat to prevent reverse-proxy timeouts (e.g. Cloudflare 524)
+	hbs := render.NewHeartbeatScanner(c, scanner, render.DefaultHeartbeatInterval)
+	defer hbs.Close()
+
 	doneRendered := false
 	sendStreamingError := func(code, message string) {
 		if err := render.ObjectData(c, map[string]any{
@@ -141,8 +145,8 @@ func StreamHandler(c *gin.Context, resp *http.Response, relayMode int) (*model.E
 
 	// Process each line from the stream
 streamLoop:
-	for scanner.Scan() {
-		data := openai_compatible.NormalizeDataLine(scanner.Text())
+	for hbs.Scan() {
+		data := openai_compatible.NormalizeDataLine(hbs.Text())
 
 		lg.Debug("stream response", zap.String("event", data))
 
@@ -289,7 +293,7 @@ streamLoop:
 	}
 
 	// Check for scanner errors
-	if err := scanner.Err(); err != nil && trackerErr == nil {
+	if err := hbs.Err(); err != nil && trackerErr == nil {
 		lg.Error("error reading stream", zap.Error(err), zap.Int("scanner_max_token_size", helper.DefaultScannerMaxTokenSize))
 	}
 
@@ -881,6 +885,11 @@ func ResponseAPIStreamHandler(c *gin.Context, resp *http.Response, relayMode int
 
 	// Set response headers for SSE
 	common.SetEventStreamHeaders(c)
+
+	// Wrap scanner with heartbeat to prevent reverse-proxy timeouts (e.g. Cloudflare 524)
+	hbs := render.NewHeartbeatScanner(c, scanner, render.DefaultHeartbeatInterval)
+	defer hbs.Close()
+
 	lg.Debug("forwarding response api converted stream to client",
 		zap.Int("relay_mode", relayMode),
 		zap.Bool("flush_supported", flushSupported),
@@ -890,8 +899,8 @@ func ResponseAPIStreamHandler(c *gin.Context, resp *http.Response, relayMode int
 	forwardedChunks := 0
 
 	// Process each line from the stream
-	for scanner.Scan() {
-		data := openai_compatible.NormalizeDataLine(scanner.Text())
+	for hbs.Scan() {
+		data := openai_compatible.NormalizeDataLine(hbs.Text())
 
 		lg.Debug("receive stream event", zap.String("event", data))
 
@@ -1276,7 +1285,7 @@ func ResponseAPIStreamHandler(c *gin.Context, resp *http.Response, relayMode int
 		}
 	}
 
-	if err := scanner.Err(); err != nil {
+	if err := hbs.Err(); err != nil {
 		// Let ErrorWrapper handle the logging to avoid duplicate logging
 		return ErrorWrapper(err, "read_stream_failed", http.StatusInternalServerError), responseText, usage
 	}
@@ -1442,6 +1451,11 @@ func ResponseAPIDirectStreamHandler(c *gin.Context, resp *http.Response, relayMo
 
 	// Set response headers for SSE
 	common.SetEventStreamHeaders(c)
+
+	// Wrap scanner with heartbeat to prevent reverse-proxy timeouts (e.g. Cloudflare 524)
+	hbs := render.NewHeartbeatScanner(c, scanner, render.DefaultHeartbeatInterval)
+	defer hbs.Close()
+
 	lg.Debug("forwarding response api native stream to client",
 		zap.Int("relay_mode", relayMode),
 		zap.Bool("flush_supported", flushSupported),
@@ -1457,8 +1471,8 @@ func ResponseAPIDirectStreamHandler(c *gin.Context, resp *http.Response, relayMo
 	pendingEventType := ""
 
 	// Process each line from the stream
-	for scanner.Scan() {
-		line := scanner.Text()
+	for hbs.Scan() {
+		line := hbs.Text()
 
 		// Capture SSE "event:" lines to forward alongside the subsequent "data:" line.
 		if strings.HasPrefix(line, "event:") {
@@ -1542,7 +1556,7 @@ func ResponseAPIDirectStreamHandler(c *gin.Context, resp *http.Response, relayMo
 		}
 	}
 
-	if err := scanner.Err(); err != nil {
+	if err := hbs.Err(); err != nil {
 		// Let ErrorWrapper handle the logging to avoid duplicate logging
 		return ErrorWrapper(err, "read_stream_failed", http.StatusInternalServerError), responseText, usage
 	}

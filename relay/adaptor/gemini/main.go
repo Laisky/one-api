@@ -894,8 +894,12 @@ func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusC
 
 	common.SetEventStreamHeaders(c)
 
-	for scanner.Scan() {
-		data := scanner.Text()
+	// Wrap scanner with heartbeat to prevent reverse-proxy timeouts (e.g. Cloudflare 524)
+	hbs := render.NewHeartbeatScanner(c, scanner, render.DefaultHeartbeatInterval)
+	defer hbs.Close()
+
+	for hbs.Scan() {
+		data := hbs.Text()
 		data = strings.TrimSpace(data)
 
 		if !strings.HasPrefix(data, "data: ") {
@@ -930,7 +934,7 @@ func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusC
 				zap.Error(errors.Wrap(err, "render stream")))
 		}
 	}
-	if err := scanner.Err(); err != nil {
+	if err := hbs.Err(); err != nil {
 		lg.Error("error reading stream",
 			zap.Error(errors.Wrap(err, "scanner stream")),
 			zap.Int("scanner_max_token_size", helper.DefaultScannerMaxTokenSize))

@@ -97,6 +97,8 @@ func LogClientRequestPayload(c *gin.Context, label string, limit int) error {
 }
 
 // SetEventStreamHeaders configures the standard headers required for server-sent event responses.
+// It also flushes the headers immediately so reverse proxies (like Cloudflare)
+// see the 200 response right away, preventing premature timeout (524) errors.
 func SetEventStreamHeaders(c *gin.Context) {
 	c.Writer.Header().Set("Content-Type", "text/event-stream")
 	c.Writer.Header().Set("Cache-Control", "no-cache")
@@ -104,4 +106,5 @@ func SetEventStreamHeaders(c *gin.Context) {
 	c.Writer.Header().Set("Transfer-Encoding", "chunked")
 	c.Writer.Header().Set("X-Accel-Buffering", "no")
 	c.Writer.Header().Set("Pragma", "no-cache") // This is for legacy HTTP; I'm pretty sure.
+	c.Writer.Flush()                            // Send headers immediately to keep reverse proxies alive.
 }

@@ -49,6 +49,10 @@ func PasskeyCredentialToWebAuthn(c *PasskeyCredential) webauthn.Credential {
 		PublicKey:       c.PublicKey,
 		AttestationType: c.AttestationType,
 		Transport:       transports,
+		Flags: webauthn.CredentialFlags{
+			BackupEligible: c.BackupEligible,
+			BackupState:    c.BackupState,
+		},
 		Authenticator: webauthn.Authenticator{
 			AAGUID:    c.AAGUID,
 			SignCount: c.SignCount,

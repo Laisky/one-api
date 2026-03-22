@@ -23,6 +23,8 @@ type PasskeyCredential struct {
 	AttestationType string `json:"-" gorm:"size:64"`                         // attestation type
 	AAGUID          []byte `json:"-" gorm:"size:64"`                         // authenticator AAGUID
 	SignCount       uint32 `json:"sign_count" gorm:"default:0"`              // signature counter
+	BackupEligible  bool   `json:"-" gorm:"default:false"`                   // BE flag
+	BackupState     bool   `json:"-" gorm:"default:false"`                   // BS flag
 	Transport       string `json:"-" gorm:"size:256"`                        // comma-separated transports
 	CreatedAt       int64  `json:"created_at" gorm:"bigint;autoCreateTime:milli"`
 	UpdatedAt       int64  `json:"updated_at" gorm:"bigint;autoUpdateTime:milli"`
@@ -83,12 +85,15 @@ func DeletePasskeyCredential(id, userId int) error {
 	return nil
 }
 
-// UpdatePasskeySignCount updates the sign count after a successful authentication.
-func UpdatePasskeySignCount(id int, signCount uint32) {
+// UpdatePasskeyAfterLogin updates the sign count and backup state after a successful authentication.
+func UpdatePasskeyAfterLogin(id int, signCount uint32, backupState bool) {
 	err := DB.Model(&PasskeyCredential{}).Where("id = ?", id).
-		Update("sign_count", signCount).Error
+		Updates(map[string]interface{}{
+			"sign_count":   signCount,
+			"backup_state": backupState,
+		}).Error
 	if err != nil {
-		logger.Logger.Error("failed to update passkey sign count",
+		logger.Logger.Error("failed to update passkey after login",
 			zap.Int("id", id), zap.Error(err))
 	}
 }

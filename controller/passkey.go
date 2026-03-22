@@ -202,6 +202,8 @@ func PasskeyRegisterFinish(c *gin.Context) {
 		AttestationType: credential.AttestationType,
 		AAGUID:          credential.Authenticator.AAGUID,
 		SignCount:       credential.Authenticator.SignCount,
+		BackupEligible:  credential.Flags.BackupEligible,
+		BackupState:     credential.Flags.BackupState,
 		Transport:       model.TransportsToString(credential.Transport),
 	}
 	if err = model.CreatePasskeyCredential(dbCred); err != nil {
@@ -303,10 +305,10 @@ func PasskeyLoginFinish(c *gin.Context) {
 		return
 	}
 
-	// Update sign count.
+	// Update sign count and backup state.
 	dbCred, err := model.GetPasskeyCredentialByCredentialID(credential.ID)
 	if err == nil {
-		model.UpdatePasskeySignCount(dbCred.Id, credential.Authenticator.SignCount)
+		model.UpdatePasskeyAfterLogin(dbCred.Id, credential.Authenticator.SignCount, credential.Flags.BackupState)
 	}
 
 	// Resolve the user and set up the session.
