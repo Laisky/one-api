@@ -56,6 +56,14 @@ type HeartbeatScanner struct {
 	mu       sync.Mutex
 	err      error
 	closed   bool
+
+	// heartbeatsSent tracks the number of heartbeat comments sent to the client.
+	// Accessed only from the caller's goroutine (via Scan()), so no mutex needed.
+	heartbeatsSent int
+
+	// heartbeatWriteErr records the first write error encountered when sending
+	// a heartbeat. A non-nil value indicates the client connection is likely dead.
+	heartbeatWriteErr error
 }
 
 // NewHeartbeatScanner creates a HeartbeatScanner that reads lines from the
@@ -106,10 +114,12 @@ func (h *HeartbeatScanner) readLoop(scanner *bufio.Scanner) {
 // Scan advances to the next line from the upstream scanner. While waiting
 // for data, it sends SSE heartbeat comments to the client at the configured
 // interval. Returns true if a line is available via Text(), false when the
-// stream has ended.
+// stream has ended or the client has disconnected.
 func (h *HeartbeatScanner) Scan() bool {
 	ticker := time.NewTicker(h.interval)
 	defer ticker.Stop()
+
+	clientCtx := h.c.Request.Context()
 
 	for {
 		select {
@@ -121,6 +131,15 @@ func (h *HeartbeatScanner) Scan() bool {
 			return true
 		case <-ticker.C:
 			h.sendHeartbeat()
+		case <-clientCtx.Done():
+			// Client disconnected (e.g. Cloudflare 524, browser closed).
+			// Stop processing to avoid wasting resources on a dead connection.
+			h.mu.Lock()
+			if h.err == nil {
+				h.err = clientCtx.Err()
+			}
+			h.mu.Unlock()
+			return false
 		}
 	}
 }
@@ -137,6 +156,18 @@ func (h *HeartbeatScanner) Err() error {
 	return h.err
 }
 
+// HeartbeatsSent returns the total number of heartbeat comments sent during
+// this scanner's lifetime. Useful for diagnostics and logging.
+func (h *HeartbeatScanner) HeartbeatsSent() int {
+	return h.heartbeatsSent
+}
+
+// HeartbeatWriteErr returns the first write error encountered when sending
+// a heartbeat, or nil if all heartbeats were written successfully.
+func (h *HeartbeatScanner) HeartbeatWriteErr() error {
+	return h.heartbeatWriteErr
+}
+
 // Close signals the background reader goroutine to stop. It is safe to call
 // multiple times. After Close, the caller should also close the upstream
 // resp.Body to unblock any in-progress scanner.Scan() call in the goroutine.
@@ -148,6 +179,13 @@ func (h *HeartbeatScanner) Close() {
 }
 
 func (h *HeartbeatScanner) sendHeartbeat() {
-	_, _ = h.c.Writer.Write([]byte(heartbeatPayload))
+	_, err := h.c.Writer.Write([]byte(heartbeatPayload))
+	if err != nil {
+		if h.heartbeatWriteErr == nil {
+			h.heartbeatWriteErr = err
+		}
+		return
+	}
 	h.c.Writer.Flush()
+	h.heartbeatsSent++
 }

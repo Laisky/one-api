@@ -225,6 +225,7 @@ func RelayResponseAPIHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 	lg.Debug("response api DoResponse returned",
 		zap.Bool("has_usage", usage != nil),
 		zap.Bool("has_error", respErr != nil),
+		zap.Any("error_detail", respErr),
 		zap.Int("user_id", meta.UserId),
 		zap.String("model", meta.ActualModelName),
 		zap.String("request_id", c.GetString(ctxkey.RequestId)),

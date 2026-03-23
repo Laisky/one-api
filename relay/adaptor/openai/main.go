@@ -292,6 +292,14 @@ streamLoop:
 		}
 	}
 
+	// Log heartbeat diagnostics for chat completion stream
+	if hbs.HeartbeatsSent() > 0 || hbs.HeartbeatWriteErr() != nil {
+		lg.Debug("heartbeat diagnostics",
+			zap.Int("heartbeats_sent", hbs.HeartbeatsSent()),
+			zap.NamedError("heartbeat_write_err", hbs.HeartbeatWriteErr()),
+		)
+	}
+
 	// Check for scanner errors
 	if err := hbs.Err(); err != nil && trackerErr == nil {
 		lg.Error("error reading stream", zap.Error(err), zap.Int("scanner_max_token_size", helper.DefaultScannerMaxTokenSize))
@@ -1285,8 +1293,18 @@ func ResponseAPIStreamHandler(c *gin.Context, resp *http.Response, relayMode int
 		}
 	}
 
+	if hbs.HeartbeatsSent() > 0 || hbs.HeartbeatWriteErr() != nil {
+		lg.Debug("heartbeat diagnostics",
+			zap.Int("heartbeats_sent", hbs.HeartbeatsSent()),
+			zap.NamedError("heartbeat_write_err", hbs.HeartbeatWriteErr()),
+		)
+	}
+
 	if err := hbs.Err(); err != nil {
-		// Let ErrorWrapper handle the logging to avoid duplicate logging
+		lg.Debug("stream read failed",
+			zap.Error(err),
+			zap.Int("forwarded_chunks", forwardedChunks),
+		)
 		return ErrorWrapper(err, "read_stream_failed", http.StatusInternalServerError), responseText, usage
 	}
 
@@ -1316,6 +1334,7 @@ func ResponseAPIStreamHandler(c *gin.Context, resp *http.Response, relayMode int
 	lg.Debug("completed response api converted stream forwarding",
 		zap.Int("forwarded_chunks", forwardedChunks),
 		zap.Bool("done_rendered", doneRendered),
+		zap.Int("heartbeats_sent", hbs.HeartbeatsSent()),
 	)
 
 	return nil, responseText, usage
@@ -1561,6 +1580,23 @@ func ResponseAPIDirectStreamHandler(c *gin.Context, resp *http.Response, relayMo
 		return ErrorWrapper(err, "read_stream_failed", http.StatusInternalServerError), responseText, usage
 	}
 
+	// Log heartbeat diagnostics regardless of error state — critical for
+	// debugging reverse-proxy timeout (524) issues.
+	if hbs.HeartbeatsSent() > 0 || hbs.HeartbeatWriteErr() != nil {
+		lg.Debug("heartbeat diagnostics",
+			zap.Int("heartbeats_sent", hbs.HeartbeatsSent()),
+			zap.NamedError("heartbeat_write_err", hbs.HeartbeatWriteErr()),
+		)
+	}
+
+	if err := hbs.Err(); err != nil {
+		lg.Debug("stream read failed",
+			zap.Error(err),
+			zap.Int("forwarded_chunks", forwardedChunks),
+		)
+		return ErrorWrapper(err, "read_stream_failed", http.StatusInternalServerError), responseText, usage
+	}
+
 	// Do NOT fabricate a [DONE] if the upstream didn't send one.
 	// An honest proxy must let the client observe the same stream termination
 	// behaviour as the upstream API: if the upstream connection dropped before
@@ -1588,6 +1624,7 @@ func ResponseAPIDirectStreamHandler(c *gin.Context, resp *http.Response, relayMo
 	lg.Debug("completed response api native stream forwarding",
 		zap.Int("forwarded_chunks", forwardedChunks),
 		zap.Bool("done_rendered", doneRendered),
+		zap.Int("heartbeats_sent", hbs.HeartbeatsSent()),
 	)
 
 	if lastFullResponse != nil {

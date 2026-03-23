@@ -2,6 +2,7 @@ package render
 
 import (
 	"bufio"
+	"context"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -282,4 +283,265 @@ func TestHeartbeatScanner_InterleavesHeartbeatsWithData(t *testing.T) {
 	heartbeatCount := strings.Count(body, ":\n")
 	assert.GreaterOrEqual(t, heartbeatCount, 2,
 		"expected heartbeats during pauses between chunks, got %d", heartbeatCount)
+}
+
+// newTestContextWithCancel creates a test gin.Context whose request context
+// can be cancelled to simulate client disconnect.
+func newTestContextWithCancel() (*gin.Context, *httptest.ResponseRecorder, context.CancelFunc) {
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	ctx, cancel := context.WithCancel(context.Background())
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil).WithContext(ctx)
+	return c, w, cancel
+}
+
+// TestHeartbeatScanner_ClientDisconnect verifies that Scan returns false
+// when the client context is cancelled (simulating Cloudflare 524 / browser close).
+func TestHeartbeatScanner_ClientDisconnect(t *testing.T) {
+	t.Parallel()
+	c, _, cancel := newTestContextWithCancel()
+
+	// Create a reader that blocks indefinitely (upstream never finishes)
+	pr, pw := io.Pipe()
+	defer pw.Close()
+
+	scanner := bufio.NewScanner(pr)
+	scanner.Split(bufio.ScanLines)
+
+	hbs := NewHeartbeatScanner(c, scanner, 50*time.Millisecond)
+	defer hbs.Close()
+
+	// Cancel the client context after a short delay
+	go func() {
+		time.Sleep(80 * time.Millisecond)
+		cancel()
+	}()
+
+	// Scan should return false because the client disconnected
+	done := make(chan bool, 1)
+	go func() {
+		result := hbs.Scan()
+		done <- result
+	}()
+
+	select {
+	case result := <-done:
+		assert.False(t, result, "Scan should return false when client disconnects")
+	case <-time.After(2 * time.Second):
+		t.Fatal("Scan did not return within 2 seconds after client disconnect")
+	}
+
+	// The error should reflect the context cancellation
+	err := hbs.Err()
+	assert.ErrorIs(t, err, context.Canceled)
+}
+
+// TestHeartbeatScanner_ClientDisconnectDuringData verifies that client
+// disconnect is detected even when upstream data is flowing (between lines).
+func TestHeartbeatScanner_ClientDisconnectDuringData(t *testing.T) {
+	t.Parallel()
+	c, _, cancel := newTestContextWithCancel()
+
+	pr, pw := io.Pipe()
+
+	scanner := bufio.NewScanner(pr)
+	scanner.Split(bufio.ScanLines)
+
+	hbs := NewHeartbeatScanner(c, scanner, 50*time.Millisecond)
+	defer hbs.Close()
+
+	// Write first line, then cancel context, then write more
+	go func() {
+		defer pw.Close()
+		pw.Write([]byte("data: chunk1\n"))
+		time.Sleep(50 * time.Millisecond)
+		cancel()
+		time.Sleep(200 * time.Millisecond)
+		pw.Write([]byte("data: chunk2\n")) // should not be received
+	}()
+
+	var lines []string
+	for hbs.Scan() {
+		lines = append(lines, hbs.Text())
+	}
+
+	// Should have received the first line but not the second
+	assert.Contains(t, lines, "data: chunk1")
+	assert.NotContains(t, lines, "data: chunk2",
+		"should not receive data after client disconnect")
+}
+
+// TestHeartbeatScanner_HeartbeatsSentCounter verifies the HeartbeatsSent()
+// counter tracks heartbeats accurately.
+func TestHeartbeatScanner_HeartbeatsSentCounter(t *testing.T) {
+	t.Parallel()
+	c, _ := newTestContext()
+
+	reader := &slowReader{
+		chunks:   []string{"data: hello\n"},
+		delays:   []time.Duration{250 * time.Millisecond},
+		released: make(chan struct{}),
+	}
+	scanner := bufio.NewScanner(reader)
+	scanner.Split(bufio.ScanLines)
+
+	hbs := NewHeartbeatScanner(c, scanner, 50*time.Millisecond)
+	defer hbs.Close()
+
+	for hbs.Scan() {
+		// consume
+	}
+
+	require.NoError(t, hbs.Err())
+	sent := hbs.HeartbeatsSent()
+	assert.GreaterOrEqual(t, sent, 2,
+		"expected at least 2 heartbeats during 250ms delay with 50ms interval, got %d", sent)
+	assert.Nil(t, hbs.HeartbeatWriteErr(),
+		"expected no heartbeat write error with healthy connection")
+}
+
+// TestHeartbeatScanner_HeartbeatsSentZeroWhenFast verifies no heartbeats
+// are counted when data flows faster than the interval.
+func TestHeartbeatScanner_HeartbeatsSentZeroWhenFast(t *testing.T) {
+	t.Parallel()
+	c, _ := newTestContext()
+	scanner := newScanner("line1\nline2\nline3\n")
+
+	hbs := NewHeartbeatScanner(c, scanner, 1*time.Second)
+	defer hbs.Close()
+
+	for hbs.Scan() {
+		// consume
+	}
+	require.NoError(t, hbs.Err())
+	assert.Equal(t, 0, hbs.HeartbeatsSent(),
+		"expected 0 heartbeats when data flows fast")
+}
+
+// errorWriter is a ResponseWriter that returns errors on Write to simulate
+// a broken client connection.
+type errorWriter struct {
+	gin.ResponseWriter
+	writeErr     error
+	writeCount   int
+	mu           sync.Mutex
+	successCount int // number of writes to succeed before returning errors
+}
+
+func (w *errorWriter) Write(data []byte) (int, error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.writeCount++
+	if w.successCount > 0 && w.writeCount <= w.successCount {
+		return w.ResponseWriter.Write(data)
+	}
+	return 0, w.writeErr
+}
+
+func (w *errorWriter) Flush() {
+	// no-op for broken writer
+}
+
+// TestHeartbeatScanner_HeartbeatWriteError verifies that write errors during
+// heartbeat sending are captured and subsequent heartbeats are skipped.
+func TestHeartbeatScanner_HeartbeatWriteError(t *testing.T) {
+	t.Parallel()
+	c, w := newTestContext()
+
+	// Wrap the writer with one that fails on Write
+	brokenWriter := &errorWriter{
+		ResponseWriter: c.Writer,
+		writeErr:       io.ErrClosedPipe,
+	}
+	c.Writer = brokenWriter
+
+	reader := &slowReader{
+		chunks:   []string{"data: hello\n"},
+		delays:   []time.Duration{200 * time.Millisecond},
+		released: make(chan struct{}),
+	}
+	scanner := bufio.NewScanner(reader)
+	scanner.Split(bufio.ScanLines)
+
+	hbs := NewHeartbeatScanner(c, scanner, 50*time.Millisecond)
+	defer hbs.Close()
+
+	for hbs.Scan() {
+		// consume
+	}
+
+	// HeartbeatsSent should be 0 since all writes failed
+	assert.Equal(t, 0, hbs.HeartbeatsSent(),
+		"no heartbeats should be counted when writes fail")
+
+	// The write error should be captured
+	assert.ErrorIs(t, hbs.HeartbeatWriteErr(), io.ErrClosedPipe)
+
+	// The response body should be empty (no successful heartbeat writes)
+	assert.Empty(t, w.Body.String(), "nothing should be written to a broken writer")
+}
+
+// TestHeartbeatScanner_KeepAliveForwardingSimulation simulates the exact
+// scenario from the 524 bug: upstream sends keepalive events every 30s-like
+// interval, and the HeartbeatScanner should fill the gaps with heartbeats.
+func TestHeartbeatScanner_KeepAliveForwardingSimulation(t *testing.T) {
+	t.Parallel()
+	c, w := newTestContext()
+
+	pr, pw := io.Pipe()
+
+	scanner := bufio.NewScanner(pr)
+	scanner.Split(bufio.ScanLines)
+
+	// Use 30ms heartbeat interval (simulating 5s in production but faster for tests)
+	hbs := NewHeartbeatScanner(c, scanner, 30*time.Millisecond)
+	defer hbs.Close()
+
+	// Simulate the upstream sending pattern from the bug:
+	// response.created immediately, then keepalives with gaps
+	go func() {
+		defer pw.Close()
+		// Initial events arrive immediately
+		pw.Write([]byte("event: response.created\n"))
+		pw.Write([]byte("data: {\"type\":\"response.created\"}\n"))
+		pw.Write([]byte("\n"))
+
+		// 150ms gap (simulating 30s upstream thinking pause)
+		time.Sleep(150 * time.Millisecond)
+
+		// Keepalive arrives
+		pw.Write([]byte("event: keepalive\n"))
+		pw.Write([]byte("data: {\"type\":\"keepalive\",\"sequence_number\":2}\n"))
+		pw.Write([]byte("\n"))
+
+		// Another 150ms gap
+		time.Sleep(150 * time.Millisecond)
+
+		// Stream ends
+		pw.Write([]byte("data: [DONE]\n"))
+	}()
+
+	var lines []string
+	for hbs.Scan() {
+		lines = append(lines, hbs.Text())
+	}
+
+	require.NoError(t, hbs.Err())
+
+	// Verify all upstream lines were forwarded
+	assert.Contains(t, lines, "event: response.created")
+	assert.Contains(t, lines, "data: {\"type\":\"response.created\"}")
+	assert.Contains(t, lines, "event: keepalive")
+	assert.Contains(t, lines, "data: {\"type\":\"keepalive\",\"sequence_number\":2}")
+	assert.Contains(t, lines, "data: [DONE]")
+
+	// Verify heartbeats were sent during the gaps
+	body := w.Body.String()
+	heartbeatCount := strings.Count(body, ":\n")
+	assert.GreaterOrEqual(t, heartbeatCount, 4,
+		"expected at least 4 heartbeats during two 150ms gaps with 30ms interval, got %d", heartbeatCount)
+
+	// HeartbeatsSent counter should match
+	assert.Equal(t, heartbeatCount, hbs.HeartbeatsSent(),
+		"HeartbeatsSent() should match actual heartbeats written")
 }
