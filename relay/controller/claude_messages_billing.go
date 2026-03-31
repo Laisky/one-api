@@ -2,7 +2,6 @@ package controller
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 
 	"github.com/Laisky/errors/v2"
@@ -23,6 +22,7 @@ import (
 func preConsumeClaudeMessagesQuota(c *gin.Context, request *ClaudeMessagesRequest, promptTokens int, ratio float64, completionRatio float64, meta *metalib.Meta) (int64, *relaymodel.ErrorWithStatusCode) {
 	// Use similar logic to ChatCompletion pre-consumption
 	ctx := gmw.Ctx(c)
+	lg := gmw.GetLogger(c)
 	promptQuota := float64(promptTokens) * ratio
 	completionQuota := 0.0
 	if request.MaxTokens > 0 {
@@ -44,25 +44,25 @@ func preConsumeClaudeMessagesQuota(c *gin.Context, request *ClaudeMessagesReques
 	if userQuota-baseQuota < 0 {
 		return baseQuota, openai.ErrorWrapper(errors.New("user quota is not enough"), "insufficient_user_quota", http.StatusForbidden)
 	}
-	err = model.CacheDecreaseUserQuota(ctx, meta.UserId, baseQuota)
-	if err != nil {
-		return baseQuota, openai.ErrorWrapper(err, "decrease_user_quota_failed", http.StatusInternalServerError)
-	}
 	if userQuota > 100*baseQuota &&
 		(tokenQuotaUnlimited || tokenQuota > 100*baseQuota) {
 		// in this case, we do not pre-consume quota
 		// because the user and token have enough quota
 		baseQuota = 0
-		gmw.GetLogger(c).Info(fmt.Sprintf("user %d has enough quota %d, trusted and no need to pre-consume", meta.UserId, userQuota))
+		lg.Info("user has enough quota, trusted and no need to pre-consume",
+			zap.Int("user_id", meta.UserId),
+			zap.Int64("user_quota", userQuota),
+		)
 	}
 	if baseQuota > 0 {
 		err := model.PreConsumeTokenQuota(ctx, meta.TokenId, baseQuota)
 		if err != nil {
 			return baseQuota, openai.ErrorWrapper(err, "pre_consume_token_quota_failed", http.StatusForbidden)
 		}
+		syncUserQuotaCacheAfterPreConsume(ctx, meta.UserId, baseQuota, "claude_messages_preconsume")
 	}
 
-	gmw.GetLogger(c).Debug("pre-consumed quota for Claude Messages",
+	lg.Debug("pre-consumed quota for Claude Messages",
 		zap.Int64("quota", baseQuota),
 		zap.Float64("ratio", ratio))
 	return baseQuota, nil

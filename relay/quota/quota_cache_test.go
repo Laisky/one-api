@@ -117,6 +117,30 @@ func TestComputeEmbeddingPromptCostUsesModalityTokenRatios(t *testing.T) {
 	require.Equal(t, 100, result.PromptTokens)
 }
 
+// TestComputeUnknownModelFallbackUsesQuotaUnits verifies that unknown-model fallback pricing
+// is expressed in internal quota units, preventing large requests from being underbilled.
+func TestComputeUnknownModelFallbackUsesQuotaUnits(t *testing.T) {
+	t.Parallel()
+
+	modelRatio := pricing.GetModelRatioWithThreeLayers("unknown-billing-model", nil, nil)
+	require.Equal(t, 2.5*0.5, modelRatio)
+
+	usage := &relaymodel.Usage{
+		PromptTokens:     12000,
+		CompletionTokens: 8000,
+	}
+
+	result := quotautil.Compute(quotautil.ComputeInput{
+		Usage:      usage,
+		ModelName:  "unknown-billing-model",
+		ModelRatio: modelRatio,
+		GroupRatio: 1,
+	})
+
+	require.Equal(t, int64(25000), result.TotalQuota)
+	require.Greater(t, result.TotalQuota, int64(1), "unknown-model fallback should not collapse large requests to the minimum charge")
+}
+
 // TestComputeEmbeddingPromptCostUsesPerUnitFallbacks verifies direct per-unit embedding prices are used when token breakdowns are unavailable.
 func TestComputeEmbeddingPromptCostUsesPerUnitFallbacks(t *testing.T) {
 	t.Parallel()

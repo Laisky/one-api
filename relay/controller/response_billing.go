@@ -53,6 +53,7 @@ func preConsumeResponseAPIQuota(
 	if err != nil {
 		return baseQuota, openai.ErrorWrapper(err, "pre_consume_token_quota_failed", http.StatusForbidden)
 	}
+	syncUserQuotaCacheAfterPreConsume(ctx, meta.UserId, baseQuota, "response_api_preconsume")
 
 	return baseQuota, nil
 }

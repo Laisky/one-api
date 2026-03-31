@@ -75,7 +75,7 @@ For model input/output ratio resolution (`relay/pricing/global.go`):
 2. Provider adapter default (`GetDefaultModelPricing`)
 3. Global pricing map (merged from configured adapters; default list size is 13)
 4. Final fallback
-   - input ratio fallback: `2.5 * 0.000001`
+   - input ratio fallback: `2.5 * billingratio.MilliTokensUsd` (= 1.25 quota per token)
    - completion ratio fallback: `1.0`
 
 ### Final Quota Formula

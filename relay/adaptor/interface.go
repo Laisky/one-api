@@ -10,6 +10,7 @@ import (
 	"github.com/Laisky/errors/v2"
 	"github.com/gin-gonic/gin"
 
+	billingratio "github.com/songquanpeng/one-api/relay/billing/ratio"
 	"github.com/songquanpeng/one-api/relay/meta"
 	"github.com/songquanpeng/one-api/relay/model"
 )
@@ -343,7 +344,7 @@ func (d *DefaultPricingMethods) GetDefaultModelPricing() map[string]ModelConfig 
 
 func (d *DefaultPricingMethods) GetModelRatio(modelName string) float64 {
 	// Fallback to a reasonable default
-	return 2.5 * 0.000001 // 2.5 USD per million tokens
+	return 2.5 * billingratio.MilliTokensUsd // 2.5 USD per million tokens in internal quota units
 }
 
 func (d *DefaultPricingMethods) GetCompletionRatio(modelName string) float64 {

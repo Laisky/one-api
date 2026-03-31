@@ -315,7 +315,7 @@ func (a *Adaptor) GetModelRatio(modelName string) float64 {
 		return price.Ratio
 	}
 	// Default AWS pricing (Claude-like)
-	return 3 * 0.000001 // Default USD pricing
+	return 3 * ratio.MilliTokensUsd // Default USD pricing in internal quota units
 }
 
 func (a *Adaptor) GetCompletionRatio(modelName string) float64 {

@@ -326,9 +326,6 @@ func preConsumeRerankQuota(c *gin.Context, perCallQuota int64, meta *metalib.Met
 	if userQuota-perCallQuota < 0 {
 		return perCallQuota, openai.ErrorWrapper(errors.New("user quota is not enough"), "insufficient_user_quota", http.StatusForbidden)
 	}
-	if err := model.CacheDecreaseUserQuota(ctx, meta.UserId, perCallQuota); err != nil {
-		return perCallQuota, openai.ErrorWrapper(err, "decrease_user_quota_failed", http.StatusInternalServerError)
-	}
 
 	if userQuota > 100*perCallQuota && (tokenQuotaUnlimited || tokenQuota > 100*perCallQuota) {
 		lg.Info("user has enough quota, trusted and no need to pre-consume", zap.Int("user_id", meta.UserId), zap.Int64("user_quota", userQuota))
@@ -338,6 +335,7 @@ func preConsumeRerankQuota(c *gin.Context, perCallQuota int64, meta *metalib.Met
 	if err := model.PreConsumeTokenQuota(ctx, meta.TokenId, perCallQuota); err != nil {
 		return perCallQuota, openai.ErrorWrapper(err, "pre_consume_token_quota_failed", http.StatusForbidden)
 	}
+	syncUserQuotaCacheAfterPreConsume(ctx, meta.UserId, perCallQuota, "rerank_preconsume")
 
 	return perCallQuota, nil
 }

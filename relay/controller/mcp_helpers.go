@@ -152,12 +152,10 @@ func preConsumeMCPRoundQuota(c *gin.Context, meta *metalib.Meta, request *relaym
 	if userQuota-preConsumedQuota < 0 {
 		return preConsumedQuota, errors.New("user quota is not enough")
 	}
-	if err := model.CacheDecreaseUserQuota(ctx, meta.UserId, preConsumedQuota); err != nil {
-		return preConsumedQuota, err
-	}
 	if err := model.PreConsumeTokenQuota(ctx, meta.TokenId, preConsumedQuota); err != nil {
 		return preConsumedQuota, err
 	}
+	syncUserQuotaCacheAfterPreConsume(ctx, meta.UserId, preConsumedQuota, "mcp_round_preconsume")
 	return preConsumedQuota, nil
 }
 
@@ -200,7 +198,7 @@ func updateMCPRequestCostEstimate(c *gin.Context, meta *metalib.Meta, usage *rel
 		ChannelCompletionRatio: channelCompletionRatio,
 		PricingAdaptor:         pricingAdaptor,
 	})
-	quota := computeResult.TotalQuota + usage.ToolsCost
+	quota := computeResult.TotalQuota
 	if quota < 0 {
 		quota = 0
 	}

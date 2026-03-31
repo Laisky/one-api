@@ -2,6 +2,7 @@ package render
 
 import (
 	"bufio"
+	"context"
 	"sync"
 	"time"
 
@@ -87,7 +88,9 @@ func NewHeartbeatScanner(c *gin.Context, scanner *bufio.Scanner, interval time.D
 	}
 	// Flush headers immediately so the reverse proxy sees the 200 + SSE
 	// content-type right away, before any upstream data arrives.
-	c.Writer.Flush()
+	if c != nil && c.Writer != nil {
+		c.Writer.Flush()
+	}
 
 	go h.readLoop(scanner)
 	return h
@@ -119,7 +122,10 @@ func (h *HeartbeatScanner) Scan() bool {
 	ticker := time.NewTicker(h.interval)
 	defer ticker.Stop()
 
-	clientCtx := h.c.Request.Context()
+	clientCtx := context.Background()
+	if h.c != nil && h.c.Request != nil {
+		clientCtx = h.c.Request.Context()
+	}
 
 	for {
 		select {
@@ -179,6 +185,9 @@ func (h *HeartbeatScanner) Close() {
 }
 
 func (h *HeartbeatScanner) sendHeartbeat() {
+	if h.c == nil || h.c.Writer == nil {
+		return
+	}
 	_, err := h.c.Writer.Write([]byte(heartbeatPayload))
 	if err != nil {
 		if h.heartbeatWriteErr == nil {

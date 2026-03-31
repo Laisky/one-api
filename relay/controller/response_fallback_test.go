@@ -34,9 +34,8 @@ import (
 )
 
 var (
-	responseFallbackDBOnce      sync.Once
-	responseFallbackMigrateOnce sync.Once
-	responseFallbackFixtureMu   sync.Mutex
+	responseFallbackDBOnce    sync.Once
+	responseFallbackFixtureMu sync.Mutex
 )
 
 const (
@@ -880,21 +879,19 @@ func ensureResponseFallbackFixtures(t *testing.T) {
 
 	ensureResponseFallbackDB(t)
 
-	responseFallbackMigrateOnce.Do(func() {
-		err := model.DB.AutoMigrate(
-			&model.User{},
-			&model.Token{},
-			&model.Channel{},
-			&model.UserRequestCost{},
-			&model.Log{},
-			&model.Trace{},
-			&model.MCPServer{},
-			&model.MCPTool{},
-		)
-		require.NoError(t, err, "failed to migrate tables")
-	})
+	err := model.DB.AutoMigrate(
+		&model.User{},
+		&model.Token{},
+		&model.Channel{},
+		&model.UserRequestCost{},
+		&model.Log{},
+		&model.Trace{},
+		&model.MCPServer{},
+		&model.MCPTool{},
+	)
+	require.NoError(t, err, "failed to migrate tables")
 
-	err := model.DB.Where("id = ?", fallbackUserID).Delete(&model.User{}).Error
+	err = model.DB.Where("id = ?", fallbackUserID).Delete(&model.User{}).Error
 	require.NoError(t, err, "failed to clean user fixture")
 	user := &model.User{Id: fallbackUserID, Username: "response-fallback", Quota: 1_000_000, Status: model.UserStatusEnabled}
 	err = model.DB.Create(user).Error

@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/songquanpeng/one-api/relay/adaptor"
+	billingratio "github.com/songquanpeng/one-api/relay/billing/ratio"
 	"github.com/songquanpeng/one-api/relay/meta"
 	relaymodel "github.com/songquanpeng/one-api/relay/model"
 )
@@ -23,7 +24,7 @@ func (m *localMockAdaptor) GetModelRatio(modelName string) float64 {
 	if p, ok := m.pricing[modelName]; ok {
 		return p.Ratio
 	}
-	return 2.5 * 0.000001
+	return 2.5 * billingratio.MilliTokensUsd
 }
 func (m *localMockAdaptor) GetCompletionRatio(modelName string) float64 {
 	if p, ok := m.pricing[modelName]; ok {

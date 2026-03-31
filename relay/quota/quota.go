@@ -3,6 +3,9 @@ package quota
 import (
 	"math"
 
+	"github.com/Laisky/zap"
+
+	"github.com/songquanpeng/one-api/common/logger"
 	modelcfg "github.com/songquanpeng/one-api/model"
 	"github.com/songquanpeng/one-api/relay/adaptor"
 	billingratio "github.com/songquanpeng/one-api/relay/billing/ratio"
@@ -199,6 +202,15 @@ func Compute(input ComputeInput) ComputeResult {
 
 	totalQuota := int64(math.Ceil(cost)) + usage.ToolsCost
 	if (usedModelRatio*input.GroupRatio) != 0 && totalQuota <= 0 {
+		logger.Logger.Debug("quota calculation clamped to minimum charge",
+			zap.String("model_name", input.ModelName),
+			zap.Int("prompt_tokens", promptTokens),
+			zap.Int("completion_tokens", completionTokens),
+			zap.Float64("raw_cost", cost),
+			zap.Float64("model_ratio", usedModelRatio),
+			zap.Float64("group_ratio", input.GroupRatio),
+			zap.Float64("completion_ratio", usedCompletionRatio),
+		)
 		totalQuota = 1
 	}
 

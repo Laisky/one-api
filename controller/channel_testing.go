@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"math"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -37,6 +36,7 @@ import (
 	"github.com/songquanpeng/one-api/relay/meta"
 	relaymodel "github.com/songquanpeng/one-api/relay/model"
 	"github.com/songquanpeng/one-api/relay/pricing"
+	quotautil "github.com/songquanpeng/one-api/relay/quota"
 	"github.com/songquanpeng/one-api/relay/relaymode"
 )
 
@@ -86,18 +86,16 @@ func calculateTestCost(usage *relaymodel.Usage, meta *meta.Meta, request *relaym
 
 	// Use the same group ratio as set in the context (typically 1.0 for tests)
 	groupRatio := 1.0 // Default group ratio for tests
+	computeResult := quotautil.Compute(quotautil.ComputeInput{
+		Usage:                  usage,
+		ModelName:              request.Model,
+		ModelRatio:             modelRatio,
+		GroupRatio:             groupRatio,
+		ChannelCompletionRatio: map[string]float64{request.Model: completionRatio},
+		PricingAdaptor:         pricingAdaptor,
+	})
 
-	// Calculate cost using the same formula as postConsumeQuota
-	promptTokens := usage.PromptTokens
-	completionTokens := usage.CompletionTokens
-	ratio := modelRatio * groupRatio
-
-	quota := int64(math.Ceil((float64(promptTokens)+float64(completionTokens)*completionRatio)*ratio)) + usage.ToolsCost
-	if ratio != 0 && quota <= 0 {
-		quota = 1
-	}
-
-	return quota
+	return computeResult.TotalQuota
 }
 
 func testChannel(ctx context.Context, channel *model.Channel, request *relaymodel.GeneralOpenAIRequest) (responseMessage string, err error, openaiErr *relaymodel.Error) {

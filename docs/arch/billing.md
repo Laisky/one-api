@@ -1029,7 +1029,7 @@ graph TD
 ```go
 // Each adapter implements comprehensive pricing
 func (a *Adaptor) GetDefaultModelPricing() map[string]adaptor.ModelConfig {
-    const MilliTokensUsd = 0.000001
+    const MilliTokensUsd = 0.5 // QuotaPerUsd / 1M = 500000 / 1000000
 
     return map[string]adaptor.ModelConfig{
         "model-name": {
@@ -1265,7 +1265,7 @@ func GetModelRatioWithThreeLayers(modelName string, channelOverrides map[string]
     }
 
     // Layer 4: Final fallback - reasonable default
-    return 2.5 * 0.000001 // 2.5 USD per million tokens
+    return 2.5 * billingratio.MilliTokensUsd // 2.5 USD per million tokens in internal quota units
 }
 ```
 

@@ -134,9 +134,9 @@ func CacheUpdateUserQuota(ctx context.Context, id int) error {
 	if !common.IsRedisEnabled() {
 		return nil
 	}
-	quota, err := CacheGetUserQuota(ctx, id)
+	quota, err := GetUserQuota(id)
 	if err != nil {
-		return errors.Wrapf(err, "get cached quota for user %d", id)
+		return errors.Wrapf(err, "get database quota for user %d", id)
 	}
 	err = common.RedisSet(ctx, fmt.Sprintf("user_quota:%d", id), fmt.Sprintf("%d", quota), time.Duration(UserId2QuotaCacheSeconds)*time.Second)
 	if err != nil {

@@ -137,9 +137,6 @@ func RelayVideoHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 		if userQuota-usedQuota < 0 {
 			return openai.ErrorWrapper(errors.New("user quota is not enough"), "insufficient_user_quota", http.StatusForbidden)
 		}
-		if err := model.CacheDecreaseUserQuota(ctx, userId, usedQuota); err != nil {
-			return openai.ErrorWrapper(err, "decrease_user_quota_failed", http.StatusInternalServerError)
-		}
 
 		tokenQuota := c.GetInt64(ctxkey.TokenQuota)
 		tokenQuotaUnlimited := c.GetBool(ctxkey.TokenQuotaUnlimited)
@@ -151,6 +148,7 @@ func RelayVideoHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 			if err := model.PreConsumeTokenQuota(ctx, tokenId, preConsumedQuota); err != nil {
 				return openai.ErrorWrapper(err, "pre_consume_token_quota_failed", http.StatusForbidden)
 			}
+			syncUserQuotaCacheAfterPreConsume(ctx, userId, preConsumedQuota, "video_preconsume")
 
 			// Billing audit safety net
 			markPreConsumed(c, preConsumedQuota)

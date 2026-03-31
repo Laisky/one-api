@@ -9,6 +9,7 @@ import (
 	"github.com/songquanpeng/one-api/common/logger"
 	"github.com/songquanpeng/one-api/relay/adaptor"
 	"github.com/songquanpeng/one-api/relay/apitype"
+	billingratio "github.com/songquanpeng/one-api/relay/billing/ratio"
 )
 
 // DefaultGlobalPricingAdapters defines which adapters contribute to global pricing fallback
@@ -367,7 +368,13 @@ func GetModelRatioWithThreeLayers(modelName string, channelOverrides map[string]
 	}
 
 	// Layer 4: Final fallback - reasonable default
-	return 2.5 * 0.000001 // 2.5 USD per million tokens
+	fallbackRatio := 2.5 * billingratio.MilliTokensUsd
+	logger.Logger.Debug("pricing fallback used for unknown model",
+		zap.String("model_name", modelName),
+		zap.Float64("fallback_ratio", fallbackRatio),
+		zap.String("unit", "quota_per_token"),
+	)
+	return fallbackRatio // 2.5 USD per million tokens expressed in internal quota units
 }
 
 // GetCompletionRatioWithThreeLayers implements the three-layer completion ratio fallback
@@ -465,7 +472,7 @@ type EffectivePricing struct {
 // - Optional tier fields inherit from base if zero. Negative cached ratios mean free.
 func ResolveEffectivePricing(modelName string, inputTokens int, adaptor adaptor.Adaptor) EffectivePricing {
 	if adaptor == nil {
-		baseIn := 2.5 * 0.000001
+		baseIn := 2.5 * billingratio.MilliTokensUsd
 		baseComp := 1.0
 		return EffectivePricing{
 			InputRatio:           baseIn,

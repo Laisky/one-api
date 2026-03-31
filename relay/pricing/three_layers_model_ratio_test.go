@@ -6,6 +6,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/songquanpeng/one-api/relay/adaptor"
+	billingratio "github.com/songquanpeng/one-api/relay/billing/ratio"
 )
 
 // TestGetModelRatioWithThreeLayers_AllLayers verifies model-ratio precedence and corner cases.
@@ -34,7 +35,7 @@ func TestGetModelRatioWithThreeLayers_AllLayers(t *testing.T) {
 	require.InDelta(t, 0.0, GetModelRatioWithThreeLayers(modelName, channelZero, provider), 1e-12)
 
 	// Unknown model falls back to built-in default.
-	require.InDelta(t, 2.5*0.000001, GetModelRatioWithThreeLayers("unknown-model", nil, nil), 1e-12)
+	require.InDelta(t, 2.5*billingratio.MilliTokensUsd, GetModelRatioWithThreeLayers("unknown-model", nil, nil), 1e-12)
 }
 
 // TestGetCompletionRatioWithThreeLayers_AllLayers verifies completion-ratio precedence and corner cases.

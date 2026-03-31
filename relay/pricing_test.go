@@ -9,6 +9,7 @@ import (
 	"github.com/songquanpeng/one-api/relay/adaptor/openrouter"
 	"github.com/songquanpeng/one-api/relay/adaptor/xai"
 	"github.com/songquanpeng/one-api/relay/apitype"
+	billingratio "github.com/songquanpeng/one-api/relay/billing/ratio"
 )
 
 // TestAdapterPricingImplementations tests that all major adapters have proper pricing implementations
@@ -298,6 +299,33 @@ func TestFallbackPricing(t *testing.T) {
 			require.Greater(t, completionRatio, 0.0, "%s: Fallback completion ratio for unknown model should be > 0, got %.2f", adapter.name, completionRatio)
 
 			t.Logf("%s fallback pricing: ratio=%.9f, completion_ratio=%.2f", adapter.name, ratio, completionRatio)
+		})
+	}
+}
+
+// TestFallbackPricingUsesQuotaUnits verifies unknown-model fallback values remain in the
+// internal quota-per-token unit instead of raw USD-per-token values.
+func TestFallbackPricingUsesQuotaUnits(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		name     string
+		apiType  int
+		expected float64
+	}{
+		{name: "Anthropic", apiType: apitype.Anthropic, expected: 3 * billingratio.MilliTokensUsd},
+		{name: "AWS Bedrock", apiType: apitype.AwsClaude, expected: 3 * billingratio.MilliTokensUsd},
+		{name: "Cohere", apiType: apitype.Cohere, expected: 0.5 * billingratio.MilliTokensUsd},
+		{name: "Ollama", apiType: apitype.Ollama, expected: 2.5 * billingratio.MilliTokensUsd},
+	}
+
+	for _, tc := range testCases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			adaptor := GetAdaptor(tc.apiType)
+			require.NotNil(t, adaptor)
+			require.Equal(t, tc.expected, adaptor.GetModelRatio("unknown-test-model-12345"))
 		})
 	}
 }

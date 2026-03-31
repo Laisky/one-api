@@ -11,6 +11,7 @@ import (
 
 	"github.com/songquanpeng/one-api/common/ctxkey"
 	"github.com/songquanpeng/one-api/relay/adaptor"
+	billingratio "github.com/songquanpeng/one-api/relay/billing/ratio"
 	"github.com/songquanpeng/one-api/relay/meta"
 	"github.com/songquanpeng/one-api/relay/model"
 	"github.com/songquanpeng/one-api/relay/relaymode"
@@ -209,7 +210,7 @@ func (a *Adaptor) GetModelRatio(modelName string) float64 {
 		return price.Ratio
 	}
 	// Fallback to global pricing for unknown models
-	return 3 * 0.000001 // Default Anthropic pricing
+	return 3 * billingratio.MilliTokensUsd // Default Anthropic pricing in internal quota units
 }
 
 func (a *Adaptor) GetCompletionRatio(modelName string) float64 {

@@ -231,10 +231,6 @@ func preConsumeQuota(
 	if userQuota-preConsumedQuota < 0 {
 		return preConsumedQuota, openai.ErrorWrapper(errors.New("user quota is not enough"), "insufficient_user_quota", http.StatusForbidden)
 	}
-	err = model.CacheDecreaseUserQuota(ctx, meta.UserId, preConsumedQuota)
-	if err != nil {
-		return preConsumedQuota, openai.ErrorWrapper(err, "decrease_user_quota_failed", http.StatusInternalServerError)
-	}
 	if userQuota > 100*preConsumedQuota &&
 		(tokenQuotaUnlimited || tokenQuota > 100*preConsumedQuota) {
 		// in this case, we do not pre-consume quota
@@ -247,6 +243,7 @@ func preConsumeQuota(
 		if err != nil {
 			return preConsumedQuota, openai.ErrorWrapper(err, "pre_consume_token_quota_failed", http.StatusForbidden)
 		}
+		syncUserQuotaCacheAfterPreConsume(ctx, meta.UserId, preConsumedQuota, "chat_preconsume")
 	}
 	return preConsumedQuota, nil
 }

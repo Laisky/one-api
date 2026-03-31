@@ -558,14 +558,19 @@ func preConsumeQuotaForMCPRound(c *gin.Context, meta *metalib.Meta, quota int64)
 	if quota <= 0 {
 		return nil
 	}
-	userQuota, err := model.CacheGetUserQuota(gmw.Ctx(c), meta.UserId)
+	ctx := gmw.Ctx(c)
+	userQuota, err := model.CacheGetUserQuota(ctx, meta.UserId)
 	if err != nil {
 		return err
 	}
 	if userQuota-quota < 0 {
 		return errors.New("user quota is not enough")
 	}
-	return model.PreConsumeTokenQuota(gmw.Ctx(c), meta.TokenId, quota)
+	if err := model.PreConsumeTokenQuota(ctx, meta.TokenId, quota); err != nil {
+		return err
+	}
+	syncUserQuotaCacheAfterPreConsume(ctx, meta.UserId, quota, "claude_mcp_round_preconsume")
+	return nil
 }
 
 // marshalStringJSON marshals a string to JSON format.
