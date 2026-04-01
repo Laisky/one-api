@@ -42,6 +42,9 @@ func (a *Adaptor) GetRequestURL(meta *meta.Meta) (string, error) {
 	case relaymode.Embeddings:
 		return fmt.Sprintf("%s/api/paas/v4/embeddings", meta.BaseURL), nil
 	}
+	if isOCRModel(meta.ActualModelName) {
+		return fmt.Sprintf("%s/api/paas/v4/layout_parsing", meta.BaseURL), nil
+	}
 	a.SetVersionByModeName(meta.ActualModelName)
 	if a.APIVersion == "v4" {
 		return fmt.Sprintf("%s/api/paas/v4/chat/completions", meta.BaseURL), nil
@@ -69,6 +72,10 @@ func (a *Adaptor) ConvertRequest(c *gin.Context, relayMode int, request *model.G
 		baiduEmbeddingRequest, err := ConvertEmbeddingRequest(*request)
 		return baiduEmbeddingRequest, err
 	default:
+		if isOCRModel(request.Model) {
+			return ConvertOCRRequest(*request)
+		}
+
 		// TopP [0.0, 1.0]
 		request.TopP = helper.Float64PtrMax(request.TopP, 1)
 		request.TopP = helper.Float64PtrMin(request.TopP, 0)
@@ -260,6 +267,10 @@ func (a *Adaptor) DoResponse(c *gin.Context, resp *http.Response, meta *meta.Met
 		return
 	case relaymode.ImagesGenerations:
 		err, usage = openai.ImageHandler(c, resp)
+		return
+	}
+	if isOCRModel(meta.ActualModelName) {
+		err, usage = OCRHandler(c, resp, meta.ActualModelName)
 		return
 	}
 	if a.APIVersion == "v4" {

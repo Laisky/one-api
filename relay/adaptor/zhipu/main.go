@@ -16,6 +16,7 @@ import (
 
 	"github.com/songquanpeng/one-api/common"
 	"github.com/songquanpeng/one-api/common/helper"
+	"github.com/songquanpeng/one-api/common/random"
 	"github.com/songquanpeng/one-api/common/render"
 	commonsse "github.com/songquanpeng/one-api/common/sse"
 	"github.com/songquanpeng/one-api/relay/adaptor/openai"
@@ -268,6 +269,74 @@ func EmbeddingsHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithSta
 		return openai.ErrorWrapper(err, "unmarshal_response_body_failed", http.StatusInternalServerError), nil
 	}
 	fullTextResponse := embeddingResponseZhipu2OpenAI(&zhipuResponse)
+	jsonResponse, err := json.Marshal(fullTextResponse)
+	if err != nil {
+		return openai.ErrorWrapper(err, "marshal_response_body_failed", http.StatusInternalServerError), nil
+	}
+	c.Writer.Header().Set("Content-Type", "application/json")
+	c.Writer.WriteHeader(resp.StatusCode)
+	_, err = c.Writer.Write(jsonResponse)
+	return nil, &fullTextResponse.Usage
+}
+
+func isOCRModel(modelName string) bool {
+	return modelName == "glm-ocr"
+}
+
+// ConvertOCRRequest extracts the file URL from OpenAI-style messages
+// and converts it to a Zhipu OCR request.
+func ConvertOCRRequest(request model.GeneralOpenAIRequest) (*OCRRequest, error) {
+	// Look for an image URL in the messages
+	for _, msg := range request.Messages {
+		if msg.Role != "user" {
+			continue
+		}
+		for _, content := range msg.ParseContent() {
+			if content.ImageURL != nil && content.ImageURL.Url != "" {
+				return &OCRRequest{
+					Model: request.Model,
+					File:  content.ImageURL.Url,
+				}, nil
+			}
+		}
+	}
+	return nil, errors.New("glm-ocr requires an image_url in the message content")
+}
+
+// OCRHandler converts the Zhipu layout_parsing response to OpenAI chat completion format.
+func OCRHandler(c *gin.Context, resp *http.Response, modelName string) (*model.ErrorWithStatusCode, *model.Usage) {
+	var ocrResponse OCRResponse
+	responseBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return openai.ErrorWrapper(err, "read_response_body_failed", http.StatusInternalServerError), nil
+	}
+	err = resp.Body.Close()
+	if err != nil {
+		return openai.ErrorWrapper(err, "close_response_body_failed", http.StatusInternalServerError), nil
+	}
+	err = json.Unmarshal(responseBody, &ocrResponse)
+	if err != nil {
+		return openai.ErrorWrapper(err, "unmarshal_response_body_failed", http.StatusInternalServerError), nil
+	}
+
+	fullTextResponse := openai.TextResponse{
+		Id:      "ocr-" + random.GetUUID(),
+		Object:  "chat.completion",
+		Created: helper.GetTimestamp(),
+		Model:   modelName,
+		Choices: []openai.TextResponseChoice{
+			{
+				Index: 0,
+				Message: model.Message{
+					Role:    "assistant",
+					Content: ocrResponse.Content,
+				},
+				FinishReason: "stop",
+			},
+		},
+		Usage: ocrResponse.Usage,
+	}
+
 	jsonResponse, err := json.Marshal(fullTextResponse)
 	if err != nil {
 		return openai.ErrorWrapper(err, "marshal_response_body_failed", http.StatusInternalServerError), nil

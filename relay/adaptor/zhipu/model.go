@@ -69,3 +69,13 @@ type ImageRequest struct {
 	Prompt string `json:"prompt"`
 	UserId string `json:"user_id,omitempty"`
 }
+
+type OCRRequest struct {
+	Model string `json:"model"`
+	File  string `json:"file"`
+}
+
+type OCRResponse struct {
+	Content     string      `json:"content"`
+	model.Usage `json:"usage"`
+}

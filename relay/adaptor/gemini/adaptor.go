@@ -117,6 +117,9 @@ func (a *Adaptor) ConvertClaudeRequest(c *gin.Context, request *model.ClaudeRequ
 		Stream:      request.Stream != nil && *request.Stream,
 		Stop:        request.StopSequences,
 	}
+	if structuredResponseFormat := claudeStructuredResponseFormat(request); structuredResponseFormat != nil {
+		openaiRequest.ResponseFormat = structuredResponseFormat
+	}
 
 	// Convert system prompt
 	if request.System != nil {
@@ -213,27 +216,29 @@ func (a *Adaptor) ConvertClaudeRequest(c *gin.Context, request *model.ClaudeRequ
 	}
 
 	// Convert tools
-	for _, tool := range request.Tools {
-		openaiTool := model.Tool{
-			Type: "function",
-			Function: &model.Function{
-				Name:        tool.Name,
-				Description: tool.Description,
-			},
-		}
-
-		// Convert input schema
-		if tool.InputSchema != nil {
-			if schemaMap, ok := tool.InputSchema.(map[string]any); ok {
-				openaiTool.Function.Parameters = schemaMap
+	if openaiRequest.ResponseFormat == nil {
+		for _, tool := range request.Tools {
+			openaiTool := model.Tool{
+				Type: "function",
+				Function: &model.Function{
+					Name:        tool.Name,
+					Description: tool.Description,
+				},
 			}
-		}
 
-		openaiRequest.Tools = append(openaiRequest.Tools, openaiTool)
+			// Convert input schema
+			if tool.InputSchema != nil {
+				if schemaMap, ok := tool.InputSchema.(map[string]any); ok {
+					openaiTool.Function.Parameters = schemaMap
+				}
+			}
+
+			openaiRequest.Tools = append(openaiRequest.Tools, openaiTool)
+		}
 	}
 
 	// Convert tool choice
-	if request.ToolChoice != nil {
+	if request.ToolChoice != nil && openaiRequest.ResponseFormat == nil {
 		openaiRequest.ToolChoice = request.ToolChoice
 	}
 

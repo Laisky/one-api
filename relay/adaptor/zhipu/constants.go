@@ -91,6 +91,9 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 	// Embedding Models
 	"embedding-3": {Ratio: 0.0005 * ratio.MilliTokensRmb, CompletionRatio: 1},
 	"embedding-2": {Ratio: 0.0005 * ratio.MilliTokensRmb, CompletionRatio: 1},
+
+	// OCR Models
+	"glm-ocr": {Ratio: 0.2 * ratio.MilliTokensRmb, CompletionRatio: 1},
 }
 
 // ZhipuToolingDefaults captures Open BigModel's published search-tool pricing tiers (retrieved 2025-11-12).
