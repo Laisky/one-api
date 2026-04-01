@@ -302,7 +302,7 @@ streamLoop:
 
 	// Check for scanner errors
 	if err := hbs.Err(); err != nil && trackerErr == nil {
-		lg.Error("error reading stream", zap.Error(err), zap.Int("scanner_max_token_size", helper.DefaultScannerMaxTokenSize))
+		render.LogHeartbeatScannerError(c, lg, err, helper.DefaultScannerMaxTokenSize, hbs)
 	}
 
 	// Let the streamRewriter finalize if present, but do NOT fabricate a

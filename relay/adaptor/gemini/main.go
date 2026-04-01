@@ -935,9 +935,7 @@ func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusC
 		}
 	}
 	if err := hbs.Err(); err != nil {
-		lg.Error("error reading stream",
-			zap.Error(errors.Wrap(err, "scanner stream")),
-			zap.Int("scanner_max_token_size", helper.DefaultScannerMaxTokenSize))
+		render.LogHeartbeatScannerError(c, lg, errors.Wrap(err, "scanner stream"), helper.DefaultScannerMaxTokenSize, hbs)
 	}
 
 	if outputImageCount > 0 {

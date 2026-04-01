@@ -966,7 +966,7 @@ func ClaudeNativeStreamHandler(c *gin.Context, resp *http.Response) (*model.Erro
 	}
 
 	if err := hbs.Err(); err != nil {
-		logger.Error("error reading stream", zap.Error(err), zap.Int("scanner_max_token_size", helper.DefaultScannerMaxTokenSize))
+		render.LogHeartbeatScannerError(c, logger, err, helper.DefaultScannerMaxTokenSize, hbs)
 	}
 
 	// Send final data: [DONE] to close the stream
@@ -1143,7 +1143,7 @@ func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusC
 	}
 
 	if err := hbs.Err(); err != nil {
-		logger.Error("error reading stream", zap.Error(err), zap.Int("scanner_max_token_size", helper.DefaultScannerMaxTokenSize))
+		render.LogHeartbeatScannerError(c, logger, err, helper.DefaultScannerMaxTokenSize, hbs)
 	}
 
 	if streamRewriter != nil {

@@ -6,7 +6,7 @@ import "bufio"
 const DefaultScannerInitialBufferSize = 64 * 1024
 
 // DefaultScannerMaxTokenSize defines the maximum token size supported by scanners.
-const DefaultScannerMaxTokenSize = 32 * 1024 * 1024
+const DefaultScannerMaxTokenSize = 64 * 1024 * 1024
 
 // ConfigureScannerBuffer configures the scanner buffer sizes to handle large tokens.
 // It is safe to call multiple times for the same scanner.
