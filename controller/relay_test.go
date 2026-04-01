@@ -10,9 +10,12 @@ import (
 
 	"github.com/Laisky/errors/v2"
 	gmw "github.com/Laisky/gin-middlewares/v7"
+	"github.com/Laisky/zap"
+	"github.com/Laisky/zap/zapcore"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gorm.io/gorm"
 
 	"github.com/songquanpeng/one-api/common/config"
 	"github.com/songquanpeng/one-api/common/ctxkey"
@@ -20,6 +23,88 @@ import (
 	dbmodel "github.com/songquanpeng/one-api/model"
 	"github.com/songquanpeng/one-api/relay/model"
 )
+
+func TestAppendRelayFailureFields(t *testing.T) {
+	t.Parallel()
+
+	fields := appendRelayFailureFields(processChannelRelayErrorParams{
+		RequestID:     "req-123",
+		UserId:        11,
+		TokenId:       22,
+		ChannelId:     33,
+		ChannelName:   "primary-openai",
+		Group:         "default",
+		OriginalModel: "gpt-4o",
+		ActualModel:   "gpt-4.1",
+		RequestURL:    "/v1/chat/completions",
+		Err: model.ErrorWithStatusCode{
+			StatusCode: http.StatusBadGateway,
+			Error: model.Error{
+				Message: "upstream overloaded",
+				Type:    model.ErrorTypeServer,
+				Code:    "overloaded",
+			},
+		},
+	}, zap.String("retry_skip_reason", "specific channel requested"))
+
+	encoder := zapcore.NewMapObjectEncoder()
+	for _, field := range fields {
+		field.AddTo(encoder)
+	}
+
+	require.Equal(t, "req-123", encoder.Fields["request_id"])
+	require.Equal(t, "/v1/chat/completions", encoder.Fields["request_url"])
+	require.EqualValues(t, 11, encoder.Fields["user_id"])
+	require.EqualValues(t, 22, encoder.Fields["token_id"])
+	require.EqualValues(t, 33, encoder.Fields["channel_id"])
+	require.Equal(t, "primary-openai", encoder.Fields["channel_name"])
+	require.Equal(t, "default", encoder.Fields["group"])
+	require.Equal(t, "gpt-4o", encoder.Fields["origin_model"])
+	require.Equal(t, "gpt-4.1", encoder.Fields["actual_model"])
+	require.EqualValues(t, http.StatusBadGateway, encoder.Fields["status_code"])
+	require.Equal(t, "overloaded", encoder.Fields["error_code"])
+	require.Equal(t, string(model.ErrorTypeServer), encoder.Fields["error_type"])
+	require.Equal(t, "upstream overloaded", encoder.Fields["upstream_error"])
+	require.Equal(t, "specific channel requested", encoder.Fields["retry_skip_reason"])
+}
+
+func TestIsExpectedChannelSelectionExhaustedError(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{
+			name: "wrapped record not found",
+			err:  errors.Wrap(gorm.ErrRecordNotFound, "get random satisfied channel excluding failed ones"),
+			want: true,
+		},
+		{
+			name: "explicit no channels available",
+			err:  errors.New("no channels available for model gpt-4o in group default after excluding 2 channels"),
+			want: true,
+		},
+		{
+			name: "memory cache miss",
+			err:  errors.New("channel not found in memory cache"),
+			want: true,
+		},
+		{
+			name: "unexpected backend failure",
+			err:  errors.New("dial tcp 127.0.0.1:3306: connect: connection refused"),
+			want: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, tt.want, isExpectedChannelSelectionExhaustedError(tt.err))
+		})
+	}
+}
 
 func TestShouldRetry(t *testing.T) {
 	gin.SetMode(gin.TestMode)
