@@ -134,14 +134,16 @@ func TestSpecificAdapterPricing(t *testing.T) {
 		require.NotNil(t, adaptor, "xAI_Pricing not found")
 
 		testModels := map[string]string{
-			"grok-code-fast-1":          "$0.20 input, $0.02 cached input, $1.50 output",
-			"grok-4-0709":               "$3.00 input, $15.00 output",
-			"grok-4-fast-reasoning":     "$0.20 input, $0.05 cached input, $0.50 output",
-			"grok-4-fast":               "$0.20 input, $0.05 cached input, $0.50 output",
-			"grok-4-fast-non-reasoning": "$0.20 input, $0.05 cached input, $0.50 output",
-			"grok-3":                    "$3.00 input, $15.00 output",
-			"grok-3-mini":               "$0.30 input, $0.50 output",
-			"grok-2-vision-1212":        "$2.00 input, $10.00 output",
+			"grok-code-fast-1":             "$0.20 input, $0.02 cached input, $1.50 output",
+			"grok-4-0709":                  "$3.00 input, $15.00 output",
+			"grok-4.20-0309-reasoning":     "$2.00 input, $0.20 cached input, $6.00 output",
+			"grok-4.20-0309-non-reasoning": "$2.00 input, $0.20 cached input, $6.00 output",
+			"grok-4.20-multi-agent-0309":   "$2.00 input, $0.20 cached input, $6.00 output",
+			"grok-4-1-fast-reasoning":      "$0.20 input, $0.05 cached input, $0.50 output",
+			"grok-4-1-fast-non-reasoning":  "$0.20 input, $0.05 cached input, $0.50 output",
+			"grok-3":                       "$3.00 input, $15.00 output",
+			"grok-3-mini":                  "$0.30 input, $0.50 output",
+			"grok-2-vision-1212":           "$2.00 input, $10.00 output",
 		}
 
 		for model, description := range testModels {
@@ -161,7 +163,7 @@ func TestSpecificAdapterPricing(t *testing.T) {
 				description)
 		}
 
-		imageModels := []string{"grok-2-image-1212", "grok-2-image"}
+		imageModels := []string{"grok-imagine-image", "grok-imagine-image-pro", "grok-2-image-1212", "grok-2-image"}
 		for _, imageModel := range imageModels {
 			expectedImageConfig, ok := xai.ModelRatios[imageModel]
 			require.True(t, ok, "xAI image model %s missing from ModelRatios", imageModel)
@@ -178,6 +180,11 @@ func TestSpecificAdapterPricing(t *testing.T) {
 				imageModel, imageModelRatio, expectedImageConfig.Ratio, imageModelCompletionRatio, expectedImageConfig.CompletionRatio,
 				expectedImageConfig.Image.PricePerImageUsd)
 		}
+
+		videoCfg, ok := xai.ModelRatios["grok-imagine-video"]
+		require.True(t, ok, "xAI video model grok-imagine-video missing from ModelRatios")
+		require.NotNil(t, videoCfg.Video, "expected video pricing metadata for grok-imagine-video")
+		require.InDelta(t, 0.05, videoCfg.Video.PerSecondUsd, 1e-12)
 	})
 
 	t.Run("Gemini_Pricing", func(t *testing.T) {

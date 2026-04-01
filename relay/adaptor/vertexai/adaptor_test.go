@@ -45,6 +45,21 @@ func TestGetModelListIncludesGeminiEmbeddingPreviewOnce(t *testing.T) {
 	require.Equal(t, 1, count, "expected gemini-embedding-2-preview exactly once in Vertex AI model list")
 }
 
+func TestGetDefaultModelPricingIncludesLatestVertexMaaSModels(t *testing.T) {
+	t.Parallel()
+
+	a := &Adaptor{}
+	pricing := a.GetDefaultModelPricing()
+
+	deepseekCfg, ok := pricing["deepseek-ai/deepseek-v3.2-maas"]
+	require.True(t, ok, "deepseek-ai/deepseek-v3.2-maas missing from Vertex AI pricing map")
+	require.Equal(t, deepseek.ModelRatios["deepseek-ai/deepseek-v3.2-maas"], deepseekCfg)
+
+	qwenCfg, ok := pricing["qwen/qwen3-next-80b-a3b-thinking-maas"]
+	require.True(t, ok, "qwen/qwen3-next-80b-a3b-thinking-maas missing from Vertex AI pricing map")
+	require.Equal(t, qwen.ModelRatios["qwen/qwen3-next-80b-a3b-thinking-maas"], qwenCfg)
+}
+
 // TestBuildGeminiURLUsesBatchEmbedContents verifies Vertex AI Gemini embeddings use the batch embedding endpoint.
 // Parameters: t coordinates the test case execution. Returns: no values.
 func TestBuildGeminiURLUsesBatchEmbedContents(t *testing.T) {

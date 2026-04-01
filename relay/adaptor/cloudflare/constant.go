@@ -56,6 +56,9 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 
 	// IBM Granite
 	"@cf/ibm-granite/granite-4.0-h-micro": {Ratio: 0.017 * ratio.MilliTokensUsd, CompletionRatio: 0.112 / 0.017},
+	"@cf/zai-org/glm-4.7-flash":           {Ratio: 0.060 * ratio.MilliTokensUsd, CompletionRatio: 0.400 / 0.060},
+	"@cf/nvidia/nemotron-3-120b-a12b":     {Ratio: 0.500 * ratio.MilliTokensUsd, CompletionRatio: 1.500 / 0.500},
+	"@cf/moonshotai/kimi-k2.5":            {Ratio: 0.600 * ratio.MilliTokensUsd, CompletionRatio: 3.000 / 0.600, CachedInputRatio: 0.100 * ratio.MilliTokensUsd},
 
 	// OpenAI OSS
 	"@cf/openai/gpt-oss-120b": {Ratio: 0.350 * ratio.MilliTokensUsd, CompletionRatio: 0.750 / 0.350},
@@ -86,8 +89,12 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 	// Audio Models
 	"@cf/openai/whisper":                {Audio: &adaptor.AudioPricingConfig{UsdPerSecond: 0.0005 / 60}},
 	"@cf/openai/whisper-large-v3-turbo": {Audio: &adaptor.AudioPricingConfig{UsdPerSecond: 0.0005 / 60}},
+	"@cf/myshell-ai/melotts":            {Audio: &adaptor.AudioPricingConfig{UsdPerSecond: 0.0002 / 60}},
+	"@cf/deepgram/aura-1":               {Ratio: 15.0 * ratio.MilliTokensUsd, CompletionRatio: 1},
 	"@cf/deepgram/nova-3":               {Audio: &adaptor.AudioPricingConfig{UsdPerSecond: 0.0052 / 60}},
 	"@cf/pipecat-ai/smart-turn-v2":      {Audio: &adaptor.AudioPricingConfig{UsdPerSecond: 0.00033795 / 60}},
+	"@cf/deepgram/aura-2-en":            {Ratio: 30.0 * ratio.MilliTokensUsd, CompletionRatio: 1},
+	"@cf/deepgram/aura-2-es":            {Ratio: 30.0 * ratio.MilliTokensUsd, CompletionRatio: 1},
 
 	// Specialized Models
 	"@cf/defog/sqlcoder-7b-2":                {Ratio: 0.1 * ratio.MilliTokensUsd, CompletionRatio: 1},

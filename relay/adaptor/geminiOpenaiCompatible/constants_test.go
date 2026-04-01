@@ -110,6 +110,18 @@ func TestGemini31FlashImagePreviewPricing(t *testing.T) {
 	require.InDelta(t, gemini31FlashImage4KPrice/gemini31FlashImage1KPrice, cfg.Image.SizeMultipliers["4096x4096"], 1e-12)
 }
 
+func TestGemini31FlashLivePreviewPricing(t *testing.T) {
+	t.Parallel()
+
+	cfg, ok := ModelRatios["gemini-3.1-flash-live-preview"]
+	require.True(t, ok, "gemini-3.1-flash-live-preview missing from pricing map")
+	require.InDelta(t, 0.75*ratio.MilliTokensUsd, cfg.Ratio, 1e-12)
+	require.InDelta(t, 4.50/0.75, cfg.CompletionRatio, 1e-12)
+	require.NotNil(t, cfg.Audio, "expected live preview audio pricing metadata")
+	require.InDelta(t, 3.00/0.75, cfg.Audio.PromptRatio, 1e-12)
+	require.InDelta(t, 12.00/4.50, cfg.Audio.CompletionRatio, 1e-12)
+}
+
 func TestGetModelModalitiesGeminiVersionCutoff(t *testing.T) {
 	t.Parallel()
 	testCases := []struct {

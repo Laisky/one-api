@@ -20,7 +20,7 @@ Try it at <https://oneapi.laisky.com>, login with `test` / `12345678`. 🚀
 ```plain
 === One-API Compatibility Matrix 2025-12-12T04:37:09Z ===
 
-Request Format                         gpt-4o-mini  gpt-5-mini   claude-haiku-4-5  gemini-2.5-flash  openai/gpt-oss-20b  deepseek-chat  grok-4-fast-non-reasoning  azure-gpt-5-nano
+Request Format                         gpt-4o-mini  gpt-5-mini   claude-haiku-4-5  gemini-2.5-flash  openai/gpt-oss-20b  deepseek-chat  grok-4-1-fast-non-reasoning  azure-gpt-5-nano
 Chat (stream=false)                    PASS 11.21s  PASS 13.10s  PASS 8.52s        PASS 4.64s        PASS 9.52s          PASS 7.08s     PASS 3.08s                 PASS 14.68s
 Chat (stream=true)                     PASS 13.23s  PASS 13.37s  PASS 2.31s        PASS 6.02s        PASS 4.56s          PASS 10.92s    PASS 9.72s                 PASS 15.30s
 Chat Tools (stream=false)              PASS 5.60s   PASS 12.94s  PASS 7.69s        PASS 7.11s        PASS 3.14s          PASS 8.71s     PASS 5.48s                 PASS* 35.02s

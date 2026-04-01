@@ -133,6 +133,14 @@ var (
 			CompletionRatio: 3.00 / 1.00,
 		},
 	}
+	gemini31FlashLivePreviewPricing = adaptor.ModelConfig{
+		Ratio:           0.75 * ratio.MilliTokensUsd,
+		CompletionRatio: 4.50 / 0.75,
+		Audio: &adaptor.AudioPricingConfig{
+			PromptRatio:     3.00 / 0.75,
+			CompletionRatio: 12.00 / 4.50,
+		},
+	}
 )
 
 // ModelRatios contains all supported models and their pricing ratios
@@ -191,6 +199,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		CompletionRatio: 1.50 / 0.25,
 		Image:           gemini31FlashImageConfig(),
 	},
+	"gemini-3.1-flash-live-preview": gemini31FlashLivePreviewPricing,
 	"gemini-3.1-flash-lite-preview": {
 		Ratio:             0.25 * ratio.MilliTokensUsd,
 		CompletionRatio:   1.50 / 0.25,

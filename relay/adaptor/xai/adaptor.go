@@ -268,7 +268,7 @@ func (a *Adaptor) ConvertRequest(c *gin.Context, relayMode int, request *model.G
 	}
 	// Remove presence_penalty and frequency_penalty for certain grok-4 models as they don't support them
 	switch request.Model {
-	case "grok-4-0709", "grok-4-fast-reasoning", "grok-4-fast-non-reasoning":
+	case "grok-4-0709", "grok-4.20-0309-reasoning", "grok-4.20-0309-non-reasoning", "grok-4.20-multi-agent-0309", "grok-4-1-fast-reasoning", "grok-4-1-fast-non-reasoning":
 		if request.PresencePenalty != nil {
 			request.PresencePenalty = nil
 		}

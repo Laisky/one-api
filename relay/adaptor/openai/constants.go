@@ -104,6 +104,8 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 	// Realtime Models
 	// -------------------------------------
 
+	"gpt-realtime-1.5":                        {Ratio: 4.0 * ratio.MilliTokensUsd, CompletionRatio: 4.0, CachedInputRatio: 0.4 * ratio.MilliTokensUsd},
+	"gpt-realtime-mini":                       {Ratio: 0.6 * ratio.MilliTokensUsd, CompletionRatio: 4.0, CachedInputRatio: 0.06 * ratio.MilliTokensUsd},
 	"gpt-4o-realtime-preview":                 {Ratio: 5.0 * ratio.MilliTokensUsd, CompletionRatio: 4.0, CachedInputRatio: 2.5 * ratio.MilliTokensUsd},
 	"gpt-4o-realtime-preview-2025-06-03":      {Ratio: 5.0 * ratio.MilliTokensUsd, CompletionRatio: 4.0, CachedInputRatio: 2.5 * ratio.MilliTokensUsd},
 	"gpt-4o-mini-realtime-preview":            {Ratio: 0.6 * ratio.MilliTokensUsd, CompletionRatio: 4.0, CachedInputRatio: 0.3 * ratio.MilliTokensUsd},

@@ -12,19 +12,51 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 	// Grok Models - Based on https://console.x.ai/
 	//
 	// Note: Some prices are the same because they are aliases.
-	"grok-code-fast-1":          {Ratio: 0.2 * ratio.MilliTokensUsd, CompletionRatio: 1.5 / 0.2, CachedInputRatio: 0.02 * ratio.MilliTokensUsd},  // $0.20 input, $0.02 cached input, $1.50 output
-	"grok-4-0709":               {Ratio: 3.0 * ratio.MilliTokensUsd, CompletionRatio: 15.0 / 3.0, CachedInputRatio: 0.75 * ratio.MilliTokensUsd}, // $3.00 input, $0.75 cached input, $15.00 output
-	"grok-4-fast-reasoning":     {Ratio: 0.2 * ratio.MilliTokensUsd, CompletionRatio: 0.5 / 0.2, CachedInputRatio: 0.05 * ratio.MilliTokensUsd},  // $0.20 input, $0.05 cached input, $0.50 output
-	"grok-4-fast":               {Ratio: 0.2 * ratio.MilliTokensUsd, CompletionRatio: 0.5 / 0.2, CachedInputRatio: 0.05 * ratio.MilliTokensUsd},  // $0.20 input, $0.05 cached input, $0.50 output
-	"grok-4-fast-non-reasoning": {Ratio: 0.2 * ratio.MilliTokensUsd, CompletionRatio: 0.5 / 0.2, CachedInputRatio: 0.05 * ratio.MilliTokensUsd},  // $0.20 input, $0.05 cached input, $0.50 output
-	"grok-3":                    {Ratio: 3.0 * ratio.MilliTokensUsd, CompletionRatio: 5.0 / 3.0, CachedInputRatio: 0.75 * ratio.MilliTokensUsd},  // $3.00 input, $0.75 cached input, $15.00 output
-	"grok-3-mini":               {Ratio: 0.3 * ratio.MilliTokensUsd, CompletionRatio: 0.5 / 0.3, CachedInputRatio: 0.075 * ratio.MilliTokensUsd}, // $0.30 input, $0.075 cached input, $0.50 output
+	"grok-code-fast-1":             {Ratio: 0.2 * ratio.MilliTokensUsd, CompletionRatio: 1.5 / 0.2, CachedInputRatio: 0.02 * ratio.MilliTokensUsd}, // $0.20 input, $0.02 cached input, $1.50 output
+	"grok-4-0709":                  {Ratio: 3.0 * ratio.MilliTokensUsd, CompletionRatio: 15.0 / 3.0, CachedInputRatio: 0.75 * ratio.MilliTokensUsd},
+	"grok-4.20-0309-reasoning":     {Ratio: 2.0 * ratio.MilliTokensUsd, CompletionRatio: 6.0 / 2.0, CachedInputRatio: 0.2 * ratio.MilliTokensUsd},
+	"grok-4.20-0309-non-reasoning": {Ratio: 2.0 * ratio.MilliTokensUsd, CompletionRatio: 6.0 / 2.0, CachedInputRatio: 0.2 * ratio.MilliTokensUsd},
+	"grok-4.20-multi-agent-0309":   {Ratio: 2.0 * ratio.MilliTokensUsd, CompletionRatio: 6.0 / 2.0, CachedInputRatio: 0.2 * ratio.MilliTokensUsd},
+	"grok-4-1-fast-reasoning":      {Ratio: 0.2 * ratio.MilliTokensUsd, CompletionRatio: 0.5 / 0.2, CachedInputRatio: 0.05 * ratio.MilliTokensUsd},
+	"grok-4-1-fast-non-reasoning":  {Ratio: 0.2 * ratio.MilliTokensUsd, CompletionRatio: 0.5 / 0.2, CachedInputRatio: 0.05 * ratio.MilliTokensUsd},
+	"grok-3":                       {Ratio: 3.0 * ratio.MilliTokensUsd, CompletionRatio: 5.0 / 3.0, CachedInputRatio: 0.75 * ratio.MilliTokensUsd},
+	"grok-3-mini":                  {Ratio: 0.3 * ratio.MilliTokensUsd, CompletionRatio: 0.5 / 0.3, CachedInputRatio: 0.075 * ratio.MilliTokensUsd},
 	// "grok-3-fast":               {Ratio: 3.0 * ratio.MilliTokensUsd, CompletionRatio: 5.0, CachedInputRatio: 0.75 * ratio.MilliTokensUsd},        // $3.00 input, $0.75 cached input, $15.00 output
 	// "grok-3-mini-fast":          {Ratio: 0.3 * ratio.MilliTokensUsd, CompletionRatio: 0.5 / 0.3, CachedInputRatio: 0.075 * ratio.MilliTokensUsd}, // $0.30 input, $0.075 cached input, $0.50 output
 	"grok-2-vision-1212": {Ratio: 2.0 * ratio.MilliTokensUsd, CompletionRatio: 10.0 / 2.0}, // $2.00 input, $10.00 output
 	// "grok-2-1212":        {Ratio: 2.0 * ratio.MilliTokensUsd, CompletionRatio: 5.0},        // $2.00 input, $10.00 output
 
 	// Image generation model (no per-token charge)
+	"grok-imagine-image": {
+		Ratio:           0,
+		CompletionRatio: 1.0,
+		Image: &adaptor.ImagePricingConfig{
+			PricePerImageUsd: 0.02,
+			DefaultSize:      "1024x1024",
+			DefaultQuality:   "standard",
+			PromptTokenLimit: 4000,
+			MinImages:        1,
+			MaxImages:        10,
+			SizeMultipliers: map[string]float64{
+				"1024x1024": 1,
+			},
+		},
+	},
+	"grok-imagine-image-pro": {
+		Ratio:           0,
+		CompletionRatio: 1.0,
+		Image: &adaptor.ImagePricingConfig{
+			PricePerImageUsd: 0.07,
+			DefaultSize:      "1024x1024",
+			DefaultQuality:   "standard",
+			PromptTokenLimit: 4000,
+			MinImages:        1,
+			MaxImages:        10,
+			SizeMultipliers: map[string]float64{
+				"1024x1024": 1,
+			},
+		},
+	},
 	"grok-2-image-1212": {
 		Ratio:           0,
 		CompletionRatio: 1.0,
@@ -55,6 +87,14 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 			},
 		},
 	}, // $0.07 per image
+
+	"grok-imagine-video": {
+		Ratio:           0,
+		CompletionRatio: 1.0,
+		Video: &adaptor.VideoPricingConfig{
+			PerSecondUsd: 0.05,
+		},
+	}, // $0.05 per second
 
 	// Legacy aliases for backward compatibility
 	// "grok-beta":        {Ratio: 2.0 * ratio.MilliTokensUsd, CompletionRatio: 5.0}, // Updated to match grok-2-1212

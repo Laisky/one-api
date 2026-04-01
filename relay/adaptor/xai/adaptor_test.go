@@ -109,28 +109,28 @@ func TestConvertRequest(t *testing.T) {
 			},
 		},
 		{
-			name: "Remove penalty parameters for grok-4-fast-reasoning",
+			name: "Remove penalty parameters for grok-4-1-fast-reasoning",
 			inputRequest: &model.GeneralOpenAIRequest{
-				Model:            "grok-4-fast-reasoning",
+				Model:            "grok-4-1-fast-reasoning",
 				PresencePenalty:  float64Ptr(0.5),
 				FrequencyPenalty: float64Ptr(0.3),
 				Messages:         []model.Message{{Role: "user", Content: "hello"}},
 			},
 			expectedRequest: &model.GeneralOpenAIRequest{
-				Model:    "grok-4-fast-reasoning",
+				Model:    "grok-4-1-fast-reasoning",
 				Messages: []model.Message{{Role: "user", Content: "hello"}},
 			},
 		},
 		{
-			name: "Remove penalty parameters for grok-4-fast-non-reasoning",
+			name: "Remove penalty parameters for grok-4-1-fast-non-reasoning",
 			inputRequest: &model.GeneralOpenAIRequest{
-				Model:            "grok-4-fast-non-reasoning",
+				Model:            "grok-4-1-fast-non-reasoning",
 				PresencePenalty:  float64Ptr(0.5),
 				FrequencyPenalty: float64Ptr(0.3),
 				Messages:         []model.Message{{Role: "user", Content: "hello"}},
 			},
 			expectedRequest: &model.GeneralOpenAIRequest{
-				Model:    "grok-4-fast-non-reasoning",
+				Model:    "grok-4-1-fast-non-reasoning",
 				Messages: []model.Message{{Role: "user", Content: "hello"}},
 			},
 		},
@@ -444,6 +444,7 @@ func TestGetModelList(t *testing.T) {
 	assert.NotEmpty(t, models)
 	// Should include grok models from ModelRatios
 	assert.Contains(t, models, "grok-code-fast-1")
+	assert.Contains(t, models, "grok-4-1-fast-non-reasoning")
 }
 
 func TestGetDefaultModelPricing(t *testing.T) {
