@@ -1,23 +1,22 @@
 package cloudflare
 
 import (
-	"bufio"
 	"encoding/json"
 	"io"
 	"net/http"
 	"strings"
 
+	"github.com/Laisky/errors/v2"
 	gmw "github.com/Laisky/gin-middlewares/v7"
 	"github.com/Laisky/zap"
-
-	"github.com/songquanpeng/one-api/common/ctxkey"
-	"github.com/songquanpeng/one-api/common/render"
-
 	"github.com/gin-gonic/gin"
 
 	"github.com/songquanpeng/one-api/common"
 	"github.com/songquanpeng/one-api/common/config"
+	"github.com/songquanpeng/one-api/common/ctxkey"
 	"github.com/songquanpeng/one-api/common/helper"
+	"github.com/songquanpeng/one-api/common/render"
+	commonsse "github.com/songquanpeng/one-api/common/sse"
 	"github.com/songquanpeng/one-api/relay/adaptor/openai"
 	"github.com/songquanpeng/one-api/relay/model"
 )
@@ -37,17 +36,44 @@ func ConvertCompletionsRequest(textRequest model.GeneralOpenAIRequest) *Request 
 
 func StreamHandler(c *gin.Context, resp *http.Response, promptTokens int, modelName string) (*model.ErrorWithStatusCode, *model.Usage) {
 	lg := gmw.GetLogger(c)
-	scanner := bufio.NewScanner(resp.Body)
-	helper.ConfigureScannerBuffer(scanner)
-	scanner.Split(bufio.ScanLines)
+	lineReader := commonsse.NewLineReader(resp.Body, commonsse.DefaultLineBufferSize)
 
 	common.SetEventStreamHeaders(c)
 	id := helper.GetResponseID(c)
 	responseModel := c.GetString(ctxkey.RequestModel)
 	var responseText string
+	var streamErr error
 
-	for scanner.Scan() {
-		data := scanner.Text()
+	for {
+		line, err := lineReader.Next()
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				break
+			}
+
+			streamErr = err
+			break
+		}
+
+		if line.Oversized {
+			var response openai.ChatCompletionsStreamResponse
+			if err := json.NewDecoder(line.Large).Decode(&response); err != nil {
+				lg.Error("error unmarshalling oversized stream response", zap.Error(err))
+				continue
+			}
+			for _, v := range response.Choices {
+				v.Delta.Role = "assistant"
+				responseText += v.Delta.StringContent()
+			}
+			response.Id = id
+			response.Model = modelName
+			if err := render.ObjectData(c, response); err != nil {
+				lg.Error("error rendering stream response", zap.Error(err))
+			}
+			continue
+		}
+
+		data := line.Text()
 		if len(data) < len("data: ") {
 			continue
 		}
@@ -59,7 +85,7 @@ func StreamHandler(c *gin.Context, resp *http.Response, promptTokens int, modelN
 		}
 
 		var response openai.ChatCompletionsStreamResponse
-		err := json.Unmarshal([]byte(data), &response)
+		err = json.Unmarshal([]byte(data), &response)
 		if err != nil {
 			lg.Error("error unmarshalling stream response", zap.Error(err))
 			continue
@@ -76,8 +102,8 @@ func StreamHandler(c *gin.Context, resp *http.Response, promptTokens int, modelN
 		}
 	}
 
-	if err := scanner.Err(); err != nil {
-		lg.Error("error reading stream", zap.Error(err))
+	if streamErr != nil {
+		lg.Error("error reading stream", zap.Error(streamErr))
 	}
 
 	render.Done(c)

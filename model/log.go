@@ -423,7 +423,6 @@ func excludeProvisionalScope(tx *gorm.DB) *gorm.DB {
 	return tx.Where("type != ?", LogTypeProvisional)
 }
 
-
 // GetLogOrderClause converts frontend sort preferences into a SQL ORDER clause.
 func GetLogOrderClause(sortBy string, sortOrder string) string {
 	return ValidateOrderClause(sortBy, sortOrder, logSortFields, "id desc")

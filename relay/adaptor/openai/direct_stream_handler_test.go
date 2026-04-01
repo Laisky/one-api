@@ -495,3 +495,34 @@ func TestResponseAPIDirectStreamHandler_ToolCallPassthrough(t *testing.T) {
 	require.Contains(t, body, "get_weather")
 	require.Contains(t, body, "event: response.function_call_arguments.done\n")
 }
+
+// TestResponseAPIDirectStreamHandler_OversizedDataLineForwarded verifies large data lines bypass scanner limits.
+func TestResponseAPIDirectStreamHandler_OversizedDataLineForwarded(t *testing.T) {
+	t.Parallel()
+	c, w := newDirectStreamContext()
+
+	largePayload := strings.Repeat("A", 128*1024)
+	sse := "event: response.created\n" +
+		"data: {\"type\":\"response.created\",\"response\":{\"id\":\"resp_big\",\"object\":\"response\",\"created_at\":1700000000,\"status\":\"in_progress\"}}\n" +
+		"\n" +
+		"event: response.output_json.delta\n" +
+		"data: {\"type\":\"response.output_json.delta\",\"item_id\":\"msg_big\",\"output_index\":0,\"content_index\":0,\"delta\":{\"partial_json\":\"" + largePayload + "\"}}\n" +
+		"\n" +
+		"event: response.completed\n" +
+		"data: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_big\",\"object\":\"response\",\"created_at\":1700000000,\"status\":\"completed\",\"output\":[],\"usage\":{\"input_tokens\":10,\"output_tokens\":5,\"total_tokens\":15}}}\n" +
+		"\n" +
+		"data: [DONE]\n"
+
+	apiErr, _, usage := ResponseAPIDirectStreamHandler(c, fakeUpstream(sse), relaymode.ResponseAPI)
+	require.Nil(t, apiErr)
+	require.NotNil(t, usage)
+	require.Equal(t, 10, usage.PromptTokens)
+	require.Equal(t, 5, usage.CompletionTokens)
+	require.Equal(t, 15, usage.TotalTokens)
+
+	body := w.Body.String()
+	require.Contains(t, body, "event: response.output_json.delta\n")
+	require.Contains(t, body, largePayload[:1024])
+	require.Contains(t, body, largePayload[len(largePayload)-1024:])
+	require.Contains(t, body, "data: [DONE]")
+}

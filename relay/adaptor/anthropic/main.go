@@ -1,7 +1,6 @@
 package anthropic
 
 import (
-	"bufio"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -21,6 +20,7 @@ import (
 	"github.com/songquanpeng/one-api/common/helper"
 	"github.com/songquanpeng/one-api/common/image"
 	"github.com/songquanpeng/one-api/common/render"
+	commonsse "github.com/songquanpeng/one-api/common/sse"
 	"github.com/songquanpeng/one-api/common/tracing"
 	"github.com/songquanpeng/one-api/relay/adaptor/openai"
 	"github.com/songquanpeng/one-api/relay/adaptor/openai_compatible"
@@ -894,30 +894,53 @@ func ResponseClaude2OpenAI(c *gin.Context, claudeResponse *Response) *openai.Tex
 func ClaudeNativeStreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusCode, *model.Usage) {
 	logger := gmw.GetLogger(c)
 
-	scanner := bufio.NewScanner(resp.Body)
-	helper.ConfigureScannerBuffer(scanner)
-	scanner.Split(func(data []byte, atEOF bool) (advance int, token []byte, err error) {
-		if atEOF && len(data) == 0 {
-			return 0, nil, nil
-		}
-		if i := strings.Index(string(data), "\n"); i >= 0 {
-			return i + 1, data[0:i], nil
-		}
-		if atEOF {
-			return len(data), data, nil
-		}
-		return 0, nil, nil
-	})
+	lineReader := commonsse.NewLineReader(resp.Body, commonsse.DefaultLineBufferSize)
 	common.SetEventStreamHeaders(c)
 
-	// Wrap scanner with heartbeat to prevent reverse-proxy timeouts (e.g. Cloudflare 524)
-	hbs := render.NewHeartbeatScanner(c, scanner, render.DefaultHeartbeatInterval)
-	defer hbs.Close()
+	// Wrap the reader with heartbeats to prevent reverse-proxy timeouts (e.g. Cloudflare 524).
+	hbr := render.NewHeartbeatLineReader(c, lineReader, render.DefaultHeartbeatInterval)
+	defer hbr.Close()
 
 	var usage model.Usage
+	var streamErr error
 
-	for hbs.Scan() {
-		data := hbs.Text()
+	forwardOversizedData := func(payload io.Reader) error {
+		if _, err := c.Writer.Write([]byte("data: ")); err != nil {
+			return errors.Wrap(err, "write stream data prefix")
+		}
+
+		if _, err := io.Copy(c.Writer, payload); err != nil {
+			return errors.Wrap(err, "copy oversized stream payload")
+		}
+
+		if _, err := c.Writer.Write([]byte("\n\n")); err != nil {
+			return errors.Wrap(err, "write stream data suffix")
+		}
+
+		c.Writer.(http.Flusher).Flush()
+		return nil
+	}
+
+	for {
+		line, err := hbr.Next()
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				break
+			}
+
+			streamErr = err
+			break
+		}
+
+		if line.Oversized {
+			if err := forwardOversizedData(line.Large); err != nil {
+				streamErr = err
+				break
+			}
+			continue
+		}
+
+		data := line.Text()
 		if len(data) < 6 || !strings.HasPrefix(data, "data:") {
 			continue
 		}
@@ -932,7 +955,7 @@ func ClaudeNativeStreamHandler(c *gin.Context, resp *http.Response) (*model.Erro
 
 		// Parse the response to extract usage and model info
 		var claudeResponse StreamResponse
-		err := json.Unmarshal([]byte(data), &claudeResponse)
+		err = json.Unmarshal([]byte(data), &claudeResponse)
 		if err != nil {
 			logger.Error("error unmarshalling stream response", zap.Error(err))
 			continue
@@ -965,8 +988,8 @@ func ClaudeNativeStreamHandler(c *gin.Context, resp *http.Response) (*model.Erro
 		}
 	}
 
-	if err := hbs.Err(); err != nil {
-		render.LogHeartbeatScannerError(c, logger, err, helper.DefaultScannerMaxTokenSize, hbs)
+	if streamErr != nil {
+		render.LogHeartbeatLineReaderError(c, logger, streamErr, hbr)
 	}
 
 	// Send final data: [DONE] to close the stream
@@ -982,26 +1005,13 @@ func ClaudeNativeStreamHandler(c *gin.Context, resp *http.Response) (*model.Erro
 
 func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusCode, *model.Usage) {
 	logger := gmw.GetLogger(c)
-	createdTime := helper.GetTimestamp()
-	scanner := bufio.NewScanner(resp.Body)
-	helper.ConfigureScannerBuffer(scanner)
-	scanner.Split(func(data []byte, atEOF bool) (advance int, token []byte, err error) {
-		if atEOF && len(data) == 0 {
-			return 0, nil, nil
-		}
-		if i := strings.Index(string(data), "\n"); i >= 0 {
-			return i + 1, data[0:i], nil
-		}
-		if atEOF {
-			return len(data), data, nil
-		}
-		return 0, nil, nil
-	})
+	lineReader := commonsse.NewLineReader(resp.Body, commonsse.DefaultLineBufferSize)
 	common.SetEventStreamHeaders(c)
 
-	// Wrap scanner with heartbeat to prevent reverse-proxy timeouts (e.g. Cloudflare 524)
-	hbs := render.NewHeartbeatScanner(c, scanner, render.DefaultHeartbeatInterval)
-	defer hbs.Close()
+	// Wrap the reader with heartbeats to prevent reverse-proxy timeouts (e.g. Cloudflare 524).
+	hbr := render.NewHeartbeatLineReader(c, lineReader, render.DefaultHeartbeatInterval)
+	defer hbr.Close()
+	createdAt := helper.GetTimestamp()
 
 	var usage model.Usage
 	var modelName string
@@ -1014,9 +1024,130 @@ func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusC
 		}
 	}
 	doneRendered := false
+	var streamErr error
 
-	for hbs.Scan() {
-		data := hbs.Text()
+	for {
+		line, err := hbr.Next()
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				break
+			}
+
+			streamErr = err
+			break
+		}
+
+		if line.Oversized {
+			var claudeResponse StreamResponse
+			if err := json.NewDecoder(line.Large).Decode(&claudeResponse); err != nil {
+				logger.Error("error unmarshalling oversized stream response", zap.Error(err))
+				continue
+			}
+
+			if claudeResponse.Type == "error" && claudeResponse.Error.Type != "" {
+				openaiErr := struct {
+					Error struct {
+						Message string `json:"message"`
+						Type    string `json:"type"`
+						Code    string `json:"code"`
+					} `json:"error"`
+				}{}
+				openaiErr.Error.Message = claudeResponse.Error.Message
+				openaiErr.Error.Type = claudeResponse.Error.Type
+				openaiErr.Error.Code = claudeResponse.Error.Type
+				if e := render.ObjectData(c, openaiErr); e != nil {
+					logger.Error("error rendering stream error response", zap.Error(e))
+				}
+				render.Done(c)
+				doneRendered = true
+				_ = resp.Body.Close()
+				return nil, &usage
+			}
+
+			response, meta := StreamResponseClaude2OpenAI(c, &claudeResponse)
+			if meta != nil {
+				usage.PromptTokens += meta.Usage.InputTokens
+				usage.CompletionTokens += meta.Usage.OutputTokens
+				if meta.Usage.CacheReadInputTokens > 0 {
+					if usage.PromptTokensDetails == nil {
+						usage.PromptTokensDetails = &model.UsagePromptTokensDetails{}
+					}
+					usage.PromptTokensDetails.CachedTokens += meta.Usage.CacheReadInputTokens
+				}
+				if meta.Usage.CacheCreation != nil {
+					usage.CacheWrite5mTokens += meta.Usage.CacheCreation.Ephemeral5mInputTokens
+					usage.CacheWrite1hTokens += meta.Usage.CacheCreation.Ephemeral1hInputTokens
+				} else if meta.Usage.CacheCreationInputTokens > 0 {
+					usage.CacheWrite5mTokens += meta.Usage.CacheCreationInputTokens
+				}
+
+				if len(meta.Id) > 0 {
+					modelName = meta.Model
+					id = tracing.GenerateChatCompletionID(c)
+					continue
+				}
+
+				if len(lastToolCallChoice.Delta.ToolCalls) > 0 {
+					lastArgs := lastToolCallChoice.Delta.ToolCalls[len(lastToolCallChoice.Delta.ToolCalls)-1].Function
+					if argsStr, ok := lastArgs.Arguments.(string); ok && len(argsStr) == 0 {
+						lastArgs.Arguments = "{}"
+						response.Choices[len(response.Choices)-1].Delta.Content = nil
+						response.Choices[len(response.Choices)-1].Delta.ToolCalls = lastToolCallChoice.Delta.ToolCalls
+					}
+				}
+				if usage.PromptTokens > 0 || usage.CompletionTokens > 0 {
+					usage.TotalTokens = usage.PromptTokens + usage.CompletionTokens
+					if response != nil {
+						response.Usage = &usage
+					}
+				}
+			}
+			if response == nil {
+				continue
+			}
+
+			response.Id = id
+			response.Model = modelName
+			response.Created = createdAt
+
+			for _, choice := range response.Choices {
+				if len(choice.Delta.ToolCalls) > 0 {
+					lastToolCallChoice = choice
+				}
+			}
+
+			if streamRewriter != nil {
+				compatChunk := openai_compatible.ChatCompletionsStreamResponse{
+					Id:      response.Id,
+					Object:  response.Object,
+					Created: response.Created,
+					Model:   response.Model,
+					Usage:   response.Usage,
+					Choices: make([]openai_compatible.ChatCompletionsStreamResponseChoice, len(response.Choices)),
+				}
+				for i, choice := range response.Choices {
+					compatChunk.Choices[i] = openai_compatible.ChatCompletionsStreamResponseChoice{
+						Index:        choice.Index,
+						Delta:        choice.Delta,
+						FinishReason: choice.FinishReason,
+					}
+				}
+				handled, handledDone := streamRewriter.HandleChunk(c, &compatChunk)
+				if handled {
+					if handledDone {
+						doneRendered = true
+					}
+					continue
+				}
+			}
+			if err := render.ObjectData(c, response); err != nil {
+				logger.Error("error rendering stream response", zap.Error(err))
+			}
+
+			continue
+		}
+
+		data := line.Text()
 		if len(data) < 6 || !strings.HasPrefix(data, "data:") {
 			continue
 		}
@@ -1026,7 +1157,7 @@ func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusC
 		logger.Debug("stream received", zap.String("data", data))
 
 		var claudeResponse StreamResponse
-		err := json.Unmarshal([]byte(data), &claudeResponse)
+		err = json.Unmarshal([]byte(data), &claudeResponse)
 		if err != nil {
 			logger.Error("error unmarshalling stream response", zap.Error(err))
 			continue
@@ -1104,7 +1235,7 @@ func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusC
 
 		response.Id = id
 		response.Model = modelName
-		response.Created = createdTime
+		response.Created = createdAt
 
 		for _, choice := range response.Choices {
 			if len(choice.Delta.ToolCalls) > 0 {
@@ -1142,8 +1273,8 @@ func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusC
 		}
 	}
 
-	if err := hbs.Err(); err != nil {
-		render.LogHeartbeatScannerError(c, logger, err, helper.DefaultScannerMaxTokenSize, hbs)
+	if streamErr != nil {
+		render.LogHeartbeatLineReaderError(c, logger, streamErr, hbr)
 	}
 
 	if streamRewriter != nil {

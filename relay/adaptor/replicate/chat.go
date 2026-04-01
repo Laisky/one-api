@@ -1,7 +1,6 @@
 package replicate
 
 import (
-	"bufio"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -14,8 +13,8 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/songquanpeng/one-api/common"
-	"github.com/songquanpeng/one-api/common/helper"
 	"github.com/songquanpeng/one-api/common/render"
+	commonsse "github.com/songquanpeng/one-api/common/sse"
 	"github.com/songquanpeng/one-api/relay/adaptor/openai"
 	"github.com/songquanpeng/one-api/relay/meta"
 	"github.com/songquanpeng/one-api/relay/model"
@@ -183,53 +182,69 @@ func chatStreamHandler(c *gin.Context, streamUrl string) (responseText string, e
 		return "", errors.Errorf("bad status code [%d]%s", resp.StatusCode, string(payload))
 	}
 
-	scanner := bufio.NewScanner(resp.Body)
-	helper.ConfigureScannerBuffer(scanner)
-	scanner.Split(bufio.ScanLines)
+	lineReader := commonsse.NewLineReader(resp.Body, commonsse.DefaultLineBufferSize)
 
 	common.SetEventStreamHeaders(c)
 	doneRendered := false
-	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		if line == "" {
+	pendingEvent := ""
+	for {
+		line, readErr := lineReader.Next()
+		if readErr != nil {
+			if errors.Is(readErr, io.EOF) {
+				break
+			}
+
+			return "", errors.Wrap(readErr, "read stream line")
+		}
+
+		if line.Oversized {
+			payloadBytes, readErr := io.ReadAll(line.Large)
+			if readErr != nil {
+				return "", errors.Wrap(readErr, "read oversized stream payload")
+			}
+
+			data := string(payloadBytes)
+			switch pendingEvent {
+			case "output":
+				render.StringData(c, data)
+				responseText += data
+			case "done":
+				render.Done(c)
+				doneRendered = true
+				return responseText, nil
+			}
+			continue
+		}
+
+		lineText := strings.TrimSpace(line.Text())
+		if lineText == "" {
+			pendingEvent = ""
 			continue
 		}
 
 		// Handle comments starting with ':'
-		if strings.HasPrefix(line, ":") {
+		if strings.HasPrefix(lineText, ":") {
 			continue
 		}
 
 		// Parse SSE fields
-		if strings.HasPrefix(line, eventPrefix) {
-			event := strings.TrimSpace(line[len(eventPrefix):])
-			var data string
-			// Read the following lines to get data and id
-			for scanner.Scan() {
-				nextLine := scanner.Text()
-				if nextLine == "" {
-					break
-				}
-				if strings.HasPrefix(nextLine, dataPrefix) {
-					data = nextLine[len(dataPrefix):]
-				} else if strings.HasPrefix(nextLine, "id:") {
-					// id = strings.TrimSpace(nextLine[len("id:"):])
-				}
-			}
+		if strings.HasPrefix(lineText, eventPrefix) {
+			pendingEvent = strings.TrimSpace(lineText[len(eventPrefix):])
+			continue
+		}
 
-			if event == "output" {
+		if strings.HasPrefix(lineText, dataPrefix) {
+			data := lineText[len(dataPrefix):]
+			switch pendingEvent {
+			case "output":
 				render.StringData(c, data)
 				responseText += data
-			} else if event == "done" {
+			case "done":
 				render.Done(c)
 				doneRendered = true
-				break
+				return responseText, nil
 			}
 		}
-	}
-
-	if err := scanner.Err(); err != nil {
-		return "", errors.Wrap(err, "scan stream")
 	}
 
 	if !doneRendered {

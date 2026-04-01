@@ -1,7 +1,6 @@
 package coze
 
 import (
-	"bufio"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -16,6 +15,7 @@ import (
 	"github.com/songquanpeng/one-api/common/conv"
 	"github.com/songquanpeng/one-api/common/helper"
 	"github.com/songquanpeng/one-api/common/render"
+	commonsse "github.com/songquanpeng/one-api/common/sse"
 	"github.com/songquanpeng/one-api/common/tracing"
 	"github.com/songquanpeng/one-api/relay/adaptor/coze/constant/messagetype"
 	"github.com/songquanpeng/one-api/relay/adaptor/openai"
@@ -114,15 +114,48 @@ func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusC
 	lg := gmw.GetLogger(c)
 	var responseText string
 	createdTime := helper.GetTimestamp()
-	scanner := bufio.NewScanner(resp.Body)
-	helper.ConfigureScannerBuffer(scanner)
-	scanner.Split(bufio.ScanLines)
+	lineReader := commonsse.NewLineReader(resp.Body, commonsse.DefaultLineBufferSize)
 
 	common.SetEventStreamHeaders(c)
 	var modelName string
 
-	for scanner.Scan() {
-		data := scanner.Text()
+	var streamErr error
+	for {
+		line, err := lineReader.Next()
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				break
+			}
+
+			streamErr = err
+			break
+		}
+
+		if line.Oversized {
+			var cozeResponse StreamResponse
+			if err := json.NewDecoder(line.Large).Decode(&cozeResponse); err != nil {
+				lg.Error("error unmarshalling oversized stream response", zap.Error(err))
+				continue
+			}
+
+			response, _ := StreamResponseCoze2OpenAI(&cozeResponse)
+			if response == nil {
+				continue
+			}
+
+			for _, choice := range response.Choices {
+				responseText += conv.AsString(choice.Delta.Content)
+			}
+			response.Model = modelName
+			response.Created = createdTime
+
+			if err := render.ObjectData(c, response); err != nil {
+				lg.Error("error rendering stream response", zap.Error(err))
+			}
+			continue
+		}
+
+		data := line.Text()
 		if len(data) < 5 || !strings.HasPrefix(data, "data:") {
 			continue
 		}
@@ -130,7 +163,7 @@ func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusC
 		data = strings.TrimSuffix(data, "\r")
 
 		var cozeResponse StreamResponse
-		err := json.Unmarshal([]byte(data), &cozeResponse)
+		err = json.Unmarshal([]byte(data), &cozeResponse)
 		if err != nil {
 			lg.Error("error unmarshalling stream response", zap.Error(err))
 			continue
@@ -153,8 +186,8 @@ func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusC
 		}
 	}
 
-	if err := scanner.Err(); err != nil {
-		lg.Error("error reading stream", zap.Error(err), zap.Int("scanner_max_token_size", helper.DefaultScannerMaxTokenSize))
+	if streamErr != nil {
+		lg.Error("error reading stream", zap.Error(streamErr))
 	}
 
 	render.Done(c)

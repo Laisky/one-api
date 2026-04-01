@@ -1,7 +1,6 @@
 package controller
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -417,12 +416,10 @@ func getTextFromVerboseJSON(body []byte) (string, error) {
 }
 
 func getTextFromSRT(body []byte) (string, error) {
-	scanner := bufio.NewScanner(strings.NewReader(string(body)))
-	helper.ConfigureScannerBuffer(scanner)
 	var builder strings.Builder
 	var textLine bool
-	for scanner.Scan() {
-		line := scanner.Text()
+	for _, line := range strings.Split(string(body), "\n") {
+		line = strings.TrimSuffix(line, "\r")
 		if textLine {
 			builder.WriteString(line)
 			textLine = false
@@ -431,9 +428,6 @@ func getTextFromSRT(body []byte) (string, error) {
 			textLine = true
 			continue
 		}
-	}
-	if err := scanner.Err(); err != nil {
-		return "", err
 	}
 	return builder.String(), nil
 }

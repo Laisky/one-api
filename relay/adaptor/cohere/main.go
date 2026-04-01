@@ -1,7 +1,6 @@
 package cohere
 
 import (
-	"bufio"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -17,6 +16,7 @@ import (
 	"github.com/songquanpeng/one-api/common/ctxkey"
 	"github.com/songquanpeng/one-api/common/helper"
 	"github.com/songquanpeng/one-api/common/render"
+	commonsse "github.com/songquanpeng/one-api/common/sse"
 	"github.com/songquanpeng/one-api/common/tracing"
 	"github.com/songquanpeng/one-api/relay/adaptor/openai"
 	"github.com/songquanpeng/one-api/relay/model"
@@ -143,19 +143,55 @@ func ResponseCohere2OpenAI(c *gin.Context, cohereResponse *Response) *openai.Tex
 func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusCode, *model.Usage) {
 	createdTime := helper.GetTimestamp()
 	lg := gmw.GetLogger(c)
-	scanner := bufio.NewScanner(resp.Body)
-	helper.ConfigureScannerBuffer(scanner)
-	scanner.Split(bufio.ScanLines)
+	lineReader := commonsse.NewLineReader(resp.Body, commonsse.DefaultLineBufferSize)
 
 	common.SetEventStreamHeaders(c)
 	var usage model.Usage
 
-	for scanner.Scan() {
-		data := scanner.Text()
+	var streamErr error
+	for {
+		line, err := lineReader.Next()
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				break
+			}
+
+			streamErr = err
+			break
+		}
+
+		if line.Oversized {
+			var cohereResponse StreamResponse
+			if err := json.NewDecoder(line.Large).Decode(&cohereResponse); err != nil {
+				lg.Error("error unmarshalling oversized stream response", zap.Error(err))
+				continue
+			}
+
+			response, meta := StreamResponseCohere2OpenAI(&cohereResponse)
+			if meta != nil {
+				usage.PromptTokens += meta.Meta.Tokens.InputTokens
+				usage.CompletionTokens += meta.Meta.Tokens.OutputTokens
+				continue
+			}
+			if response == nil {
+				continue
+			}
+
+			response.Id = tracing.GenerateChatCompletionID(c)
+			response.Model = c.GetString(ctxkey.RequestModel)
+			response.Created = createdTime
+
+			if err := render.ObjectData(c, response); err != nil {
+				lg.Error("error rendering response", zap.Error(err))
+			}
+			continue
+		}
+
+		data := line.Text()
 		data = strings.TrimSuffix(data, "\r")
 
 		var cohereResponse StreamResponse
-		err := json.Unmarshal([]byte(data), &cohereResponse)
+		err = json.Unmarshal([]byte(data), &cohereResponse)
 		if err != nil {
 			lg.Error("error unmarshalling stream response", zap.Error(err))
 			continue
@@ -181,8 +217,8 @@ func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusC
 		}
 	}
 
-	if err := scanner.Err(); err != nil {
-		lg.Error("error reading stream", zap.Error(err), zap.Int("scanner_max_token_size", helper.DefaultScannerMaxTokenSize))
+	if streamErr != nil {
+		lg.Error("error reading stream", zap.Error(streamErr))
 	}
 
 	render.Done(c)

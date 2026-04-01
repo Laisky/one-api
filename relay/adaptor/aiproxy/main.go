@@ -1,13 +1,11 @@
 package aiproxy
 
 import (
-	"bufio"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"strconv"
-	"strings"
 
 	"github.com/Laisky/errors/v2"
 	gmw "github.com/Laisky/gin-middlewares/v7"
@@ -17,6 +15,7 @@ import (
 	"github.com/songquanpeng/one-api/common"
 	"github.com/songquanpeng/one-api/common/helper"
 	"github.com/songquanpeng/one-api/common/render"
+	commonsse "github.com/songquanpeng/one-api/common/sse"
 	"github.com/songquanpeng/one-api/common/tracing"
 	"github.com/songquanpeng/one-api/relay/adaptor/openai"
 	"github.com/songquanpeng/one-api/relay/constant"
@@ -95,33 +94,47 @@ func streamResponseAIProxyLibrary2OpenAI(c *gin.Context, response *LibraryStream
 func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusCode, *model.Usage) {
 	var usage model.Usage
 	var documents []LibraryDocument
-	scanner := bufio.NewScanner(resp.Body)
-	helper.ConfigureScannerBuffer(scanner)
-	scanner.Split(func(data []byte, atEOF bool) (advance int, token []byte, err error) {
-		if atEOF && len(data) == 0 {
-			return 0, nil, nil
-		}
-		if i := strings.Index(string(data), "\n"); i >= 0 {
-			return i + 1, data[0:i], nil
-		}
-		if atEOF {
-			return len(data), data, nil
-		}
-		return 0, nil, nil
-	})
+	lineReader := commonsse.NewLineReader(resp.Body, commonsse.DefaultLineBufferSize)
 
 	common.SetEventStreamHeaders(c)
 
 	lg := gmw.GetLogger(c)
-	for scanner.Scan() {
-		data := scanner.Text()
+	var streamErr error
+	for {
+		line, err := lineReader.Next()
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				break
+			}
+
+			streamErr = err
+			break
+		}
+
+		if line.Oversized {
+			var aiProxyLibraryResponse LibraryStreamResponse
+			if err := json.NewDecoder(line.Large).Decode(&aiProxyLibraryResponse); err != nil {
+				lg.Error("error unmarshalling oversized stream response", zap.Error(err))
+				continue
+			}
+			if len(aiProxyLibraryResponse.Documents) != 0 {
+				documents = aiProxyLibraryResponse.Documents
+			}
+			response := streamResponseAIProxyLibrary2OpenAI(c, &aiProxyLibraryResponse)
+			if err := render.ObjectData(c, response); err != nil {
+				lg.Error("render object data error", zap.Error(err))
+			}
+			continue
+		}
+
+		data := line.Text()
 		if len(data) < 5 || data[:5] != "data:" {
 			continue
 		}
 		data = data[5:]
 
 		var AIProxyLibraryResponse LibraryStreamResponse
-		err := json.Unmarshal([]byte(data), &AIProxyLibraryResponse)
+		err = json.Unmarshal([]byte(data), &AIProxyLibraryResponse)
 		if err != nil {
 			lg.Error("error unmarshalling stream response", zap.Error(err))
 			continue
@@ -136,8 +149,8 @@ func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusC
 		}
 	}
 
-	if err := scanner.Err(); err != nil {
-		lg.Error("error reading stream", zap.Error(err), zap.Int("scanner_max_token_size", helper.DefaultScannerMaxTokenSize))
+	if streamErr != nil {
+		lg.Error("error reading stream", zap.Error(streamErr))
 	}
 
 	response := documentsAIProxyLibrary(c, documents)

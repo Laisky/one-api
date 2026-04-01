@@ -110,25 +110,26 @@ func streamResponseOllama2OpenAI(c *gin.Context, ollamaResponse *ChatResponse) *
 func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusCode, *model.Usage) {
 	lg := gmw.GetLogger(c)
 	var usage model.Usage
-	scanner := bufio.NewScanner(resp.Body)
-	helper.ConfigureScannerBuffer(scanner)
-	scanner.Split(func(data []byte, atEOF bool) (advance int, token []byte, err error) {
-		if atEOF && len(data) == 0 {
-			return 0, nil, nil
-		}
-		if i := strings.Index(string(data), "}\n"); i >= 0 {
-			return i + 2, data[0 : i+1], nil
-		}
-		if atEOF {
-			return len(data), data, nil
-		}
-		return 0, nil, nil
-	})
+	reader := bufio.NewReaderSize(resp.Body, 64*1024)
 
 	common.SetEventStreamHeaders(c)
 
-	for scanner.Scan() {
-		data := scanner.Text()
+	var streamErr error
+	for {
+		data, readErr := reader.ReadString('\n')
+		if readErr != nil {
+			if readErr == io.EOF {
+				if data == "" {
+					break
+				}
+			} else {
+				streamErr = readErr
+				break
+			}
+		}
+
+		data = strings.TrimSuffix(data, "\n")
+		data = strings.TrimSuffix(data, "\r")
 		if after, ok := strings.CutPrefix(data, "}"); ok {
 			data = after + "}"
 		}
@@ -151,10 +152,14 @@ func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusC
 		if err != nil {
 			lg.Error("error rendering response", zap.Error(err))
 		}
+
+		if readErr == io.EOF {
+			break
+		}
 	}
 
-	if err := scanner.Err(); err != nil {
-		lg.Error("error reading stream", zap.Error(err), zap.Int("scanner_max_token_size", helper.DefaultScannerMaxTokenSize))
+	if streamErr != nil {
+		lg.Error("error reading stream", zap.Error(streamErr))
 	}
 
 	render.Done(c)

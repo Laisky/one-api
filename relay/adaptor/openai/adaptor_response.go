@@ -1,7 +1,6 @@
 package openai
 
 import (
-	"bufio"
 	"bytes"
 	"encoding/json"
 	"fmt"
@@ -10,12 +9,14 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/Laisky/errors/v2"
+
 	gmw "github.com/Laisky/gin-middlewares/v7"
 	"github.com/Laisky/zap"
 	"github.com/gin-gonic/gin"
 
 	"github.com/songquanpeng/one-api/common/ctxkey"
-	"github.com/songquanpeng/one-api/common/helper"
+	commonsse "github.com/songquanpeng/one-api/common/sse"
 	"github.com/songquanpeng/one-api/relay/adaptor"
 	"github.com/songquanpeng/one-api/relay/adaptor/openai_compatible"
 	"github.com/songquanpeng/one-api/relay/meta"
@@ -342,12 +343,31 @@ func (a *Adaptor) convertStreamingToClaudeResponse(c *gin.Context, resp *http.Re
 	go func() {
 		defer writer.Close()
 
-		scanner := bufio.NewScanner(bytes.NewReader(body))
-		helper.ConfigureScannerBuffer(scanner)
-		for scanner.Scan() {
-			line := scanner.Text()
+		lineReader := commonsse.NewLineReader(bytes.NewReader(body), commonsse.DefaultLineBufferSize)
+		for {
+			line, err := lineReader.Next()
+			if err != nil {
+				if errors.Is(err, io.EOF) {
+					break
+				}
 
-			if after, ok := strings.CutPrefix(line, "data: "); ok {
+				lg.Debug("error reading OpenAI stream for Claude conversion", zap.Error(err))
+				break
+			}
+
+			var lineText string
+			if line.Oversized {
+				payload, err := io.ReadAll(line.Large)
+				if err != nil {
+					lg.Debug("error reading oversized OpenAI stream payload for Claude conversion", zap.Error(err))
+					continue
+				}
+				lineText = "data: " + string(payload)
+			} else {
+				lineText = line.Text()
+			}
+
+			if after, ok := strings.CutPrefix(lineText, "data: "); ok {
 				data := after
 
 				if data == "[DONE]" {
@@ -379,11 +399,6 @@ func (a *Adaptor) convertStreamingToClaudeResponse(c *gin.Context, resp *http.Re
 					}
 				}
 			}
-		}
-		if err := scanner.Err(); err != nil {
-			lg.Debug("error scanning OpenAI stream for Claude conversion",
-				zap.Error(err),
-				zap.Int("scanner_max_token_size", helper.DefaultScannerMaxTokenSize))
 		}
 	}()
 

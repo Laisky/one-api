@@ -1,7 +1,6 @@
 package openai_compatible
 
 import (
-	"bufio"
 	"bytes"
 	"encoding/json"
 	"fmt"
@@ -16,8 +15,8 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/songquanpeng/one-api/common"
-	"github.com/songquanpeng/one-api/common/helper"
 	"github.com/songquanpeng/one-api/common/render"
+	commonsse "github.com/songquanpeng/one-api/common/sse"
 	relaymodel "github.com/songquanpeng/one-api/relay/model"
 )
 
@@ -246,13 +245,11 @@ func ConvertOpenAIStreamToClaudeSSE(c *gin.Context, resp *http.Response, promptT
 	// Prepare client for SSE
 	common.SetEventStreamHeaders(c)
 
-	scanner := bufio.NewScanner(resp.Body)
-	helper.ConfigureScannerBuffer(scanner)
-	scanner.Split(bufio.ScanLines)
+	lineReader := commonsse.NewLineReader(resp.Body, commonsse.DefaultLineBufferSize)
 
-	// Wrap scanner with heartbeat to prevent reverse-proxy timeouts (e.g. Cloudflare 524)
-	hbs := render.NewHeartbeatScanner(c, scanner, render.DefaultHeartbeatInterval)
-	defer hbs.Close()
+	// Wrap the reader with heartbeats to prevent reverse-proxy timeouts (e.g. Cloudflare 524).
+	hbr := render.NewHeartbeatLineReader(c, lineReader, render.DefaultHeartbeatInterval)
+	defer hbr.Close()
 
 	accumText := ""
 	accumThinking := ""
@@ -294,12 +291,176 @@ func ConvertOpenAIStreamToClaudeSSE(c *gin.Context, resp *http.Response, promptT
 	})
 
 	upstreamDone := false
-	for hbs.Scan() {
-		line := hbs.Text()
-		if !strings.HasPrefix(line, "data:") {
+	var streamErr error
+	for {
+		line, err := hbr.Next()
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				break
+			}
+
+			streamErr = err
+			break
+		}
+
+		if line.Oversized {
+			payloadBytes, err := io.ReadAll(line.Large)
+			if err != nil {
+				streamErr = err
+				break
+			}
+
+			chunk, ok := parseStreamChunk(string(payloadBytes))
+			if !ok {
+				continue
+			}
+
+			for _, choice := range chunk.Choices {
+				var thinkingContent *string
+				if choice.Delta.Thinking != nil && *choice.Delta.Thinking != "" {
+					thinkingContent = choice.Delta.Thinking
+				} else if choice.Delta.ReasoningContent != nil && *choice.Delta.ReasoningContent != "" {
+					thinkingContent = choice.Delta.ReasoningContent
+				} else if choice.Delta.Reasoning != nil && *choice.Delta.Reasoning != "" {
+					thinkingContent = choice.Delta.Reasoning
+				}
+
+				if thinkingContent != nil && *thinkingContent != "" {
+					if thinkingIndex == -1 {
+						writeClaudeSSE(map[string]any{
+							"type":          "content_block_start",
+							"index":         nextIndex,
+							"content_block": map[string]any{"type": "thinking", "thinking": ""},
+						})
+						thinkingIndex = nextIndex
+						nextIndex++
+					}
+					thinkingDelta := *thinkingContent
+					accumThinking += thinkingDelta
+					writeClaudeSSE(map[string]any{
+						"type":  "content_block_delta",
+						"index": thinkingIndex,
+						"delta": map[string]any{"type": "thinking_delta", "thinking": thinkingDelta},
+					})
+				}
+
+				if choice.Delta.Signature != nil && *choice.Delta.Signature != "" {
+					if thinkingIndex == -1 {
+						writeClaudeSSE(map[string]any{
+							"type":          "content_block_start",
+							"index":         nextIndex,
+							"content_block": map[string]any{"type": "thinking", "thinking": ""},
+						})
+						thinkingIndex = nextIndex
+						nextIndex++
+					}
+					writeClaudeSSE(map[string]any{
+						"type":  "content_block_delta",
+						"index": thinkingIndex,
+						"delta": map[string]any{"type": "signature_delta", "signature": *choice.Delta.Signature},
+					})
+				}
+
+				deltaText := choice.Delta.StringContent()
+				if deltaText != "" {
+					if textIndex == -1 {
+						writeClaudeSSE(map[string]any{
+							"type":          "content_block_start",
+							"index":         nextIndex,
+							"content_block": map[string]any{"type": "text", "text": ""},
+						})
+						textIndex = nextIndex
+						nextIndex++
+					}
+					accumText += deltaText
+					writeClaudeSSE(map[string]any{
+						"type":  "content_block_delta",
+						"index": textIndex,
+						"delta": map[string]any{"type": "text_delta", "text": deltaText},
+					})
+				}
+
+				if len(choice.Delta.ToolCalls) > 0 {
+					for _, tc := range choice.Delta.ToolCalls {
+						id := tc.Id
+						if id == "" {
+							id = fmt.Sprintf("tool_%d", nextIndex)
+						}
+						idx, exists := toolStarted[id]
+						if !exists {
+							idx = nextIndex
+							toolStarted[id] = idx
+							nextIndex++
+							writeClaudeSSE(map[string]any{
+								"type":  "content_block_start",
+								"index": idx,
+								"content_block": map[string]any{
+									"type": "tool_use",
+									"id":   id,
+									"name": func() string {
+										if tc.Function != nil {
+											return tc.Function.Name
+										}
+										return ""
+									}(),
+									"input": map[string]any{},
+								},
+							})
+						}
+
+						var argStr string
+						if tc.Function != nil && tc.Function.Arguments != nil {
+							switch v := tc.Function.Arguments.(type) {
+							case string:
+								argStr = v
+							default:
+								if b, e := json.Marshal(v); e == nil {
+									argStr = string(b)
+								}
+							}
+						}
+						if argStr != "" {
+							accumToolArgs += argStr
+							writeClaudeSSE(map[string]any{
+								"type":  "content_block_delta",
+								"index": idx,
+								"delta": map[string]any{"type": "input_json_delta", "partial_json": argStr},
+							})
+						}
+					}
+				}
+			}
+
+			if chunk.Usage != nil {
+				usage = chunk.Usage
+				usageDelta := map[string]any{
+					"input_tokens":  usage.PromptTokens,
+					"output_tokens": usage.CompletionTokens,
+				}
+				if usage.PromptTokensDetails != nil && usage.PromptTokensDetails.CachedTokens > 0 {
+					usageDelta["cache_read_input_tokens"] = usage.PromptTokensDetails.CachedTokens
+				}
+				if usage.CacheWrite5mTokens > 0 || usage.CacheWrite1hTokens > 0 {
+					usageDelta["cache_creation_input_tokens"] = usage.CacheWrite5mTokens + usage.CacheWrite1hTokens
+					usageDelta["cache_creation"] = map[string]any{
+						"ephemeral_5m_input_tokens": usage.CacheWrite5mTokens,
+						"ephemeral_1h_input_tokens": usage.CacheWrite1hTokens,
+					}
+				}
+				writeClaudeSSE(map[string]any{
+					"type":  "message_delta",
+					"usage": usageDelta,
+				})
+			}
+
 			continue
 		}
-		payload := strings.TrimSpace(strings.TrimPrefix(line, "data:"))
+
+		lineText := line.Text()
+		if !strings.HasPrefix(lineText, "data:") {
+			continue
+		}
+		payload := strings.TrimSpace(strings.TrimPrefix(lineText, "data:"))
 		if payload == "[DONE]" {
 			upstreamDone = true
 			break
@@ -454,6 +615,10 @@ func ConvertOpenAIStreamToClaudeSSE(c *gin.Context, resp *http.Response, promptT
 				"usage": usageDelta,
 			})
 		}
+	}
+
+	if streamErr != nil {
+		render.LogHeartbeatLineReaderError(c, lg, streamErr, hbr)
 	}
 
 	// Close any started content blocks.

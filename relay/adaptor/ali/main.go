@@ -1,7 +1,6 @@
 package ali
 
 import (
-	"bufio"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -18,6 +17,7 @@ import (
 	"github.com/songquanpeng/one-api/common/ctxkey"
 	"github.com/songquanpeng/one-api/common/helper"
 	"github.com/songquanpeng/one-api/common/render"
+	commonsse "github.com/songquanpeng/one-api/common/sse"
 	"github.com/songquanpeng/one-api/relay/adaptor/openai"
 	"github.com/songquanpeng/one-api/relay/model"
 )
@@ -184,32 +184,51 @@ func streamResponseAli2OpenAI(aliResponse *ChatResponse) *openai.ChatCompletions
 func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusCode, *model.Usage) {
 	var usage model.Usage
 	lg := gmw.GetLogger(c)
-	scanner := bufio.NewScanner(resp.Body)
-	helper.ConfigureScannerBuffer(scanner)
-	scanner.Split(func(data []byte, atEOF bool) (advance int, token []byte, err error) {
-		if atEOF && len(data) == 0 {
-			return 0, nil, nil
-		}
-		if i := strings.Index(string(data), "\n"); i >= 0 {
-			return i + 1, data[0:i], nil
-		}
-		if atEOF {
-			return len(data), data, nil
-		}
-		return 0, nil, nil
-	})
+	lineReader := commonsse.NewLineReader(resp.Body, commonsse.DefaultLineBufferSize)
 
 	common.SetEventStreamHeaders(c)
 
-	for scanner.Scan() {
-		data := scanner.Text()
+	var streamErr error
+	for {
+		line, err := lineReader.Next()
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				break
+			}
+
+			streamErr = err
+			break
+		}
+
+		if line.Oversized {
+			var aliResponse ChatResponse
+			if err := json.NewDecoder(line.Large).Decode(&aliResponse); err != nil {
+				lg.Error("error unmarshalling oversized stream response", zap.Error(err))
+				continue
+			}
+			if aliResponse.Usage.OutputTokens != 0 {
+				usage.PromptTokens = aliResponse.Usage.InputTokens
+				usage.CompletionTokens = aliResponse.Usage.OutputTokens
+				usage.TotalTokens = aliResponse.Usage.InputTokens + aliResponse.Usage.OutputTokens
+			}
+			response := streamResponseAli2OpenAI(&aliResponse)
+			if response == nil {
+				continue
+			}
+			if err := render.ObjectData(c, response); err != nil {
+				lg.Error("error rendering response: ", zap.Error(err))
+			}
+			continue
+		}
+
+		data := line.Text()
 		if len(data) < 5 || data[:5] != "data:" {
 			continue
 		}
 		data = data[5:]
 
 		var aliResponse ChatResponse
-		err := json.Unmarshal([]byte(data), &aliResponse)
+		err = json.Unmarshal([]byte(data), &aliResponse)
 		if err != nil {
 			lg.Error("error unmarshalling stream response: ", zap.Error(err))
 			continue
@@ -229,8 +248,8 @@ func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusC
 		}
 	}
 
-	if err := scanner.Err(); err != nil {
-		lg.Error("error reading stream: ", zap.Error(err), zap.Int("scanner_max_token_size", helper.DefaultScannerMaxTokenSize))
+	if streamErr != nil {
+		lg.Error("error reading stream: ", zap.Error(streamErr))
 	}
 
 	render.Done(c)

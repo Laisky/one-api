@@ -1,7 +1,6 @@
 package openai_compatible
 
 import (
-	"bufio"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -15,8 +14,8 @@ import (
 
 	"github.com/songquanpeng/one-api/common"
 	"github.com/songquanpeng/one-api/common/ctxkey"
-	"github.com/songquanpeng/one-api/common/helper"
 	"github.com/songquanpeng/one-api/common/render"
+	commonsse "github.com/songquanpeng/one-api/common/sse"
 	"github.com/songquanpeng/one-api/common/tracing"
 	"github.com/songquanpeng/one-api/relay/model"
 )
@@ -969,9 +968,7 @@ func UnifiedStreamProcessing(c *gin.Context, resp *http.Response, promptTokens i
 			"unexpected_response_format", resp.StatusCode), nil
 	}
 
-	scanner := bufio.NewScanner(resp.Body)
-	helper.ConfigureScannerBuffer(scanner)
-	scanner.Split(bufio.ScanLines)
+	lineReader := commonsse.NewLineReader(resp.Body, commonsse.DefaultLineBufferSize)
 
 	common.SetEventStreamHeaders(c)
 
@@ -985,8 +982,69 @@ func UnifiedStreamProcessing(c *gin.Context, resp *http.Response, promptTokens i
 	// Initialize unified streaming context
 	streamCtx := NewStreamingContext(logger, enableThinking)
 
-	for scanner.Scan() {
-		data := NormalizeDataLine(scanner.Text())
+	for {
+		line, err := lineReader.Next()
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				break
+			}
+
+			return ErrorWrapper(err, "read_stream_failed", http.StatusInternalServerError), streamCtx.usage
+		}
+
+		if line.Oversized {
+			var streamResponse ChatCompletionsStreamResponse
+			if err := json.NewDecoder(line.Large).Decode(&streamResponse); err != nil {
+				logger.Warn("failed to parse oversized streaming chunk, skipping", zap.Error(err))
+				continue
+			}
+
+			streamResponse.Id = tracing.GenerateChatCompletionID(c)
+			modifiedChunk := streamCtx.ProcessStreamChunk(&streamResponse)
+
+			if streamRewriter != nil {
+				handled, doneRendered := streamRewriter.HandleChunk(c, &streamResponse)
+				if handled {
+					if doneRendered {
+						streamCtx.doneRendered = true
+					}
+					continue
+				}
+			}
+
+			if enableThinking {
+				reasoningFormat := c.Query("reasoning_format")
+				if reasoningFormat == "" {
+					reasoningFormat = string(model.ReasoningFormatReasoningContent)
+				}
+
+				for i := range streamResponse.Choices {
+					if streamResponse.Choices[i].Delta.ReasoningContent != nil {
+						rc := *streamResponse.Choices[i].Delta.ReasoningContent
+						streamResponse.Choices[i].Delta.SetReasoningContent(reasoningFormat, rc)
+						if strings.ToLower(strings.TrimSpace(reasoningFormat)) != string(model.ReasoningFormatReasoningContent) {
+							streamResponse.Choices[i].Delta.ReasoningContent = nil
+						}
+					}
+				}
+			}
+
+			payload, err := json.Marshal(streamResponse)
+			if err != nil {
+				logger.Warn("failed to marshal oversized streaming chunk, skipping", zap.Error(err))
+				continue
+			}
+
+			if modifiedChunk {
+				render.StringData(c, "data: "+string(payload))
+			} else {
+				render.StringData(c, "data: "+string(payload))
+			}
+
+			continue
+		}
+
+		data := NormalizeDataLine(line.Text())
 		// logger.Debug("processing streaming chunk",
 		// 	zap.String("chunk_data", data),
 		// 	zap.Int("chunks_processed", streamCtx.chunksProcessed))
@@ -1074,10 +1132,6 @@ func UnifiedStreamProcessing(c *gin.Context, resp *http.Response, promptTokens i
 		} else {
 			render.StringData(c, data)
 		}
-	}
-
-	if err := scanner.Err(); err != nil {
-		return ErrorWrapper(err, "read_stream_failed", http.StatusInternalServerError), streamCtx.usage
 	}
 
 	// Validate stream completion

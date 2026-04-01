@@ -1336,3 +1336,27 @@ func TestResponseAPIStreamHandler_MeaningfulNonDoneNonDeltaEvent(t *testing.T) {
 	// Should have chunks from both the content_part.added and the delta
 	require.GreaterOrEqual(t, len(chunks), 1)
 }
+
+// TestResponseAPIStreamHandler_OversizedDataLine verifies large Response API chunks bypass scanner limits.
+func TestResponseAPIStreamHandler_OversizedDataLine(t *testing.T) {
+	t.Parallel()
+	w, c := newTestCtx()
+
+	largeDelta := strings.Repeat("R", 128*1024)
+	sse := buildSSE(
+		"response.output_text.delta", `{"type":"response.output_text.delta","item_id":"msg_big","output_index":0,"content_index":0,"delta":"`+largeDelta+`"}`,
+		"response.completed", `{"type":"response.completed","response":{"id":"resp_big","object":"response","created_at":1700000000,"status":"completed","output":[{"id":"msg_big","type":"message","status":"completed","role":"assistant","content":[{"type":"output_text","text":"`+largeDelta+`"}]}],"usage":{"input_tokens":10,"output_tokens":5,"total_tokens":15}}}`,
+		"", "[DONE]",
+	)
+
+	apiErr, text, usage := ResponseAPIStreamHandler(c, makeResp(sse), relaymode.ChatCompletions)
+	require.Nil(t, apiErr)
+	require.Equal(t, largeDelta, text)
+	require.NotNil(t, usage)
+	require.Equal(t, 15, usage.TotalTokens)
+
+	body := w.Body.String()
+	require.Contains(t, body, largeDelta[:1024])
+	require.Contains(t, body, largeDelta[len(largeDelta)-1024:])
+	require.Contains(t, body, "data: [DONE]")
+}

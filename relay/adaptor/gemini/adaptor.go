@@ -1,7 +1,6 @@
 package gemini
 
 import (
-	"bufio"
 	"bytes"
 	"encoding/json"
 	"fmt"
@@ -20,6 +19,7 @@ import (
 	"github.com/songquanpeng/one-api/common/ctxkey"
 	"github.com/songquanpeng/one-api/common/helper"
 	"github.com/songquanpeng/one-api/common/random"
+	commonsse "github.com/songquanpeng/one-api/common/sse"
 	channelhelper "github.com/songquanpeng/one-api/relay/adaptor"
 	"github.com/songquanpeng/one-api/relay/adaptor/geminiOpenaiCompatible"
 	"github.com/songquanpeng/one-api/relay/adaptor/openai"
@@ -70,7 +70,9 @@ func resolveGeminiAPIVersion(modelName string, configuredVersion string) string 
 func (a *Adaptor) SetupRequestHeader(c *gin.Context, req *http.Request, meta *meta.Meta) error {
 	channelhelper.SetupCommonRequestHeader(c, req, meta)
 	req.Header.Set("x-goog-api-key", meta.APIKey)
-	req.URL.Query().Add("key", meta.APIKey)
+	query := req.URL.Query()
+	query.Add("key", meta.APIKey)
+	req.URL.RawQuery = query.Encode()
 	return nil
 }
 
@@ -413,9 +415,7 @@ func (a *Adaptor) convertNonStreamingToClaudeResponse(c *gin.Context, resp *http
 func (a *Adaptor) convertStreamingToClaudeResponse(c *gin.Context, resp *http.Response, body []byte, meta *meta.Meta) (*http.Response, *model.ErrorWithStatusCode) {
 	lg := gmw.GetLogger(c)
 
-	scanner := bufio.NewScanner(bytes.NewReader(body))
-	helper.ConfigureScannerBuffer(scanner)
-	scanner.Split(bufio.ScanLines)
+	lineReader := commonsse.NewLineReader(bytes.NewReader(body), commonsse.DefaultLineBufferSize)
 
 	var textBuilder strings.Builder
 	type toolUse struct {
@@ -428,20 +428,42 @@ func (a *Adaptor) convertStreamingToClaudeResponse(c *gin.Context, resp *http.Re
 	completionTokens := 0
 	totalTokens := 0
 
-	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		if line == "" {
+	for {
+		line, err := lineReader.Next()
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				break
+			}
+
+			lg.Warn("error reading Gemini stream for Claude conversion", zap.Error(errors.Wrap(err, "read stream")))
+			break
+		}
+
+		var lineText string
+		if line.Oversized {
+			payloadBytes, err := io.ReadAll(line.Large)
+			if err != nil {
+				lg.Warn("error reading oversized Gemini stream payload", zap.Error(errors.Wrap(err, "read oversized stream")))
+				continue
+			}
+			lineText = "data: " + string(payloadBytes)
+		} else {
+			lineText = line.Text()
+		}
+
+		lineText = strings.TrimSpace(lineText)
+		if lineText == "" {
 			continue
 		}
-		if strings.HasPrefix(line, "event:") {
+		if strings.HasPrefix(lineText, "event:") {
 			// Skip explicit event annotations from upstream
 			continue
 		}
-		if !strings.HasPrefix(line, "data:") {
+		if !strings.HasPrefix(lineText, "data:") {
 			continue
 		}
 
-		payload := strings.TrimSpace(strings.TrimPrefix(line, "data:"))
+		payload := strings.TrimSpace(strings.TrimPrefix(lineText, "data:"))
 		if payload == "" {
 			continue
 		}
@@ -494,10 +516,6 @@ func (a *Adaptor) convertStreamingToClaudeResponse(c *gin.Context, resp *http.Re
 				})
 			}
 		}
-	}
-
-	if err := scanner.Err(); err != nil {
-		lg.Warn("error scanning Gemini stream for Claude conversion", zap.Error(errors.Wrap(err, "scan stream")), zap.Int("scanner_max_token_size", helper.DefaultScannerMaxTokenSize))
 	}
 
 	var toolArgsText strings.Builder

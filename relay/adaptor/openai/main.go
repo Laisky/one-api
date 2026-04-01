@@ -1,10 +1,8 @@
 package openai
 
 import (
-	"bufio"
 	"bytes"
 	"encoding/json"
-	stdErrors "errors"
 	"io"
 	"math"
 	"net/http"
@@ -19,8 +17,8 @@ import (
 	"github.com/songquanpeng/one-api/common"
 	"github.com/songquanpeng/one-api/common/conv"
 	"github.com/songquanpeng/one-api/common/ctxkey"
-	"github.com/songquanpeng/one-api/common/helper"
 	"github.com/songquanpeng/one-api/common/render"
+	commonsse "github.com/songquanpeng/one-api/common/sse"
 	"github.com/songquanpeng/one-api/common/tracing"
 	relaymodel "github.com/songquanpeng/one-api/model"
 	"github.com/songquanpeng/one-api/relay/adaptor/openai_compatible"
@@ -31,7 +29,7 @@ import (
 	"github.com/songquanpeng/one-api/relay/streaming"
 )
 
-var errUpstreamEmbeddingResponse = stdErrors.New("upstream embedding response error")
+var errUpstreamEmbeddingResponse = errors.New("upstream embedding response error")
 
 type responseStreamToolCallState struct {
 	name     string
@@ -116,19 +114,17 @@ func StreamHandler(c *gin.Context, resp *http.Response, relayMode int) (*model.E
 		}
 	}
 
-	// Set up scanner for reading the stream line by line
-	scanner := bufio.NewScanner(resp.Body)
-	helper.ConfigureScannerBuffer(scanner)
-	scanner.Split(bufio.ScanLines)
+	lineReader := commonsse.NewLineReader(resp.Body, commonsse.DefaultLineBufferSize)
 
 	// Set response headers for SSE
 	common.SetEventStreamHeaders(c)
 
-	// Wrap scanner with heartbeat to prevent reverse-proxy timeouts (e.g. Cloudflare 524)
-	hbs := render.NewHeartbeatScanner(c, scanner, render.DefaultHeartbeatInterval)
-	defer hbs.Close()
+	// Wrap the reader with heartbeats to prevent reverse-proxy timeouts (e.g. Cloudflare 524).
+	hbr := render.NewHeartbeatLineReader(c, lineReader, render.DefaultHeartbeatInterval)
+	defer hbr.Close()
 
 	doneRendered := false
+	var streamErr error
 	sendStreamingError := func(code, message string) {
 		if err := render.ObjectData(c, map[string]any{
 			"error": map[string]any{
@@ -145,8 +141,127 @@ func StreamHandler(c *gin.Context, resp *http.Response, relayMode int) (*model.E
 
 	// Process each line from the stream
 streamLoop:
-	for hbs.Scan() {
-		data := openai_compatible.NormalizeDataLine(hbs.Text())
+	for {
+		line, err := hbr.Next()
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				break
+			}
+
+			streamErr = err
+			break
+		}
+
+		if line.Oversized {
+			switch relayMode {
+			case relaymode.ChatCompletions:
+				var streamResponse openai_compatible.ChatCompletionsStreamResponse
+				if err := json.NewDecoder(line.Large).Decode(&streamResponse); err != nil {
+					lg.Error("unmarshalling oversized stream data", zap.Error(err))
+					continue
+				}
+
+				if len(streamResponse.Choices) == 0 && streamResponse.Usage == nil {
+					continue
+				}
+
+				for _, choice := range streamResponse.Choices {
+					currentReasoningChunk := extractReasoningContent(&choice.Delta)
+					if currentReasoningChunk != "" {
+						reasoningText += currentReasoningChunk
+					}
+
+					choice.Delta.SetReasoningContent(c.Query("reasoning_format"), currentReasoningChunk)
+					responseText += conv.AsString(choice.Delta.Content)
+
+					if tracker != nil && metaInfo != nil {
+						deltaTokens := 0
+						if chunk := conv.AsString(choice.Delta.Content); chunk != "" {
+							deltaTokens += CountTokenText(chunk, metaInfo.ActualModelName)
+						}
+						if currentReasoningChunk != "" {
+							deltaTokens += CountTokenText(currentReasoningChunk, metaInfo.ActualModelName)
+						}
+						if deltaTokens > 0 {
+							if err := tracker.RecordCompletionTokens(deltaTokens); err != nil {
+								trackerErr = err
+								if errors.Is(err, streaming.ErrQuotaExceeded) {
+									sendStreamingError("insufficient_user_quota", "user quota exhausted during streaming")
+								} else {
+									sendStreamingError("streaming_billing_failed", "failed to track streaming usage")
+								}
+								break streamLoop
+							}
+						}
+					}
+				}
+
+				handledByRewriter := false
+				if streamRewriter != nil {
+					if handled, handledDone := streamRewriter.HandleChunk(c, &streamResponse); handled {
+						handledByRewriter = true
+						if handledDone {
+							doneRendered = true
+						}
+					}
+				}
+
+				if !handledByRewriter {
+					payload, err := json.Marshal(streamResponse)
+					if err != nil {
+						lg.Error("marshalling oversized stream response", zap.Error(err))
+						continue
+					}
+					render.StringData(c, "data: "+string(payload))
+				}
+
+				if streamResponse.Usage != nil {
+					usage = streamResponse.Usage
+					if tracker != nil {
+						tracker.UpdateFinalUsage(streamResponse.Usage)
+					}
+				}
+
+				if handledByRewriter {
+					continue
+				}
+
+			case relaymode.Completions:
+				var streamResponse CompletionsStreamResponse
+				if err := json.NewDecoder(line.Large).Decode(&streamResponse); err != nil {
+					lg.Error("error unmarshalling oversized completion stream response", zap.Error(err))
+					continue
+				}
+
+				payload, err := json.Marshal(streamResponse)
+				if err != nil {
+					lg.Error("error marshalling oversized completion stream response", zap.Error(err))
+					continue
+				}
+				render.StringData(c, "data: "+string(payload))
+
+				for _, choice := range streamResponse.Choices {
+					responseText += choice.Text
+					if tracker != nil && metaInfo != nil {
+						if tokens := CountTokenText(choice.Text, metaInfo.ActualModelName); tokens > 0 {
+							if err := tracker.RecordCompletionTokens(tokens); err != nil {
+								trackerErr = err
+								if errors.Is(err, streaming.ErrQuotaExceeded) {
+									sendStreamingError("insufficient_user_quota", "user quota exhausted during streaming")
+								} else {
+									sendStreamingError("streaming_billing_failed", "failed to track streaming usage")
+								}
+								break streamLoop
+							}
+						}
+					}
+				}
+			}
+
+			continue
+		}
+
+		data := openai_compatible.NormalizeDataLine(line.Text())
 
 		lg.Debug("stream response", zap.String("event", data))
 
@@ -223,7 +338,7 @@ streamLoop:
 					if deltaTokens > 0 {
 						if err := tracker.RecordCompletionTokens(deltaTokens); err != nil {
 							trackerErr = err
-							if stdErrors.Is(err, streaming.ErrQuotaExceeded) {
+							if errors.Is(err, streaming.ErrQuotaExceeded) {
 								sendStreamingError("insufficient_user_quota", "user quota exhausted during streaming")
 							} else {
 								sendStreamingError("streaming_billing_failed", "failed to track streaming usage")
@@ -279,7 +394,7 @@ streamLoop:
 					if tokens := CountTokenText(choice.Text, metaInfo.ActualModelName); tokens > 0 {
 						if err := tracker.RecordCompletionTokens(tokens); err != nil {
 							trackerErr = err
-							if stdErrors.Is(err, streaming.ErrQuotaExceeded) {
+							if errors.Is(err, streaming.ErrQuotaExceeded) {
 								sendStreamingError("insufficient_user_quota", "user quota exhausted during streaming")
 							} else {
 								sendStreamingError("streaming_billing_failed", "failed to track streaming usage")
@@ -293,16 +408,16 @@ streamLoop:
 	}
 
 	// Log heartbeat diagnostics for chat completion stream
-	if hbs.HeartbeatsSent() > 0 || hbs.HeartbeatWriteErr() != nil {
+	if hbr.HeartbeatsSent() > 0 || hbr.HeartbeatWriteErr() != nil {
 		lg.Debug("heartbeat diagnostics",
-			zap.Int("heartbeats_sent", hbs.HeartbeatsSent()),
-			zap.NamedError("heartbeat_write_err", hbs.HeartbeatWriteErr()),
+			zap.Int("heartbeats_sent", hbr.HeartbeatsSent()),
+			zap.NamedError("heartbeat_write_err", hbr.HeartbeatWriteErr()),
 		)
 	}
 
-	// Check for scanner errors
-	if err := hbs.Err(); err != nil && trackerErr == nil {
-		render.LogHeartbeatScannerError(c, lg, err, helper.DefaultScannerMaxTokenSize, hbs)
+	// Check for stream reader errors.
+	if streamErr != nil && trackerErr == nil {
+		render.LogHeartbeatLineReaderError(c, lg, streamErr, hbr)
 	}
 
 	// Let the streamRewriter finalize if present, but do NOT fabricate a
@@ -327,7 +442,7 @@ streamLoop:
 	}
 
 	if trackerErr != nil {
-		if stdErrors.Is(trackerErr, streaming.ErrQuotaExceeded) {
+		if errors.Is(trackerErr, streaming.ErrQuotaExceeded) {
 			return ErrorWrapper(trackerErr, "insufficient_user_quota", http.StatusForbidden), "", usage
 		}
 		return ErrorWrapper(trackerErr, "streaming_billing_failed", http.StatusInternalServerError), "", usage
@@ -886,17 +1001,14 @@ func ResponseAPIStreamHandler(c *gin.Context, resp *http.Response, relayMode int
 		return state
 	}
 
-	// Set up scanner for reading the stream line by line
-	scanner := bufio.NewScanner(resp.Body)
-	helper.ConfigureScannerBuffer(scanner)
-	scanner.Split(bufio.ScanLines)
+	lineReader := commonsse.NewLineReader(resp.Body, commonsse.DefaultLineBufferSize)
 
 	// Set response headers for SSE
 	common.SetEventStreamHeaders(c)
 
-	// Wrap scanner with heartbeat to prevent reverse-proxy timeouts (e.g. Cloudflare 524)
-	hbs := render.NewHeartbeatScanner(c, scanner, render.DefaultHeartbeatInterval)
-	defer hbs.Close()
+	// Wrap the reader with heartbeats to prevent reverse-proxy timeouts (e.g. Cloudflare 524).
+	hbr := render.NewHeartbeatLineReader(c, lineReader, render.DefaultHeartbeatInterval)
+	defer hbr.Close()
 
 	lg.Debug("forwarding response api converted stream to client",
 		zap.Int("relay_mode", relayMode),
@@ -905,10 +1017,338 @@ func ResponseAPIStreamHandler(c *gin.Context, resp *http.Response, relayMode int
 
 	doneRendered := false
 	forwardedChunks := 0
+	var streamErr error
 
 	// Process each line from the stream
-	for hbs.Scan() {
-		data := openai_compatible.NormalizeDataLine(hbs.Text())
+	for {
+		line, err := hbr.Next()
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				break
+			}
+
+			streamErr = err
+			break
+		}
+
+		if line.Oversized {
+			fullResponse, streamEvent, err := ParseResponseAPIStreamEventFromReader(line.Large)
+			if err != nil {
+				lg.Debug("skipping unparseable oversized stream chunk", zap.Error(err))
+				continue
+			}
+
+			var responseAPIChunk ResponseAPIResponse
+			var outputIndex *int
+			if fullResponse != nil {
+				responseAPIChunk = *fullResponse
+			} else if streamEvent != nil {
+				responseAPIChunk = ConvertStreamEventToResponse(streamEvent)
+				if streamEvent.OutputIndex >= 0 {
+					outputIndex = &streamEvent.OutputIndex
+				}
+			} else {
+				continue
+			}
+
+			if newCalls := countNewWebSearchSearchActions(responseAPIChunk.Output, webSearchSeen); newCalls > 0 {
+				webSearchCount += newCalls
+			}
+
+			if streamEvent != nil && strings.Contains(streamEvent.Type, "delta") {
+				if delta := extractStringFromRaw(streamEvent.Delta, "partial_json", "json", "text", "delta"); delta != "" {
+					if strings.Contains(streamEvent.Type, "reasoning_summary_text") {
+						reasoningText += delta
+					} else {
+						responseText += delta
+					}
+				}
+			}
+
+			eventType := ""
+			if streamEvent != nil {
+				eventType = streamEvent.Type
+			} else if fullResponse != nil {
+				if responseAPIChunk.Status != "" {
+					eventType = "response." + responseAPIChunk.Status
+				} else {
+					eventType = "response.completed"
+				}
+			}
+
+			if eventType != "" {
+				if streamEvent != nil && streamEvent.Item != nil && streamEvent.Item.Type == "function_call" {
+					if state := getToolState(streamEvent.Item.Id); state != nil {
+						if streamEvent.OutputIndex >= 0 {
+							state.setIndex(streamEvent.OutputIndex)
+						}
+						state.setName(streamEvent.Item.Name)
+						if streamEvent.Item.Arguments != "" {
+							state.appendArgs(streamEvent.Item.Arguments)
+						}
+					}
+				}
+				if streamEvent != nil && strings.HasPrefix(eventType, "response.function_call_arguments.delta") {
+					if state := getToolState(streamEvent.ItemId); state != nil {
+						if streamEvent.OutputIndex >= 0 {
+							state.setIndex(streamEvent.OutputIndex)
+						}
+						state.appendArgs(extractStringFromRaw(streamEvent.Delta, "partial_json", "text", "arguments", "delta"))
+					}
+				}
+				if streamEvent != nil && strings.HasPrefix(eventType, "response.function_call_arguments.done") {
+					if state := getToolState(streamEvent.ItemId); state != nil {
+						if streamEvent.OutputIndex >= 0 {
+							state.setIndex(streamEvent.OutputIndex)
+						}
+						if streamEvent.Arguments != "" {
+							state.replaceArgs(streamEvent.Arguments)
+						}
+					}
+				}
+			}
+
+			chatCompletionChunk := ConvertResponseAPIStreamToChatCompletionWithIndex(&responseAPIChunk, outputIndex)
+
+			if streamEvent != nil {
+				eventType := streamEvent.Type
+				if !strings.Contains(eventType, "delta") {
+					seen := false
+					for _, out := range responseAPIChunk.Output {
+						if out.Id != "" {
+							if _, ok := seenOutputItems[out.Id]; ok {
+								seen = true
+								break
+							}
+						}
+					}
+
+					if seen {
+						if eventType == "response.completed" {
+							if len(chatCompletionChunk.Choices) > 0 {
+								delta := &chatCompletionChunk.Choices[0].Delta
+								delta.Content = responseText
+								delta.Reasoning = nil
+								delta.ToolCalls = nil
+							}
+						} else {
+							if len(chatCompletionChunk.Choices) > 0 {
+								delta := &chatCompletionChunk.Choices[0].Delta
+								delta.Content = ""
+								delta.Reasoning = nil
+								delta.ToolCalls = nil
+							}
+						}
+					}
+				}
+			}
+
+			if len(chatCompletionChunk.Choices) > 0 {
+				delta := &chatCompletionChunk.Choices[0].Delta
+				candidateIDs := make([]string, 0, 3)
+				for _, tc := range delta.ToolCalls {
+					candidateIDs = append(candidateIDs, tc.Id)
+				}
+				if streamEvent != nil {
+					if streamEvent.Item != nil && streamEvent.Item.Type == "function_call" && streamEvent.Item.Id != "" {
+						candidateIDs = append(candidateIDs, streamEvent.Item.Id)
+					}
+					if streamEvent.ItemId != "" {
+						candidateIDs = append(candidateIDs, streamEvent.ItemId)
+					}
+				}
+
+				for idx := range delta.ToolCalls {
+					tc := &delta.ToolCalls[idx]
+					callID := tc.Id
+					if callID == "" && streamEvent != nil {
+						if streamEvent.Item != nil && streamEvent.Item.Type == "function_call" && streamEvent.Item.Id != "" {
+							callID = streamEvent.Item.Id
+							tc.Id = callID
+						} else if streamEvent.ItemId != "" {
+							callID = streamEvent.ItemId
+							tc.Id = callID
+						}
+					}
+					if state := getToolState(callID); state != nil {
+						if tc.Function == nil {
+							tc.Function = &model.Function{}
+						}
+						tc.Function.Name = state.name
+						tc.Function.Arguments = state.arguments()
+						if state.hasIndex {
+							idxCopy := state.index
+							tc.Index = &idxCopy
+						}
+					}
+				}
+
+				if len(delta.ToolCalls) == 0 && len(candidateIDs) > 0 {
+					for _, id := range candidateIDs {
+						if state := toolStates[id]; state != nil {
+							tool := model.Tool{
+								Id:   id,
+								Type: "function",
+								Function: &model.Function{
+									Name:      state.name,
+									Arguments: state.arguments(),
+								},
+							}
+							if state.hasIndex {
+								idxCopy := state.index
+								tool.Index = &idxCopy
+							}
+							delta.ToolCalls = append(delta.ToolCalls, tool)
+							break
+						}
+					}
+				}
+
+				if streamEvent != nil && strings.Contains(streamEvent.Type, "delta") {
+					itemId := streamEvent.ItemId
+					if itemId == "" && streamEvent.Item != nil {
+						itemId = streamEvent.Item.Id
+					}
+					if itemId != "" {
+						seenOutputItems[itemId] = struct{}{}
+					}
+				}
+			}
+
+			if responseAPIChunk.Usage != nil {
+				lastUsage = responseAPIChunk.Usage
+			}
+			if chatCompletionChunk.Usage != nil {
+				usage = chatCompletionChunk.Usage
+			}
+
+			if eventType != "" {
+				if strings.HasPrefix(eventType, "response.completed") && len(chatCompletionChunk.Choices) > 0 {
+					if fullResponse != nil {
+						if len(chatCompletionChunk.Choices) > 0 {
+							delta := &chatCompletionChunk.Choices[0].Delta
+							delta.Content = responseText
+							delta.Reasoning = nil
+							delta.ToolCalls = nil
+						}
+					} else {
+						delta := &chatCompletionChunk.Choices[0].Delta
+						if content, ok := delta.Content.(string); ok && content != "" {
+							delta.Content = ""
+						}
+						delta.Reasoning = nil
+						delta.ToolCalls = nil
+					}
+				}
+
+				hasMeaningfulDelta := func() bool {
+					if len(chatCompletionChunk.Choices) == 0 {
+						return false
+					}
+					delta := chatCompletionChunk.Choices[0].Delta
+					if delta.Reasoning != nil && *delta.Reasoning != "" {
+						return true
+					}
+					if len(delta.ToolCalls) > 0 {
+						return true
+					}
+					switch v := delta.Content.(type) {
+					case string:
+						return v != ""
+					case []byte:
+						return len(v) > 0
+					}
+					return false
+				}()
+
+				hasToolCalls := len(chatCompletionChunk.Choices) > 0 && len(chatCompletionChunk.Choices[0].Delta.ToolCalls) > 0
+				hasFinishReason := len(chatCompletionChunk.Choices) > 0 && chatCompletionChunk.Choices[0].FinishReason != nil
+				shouldSendChunk := false
+
+				if strings.Contains(eventType, "delta") {
+					shouldSendChunk = hasMeaningfulDelta
+				} else if hasToolCalls {
+					shouldSendChunk = true
+				} else if eventType == "response.completed" && hasFinishReason {
+					shouldSendChunk = true
+				} else if hasMeaningfulDelta &&
+					!strings.Contains(eventType, "output_text.done") &&
+					!strings.Contains(eventType, "content_part.done") &&
+					!strings.Contains(eventType, "output_item.done") &&
+					!strings.Contains(eventType, "reasoning_summary_text.done") {
+					shouldSendChunk = true
+				}
+
+				if shouldSendChunk {
+					jsonStr, err := json.Marshal(chatCompletionChunk)
+					if err != nil {
+						lg.Error("error marshalling oversized stream chunk", zap.Error(err))
+						continue
+					}
+
+					render.StringData(c, string(jsonStr))
+					forwardedChunks++
+					if forwardedChunks == 1 {
+						lg.Debug("first response api converted stream chunk flushed to client")
+					}
+				} else if eventType == "response.completed" && responseAPIChunk.Usage != nil {
+					convertedUsage := responseAPIChunk.Usage.ToModelUsage()
+					if convertedUsage != nil {
+						finalContent := ""
+						var finalFinish *string
+						if len(chatCompletionChunk.Choices) > 0 {
+							if chatCompletionChunk.Choices[0].FinishReason != nil {
+								fr := *chatCompletionChunk.Choices[0].FinishReason
+								finalFinish = &fr
+							}
+							if content, ok := chatCompletionChunk.Choices[0].Delta.Content.(string); ok && content != "" {
+								finalContent = content
+							}
+						}
+						if finalContent == "" {
+							finalContent = responseText
+						}
+						if finalFinish == nil {
+							fr := "stop"
+							finalFinish = &fr
+						}
+
+						usageChunk := ChatCompletionsStreamResponse{
+							Id:      responseAPIChunk.Id,
+							Object:  "chat.completion.chunk",
+							Created: responseAPIChunk.CreatedAt,
+							Model:   responseAPIChunk.Model,
+							Choices: []ChatCompletionsStreamResponseChoice{{
+								Index: 0,
+								Delta: model.Message{
+									Role:    "assistant",
+									Content: finalContent,
+								},
+								FinishReason: finalFinish,
+							}},
+							Usage: convertedUsage,
+						}
+
+						jsonStr, err := json.Marshal(usageChunk)
+						if err != nil {
+							lg.Error("error marshalling oversized usage chunk", zap.Error(err))
+							continue
+						}
+
+						render.StringData(c, string(jsonStr))
+						forwardedChunks++
+						if forwardedChunks == 1 {
+							lg.Debug("first response api converted stream chunk flushed to client")
+						}
+						lg.Debug("sent usage chunk from response.completed", zap.ByteString("chunk", jsonStr))
+					}
+				}
+			}
+
+			continue
+		}
+
+		data := openai_compatible.NormalizeDataLine(line.Text())
 
 		lg.Debug("receive stream event", zap.String("event", data))
 
@@ -1293,19 +1733,19 @@ func ResponseAPIStreamHandler(c *gin.Context, resp *http.Response, relayMode int
 		}
 	}
 
-	if hbs.HeartbeatsSent() > 0 || hbs.HeartbeatWriteErr() != nil {
+	if hbr.HeartbeatsSent() > 0 || hbr.HeartbeatWriteErr() != nil {
 		lg.Debug("heartbeat diagnostics",
-			zap.Int("heartbeats_sent", hbs.HeartbeatsSent()),
-			zap.NamedError("heartbeat_write_err", hbs.HeartbeatWriteErr()),
+			zap.Int("heartbeats_sent", hbr.HeartbeatsSent()),
+			zap.NamedError("heartbeat_write_err", hbr.HeartbeatWriteErr()),
 		)
 	}
 
-	if err := hbs.Err(); err != nil {
+	if streamErr != nil {
 		lg.Debug("stream read failed",
-			zap.Error(err),
+			zap.Error(streamErr),
 			zap.Int("forwarded_chunks", forwardedChunks),
 		)
-		return ErrorWrapper(err, "read_stream_failed", http.StatusInternalServerError), responseText, usage
+		return ErrorWrapper(streamErr, "read_stream_failed", http.StatusInternalServerError), responseText, usage
 	}
 
 	// Do NOT fabricate a [DONE] if the upstream didn't send one.
@@ -1334,7 +1774,7 @@ func ResponseAPIStreamHandler(c *gin.Context, resp *http.Response, relayMode int
 	lg.Debug("completed response api converted stream forwarding",
 		zap.Int("forwarded_chunks", forwardedChunks),
 		zap.Bool("done_rendered", doneRendered),
-		zap.Int("heartbeats_sent", hbs.HeartbeatsSent()),
+		zap.Int("heartbeats_sent", hbr.HeartbeatsSent()),
 	)
 
 	return nil, responseText, usage
@@ -1463,17 +1903,14 @@ func ResponseAPIDirectStreamHandler(c *gin.Context, resp *http.Response, relayMo
 		flushSupported = true
 	}
 
-	// Set up scanner for reading the stream line by line
-	scanner := bufio.NewScanner(resp.Body)
-	helper.ConfigureScannerBuffer(scanner)
-	scanner.Split(bufio.ScanLines)
+	lineReader := commonsse.NewLineReader(resp.Body, commonsse.DefaultLineBufferSize)
 
 	// Set response headers for SSE
 	common.SetEventStreamHeaders(c)
 
-	// Wrap scanner with heartbeat to prevent reverse-proxy timeouts (e.g. Cloudflare 524)
-	hbs := render.NewHeartbeatScanner(c, scanner, render.DefaultHeartbeatInterval)
-	defer hbs.Close()
+	// Wrap the reader with heartbeats to prevent reverse-proxy timeouts (e.g. Cloudflare 524).
+	hbr := render.NewHeartbeatLineReader(c, lineReader, render.DefaultHeartbeatInterval)
+	defer hbr.Close()
 
 	lg.Debug("forwarding response api native stream to client",
 		zap.Int("relay_mode", relayMode),
@@ -1482,6 +1919,30 @@ func ResponseAPIDirectStreamHandler(c *gin.Context, resp *http.Response, relayMo
 
 	doneRendered := false
 	forwardedChunks := 0
+	var streamErr error
+
+	forwardOversizedData := func(eventType string, payload io.Reader) error {
+		if eventType != "" {
+			if _, err := c.Writer.Write([]byte("event: " + eventType + "\n")); err != nil {
+				return errors.Wrap(err, "write stream event type")
+			}
+		}
+
+		if _, err := c.Writer.Write([]byte("data: ")); err != nil {
+			return errors.Wrap(err, "write stream data prefix")
+		}
+
+		if _, err := io.Copy(c.Writer, payload); err != nil {
+			return errors.Wrap(err, "copy oversized stream payload")
+		}
+
+		if _, err := c.Writer.Write([]byte("\n\n")); err != nil {
+			return errors.Wrap(err, "write stream data suffix")
+		}
+
+		c.Writer.Flush()
+		return nil
+	}
 
 	// pendingEventType tracks the SSE "event:" line that precedes each "data:" line.
 	// The Responses API uses typed SSE events (e.g. "event: response.output_text.delta")
@@ -1490,16 +1951,40 @@ func ResponseAPIDirectStreamHandler(c *gin.Context, resp *http.Response, relayMo
 	pendingEventType := ""
 
 	// Process each line from the stream
-	for hbs.Scan() {
-		line := hbs.Text()
+	for {
+		line, err := hbr.Next()
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				break
+			}
 
-		// Capture SSE "event:" lines to forward alongside the subsequent "data:" line.
-		if strings.HasPrefix(line, "event:") {
-			pendingEventType = strings.TrimSpace(strings.TrimPrefix(line, "event:"))
+			streamErr = err
+			break
+		}
+
+		if line.Oversized {
+			if err := forwardOversizedData(pendingEventType, line.Large); err != nil {
+				streamErr = err
+				break
+			}
+
+			pendingEventType = ""
+			forwardedChunks++
+			if forwardedChunks == 1 {
+				lg.Debug("first response api native stream chunk flushed to client")
+			}
 			continue
 		}
 
-		data := openai_compatible.NormalizeDataLine(line)
+		lineText := line.Text()
+
+		// Capture SSE "event:" lines to forward alongside the subsequent "data:" line.
+		if strings.HasPrefix(lineText, "event:") {
+			pendingEventType = strings.TrimSpace(strings.TrimPrefix(lineText, "event:"))
+			continue
+		}
+
+		data := openai_compatible.NormalizeDataLine(lineText)
 
 		lg.Debug("receive stream event", zap.String("event", data))
 
@@ -1575,26 +2060,21 @@ func ResponseAPIDirectStreamHandler(c *gin.Context, resp *http.Response, relayMo
 		}
 	}
 
-	if err := hbs.Err(); err != nil {
-		// Let ErrorWrapper handle the logging to avoid duplicate logging
-		return ErrorWrapper(err, "read_stream_failed", http.StatusInternalServerError), responseText, usage
-	}
-
 	// Log heartbeat diagnostics regardless of error state — critical for
 	// debugging reverse-proxy timeout (524) issues.
-	if hbs.HeartbeatsSent() > 0 || hbs.HeartbeatWriteErr() != nil {
+	if hbr.HeartbeatsSent() > 0 || hbr.HeartbeatWriteErr() != nil {
 		lg.Debug("heartbeat diagnostics",
-			zap.Int("heartbeats_sent", hbs.HeartbeatsSent()),
-			zap.NamedError("heartbeat_write_err", hbs.HeartbeatWriteErr()),
+			zap.Int("heartbeats_sent", hbr.HeartbeatsSent()),
+			zap.NamedError("heartbeat_write_err", hbr.HeartbeatWriteErr()),
 		)
 	}
 
-	if err := hbs.Err(); err != nil {
+	if streamErr != nil {
 		lg.Debug("stream read failed",
-			zap.Error(err),
+			zap.Error(streamErr),
 			zap.Int("forwarded_chunks", forwardedChunks),
 		)
-		return ErrorWrapper(err, "read_stream_failed", http.StatusInternalServerError), responseText, usage
+		return ErrorWrapper(streamErr, "read_stream_failed", http.StatusInternalServerError), responseText, usage
 	}
 
 	// Do NOT fabricate a [DONE] if the upstream didn't send one.
@@ -1624,7 +2104,7 @@ func ResponseAPIDirectStreamHandler(c *gin.Context, resp *http.Response, relayMo
 	lg.Debug("completed response api native stream forwarding",
 		zap.Int("forwarded_chunks", forwardedChunks),
 		zap.Bool("done_rendered", doneRendered),
-		zap.Int("heartbeats_sent", hbs.HeartbeatsSent()),
+		zap.Int("heartbeats_sent", hbr.HeartbeatsSent()),
 	)
 
 	if lastFullResponse != nil {

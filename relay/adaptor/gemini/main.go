@@ -1,7 +1,6 @@
 package gemini
 
 import (
-	"bufio"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -20,6 +19,7 @@ import (
 	"github.com/songquanpeng/one-api/common/image"
 	"github.com/songquanpeng/one-api/common/random"
 	"github.com/songquanpeng/one-api/common/render"
+	commonsse "github.com/songquanpeng/one-api/common/sse"
 	"github.com/songquanpeng/one-api/common/tracing"
 	"github.com/songquanpeng/one-api/relay/adaptor/geminiOpenaiCompatible"
 	"github.com/songquanpeng/one-api/relay/adaptor/openai"
@@ -888,18 +888,38 @@ func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusC
 	outputImageCount := 0
 	inlineImageCount := 0
 	fileImageCount := 0
-	scanner := bufio.NewScanner(resp.Body)
-	helper.ConfigureScannerBuffer(scanner)
-	scanner.Split(bufio.ScanLines)
+	lineReader := commonsse.NewLineReader(resp.Body, commonsse.DefaultLineBufferSize)
 
 	common.SetEventStreamHeaders(c)
 
-	// Wrap scanner with heartbeat to prevent reverse-proxy timeouts (e.g. Cloudflare 524)
-	hbs := render.NewHeartbeatScanner(c, scanner, render.DefaultHeartbeatInterval)
-	defer hbs.Close()
+	// Wrap the reader with heartbeats to prevent reverse-proxy timeouts (e.g. Cloudflare 524).
+	hbr := render.NewHeartbeatLineReader(c, lineReader, render.DefaultHeartbeatInterval)
+	defer hbr.Close()
+	var streamErr error
 
-	for hbs.Scan() {
-		data := hbs.Text()
+	for {
+		line, err := hbr.Next()
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				break
+			}
+
+			streamErr = err
+			break
+		}
+
+		var data string
+		if line.Oversized {
+			payload, err := io.ReadAll(line.Large)
+			if err != nil {
+				streamErr = err
+				break
+			}
+			data = "data: " + string(payload)
+		} else {
+			data = line.Text()
+		}
+
 		data = strings.TrimSpace(data)
 
 		if !strings.HasPrefix(data, "data: ") {
@@ -909,7 +929,7 @@ func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusC
 		data = strings.TrimSuffix(data, "\"")
 
 		var geminiResponse ChatResponse
-		err := json.Unmarshal([]byte(data), &geminiResponse)
+		err = json.Unmarshal([]byte(data), &geminiResponse)
 		if err != nil {
 			lg.Error("error unmarshalling stream response",
 				zap.Error(errors.Wrap(err, "unmarshal stream")))
@@ -934,8 +954,8 @@ func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusC
 				zap.Error(errors.Wrap(err, "render stream")))
 		}
 	}
-	if err := hbs.Err(); err != nil {
-		render.LogHeartbeatScannerError(c, lg, errors.Wrap(err, "scanner stream"), helper.DefaultScannerMaxTokenSize, hbs)
+	if streamErr != nil {
+		render.LogHeartbeatLineReaderError(c, lg, errors.Wrap(streamErr, "line reader stream"), hbr)
 	}
 
 	if outputImageCount > 0 {

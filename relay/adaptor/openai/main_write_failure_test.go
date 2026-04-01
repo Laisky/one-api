@@ -2,11 +2,12 @@ package openai
 
 import (
 	"bytes"
-	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/Laisky/errors/v2"
 
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"

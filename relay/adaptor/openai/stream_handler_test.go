@@ -2,7 +2,6 @@ package openai
 
 import (
 	"context"
-	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -12,6 +11,8 @@ import (
 	"testing"
 	"time"
 	"unsafe"
+
+	"github.com/Laisky/errors/v2"
 
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
@@ -1054,4 +1055,33 @@ func TestStreamHandler_CompletionsTrackerGenericError(t *testing.T) {
 
 	body := w.Body.String()
 	assert.Contains(t, body, "streaming_billing_failed")
+}
+
+// TestStreamHandler_OversizedChatChunk verifies oversized chat-completion chunks bypass scanner limits.
+func TestStreamHandler_OversizedChatChunk(t *testing.T) {
+	t.Parallel()
+	c, w := newTestGinContext()
+
+	largeContent := strings.Repeat("L", 128*1024)
+	sseData := strings.Join([]string{
+		`data: {"id":"chatcmpl-big","object":"chat.completion.chunk","created":1700000000,"model":"gpt-4","choices":[{"index":0,"delta":{"content":"` + largeContent + `"},"finish_reason":null}]}`,
+		"",
+		`data: {"id":"chatcmpl-big","object":"chat.completion.chunk","created":1700000000,"model":"gpt-4","choices":[{"index":0,"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":10,"completion_tokens":20,"total_tokens":30}}`,
+		"",
+		"data: [DONE]",
+		"",
+	}, "\n")
+
+	resp := newSSEResponse(sseData)
+	errResp, responseText, usage := StreamHandler(c, resp, relaymode.ChatCompletions)
+
+	require.Nil(t, errResp)
+	require.Equal(t, largeContent, responseText)
+	require.NotNil(t, usage)
+	require.Equal(t, 30, usage.TotalTokens)
+
+	body := w.Body.String()
+	require.Contains(t, body, largeContent[:1024])
+	require.Contains(t, body, largeContent[len(largeContent)-1024:])
+	require.Contains(t, body, "[DONE]")
 }

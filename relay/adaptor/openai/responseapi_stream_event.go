@@ -1,7 +1,9 @@
 package openai
 
 import (
+	"bytes"
 	"encoding/json"
+	"io"
 	"strconv"
 	"strings"
 
@@ -44,22 +46,186 @@ type ResponseAPIStreamEvent struct {
 	Usage  *model.Usage `json:"usage,omitempty"`  // Usage information
 }
 
+type responseAPIStreamEnvelope struct {
+	Id                 string                         `json:"id,omitempty"`
+	Object             string                         `json:"object,omitempty"`
+	CreatedAt          int64                          `json:"created_at,omitempty"`
+	Status             string                         `json:"status,omitempty"`
+	Model              string                         `json:"model,omitempty"`
+	Instructions       *string                        `json:"instructions,omitempty"`
+	MaxOutputTokens    *int                           `json:"max_output_tokens,omitempty"`
+	Metadata           any                            `json:"metadata,omitempty"`
+	ParallelToolCalls  bool                           `json:"parallel_tool_calls,omitempty"`
+	PreviousResponseId *string                        `json:"previous_response_id,omitempty"`
+	Reasoning          *model.OpenAIResponseReasoning `json:"reasoning,omitempty"`
+	ServiceTier        *string                        `json:"service_tier,omitempty"`
+	Temperature        *float64                       `json:"temperature,omitempty"`
+	ToolChoice         any                            `json:"tool_choice,omitempty"`
+	Tools              []model.Tool                   `json:"tools,omitempty"`
+	RequiredAction     *ResponseAPIRequiredAction     `json:"required_action,omitempty"`
+	TopP               *float64                       `json:"top_p,omitempty"`
+	Truncation         *string                        `json:"truncation,omitempty"`
+	User               *string                        `json:"user,omitempty"`
+	Error              *model.Error                   `json:"error,omitempty"`
+	IncompleteDetails  *IncompleteDetails             `json:"incomplete_details,omitempty"`
+	UsageRaw           json.RawMessage                `json:"usage,omitempty"`
+	OutputRaw          json.RawMessage                `json:"output,omitempty"`
+	TextRaw            json.RawMessage                `json:"text,omitempty"`
+
+	Type           string               `json:"type,omitempty"`
+	SequenceNumber int                  `json:"sequence_number,omitempty"`
+	Response       *ResponseAPIResponse `json:"response,omitempty"`
+	OutputIndex    *int                 `json:"output_index,omitempty"`
+	Item           *OutputItem          `json:"item,omitempty"`
+	ItemId         string               `json:"item_id,omitempty"`
+	ContentIndex   int                  `json:"content_index,omitempty"`
+	Part           *OutputContent       `json:"part,omitempty"`
+	Delta          json.RawMessage      `json:"delta,omitempty"`
+	Arguments      string               `json:"arguments,omitempty"`
+	JSONRaw        json.RawMessage      `json:"json,omitempty"`
+}
+
 // ParseResponseAPIStreamEvent attempts to parse a streaming event as either a full response
 // or a streaming event, returning the appropriate data structure
 func ParseResponseAPIStreamEvent(data []byte) (*ResponseAPIResponse, *ResponseAPIStreamEvent, error) {
-	// First try to parse as a full ResponseAPIResponse (for response-level events)
-	var fullResponse ResponseAPIResponse
-	if err := json.Unmarshal(data, &fullResponse); err == nil && fullResponse.Id != "" {
-		return &fullResponse, nil, nil
+	return ParseResponseAPIStreamEventFromReader(bytes.NewReader(data))
+}
+
+// ParseResponseAPIStreamEventFromReader decodes a Response API stream payload from an io.Reader.
+// It accepts either a full response object or a streaming event payload and returns the decoded form.
+func ParseResponseAPIStreamEventFromReader(reader io.Reader) (*ResponseAPIResponse, *ResponseAPIStreamEvent, error) {
+	var envelope responseAPIStreamEnvelope
+	if err := json.NewDecoder(reader).Decode(&envelope); err != nil {
+		return nil, nil, errors.Wrap(err, "ParseResponseAPIStreamEventFromReader: decode payload")
 	}
 
-	// If that fails, try to parse as a streaming event
-	var streamEvent ResponseAPIStreamEvent
-	if err := json.Unmarshal(data, &streamEvent); err != nil {
-		return nil, nil, errors.Wrap(err, "ParseResponseAPIStreamEvent: failed to unmarshal as stream event")
+	if envelope.Id != "" && envelope.Type == "" {
+		fullResponse, err := buildResponseAPIResponseFromEnvelope(&envelope)
+		if err != nil {
+			return nil, nil, err
+		}
+
+		return fullResponse, nil, nil
 	}
 
-	return nil, &streamEvent, nil
+	streamEvent, err := buildResponseAPIStreamEventFromEnvelope(&envelope)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return nil, streamEvent, nil
+}
+
+// buildResponseAPIResponseFromEnvelope converts the decoded envelope into a full ResponseAPIResponse.
+func buildResponseAPIResponseFromEnvelope(envelope *responseAPIStreamEnvelope) (*ResponseAPIResponse, error) {
+	if envelope == nil {
+		return nil, errors.New("buildResponseAPIResponseFromEnvelope: nil envelope")
+	}
+
+	fullResponse := &ResponseAPIResponse{
+		Id:                 envelope.Id,
+		Object:             envelope.Object,
+		CreatedAt:          envelope.CreatedAt,
+		Status:             envelope.Status,
+		Model:              envelope.Model,
+		Instructions:       envelope.Instructions,
+		MaxOutputTokens:    envelope.MaxOutputTokens,
+		Metadata:           envelope.Metadata,
+		ParallelToolCalls:  envelope.ParallelToolCalls,
+		PreviousResponseId: envelope.PreviousResponseId,
+		Reasoning:          envelope.Reasoning,
+		ServiceTier:        envelope.ServiceTier,
+		Temperature:        envelope.Temperature,
+		ToolChoice:         envelope.ToolChoice,
+		Tools:              envelope.Tools,
+		RequiredAction:     envelope.RequiredAction,
+		TopP:               envelope.TopP,
+		Truncation:         envelope.Truncation,
+		User:               envelope.User,
+		Error:              envelope.Error,
+		IncompleteDetails:  envelope.IncompleteDetails,
+	}
+
+	if len(envelope.UsageRaw) > 0 {
+		var usage ResponseAPIUsage
+		if err := json.Unmarshal(envelope.UsageRaw, &usage); err != nil {
+			return nil, errors.Wrap(err, "buildResponseAPIResponseFromEnvelope: decode usage")
+		}
+		fullResponse.Usage = &usage
+	}
+
+	if len(envelope.OutputRaw) > 0 {
+		var output []OutputItem
+		if err := json.Unmarshal(envelope.OutputRaw, &output); err != nil {
+			return nil, errors.Wrap(err, "buildResponseAPIResponseFromEnvelope: decode output")
+		}
+		fullResponse.Output = output
+	}
+
+	if len(envelope.TextRaw) > 0 {
+		var textConfig ResponseTextConfig
+		if err := json.Unmarshal(envelope.TextRaw, &textConfig); err == nil {
+			fullResponse.Text = &textConfig
+		}
+	}
+
+	return fullResponse, nil
+}
+
+// buildResponseAPIStreamEventFromEnvelope converts the decoded envelope into a ResponseAPIStreamEvent.
+func buildResponseAPIStreamEventFromEnvelope(envelope *responseAPIStreamEnvelope) (*ResponseAPIStreamEvent, error) {
+	if envelope == nil {
+		return nil, errors.New("buildResponseAPIStreamEventFromEnvelope: nil envelope")
+	}
+
+	streamEvent := &ResponseAPIStreamEvent{
+		Type:           envelope.Type,
+		SequenceNumber: envelope.SequenceNumber,
+		Response:       envelope.Response,
+		RequiredAction: envelope.RequiredAction,
+		Item:           envelope.Item,
+		ItemId:         envelope.ItemId,
+		ContentIndex:   envelope.ContentIndex,
+		Part:           envelope.Part,
+		Delta:          cloneResponseAPIStreamRawMessage(envelope.Delta),
+		Arguments:      envelope.Arguments,
+		Output:         cloneResponseAPIStreamRawMessage(envelope.OutputRaw),
+		JSON:           cloneResponseAPIStreamRawMessage(envelope.JSONRaw),
+		Id:             envelope.Id,
+		Status:         envelope.Status,
+	}
+
+	if envelope.OutputIndex != nil {
+		streamEvent.OutputIndex = *envelope.OutputIndex
+	}
+
+	if len(envelope.UsageRaw) > 0 {
+		var usage model.Usage
+		if err := json.Unmarshal(envelope.UsageRaw, &usage); err != nil {
+			return nil, errors.Wrap(err, "buildResponseAPIStreamEventFromEnvelope: decode usage")
+		}
+		streamEvent.Usage = &usage
+	}
+
+	if len(envelope.TextRaw) > 0 {
+		var text string
+		if err := json.Unmarshal(envelope.TextRaw, &text); err == nil {
+			streamEvent.Text = text
+		}
+	}
+
+	return streamEvent, nil
+}
+
+// cloneResponseAPIStreamRawMessage copies a json.RawMessage so callers can retain it safely.
+func cloneResponseAPIStreamRawMessage(raw json.RawMessage) json.RawMessage {
+	if len(raw) == 0 {
+		return nil
+	}
+
+	dup := make([]byte, len(raw))
+	copy(dup, raw)
+	return json.RawMessage(dup)
 }
 
 // ConvertStreamEventToResponse converts a streaming event to a ResponseAPIResponse structure

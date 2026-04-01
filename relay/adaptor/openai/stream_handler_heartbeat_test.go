@@ -89,7 +89,7 @@ func TestStreamHandler_HeartbeatDuringSlowUpstream(t *testing.T) {
 
 	// Heartbeats should have been sent during the 200ms delay.
 	// The default interval is 5s which is too long for this test, but
-	// the HeartbeatScanner is used and headers are flushed immediately.
+	// the HeartbeatLineReader is used and headers are flushed immediately.
 	// At minimum, verify the response was flushed (headers sent).
 	assert.True(t, w.Flushed, "response should be flushed")
 }
@@ -100,7 +100,7 @@ func TestStreamHandler_HeartbeatBetweenChunks(t *testing.T) {
 	// This test uses a custom HeartbeatInterval via the slowSSEBody
 	// to verify heartbeats fire between chunks. Since we can't override
 	// the interval per-handler call, we rely on the unit tests in
-	// heartbeat_test.go for timing verification. Here we verify the
+	// heartbeat_line_reader_test.go for timing verification. Here we verify the
 	// handler correctly processes data with the heartbeat wrapper.
 	c, w := newTestGinContext()
 

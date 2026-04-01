@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/gin-gonic/gin"
@@ -125,4 +126,57 @@ func TestConvertStreamingToClaudeResponse_Basic(t *testing.T) {
 	require.Contains(t, converted, "Hello from Gemini", "missing response text")
 	require.Contains(t, converted, "\"input_tokens\":4", "missing usage input tokens")
 	require.Contains(t, converted, "data: [DONE]", "missing done marker")
+}
+
+// TestConvertStreamingToClaudeResponse_OversizedChunk verifies oversized Gemini SSE lines convert to Claude SSE.
+func TestConvertStreamingToClaudeResponse_OversizedChunk(t *testing.T) {
+	t.Parallel()
+	gin.SetMode(gin.TestMode)
+
+	adaptor := &Adaptor{}
+	recorder := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(recorder)
+
+	largeText := strings.Repeat("m", 128*1024)
+	streamChunk := ChatResponse{
+		Candidates: []ChatCandidate{{
+			FinishReason: "STOP",
+			Content:      ChatContent{Parts: []Part{{Text: largeText}}},
+		}},
+		UsageMetadata: &UsageMetadata{
+			PromptTokenCount:     4,
+			CandidatesTokenCount: 3,
+			TotalTokenCount:      7,
+		},
+	}
+
+	chunkBytes, err := json.Marshal(streamChunk)
+	require.NoError(t, err)
+
+	streamBuf := bytes.NewBuffer(nil)
+	streamBuf.WriteString("data: ")
+	streamBuf.Write(chunkBytes)
+	streamBuf.WriteString("\n\n")
+	streamBuf.WriteString("data: [DONE]\n\n")
+
+	resp := &http.Response{
+		StatusCode: http.StatusOK,
+		Header:     make(http.Header),
+		Body:       io.NopCloser(bytes.NewReader(streamBuf.Bytes())),
+	}
+	resp.Header.Set("Content-Type", "text/event-stream")
+
+	metaInfo := &meta.Meta{ActualModelName: "gemini-2.5-flash", PromptTokens: 4}
+
+	newResp, errResp := adaptor.convertStreamingToClaudeResponse(ctx, resp, streamBuf.Bytes(), metaInfo)
+	require.Nil(t, errResp)
+	defer newResp.Body.Close()
+
+	convertedBody, err := io.ReadAll(newResp.Body)
+	require.NoError(t, err)
+
+	converted := string(convertedBody)
+	require.Contains(t, converted, largeText[:1024])
+	require.Contains(t, converted, largeText[len(largeText)-1024:])
+	require.Contains(t, converted, "data: [DONE]")
 }

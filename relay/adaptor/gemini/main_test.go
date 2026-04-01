@@ -311,6 +311,41 @@ func TestCleanFunctionParameters(t *testing.T) {
 	}
 }
 
+// TestStreamHandler_OversizedChunk verifies oversized Gemini stream chunks bypass scanner limits.
+func TestStreamHandler_OversizedChunk(t *testing.T) {
+	t.Parallel()
+	gin.SetMode(gin.TestMode)
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
+
+	largeText := strings.Repeat("g", 128*1024)
+	chunk := ChatResponse{
+		Candidates: []ChatCandidate{{
+			FinishReason: "STOP",
+			Content:      ChatContent{Parts: []Part{{Text: largeText}}},
+		}},
+	}
+	chunkBytes, err := json.Marshal(chunk)
+	require.NoError(t, err)
+
+	sse := "data: " + string(chunkBytes) + "\n\n" + "data: [DONE]\n\n"
+	resp := &http.Response{
+		StatusCode: http.StatusOK,
+		Header:     http.Header{"Content-Type": []string{"text/event-stream"}},
+		Body:       io.NopCloser(strings.NewReader(sse)),
+	}
+
+	apiErr, responseText := StreamHandler(c, resp)
+	require.Nil(t, apiErr)
+	require.Equal(t, largeText, responseText)
+
+	body := recorder.Body.String()
+	require.Contains(t, body, largeText[:1024])
+	require.Contains(t, body, largeText[len(largeText)-1024:])
+	require.Contains(t, body, "[DONE]")
+}
+
 func TestConvertRequestSetsToolConfig(t *testing.T) {
 	t.Parallel()
 

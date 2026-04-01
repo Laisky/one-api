@@ -1,7 +1,6 @@
 package zhipu
 
 import (
-	"bufio"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -18,6 +17,7 @@ import (
 	"github.com/songquanpeng/one-api/common"
 	"github.com/songquanpeng/one-api/common/helper"
 	"github.com/songquanpeng/one-api/common/render"
+	commonsse "github.com/songquanpeng/one-api/common/sse"
 	"github.com/songquanpeng/one-api/relay/adaptor/openai"
 	"github.com/songquanpeng/one-api/relay/constant"
 	"github.com/songquanpeng/one-api/relay/model"
@@ -148,60 +148,61 @@ func streamMetaResponseZhipu2OpenAI(zhipuResponse *StreamMetaResponse) (*openai.
 func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusCode, *model.Usage) {
 	var usage *model.Usage
 	lg := gmw.GetLogger(c)
-	scanner := bufio.NewScanner(resp.Body)
-	helper.ConfigureScannerBuffer(scanner)
-	scanner.Split(func(data []byte, atEOF bool) (advance int, token []byte, err error) {
-		if atEOF && len(data) == 0 {
-			return 0, nil, nil
-		}
-		if i := strings.Index(string(data), "\n\n"); i >= 0 && strings.Contains(string(data), ":") {
-			return i + 2, data[0:i], nil
-		}
-		if atEOF {
-			return len(data), data, nil
-		}
-		return 0, nil, nil
-	})
+	lineReader := commonsse.NewLineReader(resp.Body, commonsse.DefaultLineBufferSize)
 
 	common.SetEventStreamHeaders(c)
 
-	for scanner.Scan() {
-		data := scanner.Text()
-		lines := strings.Split(data, "\n")
-		for i, line := range lines {
-			if len(line) < 5 {
+	var streamErr error
+	for {
+		line, err := lineReader.Next()
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				break
+			}
+
+			streamErr = err
+			break
+		}
+
+		if line.Oversized {
+			payloadBytes, err := io.ReadAll(line.Large)
+			if err != nil {
+				streamErr = err
+				break
+			}
+			response := streamResponseZhipu2OpenAI(string(payloadBytes))
+			if err := render.ObjectData(c, response); err != nil {
+				lg.Error("error marshalling oversized stream response", zap.Error(err))
+			}
+			continue
+		}
+
+		lineText := line.Text()
+		if len(lineText) < 5 {
+			continue
+		}
+		if strings.HasPrefix(lineText, "data:") {
+			response := streamResponseZhipu2OpenAI(lineText[5:])
+			if err := render.ObjectData(c, response); err != nil {
+				lg.Error("error marshalling stream response", zap.Error(err))
+			}
+		} else if strings.HasPrefix(lineText, "meta:") {
+			metaSegment := lineText[5:]
+			var zhipuResponse StreamMetaResponse
+			if err := json.Unmarshal([]byte(metaSegment), &zhipuResponse); err != nil {
+				lg.Error("error unmarshalling stream response", zap.Error(err))
 				continue
 			}
-			if strings.HasPrefix(line, "data:") {
-				dataSegment := line[5:]
-				if i != len(lines)-1 {
-					dataSegment += "\n"
-				}
-				response := streamResponseZhipu2OpenAI(dataSegment)
-				err := render.ObjectData(c, response)
-				if err != nil {
-					lg.Error("error marshalling stream response", zap.Error(err))
-				}
-			} else if strings.HasPrefix(line, "meta:") {
-				metaSegment := line[5:]
-				var zhipuResponse StreamMetaResponse
-				err := json.Unmarshal([]byte(metaSegment), &zhipuResponse)
-				if err != nil {
-					lg.Error("error unmarshalling stream response", zap.Error(err))
-					continue
-				}
-				response, zhipuUsage := streamMetaResponseZhipu2OpenAI(&zhipuResponse)
-				err = render.ObjectData(c, response)
-				if err != nil {
-					lg.Error("error marshalling stream response", zap.Error(err))
-				}
-				usage = zhipuUsage
+			response, zhipuUsage := streamMetaResponseZhipu2OpenAI(&zhipuResponse)
+			if err := render.ObjectData(c, response); err != nil {
+				lg.Error("error marshalling stream response", zap.Error(err))
 			}
+			usage = zhipuUsage
 		}
 	}
 
-	if err := scanner.Err(); err != nil {
-		lg.Error("error reading stream", zap.Error(err), zap.Int("scanner_max_token_size", helper.DefaultScannerMaxTokenSize))
+	if streamErr != nil {
+		lg.Error("error reading stream", zap.Error(streamErr))
 	}
 
 	render.Done(c)
