@@ -947,19 +947,31 @@ func ClaudeNativeStreamHandler(c *gin.Context, resp *http.Response) (*model.Erro
 		data = strings.TrimPrefix(data, "data:")
 		data = strings.TrimSpace(data)
 
+		// Skip [DONE] marker (OpenAI convention, not part of Anthropic protocol)
+		if data == "[DONE]" {
+			continue
+		}
+
 		logger.Debug("stream received", zap.String("data", data))
 
-		// For Claude native streaming, we pass through the events directly
-		c.Writer.Write([]byte("data: " + data + "\n\n"))
-		c.Writer.(http.Flusher).Flush()
-
-		// Parse the response to extract usage and model info
+		// Parse the response to extract event type and usage info
 		var claudeResponse StreamResponse
 		err = json.Unmarshal([]byte(data), &claudeResponse)
 		if err != nil {
 			logger.Error("error unmarshalling stream response", zap.Error(err))
+			// Still forward unparseable events as-is
+			c.Writer.Write([]byte("data: " + data + "\n\n"))
+			c.Writer.(http.Flusher).Flush()
 			continue
 		}
+
+		// Write SSE event with proper event: type line for Anthropic SDK compatibility
+		if claudeResponse.Type != "" {
+			c.Writer.Write([]byte("event: " + claudeResponse.Type + "\ndata: " + data + "\n\n"))
+		} else {
+			c.Writer.Write([]byte("data: " + data + "\n\n"))
+		}
+		c.Writer.(http.Flusher).Flush()
 
 		// Extract usage info from message_delta and message_start
 		if claudeResponse.Usage != nil {
