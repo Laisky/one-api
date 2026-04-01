@@ -52,7 +52,7 @@ func TestRecordProvisionalConsumeLog(t *testing.T) {
 	require.Equal(t, 5, saved.ChannelId)
 	require.Equal(t, "gpt-5.4", saved.ModelName)
 	require.Equal(t, 5000, saved.Quota)
-	require.Equal(t, LogTypeConsume, saved.Type)
+	require.Equal(t, LogTypeProvisional, saved.Type)
 	require.Equal(t, "req_123", saved.RequestId)
 	require.Contains(t, saved.Content, "[provisional]")
 
@@ -144,6 +144,7 @@ func TestProvisionalLogFullLifecycle(t *testing.T) {
 	var provisional Log
 	require.NoError(t, LOG_DB.First(&provisional, logID).Error)
 	require.Equal(t, 20000, provisional.Quota)
+	require.Equal(t, LogTypeProvisional, provisional.Type)
 	require.Equal(t, true, provisional.Metadata[LogMetadataKeyProvisional])
 
 	// Step 2: Post-billing reconciles with actual usage (less than estimated)
@@ -162,6 +163,7 @@ func TestProvisionalLogFullLifecycle(t *testing.T) {
 	require.Equal(t, "req_lifecycle", final.RequestId)
 	require.Equal(t, "trace_lifecycle", final.TraceId)
 	require.Equal(t, true, final.IsStream)
+	require.Equal(t, LogTypeConsume, final.Type)
 	require.NotContains(t, final.Content, "[provisional]")
 
 	// Provisional flag should be gone
