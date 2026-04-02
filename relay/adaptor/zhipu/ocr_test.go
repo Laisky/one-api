@@ -243,11 +243,11 @@ func TestConvertOCRRequest(t *testing.T) {
 		req := model.GeneralOpenAIRequest{
 			Model: "glm-ocr",
 			ExtraBody: map[string]any{
-				"request_id":               "req-999",
+				"request_id":                "req-999",
 				"return_crop_images":        true,
 				"need_layout_visualization": true,
-				"start_page_id":            float64(2),
-				"end_page_id":              float64(10),
+				"start_page_id":             float64(2),
+				"end_page_id":               float64(10),
 			},
 			Messages: []model.Message{
 				{

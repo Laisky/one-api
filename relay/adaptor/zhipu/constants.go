@@ -236,7 +236,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 	// Legacy Models
 	// =====================================================================
 
-	"glm-3-turbo":     {Ratio: 0.005 * ratio.MilliTokensRmb, CompletionRatio: 1},
+	"glm-3-turbo":      {Ratio: 0.005 * ratio.MilliTokensRmb, CompletionRatio: 1},
 	"glm-zero-preview": {Ratio: 0.7 * ratio.MilliTokensRmb, CompletionRatio: 1},
 }
 

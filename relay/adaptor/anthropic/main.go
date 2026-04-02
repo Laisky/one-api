@@ -904,7 +904,36 @@ func ClaudeNativeStreamHandler(c *gin.Context, resp *http.Response) (*model.Erro
 	var usage model.Usage
 	var streamErr error
 
-	forwardOversizedData := func(payload io.Reader) error {
+	flushWriter := func() {
+		if f, ok := c.Writer.(http.Flusher); ok {
+			f.Flush()
+		}
+	}
+
+	// writeSSEEvent writes a properly formatted SSE event to the client.
+	// If eventType is non-empty, it emits an "event:" line for Anthropic SDK compatibility.
+	writeSSEEvent := func(eventType, data string) error {
+		var err error
+		if eventType != "" {
+			_, err = c.Writer.Write([]byte("event: " + eventType + "\ndata: " + data + "\n\n"))
+		} else {
+			_, err = c.Writer.Write([]byte("data: " + data + "\n\n"))
+		}
+		flushWriter()
+		if err != nil {
+			return errors.Wrap(err, "write SSE event")
+		}
+		return nil
+	}
+
+	// forwardOversizedData streams an oversized data line with an optional event type prefix.
+	forwardOversizedData := func(eventType string, payload io.Reader) error {
+		if eventType != "" {
+			if _, err := c.Writer.Write([]byte("event: " + eventType + "\n")); err != nil {
+				return errors.Wrap(err, "write oversized event type prefix")
+			}
+		}
+
 		if _, err := c.Writer.Write([]byte("data: ")); err != nil {
 			return errors.Wrap(err, "write stream data prefix")
 		}
@@ -917,9 +946,13 @@ func ClaudeNativeStreamHandler(c *gin.Context, resp *http.Response) (*model.Erro
 			return errors.Wrap(err, "write stream data suffix")
 		}
 
-		c.Writer.(http.Flusher).Flush()
+		flushWriter()
 		return nil
 	}
+
+	// lastEventType tracks the most recently seen SSE "event:" line value,
+	// so we can attach it to the following data line (including oversized ones).
+	var lastEventType string
 
 	for {
 		line, err := hbr.Next()
@@ -933,15 +966,22 @@ func ClaudeNativeStreamHandler(c *gin.Context, resp *http.Response) (*model.Erro
 		}
 
 		if line.Oversized {
-			if err := forwardOversizedData(line.Large); err != nil {
+			if err := forwardOversizedData(lastEventType, line.Large); err != nil {
 				streamErr = err
 				break
 			}
+			lastEventType = ""
+			continue
+		}
+
+		// Capture event type from SSE "event:" lines for the next data line
+		if line.Kind == commonsse.LineKindEvent {
+			lastEventType = strings.TrimSpace(strings.TrimPrefix(line.Text(), "event:"))
 			continue
 		}
 
 		data := line.Text()
-		if len(data) < 6 || !strings.HasPrefix(data, "data:") {
+		if !strings.HasPrefix(data, "data:") {
 			continue
 		}
 		data = strings.TrimPrefix(data, "data:")
@@ -949,6 +989,7 @@ func ClaudeNativeStreamHandler(c *gin.Context, resp *http.Response) (*model.Erro
 
 		// Skip [DONE] marker (OpenAI convention, not part of Anthropic protocol)
 		if data == "[DONE]" {
+			lastEventType = ""
 			continue
 		}
 
@@ -959,42 +1000,55 @@ func ClaudeNativeStreamHandler(c *gin.Context, resp *http.Response) (*model.Erro
 		err = json.Unmarshal([]byte(data), &claudeResponse)
 		if err != nil {
 			logger.Error("error unmarshalling stream response", zap.Error(err))
-			// Still forward unparseable events as-is
-			c.Writer.Write([]byte("data: " + data + "\n\n"))
-			c.Writer.(http.Flusher).Flush()
+			// Still forward unparseable events as-is, using the SSE event type if available
+			if writeErr := writeSSEEvent(lastEventType, data); writeErr != nil {
+				streamErr = writeErr
+				break
+			}
+			lastEventType = ""
 			continue
 		}
 
-		// Write SSE event with proper event: type line for Anthropic SDK compatibility
-		if claudeResponse.Type != "" {
-			c.Writer.Write([]byte("event: " + claudeResponse.Type + "\ndata: " + data + "\n\n"))
-		} else {
-			c.Writer.Write([]byte("data: " + data + "\n\n"))
+		// Determine event type: prefer SSE event: line, fall back to JSON type field
+		eventType := lastEventType
+		if eventType == "" {
+			eventType = claudeResponse.Type
 		}
-		c.Writer.(http.Flusher).Flush()
+		if writeErr := writeSSEEvent(eventType, data); writeErr != nil {
+			streamErr = writeErr
+			break
+		}
+		lastEventType = ""
 
-		// Extract usage info from message_delta and message_start
-		if claudeResponse.Usage != nil {
+		// Extract usage info from message_delta and message_start events.
+		// For message_start, the Anthropic API nests usage inside "message.usage",
+		// so we check both top-level Usage and Message.Usage.
+		eventUsage := claudeResponse.Usage
+		if eventUsage == nil && claudeResponse.Type == "message_start" && claudeResponse.Message != nil {
+			eventUsage = &claudeResponse.Message.Usage
+		}
+
+		if eventUsage != nil {
 			if claudeResponse.Type == "message_delta" {
-				usage.PromptTokens += claudeResponse.Usage.InputTokens
-				usage.CompletionTokens += claudeResponse.Usage.OutputTokens
+				usage.PromptTokens += eventUsage.InputTokens
+				usage.CompletionTokens += eventUsage.OutputTokens
 			}
 
 			// Accumulate cache tokens from both message_start and message_delta events
 			if claudeResponse.Type == "message_start" || claudeResponse.Type == "message_delta" {
-				if claudeResponse.Usage.CacheReadInputTokens > 0 {
+				if eventUsage.CacheReadInputTokens > 0 {
 					if usage.PromptTokensDetails == nil {
 						usage.PromptTokensDetails = &model.UsagePromptTokensDetails{}
 					}
-					usage.PromptTokensDetails.CachedTokens += claudeResponse.Usage.CacheReadInputTokens
+					usage.PromptTokensDetails.CachedTokens += eventUsage.CacheReadInputTokens
 				}
 
 				// Accumulate cache creation tokens
-				if claudeResponse.Usage.CacheCreation != nil {
-					usage.CacheWrite5mTokens += claudeResponse.Usage.CacheCreation.Ephemeral5mInputTokens
-					usage.CacheWrite1hTokens += claudeResponse.Usage.CacheCreation.Ephemeral1hInputTokens
-				} else if claudeResponse.Usage.CacheCreationInputTokens > 0 {
-					usage.CacheWrite5mTokens += claudeResponse.Usage.CacheCreationInputTokens
+				if eventUsage.CacheCreation != nil {
+					usage.CacheWrite5mTokens += eventUsage.CacheCreation.Ephemeral5mInputTokens
+					usage.CacheWrite1hTokens += eventUsage.CacheCreation.Ephemeral1hInputTokens
+				} else if eventUsage.CacheCreationInputTokens > 0 {
+					usage.CacheWrite5mTokens += eventUsage.CacheCreationInputTokens
 				}
 			}
 		}
@@ -1003,10 +1057,6 @@ func ClaudeNativeStreamHandler(c *gin.Context, resp *http.Response) (*model.Erro
 	if streamErr != nil {
 		render.LogHeartbeatLineReaderError(c, logger, streamErr, hbr)
 	}
-
-	// Send final data: [DONE] to close the stream
-	c.Writer.Write([]byte("data: [DONE]\n\n"))
-	c.Writer.(http.Flusher).Flush()
 
 	err := resp.Body.Close()
 	if err != nil {

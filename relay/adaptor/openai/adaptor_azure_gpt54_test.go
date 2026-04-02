@@ -320,10 +320,10 @@ func TestGPT54ModelsPricingDefined(t *testing.T) {
 	t.Parallel()
 
 	expected := map[string]struct {
-		inputPerMillion      float64
-		completionRatio      float64
-		hasCachedInputRatio  bool
-		cachedInputPerMil    float64
+		inputPerMillion     float64
+		completionRatio     float64
+		hasCachedInputRatio bool
+		cachedInputPerMil   float64
 	}{
 		"gpt-5.4":      {2.5, 15 / 2.5, true, 0.25},
 		"gpt-5.4-mini": {0.75, 4.5 / 0.75, true, 0.075},

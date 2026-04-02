@@ -89,7 +89,12 @@ func TestClaudeNativeStreamHandler_OversizedDataLineForwarded(t *testing.T) {
 	body := recorder.Body.String()
 	require.Contains(t, body, largeText[:1024])
 	require.Contains(t, body, largeText[len(largeText)-1024:])
-	require.Contains(t, body, "data: [DONE]")
+	// Anthropic native streams should NOT emit [DONE] (that's an OpenAI convention)
+	require.NotContains(t, body, "[DONE]")
+	// Verify event type lines are emitted
+	require.Contains(t, body, "event: message_start\n")
+	require.Contains(t, body, "event: content_block_delta\n")
+	require.Contains(t, body, "event: message_delta\n")
 }
 
 // TestStreamHandler_OversizedConvertedChunk verifies oversized Anthropic deltas convert to OpenAI chunks.

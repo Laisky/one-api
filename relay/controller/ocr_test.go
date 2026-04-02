@@ -75,12 +75,22 @@ type mockOCRAdaptor struct {
 	doOCRRespFn  func(c *gin.Context, resp *http.Response, meta *metalib.Meta) (*relaymodel.Usage, *relaymodel.ErrorWithStatusCode)
 }
 
-func (m *mockOCRAdaptor) Init(_ *metalib.Meta)                                          {}
-func (m *mockOCRAdaptor) GetRequestURL(_ *metalib.Meta) (string, error)                 { return "https://test.api/layout_parsing", nil }
-func (m *mockOCRAdaptor) SetupRequestHeader(_ *gin.Context, _ *http.Request, _ *metalib.Meta) error { return nil }
-func (m *mockOCRAdaptor) ConvertRequest(_ *gin.Context, _ int, _ *relaymodel.GeneralOpenAIRequest) (any, error) { return nil, nil }
-func (m *mockOCRAdaptor) ConvertImageRequest(_ *gin.Context, _ *relaymodel.ImageRequest) (any, error) { return nil, nil }
-func (m *mockOCRAdaptor) ConvertClaudeRequest(_ *gin.Context, _ *relaymodel.ClaudeRequest) (any, error) { return nil, nil }
+func (m *mockOCRAdaptor) Init(_ *metalib.Meta) {}
+func (m *mockOCRAdaptor) GetRequestURL(_ *metalib.Meta) (string, error) {
+	return "https://test.api/layout_parsing", nil
+}
+func (m *mockOCRAdaptor) SetupRequestHeader(_ *gin.Context, _ *http.Request, _ *metalib.Meta) error {
+	return nil
+}
+func (m *mockOCRAdaptor) ConvertRequest(_ *gin.Context, _ int, _ *relaymodel.GeneralOpenAIRequest) (any, error) {
+	return nil, nil
+}
+func (m *mockOCRAdaptor) ConvertImageRequest(_ *gin.Context, _ *relaymodel.ImageRequest) (any, error) {
+	return nil, nil
+}
+func (m *mockOCRAdaptor) ConvertClaudeRequest(_ *gin.Context, _ *relaymodel.ClaudeRequest) (any, error) {
+	return nil, nil
+}
 func (m *mockOCRAdaptor) DoRequest(_ *gin.Context, _ *metalib.Meta, _ io.Reader) (*http.Response, error) {
 	if m.doRequestFn != nil {
 		return m.doRequestFn()
@@ -94,12 +104,14 @@ func (m *mockOCRAdaptor) DoRequest(_ *gin.Context, _ *metalib.Meta, _ io.Reader)
 		Header:     make(http.Header),
 	}, nil
 }
-func (m *mockOCRAdaptor) DoResponse(_ *gin.Context, _ *http.Response, _ *metalib.Meta) (*relaymodel.Usage, *relaymodel.ErrorWithStatusCode) { return nil, nil }
-func (m *mockOCRAdaptor) GetModelList() []string                                        { return nil }
-func (m *mockOCRAdaptor) GetChannelName() string                                        { return "mock-ocr" }
-func (m *mockOCRAdaptor) GetDefaultModelPricing() map[string]adaptor.ModelConfig         { return nil }
-func (m *mockOCRAdaptor) GetModelRatio(_ string) float64                                { return 1.0 }
-func (m *mockOCRAdaptor) GetCompletionRatio(_ string) float64                           { return 1.0 }
+func (m *mockOCRAdaptor) DoResponse(_ *gin.Context, _ *http.Response, _ *metalib.Meta) (*relaymodel.Usage, *relaymodel.ErrorWithStatusCode) {
+	return nil, nil
+}
+func (m *mockOCRAdaptor) GetModelList() []string                                 { return nil }
+func (m *mockOCRAdaptor) GetChannelName() string                                 { return "mock-ocr" }
+func (m *mockOCRAdaptor) GetDefaultModelPricing() map[string]adaptor.ModelConfig { return nil }
+func (m *mockOCRAdaptor) GetModelRatio(_ string) float64                         { return 1.0 }
+func (m *mockOCRAdaptor) GetCompletionRatio(_ string) float64                    { return 1.0 }
 func (m *mockOCRAdaptor) ConvertOCRRequest(_ *gin.Context, req *relaymodel.OCRRequest) (any, error) {
 	if m.convertErr != nil {
 		return nil, m.convertErr
@@ -119,12 +131,22 @@ func (m *mockOCRAdaptor) DoOCRResponse(c *gin.Context, resp *http.Response, meta
 // plainAdaptor implements adaptor.Adaptor but NOT adaptor.OCRAdaptor.
 type plainAdaptor struct{}
 
-func (p *plainAdaptor) Init(_ *metalib.Meta)                                            {}
-func (p *plainAdaptor) GetRequestURL(_ *metalib.Meta) (string, error)                   { return "https://test.api/v1/chat/completions", nil }
-func (p *plainAdaptor) SetupRequestHeader(_ *gin.Context, _ *http.Request, _ *metalib.Meta) error { return nil }
-func (p *plainAdaptor) ConvertRequest(_ *gin.Context, _ int, _ *relaymodel.GeneralOpenAIRequest) (any, error) { return nil, nil }
-func (p *plainAdaptor) ConvertImageRequest(_ *gin.Context, _ *relaymodel.ImageRequest) (any, error) { return nil, nil }
-func (p *plainAdaptor) ConvertClaudeRequest(_ *gin.Context, _ *relaymodel.ClaudeRequest) (any, error) { return nil, nil }
+func (p *plainAdaptor) Init(_ *metalib.Meta) {}
+func (p *plainAdaptor) GetRequestURL(_ *metalib.Meta) (string, error) {
+	return "https://test.api/v1/chat/completions", nil
+}
+func (p *plainAdaptor) SetupRequestHeader(_ *gin.Context, _ *http.Request, _ *metalib.Meta) error {
+	return nil
+}
+func (p *plainAdaptor) ConvertRequest(_ *gin.Context, _ int, _ *relaymodel.GeneralOpenAIRequest) (any, error) {
+	return nil, nil
+}
+func (p *plainAdaptor) ConvertImageRequest(_ *gin.Context, _ *relaymodel.ImageRequest) (any, error) {
+	return nil, nil
+}
+func (p *plainAdaptor) ConvertClaudeRequest(_ *gin.Context, _ *relaymodel.ClaudeRequest) (any, error) {
+	return nil, nil
+}
 func (p *plainAdaptor) DoRequest(_ *gin.Context, _ *metalib.Meta, _ io.Reader) (*http.Response, error) {
 	return &http.Response{
 		StatusCode: http.StatusOK,
@@ -132,12 +154,14 @@ func (p *plainAdaptor) DoRequest(_ *gin.Context, _ *metalib.Meta, _ io.Reader) (
 		Header:     make(http.Header),
 	}, nil
 }
-func (p *plainAdaptor) DoResponse(_ *gin.Context, _ *http.Response, _ *metalib.Meta) (*relaymodel.Usage, *relaymodel.ErrorWithStatusCode) { return nil, nil }
-func (p *plainAdaptor) GetModelList() []string                                          { return nil }
-func (p *plainAdaptor) GetChannelName() string                                          { return "plain-adaptor" }
-func (p *plainAdaptor) GetDefaultModelPricing() map[string]adaptor.ModelConfig           { return nil }
-func (p *plainAdaptor) GetModelRatio(_ string) float64                                  { return 1.0 }
-func (p *plainAdaptor) GetCompletionRatio(_ string) float64                             { return 1.0 }
+func (p *plainAdaptor) DoResponse(_ *gin.Context, _ *http.Response, _ *metalib.Meta) (*relaymodel.Usage, *relaymodel.ErrorWithStatusCode) {
+	return nil, nil
+}
+func (p *plainAdaptor) GetModelList() []string                                 { return nil }
+func (p *plainAdaptor) GetChannelName() string                                 { return "plain-adaptor" }
+func (p *plainAdaptor) GetDefaultModelPricing() map[string]adaptor.ModelConfig { return nil }
+func (p *plainAdaptor) GetModelRatio(_ string) float64                         { return 1.0 }
+func (p *plainAdaptor) GetCompletionRatio(_ string) float64                    { return 1.0 }
 
 // ===========================================================================
 // 1. Request validation (getAndValidateOCRRequest)
