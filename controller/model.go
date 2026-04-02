@@ -19,6 +19,7 @@ import (
 	"github.com/songquanpeng/one-api/middleware"
 	"github.com/songquanpeng/one-api/model"
 	relay "github.com/songquanpeng/one-api/relay"
+	adaptorpkg "github.com/songquanpeng/one-api/relay/adaptor"
 	"github.com/songquanpeng/one-api/relay/adaptor/openai"
 	"github.com/songquanpeng/one-api/relay/apitype"
 	"github.com/songquanpeng/one-api/relay/billing/ratio"
@@ -220,11 +221,69 @@ type ChannelModelsDisplayInfo struct {
 
 // ModelDisplayInfo represents display information for a single model
 type ModelDisplayInfo struct {
-	InputPrice       float64 `json:"input_price"`           // Price per 1M input tokens in USD
-	CachedInputPrice float64 `json:"cached_input_price"`    // Price per 1M cached input tokens in USD (falls back to input price when unspecified)
-	OutputPrice      float64 `json:"output_price"`          // Price per 1M output tokens in USD
-	MaxTokens        int32   `json:"max_tokens"`            // Maximum tokens limit, 0 means unlimited
-	ImagePrice       float64 `json:"image_price,omitempty"` // USD per image (image models only)
+	InputPrice          float64                    `json:"input_price"`                      // Price per 1M input tokens in USD
+	CachedInputPrice    float64                    `json:"cached_input_price"`               // Price per 1M cached input tokens in USD (falls back to input price when unspecified)
+	CacheWrite5mPrice   float64                    `json:"cache_write_5m_price,omitempty"`   // Price per 1M tokens for 5-minute cache write
+	CacheWrite1hPrice   float64                    `json:"cache_write_1h_price,omitempty"`   // Price per 1M tokens for 1-hour cache write
+	OutputPrice         float64                    `json:"output_price"`                     // Price per 1M output tokens in USD
+	MaxTokens           int32                      `json:"max_tokens"`                       // Maximum tokens limit, 0 means unlimited
+	ImagePrice          float64                    `json:"image_price,omitempty"`             // USD per image (image models only)
+	Tiers               []ModelDisplayTier         `json:"tiers,omitempty"`                  // Tiered pricing (volume-based)
+	VideoPricing        *VideoDisplayPricing       `json:"video_pricing,omitempty"`           // Video generation pricing
+	AudioPricing        *AudioDisplayPricing       `json:"audio_pricing,omitempty"`           // Audio prompt/completion pricing
+	ImagePricing        *ImageDisplayPricing       `json:"image_pricing,omitempty"`           // Detailed image pricing with size/quality multipliers
+	EmbeddingPricing    *EmbeddingDisplayPricing   `json:"embedding_pricing,omitempty"`       // Embedding pricing by modality
+}
+
+// ModelDisplayTier represents a single tier in volume-based pricing
+type ModelDisplayTier struct {
+	InputPrice          float64 `json:"input_price"`                    // Price per 1M input tokens for this tier
+	OutputPrice         float64 `json:"output_price"`                   // Price per 1M output tokens for this tier
+	CachedInputPrice    float64 `json:"cached_input_price,omitempty"`   // Cached input price for this tier
+	CacheWrite5mPrice   float64 `json:"cache_write_5m_price,omitempty"` // 5-min cache write price for this tier
+	CacheWrite1hPrice   float64 `json:"cache_write_1h_price,omitempty"` // 1-hour cache write price for this tier
+	InputTokenThreshold int     `json:"input_token_threshold"`          // Minimum input tokens to reach this tier
+}
+
+// VideoDisplayPricing represents video generation pricing for display
+type VideoDisplayPricing struct {
+	PerSecondUsd          float64            `json:"per_second_usd"`                    // USD per rendered second at base resolution
+	BaseResolution        string             `json:"base_resolution,omitempty"`          // Base resolution (e.g. "1280x720")
+	ResolutionMultipliers map[string]float64 `json:"resolution_multipliers,omitempty"`   // Resolution -> multiplier map
+}
+
+// AudioDisplayPricing represents audio pricing for display
+type AudioDisplayPricing struct {
+	PromptTokenRatio          float64 `json:"prompt_token_ratio,omitempty"`           // Audio-to-text token conversion ratio for prompt
+	CompletionTokenRatio      float64 `json:"completion_token_ratio,omitempty"`       // Audio-to-text token conversion ratio for completion
+	PromptTokensPerSecond     float64 `json:"prompt_tokens_per_second,omitempty"`     // Tokens generated per second of prompt audio
+	CompletionTokensPerSecond float64 `json:"completion_tokens_per_second,omitempty"` // Tokens generated per second of completion audio
+	UsdPerSecond              float64 `json:"usd_per_second,omitempty"`               // Direct USD per second pricing
+}
+
+// ImageDisplayPricing represents detailed image pricing for display
+type ImageDisplayPricing struct {
+	PricePerImageUsd       float64                       `json:"price_per_image_usd,omitempty"`       // Base USD per image
+	DefaultSize            string                        `json:"default_size,omitempty"`               // Default resolution
+	DefaultQuality         string                        `json:"default_quality,omitempty"`             // Default quality level
+	MinImages              int                           `json:"min_images,omitempty"`                  // Minimum images per request
+	MaxImages              int                           `json:"max_images,omitempty"`                  // Maximum images per request
+	SizeMultipliers        map[string]float64            `json:"size_multipliers,omitempty"`            // Resolution -> multiplier
+	QualityMultipliers     map[string]float64            `json:"quality_multipliers,omitempty"`         // Quality -> multiplier
+	QualitySizeMultipliers map[string]map[string]float64 `json:"quality_size_multipliers,omitempty"`    // Quality -> Size -> multiplier
+}
+
+// EmbeddingDisplayPricing represents embedding pricing for display
+type EmbeddingDisplayPricing struct {
+	TextTokenPrice     float64 `json:"text_token_price,omitempty"`      // Price per 1M text tokens
+	ImageTokenPrice    float64 `json:"image_token_price,omitempty"`     // Price per 1M image tokens
+	AudioTokenPrice    float64 `json:"audio_token_price,omitempty"`     // Price per 1M audio tokens
+	VideoTokenPrice    float64 `json:"video_token_price,omitempty"`     // Price per 1M video tokens
+	DocumentTokenPrice float64 `json:"document_token_price,omitempty"`  // Price per 1M document tokens
+	UsdPerImage        float64 `json:"usd_per_image,omitempty"`         // Direct USD per image
+	UsdPerAudioSecond  float64 `json:"usd_per_audio_second,omitempty"`  // Direct USD per audio second
+	UsdPerVideoFrame   float64 `json:"usd_per_video_frame,omitempty"`   // Direct USD per video frame
+	UsdPerDocumentPage float64 `json:"usd_per_document_page,omitempty"` // Direct USD per document page
 }
 
 // mergeModelNamesWithOverrides merges explicit channel models with pricing override entries, removing duplicates.
@@ -376,20 +435,78 @@ func GetModelsDisplay(c *gin.Context) {
 				}
 			}
 
-			var inputPrice, cachedInputPrice, outputPrice float64
+			var inputPrice, cachedInputPrice, cacheWrite5mPrice, cacheWrite1hPrice, outputPrice float64
 			var maxTokens int32
 			var imagePrice float64
+			var tiers []ModelDisplayTier
+			var videoPricing *VideoDisplayPricing
+			var audioPricing *AudioDisplayPricing
+			var imagePricing *ImageDisplayPricing
+			var embeddingPricing *EmbeddingDisplayPricing
 			baseCompletionRatio := 0.0
 			overrideApplied := false
 
+			// buildImageDisplayPricing converts an adaptor ImagePricingConfig to display format
+			buildImageDisplayPricing := func(img interface{ HasData() bool }, raw interface{}) *ImageDisplayPricing {
+				// Use type switch to handle both adaptor and local types
+				switch v := raw.(type) {
+				case *adaptorpkg.ImagePricingConfig:
+					if v == nil || !v.HasData() {
+						return nil
+					}
+					dp := &ImageDisplayPricing{
+						PricePerImageUsd: v.PricePerImageUsd,
+						DefaultSize:      v.DefaultSize,
+						DefaultQuality:   v.DefaultQuality,
+						MinImages:        v.MinImages,
+						MaxImages:        v.MaxImages,
+					}
+					if len(v.SizeMultipliers) > 0 {
+						dp.SizeMultipliers = v.SizeMultipliers
+					}
+					if len(v.QualityMultipliers) > 0 {
+						dp.QualityMultipliers = v.QualityMultipliers
+					}
+					if len(v.QualitySizeMultipliers) > 0 {
+						dp.QualitySizeMultipliers = v.QualitySizeMultipliers
+					}
+					return dp
+				case *model.ImagePricingLocal:
+					if v == nil {
+						return nil
+					}
+					dp := &ImageDisplayPricing{
+						PricePerImageUsd: v.PricePerImageUsd,
+						DefaultSize:      v.DefaultSize,
+						DefaultQuality:   v.DefaultQuality,
+						MinImages:        v.MinImages,
+						MaxImages:        v.MaxImages,
+					}
+					if len(v.SizeMultipliers) > 0 {
+						dp.SizeMultipliers = v.SizeMultipliers
+					}
+					if len(v.QualityMultipliers) > 0 {
+						dp.QualityMultipliers = v.QualityMultipliers
+					}
+					if len(v.QualitySizeMultipliers) > 0 {
+						dp.QualitySizeMultipliers = v.QualitySizeMultipliers
+					}
+					return dp
+				}
+				return nil
+			}
+			_ = buildImageDisplayPricing // used below
+
 			if cfg, ok := pricing[actual]; ok {
 				if cfg.Image != nil && cfg.Image.PricePerImageUsd > 0 && cfg.Ratio == 0 && cfg.CachedInputRatio <= 0 {
-					result[modelName] = ModelDisplayInfo{
+					info := ModelDisplayInfo{
 						MaxTokens:        cfg.MaxTokens,
 						ImagePrice:       cfg.Image.PricePerImageUsd,
 						InputPrice:       0,
 						CachedInputPrice: 0,
+						ImagePricing:     buildImageDisplayPricing(cfg.Image, cfg.Image),
 					}
+					result[modelName] = info
 					continue
 				}
 				inputPrice = convertRatioToPrice(cfg.Ratio)
@@ -406,11 +523,72 @@ func GetModelsDisplay(c *gin.Context) {
 						inputPrice = cachedInputPrice
 					}
 				}
+				cacheWrite5mPrice = convertRatioToPrice(cfg.CacheWrite5mRatio)
+				cacheWrite1hPrice = convertRatioToPrice(cfg.CacheWrite1hRatio)
 				baseCompletionRatio = cfg.CompletionRatio
 				outputPrice = inputPrice * cfg.CompletionRatio
 				maxTokens = cfg.MaxTokens
 				if cfg.Image != nil {
 					imagePrice = cfg.Image.PricePerImageUsd
+					imagePricing = buildImageDisplayPricing(cfg.Image, cfg.Image)
+				}
+				// Tiered pricing
+				if len(cfg.Tiers) > 0 {
+					tiers = make([]ModelDisplayTier, 0, len(cfg.Tiers))
+					for _, tier := range cfg.Tiers {
+						tierInput := convertRatioToPrice(tier.Ratio)
+						tierOutput := tierInput * tier.CompletionRatio
+						if tier.CompletionRatio == 0 {
+							tierOutput = tierInput * baseCompletionRatio
+						}
+						dt := ModelDisplayTier{
+							InputPrice:          tierInput,
+							OutputPrice:         tierOutput,
+							InputTokenThreshold: tier.InputTokenThreshold,
+						}
+						if tier.CachedInputRatio != 0 {
+							dt.CachedInputPrice = convertRatioToPrice(tier.CachedInputRatio)
+						}
+						if tier.CacheWrite5mRatio != 0 {
+							dt.CacheWrite5mPrice = convertRatioToPrice(tier.CacheWrite5mRatio)
+						}
+						if tier.CacheWrite1hRatio != 0 {
+							dt.CacheWrite1hPrice = convertRatioToPrice(tier.CacheWrite1hRatio)
+						}
+						tiers = append(tiers, dt)
+					}
+				}
+				// Video pricing
+				if cfg.Video != nil && cfg.Video.HasData() {
+					videoPricing = &VideoDisplayPricing{
+						PerSecondUsd:          cfg.Video.PerSecondUsd,
+						BaseResolution:        cfg.Video.BaseResolution,
+						ResolutionMultipliers: cfg.Video.ResolutionMultipliers,
+					}
+				}
+				// Audio pricing
+				if cfg.Audio != nil && cfg.Audio.HasData() {
+					audioPricing = &AudioDisplayPricing{
+						PromptTokenRatio:          cfg.Audio.PromptRatio,
+						CompletionTokenRatio:      cfg.Audio.CompletionRatio,
+						PromptTokensPerSecond:     cfg.Audio.PromptTokensPerSecond,
+						CompletionTokensPerSecond: cfg.Audio.CompletionTokensPerSecond,
+						UsdPerSecond:              cfg.Audio.UsdPerSecond,
+					}
+				}
+				// Embedding pricing
+				if cfg.Embedding != nil && cfg.Embedding.HasData() {
+					embeddingPricing = &EmbeddingDisplayPricing{
+						TextTokenPrice:     convertRatioToPrice(cfg.Embedding.TextTokenRatio),
+						ImageTokenPrice:    convertRatioToPrice(cfg.Embedding.ImageTokenRatio),
+						AudioTokenPrice:    convertRatioToPrice(cfg.Embedding.AudioTokenRatio),
+						VideoTokenPrice:    convertRatioToPrice(cfg.Embedding.VideoTokenRatio),
+						DocumentTokenPrice: convertRatioToPrice(cfg.Embedding.DocumentTokenRatio),
+						UsdPerImage:        cfg.Embedding.UsdPerImage,
+						UsdPerAudioSecond:  cfg.Embedding.UsdPerAudioSecond,
+						UsdPerVideoFrame:   cfg.Embedding.UsdPerVideoFrame,
+						UsdPerDocumentPage: cfg.Embedding.UsdPerDocumentPage,
+					}
 				}
 			} else {
 				inRatio := adaptor.GetModelRatio(actual)
@@ -423,14 +601,20 @@ func GetModelsDisplay(c *gin.Context) {
 				imagePrice = 0
 			}
 
-			if cfg, ok := getOverride(modelName); ok {
-				overrideApplied = true
+			applyOverride := func(cfg *model.ModelConfigLocal) {
 				if cfg.MaxTokens != 0 {
 					maxTokens = cfg.MaxTokens
 				}
 				if cfg.Ratio != 0 {
+					prevInputPrice := inputPrice
 					inputPrice = convertRatioToPrice(cfg.Ratio)
-					cachedInputPrice = inputPrice
+					if cfg.CachedInputRatio != 0 {
+						cachedInputPrice = convertRatioToPrice(cfg.CachedInputRatio)
+					} else if cachedInputPrice == prevInputPrice {
+						// No adaptor-level cache pricing existed, follow the new input price
+						cachedInputPrice = inputPrice
+					}
+					// else: preserve the adaptor-level cachedInputPrice
 					if cfg.CompletionRatio != 0 {
 						outputPrice = inputPrice * cfg.CompletionRatio
 					} else if baseCompletionRatio != 0 {
@@ -441,41 +625,42 @@ func GetModelsDisplay(c *gin.Context) {
 				} else if cfg.CompletionRatio != 0 && inputPrice > 0 {
 					outputPrice = inputPrice * cfg.CompletionRatio
 				}
+				if cfg.CacheWrite5mRatio != 0 {
+					cacheWrite5mPrice = convertRatioToPrice(cfg.CacheWrite5mRatio)
+				}
+				if cfg.CacheWrite1hRatio != 0 {
+					cacheWrite1hPrice = convertRatioToPrice(cfg.CacheWrite1hRatio)
+				}
 				if cfg.Image != nil && cfg.Image.PricePerImageUsd > 0 {
 					imagePrice = cfg.Image.PricePerImageUsd
+					imagePricing = buildImageDisplayPricing(nil, cfg.Image)
 				}
+			}
+
+			if cfg, ok := getOverride(modelName); ok {
+				overrideApplied = true
+				applyOverride(cfg)
 			}
 			if !overrideApplied && actual != modelName {
 				if cfg, ok := getOverride(actual); ok {
 					overrideApplied = true
-					if cfg.MaxTokens != 0 {
-						maxTokens = cfg.MaxTokens
-					}
-					if cfg.Ratio != 0 {
-						inputPrice = convertRatioToPrice(cfg.Ratio)
-						cachedInputPrice = inputPrice
-						if cfg.CompletionRatio != 0 {
-							outputPrice = inputPrice * cfg.CompletionRatio
-						} else if baseCompletionRatio != 0 {
-							outputPrice = inputPrice * baseCompletionRatio
-						} else if outputPrice == 0 {
-							outputPrice = inputPrice
-						}
-					} else if cfg.CompletionRatio != 0 && inputPrice > 0 {
-						outputPrice = inputPrice * cfg.CompletionRatio
-					}
-					if cfg.Image != nil && cfg.Image.PricePerImageUsd > 0 {
-						imagePrice = cfg.Image.PricePerImageUsd
-					}
+					applyOverride(cfg)
 				}
 			}
 
 			result[modelName] = ModelDisplayInfo{
-				InputPrice:       inputPrice,
-				CachedInputPrice: cachedInputPrice,
-				OutputPrice:      outputPrice,
-				MaxTokens:        maxTokens,
-				ImagePrice:       imagePrice,
+				InputPrice:        inputPrice,
+				CachedInputPrice:  cachedInputPrice,
+				CacheWrite5mPrice: cacheWrite5mPrice,
+				CacheWrite1hPrice: cacheWrite1hPrice,
+				OutputPrice:       outputPrice,
+				MaxTokens:         maxTokens,
+				ImagePrice:        imagePrice,
+				Tiers:             tiers,
+				VideoPricing:      videoPricing,
+				AudioPricing:      audioPricing,
+				ImagePricing:      imagePricing,
+				EmbeddingPricing:  embeddingPricing,
 			}
 			if inputPrice == 0 && cachedInputPrice == 0 && outputPrice == 0 && imagePrice == 0 && lg != nil {
 				lg.Debug("model display missing pricing metadata",

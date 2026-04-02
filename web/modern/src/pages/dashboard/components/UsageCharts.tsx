@@ -150,7 +150,7 @@ export function UsageCharts({
             <XAxis dataKey="date" tickLine={false} axisLine={false} fontSize={12} />
             <YAxis tickLine={false} axisLine={false} width={60} fontSize={12} tickFormatter={formatStackedTick} />
             <Tooltip content={stackedTooltip} />
-            <Legend />
+            <Legend wrapperStyle={{ maxHeight: 80, overflowY: 'auto' }} />
             {modelKeys.map((m, idx) => (
               <Bar key={m} dataKey={m} stackId="statistics-models" fill={barColor(idx)} radius={[2, 2, 0, 0]} />
             ))}
@@ -169,7 +169,7 @@ export function UsageCharts({
             <XAxis dataKey="date" tickLine={false} axisLine={false} fontSize={12} />
             <YAxis tickLine={false} axisLine={false} width={60} fontSize={12} tickFormatter={formatStackedTick} />
             <Tooltip content={stackedTooltip} />
-            <Legend />
+            <Legend wrapperStyle={{ maxHeight: 80, overflowY: 'auto' }} />
             {userKeys.map((userKey, idx) => (
               <Bar key={userKey} dataKey={userKey} stackId="statistics-users" fill={barColor(idx)} radius={[2, 2, 0, 0]} />
             ))}
@@ -188,7 +188,7 @@ export function UsageCharts({
             <XAxis dataKey="date" tickLine={false} axisLine={false} fontSize={12} />
             <YAxis tickLine={false} axisLine={false} width={60} fontSize={12} tickFormatter={formatStackedTick} />
             <Tooltip content={stackedTooltip} />
-            <Legend />
+            <Legend wrapperStyle={{ maxHeight: 80, overflowY: 'auto' }} />
             {tokenKeys.map((tokenKey, idx) => (
               <Bar key={tokenKey} dataKey={tokenKey} stackId="statistics-tokens" fill={barColor(idx)} radius={[2, 2, 0, 0]} />
             ))}

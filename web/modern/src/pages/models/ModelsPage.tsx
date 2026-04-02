@@ -3,23 +3,15 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { ResponsivePageContainer } from '@/components/ui/responsive-container';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { useResponsive } from '@/hooks/useResponsive';
 import { api } from '@/lib/api';
-import { Info } from 'lucide-react';
+import { ChevronRight } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-
-interface ModelData {
-  input_price: number;
-  cached_input_price?: number;
-  output_price: number;
-  max_tokens: number;
-  image_price?: number;
-}
+import { ModelDisplayData, ModelPricingModal } from './ModelPricingModal';
 
 interface ChannelInfo {
-  models: Record<string, ModelData>;
+  models: Record<string, ModelDisplayData>;
 }
 
 interface ModelsData {
@@ -33,6 +25,8 @@ export function ModelsPage() {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedChannels, setSelectedChannels] = useState<string[]>([]);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [selectedModel, setSelectedModel] = useState<{ name: string; data: ModelDisplayData; channel: string } | null>(null);
   const { t } = useTranslation();
   const tr = useCallback(
     (key: string, defaultValue: string, options?: Record<string, unknown>) => t(`models.${key}`, { defaultValue, ...options }),
@@ -42,7 +36,6 @@ export function ModelsPage() {
   const fetchModelsData = async () => {
     try {
       setLoading(true);
-      // Unified API call - complete URL with /api prefix
       const res = await api.get('/api/models/display');
       const { success, message, data } = res.data;
       if (success) {
@@ -65,7 +58,6 @@ export function ModelsPage() {
   useEffect(() => {
     let filtered = { ...modelsData };
 
-    // Filter by selected channels
     if (selectedChannels.length > 0) {
       const channelFiltered: ModelsData = {};
       selectedChannels.forEach((channelName) => {
@@ -76,12 +68,11 @@ export function ModelsPage() {
       filtered = channelFiltered;
     }
 
-    // Filter by search term
     if (searchTerm) {
       const searchFiltered: ModelsData = {};
       Object.keys(filtered).forEach((channelName) => {
         const channelData = filtered[channelName];
-        const filteredModels: Record<string, ModelData> = {};
+        const filteredModels: Record<string, ModelDisplayData> = {};
 
         Object.keys(channelData.models).forEach((modelName) => {
           if (modelName.toLowerCase().includes(searchTerm.toLowerCase())) {
@@ -109,13 +100,6 @@ export function ModelsPage() {
     return `$${price.toFixed(2)}`;
   };
 
-  const formatMaxTokens = (maxTokens: number): string => {
-    if (maxTokens === 0) return tr('labels.unlimited', 'Unlimited');
-    if (maxTokens >= 1000000) return `${(maxTokens / 1000000).toFixed(1)}M`;
-    if (maxTokens >= 1000) return `${(maxTokens / 1000).toFixed(0)}K`;
-    return maxTokens.toString();
-  };
-
   const formatChannelName = (channelName: string): string => {
     const colonIndex = channelName.indexOf(':');
     if (colonIndex !== -1) {
@@ -137,15 +121,34 @@ export function ModelsPage() {
     setSelectedChannels([]);
   };
 
+  const openModelDetail = (modelName: string, data: ModelDisplayData, channelName: string) => {
+    setSelectedModel({ name: modelName, data, channel: formatChannelName(channelName) });
+    setModalOpen(true);
+  };
+
+  /** Check if a model has rich pricing data beyond basic text tokens */
+  const hasRichPricing = (data: ModelDisplayData): boolean => {
+    return !!(
+      data.tiers?.length ||
+      data.video_pricing ||
+      data.audio_pricing ||
+      data.image_pricing ||
+      data.embedding_pricing ||
+      (data.cache_write_5m_price && data.cache_write_5m_price > 0) ||
+      (data.cache_write_1h_price && data.cache_write_1h_price > 0) ||
+      (data.cached_input_price !== undefined && data.cached_input_price !== data.input_price)
+    );
+  };
+
   const renderChannelModels = (channelName: string, channelInfo: ChannelInfo) => {
     const models = Object.keys(channelInfo.models)
       .sort()
       .map((modelName) => ({
         model: modelName,
+        data: channelInfo.models[modelName],
         inputPrice: channelInfo.models[modelName].input_price,
         cachedInputPrice: channelInfo.models[modelName].cached_input_price ?? channelInfo.models[modelName].input_price,
         outputPrice: channelInfo.models[modelName].output_price,
-        maxTokens: channelInfo.models[modelName].max_tokens,
         imagePrice: channelInfo.models[modelName].image_price,
       }));
 
@@ -160,45 +163,46 @@ export function ModelsPage() {
           {isMobile ? (
             <div className="space-y-3">
               {models.map((model) => (
-                <div key={model.model} className="rounded-xl border bg-card p-4 shadow-sm space-y-3">
-                  <div>
-                    <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-                      {tr('table.model', 'Model')}
-                    </div>
-                    <div className="font-mono text-sm break-all">{model.model}</div>
-                  </div>
-                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div
+                  key={model.model}
+                  className="rounded-xl border bg-card p-4 shadow-sm space-y-3 cursor-pointer transition-colors hover:bg-muted/50 active:bg-muted/70"
+                  onClick={() => openModelDetail(model.model, model.data, channelName)}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') openModelDetail(model.model, model.data, channelName); }}
+                >
+                  <div className="flex items-center justify-between">
                     <div>
                       <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-                        {tr('table.input_price', 'Input Price')}
+                        {tr('table.model', 'Model')}
+                      </div>
+                      <div className="font-mono text-sm break-all">{model.model}</div>
+                    </div>
+                    <ChevronRight className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                        {tr('table.input_short', 'Input')}
                       </div>
                       <div className="text-sm">{formatPrice(model.inputPrice)}</div>
                     </div>
                     <div>
                       <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-                        {tr('table.cached_input_price', 'Cached Input Price')}
-                      </div>
-                      <div className="text-sm">{formatPrice(model.cachedInputPrice)}</div>
-                    </div>
-                    <div>
-                      <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-                        {tr('table.output_price', 'Output Price')}
+                        {tr('table.output_short', 'Output')}
                       </div>
                       <div className="text-sm">{formatPrice(model.outputPrice)}</div>
                     </div>
-                    <div>
-                      <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-                        {tr('table.image_price', 'Image Price')}
-                      </div>
-                      <div className="text-sm">{model.imagePrice && model.imagePrice > 0 ? formatPrice(model.imagePrice) : '-'}</div>
-                    </div>
                   </div>
-                  <div>
-                    <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-                      {tr('table.max_tokens', 'Max Tokens')}
+                  {hasRichPricing(model.data) && (
+                    <div className="flex flex-wrap gap-1">
+                      {model.data.image_pricing && <Badge variant="secondary" className="text-[10px] px-1.5 py-0">Image</Badge>}
+                      {model.data.video_pricing && <Badge variant="secondary" className="text-[10px] px-1.5 py-0">Video</Badge>}
+                      {model.data.audio_pricing && <Badge variant="secondary" className="text-[10px] px-1.5 py-0">Audio</Badge>}
+                      {model.data.tiers && model.data.tiers.length > 0 && <Badge variant="secondary" className="text-[10px] px-1.5 py-0">Tiered</Badge>}
+                      {model.data.embedding_pricing && <Badge variant="secondary" className="text-[10px] px-1.5 py-0">Embedding</Badge>}
                     </div>
-                    <div className="text-sm">{formatMaxTokens(model.maxTokens)}</div>
-                  </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -212,39 +216,40 @@ export function ModelsPage() {
                     <th className="text-left py-2 px-3 font-medium">{tr('table.cached_input_price', 'Cached Input Price')}</th>
                     <th className="text-left py-2 px-3 font-medium">{tr('table.output_price', 'Output Price')}</th>
                     <th className="text-left py-2 px-3 font-medium">{tr('table.image_price', 'Image Price (per image)')}</th>
-                    <th className="text-left py-2 px-3 font-medium">
-                      <span className="inline-flex items-center gap-1">
-                        {tr('table.max_tokens', 'Max Tokens')}
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <button
-                              type="button"
-                              className="inline-flex items-center text-muted-foreground hover:text-foreground focus:outline-none"
-                              aria-label="What does max tokens mean?"
-                            >
-                              <Info className="h-4 w-4" aria-hidden="true" />
-                            </button>
-                          </TooltipTrigger>
-                          <TooltipContent side="top" align="start" className="max-w-xs text-sm">
-                            {tr(
-                              'table.max_tokens_tooltip',
-                              'Maximum total tokens this channel allows per request for the model, including prompt and completion tokens. A value of 0 means the provider does not advertise a fixed limit.'
-                            )}
-                          </TooltipContent>
-                        </Tooltip>
-                      </span>
-                    </th>
+                    <th className="w-8"></th>
                   </tr>
                 </thead>
                 <tbody>
                   {models.map((model) => (
-                    <tr key={model.model} className="border-b hover:bg-muted/50">
-                      <td className="py-2 px-3 font-mono text-sm">{model.model}</td>
+                    <tr
+                      key={model.model}
+                      className="border-b cursor-pointer transition-colors hover:bg-muted/50"
+                      onClick={() => openModelDetail(model.model, model.data, channelName)}
+                      role="button"
+                      tabIndex={0}
+                      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') openModelDetail(model.model, model.data, channelName); }}
+                    >
+                      <td className="py-2 px-3 font-mono text-sm">
+                        <span className="inline-flex items-center gap-2">
+                          {model.model}
+                          {hasRichPricing(model.data) && (
+                            <span className="inline-flex gap-1">
+                              {model.data.image_pricing && <Badge variant="secondary" className="text-[10px] px-1.5 py-0">Image</Badge>}
+                              {model.data.video_pricing && <Badge variant="secondary" className="text-[10px] px-1.5 py-0">Video</Badge>}
+                              {model.data.audio_pricing && <Badge variant="secondary" className="text-[10px] px-1.5 py-0">Audio</Badge>}
+                              {model.data.tiers && model.data.tiers.length > 0 && <Badge variant="secondary" className="text-[10px] px-1.5 py-0">Tiered</Badge>}
+                              {model.data.embedding_pricing && <Badge variant="secondary" className="text-[10px] px-1.5 py-0">Embedding</Badge>}
+                            </span>
+                          )}
+                        </span>
+                      </td>
                       <td className="py-2 px-3">{formatPrice(model.inputPrice)}</td>
                       <td className="py-2 px-3">{formatPrice(model.cachedInputPrice)}</td>
                       <td className="py-2 px-3">{formatPrice(model.outputPrice)}</td>
                       <td className="py-2 px-3">{model.imagePrice && model.imagePrice > 0 ? formatPrice(model.imagePrice) : '-'}</td>
-                      <td className="py-2 px-3">{formatMaxTokens(model.maxTokens)}</td>
+                      <td className="py-2 px-1">
+                        <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -277,7 +282,7 @@ export function ModelsPage() {
   const channelOptions = Object.keys(modelsData).sort();
 
   return (
-    <TooltipProvider delayDuration={150}>
+    <>
       <ResponsivePageContainer
         title={tr('title', 'Supported Models')}
         description={tr('description', 'Browse all models supported by the server, grouped by channel/adaptor with pricing information.')}
@@ -336,7 +341,17 @@ export function ModelsPage() {
           </CardContent>
         </Card>
       </ResponsivePageContainer>
-    </TooltipProvider>
+
+      {selectedModel && (
+        <ModelPricingModal
+          open={modalOpen}
+          onOpenChange={setModalOpen}
+          modelName={selectedModel.name}
+          data={selectedModel.data}
+          channelName={selectedModel.channel}
+        />
+      )}
+    </>
   );
 }
 
