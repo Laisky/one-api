@@ -751,6 +751,13 @@ var (
 	// Default: true
 	EnablePrometheusMetrics = env.Bool("ENABLE_PROMETHEUS_METRICS", true)
 
+	// MetricsToken is the Bearer token required to access the /metrics endpoint.
+	// When empty (default), the endpoint returns 403 until configured.
+	//
+	// Environment variable: METRICS_TOKEN
+	// Default: "" (metrics endpoint blocked)
+	MetricsToken = env.String("METRICS_TOKEN", "")
+
 	// MetricQueueSize configures the buffered queue that aggregates success/failure
 	// events before processing. Larger queues handle burst traffic better.
 	//

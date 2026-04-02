@@ -20,6 +20,7 @@ The Prometheus monitoring system provides detailed metrics about:
 ### Environment Variables
 
 - `ENABLE_PROMETHEUS_METRICS`: Enable/disable Prometheus metrics collection (default: `true`)
+- `METRICS_TOKEN`: Bearer token required to access the `/metrics` endpoint. When not set, the endpoint returns 403. (default: empty)
 - `ENABLE_METRIC`: Enable/disable the existing channel monitoring system (default: `false`)
 
 ### Metrics Endpoint
@@ -28,6 +29,30 @@ When Prometheus monitoring is enabled, metrics are available at:
 
 ```
 http://your-server:port/metrics
+```
+
+**Authentication:** The `/metrics` endpoint requires a Bearer token configured via the `METRICS_TOKEN` environment variable. Requests without a valid token will be rejected.
+
+### Prometheus Scrape Configuration
+
+```yaml
+scrape_configs:
+  - job_name: 'one-api'
+    bearer_token: '<your-metrics-token>'
+    metrics_path: /metrics
+    static_configs:
+      - targets: ['one-api:3000']
+```
+
+Or using a file-based token (recommended for production):
+
+```yaml
+scrape_configs:
+  - job_name: 'one-api'
+    bearer_token_file: /etc/prometheus/one-api-token
+    metrics_path: /metrics
+    static_configs:
+      - targets: ['one-api:3000']
 ```
 
 ## Available Metrics

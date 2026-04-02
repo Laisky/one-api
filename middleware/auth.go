@@ -236,6 +236,7 @@ func TokenAuth() func(c *gin.Context) {
 
 		// Set token-related context for downstream handlers
 		c.Set(ctxkey.Id, token.UserId)
+		c.Set(ctxkey.Username, model.GetUsernameById(token.UserId))
 		c.Set(ctxkey.TokenId, token.Id)
 		c.Set(ctxkey.TokenName, token.Name)
 		c.Set(ctxkey.TokenQuota, token.RemainQuota)

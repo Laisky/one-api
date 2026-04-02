@@ -1,0 +1,16 @@
+services:
+  oneapi:
+    build:
+      context: .
+      dockerfile: Dockerfile.local
+    container_name: oneapi-local
+    ports:
+      - "3000:3000"
+    environment:
+      - GIN_MODE=debug
+      - SESSION_SECRET=test-secret
+      - INITIAL_ROOT_TOKEN=sk-local-test-token
+      - ENABLE_PROMETHEUS_METRICS=true
+      - METRICS_TOKEN=test-metrics-token
+    volumes:
+      - ./data/local:/data
