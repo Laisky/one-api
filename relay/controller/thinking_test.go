@@ -208,6 +208,31 @@ func TestApplyThinkingQueryToChatRequestSkipsQwenOverrideForHostedProviders(t *t
 	require.Nil(t, payload.ReasoningEffort)
 }
 
+func TestApplyThinkingQueryToChatRequestSkipsQwenOverrideForAliBailian(t *testing.T) {
+	t.Parallel()
+	// Ali Bailian uses its own enable_thinking passthrough at root level,
+	// NOT the vLLM chat_template_kwargs mechanism. Verify the override is skipped.
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions?thinking=false", nil)
+	c.Request = req
+
+	meta := &metalib.Meta{
+		ActualModelName: "qwen3.5-27b",
+		APIType:         apitype.OpenAI,
+		ChannelType:     channeltype.AliBailian,
+		BaseURL:         "https://dashscope.aliyuncs.com",
+	}
+	payload := &relaymodel.GeneralOpenAIRequest{Model: "qwen3.5-27b"}
+
+	applyThinkingQueryToChatRequest(c, payload, meta)
+
+	// ExtraBody should remain nil — vLLM override must NOT be applied for AliBailian.
+	// DashScope uses root-level enable_thinking which is handled by the passthrough layer.
+	require.Nil(t, payload.ExtraBody)
+	require.Nil(t, payload.ReasoningEffort)
+}
+
 func TestApplyThinkingQueryToChatRequestAllowsQwenOverrideForVLLMBaseURL(t *testing.T) {
 	t.Parallel()
 	w := httptest.NewRecorder()
