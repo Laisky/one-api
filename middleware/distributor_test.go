@@ -394,6 +394,56 @@ func TestChannelSupportsEndpoint(t *testing.T) {
 		// Unknown relay mode should be allowed (backward compatibility)
 		require.True(t, channelSupportsEndpoint(channel, 0), "unknown relay mode should be allowed")
 	})
+
+	t.Run("default_endpoints_zhipu_supports_ocr", func(t *testing.T) {
+		t.Parallel()
+		channel := &model.Channel{
+			Id:     5,
+			Type:   channeltype.Zhipu,
+			Config: "",
+		}
+
+		// Zhipu should support OCR by default
+		require.True(t, channelSupportsEndpoint(channel, int(channeltype.EndpointOCR)), "Zhipu should support OCR by default")
+
+		// Zhipu should also support chat completions
+		require.True(t, channelSupportsEndpoint(channel, 1), "Zhipu should support chat completions")
+	})
+
+	t.Run("openai_does_not_support_ocr_by_default", func(t *testing.T) {
+		t.Parallel()
+		channel := &model.Channel{
+			Id:     6,
+			Type:   channeltype.OpenAI,
+			Config: "",
+		}
+
+		require.False(t, channelSupportsEndpoint(channel, int(channeltype.EndpointOCR)), "OpenAI should NOT support OCR by default")
+	})
+
+	t.Run("custom_endpoints_with_ocr", func(t *testing.T) {
+		t.Parallel()
+		channel := &model.Channel{
+			Id:     7,
+			Type:   channeltype.OpenAI,
+			Config: `{"supported_endpoints": ["chat_completions", "ocr"]}`,
+		}
+
+		require.True(t, channelSupportsEndpoint(channel, int(channeltype.EndpointOCR)), "custom config with ocr should support OCR")
+		require.True(t, channelSupportsEndpoint(channel, 1), "custom config should support chat_completions")
+		require.False(t, channelSupportsEndpoint(channel, 3), "custom config should NOT support embeddings")
+	})
+
+	t.Run("custom_endpoints_without_ocr", func(t *testing.T) {
+		t.Parallel()
+		channel := &model.Channel{
+			Id:     8,
+			Type:   channeltype.Zhipu,
+			Config: `{"supported_endpoints": ["chat_completions", "embeddings"]}`,
+		}
+
+		require.False(t, channelSupportsEndpoint(channel, int(channeltype.EndpointOCR)), "Zhipu with custom config excluding OCR should NOT support OCR")
+	})
 }
 
 // TestEndpointValidationBackwardCompatibility verifies that existing channels without

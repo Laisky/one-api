@@ -28,6 +28,7 @@ const (
 	EndpointClaudeMessages     Endpoint = Endpoint(relaymode.ClaudeMessages)
 	EndpointRealtime           Endpoint = Endpoint(relaymode.Realtime)
 	EndpointVideos             Endpoint = Endpoint(relaymode.Videos)
+	EndpointOCR                Endpoint = Endpoint(relaymode.OCR)
 )
 
 // EndpointInfo contains metadata about an endpoint for display purposes.
@@ -56,6 +57,7 @@ func AllEndpoints() []EndpointInfo {
 		{ID: EndpointClaudeMessages, Name: "claude_messages", Description: "Claude Messages API", Path: "/v1/messages"},
 		{ID: EndpointRealtime, Name: "realtime", Description: "Realtime API (WebSocket)", Path: "/v1/realtime"},
 		{ID: EndpointVideos, Name: "videos", Description: "Video Generation API", Path: "/v1/videos"},
+		{ID: EndpointOCR, Name: "ocr", Description: "OCR / Layout Parsing API", Path: "/api/paas/v4/layout_parsing"},
 	}
 }
 
@@ -213,6 +215,7 @@ func DefaultEndpointsForChannelType(channelType int) []Endpoint {
 			EndpointImagesGenerations,
 			EndpointResponseAPI,
 			EndpointClaudeMessages,
+			EndpointOCR,
 		}
 	case Ali:
 		return []Endpoint{

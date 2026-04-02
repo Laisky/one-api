@@ -3,6 +3,7 @@ package channeltype
 import (
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/songquanpeng/one-api/relay/relaymode"
@@ -210,4 +211,77 @@ func TestAnthropicDoesNotSupportEmbeddings(t *testing.T) {
 		}
 	}
 	require.False(t, hasEmbeddings, "Anthropic should not support embeddings endpoint")
+}
+
+// ---------------------------------------------------------------------------
+// OCR Endpoint Tests
+// ---------------------------------------------------------------------------
+
+func TestZhipuSupportsOCR(t *testing.T) {
+	t.Parallel()
+	endpoints := DefaultEndpointsForChannelType(Zhipu)
+	require.Contains(t, endpoints, EndpointOCR, "Zhipu should support OCR endpoint")
+}
+
+func TestOpenAIDoesNotSupportOCR(t *testing.T) {
+	t.Parallel()
+	endpoints := DefaultEndpointsForChannelType(OpenAI)
+	require.NotContains(t, endpoints, EndpointOCR, "OpenAI should NOT support OCR endpoint")
+}
+
+func TestOCREndpointNameConversion(t *testing.T) {
+	t.Parallel()
+
+	id := EndpointNameToID("ocr")
+	require.Equal(t, EndpointOCR, id, "ocr name should map to EndpointOCR")
+
+	name := EndpointIDToName(EndpointOCR)
+	require.Equal(t, "ocr", name, "EndpointOCR should map to ocr name")
+}
+
+func TestOCRRelayModeToEndpointName(t *testing.T) {
+	t.Parallel()
+	require.Equal(t, "ocr", RelayModeToEndpointName(relaymode.OCR))
+}
+
+func TestOCREndpointInAllEndpoints(t *testing.T) {
+	t.Parallel()
+	all := AllEndpoints()
+	found := false
+	for _, ep := range all {
+		if ep.ID == EndpointOCR {
+			found = true
+			assert.Equal(t, "ocr", ep.Name)
+			assert.Contains(t, ep.Path, "layout_parsing")
+			break
+		}
+	}
+	require.True(t, found, "OCR endpoint should be in AllEndpoints()")
+}
+
+func TestIsEndpointSupportedOCR(t *testing.T) {
+	t.Parallel()
+	withOCR := []Endpoint{EndpointChatCompletions, EndpointOCR}
+	withoutOCR := []Endpoint{EndpointChatCompletions, EndpointEmbeddings}
+
+	require.True(t, IsEndpointSupported(relaymode.OCR, withOCR))
+	require.False(t, IsEndpointSupported(relaymode.OCR, withoutOCR))
+}
+
+func TestParseEndpointListIncludesOCR(t *testing.T) {
+	t.Parallel()
+	names := []string{"chat_completions", "ocr", "invalid"}
+	endpoints := ParseEndpointList(names)
+
+	require.Len(t, endpoints, 2)
+	require.Contains(t, endpoints, EndpointChatCompletions)
+	require.Contains(t, endpoints, EndpointOCR)
+}
+
+func TestZhipuDefaultEndpointNames(t *testing.T) {
+	t.Parallel()
+	names := DefaultEndpointNamesForChannelType(Zhipu)
+	require.Contains(t, names, "ocr", "Zhipu default endpoint names should include ocr")
+	require.Contains(t, names, "chat_completions")
+	require.Contains(t, names, "embeddings")
 }

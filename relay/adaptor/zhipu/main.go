@@ -16,7 +16,6 @@ import (
 
 	"github.com/songquanpeng/one-api/common"
 	"github.com/songquanpeng/one-api/common/helper"
-	"github.com/songquanpeng/one-api/common/random"
 	"github.com/songquanpeng/one-api/common/render"
 	commonsse "github.com/songquanpeng/one-api/common/sse"
 	"github.com/songquanpeng/one-api/relay/adaptor/openai"
@@ -285,27 +284,64 @@ func isOCRModel(modelName string) bool {
 
 // ConvertOCRRequest extracts the file URL from OpenAI-style messages
 // and converts it to a Zhipu OCR request.
+// Optional parameters (request_id, user_id, return_crop_images, need_layout_visualization,
+// start_page_id, end_page_id) are forwarded from ExtraBody if present.
 func ConvertOCRRequest(request model.GeneralOpenAIRequest) (*OCRRequest, error) {
 	// Look for an image URL in the messages
+	var fileURL string
 	for _, msg := range request.Messages {
 		if msg.Role != "user" {
 			continue
 		}
 		for _, content := range msg.ParseContent() {
 			if content.ImageURL != nil && content.ImageURL.Url != "" {
-				return &OCRRequest{
-					Model: request.Model,
-					File:  content.ImageURL.Url,
-				}, nil
+				fileURL = content.ImageURL.Url
+				break
 			}
 		}
+		if fileURL != "" {
+			break
+		}
 	}
-	return nil, errors.New("glm-ocr requires an image_url in the message content")
+	if fileURL == "" {
+		return nil, errors.New("glm-ocr requires an image_url in the message content")
+	}
+
+	ocrReq := &OCRRequest{
+		Model: request.Model,
+		File:  fileURL,
+	}
+
+	// Forward optional parameters from ExtraBody
+	if request.User != "" {
+		ocrReq.UserID = request.User
+	}
+	if eb := request.ExtraBody; eb != nil {
+		if v, ok := eb["request_id"].(string); ok {
+			ocrReq.RequestID = v
+		}
+		if v, ok := eb["return_crop_images"].(bool); ok {
+			ocrReq.ReturnCropImages = &v
+		}
+		if v, ok := eb["need_layout_visualization"].(bool); ok {
+			ocrReq.NeedLayoutVisualization = &v
+		}
+		if v, ok := eb["start_page_id"].(float64); ok {
+			intV := int(v)
+			ocrReq.StartPageID = &intV
+		}
+		if v, ok := eb["end_page_id"].(float64); ok {
+			intV := int(v)
+			ocrReq.EndPageID = &intV
+		}
+	}
+
+	return ocrReq, nil
 }
 
-// OCRHandler converts the Zhipu layout_parsing response to OpenAI chat completion format.
-func OCRHandler(c *gin.Context, resp *http.Response, modelName string) (*model.ErrorWithStatusCode, *model.Usage) {
-	var ocrResponse OCRResponse
+// OCRHandler passes through the native Zhipu layout_parsing response,
+// extracting usage for billing purposes.
+func OCRHandler(c *gin.Context, resp *http.Response, _ string) (*model.ErrorWithStatusCode, *model.Usage) {
 	responseBody, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return openai.ErrorWrapper(err, "read_response_body_failed", http.StatusInternalServerError), nil
@@ -314,37 +350,20 @@ func OCRHandler(c *gin.Context, resp *http.Response, modelName string) (*model.E
 	if err != nil {
 		return openai.ErrorWrapper(err, "close_response_body_failed", http.StatusInternalServerError), nil
 	}
-	err = json.Unmarshal(responseBody, &ocrResponse)
-	if err != nil {
+
+	// Decode only to extract usage for billing; the full body is forwarded as-is.
+	var ocrResponse OCRResponse
+	if err = json.Unmarshal(responseBody, &ocrResponse); err != nil {
 		return openai.ErrorWrapper(err, "unmarshal_response_body_failed", http.StatusInternalServerError), nil
 	}
 
-	fullTextResponse := openai.TextResponse{
-		Id:      "ocr-" + random.GetUUID(),
-		Object:  "chat.completion",
-		Created: helper.GetTimestamp(),
-		Model:   modelName,
-		Choices: []openai.TextResponseChoice{
-			{
-				Index: 0,
-				Message: model.Message{
-					Role:    "assistant",
-					Content: ocrResponse.Content,
-				},
-				FinishReason: "stop",
-			},
-		},
-		Usage: ocrResponse.Usage,
-	}
-
-	jsonResponse, err := json.Marshal(fullTextResponse)
-	if err != nil {
-		return openai.ErrorWrapper(err, "marshal_response_body_failed", http.StatusInternalServerError), nil
-	}
 	c.Writer.Header().Set("Content-Type", "application/json")
 	c.Writer.WriteHeader(resp.StatusCode)
-	_, err = c.Writer.Write(jsonResponse)
-	return nil, &fullTextResponse.Usage
+	_, err = c.Writer.Write(responseBody)
+	if err != nil {
+		return openai.ErrorWrapper(err, "write_response_body_failed", http.StatusInternalServerError), nil
+	}
+	return nil, &ocrResponse.Usage
 }
 
 func embeddingResponseZhipu2OpenAI(response *EmbeddingResponse) *openai.EmbeddingResponse {

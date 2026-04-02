@@ -41,6 +41,8 @@ func (a *Adaptor) GetRequestURL(meta *meta.Meta) (string, error) {
 		return fmt.Sprintf("%s/api/paas/v4/images/generations", meta.BaseURL), nil
 	case relaymode.Embeddings:
 		return fmt.Sprintf("%s/api/paas/v4/embeddings", meta.BaseURL), nil
+	case relaymode.OCR:
+		return fmt.Sprintf("%s/api/paas/v4/layout_parsing", meta.BaseURL), nil
 	}
 	if isOCRModel(meta.ActualModelName) {
 		return fmt.Sprintf("%s/api/paas/v4/layout_parsing", meta.BaseURL), nil
@@ -335,4 +337,27 @@ func (a *Adaptor) GetCompletionRatio(modelName string) float64 {
 // DefaultToolingConfig returns Zhipu tooling defaults (search tool tiers and rates).
 func (a *Adaptor) DefaultToolingConfig() adaptor.ChannelToolConfig {
 	return ZhipuToolingDefaults
+}
+
+// ConvertOCRRequest converts the user-facing OCR request to the Zhipu-native format.
+func (a *Adaptor) ConvertOCRRequest(_ *gin.Context, request *model.OCRRequest) (any, error) {
+	if request == nil {
+		return nil, errors.New("OCR request is nil")
+	}
+	return &OCRRequest{
+		Model:                   request.Model,
+		File:                    request.File,
+		RequestID:               request.RequestID,
+		UserID:                  request.UserID,
+		ReturnCropImages:        request.ReturnCropImages,
+		NeedLayoutVisualization: request.NeedLayoutVisualization,
+		StartPageID:             request.StartPageID,
+		EndPageID:               request.EndPageID,
+	}, nil
+}
+
+// DoOCRResponse handles the upstream OCR response and writes the result to the client.
+func (a *Adaptor) DoOCRResponse(c *gin.Context, resp *http.Response, meta *meta.Meta) (usage *model.Usage, err *model.ErrorWithStatusCode) {
+	err, usage = OCRHandler(c, resp, meta.ActualModelName)
+	return
 }

@@ -180,6 +180,17 @@ wscat -c "wss://api.example.com/v1/realtime?model=gpt-4o-realtime-preview" \\
     "duration": 5
   }'`,
   },
+  ocr: {
+    description:
+      'The OCR / Layout Parsing API extracts text and layout information from documents and images. Upload a file URL and receive structured markdown results. Powered by Zhipu GLM-OCR.',
+    curlExample: `curl https://oneapi.laisky.com/api/paas/v4/layout_parsing \\
+  -H "Content-Type: application/json" \\
+  -H "Authorization: Bearer YOUR_API_KEY" \\
+  -d '{
+    "model": "glm-ocr",
+    "file": "https://example.com/document.pdf"
+  }'`,
+  },
 };
 
 export const ChannelEndpointSettings = ({ form, allEndpoints, defaultEndpoints, tr }: ChannelEndpointSettingsProps) => {

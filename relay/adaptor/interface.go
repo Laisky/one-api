@@ -328,6 +328,14 @@ type Adaptor interface {
 	GetCompletionRatio(modelName string) float64
 }
 
+// OCRAdaptor represents adaptors that can natively consume the dedicated OCR / layout-parsing DTO.
+// Adaptors must implement this interface to accept /v1/layout_parsing requests; otherwise the
+// controller will reject the call as unsupported.
+type OCRAdaptor interface {
+	ConvertOCRRequest(c *gin.Context, request *model.OCRRequest) (any, error)
+	DoOCRResponse(c *gin.Context, resp *http.Response, meta *meta.Meta) (usage *model.Usage, err *model.ErrorWithStatusCode)
+}
+
 // RerankAdaptor represents adaptors that can natively consume the dedicated rerank DTO.
 // Adaptors must implement this interface to accept /v1/rerank requests; otherwise the
 // controller will reject the call as unsupported.

@@ -321,10 +321,7 @@ export function PersonalSettings() {
 
       const attResp = await startRegistration({ optionsJSON: beginRes.data.data.publicKey });
 
-      const finishRes = await api.post(
-        `/api/user/passkey/register/finish?name=${encodeURIComponent(name)}`,
-        attResp
-      );
+      const finishRes = await api.post(`/api/user/passkey/register/finish?name=${encodeURIComponent(name)}`, attResp);
       if (finishRes.data.success) {
         setShowPasskeyName(false);
         setPasskeyName('');
@@ -689,7 +686,6 @@ export function PersonalSettings() {
           <CardDescription>{t('personal_settings.security.description')}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
-
           {/* --- Security Status Overview --- */}
           <div className="rounded-lg border bg-muted/30 p-4">
             <h4 className="text-sm font-medium mb-3">{t('personal_settings.security.status.title')}</h4>
@@ -718,9 +714,7 @@ export function PersonalSettings() {
             </div>
             {securityScore < 3 && (
               <p className="text-xs text-muted-foreground mt-2">
-                {securityScore === 1
-                  ? t('personal_settings.passkey.no_passkeys_desc')
-                  : ''}
+                {securityScore === 1 ? t('personal_settings.passkey.no_passkeys_desc') : ''}
               </p>
             )}
           </div>
@@ -731,9 +725,7 @@ export function PersonalSettings() {
           <div className="space-y-4">
             <div className="flex items-center gap-2">
               <h3 className="text-base font-semibold">{t('personal_settings.passkey.title')}</h3>
-              <Badge className="bg-primary/10 text-primary border-primary/20 text-xs">
-                {t('personal_settings.passkey.recommended')}
-              </Badge>
+              <Badge className="bg-primary/10 text-primary border-primary/20 text-xs">{t('personal_settings.passkey.recommended')}</Badge>
             </div>
             <p className="text-sm text-muted-foreground">{t('personal_settings.passkey.description')}</p>
 
@@ -758,12 +750,7 @@ export function PersonalSettings() {
                             {t('personal_settings.passkey.sign_count')}: {pk.sign_count}
                           </div>
                         </div>
-                        <Button
-                          variant="destructive"
-                          size="sm"
-                          onClick={() => deletePasskey(pk.id)}
-                          disabled={passkeyLoading}
-                        >
+                        <Button variant="destructive" size="sm" onClick={() => deletePasskey(pk.id)} disabled={passkeyLoading}>
                           {t('personal_settings.passkey.delete_button')}
                         </Button>
                       </div>
@@ -789,7 +776,14 @@ export function PersonalSettings() {
                       <Button onClick={registerPasskey} disabled={passkeyLoading}>
                         {passkeyLoading ? t('personal_settings.passkey.processing') : t('personal_settings.passkey.register_button')}
                       </Button>
-                      <Button variant="outline" onClick={() => { setShowPasskeyName(false); setPasskeyName(''); }} disabled={passkeyLoading}>
+                      <Button
+                        variant="outline"
+                        onClick={() => {
+                          setShowPasskeyName(false);
+                          setPasskeyName('');
+                        }}
+                        disabled={passkeyLoading}
+                      >
                         {t('personal_settings.totp.cancel')}
                       </Button>
                     </div>
@@ -878,12 +872,9 @@ export function PersonalSettings() {
               </div>
             </div>
             <Button onClick={updatePassword} disabled={passwordLoading || !newPassword} className="w-full md:w-auto">
-              {passwordLoading
-                ? t('personal_settings.security.password.updating')
-                : t('personal_settings.security.password.update_button')}
+              {passwordLoading ? t('personal_settings.security.password.updating') : t('personal_settings.security.password.update_button')}
             </Button>
           </div>
-
         </CardContent>
       </Card>
 

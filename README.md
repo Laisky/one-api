@@ -143,7 +143,14 @@ The original author stopped maintaining the project, leaving critical PRs and ne
     - [Moonshot Features](#moonshot-features)
       - [Support kimi-k2 Family](#support-kimi-k2-family)
     - [GLM Features](#glm-features)
-      - [Support GLM-4 Family](#support-glm-4-family)
+      - [Flagship Models - Text](#flagship-models---text)
+      - [Flagship Models - Visual](#flagship-models---visual)
+      - [Language Models](#language-models)
+      - [Reasoning Models](#reasoning-models)
+      - [Multimodal Models](#multimodal-models)
+      - [Image Generation Models](#image-generation-models)
+      - [Other Models](#other-models)
+      - [GLM OCR](#glm-ocr)
     - [XAI / Grok Features](#xai--grok-features)
       - [Support XAI/Grok Text \& Image Models](#support-xaigrok-text--image-models)
     - [Black Forest Labs Features](#black-forest-labs-features)
@@ -1341,24 +1348,131 @@ Support:
 
 ### GLM Features
 
-Support:
+#### Flagship Models - Text
 
-- `glm-zero-preview`
-- `glm-3-turbo`
-- `cogview-3-flash`
-- `codegeex-4`
-- `embedding-3`
-- `embedding-2`
+`glm-5-turbo` / `glm-5` / `glm-4.7` / `glm-4.7-flashx` / `glm-4.7-flash` / `glm-4.6` / `glm-4.5` / `glm-4.5-x` / `glm-4.5-air` / `glm-4.5-airx`
 
-#### Support GLM-4 Family
+#### Flagship Models - Visual
 
-- `glm-4.6`
-- `glm-4.5`
-- `glm-4.5-x`
-- `glm-4.5-air`
-- `glm-4.5-airx`
-- `glm-4.5-flash`
-- `glm-4v-flash`
+`glm-5v-turbo` / `glm-4.6v` / `glm-4.6v-flashx` / `glm-4.5v` / `glm-4.6v-flash` / `glm-4v-flash`
+
+#### Language Models
+
+`glm-4-plus` / `glm-4-air` / `glm-4-airx` / `glm-4-flashx-250414` / `glm-4-long` / `glm-4-assistant` / `glm-4-flash-250414` / `glm-4.5-flash` / `glm-4-flash`
+
+#### Reasoning Models
+
+`glm-z1-air` / `glm-z1-airx` / `glm-z1-flashx` / `glm-4.1v-thinking-flashx` / `glm-4.1v-thinking-flash`
+
+#### Multimodal Models
+
+`glm-4v-plus-0111` / `glm-4v-plus` / `glm-4v` / `glm-4-voice`
+
+#### Image Generation Models
+
+`cogview-4` / `cogview-3-plus` / `cogview-3` / `cogview-3-flash` / `cogviewx` / `cogviewx-flash`
+
+#### Other Models
+
+`charglm-4` / `emohaa` / `codegeex-4` / `rerank` / `embedding-3` / `embedding-2` / `glm-3-turbo` / `glm-zero-preview`
+
+#### GLM OCR
+
+```sh
+curl --location 'https://oneapi.laisky.com/api/paas/v4/layout_parsing' \
+--header 'Content-Type: application/json' \
+--header 'Authorization: ••••••' \
+--data '{
+    "model": "glm-ocr",
+    "file": "https://s3.laisky.com/uploads/2026/04/IMG_5867.jpeg"
+
+}'
+```
+
+Response:
+
+```json
+{
+  "created": 1775094925,
+  "data_info": {
+    "num_pages": 1,
+    "pages": [
+      {
+        "height": 4032,
+        "width": 3024
+      }
+    ]
+  },
+  "id": "202604020955171fc1a13d434945b8",
+  "layout_details": [
+    [
+      {
+        "bbox_2d": [1348, 297, 2104, 502],
+        "content": "## metro",
+        "height": 4032,
+        "index": 0,
+        "label": "text",
+        "native_label": "paragraph_title",
+        "width": 3024
+      },
+      {
+        "bbox_2d": [877, 587, 2171, 695],
+        "content": "Store #100256（613）823-8825",
+        "height": 4032,
+        "index": 1,
+        "label": "text",
+        "native_label": "text",
+        "width": 3024
+      },
+      {
+        "bbox_2d": [877, 680, 2102, 785],
+        "content": "E&OE HST# R105216170",
+        "height": 4032,
+        "index": 2,
+        "label": "text",
+        "native_label": "text",
+        "width": 3024
+      },
+      {
+        "bbox_2d": [524, 820, 2564, 3724],
+        "content": "<table><thead><tr><th>MEAT</th><th></th><th></th></tr></thead><tbody><tr><td>LSM.PORK SHLD BL</td><td></td><td>4.31</td></tr><tr><td>THE KEG BBQ BACK</td><td></td><td>17.99</td></tr><tr><td>Saving 3.00</td><td></td><td></td></tr><tr><td>PRODUCE</td><td></td><td></td></tr><tr><td>TOFU MEDIUM-FIRM</td><td></td><td>2.99</td></tr><tr><td>PREMIUM BANANA</td><td>0.685 kg @ $1.74/kg</td><td>1.19</td></tr><tr><td>GINGER</td><td>0.235 kg @ $6.59/kg</td><td>1.55</td></tr><tr><td>PEP.GRN LG HOT</td><td>0.340 kg @ $11.00/kg</td><td>3.74</td></tr><tr><td>(2)GARLIC</td><td>2 @ $1.99</td><td>3.98</td></tr><tr><td>SEAFOOD</td><td></td><td>7.99</td></tr><tr><td>BW BREADED FISH</td><td></td><td>7.99</td></tr><tr><td>Saving 3.00</td><td></td><td></td></tr><tr><td>SUBTOTAL</td><td></td><td>43.74</td></tr><tr><td>TOTAL</td><td></td><td>43.74</td></tr><tr><td>CREDIT CR</td><td></td><td>43.74</td></tr><tr><td>Total number of items sold</td><td></td><td>9</td></tr></tbody></table>",
+        "height": 4032,
+        "index": 3,
+        "label": "table",
+        "native_label": "table",
+        "width": 3024
+      },
+      {
+        "bbox_2d": [581, 3593, 2462, 3886],
+        "content": "RETAIN RECEIPT FOR PRODUCT RETURN WITHIN 14 DAYS. SEE STORE FOR DETAILS",
+        "height": 4032,
+        "index": 4,
+        "label": "text",
+        "native_label": "text",
+        "width": 3024
+      },
+      {
+        "bbox_2d": [612, 3892, 2464, 4030],
+        "content": "CUSTOMER CARE NUMBER 1-866-595-5554",
+        "height": 4032,
+        "index": 5,
+        "label": "text",
+        "native_label": "text",
+        "width": 3024
+      }
+    ]
+  ],
+  "layout_visualization": [],
+  "md_results": "## metro\n\nStore #100256（613）823-8825\n\nE&OE HST# R105216170\n\n<table><thead><tr><th>MEAT</th><th></th><th></th></tr></thead><tbody><tr><td>LSM.PORK SHLD BL</td><td></td><td>4.31</td></tr><tr><td>THE KEG BBQ BACK</td><td></td><td>17.99</td></tr><tr><td>Saving 3.00</td><td></td><td></td></tr><tr><td>PRODUCE</td><td></td><td></td></tr><tr><td>TOFU MEDIUM-FIRM</td><td></td><td>2.99</td></tr><tr><td>PREMIUM BANANA</td><td>0.685 kg @ $1.74/kg</td><td>1.19</td></tr><tr><td>GINGER</td><td>0.235 kg @ $6.59/kg</td><td>1.55</td></tr><tr><td>PEP.GRN LG HOT</td><td>0.340 kg @ $11.00/kg</td><td>3.74</td></tr><tr><td>(2)GARLIC</td><td>2 @ $1.99</td><td>3.98</td></tr><tr><td>SEAFOOD</td><td></td><td>7.99</td></tr><tr><td>BW BREADED FISH</td><td></td><td>7.99</td></tr><tr><td>Saving 3.00</td><td></td><td></td></tr><tr><td>SUBTOTAL</td><td></td><td>43.74</td></tr><tr><td>TOTAL</td><td></td><td>43.74</td></tr><tr><td>CREDIT CR</td><td></td><td>43.74</td></tr><tr><td>Total number of items sold</td><td></td><td>9</td></tr></tbody></table>\n\nRETAIN RECEIPT FOR PRODUCT RETURN WITHIN 14 DAYS. SEE STORE FOR DETAILS\n\nCUSTOMER CARE NUMBER 1-866-595-5554",
+  "model": "glm-ocr",
+  "request_id": "202604020955171fc1a13d434945b8",
+  "usage": {
+    "completion_tokens": 604,
+    "prompt_tokens": 7666,
+    "total_tokens": 8270
+  }
+}
+```
 
 ### XAI / Grok Features
 

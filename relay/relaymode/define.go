@@ -23,6 +23,8 @@ const (
 	Realtime
 	// Videos handles OpenAI video generation endpoints (e.g., /v1/videos)
 	Videos
+	// OCR handles document OCR / layout parsing endpoints (e.g., /v1/layout_parsing)
+	OCR
 )
 
 func String(mode int) string {
@@ -59,6 +61,8 @@ func String(mode int) string {
 		return "realtime"
 	case Videos:
 		return "video"
+	case OCR:
+		return "ocr"
 	default:
 		return "unknown"
 	}

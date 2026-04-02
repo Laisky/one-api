@@ -57,6 +57,8 @@ func relayHelper(c *gin.Context, relayMode int) *model.ErrorWithStatusCode {
 		err = rcontroller.RelayRerankHelper(c)
 	case relaymode.Videos:
 		err = rcontroller.RelayVideoHelper(c)
+	case relaymode.OCR:
+		err = rcontroller.RelayOCRHelper(c)
 	default:
 		err = rcontroller.RelayTextHelper(c)
 	}

@@ -1,9 +1,9 @@
-import { describe, expect, test, beforeEach, beforeAll, afterAll, vi } from 'vitest';
+import { api } from '@/lib/api';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
+import { afterAll, beforeAll, beforeEach, describe, expect, test, vi } from 'vitest';
 import { LoginPage } from '../LoginPage.impl';
-import { api } from '@/lib/api';
 
 const mockLogin = vi.fn();
 
@@ -157,7 +157,8 @@ describe('LoginPage Turnstile integration', () => {
         data: { turnstile_check: true, turnstile_site_key: 'site-key' },
       },
     } as any);
-    const postSpy = vi.spyOn(api, 'post')
+    const postSpy = vi
+      .spyOn(api, 'post')
       .mockResolvedValueOnce({
         data: {
           success: false,

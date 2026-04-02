@@ -116,4 +116,10 @@ func SetRelayRouter(router *gin.Engine) {
 	relayV2Router := router.Group("/v2")
 	relayV2Router.Use(relayMws...)
 	relayV2Router.POST("/rerank", controller.Relay)
+
+	// -------------------------------------
+	// Zhipu-compatible OCR endpoint: /api/paas/v4/layout_parsing
+	relayZhipuRouter := router.Group("/api/paas/v4")
+	relayZhipuRouter.Use(relayMws...)
+	relayZhipuRouter.POST("/layout_parsing", controller.Relay)
 }

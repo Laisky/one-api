@@ -154,9 +154,7 @@ describe('PersonalSettings', () => {
       expect(api.get).toHaveBeenCalledWith('/api/user/self');
     });
 
-    const emailInput = (await screen.findByPlaceholderText(
-      'personal_settings.profile_info.email_placeholder'
-    )) as HTMLInputElement;
+    const emailInput = (await screen.findByPlaceholderText('personal_settings.profile_info.email_placeholder')) as HTMLInputElement;
     expect(emailInput.value).toBe('fresh@example.com');
 
     const displayNameInput = screen.getByPlaceholderText('personal_settings.profile_info.display_name_placeholder');
@@ -187,9 +185,7 @@ describe('PersonalSettings', () => {
   it('sends a verification code and binds the new email address', async () => {
     render(<PersonalSettings />);
 
-    const emailInput = (await screen.findByPlaceholderText(
-      'personal_settings.profile_info.email_placeholder'
-    )) as HTMLInputElement;
+    const emailInput = (await screen.findByPlaceholderText('personal_settings.profile_info.email_placeholder')) as HTMLInputElement;
     fireEvent.change(emailInput, { target: { value: 'new@example.com' } });
 
     fireEvent.click(screen.getByRole('button', { name: 'personal_settings.profile_info.send_code' }));
