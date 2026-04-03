@@ -6,10 +6,13 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
+	"github.com/stretchr/testify/require"
 
 	"github.com/songquanpeng/one-api/common/config"
 )
 
+// TestMetricsAuth verifies that the MetricsAuth middleware correctly enforces
+// Bearer token authentication on the /metrics endpoint across all branches.
 func TestMetricsAuth(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
@@ -71,12 +74,8 @@ func TestMetricsAuth(t *testing.T) {
 			w := httptest.NewRecorder()
 			r.ServeHTTP(w, req)
 
-			if w.Code != tt.expectedStatus {
-				t.Errorf("expected status %d, got %d", tt.expectedStatus, w.Code)
-			}
-			if nextCalled != tt.expectNext {
-				t.Errorf("expected next handler called=%v, got %v", tt.expectNext, nextCalled)
-			}
+			require.Equal(t, tt.expectedStatus, w.Code, "unexpected status code")
+			require.Equal(t, tt.expectNext, nextCalled, "unexpected next-handler invocation")
 		})
 	}
 }

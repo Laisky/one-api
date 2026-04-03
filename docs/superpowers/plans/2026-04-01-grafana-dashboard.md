@@ -455,7 +455,7 @@ Append the following panels to the `panels` array (`id` starts at 1 and incremen
 
 - [ ] **Step 3: Validate JSON**
 
-Run: `python3 -c "import json; d=json.load(open('docs/grafana-dashboard.json')); print(f'panels: {len(d[\"panels\"])}')" `
+Run: `python3 -c "import json; d=json.load(open('docs/grafana-dashboard.json')); print(f'panels: {len(d[\"panels\"])}')"` 
 
 Expected: `panels: 9` (1 Row + 6 Stat + 2 time series)
 
@@ -672,7 +672,7 @@ Note: The Quota consumption panel provides both USD and CNY queries; users selec
 
 - [ ] **Step 7: Validate JSON and commit**
 
-Run: `python3 -c "import json; d=json.load(open('docs/grafana-dashboard.json')); print(f'panels: {len(d[\"panels\"])}')" `
+Run: `python3 -c "import json; d=json.load(open('docs/grafana-dashboard.json')); print(f'panels: {len(d[\"panels\"])}')"` 
 
 Expected: `panels: 10` (9 + 1 collapsed Row, where Row 2 contains 7 child panels)
 
@@ -830,7 +830,7 @@ Row id:18, y:46. Child panels id:19-24.
 
 - [ ] **Step 2: Validate JSON and commit**
 
-Run: `python3 -c "import json; d=json.load(open('docs/grafana-dashboard.json')); print(f'panels: {len(d[\"panels\"])}')" `
+Run: `python3 -c "import json; d=json.load(open('docs/grafana-dashboard.json')); print(f'panels: {len(d[\"panels\"])}')"` 
 
 Expected: `panels: 11` (previous 10 + 1 collapsed Row 3, containing 6 child panels)
 
@@ -1012,7 +1012,7 @@ Row id:25, y:79. Child panels id:26-33.
 
 - [ ] **Step 2: Validate JSON and commit**
 
-Run: `python3 -c "import json; d=json.load(open('docs/grafana-dashboard.json')); print(f'panels: {len(d[\"panels\"])}')" `
+Run: `python3 -c "import json; d=json.load(open('docs/grafana-dashboard.json')); print(f'panels: {len(d[\"panels\"])}')"` 
 
 Expected: `panels: 12` (previous 11 + 1 collapsed Row 4, containing 8 child panels)
 
@@ -1553,7 +1553,7 @@ Row id:53, y:156. Child panels id:54-63.
 
 - [ ] **Step 2: Validate JSON and commit**
 
-Run: `python3 -c "import json; d=json.load(open('docs/grafana-dashboard.json')); total=len(d['panels']); collapsed=[p for p in d['panels'] if p.get('collapsed')]; inner=sum(len(p.get('panels',[])) for p in collapsed); print(f'top-level: {total}, collapsed inner: {inner}, total panels: {total+inner}')" `
+Run: `python3 -c "import json; d=json.load(open('docs/grafana-dashboard.json')); total=len(d['panels']); collapsed=[p for p in d['panels'] if p.get('collapsed')]; inner=sum(len(p.get('panels',[])) for p in collapsed); print(f'top-level: {total}, collapsed inner: {inner}, total panels: {total+inner}')"` 
 
 Expected: `top-level: 16, collapsed inner: 49, total panels: 65` (16 = 1 Row (expanded) + 8 panels + 6 collapsed Rows + 1 expanded panel... exact number depends on structure, the key point is JSON parses successfully and panels are not empty)
 
