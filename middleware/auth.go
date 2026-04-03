@@ -26,6 +26,7 @@ import (
 
 	"github.com/Laisky/errors/v2"
 	gmw "github.com/Laisky/gin-middlewares/v7"
+	"github.com/Laisky/zap"
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
 
@@ -236,7 +237,12 @@ func TokenAuth() func(c *gin.Context) {
 
 		// Set token-related context for downstream handlers
 		c.Set(ctxkey.Id, token.UserId)
-		c.Set(ctxkey.Username, model.GetUsernameById(token.UserId))
+		username, err := model.CacheGetUsername(c.Request.Context(), token.UserId)
+		if err != nil {
+			gmw.GetLogger(c).Warn("failed to get username, using empty string", zap.Error(err))
+			username = ""
+		}
+		c.Set(ctxkey.Username, username)
 		c.Set(ctxkey.TokenId, token.Id)
 		c.Set(ctxkey.TokenName, token.Name)
 		c.Set(ctxkey.TokenQuota, token.RemainQuota)

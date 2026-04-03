@@ -4,7 +4,7 @@
 
 A single Grafana Dashboard containing 7 collapsible Row sections, covering both Ops/SRE and platform management perspectives. All `one_api_*` Prometheus metrics are mapped to panels. Panels marked as "reserved" currently have no production data, but are pre-configured with PromQL and will automatically display data when it becomes available.
 
-**Data source**: Prometheus, scraping `GET /metrics` (requires AdminAuth session authentication).
+**Data source**: Prometheus, scraping `GET /metrics` (requires Bearer token authentication via `METRICS_TOKEN`).
 
 ---
 
@@ -24,7 +24,7 @@ A single Grafana Dashboard containing 7 collapsible Row sections, covering both 
 
 All monetary panels use the following formula:
 
-```
+```text
 quota_value / 500000 * (1 + ($currency == "CNY") * ($exchange_rate - 1))
 ```
 
@@ -60,7 +60,7 @@ quota_value / 500000 * (1 + ($currency == "CNY") * ($exchange_rate - 1))
 
 | Panel | Type | PromQL | Legend / Description |
 |------|------|--------|-------------|
-| Relay QPS | Time series | `sum(rate(one_api_relay_requests_total{channel_id=~"$channel_id",model=~"$model",username=~"$username"}[$__rate_interval])) by (model)` | `{{model}}` |
+| Relay QPS | Time series | `sum(rate(one_api_relay_requests_total{channel_id=~"$channel_id",model=~"$model"}[$__rate_interval])) by (model)` | `{{model}}` |
 | Relay Success Rate | Time series | `sum(rate(one_api_relay_requests_total{...,success="true"}[$__rate_interval])) by (model) / sum(rate(one_api_relay_requests_total{...}[$__rate_interval])) by (model)` | `{{model}}` |
 | Relay Latency P50/P95/P99 | Time series | `histogram_quantile(0.5/0.95/0.99, sum(rate(one_api_relay_request_duration_seconds_bucket{channel_id=~"$channel_id",model=~"$model"}[$__rate_interval])) by (le, model))` | `{{model}} p50/p95/p99` |
 | Token Consumption Rate | Time series | `sum(rate(one_api_relay_tokens_total{channel_id=~"$channel_id",model=~"$model"}[$__rate_interval])) by (model, token_type)` | `{{model}}-{{token_type}}` |

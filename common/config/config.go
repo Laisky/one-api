@@ -756,7 +756,7 @@ var (
 	//
 	// Environment variable: METRICS_TOKEN
 	// Default: "" (metrics endpoint blocked)
-	MetricsToken = env.String("METRICS_TOKEN", "")
+	MetricsToken = strings.TrimSpace(env.String("METRICS_TOKEN", ""))
 
 	// MetricQueueSize configures the buffered queue that aggregates success/failure
 	// events before processing. Larger queues handle burst traffic better.

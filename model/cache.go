@@ -97,6 +97,22 @@ func CacheGetUserGroup(ctx context.Context, id int) (group string, err error) {
 	return group, nil
 }
 
+func CacheGetUsername(ctx context.Context, id int) (username string, err error) {
+	lg := logger.FromContext(ctx)
+	if !common.IsRedisEnabled() {
+		return GetUsernameById(id), nil
+	}
+	username, err = common.RedisGet(ctx, fmt.Sprintf("user_username:%d", id))
+	if err != nil {
+		username = GetUsernameById(id)
+		err = common.RedisSet(ctx, fmt.Sprintf("user_username:%d", id), username, time.Duration(UserId2GroupCacheSeconds)*time.Second)
+		if err != nil {
+			lg.Warn("Redis set username failed, continuing without cache", zap.Int("user_id", id), zap.Error(err))
+		}
+	}
+	return username, nil
+}
+
 func fetchAndUpdateUserQuota(ctx context.Context, id int) (quota int64, err error) {
 	lg := logger.FromContext(ctx)
 	quota, err = GetUserQuota(id)

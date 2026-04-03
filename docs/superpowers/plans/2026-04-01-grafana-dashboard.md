@@ -29,7 +29,7 @@ All monetary panels use two queries:
 - Query B (CNY): `<base expression> / 500000 * $exchange_rate`
 
 Visibility is controlled via Grafana panel `overrides` based on the `$currency` variable, or using a single PromQL:
-```
+```text
 <base expression> / 500000 * (1 + ($currency == "CNY") * ($exchange_rate - 1))
 ```
 
@@ -150,10 +150,10 @@ Add the following variable definitions in order to the `templating.list` array:
     "sort": 1
   },
   {
-    "name": "user_id",
-    "label": "User ID",
+    "name": "username",
+    "label": "Username",
     "type": "query",
-    "query": "label_values(one_api_user_requests_total, user_id)",
+    "query": "label_values(one_api_user_requests_total, username)",
     "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
     "refresh": 2,
     "includeAll": true,
@@ -499,7 +499,7 @@ id:11, x:0, y:14, w:12, h:8
   "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
   "gridPos": { "h": 8, "w": 12, "x": 0, "y": 14 },
   "targets": [{
-    "expr": "sum(rate(one_api_relay_requests_total{channel_id=~\"$channel_id\",channel_type=~\"$channel_type\",model=~\"$model\",user_id=~\"$user_id\"}[$__rate_interval])) by (model)",
+    "expr": "sum(rate(one_api_relay_requests_total{channel_id=~\"$channel_id\",channel_type=~\"$channel_type\",model=~\"$model\"}[$__rate_interval])) by (model)",
     "legendFormat": "{{model}}",
     "refId": "A"
   }],
@@ -937,8 +937,8 @@ Row id:25, y:79. Child panels id:26-33.
   "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
   "gridPos": { "h": 8, "w": 12, "x": 0, "y": 86 },
   "targets": [{
-    "expr": "topk(10, sum(one_api_user_requests_total{user_id=~\"$user_id\",group=~\"$group\"}) by (user_id, group))",
-    "legendFormat": "user{{user_id}}({{group}})",
+    "expr": "topk(10, sum(one_api_user_requests_total{username=~\"$username\",group=~\"$group\"}) by (username, group))",
+    "legendFormat": "{{username}}({{group}})",
     "refId": "A",
     "instant": true
   }],
@@ -957,14 +957,14 @@ Row id:25, y:79. Child panels id:26-33.
   "gridPos": { "h": 8, "w": 12, "x": 12, "y": 86 },
   "targets": [
     {
-      "expr": "topk(10, sum(rate(one_api_billing_quota_processed_total{user_id=~\"$user_id\"}[$__rate_interval])) by (user_id)) / 500000",
-      "legendFormat": "user{{user_id}} (USD)",
+      "expr": "topk(10, sum(rate(one_api_billing_quota_processed_total{username=~\"$username\"}[$__rate_interval])) by (username)) / 500000",
+      "legendFormat": "{{username}} (USD)",
       "refId": "A",
       "instant": true
     },
     {
-      "expr": "topk(10, sum(rate(one_api_billing_quota_processed_total{user_id=~\"$user_id\"}[$__rate_interval])) by (user_id)) / 500000 * $exchange_rate",
-      "legendFormat": "user{{user_id}} (CNY)",
+      "expr": "topk(10, sum(rate(one_api_billing_quota_processed_total{username=~\"$username\"}[$__rate_interval])) by (username)) / 500000 * $exchange_rate",
+      "legendFormat": "{{username}} (CNY)",
       "refId": "B",
       "instant": true
     }
@@ -983,8 +983,8 @@ Row id:25, y:79. Child panels id:26-33.
   "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
   "gridPos": { "h": 8, "w": 12, "x": 0, "y": 94 },
   "targets": [{
-    "expr": "sum(rate(one_api_user_requests_total{user_id=~\"$user_id\",group=~\"$group\"}[$__rate_interval])) by (user_id, group)",
-    "legendFormat": "user{{user_id}}({{group}})",
+    "expr": "sum(rate(one_api_user_requests_total{username=~\"$username\",group=~\"$group\"}[$__rate_interval])) by (username, group)",
+    "legendFormat": "{{username}}({{group}})",
     "refId": "A"
   }],
   "fieldConfig": { "defaults": { "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 10 }, "unit": "reqps" }, "overrides": [] },
@@ -1001,8 +1001,8 @@ Row id:25, y:79. Child panels id:26-33.
   "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
   "gridPos": { "h": 8, "w": 12, "x": 12, "y": 94 },
   "targets": [{
-    "expr": "sum(rate(one_api_user_tokens_total{user_id=~\"$user_id\"}[$__rate_interval])) by (user_id, token_type)",
-    "legendFormat": "user{{user_id}}-{{token_type}}",
+    "expr": "sum(rate(one_api_user_tokens_total{username=~\"$username\"}[$__rate_interval])) by (username, token_type)",
+    "legendFormat": "{{username}}-{{token_type}}",
     "refId": "A"
   }],
   "fieldConfig": { "defaults": { "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 10, "stacking": { "mode": "normal" } }, "unit": "short" }, "overrides": [] },

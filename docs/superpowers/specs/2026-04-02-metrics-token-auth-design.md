@@ -4,7 +4,7 @@
 
 Protect the `/metrics` Prometheus endpoint with a dedicated Bearer token to prevent unauthorized access to sensitive system telemetry data (usernames, model names, channel IDs, quota data, system internals).
 
-## Current State
+## Previous State
 
 - `/metrics` is registered without any auth middleware (`main.go:217`)
 - Enabled by default via `ENABLE_PROMETHEUS_METRICS=true`
@@ -26,7 +26,7 @@ Protect the `/metrics` Prometheus endpoint with a dedicated Bearer token to prev
 
 New function in `middleware/prometheus.go`:
 
-```
+```go
 MetricsAuth() gin.HandlerFunc
 ```
 
