@@ -15,6 +15,7 @@ export interface LogEntry {
   model_name: string;
   token_name?: string;
   username?: string;
+  user_id?: number;
   channel?: number;
   quota: number;
   prompt_tokens?: number;

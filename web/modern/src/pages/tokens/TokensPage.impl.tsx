@@ -74,7 +74,7 @@ export function TokensPage() {
   const [pageIndex, setPageIndex] = useState(Math.max(0, parseInt(searchParams.get('p') || '1') - 1));
   const [pageSize, setPageSize] = usePageSize(STORAGE_KEYS.PAGE_SIZE);
   const [total, setTotal] = useState(0);
-  const [searchKeyword, setSearchKeyword] = useState('');
+  const [searchKeyword, setSearchKeyword] = useState(searchParams.get('keyword') || '');
   const [searchOptions, setSearchOptions] = useState<SearchOption[]>([]);
   const [searchLoading, setSearchLoading] = useState(false);
   const [sortBy, setSortBy] = useState('id');
@@ -156,9 +156,13 @@ export function TokensPage() {
     }
   };
 
-  // Load initial data
+  // Load initial data (perform search if keyword is pre-filled from URL)
   useEffect(() => {
-    load(pageIndex, pageSize);
+    if (searchKeyword.trim()) {
+      performSearch();
+    } else {
+      load(pageIndex, pageSize);
+    }
     initializedRef.current = true;
   }, []);
 
@@ -221,9 +225,11 @@ export function TokensPage() {
 
   const performSearch = async () => {
     if (!searchKeyword.trim()) {
+      setSearchParams((prev) => { prev.delete('keyword'); return prev; });
       return load(0, pageSize);
     }
 
+    setSearchParams((prev) => { prev.set('keyword', searchKeyword); return prev; });
     setLoading(true);
     try {
       // Unified API call - complete URL with /api prefix

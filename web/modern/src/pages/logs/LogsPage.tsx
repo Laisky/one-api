@@ -111,9 +111,14 @@ export function LogsPage() {
   const [sortBy, setSortBy] = useState('created_at');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
 
-  // Tracing modal
-  const [detailsModalOpen, setDetailsModalOpen] = useState(false);
-  const [selectedLog, setSelectedLog] = useState<LogRow | null>(null);
+  // Tracing modal — driven by URL ?id=xxx
+  const selectedLog = useMemo(() => {
+    const idStr = searchParams.get('id');
+    if (!idStr) return null;
+    const id = parseInt(idStr);
+    return data.find((row) => row.id === id) ?? null;
+  }, [searchParams, data]);
+  const detailsModalOpen = selectedLog !== null;
 
   const getLogTypeLabelText = (typeValue: number) => t(`logs.types.${LOG_TYPE_TRANSLATION_KEYS[typeValue] ?? 'unknown'}`);
 
@@ -519,14 +524,18 @@ export function LogsPage() {
   };
 
   const handleRowClick = (log: LogRow) => {
-    setSelectedLog(log);
-    setDetailsModalOpen(true);
+    setSearchParams((prev) => {
+      prev.set('id', log.id.toString());
+      return prev;
+    });
   };
 
   const handleDetailsModalChange = (open: boolean) => {
-    setDetailsModalOpen(open);
     if (!open) {
-      setSelectedLog(null);
+      setSearchParams((prev) => {
+        prev.delete('id');
+        return prev;
+      });
     }
   };
 

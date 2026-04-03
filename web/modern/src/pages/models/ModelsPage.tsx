@@ -8,6 +8,7 @@ import { api } from '@/lib/api';
 import { ChevronRight } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useSearchParams } from 'react-router-dom';
 import { ModelDisplayData, ModelPricingModal } from './ModelPricingModal';
 
 interface ChannelInfo {
@@ -20,13 +21,14 @@ interface ModelsData {
 
 export function ModelsPage() {
   const { isMobile } = useResponsive();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [modelsData, setModelsData] = useState<ModelsData>({});
   const [filteredData, setFilteredData] = useState<ModelsData>({});
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedChannels, setSelectedChannels] = useState<string[]>([]);
-  const [modalOpen, setModalOpen] = useState(false);
   const [selectedModel, setSelectedModel] = useState<{ name: string; data: ModelDisplayData; channel: string } | null>(null);
+  const modalOpen = searchParams.get('model') !== null && selectedModel !== null;
   const { t } = useTranslation();
   const tr = useCallback(
     (key: string, defaultValue: string, options?: Record<string, unknown>) => t(`models.${key}`, { defaultValue, ...options }),
@@ -54,6 +56,23 @@ export function ModelsPage() {
   useEffect(() => {
     fetchModelsData();
   }, []);
+
+  // Auto-populate selectedModel from URL param when data loads
+  useEffect(() => {
+    const modelParam = searchParams.get('model');
+    if (!modelParam || Object.keys(modelsData).length === 0) return;
+    // Already resolved
+    if (selectedModel?.name === modelParam) return;
+    for (const channelName of Object.keys(modelsData)) {
+      const channelInfo = modelsData[channelName];
+      if (channelInfo.models[modelParam]) {
+        setSelectedModel({ name: modelParam, data: channelInfo.models[modelParam], channel: formatChannelName(channelName) });
+        return;
+      }
+    }
+    // Model not found — clean up URL
+    setSearchParams((prev) => { prev.delete('model'); return prev; }, { replace: true });
+  }, [searchParams, modelsData]);
 
   useEffect(() => {
     let filtered = { ...modelsData };
@@ -123,7 +142,14 @@ export function ModelsPage() {
 
   const openModelDetail = (modelName: string, data: ModelDisplayData, channelName: string) => {
     setSelectedModel({ name: modelName, data, channel: formatChannelName(channelName) });
-    setModalOpen(true);
+    setSearchParams((prev) => { prev.set('model', modelName); return prev; });
+  };
+
+  const handleModalClose = (open: boolean) => {
+    if (!open) {
+      setSearchParams((prev) => { prev.delete('model'); return prev; });
+      setSelectedModel(null);
+    }
   };
 
   /** Check if a model has rich pricing data beyond basic text tokens */
@@ -345,7 +371,7 @@ export function ModelsPage() {
       {selectedModel && (
         <ModelPricingModal
           open={modalOpen}
-          onOpenChange={setModalOpen}
+          onOpenChange={handleModalClose}
           modelName={selectedModel.name}
           data={selectedModel.data}
           channelName={selectedModel.channel}

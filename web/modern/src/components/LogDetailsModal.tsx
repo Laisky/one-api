@@ -18,6 +18,7 @@ import {
   CheckCircle,
   Clock,
   Copy,
+  ExternalLink,
   FileText,
   Flag,
   Globe,
@@ -29,8 +30,9 @@ import {
   User,
   Zap,
 } from 'lucide-react';
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useNavigate } from 'react-router-dom';
 
 interface LogDetailsModalProps {
   open: boolean;
@@ -159,6 +161,14 @@ const getMethodColor = (method: string): string => {
 export function LogDetailsModal({ open, onOpenChange, log }: LogDetailsModalProps) {
   const { t } = useTranslation();
   const { user } = useAuthStore();
+  const navigate = useNavigate();
+
+  const navigateTo = useCallback(
+    (path: string) => {
+      navigate(path);
+    },
+    [navigate]
+  );
   const metadataJSON = useMemo(() => (log?.metadata ? JSON.stringify(log.metadata, null, 2) : null), [log]);
   const cacheWriteSummary = useMemo(() => getCacheWriteSummaries(log?.metadata), [log]);
   const [traceData, setTraceData] = useState<TraceData | null>(null);
@@ -506,10 +516,74 @@ export function LogDetailsModal({ open, onOpenChange, log }: LogDetailsModalProp
             label={t('logs.details.recorded_at', 'Recorded At')}
             value={<TimestampDisplay timestamp={log.created_at} className="font-mono text-sm" />}
           />
-          <DetailItem label={t('logs.details.model', 'Model')} value={log.model_name || '—'} />
-          <DetailItem label={t('logs.details.user', 'User')} value={username} />
-          <DetailItem label={t('logs.details.token', 'Token')} value={log.token_name || '—'} />
-          <DetailItem label={t('logs.details.channel', 'Channel')} value={<span className="font-mono text-sm">{channelDisplay}</span>} />
+          <DetailItem
+            label={t('logs.details.model', 'Model')}
+            value={
+              log.model_name ? (
+                <button
+                  type="button"
+                  className="inline-flex items-center gap-1 text-blue-600 dark:text-blue-400 underline underline-offset-2 decoration-blue-600/40 dark:decoration-blue-400/40 hover:decoration-blue-600 dark:hover:decoration-blue-400 cursor-pointer text-left transition-colors"
+                  onClick={() => navigateTo(`/models?model=${encodeURIComponent(log.model_name)}`)}
+                >
+                  {log.model_name}
+                  <ExternalLink className="h-3 w-3 flex-shrink-0" />
+                </button>
+              ) : (
+                '—'
+              )
+            }
+          />
+          <DetailItem
+            label={t('logs.details.user', 'User')}
+            value={
+              log.user_id ? (
+                <button
+                  type="button"
+                  className="inline-flex items-center gap-1 text-blue-600 dark:text-blue-400 underline underline-offset-2 decoration-blue-600/40 dark:decoration-blue-400/40 hover:decoration-blue-600 dark:hover:decoration-blue-400 cursor-pointer text-left transition-colors"
+                  onClick={() => navigateTo(`/users/edit/${log.user_id}`)}
+                >
+                  {username}
+                  <ExternalLink className="h-3 w-3 flex-shrink-0" />
+                </button>
+              ) : (
+                username
+              )
+            }
+          />
+          <DetailItem
+            label={t('logs.details.token', 'Token')}
+            value={
+              log.token_name ? (
+                <button
+                  type="button"
+                  className="inline-flex items-center gap-1 text-blue-600 dark:text-blue-400 underline underline-offset-2 decoration-blue-600/40 dark:decoration-blue-400/40 hover:decoration-blue-600 dark:hover:decoration-blue-400 cursor-pointer text-left transition-colors"
+                  onClick={() => navigateTo(`/tokens?keyword=${encodeURIComponent(log.token_name!)}`)}
+                >
+                  {log.token_name}
+                  <ExternalLink className="h-3 w-3 flex-shrink-0" />
+                </button>
+              ) : (
+                '—'
+              )
+            }
+          />
+          <DetailItem
+            label={t('logs.details.channel', 'Channel')}
+            value={
+              log.channel != null ? (
+                <button
+                  type="button"
+                  className="inline-flex items-center gap-1 font-mono text-sm text-blue-600 dark:text-blue-400 underline underline-offset-2 decoration-blue-600/40 dark:decoration-blue-400/40 hover:decoration-blue-600 dark:hover:decoration-blue-400 cursor-pointer text-left transition-colors"
+                  onClick={() => navigateTo(`/channels/edit/${log.channel}`)}
+                >
+                  {channelDisplay}
+                  <ExternalLink className="h-3 w-3 flex-shrink-0" />
+                </button>
+              ) : (
+                <span className="font-mono text-sm">—</span>
+              )
+            }
+          />
           <DetailItem label={t('logs.details.quota', 'Quota')} value={<span className="font-mono text-sm">{quotaDisplay}</span>} />
           <DetailItem
             label={t('logs.details.quota_raw', 'Quota (raw units)')}
