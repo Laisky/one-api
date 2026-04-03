@@ -97,8 +97,8 @@ func TestGemini31FlashImagePreviewPricing(t *testing.T) {
 	t.Parallel()
 	cfg, ok := ModelRatios["gemini-3.1-flash-image-preview"]
 	require.True(t, ok, "gemini-3.1-flash-image-preview missing from pricing map")
-	require.InDelta(t, 0.25*ratio.MilliTokensUsd, cfg.Ratio, 1e-12)
-	require.InDelta(t, 1.50/0.25, cfg.CompletionRatio, 1e-9)
+	require.InDelta(t, 0.50*ratio.MilliTokensUsd, cfg.Ratio, 1e-12)
+	require.InDelta(t, 3.00/0.50, cfg.CompletionRatio, 1e-9)
 	require.NotNil(t, cfg.Image, "expected image pricing metadata for gemini-3.1-flash-image-preview")
 	require.InDelta(t, gemini31FlashImage1KPrice, cfg.Image.PricePerImageUsd, 1e-12)
 	require.Contains(t, cfg.Image.SizeMultipliers, "512x512")

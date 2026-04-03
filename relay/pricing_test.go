@@ -199,7 +199,7 @@ func TestSpecificAdapterPricing(t *testing.T) {
 		}{
 			"gemini-2.5-pro":   {1.25 * 0.5, 10.0 / 1.25},
 			"gemini-2.5-flash": {0.30 * 0.5, 2.5 / 0.30},
-			"gemini-2.0-flash": {0.10 * 0.5, 0.40 / 0.10},
+			"gemini-2.0-flash": {0.15 * 0.5, 0.60 / 0.15},
 		}
 
 		for model, expected := range testModels {
