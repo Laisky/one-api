@@ -3,7 +3,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Separator } from '@/components/ui/separator';
 import { useResponsive } from '@/hooks/useResponsive';
 import { X } from 'lucide-react';
-import { useCallback, useEffect } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 
@@ -129,8 +129,14 @@ function MobileBottomSheet({
   subtitle?: string;
   children: React.ReactNode;
 }) {
+  const sheetRef = useRef<HTMLDivElement>(null);
+  const [dragOffset, setDragOffset] = useState(0);
+  const dragStartY = useRef<number | null>(null);
+  const isDragging = useRef(false);
+
   useEffect(() => {
     if (open) {
+      setDragOffset(0);
       const prev = document.body.style.overflow;
       document.body.style.overflow = 'hidden';
       return () => { document.body.style.overflow = prev; };
@@ -144,35 +150,105 @@ function MobileBottomSheet({
     return () => document.removeEventListener('keydown', handler);
   }, [open, onClose]);
 
+  // Swipe-down-to-close handlers
+  const handleDragStart = useCallback((clientY: number) => {
+    dragStartY.current = clientY;
+    isDragging.current = true;
+  }, []);
+
+  const handleDragMove = useCallback((clientY: number) => {
+    if (dragStartY.current === null) return;
+    const delta = clientY - dragStartY.current;
+    // Only allow downward drag
+    setDragOffset(Math.max(0, delta));
+  }, []);
+
+  const handleDragEnd = useCallback(() => {
+    if (!isDragging.current) return;
+    isDragging.current = false;
+    dragStartY.current = null;
+    // Close if dragged down more than 120px
+    if (dragOffset > 120) {
+      onClose();
+    } else {
+      setDragOffset(0);
+    }
+  }, [dragOffset, onClose]);
+
+  const onTouchStart = useCallback((e: React.TouchEvent) => {
+    handleDragStart(e.touches[0].clientY);
+  }, [handleDragStart]);
+
+  const onTouchMove = useCallback((e: React.TouchEvent) => {
+    handleDragMove(e.touches[0].clientY);
+  }, [handleDragMove]);
+
+  const onTouchEnd = useCallback(() => {
+    handleDragEnd();
+  }, [handleDragEnd]);
+
+  const onMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    handleDragStart(e.clientY);
+
+    const onMouseMove = (ev: MouseEvent) => handleDragMove(ev.clientY);
+    const onMouseUp = () => {
+      handleDragEnd();
+      document.removeEventListener('mousemove', onMouseMove);
+      document.removeEventListener('mouseup', onMouseUp);
+    };
+    document.addEventListener('mousemove', onMouseMove);
+    document.addEventListener('mouseup', onMouseUp);
+  }, [handleDragStart, handleDragMove, handleDragEnd]);
+
   if (!open) return null;
 
   return createPortal(
     <>
-      <div className="fixed inset-0 z-50 bg-black/50" onClick={onClose} aria-hidden="true" />
       <div
+        className="fixed inset-0 z-50 bg-black/50"
+        style={{ opacity: dragOffset > 0 ? Math.max(0.2, 1 - dragOffset / 300) : undefined }}
+        onClick={onClose}
+        aria-hidden="true"
+      />
+      <div
+        ref={sheetRef}
         className="fixed inset-x-0 bottom-0 z-50 flex flex-col bg-background rounded-t-2xl shadow-2xl animate-in slide-in-from-bottom duration-300"
-        style={{ height: '92vh', maxHeight: '92vh' }}
+        style={{
+          maxHeight: '92vh',
+          transform: dragOffset > 0 ? `translateY(${dragOffset}px)` : undefined,
+          transition: isDragging.current ? 'none' : 'transform 0.3s ease-out',
+        }}
         role="dialog"
         aria-modal="true"
         aria-labelledby="mobile-sheet-title"
       >
-        {/* Drag indicator */}
-        <div className="flex justify-center pt-2 pb-1">
-          <div className="h-1 w-10 rounded-full bg-muted-foreground/30" />
-        </div>
-        {/* Header */}
-        <div className="flex items-start justify-between px-4 pb-3 border-b shrink-0">
-          <div className="min-w-0 flex-1 pr-3">
-            <h2 id="mobile-sheet-title" className="font-mono text-sm font-semibold truncate">{title}</h2>
-            {subtitle && <p className="text-xs text-muted-foreground truncate">{subtitle}</p>}
+        {/* Draggable header area — swipe down to close */}
+        <div
+          className="shrink-0 cursor-grab active:cursor-grabbing touch-none select-none"
+          onTouchStart={onTouchStart}
+          onTouchMove={onTouchMove}
+          onTouchEnd={onTouchEnd}
+          onMouseDown={onMouseDown}
+        >
+          {/* Drag indicator */}
+          <div className="flex justify-center pt-2 pb-1">
+            <div className="h-1 w-10 rounded-full bg-muted-foreground/30" />
           </div>
-          <button
-            onClick={onClose}
-            className="shrink-0 rounded-full p-1.5 hover:bg-muted transition-colors"
-            aria-label="Close"
-          >
-            <X className="h-4 w-4" />
-          </button>
+          {/* Header */}
+          <div className="flex items-start justify-between px-4 pb-3 border-b">
+            <div className="min-w-0 flex-1 pr-3">
+              <h2 id="mobile-sheet-title" className="font-mono text-sm font-semibold truncate">{title}</h2>
+              {subtitle && <p className="text-xs text-muted-foreground truncate">{subtitle}</p>}
+            </div>
+            <button
+              onClick={onClose}
+              className="shrink-0 rounded-full p-1.5 hover:bg-muted transition-colors"
+              aria-label="Close"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
         </div>
         {/* Scrollable content */}
         <div className="flex-1 overflow-y-auto overscroll-contain px-4 py-4">
