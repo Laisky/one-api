@@ -97,6 +97,27 @@ func CacheGetUserGroup(ctx context.Context, id int) (group string, err error) {
 	return group, nil
 }
 
+// CacheGetUsername retrieves a username by user ID, using Redis cache when available.
+// On cache miss it falls back to GetUsernameById and populates the cache.
+// Empty usernames (non-existent users) are not cached to allow retry on the next request.
+func CacheGetUsername(ctx context.Context, id int) (username string, err error) {
+	lg := logger.FromContext(ctx)
+	if !common.IsRedisEnabled() {
+		return GetUsernameById(id), nil
+	}
+	username, err = common.RedisGet(ctx, fmt.Sprintf("user_username:%d", id))
+	if err != nil {
+		username = GetUsernameById(id)
+		if username == "" {
+			return username, nil
+		}
+		if setErr := common.RedisSet(ctx, fmt.Sprintf("user_username:%d", id), username, time.Duration(UserId2GroupCacheSeconds)*time.Second); setErr != nil {
+			lg.Warn("Redis set username failed, continuing without cache", zap.Int("user_id", id), zap.Error(setErr))
+		}
+	}
+	return username, nil
+}
+
 func fetchAndUpdateUserQuota(ctx context.Context, id int) (quota int64, err error) {
 	lg := logger.FromContext(ctx)
 	quota, err = GetUserQuota(id)
