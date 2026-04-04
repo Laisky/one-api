@@ -91,9 +91,16 @@ func PostConsumeQuotaWithLog(ctx context.Context, tokenId int, quotaDelta int64,
 		provLogID = provisionalLogId[0]
 	}
 	if provLogID > 0 {
-		if err := model.ReconcileConsumeLog(ctx, provLogID, totalQuota,
-			logEntry.Content, logEntry.PromptTokens, logEntry.CompletionTokens,
-			logEntry.ElapsedTime, logEntry.Metadata); err != nil {
+		if err := model.ReconcileConsumeLogDetailed(ctx, provLogID, model.ConsumeLogReconcileDetail{
+			FinalQuota:             totalQuota,
+			Content:                logEntry.Content,
+			PromptTokens:           logEntry.PromptTokens,
+			CompletionTokens:       logEntry.CompletionTokens,
+			CachedPromptTokens:     logEntry.CachedPromptTokens,
+			CachedCompletionTokens: logEntry.CachedCompletionTokens,
+			ElapsedTime:            logEntry.ElapsedTime,
+			Metadata:               logEntry.Metadata,
+		}); err != nil {
 			lg.Error("failed to reconcile provisional log, falling back to new log entry",
 				zap.Error(err), zap.Int("provisional_log_id", provLogID))
 			model.RecordConsumeLog(ctx, logEntry)
@@ -242,6 +249,23 @@ func PostConsumeQuotaDetailed(detail QuotaConsumeDetail) {
 	if len(metadata) > 0 {
 		entry.Metadata = metadata
 	}
+
+	lg.Debug("prepared detailed consume log",
+		zap.Int("user_id", detail.UserId),
+		zap.Int("channel_id", detail.ChannelId),
+		zap.String("model", detail.ModelName),
+		zap.Int64("quota_delta", detail.QuotaDelta),
+		zap.Int64("total_quota", detail.TotalQuota),
+		zap.Int("prompt_tokens", detail.PromptTokens),
+		zap.Int("completion_tokens", detail.CompletionTokens),
+		zap.Int("cached_prompt_tokens", detail.CachedPromptTokens),
+		zap.Int("cached_completion_tokens", detail.CachedCompletionTokens),
+		zap.Int("cache_write_5m_tokens", detail.CacheWrite5mTokens),
+		zap.Int("cache_write_1h_tokens", detail.CacheWrite1hTokens),
+		zap.Int("provisional_log_id", detail.ProvisionalLogId),
+		zap.String("request_id", detail.RequestId),
+		zap.String("trace_id", detail.TraceId),
+	)
 
 	PostConsumeQuotaWithLog(detail.Ctx, detail.TokenId, detail.QuotaDelta, detail.TotalQuota, entry, detail.ProvisionalLogId)
 }

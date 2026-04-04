@@ -1,7 +1,8 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import type { Mock } from 'vitest';
-import { render, screen, act, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
+import { MemoryRouter } from 'react-router-dom';
+import type { Mock } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@/components/ui/dialog', () => {
   const Dialog = ({ children }: { children: ReactNode }) => <>{children}</>;
@@ -49,12 +50,12 @@ vi.mock('@/lib/api', () => ({
   },
 }));
 
-import { LogDetailsModal } from '../LogDetailsModal';
+import { api } from '@/lib/api';
 import { LOG_TYPES } from '@/lib/constants/logs';
 import { useAuthStore } from '@/lib/stores/auth';
 import { formatTimestamp, renderQuota } from '@/lib/utils';
 import type { LogEntry } from '@/types/log';
-import { api } from '@/lib/api';
+import { LogDetailsModal } from '../LogDetailsModal';
 
 const apiGetMock = () => api.get as Mock;
 
@@ -75,6 +76,13 @@ const formatLatencyForTest = (ms?: number) => {
   if (ms < 1000) return `${ms}ms`;
   return `${(ms / 1000).toFixed(1)}s`;
 };
+
+const renderLogDetailsModal = (log: LogEntry) =>
+  render(
+    <MemoryRouter>
+      <LogDetailsModal open onOpenChange={vi.fn()} log={log} />
+    </MemoryRouter>
+  );
 
 describe('LogDetailsModal', () => {
   beforeEach(() => {
@@ -121,7 +129,7 @@ describe('LogDetailsModal', () => {
     };
 
     await act(async () => {
-      render(<LogDetailsModal open onOpenChange={vi.fn()} log={log} />);
+      renderLogDetailsModal(log);
     });
 
     expect(screen.getByText(/log entry details/i)).toBeInTheDocument();
@@ -216,7 +224,7 @@ describe('LogDetailsModal', () => {
     apiGetMock().mockResolvedValue({ data: traceResponse } as any);
 
     await act(async () => {
-      render(<LogDetailsModal open onOpenChange={vi.fn()} log={log} />);
+      renderLogDetailsModal(log);
     });
 
     await waitFor(() => {

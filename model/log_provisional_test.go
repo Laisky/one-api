@@ -96,6 +96,8 @@ func TestReconcileConsumeLog(t *testing.T) {
 	require.NotContains(t, saved.Content, "[provisional]")
 	require.Equal(t, 42875, saved.PromptTokens)
 	require.Equal(t, 4000, saved.CompletionTokens)
+	require.Zero(t, saved.CachedPromptTokens)
+	require.Zero(t, saved.CachedCompletionTokens)
 	require.Equal(t, int64(12345), saved.ElapsedTime)
 
 	// Verify provisional flag is removed
@@ -168,5 +170,55 @@ func TestProvisionalLogFullLifecycle(t *testing.T) {
 
 	// Provisional flag should be gone
 	_, hasProvisional := final.Metadata[LogMetadataKeyProvisional]
+	require.False(t, hasProvisional)
+}
+
+// TestReconcileConsumeLogDetailed verifies that detailed reconciliation updates
+// cached token fields in addition to the existing prompt/completion columns.
+func TestReconcileConsumeLogDetailed(t *testing.T) {
+	setupTestLogDB(t)
+
+	entry := &Log{
+		UserId:    42,
+		ChannelId: 5,
+		ModelName: "gpt-5.4",
+		TokenName: "test-token",
+		RequestId: "req_cached",
+		TraceId:   "trace_cached",
+	}
+	logID := RecordProvisionalConsumeLog(context.Background(), entry, 10000)
+	require.Greater(t, logID, 0)
+
+	metadata := AppendCacheWriteTokensMetadata(LogMetadata{"extra": "data"}, 128, 256)
+	err := ReconcileConsumeLogDetailed(context.Background(), logID, ConsumeLogReconcileDetail{
+		FinalQuota:             6184,
+		Content:                "model rate 1.00, group rate 1.00, completion rate 1.00, cached_prompt 9088, cached_completion 0, cache_write_5m 128, cache_write_1h 256",
+		PromptTokens:           9208,
+		CompletionTokens:       653,
+		CachedPromptTokens:     9088,
+		CachedCompletionTokens: 0,
+		ElapsedTime:            14000,
+		Metadata:               metadata,
+	})
+	require.NoError(t, err)
+
+	var saved Log
+	require.NoError(t, LOG_DB.First(&saved, logID).Error)
+	require.Equal(t, 6184, saved.Quota)
+	require.Equal(t, 9208, saved.PromptTokens)
+	require.Equal(t, 653, saved.CompletionTokens)
+	require.Equal(t, 9088, saved.CachedPromptTokens)
+	require.Zero(t, saved.CachedCompletionTokens)
+	require.Equal(t, int64(14000), saved.ElapsedTime)
+
+	cacheWriteAny, ok := saved.Metadata[LogMetadataKeyCacheWriteTokens]
+	require.True(t, ok)
+	cacheWrite, ok := cacheWriteAny.(map[string]any)
+	require.True(t, ok)
+	require.Equal(t, float64(128), cacheWrite[LogMetadataKeyCacheWrite5m])
+	require.Equal(t, float64(256), cacheWrite[LogMetadataKeyCacheWrite1h])
+	require.Equal(t, "data", saved.Metadata["extra"])
+
+	_, hasProvisional := saved.Metadata[LogMetadataKeyProvisional]
 	require.False(t, hasProvisional)
 }

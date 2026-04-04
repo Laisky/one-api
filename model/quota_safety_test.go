@@ -26,13 +26,20 @@ func TestUpdateConsumeLogByIDFieldValidation(t *testing.T) {
 	require.NoError(t, LOG_DB.Create(logEntry).Error)
 
 	// Allowed fields should update successfully
-	err := UpdateConsumeLogByID(context.Background(), logEntry.Id, map[string]any{"quota": 42, "content": "test consume log updated"})
+	err := UpdateConsumeLogByID(context.Background(), logEntry.Id, map[string]any{
+		"quota":                    42,
+		"content":                  "test consume log updated",
+		"cached_prompt_tokens":     11,
+		"cached_completion_tokens": 7,
+	})
 	require.NoError(t, err)
 
 	var updated Log
 	require.NoError(t, LOG_DB.First(&updated, logEntry.Id).Error)
 	assert.Equal(t, 42, updated.Quota)
 	assert.Equal(t, "test consume log updated", updated.Content)
+	assert.Equal(t, 11, updated.CachedPromptTokens)
+	assert.Equal(t, 7, updated.CachedCompletionTokens)
 
 	// Unsupported fields should return an error
 	err = UpdateConsumeLogByID(context.Background(), logEntry.Id, map[string]any{"unsupported": "value"})
