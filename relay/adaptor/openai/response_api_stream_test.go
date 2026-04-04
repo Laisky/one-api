@@ -621,3 +621,104 @@ data: [DONE]`
 	t.Logf("📊 Delta events: %d, Usage events: %d", len(deltaEvents), len(usageEvents))
 	t.Logf("🎯 Accumulated text: '%s'", responseText)
 }
+
+// TestResponseAPIStreamUsageCachedTokens verifies that cached_tokens in
+// input_tokens_details of a response.completed event is correctly parsed and
+// propagated through the usage conversion pipeline.
+func TestResponseAPIStreamUsageCachedTokens(t *testing.T) {
+	// Simulates a Response API stream where the upstream returned non-zero cached tokens
+	sseStream := `event: response.output_text.delta
+data: {"type":"response.output_text.delta","item_id":"msg_test","output_index":0,"content_index":0,"delta":"Hi"}
+
+event: response.completed
+data: {"type":"response.completed","response":{"id":"resp_cache_test","object":"response","created_at":1775265407,"status":"completed","model":"gpt-5.4-2026-03-05","output":[{"id":"msg_test","type":"message","status":"completed","role":"assistant","content":[{"type":"output_text","text":"Hi","annotations":[]}]}],"usage":{"input_tokens":9208,"input_tokens_details":{"cached_tokens":4500},"output_tokens":617,"output_tokens_details":{"reasoning_tokens":50},"total_tokens":9825}}}
+
+data: [DONE]`
+
+	lines := strings.Split(sseStream, "\n")
+	const dataPrefix = "data: "
+
+	var lastUsage *ResponseAPIUsage
+
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		data := NormalizeDataLine(line)
+		if !strings.HasPrefix(data, dataPrefix) {
+			continue
+		}
+		jsonData := data[len(dataPrefix):]
+		if jsonData == "[DONE]" {
+			break
+		}
+
+		fullResponse, streamEvent, err := ParseResponseAPIStreamEvent([]byte(jsonData))
+		require.NoError(t, err)
+
+		var responseAPIChunk ResponseAPIResponse
+		if fullResponse != nil {
+			responseAPIChunk = *fullResponse
+		} else if streamEvent != nil {
+			responseAPIChunk = ConvertStreamEventToResponse(streamEvent)
+		}
+
+		if responseAPIChunk.Usage != nil {
+			lastUsage = responseAPIChunk.Usage
+		}
+	}
+
+	require.NotNil(t, lastUsage, "usage should be captured from response.completed")
+	require.Equal(t, 9208, lastUsage.InputTokens)
+	require.Equal(t, 617, lastUsage.OutputTokens)
+	require.Equal(t, 9825, lastUsage.TotalTokens)
+	require.NotNil(t, lastUsage.InputTokensDetails, "input_tokens_details should be parsed")
+	require.Equal(t, 4500, lastUsage.InputTokensDetails.CachedTokens,
+		"cached_tokens in input_tokens_details must be preserved")
+
+	// Verify conversion to model.Usage preserves cached tokens
+	modelUsage := lastUsage.ToModelUsage()
+	require.NotNil(t, modelUsage)
+	require.Equal(t, 9208, modelUsage.PromptTokens)
+	require.Equal(t, 617, modelUsage.CompletionTokens)
+	require.NotNil(t, modelUsage.PromptTokensDetails, "PromptTokensDetails must be set")
+	require.Equal(t, 4500, modelUsage.PromptTokensDetails.CachedTokens,
+		"CachedTokens must survive ResponseAPIUsage -> model.Usage conversion")
+}
+
+// TestBuildStreamEventFromEnvelopeUsageFormat verifies that when a stream event
+// carries top-level usage in Response API format (input_tokens instead of
+// prompt_tokens), the usage is correctly parsed via ResponseAPIUsage rather than
+// model.Usage directly.
+func TestBuildStreamEventFromEnvelopeUsageFormat(t *testing.T) {
+	// This JSON simulates a hypothetical stream event with top-level usage
+	// in Response API format (input_tokens, input_tokens_details).
+	eventJSON := `{
+		"type": "response.usage",
+		"sequence_number": 99,
+		"usage": {
+			"input_tokens": 500,
+			"input_tokens_details": {"cached_tokens": 200},
+			"output_tokens": 100,
+			"output_tokens_details": {"reasoning_tokens": 30},
+			"total_tokens": 600
+		}
+	}`
+
+	_, streamEvent, err := ParseResponseAPIStreamEvent([]byte(eventJSON))
+	require.NoError(t, err)
+	require.NotNil(t, streamEvent)
+	require.NotNil(t, streamEvent.Usage, "top-level usage in stream event must be parsed")
+
+	// The usage should be correctly converted from Response API format
+	require.Equal(t, 500, streamEvent.Usage.PromptTokens,
+		"input_tokens should map to PromptTokens")
+	require.Equal(t, 100, streamEvent.Usage.CompletionTokens,
+		"output_tokens should map to CompletionTokens")
+	require.Equal(t, 600, streamEvent.Usage.TotalTokens)
+	require.NotNil(t, streamEvent.Usage.PromptTokensDetails,
+		"input_tokens_details should map to PromptTokensDetails")
+	require.Equal(t, 200, streamEvent.Usage.PromptTokensDetails.CachedTokens,
+		"cached_tokens in input_tokens_details must be preserved in stream event path")
+}

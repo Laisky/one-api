@@ -667,3 +667,96 @@ func TestComputeRatioOnlyResolutionAppliesTieredCacheRatios(t *testing.T) {
 	require.InDelta(t, 3.0, result.UsedCompletionRatio, 1e-12)
 	require.Equal(t, int64(math.Ceil(88*2+20*4+10*2*3+5*5)), result.TotalQuota)
 }
+
+// TestComputeResultCachedPromptTokensField verifies that ComputeResult.CachedPromptTokens
+// correctly reflects the cached tokens from usage across different model types.
+func TestComputeResultCachedPromptTokensField(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name           string
+		modelName      string
+		promptTokens   int
+		cachedTokens   int
+		expectedCached int
+		isClaudeStyle  bool // Claude: cache buckets are separate from prompt tokens
+		cacheWrite5m   int
+		cacheWrite1h   int
+	}{
+		{
+			name:           "openai_with_cache_hit",
+			modelName:      "gpt-4o",
+			promptTokens:   1000,
+			cachedTokens:   600,
+			expectedCached: 600,
+		},
+		{
+			name:           "openai_cache_exceeds_prompt_treated_as_separate_buckets",
+			modelName:      "gpt-4o",
+			promptTokens:   100,
+			cachedTokens:   200, // more cached than prompt triggers promptExcludesCacheBuckets
+			expectedCached: 200,
+		},
+		{
+			name:           "openai_no_cache",
+			modelName:      "gpt-4o",
+			promptTokens:   500,
+			cachedTokens:   0,
+			expectedCached: 0,
+		},
+		{
+			name:           "claude_with_cache_hit",
+			modelName:      "claude-sonnet-4-20250514",
+			promptTokens:   800,
+			cachedTokens:   300,
+			expectedCached: 300,
+			isClaudeStyle:  true,
+		},
+		{
+			name:           "claude_cache_exceeds_prompt_separate_buckets",
+			modelName:      "claude-sonnet-4-20250514",
+			promptTokens:   100,
+			cachedTokens:   500,
+			expectedCached: 500, // Claude: cache buckets are independent
+			isClaudeStyle:  true,
+		},
+		{
+			name:           "openai_with_cache_and_write_tokens",
+			modelName:      "gpt-4o",
+			promptTokens:   1000,
+			cachedTokens:   400,
+			expectedCached: 400,
+			cacheWrite5m:   100,
+		},
+	}
+
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			usage := &relaymodel.Usage{
+				PromptTokens:       tc.promptTokens,
+				CompletionTokens:   50,
+				TotalTokens:        tc.promptTokens + 50,
+				CacheWrite5mTokens: tc.cacheWrite5m,
+				CacheWrite1hTokens: tc.cacheWrite1h,
+			}
+			if tc.cachedTokens > 0 {
+				usage.PromptTokensDetails = &relaymodel.UsagePromptTokensDetails{
+					CachedTokens: tc.cachedTokens,
+				}
+			}
+
+			result := quotautil.Compute(quotautil.ComputeInput{
+				Usage:      usage,
+				ModelName:  tc.modelName,
+				ModelRatio: 1.0,
+				GroupRatio: 1.0,
+			})
+
+			require.Equal(t, tc.expectedCached, result.CachedPromptTokens,
+				"CachedPromptTokens mismatch for %s", tc.name)
+		})
+	}
+}

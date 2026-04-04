@@ -200,11 +200,11 @@ func buildResponseAPIStreamEventFromEnvelope(envelope *responseAPIStreamEnvelope
 	}
 
 	if len(envelope.UsageRaw) > 0 {
-		var usage model.Usage
-		if err := json.Unmarshal(envelope.UsageRaw, &usage); err != nil {
+		var responseUsage ResponseAPIUsage
+		if err := json.Unmarshal(envelope.UsageRaw, &responseUsage); err != nil {
 			return nil, errors.Wrap(err, "buildResponseAPIStreamEventFromEnvelope: decode usage")
 		}
-		streamEvent.Usage = &usage
+		streamEvent.Usage = responseUsage.ToModelUsage()
 	}
 
 	if len(envelope.TextRaw) > 0 {
