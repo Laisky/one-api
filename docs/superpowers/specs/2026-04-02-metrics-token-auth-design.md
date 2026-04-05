@@ -6,9 +6,9 @@ Protect the `/metrics` Prometheus endpoint with a dedicated Bearer token to prev
 
 ## Previous State
 
-- `/metrics` is registered without any auth middleware (`main.go:217`)
+- `/metrics` was registered with `middleware.AdminAuth()` session authentication (`main.go:217`), which required admin login via browser — unsuitable for Prometheus scraping
 - Enabled by default via `ENABLE_PROMETHEUS_METRICS=true`
-- Exposes all `one_api_*` metrics plus Go runtime metrics to anyone who can reach the endpoint
+- Exposes all `one_api_*` metrics plus Go runtime metrics
 
 ## Design
 

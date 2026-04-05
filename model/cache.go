@@ -23,9 +23,10 @@ import (
 
 var (
 	TokenCacheSeconds         = config.SyncFrequency
-	UserId2GroupCacheSeconds  = config.SyncFrequency
-	UserId2QuotaCacheSeconds  = config.SyncFrequency
-	UserId2StatusCacheSeconds = config.SyncFrequency
+	UserId2GroupCacheSeconds    = config.SyncFrequency
+	UserId2QuotaCacheSeconds   = config.SyncFrequency
+	UserId2StatusCacheSeconds  = config.SyncFrequency
+	UserId2UsernameCacheSeconds = config.SyncFrequency
 	GroupModelsCacheSeconds   = config.SyncFrequency
 )
 
@@ -100,22 +101,22 @@ func CacheGetUserGroup(ctx context.Context, id int) (group string, err error) {
 // CacheGetUsername retrieves a username by user ID, using Redis cache when available.
 // On cache miss it falls back to GetUsernameById and populates the cache.
 // Empty usernames (non-existent users) are not cached to allow retry on the next request.
-func CacheGetUsername(ctx context.Context, id int) (username string, err error) {
+func CacheGetUsername(ctx context.Context, id int) string {
 	lg := logger.FromContext(ctx)
 	if !common.IsRedisEnabled() {
-		return GetUsernameById(id), nil
+		return GetUsernameById(id)
 	}
-	username, err = common.RedisGet(ctx, fmt.Sprintf("user_username:%d", id))
+	username, err := common.RedisGet(ctx, fmt.Sprintf("user_username:%d", id))
 	if err != nil {
 		username = GetUsernameById(id)
 		if username == "" {
-			return username, nil
+			return username
 		}
-		if setErr := common.RedisSet(ctx, fmt.Sprintf("user_username:%d", id), username, time.Duration(UserId2GroupCacheSeconds)*time.Second); setErr != nil {
+		if setErr := common.RedisSet(ctx, fmt.Sprintf("user_username:%d", id), username, time.Duration(UserId2UsernameCacheSeconds)*time.Second); setErr != nil {
 			lg.Warn("Redis set username failed, continuing without cache", zap.Int("user_id", id), zap.Error(setErr))
 		}
 	}
-	return username, nil
+	return username
 }
 
 func fetchAndUpdateUserQuota(ctx context.Context, id int) (quota int64, err error) {

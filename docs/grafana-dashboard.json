@@ -515,7 +515,7 @@
           },
           "targets": [
             {
-              "expr": "sum(rate(one_api_relay_requests_total{channel_id=~\"$channel_id\",channel_type=~\"$channel_type\",model=~\"$model\",username=~\"$username\"}[$__rate_interval])) by (model)",
+              "expr": "sum(rate(one_api_relay_requests_total{channel_id=~\"$channel_id\",channel_type=~\"$channel_type\",model=~\"$model\",user_id=~\"$username\"}[$__rate_interval])) by (model)",
               "legendFormat": "{{model}}",
               "refId": "A"
             }
@@ -563,7 +563,7 @@
           },
           "targets": [
             {
-              "expr": "sum(rate(one_api_relay_requests_total{channel_id=~\"$channel_id\",model=~\"$model\",username=~\"$username\",success=\"true\"}[$__rate_interval])) by (model) / sum(rate(one_api_relay_requests_total{channel_id=~\"$channel_id\",model=~\"$model\",username=~\"$username\"}[$__rate_interval])) by (model)",
+              "expr": "sum(rate(one_api_relay_requests_total{channel_id=~\"$channel_id\",model=~\"$model\",user_id=~\"$username\",success=\"true\"}[$__rate_interval])) by (model) / sum(rate(one_api_relay_requests_total{channel_id=~\"$channel_id\",model=~\"$model\",user_id=~\"$username\"}[$__rate_interval])) by (model)",
               "legendFormat": "{{model}}",
               "refId": "A"
             }
@@ -630,17 +630,17 @@
           },
           "targets": [
             {
-              "expr": "histogram_quantile(0.5, sum(rate(one_api_relay_request_duration_seconds_bucket{channel_id=~\"$channel_id\",model=~\"$model\",username=~\"$username\"}[$__rate_interval])) by (le, model))",
+              "expr": "histogram_quantile(0.5, sum(rate(one_api_relay_request_duration_seconds_bucket{channel_id=~\"$channel_id\",model=~\"$model\",user_id=~\"$username\"}[$__rate_interval])) by (le, model))",
               "legendFormat": "{{model}} P50",
               "refId": "A"
             },
             {
-              "expr": "histogram_quantile(0.95, sum(rate(one_api_relay_request_duration_seconds_bucket{channel_id=~\"$channel_id\",model=~\"$model\",username=~\"$username\"}[$__rate_interval])) by (le, model))",
+              "expr": "histogram_quantile(0.95, sum(rate(one_api_relay_request_duration_seconds_bucket{channel_id=~\"$channel_id\",model=~\"$model\",user_id=~\"$username\"}[$__rate_interval])) by (le, model))",
               "legendFormat": "{{model}} P95",
               "refId": "B"
             },
             {
-              "expr": "histogram_quantile(0.99, sum(rate(one_api_relay_request_duration_seconds_bucket{channel_id=~\"$channel_id\",model=~\"$model\",username=~\"$username\"}[$__rate_interval])) by (le, model))",
+              "expr": "histogram_quantile(0.99, sum(rate(one_api_relay_request_duration_seconds_bucket{channel_id=~\"$channel_id\",model=~\"$model\",user_id=~\"$username\"}[$__rate_interval])) by (le, model))",
               "legendFormat": "{{model}} P99",
               "refId": "C"
             }
@@ -687,7 +687,7 @@
           },
           "targets": [
             {
-              "expr": "sum(rate(one_api_relay_tokens_total{channel_id=~\"$channel_id\",model=~\"$model\",username=~\"$username\"}[$__rate_interval])) by (model, token_type)",
+              "expr": "sum(rate(one_api_relay_tokens_total{channel_id=~\"$channel_id\",model=~\"$model\",user_id=~\"$username\"}[$__rate_interval])) by (model, token_type)",
               "legendFormat": "{{model}}-{{token_type}}",
               "refId": "A"
             }
@@ -738,13 +738,13 @@
           },
           "targets": [
             {
-              "expr": "sum(rate(one_api_relay_quota_used_total{channel_id=~\"$channel_id\",model=~\"$model\",username=~\"$username\"}[$__rate_interval])) by (model) / 500000",
+              "expr": "sum(rate(one_api_relay_quota_used_total{channel_id=~\"$channel_id\",model=~\"$model\",user_id=~\"$username\"}[$__rate_interval])) by (model) / 500000",
               "legendFormat": "{{model}} (USD)",
               "refId": "A",
               "hide": false
             },
             {
-              "expr": "sum(rate(one_api_relay_quota_used_total{channel_id=~\"$channel_id\",model=~\"$model\",username=~\"$username\"}[$__rate_interval])) by (model) / 500000 * $exchange_rate",
+              "expr": "sum(rate(one_api_relay_quota_used_total{channel_id=~\"$channel_id\",model=~\"$model\",user_id=~\"$username\"}[$__rate_interval])) by (model) / 500000 * $exchange_rate",
               "legendFormat": "{{model}} (CNY)",
               "refId": "B",
               "hide": false
