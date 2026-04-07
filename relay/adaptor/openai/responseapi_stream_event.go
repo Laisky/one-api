@@ -110,7 +110,7 @@ func ParseResponseAPIStreamEventFromReader(reader io.Reader) (*ResponseAPIRespon
 
 	streamEvent, err := buildResponseAPIStreamEventFromEnvelope(&envelope)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, errors.Wrap(err, "build response API stream event from envelope")
 	}
 
 	return nil, streamEvent, nil

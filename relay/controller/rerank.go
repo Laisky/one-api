@@ -190,7 +190,7 @@ func RelayRerankHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 			0,
 		)
 
-		userBalance := float64(c.GetInt64(ctxkey.UserQuota))
+		userBalance := float64(getUserQuotaFromContext(c))
 		metrics.GlobalRecorder.RecordUserMetrics(
 			userIdStr,
 			username,
@@ -259,7 +259,7 @@ func getAndValidateRerankRequest(c *gin.Context) (*relaymodel.RerankRequest, err
 	}
 
 	if err := rerankRequest.Normalize(); err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "normalize rerank request")
 	}
 
 	if err := validator.ValidateRerankRequest(rerankRequest); err != nil {

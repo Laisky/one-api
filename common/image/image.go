@@ -167,7 +167,7 @@ func GetImageSizeFromBase64(encoded string) (width int, height int, err error) {
 	}
 	decoded, err := base64.StdEncoding.DecodeString(stripped)
 	if err != nil {
-		return 0, 0, err
+		return 0, 0, errors.Wrap(err, "decode base64 image")
 	}
 
 	reader := readerPool.Get().(*bytes.Reader)
@@ -176,7 +176,7 @@ func GetImageSizeFromBase64(encoded string) (width int, height int, err error) {
 
 	img, _, err := image.DecodeConfig(reader)
 	if err != nil {
-		return 0, 0, err
+		return 0, 0, errors.Wrap(err, "decode image config")
 	}
 
 	return img.Width, img.Height, nil
@@ -295,7 +295,7 @@ func ValidateDataURLImage(dataURL string) error {
 func GenerateTextImageBase64(text string) (base64Data string, mimeType string, err error) {
 	imageData, mimeType, err := GenerateTextImage(text)
 	if err != nil {
-		return "", "", err
+		return "", "", errors.Wrap(err, "generate text image")
 	}
 
 	base64Data = base64.StdEncoding.EncodeToString(imageData)

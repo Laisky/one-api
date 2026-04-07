@@ -73,12 +73,12 @@ func MCPProxy(c *gin.Context) {
 func listMCPToolsForUser(ctx context.Context, c *gin.Context) ([]mcp.ToolDescriptor, error) {
 	user, err := getUserFromContext(c)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "get user from context")
 	}
 
 	servers, err := model.ListEnabledMCPServers()
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "list enabled mcp servers")
 	}
 
 	sort.SliceStable(servers, func(i, j int) bool {
@@ -92,11 +92,11 @@ func listMCPToolsForUser(ctx context.Context, c *gin.Context) ([]mcp.ToolDescrip
 	for _, server := range servers {
 		tools, err := model.GetMCPToolsByServerID(server.Id)
 		if err != nil {
-			return nil, err
+			return nil, errors.Wrapf(err, "get mcp tools for server %d", server.Id)
 		}
 		resolved, err := mcp.ResolveTools(server, tools, nil, user.MCPToolBlacklist, nil)
 		if err != nil {
-			return nil, err
+			return nil, errors.Wrapf(err, "resolve mcp tools for server %d", server.Id)
 		}
 		for _, entry := range resolved {
 			if !entry.Policy.Allowed {
@@ -122,7 +122,7 @@ func callMCPToolForUser(ctx context.Context, c *gin.Context, params mcpCallParam
 	logger := gmw.GetLogger(c)
 	user, err := getUserFromContext(c)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "get user from context")
 	}
 
 	serverLabel, toolName := splitToolName(params.Name)
@@ -138,14 +138,14 @@ func callMCPToolForUser(ctx context.Context, c *gin.Context, params mcpCallParam
 	if serverLabel != "" {
 		server, err := model.GetMCPServerByName(serverLabel)
 		if err != nil {
-			return nil, err
+			return nil, errors.Wrapf(err, "get mcp server by name %q", serverLabel)
 		}
 		servers = []*model.MCPServer{server}
 		serverByID[server.Id] = server
 	} else {
 		servers, err = model.ListEnabledMCPServers()
 		if err != nil {
-			return nil, err
+			return nil, errors.Wrap(err, "list enabled mcp servers")
 		}
 		for _, server := range servers {
 			if server == nil {
@@ -162,14 +162,14 @@ func callMCPToolForUser(ctx context.Context, c *gin.Context, params mcpCallParam
 		}
 		tools, err := model.GetMCPToolsByServerID(server.Id)
 		if err != nil {
-			return nil, err
+			return nil, errors.Wrapf(err, "get mcp tools for server %d", server.Id)
 		}
 		toolsByServer[server.Id] = tools
 	}
 
 	candidates, err := mcp.BuildToolCandidates(servers, toolsByServer, nil, user.MCPToolBlacklist, []string{toolName}, toolName, params.Signature)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrapf(err, "build mcp tool candidates for %q", toolName)
 	}
 	if len(candidates) == 0 {
 		return nil, errors.New("no eligible MCP tool found")
@@ -184,12 +184,12 @@ func callMCPToolForUser(ctx context.Context, c *gin.Context, params mcpCallParam
 		callResult, err := client.CallTool(ctx, candidate.Tool.Name, params.Arguments)
 		if err != nil {
 			logger.Warn("mcp tool call failed", zap.Error(err), zap.Int("server_id", candidate.ServerID), zap.String("tool", candidate.Tool.Name))
-			return nil, err
+			return nil, errors.Wrapf(err, "call mcp tool %q on server %d", candidate.Tool.Name, candidate.ServerID)
 		}
 		return callResult, nil
 	})
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "call mcp tool with fallback")
 	}
 
 	if result.IsError {
@@ -204,7 +204,7 @@ func callMCPToolForUser(ctx context.Context, c *gin.Context, params mcpCallParam
 	cost := resolveToolCost(server, selected.Tool.Name)
 	if cost > 0 {
 		if err := model.DecreaseUserQuota(ctx, user.Id, cost); err != nil {
-			return nil, err
+			return nil, errors.Wrap(err, "decrease user quota for mcp tool call")
 		}
 		model.UpdateUserUsedQuotaAndRequestCount(user.Id, cost)
 		qualifiedName := server.Name + "." + selected.Tool.Name
@@ -260,14 +260,21 @@ func recordMCPToolLog(ctx context.Context, c *gin.Context, userId int, serverId 
 }
 
 // getUserFromContext loads the authenticated user from request context.
+// It first checks for the cached UserObj set by auth middleware,
+// falling back to a database lookup if not present.
 func getUserFromContext(c *gin.Context) (*model.User, error) {
+	if userObj, exists := c.Get(ctxkey.UserObj); exists {
+		if u, ok := userObj.(*model.User); ok {
+			return u, nil
+		}
+	}
 	userID := c.GetInt(ctxkey.Id)
 	if userID == 0 {
 		return nil, errors.New("user id missing")
 	}
 	user, err := model.GetUserById(userID, true)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrapf(err, "get user by id %d", userID)
 	}
 	return user, nil
 }

@@ -434,9 +434,9 @@ var (
 	// the database. Set to 0 to disable automatic syncing.
 	//
 	// Environment variable: SYNC_FREQUENCY
-	// Default: 600 (10 minutes)
+	// Default: 120 (2 minutes)
 	// Unit: seconds
-	SyncFrequency = env.Int("SYNC_FREQUENCY", 10*60)
+	SyncFrequency = env.Int("SYNC_FREQUENCY", 2*60)
 )
 
 // =============================================================================
@@ -750,6 +750,13 @@ var (
 	// Environment variable: ENABLE_PROMETHEUS_METRICS
 	// Default: true
 	EnablePrometheusMetrics = env.Bool("ENABLE_PROMETHEUS_METRICS", true)
+
+	// MetricsToken is the Bearer token required to access the /metrics endpoint.
+	// When empty (default), the endpoint returns 403 until configured.
+	//
+	// Environment variable: METRICS_TOKEN
+	// Default: "" (metrics endpoint blocked)
+	MetricsToken = strings.TrimSpace(env.String("METRICS_TOKEN", ""))
 
 	// MetricQueueSize configures the buffered queue that aggregates success/failure
 	// events before processing. Larger queues handle burst traffic better.

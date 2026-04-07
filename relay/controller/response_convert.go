@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Laisky/errors/v2"
 	"github.com/gin-gonic/gin"
 
 	"github.com/songquanpeng/one-api/common/ctxkey"
@@ -63,13 +64,13 @@ func renderChatResponseAsResponseAPI(c *gin.Context, status int, textResp *opena
 
 	data, err := json.Marshal(response)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "marshal response API response")
 	}
 
 	c.Writer.Header().Set("Content-Type", "application/json")
 	c.Writer.WriteHeader(status)
 	_, err = c.Writer.Write(data)
-	return err
+	return errors.Wrap(err, "write response API response")
 }
 
 // generateResponseAPIID generates a unique ID for a Response API response

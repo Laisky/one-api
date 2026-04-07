@@ -91,7 +91,7 @@ func (a *Adaptor) GetRequestURL(meta *meta.Meta) (string, error) {
 	var accessToken string
 	var err error
 	if accessToken, err = GetAccessToken(meta.APIKey); err != nil {
-		return "", err
+		return "", errors.Wrap(err, "get baidu access token")
 	}
 	fullRequestURL += "?access_token=" + accessToken
 	return fullRequestURL, nil

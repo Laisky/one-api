@@ -193,7 +193,7 @@ func RelayOCRHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 			0,
 		)
 
-		userBalance := float64(c.GetInt64(ctxkey.UserQuota))
+		userBalance := float64(getUserQuotaFromContext(c))
 		metrics.GlobalRecorder.RecordUserMetrics(
 			userIdStr,
 			username,

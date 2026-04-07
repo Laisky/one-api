@@ -57,7 +57,7 @@ func hasMCPBuiltinsInResponseRequest(c *gin.Context, meta *metalib.Meta, channel
 	chatRequest := &relaymodel.GeneralOpenAIRequest{Model: request.Model, Tools: responseToolsForMCP(request)}
 	registry, _, err := expandMCPBuiltinsInChatRequest(c, meta, channelRecord, provider, chatRequest)
 	if err != nil {
-		return false, err
+		return false, errors.Wrap(err, "expand mcp builtins in response request")
 	}
 	return registry != nil, nil
 }
@@ -88,7 +88,7 @@ type mcpToolCatalog struct {
 func loadMCPToolCatalog() (*mcpToolCatalog, error) {
 	servers, err := model.ListEnabledMCPServers()
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "list enabled mcp servers")
 	}
 	catalog := &mcpToolCatalog{
 		servers:       servers,
@@ -102,7 +102,7 @@ func loadMCPToolCatalog() (*mcpToolCatalog, error) {
 		catalog.serverByLabel[strings.ToLower(server.Name)] = server
 		tools, err := model.GetMCPToolsByServerID(server.Id)
 		if err != nil {
-			return nil, err
+			return nil, errors.Wrapf(err, "get mcp tools for server %d", server.Id)
 		}
 		catalog.toolsByServer[server.Id] = tools
 	}
@@ -116,7 +116,7 @@ func loadChannelMCPBlacklist(channelRecord *model.Channel) ([]string, error) {
 	}
 	cfg, err := channelRecord.LoadConfig()
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "load channel config for mcp blacklist")
 	}
 	return cfg.MCPToolBlacklist, nil
 }
@@ -129,15 +129,15 @@ func expandMCPBuiltinsInChatRequest(c *gin.Context, meta *metalib.Meta, channelR
 	lg := gmw.GetLogger(c)
 	user, err := getRelayUserFromContext(c)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, errors.Wrap(err, "get relay user from context")
 	}
 	channelBlacklist, err := loadChannelMCPBlacklist(channelRecord)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, errors.Wrap(err, "load channel mcp blacklist")
 	}
 	catalog, err := loadMCPToolCatalog()
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, errors.Wrap(err, "load mcp tool catalog")
 	}
 
 	registry := &mcpToolRegistry{
@@ -162,7 +162,7 @@ func expandMCPBuiltinsInChatRequest(c *gin.Context, meta *metalib.Meta, channelR
 		default:
 			requested, functionTool, matched, err := expandAliasedMCPTool(catalog, channelBlacklist, user.MCPToolBlacklist, tool.Type)
 			if err != nil {
-				return nil, nil, err
+				return nil, nil, errors.Wrapf(err, "expand aliased mcp tool %q", tool.Type)
 			}
 			if matched {
 				name := strings.ToLower(requested.Name)
@@ -582,11 +582,11 @@ func executeMCPToolCalls(c *gin.Context, registry *mcpToolRegistry, calls []rela
 		startIndex := registry.selectedCandidateIndex(nameKey)
 		selected, result, err := callMCPToolWithFallback(c, registry, nameKey, args, candidates, startIndex, []string{callID})
 		if err != nil {
-			return nil, err
+			return nil, errors.Wrapf(err, "call mcp tool %q with fallback", name)
 		}
 		msg, err := buildToolResultMessage(call.Id, result)
 		if err != nil {
-			return nil, err
+			return nil, errors.Wrap(err, "build tool result message")
 		}
 		results = append(results, msg)
 		recordMCPToolUsage(summary, selected, name)

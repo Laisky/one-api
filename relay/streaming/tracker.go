@@ -238,7 +238,7 @@ func (t *QuotaTracker) ensureQuotaLocked(delta int64) error {
 	if delta <= 0 {
 		return nil
 	}
-	remaining, err := model.GetUserQuota(t.params.UserID)
+	remaining, err := model.CacheGetUserQuota(t.params.Ctx, t.params.UserID)
 	if err != nil {
 		return errors.Wrap(err, "get user quota during streaming flush")
 	}

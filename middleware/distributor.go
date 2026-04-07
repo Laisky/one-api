@@ -193,7 +193,15 @@ func Distribute() func(c *gin.Context) {
 		lg := gmw.GetLogger(c)
 		userId := c.GetInt(ctxkey.Id)
 		ctx := gmw.Ctx(c)
-		userGroup, _ := model.CacheGetUserGroup(ctx, userId)
+		var userGroup string
+		if userObj, exists := c.Get(ctxkey.UserObj); exists {
+			if u, ok := userObj.(*model.User); ok {
+				userGroup = u.Group
+			}
+		}
+		if userGroup == "" {
+			userGroup, _ = model.CacheGetUserGroup(ctx, userId)
+		}
 		c.Set(ctxkey.Group, userGroup)
 
 		// Get relay mode for endpoint validation

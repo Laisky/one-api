@@ -234,16 +234,16 @@ func xunfeiMakeRequest(textRequest model.GeneralOpenAIRequest, domain, authUrl, 
 	}
 	conn, resp, err := d.Dial(authUrl, nil)
 	if err != nil || resp.StatusCode != http.StatusSwitchingProtocols {
-		return nil, nil, err
+		return nil, nil, errors.Wrap(err, "dial xunfei websocket")
 	}
 	data := requestOpenAI2Xunfei(textRequest, appId, domain)
 	err = conn.WriteJSON(data)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, errors.Wrap(err, "write xunfei request")
 	}
 	_, msg, err := conn.ReadMessage()
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, errors.Wrap(err, "read xunfei initial response")
 	}
 
 	dataChan := make(chan ChatResponse)

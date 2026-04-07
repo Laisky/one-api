@@ -248,7 +248,7 @@ func relayResponseAPIThroughChat(c *gin.Context, meta *metalib.Meta, responseAPI
 				0,
 			)
 
-			userBalance := float64(c.GetInt64(ctxkey.UserQuota))
+			userBalance := float64(getUserQuotaFromContext(c))
 			metrics.GlobalRecorder.RecordUserMetrics(
 				userId,
 				username,
@@ -430,7 +430,7 @@ func relayResponseAPIThroughChat(c *gin.Context, meta *metalib.Meta, responseAPI
 			0,
 		)
 
-		userBalance := float64(c.GetInt64(ctxkey.UserQuota))
+		userBalance := float64(getUserQuotaFromContext(c))
 		metrics.GlobalRecorder.RecordUserMetrics(
 			userId,
 			username,

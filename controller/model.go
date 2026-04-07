@@ -715,10 +715,19 @@ func GetModelsDisplay(c *gin.Context) {
 
 	// Logged-in path: show only models allowed for the user group
 	ctx := gmw.Ctx(c)
-	userGroup, err := model.CacheGetUserGroup(ctx, userId)
-	if err != nil {
-		c.JSON(http.StatusOK, ModelsDisplayResponse{Success: false, Message: "Failed to get user group: " + err.Error()})
-		return
+	var userGroup string
+	if userObj, exists := c.Get(ctxkey.UserObj); exists {
+		if u, ok := userObj.(*model.User); ok {
+			userGroup = u.Group
+		}
+	}
+	if userGroup == "" {
+		var err error
+		userGroup, err = model.CacheGetUserGroup(ctx, userId)
+		if err != nil {
+			c.JSON(http.StatusOK, ModelsDisplayResponse{Success: false, Message: "Failed to get user group: " + err.Error()})
+			return
+		}
 	}
 	abilities, err := model.CacheGetGroupModelsV2(ctx, userGroup)
 	if err != nil {
@@ -768,10 +777,19 @@ func ListModels(c *gin.Context) {
 	ctx := gmw.Ctx(c)
 	lg := gmw.GetLogger(c)
 
-	userGroup, err := model.CacheGetUserGroup(ctx, userId)
-	if err != nil {
-		middleware.AbortWithError(c, http.StatusBadRequest, err)
-		return
+	var userGroup string
+	if userObj, exists := c.Get(ctxkey.UserObj); exists {
+		if u, ok := userObj.(*model.User); ok {
+			userGroup = u.Group
+		}
+	}
+	if userGroup == "" {
+		var err error
+		userGroup, err = model.CacheGetUserGroup(ctx, userId)
+		if err != nil {
+			middleware.AbortWithError(c, http.StatusBadRequest, err)
+			return
+		}
 	}
 
 	availableAbilities, err := model.CacheGetGroupModelsV2(ctx, userGroup)
@@ -905,13 +923,22 @@ func RetrieveModel(c *gin.Context) {
 func GetUserAvailableModels(c *gin.Context) {
 	ctx := gmw.Ctx(c)
 	id := c.GetInt(ctxkey.Id)
-	userGroup, err := model.CacheGetUserGroup(ctx, id)
-	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
-		return
+	var userGroup string
+	if userObj, exists := c.Get(ctxkey.UserObj); exists {
+		if u, ok := userObj.(*model.User); ok {
+			userGroup = u.Group
+		}
+	}
+	if userGroup == "" {
+		var err error
+		userGroup, err = model.CacheGetUserGroup(ctx, id)
+		if err != nil {
+			c.JSON(http.StatusOK, gin.H{
+				"success": false,
+				"message": err.Error(),
+			})
+			return
+		}
 	}
 
 	models, err := model.CacheGetGroupModelsV2(ctx, userGroup)

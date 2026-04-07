@@ -46,7 +46,7 @@ func MigrateCustomChannelsToOpenAICompatible() error {
 		return nil
 	})
 	if err != nil {
-		return err
+		return errors.Wrap(err, "migrate custom channel type to openai compatible")
 	}
 
 	logger.Logger.Info("custom channel migration completed",

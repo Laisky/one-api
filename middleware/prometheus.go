@@ -1,14 +1,52 @@
 package middleware
 
 import (
+	"crypto/subtle"
+	"net/http"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/songquanpeng/one-api/common/config"
 	"github.com/songquanpeng/one-api/common/metrics"
 )
+
+// MetricsAuth protects the /metrics endpoint with a dedicated Bearer token.
+// Returns 403 if METRICS_TOKEN is not configured, 401 if the token is invalid.
+func MetricsAuth() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		token := config.MetricsToken
+		if token == "" {
+			c.JSON(http.StatusForbidden, gin.H{
+				"error": "metrics endpoint requires METRICS_TOKEN configuration",
+			})
+			c.Abort()
+			return
+		}
+
+		authHeader := c.GetHeader("Authorization")
+		if !strings.HasPrefix(authHeader, "Bearer ") {
+			c.JSON(http.StatusUnauthorized, gin.H{
+				"error": "invalid metrics token, please check your METRICS_TOKEN configuration",
+			})
+			c.Abort()
+			return
+		}
+
+		provided := strings.TrimPrefix(authHeader, "Bearer ")
+		if subtle.ConstantTimeCompare([]byte(provided), []byte(token)) != 1 {
+			c.JSON(http.StatusUnauthorized, gin.H{
+				"error": "invalid metrics token, please check your METRICS_TOKEN configuration",
+			})
+			c.Abort()
+			return
+		}
+
+		c.Next()
+	}
+}
 
 // PrometheusMiddleware instruments HTTP endpoints with Prometheus metrics
 func PrometheusMiddleware() gin.HandlerFunc {

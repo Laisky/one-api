@@ -58,17 +58,17 @@ func parseToolArguments(raw any) (map[string]any, error) {
 		}
 		var parsed map[string]any
 		if err := json.Unmarshal([]byte(trimmed), &parsed); err != nil {
-			return nil, err
+			return nil, errors.Wrap(err, "unmarshal string argument to map")
 		}
 		return parsed, nil
 	default:
 		payload, err := json.Marshal(v)
 		if err != nil {
-			return nil, err
+			return nil, errors.Wrap(err, "marshal argument to json")
 		}
 		var parsed map[string]any
 		if err := json.Unmarshal(payload, &parsed); err != nil {
-			return nil, err
+			return nil, errors.Wrap(err, "unmarshal argument payload to map")
 		}
 		return parsed, nil
 	}
@@ -147,13 +147,13 @@ func preConsumeMCPRoundQuota(c *gin.Context, meta *metalib.Meta, request *relaym
 	}
 	userQuota, err := model.CacheGetUserQuota(ctx, meta.UserId)
 	if err != nil {
-		return preConsumedQuota, err
+		return preConsumedQuota, errors.Wrap(err, "get user quota from cache")
 	}
 	if userQuota-preConsumedQuota < 0 {
 		return preConsumedQuota, errors.New("user quota is not enough")
 	}
 	if err := model.PreConsumeTokenQuota(ctx, meta.TokenId, preConsumedQuota); err != nil {
-		return preConsumedQuota, err
+		return preConsumedQuota, errors.Wrap(err, "pre-consume token quota")
 	}
 	syncUserQuotaCacheAfterPreConsume(ctx, meta.UserId, preConsumedQuota, "mcp_round_preconsume")
 	return preConsumedQuota, nil
@@ -286,13 +286,16 @@ func getRelayUserFromContext(c *gin.Context) (*model.User, error) {
 	if c == nil {
 		return nil, errors.New("context is nil")
 	}
+	if u := getUserObjFromContext(c); u != nil {
+		return u, nil
+	}
 	userID := c.GetInt(ctxkey.Id)
 	if userID == 0 {
 		return nil, errors.New("user id missing")
 	}
 	user, err := model.GetUserById(userID, true)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrapf(err, "get user by id %d", userID)
 	}
 	return user, nil
 }

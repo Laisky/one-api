@@ -211,7 +211,7 @@ func unmarshalJSONMap(payload []byte) (map[string]json.RawMessage, error) {
 
 	var out map[string]json.RawMessage
 	if err := json.Unmarshal(payload, &out); err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "unmarshal json map")
 	}
 
 	if out == nil {

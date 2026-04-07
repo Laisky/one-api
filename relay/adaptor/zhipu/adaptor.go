@@ -72,7 +72,10 @@ func (a *Adaptor) ConvertRequest(c *gin.Context, relayMode int, request *model.G
 	switch relayMode {
 	case relaymode.Embeddings:
 		baiduEmbeddingRequest, err := ConvertEmbeddingRequest(*request)
-		return baiduEmbeddingRequest, err
+		if err != nil {
+			return nil, errors.Wrap(err, "convert zhipu embedding request")
+		}
+		return baiduEmbeddingRequest, nil
 	default:
 		if isOCRModel(request.Model) {
 			return ConvertOCRRequest(*request)

@@ -495,7 +495,7 @@ func convertToolChoiceToConfig(toolChoice any) *ToolConfig {
 func ConvertEmbeddingRequest(request model.GeneralOpenAIRequest) (*BatchEmbeddingRequest, error) {
 	contents, _, err := BuildEmbeddingContents(request.Input)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "build gemini embedding contents")
 	}
 
 	requests := make([]EmbeddingRequest, len(contents))

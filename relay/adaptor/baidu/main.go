@@ -306,7 +306,7 @@ func GetAccessToken(apiKey string) (string, error) {
 	}
 	accessToken, err := getBaiduAccessTokenHelper(apiKey)
 	if err != nil {
-		return "", err
+		return "", errors.Wrap(err, "get baidu access token")
 	}
 	if accessToken == nil {
 		return "", errors.New("GetAccessToken return a nil token")

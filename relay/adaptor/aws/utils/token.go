@@ -268,7 +268,7 @@ func CountTokensWithBedrock(ctx context.Context, client *bedrockruntime.Client,
 	// Convert messages to ConverseTokensRequest format for token counting
 	converseTokensRequest, err := convertMessagesToConverseTokensRequest(ctx, messages)
 	if err != nil {
-		return 0, err
+		return 0, errors.Wrap(err, "convert messages to converse tokens request")
 	}
 
 	// Create CountTokensInput using Converse format
@@ -408,13 +408,13 @@ func CountTokenMessages(ctx context.Context, client *bedrockruntime.Client,
 	// Get AWS model ID
 	awsModelID, err := getAWSModelID(actualModel)
 	if err != nil {
-		return 0, err
+		return 0, errors.Wrapf(err, "get AWS model ID for %q", actualModel)
 	}
 
 	// Use AWS CountTokens API
 	tokenCount, err := CountTokensWithBedrock(ctx, client, messages, awsModelID)
 	if err != nil {
-		return 0, err
+		return 0, errors.Wrap(err, "count tokens with bedrock")
 	}
 
 	return tokenCount, nil
@@ -524,8 +524,7 @@ func GetAccurateTokenCount(ctx context.Context, client *bedrockruntime.Client,
 	// Use AWS native CountTokens API for accurate billing
 	tokenCount, err := CountTokenMessages(ctx, client, messages, modelName)
 	if err != nil {
-		// Return the error instead of falling back to estimation
-		return 0, err
+		return 0, errors.Wrapf(err, "count token messages for model %q", modelName)
 	}
 
 	return tokenCount, nil

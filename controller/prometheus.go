@@ -8,6 +8,7 @@ import (
 
 	"github.com/songquanpeng/one-api/common/ctxkey"
 	"github.com/songquanpeng/one-api/common/metrics"
+	"github.com/songquanpeng/one-api/model"
 	"github.com/songquanpeng/one-api/relay/channeltype"
 	"github.com/songquanpeng/one-api/relay/meta"
 	"github.com/songquanpeng/one-api/relay/relaymode"
@@ -44,7 +45,12 @@ func (p *PrometheusRelayMonitor) RecordRelayRequest(c *gin.Context, meta *meta.M
 	metrics.GlobalRecorder.RecordRelayRequest(startTime, meta.ChannelId, channelType, meta.ActualModelName, userId, group, tokenId, apiFormat, apiType, success, promptTokens, completionTokens, quotaUsed)
 
 	// Record user metrics
-	userBalance := float64(c.GetInt64(ctxkey.UserQuota)) // Assuming we can get user balance from context
+	var userBalance float64
+	if userObj, exists := c.Get(ctxkey.UserObj); exists {
+		if u, ok := userObj.(*model.User); ok {
+			userBalance = float64(u.Quota)
+		}
+	}
 	metrics.GlobalRecorder.RecordUserMetrics(userId, username, group, quotaUsed, promptTokens, completionTokens, userBalance)
 
 	// Record model usage

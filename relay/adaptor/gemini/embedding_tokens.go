@@ -47,7 +47,7 @@ func BuildEmbeddingContents(input any) ([]ChatContent, bool, error) {
 	case map[string]any:
 		content, multimodal, err := buildEmbeddingContentFromMap(value)
 		if err != nil {
-			return nil, false, err
+			return nil, false, errors.Wrap(err, "build embedding content from map")
 		}
 		return []ChatContent{content}, multimodal, nil
 	case []any:
@@ -60,7 +60,7 @@ func BuildEmbeddingContents(input any) ([]ChatContent, bool, error) {
 		for _, item := range value {
 			content, multimodal, err := buildEmbeddingContentFromItem(item)
 			if err != nil {
-				return nil, false, err
+				return nil, false, errors.Wrap(err, "build embedding content from item")
 			}
 			if multimodal {
 				hasMultimodal = true
@@ -362,7 +362,7 @@ func buildEmbeddingContentFromMap(raw map[string]any) (ChatContent, bool, error)
 
 	part, multimodal, err := buildEmbeddingPartFromMap(raw)
 	if err != nil {
-		return ChatContent{}, false, err
+		return ChatContent{}, false, errors.Wrap(err, "build embedding part from map")
 	}
 	return ChatContent{Parts: []Part{part}}, multimodal, nil
 }

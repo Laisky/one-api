@@ -22,11 +22,12 @@ import (
 )
 
 var (
-	TokenCacheSeconds         = config.SyncFrequency
-	UserId2GroupCacheSeconds  = config.SyncFrequency
-	UserId2QuotaCacheSeconds  = config.SyncFrequency
-	UserId2StatusCacheSeconds = config.SyncFrequency
-	GroupModelsCacheSeconds   = config.SyncFrequency
+	TokenCacheSeconds           = config.SyncFrequency
+	UserId2GroupCacheSeconds    = config.SyncFrequency
+	UserId2QuotaCacheSeconds    = config.SyncFrequency
+	UserId2StatusCacheSeconds   = config.SyncFrequency
+	UserId2UsernameCacheSeconds = config.SyncFrequency
+	GroupModelsCacheSeconds     = config.SyncFrequency
 )
 
 func CacheGetTokenByKey(ctx context.Context, key string) (*Token, error) {
@@ -75,6 +76,41 @@ func CacheGetTokenByKey(ctx context.Context, key string) (*Token, error) {
 	return &token, nil
 }
 
+// UserId2UserCacheSeconds controls the TTL for the full user object cache.
+var UserId2UserCacheSeconds = config.SyncFrequency
+
+// CacheGetUserById retrieves a full User (minus password/access_token) by ID,
+// using Redis when available. On cache miss it falls back to GetUserById and populates the cache.
+func CacheGetUserById(ctx context.Context, id int) (*User, error) {
+	lg := logger.FromContext(ctx)
+	if !common.IsRedisEnabled() {
+		return GetUserById(id, false)
+	}
+	cacheKey := fmt.Sprintf("user_obj:%d", id)
+	cached, err := common.RedisGet(ctx, cacheKey)
+	if err == nil {
+		var user User
+		if jsonErr := json.Unmarshal([]byte(cached), &user); jsonErr != nil {
+			lg.Warn("Redis cached user object corrupted, falling back to database", zap.Int("user_id", id), zap.Error(jsonErr))
+		} else {
+			return &user, nil
+		}
+	}
+	user, err := GetUserById(id, false)
+	if err != nil {
+		return nil, errors.Wrapf(err, "get user %d from database", id)
+	}
+	payload, err := json.Marshal(user)
+	if err != nil {
+		lg.Warn("failed to marshal user for cache", zap.Int("user_id", id), zap.Error(err))
+		return user, nil
+	}
+	if setErr := common.RedisSet(ctx, cacheKey, string(payload), time.Duration(UserId2UserCacheSeconds)*time.Second); setErr != nil {
+		lg.Warn("Redis set user object failed, continuing without cache", zap.Int("user_id", id), zap.Error(setErr))
+	}
+	return user, nil
+}
+
 func CacheGetUserGroup(ctx context.Context, id int) (group string, err error) {
 	lg := logger.FromContext(ctx)
 	if !common.IsRedisEnabled() {
@@ -95,6 +131,27 @@ func CacheGetUserGroup(ctx context.Context, id int) (group string, err error) {
 		return group, errors.Wrapf(err, "cache user group for user %d", id)
 	}
 	return group, nil
+}
+
+// CacheGetUsername retrieves a username by user ID, using Redis cache when available.
+// On cache miss it falls back to GetUsernameById and populates the cache.
+// Empty usernames (non-existent users) are not cached to allow retry on the next request.
+func CacheGetUsername(ctx context.Context, id int) string {
+	lg := logger.FromContext(ctx)
+	if !common.IsRedisEnabled() {
+		return GetUsernameById(id)
+	}
+	username, err := common.RedisGet(ctx, fmt.Sprintf("user_username:%d", id))
+	if err != nil {
+		username = GetUsernameById(id)
+		if username == "" {
+			return username
+		}
+		if setErr := common.RedisSet(ctx, fmt.Sprintf("user_username:%d", id), username, time.Duration(UserId2UsernameCacheSeconds)*time.Second); setErr != nil {
+			lg.Warn("Redis set username failed, continuing without cache", zap.Int("user_id", id), zap.Error(setErr))
+		}
+	}
+	return username
 }
 
 func fetchAndUpdateUserQuota(ctx context.Context, id int) (quota int64, err error) {

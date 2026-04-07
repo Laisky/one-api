@@ -93,7 +93,7 @@ func (r *mcpToolRegistry) rebuildRequestTools(request *relaymodel.GeneralOpenAIR
 		}
 		functionTool, err := buildFunctionToolFromMCP(candidates[idx])
 		if err != nil {
-			return err
+			return errors.Wrap(err, "build function tool from MCP")
 		}
 		updated = append(updated, functionTool)
 	}
@@ -196,7 +196,7 @@ func invokeMCPTool(c *gin.Context, registry *mcpToolRegistry, nameKey string, ca
 		IsError:     err != nil,
 	})
 	if err != nil {
-		return mcp.ToolCandidate{}, nil, err
+		return mcp.ToolCandidate{}, nil, errors.Wrapf(err, "call mcp tool %q on server %d", candidate.Tool.Name, candidate.ServerID)
 	}
 	return candidate, result, nil
 }
@@ -208,11 +208,11 @@ func validateMCPToolArguments(args map[string]any, candidate mcp.ToolCandidate) 
 	}
 	schema, err := mcp.ParseInputSchema(candidate.Tool.InputSchema)
 	if err != nil {
-		return false, err
+		return false, errors.Wrap(err, "parse mcp tool input schema")
 	}
 	match, err := mcp.ArgumentsMatchSchema(args, schema)
 	if err != nil {
-		return false, err
+		return false, errors.Wrap(err, "validate arguments against schema")
 	}
 	return match, nil
 }

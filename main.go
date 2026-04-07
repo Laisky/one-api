@@ -214,7 +214,7 @@ func main() {
 
 	// Add Prometheus metrics endpoint if enabled
 	if config.EnablePrometheusMetrics {
-		server.GET("/metrics", middleware.AdminAuth(), gin.WrapH(promhttp.Handler()))
+		server.GET("/metrics", middleware.MetricsAuth(), gin.WrapH(promhttp.Handler()))
 		logger.Logger.Info("Prometheus metrics endpoint available at /metrics")
 	}
 

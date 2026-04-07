@@ -129,5 +129,5 @@ func wrapFFProbeError(err error, output []byte) error {
 		}
 	}
 
-	return err
+	return errors.Wrap(err, "ffprobe error")
 }

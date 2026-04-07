@@ -159,7 +159,7 @@ func TestRelayResponseAPIHelper_FallbackAzure(t *testing.T) {
 	c.Set(ctxkey.TokenQuotaUnlimited, true)
 	c.Set(ctxkey.TokenQuota, int64(0))
 	c.Set(ctxkey.Username, "response-fallback")
-	c.Set(ctxkey.UserQuota, int64(1_000_000))
+	c.Set(ctxkey.UserObj, &model.User{Quota: 1_000_000})
 	c.Set(ctxkey.ChannelModel, &model.Channel{Id: fallbackChannelID, Type: channeltype.Azure})
 	c.Set(ctxkey.Config, model.ChannelConfig{APIVersion: "2024-02-15-preview"})
 
@@ -270,7 +270,7 @@ func TestRelayResponseAPIHelper_FallbackSearchPreviewModel(t *testing.T) {
 	c.Set(ctxkey.TokenQuotaUnlimited, true)
 	c.Set(ctxkey.TokenQuota, int64(0))
 	c.Set(ctxkey.Username, "response-fallback")
-	c.Set(ctxkey.UserQuota, int64(1_000_000))
+	c.Set(ctxkey.UserObj, &model.User{Quota: 1_000_000})
 	c.Set(ctxkey.Config, model.ChannelConfig{})
 
 	apiErr := RelayResponseAPIHelper(c)
@@ -338,7 +338,7 @@ func TestRelayResponseAPIHelper_FallbackGroqGPTOSSMultimodalValidation(t *testin
 	c.Set(ctxkey.TokenQuotaUnlimited, true)
 	c.Set(ctxkey.TokenQuota, int64(0))
 	c.Set(ctxkey.Username, "response-fallback")
-	c.Set(ctxkey.UserQuota, int64(1_000_000))
+	c.Set(ctxkey.UserObj, &model.User{Quota: 1_000_000})
 	c.Set(ctxkey.Config, model.ChannelConfig{})
 
 	apiErr := RelayResponseAPIHelper(c)
@@ -397,7 +397,7 @@ func TestRelayResponseAPIHelper_FallbackBlocksDisallowedWebSearch(t *testing.T) 
 	c.Set(ctxkey.TokenQuotaUnlimited, true)
 	c.Set(ctxkey.TokenQuota, int64(0))
 	c.Set(ctxkey.Username, "response-fallback")
-	c.Set(ctxkey.UserQuota, int64(1_000_000))
+	c.Set(ctxkey.UserObj, &model.User{Quota: 1_000_000})
 	c.Set(ctxkey.Config, model.ChannelConfig{})
 
 	apiErr := RelayResponseAPIHelper(c)
@@ -480,7 +480,7 @@ func TestRelayResponseAPIHelper_FallbackStreaming(t *testing.T) {
 	c.Set(ctxkey.TokenQuotaUnlimited, true)
 	c.Set(ctxkey.TokenQuota, int64(0))
 	c.Set(ctxkey.Username, "response-fallback")
-	c.Set(ctxkey.UserQuota, int64(1_000_000))
+	c.Set(ctxkey.UserObj, &model.User{Quota: 1_000_000})
 	c.Set(ctxkey.ChannelModel, &model.Channel{Id: fallbackCompatibleChannelID, Type: channeltype.OpenAICompatible})
 	c.Set(ctxkey.Config, model.ChannelConfig{})
 
@@ -603,7 +603,7 @@ func TestRelayResponseAPIHelper_FallbackStreamingToolCalls(t *testing.T) {
 	c.Set(ctxkey.TokenQuotaUnlimited, true)
 	c.Set(ctxkey.TokenQuota, int64(0))
 	c.Set(ctxkey.Username, "response-fallback")
-	c.Set(ctxkey.UserQuota, int64(1_000_000))
+	c.Set(ctxkey.UserObj, &model.User{Quota: 1_000_000})
 	c.Set(ctxkey.ChannelModel, &model.Channel{Id: fallbackCompatibleChannelID, Type: channeltype.OpenAICompatible})
 	c.Set(ctxkey.Config, model.ChannelConfig{})
 
@@ -723,7 +723,7 @@ func TestRelayResponseAPIHelper_FallbackAnthropicStreamingHandled(t *testing.T) 
 	c.Set(ctxkey.TokenQuotaUnlimited, true)
 	c.Set(ctxkey.TokenQuota, int64(0))
 	c.Set(ctxkey.Username, "response-fallback")
-	c.Set(ctxkey.UserQuota, int64(1_000_000))
+	c.Set(ctxkey.UserObj, &model.User{Quota: 1_000_000})
 	c.Set(ctxkey.ChannelModel, &model.Channel{Id: fallbackAnthropicChannelID, Type: channeltype.Anthropic})
 	c.Set(ctxkey.Config, model.ChannelConfig{})
 

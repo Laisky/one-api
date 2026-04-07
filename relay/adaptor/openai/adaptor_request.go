@@ -428,7 +428,7 @@ func (a *Adaptor) ConvertClaudeRequest(c *gin.Context, request *model.ClaudeRequ
 
 	converted, err := openai_compatible.ConvertClaudeRequest(c, request)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "convert claude request to openai format")
 	}
 
 	openaiRequest, ok := converted.(*model.GeneralOpenAIRequest)

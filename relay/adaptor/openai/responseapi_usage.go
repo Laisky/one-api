@@ -7,6 +7,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/Laisky/errors/v2"
+
 	"github.com/songquanpeng/one-api/relay/model"
 )
 
@@ -46,7 +48,7 @@ type ResponseAPIOutputTokensDetails struct {
 func (d *ResponseAPIInputTokensDetails) UnmarshalJSON(data []byte) error {
 	var raw map[string]any
 	if err := json.Unmarshal(data, &raw); err != nil {
-		return err
+		return errors.Wrap(err, "unmarshal input tokens details")
 	}
 
 	// Reset existing values so the struct can be reused.
@@ -120,7 +122,7 @@ func (d *ResponseAPIInputTokensDetails) WebSearchInvocationCount() int {
 func (d *ResponseAPIOutputTokensDetails) UnmarshalJSON(data []byte) error {
 	var raw map[string]any
 	if err := json.Unmarshal(data, &raw); err != nil {
-		return err
+		return errors.Wrap(err, "unmarshal output tokens details")
 	}
 
 	*d = ResponseAPIOutputTokensDetails{}

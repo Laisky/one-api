@@ -689,7 +689,7 @@ func parseResponseStreamPayload(data []byte) (*responseAPIResponse, *int, error)
 
 	var event responseAPIStreamEvent
 	if err := json.Unmarshal(data, &event); err != nil {
-		return nil, nil, err
+		return nil, nil, errors.Wrap(err, "unmarshal response API stream event")
 	}
 
 	converted := convertResponseAPIStreamEventToResponse(&event)
