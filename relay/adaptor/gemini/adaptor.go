@@ -87,7 +87,7 @@ func (a *Adaptor) ConvertRequest(c *gin.Context, relayMode int, request *model.G
 	case relaymode.Embeddings:
 		geminiEmbeddingRequest, err := ConvertEmbeddingRequest(*request)
 		if err != nil {
-			return nil, err
+			return nil, errors.Wrap(err, "convert gemini embedding request")
 		}
 		return geminiEmbeddingRequest, nil
 	default:

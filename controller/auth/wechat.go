@@ -29,7 +29,7 @@ func getWeChatIdByCode(code string) (string, error) {
 	}
 	req, err := http.NewRequest("GET", fmt.Sprintf("%s/api/wechat/user?code=%s", config.WeChatServerAddress, code), nil)
 	if err != nil {
-		return "", err
+		return "", errors.Wrap(err, "create wechat request")
 	}
 	req.Header.Set("Authorization", config.WeChatServerToken)
 	client := http.Client{
@@ -37,13 +37,13 @@ func getWeChatIdByCode(code string) (string, error) {
 	}
 	httpResponse, err := client.Do(req)
 	if err != nil {
-		return "", err
+		return "", errors.Wrap(err, "send wechat request")
 	}
 	defer httpResponse.Body.Close()
 	var res wechatLoginResponse
 	err = json.NewDecoder(httpResponse.Body).Decode(&res)
 	if err != nil {
-		return "", err
+		return "", errors.Wrap(err, "decode wechat response")
 	}
 	if !res.Success {
 		return "", errors.New(res.Message)

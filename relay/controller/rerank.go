@@ -259,7 +259,7 @@ func getAndValidateRerankRequest(c *gin.Context) (*relaymodel.RerankRequest, err
 	}
 
 	if err := rerankRequest.Normalize(); err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "normalize rerank request")
 	}
 
 	if err := validator.ValidateRerankRequest(rerankRequest); err != nil {

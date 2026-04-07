@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"strings"
 
+	"github.com/Laisky/errors/v2"
 	"github.com/go-webauthn/webauthn/protocol"
 	"github.com/go-webauthn/webauthn/webauthn"
 )
@@ -88,7 +89,7 @@ func TransportsToString(ts []protocol.AuthenticatorTransport) string {
 func NewWebAuthnUser(user *User) (*WebAuthnUser, error) {
 	creds, err := GetPasskeyCredentialsByUserId(user.Id)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrapf(err, "get passkey credentials for user %d", user.Id)
 	}
 	return &WebAuthnUser{User: user, Credentials: creds}, nil
 }

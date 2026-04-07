@@ -645,7 +645,7 @@ func autoConfirmExpiredTokenTransactions(ctx context.Context, c *gin.Context, to
 	now := helper.GetTimestamp()
 	transactions, err := model.AutoConfirmExpiredTokenTransactions(ctx, tokenID, now)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "auto confirm expired token transactions")
 	}
 
 	if len(transactions) == 0 {

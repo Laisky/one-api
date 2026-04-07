@@ -115,7 +115,7 @@ func asyncTaskWait(taskID string, key string) (*TaskResponse, []byte, error) {
 		rsp, err, body := asyncTask(taskID, key)
 		responseBody = body
 		if err != nil {
-			return &taskResponse, responseBody, err
+			return &taskResponse, responseBody, errors.Wrap(err, "ali async image task")
 		}
 
 		if rsp.Output.TaskStatus == "" {

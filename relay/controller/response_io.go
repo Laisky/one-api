@@ -138,13 +138,19 @@ func normalizeResponseAPIRawBody(rawBody []byte, request *openai.ResponseAPIRequ
 
 	if len(rawBody) == 0 {
 		patched, err := json.Marshal(request)
-		return patched, stats, err == nil, err
+		if err != nil {
+			return rawBody, stats, false, errors.Wrap(err, "marshal response API request")
+		}
+		return patched, stats, true, nil
 	}
 
 	var root map[string]json.RawMessage
 	if err := json.Unmarshal(rawBody, &root); err != nil {
 		patched, err2 := json.Marshal(request)
-		return patched, stats, err2 == nil, err2
+		if err2 != nil {
+			return rawBody, stats, false, errors.Wrap(err2, "marshal response API request after unmarshal failure")
+		}
+		return patched, stats, true, nil
 	}
 
 	changed := false

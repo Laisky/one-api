@@ -97,7 +97,7 @@ func buildRotationSinkURL(path string, interval rotationInterval, retentionDays 
 	}
 
 	if err := ensureRotationSinkRegistered(); err != nil {
-		return "", err
+		return "", errors.Wrap(err, "ensure rotation sink registered")
 	}
 
 	values := url.Values{}
@@ -144,7 +144,7 @@ func createRotationSink(u *url.URL) (zap.Sink, error) {
 
 	writer, err := newRotationWriter(filepath.Clean(targetPath), interval, retentionDays)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "create rotation writer")
 	}
 
 	return writer, nil
@@ -266,9 +266,9 @@ func (w *rotationWriter) ensureFile(ts time.Time) error {
 	if w.file == nil {
 		start, next := w.interval.windowBounds(ts)
 		if err := w.openNewFile(start, next); err != nil {
-			return err
+			return errors.Wrap(err, "open new log file")
 		}
-		return w.purgeExpired(start)
+		return errors.Wrap(w.purgeExpired(start), "purge expired log files")
 	}
 
 	if ts.Before(w.nextCutover) {
@@ -281,7 +281,7 @@ func (w *rotationWriter) ensureFile(ts time.Time) error {
 
 func (w *rotationWriter) openNewFile(start, next time.Time) error {
 	if err := ensureDir(w.baseDir); err != nil {
-		return err
+		return errors.Wrap(err, "ensure log directory")
 	}
 
 	path := w.activePathFor(start)
@@ -317,10 +317,10 @@ func (w *rotationWriter) rotate(start, next time.Time) error {
 	}
 
 	if err := w.openNewFile(start, next); err != nil {
-		return err
+		return errors.Wrap(err, "open new log file during rotation")
 	}
 
-	return w.purgeExpired(start)
+	return errors.Wrap(w.purgeExpired(start), "purge expired log files during rotation")
 }
 
 func (w *rotationWriter) purgeExpired(currentStart time.Time) error {

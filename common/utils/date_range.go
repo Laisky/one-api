@@ -1,7 +1,6 @@
 package utils
 
 import (
-	"fmt"
 	"time"
 
 	"github.com/Laisky/errors/v2"
@@ -20,11 +19,11 @@ func NormalizeDateRange(fromStr, toStr string, maxDays int) (int64, int64, error
 	const layout = "2006-01-02"
 	fromDate, err := time.Parse(layout, fromStr)
 	if err != nil {
-		return 0, 0, fmt.Errorf("invalid from_date format, expected YYYY-MM-DD: %w", err)
+		return 0, 0, errors.Wrap(err, "invalid from_date format, expected YYYY-MM-DD")
 	}
 	toDate, err := time.Parse(layout, toStr)
 	if err != nil {
-		return 0, 0, fmt.Errorf("invalid to_date format, expected YYYY-MM-DD: %w", err)
+		return 0, 0, errors.Wrap(err, "invalid to_date format, expected YYYY-MM-DD")
 	}
 
 	// Truncate to UTC midnight boundaries

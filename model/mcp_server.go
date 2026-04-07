@@ -108,7 +108,7 @@ func (s *MCPServer) NormalizeAndValidate() error {
 	}
 
 	if err := s.ValidateToolPricing(); err != nil {
-		return err
+		return errors.Wrap(err, "validate tool pricing")
 	}
 
 	return nil

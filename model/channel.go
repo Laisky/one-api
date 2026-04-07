@@ -241,14 +241,14 @@ func normalizeChannelToolingConfig(cfg *ChannelToolingConfig) (*ChannelToolingCo
 	normalized := &ChannelToolingConfig{}
 	list, err := normalizeToolWhitelist(cfg.Whitelist)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "normalize tool whitelist")
 	}
 	if len(list) > 0 {
 		normalized.Whitelist = list
 	}
 	pricing, err := normalizeToolPricingMap(cfg.Pricing)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "normalize tool pricing")
 	}
 	if len(pricing) > 0 {
 		normalized.Pricing = pricing
@@ -781,15 +781,15 @@ func (channel *Channel) validateModelPriceConfigs(configs map[string]ModelConfig
 
 		hasVideoData, err := validateVideoPricingLocal(config.Video, modelName)
 		if err != nil {
-			return err
+			return errors.Wrap(err, "validate video pricing")
 		}
 		hasAudioData, err := validateAudioPricingLocal(config.Audio, modelName)
 		if err != nil {
-			return err
+			return errors.Wrap(err, "validate audio pricing")
 		}
 		hasImageData, err := validateImagePricingLocal(config.Image, modelName)
 		if err != nil {
-			return err
+			return errors.Wrap(err, "validate image pricing")
 		}
 
 		// Validate that at least one field has meaningful data
@@ -1294,7 +1294,7 @@ func (channel *Channel) SetToolingConfig(tooling *ChannelToolingConfig) error {
 	}
 	cfg, err := channel.LoadConfig()
 	if err != nil {
-		return err
+		return errors.Wrap(err, "load channel config")
 	}
 	cfg.Tooling = cloneChannelToolingConfig(normalized)
 	return channel.storeConfig(cfg)

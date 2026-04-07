@@ -23,7 +23,7 @@ func SyncServerTools(ctx context.Context, server *model.MCPServer) (int, error) 
 	client := NewStreamableHTTPClient(server, nil, defaultSyncTimeout)
 	tools, err := client.ListTools(ctx)
 	if err != nil {
-		return 0, err
+		return 0, errors.Wrap(err, "list mcp tools from server")
 	}
 
 	stored := make([]*model.MCPTool, 0, len(tools))
@@ -51,7 +51,7 @@ func SyncServerTools(ctx context.Context, server *model.MCPServer) (int, error) 
 	}
 
 	if err := model.UpsertMCPTools(server.Id, stored); err != nil {
-		return 0, err
+		return 0, errors.Wrapf(err, "upsert mcp tools for server %d", server.Id)
 	}
 
 	return len(stored), nil

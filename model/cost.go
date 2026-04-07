@@ -270,7 +270,7 @@ func MigrateUserRequestCostEnsureUniqueRequestID() error {
 
 	deletedLongCount, err := deleteLongUserRequestCostRequestIDs()
 	if err != nil {
-		return err
+		return errors.Wrap(err, "delete long user request cost request IDs")
 	}
 	if deletedLongCount > 0 {
 		logger.Logger.Debug("Removed user_request_costs rows with oversized request_id",
@@ -286,14 +286,14 @@ func MigrateUserRequestCostEnsureUniqueRequestID() error {
 		var altered bool
 		altered, err = ensureMySQLRequestIDColumnSized()
 		if err != nil {
-			return err
+			return errors.Wrap(err, "ensure MySQL request ID column sized")
 		}
 		columnAltered = columnAltered || altered
 	} else if common.UsingPostgreSQL.Load() {
 		var altered bool
 		altered, err = ensurePostgresRequestIDColumnSized()
 		if err != nil {
-			return err
+			return errors.Wrap(err, "ensure Postgres request ID column sized")
 		}
 		columnAltered = columnAltered || altered
 	}

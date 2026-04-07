@@ -93,7 +93,7 @@ func (c *StreamableHTTPClient) ListTools(ctx context.Context) ([]ToolDescriptor,
 		Tools []ToolDescriptor `json:"tools"`
 	}
 	if err := c.doRPC(ctx, "tools/list", nil, &result); err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "mcp rpc tools/list")
 	}
 	return result.Tools, nil
 }
@@ -106,7 +106,7 @@ func (c *StreamableHTTPClient) CallTool(ctx context.Context, name string, argume
 	}
 	var result CallToolResult
 	if err := c.doRPC(ctx, "tools/call", params, &result); err != nil {
-		return nil, err
+		return nil, errors.Wrapf(err, "mcp rpc tools/call %s", name)
 	}
 	return &result, nil
 }

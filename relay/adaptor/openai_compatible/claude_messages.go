@@ -667,8 +667,8 @@ func HandleClaudeMessagesResponse(c *gin.Context, resp *http.Response, meta *met
 	// Check if this is a Claude Messages conversion
 	if isClaudeConversion, exists := c.Get(ctxkey.ClaudeMessagesConversion); !exists || !isClaudeConversion.(bool) {
 		// Not a Claude Messages conversion, proceed normally
-		err, usage := handler(c, resp, meta.PromptTokens, meta.ActualModelName)
-		return usage, err
+		errWithStatus, usage := handler(c, resp, meta.PromptTokens, meta.ActualModelName)
+		return usage, errWithStatus
 	}
 
 	// Claude Messages conversion path

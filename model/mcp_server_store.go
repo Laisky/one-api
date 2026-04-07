@@ -36,7 +36,7 @@ func ListMCPServers(offset int, limit int, sortBy string, sortOrder string) ([]*
 		return nil, errors.Wrap(err, "list mcp servers")
 	}
 	if err := decryptMCPServerSecrets(servers); err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "decrypt mcp server secrets")
 	}
 	return servers, nil
 }
@@ -60,7 +60,7 @@ func GetMCPServerByID(id int) (*MCPServer, error) {
 		return nil, errors.Wrap(err, "get mcp server")
 	}
 	if err := decryptMCPServerSecret(&server); err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "decrypt mcp server secret")
 	}
 	return &server, nil
 }
@@ -71,10 +71,10 @@ func CreateMCPServer(server *MCPServer) error {
 		return errors.New("mcp server is nil")
 	}
 	if err := server.NormalizeAndValidate(); err != nil {
-		return err
+		return errors.Wrap(err, "normalize and validate mcp server")
 	}
 	if err := encryptMCPServerSecret(server); err != nil {
-		return err
+		return errors.Wrap(err, "encrypt mcp server secret")
 	}
 	if err := DB.Create(server).Error; err != nil {
 		return errors.Wrap(err, "create mcp server")
@@ -91,10 +91,10 @@ func UpdateMCPServer(server *MCPServer) error {
 		return errors.New("mcp server id is invalid")
 	}
 	if err := server.NormalizeAndValidate(); err != nil {
-		return err
+		return errors.Wrap(err, "normalize and validate mcp server")
 	}
 	if err := encryptMCPServerSecret(server); err != nil {
-		return err
+		return errors.Wrap(err, "encrypt mcp server secret")
 	}
 	if err := DB.Model(server).Updates(server).Error; err != nil {
 		return errors.Wrap(err, "update mcp server")
@@ -124,7 +124,7 @@ func GetMCPServerByName(name string) (*MCPServer, error) {
 		return nil, errors.Wrap(err, "get mcp server by name")
 	}
 	if err := decryptMCPServerSecret(&server); err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "decrypt mcp server secret")
 	}
 	return &server, nil
 }
@@ -136,7 +136,7 @@ func ListEnabledMCPServers() ([]*MCPServer, error) {
 		return nil, errors.Wrap(err, "list enabled mcp servers")
 	}
 	if err := decryptMCPServerSecrets(servers); err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "decrypt enabled mcp server secrets")
 	}
 	return servers, nil
 }
@@ -161,7 +161,7 @@ func encryptMCPServerSecret(server *MCPServer) error {
 func decryptMCPServerSecrets(servers []*MCPServer) error {
 	for _, server := range servers {
 		if err := decryptMCPServerSecret(server); err != nil {
-			return err
+			return errors.Wrap(err, "decrypt mcp server secret in batch")
 		}
 	}
 	return nil

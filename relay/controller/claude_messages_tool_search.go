@@ -84,7 +84,7 @@ func injectDeferredMCPToolsForToolSearch(c *gin.Context, request *ClaudeMessages
 
 	user, err := getRelayUserFromContext(c)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "get relay user from context")
 	}
 
 	channelRecord := func() *model.Channel {
@@ -97,12 +97,12 @@ func injectDeferredMCPToolsForToolSearch(c *gin.Context, request *ClaudeMessages
 	}()
 	channelBlacklist, err := loadChannelMCPBlacklist(channelRecord)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "load channel mcp blacklist")
 	}
 
 	catalog, err := loadMCPToolCatalog()
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "load mcp tool catalog")
 	}
 	if len(catalog.servers) == 0 {
 		return nil, nil
@@ -561,13 +561,13 @@ func preConsumeQuotaForMCPRound(c *gin.Context, meta *metalib.Meta, quota int64)
 	ctx := gmw.Ctx(c)
 	userQuota, err := model.CacheGetUserQuota(ctx, meta.UserId)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "get user quota for MCP round")
 	}
 	if userQuota-quota < 0 {
 		return errors.New("user quota is not enough")
 	}
 	if err := model.PreConsumeTokenQuota(ctx, meta.TokenId, quota); err != nil {
-		return err
+		return errors.Wrap(err, "pre-consume token quota for MCP round")
 	}
 	syncUserQuotaCacheAfterPreConsume(ctx, meta.UserId, quota, "claude_mcp_round_preconsume")
 	return nil
@@ -599,7 +599,7 @@ func writeClaudeResponse(c *gin.Context, resp *anthropic.Response) error {
 	c.Writer.Header().Set("Content-Type", "application/json")
 	c.Writer.WriteHeader(http.StatusOK)
 	_, err = c.Writer.Write(body)
-	return err
+	return errors.Wrap(err, "write claude response body")
 }
 
 // resolveServerByIDFromCatalog looks up a server from the catalog by its ID.

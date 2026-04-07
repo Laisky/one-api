@@ -129,7 +129,7 @@ func (d *ResponseAPIOutputTokensDetails) toModel() *model.UsageCompletionTokensD
 func (d *ResponseAPIInputTokensDetails) UnmarshalJSON(data []byte) error {
 	var raw map[string]any
 	if err := json.Unmarshal(data, &raw); err != nil {
-		return err
+		return errors.Wrap(err, "unmarshal xai input tokens details")
 	}
 
 	// Reset existing values so the struct can be reused.
@@ -175,7 +175,7 @@ func (d *ResponseAPIInputTokensDetails) UnmarshalJSON(data []byte) error {
 func (d *ResponseAPIOutputTokensDetails) UnmarshalJSON(data []byte) error {
 	var raw map[string]any
 	if err := json.Unmarshal(data, &raw); err != nil {
-		return err
+		return errors.Wrap(err, "unmarshal xai output tokens details")
 	}
 
 	*d = ResponseAPIOutputTokensDetails{}

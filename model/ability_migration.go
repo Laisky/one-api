@@ -73,7 +73,7 @@ func migrateAbilitySuspendUntilMySQL() error {
 
 	logger.Logger.Debug("Normalizing legacy MySQL suspend_until values before column alter")
 	if err := normalizeAbilitySuspendUntilValues(); err != nil {
-		return err
+		return errors.Wrap(err, "normalize MySQL ability suspend_until values")
 	}
 
 	if err := DB.Exec("ALTER TABLE abilities MODIFY suspend_until DATETIME NULL").Error; err != nil {
@@ -100,7 +100,7 @@ func migrateAbilitySuspendUntilPostgres() error {
 
 	logger.Logger.Debug("Normalizing legacy PostgreSQL suspend_until values before column alter")
 	if err := normalizeAbilitySuspendUntilValues(); err != nil {
-		return err
+		return errors.Wrap(err, "normalize Postgres ability suspend_until values")
 	}
 
 	alter := "ALTER TABLE abilities ALTER COLUMN suspend_until TYPE TIMESTAMP USING NULLIF(suspend_until, '')::timestamp"
@@ -309,7 +309,7 @@ func mysqlColumnDataType(table, column string) (string, error) {
 	var dataType string
 	query := "SELECT DATA_TYPE FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = ? AND column_name = ?"
 	if err := DB.Raw(query, table, column).Scan(&dataType).Error; err != nil {
-		return "", err
+		return "", errors.Wrapf(err, "query MySQL column data type for %s.%s", table, column)
 	}
 	return strings.ToLower(dataType), nil
 }
@@ -320,7 +320,7 @@ func postgresColumnDataType(table, column string) (string, error) {
 	var dataType string
 	query := "SELECT data_type FROM information_schema.columns WHERE table_name = ? AND column_name = ?"
 	if err := DB.Raw(query, table, column).Scan(&dataType).Error; err != nil {
-		return "", err
+		return "", errors.Wrapf(err, "query Postgres column data type for %s.%s", table, column)
 	}
 	return strings.ToLower(dataType), nil
 }

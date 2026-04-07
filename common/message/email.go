@@ -226,7 +226,7 @@ func SendEmail(subject string, receiver string, content string) error {
 	// use the domain extracted above as EHLO local name; fallback is "localhost"
 	client, preAuthMechs, usingTLS, err := dialSMTPClient(ctx, addr, domain)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "dial SMTP client")
 	}
 	defer client.Close()
 

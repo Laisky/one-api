@@ -38,7 +38,7 @@ func validateValueAgainstSchema(value any, schema map[string]any) (bool, error) 
 		for _, entry := range anyOf {
 			match, err := validateValueAgainstSchema(value, entry)
 			if err != nil {
-				return false, err
+				return false, errors.Wrap(err, "validate anyOf schema entry")
 			}
 			if match {
 				return true, nil
@@ -51,7 +51,7 @@ func validateValueAgainstSchema(value any, schema map[string]any) (bool, error) 
 		for _, entry := range oneOf {
 			match, err := validateValueAgainstSchema(value, entry)
 			if err != nil {
-				return false, err
+				return false, errors.Wrap(err, "validate oneOf schema entry")
 			}
 			if match {
 				matchCount++
@@ -63,7 +63,7 @@ func validateValueAgainstSchema(value any, schema map[string]any) (bool, error) 
 		for _, entry := range allOf {
 			match, err := validateValueAgainstSchema(value, entry)
 			if err != nil {
-				return false, err
+				return false, errors.Wrap(err, "validate allOf schema entry")
 			}
 			if !match {
 				return false, nil
@@ -100,7 +100,7 @@ func validateValueAgainstSchema(value any, schema map[string]any) (bool, error) 
 			}
 			match, err := validateValueAgainstSchema(val, propSchema)
 			if err != nil {
-				return false, err
+				return false, errors.Wrapf(err, "validate object property %q", key)
 			}
 			if !match {
 				return false, nil
@@ -118,7 +118,7 @@ func validateValueAgainstSchema(value any, schema map[string]any) (bool, error) 
 			for _, item := range values {
 				match, err := validateValueAgainstSchema(item, itemsSchema)
 				if err != nil {
-					return false, err
+					return false, errors.Wrap(err, "validate array item against schema")
 				}
 				if !match {
 					return false, nil

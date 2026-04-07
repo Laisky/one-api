@@ -50,7 +50,7 @@ func (a *Adaptor) ConvertRequest(c *gin.Context, relayMode int, request *model.G
 	if relayMode == relaymode.Embeddings {
 		embeddingRequest, err := gemini.ConvertEmbeddingRequest(*request)
 		if err != nil {
-			return nil, err
+			return nil, errors.Wrap(err, "convert vertex AI gemini embedding request")
 		}
 		convertedRequest = embeddingRequest
 	} else {

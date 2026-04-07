@@ -4,6 +4,8 @@ import (
 	"runtime"
 	"time"
 
+	"github.com/Laisky/errors/v2"
+
 	"github.com/songquanpeng/one-api/common/config"
 	"github.com/songquanpeng/one-api/common/metrics"
 	"github.com/songquanpeng/one-api/model"
@@ -24,7 +26,7 @@ func InitMonitoring(version, buildTime, goVersion string, startTime time.Time) e
 	if config.OpenTelemetryEnabled {
 		otelRecorder, err := otel.NewOtelRecorder()
 		if err != nil {
-			return err
+			return errors.Wrap(err, "create OpenTelemetry recorder")
 		}
 		recorders = append(recorders, otelRecorder)
 	}

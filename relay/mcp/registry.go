@@ -105,7 +105,7 @@ func BuildToolCandidates(servers []*model.MCPServer, toolsByServer map[int][]*mo
 
 	normalizedSignature, err := normalizeSignature(signature)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "normalize mcp tool signature")
 	}
 
 	candidates := make([]ToolCandidate, 0)
@@ -119,7 +119,7 @@ func BuildToolCandidates(servers []*model.MCPServer, toolsByServer map[int][]*mo
 		}
 		resolved, err := ResolveTools(server, tools, channelBlacklist, userBlacklist, allowedTools)
 		if err != nil {
-			return nil, err
+			return nil, errors.Wrapf(err, "resolve tools for server %d", server.Id)
 		}
 		for _, entry := range resolved {
 			if !entry.Policy.Allowed || entry.Tool == nil {
@@ -204,7 +204,7 @@ func SignatureFromJSON(raw string) (string, error) {
 func CanonicalizeJSON(value any) (string, error) {
 	var buf bytes.Buffer
 	if err := writeCanonicalJSON(&buf, value); err != nil {
-		return "", err
+		return "", errors.Wrap(err, "write canonical JSON")
 	}
 	return buf.String(), nil
 }
@@ -253,7 +253,7 @@ func writeCanonicalJSON(buf *bytes.Buffer, value any) error {
 			buf.Write(encodedKey)
 			buf.WriteByte(':')
 			if err := writeCanonicalJSON(buf, val.MapIndex(key).Interface()); err != nil {
-				return err
+				return errors.Wrap(err, "write canonical JSON map value")
 			}
 		}
 		buf.WriteByte('}')
@@ -265,7 +265,7 @@ func writeCanonicalJSON(buf *bytes.Buffer, value any) error {
 				buf.WriteByte(',')
 			}
 			if err := writeCanonicalJSON(buf, val.Index(i).Interface()); err != nil {
-				return err
+				return errors.Wrap(err, "write canonical JSON array element")
 			}
 		}
 		buf.WriteByte(']')
