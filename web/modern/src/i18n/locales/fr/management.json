@@ -815,6 +815,7 @@
         "remaining_quota_title": "Restant : {{quota}}",
         "role": {
           "admin": "Admin",
+          "guest": "Invité",
           "super_admin": "Super Admin",
           "user": "Utilisateur"
         },

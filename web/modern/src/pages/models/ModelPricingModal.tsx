@@ -86,8 +86,7 @@ export function ModelPricingModal({ open, onOpenChange, modelName, data, channel
   const { isMobile } = useResponsive();
   const { t } = useTranslation();
   const tr = useCallback(
-    (key: string, defaultValue: string, options?: Record<string, unknown>) =>
-      t(`models.detail.${key}`, { defaultValue, ...options }),
+    (key: string, defaultValue: string, options?: Record<string, unknown>) => t(`models.detail.${key}`, { defaultValue, ...options }),
     [t]
   );
 
@@ -139,13 +138,17 @@ function MobileBottomSheet({
       setDragOffset(0);
       const prev = document.body.style.overflow;
       document.body.style.overflow = 'hidden';
-      return () => { document.body.style.overflow = prev; };
+      return () => {
+        document.body.style.overflow = prev;
+      };
     }
   }, [open]);
 
   useEffect(() => {
     if (!open) return;
-    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
     document.addEventListener('keydown', handler);
     return () => document.removeEventListener('keydown', handler);
   }, [open, onClose]);
@@ -175,31 +178,40 @@ function MobileBottomSheet({
     }
   }, [dragOffset, onClose]);
 
-  const onTouchStart = useCallback((e: React.TouchEvent) => {
-    handleDragStart(e.touches[0].clientY);
-  }, [handleDragStart]);
+  const onTouchStart = useCallback(
+    (e: React.TouchEvent) => {
+      handleDragStart(e.touches[0].clientY);
+    },
+    [handleDragStart]
+  );
 
-  const onTouchMove = useCallback((e: React.TouchEvent) => {
-    handleDragMove(e.touches[0].clientY);
-  }, [handleDragMove]);
+  const onTouchMove = useCallback(
+    (e: React.TouchEvent) => {
+      handleDragMove(e.touches[0].clientY);
+    },
+    [handleDragMove]
+  );
 
   const onTouchEnd = useCallback(() => {
     handleDragEnd();
   }, [handleDragEnd]);
 
-  const onMouseDown = useCallback((e: React.MouseEvent) => {
-    e.preventDefault();
-    handleDragStart(e.clientY);
+  const onMouseDown = useCallback(
+    (e: React.MouseEvent) => {
+      e.preventDefault();
+      handleDragStart(e.clientY);
 
-    const onMouseMove = (ev: MouseEvent) => handleDragMove(ev.clientY);
-    const onMouseUp = () => {
-      handleDragEnd();
-      document.removeEventListener('mousemove', onMouseMove);
-      document.removeEventListener('mouseup', onMouseUp);
-    };
-    document.addEventListener('mousemove', onMouseMove);
-    document.addEventListener('mouseup', onMouseUp);
-  }, [handleDragStart, handleDragMove, handleDragEnd]);
+      const onMouseMove = (ev: MouseEvent) => handleDragMove(ev.clientY);
+      const onMouseUp = () => {
+        handleDragEnd();
+        document.removeEventListener('mousemove', onMouseMove);
+        document.removeEventListener('mouseup', onMouseUp);
+      };
+      document.addEventListener('mousemove', onMouseMove);
+      document.addEventListener('mouseup', onMouseUp);
+    },
+    [handleDragStart, handleDragMove, handleDragEnd]
+  );
 
   if (!open) return null;
 
@@ -238,22 +250,18 @@ function MobileBottomSheet({
           {/* Header */}
           <div className="flex items-start justify-between px-4 pb-3 border-b">
             <div className="min-w-0 flex-1 pr-3">
-              <h2 id="mobile-sheet-title" className="font-mono text-sm font-semibold truncate">{title}</h2>
+              <h2 id="mobile-sheet-title" className="font-mono text-sm font-semibold truncate">
+                {title}
+              </h2>
               {subtitle && <p className="text-xs text-muted-foreground truncate">{subtitle}</p>}
             </div>
-            <button
-              onClick={onClose}
-              className="shrink-0 rounded-full p-1.5 hover:bg-muted transition-colors"
-              aria-label="Close"
-            >
+            <button onClick={onClose} className="shrink-0 rounded-full p-1.5 hover:bg-muted transition-colors" aria-label="Close">
               <X className="h-4 w-4" />
             </button>
           </div>
         </div>
         {/* Scrollable content */}
-        <div className="flex-1 overflow-y-auto overscroll-contain px-4 py-4">
-          {children}
-        </div>
+        <div className="flex-1 overflow-y-auto overscroll-contain px-4 py-4">{children}</div>
       </div>
     </>,
     document.body
@@ -275,7 +283,8 @@ function PricingContent({
   channelName: string;
   tr: TrFn;
 }) {
-  const hasCache = (data.cached_input_price !== undefined && data.cached_input_price !== data.input_price) ||
+  const hasCache =
+    (data.cached_input_price !== undefined && data.cached_input_price !== data.input_price) ||
     (data.cache_write_5m_price !== undefined && data.cache_write_5m_price > 0) ||
     (data.cache_write_1h_price !== undefined && data.cache_write_1h_price > 0);
 
@@ -294,13 +303,28 @@ function PricingContent({
         <PricingSection title={tr('cache_pricing', 'Cache Pricing')} icon="cache">
           <PriceGrid>
             {data.cached_input_price !== undefined && data.cached_input_price !== data.input_price && (
-              <PriceCell label={tr('cached_read', 'Cache Read')} sublabel={tr('per_1m', 'per 1M tokens')} value={data.cached_input_price} tr={tr} />
+              <PriceCell
+                label={tr('cached_read', 'Cache Read')}
+                sublabel={tr('per_1m', 'per 1M tokens')}
+                value={data.cached_input_price}
+                tr={tr}
+              />
             )}
             {data.cache_write_5m_price !== undefined && data.cache_write_5m_price > 0 && (
-              <PriceCell label={tr('cache_write_5m', '5-min Cache Write')} sublabel={tr('per_1m', 'per 1M tokens')} value={data.cache_write_5m_price} tr={tr} />
+              <PriceCell
+                label={tr('cache_write_5m', '5-min Cache Write')}
+                sublabel={tr('per_1m', 'per 1M tokens')}
+                value={data.cache_write_5m_price}
+                tr={tr}
+              />
             )}
             {data.cache_write_1h_price !== undefined && data.cache_write_1h_price > 0 && (
-              <PriceCell label={tr('cache_write_1h', '1-hour Cache Write')} sublabel={tr('per_1m', 'per 1M tokens')} value={data.cache_write_1h_price} tr={tr} />
+              <PriceCell
+                label={tr('cache_write_1h', '1-hour Cache Write')}
+                sublabel={tr('per_1m', 'per 1M tokens')}
+                value={data.cache_write_1h_price}
+                tr={tr}
+              />
             )}
           </PriceGrid>
         </PricingSection>
@@ -316,7 +340,7 @@ function PricingContent({
                   <th className="text-left py-2 pr-3 font-medium">{tr('tier_threshold', 'Threshold')}</th>
                   <th className="text-left py-2 px-3 font-medium">{tr('input', 'Input')}</th>
                   <th className="text-left py-2 px-3 font-medium">{tr('output', 'Output')}</th>
-                  {data.tiers.some(t => t.cached_input_price && t.cached_input_price > 0) && (
+                  {data.tiers.some((t) => t.cached_input_price && t.cached_input_price > 0) && (
                     <th className="text-left py-2 pl-3 font-medium">{tr('cached_read', 'Cache Read')}</th>
                   )}
                 </tr>
@@ -325,22 +349,26 @@ function PricingContent({
                 {/* Base tier */}
                 <tr className="border-b border-dashed">
                   <td className="py-2 pr-3">
-                    <Badge variant="secondary" className="text-xs">{tr('base_tier', 'Base')}</Badge>
+                    <Badge variant="secondary" className="text-xs">
+                      {tr('base_tier', 'Base')}
+                    </Badge>
                   </td>
                   <td className="py-2 px-3 font-mono text-sm">{formatUsd(data.input_price)}</td>
                   <td className="py-2 px-3 font-mono text-sm">{formatUsd(data.output_price)}</td>
-                  {data.tiers.some(t => t.cached_input_price && t.cached_input_price > 0) && (
+                  {data.tiers.some((t) => t.cached_input_price && t.cached_input_price > 0) && (
                     <td className="py-2 pl-3 font-mono text-sm">{formatUsd(data.cached_input_price ?? data.input_price)}</td>
                   )}
                 </tr>
                 {data.tiers.map((tier, i) => (
                   <tr key={i} className="border-b border-dashed last:border-0">
                     <td className="py-2 pr-3">
-                      <Badge variant="outline" className="text-xs">&ge; {formatTokenCount(tier.input_token_threshold)}</Badge>
+                      <Badge variant="outline" className="text-xs">
+                        &ge; {formatTokenCount(tier.input_token_threshold)}
+                      </Badge>
                     </td>
                     <td className="py-2 px-3 font-mono text-sm">{formatUsd(tier.input_price)}</td>
                     <td className="py-2 px-3 font-mono text-sm">{formatUsd(tier.output_price)}</td>
-                    {data.tiers!.some(t => t.cached_input_price && t.cached_input_price > 0) && (
+                    {data.tiers!.some((t) => t.cached_input_price && t.cached_input_price > 0) && (
                       <td className="py-2 pl-3 font-mono text-sm">{tier.cached_input_price ? formatUsd(tier.cached_input_price) : '-'}</td>
                     )}
                   </tr>
@@ -357,7 +385,13 @@ function PricingContent({
           {data.image_pricing.price_per_image_usd !== undefined && data.image_pricing.price_per_image_usd > 0 && (
             <div className="mb-3">
               <PriceGrid>
-                <PriceCell label={tr('base_price', 'Base Price')} sublabel={tr('per_image', 'per image')} value={data.image_pricing.price_per_image_usd} tr={tr} raw />
+                <PriceCell
+                  label={tr('base_price', 'Base Price')}
+                  sublabel={tr('per_image', 'per image')}
+                  value={data.image_pricing.price_per_image_usd}
+                  tr={tr}
+                  raw
+                />
               </PriceGrid>
             </div>
           )}
@@ -395,22 +429,26 @@ function PricingContent({
           )}
 
           {/* Simple size multipliers (when no quality matrix) */}
-          {!data.image_pricing.quality_size_multipliers && data.image_pricing.size_multipliers && Object.keys(data.image_pricing.size_multipliers).length > 0 && (
-            <SimpleMultiplierTable
-              data={data.image_pricing.size_multipliers}
-              basePrice={data.image_pricing.price_per_image_usd}
-              label={tr('size', 'Size')}
-            />
-          )}
+          {!data.image_pricing.quality_size_multipliers &&
+            data.image_pricing.size_multipliers &&
+            Object.keys(data.image_pricing.size_multipliers).length > 0 && (
+              <SimpleMultiplierTable
+                data={data.image_pricing.size_multipliers}
+                basePrice={data.image_pricing.price_per_image_usd}
+                label={tr('size', 'Size')}
+              />
+            )}
 
           {/* Simple quality multipliers */}
-          {!data.image_pricing.quality_size_multipliers && data.image_pricing.quality_multipliers && Object.keys(data.image_pricing.quality_multipliers).length > 0 && (
-            <SimpleMultiplierTable
-              data={data.image_pricing.quality_multipliers}
-              basePrice={data.image_pricing.price_per_image_usd}
-              label={tr('quality', 'Quality')}
-            />
-          )}
+          {!data.image_pricing.quality_size_multipliers &&
+            data.image_pricing.quality_multipliers &&
+            Object.keys(data.image_pricing.quality_multipliers).length > 0 && (
+              <SimpleMultiplierTable
+                data={data.image_pricing.quality_multipliers}
+                basePrice={data.image_pricing.price_per_image_usd}
+                label={tr('quality', 'Quality')}
+              />
+            )}
         </PricingSection>
       )}
 
@@ -418,7 +456,13 @@ function PricingContent({
       {data.video_pricing && (
         <PricingSection title={tr('video_pricing', 'Video Pricing')} icon="video">
           <PriceGrid>
-            <PriceCell label={tr('base_rate', 'Base Rate')} sublabel={tr('per_second', 'per second')} value={data.video_pricing.per_second_usd} tr={tr} raw />
+            <PriceCell
+              label={tr('base_rate', 'Base Rate')}
+              sublabel={tr('per_second', 'per second')}
+              value={data.video_pricing.per_second_usd}
+              tr={tr}
+              raw
+            />
           </PriceGrid>
           {data.video_pricing.base_resolution && (
             <div className="mt-2">
@@ -445,17 +489,27 @@ function PricingContent({
         <PricingSection title={tr('audio_pricing', 'Audio Pricing')} icon="audio">
           <PriceGrid>
             {data.audio_pricing.usd_per_second !== undefined && data.audio_pricing.usd_per_second > 0 && (
-              <PriceCell label={tr('base_rate', 'Base Rate')} sublabel={tr('per_second', 'per second')} value={data.audio_pricing.usd_per_second} tr={tr} raw />
+              <PriceCell
+                label={tr('base_rate', 'Base Rate')}
+                sublabel={tr('per_second', 'per second')}
+                value={data.audio_pricing.usd_per_second}
+                tr={tr}
+                raw
+              />
             )}
             {data.audio_pricing.prompt_token_ratio !== undefined && data.audio_pricing.prompt_token_ratio > 0 && (
               <div className="rounded-lg border bg-muted/30 p-3">
-                <div className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">{tr('prompt_ratio', 'Prompt Ratio')}</div>
+                <div className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
+                  {tr('prompt_ratio', 'Prompt Ratio')}
+                </div>
                 <div className="mt-1 text-lg font-semibold tabular-nums">{fmtNum(data.audio_pricing.prompt_token_ratio)}x</div>
               </div>
             )}
             {data.audio_pricing.completion_token_ratio !== undefined && data.audio_pricing.completion_token_ratio > 0 && (
               <div className="rounded-lg border bg-muted/30 p-3">
-                <div className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">{tr('completion_ratio', 'Completion Ratio')}</div>
+                <div className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
+                  {tr('completion_ratio', 'Completion Ratio')}
+                </div>
                 <div className="mt-1 text-lg font-semibold tabular-nums">{fmtNum(data.audio_pricing.completion_token_ratio)}x</div>
               </div>
             )}
@@ -482,24 +536,51 @@ function PricingContent({
         <PricingSection title={tr('embedding_pricing', 'Embedding Pricing')} icon="embedding">
           <PriceGrid>
             {data.embedding_pricing.text_token_price !== undefined && data.embedding_pricing.text_token_price > 0 && (
-              <PriceCell label={tr('text', 'Text')} sublabel={tr('per_1m', 'per 1M tokens')} value={data.embedding_pricing.text_token_price} tr={tr} />
+              <PriceCell
+                label={tr('text', 'Text')}
+                sublabel={tr('per_1m', 'per 1M tokens')}
+                value={data.embedding_pricing.text_token_price}
+                tr={tr}
+              />
             )}
             {data.embedding_pricing.image_token_price !== undefined && data.embedding_pricing.image_token_price > 0 && (
-              <PriceCell label={tr('image', 'Image')} sublabel={tr('per_1m', 'per 1M tokens')} value={data.embedding_pricing.image_token_price} tr={tr} />
+              <PriceCell
+                label={tr('image', 'Image')}
+                sublabel={tr('per_1m', 'per 1M tokens')}
+                value={data.embedding_pricing.image_token_price}
+                tr={tr}
+              />
             )}
             {data.embedding_pricing.audio_token_price !== undefined && data.embedding_pricing.audio_token_price > 0 && (
-              <PriceCell label={tr('audio', 'Audio')} sublabel={tr('per_1m', 'per 1M tokens')} value={data.embedding_pricing.audio_token_price} tr={tr} />
+              <PriceCell
+                label={tr('audio', 'Audio')}
+                sublabel={tr('per_1m', 'per 1M tokens')}
+                value={data.embedding_pricing.audio_token_price}
+                tr={tr}
+              />
             )}
             {data.embedding_pricing.video_token_price !== undefined && data.embedding_pricing.video_token_price > 0 && (
-              <PriceCell label={tr('video', 'Video')} sublabel={tr('per_1m', 'per 1M tokens')} value={data.embedding_pricing.video_token_price} tr={tr} />
+              <PriceCell
+                label={tr('video', 'Video')}
+                sublabel={tr('per_1m', 'per 1M tokens')}
+                value={data.embedding_pricing.video_token_price}
+                tr={tr}
+              />
             )}
             {data.embedding_pricing.document_token_price !== undefined && data.embedding_pricing.document_token_price > 0 && (
-              <PriceCell label={tr('document', 'Document')} sublabel={tr('per_1m', 'per 1M tokens')} value={data.embedding_pricing.document_token_price} tr={tr} />
+              <PriceCell
+                label={tr('document', 'Document')}
+                sublabel={tr('per_1m', 'per 1M tokens')}
+                value={data.embedding_pricing.document_token_price}
+                tr={tr}
+              />
             )}
           </PriceGrid>
           {/* Direct per-unit pricing */}
-          {(data.embedding_pricing.usd_per_image || data.embedding_pricing.usd_per_audio_second ||
-            data.embedding_pricing.usd_per_video_frame || data.embedding_pricing.usd_per_document_page) && (
+          {(data.embedding_pricing.usd_per_image ||
+            data.embedding_pricing.usd_per_audio_second ||
+            data.embedding_pricing.usd_per_video_frame ||
+            data.embedding_pricing.usd_per_document_page) && (
             <>
               <Separator className="my-3" />
               <PriceGrid>
@@ -510,7 +591,12 @@ function PricingContent({
                   <PriceCell label={tr('per_audio_sec', 'Per Audio Sec')} value={data.embedding_pricing.usd_per_audio_second} tr={tr} raw />
                 )}
                 {data.embedding_pricing.usd_per_video_frame !== undefined && data.embedding_pricing.usd_per_video_frame > 0 && (
-                  <PriceCell label={tr('per_video_frame', 'Per Video Frame')} value={data.embedding_pricing.usd_per_video_frame} tr={tr} raw />
+                  <PriceCell
+                    label={tr('per_video_frame', 'Per Video Frame')}
+                    value={data.embedding_pricing.usd_per_video_frame}
+                    tr={tr}
+                    raw
+                  />
                 )}
                 {data.embedding_pricing.usd_per_document_page !== undefined && data.embedding_pricing.usd_per_document_page > 0 && (
                   <PriceCell label={tr('per_doc_page', 'Per Doc Page')} value={data.embedding_pricing.usd_per_document_page} tr={tr} raw />
@@ -540,7 +626,9 @@ function PricingSection({ title, icon, children }: { title: string; icon: string
   return (
     <div>
       <div className="flex items-center gap-2 mb-3">
-        <span className="text-base" role="img">{sectionIcons[icon] || ''}</span>
+        <span className="text-base" role="img">
+          {sectionIcons[icon] || ''}
+        </span>
         <h3 className="text-sm font-semibold tracking-wide text-foreground">{title}</h3>
       </div>
       <div className="rounded-xl border bg-card p-4">{children}</div>
@@ -552,26 +640,12 @@ function PriceGrid({ children }: { children: React.ReactNode }) {
   return <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">{children}</div>;
 }
 
-function PriceCell({
-  label,
-  sublabel,
-  value,
-  tr,
-  raw,
-}: {
-  label: string;
-  sublabel?: string;
-  value: number;
-  tr: TrFn;
-  raw?: boolean;
-}) {
+function PriceCell({ label, sublabel, value, tr, raw }: { label: string; sublabel?: string; value: number; tr: TrFn; raw?: boolean }) {
   return (
     <div className="rounded-lg border bg-muted/30 p-3">
       <div className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">{label}</div>
       {sublabel && <div className="text-[10px] text-muted-foreground/70">{sublabel}</div>}
-      <div className="mt-1 text-lg font-semibold tabular-nums">
-        {raw ? formatUsdRaw(value) : formatUsdForTokens(value, tr)}
-      </div>
+      <div className="mt-1 text-lg font-semibold tabular-nums">{raw ? formatUsdRaw(value) : formatUsdForTokens(value, tr)}</div>
     </div>
   );
 }
@@ -597,9 +671,13 @@ function MultiplierMatrix({
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b text-muted-foreground">
-            <th className="text-left py-2 pr-3 font-medium">{rowLabel} \ {colLabel}</th>
+            <th className="text-left py-2 pr-3 font-medium">
+              {rowLabel} \ {colLabel}
+            </th>
             {sizes.map((s) => (
-              <th key={s} className="text-center py-2 px-2 font-medium font-mono text-xs">{s}</th>
+              <th key={s} className="text-center py-2 px-2 font-medium font-mono text-xs">
+                {s}
+              </th>
             ))}
           </tr>
         </thead>
@@ -615,9 +693,7 @@ function MultiplierMatrix({
                     {multiplier !== undefined ? (
                       <div>
                         <div>{price !== undefined ? formatUsdRaw(price) : `${fmtNum(multiplier)}x`}</div>
-                        {multiplier !== 1 && (
-                          <div className="text-[10px] text-muted-foreground">{fmtNum(multiplier)}x</div>
-                        )}
+                        {multiplier !== 1 && <div className="text-[10px] text-muted-foreground">{fmtNum(multiplier)}x</div>}
                       </div>
                     ) : (
                       <span className="text-muted-foreground">-</span>
@@ -652,9 +728,7 @@ function SimpleMultiplierTable({
           <tr className="border-b text-muted-foreground">
             <th className="text-left py-1.5 pr-3 font-medium">{label}</th>
             <th className="text-right py-1.5 px-3 font-medium">Multiplier</th>
-            {basePrice !== undefined && basePrice > 0 && (
-              <th className="text-right py-1.5 pl-3 font-medium">Price</th>
-            )}
+            {basePrice !== undefined && basePrice > 0 && <th className="text-right py-1.5 pl-3 font-medium">Price</th>}
           </tr>
         </thead>
         <tbody>

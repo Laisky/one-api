@@ -815,6 +815,7 @@
         "remaining_quota_title": "剩余: {{quota}}",
         "role": {
           "admin": "管理员",
+          "guest": "访客",
           "super_admin": "超级管理员",
           "user": "用户"
         },

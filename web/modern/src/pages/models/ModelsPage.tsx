@@ -71,7 +71,13 @@ export function ModelsPage() {
       }
     }
     // Model not found — clean up URL
-    setSearchParams((prev) => { prev.delete('model'); return prev; }, { replace: true });
+    setSearchParams(
+      (prev) => {
+        prev.delete('model');
+        return prev;
+      },
+      { replace: true }
+    );
   }, [searchParams, modelsData]);
 
   useEffect(() => {
@@ -142,12 +148,18 @@ export function ModelsPage() {
 
   const openModelDetail = (modelName: string, data: ModelDisplayData, channelName: string) => {
     setSelectedModel({ name: modelName, data, channel: formatChannelName(channelName) });
-    setSearchParams((prev) => { prev.set('model', modelName); return prev; });
+    setSearchParams((prev) => {
+      prev.set('model', modelName);
+      return prev;
+    });
   };
 
   const handleModalClose = (open: boolean) => {
     if (!open) {
-      setSearchParams((prev) => { prev.delete('model'); return prev; });
+      setSearchParams((prev) => {
+        prev.delete('model');
+        return prev;
+      });
       setSelectedModel(null);
     }
   };
@@ -195,7 +207,9 @@ export function ModelsPage() {
                   onClick={() => openModelDetail(model.model, model.data, channelName)}
                   role="button"
                   tabIndex={0}
-                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') openModelDetail(model.model, model.data, channelName); }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') openModelDetail(model.model, model.data, channelName);
+                  }}
                 >
                   <div className="flex items-center justify-between">
                     <div>
@@ -222,11 +236,31 @@ export function ModelsPage() {
                   </div>
                   {hasRichPricing(model.data) && (
                     <div className="flex flex-wrap gap-1">
-                      {model.data.image_pricing && <Badge variant="secondary" className="text-[10px] px-1.5 py-0">Image</Badge>}
-                      {model.data.video_pricing && <Badge variant="secondary" className="text-[10px] px-1.5 py-0">Video</Badge>}
-                      {model.data.audio_pricing && <Badge variant="secondary" className="text-[10px] px-1.5 py-0">Audio</Badge>}
-                      {model.data.tiers && model.data.tiers.length > 0 && <Badge variant="secondary" className="text-[10px] px-1.5 py-0">Tiered</Badge>}
-                      {model.data.embedding_pricing && <Badge variant="secondary" className="text-[10px] px-1.5 py-0">Embedding</Badge>}
+                      {model.data.image_pricing && (
+                        <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+                          Image
+                        </Badge>
+                      )}
+                      {model.data.video_pricing && (
+                        <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+                          Video
+                        </Badge>
+                      )}
+                      {model.data.audio_pricing && (
+                        <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+                          Audio
+                        </Badge>
+                      )}
+                      {model.data.tiers && model.data.tiers.length > 0 && (
+                        <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+                          Tiered
+                        </Badge>
+                      )}
+                      {model.data.embedding_pricing && (
+                        <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+                          Embedding
+                        </Badge>
+                      )}
                     </div>
                   )}
                 </div>
@@ -253,18 +287,40 @@ export function ModelsPage() {
                       onClick={() => openModelDetail(model.model, model.data, channelName)}
                       role="button"
                       tabIndex={0}
-                      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') openModelDetail(model.model, model.data, channelName); }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') openModelDetail(model.model, model.data, channelName);
+                      }}
                     >
                       <td className="py-2 px-3 font-mono text-sm">
                         <span className="inline-flex items-center gap-2">
                           {model.model}
                           {hasRichPricing(model.data) && (
                             <span className="inline-flex gap-1">
-                              {model.data.image_pricing && <Badge variant="secondary" className="text-[10px] px-1.5 py-0">Image</Badge>}
-                              {model.data.video_pricing && <Badge variant="secondary" className="text-[10px] px-1.5 py-0">Video</Badge>}
-                              {model.data.audio_pricing && <Badge variant="secondary" className="text-[10px] px-1.5 py-0">Audio</Badge>}
-                              {model.data.tiers && model.data.tiers.length > 0 && <Badge variant="secondary" className="text-[10px] px-1.5 py-0">Tiered</Badge>}
-                              {model.data.embedding_pricing && <Badge variant="secondary" className="text-[10px] px-1.5 py-0">Embedding</Badge>}
+                              {model.data.image_pricing && (
+                                <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+                                  Image
+                                </Badge>
+                              )}
+                              {model.data.video_pricing && (
+                                <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+                                  Video
+                                </Badge>
+                              )}
+                              {model.data.audio_pricing && (
+                                <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+                                  Audio
+                                </Badge>
+                              )}
+                              {model.data.tiers && model.data.tiers.length > 0 && (
+                                <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+                                  Tiered
+                                </Badge>
+                              )}
+                              {model.data.embedding_pricing && (
+                                <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+                                  Embedding
+                                </Badge>
+                              )}
                             </span>
                           )}
                         </span>

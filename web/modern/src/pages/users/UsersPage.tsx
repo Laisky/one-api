@@ -66,13 +66,16 @@ export function UsersPage() {
   const mounted = useRef(false);
   const getRoleLabel = useCallback(
     (role: number) => {
-      if (role >= 10) {
+      if (role >= 100) {
         return tr('table.role.super_admin', 'Super Admin');
       }
-      if (role === 1) {
+      if (role >= 10) {
         return tr('table.role.admin', 'Admin');
       }
-      return tr('table.role.user', 'User');
+      if (role >= 1) {
+        return tr('table.role.user', 'User');
+      }
+      return tr('table.role.guest', 'Guest');
     },
     [tr]
   );

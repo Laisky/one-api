@@ -225,11 +225,17 @@ export function TokensPage() {
 
   const performSearch = async () => {
     if (!searchKeyword.trim()) {
-      setSearchParams((prev) => { prev.delete('keyword'); return prev; });
+      setSearchParams((prev) => {
+        prev.delete('keyword');
+        return prev;
+      });
       return load(0, pageSize);
     }
 
-    setSearchParams((prev) => { prev.set('keyword', searchKeyword); return prev; });
+    setSearchParams((prev) => {
+      prev.set('keyword', searchKeyword);
+      return prev;
+    });
     setLoading(true);
     try {
       // Unified API call - complete URL with /api prefix

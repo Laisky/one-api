@@ -815,6 +815,7 @@
         "remaining_quota_title": "残り: {{quota}}",
         "role": {
           "admin": "管理者",
+          "guest": "ゲスト",
           "super_admin": "スーパー管理者",
           "user": "ユーザー"
         },
