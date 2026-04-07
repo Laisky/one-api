@@ -97,10 +97,19 @@ func PasskeyRegisterBegin(c *gin.Context) {
 	}
 
 	userId := c.GetInt(ctxkey.Id)
-	user, err := model.GetUserById(userId, false)
-	if err != nil {
-		respondError(c, err.Error())
-		return
+	var user *model.User
+	if userObj, exists := c.Get(ctxkey.UserObj); exists {
+		if u, ok := userObj.(*model.User); ok {
+			user = u
+		}
+	}
+	if user == nil {
+		var err error
+		user, err = model.GetUserById(userId, false)
+		if err != nil {
+			respondError(c, err.Error())
+			return
+		}
 	}
 
 	wUser, err := model.NewWebAuthnUser(user)
@@ -152,10 +161,19 @@ func PasskeyRegisterFinish(c *gin.Context) {
 	}
 
 	userId := c.GetInt(ctxkey.Id)
-	user, err := model.GetUserById(userId, false)
-	if err != nil {
-		respondError(c, err.Error())
-		return
+	var user *model.User
+	if userObj, exists := c.Get(ctxkey.UserObj); exists {
+		if u, ok := userObj.(*model.User); ok {
+			user = u
+		}
+	}
+	if user == nil {
+		var err error
+		user, err = model.GetUserById(userId, false)
+		if err != nil {
+			respondError(c, err.Error())
+			return
+		}
 	}
 
 	wUser, err := model.NewWebAuthnUser(user)

@@ -214,7 +214,7 @@ func RelayTextHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 				0,
 			)
 
-			userBalance := float64(c.GetInt64(ctxkey.UserQuota))
+			userBalance := float64(getUserQuotaFromContext(c))
 			metrics.GlobalRecorder.RecordUserMetrics(
 				userId,
 				username,
@@ -401,7 +401,7 @@ func RelayTextHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 		)
 
 		// Record user metrics
-		userBalance := float64(c.GetInt64(ctxkey.UserQuota))
+		userBalance := float64(getUserQuotaFromContext(c))
 		metrics.GlobalRecorder.RecordUserMetrics(
 			userId,
 			username,

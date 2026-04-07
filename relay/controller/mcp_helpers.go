@@ -286,6 +286,9 @@ func getRelayUserFromContext(c *gin.Context) (*model.User, error) {
 	if c == nil {
 		return nil, errors.New("context is nil")
 	}
+	if u := getUserObjFromContext(c); u != nil {
+		return u, nil
+	}
 	userID := c.GetInt(ctxkey.Id)
 	if userID == 0 {
 		return nil, errors.New("user id missing")

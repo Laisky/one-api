@@ -27,3 +27,4 @@ errlog
 # test
 /cmd/test/generated/*
 docs/requirements/observability.md
+/docker-compose.local.yml

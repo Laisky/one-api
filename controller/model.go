@@ -221,18 +221,18 @@ type ChannelModelsDisplayInfo struct {
 
 // ModelDisplayInfo represents display information for a single model
 type ModelDisplayInfo struct {
-	InputPrice          float64                    `json:"input_price"`                      // Price per 1M input tokens in USD
-	CachedInputPrice    float64                    `json:"cached_input_price"`               // Price per 1M cached input tokens in USD (falls back to input price when unspecified)
-	CacheWrite5mPrice   float64                    `json:"cache_write_5m_price,omitempty"`   // Price per 1M tokens for 5-minute cache write
-	CacheWrite1hPrice   float64                    `json:"cache_write_1h_price,omitempty"`   // Price per 1M tokens for 1-hour cache write
-	OutputPrice         float64                    `json:"output_price"`                     // Price per 1M output tokens in USD
-	MaxTokens           int32                      `json:"max_tokens"`                       // Maximum tokens limit, 0 means unlimited
-	ImagePrice          float64                    `json:"image_price,omitempty"`             // USD per image (image models only)
-	Tiers               []ModelDisplayTier         `json:"tiers,omitempty"`                  // Tiered pricing (volume-based)
-	VideoPricing        *VideoDisplayPricing       `json:"video_pricing,omitempty"`           // Video generation pricing
-	AudioPricing        *AudioDisplayPricing       `json:"audio_pricing,omitempty"`           // Audio prompt/completion pricing
-	ImagePricing        *ImageDisplayPricing       `json:"image_pricing,omitempty"`           // Detailed image pricing with size/quality multipliers
-	EmbeddingPricing    *EmbeddingDisplayPricing   `json:"embedding_pricing,omitempty"`       // Embedding pricing by modality
+	InputPrice        float64                  `json:"input_price"`                    // Price per 1M input tokens in USD
+	CachedInputPrice  float64                  `json:"cached_input_price"`             // Price per 1M cached input tokens in USD (falls back to input price when unspecified)
+	CacheWrite5mPrice float64                  `json:"cache_write_5m_price,omitempty"` // Price per 1M tokens for 5-minute cache write
+	CacheWrite1hPrice float64                  `json:"cache_write_1h_price,omitempty"` // Price per 1M tokens for 1-hour cache write
+	OutputPrice       float64                  `json:"output_price"`                   // Price per 1M output tokens in USD
+	MaxTokens         int32                    `json:"max_tokens"`                     // Maximum tokens limit, 0 means unlimited
+	ImagePrice        float64                  `json:"image_price,omitempty"`          // USD per image (image models only)
+	Tiers             []ModelDisplayTier       `json:"tiers,omitempty"`                // Tiered pricing (volume-based)
+	VideoPricing      *VideoDisplayPricing     `json:"video_pricing,omitempty"`        // Video generation pricing
+	AudioPricing      *AudioDisplayPricing     `json:"audio_pricing,omitempty"`        // Audio prompt/completion pricing
+	ImagePricing      *ImageDisplayPricing     `json:"image_pricing,omitempty"`        // Detailed image pricing with size/quality multipliers
+	EmbeddingPricing  *EmbeddingDisplayPricing `json:"embedding_pricing,omitempty"`    // Embedding pricing by modality
 }
 
 // ModelDisplayTier represents a single tier in volume-based pricing
@@ -247,9 +247,9 @@ type ModelDisplayTier struct {
 
 // VideoDisplayPricing represents video generation pricing for display
 type VideoDisplayPricing struct {
-	PerSecondUsd          float64            `json:"per_second_usd"`                    // USD per rendered second at base resolution
-	BaseResolution        string             `json:"base_resolution,omitempty"`          // Base resolution (e.g. "1280x720")
-	ResolutionMultipliers map[string]float64 `json:"resolution_multipliers,omitempty"`   // Resolution -> multiplier map
+	PerSecondUsd          float64            `json:"per_second_usd"`                   // USD per rendered second at base resolution
+	BaseResolution        string             `json:"base_resolution,omitempty"`        // Base resolution (e.g. "1280x720")
+	ResolutionMultipliers map[string]float64 `json:"resolution_multipliers,omitempty"` // Resolution -> multiplier map
 }
 
 // AudioDisplayPricing represents audio pricing for display
@@ -263,14 +263,14 @@ type AudioDisplayPricing struct {
 
 // ImageDisplayPricing represents detailed image pricing for display
 type ImageDisplayPricing struct {
-	PricePerImageUsd       float64                       `json:"price_per_image_usd,omitempty"`       // Base USD per image
-	DefaultSize            string                        `json:"default_size,omitempty"`               // Default resolution
-	DefaultQuality         string                        `json:"default_quality,omitempty"`             // Default quality level
-	MinImages              int                           `json:"min_images,omitempty"`                  // Minimum images per request
-	MaxImages              int                           `json:"max_images,omitempty"`                  // Maximum images per request
-	SizeMultipliers        map[string]float64            `json:"size_multipliers,omitempty"`            // Resolution -> multiplier
-	QualityMultipliers     map[string]float64            `json:"quality_multipliers,omitempty"`         // Quality -> multiplier
-	QualitySizeMultipliers map[string]map[string]float64 `json:"quality_size_multipliers,omitempty"`    // Quality -> Size -> multiplier
+	PricePerImageUsd       float64                       `json:"price_per_image_usd,omitempty"`      // Base USD per image
+	DefaultSize            string                        `json:"default_size,omitempty"`             // Default resolution
+	DefaultQuality         string                        `json:"default_quality,omitempty"`          // Default quality level
+	MinImages              int                           `json:"min_images,omitempty"`               // Minimum images per request
+	MaxImages              int                           `json:"max_images,omitempty"`               // Maximum images per request
+	SizeMultipliers        map[string]float64            `json:"size_multipliers,omitempty"`         // Resolution -> multiplier
+	QualityMultipliers     map[string]float64            `json:"quality_multipliers,omitempty"`      // Quality -> multiplier
+	QualitySizeMultipliers map[string]map[string]float64 `json:"quality_size_multipliers,omitempty"` // Quality -> Size -> multiplier
 }
 
 // EmbeddingDisplayPricing represents embedding pricing for display
@@ -715,10 +715,19 @@ func GetModelsDisplay(c *gin.Context) {
 
 	// Logged-in path: show only models allowed for the user group
 	ctx := gmw.Ctx(c)
-	userGroup, err := model.CacheGetUserGroup(ctx, userId)
-	if err != nil {
-		c.JSON(http.StatusOK, ModelsDisplayResponse{Success: false, Message: "Failed to get user group: " + err.Error()})
-		return
+	var userGroup string
+	if userObj, exists := c.Get(ctxkey.UserObj); exists {
+		if u, ok := userObj.(*model.User); ok {
+			userGroup = u.Group
+		}
+	}
+	if userGroup == "" {
+		var err error
+		userGroup, err = model.CacheGetUserGroup(ctx, userId)
+		if err != nil {
+			c.JSON(http.StatusOK, ModelsDisplayResponse{Success: false, Message: "Failed to get user group: " + err.Error()})
+			return
+		}
 	}
 	abilities, err := model.CacheGetGroupModelsV2(ctx, userGroup)
 	if err != nil {
@@ -768,10 +777,19 @@ func ListModels(c *gin.Context) {
 	ctx := gmw.Ctx(c)
 	lg := gmw.GetLogger(c)
 
-	userGroup, err := model.CacheGetUserGroup(ctx, userId)
-	if err != nil {
-		middleware.AbortWithError(c, http.StatusBadRequest, err)
-		return
+	var userGroup string
+	if userObj, exists := c.Get(ctxkey.UserObj); exists {
+		if u, ok := userObj.(*model.User); ok {
+			userGroup = u.Group
+		}
+	}
+	if userGroup == "" {
+		var err error
+		userGroup, err = model.CacheGetUserGroup(ctx, userId)
+		if err != nil {
+			middleware.AbortWithError(c, http.StatusBadRequest, err)
+			return
+		}
 	}
 
 	availableAbilities, err := model.CacheGetGroupModelsV2(ctx, userGroup)
@@ -905,13 +923,22 @@ func RetrieveModel(c *gin.Context) {
 func GetUserAvailableModels(c *gin.Context) {
 	ctx := gmw.Ctx(c)
 	id := c.GetInt(ctxkey.Id)
-	userGroup, err := model.CacheGetUserGroup(ctx, id)
-	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
-		return
+	var userGroup string
+	if userObj, exists := c.Get(ctxkey.UserObj); exists {
+		if u, ok := userObj.(*model.User); ok {
+			userGroup = u.Group
+		}
+	}
+	if userGroup == "" {
+		var err error
+		userGroup, err = model.CacheGetUserGroup(ctx, id)
+		if err != nil {
+			c.JSON(http.StatusOK, gin.H{
+				"success": false,
+				"message": err.Error(),
+			})
+			return
+		}
 	}
 
 	models, err := model.CacheGetGroupModelsV2(ctx, userGroup)

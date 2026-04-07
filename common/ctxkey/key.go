@@ -154,10 +154,11 @@ const (
 	// Read in: controllers to bypass quota checks when true.
 	TokenQuotaUnlimited = "token_quota_unlimited"
 
-	// UserQuota optionally carries the user’s quota for metrics/UI labeling.
-	// Not set by default middleware; controllers typically fetch from cache directly.
-	// Used in: controller/text metrics recording (if present). Treat as optional.
-	UserQuota = "user_quota"
+	// UserObj stores the authenticated *model.User in context.
+	// Set in: middleware/auth (both session and token auth paths).
+	// Read in: downstream handlers to avoid redundant DB/cache lookups for user fields
+	// (username, group, quota, status, etc.).
+	UserObj = "user_obj"
 
 	// BaseURL is the provider base URL resolved from the selected channel.
 	// Set in: middleware/distributor from channel.GetBaseURL().

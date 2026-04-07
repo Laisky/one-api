@@ -26,6 +26,7 @@ import (
 
 	"github.com/Laisky/errors/v2"
 	gmw "github.com/Laisky/gin-middlewares/v7"
+	"github.com/Laisky/zap"
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
 
@@ -48,6 +49,7 @@ func authHelper(c *gin.Context, minRole int) {
 	role := session.Get("role")
 	id := session.Get("id")
 	status := session.Get("status")
+	var userObj *model.User
 
 	// First, try to authenticate using session data (cookies)
 	if username == nil {
@@ -64,6 +66,7 @@ func authHelper(c *gin.Context, minRole int) {
 		user := model.ValidateAccessToken(accessToken)
 		if user != nil && user.Username != "" {
 			// Token is valid - use the user data from token validation
+			userObj = user
 			username = user.Username
 			role = user.Role
 			id = user.Id
@@ -91,7 +94,21 @@ func authHelper(c *gin.Context, minRole int) {
 		return
 	}
 
+	// For session-based auth, fetch the full user object if not already available
+	if userObj == nil {
+		ctx := gmw.Ctx(c)
+		var err error
+		userObj, err = model.CacheGetUserById(ctx, id.(int))
+		if err != nil {
+			gmw.GetLogger(c).Warn("failed to fetch user object for context", zap.Int("user_id", id.(int)), zap.Error(err))
+			// Non-fatal: downstream handlers can still fall back to individual lookups
+		}
+	}
+
 	// Authentication successful - set user context and continue
+	if userObj != nil {
+		c.Set(ctxkey.UserObj, userObj)
+	}
 	c.Set(ctxkey.Username, username)
 	c.Set(ctxkey.Role, role)
 	c.Set(ctxkey.Id, id)
@@ -118,12 +135,14 @@ func OptionalUserAuth() func(c *gin.Context) {
 		role := session.Get("role")
 		id := session.Get("id")
 		status := session.Get("status")
+		var userObj *model.User
 
 		if username == nil {
 			// Try Authorization header as fallback
 			accessToken := c.Request.Header.Get("Authorization")
 			if accessToken != "" {
 				if user := model.ValidateAccessToken(accessToken); user != nil && user.Username != "" {
+					userObj = user
 					username = user.Username
 					role = user.Role
 					id = user.Id
@@ -135,6 +154,17 @@ func OptionalUserAuth() func(c *gin.Context) {
 		// If we resolved a user, validate and set context
 		if username != nil && status != nil {
 			if status.(int) != model.UserStatusDisabled && !blacklist.IsUserBanned(id.(int)) {
+				if userObj == nil {
+					ctx := gmw.Ctx(c)
+					var err error
+					userObj, err = model.CacheGetUserById(ctx, id.(int))
+					if err != nil {
+						gmw.GetLogger(c).Warn("failed to fetch user object for context", zap.Int("user_id", id.(int)), zap.Error(err))
+					}
+				}
+				if userObj != nil {
+					c.Set(ctxkey.UserObj, userObj)
+				}
 				c.Set(ctxkey.Username, username)
 				c.Set(ctxkey.Role, role)
 				c.Set(ctxkey.Id, id)
@@ -205,13 +235,16 @@ func TokenAuth() func(c *gin.Context) {
 			}
 		}
 
-		// Verify the token owner (user) is still enabled and not banned
-		userEnabled, err := model.CacheIsUserEnabled(ctx, token.UserId)
+		// Fetch the full user object once; downstream handlers read from context
+		// instead of making redundant DB/cache lookups.
+		user, err := model.CacheGetUserById(ctx, token.UserId)
 		if err != nil {
-			AbortWithTokenError(c, http.StatusInternalServerError, err, tokenInfo)
+			AbortWithTokenError(c, http.StatusInternalServerError, errors.Wrap(err, "failed to get user"), tokenInfo)
 			return
 		}
-		if !userEnabled || blacklist.IsUserBanned(token.UserId) {
+
+		// Verify the token owner (user) is still enabled and not banned
+		if user.Status == model.UserStatusDisabled || blacklist.IsUserBanned(user.Id) {
 			AbortWithTokenError(c, http.StatusForbidden, errors.New("User has been banned"), tokenInfo)
 			return
 		}
@@ -234,9 +267,10 @@ func TokenAuth() func(c *gin.Context) {
 			}
 		}
 
-		// Set token-related context for downstream handlers
-		c.Set(ctxkey.Id, token.UserId)
-		c.Set(ctxkey.Username, model.CacheGetUsername(c.Request.Context(), token.UserId))
+		// Set user and token context for downstream handlers
+		c.Set(ctxkey.UserObj, user)
+		c.Set(ctxkey.Id, user.Id)
+		c.Set(ctxkey.Username, user.Username)
 		c.Set(ctxkey.TokenId, token.Id)
 		c.Set(ctxkey.TokenName, token.Name)
 		c.Set(ctxkey.TokenQuota, token.RemainQuota)
@@ -245,7 +279,7 @@ func TokenAuth() func(c *gin.Context) {
 		// Handle channel-specific routing (admin feature)
 		// Format: token_key:channel_id allows admins to specify which channel to use
 		if len(parts) > 1 {
-			if model.IsAdmin(token.UserId) {
+			if user.Role >= model.RoleAdminUser {
 				cid, err := strconv.Atoi(parts[1])
 				if err != nil {
 					AbortWithTokenError(c, http.StatusBadRequest, errors.Errorf("Invalid Channel Id: %s", parts[1]), tokenInfo)

@@ -219,7 +219,7 @@ func TestMergeControlledPassthroughJSONEnableThinkingWithAllowUnknownTrue(t *tes
 	require.NoError(t, err)
 	require.True(t, changed)
 	require.Equal(t, 1, stats.AllowedRootPreserved) // enable_thinking
-	require.Equal(t, 1, stats.UnknownPreserved)      // x-custom
+	require.Equal(t, 1, stats.UnknownPreserved)     // x-custom
 
 	var root map[string]any
 	require.NoError(t, json.Unmarshal(merged, &root))

@@ -260,7 +260,14 @@ func recordMCPToolLog(ctx context.Context, c *gin.Context, userId int, serverId 
 }
 
 // getUserFromContext loads the authenticated user from request context.
+// It first checks for the cached UserObj set by auth middleware,
+// falling back to a database lookup if not present.
 func getUserFromContext(c *gin.Context) (*model.User, error) {
+	if userObj, exists := c.Get(ctxkey.UserObj); exists {
+		if u, ok := userObj.(*model.User); ok {
+			return u, nil
+		}
+	}
 	userID := c.GetInt(ctxkey.Id)
 	if userID == 0 {
 		return nil, errors.New("user id missing")

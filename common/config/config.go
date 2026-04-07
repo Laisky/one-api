@@ -434,9 +434,9 @@ var (
 	// the database. Set to 0 to disable automatic syncing.
 	//
 	// Environment variable: SYNC_FREQUENCY
-	// Default: 600 (10 minutes)
+	// Default: 120 (2 minutes)
 	// Unit: seconds
-	SyncFrequency = env.Int("SYNC_FREQUENCY", 10*60)
+	SyncFrequency = env.Int("SYNC_FREQUENCY", 2*60)
 )
 
 // =============================================================================
