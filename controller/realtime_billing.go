@@ -123,6 +123,51 @@ func rtRecordProvisionalLog(c *gin.Context, meta *metalib.Meta, modelName string
 	return model.RecordProvisionalConsumeLog(gmw.Ctx(c), logEntry, estimatedQuota)
 }
 
+// estimateRealtimePreConsumeQuota computes the quota to pre-consume before a
+// realtime WebSocket session starts. Since audio is streamed live, we cannot
+// measure duration upfront. Instead we estimate based on a conservative minimum
+// session length (realtimePreConsumeSeconds) at the model's audio token rate.
+//
+// The estimate covers:
+//   - Audio input:  realtimePreConsumeSeconds * 10 tokens/s * audioInputPrice
+//   - Audio output: realtimePreConsumeSeconds * 20 tokens/s * audioOutputPrice
+//
+// Falls back to text-rate estimation when no audio pricing is configured.
+func estimateRealtimePreConsumeQuota(
+	modelName string,
+	modelRatio float64,
+	groupRatio float64,
+	channelModelConfigs map[string]model.ModelConfigLocal,
+	pricingAdaptor adaptor.Adaptor,
+) int64 {
+	audioCfg, ok := pricing.ResolveAudioPricing(modelName, channelModelConfigs, pricingAdaptor)
+	if ok && audioCfg != nil && audioCfg.HasData() {
+		promptRatio := audioCfg.PromptRatio
+		if promptRatio <= 0 {
+			promptRatio = pricing.DefaultAudioPromptRatio
+		}
+		completionRatio := audioCfg.CompletionRatio
+		if completionRatio <= 0 {
+			completionRatio = pricing.DefaultAudioCompletionRatio
+		}
+
+		inputTokens := float64(realtimePreConsumeSeconds * realtimeAudioInputTokensPerSec)
+		outputTokens := float64(realtimePreConsumeSeconds * realtimeAudioOutputTokensPerSec)
+
+		// Audio input cost:  tokens * modelRatio * audioPromptRatio * groupRatio
+		// Audio output cost: tokens * modelRatio * audioPromptRatio * audioCompletionRatio * groupRatio
+		inputCost := inputTokens * modelRatio * promptRatio * groupRatio
+		outputCost := outputTokens * modelRatio * promptRatio * completionRatio * groupRatio
+
+		return int64(math.Ceil(inputCost + outputCost))
+	}
+
+	// Fallback: text-rate estimation (underestimates for audio, but safe)
+	estimatedTokens := float64(realtimePreConsumeSeconds * (realtimeAudioInputTokensPerSec + realtimeAudioOutputTokensPerSec))
+	textCompletionRatio := pricing.GetCompletionRatioWithThreeLayers(modelName, nil, pricingAdaptor)
+	return int64(math.Ceil(estimatedTokens * modelRatio * groupRatio * (1 + textCompletionRatio) / 2))
+}
+
 // applyRealtimeAudioSurcharge adds a surcharge to usage.ToolsCost for audio
 // tokens in realtime sessions. quota.Compute bills ALL tokens at the uniform
 // text rate. Audio tokens cost significantly more (8-20x), so this function

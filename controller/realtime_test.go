@@ -9,6 +9,7 @@ import (
 
 	"github.com/songquanpeng/one-api/common/ctxkey"
 	"github.com/songquanpeng/one-api/relay"
+	"github.com/songquanpeng/one-api/relay/billing/ratio"
 	"github.com/songquanpeng/one-api/relay/meta"
 	rmodel "github.com/songquanpeng/one-api/relay/model"
 	"github.com/songquanpeng/one-api/relay/pricing"
@@ -206,19 +207,58 @@ func TestRtBillingAuditSafetyNet_NoPreConsume(t *testing.T) {
 	})
 }
 
-// TestPreConsumeEstimate verifies the pre-consume formula produces
-// a positive estimate for realtime models.
-func TestPreConsumeEstimate(t *testing.T) {
+// TestPreConsumeEstimate_AudioAware verifies the pre-consume formula uses
+// audio token rates and produces a realistic estimate.
+func TestPreConsumeEstimate_AudioAware(t *testing.T) {
+	t.Parallel()
+
+	for _, modelName := range []string{
+		"gpt-realtime-1.5",
+		"gpt-realtime-mini",
+		"gpt-4o-realtime-preview",
+	} {
+		t.Run(modelName, func(t *testing.T) {
+			pricingAdaptor := relay.GetAdaptor(0)
+			modelRatio := pricing.GetModelRatioWithThreeLayers(modelName, nil, pricingAdaptor)
+
+			preConsumed := estimateRealtimePreConsumeQuota(
+				modelName, modelRatio, 1.0, nil, pricingAdaptor)
+
+			require.Greater(t, preConsumed, int64(0),
+				"pre-consume estimate should be positive")
+
+			// The estimate should be significantly higher than a text-only estimate
+			// of the same token count, because audio costs 8-20x more
+			textOnlyEstimate := int64(float64(realtimePreConsumeSeconds*(realtimeAudioInputTokensPerSec+realtimeAudioOutputTokensPerSec)) * modelRatio)
+			require.Greater(t, preConsumed, textOnlyEstimate*3,
+				"audio-aware estimate should be at least 3x text-only: audio=%d, text=%d",
+				preConsumed, textOnlyEstimate)
+		})
+	}
+}
+
+// TestPreConsumeEstimate_MatchesExpectedUSD verifies the estimate matches
+// a 2-minute audio session cost for gpt-realtime-1.5.
+func TestPreConsumeEstimate_MatchesExpectedUSD(t *testing.T) {
 	t.Parallel()
 
 	pricingAdaptor := relay.GetAdaptor(0)
-	modelName := "gpt-4o-realtime-preview"
+	modelName := "gpt-realtime-1.5"
 	modelRatio := pricing.GetModelRatioWithThreeLayers(modelName, nil, pricingAdaptor)
-	groupRatio := 1.0
 
-	preConsumed := int64(float64(500+realtimePreConsumeTokens) * modelRatio * groupRatio)
-	require.Greater(t, preConsumed, int64(0),
-		"pre-consume estimate should be positive for realtime models")
+	preConsumed := estimateRealtimePreConsumeQuota(
+		modelName, modelRatio, 1.0, nil, pricingAdaptor)
+
+	// Expected for 120s session:
+	// Input:  120 * 10 = 1200 audio tokens * $32/1M = $0.0384
+	// Output: 120 * 20 = 2400 audio tokens * $64/1M = $0.1536
+	// Total: $0.192 = 96,000 quota
+	expectedUSD := 1200.0*32.0/1_000_000 + 2400.0*64.0/1_000_000
+	expectedQuota := int64(expectedUSD * ratio.QuotaPerUsd)
+
+	require.InDelta(t, expectedQuota, preConsumed, float64(expectedQuota)*0.05,
+		"2-min audio session estimate: expected ~$%.4f = %d quota, got %d",
+		expectedUSD, expectedQuota, preConsumed)
 }
 
 // TestApplyRealtimeAudioSurcharge_WithAudioTokens verifies that audio tokens

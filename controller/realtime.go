@@ -24,11 +24,20 @@ import (
 	quotautil "github.com/songquanpeng/one-api/relay/quota"
 )
 
-// realtimePreConsumeTokens is the conservative token estimate used for pre-consuming
-// quota before a realtime session. This acts as a minimum charge guarantee: if the
-// session ends with zero reported usage, the pre-consumed amount is retained.
-// Equivalent to approximately 5000 tokens of a short voice exchange.
-const realtimePreConsumeTokens = 5000
+// Realtime session preConsume estimation constants.
+// Since we can't know session length upfront (live audio streaming), we estimate
+// a conservative minimum charge based on a short audio conversation.
+const (
+	// realtimePreConsumeSeconds is the estimated session duration (seconds) for
+	// pre-consuming quota. 120s (2 minutes) is a conservative minimum.
+	realtimePreConsumeSeconds = 120
+
+	// Audio token rates per OpenAI docs:
+	// - Input:  1 token per 100ms = 10 tokens/second
+	// - Output: 1 token per 50ms  = 20 tokens/second
+	realtimeAudioInputTokensPerSec  = 10
+	realtimeAudioOutputTokensPerSec = 20
+)
 
 // RelayRealtime handles WebSocket Realtime proxying for OpenAI Realtime API.
 //
@@ -65,7 +74,10 @@ func RelayRealtime(c *gin.Context) {
 	groupRatio := c.GetFloat64(ctxkey.ChannelRatio)
 
 	// ── Step 2: Pre-consume quota ───────────────────────────────────────
-	preConsumedQuota := int64(float64(config.PreConsumedQuota+realtimePreConsumeTokens) * modelRatio * groupRatio)
+	// Estimate based on a short audio conversation.
+	// Use audio pricing when available (much higher than text), fall back to text.
+	preConsumedQuota := estimateRealtimePreConsumeQuota(
+		modelName, modelRatio, groupRatio, channelModelConfigs, pricingAdaptor)
 
 	// Check user quota before allowing the session
 	userQuota, err := model.CacheGetUserQuota(ctx, relayMeta.UserId)
