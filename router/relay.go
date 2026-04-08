@@ -49,6 +49,7 @@ func SetRelayRouter(router *gin.Engine) {
 	relayV1Router.Use(relayMws...)
 
 	relayV1Router.GET("/realtime", controller.RelayRealtime)
+	relayV1Router.POST("/realtime/sessions", controller.RelayRealtimeSessions)
 	relayV1Router.Any("/oneapi/proxy/:channelid/*target", controller.Relay)
 	relayV1Router.POST("/completions", controller.Relay)
 	relayV1Router.POST("/chat/completions", controller.Relay)

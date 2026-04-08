@@ -26,6 +26,7 @@ import {
   LogOut,
   Menu,
   MessageSquare,
+  Radio,
   Server,
   Settings,
   User,
@@ -49,6 +50,7 @@ const navigationIcons = {
   '/topup': DollarSign,
   '/models': BarChart3,
   '/chat': MessageSquare,
+  '/realtime': Radio,
   '/about': Info,
   '/settings': Settings,
   '/mcps': Server,
@@ -83,6 +85,7 @@ export function Header() {
         { name: t('common.tools'), to: '/tools', show: true },
         { name: t('common.status'), to: '/status', show: true },
         { name: t('common.playground'), to: '/chat', show: true },
+        { name: t('common.realtime'), to: '/realtime', show: true },
         { name: t('common.about'), to: '/about', show: true },
         { name: t('common.settings'), to: '/settings', show: isAdmin },
       ]

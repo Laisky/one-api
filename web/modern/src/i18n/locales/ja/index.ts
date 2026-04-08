@@ -7,6 +7,7 @@ import management from './management.json';
 import mcp from './mcp.json';
 import models from './models.json';
 import playground from './playground.json';
+import realtime from './realtime.json';
 import settings from './settings.json';
 import tools from './tools.json';
 
@@ -17,6 +18,7 @@ const translations = {
   ...settings,
   ...management,
   ...playground,
+  ...realtime,
   ...models,
   ...billing,
   ...logs,

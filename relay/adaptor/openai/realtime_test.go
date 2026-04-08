@@ -2,6 +2,7 @@ package openai
 
 import (
 	"encoding/json"
+	"net/http"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -111,6 +112,150 @@ func TestMaybeParseRealtimeUsageNoResponseID(t *testing.T) {
 	// Without response ID, deduplication doesn't apply, so tokens are counted twice
 	require.Equal(t, 20, usage.PromptTokens)
 	require.Equal(t, 40, usage.CompletionTokens)
+}
+
+// TestNegotiateRealtimeSubprotocols verifies subprotocol filtering.
+func TestNegotiateRealtimeSubprotocols(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		header   string
+		expected []string
+	}{
+		{
+			name:     "empty",
+			header:   "",
+			expected: nil,
+		},
+		{
+			name:     "realtime only",
+			header:   "realtime",
+			expected: []string{"realtime"},
+		},
+		{
+			name:     "full browser auth",
+			header:   "realtime, openai-insecure-api-key.sk-test123, openai-beta.realtime-v1",
+			expected: []string{"realtime", "openai-beta.realtime-v1"},
+		},
+		{
+			name:     "only auth key",
+			header:   "openai-insecure-api-key.sk-secret",
+			expected: nil,
+		},
+		{
+			name:     "multiple protocols without auth",
+			header:   "realtime, openai-beta.realtime-v1",
+			expected: []string{"realtime", "openai-beta.realtime-v1"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := &http.Request{Header: http.Header{}}
+			if tt.header != "" {
+				r.Header.Set("Sec-WebSocket-Protocol", tt.header)
+			}
+			result := negotiateRealtimeSubprotocols(r)
+			require.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+// TestMaybeParseRealtimeUsageAudioDetails verifies that audio/text token
+// details from input_token_details and output_token_details are parsed.
+func TestMaybeParseRealtimeUsageAudioDetails(t *testing.T) {
+	t.Parallel()
+
+	usage := &rmodel.Usage{}
+	counted := map[string]struct{}{}
+
+	msg := []byte(`{
+		"type": "response.done",
+		"response": {
+			"id": "resp_audio_1",
+			"usage": {
+				"input_tokens": 500,
+				"output_tokens": 300,
+				"total_tokens": 800,
+				"input_token_details": {
+					"cached_tokens": 50,
+					"text_tokens": 100,
+					"audio_tokens": 400
+				},
+				"output_token_details": {
+					"text_tokens": 50,
+					"audio_tokens": 250
+				}
+			}
+		}
+	}`)
+
+	maybeParseRealtimeUsage(msg, usage, counted)
+
+	require.Equal(t, 500, usage.PromptTokens)
+	require.Equal(t, 300, usage.CompletionTokens)
+	require.Equal(t, 800, usage.TotalTokens)
+
+	require.NotNil(t, usage.PromptTokensDetails)
+	require.Equal(t, 50, usage.PromptTokensDetails.CachedTokens)
+	require.Equal(t, 100, usage.PromptTokensDetails.TextTokens)
+	require.Equal(t, 400, usage.PromptTokensDetails.AudioTokens)
+
+	require.NotNil(t, usage.CompletionTokensDetails)
+	require.Equal(t, 50, usage.CompletionTokensDetails.TextTokens)
+	require.Equal(t, 250, usage.CompletionTokensDetails.AudioTokens)
+}
+
+// TestMaybeParseRealtimeUsageAudioAccumulation verifies that audio details
+// from multiple response.done events are accumulated correctly.
+func TestMaybeParseRealtimeUsageAudioAccumulation(t *testing.T) {
+	t.Parallel()
+
+	usage := &rmodel.Usage{}
+	counted := map[string]struct{}{}
+
+	msg1 := []byte(`{"type":"response.done","response":{"id":"r1","usage":{
+		"input_tokens":100,"output_tokens":50,
+		"input_token_details":{"audio_tokens":80,"text_tokens":20},
+		"output_token_details":{"audio_tokens":40,"text_tokens":10}
+	}}}`)
+	msg2 := []byte(`{"type":"response.done","response":{"id":"r2","usage":{
+		"input_tokens":200,"output_tokens":100,
+		"input_token_details":{"audio_tokens":150,"text_tokens":50},
+		"output_token_details":{"audio_tokens":70,"text_tokens":30}
+	}}}`)
+
+	maybeParseRealtimeUsage(msg1, usage, counted)
+	maybeParseRealtimeUsage(msg2, usage, counted)
+
+	require.Equal(t, 300, usage.PromptTokens)
+	require.Equal(t, 150, usage.CompletionTokens)
+
+	require.Equal(t, 230, usage.PromptTokensDetails.AudioTokens)  // 80+150
+	require.Equal(t, 70, usage.PromptTokensDetails.TextTokens)    // 20+50
+	require.Equal(t, 110, usage.CompletionTokensDetails.AudioTokens) // 40+70
+	require.Equal(t, 40, usage.CompletionTokensDetails.TextTokens)   // 10+30
+}
+
+// TestMaybeParseRealtimeUsageNoDetails verifies that events without
+// token details still parse totals correctly (backward compatibility).
+func TestMaybeParseRealtimeUsageNoDetails(t *testing.T) {
+	t.Parallel()
+
+	usage := &rmodel.Usage{}
+	counted := map[string]struct{}{}
+
+	msg := []byte(`{"type":"response.done","response":{"id":"r_nodetails","usage":{
+		"input_tokens":100,"output_tokens":50,"total_tokens":150
+	}}}`)
+
+	maybeParseRealtimeUsage(msg, usage, counted)
+
+	require.Equal(t, 100, usage.PromptTokens)
+	require.Equal(t, 50, usage.CompletionTokens)
+	require.Nil(t, usage.PromptTokensDetails, "should be nil when no details provided")
+	require.Nil(t, usage.CompletionTokensDetails, "should be nil when no details provided")
 }
 
 // TestCopyWSRealtimeUsageFullEvent verifies a realistic realtime response.done

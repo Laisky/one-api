@@ -35,6 +35,7 @@ const TopUpPage = lazy(() => import('@/pages/topup/TopUpPage'));
 const EditUserPage = lazy(() => import('@/pages/users/EditUserPage'));
 const UsersPage = lazy(() => import('@/pages/users/UsersPage').then((m) => ({ default: m.UsersPage })));
 const PlaygroundPage = lazy(() => import('@/pages/chat/PlaygroundPage'));
+const RealtimePlaygroundPage = lazy(() => import('@/pages/realtime/RealtimePlaygroundPage'));
 
 // Dev tools — lazy loaded, tree-shaken in production
 const ResponsiveDebugger = lazy(() => import('@/components/dev/responsive-debugger').then((m) => ({ default: m.ResponsiveDebugger })));
@@ -121,6 +122,7 @@ function App() {
                     <Route path="settings" element={<SettingsPage />} />
                     <Route path="topup" element={<TopUpPage />} />
                     <Route path="chat" element={<PlaygroundPage />} />
+                    <Route path="realtime" element={<RealtimePlaygroundPage />} />
                   </Route>
                 </Route>
 

@@ -163,11 +163,31 @@ func isModelInList(modelName string, models string) bool {
 // GetTokenKeyParts extracts the token key parts from the Authorization header
 //
 // key like `sk-{token}[-{channelid}]`
+//
+// For WebSocket upgrade requests from browsers (which cannot set custom headers),
+// the API key may be passed via the Sec-WebSocket-Protocol header using the
+// subprotocol format: "openai-insecure-api-key.{KEY}"
 func GetTokenKeyParts(c *gin.Context) []string {
 	key := c.Request.Header.Get("Authorization")
 	if key == "" {
 		// compatible with Anthropic
 		key = c.Request.Header.Get("X-Api-Key")
+	}
+
+	// For WebSocket upgrade requests, also check subprotocol-based auth.
+	// Browsers cannot set custom headers on WebSocket connections, so the
+	// OpenAI Realtime API allows passing the key as a subprotocol:
+	//   Sec-WebSocket-Protocol: realtime, openai-insecure-api-key.{KEY}, openai-beta.realtime-v1
+	if key == "" {
+		if sp := c.Request.Header.Get("Sec-WebSocket-Protocol"); sp != "" {
+			for _, proto := range strings.Split(sp, ",") {
+				proto = strings.TrimSpace(proto)
+				if strings.HasPrefix(proto, "openai-insecure-api-key.") {
+					key = strings.TrimPrefix(proto, "openai-insecure-api-key.")
+					break
+				}
+			}
+		}
 	}
 
 	key = strings.TrimPrefix(key, "Bearer ")
