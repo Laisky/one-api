@@ -1011,6 +1011,11 @@ var (
 	MetricFailChanSize = env.Int("METRIC_FAIL_CHAN_SIZE", 128)
 )
 
+// DB based tracing
+var (
+	TracingBasedOnDBEnabled = env.Bool("TRACING_BASED_ON_DB_ENABLED", false)
+)
+
 // =============================================================================
 // OPEN TELEMETRY
 // =============================================================================
@@ -1095,6 +1100,12 @@ var (
 		}
 		return v
 	}()
+
+	// TraceEnabled toggles database-based tracing of requests. When true, trace records are stored in the database and can be queried for debugging and monitoring purposes.
+	//
+	// Environment variable: TRACE_ENABLED
+	// Default: false
+	TraceEnabled = env.Bool("TRACE_ENABLED", false)
 
 	// TraceRetentionDays controls how long trace records are kept before the
 	// retention worker removes them. Set to 0 to disable cleanup.

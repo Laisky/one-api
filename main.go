@@ -192,7 +192,9 @@ func main() {
 	// This will cause SSE not to work!!!
 	//server.Use(gzip.Gzip(gzip.DefaultCompression))
 	server.Use(middleware.RequestId())
-	server.Use(middleware.TracingMiddleware())
+	if config.TraceEnabled {
+		server.Use(middleware.TracingMiddleware())
+	}
 
 	// Add Prometheus middleware if enabled
 	if config.EnablePrometheusMetrics {
