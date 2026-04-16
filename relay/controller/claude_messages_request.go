@@ -114,7 +114,8 @@ func rewriteClaudeOpus47Thinking(rawThinking json.RawMessage) (json.RawMessage, 
 //   - Key reordering within nested objects
 //
 // By using json.RawMessage, only the top-level fields we explicitly modify (model,
-// extra_body, top_p) are re-encoded; all other fields pass through byte-for-byte.
+// extra_body, temperature, top_p, top_k, and Opus 4.7 thinking) are re-encoded;
+// all other fields pass through byte-for-byte.
 func rewriteClaudeRequestBody(raw []byte, request *ClaudeMessagesRequest) ([]byte, error) {
 	if len(raw) == 0 || request == nil {
 		return raw, nil
