@@ -12,7 +12,10 @@ Please reach out through our [feedback form](https://forms.gle/sWjBtsrNEY2oKGuE8
 
 Web search is available on:
 
+- Claude Opus 4.7 (`claude-opus-4-7`)
+- Claude Opus 4.6 (`claude-opus-4-6`)
 - Claude Sonnet 4.5 (`claude-sonnet-4-5-20250929`)
+- Claude Sonnet 4.6 (`claude-sonnet-4-6`)
 - Claude Sonnet 4 (`claude-sonnet-4-20250514`)
 - Claude Sonnet 3.7 ([deprecated](/docs/en/about-claude/model-deprecations)) (`claude-3-7-sonnet-20250219`)
 - Claude Haiku 4.5 (`claude-haiku-4-5-20251001`)
@@ -44,7 +47,7 @@ curl https://api.anthropic.com/v1/messages \
     --header "anthropic-version: 2023-06-01" \
     --header "content-type: application/json" \
     --data '{
-        "model": "claude-sonnet-4-5",
+        "model": "claude-opus-4-7",
         "max_tokens": 1024,
         "messages": [
             {
@@ -53,7 +56,7 @@ curl https://api.anthropic.com/v1/messages \
             }
         ],
         "tools": [{
-            "type": "web_search_20250305",
+            "type": "web_search_20260209",
             "name": "web_search",
             "max_uses": 5
         }]
@@ -66,7 +69,7 @@ import anthropic
 client = anthropic.Anthropic()
 
 response = client.messages.create(
-    model="claude-sonnet-4-5",
+    model="claude-opus-4-7",
     max_tokens=1024,
     messages=[
         {
@@ -75,7 +78,7 @@ response = client.messages.create(
         }
     ],
     tools=[{
-        "type": "web_search_20250305",
+        "type": "web_search_20260209",
         "name": "web_search",
         "max_uses": 5
     }]
@@ -90,7 +93,7 @@ const anthropic = new Anthropic();
 
 async function main() {
   const response = await anthropic.messages.create({
-    model: 'claude-sonnet-4-5',
+    model: 'claude-opus-4-7',
     max_tokens: 1024,
     messages: [
       {
@@ -100,7 +103,7 @@ async function main() {
     ],
     tools: [
       {
-        type: 'web_search_20250305',
+        type: 'web_search_20260209',
         name: 'web_search',
         max_uses: 5,
       },
@@ -121,7 +124,7 @@ The web search tool supports the following parameters:
 
 ```json JSON
 {
-  "type": "web_search_20250305",
+  "type": "web_search_20260209",
   "name": "web_search",
 
   // Optional: Limit the number of searches per request
@@ -326,7 +329,7 @@ model="claude-sonnet-4-5",
 max_tokens=1024,
 messages=messages,
 tools=[{
-"type": "web_search_20250305",
+"type": "web_search_20260209",
 "name": "web_search",
 "user_location": {
 "type": "approximate",
@@ -358,7 +361,7 @@ model="claude-sonnet-4-5",
 max_tokens=1024,
 messages=messages,
 tools=[{
-"type": "web_search_20250305",
+"type": "web_search_20260209",
 "name": "web_search",
 "user_location": {
 "type": "approximate",

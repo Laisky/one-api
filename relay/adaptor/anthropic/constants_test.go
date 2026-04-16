@@ -4,6 +4,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+
+	"github.com/songquanpeng/one-api/relay/billing/ratio"
 )
 
 func TestClaudeWebSearchPricingApplied(t *testing.T) {
@@ -17,4 +19,14 @@ func TestClaudeWebSearchPricingApplied(t *testing.T) {
 		keys = append(keys, name)
 	}
 	require.ElementsMatch(t, []string{"web_search"}, keys, "expected pricing map to enumerate anthropic built-in tools")
+}
+
+func TestClaudeOpus47PricingMatchesPublishedRatios(t *testing.T) {
+	pricing, ok := ModelRatios["claude-opus-4-7"]
+	require.True(t, ok, "Claude Opus 4.7 pricing missing from Anthropic model ratios")
+	require.InDelta(t, 5*ratio.MilliTokensUsd, pricing.Ratio, 1e-12)
+	require.InDelta(t, 5.0, pricing.CompletionRatio, 1e-12)
+	require.InDelta(t, 0.5*ratio.MilliTokensUsd, pricing.CachedInputRatio, 1e-12)
+	require.InDelta(t, 6.25*ratio.MilliTokensUsd, pricing.CacheWrite5mRatio, 1e-12)
+	require.InDelta(t, 10.0*ratio.MilliTokensUsd, pricing.CacheWrite1hRatio, 1e-12)
 }

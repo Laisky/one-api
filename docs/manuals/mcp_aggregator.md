@@ -293,14 +293,14 @@ If multiple MCP servers expose the same tool name, one-api resolves by parameter
 
 ### Claude Messages API (cURL)
 
-This example uses the Claude Messages API format and standard Claude tool type. If an MCP tool named `web_search_20250305` is configured, one-api will route the tool call through MCP execution.
+This example uses the Claude Messages API format and standard Claude tool type. If an MCP tool named `web_search_20260209` is configured, one-api will route the tool call through MCP execution.
 
 ```bash
 curl "https://oneapi.laisky.com/v1/messages" \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer $ONEAPI_TOKEN" \
   -d '{
-    "model": "claude-sonnet-4-5",
+    "model": "claude-opus-4-7",
     "max_tokens": 512,
     "messages": [
       {
@@ -310,7 +310,7 @@ curl "https://oneapi.laisky.com/v1/messages" \
     ],
     "tools": [
       {
-        "type": "web_search_20250305",
+        "type": "web_search_20260209",
         "name": "web_search",
         "max_uses": 1
       }

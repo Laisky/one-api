@@ -247,6 +247,53 @@ func TestConvertRequest_ClearsTopPWhenTemperatureSpecified(t *testing.T) {
 	}
 }
 
+func TestConvertRequest_ClaudeOpus47StripsUnsupportedSampling(t *testing.T) {
+	c := newThinkingContext(t, "/v1/chat/completions")
+
+	request := model.GeneralOpenAIRequest{
+		Model:       "claude-opus-4-7",
+		MaxTokens:   4096,
+		Temperature: float64Ptr(0.8),
+		TopP:        float64Ptr(0.6),
+		TopK:        intPtr(32),
+	}
+
+	converted, err := ConvertRequest(c, request)
+	require.NoError(t, err)
+	require.NotNil(t, converted)
+
+	assert.Nil(t, converted.Temperature, "temperature should be stripped for Claude Opus 4.7")
+	assert.Nil(t, converted.TopP, "top_p should be stripped for Claude Opus 4.7")
+	assert.Nil(t, converted.TopK, "top_k should be stripped for Claude Opus 4.7")
+}
+
+func TestConvertRequest_ClaudeOpus47RewritesLegacyThinking(t *testing.T) {
+	c := newThinkingContext(t, "/v1/chat/completions")
+
+	request := model.GeneralOpenAIRequest{
+		Model:     "claude-opus-4-7",
+		MaxTokens: 8192,
+		Thinking: &model.Thinking{
+			Type:         "enabled",
+			BudgetTokens: model.IntPtr(4096),
+		},
+		Temperature: float64Ptr(0.8),
+		TopP:        float64Ptr(0.6),
+		TopK:        intPtr(32),
+	}
+
+	converted, err := ConvertRequest(c, request)
+	require.NoError(t, err)
+	require.NotNil(t, converted)
+	require.NotNil(t, converted.Thinking)
+
+	assert.Equal(t, "adaptive", converted.Thinking.Type)
+	assert.Nil(t, converted.Thinking.BudgetTokens, "budget_tokens should be stripped for Claude Opus 4.7")
+	assert.Nil(t, converted.Temperature, "temperature should be stripped for Claude Opus 4.7")
+	assert.Nil(t, converted.TopP, "top_p should be stripped for Claude Opus 4.7")
+	assert.Nil(t, converted.TopK, "top_k should be stripped for Claude Opus 4.7")
+}
+
 func TestConvertRequest_DefaultsMissingFunctionSchema(t *testing.T) {
 	c := newThinkingContext(t, "/v1/chat/completions")
 
@@ -1476,6 +1523,34 @@ func TestConvertClaudeRequest_ClearsTopPWhenTemperatureProvided(t *testing.T) {
 
 	assert.NotNil(t, converted.Temperature, "temperature should be preserved")
 	assert.Nil(t, converted.TopP, "top_p should be cleared when temperature is provided")
+}
+
+func TestConvertClaudeRequest_ClaudeOpus47StripsSamplingAndRewritesThinking(t *testing.T) {
+	c := newThinkingContext(t, "/v1/messages")
+
+	claudeRequest := model.ClaudeRequest{
+		Model:     "claude-opus-4-7",
+		MaxTokens: 8192,
+		Messages:  []model.ClaudeMessage{{Role: "user", Content: "hello"}},
+		Thinking: &model.Thinking{
+			Type:         "enabled",
+			BudgetTokens: model.IntPtr(4096),
+		},
+		Temperature: float64Ptr(0.6),
+		TopP:        float64Ptr(0.5),
+		TopK:        intPtr(16),
+	}
+
+	converted, err := ConvertClaudeRequest(c, claudeRequest)
+	require.NoError(t, err)
+	require.NotNil(t, converted)
+	require.NotNil(t, converted.Thinking)
+
+	assert.Nil(t, converted.Temperature, "temperature should be stripped for Claude Opus 4.7")
+	assert.Nil(t, converted.TopP, "top_p should be stripped for Claude Opus 4.7")
+	assert.Nil(t, converted.TopK, "top_k should be stripped for Claude Opus 4.7")
+	assert.Equal(t, "adaptive", converted.Thinking.Type)
+	assert.Nil(t, converted.Thinking.BudgetTokens, "budget_tokens should be stripped for Claude Opus 4.7")
 }
 
 func TestConvertClaudeRequest_PreservesThinkingAndSignature(t *testing.T) {

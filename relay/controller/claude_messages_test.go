@@ -128,7 +128,7 @@ func TestGetAndValidateClaudeMessagesRequest(t *testing.T) {
 func TestBuildClaudeToolsForMCP(t *testing.T) {
 	req := &relaymodel.ClaudeRequest{
 		Tools: []relaymodel.ClaudeTool{
-			{Type: "web_search_20250305", Name: "web_search"},
+			{Type: "web_search_20260209", Name: "web_search"},
 			{
 				Name:        "local_tool",
 				Description: "Local tool",
@@ -139,7 +139,7 @@ func TestBuildClaudeToolsForMCP(t *testing.T) {
 
 	tools := buildClaudeToolsForMCP(req)
 	require.Len(t, tools, 2)
-	require.Equal(t, "web_search_20250305", tools[0].Type)
+	require.Equal(t, "web_search_20260209", tools[0].Type)
 	require.Nil(t, tools[0].Function)
 	require.Equal(t, "function", tools[1].Type)
 	require.NotNil(t, tools[1].Function)

@@ -236,9 +236,7 @@ func ConvertClaudeRequest(c *gin.Context, claudeRequest model.ClaudeRequest) (*R
 		request.TopK = claudeRequest.TopK
 	}
 
-	if request.Temperature != nil && request.TopP != nil {
-		request.TopP = nil
-	}
+	NormalizeModelCompatibility(request.Model, &request.Temperature, &request.TopP, &request.TopK, &request.Thinking)
 
 	return request, nil
 }
@@ -310,6 +308,8 @@ func ConvertRequest(c *gin.Context, textRequest model.GeneralOpenAIRequest) (*Re
 			BudgetTokens: &budgetTokens,
 		}
 	}
+
+	NormalizeModelCompatibility(claudeRequest.Model, &claudeRequest.Temperature, &claudeRequest.TopP, &claudeRequest.TopK, &claudeRequest.Thinking)
 
 	if isModelSupportThinking(textRequest.Model) &&
 		claudeRequest.Thinking != nil {

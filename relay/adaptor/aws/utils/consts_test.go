@@ -164,6 +164,12 @@ func TestConvertModelID2CrossRegionProfile(t *testing.T) {
 			region:   "us-east-1",
 			expected: "global.anthropic.claude-opus-4-6-v1",
 		},
+		{
+			name:     "claude-opus-4-7 in us-east-1 uses global profile",
+			model:    "anthropic.claude-opus-4-7",
+			region:   "us-east-1",
+			expected: "global.anthropic.claude-opus-4-7",
+		},
 	}
 
 	for _, tt := range tests {
@@ -304,6 +310,39 @@ func TestClaudeOpus45RequiresGlobalProfile(t *testing.T) {
 		result := ConvertModelID2CrossRegionProfile(ctx, modelID, region)
 		require.Equalf(t, globalProfileID, result,
 			"claude-opus-4-5 in region %s should convert to global profile %s", region, globalProfileID)
+	}
+}
+
+// TestClaudeOpus47RequiresGlobalProfile specifically tests that claude-opus-4-7 is configured
+// correctly to use the global inference profile, as AWS documents for current Bedrock routing.
+func TestClaudeOpus47RequiresGlobalProfile(t *testing.T) {
+	t.Parallel()
+	modelID := "anthropic.claude-opus-4-7"
+	globalProfileID := "global." + modelID
+
+	allowedRegions, exists := GlobalProfileSourceRegions[modelID]
+	require.Truef(t, exists, "claude-opus-4-7 (%s) must be in GlobalProfileSourceRegions", modelID)
+
+	require.Containsf(t, CrossRegionInferences, globalProfileID,
+		"claude-opus-4-7 global profile (%s) must be in CrossRegionInferences", globalProfileID)
+
+	keyRegions := []string{
+		"us-east-1",
+		"eu-west-1",
+		"ap-northeast-1",
+		"ap-southeast-2",
+		"ca-west-1",
+	}
+	for _, region := range keyRegions {
+		require.Containsf(t, allowedRegions, region,
+			"region %s should be in GlobalProfileSourceRegions for claude-opus-4-7", region)
+	}
+
+	ctx := context.Background()
+	for _, region := range keyRegions {
+		result := ConvertModelID2CrossRegionProfile(ctx, modelID, region)
+		require.Equalf(t, globalProfileID, result,
+			"claude-opus-4-7 in region %s should convert to global profile %s", region, globalProfileID)
 	}
 }
 

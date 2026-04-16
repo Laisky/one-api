@@ -325,7 +325,7 @@ All adapters now follow the same four-layer pricing system and fallback logic, w
 **✅ Adapters with Native Pricing (25+ total)**:
 
 - **OpenAI**: 84 models with comprehensive GPT pricing
-- **Anthropic**: 15 models with Claude pricing
+- **Anthropic**: 28 models with Claude pricing
 - **Zhipu**: 23 models with GLM pricing
 - **Ali (Alibaba)**: 89 models with Qwen and other models
 - **Baidu**: 16 models with ERNIE pricing

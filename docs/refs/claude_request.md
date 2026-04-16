@@ -1936,13 +1936,15 @@ Important implementation note for billing correctness:
   The model that will complete your prompt.
 
   See [models](https://docs.anthropic.com/en/docs/models-overview) for additional details and options.
-  - `UnionMember0 = "claude-opus-4-6" or "claude-sonnet-4-6" or "claude-opus-4-5-20251101" or 19 more`
+  - `UnionMember0 = "claude-opus-4-7" or "claude-opus-4-6" or "claude-sonnet-4-6" or "claude-opus-4-5-20251101" or 20 more`
 
     The model that will complete your prompt.
 
     See [models](https://docs.anthropic.com/en/docs/models-overview) for additional details and options.
-    - `"claude-opus-4-6"`
+    - `"claude-opus-4-7"`
+      Most intelligent model for building agents and coding
 
+    - `"claude-opus-4-6"`
       Most intelligent model for building agents and coding
 
     - `"claude-sonnet-4-6"`
@@ -2807,7 +2809,7 @@ Important implementation note for billing correctness:
 
       When true, guarantees schema validation on tool names and inputs
 
-  - `WebSearchTool20250305 = object { name, type, allowed_callers, 7 more }`
+  - `WebSearchTool20260209 = object { name, type, allowed_callers, 7 more }`
     - `name: "web_search"`
 
       Name of the tool.
@@ -2815,8 +2817,8 @@ Important implementation note for billing correctness:
       This is how the tool will be called by the model and in `tool_use` blocks.
       - `"web_search"`
 
-    - `type: "web_search_20250305"`
-      - `"web_search_20250305"`
+    - `type: "web_search_20260209"`
+      - `"web_search_20260209"`
 
     - `allowed_callers: optional array of "direct" or "code_execution_20250825" or "code_execution_20260120"`
       - `"direct"`
@@ -3792,13 +3794,15 @@ Important implementation note for billing correctness:
     The model that will complete your prompt.
 
     See [models](https://docs.anthropic.com/en/docs/models-overview) for additional details and options.
-    - `UnionMember0 = "claude-opus-4-6" or "claude-sonnet-4-6" or "claude-opus-4-5-20251101" or 19 more`
+    - `UnionMember0 = "claude-opus-4-7" or "claude-opus-4-6" or "claude-sonnet-4-6" or "claude-opus-4-5-20251101" or 20 more`
 
       The model that will complete your prompt.
 
       See [models](https://docs.anthropic.com/en/docs/models-overview) for additional details and options.
-      - `"claude-opus-4-6"`
+      - `"claude-opus-4-7"`
+        Most intelligent model for building agents and coding
 
+      - `"claude-opus-4-6"`
         Most intelligent model for building agents and coding
 
       - `"claude-sonnet-4-6"`
@@ -4010,7 +4014,7 @@ curl https://api.anthropic.com/v1/messages \
               "role": "user"
             }
           ],
-          "model": "claude-opus-4-6"
+          "model": "claude-opus-4-7"
         }'
 ```
 
@@ -5895,13 +5899,15 @@ Learn more about token counting in our [user guide](https://docs.claude.com/en/d
   The model that will complete your prompt.
 
   See [models](https://docs.anthropic.com/en/docs/models-overview) for additional details and options.
-  - `UnionMember0 = "claude-opus-4-6" or "claude-sonnet-4-6" or "claude-opus-4-5-20251101" or 19 more`
+  - `UnionMember0 = "claude-opus-4-7" or "claude-opus-4-6" or "claude-sonnet-4-6" or "claude-opus-4-5-20251101" or 20 more`
 
     The model that will complete your prompt.
 
     See [models](https://docs.anthropic.com/en/docs/models-overview) for additional details and options.
-    - `"claude-opus-4-6"`
+    - `"claude-opus-4-7"`
+      Most intelligent model for building agents and coding
 
+    - `"claude-opus-4-6"`
       Most intelligent model for building agents and coding
 
     - `"claude-sonnet-4-6"`
@@ -6718,7 +6724,7 @@ Learn more about token counting in our [user guide](https://docs.claude.com/en/d
 
       When true, guarantees schema validation on tool names and inputs
 
-  - `WebSearchTool20250305 = object { name, type, allowed_callers, 7 more }`
+  - `WebSearchTool20260209 = object { name, type, allowed_callers, 7 more }`
     - `name: "web_search"`
 
       Name of the tool.
@@ -6726,8 +6732,8 @@ Learn more about token counting in our [user guide](https://docs.claude.com/en/d
       This is how the tool will be called by the model and in `tool_use` blocks.
       - `"web_search"`
 
-    - `type: "web_search_20250305"`
-      - `"web_search_20250305"`
+    - `type: "web_search_20260209"`
+      - `"web_search_20260209"`
 
     - `allowed_callers: optional array of "direct" or "code_execution_20250825" or "code_execution_20260120"`
       - `"direct"`
@@ -7123,7 +7129,7 @@ curl https://api.anthropic.com/v1/messages/count_tokens \
               "role": "user"
             }
           ],
-          "model": "claude-opus-4-6"
+          "model": "claude-opus-4-7"
         }'
 ```
 
@@ -11800,13 +11806,15 @@ curl https://api.anthropic.com/v1/messages/count_tokens \
     The model that will complete your prompt.
 
     See [models](https://docs.anthropic.com/en/docs/models-overview) for additional details and options.
-    - `UnionMember0 = "claude-opus-4-6" or "claude-sonnet-4-6" or "claude-opus-4-5-20251101" or 19 more`
+    - `UnionMember0 = "claude-opus-4-7" or "claude-opus-4-6" or "claude-sonnet-4-6" or "claude-opus-4-5-20251101" or 20 more`
 
       The model that will complete your prompt.
 
       See [models](https://docs.anthropic.com/en/docs/models-overview) for additional details and options.
-      - `"claude-opus-4-6"`
+      - `"claude-opus-4-7"`
+        Most intelligent model for building agents and coding
 
+      - `"claude-opus-4-6"`
         Most intelligent model for building agents and coding
 
       - `"claude-sonnet-4-6"`
@@ -12451,7 +12459,7 @@ curl https://api.anthropic.com/v1/messages/count_tokens \
 
       When true, guarantees schema validation on tool names and inputs
 
-  - `WebSearchTool20250305 = object { name, type, allowed_callers, 7 more }`
+  - `WebSearchTool20260209 = object { name, type, allowed_callers, 7 more }`
     - `name: "web_search"`
 
       Name of the tool.
@@ -12459,8 +12467,8 @@ curl https://api.anthropic.com/v1/messages/count_tokens \
       This is how the tool will be called by the model and in `tool_use` blocks.
       - `"web_search"`
 
-    - `type: "web_search_20250305"`
-      - `"web_search_20250305"`
+    - `type: "web_search_20260209"`
+      - `"web_search_20260209"`
 
     - `allowed_callers: optional array of "direct" or "code_execution_20250825" or "code_execution_20260120"`
       - `"direct"`
@@ -14700,18 +14708,20 @@ curl https://api.anthropic.com/v1/messages/count_tokens \
 
 ### Model
 
-- `Model = "claude-opus-4-6" or "claude-sonnet-4-6" or "claude-opus-4-5-20251101" or 19 more or string`
+- `Model = "claude-opus-4-7" or "claude-opus-4-6" or "claude-sonnet-4-6" or "claude-opus-4-5-20251101" or 20 more or string`
 
   The model that will complete your prompt.
 
   See [models](https://docs.anthropic.com/en/docs/models-overview) for additional details and options.
-  - `UnionMember0 = "claude-opus-4-6" or "claude-sonnet-4-6" or "claude-opus-4-5-20251101" or 19 more`
+  - `UnionMember0 = "claude-opus-4-7" or "claude-opus-4-6" or "claude-sonnet-4-6" or "claude-opus-4-5-20251101" or 20 more`
 
     The model that will complete your prompt.
 
     See [models](https://docs.anthropic.com/en/docs/models-overview) for additional details and options.
-    - `"claude-opus-4-6"`
+    - `"claude-opus-4-7"`
+      Most intelligent model for building agents and coding
 
+    - `"claude-opus-4-6"`
       Most intelligent model for building agents and coding
 
     - `"claude-sonnet-4-6"`
@@ -16264,13 +16274,15 @@ curl https://api.anthropic.com/v1/messages/count_tokens \
       The model that will complete your prompt.
 
       See [models](https://docs.anthropic.com/en/docs/models-overview) for additional details and options.
-      - `UnionMember0 = "claude-opus-4-6" or "claude-sonnet-4-6" or "claude-opus-4-5-20251101" or 19 more`
+      - `UnionMember0 = "claude-opus-4-7" or "claude-opus-4-6" or "claude-sonnet-4-6" or "claude-opus-4-5-20251101" or 20 more`
 
         The model that will complete your prompt.
 
         See [models](https://docs.anthropic.com/en/docs/models-overview) for additional details and options.
-        - `"claude-opus-4-6"`
+        - `"claude-opus-4-7"`
+          Most intelligent model for building agents and coding
 
+        - `"claude-opus-4-6"`
           Most intelligent model for building agents and coding
 
         - `"claude-sonnet-4-6"`
@@ -17062,13 +17074,15 @@ curl https://api.anthropic.com/v1/messages/count_tokens \
         The model that will complete your prompt.
 
         See [models](https://docs.anthropic.com/en/docs/models-overview) for additional details and options.
-        - `UnionMember0 = "claude-opus-4-6" or "claude-sonnet-4-6" or "claude-opus-4-5-20251101" or 19 more`
+        - `UnionMember0 = "claude-opus-4-7" or "claude-opus-4-6" or "claude-sonnet-4-6" or "claude-opus-4-5-20251101" or 20 more`
 
           The model that will complete your prompt.
 
           See [models](https://docs.anthropic.com/en/docs/models-overview) for additional details and options.
-          - `"claude-opus-4-6"`
+          - `"claude-opus-4-7"`
+            Most intelligent model for building agents and coding
 
+          - `"claude-opus-4-6"`
             Most intelligent model for building agents and coding
 
           - `"claude-sonnet-4-6"`
@@ -20709,7 +20723,7 @@ curl https://api.anthropic.com/v1/messages/count_tokens \
 
       When true, guarantees schema validation on tool names and inputs
 
-  - `WebSearchTool20250305 = object { name, type, allowed_callers, 7 more }`
+  - `WebSearchTool20260209 = object { name, type, allowed_callers, 7 more }`
     - `name: "web_search"`
 
       Name of the tool.
@@ -20717,8 +20731,8 @@ curl https://api.anthropic.com/v1/messages/count_tokens \
       This is how the tool will be called by the model and in `tool_use` blocks.
       - `"web_search"`
 
-    - `type: "web_search_20250305"`
-      - `"web_search_20250305"`
+    - `type: "web_search_20260209"`
+      - `"web_search_20260209"`
 
     - `allowed_callers: optional array of "direct" or "code_execution_20250825" or "code_execution_20260120"`
       - `"direct"`
@@ -22154,7 +22168,7 @@ curl https://api.anthropic.com/v1/messages/count_tokens \
 
 ### Web Search Tool 20250305
 
-- `WebSearchTool20250305 = object { name, type, allowed_callers, 7 more }`
+- `WebSearchTool20260209 = object { name, type, allowed_callers, 7 more }`
   - `name: "web_search"`
 
     Name of the tool.
@@ -22162,8 +22176,8 @@ curl https://api.anthropic.com/v1/messages/count_tokens \
     This is how the tool will be called by the model and in `tool_use` blocks.
     - `"web_search"`
 
-  - `type: "web_search_20250305"`
-    - `"web_search_20250305"`
+  - `type: "web_search_20260209"`
+    - `"web_search_20260209"`
 
   - `allowed_callers: optional array of "direct" or "code_execution_20250825" or "code_execution_20260120"`
     - `"direct"`
@@ -24477,13 +24491,15 @@ Learn more about the Message Batches API in our [user guide](https://docs.claude
       The model that will complete your prompt.
 
       See [models](https://docs.anthropic.com/en/docs/models-overview) for additional details and options.
-      - `UnionMember0 = "claude-opus-4-6" or "claude-sonnet-4-6" or "claude-opus-4-5-20251101" or 19 more`
+      - `UnionMember0 = "claude-opus-4-7" or "claude-opus-4-6" or "claude-sonnet-4-6" or "claude-opus-4-5-20251101" or 20 more`
 
         The model that will complete your prompt.
 
         See [models](https://docs.anthropic.com/en/docs/models-overview) for additional details and options.
-        - `"claude-opus-4-6"`
+        - `"claude-opus-4-7"`
+          Most intelligent model for building agents and coding
 
+        - `"claude-opus-4-6"`
           Most intelligent model for building agents and coding
 
         - `"claude-sonnet-4-6"`
@@ -25348,7 +25364,7 @@ Learn more about the Message Batches API in our [user guide](https://docs.claude
 
           When true, guarantees schema validation on tool names and inputs
 
-      - `WebSearchTool20250305 = object { name, type, allowed_callers, 7 more }`
+      - `WebSearchTool20260209 = object { name, type, allowed_callers, 7 more }`
         - `name: "web_search"`
 
           Name of the tool.
@@ -25356,8 +25372,8 @@ Learn more about the Message Batches API in our [user guide](https://docs.claude
           This is how the tool will be called by the model and in `tool_use` blocks.
           - `"web_search"`
 
-        - `type: "web_search_20250305"`
-          - `"web_search_20250305"`
+        - `type: "web_search_20260209"`
+          - `"web_search_20260209"`
 
         - `allowed_callers: optional array of "direct" or "code_execution_20250825" or "code_execution_20260120"`
           - `"direct"`
@@ -25853,7 +25869,7 @@ curl https://api.anthropic.com/v1/messages/batches \
                     "role": "user"
                   }
                 ],
-                "model": "claude-opus-4-6"
+                "model": "claude-opus-4-7"
               }
             }
           ]
@@ -26864,13 +26880,15 @@ Learn more about the Message Batches API in our [user guide](https://docs.claude
           The model that will complete your prompt.
 
           See [models](https://docs.anthropic.com/en/docs/models-overview) for additional details and options.
-          - `UnionMember0 = "claude-opus-4-6" or "claude-sonnet-4-6" or "claude-opus-4-5-20251101" or 19 more`
+          - `UnionMember0 = "claude-opus-4-7" or "claude-opus-4-6" or "claude-sonnet-4-6" or "claude-opus-4-5-20251101" or 20 more`
 
             The model that will complete your prompt.
 
             See [models](https://docs.anthropic.com/en/docs/models-overview) for additional details and options.
-            - `"claude-opus-4-6"`
+            - `"claude-opus-4-7"`
+              Most intelligent model for building agents and coding
 
+            - `"claude-opus-4-6"`
               Most intelligent model for building agents and coding
 
             - `"claude-sonnet-4-6"`
@@ -27931,13 +27949,15 @@ curl https://api.anthropic.com/v1/messages/batches/$MESSAGE_BATCH_ID/results \
           The model that will complete your prompt.
 
           See [models](https://docs.anthropic.com/en/docs/models-overview) for additional details and options.
-          - `UnionMember0 = "claude-opus-4-6" or "claude-sonnet-4-6" or "claude-opus-4-5-20251101" or 19 more`
+          - `UnionMember0 = "claude-opus-4-7" or "claude-opus-4-6" or "claude-sonnet-4-6" or "claude-opus-4-5-20251101" or 20 more`
 
             The model that will complete your prompt.
 
             See [models](https://docs.anthropic.com/en/docs/models-overview) for additional details and options.
-            - `"claude-opus-4-6"`
+            - `"claude-opus-4-7"`
+              Most intelligent model for building agents and coding
 
+            - `"claude-opus-4-6"`
               Most intelligent model for building agents and coding
 
             - `"claude-sonnet-4-6"`
@@ -28831,13 +28851,15 @@ curl https://api.anthropic.com/v1/messages/batches/$MESSAGE_BATCH_ID/results \
         The model that will complete your prompt.
 
         See [models](https://docs.anthropic.com/en/docs/models-overview) for additional details and options.
-        - `UnionMember0 = "claude-opus-4-6" or "claude-sonnet-4-6" or "claude-opus-4-5-20251101" or 19 more`
+        - `UnionMember0 = "claude-opus-4-7" or "claude-opus-4-6" or "claude-sonnet-4-6" or "claude-opus-4-5-20251101" or 20 more`
 
           The model that will complete your prompt.
 
           See [models](https://docs.anthropic.com/en/docs/models-overview) for additional details and options.
-          - `"claude-opus-4-6"`
+          - `"claude-opus-4-7"`
+            Most intelligent model for building agents and coding
 
+          - `"claude-opus-4-6"`
             Most intelligent model for building agents and coding
 
           - `"claude-sonnet-4-6"`
@@ -29695,13 +29717,15 @@ curl https://api.anthropic.com/v1/messages/batches/$MESSAGE_BATCH_ID/results \
       The model that will complete your prompt.
 
       See [models](https://docs.anthropic.com/en/docs/models-overview) for additional details and options.
-      - `UnionMember0 = "claude-opus-4-6" or "claude-sonnet-4-6" or "claude-opus-4-5-20251101" or 19 more`
+      - `UnionMember0 = "claude-opus-4-7" or "claude-opus-4-6" or "claude-sonnet-4-6" or "claude-opus-4-5-20251101" or 20 more`
 
         The model that will complete your prompt.
 
         See [models](https://docs.anthropic.com/en/docs/models-overview) for additional details and options.
-        - `"claude-opus-4-6"`
+        - `"claude-opus-4-7"`
+          Most intelligent model for building agents and coding
 
+        - `"claude-opus-4-6"`
           Most intelligent model for building agents and coding
 
         - `"claude-sonnet-4-6"`

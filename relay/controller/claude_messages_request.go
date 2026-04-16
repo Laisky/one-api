@@ -10,6 +10,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/songquanpeng/one-api/common"
+	"github.com/songquanpeng/one-api/relay/adaptor/anthropic"
 )
 
 // sanitizeClaudeMessagesRequest enforces parameter constraints required by upstream providers.
@@ -17,9 +18,88 @@ func sanitizeClaudeMessagesRequest(request *ClaudeMessagesRequest) {
 	if request == nil {
 		return
 	}
-	if request.Temperature != nil && request.TopP != nil {
-		request.TopP = nil
+	anthropic.NormalizeModelCompatibility(request.Model, &request.Temperature, &request.TopP, &request.TopK, &request.Thinking)
+}
+
+// applyClaudeRequestRewriteFields rewrites sanitized top-level Claude request fields in obj.
+// It updates only the top-level fields that one-api intentionally normalizes and returns any rewrite error.
+func applyClaudeRequestRewriteFields(obj map[string]json.RawMessage, request *ClaudeMessagesRequest) error {
+	if request.Model != "" {
+		modelBytes, merr := json.Marshal(request.Model)
+		if merr != nil {
+			return errors.Wrap(merr, "marshal model name")
+		}
+		obj["model"] = json.RawMessage(modelBytes)
 	}
+
+	delete(obj, "extra_body")
+	if request.Temperature == nil {
+		delete(obj, "temperature")
+	}
+	if request.TopP == nil {
+		delete(obj, "top_p")
+	}
+	if request.TopK == nil {
+		delete(obj, "top_k")
+	}
+
+	if anthropic.IsClaudeOpus47Model(request.Model) {
+		rewrittenThinking, changed, err := rewriteClaudeOpus47Thinking(obj["thinking"])
+		if err != nil {
+			return errors.Wrap(err, "rewrite Claude Opus 4.7 thinking")
+		}
+		if changed {
+			if len(rewrittenThinking) == 0 {
+				delete(obj, "thinking")
+			} else {
+				obj["thinking"] = rewrittenThinking
+			}
+		}
+	}
+
+	return nil
+}
+
+// rewriteClaudeOpus47Thinking normalizes a raw thinking object for Claude Opus 4.7.
+// It preserves valid adaptive settings where possible, rewrites legacy manual thinking to adaptive, and returns whether the raw field changed.
+func rewriteClaudeOpus47Thinking(rawThinking json.RawMessage) (json.RawMessage, bool, error) {
+	if len(rawThinking) == 0 {
+		return nil, false, nil
+	}
+
+	var obj map[string]json.RawMessage
+	if err := json.Unmarshal(rawThinking, &obj); err != nil {
+		rewritten, merr := json.Marshal(map[string]string{"type": "adaptive"})
+		if merr != nil {
+			return nil, false, errors.Wrap(merr, "marshal adaptive thinking")
+		}
+		return json.RawMessage(rewritten), true, nil
+	}
+
+	var thinkingType string
+	if rawType, ok := obj["type"]; ok {
+		if err := json.Unmarshal(rawType, &thinkingType); err != nil {
+			return nil, false, errors.Wrap(err, "unmarshal thinking type")
+		}
+	}
+
+	if strings.EqualFold(strings.TrimSpace(thinkingType), "adaptive") {
+		if _, ok := obj["budget_tokens"]; !ok {
+			return rawThinking, false, nil
+		}
+		delete(obj, "budget_tokens")
+		rewritten, err := encodeClaudeRawJSONObject(obj)
+		if err != nil {
+			return nil, false, errors.Wrap(err, "marshal adaptive thinking")
+		}
+		return json.RawMessage(rewritten), true, nil
+	}
+
+	rewritten, err := json.Marshal(map[string]string{"type": "adaptive"})
+	if err != nil {
+		return nil, false, errors.Wrap(err, "marshal adaptive thinking")
+	}
+	return json.RawMessage(rewritten), true, nil
 }
 
 // rewriteClaudeRequestBody updates the raw JSON payload to reflect sanitized request fields.
@@ -43,16 +123,8 @@ func rewriteClaudeRequestBody(raw []byte, request *ClaudeMessagesRequest) ([]byt
 	if err := json.Unmarshal(raw, &obj); err != nil {
 		return nil, errors.Wrap(err, "unmarshal raw claude body for rewrite")
 	}
-	if request.Model != "" {
-		modelBytes, merr := json.Marshal(request.Model)
-		if merr != nil {
-			return nil, errors.Wrap(merr, "marshal model name")
-		}
-		obj["model"] = json.RawMessage(modelBytes)
-	}
-	delete(obj, "extra_body")
-	if request.TopP == nil {
-		delete(obj, "top_p")
+	if err := applyClaudeRequestRewriteFields(obj, request); err != nil {
+		return nil, errors.Wrap(err, "apply Claude rewrite fields")
 	}
 
 	var buf bytes.Buffer
@@ -79,17 +151,9 @@ func rewriteAndSanitizeClaudeRequestBody(raw []byte, request *ClaudeMessagesRequ
 		return nil, stats, errors.Wrap(err, "unmarshal raw claude body for rewrite+sanitize")
 	}
 
-	// --- rewrite phase (model, extra_body, top_p) ---
-	if request.Model != "" {
-		modelBytes, merr := json.Marshal(request.Model)
-		if merr != nil {
-			return nil, stats, errors.Wrap(merr, "marshal model name")
-		}
-		obj["model"] = json.RawMessage(modelBytes)
-	}
-	delete(obj, "extra_body")
-	if request.TopP == nil {
-		delete(obj, "top_p")
+	// --- rewrite phase (model, extra_body, sampling, thinking) ---
+	if err := applyClaudeRequestRewriteFields(obj, request); err != nil {
+		return nil, stats, errors.Wrap(err, "apply Claude rewrite fields")
 	}
 
 	// --- sanitize phase (strip unsigned thinking blocks) ---

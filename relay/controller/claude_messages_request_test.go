@@ -6,6 +6,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	relaymodel "github.com/songquanpeng/one-api/relay/model"
 )
 
 func TestRewriteClaudeRequestBody_PreservesThinkingSignatures(t *testing.T) {
@@ -366,6 +368,30 @@ func TestSanitizeClaudeMessagesRequest(t *testing.T) {
 			sanitizeClaudeMessagesRequest(nil)
 		})
 	})
+
+	t.Run("Claude Opus 4.7 strips sampling and rewrites legacy thinking", func(t *testing.T) {
+		temp := 0.7
+		topP := 0.9
+		topK := 32
+		budgetTokens := 4096
+		req := &ClaudeMessagesRequest{
+			Model:       "claude-opus-4-7",
+			Temperature: &temp,
+			TopP:        &topP,
+			TopK:        &topK,
+			Thinking: &relaymodel.Thinking{
+				Type:         "enabled",
+				BudgetTokens: &budgetTokens,
+			},
+		}
+		sanitizeClaudeMessagesRequest(req)
+		assert.Nil(t, req.Temperature)
+		assert.Nil(t, req.TopP)
+		assert.Nil(t, req.TopK)
+		require.NotNil(t, req.Thinking)
+		assert.Equal(t, "adaptive", req.Thinking.Type)
+		assert.Nil(t, req.Thinking.BudgetTokens)
+	})
 }
 
 // TestRewriteClaudeRequestBody_BackwardCompatibility verifies that the rewrite
@@ -413,6 +439,38 @@ func TestRewriteClaudeRequestBody_BackwardCompatibility(t *testing.T) {
 	assert.True(t, hasSystem)
 	_, hasTools := parsed["tools"]
 	assert.True(t, hasTools)
+}
+
+func TestRewriteClaudeRequestBody_ClaudeOpus47DeletesUnsupportedFieldsAndRewritesThinking(t *testing.T) {
+	t.Parallel()
+
+	rawBody := `{"model":"claude-opus-4-7","max_tokens":2048,"temperature":0.5,"top_p":0.8,"top_k":32,"thinking":{"type":"enabled","budget_tokens":4096},"messages":[{"role":"user","content":"test"}]}`
+
+	request := &ClaudeMessagesRequest{
+		Model:     "claude-opus-4-7",
+		MaxTokens: 2048,
+		Thinking: &relaymodel.Thinking{
+			Type: "adaptive",
+		},
+	}
+
+	result, err := rewriteClaudeRequestBody([]byte(rawBody), request)
+	require.NoError(t, err)
+
+	var parsed map[string]json.RawMessage
+	require.NoError(t, json.Unmarshal(result, &parsed))
+	_, hasTemperature := parsed["temperature"]
+	assert.False(t, hasTemperature)
+	_, hasTopP := parsed["top_p"]
+	assert.False(t, hasTopP)
+	_, hasTopK := parsed["top_k"]
+	assert.False(t, hasTopK)
+
+	var thinking map[string]any
+	require.NoError(t, json.Unmarshal(parsed["thinking"], &thinking))
+	assert.Equal(t, "adaptive", thinking["type"])
+	_, hasBudgetTokens := thinking["budget_tokens"]
+	assert.False(t, hasBudgetTokens)
 }
 
 func TestStripClaudeThinkingFromAssistantHistory(t *testing.T) {
