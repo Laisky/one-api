@@ -2,6 +2,19 @@ import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { BaseMetricRow, getDisplayInCurrency, getQuotaPerUnit, ModelRow, TokenRow, UserRow } from '../types';
 
+export type CacheHeatmapEntity = {
+  name: string;
+  totalVolume: number;
+  cachedVolume: number;
+  overallRate: number;
+  perDay: Record<string, { numerator: number; denominator: number }>;
+};
+
+export type CacheHeatmap = {
+  entities: CacheHeatmapEntity[];
+  days: string[];
+};
+
 export const useDashboardCharts = (
   rows: ModelRow[],
   userRows: UserRow[],
@@ -128,69 +141,88 @@ export const useDashboardCharts = (
     [tokenRows, xAxisDays, statisticsMetric, t]
   );
 
-  const computeCacheSeries = <T extends BaseMetricRow>(rowsSource: T[], daysList: string[]) => {
+  const buildCacheHeatmap = <T extends BaseMetricRow>(
+    rowsSource: T[],
+    daysList: string[],
+    entityKey: (row: T) => string | null
+  ): CacheHeatmap => {
     const quotaPerUnit = getQuotaPerUnit();
     const displayInCurrency = getDisplayInCurrency();
-    const dayToValues: Record<string, { regular: number; cached: number }> = {};
-    for (const day of daysList) {
-      dayToValues[day] = { regular: 0, cached: 0 };
-    }
+
+    type Bucket = { numerator: number; denominator: number };
+    const byEntity: Record<string, { totals: Bucket; perDay: Record<string, Bucket> }> = {};
 
     for (const row of rowsSource) {
-      const day = row.day;
-      if (!dayToValues[day]) {
-        dayToValues[day] = { regular: 0, cached: 0 };
+      const name = entityKey(row);
+      if (!name) continue;
+      if (!byEntity[name]) {
+        byEntity[name] = { totals: { numerator: 0, denominator: 0 }, perDay: {} };
       }
 
-      let regular = 0;
-      let cached = 0;
+      let numerator = 0;
+      let denominator = 0;
       switch (statisticsMetric) {
-        case 'requests': {
-          const cacheHits = row.cache_hit_count || 0;
-          const total = row.request_count || 0;
-          cached = cacheHits;
-          regular = Math.max(total - cacheHits, 0);
+        case 'requests':
+          numerator = row.cache_hit_count || 0;
+          denominator = row.request_count || 0;
           break;
-        }
         case 'expenses': {
           const cacheQuota = row.cache_hit_quota || 0;
           const totalQuota = row.quota || 0;
-          let cachedValue = cacheQuota;
-          let regularValue = Math.max(totalQuota - cacheQuota, 0);
-          if (displayInCurrency) {
-            cachedValue = cachedValue / quotaPerUnit;
-            regularValue = regularValue / quotaPerUnit;
-          }
-          cached = cachedValue;
-          regular = regularValue;
+          numerator = displayInCurrency ? cacheQuota / quotaPerUnit : cacheQuota;
+          denominator = displayInCurrency ? totalQuota / quotaPerUnit : totalQuota;
           break;
         }
         case 'tokens':
-        default: {
-          const cachedTokens = row.cached_prompt_tokens || 0;
-          const promptTokens = row.prompt_tokens || 0;
-          cached = cachedTokens;
-          regular = Math.max(promptTokens - cachedTokens, 0);
+        default:
+          numerator = row.cached_prompt_tokens || 0;
+          denominator = row.prompt_tokens || 0;
           break;
-        }
       }
 
-      dayToValues[day].regular += regular;
-      dayToValues[day].cached += cached;
+      const bucket = byEntity[name];
+      bucket.totals.numerator += numerator;
+      bucket.totals.denominator += denominator;
+      if (!bucket.perDay[row.day]) {
+        bucket.perDay[row.day] = { numerator: 0, denominator: 0 };
+      }
+      bucket.perDay[row.day].numerator += numerator;
+      bucket.perDay[row.day].denominator += denominator;
     }
 
-    return daysList.map((day) => ({
-      date: day,
-      regular: dayToValues[day]?.regular || 0,
-      cached: dayToValues[day]?.cached || 0,
-    }));
+    const entities = Object.entries(byEntity)
+      .map(([name, { totals, perDay }]) => ({
+        name,
+        totalVolume: totals.denominator,
+        cachedVolume: totals.numerator,
+        overallRate: totals.denominator > 0 ? totals.numerator / totals.denominator : 0,
+        perDay,
+      }))
+      .filter((e) => e.totalVolume > 0)
+      .sort((a, b) => b.totalVolume - a.totalVolume);
+
+    return { entities, days: daysList };
   };
 
-  const modelCacheData = useMemo(() => computeCacheSeries(rows, xAxisDays), [rows, xAxisDays, statisticsMetric]);
+  const modelHeatmap = useMemo(
+    () => buildCacheHeatmap(rows, xAxisDays, (row) => (row.model_name ? row.model_name : t('dashboard.fallbacks.model'))),
+    [rows, xAxisDays, statisticsMetric, t]
+  );
 
-  const userCacheData = useMemo(() => computeCacheSeries(userRows, xAxisDays), [userRows, xAxisDays, statisticsMetric]);
+  const userHeatmap = useMemo(
+    () => buildCacheHeatmap(userRows, xAxisDays, (row) => (row.username ? row.username : t('dashboard.fallbacks.user'))),
+    [userRows, xAxisDays, statisticsMetric, t]
+  );
 
-  const tokenCacheData = useMemo(() => computeCacheSeries(tokenRows, xAxisDays), [tokenRows, xAxisDays, statisticsMetric]);
+  const tokenHeatmap = useMemo(
+    () =>
+      buildCacheHeatmap(tokenRows, xAxisDays, (row) => {
+        const token = row.token_name && row.token_name.trim().length > 0 ? row.token_name : t('dashboard.fallbacks.token');
+        const owner = row.username && row.username.trim().length > 0 ? row.username : t('dashboard.fallbacks.owner');
+        return `${token} (${owner})`;
+      }),
+    [tokenRows, xAxisDays, statisticsMetric, t]
+  );
 
   const rangeTotals = useMemo(() => {
     let requests = 0;
@@ -298,9 +330,9 @@ export const useDashboardCharts = (
     userStackedData,
     tokenKeys,
     tokenStackedData,
-    modelCacheData,
-    userCacheData,
-    tokenCacheData,
+    modelHeatmap,
+    userHeatmap,
+    tokenHeatmap,
     rangeTotals,
     modelLeaders,
     rangeInsights,

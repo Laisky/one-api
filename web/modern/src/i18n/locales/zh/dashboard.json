@@ -1,12 +1,19 @@
 {
   "dashboard": {
     "cache": {
-      "cached": "命中缓存",
-      "model_title": "模型缓存使用",
+      "cached": "命中",
+      "hit_rate": "命中率",
+      "model_title": "模型缓存命中率",
+      "no_activity": "无活动",
+      "overall": "整体",
       "regular": "未命中",
+      "section_subtitle": "按实体展示各日缓存命中率——颜色越深命中率越高",
       "section_title": "缓存命中分析",
-      "token_title": "Token 缓存使用",
-      "user_title": "用户缓存使用"
+      "showing_top": "展示前 {{shown}} 条，共 {{total}} 条",
+      "token_title": "Token 缓存命中率",
+      "top_n_label": "展示",
+      "total": "总量",
+      "user_title": "用户缓存命中率"
     },
     "cards": {
       "avg_cost": "单次请求平均成本",

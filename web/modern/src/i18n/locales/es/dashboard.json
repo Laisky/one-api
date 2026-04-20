@@ -2,11 +2,18 @@
   "dashboard": {
     "cache": {
       "cached": "En caché",
-      "model_title": "Uso de caché por modelo",
+      "hit_rate": "Tasa de aciertos",
+      "model_title": "Tasa de aciertos por modelo",
+      "no_activity": "Sin actividad",
+      "overall": "Global",
       "regular": "Normal",
+      "section_subtitle": "Tasa de aciertos por entidad a lo largo del tiempo — celdas más oscuras indican mayor tasa",
       "section_title": "Análisis de aciertos de caché",
-      "token_title": "Uso de caché por token",
-      "user_title": "Uso de caché por usuario"
+      "showing_top": "Mostrando los {{shown}} primeros de {{total}}",
+      "token_title": "Tasa de aciertos por token",
+      "top_n_label": "Mostrar",
+      "total": "Total",
+      "user_title": "Tasa de aciertos por usuario"
     },
     "cards": {
       "avg_cost": "Costo promedio por solicitud",

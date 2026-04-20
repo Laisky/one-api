@@ -2,11 +2,18 @@
   "dashboard": {
     "cache": {
       "cached": "En cache",
-      "model_title": "Utilisation du cache par modèle",
+      "hit_rate": "Taux de succès",
+      "model_title": "Taux de succès du cache par modèle",
+      "no_activity": "Aucune activité",
+      "overall": "Global",
       "regular": "Standard",
+      "section_subtitle": "Taux de succès du cache par entité au fil du temps — les cellules plus sombres indiquent un taux plus élevé",
       "section_title": "Analyse des succès de cache",
-      "token_title": "Utilisation du cache par jeton",
-      "user_title": "Utilisation du cache par utilisateur"
+      "showing_top": "Affichage des {{shown}} premiers sur {{total}}",
+      "token_title": "Taux de succès du cache par jeton",
+      "top_n_label": "Afficher",
+      "total": "Total",
+      "user_title": "Taux de succès du cache par utilisateur"
     },
     "cards": {
       "avg_cost": "Coût moyen par requête",

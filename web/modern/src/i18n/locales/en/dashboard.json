@@ -2,11 +2,18 @@
   "dashboard": {
     "cache": {
       "cached": "Cached",
-      "model_title": "Model Cache Usage",
+      "hit_rate": "Hit rate",
+      "model_title": "Model Cache Hit Rate",
+      "no_activity": "No activity",
+      "overall": "Overall",
       "regular": "Regular",
+      "section_subtitle": "Cache hit rate by entity over time — darker cells mean higher hit rate",
       "section_title": "Cache Hit Analysis",
-      "token_title": "Token Cache Usage",
-      "user_title": "User Cache Usage"
+      "showing_top": "Showing top {{shown}} of {{total}}",
+      "token_title": "Token Cache Hit Rate",
+      "top_n_label": "Show",
+      "total": "Total",
+      "user_title": "User Cache Hit Rate"
     },
     "cards": {
       "avg_cost": "Avg Cost / Request",

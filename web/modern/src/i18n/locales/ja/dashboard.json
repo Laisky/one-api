@@ -2,11 +2,18 @@
   "dashboard": {
     "cache": {
       "cached": "キャッシュ",
-      "model_title": "モデル別キャッシュ使用状況",
+      "hit_rate": "ヒット率",
+      "model_title": "モデル別キャッシュヒット率",
+      "no_activity": "アクティビティなし",
+      "overall": "全体",
       "regular": "通常",
+      "section_subtitle": "エンティティ別の日次ヒット率 — セルが濃いほどヒット率が高い",
       "section_title": "キャッシュヒット分析",
-      "token_title": "トークン別キャッシュ使用状況",
-      "user_title": "ユーザー別キャッシュ使用状況"
+      "showing_top": "上位 {{shown}} 件を表示（全 {{total}} 件）",
+      "token_title": "トークン別キャッシュヒット率",
+      "top_n_label": "表示",
+      "total": "合計",
+      "user_title": "ユーザー別キャッシュヒット率"
     },
     "cards": {
       "avg_cost": "リクエスト当たり平均コスト",
