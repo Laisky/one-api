@@ -7,9 +7,9 @@ import (
 
 // ModelRatios contains all supported models and their pricing ratios
 // Model list is derived from the keys of this map, eliminating redundancy
-// Based on X.AI pricing: https://console.x.ai/
+// Based on X.AI pricing: https://docs.x.ai/developers/models
 var ModelRatios = map[string]adaptor.ModelConfig{
-	// Grok Models - Based on https://console.x.ai/
+	// Grok Models - Based on https://docs.x.ai/developers/models
 	//
 	// Note: Some prices are the same because they are aliases.
 	"grok-code-fast-1":             {Ratio: 0.2 * ratio.MilliTokensUsd, CompletionRatio: 1.5 / 0.2, CachedInputRatio: 0.02 * ratio.MilliTokensUsd}, // $0.20 input, $0.02 cached input, $1.50 output
@@ -106,15 +106,16 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 // ModelList derived from ModelRatios for backward compatibility
 var ModelList = adaptor.GetModelListFromPricing(ModelRatios)
 
-// XAIToolingDefaults captures xAI's published tool invocation fees (retrieved 2025-11-12).
-// Source: https://r.jina.ai/https://docs.x.ai/docs/models
+// XAIToolingDefaults captures xAI's published tool invocation fees (retrieved 2026-04-20).
+// Source: https://docs.x.ai/developers/models
 var XAIToolingDefaults = adaptor.ChannelToolConfig{
 	Pricing: map[string]adaptor.ToolPricingConfig{
-		"web_search":         {UsdPerCall: 0.01},
-		"x_search":           {UsdPerCall: 0.01},
-		"code_execution":     {UsdPerCall: 0.01},
-		"document_search":    {UsdPerCall: 0.01},
-		"collections_search": {UsdPerCall: 0.0025},
-		"live_search_source": {UsdPerCall: 0.025},
+		"web_search":         {UsdPerCall: 0.005},  // $5 / 1k calls
+		"x_search":           {UsdPerCall: 0.005},  // $5 / 1k calls
+		"code_execution":     {UsdPerCall: 0.005},  // $5 / 1k calls
+		"code_interpreter":   {UsdPerCall: 0.005},  // alias of code_execution in Responses API
+		"attachment_search":  {UsdPerCall: 0.01},   // $10 / 1k calls (File Attachments)
+		"collections_search": {UsdPerCall: 0.0025}, // $2.50 / 1k calls
+		"file_search":        {UsdPerCall: 0.0025}, // alias of collections_search in Responses API
 	},
 }
