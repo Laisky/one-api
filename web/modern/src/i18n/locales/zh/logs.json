@@ -14,7 +14,6 @@
       "cache_write_1h": "缓存写入 1h 令牌",
       "cache_write_5m": "缓存写入 5m 令牌",
       "channel": "渠道",
-      "completion_tokens_cached": "补全令牌 (缓存)",
       "completion_tokens_output": "补全令牌 (输出)",
       "content": "内容",
       "copied": "已复制！",
@@ -63,7 +62,6 @@
       "timeline": "请求时间轴",
       "title": "日志条目详情",
       "token": "令牌",
-      "total_cached_tokens": "总缓存令牌",
       "total_time": "总请求时间",
       "total_tokens": "总令牌",
       "trace_id": "追踪 ID",
@@ -76,7 +74,6 @@
       "headers": {
         "cache_write_1h": "缓存写入 (1h)",
         "cache_write_5m": "缓存写入 (5m)",
-        "cached_completion_tokens": "缓存补全令牌",
         "cached_prompt_tokens": "缓存提示令牌",
         "completion_tokens": "补全令牌",
         "content": "内容",

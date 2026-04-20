@@ -127,9 +127,7 @@ func assertCacheAwareConsumeLog(t *testing.T, logID int, requestID string, wantP
 	require.Equal(t, wantPromptTokens, saved.PromptTokens)
 	require.Equal(t, wantCompletionTokens, saved.CompletionTokens)
 	require.Equal(t, wantCachedPromptTokens, saved.CachedPromptTokens)
-	require.Zero(t, saved.CachedCompletionTokens)
 	require.Contains(t, saved.Content, fmt.Sprintf("cached_prompt %d", wantCachedPromptTokens))
-	require.Contains(t, saved.Content, "cached_completion 0")
 	require.Contains(t, saved.Content, "cache_write_5m 10")
 	require.Contains(t, saved.Content, "cache_write_1h 5")
 

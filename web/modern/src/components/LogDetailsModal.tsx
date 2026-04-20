@@ -499,9 +499,7 @@ export function LogDetailsModal({ open, onOpenChange, log }: LogDetailsModalProp
     const promptTokens = log.prompt_tokens ?? 0;
     const cachedPromptTokens = log.cached_prompt_tokens ?? 0;
     const completionTokens = log.completion_tokens ?? 0;
-    const cachedCompletionTokens = log.cached_completion_tokens ?? 0;
     const totalTokens = promptTokens + completionTokens;
-    const totalCachedTokens = cachedPromptTokens + cachedCompletionTokens;
     const quotaDisplay = renderQuota(log.quota ?? 0);
     const rawQuota = Number.isFinite(log.quota) ? log.quota : 0;
     const latencyValue = formatLatency(log.elapsed_time);
@@ -609,10 +607,6 @@ export function LogDetailsModal({ open, onOpenChange, log }: LogDetailsModalProp
             value={<span className="font-mono text-sm">{completionTokens}</span>}
           />
           <DetailItem
-            label={t('logs.details.completion_tokens_cached', 'Completion Tokens (cached)')}
-            value={<span className="font-mono text-sm">{cachedCompletionTokens}</span>}
-          />
-          <DetailItem
             label={t('logs.details.cache_write_5m', 'Cache Write 5m Tokens')}
             value={<span className="font-mono text-sm">{cacheWriteSummary.fiveMinute}</span>}
           />
@@ -623,10 +617,6 @@ export function LogDetailsModal({ open, onOpenChange, log }: LogDetailsModalProp
           <DetailItem
             label={t('logs.details.total_tokens', 'Total Tokens')}
             value={<span className="font-mono text-sm">{totalTokens}</span>}
-          />
-          <DetailItem
-            label={t('logs.details.total_cached_tokens', 'Total Cached Tokens')}
-            value={<span className="font-mono text-sm">{totalCachedTokens}</span>}
           />
         </div>
       </div>

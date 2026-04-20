@@ -40,9 +40,8 @@ type Log struct {
 	ElapsedTime       int64  `json:"elapsed_time" gorm:"default:0;index"` // Added index for sorting (unit is ms)
 	IsStream          bool   `json:"is_stream" gorm:"default:false"`
 	SystemPromptReset bool   `json:"system_prompt_reset" gorm:"default:false"`
-	// Cached token counts (prompt/output) for cost transparency
-	CachedPromptTokens     int `json:"cached_prompt_tokens" gorm:"default:0;index"`
-	CachedCompletionTokens int `json:"cached_completion_tokens" gorm:"default:0;index"`
+	// Cached prompt tokens for cost transparency.
+	CachedPromptTokens int `json:"cached_prompt_tokens" gorm:"default:0;index"`
 	// Metadata holds provider-specific attributes serialized as JSON (e.g., cache write tokens).
 	Metadata LogMetadata `json:"metadata,omitempty" gorm:"type:text"`
 }
@@ -616,14 +615,13 @@ func RecordProvisionalConsumeLog(ctx context.Context, log *Log, estimatedQuota i
 // ConsumeLogReconcileDetail captures the finalized fields written back into a
 // provisional consume log during post-billing reconciliation.
 type ConsumeLogReconcileDetail struct {
-	FinalQuota             int64
-	Content                string
-	PromptTokens           int
-	CompletionTokens       int
-	CachedPromptTokens     int
-	CachedCompletionTokens int
-	ElapsedTime            int64
-	Metadata               LogMetadata
+	FinalQuota         int64
+	Content            string
+	PromptTokens       int
+	CompletionTokens   int
+	CachedPromptTokens int
+	ElapsedTime        int64
+	Metadata           LogMetadata
 }
 
 // ReconcileConsumeLog updates a provisional consume log entry with the final
@@ -658,14 +656,13 @@ func ReconcileConsumeLogDetailed(ctx context.Context, logID int, detail ConsumeL
 	}
 
 	updates := map[string]any{
-		"type":                     LogTypeConsume,
-		"quota":                    int(detail.FinalQuota),
-		"content":                  detail.Content,
-		"prompt_tokens":            detail.PromptTokens,
-		"completion_tokens":        detail.CompletionTokens,
-		"cached_prompt_tokens":     detail.CachedPromptTokens,
-		"cached_completion_tokens": detail.CachedCompletionTokens,
-		"elapsed_time":             detail.ElapsedTime,
+		"type":                 LogTypeConsume,
+		"quota":                int(detail.FinalQuota),
+		"content":              detail.Content,
+		"prompt_tokens":        detail.PromptTokens,
+		"completion_tokens":    detail.CompletionTokens,
+		"cached_prompt_tokens": detail.CachedPromptTokens,
+		"elapsed_time":         detail.ElapsedTime,
 	}
 
 	// Remove the provisional flag from metadata
@@ -699,7 +696,6 @@ func ReconcileConsumeLogDetailed(ctx context.Context, logID int, detail ConsumeL
 		zap.Int("prompt_tokens", detail.PromptTokens),
 		zap.Int("completion_tokens", detail.CompletionTokens),
 		zap.Int("cached_prompt_tokens", detail.CachedPromptTokens),
-		zap.Int("cached_completion_tokens", detail.CachedCompletionTokens),
 	)
 	return nil
 }
@@ -730,14 +726,13 @@ func RecordTestLogWithIDs(ctx context.Context, log *Log, requestId string, trace
 //
 // Returns an error if the update fails.
 var allowedConsumeLogUpdateFields = map[string]struct{}{
-	"quota":                    {},
-	"content":                  {},
-	"elapsed_time":             {},
-	"prompt_tokens":            {},
-	"completion_tokens":        {},
-	"cached_prompt_tokens":     {},
-	"cached_completion_tokens": {},
-	"metadata":                 {},
+	"quota":                {},
+	"content":              {},
+	"elapsed_time":         {},
+	"prompt_tokens":        {},
+	"completion_tokens":    {},
+	"cached_prompt_tokens": {},
+	"metadata":             {},
 }
 
 func UpdateConsumeLogByID(ctx context.Context, logID int, updates map[string]any) error {

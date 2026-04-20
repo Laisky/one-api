@@ -97,7 +97,6 @@ func TestReconcileConsumeLog(t *testing.T) {
 	require.Equal(t, 42875, saved.PromptTokens)
 	require.Equal(t, 4000, saved.CompletionTokens)
 	require.Zero(t, saved.CachedPromptTokens)
-	require.Zero(t, saved.CachedCompletionTokens)
 	require.Equal(t, int64(12345), saved.ElapsedTime)
 
 	// Verify provisional flag is removed
@@ -151,7 +150,7 @@ func TestProvisionalLogFullLifecycle(t *testing.T) {
 
 	// Step 2: Post-billing reconciles with actual usage (less than estimated)
 	err := ReconcileConsumeLog(context.Background(), logID, 15000,
-		"model rate 1.25, group rate 1.00, completion rate 4.00, cached_prompt 0, cached_completion 0, cache_write_5m 0, cache_write_1h 0",
+		"model rate 1.25, group rate 1.00, completion rate 4.00, cached_prompt 0, cache_write_5m 0, cache_write_1h 0",
 		42875, 4000, 72000, nil)
 	require.NoError(t, err)
 
@@ -191,14 +190,13 @@ func TestReconcileConsumeLogDetailed(t *testing.T) {
 
 	metadata := AppendCacheWriteTokensMetadata(LogMetadata{"extra": "data"}, 128, 256)
 	err := ReconcileConsumeLogDetailed(context.Background(), logID, ConsumeLogReconcileDetail{
-		FinalQuota:             6184,
-		Content:                "model rate 1.00, group rate 1.00, completion rate 1.00, cached_prompt 9088, cached_completion 0, cache_write_5m 128, cache_write_1h 256",
-		PromptTokens:           9208,
-		CompletionTokens:       653,
-		CachedPromptTokens:     9088,
-		CachedCompletionTokens: 0,
-		ElapsedTime:            14000,
-		Metadata:               metadata,
+		FinalQuota:         6184,
+		Content:            "model rate 1.00, group rate 1.00, completion rate 1.00, cached_prompt 9088, cache_write_5m 128, cache_write_1h 256",
+		PromptTokens:       9208,
+		CompletionTokens:   653,
+		CachedPromptTokens: 9088,
+		ElapsedTime:        14000,
+		Metadata:           metadata,
 	})
 	require.NoError(t, err)
 
@@ -208,7 +206,6 @@ func TestReconcileConsumeLogDetailed(t *testing.T) {
 	require.Equal(t, 9208, saved.PromptTokens)
 	require.Equal(t, 653, saved.CompletionTokens)
 	require.Equal(t, 9088, saved.CachedPromptTokens)
-	require.Zero(t, saved.CachedCompletionTokens)
 	require.Equal(t, int64(14000), saved.ElapsedTime)
 
 	cacheWriteAny, ok := saved.Metadata[LogMetadataKeyCacheWriteTokens]

@@ -322,7 +322,6 @@ export function LogsPage() {
       t('logs.export.headers.prompt_tokens'),
       t('logs.export.headers.completion_tokens'),
       t('logs.export.headers.cached_prompt_tokens'),
-      t('logs.export.headers.cached_completion_tokens'),
       t('logs.export.headers.cache_write_5m'),
       t('logs.export.headers.cache_write_1h'),
       t('logs.export.headers.latency'),
@@ -340,7 +339,6 @@ export function LogsPage() {
         log.prompt_tokens || 0,
         log.completion_tokens || 0,
         log.cached_prompt_tokens || 0,
-        log.cached_completion_tokens || 0,
         fiveMinute,
         oneHour,
         log.elapsed_time || 0,
@@ -454,11 +452,6 @@ export function LogsPage() {
                         <div>
                           {t('logs.tooltip.output_tokens', {
                             value: row.original.completion_tokens ?? 0,
-                          })}
-                        </div>
-                        <div>
-                          {t('logs.tooltip.cached_tokens', {
-                            value: row.original.cached_completion_tokens ?? 0,
                           })}
                         </div>
                         <div>

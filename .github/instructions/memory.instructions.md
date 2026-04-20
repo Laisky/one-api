@@ -13,7 +13,6 @@ One‑API is a **single‑endpoint gateway** spanning many AI SaaS providers. Cl
 ## Claude Prompt Caching & Billing (2025-08)
 
 - Three-bucket billing: normal input, cache-read, and cache-write tokens. Cache-write tokens subtract from normal input to avoid double charges, clamping at zero when necessary.
-- Cached completion/output tokens are never billed. `cached_completion_tokens` stays only for compatibility and should remain zero for Claude.
 - Pricing config for Claude (and Vertex Claude) must expose `CachedInputRatio`, `CacheWrite5mRatio`, `CacheWrite1hRatio`. Any new Claude model needs these fields.
 - Mapping: Anthropic’s `Ephemeral5mInputTokens`, `Ephemeral1hInputTokens`, or legacy `CacheCreationInputTokens` flow into the cache-write buckets.
 - Keep backend, API, UI, and docs synchronized. Always run `go test -race ./...`; allow float tolerances in assertions when needed.

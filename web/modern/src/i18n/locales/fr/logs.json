@@ -14,7 +14,6 @@
       "cache_write_1h": "Jetons écriture cache 1h",
       "cache_write_5m": "Jetons écriture cache 5m",
       "channel": "Canal",
-      "completion_tokens_cached": "Jetons de complétion (mis en cache)",
       "completion_tokens_output": "Jetons de complétion (sortie)",
       "content": "Contenu",
       "copied": "Copié !",
@@ -63,7 +62,6 @@
       "timeline": "Chronologie de la requête",
       "title": "Détails de l'entrée de journal",
       "token": "Jeton",
-      "total_cached_tokens": "Total des jetons mis en cache",
       "total_time": "Temps total de la requête",
       "total_tokens": "Total des jetons",
       "trace_id": "ID de trace",
@@ -76,7 +74,6 @@
       "headers": {
         "cache_write_1h": "Écriture cache (1h)",
         "cache_write_5m": "Écriture cache (5m)",
-        "cached_completion_tokens": "Jetons de complétion mis en cache",
         "cached_prompt_tokens": "Jetons d'invite mis en cache",
         "completion_tokens": "Jetons de complétion",
         "content": "Contenu",

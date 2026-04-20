@@ -113,7 +113,6 @@ describe('LogDetailsModal', () => {
       prompt_tokens: 1_200,
       completion_tokens: 800,
       cached_prompt_tokens: 200,
-      cached_completion_tokens: 150,
       elapsed_time: 2_345,
       request_id: 'req-123',
       trace_id: '',
@@ -157,9 +156,6 @@ describe('LogDetailsModal', () => {
     const totalTokens = screen.getByText(/total tokens/i).closest('div');
     expect(totalTokens).toHaveTextContent('2000');
 
-    const totalCachedTokens = screen.getByText(/total cached tokens/i).closest('div');
-    expect(totalCachedTokens).toHaveTextContent('350');
-
     expect(screen.getByText('Stream')).toBeInTheDocument();
     expect(screen.getByText('System Reset')).toBeInTheDocument();
     expect(screen.getByText(/req-123/)).toBeInTheDocument();
@@ -180,7 +176,6 @@ describe('LogDetailsModal', () => {
       prompt_tokens: 600,
       completion_tokens: 400,
       cached_prompt_tokens: 0,
-      cached_completion_tokens: 0,
       elapsed_time: 3_000,
       request_id: 'req-trace',
       trace_id: 'trace-abc',

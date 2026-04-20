@@ -687,7 +687,7 @@ Base formula (no caching):
 quota = (prompt_tokens + completion_tokens * completion_ratio) * model_ratio * group_ratio
 ```
 
-Claude prompt caching extends billing with cache-read and cache-write costs. We split prompt tokens into: normal input, cached-read input, and cache-write input (5m and 1h). Completion tokens may also be cached by some providers.
+Claude prompt caching extends billing with cache-read and cache-write costs. We split prompt tokens into: normal input, cached-read input, and cache-write input (5m and 1h). Completion tokens are always billed at the output price.
 
 ```
 normal_input = prompt_tokens - cached_read - cache_write_5m - cache_write_1h
@@ -695,8 +695,7 @@ normal_input = prompt_tokens - cached_read - cache_write_5m - cache_write_1h
 quota =
     normal_input        * input_price
 + cached_read         * cached_input_price
-+ noncached_completion* output_price
-    # Note: we do not bill cached completion tokens. Providers do not return cached completion metrics and there is no CachedOutputRatio.
++ completion_tokens   * output_price
 + cache_write_5m      * write5m_price
 + cache_write_1h      * write1h_price
 
@@ -704,7 +703,6 @@ where:
     input_price           = model_ratio * group_ratio
     output_price          = model_ratio * completion_ratio * group_ratio
     cached_input_price    = (CachedInputRatio if >0 else input_price) or 0 if <0
-    # No cached output price; completions are always billed at output_price
     write5m_price         = (CacheWrite5mRatio if >0 else input_price) or 0 if <0
     write1h_price         = (CacheWrite1hRatio if >0 else input_price) or 0 if <0
 ```
@@ -970,7 +968,7 @@ GET /api/channel/default-pricing?type=:channelType
 
 **Frontend:**
 
-- The logs table displays these cached token fields as tooltips in the Prompt/Completion columns for each log entry.
+- The logs table displays `cached_prompt_tokens` as a tooltip in the Prompt column for each log entry.
 
 ## Testing & Race Condition Policy (2025-08)
 

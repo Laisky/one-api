@@ -92,14 +92,13 @@ func PostConsumeQuotaWithLog(ctx context.Context, tokenId int, quotaDelta int64,
 	}
 	if provLogID > 0 {
 		if err := model.ReconcileConsumeLogDetailed(ctx, provLogID, model.ConsumeLogReconcileDetail{
-			FinalQuota:             totalQuota,
-			Content:                logEntry.Content,
-			PromptTokens:           logEntry.PromptTokens,
-			CompletionTokens:       logEntry.CompletionTokens,
-			CachedPromptTokens:     logEntry.CachedPromptTokens,
-			CachedCompletionTokens: logEntry.CachedCompletionTokens,
-			ElapsedTime:            logEntry.ElapsedTime,
-			Metadata:               logEntry.Metadata,
+			FinalQuota:         totalQuota,
+			Content:            logEntry.Content,
+			PromptTokens:       logEntry.PromptTokens,
+			CompletionTokens:   logEntry.CompletionTokens,
+			CachedPromptTokens: logEntry.CachedPromptTokens,
+			ElapsedTime:        logEntry.ElapsedTime,
+			Metadata:           logEntry.Metadata,
 		}); err != nil {
 			lg.Error("failed to reconcile provisional log, falling back to new log entry",
 				zap.Error(err), zap.Int("provisional_log_id", provLogID))
@@ -148,28 +147,27 @@ func ReturnPreConsumedQuota(ctx context.Context, preConsumedQuota int64, tokenId
 
 // QuotaConsumeDetail encapsulates all parameters for detailed quota consumption billing
 type QuotaConsumeDetail struct {
-	Ctx                    context.Context
-	TokenId                int
-	QuotaDelta             int64
-	TotalQuota             int64
-	UserId                 int
-	ChannelId              int
-	PromptTokens           int
-	CompletionTokens       int
-	ModelRatio             float64
-	GroupRatio             float64
-	ModelName              string
-	TokenName              string
-	IsStream               bool
-	StartTime              time.Time
-	SystemPromptReset      bool
-	CompletionRatio        float64
-	ToolsCost              int64
-	CachedPromptTokens     int
-	CachedCompletionTokens int
-	CacheWrite5mTokens     int
-	CacheWrite1hTokens     int
-	Metadata               model.LogMetadata
+	Ctx                context.Context
+	TokenId            int
+	QuotaDelta         int64
+	TotalQuota         int64
+	UserId             int
+	ChannelId          int
+	PromptTokens       int
+	CompletionTokens   int
+	ModelRatio         float64
+	GroupRatio         float64
+	ModelName          string
+	TokenName          string
+	IsStream           bool
+	StartTime          time.Time
+	SystemPromptReset  bool
+	CompletionRatio    float64
+	ToolsCost          int64
+	CachedPromptTokens int
+	CacheWrite5mTokens int
+	CacheWrite1hTokens int
+	Metadata           model.LogMetadata
 	// Explicit IDs propagated from gin.Context
 	RequestId string
 	TraceId   string
@@ -221,27 +219,26 @@ func PostConsumeQuotaDetailed(detail QuotaConsumeDetail) {
 
 	var logContent string
 	if detail.ToolsCost == 0 {
-		logContent = fmt.Sprintf("model rate %.2f, group rate %.2f, completion rate %.2f, cached_prompt %d, cached_completion %d, cache_write_5m %d, cache_write_1h %d",
-			detail.ModelRatio, detail.GroupRatio, detail.CompletionRatio, detail.CachedPromptTokens, detail.CachedCompletionTokens, detail.CacheWrite5mTokens, detail.CacheWrite1hTokens)
+		logContent = fmt.Sprintf("model rate %.2f, group rate %.2f, completion rate %.2f, cached_prompt %d, cache_write_5m %d, cache_write_1h %d",
+			detail.ModelRatio, detail.GroupRatio, detail.CompletionRatio, detail.CachedPromptTokens, detail.CacheWrite5mTokens, detail.CacheWrite1hTokens)
 	} else {
-		logContent = fmt.Sprintf("model rate %.2f, group rate %.2f, completion rate %.2f, tools cost %d, cached_prompt %d, cached_completion %d, cache_write_5m %d, cache_write_1h %d",
-			detail.ModelRatio, detail.GroupRatio, detail.CompletionRatio, detail.ToolsCost, detail.CachedPromptTokens, detail.CachedCompletionTokens, detail.CacheWrite5mTokens, detail.CacheWrite1hTokens)
+		logContent = fmt.Sprintf("model rate %.2f, group rate %.2f, completion rate %.2f, tools cost %d, cached_prompt %d, cache_write_5m %d, cache_write_1h %d",
+			detail.ModelRatio, detail.GroupRatio, detail.CompletionRatio, detail.ToolsCost, detail.CachedPromptTokens, detail.CacheWrite5mTokens, detail.CacheWrite1hTokens)
 	}
 	entry := &model.Log{
-		UserId:                 detail.UserId,
-		ChannelId:              detail.ChannelId,
-		PromptTokens:           detail.PromptTokens,
-		CompletionTokens:       detail.CompletionTokens,
-		ModelName:              detail.ModelName,
-		TokenName:              detail.TokenName,
-		Content:                logContent,
-		IsStream:               detail.IsStream,
-		ElapsedTime:            helper.CalcElapsedTime(detail.StartTime),
-		SystemPromptReset:      detail.SystemPromptReset,
-		CachedPromptTokens:     detail.CachedPromptTokens,
-		CachedCompletionTokens: detail.CachedCompletionTokens,
-		RequestId:              detail.RequestId,
-		TraceId:                detail.TraceId,
+		UserId:             detail.UserId,
+		ChannelId:          detail.ChannelId,
+		PromptTokens:       detail.PromptTokens,
+		CompletionTokens:   detail.CompletionTokens,
+		ModelName:          detail.ModelName,
+		TokenName:          detail.TokenName,
+		Content:            logContent,
+		IsStream:           detail.IsStream,
+		ElapsedTime:        helper.CalcElapsedTime(detail.StartTime),
+		SystemPromptReset:  detail.SystemPromptReset,
+		CachedPromptTokens: detail.CachedPromptTokens,
+		RequestId:          detail.RequestId,
+		TraceId:            detail.TraceId,
 	}
 
 	metadata := model.CloneLogMetadata(detail.Metadata)
@@ -259,7 +256,6 @@ func PostConsumeQuotaDetailed(detail QuotaConsumeDetail) {
 		zap.Int("prompt_tokens", detail.PromptTokens),
 		zap.Int("completion_tokens", detail.CompletionTokens),
 		zap.Int("cached_prompt_tokens", detail.CachedPromptTokens),
-		zap.Int("cached_completion_tokens", detail.CachedCompletionTokens),
 		zap.Int("cache_write_5m_tokens", detail.CacheWrite5mTokens),
 		zap.Int("cache_write_1h_tokens", detail.CacheWrite1hTokens),
 		zap.Int("provisional_log_id", detail.ProvisionalLogId),

@@ -14,7 +14,6 @@
       "cache_write_1h": "Cache Write 1h Tokens",
       "cache_write_5m": "Cache Write 5m Tokens",
       "channel": "Channel",
-      "completion_tokens_cached": "Completion Tokens (cached)",
       "completion_tokens_output": "Completion Tokens (output)",
       "content": "Content",
       "copied": "Copied!",
@@ -63,7 +62,6 @@
       "timeline": "Request Timeline",
       "title": "Log Entry Details",
       "token": "Token",
-      "total_cached_tokens": "Total Cached Tokens",
       "total_time": "Total Request Time",
       "total_tokens": "Total Tokens",
       "trace_id": "Trace ID",
@@ -76,7 +74,6 @@
       "headers": {
         "cache_write_1h": "Cache Write (1h)",
         "cache_write_5m": "Cache Write (5m)",
-        "cached_completion_tokens": "Cached Completion Tokens",
         "cached_prompt_tokens": "Cached Prompt Tokens",
         "completion_tokens": "Completion Tokens",
         "content": "Content",

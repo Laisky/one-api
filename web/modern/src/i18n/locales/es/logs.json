@@ -14,7 +14,6 @@
       "cache_write_1h": "Tokens de escritura en caché 1h",
       "cache_write_5m": "Tokens de escritura en caché 5m",
       "channel": "Canal",
-      "completion_tokens_cached": "Tokens de completado (en caché)",
       "completion_tokens_output": "Tokens de completado (salida)",
       "content": "Contenido",
       "copied": "¡Copiado!",
@@ -63,7 +62,6 @@
       "timeline": "Línea de tiempo de la solicitud",
       "title": "Detalles de la entrada de registro",
       "token": "Token",
-      "total_cached_tokens": "Tokens totales en caché",
       "total_time": "Tiempo total de la solicitud",
       "total_tokens": "Tokens totales",
       "trace_id": "ID de rastreo",
@@ -76,7 +74,6 @@
       "headers": {
         "cache_write_1h": "Escritura en caché (1h)",
         "cache_write_5m": "Escritura en caché (5m)",
-        "cached_completion_tokens": "Tokens de completado en caché",
         "cached_prompt_tokens": "Tokens de prompt en caché",
         "completion_tokens": "Tokens de completado",
         "content": "Contenido",

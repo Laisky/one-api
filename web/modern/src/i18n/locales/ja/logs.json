@@ -14,7 +14,6 @@
       "cache_write_1h": "キャッシュ書き込み 1h トークン",
       "cache_write_5m": "キャッシュ書き込み 5m トークン",
       "channel": "チャンネル",
-      "completion_tokens_cached": "補完トークン (キャッシュ済み)",
       "completion_tokens_output": "補完トークン (出力)",
       "content": "コンテンツ",
       "copied": "コピーしました！",
@@ -63,7 +62,6 @@
       "timeline": "リクエストタイムライン",
       "title": "ログエントリ詳細",
       "token": "トークン",
-      "total_cached_tokens": "合計キャッシュトークン",
       "total_time": "合計リクエスト時間",
       "total_tokens": "合計トークン",
       "trace_id": "トレースID",
@@ -76,7 +74,6 @@
       "headers": {
         "cache_write_1h": "キャッシュ書き込み (1h)",
         "cache_write_5m": "キャッシュ書き込み (5m)",
-        "cached_completion_tokens": "キャッシュ済み補完トークン",
         "cached_prompt_tokens": "キャッシュ済みプロンプトトークン",
         "completion_tokens": "補完トークン",
         "content": "コンテンツ",

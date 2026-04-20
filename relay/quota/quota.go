@@ -29,13 +29,12 @@ type ComputeInput struct {
 // ComputeResult captures the outcome of a quota calculation, including
 // normalized ratios used and cached token details.
 type ComputeResult struct {
-	TotalQuota             int64
-	PromptTokens           int
-	CompletionTokens       int
-	CachedPromptTokens     int
-	CachedCompletionTokens int
-	UsedModelRatio         float64
-	UsedCompletionRatio    float64
+	TotalQuota          int64
+	PromptTokens        int
+	CompletionTokens    int
+	CachedPromptTokens  int
+	UsedModelRatio      float64
+	UsedCompletionRatio float64
 }
 
 // Compute calculates the quota required for the provided usage snapshot.
@@ -215,13 +214,12 @@ func Compute(input ComputeInput) ComputeResult {
 	}
 
 	return ComputeResult{
-		TotalQuota:             totalQuota,
-		PromptTokens:           promptTokens,
-		CompletionTokens:       completionTokens,
-		CachedPromptTokens:     cachedPrompt,
-		CachedCompletionTokens: 0,
-		UsedModelRatio:         usedModelRatio,
-		UsedCompletionRatio:    usedCompletionRatio,
+		TotalQuota:          totalQuota,
+		PromptTokens:        promptTokens,
+		CompletionTokens:    completionTokens,
+		CachedPromptTokens:  cachedPrompt,
+		UsedModelRatio:      usedModelRatio,
+		UsedCompletionRatio: usedCompletionRatio,
 	}
 }
 
