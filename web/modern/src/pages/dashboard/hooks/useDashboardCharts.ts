@@ -128,6 +128,70 @@ export const useDashboardCharts = (
     [tokenRows, xAxisDays, statisticsMetric, t]
   );
 
+  const computeCacheSeries = <T extends BaseMetricRow>(rowsSource: T[], daysList: string[]) => {
+    const quotaPerUnit = getQuotaPerUnit();
+    const displayInCurrency = getDisplayInCurrency();
+    const dayToValues: Record<string, { regular: number; cached: number }> = {};
+    for (const day of daysList) {
+      dayToValues[day] = { regular: 0, cached: 0 };
+    }
+
+    for (const row of rowsSource) {
+      const day = row.day;
+      if (!dayToValues[day]) {
+        dayToValues[day] = { regular: 0, cached: 0 };
+      }
+
+      let regular = 0;
+      let cached = 0;
+      switch (statisticsMetric) {
+        case 'requests': {
+          const cacheHits = row.cache_hit_count || 0;
+          const total = row.request_count || 0;
+          cached = cacheHits;
+          regular = Math.max(total - cacheHits, 0);
+          break;
+        }
+        case 'expenses': {
+          const cacheQuota = row.cache_hit_quota || 0;
+          const totalQuota = row.quota || 0;
+          let cachedValue = cacheQuota;
+          let regularValue = Math.max(totalQuota - cacheQuota, 0);
+          if (displayInCurrency) {
+            cachedValue = cachedValue / quotaPerUnit;
+            regularValue = regularValue / quotaPerUnit;
+          }
+          cached = cachedValue;
+          regular = regularValue;
+          break;
+        }
+        case 'tokens':
+        default: {
+          const cachedTokens = row.cached_prompt_tokens || 0;
+          const promptTokens = row.prompt_tokens || 0;
+          cached = cachedTokens;
+          regular = Math.max(promptTokens - cachedTokens, 0);
+          break;
+        }
+      }
+
+      dayToValues[day].regular += regular;
+      dayToValues[day].cached += cached;
+    }
+
+    return daysList.map((day) => ({
+      date: day,
+      regular: dayToValues[day]?.regular || 0,
+      cached: dayToValues[day]?.cached || 0,
+    }));
+  };
+
+  const modelCacheData = useMemo(() => computeCacheSeries(rows, xAxisDays), [rows, xAxisDays, statisticsMetric]);
+
+  const userCacheData = useMemo(() => computeCacheSeries(userRows, xAxisDays), [userRows, xAxisDays, statisticsMetric]);
+
+  const tokenCacheData = useMemo(() => computeCacheSeries(tokenRows, xAxisDays), [tokenRows, xAxisDays, statisticsMetric]);
+
   const rangeTotals = useMemo(() => {
     let requests = 0;
     let quota = 0;
@@ -234,8 +298,16 @@ export const useDashboardCharts = (
     userStackedData,
     tokenKeys,
     tokenStackedData,
+    modelCacheData,
+    userCacheData,
+    tokenCacheData,
     rangeTotals,
     modelLeaders,
     rangeInsights,
   };
+};
+
+export const CACHE_SERIES_KEYS = {
+  regular: 'regular' as const,
+  cached: 'cached' as const,
 };

@@ -1,5 +1,13 @@
 {
   "dashboard": {
+    "cache": {
+      "cached": "キャッシュ",
+      "model_title": "モデル別キャッシュ使用状況",
+      "regular": "通常",
+      "section_title": "キャッシュヒット分析",
+      "token_title": "トークン別キャッシュ使用状況",
+      "user_title": "ユーザー別キャッシュ使用状況"
+    },
     "cards": {
       "avg_cost": "リクエスト当たり平均コスト",
       "avg_daily": "1日平均: {{value}}",

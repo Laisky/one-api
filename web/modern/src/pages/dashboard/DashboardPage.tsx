@@ -3,6 +3,7 @@ import { TimestampDisplay } from '@/components/ui/timestamp';
 import { useAuthStore } from '@/lib/stores/auth';
 import { useLayoutEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { CacheUsageCharts } from './components/CacheUsageCharts';
 import { DashboardFilter } from './components/DashboardFilter';
 import { Insights } from './components/Insights';
 import { OverviewCards } from './components/OverviewCards';
@@ -62,6 +63,9 @@ export function DashboardPage() {
     userStackedData,
     tokenKeys,
     tokenStackedData,
+    modelCacheData,
+    userCacheData,
+    tokenCacheData,
     rangeTotals,
     modelLeaders,
     rangeInsights,
@@ -151,6 +155,13 @@ export function DashboardPage() {
           tokenKeys={tokenKeys}
           statisticsMetric={statisticsMetric}
           setStatisticsMetric={setStatisticsMetric}
+        />
+
+        <CacheUsageCharts
+          modelCacheData={modelCacheData}
+          userCacheData={userCacheData}
+          tokenCacheData={tokenCacheData}
+          statisticsMetric={statisticsMetric}
         />
       </div>
     </ResponsivePageContainer>

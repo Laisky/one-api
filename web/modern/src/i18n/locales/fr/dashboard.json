@@ -1,5 +1,13 @@
 {
   "dashboard": {
+    "cache": {
+      "cached": "En cache",
+      "model_title": "Utilisation du cache par modèle",
+      "regular": "Standard",
+      "section_title": "Analyse des succès de cache",
+      "token_title": "Utilisation du cache par jeton",
+      "user_title": "Utilisation du cache par utilisateur"
+    },
     "cards": {
       "avg_cost": "Coût moyen par requête",
       "avg_daily": "Moyenne quotidienne : {{value}}",

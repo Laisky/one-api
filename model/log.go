@@ -1014,7 +1014,10 @@ func SearchLogsByDayAndModel(userId, start, endExclusive int) (LogStatistics []*
 			model_name, count(1) as request_count,
 			sum(quota) as quota,
 			sum(prompt_tokens) as prompt_tokens,
-			sum(completion_tokens) as completion_tokens
+			sum(completion_tokens) as completion_tokens,
+			sum(cached_prompt_tokens) as cached_prompt_tokens,
+			sum(CASE WHEN cached_prompt_tokens > 0 THEN 1 ELSE 0 END) as cache_hit_count,
+			sum(CASE WHEN cached_prompt_tokens > 0 THEN quota ELSE 0 END) as cache_hit_quota
 			FROM logs
 			WHERE type=2
 			AND created_at >= ? AND created_at < ?
@@ -1028,7 +1031,10 @@ func SearchLogsByDayAndModel(userId, start, endExclusive int) (LogStatistics []*
 			model_name, count(1) as request_count,
 			sum(quota) as quota,
 			sum(prompt_tokens) as prompt_tokens,
-			sum(completion_tokens) as completion_tokens
+			sum(completion_tokens) as completion_tokens,
+			sum(cached_prompt_tokens) as cached_prompt_tokens,
+			sum(CASE WHEN cached_prompt_tokens > 0 THEN 1 ELSE 0 END) as cache_hit_count,
+			sum(CASE WHEN cached_prompt_tokens > 0 THEN quota ELSE 0 END) as cache_hit_quota
 			FROM logs
 			WHERE type=2
 			AND user_id= ?
@@ -1059,7 +1065,10 @@ func SearchLogsByDayAndUser(userId, start, endExclusive int) ([]*dto.LogStatisti
 			count(1) as request_count,
 			sum(quota) as quota,
 			sum(prompt_tokens) as prompt_tokens,
-			sum(completion_tokens) as completion_tokens
+			sum(completion_tokens) as completion_tokens,
+			sum(cached_prompt_tokens) as cached_prompt_tokens,
+			sum(CASE WHEN cached_prompt_tokens > 0 THEN 1 ELSE 0 END) as cache_hit_count,
+			sum(CASE WHEN cached_prompt_tokens > 0 THEN quota ELSE 0 END) as cache_hit_quota
 			FROM logs
 			WHERE type=2
 			AND created_at >= ? AND created_at < ?
@@ -1074,7 +1083,10 @@ func SearchLogsByDayAndUser(userId, start, endExclusive int) ([]*dto.LogStatisti
 			count(1) as request_count,
 			sum(quota) as quota,
 			sum(prompt_tokens) as prompt_tokens,
-			sum(completion_tokens) as completion_tokens
+			sum(completion_tokens) as completion_tokens,
+			sum(cached_prompt_tokens) as cached_prompt_tokens,
+			sum(CASE WHEN cached_prompt_tokens > 0 THEN 1 ELSE 0 END) as cache_hit_count,
+			sum(CASE WHEN cached_prompt_tokens > 0 THEN quota ELSE 0 END) as cache_hit_quota
 			FROM logs
 			WHERE type=2
 			AND user_id = ?
@@ -1107,7 +1119,10 @@ func SearchLogsByDayAndToken(userId, start, endExclusive int) ([]*dto.LogStatist
 			count(1) as request_count,
 			sum(quota) as quota,
 			sum(prompt_tokens) as prompt_tokens,
-			sum(completion_tokens) as completion_tokens
+			sum(completion_tokens) as completion_tokens,
+			sum(cached_prompt_tokens) as cached_prompt_tokens,
+			sum(CASE WHEN cached_prompt_tokens > 0 THEN 1 ELSE 0 END) as cache_hit_count,
+			sum(CASE WHEN cached_prompt_tokens > 0 THEN quota ELSE 0 END) as cache_hit_quota
 			FROM logs
 			WHERE type=2
 			AND created_at >= ? AND created_at < ?
@@ -1123,7 +1138,10 @@ func SearchLogsByDayAndToken(userId, start, endExclusive int) ([]*dto.LogStatist
 			count(1) as request_count,
 			sum(quota) as quota,
 			sum(prompt_tokens) as prompt_tokens,
-			sum(completion_tokens) as completion_tokens
+			sum(completion_tokens) as completion_tokens,
+			sum(cached_prompt_tokens) as cached_prompt_tokens,
+			sum(CASE WHEN cached_prompt_tokens > 0 THEN 1 ELSE 0 END) as cache_hit_count,
+			sum(CASE WHEN cached_prompt_tokens > 0 THEN quota ELSE 0 END) as cache_hit_quota
 			FROM logs
 			WHERE type=2
 			AND user_id = ?

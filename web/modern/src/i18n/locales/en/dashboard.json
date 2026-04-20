@@ -1,5 +1,13 @@
 {
   "dashboard": {
+    "cache": {
+      "cached": "Cached",
+      "model_title": "Model Cache Usage",
+      "regular": "Regular",
+      "section_title": "Cache Hit Analysis",
+      "token_title": "Token Cache Usage",
+      "user_title": "User Cache Usage"
+    },
     "cards": {
       "avg_cost": "Avg Cost / Request",
       "avg_daily": "Avg daily: {{value}}",

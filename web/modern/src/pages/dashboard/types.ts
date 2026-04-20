@@ -4,6 +4,9 @@ export type BaseMetricRow = {
   quota: number;
   prompt_tokens: number;
   completion_tokens: number;
+  cached_prompt_tokens: number;
+  cache_hit_count: number;
+  cache_hit_quota: number;
 };
 
 export type ModelRow = BaseMetricRow & { model_name: string };

@@ -135,6 +135,9 @@ export const useDashboardData = () => {
             quota: row.Quota,
             prompt_tokens: row.PromptTokens,
             completion_tokens: row.CompletionTokens,
+            cached_prompt_tokens: Number(row.CachedPromptTokens ?? 0),
+            cache_hit_count: Number(row.CacheHitCount ?? 0),
+            cache_hit_quota: Number(row.CacheHitQuota ?? 0),
           }))
         );
         setUserRows(
@@ -146,6 +149,9 @@ export const useDashboardData = () => {
             quota: row.Quota,
             prompt_tokens: row.PromptTokens,
             completion_tokens: row.CompletionTokens,
+            cached_prompt_tokens: Number(row.CachedPromptTokens ?? 0),
+            cache_hit_count: Number(row.CacheHitCount ?? 0),
+            cache_hit_quota: Number(row.CacheHitQuota ?? 0),
           }))
         );
         setTokenRows(
@@ -158,6 +164,9 @@ export const useDashboardData = () => {
             quota: row.Quota,
             prompt_tokens: row.PromptTokens,
             completion_tokens: row.CompletionTokens,
+            cached_prompt_tokens: Number(row.CachedPromptTokens ?? 0),
+            cache_hit_count: Number(row.CacheHitCount ?? 0),
+            cache_hit_quota: Number(row.CacheHitQuota ?? 0),
           }))
         );
 

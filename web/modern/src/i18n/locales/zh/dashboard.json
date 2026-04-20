@@ -1,5 +1,13 @@
 {
   "dashboard": {
+    "cache": {
+      "cached": "命中缓存",
+      "model_title": "模型缓存使用",
+      "regular": "未命中",
+      "section_title": "缓存命中分析",
+      "token_title": "Token 缓存使用",
+      "user_title": "用户缓存使用"
+    },
     "cards": {
       "avg_cost": "单次请求平均成本",
       "avg_daily": "日均：{{value}}",

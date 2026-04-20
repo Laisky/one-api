@@ -1,5 +1,13 @@
 {
   "dashboard": {
+    "cache": {
+      "cached": "En caché",
+      "model_title": "Uso de caché por modelo",
+      "regular": "Normal",
+      "section_title": "Análisis de aciertos de caché",
+      "token_title": "Uso de caché por token",
+      "user_title": "Uso de caché por usuario"
+    },
     "cards": {
       "avg_cost": "Costo promedio por solicitud",
       "avg_daily": "Promedio diario: {{value}}",
