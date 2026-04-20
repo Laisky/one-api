@@ -44,7 +44,7 @@ The comment should start with the function/interface name and be in complete sen
 
 ## Golang Style
 
-This project is developed and run using Go 1.25. Please use the newest Go syntax and features as much as possible.
+This project is developed and run using Go 1.26. Please use the newest Go syntax and features as much as possible.
 
 Ideally, a single file should not exceed 600 lines. Please split the overly long files according to their functionality.
 
