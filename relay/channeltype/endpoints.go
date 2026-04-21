@@ -356,6 +356,18 @@ func DefaultEndpointsForChannelType(channelType int) []Endpoint {
 			EndpointResponseAPI,
 			EndpointClaudeMessages,
 		}
+	case Fireworks:
+		// Fireworks natively serves chat completions, text completions,
+		// embeddings, rerank, the Responses API, and an Anthropic-compatible
+		// Messages endpoint under a single Bearer-authenticated base URL.
+		return []Endpoint{
+			EndpointChatCompletions,
+			EndpointCompletions,
+			EndpointEmbeddings,
+			EndpointRerank,
+			EndpointResponseAPI,
+			EndpointClaudeMessages,
+		}
 	case Custom, OpenAICompatible:
 		return openAICompatibleBasic
 	case ClaudeCompatible:

@@ -13,6 +13,7 @@ import (
 	"github.com/songquanpeng/one-api/relay/adaptor/coze"
 	"github.com/songquanpeng/one-api/relay/adaptor/deepl"
 	"github.com/songquanpeng/one-api/relay/adaptor/deepseek"
+	"github.com/songquanpeng/one-api/relay/adaptor/fireworks"
 	"github.com/songquanpeng/one-api/relay/adaptor/gemini"
 	"github.com/songquanpeng/one-api/relay/adaptor/groq"
 	"github.com/songquanpeng/one-api/relay/adaptor/mistral"
@@ -86,6 +87,8 @@ func GetAdaptor(apiType int) adaptor.Adaptor {
 		return &openrouter.Adaptor{}
 	case apitype.Copilot:
 		return &copilot.Adaptor{}
+	case apitype.Fireworks:
+		return &fireworks.Adaptor{}
 	}
 
 	return nil

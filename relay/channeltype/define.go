@@ -55,5 +55,6 @@ const (
 	GeminiOpenAICompatible
 	ClaudeCompatible
 	Copilot
+	Fireworks
 	Dummy
 )

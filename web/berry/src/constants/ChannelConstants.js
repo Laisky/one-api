@@ -164,6 +164,12 @@ export const CHANNEL_OPTIONS = {
     value: 39,
     color: 'primary'
   },
+  54: {
+    key: 54,
+    text: 'Fireworks',
+    value: 54,
+    color: 'primary'
+  },
   42: {
     key: 42,
     text: 'VertexAI',

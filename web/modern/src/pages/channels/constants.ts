@@ -264,6 +264,14 @@ export const CHANNEL_TYPES: ChannelType[] = [
     description: 'Together AI OpenAI-compatible model hub.',
   },
   {
+    key: 54,
+    text: 'Fireworks',
+    value: 54,
+    color: 'orange',
+    description:
+      'Fireworks AI serverless inference; native chat, Responses, embeddings, and Anthropic Messages surfaces under one key.',
+  },
+  {
     key: 42,
     text: 'VertexAI',
     value: 42,

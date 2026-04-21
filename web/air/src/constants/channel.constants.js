@@ -27,6 +27,7 @@ export const CHANNEL_OPTIONS = [
   { key: 37, text: 'Cloudflare', value: 37, color: 'orange' },
   { key: 38, text: 'DeepL', value: 38, color: 'black' },
   { key: 39, text: 'together.ai', value: 39, color: 'blue' },
+  { key: 54, text: 'Fireworks', value: 54, color: 'orange' },
   { key: 42, text: 'VertexAI', value: 42, color: 'blue' },
   { key: 43, text: 'Proxy', value: 43, color: 'blue' },
   { key: 44, text: 'SiliconFlow', value: 44, color: 'blue' },
