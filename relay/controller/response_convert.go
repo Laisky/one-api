@@ -30,7 +30,7 @@ func renderChatResponseAsResponseAPI(c *gin.Context, status int, textResp *opena
 		Object:             "response",
 		CreatedAt:          time.Now().Unix(),
 		Status:             statusText,
-		Model:              meta.ActualModelName,
+		Model:              userVisibleModelName(meta, originalReq.Model),
 		Output:             output,
 		Usage:              usage,
 		Instructions:       originalReq.Instructions,
@@ -47,6 +47,9 @@ func renderChatResponseAsResponseAPI(c *gin.Context, status int, textResp *opena
 		TopP:               originalReq.TopP,
 		Truncation:         originalReq.Truncation,
 		User:               originalReq.User,
+	}
+	if response.Model == "" && meta != nil {
+		response.Model = meta.ActualModelName
 	}
 
 	if len(toolCalls) > 0 {

@@ -91,7 +91,7 @@ func maybeHandleResponseAPIWebSocket(c *gin.Context, meta *metalib.Meta) (bool, 
 	markPreConsumed(c, preConsumedQuota)
 	defer billingAuditSafetyNet(c)
 
-	provisionalLogId := recordProvisionalLog(c, meta, meta.ActualModelName, preConsumedQuota)
+	provisionalLogId := recordProvisionalLog(c, meta, userVisibleModelName(meta, meta.ActualModelName), preConsumedQuota)
 	c.Set(ctxkey.ProvisionalLogId, provisionalLogId)
 
 	// --- Execute WS proxy ---

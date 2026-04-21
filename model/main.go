@@ -279,7 +279,9 @@ func InitDB() {
 func migrateDB() error {
 	var err error
 	if err = DB.AutoMigrate(&Channel{}); err != nil {
-		return errors.Wrapf(err, "failed to migrate Channel")
+		if !shouldIgnoreDuplicateColumn(err, "hidden_models") {
+			return errors.Wrapf(err, "failed to migrate Channel")
+		}
 	}
 	if err = DB.AutoMigrate(&Token{}); err != nil {
 		return errors.Wrapf(err, "failed to migrate Token")

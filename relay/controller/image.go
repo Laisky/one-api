@@ -339,6 +339,7 @@ func RelayImageHelper(c *gin.Context, relayMode int) *relaymodel.ErrorWithStatus
 	imageModel := imageRequest.Model
 	// Convert the original image model
 	imageRequest.Model = metalib.GetMappedModelName(imageRequest.Model, billingratio.ImageOriginModelName)
+	visibleModelName := userVisibleModelName(meta, imageRequest.Model)
 	c.Set(ctxkey.ResponseFormat, imageRequest.ResponseFormat)
 
 	var requestBody io.Reader
@@ -454,7 +455,7 @@ func RelayImageHelper(c *gin.Context, relayMode int) *relaymodel.ErrorWithStatus
 
 		// Record provisional consume log immediately so that every pre-consume
 		// has an audit trail in the logs table.
-		provisionalLogId := recordProvisionalLog(c, meta, meta.ActualModelName, preConsumedQuota)
+		provisionalLogId := recordProvisionalLog(c, meta, visibleModelName, preConsumedQuota)
 		c.Set(ctxkey.ProvisionalLogId, provisionalLogId)
 
 		// Record provisional request cost
@@ -549,8 +550,8 @@ func RelayImageHelper(c *gin.Context, relayMode int) *relaymodel.ErrorWithStatus
 		if usedQuota >= 0 {
 			tokenName := c.GetString(ctxkey.TokenName)
 			logContent := formatImageBillingLog(imageBillingLogParams{
-				OriginModel:     meta.OriginModelName,
-				Model:           imageModel,
+				OriginModel:     visibleModelName,
+				Model:           visibleModelName,
 				Size:            imageRequest.Size,
 				Quality:         imageRequest.Quality,
 				RequestCount:    requestedCount,
@@ -577,7 +578,7 @@ func RelayImageHelper(c *gin.Context, relayMode int) *relaymodel.ErrorWithStatus
 						ChannelId:        meta.ChannelId,
 						PromptTokens:     promptTokens,
 						CompletionTokens: completionTokens,
-						ModelName:        imageRequest.Model,
+						ModelName:        visibleModelName,
 						TokenName:        tokenName,
 						Quota:            int(usedQuota),
 						Content:          logContent,
@@ -592,7 +593,7 @@ func RelayImageHelper(c *gin.Context, relayMode int) *relaymodel.ErrorWithStatus
 					ChannelId:        meta.ChannelId,
 					PromptTokens:     promptTokens,
 					CompletionTokens: completionTokens,
-					ModelName:        imageRequest.Model,
+					ModelName:        visibleModelName,
 					TokenName:        tokenName,
 					Quota:            int(usedQuota),
 					Content:          logContent,

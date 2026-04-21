@@ -479,6 +479,141 @@ func TestListModels_IncludesCustomChannelModels(t *testing.T) {
 	require.True(t, found, "expected %s to appear in ListModels response", customModel)
 }
 
+func TestListModelsFiltersHiddenModels(t *testing.T) {
+	setupListModelsTestEnv(t)
+	gin.SetMode(gin.TestMode)
+	group := fmt.Sprintf("group-%d", time.Now().UnixNano())
+	user := createTestUserForGroup(t, group)
+	hidden := `["hidden-alpha"]`
+	channel := &model.Channel{
+		Name:         "hidden-list",
+		Type:         channeltype.OpenAI,
+		Status:       model.ChannelStatusEnabled,
+		Models:       "hidden-alpha,public-alias",
+		Group:        group,
+		HiddenModels: &hidden,
+	}
+	require.NoError(t, channel.Insert())
+
+	router := gin.New()
+	router.GET("/v1/models", func(c *gin.Context) {
+		c.Set(ctxkey.Id, user.Id)
+		ListModels(c)
+	})
+
+	req := httptest.NewRequest("GET", "/v1/models", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+
+	var resp struct {
+		Object string `json:"object"`
+		Data   []struct {
+			Id string `json:"id"`
+		} `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	require.Equal(t, "list", resp.Object)
+
+	ids := make([]string, 0, len(resp.Data))
+	for _, item := range resp.Data {
+		ids = append(ids, item.Id)
+	}
+	require.Contains(t, ids, "public-alias")
+	require.NotContains(t, ids, "hidden-alpha")
+}
+
+func TestRetrieveModelRejectsHiddenModels(t *testing.T) {
+	setupListModelsTestEnv(t)
+	gin.SetMode(gin.TestMode)
+	group := fmt.Sprintf("group-%d", time.Now().UnixNano())
+	user := createTestUserForGroup(t, group)
+	hidden := `["hidden-alpha"]`
+	channel := &model.Channel{
+		Name:         "hidden-retrieve",
+		Type:         channeltype.OpenAI,
+		Status:       model.ChannelStatusEnabled,
+		Models:       "hidden-alpha,public-alias",
+		Group:        group,
+		HiddenModels: &hidden,
+	}
+	require.NoError(t, channel.Insert())
+
+	router := gin.New()
+	router.GET("/v1/models/:model", func(c *gin.Context) {
+		c.Set(ctxkey.Id, user.Id)
+		RetrieveModel(c)
+	})
+
+	req := httptest.NewRequest("GET", "/v1/models/hidden-alpha", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	var resp struct {
+		Error struct {
+			Code string `json:"code"`
+		} `json:"error"`
+	}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	require.Equal(t, "model_not_found", resp.Error.Code)
+}
+
+func TestGetAvailableModelsByTokenFiltersHiddenModels(t *testing.T) {
+	setupListModelsTestEnv(t)
+	gin.SetMode(gin.TestMode)
+	group := fmt.Sprintf("group-%d", time.Now().UnixNano())
+	user := createTestUserForGroup(t, group)
+	hidden := `["hidden-alpha"]`
+	channel := &model.Channel{
+		Name:         "hidden-token",
+		Type:         channeltype.OpenAI,
+		Status:       model.ChannelStatusEnabled,
+		Models:       "hidden-alpha,public-alias",
+		Group:        group,
+		HiddenModels: &hidden,
+	}
+	require.NoError(t, channel.Insert())
+
+	allowedModels := "hidden-alpha,public-alias"
+	token := &model.Token{
+		UserId:         user.Id,
+		Name:           "hidden-token",
+		Status:         model.TokenStatusEnabled,
+		RemainQuota:    100,
+		UnlimitedQuota: false,
+		ExpiredTime:    -1,
+		Models:         &allowedModels,
+	}
+	require.NoError(t, model.DB.Create(token).Error)
+
+	router := gin.New()
+	router.GET("/api/available_models", func(c *gin.Context) {
+		c.Set(ctxkey.Id, user.Id)
+		c.Set(ctxkey.TokenId, token.Id)
+		c.Set(ctxkey.AvailableModels, allowedModels)
+		GetAvailableModelsByToken(c)
+	})
+
+	req := httptest.NewRequest("GET", "/api/available_models", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	var resp struct {
+		Success bool `json:"success"`
+		Data    struct {
+			Available []string `json:"available"`
+			Enabled   bool     `json:"enabled"`
+		} `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	require.True(t, resp.Success)
+	require.True(t, resp.Data.Enabled)
+	require.Equal(t, []string{"public-alias"}, resp.Data.Available)
+}
+
 func setupListModelsTestEnv(t *testing.T) {
 	t.Helper()
 	prevRedis := common.IsRedisEnabled()

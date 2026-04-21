@@ -14,7 +14,15 @@ import { ChannelModelSettings } from '../ChannelModelSettings';
  * @param defaultValue - fallback string to render.
  * @returns The fallback translation value.
  */
-const tr = (_key: string, defaultValue: string) => defaultValue;
+const tr = (_key: string, defaultValue: string, options?: Record<string, unknown>) => {
+  let value = defaultValue;
+  if (options) {
+    for (const [optionKey, optionValue] of Object.entries(options)) {
+      value = value.replace(`{{${optionKey}}}`, String(optionValue));
+    }
+  }
+  return value;
+};
 
 const baseDefaults: ChannelForm = {
   name: 'Test Channel',
@@ -23,6 +31,7 @@ const baseDefaults: ChannelForm = {
   base_url: '',
   other: '',
   models: [],
+  hidden_models: [],
   model_mapping: '',
   model_configs: '',
   tooling: '',
@@ -52,6 +61,9 @@ const baseDefaults: ChannelForm = {
 interface TestHarnessProps {
   defaultPricing: string;
   onReady: (form: UseFormReturn<ChannelForm>) => void;
+  defaultValues?: Partial<ChannelForm>;
+  availableModels?: { id: string; name: string }[];
+  currentCatalogModels?: string[];
 }
 
 /**
@@ -60,8 +72,17 @@ interface TestHarnessProps {
  * @param onReady - callback to expose the form instance.
  * @returns The rendered ChannelModelSettings component.
  */
-const TestHarness = ({ defaultPricing, onReady }: TestHarnessProps) => {
-  const form = useForm<ChannelForm>({ defaultValues: baseDefaults });
+const TestHarness = ({ defaultPricing, onReady, defaultValues, availableModels = [], currentCatalogModels = [] }: TestHarnessProps) => {
+  const form = useForm<ChannelForm>({
+    defaultValues: {
+      ...baseDefaults,
+      ...defaultValues,
+      config: {
+        ...baseDefaults.config,
+        ...(defaultValues?.config || {}),
+      },
+    },
+  });
 
   useEffect(() => {
     onReady(form);
@@ -71,8 +92,8 @@ const TestHarness = ({ defaultPricing, onReady }: TestHarnessProps) => {
     <TooltipProvider>
       <ChannelModelSettings
         form={form}
-        availableModels={[]}
-        currentCatalogModels={[]}
+        availableModels={availableModels}
+        currentCatalogModels={currentCatalogModels}
         defaultPricing={defaultPricing}
         tr={tr}
         notify={vi.fn()}
@@ -99,5 +120,29 @@ describe('ChannelModelSettings', () => {
     await user.click(button);
 
     expect(formRef?.getValues('model_configs')).toBe('{"gpt-4": {"ratio": 1}}');
+  });
+
+  it('shows non-blocking hidden-model warnings', () => {
+    render(
+      <TestHarness
+        defaultPricing=''
+        onReady={() => {}}
+        defaultValues={{
+          models: ['public-alias'],
+          hidden_models: ['missing-model', 'public-alias'],
+          model_mapping: '{"public-alias":"hidden-upstream"}',
+        }}
+        availableModels={[
+          { id: 'public-alias', name: 'public-alias' },
+          { id: 'missing-model', name: 'missing-model' },
+        ]}
+        currentCatalogModels={['public-alias']}
+      />
+    );
+
+    expect(screen.getByText('These hidden models are not currently supported by the channel: missing-model')).toBeInTheDocument();
+    expect(
+      screen.getByText('These hidden models are used as Model Mapping sources, so the public aliases will become unreachable: public-alias')
+    ).toBeInTheDocument();
   });
 });

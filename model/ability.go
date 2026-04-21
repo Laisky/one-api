@@ -9,9 +9,11 @@ import (
 
 	"github.com/Laisky/errors/v2"
 	gutils "github.com/Laisky/go-utils/v6"
+	"github.com/Laisky/zap"
 	"gorm.io/gorm"
 
 	"github.com/songquanpeng/one-api/common"
+	"github.com/songquanpeng/one-api/common/logger"
 	"github.com/songquanpeng/one-api/common/utils"
 	"github.com/songquanpeng/one-api/dto"
 )
@@ -71,12 +73,15 @@ func GetRandomSatisfiedChannel(group string, model string, ignoreFirstPriority b
 }
 
 func (channel *Channel) AddAbilities() error {
-	models_ := strings.Split(channel.Models, ",")
-	models_ = utils.DeDuplication(models_)
-	groups_ := strings.Split(channel.Group, ",")
-	abilities := make([]Ability, 0, len(models_))
-	for _, model := range models_ {
-		for _, group := range groups_ {
+	models := utils.DeDuplication(channel.GetSupportedModelNames())
+	groups := channel.GetGroupNames()
+	hiddenModels := channel.GetHiddenModels()
+	abilities := make([]Ability, 0, len(models)*len(groups))
+	for _, model := range models {
+		if _, hidden := hiddenModels[strings.ToLower(model)]; hidden {
+			continue
+		}
+		for _, group := range groups {
 			ability := Ability{
 				Group:        group,
 				Model:        model,
@@ -87,6 +92,9 @@ func (channel *Channel) AddAbilities() error {
 			}
 			abilities = append(abilities, ability)
 		}
+	}
+	if len(abilities) == 0 {
+		return nil
 	}
 	return DB.Create(&abilities).Error
 }
@@ -133,6 +141,76 @@ func GetGroupModels(ctx context.Context, group string) ([]string, error) {
 }
 
 var getGroupModelsV2Cache = gutils.NewExpCache[[]dto.EnabledAbility](context.Background(), time.Second*10)
+
+// collectChannelGroups expands comma-separated group lists into a unique set of cache keys.
+func collectChannelGroups(groupCSVs ...string) map[string]struct{} {
+	groups := make(map[string]struct{})
+	for _, groupCSV := range groupCSVs {
+		for _, rawGroup := range strings.Split(groupCSV, ",") {
+			group := strings.TrimSpace(rawGroup)
+			if group == "" {
+				continue
+			}
+			groups[group] = struct{}{}
+		}
+	}
+	return groups
+}
+
+// deleteRedisKeysByPattern removes Redis keys matching the provided pattern.
+func deleteRedisKeysByPattern(ctx context.Context, pattern string) error {
+	if common.RDB == nil {
+		return nil
+	}
+	var cursor uint64
+	for {
+		keys, nextCursor, err := common.RDB.Scan(ctx, cursor, pattern, 100).Result()
+		if err != nil {
+			return errors.Wrapf(err, "scan redis keys with pattern %s", pattern)
+		}
+		if len(keys) > 0 {
+			if err := common.RDB.Del(ctx, keys...).Err(); err != nil {
+				return errors.Wrapf(err, "delete redis keys with pattern %s", pattern)
+			}
+		}
+		if nextCursor == 0 {
+			return nil
+		}
+		cursor = nextCursor
+	}
+}
+
+// InvalidateChannelModelCaches refreshes the in-memory routing cache and clears group-model list caches.
+func InvalidateChannelModelCaches(groupCSVs ...string) {
+	InitChannelCache()
+	affectedGroups := collectChannelGroups(groupCSVs...)
+	ctx := context.Background()
+	redisReady := common.IsRedisEnabled() && common.RDB != nil
+	if len(affectedGroups) == 0 {
+		if redisReady {
+			if err := deleteRedisKeysByPattern(ctx, "group_models:*"); err != nil {
+				logger.Logger.Warn("failed to clear redis group_models cache by pattern", zap.Error(err))
+			}
+			if err := deleteRedisKeysByPattern(ctx, "group_models_v2:*"); err != nil {
+				logger.Logger.Warn("failed to clear redis group_models_v2 cache by pattern", zap.Error(err))
+			}
+		}
+		return
+	}
+
+	for group := range affectedGroups {
+		getGroupModelsV2Cache.Delete(group)
+		if !redisReady {
+			continue
+		}
+		if err := common.RedisDel(ctx, fmt.Sprintf("group_models:%s", group)); err != nil {
+			logger.Logger.Warn("failed to clear redis group_models cache", zap.String("group", group), zap.Error(err))
+		}
+		if err := common.RedisDel(ctx, fmt.Sprintf("group_models_v2:%s", group)); err != nil {
+			logger.Logger.Warn("failed to clear redis group_models_v2 cache", zap.String("group", group), zap.Error(err))
+		}
+	}
+}
 
 // GetGroupModelsV2 returns all enabled models for this group with their channel names.
 func GetGroupModelsV2(ctx context.Context, group string) ([]dto.EnabledAbility, error) {

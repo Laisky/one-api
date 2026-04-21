@@ -1,5 +1,5 @@
 import { api } from '@/lib/api';
-import { renderHook, waitFor } from '@testing-library/react';
+import { act, renderHook, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useChannelForm } from './useChannelForm';
 
@@ -26,6 +26,7 @@ vi.mock('react-i18next', () => ({
 }));
 
 const mockApiGet = vi.mocked(api.get);
+const mockApiPut = vi.mocked(api.put);
 
 describe('useChannelForm', () => {
   beforeEach(() => {
@@ -113,5 +114,84 @@ describe('useChannelForm', () => {
     const pricingCalls = mockApiGet.mock.calls.filter((call) => call[0].startsWith('/api/channel/default-pricing')).length;
     expect(pricingCalls).toBeGreaterThanOrEqual(1);
     expect(pricingCalls).toBeLessThan(5); // Arbitrary limit, but definitely not infinite
+  });
+
+  it('should parse and submit hidden models', async () => {
+    mockApiGet.mockImplementation((url) => {
+      if (url.startsWith('/api/channel/1')) {
+        return Promise.resolve({
+          data: {
+            success: true,
+            data: {
+              id: 1,
+              type: 1,
+              name: 'Test Channel',
+              models: 'gpt-4o,public-alias',
+              hidden_models: '["gpt-4o"]',
+              group: 'default',
+              config: '{}',
+              tooling: '{}',
+            },
+          },
+        });
+      }
+      if (url.startsWith('/api/models')) {
+        return Promise.resolve({
+          data: {
+            success: true,
+            data: { 1: ['gpt-4o', 'public-alias'] },
+          },
+        });
+      }
+      if (url.startsWith('/api/option/')) {
+        return Promise.resolve({
+          data: {
+            success: true,
+            data: [{ key: 'AvailableGroups', value: 'vip' }],
+          },
+        });
+      }
+      if (url.startsWith('/api/channel/default-pricing')) {
+        return Promise.resolve({
+          data: {
+            success: true,
+            data: { model_configs: '{}', tooling: '{}' },
+          },
+        });
+      }
+      if (url.startsWith('/api/channel/metadata')) {
+        return Promise.resolve({
+          data: {
+            success: true,
+            data: { default_base_url: 'https://api.openai.com' },
+          },
+        });
+      }
+      return Promise.resolve({ data: { success: false } });
+    });
+    mockApiPut.mockResolvedValue({ data: { success: true, message: '' } });
+
+    const { result } = renderHook(() => useChannelForm());
+
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false);
+    });
+
+    expect(result.current.form.getValues('hidden_models')).toEqual(['gpt-4o']);
+
+    await act(async () => {
+      await result.current.onSubmit({
+        ...result.current.form.getValues(),
+        hidden_models: ['gpt-4o', 'hidden-b'],
+      });
+    });
+
+    expect(mockApiPut).toHaveBeenCalledWith(
+      '/api/channel/',
+      expect.objectContaining({
+        id: 1,
+        hidden_models: '["gpt-4o","hidden-b"]',
+      })
+    );
   });
 });

@@ -201,6 +201,15 @@
         "help": "特定のユーザーグループへのアクセスを制限します。空の場合はすべてのユーザーがアクセスできます。デフォルトグループは常に保持されます。",
         "label": "グループ *"
       },
+      "hidden_models": {
+        "custom_placeholder": "非表示モデルを追加...",
+        "help": "ここに列挙したモデルはこのチャンネルで提供されますが、/v1/models には表示されず、ユーザーの直接リクエストも拒否されます。Model Mapping で統一エイリアスを公開する場合に便利です。",
+        "label": "非表示モデル",
+        "no_match": "モデルが見つかりません",
+        "no_selection": "非表示モデルは選択されていません",
+        "search_placeholder": "非表示モデルを検索...",
+        "selected_count": "非表示モデル ({{count}})"
+      },
       "inference_profile": {
         "help": "モデル名から AWS Bedrock 推論プロファイル ARN への JSON マップ。特定の Bedrock 推論プロファイルを介して特定のモデルをルーティングするために使用します。",
         "label": "推論プロファイル ARN マップ (AWS Bedrock)",
@@ -351,6 +360,8 @@
         "api_key_required": "API キーは必須です。",
         "base_url_required": "このチャンネルタイプには Base URL が必要です。",
         "error_title": "検証エラー",
+        "hidden_models_not_supported": "これらの非表示モデルは現在このチャンネルでサポートされていません: {{models}}",
+        "hidden_models_unreachable_alias": "これらの非表示モデルは Model Mapping のソースとして使われているため、公開エイリアスに到達できなくなります: {{models}}",
         "inference_profile_invalid": "推論プロファイル ARN マップに無効な JSON が含まれています。",
         "invalid_json": "無効な JSON フォーマット",
         "invalid_json_short": "✗ 無効な JSON",

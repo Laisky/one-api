@@ -44,6 +44,7 @@ type Channel struct {
 	Balance            float64 `json:"balance"` // in USD
 	BalanceUpdatedTime int64   `json:"balance_updated_time" gorm:"bigint"`
 	Models             string  `json:"models"`
+	HiddenModels       *string `json:"hidden_models" gorm:"type:text"`
 	ModelConfigs       *string `json:"model_configs" gorm:"type:text"`
 	Group              string  `json:"group" gorm:"type:varchar(32);default:'default'"`
 	UsedQuota          int64   `json:"used_quota" gorm:"bigint;default:0"`
@@ -63,6 +64,7 @@ type Channel struct {
 	UpdatedAt       int64   `json:"updated_at" gorm:"bigint;autoUpdateTime:milli"`
 	// AWS-specific configuration
 	InferenceProfileArnMap *string `json:"inference_profile_arn_map" gorm:"type:text"` // JSON string mapping model names to AWS Bedrock Inference Profile ARNs
+	HiddenModelsProvided   bool    `json:"-" gorm:"-"`
 }
 
 var channelSortFields = map[string]string{
@@ -469,25 +471,152 @@ func (channel *Channel) GetModelMapping() map[string]string {
 	return modelMapping
 }
 
-// GetSupportedModelNames returns the list of model names the channel currently supports
-// based on the comma-separated Models field.
-func (channel *Channel) GetSupportedModelNames() []string {
-	models := strings.TrimSpace(channel.Models)
-	if models == "" {
+// splitCSVNames trims comma-separated names, removes empties, and deduplicates them case-insensitively.
+func splitCSVNames(raw string) []string {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
 		return nil
 	}
-	parts := strings.Split(models, ",")
+	parts := strings.Split(trimmed, ",")
+	seen := make(map[string]struct{}, len(parts))
 	out := make([]string, 0, len(parts))
-	for _, p := range parts {
-		p = strings.TrimSpace(p)
-		if p != "" {
-			out = append(out, p)
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
 		}
+		key := strings.ToLower(part)
+		if _, exists := seen[key]; exists {
+			continue
+		}
+		seen[key] = struct{}{}
+		out = append(out, part)
 	}
 	if len(out) == 0 {
 		return nil
 	}
 	return out
+}
+
+// normalizeJSONStringArray validates, trims, and deduplicates a JSON string array field.
+func normalizeJSONStringArray(raw *string, fieldName string) (*string, error) {
+	if raw == nil {
+		return nil, nil
+	}
+	trimmed := strings.TrimSpace(*raw)
+	if trimmed == "" || strings.EqualFold(trimmed, "null") {
+		return nil, nil
+	}
+
+	var values []string
+	if err := json.Unmarshal([]byte(trimmed), &values); err != nil {
+		return nil, errors.Wrapf(err, "%s must be a JSON array of strings", fieldName)
+	}
+
+	seen := make(map[string]struct{}, len(values))
+	normalized := make([]string, 0, len(values))
+	for _, value := range values {
+		item := strings.TrimSpace(value)
+		if item == "" {
+			continue
+		}
+		key := strings.ToLower(item)
+		if _, exists := seen[key]; exists {
+			continue
+		}
+		seen[key] = struct{}{}
+		normalized = append(normalized, item)
+	}
+	if len(normalized) == 0 {
+		return nil, nil
+	}
+
+	data, err := json.Marshal(normalized)
+	if err != nil {
+		return nil, errors.Wrapf(err, "marshal normalized %s", fieldName)
+	}
+	result := string(data)
+	return &result, nil
+}
+
+// NormalizeHiddenModels validates and normalizes the channel hidden-model payload before persistence.
+func (channel *Channel) NormalizeHiddenModels() error {
+	normalized, err := normalizeJSONStringArray(channel.HiddenModels, "hidden_models")
+	if err != nil {
+		return errors.Wrap(err, "normalize hidden models")
+	}
+	channel.HiddenModels = normalized
+	return nil
+}
+
+// GetSupportedModelNames returns the list of model names the channel currently supports
+// based on the comma-separated Models field.
+func (channel *Channel) GetSupportedModelNames() []string {
+	return splitCSVNames(channel.Models)
+}
+
+// GetGroupNames returns the normalized group names configured on the channel.
+func (channel *Channel) GetGroupNames() []string {
+	return splitCSVNames(channel.Group)
+}
+
+// GetHiddenModels returns the normalized hidden-model membership set for this channel.
+func (channel *Channel) GetHiddenModels() map[string]struct{} {
+	if channel.HiddenModels == nil {
+		return nil
+	}
+	trimmed := strings.TrimSpace(*channel.HiddenModels)
+	if trimmed == "" || trimmed == "[]" || strings.EqualFold(trimmed, "null") {
+		return nil
+	}
+
+	var rawHidden []string
+	if err := json.Unmarshal([]byte(trimmed), &rawHidden); err != nil {
+		logger.Logger.Warn("failed to unmarshal hidden models for channel",
+			zap.Int("channel_id", channel.Id),
+			zap.Error(err))
+		return nil
+	}
+
+	supportedModels := channel.GetSupportedModelNames()
+	if len(supportedModels) == 0 {
+		return nil
+	}
+	supported := make(map[string]struct{}, len(supportedModels))
+	for _, modelName := range supportedModels {
+		supported[strings.ToLower(modelName)] = struct{}{}
+	}
+
+	hidden := make(map[string]struct{}, len(rawHidden))
+	for _, value := range rawHidden {
+		item := strings.TrimSpace(value)
+		if item == "" {
+			continue
+		}
+		key := strings.ToLower(item)
+		if _, ok := supported[key]; !ok {
+			continue
+		}
+		hidden[key] = struct{}{}
+	}
+	if len(hidden) == 0 {
+		return nil
+	}
+	return hidden
+}
+
+// IsModelHidden reports whether the provided model name is hidden for public selection on this channel.
+func (channel *Channel) IsModelHidden(name string) bool {
+	item := strings.ToLower(strings.TrimSpace(name))
+	if item == "" {
+		return false
+	}
+	hidden := channel.GetHiddenModels()
+	if len(hidden) == 0 {
+		return false
+	}
+	_, exists := hidden[item]
+	return exists
 }
 
 // SupportsModel reports whether the channel allows the provided model name.
@@ -1419,6 +1548,9 @@ func ValidateInferenceProfileArnMapJSON(jsonStr string) error {
 }
 
 func (channel *Channel) Insert() error {
+	if err := channel.NormalizeHiddenModels(); err != nil {
+		return errors.Wrapf(err, "failed to normalize hidden models for channel: name=%s, type=%d", channel.Name, channel.Type)
+	}
 	err := DB.Create(channel).Error
 	if err != nil {
 		return errors.Wrapf(err, "failed to insert channel: name=%s, type=%d", channel.Name, channel.Type)
@@ -1427,16 +1559,19 @@ func (channel *Channel) Insert() error {
 	if err != nil {
 		return errors.Wrapf(err, "failed to add abilities for channel: id=%d, name=%s", channel.Id, channel.Name)
 	}
-	InitChannelCache()
+	InvalidateChannelModelCaches(channel.Group)
 	return nil
 }
 
 func (channel *Channel) Update() error {
+	if err := channel.NormalizeHiddenModels(); err != nil {
+		return errors.Wrapf(err, "failed to normalize hidden models for channel: id=%d, name=%s", channel.Id, channel.Name)
+	}
 	// Validate/sync TestingModel with latest supported models
 	clearTestingModel := false
 	var existing Channel
 	if channel.Id != 0 {
-		_ = DB.Select("id", "models", "testing_model").First(&existing, "id = ?", channel.Id).Error
+		_ = DB.Select("id", "models", "testing_model", "group").First(&existing, "id = ?", channel.Id).Error
 	}
 	// Determine models to validate against: new value if provided, else existing
 	modelsForValidation := channel.Models
@@ -1473,6 +1608,11 @@ func (channel *Channel) Update() error {
 	if err != nil {
 		return errors.Wrapf(err, "failed to update channel: id=%d, name=%s", channel.Id, channel.Name)
 	}
+	if channel.HiddenModelsProvided {
+		if err := DB.Model(&Channel{}).Where("id = ?", channel.Id).Update("hidden_models", channel.HiddenModels).Error; err != nil {
+			return errors.Wrapf(err, "failed to update hidden models for channel: id=%d, name=%s", channel.Id, channel.Name)
+		}
+	}
 	DB.Model(channel).First(channel, "id = ?", channel.Id)
 	if clearTestingModel {
 		if err := DB.Model(channel).Where("id = ?", channel.Id).Update("testing_model", nil).Error; err != nil {
@@ -1485,7 +1625,7 @@ func (channel *Channel) Update() error {
 	if err != nil {
 		return errors.Wrapf(err, "failed to update abilities for channel: id=%d, name=%s", channel.Id, channel.Name)
 	}
-	InitChannelCache()
+	InvalidateChannelModelCaches(existing.Group, channel.Group)
 	return nil
 }
 
@@ -1510,13 +1650,20 @@ func (channel *Channel) UpdateBalance(balance float64) {
 }
 
 func (channel *Channel) Delete() error {
+	oldGroups := channel.Group
+	if strings.TrimSpace(oldGroups) == "" && channel.Id != 0 {
+		var existing Channel
+		if err := DB.Select("id", "group").First(&existing, "id = ?", channel.Id).Error; err == nil {
+			oldGroups = existing.Group
+		}
+	}
 	if err := DB.Delete(channel).Error; err != nil {
 		return errors.Wrapf(err, "delete channel %d", channel.Id)
 	}
 	if err := channel.DeleteAbilities(); err != nil {
 		return errors.Wrapf(err, "delete abilities for channel %d", channel.Id)
 	}
-	InitChannelCache()
+	InvalidateChannelModelCaches(oldGroups)
 	return nil
 }
 
@@ -1633,6 +1780,8 @@ func (channel *Channel) SetCompletionRatio(completionRatio map[string]float64) e
 }
 
 func UpdateChannelStatusById(id int, status int) {
+	var channel Channel
+	_ = DB.Select("id", "group").First(&channel, "id = ?", id).Error
 	err := UpdateAbilityStatus(id, status == ChannelStatusEnabled)
 	if err != nil {
 		logger.Logger.Error("failed to update ability status", zap.Error(err))
@@ -1642,7 +1791,7 @@ func UpdateChannelStatusById(id int, status int) {
 		logger.Logger.Error("failed to update channel status", zap.Error(err))
 	}
 	if err == nil {
-		InitChannelCache()
+		InvalidateChannelModelCaches(channel.Group)
 	}
 }
 
@@ -1666,17 +1815,29 @@ func updateChannelUsedQuota(id int, quota int64) {
 }
 
 func DeleteChannelByStatus(status int64) (int64, error) {
+	var channels []Channel
+	_ = DB.Select("group").Where("status = ?", status).Find(&channels).Error
+	groups := make([]string, 0, len(channels))
+	for _, channel := range channels {
+		groups = append(groups, channel.Group)
+	}
 	result := DB.Where("status = ?", status).Delete(&Channel{})
 	if result.Error == nil {
-		InitChannelCache()
+		InvalidateChannelModelCaches(groups...)
 	}
 	return result.RowsAffected, result.Error
 }
 
 func DeleteDisabledChannel() (int64, error) {
+	var channels []Channel
+	_ = DB.Select("group").Where("status = ? or status = ?", ChannelStatusAutoDisabled, ChannelStatusManuallyDisabled).Find(&channels).Error
+	groups := make([]string, 0, len(channels))
+	for _, channel := range channels {
+		groups = append(groups, channel.Group)
+	}
 	result := DB.Where("status = ? or status = ?", ChannelStatusAutoDisabled, ChannelStatusManuallyDisabled).Delete(&Channel{})
 	if result.Error == nil {
-		InitChannelCache()
+		InvalidateChannelModelCaches(groups...)
 	}
 	return result.RowsAffected, result.Error
 }

@@ -337,8 +337,8 @@ func InitChannelCache() {
 
 	// Iterate over channels that are confirmed to be enabled
 	for _, channel := range channels { // channels are already filtered by status = ChannelStatusEnabled
-		channelGroups := strings.Split(channel.Group, ",")
-		channelModels := strings.Split(channel.Models, ",")
+		channelGroups := channel.GetGroupNames()
+		channelModels := channel.GetSupportedModelNames()
 
 		for _, groupName := range channelGroups {
 			if _, ok := newGroup2model2channels[groupName]; !ok {

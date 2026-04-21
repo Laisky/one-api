@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	gmw "github.com/Laisky/gin-middlewares/v7"
 	"github.com/Laisky/zap"
@@ -34,6 +35,16 @@ func shouldSkipPreConsumedRefund(c *gin.Context) bool {
 	}
 	forwarded, ok := forwardedAny.(bool)
 	return ok && forwarded
+}
+
+// userVisibleModelName returns the origin/public model name for user-facing responses and logs.
+func userVisibleModelName(meta *metalib.Meta, fallback string) string {
+	if meta != nil {
+		if origin := strings.TrimSpace(meta.OriginModelName); origin != "" {
+			return origin
+		}
+	}
+	return strings.TrimSpace(fallback)
 }
 
 // returnPreConsumedQuotaConservative refunds pre-consumed quota only when the request

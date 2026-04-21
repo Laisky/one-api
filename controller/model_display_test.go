@@ -191,6 +191,43 @@ func TestGetModelsDisplay_AnonymousUsesConfiguredModels(t *testing.T) {
 	require.InDelta(t, expected4oCached, gpt4o.CachedInputPrice, 1e-6)
 }
 
+// TestGetModelsDisplay_AnonymousFiltersHiddenModels ensures the public display omits hidden configured models.
+func TestGetModelsDisplay_AnonymousFiltersHiddenModels(t *testing.T) {
+	setupModelsDisplayTestEnv(t)
+	gin.SetMode(gin.TestMode)
+	hidden := `["hidden-alpha"]`
+	channel := &model.Channel{
+		Name:         "Hidden Display Channel",
+		Type:         channeltype.OpenAI,
+		Status:       model.ChannelStatusEnabled,
+		Models:       "hidden-alpha,public-alias",
+		Group:        "public",
+		HiddenModels: &hidden,
+	}
+	require.NoError(t, channel.Insert())
+
+	router := gin.New()
+	router.GET("/api/models/display", func(c *gin.Context) {
+		GetModelsDisplay(c)
+	})
+
+	req := httptest.NewRequest("GET", "/api/models/display", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+
+	var resp ModelsDisplayResponse
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	require.True(t, resp.Success)
+
+	key := fmt.Sprintf("%s:%s", channeltype.IdToName(channel.Type), channel.Name)
+	info, ok := resp.Data[key]
+	require.True(t, ok, "expected channel %s in response", key)
+	require.NotContains(t, info.Models, "hidden-alpha")
+	require.Contains(t, info.Models, "public-alias")
+}
+
 // TestGetModelsDisplay_GptImageShowsTokenPrice verifies image models that bill prompt tokens expose input pricing.
 func TestGetModelsDisplay_GptImageShowsTokenPrice(t *testing.T) {
 	setupModelsDisplayTestEnv(t)

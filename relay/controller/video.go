@@ -154,7 +154,7 @@ func RelayVideoHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 			markPreConsumed(c, preConsumedQuota)
 			defer billingAuditSafetyNet(c)
 
-			provisionalLogId := recordProvisionalLog(c, meta, videoRequest.Model, preConsumedQuota)
+			provisionalLogId := recordProvisionalLog(c, meta, userVisibleModelName(meta, videoRequest.Model), preConsumedQuota)
 			c.Set(ctxkey.ProvisionalLogId, provisionalLogId)
 		}
 	}
@@ -195,7 +195,7 @@ func RelayVideoHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 		entry := &model.Log{
 			UserId:      userId,
 			ChannelId:   channelId,
-			ModelName:   meta.ActualModelName,
+			ModelName:   userVisibleModelName(meta, meta.ActualModelName),
 			TokenName:   tokenName,
 			Quota:       int(usedQuota),
 			Content:     logContent,

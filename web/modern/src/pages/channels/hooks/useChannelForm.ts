@@ -48,6 +48,7 @@ export const useChannelForm = () => {
       base_url: '',
       other: '',
       models: [],
+      hidden_models: [],
       model_mapping: '',
       model_configs: '',
       tooling: '',
@@ -177,6 +178,24 @@ export const useChannelForm = () => {
           return '';
         };
 
+        const parseStringArrayField = (field: unknown): string[] => {
+          if (Array.isArray(field)) {
+            return field.filter((item): item is string => typeof item === 'string').map((item) => item.trim()).filter((item) => item !== '');
+          }
+          if (typeof field !== 'string' || field.trim() === '') {
+            return [];
+          }
+          try {
+            const parsed = JSON.parse(field);
+            if (!Array.isArray(parsed)) {
+              return [];
+            }
+            return parsed.filter((item): item is string => typeof item === 'string').map((item) => item.trim()).filter((item) => item !== '');
+          } catch (_e) {
+            return [];
+          }
+        };
+
         const channelType = toInt(data.type, 1);
         let toolingField = '';
         if (data.tooling && typeof data.tooling === 'string' && data.tooling.trim() !== '') {
@@ -195,6 +214,7 @@ export const useChannelForm = () => {
           base_url: data.base_url || '',
           other: data.other || '',
           models,
+          hidden_models: parseStringArrayField(data.hidden_models),
           model_mapping: formatJsonField(data.model_mapping),
           model_configs: formatJsonField(data.model_configs),
           tooling: toolingField,
@@ -463,6 +483,8 @@ export const useChannelForm = () => {
       payload.ratelimit = toInt(payload.ratelimit, 0);
 
       payload.models = payload.models.join(',');
+      const normalizedHiddenModels = [...new Set((data.hidden_models || []).map((model) => model.trim()).filter((model) => model !== ''))];
+      payload.hidden_models = normalizedHiddenModels.length > 0 ? JSON.stringify(normalizedHiddenModels) : null;
       payload.group = payload.groups.join(',');
       delete payload.groups;
 

@@ -16,6 +16,7 @@ import (
 	"golang.org/x/sync/singleflight"
 
 	"github.com/songquanpeng/one-api/common/ctxkey"
+	"github.com/songquanpeng/one-api/dto"
 	"github.com/songquanpeng/one-api/middleware"
 	"github.com/songquanpeng/one-api/model"
 	relay "github.com/songquanpeng/one-api/relay"
@@ -203,6 +204,74 @@ func getSupportedModelsSnapshot() ([]OpenAIModels, error) {
 	})
 
 	return models, nil
+}
+
+// getRequestUserGroup returns the request context and resolved user group for authenticated model endpoints.
+func getRequestUserGroup(c *gin.Context) (context.Context, string, error) {
+	ctx := gmw.Ctx(c)
+	if userObj, exists := c.Get(ctxkey.UserObj); exists {
+		if user, ok := userObj.(*model.User); ok {
+			group := strings.TrimSpace(user.Group)
+			if group != "" {
+				return ctx, group, nil
+			}
+		}
+	}
+	group, err := model.CacheGetUserGroup(ctx, c.GetInt(ctxkey.Id))
+	if err != nil {
+		return ctx, "", err
+	}
+	return ctx, group, nil
+}
+
+// loadChannelCached loads a channel once and reuses it from the provided cache.
+func loadChannelCached(channelID int, cache map[int]*model.Channel) (*model.Channel, error) {
+	if channelID == 0 {
+		return nil, errors.New("channel id is required")
+	}
+	if channel, ok := cache[channelID]; ok {
+		return channel, nil
+	}
+	channel, err := model.GetChannelById(channelID, false)
+	if err != nil {
+		return nil, errors.Wrapf(err, "load channel %d", channelID)
+	}
+	cache[channelID] = channel
+	return channel, nil
+}
+
+// isVisibleAbilityModel reports whether the ability's model remains publicly visible after hidden-model filtering.
+func isVisibleAbilityModel(ability dto.EnabledAbility, cache map[int]*model.Channel) bool {
+	modelName := strings.TrimSpace(ability.Model)
+	if modelName == "" {
+		return false
+	}
+	channel, err := loadChannelCached(ability.ChannelId, cache)
+	if err != nil {
+		return false
+	}
+	return !channel.IsModelHidden(modelName)
+}
+
+// filterVisibleAbilities removes stale or hidden ability rows from public model responses.
+func filterVisibleAbilities(abilities []dto.EnabledAbility, cache map[int]*model.Channel) []dto.EnabledAbility {
+	visible := make([]dto.EnabledAbility, 0, len(abilities))
+	for _, ability := range abilities {
+		if !isVisibleAbilityModel(ability, cache) {
+			continue
+		}
+		visible = append(visible, ability)
+	}
+	return visible
+}
+
+// respondModelNotFound returns the OpenAI-compatible model-not-found error payload.
+func respondModelNotFound(c *gin.Context, modelID string) {
+	msg := fmt.Sprintf("The model '%s' does not exist", modelID)
+	respErr := relaymodel.Error{Message: msg, Type: relaymodel.ErrorTypeInvalidRequest, Param: "model", Code: "model_not_found", RawError: errors.New(msg)}
+	c.JSON(http.StatusOK, gin.H{
+		"error": respErr,
+	})
 }
 
 // ModelsDisplayResponse represents the response structure for the models display page
@@ -419,6 +488,9 @@ func GetModelsDisplay(c *gin.Context) {
 		for _, rawName := range modelNames {
 			modelName := strings.TrimSpace(rawName)
 			if modelName == "" {
+				continue
+			}
+			if channel.IsModelHidden(modelName) {
 				continue
 			}
 			if !channel.SupportsModel(modelName) {
@@ -677,6 +749,9 @@ func GetModelsDisplay(c *gin.Context) {
 	if userId == 0 {
 		// Anonymous path with cache + singleflight to mitigate DB load and thundering herd
 		cacheKey := "kw:" + keyword
+		if version, err := model.GetEnabledChannelsVersionSignature(); err == nil {
+			cacheKey += ":" + version
+		}
 		if data, ok := anonymousModelsDisplayCache.Load(cacheKey); ok {
 			c.JSON(http.StatusOK, ModelsDisplayResponse{Success: true, Message: "", Data: data})
 			return
@@ -714,20 +789,10 @@ func GetModelsDisplay(c *gin.Context) {
 	}
 
 	// Logged-in path: show only models allowed for the user group
-	ctx := gmw.Ctx(c)
-	var userGroup string
-	if userObj, exists := c.Get(ctxkey.UserObj); exists {
-		if u, ok := userObj.(*model.User); ok {
-			userGroup = u.Group
-		}
-	}
-	if userGroup == "" {
-		var err error
-		userGroup, err = model.CacheGetUserGroup(ctx, userId)
-		if err != nil {
-			c.JSON(http.StatusOK, ModelsDisplayResponse{Success: false, Message: "Failed to get user group: " + err.Error()})
-			return
-		}
+	ctx, userGroup, err := getRequestUserGroup(c)
+	if err != nil {
+		c.JSON(http.StatusOK, ModelsDisplayResponse{Success: false, Message: "Failed to get user group: " + err.Error()})
+		return
 	}
 	abilities, err := model.CacheGetGroupModelsV2(ctx, userGroup)
 	if err != nil {
@@ -797,6 +862,8 @@ func ListModels(c *gin.Context) {
 		middleware.AbortWithError(c, http.StatusBadRequest, err)
 		return
 	}
+	channelCache := make(map[int]*model.Channel)
+	availableAbilities = filterVisibleAbilities(availableAbilities, channelCache)
 
 	snapshot, err := getSupportedModelsSnapshot()
 	if err != nil {
@@ -811,7 +878,6 @@ func ListModels(c *gin.Context) {
 	}
 
 	allowed := make(map[string]OpenAIModels, len(availableAbilities))
-	channelCache := make(map[int]*model.Channel)
 	created := int(time.Now().Unix())
 
 	for _, ability := range availableAbilities {
@@ -896,13 +962,44 @@ func buildModelEntryFromAbility(modelName string, channelID int, channelType int
 
 // RetrieveModel returns details about a specific model or an error when it does not exist.
 func RetrieveModel(c *gin.Context) {
-	modelId := c.Param("model")
+	modelId := strings.TrimSpace(c.Param("model"))
+	ctx, userGroup, err := getRequestUserGroup(c)
+	if err != nil {
+		middleware.AbortWithError(c, http.StatusBadRequest, err)
+		return
+	}
+	abilities, err := model.CacheGetGroupModelsV2(ctx, userGroup)
+	if err != nil {
+		middleware.AbortWithError(c, http.StatusBadRequest, err)
+		return
+	}
+	channelCache := make(map[int]*model.Channel)
+	visibleAbilities := filterVisibleAbilities(abilities, channelCache)
+	var matched *dto.EnabledAbility
+	for i := range visibleAbilities {
+		if strings.EqualFold(visibleAbilities[i].Model, modelId) {
+			matched = &visibleAbilities[i]
+			modelId = strings.TrimSpace(visibleAbilities[i].Model)
+			break
+		}
+	}
+	if matched == nil {
+		respondModelNotFound(c, modelId)
+		return
+	}
+
 	if model, ok := modelsMap[modelId]; ok {
 		c.JSON(http.StatusOK, model)
 		return
 	}
+	for key, modelEntry := range modelsMap {
+		if strings.EqualFold(key, modelId) {
+			c.JSON(http.StatusOK, modelEntry)
+			return
+		}
+	}
 	lg := gmw.GetLogger(c)
-	if snapshot, err := listAllSupportedModels(); err == nil {
+	if snapshot, err := getSupportedModelsSnapshot(); err == nil {
 		for _, m := range snapshot {
 			if strings.EqualFold(m.Id, modelId) {
 				c.JSON(http.StatusOK, m)
@@ -912,33 +1009,22 @@ func RetrieveModel(c *gin.Context) {
 	} else if lg != nil {
 		lg.Debug("failed to build supported models snapshot for lookup", zap.Error(err))
 	}
-	msg := fmt.Sprintf("The model '%s' does not exist", modelId)
-	Error := relaymodel.Error{Message: msg, Type: relaymodel.ErrorTypeInvalidRequest, Param: "model", Code: "model_not_found", RawError: errors.New(msg)}
-	c.JSON(http.StatusOK, gin.H{
-		"error": Error,
-	})
+	if entry, ok := buildModelEntryFromAbility(modelId, matched.ChannelId, matched.ChannelType, int(time.Now().Unix()), channelCache); ok {
+		c.JSON(http.StatusOK, entry)
+		return
+	}
+	respondModelNotFound(c, modelId)
 }
 
 // GetUserAvailableModels lists the model identifiers the authenticated user can access.
 func GetUserAvailableModels(c *gin.Context) {
-	ctx := gmw.Ctx(c)
-	id := c.GetInt(ctxkey.Id)
-	var userGroup string
-	if userObj, exists := c.Get(ctxkey.UserObj); exists {
-		if u, ok := userObj.(*model.User); ok {
-			userGroup = u.Group
-		}
-	}
-	if userGroup == "" {
-		var err error
-		userGroup, err = model.CacheGetUserGroup(ctx, id)
-		if err != nil {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": err.Error(),
-			})
-			return
-		}
+	ctx, userGroup, err := getRequestUserGroup(c)
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": err.Error(),
+		})
+		return
 	}
 
 	models, err := model.CacheGetGroupModelsV2(ctx, userGroup)
@@ -949,6 +1035,8 @@ func GetUserAvailableModels(c *gin.Context) {
 		})
 		return
 	}
+	channelCache := make(map[int]*model.Channel)
+	models = filterVisibleAbilities(models, channelCache)
 
 	var modelNames []string
 	modelsMap := map[string]bool{}
@@ -958,6 +1046,7 @@ func GetUserAvailableModels(c *gin.Context) {
 	for modelName := range modelsMap {
 		modelNames = append(modelNames, modelName)
 	}
+	sort.Strings(modelNames)
 
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
@@ -992,10 +1081,53 @@ func GetAvailableModelsByToken(c *gin.Context) {
 		// Token has model restrictions, use those models
 		modelsString := availableModels.(string)
 		if modelsString != "" {
-			modelNames := strings.Split(modelsString, ",")
-			// Trim whitespace from each model name
-			for i := range modelNames {
-				modelNames[i] = strings.TrimSpace(modelNames[i])
+			ctx, userGroup, err := getRequestUserGroup(c)
+			if err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{
+					"success": false,
+					"message": err.Error(),
+					"data": gin.H{
+						"available": nil,
+						"enabled":   false,
+					},
+				})
+				return
+			}
+			abilities, err := model.CacheGetGroupModelsV2(ctx, userGroup)
+			if err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{
+					"success": false,
+					"message": err.Error(),
+					"data": gin.H{
+						"available": nil,
+						"enabled":   false,
+					},
+				})
+				return
+			}
+			channelCache := make(map[int]*model.Channel)
+			visibleModels := make(map[string]struct{}, len(abilities))
+			for _, ability := range filterVisibleAbilities(abilities, channelCache) {
+				visibleModels[strings.ToLower(strings.TrimSpace(ability.Model))] = struct{}{}
+			}
+
+			tokenModels := strings.Split(modelsString, ",")
+			modelNames := make([]string, 0, len(tokenModels))
+			seen := make(map[string]struct{}, len(tokenModels))
+			for _, rawModel := range tokenModels {
+				modelName := strings.TrimSpace(rawModel)
+				if modelName == "" {
+					continue
+				}
+				key := strings.ToLower(modelName)
+				if _, ok := visibleModels[key]; !ok {
+					continue
+				}
+				if _, ok := seen[key]; ok {
+					continue
+				}
+				seen[key] = struct{}{}
+				modelNames = append(modelNames, modelName)
 			}
 			c.JSON(http.StatusOK, gin.H{
 				"success": true,

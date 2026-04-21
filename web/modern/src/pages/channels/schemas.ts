@@ -10,6 +10,7 @@ export const channelSchema = z.object({
   base_url: z.string().optional(),
   other: z.string().optional(),
   models: z.array(z.string()).default([]),
+  hidden_models: z.array(z.string()).default([]),
   model_mapping: z.string().optional(),
   model_configs: z.string().optional(),
   tooling: z.string().optional(),

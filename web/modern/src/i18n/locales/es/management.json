@@ -201,6 +201,15 @@
         "help": "Restringir el acceso a grupos de usuarios específicos. Vacío significa que todos los usuarios pueden acceder. El grupo predeterminado siempre se mantiene.",
         "label": "Grupos *"
       },
+      "hidden_models": {
+        "custom_placeholder": "Agregar modelo oculto...",
+        "help": "Los modelos listados aquí son servidos por este canal, pero no se devuelven desde /v1/models y se rechazan en solicitudes directas de usuarios. Útil para exponer un alias unificado mediante Model Mapping.",
+        "label": "Modelos ocultos",
+        "no_match": "No se encontraron modelos",
+        "no_selection": "No hay modelos ocultos seleccionados",
+        "search_placeholder": "Buscar modelos ocultos...",
+        "selected_count": "Modelos ocultos ({{count}})"
+      },
       "inference_profile": {
         "help": "Mapa JSON de nombre de modelo a ARN de perfil de inferencia de AWS Bedrock. Úsalo para enrutar ciertos modelos a través de perfiles de inferencia específicos de Bedrock.",
         "label": "Mapa de ARN de perfil de inferencia (AWS Bedrock)",
@@ -351,6 +360,8 @@
         "api_key_required": "La clave API es obligatoria.",
         "base_url_required": "La URL base es obligatoria para este tipo de canal.",
         "error_title": "Error de validación",
+        "hidden_models_not_supported": "Estos modelos ocultos no están soportados actualmente por el canal: {{models}}",
+        "hidden_models_unreachable_alias": "Estos modelos ocultos se usan como fuentes de Model Mapping, por lo que los alias públicos quedarán inaccesibles: {{models}}",
         "inference_profile_invalid": "El mapa de ARN de perfil de inferencia tiene un JSON inválido.",
         "invalid_json": "Formato JSON inválido",
         "invalid_json_short": "✗ JSON inválido",

@@ -63,6 +63,9 @@ Open **Channels → Create Channel** or select an existing channel and choose **
 | **Group Membership** | Multi-select of logical user groups (default is always included). Channels are eligible only for the groups you assign here.                                                    |
 | **Models**           | Explicit allowlist of model IDs routed through this channel. Empty list means “all supported models”. The helper dialog offers search, bulk add, and clear actions.             |
 | **Model Mapping**    | JSON object translating external model names to upstream model IDs (string → string). Useful when clients send `gpt-4` but upstream expects a deployment alias.                 |
+| **Hidden Models**    | Models this channel can serve internally but must not expose publicly. Hidden models are removed from `/v1/models`, rejected for direct user requests, and still usable as Model Mapping targets. |
+
+**Alias fan-out example:** if Channel 1 serves upstream `A` and Channel 2 serves upstream `B`, configure them as `Models="A,C"` + `Hidden Models=["A"]` + `Model Mapping={"C":"A"}` and `Models="B,C"` + `Hidden Models=["B"]` + `Model Mapping={"C":"B"}`. Users see only `C` in `/v1/models`, while the gateway still rewrites `C` to `A` or `B` upstream.
 
 ### 2.2 Provider Credentials & Config (`config` block)
 
@@ -160,6 +163,7 @@ The UI offers helper buttons:
 - Coze OAuth JWT requires a full JSON object with `client_type`, `client_id`, `coze_www_base`, `coze_api_base`, `private_key`, and `public_key_id`.
 - Azure `other` field defaults to the latest supported API version if left blank.
 - Clearing sensitive fields: leaving the API key empty when editing keeps the stored value. To remove credentials entirely, disable or delete the channel.
+- Hidden Models is a non-blocking warning field. If you hide a name that is not listed in **Models**, One-API treats it as a no-op. If you hide a name that is also a **Model Mapping** source, the public alias becomes unreachable.
 
 ## 8. Troubleshooting Checklist
 
@@ -169,6 +173,11 @@ The UI offers helper buttons:
 | Channel edit form loads with empty tooling JSON                    | Stored config is `null` or invalid JSON                 | Re-enter JSON, use **Format** to validate                                      |
 | 401/403 from provider                                              | API key malformed, missing base URL, or wrong auth type | Re-enter credentials; verify channel type matches provider                     |
 | Users hit “no enabled channel” errors                              | Channel disabled, group mismatch, or model not in list  | Re-enable channel, adjust groups/models                                        |
+| `/v1/models` does not show an upstream model                       | The upstream model is listed in **Hidden Models**       | Call the public alias instead, or test the upstream model only through an explicit admin channel selection |
+
+**FAQ: Why doesn't `/v1/models` list my upstream model?**
+
+If the model is configured in **Hidden Models**, One-API still allows the channel to serve it internally, for example as a **Model Mapping** target, but it is intentionally removed from public model discovery and rejected for direct user requests. Keep the public alias in **Models**, map the alias to the upstream target, and hide only the upstream target. Administrators can still test the underlying model by selecting the channel explicitly.
 
 ## 9. Glossary of Data Fields
 

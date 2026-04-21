@@ -287,7 +287,7 @@ func (h *chatToResponseStreamBridge) ensureInitialized(c *gin.Context, chunk *op
 		Object:             "response",
 		CreatedAt:          h.createdAt,
 		Status:             "in_progress",
-		Model:              h.model,
+		Model:              userVisibleModelName(h.meta, ""),
 		Instructions:       h.original.Instructions,
 		MaxOutputTokens:    h.original.MaxOutputTokens,
 		Metadata:           h.original.Metadata,
@@ -304,6 +304,9 @@ func (h *chatToResponseStreamBridge) ensureInitialized(c *gin.Context, chunk *op
 		User:               h.original.User,
 	}
 
+	if response.Model == "" {
+		response.Model = h.model
+	}
 	if response.Model == "" {
 		response.Model = h.original.Model
 	}
@@ -574,7 +577,7 @@ func (h *chatToResponseStreamBridge) buildFinalResponse(status string, outputs [
 		Object:             "response",
 		CreatedAt:          h.createdAt,
 		Status:             status,
-		Model:              h.model,
+		Model:              userVisibleModelName(h.meta, ""),
 		Output:             outputs,
 		Usage:              h.usage,
 		Instructions:       h.original.Instructions,
@@ -594,6 +597,9 @@ func (h *chatToResponseStreamBridge) buildFinalResponse(status string, outputs [
 		RequiredAction:     requiredAction,
 	}
 
+	if response.Model == "" {
+		response.Model = h.model
+	}
 	if response.Model == "" {
 		response.Model = h.meta.ActualModelName
 	}

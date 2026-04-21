@@ -16,7 +16,7 @@ func SetApiRouter(router *gin.Engine) {
 	{
 		apiRouter.GET("/status", controller.GetStatus)
 		apiRouter.GET("/status/channel", controller.GetChannelStatus)
-		apiRouter.GET("/models", middleware.UserAuth(), controller.DashboardListModels)
+		apiRouter.GET("/models", middleware.AdminAuth(), controller.DashboardListModels)
 		// Public endpoint: anonymous users see all supported models; logged-in users see only allowed models
 		apiRouter.GET("/models/display", middleware.OptionalUserAuth(), controller.GetModelsDisplay)
 		// Public endpoint: list enabled MCP servers and their enabled tools

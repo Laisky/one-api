@@ -201,6 +201,15 @@
         "help": "限制特定用户组的访问。留空表示所有用户都可以访问。默认分组始终保留。",
         "label": "分组 *"
       },
+      "hidden_models": {
+        "custom_placeholder": "添加隐藏模型...",
+        "help": "这里列出的模型由该渠道实际提供，但不会出现在 /v1/models 中，也会拒绝用户直接请求。适合结合模型映射对外暴露统一别名。",
+        "label": "隐藏模型",
+        "no_match": "未找到模型",
+        "no_selection": "未选择隐藏模型",
+        "search_placeholder": "搜索隐藏模型...",
+        "selected_count": "隐藏模型（{{count}}）"
+      },
       "inference_profile": {
         "help": "模型名称到 AWS Bedrock 推理配置文件 ARN 的 JSON 映射。用于通过特定 Bedrock 推理配置文件路由某些模型。",
         "label": "推理配置文件 ARN 映射 (AWS Bedrock)",
@@ -351,6 +360,8 @@
         "api_key_required": "API 密钥是必填项。",
         "base_url_required": "此渠道类型需要 Base URL。",
         "error_title": "验证错误",
+        "hidden_models_not_supported": "这些隐藏模型当前并不在该渠道支持的模型列表中：{{models}}",
+        "hidden_models_unreachable_alias": "这些隐藏模型被用作模型映射的来源，公开别名将因此无法访问：{{models}}",
         "inference_profile_invalid": "推理配置文件 ARN 映射包含无效 JSON。",
         "invalid_json": "无效 JSON 格式",
         "invalid_json_short": "✗ 无效 JSON",

@@ -201,6 +201,15 @@
         "help": "Restrict access to specific user groups. Empty means all users can access. The default group is always kept.",
         "label": "Groups *"
       },
+      "hidden_models": {
+        "custom_placeholder": "Add hidden model...",
+        "help": "Models listed here are served by this channel but not returned from /v1/models and rejected from direct user requests. Useful for exposing a unified alias via Model Mapping.",
+        "label": "Hidden Models",
+        "no_match": "No models found",
+        "no_selection": "No hidden models selected",
+        "search_placeholder": "Search hidden models...",
+        "selected_count": "Hidden Models ({{count}})"
+      },
       "inference_profile": {
         "help": "JSON map of model name to AWS Bedrock Inference Profile ARN. Use to route certain models via specific Bedrock inference profiles.",
         "label": "Inference Profile ARN Map (AWS Bedrock)",
@@ -351,6 +360,8 @@
         "api_key_required": "API key is required.",
         "base_url_required": "Base URL is required for this channel type.",
         "error_title": "Validation error",
+        "hidden_models_not_supported": "These hidden models are not currently supported by the channel: {{models}}",
+        "hidden_models_unreachable_alias": "These hidden models are used as Model Mapping sources, so the public aliases will become unreachable: {{models}}",
         "inference_profile_invalid": "Inference Profile ARN Map has invalid JSON.",
         "invalid_json": "Invalid JSON format",
         "invalid_json_short": "✗ Invalid JSON",

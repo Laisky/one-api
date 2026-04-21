@@ -822,6 +822,25 @@ func TestChatToResponseStreamBridge_ModelFallbackToRequest(t *testing.T) {
 	assert.Equal(t, "fallback-request-model", ev.Response.Model)
 }
 
+func TestChatToResponseStreamBridge_PrefersOriginModel(t *testing.T) {
+	t.Parallel()
+	c, w := newBridgeTestContext(t)
+	meta := &metalib.Meta{OriginModelName: "public-alias", ActualModelName: "hidden-target"}
+	request := &openai.ResponseAPIRequest{Model: "public-alias"}
+	handler := newChatToResponseStreamBridge(c, meta, request).(*chatToResponseStreamBridge)
+
+	chunk := bridgeTextChunk("hello")
+	chunk.Model = "hidden-target"
+	handler.ensureInitialized(c, chunk)
+
+	require.Contains(t, w.Body.String(), `"model":"public-alias"`)
+	require.NotContains(t, w.Body.String(), `"model":"hidden-target"`)
+
+	handler.model = "hidden-target"
+	resp := handler.buildFinalResponse("completed", nil, nil)
+	require.Equal(t, "public-alias", resp.Model)
+}
+
 func TestChatToResponseStreamBridge_AppendEmptyTextDelta(t *testing.T) {
 	t.Parallel()
 	c, w := newBridgeTestContext(t)

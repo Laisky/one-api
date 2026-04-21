@@ -13,6 +13,7 @@ import (
 	"github.com/Laisky/zap"
 	"github.com/gin-gonic/gin"
 
+	"github.com/songquanpeng/one-api/common"
 	"github.com/songquanpeng/one-api/common/config"
 	"github.com/songquanpeng/one-api/common/helper"
 	"github.com/songquanpeng/one-api/model"
@@ -27,12 +28,28 @@ type channelPayload struct {
 	Tooling json.RawMessage `json:"tooling"`
 }
 
-func bindChannelPayload(c *gin.Context) (*model.Channel, json.RawMessage, error) {
+type channelPayloadMeta struct {
+	HiddenModelsProvided bool
+}
+
+func bindChannelPayload(c *gin.Context) (*model.Channel, json.RawMessage, channelPayloadMeta, error) {
 	payload := channelPayload{Channel: &model.Channel{}}
-	if err := c.ShouldBindJSON(&payload); err != nil {
-		return nil, nil, err
+	if err := common.UnmarshalBodyReusable(c, &payload); err != nil {
+		return nil, nil, channelPayloadMeta{}, err
 	}
-	return payload.Channel, payload.Tooling, nil
+
+	requestBody, err := common.GetRequestBody(c)
+	if err != nil {
+		return nil, nil, channelPayloadMeta{}, err
+	}
+	rawFields := make(map[string]json.RawMessage)
+	if len(requestBody) > 0 {
+		if err := json.Unmarshal(requestBody, &rawFields); err != nil {
+			return nil, nil, channelPayloadMeta{}, err
+		}
+	}
+	_, hiddenModelsProvided := rawFields["hidden_models"]
+	return payload.Channel, payload.Tooling, channelPayloadMeta{HiddenModelsProvided: hiddenModelsProvided}, nil
 }
 
 func parseToolingConfigPayload(raw json.RawMessage) (*model.ChannelToolingConfig, bool, error) {
@@ -209,7 +226,7 @@ func GetChannel(c *gin.Context) {
 
 // AddChannel creates one or more channels using the posted configuration payload.
 func AddChannel(c *gin.Context) {
-	channel, toolingRaw, err := bindChannelPayload(c)
+	channel, toolingRaw, payloadMeta, err := bindChannelPayload(c)
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
@@ -217,6 +234,7 @@ func AddChannel(c *gin.Context) {
 		})
 		return
 	}
+	channel.HiddenModelsProvided = payloadMeta.HiddenModelsProvided
 
 	// Disallow empty channel name
 	if strings.TrimSpace(channel.Name) == "" {
@@ -348,7 +366,7 @@ func DeleteDisabledChannel(c *gin.Context) {
 func UpdateChannel(c *gin.Context) {
 	lg := gmw.GetLogger(c)
 	statusOnly := c.Query("status_only")
-	channel, toolingRaw, err := bindChannelPayload(c)
+	channel, toolingRaw, payloadMeta, err := bindChannelPayload(c)
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
@@ -356,6 +374,7 @@ func UpdateChannel(c *gin.Context) {
 		})
 		return
 	}
+	channel.HiddenModelsProvided = payloadMeta.HiddenModelsProvided
 
 	// Validate inference profile ARN map if provided
 	if channel.InferenceProfileArnMap != nil && *channel.InferenceProfileArnMap != "" {

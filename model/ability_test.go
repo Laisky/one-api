@@ -1,6 +1,8 @@
 package model
 
 import (
+	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -193,4 +195,73 @@ func TestGetRandomSatisfiedChannelExcluding_SuspendedChannels(t *testing.T) {
 	assert.NoError(t, err)
 	assert.NotNil(t, channel)
 	assert.Equal(t, 1, channel.Id, "Should only return the non-suspended channel")
+}
+
+func TestChannelHiddenModelsHelpers(t *testing.T) {
+	testDB := setupTestDB(t)
+	originalDB := DB
+	DB = testDB
+	defer func() { DB = originalDB }()
+
+	hidden := `[" ModelA ","modela","Other",""]`
+	channel := &Channel{
+		Id:           1,
+		Name:         "hidden-helper",
+		Status:       ChannelStatusEnabled,
+		Models:       "ModelA,Public",
+		Group:        "default",
+		HiddenModels: &hidden,
+	}
+	require.NoError(t, channel.NormalizeHiddenModels())
+	require.NotNil(t, channel.HiddenModels)
+	require.JSONEq(t, `["ModelA","Other"]`, *channel.HiddenModels)
+	require.True(t, channel.IsModelHidden("modela"))
+	require.True(t, channel.IsModelHidden("MODELA"))
+	require.False(t, channel.IsModelHidden("Other"), "hidden models outside Models should be treated as no-ops")
+
+	hiddenSet := channel.GetHiddenModels()
+	_, ok := hiddenSet["modela"]
+	require.True(t, ok)
+	_, ok = hiddenSet["other"]
+	require.False(t, ok)
+}
+
+func TestChannelUpdateInvalidatesHiddenModelCache(t *testing.T) {
+	testDB := setupTestDB(t)
+	originalDB := DB
+	DB = testDB
+	defer func() { DB = originalDB }()
+
+	originalUsingSQLite := common.UsingSQLite.Load()
+	common.UsingSQLite.Store(true)
+	defer func() { common.UsingSQLite.Store(originalUsingSQLite) }()
+
+	group := fmt.Sprintf("group-%d", time.Now().UnixNano())
+	channel := &Channel{
+		Name:   "hidden-cache",
+		Type:   1,
+		Status: ChannelStatusEnabled,
+		Models: "hidden-alpha,public-alias",
+		Group:  group,
+	}
+	require.NoError(t, channel.Insert())
+
+	abilities, err := GetGroupModelsV2(context.Background(), group)
+	require.NoError(t, err)
+	require.Len(t, abilities, 2)
+
+	hidden := `["hidden-alpha"]`
+	channel.HiddenModels = &hidden
+	channel.HiddenModelsProvided = true
+	require.NoError(t, channel.Update())
+
+	abilities, err = GetGroupModelsV2(context.Background(), group)
+	require.NoError(t, err)
+	require.Len(t, abilities, 1)
+	require.Equal(t, "public-alias", abilities[0].Model)
+
+	var dbAbilities []Ability
+	require.NoError(t, DB.Order("model").Find(&dbAbilities).Error)
+	require.Len(t, dbAbilities, 1)
+	require.Equal(t, "public-alias", dbAbilities[0].Model)
 }
