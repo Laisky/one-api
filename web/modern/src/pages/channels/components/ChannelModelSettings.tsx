@@ -6,7 +6,7 @@ import { AlertCircle } from 'lucide-react';
 import { useMemo } from 'react';
 import type { UseFormReturn } from 'react-hook-form';
 import { MODEL_CONFIGS_EXAMPLE, MODEL_MAPPING_EXAMPLE } from '../constants';
-import { formatJSON } from '../helpers';
+import { formatJSON, sanitizeJsonInput } from '../helpers';
 import type { ChannelForm } from '../schemas';
 import { LabelWithHelp } from './LabelWithHelp';
 
@@ -42,11 +42,15 @@ export const ChannelModelSettings = ({
       return new Set<string>();
     }
     try {
-      const parsed = JSON.parse(modelMapping) as Record<string, unknown>;
+      const parsed = JSON.parse(sanitizeJsonInput(modelMapping)) as Record<string, unknown>;
       if (!parsed || Array.isArray(parsed) || typeof parsed !== 'object') {
         return new Set<string>();
       }
-      return new Set(Object.keys(parsed).map((model) => model.trim().toLowerCase()).filter((model) => model.length > 0));
+      return new Set(
+        Object.keys(parsed)
+          .map((model) => model.trim().toLowerCase())
+          .filter((model) => model.length > 0)
+      );
     } catch (_error) {
       return new Set<string>();
     }
@@ -71,6 +75,91 @@ export const ChannelModelSettings = ({
     [hiddenModels, mappingSources]
   );
 
+  const mappingJsonIssue = useMemo<
+    { type: 'parse'; message: string } | { type: 'shape' } | { type: 'invalid-entries'; entries: string[] } | null
+  >(() => {
+    if (!modelMapping.trim()) {
+      return null;
+    }
+    try {
+      const parsed = JSON.parse(sanitizeJsonInput(modelMapping));
+      if (!parsed || Array.isArray(parsed) || typeof parsed !== 'object') {
+        return { type: 'shape' };
+      }
+      const invalid: string[] = [];
+      for (const [rawKey, rawValue] of Object.entries(parsed as Record<string, unknown>)) {
+        const keyLabel = rawKey.trim().length > 0 ? rawKey : '(empty key)';
+        if (rawKey.trim().length === 0) {
+          invalid.push(keyLabel);
+          continue;
+        }
+        if (typeof rawValue !== 'string' || rawValue.trim().length === 0) {
+          invalid.push(keyLabel);
+        }
+      }
+      if (invalid.length > 0) {
+        return { type: 'invalid-entries', entries: invalid };
+      }
+      return null;
+    } catch (error) {
+      return { type: 'parse', message: error instanceof Error ? error.message : 'Invalid JSON' };
+    }
+  }, [modelMapping]);
+
+  const hasMappingJsonIssue = mappingJsonIssue !== null;
+
+  const availableModelSet = useMemo(
+    () => new Set(availableModels.map((model) => model.id.trim().toLowerCase()).filter((model) => model.length > 0)),
+    [availableModels]
+  );
+
+  const knownTargetSet = useMemo(() => {
+    const combined = new Set<string>();
+    availableModelSet.forEach((model) => combined.add(model));
+    selectedModelSet.forEach((model) => combined.add(model));
+    return combined;
+  }, [availableModelSet, selectedModelSet]);
+
+  const mappingKeysOutsideSupported = useMemo(() => {
+    if (hasMappingJsonIssue || !modelMapping.trim()) {
+      return [] as string[];
+    }
+    try {
+      const parsed = JSON.parse(sanitizeJsonInput(modelMapping)) as Record<string, unknown>;
+      return Object.keys(parsed)
+        .map((key) => key.trim())
+        .filter((key) => key.length > 0 && !selectedModelSet.has(key.toLowerCase()));
+    } catch (_error) {
+      return [] as string[];
+    }
+  }, [modelMapping, selectedModelSet, hasMappingJsonIssue]);
+
+  const mappingTargetsOutsideCatalog = useMemo(() => {
+    // When the channel type has no catalog we cannot judge target validity.
+    if (hasMappingJsonIssue || !modelMapping.trim() || availableModelSet.size === 0) {
+      return [] as { source: string; target: string }[];
+    }
+    try {
+      const parsed = JSON.parse(sanitizeJsonInput(modelMapping)) as Record<string, unknown>;
+      const offending: { source: string; target: string }[] = [];
+      for (const [rawKey, rawValue] of Object.entries(parsed)) {
+        if (typeof rawValue !== 'string') continue;
+        const target = rawValue.trim();
+        if (!target) continue;
+        if (!knownTargetSet.has(target.toLowerCase())) {
+          offending.push({ source: rawKey.trim(), target });
+        }
+      }
+      return offending;
+    } catch (_error) {
+      return [] as { source: string; target: string }[];
+    }
+  }, [modelMapping, hasMappingJsonIssue, availableModelSet, knownTargetSet]);
+
+  const hasUnreachableMappingKeys = mappingKeysOutsideSupported.length > 0;
+  const hasUnknownMappingTargets = mappingTargetsOutsideCatalog.length > 0;
+  const hasMappingWarning = hasUnreachableMappingKeys || hasUnknownMappingTargets;
+
   const fillRelatedModels = () => {
     if (currentCatalogModels.length === 0) {
       return;
@@ -92,7 +181,7 @@ export const ChannelModelSettings = ({
   };
 
   const formatModelMapping = () => {
-    const current = form.getValues('model_mapping');
+    const current = form.getValues('model_mapping') ?? '';
     const formatted = formatJSON(current);
     form.setValue('model_mapping', formatted);
   };
@@ -102,7 +191,7 @@ export const ChannelModelSettings = ({
    * @returns void
    */
   const formatModelConfigs = () => {
-    const current = form.getValues('model_configs');
+    const current = form.getValues('model_configs') ?? '';
     const formatted = formatJSON(current);
     form.setValue('model_configs', formatted);
   };
@@ -201,9 +290,13 @@ export const ChannelModelSettings = ({
               <div className="mt-3 flex items-start gap-2 rounded-lg border border-warning-border bg-warning-muted p-3">
                 <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-warning" />
                 <span className="text-sm text-warning-foreground">
-                  {tr('validation.hidden_models_not_supported', 'These hidden models are not currently supported by the channel: {{models}}', {
-                    models: hiddenModelsOutsideSupported.join(', '),
-                  })}
+                  {tr(
+                    'validation.hidden_models_not_supported',
+                    'These hidden models are not currently supported by the channel: {{models}}',
+                    {
+                      models: hiddenModelsOutsideSupported.join(', '),
+                    }
+                  )}
                 </span>
               </div>
             )}
@@ -252,12 +345,66 @@ export const ChannelModelSettings = ({
                   placeholder={tr('model_mapping.placeholder', '{"gpt-3.5-turbo-0301": "gpt-3.5-turbo"}', {
                     example: JSON.stringify(MODEL_MAPPING_EXAMPLE, null, 2),
                   })}
-                  className={`font-mono text-xs min-h-[150px] ${errorClass('model_mapping')}`}
+                  className={`font-mono text-xs min-h-[150px] ${
+                    fieldHasError('model_mapping') || hasMappingJsonIssue
+                      ? 'border-destructive focus-visible:ring-destructive'
+                      : hasMappingWarning
+                        ? 'border-warning-border ring-1 ring-warning-border focus-visible:ring-warning'
+                        : ''
+                  }`}
                   {...field}
                   value={field.value || ''}
                 />
               </FormControl>
               <FormMessage />
+              {hasMappingJsonIssue && (
+                <div className="mt-2 flex items-start gap-2 rounded-lg border border-destructive bg-destructive/10 p-3">
+                  <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
+                  <span className="text-sm text-destructive">
+                    {mappingJsonIssue?.type === 'shape'
+                      ? tr('validation.model_mapping_shape_invalid', 'Model Mapping must be a JSON object of the form { "from": "to" }.')
+                      : mappingJsonIssue?.type === 'invalid-entries'
+                        ? tr(
+                            'validation.model_mapping_invalid_entries',
+                            'These Model Mapping entries have empty or non-string values: {{keys}}',
+                            {
+                              keys: mappingJsonIssue.entries.join(', '),
+                            }
+                          )
+                        : tr('validation.model_mapping_parse_error', 'Model Mapping JSON is invalid: {{error}}', {
+                            error: mappingJsonIssue && mappingJsonIssue.type === 'parse' ? mappingJsonIssue.message : '',
+                          })}
+                  </span>
+                </div>
+              )}
+              {!hasMappingJsonIssue && hasUnreachableMappingKeys && (
+                <div className="mt-2 flex items-start gap-2 rounded-lg border border-warning-border bg-warning-muted p-3">
+                  <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-warning" />
+                  <span className="text-sm text-warning-foreground">
+                    {tr(
+                      'validation.mapping_keys_not_supported',
+                      'These mapping keys are not in Supported Models, so requests to these aliases will be rejected: {{models}}',
+                      {
+                        models: mappingKeysOutsideSupported.join(', '),
+                      }
+                    )}
+                  </span>
+                </div>
+              )}
+              {!hasMappingJsonIssue && hasUnknownMappingTargets && (
+                <div className="mt-2 flex items-start gap-2 rounded-lg border border-warning-border bg-warning-muted p-3">
+                  <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-warning" />
+                  <span className="text-sm text-warning-foreground">
+                    {tr(
+                      'validation.mapping_targets_not_recognized',
+                      'These mapping targets are not recognized as models for this channel: {{entries}}',
+                      {
+                        entries: mappingTargetsOutsideCatalog.map((entry) => `${entry.source} → ${entry.target}`).join(', '),
+                      }
+                    )}
+                  </span>
+                </div>
+              )}
             </FormItem>
           )}
         />

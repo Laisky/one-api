@@ -113,8 +113,8 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 	"gpt-realtime-1.5": {
 		Ratio: 4.0 * ratio.MilliTokensUsd, CompletionRatio: 4.0, CachedInputRatio: 0.4 * ratio.MilliTokensUsd,
 		Audio: &adaptor.AudioPricingConfig{
-			PromptRatio:           8,  // $32/$4 = 8x
-			CompletionRatio:       2,  // $64/$32 = 2x
+			PromptRatio:           8, // $32/$4 = 8x
+			CompletionRatio:       2, // $64/$32 = 2x
 			PromptTokensPerSecond: 10,
 		},
 	},

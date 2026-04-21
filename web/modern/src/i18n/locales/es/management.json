@@ -298,6 +298,14 @@
         "help": "Maximum requests per minute. 0 means unlimited.",
         "label": "Rate Limit"
       },
+      "save_warning": {
+        "cancel": "Volver",
+        "confirm": "Guardar de todos modos",
+        "description": "Las siguientes claves de Model Mapping no están en Modelos Soportados. Las solicitudes a estos alias serán rechazadas por el enrutador aunque el mapeo se guarde:",
+        "hint": "Corrige cada entrada o guarda de todos modos para mantener el mapeo tal cual.",
+        "target_description": "Los siguientes destinos de Model Mapping no se reconocen como modelos para este canal. El proveedor upstream puede rechazar estas solicitudes:",
+        "title": "Model Mapping tiene entradas sospechosas"
+      },
       "spark": {
         "version": {
           "help": "Selecciona la versión de API para iFlytek Spark (ej. v3.5).",
@@ -366,9 +374,14 @@
         "invalid_json": "Formato JSON inválido",
         "invalid_json_short": "✗ JSON inválido",
         "invalid_json_title": "JSON inválido",
+        "mapping_keys_not_supported": "Estas claves de mapeo no están en Modelos Soportados, por lo que las solicitudes a esos alias serán rechazadas: {{models}}",
+        "mapping_targets_not_recognized": "Estos destinos de mapeo no se reconocen como modelos de este canal: {{entries}}",
         "model_configs_message": "Las configuraciones de modelos son inválidas.",
         "model_configs_title": "Configuraciones inválidas",
         "model_mapping_invalid": "El mapeo de modelos tiene un JSON inválido.",
+        "model_mapping_invalid_entries": "Estas entradas de Model Mapping tienen valores vacíos o no de tipo string: {{keys}}",
+        "model_mapping_parse_error": "El JSON de Model Mapping es inválido: {{error}}",
+        "model_mapping_shape_invalid": "Model Mapping debe ser un objeto JSON con la forma { \"from\": \"to\" }.",
         "oauth_invalid_json": "El JSON de configuración de OAuth JWT es inválido.",
         "oauth_missing_field_message": "Falta configuración de OAuth JWT: {{field}}",
         "oauth_missing_field_title": "Campo faltante",

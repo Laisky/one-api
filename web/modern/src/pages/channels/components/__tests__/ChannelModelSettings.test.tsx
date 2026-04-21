@@ -125,7 +125,7 @@ describe('ChannelModelSettings', () => {
   it('shows non-blocking hidden-model warnings', () => {
     render(
       <TestHarness
-        defaultPricing=''
+        defaultPricing=""
         onReady={() => {}}
         defaultValues={{
           models: ['public-alias'],
@@ -144,5 +144,113 @@ describe('ChannelModelSettings', () => {
     expect(
       screen.getByText('These hidden models are used as Model Mapping sources, so the public aliases will become unreachable: public-alias')
     ).toBeInTheDocument();
+  });
+
+  it('warns when Model Mapping keys are not listed in Supported Models', () => {
+    render(
+      <TestHarness
+        defaultPricing=""
+        onReady={() => {}}
+        defaultValues={{
+          models: ['public-alias'],
+          model_mapping: '{"ghost-alias":"gpt-4o","public-alias":"gpt-4o"}',
+        }}
+        availableModels={[{ id: 'public-alias', name: 'public-alias' }]}
+        currentCatalogModels={['public-alias']}
+      />
+    );
+
+    expect(
+      screen.getByText('These mapping keys are not in Supported Models, so requests to these aliases will be rejected: ghost-alias')
+    ).toBeInTheDocument();
+  });
+
+  it('flags invalid Model Mapping JSON with a destructive banner', () => {
+    render(
+      <TestHarness
+        defaultPricing=""
+        onReady={() => {}}
+        defaultValues={{
+          models: ['public-alias'],
+          model_mapping: '{"oops":',
+        }}
+        availableModels={[{ id: 'public-alias', name: 'public-alias' }]}
+      />
+    );
+
+    expect(screen.getByText(/Model Mapping JSON is invalid:/)).toBeInTheDocument();
+    // Ensure the "unreachable keys" warning is suppressed while JSON is broken.
+    expect(screen.queryByText(/are not in Supported Models/)).not.toBeInTheDocument();
+  });
+
+  it('flags non-object Model Mapping JSON', () => {
+    render(
+      <TestHarness
+        defaultPricing=""
+        onReady={() => {}}
+        defaultValues={{
+          models: ['public-alias'],
+          model_mapping: '["not","an","object"]',
+        }}
+        availableModels={[{ id: 'public-alias', name: 'public-alias' }]}
+      />
+    );
+
+    expect(screen.getByText('Model Mapping must be a JSON object of the form { "from": "to" }.')).toBeInTheDocument();
+  });
+
+  it('flags empty or non-string Model Mapping values as destructive errors', () => {
+    render(
+      <TestHarness
+        defaultPricing=""
+        onReady={() => {}}
+        defaultValues={{
+          models: ['public-alias'],
+          model_mapping: '{"public-alias":"","typo": 7}',
+        }}
+        availableModels={[{ id: 'public-alias', name: 'public-alias' }]}
+      />
+    );
+
+    expect(screen.getByText('These Model Mapping entries have empty or non-string values: public-alias, typo')).toBeInTheDocument();
+    expect(screen.queryByText(/are not in Supported Models/)).not.toBeInTheDocument();
+  });
+
+  it('warns when Model Mapping targets are not recognized by the channel', () => {
+    render(
+      <TestHarness
+        defaultPricing=""
+        onReady={() => {}}
+        defaultValues={{
+          models: ['public-alias'],
+          model_mapping: '{"public-alias":"ghost-upstream"}',
+        }}
+        availableModels={[
+          { id: 'public-alias', name: 'public-alias' },
+          { id: 'gpt-4o', name: 'gpt-4o' },
+        ]}
+      />
+    );
+
+    expect(
+      screen.getByText('These mapping targets are not recognized as models for this channel: public-alias → ghost-upstream')
+    ).toBeInTheDocument();
+  });
+
+  it('does not warn when all Model Mapping keys are in Supported Models', () => {
+    render(
+      <TestHarness
+        defaultPricing=""
+        onReady={() => {}}
+        defaultValues={{
+          models: ['public-alias'],
+          model_mapping: '{"public-alias":"gpt-4o"}',
+        }}
+        availableModels={[{ id: 'public-alias', name: 'public-alias' }]}
+        currentCatalogModels={['public-alias']}
+      />
+    );
+
+    expect(screen.queryByText(/are not in Supported Models/)).not.toBeInTheDocument();
   });
 });

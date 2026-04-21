@@ -6,7 +6,15 @@ import { useForm } from 'react-hook-form';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useParams } from 'react-router-dom';
 import { CHANNEL_TYPES_WITH_DEDICATED_BASE_URL } from '../constants';
-import { isValidJSON, normalizeChannelType, stringifyToolingConfig, toInt, validateModelConfigs } from '../helpers';
+import {
+  isValidJSON,
+  normalizeChannelType,
+  sanitizeJsonField,
+  sanitizeJsonInput,
+  stringifyToolingConfig,
+  toInt,
+  validateModelConfigs,
+} from '../helpers';
 import { type ChannelConfigForm, type ChannelForm, type EndpointInfo, channelSchema } from '../schemas';
 
 export const useChannelForm = () => {
@@ -37,6 +45,12 @@ export const useChannelForm = () => {
   const [pendingTypeChange, setPendingTypeChange] = useState<{
     fromType: number;
     toType: number;
+  } | null>(null);
+  // State for save warning confirmation dialog when Model Mapping keys/targets look suspicious.
+  const [pendingSaveConfirmation, setPendingSaveConfirmation] = useState<{
+    data: ChannelForm;
+    unreachableMappingKeys: string[];
+    unknownMappingTargets: { source: string; target: string }[];
   } | null>(null);
 
   const form = useForm<ChannelForm>({
@@ -180,7 +194,10 @@ export const useChannelForm = () => {
 
         const parseStringArrayField = (field: unknown): string[] => {
           if (Array.isArray(field)) {
-            return field.filter((item): item is string => typeof item === 'string').map((item) => item.trim()).filter((item) => item !== '');
+            return field
+              .filter((item): item is string => typeof item === 'string')
+              .map((item) => item.trim())
+              .filter((item) => item !== '');
           }
           if (typeof field !== 'string' || field.trim() === '') {
             return [];
@@ -190,7 +207,10 @@ export const useChannelForm = () => {
             if (!Array.isArray(parsed)) {
               return [];
             }
-            return parsed.filter((item): item is string => typeof item === 'string').map((item) => item.trim()).filter((item) => item !== '');
+            return parsed
+              .filter((item): item is string => typeof item === 'string')
+              .map((item) => item.trim())
+              .filter((item) => item !== '');
           } catch (_e) {
             return [];
           }
@@ -360,7 +380,71 @@ export const useChannelForm = () => {
     }
   }, [normalizedChannelType, loadDefaultPricing]);
 
+  /**
+   * getMappingWarnings inspects Model Mapping entries against the channel's configuration to
+   * surface silent misconfigurations before saving:
+   * - Source (key) not in Supported Models → requests to the alias cannot reach this channel.
+   * - Target (value) not in either the channel's supported list or the channel-type catalog →
+   *   likely a typo that will cause the upstream to reject requests.
+   */
+  const getMappingWarnings = (data: ChannelForm): { unreachableKeys: string[]; unknownTargets: { source: string; target: string }[] } => {
+    const empty = { unreachableKeys: [] as string[], unknownTargets: [] as { source: string; target: string }[] };
+    const mappingRaw = (data.model_mapping || '').trim();
+    if (!mappingRaw) {
+      return empty;
+    }
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(sanitizeJsonInput(mappingRaw));
+    } catch {
+      return empty;
+    }
+    if (!parsed || Array.isArray(parsed) || typeof parsed !== 'object') {
+      return empty;
+    }
+    const supported = new Set((data.models || []).map((model) => model.trim().toLowerCase()).filter((model) => model.length > 0));
+    const channelType = normalizeChannelType(data.type);
+    const catalog = channelType !== null ? (modelsCatalog[channelType] ?? []) : [];
+    const catalogSet = new Set(catalog.map((model) => model.trim().toLowerCase()).filter((model) => model.length > 0));
+    const knownTargets = new Set<string>();
+    supported.forEach((entry) => knownTargets.add(entry));
+    catalogSet.forEach((entry) => knownTargets.add(entry));
+
+    const unreachableKeys: string[] = [];
+    const unknownTargets: { source: string; target: string }[] = [];
+    for (const [rawKey, rawValue] of Object.entries(parsed as Record<string, unknown>)) {
+      const key = rawKey.trim();
+      if (key.length === 0) continue;
+      if (!supported.has(key.toLowerCase())) {
+        unreachableKeys.push(key);
+      }
+      if (catalogSet.size === 0) continue; // Cannot judge target validity without a catalog.
+      if (typeof rawValue !== 'string') continue;
+      const target = rawValue.trim();
+      if (target.length === 0) continue;
+      if (!knownTargets.has(target.toLowerCase())) {
+        unknownTargets.push({ source: key, target });
+      }
+    }
+    return { unreachableKeys, unknownTargets };
+  };
+
   const onSubmit = async (data: ChannelForm) => {
+    // Intercept before hitting the network so admins can review Model Mapping entries that
+    // look wrong (sources unreachable or targets not recognized by this channel).
+    const { unreachableKeys, unknownTargets } = getMappingWarnings(data);
+    if (unreachableKeys.length > 0 || unknownTargets.length > 0) {
+      setPendingSaveConfirmation({
+        data,
+        unreachableMappingKeys: unreachableKeys,
+        unknownMappingTargets: unknownTargets,
+      });
+      return;
+    }
+    await performSubmit(data);
+  };
+
+  const performSubmit = async (data: ChannelForm) => {
     setIsSubmitting(true);
     try {
       const payload: any = { ...data };
@@ -434,7 +518,7 @@ export const useChannelForm = () => {
         }
 
         try {
-          const oauthConfig = JSON.parse(data.key);
+          const oauthConfig = JSON.parse(sanitizeJsonInput(data.key));
           const requiredFields = ['client_type', 'client_id', 'coze_www_base', 'coze_api_base', 'private_key', 'public_key_id'];
 
           for (const field of requiredFields) {
@@ -522,8 +606,22 @@ export const useChannelForm = () => {
         payload.other = '2024-03-01-preview';
       }
 
-      const jsonFields = ['model_mapping', 'model_configs', 'inference_profile_arn_map', 'system_prompt'];
-      jsonFields.forEach((field) => {
+      // Admins may enter JSONC (comments + trailing commas) in these fields for
+      // readability; normalise to strict JSON so the backend parses successfully.
+      const jsoncFields = ['model_mapping', 'model_configs', 'inference_profile_arn_map', 'tooling'];
+      jsoncFields.forEach((field) => {
+        const v = payload[field];
+        if (typeof v === 'string' && v.trim() !== '') {
+          payload[field] = sanitizeJsonField(v);
+        }
+      });
+
+      if (watchType === 34 && watchConfig.auth_type === 'oauth_jwt' && typeof payload.key === 'string' && payload.key.trim() !== '') {
+        payload.key = sanitizeJsonField(payload.key);
+      }
+
+      const nullableEmptyFields = ['model_mapping', 'model_configs', 'inference_profile_arn_map', 'system_prompt'];
+      nullableEmptyFields.forEach((field) => {
         const v = payload[field];
         if (typeof v === 'string' && v.trim() === '') {
           payload[field] = null;
@@ -617,6 +715,24 @@ export const useChannelForm = () => {
     setPendingTypeChange(null);
   }, []);
 
+  /**
+   * Confirms the pending save (dismissing the Model Mapping warning) and submits.
+   */
+  const confirmSave = useCallback(async () => {
+    const pending = pendingSaveConfirmation;
+    if (!pending) return;
+    setPendingSaveConfirmation(null);
+    await performSubmit(pending.data);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingSaveConfirmation]);
+
+  /**
+   * Dismisses the pending save confirmation without submitting.
+   */
+  const cancelSave = useCallback(() => {
+    setPendingSaveConfirmation(null);
+  }, []);
+
   const testChannel = async () => {
     if (!channelId) return;
 
@@ -680,5 +796,9 @@ export const useChannelForm = () => {
     requestTypeChange,
     confirmTypeChange,
     cancelTypeChange,
+    // Save warning handling (Model Mapping keys missing from Supported Models)
+    pendingSaveConfirmation,
+    confirmSave,
+    cancelSave,
   };
 };

@@ -232,8 +232,8 @@ func TestMaybeParseRealtimeUsageAudioAccumulation(t *testing.T) {
 	require.Equal(t, 300, usage.PromptTokens)
 	require.Equal(t, 150, usage.CompletionTokens)
 
-	require.Equal(t, 230, usage.PromptTokensDetails.AudioTokens)  // 80+150
-	require.Equal(t, 70, usage.PromptTokensDetails.TextTokens)    // 20+50
+	require.Equal(t, 230, usage.PromptTokensDetails.AudioTokens)     // 80+150
+	require.Equal(t, 70, usage.PromptTokensDetails.TextTokens)       // 20+50
 	require.Equal(t, 110, usage.CompletionTokensDetails.AudioTokens) // 40+70
 	require.Equal(t, 40, usage.CompletionTokensDetails.TextTokens)   // 10+30
 }

@@ -298,6 +298,14 @@
         "help": "Maximum requests per minute. 0 means unlimited.",
         "label": "Rate Limit"
       },
+      "save_warning": {
+        "cancel": "Retour",
+        "confirm": "Enregistrer quand même",
+        "description": "Les clés de Model Mapping suivantes ne figurent pas dans les Modèles Pris en Charge. Les requêtes vers ces alias seront rejetées par le routeur même si le mappage est enregistré :",
+        "hint": "Corrigez chaque entrée, ou enregistrez quand même pour conserver le mappage tel quel.",
+        "target_description": "Les cibles de Model Mapping suivantes ne sont pas reconnues comme des modèles de ce canal. Le fournisseur upstream peut rejeter ces requêtes :",
+        "title": "Model Mapping contient des entrées suspectes"
+      },
       "spark": {
         "version": {
           "help": "Sélectionnez la version de l'API pour iFlytek Spark (ex: v3.5).",
@@ -366,9 +374,14 @@
         "invalid_json": "Format JSON invalide",
         "invalid_json_short": "✗ JSON invalide",
         "invalid_json_title": "JSON invalide",
+        "mapping_keys_not_supported": "Ces clés de mappage ne figurent pas dans les Modèles Pris en Charge ; les requêtes vers ces alias seront rejetées : {{models}}",
+        "mapping_targets_not_recognized": "Ces cibles de mappage ne sont pas reconnues comme modèles de ce canal : {{entries}}",
         "model_configs_message": "Les configurations de modèle sont invalides.",
         "model_configs_title": "Configurations invalides",
         "model_mapping_invalid": "Le mappage de modèles contient un JSON invalide.",
+        "model_mapping_invalid_entries": "Ces entrées de Model Mapping ont des valeurs vides ou non chaînes : {{keys}}",
+        "model_mapping_parse_error": "Le JSON de Model Mapping est invalide : {{error}}",
+        "model_mapping_shape_invalid": "Model Mapping doit être un objet JSON de la forme { \"from\": \"to\" }.",
         "oauth_invalid_json": "Le JSON de configuration OAuth JWT est invalide.",
         "oauth_missing_field_message": "Configuration OAuth JWT manquante : {{field}}",
         "oauth_missing_field_title": "Champ manquant",

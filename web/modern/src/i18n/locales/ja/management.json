@@ -298,6 +298,14 @@
         "help": "Maximum requests per minute. 0 means unlimited.",
         "label": "Rate Limit"
       },
+      "save_warning": {
+        "cancel": "戻る",
+        "confirm": "このまま保存",
+        "description": "以下の Model Mapping キーはサポートモデルに含まれていません。マッピングを保存しても、これらのエイリアス宛てのリクエストはルーターに拒否されます：",
+        "hint": "各項目を修正するか、このまま保存してマッピングを現状のまま保持してください。",
+        "target_description": "以下の Model Mapping ターゲットは、このチャンネルのモデルとして認識されません。上流プロバイダーがこれらのリクエストを拒否する可能性があります：",
+        "title": "Model Mapping に疑わしい項目があります"
+      },
       "spark": {
         "version": {
           "help": "iFlytek Spark の API バージョンを選択します (例: v3.5)。",
@@ -366,9 +374,14 @@
         "invalid_json": "無効な JSON フォーマット",
         "invalid_json_short": "✗ 無効な JSON",
         "invalid_json_title": "無効な JSON",
+        "mapping_keys_not_supported": "これらのマッピングキーはサポートモデルに含まれていないため、該当エイリアスへのリクエストは拒否されます: {{models}}",
+        "mapping_targets_not_recognized": "これらのマッピングターゲットは、このチャンネルのモデルとして認識されません: {{entries}}",
         "model_configs_message": "モデル設定が無効です。",
         "model_configs_title": "無効な設定",
         "model_mapping_invalid": "モデルマッピングに無効な JSON が含まれています。",
+        "model_mapping_invalid_entries": "これらのモデルマッピング項目は値が空、または文字列ではありません: {{keys}}",
+        "model_mapping_parse_error": "モデルマッピングの JSON が無効です: {{error}}",
+        "model_mapping_shape_invalid": "モデルマッピングは { \"from\": \"to\" } 形式の JSON オブジェクトである必要があります。",
         "oauth_invalid_json": "OAuth JWT 設定 JSON が無効です。",
         "oauth_missing_field_message": "OAuth JWT 設定が不足しています: {{field}}",
         "oauth_missing_field_title": "不足しているフィールド",

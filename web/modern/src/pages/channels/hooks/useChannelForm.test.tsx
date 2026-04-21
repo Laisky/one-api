@@ -194,4 +194,66 @@ describe('useChannelForm', () => {
       })
     );
   });
+
+  it('blocks save when Model Mapping keys are missing from Supported Models until confirmed', async () => {
+    mockApiGet.mockImplementation((url) => {
+      if (url.startsWith('/api/channel/1')) {
+        return Promise.resolve({
+          data: {
+            success: true,
+            data: {
+              id: 1,
+              type: 1,
+              name: 'Test Channel',
+              models: 'gpt-4o',
+              group: 'default',
+              config: '{}',
+              tooling: '{}',
+            },
+          },
+        });
+      }
+      if (url.startsWith('/api/models')) {
+        return Promise.resolve({ data: { success: true, data: { 1: ['gpt-4o'] } } });
+      }
+      if (url.startsWith('/api/option/')) {
+        return Promise.resolve({ data: { success: true, data: [] } });
+      }
+      if (url.startsWith('/api/channel/default-pricing')) {
+        return Promise.resolve({ data: { success: true, data: { model_configs: '{}', tooling: '{}' } } });
+      }
+      if (url.startsWith('/api/channel/metadata')) {
+        return Promise.resolve({ data: { success: true, data: { default_base_url: 'https://api.openai.com' } } });
+      }
+      return Promise.resolve({ data: { success: false } });
+    });
+    mockApiPut.mockResolvedValue({ data: { success: true, message: '' } });
+
+    const { result } = renderHook(() => useChannelForm());
+
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false);
+    });
+
+    // First attempt: mapping has a source alias not in Supported Models AND an unknown target.
+    await act(async () => {
+      await result.current.onSubmit({
+        ...result.current.form.getValues(),
+        model_mapping: '{"ghost-alias":"gpt-4o","gpt-4o":"mystery-upstream"}',
+      });
+    });
+
+    expect(mockApiPut).not.toHaveBeenCalled();
+    expect(result.current.pendingSaveConfirmation).not.toBeNull();
+    expect(result.current.pendingSaveConfirmation?.unreachableMappingKeys).toEqual(['ghost-alias']);
+    expect(result.current.pendingSaveConfirmation?.unknownMappingTargets).toEqual([{ source: 'gpt-4o', target: 'mystery-upstream' }]);
+
+    // Confirming the dialog should perform the save.
+    await act(async () => {
+      await result.current.confirmSave();
+    });
+
+    expect(mockApiPut).toHaveBeenCalledTimes(1);
+    expect(result.current.pendingSaveConfirmation).toBeNull();
+  });
 });

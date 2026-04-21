@@ -5,7 +5,15 @@ import { NotificationsProvider } from '@/components/ui/notifications';
 import { api } from '@/lib/api';
 import { persistSystemStatus } from '@/lib/utils';
 import { Suspense, lazy, useEffect } from 'react';
-import { Route, BrowserRouter as Router, Routes } from 'react-router-dom';
+import { Route, BrowserRouter as Router, Routes, useLocation } from 'react-router-dom';
+
+function ScrollToTop() {
+  const { pathname } = useLocation();
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [pathname]);
+  return null;
+}
 
 // Route-based code splitting: each page loads on demand
 const HomePage = lazy(() => import('@/pages/HomePage').then((m) => ({ default: m.HomePage })));
@@ -78,6 +86,7 @@ function App() {
     <ThemeProvider defaultTheme="system" storageKey="one-api-theme">
       <NotificationsProvider>
         <Router>
+          <ScrollToTop />
           <div className="bg-background">
             <Suspense fallback={<PageLoader />}>
               <Routes>

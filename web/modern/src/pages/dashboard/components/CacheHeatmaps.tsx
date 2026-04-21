@@ -122,10 +122,7 @@ function HeatmapCard({ title, heatmap, statisticsMetric, metricLabel, topN, char
   const { t } = useTranslation();
 
   const visible = useMemo(() => heatmap.entities.slice(0, topN), [heatmap.entities, topN]);
-  const maxVolume = useMemo(
-    () => visible.reduce((max, entity) => (entity.totalVolume > max ? entity.totalVolume : max), 0),
-    [visible]
-  );
+  const maxVolume = useMemo(() => visible.reduce((max, entity) => (entity.totalVolume > max ? entity.totalVolume : max), 0), [visible]);
 
   // Dimming threshold: cells with very low absolute volume get an opacity hint
   const lowVolumeThreshold = statisticsMetric === 'requests' ? 3 : 100;
@@ -196,10 +193,7 @@ function EntityRow({ entity, days, statisticsMetric, chartHsl, lowVolumeThreshol
 
   return (
     <>
-      <div
-        className="text-xs font-medium truncate sticky left-0 bg-card pr-2 flex items-center"
-        title={entity.name}
-      >
+      <div className="text-xs font-medium truncate sticky left-0 bg-card pr-2 flex items-center" title={entity.name}>
         {entity.name}
       </div>
       {days.map((day) => {

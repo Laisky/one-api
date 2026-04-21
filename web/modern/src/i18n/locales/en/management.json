@@ -211,7 +211,7 @@
         "selected_count": "Hidden Models ({{count}})"
       },
       "inference_profile": {
-        "help": "JSON map of model name to AWS Bedrock Inference Profile ARN. Use to route certain models via specific Bedrock inference profiles.",
+        "help": "JSON map of model name to AWS Bedrock Inference Profile ARN. Use to route certain models via specific Bedrock inference profiles. Comments (// and /* */) and trailing commas are allowed.",
         "label": "Inference Profile ARN Map (AWS Bedrock)",
         "note": "Map model names to AWS Bedrock inference profile ARNs (optional)",
         "placeholder": "AWS Bedrock inference profile ARN mapping:\n{{example}}"
@@ -229,7 +229,7 @@
       },
       "model_configs": {
         "format_error": "Unable to format model_configs: {{error}}",
-        "help": "Unified per-model settings. Fields: ratio (input pricing multiplier), completion_ratio (output multiplier), max_tokens (limit).",
+        "help": "Unified per-model settings. Fields: ratio (input pricing multiplier), completion_ratio (output multiplier), max_tokens (limit). Comments (// and /* */) and trailing commas are allowed.",
         "invalid": "Invalid model configs format",
         "invalid_short": "✗ Invalid Config",
         "label": "Model Configs (JSON)",
@@ -240,7 +240,7 @@
         "valid": "✓ Valid Config"
       },
       "model_mapping": {
-        "help": "Map external/legacy model names to this provider's actual model names. JSON object: { \"from\": \"to\" }.",
+        "help": "Map external/legacy model names to this provider's actual model names. JSON object: { \"from\": \"to\" }. Comments (// and /* */) and trailing commas are allowed.",
         "label": "Model Mapping (JSON)",
         "note": "Map model names for this channel (optional)",
         "placeholder": "Model name mapping in JSON format:\n{{example}}"
@@ -298,6 +298,14 @@
         "help": "Maximum requests per minute. 0 means unlimited.",
         "label": "Rate Limit"
       },
+      "save_warning": {
+        "cancel": "Go Back",
+        "confirm": "Save Anyway",
+        "description": "The following Model Mapping keys are not listed in Supported Models. Requests to these aliases will be rejected by the router even though the mapping is saved:",
+        "hint": "Correct each entry, or save anyway to keep the mapping as-is.",
+        "target_description": "The following Model Mapping targets are not recognized as models for this channel. The upstream provider may reject these requests:",
+        "title": "Model Mapping has suspicious entries"
+      },
       "spark": {
         "version": {
           "help": "Select the API version for iFlytek Spark (e.g., v3.5).",
@@ -324,7 +332,7 @@
         },
         "fix_json_notice": "Fix the tooling JSON above to manage the built-in tool whitelist.",
         "format_error": "Unable to format tooling config: {{error}}",
-        "help": "Define channel-wide built-in tool policy. Configure the whitelist and per-call pricing for provider built-in tools.",
+        "help": "Define channel-wide built-in tool policy. Configure the whitelist and per-call pricing for provider built-in tools. Comments (// and /* */) and trailing commas are allowed.",
         "invalid": "Invalid tooling config format",
         "label": "Tooling Config (JSON)",
         "no_whitelist": "No tools whitelisted",
@@ -366,9 +374,14 @@
         "invalid_json": "Invalid JSON format",
         "invalid_json_short": "✗ Invalid JSON",
         "invalid_json_title": "Invalid JSON",
+        "mapping_keys_not_supported": "These mapping keys are not in Supported Models, so requests to these aliases will be rejected: {{models}}",
+        "mapping_targets_not_recognized": "These mapping targets are not recognized as models for this channel: {{entries}}",
         "model_configs_message": "Model Configs are invalid.",
         "model_configs_title": "Invalid configs",
         "model_mapping_invalid": "Model Mapping has invalid JSON.",
+        "model_mapping_invalid_entries": "These Model Mapping entries have empty or non-string values: {{keys}}",
+        "model_mapping_parse_error": "Model Mapping JSON is invalid: {{error}}",
+        "model_mapping_shape_invalid": "Model Mapping must be a JSON object of the form { \"from\": \"to\" }.",
         "oauth_invalid_json": "OAuth JWT configuration JSON is invalid.",
         "oauth_missing_field_message": "OAuth JWT configuration missing: {{field}}",
         "oauth_missing_field_title": "Missing field",

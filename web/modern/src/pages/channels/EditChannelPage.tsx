@@ -14,6 +14,7 @@ import { ChannelMCPSettings } from './components/ChannelMCPSettings';
 import { ChannelModelSettings } from './components/ChannelModelSettings';
 import { ChannelSpecificConfig } from './components/ChannelSpecificConfig';
 import { ChannelToolingSettings } from './components/ChannelToolingSettings';
+import { ChannelSaveWarningDialog } from './components/ChannelSaveWarningDialog';
 import { ChannelTypeChangeDialog } from './components/ChannelTypeChangeDialog';
 import { CHANNEL_TYPES } from './constants';
 import { useChannelForm } from './hooks/useChannelForm';
@@ -44,6 +45,10 @@ export function EditChannelPage() {
     requestTypeChange,
     confirmTypeChange,
     cancelTypeChange,
+    // Save warning handling
+    pendingSaveConfirmation,
+    confirmSave,
+    cancelSave,
   } = useChannelForm();
 
   const selectedChannelType = CHANNEL_TYPES.find((t) => t.value === normalizedChannelType);
@@ -116,6 +121,17 @@ export function EditChannelPage() {
           toType={pendingTypeChange ? getTypeName(pendingTypeChange.toType) : ''}
           onConfirm={confirmTypeChange}
           onCancel={cancelTypeChange}
+          tr={tr}
+        />
+        <ChannelSaveWarningDialog
+          open={pendingSaveConfirmation !== null}
+          onOpenChange={(open) => {
+            if (!open) cancelSave();
+          }}
+          unreachableMappingKeys={pendingSaveConfirmation?.unreachableMappingKeys ?? []}
+          unknownMappingTargets={pendingSaveConfirmation?.unknownMappingTargets ?? []}
+          onConfirm={confirmSave}
+          onCancel={cancelSave}
           tr={tr}
         />
         <Card className="border-0 shadow-none md:border md:shadow-sm">

@@ -90,11 +90,110 @@ export const findPricingEntryCaseInsensitive = (
   return { key: matchedKey, entry: pricing[matchedKey] };
 };
 
-// JSON validation functions
+// Admin-entered JSON inputs are JSONC-flavoured: they may include `//` and
+// `/* */` comments and trailing commas for better authoring ergonomics. The
+// helpers below normalise the text into strict JSON before `JSON.parse`, and
+// are also used at submit time so the backend only ever sees canonical JSON.
+
+const stripJsonComments = (input: string): string => {
+  let output = '';
+  let i = 0;
+  const n = input.length;
+  let inString = false;
+  while (i < n) {
+    const ch = input[i];
+    const next = i + 1 < n ? input[i + 1] : '';
+    if (inString) {
+      output += ch;
+      if (ch === '\\' && i + 1 < n) {
+        output += input[i + 1];
+        i += 2;
+        continue;
+      }
+      if (ch === '"') {
+        inString = false;
+      }
+      i++;
+      continue;
+    }
+    if (ch === '"') {
+      inString = true;
+      output += ch;
+      i++;
+      continue;
+    }
+    if (ch === '/' && next === '/') {
+      i += 2;
+      while (i < n && input[i] !== '\n' && input[i] !== '\r') i++;
+      continue;
+    }
+    if (ch === '/' && next === '*') {
+      i += 2;
+      while (i < n && !(input[i] === '*' && input[i + 1] === '/')) i++;
+      if (i < n) i += 2;
+      continue;
+    }
+    output += ch;
+    i++;
+  }
+  return output;
+};
+
+const stripTrailingCommas = (input: string): string => {
+  let output = '';
+  let i = 0;
+  const n = input.length;
+  let inString = false;
+  while (i < n) {
+    const ch = input[i];
+    if (inString) {
+      output += ch;
+      if (ch === '\\' && i + 1 < n) {
+        output += input[i + 1];
+        i += 2;
+        continue;
+      }
+      if (ch === '"') {
+        inString = false;
+      }
+      i++;
+      continue;
+    }
+    if (ch === '"') {
+      inString = true;
+      output += ch;
+      i++;
+      continue;
+    }
+    if (ch === ',') {
+      let j = i + 1;
+      while (j < n && /\s/.test(input[j])) j++;
+      if (j < n && (input[j] === '}' || input[j] === ']')) {
+        i++;
+        continue;
+      }
+    }
+    output += ch;
+    i++;
+  }
+  return output;
+};
+
+/**
+ * sanitizeJsonInput converts admin-entered JSONC (JSON with line and block
+ * comments and trailing commas) into strict JSON. Safe to call on empty or
+ * already-clean input.
+ */
+export const sanitizeJsonInput = (jsonString: string): string => {
+  if (!jsonString) return jsonString;
+  return stripTrailingCommas(stripJsonComments(jsonString));
+};
+
+// JSON validation functions (accept JSONC-flavoured input)
 export const isValidJSON = (jsonString: string) => {
   if (!jsonString || jsonString.trim() === '') return true;
   try {
-    JSON.parse(jsonString);
+    JSON.parse(sanitizeJsonInput(jsonString));
     return true;
   } catch (_e) {
     return false;
@@ -104,8 +203,23 @@ export const isValidJSON = (jsonString: string) => {
 export const formatJSON = (jsonString: string) => {
   if (!jsonString || jsonString.trim() === '') return '';
   try {
-    const parsed = JSON.parse(jsonString);
+    const parsed = JSON.parse(sanitizeJsonInput(jsonString));
     return JSON.stringify(parsed, null, 2);
+  } catch (_e) {
+    return jsonString;
+  }
+};
+
+/**
+ * sanitizeJsonField returns canonical JSON if the input parses as JSONC,
+ * otherwise returns the original string so the backend can surface the
+ * validation error. Empty/whitespace inputs pass through unchanged.
+ */
+export const sanitizeJsonField = (jsonString: string): string => {
+  if (!jsonString || jsonString.trim() === '') return jsonString;
+  try {
+    const parsed = JSON.parse(sanitizeJsonInput(jsonString));
+    return JSON.stringify(parsed);
   } catch (_e) {
     return jsonString;
   }
@@ -118,7 +232,7 @@ export const validateModelConfigs = (configStr: string) => {
   }
 
   try {
-    const configs = JSON.parse(configStr);
+    const configs = JSON.parse(sanitizeJsonInput(configStr));
 
     if (typeof configs !== 'object' || configs === null || Array.isArray(configs)) {
       return { valid: false, error: 'Model configs must be a JSON object' };
@@ -192,7 +306,7 @@ export const validateToolingConfig = (configStr: string) => {
   }
 
   try {
-    const config = JSON.parse(configStr);
+    const config = JSON.parse(sanitizeJsonInput(configStr));
     if (typeof config !== 'object' || config === null || Array.isArray(config)) {
       return { valid: false, error: 'Tooling config must be a JSON object' };
     }
