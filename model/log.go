@@ -34,7 +34,7 @@ type Log struct {
 	// When a channel has model mapping configured (e.g., "my-model" -> "gpt-4"),
 	// this field preserves the original model name requested ("my-model") while ModelName
 	// holds the mapped model used for billing ("gpt-4").
-	OriginModelName   string `json:"origin_model_name" gorm:"index;default:''"`
+	OriginModelName   string `json:"origin_model_name" gorm:"index"`
 	Quota             int    `json:"quota" gorm:"default:0;index"`             // Added index for sorting
 	PromptTokens      int    `json:"prompt_tokens" gorm:"default:0;index"`     // Added index for sorting
 	CompletionTokens  int    `json:"completion_tokens" gorm:"default:0;index"` // Added index for sorting
