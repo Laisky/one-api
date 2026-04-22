@@ -140,7 +140,7 @@ func downloadImageFromHTTPURL(ctx context.Context, imageURL string) ([]byte, typ
 	contentType := resp.Header.Get("Content-Type")
 	format, err := detectImageFormat(contentType, imageURL)
 	if err != nil {
-		return nil, "", err
+		return nil, "", errors.Wrap(err, "detect image format")
 	}
 
 	// Read image data with size limit using configurable MaxInlineImageSizeMB

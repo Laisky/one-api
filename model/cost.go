@@ -418,7 +418,7 @@ func mysqlTableExists(table string) (bool, error) {
 	var res result
 	query := "SELECT COUNT(*) AS count FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = ?"
 	if err := DB.Raw(query, table).Scan(&res).Error; err != nil {
-		return false, err
+		return false, errors.Wrapf(err, "check mysql table %s exists", table)
 	}
 	return res.Count > 0, nil
 }
@@ -431,7 +431,7 @@ func mysqlColumnExists(table, column string) (bool, error) {
 	var res result
 	query := "SELECT COUNT(*) AS count FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = ? AND column_name = ?"
 	if err := DB.Raw(query, table, column).Scan(&res).Error; err != nil {
-		return false, err
+		return false, errors.Wrapf(err, "check mysql column %s.%s exists", table, column)
 	}
 	return res.Count > 0, nil
 }
@@ -444,7 +444,7 @@ func mysqlIndexExists(table, index string) (bool, error) {
 	var res result
 	query := "SELECT COUNT(*) AS count FROM information_schema.statistics WHERE table_schema = DATABASE() AND table_name = ? AND index_name = ?"
 	if err := DB.Raw(query, table, index).Scan(&res).Error; err != nil {
-		return false, err
+		return false, errors.Wrapf(err, "check mysql index %s on %s exists", index, table)
 	}
 	return res.Count > 0, nil
 }

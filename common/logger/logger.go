@@ -181,7 +181,7 @@ func (w *ginZapWriter) Write(p []byte) (int, error) {
 
 	if w.fallback != nil {
 		if _, err := w.fallback.Write(p); err != nil {
-			return 0, err
+			return 0, errors.Wrap(err, "write to fallback logger")
 		}
 	}
 

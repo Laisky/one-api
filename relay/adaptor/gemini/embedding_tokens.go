@@ -343,7 +343,7 @@ func buildEmbeddingContentFromMap(raw map[string]any) (ChatContent, bool, error)
 			}
 			part, multimodal, err := buildEmbeddingPartFromMap(partMap)
 			if err != nil {
-				return ChatContent{}, false, err
+				return ChatContent{}, false, errors.Wrap(err, "build embedding part")
 			}
 			if multimodal {
 				hasMultimodal = true

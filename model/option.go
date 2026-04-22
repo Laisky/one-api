@@ -24,7 +24,10 @@ func AllOption() ([]*Option, error) {
 	var options []*Option
 	var err error
 	err = DB.Find(&options).Error
-	return options, err
+	if err != nil {
+		return nil, errors.Wrap(err, "query all options")
+	}
+	return options, nil
 }
 
 // InitOptionMap initializes the OptionMap from config and database

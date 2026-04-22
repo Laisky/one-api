@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/Laisky/errors/v2"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
@@ -69,100 +70,100 @@ func NewOtelRecorder() (*OtelRecorder, error) {
 	var err error
 	// Relay metrics
 	if r.relayRequestDuration, err = meter.Float64Histogram("one_api_relay_request_duration_seconds", metric.WithDescription("Duration of API relay requests in seconds")); err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "create relay request duration histogram")
 	}
 	if r.relayRequestsTotal, err = meter.Int64Counter("one_api_relay_requests_total", metric.WithDescription("Total number of API relay requests")); err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "create relay requests total counter")
 	}
 	if r.relayTokensUsed, err = meter.Int64Counter("one_api_relay_tokens_total", metric.WithDescription("Total number of tokens used in relay requests")); err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "create relay tokens used counter")
 	}
 	if r.relayQuotaUsed, err = meter.Float64Counter("one_api_relay_quota_used_total", metric.WithDescription("Total quota used in relay requests")); err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "create relay quota used counter")
 	}
 
 	// HTTP metrics
 	if r.httpRequestDuration, err = meter.Float64Histogram("one_api_http_request_duration_seconds", metric.WithDescription("Duration of HTTP requests in seconds")); err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "create http request duration histogram")
 	}
 	if r.httpRequestsTotal, err = meter.Int64Counter("one_api_http_requests_total", metric.WithDescription("Total number of HTTP requests")); err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "create http requests total counter")
 	}
 	if r.httpActiveRequests, err = meter.Float64UpDownCounter("one_api_http_active_requests", metric.WithDescription("Number of active HTTP requests")); err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "create http active requests counter")
 	}
 
 	// Channel metrics
 	if r.channelStatus, err = meter.Int64Gauge("one_api_channel_status", metric.WithDescription("Channel status (1=enabled, 0=disabled, -1=auto_disabled)")); err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "create channel status gauge")
 	}
 	if r.channelBalance, err = meter.Float64Gauge("one_api_channel_balance_usd", metric.WithDescription("Channel balance in USD")); err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "create channel balance gauge")
 	}
 	if r.channelResponseTime, err = meter.Int64Gauge("one_api_channel_response_time_ms", metric.WithDescription("Channel response time in milliseconds")); err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "create channel response time gauge")
 	}
 	if r.channelSuccessRate, err = meter.Float64Gauge("one_api_channel_success_rate", metric.WithDescription("Channel success rate (0-1)")); err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "create channel success rate gauge")
 	}
 	if r.channelRequestsInFlight, err = meter.Float64UpDownCounter("one_api_channel_requests_in_flight", metric.WithDescription("Number of requests currently being processed by channel")); err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "create channel requests in flight counter")
 	}
 
 	// User metrics
 	if r.userRequestsTotal, err = meter.Int64Counter("one_api_user_requests_total", metric.WithDescription("Total number of requests by user")); err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "create user requests total counter")
 	}
 	if r.userQuotaUsed, err = meter.Float64Counter("one_api_user_quota_used_total", metric.WithDescription("Total quota used by user")); err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "create user quota used counter")
 	}
 	if r.userTokensUsed, err = meter.Int64Counter("one_api_user_tokens_total", metric.WithDescription("Total tokens used by user")); err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "create user tokens used counter")
 	}
 	if r.userBalance, err = meter.Float64Gauge("one_api_user_balance", metric.WithDescription("User balance")); err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "create user balance gauge")
 	}
 
 	// Database metrics
 	if r.dbQueriesTotal, err = meter.Int64Counter("one_api_db_queries_total", metric.WithDescription("Total number of database queries")); err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "create db queries total counter")
 	}
 
 	// Redis metrics
 	if r.redisCommandDuration, err = meter.Float64Histogram("one_api_redis_command_duration_seconds", metric.WithDescription("Duration of Redis commands in seconds")); err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "create redis command duration histogram")
 	}
 	if r.redisCommandsTotal, err = meter.Int64Counter("one_api_redis_commands_total", metric.WithDescription("Total number of Redis commands")); err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "create redis commands total counter")
 	}
 
 	// Rate limit metrics
 	if r.rateLimitHits, err = meter.Int64Counter("one_api_rate_limit_hits_total", metric.WithDescription("Total number of rate limit hits")); err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "create rate limit hits counter")
 	}
 
 	// Error metrics
 	if r.errorsTotal, err = meter.Int64Counter("one_api_errors_total", metric.WithDescription("Total number of errors")); err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "create errors total counter")
 	}
 
 	// Model metrics
 	if r.modelUsageDuration, err = meter.Float64Histogram("one_api_model_usage_duration_seconds", metric.WithDescription("Duration of model usage")); err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "create model usage duration histogram")
 	}
 
 	// Site-wide statistics (Dashboard)
 	if r.siteTotalQuota, err = meter.Int64Gauge("one_api_site_total_quota", metric.WithDescription("Total quota across all users")); err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "create site total quota gauge")
 	}
 	if r.siteUsedQuota, err = meter.Int64Gauge("one_api_site_used_quota", metric.WithDescription("Total used quota across all users")); err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "create site used quota gauge")
 	}
 	if r.siteTotalUsers, err = meter.Int64Gauge("one_api_site_total_users", metric.WithDescription("Total number of users")); err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "create site total users gauge")
 	}
 	if r.siteActiveUsers, err = meter.Int64Gauge("one_api_site_active_users", metric.WithDescription("Number of active users")); err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "create site active users gauge")
 	}
 
 	return r, nil

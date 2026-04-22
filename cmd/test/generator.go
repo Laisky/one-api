@@ -272,14 +272,14 @@ func ensureGenerationRecordSuccessful(record *generationRecord) error {
 func writeGenerationRecord(outputDir, timestamp, model, requestFormat string, record generationRecord) (string, error) {
 	data, err := json.MarshalIndent(record, "", "  ")
 	if err != nil {
-		return "", err
+		return "", errors.Wrap(err, "marshal generation record")
 	}
 
 	fileName := generationFileName(timestamp, model, requestFormat)
 	filePath := filepath.Join(outputDir, fileName)
 
 	if err := os.WriteFile(filePath, data, 0o644); err != nil {
-		return "", err
+		return "", errors.Wrap(err, "write generation record file")
 	}
 
 	return filePath, nil

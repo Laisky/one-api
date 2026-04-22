@@ -97,7 +97,7 @@ func parseChatResponseArgs(args []string, cfg config) (chatResponseOptions, erro
 	fs.StringVar(&opts.apiToken, "token", strings.TrimSpace(cfg.Token), "API token; defaults to API_TOKEN")
 
 	if err := fs.Parse(args); err != nil {
-		return chatResponseOptions{}, err
+		return chatResponseOptions{}, errors.Wrap(err, "parse chat response flags")
 	}
 
 	opts.apiEndpoint = strings.TrimSpace(opts.apiEndpoint)
@@ -209,7 +209,7 @@ func runChatResponseWebSocketProbe(ctx context.Context, logger glog.Logger, opts
 		}
 
 		if err := responseWebSocketMessageError(msg); err != nil {
-			return err
+			return errors.Wrap(err, "inspect websocket response message")
 		}
 
 		if isResponseWebSocketTerminalMessage(msg) {

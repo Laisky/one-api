@@ -137,7 +137,7 @@ func GetGroupModels(ctx context.Context, group string) ([]string, error) {
 		return nil, errors.Wrap(err, "get group models")
 	}
 	sort.Strings(models)
-	return models, err
+	return models, nil
 }
 
 var getGroupModelsV2Cache = gutils.NewExpCache[[]dto.EnabledAbility](context.Background(), time.Second*10)

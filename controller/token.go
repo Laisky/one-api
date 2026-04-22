@@ -374,12 +374,12 @@ func processPreConsume(ctx context.Context, _ *gin.Context, token *model.Token, 
 
 	preQuota, err := quotaToInt64(req.AddUsedQuota, "add_used_quota")
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, errors.Wrap(err, "convert add_used_quota to int64")
 	}
 
 	transactionID, err := generateTransactionID(ctx, token.Id)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, errors.Wrap(err, "generate transaction id")
 	}
 	req.TransactionID = &transactionID
 
@@ -387,7 +387,7 @@ func processPreConsume(ctx context.Context, _ *gin.Context, token *model.Token, 
 	expiresAt := helper.GetTimestamp() + timeoutSeconds
 
 	if err = model.PreConsumeTokenQuota(ctx, token.Id, preQuota); err != nil {
-		return nil, nil, err
+		return nil, nil, errors.Wrap(err, "pre-consume token quota")
 	}
 
 	logEntry := &model.Log{
@@ -428,12 +428,12 @@ func processPreConsume(ctx context.Context, _ *gin.Context, token *model.Token, 
 				"content": fmt.Sprintf("External (%s) pre-consume aborted (transaction %s)", req.AddReason, transactionID),
 			})
 		}
-		return nil, nil, err
+		return nil, nil, errors.Wrap(err, "create token transaction")
 	}
 
 	updatedToken, err := model.GetTokenByIds(token.Id, userID)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, errors.Wrap(err, "get token by ids after pre-consume")
 	}
 
 	return transaction, updatedToken, nil
@@ -453,7 +453,7 @@ func processPostConsume(ctx context.Context, c *gin.Context, token *model.Token,
 	if existingTxn == nil {
 		existingTxn, err = model.GetTokenTransactionByTokenAndID(ctx, token.Id, transactionID)
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, errors.Wrap(err, "get token transaction for post-consume")
 		}
 	}
 
@@ -471,14 +471,14 @@ func processPostConsume(ctx context.Context, c *gin.Context, token *model.Token,
 
 	finalQuota, err := quotaToInt64(*finalQuotaValue, "final_used_quota")
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, errors.Wrap(err, "convert final_used_quota to int64")
 	}
 
 	delta := finalQuota - existingTxn.PreQuota
 	quotaAdjusted := false
 	if delta != 0 {
 		if err = model.PostConsumeTokenQuota(ctx, token.Id, delta); err != nil {
-			return nil, nil, err
+			return nil, nil, errors.Wrap(err, "post-consume token quota delta")
 		}
 		quotaAdjusted = true
 	}
@@ -501,7 +501,7 @@ func processPostConsume(ctx context.Context, c *gin.Context, token *model.Token,
 		if quotaAdjusted {
 			_ = model.PostConsumeTokenQuota(ctx, token.Id, -delta)
 		}
-		return nil, nil, err
+		return nil, nil, errors.Wrap(err, "update token transaction for post-consume")
 	}
 
 	updatedFinal := finalQuota
@@ -534,7 +534,7 @@ func processPostConsume(ctx context.Context, c *gin.Context, token *model.Token,
 
 	updatedToken, err := model.GetTokenByIds(token.Id, userID)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, errors.Wrap(err, "get token by ids after post-consume")
 	}
 
 	return existingTxn, updatedToken, nil
@@ -552,7 +552,7 @@ func processCancelConsume(ctx context.Context, c *gin.Context, token *model.Toke
 
 	txn, err := model.GetTokenTransactionByTokenAndID(ctx, token.Id, transactionID)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, errors.Wrap(err, "get token transaction for cancel")
 	}
 
 	if txn.Status != model.TokenTransactionStatusPending {
@@ -560,7 +560,7 @@ func processCancelConsume(ctx context.Context, c *gin.Context, token *model.Toke
 	}
 
 	if err = model.PostConsumeTokenQuota(ctx, token.Id, -txn.PreQuota); err != nil {
-		return nil, nil, err
+		return nil, nil, errors.Wrap(err, "refund reserved token quota on cancel")
 	}
 
 	canceledAt := helper.GetTimestamp()
@@ -573,7 +573,7 @@ func processCancelConsume(ctx context.Context, c *gin.Context, token *model.Toke
 
 	if err = model.UpdateTokenTransaction(ctx, txn.Id, updates); err != nil {
 		_ = model.PostConsumeTokenQuota(ctx, token.Id, txn.PreQuota)
-		return nil, nil, err
+		return nil, nil, errors.Wrap(err, "update token transaction for cancel")
 	}
 
 	zero := int64(0)
@@ -600,7 +600,7 @@ func processCancelConsume(ctx context.Context, c *gin.Context, token *model.Toke
 
 	updatedToken, err := model.GetTokenByIds(token.Id, userID)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, errors.Wrap(err, "get token by ids after cancel")
 	}
 
 	return txn, updatedToken, nil
@@ -623,7 +623,7 @@ func processImmediateConsume(ctx context.Context, c *gin.Context, token *model.T
 
 	transaction, updatedToken, err := processPreConsume(ctx, c, token, userID, req, requestID, traceID)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, errors.Wrap(err, "pre-consume phase of immediate consume")
 	}
 
 	finalQuota := req.AddUsedQuota
@@ -634,7 +634,7 @@ func processImmediateConsume(ctx context.Context, c *gin.Context, token *model.T
 
 	transaction, updatedToken, err = processPostConsume(ctx, c, token, userID, &postReq, transaction)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, errors.Wrap(err, "post-consume phase of immediate consume")
 	}
 
 	return transaction, updatedToken, nil
@@ -747,7 +747,7 @@ func generateTransactionID(ctx context.Context, tokenID int) (string, error) {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
 				return candidate, nil
 			}
-			return "", err
+			return "", errors.Wrap(err, "lookup token transaction candidate")
 		}
 	}
 

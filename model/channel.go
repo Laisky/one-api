@@ -281,15 +281,15 @@ func cloneChannelToolingConfig(cfg *ChannelToolingConfig) *ChannelToolingConfig 
 func normalizeModelConfigLocal(cfg ModelConfigLocal) (ModelConfigLocal, error) {
 	video, err := normalizeVideoPricingLocal(cfg.Video)
 	if err != nil {
-		return ModelConfigLocal{}, err
+		return ModelConfigLocal{}, errors.Wrap(err, "normalize video pricing")
 	}
 	audio, err := normalizeAudioPricingLocal(cfg.Audio)
 	if err != nil {
-		return ModelConfigLocal{}, err
+		return ModelConfigLocal{}, errors.Wrap(err, "normalize audio pricing")
 	}
 	image, err := normalizeImagePricingLocal(cfg.Image)
 	if err != nil {
-		return ModelConfigLocal{}, err
+		return ModelConfigLocal{}, errors.Wrap(err, "normalize image pricing")
 	}
 
 	normalized := ModelConfigLocal{
@@ -365,12 +365,18 @@ func GetAllChannels(startIdx int, num int, scope string, sortBy string, sortOrde
 	default:
 		err = DB.Order(orderClause).Limit(num).Offset(startIdx).Omit("key").Find(&channels).Error
 	}
-	return channels, err
+	if err != nil {
+		return nil, errors.Wrap(err, "get all channels")
+	}
+	return channels, nil
 }
 
 func GetChannelCount() (count int64, err error) {
 	err = DB.Model(&Channel{}).Count(&count).Error
-	return count, err
+	if err != nil {
+		return 0, errors.Wrap(err, "count channels")
+	}
+	return count, nil
 }
 
 // GetAllEnabledChannels returns all channels with status = ChannelStatusEnabled
@@ -403,7 +409,10 @@ func SearchChannels(keyword string, sortBy string, sortOrder string) (channels [
 	orderClause := ValidateOrderClause(sortBy, sortOrder, channelSortFields, "id desc")
 
 	err = DB.Omit("key").Where("id = ? or name LIKE ?", helper.String2Int(keyword), keyword+"%").Order(orderClause).Find(&channels).Error
-	return channels, err
+	if err != nil {
+		return nil, errors.Wrap(err, "search channels")
+	}
+	return channels, nil
 }
 
 func GetChannelById(id int, selectAll bool) (*Channel, error) {

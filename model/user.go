@@ -99,12 +99,18 @@ func GetAllUsers(startIdx int, num int, order string, sortBy string, sortOrder s
 	}
 
 	err = query.Find(&users).Error
-	return users, err
+	if err != nil {
+		return nil, errors.Wrap(err, "get all users")
+	}
+	return users, nil
 }
 
 func GetUserCount() (count int64, err error) {
 	err = DB.Model(&User{}).Where("status != ?", UserStatusDeleted).Count(&count).Error
-	return count, err
+	if err != nil {
+		return 0, errors.Wrap(err, "count users")
+	}
+	return count, nil
 }
 
 func SearchUsers(keyword string, sortBy string, sortOrder string) (users []*User, err error) {
@@ -115,7 +121,10 @@ func SearchUsers(keyword string, sortBy string, sortOrder string) (users []*User
 	} else {
 		err = DB.Omit("password").Where("username LIKE ? or email LIKE ? or display_name LIKE ?", keyword+"%", keyword+"%", keyword+"%").Order(orderClause).Find(&users).Error
 	}
-	return users, err
+	if err != nil {
+		return nil, errors.Wrap(err, "search users")
+	}
+	return users, nil
 }
 
 func GetUserById(id int, selectAll bool) (*User, error) {
@@ -129,7 +138,10 @@ func GetUserById(id int, selectAll bool) (*User, error) {
 	} else {
 		err = DB.Omit("password", "access_token").First(&user, "id = ?", id).Error
 	}
-	return &user, err
+	if err != nil {
+		return nil, errors.Wrapf(err, "get user by id %d", id)
+	}
+	return &user, nil
 }
 
 func GetUserIdByAffCode(affCode string) (int, error) {
@@ -138,7 +150,10 @@ func GetUserIdByAffCode(affCode string) (int, error) {
 	}
 	var user User
 	err := DB.Select("id").First(&user, "aff_code = ?", affCode).Error
-	return user.Id, err
+	if err != nil {
+		return 0, errors.Wrapf(err, "get user id by aff code %s", affCode)
+	}
+	return user.Id, nil
 }
 
 func DeleteUserById(id int) (err error) {

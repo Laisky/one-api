@@ -160,7 +160,7 @@ func (r *largeDataReader) Read(p []byte) (int, error) {
 			}
 
 			r.finish()
-			return 0, err
+			return 0, errors.Wrap(err, "fill pending sse buffer")
 		}
 	}
 

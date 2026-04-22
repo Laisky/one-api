@@ -64,12 +64,12 @@ func detectClaudeMCPTools(c *gin.Context, meta *metalib.Meta, request *ClaudeMes
 	probe := &relaymodel.GeneralOpenAIRequest{Model: request.Model, Tools: buildClaudeToolsForMCP(request)}
 	registry, mcpToolNames, regErr := expandMCPBuiltinsInChatRequest(c, meta, channelRecord, adaptorInstance, probe)
 	if regErr != nil || registry == nil {
-		return nil, nil, nil, regErr
+		return nil, nil, nil, errors.Wrap(regErr, "expand MCP builtins in probe request")
 	}
 
 	convertedAny, err := openai_compatible.ConvertClaudeRequest(c, request)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, errors.Wrap(err, "convert Claude request to OpenAI format")
 	}
 	converted, ok := convertedAny.(*relaymodel.GeneralOpenAIRequest)
 	if !ok {
@@ -77,7 +77,7 @@ func detectClaudeMCPTools(c *gin.Context, meta *metalib.Meta, request *ClaudeMes
 	}
 	registry, mcpToolNames, regErr = expandMCPBuiltinsInChatRequest(c, meta, channelRecord, adaptorInstance, converted)
 	if regErr != nil || registry == nil {
-		return nil, nil, nil, regErr
+		return nil, nil, nil, errors.Wrap(regErr, "expand MCP builtins in converted request")
 	}
 	return registry, mcpToolNames, converted, nil
 }

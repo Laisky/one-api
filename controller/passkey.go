@@ -317,7 +317,7 @@ func PasskeyLoginFinish(c *gin.Context) {
 		resolvedUser = user
 		wUser, err := model.NewWebAuthnUser(user)
 		if err != nil {
-			return nil, err
+			return nil, errors.Wrap(err, "build webauthn user")
 		}
 		return wUser, nil
 	}

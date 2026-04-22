@@ -135,12 +135,18 @@ func GetAllUserTokens(userId int, startIdx int, num int, order string, sortBy st
 	}
 
 	err = query.Limit(num).Offset(startIdx).Find(&tokens).Error
-	return tokens, err
+	if err != nil {
+		return nil, errors.Wrapf(err, "get user %d tokens", userId)
+	}
+	return tokens, nil
 }
 
 func GetUserTokenCount(userId int) (count int64, err error) {
 	err = DB.Model(&Token{}).Where("user_id = ?", userId).Count(&count).Error
-	return count, err
+	if err != nil {
+		return 0, errors.Wrapf(err, "count user %d tokens", userId)
+	}
+	return count, nil
 }
 
 func SearchUserTokens(userId int, keyword string, startIdx int, num int, sortBy string, sortOrder string) (tokens []*Token, total int64, err error) {
@@ -151,7 +157,10 @@ func SearchUserTokens(userId int, keyword string, startIdx int, num int, sortBy 
 	orderClause := ValidateOrderClause(sortBy, sortOrder, tokenSortFields, "id desc")
 	db = db.Order(orderClause)
 	err = db.Count(&total).Limit(num).Offset(startIdx).Find(&tokens).Error
-	return tokens, total, err
+	if err != nil {
+		return nil, 0, errors.Wrapf(err, "search user %d tokens", userId)
+	}
+	return tokens, total, nil
 }
 
 func ValidateUserToken(ctx context.Context, key string) (token *Token, err error) {

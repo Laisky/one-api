@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/Laisky/errors/v2"
 	gmw "github.com/Laisky/gin-middlewares/v7"
 	glog "github.com/Laisky/go-utils/v6/log"
 	"github.com/Laisky/zap"
@@ -35,17 +36,17 @@ type channelPayloadMeta struct {
 func bindChannelPayload(c *gin.Context) (*model.Channel, json.RawMessage, channelPayloadMeta, error) {
 	payload := channelPayload{Channel: &model.Channel{}}
 	if err := common.UnmarshalBodyReusable(c, &payload); err != nil {
-		return nil, nil, channelPayloadMeta{}, err
+		return nil, nil, channelPayloadMeta{}, errors.Wrap(err, "unmarshal channel payload")
 	}
 
 	requestBody, err := common.GetRequestBody(c)
 	if err != nil {
-		return nil, nil, channelPayloadMeta{}, err
+		return nil, nil, channelPayloadMeta{}, errors.Wrap(err, "get request body")
 	}
 	rawFields := make(map[string]json.RawMessage)
 	if len(requestBody) > 0 {
 		if err := json.Unmarshal(requestBody, &rawFields); err != nil {
-			return nil, nil, channelPayloadMeta{}, err
+			return nil, nil, channelPayloadMeta{}, errors.Wrap(err, "unmarshal raw channel fields")
 		}
 	}
 	_, hiddenModelsProvided := rawFields["hidden_models"]
@@ -77,7 +78,7 @@ func parseToolingConfigPayload(raw json.RawMessage) (*model.ChannelToolingConfig
 
 		var cfg model.ChannelToolingConfig
 		if err := json.Unmarshal([]byte(toolingString), &cfg); err != nil {
-			return nil, true, err
+			return nil, true, errors.Wrap(err, "unmarshal tooling config string")
 		}
 		return &cfg, true, nil
 	}
@@ -85,7 +86,7 @@ func parseToolingConfigPayload(raw json.RawMessage) (*model.ChannelToolingConfig
 	// Otherwise, treat the payload as a JSON object.
 	var cfg model.ChannelToolingConfig
 	if err := json.Unmarshal(trimmed, &cfg); err != nil {
-		return nil, true, err
+		return nil, true, errors.Wrap(err, "unmarshal tooling config object")
 	}
 	return &cfg, true, nil
 }

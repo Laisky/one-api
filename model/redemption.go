@@ -46,12 +46,18 @@ func GetAllRedemptions(startIdx int, num int) ([]*Redemption, error) {
 	var redemptions []*Redemption
 	var err error
 	err = DB.Order("id desc").Limit(num).Offset(startIdx).Find(&redemptions).Error
-	return redemptions, err
+	if err != nil {
+		return nil, errors.Wrap(err, "get all redemptions")
+	}
+	return redemptions, nil
 }
 
 func GetRedemptionCount() (count int64, err error) {
 	err = DB.Model(&Redemption{}).Count(&count).Error
-	return count, err
+	if err != nil {
+		return 0, errors.Wrap(err, "count redemptions")
+	}
+	return count, nil
 }
 
 func SearchRedemptions(keyword string, startIdx int, num int, sortBy string, sortOrder string) (redemptions []*Redemption, total int64, err error) {
@@ -61,7 +67,10 @@ func SearchRedemptions(keyword string, startIdx int, num int, sortBy string, sor
 	}
 	db = db.Order(ValidateOrderClause(sortBy, sortOrder, redemptionSortFields, "id desc"))
 	err = db.Count(&total).Limit(num).Offset(startIdx).Find(&redemptions).Error
-	return redemptions, total, err
+	if err != nil {
+		return nil, 0, errors.Wrap(err, "search redemptions")
+	}
+	return redemptions, total, nil
 }
 
 func GetRedemptionById(id int) (*Redemption, error) {
@@ -71,7 +80,10 @@ func GetRedemptionById(id int) (*Redemption, error) {
 	redemption := Redemption{Id: id}
 	var err error = nil
 	err = DB.First(&redemption, "id = ?", id).Error
-	return &redemption, err
+	if err != nil {
+		return nil, errors.Wrapf(err, "get redemption by id %d", id)
+	}
+	return &redemption, nil
 }
 
 func Redeem(ctx context.Context, key string, userId int) (quota int64, err error) {

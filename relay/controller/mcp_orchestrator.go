@@ -228,7 +228,7 @@ func expandExplicitMCPTool(catalog *mcpToolCatalog, channelBlacklist []string, u
 	if len(allowed) == 0 {
 		resolvedTools, err := mcp.ResolveTools(server, catalog.toolsByServer[server.Id], channelBlacklist, userBlacklist, nil)
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, errors.Wrapf(err, "resolve MCP tools for server %s", tool.ServerLabel)
 		}
 		resolved := make([]mcpResolvedRequest, 0, len(resolvedTools))
 		functionTools := make([]relaymodel.Tool, 0, len(resolvedTools))
@@ -238,14 +238,14 @@ func expandExplicitMCPTool(catalog *mcpToolCatalog, channelBlacklist []string, u
 			}
 			candidates, err := mcp.BuildToolCandidates([]*model.MCPServer{server}, catalog.toolsByServer, channelBlacklist, userBlacklist, []string{entry.Tool.Name}, entry.Tool.Name, "")
 			if err != nil {
-				return nil, nil, err
+				return nil, nil, errors.Wrapf(err, "build MCP tool candidates for %s", entry.Tool.Name)
 			}
 			if len(candidates) == 0 {
 				continue
 			}
 			functionTool, err := buildFunctionToolFromMCP(candidates[0])
 			if err != nil {
-				return nil, nil, err
+				return nil, nil, errors.Wrapf(err, "build function tool from MCP candidate %s", entry.Tool.Name)
 			}
 			resolved = append(resolved, mcpResolvedRequest{Name: entry.Tool.Name, Candidates: candidates, Headers: tool.Headers})
 			functionTools = append(functionTools, functionTool)
@@ -262,14 +262,14 @@ func expandExplicitMCPTool(catalog *mcpToolCatalog, channelBlacklist []string, u
 	for _, name := range allowed {
 		candidates, err := mcp.BuildToolCandidates([]*model.MCPServer{server}, catalog.toolsByServer, channelBlacklist, userBlacklist, []string{name}, name, "")
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, errors.Wrapf(err, "build MCP tool candidates for %s", name)
 		}
 		if len(candidates) == 0 {
 			return nil, nil, errors.Errorf("no eligible MCP tool found for %s", name)
 		}
 		functionTool, err := buildFunctionToolFromMCP(candidates[0])
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, errors.Wrapf(err, "build function tool from MCP candidate %s", name)
 		}
 		resolved = append(resolved, mcpResolvedRequest{Name: name, Candidates: candidates, Headers: tool.Headers})
 		functionTools = append(functionTools, functionTool)
@@ -300,14 +300,14 @@ func expandAliasedMCPTool(catalog *mcpToolCatalog, channelBlacklist []string, us
 
 	candidates, err := mcp.BuildToolCandidates(servers, catalog.toolsByServer, channelBlacklist, userBlacklist, []string{name}, name, "")
 	if err != nil {
-		return mcpResolvedRequest{}, relaymodel.Tool{}, false, err
+		return mcpResolvedRequest{}, relaymodel.Tool{}, false, errors.Wrapf(err, "build MCP tool candidates for alias %s", name)
 	}
 	if len(candidates) == 0 {
 		return mcpResolvedRequest{}, relaymodel.Tool{}, false, nil
 	}
 	functionTool, err := buildFunctionToolFromMCP(candidates[0])
 	if err != nil {
-		return mcpResolvedRequest{}, relaymodel.Tool{}, false, err
+		return mcpResolvedRequest{}, relaymodel.Tool{}, false, errors.Wrapf(err, "build function tool from MCP alias %s", name)
 	}
 	return mcpResolvedRequest{Name: name, Candidates: candidates}, functionTool, true, nil
 }

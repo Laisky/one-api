@@ -794,7 +794,10 @@ func GetAllLogs(logType int, startTimestamp int64, endTimestamp int64, modelName
 	} else {
 		err = tx.Order(orderClause).Limit(num).Offset(startIdx).Find(&logs).Error
 	}
-	return logs, err
+	if err != nil {
+		return nil, errors.Wrap(err, "get all logs")
+	}
+	return logs, nil
 }
 
 // GetAllLogsCount returns the total number of logs matching the supplied filters.
@@ -826,7 +829,10 @@ func GetAllLogsCount(logType int, startTimestamp int64, endTimestamp int64, mode
 	tx = excludeProvisionalScope(tx)
 
 	err = tx.Model(&Log{}).Count(&count).Error
-	return count, err
+	if err != nil {
+		return 0, errors.Wrap(err, "count all logs")
+	}
+	return count, nil
 }
 
 // GetUserLogs lists logs belonging to a specific user with optional filtering and ordering.
@@ -860,7 +866,10 @@ func GetUserLogs(userId int, logType int, startTimestamp int64, endTimestamp int
 	} else {
 		err = tx.Order(orderClause).Limit(num).Offset(startIdx).Find(&logs).Error
 	}
-	return logs, err
+	if err != nil {
+		return nil, errors.Wrapf(err, "get user %d logs", userId)
+	}
+	return logs, nil
 }
 
 // GetUserLogsCount provides the number of logs for a user that satisfy the given filters.
@@ -886,7 +895,10 @@ func GetUserLogsCount(userId int, logType int, startTimestamp int64, endTimestam
 	tx = excludeProvisionalScope(tx)
 
 	err = tx.Model(&Log{}).Count(&count).Error
-	return count, err
+	if err != nil {
+		return 0, errors.Wrapf(err, "count user %d logs", userId)
+	}
+	return count, nil
 }
 
 // SearchAllLogs performs a keyword search across all log entries with pagination.
@@ -898,7 +910,10 @@ func SearchAllLogs(keyword string, startIdx int, num int, sortBy string, sortOrd
 	orderClause := GetLogOrderClause(sortBy, sortOrder)
 	db = db.Order(orderClause)
 	err = db.Count(&total).Limit(num).Offset(startIdx).Find(&logs).Error
-	return logs, total, err
+	if err != nil {
+		return nil, 0, errors.Wrap(err, "search all logs")
+	}
+	return logs, total, nil
 }
 
 // SearchUserLogs searches logs owned by a specific user using a keyword filter.
@@ -910,7 +925,10 @@ func SearchUserLogs(userId int, keyword string, startIdx int, num int, sortBy st
 	orderClause := GetLogOrderClause(sortBy, sortOrder)
 	db = db.Order(orderClause)
 	err = db.Count(&total).Limit(num).Offset(startIdx).Find(&logs).Error
-	return logs, total, err
+	if err != nil {
+		return nil, 0, errors.Wrapf(err, "search user %d logs", userId)
+	}
+	return logs, total, nil
 }
 
 // SumUsedQuota aggregates quota consumption over matching logs, scoped by model, user, token, or channel.
@@ -1046,8 +1064,10 @@ func SearchLogsByDayAndModel(userId, start, endExclusive int) (LogStatistics []*
 	}
 
 	err = LOG_DB.Raw(query, args...).Scan(&LogStatistics).Error
-
-	return LogStatistics, err
+	if err != nil {
+		return nil, errors.Wrap(err, "search logs by day and model")
+	}
+	return LogStatistics, nil
 }
 
 // SearchLogsByDayAndUser returns per-day, per-user aggregates for logs within
@@ -1099,7 +1119,10 @@ func SearchLogsByDayAndUser(userId, start, endExclusive int) ([]*dto.LogStatisti
 
 	var stats []*dto.LogStatisticByUser
 	err := LOG_DB.Raw(query, args...).Scan(&stats).Error
-	return stats, err
+	if err != nil {
+		return nil, errors.Wrap(err, "search logs by day and user")
+	}
+	return stats, nil
 }
 
 // SearchLogsByDayAndToken returns per-day, per-token aggregates (scoped by
@@ -1154,5 +1177,8 @@ func SearchLogsByDayAndToken(userId, start, endExclusive int) ([]*dto.LogStatist
 
 	var stats []*dto.LogStatisticByToken
 	err := LOG_DB.Raw(query, args...).Scan(&stats).Error
-	return stats, err
+	if err != nil {
+		return nil, errors.Wrap(err, "search logs by day and token")
+	}
+	return stats, nil
 }

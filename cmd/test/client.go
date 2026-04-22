@@ -327,7 +327,7 @@ func collectStreamBody(body io.Reader, limit int) ([]byte, error) {
 			if err == io.EOF {
 				break
 			}
-			return buffer.Bytes(), err
+			return buffer.Bytes(), errors.Wrap(err, "read stream chunk")
 		}
 	}
 

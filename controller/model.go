@@ -219,7 +219,7 @@ func getRequestUserGroup(c *gin.Context) (context.Context, string, error) {
 	}
 	group, err := model.CacheGetUserGroup(ctx, c.GetInt(ctxkey.Id))
 	if err != nil {
-		return ctx, "", err
+		return ctx, "", errors.Wrap(err, "cache get user group")
 	}
 	return ctx, group, nil
 }
@@ -398,7 +398,7 @@ func listAllSupportedModels() ([]OpenAIModels, error) {
 	}
 	channels, err := model.GetAllEnabledChannels()
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "get all enabled channels")
 	}
 	created := int(time.Now().Unix())
 	for _, ch := range channels {

@@ -93,7 +93,7 @@ func parseAudioArgs(args []string) (audioOptions, error) {
 	fs.StringVar(&sourceFlag, "input", "", "alias for --source")
 
 	if err := fs.Parse(args); err != nil {
-		return audioOptions{}, err
+		return audioOptions{}, githubErrors.Wrap(err, "parse audio flags")
 	}
 
 	source := strings.TrimSpace(sourceFlag)

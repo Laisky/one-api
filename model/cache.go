@@ -158,7 +158,7 @@ func fetchAndUpdateUserQuota(ctx context.Context, id int) (quota int64, err erro
 	lg := logger.FromContext(ctx)
 	quota, err = GetUserQuota(id)
 	if err != nil {
-		return 0, err
+		return 0, errors.Wrap(err, "get user quota")
 	}
 	err = common.RedisSet(ctx, fmt.Sprintf("user_quota:%d", id), fmt.Sprintf("%d", quota), time.Duration(UserId2QuotaCacheSeconds)*time.Second)
 	if err != nil {

@@ -60,7 +60,7 @@ func parseTestResponse(resp string) (*openai.TextResponse, string, error) {
 	var response openai.TextResponse
 	err := json.Unmarshal([]byte(resp), &response)
 	if err != nil {
-		return nil, "", err
+		return nil, "", errors.Wrap(err, "unmarshal test response")
 	}
 	if len(response.Choices) == 0 {
 		return nil, "", errors.New("response has no choices")
