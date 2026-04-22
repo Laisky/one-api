@@ -696,9 +696,24 @@ var gptImageTokenBucketPrices = map[string]gptImageTokenBucketPricing{
 		cachedInputImageUSD: 2.0,
 		outputImageUSD:      32.0,
 	},
+	// https://platform.openai.com/docs/models/gpt-image-2
+	"gpt-image-2": {
+		inputTextUSD:        5.0,
+		cachedInputTextUSD:  1.25,
+		inputImageUSD:       8.0,
+		cachedInputImageUSD: 2.0,
+		outputImageUSD:      30.0,
+	},
+	"gpt-image-2-2026-04-21": {
+		inputTextUSD:        5.0,
+		cachedInputTextUSD:  1.25,
+		inputImageUSD:       8.0,
+		cachedInputImageUSD: 2.0,
+		outputImageUSD:      30.0,
+	},
 }
 
-// computeGptImageTokenQuota calculates quota for gpt-image-1 family models using five billing buckets:
+// computeGptImageTokenQuota calculates quota for GPT image family models using five billing buckets:
 // input text, cached input text, input image, cached input image, and output image tokens.
 // Prices are expressed in USD per 1M tokens and multiplied by the groupRatio (quota multiplier) before returning quota units.
 func computeGptImageTokenQuota(modelName string, usage *relaymodel.Usage, groupRatio float64) float64 {
@@ -763,7 +778,7 @@ func computeImageUsageQuota(modelName string, usage *relaymodel.Usage, groupRati
 		return 0
 	}
 	switch modelName {
-	case "gpt-image-1", "gpt-image-1-mini", "chatgpt-image-latest", "gpt-image-1.5", "gpt-image-1.5-2025-12-16":
+	case "gpt-image-1", "gpt-image-1-mini", "chatgpt-image-latest", "gpt-image-1.5", "gpt-image-1.5-2025-12-16", "gpt-image-2", "gpt-image-2-2026-04-21":
 		return computeGptImageTokenQuota(modelName, usage, groupRatio)
 	default:
 		// Add more models here as they publish token pricing for image buckets
@@ -871,7 +886,7 @@ func computeLegacyImageTokenQuota(modelName string, usage *relaymodel.Usage, gro
 			quota *= groupRatio
 		}
 		return quota
-	case "chatgpt-image-latest", "gpt-image-1.5", "gpt-image-1.5-2025-12-16":
+	case "chatgpt-image-latest", "gpt-image-1.5", "gpt-image-1.5-2025-12-16", "gpt-image-2", "gpt-image-2-2026-04-21":
 		textTokens := usage.PromptTokensDetails.TextTokens
 		if textTokens < 0 {
 			textTokens = 0

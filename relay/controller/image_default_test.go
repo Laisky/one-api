@@ -84,6 +84,29 @@ func TestGetImageRequest_DefaultQuality_GPTImage1Mini(t *testing.T) {
 	require.Equal(t, "high", ir.Quality, "expected default quality 'high' for gpt-image-1-mini")
 }
 
+func TestGetImageRequest_Defaults_GPTImage2(t *testing.T) {
+	t.Parallel()
+	gin.SetMode(gin.TestMode)
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+
+	body := []byte(`{
+        "model": "gpt-image-2",
+        "prompt": "test prompt"
+    }`)
+	req := httptest.NewRequest("POST", "/v1/images/generations", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	c.Request = req
+
+	ir, err := getImageRequest(c, 0)
+	require.NoError(t, err, "getImageRequest error")
+	cfg, ok := pricing.ResolveModelConfig("gpt-image-2", nil, &openai.Adaptor{})
+	require.True(t, ok && cfg.Image != nil, "expected pricing config for gpt-image-2")
+	applyImageDefaults(ir, cfg.Image)
+	require.Equal(t, "1024x1024", ir.Size, "expected default size '1024x1024' for gpt-image-2")
+	require.Equal(t, "auto", ir.Quality, "expected default quality 'auto' for gpt-image-2")
+}
+
 func TestGetImageRequest_DefaultQuality_DALLE2(t *testing.T) {
 	t.Parallel()
 	gin.SetMode(gin.TestMode)

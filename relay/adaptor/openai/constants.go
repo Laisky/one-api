@@ -599,6 +599,88 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 			},
 		},
 	},
+	// OpenAI documents broader dynamic resolution support for GPT Image 2, but one-api
+	// currently prices the explicitly published 1024/1536 render tiers only.
+	"gpt-image-2": {
+		Ratio:            5.0 * ratio.MilliTokensUsd,
+		CachedInputRatio: 1.25 * ratio.MilliTokensUsd,
+		CompletionRatio:  2.0,
+		Image: &adaptor.ImagePricingConfig{
+			PricePerImageUsd: 0.006,
+			DefaultSize:      "1024x1024",
+			DefaultQuality:   "auto",
+			PromptTokenLimit: 32000,
+			MinImages:        1,
+			MaxImages:        10,
+			QualitySizeMultipliers: map[string]map[string]float64{
+				"default": {
+					"1024x1024": 1,
+					"1024x1536": 5.0 / 6.0,
+					"1536x1024": 5.0 / 6.0,
+				},
+				"low": {
+					"1024x1024": 1,
+					"1024x1536": 5.0 / 6.0,
+					"1536x1024": 5.0 / 6.0,
+				},
+				"medium": {
+					"1024x1024": 53.0 / 6.0,
+					"1024x1536": 41.0 / 6.0,
+					"1536x1024": 41.0 / 6.0,
+				},
+				"high": {
+					"1024x1024": 211.0 / 6.0,
+					"1024x1536": 165.0 / 6.0,
+					"1536x1024": 165.0 / 6.0,
+				},
+				"auto": {
+					"1024x1024": 211.0 / 6.0,
+					"1024x1536": 165.0 / 6.0,
+					"1536x1024": 165.0 / 6.0,
+				},
+			},
+		},
+	},
+	"gpt-image-2-2026-04-21": {
+		Ratio:            5.0 * ratio.MilliTokensUsd,
+		CachedInputRatio: 1.25 * ratio.MilliTokensUsd,
+		CompletionRatio:  2.0,
+		Image: &adaptor.ImagePricingConfig{
+			PricePerImageUsd: 0.006,
+			DefaultSize:      "1024x1024",
+			DefaultQuality:   "auto",
+			PromptTokenLimit: 32000,
+			MinImages:        1,
+			MaxImages:        10,
+			QualitySizeMultipliers: map[string]map[string]float64{
+				"default": {
+					"1024x1024": 1,
+					"1024x1536": 5.0 / 6.0,
+					"1536x1024": 5.0 / 6.0,
+				},
+				"low": {
+					"1024x1024": 1,
+					"1024x1536": 5.0 / 6.0,
+					"1536x1024": 5.0 / 6.0,
+				},
+				"medium": {
+					"1024x1024": 53.0 / 6.0,
+					"1024x1536": 41.0 / 6.0,
+					"1536x1024": 41.0 / 6.0,
+				},
+				"high": {
+					"1024x1024": 211.0 / 6.0,
+					"1024x1536": 165.0 / 6.0,
+					"1536x1024": 165.0 / 6.0,
+				},
+				"auto": {
+					"1024x1024": 211.0 / 6.0,
+					"1024x1536": 165.0 / 6.0,
+					"1536x1024": 165.0 / 6.0,
+				},
+			},
+		},
+	},
 
 	// Video Generation Models
 	// -------------------------------------

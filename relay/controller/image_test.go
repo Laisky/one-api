@@ -6,6 +6,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	billingratio "github.com/songquanpeng/one-api/relay/billing/ratio"
 	relaymodel "github.com/songquanpeng/one-api/relay/model"
 )
 
@@ -45,6 +46,25 @@ func TestFinalizeImageQuotaNoUsageKeepsBase(t *testing.T) {
 
 	require.Equal(t, baseQuota, summary.TotalQuota)
 	require.Equal(t, int64(0), summary.TokenQuota)
+}
+
+func TestComputeImageUsageQuotaGptImage2Buckets(t *testing.T) {
+	t.Parallel()
+	usage := &relaymodel.Usage{
+		PromptTokens:     150,
+		CompletionTokens: 200,
+		PromptTokensDetails: &relaymodel.UsagePromptTokensDetails{
+			TextTokens:   100,
+			ImageTokens:  50,
+			CachedTokens: 30,
+		},
+	}
+
+	got := computeImageUsageQuota("gpt-image-2", usage, 1.0)
+	want := (80.0*5.0 + 20.0*1.25 + 40.0*8.0 + 10.0*2.0 + 200.0*30.0) * billingratio.MilliTokensUsd
+
+	require.InDelta(t, want, got, 1e-9)
+	require.InDelta(t, want, computeImageUsageQuota("gpt-image-2-2026-04-21", usage, 1.0), 1e-9)
 }
 
 func TestFormatImageBillingLogIncludesDetails(t *testing.T) {
