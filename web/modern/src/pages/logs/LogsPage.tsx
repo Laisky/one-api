@@ -316,6 +316,7 @@ export function LogsPage() {
       t('logs.export.headers.time'),
       t('logs.export.headers.type'),
       t('logs.export.headers.model'),
+      t('logs.export.headers.origin_model'),
       t('logs.export.headers.token'),
       t('logs.export.headers.username'),
       t('logs.export.headers.quota'),
@@ -333,6 +334,7 @@ export function LogsPage() {
         formatTimestamp(log.created_at),
         log.type,
         log.model_name,
+        log.origin_model_name || '',
         log.token_name || '',
         log.username || '',
         log.quota,
@@ -394,7 +396,17 @@ export function LogsPage() {
     {
       accessorKey: 'model_name',
       header: t('logs.table.model'),
-      cell: ({ row }) => <span className="font-medium">{row.original.model_name}</span>,
+      cell: ({ row }) => {
+        const origin = row.original.origin_model_name;
+        return (
+          <span className="flex flex-col gap-0.5">
+            <span className="font-medium">{row.original.model_name}</span>
+            {origin && origin !== row.original.model_name && (
+              <Badge variant="outline" className="text-xs font-normal w-fit">{origin}</Badge>
+            )}
+          </span>
+        );
+      },
     },
     ...(Number(filters.type) !== LOG_TYPES.TEST
       ? [

@@ -202,10 +202,11 @@ func testChannel(ctx context.Context, channel *model.Channel, request *relaymode
 
 		// Create test log with actual usage information if available
 		testLog := &model.Log{
-			ChannelId:   channel.Id,
-			ModelName:   resolvedModel,
-			Content:     logContent,
-			ElapsedTime: helper.CalcElapsedTime(startTime),
+			ChannelId:      channel.Id,
+			ModelName:      resolvedModel,
+			OriginModelName: requestedModel,
+			Content:        logContent,
+			ElapsedTime:    helper.CalcElapsedTime(startTime),
 		}
 
 		// Include actual token usage and calculated cost in test logs for accurate cost tracking

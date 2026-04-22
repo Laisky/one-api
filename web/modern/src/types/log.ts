@@ -13,6 +13,7 @@ export interface LogEntry {
   type: number;
   created_at: number;
   model_name: string;
+  origin_model_name?: string;
   token_name?: string;
   username?: string;
   user_id?: number;

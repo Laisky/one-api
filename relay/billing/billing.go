@@ -157,6 +157,9 @@ type QuotaConsumeDetail struct {
 	CompletionTokens   int
 	ModelRatio         float64
 	GroupRatio         float64
+	// OriginModelName is the model name as requested by the client before mapping.
+	// ModelName is the mapped model used for billing.
+	OriginModelName       string
 	ModelName          string
 	TokenName          string
 	IsStream           bool
@@ -231,6 +234,7 @@ func PostConsumeQuotaDetailed(detail QuotaConsumeDetail) {
 		PromptTokens:       detail.PromptTokens,
 		CompletionTokens:   detail.CompletionTokens,
 		ModelName:          detail.ModelName,
+		OriginModelName:       detail.OriginModelName,
 		TokenName:          detail.TokenName,
 		Content:            logContent,
 		IsStream:           detail.IsStream,
