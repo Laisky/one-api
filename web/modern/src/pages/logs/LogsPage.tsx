@@ -22,6 +22,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useSearchParams } from 'react-router-dom';
 
+import { LogModelCell } from './components/LogModelCell';
+
 type LogRow = LogEntry;
 
 interface LogStatistics {
@@ -316,6 +318,7 @@ export function LogsPage() {
       t('logs.export.headers.time'),
       t('logs.export.headers.type'),
       t('logs.export.headers.model'),
+      t('logs.export.headers.origin_model'),
       t('logs.export.headers.token'),
       t('logs.export.headers.username'),
       t('logs.export.headers.quota'),
@@ -333,6 +336,7 @@ export function LogsPage() {
         formatTimestamp(log.created_at),
         log.type,
         log.model_name,
+        log.origin_model_name || '',
         log.token_name || '',
         log.username || '',
         log.quota,
@@ -394,7 +398,14 @@ export function LogsPage() {
     {
       accessorKey: 'model_name',
       header: t('logs.table.model'),
-      cell: ({ row }) => <span className="font-medium">{row.original.model_name}</span>,
+      cell: ({ row }) => (
+        <LogModelCell
+          modelName={row.original.model_name}
+          originModelName={row.original.origin_model_name}
+          targetLabel={t('logs.table.model')}
+          originLabel={t('logs.details.origin_model')}
+        />
+      ),
     },
     ...(Number(filters.type) !== LOG_TYPES.TEST
       ? [

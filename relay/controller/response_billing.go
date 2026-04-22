@@ -22,6 +22,9 @@ import (
 	quotautil "github.com/songquanpeng/one-api/relay/quota"
 )
 
+// postConsumeResponseAPIQuotaDetailed lets tests capture the billing detail without DB writes.
+var postConsumeResponseAPIQuotaDetailed = billing.PostConsumeQuotaDetailed
+
 // preConsumeResponseAPIQuota pre-consumes quota for Response API requests
 func preConsumeResponseAPIQuota(
 	c *gin.Context,
@@ -175,7 +178,7 @@ func postConsumeResponseAPIQuota(ctx context.Context,
 		metadata := model.AppendToolUsageMetadata(nil, toolSummary)
 		metadata = model.AppendCacheWriteTokensMetadata(metadata, usage.CacheWrite5mTokens, usage.CacheWrite1hTokens)
 
-		billing.PostConsumeQuotaDetailed(billing.QuotaConsumeDetail{
+		postConsumeResponseAPIQuotaDetailed(billing.QuotaConsumeDetail{
 			Ctx:                ctx,
 			TokenId:            meta.TokenId,
 			QuotaDelta:         quotaDelta,
@@ -186,7 +189,8 @@ func postConsumeResponseAPIQuota(ctx context.Context,
 			CompletionTokens:   completionTokens,
 			ModelRatio:         usedModelRatio,
 			GroupRatio:         groupRatio,
-			ModelName:          userVisibleModelName(meta, responseAPIRequest.Model),
+			OriginModelName:    meta.OriginModelName,
+			ModelName:          responseAPIRequest.Model,
 			TokenName:          meta.TokenName,
 			IsStream:           meta.IsStream,
 			StartTime:          meta.StartTime,

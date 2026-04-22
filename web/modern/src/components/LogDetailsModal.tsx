@@ -491,6 +491,23 @@ export function LogDetailsModal({ open, onOpenChange, log }: LogDetailsModalProp
     </div>
   );
 
+  const renderModelLink = (value?: string) => {
+    if (!value) {
+      return '—';
+    }
+
+    return (
+      <button
+        type="button"
+        className="inline-flex items-center gap-1 text-blue-600 dark:text-blue-400 underline underline-offset-2 decoration-blue-600/40 dark:decoration-blue-400/40 hover:decoration-blue-600 dark:hover:decoration-blue-400 cursor-pointer text-left transition-colors"
+        onClick={() => navigateTo(`/models?model=${encodeURIComponent(value)}`)}
+      >
+        {value}
+        <ExternalLink className="h-3 w-3 flex-shrink-0" />
+      </button>
+    );
+  };
+
   const renderSummary = () => {
     if (!log) return null;
 
@@ -516,21 +533,9 @@ export function LogDetailsModal({ open, onOpenChange, log }: LogDetailsModalProp
           />
           <DetailItem
             label={t('logs.details.model', 'Model')}
-            value={
-              log.model_name ? (
-                <button
-                  type="button"
-                  className="inline-flex items-center gap-1 text-blue-600 dark:text-blue-400 underline underline-offset-2 decoration-blue-600/40 dark:decoration-blue-400/40 hover:decoration-blue-600 dark:hover:decoration-blue-400 cursor-pointer text-left transition-colors"
-                  onClick={() => navigateTo(`/models?model=${encodeURIComponent(log.model_name)}`)}
-                >
-                  {log.model_name}
-                  <ExternalLink className="h-3 w-3 flex-shrink-0" />
-                </button>
-              ) : (
-                '—'
-              )
-            }
+            value={renderModelLink(log.model_name)}
           />
+          <DetailItem label={t('logs.details.origin_model', 'Requested Model')} value={renderModelLink(log.origin_model_name)} />
           <DetailItem
             label={t('logs.details.user', 'User')}
             value={

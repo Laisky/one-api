@@ -19,6 +19,9 @@ import (
 // after the parent context is detached from cancellation.
 const billingOpsTimeout = 60 * time.Second
 
+// postConsumeQuotaWithLogFn lets tests capture the generated log entry without hitting the DB.
+var postConsumeQuotaWithLogFn = PostConsumeQuotaWithLog
+
 // PostConsumeQuotaWithLog is the unified billing entry that consumes quota, updates caches,
 // records a consume log, and updates user/channel aggregates.
 // Caller must provide a pre-filled log entry (including RequestId/TraceId if desired).
@@ -147,16 +150,19 @@ func ReturnPreConsumedQuota(ctx context.Context, preConsumedQuota int64, tokenId
 
 // QuotaConsumeDetail encapsulates all parameters for detailed quota consumption billing
 type QuotaConsumeDetail struct {
-	Ctx                context.Context
-	TokenId            int
-	QuotaDelta         int64
-	TotalQuota         int64
-	UserId             int
-	ChannelId          int
-	PromptTokens       int
-	CompletionTokens   int
-	ModelRatio         float64
-	GroupRatio         float64
+	Ctx              context.Context
+	TokenId          int
+	QuotaDelta       int64
+	TotalQuota       int64
+	UserId           int
+	ChannelId        int
+	PromptTokens     int
+	CompletionTokens int
+	ModelRatio       float64
+	GroupRatio       float64
+	// OriginModelName is the model name as requested by the client before mapping.
+	// ModelName is the mapped model used for billing.
+	OriginModelName    string
 	ModelName          string
 	TokenName          string
 	IsStream           bool
@@ -231,6 +237,7 @@ func PostConsumeQuotaDetailed(detail QuotaConsumeDetail) {
 		PromptTokens:       detail.PromptTokens,
 		CompletionTokens:   detail.CompletionTokens,
 		ModelName:          detail.ModelName,
+		OriginModelName:    detail.OriginModelName,
 		TokenName:          detail.TokenName,
 		Content:            logContent,
 		IsStream:           detail.IsStream,
@@ -263,7 +270,7 @@ func PostConsumeQuotaDetailed(detail QuotaConsumeDetail) {
 		zap.String("trace_id", detail.TraceId),
 	)
 
-	PostConsumeQuotaWithLog(detail.Ctx, detail.TokenId, detail.QuotaDelta, detail.TotalQuota, entry, detail.ProvisionalLogId)
+	postConsumeQuotaWithLogFn(detail.Ctx, detail.TokenId, detail.QuotaDelta, detail.TotalQuota, entry, detail.ProvisionalLogId)
 }
 
 // Removed PostConsumeQuotaDetailedWithTraceID; use QuotaConsumeDetail.TraceId instead

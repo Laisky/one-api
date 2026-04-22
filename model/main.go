@@ -209,56 +209,48 @@ func InitDB() {
 
 	logger.Logger.Info("database migration started")
 
-	// STEP 0: Ensure GORM has created every table/column before bespoke migrations touch them.
-	// AutoMigrate adds any missing schema elements without attempting destructive changes, giving
-	// a stable baseline so subsequent migrations can safely assume column presence.
-	if err = migrateDB(); err != nil {
-		logger.Logger.Fatal("failed to ensure base database schema", zap.Error(err))
-		return
-	}
-	logger.Logger.Info("database base schema ensured")
-
-	// STEP 1: Schema normalization prior to the main AutoMigrate pass
-	// 1a) Normalize legacy ability suspend_until column types before AutoMigrate touches the table
-	if err = MigrateAbilitySuspendUntilColumn(); err != nil {
-		logger.Logger.Fatal("failed to migrate ability suspend_until column", zap.Error(err))
-		return
-	}
-
-	// 1b) Migrate ModelConfigs and ModelMapping columns from varchar(1024) to text
-	// This must run BEFORE AutoMigrate to ensure schema compatibility
-	if err = MigrateChannelFieldsToText(); err != nil {
-		logger.Logger.Fatal("failed to migrate channel field types", zap.Error(err))
-		return
-	}
-
-	// 1c) Ensure traces.url can store long URLs (Turnstile tokens, etc.)
-	if err = MigrateTraceURLColumnToText(); err != nil {
-		logger.Logger.Fatal("failed to migrate traces.url column", zap.Error(err))
-		return
-	}
-
-	// 1d) Ensure user_request_costs has a unique index on request_id and deduplicate old data quietly
-	if err = MigrateUserRequestCostEnsureUniqueRequestID(); err != nil {
-		logger.Logger.Fatal("failed to migrate user_request_costs unique index", zap.Error(err))
-		return
-	}
-
-	// STEP 2: Run GORM AutoMigrate on all models to pick up any structural changes introduced above
+	// STEP 1: AutoMigrate on all models to create/update tables and columns.
+	// GORM's AutoMigrate is contractually idempotent, but gorm.io/driver/sqlite's
+	// ColumnTypes() introspection (regex-based parseDDL over sqlite_master.sql) is
+	// known to mis-parse certain DDL states after ALTER TABLE ADD COLUMN. Calling
+	// AutoMigrate more than once per process can therefore fail with
+	// "duplicate column name" on SQLite. Keep this to a single invocation.
 	if err = migrateDB(); err != nil {
 		logger.Logger.Fatal("failed to migrate database", zap.Error(err))
 		return
 	}
 	logger.Logger.Info("database schema migrated")
 
-	// Run post-migration adjustments to ensure new installs have expected schema specifics.
-	if err = MigrateUserRequestCostEnsureUniqueRequestID(); err != nil {
-		logger.Logger.Fatal("failed to finalize user_request_costs unique index", zap.Error(err))
+	// STEP 2: Custom migrations that normalize or adjust EXISTING columns/data.
+	// None of these add new columns or tables — those live in the struct
+	// definitions and are handled by STEP 1's AutoMigrate. Each is idempotent
+	// and safe to run on every startup.
+
+	// 2a) Normalize legacy ability suspend_until column values / type.
+	if err = MigrateAbilitySuspendUntilColumn(); err != nil {
+		logger.Logger.Fatal("failed to migrate ability suspend_until column", zap.Error(err))
 		return
 	}
 
-	// STEP 3: Migrate existing ModelConfigs data from old format to new format
-	// This handles data format changes after schema is correct
+	// 2b) Convert ModelConfigs / ModelMapping columns from varchar(1024) to text on legacy MySQL/PG installs.
+	if err = MigrateChannelFieldsToText(); err != nil {
+		logger.Logger.Fatal("failed to migrate channel field types", zap.Error(err))
+		return
+	}
+
+	// 2c) Ensure traces.url can store long URLs (Turnstile tokens, etc.).
+	if err = MigrateTraceURLColumnToText(); err != nil {
+		logger.Logger.Fatal("failed to migrate traces.url column", zap.Error(err))
+		return
+	}
+
+	// 2d) Ensure user_request_costs has a unique index on request_id and deduplicate old data quietly.
+	if err = MigrateUserRequestCostEnsureUniqueRequestID(); err != nil {
+		logger.Logger.Fatal("failed to migrate user_request_costs unique index", zap.Error(err))
+		return
+	}
+
+	// STEP 3: Data-format migrations (schema is already correct at this point).
 	if err = MigrateCustomChannelsToOpenAICompatible(); err != nil {
 		logger.Logger.Fatal("failed to migrate custom channels", zap.Error(err))
 		return
