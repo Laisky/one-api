@@ -311,7 +311,12 @@ func DefaultEndpointsForChannelType(channelType int) []Endpoint {
 	case TogetherAI:
 		return []Endpoint{
 			EndpointChatCompletions,
+			EndpointCompletions,
 			EndpointEmbeddings,
+			EndpointImagesGenerations,
+			EndpointAudioSpeech,
+			EndpointAudioTranscription,
+			EndpointAudioTranslation,
 			EndpointResponseAPI,
 			EndpointClaudeMessages,
 		}

@@ -4,7 +4,6 @@ import (
 	"io"
 	"net/http"
 
-	"github.com/Laisky/errors/v2"
 	"github.com/gin-gonic/gin"
 
 	"github.com/songquanpeng/one-api/relay/adaptor"
@@ -39,16 +38,17 @@ func (a *Adaptor) SetupRequestHeader(c *gin.Context, req *http.Request, meta *me
 }
 
 func (a *Adaptor) ConvertRequest(c *gin.Context, relayMode int, request *model.GeneralOpenAIRequest) (any, error) {
-	// TogetherAI is OpenAI-compatible, so we can pass the request through with minimal changes
-	// Remove reasoning_effort as TogetherAI doesn't support it
-	if request.ReasoningEffort != nil {
-		request.ReasoningEffort = nil
-	}
+	// TogetherAI documents reasoning_effort on its OpenAI-compatible chat endpoint, so
+	// requests can pass through unchanged.
 	return request, nil
 }
 
 func (a *Adaptor) ConvertImageRequest(c *gin.Context, request *model.ImageRequest) (any, error) {
-	return nil, errors.New("togetherai does not support image generation")
+	if request.ResponseFormat != nil && *request.ResponseFormat == "b64_json" {
+		responseFormat := "base64"
+		request.ResponseFormat = &responseFormat
+	}
+	return request, nil
 }
 
 func (a *Adaptor) ConvertClaudeRequest(c *gin.Context, request *model.ClaudeRequest) (any, error) {
@@ -77,10 +77,9 @@ func (a *Adaptor) GetChannelName() string {
 	return "togetherai"
 }
 
-// GetDefaultModelPricing returns the pricing information for TogetherAI models
-// Based on TogetherAI pricing: https://www.together.ai/pricing
+// GetDefaultModelPricing returns the published Together AI pricing metadata used by the adaptor.
+// Source: https://docs.together.ai/docs/serverless-models
 func (a *Adaptor) GetDefaultModelPricing() map[string]adaptor.ModelConfig {
-	// Use the constants.go ModelRatios which already use ratio.MilliTokensUsd correctly
 	return ModelRatios
 }
 

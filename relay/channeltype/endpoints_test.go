@@ -213,6 +213,25 @@ func TestAnthropicDoesNotSupportEmbeddings(t *testing.T) {
 	require.False(t, hasEmbeddings, "Anthropic should not support embeddings endpoint")
 }
 
+// TestTogetherAISupportsDocumentedOpenAICompatibleEndpoints verifies Together AI exposes the
+// documented OpenAI-compatible endpoints one-api should enable by default.
+func TestTogetherAISupportsDocumentedOpenAICompatibleEndpoints(t *testing.T) {
+	t.Parallel()
+	endpoints := DefaultEndpointsForChannelType(TogetherAI)
+
+	require.Contains(t, endpoints, EndpointChatCompletions)
+	require.Contains(t, endpoints, EndpointCompletions)
+	require.Contains(t, endpoints, EndpointEmbeddings)
+	require.Contains(t, endpoints, EndpointImagesGenerations)
+	require.Contains(t, endpoints, EndpointAudioSpeech)
+	require.Contains(t, endpoints, EndpointAudioTranscription)
+	require.Contains(t, endpoints, EndpointAudioTranslation)
+	require.Contains(t, endpoints, EndpointResponseAPI)
+	require.Contains(t, endpoints, EndpointClaudeMessages)
+	require.NotContains(t, endpoints, EndpointRealtime)
+	require.NotContains(t, endpoints, EndpointRerank)
+}
+
 // ---------------------------------------------------------------------------
 // OCR Endpoint Tests
 // ---------------------------------------------------------------------------

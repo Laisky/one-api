@@ -244,7 +244,7 @@ func getAllAdapterTestCases() []AdapterTestCase {
 			ChannelType:            channeltype.TogetherAI,
 			SupportsChatCompletion: true,
 			SupportsClaudeMessages: true,
-			TestModel:              "meta-llama/Llama-2-7b-chat-hf",
+			TestModel:              "openai/gpt-oss-20b",
 		},
 		{
 			Name:                   "OpenRouter",
