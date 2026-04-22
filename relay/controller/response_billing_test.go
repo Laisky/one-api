@@ -1,9 +1,16 @@
 package controller
 
 import (
+	"context"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
+
+	"github.com/songquanpeng/one-api/relay/adaptor/openai"
+	"github.com/songquanpeng/one-api/relay/billing"
+	metalib "github.com/songquanpeng/one-api/relay/meta"
+	relaymodel "github.com/songquanpeng/one-api/relay/model"
 )
 
 // TestResponseAPIBillingIntegration tests that Response API billing follows DRY principle
@@ -160,5 +167,46 @@ func TestBillingConsistency(t *testing.T) {
 			baseQuota := int64((float64(tc.promptTokens) + float64(tc.completionTokens)*tc.completionRatio) * ratio)
 			require.Equal(t, baseQuota+tc.toolsCost, expectedQuota, "tools cost not properly added")
 		})
+	}
+}
+
+func TestPostConsumeResponseAPIQuota_PreservesOriginAndTargetModelNames(t *testing.T) {
+	logChan := make(chan billing.QuotaConsumeDetail, 1)
+	originalPostConsume := postConsumeResponseAPIQuotaDetailed
+	t.Cleanup(func() {
+		postConsumeResponseAPIQuotaDetailed = originalPostConsume
+	})
+	postConsumeResponseAPIQuotaDetailed = func(detail billing.QuotaConsumeDetail) {
+		logChan <- detail
+	}
+
+	quota := postConsumeResponseAPIQuota(
+		context.Background(),
+		&relaymodel.Usage{PromptTokens: 12, CompletionTokens: 6},
+		&metalib.Meta{
+			TokenId:         1,
+			UserId:          2,
+			ChannelId:       3,
+			TokenName:       "test-token",
+			OriginModelName: "alias-model",
+			ActualModelName: "gpt-4o-mini",
+		},
+		&openai.ResponseAPIRequest{Model: "gpt-4o-mini"},
+		0,
+		1,
+		nil,
+		1,
+		nil,
+		nil,
+	)
+
+	require.Positive(t, quota)
+
+	select {
+	case detail := <-logChan:
+		require.Equal(t, "gpt-4o-mini", detail.ModelName)
+		require.Equal(t, "alias-model", detail.OriginModelName)
+	case <-time.After(time.Second):
+		require.Fail(t, "expected detailed billing data to be emitted")
 	}
 }

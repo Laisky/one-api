@@ -22,19 +22,19 @@ import (
 
 // Log represents a persisted usage or management entry emitted by the billing pipeline.
 type Log struct {
-	Id                int    `json:"id"`
-	UserId            int    `json:"user_id" gorm:"index;index:idx_user_token,priority:1"`
-	CreatedAt         int64  `json:"created_at" gorm:"bigint;index:idx_created_at_type"`
-	Type              int    `json:"type" gorm:"index:idx_created_at_type"`
-	Content           string `json:"content" gorm:"type:text"`
-	Username          string `json:"username" gorm:"index:index_username_model_name,priority:2;default:''"`
-	TokenName         string `json:"token_name" gorm:"index;index:idx_user_token,priority:2;default:''"`
-	ModelName         string `json:"model_name" gorm:"index;index:index_username_model_name,priority:1;default:''"`
+	Id        int    `json:"id"`
+	UserId    int    `json:"user_id" gorm:"index;index:idx_user_token,priority:1"`
+	CreatedAt int64  `json:"created_at" gorm:"bigint;index:idx_created_at_type"`
+	Type      int    `json:"type" gorm:"index:idx_created_at_type"`
+	Content   string `json:"content" gorm:"type:text"`
+	Username  string `json:"username" gorm:"index:index_username_model_name,priority:2;default:''"`
+	TokenName string `json:"token_name" gorm:"index;index:idx_user_token,priority:2;default:''"`
+	ModelName string `json:"model_name" gorm:"index;index:index_username_model_name,priority:1;default:''"`
 	// OriginModelName records the model name as requested by the client before any mapping.
 	// When a channel has model mapping configured (e.g., "my-model" -> "gpt-4"),
 	// this field preserves the original model name requested ("my-model") while ModelName
 	// holds the mapped model used for billing ("gpt-4").
-	OriginModelName  string `json:"origin_model_name" gorm:"index;default:''"`
+	OriginModelName   string `json:"origin_model_name" gorm:"index;default:''"`
 	Quota             int    `json:"quota" gorm:"default:0;index"`             // Added index for sorting
 	PromptTokens      int    `json:"prompt_tokens" gorm:"default:0;index"`     // Added index for sorting
 	CompletionTokens  int    `json:"completion_tokens" gorm:"default:0;index"` // Added index for sorting

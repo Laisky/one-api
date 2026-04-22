@@ -123,7 +123,7 @@ func postConsumeClaudeMessagesQuotaWithTraceID(ctx context.Context, requestId st
 		CompletionTokens:   computeResult.CompletionTokens,
 		ModelRatio:         computeResult.UsedModelRatio,
 		GroupRatio:         groupRatio,
-		OriginModelName:        meta.OriginModelName,
+		OriginModelName:    meta.OriginModelName,
 		ModelName:          request.Model,
 		TokenName:          meta.TokenName,
 		IsStream:           meta.IsStream,

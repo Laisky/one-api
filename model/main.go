@@ -301,7 +301,9 @@ func migrateDB() error {
 		return errors.Wrapf(err, "failed to migrate Ability")
 	}
 	if err = DB.AutoMigrate(&Log{}); err != nil {
-		return errors.Wrapf(err, "failed to migrate Log")
+		if !shouldIgnoreDuplicateColumn(err, "origin_model_name") {
+			return errors.Wrapf(err, "failed to migrate Log")
+		}
 	}
 	if err = DB.AutoMigrate(&TokenTransaction{}); err != nil {
 		return errors.Wrapf(err, "failed to migrate TokenTransaction")

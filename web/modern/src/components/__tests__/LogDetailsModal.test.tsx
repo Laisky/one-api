@@ -106,6 +106,7 @@ describe('LogDetailsModal', () => {
       type: LOG_TYPES.CONSUME,
       created_at: 1_700_000_000,
       model_name: 'gpt-4',
+      origin_model_name: 'public-alias',
       token_name: 'prod-token',
       username: '',
       channel: 12,
@@ -136,6 +137,8 @@ describe('LogDetailsModal', () => {
     expect(screen.getAllByText(formatTimestamp(log.created_at)).length).toBeGreaterThan(0);
     expect(screen.getByText(renderQuota(log.quota))).toBeInTheDocument();
     expect(screen.getByText('gpt-4')).toBeInTheDocument();
+    expect(screen.getByText('public-alias')).toBeInTheDocument();
+    expect(screen.getByText(/requested model/i)).toBeInTheDocument();
     expect(screen.getByText('prod-token')).toBeInTheDocument();
     expect(screen.getByText('fallback-user')).toBeInTheDocument();
     expect(screen.getByText('12')).toBeInTheDocument();

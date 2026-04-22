@@ -40,42 +40,50 @@ func TestBackwardCompatibility(t *testing.T) {
 // when PostConsumeQuotaDetailed is called. This is critical for model mapping transparency.
 func TestOriginModelNamePreserved(t *testing.T) {
 	ctx := context.Background()
-	validTime := time.Now()
-
-	// Capture the log entry passed to PostConsumeQuotaWithLog by using a channel
+	validTime := time.Unix(1_700_000_000, 0).UTC()
 	logChan := make(chan *modelpkg.Log, 1)
-	originalPostConsume := PostConsumeQuotaWithLog
-
-	// We can't easily intercept the log entry without modifying the function or using a spy
-	// So we verify through the QuotaConsumeDetail structure validation instead
-	detail := QuotaConsumeDetail{
-		Ctx:                    ctx,
-		TokenId:                123,
-		QuotaDelta:             10,
-		TotalQuota:             50,
-		UserId:                 1,
-		ChannelId:              5,
-		PromptTokens:           100,
-		CompletionTokens:       50,
-		ModelRatio:             1.0,
-		GroupRatio:             1.0,
-		ModelName:              "gpt-4",                          // Mapped model used for billing
-		OriginModelName:        "my-model",                       // Original model requested by client
-		TokenName:              "test-token",
-		IsStream:               false,
-		StartTime:              validTime,
-		SystemPromptReset:      false,
-		CompletionRatio:        1.0,
-		ToolsCost:              0,
-		CachedPromptTokens:     0,
-		CachedCompletionTokens: 0,
+	originalPostConsume := postConsumeQuotaWithLogFn
+	t.Cleanup(func() {
+		postConsumeQuotaWithLogFn = originalPostConsume
+	})
+	postConsumeQuotaWithLogFn = func(ctx context.Context, tokenId int, quotaDelta int64, totalQuota int64, logEntry *modelpkg.Log, provisionalLogId ...int) {
+		logChan <- logEntry
 	}
 
-	// Verify the detail struct has the correct OriginModelName field
-	require.Equal(t, "my-model", detail.OriginModelName, "OriginModelName should be set correctly in QuotaConsumeDetail")
-	require.Equal(t, "gpt-4", detail.ModelName, "ModelName should be the mapped model")
+	detail := QuotaConsumeDetail{
+		Ctx:                ctx,
+		TokenId:            123,
+		QuotaDelta:         10,
+		TotalQuota:         50,
+		UserId:             1,
+		ChannelId:          5,
+		PromptTokens:       100,
+		CompletionTokens:   50,
+		ModelRatio:         1.0,
+		GroupRatio:         1.0,
+		ModelName:          "gpt-4",
+		OriginModelName:    "my-model",
+		TokenName:          "test-token",
+		IsStream:           false,
+		StartTime:          validTime,
+		SystemPromptReset:  false,
+		CompletionRatio:    1.0,
+		ToolsCost:          0,
+		CachedPromptTokens: 0,
+	}
 
-	t.Log("OriginModelName is correctly passed through QuotaConsumeDetail structure")
+	PostConsumeQuotaDetailed(detail)
+
+	select {
+	case entry := <-logChan:
+		require.Equal(t, "gpt-4", entry.ModelName)
+		require.Equal(t, "my-model", entry.OriginModelName)
+		require.Equal(t, 100, entry.PromptTokens)
+		require.Equal(t, 50, entry.CompletionTokens)
+		require.NotEmpty(t, entry.Content)
+	case <-time.After(time.Second):
+		require.Fail(t, "expected PostConsumeQuotaDetailed to emit a log entry")
+	}
 }
 
 // TestInputValidation tests that both billing functions properly validate inputs
