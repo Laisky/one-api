@@ -1,6 +1,7 @@
 import { formatNumber } from '@/lib/utils';
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import type { CacheHeatmap, CacheHeatmapEntity } from '../hooks/useDashboardCharts';
 import { getDisplayInCurrency, resolveChartVar } from '../types';
@@ -202,31 +203,17 @@ function EntityRow({ entity, days, statisticsMetric, chartHsl, lowVolumeThreshol
         const rate = hasData ? cell!.numerator / cell!.denominator : 0;
         const lowVolume = hasData && cell!.denominator < lowVolumeThreshold;
 
-        let tooltip: string;
-        if (!hasData) {
-          tooltip = `${entity.name}\n${day}\n${t('dashboard.cache.no_activity')}`;
-        } else {
-          tooltip =
-            `${entity.name}\n${day}\n` +
-            `${t('dashboard.cache.hit_rate')}: ${ratePercent(rate)}\n` +
-            `${t('dashboard.cache.cached')}: ${formatMetricValue(cell!.numerator, statisticsMetric)}\n` +
-            `${t('dashboard.cache.total')}: ${formatMetricValue(cell!.denominator, statisticsMetric)}`;
-        }
-
         return (
-          <div
+          <CacheCell
             key={day}
-            className="rounded-sm transition-transform hover:scale-110 hover:ring-2 hover:ring-primary/40"
-            style={{
-              height: '24px',
-              backgroundColor: cellBackground(rate, chartHsl, hasData),
-              opacity: lowVolume ? 0.45 : 1,
-              backgroundImage: !hasData
-                ? 'repeating-linear-gradient(45deg, hsl(var(--muted)), hsl(var(--muted)) 2px, transparent 2px, transparent 6px)'
-                : undefined,
-            }}
-            title={tooltip}
-            aria-label={tooltip}
+            entityName={entity.name}
+            day={day}
+            cell={cell}
+            hasData={hasData}
+            rate={rate}
+            lowVolume={lowVolume}
+            chartHsl={chartHsl}
+            statisticsMetric={statisticsMetric}
           />
         );
       })}
@@ -254,5 +241,72 @@ function EntityRow({ entity, days, statisticsMetric, chartHsl, lowVolumeThreshol
         </div>
       </div>
     </>
+  );
+}
+
+interface CacheCellProps {
+  entityName: string;
+  day: string;
+  cell: { numerator: number; denominator: number } | undefined;
+  hasData: boolean;
+  rate: number;
+  lowVolume: boolean;
+  chartHsl: string;
+  statisticsMetric: 'tokens' | 'requests' | 'expenses';
+}
+
+function CacheCell({ entityName, day, cell, hasData, rate, lowVolume, chartHsl, statisticsMetric }: CacheCellProps) {
+  const { t } = useTranslation();
+
+  const tooltip = hasData
+    ? `${entityName}\n${day}\n` +
+      `${t('dashboard.cache.hit_rate')}: ${ratePercent(rate)}\n` +
+      `${t('dashboard.cache.cached')}: ${formatMetricValue(cell!.numerator, statisticsMetric)}\n` +
+      `${t('dashboard.cache.total')}: ${formatMetricValue(cell!.denominator, statisticsMetric)}`
+    : `${entityName}\n${day}\n${t('dashboard.cache.no_activity')}`;
+
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          className="rounded-sm transition-transform hover:scale-110 hover:ring-2 hover:ring-primary/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 cursor-pointer"
+          style={{
+            height: '24px',
+            backgroundColor: cellBackground(rate, chartHsl, hasData),
+            opacity: lowVolume ? 0.45 : 1,
+            backgroundImage: !hasData
+              ? 'repeating-linear-gradient(45deg, hsl(var(--muted)), hsl(var(--muted)) 2px, transparent 2px, transparent 6px)'
+              : undefined,
+          }}
+          title={tooltip}
+          aria-label={tooltip}
+        />
+      </PopoverTrigger>
+      <PopoverContent side="top" className="w-auto max-w-xs p-3 text-xs">
+        <div className="flex flex-col gap-1.5">
+          <div className="font-semibold break-all">{entityName}</div>
+          <div className="text-muted-foreground tabular-nums">{day}</div>
+          {hasData ? (
+            <div className="flex flex-col gap-1 pt-1 border-t">
+              <div className="flex justify-between gap-4">
+                <span className="text-muted-foreground">{t('dashboard.cache.hit_rate')}</span>
+                <span className="font-mono font-semibold">{ratePercent(rate)}</span>
+              </div>
+              <div className="flex justify-between gap-4">
+                <span className="text-muted-foreground">{t('dashboard.cache.cached')}</span>
+                <span className="font-mono tabular-nums">{formatMetricValue(cell!.numerator, statisticsMetric)}</span>
+              </div>
+              <div className="flex justify-between gap-4">
+                <span className="text-muted-foreground">{t('dashboard.cache.total')}</span>
+                <span className="font-mono tabular-nums">{formatMetricValue(cell!.denominator, statisticsMetric)}</span>
+              </div>
+            </div>
+          ) : (
+            <div className="text-muted-foreground italic pt-1 border-t">{t('dashboard.cache.no_activity')}</div>
+          )}
+        </div>
+      </PopoverContent>
+    </Popover>
   );
 }
