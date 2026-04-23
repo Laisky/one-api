@@ -79,6 +79,12 @@ const (
 	// LogMetadataKeyProvisional marks a consume log entry as provisional (pre-consumed, awaiting reconciliation).
 	// Post-billing removes this flag when the log is reconciled with actual usage.
 	LogMetadataKeyProvisional = "provisional"
+	// LogMetadataKeyUserAPIFormat records the API format the end-user requested (e.g. "chat", "response_api").
+	LogMetadataKeyUserAPIFormat = "user_api_format"
+	// LogMetadataKeyUpstreamAPIFormat records the upstream provider's API format (e.g. "openai", "anthropic").
+	LogMetadataKeyUpstreamAPIFormat = "upstream_api_format"
+	// LogMetadataKeyUpstreamEndpoint records the final URL sent to the upstream provider.
+	LogMetadataKeyUpstreamEndpoint = "upstream_endpoint"
 )
 
 // ToolUsageEntry captures per-tool usage metadata for logging.

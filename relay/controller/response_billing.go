@@ -15,6 +15,7 @@ import (
 	"github.com/songquanpeng/one-api/common/tracing"
 	"github.com/songquanpeng/one-api/model"
 	"github.com/songquanpeng/one-api/relay/adaptor/openai"
+	"github.com/songquanpeng/one-api/relay/apitype"
 	"github.com/songquanpeng/one-api/relay/billing"
 	metalib "github.com/songquanpeng/one-api/relay/meta"
 	relaymodel "github.com/songquanpeng/one-api/relay/model"
@@ -204,6 +205,9 @@ func postConsumeResponseAPIQuota(ctx context.Context,
 			RequestId:          requestId,
 			TraceId:            traceId,
 			ProvisionalLogId:   provisionalLogId,
+			UserAPIFormat:      resolveUserAPIFormat(meta.Mode),
+			UpstreamAPIFormat:  apitype.String(meta.APIType),
+			UpstreamEndpoint:   meta.UpstreamRequestURL,
 		})
 	} else {
 		// Should not happen; log for investigation

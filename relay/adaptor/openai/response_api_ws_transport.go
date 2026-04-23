@@ -116,6 +116,9 @@ func doResponseAPIRequestViaWebSocket(
 	if err != nil {
 		return nil, true, errors.Wrap(err, "build response api websocket url")
 	}
+	if metaInfo != nil {
+		metaInfo.UpstreamRequestURL = wsURL
+	}
 
 	dialHeader, err := buildResponseAPIWebSocketHeader(c, requestAdaptor, metaInfo, fullRequestURL)
 	if err != nil {

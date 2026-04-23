@@ -181,6 +181,15 @@ type QuotaConsumeDetail struct {
 	// pre-consume time. When non-zero, post-billing reconciles this entry instead
 	// of creating a new one.
 	ProvisionalLogId int
+	// UserAPIFormat is the API format the end-user requested (e.g. "chat",
+	// "response_api", "claude_messages"). Derived from relaymode.String(meta.Mode).
+	UserAPIFormat string
+	// UpstreamAPIFormat is the upstream provider's API format (e.g. "openai",
+	// "anthropic"). Derived from apitype.String(meta.APIType).
+	UpstreamAPIFormat string
+	// UpstreamEndpoint is the final URL sent to the upstream provider, captured
+	// from meta.UpstreamRequestURL after the adaptor resolves it.
+	UpstreamEndpoint string
 }
 
 // PostConsumeQuotaDetailed handles detailed billing for ChatCompletion and Response API requests
@@ -250,6 +259,24 @@ func PostConsumeQuotaDetailed(detail QuotaConsumeDetail) {
 
 	metadata := model.CloneLogMetadata(detail.Metadata)
 	metadata = model.AppendCacheWriteTokensMetadata(metadata, detail.CacheWrite5mTokens, detail.CacheWrite1hTokens)
+	if detail.UserAPIFormat != "" {
+		if metadata == nil {
+			metadata = model.LogMetadata{}
+		}
+		metadata[model.LogMetadataKeyUserAPIFormat] = detail.UserAPIFormat
+	}
+	if detail.UpstreamAPIFormat != "" {
+		if metadata == nil {
+			metadata = model.LogMetadata{}
+		}
+		metadata[model.LogMetadataKeyUpstreamAPIFormat] = detail.UpstreamAPIFormat
+	}
+	if detail.UpstreamEndpoint != "" {
+		if metadata == nil {
+			metadata = model.LogMetadata{}
+		}
+		metadata[model.LogMetadataKeyUpstreamEndpoint] = detail.UpstreamEndpoint
+	}
 	if len(metadata) > 0 {
 		entry.Metadata = metadata
 	}

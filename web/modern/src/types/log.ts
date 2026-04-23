@@ -5,6 +5,9 @@ export type CacheWriteTokensMetadata = {
 
 export type LogMetadata = {
   cache_write_tokens?: CacheWriteTokensMetadata;
+  user_api_format?: string;
+  upstream_api_format?: string;
+  upstream_endpoint?: string;
   [key: string]: unknown;
 };
 

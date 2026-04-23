@@ -39,6 +39,9 @@ type Meta struct {
 	ChannelRatio        float64
 	ForcedSystemPrompt  string
 	StartTime           time.Time
+	// UpstreamRequestURL is the final URL sent to the upstream provider.
+	// Populated by the relay layer before/after the request is dispatched.
+	UpstreamRequestURL string
 }
 
 // GetMappedModelName returns the mapped model name and a bool indicating if the model name is mapped

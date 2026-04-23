@@ -43,6 +43,9 @@ func DoRequestHelper(a Adaptor, c *gin.Context, meta *meta.Meta, requestBody io.
 	if err != nil {
 		return nil, errors.Wrap(err, "get request url failed")
 	}
+	if meta != nil {
+		meta.UpstreamRequestURL = fullRequestURL
+	}
 
 	var (
 		preview   []byte

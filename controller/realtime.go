@@ -17,11 +17,13 @@ import (
 	"github.com/songquanpeng/one-api/relay"
 	"github.com/songquanpeng/one-api/relay/adaptor"
 	"github.com/songquanpeng/one-api/relay/adaptor/openai"
+	"github.com/songquanpeng/one-api/relay/apitype"
 	"github.com/songquanpeng/one-api/relay/billing"
 	"github.com/songquanpeng/one-api/relay/meta"
 	rmodel "github.com/songquanpeng/one-api/relay/model"
 	"github.com/songquanpeng/one-api/relay/pricing"
 	quotautil "github.com/songquanpeng/one-api/relay/quota"
+	"github.com/songquanpeng/one-api/relay/relaymode"
 )
 
 // Realtime session preConsume estimation constants.
@@ -260,25 +262,32 @@ func postConsumeRealtimeQuota(
 		ctx, cancel := context.WithTimeout(ctx, billingTimeout)
 		defer cancel()
 
+		userAPIFormat := ""
+		if relayMeta.Mode != relaymode.Unknown {
+			userAPIFormat = relaymode.String(relayMeta.Mode)
+		}
 		billing.PostConsumeQuotaDetailed(billing.QuotaConsumeDetail{
-			Ctx:              ctx,
-			TokenId:          relayMeta.TokenId,
-			QuotaDelta:       quotaDelta,
-			TotalQuota:       totalQuota,
-			UserId:           relayMeta.UserId,
-			ChannelId:        relayMeta.ChannelId,
-			PromptTokens:     computeResult.PromptTokens,
-			CompletionTokens: computeResult.CompletionTokens,
-			ModelRatio:       computeResult.UsedModelRatio,
-			GroupRatio:       groupRatio,
-			ModelName:        modelName,
-			TokenName:        relayMeta.TokenName,
-			IsStream:         true,
-			StartTime:        relayMeta.StartTime,
-			CompletionRatio:  computeResult.UsedCompletionRatio,
-			RequestId:        requestId,
-			TraceId:          traceId,
-			ProvisionalLogId: provisionalLogId,
+			Ctx:               ctx,
+			TokenId:           relayMeta.TokenId,
+			QuotaDelta:        quotaDelta,
+			TotalQuota:        totalQuota,
+			UserId:            relayMeta.UserId,
+			ChannelId:         relayMeta.ChannelId,
+			PromptTokens:      computeResult.PromptTokens,
+			CompletionTokens:  computeResult.CompletionTokens,
+			ModelRatio:        computeResult.UsedModelRatio,
+			GroupRatio:        groupRatio,
+			ModelName:         modelName,
+			TokenName:         relayMeta.TokenName,
+			IsStream:          true,
+			StartTime:         relayMeta.StartTime,
+			CompletionRatio:   computeResult.UsedCompletionRatio,
+			RequestId:         requestId,
+			TraceId:           traceId,
+			ProvisionalLogId:  provisionalLogId,
+			UserAPIFormat:     userAPIFormat,
+			UpstreamAPIFormat: apitype.String(relayMeta.APIType),
+			UpstreamEndpoint:  relayMeta.UpstreamRequestURL,
 		})
 	})
 

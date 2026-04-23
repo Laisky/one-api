@@ -12,6 +12,7 @@ import (
 	"github.com/songquanpeng/one-api/common/ctxkey"
 	"github.com/songquanpeng/one-api/model"
 	"github.com/songquanpeng/one-api/relay/adaptor/openai"
+	"github.com/songquanpeng/one-api/relay/apitype"
 	"github.com/songquanpeng/one-api/relay/billing"
 	metalib "github.com/songquanpeng/one-api/relay/meta"
 	relaymodel "github.com/songquanpeng/one-api/relay/model"
@@ -138,6 +139,9 @@ func postConsumeClaudeMessagesQuotaWithTraceID(ctx context.Context, requestId st
 		RequestId:          requestId,
 		TraceId:            traceId,
 		ProvisionalLogId:   provisionalLogId,
+		UserAPIFormat:      resolveUserAPIFormat(meta.Mode),
+		UpstreamAPIFormat:  apitype.String(meta.APIType),
+		UpstreamEndpoint:   meta.UpstreamRequestURL,
 	})
 
 	// Log with context if available

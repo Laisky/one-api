@@ -587,9 +587,9 @@ export function LogDetailsModal({ open, onOpenChange, log }: LogDetailsModalProp
               )
             }
           />
-          <DetailItem label={t('logs.details.quota', 'Quota')} value={<span className="font-mono text-sm">{quotaDisplay}</span>} />
+          <DetailItem label={t('logs.details.quota', 'Expense')} value={<span className="font-mono text-sm">{quotaDisplay}</span>} />
           <DetailItem
-            label={t('logs.details.quota_raw', 'Quota (raw units)')}
+            label={t('logs.details.quota_raw', 'Quota')}
             value={<span className="font-mono text-sm">{rawQuota}</span>}
           />
           <DetailItem

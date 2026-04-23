@@ -348,6 +348,9 @@ func postConsumeQuota(ctx context.Context,
 			RequestId:          requestId,
 			TraceId:            traceId,
 			ProvisionalLogId:   provisionalLogId,
+			UserAPIFormat:      resolveUserAPIFormat(meta.Mode),
+			UpstreamAPIFormat:  apitype.String(meta.APIType),
+			UpstreamEndpoint:   meta.UpstreamRequestURL,
 		})
 	} else {
 		gmw.GetLogger(ctx).Error("meta information incomplete, cannot post consume quota",
@@ -360,6 +363,15 @@ func postConsumeQuota(ctx context.Context,
 	}
 
 	return quota
+}
+
+// resolveUserAPIFormat returns the snake_case user-facing API format name for the given relay mode.
+// Returns an empty string when the mode is Unknown so callers can omit the metadata key.
+func resolveUserAPIFormat(mode int) string {
+	if mode == relaymode.Unknown {
+		return ""
+	}
+	return relaymode.String(mode)
 }
 
 // postConsumeQuotaWithTraceID is deprecated; callers should pass IDs via QuotaConsumeDetail
@@ -460,6 +472,9 @@ func postConsumeQuotaWithTraceID(ctx context.Context, traceId string,
 			RequestId:          requestId,
 			TraceId:            traceId,
 			ProvisionalLogId:   provisionalLogId,
+			UserAPIFormat:      resolveUserAPIFormat(meta.Mode),
+			UpstreamAPIFormat:  apitype.String(meta.APIType),
+			UpstreamEndpoint:   meta.UpstreamRequestURL,
 		})
 	} else {
 		gmw.GetLogger(ctx).Error("meta information incomplete, cannot post consume quota",
