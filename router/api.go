@@ -135,6 +135,15 @@ func SetApiRouter(router *gin.Engine) {
 			apiRouter.GET("/token/transactions", middleware.TokenAuth(), controller.GetTokenTransactions)
 			apiRouter.GET("/token/logs", middleware.TokenAuth(), controller.GetTokenLogs)
 		}
+		// Admin-scoped read-only token visibility (cross-user). Write ops stay on /api/token
+		// under UserAuth so admins can never silently mutate another user's credentials.
+		adminTokenRoute := apiRouter.Group("/admin/tokens")
+		adminTokenRoute.Use(middleware.AdminAuth())
+		{
+			adminTokenRoute.GET("/", controller.AdminGetAllTokens)
+			adminTokenRoute.GET("/search", controller.AdminSearchTokens)
+			adminTokenRoute.GET("/:id", controller.AdminGetToken)
+		}
 		costRoute := apiRouter.Group("/cost")
 		{
 			costRoute.GET("/request/:request_id", controller.GetRequestCost)

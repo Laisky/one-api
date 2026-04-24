@@ -1,0 +1,442 @@
+#!/usr/bin/env bash
+# oneapi — unified admin CLI for the one-api HTTP API.
+#
+# Usage:
+#   oneapi <resource> <action> [args...]
+#
+# Requires: ONEAPI_BASE_URL and ONEAPI_ADMIN_TOKEN in env.
+# See docs/skills/admin/SKILL.md for full context.
+
+set -euo pipefail
+HERE=$(dirname -- "${BASH_SOURCE[0]}")
+source "$HERE/lib.sh"
+
+print_help() {
+  cat <<'EOF'
+oneapi — one-api admin CLI
+
+Resources:
+  channel   Manage upstream provider channels
+  user      Manage users
+  token     View (admin) and manage (self) API tokens
+  group     List billing groups
+  option    Read/write system options (root for writes)
+  log       Query usage/billing logs
+
+Global:
+  -h, --help                 Show help
+  --yes                      Skip confirmation prompts for destructive ops
+
+Run `oneapi <resource> --help` for per-resource detail.
+Env vars:
+  ONEAPI_BASE_URL            Base URL, e.g. https://oneapi.example.com
+  ONEAPI_ADMIN_TOKEN         Admin access token (from UI > Profile)
+  ONEAPI_PAGE_SIZE=100       Default page size for loops
+  ONEAPI_THROTTLE_MS=100     Inter-request sleep in paginated loops
+  ONEAPI_ASSUME_YES=0        Set 1 to auto-confirm destructive ops
+EOF
+}
+
+ASSUME_YES=0
+ARGS=()
+for a in "$@"; do
+  case "$a" in
+    --yes) ASSUME_YES=1 ;;
+    *) ARGS+=("$a") ;;
+  esac
+done
+set -- "${ARGS[@]}"
+export ONEAPI_ASSUME_YES="$ASSUME_YES"
+
+# Global help only when no resource is given, or first arg is -h/--help
+if (( $# < 1 )) || [[ "$1" == -h || "$1" == --help ]]; then
+  print_help; exit 0
+fi
+resource="$1"; shift
+
+die() { echo "error: $*" >&2; exit 2; }
+
+# -------- channel ---------------------------------------------------------
+
+cmd_channel_help() {
+  cat <<'EOF'
+oneapi channel <action> [args]
+
+Actions:
+  list [--enabled-only]              List channels (paginated)
+  search <keyword>                   Search channels by name/model
+  get <id>                           Show a single channel
+  test <id> [--model <name>]         Test one channel; returns time + error
+  test-all [--scope <all|enabled>]   Async: test all (enabled by default)
+  balance [<id>]                     Refresh balance(s)
+  disable <id>                       Set status=2 (admin kill-switch)
+  enable <id>                        Set status=1 (must be tested first)
+  delete <id>                        Hard-delete a channel (destructive)
+  pricing get <id>                   Show channel pricing JSON
+  pricing set <id> <file>            Replace pricing from JSON file
+EOF
+}
+
+cmd_channel() {
+  (( $# >= 1 )) || { cmd_channel_help; return 0; }
+  local action="$1"; shift
+  case "$action" in
+    -h|--help) cmd_channel_help ;;
+    list)
+      local filter=''
+      for arg in "$@"; do [[ "$arg" == --enabled-only ]] && filter='| select(.status == 1)'; done
+      oneapi_paginate /api/channel/ \
+        | jq -c "${filter:+$filter |} {id, name, type, status, group, priority, weight, balance, response_time}"
+      ;;
+    search)
+      (( $# >= 1 )) || die "keyword required"
+      oneapi_get "/api/channel/search?keyword=$(jq -rn --arg v "$1" '$v|@uri')" \
+        | jq '.data[] | {id, name, type, status, group, priority}'
+      ;;
+    get)
+      (( $# >= 1 )) || die "id required"
+      oneapi_get "/api/channel/$1" | jq '.data'
+      ;;
+    test)
+      (( $# >= 1 )) || die "id required"
+      local id="$1"; shift
+      local qs=''
+      if (( $# >= 2 )) && [[ "$1" == --model ]]; then
+        qs="?model=$(jq -rn --arg v "$2" '$v|@uri')"; shift 2
+      fi
+      oneapi_get "/api/channel/test/$id$qs" | jq '{success, message, time, modelName}'
+      ;;
+    test-all)
+      local scope=enabled
+      while (( $# > 0 )); do
+        case "$1" in --scope) scope="$2"; shift 2 ;; *) die "unknown flag $1" ;; esac
+      done
+      oneapi_get "/api/channel/test?scope=$(jq -rn --arg v "$scope" '$v|@uri')" | jq '{success, message}'
+      ;;
+    balance)
+      if (( $# >= 1 )); then
+        oneapi_get "/api/channel/update_balance/$1" | jq '{success, balance, message}'
+      else
+        oneapi_get "/api/channel/update_balance" | jq '{success, message}'
+      fi
+      ;;
+    disable)
+      (( $# >= 1 )) || die "id required"
+      local body; body=$(jq -nc --argjson id "$1" '{id: $id, status: 2}')
+      oneapi_put /api/channel/ "$body" | jq '{success, message}'
+      ;;
+    enable)
+      (( $# >= 1 )) || die "id required"
+      oneapi_confirm "re-enable channel $1? (was it tested?)" || { echo "aborted"; return 1; }
+      local body; body=$(jq -nc --argjson id "$1" '{id: $id, status: 1}')
+      oneapi_put /api/channel/ "$body" | jq '{success, message}'
+      ;;
+    delete)
+      (( $# >= 1 )) || die "id required"
+      oneapi_confirm "DELETE channel $1 irreversibly?" || { echo "aborted"; return 1; }
+      oneapi_delete "/api/channel/$1" | jq '{success, message}'
+      ;;
+    pricing)
+      (( $# >= 2 )) || { cmd_channel_help; die "pricing needs sub-action"; }
+      local sub="$1" id="$2"; shift 2
+      case "$sub" in
+        get) oneapi_get "/api/channel/pricing/$id" | jq '.data' ;;
+        set)
+          (( $# >= 1 )) || die "pricing set needs a JSON file"
+          [[ -r "$1" ]] || die "cannot read $1"
+          oneapi_put "/api/channel/pricing/$id" "$(cat "$1")" | jq '{success, message}'
+          ;;
+        *) die "unknown pricing sub-action: $sub" ;;
+      esac
+      ;;
+    *) cmd_channel_help; die "unknown action: $action" ;;
+  esac
+}
+
+# -------- user ------------------------------------------------------------
+
+cmd_user_help() {
+  cat <<'EOF'
+oneapi user <action> [args]
+
+Actions:
+  list                            List users (paginated)
+  get --id <N> | --keyword <str>  Show a user
+  search <keyword>                Search users
+  disable <username>              Disable a user (bulk action)
+  enable <username>               Enable a user
+  promote <username>              Promote to admin (ROOT-ONLY)
+  demote <username>               Demote from admin
+  delete-user <username>          Soft-delete via manage endpoint
+  grant-quota <user_id> <units>   ADD quota via /api/topup (confirms first)
+  set-group <user_id> <group>     Change a user's billing group
+  set-quota <user_id> <units>     OVERWRITE quota (use grant-quota to add)
+EOF
+}
+
+cmd_user() {
+  (( $# >= 1 )) || { cmd_user_help; return 0; }
+  local action="$1"; shift
+  case "$action" in
+    -h|--help) cmd_user_help ;;
+    list)
+      oneapi_paginate /api/user/ \
+        | jq -c '{id, username, role, status, group, quota, used_quota, request_count}'
+      ;;
+    search)
+      (( $# >= 1 )) || die "keyword required"
+      oneapi_get "/api/user/search?keyword=$(jq -rn --arg v "$1" '$v|@uri')" \
+        | jq '.data[] | {id, username, email, role, status, group, quota, used_quota}'
+      ;;
+    get)
+      local id='' kw=''
+      while (( $# > 0 )); do
+        case "$1" in
+          --id) id="$2"; shift 2 ;;
+          --keyword) kw="$2"; shift 2 ;;
+          *) die "unknown flag $1" ;;
+        esac
+      done
+      if [[ -n "$id" ]]; then
+        oneapi_get "/api/user/$id" | jq '.data'
+      elif [[ -n "$kw" ]]; then
+        oneapi_get "/api/user/search?keyword=$(jq -rn --arg v "$kw" '$v|@uri')" | jq '.data'
+      else
+        die "pass --id or --keyword"
+      fi
+      ;;
+    disable|enable|promote|demote|delete-user)
+      (( $# >= 1 )) || die "username required"
+      local api_action="$action"
+      [[ "$api_action" == delete-user ]] && api_action=delete
+      if [[ "$api_action" == delete ]]; then
+        oneapi_confirm "soft-delete user $1?" || { echo "aborted"; return 1; }
+      fi
+      local body; body=$(jq -nc --arg u "$1" --arg a "$api_action" '{username: $u, action: $a}')
+      oneapi_post /api/user/manage "$body" | jq '{success, message}'
+      ;;
+    grant-quota)
+      (( $# >= 2 )) || die "user_id and units required"
+      local uid="$1" units="$2"
+      oneapi_confirm "grant $units quota units to user $uid via /api/topup?" || { echo "aborted"; return 1; }
+      local body; body=$(jq -nc --argjson id "$uid" --argjson q "$units" '{user_id: $id, quota: $q, remark: "oneapi-cli grant-quota"}')
+      oneapi_post /api/topup "$body" | jq '{success, message}'
+      ;;
+    set-group)
+      (( $# >= 2 )) || die "user_id and group required"
+      local body; body=$(jq -nc --argjson id "$1" --arg g "$2" '{id: $id, group: $g}')
+      oneapi_put /api/user/ "$body" | jq '{success, message}'
+      ;;
+    set-quota)
+      (( $# >= 2 )) || die "user_id and units required"
+      oneapi_confirm "OVERWRITE user $1 quota to $2 (not additive)?" || { echo "aborted"; return 1; }
+      local body; body=$(jq -nc --argjson id "$1" --argjson q "$2" '{id: $id, quota: $q}')
+      oneapi_put /api/user/ "$body" | jq '{success, message}'
+      ;;
+    *) cmd_user_help; die "unknown action: $action" ;;
+  esac
+}
+
+# -------- token -----------------------------------------------------------
+
+cmd_token_help() {
+  cat <<'EOF'
+oneapi token <action> [args]
+
+Admin actions (read-only, cross-user):
+  admin-list [--user-id <N>]     List tokens across users
+  admin-search <keyword>         Search tokens by name
+  admin-get <id>                 Get one token (any owner)
+
+Self actions (operate on your own tokens):
+  list                           List my tokens
+  get <id>                       Get one of my tokens
+  create <name> [quota] [expiry-unix-seconds]
+                                 Create a token under my user id
+  disable <id>                   Set status=2 on one of my tokens
+EOF
+}
+
+cmd_token() {
+  (( $# >= 1 )) || { cmd_token_help; return 0; }
+  local action="$1"; shift
+  case "$action" in
+    -h|--help) cmd_token_help ;;
+    admin-list)
+      local uid=0
+      while (( $# > 0 )); do
+        case "$1" in --user-id) uid="$2"; shift 2 ;; *) die "unknown flag $1" ;; esac
+      done
+      oneapi_paginate "/api/admin/tokens/" "user_id=$uid" \
+        | jq -c '{id, user_id, name, status, unlimited_quota, remain_quota, used_quota, expired_time}'
+      ;;
+    admin-search)
+      (( $# >= 1 )) || die "keyword required"
+      oneapi_get "/api/admin/tokens/search?keyword=$(jq -rn --arg v "$1" '$v|@uri')" \
+        | jq '.data[] | {id, user_id, name, status}'
+      ;;
+    admin-get)
+      (( $# >= 1 )) || die "id required"
+      oneapi_get "/api/admin/tokens/$1" | jq '.data'
+      ;;
+    list)
+      oneapi_paginate /api/token/ \
+        | jq -c '{id, name, status, remain_quota, used_quota, expired_time}'
+      ;;
+    get)
+      (( $# >= 1 )) || die "id required"
+      oneapi_get "/api/token/$1" | jq '.data'
+      ;;
+    create)
+      (( $# >= 1 )) || die "name required"
+      local name="$1" quota="${2:-0}" expiry="${3:--1}"
+      local body
+      body=$(jq -nc --arg n "$name" --argjson q "$quota" --argjson e "$expiry" \
+        '{name: $n, remain_quota: $q, unlimited_quota: false, expired_time: $e}')
+      oneapi_post /api/token/ "$body" | jq '{success, message, id: .data.id, key: .data.key}'
+      ;;
+    disable)
+      (( $# >= 1 )) || die "id required"
+      local body; body=$(jq -nc --argjson id "$1" '{id: $id, status: 2}')
+      oneapi_put "/api/token/?status_only=1" "$body" | jq '{success, message}'
+      ;;
+    *) cmd_token_help; die "unknown action: $action" ;;
+  esac
+}
+
+# -------- group -----------------------------------------------------------
+
+cmd_group() {
+  case "${1:-list}" in
+    list|-h|--help) oneapi_get /api/group/ | jq '.data' ;;
+    *) echo "oneapi group list   — list groups (groups are managed via 'option set GroupRatio <json>')" ;;
+  esac
+}
+
+# -------- option ----------------------------------------------------------
+
+cmd_option_help() {
+  cat <<'EOF'
+oneapi option <action> [args]
+
+Actions:
+  list                         List all options (sensitive keys filtered server-side)
+  get <key>                    Get one option's value
+  set <key> <value>            Set one option (PUT /api/option/) — ROOT required
+  ratio <GroupRatio|ModelRatio|CompletionRatio> — pretty-print a ratio map
+EOF
+}
+
+cmd_option() {
+  (( $# >= 1 )) || { cmd_option_help; return 0; }
+  local action="$1"; shift
+  case "$action" in
+    -h|--help) cmd_option_help ;;
+    list)
+      oneapi_get /api/option/ | jq '.data | map({key, value})'
+      ;;
+    get)
+      (( $# >= 1 )) || die "key required"
+      oneapi_get /api/option/ | jq --arg k "$1" '.data[] | select(.key == $k) | .value'
+      ;;
+    ratio)
+      (( $# >= 1 )) || die "ratio key required"
+      local k="$1"
+      case "$k" in GroupRatio|ModelRatio|CompletionRatio) ;; *) die "unsupported ratio key: $k" ;; esac
+      oneapi_get /api/option/ | jq -r --arg k "$k" '.data[] | select(.key == $k) | .value' | jq .
+      ;;
+    set)
+      (( $# >= 2 )) || die "key and value required"
+      local k="$1" v="$2"
+      oneapi_confirm "set option $k — root-only, takes effect immediately. Continue?" || { echo "aborted"; return 1; }
+      local body; body=$(jq -nc --arg k "$k" --arg v "$v" '{key: $k, value: $v}')
+      oneapi_put /api/option/ "$body" | jq '{success, message}'
+      ;;
+    *) cmd_option_help; die "unknown action: $action" ;;
+  esac
+}
+
+# -------- log -------------------------------------------------------------
+
+cmd_log_help() {
+  cat <<'EOF'
+oneapi log <action> [args]
+
+Actions:
+  list [--username U] [--token-name T] [--model M] [--channel N]
+       [--from <unix-seconds>] [--to <unix-seconds>] [--type 1|2|3|4] [--size 100]
+       List admin logs. All flags optional. Defaults: last 1h, type=2 (consume).
+  tail [--username U] [--size 20]        Last N consume rows, sorted desc by time.
+  stat                                   Aggregate system stats.
+  top-users [--hours 24]                 Top 10 users by quota in the window.
+EOF
+}
+
+cmd_log() {
+  (( $# >= 1 )) || { cmd_log_help; return 0; }
+  local action="$1"; shift
+  case "$action" in
+    -h|--help) cmd_log_help ;;
+    list|tail)
+      local username='' token_name='' model='' channel='' type=2 size=100
+      local from="$(($(date +%s) - 3600))" to="$(date +%s)"
+      [[ "$action" == tail ]] && size=20
+      while (( $# > 0 )); do
+        case "$1" in
+          --username) username="$2"; shift 2 ;;
+          --token-name) token_name="$2"; shift 2 ;;
+          --model) model="$2"; shift 2 ;;
+          --channel) channel="$2"; shift 2 ;;
+          --from) from="$2"; shift 2 ;;
+          --to) to="$2"; shift 2 ;;
+          --type) type="$2"; shift 2 ;;
+          --size) size="$2"; shift 2 ;;
+          *) die "unknown flag $1" ;;
+        esac
+      done
+      local args=(
+        --data-urlencode "p=0"
+        --data-urlencode "size=$size"
+        --data-urlencode "type=$type"
+        --data-urlencode "start_timestamp=$from"
+        --data-urlencode "end_timestamp=$to"
+      )
+      [[ -n "$username"   ]] && args+=(--data-urlencode "username=$username")
+      [[ -n "$token_name" ]] && args+=(--data-urlencode "token_name=$token_name")
+      [[ -n "$model"      ]] && args+=(--data-urlencode "model_name=$model")
+      [[ -n "$channel"    ]] && args+=(--data-urlencode "channel=$channel")
+      oneapi_request GET /api/log/ "${args[@]}" -G \
+        | jq '.data[] | {created_at, username, token_name, model_name, channel_id, in: .prompt_tokens, out: .completion_tokens, quota, content}'
+      ;;
+    stat) oneapi_get /api/log/stat | jq '.data' ;;
+    top-users)
+      local hours=24
+      while (( $# > 0 )); do
+        case "$1" in --hours) hours="$2"; shift 2 ;; *) die "unknown flag $1" ;; esac
+      done
+      local from="$(($(date +%s) - hours*3600))" to="$(date +%s)"
+      oneapi_request GET /api/log/ \
+        --data-urlencode "p=0" \
+        --data-urlencode "size=1000" \
+        --data-urlencode "type=2" \
+        --data-urlencode "start_timestamp=$from" \
+        --data-urlencode "end_timestamp=$to" -G \
+        | jq '[.data[] | {username, quota}] | group_by(.username)
+              | map({username: .[0].username, total_units: (map(.quota) | add)})
+              | sort_by(-.total_units) | .[0:10]'
+      ;;
+    *) cmd_log_help; die "unknown action: $action" ;;
+  esac
+}
+
+# -------- dispatch --------------------------------------------------------
+
+case "$resource" in
+  channel) cmd_channel "$@" ;;
+  user)    cmd_user    "$@" ;;
+  token)   cmd_token   "$@" ;;
+  group)   cmd_group   "$@" ;;
+  option)  cmd_option  "$@" ;;
+  log)     cmd_log     "$@" ;;
+  *) print_help; die "unknown resource: $resource" ;;
+esac
