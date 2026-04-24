@@ -134,6 +134,7 @@ The original author stopped maintaining the project, leaving critical PRs and ne
       - [Support replicate chat models](#support-replicate-chat-models)
     - [DeepSeek Features](#deepseek-features)
       - [Support deepseek-reasoner](#support-deepseek-reasoner)
+      - [DeepSeek V4](#deepseek-v4)
     - [OpenRouter Features](#openrouter-features)
       - [Support OpenRouter's reasoning content](#support-openrouters-reasoning-content)
     - [Cohere](#cohere)
@@ -1257,6 +1258,10 @@ To get started, create or edit `~/.config/opencode/opencode.json` like this:
 #### Support deepseek-reasoner
 
 - [feature: add deepseek-reasoner & gemini-2.0-flash-thinking-exp-01-21 #2045](https://github.com/songquanpeng/one-api/pull/2045)
+
+#### DeepSeek V4
+
+Support deepseek-v4-flash / deepseek-v4-pro
 
 ### OpenRouter Features
 
