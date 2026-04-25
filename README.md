@@ -909,6 +909,8 @@ Response:
 
 #### Support gpt-5 family
 
+gpt-5.5 / gpt-5.5-2026-04-23
+
 gpt-5.4 / gpt-5.4-pro
 
 gpt-5.2 / gpt-5.2-2025-12-11 / gpt-5.2-pro / gpt-5.2-pro-2025-12-11 / gpt-5.2-codex
