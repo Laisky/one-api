@@ -268,23 +268,6 @@ export function useRealtimeChat({
         payload: { url, model: selectedModel },
         transport: 'ws',
       });
-
-      const sessionFields: Record<string, unknown> = {};
-      const trimmedSystem = systemMessage?.trim();
-      if (trimmedSystem) sessionFields.instructions = trimmedSystem;
-      if (typeof temperature === 'number') sessionFields.temperature = temperature;
-      if (typeof maxCompletionTokens === 'number') sessionFields.max_response_output_tokens = maxCompletionTokens;
-
-      if (Object.keys(sessionFields).length > 0) {
-        const sessionUpdate = { type: 'session.update', session: sessionFields };
-        try {
-          ws.send(JSON.stringify(sessionUpdate));
-          addEvent({ direction: 'out', type: 'session.update', payload: sessionUpdate, transport: 'ws' });
-        } catch (err) {
-          const message = err instanceof Error ? err.message : 'failed to send session.update';
-          addEvent({ direction: 'out', type: 'error', payload: { message }, transport: 'ws' });
-        }
-      }
     };
 
     ws.onmessage = handleWsMessage;
@@ -317,16 +300,27 @@ export function useRealtimeChat({
         });
       }
     };
-  }, [
-    selectedToken,
-    selectedModel,
-    systemMessage,
-    temperature,
-    maxCompletionTokens,
-    handleWsMessage,
-    addEvent,
-    notify,
-  ]);
+  }, [selectedToken, selectedModel, handleWsMessage, addEvent, notify]);
+
+  useEffect(() => {
+    if (connectionStatus !== 'connected') return;
+    const ws = wsRef.current;
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    const sessionFields: Record<string, unknown> = {};
+    const trimmedSystem = systemMessage?.trim();
+    if (trimmedSystem) sessionFields.instructions = trimmedSystem;
+    if (typeof temperature === 'number') sessionFields.temperature = temperature;
+    if (typeof maxCompletionTokens === 'number') sessionFields.max_response_output_tokens = maxCompletionTokens;
+    if (Object.keys(sessionFields).length === 0) return;
+    const sessionUpdate = { type: 'session.update', session: sessionFields };
+    try {
+      ws.send(JSON.stringify(sessionUpdate));
+      addEvent({ direction: 'out', type: 'session.update', payload: sessionUpdate, transport: 'ws' });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'failed to send session.update';
+      addEvent({ direction: 'out', type: 'error', payload: { message }, transport: 'ws' });
+    }
+  }, [systemMessage, temperature, maxCompletionTokens, connectionStatus, addEvent]);
 
   useEffect(() => {
     if (selectedToken && selectedModel && REALTIME_MODEL_REGEX.test(selectedModel)) {

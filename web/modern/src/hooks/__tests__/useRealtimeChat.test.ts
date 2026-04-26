@@ -402,4 +402,44 @@ describe('useRealtimeChat', () => {
     const newest = sockets[sockets.length - 1];
     expect(newest.protocols).toEqual(['realtime', 'openai-insecure-api-key.tok-new']);
   });
+
+  it('disconnect emits exactly one connection.close event (no double-emit on onclose)', () => {
+    const { props, addEvent } = makeProps();
+    const { result } = renderHook(() => useRealtimeChat(props));
+    act(() => {
+      sockets[0].simulateOpen();
+    });
+    act(() => {
+      result.current.disconnect();
+    });
+    const closeEvents = addEvent.mock.calls.filter(
+      ([entry]) => entry.type === 'connection.close'
+    );
+    expect(closeEvents).toHaveLength(1);
+  });
+
+  it('changing temperature mid-session does not reconnect; sends session.update on existing socket', () => {
+    const initial = makeProps({ temperature: 0.7 });
+    const { rerender } = renderHook((p: UseRealtimeChatProps) => useRealtimeChat(p), {
+      initialProps: initial.props,
+    });
+    expect(sockets.length).toBe(1);
+    const socket0 = sockets[0];
+    act(() => {
+      socket0.simulateOpen();
+    });
+    const sentBefore = socket0.sent.length;
+
+    const next: UseRealtimeChatProps = {
+      ...initial.props,
+      temperature: 1.0,
+    };
+    rerender(next);
+
+    expect(sockets.length).toBe(1);
+    const newFrames = socket0.sent.slice(sentBefore).map((s) => JSON.parse(s));
+    const sessionUpdate = newFrames.find((f) => f.type === 'session.update');
+    expect(sessionUpdate).toBeDefined();
+    expect(sessionUpdate.session.temperature).toBe(1.0);
+  });
 });
