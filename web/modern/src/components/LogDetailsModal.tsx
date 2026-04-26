@@ -8,7 +8,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { TimestampDisplay } from '@/components/ui/timestamp';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { api } from '@/lib/api';
-import { LOG_TYPES, getLogTypeLabel } from '@/lib/constants/logs';
+import { getLogTypeLabel } from '@/lib/constants/logs';
 import { useAuthStore } from '@/lib/stores/auth';
 import { cn, renderQuota } from '@/lib/utils';
 import type { LogEntry, LogMetadata } from '@/types/log';
@@ -176,7 +176,7 @@ export function LogDetailsModal({ open, onOpenChange, log }: LogDetailsModalProp
   const [traceError, setTraceError] = useState<string | null>(null);
   const [traceCopied, setTraceCopied] = useState(false);
   const hasTrace = Boolean(
-    log && log.trace_id && log.trace_id.trim() !== '' && typeof log.id === 'number' && log.type === LOG_TYPES.CONSUME
+    log && log.trace_id && log.trace_id.trim() !== '' && typeof log.id === 'number'
   );
 
   const timelineEvents = useMemo(

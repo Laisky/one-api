@@ -1,6 +1,7 @@
 import type { Message } from '@/lib/utils';
 import type { AddEventInput } from '@/types/realtime';
 import { act, renderHook } from '@testing-library/react';
+import type { SetStateAction } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const stableNotify = vi.fn();
@@ -68,27 +69,22 @@ class MockWebSocket {
   }
 }
 
-function makeProps(overrides: Partial<UseRealtimeChatProps> = {}): {
-  props: UseRealtimeChatProps;
-  addEvent: ReturnType<typeof vi.fn>;
-  setMessages: ReturnType<typeof vi.fn>;
-  messagesRef: { current: Message[] };
-} {
+function makeProps(overrides: Partial<UseRealtimeChatProps> = {}) {
   const messagesRef: { current: Message[] } = { current: [] };
-  const setMessages = vi.fn((updater: any) => {
+  const setMessages = vi.fn((updater: SetStateAction<Message[]>) => {
     if (typeof updater === 'function') {
       messagesRef.current = updater(messagesRef.current);
     } else {
       messagesRef.current = updater;
     }
   });
-  const addEvent = vi.fn<(entry: AddEventInput) => void>();
+  const addEvent = vi.fn<[AddEventInput], void>();
   const props: UseRealtimeChatProps = {
     selectedToken: 'tok-test',
     selectedModel: 'gpt-4o-realtime-preview',
     systemMessage: '',
     messages: messagesRef.current,
-    setMessages: setMessages as any,
+    setMessages,
     addEvent,
     ...overrides,
   };
