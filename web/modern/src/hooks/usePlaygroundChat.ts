@@ -2,11 +2,16 @@ import { ImageAttachment as ImageAttachmentType } from '@/components/chat/ImageA
 import { useNotifications } from '@/components/ui/notifications';
 import { getModelCapabilities, isOpenAIMediumOnlyReasoningModel } from '@/lib/model-capabilities';
 import { Message } from '@/lib/utils';
-import { useCallback } from 'react';
+import type { AddEventInput } from '@/types/realtime';
+import { useCallback, useEffect, useRef } from 'react';
 import { UsePlaygroundChatProps, UsePlaygroundChatReturn } from './chat/types';
 import { useChatCompletionStream } from './chat/useChatCompletionStream';
 import { useChatState } from './chat/useChatState';
 import { useChatStream } from './chat/useChatStream';
+
+interface UsePlaygroundChatPropsWithEvents extends UsePlaygroundChatProps {
+  addEvent?: (entry: AddEventInput) => void;
+}
 
 export function usePlaygroundChat({
   selectedToken,
@@ -27,7 +32,12 @@ export function usePlaygroundChat({
   setMessages,
   expandedReasonings,
   setExpandedReasonings,
-}: UsePlaygroundChatProps): UsePlaygroundChatReturn {
+  addEvent,
+}: UsePlaygroundChatPropsWithEvents): UsePlaygroundChatReturn {
+  const addEventRef = useRef<typeof addEvent>(addEvent);
+  useEffect(() => {
+    addEventRef.current = addEvent;
+  });
   const { notify } = useNotifications();
 
   const { isStreaming, setIsStreaming, abortControllerRef, updateThrottleRef, throttledUpdateMessage, scheduleUpdate, addErrorMessage } =
@@ -161,7 +171,14 @@ export function usePlaygroundChat({
         stream: true,
       };
 
-      await streamChatCompletion(requestBody, abortControllerRef.current.signal);
+      addEventRef.current?.({ direction: 'out', type: 'request', payload: requestBody, transport: 'sse' });
+      try {
+        await streamChatCompletion(requestBody, abortControllerRef.current.signal);
+        addEventRef.current?.({ direction: 'in', type: 'done', payload: {}, transport: 'sse' });
+      } catch (err) {
+        const errMsg = err instanceof Error ? err.message : String(err);
+        addEventRef.current?.({ direction: 'in', type: 'error', payload: { message: errMsg }, transport: 'sse' });
+      }
     },
     [
       selectedModel,
@@ -259,7 +276,14 @@ export function usePlaygroundChat({
         stream: true,
       };
 
-      await streamChatCompletion(requestBody, abortControllerRef.current.signal);
+      addEventRef.current?.({ direction: 'out', type: 'request', payload: requestBody, transport: 'sse' });
+      try {
+        await streamChatCompletion(requestBody, abortControllerRef.current.signal);
+        addEventRef.current?.({ direction: 'in', type: 'done', payload: {}, transport: 'sse' });
+      } catch (err) {
+        const errMsg = err instanceof Error ? err.message : String(err);
+        addEventRef.current?.({ direction: 'in', type: 'error', payload: { message: errMsg }, transport: 'sse' });
+      }
     },
     [
       selectedModel,
@@ -285,6 +309,7 @@ export function usePlaygroundChat({
   const stopGeneration = useCallback(() => {
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
+      addEventRef.current?.({ direction: 'out', type: 'cancel', payload: {}, transport: 'sse' });
     }
   }, []);
 

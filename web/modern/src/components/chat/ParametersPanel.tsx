@@ -8,7 +8,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Separator } from '@/components/ui/separator';
 import { Slider } from '@/components/ui/slider';
 import { Textarea } from '@/components/ui/textarea';
-import { Settings, X } from 'lucide-react';
+import type { ConnectionStatus } from '@/types/realtime';
+import { Loader2, Settings, Wifi, WifiOff, X } from 'lucide-react';
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
@@ -117,6 +118,11 @@ interface ParametersPanelProps {
 
   // Model capabilities
   modelCapabilities: Record<string, any>;
+
+  // Realtime mode
+  connectionStatus?: ConnectionStatus;
+  onConnect?: () => void;
+  onDisconnect?: () => void;
 }
 
 const AutosuggestInput: React.FC<AutosuggestInputProps> = ({
@@ -292,8 +298,21 @@ export function ParametersPanel({
   onThinkingBudgetTokensChange,
   onSystemMessageChange,
   modelCapabilities,
+  connectionStatus,
+  onConnect,
+  onDisconnect,
 }: ParametersPanelProps) {
   const { t } = useTranslation();
+
+  const isRealtime = modelCapabilities.isRealtime === true;
+  const realtimeStatus: ConnectionStatus = connectionStatus ?? 'disconnected';
+  const lockSelectors = isRealtime && realtimeStatus === 'connected';
+  const temperatureMin = isRealtime ? 0.6 : 0;
+  const temperatureMax = isRealtime ? 1.2 : 2;
+  const temperatureStep = isRealtime ? 0.05 : 0.1;
+  const displayedTemperature = isRealtime
+    ? [Math.min(Math.max(temperature[0] ?? 0.8, 0.6), 1.2)]
+    : temperature;
 
   const modelPlaceholder = isLoadingModels
     ? t('playground.parameters.model.loading')
@@ -301,7 +320,7 @@ export function ParametersPanel({
       ? t('playground.parameters.model.no_models')
       : t('playground.parameters.model.search_placeholder');
 
-  const isModelInputDisabled = isLoadingModels || models.length === 0;
+  const isModelInputDisabled = isLoadingModels || models.length === 0 || lockSelectors;
 
   const modelEmptyText =
     models.length === 0 ? t('playground.parameters.model.no_models_for_selection') : t('playground.parameters.model.no_match');
@@ -343,7 +362,7 @@ export function ParametersPanel({
                 </div>
               )}
             </div>
-            <Select value={selectedToken} onValueChange={onTokenChange} disabled={isLoadingTokens}>
+            <Select value={selectedToken} onValueChange={onTokenChange} disabled={isLoadingTokens || lockSelectors}>
               <SelectTrigger className={isLoadingTokens ? 'opacity-50' : ''}>
                 <SelectValue
                   placeholder={
@@ -393,7 +412,7 @@ export function ParametersPanel({
             </div>
             <AutosuggestInput
               value={channelInputValue}
-              disabled={isLoadingChannels}
+              disabled={isLoadingChannels || lockSelectors}
               isLoading={isLoadingChannels}
               placeholder={isLoadingChannels ? t('playground.parameters.channel.loading') : t('playground.parameters.channel.placeholder')}
               suggestions={channelSuggestions}
@@ -446,9 +465,60 @@ export function ParametersPanel({
 
           <Separator />
 
+          {/* Realtime */}
+          {isRealtime && (
+            <>
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label className="text-sm font-medium">{t('playground.realtime.title')}</Label>
+                  {realtimeStatus === 'connected' ? (
+                    <Badge className="bg-emerald-500/15 text-emerald-600 border-emerald-500/30 gap-1.5">
+                      <Wifi className="h-3 w-3" />
+                      {t('playground.realtime.connected')}
+                    </Badge>
+                  ) : realtimeStatus === 'connecting' ? (
+                    <Badge className="bg-amber-500/15 text-amber-600 border-amber-500/30 gap-1.5">
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                      {t('playground.realtime.connecting')}
+                    </Badge>
+                  ) : (
+                    <Badge variant="secondary" className="gap-1.5">
+                      <WifiOff className="h-3 w-3" />
+                      {t('playground.realtime.disconnected')}
+                    </Badge>
+                  )}
+                </div>
+                {realtimeStatus === 'disconnected' ? (
+                  <Button
+                    className="w-full gap-2"
+                    onClick={() => onConnect?.()}
+                    disabled={!selectedToken || !selectedModel}
+                  >
+                    <Wifi className="h-4 w-4" />
+                    {t('playground.realtime.connect')}
+                  </Button>
+                ) : realtimeStatus === 'connecting' ? (
+                  <Button className="w-full gap-2" disabled>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    {t('playground.realtime.connecting')}
+                  </Button>
+                ) : (
+                  <Button className="w-full gap-2" variant="destructive" onClick={() => onDisconnect?.()}>
+                    <WifiOff className="h-4 w-4" />
+                    {t('playground.realtime.disconnect')}
+                  </Button>
+                )}
+              </div>
+
+              <Separator />
+            </>
+          )}
+
           {/* System Message */}
           <div className="space-y-2">
-            <Label className="text-sm font-medium">{t('playground.parameters.system_message.label')}</Label>
+            <Label className="text-sm font-medium">
+              {isRealtime ? t('playground.realtime.instructions') : t('playground.parameters.system_message.label')}
+            </Label>
             <Textarea
               value={systemMessage}
               onChange={(e) => onSystemMessageChange(e.target.value)}
@@ -464,10 +534,17 @@ export function ParametersPanel({
             <div className="flex justify-between items-center">
               <Label className="text-sm font-medium">{t('playground.parameters.temperature.label')}</Label>
               <Badge variant="outline" className="text-xs px-1.5 py-0.5">
-                {temperature[0]}
+                {displayedTemperature[0]}
               </Badge>
             </div>
-            <Slider value={temperature} onValueChange={onTemperatureChange} max={2} min={0} step={0.1} className="w-full" />
+            <Slider
+              value={displayedTemperature}
+              onValueChange={onTemperatureChange}
+              max={temperatureMax}
+              min={temperatureMin}
+              step={temperatureStep}
+              className="w-full"
+            />
             <div className="text-xs text-muted-foreground">{t('playground.parameters.temperature.description')}</div>
           </div>
 
@@ -488,7 +565,7 @@ export function ParametersPanel({
           <Separator />
 
           {/* Top P - Only show for supported models */}
-          {modelCapabilities.supportsTopP == true && (
+          {modelCapabilities.supportsTopP == true && !isRealtime && (
             <div className="space-y-2">
               <div className="flex justify-between items-center">
                 <Label className="text-sm font-medium">{t('playground.parameters.top_p.label')}</Label>
@@ -504,7 +581,7 @@ export function ParametersPanel({
           <Separator />
 
           {/* Top K - Only show for supported models */}
-          {modelCapabilities.supportsTopK == true && (
+          {modelCapabilities.supportsTopK == true && !isRealtime && (
             <>
               <div className="space-y-2">
                 <div className="flex justify-between items-center">
@@ -521,7 +598,7 @@ export function ParametersPanel({
           )}
 
           {/* Frequency Penalty - Only show for supported models */}
-          {modelCapabilities.supportsFrequencyPenalty == true && (
+          {modelCapabilities.supportsFrequencyPenalty == true && !isRealtime && (
             <>
               <div className="space-y-2">
                 <div className="flex justify-between items-center">
@@ -538,7 +615,7 @@ export function ParametersPanel({
           )}
 
           {/* Presence Penalty - Only show for supported models */}
-          {modelCapabilities.supportsPresencePenalty == true && (
+          {modelCapabilities.supportsPresencePenalty == true && !isRealtime && (
             <>
               <div className="space-y-2">
                 <div className="flex justify-between items-center">
@@ -555,7 +632,7 @@ export function ParametersPanel({
           )}
 
           {/* Max Completion Tokens - Only show for supported models */}
-          {modelCapabilities.supportsMaxCompletionTokens == true && (
+          {modelCapabilities.supportsMaxCompletionTokens == true && !isRealtime && (
             <>
               <div className="space-y-2">
                 <div className="flex justify-between items-center">
@@ -579,7 +656,7 @@ export function ParametersPanel({
           )}
 
           {/* Stop Sequences - Only show for supported models */}
-          {modelCapabilities.supportsStop == true && (
+          {modelCapabilities.supportsStop == true && !isRealtime && (
             <>
               <div className="space-y-2">
                 <Label className="text-sm font-medium">{t('playground.parameters.stop_sequences.label')}</Label>
@@ -596,7 +673,7 @@ export function ParametersPanel({
           )}
 
           {/* Reasoning Effort - Only show for supported models */}
-          {modelCapabilities.supportsReasoningEffort == true && (
+          {modelCapabilities.supportsReasoningEffort == true && !isRealtime && (
             <>
               <div className="space-y-2">
                 <Label className="text-sm font-medium">{t('playground.parameters.reasoning_effort.label')}</Label>
@@ -618,7 +695,7 @@ export function ParametersPanel({
           )}
 
           {/* Extended Thinking - Only show for supported Claude models */}
-          {modelCapabilities.supportsThinking == true && (
+          {modelCapabilities.supportsThinking == true && !isRealtime && (
             <>
               <div className="space-y-2">
                 <div className="flex items-center space-x-2">
@@ -664,21 +741,23 @@ export function ParametersPanel({
           <Separator />
 
           {/* Show Reasoning Content */}
-          <div className="space-y-2">
-            <div className="flex items-center space-x-2">
-              <Checkbox
-                id="show-reasoning"
-                checked={showReasoningContent}
-                onCheckedChange={(checked) => onShowReasoningContentChange(!!checked)}
-              />
-              <div className="space-y-1 leading-none">
-                <Label htmlFor="show-reasoning" className="text-sm font-medium cursor-pointer">
-                  {t('playground.parameters.show_reasoning.label')}
-                </Label>
-                <div className="text-xs text-muted-foreground">{t('playground.parameters.show_reasoning.description')}</div>
+          {!isRealtime && (
+            <div className="space-y-2">
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  id="show-reasoning"
+                  checked={showReasoningContent}
+                  onCheckedChange={(checked) => onShowReasoningContentChange(!!checked)}
+                />
+                <div className="space-y-1 leading-none">
+                  <Label htmlFor="show-reasoning" className="text-sm font-medium cursor-pointer">
+                    {t('playground.parameters.show_reasoning.label')}
+                  </Label>
+                  <div className="text-xs text-muted-foreground">{t('playground.parameters.show_reasoning.description')}</div>
+                </div>
               </div>
             </div>
-          </div>
+          )}
         </CardContent>
       </Card>
     </div>

@@ -21,6 +21,23 @@
       "top_up_link": "Top-up Link",
       "top_up_link_desc": "External link for users to purchase or top up quota."
     },
+    "group_ratio": {
+      "description": "Configure billing multipliers per channel group. Add a new group simply by adding an entry here.",
+      "fix_errors_first": "Please fix the JSON errors before saving.",
+      "format": "Format JSON",
+      "help": "JSON object whose keys are group names and values are multipliers applied to the base price (e.g. vip: 0.8 means 20% off).",
+      "invalid_entries": "These group entries must use a number ≥ 0 and a non-empty key: {{keys}}",
+      "invalid_json": "JSON parse error: {{message}}",
+      "label": "Group Ratio (JSON)",
+      "save": "Save Group Ratio",
+      "save_failed": "Failed to save group ratio",
+      "saved_message": "Group ratio updated.",
+      "saved_success": "Saved",
+      "saving": "Saving...",
+      "shape_invalid": "Group Ratio must be a JSON object of the form { \"groupName\": ratio }.",
+      "title": "Groups \u0026 Ratios",
+      "unsaved": "Unsaved changes"
+    },
     "loading": "Loading operation settings...",
     "logs": {
       "clear_button": "Clear Logs Before This Date",

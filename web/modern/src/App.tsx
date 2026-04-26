@@ -5,7 +5,7 @@ import { NotificationsProvider } from '@/components/ui/notifications';
 import { api } from '@/lib/api';
 import { persistSystemStatus } from '@/lib/utils';
 import { Suspense, lazy, useEffect } from 'react';
-import { Route, BrowserRouter as Router, Routes, useLocation } from 'react-router-dom';
+import { Navigate, Route, BrowserRouter as Router, Routes, useLocation } from 'react-router-dom';
 
 function ScrollToTop() {
   const { pathname } = useLocation();
@@ -43,7 +43,6 @@ const TopUpPage = lazy(() => import('@/pages/topup/TopUpPage'));
 const EditUserPage = lazy(() => import('@/pages/users/EditUserPage'));
 const UsersPage = lazy(() => import('@/pages/users/UsersPage').then((m) => ({ default: m.UsersPage })));
 const PlaygroundPage = lazy(() => import('@/pages/chat/PlaygroundPage'));
-const RealtimePlaygroundPage = lazy(() => import('@/pages/realtime/RealtimePlaygroundPage'));
 
 // Dev tools — lazy loaded, tree-shaken in production
 const ResponsiveDebugger = lazy(() => import('@/components/dev/responsive-debugger').then((m) => ({ default: m.ResponsiveDebugger })));
@@ -132,7 +131,7 @@ function App() {
                     <Route path="settings/:tab" element={<SettingsPage />} />
                     <Route path="topup" element={<TopUpPage />} />
                     <Route path="chat" element={<PlaygroundPage />} />
-                    <Route path="realtime" element={<RealtimePlaygroundPage />} />
+                    <Route path="realtime" element={<Navigate to="/chat" replace />} />
                   </Route>
                 </Route>
 

@@ -32,3 +32,41 @@ describe('isOpenAIMediumOnlyReasoningModel', () => {
     expect(isOpenAIMediumOnlyReasoningModel('gpt-5-mini')).toBe(false);
   });
 });
+
+describe('isRealtime detection', () => {
+  it('marks gpt-4o-realtime-preview as realtime', () => {
+    expect(getModelCapabilities('gpt-4o-realtime-preview').isRealtime).toBe(true);
+  });
+
+  it('marks gpt-4o-mini-realtime-preview-2024-12-17 as realtime', () => {
+    expect(getModelCapabilities('gpt-4o-mini-realtime-preview-2024-12-17').isRealtime).toBe(true);
+  });
+
+  it('marks dated gpt-4o-realtime-preview-2025-06-03 as realtime', () => {
+    expect(getModelCapabilities('gpt-4o-realtime-preview-2025-06-03').isRealtime).toBe(true);
+  });
+
+  it('detects realtime case-insensitively', () => {
+    expect(getModelCapabilities('GPT-4O-REALTIME-PREVIEW').isRealtime).toBe(true);
+  });
+
+  it('does not mark gpt-4o-mini as realtime', () => {
+    expect(getModelCapabilities('gpt-4o-mini').isRealtime).toBe(false);
+  });
+
+  it('does not mark claude-sonnet-4-5 as realtime', () => {
+    expect(getModelCapabilities('claude-sonnet-4-5').isRealtime).toBe(false);
+  });
+
+  it('does not mark o3-mini as realtime', () => {
+    expect(getModelCapabilities('o3-mini').isRealtime).toBe(false);
+  });
+
+  it('returns isRealtime false for empty model name', () => {
+    expect(getModelCapabilities('').isRealtime).toBe(false);
+  });
+
+  it('preserves vision capability for realtime gpt-4o models', () => {
+    expect(getModelCapabilities('gpt-4o-realtime-preview').supportsVision).toBe(true);
+  });
+});

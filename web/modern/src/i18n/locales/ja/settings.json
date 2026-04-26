@@ -21,6 +21,23 @@
       "top_up_link": "チャージリンク",
       "top_up_link_desc": "ユーザーがクォータを購入・チャージするための外部リンクです。"
     },
+    "group_ratio": {
+      "description": "チャネルグループごとの課金倍率を設定します。新しいグループはここにエントリを追加するだけで作成できます。",
+      "fix_errors_first": "保存する前に JSON のエラーを修正してください。",
+      "format": "JSON を整形",
+      "help": "キーがグループ名、値が基本価格に対する倍率となる JSON オブジェクトです（例: vip が 0.8 なら 20% 割引）。",
+      "invalid_entries": "次のグループは、空でないキーと 0 以上の数値を指定する必要があります: {{keys}}",
+      "invalid_json": "JSON 解析エラー: {{message}}",
+      "label": "グループ倍率 (JSON)",
+      "save": "グループ倍率を保存",
+      "save_failed": "グループ倍率の保存に失敗しました",
+      "saved_message": "グループ倍率を更新しました。",
+      "saved_success": "保存しました",
+      "saving": "保存中...",
+      "shape_invalid": "グループ倍率は { \"グループ名\": 倍率 } の形式の JSON オブジェクトである必要があります。",
+      "title": "グループと倍率",
+      "unsaved": "未保存の変更があります"
+    },
     "loading": "運用設定を読み込み中...",
     "logs": {
       "clear_button": "この日付以前のログを削除",

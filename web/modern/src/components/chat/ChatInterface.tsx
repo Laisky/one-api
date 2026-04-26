@@ -7,7 +7,7 @@ import { MarkdownRenderer } from '@/components/ui/markdown';
 import { Textarea } from '@/components/ui/textarea';
 import { useIsTouchDevice, useResponsive } from '@/hooks/useResponsive';
 import { Message } from '@/lib/utils';
-import { Bot, Download, Eye, EyeOff, Send, Settings, Trash2, X } from 'lucide-react';
+import { Activity, Bot, Download, Eye, EyeOff, Send, Settings, Trash2, X } from 'lucide-react';
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 
@@ -56,6 +56,11 @@ interface ChatInterfaceProps {
   onRegenerateMessage?: (messageIndex: number) => void;
   onEditMessage?: (messageIndex: number, newContent: string) => void;
   onDeleteMessage?: (messageIndex: number) => void;
+
+  // Event log
+  showEventLog?: boolean;
+  eventLogCount?: number;
+  onToggleEventLog?: () => void;
 }
 
 export function ChatInterface({
@@ -84,6 +89,9 @@ export function ChatInterface({
   onRegenerateMessage,
   onEditMessage,
   onDeleteMessage,
+  showEventLog,
+  eventLogCount,
+  onToggleEventLog,
 }: ChatInterfaceProps) {
   const { t } = useTranslation();
   const { isMobile, isTablet } = useResponsive();
@@ -157,6 +165,22 @@ export function ChatInterface({
                   <Download className="h-4 w-4 mr-1" />
                   {t('playground.chat.export')}
                 </Button>
+                {onToggleEventLog && (
+                  <Button
+                    variant={showEventLog ? 'secondary' : 'ghost'}
+                    size="sm"
+                    onClick={onToggleEventLog}
+                    className="gap-1.5"
+                  >
+                    <Activity className="h-3.5 w-3.5" />
+                    <span className="hidden sm:inline">{t('playground.realtime.event_log')}</span>
+                    {typeof eventLogCount === 'number' && eventLogCount > 0 && (
+                      <Badge variant="secondary" className="h-5 px-1.5 text-[10px]">
+                        {eventLogCount}
+                      </Badge>
+                    )}
+                  </Button>
+                )}
                 <Button
                   variant="outline"
                   size="sm"

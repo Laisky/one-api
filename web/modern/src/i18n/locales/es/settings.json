@@ -21,6 +21,23 @@
       "top_up_link": "Enlace de recarga",
       "top_up_link_desc": "Enlace externo para que los usuarios compren o recarguen cuota."
     },
+    "group_ratio": {
+      "description": "Configure los multiplicadores de facturación por grupo de canales. Para añadir un grupo nuevo basta con agregar una entrada aquí.",
+      "fix_errors_first": "Corrija los errores JSON antes de guardar.",
+      "format": "Formatear JSON",
+      "help": "Objeto JSON cuyas claves son nombres de grupos y cuyos valores son multiplicadores aplicados al precio base (p. ej. vip: 0,8 significa 20 % de descuento).",
+      "invalid_entries": "Estas entradas de grupo deben usar un número ≥ 0 y una clave no vacía: {{keys}}",
+      "invalid_json": "Error al analizar JSON: {{message}}",
+      "label": "Ratio de grupos (JSON)",
+      "save": "Guardar ratio de grupos",
+      "save_failed": "No se pudo guardar el ratio de grupos",
+      "saved_message": "Ratio de grupos actualizado.",
+      "saved_success": "Guardado",
+      "saving": "Guardando...",
+      "shape_invalid": "El ratio de grupos debe ser un objeto JSON con la forma { \"nombreGrupo\": ratio }.",
+      "title": "Grupos y ratios",
+      "unsaved": "Cambios sin guardar"
+    },
     "loading": "Cargando ajustes operativos...",
     "logs": {
       "clear_button": "Borrar registros antes de esta fecha",

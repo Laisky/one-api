@@ -21,6 +21,23 @@
       "top_up_link": "充值链接",
       "top_up_link_desc": "用户购买或充值配额的外部链接。"
     },
+    "group_ratio": {
+      "description": "为每个分组配置计费倍率。新建分组只需在此处添加一项。",
+      "fix_errors_first": "请先修正 JSON 错误再保存。",
+      "format": "格式化 JSON",
+      "help": "JSON 对象，键为分组名称，值为相对默认价格的倍率（例如 vip 为 0.8 表示 8 折）。",
+      "invalid_entries": "以下分组的取值必须是 ≥ 0 的数字，且键不能为空：{{keys}}",
+      "invalid_json": "JSON 解析失败：{{message}}",
+      "label": "分组倍率（JSON）",
+      "save": "保存分组倍率",
+      "save_failed": "保存分组倍率失败",
+      "saved_message": "分组倍率已更新。",
+      "saved_success": "保存成功",
+      "saving": "保存中...",
+      "shape_invalid": "分组倍率必须是形如 { \"分组名\": 倍率 } 的 JSON 对象。",
+      "title": "分组与倍率",
+      "unsaved": "有未保存的更改"
+    },
     "loading": "正在加载操作设置...",
     "logs": {
       "clear_button": "清除此日期之前的日志",

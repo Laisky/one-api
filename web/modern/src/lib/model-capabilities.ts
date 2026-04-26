@@ -114,6 +114,7 @@ export interface ModelCapabilities {
   supportsPresencePenalty: boolean;
   supportsMaxCompletionTokens: boolean;
   supportsVision: boolean;
+  isRealtime: boolean;
 }
 
 // Check if model is AWS OpenAI OSS model
@@ -248,6 +249,12 @@ const openaiSupportsReasoningEffort = (modelName: string): boolean => {
   return false;
 };
 
+// Check if model is a realtime model
+const modelIsRealtime = (modelName: string): boolean => {
+  const lowerName = modelName.toLowerCase();
+  return lowerName.includes('realtime');
+};
+
 // Check if model supports vision/image input
 const modelSupportsVision = (modelName: string): boolean => {
   const lowerName = modelName.toLowerCase();
@@ -319,6 +326,7 @@ export const getModelCapabilities = (modelName: string): ModelCapabilities => {
         supportsPresencePenalty: true,
         supportsMaxCompletionTokens: false,
         supportsVision: modelSupportsVision(modelName),
+        isRealtime: modelIsRealtime(modelName),
       };
 
     case 'cohere':
@@ -334,6 +342,7 @@ export const getModelCapabilities = (modelName: string): ModelCapabilities => {
         supportsPresencePenalty: true,
         supportsMaxCompletionTokens: false,
         supportsVision: modelSupportsVision(modelName),
+        isRealtime: modelIsRealtime(modelName),
       };
 
     case 'deepseek':
@@ -349,6 +358,7 @@ export const getModelCapabilities = (modelName: string): ModelCapabilities => {
         supportsPresencePenalty: true,
         supportsMaxCompletionTokens: false,
         supportsVision: modelSupportsVision(modelName),
+        isRealtime: modelIsRealtime(modelName),
       };
 
     case 'llama':
@@ -364,6 +374,7 @@ export const getModelCapabilities = (modelName: string): ModelCapabilities => {
         supportsPresencePenalty: true,
         supportsMaxCompletionTokens: false,
         supportsVision: modelSupportsVision(modelName),
+        isRealtime: modelIsRealtime(modelName),
       };
 
     case 'mistral':
@@ -379,6 +390,7 @@ export const getModelCapabilities = (modelName: string): ModelCapabilities => {
         supportsPresencePenalty: true,
         supportsMaxCompletionTokens: false,
         supportsVision: modelSupportsVision(modelName),
+        isRealtime: modelIsRealtime(modelName),
       };
 
     case 'nova':
@@ -394,6 +406,7 @@ export const getModelCapabilities = (modelName: string): ModelCapabilities => {
         supportsPresencePenalty: false,
         supportsMaxCompletionTokens: false,
         supportsVision: modelSupportsVision(modelName),
+        isRealtime: modelIsRealtime(modelName),
       };
 
     case 'openai-oss':
@@ -409,6 +422,7 @@ export const getModelCapabilities = (modelName: string): ModelCapabilities => {
         supportsPresencePenalty: false,
         supportsMaxCompletionTokens: false,
         supportsVision: modelSupportsVision(modelName),
+        isRealtime: modelIsRealtime(modelName),
       };
 
     case 'openai':
@@ -424,6 +438,7 @@ export const getModelCapabilities = (modelName: string): ModelCapabilities => {
         supportsPresencePenalty: true,
         supportsMaxCompletionTokens: true,
         supportsVision: modelSupportsVision(modelName),
+        isRealtime: modelIsRealtime(modelName),
       };
 
     case 'deepinfra':
@@ -439,6 +454,7 @@ export const getModelCapabilities = (modelName: string): ModelCapabilities => {
         supportsPresencePenalty: true,
         supportsMaxCompletionTokens: true,
         supportsVision: modelSupportsVision(modelName),
+        isRealtime: modelIsRealtime(modelName),
       };
 
     case 'vercel':
@@ -454,6 +470,7 @@ export const getModelCapabilities = (modelName: string): ModelCapabilities => {
         supportsPresencePenalty: true,
         supportsMaxCompletionTokens: true,
         supportsVision: modelSupportsVision(modelName),
+        isRealtime: modelIsRealtime(modelName),
       };
 
     case 'hyperbolic':
@@ -469,6 +486,7 @@ export const getModelCapabilities = (modelName: string): ModelCapabilities => {
         supportsPresencePenalty: true,
         supportsMaxCompletionTokens: true,
         supportsVision: modelSupportsVision(modelName),
+        isRealtime: modelIsRealtime(modelName),
       };
 
     case 'google':
@@ -484,6 +502,7 @@ export const getModelCapabilities = (modelName: string): ModelCapabilities => {
         supportsPresencePenalty: false,
         supportsMaxCompletionTokens: true,
         supportsVision: modelSupportsVision(modelName),
+        isRealtime: modelIsRealtime(modelName),
       };
 
     case 'writer':
@@ -499,6 +518,7 @@ export const getModelCapabilities = (modelName: string): ModelCapabilities => {
         supportsPresencePenalty: false,
         supportsMaxCompletionTokens: false,
         supportsVision: modelSupportsVision(modelName),
+        isRealtime: modelIsRealtime(modelName),
       };
 
     default:
@@ -518,4 +538,5 @@ const getDefaultCapabilities = (): ModelCapabilities => ({
   supportsPresencePenalty: false,
   supportsMaxCompletionTokens: false,
   supportsVision: false,
+  isRealtime: false,
 });

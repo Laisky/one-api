@@ -21,6 +21,23 @@
       "top_up_link": "Lien de recharge",
       "top_up_link_desc": "Lien externe permettant aux utilisateurs d'acheter ou de recharger du quota."
     },
+    "group_ratio": {
+      "description": "Configurez les multiplicateurs de facturation par groupe de canaux. Ajoutez un nouveau groupe simplement en ajoutant une entrée ici.",
+      "fix_errors_first": "Veuillez corriger les erreurs JSON avant d'enregistrer.",
+      "format": "Formater le JSON",
+      "help": "Objet JSON dont les clés sont des noms de groupes et les valeurs des multiplicateurs appliqués au prix de base (par ex. vip : 0,8 signifie 20 % de remise).",
+      "invalid_entries": "Ces entrées de groupe doivent utiliser un nombre ≥ 0 et une clé non vide : {{keys}}",
+      "invalid_json": "Erreur d'analyse JSON : {{message}}",
+      "label": "Ratio des groupes (JSON)",
+      "save": "Enregistrer le ratio des groupes",
+      "save_failed": "Échec de l'enregistrement du ratio des groupes",
+      "saved_message": "Ratio des groupes mis à jour.",
+      "saved_success": "Enregistré",
+      "saving": "Enregistrement...",
+      "shape_invalid": "Le ratio des groupes doit être un objet JSON de la forme { \"nomGroupe\" : ratio }.",
+      "title": "Groupes et ratios",
+      "unsaved": "Modifications non enregistrées"
+    },
     "loading": "Chargement des paramètres opérationnels...",
     "logs": {
       "clear_button": "Effacer les journaux avant cette date",

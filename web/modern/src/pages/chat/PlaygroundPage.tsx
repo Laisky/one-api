@@ -1,17 +1,22 @@
 import { ChatInterface } from '@/components/chat/ChatInterface';
+import { EventLogPanel } from '@/components/chat/EventLogPanel';
 import { ExportConversationDialog } from '@/components/chat/ExportConversationDialog';
 import { ParametersPanel } from '@/components/chat/ParametersPanel';
 import { codeBlockStyles } from '@/components/ui/markdown-css';
+import { useNotifications } from '@/components/ui/notifications';
+import { useEventLog } from '@/hooks/useEventLog';
 import { usePlaygroundChat } from '@/hooks/usePlaygroundChat';
+import { useRealtimeChat } from '@/hooks/useRealtimeChat';
+import { useResponsive } from '@/hooks/useResponsive';
 import { getModelCapabilities } from '@/lib/model-capabilities';
 import 'highlight.js/styles/a11y-dark.css';
 import 'katex/dist/katex.min.css';
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { usePlaygroundActions } from './hooks/usePlaygroundActions';
 import { usePlaygroundData } from './hooks/usePlaygroundData';
 import { usePlaygroundState } from './hooks/usePlaygroundState';
 
-// Inject styles into document head
 if (typeof document !== 'undefined') {
   const styleElement = document.createElement('style');
   styleElement.textContent = codeBlockStyles;
@@ -19,6 +24,11 @@ if (typeof document !== 'undefined') {
 }
 
 export function PlaygroundPage() {
+  const { t } = useTranslation();
+  const { isMobile } = useResponsive();
+  const { notify } = useNotifications();
+  const eventLog = useEventLog();
+
   const {
     messages,
     setMessages,
@@ -96,6 +106,7 @@ export function PlaygroundPage() {
   } = usePlaygroundData();
 
   const [modelCapabilities, setModelCapabilities] = useState<Record<string, any>>({});
+  const [showEventLog, setShowEventLog] = useState(false);
 
   useEffect(() => {
     if (selectedModel) {
@@ -104,7 +115,9 @@ export function PlaygroundPage() {
     }
   }, [selectedModel]);
 
-  const { isStreaming, sendMessage, regenerateMessage, stopGeneration } = usePlaygroundChat({
+  const isRealtime = (modelCapabilities.isRealtime as boolean | undefined) ?? false;
+
+  const sseChat = usePlaygroundChat({
     selectedToken,
     selectedModel,
     temperature,
@@ -123,13 +136,32 @@ export function PlaygroundPage() {
     setMessages,
     expandedReasonings,
     setExpandedReasonings,
+    addEvent: eventLog.addEvent,
   });
+
+  const realtimeChat = useRealtimeChat({
+    selectedToken,
+    selectedModel,
+    systemMessage,
+    temperature: Array.isArray(temperature) ? temperature[0] : temperature,
+    maxCompletionTokens: Array.isArray(maxCompletionTokens) ? maxCompletionTokens[0] : maxCompletionTokens,
+    messages,
+    setMessages,
+    addEvent: eventLog.addEvent,
+  });
+
+  const isStreaming = isRealtime ? realtimeChat.isStreaming : sseChat.isStreaming;
+  const sendMessage = isRealtime ? realtimeChat.sendMessage : sseChat.sendMessage;
+  const stopGeneration = isRealtime ? realtimeChat.stopGeneration : sseChat.stopGeneration;
+  const regenerateMessage = isRealtime
+    ? ((_msgs: any) => realtimeChat.regenerateMessage(''))
+    : sseChat.regenerateMessage;
 
   const {
     exportConversation,
     toggleReasoning,
     handleCurrentMessageChange,
-    handleSendMessage,
+    handleSendMessage: baseHandleSendMessage,
     handleCopyMessage,
     handleRegenerateMessage,
     handleEditMessage,
@@ -145,9 +177,26 @@ export function PlaygroundPage() {
     setExportDialogOpen,
   });
 
+  const handleSendMessage: typeof baseHandleSendMessage = (...args) => {
+    if (isRealtime && realtimeChat.connectionStatus !== 'connected') {
+      notify({
+        title: t('playground.realtime.disconnected'),
+        message: t('playground.realtime.error_send'),
+        type: 'warning',
+      });
+      return;
+    }
+    return baseHandleSendMessage(...args);
+  };
+
   return (
     <div className="flex h-screen bg-gradient-to-br from-background to-muted/20 relative">
-      {isMobileSidebarOpen && <div className="fixed inset-0 bg-black/50 z-40 lg:hidden" onClick={() => setIsMobileSidebarOpen(false)} />}
+      {isMobileSidebarOpen && (
+        <div
+          className="fixed inset-0 bg-black/50 z-40 lg:hidden"
+          onClick={() => setIsMobileSidebarOpen(false)}
+        />
+      )}
 
       <ParametersPanel
         isMobileSidebarOpen={isMobileSidebarOpen}
@@ -198,35 +247,70 @@ export function PlaygroundPage() {
         onSystemMessageChange={setSystemMessage}
         onShowReasoningContentChange={setShowReasoningContent}
         modelCapabilities={modelCapabilities}
+        connectionStatus={isRealtime ? realtimeChat.connectionStatus : undefined}
+        onConnect={isRealtime ? realtimeChat.connect : undefined}
+        onDisconnect={isRealtime ? realtimeChat.disconnect : undefined}
       />
 
-      <ChatInterface
-        messages={messages}
-        onClearConversation={clearConversation}
-        onExportConversation={exportConversation}
-        currentMessage={currentMessage}
-        onCurrentMessageChange={handleCurrentMessageChange}
-        onSendMessage={handleSendMessage}
-        isStreaming={isStreaming}
-        onStopGeneration={stopGeneration}
-        selectedModel={selectedModel}
-        selectedToken={selectedToken}
-        supportsVision={modelCapabilities.supportsVision || false}
-        attachedImages={attachedImages}
-        onAttachedImagesChange={setAttachedImages}
-        showPreview={showPreview}
-        onPreviewChange={setShowPreview}
-        onMobileMenuToggle={() => setIsMobileSidebarOpen(true)}
-        showReasoningContent={showReasoningContent}
-        expandedReasonings={expandedReasonings}
-        onToggleReasoning={toggleReasoning}
-        focusModeEnabled={focusModeEnabled}
-        onFocusModeChange={setFocusModeEnabled}
-        onCopyMessage={handleCopyMessage}
-        onRegenerateMessage={handleRegenerateMessage}
-        onEditMessage={handleEditMessage}
-        onDeleteMessage={handleDeleteMessage}
-      />
+      <div className="flex-1 flex min-h-0 relative">
+        <div className="flex-1 flex min-h-0">
+          <ChatInterface
+            messages={messages}
+            onClearConversation={clearConversation}
+            onExportConversation={exportConversation}
+            currentMessage={currentMessage}
+            onCurrentMessageChange={handleCurrentMessageChange}
+            onSendMessage={handleSendMessage}
+            isStreaming={isStreaming}
+            onStopGeneration={stopGeneration}
+            selectedModel={selectedModel}
+            selectedToken={selectedToken}
+            supportsVision={(modelCapabilities.supportsVision || false) && !isRealtime}
+            attachedImages={attachedImages}
+            onAttachedImagesChange={setAttachedImages}
+            showPreview={showPreview}
+            onPreviewChange={setShowPreview}
+            onMobileMenuToggle={() => setIsMobileSidebarOpen(true)}
+            showReasoningContent={showReasoningContent}
+            expandedReasonings={expandedReasonings}
+            onToggleReasoning={toggleReasoning}
+            focusModeEnabled={focusModeEnabled}
+            onFocusModeChange={setFocusModeEnabled}
+            onCopyMessage={handleCopyMessage}
+            onRegenerateMessage={handleRegenerateMessage}
+            onEditMessage={handleEditMessage}
+            onDeleteMessage={handleDeleteMessage}
+            showEventLog={showEventLog}
+            eventLogCount={eventLog.events.length}
+            onToggleEventLog={() => setShowEventLog((v) => !v)}
+          />
+        </div>
+
+        {showEventLog && (
+          <aside className="hidden md:flex flex-col w-96 flex-shrink-0 border-l border-border/50 bg-background/50 p-3 min-h-0 overflow-hidden">
+            <EventLogPanel
+              events={eventLog.events}
+              expandedEvents={eventLog.expandedEvents}
+              onToggleExpand={eventLog.toggleExpand}
+              onClear={eventLog.clearEvents}
+              isMobile={isMobile}
+              className="flex-1 min-h-0 flex flex-col"
+            />
+          </aside>
+        )}
+
+        {showEventLog && isMobile && (
+          <div className="md:hidden fixed inset-x-0 bottom-0 z-40 max-h-[60vh] bg-background border-t border-border/50 p-3 overflow-hidden">
+            <EventLogPanel
+              events={eventLog.events}
+              expandedEvents={eventLog.expandedEvents}
+              onToggleExpand={eventLog.toggleExpand}
+              onClear={eventLog.clearEvents}
+              isMobile
+            />
+          </div>
+        )}
+      </div>
 
       <ExportConversationDialog
         isOpen={exportDialogOpen}
