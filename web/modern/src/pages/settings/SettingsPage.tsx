@@ -4,25 +4,48 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useResponsive } from '@/hooks/useResponsive';
 import { useAuthStore } from '@/lib/stores/auth';
 import { cn } from '@/lib/utils';
+import { useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useNavigate, useParams } from 'react-router-dom';
 import { OperationSettings } from './OperationSettings';
 import { OtherSettings } from './OtherSettings';
 import { PersonalSettings } from './PersonalSettings';
 import { SystemSettings } from './SystemSettings';
 
+const DEFAULT_TAB = 'personal';
+
 export function SettingsPage() {
   const { t } = useTranslation();
   const { user } = useAuthStore();
   const { isMobile } = useResponsive();
+  const { tab } = useParams<{ tab?: string }>();
+  const navigate = useNavigate();
   const isRoot = user?.role >= 100;
 
   const tabCount = 1 + (isRoot ? 3 : 0); // Personal + 3 admin tabs
+
+  const validTabs = useMemo(
+    () => (isRoot ? ['personal', 'operation', 'system', 'other'] : ['personal']),
+    [isRoot]
+  );
+
+  const activeTab = tab && validTabs.includes(tab) ? tab : DEFAULT_TAB;
+
+  useEffect(() => {
+    if (tab && !validTabs.includes(tab)) {
+      navigate(`/settings/${DEFAULT_TAB}`, { replace: true });
+    }
+  }, [tab, validTabs, navigate]);
+
+  const handleTabChange = (next: string) => {
+    navigate(`/settings/${next}`);
+  };
 
   return (
     <ResponsivePageContainer title={t('settings.title')} description={t('settings.description')}>
       <Card>
         <CardContent className={cn(isMobile ? 'p-4' : 'p-6')}>
-          <Tabs defaultValue="personal" className="w-full">
+          <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
             <TabsList
               className={cn(
                 'grid w-full',

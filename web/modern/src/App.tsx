@@ -129,6 +129,7 @@ function App() {
                     <Route path="redemptions/edit/:id" element={<EditRedemptionPage />} />
                     <Route path="about" element={<AboutPage />} />
                     <Route path="settings" element={<SettingsPage />} />
+                    <Route path="settings/:tab" element={<SettingsPage />} />
                     <Route path="topup" element={<TopUpPage />} />
                     <Route path="chat" element={<PlaygroundPage />} />
                     <Route path="realtime" element={<RealtimePlaygroundPage />} />
