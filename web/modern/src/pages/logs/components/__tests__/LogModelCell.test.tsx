@@ -13,14 +13,7 @@ import { LogModelCell } from '../LogModelCell';
 
 describe('LogModelCell', () => {
   it('shows the billed model in the cell and both names in the tooltip content', () => {
-    render(
-      <LogModelCell
-        modelName="gpt-4o-mini"
-        originModelName="alias-model"
-        targetLabel="Model"
-        originLabel="Requested Model"
-      />
-    );
+    render(<LogModelCell modelName="gpt-4o-mini" originModelName="alias-model" targetLabel="Model" originLabel="Requested Model" />);
 
     expect(screen.getAllByText('gpt-4o-mini').length).toBeGreaterThan(0);
     expect(screen.getByText('alias-model')).toBeInTheDocument();

@@ -90,6 +90,9 @@
     "redirecting": "将在 {{seconds}} 秒后返回首页...",
     "stay_here": "留在此页"
   },
+  "notice": {
+    "dismiss": "关闭通知"
+  },
   "passkey_prompt": {
     "dismiss": "关闭",
     "message": "提升账户安全 — 设置通行密钥，享受快速无密码登录。",

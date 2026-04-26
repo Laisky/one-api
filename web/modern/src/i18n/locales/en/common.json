@@ -90,6 +90,9 @@
     "redirecting": "Redirecting to home in {{seconds}}s...",
     "stay_here": "Stay on this page"
   },
+  "notice": {
+    "dismiss": "Dismiss notice"
+  },
   "passkey_prompt": {
     "dismiss": "Dismiss",
     "message": "Enhance your account security — set up a passkey for fast, passwordless sign-in.",

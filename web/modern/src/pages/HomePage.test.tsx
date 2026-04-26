@@ -23,6 +23,16 @@ const clearLocalStorage = () => {
   window.localStorage.clear();
 };
 
+// Helper: route api.get mock by URL so /api/notice doesn't echo home content
+const mockApiGet = (homeContent: any, noticeContent: any = '') => {
+  (api.get as any).mockImplementation((url: string) => {
+    if (url.startsWith('/api/notice')) {
+      return Promise.resolve({ data: { success: true, data: noticeContent } });
+    }
+    return Promise.resolve({ data: { success: true, data: homeContent } });
+  });
+};
+
 describe('HomePage', () => {
   beforeEach(() => {
     vi.resetAllMocks();
@@ -30,9 +40,7 @@ describe('HomePage', () => {
   });
 
   it('renders iframe when content is a URL', async () => {
-    (api.get as any).mockResolvedValue({
-      data: { success: true, data: 'https://example.com' },
-    });
+    mockApiGet('https://example.com');
     render(<HomePage />);
     await waitFor(() => expect(api.get).toHaveBeenCalledWith('/api/home_page_content'));
     const iframe = await screen.findByTitle('Home');
@@ -40,16 +48,14 @@ describe('HomePage', () => {
   });
 
   it('renders HTML content when provided', async () => {
-    (api.get as any).mockResolvedValue({
-      data: { success: true, data: '<h2>Hi</h2>' },
-    });
+    mockApiGet('<h2>Hi</h2>');
     render(<HomePage />);
     await waitFor(() => screen.getByText('Hi'));
     expect(screen.getByText('Hi')).toBeInTheDocument();
   });
 
   it('shows minimal empty state when no content configured', async () => {
-    (api.get as any).mockResolvedValue({ data: { success: true, data: '' } });
+    mockApiGet('');
     render(<HomePage />);
     // Wait for API call
     await waitFor(() => expect(api.get).toHaveBeenCalled());

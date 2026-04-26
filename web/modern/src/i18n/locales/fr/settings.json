@@ -303,6 +303,17 @@
       "WeChatServerToken": "Jeton de vérification pour l'intégration WeChat (stocké de façon sécurisée)."
     },
     "disabled": "Désactivé",
+    "email_whitelist": {
+      "add": "Ajouter",
+      "duplicate_domain": "Le domaine \"{{domain}}\" est déjà dans la liste.",
+      "duplicate_title": "Domaine en double",
+      "empty": "Aucun domaine ajouté.",
+      "input_aria": "Nouveau domaine e-mail",
+      "invalid_domain": "\"{{domain}}\" n'est pas un domaine valide.",
+      "invalid_title": "Domaine invalide",
+      "placeholder": "ex. example.com",
+      "remove_aria": "Supprimer {{domain}}"
+    },
     "enabled": "Activé",
     "groups": {
       "authentication": {
@@ -350,6 +361,14 @@
     "loading": "Chargement des options...",
     "no_description": "Aucune description disponible pour ce paramètre pour l’instant.",
     "no_options": "Aucune option disponible ou permissions insuffisantes.",
+    "oidc_discovery": {
+      "button": "Récupérer les endpoints",
+      "failed_title": "Échec de la découverte OIDC",
+      "invalid_url": "OidcWellKnown doit être une URL http(s) valide avant la découverte.",
+      "missing_endpoints": "Le document de découverte est incomplet : {{endpoints}}",
+      "success_message": "Les endpoints d'autorisation, de jeton et userinfo ont été enregistrés.",
+      "success_title": "Endpoints OIDC mis à jour"
+    },
     "option_value_aria": "Valeur de {{key}}",
     "refresh": "Actualiser",
     "save": "Enregistrer",

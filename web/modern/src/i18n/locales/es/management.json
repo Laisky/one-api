@@ -7,15 +7,18 @@
       "disable": "Deshabilitar",
       "edit": "Editar",
       "enable": "Habilitar",
+      "refresh_balance": "Actualizar saldo de {{name}}",
       "test": "Probar"
     },
     "columns": {
       "actions": "Acciones",
+      "balance": "Saldo",
       "created": "Creado",
       "group": "Grupo",
       "id": "ID",
       "name": "Nombre",
       "priority": "Prioridad",
+      "priority_input_label": "Prioridad de {{name}}",
       "response": "Respuesta",
       "status": "Estado",
       "testing_model": "Modelo de prueba",
@@ -307,10 +310,46 @@
         "title": "Model Mapping tiene entradas sospechosas"
       },
       "spark": {
+        "api_key": {
+          "help": "APIKey de la consola iFlytek emparejado con el APISecret.",
+          "label": "APIKey *",
+          "placeholder": "APIKey"
+        },
+        "api_secret": {
+          "help": "APISecret de la consola iFlytek emparejado con el APIKey.",
+          "label": "APISecret *",
+          "placeholder": "APISecret"
+        },
+        "app_id": {
+          "help": "APPID de la consola iFlytek para la aplicación Spark.",
+          "label": "APPID *",
+          "placeholder": "APPID"
+        },
+        "heading": "Configuración de iFlytek Spark",
+        "note": "La clave API final se construirá como: APPID|APISecret|APIKey",
         "version": {
           "help": "Selecciona la versión de API para iFlytek Spark (ej. v3.5).",
           "label": "Versión de Spark",
           "placeholder": "Selecciona la versión de Spark"
+        }
+      },
+      "tencent": {
+        "app_id": {
+          "help": "AppId de Tencent Cloud asociado a las credenciales de API.",
+          "label": "AppId *",
+          "placeholder": "AppId"
+        },
+        "heading": "Configuración de Tencent Hunyuan",
+        "note": "La clave API final se construirá como: AppId|SecretId|SecretKey",
+        "secret_id": {
+          "help": "SecretId de Tencent Cloud para autenticación de API.",
+          "label": "SecretId *",
+          "placeholder": "SecretId"
+        },
+        "secret_key": {
+          "help": "SecretKey de Tencent Cloud emparejado con el SecretId.",
+          "label": "SecretKey *",
+          "placeholder": "SecretKey"
         }
       },
       "system_prompt": {
@@ -415,11 +454,23 @@
     "empty": "No se encontraron canales. Crea tu primer canal para comenzar.",
     "group_default": "default",
     "notifications": {
+      "balance_failed_message": "No se pudo actualizar el saldo.",
+      "balance_failed_title": "Error al actualizar el saldo",
+      "balance_success": "Saldo actualizado.",
+      "bulk_balance_success": "Se actualizaron todos los saldos de canales.",
+      "bulk_disable_summary_title": "Resumen de deshabilitación",
+      "bulk_enable_summary_title": "Resumen de habilitación",
+      "bulk_status_empty": "No hay canales disponibles para actualizar.",
+      "bulk_status_started": "Actualizando {{count}} canales…",
+      "bulk_status_summary": "{{success}} canales actualizados, {{failed}} fallidos.",
       "bulk_test_failed_title": "La prueba masiva falló",
       "bulk_test_started": "Se inició la prueba masiva de canales.",
       "delete_disabled_success": "Canales deshabilitados eliminados.",
       "delete_failed_message": "Error desconocido",
       "delete_failed_title": "Error al eliminar",
+      "priority_failed_message": "No se pudo actualizar la prioridad.",
+      "priority_failed_title": "Error al actualizar",
+      "priority_saved": "Prioridad actualizada.",
       "test_failed_message": "Error desconocido",
       "test_failed_title": "La prueba del canal falló",
       "test_success": "Prueba del canal exitosa.",
@@ -446,8 +497,13 @@
     },
     "title": "Canales",
     "toolbar": {
+      "bulk_actions": "Acciones masivas",
       "delete_disabled": "Eliminar deshabilitados",
       "delete_disabled_mobile": "Eliminar todos los deshabilitados",
+      "disable_visible": "Deshabilitar canales visibles",
+      "enable_visible": "Habilitar canales visibles",
+      "refresh_balances": "Actualizar todos los saldos",
+      "refresh_balances_mobile": "Actualizar saldos",
       "test_all": "Probar todo",
       "test_all_mobile": "Probar todos los canales"
     },
@@ -659,6 +715,13 @@
         "placeholder": "Buscar tokens por nombre...",
         "quota_label": "Cuota: {{quota}}"
       },
+      "share": {
+        "ama": "AMA 问天",
+        "lobechat": "LobeChat",
+        "next_chat": "ChatGPT Next Web",
+        "open_in_client": "Abrir en cliente",
+        "opencat": "OpenCat"
+      },
       "status": {
         "disabled": "Deshabilitado",
         "enabled": "Habilitado",
@@ -719,6 +782,8 @@
         "cancel": "Cancelar",
         "create": "Crear usuario",
         "creating": "Creando...",
+        "disable_2fa": "Deshabilitar 2FA del usuario",
+        "disabling_2fa": "Deshabilitando...",
         "update": "Actualizar usuario",
         "updating": "Actualizando..."
       },
@@ -729,6 +794,12 @@
         "help_password": "Ayuda: Contraseña",
         "help_quota": "Ayuda: Cuota",
         "help_username": "Ayuda: Nombre de usuario"
+      },
+      "confirm_2fa": {
+        "cancel": "Cancelar",
+        "confirm": "Deshabilitar 2FA",
+        "description": "¿Deshabilitar la autenticación de dos factores para {{username}}? Podrá iniciar sesión sin un código 2FA.",
+        "title": "Deshabilitar 2FA"
       },
       "description": {
         "create": "Crear una nueva cuenta de usuario",
@@ -781,6 +852,12 @@
         "create_success": "Usuario creado exitosamente",
         "update_success": "Usuario actualizado exitosamente"
       },
+      "notifications_2fa": {
+        "failed_message": "No se pudo deshabilitar 2FA.",
+        "failed_title": "Falló deshabilitar 2FA",
+        "success_message": "Autenticación de dos factores deshabilitada.",
+        "success_title": "2FA deshabilitada"
+      },
       "title": {
         "create": "Crear usuario",
         "edit": "Editar usuario"
@@ -800,9 +877,12 @@
     "page": {
       "actions": {
         "delete": "Eliminar",
+        "demote": "Degradar",
         "disable": "Deshabilitar",
+        "disable_2fa": "Deshabilitar 2FA",
         "edit": "Editar",
         "enable": "Habilitar",
+        "promote": "Promover",
         "topup": "Recargar"
       },
       "columns": {
@@ -816,13 +896,35 @@
         "used_quota": "Cuota utilizada",
         "username": "Nombre de usuario"
       },
+      "confirm": {
+        "cancel": "Cancelar",
+        "confirm": "Confirmar",
+        "demote_description": "¿Degradar a {{username}} a usuario regular? Perderá los privilegios de administrador.",
+        "demote_title": "Degradar usuario",
+        "disable_2fa_description": "¿Deshabilitar la autenticación de dos factores para {{username}}? Podrá iniciar sesión sin un código 2FA.",
+        "disable_2fa_title": "Deshabilitar 2FA",
+        "promote_description": "¿Promover a {{username}} a administrador? Obtendrá privilegios de administrador.",
+        "promote_title": "Promover usuario"
+      },
       "description": "Gestionar usuarios",
       "empty": "No se encontraron usuarios. Agrega tu primer usuario para comenzar.",
       "notifications": {
         "action_failed_message": "No se pudo aplicar el cambio.",
         "action_failed_title": "Acción fallida",
+        "demote_failed_message": "No se pudo degradar al usuario.",
+        "demote_failed_title": "La degradación falló",
+        "demote_success_message": "Usuario {{username}} degradado.",
+        "demote_success_title": "Usuario degradado",
+        "disable_2fa_failed_message": "No se pudo deshabilitar 2FA.",
+        "disable_2fa_failed_title": "Falló deshabilitar 2FA",
+        "disable_2fa_success_message": "Autenticación de dos factores deshabilitada para {{username}}.",
+        "disable_2fa_success_title": "2FA deshabilitada",
         "load_failed_message": "Error al cargar usuarios.",
         "load_failed_title": "Acceso denegado",
+        "promote_failed_message": "No se pudo promover al usuario.",
+        "promote_failed_title": "La promoción falló",
+        "promote_success_message": "Usuario {{username}} promovido.",
+        "promote_success_title": "Usuario promovido",
         "search_failed_message": "La búsqueda falló.",
         "search_failed_title": "Búsqueda fallida"
       },

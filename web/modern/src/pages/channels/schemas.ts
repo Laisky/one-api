@@ -34,6 +34,14 @@ export const channelSchema = z.object({
       // Supported endpoints for this channel (empty means use defaults)
       supported_endpoints: z.array(z.string()).optional(),
       mcp_tool_blacklist: z.array(z.string()).optional(),
+      // iFlytek Spark (type 18): APPID|APISecret|APIKey
+      spark_app_id: z.string().optional(),
+      spark_api_secret: z.string().optional(),
+      spark_api_key: z.string().optional(),
+      // Tencent Hunyuan (type 23): AppId|SecretId|SecretKey
+      tencent_app_id: z.string().optional(),
+      tencent_secret_id: z.string().optional(),
+      tencent_secret_key: z.string().optional(),
     })
     .default({}),
   inference_profile_arn_map: z.string().optional(),

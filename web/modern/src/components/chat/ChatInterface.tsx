@@ -166,12 +166,7 @@ export function ChatInterface({
                   {t('playground.chat.export')}
                 </Button>
                 {onToggleEventLog && (
-                  <Button
-                    variant={showEventLog ? 'secondary' : 'ghost'}
-                    size="sm"
-                    onClick={onToggleEventLog}
-                    className="gap-1.5"
-                  >
+                  <Button variant={showEventLog ? 'secondary' : 'ghost'} size="sm" onClick={onToggleEventLog} className="gap-1.5">
                     <Activity className="h-3.5 w-3.5" />
                     <span className="hidden sm:inline">{t('playground.realtime.event_log')}</span>
                     {typeof eventLogCount === 'number' && eventLogCount > 0 && (

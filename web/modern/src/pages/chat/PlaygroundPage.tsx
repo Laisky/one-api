@@ -153,9 +153,7 @@ export function PlaygroundPage() {
   const isStreaming = isRealtime ? realtimeChat.isStreaming : sseChat.isStreaming;
   const sendMessage = isRealtime ? realtimeChat.sendMessage : sseChat.sendMessage;
   const stopGeneration = isRealtime ? realtimeChat.stopGeneration : sseChat.stopGeneration;
-  const regenerateMessage = isRealtime
-    ? ((_msgs: any) => realtimeChat.regenerateMessage(''))
-    : sseChat.regenerateMessage;
+  const regenerateMessage = isRealtime ? (_msgs: any) => realtimeChat.regenerateMessage('') : sseChat.regenerateMessage;
 
   const {
     exportConversation,
@@ -191,12 +189,7 @@ export function PlaygroundPage() {
 
   return (
     <div className="flex h-screen bg-gradient-to-br from-background to-muted/20 relative">
-      {isMobileSidebarOpen && (
-        <div
-          className="fixed inset-0 bg-black/50 z-40 lg:hidden"
-          onClick={() => setIsMobileSidebarOpen(false)}
-        />
-      )}
+      {isMobileSidebarOpen && <div className="fixed inset-0 bg-black/50 z-40 lg:hidden" onClick={() => setIsMobileSidebarOpen(false)} />}
 
       <ParametersPanel
         isMobileSidebarOpen={isMobileSidebarOpen}

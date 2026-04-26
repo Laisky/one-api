@@ -7,15 +7,18 @@
       "disable": "Désactiver",
       "edit": "Modifier",
       "enable": "Activer",
+      "refresh_balance": "Actualiser le solde de {{name}}",
       "test": "Tester"
     },
     "columns": {
       "actions": "Actions",
+      "balance": "Solde",
       "created": "Créé",
       "group": "Groupe",
       "id": "ID",
       "name": "Nom",
       "priority": "Priorité",
+      "priority_input_label": "Priorité de {{name}}",
       "response": "Réponse",
       "status": "Statut",
       "testing_model": "Modèle de test",
@@ -307,10 +310,46 @@
         "title": "Model Mapping contient des entrées suspectes"
       },
       "spark": {
+        "api_key": {
+          "help": "APIKey iFlytek associé à l'APISecret.",
+          "label": "APIKey *",
+          "placeholder": "APIKey"
+        },
+        "api_secret": {
+          "help": "APISecret iFlytek associé à l'APIKey.",
+          "label": "APISecret *",
+          "placeholder": "APISecret"
+        },
+        "app_id": {
+          "help": "APPID iFlytek pour l'application Spark.",
+          "label": "APPID *",
+          "placeholder": "APPID"
+        },
+        "heading": "Configuration iFlytek Spark",
+        "note": "La clé API finale sera construite ainsi : APPID|APISecret|APIKey",
         "version": {
           "help": "Sélectionnez la version de l'API pour iFlytek Spark (ex: v3.5).",
           "label": "Version Spark",
           "placeholder": "Sélectionnez la version Spark"
+        }
+      },
+      "tencent": {
+        "app_id": {
+          "help": "AppId du compte Tencent Cloud associé aux identifiants API.",
+          "label": "AppId *",
+          "placeholder": "AppId"
+        },
+        "heading": "Configuration Tencent Hunyuan",
+        "note": "La clé API finale sera construite ainsi : AppId|SecretId|SecretKey",
+        "secret_id": {
+          "help": "SecretId Tencent Cloud pour l'authentification API.",
+          "label": "SecretId *",
+          "placeholder": "SecretId"
+        },
+        "secret_key": {
+          "help": "SecretKey Tencent Cloud associé au SecretId.",
+          "label": "SecretKey *",
+          "placeholder": "SecretKey"
         }
       },
       "system_prompt": {
@@ -415,11 +454,23 @@
     "empty": "Aucun canal trouvé. Créez votre premier canal pour commencer.",
     "group_default": "défaut",
     "notifications": {
+      "balance_failed_message": "Impossible d'actualiser le solde.",
+      "balance_failed_title": "Échec de l'actualisation du solde",
+      "balance_success": "Solde actualisé.",
+      "bulk_balance_success": "Tous les soldes des canaux ont été actualisés.",
+      "bulk_disable_summary_title": "Résumé de désactivation",
+      "bulk_enable_summary_title": "Résumé d'activation",
+      "bulk_status_empty": "Aucun canal disponible à mettre à jour.",
+      "bulk_status_started": "Mise à jour de {{count}} canaux…",
+      "bulk_status_summary": "{{success}} canaux mis à jour, {{failed}} échecs.",
       "bulk_test_failed_title": "Échec du test global",
       "bulk_test_started": "Test global des canaux démarré.",
       "delete_disabled_success": "Canaux désactivés supprimés.",
       "delete_failed_message": "Erreur inconnue",
       "delete_failed_title": "Échec de la suppression",
+      "priority_failed_message": "Impossible de mettre à jour la priorité.",
+      "priority_failed_title": "Échec de la mise à jour",
+      "priority_saved": "Priorité mise à jour.",
       "test_failed_message": "Erreur inconnue",
       "test_failed_title": "Échec du test du canal",
       "test_success": "Test du canal réussi.",
@@ -446,8 +497,13 @@
     },
     "title": "Canaux",
     "toolbar": {
+      "bulk_actions": "Actions groupées",
       "delete_disabled": "Supprimer désactivés",
       "delete_disabled_mobile": "Supprimer tous les désactivés",
+      "disable_visible": "Désactiver les canaux visibles",
+      "enable_visible": "Activer les canaux visibles",
+      "refresh_balances": "Actualiser tous les soldes",
+      "refresh_balances_mobile": "Actualiser les soldes",
       "test_all": "Tout tester",
       "test_all_mobile": "Tester tous les canaux"
     },
@@ -659,6 +715,13 @@
         "placeholder": "Rechercher des jetons par nom...",
         "quota_label": "Quota : {{quota}}"
       },
+      "share": {
+        "ama": "AMA 问天",
+        "lobechat": "LobeChat",
+        "next_chat": "ChatGPT Next Web",
+        "open_in_client": "Ouvrir dans un client",
+        "opencat": "OpenCat"
+      },
       "status": {
         "disabled": "Désactivé",
         "enabled": "Activé",
@@ -719,6 +782,8 @@
         "cancel": "Annuler",
         "create": "Créer l'utilisateur",
         "creating": "Création...",
+        "disable_2fa": "Désactiver la 2FA de l'utilisateur",
+        "disabling_2fa": "Désactivation...",
         "update": "Mettre à jour l'utilisateur",
         "updating": "Mise à jour..."
       },
@@ -729,6 +794,12 @@
         "help_password": "Aide : Mot de passe",
         "help_quota": "Aide : Quota",
         "help_username": "Aide : Nom d'utilisateur"
+      },
+      "confirm_2fa": {
+        "cancel": "Annuler",
+        "confirm": "Désactiver 2FA",
+        "description": "Désactiver l'authentification à deux facteurs pour {{username}} ? Il pourra se connecter sans code 2FA.",
+        "title": "Désactiver 2FA"
       },
       "description": {
         "create": "Créer un nouveau compte utilisateur",
@@ -781,6 +852,12 @@
         "create_success": "Utilisateur créé avec succès",
         "update_success": "Utilisateur mis à jour avec succès"
       },
+      "notifications_2fa": {
+        "failed_message": "Impossible de désactiver 2FA.",
+        "failed_title": "La désactivation 2FA a échoué",
+        "success_message": "Authentification à deux facteurs désactivée.",
+        "success_title": "2FA désactivée"
+      },
       "title": {
         "create": "Créer un utilisateur",
         "edit": "Modifier l'utilisateur"
@@ -800,9 +877,12 @@
     "page": {
       "actions": {
         "delete": "Supprimer",
+        "demote": "Rétrograder",
         "disable": "Désactiver",
+        "disable_2fa": "Désactiver 2FA",
         "edit": "Modifier",
         "enable": "Activer",
+        "promote": "Promouvoir",
         "topup": "Recharger"
       },
       "columns": {
@@ -816,13 +896,35 @@
         "used_quota": "Quota utilisé",
         "username": "Nom d'utilisateur"
       },
+      "confirm": {
+        "cancel": "Annuler",
+        "confirm": "Confirmer",
+        "demote_description": "Rétrograder {{username}} en utilisateur normal ? Il perdra ses privilèges d'administrateur.",
+        "demote_title": "Rétrograder l'utilisateur",
+        "disable_2fa_description": "Désactiver l'authentification à deux facteurs pour {{username}} ? Il pourra se connecter sans code 2FA.",
+        "disable_2fa_title": "Désactiver 2FA",
+        "promote_description": "Promouvoir {{username}} en administrateur ? Il obtiendra des privilèges d'administrateur.",
+        "promote_title": "Promouvoir l'utilisateur"
+      },
       "description": "Gérer les utilisateurs",
       "empty": "Aucun utilisateur trouvé. Ajoutez votre premier utilisateur pour commencer.",
       "notifications": {
         "action_failed_message": "Impossible d'appliquer le changement.",
         "action_failed_title": "L'action a échoué",
+        "demote_failed_message": "Impossible de rétrograder l'utilisateur.",
+        "demote_failed_title": "La rétrogradation a échoué",
+        "demote_success_message": "Utilisateur {{username}} rétrogradé.",
+        "demote_success_title": "Utilisateur rétrogradé",
+        "disable_2fa_failed_message": "Impossible de désactiver 2FA.",
+        "disable_2fa_failed_title": "La désactivation 2FA a échoué",
+        "disable_2fa_success_message": "Authentification à deux facteurs désactivée pour {{username}}.",
+        "disable_2fa_success_title": "2FA désactivée",
         "load_failed_message": "Échec du chargement des utilisateurs.",
         "load_failed_title": "Accès refusé",
+        "promote_failed_message": "Impossible de promouvoir l'utilisateur.",
+        "promote_failed_title": "La promotion a échoué",
+        "promote_success_message": "Utilisateur {{username}} promu.",
+        "promote_success_title": "Utilisateur promu",
         "search_failed_message": "La recherche a échoué.",
         "search_failed_title": "La recherche a échoué"
       },

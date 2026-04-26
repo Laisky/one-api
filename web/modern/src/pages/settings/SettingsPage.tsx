@@ -24,10 +24,7 @@ export function SettingsPage() {
 
   const tabCount = 1 + (isRoot ? 3 : 0); // Personal + 3 admin tabs
 
-  const validTabs = useMemo(
-    () => (isRoot ? ['personal', 'operation', 'system', 'other'] : ['personal']),
-    [isRoot]
-  );
+  const validTabs = useMemo(() => (isRoot ? ['personal', 'operation', 'system', 'other'] : ['personal']), [isRoot]);
 
   const activeTab = tab && validTabs.includes(tab) ? tab : DEFAULT_TAB;
 

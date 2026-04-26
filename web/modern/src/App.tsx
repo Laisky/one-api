@@ -22,9 +22,11 @@ const AboutPage = lazy(() => import('@/pages/about/AboutPage'));
 const GitHubOAuthPage = lazy(() => import('@/pages/auth/GitHubOAuthPage'));
 const LarkOAuthPage = lazy(() => import('@/pages/auth/LarkOAuthPage'));
 const LoginPage = lazy(() => import('@/pages/auth/LoginPage'));
+const OidcOAuthPage = lazy(() => import('@/pages/auth/OidcOAuthPage'));
 const PasswordResetConfirmPage = lazy(() => import('@/pages/auth/PasswordResetConfirmPage'));
 const PasswordResetPage = lazy(() => import('@/pages/auth/PasswordResetPage'));
 const RegisterPage = lazy(() => import('@/pages/auth/RegisterPage'));
+const WeChatOAuthPage = lazy(() => import('@/pages/auth/WeChatOAuthPage'));
 const ChannelsPage = lazy(() => import('@/pages/channels/ChannelsPage').then((m) => ({ default: m.ChannelsPage })));
 const EditChannelPage = lazy(() => import('@/pages/channels/EditChannelPage'));
 const DashboardPage = lazy(() => import('@/pages/dashboard/DashboardPage'));
@@ -96,6 +98,8 @@ function App() {
                 <Route path="/user/reset" element={<PasswordResetConfirmPage />} />
                 <Route path="/oauth/github" element={<GitHubOAuthPage />} />
                 <Route path="/oauth/lark" element={<LarkOAuthPage />} />
+                <Route path="/oauth/oidc" element={<OidcOAuthPage />} />
+                <Route path="/oauth/wechat" element={<WeChatOAuthPage />} />
 
                 {/* Public routes with layout */}
                 <Route path="/" element={<Layout />}>

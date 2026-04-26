@@ -1,5 +1,25 @@
 {
   "topup": {
+    "amount": {
+      "amount_label": "Amount",
+      "amount_placeholder": "Enter amount",
+      "calculate_button": "Calculate",
+      "calculate_first_message": "Please calculate the amount before recharging.",
+      "calculate_first_title": "Calculate first",
+      "calculated_message": "You will pay: {{value}}",
+      "calculated_title": "Amount calculated",
+      "calculating": "Calculating...",
+      "code_label": "Top-up Code (optional)",
+      "code_placeholder": "Enter top-up code",
+      "description": "Enter the desired top-up amount and an optional code, then preview the payable total.",
+      "failed_message": "Unable to compute amount",
+      "failed_title": "Calculation failed",
+      "invalid_message": "Please enter an amount of at least 1.",
+      "invalid_title": "Invalid amount",
+      "recharge_button": "Recharge",
+      "result": "You will pay: {{value}}",
+      "title": "Calculate Payable Amount"
+    },
     "balance": {
       "available": "Available quota for API usage",
       "description": "Your current quota balance",

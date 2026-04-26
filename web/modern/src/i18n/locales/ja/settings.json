@@ -303,6 +303,17 @@
       "WeChatServerToken": "WeChat 連携の検証トークン（安全に保管）。"
     },
     "disabled": "無効",
+    "email_whitelist": {
+      "add": "追加",
+      "duplicate_domain": "ドメイン \"{{domain}}\" は既に存在します。",
+      "duplicate_title": "重複ドメイン",
+      "empty": "ドメインがまだ追加されていません。",
+      "input_aria": "新しいメールドメイン",
+      "invalid_domain": "\"{{domain}}\" は有効なドメインではありません。",
+      "invalid_title": "無効なドメイン",
+      "placeholder": "例: example.com",
+      "remove_aria": "{{domain}} を削除"
+    },
     "enabled": "有効",
     "groups": {
       "authentication": {
@@ -350,6 +361,14 @@
     "loading": "オプションを読み込み中...",
     "no_description": "この設定の説明はまだありません。",
     "no_options": "利用可能なオプションがないか、権限が不足しています。",
+    "oidc_discovery": {
+      "button": "エンドポイントを取得",
+      "failed_title": "OIDC ディスカバリ失敗",
+      "invalid_url": "OidcWellKnown は有効な http(s) URL である必要があります。",
+      "missing_endpoints": "ディスカバリドキュメントに不足: {{endpoints}}",
+      "success_message": "認可・トークン・ユーザー情報エンドポイントを保存しました。",
+      "success_title": "OIDC エンドポイントを更新しました"
+    },
     "option_value_aria": "{{key}} の値",
     "refresh": "更新",
     "save": "保存",

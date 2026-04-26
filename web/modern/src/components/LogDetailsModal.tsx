@@ -175,9 +175,7 @@ export function LogDetailsModal({ open, onOpenChange, log }: LogDetailsModalProp
   const [traceLoading, setTraceLoading] = useState(false);
   const [traceError, setTraceError] = useState<string | null>(null);
   const [traceCopied, setTraceCopied] = useState(false);
-  const hasTrace = Boolean(
-    log && log.trace_id && log.trace_id.trim() !== '' && typeof log.id === 'number'
-  );
+  const hasTrace = Boolean(log && log.trace_id && log.trace_id.trim() !== '' && typeof log.id === 'number');
 
   const timelineEvents = useMemo(
     () => [
@@ -531,10 +529,7 @@ export function LogDetailsModal({ open, onOpenChange, log }: LogDetailsModalProp
             label={t('logs.details.recorded_at', 'Recorded At')}
             value={<TimestampDisplay timestamp={log.created_at} className="font-mono text-sm" />}
           />
-          <DetailItem
-            label={t('logs.details.model', 'Model')}
-            value={renderModelLink(log.model_name)}
-          />
+          <DetailItem label={t('logs.details.model', 'Model')} value={renderModelLink(log.model_name)} />
           <DetailItem label={t('logs.details.origin_model', 'Requested Model')} value={renderModelLink(log.origin_model_name)} />
           <DetailItem
             label={t('logs.details.user', 'User')}
@@ -588,10 +583,7 @@ export function LogDetailsModal({ open, onOpenChange, log }: LogDetailsModalProp
             }
           />
           <DetailItem label={t('logs.details.quota', 'Expense')} value={<span className="font-mono text-sm">{quotaDisplay}</span>} />
-          <DetailItem
-            label={t('logs.details.quota_raw', 'Quota')}
-            value={<span className="font-mono text-sm">{rawQuota}</span>}
-          />
+          <DetailItem label={t('logs.details.quota_raw', 'Quota')} value={<span className="font-mono text-sm">{rawQuota}</span>} />
           <DetailItem
             label={t('logs.details.latency', 'Latency')}
             value={<span className={cn('font-mono text-sm', latencyColor)}>{latencyValue}</span>}

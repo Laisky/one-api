@@ -82,6 +82,12 @@ export const useChannelForm = () => {
         api_format: 'chat_completion',
         supported_endpoints: [],
         mcp_tool_blacklist: [],
+        spark_app_id: '',
+        spark_api_secret: '',
+        spark_api_key: '',
+        tencent_app_id: '',
+        tencent_secret_id: '',
+        tencent_secret_key: '',
       },
       inference_profile_arn_map: '',
     },
@@ -165,6 +171,12 @@ export const useChannelForm = () => {
           api_format: 'chat_completion',
           supported_endpoints: [],
           mcp_tool_blacklist: [],
+          spark_app_id: '',
+          spark_api_secret: '',
+          spark_api_key: '',
+          tencent_app_id: '',
+          tencent_secret_id: '',
+          tencent_secret_key: '',
         };
         if (data.config && typeof data.config === 'string' && data.config.trim() !== '') {
           try {
@@ -217,6 +229,22 @@ export const useChannelForm = () => {
         };
 
         const channelType = toInt(data.type, 1);
+
+        // Spark (18): key is APPID|APISecret|APIKey. Hydrate config inputs from
+        // existing key so admins can edit each part individually.
+        if (channelType === 18 && typeof data.key === 'string' && data.key.includes('|')) {
+          const [appId = '', apiSecret = '', apiKey = ''] = data.key.split('|');
+          if (!config.spark_app_id) config.spark_app_id = appId;
+          if (!config.spark_api_secret) config.spark_api_secret = apiSecret;
+          if (!config.spark_api_key) config.spark_api_key = apiKey;
+        }
+        // Tencent (23): key is AppId|SecretId|SecretKey.
+        if (channelType === 23 && typeof data.key === 'string' && data.key.includes('|')) {
+          const [appId = '', secretId = '', secretKey = ''] = data.key.split('|');
+          if (!config.tencent_app_id) config.tencent_app_id = appId;
+          if (!config.tencent_secret_id) config.tencent_secret_id = secretId;
+          if (!config.tencent_secret_key) config.tencent_secret_key = secretKey;
+        }
         let toolingField = '';
         if (data.tooling && typeof data.tooling === 'string' && data.tooling.trim() !== '') {
           try {
@@ -453,6 +481,10 @@ export const useChannelForm = () => {
         payload.key = `${watchConfig.ak}|${watchConfig.sk}|${watchConfig.region}`;
       } else if (watchType === 42 && watchConfig.region && watchConfig.vertex_ai_project_id && watchConfig.vertex_ai_adc) {
         payload.key = `${watchConfig.region}|${watchConfig.vertex_ai_project_id}|${watchConfig.vertex_ai_adc}`;
+      } else if (watchType === 18 && (watchConfig.spark_app_id || watchConfig.spark_api_secret || watchConfig.spark_api_key)) {
+        payload.key = `${watchConfig.spark_app_id || ''}|${watchConfig.spark_api_secret || ''}|${watchConfig.spark_api_key || ''}`;
+      } else if (watchType === 23 && (watchConfig.tencent_app_id || watchConfig.tencent_secret_id || watchConfig.tencent_secret_key)) {
+        payload.key = `${watchConfig.tencent_app_id || ''}|${watchConfig.tencent_secret_id || ''}|${watchConfig.tencent_secret_key || ''}`;
       }
 
       if (!isEdit && (!payload.key || payload.key.trim() === '')) {

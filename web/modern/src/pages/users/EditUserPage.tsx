@@ -1,6 +1,7 @@
 import { ToolListEditor } from '@/components/mcp/ToolListEditor';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { useNotifications } from '@/components/ui/notifications';
@@ -9,8 +10,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { TimestampDisplay } from '@/components/ui/timestamp';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { api } from '@/lib/api';
+import { useAuthStore } from '@/lib/stores/auth';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { Info } from 'lucide-react';
+import { Info, ShieldOff } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useForm, useWatch } from 'react-hook-form';
 import { useTranslation } from 'react-i18next';
@@ -77,7 +79,13 @@ export function EditUserPage() {
   const [initialSnapshot, setInitialSnapshot] = useState<UserSnapshot | null>(null);
   const [createdAt, setCreatedAt] = useState<number | null>(null);
   const [updatedAt, setUpdatedAt] = useState<number | null>(null);
+  const [confirm2faOpen, setConfirm2faOpen] = useState(false);
+  const [disabling2fa, setDisabling2fa] = useState(false);
   const { notify } = useNotifications();
+  const currentUser = useAuthStore((s) => s.user);
+  const isAdmin = (currentUser?.role ?? 0) >= 10;
+  const editingOtherUser = isEdit && !!userId && currentUser?.id !== Number(userId);
+  const showDisable2faButton = isEdit && isAdmin && editingOtherUser;
 
   const userSchema = useMemo(
     () =>
@@ -286,6 +294,33 @@ export function EditUserPage() {
   // Error highlighting helpers
   const hasError = (path: string): boolean => !!(form.formState.errors as any)?.[path];
   const errorClass = (path: string) => (hasError(path) ? 'border-destructive focus-visible:ring-destructive' : '');
+
+  const handleDisable2fa = async () => {
+    if (!userId) return;
+    setDisabling2fa(true);
+    try {
+      const res = await api.post(`/api/user/totp/disable/${userId}`);
+      const { success, message } = res.data || {};
+      if (!success) {
+        throw new Error(message || tr('notifications_2fa.failed_message', 'Unable to disable 2FA.'));
+      }
+      notify({
+        type: 'success',
+        title: tr('notifications_2fa.success_title', '2FA disabled'),
+        message: tr('notifications_2fa.success_message', 'Two-factor authentication disabled.'),
+      });
+      setConfirm2faOpen(false);
+    } catch (error) {
+      const apiMessage = (error as any)?.response?.data?.message || (error as Error)?.message;
+      notify({
+        type: 'error',
+        title: tr('notifications_2fa.failed_title', 'Disable 2FA failed'),
+        message: apiMessage || tr('notifications_2fa.failed_message', 'Unable to disable 2FA.'),
+      });
+    } finally {
+      setDisabling2fa(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -576,6 +611,18 @@ export function EditUserPage() {
                 {form.formState.errors.root && <div className="text-sm text-destructive">{form.formState.errors.root.message}</div>}
 
                 <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                  {showDisable2faButton && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => setConfirm2faOpen(true)}
+                      disabled={disabling2fa}
+                      className="w-full sm:w-auto sm:mr-auto"
+                    >
+                      <ShieldOff className="mr-1 h-4 w-4" />
+                      {disabling2fa ? tr('actions.disabling_2fa', 'Disabling...') : tr('actions.disable_2fa', 'Disable user 2FA')}
+                    </Button>
+                  )}
                   <Button type="button" variant="outline" onClick={() => navigate('/users')} className="w-full sm:w-auto">
                     {tr('actions.cancel', 'Cancel')}
                   </Button>
@@ -594,6 +641,35 @@ export function EditUserPage() {
           </CardContent>
         </Card>
       </TooltipProvider>
+      <Dialog
+        open={confirm2faOpen}
+        onOpenChange={(open) => {
+          if (!open && !disabling2fa) {
+            setConfirm2faOpen(false);
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{tr('confirm_2fa.title', 'Disable 2FA')}</DialogTitle>
+            <DialogDescription>
+              {tr(
+                'confirm_2fa.description',
+                'Disable two-factor authentication for {{username}}? They will be able to sign in without a 2FA code.',
+                { username: form.getValues('username') || initialSnapshot?.username || '' }
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setConfirm2faOpen(false)} disabled={disabling2fa}>
+              {tr('confirm_2fa.cancel', 'Cancel')}
+            </Button>
+            <Button type="button" onClick={handleDisable2fa} disabled={disabling2fa}>
+              {disabling2fa ? tr('actions.disabling_2fa', 'Disabling...') : tr('confirm_2fa.confirm', 'Disable 2FA')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </ResponsivePageContainer>
   );
 }

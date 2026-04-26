@@ -7,15 +7,18 @@
       "disable": "Disable",
       "edit": "Edit",
       "enable": "Enable",
+      "refresh_balance": "Refresh balance for {{name}}",
       "test": "Test"
     },
     "columns": {
       "actions": "Actions",
+      "balance": "Balance",
       "created": "Created",
       "group": "Group",
       "id": "ID",
       "name": "Name",
       "priority": "Priority",
+      "priority_input_label": "Priority for {{name}}",
       "response": "Response",
       "status": "Status",
       "testing_model": "Testing Model",
@@ -307,10 +310,46 @@
         "title": "Model Mapping has suspicious entries"
       },
       "spark": {
+        "api_key": {
+          "help": "iFlytek console APIKey paired with the APISecret.",
+          "label": "APIKey *",
+          "placeholder": "APIKey"
+        },
+        "api_secret": {
+          "help": "iFlytek console APISecret paired with the APIKey.",
+          "label": "APISecret *",
+          "placeholder": "APISecret"
+        },
+        "app_id": {
+          "help": "iFlytek console APPID for the Spark application.",
+          "label": "APPID *",
+          "placeholder": "APPID"
+        },
+        "heading": "iFlytek Spark Configuration",
+        "note": "The final API key will be constructed as: APPID|APISecret|APIKey",
         "version": {
           "help": "Select the API version for iFlytek Spark (e.g., v3.5).",
           "label": "Spark Version",
           "placeholder": "Select Spark version"
+        }
+      },
+      "tencent": {
+        "app_id": {
+          "help": "Tencent Cloud account AppId associated with the API credentials.",
+          "label": "AppId *",
+          "placeholder": "AppId"
+        },
+        "heading": "Tencent Hunyuan Configuration",
+        "note": "The final API key will be constructed as: AppId|SecretId|SecretKey",
+        "secret_id": {
+          "help": "Tencent Cloud SecretId for API authentication.",
+          "label": "SecretId *",
+          "placeholder": "SecretId"
+        },
+        "secret_key": {
+          "help": "Tencent Cloud SecretKey paired with the SecretId.",
+          "label": "SecretKey *",
+          "placeholder": "SecretKey"
         }
       },
       "system_prompt": {
@@ -415,11 +454,23 @@
     "empty": "No channels found. Create your first channel to get started.",
     "group_default": "default",
     "notifications": {
+      "balance_failed_message": "Failed to refresh balance.",
+      "balance_failed_title": "Balance refresh failed",
+      "balance_success": "Balance refreshed.",
+      "bulk_balance_success": "All channel balances refreshed.",
+      "bulk_disable_summary_title": "Disable summary",
+      "bulk_enable_summary_title": "Enable summary",
+      "bulk_status_empty": "No channels available to update.",
+      "bulk_status_started": "Updating {{count}} channels…",
+      "bulk_status_summary": "Updated {{success}} channels, {{failed}} failed.",
       "bulk_test_failed_title": "Bulk test failed",
       "bulk_test_started": "Bulk channel test started.",
       "delete_disabled_success": "Disabled channels deleted.",
       "delete_failed_message": "Unknown error",
       "delete_failed_title": "Delete failed",
+      "priority_failed_message": "Failed to update priority.",
+      "priority_failed_title": "Update failed",
+      "priority_saved": "Priority updated.",
       "test_failed_message": "Unknown error",
       "test_failed_title": "Channel test failed",
       "test_success": "Channel test successful.",
@@ -446,8 +497,13 @@
     },
     "title": "Channels",
     "toolbar": {
+      "bulk_actions": "Bulk Actions",
       "delete_disabled": "Delete Disabled",
       "delete_disabled_mobile": "Delete All Disabled",
+      "disable_visible": "Disable visible channels",
+      "enable_visible": "Enable visible channels",
+      "refresh_balances": "Refresh All Balances",
+      "refresh_balances_mobile": "Refresh Balances",
       "test_all": "Test All",
       "test_all_mobile": "Test All Channels"
     },
@@ -659,6 +715,13 @@
         "placeholder": "Search tokens by name...",
         "quota_label": "Quota: {{quota}}"
       },
+      "share": {
+        "ama": "AMA 问天",
+        "lobechat": "LobeChat",
+        "next_chat": "ChatGPT Next Web",
+        "open_in_client": "Open in client",
+        "opencat": "OpenCat"
+      },
       "status": {
         "disabled": "Disabled",
         "enabled": "Enabled",
@@ -719,6 +782,8 @@
         "cancel": "Cancel",
         "create": "Create User",
         "creating": "Creating...",
+        "disable_2fa": "Disable user 2FA",
+        "disabling_2fa": "Disabling...",
         "update": "Update User",
         "updating": "Updating..."
       },
@@ -729,6 +794,12 @@
         "help_password": "Help: Password",
         "help_quota": "Help: Quota",
         "help_username": "Help: Username"
+      },
+      "confirm_2fa": {
+        "cancel": "Cancel",
+        "confirm": "Disable 2FA",
+        "description": "Disable two-factor authentication for {{username}}? They will be able to sign in without a 2FA code.",
+        "title": "Disable 2FA"
       },
       "description": {
         "create": "Create a new user account",
@@ -781,6 +852,12 @@
         "create_success": "User created successfully",
         "update_success": "User updated successfully"
       },
+      "notifications_2fa": {
+        "failed_message": "Unable to disable 2FA.",
+        "failed_title": "Disable 2FA failed",
+        "success_message": "Two-factor authentication disabled.",
+        "success_title": "2FA disabled"
+      },
       "title": {
         "create": "Create User",
         "edit": "Edit User"
@@ -800,9 +877,12 @@
     "page": {
       "actions": {
         "delete": "Delete",
+        "demote": "Demote",
         "disable": "Disable",
+        "disable_2fa": "Disable 2FA",
         "edit": "Edit",
         "enable": "Enable",
+        "promote": "Promote",
         "topup": "Top Up"
       },
       "columns": {
@@ -816,13 +896,35 @@
         "used_quota": "Used Quota",
         "username": "Username"
       },
+      "confirm": {
+        "cancel": "Cancel",
+        "confirm": "Confirm",
+        "demote_description": "Demote {{username}} to a regular user? They will lose admin privileges.",
+        "demote_title": "Demote user",
+        "disable_2fa_description": "Disable two-factor authentication for {{username}}? They will be able to sign in without a 2FA code.",
+        "disable_2fa_title": "Disable 2FA",
+        "promote_description": "Promote {{username}} to administrator? They will gain admin privileges.",
+        "promote_title": "Promote user"
+      },
       "description": "Manage users",
       "empty": "No users found. Add your first user to get started.",
       "notifications": {
         "action_failed_message": "Unable to apply change.",
         "action_failed_title": "Action failed",
+        "demote_failed_message": "Unable to demote user.",
+        "demote_failed_title": "Demote failed",
+        "demote_success_message": "User {{username}} demoted.",
+        "demote_success_title": "User demoted",
+        "disable_2fa_failed_message": "Unable to disable 2FA.",
+        "disable_2fa_failed_title": "Disable 2FA failed",
+        "disable_2fa_success_message": "Two-factor authentication disabled for {{username}}.",
+        "disable_2fa_success_title": "2FA disabled",
         "load_failed_message": "Failed to load users.",
         "load_failed_title": "Access denied",
+        "promote_failed_message": "Unable to promote user.",
+        "promote_failed_title": "Promote failed",
+        "promote_success_message": "User {{username}} promoted.",
+        "promote_success_title": "User promoted",
         "search_failed_message": "Search failed.",
         "search_failed_title": "Search failed"
       },

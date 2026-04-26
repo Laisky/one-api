@@ -2,7 +2,9 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { useConfirmDialog } from '@/components/ui/confirm-dialog';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { EnhancedDataTable } from '@/components/ui/enhanced-data-table';
+import { Input } from '@/components/ui/input';
 import { ListActionButton } from '@/components/ui/list-action-button';
 import { useNotifications } from '@/components/ui/notifications';
 import { ResponsiveActionGroup } from '@/components/ui/responsive-action-group';
@@ -14,7 +16,7 @@ import { useResponsive } from '@/hooks/useResponsive';
 import { api } from '@/lib/api';
 import { cn, formatTimestamp } from '@/lib/utils';
 import type { ColumnDef } from '@tanstack/react-table';
-import { Ban, CheckCircle, FlaskConical, Plus, RefreshCw, Settings, Trash2 } from 'lucide-react';
+import { Ban, Banknote, CheckCircle, ChevronDown, FlaskConical, Plus, RefreshCw, Settings, Trash2 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useSearchParams } from 'react-router-dom';
@@ -35,6 +37,8 @@ interface Channel {
   used_quota?: number;
   test_time?: number;
   testing_model?: string | null;
+  balance?: number;
+  balance_updated_time?: number;
 }
 
 /**
@@ -91,6 +95,52 @@ const formatResponseTime = (time?: number) => {
   return <span className={cn('font-mono text-sm', color)}>{time}ms</span>;
 };
 
+interface PriorityCellProps {
+  value: number;
+  ariaLabel: string;
+  onCommit: (value: number) => void;
+}
+
+/**
+ * PriorityCell renders an editable numeric input that commits on blur or Enter.
+ * It only fires onCommit when the parsed value differs from the initial value
+ * to avoid firing redundant PUT requests.
+ */
+const PriorityCell = ({ value, ariaLabel, onCommit }: PriorityCellProps) => {
+  const [draft, setDraft] = useState<string>(String(value));
+  useEffect(() => {
+    setDraft(String(value));
+  }, [value]);
+
+  const commit = () => {
+    const trimmed = draft.trim();
+    const parsed = parseInt(trimmed, 10);
+    if (!Number.isFinite(parsed)) {
+      setDraft(String(value));
+      return;
+    }
+    if (parsed === value) return;
+    onCommit(parsed);
+  };
+
+  return (
+    <Input
+      type="number"
+      value={draft}
+      aria-label={ariaLabel}
+      className="h-8 w-20 font-mono text-sm"
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          (e.target as HTMLInputElement).blur();
+        }
+      }}
+    />
+  );
+};
+
 export function ChannelsPage() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -109,6 +159,8 @@ export function ChannelsPage() {
   const [sortBy, setSortBy] = useState('id');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [bulkTesting, setBulkTesting] = useState(false);
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const [refreshingBalanceIds, setRefreshingBalanceIds] = useState<Set<number>>(new Set());
   const initializedRef = useRef(false);
   const skipFirstSortEffect = useRef(true);
 
@@ -389,6 +441,169 @@ export function ChannelsPage() {
     }
   };
 
+  const handlePriorityUpdate = async (channel: Channel, newPriority: number) => {
+    if ((channel.priority ?? 0) === newPriority) return;
+    try {
+      const res = await api.put('/api/channel/', {
+        id: channel.id,
+        name: channel.name,
+        priority: newPriority,
+      });
+      if (res.data?.success) {
+        setData((prev) => prev.map((row) => (row.id === channel.id ? { ...row, priority: newPriority } : row)));
+        notify({
+          type: 'success',
+          message: t('channels.notifications.priority_saved', 'Priority updated.'),
+        });
+      } else {
+        notify({
+          type: 'error',
+          title: t('channels.notifications.priority_failed_title', 'Update failed'),
+          message: res.data?.message || t('channels.notifications.priority_failed_message', 'Failed to update priority.'),
+        });
+      }
+    } catch (error) {
+      console.error('Failed to update priority:', error);
+      notify({
+        type: 'error',
+        title: t('channels.notifications.priority_failed_title', 'Update failed'),
+        message: error instanceof Error ? error.message : t('channels.notifications.priority_failed_message', 'Failed to update priority.'),
+      });
+    }
+  };
+
+  const handleBulkStatus = async (status: 1 | 2) => {
+    const targets = data;
+    if (targets.length === 0) {
+      notify({
+        type: 'info',
+        message: t('channels.notifications.bulk_status_empty', 'No channels available to update.'),
+      });
+      return;
+    }
+    setBulkBusy(true);
+    try {
+      notify({
+        type: 'info',
+        message: t('channels.notifications.bulk_status_started', 'Updating {{count}} channels…', { count: targets.length }),
+      });
+      let success = 0;
+      let failed = 0;
+      for (const ch of targets) {
+        try {
+          const res = await api.put('/api/channel/?status_only=1', { id: ch.id, status });
+          if (res.data?.success) {
+            success += 1;
+          } else {
+            failed += 1;
+          }
+        } catch (_err) {
+          failed += 1;
+        }
+      }
+      notify({
+        type: failed === 0 ? 'success' : 'error',
+        title:
+          status === 1
+            ? t('channels.notifications.bulk_enable_summary_title', 'Enable summary')
+            : t('channels.notifications.bulk_disable_summary_title', 'Disable summary'),
+        message: t('channels.notifications.bulk_status_summary', 'Updated {{success}} channels, {{failed}} failed.', {
+          success,
+          failed,
+        }),
+      });
+      if (searchKeyword.trim()) {
+        performSearch();
+      } else {
+        load(pageIndex, pageSize);
+      }
+    } finally {
+      setBulkBusy(false);
+    }
+  };
+
+  const handleBalanceRefresh = async (channel: Channel) => {
+    setRefreshingBalanceIds((prev) => {
+      const next = new Set(prev);
+      next.add(channel.id);
+      return next;
+    });
+    try {
+      const res = await api.get(`/api/channel/update_balance/${channel.id}`);
+      const { success, message, balance, balance_updated_time } = res.data || {};
+      if (success) {
+        setData((prev) =>
+          prev.map((row) =>
+            row.id === channel.id
+              ? {
+                  ...row,
+                  balance: typeof balance === 'number' ? balance : row.balance,
+                  balance_updated_time: typeof balance_updated_time === 'number' ? balance_updated_time : Math.floor(Date.now() / 1000),
+                }
+              : row
+          )
+        );
+        notify({
+          type: 'success',
+          message: t('channels.notifications.balance_success', 'Balance refreshed.'),
+        });
+      } else {
+        notify({
+          type: 'error',
+          title: t('channels.notifications.balance_failed_title', 'Balance refresh failed'),
+          message: message || t('channels.notifications.balance_failed_message', 'Failed to refresh balance.'),
+        });
+      }
+    } catch (error) {
+      console.error('Failed to refresh balance:', error);
+      notify({
+        type: 'error',
+        title: t('channels.notifications.balance_failed_title', 'Balance refresh failed'),
+        message: error instanceof Error ? error.message : t('channels.notifications.balance_failed_message', 'Failed to refresh balance.'),
+      });
+    } finally {
+      setRefreshingBalanceIds((prev) => {
+        const next = new Set(prev);
+        next.delete(channel.id);
+        return next;
+      });
+    }
+  };
+
+  const handleBulkBalanceRefresh = async () => {
+    setBulkBusy(true);
+    try {
+      const res = await api.get('/api/channel/update_balance');
+      const { success, message } = res.data || {};
+      if (success) {
+        notify({
+          type: 'success',
+          message: t('channels.notifications.bulk_balance_success', 'All channel balances refreshed.'),
+        });
+      } else {
+        notify({
+          type: 'error',
+          title: t('channels.notifications.balance_failed_title', 'Balance refresh failed'),
+          message: message || t('channels.notifications.balance_failed_message', 'Failed to refresh balance.'),
+        });
+      }
+      if (searchKeyword.trim()) {
+        performSearch();
+      } else {
+        load(pageIndex, pageSize);
+      }
+    } catch (error) {
+      console.error('Bulk balance refresh failed:', error);
+      notify({
+        type: 'error',
+        title: t('channels.notifications.balance_failed_title', 'Balance refresh failed'),
+        message: error instanceof Error ? error.message : t('channels.notifications.balance_failed_message', 'Failed to refresh balance.'),
+      });
+    } finally {
+      setBulkBusy(false);
+    }
+  };
+
   const handleDeleteDisabled = async () => {
     const confirmed = await confirmAction({
       title: t('channels.confirm.delete_disabled_title', 'Delete Disabled Channels'),
@@ -443,12 +658,49 @@ export function ChannelsPage() {
     {
       accessorKey: 'priority',
       header: t('channels.columns.priority'),
-      cell: ({ row }) => <span className="font-mono text-sm">{row.original.priority || 0}</span>,
+      cell: ({ row }) => (
+        <PriorityCell
+          value={row.original.priority ?? 0}
+          ariaLabel={t('channels.columns.priority_input_label', 'Priority for {{name}}', { name: row.original.name })}
+          onCommit={(next) => handlePriorityUpdate(row.original, next)}
+        />
+      ),
     },
     {
       accessorKey: 'weight',
       header: t('channels.columns.weight'),
       cell: ({ row }) => <span className="font-mono text-sm">{row.original.weight || 0}</span>,
+    },
+    {
+      accessorKey: 'balance',
+      header: t('channels.columns.balance'),
+      cell: ({ row }) => {
+        const ch = row.original;
+        const refreshing = refreshingBalanceIds.has(ch.id);
+        const formatted = typeof ch.balance === 'number' ? ch.balance.toFixed(2) : '-';
+        const updatedAt = ch.balance_updated_time ? ch.balance_updated_time * 1000 : null;
+        return (
+          <div className="flex items-center gap-2">
+            <div className="font-mono text-sm">{formatted}</div>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 w-7 p-0"
+              onClick={() => handleBalanceRefresh(ch)}
+              disabled={refreshing}
+              aria-label={t('channels.actions.refresh_balance', 'Refresh balance for {{name}}', { name: ch.name })}
+              title={t('channels.actions.refresh_balance', 'Refresh balance for {{name}}', { name: ch.name })}
+            >
+              <RefreshCw className={cn('h-3.5 w-3.5', refreshing && 'animate-spin')} />
+            </Button>
+            {updatedAt && (
+              <span className="text-xs text-muted-foreground">
+                <TimestampDisplay timestamp={updatedAt} className="font-mono" />
+              </span>
+            )}
+          </div>
+        );
+      },
     },
     {
       accessorKey: 'response_time',
@@ -602,6 +854,41 @@ export function ChannelsPage() {
           {isMobile ? t('channels.toolbar.test_all_mobile') : t('channels.toolbar.test_all')}
         </Button>
         <Button
+          variant="outline"
+          onClick={handleBulkBalanceRefresh}
+          disabled={bulkBusy || loading}
+          className={cn('gap-2 flex-1 md:flex-none whitespace-nowrap', isMobile ? 'touch-target' : '')}
+          size="sm"
+        >
+          <Banknote className="h-4 w-4" />
+          {isMobile
+            ? t('channels.toolbar.refresh_balances_mobile', 'Refresh Balances')
+            : t('channels.toolbar.refresh_balances', 'Refresh All Balances')}
+        </Button>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={bulkBusy || loading || data.length === 0}
+              className={cn('gap-2 flex-1 md:flex-none whitespace-nowrap', isMobile ? 'touch-target' : '')}
+            >
+              {t('channels.toolbar.bulk_actions', 'Bulk Actions')}
+              <ChevronDown className="h-4 w-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onSelect={() => handleBulkStatus(1)} className="gap-2">
+              <CheckCircle className="h-4 w-4 text-success" />
+              {t('channels.toolbar.enable_visible', 'Enable visible channels')}
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => handleBulkStatus(2)} className="gap-2">
+              <Ban className="h-4 w-4 text-warning" />
+              {t('channels.toolbar.disable_visible', 'Disable visible channels')}
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+        <Button
           variant="destructive"
           onClick={handleDeleteDisabled}
           className={cn('gap-2 flex-1 md:flex-none whitespace-nowrap', isMobile ? 'touch-target' : '')}
@@ -683,7 +970,7 @@ export function ChannelsPage() {
               loading={loading}
               emptyMessage={t('channels.empty')}
               mobileCardLayout={true}
-              hideColumnsOnMobile={['created_time', 'response_time']}
+              hideColumnsOnMobile={['created_time', 'response_time', 'balance']}
               compactMode={isMobile}
             />
           </CardContent>

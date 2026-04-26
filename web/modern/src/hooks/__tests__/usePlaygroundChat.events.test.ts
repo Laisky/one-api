@@ -44,9 +44,7 @@ describe('usePlaygroundChat addEvent emissions', () => {
     const addEvent = vi.fn();
     const setMessages = vi.fn();
 
-    const { result } = renderHook(() =>
-      usePlaygroundChat(baseProps({ addEvent, setMessages }) as any)
-    );
+    const { result } = renderHook(() => usePlaygroundChat(baseProps({ addEvent, setMessages }) as any));
 
     await act(async () => {
       await result.current.sendMessage('hello');
@@ -71,9 +69,7 @@ describe('usePlaygroundChat addEvent emissions', () => {
     const setMessages = vi.fn();
     streamChatCompletionMock.mockResolvedValueOnce(undefined as unknown as void);
 
-    const { result } = renderHook(() =>
-      usePlaygroundChat(baseProps({ addEvent, setMessages }) as any)
-    );
+    const { result } = renderHook(() => usePlaygroundChat(baseProps({ addEvent, setMessages }) as any));
 
     await act(async () => {
       await result.current.sendMessage('hi there');
@@ -98,9 +94,7 @@ describe('usePlaygroundChat addEvent emissions', () => {
     const setMessages = vi.fn();
     streamChatCompletionMock.mockRejectedValueOnce(new Error('boom'));
 
-    const { result } = renderHook(() =>
-      usePlaygroundChat(baseProps({ addEvent, setMessages }) as any)
-    );
+    const { result } = renderHook(() => usePlaygroundChat(baseProps({ addEvent, setMessages }) as any));
 
     await act(async () => {
       await result.current.sendMessage('hi there');
@@ -120,14 +114,10 @@ describe('usePlaygroundChat addEvent emissions', () => {
     const setMessages = vi.fn();
     streamChatCompletionMock.mockResolvedValueOnce(undefined as unknown as void);
 
-    const { result } = renderHook(() =>
-      usePlaygroundChat(baseProps({ addEvent, setMessages }) as any)
-    );
+    const { result } = renderHook(() => usePlaygroundChat(baseProps({ addEvent, setMessages }) as any));
 
     await act(async () => {
-      await result.current.regenerateMessage([
-        { role: 'user', content: 'hello', timestamp: Date.now() } as any,
-      ]);
+      await result.current.regenerateMessage([{ role: 'user', content: 'hello', timestamp: Date.now() } as any]);
     });
 
     const calls = addEvent.mock.calls.map((c) => c[0]);

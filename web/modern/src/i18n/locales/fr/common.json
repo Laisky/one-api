@@ -90,6 +90,9 @@
     "redirecting": "Redirection vers l’accueil dans {{seconds}} s...",
     "stay_here": "Rester sur cette page"
   },
+  "notice": {
+    "dismiss": "Fermer la notification"
+  },
   "passkey_prompt": {
     "dismiss": "Fermer",
     "message": "Renforcez la sécurité de votre compte — configurez un passkey pour une connexion rapide sans mot de passe.",

@@ -18,14 +18,7 @@ interface EventLogPanelProps {
   className?: string;
 }
 
-export function EventLogPanel({
-  events,
-  expandedEvents,
-  onToggleExpand,
-  onClear,
-  isMobile = false,
-  className,
-}: EventLogPanelProps) {
+export function EventLogPanel({ events, expandedEvents, onToggleExpand, onClear, isMobile = false, className }: EventLogPanelProps) {
   const { t } = useTranslation();
   const eventsEndRef = useRef<HTMLDivElement | null>(null);
 
@@ -42,12 +35,7 @@ export function EventLogPanel({
             {events.length}
           </Badge>
           {events.length > 0 && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={onClear}
-              className="h-7 gap-1 text-xs text-muted-foreground"
-            >
+            <Button variant="ghost" size="sm" onClick={onClear} className="h-7 gap-1 text-xs text-muted-foreground">
               <Trash2 className="h-3 w-3" />
               {t('playground.realtime.clear_events')}
             </Button>
@@ -81,9 +69,7 @@ export function EventLogPanel({
                         variant={isOut ? 'default' : 'outline'}
                         className={cn(
                           'text-[10px] px-1.5 py-0 shrink-0',
-                          isOut
-                            ? 'bg-blue-500/15 text-blue-600 border-blue-500/30'
-                            : 'bg-green-500/15 text-green-600 border-green-500/30'
+                          isOut ? 'bg-blue-500/15 text-blue-600 border-blue-500/30' : 'bg-green-500/15 text-green-600 border-green-500/30'
                         )}
                       >
                         {isOut ? t('playground.realtime.sent') : t('playground.realtime.received')}
@@ -95,9 +81,7 @@ export function EventLogPanel({
                         {evt.transport.toUpperCase()}
                       </Badge>
                       <span className="font-mono text-xs truncate flex-1">{evt.type}</span>
-                      <span className="text-[10px] text-muted-foreground shrink-0">
-                        {evt.timestamp.toLocaleTimeString()}
-                      </span>
+                      <span className="text-[10px] text-muted-foreground shrink-0">{evt.timestamp.toLocaleTimeString()}</span>
                     </button>
                     {isExpanded && (
                       <div className="px-4 pb-3 pl-10">

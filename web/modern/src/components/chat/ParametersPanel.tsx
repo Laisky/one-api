@@ -310,9 +310,7 @@ export function ParametersPanel({
   const temperatureMin = isRealtime ? 0.6 : 0;
   const temperatureMax = isRealtime ? 1.2 : 2;
   const temperatureStep = isRealtime ? 0.05 : 0.1;
-  const displayedTemperature = isRealtime
-    ? [Math.min(Math.max(temperature[0] ?? 0.8, 0.6), 1.2)]
-    : temperature;
+  const displayedTemperature = isRealtime ? [Math.min(Math.max(temperature[0] ?? 0.8, 0.6), 1.2)] : temperature;
 
   const modelPlaceholder = isLoadingModels
     ? t('playground.parameters.model.loading')
@@ -489,11 +487,7 @@ export function ParametersPanel({
                   )}
                 </div>
                 {realtimeStatus === 'disconnected' ? (
-                  <Button
-                    className="w-full gap-2"
-                    onClick={() => onConnect?.()}
-                    disabled={!selectedToken || !selectedModel}
-                  >
+                  <Button className="w-full gap-2" onClick={() => onConnect?.()} disabled={!selectedToken || !selectedModel}>
                     <Wifi className="h-4 w-4" />
                     {t('playground.realtime.connect')}
                   </Button>

@@ -145,8 +145,7 @@ export function useRealtimeChat({
 
         case 'response.output_text.done':
         case 'response.text.done': {
-          const finalText =
-            typeof data?.text === 'string' && data.text.length > 0 ? data.text : pendingAssistantTextRef.current;
+          const finalText = typeof data?.text === 'string' && data.text.length > 0 ? data.text : pendingAssistantTextRef.current;
           pendingAssistantTextRef.current = finalText;
           upsertAssistantText(finalText);
           break;
@@ -161,8 +160,7 @@ export function useRealtimeChat({
         }
 
         case 'error': {
-          const errorMsg =
-            (data?.error as { message?: string })?.message ?? data?.message ?? JSON.stringify(data);
+          const errorMsg = (data?.error as { message?: string })?.message ?? data?.message ?? JSON.stringify(data);
           addErrorMessage(`Error: ${errorMsg}`);
           setIsStreaming(false);
           break;

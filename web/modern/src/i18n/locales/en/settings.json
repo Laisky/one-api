@@ -303,6 +303,17 @@
       "WeChatServerToken": "Verification token for your WeChat server integration. Stored securely and never displayed."
     },
     "disabled": "Disabled",
+    "email_whitelist": {
+      "add": "Add",
+      "duplicate_domain": "Domain \"{{domain}}\" is already in the list.",
+      "duplicate_title": "Duplicate domain",
+      "empty": "No domains added yet.",
+      "input_aria": "New email domain",
+      "invalid_domain": "\"{{domain}}\" is not a valid domain.",
+      "invalid_title": "Invalid domain",
+      "placeholder": "e.g. example.com",
+      "remove_aria": "Remove {{domain}}"
+    },
     "enabled": "Enabled",
     "groups": {
       "authentication": {
@@ -350,6 +361,14 @@
     "loading": "Loading options...",
     "no_description": "No description available for this setting yet.",
     "no_options": "No options available or insufficient permissions.",
+    "oidc_discovery": {
+      "button": "Fetch endpoints",
+      "failed_title": "OIDC discovery failed",
+      "invalid_url": "OidcWellKnown must be a valid http(s) URL before discovery.",
+      "missing_endpoints": "Discovery document is missing: {{endpoints}}",
+      "success_message": "Authorization, token, and userinfo endpoints have been saved.",
+      "success_title": "OIDC endpoints updated"
+    },
     "option_value_aria": "{{key}} value",
     "refresh": "Refresh",
     "save": "Save",

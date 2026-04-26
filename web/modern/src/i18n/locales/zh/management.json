@@ -7,15 +7,18 @@
       "disable": "禁用",
       "edit": "编辑",
       "enable": "启用",
+      "refresh_balance": "刷新「{{name}}」余额",
       "test": "测试"
     },
     "columns": {
       "actions": "操作",
+      "balance": "余额",
       "created": "创建时间",
       "group": "分组",
       "id": "ID",
       "name": "名称",
       "priority": "优先级",
+      "priority_input_label": "「{{name}}」的优先级",
       "response": "响应",
       "status": "状态",
       "testing_model": "测试模型",
@@ -307,10 +310,46 @@
         "title": "模型映射存在可疑条目"
       },
       "spark": {
+        "api_key": {
+          "help": "在讯飞控制台获取的 APIKey，与 APISecret 一同使用。",
+          "label": "APIKey *",
+          "placeholder": "APIKey"
+        },
+        "api_secret": {
+          "help": "在讯飞控制台获取的 APISecret，与 APIKey 一同使用。",
+          "label": "APISecret *",
+          "placeholder": "APISecret"
+        },
+        "app_id": {
+          "help": "讯飞控制台中星火应用的 APPID。",
+          "label": "APPID *",
+          "placeholder": "APPID"
+        },
+        "heading": "讯飞星火配置",
+        "note": "最终 API Key 将拼接为：APPID|APISecret|APIKey",
         "version": {
           "help": "选择讯飞星火的 API 版本 (例如 v3.5)。",
           "label": "Spark 版本",
           "placeholder": "选择 Spark 版本"
+        }
+      },
+      "tencent": {
+        "app_id": {
+          "help": "腾讯云账号 AppId。",
+          "label": "AppId *",
+          "placeholder": "AppId"
+        },
+        "heading": "腾讯混元配置",
+        "note": "最终 API Key 将拼接为：AppId|SecretId|SecretKey",
+        "secret_id": {
+          "help": "腾讯云 API SecretId。",
+          "label": "SecretId *",
+          "placeholder": "SecretId"
+        },
+        "secret_key": {
+          "help": "与 SecretId 配对的腾讯云 SecretKey。",
+          "label": "SecretKey *",
+          "placeholder": "SecretKey"
         }
       },
       "system_prompt": {
@@ -415,11 +454,23 @@
     "empty": "尚未找到渠道，请先创建一个渠道。",
     "group_default": "default",
     "notifications": {
+      "balance_failed_message": "刷新余额失败。",
+      "balance_failed_title": "余额刷新失败",
+      "balance_success": "余额已刷新。",
+      "bulk_balance_success": "已刷新所有渠道的余额。",
+      "bulk_disable_summary_title": "禁用结果",
+      "bulk_enable_summary_title": "启用结果",
+      "bulk_status_empty": "没有可更新的渠道。",
+      "bulk_status_started": "正在更新 {{count}} 个渠道…",
+      "bulk_status_summary": "成功 {{success}} 个，失败 {{failed}} 个。",
       "bulk_test_failed_title": "批量测试失败",
       "bulk_test_started": "已开始批量渠道测试。",
       "delete_disabled_success": "已删除禁用渠道。",
       "delete_failed_message": "未知错误",
       "delete_failed_title": "删除失败",
+      "priority_failed_message": "更新优先级失败。",
+      "priority_failed_title": "更新失败",
+      "priority_saved": "优先级已更新。",
       "test_failed_message": "未知错误",
       "test_failed_title": "渠道测试失败",
       "test_success": "渠道测试成功。",
@@ -446,8 +497,13 @@
     },
     "title": "渠道",
     "toolbar": {
+      "bulk_actions": "批量操作",
       "delete_disabled": "删除禁用",
       "delete_disabled_mobile": "删除所有禁用",
+      "disable_visible": "禁用可见渠道",
+      "enable_visible": "启用可见渠道",
+      "refresh_balances": "刷新所有余额",
+      "refresh_balances_mobile": "刷新余额",
       "test_all": "测试全部",
       "test_all_mobile": "测试所有渠道"
     },
@@ -659,6 +715,13 @@
         "placeholder": "按名称搜索令牌...",
         "quota_label": "额度: {{quota}}"
       },
+      "share": {
+        "ama": "AMA 问天",
+        "lobechat": "LobeChat",
+        "next_chat": "ChatGPT Next Web",
+        "open_in_client": "在客户端打开",
+        "opencat": "OpenCat"
+      },
       "status": {
         "disabled": "已禁用",
         "enabled": "已启用",
@@ -719,6 +782,8 @@
         "cancel": "取消",
         "create": "创建用户",
         "creating": "正在创建...",
+        "disable_2fa": "禁用用户 2FA",
+        "disabling_2fa": "正在禁用...",
         "update": "更新用户",
         "updating": "正在更新..."
       },
@@ -729,6 +794,12 @@
         "help_password": "帮助: 密码",
         "help_quota": "帮助: 额度",
         "help_username": "帮助: 用户名"
+      },
+      "confirm_2fa": {
+        "cancel": "取消",
+        "confirm": "禁用 2FA",
+        "description": "禁用 {{username}} 的二步验证?该用户将无需 2FA 验证码即可登录。",
+        "title": "禁用 2FA"
       },
       "description": {
         "create": "创建一个新用户账户",
@@ -781,6 +852,12 @@
         "create_success": "用户创建成功",
         "update_success": "用户更新成功"
       },
+      "notifications_2fa": {
+        "failed_message": "无法禁用 2FA。",
+        "failed_title": "禁用 2FA 失败",
+        "success_message": "已禁用二步验证。",
+        "success_title": "2FA 已禁用"
+      },
       "title": {
         "create": "创建用户",
         "edit": "编辑用户"
@@ -800,9 +877,12 @@
     "page": {
       "actions": {
         "delete": "删除",
+        "demote": "降级",
         "disable": "禁用",
+        "disable_2fa": "禁用 2FA",
         "edit": "编辑",
         "enable": "启用",
+        "promote": "提升",
         "topup": "充值"
       },
       "columns": {
@@ -816,13 +896,35 @@
         "used_quota": "已用额度",
         "username": "用户名"
       },
+      "confirm": {
+        "cancel": "取消",
+        "confirm": "确认",
+        "demote_description": "将 {{username}} 降级为普通用户?该用户将失去管理员权限。",
+        "demote_title": "降级用户",
+        "disable_2fa_description": "禁用 {{username}} 的二步验证?该用户将无需 2FA 验证码即可登录。",
+        "disable_2fa_title": "禁用 2FA",
+        "promote_description": "将 {{username}} 提升为管理员?该用户将获得管理员权限。",
+        "promote_title": "提升用户"
+      },
       "description": "管理用户",
       "empty": "未找到用户。添加您的第一个用户以开始使用。",
       "notifications": {
         "action_failed_message": "无法应用更改。",
         "action_failed_title": "操作失败",
+        "demote_failed_message": "无法降级该用户。",
+        "demote_failed_title": "降级失败",
+        "demote_success_message": "用户 {{username}} 已降级。",
+        "demote_success_title": "用户已降级",
+        "disable_2fa_failed_message": "无法禁用 2FA。",
+        "disable_2fa_failed_title": "禁用 2FA 失败",
+        "disable_2fa_success_message": "已禁用 {{username}} 的二步验证。",
+        "disable_2fa_success_title": "2FA 已禁用",
         "load_failed_message": "加载用户失败。",
         "load_failed_title": "访问被拒绝",
+        "promote_failed_message": "无法提升该用户。",
+        "promote_failed_title": "提升失败",
+        "promote_success_message": "用户 {{username}} 已提升。",
+        "promote_success_title": "用户已提升",
         "search_failed_message": "搜索失败。",
         "search_failed_title": "搜索失败"
       },

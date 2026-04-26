@@ -7,15 +7,18 @@
       "disable": "無効化",
       "edit": "編集",
       "enable": "有効化",
+      "refresh_balance": "{{name}} の残高を更新",
       "test": "テスト"
     },
     "columns": {
       "actions": "操作",
+      "balance": "残高",
       "created": "作成日",
       "group": "グループ",
       "id": "ID",
       "name": "名前",
       "priority": "優先度",
+      "priority_input_label": "{{name}} の優先度",
       "response": "レスポンス",
       "status": "状態",
       "testing_model": "テスト用モデル",
@@ -307,10 +310,46 @@
         "title": "Model Mapping に疑わしい項目があります"
       },
       "spark": {
+        "api_key": {
+          "help": "APISecret と組み合わせて使用する iFlytek コンソールの APIKey。",
+          "label": "APIKey *",
+          "placeholder": "APIKey"
+        },
+        "api_secret": {
+          "help": "APIKey と組み合わせて使用する iFlytek コンソールの APISecret。",
+          "label": "APISecret *",
+          "placeholder": "APISecret"
+        },
+        "app_id": {
+          "help": "Spark アプリケーション用の iFlytek コンソール APPID。",
+          "label": "APPID *",
+          "placeholder": "APPID"
+        },
+        "heading": "iFlytek Spark の設定",
+        "note": "最終的な API キーは APPID|APISecret|APIKey の形で構成されます。",
         "version": {
           "help": "iFlytek Spark の API バージョンを選択します (例: v3.5)。",
           "label": "Spark バージョン",
           "placeholder": "Spark バージョンを選択"
+        }
+      },
+      "tencent": {
+        "app_id": {
+          "help": "API 認証情報に紐づく Tencent Cloud アカウントの AppId。",
+          "label": "AppId *",
+          "placeholder": "AppId"
+        },
+        "heading": "Tencent Hunyuan の設定",
+        "note": "最終的な API キーは AppId|SecretId|SecretKey の形で構成されます。",
+        "secret_id": {
+          "help": "API 認証用の Tencent Cloud SecretId。",
+          "label": "SecretId *",
+          "placeholder": "SecretId"
+        },
+        "secret_key": {
+          "help": "SecretId と組み合わせて使用する Tencent Cloud SecretKey。",
+          "label": "SecretKey *",
+          "placeholder": "SecretKey"
         }
       },
       "system_prompt": {
@@ -415,11 +454,23 @@
     "empty": "チャンネルが見つかりません。まずはチャンネルを作成してください。",
     "group_default": "default",
     "notifications": {
+      "balance_failed_message": "残高の更新に失敗しました。",
+      "balance_failed_title": "残高更新に失敗",
+      "balance_success": "残高を更新しました。",
+      "bulk_balance_success": "すべてのチャンネルの残高を更新しました。",
+      "bulk_disable_summary_title": "無効化サマリ",
+      "bulk_enable_summary_title": "有効化サマリ",
+      "bulk_status_empty": "更新できるチャンネルがありません。",
+      "bulk_status_started": "{{count}} 件のチャンネルを更新中…",
+      "bulk_status_summary": "{{success}} 件成功、{{failed}} 件失敗。",
       "bulk_test_failed_title": "一括テストに失敗しました",
       "bulk_test_started": "チャンネル一括テストを開始しました。",
       "delete_disabled_success": "無効なチャンネルを削除しました。",
       "delete_failed_message": "不明なエラー",
       "delete_failed_title": "削除に失敗しました",
+      "priority_failed_message": "優先度の更新に失敗しました。",
+      "priority_failed_title": "更新に失敗しました",
+      "priority_saved": "優先度を更新しました。",
       "test_failed_message": "不明なエラー",
       "test_failed_title": "チャンネルのテストに失敗しました",
       "test_success": "チャンネルのテストに成功しました。",
@@ -446,8 +497,13 @@
     },
     "title": "チャンネル",
     "toolbar": {
+      "bulk_actions": "一括操作",
       "delete_disabled": "無効を削除",
       "delete_disabled_mobile": "無効をすべて削除",
+      "disable_visible": "表示中のチャンネルを無効化",
+      "enable_visible": "表示中のチャンネルを有効化",
+      "refresh_balances": "全残高を更新",
+      "refresh_balances_mobile": "残高を更新",
       "test_all": "すべてテスト",
       "test_all_mobile": "全チャンネルをテスト"
     },
@@ -659,6 +715,13 @@
         "placeholder": "名前でトークンを検索...",
         "quota_label": "クォータ: {{quota}}"
       },
+      "share": {
+        "ama": "AMA 问天",
+        "lobechat": "LobeChat",
+        "next_chat": "ChatGPT Next Web",
+        "open_in_client": "クライアントで開く",
+        "opencat": "OpenCat"
+      },
       "status": {
         "disabled": "無効",
         "enabled": "有効",
@@ -719,6 +782,8 @@
         "cancel": "キャンセル",
         "create": "ユーザーを作成",
         "creating": "作成中...",
+        "disable_2fa": "ユーザーの 2FA を無効化",
+        "disabling_2fa": "無効化中...",
         "update": "ユーザーを更新",
         "updating": "更新中..."
       },
@@ -729,6 +794,12 @@
         "help_password": "ヘルプ: パスワード",
         "help_quota": "ヘルプ: クォータ",
         "help_username": "ヘルプ: ユーザー名"
+      },
+      "confirm_2fa": {
+        "cancel": "キャンセル",
+        "confirm": "2FA を無効化",
+        "description": "{{username}} の二要素認証を無効化しますか？2FA コードなしでサインインできるようになります。",
+        "title": "2FA を無効化"
       },
       "description": {
         "create": "新しいユーザーアカウントを作成",
@@ -781,6 +852,12 @@
         "create_success": "ユーザーを作成しました",
         "update_success": "ユーザーを更新しました"
       },
+      "notifications_2fa": {
+        "failed_message": "2FA を無効化できません。",
+        "failed_title": "2FA 無効化に失敗",
+        "success_message": "二要素認証を無効化しました。",
+        "success_title": "2FA 無効化"
+      },
       "title": {
         "create": "ユーザーを作成",
         "edit": "ユーザーを編集"
@@ -800,9 +877,12 @@
     "page": {
       "actions": {
         "delete": "削除",
+        "demote": "降格",
         "disable": "無効化",
+        "disable_2fa": "2FA を無効化",
         "edit": "編集",
         "enable": "有効化",
+        "promote": "昇格",
         "topup": "チャージ"
       },
       "columns": {
@@ -816,13 +896,35 @@
         "used_quota": "使用済みクォータ",
         "username": "ユーザー名"
       },
+      "confirm": {
+        "cancel": "キャンセル",
+        "confirm": "確認",
+        "demote_description": "{{username}} を一般ユーザーに降格しますか？管理者権限が失われます。",
+        "demote_title": "ユーザーを降格",
+        "disable_2fa_description": "{{username}} の二要素認証を無効化しますか？2FA コードなしでサインインできるようになります。",
+        "disable_2fa_title": "2FA を無効化",
+        "promote_description": "{{username}} を管理者に昇格しますか？管理者権限が付与されます。",
+        "promote_title": "ユーザーを昇格"
+      },
       "description": "ユーザーを管理",
       "empty": "ユーザーが見つかりません。最初のユーザーを追加して開始してください。",
       "notifications": {
         "action_failed_message": "変更を適用できません。",
         "action_failed_title": "操作に失敗しました",
+        "demote_failed_message": "ユーザーを降格できません。",
+        "demote_failed_title": "降格に失敗しました",
+        "demote_success_message": "ユーザー {{username}} を降格しました。",
+        "demote_success_title": "ユーザーを降格しました",
+        "disable_2fa_failed_message": "2FA を無効化できません。",
+        "disable_2fa_failed_title": "2FA 無効化に失敗",
+        "disable_2fa_success_message": "{{username}} の二要素認証を無効化しました。",
+        "disable_2fa_success_title": "2FA 無効化",
         "load_failed_message": "ユーザーの読み込みに失敗しました。",
         "load_failed_title": "アクセス拒否",
+        "promote_failed_message": "ユーザーを昇格できません。",
+        "promote_failed_title": "昇格に失敗しました",
+        "promote_success_message": "ユーザー {{username}} を昇格しました。",
+        "promote_success_title": "ユーザーを昇格しました",
         "search_failed_message": "検索に失敗しました。",
         "search_failed_title": "検索失敗"
       },

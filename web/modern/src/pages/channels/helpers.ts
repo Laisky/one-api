@@ -405,13 +405,15 @@ export const validateToolingConfig = (configStr: string) => {
 export const getKeyPrompt = (type: number) => {
   switch (type) {
     case 15:
-      return 'Please enter Baidu API Key and Secret Key in format: API_KEY|SECRET_KEY';
+      return 'APIKey|SecretKey';
     case 18:
-      return 'Please enter iFlytek App ID, API Secret, and API Key in format: APPID|API_SECRET|API_KEY';
+      return 'APPID|APISecret|APIKey';
     case 22:
-      return 'Please enter FastGPT API Key';
+      return 'APIKey-AppId (e.g., fastgpt-0sp2gtvfdgyi4k30jwlgwf1i-64f335d84283f05518e9e041)';
     case 23:
-      return 'Please enter Tencent SecretId and SecretKey in format: SECRET_ID|SECRET_KEY';
+      return 'AppId|SecretId|SecretKey';
+    case 26:
+      return 'APIKey|SecretKey';
     case 53:
       return 'Please enter a GitHub access token (PAT or OAuth token) with an active Copilot subscription';
     default:

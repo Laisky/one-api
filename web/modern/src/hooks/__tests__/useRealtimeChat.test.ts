@@ -240,9 +240,7 @@ describe('useRealtimeChat', () => {
     await act(async () => {
       await result.current.sendMessage('hi');
     });
-    const errCall = addEvent.mock.calls.find(
-      ([entry]) => entry.direction === 'out' && entry.type === 'error'
-    );
+    const errCall = addEvent.mock.calls.find(([entry]) => entry.direction === 'out' && entry.type === 'error');
     expect(errCall).toBeDefined();
     expect(messagesRef.current.find((m) => m.role === 'user')).toBeUndefined();
     expect(sockets[0]?.sent ?? []).toHaveLength(0);
@@ -286,9 +284,7 @@ describe('useRealtimeChat', () => {
     await act(async () => {
       await result.current.sendMessage('hello', [{ url: 'data:image/png;base64,abc' }]);
     });
-    const warnCall = addEvent.mock.calls.find(
-      ([entry]) => entry.direction === 'out' && entry.type === 'warning'
-    );
+    const warnCall = addEvent.mock.calls.find(([entry]) => entry.direction === 'out' && entry.type === 'warning');
     expect(warnCall).toBeDefined();
     expect(sockets[0].sent).toHaveLength(2);
     const first = JSON.parse(sockets[0].sent[0]);
@@ -308,9 +304,7 @@ describe('useRealtimeChat', () => {
     act(() => {
       result.current.stopGeneration();
     });
-    const cancelFrame = sockets[0].sent
-      .map((s) => JSON.parse(s))
-      .find((p) => p.type === 'response.cancel');
+    const cancelFrame = sockets[0].sent.map((s) => JSON.parse(s)).find((p) => p.type === 'response.cancel');
     expect(cancelFrame).toBeDefined();
     expect(result.current.isStreaming).toBe(false);
   });
@@ -324,9 +318,7 @@ describe('useRealtimeChat', () => {
     act(() => {
       result.current.stopGeneration();
     });
-    const cancelFrame = sockets[0].sent
-      .map((s) => JSON.parse(s))
-      .find((p) => p.type === 'response.cancel');
+    const cancelFrame = sockets[0].sent.map((s) => JSON.parse(s)).find((p) => p.type === 'response.cancel');
     expect(cancelFrame).toBeUndefined();
     expect(result.current.isStreaming).toBe(false);
   });
@@ -342,9 +334,7 @@ describe('useRealtimeChat', () => {
     });
     expect(sockets[0].readyState).toBe(MockWebSocket.CLOSED);
     expect(result.current.connectionStatus).toBe('disconnected');
-    const closeCall = addEvent.mock.calls.find(
-      ([entry]) => entry.type === 'connection.close' && entry.direction === 'in'
-    );
+    const closeCall = addEvent.mock.calls.find(([entry]) => entry.type === 'connection.close' && entry.direction === 'in');
     expect(closeCall).toBeDefined();
   });
 
@@ -408,9 +398,7 @@ describe('useRealtimeChat', () => {
     act(() => {
       result.current.disconnect();
     });
-    const closeEvents = addEvent.mock.calls.filter(
-      ([entry]) => entry.type === 'connection.close'
-    );
+    const closeEvents = addEvent.mock.calls.filter(([entry]) => entry.type === 'connection.close');
     expect(closeEvents).toHaveLength(1);
   });
 

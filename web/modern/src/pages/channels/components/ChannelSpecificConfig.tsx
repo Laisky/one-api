@@ -377,32 +377,175 @@ export const ChannelSpecificConfig = ({ form, normalizedChannelType, defaultBase
 
       case 18: // iFlytek Spark
         return (
-          <Controller
-            name="other"
-            control={form.control}
-            render={({ field }) => (
-              <FormItem>
-                <LabelWithHelp
-                  label={tr('spark.version.label', 'Spark Version')}
-                  help={tr('spark.version.help', 'Select the API version for iFlytek Spark (e.g., v3.5).')}
-                />
-                <Select value={field.value ?? ''} onValueChange={(v) => field.onChange(v)}>
-                  <FormControl>
-                    <SelectTrigger>
-                      <SelectValue placeholder={tr('spark.version.placeholder', 'Select Spark version')} />
-                    </SelectTrigger>
-                  </FormControl>
-                  <SelectContent>
-                    <SelectItem value="v1.1">v1.1</SelectItem>
-                    <SelectItem value="v2.1">v2.1</SelectItem>
-                    <SelectItem value="v3.1">v3.1</SelectItem>
-                    <SelectItem value="v3.5">v3.5</SelectItem>
-                  </SelectContent>
-                </Select>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
+          <div className="space-y-4 p-4 border rounded-lg bg-info-muted/50">
+            <h4 className="font-medium text-info-foreground">{tr('spark.heading', 'iFlytek Spark Configuration')}</h4>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <FormField
+                control={form.control}
+                name="config.spark_app_id"
+                render={({ field }) => (
+                  <FormItem>
+                    <LabelWithHelp
+                      label={tr('spark.app_id.label', 'APPID *')}
+                      help={tr('spark.app_id.help', 'iFlytek console APPID for the Spark application.')}
+                    />
+                    <FormControl>
+                      <Input
+                        placeholder={tr('spark.app_id.placeholder', 'APPID')}
+                        className={errorClass('config.spark_app_id')}
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="config.spark_api_secret"
+                render={({ field }) => (
+                  <FormItem>
+                    <LabelWithHelp
+                      label={tr('spark.api_secret.label', 'APISecret *')}
+                      help={tr('spark.api_secret.help', 'iFlytek console APISecret paired with the APIKey.')}
+                    />
+                    <FormControl>
+                      <Input
+                        type="password"
+                        placeholder={tr('spark.api_secret.placeholder', 'APISecret')}
+                        className={errorClass('config.spark_api_secret')}
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="config.spark_api_key"
+                render={({ field }) => (
+                  <FormItem>
+                    <LabelWithHelp
+                      label={tr('spark.api_key.label', 'APIKey *')}
+                      help={tr('spark.api_key.help', 'iFlytek console APIKey paired with the APISecret.')}
+                    />
+                    <FormControl>
+                      <Input
+                        type="password"
+                        placeholder={tr('spark.api_key.placeholder', 'APIKey')}
+                        className={errorClass('config.spark_api_key')}
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+            <div className="text-xs text-muted-foreground">
+              {tr('spark.note', 'The final API key will be constructed as: APPID|APISecret|APIKey')}
+            </div>
+            <Controller
+              name="other"
+              control={form.control}
+              render={({ field }) => (
+                <FormItem>
+                  <LabelWithHelp
+                    label={tr('spark.version.label', 'Spark Version')}
+                    help={tr('spark.version.help', 'Select the API version for iFlytek Spark (e.g., v3.5).')}
+                  />
+                  <Select value={field.value ?? ''} onValueChange={(v) => field.onChange(v)}>
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder={tr('spark.version.placeholder', 'Select Spark version')} />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      <SelectItem value="v1.1">v1.1</SelectItem>
+                      <SelectItem value="v2.1">v2.1</SelectItem>
+                      <SelectItem value="v3.1">v3.1</SelectItem>
+                      <SelectItem value="v3.5">v3.5</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          </div>
+        );
+
+      case 23: // Tencent Hunyuan
+        return (
+          <div className="space-y-4 p-4 border rounded-lg bg-info-muted/50">
+            <h4 className="font-medium text-info-foreground">{tr('tencent.heading', 'Tencent Hunyuan Configuration')}</h4>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <FormField
+                control={form.control}
+                name="config.tencent_app_id"
+                render={({ field }) => (
+                  <FormItem>
+                    <LabelWithHelp
+                      label={tr('tencent.app_id.label', 'AppId *')}
+                      help={tr('tencent.app_id.help', 'Tencent Cloud account AppId associated with the API credentials.')}
+                    />
+                    <FormControl>
+                      <Input
+                        placeholder={tr('tencent.app_id.placeholder', 'AppId')}
+                        className={errorClass('config.tencent_app_id')}
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="config.tencent_secret_id"
+                render={({ field }) => (
+                  <FormItem>
+                    <LabelWithHelp
+                      label={tr('tencent.secret_id.label', 'SecretId *')}
+                      help={tr('tencent.secret_id.help', 'Tencent Cloud SecretId for API authentication.')}
+                    />
+                    <FormControl>
+                      <Input
+                        placeholder={tr('tencent.secret_id.placeholder', 'SecretId')}
+                        className={errorClass('config.tencent_secret_id')}
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="config.tencent_secret_key"
+                render={({ field }) => (
+                  <FormItem>
+                    <LabelWithHelp
+                      label={tr('tencent.secret_key.label', 'SecretKey *')}
+                      help={tr('tencent.secret_key.help', 'Tencent Cloud SecretKey paired with the SecretId.')}
+                    />
+                    <FormControl>
+                      <Input
+                        type="password"
+                        placeholder={tr('tencent.secret_key.placeholder', 'SecretKey')}
+                        className={errorClass('config.tencent_secret_key')}
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+            <div className="text-xs text-muted-foreground">
+              {tr('tencent.note', 'The final API key will be constructed as: AppId|SecretId|SecretKey')}
+            </div>
+          </div>
         );
 
       case 21: // Knowledge Base: AI Proxy

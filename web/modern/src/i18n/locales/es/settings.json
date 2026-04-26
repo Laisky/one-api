@@ -303,6 +303,17 @@
       "WeChatServerToken": "Token de verificación para la integración con WeChat (se almacena de forma segura)."
     },
     "disabled": "Desactivado",
+    "email_whitelist": {
+      "add": "Añadir",
+      "duplicate_domain": "El dominio \"{{domain}}\" ya está en la lista.",
+      "duplicate_title": "Dominio duplicado",
+      "empty": "Aún no se han añadido dominios.",
+      "input_aria": "Nuevo dominio de correo",
+      "invalid_domain": "\"{{domain}}\" no es un dominio válido.",
+      "invalid_title": "Dominio inválido",
+      "placeholder": "p. ej. example.com",
+      "remove_aria": "Eliminar {{domain}}"
+    },
     "enabled": "Activado",
     "groups": {
       "authentication": {
@@ -350,6 +361,14 @@
     "loading": "Cargando opciones...",
     "no_description": "Aún no hay una descripción para esta opción.",
     "no_options": "No hay opciones disponibles o faltan permisos.",
+    "oidc_discovery": {
+      "button": "Obtener endpoints",
+      "failed_title": "Fallo al descubrir OIDC",
+      "invalid_url": "OidcWellKnown debe ser una URL http(s) válida antes de descubrir.",
+      "missing_endpoints": "El documento de descubrimiento no incluye: {{endpoints}}",
+      "success_message": "Se guardaron los endpoints de autorización, token y userinfo.",
+      "success_title": "Endpoints OIDC actualizados"
+    },
     "option_value_aria": "Valor de {{key}}",
     "refresh": "Actualizar",
     "save": "Guardar",

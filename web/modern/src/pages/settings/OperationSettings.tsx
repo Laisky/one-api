@@ -37,10 +37,7 @@ const operationSchema = z.object({
 
 type OperationForm = z.infer<typeof operationSchema>;
 
-type GroupRatioIssue =
-  | { type: 'parse'; message: string }
-  | { type: 'shape' }
-  | { type: 'invalid-entries'; entries: string[] };
+type GroupRatioIssue = { type: 'parse'; message: string } | { type: 'shape' } | { type: 'invalid-entries'; entries: string[] };
 
 const validateGroupRatioJSON = (raw: string): GroupRatioIssue | null => {
   if (!raw.trim()) return { type: 'shape' };
@@ -810,9 +807,7 @@ export function OperationSettings() {
                 value={groupRatioText}
                 onChange={(e) => setGroupRatioText(e.target.value)}
                 placeholder={'{\n  "default": 1,\n  "vip": 0.8,\n  "svip": 0.5\n}'}
-                className={`font-mono text-xs min-h-[180px] ${
-                  groupRatioIssue ? 'border-destructive focus-visible:ring-destructive' : ''
-                }`}
+                className={`font-mono text-xs min-h-[180px] ${groupRatioIssue ? 'border-destructive focus-visible:ring-destructive' : ''}`}
                 spellCheck={false}
               />
               {groupRatioIssue && (

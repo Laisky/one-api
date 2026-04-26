@@ -2,6 +2,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
+import { useNotifications } from '@/components/ui/notifications';
 import { ResponsivePageContainer } from '@/components/ui/responsive-container';
 import { api } from '@/lib/api';
 import { useAuthStore } from '@/lib/stores/auth';
@@ -17,7 +18,12 @@ export function TopUpPage() {
   const [userQuota, setUserQuota] = useState(user?.quota || 0);
   const [topUpLink, setTopUpLink] = useState('');
   const [userData, setUserData] = useState<any>(null);
+  const [amount, setAmount] = useState<number>(1);
+  const [topUpCode, setTopUpCode] = useState('');
+  const [calculatedAmount, setCalculatedAmount] = useState<number | null>(null);
+  const [isCalculating, setIsCalculating] = useState(false);
   const { t } = useTranslation();
+  const { notify } = useNotifications();
   const tr = useCallback(
     (key: string, defaultValue: string, options?: Record<string, unknown>) => t(`topup.${key}`, { defaultValue, ...options }),
     [t]
@@ -108,6 +114,95 @@ export function TopUpPage() {
     }
   };
 
+  const onCalculateAmount = async () => {
+    const numericAmount = Number(amount);
+    if (!Number.isFinite(numericAmount) || numericAmount < 1) {
+      notify({
+        type: 'error',
+        title: tr('amount.invalid_title', 'Invalid amount'),
+        message: tr('amount.invalid_message', 'Please enter an amount of at least 1.'),
+      });
+      return;
+    }
+    setIsCalculating(true);
+    try {
+      const res = await api.post('/api/user/amount', {
+        amount: numericAmount,
+        top_up_code: topUpCode,
+      });
+      const payload = res.data || {};
+      const isSuccess = payload.success === true || payload.message === 'success';
+      if (isSuccess) {
+        const computed = typeof payload.data === 'number' ? payload.data : Number(payload.data);
+        if (Number.isFinite(computed)) {
+          setCalculatedAmount(computed);
+          notify({
+            type: 'success',
+            title: tr('amount.calculated_title', 'Amount calculated'),
+            message: tr('amount.calculated_message', 'You will pay: {{value}}', { value: computed.toString() }),
+          });
+        } else {
+          notify({
+            type: 'error',
+            title: tr('amount.failed_title', 'Calculation failed'),
+            message: String(payload.data ?? tr('amount.failed_message', 'Unable to compute amount')),
+          });
+        }
+      } else {
+        notify({
+          type: 'error',
+          title: tr('amount.failed_title', 'Calculation failed'),
+          message: String(payload.data ?? payload.message ?? tr('amount.failed_message', 'Unable to compute amount')),
+        });
+      }
+    } catch (error) {
+      notify({
+        type: 'error',
+        title: tr('amount.failed_title', 'Calculation failed'),
+        message: error instanceof Error ? error.message : tr('amount.failed_message', 'Unable to compute amount'),
+      });
+    } finally {
+      setIsCalculating(false);
+    }
+  };
+
+  const buildTopUpUrl = () => {
+    const url = new URL(topUpLink);
+    if (userData) {
+      url.searchParams.append('username', userData.username);
+      url.searchParams.append('user_id', String(userData.id));
+      const uuid =
+        (globalThis as any).crypto?.randomUUID?.() ??
+        'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+          const r = (Math.random() * 16) | 0;
+          const v = c === 'x' ? r : (r & 0x3) | 0x8;
+          return v.toString(16);
+        });
+      url.searchParams.append('transaction_id', uuid);
+    }
+    return url.toString();
+  };
+
+  const onRecharge = () => {
+    if (!topUpLink) {
+      console.error('No top-up link configured');
+      return;
+    }
+    if (calculatedAmount === null) {
+      notify({
+        type: 'warning',
+        title: tr('amount.calculate_first_title', 'Calculate first'),
+        message: tr('amount.calculate_first_message', 'Please calculate the amount before recharging.'),
+      });
+      return;
+    }
+    try {
+      window.location.href = buildTopUpUrl();
+    } catch (error) {
+      console.error('Error opening top-up link:', error);
+    }
+  };
+
   const openTopUpLink = () => {
     if (!topUpLink) {
       console.error('No top-up link configured');
@@ -115,20 +210,7 @@ export function TopUpPage() {
     }
 
     try {
-      const url = new URL(topUpLink);
-      if (userData) {
-        url.searchParams.append('username', userData.username);
-        url.searchParams.append('user_id', userData.id.toString());
-        const uuid =
-          (globalThis as any).crypto?.randomUUID?.() ??
-          'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
-            const r = (Math.random() * 16) | 0;
-            const v = c === 'x' ? r : (r & 0x3) | 0x8;
-            return v.toString(16);
-          });
-        url.searchParams.append('transaction_id', uuid);
-      }
-      window.open(url.toString(), '_blank');
+      window.open(buildTopUpUrl(), '_blank');
     } catch (error) {
       console.error('Error opening top-up link:', error);
     }
@@ -202,7 +284,7 @@ export function TopUpPage() {
           </Card>
         </div>
 
-        {/* External Top-up */}
+        {/* External Top-up + Amount Calculator */}
         {topUpLink && (
           <Card>
             <CardHeader>
@@ -210,22 +292,79 @@ export function TopUpPage() {
               <CardDescription>{tr('online.description', 'Purchase quota through our external payment system')}</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="text-center space-y-4">
-                <p className="text-sm text-muted-foreground">
-                  {tr(
-                    'online.text',
-                    'Click the button below to open our secure payment portal where you can purchase additional quota for your account.'
+              <div className="space-y-6">
+                {/* Amount precalculation */}
+                <div className="space-y-3 rounded-md border p-4">
+                  <div className="text-sm font-medium">{tr('amount.title', 'Calculate Payable Amount')}</div>
+                  <p className="text-xs text-muted-foreground">
+                    {tr('amount.description', 'Enter the desired top-up amount and an optional code, then preview the payable total.')}
+                  </p>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <label className="text-xs text-muted-foreground" htmlFor="topup-amount">
+                        {tr('amount.amount_label', 'Amount')}
+                      </label>
+                      <Input
+                        id="topup-amount"
+                        type="number"
+                        min={1}
+                        value={amount}
+                        onChange={(e) => {
+                          const v = Number(e.target.value);
+                          setAmount(Number.isFinite(v) ? v : 1);
+                          setCalculatedAmount(null);
+                        }}
+                        placeholder={tr('amount.amount_placeholder', 'Enter amount')}
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-xs text-muted-foreground" htmlFor="topup-code">
+                        {tr('amount.code_label', 'Top-up Code (optional)')}
+                      </label>
+                      <Input
+                        id="topup-code"
+                        value={topUpCode}
+                        onChange={(e) => {
+                          setTopUpCode(e.target.value);
+                          setCalculatedAmount(null);
+                        }}
+                        placeholder={tr('amount.code_placeholder', 'Enter top-up code')}
+                      />
+                    </div>
+                  </div>
+                  {calculatedAmount !== null && (
+                    <div className="text-sm font-medium" data-testid="topup-amount-result">
+                      {tr('amount.result', 'You will pay: {{value}}', { value: calculatedAmount.toString() })}
+                    </div>
                   )}
-                </p>
-                <Button onClick={openTopUpLink} size="lg">
-                  {tr('online.button', 'Open Payment Portal')}
-                </Button>
-                <p className="text-xs text-muted-foreground">
-                  {tr(
-                    'online.note',
-                    'You will be redirected to an external payment system. Your account information will be automatically included.'
-                  )}
-                </p>
+                  <div className="flex flex-col gap-2 sm:flex-row">
+                    <Button type="button" variant="outline" onClick={onCalculateAmount} disabled={isCalculating}>
+                      {isCalculating ? tr('amount.calculating', 'Calculating...') : tr('amount.calculate_button', 'Calculate')}
+                    </Button>
+                    <Button type="button" onClick={onRecharge} disabled={calculatedAmount === null}>
+                      {tr('amount.recharge_button', 'Recharge')}
+                    </Button>
+                  </div>
+                </div>
+
+                {/* Legacy direct portal */}
+                <div className="text-center space-y-4">
+                  <p className="text-sm text-muted-foreground">
+                    {tr(
+                      'online.text',
+                      'Click the button below to open our secure payment portal where you can purchase additional quota for your account.'
+                    )}
+                  </p>
+                  <Button onClick={openTopUpLink} size="lg" variant="outline">
+                    {tr('online.button', 'Open Payment Portal')}
+                  </Button>
+                  <p className="text-xs text-muted-foreground">
+                    {tr(
+                      'online.note',
+                      'You will be redirected to an external payment system. Your account information will be automatically included.'
+                    )}
+                  </p>
+                </div>
               </div>
             </CardContent>
           </Card>
