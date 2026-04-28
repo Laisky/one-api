@@ -27,4 +27,11 @@ describe('LogModelCell', () => {
     expect(screen.getByText('gpt-4o-mini')).toBeInTheDocument();
     expect(screen.queryByText('Requested Model:')).not.toBeInTheDocument();
   });
+
+  it('renders plain billed model text when requested and target models match', () => {
+    render(<LogModelCell modelName="gpt-4o-mini" originModelName="gpt-4o-mini" targetLabel="Model" originLabel="Requested Model" />);
+
+    expect(screen.getByText('gpt-4o-mini')).toBeInTheDocument();
+    expect(screen.queryByText('Requested Model:')).not.toBeInTheDocument();
+  });
 });
