@@ -333,6 +333,11 @@
           "placeholder": "Selecciona la versión de Spark"
         }
       },
+      "system_prompt": {
+        "help": "Texto opcional antepuesto como mensaje del sistema a cada solicitud enviada a través de este canal. Úsalo para guardrails o estilo. Los clientes aún pueden anularlo con sus propios mensajes del sistema.",
+        "label": "Prompt del sistema",
+        "placeholder": "Prompt del sistema opcional para anteponer a todas las solicitudes"
+      },
       "tencent": {
         "app_id": {
           "help": "AppId de Tencent Cloud asociado a las credenciales de API.",
@@ -351,11 +356,6 @@
           "label": "SecretKey *",
           "placeholder": "SecretKey"
         }
-      },
-      "system_prompt": {
-        "help": "Texto opcional antepuesto como mensaje del sistema a cada solicitud enviada a través de este canal. Úsalo para guardrails o estilo. Los clientes aún pueden anularlo con sus propios mensajes del sistema.",
-        "label": "Prompt del sistema",
-        "placeholder": "Prompt del sistema opcional para anteponer a todas las solicitudes"
       },
       "title": {
         "create": "Crear canal",
@@ -792,6 +792,7 @@
         "help_email": "Ayuda: Correo electrónico",
         "help_group": "Ayuda: Grupo",
         "help_password": "Ayuda: Contraseña",
+        "help_password_locked": "Ayuda: Bloquear contraseña",
         "help_quota": "Ayuda: Cuota",
         "help_username": "Ayuda: Nombre de usuario"
       },
@@ -835,7 +836,12 @@
           "help": "La longitud mínima depende de la política. Deja vacío al editar para mantener sin cambios.",
           "label_create": "Contraseña *",
           "label_edit": "Nueva contraseña (dejar vacío para mantener la actual)",
+          "locked_hint": "La contraseña está bloqueada. Desactiva \"Bloquear contraseña\" para cambiarla. La inscripción de nuevo MFA también está bloqueada mientras esté así.",
           "placeholder": "Introduce la contraseña"
+        },
+        "password_locked": {
+          "help": "Cuando está activo, nadie puede cambiar la contraseña de este usuario y el usuario no puede habilitar nuevos TOTP/passkey. Solo un administrador root puede desbloquearlo.",
+          "label": "Bloquear contraseña (solo root)"
         },
         "quota": {
           "help": "Las unidades de cuota son tokens. La estimación en USD utiliza la relación por unidad configurada por el administrador.",
@@ -857,6 +863,12 @@
         "failed_title": "Falló deshabilitar 2FA",
         "success_message": "Autenticación de dos factores deshabilitada.",
         "success_title": "2FA deshabilitada"
+      },
+      "sections": {
+        "security_lock": {
+          "description": "Restringir cambios sensibles para este usuario. Cuando está bloqueado, se impiden tanto la edición de contraseña como el registro de nuevo MFA. Solo los administradores root pueden alternar esto.",
+          "title": "Bloqueo de seguridad"
+        }
       },
       "title": {
         "create": "Crear usuario",

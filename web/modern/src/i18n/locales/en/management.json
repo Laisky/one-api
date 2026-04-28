@@ -333,6 +333,11 @@
           "placeholder": "Select Spark version"
         }
       },
+      "system_prompt": {
+        "help": "Optional text prepended as a system message to every request sent through this channel. Use for guardrails or style. Clients can still override with their own system messages.",
+        "label": "System Prompt",
+        "placeholder": "Optional system prompt to prepend to all requests"
+      },
       "tencent": {
         "app_id": {
           "help": "Tencent Cloud account AppId associated with the API credentials.",
@@ -351,11 +356,6 @@
           "label": "SecretKey *",
           "placeholder": "SecretKey"
         }
-      },
-      "system_prompt": {
-        "help": "Optional text prepended as a system message to every request sent through this channel. Use for guardrails or style. Clients can still override with their own system messages.",
-        "label": "System Prompt",
-        "placeholder": "Optional system prompt to prepend to all requests"
       },
       "title": {
         "create": "Create Channel",
@@ -792,6 +792,7 @@
         "help_email": "Help: Email",
         "help_group": "Help: Group",
         "help_password": "Help: Password",
+        "help_password_locked": "Help: Lock password",
         "help_quota": "Help: Quota",
         "help_username": "Help: Username"
       },
@@ -835,7 +836,12 @@
           "help": "Minimum length depends on policy. Leave empty when editing to keep unchanged.",
           "label_create": "Password *",
           "label_edit": "New Password (leave empty to keep current)",
+          "locked_hint": "Password is locked. Turn off Lock password to change it. New MFA enrollment is also blocked while locked.",
           "placeholder": "Enter password"
+        },
+        "password_locked": {
+          "help": "When on, no one can change this user's password and the user cannot enable new TOTP/passkey. Only a root admin can unlock it.",
+          "label": "Lock password (root only)"
         },
         "quota": {
           "help": "Quota units are tokens. USD estimate uses the per-unit ratio configured by admin.",
@@ -857,6 +863,12 @@
         "failed_title": "Disable 2FA failed",
         "success_message": "Two-factor authentication disabled.",
         "success_title": "2FA disabled"
+      },
+      "sections": {
+        "security_lock": {
+          "description": "Restrict sensitive changes for this user. When locked, password edits and new MFA enrollment are both blocked. Only root admins can toggle this.",
+          "title": "Security lock"
+        }
       },
       "title": {
         "create": "Create User",

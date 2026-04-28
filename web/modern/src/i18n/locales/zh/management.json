@@ -333,6 +333,11 @@
           "placeholder": "选择 Spark 版本"
         }
       },
+      "system_prompt": {
+        "help": "作为系统消息预置到通过此渠道发送的每个请求的可选文本。用于护栏或风格。客户端仍可以使用自己的系统消息覆盖。",
+        "label": "系统提示",
+        "placeholder": "预置到所有请求的可选系统提示"
+      },
       "tencent": {
         "app_id": {
           "help": "腾讯云账号 AppId。",
@@ -351,11 +356,6 @@
           "label": "SecretKey *",
           "placeholder": "SecretKey"
         }
-      },
-      "system_prompt": {
-        "help": "作为系统消息预置到通过此渠道发送的每个请求的可选文本。用于护栏或风格。客户端仍可以使用自己的系统消息覆盖。",
-        "label": "系统提示",
-        "placeholder": "预置到所有请求的可选系统提示"
       },
       "title": {
         "create": "创建渠道",
@@ -792,6 +792,7 @@
         "help_email": "帮助: 邮箱",
         "help_group": "帮助: 分组",
         "help_password": "帮助: 密码",
+        "help_password_locked": "帮助: 锁定密码",
         "help_quota": "帮助: 额度",
         "help_username": "帮助: 用户名"
       },
@@ -835,7 +836,12 @@
           "help": "最小长度取决于策略。编辑时留空以保持不变。",
           "label_create": "密码 *",
           "label_edit": "新密码 (留空以保持当前密码)",
+          "locked_hint": "密码已锁定。关闭「锁定密码」后才能修改；锁定期间也无法启用 MFA。",
           "placeholder": "输入密码"
+        },
+        "password_locked": {
+          "help": "开启后，任何人（包括管理员）都无法修改该用户密码，同时该用户也无法启用 TOTP 或注册 passkey。只有 root 管理员可以解除锁定。",
+          "label": "锁定密码 (仅根管理员)"
         },
         "quota": {
           "help": "额度单位为令牌。USD 估算值使用管理员配置的单位比率。",
@@ -857,6 +863,12 @@
         "failed_title": "禁用 2FA 失败",
         "success_message": "已禁用二步验证。",
         "success_title": "2FA 已禁用"
+      },
+      "sections": {
+        "security_lock": {
+          "description": "限制对该用户的敏感修改。开启后将同时阻止修改密码和注册新的 MFA 因素。仅根管理员可以切换该开关。",
+          "title": "安全锁定"
+        }
       },
       "title": {
         "create": "创建用户",

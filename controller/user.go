@@ -995,6 +995,44 @@ func UpdateUser(c *gin.Context) {
 		}
 	}
 
+	var (
+		metadataUpdated bool
+		mergedMetadata  model.UserMetadata
+	)
+
+	if rawFieldPresent(raw, "metadata") {
+		if jsonRawIsNull(raw["metadata"]) {
+			// nil => no change
+		} else {
+			var metaPayload dto.UserMetadataPayload
+			if err := json.Unmarshal(raw["metadata"], &metaPayload); err != nil {
+				c.JSON(http.StatusOK, gin.H{"success": false, "message": invalidParameterMessage})
+				return
+			}
+			merged := originUser.Metadata
+			if metaPayload.PasswordLocked != nil {
+				if myRole != model.RoleRootUser {
+					c.JSON(http.StatusOK, gin.H{"success": false, "message": "Only root admin can change password lock"})
+					return
+				}
+				merged.PasswordLocked = *metaPayload.PasswordLocked
+			}
+			encoded, encErr := json.Marshal(merged)
+			if encErr != nil {
+				c.JSON(http.StatusOK, gin.H{"success": false, "message": errors.Wrap(encErr, "encode user metadata").Error()})
+				return
+			}
+			updates["metadata"] = string(encoded)
+			mergedMetadata = merged
+			metadataUpdated = true
+		}
+	}
+
+	effectivePasswordLocked := originUser.Metadata.PasswordLocked
+	if metadataUpdated {
+		effectivePasswordLocked = mergedMetadata.PasswordLocked
+	}
+
 	if rawFieldPresent(raw, "password") {
 		if jsonRawIsNull(raw["password"]) {
 			// nil => no change
@@ -1010,6 +1048,10 @@ func UpdateUser(c *gin.Context) {
 			password = strings.TrimSpace(password)
 			if password == "" {
 				c.JSON(http.StatusOK, gin.H{"success": false, "message": "Password cannot be empty"})
+				return
+			}
+			if effectivePasswordLocked {
+				c.JSON(http.StatusOK, gin.H{"success": false, "message": "Password is locked for this user"})
 				return
 			}
 			if utf8.RuneCountInString(password) < 8 || utf8.RuneCountInString(password) > 20 {
@@ -1127,21 +1169,24 @@ func UpdateSelf(c *gin.Context) {
 	// fill in missing username/display_name from the current user record so that
 	// partial updates don't fail with "cannot be empty" errors.
 	userId := c.GetInt(ctxkey.Id)
-	if strings.TrimSpace(user.Username) == "" || strings.TrimSpace(user.DisplayName) == "" {
-		currentUser, fetchErr := model.GetUserById(userId, false)
-		if fetchErr != nil {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": fetchErr.Error(),
-			})
-			return
-		}
-		if strings.TrimSpace(user.Username) == "" {
-			user.Username = currentUser.Username
-		}
-		if strings.TrimSpace(user.DisplayName) == "" {
-			user.DisplayName = currentUser.DisplayName
-		}
+	currentUser, fetchErr := model.GetUserById(userId, false)
+	if fetchErr != nil {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": fetchErr.Error(),
+		})
+		return
+	}
+	if strings.TrimSpace(user.Username) == "" {
+		user.Username = currentUser.Username
+	}
+	if strings.TrimSpace(user.DisplayName) == "" {
+		user.DisplayName = currentUser.DisplayName
+	}
+
+	if user.Password != "" && currentUser.Metadata.PasswordLocked {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": "Password is locked by administrator"})
+		return
 	}
 
 	if user.Password == "" {
@@ -1552,7 +1597,14 @@ func SetupTotp(c *gin.Context) {
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
-			"message": err.Error(),
+			"message": errors.Wrapf(err, "get user %d", userID).Error(),
+		})
+		return
+	}
+	if user.Metadata.PasswordLocked {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": "MFA enrollment is locked by administrator",
 		})
 		return
 	}
@@ -1655,7 +1707,14 @@ func ConfirmTotp(c *gin.Context) {
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
-			"message": err.Error(),
+			"message": errors.Wrapf(err, "get user %d", userId).Error(),
+		})
+		return
+	}
+	if user.Metadata.PasswordLocked {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": "MFA enrollment is locked by administrator",
 		})
 		return
 	}

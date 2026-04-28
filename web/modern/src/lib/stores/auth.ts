@@ -12,6 +12,9 @@ interface User {
   quota: number;
   used_quota: number;
   group: string;
+  metadata?: {
+    password_locked?: boolean;
+  };
 }
 
 interface AuthState {

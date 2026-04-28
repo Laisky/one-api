@@ -108,9 +108,14 @@ func PasskeyRegisterBegin(c *gin.Context) {
 		var err error
 		user, err = model.GetUserById(userId, false)
 		if err != nil {
-			respondError(c, "failed to get user", err)
+			respondError(c, "failed to get user", errors.Wrapf(err, "get user %d", userId))
 			return
 		}
+	}
+
+	if user.Metadata.PasswordLocked {
+		respondError(c, "MFA enrollment is locked by administrator")
+		return
 	}
 
 	wUser, err := model.NewWebAuthnUser(user)
@@ -172,9 +177,14 @@ func PasskeyRegisterFinish(c *gin.Context) {
 		var err error
 		user, err = model.GetUserById(userId, false)
 		if err != nil {
-			respondError(c, "failed to get user", err)
+			respondError(c, "failed to get user", errors.Wrapf(err, "get user %d", userId))
 			return
 		}
+	}
+
+	if user.Metadata.PasswordLocked {
+		respondError(c, "MFA enrollment is locked by administrator")
+		return
 	}
 
 	wUser, err := model.NewWebAuthnUser(user)

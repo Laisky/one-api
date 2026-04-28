@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Laisky/errors/v2"
 	gmw "github.com/Laisky/gin-middlewares/v7"
 	"github.com/Laisky/zap"
 	"github.com/gin-gonic/gin"
@@ -238,6 +239,25 @@ func ResetPassword(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
 			"message": "Reset link is illegal or expired",
+		})
+		return
+	}
+
+	var lockedCheckUser model.User
+	if err := model.DB.Where("email = ?", req.Email).First(&lockedCheckUser).Error; err != nil {
+		lg.Error("failed to look up user for password reset",
+			zap.String("email", req.Email),
+			zap.Error(errors.Wrapf(err, "look up user by email %s", req.Email)))
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": err.Error(),
+		})
+		return
+	}
+	if lockedCheckUser.Metadata.PasswordLocked {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": "Password is locked by administrator",
 		})
 		return
 	}

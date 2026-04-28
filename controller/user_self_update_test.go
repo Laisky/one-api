@@ -278,3 +278,88 @@ func TestUpdateUserMcpToolBlacklistWithoutGroup(t *testing.T) {
 	// Group should remain unchanged
 	require.Equal(t, "default", updated.Group)
 }
+
+// createLockedSelfUser provisions a logged-in user whose Metadata.PasswordLocked
+// flag is set, used by the self-update lock tests.
+func createLockedSelfUser(t *testing.T) *model.User {
+	t.Helper()
+	hashedPw, err := common.Password2Hash("oldpassword")
+	require.NoError(t, err)
+	user := &model.User{
+		Username:    "lockedself",
+		Password:    hashedPw,
+		Email:       "lockedself@example.com",
+		DisplayName: "Locked Self",
+		Group:       "default",
+		Status:      model.UserStatusEnabled,
+		Metadata:    model.UserMetadata{PasswordLocked: true},
+	}
+	require.NoError(t, model.DB.Create(user).Error)
+	return user
+}
+
+// TestUpdateSelfPasswordRejectedWhenLocked ensures a self-update password
+// change is rejected for a user whose password lock flag is set.
+func TestUpdateSelfPasswordRejectedWhenLocked(t *testing.T) {
+	setupSelfUpdateTest(t)
+	user := createLockedSelfUser(t)
+	originalHash := user.Password
+
+	router := gin.New()
+	router.PUT("/api/user/self", func(c *gin.Context) {
+		c.Set(ctxkey.Id, user.Id)
+		UpdateSelf(c)
+	})
+
+	payload := map[string]string{"password": "newpassword123"}
+	body, err := json.Marshal(payload)
+	require.NoError(t, err)
+
+	req := httptest.NewRequest(http.MethodPut, "/api/user/self", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	var resp map[string]any
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	require.Equal(t, false, resp["success"])
+	require.Contains(t, resp["message"], "Password is locked by administrator")
+
+	var stored model.User
+	require.NoError(t, model.DB.First(&stored, user.Id).Error)
+	require.Equal(t, originalHash, stored.Password)
+	require.True(t, stored.Metadata.PasswordLocked)
+}
+
+// TestUpdateSelfNonPasswordFieldsAllowedWhenLocked ensures a locked user can
+// still edit non-password profile fields like display_name.
+func TestUpdateSelfNonPasswordFieldsAllowedWhenLocked(t *testing.T) {
+	setupSelfUpdateTest(t)
+	user := createLockedSelfUser(t)
+	originalHash := user.Password
+
+	router := gin.New()
+	router.PUT("/api/user/self", func(c *gin.Context) {
+		c.Set(ctxkey.Id, user.Id)
+		UpdateSelf(c)
+	})
+
+	payload := map[string]string{"display_name": "Renamed Self"}
+	body, err := json.Marshal(payload)
+	require.NoError(t, err)
+
+	req := httptest.NewRequest(http.MethodPut, "/api/user/self", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	var resp map[string]any
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	require.Equal(t, true, resp["success"], "expected success, got: %v", resp["message"])
+
+	var stored model.User
+	require.NoError(t, model.DB.First(&stored, user.Id).Error)
+	require.Equal(t, "Renamed Self", stored.DisplayName)
+	require.Equal(t, originalHash, stored.Password)
+	require.True(t, stored.Metadata.PasswordLocked)
+}

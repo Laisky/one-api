@@ -333,6 +333,11 @@
           "placeholder": "Sélectionnez la version Spark"
         }
       },
+      "system_prompt": {
+        "help": "Texte facultatif ajouté comme message système à chaque requête envoyée via ce canal. Utilisez pour des garde-fous ou un style. Les clients peuvent toujours remplacer par leurs propres messages système.",
+        "label": "Invite système (System Prompt)",
+        "placeholder": "Invite système facultative à ajouter à toutes les requêtes"
+      },
       "tencent": {
         "app_id": {
           "help": "AppId du compte Tencent Cloud associé aux identifiants API.",
@@ -351,11 +356,6 @@
           "label": "SecretKey *",
           "placeholder": "SecretKey"
         }
-      },
-      "system_prompt": {
-        "help": "Texte facultatif ajouté comme message système à chaque requête envoyée via ce canal. Utilisez pour des garde-fous ou un style. Les clients peuvent toujours remplacer par leurs propres messages système.",
-        "label": "Invite système (System Prompt)",
-        "placeholder": "Invite système facultative à ajouter à toutes les requêtes"
       },
       "title": {
         "create": "Créer un canal",
@@ -792,6 +792,7 @@
         "help_email": "Aide : E-mail",
         "help_group": "Aide : Groupe",
         "help_password": "Aide : Mot de passe",
+        "help_password_locked": "Aide : Verrouiller le mot de passe",
         "help_quota": "Aide : Quota",
         "help_username": "Aide : Nom d'utilisateur"
       },
@@ -835,7 +836,12 @@
           "help": "La longueur minimale dépend de la politique. Laissez vide lors de la modification pour conserver inchangé.",
           "label_create": "Mot de passe *",
           "label_edit": "Nouveau mot de passe (laisser vide pour conserver l'actuel)",
+          "locked_hint": "Le mot de passe est verrouillé. Désactivez « Verrouiller le mot de passe » pour le modifier. L'enregistrement d'un nouveau MFA est aussi bloqué pendant le verrouillage.",
           "placeholder": "Entrez le mot de passe"
+        },
+        "password_locked": {
+          "help": "Lorsque cette option est activée, personne ne peut modifier le mot de passe de cet utilisateur et l'utilisateur ne peut pas activer de nouveau TOTP/passkey. Seul un administrateur root peut déverrouiller.",
+          "label": "Verrouiller le mot de passe (root uniquement)"
         },
         "quota": {
           "help": "Les unités de quota sont des jetons. L'estimation USD utilise le ratio par unité configuré par l'administrateur.",
@@ -857,6 +863,12 @@
         "failed_title": "La désactivation 2FA a échoué",
         "success_message": "Authentification à deux facteurs désactivée.",
         "success_title": "2FA désactivée"
+      },
+      "sections": {
+        "security_lock": {
+          "description": "Restreindre les modifications sensibles pour cet utilisateur. Lorsque le verrou est actif, la modification du mot de passe et l'enregistrement d'un nouveau MFA sont tous deux bloqués. Seuls les administrateurs root peuvent l'activer.",
+          "title": "Verrou de sécurité"
+        }
       },
       "title": {
         "create": "Créer un utilisateur",
