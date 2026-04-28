@@ -105,6 +105,7 @@ Prefer these over hand-rolling `curl` — they handle pagination, auth, and resp
 - **Timestamps:** `created_at`/`updated_at` are **milliseconds**; log filter params `start_timestamp`/`end_timestamp` are **seconds**. Don't mix them.
 - **Channel `test/:id` returns 200 with `success: false` when the upstream responds but returns a billing/auth error.** Always print `.message` and the `.time` field (roundtrip ms).
 - **`DELETE /api/log/` wipes logs irreversibly and breaks historical billing audits.** Require explicit, recent user authorization before calling it; prefer a dated export first.
+- **Empty values for sensitive option keys are no-ops.** `PUT /api/option/` ignores `value: ""` when the key has suffix `Token`, `Secret`, or `Password`; `GET /api/option/` already strips these. To rotate, send a non-empty value; to clear a non-sensitive option, an empty string does clear it.
 
 ## Known limitations
 

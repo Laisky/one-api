@@ -143,9 +143,9 @@ func UpdateMCPServer(c *gin.Context) {
 		return
 	}
 
-	var payload MCPServerUpsertRequest
-	if err := json.NewDecoder(c.Request.Body).Decode(&payload); err != nil {
-		helper.RespondError(c, errors.Wrap(err, "decode mcp server"))
+	payload, providedFields, err := bindMCPServerPayload(c)
+	if err != nil {
+		helper.RespondError(c, err)
 		return
 	}
 
@@ -156,6 +156,13 @@ func UpdateMCPServer(c *gin.Context) {
 	}
 
 	applyMCPServerPayload(server, payload)
+	// Mask handling: when the api_key was present in the payload but the value
+	// is a masked secret placeholder, we leave the existing value untouched
+	// and must NOT overwrite the column with an empty string.
+	if payload.APIKey != nil && common.IsMaskedSecret(*payload.APIKey) {
+		delete(providedFields, "api_key")
+	}
+	server.ProvidedFields = providedFields
 	if err := model.UpdateMCPServer(server); err != nil {
 		logger.Error("failed to update mcp server", zap.Error(err))
 		helper.RespondError(c, err)
@@ -167,6 +174,55 @@ func UpdateMCPServer(c *gin.Context) {
 		"message": "",
 		"data":    sanitizeMCPServer(server),
 	})
+}
+
+// bindMCPServerPayload decodes the upsert request and returns a map of which
+// database columns were explicitly present in the raw request body. Mirrors
+// bindChannelPayload so we can persist zero/empty values that GORM's
+// struct-based Updates would otherwise silently skip.
+func bindMCPServerPayload(c *gin.Context) (MCPServerUpsertRequest, map[string]bool, error) {
+	var payload MCPServerUpsertRequest
+	if err := common.UnmarshalBodyReusable(c, &payload); err != nil {
+		return payload, nil, errors.Wrap(err, "unmarshal mcp server payload")
+	}
+
+	requestBody, err := common.GetRequestBody(c)
+	if err != nil {
+		return payload, nil, errors.Wrap(err, "get request body")
+	}
+
+	rawFields := make(map[string]json.RawMessage)
+	if len(requestBody) > 0 {
+		if err := json.Unmarshal(requestBody, &rawFields); err != nil {
+			return payload, nil, errors.Wrap(err, "unmarshal raw mcp server fields")
+		}
+	}
+
+	// Map JSON field names to database column names. Only include columns
+	// that the UpdateMCPServer store path knows how to apply per-column.
+	jsonToColumn := map[string]string{
+		"name":                       "name",
+		"description":                "description",
+		"status":                     "status",
+		"priority":                   "priority",
+		"base_url":                   "base_url",
+		"protocol":                   "protocol",
+		"auth_type":                  "auth_type",
+		"api_key":                    "api_key",
+		"headers":                    "headers",
+		"tool_whitelist":             "tool_whitelist",
+		"tool_blacklist":             "tool_blacklist",
+		"tool_pricing":               "tool_pricing",
+		"auto_sync_enabled":          "auto_sync_enabled",
+		"auto_sync_interval_minutes": "auto_sync_interval_minutes",
+	}
+	provided := make(map[string]bool, len(jsonToColumn))
+	for jsonName, column := range jsonToColumn {
+		if _, ok := rawFields[jsonName]; ok {
+			provided[column] = true
+		}
+	}
+	return payload, provided, nil
 }
 
 // DeleteMCPServer deletes a MCP server by ID.

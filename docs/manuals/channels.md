@@ -88,7 +88,7 @@ Any new provider that requires extra configuration will appear in this section a
 | **System Prompt**             | Optional default system message injected into every request when the upstream supports it.                                                                                                               |
 | **Inference Profile ARN Map** | AWS Bedrock only. JSON map of model → Inference Profile ARN.                                                                                                                                             |
 
-All JSON fields accept formatted input; the **Format** buttons auto-indent valid JSON, and empty strings are saved as `null`.
+All JSON fields accept formatted input; the **Format** buttons auto-indent valid JSON. Submitting an empty string for `model_mapping`, `model_configs`, `system_prompt`, or `inference_profile_arn_map` clears the stored value (saved as `NULL`). Omitting the field from the request leaves the existing value untouched.
 
 ### 2.4 Operational Settings
 
@@ -162,7 +162,7 @@ The UI offers helper buttons:
 - Numeric fields (priority, weight, rate limit) accept integers only; blank values become `0`.
 - Coze OAuth JWT requires a full JSON object with `client_type`, `client_id`, `coze_www_base`, `coze_api_base`, `private_key`, and `public_key_id`.
 - Azure `other` field defaults to the latest supported API version if left blank.
-- Clearing sensitive fields: leaving the API key empty when editing keeps the stored value. To remove credentials entirely, disable or delete the channel.
+- Clearing sensitive fields: leaving the API key empty when editing keeps the stored value. To remove credentials entirely, disable or delete the channel. The same convention applies to global options whose key ends in `Token`, `Secret`, or `Password`: an empty string in the form is ignored on save.
 - Hidden Models is a non-blocking warning field. If you hide a name that is not listed in **Models**, One-API treats it as a no-op. If you hide a name that is also a **Model Mapping** source, the public alias becomes unreachable.
 
 ## 8. Troubleshooting Checklist

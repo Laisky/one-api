@@ -1156,14 +1156,30 @@ func UpdateUser(c *gin.Context) {
 
 func UpdateSelf(c *gin.Context) {
 	var user model.User
-	err := json.NewDecoder(c.Request.Body).Decode(&user)
-	if err != nil {
+	if err := common.UnmarshalBodyReusable(c, &user); err != nil {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
 			"message": invalidParameterMessage,
 		})
 		return
 	}
+
+	// Inspect the raw payload so we can distinguish "field omitted" from
+	// "field provided but empty". This matters for fields like display_name
+	// that the user may legitimately want to clear.
+	requestBody, err := common.GetRequestBody(c)
+	if err != nil {
+		helper.RespondError(c, errors.Wrap(err, "get request body"))
+		return
+	}
+	rawFields := make(map[string]json.RawMessage)
+	if len(requestBody) > 0 {
+		if err := json.Unmarshal(requestBody, &rawFields); err != nil {
+			helper.RespondError(c, errors.Wrap(err, "unmarshal raw user self payload"))
+			return
+		}
+	}
+	displayNameProvided := rawFieldPresent(rawFields, "display_name")
 
 	// When frontend sends only a subset of fields (e.g. password-only update),
 	// fill in missing username/display_name from the current user record so that
@@ -1177,10 +1193,16 @@ func UpdateSelf(c *gin.Context) {
 		})
 		return
 	}
+	// Username is the user's login identity (unique, max=30) and is treated as
+	// required. Keep the silent-restore so partial payloads (e.g. password-only)
+	// continue to work and never accidentally blank out the login key.
 	if strings.TrimSpace(user.Username) == "" {
 		user.Username = currentUser.Username
 	}
-	if strings.TrimSpace(user.DisplayName) == "" {
+	// DisplayName is optional; only fall back to the existing value when the
+	// caller did NOT supply the field at all. An explicitly provided empty
+	// string must clear the value.
+	if !displayNameProvided {
 		user.DisplayName = currentUser.DisplayName
 	}
 
@@ -1217,6 +1239,18 @@ func UpdateSelf(c *gin.Context) {
 			"message": err.Error(),
 		})
 		return
+	}
+
+	// User.Update relies on GORM's Updates(struct), which skips zero-value
+	// strings. To honor an explicit empty display_name we need a targeted
+	// update that includes the column unconditionally. Avoid logging the
+	// value itself (potential PII), only the user id.
+	if displayNameProvided && strings.TrimSpace(user.DisplayName) == "" {
+		if err := model.DB.Model(&model.User{}).Where("id = ?", userId).Update("display_name", "").Error; err != nil {
+			helper.RespondError(c, errors.Wrapf(err, "clear display_name for user: id=%d", userId))
+			return
+		}
+		logger.Logger.Debug("user cleared display_name", zap.Int("user_id", userId))
 	}
 
 	c.JSON(http.StatusOK, gin.H{

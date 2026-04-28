@@ -46,3 +46,7 @@
 - **Completeness:** Exhaustively incorporate requirements and options; resolve conflicts by rule priority and avoid premature conclusions.
 - **Persistence and retries:** Persist intelligently; retry transient errors until a reasonable limit, and change strategy for non‑transient failures.
 - **Action finality:** Only take actions after completing the above reasoning; actions are final once executed.
+
+## API conventions
+
+- **Update endpoints — clearing vs. keeping fields:** Channel, MCP-server, and user-self updates inspect the raw request body to distinguish 'field omitted' from 'field present but empty/null'. Omit a key to keep the stored value. For nullable fields (`model_mapping`, `model_configs`, `system_prompt`, `inference_profile_arn_map`, MCP server description/headers/whitelists, user `display_name`), send `null` or `""` to clear. For options whose key ends in `Token`/`Secret`/`Password`, empty values are silently ignored to prevent UI form re-saves from wiping secrets.

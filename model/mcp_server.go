@@ -56,6 +56,12 @@ type MCPServer struct {
 	LastTestError           string            `json:"last_test_error" gorm:"type:text"`
 	CreatedAt               int64             `json:"created_at" gorm:"bigint;autoCreateTime:milli"`
 	UpdatedAt               int64             `json:"updated_at" gorm:"bigint;autoUpdateTime:milli"`
+
+	// ProvidedFields tracks which columns were explicitly present in the
+	// raw request body so the update path can persist zero/empty values that
+	// GORM's struct-based Updates would otherwise silently skip. Keys are
+	// database column names. Not persisted nor serialized.
+	ProvidedFields map[string]bool `json:"-" gorm:"-"`
 }
 
 // GetPriority returns the configured MCP server priority.

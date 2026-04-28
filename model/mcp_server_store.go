@@ -4,8 +4,10 @@ import (
 	"strings"
 
 	"github.com/Laisky/errors/v2"
+	"github.com/Laisky/zap"
 
 	"github.com/Laisky/one-api/common"
+	"github.com/Laisky/one-api/common/logger"
 )
 
 // MCPServerSortFields enumerates whitelisted columns for MCP server sorting.
@@ -99,7 +101,80 @@ func UpdateMCPServer(server *MCPServer) error {
 	if err := DB.Model(server).Updates(server).Error; err != nil {
 		return errors.Wrap(err, "update mcp server")
 	}
+	// GORM's struct-based Updates silently skips zero-value fields (empty
+	// strings, false, nil maps/slices, zero numbers). When the UI lets the
+	// user clear a field, sending "" or {} or false would otherwise leave
+	// the previous value untouched. The controller layer records which
+	// columns were present in the raw request body so we can issue per-
+	// column updates that respect zero values for those fields.
+	if len(server.ProvidedFields) > 0 {
+		columnValues := map[string]any{
+			"description":                server.Description,
+			"api_key":                    server.APIKey,
+			"headers":                    server.Headers,
+			"tool_whitelist":             server.ToolWhitelist,
+			"tool_blacklist":             server.ToolBlacklist,
+			"tool_pricing":               server.ToolPricing,
+			"auto_sync_enabled":          server.AutoSyncEnabled,
+			"auto_sync_interval_minutes": server.AutoSyncIntervalMinutes,
+			"priority":                   server.Priority,
+			"status":                     server.Status,
+			"base_url":                   server.BaseURL,
+			"protocol":                   server.Protocol,
+			"auth_type":                  server.AuthType,
+			"name":                       server.Name,
+			"last_sync_status":           server.LastSyncStatus,
+			"last_sync_error":            server.LastSyncError,
+			"last_test_status":           server.LastTestStatus,
+			"last_test_error":            server.LastTestError,
+		}
+		forcedUpdates := make(map[string]any, len(server.ProvidedFields))
+		cleared := make([]string, 0, len(server.ProvidedFields))
+		for column, value := range columnValues {
+			if !server.ProvidedFields[column] {
+				continue
+			}
+			forcedUpdates[column] = value
+			if isZeroForUpdate(value) {
+				cleared = append(cleared, column)
+			}
+		}
+		if len(forcedUpdates) > 0 {
+			if err := DB.Model(&MCPServer{}).Where("id = ?", server.Id).Updates(forcedUpdates).Error; err != nil {
+				return errors.Wrapf(err, "update provided fields for mcp server id=%d", server.Id)
+			}
+			if len(cleared) > 0 && logger.Logger != nil {
+				// Field NAMES only, never values (api_key, headers may contain secrets).
+				logger.Logger.Debug("mcp server update cleared fields",
+					zap.Int("mcp_server_id", server.Id),
+					zap.Strings("cleared_fields", cleared))
+			}
+		}
+	}
 	return nil
+}
+
+// isZeroForUpdate reports whether a value is the zero/empty form that GORM's
+// struct-based Updates would skip. Used only for DEBUG logging of cleared
+// field names.
+func isZeroForUpdate(v any) bool {
+	switch x := v.(type) {
+	case string:
+		return x == ""
+	case int:
+		return x == 0
+	case int64:
+		return x == 0
+	case bool:
+		return !x
+	case JSONStringMap:
+		return len(x) == 0
+	case JSONStringSlice:
+		return len(x) == 0
+	case MCPToolPricingMap:
+		return len(x) == 0
+	}
+	return false
 }
 
 // DeleteMCPServer deletes a MCP server record by id.

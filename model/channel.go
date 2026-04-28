@@ -65,6 +65,7 @@ type Channel struct {
 	// AWS-specific configuration
 	InferenceProfileArnMap *string `json:"inference_profile_arn_map" gorm:"type:text"` // JSON string mapping model names to AWS Bedrock Inference Profile ARNs
 	HiddenModelsProvided   bool    `json:"-" gorm:"-"`
+	NullableFieldsProvided map[string]bool `json:"-" gorm:"-"`
 }
 
 var channelSortFields = map[string]string{
@@ -1620,6 +1621,40 @@ func (channel *Channel) Update() error {
 	if channel.HiddenModelsProvided {
 		if err := DB.Model(&Channel{}).Where("id = ?", channel.Id).Update("hidden_models", channel.HiddenModels).Error; err != nil {
 			return errors.Wrapf(err, "failed to update hidden models for channel: id=%d, name=%s", channel.Id, channel.Name)
+		}
+	}
+	// Some nullable text fields are persisted as *string. GORM's struct-based
+	// Updates() skips nil pointers, which means clients clearing those fields
+	// (sending JSON null) would silently keep the previous value. The bind layer
+	// records which of those fields were explicitly present in the raw request
+	// body so we can issue per-column updates that respect nil.
+	if len(channel.NullableFieldsProvided) > 0 {
+		nullableColumnValues := map[string]*string{
+			"model_mapping":             channel.ModelMapping,
+			"model_configs":             channel.ModelConfigs,
+			"system_prompt":             channel.SystemPrompt,
+			"inference_profile_arn_map": channel.InferenceProfileArnMap,
+		}
+		forcedUpdates := make(map[string]any, len(channel.NullableFieldsProvided))
+		cleared := make([]string, 0, len(channel.NullableFieldsProvided))
+		for column, value := range nullableColumnValues {
+			if !channel.NullableFieldsProvided[column] {
+				continue
+			}
+			forcedUpdates[column] = value
+			if value == nil {
+				cleared = append(cleared, column)
+			}
+		}
+		if len(forcedUpdates) > 0 {
+			if err := DB.Model(&Channel{}).Where("id = ?", channel.Id).Updates(forcedUpdates).Error; err != nil {
+				return errors.Wrapf(err, "failed to update nullable fields for channel: id=%d, name=%s", channel.Id, channel.Name)
+			}
+			if len(cleared) > 0 {
+				logger.Logger.Debug("channel update cleared nullable fields",
+					zap.Int("channel_id", channel.Id),
+					zap.Strings("cleared_fields", cleared))
+			}
 		}
 	}
 	DB.Model(channel).First(channel, "id = ?", channel.Id)

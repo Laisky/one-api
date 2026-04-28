@@ -14,14 +14,14 @@ The full schema lives in [model/channel.go](../../../../model/channel.go). Field
 | `key`            | string   | Upstream API key. Comma-separated for round-robin: `"k1,k2,k3"`       |
 | `base_url`       | *string  | Override upstream URL. Optional for OpenAI (uses default)             |
 | `models`         | string   | Comma-separated model ids: `"gpt-4o,gpt-4o-mini"`                      |
-| `model_mapping`  | *string  | JSON string mapping consumer→upstream: `{"gpt-4":"gpt-4-turbo"}`      |
-| `model_configs`  | *string  | JSON string with per-model pricing (new format). Preferred over `model_ratio`/`completion_ratio` |
+| `model_mapping`  | *string  | JSON string mapping consumer→upstream: `{"gpt-4":"gpt-4-turbo"}`. Send `null` or `""` to clear; omit to keep current value. |
+| `model_configs`  | *string  | JSON string with per-model pricing (new format). Preferred over `model_ratio`/`completion_ratio`. Send `null` or `""` to clear; omit to keep current value. |
 | `group`          | string   | Billing groups (comma-separated): `"default,vip"`                      |
 | `priority`       | *int64   | Higher wins when the same model is served by multiple channels        |
 | `weight`         | *uint    | Tie-break among same-priority channels (weighted random)              |
 | `status`         | int      | `1=enabled`, `2=manually disabled`, `3=auto disabled` — see [model/channel.go:26](../../../../model/channel.go#L26) |
 | `config`         | string   | Provider-specific JSON config (e.g. Azure `api_version`, `plugin`)    |
-| `system_prompt`  | *string  | Injected at top of every request — leave null unless you know why     |
+| `system_prompt`  | *string  | Injected at top of every request — leave null unless you know why. Send `null` or `""` to clear; omit to keep current value. |
 | `ratelimit`      | *int     | Per-channel req/min cap; null = unlimited                             |
 | `testing_model`  | *string  | Model used by `GET /test/:id`. Null → cheapest supported              |
 | `balance`        | float64  | USD, refreshed by `/update_balance/:id`                                |
@@ -236,3 +236,5 @@ jq -nc '{
 - **Azure channels need `config.api_version`.** Missing → 404 from upstream on first request.
 - **Deprecated fields `model_ratio` and `completion_ratio` on the channel row are for backward compat.** Prefer `model_configs`.
 - **Testing model defaults to the cheapest supported model on the channel.** To avoid per-test cost surprises, set `testing_model` explicitly (e.g. `"gpt-4o-mini"` for OpenAI, `"gemini-2.0-flash-lite"` for Gemini).
+- **Clearing nullable text fields (`model_mapping`, `model_configs`, `system_prompt`, `inference_profile_arn_map`) requires sending the key with `null` or `""`.** Omitting the key keeps the previous value (the controller records which keys were present in the raw body and forces a per-column update for those).
+- **Clearing `hidden_models` requires sending the key explicitly** (same reason).

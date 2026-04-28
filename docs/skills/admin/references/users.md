@@ -93,7 +93,7 @@ curl -fsS -H "Authorization: $ONEAPI_ADMIN_TOKEN" \
 
 ## Update a user
 
-PUT with `id` mandatory. Null fields are skipped — omit keys you don't want to change.
+PUT with `id` mandatory. Most fields are skipped when omitted (GORM `Updates` ignores nil/zero). **Exception: `display_name`** — sending `"display_name": ""` explicitly clears the stored display name. Omit the key to keep the current value.
 ```bash
 # Change group
 jq -nc '{id: 17, group: "vip"}' \

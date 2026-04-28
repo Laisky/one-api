@@ -223,6 +223,8 @@ flowchart LR
 - `POST /api/mcp_servers/:id/test`
 - `GET /api/mcp_servers/:id/tools`
 
+**Updating an MCP server**: send only the keys you want to change. Sending a key with an empty value (`""`, `false`, `0`, `{}`) clears that column on the server. Special case: `api_key` set to a masked-secret placeholder (e.g. `********`) is treated as 'no change'.
+
 ### Tool Catalog
 
 - `GET /api/mcp_tools?server_id=&status=`

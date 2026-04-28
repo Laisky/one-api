@@ -7,9 +7,9 @@ import { useTranslation } from 'react-i18next';
 import { useNavigate, useParams } from 'react-router-dom';
 import { CHANNEL_TYPES_WITH_DEDICATED_BASE_URL } from '../constants';
 import {
+  buildChannelSubmitPayload,
   isValidJSON,
   normalizeChannelType,
-  sanitizeJsonField,
   sanitizeJsonInput,
   stringifyToolingConfig,
   toInt,
@@ -475,19 +475,21 @@ export const useChannelForm = () => {
   const performSubmit = async (data: ChannelForm) => {
     setIsSubmitting(true);
     try {
-      const payload: any = { ...data };
-
+      // Pre-flight: composite key materialisation for create-time validation.
+      // We compute the would-be key here so the "API key is required" check
+      // matches what `buildChannelSubmitPayload` will produce later.
+      let derivedKey: string | undefined = data.key;
       if (watchType === 33 && watchConfig.ak && watchConfig.sk && watchConfig.region) {
-        payload.key = `${watchConfig.ak}|${watchConfig.sk}|${watchConfig.region}`;
+        derivedKey = `${watchConfig.ak}|${watchConfig.sk}|${watchConfig.region}`;
       } else if (watchType === 42 && watchConfig.region && watchConfig.vertex_ai_project_id && watchConfig.vertex_ai_adc) {
-        payload.key = `${watchConfig.region}|${watchConfig.vertex_ai_project_id}|${watchConfig.vertex_ai_adc}`;
+        derivedKey = `${watchConfig.region}|${watchConfig.vertex_ai_project_id}|${watchConfig.vertex_ai_adc}`;
       } else if (watchType === 18 && (watchConfig.spark_app_id || watchConfig.spark_api_secret || watchConfig.spark_api_key)) {
-        payload.key = `${watchConfig.spark_app_id || ''}|${watchConfig.spark_api_secret || ''}|${watchConfig.spark_api_key || ''}`;
+        derivedKey = `${watchConfig.spark_app_id || ''}|${watchConfig.spark_api_secret || ''}|${watchConfig.spark_api_key || ''}`;
       } else if (watchType === 23 && (watchConfig.tencent_app_id || watchConfig.tencent_secret_id || watchConfig.tencent_secret_key)) {
-        payload.key = `${watchConfig.tencent_app_id || ''}|${watchConfig.tencent_secret_id || ''}|${watchConfig.tencent_secret_key || ''}`;
+        derivedKey = `${watchConfig.tencent_app_id || ''}|${watchConfig.tencent_secret_id || ''}|${watchConfig.tencent_secret_key || ''}`;
       }
 
-      if (!isEdit && (!payload.key || payload.key.trim() === '')) {
+      if (!isEdit && (!derivedKey || derivedKey.trim() === '')) {
         form.setError('key', { message: 'API key is required' });
         notify({
           type: 'error',
@@ -594,24 +596,8 @@ export const useChannelForm = () => {
         }
       }
 
-      payload.priority = toInt(payload.priority, 0);
-      payload.weight = toInt(payload.weight, 0);
-      payload.ratelimit = toInt(payload.ratelimit, 0);
-
-      payload.models = payload.models.join(',');
-      const normalizedHiddenModels = [...new Set((data.hidden_models || []).map((model) => model.trim()).filter((model) => model !== ''))];
-      payload.hidden_models = normalizedHiddenModels.length > 0 ? JSON.stringify(normalizedHiddenModels) : null;
-      payload.group = payload.groups.join(',');
-      delete payload.groups;
-
-      payload.config = JSON.stringify(data.config);
-
-      if (isEdit && (!payload.key || payload.key.trim() === '')) {
-        delete payload.key;
-      }
-
-      const normalizedSubmitType = normalizeChannelType(payload.type);
-      const baseURLRawValue = typeof payload.base_url === 'string' ? payload.base_url : '';
+      const normalizedSubmitType = normalizeChannelType(data.type);
+      const baseURLRawValue = typeof data.base_url === 'string' ? data.base_url : '';
       const trimmedBaseURL = baseURLRawValue.trim();
       const baseURLRequired = normalizedSubmitType !== null && CHANNEL_TYPES_WITH_DEDICATED_BASE_URL.has(normalizedSubmitType);
 
@@ -626,38 +612,12 @@ export const useChannelForm = () => {
         });
         return;
       }
-
-      payload.base_url = trimmedBaseURL;
       form.clearErrors('base_url');
 
-      if (payload.base_url?.endsWith('/')) {
-        payload.base_url = payload.base_url.slice(0, -1);
-      }
-
-      if (watchType === 3 && (!payload.other || payload.other.trim() === '')) {
-        payload.other = '2024-03-01-preview';
-      }
-
-      // Admins may enter JSONC (comments + trailing commas) in these fields for
-      // readability; normalise to strict JSON so the backend parses successfully.
-      const jsoncFields = ['model_mapping', 'model_configs', 'inference_profile_arn_map', 'tooling'];
-      jsoncFields.forEach((field) => {
-        const v = payload[field];
-        if (typeof v === 'string' && v.trim() !== '') {
-          payload[field] = sanitizeJsonField(v);
-        }
-      });
-
-      if (watchType === 34 && watchConfig.auth_type === 'oauth_jwt' && typeof payload.key === 'string' && payload.key.trim() !== '') {
-        payload.key = sanitizeJsonField(payload.key);
-      }
-
-      const nullableEmptyFields = ['model_mapping', 'model_configs', 'inference_profile_arn_map', 'system_prompt'];
-      nullableEmptyFields.forEach((field) => {
-        const v = payload[field];
-        if (typeof v === 'string' && v.trim() === '') {
-          payload[field] = null;
-        }
+      const payload = buildChannelSubmitPayload(data, {
+        isEdit,
+        watchType: watchType ?? null,
+        watchConfig,
       });
 
       let response;

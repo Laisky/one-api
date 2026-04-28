@@ -1,4 +1,4 @@
-import type { NormalizedToolingConfig, ToolPricingEntry } from './schemas';
+import type { ChannelConfigForm, ChannelForm, NormalizedToolingConfig, ToolPricingEntry } from './schemas';
 
 export const normalizeChannelType = (value: unknown): number | null => {
   if (typeof value === 'number' && Number.isFinite(value)) {
@@ -399,6 +399,113 @@ export const validateToolingConfig = (configStr: string) => {
       error: `Invalid JSON format: ${(error as Error).message}`,
     };
   }
+};
+
+/**
+ * BuildChannelSubmitPayloadOptions captures all the contextual flags that
+ * influence the shape of the payload but are not part of the form data
+ * itself. Keeping this separate from `ChannelForm` lets us unit-test the
+ * transformation without spinning up the React hook.
+ */
+export interface BuildChannelSubmitPayloadOptions {
+  /** True when editing an existing channel (PUT). False on create (POST). */
+  isEdit: boolean;
+  /** Currently selected channel type (mirrors `form.watch('type')`). */
+  watchType: number | null | undefined;
+  /** Live config values used to derive composite key fields. */
+  watchConfig: ChannelConfigForm;
+}
+
+/**
+ * buildChannelSubmitPayload transforms a validated `ChannelForm` plus
+ * contextual flags into the exact payload object that should be sent to
+ * the backend. It is intentionally pure: no network, no validation, no
+ * error throwing for user-visible issues. Validation is performed by the
+ * caller before invoking this helper.
+ *
+ * Key behaviours that are locked-in by tests:
+ *  - On edit, an empty `key` is REMOVED from the payload so the backend
+ *    treats it as "do not change".
+ *  - For nullable JSON-ish fields (`model_mapping`, `model_configs`,
+ *    `inference_profile_arn_map`, `system_prompt`), an empty user input is
+ *    serialised as JSON `null` (key present, value `null`) so the backend
+ *    can distinguish "clear me" from "leave me alone".
+ *  - JSONC inputs are sanitised to strict JSON.
+ */
+export const buildChannelSubmitPayload = (data: ChannelForm, opts: BuildChannelSubmitPayloadOptions): Record<string, any> => {
+  const { isEdit, watchType, watchConfig } = opts;
+  const payload: Record<string, any> = { ...data };
+
+  // Composite key handling for channel types that pack multiple credentials.
+  if (watchType === 33 && watchConfig?.ak && watchConfig?.sk && watchConfig?.region) {
+    payload.key = `${watchConfig.ak}|${watchConfig.sk}|${watchConfig.region}`;
+  } else if (watchType === 42 && watchConfig?.region && watchConfig?.vertex_ai_project_id && watchConfig?.vertex_ai_adc) {
+    payload.key = `${watchConfig.region}|${watchConfig.vertex_ai_project_id}|${watchConfig.vertex_ai_adc}`;
+  } else if (watchType === 18 && (watchConfig?.spark_app_id || watchConfig?.spark_api_secret || watchConfig?.spark_api_key)) {
+    payload.key = `${watchConfig.spark_app_id || ''}|${watchConfig.spark_api_secret || ''}|${watchConfig.spark_api_key || ''}`;
+  } else if (watchType === 23 && (watchConfig?.tencent_app_id || watchConfig?.tencent_secret_id || watchConfig?.tencent_secret_key)) {
+    payload.key = `${watchConfig.tencent_app_id || ''}|${watchConfig.tencent_secret_id || ''}|${watchConfig.tencent_secret_key || ''}`;
+  }
+
+  payload.priority = toInt(payload.priority, 0);
+  payload.weight = toInt(payload.weight, 0);
+  payload.ratelimit = toInt(payload.ratelimit, 0);
+
+  payload.models = Array.isArray(payload.models) ? payload.models.join(',') : '';
+
+  const normalizedHiddenModels = [...new Set((data.hidden_models || []).map((model) => model.trim()).filter((model) => model !== ''))];
+  payload.hidden_models = normalizedHiddenModels.length > 0 ? JSON.stringify(normalizedHiddenModels) : null;
+
+  payload.group = Array.isArray(payload.groups) ? payload.groups.join(',') : '';
+  delete payload.groups;
+
+  payload.config = JSON.stringify(data.config);
+
+  // On edit, an empty key signals "leave the existing key alone". Drop the
+  // field entirely so the backend's partial-update logic skips it.
+  if (isEdit && (typeof payload.key !== 'string' || payload.key.trim() === '')) {
+    delete payload.key;
+  }
+
+  const baseURLRawValue = typeof payload.base_url === 'string' ? payload.base_url : '';
+  let trimmedBaseURL = baseURLRawValue.trim();
+  if (trimmedBaseURL.endsWith('/')) {
+    trimmedBaseURL = trimmedBaseURL.slice(0, -1);
+  }
+  payload.base_url = trimmedBaseURL;
+
+  // Azure (type 3) requires an api_version-like value in `other`. Apply a
+  // reasonable default so existing callers keep working without manual entry.
+  if (watchType === 3 && (typeof payload.other !== 'string' || payload.other.trim() === '')) {
+    payload.other = '2024-03-01-preview';
+  }
+
+  const jsoncFields = ['model_mapping', 'model_configs', 'inference_profile_arn_map', 'tooling'];
+  jsoncFields.forEach((field) => {
+    const v = payload[field];
+    if (typeof v === 'string' && v.trim() !== '') {
+      payload[field] = sanitizeJsonField(v);
+    }
+  });
+
+  if (watchType === 34 && watchConfig?.auth_type === 'oauth_jwt' && typeof payload.key === 'string' && payload.key.trim() !== '') {
+    payload.key = sanitizeJsonField(payload.key);
+  }
+
+  // CRITICAL: when the user clears any of these fields, send JSON `null`
+  // (key present, value null) — NOT undefined, NOT missing. The backend
+  // relies on the field key being present in the JSON body to know the
+  // user wants to clear it; omitting the key would leave the existing
+  // value untouched.
+  const nullableEmptyFields = ['model_mapping', 'model_configs', 'inference_profile_arn_map', 'system_prompt'];
+  nullableEmptyFields.forEach((field) => {
+    const v = payload[field];
+    if (typeof v === 'string' && v.trim() === '') {
+      payload[field] = null;
+    }
+  });
+
+  return payload;
 };
 
 // Helper function to get key prompt based on channel type

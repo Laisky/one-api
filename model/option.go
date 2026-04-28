@@ -174,7 +174,20 @@ func updateOptionMap(key string, value string) (err error) {
 	}
 	switch key {
 	case "EmailDomainWhitelist":
-		config.EmailDomainWhitelist = strings.Split(value, ",")
+		if strings.TrimSpace(value) == "" {
+			config.EmailDomainWhitelist = nil
+		} else {
+			parts := strings.Split(value, ",")
+			domains := make([]string, 0, len(parts))
+			for _, p := range parts {
+				p = strings.TrimSpace(p)
+				if p == "" {
+					continue
+				}
+				domains = append(domains, p)
+			}
+			config.EmailDomainWhitelist = domains
+		}
 	case "SMTPServer":
 		config.SMTPServer = value
 	case "SMTPPort":

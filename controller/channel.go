@@ -30,7 +30,8 @@ type channelPayload struct {
 }
 
 type channelPayloadMeta struct {
-	HiddenModelsProvided bool
+	HiddenModelsProvided   bool
+	NullableFieldsProvided map[string]bool
 }
 
 func bindChannelPayload(c *gin.Context) (*model.Channel, json.RawMessage, channelPayloadMeta, error) {
@@ -50,7 +51,17 @@ func bindChannelPayload(c *gin.Context) (*model.Channel, json.RawMessage, channe
 		}
 	}
 	_, hiddenModelsProvided := rawFields["hidden_models"]
-	return payload.Channel, payload.Tooling, channelPayloadMeta{HiddenModelsProvided: hiddenModelsProvided}, nil
+	nullableFieldNames := []string{"model_mapping", "model_configs", "system_prompt", "inference_profile_arn_map"}
+	nullableProvided := make(map[string]bool, len(nullableFieldNames))
+	for _, name := range nullableFieldNames {
+		if _, ok := rawFields[name]; ok {
+			nullableProvided[name] = true
+		}
+	}
+	return payload.Channel, payload.Tooling, channelPayloadMeta{
+		HiddenModelsProvided:   hiddenModelsProvided,
+		NullableFieldsProvided: nullableProvided,
+	}, nil
 }
 
 func parseToolingConfigPayload(raw json.RawMessage) (*model.ChannelToolingConfig, bool, error) {
@@ -236,6 +247,7 @@ func AddChannel(c *gin.Context) {
 		return
 	}
 	channel.HiddenModelsProvided = payloadMeta.HiddenModelsProvided
+	channel.NullableFieldsProvided = payloadMeta.NullableFieldsProvided
 
 	// Disallow empty channel name
 	if strings.TrimSpace(channel.Name) == "" {
@@ -376,6 +388,7 @@ func UpdateChannel(c *gin.Context) {
 		return
 	}
 	channel.HiddenModelsProvided = payloadMeta.HiddenModelsProvided
+	channel.NullableFieldsProvided = payloadMeta.NullableFieldsProvided
 
 	// Validate inference profile ARN map if provided
 	if channel.InferenceProfileArnMap != nil && *channel.InferenceProfileArnMap != "" {

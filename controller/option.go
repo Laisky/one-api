@@ -5,19 +5,30 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/Laisky/zap"
 	"github.com/gin-gonic/gin"
 
 	"github.com/Laisky/one-api/common/config"
 	"github.com/Laisky/one-api/common/helper"
+	"github.com/Laisky/one-api/common/logger"
 	"github.com/Laisky/one-api/model"
 )
+
+// isSensitiveOptionKey reports whether the option key holds a secret value
+// (e.g. tokens, secrets, passwords) and should never be echoed back to the
+// client or overwritten with an empty value submitted by a UI form.
+func isSensitiveOptionKey(key string) bool {
+	return strings.HasSuffix(key, "Token") ||
+		strings.HasSuffix(key, "Secret") ||
+		strings.HasSuffix(key, "Password")
+}
 
 // GetOptions returns the current configuration options excluding sensitive values.
 func GetOptions(c *gin.Context) {
 	var options []*model.Option
 	config.OptionMapRWMutex.Lock()
 	for k, v := range config.OptionMap {
-		if strings.HasSuffix(k, "Token") || strings.HasSuffix(k, "Secret") {
+		if isSensitiveOptionKey(k) {
 			continue
 		}
 		options = append(options, &model.Option{
@@ -41,6 +52,20 @@ func UpdateOption(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"success": false,
 			"message": invalidParameterMessage,
+		})
+		return
+	}
+	// Protect sensitive options (Token/Secret/Password suffix) from accidental
+	// overwrite when the client submits an empty string. GetOptions strips
+	// these values before returning them, so a UI form will always render them
+	// empty; saving the form must therefore treat empty as "no change" rather
+	// than wiping the stored secret. NEVER log the value itself.
+	if strings.TrimSpace(option.Value) == "" && isSensitiveOptionKey(option.Key) {
+		logger.Logger.Debug("ignored empty value for sensitive option to prevent overwrite",
+			zap.String("key", option.Key))
+		c.JSON(http.StatusOK, gin.H{
+			"success": true,
+			"message": "empty value ignored for sensitive option",
 		})
 		return
 	}

@@ -167,6 +167,41 @@ func TestUpdateSelfWithoutPassword(t *testing.T) {
 	require.True(t, common.ValidatePasswordAndHash("oldpassword", updated.Password))
 }
 
+// TestUpdateSelfClearDisplayName verifies that an explicit empty display_name
+// in the request body clears the stored value rather than being silently
+// reverted to the current value.
+func TestUpdateSelfClearDisplayName(t *testing.T) {
+	setupSelfUpdateTest(t)
+	user := createSelfUpdateUser(t)
+	require.Equal(t, "Self User", user.DisplayName)
+
+	router := gin.New()
+	router.PUT("/api/user/self", func(c *gin.Context) {
+		c.Set(ctxkey.Id, user.Id)
+		UpdateSelf(c)
+	})
+
+	// Explicitly send display_name="" to clear it.
+	payload := map[string]string{"display_name": ""}
+	body, err := json.Marshal(payload)
+	require.NoError(t, err)
+
+	req := httptest.NewRequest(http.MethodPut, "/api/user/self", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	var resp map[string]any
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	require.Equal(t, true, resp["success"], "expected success, got: %v", resp["message"])
+
+	var updated model.User
+	require.NoError(t, model.DB.First(&updated, user.Id).Error)
+	require.Equal(t, "", updated.DisplayName, "display_name should be cleared")
+	// Username must remain unchanged (silent-restore for empty username preserved).
+	require.Equal(t, "selfuser", updated.Username)
+}
+
 // TestCreateUserWithAllFields verifies that admin create user honors
 // email, quota, and group fields.
 func TestCreateUserWithAllFields(t *testing.T) {

@@ -142,6 +142,8 @@ If the whitelist is empty, no MCP tools from that server are available until exp
 - **Auto sync enabled**: Whether to periodically sync the tool catalog.
 - **Auto sync interval**: Minutes between syncs (default 60, bounded 5–1440).
 
+**Updating an MCP server**: send only the keys you want to change. Sending a key with an empty value (`""`, `false`, `0`, `{}`) clears that column on the server. Special case: `api_key` set to a masked-secret placeholder (e.g. `********`) is treated as 'no change'.
+
 ![](https://s3.laisky.com/uploads/2026/01/one-mcp-4.png)
 
 ### Configuration examples
