@@ -7,7 +7,7 @@ import (
 
 // ModelRatios contains all supported models and their pricing ratios
 // Model list is derived from the keys of this map, eliminating redundancy
-// Based on Cloudflare Workers AI pricing - updated 2026-04-20
+// Based on Cloudflare Workers AI pricing (retrieved 2026-04-28).
 // Source: https://developers.cloudflare.com/workers-ai/platform/pricing/
 var ModelRatios = map[string]adaptor.ModelConfig{
 	// Meta Llama Models
@@ -47,6 +47,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 	"@cf/zai-org/glm-4.7-flash":           {Ratio: 0.060 * ratio.MilliTokensUsd, CompletionRatio: 0.400 / 0.060},
 	"@cf/nvidia/nemotron-3-120b-a12b":     {Ratio: 0.500 * ratio.MilliTokensUsd, CompletionRatio: 1.500 / 0.500},
 	"@cf/moonshotai/kimi-k2.5":            {Ratio: 0.600 * ratio.MilliTokensUsd, CompletionRatio: 3.000 / 0.600, CachedInputRatio: 0.100 * ratio.MilliTokensUsd},
+	"@cf/moonshotai/kimi-k2.6":            {Ratio: 0.950 * ratio.MilliTokensUsd, CompletionRatio: 4.000 / 0.950, CachedInputRatio: 0.160 * ratio.MilliTokensUsd},
 
 	// OpenAI OSS
 	"@cf/openai/gpt-oss-120b": {Ratio: 0.350 * ratio.MilliTokensUsd, CompletionRatio: 0.750 / 0.350},
@@ -84,6 +85,6 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 // ModelList derived from ModelRatios for backward compatibility
 var ModelList = adaptor.GetModelListFromPricing(ModelRatios)
 
-// CloudflareToolingDefaults notes Workers AI publishes only neuron-based model pricing (no server-side tool billing as of 2026-04-20).
+// CloudflareToolingDefaults notes Workers AI publishes only neuron-based model pricing (no server-side tool billing as of 2026-04-28).
 // Source: https://developers.cloudflare.com/workers-ai/platform/pricing/
 var CloudflareToolingDefaults = adaptor.ChannelToolConfig{}

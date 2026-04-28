@@ -5,18 +5,26 @@ import (
 	ratio "github.com/Laisky/one-api/relay/billing/ratio"
 )
 
-// ModelRatios contains all supported models and their pricing ratios
-// Model list is derived from the keys of this map, eliminating redundancy
-// Based on X.AI pricing: https://docs.x.ai/developers/models
+// ModelRatios contains all supported models and their pricing ratios.
+// Model list is derived from the keys of this map, eliminating redundancy.
+// Official sources:
+// - https://docs.x.ai/developers/models
+// - https://docs.x.ai/developers/model-capabilities/text/multi-agent
+// - https://docs.x.ai/developers/tools/web-search
 var ModelRatios = map[string]adaptor.ModelConfig{
-	// Grok Models - Based on https://docs.x.ai/developers/models
+	// Grok Models
 	//
-	// Note: Some prices are the same because they are aliases.
+	// Note: Some prices are the same because they are aliases or stable/snapshot pairs.
 	"grok-code-fast-1":             {Ratio: 0.2 * ratio.MilliTokensUsd, CompletionRatio: 1.5 / 0.2, CachedInputRatio: 0.02 * ratio.MilliTokensUsd}, // $0.20 input, $0.02 cached input, $1.50 output
 	"grok-4-0709":                  {Ratio: 3.0 * ratio.MilliTokensUsd, CompletionRatio: 15.0 / 3.0, CachedInputRatio: 0.75 * ratio.MilliTokensUsd},
+	"grok-4.20":                    {Ratio: 2.0 * ratio.MilliTokensUsd, CompletionRatio: 6.0 / 2.0, CachedInputRatio: 0.2 * ratio.MilliTokensUsd},
+	"grok-4.20-reasoning":          {Ratio: 2.0 * ratio.MilliTokensUsd, CompletionRatio: 6.0 / 2.0, CachedInputRatio: 0.2 * ratio.MilliTokensUsd},
+	"grok-4.20-non-reasoning":      {Ratio: 2.0 * ratio.MilliTokensUsd, CompletionRatio: 6.0 / 2.0, CachedInputRatio: 0.2 * ratio.MilliTokensUsd},
+	"grok-4.20-multi-agent":        {Ratio: 2.0 * ratio.MilliTokensUsd, CompletionRatio: 6.0 / 2.0, CachedInputRatio: 0.2 * ratio.MilliTokensUsd},
 	"grok-4.20-0309-reasoning":     {Ratio: 2.0 * ratio.MilliTokensUsd, CompletionRatio: 6.0 / 2.0, CachedInputRatio: 0.2 * ratio.MilliTokensUsd},
 	"grok-4.20-0309-non-reasoning": {Ratio: 2.0 * ratio.MilliTokensUsd, CompletionRatio: 6.0 / 2.0, CachedInputRatio: 0.2 * ratio.MilliTokensUsd},
 	"grok-4.20-multi-agent-0309":   {Ratio: 2.0 * ratio.MilliTokensUsd, CompletionRatio: 6.0 / 2.0, CachedInputRatio: 0.2 * ratio.MilliTokensUsd},
+	"grok-4-1-fast":                {Ratio: 0.2 * ratio.MilliTokensUsd, CompletionRatio: 0.5 / 0.2, CachedInputRatio: 0.05 * ratio.MilliTokensUsd},
 	"grok-4-1-fast-reasoning":      {Ratio: 0.2 * ratio.MilliTokensUsd, CompletionRatio: 0.5 / 0.2, CachedInputRatio: 0.05 * ratio.MilliTokensUsd},
 	"grok-4-1-fast-non-reasoning":  {Ratio: 0.2 * ratio.MilliTokensUsd, CompletionRatio: 0.5 / 0.2, CachedInputRatio: 0.05 * ratio.MilliTokensUsd},
 	"grok-3":                       {Ratio: 3.0 * ratio.MilliTokensUsd, CompletionRatio: 5.0 / 3.0, CachedInputRatio: 0.75 * ratio.MilliTokensUsd},
@@ -106,7 +114,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 // ModelList derived from ModelRatios for backward compatibility
 var ModelList = adaptor.GetModelListFromPricing(ModelRatios)
 
-// XAIToolingDefaults captures xAI's published tool invocation fees (retrieved 2026-04-20).
+// XAIToolingDefaults captures xAI's published tool invocation fees.
 // Source: https://docs.x.ai/developers/models
 var XAIToolingDefaults = adaptor.ChannelToolConfig{
 	Pricing: map[string]adaptor.ToolPricingConfig{

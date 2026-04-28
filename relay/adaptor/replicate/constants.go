@@ -7,7 +7,8 @@ import (
 
 // ModelRatios contains all supported models and their pricing ratios
 // Model list is derived from the keys of this map, eliminating redundancy
-// Based on Replicate pricing: https://replicate.com/pricing
+// Based on Replicate pricing and explicit official model pages retrieved 2026-04-28.
+// Replicate collection pages are treated additively for discovery; absence from a collection is not used for removals.
 func replicateImageConfig(pricePerImage float64) *adaptor.ImagePricingConfig {
 	return &adaptor.ImagePricingConfig{
 		PricePerImageUsd: pricePerImage,
@@ -69,6 +70,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 	"deepseek-ai/deepseek-r1":                   {Ratio: 3.75 * ratio.MilliTokensUsd, CompletionRatio: 10.0 / 3.75},    // $3.75/$10.0 per 1M tokens
 	"deepseek-ai/deepseek-v3":                   {Ratio: 1.45 * ratio.MilliTokensUsd, CompletionRatio: 1.0},            // $1.45/$1.45 per 1M tokens
 	"deepseek-ai/deepseek-v3.1":                 {Ratio: 0.672 * ratio.MilliTokensUsd, CompletionRatio: 2.016 / 0.672}, // $0.672/$2.016 per 1M tokens
+	"google/gemini-2.5-flash":                   {Ratio: 0.30 * ratio.MilliTokensUsd, CompletionRatio: 2.50 / 0.30},    // $0.30/$2.50 per 1M tokens
 	"ibm-granite/granite-20b-code-instruct-8k":  {Ratio: 0.1 * ratio.MilliTokensUsd, CompletionRatio: 0.5 / 0.1},       // $0.1/$0.5 per 1M tokens
 	"ibm-granite/granite-3.0-2b-instruct":       {Ratio: 0.03 * ratio.MilliTokensUsd, CompletionRatio: 0.25 / 0.03},    // $0.03/$0.25 per 1M tokens
 	"ibm-granite/granite-3.0-8b-instruct":       {Ratio: 0.05 * ratio.MilliTokensUsd, CompletionRatio: 0.25 / 0.05},    // $0.05/$0.25 per 1M tokens
@@ -93,6 +95,8 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 	"meta/meta-llama-3-8b-instruct":             {Ratio: 0.05 * ratio.MilliTokensUsd, CompletionRatio: 0.25 / 0.05},    // $0.05/$0.25 per 1M tokens
 	"mistralai/mistral-7b-instruct-v0.2":        {Ratio: 0.05 * ratio.MilliTokensUsd, CompletionRatio: 0.25 / 0.05},    // $0.05/$0.25 per 1M tokens
 	"mistralai/mistral-7b-v0.1":                 {Ratio: 0.05 * ratio.MilliTokensUsd, CompletionRatio: 0.25 / 0.05},    // $0.05/$0.25 per 1M tokens
+	"moonshotai/kimi-k2.5":                      {Ratio: 0.72 * ratio.MilliTokensUsd, CompletionRatio: 3.60 / 0.72},    // $0.72/$3.60 per 1M tokens
+	"openai/gpt-4.1":                            {Ratio: 2.0 * ratio.MilliTokensUsd, CompletionRatio: 8.0 / 2.0},       // $2.0/$8.0 per 1M tokens
 	"openai/gpt-5":                              {Ratio: 1.25 * ratio.MilliTokensUsd, CompletionRatio: 10.0 / 1.25},    // $1.25/$10.0 per 1M tokens
 	"openai/gpt-5-mini":                         {Ratio: 0.25 * ratio.MilliTokensUsd, CompletionRatio: 2.0 / 0.25},     // $0.25/$2.0 per 1M tokens
 	"openai/gpt-5-nano":                         {Ratio: 0.05 * ratio.MilliTokensUsd, CompletionRatio: 0.40 / 0.05},    // $0.05/$0.40 per 1M tokens
@@ -108,6 +112,6 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 // ModelList derived from ModelRatios for backward compatibility
 var ModelList = adaptor.GetModelListFromPricing(ModelRatios)
 
-// ReplicateToolingDefaults notes that Replicate bills per model runtime without separate tool pricing (retrieved 2025-11-12).
-// Source: https://r.jina.ai/https://replicate.com/pricing
+// ReplicateToolingDefaults notes that Replicate bills per model runtime without separate tool pricing (retrieved 2026-04-28).
+// Source: https://replicate.com/pricing
 var ReplicateToolingDefaults = adaptor.ChannelToolConfig{}

@@ -31,7 +31,7 @@ const (
 	gemini31FlashImage512Price = 0.045
 	gemini31FlashImage1KPrice  = 0.067
 	gemini31FlashImage2KPrice  = 0.101
-	gemini31FlashImage4KPrice  = 0.151
+	gemini31FlashImage4KPrice  = 0.15
 
 	geminiEmbedding001TextPrice              = 0.15
 	geminiEmbedding2PreviewTextPrice         = 0.20
@@ -92,6 +92,14 @@ var (
 		Ratio:            1.25 * ratio.MilliTokensUsd,
 		CompletionRatio:  10.0 / 1.25,
 		CachedInputRatio: 0.13 * ratio.MilliTokensUsd,
+		Tiers: []adaptor.ModelRatioTier{
+			{
+				Ratio:               2.5 * ratio.MilliTokensUsd,
+				CompletionRatio:     15.0 / 2.5,
+				CachedInputRatio:    0.25 * ratio.MilliTokensUsd,
+				InputTokenThreshold: 200001,
+			},
+		},
 	}
 	gemini25FlashPricing = adaptor.ModelConfig{
 		Ratio:            0.30 * ratio.MilliTokensUsd,

@@ -8,7 +8,7 @@ import (
 // ModelRatios contains Fireworks serverless models with their per-token pricing.
 //
 // Fireworks model IDs always use the "accounts/fireworks/models/<slug>" resource name.
-// Pricing reference: https://fireworks.ai/pricing#serverless-pricing (retrieved 2026-04-21).
+// Pricing reference: https://fireworks.ai/pricing#serverless-pricing (retrieved 2026-04-28).
 //
 // Pricing buckets:
 //   - <4B dense: $0.10/1M flat
@@ -19,6 +19,13 @@ import (
 //
 // Popular flagship models use per-model pricing listed below.
 var ModelRatios = map[string]adaptor.ModelConfig{
+	// DeepSeek V4 Pro — $1.74 in / $3.48 out, discounted cached input listed separately
+	"accounts/fireworks/models/deepseek-v4-pro": {
+		Ratio:            1.74 * ratio.MilliTokensUsd,
+		CompletionRatio:  3.48 / 1.74,
+		CachedInputRatio: 0.15 * ratio.MilliTokensUsd,
+	},
+
 	// DeepSeek family — $0.56 in / $1.68 out, 50% cached discount
 	"accounts/fireworks/models/deepseek-v3": {
 		Ratio:            0.56 * ratio.MilliTokensUsd,

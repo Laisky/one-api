@@ -2,7 +2,9 @@ package deepl
 
 import "github.com/Laisky/one-api/relay/adaptor"
 
-// https://developers.deepl.com/docs/api-reference/glossaries
+// ModelList retains compatibility aliases for common DeepL routes.
+// DeepL's official API exposes language pairs and model_type choices rather than canonical model IDs,
+// so these entries remain intentionally curated.
 
 var ModelList = []string{
 	"deepl-zh",
@@ -10,6 +12,6 @@ var ModelList = []string{
 	"deepl-ja",
 }
 
-// DeepLToolingDefaults captures that DeepL's translation API does not publish per-call tooling charges (retrieved 2025-11-12).
-// Source: https://r.jina.ai/https://developers.deepl.com/docs/api-reference
+// DeepLToolingDefaults captures that DeepL's translation API does not publish per-call tooling charges (retrieved 2026-04-28).
+// Source: https://developers.deepl.com/docs/api-reference
 var DeepLToolingDefaults = adaptor.ChannelToolConfig{}

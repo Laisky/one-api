@@ -37,8 +37,8 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 // ModelList derived from ModelRatios for backward compatibility
 var ModelList = adaptor.GetModelListFromPricing(ModelRatios)
 
-// GroqToolingDefaults enumerates Groq's Compound and GPT-OSS built-in tools and pricing (retrieved 2025-11-12).
-// Source: https://r.jina.ai/https://groq.com/pricing
+// GroqToolingDefaults enumerates Groq's Compound and GPT-OSS built-in tool pricing.
+// Source: https://groq.com/pricing/
 var GroqToolingDefaults = adaptor.ChannelToolConfig{
 	Pricing: map[string]adaptor.ToolPricingConfig{
 		"basic_search":          {UsdPerCall: 0.005},

@@ -46,18 +46,20 @@ func togetherAIGeminiProImageConfig() *adaptor.ImagePricingConfig {
 
 // ModelRatios contains Together AI models with published pricing metadata from the public
 // serverless models catalog.
-// Source: https://docs.together.ai/docs/serverless-models
+// Source: https://docs.together.ai/docs/serverless-models (retrieved 2026-04-28)
 var ModelRatios = map[string]adaptor.ModelConfig{
 	// Chat and vision-capable LLMs.
 	"MiniMaxAI/MiniMax-M2.7":                   {Ratio: 0.30 * ratio.MilliTokensUsd, CompletionRatio: 1.20 / 0.30, CachedInputRatio: 0.06 * ratio.MilliTokensUsd},
 	"MiniMaxAI/MiniMax-M2.5":                   {Ratio: 0.30 * ratio.MilliTokensUsd, CompletionRatio: 1.20 / 0.30, CachedInputRatio: 0.06 * ratio.MilliTokensUsd},
 	"Qwen/Qwen3.5-397B-A17B":                   {Ratio: 0.60 * ratio.MilliTokensUsd, CompletionRatio: 3.60 / 0.60},
 	"Qwen/Qwen3.5-9B":                          {Ratio: 0.10 * ratio.MilliTokensUsd, CompletionRatio: 0.15 / 0.10},
+	"moonshotai/Kimi-K2.6":                     {Ratio: 1.20 * ratio.MilliTokensUsd, CompletionRatio: 4.50 / 1.20, CachedInputRatio: 0.20 * ratio.MilliTokensUsd},
 	"moonshotai/Kimi-K2.5":                     {Ratio: 0.50 * ratio.MilliTokensUsd, CompletionRatio: 2.80 / 0.50},
 	"zai-org/GLM-5.1":                          {Ratio: 1.40 * ratio.MilliTokensUsd, CompletionRatio: 4.40 / 1.40},
 	"zai-org/GLM-5":                            {Ratio: 1.00 * ratio.MilliTokensUsd, CompletionRatio: 3.20 / 1.00},
 	"openai/gpt-oss-120b":                      {Ratio: 0.15 * ratio.MilliTokensUsd, CompletionRatio: 0.60 / 0.15},
 	"openai/gpt-oss-20b":                       {Ratio: 0.05 * ratio.MilliTokensUsd, CompletionRatio: 0.20 / 0.05},
+	"deepseek-ai/DeepSeek-V4-Pro":              {Ratio: 2.10 * ratio.MilliTokensUsd, CompletionRatio: 4.40 / 2.10, CachedInputRatio: 0.20 * ratio.MilliTokensUsd},
 	"deepseek-ai/DeepSeek-V3.1":                {Ratio: 0.60 * ratio.MilliTokensUsd, CompletionRatio: 1.70 / 0.60},
 	"Qwen/Qwen3-Coder-Next-FP8":                {Ratio: 0.50 * ratio.MilliTokensUsd, CompletionRatio: 1.20 / 0.50},
 	"Qwen/Qwen3-Coder-480B-A35B-Instruct-FP8":  {Ratio: 2.00 * ratio.MilliTokensUsd, CompletionRatio: 1},
@@ -116,17 +118,19 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 
 // ModelList captures the current public Together AI serverless catalog used by the OpenAI-compatible adapter.
 // Pricing is currently published for only a subset of these models, so ModelRatios intentionally stays smaller.
-// Source: https://docs.together.ai/docs/serverless-models
+// Source: https://docs.together.ai/docs/serverless-models (retrieved 2026-04-28)
 var ModelList = []string{
 	"MiniMaxAI/MiniMax-M2.7",
 	"MiniMaxAI/MiniMax-M2.5",
 	"Qwen/Qwen3.5-397B-A17B",
 	"Qwen/Qwen3.5-9B",
+	"moonshotai/Kimi-K2.6",
 	"moonshotai/Kimi-K2.5",
 	"zai-org/GLM-5.1",
 	"zai-org/GLM-5",
 	"openai/gpt-oss-120b",
 	"openai/gpt-oss-20b",
+	"deepseek-ai/DeepSeek-V4-Pro",
 	"deepseek-ai/DeepSeek-V3.1",
 	"Qwen/Qwen3-Coder-Next-FP8",
 	"Qwen/Qwen3-Coder-480B-A35B-Instruct-FP8",

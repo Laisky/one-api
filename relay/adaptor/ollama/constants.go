@@ -5,9 +5,10 @@ import (
 	"github.com/Laisky/one-api/relay/billing/ratio"
 )
 
-// ModelRatios contains all supported models and their pricing ratios
-// Model list is derived from the keys of this map, eliminating redundancy
-// Ollama is typically free for local usage, but we set minimal pricing for consistency
+// ModelRatios contains a curated Ollama compatibility list.
+// Model list is derived from the keys of this map, eliminating redundancy.
+// Ollama's official search page now exposes a much broader local and cloud catalog, but this adaptor intentionally keeps a
+// small stable set until there is an explicit product decision to broaden the supported surface.
 var ModelRatios = map[string]adaptor.ModelConfig{
 	// Ollama Models - typically free for local usage
 	"codellama:7b-instruct": {Ratio: 0.01 * ratio.MilliTokensUsd, CompletionRatio: 1},
@@ -22,6 +23,6 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 // ModelList derived from ModelRatios for backward compatibility
 var ModelList = adaptor.GetModelListFromPricing(ModelRatios)
 
-// OllamaToolingDefaults notes that Ollama runs locally and publishes no tool pricing (retrieved 2025-11-12).
-// Source: https://r.jina.ai/https://ollama.com/
+// OllamaToolingDefaults notes that Ollama runs locally and publishes no tool pricing (retrieved 2026-04-28).
+// Source: https://ollama.com/search
 var OllamaToolingDefaults = adaptor.ChannelToolConfig{}

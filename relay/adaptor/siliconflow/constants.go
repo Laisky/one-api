@@ -5,9 +5,10 @@ import (
 	"github.com/Laisky/one-api/relay/billing/ratio"
 )
 
-// ModelRatios contains all supported models and their pricing ratios
-// Model list is derived from the keys of this map, eliminating redundancy
-// Based on SiliconFlow pricing: https://docs.siliconflow.cn/docs/getting-started
+// ModelRatios contains a conservative SiliconFlow compatibility snapshot.
+// Model list is derived from the keys of this map, eliminating redundancy.
+// SiliconFlow's public site no longer exposes an authoritative machine-readable pricing table in this environment,
+// and the richer catalog is effectively account-gated, so this file intentionally avoids speculative churn.
 var ModelRatios = map[string]adaptor.ModelConfig{
 	// SiliconFlow Models - Based on https://siliconflow.cn/pricing
 	"deepseek-chat":                           {Ratio: 0.14 * ratio.MilliTokensUsd, CompletionRatio: 1},
@@ -35,6 +36,6 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 // ModelList derived from ModelRatios for backward compatibility
 var ModelList = adaptor.GetModelListFromPricing(ModelRatios)
 
-// SiliconFlowToolingDefaults notes that SiliconFlow public docs focus on model usage; no separate tool fees are published (retrieved 2025-11-12).
-// Source: https://r.jina.ai/https://docs.siliconflow.com/en/api-reference/chat-completions/chat-completions
+// SiliconFlowToolingDefaults notes that SiliconFlow public docs focus on model usage; no separate tool fees are published (retrieved 2026-04-28).
+// Source: https://siliconflow.cn/pricing
 var SiliconFlowToolingDefaults = adaptor.ChannelToolConfig{}
