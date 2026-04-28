@@ -4,7 +4,7 @@ import (
 	"github.com/Laisky/errors/v2"
 	"github.com/Laisky/zap"
 
-	"github.com/songquanpeng/one-api/common/logger"
+	"github.com/Laisky/one-api/common/logger"
 )
 
 // PasskeyCredential stores a single WebAuthn credential (passkey) for a user.

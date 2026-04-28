@@ -1,6 +1,6 @@
 package openai
 
-import "github.com/songquanpeng/one-api/relay/model"
+import "github.com/Laisky/one-api/relay/model"
 
 // ResponseAPIRequest represents the OpenAI Response API request structure
 // https://platform.openai.com/docs/api-reference/responses

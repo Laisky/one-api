@@ -6,8 +6,8 @@ import (
 	"github.com/Laisky/zap"
 	"github.com/aws/aws-sdk-go-v2/service/bedrockruntime/types"
 
-	"github.com/songquanpeng/one-api/relay/adaptor/openai"
-	relaymodel "github.com/songquanpeng/one-api/relay/model"
+	"github.com/Laisky/one-api/relay/adaptor/openai"
+	relaymodel "github.com/Laisky/one-api/relay/model"
 )
 
 type Renderer func([]byte) bool

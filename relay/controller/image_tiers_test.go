@@ -5,13 +5,13 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/songquanpeng/one-api/relay/adaptor/ali"
-	"github.com/songquanpeng/one-api/relay/adaptor/gemini"
-	"github.com/songquanpeng/one-api/relay/adaptor/openai"
-	"github.com/songquanpeng/one-api/relay/adaptor/vertexai"
-	"github.com/songquanpeng/one-api/relay/adaptor/xai"
-	relaymodel "github.com/songquanpeng/one-api/relay/model"
-	"github.com/songquanpeng/one-api/relay/pricing"
+	"github.com/Laisky/one-api/relay/adaptor/ali"
+	"github.com/Laisky/one-api/relay/adaptor/gemini"
+	"github.com/Laisky/one-api/relay/adaptor/openai"
+	"github.com/Laisky/one-api/relay/adaptor/vertexai"
+	"github.com/Laisky/one-api/relay/adaptor/xai"
+	relaymodel "github.com/Laisky/one-api/relay/model"
+	"github.com/Laisky/one-api/relay/pricing"
 )
 
 // Sanity check: usd_per_image * QuotaPerUsd with $0.04 -> 0.04 * 500000 = 20000

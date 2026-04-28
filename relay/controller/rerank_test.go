@@ -7,8 +7,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	metalib "github.com/songquanpeng/one-api/relay/meta"
-	relaymodel "github.com/songquanpeng/one-api/relay/model"
+	metalib "github.com/Laisky/one-api/relay/meta"
+	relaymodel "github.com/Laisky/one-api/relay/model"
 )
 
 func TestPostConsumeRerankQuotaPerCall(t *testing.T) {

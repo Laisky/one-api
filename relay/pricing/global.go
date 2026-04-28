@@ -6,10 +6,10 @@ import (
 
 	"github.com/Laisky/zap"
 
-	"github.com/songquanpeng/one-api/common/logger"
-	"github.com/songquanpeng/one-api/relay/adaptor"
-	"github.com/songquanpeng/one-api/relay/apitype"
-	billingratio "github.com/songquanpeng/one-api/relay/billing/ratio"
+	"github.com/Laisky/one-api/common/logger"
+	"github.com/Laisky/one-api/relay/adaptor"
+	"github.com/Laisky/one-api/relay/apitype"
+	billingratio "github.com/Laisky/one-api/relay/billing/ratio"
 )
 
 // DefaultGlobalPricingAdapters defines which adapters contribute to global pricing fallback

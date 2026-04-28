@@ -5,7 +5,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/songquanpeng/one-api/common/config"
+	"github.com/Laisky/one-api/common/config"
 )
 
 // This test ensures the 413 path's tryLargerMaxTokens filtering logic does not panic and

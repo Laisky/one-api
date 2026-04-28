@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/songquanpeng/one-api/common/helper"
+	"github.com/Laisky/one-api/common/helper"
 )
 
 func TestUpdateConsumeLogByIDFieldValidation(t *testing.T) {

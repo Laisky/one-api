@@ -3,7 +3,7 @@ package pricing
 import (
 	"testing"
 
-	"github.com/songquanpeng/one-api/relay/adaptor"
+	"github.com/Laisky/one-api/relay/adaptor"
 )
 
 // setTestGlobalModelConfigs replaces global model pricing for deterministic tests.

@@ -12,10 +12,10 @@ import (
 	"github.com/Laisky/zap"
 	"gorm.io/gorm"
 
-	"github.com/songquanpeng/one-api/common"
-	"github.com/songquanpeng/one-api/common/logger"
-	"github.com/songquanpeng/one-api/common/utils"
-	"github.com/songquanpeng/one-api/dto"
+	"github.com/Laisky/one-api/common"
+	"github.com/Laisky/one-api/common/logger"
+	"github.com/Laisky/one-api/common/utils"
+	"github.com/Laisky/one-api/dto"
 )
 
 type Ability struct {

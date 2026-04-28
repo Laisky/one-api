@@ -3,9 +3,9 @@ package router
 import (
 	"github.com/gin-gonic/gin"
 
-	"github.com/songquanpeng/one-api/common/graceful"
-	"github.com/songquanpeng/one-api/controller"
-	"github.com/songquanpeng/one-api/middleware"
+	"github.com/Laisky/one-api/common/graceful"
+	"github.com/Laisky/one-api/controller"
+	"github.com/Laisky/one-api/middleware"
 )
 
 func SetRelayRouter(router *gin.Engine) {

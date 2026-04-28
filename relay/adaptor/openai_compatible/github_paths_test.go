@@ -5,7 +5,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/songquanpeng/one-api/relay/relaymode"
+	"github.com/Laisky/one-api/relay/relaymode"
 )
 
 func TestIsGitHubModelsBaseURL(t *testing.T) {

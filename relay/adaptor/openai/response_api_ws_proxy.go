@@ -13,9 +13,9 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
 
-	rmeta "github.com/songquanpeng/one-api/relay/meta"
-	rmodel "github.com/songquanpeng/one-api/relay/model"
-	"github.com/songquanpeng/one-api/relay/relaymode"
+	rmeta "github.com/Laisky/one-api/relay/meta"
+	rmodel "github.com/Laisky/one-api/relay/model"
+	"github.com/Laisky/one-api/relay/relaymode"
 )
 
 type responseAPIWebSocketEvent struct {

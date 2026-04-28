@@ -8,8 +8,8 @@ import (
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 
-	"github.com/songquanpeng/one-api/common"
-	"github.com/songquanpeng/one-api/common/logger"
+	"github.com/Laisky/one-api/common"
+	"github.com/Laisky/one-api/common/logger"
 )
 
 func TestMain(m *testing.M) {

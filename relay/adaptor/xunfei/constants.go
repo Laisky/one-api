@@ -1,8 +1,8 @@
 package xunfei
 
 import (
-	"github.com/songquanpeng/one-api/relay/adaptor"
-	"github.com/songquanpeng/one-api/relay/billing/ratio"
+	"github.com/Laisky/one-api/relay/adaptor"
+	"github.com/Laisky/one-api/relay/billing/ratio"
 )
 
 // ModelRatios contains all supported models and their pricing ratios

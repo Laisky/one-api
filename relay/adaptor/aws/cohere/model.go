@@ -1,7 +1,7 @@
 package aws
 
 import (
-	relaymodel "github.com/songquanpeng/one-api/relay/model"
+	relaymodel "github.com/Laisky/one-api/relay/model"
 )
 
 // Request represents a chat completion request to AWS Bedrock Cohere Command R models.

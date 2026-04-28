@@ -12,8 +12,8 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 
-	"github.com/songquanpeng/one-api/relay/meta"
-	"github.com/songquanpeng/one-api/relay/model"
+	"github.com/Laisky/one-api/relay/meta"
+	"github.com/Laisky/one-api/relay/model"
 )
 
 // TestConvertClaudeRequest_PromotesStructuredOutputToResponseSchema verifies Claude structured requests use Gemini responseSchema instead of tool calling.

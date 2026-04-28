@@ -7,7 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	relaymodel "github.com/songquanpeng/one-api/relay/model"
+	relaymodel "github.com/Laisky/one-api/relay/model"
 )
 
 func TestRewriteClaudeRequestBody_PreservesThinkingSignatures(t *testing.T) {

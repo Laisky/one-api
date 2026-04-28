@@ -7,7 +7,7 @@ import (
 	"github.com/Laisky/errors/v2"
 	"github.com/gin-gonic/gin"
 
-	"github.com/songquanpeng/one-api/common"
+	"github.com/Laisky/one-api/common"
 )
 
 // StringData streams an SSE data chunk to the client using the provided string payload.

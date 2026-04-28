@@ -5,7 +5,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/songquanpeng/one-api/relay/billing/ratio"
+	"github.com/Laisky/one-api/relay/billing/ratio"
 )
 
 func TestModelRatiosIncludeLatestWorkersAITextModels(t *testing.T) {

@@ -9,7 +9,7 @@ import (
 
 	"github.com/Laisky/errors/v2"
 
-	"github.com/songquanpeng/one-api/relay/model"
+	"github.com/Laisky/one-api/relay/model"
 )
 
 // ResponseAPIUsage represents the usage information structure for Response API

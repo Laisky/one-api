@@ -7,7 +7,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	rmodel "github.com/songquanpeng/one-api/relay/model"
+	rmodel "github.com/Laisky/one-api/relay/model"
 )
 
 // TestMaybeParseRealtimeUsage verifies basic usage extraction from realtime events.

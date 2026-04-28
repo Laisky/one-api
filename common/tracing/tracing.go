@@ -8,8 +8,8 @@ import (
 	"github.com/gin-gonic/gin"
 	oteltrace "go.opentelemetry.io/otel/trace"
 
-	"github.com/songquanpeng/one-api/common/logger"
-	"github.com/songquanpeng/one-api/model"
+	"github.com/Laisky/one-api/common/logger"
+	"github.com/Laisky/one-api/model"
 )
 
 // otelTraceIDFromContext extracts the OpenTelemetry trace ID from a context when available.

@@ -5,7 +5,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/songquanpeng/one-api/common/random"
+	"github.com/Laisky/one-api/common/random"
 )
 
 func TestUniqueness(t *testing.T) {

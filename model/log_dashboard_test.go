@@ -7,7 +7,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/songquanpeng/one-api/dto"
+	"github.com/Laisky/one-api/dto"
 )
 
 func TestDashboardAggregations(t *testing.T) {

@@ -7,7 +7,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/songquanpeng/one-api/common"
+	"github.com/Laisky/one-api/common"
 )
 
 func TestEnsureSQLitePathCreatesDirectory(t *testing.T) {

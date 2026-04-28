@@ -11,8 +11,8 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 
-	"github.com/songquanpeng/one-api/common"
-	"github.com/songquanpeng/one-api/common/logger"
+	"github.com/Laisky/one-api/common"
+	"github.com/Laisky/one-api/common/logger"
 )
 
 // TestCreateTraceWithLongURL verifies that trace creation succeeds even when the request URL includes very long query strings.

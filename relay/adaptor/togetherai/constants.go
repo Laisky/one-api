@@ -1,8 +1,8 @@
 package togetherai
 
 import (
-	"github.com/songquanpeng/one-api/relay/adaptor"
-	"github.com/songquanpeng/one-api/relay/billing/ratio"
+	"github.com/Laisky/one-api/relay/adaptor"
+	"github.com/Laisky/one-api/relay/billing/ratio"
 )
 
 const togetherAIImageBaseSize = "1024x1024"

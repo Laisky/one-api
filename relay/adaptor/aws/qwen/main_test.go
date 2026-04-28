@@ -13,7 +13,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 
-	relaymodel "github.com/songquanpeng/one-api/relay/model"
+	relaymodel "github.com/Laisky/one-api/relay/model"
 )
 
 func TestConvertConverseResponseToQwenUsageMapping(t *testing.T) {

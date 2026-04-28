@@ -5,7 +5,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	relaymodel "github.com/songquanpeng/one-api/relay/model"
+	relaymodel "github.com/Laisky/one-api/relay/model"
 )
 
 func TestGetImageCostRatio_Dalle3Tiers(t *testing.T) {

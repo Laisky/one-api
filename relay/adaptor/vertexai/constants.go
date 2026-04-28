@@ -1,6 +1,6 @@
 package vertexai
 
-import "github.com/songquanpeng/one-api/relay/adaptor"
+import "github.com/Laisky/one-api/relay/adaptor"
 
 // VertexAIToolingDefaults captures Vertex AI's published tooling charges (retrieved 2025-11-12).
 // Source: https://r.jina.ai/https://cloud.google.com/vertex-ai/generative-ai/pricing

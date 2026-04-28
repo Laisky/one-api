@@ -8,9 +8,9 @@ import (
 
 	"github.com/Laisky/zap"
 
-	"github.com/songquanpeng/one-api/common/config"
-	"github.com/songquanpeng/one-api/common/graceful"
-	"github.com/songquanpeng/one-api/common/logger"
+	"github.com/Laisky/one-api/common/config"
+	"github.com/Laisky/one-api/common/graceful"
+	"github.com/Laisky/one-api/common/logger"
 )
 
 const (

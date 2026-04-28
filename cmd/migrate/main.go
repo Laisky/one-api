@@ -9,8 +9,8 @@ import (
 	"github.com/Laisky/errors/v2"
 	"github.com/Laisky/zap"
 
-	"github.com/songquanpeng/one-api/cmd/migrate/internal"
-	"github.com/songquanpeng/one-api/common/logger"
+	"github.com/Laisky/one-api/cmd/migrate/internal"
+	"github.com/Laisky/one-api/common/logger"
 )
 
 const (

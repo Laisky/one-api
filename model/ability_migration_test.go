@@ -10,7 +10,7 @@ import (
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 
-	"github.com/songquanpeng/one-api/common"
+	"github.com/Laisky/one-api/common"
 )
 
 func TestParseLegacySuspendUntil(t *testing.T) {

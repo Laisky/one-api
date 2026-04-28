@@ -3,8 +3,8 @@ package gemini
 import (
 	"slices"
 
-	"github.com/songquanpeng/one-api/relay/adaptor"
-	"github.com/songquanpeng/one-api/relay/adaptor/geminiOpenaiCompatible"
+	"github.com/Laisky/one-api/relay/adaptor"
+	"github.com/Laisky/one-api/relay/adaptor/geminiOpenaiCompatible"
 )
 
 // ModelRatios uses the shared Gemini pricing from geminiOpenaiCompatible

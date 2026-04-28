@@ -15,11 +15,11 @@ import (
 
 	gmw "github.com/Laisky/gin-middlewares/v7"
 
-	"github.com/songquanpeng/one-api/common/client"
-	"github.com/songquanpeng/one-api/common/ctxkey"
-	"github.com/songquanpeng/one-api/common/logger"
-	"github.com/songquanpeng/one-api/model"
-	"github.com/songquanpeng/one-api/relay/channeltype"
+	"github.com/Laisky/one-api/common/client"
+	"github.com/Laisky/one-api/common/ctxkey"
+	"github.com/Laisky/one-api/common/logger"
+	"github.com/Laisky/one-api/model"
+	"github.com/Laisky/one-api/relay/channeltype"
 )
 
 const responseAPISuccessPayload = `{

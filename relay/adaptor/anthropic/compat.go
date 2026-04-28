@@ -3,7 +3,7 @@ package anthropic
 import (
 	"strings"
 
-	"github.com/songquanpeng/one-api/relay/model"
+	"github.com/Laisky/one-api/relay/model"
 )
 
 const claudeOpus47ModelPrefix = "claude-opus-4-7"

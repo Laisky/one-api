@@ -5,7 +5,7 @@ import (
 
 	. "github.com/smartystreets/goconvey/convey"
 
-	"github.com/songquanpeng/one-api/relay/apitype"
+	"github.com/Laisky/one-api/relay/apitype"
 )
 
 func TestGetAdaptor(t *testing.T) {

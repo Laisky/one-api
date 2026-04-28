@@ -5,7 +5,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/songquanpeng/one-api/relay/model"
+	"github.com/Laisky/one-api/relay/model"
 )
 
 // extractGptVersion returns the numeric GPT major/minor version if present in the model name.

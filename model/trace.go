@@ -14,7 +14,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	"gorm.io/gorm"
 
-	"github.com/songquanpeng/one-api/common"
+	"github.com/Laisky/one-api/common"
 )
 
 // Trace represents a request tracing record with key timestamps

@@ -14,7 +14,7 @@ import (
 	glog "github.com/Laisky/go-utils/v6/log"
 	"github.com/Laisky/zap"
 
-	"github.com/songquanpeng/one-api/common/helper"
+	"github.com/Laisky/one-api/common/helper"
 )
 
 const (

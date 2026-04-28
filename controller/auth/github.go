@@ -16,10 +16,10 @@ import (
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
 
-	"github.com/songquanpeng/one-api/common/config"
-	"github.com/songquanpeng/one-api/common/random"
-	"github.com/songquanpeng/one-api/controller"
-	"github.com/songquanpeng/one-api/model"
+	"github.com/Laisky/one-api/common/config"
+	"github.com/Laisky/one-api/common/random"
+	"github.com/Laisky/one-api/controller"
+	"github.com/Laisky/one-api/model"
 )
 
 type GitHubOAuthResponse struct {

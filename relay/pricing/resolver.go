@@ -3,8 +3,8 @@ package pricing
 import (
 	"sort"
 
-	"github.com/songquanpeng/one-api/model"
-	"github.com/songquanpeng/one-api/relay/adaptor"
+	"github.com/Laisky/one-api/model"
+	"github.com/Laisky/one-api/relay/adaptor"
 )
 
 const (

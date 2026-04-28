@@ -5,7 +5,7 @@ import (
 
 	"github.com/Laisky/errors/v2"
 
-	"github.com/songquanpeng/one-api/common"
+	"github.com/Laisky/one-api/common"
 )
 
 // MCPServerSortFields enumerates whitelisted columns for MCP server sorting.

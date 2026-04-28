@@ -6,7 +6,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/songquanpeng/one-api/relay/relaymode"
+	"github.com/Laisky/one-api/relay/relaymode"
 )
 
 // TestAllEndpointsConsistency verifies that all endpoint IDs match their corresponding relaymode constants.

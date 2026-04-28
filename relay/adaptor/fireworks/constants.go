@@ -1,8 +1,8 @@
 package fireworks
 
 import (
-	"github.com/songquanpeng/one-api/relay/adaptor"
-	"github.com/songquanpeng/one-api/relay/billing/ratio"
+	"github.com/Laisky/one-api/relay/adaptor"
+	"github.com/Laisky/one-api/relay/billing/ratio"
 )
 
 // ModelRatios contains Fireworks serverless models with their per-token pricing.

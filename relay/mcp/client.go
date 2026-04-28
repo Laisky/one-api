@@ -14,8 +14,8 @@ import (
 	glog "github.com/Laisky/go-utils/v6/log"
 	"github.com/Laisky/zap"
 
-	"github.com/songquanpeng/one-api/common/random"
-	"github.com/songquanpeng/one-api/model"
+	"github.com/Laisky/one-api/common/random"
+	"github.com/Laisky/one-api/model"
 )
 
 // Client defines MCP operations required by the aggregator.

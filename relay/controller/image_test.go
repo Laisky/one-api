@@ -6,8 +6,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	billingratio "github.com/songquanpeng/one-api/relay/billing/ratio"
-	relaymodel "github.com/songquanpeng/one-api/relay/model"
+	billingratio "github.com/Laisky/one-api/relay/billing/ratio"
+	relaymodel "github.com/Laisky/one-api/relay/model"
 )
 
 func TestCalculateImageBaseQuotaPerImage(t *testing.T) {

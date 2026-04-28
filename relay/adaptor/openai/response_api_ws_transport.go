@@ -16,11 +16,11 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
 
-	"github.com/songquanpeng/one-api/common/ctxkey"
-	"github.com/songquanpeng/one-api/common/tracing"
-	dbmodel "github.com/songquanpeng/one-api/model"
-	"github.com/songquanpeng/one-api/relay/adaptor"
-	rmeta "github.com/songquanpeng/one-api/relay/meta"
+	"github.com/Laisky/one-api/common/ctxkey"
+	"github.com/Laisky/one-api/common/tracing"
+	dbmodel "github.com/Laisky/one-api/model"
+	"github.com/Laisky/one-api/relay/adaptor"
+	rmeta "github.com/Laisky/one-api/relay/meta"
 )
 
 const wsRequestPreviewLimit = 4096

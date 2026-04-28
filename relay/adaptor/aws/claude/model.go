@@ -1,8 +1,8 @@
 package aws
 
 import (
-	"github.com/songquanpeng/one-api/relay/adaptor/anthropic"
-	"github.com/songquanpeng/one-api/relay/model"
+	"github.com/Laisky/one-api/relay/adaptor/anthropic"
+	"github.com/Laisky/one-api/relay/model"
 )
 
 // Request is the request to AWS Claude

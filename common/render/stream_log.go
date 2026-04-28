@@ -9,7 +9,7 @@ import (
 	"github.com/Laisky/zap/zapcore"
 	"github.com/gin-gonic/gin"
 
-	commonsse "github.com/songquanpeng/one-api/common/sse"
+	commonsse "github.com/Laisky/one-api/common/sse"
 )
 
 // heartbeatLineReaderLogPlan describes how a HeartbeatLineReader error should be logged.

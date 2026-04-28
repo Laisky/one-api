@@ -12,7 +12,7 @@ import (
 	"github.com/Laisky/zap"
 	"github.com/gin-gonic/gin"
 
-	"github.com/songquanpeng/one-api/common/ctxkey"
+	"github.com/Laisky/one-api/common/ctxkey"
 )
 
 // GetRequestBody reads and caches the request body so it can be reused later in the handler chain.

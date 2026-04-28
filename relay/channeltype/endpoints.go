@@ -4,7 +4,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/songquanpeng/one-api/relay/relaymode"
+	"github.com/Laisky/one-api/relay/relaymode"
 )
 
 // Endpoint represents an API endpoint type that can be enabled/disabled per channel.

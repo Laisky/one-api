@@ -542,7 +542,7 @@ Response:
 
 #### Support openai images edits
 
-- [feat: support openai images edits api #1369](https://github.com/songquanpeng/one-api/pull/1369)
+- [feat: support openai images edits api #1369](https://github.com/Laisky/one-api/pull/1369)
 
 ```sh
 curl --location 'https://oneapi.laisky.com/v1/images/edits' \
@@ -568,11 +568,11 @@ Response:
 
 #### Support OpenAI o1/o1-mini/o1-preview
 
-- [feat: add openai o1 #1990](https://github.com/songquanpeng/one-api/pull/1990)
+- [feat: add openai o1 #1990](https://github.com/Laisky/one-api/pull/1990)
 
 #### Support gpt-4o-audio
 
-- [feat: support gpt-4o-audio #2032](https://github.com/songquanpeng/one-api/pull/2032)
+- [feat: support gpt-4o-audio #2032](https://github.com/Laisky/one-api/pull/2032)
 
 ```sh
 
@@ -661,7 +661,7 @@ Response:
 
 #### Support OpenAI web search models
 
-- [feature: support openai web search models #2189](https://github.com/songquanpeng/one-api/pull/2189)
+- [feature: support openai web search models #2189](https://github.com/Laisky/one-api/pull/2189)
 
 support `gpt-4o-search-preview` & `gpt-4o-mini-search-preview`
 
@@ -858,7 +858,7 @@ Response:
 
 #### Support o3-mini & o3 & o4-mini & gpt-4.1 & o3-pro & reasoning content
 
-- [feat: extend support for o3 models and update model ratios #2048](https://github.com/songquanpeng/one-api/pull/2048)
+- [feat: extend support for o3 models and update model ratios #2048](https://github.com/Laisky/one-api/pull/2048)
 
 ![](https://s3.laisky.com/uploads/2025/06/o3-pro.png)
 
@@ -1082,15 +1082,15 @@ curl --location 'https://oneapi.laisky.com/v1/videos/video_691611812ca88190bfb12
 
 #### (Merged) Support aws claude
 
-- [feat: support aws bedrockruntime claude3 #1328](https://github.com/songquanpeng/one-api/pull/1328)
-- [feat: add new claude models #1910](https://github.com/songquanpeng/one-api/pull/1910)
+- [feat: support aws bedrockruntime claude3 #1328](https://github.com/Laisky/one-api/pull/1328)
+- [feat: add new claude models #1910](https://github.com/Laisky/one-api/pull/1910)
 
 ![](https://s3.laisky.com/uploads/2024/12/oneapi-claude.png)
 
 #### Support claude-3-7-sonnet & thinking
 
-- [feat: support claude-3-7-sonnet #2143](https://github.com/songquanpeng/one-api/pull/2143/files)
-- [feat: support claude thinking #2144](https://github.com/songquanpeng/one-api/pull/2144)
+- [feat: support claude-3-7-sonnet #2143](https://github.com/Laisky/one-api/pull/2143/files)
+- [feat: support claude thinking #2144](https://github.com/Laisky/one-api/pull/2144)
 
 By default, the thinking mode is not enabled. You need to manually pass the `thinking` field in the request body to enable it.
 
@@ -1126,27 +1126,27 @@ claude-opus-4-0 / claude-opus-4-1 / claude-opus-4-5 / claude-opus-4-6 / claude-o
 
 #### Support gemini-2.0-flash-exp
 
-- [feat: add gemini-2.0-flash-exp #1983](https://github.com/songquanpeng/one-api/pull/1983)
+- [feat: add gemini-2.0-flash-exp #1983](https://github.com/Laisky/one-api/pull/1983)
 
 ![](https://s3.laisky.com/uploads/2024/12/oneapi-gemini-flash.png)
 
 #### Support gemini-2.0-flash
 
-- [feat: support gemini-2.0-flash #2055](https://github.com/songquanpeng/one-api/pull/2055)
+- [feat: support gemini-2.0-flash #2055](https://github.com/Laisky/one-api/pull/2055)
 
 #### Support gemini-2.0-flash-thinking-exp-01-21
 
-- [feature: add deepseek-reasoner & gemini-2.0-flash-thinking-exp-01-21 #2045](https://github.com/songquanpeng/one-api/pull/2045)
+- [feature: add deepseek-reasoner & gemini-2.0-flash-thinking-exp-01-21 #2045](https://github.com/Laisky/one-api/pull/2045)
 
 #### Support Vertex Imagen3
 
-- [feat: support vertex imagen3 #2030](https://github.com/songquanpeng/one-api/pull/2030)
+- [feat: support vertex imagen3 #2030](https://github.com/Laisky/one-api/pull/2030)
 
 ![](https://s3.laisky.com/uploads/2025/01/oneapi-imagen3.png)
 
 #### Support gemini multimodal output #2197
 
-- [feature: support gemini multimodal output #2197](https://github.com/songquanpeng/one-api/pull/2197)
+- [feature: support gemini multimodal output #2197](https://github.com/Laisky/one-api/pull/2197)
 
 ![](https://s3.laisky.com/uploads/2025/03/gemini-multimodal.png)
 
@@ -1232,7 +1232,7 @@ To get started, create or edit `~/.config/opencode/opencode.json` like this:
 
 #### Support AWS cross-region inferences
 
-- [fix: support aws cross region inferences #2182](https://github.com/songquanpeng/one-api/pull/2182)
+- [fix: support aws cross region inferences #2182](https://github.com/Laisky/one-api/pull/2182)
 
 #### Support AWS BedRock Inference Profile
 
@@ -1242,8 +1242,8 @@ To get started, create or edit `~/.config/opencode/opencode.json` like this:
 
 #### Support replicate flux & remix
 
-- [feature: 支持 replicate 的绘图 #1954](https://github.com/songquanpeng/one-api/pull/1954)
-- [feat: image edits/inpaiting 支持 replicate 的 flux remix #1986](https://github.com/songquanpeng/one-api/pull/1986)
+- [feature: 支持 replicate 的绘图 #1954](https://github.com/Laisky/one-api/pull/1954)
+- [feat: image edits/inpaiting 支持 replicate 的 flux remix #1986](https://github.com/Laisky/one-api/pull/1986)
 
 ![](https://s3.laisky.com/uploads/2024/12/oneapi-replicate-1.png)
 
@@ -1253,13 +1253,13 @@ To get started, create or edit `~/.config/opencode/opencode.json` like this:
 
 #### Support replicate chat models
 
-- [feat: 支持 replicate chat models #1989](https://github.com/songquanpeng/one-api/pull/1989)
+- [feat: 支持 replicate chat models #1989](https://github.com/Laisky/one-api/pull/1989)
 
 ### DeepSeek Features
 
 #### Support deepseek-reasoner
 
-- [feature: add deepseek-reasoner & gemini-2.0-flash-thinking-exp-01-21 #2045](https://github.com/songquanpeng/one-api/pull/2045)
+- [feature: add deepseek-reasoner & gemini-2.0-flash-thinking-exp-01-21 #2045](https://github.com/Laisky/one-api/pull/2045)
 
 #### DeepSeek V4
 
@@ -1269,7 +1269,7 @@ Support deepseek-v4-flash / deepseek-v4-pro
 
 #### Support OpenRouter's reasoning content
 
-- [feat: support OpenRouter reasoning #2108](https://github.com/songquanpeng/one-api/pull/2108)
+- [feat: support OpenRouter reasoning #2108](https://github.com/Laisky/one-api/pull/2108)
 
 By default, the thinking mode is automatically enabled for the deepseek-r1 model, and the response is returned in the open-router format.
 
@@ -1495,13 +1495,13 @@ Response:
 
 ## Bug Fixes & Enterprise-Grade Improvements (Including Security Enhancements)
 
-- [BUGFIX: Several issues when updating tokens #1933](https://github.com/songquanpeng/one-api/pull/1933)
-- [feat(audio): count whisper-1 quota by audio duration #2022](https://github.com/songquanpeng/one-api/pull/2022)
+- [BUGFIX: Several issues when updating tokens #1933](https://github.com/Laisky/one-api/pull/1933)
+- [feat(audio): count whisper-1 quota by audio duration #2022](https://github.com/Laisky/one-api/pull/2022)
 - [fix: Fix issue where high-quota users using low-quota tokens aren't pre-charged, causing large token deficits under high concurrency #25](https://github.com/Laisky/one-api/pull/25)
-- [fix: channel test false negative #2065](https://github.com/songquanpeng/one-api/pull/2065)
-- [fix: resolve "bufio.Scanner: token too long" error by increasing buffer size #2128](https://github.com/songquanpeng/one-api/pull/2128)
-- [feat: Enhance VolcEngine channel support with bot model #2131](https://github.com/songquanpeng/one-api/pull/2131)
-- [fix: models API returns models in deactivated channels #2150](https://github.com/songquanpeng/one-api/pull/2150)
+- [fix: channel test false negative #2065](https://github.com/Laisky/one-api/pull/2065)
+- [fix: resolve "bufio.Scanner: token too long" error by increasing buffer size #2128](https://github.com/Laisky/one-api/pull/2128)
+- [feat: Enhance VolcEngine channel support with bot model #2131](https://github.com/Laisky/one-api/pull/2131)
+- [fix: models API returns models in deactivated channels #2150](https://github.com/Laisky/one-api/pull/2150)
 - [fix: Automatically close channel when connection fails](https://github.com/Laisky/one-api/pull/34)
 - [fix: update EmailDomainWhitelist submission logic #33](https://github.com/Laisky/one-api/pull/33)
 - [fix: send ByAll](https://github.com/Laisky/one-api/pull/35)

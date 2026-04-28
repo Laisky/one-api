@@ -1,6 +1,6 @@
 package aws
 
-import "github.com/songquanpeng/one-api/relay/adaptor"
+import "github.com/Laisky/one-api/relay/adaptor"
 
 // AWSToolingDefaults captures Amazon Bedrock AgentCore pricing for common server-side tools (retrieved 2025-11-12).
 // Source: https://r.jina.ai/https://aws.amazon.com/bedrock/agentcore/pricing/

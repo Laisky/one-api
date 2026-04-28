@@ -35,7 +35,7 @@ index ae2960f2..ea3412b0 100644
  	"context"
  	"encoding/json"
  	"fmt"
-+	claude "github.com/songquanpeng/one-api/relay/adaptor/aws/claude"
++	claude "github.com/Laisky/one-api/relay/adaptor/aws/claude"
  	"io"
  	"math"
  	"net/http"
@@ -172,7 +172,7 @@ index 4d739ca6..847f4da8 100644
  	"embed"
  	"encoding/base64"
  	"fmt"
-+	"github.com/songquanpeng/one-api/relay/adaptor/aws/utils"
++	"github.com/Laisky/one-api/relay/adaptor/aws/utils"
  	"net/http"
  	"os"
  	"runtime"
@@ -223,9 +223,9 @@ index e2e093d1..0bda9f0a 100644
  	"github.com/aws/aws-sdk-go-v2/service/bedrockruntime"
  	"github.com/gin-gonic/gin"
 @@ -13,23 +12,30 @@ import (
- 	"github.com/songquanpeng/one-api/relay/adaptor/aws/utils"
- 	"github.com/songquanpeng/one-api/relay/meta"
- 	"github.com/songquanpeng/one-api/relay/model"
+ 	"github.com/Laisky/one-api/relay/adaptor/aws/utils"
+ 	"github.com/Laisky/one-api/relay/meta"
+ 	"github.com/Laisky/one-api/relay/model"
 +	"io"
 +	"net/http"
  )
@@ -420,10 +420,10 @@ index 5f655480..6be027d1 100644
 
  import (
 +	"context"
-+	"github.com/songquanpeng/one-api/common/logger"
- 	claude "github.com/songquanpeng/one-api/relay/adaptor/aws/claude"
- 	llama3 "github.com/songquanpeng/one-api/relay/adaptor/aws/llama3"
- 	"github.com/songquanpeng/one-api/relay/adaptor/aws/utils"
++	"github.com/Laisky/one-api/common/logger"
+ 	claude "github.com/Laisky/one-api/relay/adaptor/aws/claude"
+ 	llama3 "github.com/Laisky/one-api/relay/adaptor/aws/llama3"
+ 	"github.com/Laisky/one-api/relay/adaptor/aws/utils"
 +	"regexp"
  )
 

@@ -5,7 +5,7 @@ import (
 
 	"gorm.io/gorm"
 
-	"github.com/songquanpeng/one-api/common/metrics"
+	"github.com/Laisky/one-api/common/metrics"
 )
 
 // PrometheusDBHook implements GORM's plugin interface for monitoring database operations

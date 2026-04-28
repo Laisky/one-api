@@ -7,10 +7,10 @@ import (
 
 	"github.com/Laisky/zap"
 
-	"github.com/songquanpeng/one-api/relay/adaptor/common/deepseekcompat"
-	"github.com/songquanpeng/one-api/relay/channeltype"
-	"github.com/songquanpeng/one-api/relay/meta"
-	"github.com/songquanpeng/one-api/relay/model"
+	"github.com/Laisky/one-api/relay/adaptor/common/deepseekcompat"
+	"github.com/Laisky/one-api/relay/channeltype"
+	"github.com/Laisky/one-api/relay/meta"
+	"github.com/Laisky/one-api/relay/model"
 )
 
 type deepSeekToolNormalizeLogger interface {

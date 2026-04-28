@@ -12,7 +12,7 @@ install:
 
 .PHONY: lint
 lint:
-	goimports -local module,github.com/songquanpeng/one-api -w .
+	goimports -local module,github.com/Laisky/one-api -w .
 	go mod tidy
 	gofmt -s -w .
 	go vet

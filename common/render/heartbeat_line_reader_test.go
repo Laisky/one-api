@@ -14,7 +14,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	commonsse "github.com/songquanpeng/one-api/common/sse"
+	commonsse "github.com/Laisky/one-api/common/sse"
 )
 
 // newTestContext creates a gin test context and recorder for heartbeat tests.

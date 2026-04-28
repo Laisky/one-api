@@ -4,7 +4,7 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/songquanpeng/one-api/relay/relaymode"
+	"github.com/Laisky/one-api/relay/relaymode"
 )
 
 const gitHubModelsHost = "models.github.ai"

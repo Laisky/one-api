@@ -13,8 +13,8 @@ import (
 	"github.com/Laisky/errors/v2"
 	"github.com/Laisky/zap"
 
-	"github.com/songquanpeng/one-api/common"
-	oneapilogger "github.com/songquanpeng/one-api/common/logger"
+	"github.com/Laisky/one-api/common"
+	oneapilogger "github.com/Laisky/one-api/common/logger"
 )
 
 // DatabaseConnection represents a database connection with metadata

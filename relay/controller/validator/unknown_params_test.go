@@ -5,7 +5,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/songquanpeng/one-api/relay/controller/validator"
+	"github.com/Laisky/one-api/relay/controller/validator"
 )
 
 func TestGetKnownParameters(t *testing.T) {

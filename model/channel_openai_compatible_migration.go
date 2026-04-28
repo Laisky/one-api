@@ -5,8 +5,8 @@ import (
 	"github.com/Laisky/zap"
 	"gorm.io/gorm"
 
-	"github.com/songquanpeng/one-api/common/logger"
-	"github.com/songquanpeng/one-api/relay/channeltype"
+	"github.com/Laisky/one-api/common/logger"
+	"github.com/Laisky/one-api/relay/channeltype"
 )
 
 // MigrateCustomChannelsToOpenAICompatible upgrades legacy custom channels (type 8) to the unified

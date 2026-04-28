@@ -13,9 +13,9 @@ import (
 	"github.com/gorilla/websocket"
 	"github.com/stretchr/testify/require"
 
-	rmeta "github.com/songquanpeng/one-api/relay/meta"
-	rmodel "github.com/songquanpeng/one-api/relay/model"
-	"github.com/songquanpeng/one-api/relay/relaymode"
+	rmeta "github.com/Laisky/one-api/relay/meta"
+	rmodel "github.com/Laisky/one-api/relay/model"
+	"github.com/Laisky/one-api/relay/relaymode"
 )
 
 // ---------------------------------------------------------------------------

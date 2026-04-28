@@ -5,7 +5,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/songquanpeng/one-api/relay/channeltype"
+	"github.com/Laisky/one-api/relay/channeltype"
 )
 
 func TestGetFullRequestURL(t *testing.T) {

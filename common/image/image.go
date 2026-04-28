@@ -24,9 +24,9 @@ import (
 	"golang.org/x/image/math/fixed"
 	_ "golang.org/x/image/webp"
 
-	"github.com/songquanpeng/one-api/common/client"
-	"github.com/songquanpeng/one-api/common/config"
-	netutil "github.com/songquanpeng/one-api/common/network"
+	"github.com/Laisky/one-api/common/client"
+	"github.com/Laisky/one-api/common/config"
+	netutil "github.com/Laisky/one-api/common/network"
 )
 
 // Regex to match data URL pattern

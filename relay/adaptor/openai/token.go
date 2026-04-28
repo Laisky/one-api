@@ -13,11 +13,11 @@ import (
 	"github.com/Laisky/zap"
 	"github.com/pkoukk/tiktoken-go"
 
-	"github.com/songquanpeng/one-api/common/config"
-	"github.com/songquanpeng/one-api/common/helper"
-	imgutil "github.com/songquanpeng/one-api/common/image"
-	"github.com/songquanpeng/one-api/relay/model"
-	"github.com/songquanpeng/one-api/relay/pricing"
+	"github.com/Laisky/one-api/common/config"
+	"github.com/Laisky/one-api/common/helper"
+	imgutil "github.com/Laisky/one-api/common/image"
+	"github.com/Laisky/one-api/relay/model"
+	"github.com/Laisky/one-api/relay/pricing"
 )
 
 // tokenEncoderMap won't grow after initialization

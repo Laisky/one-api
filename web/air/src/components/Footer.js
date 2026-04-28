@@ -45,7 +45,7 @@ const Footer = () => {
             </a>
             由{' '}
             <a href='https://github.com/Laisky' target='_blank'>
-              JustSong
+              Laisky
             </a>{' '}
             构建，主题 air 来自{' '}
             <a href='https://github.com/Calcium-Ion' target='_blank'>

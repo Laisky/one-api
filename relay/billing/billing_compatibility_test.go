@@ -7,7 +7,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	modelpkg "github.com/songquanpeng/one-api/model"
+	modelpkg "github.com/Laisky/one-api/model"
 )
 
 // TestBackwardCompatibility ensures that the billing refactor doesn't break existing functionality

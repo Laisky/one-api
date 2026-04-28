@@ -6,7 +6,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/songquanpeng/one-api/relay/channeltype"
+	"github.com/Laisky/one-api/relay/channeltype"
 )
 
 // GetChannelMetadata returns server-side metadata about a channel type

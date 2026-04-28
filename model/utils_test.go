@@ -10,8 +10,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/songquanpeng/one-api/common/config"
-	"github.com/songquanpeng/one-api/common/random"
+	"github.com/Laisky/one-api/common/config"
+	"github.com/Laisky/one-api/common/random"
 )
 
 // TestBatchUpdaterGracefulShutdown verifies that the batch updater properly

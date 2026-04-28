@@ -1,6 +1,6 @@
 package deepl
 
-import "github.com/songquanpeng/one-api/relay/adaptor"
+import "github.com/Laisky/one-api/relay/adaptor"
 
 // https://developers.deepl.com/docs/api-reference/glossaries
 
