@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"sort"
 	"strings"
@@ -226,34 +227,20 @@ func resolveToolCost(server *model.MCPServer, toolName string) int64 {
 	return 0
 }
 
-// recordMCPToolLog records MCP tool usage into the consume log.
+// recordMCPToolLog records an MCP tool invocation as a single LogTypeTool row.
+// The dashboard tool charts aggregate strictly on type, so this becomes one
+// row per invocation with ModelName=toolName and Quota=cost.
 func recordMCPToolLog(ctx context.Context, c *gin.Context, userId int, serverId int, toolName string, cost int64) {
 	if cost <= 0 {
 		return
 	}
-	summary := &model.ToolUsageSummary{
-		TotalCost:  cost,
-		Counts:     map[string]int{toolName: 1},
-		CostByTool: map[string]int64{toolName: cost},
-		Entries: []model.ToolUsageEntry{
-			{
-				Tool:     toolName,
-				Source:   "oneapi_builtin",
-				ServerID: serverId,
-				Count:    1,
-				Cost:     cost,
-			},
-		},
-	}
-	metadata := model.AppendToolUsageMetadata(nil, summary)
-	model.RecordConsumeLog(ctx, &model.Log{
+	model.RecordToolLog(ctx, &model.Log{
 		UserId:      userId,
-		ModelName:   "mcp",
+		ModelName:   toolName,
 		Quota:       int(cost),
-		Content:     "MCP tool call",
+		Content:     fmt.Sprintf("MCP tool call: %s (server %d)", toolName, serverId),
 		RequestId:   c.GetString(ctxkey.RequestId),
 		TraceId:     tracing.GetTraceID(c),
-		Metadata:    metadata,
 		IsStream:    false,
 		ElapsedTime: helper.CalcElapsedTime(time.Now().Add(-time.Millisecond)),
 	})

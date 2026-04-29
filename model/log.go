@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"maps"
-	"sort"
 	"strings"
 	"time"
 
@@ -75,8 +74,6 @@ const (
 	LogMetadataKeyCacheWrite5m = "ephemeral_5m"
 	// LogMetadataKeyCacheWrite1h records the count of 1-hour window cache write tokens.
 	LogMetadataKeyCacheWrite1h = "ephemeral_1h"
-	// LogMetadataKeyToolUsage stores structured metadata about built-in tool usage and charges.
-	LogMetadataKeyToolUsage = "tool_usage"
 	// LogMetadataKeyProvisional marks a consume log entry as provisional (pre-consumed, awaiting reconciliation).
 	// Post-billing removes this flag when the log is reconciled with actual usage.
 	LogMetadataKeyProvisional = "provisional"
@@ -197,50 +194,6 @@ func AppendCacheWriteTokensMetadata(metadata LogMetadata, cacheWrite5m, cacheWri
 	return metadata
 }
 
-// AppendToolUsageMetadata attaches tool invocation details to the metadata map when present.
-func AppendToolUsageMetadata(metadata LogMetadata, summary *ToolUsageSummary) LogMetadata {
-	if summary == nil {
-		return metadata
-	}
-	if summary.TotalCost == 0 && len(summary.Counts) == 0 && len(summary.CostByTool) == 0 {
-		return metadata
-	}
-	if metadata == nil {
-		metadata = LogMetadata{}
-	}
-
-	entry := make(map[string]any, 3)
-	if summary.TotalCost != 0 {
-		entry["total_cost"] = summary.TotalCost
-	}
-	if len(summary.Counts) > 0 {
-		countsCopy := make(map[string]int, len(summary.Counts))
-		maps.Copy(countsCopy, summary.Counts)
-		entry["counts"] = countsCopy
-	}
-	if len(summary.CostByTool) > 0 {
-		costCopy := make(map[string]int64, len(summary.CostByTool))
-		maps.Copy(costCopy, summary.CostByTool)
-		entry["cost_by_tool"] = costCopy
-	}
-	if len(summary.Entries) > 0 {
-		entries := make([]map[string]any, 0, len(summary.Entries))
-		for _, item := range summary.Entries {
-			entries = append(entries, map[string]any{
-				"tool":      item.Tool,
-				"source":    item.Source,
-				"server_id": item.ServerID,
-				"count":     item.Count,
-				"cost":      item.Cost,
-			})
-		}
-		entry["entries"] = entries
-	}
-
-	metadata[LogMetadataKeyToolUsage] = entry
-	return metadata
-}
-
 const (
 	// LogTypeUnknown denotes an unspecified log category and should only appear in migration edge cases.
 	LogTypeUnknown = iota
@@ -257,6 +210,12 @@ const (
 	// LogTypeProvisional marks a pre-consumed quota log entry that is awaiting
 	// post-billing reconciliation. Once reconciled, the type is changed to LogTypeConsume.
 	LogTypeProvisional
+	// LogTypeTool records a single built-in or external tool invocation as its
+	// own row, separate from the model billing row. ModelName carries the tool
+	// identifier (e.g. "web_search", "mcp", "extract_key_info") and Quota is
+	// the cost charged for that invocation. Dashboard tool charts aggregate
+	// strictly on this type.
+	LogTypeTool
 )
 
 const manageLogRedactedPlaceholder = "[REDACTED]"
@@ -564,6 +523,118 @@ func RecordConsumeLog(ctx context.Context, log *Log) {
 	log.CreatedAt = helper.GetTimestamp()
 	log.Type = LogTypeConsume
 	recordLogHelper(ctx, log)
+}
+
+// RecordToolLog stores a single tool invocation log entry. It is used when the
+// caller already has fully formed billing details for one invocation (for
+// example the external `/api/token/consume` endpoint). The log row carries the
+// tool identifier in ModelName and the charged quota in Quota.
+func RecordToolLog(ctx context.Context, log *Log) {
+	if !config.IsLogConsumeEnabled() {
+		return
+	}
+	log.Username = GetUsernameById(log.UserId)
+	log.CreatedAt = helper.GetTimestamp()
+	log.Type = LogTypeTool
+	recordLogHelper(ctx, log)
+}
+
+// RecordToolLogs emits one LogTypeTool row per tool invocation captured in the
+// provided summary. Billing/audit fields are inherited from base, but
+// model-specific fields (model_name, quota, prompt/completion tokens) are
+// overwritten on each row to reflect the per-invocation tool data.
+//
+// When summary.CostByTool[tool] is set, that value is the total quota for the
+// tool in this request and is split evenly across the count rows; the first
+// row absorbs any rounding remainder so the per-tool sum is preserved exactly.
+// When CostByTool is missing for a tool, rows are written with quota=0.
+//
+// The base.ModelName (the chat model that triggered the tools) is preserved
+// on every emitted row as OriginModelName so dashboards can correlate tool
+// invocations back to the originating model.
+func RecordToolLogs(ctx context.Context, base *Log, summary *ToolUsageSummary) {
+	if !config.IsLogConsumeEnabled() {
+		return
+	}
+	if base == nil || summary == nil {
+		return
+	}
+	if len(summary.Counts) == 0 && len(summary.CostByTool) == 0 {
+		return
+	}
+
+	now := helper.GetTimestamp()
+	username := base.Username
+	if username == "" {
+		username = GetUsernameById(base.UserId)
+	}
+
+	// Build the unique tool name set from both Counts and CostByTool so a
+	// tool that has cost but no count (or vice versa) still gets one row.
+	tools := map[string]struct{}{}
+	for tool := range summary.Counts {
+		if strings.TrimSpace(tool) != "" {
+			tools[tool] = struct{}{}
+		}
+	}
+	for tool := range summary.CostByTool {
+		if strings.TrimSpace(tool) != "" {
+			tools[tool] = struct{}{}
+		}
+	}
+
+	originModelName := base.OriginModelName
+	if originModelName == "" {
+		originModelName = base.ModelName
+	}
+
+	lg := logger.FromContext(ctx)
+	for tool := range tools {
+		count := summary.Counts[tool]
+		if count <= 0 {
+			count = 1
+		}
+		totalCost := summary.CostByTool[tool]
+		perCall := int64(0)
+		remainder := int64(0)
+		if count > 0 {
+			perCall = totalCost / int64(count)
+			remainder = totalCost % int64(count)
+		}
+
+		for i := 0; i < count; i++ {
+			rowQuota := perCall
+			if i == 0 {
+				rowQuota += remainder
+			}
+			row := &Log{
+				UserId:          base.UserId,
+				Username:        username,
+				CreatedAt:       now,
+				Type:            LogTypeTool,
+				Content:         fmt.Sprintf("Tool invocation: %s", tool),
+				TokenName:       base.TokenName,
+				ModelName:       tool,
+				OriginModelName: originModelName,
+				Quota:           int(rowQuota),
+				ChannelId:       base.ChannelId,
+				RequestId:       base.RequestId,
+				TraceId:         base.TraceId,
+				ElapsedTime:     base.ElapsedTime,
+				IsStream:        false,
+			}
+			ensureLogContent(row)
+			if err := LOG_DB.Create(row).Error; err != nil {
+				lg.Error("failed to record tool log",
+					zap.Error(err),
+					zap.Int("user_id", base.UserId),
+					zap.String("tool", tool),
+					zap.Int64("quota", rowQuota),
+					zap.String("request_id", base.RequestId),
+				)
+			}
+		}
+	}
 }
 
 // RecordProvisionalConsumeLog creates a consume log entry at pre-consume time
@@ -1027,17 +1098,11 @@ func dayAggregationSelect() string {
 	return "DATE_FORMAT(FROM_UNIXTIME(created_at), '%Y-%m-%d') as day"
 }
 
-type dashboardToolLogRow struct {
-	Day       string      `gorm:"column:day"`
-	Username  string      `gorm:"column:username"`
-	UserId    int         `gorm:"column:user_id"`
-	TokenName string      `gorm:"column:token_name"`
-	Metadata  LogMetadata `gorm:"column:metadata"`
-}
-
-// loadToolDashboardLogRows loads consume logs containing metadata for tool dashboard aggregation.
-// It accepts an optional user scope and returns the matching log rows ordered for stable aggregation.
-func loadToolDashboardLogRows(userId, start, endExclusive int) ([]dashboardToolLogRow, error) {
+// SearchToolLogsByDayAndTool returns per-day, per-tool aggregates of tool
+// invocation logs (Type == LogTypeTool). request_count is the number of
+// invocations (one log row per invocation) and quota is the sum of the
+// charged quota.
+func SearchToolLogsByDayAndTool(userId, start, endExclusive int) ([]*dto.ToolLogStatistic, error) {
 	groupSelect := dayAggregationSelect()
 
 	var query string
@@ -1046,441 +1111,130 @@ func loadToolDashboardLogRows(userId, start, endExclusive int) ([]dashboardToolL
 	if userId == 0 {
 		query = `
 			SELECT ` + groupSelect + `,
-			username,
-			user_id,
-			COALESCE(token_name, '') as token_name,
-			metadata
+			COALESCE(model_name, '') as tool_name,
+			count(1) as request_count,
+			COALESCE(sum(quota), 0) as quota
 			FROM logs
 			WHERE type = ?
-			AND metadata IS NOT NULL
 			AND created_at >= ? AND created_at < ?
-			ORDER BY day, username, token_name
+			GROUP BY day, tool_name
+			ORDER BY day, tool_name
 		`
-		args = []any{LogTypeConsume, start, endExclusive}
+		args = []any{LogTypeTool, start, endExclusive}
 	} else {
 		query = `
 			SELECT ` + groupSelect + `,
-			username,
-			user_id,
-			COALESCE(token_name, '') as token_name,
-			metadata
+			COALESCE(model_name, '') as tool_name,
+			count(1) as request_count,
+			COALESCE(sum(quota), 0) as quota
 			FROM logs
 			WHERE type = ?
 			AND user_id = ?
-			AND metadata IS NOT NULL
 			AND created_at >= ? AND created_at < ?
-			ORDER BY day, username, token_name
+			GROUP BY day, tool_name
+			ORDER BY day, tool_name
 		`
-		args = []any{LogTypeConsume, userId, start, endExclusive}
+		args = []any{LogTypeTool, userId, start, endExclusive}
 	}
 
-	var rows []dashboardToolLogRow
-	if err := LOG_DB.Raw(query, args...).Scan(&rows).Error; err != nil {
-		return nil, errors.Wrap(err, "load tool dashboard log rows")
+	var stats []*dto.ToolLogStatistic
+	if err := LOG_DB.Raw(query, args...).Scan(&stats).Error; err != nil {
+		return nil, errors.Wrap(err, "search tool logs by day and tool")
 	}
-
-	return rows, nil
-}
-
-// normalizeToolUsageName trims tool names so aggregation keys remain stable across stored metadata.
-// It returns the normalized name or an empty string when the input is blank.
-func normalizeToolUsageName(name string) string {
-	trimmed := strings.TrimSpace(name)
-	if trimmed == "" {
-		return ""
-	}
-	return trimmed
-}
-
-// toolUsageInt converts numeric tool metadata values into int for aggregation.
-// It returns the converted value and whether the conversion succeeded.
-func toolUsageInt(value any) (int, bool) {
-	switch typed := value.(type) {
-	case int:
-		return typed, true
-	case int8:
-		return int(typed), true
-	case int16:
-		return int(typed), true
-	case int32:
-		return int(typed), true
-	case int64:
-		return int(typed), true
-	case uint:
-		return int(typed), true
-	case uint8:
-		return int(typed), true
-	case uint16:
-		return int(typed), true
-	case uint32:
-		return int(typed), true
-	case uint64:
-		return int(typed), true
-	case float32:
-		return int(typed), true
-	case float64:
-		return int(typed), true
-	default:
-		return 0, false
-	}
-}
-
-// toolUsageInt64 converts numeric tool metadata values into int64 for aggregation.
-// It returns the converted value and whether the conversion succeeded.
-func toolUsageInt64(value any) (int64, bool) {
-	switch typed := value.(type) {
-	case int:
-		return int64(typed), true
-	case int8:
-		return int64(typed), true
-	case int16:
-		return int64(typed), true
-	case int32:
-		return int64(typed), true
-	case int64:
-		return typed, true
-	case uint:
-		return int64(typed), true
-	case uint8:
-		return int64(typed), true
-	case uint16:
-		return int64(typed), true
-	case uint32:
-		return int64(typed), true
-	case uint64:
-		return int64(typed), true
-	case float32:
-		return int64(typed), true
-	case float64:
-		return int64(typed), true
-	default:
-		return 0, false
-	}
-}
-
-// extractToolCounts reads the per-tool invocation counters from serialized log metadata.
-// It returns a normalized count map or nil when no usable counters are present.
-func extractToolCounts(value any) map[string]int {
-	counts := map[string]int{}
-
-	switch typed := value.(type) {
-	case map[string]int:
-		for name, count := range typed {
-			if normalized := normalizeToolUsageName(name); normalized != "" && count > 0 {
-				counts[normalized] += count
-			}
-		}
-	case map[string]int64:
-		for name, count := range typed {
-			if normalized := normalizeToolUsageName(name); normalized != "" && count > 0 {
-				counts[normalized] += int(count)
-			}
-		}
-	case map[string]float64:
-		for name, count := range typed {
-			if normalized := normalizeToolUsageName(name); normalized != "" && count > 0 {
-				counts[normalized] += int(count)
-			}
-		}
-	case map[string]any:
-		for name, raw := range typed {
-			count, ok := toolUsageInt(raw)
-			if !ok || count <= 0 {
-				continue
-			}
-			if normalized := normalizeToolUsageName(name); normalized != "" {
-				counts[normalized] += count
-			}
-		}
-	}
-
-	if len(counts) == 0 {
-		return nil
-	}
-
-	return counts
-}
-
-// extractToolCosts reads the per-tool quota charges from serialized log metadata.
-// It returns a normalized cost map or nil when no usable costs are present.
-func extractToolCosts(value any) map[string]int64 {
-	costs := map[string]int64{}
-
-	switch typed := value.(type) {
-	case map[string]int64:
-		for name, cost := range typed {
-			if normalized := normalizeToolUsageName(name); normalized != "" && cost > 0 {
-				costs[normalized] += cost
-			}
-		}
-	case map[string]int:
-		for name, cost := range typed {
-			if normalized := normalizeToolUsageName(name); normalized != "" && cost > 0 {
-				costs[normalized] += int64(cost)
-			}
-		}
-	case map[string]float64:
-		for name, cost := range typed {
-			if normalized := normalizeToolUsageName(name); normalized != "" && cost > 0 {
-				costs[normalized] += int64(cost)
-			}
-		}
-	case map[string]any:
-		for name, raw := range typed {
-			cost, ok := toolUsageInt64(raw)
-			if !ok || cost <= 0 {
-				continue
-			}
-			if normalized := normalizeToolUsageName(name); normalized != "" {
-				costs[normalized] += cost
-			}
-		}
-	}
-
-	if len(costs) == 0 {
-		return nil
-	}
-
-	return costs
-}
-
-// totalToolInvocations sums the invocation counters from a parsed tool usage summary.
-// It returns zero when the summary is nil or empty.
-func totalToolInvocations(summary *ToolUsageSummary) int {
-	if summary == nil {
-		return 0
-	}
-
-	total := 0
-	for _, count := range summary.Counts {
-		if count > 0 {
-			total += count
-		}
-	}
-
-	return total
-}
-
-// totalToolQuota sums the quota charges from a parsed tool usage summary.
-// It prefers the explicit total cost when available and otherwise falls back to per-tool costs.
-func totalToolQuota(summary *ToolUsageSummary) int64 {
-	if summary == nil {
-		return 0
-	}
-	if summary.TotalCost > 0 {
-		return summary.TotalCost
-	}
-
-	var total int64
-	for _, cost := range summary.CostByTool {
-		if cost > 0 {
-			total += cost
-		}
-	}
-
-	return total
-}
-
-// extractToolUsageSummary reconstructs tool usage counters and costs from persisted log metadata.
-// It returns nil when the metadata does not contain usable tool usage information.
-func extractToolUsageSummary(metadata LogMetadata) *ToolUsageSummary {
-	if len(metadata) == 0 {
-		return nil
-	}
-
-	raw, ok := metadata[LogMetadataKeyToolUsage]
-	if !ok || raw == nil {
-		return nil
-	}
-
-	var entry map[string]any
-	switch typed := raw.(type) {
-	case map[string]any:
-		entry = typed
-	case LogMetadata:
-		entry = map[string]any(typed)
-	default:
-		return nil
-	}
-
-	summary := &ToolUsageSummary{
-		Counts:     extractToolCounts(entry["counts"]),
-		CostByTool: extractToolCosts(entry["cost_by_tool"]),
-	}
-
-	if totalCost, ok := toolUsageInt64(entry["total_cost"]); ok && totalCost > 0 {
-		summary.TotalCost = totalCost
-	}
-
-	if len(summary.CostByTool) == 0 && summary.TotalCost > 0 && len(summary.Counts) == 1 {
-		for toolName := range summary.Counts {
-			summary.CostByTool = map[string]int64{toolName: summary.TotalCost}
-		}
-	}
-
-	if summary.TotalCost == 0 {
-		summary.TotalCost = totalToolQuota(summary)
-	}
-
-	if summary.TotalCost == 0 && len(summary.Counts) == 0 && len(summary.CostByTool) == 0 {
-		return nil
-	}
-
-	return summary
-}
-
-// SearchToolLogsByDayAndTool returns per-day, per-tool aggregates for built-in and MCP tool usage.
-// It accepts an optional user scope and returns request counts and charged quota.
-func SearchToolLogsByDayAndTool(userId, start, endExclusive int) ([]*dto.ToolLogStatistic, error) {
-	rows, err := loadToolDashboardLogRows(userId, start, endExclusive)
-	if err != nil {
-		return nil, err
-	}
-
-	type aggregateKey struct {
-		Day      string
-		ToolName string
-	}
-
-	aggregates := map[aggregateKey]*dto.ToolLogStatistic{}
-	for _, row := range rows {
-		summary := extractToolUsageSummary(row.Metadata)
-		if summary == nil {
-			continue
-		}
-
-		for toolName, count := range summary.Counts {
-			key := aggregateKey{Day: row.Day, ToolName: toolName}
-			if _, ok := aggregates[key]; !ok {
-				aggregates[key] = &dto.ToolLogStatistic{Day: row.Day, ToolName: toolName}
-			}
-			aggregates[key].RequestCount += count
-		}
-
-		for toolName, cost := range summary.CostByTool {
-			key := aggregateKey{Day: row.Day, ToolName: toolName}
-			if _, ok := aggregates[key]; !ok {
-				aggregates[key] = &dto.ToolLogStatistic{Day: row.Day, ToolName: toolName}
-			}
-			aggregates[key].Quota += cost
-		}
-	}
-
-	stats := make([]*dto.ToolLogStatistic, 0, len(aggregates))
-	for _, stat := range aggregates {
-		stats = append(stats, stat)
-	}
-
-	sort.Slice(stats, func(i, j int) bool {
-		if stats[i].Day == stats[j].Day {
-			return stats[i].ToolName < stats[j].ToolName
-		}
-		return stats[i].Day < stats[j].Day
-	})
-
 	return stats, nil
 }
 
-// SearchToolLogsByDayAndUser returns per-day, per-user aggregates for tool usage.
-// It accepts an optional user scope and returns invocation counts and charged quota.
+// SearchToolLogsByDayAndUser returns per-day, per-user aggregates of tool
+// invocation logs (Type == LogTypeTool).
 func SearchToolLogsByDayAndUser(userId, start, endExclusive int) ([]*dto.ToolLogStatisticByUser, error) {
-	rows, err := loadToolDashboardLogRows(userId, start, endExclusive)
-	if err != nil {
-		return nil, err
+	groupSelect := dayAggregationSelect()
+
+	var query string
+	var args []any
+
+	if userId == 0 {
+		query = `
+			SELECT ` + groupSelect + `,
+			COALESCE(username, '') as username,
+			user_id,
+			count(1) as request_count,
+			COALESCE(sum(quota), 0) as quota
+			FROM logs
+			WHERE type = ?
+			AND created_at >= ? AND created_at < ?
+			GROUP BY day, username, user_id
+			ORDER BY day, username, user_id
+		`
+		args = []any{LogTypeTool, start, endExclusive}
+	} else {
+		query = `
+			SELECT ` + groupSelect + `,
+			COALESCE(username, '') as username,
+			user_id,
+			count(1) as request_count,
+			COALESCE(sum(quota), 0) as quota
+			FROM logs
+			WHERE type = ?
+			AND user_id = ?
+			AND created_at >= ? AND created_at < ?
+			GROUP BY day, username, user_id
+			ORDER BY day, username, user_id
+		`
+		args = []any{LogTypeTool, userId, start, endExclusive}
 	}
 
-	type aggregateKey struct {
-		Day      string
-		Username string
-		UserId   int
+	var stats []*dto.ToolLogStatisticByUser
+	if err := LOG_DB.Raw(query, args...).Scan(&stats).Error; err != nil {
+		return nil, errors.Wrap(err, "search tool logs by day and user")
 	}
-
-	aggregates := map[aggregateKey]*dto.ToolLogStatisticByUser{}
-	for _, row := range rows {
-		summary := extractToolUsageSummary(row.Metadata)
-		if summary == nil {
-			continue
-		}
-
-		key := aggregateKey{Day: row.Day, Username: row.Username, UserId: row.UserId}
-		if _, ok := aggregates[key]; !ok {
-			aggregates[key] = &dto.ToolLogStatisticByUser{Day: row.Day, Username: row.Username, UserId: row.UserId}
-		}
-		aggregates[key].RequestCount += totalToolInvocations(summary)
-		aggregates[key].Quota += totalToolQuota(summary)
-	}
-
-	stats := make([]*dto.ToolLogStatisticByUser, 0, len(aggregates))
-	for _, stat := range aggregates {
-		stats = append(stats, stat)
-	}
-
-	sort.Slice(stats, func(i, j int) bool {
-		if stats[i].Day == stats[j].Day {
-			if stats[i].Username == stats[j].Username {
-				return stats[i].UserId < stats[j].UserId
-			}
-			return stats[i].Username < stats[j].Username
-		}
-		return stats[i].Day < stats[j].Day
-	})
-
 	return stats, nil
 }
 
-// SearchToolLogsByDayAndToken returns per-day, per-token aggregates for tool usage.
-// It accepts an optional user scope and returns invocation counts and charged quota.
+// SearchToolLogsByDayAndToken returns per-day, per-token aggregates of tool
+// invocation logs (Type == LogTypeTool).
 func SearchToolLogsByDayAndToken(userId, start, endExclusive int) ([]*dto.ToolLogStatisticByToken, error) {
-	rows, err := loadToolDashboardLogRows(userId, start, endExclusive)
-	if err != nil {
-		return nil, err
+	groupSelect := dayAggregationSelect()
+
+	var query string
+	var args []any
+
+	if userId == 0 {
+		query = `
+			SELECT ` + groupSelect + `,
+			COALESCE(username, '') as username,
+			user_id,
+			COALESCE(token_name, '') as token_name,
+			count(1) as request_count,
+			COALESCE(sum(quota), 0) as quota
+			FROM logs
+			WHERE type = ?
+			AND created_at >= ? AND created_at < ?
+			GROUP BY day, username, user_id, token_name
+			ORDER BY day, username, user_id, token_name
+		`
+		args = []any{LogTypeTool, start, endExclusive}
+	} else {
+		query = `
+			SELECT ` + groupSelect + `,
+			COALESCE(username, '') as username,
+			user_id,
+			COALESCE(token_name, '') as token_name,
+			count(1) as request_count,
+			COALESCE(sum(quota), 0) as quota
+			FROM logs
+			WHERE type = ?
+			AND user_id = ?
+			AND created_at >= ? AND created_at < ?
+			GROUP BY day, username, user_id, token_name
+			ORDER BY day, username, user_id, token_name
+		`
+		args = []any{LogTypeTool, userId, start, endExclusive}
 	}
 
-	type aggregateKey struct {
-		Day       string
-		TokenName string
-		Username  string
-		UserId    int
+	var stats []*dto.ToolLogStatisticByToken
+	if err := LOG_DB.Raw(query, args...).Scan(&stats).Error; err != nil {
+		return nil, errors.Wrap(err, "search tool logs by day and token")
 	}
-
-	aggregates := map[aggregateKey]*dto.ToolLogStatisticByToken{}
-	for _, row := range rows {
-		summary := extractToolUsageSummary(row.Metadata)
-		if summary == nil {
-			continue
-		}
-
-		key := aggregateKey{Day: row.Day, TokenName: row.TokenName, Username: row.Username, UserId: row.UserId}
-		if _, ok := aggregates[key]; !ok {
-			aggregates[key] = &dto.ToolLogStatisticByToken{
-				Day:       row.Day,
-				TokenName: row.TokenName,
-				Username:  row.Username,
-				UserId:    row.UserId,
-			}
-		}
-		aggregates[key].RequestCount += totalToolInvocations(summary)
-		aggregates[key].Quota += totalToolQuota(summary)
-	}
-
-	stats := make([]*dto.ToolLogStatisticByToken, 0, len(aggregates))
-	for _, stat := range aggregates {
-		stats = append(stats, stat)
-	}
-
-	sort.Slice(stats, func(i, j int) bool {
-		if stats[i].Day == stats[j].Day {
-			if stats[i].Username == stats[j].Username {
-				if stats[i].TokenName == stats[j].TokenName {
-					return stats[i].UserId < stats[j].UserId
-				}
-				return stats[i].TokenName < stats[j].TokenName
-			}
-			return stats[i].Username < stats[j].Username
-		}
-		return stats[i].Day < stats[j].Day
-	})
-
 	return stats, nil
 }
 

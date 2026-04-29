@@ -319,8 +319,7 @@ func postConsumeQuota(ctx context.Context,
 				}
 			}
 		}
-		metadata := model.AppendToolUsageMetadata(nil, toolSummary)
-		metadata = model.AppendCacheWriteTokensMetadata(metadata, usage.CacheWrite5mTokens, usage.CacheWrite1hTokens)
+		metadata := model.AppendCacheWriteTokensMetadata(nil, usage.CacheWrite5mTokens, usage.CacheWrite1hTokens)
 
 		billing.PostConsumeQuotaDetailed(billing.QuotaConsumeDetail{
 			Ctx:                ctx,
@@ -351,6 +350,7 @@ func postConsumeQuota(ctx context.Context,
 			UserAPIFormat:      resolveUserAPIFormat(meta.Mode),
 			UpstreamAPIFormat:  apitype.String(meta.APIType),
 			UpstreamEndpoint:   meta.UpstreamRequestURL,
+			ToolUsageSummary:   toolSummary,
 		})
 	} else {
 		gmw.GetLogger(ctx).Error("meta information incomplete, cannot post consume quota",
@@ -443,8 +443,7 @@ func postConsumeQuotaWithTraceID(ctx context.Context, traceId string,
 				}
 			}
 		}
-		metadata := model.AppendToolUsageMetadata(nil, toolSummary)
-		metadata = model.AppendCacheWriteTokensMetadata(metadata, usage.CacheWrite5mTokens, usage.CacheWrite1hTokens)
+		metadata := model.AppendCacheWriteTokensMetadata(nil, usage.CacheWrite5mTokens, usage.CacheWrite1hTokens)
 
 		billing.PostConsumeQuotaDetailed(billing.QuotaConsumeDetail{
 			Ctx:                ctx,
@@ -475,6 +474,7 @@ func postConsumeQuotaWithTraceID(ctx context.Context, traceId string,
 			UserAPIFormat:      resolveUserAPIFormat(meta.Mode),
 			UpstreamAPIFormat:  apitype.String(meta.APIType),
 			UpstreamEndpoint:   meta.UpstreamRequestURL,
+			ToolUsageSummary:   toolSummary,
 		})
 	} else {
 		gmw.GetLogger(ctx).Error("meta information incomplete, cannot post consume quota",

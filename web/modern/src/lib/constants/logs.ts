@@ -1,4 +1,6 @@
 // LOG_TYPES enumerates the numeric codes persisted for each log category.
+// Note: 6 is reserved for provisional pre-consume entries that are reconciled
+// before the user sees them, so it does not appear in the filter options.
 export const LOG_TYPES = {
   ALL: 0,
   TOPUP: 1,
@@ -6,6 +8,7 @@ export const LOG_TYPES = {
   MANAGE: 3,
   SYSTEM: 4,
   TEST: 5,
+  TOOL: 7,
 } as const;
 
 // LOG_TYPE_LABELS maps log type codes to human-readable labels used across the UI.
@@ -16,6 +19,7 @@ export const LOG_TYPE_LABELS: Record<number, string> = {
   [LOG_TYPES.MANAGE]: 'Management',
   [LOG_TYPES.SYSTEM]: 'System',
   [LOG_TYPES.TEST]: 'Test',
+  [LOG_TYPES.TOOL]: 'Tool',
 };
 
 // LOG_TYPE_OPTIONS feeds select controls with value/label pairs derived from LOG_TYPE_LABELS.

@@ -144,6 +144,7 @@
       "manage": "Manage",
       "system": "System",
       "test": "Test",
+      "tool": "Tool",
       "topup": "Top Up",
       "unknown": "Unknown"
     }

@@ -190,6 +190,11 @@ type QuotaConsumeDetail struct {
 	// UpstreamEndpoint is the final URL sent to the upstream provider, captured
 	// from meta.UpstreamRequestURL after the adaptor resolves it.
 	UpstreamEndpoint string
+	// ToolUsageSummary describes built-in tool invocations performed during
+	// the request. When non-nil and non-empty, PostConsumeQuotaDetailed emits
+	// one LogTypeTool row per invocation so the dashboard tool charts can
+	// aggregate strictly on type. The originating consume log row is unchanged.
+	ToolUsageSummary *model.ToolUsageSummary
 }
 
 // PostConsumeQuotaDetailed handles detailed billing for ChatCompletion and Response API requests
@@ -298,6 +303,13 @@ func PostConsumeQuotaDetailed(detail QuotaConsumeDetail) {
 	)
 
 	postConsumeQuotaWithLogFn(detail.Ctx, detail.TokenId, detail.QuotaDelta, detail.TotalQuota, entry, detail.ProvisionalLogId)
+
+	// Emit tool invocation log rows so dashboard tool charts (which aggregate
+	// strictly on type=LogTypeTool) reflect built-in tool usage. The originating
+	// model consume row remains as-is; tool rows are siblings of it.
+	if detail.ToolUsageSummary != nil {
+		model.RecordToolLogs(detail.Ctx, entry, detail.ToolUsageSummary)
+	}
 }
 
 // Removed PostConsumeQuotaDetailedWithTraceID; use QuotaConsumeDetail.TraceId instead

@@ -170,6 +170,9 @@ func TestConsumeTokenPreAndPostFlow(t *testing.T) {
 		require.NoError(t, model.LOG_DB.First(&logEntry, *txn.LogId).Error)
 		require.Equal(t, 80, logEntry.Quota)
 		require.Contains(t, logEntry.Content, "finalized")
+		// External billing rows are tool-typed so they appear in the dashboard's
+		// tool charts instead of the model usage charts.
+		require.Equal(t, model.LogTypeTool, logEntry.Type)
 	}
 
 	refreshedUser, err = model.GetUserById(user.Id, true)
@@ -218,6 +221,7 @@ func TestConsumeTokenCancelFlow(t *testing.T) {
 		require.NoError(t, model.LOG_DB.First(&logEntry, *txn.LogId).Error)
 		require.Equal(t, 0, logEntry.Quota)
 		require.Contains(t, logEntry.Content, "canceled")
+		require.Equal(t, model.LogTypeTool, logEntry.Type)
 	}
 }
 
@@ -253,6 +257,7 @@ func TestConsumeTokenAutoConfirmTimeout(t *testing.T) {
 		var logEntry model.Log
 		require.NoError(t, model.LOG_DB.First(&logEntry, *txn.LogId).Error)
 		require.Contains(t, logEntry.Content, "auto-confirmed")
+		require.Equal(t, model.LogTypeTool, logEntry.Type)
 	}
 }
 
@@ -284,4 +289,14 @@ func TestConsumeTokenDefaultsToSinglePhase(t *testing.T) {
 	refreshedUser, err := model.GetUserById(user.Id, true)
 	require.NoError(t, err)
 	require.Equal(t, int64(880), refreshedUser.Quota)
+
+	// Confirm the resulting log row is tool-typed so the dashboard tool charts
+	// pick it up via the LogTypeTool aggregation path.
+	var logRows []model.Log
+	require.NoError(t, model.LOG_DB.Where("request_id = ?", "req-single").Find(&logRows).Error)
+	require.NotEmpty(t, logRows)
+	for _, row := range logRows {
+		require.Equal(t, model.LogTypeTool, row.Type)
+		require.Equal(t, "serviceD", row.ModelName)
+	}
 }

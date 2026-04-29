@@ -176,8 +176,7 @@ func postConsumeResponseAPIQuota(ctx context.Context,
 				}
 			}
 		}
-		metadata := model.AppendToolUsageMetadata(nil, toolSummary)
-		metadata = model.AppendCacheWriteTokensMetadata(metadata, usage.CacheWrite5mTokens, usage.CacheWrite1hTokens)
+		metadata := model.AppendCacheWriteTokensMetadata(nil, usage.CacheWrite5mTokens, usage.CacheWrite1hTokens)
 
 		postConsumeResponseAPIQuotaDetailed(billing.QuotaConsumeDetail{
 			Ctx:                ctx,
@@ -208,6 +207,7 @@ func postConsumeResponseAPIQuota(ctx context.Context,
 			UserAPIFormat:      resolveUserAPIFormat(meta.Mode),
 			UpstreamAPIFormat:  apitype.String(meta.APIType),
 			UpstreamEndpoint:   meta.UpstreamRequestURL,
+			ToolUsageSummary:   toolSummary,
 		})
 	} else {
 		// Should not happen; log for investigation

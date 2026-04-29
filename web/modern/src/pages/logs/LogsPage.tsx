@@ -39,6 +39,7 @@ const LOG_TYPE_TRANSLATION_KEYS: Record<number, string> = {
   [LOG_TYPES.MANAGE]: 'manage',
   [LOG_TYPES.SYSTEM]: 'system',
   [LOG_TYPES.TEST]: 'test',
+  [LOG_TYPES.TOOL]: 'tool',
 };
 
 const formatLatency = (ms?: number, fallback: string = '-') => {
@@ -137,6 +138,8 @@ export function LogsPage() {
         return <Badge className="bg-muted text-muted-foreground">{label}</Badge>;
       case LOG_TYPES.TEST:
         return <Badge className="bg-warning-muted text-warning-foreground">{label}</Badge>;
+      case LOG_TYPES.TOOL:
+        return <Badge className="bg-secondary text-secondary-foreground">{label}</Badge>;
       default:
         return <Badge variant="outline">{label}</Badge>;
     }

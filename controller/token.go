@@ -400,7 +400,9 @@ func processPreConsume(ctx context.Context, _ *gin.Context, token *model.Token, 
 		TraceId:   traceID,
 	}
 
-	model.RecordConsumeLog(ctx, logEntry)
+	// External /api/token/consume rows are tool-typed so they appear in the
+	// dashboard's tool charts instead of model usage charts.
+	model.RecordToolLog(ctx, logEntry)
 
 	transaction := &model.TokenTransaction{
 		TransactionID: transactionID,

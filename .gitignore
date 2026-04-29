@@ -30,5 +30,5 @@ errlog
 docs/requirements/observability.md
 /docker-compose.local.yml
 /.claude/
-/one-api.db-shm
-/one-api.db-wal
+one-api.db-shm
+one-api.db-wal
