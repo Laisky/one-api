@@ -3,6 +3,7 @@ package internal
 import (
 	"context"
 	"fmt"
+	"sync/atomic"
 	"time"
 
 	"github.com/Laisky/errors/v2"
@@ -25,6 +26,11 @@ type Migrator struct {
 
 	sourceConn *DatabaseConnection
 	targetConn *DatabaseConnection
+
+	// upsertFailures counts records the upsert path silently dropped
+	// (per-record Save() returning an error). Surfaced in the final summary
+	// so silent data loss cannot hide behind a "completed" message.
+	upsertFailures int64
 }
 
 // MigrationStats holds statistics about the migration process
@@ -260,13 +266,16 @@ func (m *Migrator) runAutoMigration() error {
 func (m *Migrator) printStats(stats *MigrationStats) {
 	duration := stats.EndTime.Sub(stats.StartTime)
 
+	upsertFailures := atomic.LoadInt64(&m.upsertFailures)
+
 	logger.Logger.Info("=== Migration Statistics ===")
 	logger.Logger.Info("Migration completed",
 		zap.Duration("duration", duration),
 		zap.Int("tables_done", stats.TablesDone),
 		zap.Int("tables_total", stats.TablesTotal),
 		zap.Int64("records_done", stats.RecordsDone),
-		zap.Int64("records_total", stats.RecordsTotal))
+		zap.Int64("records_total", stats.RecordsTotal),
+		zap.Int64("upsert_failures", upsertFailures))
 
 	if len(stats.Errors) > 0 {
 		logger.Logger.Warn("Migration completed with errors", zap.Int("error_count", len(stats.Errors)))
@@ -275,6 +284,9 @@ func (m *Migrator) printStats(stats *MigrationStats) {
 				zap.Int("error_index", i+1),
 				zap.Error(err))
 		}
+	} else if upsertFailures > 0 {
+		logger.Logger.Warn("Migration completed with silent upsert failures — target may be missing records",
+			zap.Int64("upsert_failures", upsertFailures))
 	} else {
 		logger.Logger.Info("Migration completed successfully with no errors")
 	}

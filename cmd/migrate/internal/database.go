@@ -58,11 +58,26 @@ func ConnectDatabase(dbType, dsn string) (*DatabaseConnection, error) {
 	case "sqlite":
 		driver = "sqlite"
 		oneapilogger.Logger.Info("Connecting to SQLite database")
-		// Add busy timeout for SQLite
-		if !strings.Contains(cleanDSN, "?") {
-			cleanDSN += fmt.Sprintf("?_busy_timeout=%d", common.SQLiteBusyTimeout)
-		} else if !strings.Contains(cleanDSN, "_busy_timeout") {
-			cleanDSN += fmt.Sprintf("&_busy_timeout=%d", common.SQLiteBusyTimeout)
+		// SQLite tuning for the migration tool: WAL + NORMAL sync greatly speed
+		// up bulk writes; a long busy_timeout is a safety net for any implicit
+		// lock waits. Writer concurrency is serialized at the pool layer below
+		// (SetMaxOpenConns(1)) — SQLite only supports one writer at a time.
+		const migrationBusyTimeoutMs = 60000
+		sqliteParams := []string{
+			fmt.Sprintf("_busy_timeout=%d", migrationBusyTimeoutMs),
+			"_journal_mode=WAL",
+			"_synchronous=NORMAL",
+		}
+		sep := "?"
+		if strings.Contains(cleanDSN, "?") {
+			sep = "&"
+		}
+		for _, p := range sqliteParams {
+			key := strings.SplitN(p, "=", 2)[0]
+			if !strings.Contains(cleanDSN, key+"=") {
+				cleanDSN += sep + p
+				sep = "&"
+			}
 		}
 		db, err = gorm.Open(sqlite.Open(cleanDSN), &gorm.Config{
 			PrepareStmt: true,
@@ -106,6 +121,15 @@ func ConnectDatabase(dbType, dsn string) (*DatabaseConnection, error) {
 
 	if err := sqlDB.Ping(); err != nil {
 		return nil, errors.Wrapf(err, "failed to ping %s database", dbType)
+	}
+
+	// SQLite supports a single writer at a time. Capping MaxOpenConns to 1
+	// fully serializes writes through the database/sql pool, eliminating
+	// "database is locked" errors when multiple migration workers write
+	// concurrently. Reads are also serialized but the migration tool reads
+	// from source (separate connection), so this is the right trade-off.
+	if strings.ToLower(dbType) == "sqlite" {
+		sqlDB.SetMaxOpenConns(1)
 	}
 
 	oneapilogger.Logger.Info("Successfully connected to database", zap.String("type", dbType))

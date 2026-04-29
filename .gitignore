@@ -10,6 +10,7 @@ node_modules
 /web/node_modules
 cmd.md
 .env
+/one-api.db*
 /one-api
 temp
 .DS_Store
@@ -28,3 +29,6 @@ errlog
 /cmd/test/generated/*
 docs/requirements/observability.md
 /docker-compose.local.yml
+/.claude/
+/one-api.db-shm
+/one-api.db-wal

@@ -120,7 +120,12 @@ func openSQLite() (*gorm.DB, error) {
 
 	logger.Logger.Debug("using SQLite database", zap.String("path", sqlitePath), zap.Int("busy_timeout_ms", common.SQLiteBusyTimeout))
 
-	dsn := fmt.Sprintf("%s?_busy_timeout=%d", sqlitePath, common.SQLiteBusyTimeout)
+	// WAL lets readers run concurrently with a writer; synchronous=NORMAL
+	// pairs safely with WAL (a crash loses at most the last commit, never
+	// corrupts the DB). busy_timeout is the cap a connection waits when the
+	// writer slot is held — combined with the existing sqlite_retry helper
+	// this is the standard recipe for SQLite under multi-goroutine workloads.
+	dsn := fmt.Sprintf("%s?_busy_timeout=%d&_journal_mode=WAL&_synchronous=NORMAL", sqlitePath, common.SQLiteBusyTimeout)
 	return gorm.Open(sqlite.Open(dsn), &gorm.Config{
 		PrepareStmt: true, // precompile SQL
 	})

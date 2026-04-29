@@ -222,9 +222,11 @@ var (
 	// during concurrent access. Higher values reduce lock errors but increase latency.
 	//
 	// Environment variable: SQLITE_BUSY_TIMEOUT
-	// Default: 3000 (3 seconds)
+	// Default: 10000 (10 seconds) — long enough to absorb write bursts without
+	// surfacing transient lock errors; pairs with WAL journaling and the
+	// sqlite_retry helper for production-grade resilience.
 	// Unit: milliseconds
-	SQLiteBusyTimeout = env.Int("SQLITE_BUSY_TIMEOUT", 3000)
+	SQLiteBusyTimeout = env.Int("SQLITE_BUSY_TIMEOUT", 10000)
 
 	// SQLMaxIdleConns controls the primary database pool's idle connection count.
 	// Set based on expected concurrent connections and database server capacity.

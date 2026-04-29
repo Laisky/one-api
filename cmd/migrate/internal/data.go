@@ -3,11 +3,14 @@ package internal
 import (
 	"context"
 	"reflect"
+	"strings"
 	"sync"
 	"sync/atomic"
 
 	"github.com/Laisky/errors/v2"
 	"github.com/Laisky/zap"
+	"gorm.io/gorm"
+	"gorm.io/gorm/schema"
 
 	"github.com/Laisky/one-api/common/logger"
 	"github.com/Laisky/one-api/model"
@@ -181,7 +184,6 @@ func (m *Migrator) migrateTableConcurrent(ctx context.Context, tableInfo TableIn
 	var migratedCount int64
 	var lastProgressReport int64
 	collectorWg.Go(func() {
-		defer collectorWg.Done()
 		for result := range results {
 			if result.Error != nil {
 				logger.Logger.Error("Batch job failed",
@@ -260,6 +262,30 @@ func (m *Migrator) batchWorker(ctx context.Context, jobs <-chan BatchJob, result
 	}
 }
 
+// schemaCache memoizes parsed GORM schemas across migrateBatch invocations.
+// schema.Parse caches into the provided sync.Map, so reusing one map avoids
+// re-parsing reflective info on every batch.
+var schemaCache sync.Map
+
+// primaryKeyOrderClause returns an SQL ORDER BY fragment listing the
+// quoted primary key columns of the given model, in declaration order, all
+// ascending. Used to make LIMIT/OFFSET pagination deterministic across a
+// concurrently-written source.
+func primaryKeyOrderClause(db *gorm.DB, model any) (string, error) {
+	s, err := schema.Parse(model, &schemaCache, db.NamingStrategy)
+	if err != nil {
+		return "", errors.Wrapf(err, "parse model schema")
+	}
+	if len(s.PrimaryFields) == 0 {
+		return "", errors.Errorf("model %T has no primary key", model)
+	}
+	cols := make([]string, 0, len(s.PrimaryFields))
+	for _, f := range s.PrimaryFields {
+		cols = append(cols, db.Statement.Quote(f.DBName))
+	}
+	return strings.Join(cols, ", "), nil
+}
+
 // migrateBatch migrates a batch of records for a specific table
 func (m *Migrator) migrateBatch(tableInfo TableInfo, offset int64, limit int) (int64, error) {
 	// Create a slice to hold the batch data
@@ -267,8 +293,18 @@ func (m *Migrator) migrateBatch(tableInfo TableInfo, offset int64, limit int) (i
 	sliceType := reflect.SliceOf(modelType)
 	batch := reflect.New(sliceType).Interface()
 
+	// Determine the source's primary key columns. Without ORDER BY, LIMIT/OFFSET
+	// produces inconsistent slices on a concurrently-written source (PG row
+	// order is not stable), causing batches to overlap and skip rows — which
+	// silently loses records. Ordering by the PK gives stable, non-overlapping
+	// windows even while new rows are being appended.
+	orderClause, err := primaryKeyOrderClause(m.sourceConn.DB, tableInfo.Model)
+	if err != nil {
+		return 0, errors.Wrapf(err, "resolve primary key for %s", tableInfo.Name)
+	}
+
 	// Fetch batch from source database
-	query := m.sourceConn.DB.Limit(limit).Offset(int(offset))
+	query := m.sourceConn.DB.Order(orderClause).Limit(limit).Offset(int(offset))
 	if err := query.Find(batch).Error; err != nil {
 		return 0, errors.Wrapf(err, "failed to fetch batch from source")
 	}
@@ -350,6 +386,9 @@ func (m *Migrator) upsertBatch(batch any, tableInfo TableInfo) error {
 
 	successCount := 0
 	errorCount := 0
+	var firstErr error
+	const maxLoggedErrors = 3
+	loggedErrors := 0
 
 	// Process each record individually for upsert
 	for i := range batchLen {
@@ -359,11 +398,17 @@ func (m *Migrator) upsertBatch(batch any, tableInfo TableInfo) error {
 		result := m.targetConn.DB.Save(record)
 		if result.Error != nil {
 			errorCount++
-			if m.Verbose {
+			if firstErr == nil {
+				firstErr = result.Error
+			}
+			// Always log up to a few failure samples so silent data loss is
+			// visible. Verbose mode logs every failure.
+			if m.Verbose || loggedErrors < maxLoggedErrors {
 				logger.Logger.Warn("Failed to upsert record",
 					zap.Int("record_index", i+1),
 					zap.String("table", tableInfo.Name),
 					zap.Error(result.Error))
+				loggedErrors++
 			}
 			// Continue with other records instead of failing the entire batch
 		} else {
@@ -371,11 +416,13 @@ func (m *Migrator) upsertBatch(batch any, tableInfo TableInfo) error {
 		}
 	}
 
-	if m.Verbose && errorCount > 0 {
-		logger.Logger.Warn("Table upsert completed with errors",
+	if errorCount > 0 {
+		atomic.AddInt64(&m.upsertFailures, int64(errorCount))
+		logger.Logger.Warn("Table upsert batch completed with errors",
 			zap.String("table", tableInfo.Name),
 			zap.Int("successful", successCount),
-			zap.Int("failed", errorCount))
+			zap.Int("failed", errorCount),
+			zap.Error(firstErr))
 	}
 
 	return nil
