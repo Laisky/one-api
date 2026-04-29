@@ -87,10 +87,10 @@
       "metric_label": "指標: {{metric}}",
       "metric_placeholder": "指標を選択",
       "model_usage": "モデル別利用状況",
+      "token_usage": "トークン利用状況",
       "tool_token_usage": "トークン別ツール利用状況",
       "tool_usage": "ツール利用状況",
       "tool_user_usage": "ユーザー別ツール利用状況",
-      "token_usage": "トークン利用状況",
       "user_usage": "ユーザー別利用状況"
     },
     "title": "ダッシュボード",
