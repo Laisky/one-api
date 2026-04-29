@@ -2,7 +2,7 @@ import { api } from '@/lib/api';
 import { useAuthStore } from '@/lib/stores/auth';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ModelRow, TokenRow, UserOption, UserRow } from '../types';
+import { ModelRow, TokenRow, ToolRow, ToolTokenRow, ToolUserRow, UserOption, UserRow } from '../types';
 
 export const useDashboardData = () => {
   const { t } = useTranslation();
@@ -27,6 +27,9 @@ export const useDashboardData = () => {
   const [rows, setRows] = useState<ModelRow[]>([]);
   const [userRows, setUserRows] = useState<UserRow[]>([]);
   const [tokenRows, setTokenRows] = useState<TokenRow[]>([]);
+  const [toolRows, setToolRows] = useState<ToolRow[]>([]);
+  const [toolUserRows, setToolUserRows] = useState<ToolUserRow[]>([]);
+  const [toolTokenRows, setToolTokenRows] = useState<ToolTokenRow[]>([]);
 
   // Date validation functions
   const getMaxDate = () => {
@@ -127,14 +130,17 @@ export const useDashboardData = () => {
         const logs = data?.logs || data || [];
         const userLogs = data?.user_logs || [];
         const tokenLogs = data?.token_logs || [];
+        const toolLogs = data?.tool_logs || [];
+        const toolUserLogs = data?.tool_user_logs || [];
+        const toolTokenLogs = data?.tool_token_logs || [];
         setRows(
           logs.map((row: any) => ({
             day: row.Day,
             model_name: row.ModelName,
-            request_count: row.RequestCount,
-            quota: row.Quota,
-            prompt_tokens: row.PromptTokens,
-            completion_tokens: row.CompletionTokens,
+            request_count: Number(row.RequestCount ?? 0),
+            quota: Number(row.Quota ?? 0),
+            prompt_tokens: Number(row.PromptTokens ?? 0),
+            completion_tokens: Number(row.CompletionTokens ?? 0),
             cached_prompt_tokens: Number(row.CachedPromptTokens ?? 0),
             cache_hit_count: Number(row.CacheHitCount ?? 0),
             cache_hit_quota: Number(row.CacheHitQuota ?? 0),
@@ -145,10 +151,10 @@ export const useDashboardData = () => {
             day: row.Day,
             username: row.Username,
             user_id: Number(row.UserId ?? 0),
-            request_count: row.RequestCount,
-            quota: row.Quota,
-            prompt_tokens: row.PromptTokens,
-            completion_tokens: row.CompletionTokens,
+            request_count: Number(row.RequestCount ?? 0),
+            quota: Number(row.Quota ?? 0),
+            prompt_tokens: Number(row.PromptTokens ?? 0),
+            completion_tokens: Number(row.CompletionTokens ?? 0),
             cached_prompt_tokens: Number(row.CachedPromptTokens ?? 0),
             cache_hit_count: Number(row.CacheHitCount ?? 0),
             cache_hit_quota: Number(row.CacheHitQuota ?? 0),
@@ -160,13 +166,40 @@ export const useDashboardData = () => {
             username: row.Username,
             token_name: row.TokenName,
             user_id: Number(row.UserId ?? 0),
-            request_count: row.RequestCount,
-            quota: row.Quota,
-            prompt_tokens: row.PromptTokens,
-            completion_tokens: row.CompletionTokens,
+            request_count: Number(row.RequestCount ?? 0),
+            quota: Number(row.Quota ?? 0),
+            prompt_tokens: Number(row.PromptTokens ?? 0),
+            completion_tokens: Number(row.CompletionTokens ?? 0),
             cached_prompt_tokens: Number(row.CachedPromptTokens ?? 0),
             cache_hit_count: Number(row.CacheHitCount ?? 0),
             cache_hit_quota: Number(row.CacheHitQuota ?? 0),
+          }))
+        );
+        setToolRows(
+          toolLogs.map((row: any) => ({
+            day: row.Day,
+            tool_name: row.ToolName,
+            request_count: Number(row.RequestCount ?? 0),
+            quota: Number(row.Quota ?? 0),
+          }))
+        );
+        setToolUserRows(
+          toolUserLogs.map((row: any) => ({
+            day: row.Day,
+            username: row.Username,
+            user_id: Number(row.UserId ?? 0),
+            request_count: Number(row.RequestCount ?? 0),
+            quota: Number(row.Quota ?? 0),
+          }))
+        );
+        setToolTokenRows(
+          toolTokenLogs.map((row: any) => ({
+            day: row.Day,
+            username: row.Username,
+            token_name: row.TokenName,
+            user_id: Number(row.UserId ?? 0),
+            request_count: Number(row.RequestCount ?? 0),
+            quota: Number(row.Quota ?? 0),
           }))
         );
 
@@ -177,6 +210,9 @@ export const useDashboardData = () => {
         setRows([]);
         setUserRows([]);
         setTokenRows([]);
+        setToolRows([]);
+        setToolUserRows([]);
+        setToolTokenRows([]);
       }
     } catch (error: any) {
       // Ignore abort errors
@@ -188,6 +224,9 @@ export const useDashboardData = () => {
       setRows([]);
       setUserRows([]);
       setTokenRows([]);
+      setToolRows([]);
+      setToolUserRows([]);
+      setToolTokenRows([]);
     } finally {
       // Only clear loading if this request wasn't aborted
       if (!abortController.signal.aborted) {
@@ -267,6 +306,9 @@ export const useDashboardData = () => {
     rows,
     userRows,
     tokenRows,
+    toolRows,
+    toolUserRows,
+    toolTokenRows,
     loadStats,
     applyPreset: applyPresetAndFetch,
     getMinDate,

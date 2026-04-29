@@ -17,10 +17,27 @@ export type TokenRow = BaseMetricRow & {
   user_id: number;
 };
 
+export type ToolMetricRow = {
+  day: string;
+  request_count: number;
+  quota: number;
+};
+
+export type ToolRow = ToolMetricRow & { tool_name: string };
+export type ToolUserRow = ToolMetricRow & { username: string; user_id: number };
+export type ToolTokenRow = ToolMetricRow & {
+  token_name: string;
+  username: string;
+  user_id: number;
+};
+
 export type DashboardData = {
   rows: ModelRow[];
   userRows: UserRow[];
   tokenRows: TokenRow[];
+  toolRows: ToolRow[];
+  toolUserRows: ToolUserRow[];
+  toolTokenRows: ToolTokenRow[];
 };
 
 export type UserOption = {

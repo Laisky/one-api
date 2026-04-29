@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"maps"
+	"sort"
 	"strings"
 	"time"
 
@@ -1024,6 +1025,463 @@ func dayAggregationSelect() string {
 	}
 
 	return "DATE_FORMAT(FROM_UNIXTIME(created_at), '%Y-%m-%d') as day"
+}
+
+type dashboardToolLogRow struct {
+	Day       string      `gorm:"column:day"`
+	Username  string      `gorm:"column:username"`
+	UserId    int         `gorm:"column:user_id"`
+	TokenName string      `gorm:"column:token_name"`
+	Metadata  LogMetadata `gorm:"column:metadata"`
+}
+
+// loadToolDashboardLogRows loads consume logs containing metadata for tool dashboard aggregation.
+// It accepts an optional user scope and returns the matching log rows ordered for stable aggregation.
+func loadToolDashboardLogRows(userId, start, endExclusive int) ([]dashboardToolLogRow, error) {
+	groupSelect := dayAggregationSelect()
+
+	var query string
+	var args []any
+
+	if userId == 0 {
+		query = `
+			SELECT ` + groupSelect + `,
+			username,
+			user_id,
+			COALESCE(token_name, '') as token_name,
+			metadata
+			FROM logs
+			WHERE type = ?
+			AND metadata IS NOT NULL
+			AND created_at >= ? AND created_at < ?
+			ORDER BY day, username, token_name
+		`
+		args = []any{LogTypeConsume, start, endExclusive}
+	} else {
+		query = `
+			SELECT ` + groupSelect + `,
+			username,
+			user_id,
+			COALESCE(token_name, '') as token_name,
+			metadata
+			FROM logs
+			WHERE type = ?
+			AND user_id = ?
+			AND metadata IS NOT NULL
+			AND created_at >= ? AND created_at < ?
+			ORDER BY day, username, token_name
+		`
+		args = []any{LogTypeConsume, userId, start, endExclusive}
+	}
+
+	var rows []dashboardToolLogRow
+	if err := LOG_DB.Raw(query, args...).Scan(&rows).Error; err != nil {
+		return nil, errors.Wrap(err, "load tool dashboard log rows")
+	}
+
+	return rows, nil
+}
+
+// normalizeToolUsageName trims tool names so aggregation keys remain stable across stored metadata.
+// It returns the normalized name or an empty string when the input is blank.
+func normalizeToolUsageName(name string) string {
+	trimmed := strings.TrimSpace(name)
+	if trimmed == "" {
+		return ""
+	}
+	return trimmed
+}
+
+// toolUsageInt converts numeric tool metadata values into int for aggregation.
+// It returns the converted value and whether the conversion succeeded.
+func toolUsageInt(value any) (int, bool) {
+	switch typed := value.(type) {
+	case int:
+		return typed, true
+	case int8:
+		return int(typed), true
+	case int16:
+		return int(typed), true
+	case int32:
+		return int(typed), true
+	case int64:
+		return int(typed), true
+	case uint:
+		return int(typed), true
+	case uint8:
+		return int(typed), true
+	case uint16:
+		return int(typed), true
+	case uint32:
+		return int(typed), true
+	case uint64:
+		return int(typed), true
+	case float32:
+		return int(typed), true
+	case float64:
+		return int(typed), true
+	default:
+		return 0, false
+	}
+}
+
+// toolUsageInt64 converts numeric tool metadata values into int64 for aggregation.
+// It returns the converted value and whether the conversion succeeded.
+func toolUsageInt64(value any) (int64, bool) {
+	switch typed := value.(type) {
+	case int:
+		return int64(typed), true
+	case int8:
+		return int64(typed), true
+	case int16:
+		return int64(typed), true
+	case int32:
+		return int64(typed), true
+	case int64:
+		return typed, true
+	case uint:
+		return int64(typed), true
+	case uint8:
+		return int64(typed), true
+	case uint16:
+		return int64(typed), true
+	case uint32:
+		return int64(typed), true
+	case uint64:
+		return int64(typed), true
+	case float32:
+		return int64(typed), true
+	case float64:
+		return int64(typed), true
+	default:
+		return 0, false
+	}
+}
+
+// extractToolCounts reads the per-tool invocation counters from serialized log metadata.
+// It returns a normalized count map or nil when no usable counters are present.
+func extractToolCounts(value any) map[string]int {
+	counts := map[string]int{}
+
+	switch typed := value.(type) {
+	case map[string]int:
+		for name, count := range typed {
+			if normalized := normalizeToolUsageName(name); normalized != "" && count > 0 {
+				counts[normalized] += count
+			}
+		}
+	case map[string]int64:
+		for name, count := range typed {
+			if normalized := normalizeToolUsageName(name); normalized != "" && count > 0 {
+				counts[normalized] += int(count)
+			}
+		}
+	case map[string]float64:
+		for name, count := range typed {
+			if normalized := normalizeToolUsageName(name); normalized != "" && count > 0 {
+				counts[normalized] += int(count)
+			}
+		}
+	case map[string]any:
+		for name, raw := range typed {
+			count, ok := toolUsageInt(raw)
+			if !ok || count <= 0 {
+				continue
+			}
+			if normalized := normalizeToolUsageName(name); normalized != "" {
+				counts[normalized] += count
+			}
+		}
+	}
+
+	if len(counts) == 0 {
+		return nil
+	}
+
+	return counts
+}
+
+// extractToolCosts reads the per-tool quota charges from serialized log metadata.
+// It returns a normalized cost map or nil when no usable costs are present.
+func extractToolCosts(value any) map[string]int64 {
+	costs := map[string]int64{}
+
+	switch typed := value.(type) {
+	case map[string]int64:
+		for name, cost := range typed {
+			if normalized := normalizeToolUsageName(name); normalized != "" && cost > 0 {
+				costs[normalized] += cost
+			}
+		}
+	case map[string]int:
+		for name, cost := range typed {
+			if normalized := normalizeToolUsageName(name); normalized != "" && cost > 0 {
+				costs[normalized] += int64(cost)
+			}
+		}
+	case map[string]float64:
+		for name, cost := range typed {
+			if normalized := normalizeToolUsageName(name); normalized != "" && cost > 0 {
+				costs[normalized] += int64(cost)
+			}
+		}
+	case map[string]any:
+		for name, raw := range typed {
+			cost, ok := toolUsageInt64(raw)
+			if !ok || cost <= 0 {
+				continue
+			}
+			if normalized := normalizeToolUsageName(name); normalized != "" {
+				costs[normalized] += cost
+			}
+		}
+	}
+
+	if len(costs) == 0 {
+		return nil
+	}
+
+	return costs
+}
+
+// totalToolInvocations sums the invocation counters from a parsed tool usage summary.
+// It returns zero when the summary is nil or empty.
+func totalToolInvocations(summary *ToolUsageSummary) int {
+	if summary == nil {
+		return 0
+	}
+
+	total := 0
+	for _, count := range summary.Counts {
+		if count > 0 {
+			total += count
+		}
+	}
+
+	return total
+}
+
+// totalToolQuota sums the quota charges from a parsed tool usage summary.
+// It prefers the explicit total cost when available and otherwise falls back to per-tool costs.
+func totalToolQuota(summary *ToolUsageSummary) int64 {
+	if summary == nil {
+		return 0
+	}
+	if summary.TotalCost > 0 {
+		return summary.TotalCost
+	}
+
+	var total int64
+	for _, cost := range summary.CostByTool {
+		if cost > 0 {
+			total += cost
+		}
+	}
+
+	return total
+}
+
+// extractToolUsageSummary reconstructs tool usage counters and costs from persisted log metadata.
+// It returns nil when the metadata does not contain usable tool usage information.
+func extractToolUsageSummary(metadata LogMetadata) *ToolUsageSummary {
+	if len(metadata) == 0 {
+		return nil
+	}
+
+	raw, ok := metadata[LogMetadataKeyToolUsage]
+	if !ok || raw == nil {
+		return nil
+	}
+
+	var entry map[string]any
+	switch typed := raw.(type) {
+	case map[string]any:
+		entry = typed
+	case LogMetadata:
+		entry = map[string]any(typed)
+	default:
+		return nil
+	}
+
+	summary := &ToolUsageSummary{
+		Counts:     extractToolCounts(entry["counts"]),
+		CostByTool: extractToolCosts(entry["cost_by_tool"]),
+	}
+
+	if totalCost, ok := toolUsageInt64(entry["total_cost"]); ok && totalCost > 0 {
+		summary.TotalCost = totalCost
+	}
+
+	if len(summary.CostByTool) == 0 && summary.TotalCost > 0 && len(summary.Counts) == 1 {
+		for toolName := range summary.Counts {
+			summary.CostByTool = map[string]int64{toolName: summary.TotalCost}
+		}
+	}
+
+	if summary.TotalCost == 0 {
+		summary.TotalCost = totalToolQuota(summary)
+	}
+
+	if summary.TotalCost == 0 && len(summary.Counts) == 0 && len(summary.CostByTool) == 0 {
+		return nil
+	}
+
+	return summary
+}
+
+// SearchToolLogsByDayAndTool returns per-day, per-tool aggregates for built-in and MCP tool usage.
+// It accepts an optional user scope and returns request counts and charged quota.
+func SearchToolLogsByDayAndTool(userId, start, endExclusive int) ([]*dto.ToolLogStatistic, error) {
+	rows, err := loadToolDashboardLogRows(userId, start, endExclusive)
+	if err != nil {
+		return nil, err
+	}
+
+	type aggregateKey struct {
+		Day      string
+		ToolName string
+	}
+
+	aggregates := map[aggregateKey]*dto.ToolLogStatistic{}
+	for _, row := range rows {
+		summary := extractToolUsageSummary(row.Metadata)
+		if summary == nil {
+			continue
+		}
+
+		for toolName, count := range summary.Counts {
+			key := aggregateKey{Day: row.Day, ToolName: toolName}
+			if _, ok := aggregates[key]; !ok {
+				aggregates[key] = &dto.ToolLogStatistic{Day: row.Day, ToolName: toolName}
+			}
+			aggregates[key].RequestCount += count
+		}
+
+		for toolName, cost := range summary.CostByTool {
+			key := aggregateKey{Day: row.Day, ToolName: toolName}
+			if _, ok := aggregates[key]; !ok {
+				aggregates[key] = &dto.ToolLogStatistic{Day: row.Day, ToolName: toolName}
+			}
+			aggregates[key].Quota += cost
+		}
+	}
+
+	stats := make([]*dto.ToolLogStatistic, 0, len(aggregates))
+	for _, stat := range aggregates {
+		stats = append(stats, stat)
+	}
+
+	sort.Slice(stats, func(i, j int) bool {
+		if stats[i].Day == stats[j].Day {
+			return stats[i].ToolName < stats[j].ToolName
+		}
+		return stats[i].Day < stats[j].Day
+	})
+
+	return stats, nil
+}
+
+// SearchToolLogsByDayAndUser returns per-day, per-user aggregates for tool usage.
+// It accepts an optional user scope and returns invocation counts and charged quota.
+func SearchToolLogsByDayAndUser(userId, start, endExclusive int) ([]*dto.ToolLogStatisticByUser, error) {
+	rows, err := loadToolDashboardLogRows(userId, start, endExclusive)
+	if err != nil {
+		return nil, err
+	}
+
+	type aggregateKey struct {
+		Day      string
+		Username string
+		UserId   int
+	}
+
+	aggregates := map[aggregateKey]*dto.ToolLogStatisticByUser{}
+	for _, row := range rows {
+		summary := extractToolUsageSummary(row.Metadata)
+		if summary == nil {
+			continue
+		}
+
+		key := aggregateKey{Day: row.Day, Username: row.Username, UserId: row.UserId}
+		if _, ok := aggregates[key]; !ok {
+			aggregates[key] = &dto.ToolLogStatisticByUser{Day: row.Day, Username: row.Username, UserId: row.UserId}
+		}
+		aggregates[key].RequestCount += totalToolInvocations(summary)
+		aggregates[key].Quota += totalToolQuota(summary)
+	}
+
+	stats := make([]*dto.ToolLogStatisticByUser, 0, len(aggregates))
+	for _, stat := range aggregates {
+		stats = append(stats, stat)
+	}
+
+	sort.Slice(stats, func(i, j int) bool {
+		if stats[i].Day == stats[j].Day {
+			if stats[i].Username == stats[j].Username {
+				return stats[i].UserId < stats[j].UserId
+			}
+			return stats[i].Username < stats[j].Username
+		}
+		return stats[i].Day < stats[j].Day
+	})
+
+	return stats, nil
+}
+
+// SearchToolLogsByDayAndToken returns per-day, per-token aggregates for tool usage.
+// It accepts an optional user scope and returns invocation counts and charged quota.
+func SearchToolLogsByDayAndToken(userId, start, endExclusive int) ([]*dto.ToolLogStatisticByToken, error) {
+	rows, err := loadToolDashboardLogRows(userId, start, endExclusive)
+	if err != nil {
+		return nil, err
+	}
+
+	type aggregateKey struct {
+		Day       string
+		TokenName string
+		Username  string
+		UserId    int
+	}
+
+	aggregates := map[aggregateKey]*dto.ToolLogStatisticByToken{}
+	for _, row := range rows {
+		summary := extractToolUsageSummary(row.Metadata)
+		if summary == nil {
+			continue
+		}
+
+		key := aggregateKey{Day: row.Day, TokenName: row.TokenName, Username: row.Username, UserId: row.UserId}
+		if _, ok := aggregates[key]; !ok {
+			aggregates[key] = &dto.ToolLogStatisticByToken{
+				Day:       row.Day,
+				TokenName: row.TokenName,
+				Username:  row.Username,
+				UserId:    row.UserId,
+			}
+		}
+		aggregates[key].RequestCount += totalToolInvocations(summary)
+		aggregates[key].Quota += totalToolQuota(summary)
+	}
+
+	stats := make([]*dto.ToolLogStatisticByToken, 0, len(aggregates))
+	for _, stat := range aggregates {
+		stats = append(stats, stat)
+	}
+
+	sort.Slice(stats, func(i, j int) bool {
+		if stats[i].Day == stats[j].Day {
+			if stats[i].Username == stats[j].Username {
+				if stats[i].TokenName == stats[j].TokenName {
+					return stats[i].UserId < stats[j].UserId
+				}
+				return stats[i].TokenName < stats[j].TokenName
+			}
+			return stats[i].Username < stats[j].Username
+		}
+		return stats[i].Day < stats[j].Day
+	})
+
+	return stats, nil
 }
 
 // SearchLogsByDayAndModel returns per-day, per-model aggregates for logs in the

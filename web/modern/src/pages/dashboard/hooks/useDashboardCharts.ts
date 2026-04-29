@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { BaseMetricRow, getDisplayInCurrency, getQuotaPerUnit, ModelRow, TokenRow, UserRow } from '../types';
+import { BaseMetricRow, getDisplayInCurrency, getQuotaPerUnit, ModelRow, TokenRow, ToolMetricRow, ToolRow, ToolTokenRow, ToolUserRow, UserRow } from '../types';
 
 export type CacheHeatmapEntity = {
   name: string;
@@ -19,7 +19,11 @@ export const useDashboardCharts = (
   rows: ModelRow[],
   userRows: UserRow[],
   tokenRows: TokenRow[],
-  statisticsMetric: 'tokens' | 'requests' | 'expenses'
+  toolRows: ToolRow[],
+  toolUserRows: ToolUserRow[],
+  toolTokenRows: ToolTokenRow[],
+  statisticsMetric: 'tokens' | 'requests' | 'expenses',
+  toolStatisticsMetric: 'requests' | 'expenses'
 ) => {
   const { t } = useTranslation();
 
@@ -55,6 +59,26 @@ export const useDashboardCharts = (
     }
     return Array.from(values).sort((a, b) => a.localeCompare(b));
   }, [rows, userRows, tokenRows]);
+
+  const toolXAxisDays = useMemo(() => {
+    const values = new Set<string>();
+    for (const row of toolRows) {
+      if (row.day) {
+        values.add(row.day);
+      }
+    }
+    for (const row of toolUserRows) {
+      if (row.day) {
+        values.add(row.day);
+      }
+    }
+    for (const row of toolTokenRows) {
+      if (row.day) {
+        values.add(row.day);
+      }
+    }
+    return Array.from(values).sort((a, b) => a.localeCompare(b));
+  }, [toolRows, toolUserRows, toolTokenRows]);
 
   const timeSeries = useMemo(() => {
     const quotaPerUnit = getQuotaPerUnit();
@@ -121,6 +145,51 @@ export const useDashboardCharts = (
     return { uniqueKeys, stackedData };
   };
 
+  const computeToolStackedSeries = <T extends ToolMetricRow>(rowsSource: T[], daysList: string[], labelFn: (row: T) => string | null) => {
+    const quotaPerUnit = getQuotaPerUnit();
+    const displayInCurrency = getDisplayInCurrency();
+    const dayToValues: Record<string, Record<string, number>> = {};
+    for (const day of daysList) {
+      dayToValues[day] = {};
+    }
+
+    const uniqueKeys: string[] = [];
+    const seen = new Set<string>();
+
+    for (const row of rowsSource) {
+      const label = labelFn(row);
+      if (!label) {
+        continue;
+      }
+      if (!seen.has(label)) {
+        uniqueKeys.push(label);
+        seen.add(label);
+      }
+
+      const day = row.day;
+      if (!dayToValues[day]) {
+        dayToValues[day] = {};
+      }
+
+      let value = row.request_count || 0;
+      if (toolStatisticsMetric === 'expenses') {
+        value = row.quota || 0;
+        if (displayInCurrency) {
+          value = value / quotaPerUnit;
+        }
+      }
+
+      dayToValues[day][label] = (dayToValues[day][label] || 0) + value;
+    }
+
+    const stackedData = daysList.map((day) => ({
+      date: day,
+      ...(dayToValues[day] || {}),
+    }));
+
+    return { uniqueKeys, stackedData };
+  };
+
   const { uniqueKeys: modelKeys, stackedData: modelStackedData } = useMemo(
     () => computeStackedSeries(rows, xAxisDays, (row) => (row.model_name ? row.model_name : t('dashboard.fallbacks.model'))),
     [rows, xAxisDays, statisticsMetric, t]
@@ -139,6 +208,26 @@ export const useDashboardCharts = (
         return `${token}(${owner})`;
       }),
     [tokenRows, xAxisDays, statisticsMetric, t]
+  );
+
+  const { uniqueKeys: toolKeys, stackedData: toolStackedData } = useMemo(
+    () => computeToolStackedSeries(toolRows, toolXAxisDays, (row) => (row.tool_name ? row.tool_name : t('dashboard.fallbacks.tool'))),
+    [toolRows, toolXAxisDays, toolStatisticsMetric, t]
+  );
+
+  const { uniqueKeys: toolUserKeys, stackedData: toolUserStackedData } = useMemo(
+    () => computeToolStackedSeries(toolUserRows, toolXAxisDays, (row) => (row.username ? row.username : t('dashboard.fallbacks.user'))),
+    [toolUserRows, toolXAxisDays, toolStatisticsMetric, t]
+  );
+
+  const { uniqueKeys: toolTokenKeys, stackedData: toolTokenStackedData } = useMemo(
+    () =>
+      computeToolStackedSeries(toolTokenRows, toolXAxisDays, (row) => {
+        const token = row.token_name && row.token_name.trim().length > 0 ? row.token_name : t('dashboard.fallbacks.token');
+        const owner = row.username && row.username.trim().length > 0 ? row.username : t('dashboard.fallbacks.owner');
+        return `${token}(${owner})`;
+      }),
+    [toolTokenRows, toolXAxisDays, toolStatisticsMetric, t]
   );
 
   const buildCacheHeatmap = <T extends BaseMetricRow>(
@@ -330,6 +419,12 @@ export const useDashboardCharts = (
     userStackedData,
     tokenKeys,
     tokenStackedData,
+    toolKeys,
+    toolStackedData,
+    toolUserKeys,
+    toolUserStackedData,
+    toolTokenKeys,
+    toolTokenStackedData,
     modelHeatmap,
     userHeatmap,
     tokenHeatmap,

@@ -38,6 +38,7 @@
       "model": "Modèle inconnu",
       "owner": "inconnu",
       "token": "jeton sans nom",
+      "tool": "Outil inconnu",
       "user": "Utilisateur inconnu"
     },
     "filters": {
@@ -86,6 +87,9 @@
       "metric_label": "Indicateur : {{metric}}",
       "metric_placeholder": "Choisir un indicateur",
       "model_usage": "Utilisation des modèles",
+      "tool_token_usage": "Utilisation des outils par jeton",
+      "tool_usage": "Utilisation des outils",
+      "tool_user_usage": "Utilisation des outils par utilisateur",
       "token_usage": "Utilisation des jetons",
       "user_usage": "Utilisation par utilisateur"
     },

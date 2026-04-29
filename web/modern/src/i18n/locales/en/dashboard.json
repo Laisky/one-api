@@ -38,6 +38,7 @@
       "model": "Unknown model",
       "owner": "unknown",
       "token": "unnamed token",
+      "tool": "Unknown tool",
       "user": "Unknown user"
     },
     "filters": {
@@ -86,6 +87,9 @@
       "metric_label": "Metric: {{metric}}",
       "metric_placeholder": "Select metric",
       "model_usage": "Model Usage",
+      "tool_token_usage": "Tool Usage by Token",
+      "tool_usage": "Tool Usage",
+      "tool_user_usage": "Tool Usage by User",
       "token_usage": "Token Usage",
       "user_usage": "User Usage"
     },

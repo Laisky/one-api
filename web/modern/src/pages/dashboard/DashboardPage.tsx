@@ -8,6 +8,7 @@ import { DashboardFilter } from './components/DashboardFilter';
 import { Insights } from './components/Insights';
 import { OverviewCards } from './components/OverviewCards';
 import { TimeSeriesCharts } from './components/TimeSeriesCharts';
+import { ToolUsageCharts } from './components/ToolUsageCharts';
 import { TopModels } from './components/TopModels';
 import { UsageCharts } from './components/UsageCharts';
 import { useDashboardCharts } from './hooks/useDashboardCharts';
@@ -18,6 +19,7 @@ export function DashboardPage() {
   const { user } = useAuthStore();
   const [filtersReady, setFiltersReady] = useState(false);
   const [statisticsMetric, setStatisticsMetric] = useState<'tokens' | 'requests' | 'expenses'>('tokens');
+  const [toolStatisticsMetric, setToolStatisticsMetric] = useState<'requests' | 'expenses'>('requests');
 
   useLayoutEffect(() => {
     if (typeof document === 'undefined') {
@@ -49,6 +51,9 @@ export function DashboardPage() {
     rows,
     userRows,
     tokenRows,
+    toolRows,
+    toolUserRows,
+    toolTokenRows,
     loadStats,
     applyPreset,
     getMinDate,
@@ -63,13 +68,19 @@ export function DashboardPage() {
     userStackedData,
     tokenKeys,
     tokenStackedData,
+    toolKeys,
+    toolStackedData,
+    toolUserKeys,
+    toolUserStackedData,
+    toolTokenKeys,
+    toolTokenStackedData,
     modelHeatmap,
     userHeatmap,
     tokenHeatmap,
     rangeTotals,
     modelLeaders,
     rangeInsights,
-  } = useDashboardCharts(rows, userRows, tokenRows, statisticsMetric);
+  } = useDashboardCharts(rows, userRows, tokenRows, toolRows, toolUserRows, toolTokenRows, statisticsMetric, toolStatisticsMetric);
 
   if (!user) {
     return <div>{t('dashboard.login_required')}</div>;
@@ -155,6 +166,17 @@ export function DashboardPage() {
           tokenKeys={tokenKeys}
           statisticsMetric={statisticsMetric}
           setStatisticsMetric={setStatisticsMetric}
+        />
+
+        <ToolUsageCharts
+          toolStackedData={toolStackedData}
+          toolKeys={toolKeys}
+          toolUserStackedData={toolUserStackedData}
+          toolUserKeys={toolUserKeys}
+          toolTokenStackedData={toolTokenStackedData}
+          toolTokenKeys={toolTokenKeys}
+          toolStatisticsMetric={toolStatisticsMetric}
+          setToolStatisticsMetric={setToolStatisticsMetric}
         />
 
         <CacheHeatmaps

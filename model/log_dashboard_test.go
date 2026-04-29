@@ -33,6 +33,17 @@ func TestDashboardAggregations(t *testing.T) {
 			Quota:            100,
 			PromptTokens:     70,
 			CompletionTokens: 30,
+			Metadata: AppendToolUsageMetadata(nil, &ToolUsageSummary{
+				TotalCost: 45,
+				Counts: map[string]int{
+					"web_search": 2,
+					"calculator": 1,
+				},
+				CostByTool: map[string]int64{
+					"web_search": 30,
+					"calculator": 15,
+				},
+			}),
 		},
 		{
 			UserId:           102,
@@ -44,6 +55,15 @@ func TestDashboardAggregations(t *testing.T) {
 			Quota:            50,
 			PromptTokens:     40,
 			CompletionTokens: 10,
+			Metadata: AppendToolUsageMetadata(nil, &ToolUsageSummary{
+				TotalCost: 12,
+				Counts: map[string]int{
+					"web_search": 1,
+				},
+				CostByTool: map[string]int64{
+					"web_search": 12,
+				},
+			}),
 		},
 		{
 			UserId:           101,
@@ -55,6 +75,17 @@ func TestDashboardAggregations(t *testing.T) {
 			Quota:            80,
 			PromptTokens:     50,
 			CompletionTokens: 30,
+			Metadata: AppendToolUsageMetadata(nil, &ToolUsageSummary{
+				TotalCost: 25,
+				Counts: map[string]int{
+					"web_search": 1,
+					"file_read":  2,
+				},
+				CostByTool: map[string]int64{
+					"web_search": 10,
+					"file_read":  15,
+				},
+			}),
 		},
 		{
 			UserId:           102,
@@ -77,6 +108,15 @@ func TestDashboardAggregations(t *testing.T) {
 			Quota:            30,
 			PromptTokens:     20,
 			CompletionTokens: 10,
+			Metadata: AppendToolUsageMetadata(nil, &ToolUsageSummary{
+				TotalCost: 8,
+				Counts: map[string]int{
+					"calculator": 2,
+				},
+				CostByTool: map[string]int64{
+					"calculator": 8,
+				},
+			}),
 		},
 	}
 
@@ -157,6 +197,74 @@ func TestDashboardAggregations(t *testing.T) {
 	tokenScoped, err := SearchLogsByDayAndToken(101, start, end)
 	require.NoError(t, err)
 	for _, stat := range tokenScoped {
+		require.Equal(t, 101, stat.UserId)
+		require.Equal(t, "alice", stat.Username)
+	}
+
+	toolStats, err := SearchToolLogsByDayAndTool(0, start, end)
+	require.NoError(t, err)
+
+	toolByKey := make(map[string]*dto.ToolLogStatistic)
+	for _, stat := range toolStats {
+		toolByKey[fmt.Sprintf("%s|%s", stat.Day, stat.ToolName)] = stat
+	}
+
+	webSearchDay1 := toolByKey[fmt.Sprintf("%s|%s", day1Str, "web_search")]
+	require.NotNil(t, webSearchDay1)
+	require.Equal(t, 3, webSearchDay1.RequestCount)
+	require.EqualValues(t, 42, webSearchDay1.Quota)
+
+	calculatorDay2 := toolByKey[fmt.Sprintf("%s|%s", day2Str, "calculator")]
+	require.NotNil(t, calculatorDay2)
+	require.Equal(t, 2, calculatorDay2.RequestCount)
+	require.EqualValues(t, 8, calculatorDay2.Quota)
+
+	toolUserStats, err := SearchToolLogsByDayAndUser(0, start, end)
+	require.NoError(t, err)
+
+	toolUserByKey := make(map[string]*dto.ToolLogStatisticByUser)
+	for _, stat := range toolUserStats {
+		toolUserByKey[fmt.Sprintf("%s|%s", stat.Day, stat.Username)] = stat
+	}
+
+	aliceToolDay2 := toolUserByKey[fmt.Sprintf("%s|%s", day2Str, "alice")]
+	require.NotNil(t, aliceToolDay2)
+	require.Equal(t, 5, aliceToolDay2.RequestCount)
+	require.EqualValues(t, 33, aliceToolDay2.Quota)
+
+	bobToolDay1 := toolUserByKey[fmt.Sprintf("%s|%s", day1Str, "bob")]
+	require.NotNil(t, bobToolDay1)
+	require.Equal(t, 1, bobToolDay1.RequestCount)
+	require.EqualValues(t, 12, bobToolDay1.Quota)
+
+	toolTokenStats, err := SearchToolLogsByDayAndToken(0, start, end)
+	require.NoError(t, err)
+
+	toolTokenByKey := make(map[string]*dto.ToolLogStatisticByToken)
+	for _, stat := range toolTokenStats {
+		toolTokenByKey[fmt.Sprintf("%s|%s|%s", stat.Day, stat.TokenName, stat.Username)] = stat
+	}
+
+	alphaToolsDay2 := toolTokenByKey[fmt.Sprintf("%s|%s|%s", day2Str, "alpha", "alice")]
+	require.NotNil(t, alphaToolsDay2)
+	require.Equal(t, 3, alphaToolsDay2.RequestCount)
+	require.EqualValues(t, 25, alphaToolsDay2.Quota)
+
+	deltaToolsDay2 := toolTokenByKey[fmt.Sprintf("%s|%s|%s", day2Str, "delta", "alice")]
+	require.NotNil(t, deltaToolsDay2)
+	require.Equal(t, 2, deltaToolsDay2.RequestCount)
+	require.EqualValues(t, 8, deltaToolsDay2.Quota)
+
+	toolUserScoped, err := SearchToolLogsByDayAndUser(101, start, end)
+	require.NoError(t, err)
+	require.Len(t, toolUserScoped, 2)
+	for _, stat := range toolUserScoped {
+		require.Equal(t, 101, stat.UserId)
+	}
+
+	toolTokenScoped, err := SearchToolLogsByDayAndToken(101, start, end)
+	require.NoError(t, err)
+	for _, stat := range toolTokenScoped {
 		require.Equal(t, 101, stat.UserId)
 		require.Equal(t, "alice", stat.Username)
 	}

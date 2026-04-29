@@ -38,6 +38,7 @@
       "model": "Modelo desconocido",
       "owner": "desconocido",
       "token": "token sin nombre",
+      "tool": "Herramienta desconocida",
       "user": "Usuario desconocido"
     },
     "filters": {
@@ -86,6 +87,9 @@
       "metric_label": "Indicador: {{metric}}",
       "metric_placeholder": "Selecciona el indicador",
       "model_usage": "Uso por modelo",
+      "tool_token_usage": "Uso de herramientas por token",
+      "tool_usage": "Uso de herramientas",
+      "tool_user_usage": "Uso de herramientas por usuario",
       "token_usage": "Uso de tokens",
       "user_usage": "Uso por usuario"
     },

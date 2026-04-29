@@ -41,3 +41,30 @@ type LogStatisticByToken struct {
 	CacheHitCount      int    `gorm:"column:cache_hit_count"`
 	CacheHitQuota      int    `gorm:"column:cache_hit_quota"`
 }
+
+// ToolLogStatistic captures aggregated tool usage grouped by day and tool name.
+type ToolLogStatistic struct {
+	Day          string `gorm:"column:day"`
+	ToolName     string `gorm:"column:tool_name"`
+	RequestCount int    `gorm:"column:request_count"`
+	Quota        int64  `gorm:"column:quota"`
+}
+
+// ToolLogStatisticByUser captures aggregated tool usage grouped by day and user.
+type ToolLogStatisticByUser struct {
+	Day          string `gorm:"column:day"`
+	Username     string `gorm:"column:username"`
+	UserId       int    `gorm:"column:user_id"`
+	RequestCount int    `gorm:"column:request_count"`
+	Quota        int64  `gorm:"column:quota"`
+}
+
+// ToolLogStatisticByToken captures aggregated tool usage grouped by day, token, and user.
+type ToolLogStatisticByToken struct {
+	Day          string `gorm:"column:day"`
+	Username     string `gorm:"column:username"`
+	UserId       int    `gorm:"column:user_id"`
+	TokenName    string `gorm:"column:token_name"`
+	RequestCount int    `gorm:"column:request_count"`
+	Quota        int64  `gorm:"column:quota"`
+}
