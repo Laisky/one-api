@@ -24,6 +24,16 @@ func SetRelayRouter(router *gin.Engine) {
 	router.Use(middleware.APIFormatAutoDetect(router))
 	router.Use(middleware.CORS())
 	router.Use(middleware.GzipDecodeMiddleware())
+
+	// OpenRouter provider listing endpoint. Public (no auth) since OpenRouter
+	// scrapes this during onboarding and periodic refresh. Returns the model
+	// catalog in the OpenRouter upstream-provider schema described at
+	// https://openrouter.ai/docs/guides/get-started/for-providers.
+	openRouterRouter := router.Group("/openrouter/v1")
+	{
+		openRouterRouter.GET("/models", controller.OpenRouterListModels)
+	}
+
 	// https://platform.openai.com/docs/api-reference/introduction
 	modelsRouter := router.Group("/v1/models")
 	modelsRouter.Use(middleware.TokenAuth())

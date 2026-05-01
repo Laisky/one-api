@@ -49,6 +49,30 @@ type ModelConfig struct {
 	Image *ImagePricingConfig `json:"image,omitempty"`
 	// Embedding captures modality-specific pricing metadata for embedding requests.
 	Embedding *EmbeddingPricingConfig `json:"embedding,omitempty"`
+	// ContextLength is the total token context (input+output) the model supports.
+	// 0 means unspecified — caller should fall back to a reasonable default.
+	ContextLength int32 `json:"context_length,omitempty"`
+	// MaxOutputTokens is the maximum tokens the model can emit per response.
+	// 0 means unspecified — caller should fall back to ContextLength or a default.
+	MaxOutputTokens int32 `json:"max_output_tokens,omitempty"`
+	// InputModalities lists supported input modalities. Empty implies ["text"].
+	// Valid OpenRouter values include "text", "image", "file".
+	InputModalities []string `json:"input_modalities,omitempty"`
+	// OutputModalities lists supported output modalities. Empty implies ["text"].
+	OutputModalities []string `json:"output_modalities,omitempty"`
+	// SupportedFeatures advertises capabilities. Subset of:
+	// "tools", "json_mode", "structured_outputs", "logprobs", "web_search", "reasoning".
+	SupportedFeatures []string `json:"supported_features,omitempty"`
+	// SupportedSamplingParameters lists OpenAI-compatible sampling parameters this model accepts.
+	// Empty means caller should use a default conservative set.
+	SupportedSamplingParameters []string `json:"supported_sampling_parameters,omitempty"`
+	// Quantization advertises numeric precision. Empty means unspecified.
+	// Valid OpenRouter values: "int4","int8","fp4","fp6","fp8","fp16","bf16","fp32".
+	Quantization string `json:"quantization,omitempty"`
+	// HuggingFaceID identifies the model on HuggingFace if applicable. Empty if not on HF.
+	HuggingFaceID string `json:"hugging_face_id,omitempty"`
+	// Description is a short human-readable description (optional).
+	Description string `json:"description,omitempty"`
 }
 
 // EmbeddingPricingConfig captures modality-specific pricing metadata for embedding requests.
