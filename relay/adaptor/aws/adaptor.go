@@ -486,4 +486,3 @@ func GetModelCapabilities(modelName string) ProviderCapabilities {
 
 	return baseCapabilities
 }
-

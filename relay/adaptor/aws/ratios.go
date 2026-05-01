@@ -362,7 +362,7 @@ var awsBedrockModelPricing = map[string]adaptor.ModelConfig{
 	},
 	"amazon-titan-embed-text": {
 		Ratio: 0.1 * ratio.MilliTokensUsd, CompletionRatio: 1,
-		ContextLength: 8192,
+		ContextLength:   8192,
 		InputModalities: awsTextInputs, OutputModalities: awsTextOutputs,
 		Description: "Amazon Titan Text Embeddings model on AWS Bedrock.",
 	},

@@ -60,6 +60,8 @@ var audioModelRatios = map[string]adaptor.ModelConfig{
 			CompletionRatio:       2,
 			PromptTokensPerSecond: 10,
 		},
+		ContextLength:    16000,
+		MaxOutputTokens:  2000,
 		InputModalities:  []string{"text"},
 		OutputModalities: []string{"text"},
 		Description:      "GPT-4o transcribe: high-quality speech-to-text successor to Whisper.",
@@ -72,6 +74,8 @@ var audioModelRatios = map[string]adaptor.ModelConfig{
 			CompletionRatio:       2,
 			PromptTokensPerSecond: 10,
 		},
+		ContextLength:    16000,
+		MaxOutputTokens:  2000,
 		InputModalities:  []string{"text"},
 		OutputModalities: []string{"text"},
 		Description:      "GPT-4o mini transcribe: cost-efficient speech-to-text model.",
@@ -79,6 +83,7 @@ var audioModelRatios = map[string]adaptor.ModelConfig{
 	"gpt-4o-mini-tts": {
 		Ratio:            0.6 * ratio.MilliTokensUsd,
 		CompletionRatio:  20.0, // $0.60 input, $12.00 output per 1M tokens
+		ContextLength:    2000,
 		InputModalities:  []string{"text"},
 		OutputModalities: []string{"text"},
 		Description:      "GPT-4o mini TTS: low-latency neural text-to-speech model.",

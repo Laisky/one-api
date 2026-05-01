@@ -64,3 +64,23 @@ func TestRealtimeModelsIncludeCurrentStableIDs(t *testing.T) {
 		require.InDelta(t, expected.completionRatio, cfg.CompletionRatio, 1e-12)
 	}
 }
+
+// TestOpenAIAudioMetadata verifies explicit token limits for transcribe and mini-tts models.
+// Parameter t coordinates the test run. Returns no values.
+func TestOpenAIAudioMetadata(t *testing.T) {
+	t.Parallel()
+
+	transcribeCfg, ok := ModelRatios["gpt-4o-transcribe"]
+	require.True(t, ok)
+	require.EqualValues(t, 16000, transcribeCfg.ContextLength)
+	require.EqualValues(t, 2000, transcribeCfg.MaxOutputTokens)
+
+	miniTranscribeCfg, ok := ModelRatios["gpt-4o-mini-transcribe"]
+	require.True(t, ok)
+	require.EqualValues(t, 16000, miniTranscribeCfg.ContextLength)
+	require.EqualValues(t, 2000, miniTranscribeCfg.MaxOutputTokens)
+
+	miniTTSCfg, ok := ModelRatios["gpt-4o-mini-tts"]
+	require.True(t, ok)
+	require.EqualValues(t, 2000, miniTTSCfg.ContextLength)
+}

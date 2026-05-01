@@ -24,7 +24,7 @@ import (
 //     zero/empty form (string "", JSONStringMap{}, JSONStringSlice(nil),
 //     MCPToolPricingMap(nil), false), the update path must persist it instead of
 //     letting GORM's struct-based Updates skip it.
-//   - For non-pointer string columns (Description), the column ends up '' (NOT
+//   - For non-pointer string columns (Description), the column ends up ” (NOT
 //     NULL) on every backend.
 //   - For JSON-serialized columns whose Value() returns (nil, nil) on empty
 //     input (Headers, ToolWhitelist, ToolPricing), the column ends up SQL NULL

@@ -38,16 +38,16 @@ var imageGenerationModels = map[string]adaptor.ModelConfig{
 		Description:      "CogView-3-Flash: free fast text-to-image generation model.",
 	},
 	"cogviewx": {
-		Ratio:            0.04 * ratio.MilliTokensRmb,
-		CompletionRatio:  1,
+		Ratio:           0.04 * ratio.MilliTokensRmb,
+		CompletionRatio: 1,
 		InputModalities: []string{"text", "image"},
-		Description:      "CogVideoX: text-and-image-to-video generation model.",
+		Description:     "CogVideoX: text-and-image-to-video generation model.",
 	},
 	"cogviewx-flash": {
-		Ratio:            0.008 * ratio.MilliTokensRmb,
-		CompletionRatio:  1,
+		Ratio:           0.008 * ratio.MilliTokensRmb,
+		CompletionRatio: 1,
 		InputModalities: []string{"text", "image"},
-		Description:      "CogVideoX-Flash: free fast text-to-video generator with 4K and 60fps support.",
+		Description:     "CogVideoX-Flash: free fast text-to-video generator with 4K and 60fps support.",
 	},
 }
 
@@ -100,18 +100,18 @@ var utilityModels = map[string]adaptor.ModelConfig{
 // embeddingModels enumerates Zhipu's text embedding models.
 var embeddingModels = map[string]adaptor.ModelConfig{
 	"embedding-3": {
-		Ratio:            0.5 * ratio.MilliTokensRmb,
-		CompletionRatio:  1,
+		Ratio:           0.5 * ratio.MilliTokensRmb,
+		CompletionRatio: 1,
 		ContextLength:   8_192,
 		InputModalities: textInput(),
-		Description:      "Embedding-3: V3 text embedding model with 8K context.",
+		Description:     "Embedding-3: V3 text embedding model with 8K context.",
 	},
 	"embedding-2": {
-		Ratio:            0.5 * ratio.MilliTokensRmb,
-		CompletionRatio:  1,
+		Ratio:           0.5 * ratio.MilliTokensRmb,
+		CompletionRatio: 1,
 		ContextLength:   8_192,
 		InputModalities: textInput(),
-		Description:      "Embedding-2: V2 text embedding model with 8K context.",
+		Description:     "Embedding-2: V2 text embedding model with 8K context.",
 	},
 }
 

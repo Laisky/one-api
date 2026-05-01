@@ -7,11 +7,11 @@ import (
 )
 
 var (
-	qwenTextInputs              = []string{"text"}
-	qwenTextOutputs             = []string{"text"}
-	qwenSamplingParams          = []string{"temperature", "top_p", "top_k", "stop", "max_tokens"}
-	qwenChatFeatures            = []string{"tools"}
-	qwenChatReasoningFeatures   = []string{"tools", "reasoning"}
+	qwenTextInputs            = []string{"text"}
+	qwenTextOutputs           = []string{"text"}
+	qwenSamplingParams        = []string{"temperature", "top_p", "top_k", "stop", "max_tokens"}
+	qwenChatFeatures          = []string{"tools"}
+	qwenChatReasoningFeatures = []string{"tools", "reasoning"}
 )
 
 // ModelRatios contains pricing information for Qwen models served on Vertex AI Model-as-a-Service.

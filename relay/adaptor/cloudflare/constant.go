@@ -313,7 +313,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 	// Embedding Models
 	"@cf/baai/bge-small-en-v1.5": {
 		Ratio: 0.020 * ratio.MilliTokensUsd, CompletionRatio: 1,
-		ContextLength: 512,
+		ContextLength:   512,
 		InputModalities: cfTextInputs, OutputModalities: cfTextOutputs,
 		Quantization:  "fp16",
 		HuggingFaceID: "BAAI/bge-small-en-v1.5",
@@ -321,7 +321,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 	},
 	"@cf/baai/bge-base-en-v1.5": {
 		Ratio: 0.067 * ratio.MilliTokensUsd, CompletionRatio: 1,
-		ContextLength: 512,
+		ContextLength:   512,
 		InputModalities: cfTextInputs, OutputModalities: cfTextOutputs,
 		Quantization:  "fp16",
 		HuggingFaceID: "BAAI/bge-base-en-v1.5",
@@ -329,7 +329,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 	},
 	"@cf/baai/bge-large-en-v1.5": {
 		Ratio: 0.204 * ratio.MilliTokensUsd, CompletionRatio: 1,
-		ContextLength: 512,
+		ContextLength:   512,
 		InputModalities: cfTextInputs, OutputModalities: cfTextOutputs,
 		Quantization:  "fp16",
 		HuggingFaceID: "BAAI/bge-large-en-v1.5",
@@ -337,7 +337,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 	},
 	"@cf/baai/bge-m3": {
 		Ratio: 0.012 * ratio.MilliTokensUsd, CompletionRatio: 1,
-		ContextLength: 8192,
+		ContextLength:   8192,
 		InputModalities: cfTextInputs, OutputModalities: cfTextOutputs,
 		Quantization:  "fp16",
 		HuggingFaceID: "BAAI/bge-m3",
@@ -345,7 +345,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 	},
 	"@cf/pfnet/plamo-embedding-1b": {
 		Ratio: 0.019 * ratio.MilliTokensUsd, CompletionRatio: 1,
-		ContextLength: 4096,
+		ContextLength:   4096,
 		InputModalities: cfTextInputs, OutputModalities: cfTextOutputs,
 		Quantization:  "fp16",
 		HuggingFaceID: "pfnet/plamo-embedding-1b",
@@ -353,7 +353,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 	},
 	"@cf/qwen/qwen3-embedding-0.6b": {
 		Ratio: 0.012 * ratio.MilliTokensUsd, CompletionRatio: 1,
-		ContextLength: 32768,
+		ContextLength:   32768,
 		InputModalities: cfTextInputs, OutputModalities: cfTextOutputs,
 		Quantization:  "fp16",
 		HuggingFaceID: "Qwen/Qwen3-Embedding-0.6B",
@@ -362,61 +362,61 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 
 	// Audio Models
 	"@cf/openai/whisper": {
-		Audio:           &adaptor.AudioPricingConfig{UsdPerSecond: 0.0005 / 60},
+		Audio:            &adaptor.AudioPricingConfig{UsdPerSecond: 0.0005 / 60},
 		OutputModalities: cfTextOutputs,
-		HuggingFaceID: "openai/whisper-large-v3",
-		Description:   "OpenAI Whisper speech-to-text on Cloudflare Workers AI.",
+		HuggingFaceID:    "openai/whisper-large-v3",
+		Description:      "OpenAI Whisper speech-to-text on Cloudflare Workers AI.",
 	},
 	"@cf/openai/whisper-large-v3-turbo": {
-		Audio:           &adaptor.AudioPricingConfig{UsdPerSecond: 0.0005 / 60},
+		Audio:            &adaptor.AudioPricingConfig{UsdPerSecond: 0.0005 / 60},
 		OutputModalities: cfTextOutputs,
-		HuggingFaceID: "openai/whisper-large-v3-turbo",
-		Description:   "OpenAI Whisper Large v3 Turbo speech-to-text on Cloudflare Workers AI.",
+		HuggingFaceID:    "openai/whisper-large-v3-turbo",
+		Description:      "OpenAI Whisper Large v3 Turbo speech-to-text on Cloudflare Workers AI.",
 	},
 	"@cf/myshell-ai/melotts": {
-		Audio:            &adaptor.AudioPricingConfig{UsdPerSecond: 0.0002 / 60},
+		Audio:           &adaptor.AudioPricingConfig{UsdPerSecond: 0.0002 / 60},
 		InputModalities: cfTextInputs,
-		HuggingFaceID:    "myshell-ai/MeloTTS-English",
-		Description:      "MyShell MeloTTS multi-lingual TTS on Cloudflare Workers AI.",
+		HuggingFaceID:   "myshell-ai/MeloTTS-English",
+		Description:     "MyShell MeloTTS multi-lingual TTS on Cloudflare Workers AI.",
 	},
 	"@cf/deepgram/aura-1": {
-		Ratio:            15.0 * ratio.MilliTokensUsd,
-		CompletionRatio:  1,
+		Ratio:           15.0 * ratio.MilliTokensUsd,
+		CompletionRatio: 1,
 		InputModalities: cfTextInputs,
-		Description:      "Deepgram Aura 1 TTS on Cloudflare Workers AI.",
+		Description:     "Deepgram Aura 1 TTS on Cloudflare Workers AI.",
 	},
 	"@cf/deepgram/nova-3": {
-		Audio:           &adaptor.AudioPricingConfig{UsdPerSecond: 0.0052 / 60},
+		Audio:            &adaptor.AudioPricingConfig{UsdPerSecond: 0.0052 / 60},
 		OutputModalities: cfTextOutputs,
-		Description: "Deepgram Nova 3 speech-to-text on Cloudflare Workers AI.",
+		Description:      "Deepgram Nova 3 speech-to-text on Cloudflare Workers AI.",
 	},
 	"@cf/deepgram/flux": {
-		Audio:           &adaptor.AudioPricingConfig{UsdPerSecond: 0.0077 / 60},
+		Audio:            &adaptor.AudioPricingConfig{UsdPerSecond: 0.0077 / 60},
 		OutputModalities: cfTextOutputs,
-		Description: "Deepgram Flux conversational ASR on Cloudflare Workers AI.",
+		Description:      "Deepgram Flux conversational ASR on Cloudflare Workers AI.",
 	},
 	"@cf/pipecat-ai/smart-turn-v2": {
-		Audio:           &adaptor.AudioPricingConfig{UsdPerSecond: 0.00033795 / 60},
+		Audio:            &adaptor.AudioPricingConfig{UsdPerSecond: 0.00033795 / 60},
 		OutputModalities: cfTextOutputs,
-		Description: "Pipecat smart-turn v2 voice activity detector on Cloudflare Workers AI.",
+		Description:      "Pipecat smart-turn v2 voice activity detector on Cloudflare Workers AI.",
 	},
 	"@cf/deepgram/aura-2-en": {
-		Ratio:            30.0 * ratio.MilliTokensUsd,
-		CompletionRatio:  1,
+		Ratio:           30.0 * ratio.MilliTokensUsd,
+		CompletionRatio: 1,
 		InputModalities: cfTextInputs,
-		Description:      "Deepgram Aura 2 English TTS on Cloudflare Workers AI.",
+		Description:     "Deepgram Aura 2 English TTS on Cloudflare Workers AI.",
 	},
 	"@cf/deepgram/aura-2-es": {
-		Ratio:            30.0 * ratio.MilliTokensUsd,
-		CompletionRatio:  1,
+		Ratio:           30.0 * ratio.MilliTokensUsd,
+		CompletionRatio: 1,
 		InputModalities: cfTextInputs,
-		Description:      "Deepgram Aura 2 Spanish TTS on Cloudflare Workers AI.",
+		Description:     "Deepgram Aura 2 Spanish TTS on Cloudflare Workers AI.",
 	},
 
 	// Other (Classification, Reranker, Translation, etc.)
 	"@cf/huggingface/distilbert-sst-2-int8": {
 		Ratio: 0.026 * ratio.MilliTokensUsd, CompletionRatio: 1,
-		ContextLength: 512,
+		ContextLength:   512,
 		InputModalities: cfTextInputs, OutputModalities: cfTextOutputs,
 		Quantization:  "int8",
 		HuggingFaceID: "distilbert-base-uncased-finetuned-sst-2-english",
@@ -424,7 +424,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 	},
 	"@cf/baai/bge-reranker-base": {
 		Ratio: 0.003 * ratio.MilliTokensUsd, CompletionRatio: 1,
-		ContextLength: 512,
+		ContextLength:   512,
 		InputModalities: cfTextInputs, OutputModalities: cfTextOutputs,
 		Quantization:  "fp16",
 		HuggingFaceID: "BAAI/bge-reranker-base",
@@ -432,7 +432,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 	},
 	"@cf/meta/m2m100-1.2b": {
 		Ratio: 0.342 * ratio.MilliTokensUsd, CompletionRatio: 1,
-		ContextLength: 1024,
+		ContextLength:   1024,
 		InputModalities: cfTextInputs, OutputModalities: cfTextOutputs,
 		Quantization:  "fp16",
 		HuggingFaceID: "facebook/m2m100_1.2B",
@@ -440,7 +440,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 	},
 	"@cf/ai4bharat/indictrans2-en-indic-1B": {
 		Ratio: 0.342 * ratio.MilliTokensUsd, CompletionRatio: 1,
-		ContextLength: 1024,
+		ContextLength:   1024,
 		InputModalities: cfTextInputs, OutputModalities: cfTextOutputs,
 		Quantization:  "fp16",
 		HuggingFaceID: "ai4bharat/indictrans2-en-indic-1B",

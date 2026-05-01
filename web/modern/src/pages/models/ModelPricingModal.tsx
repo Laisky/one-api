@@ -16,6 +16,15 @@ export interface ModelDisplayData {
   cache_write_1h_price?: number;
   output_price: number;
   max_tokens?: number;
+  context_length?: number;
+  max_output_tokens?: number;
+  input_modalities?: string[];
+  output_modalities?: string[];
+  supported_features?: string[];
+  supported_sampling_parameters?: string[];
+  quantization?: string;
+  hugging_face_id?: string;
+  description?: string;
   image_price?: number;
   tiers?: TierData[];
   video_pricing?: VideoPricingData;
@@ -287,9 +296,98 @@ function PricingContent({
     (data.cached_input_price !== undefined && data.cached_input_price !== data.input_price) ||
     (data.cache_write_5m_price !== undefined && data.cache_write_5m_price > 0) ||
     (data.cache_write_1h_price !== undefined && data.cache_write_1h_price > 0);
+  const hasMetadata =
+    (data.description && data.description.trim().length > 0) ||
+    (data.context_length !== undefined && data.context_length > 0) ||
+    (data.max_output_tokens !== undefined && data.max_output_tokens > 0) ||
+    (data.max_tokens !== undefined && data.max_tokens > 0) ||
+    (data.quantization && data.quantization.trim().length > 0) ||
+    (data.hugging_face_id && data.hugging_face_id.trim().length > 0) ||
+    (data.input_modalities && data.input_modalities.length > 0) ||
+    (data.output_modalities && data.output_modalities.length > 0) ||
+    (data.supported_features && data.supported_features.length > 0) ||
+    (data.supported_sampling_parameters && data.supported_sampling_parameters.length > 0);
 
   return (
     <div className="space-y-5">
+      {/* General model metadata */}
+      {hasMetadata && (
+        <PricingSection title={tr('model_profile', 'Model Profile')} icon="profile">
+          <div className="space-y-3">
+            {data.description && data.description.trim().length > 0 && (
+              <div className="rounded-lg border bg-muted/30 p-3 text-sm leading-relaxed text-foreground/90">{data.description}</div>
+            )}
+
+            <PriceGrid>
+              {data.context_length !== undefined && data.context_length > 0 && (
+                <div className="rounded-lg border bg-muted/30 p-3">
+                  <div className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
+                    {tr('context_length', 'Context Length')}
+                  </div>
+                  <div className="mt-1 text-lg font-semibold tabular-nums">{formatTokenCountFull(data.context_length)}</div>
+                </div>
+              )}
+              {data.max_output_tokens !== undefined && data.max_output_tokens > 0 && (
+                <div className="rounded-lg border bg-muted/30 p-3">
+                  <div className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
+                    {tr('max_output_tokens', 'Max Output Tokens')}
+                  </div>
+                  <div className="mt-1 text-lg font-semibold tabular-nums">{formatTokenCountFull(data.max_output_tokens)}</div>
+                </div>
+              )}
+              {data.max_tokens !== undefined && data.max_tokens > 0 && (
+                <div className="rounded-lg border bg-muted/30 p-3">
+                  <div className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
+                    {tr('max_tokens', 'Max Tokens')}
+                  </div>
+                  <div className="mt-1 text-lg font-semibold tabular-nums">{formatTokenCountFull(data.max_tokens)}</div>
+                </div>
+              )}
+              {data.quantization && data.quantization.trim().length > 0 && (
+                <div className="rounded-lg border bg-muted/30 p-3">
+                  <div className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
+                    {tr('quantization', 'Quantization')}
+                  </div>
+                  <div className="mt-1 text-lg font-semibold tabular-nums">{data.quantization}</div>
+                </div>
+              )}
+            </PriceGrid>
+
+            {data.hugging_face_id && data.hugging_face_id.trim().length > 0 && (
+              <div className="rounded-lg border bg-muted/30 p-3">
+                <div className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
+                  {tr('hugging_face_id', 'HuggingFace ID')}
+                </div>
+                <div className="mt-1 font-mono text-xs break-all">{data.hugging_face_id}</div>
+              </div>
+            )}
+
+            {(data.input_modalities && data.input_modalities.length > 0) ||
+            (data.output_modalities && data.output_modalities.length > 0) ||
+            (data.supported_features && data.supported_features.length > 0) ||
+            (data.supported_sampling_parameters && data.supported_sampling_parameters.length > 0) ? (
+              <div className="space-y-2">
+                {data.input_modalities && data.input_modalities.length > 0 && (
+                  <TagRow label={tr('input_modalities', 'Input Modalities')} values={data.input_modalities} />
+                )}
+                {data.output_modalities && data.output_modalities.length > 0 && (
+                  <TagRow label={tr('output_modalities', 'Output Modalities')} values={data.output_modalities} />
+                )}
+                {data.supported_features && data.supported_features.length > 0 && (
+                  <TagRow label={tr('supported_features', 'Supported Features')} values={data.supported_features} />
+                )}
+                {data.supported_sampling_parameters && data.supported_sampling_parameters.length > 0 && (
+                  <TagRow
+                    label={tr('supported_sampling_parameters', 'Supported Sampling Parameters')}
+                    values={data.supported_sampling_parameters}
+                  />
+                )}
+              </div>
+            ) : null}
+          </div>
+        </PricingSection>
+      )}
+
       {/* Base text token pricing */}
       <PricingSection title={tr('text_tokens', 'Text Token Pricing')} icon="text">
         <PriceGrid>
@@ -613,6 +711,7 @@ function PricingContent({
 // ---- Reusable sub-components ----
 
 const sectionIcons: Record<string, string> = {
+  profile: '\u{1F9ED}',
   text: '\u{1F4DD}',
   cache: '\u{1F4BE}',
   tiers: '\u{1F4CA}',
@@ -646,6 +745,27 @@ function PriceCell({ label, sublabel, value, tr, raw }: { label: string; sublabe
       <div className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">{label}</div>
       {sublabel && <div className="text-[10px] text-muted-foreground/70">{sublabel}</div>}
       <div className="mt-1 text-lg font-semibold tabular-nums">{raw ? formatUsdRaw(value) : formatUsdForTokens(value, tr)}</div>
+    </div>
+  );
+}
+
+function TagRow({ label, values }: { label: string; values: string[] }) {
+  const normalized = values
+    .map((value) => value.trim())
+    .filter((value, idx, arr) => value.length > 0 && arr.indexOf(value) === idx);
+  if (normalized.length === 0) {
+    return null;
+  }
+  return (
+    <div className="rounded-lg border bg-muted/20 p-2.5">
+      <div className="mb-2 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">{label}</div>
+      <div className="flex flex-wrap gap-1.5">
+        {normalized.map((value) => (
+          <Badge key={value} variant="outline" className="font-mono text-[11px]">
+            {value}
+          </Badge>
+        ))}
+      </div>
     </div>
   );
 }
@@ -777,4 +897,8 @@ function formatTokenCount(count: number): string {
   if (count >= 1_000_000) return `${(count / 1_000_000).toFixed(1)}M`;
   if (count >= 1_000) return `${(count / 1_000).toFixed(0)}K`;
   return count.toString();
+}
+
+function formatTokenCountFull(count: number): string {
+  return count.toLocaleString();
 }

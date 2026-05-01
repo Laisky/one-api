@@ -63,8 +63,8 @@ type Channel struct {
 	CreatedAt       int64   `json:"created_at" gorm:"bigint;autoCreateTime:milli"`
 	UpdatedAt       int64   `json:"updated_at" gorm:"bigint;autoUpdateTime:milli"`
 	// AWS-specific configuration
-	InferenceProfileArnMap *string `json:"inference_profile_arn_map" gorm:"type:text"` // JSON string mapping model names to AWS Bedrock Inference Profile ARNs
-	HiddenModelsProvided   bool    `json:"-" gorm:"-"`
+	InferenceProfileArnMap *string         `json:"inference_profile_arn_map" gorm:"type:text"` // JSON string mapping model names to AWS Bedrock Inference Profile ARNs
+	HiddenModelsProvided   bool            `json:"-" gorm:"-"`
 	NullableFieldsProvided map[string]bool `json:"-" gorm:"-"`
 }
 

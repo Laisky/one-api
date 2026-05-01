@@ -281,6 +281,54 @@ func TestGetModelsDisplay_GptImageShowsTokenPrice(t *testing.T) {
 	require.InDelta(t, pricingCfg.Image.PricePerImageUsd, modelInfo.ImagePrice, 1e-9)
 }
 
+// TestGetModelsDisplay_IncludesModelMetadata verifies /api/models/display exposes rich
+// model metadata (context, modalities, features, and sampling parameters) from adaptor ModelConfig.
+func TestGetModelsDisplay_IncludesModelMetadata(t *testing.T) {
+	setupModelsDisplayTestEnv(t)
+	gin.SetMode(gin.TestMode)
+
+	channel := &model.Channel{
+		Name:   "Metadata Channel",
+		Type:   channeltype.OpenAI,
+		Status: model.ChannelStatusEnabled,
+		Models: "gpt-4o-mini",
+		Group:  "public",
+	}
+	require.NoError(t, model.DB.Create(channel).Error)
+
+	router := gin.New()
+	router.GET("/api/models/display", func(c *gin.Context) {
+		GetModelsDisplay(c)
+	})
+
+	req := httptest.NewRequest("GET", "/api/models/display", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+
+	var resp ModelsDisplayResponse
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	require.True(t, resp.Success)
+
+	key := fmt.Sprintf("%s:%s", channeltype.IdToName(channel.Type), channel.Name)
+	info, ok := resp.Data[key]
+	require.True(t, ok, "expected channel %s in response", key)
+	modelInfo, ok := info.Models["gpt-4o-mini"]
+	require.True(t, ok, "expected gpt-4o-mini in model listing")
+
+	cfg := openai.ModelRatios["gpt-4o-mini"]
+	require.Equal(t, cfg.ContextLength, modelInfo.ContextLength)
+	require.Equal(t, cfg.MaxOutputTokens, modelInfo.MaxOutputTokens)
+	require.Equal(t, cfg.Quantization, modelInfo.Quantization)
+	require.Equal(t, cfg.HuggingFaceID, modelInfo.HuggingFaceID)
+	require.Equal(t, cfg.Description, modelInfo.Description)
+	require.ElementsMatch(t, cfg.InputModalities, modelInfo.InputModalities)
+	require.ElementsMatch(t, cfg.OutputModalities, modelInfo.OutputModalities)
+	require.ElementsMatch(t, cfg.SupportedFeatures, modelInfo.SupportedFeatures)
+	require.ElementsMatch(t, cfg.SupportedSamplingParameters, modelInfo.SupportedSampling)
+}
+
 // TestGetModelsDisplay_AnonymousIncludesModelConfigOnlyEntries ensures channels that only declare models via
 // model_configs still expose them on the models display endpoint.
 func TestGetModelsDisplay_AnonymousIncludesModelConfigOnlyEntries(t *testing.T) {

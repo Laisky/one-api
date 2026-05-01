@@ -19,8 +19,10 @@ const (
 	gemini2MContext int32 = 2_097_152
 	// geminiProMaxOutput is the standard maximum output token length advertised for Pro tiers (2.5+).
 	geminiProMaxOutput int32 = 65536
-	// geminiFlashMaxOutput is the standard maximum output token length advertised for Flash tiers (2.x/3.x).
+	// geminiFlashMaxOutput is the standard maximum output token length advertised for Gemini 2.x Flash tiers.
 	geminiFlashMaxOutput int32 = 8192
+	// gemini3FlashMaxOutput is the documented maximum output token length for Gemini 3.x Flash tiers.
+	gemini3FlashMaxOutput int32 = 65536
 )
 
 // geminiInputTextImageFile lists the modalities every multimodal Gemini chat tier accepts.
@@ -149,13 +151,13 @@ var geminiMetadataOverrides = map[string]adaptor.ModelConfig{
 		Description:                 "Gemini 3.1 Pro preview tier configured for custom tool definitions.",
 	},
 	"gemini-3.1-flash-image-preview": {
-		ContextLength:               gemini1MContext,
+		ContextLength:               131_072,
 		MaxOutputTokens:             32_768,
 		InputModalities:             geminiInputTextImageFile,
 		OutputModalities:            geminiOutputTextImage,
-		SupportedFeatures:           geminiFeatures25Plus,
+		SupportedFeatures:           []string{"json_mode", "structured_outputs"},
 		SupportedSamplingParameters: geminiSamplingImage,
-		Description:                 "Gemini 3.1 Flash native image-generation preview tier with multi-resolution rendering.",
+		Description:                 "Gemini 3.1 Flash native image-generation preview tier with up to 128K context.",
 	},
 	"gemini-3.1-flash-live-preview": {
 		ContextLength:               32_768,
@@ -168,7 +170,7 @@ var geminiMetadataOverrides = map[string]adaptor.ModelConfig{
 	},
 	"gemini-3.1-flash-lite-preview": {
 		ContextLength:               gemini1MContext,
-		MaxOutputTokens:             geminiFlashMaxOutput,
+		MaxOutputTokens:             gemini3FlashMaxOutput,
 		InputModalities:             geminiInputTextImageFile,
 		OutputModalities:            geminiOutputText,
 		SupportedFeatures:           geminiFeatures25Plus,
@@ -186,7 +188,7 @@ var geminiMetadataOverrides = map[string]adaptor.ModelConfig{
 	},
 	"gemini-3-flash-preview": {
 		ContextLength:               gemini1MContext,
-		MaxOutputTokens:             geminiFlashMaxOutput,
+		MaxOutputTokens:             gemini3FlashMaxOutput,
 		InputModalities:             geminiInputTextImageFile,
 		OutputModalities:            geminiOutputText,
 		SupportedFeatures:           geminiFeatures25Plus,
@@ -194,11 +196,11 @@ var geminiMetadataOverrides = map[string]adaptor.ModelConfig{
 		Description:                 "Gemini 3 Flash preview multimodal model balancing latency and quality.",
 	},
 	"gemini-3-pro-image-preview": {
-		ContextLength:               gemini1MContext,
-		MaxOutputTokens:             geminiProMaxOutput,
+		ContextLength:               65_536,
+		MaxOutputTokens:             32_768,
 		InputModalities:             geminiInputTextImageFile,
 		OutputModalities:            geminiOutputTextImage,
-		SupportedFeatures:           geminiFeatures25Plus,
+		SupportedFeatures:           []string{"json_mode", "structured_outputs"},
 		SupportedSamplingParameters: geminiSamplingImage,
 		Description:                 "Gemini 3 Pro native image-generation preview tier with 1K/2K/4K rendering.",
 	},
@@ -324,20 +326,20 @@ var geminiMetadataOverrides = map[string]adaptor.ModelConfig{
 		Description:                 "Gemini 2.5 Flash native-audio preview snapshot dated 12-2025.",
 	},
 	"gemini-2.5-flash-image": {
-		ContextLength:               32_768,
-		MaxOutputTokens:             8192,
+		ContextLength:               65_536,
+		MaxOutputTokens:             32_768,
 		InputModalities:             geminiInputTextImageFile,
 		OutputModalities:            geminiOutputTextImage,
-		SupportedFeatures:           []string{"tools", "json_mode"},
+		SupportedFeatures:           []string{"json_mode", "structured_outputs"},
 		SupportedSamplingParameters: geminiSamplingImage,
 		Description:                 "Gemini 2.5 Flash native image-generation tier (Nano Banana family).",
 	},
 	"gemini-2.5-flash-image-preview": {
-		ContextLength:               32_768,
-		MaxOutputTokens:             8192,
+		ContextLength:               65_536,
+		MaxOutputTokens:             32_768,
 		InputModalities:             geminiInputTextImageFile,
 		OutputModalities:            geminiOutputTextImage,
-		SupportedFeatures:           []string{"tools", "json_mode"},
+		SupportedFeatures:           []string{"json_mode", "structured_outputs"},
 		SupportedSamplingParameters: geminiSamplingImage,
 		Description:                 "Gemini 2.5 Flash native image-generation preview tier (Nano Banana preview).",
 	},

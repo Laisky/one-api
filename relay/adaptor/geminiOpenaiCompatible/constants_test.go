@@ -167,3 +167,34 @@ func TestGeminiVersionAtLeast(t *testing.T) {
 		require.Equal(t, tc.expected, GeminiVersionAtLeast(tc.model, tc.min), tc.model)
 	}
 }
+
+// TestGeminiMetadataOverrides verifies researched model limits and feature metadata for Gemini image and flash families.
+// Parameter t drives test execution. Returns no values.
+func TestGeminiMetadataOverrides(t *testing.T) {
+	t.Parallel()
+
+	flashCfg, ok := ModelRatios["gemini-3-flash-preview"]
+	require.True(t, ok)
+	require.EqualValues(t, 65536, flashCfg.MaxOutputTokens)
+
+	flashLiteCfg, ok := ModelRatios["gemini-3.1-flash-lite-preview"]
+	require.True(t, ok)
+	require.EqualValues(t, 65536, flashLiteCfg.MaxOutputTokens)
+
+	flashImageCfg, ok := ModelRatios["gemini-3.1-flash-image-preview"]
+	require.True(t, ok)
+	require.EqualValues(t, 131072, flashImageCfg.ContextLength)
+	require.EqualValues(t, 32768, flashImageCfg.MaxOutputTokens)
+	require.ElementsMatch(t, []string{"json_mode", "structured_outputs"}, flashImageCfg.SupportedFeatures)
+
+	proImageCfg, ok := ModelRatios["gemini-3-pro-image-preview"]
+	require.True(t, ok)
+	require.EqualValues(t, 65536, proImageCfg.ContextLength)
+	require.EqualValues(t, 32768, proImageCfg.MaxOutputTokens)
+
+	flash25ImageCfg, ok := ModelRatios["gemini-2.5-flash-image"]
+	require.True(t, ok)
+	require.EqualValues(t, 65536, flash25ImageCfg.ContextLength)
+	require.EqualValues(t, 32768, flash25ImageCfg.MaxOutputTokens)
+	require.ElementsMatch(t, []string{"json_mode", "structured_outputs"}, flash25ImageCfg.SupportedFeatures)
+}

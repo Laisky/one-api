@@ -290,18 +290,27 @@ type ChannelModelsDisplayInfo struct {
 
 // ModelDisplayInfo represents display information for a single model
 type ModelDisplayInfo struct {
-	InputPrice        float64                  `json:"input_price"`                    // Price per 1M input tokens in USD
-	CachedInputPrice  float64                  `json:"cached_input_price"`             // Price per 1M cached input tokens in USD (falls back to input price when unspecified)
-	CacheWrite5mPrice float64                  `json:"cache_write_5m_price,omitempty"` // Price per 1M tokens for 5-minute cache write
-	CacheWrite1hPrice float64                  `json:"cache_write_1h_price,omitempty"` // Price per 1M tokens for 1-hour cache write
-	OutputPrice       float64                  `json:"output_price"`                   // Price per 1M output tokens in USD
-	MaxTokens         int32                    `json:"max_tokens"`                     // Maximum tokens limit, 0 means unlimited
-	ImagePrice        float64                  `json:"image_price,omitempty"`          // USD per image (image models only)
-	Tiers             []ModelDisplayTier       `json:"tiers,omitempty"`                // Tiered pricing (volume-based)
-	VideoPricing      *VideoDisplayPricing     `json:"video_pricing,omitempty"`        // Video generation pricing
-	AudioPricing      *AudioDisplayPricing     `json:"audio_pricing,omitempty"`        // Audio prompt/completion pricing
-	ImagePricing      *ImageDisplayPricing     `json:"image_pricing,omitempty"`        // Detailed image pricing with size/quality multipliers
-	EmbeddingPricing  *EmbeddingDisplayPricing `json:"embedding_pricing,omitempty"`    // Embedding pricing by modality
+	InputPrice        float64                  `json:"input_price"`                             // Price per 1M input tokens in USD
+	CachedInputPrice  float64                  `json:"cached_input_price"`                      // Price per 1M cached input tokens in USD (falls back to input price when unspecified)
+	CacheWrite5mPrice float64                  `json:"cache_write_5m_price,omitempty"`          // Price per 1M tokens for 5-minute cache write
+	CacheWrite1hPrice float64                  `json:"cache_write_1h_price,omitempty"`          // Price per 1M tokens for 1-hour cache write
+	OutputPrice       float64                  `json:"output_price"`                            // Price per 1M output tokens in USD
+	MaxTokens         int32                    `json:"max_tokens"`                              // Maximum tokens limit, 0 means unlimited
+	ContextLength     int32                    `json:"context_length,omitempty"`                // Maximum total context window (input + output)
+	MaxOutputTokens   int32                    `json:"max_output_tokens,omitempty"`             // Maximum output tokens per response
+	InputModalities   []string                 `json:"input_modalities,omitempty"`              // Supported request input modalities
+	OutputModalities  []string                 `json:"output_modalities,omitempty"`             // Supported response output modalities
+	SupportedFeatures []string                 `json:"supported_features,omitempty"`            // Capability flags such as tools/json_mode/reasoning
+	SupportedSampling []string                 `json:"supported_sampling_parameters,omitempty"` // Supported OpenAI-compatible sampling parameters
+	Quantization      string                   `json:"quantization,omitempty"`                  // Numeric precision label (for OpenRouter-compatible metadata)
+	HuggingFaceID     string                   `json:"hugging_face_id,omitempty"`               // HuggingFace model identifier when applicable
+	Description       string                   `json:"description,omitempty"`                   // Human-readable short model description
+	ImagePrice        float64                  `json:"image_price,omitempty"`                   // USD per image (image models only)
+	Tiers             []ModelDisplayTier       `json:"tiers,omitempty"`                         // Tiered pricing (volume-based)
+	VideoPricing      *VideoDisplayPricing     `json:"video_pricing,omitempty"`                 // Video generation pricing
+	AudioPricing      *AudioDisplayPricing     `json:"audio_pricing,omitempty"`                 // Audio prompt/completion pricing
+	ImagePricing      *ImageDisplayPricing     `json:"image_pricing,omitempty"`                 // Detailed image pricing with size/quality multipliers
+	EmbeddingPricing  *EmbeddingDisplayPricing `json:"embedding_pricing,omitempty"`             // Embedding pricing by modality
 }
 
 // ModelDisplayTier represents a single tier in volume-based pricing
@@ -511,6 +520,15 @@ func GetModelsDisplay(c *gin.Context) {
 			var maxTokens int32
 			var imagePrice float64
 			var tiers []ModelDisplayTier
+			var contextLength int32
+			var maxOutputTokens int32
+			var inputModalities []string
+			var outputModalities []string
+			var supportedFeatures []string
+			var supportedSampling []string
+			var quantization string
+			var huggingFaceID string
+			var description string
 			var videoPricing *VideoDisplayPricing
 			var audioPricing *AudioDisplayPricing
 			var imagePricing *ImageDisplayPricing
@@ -572,11 +590,20 @@ func GetModelsDisplay(c *gin.Context) {
 			if cfg, ok := pricing[actual]; ok {
 				if cfg.Image != nil && cfg.Image.PricePerImageUsd > 0 && cfg.Ratio == 0 && cfg.CachedInputRatio <= 0 {
 					info := ModelDisplayInfo{
-						MaxTokens:        cfg.MaxTokens,
-						ImagePrice:       cfg.Image.PricePerImageUsd,
-						InputPrice:       0,
-						CachedInputPrice: 0,
-						ImagePricing:     buildImageDisplayPricing(cfg.Image, cfg.Image),
+						MaxTokens:         cfg.MaxTokens,
+						ContextLength:     cfg.ContextLength,
+						MaxOutputTokens:   cfg.MaxOutputTokens,
+						InputModalities:   append([]string(nil), cfg.InputModalities...),
+						OutputModalities:  append([]string(nil), cfg.OutputModalities...),
+						SupportedFeatures: append([]string(nil), cfg.SupportedFeatures...),
+						SupportedSampling: append([]string(nil), cfg.SupportedSamplingParameters...),
+						Quantization:      cfg.Quantization,
+						HuggingFaceID:     cfg.HuggingFaceID,
+						Description:       cfg.Description,
+						ImagePrice:        cfg.Image.PricePerImageUsd,
+						InputPrice:        0,
+						CachedInputPrice:  0,
+						ImagePricing:      buildImageDisplayPricing(cfg.Image, cfg.Image),
 					}
 					result[modelName] = info
 					continue
@@ -600,6 +627,15 @@ func GetModelsDisplay(c *gin.Context) {
 				baseCompletionRatio = cfg.CompletionRatio
 				outputPrice = inputPrice * cfg.CompletionRatio
 				maxTokens = cfg.MaxTokens
+				contextLength = cfg.ContextLength
+				maxOutputTokens = cfg.MaxOutputTokens
+				inputModalities = append([]string(nil), cfg.InputModalities...)
+				outputModalities = append([]string(nil), cfg.OutputModalities...)
+				supportedFeatures = append([]string(nil), cfg.SupportedFeatures...)
+				supportedSampling = append([]string(nil), cfg.SupportedSamplingParameters...)
+				quantization = cfg.Quantization
+				huggingFaceID = cfg.HuggingFaceID
+				description = cfg.Description
 				if cfg.Image != nil {
 					imagePrice = cfg.Image.PricePerImageUsd
 					imagePricing = buildImageDisplayPricing(cfg.Image, cfg.Image)
@@ -727,6 +763,15 @@ func GetModelsDisplay(c *gin.Context) {
 				CacheWrite1hPrice: cacheWrite1hPrice,
 				OutputPrice:       outputPrice,
 				MaxTokens:         maxTokens,
+				ContextLength:     contextLength,
+				MaxOutputTokens:   maxOutputTokens,
+				InputModalities:   inputModalities,
+				OutputModalities:  outputModalities,
+				SupportedFeatures: supportedFeatures,
+				SupportedSampling: supportedSampling,
+				Quantization:      quantization,
+				HuggingFaceID:     huggingFaceID,
+				Description:       description,
 				ImagePrice:        imagePrice,
 				Tiers:             tiers,
 				VideoPricing:      videoPricing,
