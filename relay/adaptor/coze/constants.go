@@ -11,7 +11,14 @@ import (
 // so this file intentionally stays stable rather than inferring token economics from plan bundles.
 var ModelRatios = map[string]adaptor.ModelConfig{
 	// Coze models - retained as a compatibility alias because the public pricing is credit-based rather than token-based.
-	"coze-chat": {Ratio: 0.1 * ratio.MilliTokensUsd, CompletionRatio: 1},
+	"coze-chat": {
+		Ratio: 0.1 * ratio.MilliTokensUsd, CompletionRatio: 1,
+		ContextLength: 32000, MaxOutputTokens: 4096,
+		InputModalities:             []string{"text"},
+		OutputModalities:            []string{"text"},
+		SupportedSamplingParameters: []string{"temperature", "top_p", "max_tokens"},
+		Description:                 "Coze chat compatibility alias; provider exposes credit-based pricing rather than canonical per-token rates.",
+	},
 }
 
 // ModelList derived from ModelRatios for backward compatibility

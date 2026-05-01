@@ -30,6 +30,18 @@ func imagenDefaultImageConfig(pricePerImage float64) *adaptor.ImagePricingConfig
 	}
 }
 
+// imagenModelConfig builds an Imagen ModelConfig with consistent metadata.
+func imagenModelConfig(pricePerImage float64, description string) adaptor.ModelConfig {
+	return adaptor.ModelConfig{
+		Ratio:            0,
+		CompletionRatio:  1.0,
+		Image:            imagenDefaultImageConfig(pricePerImage),
+		InputModalities:  []string{"text"},
+		OutputModalities: []string{"image"},
+		Description:      description,
+	}
+}
+
 // ModelRatios contains all supported models and their pricing ratios
 // Model list is derived from the keys of this map, eliminating redundancy
 // Based on VertexAI Imagen pricing: https://cloud.google.com/vertex-ai/generative-ai/pricing
@@ -38,28 +50,28 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 	// Imagen Pricing (source: official Vertex AI pricing doc, 2025-08)
 
 	// Imagen 4.0 GA (2025-08-14)
-	"imagen-4.0-generate-001":       {Ratio: 0, CompletionRatio: 1.0, Image: imagenDefaultImageConfig(0.04)}, // Imagen 4
-	"imagen-4.0-ultra-generate-001": {Ratio: 0, CompletionRatio: 1.0, Image: imagenDefaultImageConfig(0.06)}, // Imagen 4 Ultra
-	"imagen-4.0-fast-generate-001":  {Ratio: 0, CompletionRatio: 1.0, Image: imagenDefaultImageConfig(0.02)}, // Imagen 4 Fast
+	"imagen-4.0-generate-001":       imagenModelConfig(0.04, "Google Imagen 4 image generation on Vertex AI."),
+	"imagen-4.0-ultra-generate-001": imagenModelConfig(0.06, "Google Imagen 4 Ultra image generation on Vertex AI."),
+	"imagen-4.0-fast-generate-001":  imagenModelConfig(0.02, "Google Imagen 4 Fast image generation on Vertex AI."),
 
 	// Imagen 4.0 Public Preview (retained for backward compatibility)
-	"imagen-4.0-generate-preview-06-06":       {Ratio: 0, CompletionRatio: 1.0, Image: imagenDefaultImageConfig(0.04)},
-	"imagen-4.0-ultra-generate-preview-06-06": {Ratio: 0, CompletionRatio: 1.0, Image: imagenDefaultImageConfig(0.06)},
-	"imagen-4.0-fast-generate-preview-06-06":  {Ratio: 0, CompletionRatio: 1.0, Image: imagenDefaultImageConfig(0.02)},
-	"imagen-4.0-generate-preview-05-20":       {Ratio: 0, CompletionRatio: 1.0, Image: imagenDefaultImageConfig(0.04)},
-	"imagen-4.0-ultra-generate-preview-05-20": {Ratio: 0, CompletionRatio: 1.0, Image: imagenDefaultImageConfig(0.06)},
-	"imagen-4.0-fast-generate-preview-05-20":  {Ratio: 0, CompletionRatio: 1.0, Image: imagenDefaultImageConfig(0.02)},
+	"imagen-4.0-generate-preview-06-06":       imagenModelConfig(0.04, "Google Imagen 4 preview (June 2025) on Vertex AI."),
+	"imagen-4.0-ultra-generate-preview-06-06": imagenModelConfig(0.06, "Google Imagen 4 Ultra preview (June 2025) on Vertex AI."),
+	"imagen-4.0-fast-generate-preview-06-06":  imagenModelConfig(0.02, "Google Imagen 4 Fast preview (June 2025) on Vertex AI."),
+	"imagen-4.0-generate-preview-05-20":       imagenModelConfig(0.04, "Google Imagen 4 preview (May 2025) on Vertex AI."),
+	"imagen-4.0-ultra-generate-preview-05-20": imagenModelConfig(0.06, "Google Imagen 4 Ultra preview (May 2025) on Vertex AI."),
+	"imagen-4.0-fast-generate-preview-05-20":  imagenModelConfig(0.02, "Google Imagen 4 Fast preview (May 2025) on Vertex AI."),
 
 	// Imagen 3.0 (GA)
-	"imagen-3.0-generate-001":      {Ratio: 0, CompletionRatio: 1.0, Image: imagenDefaultImageConfig(0.04)}, // Imagen 3
-	"imagen-3.0-generate-002":      {Ratio: 0, CompletionRatio: 1.0, Image: imagenDefaultImageConfig(0.04)}, // Imagen 3
-	"imagen-3.0-fast-generate-001": {Ratio: 0, CompletionRatio: 1.0, Image: imagenDefaultImageConfig(0.02)}, // Imagen 3 Fast
-	"imagen-3.0-capability-001":    {Ratio: 0, CompletionRatio: 1.0, Image: imagenDefaultImageConfig(0.04)}, // Imagen 3 edit/customize
+	"imagen-3.0-generate-001":      imagenModelConfig(0.04, "Google Imagen 3 image generation on Vertex AI."),
+	"imagen-3.0-generate-002":      imagenModelConfig(0.04, "Google Imagen 3 (revision 002) image generation on Vertex AI."),
+	"imagen-3.0-fast-generate-001": imagenModelConfig(0.02, "Google Imagen 3 Fast image generation on Vertex AI."),
+	"imagen-3.0-capability-001":    imagenModelConfig(0.04, "Google Imagen 3 edit and customize on Vertex AI."),
 
 	// Imagen 2.x & 1.x (legacy imagegeneration@ versions)
-	"imagegeneration@006": {Ratio: 0, CompletionRatio: 1.0, Image: imagenDefaultImageConfig(0.02)}, // Imagen 2 (gen + edit)
-	"imagegeneration@005": {Ratio: 0, CompletionRatio: 1.0, Image: imagenDefaultImageConfig(0.02)}, // Imagen 2 early GA
-	"imagegeneration@002": {Ratio: 0, CompletionRatio: 1.0, Image: imagenDefaultImageConfig(0.02)}, // Imagen 1 (gen + edit)
+	"imagegeneration@006": imagenModelConfig(0.02, "Google Imagen 2 (legacy) image generation and editing on Vertex AI."),
+	"imagegeneration@005": imagenModelConfig(0.02, "Google Imagen 2 (legacy early GA) on Vertex AI."),
+	"imagegeneration@002": imagenModelConfig(0.02, "Google Imagen 1 (legacy) image generation and editing on Vertex AI."),
 }
 
 // ModelList derived from ModelRatios for backward compatibility.

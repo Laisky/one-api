@@ -22,6 +22,14 @@ import (
 	"github.com/Laisky/one-api/relay/model"
 )
 
+var (
+	veoTextImageInputs = []string{"text", "image"}
+	// veoVideoOutputs is left nil because OpenRouter's listing schema enumerates
+	// only "text", "image", "file" as valid output modalities; video generation
+	// is captured in each model's Description field instead.
+	veoVideoOutputs []string
+)
+
 // ModelRatios contains all supported models and their pricing ratios
 // Model list is derived from the keys of this map, eliminating redundancy
 // Based on VertexAI Veo pricing: https://cloud.google.com/vertex-ai/generative-ai/pricing
@@ -32,16 +40,22 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		Ratio:           veoRatioFromUsdPerSecond(0.50),
 		CompletionRatio: 1,
 		Video:           veoVideoPricingConfig(0.50),
+		InputModalities: veoTextImageInputs, OutputModalities: veoVideoOutputs,
+		Description: "Google Veo 2 video generation on Vertex AI.",
 	},
 	"veo-2.0-generate-exp": {
 		Ratio:           veoRatioFromUsdPerSecond(0.50),
 		CompletionRatio: 1,
 		Video:           veoVideoPricingConfig(0.50),
+		InputModalities: veoTextImageInputs, OutputModalities: veoVideoOutputs,
+		Description: "Google Veo 2 experimental video generation on Vertex AI.",
 	},
 	"veo-2.0-generate-preview": {
 		Ratio:           veoRatioFromUsdPerSecond(0.50),
 		CompletionRatio: 1,
 		Video:           veoVideoPricingConfig(0.50),
+		InputModalities: veoTextImageInputs, OutputModalities: veoVideoOutputs,
+		Description: "Google Veo 2 preview video generation on Vertex AI.",
 	},
 
 	// Veo 3 pricing baseline (video-only 720p/1080p): $0.20 per second.
@@ -50,11 +64,15 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		Ratio:           veoRatioFromUsdPerSecond(0.20),
 		CompletionRatio: 1,
 		Video:           veoVideoPricingConfig(0.20),
+		InputModalities: veoTextImageInputs, OutputModalities: veoVideoOutputs,
+		Description: "Google Veo 3 video generation on Vertex AI.",
 	},
 	"veo-3.0-generate-preview": {
 		Ratio:           veoRatioFromUsdPerSecond(0.20),
 		CompletionRatio: 1,
 		Video:           veoVideoPricingConfig(0.20),
+		InputModalities: veoTextImageInputs, OutputModalities: veoVideoOutputs,
+		Description: "Google Veo 3 preview video generation on Vertex AI.",
 	},
 
 	// Veo 3 Fast pricing baseline (video-only 720p/1080p): $0.10 per second.
@@ -62,11 +80,15 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		Ratio:           veoRatioFromUsdPerSecond(0.10),
 		CompletionRatio: 1,
 		Video:           veoVideoPricingConfig(0.10),
+		InputModalities: veoTextImageInputs, OutputModalities: veoVideoOutputs,
+		Description: "Google Veo 3 Fast video generation on Vertex AI.",
 	},
 	"veo-3.0-fast-generate-preview": {
 		Ratio:           veoRatioFromUsdPerSecond(0.10),
 		CompletionRatio: 1,
 		Video:           veoVideoPricingConfig(0.10),
+		InputModalities: veoTextImageInputs, OutputModalities: veoVideoOutputs,
+		Description: "Google Veo 3 Fast preview video generation on Vertex AI.",
 	},
 
 	// Veo 3.1 pricing baseline (video-only 720p/1080p): $0.20 per second.
@@ -77,6 +99,8 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		Video: veoVideoPricingConfig(0.20, map[string]float64{
 			"4k": 2,
 		}),
+		InputModalities: veoTextImageInputs, OutputModalities: veoVideoOutputs,
+		Description: "Google Veo 3.1 video generation on Vertex AI (4k surcharge applies).",
 	},
 	"veo-3.1-generate-preview": {
 		Ratio:           veoRatioFromUsdPerSecond(0.20),
@@ -84,6 +108,8 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		Video: veoVideoPricingConfig(0.20, map[string]float64{
 			"4k": 2,
 		}),
+		InputModalities: veoTextImageInputs, OutputModalities: veoVideoOutputs,
+		Description: "Google Veo 3.1 preview video generation on Vertex AI (4k surcharge applies).",
 	},
 
 	// Veo 3.1 Fast pricing baseline (video-only 720p/1080p): $0.10 per second.
@@ -94,6 +120,8 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		Video: veoVideoPricingConfig(0.10, map[string]float64{
 			"4k": 3,
 		}),
+		InputModalities: veoTextImageInputs, OutputModalities: veoVideoOutputs,
+		Description: "Google Veo 3.1 Fast video generation on Vertex AI (4k surcharge applies).",
 	},
 	"veo-3.1-fast-generate-preview": {
 		Ratio:           veoRatioFromUsdPerSecond(0.10),
@@ -101,6 +129,8 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		Video: veoVideoPricingConfig(0.10, map[string]float64{
 			"4k": 3,
 		}),
+		InputModalities: veoTextImageInputs, OutputModalities: veoVideoOutputs,
+		Description: "Google Veo 3.1 Fast preview video generation on Vertex AI (4k surcharge applies).",
 	},
 }
 

@@ -2,7 +2,6 @@ package aws
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"net/http"
 	"strings"
@@ -201,113 +200,16 @@ func (a *Adaptor) DoRequest(c *gin.Context, meta *meta.Meta, requestBody io.Read
 	return nil, nil
 }
 
-// Pricing methods - AWS adapter manages its own model pricing
+// GetDefaultModelPricing returns the AWS Bedrock pricing and metadata table.
+// The canonical map lives in ratios.go to keep this file under the codebase
+// length budget. Callers receive a fresh shallow copy so mutations do not
+// affect the shared table.
 func (a *Adaptor) GetDefaultModelPricing() map[string]adaptor.ModelConfig {
-	// Direct map definition - much easier to maintain and edit
-	// Pricing from https://aws.amazon.com/bedrock/pricing/
-	return map[string]adaptor.ModelConfig{
-		// Claude Models on AWS Bedrock
-		"claude-instant-1.2":         {Ratio: 0.8 * ratio.MilliTokensUsd, CompletionRatio: 3.0, CachedInputRatio: 0.08 * ratio.MilliTokensUsd, CacheWrite5mRatio: 1.0 * ratio.MilliTokensUsd, CacheWrite1hRatio: 1.6 * ratio.MilliTokensUsd},
-		"claude-2.0":                 {Ratio: 8 * ratio.MilliTokensUsd, CompletionRatio: 3.0, CachedInputRatio: 0.8 * ratio.MilliTokensUsd, CacheWrite5mRatio: 10 * ratio.MilliTokensUsd, CacheWrite1hRatio: 16 * ratio.MilliTokensUsd},
-		"claude-2.1":                 {Ratio: 8 * ratio.MilliTokensUsd, CompletionRatio: 3.0, CachedInputRatio: 0.8 * ratio.MilliTokensUsd, CacheWrite5mRatio: 10 * ratio.MilliTokensUsd, CacheWrite1hRatio: 16 * ratio.MilliTokensUsd},
-		"claude-3-haiku-20240307":    {Ratio: 0.25 * ratio.MilliTokensUsd, CompletionRatio: 5.0, CachedInputRatio: 0.03 * ratio.MilliTokensUsd, CacheWrite5mRatio: 0.30 * ratio.MilliTokensUsd, CacheWrite1hRatio: 0.5 * ratio.MilliTokensUsd},
-		"claude-3-5-haiku-20241022":  {Ratio: 0.8 * ratio.MilliTokensUsd, CompletionRatio: 5.0, CachedInputRatio: 0.08 * ratio.MilliTokensUsd, CacheWrite5mRatio: 1.0 * ratio.MilliTokensUsd, CacheWrite1hRatio: 1.6 * ratio.MilliTokensUsd},
-		"claude-3-sonnet-20240229":   {Ratio: 3 * ratio.MilliTokensUsd, CompletionRatio: 5.0, CachedInputRatio: 0.3 * ratio.MilliTokensUsd, CacheWrite5mRatio: 3.75 * ratio.MilliTokensUsd, CacheWrite1hRatio: 6 * ratio.MilliTokensUsd},
-		"claude-3-5-sonnet-latest":   {Ratio: 3 * ratio.MilliTokensUsd, CompletionRatio: 5.0, CachedInputRatio: 0.3 * ratio.MilliTokensUsd, CacheWrite5mRatio: 3.75 * ratio.MilliTokensUsd, CacheWrite1hRatio: 6 * ratio.MilliTokensUsd},
-		"claude-3-5-sonnet-20240620": {Ratio: 3 * ratio.MilliTokensUsd, CompletionRatio: 5.0, CachedInputRatio: 0.3 * ratio.MilliTokensUsd, CacheWrite5mRatio: 3.75 * ratio.MilliTokensUsd, CacheWrite1hRatio: 6 * ratio.MilliTokensUsd},
-		"claude-3-5-sonnet-20241022": {Ratio: 3 * ratio.MilliTokensUsd, CompletionRatio: 5.0, CachedInputRatio: 0.3 * ratio.MilliTokensUsd, CacheWrite5mRatio: 3.75 * ratio.MilliTokensUsd, CacheWrite1hRatio: 6 * ratio.MilliTokensUsd},
-		"claude-3-7-sonnet-latest":   {Ratio: 3 * ratio.MilliTokensUsd, CompletionRatio: 5.0, CachedInputRatio: 0.3 * ratio.MilliTokensUsd, CacheWrite5mRatio: 3.75 * ratio.MilliTokensUsd, CacheWrite1hRatio: 6 * ratio.MilliTokensUsd},
-		"claude-3-7-sonnet-20250219": {Ratio: 3 * ratio.MilliTokensUsd, CompletionRatio: 5.0, CachedInputRatio: 0.3 * ratio.MilliTokensUsd, CacheWrite5mRatio: 3.75 * ratio.MilliTokensUsd, CacheWrite1hRatio: 6 * ratio.MilliTokensUsd},
-		"claude-sonnet-4-0":          {Ratio: 3 * ratio.MilliTokensUsd, CompletionRatio: 5.0, CachedInputRatio: 0.3 * ratio.MilliTokensUsd, CacheWrite5mRatio: 3.75 * ratio.MilliTokensUsd, CacheWrite1hRatio: 6 * ratio.MilliTokensUsd},
-		"claude-sonnet-4-20250514":   {Ratio: 3 * ratio.MilliTokensUsd, CompletionRatio: 5.0, CachedInputRatio: 0.3 * ratio.MilliTokensUsd, CacheWrite5mRatio: 3.75 * ratio.MilliTokensUsd, CacheWrite1hRatio: 6 * ratio.MilliTokensUsd},
-		"claude-sonnet-4-5":          {Ratio: 3 * ratio.MilliTokensUsd, CompletionRatio: 5.0, CachedInputRatio: 0.3 * ratio.MilliTokensUsd, CacheWrite5mRatio: 3.75 * ratio.MilliTokensUsd, CacheWrite1hRatio: 6 * ratio.MilliTokensUsd},
-		"claude-sonnet-4-5-20250929": {Ratio: 3 * ratio.MilliTokensUsd, CompletionRatio: 5.0, CachedInputRatio: 0.3 * ratio.MilliTokensUsd, CacheWrite5mRatio: 3.75 * ratio.MilliTokensUsd, CacheWrite1hRatio: 6 * ratio.MilliTokensUsd},
-		"claude-sonnet-4-6":          {Ratio: 3 * ratio.MilliTokensUsd, CompletionRatio: 5.0, CachedInputRatio: 0.3 * ratio.MilliTokensUsd, CacheWrite5mRatio: 3.75 * ratio.MilliTokensUsd, CacheWrite1hRatio: 6 * ratio.MilliTokensUsd},
-		"claude-3-opus-20240229":     {Ratio: 15 * ratio.MilliTokensUsd, CompletionRatio: 5.0, CachedInputRatio: 1.5 * ratio.MilliTokensUsd, CacheWrite5mRatio: 18.75 * ratio.MilliTokensUsd, CacheWrite1hRatio: 30 * ratio.MilliTokensUsd},
-		"claude-opus-4-0":            {Ratio: 15 * ratio.MilliTokensUsd, CompletionRatio: 5.0, CachedInputRatio: 1.5 * ratio.MilliTokensUsd, CacheWrite5mRatio: 18.75 * ratio.MilliTokensUsd, CacheWrite1hRatio: 30 * ratio.MilliTokensUsd},
-		"claude-opus-4-20250514":     {Ratio: 15 * ratio.MilliTokensUsd, CompletionRatio: 5.0, CachedInputRatio: 1.5 * ratio.MilliTokensUsd, CacheWrite5mRatio: 18.75 * ratio.MilliTokensUsd, CacheWrite1hRatio: 30 * ratio.MilliTokensUsd},
-		"claude-opus-4-1":            {Ratio: 15 * ratio.MilliTokensUsd, CompletionRatio: 5.0, CachedInputRatio: 1.5 * ratio.MilliTokensUsd, CacheWrite5mRatio: 18.75 * ratio.MilliTokensUsd, CacheWrite1hRatio: 30 * ratio.MilliTokensUsd},
-		"claude-opus-4-1-20250805":   {Ratio: 15 * ratio.MilliTokensUsd, CompletionRatio: 75.0 / 15, CachedInputRatio: 1.5 * ratio.MilliTokensUsd, CacheWrite5mRatio: 18.75 * ratio.MilliTokensUsd, CacheWrite1hRatio: 30 * ratio.MilliTokensUsd},
-		"claude-opus-4-5":            {Ratio: 5 * ratio.MilliTokensUsd, CompletionRatio: 25.0 / 5, CachedInputRatio: 0.5 * ratio.MilliTokensUsd, CacheWrite5mRatio: 6.25 * ratio.MilliTokensUsd, CacheWrite1hRatio: 10 * ratio.MilliTokensUsd},
-		"claude-opus-4-5-20251101":   {Ratio: 5 * ratio.MilliTokensUsd, CompletionRatio: 25.0 / 5, CachedInputRatio: 0.5 * ratio.MilliTokensUsd, CacheWrite5mRatio: 6.25 * ratio.MilliTokensUsd, CacheWrite1hRatio: 10 * ratio.MilliTokensUsd},
-		"claude-opus-4-6":            {Ratio: 5 * ratio.MilliTokensUsd, CompletionRatio: 25.0 / 5, CachedInputRatio: 0.5 * ratio.MilliTokensUsd, CacheWrite5mRatio: 6.25 * ratio.MilliTokensUsd, CacheWrite1hRatio: 10 * ratio.MilliTokensUsd},
-		"claude-opus-4-7":            {Ratio: 5 * ratio.MilliTokensUsd, CompletionRatio: 25.0 / 5, CachedInputRatio: 0.5 * ratio.MilliTokensUsd, CacheWrite5mRatio: 6.25 * ratio.MilliTokensUsd, CacheWrite1hRatio: 10 * ratio.MilliTokensUsd},
-
-		// Llama Models on AWS Bedrock
-		// Note: Pricing may need to be updated later; also this model is significantly faster on AWS GPUs.
-		// Llama 4 models - Pricing given per 1K tokens; normalize to $/1M then to $/token via ratio.MilliTokensUsd
-		"llama4-maverick-17b-1m": {Ratio: 0.24 * ratio.MilliTokensUsd, CompletionRatio: 4.04}, // $0.24/$0.97 per 1M → $/token
-		"llama4-scout-17b-3.5m":  {Ratio: 0.17 * ratio.MilliTokensUsd, CompletionRatio: 3.88}, // $0.17/$0.66 per 1M → $/token
-
-		// Llama 3.3 models
-		"llama3-3-70b-128k": {Ratio: 0.72 * ratio.MilliTokensUsd, CompletionRatio: 1}, // $0.72/$0.72 per 1M → $/token
-
-		// Llama 3.2 models
-		"llama3-2-1b-131k":         {Ratio: 0.1 * ratio.MilliTokensUsd, CompletionRatio: 1},  // $0.1/$0.1 per 1M → $/token
-		"llama3-2-3b-131k":         {Ratio: 0.15 * ratio.MilliTokensUsd, CompletionRatio: 1}, // $0.15/$0.15 per 1M → $/token
-		"llama3-2-11b-vision-131k": {Ratio: 0.16 * ratio.MilliTokensUsd, CompletionRatio: 1}, // $0.16/$0.16 per 1M → $/token
-		"llama3-2-90b-128k":        {Ratio: 0.72 * ratio.MilliTokensUsd, CompletionRatio: 1}, // $0.72/$0.72 per 1M → $/token
-
-		// Llama 3.1 models
-		"llama3-1-8b-128k":  {Ratio: 0.22 * ratio.MilliTokensUsd, CompletionRatio: 1}, // $0.22/$0.22 per 1M → $/token
-		"llama3-1-70b-128k": {Ratio: 0.72 * ratio.MilliTokensUsd, CompletionRatio: 1}, // $0.72/$0.72 per 1M → $/token
-
-		// Llama 3 models
-		"llama3-8b-8192":  {Ratio: 0.3 * ratio.MilliTokensUsd, CompletionRatio: 2},     // $0.3/$0.6 per 1M → $/token
-		"llama3-70b-8192": {Ratio: 2.65 * ratio.MilliTokensUsd, CompletionRatio: 1.32}, // $2.65/$3.5 per 1M → $/token
-		// Amazon Nova Models (if supported)
-		"amazon-nova-micro":   {Ratio: 0.035 * ratio.MilliTokensUsd, CompletionRatio: 4.28}, // $0.035/$0.15 per 1M tokens
-		"amazon-nova-lite":    {Ratio: 0.06 * ratio.MilliTokensUsd, CompletionRatio: 4.17},  // $0.06/$0.25 per 1M tokens
-		"amazon-nova-pro":     {Ratio: 0.8 * ratio.MilliTokensUsd, CompletionRatio: 4},      // $0.8/$3.2 per 1M tokens
-		"amazon-nova-premier": {Ratio: 2.4 * ratio.MilliTokensUsd, CompletionRatio: 4.17},   // $2.4/$10 per 1M tokens
-
-		// Titan Models (if supported)
-		"amazon-titan-text-lite":    {Ratio: 0.3 * ratio.MilliTokensUsd, CompletionRatio: 1.33}, // $0.3/$0.4 per 1M tokens
-		"amazon-titan-text-express": {Ratio: 0.8 * ratio.MilliTokensUsd, CompletionRatio: 2},    // $0.8/$1.6 per 1M tokens
-		"amazon-titan-embed-text":   {Ratio: 0.1 * ratio.MilliTokensUsd, CompletionRatio: 1},    // $0.1 per 1M tokens
-
-		// Cohere Models (Supported) - Note: These are per 1K tokens, converted to 1M tokens using ratio.MilliTokensUsd
-		"command-r":      {Ratio: 0.5 * ratio.MilliTokensUsd, CompletionRatio: 3}, // $0.5/$2 per 1M tokens
-		"command-r-plus": {Ratio: 3 * ratio.MilliTokensUsd, CompletionRatio: 5},   // $3/$5 per 1M tokens
-
-		// Qwen Models (Supported) - Note: These are per 1K tokens, converted to 1M tokens using MilliTokensUsd
-		"qwen3-235b":       {Ratio: 0.22 * ratio.MilliTokensUsd, CompletionRatio: 4},    // $0.00022/$0.00088 per 1K tokens = $0.22/$0.88 per 1M tokens
-		"qwen3-32b":        {Ratio: 0.15 * ratio.MilliTokensUsd, CompletionRatio: 4},    // $0.00015/$0.0006 per 1K tokens = $0.15/$0.6 per 1M tokens
-		"qwen3-coder-30b":  {Ratio: 0.15 * ratio.MilliTokensUsd, CompletionRatio: 4},    // $0.00015/$0.0006 per 1K tokens = $0.15/$0.6 per 1M tokens
-		"qwen3-coder-480b": {Ratio: 0.22 * ratio.MilliTokensUsd, CompletionRatio: 8.18}, // $0.00022/$0.0018 per 1K tokens = $0.22/$1.8 per 1M tokens
-
-		// AI21 Models (if supported)
-		"ai21-j2-mid":    {Ratio: 12.5 * ratio.MilliTokensUsd, CompletionRatio: 1}, // $12.5 per 1M tokens
-		"ai21-j2-ultra":  {Ratio: 18.8 * ratio.MilliTokensUsd, CompletionRatio: 1}, // $18.8 per 1M tokens
-		"ai21-jamba-1.5": {Ratio: 2 * ratio.MilliTokensUsd, CompletionRatio: 4},    // $2/$8 per 1M tokens
-
-		// DeepSeek Models (Supported) - Updated pricing as of 2025-09-19 - Note: These are per 1K tokens, converted to 1M tokens using MilliTokensUsd
-		"deepseek-r1":   {Ratio: 1.35 * ratio.MilliTokensUsd, CompletionRatio: 4},   // $0.00135/$0.0054 per 1K tokens = $1.35/$5.4 per 1M tokens
-		"deepseek-v3.1": {Ratio: 0.58 * ratio.MilliTokensUsd, CompletionRatio: 2.9}, // $0.00058/$0.00168 per 1K tokens = $0.58/$1.68 per 1M tokens
-
-		// Mistral Models (Supported) - Updated pricing as of 2025-08-27 - Note: These are per 1K tokens, converted to 1M tokens using ratio.MilliTokensUsd
-		//
-		// Note: The Mistral Instruct model (mistral-7b, mixtral-8x7b) is currently considered legacy and unsupported.
-		// Only the newest/latest models available in AWS Bedrock are supported.
-		"mistral-7b-instruct":        {Ratio: 0.15 * ratio.MilliTokensUsd, CompletionRatio: 1.33}, // $0.15/$0.2 per 1M tokens
-		"mistral-8x7b-instruct":      {Ratio: 0.45 * ratio.MilliTokensUsd, CompletionRatio: 1.56}, // $0.45/$0.7 per 1M tokens
-		"mistral-large":              {Ratio: 4 * ratio.MilliTokensUsd, CompletionRatio: 3},       // $4/$12 per 1M tokens
-		"mistral-7b":                 {Ratio: 0.15 * ratio.MilliTokensUsd, CompletionRatio: 1.33}, // $0.00015/$0.0002 per 1K tokens = $0.15/$0.2 per 1M tokens
-		"mixtral-8x7b":               {Ratio: 0.45 * ratio.MilliTokensUsd, CompletionRatio: 1.56}, // $0.00045/$0.0007 per 1K tokens = $0.45/$0.7 per 1M tokens
-		"mistral-small-2402":         {Ratio: 1 * ratio.MilliTokensUsd, CompletionRatio: 3},       // $0.001/$0.003 per 1K tokens = $1/$3 per 1M tokens
-		"mistral-large-2402":         {Ratio: 4 * ratio.MilliTokensUsd, CompletionRatio: 3},       // $0.004/$0.012 per 1K tokens = $4/$12 per 1M tokens
-		"mistral-pixtral-large-2502": {Ratio: 2 * ratio.MilliTokensUsd, CompletionRatio: 3},       // $0.002/$0.006 per 1K tokens = $2/$6 per 1M tokens
-
-		// OpenAI OSS Models (Supported) - Updated pricing as of 2025-09-13 - Note: These are per 1K tokens, converted to 1M tokens using ratio.MilliTokensUsd
-		// These models work similarly to DeepSeek-R1 with reasoning content and use converse method
-		"gpt-oss-20b":  {Ratio: 0.07 * ratio.MilliTokensUsd, CompletionRatio: 4.29}, // $0.00007/$0.0003 per 1K tokens = $0.07/$0.3 per 1M tokens
-		"gpt-oss-120b": {Ratio: 0.15 * ratio.MilliTokensUsd, CompletionRatio: 4},    // $0.00015/$0.0006 per 1K tokens = $0.15/$0.6 per 1M tokens
-
-		// Writer Models (Supported) - Updated pricing as of 2025-09-17 - Note: These are per 1K tokens, converted to 1M tokens using MilliTokensUsd
-		// Simple text/chat models without reasoning content support.
-		"palmyra-x4": {Ratio: 2.5 * ratio.MilliTokensUsd, CompletionRatio: 4},  // $0.0025/$0.010 per 1K tokens = $2.5/$10 per 1M tokens
-		"palmyra-x5": {Ratio: 0.6 * ratio.MilliTokensUsd, CompletionRatio: 10}, // $0.0006/$0.006 per 1K tokens = $0.6/$6 per 1M tokens
+	out := make(map[string]adaptor.ModelConfig, len(awsBedrockModelPricing))
+	for k, v := range awsBedrockModelPricing {
+		out[k] = v
 	}
+	return out
 }
 
 func (a *Adaptor) GetModelRatio(modelName string) float64 {
@@ -326,12 +228,6 @@ func (a *Adaptor) GetCompletionRatio(modelName string) float64 {
 	}
 	// Default completion ratio for AWS
 	return 5.0
-}
-
-// UnsupportedParameter represents a parameter that is not supported by a provider
-type UnsupportedParameter struct {
-	Name        string
-	Description string
 }
 
 // ProviderCapabilities defines what features are supported by different AWS providers
@@ -591,173 +487,3 @@ func GetModelCapabilities(modelName string) ProviderCapabilities {
 	return baseCapabilities
 }
 
-// ValidateUnsupportedParameters checks for unsupported parameters and returns an error if any are found
-// Now uses model names instead of provider names
-func ValidateUnsupportedParameters(request *model.GeneralOpenAIRequest, modelName string) *model.ErrorWithStatusCode {
-	capabilities := GetModelCapabilities(modelName)
-	var unsupportedParams []UnsupportedParameter
-
-	// Check for tools support
-	if len(request.Tools) > 0 && !capabilities.SupportsTools {
-		unsupportedParams = append(unsupportedParams, UnsupportedParameter{
-			Name:        "tools",
-			Description: "Tool calling is not supported by this model",
-		})
-	}
-
-	// Check for tool_choice support
-	if request.ToolChoice != nil && !capabilities.SupportsTools {
-		unsupportedParams = append(unsupportedParams, UnsupportedParameter{
-			Name:        "tool_choice",
-			Description: "Tool choice is not supported by this model",
-		})
-	}
-
-	// Check for parallel_tool_calls support
-	if request.ParallelTooCalls != nil && !capabilities.SupportsParallelToolCalls {
-		unsupportedParams = append(unsupportedParams, UnsupportedParameter{
-			Name:        "parallel_tool_calls",
-			Description: "Parallel tool calls are not supported by this model",
-		})
-	}
-
-	// Check for functions support (deprecated OpenAI feature)
-	if len(request.Functions) > 0 && !capabilities.SupportsFunctions {
-		unsupportedParams = append(unsupportedParams, UnsupportedParameter{
-			Name:        "functions",
-			Description: "Functions (deprecated OpenAI feature) are not supported by this model. Use 'tools' instead",
-		})
-	}
-
-	// Check for function_call support
-	if request.FunctionCall != nil && !capabilities.SupportsFunctions {
-		unsupportedParams = append(unsupportedParams, UnsupportedParameter{
-			Name:        "function_call",
-			Description: "Function call (deprecated OpenAI feature) is not supported by this model. Use 'tool_choice' instead",
-		})
-	}
-
-	// Check for logprobs support
-	if request.Logprobs != nil && *request.Logprobs && !capabilities.SupportsLogprobs {
-		unsupportedParams = append(unsupportedParams, UnsupportedParameter{
-			Name:        "logprobs",
-			Description: "Log probabilities are not supported by this model",
-		})
-	}
-
-	// Check for top_logprobs support
-	if request.TopLogprobs != nil && !capabilities.SupportsTopLogprobs {
-		unsupportedParams = append(unsupportedParams, UnsupportedParameter{
-			Name:        "top_logprobs",
-			Description: "Top log probabilities are not supported by this model",
-		})
-	}
-
-	// Check for logit_bias support
-	if request.LogitBias != nil && !capabilities.SupportsLogitBias {
-		unsupportedParams = append(unsupportedParams, UnsupportedParameter{
-			Name:        "logit_bias",
-			Description: "Logit bias is not supported by this model",
-		})
-	}
-
-	// Check for response_format support
-	if request.ResponseFormat != nil && !capabilities.SupportsResponseFormat {
-		unsupportedParams = append(unsupportedParams, UnsupportedParameter{
-			Name:        "response_format",
-			Description: "Response format is not supported by this model",
-		})
-	}
-
-	// Check for reasoning_effort support
-	if request.ReasoningEffort != nil && !capabilities.SupportsReasoningEffort {
-		unsupportedParams = append(unsupportedParams, UnsupportedParameter{
-			Name:        "reasoning_effort",
-			Description: "Reasoning effort is not supported by this model",
-		})
-	}
-
-	// Check for modalities support
-	if len(request.Modalities) > 0 && !capabilities.SupportsModalities {
-		unsupportedParams = append(unsupportedParams, UnsupportedParameter{
-			Name:        "modalities",
-			Description: "Modalities are not supported by this model",
-		})
-	}
-
-	// Check for audio support
-	if request.Audio != nil && !capabilities.SupportsAudio {
-		unsupportedParams = append(unsupportedParams, UnsupportedParameter{
-			Name:        "audio",
-			Description: "Audio input/output is not supported by this model",
-		})
-	}
-
-	// Check for web_search_options support
-	if request.WebSearchOptions != nil && !capabilities.SupportsWebSearch {
-		unsupportedParams = append(unsupportedParams, UnsupportedParameter{
-			Name:        "web_search_options",
-			Description: "Web search is not supported by this model",
-		})
-	}
-
-	// Check for thinking support (Anthropic-specific)
-	if request.Thinking != nil && !capabilities.SupportsThinking {
-		unsupportedParams = append(unsupportedParams, UnsupportedParameter{
-			Name:        "thinking",
-			Description: "Extended thinking is not supported by this model",
-		})
-	}
-
-	// Check for service_tier support
-	if request.ServiceTier != nil && !capabilities.SupportsServiceTier {
-		unsupportedParams = append(unsupportedParams, UnsupportedParameter{
-			Name:        "service_tier",
-			Description: "Service tier is not supported by this model",
-		})
-	}
-
-	// Check for prediction support
-	if request.Prediction != nil && !capabilities.SupportsPrediction {
-		unsupportedParams = append(unsupportedParams, UnsupportedParameter{
-			Name:        "prediction",
-			Description: "Prediction is not supported by this model",
-		})
-	}
-
-	// Do not treat max_completion_tokens as unsupported; we'll map it to max_tokens if needed
-
-	// Check for stop support
-	if request.Stop != nil && !capabilities.SupportsStop {
-		unsupportedParams = append(unsupportedParams, UnsupportedParameter{
-			Name:        "stop",
-			Description: "Stop parameter is not supported by this model",
-		})
-	}
-
-	// If we found unsupported parameters, return an error
-	if len(unsupportedParams) > 0 {
-		var errorMessage string
-		if len(unsupportedParams) == 1 {
-			errorMessage = fmt.Sprintf("Unsupported parameter '%s': %s",
-				unsupportedParams[0].Name, unsupportedParams[0].Description)
-		} else {
-			errorMessage = fmt.Sprintf("Unsupported parameters for model '%s':", modelName)
-			for _, param := range unsupportedParams {
-				errorMessage += fmt.Sprintf("\n- %s: %s", param.Name, param.Description)
-			}
-		}
-
-		return &model.ErrorWithStatusCode{
-			StatusCode: http.StatusBadRequest,
-			Error: model.Error{
-				Message:  errorMessage,
-				Type:     model.ErrorTypeInvalidRequest,
-				Code:     "unsupported_parameter",
-				RawError: errors.New(errorMessage),
-			},
-		}
-	}
-
-	return nil
-}
