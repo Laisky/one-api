@@ -44,35 +44,217 @@ func togetherAIGeminiProImageConfig() *adaptor.ImagePricingConfig {
 	}
 }
 
+// Shared metadata helpers for Together AI chat/LLM models.
+// All Together AI hosted models are closed-weight (quantization is in-house) or open-weight
+// where quantization comes from Together AI's serving layer.
+// Sources: https://docs.together.ai/docs/serverless-models, HuggingFace model cards.
+var (
+	togetherTextIn         = []string{"text"}
+	togetherVisionIn       = []string{"text", "image"}
+	togetherTextOut        = []string{"text"}
+	togetherChatFeatures   = []string{"tools", "json_mode"}
+	togetherReasonFeatures = []string{"tools", "json_mode", "reasoning"}
+	togetherChatSampling   = []string{"temperature", "top_p", "frequency_penalty", "presence_penalty", "stop", "seed", "max_tokens"}
+	togetherR1Sampling     = []string{"temperature", "top_p", "stop", "seed", "max_tokens"}
+)
+
 // ModelRatios contains Together AI models with published pricing metadata from the public
 // serverless models catalog.
 // Source: https://docs.together.ai/docs/serverless-models (retrieved 2026-04-28)
 var ModelRatios = map[string]adaptor.ModelConfig{
 	// Chat and vision-capable LLMs.
-	"MiniMaxAI/MiniMax-M2.7":                   {Ratio: 0.30 * ratio.MilliTokensUsd, CompletionRatio: 1.20 / 0.30, CachedInputRatio: 0.06 * ratio.MilliTokensUsd},
-	"MiniMaxAI/MiniMax-M2.5":                   {Ratio: 0.30 * ratio.MilliTokensUsd, CompletionRatio: 1.20 / 0.30, CachedInputRatio: 0.06 * ratio.MilliTokensUsd},
-	"Qwen/Qwen3.5-397B-A17B":                   {Ratio: 0.60 * ratio.MilliTokensUsd, CompletionRatio: 3.60 / 0.60},
-	"Qwen/Qwen3.5-9B":                          {Ratio: 0.10 * ratio.MilliTokensUsd, CompletionRatio: 0.15 / 0.10},
-	"moonshotai/Kimi-K2.6":                     {Ratio: 1.20 * ratio.MilliTokensUsd, CompletionRatio: 4.50 / 1.20, CachedInputRatio: 0.20 * ratio.MilliTokensUsd},
-	"moonshotai/Kimi-K2.5":                     {Ratio: 0.50 * ratio.MilliTokensUsd, CompletionRatio: 2.80 / 0.50},
-	"zai-org/GLM-5.1":                          {Ratio: 1.40 * ratio.MilliTokensUsd, CompletionRatio: 4.40 / 1.40},
-	"zai-org/GLM-5":                            {Ratio: 1.00 * ratio.MilliTokensUsd, CompletionRatio: 3.20 / 1.00},
-	"openai/gpt-oss-120b":                      {Ratio: 0.15 * ratio.MilliTokensUsd, CompletionRatio: 0.60 / 0.15},
-	"openai/gpt-oss-20b":                       {Ratio: 0.05 * ratio.MilliTokensUsd, CompletionRatio: 0.20 / 0.05},
-	"deepseek-ai/DeepSeek-V4-Pro":              {Ratio: 2.10 * ratio.MilliTokensUsd, CompletionRatio: 4.40 / 2.10, CachedInputRatio: 0.20 * ratio.MilliTokensUsd},
-	"deepseek-ai/DeepSeek-V3.1":                {Ratio: 0.60 * ratio.MilliTokensUsd, CompletionRatio: 1.70 / 0.60},
-	"Qwen/Qwen3-Coder-Next-FP8":                {Ratio: 0.50 * ratio.MilliTokensUsd, CompletionRatio: 1.20 / 0.50},
-	"Qwen/Qwen3-Coder-480B-A35B-Instruct-FP8":  {Ratio: 2.00 * ratio.MilliTokensUsd, CompletionRatio: 1},
-	"Qwen/Qwen3-235B-A22B-Instruct-2507-tput":  {Ratio: 0.20 * ratio.MilliTokensUsd, CompletionRatio: 0.60 / 0.20},
-	"deepseek-ai/DeepSeek-R1":                  {Ratio: 3.00 * ratio.MilliTokensUsd, CompletionRatio: 7.00 / 3.00},
-	"meta-llama/Llama-3.3-70B-Instruct-Turbo":  {Ratio: 0.88 * ratio.MilliTokensUsd, CompletionRatio: 1},
-	"deepcogito/cogito-v2-1-671b":              {Ratio: 1.25 * ratio.MilliTokensUsd, CompletionRatio: 1},
-	"essentialai/rnj-1-instruct":               {Ratio: 0.15 * ratio.MilliTokensUsd, CompletionRatio: 1},
-	"Qwen/Qwen2.5-7B-Instruct-Turbo":           {Ratio: 0.30 * ratio.MilliTokensUsd, CompletionRatio: 1},
-	"google/gemma-4-31B-it":                    {Ratio: 0.20 * ratio.MilliTokensUsd, CompletionRatio: 0.50 / 0.20},
-	"google/gemma-3n-E4B-it":                   {Ratio: 0.06 * ratio.MilliTokensUsd, CompletionRatio: 0.12 / 0.06},
-	"LiquidAI/LFM2-24B-A2B":                    {Ratio: 0.03 * ratio.MilliTokensUsd, CompletionRatio: 0.12 / 0.03},
-	"meta-llama/Meta-Llama-3-8B-Instruct-Lite": {Ratio: 0.10 * ratio.MilliTokensUsd, CompletionRatio: 1},
+	"MiniMaxAI/MiniMax-M2.7": {
+		Ratio: 0.30 * ratio.MilliTokensUsd, CompletionRatio: 1.20 / 0.30, CachedInputRatio: 0.06 * ratio.MilliTokensUsd,
+		ContextLength: 202752, MaxOutputTokens: 8192,
+		InputModalities: togetherTextIn, OutputModalities: togetherTextOut,
+		SupportedFeatures: togetherReasonFeatures, SupportedSamplingParameters: togetherChatSampling,
+		Quantization: "fp4", HuggingFaceID: "MiniMaxAI/MiniMax-M2",
+		Description: "MiniMax M2 interleaved-thinking MoE (230B/10B active) for coding and agentic workflows.",
+	},
+	"MiniMaxAI/MiniMax-M2.5": {
+		Ratio: 0.30 * ratio.MilliTokensUsd, CompletionRatio: 1.20 / 0.30, CachedInputRatio: 0.06 * ratio.MilliTokensUsd,
+		ContextLength: 202752, MaxOutputTokens: 8192,
+		InputModalities: togetherTextIn, OutputModalities: togetherTextOut,
+		SupportedFeatures: togetherReasonFeatures, SupportedSamplingParameters: togetherChatSampling,
+		Quantization: "fp4", HuggingFaceID: "MiniMaxAI/MiniMax-M2",
+		Description: "Earlier checkpoint of MiniMax M2 interleaved-thinking MoE.",
+	},
+	"Qwen/Qwen3.5-397B-A17B": {
+		Ratio: 0.60 * ratio.MilliTokensUsd, CompletionRatio: 3.60 / 0.60,
+		ContextLength: 262144, MaxOutputTokens: 8192,
+		InputModalities: togetherVisionIn, OutputModalities: togetherTextOut,
+		SupportedFeatures: togetherChatFeatures, SupportedSamplingParameters: togetherChatSampling,
+		Quantization: "fp4", HuggingFaceID: "Qwen/Qwen3.5-397B-A17B",
+		Description: "Qwen 3.5 397B vision-language MoE with 262K context and strong multilingual coding.",
+	},
+	"Qwen/Qwen3.5-9B": {
+		Ratio: 0.10 * ratio.MilliTokensUsd, CompletionRatio: 0.15 / 0.10,
+		ContextLength: 262144, MaxOutputTokens: 8192,
+		InputModalities: togetherVisionIn, OutputModalities: togetherTextOut,
+		SupportedFeatures: togetherChatFeatures, SupportedSamplingParameters: togetherChatSampling,
+		Quantization: "fp8", HuggingFaceID: "Qwen/Qwen3.5-9B",
+		Description: "Compact Qwen 3.5 9B vision-language model with 262K context.",
+	},
+	"moonshotai/Kimi-K2.6": {
+		Ratio: 1.20 * ratio.MilliTokensUsd, CompletionRatio: 4.50 / 1.20, CachedInputRatio: 0.20 * ratio.MilliTokensUsd,
+		ContextLength: 262144, MaxOutputTokens: 8192,
+		InputModalities: togetherVisionIn, OutputModalities: togetherTextOut,
+		SupportedFeatures: togetherChatFeatures, SupportedSamplingParameters: togetherChatSampling,
+		Quantization: "fp4", HuggingFaceID: "moonshotai/Kimi-K2-Instruct",
+		Description: "Kimi K2.6 agentic MoE (1T/32B active) with cached input pricing, optimised for tool use and SWE.",
+	},
+	"moonshotai/Kimi-K2.5": {
+		Ratio: 0.50 * ratio.MilliTokensUsd, CompletionRatio: 2.80 / 0.50,
+		ContextLength: 262144, MaxOutputTokens: 8192,
+		InputModalities: togetherVisionIn, OutputModalities: togetherTextOut,
+		SupportedFeatures: togetherChatFeatures, SupportedSamplingParameters: togetherChatSampling,
+		Quantization: "fp4", HuggingFaceID: "moonshotai/Kimi-K2-Instruct",
+		Description: "Kimi K2.5 agentic MoE (1T/32B active) with vision support and 262K context.",
+	},
+	"zai-org/GLM-5.1": {
+		Ratio: 1.40 * ratio.MilliTokensUsd, CompletionRatio: 4.40 / 1.40,
+		ContextLength: 202752, MaxOutputTokens: 131072,
+		InputModalities: togetherTextIn, OutputModalities: togetherTextOut,
+		SupportedFeatures: togetherReasonFeatures, SupportedSamplingParameters: togetherChatSampling,
+		Quantization: "fp4", HuggingFaceID: "zai-org/GLM-5.1",
+		Description: "Z.ai GLM-5.1 hybrid-reasoning MoE (754B/40B active) with strong agentic performance.",
+	},
+	"zai-org/GLM-5": {
+		Ratio: 1.00 * ratio.MilliTokensUsd, CompletionRatio: 3.20 / 1.00,
+		ContextLength: 202752, MaxOutputTokens: 131072,
+		InputModalities: togetherTextIn, OutputModalities: togetherTextOut,
+		SupportedFeatures: togetherReasonFeatures, SupportedSamplingParameters: togetherChatSampling,
+		Quantization: "fp4", HuggingFaceID: "zai-org/GLM-5",
+		Description: "Z.ai GLM-5 hybrid-reasoning MoE (754B/40B active), state-of-the-art open-source agentic model.",
+	},
+	"openai/gpt-oss-120b": {
+		Ratio: 0.15 * ratio.MilliTokensUsd, CompletionRatio: 0.60 / 0.15,
+		ContextLength: 128000, MaxOutputTokens: 16384,
+		InputModalities: togetherTextIn, OutputModalities: togetherTextOut,
+		SupportedFeatures: togetherChatFeatures, SupportedSamplingParameters: togetherChatSampling,
+		Quantization: "fp4", HuggingFaceID: "openai/gpt-oss-120b",
+		Description: "OpenAI gpt-oss-120b dense open-weight model with 128K context.",
+	},
+	"openai/gpt-oss-20b": {
+		Ratio: 0.05 * ratio.MilliTokensUsd, CompletionRatio: 0.20 / 0.05,
+		ContextLength: 128000, MaxOutputTokens: 16384,
+		InputModalities: togetherTextIn, OutputModalities: togetherTextOut,
+		SupportedFeatures: togetherChatFeatures, SupportedSamplingParameters: togetherChatSampling,
+		Quantization: "fp4", HuggingFaceID: "openai/gpt-oss-20b",
+		Description: "OpenAI gpt-oss-20b compact dense open-weight model with 128K context.",
+	},
+	"deepseek-ai/DeepSeek-V4-Pro": {
+		Ratio: 2.10 * ratio.MilliTokensUsd, CompletionRatio: 4.40 / 2.10, CachedInputRatio: 0.20 * ratio.MilliTokensUsd,
+		ContextLength: 512000, MaxOutputTokens: 8192,
+		InputModalities: togetherTextIn, OutputModalities: togetherTextOut,
+		SupportedFeatures: togetherChatFeatures, SupportedSamplingParameters: togetherChatSampling,
+		Quantization: "fp4", HuggingFaceID: "deepseek-ai/DeepSeek-V4-Pro",
+		Description: "DeepSeek V4-Pro flagship MoE with 512K context and prompt-cache pricing.",
+	},
+	"deepseek-ai/DeepSeek-V3.1": {
+		Ratio: 0.60 * ratio.MilliTokensUsd, CompletionRatio: 1.70 / 0.60,
+		ContextLength: 128000, MaxOutputTokens: 8192,
+		InputModalities: togetherTextIn, OutputModalities: togetherTextOut,
+		SupportedFeatures: togetherChatFeatures, SupportedSamplingParameters: togetherChatSampling,
+		Quantization: "fp8", HuggingFaceID: "deepseek-ai/DeepSeek-V3",
+		Description: "DeepSeek V3.1 MoE (671B/37B active) with 128K context.",
+	},
+	"Qwen/Qwen3-Coder-Next-FP8": {
+		Ratio: 0.50 * ratio.MilliTokensUsd, CompletionRatio: 1.20 / 0.50,
+		ContextLength: 262144, MaxOutputTokens: 8192,
+		InputModalities: togetherTextIn, OutputModalities: togetherTextOut,
+		SupportedFeatures: togetherChatFeatures, SupportedSamplingParameters: togetherChatSampling,
+		Quantization: "fp8",
+		Description:  "Next-generation Qwen3 coding model in FP8 (architecture not yet published).",
+	},
+	"Qwen/Qwen3-Coder-480B-A35B-Instruct-FP8": {
+		Ratio: 2.00 * ratio.MilliTokensUsd, CompletionRatio: 1,
+		ContextLength: 256000, MaxOutputTokens: 65536,
+		InputModalities: togetherTextIn, OutputModalities: togetherTextOut,
+		SupportedFeatures: togetherChatFeatures, SupportedSamplingParameters: togetherChatSampling,
+		Quantization: "fp8", HuggingFaceID: "Qwen/Qwen3-Coder-480B-A35B-Instruct",
+		Description: "Qwen3 480B coding MoE (480B/35B active) in FP8, non-thinking mode, 256K context.",
+	},
+	"Qwen/Qwen3-235B-A22B-Instruct-2507-tput": {
+		Ratio: 0.20 * ratio.MilliTokensUsd, CompletionRatio: 0.60 / 0.20,
+		ContextLength: 262144, MaxOutputTokens: 8192,
+		InputModalities: togetherTextIn, OutputModalities: togetherTextOut,
+		SupportedFeatures: togetherChatFeatures, SupportedSamplingParameters: togetherChatSampling,
+		Quantization: "fp8", HuggingFaceID: "Qwen/Qwen3-235B-A22B-Instruct",
+		Description: "Throughput-optimised Qwen3 235B MoE instruct (July 2025 checkpoint), non-thinking mode.",
+	},
+	"deepseek-ai/DeepSeek-R1": {
+		Ratio: 3.00 * ratio.MilliTokensUsd, CompletionRatio: 7.00 / 3.00,
+		ContextLength: 128000, MaxOutputTokens: 32768,
+		InputModalities: togetherTextIn, OutputModalities: togetherTextOut,
+		SupportedFeatures: togetherReasonFeatures, SupportedSamplingParameters: togetherR1Sampling,
+		Quantization: "fp8", HuggingFaceID: "deepseek-ai/DeepSeek-R1",
+		Description: "DeepSeek-R1 671B full reasoning model with extended CoT; restrict temperature to 0.5-0.7.",
+	},
+	"meta-llama/Llama-3.3-70B-Instruct-Turbo": {
+		Ratio: 0.88 * ratio.MilliTokensUsd, CompletionRatio: 1,
+		ContextLength: 131072, MaxOutputTokens: 8192,
+		InputModalities: togetherTextIn, OutputModalities: togetherTextOut,
+		SupportedFeatures: togetherChatFeatures, SupportedSamplingParameters: togetherChatSampling,
+		Quantization: "fp8", HuggingFaceID: "meta-llama/Llama-3.3-70B-Instruct",
+		Description: "Meta Llama 3.3 70B instruction model (FP8 turbo) with 128K context.",
+	},
+	"deepcogito/cogito-v2-1-671b": {
+		Ratio: 1.25 * ratio.MilliTokensUsd, CompletionRatio: 1,
+		ContextLength: 163840, MaxOutputTokens: 8192,
+		InputModalities: togetherTextIn, OutputModalities: togetherTextOut,
+		SupportedFeatures: []string{"reasoning"}, SupportedSamplingParameters: togetherChatSampling,
+		Quantization: "bf16", HuggingFaceID: "deepcogito/cogito-v2-1-671b",
+		Description: "Cogito v2.1 671B hybrid-reasoning model using IDA for optional extended thinking.",
+	},
+	"essentialai/rnj-1-instruct": {
+		Ratio: 0.15 * ratio.MilliTokensUsd, CompletionRatio: 1,
+		ContextLength: 32768, MaxOutputTokens: 8192,
+		InputModalities: togetherTextIn, OutputModalities: togetherTextOut,
+		SupportedFeatures: togetherChatFeatures, SupportedSamplingParameters: togetherChatSampling,
+		Quantization: "bf16", HuggingFaceID: "essentialai/rnj-1-instruct",
+		Description: "Essential AI RNJ-1 instruction model in BF16 with 32K context and tool-calling.",
+	},
+	"Qwen/Qwen2.5-7B-Instruct-Turbo": {
+		Ratio: 0.30 * ratio.MilliTokensUsd, CompletionRatio: 1,
+		ContextLength: 32768, MaxOutputTokens: 8192,
+		InputModalities: togetherTextIn, OutputModalities: togetherTextOut,
+		SupportedFeatures: togetherChatFeatures, SupportedSamplingParameters: togetherChatSampling,
+		Quantization: "fp8", HuggingFaceID: "Qwen/Qwen2.5-7B-Instruct",
+		Description: "FP8-quantised Qwen 2.5 7B instruction model with 32K context.",
+	},
+	"google/gemma-4-31B-it": {
+		Ratio: 0.20 * ratio.MilliTokensUsd, CompletionRatio: 0.50 / 0.20,
+		ContextLength: 262144, MaxOutputTokens: 8192,
+		InputModalities: togetherVisionIn, OutputModalities: togetherTextOut,
+		SupportedFeatures: togetherChatFeatures, SupportedSamplingParameters: togetherChatSampling,
+		Quantization: "fp8", HuggingFaceID: "google/gemma-4-31b-it",
+		Description: "Google Gemma 4 31B multimodal instruction model with 262K context.",
+	},
+	"google/gemma-3n-E4B-it": {
+		Ratio: 0.06 * ratio.MilliTokensUsd, CompletionRatio: 0.12 / 0.06,
+		ContextLength: 32768, MaxOutputTokens: 8192,
+		InputModalities: togetherVisionIn, OutputModalities: togetherTextOut,
+		SupportedFeatures: []string{"json_mode"}, SupportedSamplingParameters: togetherChatSampling,
+		Quantization: "fp8", HuggingFaceID: "google/gemma-3n-E4B-it",
+		Description: "Google Gemma 3n E4B multimodal instruction model with vision support and 32K context.",
+	},
+	"LiquidAI/LFM2-24B-A2B": {
+		Ratio: 0.03 * ratio.MilliTokensUsd, CompletionRatio: 0.12 / 0.03,
+		ContextLength: 32768, MaxOutputTokens: 8192,
+		InputModalities: togetherTextIn, OutputModalities: togetherTextOut,
+		SupportedSamplingParameters: togetherChatSampling,
+		Quantization:                "bf16", HuggingFaceID: "LiquidAI/LFM2-24B-A2B",
+		Description: "Liquid Foundation Model 2, 24B MoE with hybrid-conv/attn architecture for edge deployment.",
+	},
+	"meta-llama/Meta-Llama-3-8B-Instruct-Lite": {
+		Ratio: 0.10 * ratio.MilliTokensUsd, CompletionRatio: 1,
+		ContextLength: 8192, MaxOutputTokens: 8192,
+		InputModalities: togetherTextIn, OutputModalities: togetherTextOut,
+		SupportedSamplingParameters: togetherChatSampling,
+		Quantization:                "bf16", HuggingFaceID: "meta-llama/Meta-Llama-3-8B-Instruct",
+		Description: "Lightweight quantised variant of Meta Llama 3 8B for fast low-cost inference.",
+	},
 
 	// Embeddings.
 	"intfloat/multilingual-e5-large-instruct": {
