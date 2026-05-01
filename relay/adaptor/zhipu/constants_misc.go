@@ -120,6 +120,8 @@ var ocrModels = map[string]adaptor.ModelConfig{
 	"glm-ocr": {
 		Ratio:            0.2 * ratio.MilliTokensRmb,
 		CompletionRatio:  1,
+		ContextLength:    8192,
+		MaxOutputTokens:  4096,
 		InputModalities:  []string{"image", "file"},
 		OutputModalities: textOutput(),
 		HuggingFaceID:    "zai-org/GLM-OCR",
