@@ -611,7 +611,7 @@ func processCancelConsume(ctx context.Context, c *gin.Context, token *model.Toke
 // processImmediateConsume performs a pre and post flow back-to-back for legacy single-phase clients.
 func processImmediateConsume(ctx context.Context, c *gin.Context, token *model.Token, userID int, req *consumeTokenRequest, requestID string, traceID string) (*model.TokenTransaction, *model.Token, error) {
 	if req.AddUsedQuota == 0 {
-		return nil, nil, errors.New("add_used_quota must be greater than 0 for immediate consumption")
+		return processZeroQuotaImmediateConsume(ctx, token, userID, req, requestID, traceID)
 	}
 
 	var transactionID string
@@ -637,6 +637,74 @@ func processImmediateConsume(ctx context.Context, c *gin.Context, token *model.T
 	transaction, updatedToken, err = processPostConsume(ctx, c, token, userID, &postReq, transaction)
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "post-consume phase of immediate consume")
+	}
+
+	return transaction, updatedToken, nil
+}
+
+// processZeroQuotaImmediateConsume records a billing log and confirmed transaction
+// for a free tool invocation. Free MCP tool calls still need a unified audit trail,
+// so we persist a zero-quota log row and a finalized transaction without touching
+// token or user balances.
+func processZeroQuotaImmediateConsume(ctx context.Context, token *model.Token, userID int, req *consumeTokenRequest, requestID string, traceID string) (*model.TokenTransaction, *model.Token, error) {
+	var transactionID string
+	if req.TransactionID != nil {
+		transactionID = strings.TrimSpace(*req.TransactionID)
+	}
+	if transactionID == "" {
+		generated, err := generateTransactionID(ctx, token.Id)
+		if err != nil {
+			return nil, nil, errors.Wrap(err, "generate transaction id for zero-quota consume")
+		}
+		transactionID = generated
+		req.TransactionID = &transactionID
+	}
+
+	logEntry := &model.Log{
+		UserId:    userID,
+		ModelName: req.AddReason,
+		TokenName: token.Name,
+		Quota:     0,
+		Content:   buildPostConsumeLogContent(req.AddReason, 0, 0, transactionID),
+		RequestId: requestID,
+		TraceId:   traceID,
+	}
+	if req.ElapsedTimeMs != nil && *req.ElapsedTimeMs > 0 {
+		logEntry.ElapsedTime = *req.ElapsedTimeMs
+	}
+	model.RecordToolLog(ctx, logEntry)
+
+	confirmedAt := helper.GetTimestamp()
+	zeroQuota := int64(0)
+	transaction := &model.TokenTransaction{
+		TransactionID: transactionID,
+		TokenId:       token.Id,
+		UserId:        userID,
+		Status:        model.TokenTransactionStatusConfirmed,
+		PreQuota:      0,
+		FinalQuota:    &zeroQuota,
+		Reason:        req.AddReason,
+		RequestId:     requestID,
+		TraceId:       traceID,
+		ConfirmedAt:   &confirmedAt,
+		AutoConfirmed: false,
+	}
+	if logEntry.Id > 0 {
+		logID := logEntry.Id
+		transaction.LogId = &logID
+	}
+	if req.ElapsedTimeMs != nil && *req.ElapsedTimeMs > 0 {
+		elapsed := *req.ElapsedTimeMs
+		transaction.ElapsedTimeMs = &elapsed
+	}
+
+	if err := model.CreateTokenTransaction(ctx, transaction); err != nil {
+		return nil, nil, errors.Wrap(err, "create zero-quota token transaction")
+	}
+
+	updatedToken, err := model.GetTokenByIds(token.Id, userID)
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "get token after zero-quota consume")
 	}
 
 	return transaction, updatedToken, nil

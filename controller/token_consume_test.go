@@ -261,6 +261,44 @@ func TestConsumeTokenAutoConfirmTimeout(t *testing.T) {
 	}
 }
 
+func TestConsumeTokenZeroQuotaSinglePhase(t *testing.T) {
+	cleanup, user, token := setupConsumeTokenTest(t)
+	defer cleanup()
+
+	body := `{"add_used_quota":0,"add_reason":"file_list","phase":"single"}`
+	c, recorder := newConsumeTokenContext(t, http.MethodPost, body, user.Id, token.Id, "req-zero")
+
+	ConsumeToken(c)
+	require.Equal(t, http.StatusOK, recorder.Code)
+
+	var resp map[string]any
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &resp))
+	require.True(t, resp["success"].(bool))
+
+	data := resp["data"].(map[string]any)
+	require.EqualValues(t, token.RemainQuota, data["remain_quota"])
+
+	transaction := resp["transaction"].(map[string]any)
+	require.Equal(t, "confirmed", transaction["status"])
+	require.EqualValues(t, 0, transaction["final_quota"])
+	require.EqualValues(t, 0, transaction["pre_quota"])
+
+	refreshedToken, err := model.GetTokenByIds(token.Id, user.Id)
+	require.NoError(t, err)
+	require.Equal(t, int64(1000), refreshedToken.RemainQuota)
+
+	refreshedUser, err := model.GetUserById(user.Id, true)
+	require.NoError(t, err)
+	require.Equal(t, int64(1000), refreshedUser.Quota)
+
+	var logRows []model.Log
+	require.NoError(t, model.LOG_DB.Where("request_id = ?", "req-zero").Find(&logRows).Error)
+	require.Len(t, logRows, 1)
+	require.Equal(t, model.LogTypeTool, logRows[0].Type)
+	require.Equal(t, "file_list", logRows[0].ModelName)
+	require.Equal(t, 0, logRows[0].Quota)
+}
+
 func TestConsumeTokenDefaultsToSinglePhase(t *testing.T) {
 	cleanup, user, token := setupConsumeTokenTest(t)
 	defer cleanup()
