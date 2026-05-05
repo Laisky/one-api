@@ -176,6 +176,7 @@ func callMCPToolForUser(ctx context.Context, c *gin.Context, params mcpCallParam
 		return nil, errors.New("no eligible MCP tool found")
 	}
 
+	startedAt := time.Now()
 	selected, result, err := mcp.CallWithFallback(ctx, candidates, func(ctx context.Context, candidate mcp.ToolCandidate) (*mcp.CallToolResult, error) {
 		server := serverByID[candidate.ServerID]
 		if server == nil {
@@ -208,9 +209,10 @@ func callMCPToolForUser(ctx context.Context, c *gin.Context, params mcpCallParam
 			return nil, errors.Wrap(err, "decrease user quota for mcp tool call")
 		}
 		model.UpdateUserUsedQuotaAndRequestCount(user.Id, cost)
-		qualifiedName := server.Name + "." + selected.Tool.Name
-		recordMCPToolLog(ctx, c, user.Id, server.Id, qualifiedName, cost)
 	}
+
+	qualifiedName := server.Name + "." + selected.Tool.Name
+	recordMCPToolLog(ctx, c, user.Id, server.Id, qualifiedName, cost, helper.CalcElapsedTime(startedAt))
 
 	return result, nil
 }
@@ -229,11 +231,9 @@ func resolveToolCost(server *model.MCPServer, toolName string) int64 {
 
 // recordMCPToolLog records an MCP tool invocation as a single LogTypeTool row.
 // The dashboard tool charts aggregate strictly on type, so this becomes one
-// row per invocation with ModelName=toolName and Quota=cost.
-func recordMCPToolLog(ctx context.Context, c *gin.Context, userId int, serverId int, toolName string, cost int64) {
-	if cost <= 0 {
-		return
-	}
+// row per invocation with ModelName=toolName and Quota=cost. Free invocations
+// (cost == 0) still emit a row so every MCP call has a unified audit trail.
+func recordMCPToolLog(ctx context.Context, c *gin.Context, userId int, serverId int, toolName string, cost int64, elapsedMs int64) {
 	model.RecordToolLog(ctx, &model.Log{
 		UserId:      userId,
 		ModelName:   toolName,
@@ -242,7 +242,7 @@ func recordMCPToolLog(ctx context.Context, c *gin.Context, userId int, serverId 
 		RequestId:   c.GetString(ctxkey.RequestId),
 		TraceId:     tracing.GetTraceID(c),
 		IsStream:    false,
-		ElapsedTime: helper.CalcElapsedTime(time.Now().Add(-time.Millisecond)),
+		ElapsedTime: elapsedMs,
 	})
 }
 
