@@ -13,6 +13,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { STORAGE_KEYS, usePageSize } from '@/hooks/usePersistentState';
 import { api } from '@/lib/api';
 import { LOG_TYPES, LOG_TYPE_OPTIONS } from '@/lib/constants/logs';
+import { fetchAllPaginatedResults } from '@/lib/export';
 import { useAuthStore } from '@/lib/stores/auth';
 import { cn, formatTimestamp, fromDateTimeLocal, renderQuota, toDateTimeLocal } from '@/lib/utils';
 import type { LogEntry, LogMetadata } from '@/types/log';
@@ -78,6 +79,7 @@ export function LogsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [data, setData] = useState<LogRow[]>([]);
   const [loading, setLoading] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const [pageIndex, setPageIndex] = useState(Math.max(0, parseInt(searchParams.get('p') || '1') - 1));
   const [pageSize, setPageSize] = usePageSize(STORAGE_KEYS.PAGE_SIZE);
   const [total, setTotal] = useState(0);
@@ -315,52 +317,74 @@ export function LogsPage() {
     }
   };
 
-  const handleExportLogs = () => {
-    // Implementation for exporting logs to CSV
-    const csvHeaders = [
-      t('logs.export.headers.time'),
-      t('logs.export.headers.type'),
-      t('logs.export.headers.model'),
-      t('logs.export.headers.origin_model'),
-      t('logs.export.headers.token'),
-      t('logs.export.headers.username'),
-      t('logs.export.headers.quota'),
-      t('logs.export.headers.prompt_tokens'),
-      t('logs.export.headers.completion_tokens'),
-      t('logs.export.headers.cached_prompt_tokens'),
-      t('logs.export.headers.cache_write_5m'),
-      t('logs.export.headers.cache_write_1h'),
-      t('logs.export.headers.latency'),
-      t('logs.export.headers.content'),
-    ];
-    const csvData = data.map((log) => {
-      const { fiveMinute, oneHour } = getCacheWriteSummaries(log.metadata);
-      return [
-        formatTimestamp(log.created_at),
-        log.type,
-        log.model_name,
-        log.origin_model_name || '',
-        log.token_name || '',
-        log.username || '',
-        log.quota,
-        log.prompt_tokens || 0,
-        log.completion_tokens || 0,
-        log.cached_prompt_tokens || 0,
-        fiveMinute,
-        oneHour,
-        log.elapsed_time || 0,
-        (log.content || '').replace(/,/g, ';').replace(/\n/g, ' '),
-      ];
-    });
+  const handleExportLogs = async () => {
+    setExporting(true);
+    try {
+      const params = new URLSearchParams();
+      if (filters.type !== '0') params.set('type', filters.type);
+      if (filters.model_name) params.set('model_name', filters.model_name);
+      if (filters.token_name) params.set('token_name', filters.token_name);
+      if (isAdminOrRoot && filters.username) params.set('username', filters.username);
+      if (filters.channel && isAdminOrRoot) params.set('channel', filters.channel);
+      if (filters.start_timestamp) params.set('start_timestamp', String(fromDateTimeLocal(filters.start_timestamp)));
+      if (filters.end_timestamp) params.set('end_timestamp', String(fromDateTimeLocal(filters.end_timestamp)));
+      if (sortBy) {
+        params.set('sort', sortBy);
+        params.set('order', sortOrder);
+      }
 
-    const csv = [csvHeaders, ...csvData].map((row) => row.join(',')).join('\n');
-    const blob = new Blob([csv], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `logs_${new Date().toISOString().split('T')[0]}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
+      const exportPath = isAdminOrRoot ? '/api/log/' : '/api/log/self';
+      const exportData = await fetchAllPaginatedResults<LogRow>((url) => api.get(url), exportPath, params);
+
+      const csvHeaders = [
+        t('logs.export.headers.time'),
+        t('logs.export.headers.type'),
+        t('logs.export.headers.model'),
+        t('logs.export.headers.origin_model'),
+        t('logs.export.headers.token'),
+        t('logs.export.headers.username'),
+        t('logs.export.headers.quota'),
+        t('logs.export.headers.prompt_tokens'),
+        t('logs.export.headers.completion_tokens'),
+        t('logs.export.headers.cached_prompt_tokens'),
+        t('logs.export.headers.cache_write_5m'),
+        t('logs.export.headers.cache_write_1h'),
+        t('logs.export.headers.latency'),
+        t('logs.export.headers.content'),
+      ];
+      const csvData = exportData.map((log) => {
+        const { fiveMinute, oneHour } = getCacheWriteSummaries(log.metadata);
+        return [
+          formatTimestamp(log.created_at),
+          log.type,
+          log.model_name,
+          log.origin_model_name || '',
+          log.token_name || '',
+          log.username || '',
+          log.quota,
+          log.prompt_tokens || 0,
+          log.completion_tokens || 0,
+          log.cached_prompt_tokens || 0,
+          fiveMinute,
+          oneHour,
+          log.elapsed_time || 0,
+          (log.content || '').replace(/,/g, ';').replace(/\n/g, ' '),
+        ];
+      });
+
+      const csv = [csvHeaders, ...csvData].map((row) => row.join(',')).join('\n');
+      const blob = new Blob([csv], { type: 'text/csv' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `logs_${new Date().toISOString().split('T')[0]}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Failed to export logs:', error);
+    } finally {
+      setExporting(false);
+    }
   };
 
   const CopyButton = ({ text }: { text: string }) => (
@@ -416,17 +440,17 @@ export function LogsPage() {
           {
             accessorKey: 'username',
             header: t('logs.table.user'),
-            cell: ({ row }) => <span className="text-sm">{row.original.username || user?.username || t('logs.labels.missing')}</span>,
+            cell: ({ row }: { row: any }) => <span className="text-sm">{row.original.username || user?.username || t('logs.labels.missing')}</span>,
           } as ColumnDef<LogRow>,
           {
             accessorKey: 'token_name',
             header: t('logs.table.token'),
-            cell: ({ row }) => <span className="text-sm">{row.original.token_name || t('logs.labels.missing')}</span>,
+            cell: ({ row }: { row: any }) => <span className="text-sm">{row.original.token_name || t('logs.labels.missing')}</span>,
           },
           {
             accessorKey: 'prompt_tokens',
             header: t('logs.table.prompt'),
-            cell: ({ row }) => (
+            cell: ({ row }: { row: any }) => (
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>
@@ -453,7 +477,7 @@ export function LogsPage() {
           {
             accessorKey: 'completion_tokens',
             header: t('logs.table.completion'),
-            cell: ({ row }) => {
+            cell: ({ row }: { row: any }) => {
               const { fiveMinute, oneHour } = getCacheWriteSummaries(row.original.metadata);
               return (
                 <TooltipProvider>
@@ -484,7 +508,7 @@ export function LogsPage() {
           {
             accessorKey: 'quota',
             header: t('logs.table.cost'),
-            cell: ({ row }) => (
+            cell: ({ row }: { row: any }) => (
               <span className="font-mono text-sm" title={row.original.content || ''}>
                 {renderQuota(row.original.quota)}
               </span>
@@ -493,7 +517,7 @@ export function LogsPage() {
           {
             accessorKey: 'elapsed_time',
             header: t('logs.table.latency'),
-            cell: ({ row }) => (
+            cell: ({ row }: { row: any }) => (
               <span className={cn('font-mono text-sm', getLatencyColor(row.original.elapsed_time))}>
                 {formatLatency(row.original.elapsed_time, t('logs.labels.not_available'))}
               </span>
@@ -577,8 +601,14 @@ export function LogsPage() {
               {showStat ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
               {showStat ? t('logs.actions.hide_stats') : t('logs.actions.show_stats')}
             </Button>
-            <Button variant="outline" onClick={handleExportLogs} className="gap-2 whitespace-nowrap w-full sm:w-auto" size="sm">
-              <FileDown className="h-4 w-4" />
+            <Button
+              variant="outline"
+              onClick={handleExportLogs}
+              className="gap-2 whitespace-nowrap w-full sm:w-auto"
+              size="sm"
+              disabled={exporting}
+            >
+              {exporting ? <RefreshCw className="h-4 w-4 animate-spin" /> : <FileDown className="h-4 w-4" />}
               {t('logs.actions.export')}
             </Button>
             {isAdmin && (
