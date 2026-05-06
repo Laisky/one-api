@@ -13,7 +13,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { STORAGE_KEYS, usePageSize } from '@/hooks/usePersistentState';
 import { api } from '@/lib/api';
 import { LOG_TYPES, LOG_TYPE_OPTIONS } from '@/lib/constants/logs';
-import { fetchAllPaginatedResults } from '@/lib/export';
+import { buildCsv, fetchAllPaginatedResults, mapWithConcurrency } from '@/lib/export';
 import { useAuthStore } from '@/lib/stores/auth';
 import { cn, formatTimestamp, fromDateTimeLocal, renderQuota, toDateTimeLocal } from '@/lib/utils';
 import type { LogEntry, LogMetadata } from '@/types/log';
@@ -72,6 +72,20 @@ const getCacheWriteSummaries = (metadata?: LogMetadata) => {
     oneHour: coerceTokenCount(details.ephemeral_1h),
   };
 };
+
+interface ExportTracePayload {
+  id: number;
+  trace_id: string;
+  url: string;
+  method: string;
+  body_size: number;
+  status: number;
+  created_at: number;
+  updated_at: number;
+  timestamps?: Record<string, unknown>;
+  durations?: Record<string, unknown>;
+  log?: Record<string, unknown>;
+}
 
 export function LogsPage() {
   const { t } = useTranslation();
@@ -335,44 +349,94 @@ export function LogsPage() {
 
       const exportPath = isAdminOrRoot ? '/api/log/' : '/api/log/self';
       const exportData = await fetchAllPaginatedResults<LogRow>((url) => api.get(url), exportPath, params);
+      const logsWithTrace = exportData.filter((log) => log.trace_id?.trim());
+      const traceEntries = await mapWithConcurrency(
+        logsWithTrace,
+        async (log) => {
+          try {
+            const traceResponse = await api.get(`/api/trace/log/${log.id}`);
+            if (traceResponse.data?.success === false) {
+              return {
+                logId: log.id,
+                trace: { error: traceResponse.data?.message || t('logs.details.load_failed') } as ExportTracePayload | { error: string },
+              };
+            }
+
+            return {
+              logId: log.id,
+              trace: (traceResponse.data?.data as ExportTracePayload | undefined) ?? null,
+            };
+          } catch (_error) {
+            return {
+              logId: log.id,
+              trace: { error: t('logs.details.load_failed') } as ExportTracePayload | { error: string },
+            };
+          }
+        }
+      );
+      const tracesByLogId = new Map<number, ExportTracePayload | { error: string } | null>(
+        traceEntries.map((entry) => [entry.logId, entry.trace])
+      );
 
       const csvHeaders = [
-        t('logs.export.headers.time'),
-        t('logs.export.headers.type'),
-        t('logs.export.headers.model'),
-        t('logs.export.headers.origin_model'),
-        t('logs.export.headers.token'),
-        t('logs.export.headers.username'),
-        t('logs.export.headers.quota'),
-        t('logs.export.headers.prompt_tokens'),
-        t('logs.export.headers.completion_tokens'),
-        t('logs.export.headers.cached_prompt_tokens'),
-        t('logs.export.headers.cache_write_5m'),
-        t('logs.export.headers.cache_write_1h'),
-        t('logs.export.headers.latency'),
-        t('logs.export.headers.content'),
+        t('logs.details.recorded_at'),
+        t('logs.details.type'),
+        t('logs.details.log_id'),
+        t('logs.details.model'),
+        t('logs.details.origin_model'),
+        t('logs.details.token'),
+        t('logs.details.user'),
+        t('logs.details.channel'),
+        t('logs.details.quota'),
+        t('logs.details.quota_raw'),
+        t('logs.details.prompt_tokens_input'),
+        t('logs.details.completion_tokens_output'),
+        t('logs.details.prompt_tokens_cached'),
+        t('logs.details.cache_write_5m'),
+        t('logs.details.cache_write_1h'),
+        t('logs.details.total_tokens'),
+        t('logs.details.latency'),
+        t('logs.details.request_id'),
+        t('logs.details.trace_id'),
+        t('logs.details.stream'),
+        t('logs.details.system_reset'),
+        t('logs.details.content'),
+        t('logs.details.metadata'),
+        t('logs.details.tracing'),
       ];
       const csvData = exportData.map((log) => {
         const { fiveMinute, oneHour } = getCacheWriteSummaries(log.metadata);
+        const totalTokens = (log.prompt_tokens ?? 0) + (log.completion_tokens ?? 0);
+        const tracePayload = tracesByLogId.get(log.id) ?? null;
         return [
           formatTimestamp(log.created_at),
-          log.type,
+          `${getLogTypeLabelText(log.type)} (${log.type})`,
+          log.id,
           log.model_name,
           log.origin_model_name || '',
           log.token_name || '',
           log.username || '',
+          log.channel ?? '',
+          renderQuota(log.quota),
           log.quota,
           log.prompt_tokens || 0,
           log.completion_tokens || 0,
           log.cached_prompt_tokens || 0,
           fiveMinute,
           oneHour,
-          log.elapsed_time || 0,
-          (log.content || '').replace(/,/g, ';').replace(/\n/g, ' '),
+          totalTokens,
+          formatLatency(log.elapsed_time, t('logs.labels.not_available')),
+          log.request_id || '',
+          log.trace_id || '',
+          Boolean(log.is_stream),
+          Boolean(log.system_prompt_reset),
+          log.content || '',
+          log.metadata ?? null,
+          tracePayload,
         ];
       });
 
-      const csv = [csvHeaders, ...csvData].map((row) => row.join(',')).join('\n');
+      const csv = buildCsv([csvHeaders, ...csvData]);
       const blob = new Blob([csv], { type: 'text/csv' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
