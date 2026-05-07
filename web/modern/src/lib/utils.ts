@@ -220,6 +220,13 @@ export interface SystemStatus {
   turnstile_site_key?: string;
   github_oauth?: boolean;
   github_client_id?: string;
+  lark_client_id?: string;
+  oidc?: boolean;
+  oidc_client_id?: string;
+  oidc_well_known?: string;
+  oidc_authorization_endpoint?: string;
+  oidc_token_endpoint?: string;
+  oidc_userinfo_endpoint?: string;
   chat_link?: string;
   [key: string]: any;
 }

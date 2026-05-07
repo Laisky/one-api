@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Separator } from '@/components/ui/separator';
 import { useSystemStatus } from '@/hooks/useSystemStatus';
 import { api } from '@/lib/api';
-import { buildGitHubOAuthUrl, getOAuthState } from '@/lib/oauth';
+import { buildGitHubOAuthUrl, buildOidcOAuthUrl, getOAuthState } from '@/lib/oauth';
 import { useAuthStore } from '@/lib/stores/auth';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { browserSupportsWebAuthn, startAuthentication } from '@simplewebauthn/browser';
@@ -141,6 +141,20 @@ export function LoginPage() {
     }
   };
 
+  const onOidcOAuth = async () => {
+    if (!systemStatus.oidc_client_id || !systemStatus.oidc_authorization_endpoint) return;
+    try {
+      const state = await getOAuthState();
+      const redirectUri = `${window.location.origin}/oauth/oidc`;
+      const url = buildOidcOAuthUrl(systemStatus.oidc_authorization_endpoint, systemStatus.oidc_client_id, state, redirectUri);
+      window.location.href = url;
+    } catch {
+      const redirectUri = `${window.location.origin}/oauth/oidc`;
+      const url = buildOidcOAuthUrl(systemStatus.oidc_authorization_endpoint, systemStatus.oidc_client_id, '', redirectUri);
+      window.location.href = url;
+    }
+  };
+
   const onSubmit = async (data: LoginForm) => {
     // Only gate on Turnstile if it's been required (after a prior failed attempt).
     if (turnstileRequired && turnstileEnabled && !turnstileToken) {
@@ -224,7 +238,7 @@ export function LoginPage() {
     if (totpRequired && totpRef.current) totpRef.current.focus();
   }, [totpRequired]);
 
-  const hasOAuthOptions = systemStatus.github_oauth || systemStatus.lark_client_id;
+  const hasOAuthOptions = systemStatus.github_oauth || systemStatus.lark_client_id || systemStatus.oidc;
 
   const handleTurnstileVerify = (token: string) => {
     setTurnstileToken(token);
@@ -427,6 +441,23 @@ export function LoginPage() {
                         <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z" />
                       </svg>
                       Lark
+                    </Button>
+                  )}
+                  {systemStatus.oidc && (
+                    <Button variant="outline" size="sm" onClick={onOidcOAuth}>
+                      <svg
+                        className="w-4 h-4 mr-2"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        aria-hidden="true"
+                      >
+                        <path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4" />
+                      </svg>
+                      OIDC
                     </Button>
                   )}
                 </div>

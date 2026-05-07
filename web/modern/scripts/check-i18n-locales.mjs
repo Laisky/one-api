@@ -57,7 +57,9 @@ for (const filename of referenceFiles) {
 
   const lineCounts = supportedLanguages.map((language) => byLanguage.get(language).lineCount);
   if (new Set(lineCounts).size !== 1) {
-    failures.push(`${filename} has mismatched line counts: ${supportedLanguages.map((language) => `${language}:${byLanguage.get(language).lineCount}`).join(', ')}.`);
+    failures.push(
+      `${filename} has mismatched line counts: ${supportedLanguages.map((language) => `${language}:${byLanguage.get(language).lineCount}`).join(', ')}.`
+    );
   }
 
   if (!filename.endsWith('.json')) {
@@ -67,7 +69,9 @@ for (const filename of referenceFiles) {
   const allKeyPaths = [...new Set(supportedLanguages.flatMap((language) => byLanguage.get(language).keyPaths))].sort();
   const keyCounts = supportedLanguages.map((language) => byLanguage.get(language).keyPaths.length);
   if (new Set(keyCounts).size !== 1) {
-    failures.push(`${filename} has mismatched key counts: ${supportedLanguages.map((language) => `${language}:${byLanguage.get(language).keyPaths.length}`).join(', ')}.`);
+    failures.push(
+      `${filename} has mismatched key counts: ${supportedLanguages.map((language) => `${language}:${byLanguage.get(language).keyPaths.length}`).join(', ')}.`
+    );
   }
 
   for (const language of supportedLanguages) {

@@ -1,6 +1,17 @@
 import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { BaseMetricRow, getDisplayInCurrency, getQuotaPerUnit, ModelRow, TokenRow, ToolMetricRow, ToolRow, ToolTokenRow, ToolUserRow, UserRow } from '../types';
+import {
+  BaseMetricRow,
+  getDisplayInCurrency,
+  getQuotaPerUnit,
+  ModelRow,
+  TokenRow,
+  ToolMetricRow,
+  ToolRow,
+  ToolTokenRow,
+  ToolUserRow,
+  UserRow,
+} from '../types';
 
 export type CacheHeatmapEntity = {
   name: string;

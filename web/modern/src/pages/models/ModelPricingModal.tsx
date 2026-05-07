@@ -750,9 +750,7 @@ function PriceCell({ label, sublabel, value, tr, raw }: { label: string; sublabe
 }
 
 function TagRow({ label, values }: { label: string; values: string[] }) {
-  const normalized = values
-    .map((value) => value.trim())
-    .filter((value, idx, arr) => value.length > 0 && arr.indexOf(value) === idx);
+  const normalized = values.map((value) => value.trim()).filter((value, idx, arr) => value.length > 0 && arr.indexOf(value) === idx);
   if (normalized.length === 0) {
     return null;
   }

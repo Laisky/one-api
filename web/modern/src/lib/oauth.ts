@@ -24,3 +24,17 @@ export function buildGitHubOAuthUrl(clientId: string, state: string, redirectUri
   if (redirectUri) params.set('redirect_uri', redirectUri);
   return `${base}?${params.toString()}`;
 }
+
+/**
+ * Build the OIDC authorization URL using the configured authorization endpoint.
+ * The redirect_uri must match the one registered with the OIDC provider.
+ */
+export function buildOidcOAuthUrl(authorizationEndpoint: string, clientId: string, state: string, redirectUri: string): string {
+  const params = new URLSearchParams();
+  params.set('client_id', clientId);
+  params.set('redirect_uri', redirectUri);
+  params.set('response_type', 'code');
+  params.set('scope', 'openid profile email');
+  params.set('state', state);
+  return `${authorizationEndpoint}?${params.toString()}`;
+}

@@ -350,30 +350,27 @@ export function LogsPage() {
       const exportPath = isAdminOrRoot ? '/api/log/' : '/api/log/self';
       const exportData = await fetchAllPaginatedResults<LogRow>((url) => api.get(url), exportPath, params);
       const logsWithTrace = exportData.filter((log) => log.trace_id?.trim());
-      const traceEntries = await mapWithConcurrency(
-        logsWithTrace,
-        async (log) => {
-          try {
-            const traceResponse = await api.get(`/api/trace/log/${log.id}`);
-            if (traceResponse.data?.success === false) {
-              return {
-                logId: log.id,
-                trace: { error: traceResponse.data?.message || t('logs.details.load_failed') } as ExportTracePayload | { error: string },
-              };
-            }
-
+      const traceEntries = await mapWithConcurrency(logsWithTrace, async (log) => {
+        try {
+          const traceResponse = await api.get(`/api/trace/log/${log.id}`);
+          if (traceResponse.data?.success === false) {
             return {
               logId: log.id,
-              trace: (traceResponse.data?.data as ExportTracePayload | undefined) ?? null,
-            };
-          } catch (_error) {
-            return {
-              logId: log.id,
-              trace: { error: t('logs.details.load_failed') } as ExportTracePayload | { error: string },
+              trace: { error: traceResponse.data?.message || t('logs.details.load_failed') } as ExportTracePayload | { error: string },
             };
           }
+
+          return {
+            logId: log.id,
+            trace: (traceResponse.data?.data as ExportTracePayload | undefined) ?? null,
+          };
+        } catch (_error) {
+          return {
+            logId: log.id,
+            trace: { error: t('logs.details.load_failed') } as ExportTracePayload | { error: string },
+          };
         }
-      );
+      });
       const tracesByLogId = new Map<number, ExportTracePayload | { error: string } | null>(
         traceEntries.map((entry) => [entry.logId, entry.trace])
       );
@@ -504,7 +501,9 @@ export function LogsPage() {
           {
             accessorKey: 'username',
             header: t('logs.table.user'),
-            cell: ({ row }: { row: any }) => <span className="text-sm">{row.original.username || user?.username || t('logs.labels.missing')}</span>,
+            cell: ({ row }: { row: any }) => (
+              <span className="text-sm">{row.original.username || user?.username || t('logs.labels.missing')}</span>
+            ),
           } as ColumnDef<LogRow>,
           {
             accessorKey: 'token_name',
