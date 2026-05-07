@@ -122,6 +122,23 @@
       "get_invite_link": "招待リンクを取得",
       "title": "アクセストークンと招待"
     },
+    "oauth_binding": {
+      "bind_failed": "連携フローの開始に失敗しました",
+      "bind_lark": "Lark を連携",
+      "bind_oidc": "OIDC を連携",
+      "binding": "連携中...",
+      "bound_lark": "Lark アカウント連携済み",
+      "bound_oidc": "OIDC アカウント連携済み",
+      "description": "サードパーティの ID プロバイダーをアカウントに連携してワンクリックでサインインできます。",
+      "lark_label": "Lark",
+      "not_bound": "未連携",
+      "oidc_label": "OIDC",
+      "title": "アカウント連携",
+      "unbind_failed": "アカウントの連携解除に失敗しました",
+      "unbind_lark": "Lark の連携を解除",
+      "unbind_oidc": "OIDC の連携を解除",
+      "unbind_success": "アカウントの連携を解除しました"
+    },
     "passkey": {
       "delete_button": "削除",
       "delete_confirm": "このパスキーを削除してもよろしいですか？",

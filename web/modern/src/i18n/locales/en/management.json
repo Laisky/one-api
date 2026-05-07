@@ -541,10 +541,23 @@
       "title": "Generate Redemption Codes"
     },
     "edit": {
+      "actions": {
+        "back_to_list": "Back to list",
+        "copied": "Copied",
+        "copy": "Copy",
+        "copy_all": "Copy all",
+        "download_codes": "Download codes"
+      },
+      "code_generated_hint": "Copy the code below; it will not be shown together with its name again.",
+      "codes_generated": "{{count}} codes generated",
+      "codes_generated_aria": "Generated redemption codes",
+      "codes_generated_hint": "Save the codes now — once you leave this page they cannot be retrieved as a batch.",
       "description": {
         "create": "Create a new redemption code",
         "edit": "Update redemption code settings"
       },
+      "download_codes": "Download codes",
+      "download_filename_prefix": "redemption-codes",
       "loading": "Loading redemption...",
       "notifications": {
         "create_success": "Redemption created successfully",

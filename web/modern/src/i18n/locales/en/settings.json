@@ -122,6 +122,23 @@
       "get_invite_link": "Get Invitation Link",
       "title": "Access Token \u0026 Invitation"
     },
+    "oauth_binding": {
+      "bind_failed": "Failed to start binding flow",
+      "bind_lark": "Bind Lark",
+      "bind_oidc": "Bind OIDC",
+      "binding": "Binding...",
+      "bound_lark": "Lark account bound",
+      "bound_oidc": "OIDC account bound",
+      "description": "Link third-party identity providers to your account for one-click sign-in.",
+      "lark_label": "Lark",
+      "not_bound": "Not bound",
+      "oidc_label": "OIDC",
+      "title": "Account Bindings",
+      "unbind_failed": "Failed to unbind account",
+      "unbind_lark": "Unbind Lark",
+      "unbind_oidc": "Unbind OIDC",
+      "unbind_success": "Account unbound successfully"
+    },
     "passkey": {
       "delete_button": "Delete",
       "delete_confirm": "Are you sure you want to delete this passkey?",

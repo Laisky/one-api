@@ -122,6 +122,23 @@
       "get_invite_link": "获取邀请链接",
       "title": "访问令牌与邀请"
     },
+    "oauth_binding": {
+      "bind_failed": "启动绑定流程失败",
+      "bind_lark": "绑定飞书",
+      "bind_oidc": "绑定 OIDC",
+      "binding": "绑定中...",
+      "bound_lark": "飞书账号已绑定",
+      "bound_oidc": "OIDC 账号已绑定",
+      "description": "关联第三方身份提供方，实现一键登录。",
+      "lark_label": "飞书",
+      "not_bound": "未绑定",
+      "oidc_label": "OIDC",
+      "title": "账号绑定",
+      "unbind_failed": "解绑账号失败",
+      "unbind_lark": "解绑飞书",
+      "unbind_oidc": "解绑 OIDC",
+      "unbind_success": "账号解绑成功"
+    },
     "passkey": {
       "delete_button": "删除",
       "delete_confirm": "确定要删除此通行密钥吗？",

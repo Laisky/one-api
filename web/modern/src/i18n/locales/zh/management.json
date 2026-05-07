@@ -541,10 +541,23 @@
       "title": "生成兑换码"
     },
     "edit": {
+      "actions": {
+        "back_to_list": "返回列表",
+        "copied": "已复制",
+        "copy": "复制",
+        "copy_all": "全部复制",
+        "download_codes": "下载兑换码"
+      },
+      "code_generated_hint": "请立即复制下方兑换码，离开此页后将无法与名称一同重新查看。",
+      "codes_generated": "已生成 {{count}} 个兑换码",
+      "codes_generated_aria": "生成的兑换码列表",
+      "codes_generated_hint": "请立即保存兑换码 — 离开此页面后将无法再次批量获取。",
       "description": {
         "create": "创建一个新的兑换码",
         "edit": "更新兑换码设置"
       },
+      "download_codes": "下载兑换码",
+      "download_filename_prefix": "redemption-codes",
       "loading": "正在加载兑换码...",
       "notifications": {
         "create_success": "兑换码创建成功",

@@ -541,10 +541,23 @@
       "title": "Générer des codes de remboursement"
     },
     "edit": {
+      "actions": {
+        "back_to_list": "Retour à la liste",
+        "copied": "Copié",
+        "copy": "Copier",
+        "copy_all": "Tout copier",
+        "download_codes": "Télécharger les codes"
+      },
+      "code_generated_hint": "Copiez le code ci-dessous ; il ne sera plus affiché avec son nom.",
+      "codes_generated": "{{count}} codes générés",
+      "codes_generated_aria": "Codes de remboursement générés",
+      "codes_generated_hint": "Enregistrez les codes maintenant — une fois cette page quittée, ils ne pourront plus être récupérés en lot.",
       "description": {
         "create": "Créer un nouveau code de remboursement",
         "edit": "Mettre à jour les paramètres du code de remboursement"
       },
+      "download_codes": "Télécharger les codes",
+      "download_filename_prefix": "redemption-codes",
       "loading": "Chargement du remboursement...",
       "notifications": {
         "create_success": "Remboursement créé avec succès",

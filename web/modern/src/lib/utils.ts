@@ -227,6 +227,8 @@ export interface SystemStatus {
   oidc_authorization_endpoint?: string;
   oidc_token_endpoint?: string;
   oidc_userinfo_endpoint?: string;
+  wechat_login?: boolean;
+  wechat_qrcode?: string;
   chat_link?: string;
   [key: string]: any;
 }

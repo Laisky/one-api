@@ -541,10 +541,23 @@
       "title": "引き換えコードを生成"
     },
     "edit": {
+      "actions": {
+        "back_to_list": "一覧に戻る",
+        "copied": "コピー済み",
+        "copy": "コピー",
+        "copy_all": "すべてコピー",
+        "download_codes": "コードをダウンロード"
+      },
+      "code_generated_hint": "下のコードをコピーしてください。名前と一緒に再表示されることはありません。",
+      "codes_generated": "{{count}} 件のコードを生成しました",
+      "codes_generated_aria": "生成された引き換えコード",
+      "codes_generated_hint": "今すぐコードを保存してください — このページを離れるとまとめて取得できなくなります。",
       "description": {
         "create": "新しい引き換えコードを作成",
         "edit": "引き換えコード設定を更新"
       },
+      "download_codes": "コードをダウンロード",
+      "download_filename_prefix": "redemption-codes",
       "loading": "引き換えを読み込み中...",
       "notifications": {
         "create_success": "引き換えを作成しました",

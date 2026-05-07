@@ -541,10 +541,23 @@
       "title": "Generar códigos de canje"
     },
     "edit": {
+      "actions": {
+        "back_to_list": "Volver a la lista",
+        "copied": "Copiado",
+        "copy": "Copiar",
+        "copy_all": "Copiar todo",
+        "download_codes": "Descargar códigos"
+      },
+      "code_generated_hint": "Copia el código a continuación; no se mostrará junto con su nombre de nuevo.",
+      "codes_generated": "{{count}} códigos generados",
+      "codes_generated_aria": "Códigos de canje generados",
+      "codes_generated_hint": "Guarda los códigos ahora — una vez que salgas de esta página no podrán recuperarse como un lote.",
       "description": {
         "create": "Crear un nuevo código de canje",
         "edit": "Actualizar configuración del código de canje"
       },
+      "download_codes": "Descargar códigos",
+      "download_filename_prefix": "redemption-codes",
       "loading": "Cargando canje...",
       "notifications": {
         "create_success": "Canje creado exitosamente",

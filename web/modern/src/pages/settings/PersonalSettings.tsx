@@ -10,6 +10,7 @@ import { useNotifications } from '@/components/ui/notifications';
 import { Separator } from '@/components/ui/separator';
 import { useResponsive } from '@/hooks/useResponsive';
 import { api } from '@/lib/api';
+import { buildOidcOAuthUrl, getOAuthState } from '@/lib/oauth';
 import { useAuthStore } from '@/lib/stores/auth';
 import { loadSystemStatus, type SystemStatus } from '@/lib/utils';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -76,6 +77,23 @@ export function PersonalSettings() {
   const [emailVerificationError, setEmailVerificationError] = useState('');
   const [turnstileToken, setTurnstileToken] = useState('');
 
+  // OAuth binding state — track third-party identifiers returned by /api/user/self.
+  // We track these locally because the shared auth store User type does not include them.
+  interface OAuthBindings {
+    github_id: string;
+    wechat_id: string;
+    lark_id: string;
+    oidc_id: string;
+  }
+  const [oauthBindings, setOauthBindings] = useState<OAuthBindings>({
+    github_id: '',
+    wechat_id: '',
+    lark_id: '',
+    oidc_id: '',
+  });
+  const [oauthBindingError, setOauthBindingError] = useState('');
+  const [oauthBindingPending, setOauthBindingPending] = useState<'lark' | 'oidc' | null>(null);
+
   const turnstileEnabled = Boolean(systemStatus.turnstile_check);
   const turnstileRenderable = turnstileEnabled && Boolean(systemStatus.turnstile_site_key);
 
@@ -120,6 +138,12 @@ export function PersonalSettings() {
           username: data.username || '',
           display_name: data.display_name || '',
           email: data.email || '',
+        });
+        setOauthBindings({
+          github_id: data.github_id || '',
+          wechat_id: data.wechat_id || '',
+          lark_id: data.lark_id || '',
+          oidc_id: data.oidc_id || '',
         });
         return true;
       }
@@ -512,6 +536,41 @@ export function PersonalSettings() {
     }
   };
 
+  // Bind a Lark account by redirecting to the Lark OAuth authorize URL.
+  // The OAuth callback (/oauth/lark) detects bind vs login by inspecting the
+  // backend response message, so no extra "intent" query param is needed.
+  const onBindLark = () => {
+    setOauthBindingError('');
+    if (!systemStatus.lark_client_id) {
+      setOauthBindingError(t('personal_settings.oauth_binding.bind_failed'));
+      return;
+    }
+    setOauthBindingPending('lark');
+    const redirectUri = `${window.location.origin}/oauth/lark`;
+    window.location.href = `https://open.larksuite.com/open-apis/authen/v1/index?app_id=${encodeURIComponent(
+      systemStatus.lark_client_id
+    )}&redirect_uri=${encodeURIComponent(redirectUri)}`;
+  };
+
+  // Bind an OIDC account by redirecting to the configured authorization endpoint.
+  const onBindOidc = async () => {
+    setOauthBindingError('');
+    if (!systemStatus.oidc_client_id || !systemStatus.oidc_authorization_endpoint) {
+      setOauthBindingError(t('personal_settings.oauth_binding.bind_failed'));
+      return;
+    }
+    setOauthBindingPending('oidc');
+    try {
+      const state = await getOAuthState();
+      const redirectUri = `${window.location.origin}/oauth/oidc`;
+      const url = buildOidcOAuthUrl(systemStatus.oidc_authorization_endpoint, systemStatus.oidc_client_id, state, redirectUri);
+      window.location.href = url;
+    } catch (error) {
+      setOauthBindingPending(null);
+      setOauthBindingError(error instanceof Error ? error.message : t('personal_settings.oauth_binding.bind_failed'));
+    }
+  };
+
   const onSubmit = async (data: PersonalForm) => {
     setLoading(true);
     try {
@@ -678,6 +737,71 @@ export function PersonalSettings() {
           </div>
         </CardContent>
       </Card>
+
+      {/* ========== Account Bindings Card ========== */}
+      {(systemStatus.lark_client_id || systemStatus.oidc) && (
+        <Card>
+          <CardHeader>
+            <CardTitle>{t('personal_settings.oauth_binding.title')}</CardTitle>
+            <CardDescription>{t('personal_settings.oauth_binding.description')}</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {oauthBindingError && <div className="text-sm text-destructive font-medium">{oauthBindingError}</div>}
+
+            {/* Lark binding row */}
+            {systemStatus.lark_client_id && (
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between rounded-lg border bg-background p-3">
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="font-medium">{t('personal_settings.oauth_binding.lark_label')}</span>
+                  {oauthBindings.lark_id ? (
+                    <Badge className="bg-emerald-100 text-emerald-800 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-400 dark:border-emerald-800">
+                      {t('personal_settings.oauth_binding.bound_lark')}
+                    </Badge>
+                  ) : (
+                    <Badge variant="outline" className="text-muted-foreground border-dashed">
+                      {t('personal_settings.oauth_binding.not_bound')}
+                    </Badge>
+                  )}
+                </div>
+                {!oauthBindings.lark_id && (
+                  <Button onClick={onBindLark} disabled={oauthBindingPending !== null} className="w-full sm:w-auto">
+                    {oauthBindingPending === 'lark'
+                      ? t('personal_settings.oauth_binding.binding')
+                      : t('personal_settings.oauth_binding.bind_lark')}
+                  </Button>
+                )}
+                {/* TODO: backend has no /api/oauth/lark/unbind endpoint; add unbind button once backend supports it. */}
+              </div>
+            )}
+
+            {/* OIDC binding row */}
+            {systemStatus.oidc && (
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between rounded-lg border bg-background p-3">
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="font-medium">{t('personal_settings.oauth_binding.oidc_label')}</span>
+                  {oauthBindings.oidc_id ? (
+                    <Badge className="bg-emerald-100 text-emerald-800 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-400 dark:border-emerald-800">
+                      {t('personal_settings.oauth_binding.bound_oidc')}
+                    </Badge>
+                  ) : (
+                    <Badge variant="outline" className="text-muted-foreground border-dashed">
+                      {t('personal_settings.oauth_binding.not_bound')}
+                    </Badge>
+                  )}
+                </div>
+                {!oauthBindings.oidc_id && (
+                  <Button onClick={onBindOidc} disabled={oauthBindingPending !== null} className="w-full sm:w-auto">
+                    {oauthBindingPending === 'oidc'
+                      ? t('personal_settings.oauth_binding.binding')
+                      : t('personal_settings.oauth_binding.bind_oidc')}
+                  </Button>
+                )}
+                {/* TODO: backend has no /api/oauth/oidc/unbind endpoint; add unbind button once backend supports it. */}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {/* ========== Account Security Card ========== */}
       <Card>

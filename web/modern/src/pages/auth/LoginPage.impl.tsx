@@ -1,6 +1,7 @@
 import Turnstile from '@/components/Turnstile';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { Separator } from '@/components/ui/separator';
@@ -49,6 +50,10 @@ export function LoginPage() {
   const turnstileRenderable = turnstileRequired && turnstileEnabled && Boolean(systemStatus?.turnstile_site_key);
   const [passkeyLoading, setPasskeyLoading] = useState(false);
   const passkeySupported = typeof window !== 'undefined' && browserSupportsWebAuthn();
+  const [wechatOpen, setWechatOpen] = useState(false);
+  const [wechatCode, setWechatCode] = useState('');
+  const [wechatLoading, setWechatLoading] = useState(false);
+  const [wechatError, setWechatError] = useState('');
 
   const onPasskeyLogin = async () => {
     setPasskeyLoading(true);
@@ -155,6 +160,57 @@ export function LoginPage() {
     }
   };
 
+  const onWeChatOpen = () => {
+    setWechatCode('');
+    setWechatError('');
+    setWechatOpen(true);
+  };
+
+  const onWeChatSubmit = async () => {
+    const code = wechatCode.trim();
+    if (!code) {
+      setWechatError(t('auth.login.wechat_code_required'));
+      return;
+    }
+    setWechatLoading(true);
+    setWechatError('');
+    try {
+      const response = await api.get(`/api/oauth/wechat?code=${encodeURIComponent(code)}`);
+      const { success, message, data } = response.data;
+      if (!success) {
+        setWechatError(message || t('auth.login.wechat_failed'));
+        return;
+      }
+
+      if (message === 'bind') {
+        setWechatOpen(false);
+        navigate('/settings', { state: { message: t('auth.oauth.wechat.bind_success') } });
+        return;
+      }
+
+      login(data, '');
+      setWechatOpen(false);
+
+      const redirectTo = searchParams.get('redirect_to');
+      if (redirectTo) {
+        try {
+          const decodedPath = decodeURIComponent(redirectTo);
+          if (decodedPath.startsWith('/')) {
+            navigate(decodedPath);
+            return;
+          }
+        } catch (err) {
+          console.error('Invalid redirect_to parameter:', err);
+        }
+      }
+      navigate('/dashboard');
+    } catch (error) {
+      setWechatError(error instanceof Error ? error.message : t('auth.login.wechat_failed'));
+    } finally {
+      setWechatLoading(false);
+    }
+  };
+
   const onSubmit = async (data: LoginForm) => {
     // Only gate on Turnstile if it's been required (after a prior failed attempt).
     if (turnstileRequired && turnstileEnabled && !turnstileToken) {
@@ -238,7 +294,7 @@ export function LoginPage() {
     if (totpRequired && totpRef.current) totpRef.current.focus();
   }, [totpRequired]);
 
-  const hasOAuthOptions = systemStatus.github_oauth || systemStatus.lark_client_id || systemStatus.oidc;
+  const hasOAuthOptions = systemStatus.github_oauth || systemStatus.lark_client_id || systemStatus.oidc || systemStatus.wechat_login;
 
   const handleTurnstileVerify = (token: string) => {
     setTurnstileToken(token);
@@ -434,7 +490,14 @@ export function LoginPage() {
                       GitHub
                     </Button>
                   )}
-                  {/* WeChat OAuth: hidden until implementation is complete */}
+                  {systemStatus.wechat_login && (
+                    <Button variant="outline" size="sm" onClick={onWeChatOpen}>
+                      <svg className="w-4 h-4 mr-2" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                        <path d="M8.5 4C4.36 4 1 6.69 1 10c0 1.89 1.1 3.56 2.79 4.65L3 17l2.74-1.43c.74.18 1.51.28 2.31.28.27 0 .54-.01.8-.04-.17-.5-.26-1.03-.26-1.58 0-3.18 3.13-5.77 7-5.77.13 0 .26 0 .39.01C15.3 5.84 12.16 4 8.5 4zm-2 2c.55 0 1 .45 1 1s-.45 1-1 1-1-.45-1-1 .45-1 1-1zm5 0c.55 0 1 .45 1 1s-.45 1-1 1-1-.45-1-1 .45-1 1-1zm4.5 4.5c-3.59 0-6.5 2.24-6.5 5s2.91 5 6.5 5c.63 0 1.24-.07 1.81-.21L20 21.5l-.6-2.04C21.65 18.42 23 16.78 23 14.5c0-2.76-2.91-5-6.5-5zm-2 2.25c.41 0 .75.34.75.75s-.34.75-.75.75-.75-.34-.75-.75.34-.75.75-.75zm4 0c.41 0 .75.34.75.75s-.34.75-.75.75-.75-.34-.75-.75.34-.75.75-.75z" />
+                      </svg>
+                      WeChat
+                    </Button>
+                  )}
                   {systemStatus.lark_client_id && (
                     <Button variant="outline" size="sm" onClick={onLarkOAuth}>
                       <svg className="w-4 h-4 mr-2" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
@@ -466,6 +529,47 @@ export function LoginPage() {
           )}
         </CardContent>
       </Card>
+      <Dialog
+        open={wechatOpen}
+        onOpenChange={(open) => {
+          if (!wechatLoading) setWechatOpen(open);
+        }}
+      >
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>{t('auth.login.wechat_modal_title')}</DialogTitle>
+            <DialogDescription>{t('auth.login.wechat_modal_description')}</DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col items-center gap-3">
+            {systemStatus.wechat_qrcode && (
+              <img src={systemStatus.wechat_qrcode} alt="WeChat QR code" className="max-h-64 w-auto rounded-md border" />
+            )}
+            <Input
+              type="text"
+              autoFocus
+              value={wechatCode}
+              placeholder={t('auth.login.wechat_code_placeholder')}
+              disabled={wechatLoading}
+              onChange={(e) => {
+                setWechatCode(e.target.value);
+                if (wechatError) setWechatError('');
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  void onWeChatSubmit();
+                }
+              }}
+            />
+            {wechatError && <p className="text-sm text-destructive w-full">{wechatError}</p>}
+          </div>
+          <DialogFooter>
+            <Button type="button" onClick={() => void onWeChatSubmit()} disabled={wechatLoading}>
+              {wechatLoading ? t('auth.login.signing_in') : t('auth.login.title')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </main>
   );
 }

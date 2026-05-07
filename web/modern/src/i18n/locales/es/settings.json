@@ -122,6 +122,23 @@
       "get_invite_link": "Obtener enlace de invitación",
       "title": "Token de acceso e invitación"
     },
+    "oauth_binding": {
+      "bind_failed": "No se pudo iniciar el flujo de vinculación",
+      "bind_lark": "Vincular Lark",
+      "bind_oidc": "Vincular OIDC",
+      "binding": "Vinculando...",
+      "bound_lark": "Cuenta de Lark vinculada",
+      "bound_oidc": "Cuenta OIDC vinculada",
+      "description": "Vincula proveedores de identidad de terceros a tu cuenta para iniciar sesión con un clic.",
+      "lark_label": "Lark",
+      "not_bound": "No vinculada",
+      "oidc_label": "OIDC",
+      "title": "Vinculación de cuentas",
+      "unbind_failed": "No se pudo desvincular la cuenta",
+      "unbind_lark": "Desvincular Lark",
+      "unbind_oidc": "Desvincular OIDC",
+      "unbind_success": "Cuenta desvinculada correctamente"
+    },
     "passkey": {
       "delete_button": "Eliminar",
       "delete_confirm": "¿Estás seguro de que deseas eliminar esta passkey?",
