@@ -5,8 +5,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -22,7 +24,22 @@ import (
 	"github.com/Laisky/one-api/common/helper"
 	"github.com/Laisky/one-api/common/logger"
 	"github.com/Laisky/one-api/model"
+	"github.com/Laisky/one-api/relay/mcp"
 )
+
+// marshalIDForFixture serializes a JSON-RPC id field back to its raw JSON
+// form so the fake upstream can echo it correctly across number/string
+// types. Returns the literal `null` if the id is missing or unmarshalable.
+func marshalIDForFixture(id any) string {
+	if id == nil {
+		return "null"
+	}
+	encoded, err := json.Marshal(id)
+	if err != nil {
+		return "null"
+	}
+	return string(encoded)
+}
 
 // setupMCPProxyTest spins up an isolated SQLite database, fake MCP backend,
 // and a test user/server/tool seeded for callMCPToolForUser-driven scenarios.
@@ -78,7 +95,31 @@ func setupMCPProxyTest(t *testing.T) (cleanup func(), fx *mcpFixture) {
 		return []byte(`{"jsonrpc":"2.0","id":"1","result":{"content":"ok","is_error":false}}`), http.StatusOK
 	}
 
+	// The fake upstream behaves like a spec-compliant MCP server: it replies
+	// to `initialize` with a valid handshake envelope, accepts
+	// notifications with HTTP 202, and routes tool calls to the
+	// configurable respondPayload. upstreamHits counts only tool calls so
+	// existing assertions still mean "the proxy invoked the tool once."
 	fx.upstream = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		bodyBytes, _ := io.ReadAll(r.Body)
+		var rpc struct {
+			ID     any    `json:"id"`
+			Method string `json:"method"`
+		}
+		_ = json.Unmarshal(bodyBytes, &rpc)
+
+		switch rpc.Method {
+		case "initialize":
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			_, _ = fmt.Fprintf(w, `{"jsonrpc":"2.0","id":%s,"result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{}},"serverInfo":{"name":"fake-upstream","version":"1.0"}}}`, marshalIDForFixture(rpc.ID))
+			return
+		}
+		if strings.HasPrefix(rpc.Method, "notifications/") {
+			w.WriteHeader(http.StatusAccepted)
+			return
+		}
+
 		fx.upstreamHits++
 		body, status := fx.respondPayload()
 		w.Header().Set("Content-Type", "application/json")
@@ -405,6 +446,53 @@ func TestMCPProxy_GetReturns405(t *testing.T) {
 
 	MCPProxy(c)
 	require.Equal(t, http.StatusMethodNotAllowed, recorder.Code)
+}
+
+// TestMCPProxy_SelfTest_ClientDrivesOwnServer wires the in-process
+// StreamableHTTPClient against our own MCPProxy handler over real HTTP.
+// This is the bidirectional contract: the same protocol code that talks to
+// upstream MCP servers must also be able to drive our own server. If
+// either half drifts from the spec, this test fails first.
+func TestMCPProxy_SelfTest_ClientDrivesOwnServer(t *testing.T) {
+	cleanup, fx := setupMCPProxyTest(t)
+	defer cleanup()
+
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	// Stub the auth middleware: inject the fixture user into context.
+	// Production uses TokenAuth; here we bypass it because the unit under
+	// test is the protocol contract, not authentication.
+	router.Any("/mcp", func(c *gin.Context) {
+		c.Set(ctxkey.Id, fx.user.Id)
+		c.Set(ctxkey.RequestId, "selftest")
+		c.Set(helper.RequestIdKey, "selftest")
+		gmw.SetLogger(c, logger.Logger)
+		MCPProxy(c)
+	})
+	httpServer := httptest.NewServer(router)
+	defer httpServer.Close()
+
+	// Build a real client pointing at our own /mcp endpoint and exercise
+	// the full lifecycle: initialize → notifications/initialized →
+	// tools/list. The fixture seeds a tool named "fake-mcp.echo".
+	mcpServer := &model.MCPServer{
+		BaseURL:  httpServer.URL + "/mcp",
+		AuthType: model.MCPAuthTypeNone,
+	}
+	client := mcp.NewStreamableHTTPClient(mcpServer, nil, 5*time.Second)
+
+	require.NoError(t, client.Initialize(context.Background()),
+		"initialize handshake against our own server must succeed")
+
+	tools, err := client.ListTools(context.Background())
+	require.NoError(t, err, "tools/list against our own server must succeed")
+
+	var names []string
+	for _, tl := range tools {
+		names = append(names, tl.Name)
+	}
+	require.Contains(t, names, "fake-mcp.echo",
+		"client must surface the seeded tool via the proxy: got %v", names)
 }
 
 // TestMCPProxy_HTTPHandlerLogsFreeToolCall exercises the full HTTP entry

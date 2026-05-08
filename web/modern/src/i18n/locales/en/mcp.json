@@ -5,6 +5,8 @@
         "add": "Add",
         "cancel": "Cancel",
         "create": "Create Server",
+        "sync": "Sync now",
+        "sync_in_progress": "Syncing...",
         "update": "Update Server"
       },
       "fields": {
@@ -46,7 +48,9 @@
       "notifications": {
         "load_failed": "Failed to load MCP server",
         "save_failed": "Save failed",
-        "save_success": "Saved"
+        "save_success": "Saved",
+        "sync_failed": "Sync failed: {{message}}",
+        "sync_success": "Synced {{count}} tools from upstream"
       },
       "pricing": {
         "invalid": "Tool pricing JSON is invalid",

@@ -5,6 +5,8 @@
         "add": "Agregar",
         "cancel": "Cancelar",
         "create": "Crear servidor",
+        "sync": "Sincronizar ahora",
+        "sync_in_progress": "Sincronizando...",
         "update": "Actualizar servidor"
       },
       "fields": {
@@ -46,7 +48,9 @@
       "notifications": {
         "load_failed": "Error al cargar el servidor MCP",
         "save_failed": "Error al guardar",
-        "save_success": "Guardado"
+        "save_success": "Guardado",
+        "sync_failed": "Sincronización fallida: {{message}}",
+        "sync_success": "Se sincronizaron {{count}} herramientas desde el origen"
       },
       "pricing": {
         "invalid": "El JSON de precios de herramientas no es válido",

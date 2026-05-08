@@ -11,7 +11,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { api } from '@/lib/api';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { Info } from 'lucide-react';
+import { Info, RefreshCw } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { useTranslation } from 'react-i18next';
@@ -52,6 +52,7 @@ export function EditMCPServerPage() {
   const isEdit = Boolean(serverId);
   const [loading, setLoading] = useState(isEdit);
   const [tools, setTools] = useState<MCPTool[]>([]);
+  const [syncing, setSyncing] = useState(false);
 
   const form = useForm<ServerForm>({
     resolver: zodResolver(serverSchema),
@@ -137,6 +138,41 @@ export function EditMCPServerPage() {
       loadTools();
     }
   }, [serverId]);
+
+  const handleSync = async () => {
+    if (!serverId) return;
+    setSyncing(true);
+    try {
+      const response = await api.post(`/api/mcp_servers/${serverId}/sync`);
+      const { success, data, message } = response.data;
+      if (!success) {
+        notify({
+          type: 'error',
+          title: t('mcp.edit.notifications.sync_failed', 'Sync failed: {{message}}', {
+            message: message || '',
+          }),
+          message: message || '',
+        });
+        return;
+      }
+      const count = data?.tool_count ?? 0;
+      notify({
+        type: 'success',
+        title: t('mcp.edit.notifications.sync_success', 'Synced {{count}} tools from upstream', { count }),
+        message: '',
+      });
+      await loadTools();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      notify({
+        type: 'error',
+        title: t('mcp.edit.notifications.sync_failed', 'Sync failed: {{message}}', { message }),
+        message,
+      });
+    } finally {
+      setSyncing(false);
+    }
+  };
 
   const parseJSON = (value?: string) => {
     if (!value || value.trim() === '') return undefined;
@@ -484,6 +520,20 @@ export function EditMCPServerPage() {
                 </div>
 
                 <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                  {isEdit && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={handleSync}
+                      disabled={syncing}
+                      className="w-full sm:w-auto"
+                    >
+                      <RefreshCw className={`mr-2 h-4 w-4 ${syncing ? 'animate-spin' : ''}`} />
+                      {syncing
+                        ? t('mcp.edit.actions.sync_in_progress', 'Syncing...')
+                        : t('mcp.edit.actions.sync', 'Sync now')}
+                    </Button>
+                  )}
                   <Button type="button" variant="outline" onClick={() => navigate('/mcps')} className="w-full sm:w-auto">
                     {t('mcp.edit.actions.cancel', 'Cancel')}
                   </Button>

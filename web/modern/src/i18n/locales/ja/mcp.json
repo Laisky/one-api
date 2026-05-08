@@ -5,6 +5,8 @@
         "add": "追加",
         "cancel": "キャンセル",
         "create": "サーバーを作成",
+        "sync": "今すぐ同期",
+        "sync_in_progress": "同期中…",
         "update": "サーバーを更新"
       },
       "fields": {
@@ -46,7 +48,9 @@
       "notifications": {
         "load_failed": "MCP サーバーの読み込みに失敗しました",
         "save_failed": "保存に失敗しました",
-        "save_success": "保存しました"
+        "save_success": "保存しました",
+        "sync_failed": "同期に失敗しました：{{message}}",
+        "sync_success": "上流から {{count}} 個のツールを同期しました"
       },
       "pricing": {
         "invalid": "ツールの料金設定 JSON が無効です",
