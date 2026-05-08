@@ -36,37 +36,93 @@ type mcpCallParams struct {
 	Signature string         `json:"signature,omitempty"`
 }
 
+// MCP Streamable HTTP transport constants. The protocol version advertised here
+// matches what the upstream client in relay/mcp/client.go negotiates by default
+// and is supported by current MCP Inspector / SDK releases.
+const (
+	mcpProtocolVersion = "2025-06-18"
+	mcpServerName      = "one-api-mcp-proxy"
+	mcpServerVersion   = "1.0.0"
+)
+
+// JSON-RPC 2.0 error codes (https://www.jsonrpc.org/specification#error_object).
+const (
+	mcpErrParseError     = -32700
+	mcpErrInvalidRequest = -32600
+	mcpErrMethodNotFound = -32601
+	mcpErrInvalidParams  = -32602
+	mcpErrInternal       = -32603
+)
+
 // MCPProxy handles MCP Streamable HTTP requests backed by configured MCP servers.
+// Implements the single-endpoint Streamable HTTP transport: POST for JSON-RPC
+// messages, GET for optional server-to-client SSE (not supported here, so 405),
+// DELETE for session termination (stateless proxy, also 405).
 func MCPProxy(c *gin.Context) {
+	switch c.Request.Method {
+	case http.MethodPost:
+		handleMCPPost(c)
+	case http.MethodGet, http.MethodDelete:
+		c.AbortWithStatus(http.StatusMethodNotAllowed)
+	default:
+		c.AbortWithStatus(http.StatusMethodNotAllowed)
+	}
+}
+
+func handleMCPPost(c *gin.Context) {
 	ctx := gmw.Ctx(c)
 	var req mcpRPCRequest
 	if err := json.NewDecoder(c.Request.Body).Decode(&req); err != nil {
-		respondMCPError(c, req.ID, errors.Wrap(err, "decode mcp request"))
+		respondMCPError(c, nil, mcpErrParseError, errors.Wrap(err, "decode mcp request"))
 		return
 	}
 
+	// JSON-RPC notifications carry no `id`. The Streamable HTTP transport
+	// requires the server to reply with HTTP 202 and an empty body — never a
+	// JSON-RPC envelope — so SDK clients don't try to correlate a response.
+	isNotification := req.ID == nil
+
 	switch strings.ToLower(strings.TrimSpace(req.Method)) {
+	case "initialize":
+		respondMCPResult(c, req.ID, gin.H{
+			"protocolVersion": mcpProtocolVersion,
+			"capabilities": gin.H{
+				"tools": gin.H{"listChanged": false},
+			},
+			"serverInfo": gin.H{
+				"name":    mcpServerName,
+				"version": mcpServerVersion,
+			},
+		})
+	case "notifications/initialized", "notifications/cancelled", "notifications/progress", "notifications/roots/list_changed":
+		c.AbortWithStatus(http.StatusAccepted)
+	case "ping":
+		respondMCPResult(c, req.ID, gin.H{})
 	case "tools/list":
 		tools, err := listMCPToolsForUser(ctx, c)
 		if err != nil {
-			respondMCPError(c, req.ID, err)
+			respondMCPError(c, req.ID, mcpErrInternal, err)
 			return
 		}
 		respondMCPResult(c, req.ID, gin.H{"tools": tools})
 	case "tools/call":
 		var params mcpCallParams
 		if err := json.Unmarshal(req.Params, &params); err != nil {
-			respondMCPError(c, req.ID, errors.Wrap(err, "decode mcp call params"))
+			respondMCPError(c, req.ID, mcpErrInvalidParams, errors.Wrap(err, "decode mcp call params"))
 			return
 		}
 		result, err := callMCPToolForUser(ctx, c, params)
 		if err != nil {
-			respondMCPError(c, req.ID, err)
+			respondMCPError(c, req.ID, mcpErrInternal, err)
 			return
 		}
 		respondMCPResult(c, req.ID, result)
 	default:
-		respondMCPError(c, req.ID, errors.Errorf("unsupported method %s", req.Method))
+		if isNotification {
+			c.AbortWithStatus(http.StatusAccepted)
+			return
+		}
+		respondMCPError(c, req.ID, mcpErrMethodNotFound, errors.Errorf("unsupported method %s", req.Method))
 	}
 }
 
@@ -294,12 +350,15 @@ func respondMCPResult(c *gin.Context, id any, result any) {
 	})
 }
 
-// respondMCPError writes a JSON-RPC error payload.
-func respondMCPError(c *gin.Context, id any, err error) {
+// respondMCPError writes a JSON-RPC 2.0 error payload. The HTTP status stays
+// 200 because JSON-RPC errors are envelope-level — clients parse the body to
+// distinguish protocol errors from transport failures.
+func respondMCPError(c *gin.Context, id any, code int, err error) {
 	c.JSON(http.StatusOK, gin.H{
 		"jsonrpc": "2.0",
 		"id":      id,
 		"error": gin.H{
+			"code":    code,
 			"message": err.Error(),
 		},
 	})
