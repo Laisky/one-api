@@ -42,7 +42,10 @@ func SetRelayRouter(router *gin.Engine) {
 		modelsRouter.GET("/:model", controller.RetrieveModel)
 	}
 
-	router.POST("/mcp", middleware.TokenAuth(), controller.MCPProxy)
+	// MCP Streamable HTTP transport: a single endpoint serves POST (JSON-RPC
+	// requests/notifications), GET (optional server-initiated SSE), and
+	// DELETE (session termination). The handler dispatches by method.
+	router.Any("/mcp", middleware.TokenAuth(), controller.MCPProxy)
 
 	relayMws := []gin.HandlerFunc{
 		// Track in-flight requests for graceful shutdown/drain

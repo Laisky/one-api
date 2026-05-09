@@ -5,8 +5,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -22,7 +24,22 @@ import (
 	"github.com/Laisky/one-api/common/helper"
 	"github.com/Laisky/one-api/common/logger"
 	"github.com/Laisky/one-api/model"
+	"github.com/Laisky/one-api/relay/mcp"
 )
+
+// marshalIDForFixture serializes a JSON-RPC id field back to its raw JSON
+// form so the fake upstream can echo it correctly across number/string
+// types. Returns the literal `null` if the id is missing or unmarshalable.
+func marshalIDForFixture(id any) string {
+	if id == nil {
+		return "null"
+	}
+	encoded, err := json.Marshal(id)
+	if err != nil {
+		return "null"
+	}
+	return string(encoded)
+}
 
 // setupMCPProxyTest spins up an isolated SQLite database, fake MCP backend,
 // and a test user/server/tool seeded for callMCPToolForUser-driven scenarios.
@@ -78,7 +95,31 @@ func setupMCPProxyTest(t *testing.T) (cleanup func(), fx *mcpFixture) {
 		return []byte(`{"jsonrpc":"2.0","id":"1","result":{"content":"ok","is_error":false}}`), http.StatusOK
 	}
 
+	// The fake upstream behaves like a spec-compliant MCP server: it replies
+	// to `initialize` with a valid handshake envelope, accepts
+	// notifications with HTTP 202, and routes tool calls to the
+	// configurable respondPayload. upstreamHits counts only tool calls so
+	// existing assertions still mean "the proxy invoked the tool once."
 	fx.upstream = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		bodyBytes, _ := io.ReadAll(r.Body)
+		var rpc struct {
+			ID     any    `json:"id"`
+			Method string `json:"method"`
+		}
+		_ = json.Unmarshal(bodyBytes, &rpc)
+
+		switch rpc.Method {
+		case "initialize":
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			_, _ = fmt.Fprintf(w, `{"jsonrpc":"2.0","id":%s,"result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{}},"serverInfo":{"name":"fake-upstream","version":"1.0"}}}`, marshalIDForFixture(rpc.ID))
+			return
+		}
+		if strings.HasPrefix(rpc.Method, "notifications/") {
+			w.WriteHeader(http.StatusAccepted)
+			return
+		}
+
 		fx.upstreamHits++
 		body, status := fx.respondPayload()
 		w.Header().Set("Content-Type", "application/json")
@@ -293,6 +334,165 @@ func TestCallMCPToolForUser_TransportFailureProducesNoLog(t *testing.T) {
 	var rows []model.Log
 	require.NoError(t, model.LOG_DB.Where("request_id = ?", "req-transport").Find(&rows).Error)
 	require.Empty(t, rows, "transport failures must not produce billing logs")
+}
+
+// TestMCPProxy_Initialize verifies the Streamable HTTP handshake: an
+// `initialize` request must return protocolVersion, capabilities, and
+// serverInfo so MCP Inspector / SDK clients accept the connection.
+func TestMCPProxy_Initialize(t *testing.T) {
+	cleanup, fx := setupMCPProxyTest(t)
+	defer cleanup()
+
+	body := `{"jsonrpc":"2.0","id":0,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"mcp-inspector","version":"0.21"}}}`
+
+	c, recorder := newMCPCallContext(t, fx.user.Id, "req-init")
+	c.Request = httptest.NewRequest(http.MethodPost, "/mcp", bytes.NewBufferString(body))
+	c.Request.Header.Set("Content-Type", "application/json")
+	c.Request.Header.Set("Accept", "application/json, text/event-stream")
+
+	MCPProxy(c)
+	require.Equal(t, http.StatusOK, recorder.Code)
+
+	var resp map[string]any
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &resp))
+	require.Equal(t, "2.0", resp["jsonrpc"])
+	require.Nil(t, resp["error"])
+
+	result, ok := resp["result"].(map[string]any)
+	require.True(t, ok, "result must be an object")
+	require.NotEmpty(t, result["protocolVersion"], "protocolVersion required by spec")
+
+	caps, ok := result["capabilities"].(map[string]any)
+	require.True(t, ok, "capabilities required by spec")
+	require.Contains(t, caps, "tools", "server must advertise tools capability")
+
+	info, ok := result["serverInfo"].(map[string]any)
+	require.True(t, ok, "serverInfo required by spec")
+	require.NotEmpty(t, info["name"])
+	require.NotEmpty(t, info["version"])
+}
+
+// TestMCPProxy_NotificationsInitialized confirms the server replies to the
+// `notifications/initialized` notification with HTTP 202 and an empty body —
+// returning a JSON-RPC envelope here breaks SDK clients.
+func TestMCPProxy_NotificationsInitialized(t *testing.T) {
+	cleanup, fx := setupMCPProxyTest(t)
+	defer cleanup()
+
+	body := `{"jsonrpc":"2.0","method":"notifications/initialized"}`
+
+	c, recorder := newMCPCallContext(t, fx.user.Id, "req-notif")
+	c.Request = httptest.NewRequest(http.MethodPost, "/mcp", bytes.NewBufferString(body))
+	c.Request.Header.Set("Content-Type", "application/json")
+
+	MCPProxy(c)
+	require.Equal(t, http.StatusAccepted, recorder.Code)
+	require.Empty(t, recorder.Body.Bytes(), "notifications must not produce a JSON-RPC response body")
+}
+
+// TestMCPProxy_Ping verifies the `ping` request returns an empty result.
+func TestMCPProxy_Ping(t *testing.T) {
+	cleanup, fx := setupMCPProxyTest(t)
+	defer cleanup()
+
+	body := `{"jsonrpc":"2.0","id":"p1","method":"ping"}`
+
+	c, recorder := newMCPCallContext(t, fx.user.Id, "req-ping")
+	c.Request = httptest.NewRequest(http.MethodPost, "/mcp", bytes.NewBufferString(body))
+	c.Request.Header.Set("Content-Type", "application/json")
+
+	MCPProxy(c)
+	require.Equal(t, http.StatusOK, recorder.Code)
+
+	var resp map[string]any
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &resp))
+	require.Equal(t, "p1", resp["id"])
+	require.Nil(t, resp["error"])
+	require.NotNil(t, resp["result"])
+}
+
+// TestMCPProxy_MethodNotFound verifies that an unknown request method returns
+// a JSON-RPC error with code -32601 (method not found) per spec.
+func TestMCPProxy_MethodNotFound(t *testing.T) {
+	cleanup, fx := setupMCPProxyTest(t)
+	defer cleanup()
+
+	body := `{"jsonrpc":"2.0","id":9,"method":"completely/unknown"}`
+
+	c, recorder := newMCPCallContext(t, fx.user.Id, "req-unknown")
+	c.Request = httptest.NewRequest(http.MethodPost, "/mcp", bytes.NewBufferString(body))
+	c.Request.Header.Set("Content-Type", "application/json")
+
+	MCPProxy(c)
+	require.Equal(t, http.StatusOK, recorder.Code)
+
+	var resp map[string]any
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &resp))
+	errObj, ok := resp["error"].(map[string]any)
+	require.True(t, ok, "expected JSON-RPC error envelope")
+	require.Equal(t, float64(mcpErrMethodNotFound), errObj["code"])
+}
+
+// TestMCPProxy_GetReturns405 ensures the stateless proxy rejects GET requests
+// (no server-initiated streaming) with 405 Method Not Allowed, as required
+// by the Streamable HTTP transport spec.
+func TestMCPProxy_GetReturns405(t *testing.T) {
+	cleanup, fx := setupMCPProxyTest(t)
+	defer cleanup()
+
+	c, recorder := newMCPCallContext(t, fx.user.Id, "req-get")
+	c.Request = httptest.NewRequest(http.MethodGet, "/mcp", nil)
+	c.Request.Header.Set("Accept", "text/event-stream")
+
+	MCPProxy(c)
+	require.Equal(t, http.StatusMethodNotAllowed, recorder.Code)
+}
+
+// TestMCPProxy_SelfTest_ClientDrivesOwnServer wires the in-process
+// StreamableHTTPClient against our own MCPProxy handler over real HTTP.
+// This is the bidirectional contract: the same protocol code that talks to
+// upstream MCP servers must also be able to drive our own server. If
+// either half drifts from the spec, this test fails first.
+func TestMCPProxy_SelfTest_ClientDrivesOwnServer(t *testing.T) {
+	cleanup, fx := setupMCPProxyTest(t)
+	defer cleanup()
+
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	// Stub the auth middleware: inject the fixture user into context.
+	// Production uses TokenAuth; here we bypass it because the unit under
+	// test is the protocol contract, not authentication.
+	router.Any("/mcp", func(c *gin.Context) {
+		c.Set(ctxkey.Id, fx.user.Id)
+		c.Set(ctxkey.RequestId, "selftest")
+		c.Set(helper.RequestIdKey, "selftest")
+		gmw.SetLogger(c, logger.Logger)
+		MCPProxy(c)
+	})
+	httpServer := httptest.NewServer(router)
+	defer httpServer.Close()
+
+	// Build a real client pointing at our own /mcp endpoint and exercise
+	// the full lifecycle: initialize → notifications/initialized →
+	// tools/list. The fixture seeds a tool named "fake-mcp.echo".
+	mcpServer := &model.MCPServer{
+		BaseURL:  httpServer.URL + "/mcp",
+		AuthType: model.MCPAuthTypeNone,
+	}
+	client := mcp.NewStreamableHTTPClient(mcpServer, nil, 5*time.Second)
+
+	require.NoError(t, client.Initialize(context.Background()),
+		"initialize handshake against our own server must succeed")
+
+	tools, err := client.ListTools(context.Background())
+	require.NoError(t, err, "tools/list against our own server must succeed")
+
+	var names []string
+	for _, tl := range tools {
+		names = append(names, tl.Name)
+	}
+	require.Contains(t, names, "fake-mcp.echo",
+		"client must surface the seeded tool via the proxy: got %v", names)
 }
 
 // TestMCPProxy_HTTPHandlerLogsFreeToolCall exercises the full HTTP entry

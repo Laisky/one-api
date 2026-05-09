@@ -5,6 +5,8 @@
         "add": "添加",
         "cancel": "取消",
         "create": "创建服务器",
+        "sync": "立即同步",
+        "sync_in_progress": "同步中…",
         "update": "更新服务器"
       },
       "fields": {
@@ -46,7 +48,9 @@
       "notifications": {
         "load_failed": "加载 MCP 服务器失败",
         "save_failed": "保存失败",
-        "save_success": "已保存"
+        "save_success": "已保存",
+        "sync_failed": "同步失败：{{message}}",
+        "sync_success": "已从上游同步 {{count}} 个工具"
       },
       "pricing": {
         "invalid": "工具定价 JSON 格式无效",
