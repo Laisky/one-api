@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
-	"regexp"
 	"strings"
 
 	"github.com/Laisky/errors/v2"
@@ -13,6 +12,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/Laisky/one-api/common/ctxkey"
+	"github.com/Laisky/one-api/relay/adaptor"
 	"github.com/Laisky/one-api/relay/channeltype"
 	"github.com/Laisky/one-api/relay/model"
 )
@@ -117,57 +117,20 @@ func CountTokenText(text string, modelName string) int {
 	return len(text) / 4
 }
 
-// versionSuffixRe matches base URLs ending with a version segment like /v1, /v4, /v1beta, etc.
-var versionSuffixRe = regexp.MustCompile(`/v\d+[a-zA-Z0-9]*$`)
-
-// stripV1Prefix removes the leading /v1 from a path, ensuring the result starts with /.
-// It only strips "/v1" when followed by "/" or end-of-string, to avoid partially
-// trimming paths like "/v11/chat/completions".
-func stripV1Prefix(path string) string {
-	if path == "/v1" {
-		return "/"
-	}
-	if strings.HasPrefix(path, "/v1/") {
-		return path[len("/v1"):]
-	}
-	return path
-}
-
-// hasVersionSuffix reports whether the base URL ends with a version-like segment (e.g. /v1, /v4, /v1beta).
-func hasVersionSuffix(base string) bool {
-	return versionSuffixRe.MatchString(base)
-}
-
 // GetFullRequestURL constructs the full request URL for OpenAI-compatible APIs
 func GetFullRequestURL(baseURL string, requestURL string, channelType int) string {
-	trimmedBase := strings.TrimRight(baseURL, "/")
-	path := strings.TrimSpace(requestURL)
-	if path != "" && !strings.HasPrefix(path, "/") {
-		path = "/" + path
-	}
-
+	trimmedBase := adaptor.NormalizeBaseURL(baseURL)
+	path := adaptor.NormalizeRequestPath(requestURL)
+	exactV1Result := ""
 	if channelType == channeltype.OpenAICompatible {
-		if hasVersionSuffix(trimmedBase) {
-			path = stripV1Prefix(path)
-		}
-		if path == "" {
-			return trimmedBase
-		}
-		return trimmedBase + path
+		exactV1Result = "/"
 	}
 
-	if hasVersionSuffix(trimmedBase) {
-		if path == "/v1" {
-			path = ""
-		} else if strings.HasPrefix(path, "/v1/") {
-			path = path[len("/v1"):]
-		}
+	if adaptor.HasVersionSuffix(trimmedBase) {
+		path = adaptor.StripOpenAIV1Prefix(path, exactV1Result)
 	}
 
-	if path == "" {
-		return trimmedBase
-	}
-	return trimmedBase + path
+	return adaptor.JoinBaseURLAndPath(trimmedBase, path)
 }
 
 // StreamHandler processes streaming responses from OpenAI-compatible APIs

@@ -63,6 +63,18 @@ func TestGetFullRequestURLForOpenAICompatible(t *testing.T) {
 			requestPath: "/v11/chat/completions",
 			expect:      "https://api.example.com/v1/v11/chat/completions",
 		},
+		{
+			name:        "base-normalized-with-query",
+			baseURL:     " https://api.example.com/v4/ ",
+			requestPath: " v1/chat/completions?foo=bar ",
+			expect:      "https://api.example.com/v4/chat/completions?foo=bar",
+		},
+		{
+			name:        "exact-v1-preserves-root-slash",
+			baseURL:     "https://api.example.com/v4",
+			requestPath: "/v1",
+			expect:      "https://api.example.com/v4/",
+		},
 	}
 
 	for _, tt := range tests {
@@ -77,11 +89,70 @@ func TestGetFullRequestURLForOpenAICompatible(t *testing.T) {
 func TestGetFullRequestURLForOtherTypes(t *testing.T) {
 	t.Parallel()
 
-	base := "https://api.openai.com"
-	path := "/v1/chat/completions"
+	tests := []struct {
+		name   string
+		base   string
+		path   string
+		expect string
+	}{
+		{
+			name:   "plain-openai",
+			base:   "https://api.openai.com",
+			path:   "/v1/chat/completions",
+			expect: "https://api.openai.com/v1/chat/completions",
+		},
+		{
+			name:   "normalized-base-and-path",
+			base:   " https://api.openai.com/ ",
+			path:   " v1/chat/completions ",
+			expect: "https://api.openai.com/v1/chat/completions",
+		},
+	}
 
-	got := GetFullRequestURL(base, path, channeltype.OpenAI)
-	require.Equal(t, base+path, got)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got := GetFullRequestURL(tt.base, tt.path, channeltype.OpenAI)
+			require.Equal(t, tt.expect, got)
+		})
+	}
+}
+
+func TestGetFullRequestURLForCloudflareGateway(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name        string
+		base        string
+		path        string
+		channelType int
+		expect      string
+	}{
+		{
+			name:        "openai-strips-v1-prefix",
+			base:        "https://gateway.ai.cloudflare.com/account/gateway/openai/",
+			path:        " /v1/chat/completions ",
+			channelType: channeltype.OpenAI,
+			expect:      "https://gateway.ai.cloudflare.com/account/gateway/openai/chat/completions",
+		},
+		{
+			// Trailing slash on the base URL must not produce a double slash after the
+			// /openai/deployments prefix is stripped.
+			name:        "azure-trailing-slash-collapses",
+			base:        "https://gateway.ai.cloudflare.com/account/gateway/azure/",
+			path:        "/openai/deployments/mygpt/chat/completions",
+			channelType: channeltype.Azure,
+			expect:      "https://gateway.ai.cloudflare.com/account/gateway/azure/mygpt/chat/completions",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got := GetFullRequestURL(tt.base, tt.path, tt.channelType)
+			require.Equal(t, tt.expect, got)
+		})
+	}
 }
 
 func TestShouldForceResponseAPIForOpenAICompatible(t *testing.T) {
@@ -144,4 +215,12 @@ func TestGetRequestURLForOpenAICompatible(t *testing.T) {
 	url, err = adaptor.GetRequestURL(metaInfo)
 	require.NoError(t, err)
 	require.Equal(t, "https://models.github.ai/inference/embeddings", url)
+
+	metaInfo.BaseURL = " https://upstream.test/v4/ "
+	metaInfo.Mode = relaymode.ChatCompletions
+	metaInfo.Config.APIFormat = channeltype.OpenAICompatibleAPIFormatChatCompletion
+	metaInfo.RequestURLPath = " v1/chat/completions?foo=bar "
+	url, err = adaptor.GetRequestURL(metaInfo)
+	require.NoError(t, err)
+	require.Equal(t, "https://upstream.test/v4/chat/completions?foo=bar", url)
 }

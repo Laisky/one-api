@@ -1,10 +1,9 @@
 package openai
 
 import (
-	"fmt"
-	"regexp"
 	"strings"
 
+	"github.com/Laisky/one-api/relay/adaptor"
 	"github.com/Laisky/one-api/relay/channeltype"
 	"github.com/Laisky/one-api/relay/model"
 )
@@ -18,37 +17,28 @@ func ResponseText2Usage(responseText string, modelName string, promptTokens int)
 	return usage
 }
 
-// openaiVersionSuffixRe matches base URLs ending with a version segment like /v1, /v4, /v1beta, etc.
-var openaiVersionSuffixRe = regexp.MustCompile(`/v\d+[a-zA-Z0-9]*$`)
-
 // GetFullRequestURL constructs the full request URL for OpenAI and compatible APIs,
 // handling version suffix deduplication to avoid paths like /v4/v1/chat/completions.
 func GetFullRequestURL(baseURL string, requestURL string, channelType int) string {
+	trimmedBase := adaptor.NormalizeBaseURL(baseURL)
+	path := adaptor.NormalizeRequestPath(requestURL)
+
 	if channelType == channeltype.OpenAICompatible {
-		trimmedBase := strings.TrimRight(baseURL, "/")
-		path := requestURL
-		if !strings.HasPrefix(path, "/") {
-			path = "/" + path
-		}
-		if openaiVersionSuffixRe.MatchString(trimmedBase) {
+		if adaptor.HasVersionSuffix(trimmedBase) {
 			// Preserve legacy custom-channel behaviour: if the stored base already contains a version
 			// suffix (e.g. /v1, /v4, /v1beta), strip /v1 from the request path to avoid duplication.
-			if path == "/v1" {
-				path = "/"
-			} else if strings.HasPrefix(path, "/v1/") {
-				path = path[len("/v1"):]
-			}
+			path = adaptor.StripOpenAIV1Prefix(path, "/")
 		}
-		return trimmedBase + path
+		return adaptor.JoinBaseURLAndPath(trimmedBase, path)
 	}
-	fullRequestURL := fmt.Sprintf("%s%s", baseURL, requestURL)
+	fullRequestURL := adaptor.JoinBaseURLAndPath(trimmedBase, path)
 
-	if strings.HasPrefix(baseURL, "https://gateway.ai.cloudflare.com") {
+	if strings.HasPrefix(trimmedBase, "https://gateway.ai.cloudflare.com") {
 		switch channelType {
 		case channeltype.OpenAI:
-			fullRequestURL = fmt.Sprintf("%s%s", baseURL, strings.TrimPrefix(requestURL, "/v1"))
+			fullRequestURL = adaptor.JoinBaseURLAndPath(trimmedBase, adaptor.StripOpenAIV1Prefix(path, ""))
 		case channeltype.Azure:
-			fullRequestURL = fmt.Sprintf("%s%s", baseURL, strings.TrimPrefix(requestURL, "/openai/deployments"))
+			fullRequestURL = adaptor.JoinBaseURLAndPath(trimmedBase, strings.TrimPrefix(path, "/openai/deployments"))
 		}
 	}
 	return fullRequestURL
