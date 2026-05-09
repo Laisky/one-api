@@ -90,6 +90,13 @@ func TestGetFullRequestURL(t *testing.T) {
 			channelType: channeltype.OpenAICompatible,
 		},
 		{
+			name:        "compatible-v11-path-not-trimmed",
+			base:        "https://proxy.example.com/v1",
+			path:        "/v11/chat/completions",
+			expect:      "https://proxy.example.com/v1/v11/chat/completions",
+			channelType: channeltype.OpenAICompatible,
+		},
+		{
 			name:        "other-type-base-with-v4",
 			base:        "https://api.example.com/v4",
 			path:        "/v1/chat/completions",

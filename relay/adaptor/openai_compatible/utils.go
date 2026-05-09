@@ -23,6 +23,8 @@ const (
 	Done             = "[DONE]"
 )
 
+// shouldLogDetailedUpstreamBody determines whether to log the full upstream response body
+// for debugging purposes based on query parameter or logger level.
 func shouldLogDetailedUpstreamBody(c *gin.Context) bool {
 	if c == nil {
 		return true
@@ -119,13 +121,14 @@ func CountTokenText(text string, modelName string) int {
 var versionSuffixRe = regexp.MustCompile(`/v\d+[a-zA-Z0-9]*$`)
 
 // stripV1Prefix removes the leading /v1 from a path, ensuring the result starts with /.
+// It only strips "/v1" when followed by "/" or end-of-string, to avoid partially
+// trimming paths like "/v11/chat/completions".
 func stripV1Prefix(path string) string {
-	path = strings.TrimPrefix(path, "/v1")
-	if path == "" {
-		path = "/"
+	if path == "/v1" {
+		return "/"
 	}
-	if !strings.HasPrefix(path, "/") {
-		path = "/" + path
+	if strings.HasPrefix(path, "/v1/") {
+		return path[len("/v1"):]
 	}
 	return path
 }

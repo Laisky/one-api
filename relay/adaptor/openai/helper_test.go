@@ -57,6 +57,12 @@ func TestGetFullRequestURLForOpenAICompatible(t *testing.T) {
 			requestPath: "/v1/chat/completions",
 			expect:      "https://api.example.com/v1beta/chat/completions",
 		},
+		{
+			name:        "v11-path-not-trimmed",
+			baseURL:     "https://api.example.com/v1",
+			requestPath: "/v11/chat/completions",
+			expect:      "https://api.example.com/v1/v11/chat/completions",
+		},
 	}
 
 	for _, tt := range tests {
