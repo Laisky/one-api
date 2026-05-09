@@ -12,6 +12,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/Laisky/one-api/common/ctxkey"
+	"github.com/Laisky/one-api/relay/adaptor"
 	"github.com/Laisky/one-api/relay/channeltype"
 	"github.com/Laisky/one-api/relay/model"
 )
@@ -22,6 +23,8 @@ const (
 	Done             = "[DONE]"
 )
 
+// shouldLogDetailedUpstreamBody determines whether to log the full upstream response body
+// for debugging purposes based on query parameter or logger level.
 func shouldLogDetailedUpstreamBody(c *gin.Context) bool {
 	if c == nil {
 		return true
@@ -116,43 +119,18 @@ func CountTokenText(text string, modelName string) int {
 
 // GetFullRequestURL constructs the full request URL for OpenAI-compatible APIs
 func GetFullRequestURL(baseURL string, requestURL string, channelType int) string {
-	trimmedBase := strings.TrimRight(baseURL, "/")
-	path := strings.TrimSpace(requestURL)
-	if path != "" && !strings.HasPrefix(path, "/") {
-		path = "/" + path
-	}
-
+	trimmedBase := adaptor.NormalizeBaseURL(baseURL)
+	path := adaptor.NormalizeRequestPath(requestURL)
+	exactV1Result := ""
 	if channelType == channeltype.OpenAICompatible {
-		if strings.HasSuffix(trimmedBase, "/v1") {
-			path = strings.TrimPrefix(path, "/v1")
-			if path == "" {
-				path = "/"
-			}
-			if !strings.HasPrefix(path, "/") {
-				path = "/" + path
-			}
-		}
-		if path == "" {
-			return trimmedBase
-		}
-		return trimmedBase + path
+		exactV1Result = "/"
 	}
 
-	if strings.HasSuffix(trimmedBase, "/v1") {
-		if path == "/v1" {
-			path = ""
-		} else if strings.HasPrefix(path, "/v1/") {
-			path = path[len("/v1"):]
-			if path == "" {
-				path = ""
-			}
-		}
+	if adaptor.HasVersionSuffix(trimmedBase) {
+		path = adaptor.StripOpenAIV1Prefix(path, exactV1Result)
 	}
 
-	if path == "" {
-		return trimmedBase
-	}
-	return trimmedBase + path
+	return adaptor.JoinBaseURLAndPath(trimmedBase, path)
 }
 
 // StreamHandler processes streaming responses from OpenAI-compatible APIs
