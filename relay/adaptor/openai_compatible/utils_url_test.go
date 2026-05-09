@@ -67,6 +67,35 @@ func TestGetFullRequestURL(t *testing.T) {
 			expect:      "https://oneapi.laisky.com/v1/embeddings",
 			channelType: channeltype.OpenAI,
 		},
+		// Version suffix cases: base URL ends with /v{N} or /v{N}{suffix}
+		{
+			name:        "compatible-base-with-v4-zhipu-coding",
+			base:        "https://open.bigmodel.cn/api/coding/paas/v4",
+			path:        "/v1/chat/completions",
+			expect:      "https://open.bigmodel.cn/api/coding/paas/v4/chat/completions",
+			channelType: channeltype.OpenAICompatible,
+		},
+		{
+			name:        "compatible-base-with-v2",
+			base:        "https://proxy.example.com/v2",
+			path:        "/v1/chat/completions",
+			expect:      "https://proxy.example.com/v2/chat/completions",
+			channelType: channeltype.OpenAICompatible,
+		},
+		{
+			name:        "compatible-base-with-v1beta",
+			base:        "https://proxy.example.com/v1beta",
+			path:        "/v1/chat/completions",
+			expect:      "https://proxy.example.com/v1beta/chat/completions",
+			channelType: channeltype.OpenAICompatible,
+		},
+		{
+			name:        "other-type-base-with-v4",
+			base:        "https://api.example.com/v4",
+			path:        "/v1/chat/completions",
+			expect:      "https://api.example.com/v4/chat/completions",
+			channelType: channeltype.OpenAI,
+		},
 	}
 
 	for _, tc := range cases {

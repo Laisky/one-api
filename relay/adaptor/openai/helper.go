@@ -2,6 +2,7 @@ package openai
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 
 	"github.com/Laisky/one-api/relay/channeltype"
@@ -16,6 +17,9 @@ func ResponseText2Usage(responseText string, modelName string, promptTokens int)
 	return usage
 }
 
+// openaiVersionSuffixRe matches base URLs ending with a version segment like /v1, /v4, /v1beta, etc.
+var openaiVersionSuffixRe = regexp.MustCompile(`/v\d+[a-zA-Z0-9]*$`)
+
 func GetFullRequestURL(baseURL string, requestURL string, channelType int) string {
 	if channelType == channeltype.OpenAICompatible {
 		trimmedBase := strings.TrimRight(baseURL, "/")
@@ -23,10 +27,9 @@ func GetFullRequestURL(baseURL string, requestURL string, channelType int) strin
 		if !strings.HasPrefix(path, "/") {
 			path = "/" + path
 		}
-		if strings.HasSuffix(trimmedBase, "/v1") {
-			// Preserve legacy custom-channel behaviour: if the stored base already contains /v1,
-			// avoid duplicating the segment. Otherwise leave the path untouched so providers that
-			// expect /v1 in the request keep working.
+		if openaiVersionSuffixRe.MatchString(trimmedBase) {
+			// Preserve legacy custom-channel behaviour: if the stored base already contains a version
+			// suffix (e.g. /v1, /v4, /v1beta), strip /v1 from the request path to avoid duplication.
 			path = strings.TrimPrefix(path, "/v1")
 			if path == "" {
 				path = "/"

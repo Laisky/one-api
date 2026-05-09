@@ -38,6 +38,25 @@ func TestGetFullRequestURLForOpenAICompatible(t *testing.T) {
 			requestPath: "/dashboard/billing/subscription",
 			expect:      "https://api.example.com/v1/dashboard/billing/subscription",
 		},
+		// Version suffix cases: base URL ends with /v{N} or /v{N}{suffix}
+		{
+			name:        "base-with-v4-zhipu-coding",
+			baseURL:     "https://open.bigmodel.cn/api/coding/paas/v4",
+			requestPath: "/v1/chat/completions",
+			expect:      "https://open.bigmodel.cn/api/coding/paas/v4/chat/completions",
+		},
+		{
+			name:        "base-with-v2",
+			baseURL:     "https://api.example.com/v2",
+			requestPath: "/v1/chat/completions",
+			expect:      "https://api.example.com/v2/chat/completions",
+		},
+		{
+			name:        "base-with-v1beta",
+			baseURL:     "https://api.example.com/v1beta",
+			requestPath: "/v1/chat/completions",
+			expect:      "https://api.example.com/v1beta/chat/completions",
+		},
 	}
 
 	for _, tt := range tests {

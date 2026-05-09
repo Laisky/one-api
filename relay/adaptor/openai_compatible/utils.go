@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"regexp"
 	"strings"
 
 	"github.com/Laisky/errors/v2"
@@ -114,6 +115,26 @@ func CountTokenText(text string, modelName string) int {
 	return len(text) / 4
 }
 
+// versionSuffixRe matches base URLs ending with a version segment like /v1, /v4, /v1beta, etc.
+var versionSuffixRe = regexp.MustCompile(`/v\d+[a-zA-Z0-9]*$`)
+
+// stripV1Prefix removes the leading /v1 from a path, ensuring the result starts with /.
+func stripV1Prefix(path string) string {
+	path = strings.TrimPrefix(path, "/v1")
+	if path == "" {
+		path = "/"
+	}
+	if !strings.HasPrefix(path, "/") {
+		path = "/" + path
+	}
+	return path
+}
+
+// hasVersionSuffix reports whether the base URL ends with a version-like segment (e.g. /v1, /v4, /v1beta).
+func hasVersionSuffix(base string) bool {
+	return versionSuffixRe.MatchString(base)
+}
+
 // GetFullRequestURL constructs the full request URL for OpenAI-compatible APIs
 func GetFullRequestURL(baseURL string, requestURL string, channelType int) string {
 	trimmedBase := strings.TrimRight(baseURL, "/")
@@ -123,14 +144,8 @@ func GetFullRequestURL(baseURL string, requestURL string, channelType int) strin
 	}
 
 	if channelType == channeltype.OpenAICompatible {
-		if strings.HasSuffix(trimmedBase, "/v1") {
-			path = strings.TrimPrefix(path, "/v1")
-			if path == "" {
-				path = "/"
-			}
-			if !strings.HasPrefix(path, "/") {
-				path = "/" + path
-			}
+		if hasVersionSuffix(trimmedBase) {
+			path = stripV1Prefix(path)
 		}
 		if path == "" {
 			return trimmedBase
@@ -138,14 +153,11 @@ func GetFullRequestURL(baseURL string, requestURL string, channelType int) strin
 		return trimmedBase + path
 	}
 
-	if strings.HasSuffix(trimmedBase, "/v1") {
+	if hasVersionSuffix(trimmedBase) {
 		if path == "/v1" {
 			path = ""
 		} else if strings.HasPrefix(path, "/v1/") {
 			path = path[len("/v1"):]
-			if path == "" {
-				path = ""
-			}
 		}
 	}
 
