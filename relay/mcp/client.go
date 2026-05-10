@@ -549,5 +549,22 @@ func isMCPInvalidSessionError(err error) bool {
 	if err == nil {
 		return false
 	}
-	return strings.Contains(strings.ToLower(err.Error()), "no valid session id provided")
+	type rpcEnvelope struct {
+		Error *struct {
+			Code    int    `json:"code"`
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+
+	raw := err.Error()
+	if idx := strings.Index(raw, "{"); idx >= 0 {
+		var envelope rpcEnvelope
+		if decodeErr := json.Unmarshal([]byte(raw[idx:]), &envelope); decodeErr == nil && envelope.Error != nil {
+			if envelope.Error.Code == -32000 {
+				return strings.Contains(strings.ToLower(envelope.Error.Message), "session")
+			}
+		}
+	}
+
+	return strings.Contains(strings.ToLower(raw), "no valid session id provided")
 }
