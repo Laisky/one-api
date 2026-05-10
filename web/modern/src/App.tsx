@@ -91,22 +91,22 @@ function App() {
           <div className="bg-background">
             <Suspense fallback={<PageLoader />}>
               <Routes>
-                {/* Public auth routes */}
-                <Route path="/login" element={<LoginPage />} />
-                <Route path="/register" element={<RegisterPage />} />
-                <Route path="/reset" element={<PasswordResetPage />} />
-                <Route path="/user/reset" element={<PasswordResetConfirmPage />} />
+                {/* OAuth callback routes — transient redirect handlers, no chrome */}
                 <Route path="/oauth/github" element={<GitHubOAuthPage />} />
                 <Route path="/oauth/lark" element={<LarkOAuthPage />} />
                 <Route path="/oauth/oidc" element={<OidcOAuthPage />} />
                 <Route path="/oauth/wechat" element={<WeChatOAuthPage />} />
 
-                {/* Public routes with layout */}
+                {/* Public routes with layout (auth pages share header/footer for i18n + theme switching) */}
                 <Route path="/" element={<Layout />}>
                   <Route index element={<HomePage />} />
                   <Route path="models" element={<ModelsPage />} />
                   <Route path="tools" element={<ToolsPage />} />
                   <Route path="status" element={<StatusPage />} />
+                  <Route path="login" element={<LoginPage />} />
+                  <Route path="register" element={<RegisterPage />} />
+                  <Route path="reset" element={<PasswordResetPage />} />
+                  <Route path="user/reset" element={<PasswordResetConfirmPage />} />
                 </Route>
 
                 {/* Protected routes */}

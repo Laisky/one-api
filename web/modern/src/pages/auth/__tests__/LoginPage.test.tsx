@@ -208,9 +208,7 @@ describe('LoginPage', () => {
         },
       },
     } as any);
-    mockLocalStorage.getItem.mockReturnValue(
-      JSON.stringify({ system_name: 'Test API', password_login: false, oidc: true })
-    );
+    mockLocalStorage.getItem.mockReturnValue(JSON.stringify({ system_name: 'Test API', password_login: false, oidc: true }));
 
     renderLoginPage();
 
@@ -236,9 +234,7 @@ describe('LoginPage', () => {
         },
       },
     } as any);
-    mockLocalStorage.getItem.mockReturnValue(
-      JSON.stringify({ system_name: 'Test API', password_login: true })
-    );
+    mockLocalStorage.getItem.mockReturnValue(JSON.stringify({ system_name: 'Test API', password_login: true }));
 
     renderLoginPage();
 

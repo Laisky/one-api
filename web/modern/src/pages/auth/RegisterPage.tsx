@@ -142,7 +142,7 @@ export function RegisterPage() {
   };
 
   return (
-    <main className="min-h-screen flex items-center justify-center p-4">
+    <div className="flex items-center justify-center min-h-[calc(100dvh-12rem)] py-4">
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
           <CardTitle className="text-2xl">{t('auth.register.title')}</CardTitle>
@@ -296,7 +296,7 @@ export function RegisterPage() {
           </Form>
         </CardContent>
       </Card>
-    </main>
+    </div>
   );
 }
 

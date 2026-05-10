@@ -521,17 +521,9 @@ export function EditMCPServerPage() {
 
                 <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
                   {isEdit && (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={handleSync}
-                      disabled={syncing}
-                      className="w-full sm:w-auto"
-                    >
+                    <Button type="button" variant="outline" onClick={handleSync} disabled={syncing} className="w-full sm:w-auto">
                       <RefreshCw className={`mr-2 h-4 w-4 ${syncing ? 'animate-spin' : ''}`} />
-                      {syncing
-                        ? t('mcp.edit.actions.sync_in_progress', 'Syncing...')
-                        : t('mcp.edit.actions.sync', 'Sync now')}
+                      {syncing ? t('mcp.edit.actions.sync_in_progress', 'Syncing...') : t('mcp.edit.actions.sync', 'Sync now')}
                     </Button>
                   )}
                   <Button type="button" variant="outline" onClick={() => navigate('/mcps')} className="w-full sm:w-auto">
