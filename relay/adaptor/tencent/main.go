@@ -109,10 +109,13 @@ func embeddingResponseTencent2OpenAI(response *EmbeddingResponse) *openai.Embedd
 }
 
 func responseTencent2OpenAI(response *ChatResponse) *openai.TextResponse {
+	// Initialize Choices to a non-nil empty slice so JSON-encoded responses always
+	// emit `"choices":[]` instead of `null` when upstream returns no choices.
 	fullTextResponse := openai.TextResponse{
 		Id:      response.ReqID,
 		Object:  "chat.completion",
 		Created: helper.GetTimestamp(),
+		Choices: make([]openai.TextResponseChoice, 0, len(response.Choices)),
 		Usage: model.Usage{
 			PromptTokens:     response.Usage.PromptTokens,
 			CompletionTokens: response.Usage.CompletionTokens,
@@ -134,11 +137,14 @@ func responseTencent2OpenAI(response *ChatResponse) *openai.TextResponse {
 }
 
 func streamResponseTencent2OpenAI(c *gin.Context, TencentResponse *ChatResponse) *openai.ChatCompletionsStreamResponse {
+	// Pre-size Choices to capacity 1 since each Tencent stream chunk carries at most
+	// one choice; ensures `"choices":[]` on the wire for empty frames.
 	response := openai.ChatCompletionsStreamResponse{
 		Id:      tracing.GenerateChatCompletionID(c),
 		Object:  "chat.completion.chunk",
 		Created: helper.GetTimestamp(),
 		Model:   "tencent-hunyuan",
+		Choices: make([]openai.ChatCompletionsStreamResponseChoice, 0, 1),
 	}
 	if len(TencentResponse.Choices) > 0 {
 		var choice openai.ChatCompletionsStreamResponseChoice

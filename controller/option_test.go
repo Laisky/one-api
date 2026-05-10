@@ -163,6 +163,45 @@ func TestUpdateOption_NonSensitiveEmptyValuePersists(t *testing.T) {
 	assert.Equal(t, "", stored.Value, "non-sensitive empty save must persist")
 }
 
+// TestGetOptions_AllSensitiveFilteredEmitsDataArray verifies that when every
+// configured option key is sensitive (and therefore filtered out) the
+// response still serializes "data" as [], not null. The frontend invokes
+// .map() on the array unconditionally and crashes on null.
+func TestGetOptions_AllSensitiveFilteredEmitsDataArray(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	cleanup := setupOptionTestEnvironment(t)
+	t.Cleanup(cleanup)
+
+	// Seed only sensitive keys so GetOptions filters them all out and the
+	// resulting slice is empty.
+	config.OptionMapRWMutex.Lock()
+	config.OptionMap["GitHubClientSecret"] = "x"
+	config.OptionMap["SMTPToken"] = "y"
+	config.OptionMap["SMTPPassword"] = "z"
+	config.OptionMapRWMutex.Unlock()
+
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodGet, "/api/option", nil)
+	GetOptions(c)
+
+	require.Equal(t, http.StatusOK, w.Code)
+
+	raw := w.Body.String()
+	require.Contains(t, raw, `"data":[]`,
+		"options endpoint must serialize empty data as [] not null")
+	require.NotContains(t, raw, `"data":null`,
+		"a nil slice marshals to null and crashes the admin UI")
+
+	var payload struct {
+		Success bool            `json:"success"`
+		Data    []*model.Option `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &payload))
+	require.True(t, payload.Success)
+	require.Len(t, payload.Data, 0)
+}
+
 func TestUpdateOption_SensitiveValueStillUpdatable(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	cleanup := setupOptionTestEnvironment(t)

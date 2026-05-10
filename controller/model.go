@@ -1083,7 +1083,7 @@ func GetUserAvailableModels(c *gin.Context) {
 	channelCache := make(map[int]*model.Channel)
 	models = filterVisibleAbilities(models, channelCache)
 
-	var modelNames []string
+	modelNames := make([]string, 0)
 	modelsMap := map[string]bool{}
 	for _, model := range models {
 		modelsMap[model.Model] = true

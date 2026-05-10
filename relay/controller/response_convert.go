@@ -100,9 +100,11 @@ func deriveResponseStatus(choices []openai_compatible.TextResponseChoice) (strin
 	return status, nil
 }
 
-// buildResponseOutput builds the output items for a Response API response from Chat Completion choices
+// buildResponseOutput builds the output items for a Response API response from Chat Completion choices.
+// The returned slice is always non-nil so that JSON serialization yields "output": [] instead of null,
+// which strict OpenAI SDK clients reject as a violation of the Responses API schema.
 func buildResponseOutput(choices []openai_compatible.TextResponseChoice) []openai.OutputItem {
-	var output []openai.OutputItem
+	output := make([]openai.OutputItem, 0)
 	for _, choice := range choices {
 		msg := choice.Message
 		contents := convertMessageContent(msg)

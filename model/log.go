@@ -102,6 +102,21 @@ type ToolUsageSummary struct {
 	Entries    []ToolUsageEntry // Optional detailed entries
 }
 
+// MarshalJSON renders an empty JSON object when the map is nil.
+//
+// Why: Scan leaves nil on NULL/empty columns; without this, default reflection
+// emits JSON null which strict clients reject.
+func (m LogMetadata) MarshalJSON() ([]byte, error) {
+	if m == nil {
+		return []byte("{}"), nil
+	}
+	payload, err := json.Marshal(map[string]any(m))
+	if err != nil {
+		return nil, errors.Wrap(err, "marshal log metadata")
+	}
+	return payload, nil
+}
+
 // Value converts LogMetadata to a driver-compatible JSON representation.
 func (m LogMetadata) Value() (driver.Value, error) {
 	if len(m) == 0 {

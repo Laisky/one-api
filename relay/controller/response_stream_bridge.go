@@ -288,6 +288,7 @@ func (h *chatToResponseStreamBridge) ensureInitialized(c *gin.Context, chunk *op
 		CreatedAt:          h.createdAt,
 		Status:             "in_progress",
 		Model:              userVisibleModelName(h.meta, ""),
+		Output:             make([]openai.OutputItem, 0),
 		Instructions:       h.original.Instructions,
 		MaxOutputTokens:    h.original.MaxOutputTokens,
 		Metadata:           h.original.Metadata,
@@ -572,6 +573,9 @@ func (h *chatToResponseStreamBridge) currentToolCallSnapshots() []openai.Respons
 }
 
 func (h *chatToResponseStreamBridge) buildFinalResponse(status string, outputs []openai.OutputItem, requiredAction *openai.ResponseAPIRequiredAction) *openai.ResponseAPIResponse {
+	if outputs == nil {
+		outputs = make([]openai.OutputItem, 0)
+	}
 	response := &openai.ResponseAPIResponse{
 		Id:                 h.responseID,
 		Object:             "response",

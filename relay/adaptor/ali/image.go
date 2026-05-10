@@ -142,8 +142,12 @@ func asyncTaskWait(taskID string, key string) (*TaskResponse, []byte, error) {
 }
 
 func responseAli2OpenAIImage(response *TaskResponse, responseFormat string) *openai.ImageResponse {
+	// Pre-size Data to a non-nil empty slice so JSON-encoded responses always emit
+	// `"data":[]` instead of `null` when every upstream result fails the b64 fetch
+	// or when no results are returned at all.
 	imageResponse := openai.ImageResponse{
 		Created: helper.GetTimestamp(),
+		Data:    make([]openai.ImageData, 0, len(response.Output.Results)),
 	}
 
 	for _, data := range response.Output.Results {

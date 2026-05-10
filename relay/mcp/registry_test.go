@@ -61,17 +61,82 @@ func TestResolveTools_AllowedToolsFilter(t *testing.T) {
 	require.True(t, allowed["tool_b"], "tool_b should be allowed")
 }
 
-func TestResolveTools_EmptyWhitelistDeniesAll(t *testing.T) {
+// TestResolveTools_EmptyWhitelistAllowsAll verifies the issue #340 fix:
+// when ToolWhitelist is empty, ResolveTools applies no whitelist filtering.
+// Sync never populates ToolWhitelist, so requiring an explicit whitelist
+// would silently hide every synced tool from /mcp tools/list and from chat
+// tool aggregation — the exact symptom users reported.
+func TestResolveTools_EmptyWhitelistAllowsAll(t *testing.T) {
 	server := &model.MCPServer{
 		Id:   1,
 		Name: "mcp",
 	}
-	tools := []*model.MCPTool{{Name: "tool_a"}}
+	tools := []*model.MCPTool{
+		{Name: "tool_a"},
+		{Name: "tool_b"},
+	}
 
 	resolved, err := ResolveTools(server, tools, nil, nil, nil)
 	require.NoError(t, err)
-	require.Len(t, resolved, 1)
-	require.False(t, resolved[0].Policy.Allowed, "tool should be denied when whitelist is empty")
+	require.Len(t, resolved, 2)
+	for _, entry := range resolved {
+		require.True(t, entry.Policy.Allowed, "tool %s should be allowed when whitelist is empty", entry.Tool.Name)
+	}
+}
+
+// TestResolveTools_EmptyWhitelistRespectsBlacklists asserts that the empty-
+// whitelist relaxation does not bypass any of the blacklist layers (server,
+// channel, user). Real-world abuse prevention relies on these blacklists.
+func TestResolveTools_EmptyWhitelistRespectsBlacklists(t *testing.T) {
+	server := &model.MCPServer{
+		Id:            1,
+		Name:          "mcp",
+		ToolBlacklist: model.JSONStringSlice{"server_blocked"},
+	}
+	tools := []*model.MCPTool{
+		{Name: "free"},
+		{Name: "server_blocked"},
+		{Name: "channel_blocked"},
+		{Name: "user_blocked"},
+	}
+
+	resolved, err := ResolveTools(server, tools, []string{"channel_blocked"}, []string{"user_blocked"}, nil)
+	require.NoError(t, err)
+
+	allowed := map[string]bool{}
+	for _, entry := range resolved {
+		allowed[entry.Tool.Name] = entry.Policy.Allowed
+	}
+	require.True(t, allowed["free"], "free tool should be allowed")
+	require.False(t, allowed["server_blocked"], "server blacklist should still apply")
+	require.False(t, allowed["channel_blocked"], "channel blacklist should still apply")
+	require.False(t, allowed["user_blocked"], "user blacklist should still apply")
+}
+
+// TestResolveTools_NonEmptyWhitelistFiltersStrictly is the regression guard
+// for the existing whitelist semantic: when whitelist is non-empty, only
+// listed tools are allowed.
+func TestResolveTools_NonEmptyWhitelistFiltersStrictly(t *testing.T) {
+	server := &model.MCPServer{
+		Id:            1,
+		Name:          "mcp",
+		ToolWhitelist: model.JSONStringSlice{"allowed_tool"},
+	}
+	tools := []*model.MCPTool{
+		{Name: "allowed_tool"},
+		{Name: "not_in_whitelist"},
+	}
+
+	resolved, err := ResolveTools(server, tools, nil, nil, nil)
+	require.NoError(t, err)
+	require.Len(t, resolved, 2)
+
+	allowed := map[string]bool{}
+	for _, entry := range resolved {
+		allowed[entry.Tool.Name] = entry.Policy.Allowed
+	}
+	require.True(t, allowed["allowed_tool"])
+	require.False(t, allowed["not_in_whitelist"], "tools outside non-empty whitelist must remain denied")
 }
 
 func TestBuildToolCandidates_PriorityOrdering(t *testing.T) {

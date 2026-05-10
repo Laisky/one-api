@@ -412,8 +412,9 @@ func (a *Adaptor) handleImageResponse(c *gin.Context, resp *http.Response) (usag
 		return nil, openai_compatible.ErrorWrapper(errors.Wrap(parseErr, "parse xai image response"), "parse_response_failed", http.StatusInternalServerError)
 	}
 
-	// Convert to OpenAI format
-	var imageDataList []ImageData
+	// Convert to OpenAI format. Pre-size to a non-nil empty slice so the wire-level
+	// JSON always emits `"data":[]` instead of `null` for empty/error upstream payloads.
+	imageDataList := make([]ImageData, 0, len(xaiResponse.Data))
 	for _, xaiData := range xaiResponse.Data {
 		imageData := ImageData{
 			URL:           xaiData.URL,

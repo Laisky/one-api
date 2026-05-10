@@ -924,6 +924,113 @@ func TestChatToResponseStreamBridge_UpstreamDropWithoutDone(t *testing.T) {
 	}
 }
 
+// TestChatToResponseStreamBridge_ResponseCreatedHasOutputArray asserts that the very
+// first SSE event emitted by the bridge (response.created) carries "output":[] rather
+// than "output":null. This is the regression for strict OpenAI Python/TS SDK clients
+// — the bug fired on every bridged stream's initial event.
+func TestChatToResponseStreamBridge_ResponseCreatedHasOutputArray(t *testing.T) {
+	t.Parallel()
+	c, w := newBridgeTestContext(t)
+	bridge := newTestBridge(t, c)
+
+	bridge.ensureInitialized(c, &openai_compatible.ChatCompletionsStreamResponse{})
+
+	body := w.Body.String()
+	assert.NotContains(t, body, `"output":null`, "response.created event must never serialize output as null")
+
+	events := parseBridgeSSE(body)
+	created := bridgeFindEvents(events, "response.created")
+	require.Len(t, created, 1)
+
+	// Decode the data payload and inspect "response.output" raw bytes.
+	var envelope struct {
+		Response map[string]json.RawMessage `json:"response"`
+	}
+	require.NoError(t, json.Unmarshal(created[0].data, &envelope))
+	require.Contains(t, envelope.Response, "output", "response.created payload must include output field")
+	outputRaw := strings.TrimSpace(string(envelope.Response["output"]))
+	assert.Equal(t, "[]", outputRaw, "output must serialize as an empty JSON array")
+
+	// And via the typed accessor as a belt-and-braces check.
+	var ev openai.ResponseAPIStreamEvent
+	bridgeUnmarshal(t, created[0], &ev)
+	require.NotNil(t, ev.Response)
+	require.NotNil(t, ev.Response.Output, "Output must be a non-nil slice")
+	assert.Equal(t, 0, len(ev.Response.Output))
+}
+
+// TestChatToResponseStreamBridge_FullEmptyStreamEmitsOutputArray drives the bridge with
+// zero deltas (immediate HandleDone, simulating an upstream that emits [DONE] without
+// any content). Every emitted event whose payload includes "output" must have it as []
+// and never null.
+func TestChatToResponseStreamBridge_FullEmptyStreamEmitsOutputArray(t *testing.T) {
+	t.Parallel()
+	c, w := newBridgeTestContext(t)
+	bridge := newTestBridge(t, c)
+
+	ok, done := bridge.HandleDone(c)
+	require.True(t, ok)
+	require.True(t, done)
+
+	body := w.Body.String()
+	assert.NotContains(t, body, `"output":null`, "no event may serialize output as null")
+
+	events := parseBridgeSSE(body)
+	require.NotEmpty(t, events)
+
+	// Walk every event and, where "response.output" is present, require it to be [].
+	// On response.completed the bridge places the in-progress message item into
+	// response.output, so we only assert non-null (never null), not always empty.
+	sawCreated := false
+	sawCompleted := false
+	for _, e := range events {
+		var envelope struct {
+			Response map[string]json.RawMessage `json:"response,omitempty"`
+		}
+		if err := json.Unmarshal(e.data, &envelope); err != nil {
+			continue
+		}
+		raw, ok := envelope.Response["output"]
+		if !ok {
+			continue
+		}
+		trimmed := strings.TrimSpace(string(raw))
+		assert.NotEqual(t, "null", trimmed, "event %q must not emit output:null", e.event)
+
+		switch e.event {
+		case "response.created":
+			sawCreated = true
+			assert.Equal(t, "[]", trimmed, "response.created must emit output:[]")
+		case "response.completed":
+			sawCompleted = true
+			// The bridge always stages a message OutputItem on done, so this is a
+			// non-empty array; the only invariant we enforce here is "not null".
+			assert.True(t, strings.HasPrefix(trimmed, "["), "response.completed.output must be an array, got %q", trimmed)
+		}
+	}
+	assert.True(t, sawCreated, "expected to observe a response.created event")
+	assert.True(t, sawCompleted, "expected to observe a response.completed event")
+}
+
+// TestChatToResponseStreamBridge_BuildFinalResponseNilOutputDefaultsToEmptySlice
+// guards the buildFinalResponse seam: even if a future caller passes nil, the wire
+// response must still carry output:[] not output:null.
+func TestChatToResponseStreamBridge_BuildFinalResponseNilOutputDefaultsToEmptySlice(t *testing.T) {
+	t.Parallel()
+	c, _ := newBridgeTestContext(t)
+	bridge := newTestBridge(t, c)
+
+	resp := bridge.buildFinalResponse("completed", nil, nil)
+	require.NotNil(t, resp)
+	require.NotNil(t, resp.Output, "buildFinalResponse must coerce nil outputs to a non-nil slice")
+	assert.Equal(t, 0, len(resp.Output))
+
+	data, err := json.Marshal(resp)
+	require.NoError(t, err)
+	assert.Contains(t, string(data), `"output":[]`)
+	assert.NotContains(t, string(data), `"output":null`)
+}
+
 // TestChatToResponseStreamBridge_UpstreamDropWithFinishLength verifies that
 // when upstream sends finish_reason="length" but drops before [DONE], the
 // bridge correctly reports "incomplete" status.

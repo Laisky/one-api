@@ -666,3 +666,82 @@ func stringPtr(s string) *string {
 func float64Ptr(f float64) *float64 {
 	return &f
 }
+
+// TestHandleImageResponse_UpstreamEmptyDataEmitsDataArray verifies that an
+// upstream payload with `"data": []` is forwarded with `"data":[]` (never null).
+func TestHandleImageResponse_UpstreamEmptyDataEmitsDataArray(t *testing.T) {
+	t.Parallel()
+	gin.SetMode(gin.TestMode)
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+
+	body := `{"data":[]}`
+	resp := &http.Response{
+		StatusCode: 200,
+		Header:     http.Header{},
+		Body:       io.NopCloser(strings.NewReader(body)),
+	}
+
+	a := &Adaptor{}
+	usage, errWS := a.handleImageResponse(c, resp)
+	require.Nil(t, errWS)
+	require.Nil(t, usage)
+
+	out := rec.Body.String()
+	require.Contains(t, out, `"data":[]`)
+	require.NotContains(t, out, `"data":null`)
+}
+
+// TestHandleImageResponse_UpstreamErrorEnvelopeEmitsDataArray verifies that an
+// upstream payload missing the data key (e.g. an error envelope without data)
+// still produces a valid OpenAI-shaped response with `"data":[]`.
+func TestHandleImageResponse_UpstreamErrorEnvelopeEmitsDataArray(t *testing.T) {
+	t.Parallel()
+	gin.SetMode(gin.TestMode)
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+
+	body := `{"error":{"message":"upstream rejected"}}`
+	resp := &http.Response{
+		StatusCode: 200,
+		Header:     http.Header{},
+		Body:       io.NopCloser(strings.NewReader(body)),
+	}
+
+	a := &Adaptor{}
+	usage, errWS := a.handleImageResponse(c, resp)
+	require.Nil(t, errWS)
+	require.Nil(t, usage)
+
+	out := rec.Body.String()
+	require.Contains(t, out, `"data":[]`)
+	require.NotContains(t, out, `"data":null`)
+}
+
+// TestHandleImageResponse_PopulatedRoundTrips sanity-checks normal upstream
+// payloads with images.
+func TestHandleImageResponse_PopulatedRoundTrips(t *testing.T) {
+	t.Parallel()
+	gin.SetMode(gin.TestMode)
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+
+	body := `{"data":[{"url":"https://example.com/a.png","b64_json":"AAAA","revised_prompt":"p"}]}`
+	resp := &http.Response{
+		StatusCode: 200,
+		Header:     http.Header{},
+		Body:       io.NopCloser(strings.NewReader(body)),
+	}
+
+	a := &Adaptor{}
+	usage, errWS := a.handleImageResponse(c, resp)
+	require.Nil(t, errWS)
+	require.Nil(t, usage)
+
+	var parsed ImageResponse
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &parsed))
+	require.Len(t, parsed.Data, 1)
+	require.Equal(t, "https://example.com/a.png", parsed.Data[0].URL)
+	require.Equal(t, "AAAA", parsed.Data[0].B64Json)
+	require.Equal(t, "p", parsed.Data[0].RevisedPrompt)
+}

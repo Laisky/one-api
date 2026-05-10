@@ -153,7 +153,7 @@ func AddRedemption(c *gin.Context) {
 		})
 		return
 	}
-	var keys []string
+	keys := make([]string, 0, redemption.Count)
 	for i := 0; i < redemption.Count; i++ {
 		key := random.GetUUID()
 		cleanRedemption := model.Redemption{

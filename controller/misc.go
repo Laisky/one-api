@@ -330,7 +330,7 @@ func GetChannelStatus(c *gin.Context) {
 	}
 
 	// Format channels for monitoring
-	var channelStatuses []gin.H
+	channelStatuses := make([]gin.H, 0, len(channels))
 	for _, channel := range channels {
 		var status string
 		var enabled bool

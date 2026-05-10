@@ -25,7 +25,7 @@ func isSensitiveOptionKey(key string) bool {
 
 // GetOptions returns the current configuration options excluding sensitive values.
 func GetOptions(c *gin.Context) {
-	var options []*model.Option
+	options := make([]*model.Option, 0)
 	config.OptionMapRWMutex.Lock()
 	for k, v := range config.OptionMap {
 		if isSensitiveOptionKey(k) {

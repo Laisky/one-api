@@ -45,6 +45,83 @@ func setupMCPToolsTestEnvironment(t *testing.T) func() {
 	}
 }
 
+// TestListMCPServerTools_EmptyServerEmitsDataArray asserts an empty tool set
+// serializes "data" as [] rather than null. Frontend code calls .map() on the
+// returned array — null causes a TypeError and crashes the page.
+func TestListMCPServerTools_EmptyServerEmitsDataArray(t *testing.T) {
+	cleanup := setupMCPToolsTestEnvironment(t)
+	defer cleanup()
+
+	server := &model.MCPServer{
+		Name:     "empty-mcp",
+		BaseURL:  "https://example.com",
+		Protocol: model.MCPProtocolStreamableHTTP,
+		AuthType: model.MCPAuthTypeNone,
+	}
+	require.NoError(t, model.CreateMCPServer(server))
+
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	router.GET("/api/mcp_servers/:id/tools", ListMCPServerTools)
+
+	request, _ := http.NewRequest(http.MethodGet, "/api/mcp_servers/"+strconv.Itoa(server.Id)+"/tools", nil)
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, request)
+
+	require.Equal(t, http.StatusOK, response.Code)
+
+	raw := response.Body.String()
+	require.Contains(t, raw, `"data":[]`,
+		"empty MCP tool list must serialize as [] so frontend .map() does not crash")
+	require.NotContains(t, raw, `"data":null`,
+		"a nil slice marshals to null and breaks the admin UI")
+
+	var payload struct {
+		Success bool             `json:"success"`
+		Data    []*model.MCPTool `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &payload))
+	require.True(t, payload.Success)
+	require.Len(t, payload.Data, 0)
+}
+
+// TestListMCPServerTools_PopulatedReturnsTools is the populated companion to
+// the empty-array regression test — ensures the normal path still works.
+func TestListMCPServerTools_PopulatedReturnsTools(t *testing.T) {
+	cleanup := setupMCPToolsTestEnvironment(t)
+	defer cleanup()
+
+	server := &model.MCPServer{
+		Name:     "populated-mcp",
+		BaseURL:  "https://example.com",
+		Protocol: model.MCPProtocolStreamableHTTP,
+		AuthType: model.MCPAuthTypeNone,
+	}
+	require.NoError(t, model.CreateMCPServer(server))
+	require.NoError(t, model.UpsertMCPTools(server.Id, []*model.MCPTool{
+		{Name: "echo", DisplayName: "echo"},
+	}))
+
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	router.GET("/api/mcp_servers/:id/tools", ListMCPServerTools)
+
+	request, _ := http.NewRequest(http.MethodGet, "/api/mcp_servers/"+strconv.Itoa(server.Id)+"/tools", nil)
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, request)
+
+	require.Equal(t, http.StatusOK, response.Code)
+
+	var payload struct {
+		Success bool             `json:"success"`
+		Data    []*model.MCPTool `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &payload))
+	require.True(t, payload.Success)
+	require.Len(t, payload.Data, 1)
+	require.Equal(t, "echo", payload.Data[0].Name)
+}
+
 // TestListMCPServerToolsAppliesPricing ensures MCP tool pricing is included in the tools list response.
 func TestListMCPServerToolsAppliesPricing(t *testing.T) {
 	cleanup := setupMCPToolsTestEnvironment(t)
