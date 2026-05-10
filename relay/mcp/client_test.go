@@ -244,6 +244,59 @@ func TestClient_NotificationFailureNonFatal(t *testing.T) {
 	require.Len(t, tools, 1)
 }
 
+// TestClient_ListTools_RetryOnInvalidSessionID verifies the client retries
+// initialize + tools/list once when the server rejects a missing/invalid
+// Mcp-Session-Id.
+func TestClient_ListTools_RetryOnInvalidSessionID(t *testing.T) {
+	const recoveredSessionID = "session-after-reinit"
+
+	var initCount atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		bodyBytes, _ := io.ReadAll(r.Body)
+		var rpc struct {
+			ID     any    `json:"id"`
+			Method string `json:"method"`
+		}
+		_ = json.Unmarshal(bodyBytes, &rpc)
+
+		switch rpc.Method {
+		case "initialize":
+			call := initCount.Add(1)
+			w.Header().Set("Content-Type", "application/json")
+			if call >= 2 {
+				w.Header().Set("Mcp-Session-Id", recoveredSessionID)
+			}
+			w.WriteHeader(http.StatusOK)
+			_, _ = fmt.Fprintf(w, `{"jsonrpc":"2.0","id":%s,"result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{}},"serverInfo":{"name":"retry","version":"1"}}}`, marshalRPCID(rpc.ID))
+		case "notifications/initialized":
+			w.WriteHeader(http.StatusAccepted)
+		case "tools/list":
+			if r.Header.Get("Mcp-Session-Id") != recoveredSessionID {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusBadRequest)
+				_, _ = w.Write([]byte(`{"jsonrpc":"2.0","error":{"code":-32000,"message":"Bad Request: No valid session ID provided"},"id":null}`))
+				return
+			}
+
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			_, _ = fmt.Fprintf(w, `{"jsonrpc":"2.0","id":%s,"result":{"tools":[{"name":"recovered"}]}}`, marshalRPCID(rpc.ID))
+		default:
+			w.WriteHeader(http.StatusBadRequest)
+		}
+	}))
+	defer server.Close()
+
+	mcpServer := &model.MCPServer{BaseURL: server.URL, AuthType: model.MCPAuthTypeNone}
+	client := NewStreamableHTTPClient(mcpServer, nil, 5*time.Second)
+
+	tools, err := client.ListTools(context.Background())
+	require.NoError(t, err)
+	require.Len(t, tools, 1)
+	require.Equal(t, "recovered", tools[0].Name)
+	require.Equal(t, int32(2), initCount.Load(), "client should reinitialize once after invalid session rejection")
+}
+
 // TestParseSSEResponse covers the small SSE parser directly so its edge
 // cases (multi-line data, missing data, mixed event lines) are pinned.
 func TestParseSSEResponse(t *testing.T) {

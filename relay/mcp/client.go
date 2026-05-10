@@ -165,7 +165,7 @@ func (c *StreamableHTTPClient) ListTools(ctx context.Context) ([]ToolDescriptor,
 	var result struct {
 		Tools []ToolDescriptor `json:"tools"`
 	}
-	if err := c.doRPC(ctx, "tools/list", nil, &result); err != nil {
+	if err := c.doRPCWithSessionRetry(ctx, "tools/list", nil, &result); err != nil {
 		return nil, errors.Wrap(err, "mcp rpc tools/list")
 	}
 	return result.Tools, nil
@@ -181,16 +181,44 @@ func (c *StreamableHTTPClient) CallTool(ctx context.Context, name string, argume
 		"arguments": arguments,
 	}
 	var result CallToolResult
-	if err := c.doRPC(ctx, "tools/call", params, &result); err != nil {
+	if err := c.doRPCWithSessionRetry(ctx, "tools/call", params, &result); err != nil {
 		return nil, errors.Wrapf(err, "mcp rpc tools/call %s", name)
 	}
 	return &result, nil
+}
+
+// doRPCWithSessionRetry performs one JSON-RPC call and retries once after
+// re-initialization when the upstream reports an invalid MCP session id.
+func (c *StreamableHTTPClient) doRPCWithSessionRetry(ctx context.Context, method string, params any, out any) error {
+	err := c.doRPC(ctx, method, params, out)
+	if err == nil {
+		return nil
+	}
+	if !isMCPInvalidSessionError(err) {
+		return err
+	}
+
+	c.resetInitialization()
+	if initErr := c.Initialize(ctx); initErr != nil {
+		return errors.Wrap(initErr, "reinitialize mcp session")
+	}
+	return c.doRPC(ctx, method, params, out)
 }
 
 // doRPC performs a JSON-RPC call and discards the response headers.
 func (c *StreamableHTTPClient) doRPC(ctx context.Context, method string, params any, out any) error {
 	_, err := c.doRPCRaw(ctx, method, params, out)
 	return err
+}
+
+// resetInitialization clears negotiated MCP session/protocol state so a fresh
+// initialize handshake can run again.
+func (c *StreamableHTTPClient) resetInitialization() {
+	c.initMu.Lock()
+	defer c.initMu.Unlock()
+	c.initialized = false
+	c.sessionID = ""
+	delete(c.Headers, mcpSessionIDHeader)
 }
 
 // doRPCRaw performs a JSON-RPC call and returns the response headers, which
@@ -513,4 +541,13 @@ func isLikelyBase64(value string) bool {
 		return false
 	}
 	return true
+}
+
+// isMCPInvalidSessionError reports whether an RPC failure indicates that the
+// server rejected or missed the current Mcp-Session-Id.
+func isMCPInvalidSessionError(err error) bool {
+	if err == nil {
+		return false
+	}
+	return strings.Contains(strings.ToLower(err.Error()), "no valid session id provided")
 }
