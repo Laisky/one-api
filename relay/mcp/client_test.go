@@ -8,10 +8,12 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/Laisky/errors/v2"
 	"github.com/stretchr/testify/require"
 
 	"github.com/Laisky/one-api/model"
@@ -242,6 +244,368 @@ func TestClient_NotificationFailureNonFatal(t *testing.T) {
 	tools, err := client.ListTools(context.Background())
 	require.NoError(t, err, "failure on notifications/initialized must not block subsequent calls")
 	require.Len(t, tools, 1)
+}
+
+// recordedRequest captures the payload of a single inbound HTTP request so
+// strict-mode tests can make post-hoc assertions about what the client sent.
+type recordedRequest struct {
+	Method     string
+	RPCMethod  string
+	Headers    http.Header
+	RawBody    []byte
+	ParsedBody map[string]any
+}
+
+// strictMockServer mimics validation behavior of the TypeScript MCP SDK
+// (used by aas-ee/open-web-search and similar). Tests use it to assert the
+// Go client emits spec-compliant JSON-RPC + Streamable HTTP requests.
+type strictMockServer struct {
+	t                 *testing.T
+	mu                sync.Mutex
+	requests          []recordedRequest
+	sessionID         string
+	toolsListAsSSE    bool
+	rejectNullParams  bool
+	requireSession    bool
+	requireAcceptDual bool
+}
+
+func newStrictMockServer(t *testing.T) *strictMockServer {
+	return &strictMockServer{
+		t:                 t,
+		sessionID:         "session-abc-123",
+		rejectNullParams:  true,
+		requireSession:    true,
+		requireAcceptDual: true,
+	}
+}
+
+func (m *strictMockServer) handler() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		bodyBytes, err := io.ReadAll(r.Body)
+		if err != nil {
+			http.Error(w, "read body", http.StatusInternalServerError)
+			return
+		}
+		_ = r.Body.Close()
+
+		var parsed map[string]any
+		if len(bodyBytes) > 0 {
+			if jerr := json.Unmarshal(bodyBytes, &parsed); jerr != nil {
+				m.writeJSONRPCError(w, http.StatusBadRequest, nil, -32700, "Parse error: Invalid JSON-RPC message")
+				return
+			}
+		}
+
+		rpcMethod, _ := parsed["method"].(string)
+
+		m.mu.Lock()
+		m.requests = append(m.requests, recordedRequest{
+			Method:     r.Method,
+			RPCMethod:  rpcMethod,
+			Headers:    r.Header.Clone(),
+			RawBody:    append([]byte(nil), bodyBytes...),
+			ParsedBody: parsed,
+		})
+		m.mu.Unlock()
+
+		if m.requireAcceptDual {
+			accept := r.Header.Get("Accept")
+			if !strings.Contains(accept, "application/json") || !strings.Contains(accept, "text/event-stream") {
+				w.WriteHeader(http.StatusNotAcceptable)
+				return
+			}
+		}
+
+		if m.rejectNullParams {
+			if rawParams, ok := parsed["params"]; ok && rawParams == nil {
+				m.writeJSONRPCError(w, http.StatusBadRequest, parsed["id"], -32700, "Parse error: Invalid JSON-RPC message")
+				return
+			}
+		}
+
+		if m.requireSession && rpcMethod != "initialize" {
+			if r.Header.Get(mcpSessionIDHeader) == "" {
+				m.writeJSONRPCError(w, http.StatusBadRequest, parsed["id"], -32000, "Bad Request: No valid session ID provided")
+				return
+			}
+		}
+
+		switch rpcMethod {
+		case "initialize":
+			w.Header().Set(mcpSessionIDHeader, m.sessionID)
+			w.Header().Set("Content-Type", "application/json")
+			result := map[string]any{
+				"jsonrpc": "2.0",
+				"id":      parsed["id"],
+				"result": map[string]any{
+					"protocolVersion": "2025-06-18",
+					"capabilities":    map[string]any{"tools": map[string]any{}},
+					"serverInfo":      map[string]any{"name": "mock", "version": "0.0.1"},
+				},
+			}
+			_ = json.NewEncoder(w).Encode(result)
+		case "notifications/initialized":
+			w.WriteHeader(http.StatusAccepted)
+		case "tools/list":
+			tool := map[string]any{
+				"name":        "web_search",
+				"description": "Search the web",
+				"inputSchema": map[string]any{
+					"type":       "object",
+					"properties": map[string]any{"query": map[string]any{"type": "string"}},
+					"required":   []string{"query"},
+				},
+			}
+			result := map[string]any{
+				"jsonrpc": "2.0",
+				"id":      parsed["id"],
+				"result":  map[string]any{"tools": []any{tool}},
+			}
+			if m.toolsListAsSSE {
+				w.Header().Set("Content-Type", "text/event-stream")
+				w.WriteHeader(http.StatusOK)
+				payload, _ := json.Marshal(result)
+				_, _ = fmt.Fprintf(w, "event: message\ndata: %s\n\n", payload)
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(result)
+		case "tools/call":
+			success := map[string]any{
+				"jsonrpc": "2.0",
+				"id":      parsed["id"],
+				"result": map[string]any{
+					"content": []any{map[string]any{"type": "text", "text": "ok"}},
+				},
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(success)
+		default:
+			m.writeJSONRPCError(w, http.StatusBadRequest, parsed["id"], -32601, "Method not found")
+		}
+	}
+}
+
+func (m *strictMockServer) writeJSONRPCError(w http.ResponseWriter, status int, id any, code int, message string) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	body := map[string]any{
+		"jsonrpc": "2.0",
+		"id":      id,
+		"error":   map[string]any{"code": code, "message": message},
+	}
+	_ = json.NewEncoder(w).Encode(body)
+}
+
+func (m *strictMockServer) snapshot() []recordedRequest {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	out := make([]recordedRequest, len(m.requests))
+	copy(out, m.requests)
+	return out
+}
+
+func (m *strictMockServer) findRequest(rpcMethod string) (recordedRequest, error) {
+	for _, req := range m.snapshot() {
+		if req.RPCMethod == rpcMethod {
+			return req, nil
+		}
+	}
+	return recordedRequest{}, errors.Errorf("no request recorded for method %q", rpcMethod)
+}
+
+func newStrictTestClient(t *testing.T, baseURL string, server model.MCPServer) *StreamableHTTPClient {
+	t.Helper()
+	server.BaseURL = baseURL
+	return NewStreamableHTTPClient(&server, nil, 5*time.Second)
+}
+
+// TestStreamableHTTPClient_ListToolsHappyPath drives the full handshake +
+// tools/list flow against a strict TS-SDK-style upstream and asserts on
+// request order, session header propagation, and JSON-RPC validity.
+func TestStreamableHTTPClient_ListToolsHappyPath(t *testing.T) {
+	mock := newStrictMockServer(t)
+	srv := httptest.NewServer(mock.handler())
+	defer srv.Close()
+
+	client := newStrictTestClient(t, srv.URL, model.MCPServer{})
+	tools, err := client.ListTools(context.Background())
+	require.NoError(t, err)
+	require.Len(t, tools, 1)
+	require.Equal(t, "web_search", tools[0].Name)
+	require.NotNil(t, tools[0].InputSchema)
+	require.Equal(t, "object", tools[0].InputSchema["type"])
+
+	requests := mock.snapshot()
+	require.Len(t, requests, 3)
+	require.Equal(t, "initialize", requests[0].RPCMethod)
+	require.Empty(t, requests[0].Headers.Get(mcpSessionIDHeader))
+	require.Equal(t, "notifications/initialized", requests[1].RPCMethod)
+	require.Equal(t, mock.sessionID, requests[1].Headers.Get(mcpSessionIDHeader))
+	require.Equal(t, "tools/list", requests[2].RPCMethod)
+	require.Equal(t, mock.sessionID, requests[2].Headers.Get(mcpSessionIDHeader))
+
+	for _, req := range requests {
+		require.True(t, json.Valid(req.RawBody), "request body must be valid JSON: %s", req.RawBody)
+		require.Equal(t, "2.0", req.ParsedBody["jsonrpc"], "missing jsonrpc 2.0 marker")
+	}
+	require.NotContains(t, string(requests[2].RawBody), `"params":null`,
+		"tools/list must not serialize params as null (regression for Bug A)")
+}
+
+// TestStreamableHTTPClient_OmitsNullParamsOnRequests focused regression for Bug A:
+// when no params are supplied, the field must be absent entirely, not null.
+func TestStreamableHTTPClient_OmitsNullParamsOnRequests(t *testing.T) {
+	mock := newStrictMockServer(t)
+	srv := httptest.NewServer(mock.handler())
+	defer srv.Close()
+
+	client := newStrictTestClient(t, srv.URL, model.MCPServer{})
+	_, err := client.ListTools(context.Background())
+	require.NoError(t, err)
+
+	listReq, err := mock.findRequest("tools/list")
+	require.NoError(t, err)
+	_, hasParams := listReq.ParsedBody["params"]
+	require.False(t, hasParams,
+		"tools/list payload must omit `params` entirely when nil; got: %s", listReq.RawBody)
+}
+
+// TestStreamableHTTPClient_CapturesSessionIDAndPropagates asserts the session
+// id from initialize is attached to every subsequent request.
+func TestStreamableHTTPClient_CapturesSessionIDAndPropagates(t *testing.T) {
+	mock := newStrictMockServer(t)
+	srv := httptest.NewServer(mock.handler())
+	defer srv.Close()
+
+	client := newStrictTestClient(t, srv.URL, model.MCPServer{})
+	_, err := client.ListTools(context.Background())
+	require.NoError(t, err)
+
+	for _, req := range mock.snapshot() {
+		if req.RPCMethod == "initialize" {
+			require.Empty(t, req.Headers.Get(mcpSessionIDHeader))
+			continue
+		}
+		require.Equal(t, mock.sessionID, req.Headers.Get(mcpSessionIDHeader),
+			"expected Mcp-Session-Id %q on %s", mock.sessionID, req.RPCMethod)
+	}
+}
+
+// TestStreamableHTTPClient_NotificationsHaveNoID verifies notifications omit
+// the JSON-RPC `id` field per spec — strict TS SDK rejects notifications with id.
+func TestStreamableHTTPClient_NotificationsHaveNoID(t *testing.T) {
+	mock := newStrictMockServer(t)
+	srv := httptest.NewServer(mock.handler())
+	defer srv.Close()
+
+	client := newStrictTestClient(t, srv.URL, model.MCPServer{})
+	_, err := client.ListTools(context.Background())
+	require.NoError(t, err)
+
+	notif, err := mock.findRequest("notifications/initialized")
+	require.NoError(t, err)
+	_, hasID := notif.ParsedBody["id"]
+	require.False(t, hasID,
+		"JSON-RPC notification must not include `id`; got: %s", notif.RawBody)
+}
+
+// TestStreamableHTTPClient_HandlesSSEResponse exercises tools/list returned
+// as a single SSE event payload.
+func TestStreamableHTTPClient_HandlesSSEResponse(t *testing.T) {
+	mock := newStrictMockServer(t)
+	mock.toolsListAsSSE = true
+	srv := httptest.NewServer(mock.handler())
+	defer srv.Close()
+
+	client := newStrictTestClient(t, srv.URL, model.MCPServer{})
+	tools, err := client.ListTools(context.Background())
+	require.NoError(t, err)
+	require.Len(t, tools, 1)
+	require.Equal(t, "web_search", tools[0].Name)
+	require.NotNil(t, tools[0].InputSchema)
+}
+
+// TestStreamableHTTPClient_CallTool verifies the wire shape of tools/call and
+// the success-path result decode.
+func TestStreamableHTTPClient_CallTool(t *testing.T) {
+	mock := newStrictMockServer(t)
+	srv := httptest.NewServer(mock.handler())
+	defer srv.Close()
+
+	client := newStrictTestClient(t, srv.URL, model.MCPServer{})
+	result, err := client.CallTool(context.Background(), "web_search", map[string]any{"query": "hello"})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.NotNil(t, result.Content)
+
+	callReq, err := mock.findRequest("tools/call")
+	require.NoError(t, err)
+	params, ok := callReq.ParsedBody["params"].(map[string]any)
+	require.True(t, ok, "tools/call params must be an object; got: %s", callReq.RawBody)
+	require.Equal(t, "web_search", params["name"])
+	args, ok := params["arguments"].(map[string]any)
+	require.True(t, ok, "arguments must be an object")
+	require.Equal(t, "hello", args["query"])
+}
+
+// TestStreamableHTTPClient_AcceptHeader asserts every outbound request
+// advertises both JSON and SSE per the Streamable HTTP transport spec.
+func TestStreamableHTTPClient_AcceptHeader(t *testing.T) {
+	mock := newStrictMockServer(t)
+	srv := httptest.NewServer(mock.handler())
+	defer srv.Close()
+
+	client := newStrictTestClient(t, srv.URL, model.MCPServer{})
+	_, err := client.ListTools(context.Background())
+	require.NoError(t, err)
+
+	for _, req := range mock.snapshot() {
+		accept := req.Headers.Get("Accept")
+		require.Contains(t, accept, "application/json", "Accept missing application/json on %s", req.RPCMethod)
+		require.Contains(t, accept, "text/event-stream", "Accept missing text/event-stream on %s", req.RPCMethod)
+	}
+}
+
+// TestStreamableHTTPClient_AuthBearer asserts bearer auth attaches an
+// Authorization header on every request including the handshake.
+func TestStreamableHTTPClient_AuthBearer(t *testing.T) {
+	mock := newStrictMockServer(t)
+	srv := httptest.NewServer(mock.handler())
+	defer srv.Close()
+
+	client := newStrictTestClient(t, srv.URL, model.MCPServer{
+		AuthType: model.MCPAuthTypeBearer,
+		APIKey:   "xyz",
+	})
+	_, err := client.ListTools(context.Background())
+	require.NoError(t, err)
+
+	for _, req := range mock.snapshot() {
+		require.Equal(t, "Bearer xyz", req.Headers.Get("Authorization"),
+			"missing/incorrect Authorization on %s", req.RPCMethod)
+	}
+}
+
+// TestStreamableHTTPClient_AuthAPIKey asserts api_key auth attaches the
+// X-API-Key header on every request including the handshake.
+func TestStreamableHTTPClient_AuthAPIKey(t *testing.T) {
+	mock := newStrictMockServer(t)
+	srv := httptest.NewServer(mock.handler())
+	defer srv.Close()
+
+	client := newStrictTestClient(t, srv.URL, model.MCPServer{
+		AuthType: model.MCPAuthTypeAPIKey,
+		APIKey:   "xyz",
+	})
+	_, err := client.ListTools(context.Background())
+	require.NoError(t, err)
+
+	for _, req := range mock.snapshot() {
+		require.Equal(t, "xyz", req.Headers.Get("X-API-Key"),
+			"missing/incorrect X-API-Key on %s", req.RPCMethod)
+	}
 }
 
 // TestParseSSEResponse covers the small SSE parser directly so its edge

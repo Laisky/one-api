@@ -18,6 +18,30 @@ func TestCallToolResult_UnmarshalJSON_PreservesRaw(t *testing.T) {
 	require.False(t, result.IsError)
 }
 
+// TestToolDescriptor_MarshalJSON_UsesCamelCase verifies MCP-spec compliant
+// camelCase serialization. The MCP spec (2025-03-26 / 2025-06-18 / draft)
+// mandates `inputSchema`; the legacy snake_case form would silently drop the
+// schema for strict consumers.
+func TestToolDescriptor_MarshalJSON_UsesCamelCase(t *testing.T) {
+	descriptor := ToolDescriptor{
+		Name:        "web_search",
+		Description: "Search",
+		InputSchema: map[string]any{
+			"type": "object",
+		},
+	}
+	encoded, err := json.Marshal(descriptor)
+	require.NoError(t, err)
+	require.Contains(t, string(encoded), `"inputSchema"`)
+	require.NotContains(t, string(encoded), `"input_schema"`)
+
+	emptyDescriptor := ToolDescriptor{Name: "web_search"}
+	emptyEncoded, err := json.Marshal(emptyDescriptor)
+	require.NoError(t, err)
+	require.NotContains(t, string(emptyEncoded), `"inputSchema"`)
+	require.NotContains(t, string(emptyEncoded), `"input_schema"`)
+}
+
 // TestToolDescriptor_UnmarshalJSON_HandlesSchemaFields verifies schema field naming variants are supported.
 func TestToolDescriptor_UnmarshalJSON_HandlesSchemaFields(t *testing.T) {
 	inputSchemaPayload := `{"name":"web_fetch","description":"Fetch","inputSchema":{"type":"object","properties":{"url":{"type":"string"}},"required":["url"]}}`

@@ -145,7 +145,11 @@ func listMCPToolsForUser(ctx context.Context, c *gin.Context) ([]mcp.ToolDescrip
 		return servers[i].GetPriority() > servers[j].GetPriority()
 	})
 
-	var descriptors []mcp.ToolDescriptor
+	// Initialize as a non-nil empty slice so the JSON-RPC `tools/list`
+	// response marshals to `[]` instead of `null` when no servers/tools
+	// resolve. Spec-compliant MCP clients (e.g. MCP Inspector with Zod
+	// schemas) reject `null` for the required `tools` array. See issue #340.
+	descriptors := make([]mcp.ToolDescriptor, 0)
 	for _, server := range servers {
 		tools, err := model.GetMCPToolsByServerID(server.Id)
 		if err != nil {

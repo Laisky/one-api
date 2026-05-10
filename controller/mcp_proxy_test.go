@@ -524,3 +524,235 @@ func TestMCPProxy_HTTPHandlerLogsFreeToolCall(t *testing.T) {
 	require.Equal(t, 0, rows[0].Quota)
 	require.Equal(t, "fake-mcp.echo", rows[0].ModelName)
 }
+
+// invokeMCPProxy is a small helper that wires a fresh gin context with the
+// fixture user and dispatches a JSON-RPC body through MCPProxy.
+func invokeMCPProxy(t *testing.T, fx *mcpFixture, method, requestID, body string) *httptest.ResponseRecorder {
+	t.Helper()
+	c, recorder := newMCPCallContext(t, fx.user.Id, requestID)
+	c.Set(ctxkey.UserObj, fx.user)
+	c.Request = httptest.NewRequest(method, "/mcp", bytes.NewBufferString(body))
+	c.Request.Header.Set("Content-Type", "application/json")
+	c.Request.Header.Set("Accept", "application/json, text/event-stream")
+	MCPProxy(c)
+	return recorder
+}
+
+// disableAllMCPServers wipes the seeded server/tool rows so tools/list runs
+// against an empty registry — the regression scenario from issue #340.
+func disableAllMCPServers(t *testing.T) {
+	t.Helper()
+	require.NoError(t, model.DB.Where("1 = 1").Delete(&model.MCPTool{}).Error)
+	require.NoError(t, model.DB.Where("1 = 1").Delete(&model.MCPServer{}).Error)
+}
+
+// TestMCPProxy_ToolsList_EmptyReturnsArrayNotNull is the regression guard for
+// issue #340: with no enabled MCP servers, the JSON-RPC `tools/list` result
+// must marshal `tools` as `[]`, not `null`. MCP Inspector validates the
+// response body with a Zod array schema and rejects `null`.
+func TestMCPProxy_ToolsList_EmptyReturnsArrayNotNull(t *testing.T) {
+	cleanup, fx := setupMCPProxyTest(t)
+	defer cleanup()
+
+	disableAllMCPServers(t)
+
+	recorder := invokeMCPProxy(t, fx, http.MethodPost, "req-empty",
+		`{"jsonrpc":"2.0","id":11,"method":"tools/list"}`)
+	require.Equal(t, http.StatusOK, recorder.Code)
+
+	raw := recorder.Body.String()
+	require.Contains(t, raw, `"tools":[]`,
+		"empty tool list must serialize as [] for spec-compliant MCP clients")
+	require.NotContains(t, raw, `"tools":null`,
+		"a nil slice marshals to null and breaks MCP Inspector (issue #340)")
+
+	var resp struct {
+		Result struct {
+			Tools *json.RawMessage `json:"tools"`
+		} `json:"result"`
+	}
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &resp))
+	require.NotNil(t, resp.Result.Tools, "tools field must be present")
+	require.Equal(t, "[]", strings.TrimSpace(string(*resp.Result.Tools)))
+}
+
+// TestMCPProxy_ToolsList_PopulatedReturnsCamelCaseInputSchema verifies a
+// populated registry: tool names are server-qualified and the schema field
+// is the spec-mandated `inputSchema` (camelCase), not `input_schema`.
+func TestMCPProxy_ToolsList_PopulatedReturnsCamelCaseInputSchema(t *testing.T) {
+	cleanup, fx := setupMCPProxyTest(t)
+	defer cleanup()
+
+	require.NoError(t, model.DB.Model(&model.MCPTool{}).
+		Where("id = ?", fx.tool.Id).
+		Update("input_schema", `{"type":"object","properties":{"q":{"type":"string"}}}`).Error)
+
+	recorder := invokeMCPProxy(t, fx, http.MethodPost, "req-list",
+		`{"jsonrpc":"2.0","id":12,"method":"tools/list"}`)
+	require.Equal(t, http.StatusOK, recorder.Code)
+
+	raw := recorder.Body.String()
+	require.Contains(t, raw, `"inputSchema":`,
+		"MCP spec mandates camelCase inputSchema in tools/list results")
+	require.NotContains(t, raw, `"input_schema":`,
+		"snake_case input_schema breaks MCP Inspector and SDK clients")
+
+	var resp struct {
+		Result struct {
+			Tools []mcp.ToolDescriptor `json:"tools"`
+		} `json:"result"`
+	}
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &resp))
+	require.Len(t, resp.Result.Tools, 1)
+	require.Equal(t, "fake-mcp.echo", resp.Result.Tools[0].Name,
+		"tool name must be server-qualified")
+	require.Equal(t, "object", resp.Result.Tools[0].InputSchema["type"])
+}
+
+// TestMCPProxy_NotificationsInitialized_Returns202 covers all four
+// notification methods the proxy accepts. Each must yield HTTP 202 with an
+// empty body — JSON-RPC notifications carry no `id` and the Streamable HTTP
+// transport forbids returning an envelope.
+func TestMCPProxy_NotificationsInitialized_Returns202(t *testing.T) {
+	cleanup, fx := setupMCPProxyTest(t)
+	defer cleanup()
+
+	methods := []string{
+		"notifications/initialized",
+		"notifications/cancelled",
+		"notifications/progress",
+		"notifications/roots/list_changed",
+	}
+	for _, m := range methods {
+		body := fmt.Sprintf(`{"jsonrpc":"2.0","method":%q}`, m)
+		recorder := invokeMCPProxy(t, fx, http.MethodPost, "req-"+m, body)
+		require.Equalf(t, http.StatusAccepted, recorder.Code,
+			"notification %s must return 202 Accepted", m)
+		require.Emptyf(t, recorder.Body.Bytes(),
+			"notification %s must not return a response body", m)
+	}
+}
+
+// TestMCPProxy_DeleteReturns405 ensures the stateless proxy rejects DELETE
+// (session termination) per the Streamable HTTP transport contract.
+func TestMCPProxy_DeleteReturns405(t *testing.T) {
+	cleanup, fx := setupMCPProxyTest(t)
+	defer cleanup()
+
+	c, recorder := newMCPCallContext(t, fx.user.Id, "req-delete")
+	c.Request = httptest.NewRequest(http.MethodDelete, "/mcp", nil)
+	MCPProxy(c)
+	require.Equal(t, http.StatusMethodNotAllowed, recorder.Code)
+}
+
+// TestMCPProxy_UnsupportedMethod_RequestVsNotification confirms the dispatcher
+// distinguishes JSON-RPC requests (id present) from notifications (id absent)
+// for unknown methods: requests get a -32601 error envelope, notifications
+// silently 202 — anything else breaks SDK error handling.
+func TestMCPProxy_UnsupportedMethod_RequestVsNotification(t *testing.T) {
+	cleanup, fx := setupMCPProxyTest(t)
+	defer cleanup()
+
+	requestRec := invokeMCPProxy(t, fx, http.MethodPost, "req-unknown-req",
+		`{"jsonrpc":"2.0","id":99,"method":"foo/bar"}`)
+	require.Equal(t, http.StatusOK, requestRec.Code)
+	var reqResp map[string]any
+	require.NoError(t, json.Unmarshal(requestRec.Body.Bytes(), &reqResp))
+	errObj, ok := reqResp["error"].(map[string]any)
+	require.True(t, ok, "request with unknown method must return JSON-RPC error envelope")
+	require.Equal(t, float64(mcpErrMethodNotFound), errObj["code"])
+
+	notifRec := invokeMCPProxy(t, fx, http.MethodPost, "req-unknown-notif",
+		`{"jsonrpc":"2.0","method":"foo/bar"}`)
+	require.Equal(t, http.StatusAccepted, notifRec.Code,
+		"unknown notification (no id) must yield 202, not an error envelope")
+	require.Empty(t, notifRec.Body.Bytes())
+}
+
+// TestMCPProxy_BadJSON_ReturnsParseError verifies a malformed body produces a
+// JSON-RPC parse error with id=null per spec.
+func TestMCPProxy_BadJSON_ReturnsParseError(t *testing.T) {
+	cleanup, fx := setupMCPProxyTest(t)
+	defer cleanup()
+
+	recorder := invokeMCPProxy(t, fx, http.MethodPost, "req-badjson", `{not-json`)
+	require.Equal(t, http.StatusOK, recorder.Code)
+
+	var resp map[string]any
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &resp))
+	require.Nil(t, resp["id"], "parse errors must use id=null per JSON-RPC spec")
+	errObj, ok := resp["error"].(map[string]any)
+	require.True(t, ok)
+	require.Equal(t, float64(mcpErrParseError), errObj["code"])
+}
+
+// TestMCPProxy_ToolsList_BlacklistedToolHidden seeds two whitelisted tools and
+// adds one of them to the user's MCPToolBlacklist. The blacklisted tool must
+// not appear in tools/list results.
+func TestMCPProxy_ToolsList_BlacklistedToolHidden(t *testing.T) {
+	cleanup, fx := setupMCPProxyTest(t)
+	defer cleanup()
+
+	require.NoError(t, model.DB.Create(&model.MCPTool{
+		Id:          2,
+		ServerId:    fx.server.Id,
+		Name:        "paid_echo",
+		DisplayName: "Paid Echo",
+		Description: "Echoes input (paid)",
+		InputSchema: `{"type":"object"}`,
+		Status:      1,
+	}).Error)
+
+	fx.user.MCPToolBlacklist = model.JSONStringSlice{"paid_echo"}
+	require.NoError(t, model.DB.Save(fx.user).Error)
+	reloaded, err := model.GetUserById(fx.user.Id, true)
+	require.NoError(t, err)
+	fx.user = reloaded
+
+	recorder := invokeMCPProxy(t, fx, http.MethodPost, "req-blacklist",
+		`{"jsonrpc":"2.0","id":13,"method":"tools/list"}`)
+	require.Equal(t, http.StatusOK, recorder.Code)
+
+	var resp struct {
+		Result struct {
+			Tools []mcp.ToolDescriptor `json:"tools"`
+		} `json:"result"`
+	}
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &resp))
+	require.Len(t, resp.Result.Tools, 1, "blacklisted tool must be filtered out")
+	require.Equal(t, "fake-mcp.echo", resp.Result.Tools[0].Name)
+}
+
+// TestMCPProxy_FullInspectorHandshake mirrors the real MCP Inspector flow
+// against a single proxy instance: initialize → notifications/initialized →
+// tools/list. It is the end-to-end smoke test for the Streamable HTTP
+// transport contract — if any leg drifts from the spec, this fails first.
+func TestMCPProxy_FullInspectorHandshake(t *testing.T) {
+	cleanup, fx := setupMCPProxyTest(t)
+	defer cleanup()
+
+	initRec := invokeMCPProxy(t, fx, http.MethodPost, "req-handshake-init",
+		`{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"mcp-inspector","version":"0.1"}}}`)
+	require.Equal(t, http.StatusOK, initRec.Code)
+	var initResp map[string]any
+	require.NoError(t, json.Unmarshal(initRec.Body.Bytes(), &initResp))
+	require.Nil(t, initResp["error"])
+	result, ok := initResp["result"].(map[string]any)
+	require.True(t, ok)
+	require.Equal(t, mcpProtocolVersion, result["protocolVersion"])
+	info := result["serverInfo"].(map[string]any)
+	require.Equal(t, mcpServerName, info["name"])
+
+	notifRec := invokeMCPProxy(t, fx, http.MethodPost, "req-handshake-notif",
+		`{"jsonrpc":"2.0","method":"notifications/initialized"}`)
+	require.Equal(t, http.StatusAccepted, notifRec.Code)
+	require.Empty(t, notifRec.Body.Bytes())
+
+	listRec := invokeMCPProxy(t, fx, http.MethodPost, "req-handshake-list",
+		`{"jsonrpc":"2.0","id":2,"method":"tools/list"}`)
+	require.Equal(t, http.StatusOK, listRec.Code)
+	require.Contains(t, listRec.Body.String(), `"tools":`,
+		"handshake must end with a tools/list response containing a tools array")
+	require.NotContains(t, listRec.Body.String(), `"tools":null`,
+		"tools must never be null — issue #340")
+}

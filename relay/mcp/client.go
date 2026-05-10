@@ -201,11 +201,18 @@ func (c *StreamableHTTPClient) doRPCRaw(ctx context.Context, method string, para
 	if c == nil {
 		return nil, errors.New("mcp client is nil")
 	}
+	// Per JSON-RPC 2.0, the params member MUST be a structured value (Object
+	// or Array) when present. Strict validators (e.g. the TypeScript MCP
+	// SDK's Zod schema used by aas-ee/open-web-search) reject `"params":null`
+	// with -32700 "Parse error: Invalid JSON-RPC message". Omit the field
+	// entirely when no params were supplied.
 	payload := map[string]any{
 		"jsonrpc": "2.0",
 		"id":      random.GetUUID(),
 		"method":  method,
-		"params":  params,
+	}
+	if params != nil {
+		payload["params"] = params
 	}
 	data, err := json.Marshal(payload)
 	if err != nil {
