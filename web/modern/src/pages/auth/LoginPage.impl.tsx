@@ -45,6 +45,11 @@ export function LoginPage() {
   const location = useLocation();
   const { login } = useAuthStore();
   const { systemStatus } = useSystemStatus();
+  // Default to enabled when the flag is missing (e.g. status hasn't loaded yet
+  // or the backend predates this field) so we don't accidentally lock out
+  // users on slow networks. Only an explicit `false` hides the password form.
+  const passwordLoginEnabled = systemStatus?.password_login !== false;
+  const passwordRegisterEnabled = systemStatus?.password_register !== false;
   const turnstileEnabled = Boolean(systemStatus?.turnstile_check);
   // Only show Turnstile after the server tells us it's required (i.e. after a failed login attempt).
   const turnstileRenderable = turnstileRequired && turnstileEnabled && Boolean(systemStatus?.turnstile_site_key);
@@ -328,6 +333,16 @@ export function LoginPage() {
           <CardDescription>{t('auth.login.subtitle')}</CardDescription>
         </CardHeader>
         <CardContent>
+          {!passwordLoginEnabled && (
+            <div
+              data-testid="password-login-disabled-notice"
+              className="mb-4 text-sm rounded-md border border-warning-border bg-warning-muted p-3 text-warning-foreground"
+            >
+              {hasOAuthOptions || passkeySupported
+                ? t('auth.login.password_login_disabled')
+                : t('auth.login.password_login_disabled_no_methods')}
+            </div>
+          )}
           <Form {...form}>
             <form data-testid="login-form" onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
               <FormField
@@ -466,12 +481,14 @@ export function LoginPage() {
                 <Link to="/reset" className="text-primary hover:underline">
                   {t('auth.login.forgot_password')}
                 </Link>
-                <div>
-                  {t('auth.login.no_account')}{' '}
-                  <Link to="/register" className="text-primary hover:underline">
-                    {t('auth.login.sign_up')}
-                  </Link>
-                </div>
+                {passwordRegisterEnabled && (
+                  <div>
+                    {t('auth.login.no_account')}{' '}
+                    <Link to="/register" className="text-primary hover:underline">
+                      {t('auth.login.sign_up')}
+                    </Link>
+                  </div>
+                )}
               </div>
             </form>
           </Form>

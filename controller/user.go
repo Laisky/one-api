@@ -114,6 +114,23 @@ func Login(c *gin.Context) {
 		return
 	}
 
+	// Enforce PasswordLoginEnabled: when the admin disables password login,
+	// only root users may still authenticate with username/password (so a
+	// site operator can recover access if the SSO/IdP is unreachable).
+	// All other roles must use a third-party method such as OIDC. The check
+	// runs after ValidateAndFill so we never reveal account existence to
+	// callers that supplied wrong credentials.
+	if !config.PasswordLoginEnabled && user.Role < model.RoleRootUser {
+		logger.Logger.Debug("password login rejected: feature disabled for non-root user",
+			zap.Int("user_id", user.Id),
+			zap.Int("role", user.Role))
+		c.JSON(http.StatusOK, gin.H{
+			"message": "The administrator has disabled password login. Please use a third-party authentication method (e.g. OIDC) to log in.",
+			"success": false,
+		})
+		return
+	}
+
 	// Check if TOTP is enabled for this user
 	if user.TotpSecret != "" {
 		// TOTP is enabled, check if code is provided

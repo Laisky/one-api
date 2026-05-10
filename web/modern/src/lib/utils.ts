@@ -230,6 +230,8 @@ export interface SystemStatus {
   wechat_login?: boolean;
   wechat_qrcode?: string;
   chat_link?: string;
+  password_login?: boolean;
+  password_register?: boolean;
   [key: string]: any;
 }
 
@@ -249,19 +251,9 @@ export const persistSystemStatus = (data: SystemStatus) => {
 };
 
 export const loadSystemStatus = async (): Promise<SystemStatus | null> => {
-  // First try to get from localStorage
-  const status = localStorage.getItem('status');
-  if (status) {
-    try {
-      const parsedStatus = JSON.parse(status);
-      persistSystemStatus(parsedStatus);
-      return parsedStatus;
-    } catch (error) {
-      console.error('Error parsing system status:', error);
-    }
-  }
-
-  // If not in localStorage, fetch from server
+  // Always fetch from the server so admin-toggled flags (e.g. password_login)
+  // propagate to clients without requiring a localStorage clear. We fall back
+  // to the cached value only if the network call fails.
   try {
     const response = await api.get('/api/status');
     const { success, data } = response.data;
@@ -272,6 +264,17 @@ export const loadSystemStatus = async (): Promise<SystemStatus | null> => {
     }
   } catch (error) {
     console.error('Error fetching system status:', error);
+  }
+
+  // Network/server failure — fall back to whatever we previously cached so the
+  // app stays usable offline.
+  const cached = localStorage.getItem('status');
+  if (cached) {
+    try {
+      return JSON.parse(cached) as SystemStatus;
+    } catch (parseError) {
+      console.error('Error parsing system status:', parseError);
+    }
   }
 
   return null;

@@ -191,6 +191,61 @@ describe('LoginPage', () => {
     });
   });
 
+  it('shows the disabled-password notice but keeps the form visible so root can still log in', async () => {
+    // Backend says password_login is off — UI should warn the user, but must
+    // not hide the form (root needs it to recover access).
+    mockApiGet.mockReset();
+    mockApiGet.mockResolvedValue({
+      data: {
+        success: true,
+        data: {
+          system_name: 'Test API',
+          turnstile_check: false,
+          password_login: false,
+          oidc: true,
+          oidc_client_id: 'oidc-client',
+          oidc_authorization_endpoint: 'https://idp.example.com/authorize',
+        },
+      },
+    } as any);
+    mockLocalStorage.getItem.mockReturnValue(
+      JSON.stringify({ system_name: 'Test API', password_login: false, oidc: true })
+    );
+
+    renderLoginPage();
+
+    const notice = await screen.findByTestId('password-login-disabled-notice');
+    expect(notice).toBeInTheDocument();
+    expect(notice.textContent).toMatch(/password login is disabled/i);
+
+    // Form must remain so the root account can still recover.
+    expect(screen.getByLabelText(/username/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/password/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /sign in/i })).toBeInTheDocument();
+  });
+
+  it('omits the disabled notice when password_login is enabled', async () => {
+    mockApiGet.mockReset();
+    mockApiGet.mockResolvedValue({
+      data: {
+        success: true,
+        data: {
+          system_name: 'Test API',
+          turnstile_check: false,
+          password_login: true,
+        },
+      },
+    } as any);
+    mockLocalStorage.getItem.mockReturnValue(
+      JSON.stringify({ system_name: 'Test API', password_login: true })
+    );
+
+    renderLoginPage();
+
+    await screen.findByLabelText(/username/i);
+    expect(screen.queryByTestId('password-login-disabled-notice')).not.toBeInTheDocument();
+  });
+
   it('shows back to login button in TOTP mode', async () => {
     const mockApiPost = vi.mocked(api.post);
     mockApiPost.mockResolvedValueOnce({
