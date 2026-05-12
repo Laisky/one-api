@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { KeyRound } from 'lucide-react';
 import { browserSupportsWebAuthn } from '@simplewebauthn/browser';
@@ -10,6 +10,12 @@ import { Banner, BannerActions, BannerContent, BannerDescription, BannerIcon } f
 
 const STORAGE_KEY = 'passkey_prompt_dismissed';
 
+// Routes where the banner must never fire an authenticated probe, even if
+// the store's `isAuthenticated` flag is stale (e.g. zustand persist
+// re-hydrated true after iOS ITP cleared the session cookie). Probing here
+// triggers a 401 → /login redirect loop.
+const AUTH_PUBLIC_PATHS = new Set(['/login', '/register', '/reset', '/user/reset']);
+
 /**
  * One-time dismissible banner shown to logged-in users who have not yet
  * registered a passkey. Once dismissed (localStorage), the banner stays hidden.
@@ -17,11 +23,13 @@ const STORAGE_KEY = 'passkey_prompt_dismissed';
 export function PasskeyPromptBanner() {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const location = useLocation();
   const { isAuthenticated } = useAuthStore();
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {
     if (!isAuthenticated) return;
+    if (AUTH_PUBLIC_PATHS.has(location.pathname) || location.pathname.startsWith('/oauth/')) return;
     if (!browserSupportsWebAuthn()) return;
     if (localStorage.getItem(STORAGE_KEY) === '1') return;
 
@@ -45,7 +53,7 @@ export function PasskeyPromptBanner() {
     return () => {
       cancelled = true;
     };
-  }, [isAuthenticated]);
+  }, [isAuthenticated, location.pathname]);
 
   const dismiss = () => {
     localStorage.setItem(STORAGE_KEY, '1');

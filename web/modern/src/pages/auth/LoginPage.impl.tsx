@@ -6,7 +6,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { Input } from '@/components/ui/input';
 import { Separator } from '@/components/ui/separator';
 import { useSystemStatus } from '@/hooks/useSystemStatus';
-import { api } from '@/lib/api';
+import { api, isSafeInternalPath } from '@/lib/api';
 import { buildGitHubOAuthUrl, buildOidcOAuthUrl, getOAuthState } from '@/lib/oauth';
 import { useAuthStore } from '@/lib/stores/auth';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -84,7 +84,10 @@ export function LoginPage() {
         if (redirectTo) {
           try {
             const decodedPath = decodeURIComponent(redirectTo);
-            if (decodedPath.startsWith('/')) {
+            // Reject anything that isn't a same-origin internal path (e.g. `//evil.com`).
+            // Also bounce back to /dashboard if the target is another /login URL — that
+            // would just send us back here.
+            if (isSafeInternalPath(decodedPath) && !decodedPath.startsWith('/login')) {
               navigate(decodedPath);
             } else {
               navigate('/dashboard');
@@ -200,7 +203,7 @@ export function LoginPage() {
       if (redirectTo) {
         try {
           const decodedPath = decodeURIComponent(redirectTo);
-          if (decodedPath.startsWith('/')) {
+          if (isSafeInternalPath(decodedPath) && !decodedPath.startsWith('/login')) {
             navigate(decodedPath);
             return;
           }
@@ -265,11 +268,11 @@ export function LoginPage() {
           navigate('/users/edit');
           console.warn(t('auth.login.root_password_warning'));
         } else if (redirectTo) {
-          // Decode and navigate to the original page
+          // Decode and navigate to the original page, enforcing same-origin
+          // and rejecting any /login target to break potential redirect loops.
           try {
             const decodedPath = decodeURIComponent(redirectTo);
-            // Ensure the redirect path is safe (starts with /)
-            if (decodedPath.startsWith('/')) {
+            if (isSafeInternalPath(decodedPath) && !decodedPath.startsWith('/login')) {
               navigate(decodedPath);
             } else {
               navigate('/dashboard');
