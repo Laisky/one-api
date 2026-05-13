@@ -2,8 +2,9 @@ package router
 
 import (
 	"embed"
-	"fmt"
 	"net/http"
+	"net/url"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 
@@ -23,8 +24,18 @@ func SetRouter(router *gin.Engine, buildFS embed.FS) {
 	if frontendBaseUrl == "" {
 		SetWebRouter(router, buildFS)
 	} else {
+		trimmedBase := strings.TrimRight(frontendBaseUrl, "/")
 		router.NoRoute(func(c *gin.Context) {
-			c.Redirect(http.StatusMovedPermanently, fmt.Sprintf("%s%s", frontendBaseUrl, c.Request.RequestURI))
+			// Reconstruct the target URL via url.ParseRequestURI so a hand-crafted
+			// RequestURI (e.g. an absolute form or a non-origin form) cannot escape
+			// the configured frontend origin. Standard browser requests use origin-form
+			// (always starting with `/`); anything else here is suspect.
+			parsed, err := url.ParseRequestURI(c.Request.RequestURI)
+			if err != nil || !strings.HasPrefix(parsed.Path, "/") {
+				c.AbortWithStatus(http.StatusBadRequest)
+				return
+			}
+			c.Redirect(http.StatusMovedPermanently, trimmedBase+parsed.RequestURI())
 		})
 	}
 }

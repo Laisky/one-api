@@ -160,12 +160,20 @@ var (
 	CookieMaxAgeHours = env.Int("COOKIE_MAXAGE_HOURS", 168)
 
 	// EnableCookieSecure forces the browser to send session cookies only over
-	// HTTPS when set to true. Enable this in production with HTTPS termination.
+	// HTTPS. Defaults to `true` because that is what production deployments
+	// must use — without it, Safari/iOS Chrome may evict the cookie under ITP
+	// while `localStorage` survives, producing repeated logout/redirect cycles
+	// on mobile even when the site is served over HTTPS.
+	//
+	// Local HTTP development should explicitly set ENABLE_COOKIE_SECURE=false.
+	// Tying the flag to DEBUG was considered and rejected: operators sometimes
+	// enable DEBUG in production for log verbosity during incident response,
+	// and the cookie posture must not change in that case.
 	//
 	// Environment variable: ENABLE_COOKIE_SECURE
-	// Default: false
+	// Default: true
 	// Allowed values: true, false
-	EnableCookieSecure = env.Bool("ENABLE_COOKIE_SECURE", false)
+	EnableCookieSecure = env.Bool("ENABLE_COOKIE_SECURE", true)
 )
 
 // =============================================================================

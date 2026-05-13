@@ -197,11 +197,11 @@ func main() {
 		sessionStore = cookie.NewStore(sessionSecret, sessionSecret)
 	}
 
-	cookieSecure := false
-	if config.EnableCookieSecure {
-		cookieSecure = true
-	} else {
-		logger.Logger.Warn("ENABLE_COOKIE_SECURE is not set, using insecure cookie store")
+	// Defaults to Secure=true (production-safe). Local HTTP development must
+	// explicitly set ENABLE_COOKIE_SECURE=false.
+	cookieSecure := config.EnableCookieSecure
+	if !cookieSecure {
+		logger.Logger.Warn("ENABLE_COOKIE_SECURE=false: session cookies will be sent over plain HTTP; do not use this configuration in production")
 	}
 	sessionStore.Options(sessions.Options{
 		Path:     "/",

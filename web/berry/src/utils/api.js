@@ -25,13 +25,35 @@ API.interceptors.request.use((config) => {
   return config;
 });
 
+// Re-entrancy guard — parallel 401s should produce only one redirect.
+let authFailureInFlight = false;
+
 API.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      localStorage.removeItem('user');
-      store.dispatch({ type: LOGIN, payload: null });
-      window.location.href = config.basename + 'login';
+      if (!authFailureInFlight) {
+        authFailureInFlight = true;
+        try {
+          localStorage.removeItem('user');
+          localStorage.removeItem('token');
+        } catch (_e) {
+          // ignore — localStorage may be unavailable in some embedded contexts
+        }
+        store.dispatch({ type: LOGIN, payload: null });
+        // Loop guard: if we're already on the login page, don't navigate again.
+        // Without this, repeated 401s on the login page itself would hard-reload
+        // forever (and on iOS Chrome, that's exactly what stale-cookie state
+        // produces).
+        const loginPath = (config.basename || '') + 'login';
+        if (window.location.pathname !== loginPath && !window.location.pathname.endsWith('/login')) {
+          window.location.replace(loginPath);
+        } else {
+          // Restore the gate — we did not navigate, so future failures should
+          // be allowed to act if they fire on a different page later.
+          authFailureInFlight = false;
+        }
+      }
     }
 
     if (error.response?.data?.message) {
