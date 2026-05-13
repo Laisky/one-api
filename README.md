@@ -181,15 +181,18 @@ oneapi:
     driver: 'json-file'
     options:
       max-size: '10m'
+  environment:
+    # ⚠️ Only set ENABLE_COOKIE_SECURE=false for HTTP deployments; keep it true for HTTPS to ensure session security
+    - ENABLE_COOKIE_SECURE=false
   volumes:
     - /var/lib/oneapi:/data
   ports:
     - 3000:3000
 ```
 
-> [!TIP]
+> [!IMPORTANT]
 >
-> For production environments, consider using proper secret management solutions instead of hardcoding sensitive values in environment variables.
+> Session cookies are marked `Secure` by default, so the browser will only send them over HTTPS. If you are serving the service over plain HTTP (for example accessing `http://<host>:3000` directly, or a reverse proxy that terminates HTTPS but is misconfigured), logins will appear to succeed but the next request is unauthenticated, looping the user back to the login page. In that case set `ENABLE_COOKIE_SECURE=false` in the `environment` section. Keep it at the default (`true`) for any production deployment served over HTTPS.
 
 ### Kubernetes Deployment
 
