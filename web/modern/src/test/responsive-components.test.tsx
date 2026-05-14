@@ -4,7 +4,7 @@
  */
 
 import { describe, it, expect, vi } from 'vitest';
-import { render } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { BrowserRouter } from 'react-router-dom';
 import { ResponsiveContainer, ResponsivePageContainer } from '@/components/ui/responsive-container';
 import { AdaptiveGrid } from '@/components/ui/adaptive-grid';
@@ -120,5 +120,44 @@ describe('Enhanced Data Table', () => {
     );
 
     expect(container).toBeTruthy();
+  });
+
+  it('should hide floating row actions while hovering interactive row controls', async () => {
+    const columns = [
+      { header: 'Name', accessorKey: 'name' },
+      {
+        id: 'actions',
+        header: 'Actions',
+        cell: () => <button type="button">Inline action</button>,
+      },
+    ];
+
+    const data = [{ name: 'John Doe' }];
+
+    render(
+      <TestWrapper>
+        <EnhancedDataTable
+          columns={columns}
+          data={data}
+          floatingRowActions={() => <button type="button">Floating row action</button>}
+        />
+      </TestWrapper>
+    );
+
+    const row = screen.getByText('John Doe').closest('tr');
+    expect(row).toBeTruthy();
+
+    fireEvent.mouseOver(row as HTMLTableRowElement, { clientX: 32, clientY: 48 });
+    await waitFor(() => {
+      expect(screen.getByText('Floating row action')).toBeInTheDocument();
+    });
+
+    fireEvent.mouseMove(screen.getByText('Inline action'), { clientX: 40, clientY: 48 });
+    await waitFor(() => {
+      expect(screen.queryByText('Floating row action')).not.toBeInTheDocument();
+    });
+
+    fireEvent.mouseMove(screen.getByText('John Doe'), { clientX: 56, clientY: 48 });
+    expect(screen.getByText('Floating row action')).toBeInTheDocument();
   });
 });
