@@ -13,6 +13,7 @@ vi.mock('@/lib/api', () => ({
   api: {
     get: vi.fn(),
     delete: vi.fn(),
+    post: vi.fn(),
     put: vi.fn(),
   },
 }));
@@ -33,6 +34,7 @@ vi.mock('react-router-dom', async () => {
 });
 
 const mockApiGet = vi.mocked(api.get);
+const mockApiPost = vi.mocked(api.post);
 
 const mockChannelsData = {
   success: true,
@@ -58,6 +60,7 @@ describe('ChannelsPage Pagination', () => {
     // Clear localStorage to ensure consistent page size defaults
     localStorage.clear();
     mockApiGet.mockResolvedValue({ data: mockChannelsData });
+    mockApiPost.mockResolvedValue({ data: { success: true } });
   });
 
   const renderChannelsPage = () => {
@@ -159,5 +162,30 @@ describe('ChannelsPage Pagination', () => {
     });
 
     expect(mockApiGet).toHaveBeenCalledTimes(1);
+  });
+
+  it('should duplicate a channel with copied configuration', async () => {
+    renderChannelsPage();
+    const user = userEvent.setup();
+
+    await waitFor(() => {
+      expect(mockApiGet).toHaveBeenCalledWith('/api/channel/?p=0&size=10&sort=id&order=desc');
+    });
+
+    mockApiGet.mockClear();
+    mockApiPost.mockClear();
+
+    const duplicateButtons = await screen.findAllByRole('button', { name: 'Duplicate' });
+    await user.click(duplicateButtons[0]);
+
+    await waitFor(() => {
+      expect(mockApiPost).toHaveBeenCalledWith('/api/channel/1/duplicate');
+    });
+
+    expect(mockApiGet.mock.calls).not.toContainEqual(['/api/channel/1']);
+
+    await waitFor(() => {
+      expect(mockApiGet).toHaveBeenCalledWith('/api/channel/?p=0&size=10&sort=id&order=desc');
+    });
   });
 });

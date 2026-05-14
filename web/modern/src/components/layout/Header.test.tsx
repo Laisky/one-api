@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 
@@ -140,5 +140,60 @@ describe('Header logout UX', () => {
       expect(api.get).toHaveBeenCalledWith('/api/user/logout');
     });
     expect(logoutMock).toHaveBeenCalled();
+  });
+});
+
+describe('Header anonymous mobile layout', () => {
+  beforeEach(() => {
+    mockUseResponsive.mockReset();
+    responsiveState = {
+      isMobile: true,
+      isTablet: false,
+      isDesktop: false,
+      isLarge: false,
+      currentBreakpoint: 'mobile',
+      width: 320,
+      height: 568,
+    };
+    mockUseResponsive.mockImplementation(() => responsiveState);
+
+    useAuthStore.setState({
+      user: null,
+      token: null,
+      isAuthenticated: false,
+      login: vi.fn() as any,
+      logout: vi.fn() as any,
+      updateUser: vi.fn() as any,
+    });
+
+    localStorage.clear();
+    localStorage.setItem('system_name', 'OneAPI Test');
+    (api.get as any).mockReset();
+    (api.get as any).mockResolvedValue({ data: { success: true } });
+  });
+
+  it('hides inline Register/Login on mobile so the header fits 320px viewports', () => {
+    renderHeader();
+
+    // On mobile, anonymous users see only the hamburger trigger in the header;
+    // the inline Register link and Login button are intentionally hidden so the
+    // header's min-content stays below ~320px. They move into the drawer below.
+    const header = screen.getByRole('banner');
+    expect(within(header).queryByRole('link', { name: /register/i })).toBeNull();
+    expect(within(header).queryByRole('link', { name: /^login$/i })).toBeNull();
+    expect(within(header).getByLabelText(/open navigation menu/i)).toBeInTheDocument();
+  });
+
+  it('exposes Register/Login inside the mobile navigation drawer', async () => {
+    const user = userEvent.setup();
+    renderHeader();
+
+    await user.click(screen.getByLabelText(/open navigation menu/i));
+
+    const loginLink = await screen.findByRole('link', { name: /^login$/i });
+    const registerLink = await screen.findByRole('link', { name: /register/i });
+
+    expect(loginLink).toHaveAttribute('href', '/login');
+    expect(registerLink).toHaveAttribute('href', '/register');
   });
 });

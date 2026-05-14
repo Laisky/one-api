@@ -16,7 +16,7 @@ import { useResponsive } from '@/hooks/useResponsive';
 import { api } from '@/lib/api';
 import { cn, formatTimestamp } from '@/lib/utils';
 import type { ColumnDef } from '@tanstack/react-table';
-import { Ban, Banknote, CheckCircle, ChevronDown, FlaskConical, Plus, RefreshCw, Settings, Trash2 } from 'lucide-react';
+import { Ban, Banknote, CheckCircle, ChevronDown, Copy, FlaskConical, Plus, RefreshCw, Settings, Trash2 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useSearchParams } from 'react-router-dom';
@@ -379,6 +379,38 @@ export function ChannelsPage() {
       }
     } catch (error) {
       console.error(`Failed to ${action} channel:`, error);
+    }
+  };
+
+  const duplicateChannel = async (channel: Channel) => {
+    try {
+      const duplicateResponse = await api.post(`/api/channel/${channel.id}/duplicate`);
+      if (duplicateResponse.data?.success) {
+        notify({
+          type: 'success',
+          message: t('channels.notifications.duplicate_success', 'Channel duplicated.'),
+        });
+
+        if (searchKeyword.trim()) {
+          await performSearch();
+        } else {
+          await load(pageIndex, pageSize);
+        }
+        return;
+      }
+
+      notify({
+        type: 'error',
+        title: t('channels.notifications.duplicate_failed_title', 'Duplicate failed'),
+        message: duplicateResponse.data?.message || t('channels.notifications.duplicate_failed_message', 'Failed to duplicate channel.'),
+      });
+    } catch (error) {
+      console.error('Failed to duplicate channel:', error);
+      notify({
+        type: 'error',
+        title: t('channels.notifications.duplicate_failed_title', 'Duplicate failed'),
+        message: error instanceof Error ? error.message : t('channels.notifications.duplicate_failed_message', 'Failed to duplicate channel.'),
+      });
     }
   };
 
@@ -784,6 +816,15 @@ export function ChannelsPage() {
             <ListActionButton
               variant="outline"
               size="sm"
+              onClick={() => duplicateChannel(channel)}
+              className="gap-1"
+              icon={<Copy className="h-3 w-3" />}
+            >
+              {t('channels.actions.duplicate', 'Duplicate')}
+            </ListActionButton>
+            <ListActionButton
+              variant="outline"
+              size="sm"
               onClick={() => manage(channel.id, channel.status === 1 ? 'disable' : 'enable')}
               className={cn('gap-1', channel.status === 1 ? 'text-warning hover:text-warning/80' : 'text-success hover:text-success/80')}
             >
@@ -929,6 +970,12 @@ export function ChannelsPage() {
                     title={t('channels.actions.edit')}
                     aria-label={t('channels.actions.edit')}
                     icon={<Settings className="h-4 w-4" />}
+                  />
+                  <ListActionButton
+                    onClick={() => duplicateChannel(row)}
+                    title={t('channels.actions.duplicate', 'Duplicate')}
+                    aria-label={t('channels.actions.duplicate', 'Duplicate')}
+                    icon={<Copy className="h-4 w-4" />}
                   />
                   <ListActionButton
                     onClick={() => manage(row.id, row.status === 1 ? 'disable' : 'enable')}

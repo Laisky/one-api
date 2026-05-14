@@ -105,6 +105,7 @@ func SetApiRouter(router *gin.Engine) {
 			channelRoute.GET("/pricing/:id", controller.GetChannelPricing)
 			channelRoute.GET("/default-pricing", controller.GetChannelDefaultPricing)
 			channelRoute.POST("/", controller.AddChannel)
+			channelRoute.POST("/:id/duplicate", controller.DuplicateChannel)
 			channelRoute.PUT("/", controller.UpdateChannel)
 			channelRoute.PUT("/pricing/:id", controller.UpdateChannelPricing)
 			channelRoute.DELETE("/disabled", controller.DeleteDisabledChannel)

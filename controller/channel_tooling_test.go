@@ -111,7 +111,7 @@ func TestUpdateChannelToolingLifecycle(t *testing.T) {
 	require.Nil(t, refreshed.GetToolingConfig())
 }
 
-func TestGetChannelIncludesToolingField(t *testing.T) {
+func TestGetChannelIncludesToolingFieldWithoutKey(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	model.InitDB()
 
@@ -149,11 +149,105 @@ func TestGetChannelIncludesToolingField(t *testing.T) {
 	var resp struct {
 		Success bool `json:"success"`
 		Data    struct {
+			Key     string  `json:"key"`
 			Tooling *string `json:"tooling"`
 		} `json:"data"`
 	}
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
 	require.True(t, resp.Success)
+	require.Empty(t, resp.Data.Key)
 	require.NotNil(t, resp.Data.Tooling)
 	require.Contains(t, *resp.Data.Tooling, "web_search")
+}
+
+func TestDuplicateChannelClonesServerSideWithoutExposingKey(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	model.InitDB()
+
+	originalMemoryCache := config.MemoryCacheEnabled
+	config.MemoryCacheEnabled = false
+	t.Cleanup(func() { config.MemoryCacheEnabled = originalMemoryCache })
+
+	testingModel := "gpt-4"
+	baseURL := "https://example.com/v1"
+	hiddenModels := "[\"gpt-4o-mini\"]"
+	priority := int64(9)
+	weight := uint(7)
+	source := &model.Channel{
+		Name:               "duplicate-source",
+		Type:               1,
+		Key:                "sk-test",
+		Group:              "default",
+		Models:             "gpt-4,gpt-4o-mini",
+		Status:             model.ChannelStatusEnabled,
+		Config:             "{\"api_format\":\"chat_completion\"}",
+		Balance:            123.45,
+		BalanceUpdatedTime: 456,
+		UsedQuota:          789,
+		ResponseTime:       321,
+		TestTime:           654,
+		BaseURL:            &baseURL,
+		TestingModel:       &testingModel,
+		HiddenModels:       &hiddenModels,
+		Priority:           &priority,
+		Weight:             &weight,
+	}
+	require.NoError(t, source.SetToolingConfig(&model.ChannelToolingConfig{Whitelist: []string{"web_search"}}))
+	require.NoError(t, source.Insert())
+	t.Cleanup(func() {
+		model.DB.Exec("DELETE FROM abilities WHERE channel_id IN (?, ?)", source.Id, source.Id+1)
+		model.DB.Exec("DELETE FROM channels WHERE id IN (?, ?)", source.Id, source.Id+1)
+	})
+
+	router := gin.New()
+	router.POST("/api/channel/:id/duplicate", DuplicateChannel)
+
+	requestPath := fmt.Sprintf("/api/channel/%d/duplicate", source.Id)
+	req, err := http.NewRequest(http.MethodPost, requestPath, nil)
+	require.NoError(t, err)
+
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	var resp struct {
+		Success bool `json:"success"`
+		Data    struct {
+			ID   int    `json:"id"`
+			Name string `json:"name"`
+		} `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	require.True(t, resp.Success)
+	require.NotZero(t, resp.Data.ID)
+	require.Equal(t, "duplicate-source Copy", resp.Data.Name)
+
+	duplicated, err := model.GetChannelById(resp.Data.ID, true)
+	require.NoError(t, err)
+	require.NotEqual(t, source.Id, duplicated.Id)
+	require.Equal(t, "duplicate-source Copy", duplicated.Name)
+	require.Equal(t, source.Key, duplicated.Key)
+	require.Equal(t, source.Group, duplicated.Group)
+	require.Equal(t, source.Models, duplicated.Models)
+	require.Equal(t, source.Status, duplicated.Status)
+	require.Equal(t, source.Config, duplicated.Config)
+	require.Equal(t, source.GetBaseURL(), duplicated.GetBaseURL())
+	require.NotNil(t, duplicated.TestingModel)
+	require.Equal(t, testingModel, *duplicated.TestingModel)
+	require.NotNil(t, duplicated.HiddenModels)
+	require.Equal(t, hiddenModels, *duplicated.HiddenModels)
+	require.NotNil(t, duplicated.Priority)
+	require.Equal(t, priority, *duplicated.Priority)
+	require.NotNil(t, duplicated.Weight)
+	require.Equal(t, weight, *duplicated.Weight)
+	require.Zero(t, duplicated.Balance)
+	require.Zero(t, duplicated.BalanceUpdatedTime)
+	require.Zero(t, duplicated.UsedQuota)
+	require.Zero(t, duplicated.ResponseTime)
+	require.Zero(t, duplicated.TestTime)
+	require.NotZero(t, duplicated.CreatedTime)
+
+	toolingCfg := duplicated.GetToolingConfig()
+	require.NotNil(t, toolingCfg)
+	require.ElementsMatch(t, []string{"web_search"}, toolingCfg.Whitelist)
 }

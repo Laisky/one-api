@@ -29,7 +29,7 @@ dev-berry:
 	@./web/berry/dev.sh dev
 
 dev-modern:
-	@cd web/modern && npm run dev
+	@cd web/modern && CHOKIDAR_USEPOLLING=$${CHOKIDAR_USEPOLLING:-1} CHOKIDAR_INTERVAL=$${CHOKIDAR_INTERVAL:-1000} yarn dev
 
 # Default dev target
 .PHONY: dev

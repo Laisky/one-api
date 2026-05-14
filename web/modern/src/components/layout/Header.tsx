@@ -184,7 +184,9 @@ export function Header() {
                 </>
               ) : (
                 <div className="flex items-center space-x-2">
-                  {isMobile && (
+                  {isMobile ? (
+                    // On mobile, route Register/Login through the drawer footer to keep the
+                    // header narrow enough for 320px viewports — see drawer footer below.
                     <Button
                       variant="ghost"
                       size="sm"
@@ -194,13 +196,16 @@ export function Header() {
                     >
                       <Menu className="h-5 w-5" />
                     </Button>
+                  ) : (
+                    <>
+                      <Link to="/register" className="font-medium text-sm text-muted-foreground hover:text-primary transition-colors">
+                        {t('common.register')}
+                      </Link>
+                      <Button asChild size="sm" className="touch-target">
+                        <Link to="/login">{t('common.login')}</Link>
+                      </Button>
+                    </>
                   )}
-                  <Link to="/register" className="font-medium text-sm text-muted-foreground hover:text-primary transition-colors">
-                    {t('common.register')}
-                  </Link>
-                  <Button asChild size="sm" className="touch-target">
-                    <Link to="/login">{t('common.login')}</Link>
-                  </Button>
                 </div>
               )}
             </div>
@@ -239,7 +244,25 @@ export function Header() {
                   {t('common.logout')}
                 </Button>
               </div>
-            ) : undefined
+            ) : (
+              <div className="flex flex-col gap-2">
+                <Button
+                  asChild
+                  className="w-full touch-target"
+                  onClick={() => setMobileMenuOpen(false)}
+                >
+                  <Link to="/login">{t('common.login')}</Link>
+                </Button>
+                <Button
+                  asChild
+                  variant="outline"
+                  className="w-full touch-target"
+                  onClick={() => setMobileMenuOpen(false)}
+                >
+                  <Link to="/register">{t('common.register')}</Link>
+                </Button>
+              </div>
+            )
           }
         />
       </header>

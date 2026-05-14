@@ -34,6 +34,8 @@ type channelPayloadMeta struct {
 	NullableFieldsProvided map[string]bool
 }
 
+const duplicateChannelNameSuffix = " Copy"
+
 func bindChannelPayload(c *gin.Context) (*model.Channel, json.RawMessage, channelPayloadMeta, error) {
 	payload := channelPayload{Channel: &model.Channel{}}
 	if err := common.UnmarshalBodyReusable(c, &payload); err != nil {
@@ -117,6 +119,72 @@ func convertAdaptorVideoPricing(cfg *adaptor.VideoPricingConfig) *model.VideoPri
 		maps.Copy(local.ResolutionMultipliers, cfg.ResolutionMultipliers)
 	}
 	return local
+}
+
+// buildDuplicateChannelName returns the duplicated channel name for the provided source name.
+// It trims surrounding whitespace and falls back to "Channel" when the source name is empty.
+func buildDuplicateChannelName(name string) string {
+	trimmed := strings.TrimSpace(name)
+	if trimmed == "" {
+		trimmed = "Channel"
+	}
+	return trimmed + duplicateChannelNameSuffix
+}
+
+// prepareChannelForCreate normalizes a channel before insert.
+// It mutates the channel by setting creation timestamps, validating TestingModel, and applying default BaseURL values when needed.
+func prepareChannelForCreate(channel *model.Channel) {
+	channel.CreatedTime = helper.GetTimestamp()
+
+	// Sanitize testing model at creation: only keep if present in models list.
+	if channel.TestingModel != nil {
+		tm := strings.TrimSpace(*channel.TestingModel)
+		if tm == "" {
+			channel.TestingModel = nil
+		} else {
+			ok := false
+			for name := range strings.SplitSeq(channel.Models, ",") {
+				if strings.TrimSpace(name) == tm {
+					ok = true
+					break
+				}
+			}
+			if !ok {
+				channel.TestingModel = nil
+			}
+		}
+	}
+
+	// Auto-populate default BaseURL on creation if blank and default exists.
+	if (channel.BaseURL == nil || *channel.BaseURL == "") && channel.Type >= 0 {
+		if channel.Type < len(channeltype.ChannelBaseURLs) {
+			def := channeltype.ChannelBaseURLs[channel.Type]
+			if strings.TrimSpace(def) != "" {
+				value := strings.TrimRight(def, "/")
+				channel.BaseURL = &value
+			}
+		}
+	}
+}
+
+// cloneChannelForDuplicate returns a new channel record cloned from the source channel.
+// It preserves configuration fields, clears identity and usage fields, and prepares the result for insertion.
+func cloneChannelForDuplicate(source *model.Channel) *model.Channel {
+	duplicate := *source
+	duplicate.Id = 0
+	duplicate.Name = buildDuplicateChannelName(source.Name)
+	duplicate.CreatedAt = 0
+	duplicate.UpdatedAt = 0
+	duplicate.CreatedTime = 0
+	duplicate.TestTime = 0
+	duplicate.ResponseTime = 0
+	duplicate.Balance = 0
+	duplicate.BalanceUpdatedTime = 0
+	duplicate.UsedQuota = 0
+	duplicate.HiddenModelsProvided = false
+	duplicate.NullableFieldsProvided = nil
+	prepareChannelForCreate(&duplicate)
+	return &duplicate
 }
 
 func buildChannelResponsePayload(lg glog.Logger, channel *model.Channel) any {
@@ -210,7 +278,7 @@ func SearchChannels(c *gin.Context) {
 	})
 }
 
-// GetChannel retrieves a single channel by ID and returns its full configuration.
+// GetChannel retrieves a single channel by ID and returns its configuration with secret fields masked.
 func GetChannel(c *gin.Context) {
 	lg := gmw.GetLogger(c)
 	id, err := strconv.Atoi(c.Param("id"))
@@ -233,6 +301,46 @@ func GetChannel(c *gin.Context) {
 		"success": true,
 		"message": "",
 		"data":    buildChannelResponsePayload(lg, channel),
+	})
+}
+
+// DuplicateChannel clones the specified channel server-side and persists the duplicate.
+// It reads the original with secret fields available on the server, clears usage fields, and returns the new channel identifier and name.
+func DuplicateChannel(c *gin.Context) {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": err.Error(),
+		})
+		return
+	}
+
+	source, err := model.GetChannelById(id, true)
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": err.Error(),
+		})
+		return
+	}
+
+	duplicate := cloneChannelForDuplicate(source)
+	if err := duplicate.Insert(); err != nil {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "",
+		"data": gin.H{
+			"id":   duplicate.Id,
+			"name": duplicate.Name,
+		},
 	})
 }
 
@@ -286,25 +394,7 @@ func AddChannel(c *gin.Context) {
 		}
 	}
 
-	channel.CreatedTime = helper.GetTimestamp()
-	// Sanitize testing model at creation: only keep if present in models list
-	if channel.TestingModel != nil {
-		tm := strings.TrimSpace(*channel.TestingModel)
-		if tm == "" {
-			channel.TestingModel = nil
-		} else {
-			ok := false
-			for name := range strings.SplitSeq(channel.Models, ",") {
-				if strings.TrimSpace(name) == tm {
-					ok = true
-					break
-				}
-			}
-			if !ok {
-				channel.TestingModel = nil
-			}
-		}
-	}
+	prepareChannelForCreate(channel)
 	keys := strings.Split(channel.Key, "\n")
 	channels := make([]model.Channel, 0, len(keys))
 	for _, key := range keys {
@@ -313,17 +403,6 @@ func AddChannel(c *gin.Context) {
 		}
 		localChannel := *channel
 		localChannel.Key = key
-		// Auto-populate default BaseURL on creation if blank and default exists
-		if (localChannel.BaseURL == nil || *localChannel.BaseURL == "") && localChannel.Type >= 0 {
-			// Defensive bounds check against channeltype.ChannelBaseURLs
-			if localChannel.Type < len(channeltype.ChannelBaseURLs) {
-				def := channeltype.ChannelBaseURLs[localChannel.Type]
-				if strings.TrimSpace(def) != "" {
-					v := strings.TrimRight(def, "/")
-					localChannel.BaseURL = &v
-				}
-			}
-		}
 		channels = append(channels, localChannel)
 	}
 	err = model.BatchInsertChannels(channels)
