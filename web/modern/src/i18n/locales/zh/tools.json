@@ -11,6 +11,7 @@
     "no_tools": "未找到工具",
     "no_tools_desc": "请尝试调整搜索或筛选条件。",
     "search": "搜索工具...",
+    "server_count": "{{count}} 个工具",
     "status": {
       "disabled": "已禁用",
       "enabled": "已启用"

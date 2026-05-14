@@ -51,7 +51,7 @@
       "showing": "Mostrando {{start}}-{{end}} de {{total}} elementos"
     },
     "password": "Contraseña",
-    "playground": "Playground",
+    "playground": "Zona de pruebas",
     "redemptions": "Canjes",
     "register": "Registrarse",
     "remove": "Eliminar",
@@ -62,7 +62,7 @@
     "submit": "Enviar",
     "to": "a",
     "tokens": "Tokens",
-    "tools": "Tools",
+    "tools": "Herramientas",
     "topup": "Recargar",
     "username": "Nombre de usuario",
     "users": "Usuarios",

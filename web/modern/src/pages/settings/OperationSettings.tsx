@@ -164,7 +164,7 @@ export function OperationSettings() {
       // Unified API call - complete URL with /api prefix
       const response = await api.put('/api/option/', { key, value: String(value) });
       if (!response.data?.success) {
-        throw new Error(response.data?.message || t('operation_settings.save_failed_generic', 'Failed to save setting.'));
+        throw new Error(response.data?.message || t('operation_settings.save_failed_generic'));
       }
     } catch (error) {
       console.error(`Error updating ${key}:`, error);
@@ -201,14 +201,14 @@ export function OperationSettings() {
 
       notify({
         type: 'success',
-        title: t('operation_settings.save_success_title', 'Settings saved'),
-        message: t('operation_settings.save_success_message', 'Changes saved successfully.'),
+        title: t('operation_settings.save_success_title'),
+        message: t('operation_settings.save_success_message'),
       });
     } catch (error: any) {
       notify({
         type: 'error',
-        title: t('operation_settings.save_failed_title', 'Save failed'),
-        message: error?.response?.data?.message || error?.message || t('operation_settings.save_failed_generic', 'Failed to save setting.'),
+        title: t('operation_settings.save_failed_title'),
+        message: error?.response?.data?.message || error?.message || t('operation_settings.save_failed_generic'),
       });
     }
   };
@@ -264,22 +264,22 @@ export function OperationSettings() {
       if (success) {
         notify({
           type: 'success',
-          title: t('operation_settings.logs.clear_success_title', 'Logs cleared'),
-          message: data || t('operation_settings.logs.clear_success_message', 'Historical logs cleared.'),
+          title: t('operation_settings.logs.clear_success_title'),
+          message: data || t('operation_settings.logs.clear_success_message'),
         });
       } else {
         notify({
           type: 'error',
-          title: t('operation_settings.logs.clear_failed_title', 'Clear failed'),
-          message: message || t('operation_settings.logs.clear_failed_message', 'Failed to clear logs.'),
+          title: t('operation_settings.logs.clear_failed_title'),
+          message: message || t('operation_settings.logs.clear_failed_message'),
         });
       }
     } catch (error) {
       console.error('Error clearing logs:', error);
       notify({
         type: 'error',
-        title: t('operation_settings.logs.clear_failed_title', 'Clear failed'),
-        message: error instanceof Error ? error.message : t('operation_settings.logs.clear_failed_message', 'Failed to clear logs.'),
+        title: t('operation_settings.logs.clear_failed_title'),
+        message: error instanceof Error ? error.message : t('operation_settings.logs.clear_failed_message'),
       });
     }
   };
@@ -560,9 +560,9 @@ export function OperationSettings() {
                               field.onChange(!checked);
                               notify({
                                 type: 'error',
-                                title: t('operation_settings.save_failed_title', 'Save failed'),
+                                title: t('operation_settings.save_failed_title'),
                                 message:
-                                  error?.response?.data?.message || error?.message || t('operation_settings.save_failed_generic', 'Failed to save setting.'),
+                                  error?.response?.data?.message || error?.message || t('operation_settings.save_failed_generic'),
                               });
                             }
                           }}
@@ -601,9 +601,9 @@ export function OperationSettings() {
                               field.onChange(!checked);
                               notify({
                                 type: 'error',
-                                title: t('operation_settings.save_failed_title', 'Save failed'),
+                                title: t('operation_settings.save_failed_title'),
                                 message:
-                                  error?.response?.data?.message || error?.message || t('operation_settings.save_failed_generic', 'Failed to save setting.'),
+                                  error?.response?.data?.message || error?.message || t('operation_settings.save_failed_generic'),
                               });
                             }
                           }}
@@ -642,9 +642,9 @@ export function OperationSettings() {
                               field.onChange(!checked);
                               notify({
                                 type: 'error',
-                                title: t('operation_settings.save_failed_title', 'Save failed'),
+                                title: t('operation_settings.save_failed_title'),
                                 message:
-                                  error?.response?.data?.message || error?.message || t('operation_settings.save_failed_generic', 'Failed to save setting.'),
+                                  error?.response?.data?.message || error?.message || t('operation_settings.save_failed_generic'),
                               });
                             }
                           }}
@@ -683,9 +683,9 @@ export function OperationSettings() {
                               field.onChange(!checked);
                               notify({
                                 type: 'error',
-                                title: t('operation_settings.save_failed_title', 'Save failed'),
+                                title: t('operation_settings.save_failed_title'),
                                 message:
-                                  error?.response?.data?.message || error?.message || t('operation_settings.save_failed_generic', 'Failed to save setting.'),
+                                  error?.response?.data?.message || error?.message || t('operation_settings.save_failed_generic'),
                               });
                             }
                           }}
@@ -797,9 +797,9 @@ export function OperationSettings() {
                               field.onChange(!checked);
                               notify({
                                 type: 'error',
-                                title: t('operation_settings.save_failed_title', 'Save failed'),
+                                title: t('operation_settings.save_failed_title'),
                                 message:
-                                  error?.response?.data?.message || error?.message || t('operation_settings.save_failed_generic', 'Failed to save setting.'),
+                                  error?.response?.data?.message || error?.message || t('operation_settings.save_failed_generic'),
                               });
                             }
                           }}
@@ -838,9 +838,9 @@ export function OperationSettings() {
                               field.onChange(!checked);
                               notify({
                                 type: 'error',
-                                title: t('operation_settings.save_failed_title', 'Save failed'),
+                                title: t('operation_settings.save_failed_title'),
                                 message:
-                                  error?.response?.data?.message || error?.message || t('operation_settings.save_failed_generic', 'Failed to save setting.'),
+                                  error?.response?.data?.message || error?.message || t('operation_settings.save_failed_generic'),
                               });
                             }
                           }}

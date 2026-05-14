@@ -42,6 +42,10 @@
     "logs": {
       "clear_button": "清除此日期之前的日志",
       "clear_failed": "清除日志失败: {{message}}",
+      "clear_failed_message": "清除日志失败。",
+      "clear_failed_title": "清除失败",
+      "clear_success_message": "历史日志已清除。",
+      "clear_success_title": "日志已清除",
       "clear_warning": "这将永久删除所选日期之前的所有日志。",
       "cleared_success": "已清除 {{count}} 条日志！",
       "description": "清除历史日志以释放存储空间",
@@ -72,12 +76,16 @@
       "quota_for_new_user_desc": "每个新注册用户获得的初始配额。",
       "save": "保存配额设置",
       "title": "配额设置"
-    }
+    },
+    "save_failed_generic": "保存设置失败。",
+    "save_failed_title": "保存失败",
+    "save_success_message": "更改已成功保存。",
+    "save_success_title": "设置已保存"
   },
   "other_settings": {
     "branding": {
       "description": "配置系统名称、Logo 和视觉外观",
-      "logo_url": "Logo URL",
+      "logo_url": "Logo 地址",
       "logo_url_desc": "在页眉/登录屏幕中显示的 Logo 图片 URL。",
       "save": "保存",
       "system_name": "系统名称",
@@ -107,6 +115,10 @@
       "title": "内容管理"
     },
     "loading": "正在加载其他设置...",
+    "save_failed_message": "保存设置失败。",
+    "save_failed_title": "保存失败",
+    "save_success_message": "设置已成功保存。",
+    "save_success_title": "已保存",
     "updates": {
       "check_update": "检查更新",
       "description": "检查更新并管理系统版本",
@@ -118,8 +130,10 @@
   "personal_settings": {
     "access_token": {
       "description": "生成访问令牌和邀请链接。",
+      "generate_failed": "生成访问令牌失败。",
       "generate_token": "生成访问令牌",
       "get_invite_link": "获取邀请链接",
+      "invite_failed": "获取邀请链接失败。",
       "title": "访问令牌与邀请"
     },
     "oauth_binding": {
@@ -176,6 +190,7 @@
       "email": "邮箱",
       "email_help": "更换邮箱需要验证。发送验证码到新邮箱地址，然后在下方确认。",
       "email_placeholder": "输入邮箱",
+      "email_required": "请输入有效的邮箱地址",
       "email_verification_code_placeholder": "输入邮箱验证码",
       "failed": "更新失败",
       "load_failed": "加载个人信息失败",
@@ -186,7 +201,8 @@
       "title": "个人信息",
       "update_button": "更新个人资料",
       "updating": "正在更新...",
-      "username": "用户名"
+      "username": "用户名",
+      "username_required": "用户名不能为空"
     },
     "security": {
       "description": "管理您的登录方式和帐户保护。",
@@ -234,6 +250,8 @@
         "setup_failed": "设置 TOTP 失败"
       },
       "processing": "正在处理...",
+      "qr_alt": "TOTP 二维码",
+      "qr_caption": "双因素认证",
       "secret_key": "密钥（手动输入）",
       "setup_desc": "按照以下步骤使用 TOTP 保护您的帐户。",
       "setup_instructions_title": "设置说明",

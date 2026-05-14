@@ -60,6 +60,10 @@
       "title_edit": "Editar servidor MCP",
       "tools": {
         "title": "Herramientas sincronizadas"
+      },
+      "validation": {
+        "base_url_required": "La URL base es obligatoria",
+        "name_required": "El nombre es obligatorio"
       }
     },
     "list": {

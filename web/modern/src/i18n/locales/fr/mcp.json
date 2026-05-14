@@ -60,6 +60,10 @@
       "title_edit": "Modifier le serveur MCP",
       "tools": {
         "title": "Outils synchronisés"
+      },
+      "validation": {
+        "base_url_required": "L'URL de base est requise",
+        "name_required": "Le nom est requis"
       }
     },
     "list": {
@@ -70,7 +74,7 @@
         "edit": "Modifier",
         "enable": "Activer",
         "refresh": "Actualiser",
-        "sync": "Sync",
+        "sync": "Synchroniser",
         "test": "Tester"
       },
       "columns": {

@@ -86,7 +86,7 @@ export function EditChannelPage() {
   // RHF invalid handler
   const onInvalid = (errors: any) => {
     const firstKey = Object.keys(errors)[0];
-    const firstMsg = errors[firstKey]?.message || 'Please correct the highlighted fields.';
+    const firstMsg = errors[firstKey]?.message || tr('validation.fix_fields', 'Please correct the highlighted fields.');
     notify({
       type: 'error',
       title: tr('validation.error_title', 'Validation error'),

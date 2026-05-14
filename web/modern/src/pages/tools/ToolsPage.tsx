@@ -233,7 +233,7 @@ export function ToolsPage() {
                     <Card key={serverName} className="mb-6 border-0 shadow-none md:border md:shadow-sm">
                       <CardHeader>
                         <CardTitle className="text-lg">
-                          {serverName} ({tools.length} tools)
+                          {serverName} ({tr('server_count', '{{count}} tools', { count: tools.length })})
                         </CardTitle>
                       </CardHeader>
                       <CardContent>

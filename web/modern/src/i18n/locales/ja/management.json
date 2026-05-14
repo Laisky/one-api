@@ -125,15 +125,15 @@
         }
       },
       "common": {
-        "add": "Add",
+        "add": "追加",
         "base_url": {
-          "fixed_note": "Using default: {{url}}",
-          "help_editable": "Custom API base URL. Leave empty to use the default URL.",
-          "help_readonly": "The API base URL for this channel type is fixed and cannot be modified.",
-          "label": "API Base URL",
+          "fixed_note": "デフォルトを使用中: {{url}}",
+          "help_editable": "カスタム API ベース URL です。デフォルト URL を使用する場合は空のままにしてください。",
+          "help_readonly": "このチャネルタイプの API ベース URL は固定されており、変更できません。",
+          "label": "API ベース URL",
           "placeholder": "https://api.example.com"
         },
-        "format_json": "Format JSON"
+        "format_json": "JSON を整形"
       },
       "coze": {
         "auth_type": {
@@ -162,6 +162,78 @@
       "description": {
         "create": "新しい API チャンネルを作成",
         "edit": "チャンネル設定を更新"
+      },
+      "endpoints": {
+        "audio_speech": {
+          "description": "テキスト読み上げ API はテキストを音声に変換します。複数の音声や出力形式を選んで自然な読み上げ音声を生成できます。",
+          "label": "テキスト読み上げ"
+        },
+        "audio_transcription": {
+          "description": "音声文字起こし API は音声をテキストに変換します。音声ファイルをアップロードすると、指定した言語の文字起こし結果を受け取れます。",
+          "label": "音声文字起こし"
+        },
+        "audio_translation": {
+          "description": "音声翻訳 API は音声を英語テキストに翻訳します。対応言語の音声ファイルをアップロードすると英語の文字起こしを受け取れます。",
+          "label": "音声翻訳"
+        },
+        "chat_completions": {
+          "description": "Chat Completions API はチャットベースの会話に対するモデル応答を生成します。メッセージの一覧を送ると、モデルが生成した返信を受け取れます。ストリーミングと非ストリーミングの両方に対応します。",
+          "label": "Chat Completions"
+        },
+        "claude_messages": {
+          "description": "Claude Messages API は Claude モデルとやり取りするための Anthropic ネイティブ形式です。One-API はこの形式を任意の対応バックエンドで使えるように変換します。",
+          "label": "Claude Messages"
+        },
+        "completions": {
+          "description": "従来の Completions API は指定したプロンプトに対するテキスト補完を生成します。これは初期のテキスト生成 API で、現在は主に Chat Completions に置き換えられています。",
+          "label": "Completions"
+        },
+        "default_badge": "デフォルト",
+        "embeddings": {
+          "description": "Embeddings API はテキストを数値ベクトル表現に変換します。これらのベクトルは意味検索、クラスタリング、類似度比較に利用できます。",
+          "label": "埋め込み"
+        },
+        "help": "このチャネルがサポートする API エンドポイントを選択します。情報アイコンをクリックすると詳細や使用例を確認できます。",
+        "images_edits": {
+          "description": "画像編集 API はテキスト指示に基づいて既存の画像を編集します。画像、マスク、プロンプトをアップロードして編集版を生成します。",
+          "label": "画像編集"
+        },
+        "images_generations": {
+          "description": "画像生成 API はテキスト説明から画像を生成します。プロンプトを指定すると、さまざまな形式やサイズの画像を 1 つ以上受け取れます。",
+          "label": "画像生成"
+        },
+        "label": "サポートされるエンドポイント",
+        "modal": {
+          "description": "説明",
+          "example": "cURL の例"
+        },
+        "moderations": {
+          "description": "Moderations API はテキストがコンテンツポリシーに違反しているかを判定します。違反の可能性を示すカテゴリとスコアを返します。",
+          "label": "モデレーション"
+        },
+        "ocr": {
+          "description": "OCR / レイアウト解析 API は文書や画像からテキストとレイアウト情報を抽出します。ファイル URL をアップロードすると、構造化された Markdown 結果を受け取れます。Zhipu GLM-OCR により提供されます。",
+          "label": "OCR / レイアウト解析"
+        },
+        "realtime": {
+          "description": "Realtime API は WebSocket を通じて低遅延の双方向通信を実現します。音声アシスタントやリアルタイム対話アプリに最適です。",
+          "label": "Realtime API"
+        },
+        "rerank": {
+          "description": "Rerank API は文書一覧をクエリとの関連度に基づいて並べ替えます。検索結果や RAG システムの改善に役立ちます。",
+          "label": "Rerank"
+        },
+        "reset_defaults": "デフォルトに戻す",
+        "response_api": {
+          "description": "Response API は OpenAI の新しいステートフルな複数ターン会話 API です。サーバー側で会話状態を管理し、ツールや構造化出力などの高度な機能をサポートします。",
+          "label": "Response API"
+        },
+        "select_all": "すべて選択",
+        "select_none": "最小構成",
+        "videos": {
+          "description": "動画生成 API はテキスト説明や画像から動画を生成します。プロンプトやパラメータを指定して動画コンテンツを作成します。",
+          "label": "動画生成"
+        }
       },
       "errors": {
         "operation_failed": "操作に失敗しました",
@@ -201,7 +273,7 @@
         }
       },
       "groups": {
-        "add_placeholder": "Add custom group...",
+        "add_placeholder": "カスタムグループを追加...",
         "help": "特定のユーザーグループへのアクセスを制限します。空の場合はすべてのユーザーがアクセスできます。デフォルトグループは常に保持されます。",
         "label": "グループ *"
       },
@@ -221,8 +293,8 @@
         "placeholder": "AWS Bedrock 推論プロファイル ARN マッピング:\n{{example}}"
       },
       "key": {
-        "help": "The API key for authentication with the provider.",
-        "label": "API Key"
+        "help": "プロバイダー認証に使用する API キーです。",
+        "label": "API キー"
       },
       "loading": "チャンネルを読み込み中...",
       "mcp": {
@@ -237,7 +309,7 @@
         "invalid": "無効なモデル設定フォーマット",
         "invalid_short": "✗ 無効な設定",
         "label": "モデル設定 (JSON)",
-        "load_default": "Load Default",
+        "load_default": "デフォルトを読み込む",
         "note": "モデルごとの価格と制限を設定 (任意)",
         "placeholder": "JSON 形式のモデル設定:\n{{example}}",
         "select_type_notice": "モデル設定を構成するにはチャンネルタイプを選択してください。",
@@ -251,7 +323,7 @@
       },
       "models": {
         "add_custom": "追加",
-        "clear": "Clear",
+        "clear": "クリア",
         "clear_all": "すべてクリア",
         "copy_title": "クリックしてモデル名をコピー",
         "custom_placeholder": "カスタムモデルを追加...",
@@ -259,16 +331,16 @@
         "fill_related": "関連モデルを入力 ({{count}})",
         "help": "このチャンネルで利用可能なモデル。すべてのプロバイダーモデルを許可するには空のままにしてください。ボタンを使用して関連/すべてのモデルを入力します。重複は削除されます。",
         "label": "サポートされているモデル *",
-        "no_match": "No models found",
-        "no_selection": "No models selected",
+        "no_match": "モデルが見つかりません",
+        "no_selection": "モデルが選択されていません",
         "search_placeholder": "モデルを検索...",
         "select_type_notice": "サポートされているモデルを構成するにはチャンネルタイプを選択してください。",
-        "selected_count": "Selected Models ({{count}})"
+        "selected_count": "選択済みモデル ({{count}})"
       },
       "name": {
-        "help": "A descriptive name for this channel to identify it in logs and lists.",
-        "label": "Channel Name *",
-        "placeholder": "My Channel"
+        "help": "ログや一覧でこのチャネルを識別するための説明的な名前です。",
+        "label": "チャネル名 *",
+        "placeholder": "マイチャネル"
       },
       "openai_compatible": {
         "api_format": {
@@ -295,12 +367,12 @@
         }
       },
       "priority": {
-        "help": "Higher priority channels are tried first. Default is 0.",
-        "label": "Priority"
+        "help": "優先度の高いチャネルから先に試行されます。デフォルトは 0 です。",
+        "label": "優先度"
       },
       "ratelimit": {
-        "help": "Maximum requests per minute. 0 means unlimited.",
-        "label": "Rate Limit"
+        "help": "1 分あたりの最大リクエスト数です。0 は無制限を意味します。",
+        "label": "レート制限"
       },
       "save_warning": {
         "cancel": "戻る",
@@ -363,9 +435,9 @@
         "edit": "チャンネルを編集"
       },
       "tooling": {
-        "add_custom": "Add custom tool...",
-        "available_tools": "Available Tools",
-        "editor_disabled": "Fix JSON error to enable editor",
+        "add_custom": "カスタムツールを追加...",
+        "available_tools": "利用可能なツール",
+        "editor_disabled": "JSON エラーを修正するとエディターを有効化できます",
         "errors": {
           "invalid_json_message": "ホワイトリストを編集する前にツール JSON を修正してください。",
           "invalid_json_title": "無効な JSON"
@@ -375,7 +447,7 @@
         "help": "チャンネル全体の組み込みツールポリシーを定義します。プロバイダーの組み込みツールのホワイトリストと呼び出しごとの価格を設定します。",
         "invalid": "無効なツール設定フォーマット",
         "label": "ツール設定 (JSON)",
-        "no_whitelist": "No tools whitelisted",
+        "no_whitelist": "ホワイトリストに登録されたツールはありません",
         "note": "組み込みツール許可リストと呼び出しごとの価格を設定 (任意)",
         "placeholder": "JSON 形式のツール設定:\n{{example}}",
         "whitelist": {
@@ -387,27 +459,29 @@
           "subtitle": "空のホワイトリストはすべてのプロバイダーツールを利用可能にします。",
           "title": "組み込みツールホワイトリスト"
         },
-        "whitelist_editor": "Whitelist Editor",
-        "whitelisted_tools": "Whitelisted Tools ({{count}})"
+        "whitelist_editor": "ホワイトリストエディター",
+        "whitelisted_tools": "ホワイトリスト済みツール ({{count}})"
       },
       "type": {
-        "help": "The provider type for this channel. Changing this may reset some fields.",
-        "label": "Channel Type *",
-        "not_found": "No channel type found.",
-        "placeholder": "Select a channel type",
-        "search": "Search channel type..."
+        "help": "このチャネルのプロバイダー種別です。変更すると一部の項目がリセットされる場合があります。",
+        "label": "チャネルタイプ *",
+        "not_found": "チャネルタイプが見つかりません。",
+        "placeholder": "チャネルタイプを選択",
+        "search": "チャネルタイプを検索..."
       },
       "type_change": {
-        "cancel": "Cancel",
-        "confirm": "Change Type",
-        "description": "You are about to change the channel type from \"{{fromType}}\" to \"{{toType}}\".",
-        "title": "Change Channel Type?",
-        "warning": "Warning: This may reset some configuration fields specific to the previous channel type. Any unsaved changes may be lost."
+        "cancel": "キャンセル",
+        "confirm": "タイプを変更",
+        "description": "チャネルタイプを \"{{fromType}}\" から \"{{toType}}\" に変更しようとしています。",
+        "title": "チャネルタイプを変更しますか？",
+        "warning": "警告: 以前のチャネルタイプ固有の設定項目がリセットされる場合があります。未保存の変更は失われる可能性があります。"
       },
       "validation": {
         "api_key_required": "API キーは必須です。",
         "base_url_required": "このチャンネルタイプには Base URL が必要です。",
+        "endpoints_required": "保存する前に少なくとも 1 つのエンドポイントを有効にしてください。",
         "error_title": "検証エラー",
+        "fix_fields": "ハイライトされたフィールドを修正してください。",
         "hidden_models_not_supported": "これらの非表示モデルは現在このチャンネルでサポートされていません: {{models}}",
         "hidden_models_unreachable_alias": "これらの非表示モデルは Model Mapping のソースとして使われているため、公開エイリアスに到達できなくなります: {{models}}",
         "inference_profile_invalid": "推論プロファイル ARN マップに無効な JSON が含まれています。",
@@ -422,11 +496,13 @@
         "model_mapping_invalid_entries": "これらのモデルマッピング項目は値が空、または文字列ではありません: {{keys}}",
         "model_mapping_parse_error": "モデルマッピングの JSON が無効です: {{error}}",
         "model_mapping_shape_invalid": "モデルマッピングは { \"from\": \"to\" } 形式の JSON オブジェクトである必要があります。",
+        "name_required": "チャネル名は必須です",
         "oauth_invalid_json": "OAuth JWT 設定 JSON が無効です。",
         "oauth_missing_field_message": "OAuth JWT 設定が不足しています: {{field}}",
         "oauth_missing_field_title": "不足しているフィールド",
         "oauth_parse_message": "OAuth JWT 解析エラー: {{error}}",
         "oauth_parse_title": "解析エラー",
+        "type_required": "チャネルタイプは必須です",
         "valid_json": "✓ 有効な JSON"
       },
       "vertex": {
@@ -448,8 +524,8 @@
         }
       },
       "weight": {
-        "help": "Used for load balancing between channels of the same priority. Default is 0.",
-        "label": "Weight"
+        "help": "同じ優先度のチャネル間での負荷分散に使用されます。デフォルトは 0 です。",
+        "label": "重み"
       }
     },
     "empty": "チャンネルが見つかりません。まずはチャンネルを作成してください。",
@@ -681,7 +757,9 @@
       "validation": {
         "error_title": "検証エラー",
         "fix_fields": "ハイライトされたフィールドを修正してください。",
-        "invalid_expiration": "無効な有効期限"
+        "invalid_expiration": "無効な有効期限",
+        "name_required": "トークン名は必須です",
+        "quota_min": "クォータは負にできません"
       }
     },
     "page": {
@@ -773,6 +851,10 @@
             "placeholder": "ユーザー名を入力"
           }
         },
+        "notifications": {
+          "create_failed_message": "ユーザーを作成できません。",
+          "create_failed_title": "作成に失敗"
+        },
         "title": "ユーザーを作成"
       },
       "topup": {
@@ -790,12 +872,16 @@
             "placeholder": "任意"
           }
         },
+        "notifications": {
+          "submit_failed_message": "ユーザーにチャージできません。",
+          "submit_failed_title": "チャージに失敗"
+        },
         "title": "{{username}} にチャージ"
       }
     },
     "edit": {
       "actions": {
-        "add": "Add",
+        "add": "追加",
         "cancel": "キャンセル",
         "create": "ユーザーを作成",
         "creating": "作成中...",
@@ -919,6 +1005,7 @@
         "display_name": "表示名",
         "group": "グループ",
         "id": "ID",
+        "register_time": "登録日時",
         "remaining_quota": "残りクォータ",
         "role": "ロール",
         "status": "ステータス",
@@ -988,6 +1075,7 @@
           "default": "デフォルト",
           "id": "ID",
           "quota": "残りクォータ",
+          "register_time": "登録日時",
           "used_quota": "使用済みクォータ",
           "username": "ユーザー名"
         },

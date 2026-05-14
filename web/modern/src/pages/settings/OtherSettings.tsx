@@ -91,23 +91,23 @@ export function OtherSettings() {
       if (!response.data?.success) {
         notify({
           type: 'error',
-          title: t('other_settings.save_failed_title', 'Save failed'),
-          message: response.data?.message || t('other_settings.save_failed_message', 'Failed to save setting.'),
+          title: t('other_settings.save_failed_title'),
+          message: response.data?.message || t('other_settings.save_failed_message'),
         });
         return false;
       }
       notify({
         type: 'success',
-        title: t('other_settings.save_success_title', 'Saved'),
-        message: t('other_settings.save_success_message', 'Setting saved successfully.'),
+        title: t('other_settings.save_success_title'),
+        message: t('other_settings.save_success_message'),
       });
       return true;
     } catch (error) {
       console.error(`Error updating ${key}:`, error);
       notify({
         type: 'error',
-        title: t('other_settings.save_failed_title', 'Save failed'),
-        message: (error as any)?.response?.data?.message || (error as Error)?.message || t('other_settings.save_failed_message', 'Failed to save setting.'),
+        title: t('other_settings.save_failed_title'),
+        message: (error as any)?.response?.data?.message || (error as Error)?.message || t('other_settings.save_failed_message'),
       });
       return false;
     } finally {

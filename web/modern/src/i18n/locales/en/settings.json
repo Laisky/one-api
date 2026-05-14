@@ -42,6 +42,10 @@
     "logs": {
       "clear_button": "Clear Logs Before This Date",
       "clear_failed": "Failed to clear logs: {{message}}",
+      "clear_failed_message": "Failed to clear logs.",
+      "clear_failed_title": "Clear failed",
+      "clear_success_message": "Historical logs cleared.",
+      "clear_success_title": "Logs cleared",
       "clear_warning": "This will permanently delete all logs before the selected date.",
       "cleared_success": "Cleared {{count}} logs!",
       "description": "Clear historical logs to free up storage space",
@@ -72,7 +76,11 @@
       "quota_for_new_user_desc": "Initial quota granted to each newly registered user.",
       "save": "Save Quota Settings",
       "title": "Quota Settings"
-    }
+    },
+    "save_failed_generic": "Failed to save setting.",
+    "save_failed_title": "Save failed",
+    "save_success_message": "Changes saved successfully.",
+    "save_success_title": "Settings saved"
   },
   "other_settings": {
     "branding": {
@@ -107,6 +115,10 @@
       "title": "Content Management"
     },
     "loading": "Loading other settings...",
+    "save_failed_message": "Failed to save setting.",
+    "save_failed_title": "Save failed",
+    "save_success_message": "Setting saved successfully.",
+    "save_success_title": "Saved",
     "updates": {
       "check_update": "Check for Updates",
       "description": "Check for updates and manage system version",
@@ -118,8 +130,10 @@
   "personal_settings": {
     "access_token": {
       "description": "Generate access tokens and invitation links.",
+      "generate_failed": "Failed to generate access token.",
       "generate_token": "Generate Access Token",
       "get_invite_link": "Get Invitation Link",
+      "invite_failed": "Failed to get invite link.",
       "title": "Access Token \u0026 Invitation"
     },
     "oauth_binding": {
@@ -176,6 +190,7 @@
       "email": "Email",
       "email_help": "Changing email requires verification. Send a code to the new address and confirm it below.",
       "email_placeholder": "Enter email",
+      "email_required": "Valid email is required",
       "email_verification_code_placeholder": "Enter email verification code",
       "failed": "Update failed",
       "load_failed": "Failed to load profile information",
@@ -186,7 +201,8 @@
       "title": "Profile Information",
       "update_button": "Update Profile",
       "updating": "Updating...",
-      "username": "Username"
+      "username": "Username",
+      "username_required": "Username is required"
     },
     "security": {
       "description": "Manage how you sign in and protect your account.",
@@ -234,6 +250,8 @@
         "setup_failed": "Failed to setup TOTP"
       },
       "processing": "Processing...",
+      "qr_alt": "TOTP QR Code",
+      "qr_caption": "Two-Factor Authentication",
       "secret_key": "Secret Key (manual entry)",
       "setup_desc": "Follow these steps to secure your account with TOTP.",
       "setup_instructions_title": "Setup Instructions",

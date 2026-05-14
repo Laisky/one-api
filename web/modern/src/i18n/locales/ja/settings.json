@@ -42,6 +42,10 @@
     "logs": {
       "clear_button": "この日付以前のログを削除",
       "clear_failed": "ログの削除に失敗しました: {{message}}",
+      "clear_failed_message": "ログの削除に失敗しました。",
+      "clear_failed_title": "削除に失敗しました",
+      "clear_success_message": "履歴ログを削除しました。",
+      "clear_success_title": "ログを削除しました",
       "clear_warning": "選択した日付より前のログはすべて完全に削除されます。",
       "cleared_success": "{{count}} 件のログを削除しました！",
       "description": "保存領域を確保するため、古いログを削除します",
@@ -72,7 +76,11 @@
       "quota_for_new_user_desc": "新しく登録したユーザーに付与される初期クォータです。",
       "save": "クォータ設定を保存",
       "title": "クォータ設定"
-    }
+    },
+    "save_failed_generic": "設定の保存に失敗しました。",
+    "save_failed_title": "保存に失敗しました",
+    "save_success_message": "変更を保存しました。",
+    "save_success_title": "設定を保存しました"
   },
   "other_settings": {
     "branding": {
@@ -107,6 +115,10 @@
       "title": "コンテンツ管理"
     },
     "loading": "その他の設定を読み込み中...",
+    "save_failed_message": "設定の保存に失敗しました。",
+    "save_failed_title": "保存に失敗しました",
+    "save_success_message": "設定を保存しました。",
+    "save_success_title": "保存しました",
     "updates": {
       "check_update": "更新を確認",
       "description": "更新を確認し、システムバージョンを管理します",
@@ -118,8 +130,10 @@
   "personal_settings": {
     "access_token": {
       "description": "アクセストークンと招待リンクを生成します。",
+      "generate_failed": "アクセストークンの生成に失敗しました。",
       "generate_token": "アクセストークンを生成",
       "get_invite_link": "招待リンクを取得",
+      "invite_failed": "招待リンクの取得に失敗しました。",
       "title": "アクセストークンと招待"
     },
     "oauth_binding": {
@@ -167,26 +181,28 @@
       "title": "パスキー (WebAuthn)"
     },
     "profile_info": {
-      "bind_email": "Bind Email",
-      "bind_success": "Email updated successfully",
-      "binding_email": "Binding email...",
+      "bind_email": "メールアドレスを連携",
+      "bind_success": "メールアドレスを更新しました",
+      "binding_email": "メールアドレスを連携中...",
       "description": "個人情報とアカウント設定を更新します。",
       "display_name": "表示名",
       "display_name_placeholder": "表示名を入力",
       "email": "メールアドレス",
-      "email_help": "Changing email requires verification. Send a code to the new address and confirm it below.",
+      "email_help": "メールアドレスを変更するには認証が必要です。新しいアドレスに認証コードを送り、下で確認してください。",
       "email_placeholder": "メールアドレスを入力",
-      "email_verification_code_placeholder": "Enter email verification code",
+      "email_required": "有効なメールアドレスを入力してください",
+      "email_verification_code_placeholder": "メール認証コードを入力",
       "failed": "更新に失敗しました",
-      "load_failed": "Failed to load profile information",
-      "send_code": "Send Verification Code",
-      "send_code_success": "Verification code sent. Check your inbox.",
-      "sending_code": "Sending code...",
+      "load_failed": "プロフィール情報の読み込みに失敗しました",
+      "send_code": "認証コードを送信",
+      "send_code_success": "認証コードを送信しました。受信箱を確認してください。",
+      "sending_code": "コード送信中...",
       "success": "プロフィールを更新しました",
       "title": "プロフィール情報",
       "update_button": "プロフィールを更新",
       "updating": "更新中...",
-      "username": "ユーザー名"
+      "username": "ユーザー名",
+      "username_required": "ユーザー名は必須です"
     },
     "security": {
       "description": "ログイン方法とアカウント保護を管理します。",
@@ -234,6 +250,8 @@
         "setup_failed": "TOTP の設定に失敗しました"
       },
       "processing": "処理中...",
+      "qr_alt": "TOTP QR コード",
+      "qr_caption": "二要素認証",
       "secret_key": "シークレットキー（手入力用）",
       "setup_desc": "以下の手順で TOTP を設定し、アカウントを保護します。",
       "setup_instructions_title": "設定手順",

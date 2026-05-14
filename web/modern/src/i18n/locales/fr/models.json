@@ -1,5 +1,6 @@
 {
   "models": {
+    "channel_count": "{{count}} modèles",
     "clear_filters": "Effacer les filtres",
     "description": "Parcourez tous les modèles pris en charge par le serveur, regroupés par canal/adaptateur avec des informations de tarification.",
     "detail": {
@@ -13,6 +14,7 @@
       "cache_write_1h": "Écriture cache 1 heure",
       "cache_write_5m": "Écriture cache 5 min",
       "cached_read": "Lecture du cache",
+      "close": "Fermer",
       "completion_ratio": "Ratio de complétion",
       "completion_tps": "Complétion",
       "context_length": "Longueur du contexte",
@@ -31,6 +33,7 @@
       "max_tokens": "Jetons max",
       "min_images": "Min",
       "model_profile": "Profil du modèle",
+      "multiplier": "Multiplicateur",
       "output": "Sortie",
       "output_modalities": "Modalités de sortie",
       "per_1m": "pour 1M de jetons",
@@ -40,6 +43,7 @@
       "per_image_unit": "Par image",
       "per_second": "par seconde",
       "per_video_frame": "Par frame vidéo",
+      "price": "Prix",
       "prompt_ratio": "Ratio de prompt",
       "prompt_tps": "Prompt",
       "quality": "Qualité",
@@ -60,8 +64,13 @@
     },
     "found": "Trouvé {{count}} modèles dans {{channels}} canaux",
     "labels": {
+      "audio": "Audio",
+      "embedding": "Embedding",
       "free": "Gratuit",
-      "unlimited": "Illimité"
+      "image": "Image",
+      "tiered": "Par paliers",
+      "unlimited": "Illimité",
+      "video": "Vidéo"
     },
     "loading": "Chargement des modèles...",
     "no_models": "Aucun modèle trouvé",

@@ -17,18 +17,16 @@ import { loadSystemStatus, type SystemStatus } from '@/lib/utils';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { browserSupportsWebAuthn, startRegistration } from '@simplewebauthn/browser';
 import QRCode from 'qrcode';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { useTranslation } from 'react-i18next';
 import * as z from 'zod';
 
-const personalSchema = z.object({
-  username: z.string().min(1, 'Username is required'),
-  display_name: z.string().optional(),
-  email: z.string().email('Valid email is required').optional(),
-});
-
-type PersonalForm = z.infer<typeof personalSchema>;
+type PersonalForm = {
+  username: string;
+  display_name?: string;
+  email?: string;
+};
 
 export function PersonalSettings() {
   const { t } = useTranslation();
@@ -98,6 +96,16 @@ export function PersonalSettings() {
 
   const turnstileEnabled = Boolean(systemStatus.turnstile_check);
   const turnstileRenderable = turnstileEnabled && Boolean(systemStatus.turnstile_site_key);
+
+  const personalSchema = useMemo(
+    () =>
+      z.object({
+        username: z.string().min(1, t('personal_settings.profile_info.username_required')),
+        display_name: z.string().optional(),
+        email: z.string().email(t('personal_settings.profile_info.email_required')).optional(),
+      }),
+    [t]
+  );
 
   // Load system status
   const loadStatus = async () => {
@@ -244,7 +252,7 @@ export function PersonalSettings() {
 
         ctx.font = '12px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
         ctx.fillStyle = '#666666';
-        ctx.fillText('Two-Factor Authentication', canvas.width / 2, padding + 28);
+  ctx.fillText(t('personal_settings.totp.qr_caption'), canvas.width / 2, padding + 28);
 
         ctx.drawImage(img, padding, padding + textHeight, img.width, img.height);
 
@@ -440,13 +448,13 @@ export function PersonalSettings() {
       } else {
         notify({
           type: 'error',
-          message: message || t('personal_settings.access_token.generate_failed', 'Failed to generate access token.'),
+          message: message || t('personal_settings.access_token.generate_failed'),
         });
       }
     } catch (error) {
       notify({
         type: 'error',
-        message: error instanceof Error ? error.message : t('personal_settings.access_token.generate_failed', 'Failed to generate access token.'),
+        message: error instanceof Error ? error.message : t('personal_settings.access_token.generate_failed'),
       });
     }
   };
@@ -463,13 +471,13 @@ export function PersonalSettings() {
       } else {
         notify({
           type: 'error',
-          message: message || t('personal_settings.access_token.invite_failed', 'Failed to get invite link.'),
+          message: message || t('personal_settings.access_token.invite_failed'),
         });
       }
     } catch (error) {
       notify({
         type: 'error',
-        message: error instanceof Error ? error.message : t('personal_settings.access_token.invite_failed', 'Failed to get invite link.'),
+        message: error instanceof Error ? error.message : t('personal_settings.access_token.invite_failed'),
       });
     }
   };
@@ -1057,7 +1065,7 @@ export function PersonalSettings() {
               <div className={`flex justify-center ${isMobile ? 'my-2' : 'my-4'}`}>
                 <img
                   src={totpQRCode}
-                  alt="TOTP QR Code"
+                  alt={t('personal_settings.totp.qr_alt')}
                   className={`rounded-lg shadow-md ${isMobile ? 'max-w-[240px] w-full h-auto' : 'max-w-full'}`}
                 />
               </div>

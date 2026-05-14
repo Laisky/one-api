@@ -12,6 +12,7 @@
       "showing_top": "Mostrando los {{shown}} primeros de {{total}}",
       "token_title": "Tasa de aciertos por token",
       "top_n_label": "Mostrar",
+      "top_n_option": "Top {{count}}",
       "total": "Total",
       "user_title": "Tasa de aciertos por usuario"
     },

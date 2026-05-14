@@ -60,6 +60,10 @@
       "title_edit": "编辑 MCP 服务器",
       "tools": {
         "title": "已同步工具"
+      },
+      "validation": {
+        "base_url_required": "基础 URL 不能为空",
+        "name_required": "名称不能为空"
       }
     },
     "list": {

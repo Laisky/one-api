@@ -60,6 +60,10 @@
       "title_edit": "Edit MCP Server",
       "tools": {
         "title": "Synced tools"
+      },
+      "validation": {
+        "base_url_required": "Base URL is required",
+        "name_required": "Name is required"
       }
     },
     "list": {

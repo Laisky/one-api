@@ -44,12 +44,13 @@ export function TopUpPage() {
   const renderQuotaWithPrompt = (quota: number): string => {
     const quotaPerUnit = parseFloat(localStorage.getItem('quota_per_unit') || '500000');
     const displayInCurrency = localStorage.getItem('display_in_currency') === 'true';
+    const tokensLabel = t('common.tokens');
 
     if (displayInCurrency) {
       const usdValue = (quota / quotaPerUnit).toFixed(6);
-      return `${quota.toLocaleString()} tokens ($${usdValue})`;
+      return `${quota.toLocaleString()} ${tokensLabel} ($${usdValue})`;
     }
-    return `${quota.toLocaleString()} tokens`;
+    return `${quota.toLocaleString()} ${tokensLabel}`;
   };
 
   const loadUserData = async () => {

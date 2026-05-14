@@ -1,5 +1,6 @@
 {
   "models": {
+    "channel_count": "{{count}} 个模型",
     "clear_filters": "清除筛选",
     "description": "浏览服务器支持的所有模型，按渠道/适配器分组并显示定价信息。",
     "detail": {
@@ -13,6 +14,7 @@
       "cache_write_1h": "1 小时缓存写入",
       "cache_write_5m": "5 分钟缓存写入",
       "cached_read": "缓存读取",
+      "close": "关闭",
       "completion_ratio": "补全比率",
       "completion_tps": "补全",
       "context_length": "上下文长度",
@@ -31,6 +33,7 @@
       "max_tokens": "最大令牌",
       "min_images": "最少",
       "model_profile": "模型配置",
+      "multiplier": "倍率",
       "output": "输出",
       "output_modalities": "输出模态",
       "per_1m": "每 1M 令牌",
@@ -40,6 +43,7 @@
       "per_image_unit": "每张图片",
       "per_second": "每秒",
       "per_video_frame": "每帧视频",
+      "price": "价格",
       "prompt_ratio": "提示词比率",
       "prompt_tps": "提示词",
       "quality": "画质",
@@ -60,8 +64,13 @@
     },
     "found": "在 {{channels}} 个渠道中找到 {{count}} 个模型",
     "labels": {
+      "audio": "音频",
+      "embedding": "嵌入",
       "free": "免费",
-      "unlimited": "无限"
+      "image": "图片",
+      "tiered": "阶梯",
+      "unlimited": "无限",
+      "video": "视频"
     },
     "loading": "正在加载模型...",
     "no_models": "未找到模型",

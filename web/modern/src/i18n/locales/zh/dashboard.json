@@ -12,6 +12,7 @@
       "showing_top": "展示前 {{shown}} 条，共 {{total}} 条",
       "token_title": "Token 缓存命中率",
       "top_n_label": "展示",
+      "top_n_option": "前 {{count}}",
       "total": "总量",
       "user_title": "用户缓存命中率"
     },

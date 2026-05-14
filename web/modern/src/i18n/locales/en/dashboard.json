@@ -12,6 +12,7 @@
       "showing_top": "Showing top {{shown}} of {{total}}",
       "token_title": "Token Cache Hit Rate",
       "top_n_label": "Show",
+      "top_n_option": "Top {{count}}",
       "total": "Total",
       "user_title": "User Cache Hit Rate"
     },

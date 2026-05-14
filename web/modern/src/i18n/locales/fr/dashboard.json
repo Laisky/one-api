@@ -12,6 +12,7 @@
       "showing_top": "Affichage des {{shown}} premiers sur {{total}}",
       "token_title": "Taux de succès du cache par jeton",
       "top_n_label": "Afficher",
+      "top_n_option": "Top {{count}}",
       "total": "Total",
       "user_title": "Taux de succès du cache par utilisateur"
     },

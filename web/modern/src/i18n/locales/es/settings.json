@@ -42,6 +42,10 @@
     "logs": {
       "clear_button": "Borrar registros antes de esta fecha",
       "clear_failed": "No se pudieron borrar los registros: {{message}}",
+      "clear_failed_message": "No se pudieron borrar los registros.",
+      "clear_failed_title": "Error al borrar",
+      "clear_success_message": "Se borraron los registros históricos.",
+      "clear_success_title": "Registros borrados",
       "clear_warning": "Esto eliminará permanentemente todos los registros anteriores a la fecha seleccionada.",
       "cleared_success": "¡{{count}} registros borrados!",
       "description": "Elimina registros históricos para liberar espacio",
@@ -72,7 +76,11 @@
       "quota_for_new_user_desc": "Cuota inicial otorgada a cada usuario recién registrado.",
       "save": "Guardar ajustes de cuota",
       "title": "Ajustes de cuota"
-    }
+    },
+    "save_failed_generic": "No se pudo guardar la configuración.",
+    "save_failed_title": "Error al guardar",
+    "save_success_message": "Los cambios se guardaron correctamente.",
+    "save_success_title": "Configuración guardada"
   },
   "other_settings": {
     "branding": {
@@ -107,6 +115,10 @@
       "title": "Gestión de contenido"
     },
     "loading": "Cargando otros ajustes...",
+    "save_failed_message": "No se pudo guardar la configuración.",
+    "save_failed_title": "Error al guardar",
+    "save_success_message": "Configuración guardada correctamente.",
+    "save_success_title": "Guardado",
     "updates": {
       "check_update": "Buscar actualizaciones",
       "description": "Verifica actualizaciones y gestiona la versión del sistema",
@@ -118,8 +130,10 @@
   "personal_settings": {
     "access_token": {
       "description": "Genera tokens de acceso y enlaces de invitación.",
+      "generate_failed": "No se pudo generar el token de acceso.",
       "generate_token": "Generar token de acceso",
       "get_invite_link": "Obtener enlace de invitación",
+      "invite_failed": "No se pudo obtener el enlace de invitación.",
       "title": "Token de acceso e invitación"
     },
     "oauth_binding": {
@@ -167,26 +181,28 @@
       "title": "Passkeys (WebAuthn)"
     },
     "profile_info": {
-      "bind_email": "Bind Email",
-      "bind_success": "Email updated successfully",
-      "binding_email": "Binding email...",
+      "bind_email": "Vincular correo electrónico",
+      "bind_success": "Correo electrónico actualizado correctamente",
+      "binding_email": "Vinculando correo electrónico...",
       "description": "Actualiza tu información personal y ajustes de cuenta.",
       "display_name": "Nombre para mostrar",
       "display_name_placeholder": "Introduce un nombre para mostrar",
       "email": "Correo electrónico",
-      "email_help": "Changing email requires verification. Send a code to the new address and confirm it below.",
+      "email_help": "Cambiar el correo electrónico requiere verificación. Envía un código a la nueva dirección y confírmalo abajo.",
       "email_placeholder": "Introduce un correo",
-      "email_verification_code_placeholder": "Enter email verification code",
+      "email_required": "Se requiere un correo electrónico válido",
+      "email_verification_code_placeholder": "Introduce el código de verificación por correo",
       "failed": "La actualización falló",
-      "load_failed": "Failed to load profile information",
-      "send_code": "Send Verification Code",
-      "send_code_success": "Verification code sent. Check your inbox.",
-      "sending_code": "Sending code...",
+      "load_failed": "No se pudo cargar la información del perfil",
+      "send_code": "Enviar código de verificación",
+      "send_code_success": "Código de verificación enviado. Revisa tu bandeja de entrada.",
+      "sending_code": "Enviando código...",
       "success": "Perfil actualizado correctamente",
       "title": "Información del perfil",
       "update_button": "Actualizar perfil",
       "updating": "Actualizando...",
-      "username": "Nombre de usuario"
+      "username": "Nombre de usuario",
+      "username_required": "El nombre de usuario es obligatorio"
     },
     "security": {
       "description": "Gestiona cómo inicias sesión y protege tu cuenta.",
@@ -234,6 +250,8 @@
         "setup_failed": "Error al configurar TOTP"
       },
       "processing": "Procesando...",
+      "qr_alt": "Código QR de TOTP",
+      "qr_caption": "Autenticación de dos factores",
       "secret_key": "Clave secreta (entrada manual)",
       "setup_desc": "Sigue estos pasos para proteger tu cuenta con TOTP.",
       "setup_instructions_title": "Instrucciones de configuración",

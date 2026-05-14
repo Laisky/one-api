@@ -163,6 +163,78 @@
         "create": "Create a new API channel",
         "edit": "Update channel configuration"
       },
+      "endpoints": {
+        "audio_speech": {
+          "description": "The Text-to-Speech API converts text into spoken audio. Choose from multiple voices and output formats to generate natural-sounding speech.",
+          "label": "Text-to-Speech"
+        },
+        "audio_transcription": {
+          "description": "The Audio Transcription API converts spoken audio into text. Upload an audio file to receive a transcript in the specified language.",
+          "label": "Audio Transcription"
+        },
+        "audio_translation": {
+          "description": "The Audio Translation API translates spoken audio into English text. Upload an audio file in any supported language to receive an English transcript.",
+          "label": "Audio Translation"
+        },
+        "chat_completions": {
+          "description": "The Chat Completions API creates model responses for chat-based conversations. Send a list of messages and receive a model-generated reply. Supports both streaming and non-streaming modes.",
+          "label": "Chat Completions"
+        },
+        "claude_messages": {
+          "description": "The Claude Messages API is Anthropic's native format for interacting with Claude models. One-API converts this format to work with any supported backend.",
+          "label": "Claude Messages"
+        },
+        "completions": {
+          "description": "The legacy Completions API generates text completions for a given prompt. This is the original text generation API, now largely superseded by Chat Completions.",
+          "label": "Completions"
+        },
+        "default_badge": "default",
+        "embeddings": {
+          "description": "The Embeddings API converts text into numerical vector representations. These vectors can be used for semantic search, clustering, and similarity comparisons.",
+          "label": "Embeddings"
+        },
+        "help": "Select which API endpoints this channel supports. Click an endpoint's info icon for details and usage examples.",
+        "images_edits": {
+          "description": "The Image Edits API modifies existing images based on text instructions. Upload an image with a mask and prompt to generate edited versions.",
+          "label": "Image Edits"
+        },
+        "images_generations": {
+          "description": "The Image Generation API creates images from text descriptions. Specify a prompt and receive one or more generated images in various formats and sizes.",
+          "label": "Image Generation"
+        },
+        "label": "Supported Endpoints",
+        "modal": {
+          "description": "Description",
+          "example": "cURL Example"
+        },
+        "moderations": {
+          "description": "The Moderations API checks whether text violates content policies. It returns categories and scores indicating the likelihood of policy violations.",
+          "label": "Moderations"
+        },
+        "ocr": {
+          "description": "The OCR / Layout Parsing API extracts text and layout information from documents and images. Upload a file URL and receive structured markdown results. Powered by Zhipu GLM-OCR.",
+          "label": "OCR / Layout Parsing"
+        },
+        "realtime": {
+          "description": "The Realtime API enables low-latency, bidirectional communication via WebSocket. Ideal for voice assistants and real-time interactive applications.",
+          "label": "Realtime"
+        },
+        "rerank": {
+          "description": "The Rerank API reorders a list of documents based on their relevance to a query. Useful for improving search results and retrieval-augmented generation (RAG) systems.",
+          "label": "Rerank"
+        },
+        "reset_defaults": "Reset to Defaults",
+        "response_api": {
+          "description": "The Response API is OpenAI's newer stateful API for multi-turn conversations. It manages conversation state server-side and supports advanced features like tools and structured output.",
+          "label": "Response API"
+        },
+        "select_all": "Select All",
+        "select_none": "Minimal",
+        "videos": {
+          "description": "The Video Generation API creates videos from text descriptions or images. Specify prompts and parameters to generate video content.",
+          "label": "Video Generation"
+        }
+      },
       "errors": {
         "operation_failed": "Operation failed",
         "request_failed_title": "Request failed",
@@ -407,7 +479,9 @@
       "validation": {
         "api_key_required": "API key is required.",
         "base_url_required": "Base URL is required for this channel type.",
+        "endpoints_required": "Enable at least one endpoint before saving.",
         "error_title": "Validation error",
+        "fix_fields": "Please correct the highlighted fields.",
         "hidden_models_not_supported": "These hidden models are not currently supported by the channel: {{models}}",
         "hidden_models_unreachable_alias": "These hidden models are used as Model Mapping sources, so the public aliases will become unreachable: {{models}}",
         "inference_profile_invalid": "Inference Profile ARN Map has invalid JSON.",
@@ -422,11 +496,13 @@
         "model_mapping_invalid_entries": "These Model Mapping entries have empty or non-string values: {{keys}}",
         "model_mapping_parse_error": "Model Mapping JSON is invalid: {{error}}",
         "model_mapping_shape_invalid": "Model Mapping must be a JSON object of the form { \"from\": \"to\" }.",
+        "name_required": "Channel name is required",
         "oauth_invalid_json": "OAuth JWT configuration JSON is invalid.",
         "oauth_missing_field_message": "OAuth JWT configuration missing: {{field}}",
         "oauth_missing_field_title": "Missing field",
         "oauth_parse_message": "OAuth JWT parse error: {{error}}",
         "oauth_parse_title": "Parse error",
+        "type_required": "Channel type is required",
         "valid_json": "✓ Valid JSON"
       },
       "vertex": {
@@ -681,7 +757,9 @@
       "validation": {
         "error_title": "Validation error",
         "fix_fields": "Please correct the highlighted fields.",
-        "invalid_expiration": "Invalid expiration time"
+        "invalid_expiration": "Invalid expiration time",
+        "name_required": "Token name is required",
+        "quota_min": "Quota must be non-negative"
       }
     },
     "page": {
@@ -773,6 +851,10 @@
             "placeholder": "Enter username"
           }
         },
+        "notifications": {
+          "create_failed_message": "Unable to create user.",
+          "create_failed_title": "Create failed"
+        },
         "title": "Create User"
       },
       "topup": {
@@ -789,6 +871,10 @@
             "label": "Remark",
             "placeholder": "Optional"
           }
+        },
+        "notifications": {
+          "submit_failed_message": "Unable to top up user.",
+          "submit_failed_title": "Top up failed"
         },
         "title": "Top Up {{username}}"
       }
@@ -919,6 +1005,7 @@
         "display_name": "Display Name",
         "group": "Group",
         "id": "ID",
+        "register_time": "Register Time",
         "remaining_quota": "Remaining Quota",
         "role": "Role",
         "status": "Status",
@@ -988,6 +1075,7 @@
           "default": "Default",
           "id": "ID",
           "quota": "Remaining Quota",
+          "register_time": "Register Time",
           "used_quota": "Used Quota",
           "username": "Username"
         },

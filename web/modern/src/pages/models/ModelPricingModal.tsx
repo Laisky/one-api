@@ -98,12 +98,13 @@ export function ModelPricingModal({ open, onOpenChange, modelName, data, channel
     (key: string, defaultValue: string, options?: Record<string, unknown>) => t(`models.detail.${key}`, { defaultValue, ...options }),
     [t]
   );
+  const closeLabel = tr('close', 'Close');
 
   const content = <PricingContent modelName={modelName} data={data} channelName={channelName} tr={tr} />;
 
   if (isMobile) {
     return (
-      <MobileBottomSheet open={open} onClose={() => onOpenChange(false)} title={modelName} subtitle={channelName}>
+      <MobileBottomSheet open={open} onClose={() => onOpenChange(false)} title={modelName} subtitle={channelName} closeLabel={closeLabel}>
         {content}
       </MobileBottomSheet>
     );
@@ -129,12 +130,14 @@ function MobileBottomSheet({
   onClose,
   title,
   subtitle,
+  closeLabel,
   children,
 }: {
   open: boolean;
   onClose: () => void;
   title: string;
   subtitle?: string;
+  closeLabel: string;
   children: React.ReactNode;
 }) {
   const sheetRef = useRef<HTMLDivElement>(null);
@@ -264,7 +267,7 @@ function MobileBottomSheet({
               </h2>
               {subtitle && <p className="text-xs text-muted-foreground truncate">{subtitle}</p>}
             </div>
-            <button onClick={onClose} className="shrink-0 rounded-full p-1.5 hover:bg-muted transition-colors" aria-label="Close">
+            <button onClick={onClose} className="shrink-0 rounded-full p-1.5 hover:bg-muted transition-colors" aria-label={closeLabel}>
               <X className="h-4 w-4" />
             </button>
           </div>
@@ -534,6 +537,7 @@ function PricingContent({
                 data={data.image_pricing.size_multipliers}
                 basePrice={data.image_pricing.price_per_image_usd}
                 label={tr('size', 'Size')}
+                tr={tr}
               />
             )}
 
@@ -545,6 +549,7 @@ function PricingContent({
                 data={data.image_pricing.quality_multipliers}
                 basePrice={data.image_pricing.price_per_image_usd}
                 label={tr('quality', 'Quality')}
+                tr={tr}
               />
             )}
         </PricingSection>
@@ -575,6 +580,7 @@ function PricingContent({
                 data={data.video_pricing.resolution_multipliers}
                 basePrice={data.video_pricing.per_second_usd}
                 label={tr('resolution', 'Resolution')}
+                tr={tr}
                 unit={tr('per_second', 'per second')}
               />
             </div>
@@ -831,11 +837,13 @@ function SimpleMultiplierTable({
   data,
   basePrice,
   label,
+  tr,
   unit: _unit,
 }: {
   data: Record<string, number>;
   basePrice?: number;
   label: string;
+  tr: TrFn;
   unit?: string;
 }) {
   const entries = Object.entries(data).sort(([, a], [, b]) => a - b);
@@ -845,8 +853,8 @@ function SimpleMultiplierTable({
         <thead>
           <tr className="border-b text-muted-foreground">
             <th className="text-left py-1.5 pr-3 font-medium">{label}</th>
-            <th className="text-right py-1.5 px-3 font-medium">Multiplier</th>
-            {basePrice !== undefined && basePrice > 0 && <th className="text-right py-1.5 pl-3 font-medium">Price</th>}
+            <th className="text-right py-1.5 px-3 font-medium">{tr('multiplier', 'Multiplier')}</th>
+            {basePrice !== undefined && basePrice > 0 && <th className="text-right py-1.5 pl-3 font-medium">{tr('price', 'Price')}</th>}
           </tr>
         </thead>
         <tbody>

@@ -24,24 +24,25 @@ interface MCPTool {
   description?: string;
 }
 
-const serverSchema = z.object({
-  name: z.string().min(1, 'Name is required'),
-  description: z.string().optional(),
-  status: z.coerce.number().int().default(1),
-  priority: z.coerce.number().int().default(0),
-  base_url: z.string().min(1, 'Base URL is required'),
-  protocol: z.string().default('streamable_http'),
-  auth_type: z.string().default('none'),
-  api_key: z.string().optional(),
-  headers: z.string().optional(),
-  tool_whitelist: z.array(z.string()).default([]),
-  tool_blacklist: z.array(z.string()).default([]),
-  tool_pricing: z.string().optional(),
-  auto_sync_enabled: z.boolean().default(true),
-  auto_sync_interval_minutes: z.coerce.number().int().min(5).max(1440).default(60),
-});
+const createServerSchema = (translate: (key: string, defaultValue: string) => string) =>
+  z.object({
+    name: z.string().min(1, translate('mcp.edit.validation.name_required', 'Name is required')),
+    description: z.string().optional(),
+    status: z.coerce.number().int().default(1),
+    priority: z.coerce.number().int().default(0),
+    base_url: z.string().min(1, translate('mcp.edit.validation.base_url_required', 'Base URL is required')),
+    protocol: z.string().default('streamable_http'),
+    auth_type: z.string().default('none'),
+    api_key: z.string().optional(),
+    headers: z.string().optional(),
+    tool_whitelist: z.array(z.string()).default([]),
+    tool_blacklist: z.array(z.string()).default([]),
+    tool_pricing: z.string().optional(),
+    auto_sync_enabled: z.boolean().default(true),
+    auto_sync_interval_minutes: z.coerce.number().int().min(5).max(1440).default(60),
+  });
 
-type ServerForm = z.infer<typeof serverSchema>;
+type ServerForm = z.infer<ReturnType<typeof createServerSchema>>;
 
 export function EditMCPServerPage() {
   const { t } = useTranslation();
@@ -53,9 +54,10 @@ export function EditMCPServerPage() {
   const [loading, setLoading] = useState(isEdit);
   const [tools, setTools] = useState<MCPTool[]>([]);
   const [syncing, setSyncing] = useState(false);
+  const validationSchema = useMemo(() => createServerSchema((key, defaultValue) => String(t(key, defaultValue))), [t]);
 
   const form = useForm<ServerForm>({
-    resolver: zodResolver(serverSchema),
+    resolver: zodResolver(validationSchema),
     defaultValues: {
       name: '',
       description: '',

@@ -178,6 +178,36 @@ export function ModelsPage() {
     );
   };
 
+  const renderPricingBadges = (data: ModelDisplayData) => (
+    <>
+      {data.image_pricing && (
+        <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+          {tr('labels.image', 'Image')}
+        </Badge>
+      )}
+      {data.video_pricing && (
+        <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+          {tr('labels.video', 'Video')}
+        </Badge>
+      )}
+      {data.audio_pricing && (
+        <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+          {tr('labels.audio', 'Audio')}
+        </Badge>
+      )}
+      {data.tiers && data.tiers.length > 0 && (
+        <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+          {tr('labels.tiered', 'Tiered')}
+        </Badge>
+      )}
+      {data.embedding_pricing && (
+        <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+          {tr('labels.embedding', 'Embedding')}
+        </Badge>
+      )}
+    </>
+  );
+
   const renderChannelModels = (channelName: string, channelInfo: ChannelInfo) => {
     const models = Object.keys(channelInfo.models)
       .sort()
@@ -194,7 +224,7 @@ export function ModelsPage() {
       <Card key={channelName} className="mb-6 border-0 shadow-none md:border md:shadow-sm">
         <CardHeader>
           <CardTitle className="text-lg">
-            {formatChannelName(channelName)} ({models.length} models)
+            {formatChannelName(channelName)} ({tr('channel_count', '{{count}} models', { count: models.length })})
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -235,33 +265,7 @@ export function ModelsPage() {
                     </div>
                   </div>
                   {hasRichPricing(model.data) && (
-                    <div className="flex flex-wrap gap-1">
-                      {model.data.image_pricing && (
-                        <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
-                          Image
-                        </Badge>
-                      )}
-                      {model.data.video_pricing && (
-                        <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
-                          Video
-                        </Badge>
-                      )}
-                      {model.data.audio_pricing && (
-                        <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
-                          Audio
-                        </Badge>
-                      )}
-                      {model.data.tiers && model.data.tiers.length > 0 && (
-                        <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
-                          Tiered
-                        </Badge>
-                      )}
-                      {model.data.embedding_pricing && (
-                        <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
-                          Embedding
-                        </Badge>
-                      )}
-                    </div>
+                    <div className="flex flex-wrap gap-1">{renderPricingBadges(model.data)}</div>
                   )}
                 </div>
               ))}
@@ -294,35 +298,7 @@ export function ModelsPage() {
                       <td className="py-2 px-3 font-mono text-sm">
                         <span className="inline-flex items-center gap-2">
                           {model.model}
-                          {hasRichPricing(model.data) && (
-                            <span className="inline-flex gap-1">
-                              {model.data.image_pricing && (
-                                <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
-                                  Image
-                                </Badge>
-                              )}
-                              {model.data.video_pricing && (
-                                <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
-                                  Video
-                                </Badge>
-                              )}
-                              {model.data.audio_pricing && (
-                                <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
-                                  Audio
-                                </Badge>
-                              )}
-                              {model.data.tiers && model.data.tiers.length > 0 && (
-                                <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
-                                  Tiered
-                                </Badge>
-                              )}
-                              {model.data.embedding_pricing && (
-                                <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
-                                  Embedding
-                                </Badge>
-                              )}
-                            </span>
-                          )}
+                          {hasRichPricing(model.data) && <span className="inline-flex gap-1">{renderPricingBadges(model.data)}</span>}
                         </span>
                       </td>
                       <td className="py-2 px-3">{formatPrice(model.inputPrice)}</td>

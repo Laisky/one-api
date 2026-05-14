@@ -11,6 +11,7 @@
     "no_tools": "Aucun outil trouvé",
     "no_tools_desc": "Essayez d'ajuster votre recherche ou vos filtres.",
     "search": "Rechercher des outils...",
+    "server_count": "{{count}} outils",
     "status": {
       "disabled": "Désactivé",
       "enabled": "Activé"

@@ -13,7 +13,7 @@ import { api } from '@/lib/api';
 import { fromDateTimeLocal, toDateTimeLocal } from '@/lib/utils';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Info } from 'lucide-react';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useParams } from 'react-router-dom';
@@ -28,16 +28,27 @@ const renderQuotaWithPrompt = (quota: number): string => {
   return `$${usdValue}`;
 };
 
-const tokenSchema = z.object({
-  name: z.string().min(1, 'Token name is required'),
-  remain_quota: z.coerce.number().min(0, 'Quota must be non-negative'),
-  expired_time: z.string().optional(),
-  unlimited_quota: z.boolean().default(false),
-  models: z.array(z.string()).default([]),
-  subnet: z.string().optional(),
-});
+type TokenValidationTranslator = (key: string, defaultValue: string) => string;
 
-type TokenForm = z.infer<typeof tokenSchema>;
+/**
+ * createTokenSchema builds the token form schema and injects localized
+ * validation messages when a translator is provided.
+ */
+const createTokenSchema = (tr?: TokenValidationTranslator) => {
+  const message = (key: string, defaultValue: string) => tr?.(key, defaultValue) ?? defaultValue;
+
+  return z.object({
+    name: z.string().min(1, message('validation.name_required', 'Token name is required')),
+    remain_quota: z.coerce.number().min(0, message('validation.quota_min', 'Quota must be non-negative')),
+    expired_time: z.string().optional(),
+    unlimited_quota: z.boolean().default(false),
+    models: z.array(z.string()).default([]),
+    subnet: z.string().optional(),
+  });
+};
+
+type TokenSchema = ReturnType<typeof createTokenSchema>;
+type TokenForm = z.infer<TokenSchema>;
 
 // Matches a subset of backend Token for status handling
 type BackendToken = {
@@ -61,6 +72,7 @@ export function EditTokenPage() {
     (key: string, defaultValue: string, options?: Record<string, unknown>) => t(`tokens.edit.${key}`, { defaultValue, ...options }),
     [t]
   );
+  const schema = useMemo(() => createTokenSchema((key, defaultValue) => tr(key, defaultValue)), [tr]);
 
   const [loading, setLoading] = useState(isEdit);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -69,7 +81,7 @@ export function EditTokenPage() {
   const { notify } = useNotifications();
 
   const form = useForm<TokenForm>({
-    resolver: zodResolver(tokenSchema),
+    resolver: zodResolver(schema),
     defaultValues: {
       name: '',
       remain_quota: 500000,

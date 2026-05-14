@@ -125,15 +125,15 @@
         }
       },
       "common": {
-        "add": "Add",
+        "add": "添加",
         "base_url": {
-          "fixed_note": "Using default: {{url}}",
-          "help_editable": "Custom API base URL. Leave empty to use the default URL.",
-          "help_readonly": "The API base URL for this channel type is fixed and cannot be modified.",
-          "label": "API Base URL",
+          "fixed_note": "使用默认值: {{url}}",
+          "help_editable": "自定义 API 基础 URL。留空以使用默认 URL。",
+          "help_readonly": "此渠道类型的 API 基础 URL 是固定的，无法修改。",
+          "label": "API 基础 URL",
           "placeholder": "https://api.example.com"
         },
-        "format_json": "Format JSON"
+        "format_json": "格式化 JSON"
       },
       "coze": {
         "auth_type": {
@@ -162,6 +162,78 @@
       "description": {
         "create": "创建一个新的 API 渠道",
         "edit": "更新渠道配置"
+      },
+      "endpoints": {
+        "audio_speech": {
+          "description": "文本转语音 API 可将文本转换为语音音频。您可以选择多种声音和输出格式来生成自然语音。",
+          "label": "文本转语音"
+        },
+        "audio_transcription": {
+          "description": "语音转写 API 可将语音音频转换为文本。上传音频文件后，可获得指定语言的转写结果。",
+          "label": "语音转写"
+        },
+        "audio_translation": {
+          "description": "语音翻译 API 可将语音音频翻译为英文文本。上传任意受支持语言的音频文件后，可获得英文转写结果。",
+          "label": "语音翻译"
+        },
+        "chat_completions": {
+          "description": "聊天补全 API 为基于聊天的对话生成模型回复。发送一组消息并接收模型生成的回答，支持流式和非流式模式。",
+          "label": "聊天补全"
+        },
+        "claude_messages": {
+          "description": "Claude Messages API 是 Anthropic 与 Claude 模型交互的原生格式。One-API 会将该格式转换为适用于任何受支持后端的形式。",
+          "label": "Claude Messages"
+        },
+        "completions": {
+          "description": "传统补全 API 会根据给定提示词生成文本补全。这是最早的文本生成 API，如今大多已被聊天补全所取代。",
+          "label": "文本补全"
+        },
+        "default_badge": "默认",
+        "embeddings": {
+          "description": "向量嵌入 API 可将文本转换为数值向量表示。这些向量可用于语义搜索、聚类和相似度比较。",
+          "label": "向量嵌入"
+        },
+        "help": "选择此渠道支持的 API 端点。点击端点旁的信息图标可查看详情和使用示例。",
+        "images_edits": {
+          "description": "图像编辑 API 会根据文本指令修改现有图像。上传带遮罩的图像和提示词后，可生成编辑后的版本。",
+          "label": "图像编辑"
+        },
+        "images_generations": {
+          "description": "图像生成 API 会根据文本描述生成图像。指定提示词后，可生成一种或多种不同格式和尺寸的图像。",
+          "label": "图像生成"
+        },
+        "label": "支持的端点",
+        "modal": {
+          "description": "说明",
+          "example": "cURL 示例"
+        },
+        "moderations": {
+          "description": "内容审核 API 用于检查文本是否违反内容策略。它会返回类别和分数，以表示违反策略的可能性。",
+          "label": "内容审核"
+        },
+        "ocr": {
+          "description": "OCR / 版面解析 API 可从文档和图像中提取文本与版面信息。上传文件 URL 后，可获得结构化的 Markdown 结果。由 Zhipu GLM-OCR 提供支持。",
+          "label": "OCR / 版面解析"
+        },
+        "realtime": {
+          "description": "实时 API 通过 WebSocket 提供低延迟、双向通信，非常适合语音助手和实时交互应用。",
+          "label": "实时 API"
+        },
+        "rerank": {
+          "description": "重排序 API 会根据文档与查询的相关性重新排序文档列表，适用于改进搜索结果和检索增强生成（RAG）系统。",
+          "label": "重排序"
+        },
+        "reset_defaults": "恢复默认",
+        "response_api": {
+          "description": "Response API 是 OpenAI 较新的有状态多轮对话 API。它在服务端管理对话状态，并支持工具和结构化输出等高级功能。",
+          "label": "Response API"
+        },
+        "select_all": "全选",
+        "select_none": "最小集",
+        "videos": {
+          "description": "视频生成 API 会根据文本描述或图像生成视频。指定提示词和参数后即可生成视频内容。",
+          "label": "视频生成"
+        }
       },
       "errors": {
         "operation_failed": "操作失败",
@@ -201,7 +273,7 @@
         }
       },
       "groups": {
-        "add_placeholder": "Add custom group...",
+        "add_placeholder": "添加自定义分组...",
         "help": "限制特定用户组的访问。留空表示所有用户都可以访问。默认分组始终保留。",
         "label": "分组 *"
       },
@@ -221,8 +293,8 @@
         "placeholder": "AWS Bedrock 推理配置文件 ARN 映射:\n{{example}}"
       },
       "key": {
-        "help": "The API key for authentication with the provider.",
-        "label": "API Key"
+        "help": "用于向提供商进行身份验证的 API 密钥。",
+        "label": "API 密钥"
       },
       "loading": "正在加载渠道...",
       "mcp": {
@@ -237,7 +309,7 @@
         "invalid": "无效的模型配置格式",
         "invalid_short": "✗ 无效配置",
         "label": "模型配置 (JSON)",
-        "load_default": "Load Default",
+        "load_default": "加载默认值",
         "note": "配置每个模型的定价和限制 (可选)",
         "placeholder": "JSON 格式的模型配置:\n{{example}}",
         "select_type_notice": "选择渠道类型以配置模型配置。",
@@ -251,7 +323,7 @@
       },
       "models": {
         "add_custom": "添加",
-        "clear": "Clear",
+        "clear": "清除",
         "clear_all": "全部清除",
         "copy_title": "点击复制模型名称",
         "custom_placeholder": "添加自定义模型...",
@@ -259,16 +331,16 @@
         "fill_related": "填充相关模型 ({{count}})",
         "help": "此渠道可用的模型。留空以允许所有提供商模型。使用按钮填充相关/所有模型；重复项将被删除。",
         "label": "支持的模型 *",
-        "no_match": "No models found",
-        "no_selection": "No models selected",
+        "no_match": "未找到模型",
+        "no_selection": "未选择模型",
         "search_placeholder": "搜索模型...",
         "select_type_notice": "选择渠道类型以配置支持的模型。",
-        "selected_count": "Selected Models ({{count}})"
+        "selected_count": "已选模型（{{count}}）"
       },
       "name": {
-        "help": "A descriptive name for this channel to identify it in logs and lists.",
-        "label": "Channel Name *",
-        "placeholder": "My Channel"
+        "help": "用于在日志和列表中识别此渠道的描述性名称。",
+        "label": "渠道名称 *",
+        "placeholder": "我的渠道"
       },
       "openai_compatible": {
         "api_format": {
@@ -295,12 +367,12 @@
         }
       },
       "priority": {
-        "help": "Higher priority channels are tried first. Default is 0.",
-        "label": "Priority"
+        "help": "优先级更高的渠道会先尝试。默认值为 0。",
+        "label": "优先级"
       },
       "ratelimit": {
-        "help": "Maximum requests per minute. 0 means unlimited.",
-        "label": "Rate Limit"
+        "help": "每分钟最大请求数。0 表示不限制。",
+        "label": "速率限制"
       },
       "save_warning": {
         "cancel": "返回修改",
@@ -363,9 +435,9 @@
         "edit": "编辑渠道"
       },
       "tooling": {
-        "add_custom": "Add custom tool...",
-        "available_tools": "Available Tools",
-        "editor_disabled": "Fix JSON error to enable editor",
+        "add_custom": "添加自定义工具...",
+        "available_tools": "可用工具",
+        "editor_disabled": "修复 JSON 错误后即可启用编辑器",
         "errors": {
           "invalid_json_message": "在编辑白名单之前修复工具 JSON。",
           "invalid_json_title": "无效 JSON"
@@ -375,7 +447,7 @@
         "help": "定义渠道范围的内置工具策略。配置提供商内置工具的白名单和每次调用的定价。支持注释（// 和 /* */）及尾逗号。",
         "invalid": "无效的工具配置格式",
         "label": "工具配置 (JSON)",
-        "no_whitelist": "No tools whitelisted",
+        "no_whitelist": "没有加入白名单的工具",
         "note": "配置内置工具允许列表和每次调用的定价 (可选)",
         "placeholder": "JSON 格式的工具配置:\n{{example}}",
         "whitelist": {
@@ -387,27 +459,29 @@
           "subtitle": "空白白名单保留所有提供商工具可用。",
           "title": "内置工具白名单"
         },
-        "whitelist_editor": "Whitelist Editor",
-        "whitelisted_tools": "Whitelisted Tools ({{count}})"
+        "whitelist_editor": "白名单编辑器",
+        "whitelisted_tools": "白名单工具 ({{count}})"
       },
       "type": {
-        "help": "The provider type for this channel. Changing this may reset some fields.",
-        "label": "Channel Type *",
-        "not_found": "No channel type found.",
-        "placeholder": "Select a channel type",
-        "search": "Search channel type..."
+        "help": "此渠道的提供商类型。更改后可能会重置某些字段。",
+        "label": "渠道类型 *",
+        "not_found": "未找到渠道类型。",
+        "placeholder": "选择渠道类型",
+        "search": "搜索渠道类型..."
       },
       "type_change": {
-        "cancel": "Cancel",
-        "confirm": "Change Type",
-        "description": "You are about to change the channel type from \"{{fromType}}\" to \"{{toType}}\".",
-        "title": "Change Channel Type?",
-        "warning": "Warning: This may reset some configuration fields specific to the previous channel type. Any unsaved changes may be lost."
+        "cancel": "取消",
+        "confirm": "更改类型",
+        "description": "您即将将渠道类型从 \"{{fromType}}\" 更改为 \"{{toType}}\"。",
+        "title": "更改渠道类型？",
+        "warning": "警告：这可能会重置上一种渠道类型特有的某些配置字段。任何未保存的更改都可能丢失。"
       },
       "validation": {
         "api_key_required": "API 密钥是必填项。",
         "base_url_required": "此渠道类型需要 Base URL。",
+        "endpoints_required": "保存前请至少启用一个端点。",
         "error_title": "验证错误",
+        "fix_fields": "请更正高亮显示的字段。",
         "hidden_models_not_supported": "这些隐藏模型当前并不在该渠道支持的模型列表中：{{models}}",
         "hidden_models_unreachable_alias": "这些隐藏模型被用作模型映射的来源，公开别名将因此无法访问：{{models}}",
         "inference_profile_invalid": "推理配置文件 ARN 映射包含无效 JSON。",
@@ -422,11 +496,13 @@
         "model_mapping_invalid_entries": "以下模型映射条目的值为空或不是字符串：{{keys}}",
         "model_mapping_parse_error": "模型映射 JSON 无效：{{error}}",
         "model_mapping_shape_invalid": "模型映射必须是形如 { \"from\": \"to\" } 的 JSON 对象。",
+        "name_required": "渠道名称是必填项",
         "oauth_invalid_json": "OAuth JWT 配置 JSON 无效。",
         "oauth_missing_field_message": "OAuth JWT 配置缺少: {{field}}",
         "oauth_missing_field_title": "缺少字段",
         "oauth_parse_message": "OAuth JWT 解析错误: {{error}}",
         "oauth_parse_title": "解析错误",
+        "type_required": "渠道类型是必填项",
         "valid_json": "✓ 有效 JSON"
       },
       "vertex": {
@@ -448,8 +524,8 @@
         }
       },
       "weight": {
-        "help": "Used for load balancing between channels of the same priority. Default is 0.",
-        "label": "Weight"
+        "help": "用于在相同优先级的渠道之间进行负载均衡。默认值为 0。",
+        "label": "权重"
       }
     },
     "empty": "尚未找到渠道，请先创建一个渠道。",
@@ -681,7 +757,9 @@
       "validation": {
         "error_title": "验证错误",
         "fix_fields": "请更正高亮显示的字段。",
-        "invalid_expiration": "无效的过期时间"
+        "invalid_expiration": "无效的过期时间",
+        "name_required": "令牌名称是必填项",
+        "quota_min": "额度必须为非负数"
       }
     },
     "page": {
@@ -773,6 +851,10 @@
             "placeholder": "输入用户名"
           }
         },
+        "notifications": {
+          "create_failed_message": "无法创建用户。",
+          "create_failed_title": "创建失败"
+        },
         "title": "创建用户"
       },
       "topup": {
@@ -789,6 +871,10 @@
             "label": "备注",
             "placeholder": "可选"
           }
+        },
+        "notifications": {
+          "submit_failed_message": "无法为用户充值。",
+          "submit_failed_title": "充值失败"
         },
         "title": "充值 {{username}}"
       }
@@ -919,6 +1005,7 @@
         "display_name": "显示名称",
         "group": "分组",
         "id": "ID",
+        "register_time": "注册时间",
         "remaining_quota": "剩余额度",
         "role": "角色",
         "status": "状态",
@@ -988,6 +1075,7 @@
           "default": "默认",
           "id": "ID",
           "quota": "剩余额度",
+          "register_time": "注册时间",
           "used_quota": "已用额度",
           "username": "用户名"
         },

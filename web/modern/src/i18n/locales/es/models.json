@@ -1,5 +1,6 @@
 {
   "models": {
+    "channel_count": "{{count}} modelos",
     "clear_filters": "Borrar filtros",
     "description": "Explora todos los modelos compatibles con el servidor, agrupados por canal/adaptador con información de precios.",
     "detail": {
@@ -13,6 +14,7 @@
       "cache_write_1h": "Escritura caché 1 hora",
       "cache_write_5m": "Escritura caché 5 min",
       "cached_read": "Lectura de caché",
+      "close": "Cerrar",
       "completion_ratio": "Ratio de completado",
       "completion_tps": "Completado",
       "context_length": "Longitud de contexto",
@@ -31,6 +33,7 @@
       "max_tokens": "Máx. tokens",
       "min_images": "Mín",
       "model_profile": "Perfil del modelo",
+      "multiplier": "Multiplicador",
       "output": "Salida",
       "output_modalities": "Modalidades de salida",
       "per_1m": "por 1M tokens",
@@ -40,6 +43,7 @@
       "per_image_unit": "Por imagen",
       "per_second": "por segundo",
       "per_video_frame": "Por frame video",
+      "price": "Precio",
       "prompt_ratio": "Ratio de prompt",
       "prompt_tps": "Prompt",
       "quality": "Calidad",
@@ -60,8 +64,13 @@
     },
     "found": "Se encontraron {{count}} modelos en {{channels}} canales",
     "labels": {
+      "audio": "Audio",
+      "embedding": "Embedding",
       "free": "Gratis",
-      "unlimited": "Ilimitado"
+      "image": "Imagen",
+      "tiered": "Escalonado",
+      "unlimited": "Ilimitado",
+      "video": "Video"
     },
     "loading": "Cargando modelos...",
     "no_models": "No se encontraron modelos",

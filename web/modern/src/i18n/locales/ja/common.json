@@ -70,7 +70,7 @@
     "welcome": "One APIへようこそ"
   },
   "footer": {
-    "copyright": "© {{year}} One API. All rights reserved."
+    "copyright": "© {{year}} One API. 無断転載を禁じます。"
   },
   "header": {
     "confirm_logout": "ログアウトの確認",

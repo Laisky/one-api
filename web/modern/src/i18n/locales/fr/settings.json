@@ -42,6 +42,10 @@
     "logs": {
       "clear_button": "Effacer les journaux avant cette date",
       "clear_failed": "Impossible d'effacer les journaux : {{message}}",
+      "clear_failed_message": "Impossible d'effacer les journaux.",
+      "clear_failed_title": "Échec de la suppression",
+      "clear_success_message": "Les journaux historiques ont été effacés.",
+      "clear_success_title": "Journaux effacés",
       "clear_warning": "Cela supprimera définitivement tous les journaux antérieurs à la date sélectionnée.",
       "cleared_success": "{{count}} journaux effacés !",
       "description": "Nettoyez les journaux historiques pour libérer de l'espace de stockage",
@@ -72,7 +76,11 @@
       "quota_for_new_user_desc": "Quota initial accordé à chaque nouvel utilisateur inscrit.",
       "save": "Enregistrer les paramètres de quota",
       "title": "Paramètres de quota"
-    }
+    },
+    "save_failed_generic": "Impossible d'enregistrer le paramètre.",
+    "save_failed_title": "Échec de l'enregistrement",
+    "save_success_message": "Les modifications ont été enregistrées avec succès.",
+    "save_success_title": "Paramètres enregistrés"
   },
   "other_settings": {
     "branding": {
@@ -107,6 +115,10 @@
       "title": "Gestion du contenu"
     },
     "loading": "Chargement des autres paramètres...",
+    "save_failed_message": "Impossible d'enregistrer le paramètre.",
+    "save_failed_title": "Échec de l'enregistrement",
+    "save_success_message": "Paramètre enregistré avec succès.",
+    "save_success_title": "Enregistré",
     "updates": {
       "check_update": "Rechercher des mises à jour",
       "description": "Vérifier les mises à jour et gérer la version du système",
@@ -118,8 +130,10 @@
   "personal_settings": {
     "access_token": {
       "description": "Générez des tokens d'accès et des liens d'invitation.",
+      "generate_failed": "Échec de la génération du token d'accès.",
       "generate_token": "Générer un token d'accès",
       "get_invite_link": "Obtenir un lien d'invitation",
+      "invite_failed": "Impossible d'obtenir le lien d'invitation.",
       "title": "Token d'accès et invitation"
     },
     "oauth_binding": {
@@ -167,26 +181,28 @@
       "title": "Passkeys (WebAuthn)"
     },
     "profile_info": {
-      "bind_email": "Bind Email",
-      "bind_success": "Email updated successfully",
-      "binding_email": "Binding email...",
+      "bind_email": "Associer l’e-mail",
+      "bind_success": "Adresse e-mail mise à jour avec succès",
+      "binding_email": "Association de l’e-mail...",
       "description": "Mettez à jour vos informations personnelles et paramètres de compte.",
       "display_name": "Nom d'affichage",
       "display_name_placeholder": "Saisissez un nom d'affichage",
       "email": "E-mail",
-      "email_help": "Changing email requires verification. Send a code to the new address and confirm it below.",
+      "email_help": "Le changement d’adresse e-mail nécessite une vérification. Envoyez un code à la nouvelle adresse et confirmez-le ci-dessous.",
       "email_placeholder": "Saisissez un e-mail",
-      "email_verification_code_placeholder": "Enter email verification code",
+      "email_required": "Une adresse e-mail valide est requise",
+      "email_verification_code_placeholder": "Saisissez le code de vérification par e-mail",
       "failed": "Échec de la mise à jour",
-      "load_failed": "Failed to load profile information",
-      "send_code": "Send Verification Code",
-      "send_code_success": "Verification code sent. Check your inbox.",
-      "sending_code": "Sending code...",
+      "load_failed": "Impossible de charger les informations du profil",
+      "send_code": "Envoyer le code de vérification",
+      "send_code_success": "Code de vérification envoyé. Vérifiez votre boîte de réception.",
+      "sending_code": "Envoi du code...",
       "success": "Profil mis à jour avec succès",
       "title": "Informations du profil",
       "update_button": "Mettre à jour le profil",
       "updating": "Mise à jour...",
-      "username": "Nom d'utilisateur"
+      "username": "Nom d'utilisateur",
+      "username_required": "Le nom d'utilisateur est obligatoire"
     },
     "security": {
       "description": "Gérez vos méthodes de connexion et la protection de votre compte.",
@@ -234,6 +250,8 @@
         "setup_failed": "Échec de la configuration TOTP"
       },
       "processing": "Traitement...",
+      "qr_alt": "QR code TOTP",
+      "qr_caption": "Authentification à deux facteurs",
       "secret_key": "Clé secrète (saisie manuelle)",
       "setup_desc": "Suivez ces étapes pour protéger votre compte avec TOTP.",
       "setup_instructions_title": "Instructions de configuration",

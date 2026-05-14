@@ -1,5 +1,6 @@
 {
   "models": {
+    "channel_count": "{{count}} models",
     "clear_filters": "Clear Filters",
     "description": "Browse all models supported by the server, grouped by channel/adaptor with pricing information.",
     "detail": {
@@ -13,6 +14,7 @@
       "cache_write_1h": "1-hour Cache Write",
       "cache_write_5m": "5-min Cache Write",
       "cached_read": "Cache Read",
+      "close": "Close",
       "completion_ratio": "Completion Ratio",
       "completion_tps": "Completion",
       "context_length": "Context Length",
@@ -31,6 +33,7 @@
       "max_tokens": "Max Tokens",
       "min_images": "Min",
       "model_profile": "Model Profile",
+      "multiplier": "Multiplier",
       "output": "Output",
       "output_modalities": "Output Modalities",
       "per_1m": "per 1M tokens",
@@ -40,6 +43,7 @@
       "per_image_unit": "Per Image",
       "per_second": "per second",
       "per_video_frame": "Per Video Frame",
+      "price": "Price",
       "prompt_ratio": "Prompt Ratio",
       "prompt_tps": "Prompt",
       "quality": "Quality",
@@ -60,8 +64,13 @@
     },
     "found": "Found {{count}} models in {{channels}} channels",
     "labels": {
+      "audio": "Audio",
+      "embedding": "Embedding",
       "free": "Free",
-      "unlimited": "Unlimited"
+      "image": "Image",
+      "tiered": "Tiered",
+      "unlimited": "Unlimited",
+      "video": "Video"
     },
     "loading": "Loading models...",
     "no_models": "No models found",

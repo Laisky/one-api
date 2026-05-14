@@ -51,7 +51,7 @@
       "showing": "显示第 {{start}}-{{end}} 条，共 {{total}} 条"
     },
     "password": "密码",
-    "playground": "Playground",
+    "playground": "实验场",
     "redemptions": "兑换",
     "register": "注册",
     "remove": "移除",

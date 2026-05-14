@@ -15,7 +15,7 @@ import {
   toInt,
   validateModelConfigs,
 } from '../helpers';
-import { type ChannelConfigForm, type ChannelForm, type EndpointInfo, channelSchema } from '../schemas';
+import { createChannelSchema, type ChannelConfigForm, type ChannelForm, type EndpointInfo } from '../schemas';
 
 export const useChannelForm = () => {
   const params = useParams();
@@ -53,8 +53,10 @@ export const useChannelForm = () => {
     unknownMappingTargets: { source: string; target: string }[];
   } | null>(null);
 
+  const schema = useMemo(() => createChannelSchema((key, defaultValue) => tr(key, defaultValue)), [tr]);
+
   const form = useForm<ChannelForm>({
-    resolver: zodResolver(channelSchema),
+    resolver: zodResolver(schema),
     defaultValues: {
       name: '',
       type: isEdit ? 1 : (undefined as unknown as number),
@@ -490,7 +492,7 @@ export const useChannelForm = () => {
       }
 
       if (!isEdit && (!derivedKey || derivedKey.trim() === '')) {
-        form.setError('key', { message: 'API key is required' });
+        form.setError('key', { message: tr('validation.api_key_required', 'API key is required.') });
         notify({
           type: 'error',
           title: tr('validation.error_title', 'Validation error'),
@@ -501,7 +503,7 @@ export const useChannelForm = () => {
 
       if (data.model_mapping && !isValidJSON(data.model_mapping)) {
         form.setError('model_mapping', {
-          message: 'Invalid JSON format in model mapping',
+          message: tr('validation.model_mapping_invalid', 'Model Mapping has invalid JSON.'),
         });
         notify({
           type: 'error',
@@ -515,7 +517,7 @@ export const useChannelForm = () => {
         const validation = validateModelConfigs(data.model_configs);
         if (!validation.valid) {
           form.setError('model_configs', {
-            message: validation.error || 'Invalid model configs format',
+            message: validation.error || tr('model_configs.invalid', 'Invalid model configs format'),
           });
           notify({
             type: 'error',
@@ -528,7 +530,7 @@ export const useChannelForm = () => {
 
       if (data.inference_profile_arn_map && !isValidJSON(data.inference_profile_arn_map)) {
         form.setError('inference_profile_arn_map', {
-          message: 'Invalid JSON format in inference profile ARN map',
+          message: tr('validation.inference_profile_invalid', 'Inference Profile ARN Map has invalid JSON.'),
         });
         notify({
           type: 'error',
@@ -541,7 +543,7 @@ export const useChannelForm = () => {
       if (watchType === 34 && watchConfig.auth_type === 'oauth_jwt') {
         if (!isValidJSON(data.key)) {
           form.setError('key', {
-            message: 'Invalid JSON format for OAuth JWT configuration',
+            message: tr('validation.oauth_invalid_json', 'OAuth JWT configuration JSON is invalid.'),
           });
           notify({
             type: 'error',
@@ -558,7 +560,7 @@ export const useChannelForm = () => {
           for (const field of requiredFields) {
             if (!Object.hasOwn(oauthConfig, field)) {
               form.setError('key', {
-                message: `Missing required field: ${field}`,
+                message: tr('validation.oauth_missing_field_message', 'OAuth JWT configuration missing: {{field}}', { field }),
               });
               notify({
                 type: 'error',
@@ -573,7 +575,7 @@ export const useChannelForm = () => {
 
             if (effectiveEndpoints.length === 0) {
               form.setError('config.supported_endpoints', {
-                message: 'Select at least one endpoint',
+                message: tr('validation.endpoints_required', 'Enable at least one endpoint before saving.'),
               });
               notify({
                 type: 'error',
@@ -585,7 +587,7 @@ export const useChannelForm = () => {
           }
         } catch (error) {
           form.setError('key', {
-            message: `OAuth config parse error: ${(error as Error).message}`,
+            message: tr('validation.oauth_parse_message', 'OAuth JWT parse error: {{error}}', { error: (error as Error).message }),
           });
           notify({
             type: 'error',
@@ -603,7 +605,7 @@ export const useChannelForm = () => {
 
       if (baseURLRequired && !trimmedBaseURL) {
         form.setError('base_url', {
-          message: 'Base URL is required for this channel type',
+          message: tr('validation.base_url_required', 'Base URL is required for this channel type.'),
         });
         notify({
           type: 'error',
@@ -638,7 +640,7 @@ export const useChannelForm = () => {
           },
         });
       } else {
-        form.setError('root', { message: message || 'Operation failed' });
+        form.setError('root', { message: message || tr('errors.operation_failed', 'Operation failed') });
         notify({
           type: 'error',
           title: tr('errors.request_failed_title', 'Request failed'),
@@ -647,7 +649,7 @@ export const useChannelForm = () => {
       }
     } catch (error) {
       form.setError('root', {
-        message: error instanceof Error ? error.message : 'Operation failed',
+        message: error instanceof Error ? error.message : tr('errors.operation_failed', 'Operation failed'),
       });
       notify({
         type: 'error',

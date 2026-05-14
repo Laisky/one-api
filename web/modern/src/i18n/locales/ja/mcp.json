@@ -60,6 +60,10 @@
       "title_edit": "MCP サーバーを編集",
       "tools": {
         "title": "同期されたツール"
+      },
+      "validation": {
+        "base_url_required": "ベース URL は必須です",
+        "name_required": "名前は必須です"
       }
     },
     "list": {
