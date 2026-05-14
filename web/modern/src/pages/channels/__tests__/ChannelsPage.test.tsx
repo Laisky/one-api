@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { BrowserRouter } from 'react-router-dom';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
@@ -35,6 +35,7 @@ vi.mock('react-router-dom', async () => {
 
 const mockApiGet = vi.mocked(api.get);
 const mockApiPost = vi.mocked(api.post);
+const mockApiDelete = vi.mocked(api.delete);
 
 const mockChannelsData = {
   success: true,
@@ -61,6 +62,7 @@ describe('ChannelsPage Pagination', () => {
     localStorage.clear();
     mockApiGet.mockResolvedValue({ data: mockChannelsData });
     mockApiPost.mockResolvedValue({ data: { success: true } });
+    mockApiDelete.mockResolvedValue({ data: { success: true } });
   });
 
   const renderChannelsPage = () => {
@@ -187,5 +189,23 @@ describe('ChannelsPage Pagination', () => {
     await waitFor(() => {
       expect(mockApiGet).toHaveBeenCalledWith('/api/channel/?p=0&size=10&sort=id&order=desc');
     });
+  });
+
+  it('should show the channel name and type in the delete confirmation dialog', async () => {
+    renderChannelsPage();
+    const user = userEvent.setup();
+
+    const nameCell = await screen.findByText('Channel 1');
+    const row = nameCell.closest('tr');
+
+    expect(row).not.toBeNull();
+    await user.click(within(row as HTMLElement).getByRole('button', { name: 'Delete' }));
+
+    const dialog = await screen.findByRole('dialog');
+
+    expect(within(dialog).getByText('Channel 1')).toBeInTheDocument();
+    expect(within(dialog).getByText('OpenAI')).toBeInTheDocument();
+    expect(within(dialog).getByText('Name')).toBeInTheDocument();
+    expect(within(dialog).getByText('Type')).toBeInTheDocument();
   });
 });

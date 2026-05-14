@@ -2,6 +2,7 @@ import { LogDetailsModal } from '@/components/LogDetailsModal';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
+import { useConfirmDialog } from '@/components/ui/confirm-dialog';
 import { EnhancedDataTable } from '@/components/ui/enhanced-data-table';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -90,6 +91,7 @@ interface ExportTracePayload {
 export function LogsPage() {
   const { t } = useTranslation();
   const { user } = useAuthStore();
+  const [confirmAction, ConfirmActionDialog] = useConfirmDialog();
   const [searchParams, setSearchParams] = useSearchParams();
   const [data, setData] = useState<LogRow[]>([]);
   const [loading, setLoading] = useState(false);
@@ -319,7 +321,17 @@ export function LogsPage() {
 
   const handleClearLogs = async () => {
     const ts = fromDateTimeLocal(filters.end_timestamp);
-    const confirmed = window.confirm(t('logs.confirm.delete_before', { timestamp: filters.end_timestamp }));
+    const confirmed = await confirmAction({
+      title: t('logs.actions.clear'),
+      description: t('logs.confirm.delete_before', { timestamp: filters.end_timestamp }),
+      details: [
+        {
+          label: t('logs.filters.end'),
+          value: filters.end_timestamp,
+        },
+      ],
+      variant: 'destructive',
+    });
     if (!confirmed) return;
 
     try {
@@ -838,6 +850,7 @@ export function LogsPage() {
         </CardContent>
       </Card>
 
+      <ConfirmActionDialog />
       <LogDetailsModal open={detailsModalOpen} onOpenChange={handleDetailsModalChange} log={selectedLog} />
     </ResponsivePageContainer>
   );

@@ -246,19 +246,10 @@ export function Header() {
               </div>
             ) : (
               <div className="flex flex-col gap-2">
-                <Button
-                  asChild
-                  className="w-full touch-target"
-                  onClick={() => setMobileMenuOpen(false)}
-                >
+                <Button asChild className="w-full touch-target" onClick={() => setMobileMenuOpen(false)}>
                   <Link to="/login">{t('common.login')}</Link>
                 </Button>
-                <Button
-                  asChild
-                  variant="outline"
-                  className="w-full touch-target"
-                  onClick={() => setMobileMenuOpen(false)}
-                >
+                <Button asChild variant="outline" className="w-full touch-target" onClick={() => setMobileMenuOpen(false)}>
                   <Link to="/register">{t('common.register')}</Link>
                 </Button>
               </div>

@@ -166,6 +166,9 @@ describe('UsersPage promote/demote/disable_2fa actions', () => {
     await user.click(screen.getByRole('button', { name: 'Promote' }));
 
     const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByText('Username')).toBeInTheDocument();
+    expect(within(dialog).getByText('Role')).toBeInTheDocument();
+    expect(within(dialog).getByText('User')).toBeInTheDocument();
     await user.click(within(dialog).getByRole('button', { name: 'Confirm' }));
 
     await waitFor(() => {

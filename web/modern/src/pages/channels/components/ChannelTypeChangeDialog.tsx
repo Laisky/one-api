@@ -43,6 +43,13 @@ export function ChannelTypeChangeDialog({ open, onOpenChange, fromType, toType, 
                 toType,
               })}
             </p>
+            <div className="flex items-center justify-between gap-3 rounded-md border border-warning-border bg-warning-muted px-3 py-2 text-sm text-warning-foreground">
+              <span className="font-semibold break-all">{fromType}</span>
+              <span aria-hidden="true" className="text-warning-foreground/70">
+                →
+              </span>
+              <span className="font-semibold break-all text-right">{toType}</span>
+            </div>
             <p className="text-warning font-medium">
               {tr(
                 'type_change.warning',

@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
@@ -175,5 +175,22 @@ describe('TokensPage share dropdown integration', () => {
     expect(screen.queryByTestId(`token-share-next-${sampleToken.id}`)).not.toBeInTheDocument();
     expect(screen.queryByTestId(`token-share-lobechat-${sampleToken.id}`)).not.toBeInTheDocument();
     expect(screen.getByTestId(`token-share-opencat-${sampleToken.id}`)).toBeInTheDocument();
+  });
+
+  it('shows token name and id in the delete confirmation dialog', async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByText('Sample')).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole('button', { name: 'Delete' }));
+
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByText('Sample')).toBeInTheDocument();
+    expect(within(dialog).getByText('42')).toBeInTheDocument();
+    expect(within(dialog).getByText('Name')).toBeInTheDocument();
+    expect(within(dialog).getByText('ID')).toBeInTheDocument();
   });
 });

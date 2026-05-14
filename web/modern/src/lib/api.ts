@@ -103,9 +103,7 @@ const handleAuthFailure = () => {
   }
 
   const currentPath = window.location.pathname + window.location.search;
-  const target = isSafeInternalPath(currentPath)
-    ? `/login?redirect_to=${encodeURIComponent(currentPath)}`
-    : '/login';
+  const target = isSafeInternalPath(currentPath) ? `/login?redirect_to=${encodeURIComponent(currentPath)}` : '/login';
 
   // `replace` (vs. `href`) prevents the broken state from accumulating in
   // history — the user can't back-button into a 401 retry.

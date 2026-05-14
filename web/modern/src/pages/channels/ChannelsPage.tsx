@@ -164,9 +164,18 @@ export function ChannelsPage() {
   const initializedRef = useRef(false);
   const skipFirstSortEffect = useRef(true);
 
+  const getChannelTypeLabel = (type: number) => {
+    return (
+      CHANNEL_TYPES[type]?.name ||
+      t('channels.type_unknown', {
+        type,
+      })
+    );
+  };
+
   const renderChannelTypeBadge = (type: number) => {
     const channelType = CHANNEL_TYPES[type] || {
-      name: t('channels.type_unknown', { type }),
+      name: getChannelTypeLabel(type),
       color: undefined,
     };
     const colorValue = resolveChannelColor(channelType.color, type);
@@ -322,9 +331,24 @@ export function ChannelsPage() {
   const manage = async (id: number, action: 'enable' | 'disable' | 'delete' | 'test', index?: number) => {
     try {
       if (action === 'delete') {
+        const targetChannel = data.find((channel) => channel.id === id);
         const confirmed = await confirmAction({
           title: t('channels.confirm.delete_title', 'Delete Channel'),
           description: t('channels.confirm.delete'),
+          details: [
+            {
+              label: t('channels.columns.name'),
+              value: targetChannel?.name || '-',
+            },
+            {
+              label: t('channels.columns.type'),
+              value: targetChannel ? getChannelTypeLabel(targetChannel.type) : '-',
+            },
+            {
+              label: t('channels.search.id_label'),
+              value: id,
+            },
+          ],
         });
         if (!confirmed) return;
         // Unified API call - complete URL with /api prefix
@@ -409,7 +433,8 @@ export function ChannelsPage() {
       notify({
         type: 'error',
         title: t('channels.notifications.duplicate_failed_title', 'Duplicate failed'),
-        message: error instanceof Error ? error.message : t('channels.notifications.duplicate_failed_message', 'Failed to duplicate channel.'),
+        message:
+          error instanceof Error ? error.message : t('channels.notifications.duplicate_failed_message', 'Failed to duplicate channel.'),
       });
     }
   };

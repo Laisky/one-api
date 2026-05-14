@@ -186,6 +186,19 @@ export function TokensPage() {
     },
     [tr]
   );
+  const buildTokenDeleteDetails = useCallback(
+    (token: Token) => [
+      {
+        label: tr('columns.name', 'Name'),
+        value: formatTokenLabel(token),
+      },
+      {
+        label: tr('columns.id', 'ID'),
+        value: token.id,
+      },
+    ],
+    [formatTokenLabel, tr]
+  );
 
   const load = async (p = 0, size = pageSize) => {
     setLoading(true);
@@ -570,6 +583,7 @@ export function TokensPage() {
                 const confirmed = await confirmDelete({
                   title: tr('confirm.delete_title', 'Delete Token'),
                   description: tr('confirm.delete', 'Are you sure you want to delete token "{{label}}"?', { label }),
+                  details: buildTokenDeleteDetails(token),
                 });
                 if (confirmed) manage(token.id, 'delete');
               }}
@@ -657,6 +671,7 @@ export function TokensPage() {
                       const confirmed = await confirmDelete({
                         title: tr('confirm.delete_title', 'Delete Token'),
                         description: tr('confirm.delete', 'Are you sure you want to delete token "{{label}}"?', { label }),
+                        details: buildTokenDeleteDetails(row),
                       });
                       if (confirmed) manage(row.id, 'delete');
                     }}

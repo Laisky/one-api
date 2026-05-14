@@ -3,6 +3,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { useConfirmDialog } from '@/components/ui/confirm-dialog';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
@@ -33,6 +34,7 @@ export function PersonalSettings() {
   const { t } = useTranslation();
   const { user, updateUser } = useAuthStore();
   const { notify } = useNotifications();
+  const [confirmAction, ConfirmActionDialog] = useConfirmDialog();
   const [loading, setLoading] = useState(false);
   const [systemToken, setSystemToken] = useState('');
   const [affLink, setAffLink] = useState('');
@@ -364,11 +366,27 @@ export function PersonalSettings() {
   };
 
   // Delete a passkey
-  const deletePasskey = async (id: number) => {
-    if (!confirm(t('personal_settings.passkey.delete_confirm'))) return;
+  const deletePasskey = async (passkey: PasskeyInfo) => {
+    const confirmed = await confirmAction({
+      title: t('personal_settings.passkey.delete_button'),
+      description: t('personal_settings.passkey.delete_confirm'),
+      details: [
+        {
+          label: t('personal_settings.passkey.name_label'),
+          value: passkey.credential_name,
+        },
+        {
+          label: t('personal_settings.passkey.registered'),
+          value: new Date(passkey.created_at).toLocaleDateString(),
+        },
+      ],
+      variant: 'destructive',
+    });
+    if (!confirmed) return;
+
     setPasskeyLoading(true);
     try {
-      const res = await api.delete(`/api/user/passkey/${id}`);
+      const res = await api.delete(`/api/user/passkey/${passkey.id}`);
       if (res.data.success) {
         await loadPasskeys();
       } else {
@@ -874,7 +892,7 @@ export function PersonalSettings() {
                             {t('personal_settings.passkey.sign_count')}: {pk.sign_count}
                           </div>
                         </div>
-                        <Button variant="destructive" size="sm" onClick={() => deletePasskey(pk.id)} disabled={passkeyLoading}>
+                        <Button variant="destructive" size="sm" onClick={() => deletePasskey(pk)} disabled={passkeyLoading}>
                           {t('personal_settings.passkey.delete_button')}
                         </Button>
                       </div>
@@ -1074,6 +1092,7 @@ export function PersonalSettings() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      <ConfirmActionDialog />
     </div>
   );
 }

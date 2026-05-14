@@ -6,7 +6,11 @@ import { useAuthStore } from '@/lib/stores/auth';
 // Custom axios adapter — lets us stage canned responses without spinning up
 // a real network or pulling in axios-mock-adapter (which isn't a dep).
 type Canned = { status: number; data: unknown };
-const stub: { route: (url: string, resp: Canned) => void; reset: () => void; adapter: (cfg: AxiosRequestConfig) => Promise<AxiosResponse> } = (() => {
+const stub: {
+  route: (url: string, resp: Canned) => void;
+  reset: () => void;
+  adapter: (cfg: AxiosRequestConfig) => Promise<AxiosResponse>;
+} = (() => {
   const responses = new Map<string, Canned>();
   return {
     route: (url, resp) => responses.set(url, resp),

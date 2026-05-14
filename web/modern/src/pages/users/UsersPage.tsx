@@ -1,5 +1,6 @@
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
+import { ConfirmDetailsList } from '@/components/ui/confirm-dialog';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { EnhancedDataTable } from '@/components/ui/enhanced-data-table';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
@@ -333,6 +334,19 @@ export function UsersPage() {
     setConfirmState({ open: false });
   };
 
+  const confirmDetails = confirmState.user
+    ? [
+        {
+          label: tr('columns.username', 'Username'),
+          value: confirmState.user.username,
+        },
+        {
+          label: tr('columns.role', 'Role'),
+          value: getRoleLabel(confirmState.user.role),
+        },
+      ]
+    : [];
+
   const runConfirmAction = async () => {
     const { kind, user } = confirmState;
     if (!kind || !user) return;
@@ -606,22 +620,27 @@ export function UsersPage() {
                   ? tr('confirm.demote_title', 'Demote user')
                   : tr('confirm.disable_2fa_title', 'Disable 2FA')}
             </DialogTitle>
-            <DialogDescription>
-              {confirmState.kind === 'promote'
-                ? tr('confirm.promote_description', 'Promote {{username}} to administrator? They will gain admin privileges.', {
-                    username: confirmState.user?.username ?? '',
-                  })
-                : confirmState.kind === 'demote'
-                  ? tr('confirm.demote_description', 'Demote {{username}} to a regular user? They will lose admin privileges.', {
-                      username: confirmState.user?.username ?? '',
-                    })
-                  : tr(
-                      'confirm.disable_2fa_description',
-                      'Disable two-factor authentication for {{username}}? They will be able to sign in without a 2FA code.',
-                      {
+            <DialogDescription asChild>
+              <div className="space-y-3 text-sm text-muted-foreground">
+                <div>
+                  {confirmState.kind === 'promote'
+                    ? tr('confirm.promote_description', 'Promote {{username}} to administrator? They will gain admin privileges.', {
                         username: confirmState.user?.username ?? '',
-                      }
-                    )}
+                      })
+                    : confirmState.kind === 'demote'
+                      ? tr('confirm.demote_description', 'Demote {{username}} to a regular user? They will lose admin privileges.', {
+                          username: confirmState.user?.username ?? '',
+                        })
+                      : tr(
+                          'confirm.disable_2fa_description',
+                          'Disable two-factor authentication for {{username}}? They will be able to sign in without a 2FA code.',
+                          {
+                            username: confirmState.user?.username ?? '',
+                          }
+                        )}
+                </div>
+                {confirmDetails.length > 0 ? <ConfirmDetailsList details={confirmDetails} /> : null}
+              </div>
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
