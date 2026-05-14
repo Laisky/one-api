@@ -314,10 +314,7 @@ func TestChannel(c *gin.Context) {
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
 		lg.Debug("invalid channel id", zap.Error(err))
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
+		helper.RespondError(c, err)
 		return
 	}
 
@@ -325,10 +322,7 @@ func TestChannel(c *gin.Context) {
 	channel, err := model.GetChannelById(id, true)
 	if err != nil {
 		lg.Debug("failed to get channel by id", zap.Error(err))
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
+		helper.RespondError(c, err)
 		return
 	}
 
@@ -495,10 +489,7 @@ func TestChannels(c *gin.Context) {
 	}
 	err := testChannels(ctx, true, scope)
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
+		helper.RespondError(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{

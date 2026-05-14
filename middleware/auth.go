@@ -333,6 +333,6 @@ func shouldCheckModel(c *gin.Context) bool {
 
 // respondAuthError centralizes error responses for auth failures (DRY, KISS)
 func respondAuthError(c *gin.Context, status int, message string) {
-	c.JSON(status, gin.H{"success": false, "message": message})
+	helper.RespondErrorWithStatus(c, status, errors.New(message))
 	c.Abort()
 }

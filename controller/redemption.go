@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/Laisky/errors/v2"
 	"github.com/gin-gonic/gin"
 
 	"github.com/Laisky/one-api/common/config"
@@ -32,20 +33,14 @@ func GetAllRedemptions(c *gin.Context) {
 
 	redemptions, err := model.GetAllRedemptions(p*size, size)
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
+		helper.RespondError(c, err)
 		return
 	}
 
 	// Get total count for pagination
 	totalCount, err := model.GetRedemptionCount()
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
+		helper.RespondError(c, err)
 		return
 	}
 
@@ -78,10 +73,7 @@ func SearchRedemptions(c *gin.Context) {
 	}
 	redemptions, total, err := model.SearchRedemptions(keyword, p*size, size, sortBy, sortOrder)
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
+		helper.RespondError(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{
@@ -96,18 +88,12 @@ func SearchRedemptions(c *gin.Context) {
 func GetRedemption(c *gin.Context) {
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
+		helper.RespondError(c, err)
 		return
 	}
 	redemption, err := model.GetRedemptionById(id)
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
+		helper.RespondError(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{
@@ -122,35 +108,23 @@ func AddRedemption(c *gin.Context) {
 	redemption := model.Redemption{}
 	err := c.ShouldBindJSON(&redemption)
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
+		helper.RespondError(c, err)
 		return
 	}
 	if strings.TrimSpace(redemption.Name) == "" {
-		c.JSON(http.StatusOK, gin.H{"success": false, "message": "Redemption name is required"})
+		helper.RespondError(c, errors.New("Redemption name is required"))
 		return
 	}
 	if len(redemption.Name) == 0 || len(redemption.Name) > 20 {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": "The length of the redemption code name must be between 1-20",
-		})
+		helper.RespondError(c, errors.New("The length of the redemption code name must be between 1-20"))
 		return
 	}
 	if redemption.Count <= 0 {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": "The number of redemption codes must be greater than 0",
-		})
+		helper.RespondError(c, errors.New("The number of redemption codes must be greater than 0"))
 		return
 	}
 	if redemption.Count > 100 {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": "The number of redemption codes generated in a batch cannot be greater than 100",
-		})
+		helper.RespondError(c, errors.New("The number of redemption codes generated in a batch cannot be greater than 100"))
 		return
 	}
 	keys := make([]string, 0, redemption.Count)
@@ -186,10 +160,7 @@ func DeleteRedemption(c *gin.Context) {
 	id, _ := strconv.Atoi(c.Param("id"))
 	err := model.DeleteRedemptionById(id)
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
+		helper.RespondError(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{
@@ -204,18 +175,12 @@ func UpdateRedemption(c *gin.Context) {
 	redemption := model.Redemption{}
 	err := c.ShouldBindJSON(&redemption)
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
+		helper.RespondError(c, err)
 		return
 	}
 	cleanRedemption, err := model.GetRedemptionById(redemption.Id)
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
+		helper.RespondError(c, err)
 		return
 	}
 	if statusOnly != "" {
@@ -223,7 +188,7 @@ func UpdateRedemption(c *gin.Context) {
 	} else {
 		// If you add more fields, please also update redemption.Update()
 		if strings.TrimSpace(redemption.Name) == "" {
-			c.JSON(http.StatusOK, gin.H{"success": false, "message": "Redemption name cannot be empty"})
+			helper.RespondError(c, errors.New("Redemption name cannot be empty"))
 			return
 		}
 		cleanRedemption.Name = redemption.Name
@@ -231,10 +196,7 @@ func UpdateRedemption(c *gin.Context) {
 	}
 	err = cleanRedemption.Update()
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
+		helper.RespondError(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{

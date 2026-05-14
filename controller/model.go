@@ -16,6 +16,7 @@ import (
 	"golang.org/x/sync/singleflight"
 
 	"github.com/Laisky/one-api/common/ctxkey"
+	"github.com/Laisky/one-api/common/helper"
 	"github.com/Laisky/one-api/dto"
 	"github.com/Laisky/one-api/middleware"
 	"github.com/Laisky/one-api/model"
@@ -825,7 +826,7 @@ func GetModelsDisplay(c *gin.Context) {
 			return result, nil
 		})
 		if err != nil {
-			c.JSON(http.StatusOK, ModelsDisplayResponse{Success: false, Message: "Failed to load channels: " + err.Error()})
+			helper.RespondError(c, errors.Wrap(err, "Failed to load channels"))
 			return
 		}
 		data := v.(map[string]ChannelModelsDisplayInfo)
@@ -836,12 +837,12 @@ func GetModelsDisplay(c *gin.Context) {
 	// Logged-in path: show only models allowed for the user group
 	ctx, userGroup, err := getRequestUserGroup(c)
 	if err != nil {
-		c.JSON(http.StatusOK, ModelsDisplayResponse{Success: false, Message: "Failed to get user group: " + err.Error()})
+		helper.RespondError(c, errors.Wrap(err, "Failed to get user group"))
 		return
 	}
 	abilities, err := model.CacheGetGroupModelsV2(ctx, userGroup)
 	if err != nil {
-		c.JSON(http.StatusOK, ModelsDisplayResponse{Success: false, Message: "Failed to get available models: " + err.Error()})
+		helper.RespondError(c, errors.Wrap(err, "Failed to get available models"))
 		return
 	}
 
@@ -1065,19 +1066,13 @@ func RetrieveModel(c *gin.Context) {
 func GetUserAvailableModels(c *gin.Context) {
 	ctx, userGroup, err := getRequestUserGroup(c)
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
+		helper.RespondError(c, err)
 		return
 	}
 
 	models, err := model.CacheGetGroupModelsV2(ctx, userGroup)
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
+		helper.RespondError(c, err)
 		return
 	}
 	channelCache := make(map[int]*model.Channel)

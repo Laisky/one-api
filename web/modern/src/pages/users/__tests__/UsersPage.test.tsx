@@ -303,6 +303,31 @@ describe('UsersPage promote/demote/disable_2fa actions', () => {
     expect(screen.getByText('alice')).toBeInTheDocument();
   });
 
+  it('shows an error notification when top up returns success false', async () => {
+    setSuperAdmin();
+    seedListResponse([baseUser]);
+    (api.post as any).mockResolvedValue({
+      data: { success: false, message: 'top up rejected' },
+    });
+
+    renderPage();
+    const user = userEvent.setup();
+    await screen.findByText('alice');
+
+    await user.click(screen.getByRole('button', { name: 'Top Up' }));
+    const dialog = await screen.findByRole('dialog');
+    await user.click(within(dialog).getByRole('button', { name: 'Submit' }));
+
+    await waitFor(() => {
+      expect(notify).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'error',
+          message: 'top up rejected',
+        })
+      );
+    });
+  });
+
   it('disables 2FA after confirmation and notifies success', async () => {
     setSuperAdmin();
     seedListResponse([baseUser]);

@@ -6,6 +6,7 @@ import { useConfirmDialog } from '@/components/ui/confirm-dialog';
 import { EnhancedDataTable } from '@/components/ui/enhanced-data-table';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { useNotifications } from '@/components/ui/notifications';
 import { ResponsivePageContainer } from '@/components/ui/responsive-container';
 import { SearchableDropdown, type SearchOption } from '@/components/ui/searchable-dropdown';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -90,6 +91,7 @@ interface ExportTracePayload {
 
 export function LogsPage() {
   const { t } = useTranslation();
+  const { notify } = useNotifications();
   const { user } = useAuthStore();
   const [confirmAction, ConfirmActionDialog] = useConfirmDialog();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -336,10 +338,28 @@ export function LogsPage() {
 
     try {
       // Unified API call - complete URL with /api prefix
-      await api.delete('/api/log?target_timestamp=' + ts);
+      const res = await api.delete('/api/log?target_timestamp=' + ts);
+      if (!res.data?.success) {
+        notify({
+          type: 'error',
+          title: t('logs.notifications.clear_failed_title', 'Clear failed'),
+          message: res.data?.message || t('logs.notifications.clear_failed_message', 'Failed to clear logs.'),
+        });
+        return;
+      }
       load(0, pageSize);
+      notify({
+        type: 'success',
+        title: t('logs.notifications.clear_success_title', 'Logs cleared'),
+        message: t('logs.notifications.clear_success_message', 'Logs cleared successfully.'),
+      });
     } catch (error) {
       console.error('Failed to clear logs:', error);
+      notify({
+        type: 'error',
+        title: t('logs.notifications.clear_failed_title', 'Clear failed'),
+        message: (error as any)?.response?.data?.message || (error as Error)?.message || t('logs.notifications.clear_failed_message', 'Failed to clear logs.'),
+      });
     }
   };
 

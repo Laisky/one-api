@@ -10,6 +10,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/Laisky/one-api/common/config"
+	"github.com/Laisky/one-api/common/helper"
 )
 
 type turnstileCheckResponse struct {
@@ -51,10 +52,7 @@ func TurnstileCheck() gin.HandlerFunc {
 				return
 			}
 			if err := VerifyTurnstileToken(c.Query("turnstile"), c.ClientIP()); err != nil {
-				c.JSON(http.StatusOK, gin.H{
-					"success": false,
-					"message": err.Error(),
-				})
+				helper.RespondError(c, err)
 				c.Abort()
 				return
 			}

@@ -159,35 +159,57 @@ export function OperationSettings() {
     }
   };
 
-  const updateOption = async (key: string, value: string | number | boolean) => {
+  const persistOption = async (key: string, value: string | number | boolean) => {
     try {
       // Unified API call - complete URL with /api prefix
-      await api.put('/api/option/', { key, value: String(value) });
+      const response = await api.put('/api/option/', { key, value: String(value) });
+      if (!response.data?.success) {
+        throw new Error(response.data?.message || t('operation_settings.save_failed_generic', 'Failed to save setting.'));
+      }
     } catch (error) {
       console.error(`Error updating ${key}:`, error);
+      throw error;
     }
+  };
+
+  const updateOption = async (key: string, value: string | number | boolean) => {
+    await persistOption(key, value);
   };
 
   const onSubmitGroup = async (group: 'quota' | 'general' | 'monitor') => {
     const values = form.getValues();
 
-    switch (group) {
-      case 'quota':
-        await updateOption('QuotaForNewUser', values.QuotaForNewUser);
-        await updateOption('QuotaForInviter', values.QuotaForInviter);
-        await updateOption('QuotaForInvitee', values.QuotaForInvitee);
-        await updateOption('PreConsumedQuota', values.PreConsumedQuota);
-        break;
-      case 'general':
-        await updateOption('TopUpLink', values.TopUpLink);
-        await updateOption('ChatLink', values.ChatLink);
-        await updateOption('QuotaPerUnit', values.QuotaPerUnit);
-        await updateOption('RetryTimes', values.RetryTimes);
-        break;
-      case 'monitor':
-        await updateOption('QuotaRemindThreshold', values.QuotaRemindThreshold);
-        await updateOption('ChannelDisableThreshold', values.ChannelDisableThreshold);
-        break;
+    try {
+      switch (group) {
+        case 'quota':
+          await persistOption('QuotaForNewUser', values.QuotaForNewUser);
+          await persistOption('QuotaForInviter', values.QuotaForInviter);
+          await persistOption('QuotaForInvitee', values.QuotaForInvitee);
+          await persistOption('PreConsumedQuota', values.PreConsumedQuota);
+          break;
+        case 'general':
+          await persistOption('TopUpLink', values.TopUpLink);
+          await persistOption('ChatLink', values.ChatLink);
+          await persistOption('QuotaPerUnit', values.QuotaPerUnit);
+          await persistOption('RetryTimes', values.RetryTimes);
+          break;
+        case 'monitor':
+          await persistOption('QuotaRemindThreshold', values.QuotaRemindThreshold);
+          await persistOption('ChannelDisableThreshold', values.ChannelDisableThreshold);
+          break;
+      }
+
+      notify({
+        type: 'success',
+        title: t('operation_settings.save_success_title', 'Settings saved'),
+        message: t('operation_settings.save_success_message', 'Changes saved successfully.'),
+      });
+    } catch (error: any) {
+      notify({
+        type: 'error',
+        title: t('operation_settings.save_failed_title', 'Save failed'),
+        message: error?.response?.data?.message || error?.message || t('operation_settings.save_failed_generic', 'Failed to save setting.'),
+      });
     }
   };
 
@@ -207,7 +229,7 @@ export function OperationSettings() {
     setSavingGroupRatio(true);
     try {
       const sanitized = JSON.stringify(JSON.parse(sanitizeJsonInput(groupRatioText)));
-      await api.put('/api/option/', { key: 'GroupRatio', value: sanitized });
+      await persistOption('GroupRatio', sanitized);
       const pretty = formatJSON(sanitized) || sanitized;
       setGroupRatioText(pretty);
       setGroupRatioOriginal(pretty);
@@ -240,12 +262,25 @@ export function OperationSettings() {
       const res = await api.delete(`/api/log/?target_timestamp=${timestamp}`);
       const { success, message, data } = res.data;
       if (success) {
-        // Log clearing succeeded
+        notify({
+          type: 'success',
+          title: t('operation_settings.logs.clear_success_title', 'Logs cleared'),
+          message: data || t('operation_settings.logs.clear_success_message', 'Historical logs cleared.'),
+        });
       } else {
-        console.error(t('operation_settings.logs.clear_failed', { message }));
+        notify({
+          type: 'error',
+          title: t('operation_settings.logs.clear_failed_title', 'Clear failed'),
+          message: message || t('operation_settings.logs.clear_failed_message', 'Failed to clear logs.'),
+        });
       }
     } catch (error) {
       console.error('Error clearing logs:', error);
+      notify({
+        type: 'error',
+        title: t('operation_settings.logs.clear_failed_title', 'Clear failed'),
+        message: error instanceof Error ? error.message : t('operation_settings.logs.clear_failed_message', 'Failed to clear logs.'),
+      });
     }
   };
 
@@ -517,9 +552,19 @@ export function OperationSettings() {
                       <FormControl>
                         <Checkbox
                           checked={field.value}
-                          onCheckedChange={(checked) => {
+                          onCheckedChange={async (checked) => {
                             field.onChange(checked);
-                            updateOption('LogConsumeEnabled', checked);
+                            try {
+                              await updateOption('LogConsumeEnabled', checked);
+                            } catch (error: any) {
+                              field.onChange(!checked);
+                              notify({
+                                type: 'error',
+                                title: t('operation_settings.save_failed_title', 'Save failed'),
+                                message:
+                                  error?.response?.data?.message || error?.message || t('operation_settings.save_failed_generic', 'Failed to save setting.'),
+                              });
+                            }
                           }}
                         />
                       </FormControl>
@@ -548,9 +593,19 @@ export function OperationSettings() {
                       <FormControl>
                         <Checkbox
                           checked={field.value}
-                          onCheckedChange={(checked) => {
+                          onCheckedChange={async (checked) => {
                             field.onChange(checked);
-                            updateOption('DisplayInCurrencyEnabled', checked);
+                            try {
+                              await updateOption('DisplayInCurrencyEnabled', checked);
+                            } catch (error: any) {
+                              field.onChange(!checked);
+                              notify({
+                                type: 'error',
+                                title: t('operation_settings.save_failed_title', 'Save failed'),
+                                message:
+                                  error?.response?.data?.message || error?.message || t('operation_settings.save_failed_generic', 'Failed to save setting.'),
+                              });
+                            }
                           }}
                         />
                       </FormControl>
@@ -579,9 +634,19 @@ export function OperationSettings() {
                       <FormControl>
                         <Checkbox
                           checked={field.value}
-                          onCheckedChange={(checked) => {
+                          onCheckedChange={async (checked) => {
                             field.onChange(checked);
-                            updateOption('DisplayTokenStatEnabled', checked);
+                            try {
+                              await updateOption('DisplayTokenStatEnabled', checked);
+                            } catch (error: any) {
+                              field.onChange(!checked);
+                              notify({
+                                type: 'error',
+                                title: t('operation_settings.save_failed_title', 'Save failed'),
+                                message:
+                                  error?.response?.data?.message || error?.message || t('operation_settings.save_failed_generic', 'Failed to save setting.'),
+                              });
+                            }
                           }}
                         />
                       </FormControl>
@@ -610,9 +675,19 @@ export function OperationSettings() {
                       <FormControl>
                         <Checkbox
                           checked={field.value}
-                          onCheckedChange={(checked) => {
+                          onCheckedChange={async (checked) => {
                             field.onChange(checked);
-                            updateOption('ApproximateTokenEnabled', checked);
+                            try {
+                              await updateOption('ApproximateTokenEnabled', checked);
+                            } catch (error: any) {
+                              field.onChange(!checked);
+                              notify({
+                                type: 'error',
+                                title: t('operation_settings.save_failed_title', 'Save failed'),
+                                message:
+                                  error?.response?.data?.message || error?.message || t('operation_settings.save_failed_generic', 'Failed to save setting.'),
+                              });
+                            }
                           }}
                         />
                       </FormControl>
@@ -714,9 +789,19 @@ export function OperationSettings() {
                       <FormControl>
                         <Checkbox
                           checked={field.value}
-                          onCheckedChange={(checked) => {
+                          onCheckedChange={async (checked) => {
                             field.onChange(checked);
-                            updateOption('AutomaticDisableChannelEnabled', checked);
+                            try {
+                              await updateOption('AutomaticDisableChannelEnabled', checked);
+                            } catch (error: any) {
+                              field.onChange(!checked);
+                              notify({
+                                type: 'error',
+                                title: t('operation_settings.save_failed_title', 'Save failed'),
+                                message:
+                                  error?.response?.data?.message || error?.message || t('operation_settings.save_failed_generic', 'Failed to save setting.'),
+                              });
+                            }
                           }}
                         />
                       </FormControl>
@@ -745,9 +830,19 @@ export function OperationSettings() {
                       <FormControl>
                         <Checkbox
                           checked={field.value}
-                          onCheckedChange={(checked) => {
+                          onCheckedChange={async (checked) => {
                             field.onChange(checked);
-                            updateOption('AutomaticEnableChannelEnabled', checked);
+                            try {
+                              await updateOption('AutomaticEnableChannelEnabled', checked);
+                            } catch (error: any) {
+                              field.onChange(!checked);
+                              notify({
+                                type: 'error',
+                                title: t('operation_settings.save_failed_title', 'Save failed'),
+                                message:
+                                  error?.response?.data?.message || error?.message || t('operation_settings.save_failed_generic', 'Failed to save setting.'),
+                              });
+                            }
                           }}
                         />
                       </FormControl>

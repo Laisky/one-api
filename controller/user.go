@@ -62,19 +62,13 @@ func Login(c *gin.Context) {
 	var loginRequest LoginRequest
 	err := json.NewDecoder(c.Request.Body).Decode(&loginRequest)
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"message": invalidParameterMessage,
-			"success": false,
-		})
+		helper.RespondError(c, errors.New(invalidParameterMessage))
 		return
 	}
 	username := loginRequest.Username
 	password := loginRequest.Password
 	if username == "" || password == "" {
-		c.JSON(http.StatusOK, gin.H{
-			"message": invalidParameterMessage,
-			"success": false,
-		})
+		helper.RespondError(c, errors.New(invalidParameterMessage))
 		return
 	}
 
@@ -124,10 +118,7 @@ func Login(c *gin.Context) {
 		logger.Logger.Debug("password login rejected: feature disabled for non-root user",
 			zap.Int("user_id", user.Id),
 			zap.Int("role", user.Role))
-		c.JSON(http.StatusOK, gin.H{
-			"message": "The administrator has disabled password login. Please use a third-party authentication method (e.g. OIDC) to log in.",
-			"success": false,
-		})
+		helper.RespondError(c, errors.New("The administrator has disabled password login. Please use a third-party authentication method (e.g. OIDC) to log in."))
 		return
 	}
 
@@ -148,19 +139,13 @@ func Login(c *gin.Context) {
 
 		// Check rate limit for TOTP verification during login
 		if !middleware.CheckTotpRateLimit(c, user.Id) {
-			c.JSON(http.StatusTooManyRequests, gin.H{
-				"success": false,
-				"message": "Too many TOTP verification attempts. Please wait before trying again.",
-			})
+			helper.RespondErrorWithStatus(c, http.StatusTooManyRequests, errors.New("Too many TOTP verification attempts. Please wait before trying again."))
 			return
 		}
 
 		// Verify TOTP code
 		if !verifyTotpCode(ctx, user.Id, user.TotpSecret, loginRequest.TotpCode) {
-			c.JSON(http.StatusOK, gin.H{
-				"message": "Invalid TOTP code",
-				"success": false,
-			})
+			helper.RespondError(c, errors.New("Invalid TOTP code"))
 			return
 		}
 	}
@@ -223,10 +208,7 @@ func Logout(c *gin.Context) {
 	session.Clear()
 	err := session.Save()
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"message": err.Error(),
-			"success": false,
-		})
+		helper.RespondError(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{
@@ -238,48 +220,30 @@ func Logout(c *gin.Context) {
 func Register(c *gin.Context) {
 	ctx := gmw.Ctx(c)
 	if !config.RegisterEnabled {
-		c.JSON(http.StatusOK, gin.H{
-			"message": "The administrator has turned off new user registration",
-			"success": false,
-		})
+		helper.RespondError(c, errors.New("The administrator has turned off new user registration"))
 		return
 	}
 	if !config.PasswordRegisterEnabled {
-		c.JSON(http.StatusOK, gin.H{
-			"message": "The administrator has turned off registration via password. Please use the form of third-party account verification to register",
-			"success": false,
-		})
+		helper.RespondError(c, errors.New("The administrator has turned off registration via password. Please use the form of third-party account verification to register"))
 		return
 	}
 	var user model.User
 	err := json.NewDecoder(c.Request.Body).Decode(&user)
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": invalidParameterMessage,
-		})
+		helper.RespondError(c, errors.New(invalidParameterMessage))
 		return
 	}
 	if err := common.Validate.Struct(&user); err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": invalidInputMessage,
-		})
+		helper.RespondError(c, errors.New(invalidInputMessage))
 		return
 	}
 	if config.EmailVerificationEnabled {
 		if user.Email == "" || user.VerificationCode == "" {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": "The administrator has turned on email verification, please enter the email address and verification code",
-			})
+			helper.RespondError(c, errors.New("The administrator has turned on email verification, please enter the email address and verification code"))
 			return
 		}
 		if !common.VerifyCodeWithKey(user.Email, user.VerificationCode, common.EmailVerificationPurpose) {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": "Verification code error or expired",
-			})
+			helper.RespondError(c, errors.New("Verification code error or expired"))
 			return
 		}
 	}
@@ -295,10 +259,7 @@ func Register(c *gin.Context) {
 		cleanUser.Email = user.Email
 	}
 	if err := cleanUser.Insert(ctx, inviterId); err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
+		helper.RespondError(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{
@@ -333,20 +294,14 @@ func GetAllUsers(c *gin.Context) {
 	users, err := model.GetAllUsers(p*size, size, order, sortBy, sortOrder)
 
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
+		helper.RespondError(c, err)
 		return
 	}
 
 	// Get total count for pagination
 	totalCount, err := model.GetUserCount()
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
+		helper.RespondError(c, err)
 		return
 	}
 
@@ -368,10 +323,7 @@ func SearchUsers(c *gin.Context) {
 
 	users, err := model.SearchUsers(keyword, sortBy, sortOrder)
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
+		helper.RespondError(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{
@@ -384,26 +336,17 @@ func SearchUsers(c *gin.Context) {
 func GetUser(c *gin.Context) {
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
+		helper.RespondError(c, err)
 		return
 	}
 	user, err := model.GetUserById(id, false)
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
+		helper.RespondError(c, err)
 		return
 	}
 	myRole := c.GetInt(ctxkey.Role)
 	if myRole <= user.Role && myRole != model.RoleRootUser {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": "No permission to get information of users at the same level or higher",
-		})
+		helper.RespondError(c, errors.New("No permission to get information of users at the same level or higher"))
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{
@@ -670,27 +613,18 @@ func GenerateAccessToken(c *gin.Context) {
 	id := c.GetInt(ctxkey.Id)
 	user, err := model.GetUserById(id, true)
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
+		helper.RespondError(c, err)
 		return
 	}
 	user.AccessToken = random.GetUUID()
 
 	if model.DB.Where("access_token = ?", user.AccessToken).First(user).RowsAffected != 0 {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": "Please try again, the system-generated UUID is actually duplicated!",
-		})
+		helper.RespondError(c, errors.New("Please try again, the system-generated UUID is actually duplicated!"))
 		return
 	}
 
 	if err := user.Update(false); err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
+		helper.RespondError(c, err)
 		return
 	}
 
@@ -705,19 +639,13 @@ func GetAffCode(c *gin.Context) {
 	id := c.GetInt(ctxkey.Id)
 	user, err := model.GetUserById(id, true)
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
+		helper.RespondError(c, err)
 		return
 	}
 	if user.AffCode == "" {
 		user.AffCode = random.GetRandomString(4)
 		if err := user.Update(false); err != nil {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": err.Error(),
-			})
+			helper.RespondError(c, err)
 			return
 		}
 	}
@@ -733,10 +661,7 @@ func GetSelfByToken(c *gin.Context) {
 	userID := c.GetInt(ctxkey.Id)
 	tokenID := c.GetInt(ctxkey.TokenId)
 	if userID == 0 || tokenID == 0 {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"success": false,
-			"message": "missing token context",
-		})
+		helper.RespondErrorWithStatus(c, http.StatusBadRequest, errors.New("missing token context"))
 		return
 	}
 
@@ -825,10 +750,7 @@ func GetSelf(c *gin.Context) {
 	id := c.GetInt(ctxkey.Id)
 	user, err := model.GetUserById(id, false)
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
+		helper.RespondError(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{
@@ -843,54 +765,36 @@ func UpdateUser(c *gin.Context) {
 	adminUserID := c.GetInt(ctxkey.Id)
 	body, err := common.GetRequestBody(c)
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": invalidParameterMessage,
-		})
+		helper.RespondError(c, errors.New(invalidParameterMessage))
 		return
 	}
 
 	var raw map[string]json.RawMessage
 	if err := json.Unmarshal(body, &raw); err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": invalidParameterMessage,
-		})
+		helper.RespondError(c, errors.New(invalidParameterMessage))
 		return
 	}
 
 	var payload dto.UserAdminUpdatePayload
 	if err := json.Unmarshal(body, &payload); err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": invalidParameterMessage,
-		})
+		helper.RespondError(c, errors.New(invalidParameterMessage))
 		return
 	}
 
 	if payload.Id == 0 {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": invalidParameterMessage,
-		})
+		helper.RespondError(c, errors.New(invalidParameterMessage))
 		return
 	}
 
 	originUser, err := model.GetUserById(payload.Id, false)
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
+		helper.RespondError(c, err)
 		return
 	}
 
 	myRole := c.GetInt(ctxkey.Role)
 	if myRole <= originUser.Role && myRole != model.RoleRootUser {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": "No permission to update user information with the same permission level or higher permission level",
-		})
+		helper.RespondError(c, errors.New("No permission to update user information with the same permission level or higher permission level"))
 		return
 	}
 
@@ -904,28 +808,25 @@ func UpdateUser(c *gin.Context) {
 
 	if rawFieldPresent(raw, "username") {
 		if jsonRawIsNull(raw["username"]) {
-			c.JSON(http.StatusOK, gin.H{"success": false, "message": "Username cannot be null"})
+			helper.RespondError(c, errors.New("Username cannot be null"))
 			return
 		}
 		var username string
 		if err := json.Unmarshal(raw["username"], &username); err != nil {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": invalidParameterMessage,
-			})
+			helper.RespondError(c, errors.New(invalidParameterMessage))
 			return
 		}
 		username = strings.TrimSpace(username)
 		if username == "" {
-			c.JSON(http.StatusOK, gin.H{"success": false, "message": "Username cannot be empty"})
+			helper.RespondError(c, errors.New("Username cannot be empty"))
 			return
 		}
 		if utf8.RuneCountInString(username) < 3 || utf8.RuneCountInString(username) > 30 {
-			c.JSON(http.StatusOK, gin.H{"success": false, "message": "Username must be between 3 and 30 characters"})
+			helper.RespondError(c, errors.New("Username must be between 3 and 30 characters"))
 			return
 		}
 		if myRole <= originUser.Role && myRole != model.RoleRootUser && username != originUser.Username {
-			c.JSON(http.StatusOK, gin.H{"success": false, "message": "No permission to rename this user"})
+			helper.RespondError(c, errors.New("No permission to rename this user"))
 			return
 		}
 		updates["username"] = username
@@ -937,15 +838,12 @@ func UpdateUser(c *gin.Context) {
 		} else {
 			var displayName string
 			if err := json.Unmarshal(raw["display_name"], &displayName); err != nil {
-				c.JSON(http.StatusOK, gin.H{
-					"success": false,
-					"message": invalidParameterMessage,
-				})
+				helper.RespondError(c, errors.New(invalidParameterMessage))
 				return
 			}
 			displayName = strings.TrimSpace(displayName)
 			if utf8.RuneCountInString(displayName) > 20 {
-				c.JSON(http.StatusOK, gin.H{"success": false, "message": "Display name cannot exceed 20 characters"})
+				helper.RespondError(c, errors.New("Display name cannot exceed 20 characters"))
 				return
 			}
 			updates["display_name"] = displayName
@@ -958,20 +856,17 @@ func UpdateUser(c *gin.Context) {
 		} else {
 			var email string
 			if err := json.Unmarshal(raw["email"], &email); err != nil {
-				c.JSON(http.StatusOK, gin.H{
-					"success": false,
-					"message": invalidParameterMessage,
-				})
+				helper.RespondError(c, errors.New(invalidParameterMessage))
 				return
 			}
 			email = strings.TrimSpace(email)
 			if email != "" {
 				if utf8.RuneCountInString(email) > 50 {
-					c.JSON(http.StatusOK, gin.H{"success": false, "message": "Email cannot exceed 50 characters"})
+					helper.RespondError(c, errors.New("Email cannot exceed 50 characters"))
 					return
 				}
 				if err := common.Validate.Var(email, "email"); err != nil {
-					c.JSON(http.StatusOK, gin.H{"success": false, "message": "Valid email is required"})
+					helper.RespondError(c, errors.New("Valid email is required"))
 					return
 				}
 			}
@@ -985,19 +880,16 @@ func UpdateUser(c *gin.Context) {
 		} else {
 			var group string
 			if err := json.Unmarshal(raw["group"], &group); err != nil {
-				c.JSON(http.StatusOK, gin.H{
-					"success": false,
-					"message": invalidParameterMessage,
-				})
+				helper.RespondError(c, errors.New(invalidParameterMessage))
 				return
 			}
 			group = strings.TrimSpace(group)
 			if group == "" {
-				c.JSON(http.StatusOK, gin.H{"success": false, "message": "Group cannot be empty"})
+				helper.RespondError(c, errors.New("Group cannot be empty"))
 				return
 			}
 			if utf8.RuneCountInString(group) > 32 {
-				c.JSON(http.StatusOK, gin.H{"success": false, "message": "Group cannot exceed 32 characters"})
+				helper.RespondError(c, errors.New("Group cannot exceed 32 characters"))
 				return
 			}
 			updates["group"] = group
@@ -1010,10 +902,7 @@ func UpdateUser(c *gin.Context) {
 		} else {
 			var blacklist model.JSONStringSlice
 			if err := json.Unmarshal(raw["mcp_tool_blacklist"], &blacklist); err != nil {
-				c.JSON(http.StatusOK, gin.H{
-					"success": false,
-					"message": invalidParameterMessage,
-				})
+				helper.RespondError(c, errors.New(invalidParameterMessage))
 				return
 			}
 			updates["mcp_tool_blacklist"] = blacklist
@@ -1027,16 +916,13 @@ func UpdateUser(c *gin.Context) {
 			if payload.Quota == nil {
 				var quotaValue int64
 				if err := json.Unmarshal(raw["quota"], &quotaValue); err != nil {
-					c.JSON(http.StatusOK, gin.H{
-						"success": false,
-						"message": invalidParameterMessage,
-					})
+					helper.RespondError(c, errors.New(invalidParameterMessage))
 					return
 				}
 				payload.Quota = &quotaValue
 			}
 			if *payload.Quota < 0 {
-				c.JSON(http.StatusOK, gin.H{"success": false, "message": "Quota must be non-negative"})
+				helper.RespondError(c, errors.New("Quota must be non-negative"))
 				return
 			}
 			newQuota = *payload.Quota
@@ -1056,20 +942,20 @@ func UpdateUser(c *gin.Context) {
 		} else {
 			var metaPayload dto.UserMetadataPayload
 			if err := json.Unmarshal(raw["metadata"], &metaPayload); err != nil {
-				c.JSON(http.StatusOK, gin.H{"success": false, "message": invalidParameterMessage})
+				helper.RespondError(c, errors.New(invalidParameterMessage))
 				return
 			}
 			merged := originUser.Metadata
 			if metaPayload.PasswordLocked != nil {
 				if myRole != model.RoleRootUser {
-					c.JSON(http.StatusOK, gin.H{"success": false, "message": "Only root admin can change password lock"})
+					helper.RespondError(c, errors.New("Only root admin can change password lock"))
 					return
 				}
 				merged.PasswordLocked = *metaPayload.PasswordLocked
 			}
 			encoded, encErr := json.Marshal(merged)
 			if encErr != nil {
-				c.JSON(http.StatusOK, gin.H{"success": false, "message": errors.Wrap(encErr, "encode user metadata").Error()})
+				helper.RespondError(c, errors.Wrap(encErr, "encode user metadata"))
 				return
 			}
 			updates["metadata"] = string(encoded)
@@ -1089,28 +975,25 @@ func UpdateUser(c *gin.Context) {
 		} else {
 			var password string
 			if err := json.Unmarshal(raw["password"], &password); err != nil {
-				c.JSON(http.StatusOK, gin.H{
-					"success": false,
-					"message": invalidParameterMessage,
-				})
+				helper.RespondError(c, errors.New(invalidParameterMessage))
 				return
 			}
 			password = strings.TrimSpace(password)
 			if password == "" {
-				c.JSON(http.StatusOK, gin.H{"success": false, "message": "Password cannot be empty"})
+				helper.RespondError(c, errors.New("Password cannot be empty"))
 				return
 			}
 			if effectivePasswordLocked {
-				c.JSON(http.StatusOK, gin.H{"success": false, "message": "Password is locked for this user"})
+				helper.RespondError(c, errors.New("Password is locked for this user"))
 				return
 			}
 			if utf8.RuneCountInString(password) < 8 || utf8.RuneCountInString(password) > 20 {
-				c.JSON(http.StatusOK, gin.H{"success": false, "message": "Password length must be between 8 and 20 characters"})
+				helper.RespondError(c, errors.New("Password length must be between 8 and 20 characters"))
 				return
 			}
 			hashed, hashErr := common.Password2Hash(password)
 			if hashErr != nil {
-				c.JSON(http.StatusOK, gin.H{"success": false, "message": hashErr.Error()})
+				helper.RespondError(c, hashErr)
 				return
 			}
 			updates["password"] = hashed
@@ -1125,17 +1008,11 @@ func UpdateUser(c *gin.Context) {
 			if payload.Role != nil {
 				roleValue = *payload.Role
 			} else if err := json.Unmarshal(raw["role"], &roleValue); err != nil {
-				c.JSON(http.StatusOK, gin.H{
-					"success": false,
-					"message": invalidParameterMessage,
-				})
+				helper.RespondError(c, errors.New(invalidParameterMessage))
 				return
 			}
 			if myRole <= roleValue && myRole != model.RoleRootUser {
-				c.JSON(http.StatusOK, gin.H{
-					"success": false,
-					"message": "No permission to promote other users to a permission level greater than or equal to your own",
-				})
+				helper.RespondError(c, errors.New("No permission to promote other users to a permission level greater than or equal to your own"))
 				return
 			}
 			updates["role"] = roleValue
@@ -1150,16 +1027,13 @@ func UpdateUser(c *gin.Context) {
 			if payload.Status != nil {
 				statusValue = *payload.Status
 			} else if err := json.Unmarshal(raw["status"], &statusValue); err != nil {
-				c.JSON(http.StatusOK, gin.H{
-					"success": false,
-					"message": invalidParameterMessage,
-				})
+				helper.RespondError(c, errors.New(invalidParameterMessage))
 				return
 			}
 			switch statusValue {
 			case model.UserStatusEnabled, model.UserStatusDisabled, model.UserStatusDeleted:
 			default:
-				c.JSON(http.StatusOK, gin.H{"success": false, "message": "Invalid status provided"})
+				helper.RespondError(c, errors.New("Invalid status provided"))
 				return
 			}
 			updates["status"] = statusValue
@@ -1177,10 +1051,7 @@ func UpdateUser(c *gin.Context) {
 	}
 
 	if err := model.DB.Model(&model.User{}).Where("id = ?", payload.Id).Updates(updates).Error; err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": errors.Wrapf(err, "failed to update user: id=%d", payload.Id).Error(),
-		})
+		helper.RespondError(c, errors.Wrapf(err, "failed to update user: id=%d", payload.Id))
 		return
 	}
 
@@ -1207,10 +1078,7 @@ func UpdateUser(c *gin.Context) {
 func UpdateSelf(c *gin.Context) {
 	var user model.User
 	if err := common.UnmarshalBodyReusable(c, &user); err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": invalidParameterMessage,
-		})
+		helper.RespondError(c, errors.New(invalidParameterMessage))
 		return
 	}
 
@@ -1237,10 +1105,7 @@ func UpdateSelf(c *gin.Context) {
 	userId := c.GetInt(ctxkey.Id)
 	currentUser, fetchErr := model.GetUserById(userId, false)
 	if fetchErr != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": fetchErr.Error(),
-		})
+		helper.RespondError(c, fetchErr)
 		return
 	}
 	// Username is the user's login identity (unique, max=30) and is treated as
@@ -1257,7 +1122,7 @@ func UpdateSelf(c *gin.Context) {
 	}
 
 	if user.Password != "" && currentUser.Metadata.PasswordLocked {
-		c.JSON(http.StatusOK, gin.H{"success": false, "message": "Password is locked by administrator"})
+		helper.RespondError(c, errors.New("Password is locked by administrator"))
 		return
 	}
 
@@ -1265,10 +1130,7 @@ func UpdateSelf(c *gin.Context) {
 		user.Password = "$I_LOVE_U" // make Validator happy :)
 	}
 	if err := common.Validate.Struct(&user); err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": "Input is illegal " + err.Error(),
-		})
+		helper.RespondError(c, errors.New("Input is illegal "+err.Error()))
 		return
 	}
 
@@ -1284,10 +1146,7 @@ func UpdateSelf(c *gin.Context) {
 	}
 	updatePassword := user.Password != ""
 	if err := cleanUser.Update(updatePassword); err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
+		helper.RespondError(c, err)
 		return
 	}
 
@@ -1312,34 +1171,22 @@ func UpdateSelf(c *gin.Context) {
 func DeleteUser(c *gin.Context) {
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
+		helper.RespondError(c, err)
 		return
 	}
 	originUser, err := model.GetUserById(id, false)
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
+		helper.RespondError(c, err)
 		return
 	}
 	myRole := c.GetInt("role")
 	if myRole <= originUser.Role {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": "No permission to delete users with the same permission level or higher permission level",
-		})
+		helper.RespondError(c, errors.New("No permission to delete users with the same permission level or higher permission level"))
 		return
 	}
 	err = model.DeleteUserById(id)
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
+		helper.RespondError(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{
@@ -1353,19 +1200,13 @@ func DeleteSelf(c *gin.Context) {
 	user, _ := model.GetUserById(id, false)
 
 	if user.Role == model.RoleRootUser {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": "Cannot delete super administrator account",
-		})
+		helper.RespondError(c, errors.New("Cannot delete super administrator account"))
 		return
 	}
 
 	err := model.DeleteUserById(id)
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
+		helper.RespondError(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{
@@ -1380,26 +1221,20 @@ func CreateUser(c *gin.Context) {
 	var user model.User
 	err := json.NewDecoder(c.Request.Body).Decode(&user)
 	if err != nil || user.Username == "" || user.Password == "" {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": invalidParameterMessage,
-		})
+		helper.RespondError(c, errors.New(invalidParameterMessage))
 		return
 	}
 	if err := common.Validate.Struct(&user); err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": invalidInputMessage,
-		})
+		helper.RespondError(c, errors.New(invalidInputMessage))
 		return
 	}
 	// Disallow empty username/display name
 	if strings.TrimSpace(user.Username) == "" {
-		c.JSON(http.StatusOK, gin.H{"success": false, "message": "Username cannot be empty"})
+		helper.RespondError(c, errors.New("Username cannot be empty"))
 		return
 	}
 	if user.DisplayName != "" && strings.TrimSpace(user.DisplayName) == "" {
-		c.JSON(http.StatusOK, gin.H{"success": false, "message": "Display name cannot be empty if provided"})
+		helper.RespondError(c, errors.New("Display name cannot be empty if provided"))
 		return
 	}
 	if user.DisplayName == "" {
@@ -1407,10 +1242,7 @@ func CreateUser(c *gin.Context) {
 	}
 	myRole := c.GetInt("role")
 	if user.Role >= myRole {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": "Unable to create users with permissions greater than or equal to your own",
-		})
+		helper.RespondError(c, errors.New("Unable to create users with permissions greater than or equal to your own"))
 		return
 	}
 	// Even for admin users, we cannot fully trust them!
@@ -1421,10 +1253,7 @@ func CreateUser(c *gin.Context) {
 		Email:       user.Email,
 	}
 	if err := cleanUser.Insert(ctx, 0); err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
+		helper.RespondError(c, err)
 		return
 	}
 
@@ -1460,10 +1289,7 @@ func ManageUser(c *gin.Context) {
 	err := json.NewDecoder(c.Request.Body).Decode(&req)
 
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": invalidParameterMessage,
-		})
+		helper.RespondError(c, errors.New(invalidParameterMessage))
 		return
 	}
 	user := model.User{
@@ -1472,86 +1298,56 @@ func ManageUser(c *gin.Context) {
 	// Fill attributes
 	model.DB.Where(&user).First(&user)
 	if user.Id == 0 {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": "User does not exist",
-		})
+		helper.RespondError(c, errors.New("User does not exist"))
 		return
 	}
 	myRole := c.GetInt("role")
 	if myRole <= user.Role && myRole != model.RoleRootUser {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": "No permission to update user information with the same permission level or higher permission level",
-		})
+		helper.RespondError(c, errors.New("No permission to update user information with the same permission level or higher permission level"))
 		return
 	}
 	switch req.Action {
 	case "disable":
 		user.Status = model.UserStatusDisabled
 		if user.Role == model.RoleRootUser {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": "Unable to disable super administrator user",
-			})
+			helper.RespondError(c, errors.New("Unable to disable super administrator user"))
 			return
 		}
 	case "enable":
 		user.Status = model.UserStatusEnabled
 	case "delete":
 		if user.Role == model.RoleRootUser {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": "Unable to delete super administrator user",
-			})
+			helper.RespondError(c, errors.New("Unable to delete super administrator user"))
 			return
 		}
 		if err := user.Delete(); err != nil {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": err.Error(),
-			})
+			helper.RespondError(c, err)
 			return
 		}
 	case "promote":
 		if myRole != model.RoleRootUser {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": "Ordinary administrator users cannot promote other users to administrators",
-			})
+			helper.RespondError(c, errors.New("Ordinary administrator users cannot promote other users to administrators"))
 			return
 		}
 		if user.Role >= model.RoleAdminUser {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": "The user is already an administrator",
-			})
+			helper.RespondError(c, errors.New("The user is already an administrator"))
 			return
 		}
 		user.Role = model.RoleAdminUser
 	case "demote":
 		if user.Role == model.RoleRootUser {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": "Unable to downgrade super administrator user",
-			})
+			helper.RespondError(c, errors.New("Unable to downgrade super administrator user"))
 			return
 		}
 		if user.Role == model.RoleCommonUser {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": "The user is already an ordinary user",
-			})
+			helper.RespondError(c, errors.New("The user is already an ordinary user"))
 			return
 		}
 		user.Role = model.RoleCommonUser
 	}
 
 	if err := user.Update(false); err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
+		helper.RespondError(c, err)
 		return
 	}
 	clearUser := model.User{
@@ -1569,10 +1365,7 @@ func EmailBind(c *gin.Context) {
 	email := c.Query("email")
 	code := c.Query("code")
 	if !common.VerifyCodeWithKey(email, code, common.EmailVerificationPurpose) {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": "Verification code error or expired",
-		})
+		helper.RespondError(c, errors.New("Verification code error or expired"))
 		return
 	}
 	id := c.GetInt("id")
@@ -1581,20 +1374,14 @@ func EmailBind(c *gin.Context) {
 	}
 	err := user.FillUserById()
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
+		helper.RespondError(c, err)
 		return
 	}
 	user.Email = email
 	// no need to check if this email already taken, because we have used verification code to check it
 	err = user.Update(false)
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
+		helper.RespondError(c, err)
 		return
 	}
 	if user.Role == model.RoleRootUser {
@@ -1615,19 +1402,13 @@ func TopUp(c *gin.Context) {
 	req := topUpRequest{}
 	err := c.ShouldBindJSON(&req)
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
+		helper.RespondError(c, err)
 		return
 	}
 	id := c.GetInt("id")
 	quota, err := model.Redeem(ctx, req.Key, id)
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
+		helper.RespondError(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{
@@ -1648,18 +1429,12 @@ func AdminTopUp(c *gin.Context) {
 	req := adminTopUpRequest{}
 	err := c.ShouldBindJSON(&req)
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
+		helper.RespondError(c, err)
 		return
 	}
 	err = model.IncreaseUserQuota(ctx, req.UserId, int64(req.Quota))
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
+		helper.RespondError(c, err)
 		return
 	}
 	if req.Remark == "" {
@@ -1683,17 +1458,11 @@ func SetupTotp(c *gin.Context) {
 	userID := c.GetInt(ctxkey.Id)
 	user, err := model.GetUserById(userID, true)
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": errors.Wrapf(err, "get user %d", userID).Error(),
-		})
+		helper.RespondError(c, errors.Wrapf(err, "get user %d", userID))
 		return
 	}
 	if user.Metadata.PasswordLocked {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": "MFA enrollment is locked by administrator",
-		})
+		helper.RespondError(c, errors.New("MFA enrollment is locked by administrator"))
 		return
 	}
 	// Generate a new secret
@@ -1706,10 +1475,7 @@ func SetupTotp(c *gin.Context) {
 		IssuerName:   config.SystemName,
 	})
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": "Failed to generate TOTP: " + err.Error(),
-		})
+		helper.RespondError(c, errors.New("Failed to generate TOTP: "+err.Error()))
 		return
 	}
 
@@ -1766,44 +1532,29 @@ func ConfirmTotp(c *gin.Context) {
 
 	// Check rate limit for TOTP verification
 	if !middleware.CheckTotpRateLimit(c, userId) {
-		c.JSON(http.StatusTooManyRequests, gin.H{
-			"success": false,
-			"message": "Too many TOTP verification attempts. Please wait before trying again.",
-		})
+		helper.RespondErrorWithStatus(c, http.StatusTooManyRequests, errors.New("Too many TOTP verification attempts. Please wait before trying again."))
 		return
 	}
 
 	var req TotpSetupRequest
 	err := json.NewDecoder(c.Request.Body).Decode(&req)
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": invalidParameterMessage,
-		})
+		helper.RespondError(c, errors.New(invalidParameterMessage))
 		return
 	}
 
 	if req.TotpCode == "" {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": "TOTP code is required",
-		})
+		helper.RespondError(c, errors.New("TOTP code is required"))
 		return
 	}
 
 	user, err := model.GetUserById(userId, true)
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": errors.Wrapf(err, "get user %d", userId).Error(),
-		})
+		helper.RespondError(c, errors.Wrapf(err, "get user %d", userId))
 		return
 	}
 	if user.Metadata.PasswordLocked {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": "MFA enrollment is locked by administrator",
-		})
+		helper.RespondError(c, errors.New("MFA enrollment is locked by administrator"))
 		return
 	}
 
@@ -1811,10 +1562,7 @@ func ConfirmTotp(c *gin.Context) {
 	session := sessions.Default(c)
 	tempSecret := session.Get("temp_totp_secret")
 	if tempSecret == nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": "No TOTP setup session found. Please start setup again.",
-		})
+		helper.RespondError(c, errors.New("No TOTP setup session found. Please start setup again."))
 		return
 	}
 
@@ -1822,10 +1570,7 @@ func ConfirmTotp(c *gin.Context) {
 
 	// Verify the TOTP code
 	if !verifyTotpCode(ctx, user.Id, secret, req.TotpCode) {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": "Invalid TOTP code",
-		})
+		helper.RespondError(c, errors.New("Invalid TOTP code"))
 		return
 	}
 
@@ -1833,10 +1578,7 @@ func ConfirmTotp(c *gin.Context) {
 	user.TotpSecret = secret
 	err = user.Update(false)
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
+		helper.RespondError(c, err)
 		return
 	}
 
@@ -1857,56 +1599,38 @@ func DisableTotp(c *gin.Context) {
 
 	// Check rate limit for TOTP verification
 	if !middleware.CheckTotpRateLimit(c, userId) {
-		c.JSON(http.StatusTooManyRequests, gin.H{
-			"success": false,
-			"message": "Too many TOTP verification attempts. Please wait before trying again.",
-		})
+		helper.RespondErrorWithStatus(c, http.StatusTooManyRequests, errors.New("Too many TOTP verification attempts. Please wait before trying again."))
 		return
 	}
 
 	var req TotpSetupRequest
 	err := json.NewDecoder(c.Request.Body).Decode(&req)
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": invalidParameterMessage,
-		})
+		helper.RespondError(c, errors.New(invalidParameterMessage))
 		return
 	}
 
 	user, err := model.GetUserById(userId, true)
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
+		helper.RespondError(c, err)
 		return
 	}
 
 	if user.TotpSecret == "" {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": "TOTP is not enabled for this user",
-		})
+		helper.RespondError(c, errors.New("TOTP is not enabled for this user"))
 		return
 	}
 
 	// Verify the TOTP code before disabling
 	if !verifyTotpCode(ctx, user.Id, user.TotpSecret, req.TotpCode) {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": "Invalid TOTP code",
-		})
+		helper.RespondError(c, errors.New("Invalid TOTP code"))
 		return
 	}
 
 	// Clear the TOTP secret
 	err = user.ClearTotpSecret()
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
+		helper.RespondError(c, err)
 		return
 	}
 
@@ -1964,10 +1688,7 @@ func GetTotpStatus(c *gin.Context) {
 	userId := c.GetInt(ctxkey.Id)
 	user, err := model.GetUserById(userId, true)
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
+		helper.RespondError(c, err)
 		return
 	}
 
@@ -1985,59 +1706,41 @@ func AdminDisableUserTotp(c *gin.Context) {
 	ctx := gmw.Ctx(c)
 	targetUserId := c.Param("id")
 	if targetUserId == "" {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": invalidParameterMessage,
-		})
+		helper.RespondError(c, errors.New(invalidParameterMessage))
 		return
 	}
 
 	// Convert string ID to int
 	userId, err := strconv.Atoi(targetUserId)
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": "Invalid user ID",
-		})
+		helper.RespondError(c, errors.New("Invalid user ID"))
 		return
 	}
 
 	// Get the target user
 	user, err := model.GetUserById(userId, true)
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
+		helper.RespondError(c, err)
 		return
 	}
 
 	// Check if admin has permission to modify this user
 	myRole := c.GetInt(ctxkey.Role)
 	if myRole <= user.Role && myRole != model.RoleRootUser {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": "No permission to modify user with the same or higher permission level",
-		})
+		helper.RespondError(c, errors.New("No permission to modify user with the same or higher permission level"))
 		return
 	}
 
 	// Check if TOTP is already disabled
 	if user.TotpSecret == "" {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": "TOTP is not enabled for this user",
-		})
+		helper.RespondError(c, errors.New("TOTP is not enabled for this user"))
 		return
 	}
 
 	// Clear the TOTP secret
 	err = user.ClearTotpSecret()
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
+		helper.RespondError(c, err)
 		return
 	}
 

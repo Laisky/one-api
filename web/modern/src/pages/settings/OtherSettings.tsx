@@ -2,6 +2,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
+import { useNotifications } from '@/components/ui/notifications';
 import { Textarea } from '@/components/ui/textarea';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { api } from '@/lib/api';
@@ -26,6 +27,7 @@ type OtherForm = z.infer<typeof otherSchema>;
 
 export function OtherSettings() {
   const { t } = useTranslation();
+  const { notify } = useNotifications();
   const [loading, setLoading] = useState(true);
   const [updateData, setUpdateData] = useState<{
     tag_name: string;
@@ -85,9 +87,29 @@ export function OtherSettings() {
     try {
       setLoading(true);
       // Unified API call - complete URL with /api prefix
-      await api.put('/api/option/', { key, value });
+      const response = await api.put('/api/option/', { key, value });
+      if (!response.data?.success) {
+        notify({
+          type: 'error',
+          title: t('other_settings.save_failed_title', 'Save failed'),
+          message: response.data?.message || t('other_settings.save_failed_message', 'Failed to save setting.'),
+        });
+        return false;
+      }
+      notify({
+        type: 'success',
+        title: t('other_settings.save_success_title', 'Saved'),
+        message: t('other_settings.save_success_message', 'Setting saved successfully.'),
+      });
+      return true;
     } catch (error) {
       console.error(`Error updating ${key}:`, error);
+      notify({
+        type: 'error',
+        title: t('other_settings.save_failed_title', 'Save failed'),
+        message: (error as any)?.response?.data?.message || (error as Error)?.message || t('other_settings.save_failed_message', 'Failed to save setting.'),
+      });
+      return false;
     } finally {
       setLoading(false);
     }

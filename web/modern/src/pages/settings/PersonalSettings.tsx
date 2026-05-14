@@ -438,10 +438,16 @@ export function PersonalSettings() {
         setAffLink('');
         await navigator.clipboard.writeText(data);
       } else {
-        console.error('Failed to generate token:', message);
+        notify({
+          type: 'error',
+          message: message || t('personal_settings.access_token.generate_failed', 'Failed to generate access token.'),
+        });
       }
     } catch (error) {
-      console.error('Error generating token:', error);
+      notify({
+        type: 'error',
+        message: error instanceof Error ? error.message : t('personal_settings.access_token.generate_failed', 'Failed to generate access token.'),
+      });
     }
   };
 
@@ -455,10 +461,16 @@ export function PersonalSettings() {
         setSystemToken('');
         await navigator.clipboard.writeText(link);
       } else {
-        console.error('Failed to get aff link:', message);
+        notify({
+          type: 'error',
+          message: message || t('personal_settings.access_token.invite_failed', 'Failed to get invite link.'),
+        });
       }
     } catch (error) {
-      console.error('Error getting aff link:', error);
+      notify({
+        type: 'error',
+        message: error instanceof Error ? error.message : t('personal_settings.access_token.invite_failed', 'Failed to get invite link.'),
+      });
     }
   };
 

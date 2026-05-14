@@ -373,10 +373,7 @@ type MCPServerDisplayInfo struct {
 func GetToolsDisplay(c *gin.Context) {
 	servers, err := model.ListEnabledMCPServers()
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": "Failed to load MCP servers: " + err.Error(),
-		})
+		helper.RespondError(c, errors.Wrap(err, "Failed to load MCP servers"))
 		return
 	}
 

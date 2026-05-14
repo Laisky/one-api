@@ -6,6 +6,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { EnhancedDataTable } from '@/components/ui/enhanced-data-table';
 import { ListActionButton } from '@/components/ui/list-action-button';
+import { useNotifications } from '@/components/ui/notifications';
 import { ResponsiveActionGroup } from '@/components/ui/responsive-action-group';
 import { ResponsivePageContainer } from '@/components/ui/responsive-container';
 import { type SearchOption } from '@/components/ui/searchable-dropdown';
@@ -119,6 +120,7 @@ export function TokensPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const { isMobile } = useResponsive();
   const userQuota = useAuthStore((state) => state.user?.quota ?? null);
+  const { notify } = useNotifications();
   const { t } = useTranslation();
   const [confirmDelete, ConfirmDeleteDialog] = useConfirmDialog();
   const tr = useCallback(
@@ -341,15 +343,27 @@ export function TokensPage() {
         });
       }
 
-      if (res.data?.success) {
-        if (searchKeyword.trim()) {
-          performSearch();
-        } else {
-          load(pageIndex, pageSize);
-        }
+      if (!res.data?.success) {
+        notify({
+          type: 'error',
+          title: tr('notifications.action_failed_title', 'Action failed'),
+          message: res.data?.message || tr('notifications.action_failed_message', 'Unable to apply change.'),
+        });
+        return;
+      }
+
+      if (searchKeyword.trim()) {
+        performSearch();
+      } else {
+        load(pageIndex, pageSize);
       }
     } catch (error) {
       console.error(`Failed to ${action} token:`, error);
+      notify({
+        type: 'error',
+        title: tr('notifications.action_failed_title', 'Action failed'),
+        message: (error as any)?.response?.data?.message || (error as Error)?.message || tr('notifications.action_failed_message', 'Unable to apply change.'),
+      });
     }
   };
 

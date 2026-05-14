@@ -353,12 +353,18 @@ export function ChannelsPage() {
         if (!confirmed) return;
         // Unified API call - complete URL with /api prefix
         const res = await api.delete(`/api/channel/${id}`);
-        if (res.data?.success) {
-          if (searchKeyword.trim()) {
-            performSearch();
-          } else {
-            load(pageIndex, pageSize);
-          }
+        if (!res.data?.success) {
+          notify({
+            type: 'error',
+            title: t('channels.notifications.delete_failed_title', 'Delete failed'),
+            message: res.data?.message || t('channels.notifications.delete_failed_message', 'Failed to delete channel.'),
+          });
+          return;
+        }
+        if (searchKeyword.trim()) {
+          performSearch();
+        } else {
+          load(pageIndex, pageSize);
         }
         return;
       }
@@ -394,15 +400,34 @@ export function ChannelsPage() {
       // Enable/disable - send status_only to avoid overwriting other fields
       const payload = { id, status: action === 'enable' ? 1 : 2 };
       const res = await api.put('/api/channel/?status_only=1', payload);
-      if (res.data?.success) {
-        if (searchKeyword.trim()) {
-          performSearch();
-        } else {
-          load(pageIndex, pageSize);
-        }
+      if (!res.data?.success) {
+        notify({
+          type: 'error',
+          title: t('channels.notifications.status_failed_title', 'Update failed'),
+          message: res.data?.message || t('channels.notifications.status_failed_message', 'Failed to update channel status.'),
+        });
+        return;
+      }
+      if (searchKeyword.trim()) {
+        performSearch();
+      } else {
+        load(pageIndex, pageSize);
       }
     } catch (error) {
       console.error(`Failed to ${action} channel:`, error);
+      notify({
+        type: 'error',
+        title:
+          action === 'delete'
+            ? t('channels.notifications.delete_failed_title', 'Delete failed')
+            : t('channels.notifications.status_failed_title', 'Update failed'),
+        message:
+          error instanceof Error
+            ? error.message
+            : action === 'delete'
+              ? t('channels.notifications.delete_failed_message', 'Failed to delete channel.')
+              : t('channels.notifications.status_failed_message', 'Failed to update channel status.'),
+      });
     }
   };
 
@@ -480,7 +505,15 @@ export function ChannelsPage() {
     setBulkTesting(true);
     try {
       // Unified API call - complete URL with /api prefix
-      await api.get('/api/channel/test');
+      const res = await api.get('/api/channel/test');
+      if (!res.data?.success) {
+        notify({
+          type: 'error',
+          title: t('channels.notifications.bulk_test_failed_title'),
+          message: res.data?.message || t('channels.notifications.test_failed_message'),
+        });
+        return;
+      }
       load(pageIndex, pageSize);
       notify({
         type: 'info',
@@ -670,7 +703,15 @@ export function ChannelsPage() {
 
     try {
       // Unified API call - complete URL with /api prefix
-      await api.delete('/api/channel/disabled');
+      const res = await api.delete('/api/channel/disabled');
+      if (!res.data?.success) {
+        notify({
+          type: 'error',
+          title: t('channels.notifications.delete_failed_title'),
+          message: res.data?.message || t('channels.notifications.delete_failed_message'),
+        });
+        return;
+      }
       load(pageIndex, pageSize);
       notify({
         type: 'success',

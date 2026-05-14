@@ -17,6 +17,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/Laisky/one-api/common/config"
+	"github.com/Laisky/one-api/common/helper"
 	"github.com/Laisky/one-api/common/random"
 	"github.com/Laisky/one-api/controller"
 	"github.com/Laisky/one-api/model"
@@ -98,10 +99,7 @@ func GitHubOAuth(c *gin.Context) {
 	session := sessions.Default(c)
 	state := c.Query("state")
 	if state == "" || session.Get("oauth_state") == nil || state != session.Get("oauth_state").(string) {
-		c.JSON(http.StatusForbidden, gin.H{
-			"success": false,
-			"message": "state is empty or not same",
-		})
+		helper.RespondErrorWithStatus(c, http.StatusForbidden, errors.New("state is empty or not same"))
 		return
 	}
 	username := session.Get("username")
@@ -111,19 +109,13 @@ func GitHubOAuth(c *gin.Context) {
 	}
 
 	if !config.GitHubOAuthEnabled {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": "The administrator did not turn on login and registration via GitHub",
-		})
+		helper.RespondError(c, errors.New("The administrator did not turn on login and registration via GitHub"))
 		return
 	}
 	code := c.Query("code")
 	githubUser, err := getGitHubUserInfoByCode(ctx, code)
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
+		helper.RespondError(c, err)
 		return
 	}
 	user := model.User{
@@ -132,10 +124,7 @@ func GitHubOAuth(c *gin.Context) {
 	if model.IsGitHubIdAlreadyTaken(user.GitHubId) {
 		err := user.FillUserByGitHubId()
 		if err != nil {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": err.Error(),
-			})
+			helper.RespondError(c, err)
 			return
 		}
 	} else {
@@ -151,26 +140,17 @@ func GitHubOAuth(c *gin.Context) {
 			user.Status = model.UserStatusEnabled
 
 			if err := user.Insert(ctx, 0); err != nil {
-				c.JSON(http.StatusOK, gin.H{
-					"success": false,
-					"message": err.Error(),
-				})
+				helper.RespondError(c, err)
 				return
 			}
 		} else {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": "The administrator has turned off new user registration",
-			})
+			helper.RespondError(c, errors.New("The administrator has turned off new user registration"))
 			return
 		}
 	}
 
 	if user.Status != model.UserStatusEnabled {
-		c.JSON(http.StatusOK, gin.H{
-			"message": "User has been banned",
-			"success": false,
-		})
+		helper.RespondError(c, errors.New("User has been banned"))
 		return
 	}
 	controller.SetupLogin(&user, c)
@@ -178,29 +158,20 @@ func GitHubOAuth(c *gin.Context) {
 
 func GitHubBind(c *gin.Context) {
 	if !config.GitHubOAuthEnabled {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": "The administrator did not turn on login and registration via GitHub",
-		})
+		helper.RespondError(c, errors.New("The administrator did not turn on login and registration via GitHub"))
 		return
 	}
 	code := c.Query("code")
 	githubUser, err := getGitHubUserInfoByCode(gmw.Ctx(c), code)
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
+		helper.RespondError(c, err)
 		return
 	}
 	user := model.User{
 		GitHubId: githubUser.Login,
 	}
 	if model.IsGitHubIdAlreadyTaken(user.GitHubId) {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": "The GitHub account has been bound",
-		})
+		helper.RespondError(c, errors.New("The GitHub account has been bound"))
 		return
 	}
 	session := sessions.Default(c)
@@ -209,19 +180,13 @@ func GitHubBind(c *gin.Context) {
 	user.Id = id.(int)
 	err = user.FillUserById()
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
+		helper.RespondError(c, err)
 		return
 	}
 	user.GitHubId = githubUser.Login
 	err = user.Update(false)
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
+		helper.RespondError(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{
@@ -237,10 +202,7 @@ func GenerateOAuthCode(c *gin.Context) {
 	session.Set("oauth_state", state)
 	err := session.Save()
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
+		helper.RespondError(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{

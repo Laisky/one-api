@@ -83,8 +83,10 @@ export default function ChannelTableRow({
       return;
     }
 
-    await manageChannel(item.id, "priority", currentValue);
-    setPriority(currentValue);
+    const { success, data } = await manageChannel(item.id, "priority", currentValue);
+    if (success) {
+      setPriority(data?.priority ?? currentValue);
+    }
   };
 
   const handleResponseTime = async () => {

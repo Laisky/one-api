@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/Laisky/errors/v2"
 	gmw "github.com/Laisky/gin-middlewares/v7"
 	"github.com/Laisky/zap"
 	"github.com/gin-gonic/gin"
@@ -37,11 +38,27 @@ func OpenBrowser(url string) {
 	}
 }
 
-// RespondError sends a JSON response with a success status and an error message.
+// RespondError logs the error with a context-aware logger (preserving trace info)
+// and returns HTTP 200 with {success:false, message: err.Error()}. This is the
+// canonical helper for error responses from controllers — prefer this over
+// inlining the JSON body so every error response gets logged with request context.
 func RespondError(c *gin.Context, err error) {
-	logger := gmw.GetLogger(c)
-	logger.Error("http server error", zap.Error(err))
-	c.JSON(http.StatusOK, gin.H{
+	RespondErrorWithStatus(c, http.StatusOK, err)
+}
+
+// RespondErrorWithStatus is the status-code-aware variant of RespondError, for
+// callers that need to return a non-200 status (e.g. 4xx in middleware).
+// It logs the error with the context-aware logger and writes the standard
+// {success:false, message: err.Error()} body.
+func RespondErrorWithStatus(c *gin.Context, status int, err error) {
+	if err == nil {
+		err = errors.New("unknown error")
+	}
+	gmw.GetLogger(c).Error("http handler error",
+		zap.Int("status", status),
+		zap.Error(err),
+	)
+	c.JSON(status, gin.H{
 		"success": false,
 		"message": err.Error(),
 	})

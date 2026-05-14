@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/Laisky/errors/v2"
 	"github.com/Laisky/zap"
 	"github.com/gin-gonic/gin"
 
@@ -49,10 +50,7 @@ func UpdateOption(c *gin.Context) {
 	var option model.Option
 	err := json.NewDecoder(c.Request.Body).Decode(&option)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"success": false,
-			"message": invalidParameterMessage,
-		})
+		helper.RespondErrorWithStatus(c, http.StatusBadRequest, errors.New(invalidParameterMessage))
 		return
 	}
 	// Protect sensitive options (Token/Secret/Password suffix) from accidental
@@ -76,51 +74,33 @@ func UpdateOption(c *gin.Context) {
 			option.Value = "modern"
 		}
 		if !config.ValidThemes[option.Value] {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": "invalid theme",
-			})
+			helper.RespondError(c, errors.New("invalid theme"))
 			return
 		}
 	case "GitHubOAuthEnabled":
 		if option.Value == "true" && config.GitHubClientId == "" {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": "Unable to enable GitHub OAuth, please fill in the GitHub Client Id and GitHub Client Secret first!",
-			})
+			helper.RespondError(c, errors.New("Unable to enable GitHub OAuth, please fill in the GitHub Client Id and GitHub Client Secret first!"))
 			return
 		}
 	case "EmailDomainRestrictionEnabled":
 		if option.Value == "true" && len(config.EmailDomainWhitelist) == 0 {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": "Unable to enable email domain restriction, please fill in the restricted email domains first!",
-			})
+			helper.RespondError(c, errors.New("Unable to enable email domain restriction, please fill in the restricted email domains first!"))
 			return
 		}
 	case "WeChatAuthEnabled":
 		if option.Value == "true" && config.WeChatServerAddress == "" {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": "Unable to enable WeChat login, please fill in the relevant configuration information for WeChat login first!",
-			})
+			helper.RespondError(c, errors.New("Unable to enable WeChat login, please fill in the relevant configuration information for WeChat login first!"))
 			return
 		}
 	case "TurnstileCheckEnabled":
 		if option.Value == "true" && config.TurnstileSiteKey == "" {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": "Unable to enable Turnstile verification, please fill in the relevant configuration information for Turnstile verification first!",
-			})
+			helper.RespondError(c, errors.New("Unable to enable Turnstile verification, please fill in the relevant configuration information for Turnstile verification first!"))
 			return
 		}
 	}
 	err = model.UpdateOption(option.Key, option.Value)
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
+		helper.RespondError(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{

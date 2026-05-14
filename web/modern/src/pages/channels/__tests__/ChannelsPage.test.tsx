@@ -4,8 +4,9 @@ import { BrowserRouter } from 'react-router-dom';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { ChannelsPage } from '../ChannelsPage';
 import { api } from '@/lib/api';
+const notify = vi.fn();
 vi.mock('@/components/ui/notifications', () => ({
-  useNotifications: () => ({ notify: vi.fn() }),
+  useNotifications: () => ({ notify }),
 }));
 
 // Mock the API
@@ -36,6 +37,7 @@ vi.mock('react-router-dom', async () => {
 const mockApiGet = vi.mocked(api.get);
 const mockApiPost = vi.mocked(api.post);
 const mockApiDelete = vi.mocked(api.delete);
+const mockApiPut = vi.mocked(api.put);
 
 const mockChannelsData = {
   success: true,
@@ -63,6 +65,7 @@ describe('ChannelsPage Pagination', () => {
     mockApiGet.mockResolvedValue({ data: mockChannelsData });
     mockApiPost.mockResolvedValue({ data: { success: true } });
     mockApiDelete.mockResolvedValue({ data: { success: true } });
+    mockApiPut.mockResolvedValue({ data: { success: true } });
   });
 
   const renderChannelsPage = () => {
@@ -207,5 +210,54 @@ describe('ChannelsPage Pagination', () => {
     expect(within(dialog).getByText('OpenAI')).toBeInTheDocument();
     expect(within(dialog).getByText('Name')).toBeInTheDocument();
     expect(within(dialog).getByText('Type')).toBeInTheDocument();
+  });
+
+  it('shows an error notification when delete returns success false', async () => {
+    mockApiDelete.mockResolvedValueOnce({ data: { success: false, message: 'cannot delete channel' } });
+
+    renderChannelsPage();
+    const user = userEvent.setup();
+
+    const nameCell = await screen.findByText('Channel 1');
+    const row = nameCell.closest('tr');
+
+    expect(row).not.toBeNull();
+    await user.click(within(row as HTMLElement).getByRole('button', { name: 'Delete' }));
+
+    const dialog = await screen.findByRole('dialog');
+    await user.click(within(dialog).getByRole('button', { name: 'Confirm' }));
+
+    await waitFor(() => {
+      expect(notify).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'error',
+          message: 'cannot delete channel',
+        })
+      );
+    });
+  });
+
+  it('shows an error notification when bulk test returns success false', async () => {
+    mockApiGet.mockImplementation((url: string) => {
+      if (url === '/api/channel/test') {
+        return Promise.resolve({ data: { success: false, message: 'bulk test rejected' } }) as any;
+      }
+      return Promise.resolve({ data: mockChannelsData }) as any;
+    });
+
+    renderChannelsPage();
+    const user = userEvent.setup();
+
+    await screen.findByText('Channel 1');
+    await user.click(screen.getByRole('button', { name: /test all/i }));
+
+    await waitFor(() => {
+      expect(notify).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'error',
+          message: 'bulk test rejected',
+        })
+      );
+    });
   });
 });

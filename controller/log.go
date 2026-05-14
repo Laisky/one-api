@@ -4,10 +4,12 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/Laisky/errors/v2"
 	"github.com/gin-gonic/gin"
 
 	"github.com/Laisky/one-api/common/config"
 	"github.com/Laisky/one-api/common/ctxkey"
+	"github.com/Laisky/one-api/common/helper"
 	"github.com/Laisky/one-api/model"
 )
 
@@ -37,10 +39,7 @@ func GetAllLogs(c *gin.Context) {
 	if sortBy != "" && startTimestamp > 0 && endTimestamp > 0 {
 		maxRange := int64(30 * 24 * 60 * 60) // 30 days in seconds
 		if endTimestamp-startTimestamp > maxRange {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": "Date range for sorting cannot exceed 30 days",
-			})
+			helper.RespondError(c, errors.New("Date range for sorting cannot exceed 30 days"))
 			return
 		}
 	}
@@ -60,20 +59,14 @@ func GetAllLogs(c *gin.Context) {
 
 	logs, err := model.GetAllLogs(logType, startTimestamp, endTimestamp, modelName, username, tokenName, p*itemsPerPage, itemsPerPage, channel, sortBy, sortOrder)
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
+		helper.RespondError(c, err)
 		return
 	}
 
 	// Get total count for pagination
 	totalCount, err := model.GetAllLogsCount(logType, startTimestamp, endTimestamp, modelName, username, tokenName, channel)
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
+		helper.RespondError(c, err)
 		return
 	}
 
@@ -110,10 +103,7 @@ func GetUserLogs(c *gin.Context) {
 	if sortBy != "" && startTimestamp > 0 && endTimestamp > 0 {
 		maxRange := int64(30 * 24 * 60 * 60) // 30 days in seconds
 		if endTimestamp-startTimestamp > maxRange {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": "Date range for sorting cannot exceed 30 days",
-			})
+			helper.RespondError(c, errors.New("Date range for sorting cannot exceed 30 days"))
 			return
 		}
 	}
@@ -129,20 +119,14 @@ func GetUserLogs(c *gin.Context) {
 
 	logs, err := model.GetUserLogs(userId, logType, startTimestamp, endTimestamp, modelName, tokenName, p*size, size, sortBy, sortOrder)
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
+		helper.RespondError(c, err)
 		return
 	}
 
 	// Get total count for pagination
 	totalCount, err := model.GetUserLogsCount(userId, logType, startTimestamp, endTimestamp, modelName, tokenName)
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
+		helper.RespondError(c, err)
 		return
 	}
 
@@ -179,19 +163,13 @@ func GetTokenLogs(c *gin.Context) {
 
 	logs, err := model.GetUserLogs(userId, logType, startTimestamp, endTimestamp, modelName, tokenName, p*size, size, "", "")
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
+		helper.RespondError(c, err)
 		return
 	}
 
 	totalCount, err := model.GetUserLogsCount(userId, logType, startTimestamp, endTimestamp, modelName, tokenName)
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
+		helper.RespondError(c, err)
 		return
 	}
 
@@ -224,10 +202,7 @@ func SearchAllLogs(c *gin.Context) {
 	}
 	logs, total, err := model.SearchAllLogs(keyword, p*size, size, sortBy, sortOrder)
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
+		helper.RespondError(c, err)
 		return
 	}
 
@@ -261,10 +236,7 @@ func SearchUserLogs(c *gin.Context) {
 	}
 	logs, total, err := model.SearchUserLogs(userId, keyword, p*size, size, sortBy, sortOrder)
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
+		helper.RespondError(c, err)
 		return
 	}
 
@@ -322,18 +294,12 @@ func GetLogsSelfStat(c *gin.Context) {
 func DeleteHistoryLogs(c *gin.Context) {
 	targetTimestamp, _ := strconv.ParseInt(c.Query("target_timestamp"), 10, 64)
 	if targetTimestamp == 0 {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": "target timestamp is required",
-		})
+		helper.RespondError(c, errors.New("target timestamp is required"))
 		return
 	}
 	count, err := model.DeleteOldLog(targetTimestamp)
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
+		helper.RespondError(c, err)
 		return
 	}
 

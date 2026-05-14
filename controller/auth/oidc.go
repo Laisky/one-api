@@ -15,6 +15,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/Laisky/one-api/common/config"
+	"github.com/Laisky/one-api/common/helper"
 	"github.com/Laisky/one-api/controller"
 	"github.com/Laisky/one-api/model"
 )
@@ -86,10 +87,7 @@ func OidcAuth(c *gin.Context) {
 	session := sessions.Default(c)
 	state := c.Query("state")
 	if state == "" || session.Get("oauth_state") == nil || state != session.Get("oauth_state").(string) {
-		c.JSON(http.StatusForbidden, gin.H{
-			"success": false,
-			"message": "state is empty or not same",
-		})
+		helper.RespondErrorWithStatus(c, http.StatusForbidden, errors.New("state is empty or not same"))
 		return
 	}
 	username := session.Get("username")
@@ -98,19 +96,13 @@ func OidcAuth(c *gin.Context) {
 		return
 	}
 	if !config.OidcEnabled {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": "Administrator has not enabled OIDC Log in and Sign up",
-		})
+		helper.RespondError(c, errors.New("Administrator has not enabled OIDC Log in and Sign up"))
 		return
 	}
 	code := c.Query("code")
 	oidcUser, err := getOidcUserInfoByCode(code)
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
+		helper.RespondError(c, err)
 		return
 	}
 	user := model.User{
@@ -119,10 +111,7 @@ func OidcAuth(c *gin.Context) {
 	if model.IsOidcIdAlreadyTaken(user.OidcId) {
 		err := user.FillUserByOidcId()
 		if err != nil {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": err.Error(),
-			})
+			helper.RespondError(c, err)
 			return
 		}
 	} else {
@@ -140,26 +129,17 @@ func OidcAuth(c *gin.Context) {
 			}
 			err := user.Insert(ctx, 0)
 			if err != nil {
-				c.JSON(http.StatusOK, gin.H{
-					"success": false,
-					"message": err.Error(),
-				})
+				helper.RespondError(c, err)
 				return
 			}
 		} else {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": "The administrator has turned off new user registration",
-			})
+			helper.RespondError(c, errors.New("The administrator has turned off new user registration"))
 			return
 		}
 	}
 
 	if user.Status != model.UserStatusEnabled {
-		c.JSON(http.StatusOK, gin.H{
-			"message": "User has been banned",
-			"success": false,
-		})
+		helper.RespondError(c, errors.New("User has been banned"))
 		return
 	}
 	controller.SetupLogin(&user, c)
@@ -167,29 +147,20 @@ func OidcAuth(c *gin.Context) {
 
 func OidcBind(c *gin.Context) {
 	if !config.OidcEnabled {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": "The administrator has turned off new user registration",
-		})
+		helper.RespondError(c, errors.New("The administrator has turned off new user registration"))
 		return
 	}
 	code := c.Query("code")
 	oidcUser, err := getOidcUserInfoByCode(code)
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
+		helper.RespondError(c, err)
 		return
 	}
 	user := model.User{
 		OidcId: oidcUser.OpenID,
 	}
 	if model.IsOidcIdAlreadyTaken(user.OidcId) {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": "This OIDC account has already been bound",
-		})
+		helper.RespondError(c, errors.New("This OIDC account has already been bound"))
 		return
 	}
 	session := sessions.Default(c)
@@ -198,19 +169,13 @@ func OidcBind(c *gin.Context) {
 	user.Id = id.(int)
 	err = user.FillUserById()
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
+		helper.RespondError(c, err)
 		return
 	}
 	user.OidcId = oidcUser.OpenID
 	err = user.Update(false)
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
+		helper.RespondError(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{

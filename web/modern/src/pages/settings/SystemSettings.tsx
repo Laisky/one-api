@@ -358,7 +358,10 @@ export function SystemSettings() {
       const serialized = Array.isArray(value) ? value.join(',') : value;
       try {
         // Unified API call - complete URL with /api prefix
-        await api.put('/api/option/', { key, value: serialized });
+        const response = await api.put('/api/option/', { key, value: serialized });
+        if (!response.data?.success) {
+          throw new Error(response.data?.message || t('system_settings.save_failed'));
+        }
         setOptions((prev) => {
           const index = prev.findIndex((opt) => opt.key === key);
           if (index === -1) {
@@ -424,7 +427,10 @@ export function SystemSettings() {
       // Save each endpoint via existing per-key save logic
       for (const sourceKey of targetKeys) {
         const optionKey = OIDC_DISCOVERY_KEY_MAP[sourceKey];
-        await api.put('/api/option/', { key: optionKey, value: String(payload[sourceKey]) });
+        const response = await api.put('/api/option/', { key: optionKey, value: String(payload[sourceKey]) });
+        if (!response.data?.success) {
+          throw new Error(response.data?.message || t('system_settings.oidc_discovery.failed_title'));
+        }
       }
 
       // Update local options state in one pass

@@ -677,6 +677,7 @@ function CreateUserDialog({ open, onOpenChange, onCreated }: { open: boolean; on
     defaultValues: { username: '', password: '', display_name: '' },
   });
   const { t } = useTranslation();
+  const { notify } = useNotifications();
   const tr = useCallback(
     (key: string, defaultValue: string, options?: Record<string, unknown>) =>
       t(`users.dialogs.create.${key}`, { defaultValue, ...options }),
@@ -692,16 +693,33 @@ function CreateUserDialog({ open, onOpenChange, onCreated }: { open: boolean; on
           <form
             className="space-y-3"
             onSubmit={form.handleSubmit(async (values) => {
-              // Unified API call - complete URL with /api prefix
-              const res = await api.post('/api/user/', {
-                username: values.username,
-                password: values.password,
-                display_name: values.display_name || values.username,
-              });
-              if (res.data?.success) {
+              try {
+                // Unified API call - complete URL with /api prefix
+                const res = await api.post('/api/user/', {
+                  username: values.username,
+                  password: values.password,
+                  display_name: values.display_name || values.username,
+                });
+                if (!res.data?.success) {
+                  notify({
+                    type: 'error',
+                    title: tr('notifications.create_failed_title', 'Create failed'),
+                    message: res.data?.message || tr('notifications.create_failed_message', 'Unable to create user.'),
+                  });
+                  return;
+                }
                 onOpenChange(false);
                 form.reset();
                 onCreated();
+              } catch (error) {
+                notify({
+                  type: 'error',
+                  title: tr('notifications.create_failed_title', 'Create failed'),
+                  message:
+                    (error as any)?.response?.data?.message ||
+                    (error as Error)?.message ||
+                    tr('notifications.create_failed_message', 'Unable to create user.'),
+                });
               }
             })}
           >
@@ -781,6 +799,7 @@ function TopUpDialog({
     defaultValues: { quota: 0, remark: '' },
   });
   const { t } = useTranslation();
+  const { notify } = useNotifications();
   const tr = useCallback(
     (key: string, defaultValue: string, options?: Record<string, unknown>) => t(`users.dialogs.topup.${key}`, { defaultValue, ...options }),
     [t]
@@ -800,16 +819,33 @@ function TopUpDialog({
             className="space-y-3"
             onSubmit={form.handleSubmit(async (values) => {
               if (!userId) return;
-              // Unified API call - complete URL with /api prefix
-              const res = await api.post('/api/topup', {
-                user_id: userId,
-                quota: values.quota,
-                remark: values.remark,
-              });
-              if (res.data?.success) {
+              try {
+                // Unified API call - complete URL with /api prefix
+                const res = await api.post('/api/topup', {
+                  user_id: userId,
+                  quota: values.quota,
+                  remark: values.remark,
+                });
+                if (!res.data?.success) {
+                  notify({
+                    type: 'error',
+                    title: tr('notifications.submit_failed_title', 'Top up failed'),
+                    message: res.data?.message || tr('notifications.submit_failed_message', 'Unable to top up user.'),
+                  });
+                  return;
+                }
                 onOpenChange(false);
                 form.reset();
                 onDone();
+              } catch (error) {
+                notify({
+                  type: 'error',
+                  title: tr('notifications.submit_failed_title', 'Top up failed'),
+                  message:
+                    (error as any)?.response?.data?.message ||
+                    (error as Error)?.message ||
+                    tr('notifications.submit_failed_message', 'Unable to top up user.'),
+                });
               }
             })}
           >

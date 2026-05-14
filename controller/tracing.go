@@ -4,10 +4,12 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/Laisky/errors/v2"
 	gmw "github.com/Laisky/gin-middlewares/v7"
 	"github.com/Laisky/zap"
 	"github.com/gin-gonic/gin"
 
+	"github.com/Laisky/one-api/common/helper"
 	"github.com/Laisky/one-api/model"
 )
 
@@ -16,10 +18,7 @@ func GetTraceByTraceId(c *gin.Context) {
 	lg := gmw.GetLogger(c)
 	traceId := c.Param("trace_id")
 	if traceId == "" {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"success": false,
-			"message": "trace_id parameter is required",
-		})
+		helper.RespondErrorWithStatus(c, http.StatusBadRequest, errors.New("trace_id parameter is required"))
 		return
 	}
 
@@ -33,10 +32,7 @@ func GetTraceByTraceId(c *gin.Context) {
 		lg.Error("failed to get trace by trace ID",
 			zap.Error(err),
 			zap.String("trace_id", traceId))
-		c.JSON(http.StatusNotFound, gin.H{
-			"success": false,
-			"message": "trace not found",
-		})
+		helper.RespondErrorWithStatus(c, http.StatusNotFound, errors.New("trace not found"))
 		return
 	}
 
@@ -46,10 +42,7 @@ func GetTraceByTraceId(c *gin.Context) {
 		lg.Error("failed to parse trace timestamps",
 			zap.Error(err),
 			zap.String("trace_id", traceId))
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"success": false,
-			"message": "failed to parse trace timestamps",
-		})
+		helper.RespondErrorWithStatus(c, http.StatusInternalServerError, errors.New("failed to parse trace timestamps"))
 		return
 	}
 
@@ -77,19 +70,13 @@ func GetTraceByLogId(c *gin.Context) {
 	lg := gmw.GetLogger(c)
 	logIdStr := c.Param("log_id")
 	if logIdStr == "" {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"success": false,
-			"message": "log_id parameter is required",
-		})
+		helper.RespondErrorWithStatus(c, http.StatusBadRequest, errors.New("log_id parameter is required"))
 		return
 	}
 
 	logId, err := strconv.Atoi(logIdStr)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"success": false,
-			"message": "invalid log_id parameter",
-		})
+		helper.RespondErrorWithStatus(c, http.StatusBadRequest, errors.New("invalid log_id parameter"))
 		return
 	}
 
@@ -99,18 +86,12 @@ func GetTraceByLogId(c *gin.Context) {
 		lg.Error("failed to get log by ID",
 			zap.Error(err),
 			zap.Int("log_id", logId))
-		c.JSON(http.StatusNotFound, gin.H{
-			"success": false,
-			"message": "log not found",
-		})
+		helper.RespondErrorWithStatus(c, http.StatusNotFound, errors.New("log not found"))
 		return
 	}
 
 	if log.TraceId == "" {
-		c.JSON(http.StatusNotFound, gin.H{
-			"success": false,
-			"message": "no trace information available for this log entry",
-		})
+		helper.RespondErrorWithStatus(c, http.StatusNotFound, errors.New("no trace information available for this log entry"))
 		return
 	}
 
@@ -126,10 +107,7 @@ func GetTraceByLogId(c *gin.Context) {
 			zap.Error(err),
 			zap.String("trace_id", log.TraceId),
 			zap.Int("log_id", logId))
-		c.JSON(http.StatusNotFound, gin.H{
-			"success": false,
-			"message": "trace information not found",
-		})
+		helper.RespondErrorWithStatus(c, http.StatusNotFound, errors.New("trace information not found"))
 		return
 	}
 
@@ -140,10 +118,7 @@ func GetTraceByLogId(c *gin.Context) {
 			zap.Error(err),
 			zap.String("trace_id", log.TraceId),
 			zap.Int("log_id", logId))
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"success": false,
-			"message": "failed to parse trace timestamps",
-		})
+		helper.RespondErrorWithStatus(c, http.StatusInternalServerError, errors.New("failed to parse trace timestamps"))
 		return
 	}
 

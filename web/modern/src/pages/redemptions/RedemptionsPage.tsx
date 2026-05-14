@@ -5,6 +5,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { ListActionButton } from '@/components/ui/list-action-button';
+import { useNotifications } from '@/components/ui/notifications';
 import { ResponsiveActionGroup } from '@/components/ui/responsive-action-group';
 import { ResponsivePageContainer } from '@/components/ui/responsive-container';
 import { SearchableDropdown } from '@/components/ui/searchable-dropdown';
@@ -34,6 +35,7 @@ export function RedemptionsPage() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { isMobile } = useResponsive();
+  const { notify } = useNotifications();
   const { t } = useTranslation();
   const tr = useCallback(
     (key: string, defaultValue: string, options?: Record<string, unknown>) => t(`redemptions.${key}`, { defaultValue, ...options }),
@@ -183,19 +185,33 @@ export function RedemptionsPage() {
   ];
 
   const manage = async (id: number, action: 'enable' | 'disable' | 'delete', idx: number) => {
-    let res: any;
-    if (action === 'delete') {
-      // Unified API call - complete URL with /api prefix
-      res = await api.delete(`/api/redemption/${id}`);
-    } else {
-      const body: any = { id, status: action === 'enable' ? 1 : 2 };
-      res = await api.put('/api/redemption/?status_only=true', body);
-    }
-    if (res.data?.success) {
+    try {
+      let res: any;
+      if (action === 'delete') {
+        // Unified API call - complete URL with /api prefix
+        res = await api.delete(`/api/redemption/${id}`);
+      } else {
+        const body: any = { id, status: action === 'enable' ? 1 : 2 };
+        res = await api.put('/api/redemption/?status_only=true', body);
+      }
+      if (!res.data?.success) {
+        notify({
+          type: 'error',
+          title: tr('notifications.action_failed_title', 'Action failed'),
+          message: res.data?.message || tr('notifications.action_failed_message', 'Unable to apply change.'),
+        });
+        return;
+      }
       const next = [...data];
       if (action === 'delete') next.splice(idx, 1);
       else next[idx].status = action === 'enable' ? 1 : 2;
       setData(next);
+    } catch (error) {
+      notify({
+        type: 'error',
+        title: tr('notifications.action_failed_title', 'Action failed'),
+        message: (error as any)?.response?.data?.message || (error as Error)?.message || tr('notifications.action_failed_message', 'Unable to apply change.'),
+      });
     }
   };
 
