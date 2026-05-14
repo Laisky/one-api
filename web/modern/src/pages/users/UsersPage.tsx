@@ -439,17 +439,24 @@ export function UsersPage() {
         const body: any = { id, status: action === 'enable' ? 1 : 2 };
         res = await api.put('/api/user/?status_only=true', body);
       }
-      const { success } = res.data;
-      if (success) {
-        // Optimistic update like legacy
-        const next = [...data];
-        if (action === 'delete') {
-          next.splice(idx, 1);
-        } else {
-          next[idx].status = action === 'enable' ? 1 : 2;
-        }
-        setData(next);
+      const { success, message } = res.data || {};
+      if (!success) {
+        notify({
+          type: 'error',
+          title: tr('notifications.action_failed_title', 'Action failed'),
+          message: message || tr('notifications.action_failed_message', 'Unable to apply change.'),
+        });
+        return;
       }
+
+      // Optimistic update like legacy
+      const next = [...data];
+      if (action === 'delete') {
+        next.splice(idx, 1);
+      } else {
+        next[idx].status = action === 'enable' ? 1 : 2;
+      }
+      setData(next);
     } catch (error) {
       const message = (error as any)?.response?.data?.message || tr('notifications.action_failed_message', 'Unable to apply change.');
       notify({

@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strconv"
 	"testing"
 
 	"github.com/gin-gonic/gin"
@@ -187,6 +188,46 @@ func TestUpdateUserEmailNullSkipsChange(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "existing@example.com", updated.Email)
 	require.Equal(t, int64(42), updated.Quota)
+}
+
+// TestDeleteUserRespondsWithSuccess verifies that admin deletion returns a
+// JSON success payload and removes the target user from the database.
+func TestDeleteUserRespondsWithSuccess(t *testing.T) {
+	setupUserControllerTest(t)
+
+	target := &model.User{
+		Username:    "delete-target",
+		Password:    "hashed-password",
+		DisplayName: "Delete Target",
+		Role:        model.RoleCommonUser,
+		Group:       "default",
+		Status:      model.UserStatusEnabled,
+	}
+	require.NoError(t, model.DB.Create(target).Error)
+
+	router := gin.New()
+	router.DELETE("/api/user/:id", func(c *gin.Context) {
+		c.Set("role", model.RoleRootUser)
+		DeleteUser(c)
+	})
+
+	req := httptest.NewRequest(http.MethodDelete, "/api/user/"+strconv.Itoa(target.Id), nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+
+	var resp struct {
+		Success bool   `json:"success"`
+		Message string `json:"message"`
+	}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	require.True(t, resp.Success, resp.Message)
+
+	updated, err := model.GetUserById(target.Id, true)
+	require.NoError(t, err)
+	require.Equal(t, model.UserStatusDeleted, updated.Status)
+	require.NotEqual(t, "delete-target", updated.Username)
 }
 
 // createLockTargetUser creates a regular common user fixture for the password

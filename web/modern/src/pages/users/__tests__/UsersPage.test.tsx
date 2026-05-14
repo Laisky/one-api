@@ -257,6 +257,52 @@ describe('UsersPage promote/demote/disable_2fa actions', () => {
     });
   });
 
+  it('deletes a user row when the backend confirms success', async () => {
+    setSuperAdmin();
+    seedListResponse([baseUser]);
+    (api.delete as any).mockResolvedValue({
+      data: { success: true, message: '' },
+    });
+
+    renderPage();
+    const user = userEvent.setup();
+    await screen.findByText('alice');
+
+    await user.click(screen.getByRole('button', { name: 'Delete' }));
+
+    await waitFor(() => {
+      expect(api.delete).toHaveBeenCalledWith('/api/user/2');
+    });
+    await waitFor(() => {
+      expect(screen.queryByText('alice')).not.toBeInTheDocument();
+    });
+  });
+
+  it('shows error notification when delete returns success false', async () => {
+    setSuperAdmin();
+    seedListResponse([baseUser]);
+    (api.delete as any).mockResolvedValue({
+      data: { success: false, message: 'cannot delete this user' },
+    });
+
+    renderPage();
+    const user = userEvent.setup();
+    await screen.findByText('alice');
+
+    await user.click(screen.getByRole('button', { name: 'Delete' }));
+
+    await waitFor(() => {
+      expect(notify).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'error',
+          title: 'Action failed',
+          message: 'cannot delete this user',
+        })
+      );
+    });
+    expect(screen.getByText('alice')).toBeInTheDocument();
+  });
+
   it('disables 2FA after confirmation and notifies success', async () => {
     setSuperAdmin();
     seedListResponse([baseUser]);
