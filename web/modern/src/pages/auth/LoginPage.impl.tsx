@@ -324,9 +324,7 @@ export function LoginPage() {
               <img
                 src={systemStatus.logo}
                 alt={
-                  systemStatus.system_name
-                    ? t('auth.login.logo_alt', { name: systemStatus.system_name })
-                    : t('auth.login.site_logo_alt')
+                  systemStatus.system_name ? t('auth.login.logo_alt', { name: systemStatus.system_name }) : t('auth.login.site_logo_alt')
                 }
                 className="h-12 w-auto"
                 decoding="async"
@@ -566,11 +564,7 @@ export function LoginPage() {
           </DialogHeader>
           <div className="flex flex-col items-center gap-3">
             {systemStatus.wechat_qrcode && (
-              <img
-                src={systemStatus.wechat_qrcode}
-                alt={t('auth.login.wechat_qr_alt')}
-                className="max-h-64 w-auto rounded-md border"
-              />
+              <img src={systemStatus.wechat_qrcode} alt={t('auth.login.wechat_qr_alt')} className="max-h-64 w-auto rounded-md border" />
             )}
             <Input
               type="text"

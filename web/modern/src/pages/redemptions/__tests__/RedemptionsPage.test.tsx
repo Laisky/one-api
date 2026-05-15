@@ -68,9 +68,7 @@ describe('RedemptionsPage action feedback', () => {
     await user.click(screen.getByRole('button', { name: 'Delete' }));
 
     await waitFor(() => {
-      expect(notify).toHaveBeenCalledWith(
-        expect.objectContaining({ type: 'error', message: 'cannot delete redemption' })
-      );
+      expect(notify).toHaveBeenCalledWith(expect.objectContaining({ type: 'error', message: 'cannot delete redemption' }));
     });
   });
 
@@ -84,9 +82,7 @@ describe('RedemptionsPage action feedback', () => {
     await user.click(screen.getByRole('button', { name: 'Disable' }));
 
     await waitFor(() => {
-      expect(notify).toHaveBeenCalledWith(
-        expect.objectContaining({ type: 'error', message: 'cannot disable redemption' })
-      );
+      expect(notify).toHaveBeenCalledWith(expect.objectContaining({ type: 'error', message: 'cannot disable redemption' }));
     });
   });
 });

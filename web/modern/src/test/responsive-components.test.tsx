@@ -136,11 +136,7 @@ describe('Enhanced Data Table', () => {
 
     render(
       <TestWrapper>
-        <EnhancedDataTable
-          columns={columns}
-          data={data}
-          floatingRowActions={() => <button type="button">Floating row action</button>}
-        />
+        <EnhancedDataTable columns={columns} data={data} floatingRowActions={() => <button type="button">Floating row action</button>} />
       </TestWrapper>
     );
 

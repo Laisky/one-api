@@ -33,9 +33,7 @@ describe('OtherSettings action feedback', () => {
     await user.click(screen.getAllByRole('button', { name: /save/i })[0]);
 
     await waitFor(() => {
-      expect(notify).toHaveBeenCalledWith(
-        expect.objectContaining({ type: 'error', message: 'branding save rejected' })
-      );
+      expect(notify).toHaveBeenCalledWith(expect.objectContaining({ type: 'error', message: 'branding save rejected' }));
     });
   });
 });

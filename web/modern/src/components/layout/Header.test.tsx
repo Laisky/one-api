@@ -92,7 +92,7 @@ describe('Header logout UX', () => {
     const user = userEvent.setup();
     renderHeader();
 
-    const accountMenuButton = screen.getByLabelText(/open account menu/i);
+    const accountMenuButton = screen.getByLabelText(/account menu for demo-user/i);
     await user.click(accountMenuButton);
 
     const logoutMenuItem = await screen.findByText('Logout');

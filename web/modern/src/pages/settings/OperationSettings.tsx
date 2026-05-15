@@ -561,8 +561,7 @@ export function OperationSettings() {
                               notify({
                                 type: 'error',
                                 title: t('operation_settings.save_failed_title'),
-                                message:
-                                  error?.response?.data?.message || error?.message || t('operation_settings.save_failed_generic'),
+                                message: error?.response?.data?.message || error?.message || t('operation_settings.save_failed_generic'),
                               });
                             }
                           }}
@@ -602,8 +601,7 @@ export function OperationSettings() {
                               notify({
                                 type: 'error',
                                 title: t('operation_settings.save_failed_title'),
-                                message:
-                                  error?.response?.data?.message || error?.message || t('operation_settings.save_failed_generic'),
+                                message: error?.response?.data?.message || error?.message || t('operation_settings.save_failed_generic'),
                               });
                             }
                           }}
@@ -643,8 +641,7 @@ export function OperationSettings() {
                               notify({
                                 type: 'error',
                                 title: t('operation_settings.save_failed_title'),
-                                message:
-                                  error?.response?.data?.message || error?.message || t('operation_settings.save_failed_generic'),
+                                message: error?.response?.data?.message || error?.message || t('operation_settings.save_failed_generic'),
                               });
                             }
                           }}
@@ -684,8 +681,7 @@ export function OperationSettings() {
                               notify({
                                 type: 'error',
                                 title: t('operation_settings.save_failed_title'),
-                                message:
-                                  error?.response?.data?.message || error?.message || t('operation_settings.save_failed_generic'),
+                                message: error?.response?.data?.message || error?.message || t('operation_settings.save_failed_generic'),
                               });
                             }
                           }}
@@ -798,8 +794,7 @@ export function OperationSettings() {
                               notify({
                                 type: 'error',
                                 title: t('operation_settings.save_failed_title'),
-                                message:
-                                  error?.response?.data?.message || error?.message || t('operation_settings.save_failed_generic'),
+                                message: error?.response?.data?.message || error?.message || t('operation_settings.save_failed_generic'),
                               });
                             }
                           }}
@@ -839,8 +834,7 @@ export function OperationSettings() {
                               notify({
                                 type: 'error',
                                 title: t('operation_settings.save_failed_title'),
-                                message:
-                                  error?.response?.data?.message || error?.message || t('operation_settings.save_failed_generic'),
+                                message: error?.response?.data?.message || error?.message || t('operation_settings.save_failed_generic'),
                               });
                             }
                           }}

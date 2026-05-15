@@ -59,9 +59,7 @@ describe('LogsPage action feedback', () => {
     await user.click(clearButton);
 
     await waitFor(() => {
-      expect(notify).toHaveBeenCalledWith(
-        expect.objectContaining({ type: 'error', message: 'clear logs rejected' })
-      );
+      expect(notify).toHaveBeenCalledWith(expect.objectContaining({ type: 'error', message: 'clear logs rejected' }));
     });
   });
 });

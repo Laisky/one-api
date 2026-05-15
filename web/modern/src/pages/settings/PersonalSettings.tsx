@@ -252,7 +252,7 @@ export function PersonalSettings() {
 
         ctx.font = '12px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
         ctx.fillStyle = '#666666';
-  ctx.fillText(t('personal_settings.totp.qr_caption'), canvas.width / 2, padding + 28);
+        ctx.fillText(t('personal_settings.totp.qr_caption'), canvas.width / 2, padding + 28);
 
         ctx.drawImage(img, padding, padding + textHeight, img.width, img.height);
 

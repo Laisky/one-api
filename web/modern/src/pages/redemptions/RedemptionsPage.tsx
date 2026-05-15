@@ -210,7 +210,10 @@ export function RedemptionsPage() {
       notify({
         type: 'error',
         title: tr('notifications.action_failed_title', 'Action failed'),
-        message: (error as any)?.response?.data?.message || (error as Error)?.message || tr('notifications.action_failed_message', 'Unable to apply change.'),
+        message:
+          (error as any)?.response?.data?.message ||
+          (error as Error)?.message ||
+          tr('notifications.action_failed_message', 'Unable to apply change.'),
       });
     }
   };

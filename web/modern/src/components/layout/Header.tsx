@@ -158,9 +158,7 @@ export function Header() {
                       <DropdownMenuContent align="end" className="w-60">
                         <DropdownMenuLabel className="flex flex-col gap-0.5 py-2 font-normal">
                           <span className="text-sm font-medium truncate">{user.display_name || user.username}</span>
-                          <span className="text-xs text-muted-foreground truncate">
-                            {user.email || `@${user.username}`}
-                          </span>
+                          <span className="text-xs text-muted-foreground truncate">{user.email || `@${user.username}`}</span>
                         </DropdownMenuLabel>
                         <DropdownMenuSeparator />
                         <DropdownMenuItem onSelect={() => navigate('/settings')} className="flex items-center gap-2 cursor-pointer">

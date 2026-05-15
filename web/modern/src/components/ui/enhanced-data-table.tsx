@@ -11,15 +11,7 @@ import * as React from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 
-const INTERACTIVE_ROW_TARGET_SELECTOR = [
-  'button',
-  'a[href]',
-  'input',
-  'select',
-  'textarea',
-  '[role="button"]',
-  '[role="link"]',
-].join(', ');
+const INTERACTIVE_ROW_TARGET_SELECTOR = ['button', 'a[href]', 'input', 'select', 'textarea', '[role="button"]', '[role="link"]'].join(', ');
 
 export interface EnhancedDataTableProps<TData, TValue> {
   columns: ColumnDef<TData, TValue>[];

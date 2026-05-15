@@ -358,7 +358,10 @@ export function LogsPage() {
       notify({
         type: 'error',
         title: t('logs.notifications.clear_failed_title', 'Clear failed'),
-        message: (error as any)?.response?.data?.message || (error as Error)?.message || t('logs.notifications.clear_failed_message', 'Failed to clear logs.'),
+        message:
+          (error as any)?.response?.data?.message ||
+          (error as Error)?.message ||
+          t('logs.notifications.clear_failed_message', 'Failed to clear logs.'),
       });
     }
   };

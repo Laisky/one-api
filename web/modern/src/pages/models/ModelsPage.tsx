@@ -264,9 +264,7 @@ export function ModelsPage() {
                       <div className="text-sm">{formatPrice(model.outputPrice)}</div>
                     </div>
                   </div>
-                  {hasRichPricing(model.data) && (
-                    <div className="flex flex-wrap gap-1">{renderPricingBadges(model.data)}</div>
-                  )}
+                  {hasRichPricing(model.data) && <div className="flex flex-wrap gap-1">{renderPricingBadges(model.data)}</div>}
                 </div>
               ))}
             </div>
