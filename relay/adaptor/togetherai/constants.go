@@ -132,7 +132,12 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		ContextLength: 128000, MaxOutputTokens: 16384,
 		InputModalities: togetherTextIn, OutputModalities: togetherTextOut,
 		SupportedFeatures: togetherChatFeatures, SupportedSamplingParameters: togetherChatSampling,
-		Quantization: "fp4", HuggingFaceID: "openai/gpt-oss-120b",
+		// Together's OpenAI-compatibility doc states reasoning_effort works on GPT-OSS
+		// models with values "low", "medium", "high".
+		// Source: https://docs.together.ai/docs/openai-api-compatibility
+		SupportedReasoningEfforts: []string{"low", "medium", "high"},
+		DefaultReasoningEffort:    "medium",
+		Quantization:              "fp4", HuggingFaceID: "openai/gpt-oss-120b",
 		Description: "OpenAI gpt-oss-120b dense open-weight model with 128K context.",
 	},
 	"openai/gpt-oss-20b": {
@@ -140,7 +145,12 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		ContextLength: 128000, MaxOutputTokens: 16384,
 		InputModalities: togetherTextIn, OutputModalities: togetherTextOut,
 		SupportedFeatures: togetherChatFeatures, SupportedSamplingParameters: togetherChatSampling,
-		Quantization: "fp4", HuggingFaceID: "openai/gpt-oss-20b",
+		// Together's OpenAI-compatibility doc states reasoning_effort works on GPT-OSS
+		// models with values "low", "medium", "high".
+		// Source: https://docs.together.ai/docs/openai-api-compatibility
+		SupportedReasoningEfforts: []string{"low", "medium", "high"},
+		DefaultReasoningEffort:    "medium",
+		Quantization:              "fp4", HuggingFaceID: "openai/gpt-oss-20b",
 		Description: "OpenAI gpt-oss-20b compact dense open-weight model with 128K context.",
 	},
 	"deepseek-ai/DeepSeek-V4-Pro": {

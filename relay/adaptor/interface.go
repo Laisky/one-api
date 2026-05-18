@@ -66,6 +66,18 @@ type ModelConfig struct {
 	// SupportedSamplingParameters lists OpenAI-compatible sampling parameters this model accepts.
 	// Empty means caller should use a default conservative set.
 	SupportedSamplingParameters []string `json:"supported_sampling_parameters,omitempty"`
+	// SupportedReasoningEfforts enumerates the reasoning_effort levels this model accepts.
+	// Valid OpenAI-vocabulary values: "minimal","low","medium","high". Empty implies the
+	// model does not support a tunable reasoning_effort parameter (non-reasoning models,
+	// or providers that expose reasoning via a budget rather than a discrete level).
+	SupportedReasoningEfforts []string `json:"supported_reasoning_efforts,omitempty"`
+	// DefaultReasoningEffort is the level the relay applies when a request omits
+	// reasoning_effort but the model supports it. Empty means callers must supply
+	// their own default; the OpenAI relay falls back to "medium" in that case.
+	DefaultReasoningEffort string `json:"default_reasoning_effort,omitempty"`
+	// MaxReasoningTokens caps the upstream reasoning budget (e.g., Anthropic
+	// `thinking.budget_tokens`, Gemini `thinkingBudget`). 0 means unspecified.
+	MaxReasoningTokens int32 `json:"max_reasoning_tokens,omitempty"`
 	// Quantization advertises numeric precision. Empty means unspecified.
 	// Valid OpenRouter values: "int4","int8","fp4","fp6","fp8","fp16","bf16","fp32".
 	Quantization string `json:"quantization,omitempty"`

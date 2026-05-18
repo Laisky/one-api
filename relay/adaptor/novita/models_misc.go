@@ -259,9 +259,14 @@ var miscModelRatios = map[string]adaptor.ModelConfig{
 		OutputModalities:            novitaTextOnlyModalities,
 		SupportedFeatures:           novitaReasoningFeatures,
 		SupportedSamplingParameters: novitaReasoningSamplingParams,
-		Quantization:                "bf16",
-		HuggingFaceID:               "openai/gpt-oss-120b",
-		Description:                 "OpenAI GPT-OSS 120B open-weight reasoning chat model with 128K context.",
+		// Novita documents GPT-OSS reasoning_effort ("low"/"medium"/"high") through its
+		// OpenAI-compatible REST surface.
+		// Source: https://medium.com/@marketing_novita.ai/gpt-oss-on-novita-ai-access-openais-open-source-models-via-api-b62c87f378a0
+		SupportedReasoningEfforts: []string{"low", "medium", "high"},
+		DefaultReasoningEffort:    "medium",
+		Quantization:              "bf16",
+		HuggingFaceID:             "openai/gpt-oss-120b",
+		Description:               "OpenAI GPT-OSS 120B open-weight reasoning chat model with 128K context.",
 	},
 	"openai/gpt-oss-20b": {
 		Ratio:                       0.04 * ratio.MilliTokensUsd,
@@ -272,9 +277,14 @@ var miscModelRatios = map[string]adaptor.ModelConfig{
 		OutputModalities:            novitaTextOnlyModalities,
 		SupportedFeatures:           novitaReasoningFeatures,
 		SupportedSamplingParameters: novitaReasoningSamplingParams,
-		Quantization:                "bf16",
-		HuggingFaceID:               "openai/gpt-oss-20b",
-		Description:                 "OpenAI GPT-OSS 20B open-weight reasoning chat model with 128K context.",
+		// Novita documents GPT-OSS reasoning_effort ("low"/"medium"/"high") through its
+		// OpenAI-compatible REST surface.
+		// Source: https://medium.com/@marketing_novita.ai/gpt-oss-on-novita-ai-access-openais-open-source-models-via-api-b62c87f378a0
+		SupportedReasoningEfforts: []string{"low", "medium", "high"},
+		DefaultReasoningEffort:    "medium",
+		Quantization:              "bf16",
+		HuggingFaceID:             "openai/gpt-oss-20b",
+		Description:               "OpenAI GPT-OSS 20B open-weight reasoning chat model with 128K context.",
 	},
 
 	// Sao10K Llama fine-tunes — community role-play models.

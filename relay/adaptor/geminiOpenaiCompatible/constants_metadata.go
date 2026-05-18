@@ -28,6 +28,13 @@ const (
 // geminiInputTextImageFile lists the modalities every multimodal Gemini chat tier accepts.
 var geminiInputTextImageFile = []string{"text", "image", "file"}
 
+// geminiInputMultimodal lists the full multimodal input set advertised for Gemini 2.5+/3.x chat tiers
+// per https://ai.google.dev/gemini-api/docs/models (text, image, audio, video, and arbitrary files).
+var geminiInputMultimodal = []string{"text", "image", "audio", "video", "file"}
+
+// geminiInputLive lists the Live API audio/text/image inputs per https://ai.google.dev/gemini-api/docs/live.
+var geminiInputLive = []string{"text", "audio", "image"}
+
 // geminiInputTextOnly lists modalities for text-only models (Gemma, embedders, AQA, Imagen prompt).
 var geminiInputTextOnly = []string{"text"}
 
@@ -36,6 +43,12 @@ var geminiOutputText = []string{"text"}
 
 // geminiOutputTextImage lists output modalities for native image-generation tiers.
 var geminiOutputTextImage = []string{"text", "image"}
+
+// geminiOutputTextAudio lists output modalities for Live API tiers that stream audio alongside text.
+var geminiOutputTextAudio = []string{"text", "audio"}
+
+// geminiOutputAudio lists output modalities for TTS-only tiers per https://ai.google.dev/gemini-api/docs/models.
+var geminiOutputAudio = []string{"audio"}
 
 // geminiOutputImage lists output modalities for image-only generation models (Imagen).
 var geminiOutputImage = []string{"image"}
@@ -51,6 +64,28 @@ var geminiFeaturesGemma = []string{"json_mode"}
 
 // geminiSamplingChat lists the sampling parameters Google documents for Gemini chat completions.
 var geminiSamplingChat = []string{"temperature", "top_p", "top_k", "stop", "max_tokens"}
+
+// Reasoning effort enumerations published for the Gemini OpenAI-compatible endpoint
+// (https://ai.google.dev/gemini-api/docs/openai). Gemini 3.x exposes minimal/low/medium/high mapping
+// to thinkingLevel; Gemini 2.5 maps the same labels to thinkingBudget tiers. The "none" value is only
+// honored on 2.5 models that allow disabling thought, and the Pro tiers cannot disable reasoning.
+var (
+	gemini25ProReasoningEfforts      = []string{"minimal", "low", "medium", "high"}
+	gemini25ReasoningEfforts         = []string{"minimal", "low", "medium", "high", "none"}
+	gemini3ProReasoningEfforts       = []string{"low", "medium", "high"}
+	gemini3FlashReasoningEfforts     = []string{"minimal", "low", "medium", "high"}
+	gemini3FlashLiteReasoningEfforts = []string{"minimal", "low", "medium", "high"}
+)
+
+// Published thinking-budget ceilings from https://ai.google.dev/gemini-api/docs/thinking.
+// Gemini 3.x uses thinkingLevel rather than an integer budget; we surface the per-level cap (24,576)
+// because the OpenAI-compat layer continues to translate "high" into a budget request internally.
+const (
+	gemini25ProMaxThinkingBudget       int32 = 32_768
+	gemini25FlashMaxThinkingBudget     int32 = 24_576
+	gemini25FlashLiteMaxThinkingBudget int32 = 24_576
+	gemini3LevelMaxThinkingBudget      int32 = 24_576
+)
 
 // geminiSamplingGemma lists the sampling parameters surfaced by Gemini-served Gemma tiers.
 var geminiSamplingGemma = []string{"temperature", "top_p", "top_k", "stop", "max_tokens"}
@@ -118,7 +153,7 @@ var geminiMetadataOverrides = map[string]adaptor.ModelConfig{
 	"gemini-embedding-2-preview": {
 		ContextLength:    8192,
 		MaxOutputTokens:  0,
-		InputModalities:  geminiInputTextImageFile,
+		InputModalities:  geminiInputMultimodal,
 		OutputModalities: geminiOutputText,
 		Description:      "Multimodal embedding preview model accepting text, image, audio, and video inputs.",
 	},
@@ -135,19 +170,25 @@ var geminiMetadataOverrides = map[string]adaptor.ModelConfig{
 	"gemini-3.1-pro-preview": {
 		ContextLength:               gemini1MContext,
 		MaxOutputTokens:             geminiProMaxOutput,
-		InputModalities:             geminiInputTextImageFile,
+		InputModalities:             geminiInputMultimodal,
 		OutputModalities:            geminiOutputText,
 		SupportedFeatures:           geminiFeatures25Plus,
 		SupportedSamplingParameters: geminiSamplingChat,
+		SupportedReasoningEfforts:   gemini3ProReasoningEfforts,
+		DefaultReasoningEffort:      "high",
+		MaxReasoningTokens:          gemini3LevelMaxThinkingBudget,
 		Description:                 "Gemini 3.1 Pro preview multimodal reasoning tier with 1M context.",
 	},
 	"gemini-3.1-pro-preview-customtools": {
 		ContextLength:               gemini1MContext,
 		MaxOutputTokens:             geminiProMaxOutput,
-		InputModalities:             geminiInputTextImageFile,
+		InputModalities:             geminiInputMultimodal,
 		OutputModalities:            geminiOutputText,
 		SupportedFeatures:           geminiFeatures25Plus,
 		SupportedSamplingParameters: geminiSamplingChat,
+		SupportedReasoningEfforts:   gemini3ProReasoningEfforts,
+		DefaultReasoningEffort:      "high",
+		MaxReasoningTokens:          gemini3LevelMaxThinkingBudget,
 		Description:                 "Gemini 3.1 Pro preview tier configured for custom tool definitions.",
 	},
 	"gemini-3.1-flash-image-preview": {
@@ -162,37 +203,46 @@ var geminiMetadataOverrides = map[string]adaptor.ModelConfig{
 	"gemini-3.1-flash-live-preview": {
 		ContextLength:               32_768,
 		MaxOutputTokens:             8192,
-		InputModalities:             []string{"text", "image", "file"},
-		OutputModalities:            []string{"text"},
+		InputModalities:             geminiInputLive,
+		OutputModalities:            geminiOutputTextAudio,
 		SupportedFeatures:           []string{"tools", "json_mode"},
 		SupportedSamplingParameters: geminiSamplingChat,
-		Description:                 "Gemini 3.1 Flash Live preview tier optimized for low-latency bidirectional sessions.",
+		Description:                 "Gemini 3.1 Flash Live preview tier optimized for low-latency bidirectional audio sessions.",
 	},
 	"gemini-3.1-flash-lite-preview": {
 		ContextLength:               gemini1MContext,
 		MaxOutputTokens:             gemini3FlashMaxOutput,
-		InputModalities:             geminiInputTextImageFile,
+		InputModalities:             geminiInputMultimodal,
 		OutputModalities:            geminiOutputText,
 		SupportedFeatures:           geminiFeatures25Plus,
 		SupportedSamplingParameters: geminiSamplingChat,
+		SupportedReasoningEfforts:   gemini3FlashLiteReasoningEfforts,
+		DefaultReasoningEffort:      "minimal",
+		MaxReasoningTokens:          gemini3LevelMaxThinkingBudget,
 		Description:                 "Gemini 3.1 Flash Lite preview tier for cost-efficient high-throughput workloads.",
 	},
 	"gemini-3-pro-preview": {
 		ContextLength:               gemini1MContext,
 		MaxOutputTokens:             geminiProMaxOutput,
-		InputModalities:             geminiInputTextImageFile,
+		InputModalities:             geminiInputMultimodal,
 		OutputModalities:            geminiOutputText,
 		SupportedFeatures:           geminiFeatures25Plus,
 		SupportedSamplingParameters: geminiSamplingChat,
+		SupportedReasoningEfforts:   gemini3ProReasoningEfforts,
+		DefaultReasoningEffort:      "high",
+		MaxReasoningTokens:          gemini3LevelMaxThinkingBudget,
 		Description:                 "Gemini 3 Pro preview multimodal reasoning tier with 1M context.",
 	},
 	"gemini-3-flash-preview": {
 		ContextLength:               gemini1MContext,
 		MaxOutputTokens:             gemini3FlashMaxOutput,
-		InputModalities:             geminiInputTextImageFile,
+		InputModalities:             geminiInputMultimodal,
 		OutputModalities:            geminiOutputText,
 		SupportedFeatures:           geminiFeatures25Plus,
 		SupportedSamplingParameters: geminiSamplingChat,
+		SupportedReasoningEfforts:   gemini3FlashReasoningEfforts,
+		DefaultReasoningEffort:      "high",
+		MaxReasoningTokens:          gemini3LevelMaxThinkingBudget,
 		Description:                 "Gemini 3 Flash preview multimodal model balancing latency and quality.",
 	},
 	"gemini-3-pro-image-preview": {
@@ -209,37 +259,49 @@ var geminiMetadataOverrides = map[string]adaptor.ModelConfig{
 	"gemini-2.5-pro": {
 		ContextLength:               gemini1MContext,
 		MaxOutputTokens:             geminiProMaxOutput,
-		InputModalities:             geminiInputTextImageFile,
+		InputModalities:             geminiInputMultimodal,
 		OutputModalities:            geminiOutputText,
 		SupportedFeatures:           geminiFeatures25Plus,
 		SupportedSamplingParameters: geminiSamplingChat,
+		SupportedReasoningEfforts:   gemini25ProReasoningEfforts,
+		DefaultReasoningEffort:      "medium",
+		MaxReasoningTokens:          gemini25ProMaxThinkingBudget,
 		Description:                 "Gemini 2.5 Pro multimodal reasoning tier (1M context, thinking enabled).",
 	},
 	"gemini-2.5-pro-preview": {
 		ContextLength:               gemini1MContext,
 		MaxOutputTokens:             geminiProMaxOutput,
-		InputModalities:             geminiInputTextImageFile,
+		InputModalities:             geminiInputMultimodal,
 		OutputModalities:            geminiOutputText,
 		SupportedFeatures:           geminiFeatures25Plus,
 		SupportedSamplingParameters: geminiSamplingChat,
+		SupportedReasoningEfforts:   gemini25ProReasoningEfforts,
+		DefaultReasoningEffort:      "medium",
+		MaxReasoningTokens:          gemini25ProMaxThinkingBudget,
 		Description:                 "Gemini 2.5 Pro preview tier (1M context, thinking enabled).",
 	},
 	"gemini-2.5-computer-use-preview": {
 		ContextLength:               gemini1MContext,
 		MaxOutputTokens:             geminiProMaxOutput,
-		InputModalities:             geminiInputTextImageFile,
+		InputModalities:             geminiInputMultimodal,
 		OutputModalities:            geminiOutputText,
 		SupportedFeatures:           geminiFeatures25Plus,
 		SupportedSamplingParameters: geminiSamplingChat,
+		SupportedReasoningEfforts:   gemini25ProReasoningEfforts,
+		DefaultReasoningEffort:      "medium",
+		MaxReasoningTokens:          gemini25ProMaxThinkingBudget,
 		Description:                 "Gemini 2.5 Computer Use preview tier with browser/agent control tools.",
 	},
 	"gemini-2.5-computer-use-preview-10-2025": {
 		ContextLength:               gemini1MContext,
 		MaxOutputTokens:             geminiProMaxOutput,
-		InputModalities:             geminiInputTextImageFile,
+		InputModalities:             geminiInputMultimodal,
 		OutputModalities:            geminiOutputText,
 		SupportedFeatures:           geminiFeatures25Plus,
 		SupportedSamplingParameters: geminiSamplingChat,
+		SupportedReasoningEfforts:   gemini25ProReasoningEfforts,
+		DefaultReasoningEffort:      "medium",
+		MaxReasoningTokens:          gemini25ProMaxThinkingBudget,
 		Description:                 "Gemini 2.5 Computer Use preview snapshot dated 10-2025.",
 	},
 
@@ -247,82 +309,109 @@ var geminiMetadataOverrides = map[string]adaptor.ModelConfig{
 	"gemini-2.5-flash": {
 		ContextLength:               gemini1MContext,
 		MaxOutputTokens:             geminiFlashMaxOutput,
-		InputModalities:             geminiInputTextImageFile,
+		InputModalities:             geminiInputMultimodal,
 		OutputModalities:            geminiOutputText,
 		SupportedFeatures:           geminiFeatures25Plus,
 		SupportedSamplingParameters: geminiSamplingChat,
+		SupportedReasoningEfforts:   gemini25ReasoningEfforts,
+		DefaultReasoningEffort:      "medium",
+		MaxReasoningTokens:          gemini25FlashMaxThinkingBudget,
 		Description:                 "Gemini 2.5 Flash multimodal tier optimized for latency and cost.",
 	},
 	"gemini-2.5-flash-preview": {
 		ContextLength:               gemini1MContext,
 		MaxOutputTokens:             geminiFlashMaxOutput,
-		InputModalities:             geminiInputTextImageFile,
+		InputModalities:             geminiInputMultimodal,
 		OutputModalities:            geminiOutputText,
 		SupportedFeatures:           geminiFeatures25Plus,
 		SupportedSamplingParameters: geminiSamplingChat,
+		SupportedReasoningEfforts:   gemini25ReasoningEfforts,
+		DefaultReasoningEffort:      "medium",
+		MaxReasoningTokens:          gemini25FlashMaxThinkingBudget,
 		Description:                 "Gemini 2.5 Flash preview tier.",
 	},
 	"gemini-2.5-flash-preview-09-2025": {
 		ContextLength:               gemini1MContext,
 		MaxOutputTokens:             geminiFlashMaxOutput,
-		InputModalities:             geminiInputTextImageFile,
+		InputModalities:             geminiInputMultimodal,
 		OutputModalities:            geminiOutputText,
 		SupportedFeatures:           geminiFeatures25Plus,
 		SupportedSamplingParameters: geminiSamplingChat,
+		SupportedReasoningEfforts:   gemini25ReasoningEfforts,
+		DefaultReasoningEffort:      "medium",
+		MaxReasoningTokens:          gemini25FlashMaxThinkingBudget,
 		Description:                 "Gemini 2.5 Flash preview snapshot dated 09-2025.",
 	},
 	"gemini-2.5-flash-lite": {
 		ContextLength:               gemini1MContext,
 		MaxOutputTokens:             geminiFlashMaxOutput,
-		InputModalities:             geminiInputTextImageFile,
+		InputModalities:             geminiInputMultimodal,
 		OutputModalities:            geminiOutputText,
 		SupportedFeatures:           geminiFeatures25Plus,
 		SupportedSamplingParameters: geminiSamplingChat,
+		SupportedReasoningEfforts:   gemini25ReasoningEfforts,
+		DefaultReasoningEffort:      "none",
+		MaxReasoningTokens:          gemini25FlashLiteMaxThinkingBudget,
 		Description:                 "Gemini 2.5 Flash Lite multimodal tier for cost-sensitive workloads.",
 	},
 	"gemini-2.5-flash-lite-preview": {
 		ContextLength:               gemini1MContext,
 		MaxOutputTokens:             geminiFlashMaxOutput,
-		InputModalities:             geminiInputTextImageFile,
+		InputModalities:             geminiInputMultimodal,
 		OutputModalities:            geminiOutputText,
 		SupportedFeatures:           geminiFeatures25Plus,
 		SupportedSamplingParameters: geminiSamplingChat,
+		SupportedReasoningEfforts:   gemini25ReasoningEfforts,
+		DefaultReasoningEffort:      "none",
+		MaxReasoningTokens:          gemini25FlashLiteMaxThinkingBudget,
 		Description:                 "Gemini 2.5 Flash Lite preview tier.",
 	},
 	"gemini-2.5-flash-lite-preview-09-2025": {
 		ContextLength:               gemini1MContext,
 		MaxOutputTokens:             geminiFlashMaxOutput,
-		InputModalities:             geminiInputTextImageFile,
+		InputModalities:             geminiInputMultimodal,
 		OutputModalities:            geminiOutputText,
 		SupportedFeatures:           geminiFeatures25Plus,
 		SupportedSamplingParameters: geminiSamplingChat,
+		SupportedReasoningEfforts:   gemini25ReasoningEfforts,
+		DefaultReasoningEffort:      "none",
+		MaxReasoningTokens:          gemini25FlashLiteMaxThinkingBudget,
 		Description:                 "Gemini 2.5 Flash Lite preview snapshot dated 09-2025.",
 	},
 	"gemini-2.5-flash-native-audio": {
 		ContextLength:               128_000,
 		MaxOutputTokens:             8192,
-		InputModalities:             geminiInputTextImageFile,
-		OutputModalities:            geminiOutputText,
+		InputModalities:             geminiInputLive,
+		OutputModalities:            geminiOutputTextAudio,
 		SupportedFeatures:           []string{"tools", "json_mode", "reasoning"},
 		SupportedSamplingParameters: geminiSamplingChat,
+		SupportedReasoningEfforts:   gemini25ReasoningEfforts,
+		DefaultReasoningEffort:      "medium",
+		MaxReasoningTokens:          gemini25FlashMaxThinkingBudget,
 		Description:                 "Gemini 2.5 Flash native-audio dialog tier with low-latency audio in/out.",
 	},
 	"gemini-2.5-flash-native-audio-preview-09-2025": {
 		ContextLength:               128_000,
 		MaxOutputTokens:             8192,
-		InputModalities:             geminiInputTextImageFile,
-		OutputModalities:            geminiOutputText,
+		InputModalities:             geminiInputLive,
+		OutputModalities:            geminiOutputTextAudio,
 		SupportedFeatures:           []string{"tools", "json_mode", "reasoning"},
 		SupportedSamplingParameters: geminiSamplingChat,
+		SupportedReasoningEfforts:   gemini25ReasoningEfforts,
+		DefaultReasoningEffort:      "medium",
+		MaxReasoningTokens:          gemini25FlashMaxThinkingBudget,
 		Description:                 "Gemini 2.5 Flash native-audio preview snapshot dated 09-2025.",
 	},
 	"gemini-2.5-flash-native-audio-preview-12-2025": {
 		ContextLength:               128_000,
 		MaxOutputTokens:             8192,
-		InputModalities:             geminiInputTextImageFile,
-		OutputModalities:            geminiOutputText,
+		InputModalities:             geminiInputLive,
+		OutputModalities:            geminiOutputTextAudio,
 		SupportedFeatures:           []string{"tools", "json_mode", "reasoning"},
 		SupportedSamplingParameters: geminiSamplingChat,
+		SupportedReasoningEfforts:   gemini25ReasoningEfforts,
+		DefaultReasoningEffort:      "medium",
+		MaxReasoningTokens:          gemini25FlashMaxThinkingBudget,
 		Description:                 "Gemini 2.5 Flash native-audio preview snapshot dated 12-2025.",
 	},
 	"gemini-2.5-flash-image": {
@@ -347,25 +436,28 @@ var geminiMetadataOverrides = map[string]adaptor.ModelConfig{
 		ContextLength:               8192,
 		MaxOutputTokens:             8192,
 		InputModalities:             geminiInputTextOnly,
-		OutputModalities:            geminiOutputText,
+		OutputModalities:            geminiOutputAudio,
 		SupportedSamplingParameters: []string{"temperature", "top_p", "top_k"},
-		Description:                 "Gemini 2.5 Flash preview text-to-speech tier (audio output billed via Audio config).",
+		Description:                 "Gemini 2.5 Flash preview text-to-speech tier streaming native audio output.",
 	},
 	"gemini-2.5-pro-preview-tts": {
 		ContextLength:               8192,
 		MaxOutputTokens:             8192,
 		InputModalities:             geminiInputTextOnly,
-		OutputModalities:            geminiOutputText,
+		OutputModalities:            geminiOutputAudio,
 		SupportedSamplingParameters: []string{"temperature", "top_p", "top_k"},
-		Description:                 "Gemini 2.5 Pro preview text-to-speech tier (audio output billed via Audio config).",
+		Description:                 "Gemini 2.5 Pro preview text-to-speech tier streaming high-fidelity native audio output.",
 	},
 	"gemini-robotics-er-1.5-preview": {
 		ContextLength:               1_000_000,
 		MaxOutputTokens:             geminiFlashMaxOutput,
-		InputModalities:             geminiInputTextImageFile,
+		InputModalities:             geminiInputMultimodal,
 		OutputModalities:            geminiOutputText,
 		SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs", "reasoning"},
 		SupportedSamplingParameters: geminiSamplingChat,
+		SupportedReasoningEfforts:   gemini25ReasoningEfforts,
+		DefaultReasoningEffort:      "medium",
+		MaxReasoningTokens:          gemini25FlashMaxThinkingBudget,
 		Description:                 "Gemini Robotics-ER 1.5 preview tier for embodied reasoning workloads.",
 	},
 
@@ -373,7 +465,7 @@ var geminiMetadataOverrides = map[string]adaptor.ModelConfig{
 	"gemini-2.0-flash": {
 		ContextLength:               gemini1MContext,
 		MaxOutputTokens:             geminiFlashMaxOutput,
-		InputModalities:             geminiInputTextImageFile,
+		InputModalities:             geminiInputMultimodal,
 		OutputModalities:            geminiOutputText,
 		SupportedFeatures:           geminiFeatures20,
 		SupportedSamplingParameters: geminiSamplingChat,
@@ -382,7 +474,7 @@ var geminiMetadataOverrides = map[string]adaptor.ModelConfig{
 	"gemini-2.0-flash-image": {
 		ContextLength:               gemini1MContext,
 		MaxOutputTokens:             geminiFlashMaxOutput,
-		InputModalities:             geminiInputTextImageFile,
+		InputModalities:             geminiInputMultimodal,
 		OutputModalities:            geminiOutputTextImage,
 		SupportedFeatures:           geminiFeatures20,
 		SupportedSamplingParameters: geminiSamplingImage,
@@ -391,7 +483,7 @@ var geminiMetadataOverrides = map[string]adaptor.ModelConfig{
 	"gemini-2.0-flash-lite": {
 		ContextLength:               gemini1MContext,
 		MaxOutputTokens:             geminiFlashMaxOutput,
-		InputModalities:             geminiInputTextImageFile,
+		InputModalities:             geminiInputMultimodal,
 		OutputModalities:            geminiOutputText,
 		SupportedFeatures:           geminiFeatures20,
 		SupportedSamplingParameters: geminiSamplingChat,
@@ -421,6 +513,15 @@ func mergeGeminiMetadata(base, override adaptor.ModelConfig) adaptor.ModelConfig
 	}
 	if len(override.SupportedSamplingParameters) > 0 {
 		base.SupportedSamplingParameters = append([]string(nil), override.SupportedSamplingParameters...)
+	}
+	if len(override.SupportedReasoningEfforts) > 0 {
+		base.SupportedReasoningEfforts = append([]string(nil), override.SupportedReasoningEfforts...)
+	}
+	if override.DefaultReasoningEffort != "" {
+		base.DefaultReasoningEffort = override.DefaultReasoningEffort
+	}
+	if override.MaxReasoningTokens != 0 {
+		base.MaxReasoningTokens = override.MaxReasoningTokens
 	}
 	if override.Quantization != "" {
 		base.Quantization = override.Quantization

@@ -78,8 +78,12 @@ var deepseekModels = map[string]adaptor.ModelConfig{
 		OutputModalities:            fwTextOnlyModalities,
 		SupportedFeatures:           fwReasoningFeatures,
 		SupportedSamplingParameters: fwReasoningSamplingParams,
-		Quantization:                "fp8",
-		HuggingFaceID:               "deepseek-ai/DeepSeek-R1-0528",
-		Description:                 "DeepSeek R1 05/28 reasoning checkpoint (674B MoE) approaching o3/Gemini 2.5 Pro on complex reasoning benchmarks.",
+		// Fireworks expanded reasoning_effort controls to DeepSeek-R1 (low/medium/high).
+		// Sources: https://docs.fireworks.ai/guides/reasoning, https://fireworks.ai/blog/deepseek-r1-deepdive
+		SupportedReasoningEfforts: []string{"low", "medium", "high"},
+		DefaultReasoningEffort:    "medium",
+		Quantization:              "fp8",
+		HuggingFaceID:             "deepseek-ai/DeepSeek-R1-0528",
+		Description:               "DeepSeek R1 05/28 reasoning checkpoint (674B MoE) approaching o3/Gemini 2.5 Pro on complex reasoning benchmarks.",
 	},
 }

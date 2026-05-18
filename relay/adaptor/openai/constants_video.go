@@ -14,7 +14,7 @@ var videoModelRatios = map[string]adaptor.ModelConfig{
 			BaseResolution: "1280x720",
 		},
 		InputModalities:  []string{"text"},
-		OutputModalities: []string{"text"},
+		OutputModalities: []string{"video"},
 		Description:      "Sora 2: text-to-video model rendering 720p clips.",
 	},
 	"sora-2-pro": {
@@ -23,7 +23,7 @@ var videoModelRatios = map[string]adaptor.ModelConfig{
 			BaseResolution: "1920x1080",
 		},
 		InputModalities:  []string{"text"},
-		OutputModalities: []string{"text"},
+		OutputModalities: []string{"video"},
 		Description:      "Sora 2 Pro: text-to-video model rendering 1080p clips.",
 	},
 }

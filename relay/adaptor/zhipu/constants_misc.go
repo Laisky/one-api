@@ -38,16 +38,18 @@ var imageGenerationModels = map[string]adaptor.ModelConfig{
 		Description:      "CogView-3-Flash: free fast text-to-image generation model.",
 	},
 	"cogviewx": {
-		Ratio:           0.04 * ratio.MilliTokensRmb,
-		CompletionRatio: 1,
-		InputModalities: []string{"text", "image"},
-		Description:     "CogVideoX: text-and-image-to-video generation model.",
+		Ratio:            0.04 * ratio.MilliTokensRmb,
+		CompletionRatio:  1,
+		InputModalities:  []string{"text", "image"},
+		OutputModalities: []string{"video"},
+		Description:      "CogVideoX: text-and-image-to-video generation model.",
 	},
 	"cogviewx-flash": {
-		Ratio:           0.008 * ratio.MilliTokensRmb,
-		CompletionRatio: 1,
-		InputModalities: []string{"text", "image"},
-		Description:     "CogVideoX-Flash: free fast text-to-video generator with 4K and 60fps support.",
+		Ratio:            0.008 * ratio.MilliTokensRmb,
+		CompletionRatio:  1,
+		InputModalities:  []string{"text", "image"},
+		OutputModalities: []string{"video"},
+		Description:      "CogVideoX-Flash: free fast text-to-video generator with 4K and 60fps support.",
 	},
 }
 

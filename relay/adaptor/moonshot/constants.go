@@ -112,6 +112,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		OutputModalities:            moonshotTextOutputs,
 		SupportedFeatures:           moonshotReasoningFeatures,
 		SupportedSamplingParameters: moonshotReasoningSamplingParams,
+		MaxReasoningTokens:          49152,
 		Description:                 "Moonshot Kimi-K2 thinking variant exposing an explicit reasoning channel.",
 	},
 	"kimi-k2-thinking-turbo": {
@@ -124,6 +125,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		OutputModalities:            moonshotTextOutputs,
 		SupportedFeatures:           moonshotReasoningFeatures,
 		SupportedSamplingParameters: moonshotReasoningSamplingParams,
+		MaxReasoningTokens:          49152,
 		Description:                 "Moonshot Kimi-K2 thinking turbo, lower-latency reasoning tier.",
 	},
 }

@@ -125,8 +125,12 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		OutputModalities:            groqTextOnlyModalities,
 		SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs", "reasoning", "web_search"},
 		SupportedSamplingParameters: groqReasoningSamplingParams,
-		HuggingFaceID:               "openai/gpt-oss-120b",
-		Description:                 "OpenAI's 120B open-weight Mixture-of-Experts reasoning model with built-in web search and code execution.",
+		// Groq's reasoning docs explicitly enumerate low/medium/high for gpt-oss models.
+		// Source: https://console.groq.com/docs/reasoning
+		SupportedReasoningEfforts: []string{"low", "medium", "high"},
+		DefaultReasoningEffort:    "medium",
+		HuggingFaceID:             "openai/gpt-oss-120b",
+		Description:               "OpenAI's 120B open-weight Mixture-of-Experts reasoning model with built-in web search and code execution.",
 	},
 	"openai/gpt-oss-20b": {
 		Ratio:                       0.075 * ratio.MilliTokensUsd,
@@ -138,8 +142,12 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		OutputModalities:            groqTextOnlyModalities,
 		SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs", "reasoning", "web_search"},
 		SupportedSamplingParameters: groqReasoningSamplingParams,
-		HuggingFaceID:               "openai/gpt-oss-20b",
-		Description:                 "OpenAI's 20B open-weight MoE reasoning model with browser search and code execution support.",
+		// Groq's reasoning docs explicitly enumerate low/medium/high for gpt-oss models.
+		// Source: https://console.groq.com/docs/reasoning
+		SupportedReasoningEfforts: []string{"low", "medium", "high"},
+		DefaultReasoningEffort:    "medium",
+		HuggingFaceID:             "openai/gpt-oss-20b",
+		Description:               "OpenAI's 20B open-weight MoE reasoning model with browser search and code execution support.",
 	},
 
 	// Preview Models
@@ -211,8 +219,12 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		OutputModalities:            groqTextOnlyModalities,
 		SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs", "reasoning"},
 		SupportedSamplingParameters: groqReasoningSamplingParams,
-		HuggingFaceID:               "openai/gpt-oss-safeguard-20b",
-		Description:                 "20B GPT-OSS variant fine-tuned for policy-following safety classification with custom taxonomies.",
+		// Inherits the gpt-oss reasoning_effort surface (low/medium/high).
+		// Source: https://console.groq.com/docs/reasoning
+		SupportedReasoningEfforts: []string{"low", "medium", "high"},
+		DefaultReasoningEffort:    "medium",
+		HuggingFaceID:             "openai/gpt-oss-safeguard-20b",
+		Description:               "20B GPT-OSS variant fine-tuned for policy-following safety classification with custom taxonomies.",
 	},
 	"qwen/qwen3-32b": {
 		Ratio:                       0.29 * ratio.MilliTokensUsd,

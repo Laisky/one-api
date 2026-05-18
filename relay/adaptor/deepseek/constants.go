@@ -24,6 +24,13 @@ var (
 	// deepseekReasonerSamplingParams lists the restricted sampling set for the legacy reasoner model.
 	// DeepSeek's reasoner endpoint historically ignored temperature/top_p; only the listed knobs apply.
 	deepseekReasonerSamplingParams = []string{"max_tokens", "stop"}
+
+	// deepseekReasoningEfforts lists the reasoning_effort levels accepted by the
+	// V4 chat models when thinking is enabled. DeepSeek currently publishes
+	// "high" and "max" only; "max" is auto-selected for agentic Claude Code /
+	// OpenCode style flows.
+	// Source: https://api-docs.deepseek.com/api/create-chat-completion
+	deepseekReasoningEfforts = []string{"high", "max"}
 )
 
 // ModelRatios contains all supported models and their pricing ratios
@@ -61,9 +68,10 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		OutputModalities:            deepseekTextOutputs,
 		SupportedFeatures:           deepseekReasoningFeatures,
 		SupportedSamplingParameters: deepseekReasonerSamplingParams,
-		Quantization:                "fp8",
-		HuggingFaceID:               "deepseek-ai/DeepSeek-R1",
-		Description:                 "Legacy DeepSeek reasoning alias (DeepSeek R1 lineage, thinking mode).",
+		// Always-on thinking; DeepSeek R1 reasoner does not expose reasoning_effort or budget.
+		Quantization:  "fp8",
+		HuggingFaceID: "deepseek-ai/DeepSeek-R1",
+		Description:   "Legacy DeepSeek reasoning alias (DeepSeek R1 lineage, thinking mode).",
 	},
 	// Current models (retrieved 2026-04-24)
 	// deepseek-v4-flash: $0.14/1M input (cache miss), $0.028/1M input (cache hit), $0.28/1M output, 1M context
@@ -77,9 +85,12 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		OutputModalities:            deepseekTextOutputs,
 		SupportedFeatures:           deepseekReasoningFeatures,
 		SupportedSamplingParameters: deepseekSamplingParams,
-		Quantization:                "fp8",
-		HuggingFaceID:               "deepseek-ai/DeepSeek-V4-Flash",
-		Description:                 "DeepSeek V4 Flash MoE chat model with thinking and non-thinking modes; 1M context.",
+		// thinking.reasoning_effort: "high" (default) | "max" — applies only when thinking.type=enabled.
+		SupportedReasoningEfforts: deepseekReasoningEfforts,
+		DefaultReasoningEffort:    "high",
+		Quantization:              "fp8",
+		HuggingFaceID:             "deepseek-ai/DeepSeek-V4-Flash",
+		Description:               "DeepSeek V4 Flash MoE chat model with thinking and non-thinking modes; 1M context.",
 	},
 	// deepseek-v4-pro: $1.74/1M input (cache miss), $0.145/1M input (cache hit), $3.48/1M output, 1M context
 	"deepseek-v4-pro": {
@@ -92,9 +103,12 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		OutputModalities:            deepseekTextOutputs,
 		SupportedFeatures:           deepseekReasoningFeatures,
 		SupportedSamplingParameters: deepseekSamplingParams,
-		Quantization:                "fp8",
-		HuggingFaceID:               "deepseek-ai/DeepSeek-V4-Pro",
-		Description:                 "DeepSeek V4 Pro MoE chat model with thinking and non-thinking modes; 1M context.",
+		// thinking.reasoning_effort: "high" (default) | "max" — applies only when thinking.type=enabled.
+		SupportedReasoningEfforts: deepseekReasoningEfforts,
+		DefaultReasoningEffort:    "high",
+		Quantization:              "fp8",
+		HuggingFaceID:             "deepseek-ai/DeepSeek-V4-Pro",
+		Description:               "DeepSeek V4 Pro MoE chat model with thinking and non-thinking modes; 1M context.",
 	},
 }
 

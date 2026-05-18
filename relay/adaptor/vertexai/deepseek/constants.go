@@ -40,7 +40,9 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		OutputModalities:            deepSeekVertexTextOutputs,
 		SupportedFeatures:           deepSeekVertexReasoningFeatures,
 		SupportedSamplingParameters: deepSeekVertexStandardSampling,
-		Description:                 "DeepSeek V3.2 on Vertex AI MaaS with long context, tool use, and reasoning support.",
+		// Vertex AI MaaS does not publish a tunable reasoning_effort for DeepSeek V3.2;
+		// thinking is toggled via the request body's thinking.type field instead.
+		Description: "DeepSeek V3.2 on Vertex AI MaaS with long context, tool use, and reasoning support.",
 	},
 	// DeepSeek V3.1 - Input: $0.60 / million tokens, Output: $1.70 / million tokens
 	"deepseek-ai/deepseek-v3.1-maas": {
@@ -52,7 +54,8 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		OutputModalities:            deepSeekVertexTextOutputs,
 		SupportedFeatures:           deepSeekVertexReasoningFeatures,
 		SupportedSamplingParameters: deepSeekVertexStandardSampling,
-		Description:                 "DeepSeek V3.1 on Vertex AI MaaS with long context and reasoning-oriented chat capabilities.",
+		// Vertex AI MaaS does not publish a tunable reasoning_effort for DeepSeek V3.1.
+		Description: "DeepSeek V3.1 on Vertex AI MaaS with long context and reasoning-oriented chat capabilities.",
 	},
 	// DeepSeek R1 - Input: $1.35 / million tokens, Output: $5.40 / million tokens
 	"deepseek-ai/deepseek-r1-0528-maas": {
@@ -64,7 +67,8 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		OutputModalities:            deepSeekVertexTextOutputs,
 		SupportedFeatures:           deepSeekVertexReasoningFeatures,
 		SupportedSamplingParameters: deepSeekVertexReasoningSampling,
-		Description:                 "DeepSeek R1-0528 on Vertex AI MaaS optimized for reasoning with restricted sampling controls.",
+		// R1 reasoning is always-on; no reasoning_effort or budget is exposed.
+		Description: "DeepSeek R1-0528 on Vertex AI MaaS optimized for reasoning with restricted sampling controls.",
 	},
 }
 

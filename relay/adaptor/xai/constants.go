@@ -46,6 +46,23 @@ var (
 	// always-on reasoning Grok models (e.g. grok-4) which reject temperature
 	// /top_p tuning. Only stop, seed, and max_tokens are reliably honored.
 	grokReasoningSamplingParams = []string{"stop", "seed", "max_tokens"}
+
+	// grokMiniReasoningEfforts lists the reasoning_effort values accepted by
+	// reasoning-tunable Grok mini models (grok-3-mini). xAI documents only "low"
+	// and "high" for the chat completions endpoint on these models.
+	// Source: https://docs.x.ai/docs/api-reference#chat-completions
+	grokMiniReasoningEfforts = []string{"low", "high"}
+
+	// grokFullReasoningEfforts lists the reasoning_effort values accepted by
+	// newer reasoning-tunable Grok flagship models (grok-4.3 and similar).
+	// Source: https://docs.x.ai/docs/guides/reasoning
+	grokFullReasoningEfforts = []string{"none", "low", "medium", "high"}
+
+	// grokMultiAgentEfforts lists the reasoning.effort values accepted by
+	// grok-4.20 multi-agent variants. Note that for multi-agent the effort
+	// level controls how many agents collaborate rather than reasoning depth.
+	// Source: https://docs.x.ai/developers/model-capabilities/text/multi-agent
+	grokMultiAgentEfforts = []string{"low", "medium", "high", "xhigh"}
 )
 
 // ModelRatios contains all supported models and their pricing ratios.
@@ -72,6 +89,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		ContextLength:   256000,
 		InputModalities: grokTextInputs, OutputModalities: grokTextOutputs,
 		SupportedFeatures: grokFeaturesReasoning, SupportedSamplingParameters: grokSamplingParams,
+		// Reasoning is always-on; xAI does not document a reasoning_effort knob for this model.
 		Description: "Grok Code Fast 1 is a speedy and economical reasoning model from xAI optimized for agentic coding with visible reasoning traces.",
 	},
 	"grok-4-0709": {
@@ -79,6 +97,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		ContextLength:   256000,
 		InputModalities: grokVisionInputs, OutputModalities: grokTextOutputs,
 		SupportedFeatures: grokFeaturesReasoning, SupportedSamplingParameters: grokReasoningSamplingParams,
+		// reasoning_effort is rejected by grok-4-0709 per xAI API reference; reasoning is always-on.
 		Description: "Grok 4 (0709) is xAI's reasoning flagship with 256k context, parallel tool calling, and image+text inputs; reasoning is always on and not exposed.",
 	},
 	"grok-4.20": {
@@ -86,6 +105,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		ContextLength:   2000000,
 		InputModalities: grokVisionInputs, OutputModalities: grokTextOutputs,
 		SupportedFeatures: grokFeaturesReasoning, SupportedSamplingParameters: grokSamplingParams,
+		SupportedReasoningEfforts: grokFullReasoningEfforts, DefaultReasoningEffort: "low",
 		Description: "Grok 4.20 is xAI's flagship model with 2M context, agentic tool calling, and toggleable reasoning.",
 	},
 	"grok-4.20-reasoning": {
@@ -93,6 +113,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		ContextLength:   2000000,
 		InputModalities: grokVisionInputs, OutputModalities: grokTextOutputs,
 		SupportedFeatures: grokFeaturesReasoning, SupportedSamplingParameters: grokSamplingParams,
+		SupportedReasoningEfforts: grokFullReasoningEfforts, DefaultReasoningEffort: "low",
 		Description: "Grok 4.20 (reasoning enabled) — flagship 2M-context model with active extended thinking.",
 	},
 	"grok-4.20-non-reasoning": {
@@ -100,6 +121,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		ContextLength:   2000000,
 		InputModalities: grokVisionInputs, OutputModalities: grokTextOutputs,
 		SupportedFeatures: grokFeaturesBase, SupportedSamplingParameters: grokSamplingParams,
+		// Reasoning explicitly disabled; no reasoning_effort honored.
 		Description: "Grok 4.20 (reasoning disabled) — flagship 2M-context model with reasoning turned off for lower latency.",
 	},
 	"grok-4.20-multi-agent": {
@@ -107,6 +129,8 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		ContextLength:   2000000,
 		InputModalities: grokVisionInputs, OutputModalities: grokTextOutputs,
 		SupportedFeatures: grokFeaturesReasoning, SupportedSamplingParameters: grokSamplingParams,
+		// Multi-agent reasoning.effort governs agent count (4 on low/medium, 16 on high/xhigh), not depth.
+		SupportedReasoningEfforts: grokMultiAgentEfforts, DefaultReasoningEffort: "low",
 		Description: "Grok 4.20 Multi-Agent: parallel-agent variant for deep research and multi-step agentic workflows (4 agents on low/medium, 16 on high/xhigh).",
 	},
 	"grok-4.20-0309-reasoning": {
@@ -114,6 +138,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		ContextLength:   2000000,
 		InputModalities: grokVisionInputs, OutputModalities: grokTextOutputs,
 		SupportedFeatures: grokFeaturesReasoning, SupportedSamplingParameters: grokSamplingParams,
+		SupportedReasoningEfforts: grokFullReasoningEfforts, DefaultReasoningEffort: "low",
 		Description: "Grok 4.20 (March 9 snapshot, reasoning) — pinned 2M-context release with extended thinking.",
 	},
 	"grok-4.20-0309-non-reasoning": {
@@ -128,6 +153,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		ContextLength:   2000000,
 		InputModalities: grokVisionInputs, OutputModalities: grokTextOutputs,
 		SupportedFeatures: grokFeaturesReasoning, SupportedSamplingParameters: grokSamplingParams,
+		SupportedReasoningEfforts: grokMultiAgentEfforts, DefaultReasoningEffort: "low",
 		Description: "Grok 4.20 Multi-Agent (March 9 snapshot) — pinned parallel-agent release for deep research workflows.",
 	},
 	"grok-4-1-fast": {
@@ -135,6 +161,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		ContextLength:   2000000,
 		InputModalities: grokVisionInputs, OutputModalities: grokTextOutputs,
 		SupportedFeatures: grokFeaturesReasoning, SupportedSamplingParameters: grokSamplingParams,
+		SupportedReasoningEfforts: grokFullReasoningEfforts, DefaultReasoningEffort: "low",
 		Description: "Grok 4.1 Fast: xAI's cost-efficient agentic tool-calling model with 2M context and toggleable reasoning.",
 	},
 	"grok-4-1-fast-reasoning": {
@@ -142,6 +169,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		ContextLength:   2000000,
 		InputModalities: grokVisionInputs, OutputModalities: grokTextOutputs,
 		SupportedFeatures: grokFeaturesReasoning, SupportedSamplingParameters: grokSamplingParams,
+		SupportedReasoningEfforts: grokFullReasoningEfforts, DefaultReasoningEffort: "low",
 		Description: "Grok 4.1 Fast (reasoning enabled) — 2M-context cost-efficient model with extended thinking.",
 	},
 	"grok-4-1-fast-non-reasoning": {
@@ -156,6 +184,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		ContextLength:   131072,
 		InputModalities: grokTextInputs, OutputModalities: grokTextOutputs,
 		SupportedFeatures: grokFeaturesBase, SupportedSamplingParameters: grokSamplingParams,
+		// grok-3 is non-reasoning and does not accept reasoning_effort.
 		Description: "Grok 3 is xAI's flagship enterprise model for data extraction, coding, and summarization with deep domain knowledge.",
 	},
 	"grok-3-mini": {
@@ -163,6 +192,8 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		ContextLength:   131072,
 		InputModalities: grokTextInputs, OutputModalities: grokTextOutputs,
 		SupportedFeatures: grokFeaturesReasoning, SupportedSamplingParameters: grokSamplingParams,
+		// xAI docs publish only "low" and "high" for grok-3-mini reasoning_effort.
+		SupportedReasoningEfforts: grokMiniReasoningEfforts, DefaultReasoningEffort: "low",
 		Description: "Grok 3 Mini is a lightweight thinking model great for logic-heavy tasks; raw thinking traces are accessible.",
 	},
 	// "grok-3-fast":               {Ratio: 3.0 * ratio.MilliTokensUsd, CompletionRatio: 5.0, CachedInputRatio: 0.75 * ratio.MilliTokensUsd},        // $3.00 input, $0.75 cached input, $15.00 output

@@ -32,8 +32,9 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		ContextLength:   262144, MaxOutputTokens: 32768,
 		InputModalities: qwenTextInputs, OutputModalities: qwenTextOutputs,
 		SupportedFeatures: qwenChatReasoningFeatures, SupportedSamplingParameters: qwenSamplingParams,
-		HuggingFaceID: "Qwen/Qwen3-Next-80B-A3B-Thinking",
-		Description:   "Alibaba Qwen3-Next 80B/A3B reasoning (thinking) mixture-of-experts on Vertex AI MaaS.",
+		MaxReasoningTokens: 38912,
+		HuggingFaceID:      "Qwen/Qwen3-Next-80B-A3B-Thinking",
+		Description:        "Alibaba Qwen3-Next 80B/A3B reasoning (thinking) mixture-of-experts on Vertex AI MaaS.",
 	},
 	"qwen/qwen3-coder-480b-a35b-instruct-maas": {
 		Ratio:           0.22 * ratio.MilliTokensUsd, // $0.22 per million tokens input

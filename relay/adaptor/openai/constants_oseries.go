@@ -15,6 +15,11 @@ import (
 //   - https://platform.openai.com/docs/models/o4-mini (o4-mini: 200K/100K)
 var oSeriesReasoningFeatures = []string{"reasoning", "tools"}
 
+// oSeriesMediumOnlyEfforts is the constrained reasoning_effort set OpenAI exposes
+// for o1/o3/o4 chat models. The Responses/Chat APIs reject other levels for these
+// models; the relay clamps to "medium" before dispatch.
+var oSeriesMediumOnlyEfforts = []string{"medium"}
+
 var oSeriesModelRatios = map[string]adaptor.ModelConfig{
 	// o1 family
 	"o1": {
@@ -27,6 +32,8 @@ var oSeriesModelRatios = map[string]adaptor.ModelConfig{
 		OutputModalities:            []string{"text"},
 		SupportedFeatures:           append([]string{"structured_outputs"}, oSeriesReasoningFeatures...),
 		SupportedSamplingParameters: reasoningSamplingParameters(),
+		SupportedReasoningEfforts:   oSeriesMediumOnlyEfforts,
+		DefaultReasoningEffort:      "medium",
 		Description:                 "o1: reasoning model with 200K context and 100K output budget.",
 	},
 	"o1-2024-12-17": {
@@ -39,6 +46,8 @@ var oSeriesModelRatios = map[string]adaptor.ModelConfig{
 		OutputModalities:            []string{"text"},
 		SupportedFeatures:           append([]string{"structured_outputs"}, oSeriesReasoningFeatures...),
 		SupportedSamplingParameters: reasoningSamplingParameters(),
+		SupportedReasoningEfforts:   oSeriesMediumOnlyEfforts,
+		DefaultReasoningEffort:      "medium",
 		Description:                 "o1 snapshot from 2024-12-17.",
 	},
 	"o1-pro": {
@@ -50,6 +59,8 @@ var oSeriesModelRatios = map[string]adaptor.ModelConfig{
 		OutputModalities:            []string{"text"},
 		SupportedFeatures:           oSeriesReasoningFeatures,
 		SupportedSamplingParameters: reasoningSamplingParameters(),
+		SupportedReasoningEfforts:   oSeriesMediumOnlyEfforts,
+		DefaultReasoningEffort:      "medium",
 		Description:                 "o1 Pro: extended-reasoning premium tier of o1.",
 	},
 	"o1-pro-2025-03-19": {
@@ -61,6 +72,8 @@ var oSeriesModelRatios = map[string]adaptor.ModelConfig{
 		OutputModalities:            []string{"text"},
 		SupportedFeatures:           oSeriesReasoningFeatures,
 		SupportedSamplingParameters: reasoningSamplingParameters(),
+		SupportedReasoningEfforts:   oSeriesMediumOnlyEfforts,
+		DefaultReasoningEffort:      "medium",
 		Description:                 "o1 Pro snapshot from 2025-03-19.",
 	},
 	"o1-preview": {
@@ -73,6 +86,8 @@ var oSeriesModelRatios = map[string]adaptor.ModelConfig{
 		OutputModalities:            []string{"text"},
 		SupportedFeatures:           oSeriesReasoningFeatures,
 		SupportedSamplingParameters: reasoningSamplingParameters(),
+		SupportedReasoningEfforts:   oSeriesMediumOnlyEfforts,
+		DefaultReasoningEffort:      "medium",
 		Description:                 "o1 preview: original o1 research preview (text-only).",
 	},
 	"o1-preview-2024-09-12": {
@@ -85,6 +100,8 @@ var oSeriesModelRatios = map[string]adaptor.ModelConfig{
 		OutputModalities:            []string{"text"},
 		SupportedFeatures:           oSeriesReasoningFeatures,
 		SupportedSamplingParameters: reasoningSamplingParameters(),
+		SupportedReasoningEfforts:   oSeriesMediumOnlyEfforts,
+		DefaultReasoningEffort:      "medium",
 		Description:                 "o1 preview snapshot from 2024-09-12.",
 	},
 	"o1-mini": {
@@ -97,6 +114,8 @@ var oSeriesModelRatios = map[string]adaptor.ModelConfig{
 		OutputModalities:            []string{"text"},
 		SupportedFeatures:           oSeriesReasoningFeatures,
 		SupportedSamplingParameters: reasoningSamplingParameters(),
+		SupportedReasoningEfforts:   oSeriesMediumOnlyEfforts,
+		DefaultReasoningEffort:      "medium",
 		Description:                 "o1 mini: cost-efficient reasoning model (text-only).",
 	},
 	"o1-mini-2024-09-12": {
@@ -109,6 +128,8 @@ var oSeriesModelRatios = map[string]adaptor.ModelConfig{
 		OutputModalities:            []string{"text"},
 		SupportedFeatures:           oSeriesReasoningFeatures,
 		SupportedSamplingParameters: reasoningSamplingParameters(),
+		SupportedReasoningEfforts:   oSeriesMediumOnlyEfforts,
+		DefaultReasoningEffort:      "medium",
 		Description:                 "o1 mini snapshot from 2024-09-12.",
 	},
 	// o3 family
@@ -122,6 +143,8 @@ var oSeriesModelRatios = map[string]adaptor.ModelConfig{
 		OutputModalities:            []string{"text"},
 		SupportedFeatures:           append([]string{"structured_outputs"}, oSeriesReasoningFeatures...),
 		SupportedSamplingParameters: reasoningSamplingParameters(),
+		SupportedReasoningEfforts:   oSeriesMediumOnlyEfforts,
+		DefaultReasoningEffort:      "medium",
 		Description:                 "o3: advanced reasoning model with 200K context.",
 	},
 	"o3-2025-04-16": {
@@ -134,6 +157,8 @@ var oSeriesModelRatios = map[string]adaptor.ModelConfig{
 		OutputModalities:            []string{"text"},
 		SupportedFeatures:           append([]string{"structured_outputs"}, oSeriesReasoningFeatures...),
 		SupportedSamplingParameters: reasoningSamplingParameters(),
+		SupportedReasoningEfforts:   oSeriesMediumOnlyEfforts,
+		DefaultReasoningEffort:      "medium",
 		Description:                 "o3 snapshot from 2025-04-16.",
 	},
 	"o3-mini": {
@@ -146,6 +171,8 @@ var oSeriesModelRatios = map[string]adaptor.ModelConfig{
 		OutputModalities:            []string{"text"},
 		SupportedFeatures:           append([]string{"structured_outputs"}, oSeriesReasoningFeatures...),
 		SupportedSamplingParameters: reasoningSamplingParameters(),
+		SupportedReasoningEfforts:   oSeriesMediumOnlyEfforts,
+		DefaultReasoningEffort:      "medium",
 		Description:                 "o3 mini: cost-efficient reasoning successor to o1-mini.",
 	},
 	"o3-mini-2025-01-31": {
@@ -158,6 +185,8 @@ var oSeriesModelRatios = map[string]adaptor.ModelConfig{
 		OutputModalities:            []string{"text"},
 		SupportedFeatures:           append([]string{"structured_outputs"}, oSeriesReasoningFeatures...),
 		SupportedSamplingParameters: reasoningSamplingParameters(),
+		SupportedReasoningEfforts:   oSeriesMediumOnlyEfforts,
+		DefaultReasoningEffort:      "medium",
 		Description:                 "o3 mini snapshot from 2025-01-31.",
 	},
 	"o3-pro": {
@@ -169,6 +198,8 @@ var oSeriesModelRatios = map[string]adaptor.ModelConfig{
 		OutputModalities:            []string{"text"},
 		SupportedFeatures:           oSeriesReasoningFeatures,
 		SupportedSamplingParameters: reasoningSamplingParameters(),
+		SupportedReasoningEfforts:   oSeriesMediumOnlyEfforts,
+		DefaultReasoningEffort:      "medium",
 		Description:                 "o3 Pro: extended-reasoning premium tier of o3.",
 	},
 	"o3-pro-2025-06-10": {
@@ -180,6 +211,8 @@ var oSeriesModelRatios = map[string]adaptor.ModelConfig{
 		OutputModalities:            []string{"text"},
 		SupportedFeatures:           oSeriesReasoningFeatures,
 		SupportedSamplingParameters: reasoningSamplingParameters(),
+		SupportedReasoningEfforts:   oSeriesMediumOnlyEfforts,
+		DefaultReasoningEffort:      "medium",
 		Description:                 "o3 Pro snapshot from 2025-06-10.",
 	},
 	"o3-deep-research": {
@@ -192,6 +225,8 @@ var oSeriesModelRatios = map[string]adaptor.ModelConfig{
 		OutputModalities:            []string{"text"},
 		SupportedFeatures:           append([]string{"web_search"}, oSeriesReasoningFeatures...),
 		SupportedSamplingParameters: reasoningSamplingParameters(),
+		SupportedReasoningEfforts:   oSeriesMediumOnlyEfforts,
+		DefaultReasoningEffort:      "medium",
 		Description:                 "o3 deep research: agentic research model with built-in browsing.",
 	},
 	"o3-deep-research-2025-06-26": {
@@ -204,6 +239,8 @@ var oSeriesModelRatios = map[string]adaptor.ModelConfig{
 		OutputModalities:            []string{"text"},
 		SupportedFeatures:           append([]string{"web_search"}, oSeriesReasoningFeatures...),
 		SupportedSamplingParameters: reasoningSamplingParameters(),
+		SupportedReasoningEfforts:   oSeriesMediumOnlyEfforts,
+		DefaultReasoningEffort:      "medium",
 		Description:                 "o3 deep research snapshot from 2025-06-26.",
 	},
 	// o4 family
@@ -217,6 +254,8 @@ var oSeriesModelRatios = map[string]adaptor.ModelConfig{
 		OutputModalities:            []string{"text"},
 		SupportedFeatures:           append([]string{"structured_outputs"}, oSeriesReasoningFeatures...),
 		SupportedSamplingParameters: reasoningSamplingParameters(),
+		SupportedReasoningEfforts:   oSeriesMediumOnlyEfforts,
+		DefaultReasoningEffort:      "medium",
 		Description:                 "o4 mini: fast reasoning model with 200K context.",
 	},
 	"o4-mini-2025-04-16": {
@@ -229,6 +268,8 @@ var oSeriesModelRatios = map[string]adaptor.ModelConfig{
 		OutputModalities:            []string{"text"},
 		SupportedFeatures:           append([]string{"structured_outputs"}, oSeriesReasoningFeatures...),
 		SupportedSamplingParameters: reasoningSamplingParameters(),
+		SupportedReasoningEfforts:   oSeriesMediumOnlyEfforts,
+		DefaultReasoningEffort:      "medium",
 		Description:                 "o4 mini snapshot from 2025-04-16.",
 	},
 	"o4-mini-deep-research": {
@@ -241,6 +282,8 @@ var oSeriesModelRatios = map[string]adaptor.ModelConfig{
 		OutputModalities:            []string{"text"},
 		SupportedFeatures:           append([]string{"web_search"}, oSeriesReasoningFeatures...),
 		SupportedSamplingParameters: reasoningSamplingParameters(),
+		SupportedReasoningEfforts:   oSeriesMediumOnlyEfforts,
+		DefaultReasoningEffort:      "medium",
 		Description:                 "o4 mini deep research: cost-efficient agentic research model.",
 	},
 	"o4-mini-deep-research-2025-06-26": {
@@ -253,6 +296,8 @@ var oSeriesModelRatios = map[string]adaptor.ModelConfig{
 		OutputModalities:            []string{"text"},
 		SupportedFeatures:           append([]string{"web_search"}, oSeriesReasoningFeatures...),
 		SupportedSamplingParameters: reasoningSamplingParameters(),
+		SupportedReasoningEfforts:   oSeriesMediumOnlyEfforts,
+		DefaultReasoningEffort:      "medium",
 		Description:                 "o4 mini deep research snapshot from 2025-06-26.",
 	},
 }

@@ -64,7 +64,8 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		ContextLength: 200000, MaxOutputTokens: 32000,
 		InputModalities: claudeVisionInputs, OutputModalities: claudeTextOutputs,
 		SupportedFeatures: claudeFeaturesWithReasoning, SupportedSamplingParameters: claudeSamplingParams,
-		Description: "Claude Opus 4 (alias for claude-opus-4-20250514).",
+		MaxReasoningTokens: 30000,
+		Description:        "Claude Opus 4 (alias for claude-opus-4-20250514).",
 	},
 	"claude-opus-4-20250514": {
 		Ratio: 15 * ratio.MilliTokensUsd, CompletionRatio: 5.0,
@@ -72,7 +73,8 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		ContextLength: 200000, MaxOutputTokens: 32000,
 		InputModalities: claudeVisionInputs, OutputModalities: claudeTextOutputs,
 		SupportedFeatures: claudeFeaturesWithReasoning, SupportedSamplingParameters: claudeSamplingParams,
-		Description: "Claude Opus 4 frontier model with extended thinking (deprecated; retire 2026-06-15).",
+		MaxReasoningTokens: 30000,
+		Description:        "Claude Opus 4 frontier model with extended thinking (deprecated; retire 2026-06-15).",
 	},
 	"claude-opus-4-1": {
 		Ratio: 15 * ratio.MilliTokensUsd, CompletionRatio: 5.0,
@@ -80,7 +82,8 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		ContextLength: 200000, MaxOutputTokens: 32000,
 		InputModalities: claudeVisionInputs, OutputModalities: claudeTextOutputs,
 		SupportedFeatures: claudeFeaturesWithReasoning, SupportedSamplingParameters: claudeSamplingParams,
-		Description: "Claude Opus 4.1 (alias for claude-opus-4-1-20250805).",
+		MaxReasoningTokens: 30000,
+		Description:        "Claude Opus 4.1 (alias for claude-opus-4-1-20250805).",
 	},
 	"claude-opus-4-1-20250805": {
 		Ratio: 15 * ratio.MilliTokensUsd, CompletionRatio: 75.0 / 15,
@@ -88,7 +91,8 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		ContextLength: 200000, MaxOutputTokens: 32000,
 		InputModalities: claudeVisionInputs, OutputModalities: claudeTextOutputs,
 		SupportedFeatures: claudeFeaturesWithReasoning, SupportedSamplingParameters: claudeSamplingParams,
-		Description: "Claude Opus 4.1 frontier reasoning model with extended thinking.",
+		MaxReasoningTokens: 30000,
+		Description:        "Claude Opus 4.1 frontier reasoning model with extended thinking.",
 	},
 	"claude-opus-4-5": {
 		Ratio: 5 * ratio.MilliTokensUsd, CompletionRatio: 25.0 / 5,
@@ -96,7 +100,8 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		ContextLength: 200000, MaxOutputTokens: 64000,
 		InputModalities: claudeVisionInputs, OutputModalities: claudeTextOutputs,
 		SupportedFeatures: claudeFeaturesWithReasoning, SupportedSamplingParameters: claudeSamplingParams,
-		Description: "Claude Opus 4.5 (alias for claude-opus-4-5-20251101).",
+		MaxReasoningTokens: 60000,
+		Description:        "Claude Opus 4.5 (alias for claude-opus-4-5-20251101).",
 	},
 	"claude-opus-4-5-20251101": {
 		Ratio: 5 * ratio.MilliTokensUsd, CompletionRatio: 25.0 / 5,
@@ -104,7 +109,8 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		ContextLength: 200000, MaxOutputTokens: 64000,
 		InputModalities: claudeVisionInputs, OutputModalities: claudeTextOutputs,
 		SupportedFeatures: claudeFeaturesWithReasoning, SupportedSamplingParameters: claudeSamplingParams,
-		Description: "Claude Opus 4.5 frontier model with extended thinking.",
+		MaxReasoningTokens: 60000,
+		Description:        "Claude Opus 4.5 frontier model with extended thinking.",
 	},
 	"claude-opus-4-6": {
 		Ratio: 5 * ratio.MilliTokensUsd, CompletionRatio: 25.0 / 5,
@@ -112,7 +118,8 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		ContextLength: 1000000, MaxOutputTokens: 128000,
 		InputModalities: claudeVisionInputs, OutputModalities: claudeTextOutputs,
 		SupportedFeatures: claudeFeaturesWithReasoning, SupportedSamplingParameters: claudeSamplingParams,
-		Description: "Claude Opus 4.6 with 1M-token context and extended thinking.",
+		MaxReasoningTokens: 120000,
+		Description:        "Claude Opus 4.6 with 1M-token context and extended thinking.",
 	},
 	"claude-opus-4-7": {
 		Ratio: 5 * ratio.MilliTokensUsd, CompletionRatio: 25.0 / 5,
@@ -130,7 +137,8 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		ContextLength: 200000, MaxOutputTokens: 64000,
 		InputModalities: claudeVisionInputs, OutputModalities: claudeTextOutputs,
 		SupportedFeatures: claudeFeaturesWithReasoning, SupportedSamplingParameters: claudeSamplingParams,
-		Description: "Claude Sonnet 4 (alias for claude-sonnet-4-20250514).",
+		MaxReasoningTokens: 60000,
+		Description:        "Claude Sonnet 4 (alias for claude-sonnet-4-20250514).",
 	},
 	"claude-sonnet-4-20250514": {
 		Ratio: 3 * ratio.MilliTokensUsd, CompletionRatio: 5.0,
@@ -138,7 +146,8 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		ContextLength: 200000, MaxOutputTokens: 64000,
 		InputModalities: claudeVisionInputs, OutputModalities: claudeTextOutputs,
 		SupportedFeatures: claudeFeaturesWithReasoning, SupportedSamplingParameters: claudeSamplingParams,
-		Description: "Claude Sonnet 4 with extended thinking (deprecated; retire 2026-06-15).",
+		MaxReasoningTokens: 60000,
+		Description:        "Claude Sonnet 4 with extended thinking (deprecated; retire 2026-06-15).",
 	},
 	"claude-sonnet-4-5": {
 		Ratio: 3 * ratio.MilliTokensUsd, CompletionRatio: 5.0,
@@ -146,7 +155,8 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		ContextLength: 200000, MaxOutputTokens: 64000,
 		InputModalities: claudeVisionInputs, OutputModalities: claudeTextOutputs,
 		SupportedFeatures: claudeFeaturesWithReasoning, SupportedSamplingParameters: claudeSamplingParams,
-		Description: "Claude Sonnet 4.5 (alias for claude-sonnet-4-5-20250929).",
+		MaxReasoningTokens: 60000,
+		Description:        "Claude Sonnet 4.5 (alias for claude-sonnet-4-5-20250929).",
 	},
 	"claude-sonnet-4-5-20250929": {
 		Ratio: 3 * ratio.MilliTokensUsd, CompletionRatio: 5.0,
@@ -154,7 +164,8 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		ContextLength: 200000, MaxOutputTokens: 64000,
 		InputModalities: claudeVisionInputs, OutputModalities: claudeTextOutputs,
 		SupportedFeatures: claudeFeaturesWithReasoning, SupportedSamplingParameters: claudeSamplingParams,
-		Description: "Claude Sonnet 4.5 balanced flagship with extended thinking.",
+		MaxReasoningTokens: 60000,
+		Description:        "Claude Sonnet 4.5 balanced flagship with extended thinking.",
 	},
 	"claude-sonnet-4-6": {
 		Ratio: 3 * ratio.MilliTokensUsd, CompletionRatio: 5.0,
@@ -162,7 +173,8 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		ContextLength: 1000000, MaxOutputTokens: 64000,
 		InputModalities: claudeVisionInputs, OutputModalities: claudeTextOutputs,
 		SupportedFeatures: claudeFeaturesWithReasoning, SupportedSamplingParameters: claudeSamplingParams,
-		Description: "Claude Sonnet 4.6 with 1M-token context, extended and adaptive thinking.",
+		MaxReasoningTokens: 60000,
+		Description:        "Claude Sonnet 4.6 with 1M-token context, extended and adaptive thinking.",
 	},
 
 	// Claude 4 Haiku Models
@@ -172,7 +184,8 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		ContextLength: 200000, MaxOutputTokens: 64000,
 		InputModalities: claudeVisionInputs, OutputModalities: claudeTextOutputs,
 		SupportedFeatures: claudeFeaturesWithReasoning, SupportedSamplingParameters: claudeSamplingParams,
-		Description: "Claude Haiku 4.5 (alias for claude-haiku-4-5-20251001).",
+		MaxReasoningTokens: 60000,
+		Description:        "Claude Haiku 4.5 (alias for claude-haiku-4-5-20251001).",
 	},
 	"claude-haiku-4-5-20251001": {
 		Ratio: 1 * ratio.MilliTokensUsd, CompletionRatio: 5.0,
@@ -180,7 +193,8 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		ContextLength: 200000, MaxOutputTokens: 64000,
 		InputModalities: claudeVisionInputs, OutputModalities: claudeTextOutputs,
 		SupportedFeatures: claudeFeaturesWithReasoning, SupportedSamplingParameters: claudeSamplingParams,
-		Description: "Claude Haiku 4.5 fastest near-frontier model with extended thinking.",
+		MaxReasoningTokens: 60000,
+		Description:        "Claude Haiku 4.5 fastest near-frontier model with extended thinking.",
 	},
 
 	// Claude 3 Opus Models (Deprecated)
@@ -200,7 +214,8 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		ContextLength: 200000, MaxOutputTokens: 8192,
 		InputModalities: claudeVisionInputs, OutputModalities: claudeTextOutputs,
 		SupportedFeatures: claudeFeaturesWithReasoning, SupportedSamplingParameters: claudeSamplingParams,
-		Description: "Claude 3.7 Sonnet alias tracking the latest 3.7 snapshot.",
+		MaxReasoningTokens: 7000,
+		Description:        "Claude 3.7 Sonnet alias tracking the latest 3.7 snapshot.",
 	},
 	"claude-3-7-sonnet-20250219": {
 		Ratio: 3 * ratio.MilliTokensUsd, CompletionRatio: 5.0,
@@ -208,7 +223,8 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		ContextLength: 200000, MaxOutputTokens: 8192,
 		InputModalities: claudeVisionInputs, OutputModalities: claudeTextOutputs,
 		SupportedFeatures: claudeFeaturesWithReasoning, SupportedSamplingParameters: claudeSamplingParams,
-		Description: "Claude 3.7 Sonnet first hybrid reasoning model with extended thinking.",
+		MaxReasoningTokens: 7000,
+		Description:        "Claude 3.7 Sonnet first hybrid reasoning model with extended thinking.",
 	},
 
 	// Claude 3.5 Sonnet Models

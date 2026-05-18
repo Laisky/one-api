@@ -93,7 +93,8 @@ var awsBedrockModelPricing = map[string]adaptor.ModelConfig{
 		ContextLength: 200000, MaxOutputTokens: 64000,
 		InputModalities: awsClaudeVisionInputs, OutputModalities: awsTextOutputs,
 		SupportedFeatures: awsClaudeFeaturesWithReasoning, SupportedSamplingParameters: awsClaudeSamplingParams,
-		Description: "Claude 3.7 Sonnet (latest alias) on AWS Bedrock with extended thinking.",
+		MaxReasoningTokens: 60000,
+		Description:        "Claude 3.7 Sonnet (latest alias) on AWS Bedrock with extended thinking.",
 	},
 	"claude-3-7-sonnet-20250219": {
 		Ratio: 3 * ratio.MilliTokensUsd, CompletionRatio: 5.0,
@@ -101,7 +102,8 @@ var awsBedrockModelPricing = map[string]adaptor.ModelConfig{
 		ContextLength: 200000, MaxOutputTokens: 64000,
 		InputModalities: awsClaudeVisionInputs, OutputModalities: awsTextOutputs,
 		SupportedFeatures: awsClaudeFeaturesWithReasoning, SupportedSamplingParameters: awsClaudeSamplingParams,
-		Description: "Claude 3.7 Sonnet (February 2025 release) on AWS Bedrock with extended thinking.",
+		MaxReasoningTokens: 60000,
+		Description:        "Claude 3.7 Sonnet (February 2025 release) on AWS Bedrock with extended thinking.",
 	},
 	"claude-sonnet-4-0": {
 		Ratio: 3 * ratio.MilliTokensUsd, CompletionRatio: 5.0,
@@ -109,7 +111,8 @@ var awsBedrockModelPricing = map[string]adaptor.ModelConfig{
 		ContextLength: 200000, MaxOutputTokens: 64000,
 		InputModalities: awsClaudeVisionInputs, OutputModalities: awsTextOutputs,
 		SupportedFeatures: awsClaudeFeaturesWithReasoning, SupportedSamplingParameters: awsClaudeSamplingParams,
-		Description: "Claude Sonnet 4 (alias) on AWS Bedrock.",
+		MaxReasoningTokens: 60000,
+		Description:        "Claude Sonnet 4 (alias) on AWS Bedrock.",
 	},
 	"claude-sonnet-4-20250514": {
 		Ratio: 3 * ratio.MilliTokensUsd, CompletionRatio: 5.0,
@@ -117,7 +120,8 @@ var awsBedrockModelPricing = map[string]adaptor.ModelConfig{
 		ContextLength: 200000, MaxOutputTokens: 64000,
 		InputModalities: awsClaudeVisionInputs, OutputModalities: awsTextOutputs,
 		SupportedFeatures: awsClaudeFeaturesWithReasoning, SupportedSamplingParameters: awsClaudeSamplingParams,
-		Description: "Claude Sonnet 4 (May 2025 release) on AWS Bedrock.",
+		MaxReasoningTokens: 60000,
+		Description:        "Claude Sonnet 4 (May 2025 release) on AWS Bedrock.",
 	},
 	"claude-sonnet-4-5": {
 		Ratio: 3 * ratio.MilliTokensUsd, CompletionRatio: 5.0,
@@ -125,7 +129,8 @@ var awsBedrockModelPricing = map[string]adaptor.ModelConfig{
 		ContextLength: 200000, MaxOutputTokens: 64000,
 		InputModalities: awsClaudeVisionInputs, OutputModalities: awsTextOutputs,
 		SupportedFeatures: awsClaudeFeaturesWithReasoning, SupportedSamplingParameters: awsClaudeSamplingParams,
-		Description: "Claude Sonnet 4.5 (alias) on AWS Bedrock.",
+		MaxReasoningTokens: 60000,
+		Description:        "Claude Sonnet 4.5 (alias) on AWS Bedrock.",
 	},
 	"claude-sonnet-4-5-20250929": {
 		Ratio: 3 * ratio.MilliTokensUsd, CompletionRatio: 5.0,
@@ -133,7 +138,8 @@ var awsBedrockModelPricing = map[string]adaptor.ModelConfig{
 		ContextLength: 200000, MaxOutputTokens: 64000,
 		InputModalities: awsClaudeVisionInputs, OutputModalities: awsTextOutputs,
 		SupportedFeatures: awsClaudeFeaturesWithReasoning, SupportedSamplingParameters: awsClaudeSamplingParams,
-		Description: "Claude Sonnet 4.5 (September 2025 release) on AWS Bedrock.",
+		MaxReasoningTokens: 60000,
+		Description:        "Claude Sonnet 4.5 (September 2025 release) on AWS Bedrock.",
 	},
 	"claude-sonnet-4-6": {
 		Ratio: 3 * ratio.MilliTokensUsd, CompletionRatio: 5.0,
@@ -141,7 +147,8 @@ var awsBedrockModelPricing = map[string]adaptor.ModelConfig{
 		ContextLength: 1000000, MaxOutputTokens: 128000,
 		InputModalities: awsClaudeVisionInputs, OutputModalities: awsTextOutputs,
 		SupportedFeatures: awsClaudeFeaturesWithReasoning, SupportedSamplingParameters: awsClaudeSamplingParams,
-		Description: "Claude Sonnet 4.6 on AWS Bedrock with 1M-token context and extended thinking.",
+		MaxReasoningTokens: 120000,
+		Description:        "Claude Sonnet 4.6 on AWS Bedrock with 1M-token context and extended thinking.",
 	},
 	"claude-3-opus-20240229": {
 		Ratio: 15 * ratio.MilliTokensUsd, CompletionRatio: 5.0,
@@ -157,7 +164,8 @@ var awsBedrockModelPricing = map[string]adaptor.ModelConfig{
 		ContextLength: 200000, MaxOutputTokens: 32000,
 		InputModalities: awsClaudeVisionInputs, OutputModalities: awsTextOutputs,
 		SupportedFeatures: awsClaudeFeaturesWithReasoning, SupportedSamplingParameters: awsClaudeSamplingParams,
-		Description: "Claude Opus 4 (alias) on AWS Bedrock.",
+		MaxReasoningTokens: 30000,
+		Description:        "Claude Opus 4 (alias) on AWS Bedrock.",
 	},
 	"claude-opus-4-20250514": {
 		Ratio: 15 * ratio.MilliTokensUsd, CompletionRatio: 5.0,
@@ -165,7 +173,8 @@ var awsBedrockModelPricing = map[string]adaptor.ModelConfig{
 		ContextLength: 200000, MaxOutputTokens: 32000,
 		InputModalities: awsClaudeVisionInputs, OutputModalities: awsTextOutputs,
 		SupportedFeatures: awsClaudeFeaturesWithReasoning, SupportedSamplingParameters: awsClaudeSamplingParams,
-		Description: "Claude Opus 4 (May 2025 release) on AWS Bedrock.",
+		MaxReasoningTokens: 30000,
+		Description:        "Claude Opus 4 (May 2025 release) on AWS Bedrock.",
 	},
 	"claude-opus-4-1": {
 		Ratio: 15 * ratio.MilliTokensUsd, CompletionRatio: 5.0,
@@ -173,7 +182,8 @@ var awsBedrockModelPricing = map[string]adaptor.ModelConfig{
 		ContextLength: 200000, MaxOutputTokens: 32000,
 		InputModalities: awsClaudeVisionInputs, OutputModalities: awsTextOutputs,
 		SupportedFeatures: awsClaudeFeaturesWithReasoning, SupportedSamplingParameters: awsClaudeSamplingParams,
-		Description: "Claude Opus 4.1 (alias) on AWS Bedrock.",
+		MaxReasoningTokens: 30000,
+		Description:        "Claude Opus 4.1 (alias) on AWS Bedrock.",
 	},
 	"claude-opus-4-1-20250805": {
 		Ratio: 15 * ratio.MilliTokensUsd, CompletionRatio: 75.0 / 15,
@@ -181,7 +191,8 @@ var awsBedrockModelPricing = map[string]adaptor.ModelConfig{
 		ContextLength: 200000, MaxOutputTokens: 32000,
 		InputModalities: awsClaudeVisionInputs, OutputModalities: awsTextOutputs,
 		SupportedFeatures: awsClaudeFeaturesWithReasoning, SupportedSamplingParameters: awsClaudeSamplingParams,
-		Description: "Claude Opus 4.1 (August 2025 release) on AWS Bedrock with extended thinking.",
+		MaxReasoningTokens: 30000,
+		Description:        "Claude Opus 4.1 (August 2025 release) on AWS Bedrock with extended thinking.",
 	},
 	"claude-opus-4-5": {
 		Ratio: 5 * ratio.MilliTokensUsd, CompletionRatio: 25.0 / 5,
@@ -189,7 +200,8 @@ var awsBedrockModelPricing = map[string]adaptor.ModelConfig{
 		ContextLength: 200000, MaxOutputTokens: 64000,
 		InputModalities: awsClaudeVisionInputs, OutputModalities: awsTextOutputs,
 		SupportedFeatures: awsClaudeFeaturesWithReasoning, SupportedSamplingParameters: awsClaudeSamplingParams,
-		Description: "Claude Opus 4.5 (alias) on AWS Bedrock.",
+		MaxReasoningTokens: 60000,
+		Description:        "Claude Opus 4.5 (alias) on AWS Bedrock.",
 	},
 	"claude-opus-4-5-20251101": {
 		Ratio: 5 * ratio.MilliTokensUsd, CompletionRatio: 25.0 / 5,
@@ -197,7 +209,8 @@ var awsBedrockModelPricing = map[string]adaptor.ModelConfig{
 		ContextLength: 200000, MaxOutputTokens: 64000,
 		InputModalities: awsClaudeVisionInputs, OutputModalities: awsTextOutputs,
 		SupportedFeatures: awsClaudeFeaturesWithReasoning, SupportedSamplingParameters: awsClaudeSamplingParams,
-		Description: "Claude Opus 4.5 (November 2025 release) on AWS Bedrock.",
+		MaxReasoningTokens: 60000,
+		Description:        "Claude Opus 4.5 (November 2025 release) on AWS Bedrock.",
 	},
 	"claude-opus-4-6": {
 		Ratio: 5 * ratio.MilliTokensUsd, CompletionRatio: 25.0 / 5,
@@ -205,7 +218,8 @@ var awsBedrockModelPricing = map[string]adaptor.ModelConfig{
 		ContextLength: 1000000, MaxOutputTokens: 128000,
 		InputModalities: awsClaudeVisionInputs, OutputModalities: awsTextOutputs,
 		SupportedFeatures: awsClaudeFeaturesWithReasoning, SupportedSamplingParameters: awsClaudeSamplingParams,
-		Description: "Claude Opus 4.6 on AWS Bedrock with 1M-token context and extended thinking.",
+		MaxReasoningTokens: 120000,
+		Description:        "Claude Opus 4.6 on AWS Bedrock with 1M-token context and extended thinking.",
 	},
 	"claude-opus-4-7": {
 		Ratio: 5 * ratio.MilliTokensUsd, CompletionRatio: 25.0 / 5,

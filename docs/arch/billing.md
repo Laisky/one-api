@@ -480,6 +480,19 @@ type ModelConfig struct {
     Video             *VideoPricingConfig  `json:"video,omitempty"`
     Audio             *AudioPricingConfig  `json:"audio,omitempty"`
     Image             *ImagePricingConfig  `json:"image,omitempty"`
+    Embedding         *EmbeddingPricingConfig `json:"embedding,omitempty"`
+    ContextLength     int32                `json:"context_length,omitempty"`
+    MaxOutputTokens   int32                `json:"max_output_tokens,omitempty"`
+    InputModalities   []string             `json:"input_modalities,omitempty"`
+    OutputModalities  []string             `json:"output_modalities,omitempty"`
+    SupportedFeatures []string             `json:"supported_features,omitempty"`
+    SupportedSamplingParameters []string   `json:"supported_sampling_parameters,omitempty"`
+    SupportedReasoningEfforts []string     `json:"supported_reasoning_efforts,omitempty"`
+    DefaultReasoningEffort    string       `json:"default_reasoning_effort,omitempty"`
+    MaxReasoningTokens        int32        `json:"max_reasoning_tokens,omitempty"`
+    Quantization     string                `json:"quantization,omitempty"`
+    HuggingFaceID    string                `json:"hugging_face_id,omitempty"`
+    Description      string                `json:"description,omitempty"`
 }
 
 type ModelRatioTier struct {
@@ -496,6 +509,8 @@ type ModelRatioTier struct {
 - **Cache-aware pricing**: `CachedInputRatio`, `CacheWrite5mRatio`, and `CacheWrite1hRatio` let adapters express Anthropic-style prompt caching economics. Negative values mark a bucket as free; zero means “inherit the base ratio.”
 - **Max token policy**: `MaxTokens` carries per-model token ceilings so controllers can clamp `max_tokens` before dispatching upstream.
 - **Multimedia metadata**: `Video`, `Audio`, and `Image` pointers hold secondary pricing dimensions (per-second, per-minute, or per-image tables) alongside text token billing. These blobs travel through the three-layer resolver so channel overrides, adapter defaults, and global fallbacks stay consistent across media types.
+- **Capability metadata**: `ContextLength`, `MaxOutputTokens`, `InputModalities`, `OutputModalities`, `SupportedFeatures`, `SupportedSamplingParameters`, `Quantization`, and `HuggingFaceID` describe the model surface so adaptors, request transformers, and the admin UI can advertise what each model actually accepts.
+- **Reasoning metadata**: `SupportedReasoningEfforts` enumerates the discrete `reasoning_effort` levels a model accepts (subset of `minimal`/`low`/`medium`/`high`). `DefaultReasoningEffort` is the level applied when callers omit one. `MaxReasoningTokens` caps providers that use a budget instead of a level (Anthropic `thinking.budget_tokens`, Gemini `thinkingBudget`). Reasoning-aware request transformers read these fields data-first, falling back to model-name heuristics only when the config is empty.
 
 `VideoPricingConfig`, `AudioPricingConfig`, and `ImagePricingConfig` define the knobs administrators see in the UI: duration-based USD prices, prompt-to-token conversion ratios, render-based size/quality multipliers, and min/max batch sizes. Channel overrides merge on top of adapter defaults, and unresolved fields inherit from the previous layer to avoid surprises.
 

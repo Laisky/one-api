@@ -6,9 +6,9 @@ import (
 )
 
 // audioModelRatios captures pricing and metadata for OpenAI audio (TTS / STT)
-// models. These models route through dedicated /audio endpoints; their
-// chat-completions InputModalities is "text" only because OpenRouter's
-// modality vocabulary does not include audio.
+// models. These models route through dedicated /audio endpoints; modalities
+// reflect the actual request envelope (TTS = text in / audio out, STT = audio
+// in / text out) so capability surfaces can advertise them accurately.
 // Source: https://platform.openai.com/docs/models/whisper-1, /tts-1, /gpt-4o-transcribe.
 var audioModelRatios = map[string]adaptor.ModelConfig{
 	"whisper-1": {
@@ -20,7 +20,7 @@ var audioModelRatios = map[string]adaptor.ModelConfig{
 			PromptTokensPerSecond: 10,
 			UsdPerSecond:          0.0001,
 		},
-		InputModalities:  []string{"text"},
+		InputModalities:  []string{"audio"},
 		OutputModalities: []string{"text"},
 		Description:      "Whisper v1: speech-to-text transcription model.",
 	},
@@ -28,28 +28,28 @@ var audioModelRatios = map[string]adaptor.ModelConfig{
 		Ratio:            15.0 * ratio.MilliTokensUsd,
 		CompletionRatio:  1.0, // $15.00 per 1M characters
 		InputModalities:  []string{"text"},
-		OutputModalities: []string{"text"},
+		OutputModalities: []string{"audio"},
 		Description:      "TTS-1: standard-quality text-to-speech model.",
 	},
 	"tts-1-1106": {
 		Ratio:            15.0 * ratio.MilliTokensUsd,
 		CompletionRatio:  1.0,
 		InputModalities:  []string{"text"},
-		OutputModalities: []string{"text"},
+		OutputModalities: []string{"audio"},
 		Description:      "TTS-1 snapshot from 2023-11-06.",
 	},
 	"tts-1-hd": {
 		Ratio:            30.0 * ratio.MilliTokensUsd,
 		CompletionRatio:  1.0, // $30.00 per 1M characters
 		InputModalities:  []string{"text"},
-		OutputModalities: []string{"text"},
+		OutputModalities: []string{"audio"},
 		Description:      "TTS-1 HD: higher-fidelity text-to-speech model.",
 	},
 	"tts-1-hd-1106": {
 		Ratio:            30.0 * ratio.MilliTokensUsd,
 		CompletionRatio:  1.0,
 		InputModalities:  []string{"text"},
-		OutputModalities: []string{"text"},
+		OutputModalities: []string{"audio"},
 		Description:      "TTS-1 HD snapshot from 2023-11-06.",
 	},
 	"gpt-4o-transcribe": {
@@ -62,7 +62,7 @@ var audioModelRatios = map[string]adaptor.ModelConfig{
 		},
 		ContextLength:    16000,
 		MaxOutputTokens:  2000,
-		InputModalities:  []string{"text"},
+		InputModalities:  []string{"audio"},
 		OutputModalities: []string{"text"},
 		Description:      "GPT-4o transcribe: high-quality speech-to-text successor to Whisper.",
 	},
@@ -76,7 +76,7 @@ var audioModelRatios = map[string]adaptor.ModelConfig{
 		},
 		ContextLength:    16000,
 		MaxOutputTokens:  2000,
-		InputModalities:  []string{"text"},
+		InputModalities:  []string{"audio"},
 		OutputModalities: []string{"text"},
 		Description:      "GPT-4o mini transcribe: cost-efficient speech-to-text model.",
 	},
@@ -85,7 +85,7 @@ var audioModelRatios = map[string]adaptor.ModelConfig{
 		CompletionRatio:  20.0, // $0.60 input, $12.00 output per 1M tokens
 		ContextLength:    2000,
 		InputModalities:  []string{"text"},
-		OutputModalities: []string{"text"},
+		OutputModalities: []string{"audio"},
 		Description:      "GPT-4o mini TTS: low-latency neural text-to-speech model.",
 	},
 }

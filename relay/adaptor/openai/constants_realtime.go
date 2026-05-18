@@ -6,9 +6,9 @@ import (
 )
 
 // realtimeModelRatios captures pricing and metadata for OpenAI Realtime models.
-// Realtime endpoints stream audio chunks bidirectionally; per OpenRouter's modality
-// vocabulary the chat-completions exposure reports text-only modalities while audio
-// pricing is encoded via Audio sub-config.
+// Realtime endpoints stream text and audio chunks bidirectionally; modalities
+// reflect this duality while audio-specific pricing is encoded via the Audio
+// sub-config.
 // Source: https://developers.openai.com/api/docs/pricing
 var realtimeModelRatios = map[string]adaptor.ModelConfig{
 	// gpt-realtime-1.5: text $4/$16, audio $32/$64, cached text $0.40
@@ -23,8 +23,8 @@ var realtimeModelRatios = map[string]adaptor.ModelConfig{
 		},
 		ContextLength:               128000,
 		MaxOutputTokens:             4096,
-		InputModalities:             []string{"text"},
-		OutputModalities:            []string{"text"},
+		InputModalities:             []string{"text", "audio"},
+		OutputModalities:            []string{"text", "audio"},
 		SupportedFeatures:           []string{"tools"},
 		SupportedSamplingParameters: standardSamplingParameters(),
 		Description:                 "GPT Realtime 1.5: bidirectional audio streaming with tool calls.",
@@ -41,8 +41,8 @@ var realtimeModelRatios = map[string]adaptor.ModelConfig{
 		},
 		ContextLength:               128000,
 		MaxOutputTokens:             4096,
-		InputModalities:             []string{"text"},
-		OutputModalities:            []string{"text"},
+		InputModalities:             []string{"text", "audio"},
+		OutputModalities:            []string{"text", "audio"},
 		SupportedFeatures:           []string{"tools"},
 		SupportedSamplingParameters: standardSamplingParameters(),
 		Description:                 "GPT Realtime mini: cost-optimized realtime audio streaming.",
@@ -59,8 +59,8 @@ var realtimeModelRatios = map[string]adaptor.ModelConfig{
 		},
 		ContextLength:               128000,
 		MaxOutputTokens:             4096,
-		InputModalities:             []string{"text"},
-		OutputModalities:            []string{"text"},
+		InputModalities:             []string{"text", "audio"},
+		OutputModalities:            []string{"text", "audio"},
 		SupportedFeatures:           []string{"tools"},
 		SupportedSamplingParameters: standardSamplingParameters(),
 		Description:                 "GPT Realtime: rolling alias for the latest realtime model (currently 1.5).",
@@ -77,8 +77,8 @@ var realtimeModelRatios = map[string]adaptor.ModelConfig{
 		},
 		ContextLength:               128000,
 		MaxOutputTokens:             4096,
-		InputModalities:             []string{"text"},
-		OutputModalities:            []string{"text"},
+		InputModalities:             []string{"text", "audio"},
+		OutputModalities:            []string{"text", "audio"},
 		SupportedFeatures:           []string{"tools"},
 		SupportedSamplingParameters: standardSamplingParameters(),
 		Description:                 "GPT-4o Realtime preview: streaming audio with tool calling.",
@@ -94,8 +94,8 @@ var realtimeModelRatios = map[string]adaptor.ModelConfig{
 		},
 		ContextLength:               128000,
 		MaxOutputTokens:             4096,
-		InputModalities:             []string{"text"},
-		OutputModalities:            []string{"text"},
+		InputModalities:             []string{"text", "audio"},
+		OutputModalities:            []string{"text", "audio"},
 		SupportedFeatures:           []string{"tools"},
 		SupportedSamplingParameters: standardSamplingParameters(),
 		Description:                 "GPT-4o Realtime preview snapshot from 2025-06-03.",
@@ -112,8 +112,8 @@ var realtimeModelRatios = map[string]adaptor.ModelConfig{
 		},
 		ContextLength:               128000,
 		MaxOutputTokens:             4096,
-		InputModalities:             []string{"text"},
-		OutputModalities:            []string{"text"},
+		InputModalities:             []string{"text", "audio"},
+		OutputModalities:            []string{"text", "audio"},
 		SupportedFeatures:           []string{"tools"},
 		SupportedSamplingParameters: standardSamplingParameters(),
 		Description:                 "GPT-4o mini Realtime preview: low-latency speech for cost-sensitive workloads.",
@@ -129,8 +129,8 @@ var realtimeModelRatios = map[string]adaptor.ModelConfig{
 		},
 		ContextLength:               128000,
 		MaxOutputTokens:             4096,
-		InputModalities:             []string{"text"},
-		OutputModalities:            []string{"text"},
+		InputModalities:             []string{"text", "audio"},
+		OutputModalities:            []string{"text", "audio"},
 		SupportedFeatures:           []string{"tools"},
 		SupportedSamplingParameters: standardSamplingParameters(),
 		Description:                 "GPT-4o mini Realtime preview snapshot from 2024-12-17.",

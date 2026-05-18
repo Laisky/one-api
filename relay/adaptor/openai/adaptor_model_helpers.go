@@ -61,11 +61,21 @@ func isDeepResearchModel(modelName string) bool {
 	return strings.Contains(modelName, "deep-research")
 }
 
-// isMediumOnlyReasoningModel returns true if the model only supports medium reasoning effort.
+// isMediumOnlyReasoningModel reports whether the model only accepts a single
+// "medium" reasoning_effort level. The data-driven check examines
+// SupportedReasoningEfforts on the ModelConfig; when the model is unknown the
+// helper falls back to name-based heuristics for forward compatibility.
 func isMediumOnlyReasoningModel(modelName string) bool {
 	lower := normalizedModelName(modelName)
 	if lower == "" {
 		return false
+	}
+
+	if cfg, ok := ModelRatios[modelName]; ok && len(cfg.SupportedReasoningEfforts) > 0 {
+		if len(cfg.SupportedReasoningEfforts) != 1 {
+			return false
+		}
+		return strings.EqualFold(cfg.SupportedReasoningEfforts[0], "medium")
 	}
 
 	if strings.HasPrefix(lower, "o") {
@@ -81,19 +91,42 @@ func isMediumOnlyReasoningModel(modelName string) bool {
 	return false
 }
 
-// defaultReasoningEffortForModel returns the default reasoning effort level for the given model.
+// defaultReasoningEffortForModel returns the default reasoning effort level
+// for the model. Falls back to "medium" when the model config doesn't pin one.
 func defaultReasoningEffortForModel(modelName string) string {
+	if cfg, ok := ModelRatios[modelName]; ok {
+		if cfg.DefaultReasoningEffort != "" {
+			return cfg.DefaultReasoningEffort
+		}
+		if len(cfg.SupportedReasoningEfforts) == 1 {
+			return cfg.SupportedReasoningEfforts[0]
+		}
+	}
 	return "medium"
 }
 
+// isReasoningEffortAllowedForModel reports whether `effort` is a permitted
+// reasoning_effort value for the model. Data-driven against the model config
+// when populated; falls back to name-based heuristics otherwise.
 func isReasoningEffortAllowedForModel(modelName, effort string) bool {
 	if effort == "" {
 		return false
 	}
-	if isDeepResearchModel(modelName) || isMediumOnlyReasoningModel(modelName) {
-		return effort == "medium"
+	normalized := strings.ToLower(strings.TrimSpace(effort))
+
+	if cfg, ok := ModelRatios[modelName]; ok && len(cfg.SupportedReasoningEfforts) > 0 {
+		for _, allowed := range cfg.SupportedReasoningEfforts {
+			if strings.EqualFold(allowed, normalized) {
+				return true
+			}
+		}
+		return false
 	}
-	switch effort {
+
+	if isDeepResearchModel(modelName) || isMediumOnlyReasoningModel(modelName) {
+		return normalized == "medium"
+	}
+	switch normalized {
 	case "low", "medium", "high":
 		return true
 	default:
