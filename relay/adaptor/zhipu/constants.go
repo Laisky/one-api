@@ -103,8 +103,8 @@ func mergeModelRatios(tables ...map[string]adaptor.ModelConfig) map[string]adapt
 	return merged
 }
 
-// ZhipuToolingDefaults captures Open BigModel's published search-tool pricing tiers (retrieved 2025-11-12).
-// Source: https://r.jina.ai/https://open.bigmodel.cn/pricing
+// ZhipuToolingDefaults captures Open BigModel's published search-tool pricing tiers (retrieved 2026-05-18).
+// Source: https://open.bigmodel.cn/pricing
 var ZhipuToolingDefaults = adaptor.ChannelToolConfig{
 	Pricing: map[string]adaptor.ToolPricingConfig{
 		"search_std":       {UsdPerCall: 0.01},

@@ -5,9 +5,15 @@ import (
 	"github.com/Laisky/one-api/relay/billing/ratio"
 )
 
-// LingYi WanWu (01.AI) hosts the Yi family of chat models. Public docs:
+// LingYi WanWu (01.AI) hosts the Yi family of chat models. Public docs
+// (retrieved 2026-05-18):
 //   - https://platform.lingyiwanwu.com/docs (API + pricing)
 //
+// 01.AI has pivoted toward enterprise deployments; only yi-lightning and
+// yi-vision-v2 remain documented on the consumer platform pricing page.
+// yi-large / yi-medium / yi-spark are no longer publicly listed and are
+// omitted from this map. yi-lightning is documented as an intelligent-routing
+// model that internally dispatches to DeepSeek-V3 / Qwen3-30B-A3B / Yi-Lightning.
 // The smaller Yi-6B / Yi-9B / Yi-34B base models are open on HuggingFace under
 // 01-ai/Yi-*; the production yi-lightning and yi-vision-v2 SKUs served by the
 // platform are tuned closed-weight derivatives, so HuggingFaceID is left empty.
@@ -69,6 +75,6 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 // ModelList derived from ModelRatios for backward compatibility
 var ModelList = adaptor.GetModelListFromPricing(ModelRatios)
 
-// LingyiWanwuToolingDefaults notes that LingYi WanWu's pricing docs list model rates only (no tool metering) as of 2025-11-12.
+// LingyiWanwuToolingDefaults notes that LingYi WanWu's pricing docs list model rates only (no tool metering) as of 2026-05-18.
 // Source: https://r.jina.ai/https://platform.lingyiwanwu.com/docs#%E6%A8%A1%E5%9E%8B%E4%B8%8E%E8%AE%A1%E8%B4%B9
 var LingyiWanwuToolingDefaults = adaptor.ChannelToolConfig{}

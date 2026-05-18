@@ -58,7 +58,7 @@ func openRouterModelConfigWithMetadata(inputPerMillion, outputPerMillion, cached
 
 // ModelRatios defines the OpenRouter model pricing snapshot and per-model metadata
 // derived from the official models API.
-// Source: https://openrouter.ai/api/v1/models (retrieved 2026-05-01).
+// Source: https://openrouter.ai/api/v1/models (retrieved 2026-05-18).
 // Rows whose official API still reports negative placeholder token prices are intentionally excluded:
 // openrouter/auto, openrouter/bodybuilder, and openrouter/pareto-code.
 // TODO(file-length): this file is large because it lists every catalog model with its
@@ -1581,6 +1581,15 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 			SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs"},
 			SupportedSamplingParameters: []string{"temperature", "top_p", "frequency_penalty", "presence_penalty", "stop", "seed", "max_tokens"},
 			Description:                 "Mistral Medium 3.1 is an updated version of Mistral Medium 3, which is a high-performance enterprise-grade language model designed to deliver frontier-level capabilities at significantly reduced operational cost. It balances...",
+		}),
+	"mistralai/mistral-medium-3-5": openRouterModelConfigWithMetadata(1.5, 7.5, 0, 0,
+		openRouterModelMetadata{
+			ContextLength:               262144,
+			InputModalities:             []string{"text", "image", "file"},
+			OutputModalities:            []string{"text"},
+			SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs", "reasoning"},
+			SupportedSamplingParameters: []string{"temperature", "top_p", "frequency_penalty", "presence_penalty", "stop", "seed", "max_tokens"},
+			Description:                 "Mistral Medium 3.5 is a dense 128B instruction-following model from Mistral AI. It supports text and image inputs with text output, and is designed for agentic workflows, coding, and complex...",
 		}),
 	"mistralai/mistral-nemo": openRouterModelConfigWithMetadata(0.02, 0.04, 0, 0,
 		openRouterModelMetadata{

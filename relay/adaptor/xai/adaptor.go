@@ -266,9 +266,24 @@ func (a *Adaptor) ConvertRequest(c *gin.Context, relayMode int, request *model.G
 	if request.ReasoningEffort != nil {
 		request.ReasoningEffort = nil
 	}
-	// Remove presence_penalty and frequency_penalty for certain grok-4 models as they don't support them
+	// Remove presence_penalty and frequency_penalty for grok-4 family reasoning models
+	// per xAI API reference: presencePenalty, frequencyPenalty, and stop cannot be used
+	// with reasoning models. Source: https://docs.x.ai/docs/api-reference#chat-completions
 	switch request.Model {
-	case "grok-4-0709", "grok-4.20-0309-reasoning", "grok-4.20-0309-non-reasoning", "grok-4.20-multi-agent-0309", "grok-4-1-fast-reasoning", "grok-4-1-fast-non-reasoning":
+	case "grok-4.3",
+		"grok-4-0709",
+		"grok-4.20",
+		"grok-4.20-reasoning",
+		"grok-4.20-non-reasoning",
+		"grok-4.20-multi-agent",
+		"grok-4.20-0309-reasoning",
+		"grok-4.20-0309-non-reasoning",
+		"grok-4.20-multi-agent-0309",
+		"grok-4-1-fast-reasoning",
+		"grok-4-1-fast-non-reasoning",
+		"grok-4-fast-reasoning",
+		"grok-4-fast-non-reasoning",
+		"grok-code-fast-1":
 		if request.PresencePenalty != nil {
 			request.PresencePenalty = nil
 		}

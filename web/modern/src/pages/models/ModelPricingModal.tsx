@@ -22,6 +22,9 @@ export interface ModelDisplayData {
   output_modalities?: string[];
   supported_features?: string[];
   supported_sampling_parameters?: string[];
+  max_reasoning_tokens?: number;
+  supported_reasoning_efforts?: string[];
+  default_reasoning_effort?: string;
   quantization?: string;
   hugging_face_id?: string;
   description?: string;
@@ -304,12 +307,15 @@ function PricingContent({
     (data.context_length !== undefined && data.context_length > 0) ||
     (data.max_output_tokens !== undefined && data.max_output_tokens > 0) ||
     (data.max_tokens !== undefined && data.max_tokens > 0) ||
+    (data.max_reasoning_tokens !== undefined && data.max_reasoning_tokens > 0) ||
+    (data.default_reasoning_effort && data.default_reasoning_effort.trim().length > 0) ||
     (data.quantization && data.quantization.trim().length > 0) ||
     (data.hugging_face_id && data.hugging_face_id.trim().length > 0) ||
     (data.input_modalities && data.input_modalities.length > 0) ||
     (data.output_modalities && data.output_modalities.length > 0) ||
     (data.supported_features && data.supported_features.length > 0) ||
-    (data.supported_sampling_parameters && data.supported_sampling_parameters.length > 0);
+    (data.supported_sampling_parameters && data.supported_sampling_parameters.length > 0) ||
+    (data.supported_reasoning_efforts && data.supported_reasoning_efforts.length > 0);
 
   return (
     <div className="space-y-5">
@@ -346,6 +352,22 @@ function PricingContent({
                   <div className="mt-1 text-lg font-semibold tabular-nums">{formatTokenCountFull(data.max_tokens)}</div>
                 </div>
               )}
+              {data.max_reasoning_tokens !== undefined && data.max_reasoning_tokens > 0 && (
+                <div className="rounded-lg border bg-muted/30 p-3">
+                  <div className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
+                    {tr('max_reasoning_tokens', 'Max Reasoning Tokens')}
+                  </div>
+                  <div className="mt-1 text-lg font-semibold tabular-nums">{formatTokenCountFull(data.max_reasoning_tokens)}</div>
+                </div>
+              )}
+              {data.default_reasoning_effort && data.default_reasoning_effort.trim().length > 0 && (
+                <div className="rounded-lg border bg-muted/30 p-3">
+                  <div className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
+                    {tr('default_reasoning_effort', 'Default Reasoning Effort')}
+                  </div>
+                  <div className="mt-1 text-lg font-semibold tabular-nums capitalize">{data.default_reasoning_effort}</div>
+                </div>
+              )}
               {data.quantization && data.quantization.trim().length > 0 && (
                 <div className="rounded-lg border bg-muted/30 p-3">
                   <div className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
@@ -368,7 +390,8 @@ function PricingContent({
             {(data.input_modalities && data.input_modalities.length > 0) ||
             (data.output_modalities && data.output_modalities.length > 0) ||
             (data.supported_features && data.supported_features.length > 0) ||
-            (data.supported_sampling_parameters && data.supported_sampling_parameters.length > 0) ? (
+            (data.supported_sampling_parameters && data.supported_sampling_parameters.length > 0) ||
+            (data.supported_reasoning_efforts && data.supported_reasoning_efforts.length > 0) ? (
               <div className="space-y-2">
                 {data.input_modalities && data.input_modalities.length > 0 && (
                   <TagRow label={tr('input_modalities', 'Input Modalities')} values={data.input_modalities} />
@@ -378,6 +401,12 @@ function PricingContent({
                 )}
                 {data.supported_features && data.supported_features.length > 0 && (
                   <TagRow label={tr('supported_features', 'Supported Features')} values={data.supported_features} />
+                )}
+                {data.supported_reasoning_efforts && data.supported_reasoning_efforts.length > 0 && (
+                  <TagRow
+                    label={tr('supported_reasoning_efforts', 'Supported Reasoning Efforts')}
+                    values={data.supported_reasoning_efforts}
+                  />
                 )}
                 {data.supported_sampling_parameters && data.supported_sampling_parameters.length > 0 && (
                   <TagRow

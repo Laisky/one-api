@@ -135,7 +135,10 @@ func TestConvertRequest(t *testing.T) {
 			},
 		},
 		{
-			name: "Keep penalty parameters for other models",
+			// grok-code-fast-1 was retired on May 15, 2026 and now auto-redirects to
+			// grok-4.3, which rejects presence_penalty/frequency_penalty per the xAI
+			// API reference. The adaptor strips these params to avoid upstream errors.
+			name: "Strip penalty parameters for grok-code-fast-1 (redirects to grok-4.3)",
 			inputRequest: &model.GeneralOpenAIRequest{
 				Model:            "grok-code-fast-1",
 				PresencePenalty:  float64Ptr(0.5),
@@ -143,7 +146,38 @@ func TestConvertRequest(t *testing.T) {
 				Messages:         []model.Message{{Role: "user", Content: "hello"}},
 			},
 			expectedRequest: &model.GeneralOpenAIRequest{
-				Model:            "grok-code-fast-1",
+				Model:    "grok-code-fast-1",
+				Messages: []model.Message{{Role: "user", Content: "hello"}},
+			},
+		},
+		{
+			// grok-4.3 is xAI's flagship reasoning model released May 6, 2026.
+			// Per the API reference it does not support presence_penalty,
+			// frequency_penalty, or stop. The adaptor strips them.
+			name: "Strip penalty parameters for grok-4.3",
+			inputRequest: &model.GeneralOpenAIRequest{
+				Model:            "grok-4.3",
+				PresencePenalty:  float64Ptr(0.5),
+				FrequencyPenalty: float64Ptr(0.3),
+				Messages:         []model.Message{{Role: "user", Content: "hello"}},
+			},
+			expectedRequest: &model.GeneralOpenAIRequest{
+				Model:    "grok-4.3",
+				Messages: []model.Message{{Role: "user", Content: "hello"}},
+			},
+		},
+		{
+			// Non-reasoning legacy models (e.g. grok-2-vision-1212) accept penalty
+			// parameters; the adaptor must leave them untouched.
+			name: "Keep penalty parameters for grok-2-vision-1212",
+			inputRequest: &model.GeneralOpenAIRequest{
+				Model:            "grok-2-vision-1212",
+				PresencePenalty:  float64Ptr(0.5),
+				FrequencyPenalty: float64Ptr(0.3),
+				Messages:         []model.Message{{Role: "user", Content: "hello"}},
+			},
+			expectedRequest: &model.GeneralOpenAIRequest{
+				Model:            "grok-2-vision-1212",
 				PresencePenalty:  float64Ptr(0.5),
 				FrequencyPenalty: float64Ptr(0.3),
 				Messages:         []model.Message{{Role: "user", Content: "hello"}},
@@ -442,7 +476,13 @@ func TestGetModelList(t *testing.T) {
 	adaptor := &Adaptor{}
 	models := adaptor.GetModelList()
 	assert.NotEmpty(t, models)
-	// Should include grok models from ModelRatios
+	// Should include current flagship and current snapshot models from ModelRatios
+	assert.Contains(t, models, "grok-4.3")
+	assert.Contains(t, models, "grok-4.20-0309-reasoning")
+	assert.Contains(t, models, "grok-4.20-multi-agent-0309")
+	assert.Contains(t, models, "grok-imagine-image")
+	assert.Contains(t, models, "grok-imagine-image-quality")
+	// Retired-but-redirected slugs are still in the table for billing continuity
 	assert.Contains(t, models, "grok-code-fast-1")
 	assert.Contains(t, models, "grok-4-1-fast-non-reasoning")
 }

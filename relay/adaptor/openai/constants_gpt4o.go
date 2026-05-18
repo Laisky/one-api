@@ -178,15 +178,20 @@ var gpt4oModelRatios = map[string]adaptor.ModelConfig{
 		SupportedSamplingParameters: standardSamplingParameters(),
 		Description:                 "GPT-4o audio preview snapshot from 2025-06-03.",
 	},
+	// chatgpt-4o-latest: rolling alias mirroring the consumer ChatGPT default model.
+	// Note: the model behind this alias has been upgraded several times. As of 2026-05,
+	// the alias is billed at the ChatGPT-tier rate $5/$0.50/$30 per 1M tokens.
+	// Source: https://developers.openai.com/api/docs/pricing#specialized-models (chat-latest row).
 	"chatgpt-4o-latest": {
 		Ratio:                       5.0 * ratio.MilliTokensUsd,
-		CompletionRatio:             15.0 / 5.0,
+		CompletionRatio:             30.0 / 5.0,
+		CachedInputRatio:            0.5 * ratio.MilliTokensUsd,
 		ContextLength:               128000,
 		MaxOutputTokens:             16384,
 		InputModalities:             []string{"text", "image"},
 		OutputModalities:            []string{"text"},
 		SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs"},
 		SupportedSamplingParameters: standardSamplingParameters(),
-		Description:                 "ChatGPT-4o latest: rolling alias mirroring the consumer ChatGPT default model.",
+		Description:                 "ChatGPT-4o latest: rolling alias mirroring the consumer ChatGPT default model (chat-latest pricing).",
 	},
 }

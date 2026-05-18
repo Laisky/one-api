@@ -241,7 +241,7 @@ var oSeriesModelRatios = map[string]adaptor.ModelConfig{
 		SupportedSamplingParameters: reasoningSamplingParameters(),
 		SupportedReasoningEfforts:   oSeriesMediumOnlyEfforts,
 		DefaultReasoningEffort:      "medium",
-		Description:                 "o3 deep research snapshot from 2025-06-26.",
+		Description:                 "o3 deep research snapshot from 2025-06-26 (deprecated per OpenAI docs).",
 	},
 	// o4 family
 	"o4-mini": {

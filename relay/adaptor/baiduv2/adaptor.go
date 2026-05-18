@@ -56,7 +56,7 @@ func (a *Adaptor) GetChannelName() string {
 }
 
 // GetDefaultModelPricing returns the pricing information for BaiduV2 models
-// Based on Baidu pricing: https://cloud.baidu.com/doc/WENXINWORKSHOP/s/Blfmc9do2
+// Based on Baidu pricing: https://cloud.baidu.com/doc/qianfan/s/wmh4sv6ya (verified 2026-05-18)
 func (a *Adaptor) GetDefaultModelPricing() map[string]adaptor.ModelConfig {
 	return ModelRatios
 }
@@ -79,7 +79,7 @@ func (a *Adaptor) GetCompletionRatio(modelName string) float64 {
 	return a.DefaultPricingMethods.GetCompletionRatio(modelName)
 }
 
-// DefaultToolingConfig returns Baidu v2 tooling defaults (none documented publicly as of 2025-11-12).
+// DefaultToolingConfig returns Baidu v2 tooling defaults (none documented publicly as of 2026-05-18).
 func (a *Adaptor) DefaultToolingConfig() adaptor.ChannelToolConfig {
 	return BaiduV2ToolingDefaults
 }

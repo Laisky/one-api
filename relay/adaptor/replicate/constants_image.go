@@ -20,6 +20,15 @@ var replicateImageModelRatios = map[string]adaptor.ModelConfig{
 		InputModalities: imageInputs, OutputModalities: imageOutputs,
 		Description: "FLUX 1.1 [pro] high-quality text-to-image generator from Black Forest Labs.",
 	},
+	"black-forest-labs/flux-2-pro": {
+		// Black Forest Labs publishes FLUX.2 [pro] at $0.03/megapixel for text-to-image
+		// (image editing is $0.045/megapixel). Most Replicate requests default to a
+		// single 1024x1024 (1MP) image, which lines up with $0.03/image. Confirm at
+		// https://bfl.ai/pricing for higher-resolution requests.
+		Ratio: 0, CompletionRatio: 1.0, Image: replicateImageConfig(0.03),
+		InputModalities: imageEditInputs, OutputModalities: imageOutputs,
+		Description: "FLUX.2 [pro] high-resolution text-to-image and multi-reference editing model.",
+	},
 	"black-forest-labs/flux-1.1-pro-ultra": {
 		Ratio: 0, CompletionRatio: 1.0, Image: replicateImageConfig(0.06),
 		InputModalities: imageInputs, OutputModalities: imageOutputs,
@@ -117,6 +126,31 @@ var replicateImageModelRatios = map[string]adaptor.ModelConfig{
 		Ratio: 0, CompletionRatio: 1.0, Image: replicateImageConfig(0.04),
 		InputModalities: imageInputs, OutputModalities: imageOutputs,
 		Description: "ByteDance Seedream 4.5 text-to-image generator with improved fidelity.",
+	},
+	"bytedance/seedream-5-lite": {
+		// $0.035/image flat rate; image-to-image and text-to-image share the same price.
+		Ratio: 0, CompletionRatio: 1.0, Image: replicateImageConfig(0.035),
+		InputModalities: imageEditInputs, OutputModalities: imageOutputs,
+		Description: "ByteDance Seedream 5.0 Lite image model with built-in reasoning and example-based editing.",
+	},
+	"openai/gpt-image-2": {
+		// Replicate exposes quality tiers; the default "auto" / "high" tier is $0.128/image,
+		// medium is $0.047/image, low is $0.012/image. The base config uses the default tier;
+		// downstream callers should override when emitting low/medium-quality requests.
+		Ratio: 0, CompletionRatio: 1.0,
+		Image: &adaptor.ImagePricingConfig{
+			PricePerImageUsd: 0.128,
+			MinImages:        1,
+			DefaultQuality:   "auto",
+			QualityMultipliers: map[string]float64{
+				"low":    0.012 / 0.128,
+				"medium": 0.047 / 0.128,
+				"high":   1.0,
+				"auto":   1.0,
+			},
+		},
+		InputModalities: imageEditInputs, OutputModalities: imageOutputs,
+		Description: "OpenAI GPT-Image-2 multimodal image generation and editing model.",
 	},
 	"google/imagen-4": {
 		Ratio: 0, CompletionRatio: 1.0, Image: replicateImageConfig(0.04),

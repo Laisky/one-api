@@ -21,8 +21,10 @@ var (
 
 // ModelRatios contains all supported models and their pricing ratios
 // Model list is derived from the keys of this map, eliminating redundancy
-// Based on Cloudflare Workers AI pricing (retrieved 2026-04-28).
-// Source: https://developers.cloudflare.com/workers-ai/platform/pricing/
+// Based on Cloudflare Workers AI pricing (retrieved 2026-05-18).
+// Sources:
+//   - https://developers.cloudflare.com/workers-ai/platform/pricing/
+//   - https://developers.cloudflare.com/workers-ai/models/
 var ModelRatios = map[string]adaptor.ModelConfig{
 	// Meta Llama Models
 	"@cf/meta/llama-3.2-1b-instruct": {
@@ -178,9 +180,11 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		ContextLength: 64000, MaxOutputTokens: 16000,
 		InputModalities: cfTextInputs, OutputModalities: cfTextOutputs,
 		SupportedFeatures: cfReasoningFeatures, SupportedSamplingParameters: cfBasicSamplingParams,
-		Quantization:  "fp16",
-		HuggingFaceID: "deepseek-ai/DeepSeek-R1-Distill-Qwen-32B",
-		Description:   "DeepSeek R1 distilled into Qwen 32B reasoning model on Cloudflare Workers AI.",
+		SupportedReasoningEfforts: []string{"low", "medium", "high"},
+		DefaultReasoningEffort:    "medium",
+		Quantization:              "fp16",
+		HuggingFaceID:             "deepseek-ai/DeepSeek-R1-Distill-Qwen-32B",
+		Description:               "DeepSeek R1 distilled into Qwen 32B reasoning model on Cloudflare Workers AI.",
 	},
 
 	// Google Models
@@ -209,9 +213,11 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		ContextLength: 32768, MaxOutputTokens: 8192,
 		InputModalities: cfTextInputs, OutputModalities: cfTextOutputs,
 		SupportedFeatures: cfReasoningFeatures, SupportedSamplingParameters: cfBasicSamplingParams,
-		Quantization:  "fp16",
-		HuggingFaceID: "Qwen/QwQ-32B",
-		Description:   "Alibaba Qwen QwQ 32B reasoning model on Cloudflare Workers AI.",
+		SupportedReasoningEfforts: []string{"low", "medium", "high"},
+		DefaultReasoningEffort:    "medium",
+		Quantization:              "fp16",
+		HuggingFaceID:             "Qwen/QwQ-32B",
+		Description:               "Alibaba Qwen QwQ 32B reasoning model on Cloudflare Workers AI.",
 	},
 	"@cf/qwen/qwen2.5-coder-32b-instruct": {
 		Ratio: 0.660 * ratio.MilliTokensUsd, CompletionRatio: 1.000 / 0.660,
@@ -256,9 +262,11 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		ContextLength: 128000, MaxOutputTokens: 8192,
 		InputModalities: cfTextInputs, OutputModalities: cfTextOutputs,
 		SupportedFeatures: cfReasoningFeatures, SupportedSamplingParameters: cfBasicSamplingParams,
-		Quantization:  "fp16",
-		HuggingFaceID: "nvidia/Nemotron-3-120B-A12B",
-		Description:   "NVIDIA Nemotron 3 120B/A12B mixture-of-experts on Cloudflare Workers AI.",
+		SupportedReasoningEfforts: []string{"low", "medium", "high"},
+		DefaultReasoningEffort:    "medium",
+		Quantization:              "fp16",
+		HuggingFaceID:             "nvidia/Nemotron-3-120B-A12B",
+		Description:               "NVIDIA Nemotron 3 120B/A12B mixture-of-experts on Cloudflare Workers AI.",
 	},
 	"@cf/moonshotai/kimi-k2.5": {
 		Ratio: 0.600 * ratio.MilliTokensUsd, CompletionRatio: 3.000 / 0.600, CachedInputRatio: 0.100 * ratio.MilliTokensUsd,
@@ -285,18 +293,22 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		ContextLength: 128000, MaxOutputTokens: 32768,
 		InputModalities: cfTextInputs, OutputModalities: cfTextOutputs,
 		SupportedFeatures: cfReasoningFeatures, SupportedSamplingParameters: cfBasicSamplingParams,
-		Quantization:  "fp16",
-		HuggingFaceID: "openai/gpt-oss-120b",
-		Description:   "OpenAI gpt-oss 120B reasoning model on Cloudflare Workers AI.",
+		SupportedReasoningEfforts: []string{"low", "medium", "high"},
+		DefaultReasoningEffort:    "medium",
+		Quantization:              "fp16",
+		HuggingFaceID:             "openai/gpt-oss-120b",
+		Description:               "OpenAI gpt-oss 120B reasoning model on Cloudflare Workers AI.",
 	},
 	"@cf/openai/gpt-oss-20b": {
 		Ratio: 0.200 * ratio.MilliTokensUsd, CompletionRatio: 1.5,
 		ContextLength: 128000, MaxOutputTokens: 32768,
 		InputModalities: cfTextInputs, OutputModalities: cfTextOutputs,
 		SupportedFeatures: cfReasoningFeatures, SupportedSamplingParameters: cfBasicSamplingParams,
-		Quantization:  "fp16",
-		HuggingFaceID: "openai/gpt-oss-20b",
-		Description:   "OpenAI gpt-oss 20B reasoning model on Cloudflare Workers AI.",
+		SupportedReasoningEfforts: []string{"low", "medium", "high"},
+		DefaultReasoningEffort:    "medium",
+		Quantization:              "fp16",
+		HuggingFaceID:             "openai/gpt-oss-20b",
+		Description:               "OpenAI gpt-oss 20B reasoning model on Cloudflare Workers AI.",
 	},
 
 	// Other LLMs
@@ -422,6 +434,89 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		Description:      "Deepgram Aura 2 Spanish TTS on Cloudflare Workers AI.",
 	},
 
+	// Image Models (Cloudflare bills per 512x512 tile or per output megapixel; see source URL).
+	// We expose canonical per-image pricing for the most common single-image
+	// request shape. Callers that emit multi-tile outputs should scale accordingly.
+	"@cf/black-forest-labs/flux-1-schnell": {
+		Image: &adaptor.ImagePricingConfig{
+			// $0.0000528 per 512x512 tile; a 1024x1024 image = 4 tiles ≈ $0.000211.
+			PricePerImageUsd: 0.0000528 * 4,
+			MinImages:        1,
+			DefaultSize:      "1024x1024",
+		},
+		InputModalities:  cfTextInputs,
+		OutputModalities: []string{"image"},
+		HuggingFaceID:    "black-forest-labs/FLUX.1-schnell",
+		Description:      "FLUX.1 [schnell] 12B rectified-flow text-to-image model on Cloudflare Workers AI.",
+	},
+	"@cf/leonardo/lucid-origin": {
+		Image: &adaptor.ImagePricingConfig{
+			// $0.006996 per 512x512 tile.
+			PricePerImageUsd: 0.006996 * 4,
+			MinImages:        1,
+			DefaultSize:      "1024x1024",
+		},
+		InputModalities:  cfTextInputs,
+		OutputModalities: []string{"image"},
+		Description:      "Leonardo Lucid Origin text-to-image model on Cloudflare Workers AI.",
+	},
+	"@cf/leonardo/phoenix-1.0": {
+		Image: &adaptor.ImagePricingConfig{
+			// $0.005830 per 512x512 tile.
+			PricePerImageUsd: 0.005830 * 4,
+			MinImages:        1,
+			DefaultSize:      "1024x1024",
+		},
+		InputModalities:  cfTextInputs,
+		OutputModalities: []string{"image"},
+		Description:      "Leonardo Phoenix 1.0 text-to-image model on Cloudflare Workers AI.",
+	},
+	"@cf/black-forest-labs/flux-2-dev": {
+		Image: &adaptor.ImagePricingConfig{
+			// Published: $0.00021 per input tile, $0.00041 per output tile.
+			// Default 1024x1024 = 4 output tiles ≈ $0.00164 per image.
+			PricePerImageUsd: 0.00041 * 4,
+			MinImages:        1,
+			DefaultSize:      "1024x1024",
+		},
+		InputModalities:  cfTextInputs,
+		OutputModalities: []string{"image"},
+		HuggingFaceID:    "black-forest-labs/FLUX.2-dev",
+		Description:      "FLUX.2 [dev] multi-reference text-to-image model on Cloudflare Workers AI.",
+	},
+	"@cf/black-forest-labs/flux-2-klein-4b": {
+		Image: &adaptor.ImagePricingConfig{
+			// Published: $0.000059 per input tile, $0.000287 per output tile.
+			PricePerImageUsd: 0.000287 * 4,
+			MinImages:        1,
+			DefaultSize:      "1024x1024",
+		},
+		InputModalities:  cfTextInputs,
+		OutputModalities: []string{"image"},
+		Description:      "FLUX.2 Klein 4B distilled text-to-image model on Cloudflare Workers AI.",
+	},
+	"@cf/black-forest-labs/flux-2-klein-9b": {
+		Image: &adaptor.ImagePricingConfig{
+			// Published: $0.015 per first megapixel (1024x1024).
+			PricePerImageUsd: 0.015,
+			MinImages:        1,
+			DefaultSize:      "1024x1024",
+		},
+		InputModalities:  cfTextInputs,
+		OutputModalities: []string{"image"},
+		Description:      "FLUX.2 Klein 9B distilled text-to-image model on Cloudflare Workers AI.",
+	},
+	"@cf/microsoft/resnet-50": {
+		// $2.51 per million images.
+		Image: &adaptor.ImagePricingConfig{
+			PricePerImageUsd: 2.51 / 1_000_000,
+			MinImages:        1,
+		},
+		InputModalities:  []string{"image"},
+		OutputModalities: cfTextOutputs,
+		HuggingFaceID:    "microsoft/resnet-50",
+		Description:      "Microsoft ResNet-50 image classifier on Cloudflare Workers AI.",
+	},
 	// Other (Classification, Reranker, Translation, etc.)
 	"@cf/huggingface/distilbert-sst-2-int8": {
 		Ratio: 0.026 * ratio.MilliTokensUsd, CompletionRatio: 1,

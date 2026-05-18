@@ -41,13 +41,19 @@ var (
 // ModelRatios contains all supported models and their pricing/configuration metadata.
 // Model list is derived from the keys of this map, eliminating redundancy.
 //
-// Pricing source: https://cloud.baidu.com/doc/WENXINWORKSHOP/s/Blfmc9dlf (verified 2026-05-01).
+// Pricing sources (verified 2026-05-18):
+//   - https://cloud.baidu.com/doc/WENXINWORKSHOP/s/hlrk4akp7 (legacy ERNIE v1 inference pricing)
+//   - https://cloud.baidu.com/doc/qianfan/s/wmh4sv6ya (Qianfan inference pricing, cross-checked)
 //
 // Capability metadata sources:
-//   - https://cloud.baidu.com/doc/WENXINWORKSHOP/index.html (ERNIE legacy v1 model lineup)
+//   - https://cloud.baidu.com/doc/WENXINWORKSHOP/s/Nlks5zkzu (ERNIE legacy v1 model catalog)
 //   - https://ai.baidu.com/ai-doc/AISTUDIO/Mmhslv9lf (per-model context/output limits)
 //
 // Notes:
+//   - This adaptor only covers the legacy Wenxin Workshop v1 endpoints whose URL routes are
+//     hard-coded in adaptor.go (ERNIE 4.0/3.5/Speed/Lite/Tiny/Bot, BLOOMZ, Embedding-V1, BGE,
+//     tao-8k). Newer ERNIE 4.5 / 4.5 Turbo / X1 models use the OpenAI-compatible Qianfan v2
+//     endpoint and are registered in the baiduv2 adaptor.
 //   - All ERNIE legacy v1 chat models are closed-weight; HuggingFaceID and Quantization are intentionally empty.
 //   - Embedding-V1 / bge-large-* / tao-8k are embedding/representation models; chat-only fields are omitted.
 var ModelRatios = map[string]adaptor.ModelConfig{
@@ -237,6 +243,6 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 	},
 }
 
-// BaiduToolingDefaults notes that Wenxin ModelBuilder documentation does not disclose per-tool billing publicly (retrieved 2025-11-12).
-// Source: https://r.jina.ai/https://cloud.baidu.com/doc/WENXINWORKSHOP/s/Blfmc9dlf
+// BaiduToolingDefaults notes that Wenxin ModelBuilder documentation does not disclose per-tool billing publicly (retrieved 2026-05-18).
+// Source: https://cloud.baidu.com/doc/WENXINWORKSHOP/s/hlrk4akp7
 var BaiduToolingDefaults = adaptor.ChannelToolConfig{}

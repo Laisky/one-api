@@ -17,6 +17,16 @@ var (
 	// ernieV2ChatFeatures lists the capability set for ERNIE 4.0/3.5 chat tiers
 	// that support tool-calling and JSON mode on the Qianfan v2 API.
 	ernieV2ChatFeatures = []string{"tools", "json_mode"}
+	// ernieV2TurboFeatures lists the capability set for the ERNIE 4.5 Turbo family,
+	// which adds structured outputs on top of tool-calling and JSON mode per the
+	// Qianfan v2 reference (verified 2026-05-18 via LLMReference catalog).
+	ernieV2TurboFeatures = []string{"tools", "json_mode", "structured_outputs"}
+	// ernieV2VisionInputs lists the input modalities for multimodal ERNIE Turbo VL.
+	ernieV2VisionInputs = []string{"text", "image"}
+	// ernieV2ReasoningFeatures lists the capability set for the ERNIE X1 reasoning
+	// family. Baidu exposes reasoning as a binary thinking mode without a tunable
+	// budget so MaxReasoningTokens stays unset.
+	ernieV2ReasoningFeatures = []string{"tools", "json_mode", "reasoning"}
 	// ernieV2BasicFeatures lists the reduced capability set for Speed/Lite/Tiny/
 	// Character/Novel tiers — tool-calling per Qianfan docs but no advertised JSON mode.
 	ernieV2BasicFeatures = []string{"tools"}
@@ -58,14 +68,94 @@ var (
 // ModelRatios contains all supported models and their pricing/configuration metadata.
 // Model list is derived from the keys of this map, eliminating redundancy.
 //
-// Pricing source: https://cloud.baidu.com/doc/WENXINWORKSHOP/s/Blfmc9do2 (verified 2026-05-01).
+// Pricing sources (verified 2026-05-18):
+//   - https://cloud.baidu.com/doc/qianfan/s/wmh4sv6ya (Qianfan inference pricing — primary)
+//   - https://cloud.baidu.com/doc/WENXINWORKSHOP/s/hlrk4akp7 (legacy ERNIE pricing — verified)
 //
 // Capability metadata sources:
 //   - https://cloud.baidu.com/doc/qianfan-api/s/ (Qianfan v2 API reference)
+//   - https://cloud.baidu.com/doc/WENXINWORKSHOP/s/Nlks5zkzu (ERNIE model catalog)
 //   - https://ai.baidu.com/ai-doc/AISTUDIO/Mmhslv9lf (per-model context/output limits)
 //   - https://huggingface.co/baidu (open-weight ERNIE 4.5 family)
 //   - https://huggingface.co/deepseek-ai (hosted DeepSeek chat models)
+//
+// Notes:
+//   - ERNIE 4.5 / 4.5 Turbo and ERNIE X1 / X1 Turbo are served through the Qianfan v2
+//     OpenAI-compatible endpoint, so they live in this adaptor rather than the legacy v1.
+//   - Baidu exposes reasoning on the X1 family as a binary thinking mode (no tunable
+//     budget), so MaxReasoningTokens is intentionally left at zero per the memory rule
+//     applied to Chinese-cloud reasoning models.
 var ModelRatios = map[string]adaptor.ModelConfig{
+	// ERNIE 4.5 Models (closed-weight flagship family released March 2025)
+	"ernie-4.5": {
+		Ratio:                       0.004 * ratio.MilliTokensRmb,
+		CompletionRatio:             4,
+		ContextLength:               32768,
+		MaxOutputTokens:             8192,
+		InputModalities:             ernieV2TextInputs,
+		OutputModalities:            ernieV2TextOutputs,
+		SupportedFeatures:           ernieV2TurboFeatures,
+		SupportedSamplingParameters: qianfanV2SamplingParameters,
+		Description:                 "Baidu ERNIE 4.5: closed-weight flagship chat model on Qianfan v2 (text-only).",
+	}, // CNY 0.004 / 0.016 per 1k tokens (input/output)
+	"ernie-4.5-turbo-32k": {
+		Ratio:                       0.0008 * ratio.MilliTokensRmb,
+		CompletionRatio:             4,
+		ContextLength:               32768,
+		MaxOutputTokens:             8192,
+		InputModalities:             ernieV2TextInputs,
+		OutputModalities:            ernieV2TextOutputs,
+		SupportedFeatures:           ernieV2TurboFeatures,
+		SupportedSamplingParameters: qianfanV2SamplingParameters,
+		Description:                 "Baidu ERNIE 4.5 Turbo 32K: closed-weight balanced-cost chat model priced at 20% of ERNIE 4.5.",
+	}, // CNY 0.0008 / 0.0032 per 1k tokens
+	"ernie-4.5-turbo-128k": {
+		Ratio:                       0.0008 * ratio.MilliTokensRmb,
+		CompletionRatio:             4,
+		ContextLength:               131072,
+		MaxOutputTokens:             8192,
+		InputModalities:             ernieV2TextInputs,
+		OutputModalities:            ernieV2TextOutputs,
+		SupportedFeatures:           ernieV2TurboFeatures,
+		SupportedSamplingParameters: qianfanV2SamplingParameters,
+		Description:                 "Baidu ERNIE 4.5 Turbo 128K: long-context closed-weight balanced-cost chat model.",
+	}, // CNY 0.0008 / 0.0032 per 1k tokens
+	"ernie-4.5-turbo-vl": {
+		Ratio:                       0.003 * ratio.MilliTokensRmb,
+		CompletionRatio:             3,
+		ContextLength:               32768,
+		MaxOutputTokens:             8192,
+		InputModalities:             ernieV2VisionInputs,
+		OutputModalities:            ernieV2TextOutputs,
+		SupportedFeatures:           ernieV2TurboFeatures,
+		SupportedSamplingParameters: qianfanV2SamplingParameters,
+		Description:                 "Baidu ERNIE 4.5 Turbo VL: closed-weight multimodal chat model accepting text and image inputs.",
+	}, // CNY 0.003 / 0.009 per 1k tokens
+
+	// ERNIE X1 Models (closed-weight reasoning family)
+	"ernie-x1": {
+		Ratio:                       0.002 * ratio.MilliTokensRmb,
+		CompletionRatio:             4,
+		ContextLength:               32768,
+		MaxOutputTokens:             8192,
+		InputModalities:             ernieV2TextInputs,
+		OutputModalities:            ernieV2TextOutputs,
+		SupportedFeatures:           ernieV2ReasoningFeatures,
+		SupportedSamplingParameters: qianfanV2SamplingParameters,
+		Description:                 "Baidu ERNIE X1: closed-weight deep-thinking reasoning chat model on Qianfan v2.",
+	}, // CNY 0.002 / 0.008 per 1k tokens
+	"ernie-x1-turbo": {
+		Ratio:                       0.001 * ratio.MilliTokensRmb,
+		CompletionRatio:             4,
+		ContextLength:               32768,
+		MaxOutputTokens:             8192,
+		InputModalities:             ernieV2TextInputs,
+		OutputModalities:            ernieV2TextOutputs,
+		SupportedFeatures:           ernieV2ReasoningFeatures,
+		SupportedSamplingParameters: qianfanV2SamplingParameters,
+		Description:                 "Baidu ERNIE X1 Turbo: closed-weight reasoning chat model priced at half of ERNIE X1.",
+	}, // CNY 0.001 / 0.004 per 1k tokens
+
 	// ERNIE 4.0 Models
 	"ernie-4.0-8k-latest": {
 		Ratio:                       0.12 * ratio.MilliTokensRmb,
@@ -348,6 +438,6 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 // ModelList derived from ModelRatios for backward compatibility
 var ModelList = adaptor.GetModelListFromPricing(ModelRatios)
 
-// BaiduV2ToolingDefaults records that the updated Wenxin billing docs require authentication for tool pricing (retrieved 2025-11-12).
-// Source: https://r.jina.ai/https://cloud.baidu.com/doc/WENXINWORKSHOP/s/Blfmc9do2 (restricted access)
+// BaiduV2ToolingDefaults records that the updated Qianfan billing docs do not enumerate per-tool tariffs (retrieved 2026-05-18).
+// Source: https://cloud.baidu.com/doc/qianfan/s/wmh4sv6ya
 var BaiduV2ToolingDefaults = adaptor.ChannelToolConfig{}

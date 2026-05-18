@@ -8,8 +8,9 @@ import (
 // iFlytek Spark v2 (HTTP / OpenAI-compatible) reuses the same closed-weight
 // model lineup as the websocket adaptor but addresses models by the upstream
 // "domain" identifier (lite / generalv3 / pro-128k / generalv3.5 / max-32k /
-// 4.0Ultra). Reference docs:
+// 4.0Ultra). Reference docs (retrieved 2026-05-18):
 //   - https://www.xfyun.cn/doc/spark/HTTP%E8%B0%83%E7%94%A8%E6%96%87%E6%A1%A3.html
+//   - https://xinghuo.xfyun.cn/sparkapi (consumer pricing page)
 
 // xunfeiv2TextInputs is the input modality set for Spark v2 chat models.
 var xunfeiv2TextInputs = []string{"text"}
@@ -17,12 +18,13 @@ var xunfeiv2TextInputs = []string{"text"}
 // xunfeiv2TextOutputs is the text-only output modality used by Spark v2.
 var xunfeiv2TextOutputs = []string{"text"}
 
-// xunfeiv2BasicFeatures captures the feature set of the cost-optimized Spark
-// Lite tier (no function calling).
+// xunfeiv2BasicFeatures captures the feature set of tiers without FunctionCall
+// (lite / generalv3 / pro-128k per the HTTP API doc).
 var xunfeiv2BasicFeatures = []string{}
 
 // xunfeiv2ChatFeatures advertises tool / JSON mode capabilities for Spark
-// generalv3 / generalv3.5 / max / 4.0Ultra tiers.
+// generalv3.5 / max-32k / 4.0Ultra tiers (HTTP doc lists FunctionCall on Max
+// and 4.0 Ultra).
 var xunfeiv2ChatFeatures = []string{"tools", "json_mode"}
 
 // xunfeiv2SamplingParams enumerates sampling parameters accepted by Spark v2
@@ -43,33 +45,33 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 	"lite": {
 		Ratio:                       0.3 * ratio.MilliTokensRmb,
 		CompletionRatio:             1,
-		ContextLength:               4096,
+		ContextLength:               8192,
 		MaxOutputTokens:             4096,
 		InputModalities:             xunfeiv2TextInputs,
 		OutputModalities:            xunfeiv2TextOutputs,
 		SupportedFeatures:           xunfeiv2BasicFeatures,
 		SupportedSamplingParameters: xunfeiv2SamplingParams,
-		Description:                 "iFlytek Spark Lite (HTTP API domain `lite`) cost-optimized closed-weight chat model.",
+		Description:                 "iFlytek Spark Lite (HTTP API domain `lite`) cost-optimized closed-weight chat model (free tier).",
 	},
 	"generalv3": {
 		Ratio:                       2.0 * ratio.MilliTokensRmb,
 		CompletionRatio:             1,
 		ContextLength:               8192,
-		MaxOutputTokens:             4096,
+		MaxOutputTokens:             8192,
 		InputModalities:             xunfeiv2TextInputs,
 		OutputModalities:            xunfeiv2TextOutputs,
-		SupportedFeatures:           xunfeiv2ChatFeatures,
+		SupportedFeatures:           xunfeiv2BasicFeatures,
 		SupportedSamplingParameters: xunfeiv2SamplingParams,
-		Description:                 "iFlytek Spark Pro (HTTP API domain `generalv3`) closed-weight chat model with function calling.",
+		Description:                 "iFlytek Spark Pro (HTTP API domain `generalv3`) closed-weight chat model (HTTP doc: no FunctionCall on Pro tier).",
 	},
 	"pro-128k": {
 		Ratio:                       5.0 * ratio.MilliTokensRmb,
 		CompletionRatio:             1,
 		ContextLength:               131072,
-		MaxOutputTokens:             4096,
+		MaxOutputTokens:             32768,
 		InputModalities:             xunfeiv2TextInputs,
 		OutputModalities:            xunfeiv2TextOutputs,
-		SupportedFeatures:           xunfeiv2ChatFeatures,
+		SupportedFeatures:           xunfeiv2BasicFeatures,
 		SupportedSamplingParameters: xunfeiv2SamplingParams,
 		Description:                 "iFlytek Spark Pro long-context (HTTP API domain `pro-128k`) with 128k context window.",
 	},
@@ -77,34 +79,34 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		Ratio:                       2.0 * ratio.MilliTokensRmb,
 		CompletionRatio:             1,
 		ContextLength:               8192,
-		MaxOutputTokens:             4096,
+		MaxOutputTokens:             8192,
 		InputModalities:             xunfeiv2TextInputs,
 		OutputModalities:            xunfeiv2TextOutputs,
 		SupportedFeatures:           xunfeiv2ChatFeatures,
 		SupportedSamplingParameters: xunfeiv2SamplingParams,
-		Description:                 "iFlytek Spark Max (HTTP API domain `generalv3.5`) closed-weight chat model with function calling.",
+		Description:                 "iFlytek Spark Max (HTTP API domain `generalv3.5`) closed-weight chat model with FunctionCall (scheduled deprecation 2026-03-10).",
 	},
 	"max-32k": {
 		Ratio:                       5.0 * ratio.MilliTokensRmb,
 		CompletionRatio:             1,
 		ContextLength:               32768,
-		MaxOutputTokens:             4096,
+		MaxOutputTokens:             32768,
 		InputModalities:             xunfeiv2TextInputs,
 		OutputModalities:            xunfeiv2TextOutputs,
 		SupportedFeatures:           xunfeiv2ChatFeatures,
 		SupportedSamplingParameters: xunfeiv2SamplingParams,
-		Description:                 "iFlytek Spark Max long-context (HTTP API domain `max-32k`) with 32k context window.",
+		Description:                 "iFlytek Spark Max long-context (HTTP API domain `max-32k`) with 32k context window and FunctionCall (scheduled deprecation 2026-03-10).",
 	},
 	"4.0Ultra": {
 		Ratio:                       5.0 * ratio.MilliTokensRmb,
 		CompletionRatio:             1,
-		ContextLength:               8192,
-		MaxOutputTokens:             4096,
+		ContextLength:               32768,
+		MaxOutputTokens:             32768,
 		InputModalities:             xunfeiv2TextInputs,
 		OutputModalities:            xunfeiv2TextOutputs,
 		SupportedFeatures:           xunfeiv2ChatFeatures,
 		SupportedSamplingParameters: xunfeiv2SamplingParams,
-		Description:                 "iFlytek Spark 4.0 Ultra (HTTP API domain `4.0Ultra`) flagship closed-weight chat model.",
+		Description:                 "iFlytek Spark 4.0 Ultra (HTTP API domain `4.0Ultra`) flagship closed-weight chat model with FunctionCall.",
 	},
 }
 

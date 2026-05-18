@@ -157,6 +157,13 @@ var geminiMetadataOverrides = map[string]adaptor.ModelConfig{
 		OutputModalities: geminiOutputText,
 		Description:      "Multimodal embedding preview model accepting text, image, audio, and video inputs.",
 	},
+	"gemini-embedding-2": {
+		ContextLength:    8192,
+		MaxOutputTokens:  0,
+		InputModalities:  geminiInputMultimodal,
+		OutputModalities: geminiOutputText,
+		Description:      "Gemini Embedding 2 multimodal GA model accepting text, image, audio, and video inputs.",
+	},
 	"aqa": {
 		ContextLength:               7168,
 		MaxOutputTokens:             1024,
@@ -221,6 +228,26 @@ var geminiMetadataOverrides = map[string]adaptor.ModelConfig{
 		MaxReasoningTokens:          gemini3LevelMaxThinkingBudget,
 		Description:                 "Gemini 3.1 Flash Lite preview tier for cost-efficient high-throughput workloads.",
 	},
+	"gemini-3.1-flash-lite": {
+		ContextLength:               gemini1MContext,
+		MaxOutputTokens:             gemini3FlashMaxOutput,
+		InputModalities:             geminiInputMultimodal,
+		OutputModalities:            geminiOutputText,
+		SupportedFeatures:           geminiFeatures25Plus,
+		SupportedSamplingParameters: geminiSamplingChat,
+		SupportedReasoningEfforts:   gemini3FlashLiteReasoningEfforts,
+		DefaultReasoningEffort:      "minimal",
+		MaxReasoningTokens:          gemini3LevelMaxThinkingBudget,
+		Description:                 "Gemini 3.1 Flash Lite GA tier for cost-efficient high-throughput multimodal workloads.",
+	},
+	"gemini-3.1-flash-tts-preview": {
+		ContextLength:               8192,
+		MaxOutputTokens:             8192,
+		InputModalities:             geminiInputTextOnly,
+		OutputModalities:            geminiOutputAudio,
+		SupportedSamplingParameters: []string{"temperature", "top_p", "top_k"},
+		Description:                 "Gemini 3.1 Flash preview text-to-speech tier with expressive low-latency audio output.",
+	},
 	"gemini-3-pro-preview": {
 		ContextLength:               gemini1MContext,
 		MaxOutputTokens:             geminiProMaxOutput,
@@ -241,9 +268,11 @@ var geminiMetadataOverrides = map[string]adaptor.ModelConfig{
 		SupportedFeatures:           geminiFeatures25Plus,
 		SupportedSamplingParameters: geminiSamplingChat,
 		SupportedReasoningEfforts:   gemini3FlashReasoningEfforts,
-		DefaultReasoningEffort:      "high",
-		MaxReasoningTokens:          gemini3LevelMaxThinkingBudget,
-		Description:                 "Gemini 3 Flash preview multimodal model balancing latency and quality.",
+		// Per https://ai.google.dev/gemini-api/docs/thinking the Gemini 3 Flash thinkingLevel
+		// default is "minimal"; callers that require deep reasoning must opt in explicitly.
+		DefaultReasoningEffort: "minimal",
+		MaxReasoningTokens:     gemini3LevelMaxThinkingBudget,
+		Description:            "Gemini 3 Flash preview multimodal model balancing latency and quality.",
 	},
 	"gemini-3-pro-image-preview": {
 		ContextLength:               65_536,
@@ -459,6 +488,18 @@ var geminiMetadataOverrides = map[string]adaptor.ModelConfig{
 		DefaultReasoningEffort:      "medium",
 		MaxReasoningTokens:          gemini25FlashMaxThinkingBudget,
 		Description:                 "Gemini Robotics-ER 1.5 preview tier for embodied reasoning workloads.",
+	},
+	"gemini-robotics-er-1.6-preview": {
+		ContextLength:               1_000_000,
+		MaxOutputTokens:             geminiFlashMaxOutput,
+		InputModalities:             geminiInputMultimodal,
+		OutputModalities:            geminiOutputText,
+		SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs", "reasoning"},
+		SupportedSamplingParameters: geminiSamplingChat,
+		SupportedReasoningEfforts:   gemini25ReasoningEfforts,
+		DefaultReasoningEffort:      "medium",
+		MaxReasoningTokens:          gemini25FlashMaxThinkingBudget,
+		Description:                 "Gemini Robotics-ER 1.6 preview tier for embodied reasoning workloads (text/image/video/audio in).",
 	},
 
 	// Gemini 2.0 Flash Models.

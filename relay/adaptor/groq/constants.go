@@ -19,6 +19,10 @@ var (
 	groqTextOnlyModalities = []string{"text"}
 	// groqTextImageInModalities advertises text+image input with text output.
 	groqTextImageInModalities = []string{"text", "image"}
+	// groqAudioInModalities advertises audio-only input (Whisper STT).
+	groqAudioInModalities = []string{"audio"}
+	// groqAudioOutModalities advertises audio-only output (TTS).
+	groqAudioOutModalities = []string{"audio"}
 
 	// groqChatSamplingParams enumerates the OpenAI-compatible sampling parameters
 	// that Groq's chat completion endpoints accept for typical Llama/Qwen/Mixtral
@@ -98,22 +102,28 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		Description:                 "12B safety classifier built on the Llama 4 Scout backbone; accepts text and up to five image inputs.",
 	},
 	"whisper-large-v3": {
-		Ratio:                       0.111 * ratio.MilliTokensUsd,
+		Ratio:                       0,
 		CompletionRatio:             1,
-		InputModalities:             groqTextOnlyModalities,
+		InputModalities:             groqAudioInModalities,
 		OutputModalities:            groqTextOnlyModalities,
 		SupportedSamplingParameters: []string{"language", "prompt", "response_format", "temperature"},
-		HuggingFaceID:               "openai/whisper-large-v3",
-		Description:                 "OpenAI Whisper large-v3 speech-to-text model (audio input, text output) with 99+ language support.",
+		// Groq publishes Whisper pricing as $0.111 per audio-hour (=$0.111/3600 USD/sec).
+		// Source: https://groq.com/pricing
+		Audio:         &adaptor.AudioPricingConfig{UsdPerSecond: 0.111 / 3600},
+		HuggingFaceID: "openai/whisper-large-v3",
+		Description:   "OpenAI Whisper large-v3 speech-to-text model (audio input, text output) with 99+ language support.",
 	},
 	"whisper-large-v3-turbo": {
-		Ratio:                       0.04 * ratio.MilliTokensUsd,
+		Ratio:                       0,
 		CompletionRatio:             1,
-		InputModalities:             groqTextOnlyModalities,
+		InputModalities:             groqAudioInModalities,
 		OutputModalities:            groqTextOnlyModalities,
 		SupportedSamplingParameters: []string{"language", "prompt", "response_format", "temperature"},
-		HuggingFaceID:               "openai/whisper-large-v3-turbo",
-		Description:                 "Whisper large-v3 turbo variant (audio input, text output) with 216x real-time speed factor.",
+		// Groq publishes Whisper Turbo pricing as $0.04 per audio-hour.
+		// Source: https://groq.com/pricing
+		Audio:         &adaptor.AudioPricingConfig{UsdPerSecond: 0.04 / 3600},
+		HuggingFaceID: "openai/whisper-large-v3-turbo",
+		Description:   "Whisper large-v3 turbo variant (audio input, text output) with 228x real-time speed factor.",
 	},
 	"openai/gpt-oss-120b": {
 		Ratio:                       0.15 * ratio.MilliTokensUsd,
@@ -246,7 +256,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		ContextLength:    4000,
 		MaxOutputTokens:  50000,
 		InputModalities:  groqTextOnlyModalities,
-		OutputModalities: groqTextOnlyModalities,
+		OutputModalities: groqAudioOutModalities,
 		Description:      "Canopy Labs Orpheus text-to-speech model (Saudi Arabic). Output is rendered audio billed per character.",
 	},
 	"canopylabs/orpheus-v1-english": {
@@ -255,7 +265,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		ContextLength:    4000,
 		MaxOutputTokens:  50000,
 		InputModalities:  groqTextOnlyModalities,
-		OutputModalities: groqTextOnlyModalities,
+		OutputModalities: groqAudioOutModalities,
 		HuggingFaceID:    "canopylabs/orpheus-3b-0.1-ft",
 		Description:      "Canopy Labs Orpheus v1 English text-to-speech (Llama-3.2-3B backbone) with bracketed vocal direction tags.",
 	},

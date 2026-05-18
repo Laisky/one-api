@@ -136,6 +136,48 @@ var (
 			CompletionRatio: 12.00 / 4.50,
 		},
 	}
+	// gemini31FlashLitePricing applies to both the preview snapshot and the GA tier.
+	// Source: https://ai.google.dev/gemini-api/docs/pricing — $0.25 input / $1.50 output,
+	// cached $0.025, audio input $0.50.
+	gemini31FlashLitePricing = adaptor.ModelConfig{
+		Ratio:            0.25 * ratio.MilliTokensUsd,
+		CompletionRatio:  1.50 / 0.25,
+		CachedInputRatio: 0.025 * ratio.MilliTokensUsd,
+		Audio: &adaptor.AudioPricingConfig{
+			PromptRatio:     0.50 / 0.25,
+			CompletionRatio: 0.25 / 0.50,
+		},
+	}
+	// gemini25FlashNativeAudioPricing covers all native-audio preview snapshots.
+	// Source: https://ai.google.dev/gemini-api/docs/pricing — text input $0.50, text output $2.00,
+	// audio in/out $3.00 / $12.00.
+	gemini25FlashNativeAudioPricing = adaptor.ModelConfig{
+		Ratio:           0.50 * ratio.MilliTokensUsd,
+		CompletionRatio: 2.0 / 0.50,
+		Audio: &adaptor.AudioPricingConfig{
+			PromptRatio:     3.0 / 0.50,
+			CompletionRatio: 12.0 / 2.0,
+		},
+	}
+	// geminiRoboticsER15Pricing is documented as a Flash-tier billing surface in Google's pricing table.
+	geminiRoboticsER15Pricing = adaptor.ModelConfig{
+		Ratio:           0.30 * ratio.MilliTokensUsd,
+		CompletionRatio: 2.5 / 0.30,
+		Audio: &adaptor.AudioPricingConfig{
+			PromptRatio:     1.00 / 0.30,
+			CompletionRatio: 0.30,
+		},
+	}
+	// geminiRoboticsER16Pricing reflects Google's new preview tier ($1.00 input text/image/video,
+	// $2.00 audio input, $5.00 output) per https://ai.google.dev/gemini-api/docs/pricing.
+	geminiRoboticsER16Pricing = adaptor.ModelConfig{
+		Ratio:           1.00 * ratio.MilliTokensUsd,
+		CompletionRatio: 5.00 / 1.00,
+		Audio: &adaptor.AudioPricingConfig{
+			PromptRatio:     2.00 / 1.00,
+			CompletionRatio: 5.00 / 2.00,
+		},
+	}
 )
 
 // ModelRatios contains all supported models and their pricing ratios
@@ -156,7 +198,10 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 	// details are available for quota reconciliation.
 	"gemini-embedding-001":       {Ratio: geminiEmbedding001TextPrice * ratio.MilliTokensUsd, CompletionRatio: 1},
 	"gemini-embedding-2-preview": {Ratio: geminiEmbedding2PreviewTextPrice * ratio.MilliTokensUsd, CompletionRatio: 1, Embedding: geminiEmbedding2PreviewConfig()},
-	"aqa":                        {Ratio: 1, CompletionRatio: 1},
+	// Gemini Embedding 2 GA alias: https://ai.google.dev/gemini-api/docs/pricing now lists
+	// the model as gemini-embedding-2 alongside the preview snapshot. Keep both for compatibility.
+	"gemini-embedding-2": {Ratio: geminiEmbedding2PreviewTextPrice * ratio.MilliTokensUsd, CompletionRatio: 1, Embedding: geminiEmbedding2PreviewConfig()},
+	"aqa":                {Ratio: 1, CompletionRatio: 1},
 
 	// Gemini 3 Models
 	"gemini-3.1-pro-preview": {
@@ -191,13 +236,17 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		Image:           gemini31FlashImageConfig(),
 	},
 	"gemini-3.1-flash-live-preview": gemini31FlashLivePreviewPricing,
-	"gemini-3.1-flash-lite-preview": {
-		Ratio:            0.25 * ratio.MilliTokensUsd,
-		CompletionRatio:  1.50 / 0.25,
-		CachedInputRatio: 0.03 * ratio.MilliTokensUsd,
+	// Gemini 3.1 Flash-Lite reached GA per https://ai.google.dev/gemini-api/docs/models;
+	// preview snapshot retained for backward compatibility.
+	"gemini-3.1-flash-lite":         gemini31FlashLitePricing,
+	"gemini-3.1-flash-lite-preview": gemini31FlashLitePricing,
+	// Gemini 3.1 Flash TTS preview ($1.00 input text / $20.00 output audio).
+	"gemini-3.1-flash-tts-preview": {
+		Ratio:           1.0 * ratio.MilliTokensUsd,
+		CompletionRatio: 20.0 / 1.0,
 		Audio: &adaptor.AudioPricingConfig{
-			PromptRatio:     0.50 / 0.25,
-			CompletionRatio: 0.25 / 0.50,
+			PromptRatio:     1,
+			CompletionRatio: 1,
 		},
 	},
 	"gemini-3-pro-preview": {
@@ -242,30 +291,9 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 	"gemini-2.5-flash-lite":                 gemini25FlashLitePricing,
 	"gemini-2.5-flash-lite-preview":         gemini25FlashLitePricing,
 	"gemini-2.5-flash-lite-preview-09-2025": gemini25FlashLitePricing,
-	"gemini-2.5-flash-native-audio": {
-		Ratio:           0.50 * ratio.MilliTokensUsd,
-		CompletionRatio: 2.0 / 0.50,
-		Audio: &adaptor.AudioPricingConfig{
-			PromptRatio:     3.0 / 0.50,
-			CompletionRatio: 12.0 / 2.0,
-		},
-	},
-	"gemini-2.5-flash-native-audio-preview-09-2025": {
-		Ratio:           0.50 * ratio.MilliTokensUsd,
-		CompletionRatio: 2.0 / 0.50,
-		Audio: &adaptor.AudioPricingConfig{
-			PromptRatio:     3.0 / 0.50,
-			CompletionRatio: 12.0 / 2.0,
-		},
-	},
-	"gemini-2.5-flash-native-audio-preview-12-2025": {
-		Ratio:           0.50 * ratio.MilliTokensUsd,
-		CompletionRatio: 2.0 / 0.50,
-		Audio: &adaptor.AudioPricingConfig{
-			PromptRatio:     3.0 / 0.50,
-			CompletionRatio: 12.0 / 2.0,
-		},
-	},
+	"gemini-2.5-flash-native-audio":                 gemini25FlashNativeAudioPricing,
+	"gemini-2.5-flash-native-audio-preview-09-2025": gemini25FlashNativeAudioPricing,
+	"gemini-2.5-flash-native-audio-preview-12-2025": gemini25FlashNativeAudioPricing,
 	"gemini-2.5-flash-image":         {Ratio: 0.30 * ratio.MilliTokensUsd, CompletionRatio: 2.5 / 0.30, Image: geminiImageConfig(0.039)},
 	"gemini-2.5-flash-image-preview": {Ratio: 0.30 * ratio.MilliTokensUsd, CompletionRatio: 2.5 / 0.30, Image: geminiImageConfig(0.039)},
 	"gemini-2.5-flash-preview-tts": {
@@ -284,14 +312,10 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 			CompletionRatio: 1,
 		},
 	},
-	"gemini-robotics-er-1.5-preview": {
-		Ratio:           0.30 * ratio.MilliTokensUsd,
-		CompletionRatio: 2.5 / 0.30,
-		Audio: &adaptor.AudioPricingConfig{
-			PromptRatio:     1.00 / 0.30,
-			CompletionRatio: 0.30,
-		},
-	},
+	"gemini-robotics-er-1.5-preview": geminiRoboticsER15Pricing,
+	// Gemini Robotics-ER 1.6 preview surfaces in https://ai.google.dev/gemini-api/docs/pricing
+	// at $1.00 input / $5.00 output with $2.00 audio input.
+	"gemini-robotics-er-1.6-preview": geminiRoboticsER16Pricing,
 
 	// Gemini 2.0 Flash Models
 	"gemini-2.0-flash": {
@@ -325,6 +349,7 @@ var geminiWebSearchModels = map[string]struct{}{
 	"gemini-3.1-pro-preview":                  {},
 	"gemini-3.1-pro-preview-customtools":      {},
 	"gemini-3.1-flash-image-preview":          {},
+	"gemini-3.1-flash-lite":                   {},
 	"gemini-3.1-flash-lite-preview":           {},
 	"gemini-3-pro-preview":                    {},
 	"gemini-3-flash-preview":                  {},
@@ -340,6 +365,7 @@ var geminiWebSearchModels = map[string]struct{}{
 	"gemini-2.0-flash-image":                  {},
 	"gemini-2.0-flash-lite":                   {},
 	"gemini-robotics-er-1.5-preview":          {},
+	"gemini-robotics-er-1.6-preview":          {},
 }
 
 var geminiToolingDefaults = buildGeminiToolingDefaults()

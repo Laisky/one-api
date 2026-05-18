@@ -2,8 +2,8 @@ package vertexai
 
 import "github.com/Laisky/one-api/relay/adaptor"
 
-// VertexAIToolingDefaults captures Vertex AI's published tooling charges (retrieved 2025-11-12).
-// Source: https://r.jina.ai/https://cloud.google.com/vertex-ai/generative-ai/pricing
+// VertexAIToolingDefaults captures Vertex AI's published tooling charges (retrieved 2026-05-18).
+// Source: https://cloud.google.com/vertex-ai/generative-ai/pricing
 var VertexAIToolingDefaults = adaptor.ChannelToolConfig{
 	Pricing: map[string]adaptor.ToolPricingConfig{
 		"google_search_grounding":  {UsdPerCall: 0.035},

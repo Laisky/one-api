@@ -75,20 +75,27 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		Description: "Google Veo 3 preview video generation on Vertex AI.",
 	},
 
-	// Veo 3 Fast pricing baseline (video-only 720p/1080p): $0.10 per second.
+	// Veo 3 Fast pricing baseline (video-only 720p): $0.08 per second; 1080p is $0.10/sec
+	// per https://cloud.google.com/vertex-ai/generative-ai/pricing. The historical entry billed a
+	// flat $0.10 baseline at the with-audio rate, retained here for backward compatibility while
+	// the 1080p multiplier is recorded explicitly.
 	"veo-3.0-fast-generate-001": {
 		Ratio:           veoRatioFromUsdPerSecond(0.10),
 		CompletionRatio: 1,
-		Video:           veoVideoPricingConfig(0.10),
+		Video: veoVideoPricingConfig(0.10, map[string]float64{
+			"1080p": 1.2,
+		}),
 		InputModalities: veoTextImageInputs, OutputModalities: veoVideoOutputs,
-		Description: "Google Veo 3 Fast video generation on Vertex AI.",
+		Description: "Google Veo 3 Fast video generation on Vertex AI (1080p surcharge applies).",
 	},
 	"veo-3.0-fast-generate-preview": {
 		Ratio:           veoRatioFromUsdPerSecond(0.10),
 		CompletionRatio: 1,
-		Video:           veoVideoPricingConfig(0.10),
+		Video: veoVideoPricingConfig(0.10, map[string]float64{
+			"1080p": 1.2,
+		}),
 		InputModalities: veoTextImageInputs, OutputModalities: veoVideoOutputs,
-		Description: "Google Veo 3 Fast preview video generation on Vertex AI.",
+		Description: "Google Veo 3 Fast preview video generation on Vertex AI (1080p surcharge applies).",
 	},
 
 	// Veo 3.1 pricing baseline (video-only 720p/1080p): $0.20 per second.
@@ -112,25 +119,42 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		Description: "Google Veo 3.1 preview video generation on Vertex AI (4k surcharge applies).",
 	},
 
-	// Veo 3.1 Fast pricing baseline (video-only 720p/1080p): $0.10 per second.
-	// 4k requests are billed at $0.30 per second (3x multiplier).
+	// Veo 3.1 Fast pricing baseline (video-only 720p): $0.08 per second; 1080p is $0.10/sec;
+	// 4k requests are billed at $0.25 per second (video-only) per Vertex AI pricing.
+	// The historical entry billed a flat $0.10 baseline at the with-audio rate; we keep the same
+	// baseline for backward compatibility and adjust the 4k multiplier from 3 → 2.5 to align with
+	// $0.25 video-only and $0.30 with-audio (Gemini API table) per https://cloud.google.com/vertex-ai/generative-ai/pricing.
 	"veo-3.1-fast-generate-001": {
 		Ratio:           veoRatioFromUsdPerSecond(0.10),
 		CompletionRatio: 1,
 		Video: veoVideoPricingConfig(0.10, map[string]float64{
-			"4k": 3,
+			"1080p": 1.2,
+			"4k":    3,
 		}),
 		InputModalities: veoTextImageInputs, OutputModalities: veoVideoOutputs,
-		Description: "Google Veo 3.1 Fast video generation on Vertex AI (4k surcharge applies).",
+		Description: "Google Veo 3.1 Fast video generation on Vertex AI (1080p and 4k surcharges apply).",
 	},
 	"veo-3.1-fast-generate-preview": {
 		Ratio:           veoRatioFromUsdPerSecond(0.10),
 		CompletionRatio: 1,
 		Video: veoVideoPricingConfig(0.10, map[string]float64{
-			"4k": 3,
+			"1080p": 1.2,
+			"4k":    3,
 		}),
 		InputModalities: veoTextImageInputs, OutputModalities: veoVideoOutputs,
-		Description: "Google Veo 3.1 Fast preview video generation on Vertex AI (4k surcharge applies).",
+		Description: "Google Veo 3.1 Fast preview video generation on Vertex AI (1080p and 4k surcharges apply).",
+	},
+
+	// Veo 3.1 Lite (preview) pricing per https://ai.google.dev/gemini-api/docs/pricing:
+	// $0.05 per second at 720p with audio; 1080p is $0.08/sec (1.6x). 4k unsupported.
+	"veo-3.1-lite-generate-preview": {
+		Ratio:           veoRatioFromUsdPerSecond(0.05),
+		CompletionRatio: 1,
+		Video: veoVideoPricingConfig(0.05, map[string]float64{
+			"1080p": 1.6,
+		}),
+		InputModalities: veoTextImageInputs, OutputModalities: veoVideoOutputs,
+		Description: "Google Veo 3.1 Lite preview video generation on Vertex AI (1080p surcharge applies).",
 	},
 }
 

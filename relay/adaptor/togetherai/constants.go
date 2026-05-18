@@ -286,6 +286,19 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 	"black-forest-labs/FLUX.1-kontext-pro":     {Ratio: 0, CompletionRatio: 1, Image: togetherAIImagePerMegapixelConfig(0.04)},
 	"black-forest-labs/FLUX.1-kontext-max":     {Ratio: 0, CompletionRatio: 1, Image: togetherAIImagePerMegapixelConfig(0.08)},
 	"black-forest-labs/FLUX.1-krea-dev":        {Ratio: 0, CompletionRatio: 1, Image: togetherAIImagePerMegapixelConfig(0.025)},
+	// FLUX.2 family (Together AI pricing page, retrieved 2026-05-18).
+	// Source: https://www.together.ai/pricing
+	"black-forest-labs/FLUX.2-dev":  {Ratio: 0, CompletionRatio: 1, Image: togetherAIImagePerMegapixelConfig(0.0154)},
+	"black-forest-labs/FLUX.2-flex": {Ratio: 0, CompletionRatio: 1, Image: togetherAIImagePerMegapixelConfig(0.03)},
+	"black-forest-labs/FLUX.2-pro": {Ratio: 0, CompletionRatio: 1, Image: &adaptor.ImagePricingConfig{
+		PricePerImageUsd: 0.03,
+		DefaultSize:      togetherAIImageBaseSize,
+		MinImages:        1,
+	}},
+	"black-forest-labs/FLUX.2-max": {Ratio: 0, CompletionRatio: 1, Image: togetherAIImagePerMegapixelConfig(0.070)},
+	// Additional 2026 image models served by Together AI.
+	// Source: https://docs.together.ai/docs/serverless-models
+	"Wan-AI/Wan2.6-image": {Ratio: 0, CompletionRatio: 1, Image: togetherAIImagePerMegapixelConfig(0.03)},
 	"ByteDance-Seed/Seedream-3.0":              {Ratio: 0, CompletionRatio: 1, Image: togetherAIImagePerMegapixelConfig(0.018)},
 	"ByteDance-Seed/Seedream-4.0":              {Ratio: 0, CompletionRatio: 1, Image: togetherAIImagePerMegapixelConfig(0.03)},
 	"Qwen/Qwen-Image":                          {Ratio: 0, CompletionRatio: 1, Image: togetherAIImagePerMegapixelConfig(0.005)},

@@ -32,32 +32,53 @@ var multimodalInputModalities = []string{"text", "image"}
 var chatFeatures = []string{"tools", "json_mode", "structured_outputs"}
 
 // reasoningFeatures extends chatFeatures with the reasoning capability advertised
-// by the Magistral family. Reference:
+// by the Magistral family and hybrid reasoning models (Mistral Small 4,
+// Mistral Medium 3.5). Reference:
 // https://docs.mistral.ai/capabilities/reasoning/
 var reasoningFeatures = []string{"tools", "json_mode", "structured_outputs", "reasoning"}
+
+// magistralReasoningEfforts enumerates the reasoning_effort values accepted by
+// reasoning-capable Mistral models. The platform exposes the OpenAI-compatible
+// low/medium/high vocabulary. Reference:
+// https://docs.mistral.ai/capabilities/reasoning/
+var magistralReasoningEfforts = []string{"low", "medium", "high"}
 
 // ModelRatios contains all supported models and their pricing ratios.
 // Model list is derived from the keys of this map, eliminating redundancy.
 // Official sources:
 // - https://docs.mistral.ai/getting-started/models/models_overview/
-// - https://docs.mistral.ai/resources/changelogs
+// - https://docs.mistral.ai/getting-started/changelog
 // - https://mistral.ai/pricing
 // - model cards under https://docs.mistral.ai/models/model-cards/
 var ModelRatios = map[string]adaptor.ModelConfig{
+	// --- Mistral Medium family ---
 	"mistral-medium-latest": {
-		Ratio:                       0.4 * ratio.MilliTokensUsd, // $0.4 input
-		CompletionRatio:             5.0,                        // $2 output
-		ContextLength:               131072,
+		Ratio:                       1.5 * ratio.MilliTokensUsd, // $1.50 input (Medium 3.5)
+		CompletionRatio:             5.0,                        // $7.50 output
+		ContextLength:               262144,
 		MaxOutputTokens:             8192,
 		InputModalities:             multimodalInputModalities,
 		OutputModalities:            textOnlyModalities,
-		SupportedFeatures:           chatFeatures,
+		SupportedFeatures:           reasoningFeatures,
 		SupportedSamplingParameters: commonSamplingParams,
-		Description:                 "Mistral Medium frontier-class multimodal chat model (alias for the latest medium release).",
+		SupportedReasoningEfforts:   magistralReasoningEfforts,
+		Description:                 "Mistral Medium frontier-class multimodal chat model (alias for the latest medium release; currently Medium 3.5).",
+	},
+	"mistral-medium-2604": {
+		Ratio:                       1.5 * ratio.MilliTokensUsd, // $1.50 input
+		CompletionRatio:             5.0,                        // $7.50 output
+		ContextLength:               262144,
+		MaxOutputTokens:             8192,
+		InputModalities:             multimodalInputModalities,
+		OutputModalities:            textOnlyModalities,
+		SupportedFeatures:           reasoningFeatures,
+		SupportedSamplingParameters: commonSamplingParams,
+		SupportedReasoningEfforts:   magistralReasoningEfforts,
+		Description:                 "Mistral Medium 3.5 (2026-04) multimodal model with tunable reasoning_effort and 256k context. Equivalent API alias: mistral-medium-3-5.",
 	},
 	"mistral-medium-2508": {
-		Ratio:                       0.4 * ratio.MilliTokensUsd,
-		CompletionRatio:             5.0,
+		Ratio:                       0.4 * ratio.MilliTokensUsd, // $0.40 input
+		CompletionRatio:             5.0,                        // $2.00 output
 		ContextLength:               131072,
 		MaxOutputTokens:             8192,
 		InputModalities:             multimodalInputModalities,
@@ -66,38 +87,46 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		SupportedSamplingParameters: commonSamplingParams,
 		Description:                 "Mistral Medium 3.1 (2025-08) multimodal chat model with 128k context.",
 	},
+
+	// --- Magistral reasoning family ---
 	"magistral-medium-latest": {
 		Ratio:                       2.0 * ratio.MilliTokensUsd, // $2 input
 		CompletionRatio:             2.5,                        // $5 output
-		ContextLength:               40960,
+		ContextLength:               131072,
 		MaxOutputTokens:             8192,
-		InputModalities:             textOnlyModalities,
+		InputModalities:             multimodalInputModalities,
 		OutputModalities:            textOnlyModalities,
 		SupportedFeatures:           reasoningFeatures,
 		SupportedSamplingParameters: commonSamplingParams,
+		SupportedReasoningEfforts:   magistralReasoningEfforts,
 		Description:                 "Magistral Medium reasoning model (alias for the latest release).",
 	},
 	"magistral-medium-2509": {
 		Ratio:                       2.0 * ratio.MilliTokensUsd,
 		CompletionRatio:             2.5,
-		ContextLength:               40960,
+		ContextLength:               131072,
 		MaxOutputTokens:             8192,
-		InputModalities:             textOnlyModalities,
+		InputModalities:             multimodalInputModalities,
 		OutputModalities:            textOnlyModalities,
 		SupportedFeatures:           reasoningFeatures,
 		SupportedSamplingParameters: commonSamplingParams,
-		Description:                 "Magistral Medium reasoning model snapshot 2509.",
+		SupportedReasoningEfforts:   magistralReasoningEfforts,
+		Description:                 "Magistral Medium 1.2 reasoning model snapshot 2509 with native vision and tool use.",
 	},
+
+	// --- Devstral / coding agent family ---
 	"devstral-2512": {
-		Ratio:                       0.4 * ratio.MilliTokensUsd,
-		CompletionRatio:             5.0,
-		ContextLength:               131072,
+		Ratio:                       0.4 * ratio.MilliTokensUsd, // $0.40 input
+		CompletionRatio:             5.0,                        // $2.00 output
+		ContextLength:               262144,
 		MaxOutputTokens:             8192,
-		InputModalities:             textOnlyModalities,
+		InputModalities:             multimodalInputModalities,
 		OutputModalities:            textOnlyModalities,
 		SupportedFeatures:           chatFeatures,
 		SupportedSamplingParameters: commonSamplingParams,
-		Description:                 "Devstral 2025-12 software engineering / agentic coding model.",
+		Quantization:                "bf16",
+		HuggingFaceID:               "mistralai/Devstral-2-123B-Instruct-2512",
+		Description:                 "Devstral 2 (2025-12) 123B agentic coding model with 256k context and image input.",
 	},
 	"devstral-medium-2507": {
 		Ratio:                       0.4 * ratio.MilliTokensUsd,
@@ -108,18 +137,20 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		OutputModalities:            textOnlyModalities,
 		SupportedFeatures:           chatFeatures,
 		SupportedSamplingParameters: commonSamplingParams,
-		Description:                 "Devstral Medium 2025-07 agentic coding model.",
+		Description:                 "Devstral Medium 2025-07 agentic coding model. Deprecated 2026-02-27; retires 2026-05-31.",
 	},
+
+	// --- Codestral / code completion family ---
 	"codestral-latest": {
-		Ratio:                       0.3 * ratio.MilliTokensUsd, // $0.3 input
-		CompletionRatio:             3.0,                        // $0.9 output
+		Ratio:                       0.3 * ratio.MilliTokensUsd, // $0.30 input
+		CompletionRatio:             3.0,                        // $0.90 output
 		ContextLength:               262144,
 		MaxOutputTokens:             8192,
 		InputModalities:             textOnlyModalities,
 		OutputModalities:            textOnlyModalities,
 		SupportedFeatures:           chatFeatures,
 		SupportedSamplingParameters: commonSamplingParams,
-		Description:                 "Codestral code-completion model (alias for the latest release).",
+		Description:                 "Codestral code-completion model (alias for the latest release; currently codestral-2508).",
 	},
 	"codestral-2508": {
 		Ratio:                       0.3 * ratio.MilliTokensUsd,
@@ -130,30 +161,36 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		OutputModalities:            textOnlyModalities,
 		SupportedFeatures:           chatFeatures,
 		SupportedSamplingParameters: commonSamplingParams,
-		Description:                 "Codestral 2025-08 code-completion model with 256k context.",
+		Description:                 "Codestral 2025-08 code-completion model with 256k context and FIM support.",
 	},
+
+	// --- Mistral Large family ---
 	"mistral-large-latest": {
-		Ratio:                       0.5 * ratio.MilliTokensUsd, // $0.5 input
-		CompletionRatio:             3.0,                        // $1.5 output
-		ContextLength:               131072,
+		Ratio:                       0.5 * ratio.MilliTokensUsd, // $0.50 input (Large 3)
+		CompletionRatio:             3.0,                        // $1.50 output
+		ContextLength:               262144,
 		MaxOutputTokens:             8192,
-		InputModalities:             textOnlyModalities,
+		InputModalities:             multimodalInputModalities,
 		OutputModalities:            textOnlyModalities,
 		SupportedFeatures:           chatFeatures,
 		SupportedSamplingParameters: commonSamplingParams,
-		Description:                 "Mistral Large flagship dense chat model (alias for the latest release).",
+		Description:                 "Mistral Large flagship multimodal MoE model (alias for the latest release; currently Large 3).",
 	},
 	"mistral-large-2512": {
 		Ratio:                       0.5 * ratio.MilliTokensUsd,
 		CompletionRatio:             3.0,
-		ContextLength:               131072,
+		ContextLength:               262144,
 		MaxOutputTokens:             8192,
-		InputModalities:             textOnlyModalities,
+		InputModalities:             multimodalInputModalities,
 		OutputModalities:            textOnlyModalities,
 		SupportedFeatures:           chatFeatures,
 		SupportedSamplingParameters: commonSamplingParams,
-		Description:                 "Mistral Large 2025-12 dense chat model with 128k context.",
+		Quantization:                "bf16",
+		HuggingFaceID:               "mistralai/Mistral-Large-3-675B-Instruct-2512",
+		Description:                 "Mistral Large 3 (2025-12) 675B sparse-MoE multimodal model with 256k context.",
 	},
+
+	// --- Pixtral / multimodal vision family ---
 	"pixtral-large-latest": {
 		Ratio:                       2.0 * ratio.MilliTokensUsd, // $2 input
 		CompletionRatio:             3.0,                        // $6 output
@@ -163,22 +200,54 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		OutputModalities:            textOnlyModalities,
 		SupportedFeatures:           chatFeatures,
 		SupportedSamplingParameters: commonSamplingParams,
-		Description:                 "Pixtral Large 124B multimodal vision-language model.",
+		Description:                 "Pixtral Large 124B multimodal vision-language model (alias for pixtral-large-2411). Deprecated 2026-02-27; retires 2026-05-31.",
 	},
-	"mistral-saba-latest": {
-		Ratio:                       0.2 * ratio.MilliTokensUsd, // $0.2 input
-		CompletionRatio:             3.0,                        // $0.6 output
-		ContextLength:               32768,
+	"pixtral-large-2411": {
+		Ratio:                       2.0 * ratio.MilliTokensUsd,
+		CompletionRatio:             3.0,
+		ContextLength:               131072,
 		MaxOutputTokens:             8192,
-		InputModalities:             textOnlyModalities,
+		InputModalities:             multimodalInputModalities,
 		OutputModalities:            textOnlyModalities,
 		SupportedFeatures:           chatFeatures,
 		SupportedSamplingParameters: commonSamplingParams,
-		Description:                 "Mistral Saba regional model tuned for Middle East and South Asian languages.",
+		Quantization:                "bf16",
+		HuggingFaceID:               "mistralai/Pixtral-Large-Instruct-2411",
+		Description:                 "Pixtral Large 2024-11 124B open-weight multimodal vision-language model. Deprecated 2026-02-27; retires 2026-05-31.",
 	},
+
+	// --- Mistral Small family ---
 	"mistral-small-latest": {
+		Ratio:                       0.15 * ratio.MilliTokensUsd, // $0.15 input (Small 4)
+		CompletionRatio:             4.0,                         // $0.60 output
+		ContextLength:               262144,
+		MaxOutputTokens:             8192,
+		InputModalities:             multimodalInputModalities,
+		OutputModalities:            textOnlyModalities,
+		SupportedFeatures:           reasoningFeatures,
+		SupportedSamplingParameters: commonSamplingParams,
+		SupportedReasoningEfforts:   magistralReasoningEfforts,
+		Quantization:                "bf16",
+		HuggingFaceID:               "mistralai/Mistral-Small-4-119B-2603",
+		Description:                 "Mistral Small hybrid reasoning/coding multimodal model (alias for the latest release; currently Small 4).",
+	},
+	"mistral-small-2603": {
 		Ratio:                       0.15 * ratio.MilliTokensUsd, // $0.15 input
-		CompletionRatio:             4.0,                         // $0.6 output
+		CompletionRatio:             4.0,                         // $0.60 output
+		ContextLength:               262144,
+		MaxOutputTokens:             8192,
+		InputModalities:             multimodalInputModalities,
+		OutputModalities:            textOnlyModalities,
+		SupportedFeatures:           reasoningFeatures,
+		SupportedSamplingParameters: commonSamplingParams,
+		SupportedReasoningEfforts:   magistralReasoningEfforts,
+		Quantization:                "bf16",
+		HuggingFaceID:               "mistralai/Mistral-Small-4-119B-2603",
+		Description:                 "Mistral Small 4 (2026-03) 119B MoE hybrid model with reasoning, vision, and 256k context.",
+	},
+	"mistral-small-2506": {
+		Ratio:                       0.15 * ratio.MilliTokensUsd,
+		CompletionRatio:             4.0,
 		ContextLength:               131072,
 		MaxOutputTokens:             8192,
 		InputModalities:             multimodalInputModalities,
@@ -187,17 +256,18 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		SupportedSamplingParameters: commonSamplingParams,
 		Quantization:                "bf16",
 		HuggingFaceID:               "mistralai/Mistral-Small-3.2-24B-Instruct-2506",
-		Description:                 "Mistral Small 3.2 24B open-weight multimodal chat model (alias for the latest small release).",
+		Description:                 "Mistral Small 3.2 24B open-weight multimodal chat model snapshot 2506. Deprecated 2026-04-30; retires 2026-07-31.",
 	},
 	"magistral-small-latest": {
-		Ratio:                       0.5 * ratio.MilliTokensUsd, // $0.5 input
-		CompletionRatio:             3.0,                        // $1.5 output
-		ContextLength:               40960,
+		Ratio:                       0.5 * ratio.MilliTokensUsd, // $0.50 input
+		CompletionRatio:             3.0,                        // $1.50 output
+		ContextLength:               131072,
 		MaxOutputTokens:             8192,
-		InputModalities:             textOnlyModalities,
+		InputModalities:             multimodalInputModalities,
 		OutputModalities:            textOnlyModalities,
 		SupportedFeatures:           reasoningFeatures,
 		SupportedSamplingParameters: commonSamplingParams,
+		SupportedReasoningEfforts:   magistralReasoningEfforts,
 		Quantization:                "bf16",
 		HuggingFaceID:               "mistralai/Magistral-Small-2509",
 		Description:                 "Magistral Small open-weight reasoning model (alias for the latest release).",
@@ -205,19 +275,20 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 	"magistral-small-2509": {
 		Ratio:                       0.5 * ratio.MilliTokensUsd,
 		CompletionRatio:             3.0,
-		ContextLength:               40960,
+		ContextLength:               131072,
 		MaxOutputTokens:             8192,
-		InputModalities:             textOnlyModalities,
+		InputModalities:             multimodalInputModalities,
 		OutputModalities:            textOnlyModalities,
 		SupportedFeatures:           reasoningFeatures,
 		SupportedSamplingParameters: commonSamplingParams,
+		SupportedReasoningEfforts:   magistralReasoningEfforts,
 		Quantization:                "bf16",
 		HuggingFaceID:               "mistralai/Magistral-Small-2509",
-		Description:                 "Magistral Small 2025-09 open-weight reasoning model.",
+		Description:                 "Magistral Small 2025-09 open-weight reasoning model with vision support.",
 	},
 	"devstral-small-2507": {
-		Ratio:                       0.1 * ratio.MilliTokensUsd, // $0.1 input
-		CompletionRatio:             3.0,                        // $0.3 output
+		Ratio:                       0.1 * ratio.MilliTokensUsd, // $0.10 input
+		CompletionRatio:             3.0,                        // $0.30 output
 		ContextLength:               131072,
 		MaxOutputTokens:             8192,
 		InputModalities:             textOnlyModalities,
@@ -226,130 +297,114 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		SupportedSamplingParameters: commonSamplingParams,
 		Quantization:                "bf16",
 		HuggingFaceID:               "mistralai/Devstral-Small-2507",
-		Description:                 "Devstral Small 2025-07 open-weight agentic coding model.",
+		Description:                 "Devstral Small 2025-07 open-weight agentic coding model. Deprecated 2026-02-27; retires 2026-05-31.",
 	},
-	"pixtral-12b": {
+	// Note: devstral-small-2512 / pixtral-12b / open-mistral-7b / open-mixtral-8x7b /
+	// open-mixtral-8x22b / mistral-saba-* are all retired per the Mistral legacy table
+	// (https://docs.mistral.ai/getting-started/models/models_overview/#legacy-deprecated)
+	// and have been removed.
+
+	"open-mistral-nemo": {
 		Ratio:                       0.15 * ratio.MilliTokensUsd, // $0.15 input
 		CompletionRatio:             1.0,                         // $0.15 output
 		ContextLength:               131072,
+		MaxOutputTokens:             8192,
+		InputModalities:             textOnlyModalities,
+		OutputModalities:            textOnlyModalities,
+		SupportedFeatures:           chatFeatures,
+		SupportedSamplingParameters: commonSamplingParams,
+		Quantization:                "bf16",
+		HuggingFaceID:               "mistralai/Mistral-Nemo-Instruct-2407",
+		Description:                 "Mistral Nemo 12B open-weight dense chat model co-developed with NVIDIA.",
+	},
+
+	// --- Ministral 3 edge family (December 2025) ---
+	"ministral-14b-2512": {
+		Ratio:                       0.2 * ratio.MilliTokensUsd, // $0.20 input
+		CompletionRatio:             1.0,                        // $0.20 output
+		ContextLength:               262144,
 		MaxOutputTokens:             8192,
 		InputModalities:             multimodalInputModalities,
 		OutputModalities:            textOnlyModalities,
 		SupportedFeatures:           chatFeatures,
 		SupportedSamplingParameters: commonSamplingParams,
 		Quantization:                "bf16",
-		HuggingFaceID:               "mistralai/Pixtral-12B-2409",
-		Description:                 "Pixtral 12B open-weight multimodal vision-language model.",
-	},
-	"open-mistral-7b": {
-		Ratio:                       0.25 * ratio.MilliTokensUsd, // $0.25 input
-		CompletionRatio:             1.0,                         // $0.25 output
-		ContextLength:               32768,
-		MaxOutputTokens:             8192,
-		InputModalities:             textOnlyModalities,
-		OutputModalities:            textOnlyModalities,
-		SupportedFeatures:           chatFeatures,
-		SupportedSamplingParameters: commonSamplingParams,
-		Quantization:                "bf16",
-		HuggingFaceID:               "mistralai/Mistral-7B-Instruct-v0.3",
-		Description:                 "Mistral 7B Instruct v0.3 open-weight dense chat model.",
-	},
-	"open-mixtral-8x7b": {
-		Ratio:                       0.7 * ratio.MilliTokensUsd, // $0.7 input
-		CompletionRatio:             1.0,                        // $0.7 output
-		ContextLength:               32768,
-		MaxOutputTokens:             8192,
-		InputModalities:             textOnlyModalities,
-		OutputModalities:            textOnlyModalities,
-		SupportedFeatures:           chatFeatures,
-		SupportedSamplingParameters: commonSamplingParams,
-		Quantization:                "bf16",
-		HuggingFaceID:               "mistralai/Mixtral-8x7B-Instruct-v0.1",
-		Description:                 "Mixtral 8x7B Instruct open-weight sparse MoE chat model.",
-	},
-	"open-mixtral-8x22b": {
-		Ratio:                       2.0 * ratio.MilliTokensUsd, // $2 input
-		CompletionRatio:             3.0,                        // $6 output
-		ContextLength:               65536,
-		MaxOutputTokens:             8192,
-		InputModalities:             textOnlyModalities,
-		OutputModalities:            textOnlyModalities,
-		SupportedFeatures:           chatFeatures,
-		SupportedSamplingParameters: commonSamplingParams,
-		Quantization:                "bf16",
-		HuggingFaceID:               "mistralai/Mixtral-8x22B-Instruct-v0.1",
-		Description:                 "Mixtral 8x22B Instruct open-weight sparse MoE chat model.",
-	},
-	"ministral-14b-2512": {
-		Ratio:                       0.2 * ratio.MilliTokensUsd, // $0.2 input
-		CompletionRatio:             1.0,                        // $0.2 output
-		ContextLength:               131072,
-		MaxOutputTokens:             8192,
-		InputModalities:             textOnlyModalities,
-		OutputModalities:            textOnlyModalities,
-		SupportedFeatures:           chatFeatures,
-		SupportedSamplingParameters: commonSamplingParams,
-		Description:                 "Ministral 14B 2025-12 edge chat model with 128k context.",
+		HuggingFaceID:               "mistralai/Ministral-3-14B-Instruct-2512",
+		Description:                 "Ministral 3 14B (2025-12) edge multimodal model with 256k context.",
 	},
 	"ministral-8b-latest": {
 		Ratio:                       0.15 * ratio.MilliTokensUsd, // $0.15 input
 		CompletionRatio:             1.0,                         // $0.15 output
-		ContextLength:               131072,
+		ContextLength:               262144,
 		MaxOutputTokens:             8192,
-		InputModalities:             textOnlyModalities,
+		InputModalities:             multimodalInputModalities,
 		OutputModalities:            textOnlyModalities,
 		SupportedFeatures:           chatFeatures,
 		SupportedSamplingParameters: commonSamplingParams,
-		Description:                 "Ministral 8B edge chat model (alias for the latest release).",
+		Quantization:                "bf16",
+		HuggingFaceID:               "mistralai/Ministral-3-8B-Instruct-2512",
+		Description:                 "Ministral 8B edge multimodal chat model (alias for the latest release).",
 	},
 	"ministral-8b-2512": {
 		Ratio:                       0.15 * ratio.MilliTokensUsd,
 		CompletionRatio:             1.0,
-		ContextLength:               131072,
+		ContextLength:               262144,
 		MaxOutputTokens:             8192,
-		InputModalities:             textOnlyModalities,
+		InputModalities:             multimodalInputModalities,
 		OutputModalities:            textOnlyModalities,
 		SupportedFeatures:           chatFeatures,
 		SupportedSamplingParameters: commonSamplingParams,
-		Description:                 "Ministral 8B 2025-12 edge chat model with 128k context.",
+		Quantization:                "bf16",
+		HuggingFaceID:               "mistralai/Ministral-3-8B-Instruct-2512",
+		Description:                 "Ministral 3 8B (2025-12) edge multimodal model with 256k context.",
 	},
 	"ministral-3b-latest": {
-		Ratio:                       0.1 * ratio.MilliTokensUsd, // $0.1 input
-		CompletionRatio:             1.0,                        // $0.1 output
-		ContextLength:               131072,
+		Ratio:                       0.1 * ratio.MilliTokensUsd, // $0.10 input
+		CompletionRatio:             1.0,                        // $0.10 output
+		ContextLength:               262144,
 		MaxOutputTokens:             8192,
-		InputModalities:             textOnlyModalities,
+		InputModalities:             multimodalInputModalities,
 		OutputModalities:            textOnlyModalities,
 		SupportedFeatures:           chatFeatures,
 		SupportedSamplingParameters: commonSamplingParams,
-		Description:                 "Ministral 3B edge chat model (alias for the latest release).",
+		Quantization:                "bf16",
+		HuggingFaceID:               "mistralai/Ministral-3-3B-Instruct-2512",
+		Description:                 "Ministral 3B edge multimodal chat model (alias for the latest release).",
 	},
 	"ministral-3b-2512": {
 		Ratio:                       0.1 * ratio.MilliTokensUsd,
 		CompletionRatio:             1.0,
-		ContextLength:               131072,
+		ContextLength:               262144,
 		MaxOutputTokens:             8192,
-		InputModalities:             textOnlyModalities,
+		InputModalities:             multimodalInputModalities,
 		OutputModalities:            textOnlyModalities,
 		SupportedFeatures:           chatFeatures,
 		SupportedSamplingParameters: commonSamplingParams,
-		Description:                 "Ministral 3B 2025-12 edge chat model with 128k context.",
+		Quantization:                "bf16",
+		HuggingFaceID:               "mistralai/Ministral-3-3B-Instruct-2512",
+		Description:                 "Ministral 3 3B (2025-12) compact edge multimodal model with 256k context.",
 	},
 
-	// Embedding Models
+	// --- Embedding Models ---
 	"mistral-embed": {
-		Ratio:           0.1 * ratio.MilliTokensUsd, // $0.1 input only
+		Ratio:           0.1 * ratio.MilliTokensUsd, // $0.10 input only
 		CompletionRatio: 1.0,
 		ContextLength:   8192,
 		InputModalities: textOnlyModalities,
-		Description:     "Mistral Embed text embedding model with 8k context.",
+		Embedding: &adaptor.EmbeddingPricingConfig{
+			TextTokenRatio: 0.1 * ratio.MilliTokensUsd,
+		},
+		Description: "Mistral Embed text embedding model with 8k context.",
 	},
 	"codestral-embed-2505": {
 		Ratio:           0.15 * ratio.MilliTokensUsd, // $0.15 input only
 		CompletionRatio: 1.0,
 		ContextLength:   8192,
 		InputModalities: textOnlyModalities,
-		Description:     "Codestral Embed 2025-05 code embedding model.",
+		Embedding: &adaptor.EmbeddingPricingConfig{
+			TextTokenRatio: 0.15 * ratio.MilliTokensUsd,
+		},
+		Description: "Codestral Embed 2025-05 code embedding model with 8k context.",
 	},
 }
 

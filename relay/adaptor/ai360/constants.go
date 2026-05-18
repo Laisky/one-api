@@ -6,9 +6,18 @@ import (
 )
 
 // AI360 (奇虎 360 智脑) hosts closed-weight chat and embedding models behind an
-// OpenAI-compatible API. Reference docs:
+// OpenAI-compatible API. Reference docs (re-audited 2026-05-18):
 //   - https://ai.360.cn/ (product overview)
-//   - https://ai.360.com/openplatform/docs (developer documentation)
+//   - https://ai.360.com/platform/docs (developer documentation; behind login)
+//   - https://aiplus.360.cn/360gptpro (enterprise console; no public per-token pricing)
+//
+// The official 360 platform docs require login, and the public marketing pages
+// no longer publish per-token pricing. The entries below reflect the
+// historical pricing surfaced by the original constants and remain
+// UNVERIFIED against current 2026 docs — they are retained because none of
+// these SKUs has been officially retired. New 360GPT-Pro / 360GPT-Turbo
+// variants advertised on the marketing site lack public USD-per-token data,
+// so they are intentionally omitted to avoid speculative pricing.
 //
 // All 360GPT* and embedding SKUs are closed-weight (HuggingFaceID stays empty).
 
@@ -78,6 +87,6 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 // ModelList derived from ModelRatios for backward compatibility
 var ModelList = adaptor.GetModelListFromPricing(ModelRatios)
 
-// AI360ToolingDefaults documents that AI360 does not publish built-in tool pricing (retrieved 2025-11-12).
+// AI360ToolingDefaults documents that AI360 does not publish built-in tool pricing (re-audited 2026-05-18).
 // Source: https://r.jina.ai/https://ai.360.com/platform (login wall, no public tool catalog)
 var AI360ToolingDefaults = adaptor.ChannelToolConfig{}

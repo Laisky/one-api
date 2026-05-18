@@ -8,11 +8,19 @@ import (
 // awsBedrockModelPricing is the canonical source of truth for AWS Bedrock model
 // pricing and metadata. It is consumed by Adaptor.GetDefaultModelPricing.
 //
-// Pricing references:
+// Pricing references (verified 2026-05-18):
 //   - https://aws.amazon.com/bedrock/pricing/
+//   - https://aws.amazon.com/nova/pricing/
 //
 // Capability and context references:
 //   - https://docs.aws.amazon.com/bedrock/latest/userguide/models-supported.html
+//   - https://docs.aws.amazon.com/bedrock/latest/userguide/model-cards.html
+//
+// Notes:
+//   - Standard on-demand (per-token) pricing only. Provisioned throughput and
+//     batch (50% discount) tiers are not modeled here.
+//   - Bedrock Anthropic pricing currently matches Anthropic's first-party API,
+//     so per-token rates mirror relay/adaptor/anthropic/constants.go.
 var awsBedrockModelPricing = map[string]adaptor.ModelConfig{
 	// Claude Models on AWS Bedrock
 	"claude-instant-1.2": {
@@ -54,6 +62,24 @@ var awsBedrockModelPricing = map[string]adaptor.ModelConfig{
 		InputModalities: awsClaudeVisionInputs, OutputModalities: awsTextOutputs,
 		SupportedFeatures: awsClaudeFeaturesNoReasoning, SupportedSamplingParameters: awsClaudeSamplingParams,
 		Description: "Claude 3.5 Haiku on AWS Bedrock (fast multimodal model).",
+	},
+	"claude-haiku-4-5": {
+		Ratio: 1 * ratio.MilliTokensUsd, CompletionRatio: 5.0,
+		CachedInputRatio: 0.1 * ratio.MilliTokensUsd, CacheWrite5mRatio: 1.25 * ratio.MilliTokensUsd, CacheWrite1hRatio: 2 * ratio.MilliTokensUsd,
+		ContextLength: 200000, MaxOutputTokens: 64000,
+		InputModalities: awsClaudeVisionInputs, OutputModalities: awsTextOutputs,
+		SupportedFeatures: awsClaudeFeaturesWithReasoning, SupportedSamplingParameters: awsClaudeSamplingParams,
+		MaxReasoningTokens: 60000,
+		Description:        "Claude Haiku 4.5 (alias) on AWS Bedrock with extended thinking.",
+	},
+	"claude-haiku-4-5-20251001": {
+		Ratio: 1 * ratio.MilliTokensUsd, CompletionRatio: 5.0,
+		CachedInputRatio: 0.1 * ratio.MilliTokensUsd, CacheWrite5mRatio: 1.25 * ratio.MilliTokensUsd, CacheWrite1hRatio: 2 * ratio.MilliTokensUsd,
+		ContextLength: 200000, MaxOutputTokens: 64000,
+		InputModalities: awsClaudeVisionInputs, OutputModalities: awsTextOutputs,
+		SupportedFeatures: awsClaudeFeaturesWithReasoning, SupportedSamplingParameters: awsClaudeSamplingParams,
+		MaxReasoningTokens: 60000,
+		Description:        "Claude Haiku 4.5 (October 2025 release) on AWS Bedrock with extended thinking.",
 	},
 	"claude-3-sonnet-20240229": {
 		Ratio: 3 * ratio.MilliTokensUsd, CompletionRatio: 5.0,

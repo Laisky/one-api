@@ -77,7 +77,7 @@ func replicateImageConfig(pricePerImage float64) *adaptor.ImagePricingConfig {
 
 // ModelRatios contains all supported models and their pricing ratios.
 // Model list is derived from the keys of this map, eliminating redundancy.
-// Based on Replicate pricing and explicit official model pages retrieved 2026-04-28.
+// Based on Replicate pricing and explicit official model pages retrieved 2026-05-18.
 // Replicate collection pages are treated additively for discovery; absence from a collection is not used for removals.
 //
 // The map is assembled in init() from family-specific maps declared in

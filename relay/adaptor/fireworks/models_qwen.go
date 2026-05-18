@@ -22,10 +22,12 @@ var qwenModels = map[string]adaptor.ModelConfig{
 		// guide accepts Anthropic-style `thinking.budget_tokens` mapped here. The
 		// Qwen3 technical report caps thinking at 38,912 tokens per problem.
 		// Sources: https://docs.fireworks.ai/guides/reasoning, Qwen3 technical report (max 38,912 tokens).
-		MaxReasoningTokens: 38912,
-		Quantization:       "fp16",
-		HuggingFaceID:      "Qwen/Qwen3-VL-30B-A3B-Thinking",
-		Description:        "Alibaba Qwen3-VL-30B-A3B Thinking (31.1B MoE) multimodal reasoning model with 256K context and visual perception/agent skills.",
+		SupportedReasoningEfforts: []string{"low", "medium", "high"},
+		DefaultReasoningEffort:    "medium",
+		MaxReasoningTokens:        38912,
+		Quantization:              "fp16",
+		HuggingFaceID:             "Qwen/Qwen3-VL-30B-A3B-Thinking",
+		Description:               "Alibaba Qwen3-VL-30B-A3B Thinking (31.1B MoE) multimodal reasoning model with 256K context and visual perception/agent skills.",
 	},
 	"accounts/fireworks/models/qwen2p5-72b-instruct": {
 		Ratio:                       0.90 * ratio.MilliTokensUsd,

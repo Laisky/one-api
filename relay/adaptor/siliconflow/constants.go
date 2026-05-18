@@ -56,10 +56,14 @@ var (
 
 // ModelRatios contains a conservative SiliconFlow compatibility snapshot.
 // Model list is derived from the keys of this map, eliminating redundancy.
-// SiliconFlow's public site no longer exposes an authoritative machine-readable pricing table in this environment,
-// and the richer catalog is effectively account-gated, so this file intentionally avoids speculative churn.
+// SiliconFlow's public site is partially account-gated, so this file
+// intentionally avoids speculative churn and only enumerates models with
+// publicly visible USD pricing on the English pricing page.
 //
-// Pricing source: https://siliconflow.cn/pricing (snapshot retained from prior import).
+// Pricing sources (retrieved 2026-05-18):
+//   - https://www.siliconflow.com/pricing (English; USD per million tokens / image / second)
+//   - https://siliconflow.cn/pricing (Chinese; CNY per million tokens — converted at 0.14 USD/CNY for legacy aliases)
+//   - https://siliconflow.cn/zh-cn/models (catalog, partially login-gated)
 // Capability metadata is derived from upstream HuggingFace model cards plus the
 // SiliconFlow text-generation guide.
 var ModelRatios = map[string]adaptor.ModelConfig{
@@ -315,6 +319,174 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		Quantization:                "bf16",
 		HuggingFaceID:               "google/gemma-2-27b-it",
 		Description:                 "Google Gemma 2 27B instruction-tuned chat model with 8K context.",
+	},
+
+	// === 2026-era models (USD pricing from https://www.siliconflow.com/pricing) ===
+
+	"deepseek-ai/DeepSeek-V3.2-Exp": {
+		// $0.27/M input, $0.42/M output (sparse-attention long-context variant).
+		Ratio:                       0.27 * ratio.MilliTokensUsd,
+		CompletionRatio:             0.42 / 0.27,
+		ContextLength:               163840,
+		MaxOutputTokens:             16384,
+		InputModalities:             siliconflowTextModalities,
+		OutputModalities:            siliconflowTextModalities,
+		SupportedFeatures:           []string{"tools", "json_mode", "reasoning"},
+		SupportedSamplingParameters: siliconflowChatSamplingParams,
+		SupportedReasoningEfforts:   []string{"low", "medium", "high"},
+		DefaultReasoningEffort:      "medium",
+		Quantization:                "fp8",
+		HuggingFaceID:               "deepseek-ai/DeepSeek-V3.2-Exp",
+		Description:                 "DeepSeek V3.2 Exp sparse-attention hybrid reasoning + chat MoE model on SiliconFlow.",
+	},
+	"Qwen/Qwen3-235B-A22B-Thinking-2507": {
+		// $0.35/M input, $1.42/M output thinking variant.
+		Ratio:                       0.35 * ratio.MilliTokensUsd,
+		CompletionRatio:             1.42 / 0.35,
+		ContextLength:               262144,
+		MaxOutputTokens:             32768,
+		InputModalities:             siliconflowTextModalities,
+		OutputModalities:            siliconflowTextModalities,
+		SupportedFeatures:           []string{"tools", "json_mode", "reasoning"},
+		SupportedSamplingParameters: siliconflowChatSamplingParams,
+		SupportedReasoningEfforts:   []string{"low", "medium", "high"},
+		DefaultReasoningEffort:      "medium",
+		Quantization:                "fp8",
+		HuggingFaceID:               "Qwen/Qwen3-235B-A22B-Thinking-2507",
+		Description:                 "Alibaba Qwen3 235B/A22B Thinking MoE reasoning model with 256K context on SiliconFlow.",
+	},
+	"Qwen/Qwen3-235B-A22B-Instruct-2507": {
+		// SiliconFlow publishes the instruct variant alongside the thinking variant.
+		// Same input price tier as the thinking model on the public board.
+		Ratio:                       0.35 * ratio.MilliTokensUsd,
+		CompletionRatio:             1.42 / 0.35,
+		ContextLength:               262144,
+		MaxOutputTokens:             16384,
+		InputModalities:             siliconflowTextModalities,
+		OutputModalities:            siliconflowTextModalities,
+		SupportedFeatures:           siliconflowChatFeatures,
+		SupportedSamplingParameters: siliconflowChatSamplingParams,
+		Quantization:                "fp8",
+		HuggingFaceID:               "Qwen/Qwen3-235B-A22B-Instruct-2507",
+		Description:                 "Alibaba Qwen3 235B/A22B Instruct MoE chat model with 256K context on SiliconFlow.",
+	},
+	"moonshotai/Kimi-K2.5-Instruct": {
+		// $0.45/M input, $2.25/M output.
+		Ratio:                       0.45 * ratio.MilliTokensUsd,
+		CompletionRatio:             2.25 / 0.45,
+		ContextLength:               262144,
+		MaxOutputTokens:             16384,
+		InputModalities:             siliconflowTextModalities,
+		OutputModalities:            siliconflowTextModalities,
+		SupportedFeatures:           []string{"tools", "json_mode", "reasoning"},
+		SupportedSamplingParameters: siliconflowChatSamplingParams,
+		SupportedReasoningEfforts:   []string{"low", "medium", "high"},
+		DefaultReasoningEffort:      "medium",
+		Quantization:                "fp8",
+		HuggingFaceID:               "moonshotai/Kimi-K2-Instruct",
+		Description:                 "Moonshot Kimi K2.5 Instruct long-context MoE chat model on SiliconFlow.",
+	},
+	"moonshotai/Kimi-K2.6-Instruct": {
+		// $0.90/M input, $4.00/M output.
+		Ratio:                       0.90 * ratio.MilliTokensUsd,
+		CompletionRatio:             4.00 / 0.90,
+		ContextLength:               262144,
+		MaxOutputTokens:             16384,
+		InputModalities:             siliconflowTextModalities,
+		OutputModalities:            siliconflowTextModalities,
+		SupportedFeatures:           []string{"tools", "json_mode", "reasoning"},
+		SupportedSamplingParameters: siliconflowChatSamplingParams,
+		SupportedReasoningEfforts:   []string{"low", "medium", "high"},
+		DefaultReasoningEffort:      "medium",
+		Quantization:                "fp8",
+		HuggingFaceID:               "moonshotai/Kimi-K2-Instruct",
+		Description:                 "Moonshot Kimi K2.6 Instruct long-context MoE chat model on SiliconFlow.",
+	},
+	"zai-org/GLM-4.7": {
+		// $0.42/M input, $2.20/M output.
+		Ratio:                       0.42 * ratio.MilliTokensUsd,
+		CompletionRatio:             2.20 / 0.42,
+		ContextLength:               131072,
+		MaxOutputTokens:             16384,
+		InputModalities:             siliconflowTextModalities,
+		OutputModalities:            siliconflowTextModalities,
+		SupportedFeatures:           siliconflowChatFeatures,
+		SupportedSamplingParameters: siliconflowChatSamplingParams,
+		Quantization:                "fp8",
+		HuggingFaceID:               "zai-org/GLM-4.7",
+		Description:                 "Zhipu GLM-4.7 chat model with native tool calling and 128K context on SiliconFlow.",
+	},
+
+	// === Image models (USD per image) ===
+	"black-forest-labs/FLUX.1-schnell": {
+		Ratio: 0, CompletionRatio: 1.0,
+		Image: &adaptor.ImagePricingConfig{
+			PricePerImageUsd: 0.0014,
+			MinImages:        1,
+			DefaultSize:      "1024x1024",
+		},
+		InputModalities:  []string{"text"},
+		OutputModalities: []string{"image"},
+		HuggingFaceID:    "black-forest-labs/FLUX.1-schnell",
+		Description:      "FLUX.1 [schnell] 12B Apache-licensed text-to-image model on SiliconFlow.",
+	},
+	"black-forest-labs/FLUX.1.1-pro": {
+		Ratio: 0, CompletionRatio: 1.0,
+		Image: &adaptor.ImagePricingConfig{
+			PricePerImageUsd: 0.04,
+			MinImages:        1,
+			DefaultSize:      "1024x1024",
+		},
+		InputModalities:  []string{"text"},
+		OutputModalities: []string{"image"},
+		Description:      "FLUX 1.1 [pro] managed text-to-image generator on SiliconFlow.",
+	},
+	"black-forest-labs/FLUX.2-pro": {
+		Ratio: 0, CompletionRatio: 1.0,
+		Image: &adaptor.ImagePricingConfig{
+			PricePerImageUsd: 0.03,
+			MinImages:        1,
+			DefaultSize:      "1024x1024",
+		},
+		InputModalities:  []string{"text", "image"},
+		OutputModalities: []string{"image"},
+		Description:      "FLUX.2 [pro] high-resolution text-to-image and multi-reference editing on SiliconFlow.",
+	},
+	"black-forest-labs/FLUX.2-flex": {
+		Ratio: 0, CompletionRatio: 1.0,
+		Image: &adaptor.ImagePricingConfig{
+			PricePerImageUsd: 0.06,
+			MinImages:        1,
+			DefaultSize:      "1024x1024",
+		},
+		InputModalities:  []string{"text", "image"},
+		OutputModalities: []string{"image"},
+		Description:      "FLUX.2 [flex] tunable-step text-to-image variant on SiliconFlow.",
+	},
+	"Bytedance/Z-Image-Turbo": {
+		Ratio: 0, CompletionRatio: 1.0,
+		Image: &adaptor.ImagePricingConfig{
+			PricePerImageUsd: 0.005,
+			MinImages:        1,
+			DefaultSize:      "1024x1024",
+		},
+		InputModalities:  []string{"text"},
+		OutputModalities: []string{"image"},
+		Description:      "ByteDance Z-Image Turbo fast text-to-image generator on SiliconFlow.",
+	},
+
+	// === Audio models ===
+	"FunAudioLLM/CosyVoice2-0.5B": {
+		// SiliconFlow bills CosyVoice2 at $7.15 per 1M UTF-8 input bytes.
+		// Approximate 1 token ≈ 4 UTF-8 bytes for English/Chinese mix → ~$0.029 / M tokens
+		// expressed as audio prompt-token billing for accounting purposes.
+		Audio: &adaptor.AudioPricingConfig{
+			PromptRatio: (7.15 / 4.0) * ratio.MilliTokensUsd,
+		},
+		InputModalities:  []string{"text"},
+		OutputModalities: []string{"audio"},
+		HuggingFaceID:    "FunAudioLLM/CosyVoice2-0.5B",
+		Description:      "Alibaba FunAudioLLM CosyVoice 2 0.5B multilingual TTS model on SiliconFlow.",
 	},
 }
 

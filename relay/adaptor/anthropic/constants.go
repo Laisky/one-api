@@ -54,8 +54,12 @@ var (
 
 // ModelRatios contains all supported models and their pricing ratios.
 //
-//   - https://docs.claude.com/en/docs/about-claude/models/overview
+// Sources (verified 2026-05-18):
+//   - https://platform.claude.com/docs/en/about-claude/models/overview
 //   - https://platform.claude.com/docs/en/about-claude/pricing
+//   - https://platform.claude.com/docs/en/about-claude/model-deprecations
+//   - https://platform.claude.com/docs/en/build-with-claude/extended-thinking
+//   - https://platform.claude.com/docs/en/build-with-claude/adaptive-thinking
 var ModelRatios = map[string]adaptor.ModelConfig{
 	// Claude 4 Opus Models
 	"claude-opus-4-0": {
@@ -204,7 +208,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		ContextLength: 200000, MaxOutputTokens: 4096,
 		InputModalities: claudeVisionInputs, OutputModalities: claudeTextOutputs,
 		SupportedFeatures: claudeFeaturesNoReasoning, SupportedSamplingParameters: claudeSamplingParams,
-		Description: "Claude 3 Opus legacy high-intelligence model (deprecated).",
+		Description: "Claude 3 Opus legacy high-intelligence model (retired 2026-01-05 on first-party API; still available on Bedrock/Vertex).",
 	},
 
 	// Claude 3.7 Sonnet Models
@@ -214,8 +218,8 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		ContextLength: 200000, MaxOutputTokens: 8192,
 		InputModalities: claudeVisionInputs, OutputModalities: claudeTextOutputs,
 		SupportedFeatures: claudeFeaturesWithReasoning, SupportedSamplingParameters: claudeSamplingParams,
-		MaxReasoningTokens: 7000,
-		Description:        "Claude 3.7 Sonnet alias tracking the latest 3.7 snapshot.",
+		MaxReasoningTokens: 64000,
+		Description:        "Claude 3.7 Sonnet alias (retired 2026-02-19 on first-party API; still available on Bedrock/Vertex).",
 	},
 	"claude-3-7-sonnet-20250219": {
 		Ratio: 3 * ratio.MilliTokensUsd, CompletionRatio: 5.0,
@@ -223,8 +227,8 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		ContextLength: 200000, MaxOutputTokens: 8192,
 		InputModalities: claudeVisionInputs, OutputModalities: claudeTextOutputs,
 		SupportedFeatures: claudeFeaturesWithReasoning, SupportedSamplingParameters: claudeSamplingParams,
-		MaxReasoningTokens: 7000,
-		Description:        "Claude 3.7 Sonnet first hybrid reasoning model with extended thinking.",
+		MaxReasoningTokens: 64000,
+		Description:        "Claude 3.7 Sonnet hybrid reasoning model (retired 2026-02-19 on first-party API; still available on Bedrock/Vertex).",
 	},
 
 	// Claude 3.5 Sonnet Models
@@ -234,7 +238,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		ContextLength: 200000, MaxOutputTokens: 8192,
 		InputModalities: claudeVisionInputs, OutputModalities: claudeTextOutputs,
 		SupportedFeatures: claudeFeaturesNoReasoning, SupportedSamplingParameters: claudeSamplingParams,
-		Description: "Claude 3.5 Sonnet alias tracking the latest 3.5 Sonnet snapshot.",
+		Description: "Claude 3.5 Sonnet alias (retired 2025-10-28 on first-party API; still available on Bedrock/Vertex).",
 	},
 	"claude-3-5-sonnet-20240620": {
 		Ratio: 3 * ratio.MilliTokensUsd, CompletionRatio: 5.0,
@@ -242,7 +246,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		ContextLength: 200000, MaxOutputTokens: 8192,
 		InputModalities: claudeVisionInputs, OutputModalities: claudeTextOutputs,
 		SupportedFeatures: claudeFeaturesNoReasoning, SupportedSamplingParameters: claudeSamplingParams,
-		Description: "Claude 3.5 Sonnet original release (June 2024).",
+		Description: "Claude 3.5 Sonnet original June 2024 release (retired 2025-10-28 on first-party API; still available on Bedrock/Vertex).",
 	},
 	"claude-3-5-sonnet-20241022": {
 		Ratio: 3 * ratio.MilliTokensUsd, CompletionRatio: 5.0,
@@ -250,7 +254,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		ContextLength: 200000, MaxOutputTokens: 8192,
 		InputModalities: claudeVisionInputs, OutputModalities: claudeTextOutputs,
 		SupportedFeatures: claudeFeaturesNoReasoning, SupportedSamplingParameters: claudeSamplingParams,
-		Description: "Claude 3.5 Sonnet v2 (October 2024) with computer-use beta.",
+		Description: "Claude 3.5 Sonnet v2 October 2024 release with computer-use beta (retired 2025-10-28 on first-party API; still available on Bedrock/Vertex).",
 	},
 	"claude-3-sonnet-20240229": {
 		Ratio: 3 * ratio.MilliTokensUsd, CompletionRatio: 5.0,
@@ -258,7 +262,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		ContextLength: 200000, MaxOutputTokens: 4096,
 		InputModalities: claudeVisionInputs, OutputModalities: claudeTextOutputs,
 		SupportedFeatures: claudeFeaturesNoReasoning, SupportedSamplingParameters: claudeSamplingParams,
-		Description: "Claude 3 Sonnet legacy mid-tier model (deprecated).",
+		Description: "Claude 3 Sonnet legacy mid-tier model (retired 2025-07-21 on first-party API; still available on Bedrock/Vertex).",
 	},
 
 	// Claude 3.5 Haiku Models
@@ -268,7 +272,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		ContextLength: 200000, MaxOutputTokens: 8192,
 		InputModalities: claudeVisionInputs, OutputModalities: claudeTextOutputs,
 		SupportedFeatures: claudeFeaturesNoReasoning, SupportedSamplingParameters: claudeSamplingParams,
-		Description: "Claude 3.5 Haiku alias tracking the latest 3.5 Haiku snapshot.",
+		Description: "Claude 3.5 Haiku alias (retired 2026-02-19 on first-party API; still available on Bedrock/Vertex).",
 	},
 	"claude-3-5-haiku-20241022": {
 		Ratio: 0.8 * ratio.MilliTokensUsd, CompletionRatio: 5.0,
@@ -276,7 +280,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		ContextLength: 200000, MaxOutputTokens: 8192,
 		InputModalities: claudeVisionInputs, OutputModalities: claudeTextOutputs,
 		SupportedFeatures: claudeFeaturesNoReasoning, SupportedSamplingParameters: claudeSamplingParams,
-		Description: "Claude 3.5 Haiku fast, cost-efficient model.",
+		Description: "Claude 3.5 Haiku fast, cost-efficient model (retired 2026-02-19 on first-party API; still available on Bedrock/Vertex).",
 	},
 
 	// Claude 3 Haiku Models
@@ -286,7 +290,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		ContextLength: 200000, MaxOutputTokens: 4096,
 		InputModalities: claudeVisionInputs, OutputModalities: claudeTextOutputs,
 		SupportedFeatures: claudeFeaturesNoReasoning, SupportedSamplingParameters: claudeSamplingParams,
-		Description: "Claude 3 Haiku legacy fast, low-cost model with vision support.",
+		Description: "Claude 3 Haiku legacy fast, low-cost model with vision support (retired 2026-04-20 on first-party API; still available on Bedrock/Vertex).",
 	},
 
 	// Legacy Models
@@ -296,7 +300,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		ContextLength: 200000, MaxOutputTokens: 4096,
 		InputModalities: claudeTextInputs, OutputModalities: claudeTextOutputs,
 		SupportedFeatures: claudeLegacyFeatures, SupportedSamplingParameters: claudeSamplingParams,
-		Description: "Claude 2.1 legacy text-only model (no vision, no tools).",
+		Description: "Claude 2.1 legacy text-only model, no vision, no tools (retired 2025-07-21 on first-party API).",
 	},
 	"claude-2.0": {
 		Ratio: 8 * ratio.MilliTokensUsd, CompletionRatio: 3.0,
@@ -304,7 +308,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		ContextLength: 100000, MaxOutputTokens: 4096,
 		InputModalities: claudeTextInputs, OutputModalities: claudeTextOutputs,
 		SupportedFeatures: claudeLegacyFeatures, SupportedSamplingParameters: claudeSamplingParams,
-		Description: "Claude 2.0 legacy text-only model (no vision, no tools).",
+		Description: "Claude 2.0 legacy text-only model, no vision, no tools (retired 2025-07-21 on first-party API).",
 	},
 	"claude-instant-1.2": {
 		Ratio: 0.8 * ratio.MilliTokensUsd, CompletionRatio: 3.0,
@@ -312,7 +316,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		ContextLength: 100000, MaxOutputTokens: 4096,
 		InputModalities: claudeTextInputs, OutputModalities: claudeTextOutputs,
 		SupportedFeatures: claudeLegacyFeatures, SupportedSamplingParameters: claudeSamplingParams,
-		Description: "Claude Instant 1.2 legacy fast text-only model (no vision, no tools).",
+		Description: "Claude Instant 1.2 legacy fast text-only model, no vision, no tools (retired 2024-11-06 on first-party API).",
 	},
 }
 

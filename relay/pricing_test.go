@@ -26,7 +26,9 @@ func TestAdapterPricingImplementations(t *testing.T) {
 		{"Zhipu", apitype.Zhipu, "glm-4", false},
 		{"Ali", apitype.Ali, "qwen-turbo", false},
 		{"Baidu", apitype.Baidu, "ERNIE-4.0-8K", false},
-		{"Tencent", apitype.Tencent, "hunyuan-lite", false},
+		// hunyuan-lite is offered free of charge per Tencent's May 2026 pricing page (Ratio=0),
+		// so the sample probes hunyuan-turbos which carries a non-zero ratio.
+		{"Tencent", apitype.Tencent, "hunyuan-turbos", false},
 		{"Gemini", apitype.Gemini, "gemini-2.5-flash", false},
 		{"Xunfei", apitype.Xunfei, "Spark-Lite", false},
 		{"VertexAI", apitype.VertexAI, "gemini-2.5-flash", false},
