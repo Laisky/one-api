@@ -50,16 +50,21 @@ var (
 
 	// claudeSamplingParams lists the sampling parameters Claude chat completions accept.
 	claudeSamplingParams = []string{"temperature", "top_p", "top_k", "stop", "max_tokens"}
+	// claudeOpus47SamplingParams reflects Claude Opus 4.7's removal of temperature/top_p/top_k controls.
+	// Source: https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-anthropic-claude-opus-4-7.html
+	claudeOpus47SamplingParams = []string{"stop", "max_tokens"}
 )
 
 // ModelRatios contains all supported models and their pricing ratios.
 //
-// Sources (verified 2026-05-18):
+// Sources (verified 2026-05-19):
 //   - https://platform.claude.com/docs/en/about-claude/models/overview
 //   - https://platform.claude.com/docs/en/about-claude/pricing
 //   - https://platform.claude.com/docs/en/about-claude/model-deprecations
 //   - https://platform.claude.com/docs/en/build-with-claude/extended-thinking
 //   - https://platform.claude.com/docs/en/build-with-claude/adaptive-thinking
+//   - https://platform.claude.com/docs/en/build-with-claude/claude-in-amazon-bedrock
+//   - https://platform.claude.com/docs/en/build-with-claude/claude-on-amazon-bedrock-legacy
 var ModelRatios = map[string]adaptor.ModelConfig{
 	// Claude 4 Opus Models
 	"claude-opus-4-0": {
@@ -78,7 +83,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		InputModalities: claudeVisionInputs, OutputModalities: claudeTextOutputs,
 		SupportedFeatures: claudeFeaturesWithReasoning, SupportedSamplingParameters: claudeSamplingParams,
 		MaxReasoningTokens: 30000,
-		Description:        "Claude Opus 4 frontier model with extended thinking (deprecated; retire 2026-06-15).",
+		Description:        "Claude Opus 4 frontier model with extended thinking (deprecated 2026-04-14; retire 2026-06-15 on first-party API and 2026-05-31 on Bedrock).",
 	},
 	"claude-opus-4-1": {
 		Ratio: 15 * ratio.MilliTokensUsd, CompletionRatio: 5.0,
@@ -130,8 +135,8 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		CachedInputRatio: 0.5 * ratio.MilliTokensUsd, CacheWrite5mRatio: 6.25 * ratio.MilliTokensUsd, CacheWrite1hRatio: 10 * ratio.MilliTokensUsd,
 		ContextLength: 1000000, MaxOutputTokens: 128000,
 		InputModalities: claudeVisionInputs, OutputModalities: claudeTextOutputs,
-		SupportedFeatures: claudeFeaturesWithReasoning, SupportedSamplingParameters: claudeSamplingParams,
-		Description: "Claude Opus 4.7 most capable Anthropic model with 1M-token context and adaptive thinking.",
+		SupportedFeatures: claudeFeaturesWithReasoning, SupportedSamplingParameters: claudeOpus47SamplingParams,
+		Description: "Claude Opus 4.7 most capable Anthropic model with 1M-token context and adaptive thinking; temperature/top_p/top_k are unsupported.",
 	},
 
 	// Claude 4 Sonnet Models
@@ -151,7 +156,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		InputModalities: claudeVisionInputs, OutputModalities: claudeTextOutputs,
 		SupportedFeatures: claudeFeaturesWithReasoning, SupportedSamplingParameters: claudeSamplingParams,
 		MaxReasoningTokens: 60000,
-		Description:        "Claude Sonnet 4 with extended thinking (deprecated; retire 2026-06-15).",
+		Description:        "Claude Sonnet 4 with extended thinking (deprecated 2026-04-14; retire 2026-06-15 on first-party API and 2026-10-14 on Bedrock).",
 	},
 	"claude-sonnet-4-5": {
 		Ratio: 3 * ratio.MilliTokensUsd, CompletionRatio: 5.0,
@@ -219,7 +224,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		InputModalities: claudeVisionInputs, OutputModalities: claudeTextOutputs,
 		SupportedFeatures: claudeFeaturesWithReasoning, SupportedSamplingParameters: claudeSamplingParams,
 		MaxReasoningTokens: 64000,
-		Description:        "Claude 3.7 Sonnet alias (retired 2026-02-19 on first-party API; still available on Bedrock/Vertex).",
+		Description:        "Claude 3.7 Sonnet alias (retired 2026-02-19 on first-party API and 2026-04-28 on Bedrock; may still be available on Vertex AI).",
 	},
 	"claude-3-7-sonnet-20250219": {
 		Ratio: 3 * ratio.MilliTokensUsd, CompletionRatio: 5.0,
@@ -228,7 +233,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		InputModalities: claudeVisionInputs, OutputModalities: claudeTextOutputs,
 		SupportedFeatures: claudeFeaturesWithReasoning, SupportedSamplingParameters: claudeSamplingParams,
 		MaxReasoningTokens: 64000,
-		Description:        "Claude 3.7 Sonnet hybrid reasoning model (retired 2026-02-19 on first-party API; still available on Bedrock/Vertex).",
+		Description:        "Claude 3.7 Sonnet hybrid reasoning model (retired 2026-02-19 on first-party API and 2026-04-28 on Bedrock; may still be available on Vertex AI).",
 	},
 
 	// Claude 3.5 Sonnet Models
@@ -272,7 +277,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		ContextLength: 200000, MaxOutputTokens: 8192,
 		InputModalities: claudeVisionInputs, OutputModalities: claudeTextOutputs,
 		SupportedFeatures: claudeFeaturesNoReasoning, SupportedSamplingParameters: claudeSamplingParams,
-		Description: "Claude 3.5 Haiku alias (retired 2026-02-19 on first-party API; still available on Bedrock/Vertex).",
+		Description: "Claude 3.5 Haiku alias (retired 2026-02-19 on first-party API; deprecated on Bedrock with retirement 2026-06-19; still available on Vertex AI).",
 	},
 	"claude-3-5-haiku-20241022": {
 		Ratio: 0.8 * ratio.MilliTokensUsd, CompletionRatio: 5.0,
@@ -280,7 +285,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		ContextLength: 200000, MaxOutputTokens: 8192,
 		InputModalities: claudeVisionInputs, OutputModalities: claudeTextOutputs,
 		SupportedFeatures: claudeFeaturesNoReasoning, SupportedSamplingParameters: claudeSamplingParams,
-		Description: "Claude 3.5 Haiku fast, cost-efficient model (retired 2026-02-19 on first-party API; still available on Bedrock/Vertex).",
+		Description: "Claude 3.5 Haiku fast, cost-efficient model (retired 2026-02-19 on first-party API; deprecated on Bedrock with retirement 2026-06-19; still available on Vertex AI).",
 	},
 
 	// Claude 3 Haiku Models

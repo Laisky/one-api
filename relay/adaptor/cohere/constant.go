@@ -91,15 +91,8 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 
 	// Aya research models (open-weights, hosted on Cohere API).
 	// Aya Expanse: $0.50 input / $1.50 output per 1M tokens; multilingual research model.
-	"c4ai-aya-expanse-8b": {
-		Ratio: 0.5 * ratio.MilliTokensUsd, CompletionRatio: 3,
-		ContextLength: 8192, MaxOutputTokens: 4096,
-		InputModalities: cohereTextInputs, OutputModalities: cohereTextOutputs,
-		SupportedFeatures: cohereChatFeaturesNoStructured, SupportedSamplingParameters: cohereSamplingParams,
-		Quantization:  "bf16",
-		HuggingFaceID: "CohereLabs/aya-expanse-8b",
-		Description:   "Cohere Aya Expanse 8B multilingual research model covering 23+ languages.",
-	},
+	// Note: c4ai-aya-expanse-8b and c4ai-aya-vision-8b retired 2026-04-04 and have been removed.
+	// Reference: https://docs.cohere.com/docs/aya and https://docs.cohere.com/changelog
 	"c4ai-aya-expanse-32b": {
 		Ratio: 0.5 * ratio.MilliTokensUsd, CompletionRatio: 3,
 		ContextLength: 128000, MaxOutputTokens: 4096,
@@ -109,17 +102,6 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		HuggingFaceID: "CohereLabs/aya-expanse-32b",
 		Description:   "Cohere Aya Expanse 32B multilingual research model with 128k context.",
 	},
-	"c4ai-aya-vision-8b": {
-		// Aya Vision pricing not separately published; uses Aya Expanse rate as Cohere lists
-		// these together under the Aya research family. Flagged as unverified pricing.
-		Ratio: 0.5 * ratio.MilliTokensUsd, CompletionRatio: 3,
-		ContextLength: 16000, MaxOutputTokens: 4096,
-		InputModalities: cohereMultimodalInputs, OutputModalities: cohereTextOutputs,
-		SupportedFeatures: cohereChatFeaturesNoStructured, SupportedSamplingParameters: cohereSamplingParams,
-		Quantization:  "bf16",
-		HuggingFaceID: "CohereLabs/aya-vision-8b",
-		Description:   "Cohere Aya Vision 8B multilingual multimodal research model (text+image inputs).",
-	},
 	"c4ai-aya-vision-32b": {
 		Ratio: 0.5 * ratio.MilliTokensUsd, CompletionRatio: 3,
 		ContextLength: 16000, MaxOutputTokens: 4096,
@@ -128,6 +110,102 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		Quantization:  "bf16",
 		HuggingFaceID: "CohereLabs/aya-vision-32b",
 		Description:   "Cohere Aya Vision 32B multilingual multimodal research model (text+image inputs).",
+	},
+
+	// Tiny Aya family (released 2026-02-17). 3.35B open-weight multilingual models
+	// covering 70 languages with regional specializations. Surfaced on the Cohere API
+	// with conservative Aya-family pricing pending official rate publication.
+	// References: https://cohere.com/blog/cohere-labs-tiny-aya
+	// https://huggingface.co/CohereLabs/tiny-aya-global
+	"tiny-aya-global": {
+		Ratio: 0.5 * ratio.MilliTokensUsd, CompletionRatio: 3,
+		ContextLength: 8192, MaxOutputTokens: 8192,
+		InputModalities: cohereTextInputs, OutputModalities: cohereTextOutputs,
+		SupportedFeatures: cohereChatFeaturesNoStructured, SupportedSamplingParameters: cohereSamplingParams,
+		Quantization:  "bf16",
+		HuggingFaceID: "CohereLabs/tiny-aya-global",
+		Description:   "Tiny Aya Global (2026-02) 3.35B open-weight multilingual instruction-tuned model covering 70 languages.",
+	},
+	"tiny-aya-earth": {
+		Ratio: 0.5 * ratio.MilliTokensUsd, CompletionRatio: 3,
+		ContextLength: 8192, MaxOutputTokens: 8192,
+		InputModalities: cohereTextInputs, OutputModalities: cohereTextOutputs,
+		SupportedFeatures: cohereChatFeaturesNoStructured, SupportedSamplingParameters: cohereSamplingParams,
+		Quantization:  "bf16",
+		HuggingFaceID: "CohereLabs/tiny-aya-earth",
+		Description:   "Tiny Aya Earth (2026-02) 3.35B regional multilingual model tuned for African languages.",
+	},
+	"tiny-aya-fire": {
+		Ratio: 0.5 * ratio.MilliTokensUsd, CompletionRatio: 3,
+		ContextLength: 8192, MaxOutputTokens: 8192,
+		InputModalities: cohereTextInputs, OutputModalities: cohereTextOutputs,
+		SupportedFeatures: cohereChatFeaturesNoStructured, SupportedSamplingParameters: cohereSamplingParams,
+		Quantization:  "bf16",
+		HuggingFaceID: "CohereLabs/tiny-aya-fire",
+		Description:   "Tiny Aya Fire (2026-02) 3.35B regional multilingual model tuned for South Asian languages.",
+	},
+	"tiny-aya-water": {
+		Ratio: 0.5 * ratio.MilliTokensUsd, CompletionRatio: 3,
+		ContextLength: 8192, MaxOutputTokens: 8192,
+		InputModalities: cohereTextInputs, OutputModalities: cohereTextOutputs,
+		SupportedFeatures: cohereChatFeaturesNoStructured, SupportedSamplingParameters: cohereSamplingParams,
+		Quantization:  "bf16",
+		HuggingFaceID: "CohereLabs/tiny-aya-water",
+		Description:   "Tiny Aya Water (2026-02) 3.35B regional multilingual model tuned for Asia-Pacific, West Asian, and European languages.",
+	},
+
+	// Command A specialized variants released in 2025.
+	"command-a-vision-07-2025": {
+		// $2.50 input / $10.00 output per 1M tokens (vision variant inherits Command A rates).
+		// 128K context, supports up to 20 images per request; no tool use per docs.
+		Ratio: 2.5 * ratio.MilliTokensUsd, CompletionRatio: 4,
+		ContextLength: 128000, MaxOutputTokens: 8192,
+		InputModalities: cohereMultimodalInputs, OutputModalities: cohereTextOutputs,
+		SupportedFeatures: []string{"json_mode"}, SupportedSamplingParameters: cohereSamplingParams,
+		Quantization:  "bf16",
+		HuggingFaceID: "CohereLabs/command-a-vision-07-2025",
+		Description:   "Cohere Command A Vision (July 2025) 112B multimodal model for document analysis, OCR, and chart interpretation.",
+	},
+	"command-a-reasoning-08-2025": {
+		// $2.50 input / $10.00 output per 1M tokens (inherits Command A rates).
+		// 256K context with toggleable thinking; multilingual reasoning across 23 languages.
+		Ratio: 2.5 * ratio.MilliTokensUsd, CompletionRatio: 4,
+		ContextLength: 256000, MaxOutputTokens: 32768,
+		InputModalities: cohereTextInputs, OutputModalities: cohereTextOutputs,
+		SupportedFeatures: []string{"tools", "json_mode", "structured_outputs", "web_search", "reasoning"},
+		SupportedSamplingParameters: cohereSamplingParams,
+		SupportedReasoningEfforts:   []string{"low", "medium", "high"},
+		Quantization:                "bf16",
+		HuggingFaceID:               "CohereLabs/command-a-reasoning-08-2025",
+		Description:                 "Cohere Command A Reasoning (August 2025) 111B hybrid reasoning model with toggleable thinking and 256k context.",
+	},
+	"command-a-translate-08-2025": {
+		// $2.50 input / $10.00 output per 1M tokens (inherits Command A rates).
+		// 16K total context split 8K input / 8K output; translation-focused, no tool use.
+		Ratio: 2.5 * ratio.MilliTokensUsd, CompletionRatio: 4,
+		ContextLength: 16000, MaxOutputTokens: 8192,
+		InputModalities: cohereTextInputs, OutputModalities: cohereTextOutputs,
+		SupportedFeatures: []string{}, SupportedSamplingParameters: cohereSamplingParams,
+		Quantization:  "bf16",
+		HuggingFaceID: "CohereLabs/command-a-translate-08-2025",
+		Description:   "Cohere Command A Translate (August 2025) 111B translation specialist covering 23 languages.",
+	},
+
+	// Audio transcription model. cohere-transcribe is offered via Model Vault per-hour
+	// pricing; we expose token-billing fallback in case the relay needs to bill text fragments.
+	// Reference: https://docs.cohere.com/docs/transcribe
+	"cohere-transcribe-03-2026": {
+		Ratio:           0.0,
+		CompletionRatio: 1.0,
+		ContextLength:   32768,
+		InputModalities: []string{"audio"},
+		Audio: &adaptor.AudioPricingConfig{
+			// Cohere Transcribe is currently free during API trial with rate limits;
+			// production deployment is per-hour Model Vault. No per-second public rate.
+			UsdPerSecond: 0.0,
+		},
+		HuggingFaceID: "CohereLabs/cohere-transcribe-03-2026",
+		Description:   "Cohere Transcribe (March 2026) state-of-the-art multilingual ASR model covering 14 languages with 25MB max file size.",
 	},
 
 	// Command Models (legacy generation-only; deprecated 2025-09-15)
@@ -232,6 +310,23 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 	// (one search = one query with up to 100 documents). Per-call pricing is encoded
 	// as USD-per-call divided over the QuotaPerUsd factor.
 	// Source: https://cohere.com/pricing
+	"rerank-v4.0-pro": {
+		// Rerank v4.0 Pro: $2.50 per 1,000 searches.
+		// References: https://openrouter.ai/cohere/rerank-4-pro and Cohere pricing page.
+		Ratio:            (2.5 / 1000.0) * ratio.QuotaPerUsd,
+		ContextLength:    32768,
+		InputModalities:  cohereTextInputs,
+		OutputModalities: cohereTextOutputs,
+		Description:      "Cohere Rerank v4.0 Pro multilingual reranker with 32k context window optimized for best accuracy.",
+	},
+	"rerank-v4.0-fast": {
+		// Rerank v4.0 Fast: $2.00 per 1,000 searches (lighter low-latency variant).
+		Ratio:            (2.0 / 1000.0) * ratio.QuotaPerUsd,
+		ContextLength:    32768,
+		InputModalities:  cohereTextInputs,
+		OutputModalities: cohereTextOutputs,
+		Description:      "Cohere Rerank v4.0 Fast low-latency multilingual reranker with 32k context window.",
+	},
 	"rerank-v3.5": {
 		Ratio:            (2.0 / 1000.0) * ratio.QuotaPerUsd,
 		ContextLength:    4096,

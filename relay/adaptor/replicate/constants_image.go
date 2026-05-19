@@ -20,6 +20,23 @@ var replicateImageModelRatios = map[string]adaptor.ModelConfig{
 		InputModalities: imageInputs, OutputModalities: imageOutputs,
 		Description: "FLUX 1.1 [pro] high-quality text-to-image generator from Black Forest Labs.",
 	},
+	"black-forest-labs/flux-2-dev": {
+		// FLUX.2 [dev] is the open-weight distilled variant priced at $0.012/MP for both
+		// text-to-image and image editing. The base config assumes a single 1024x1024 (1MP)
+		// output. Confirm at https://bfl.ai/pricing for higher-resolution requests.
+		Ratio: 0, CompletionRatio: 1.0, Image: replicateImageConfig(0.012),
+		InputModalities: imageEditInputs, OutputModalities: imageOutputs,
+		HuggingFaceID: "black-forest-labs/FLUX.2-dev",
+		Description:   "FLUX.2 [dev] open-weight 32B distilled rectified-flow text-to-image and editing model.",
+	},
+	"black-forest-labs/flux-2-max": {
+		// FLUX.2 [max] is BFL's highest-quality FLUX.2 tier listed on Replicate at
+		// roughly $0.25/image (25 credits/image with 1 credit = 1 cent). Confirm at
+		// https://bfl.ai/pricing for current rates.
+		Ratio: 0, CompletionRatio: 1.0, Image: replicateImageConfig(0.25),
+		InputModalities: imageEditInputs, OutputModalities: imageOutputs,
+		Description: "FLUX.2 [max] highest-quality FLUX.2 tier with strongest prompt following and up to 8 reference images.",
+	},
 	"black-forest-labs/flux-2-pro": {
 		// Black Forest Labs publishes FLUX.2 [pro] at $0.03/megapixel for text-to-image
 		// (image editing is $0.045/megapixel). Most Replicate requests default to a

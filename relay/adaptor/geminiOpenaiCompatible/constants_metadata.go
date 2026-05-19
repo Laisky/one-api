@@ -274,6 +274,20 @@ var geminiMetadataOverrides = map[string]adaptor.ModelConfig{
 		MaxReasoningTokens:     gemini3LevelMaxThinkingBudget,
 		Description:            "Gemini 3 Flash preview multimodal model balancing latency and quality.",
 	},
+	"gemini-3.5-flash": {
+		ContextLength:               gemini1MContext,
+		MaxOutputTokens:             gemini3FlashMaxOutput,
+		InputModalities:             geminiInputMultimodal,
+		OutputModalities:            geminiOutputText,
+		SupportedFeatures:           geminiFeatures25Plus,
+		SupportedSamplingParameters: geminiSamplingChat,
+		SupportedReasoningEfforts:   gemini3FlashReasoningEfforts,
+		// Per https://deepmind.google/models/gemini/flash/ Gemini 3.5 Flash defaults to dynamic
+		// "medium" thinking; callers can dial it down to minimal/low or up to high.
+		DefaultReasoningEffort: "medium",
+		MaxReasoningTokens:     gemini3LevelMaxThinkingBudget,
+		Description:            "Gemini 3.5 Flash GA multimodal reasoning tier (1M context, dynamic thinking on by default).",
+	},
 	"gemini-3-pro-image-preview": {
 		ContextLength:               65_536,
 		MaxOutputTokens:             32_768,

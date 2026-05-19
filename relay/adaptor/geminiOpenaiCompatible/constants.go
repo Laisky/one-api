@@ -128,6 +128,14 @@ var (
 			CompletionRatio: 3.00 / 1.00,
 		},
 	}
+	// gemini35FlashPricing reflects the Gemini 3.5 Flash GA pricing announced 2026-05-19.
+	// Source: https://ai.google.dev/gemini-api/docs/pricing — $1.50 input / $9.00 output,
+	// cached $0.15. Google publishes a single unified input rate across text/image/audio/video.
+	gemini35FlashPricing = adaptor.ModelConfig{
+		Ratio:            1.50 * ratio.MilliTokensUsd,
+		CompletionRatio:  9.00 / 1.50,
+		CachedInputRatio: 0.15 * ratio.MilliTokensUsd,
+	}
 	gemini31FlashLivePreviewPricing = adaptor.ModelConfig{
 		Ratio:           0.75 * ratio.MilliTokensUsd,
 		CompletionRatio: 4.50 / 0.75,
@@ -263,6 +271,10 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		},
 	},
 	"gemini-3-flash-preview": gemini3FlashPricing,
+	// Gemini 3.5 Flash reached GA on 2026-05-19 (https://ai.google.dev/gemini-api/docs/changelog).
+	// It is Google's most intelligent Flash tier with 1M context, dynamic thinking by default,
+	// and unified input pricing across text/image/audio/video modalities.
+	"gemini-3.5-flash": gemini35FlashPricing,
 	"gemini-3-pro-image-preview": {
 		Ratio:            2.0 * ratio.MilliTokensUsd,
 		CompletionRatio:  12.0 / 2.0,
@@ -353,6 +365,7 @@ var geminiWebSearchModels = map[string]struct{}{
 	"gemini-3.1-flash-lite-preview":           {},
 	"gemini-3-pro-preview":                    {},
 	"gemini-3-flash-preview":                  {},
+	"gemini-3.5-flash":                        {},
 	"gemini-2.5-pro":                          {},
 	"gemini-2.5-pro-preview":                  {},
 	"gemini-2.5-computer-use-preview":         {},

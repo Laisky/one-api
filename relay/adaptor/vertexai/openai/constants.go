@@ -16,8 +16,14 @@ var (
 )
 
 // ModelRatios contains pricing information for OpenAI GPT-OSS models on Vertex AI MaaS.
-// Source: https://discuss.google.dev/t/now-ga-openais-gpt-oss-qwen3-models-on-vertex-ai-as-open-model-apis/253945
-// and https://cloud.google.com/vertex-ai/generative-ai/pricing (retrieved 2026-05-18).
+// Sources (retrieved 2026-05-19):
+//   - https://discuss.google.dev/t/now-ga-openais-gpt-oss-qwen3-models-on-vertex-ai-as-open-model-apis/253945
+//   - https://docs.cloud.google.com/vertex-ai/generative-ai/docs/maas/capabilities/thinking
+//   - https://cloudprice.net/models/vertex_ai/openai/gpt-oss-20b-maas
+//   - https://cloudprice.net/models/vertex_ai/openai/gpt-oss-120b-maas
+//
+// Both variants surface thinking in `reasoning_content` and accept the standard OpenAI
+// `reasoning_effort` parameter with low/medium/high tiers per the Vertex thinking capability doc.
 var ModelRatios = map[string]adaptor.ModelConfig{
 	"openai/gpt-oss-20b-maas": {
 		Ratio:                       0.075 * ratio.MilliTokensUsd, // $0.075 per million input tokens

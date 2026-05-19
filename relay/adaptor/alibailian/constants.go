@@ -128,10 +128,17 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		Description:                 "Qwen Max on Bailian: most capable Qwen flagship chat tier (32K context, 2.47/9.88 CNY/1M).",
 	},
 
-	// ----- Qwen3 closed (Bailian) ----------------------------------------------
+	// ----- Qwen3 / Qwen3.5 / Qwen3.6 closed (Bailian) --------------------------
+	// Aliyun pricing (verified 2026-05-19, Beijing CNY/1M):
+	//   qwen3-max:           0-32K 2.5/10, tiered to 128K-256K 7/28
+	//   qwen3.5-plus:        0-128K 0.8/4.8, tiered to 256K-1M 4/24
+	//   qwen3.5-flash:       0-128K 0.2/2, tiered to 256K-1M 1.2/12
+	//   qwen3.6-plus:        0-256K 2/12, 256K-1M 8/48 (released 2026-04-02)
+	//   qwen3.6-flash:       0-256K 1.2/7.2, 256K-1M 4.8/28.8 (released 2026-04-16)
+	//   qwen3.6-max-preview: 0-128K 9/54, 128K-256K 15/90 (released 2026-04-20)
 	"qwen3-max": {
-		Ratio:                       0.00257 * 1000 * ratio.MilliTokensRmb,
-		CompletionRatio:             4, // 10.30 / 2.57
+		Ratio:                       0.0025 * 1000 * ratio.MilliTokensRmb,
+		CompletionRatio:             4, // 10 / 2.5
 		ContextLength:               262144,
 		MaxOutputTokens:             32768,
 		InputModalities:             bailianTextInputs,
@@ -140,6 +147,67 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		SupportedSamplingParameters: bailianSamplingParameters,
 		Quantization:                "bf16",
 		Description:                 "Qwen3 Max on Bailian: closed-weight flagship (256K context, 0-32K base tier billed here).",
+	},
+	"qwen3.5-plus": {
+		Ratio:                       0.0008 * 1000 * ratio.MilliTokensRmb,
+		CompletionRatio:             6, // 4.8 / 0.8
+		ContextLength:               1000000,
+		MaxOutputTokens:             32768,
+		InputModalities:             bailianTextInputs,
+		OutputModalities:            bailianTextOutputs,
+		SupportedFeatures:           bailianChatFeatures,
+		SupportedSamplingParameters: bailianSamplingParameters,
+		Quantization:                "bf16",
+		Description:                 "Qwen3.5 Plus on Bailian: balanced 1M-context tier (0-128K base tier billed here).",
+	},
+	"qwen3.5-flash": {
+		Ratio:                       0.0002 * 1000 * ratio.MilliTokensRmb,
+		CompletionRatio:             10, // 2 / 0.2
+		ContextLength:               1000000,
+		MaxOutputTokens:             32768,
+		InputModalities:             bailianTextInputs,
+		OutputModalities:            bailianTextOutputs,
+		SupportedFeatures:           bailianChatFeatures,
+		SupportedSamplingParameters: bailianSamplingParameters,
+		Quantization:                "bf16",
+		Description:                 "Qwen3.5 Flash on Bailian: cost-optimized 1M-context tier (0-128K base tier billed here).",
+	},
+	"qwen3.6-plus": {
+		Ratio:                       0.002 * 1000 * ratio.MilliTokensRmb,
+		CompletionRatio:             6, // 12 / 2
+		ContextLength:               1000000,
+		MaxOutputTokens:             65536,
+		InputModalities:             bailianTextInputs,
+		OutputModalities:            bailianTextOutputs,
+		SupportedFeatures:           bailianChatFeatures,
+		SupportedSamplingParameters: bailianSamplingParameters,
+		Quantization:                "bf16",
+		Description:                 "Qwen3.6 Plus on Bailian: closed-weight flagship released 2026-04-02 (1M context, 0-256K base tier billed here).",
+	},
+	"qwen3.6-flash": {
+		Ratio:                       0.0012 * 1000 * ratio.MilliTokensRmb,
+		CompletionRatio:             6, // 7.2 / 1.2
+		ContextLength:               1000000,
+		MaxOutputTokens:             65536,
+		InputModalities:             bailianTextInputs,
+		OutputModalities:            bailianTextOutputs,
+		SupportedFeatures:           bailianChatFeatures,
+		SupportedSamplingParameters: bailianSamplingParameters,
+		Quantization:                "bf16",
+		Description:                 "Qwen3.6 Flash on Bailian: cost-optimized tier released 2026-04-16 (1M context, 0-256K base tier billed here).",
+	},
+	"qwen3.6-max-preview": {
+		Ratio:                       0.009 * 1000 * ratio.MilliTokensRmb,
+		CompletionRatio:             6, // 54 / 9
+		ContextLength:               262144,
+		MaxOutputTokens:             65536,
+		InputModalities:             bailianTextInputs,
+		OutputModalities:            bailianTextOutputs,
+		SupportedFeatures:           bailianReasoningFeatures,
+		SupportedSamplingParameters: bailianSamplingParameters,
+		MaxReasoningTokens:          65536,
+		Quantization:                "bf16",
+		Description:                 "Qwen3.6 Max Preview on Bailian: closed-weight reasoning flagship released 2026-04-20 (256K context, 0-128K base tier billed here).",
 	},
 
 	// ----- Qwen Coder (Bailian) ------------------------------------------------
@@ -197,9 +265,13 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 	},
 
 	// ----- Qwen3 Coder (Bailian, tiered) ---------------------------------------
+	// Aliyun pricing (verified 2026-05-19, Beijing CNY/1M, 0-32K base tier):
+	//   qwen3-coder-plus:   4 / 16
+	//   qwen3-coder-flash:  1 / 4
+	//   qwen3-coder-next:   1 / 4  (256K context)
 	"qwen3-coder-plus": {
-		Ratio:                       0.00411 * 1000 * ratio.MilliTokensRmb,
-		CompletionRatio:             4, // 16.45 / 4.11
+		Ratio:                       0.004 * 1000 * ratio.MilliTokensRmb,
+		CompletionRatio:             4, // 16 / 4
 		ContextLength:               1000000,
 		MaxOutputTokens:             65536,
 		InputModalities:             bailianTextInputs,
@@ -210,8 +282,8 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		Description:                 "Qwen3 Coder Plus on Bailian: closed-weight code flagship (0-32K base tier billed here).",
 	},
 	"qwen3-coder-flash": {
-		Ratio:                       0.00103 * 1000 * ratio.MilliTokensRmb,
-		CompletionRatio:             4, // 4.11 / 1.03
+		Ratio:                       0.001 * 1000 * ratio.MilliTokensRmb,
+		CompletionRatio:             4, // 4 / 1
 		ContextLength:               1000000,
 		MaxOutputTokens:             65536,
 		InputModalities:             bailianTextInputs,
@@ -220,6 +292,19 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		SupportedSamplingParameters: bailianSamplingParameters,
 		Quantization:                "bf16",
 		Description:                 "Qwen3 Coder Flash on Bailian: cost-optimized code tier (0-32K base tier billed here).",
+	},
+	"qwen3-coder-next": {
+		Ratio:                       0.001 * 1000 * ratio.MilliTokensRmb,
+		CompletionRatio:             4, // 4 / 1
+		ContextLength:               262144,
+		MaxOutputTokens:             65536,
+		InputModalities:             bailianTextInputs,
+		OutputModalities:            bailianTextOutputs,
+		SupportedFeatures:           bailianChatFeatures,
+		SupportedSamplingParameters: bailianSamplingParameters,
+		HuggingFaceID:               "Qwen/Qwen3-Coder-Next",
+		Quantization:                "bf16",
+		Description:                 "Qwen3 Coder Next on Bailian: open-weight cost-optimized coder successor (256K context, 0-32K base tier billed here).",
 	},
 
 	// ----- Qwen VL (Bailian) ---------------------------------------------------
@@ -272,8 +357,8 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		Description:                 "Qwen3-VL Plus on Bailian: multimodal tier with tiered 256K context (0-32K base tier billed here).",
 	},
 	"qwen3-vl-flash": {
-		Ratio:                       0.00016 * 1000 * ratio.MilliTokensRmb,
-		CompletionRatio:             9.6875,
+		Ratio:                       0.00015 * 1000 * ratio.MilliTokensRmb,
+		CompletionRatio:             10, // 1.5 / 0.15
 		ContextLength:               262144,
 		MaxOutputTokens:             16384,
 		InputModalities:             bailianMultimodalInputs,
@@ -281,7 +366,149 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		SupportedFeatures:           bailianChatFeatures,
 		SupportedSamplingParameters: bailianSamplingParameters,
 		Quantization:                "bf16",
-		Description:                 "Qwen3-VL Flash on Bailian: cost-optimized multimodal tier.",
+		Description:                 "Qwen3-VL Flash on Bailian: cost-optimized multimodal tier (0-32K base tier billed here).",
+	},
+
+	// ----- Qwen3 VL open-weight tiers (Bailian) --------------------------------
+	// Aliyun pricing (verified 2026-05-19, Beijing CNY/1M, flat):
+	//   235B-A22B Instruct: 2 / 8;   235B-A22B Thinking: 2 / 20
+	//    32B Instruct:      2 / 8;    32B Thinking:      2 / 20
+	//    30B-A3B Instruct:  0.75 / 3; 30B-A3B Thinking:  0.75 / 7.5
+	//     8B Instruct:      0.5  / 2;  8B Thinking:      0.5  / 5
+	"qwen3-vl-235b-a22b-instruct": {
+		Ratio:                       0.002 * 1000 * ratio.MilliTokensRmb,
+		CompletionRatio:             4, // 8 / 2
+		ContextLength:               262144,
+		MaxOutputTokens:             32768,
+		InputModalities:             bailianMultimodalInputs,
+		OutputModalities:            bailianTextOutputs,
+		SupportedFeatures:           bailianChatFeatures,
+		SupportedSamplingParameters: bailianSamplingParameters,
+		HuggingFaceID:               "Qwen/Qwen3-VL-235B-A22B-Instruct",
+		Quantization:                "bf16",
+		Description:                 "Qwen3-VL 235B A22B Instruct on Bailian: open-weight multimodal MoE flagship (22B active).",
+	},
+	"qwen3-vl-235b-a22b-thinking": {
+		Ratio:                       0.002 * 1000 * ratio.MilliTokensRmb,
+		CompletionRatio:             10, // 20 / 2
+		ContextLength:               262144,
+		MaxOutputTokens:             32768,
+		InputModalities:             bailianMultimodalInputs,
+		OutputModalities:            bailianTextOutputs,
+		SupportedFeatures:           bailianReasoningFeatures,
+		SupportedSamplingParameters: bailianReasoningSamplingParameters,
+		MaxReasoningTokens:          38912,
+		HuggingFaceID:               "Qwen/Qwen3-VL-235B-A22B-Thinking",
+		Quantization:                "bf16",
+		Description:                 "Qwen3-VL 235B A22B Thinking on Bailian: open-weight multimodal reasoning MoE.",
+	},
+	"qwen3-vl-32b-instruct": {
+		Ratio:                       0.002 * 1000 * ratio.MilliTokensRmb,
+		CompletionRatio:             4, // 8 / 2
+		ContextLength:               262144,
+		MaxOutputTokens:             32768,
+		InputModalities:             bailianMultimodalInputs,
+		OutputModalities:            bailianTextOutputs,
+		SupportedFeatures:           bailianChatFeatures,
+		SupportedSamplingParameters: bailianSamplingParameters,
+		HuggingFaceID:               "Qwen/Qwen3-VL-32B-Instruct",
+		Quantization:                "bf16",
+		Description:                 "Qwen3-VL 32B Instruct on Bailian: open-weight dense multimodal model.",
+	},
+	"qwen3-vl-32b-thinking": {
+		Ratio:                       0.002 * 1000 * ratio.MilliTokensRmb,
+		CompletionRatio:             10, // 20 / 2
+		ContextLength:               262144,
+		MaxOutputTokens:             32768,
+		InputModalities:             bailianMultimodalInputs,
+		OutputModalities:            bailianTextOutputs,
+		SupportedFeatures:           bailianReasoningFeatures,
+		SupportedSamplingParameters: bailianReasoningSamplingParameters,
+		MaxReasoningTokens:          38912,
+		HuggingFaceID:               "Qwen/Qwen3-VL-32B-Thinking",
+		Quantization:                "bf16",
+		Description:                 "Qwen3-VL 32B Thinking on Bailian: open-weight dense multimodal reasoning model.",
+	},
+	"qwen3-vl-30b-a3b-instruct": {
+		Ratio:                       0.00075 * 1000 * ratio.MilliTokensRmb,
+		CompletionRatio:             4, // 3 / 0.75
+		ContextLength:               262144,
+		MaxOutputTokens:             32768,
+		InputModalities:             bailianMultimodalInputs,
+		OutputModalities:            bailianTextOutputs,
+		SupportedFeatures:           bailianChatFeatures,
+		SupportedSamplingParameters: bailianSamplingParameters,
+		HuggingFaceID:               "Qwen/Qwen3-VL-30B-A3B-Instruct",
+		Quantization:                "bf16",
+		Description:                 "Qwen3-VL 30B A3B Instruct on Bailian: open-weight multimodal MoE (3B active).",
+	},
+	"qwen3-vl-30b-a3b-thinking": {
+		Ratio:                       0.00075 * 1000 * ratio.MilliTokensRmb,
+		CompletionRatio:             10, // 7.5 / 0.75
+		ContextLength:               262144,
+		MaxOutputTokens:             32768,
+		InputModalities:             bailianMultimodalInputs,
+		OutputModalities:            bailianTextOutputs,
+		SupportedFeatures:           bailianReasoningFeatures,
+		SupportedSamplingParameters: bailianReasoningSamplingParameters,
+		MaxReasoningTokens:          38912,
+		HuggingFaceID:               "Qwen/Qwen3-VL-30B-A3B-Thinking",
+		Quantization:                "bf16",
+		Description:                 "Qwen3-VL 30B A3B Thinking on Bailian: open-weight multimodal MoE reasoning model (3B active).",
+	},
+	"qwen3-vl-8b-instruct": {
+		Ratio:                       0.0005 * 1000 * ratio.MilliTokensRmb,
+		CompletionRatio:             4, // 2 / 0.5
+		ContextLength:               262144,
+		MaxOutputTokens:             32768,
+		InputModalities:             bailianMultimodalInputs,
+		OutputModalities:            bailianTextOutputs,
+		SupportedFeatures:           bailianChatFeatures,
+		SupportedSamplingParameters: bailianSamplingParameters,
+		HuggingFaceID:               "Qwen/Qwen3-VL-8B-Instruct",
+		Quantization:                "bf16",
+		Description:                 "Qwen3-VL 8B Instruct on Bailian: open-weight compact multimodal model.",
+	},
+	"qwen3-vl-8b-thinking": {
+		Ratio:                       0.0005 * 1000 * ratio.MilliTokensRmb,
+		CompletionRatio:             10, // 5 / 0.5
+		ContextLength:               262144,
+		MaxOutputTokens:             32768,
+		InputModalities:             bailianMultimodalInputs,
+		OutputModalities:            bailianTextOutputs,
+		SupportedFeatures:           bailianReasoningFeatures,
+		SupportedSamplingParameters: bailianReasoningSamplingParameters,
+		MaxReasoningTokens:          38912,
+		HuggingFaceID:               "Qwen/Qwen3-VL-8B-Thinking",
+		Quantization:                "bf16",
+		Description:                 "Qwen3-VL 8B Thinking on Bailian: open-weight compact multimodal reasoning model.",
+	},
+
+	// ----- Qwen Omni (Bailian, multimodal) -------------------------------------
+	// Text I/O rate billed here; audio billing is per-modality upstream.
+	"qwen3-omni-flash": {
+		Ratio:                       0.0069 * 1000 * ratio.MilliTokensRmb,
+		CompletionRatio:             2.29, // 15.8 / 6.9
+		ContextLength:               262144,
+		MaxOutputTokens:             16384,
+		InputModalities:             bailianMultimodalInputs,
+		OutputModalities:            bailianTextOutputs,
+		SupportedFeatures:           bailianChatFeatures,
+		SupportedSamplingParameters: bailianSamplingParameters,
+		Quantization:                "bf16",
+		Description:                 "Qwen3-Omni Flash on Bailian: closed-weight multimodal tier (text I/O rate billed here).",
+	},
+	"qwen-omni-turbo": {
+		Ratio:                       0.0016 * 1000 * ratio.MilliTokensRmb,
+		CompletionRatio:             15.625, // 25 / 1.6
+		ContextLength:               32768,
+		MaxOutputTokens:             8192,
+		InputModalities:             bailianMultimodalInputs,
+		OutputModalities:            bailianTextOutputs,
+		SupportedFeatures:           bailianChatFeatures,
+		SupportedSamplingParameters: bailianSamplingParameters,
+		Quantization:                "bf16",
+		Description:                 "Qwen-Omni Turbo on Bailian: closed-weight multimodal tier (text I/O rate billed here).",
 	},
 
 	// ----- Qwen MT (Bailian) ---------------------------------------------------

@@ -248,6 +248,22 @@ func TestGeminiRoboticsER16Pricing(t *testing.T) {
 	require.InDelta(t, 2.0/1.0, cfg.Audio.PromptRatio, 1e-9)
 }
 
+// TestGemini35FlashGAPricing verifies the Gemini 3.5 Flash GA entry (2026-05-19 launch) at
+// $1.50 input / $9.00 output / $0.15 cached per Google's published pricing.
+func TestGemini35FlashGAPricing(t *testing.T) {
+	t.Parallel()
+
+	cfg, ok := ModelRatios["gemini-3.5-flash"]
+	require.True(t, ok, "gemini-3.5-flash missing from pricing map")
+	require.InDelta(t, 1.50*ratio.MilliTokensUsd, cfg.Ratio, 1e-12)
+	require.InDelta(t, 9.00/1.50, cfg.CompletionRatio, 1e-9)
+	require.InDelta(t, 0.15*ratio.MilliTokensUsd, cfg.CachedInputRatio, 1e-12)
+	require.EqualValues(t, 1_048_576, cfg.ContextLength)
+	require.EqualValues(t, 65536, cfg.MaxOutputTokens)
+	require.Equal(t, "medium", cfg.DefaultReasoningEffort)
+	require.Contains(t, geminiWebSearchModels, "gemini-3.5-flash")
+}
+
 // TestGeminiEmbedding2GAAlias verifies that the GA gemini-embedding-2 alias mirrors the preview entry.
 func TestGeminiEmbedding2GAAlias(t *testing.T) {
 	t.Parallel()

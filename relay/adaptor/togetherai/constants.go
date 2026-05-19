@@ -79,6 +79,17 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		Quantization: "fp4", HuggingFaceID: "MiniMaxAI/MiniMax-M2",
 		Description: "Earlier checkpoint of MiniMax M2 interleaved-thinking MoE.",
 	},
+	// Qwen3.6-Plus released 2026-04-01; serverless price $0.50/$3.00 with hybrid linear-attention + MoE
+	// routing and 1M context. Multimodal (text+image+video input) with thinking mode.
+	// Source: https://www.together.ai/models/qwen36-plus
+	"Qwen/Qwen3.6-Plus": {
+		Ratio: 0.50 * ratio.MilliTokensUsd, CompletionRatio: 3.00 / 0.50,
+		ContextLength: 1000000, MaxOutputTokens: 32768,
+		InputModalities: togetherVisionIn, OutputModalities: togetherTextOut,
+		SupportedFeatures: togetherReasonFeatures, SupportedSamplingParameters: togetherChatSampling,
+		Quantization: "fp8", HuggingFaceID: "Qwen/Qwen3.6-Plus",
+		Description: "Qwen 3.6 Plus multimodal agentic MoE with hybrid linear-attention routing, 1M context, and thinking mode.",
+	},
 	"Qwen/Qwen3.5-397B-A17B": {
 		Ratio: 0.60 * ratio.MilliTokensUsd, CompletionRatio: 3.60 / 0.60,
 		ContextLength: 262144, MaxOutputTokens: 8192,
@@ -234,12 +245,24 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		Description: "FP8-quantised Qwen 2.5 7B instruction model with 32K context.",
 	},
 	"google/gemma-4-31B-it": {
-		Ratio: 0.20 * ratio.MilliTokensUsd, CompletionRatio: 0.50 / 0.20,
+		// Together AI repriced Gemma 4 31B IT to $0.39/$0.97 effective May 2026.
+		// Source: https://www.together.ai/pricing (retrieved 2026-05-19)
+		Ratio: 0.39 * ratio.MilliTokensUsd, CompletionRatio: 0.97 / 0.39,
 		ContextLength: 262144, MaxOutputTokens: 8192,
 		InputModalities: togetherVisionIn, OutputModalities: togetherTextOut,
 		SupportedFeatures: togetherChatFeatures, SupportedSamplingParameters: togetherChatSampling,
 		Quantization: "fp8", HuggingFaceID: "google/gemma-4-31b-it",
 		Description: "Google Gemma 4 31B multimodal instruction model with 262K context.",
+	},
+	// Llama Guard 4 12B available on Together serverless moderation tier.
+	// Source: https://www.together.ai/pricing (retrieved 2026-05-19)
+	"meta-llama/Llama-Guard-4-12B": {
+		Ratio: 0.20 * ratio.MilliTokensUsd, CompletionRatio: 1,
+		ContextLength: 1048576, MaxOutputTokens: 1024,
+		InputModalities: togetherVisionIn, OutputModalities: togetherTextOut,
+		SupportedSamplingParameters: togetherChatSampling,
+		Quantization:                "fp8", HuggingFaceID: "meta-llama/Llama-Guard-4-12B",
+		Description: "Meta Llama Guard 4 12B safety/classification model accepting text+image input with 1M context.",
 	},
 	"google/gemma-3n-E4B-it": {
 		Ratio: 0.06 * ratio.MilliTokensUsd, CompletionRatio: 0.12 / 0.06,
@@ -313,7 +336,8 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 
 	// Audio models with published pricing.
 	"canopylabs/orpheus-3b-0.1-ft": {Ratio: 15.0 * ratio.MilliTokensUsd, CompletionRatio: 1},
-	"hexgrad/Kokoro-82M":           {Ratio: 4.0 * ratio.MilliTokensUsd, CompletionRatio: 1},
+	// Kokoro 82M TTS repriced to $10/1M characters (Together pricing 2026-05-19).
+	"hexgrad/Kokoro-82M":           {Ratio: 10.0 * ratio.MilliTokensUsd, CompletionRatio: 1},
 	"cartesia/sonic-3":             {Ratio: 65.0 * ratio.MilliTokensUsd, CompletionRatio: 1},
 	"cartesia/sonic-2":             {Ratio: 65.0 * ratio.MilliTokensUsd, CompletionRatio: 1},
 	"cartesia/sonic":               {Ratio: 65.0 * ratio.MilliTokensUsd, CompletionRatio: 1},
@@ -327,6 +351,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 var ModelList = []string{
 	"MiniMaxAI/MiniMax-M2.7",
 	"MiniMaxAI/MiniMax-M2.5",
+	"Qwen/Qwen3.6-Plus",
 	"Qwen/Qwen3.5-397B-A17B",
 	"Qwen/Qwen3.5-9B",
 	"moonshotai/Kimi-K2.6",
@@ -342,6 +367,7 @@ var ModelList = []string{
 	"Qwen/Qwen3-235B-A22B-Instruct-2507-tput",
 	"deepseek-ai/DeepSeek-R1",
 	"meta-llama/Llama-3.3-70B-Instruct-Turbo",
+	"meta-llama/Llama-Guard-4-12B",
 	"deepcogito/cogito-v2-1-671b",
 	"essentialai/rnj-1-instruct",
 	"Qwen/Qwen2.5-7B-Instruct-Turbo",

@@ -142,8 +142,10 @@ var qwenModelRatios = map[string]adaptor.ModelConfig{
 		Description:                 "Qwen3 Coder 30B/A3B Instruct MoE coding chat model with 160K context.",
 	},
 	"qwen/qwen3-coder-480b-a35b-instruct": {
-		Ratio:                       0.3 * ratio.MilliTokensUsd,
-		CompletionRatio:             4.33333333333,
+		// Novita repriced Qwen3-Coder-480B to $0.38/$1.55 effective May 2026.
+		// Source: https://novita.ai/pricing (retrieved 2026-05-19)
+		Ratio:                       0.38 * ratio.MilliTokensUsd,
+		CompletionRatio:             1.55 / 0.38,
 		ContextLength:               262144,
 		MaxOutputTokens:             65536,
 		InputModalities:             novitaTextOnlyModalities,

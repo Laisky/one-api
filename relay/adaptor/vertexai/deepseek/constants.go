@@ -18,13 +18,18 @@ var (
 
 // ModelRatios contains DeepSeek models and their pricing ratios on Vertex AI MaaS.
 //
-// Pricing sources (retrieved 2026-05-18):
-//   - https://cloud.google.com/vertex-ai/generative-ai/docs/maas/deepseek/deepseek-ocr
+// Pricing sources (retrieved 2026-05-19):
+//   - https://docs.cloud.google.com/vertex-ai/generative-ai/docs/maas/deepseek/deepseek-ocr
+//   - https://docs.cloud.google.com/vertex-ai/generative-ai/docs/maas/deepseek/deepseek-v31
+//   - https://docs.cloud.google.com/vertex-ai/generative-ai/docs/maas/deepseek/deepseek-v32
+//   - https://docs.cloud.google.com/vertex-ai/generative-ai/docs/maas/deepseek/deepseek-r1
+//   - https://docs.cloud.google.com/vertex-ai/generative-ai/docs/maas/capabilities/thinking
 //   - https://cloudprice.net/models/vertex_ai/deepseek-ai/deepseek-v3.1-maas
 //   - https://cloudprice.net/models/vertex_ai/deepseek-ai/deepseek-v3.2-maas
-//   - https://console.cloud.google.com/vertex-ai/publishers/deepseek-ai/model-garden/deepseek-r1-0528-maas
+//   - https://cloudprice.net/models/vertex_ai/deepseek-ai/deepseek-ocr-maas
 var ModelRatios = map[string]adaptor.ModelConfig{
 	// DeepSeek OCR - Input: $0.30 / million tokens, Output: $1.20 / million tokens
+	// Vertex GA 2025-10-23 in us-central1 only; accepts text, documents, and images.
 	"deepseek-ai/deepseek-ocr-maas": {
 		Ratio:                       0.30 * ratio.MilliTokensUsd,
 		CompletionRatio:             1.20 / 0.30,
@@ -34,9 +39,11 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		OutputModalities:            deepSeekVertexTextOutputs,
 		SupportedFeatures:           deepSeekVertexStandardFeatures,
 		SupportedSamplingParameters: deepSeekVertexStandardSampling,
-		Description:                 "DeepSeek OCR on Vertex AI MaaS for document and image understanding with text output.",
+		Description:                 "DeepSeek OCR on Vertex AI MaaS (us-central1) for document and image understanding with text output.",
 	},
 	// DeepSeek V3.2 - Input: $0.56 / million tokens, Output: $1.68 / million tokens
+	// Vertex GA 2025-12-10; global endpoint. Hybrid thinking via chat_template_kwargs.thinking;
+	// reasoning text surfaces in reasoning_content, response text in content.
 	"deepseek-ai/deepseek-v3.2-maas": {
 		Ratio:                       0.56 * ratio.MilliTokensUsd,
 		CompletionRatio:             1.68 / 0.56,
@@ -47,11 +54,12 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		SupportedFeatures:           deepSeekVertexReasoningFeatures,
 		SupportedSamplingParameters: deepSeekVertexStandardSampling,
 		// Vertex AI MaaS does not publish a tunable reasoning_effort for DeepSeek V3.2;
-		// thinking is toggled via the request body's thinking.type field instead.
-		Description: "DeepSeek V3.2 on Vertex AI MaaS with long context, tool use, and reasoning support.",
+		// thinking is toggled via chat_template_kwargs.thinking (boolean) in the request body.
+		Description: "DeepSeek V3.2 on Vertex AI MaaS with long context, tool use, and optional hybrid thinking.",
 	},
 	// DeepSeek V3.1 - Input: $1.35 / million tokens, Output: $5.40 / million tokens
-	// (Vertex aligned V3.1 with R1 list pricing; retrieved 2026-05-18.)
+	// Vertex GA 2025-08-28 in us-central1; hybrid thinking via chat_template_kwargs.thinking.
+	// (Vertex aligns V3.1 with R1 list pricing; cloudprice confirmed 2026-05-19.)
 	"deepseek-ai/deepseek-v3.1-maas": {
 		Ratio:                       1.35 * ratio.MilliTokensUsd, // Input price: $1.35 per million tokens
 		CompletionRatio:             5.40 / 1.35,                 // Output/Input ratio: $5.40 / $1.35 = 4.0
@@ -61,10 +69,13 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		OutputModalities:            deepSeekVertexTextOutputs,
 		SupportedFeatures:           deepSeekVertexReasoningFeatures,
 		SupportedSamplingParameters: deepSeekVertexStandardSampling,
-		// Vertex AI MaaS does not publish a tunable reasoning_effort for DeepSeek V3.1.
-		Description: "DeepSeek V3.1 on Vertex AI MaaS with long context and reasoning-oriented chat capabilities.",
+		// Vertex AI MaaS does not publish a tunable reasoning_effort for DeepSeek V3.1;
+		// thinking is toggled via chat_template_kwargs.thinking (boolean) in the request body.
+		Description: "DeepSeek V3.1 on Vertex AI MaaS with long context and optional hybrid thinking mode.",
 	},
 	// DeepSeek R1-0528 - Input: $1.35 / million tokens, Output: $5.40 / million tokens
+	// Always-on reasoning. Vertex returns thinking inside <think>...</think> tags in `content`
+	// (no separate reasoning_content field for this model variant).
 	"deepseek-ai/deepseek-r1-0528-maas": {
 		Ratio:                       1.35 * ratio.MilliTokensUsd, // Input price: $1.35 per million tokens
 		CompletionRatio:             5.40 / 1.35,                 // Output/Input ratio: $5.40 / $1.35 = 4.0

@@ -21,10 +21,18 @@ var (
 
 // ModelRatios contains all supported models and their pricing ratios
 // Model list is derived from the keys of this map, eliminating redundancy
-// Based on Cloudflare Workers AI pricing (retrieved 2026-05-18).
+// Based on Cloudflare Workers AI pricing (retrieved 2026-05-19).
+//
+// Per the 2026-05-08 changelog, several legacy models are scheduled for
+// deprecation on 2026-05-30 (kimi-k2.5 aliases to k2.6, llama-3.x family,
+// llama-2, mistral-7b-v0.1, gemma-3-12b-it). Entries remain in this table
+// until automatic deletion so existing integrations keep billing correctly
+// during the cutover window.
+//
 // Sources:
 //   - https://developers.cloudflare.com/workers-ai/platform/pricing/
 //   - https://developers.cloudflare.com/workers-ai/models/
+//   - https://developers.cloudflare.com/workers-ai/changelog/
 var ModelRatios = map[string]adaptor.ModelConfig{
 	// Meta Llama Models
 	"@cf/meta/llama-3.2-1b-instruct": {
@@ -88,7 +96,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		SupportedFeatures: cfToolsFeatures, SupportedSamplingParameters: cfBasicSamplingParams,
 		Quantization:  "fp16",
 		HuggingFaceID: "meta-llama/Llama-3.1-8B-Instruct",
-		Description:   "Meta Llama 3.1 8B Instruct (fp16) on Cloudflare Workers AI.",
+		Description:   "Meta Llama 3.1 8B Instruct (fp16) on Cloudflare Workers AI (planned deprecation 2026-05-30).",
 	},
 	"@cf/meta/llama-3.1-8b-instruct-fp8": {
 		Ratio: 0.152 * ratio.MilliTokensUsd, CompletionRatio: 0.287 / 0.152,
@@ -106,7 +114,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		SupportedFeatures: cfToolsFeatures, SupportedSamplingParameters: cfBasicSamplingParams,
 		Quantization:  "int4",
 		HuggingFaceID: "meta-llama/Llama-3.1-8B-Instruct",
-		Description:   "Meta Llama 3.1 8B Instruct AWQ-quantized on Cloudflare Workers AI.",
+		Description:   "Meta Llama 3.1 8B Instruct AWQ-quantized on Cloudflare Workers AI (planned deprecation 2026-05-30).",
 	},
 	"@cf/meta/llama-3-8b-instruct": {
 		Ratio: 0.282 * ratio.MilliTokensUsd, CompletionRatio: 0.827 / 0.282,
@@ -115,7 +123,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		SupportedFeatures: cfChatFeatures, SupportedSamplingParameters: cfBasicSamplingParams,
 		Quantization:  "fp16",
 		HuggingFaceID: "meta-llama/Meta-Llama-3-8B-Instruct",
-		Description:   "Meta Llama 3 8B Instruct on Cloudflare Workers AI.",
+		Description:   "Meta Llama 3 8B Instruct on Cloudflare Workers AI (planned deprecation 2026-05-30).",
 	},
 	"@cf/meta/llama-3-8b-instruct-awq": {
 		Ratio: 0.123 * ratio.MilliTokensUsd, CompletionRatio: 0.266 / 0.123,
@@ -124,7 +132,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		SupportedFeatures: cfChatFeatures, SupportedSamplingParameters: cfBasicSamplingParams,
 		Quantization:  "int4",
 		HuggingFaceID: "meta-llama/Meta-Llama-3-8B-Instruct",
-		Description:   "Meta Llama 3 8B Instruct AWQ-quantized on Cloudflare Workers AI.",
+		Description:   "Meta Llama 3 8B Instruct AWQ-quantized on Cloudflare Workers AI (planned deprecation 2026-05-30).",
 	},
 	"@cf/meta/llama-2-7b-chat-fp16": {
 		Ratio: 0.556 * ratio.MilliTokensUsd, CompletionRatio: 6.667 / 0.556,
@@ -133,7 +141,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		SupportedFeatures: cfChatFeatures, SupportedSamplingParameters: cfBasicSamplingParams,
 		Quantization:  "fp16",
 		HuggingFaceID: "meta-llama/Llama-2-7b-chat-hf",
-		Description:   "Meta Llama 2 7B Chat (fp16) on Cloudflare Workers AI.",
+		Description:   "Meta Llama 2 7B Chat (fp16) on Cloudflare Workers AI (planned deprecation 2026-05-30).",
 	},
 	"@cf/meta/llama-guard-3-8b": {
 		Ratio: 0.484 * ratio.MilliTokensUsd, CompletionRatio: 0.030 / 0.484,
@@ -162,7 +170,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		SupportedFeatures: cfChatFeatures, SupportedSamplingParameters: cfBasicSamplingParams,
 		Quantization:  "fp16",
 		HuggingFaceID: "mistralai/Mistral-7B-Instruct-v0.1",
-		Description:   "Mistral 7B Instruct v0.1 on Cloudflare Workers AI.",
+		Description:   "Mistral 7B Instruct v0.1 on Cloudflare Workers AI (planned deprecation 2026-05-30).",
 	},
 	"@cf/mistralai/mistral-small-3.1-24b-instruct": {
 		Ratio: 0.351 * ratio.MilliTokensUsd, CompletionRatio: 0.555 / 0.351,
@@ -195,16 +203,19 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		SupportedFeatures: cfChatFeatures, SupportedSamplingParameters: cfBasicSamplingParams,
 		Quantization:  "fp16",
 		HuggingFaceID: "google/gemma-3-12b-it",
-		Description:   "Google Gemma 3 12B Instruct multimodal model on Cloudflare Workers AI.",
+		Description:   "Google Gemma 3 12B Instruct multimodal model on Cloudflare Workers AI (planned deprecation 2026-05-30).",
 	},
 	"@cf/google/gemma-4-26b-a4b-it": {
+		// Catalog labels: Function calling, Reasoning, Vision. 256K context window per model card.
 		Ratio: 0.100 * ratio.MilliTokensUsd, CompletionRatio: 0.300 / 0.100,
-		ContextLength: 128000, MaxOutputTokens: 8192,
+		ContextLength: 256000, MaxOutputTokens: 8192,
 		InputModalities: cfVisionInputs, OutputModalities: cfTextOutputs,
-		SupportedFeatures: cfChatFeatures, SupportedSamplingParameters: cfBasicSamplingParams,
-		Quantization:  "fp16",
-		HuggingFaceID: "google/gemma-4-26b-a4b-it",
-		Description:   "Google Gemma 4 26B (4B-active MoE) on Cloudflare Workers AI.",
+		SupportedFeatures: []string{"tools", "reasoning"}, SupportedSamplingParameters: cfBasicSamplingParams,
+		SupportedReasoningEfforts: []string{"low", "medium", "high"},
+		DefaultReasoningEffort:    "medium",
+		Quantization:              "fp16",
+		HuggingFaceID:             "google/gemma-4-26b-a4b-it",
+		Description:               "Google Gemma 4 26B/4B-active MoE multimodal model with 256K context, thinking, and function calling on Cloudflare Workers AI.",
 	},
 
 	// Qwen Models
@@ -240,13 +251,14 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 
 	// IBM / ZAI / NVIDIA / Moonshot
 	"@cf/ibm-granite/granite-4.0-h-micro": {
+		// Catalog labels: Function calling.
 		Ratio: 0.017 * ratio.MilliTokensUsd, CompletionRatio: 0.112 / 0.017,
 		ContextLength: 128000, MaxOutputTokens: 4096,
 		InputModalities: cfTextInputs, OutputModalities: cfTextOutputs,
-		SupportedFeatures: cfChatFeatures, SupportedSamplingParameters: cfBasicSamplingParams,
+		SupportedFeatures: cfToolsFeatures, SupportedSamplingParameters: cfBasicSamplingParams,
 		Quantization:  "fp16",
 		HuggingFaceID: "ibm-granite/granite-4.0-h-micro",
-		Description:   "IBM Granite 4.0 Hybrid Micro on Cloudflare Workers AI.",
+		Description:   "IBM Granite 4.0 Hybrid Micro instruct model with function calling on Cloudflare Workers AI.",
 	},
 	"@cf/zai-org/glm-4.7-flash": {
 		Ratio: 0.060 * ratio.MilliTokensUsd, CompletionRatio: 0.400 / 0.060,
@@ -269,22 +281,23 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		Description:               "NVIDIA Nemotron 3 120B/A12B mixture-of-experts on Cloudflare Workers AI.",
 	},
 	"@cf/moonshotai/kimi-k2.5": {
+		// Planned deprecation 2026-05-30: requests will be auto-aliased to @cf/moonshotai/kimi-k2.6.
 		Ratio: 0.600 * ratio.MilliTokensUsd, CompletionRatio: 3.000 / 0.600, CachedInputRatio: 0.100 * ratio.MilliTokensUsd,
 		ContextLength: 256000, MaxOutputTokens: 8192,
-		InputModalities: cfTextInputs, OutputModalities: cfTextOutputs,
+		InputModalities: cfVisionInputs, OutputModalities: cfTextOutputs,
 		SupportedFeatures: cfToolsFeatures, SupportedSamplingParameters: cfBasicSamplingParams,
 		Quantization:  "fp8",
-		HuggingFaceID: "moonshotai/Kimi-K2-Instruct",
-		Description:   "Moonshot Kimi K2.5 long-context chat model on Cloudflare Workers AI.",
+		HuggingFaceID: "moonshotai/Kimi-K2.5",
+		Description:   "Moonshot Kimi K2.5 multimodal long-context chat model on Cloudflare Workers AI (planned deprecation 2026-05-30, aliases to kimi-k2.6).",
 	},
 	"@cf/moonshotai/kimi-k2.6": {
 		Ratio: 0.950 * ratio.MilliTokensUsd, CompletionRatio: 4.000 / 0.950, CachedInputRatio: 0.160 * ratio.MilliTokensUsd,
 		ContextLength: 256000, MaxOutputTokens: 8192,
-		InputModalities: cfTextInputs, OutputModalities: cfTextOutputs,
+		InputModalities: cfVisionInputs, OutputModalities: cfTextOutputs,
 		SupportedFeatures: cfToolsFeatures, SupportedSamplingParameters: cfBasicSamplingParams,
 		Quantization:  "fp8",
-		HuggingFaceID: "moonshotai/Kimi-K2-Instruct",
-		Description:   "Moonshot Kimi K2.6 long-context chat model on Cloudflare Workers AI.",
+		HuggingFaceID: "moonshotai/Kimi-K2.6",
+		Description:   "Moonshot Kimi K2.6 frontier-scale multimodal long-context chat model on Cloudflare Workers AI.",
 	},
 
 	// OpenAI OSS

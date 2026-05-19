@@ -174,9 +174,11 @@ var deepseekModelRatios = map[string]adaptor.ModelConfig{
 		Description:                 "DeepSeek V4 Flash with 1M context, fast cache-read discount and reasoning support.",
 	},
 	"deepseek/deepseek-v4-pro": {
-		Ratio:                       1.74 * ratio.MilliTokensUsd,
-		CompletionRatio:             2,
-		CachedInputRatio:            0.145 * ratio.MilliTokensUsd,
+		// Novita repriced DeepSeek-V4-Pro to $1.67/$3.38 with $0.13 cache-read effective May 2026.
+		// Source: https://novita.ai/pricing (retrieved 2026-05-19)
+		Ratio:                       1.67 * ratio.MilliTokensUsd,
+		CompletionRatio:             3.38 / 1.67,
+		CachedInputRatio:            0.13 * ratio.MilliTokensUsd,
 		ContextLength:               1048576,
 		MaxOutputTokens:             393216,
 		InputModalities:             novitaTextOnlyModalities,

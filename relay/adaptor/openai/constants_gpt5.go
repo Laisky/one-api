@@ -72,6 +72,24 @@ var gpt54ProLongContextTier = adaptor.ModelRatioTier{
 }
 
 var gpt5ModelRatios = map[string]adaptor.ModelConfig{
+	// chat-latest: rolling alias to the latest GPT-5.5 Instant model used in ChatGPT.
+	// Replaces the retired chatgpt-4o-latest alias (sunset 2026-02-17). Released 2026-05-05.
+	// 400K context, 128K max output, $5/$0.50/$30 per 1M tokens.
+	// Source: https://developers.openai.com/api/docs/models/chat-latest
+	"chat-latest": {
+		Ratio:                       5.0 * ratio.MilliTokensUsd,
+		CompletionRatio:             30.0 / 5.0,
+		CachedInputRatio:            0.5 * ratio.MilliTokensUsd,
+		ContextLength:               400000,
+		MaxOutputTokens:             128000,
+		InputModalities:             []string{"text", "image"},
+		OutputModalities:            []string{"text"},
+		SupportedFeatures:           gpt5ReasoningFeatures,
+		SupportedSamplingParameters: reasoningSamplingParameters(),
+		SupportedReasoningEfforts:   gpt5ChatOnlyEfforts,
+		DefaultReasoningEffort:      "medium",
+		Description:                 "chat-latest: rolling alias for the GPT-5.5 Instant model behind ChatGPT (chat-latest pricing).",
+	},
 	// gpt-5.5: 1.05M context, 128K output. >272K input tokens are billed at the
 	// long-context tier (2x input, 1.5x output) for the entire session.
 	"gpt-5.5": {

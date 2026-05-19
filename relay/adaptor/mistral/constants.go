@@ -164,6 +164,44 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		Description:                 "Codestral 2025-08 code-completion model with 256k context and FIM support.",
 	},
 
+	// --- Voxtral audio family (speech-to-text, audio-conditioned chat, text-to-speech) ---
+	// Reference: https://docs.mistral.ai/models/overview and
+	// https://docs.mistral.ai/models/voxtral-mini-transcribe-26-02
+	"voxtral-small-2507": {
+		Ratio:                       0.1 * ratio.MilliTokensUsd, // $0.10 input
+		CompletionRatio:             3.0,                        // $0.30 output
+		ContextLength:               32768,
+		MaxOutputTokens:             8192,
+		InputModalities:             []string{"text", "audio"},
+		OutputModalities:            textOnlyModalities,
+		SupportedFeatures:           chatFeatures,
+		SupportedSamplingParameters: commonSamplingParams,
+		Quantization:                "bf16",
+		HuggingFaceID:               "mistralai/Voxtral-Small-24B-2507",
+		Description:                 "Voxtral Small 24B (2025-07) open-weight audio-conditioned instruct model with 32k context.",
+	},
+	"voxtral-mini-transcribe-2602": {
+		Ratio:           0.1 * ratio.MilliTokensUsd, // fallback token billing
+		CompletionRatio: 1.0,
+		ContextLength:   32768,
+		InputModalities: []string{"audio"},
+		Audio: &adaptor.AudioPricingConfig{
+			UsdPerSecond: 0.003 / 60.0, // $0.003 per audio minute
+		},
+		Description: "Voxtral Mini Transcribe 2 (2026-02) low-latency speech-to-text model at $0.003 per audio minute.",
+	},
+	"voxtral-tts-2603": {
+		// Voxtral TTS bills at $16 per million characters ($0.016/1k chars).
+		// We surface the per-character rate via the token ratio so prompt billing
+		// fires consistently when callers pass text input.
+		Ratio:            16.0 * ratio.MilliTokensUsd,
+		CompletionRatio:  1.0,
+		ContextLength:    8192,
+		InputModalities:  textOnlyModalities,
+		OutputModalities: []string{"audio"},
+		Description:      "Voxtral TTS (2026-03) zero-shot voice cloning text-to-speech model at $16 per million input characters.",
+	},
+
 	// --- Mistral Large family ---
 	"mistral-large-latest": {
 		Ratio:                       0.5 * ratio.MilliTokensUsd, // $0.50 input (Large 3)
@@ -246,8 +284,8 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		Description:                 "Mistral Small 4 (2026-03) 119B MoE hybrid model with reasoning, vision, and 256k context.",
 	},
 	"mistral-small-2506": {
-		Ratio:                       0.15 * ratio.MilliTokensUsd,
-		CompletionRatio:             4.0,
+		Ratio:                       0.1 * ratio.MilliTokensUsd, // $0.10 input
+		CompletionRatio:             3.0,                        // $0.30 output
 		ContextLength:               131072,
 		MaxOutputTokens:             8192,
 		InputModalities:             multimodalInputModalities,

@@ -285,10 +285,13 @@ var qwenOpenModelRatios = map[string]adaptor.ModelConfig{
 	},
 
 	// ----- Qwen3 Coder (open) --------------------------------------------------
-	// 480B-A35B 6.17/24.68 CNY base tier; 30B-A3B 1.55/6.17 CNY base tier.
+	// Aliyun pricing (verified 2026-05-19, Beijing CNY/1M, 0-32K base tier):
+	//   480B-A35B Instruct: 6 / 24
+	//   30B-A3B Instruct:   1.5 / 6
+	//   qwen3-coder-next:   1 / 4 (256K-context cost-optimized successor)
 	"qwen3-coder-480b-a35b-instruct": {
-		Ratio:                       0.00617 * 1000 * ratio.MilliTokensRmb,
-		CompletionRatio:             4, // 24.68 / 6.17
+		Ratio:                       0.006 * 1000 * ratio.MilliTokensRmb,
+		CompletionRatio:             4, // 24 / 6
 		ContextLength:               262144,
 		MaxOutputTokens:             65536,
 		InputModalities:             []string{"text"},
@@ -300,8 +303,8 @@ var qwenOpenModelRatios = map[string]adaptor.ModelConfig{
 		Description:                 "Qwen3-Coder 480B A35B Instruct: open-weight MoE coder flagship (0-32K base tier billed here).",
 	},
 	"qwen3-coder-30b-a3b-instruct": {
-		Ratio:                       0.00155 * 1000 * ratio.MilliTokensRmb,
-		CompletionRatio:             3.98, // 6.17 / 1.55
+		Ratio:                       0.0015 * 1000 * ratio.MilliTokensRmb,
+		CompletionRatio:             4, // 6 / 1.5
 		ContextLength:               262144,
 		MaxOutputTokens:             65536,
 		InputModalities:             []string{"text"},
@@ -311,6 +314,19 @@ var qwenOpenModelRatios = map[string]adaptor.ModelConfig{
 		Quantization:                "bf16",
 		HuggingFaceID:               "Qwen/Qwen3-Coder-30B-A3B-Instruct",
 		Description:                 "Qwen3-Coder 30B A3B Instruct: open-weight MoE coder (0-32K base tier billed here).",
+	},
+	"qwen3-coder-next": {
+		Ratio:                       0.001 * 1000 * ratio.MilliTokensRmb,
+		CompletionRatio:             4, // 4 / 1
+		ContextLength:               262144,
+		MaxOutputTokens:             65536,
+		InputModalities:             []string{"text"},
+		OutputModalities:            []string{"text"},
+		SupportedFeatures:           qwenChatFeatures(),
+		SupportedSamplingParameters: qwenStandardSamplingParameters(),
+		Quantization:                "bf16",
+		HuggingFaceID:               "Qwen/Qwen3-Coder-Next",
+		Description:                 "Qwen3-Coder Next: open-weight cost-optimized coder successor (256K context, 0-32K base tier billed here).",
 	},
 
 	// ----- Qwen 2 Instruct (open) ---------------------------------------------
@@ -715,6 +731,123 @@ var qwenOpenModelRatios = map[string]adaptor.ModelConfig{
 		Quantization:                "bf16",
 		// HF slug not published for the 0.5B variant on the Qwen org page.
 		Description: "Qwen2.5-VL 0.5B Instruct: open-weight micro vision-language model (HF card not published).",
+	},
+
+	// ----- Qwen 3 VL (open vision) --------------------------------------------
+	// Aliyun pricing (verified 2026-05-19, Beijing CNY/1M):
+	//   235B-A22B Instruct: 2 / 8;   235B-A22B Thinking: 2 / 20
+	//    32B Instruct:      2 / 8;    32B Thinking:      2 / 20
+	//    30B-A3B Instruct:  0.75 / 3; 30B-A3B Thinking:  0.75 / 7.5
+	//     8B Instruct:      0.5  / 2;  8B Thinking:      0.5  / 5
+	// All variants are open-weight under https://huggingface.co/Qwen and serve
+	// at bf16 on Model Studio.
+	"qwen3-vl-235b-a22b-instruct": {
+		Ratio:                       0.002 * 1000 * ratio.MilliTokensRmb,
+		CompletionRatio:             4, // 8 / 2
+		ContextLength:               262144,
+		MaxOutputTokens:             32768,
+		InputModalities:             []string{"text", "image", "file"},
+		OutputModalities:            []string{"text"},
+		SupportedFeatures:           qwenChatFeatures(),
+		SupportedSamplingParameters: qwenStandardSamplingParameters(),
+		Quantization:                "bf16",
+		HuggingFaceID:               "Qwen/Qwen3-VL-235B-A22B-Instruct",
+		Description:                 "Qwen3-VL 235B A22B Instruct: open-weight multimodal MoE flagship (22B active, 256K context).",
+	},
+	"qwen3-vl-235b-a22b-thinking": {
+		Ratio:                       0.002 * 1000 * ratio.MilliTokensRmb,
+		CompletionRatio:             10, // 20 / 2
+		ContextLength:               262144,
+		MaxOutputTokens:             32768,
+		InputModalities:             []string{"text", "image", "file"},
+		OutputModalities:            []string{"text"},
+		SupportedFeatures:           qwenReasoningFeatures(),
+		SupportedSamplingParameters: qwenReasoningSamplingParameters(),
+		MaxReasoningTokens:          38912,
+		Quantization:                "bf16",
+		HuggingFaceID:               "Qwen/Qwen3-VL-235B-A22B-Thinking",
+		Description:                 "Qwen3-VL 235B A22B Thinking: open-weight multimodal reasoning MoE flagship (22B active).",
+	},
+	"qwen3-vl-32b-instruct": {
+		Ratio:                       0.002 * 1000 * ratio.MilliTokensRmb,
+		CompletionRatio:             4, // 8 / 2
+		ContextLength:               262144,
+		MaxOutputTokens:             32768,
+		InputModalities:             []string{"text", "image", "file"},
+		OutputModalities:            []string{"text"},
+		SupportedFeatures:           qwenChatFeatures(),
+		SupportedSamplingParameters: qwenStandardSamplingParameters(),
+		Quantization:                "bf16",
+		HuggingFaceID:               "Qwen/Qwen3-VL-32B-Instruct",
+		Description:                 "Qwen3-VL 32B Instruct: open-weight dense multimodal model.",
+	},
+	"qwen3-vl-32b-thinking": {
+		Ratio:                       0.002 * 1000 * ratio.MilliTokensRmb,
+		CompletionRatio:             10, // 20 / 2
+		ContextLength:               262144,
+		MaxOutputTokens:             32768,
+		InputModalities:             []string{"text", "image", "file"},
+		OutputModalities:            []string{"text"},
+		SupportedFeatures:           qwenReasoningFeatures(),
+		SupportedSamplingParameters: qwenReasoningSamplingParameters(),
+		MaxReasoningTokens:          38912,
+		Quantization:                "bf16",
+		HuggingFaceID:               "Qwen/Qwen3-VL-32B-Thinking",
+		Description:                 "Qwen3-VL 32B Thinking: open-weight dense multimodal reasoning model.",
+	},
+	"qwen3-vl-30b-a3b-instruct": {
+		Ratio:                       0.00075 * 1000 * ratio.MilliTokensRmb,
+		CompletionRatio:             4, // 3 / 0.75
+		ContextLength:               262144,
+		MaxOutputTokens:             32768,
+		InputModalities:             []string{"text", "image", "file"},
+		OutputModalities:            []string{"text"},
+		SupportedFeatures:           qwenChatFeatures(),
+		SupportedSamplingParameters: qwenStandardSamplingParameters(),
+		Quantization:                "bf16",
+		HuggingFaceID:               "Qwen/Qwen3-VL-30B-A3B-Instruct",
+		Description:                 "Qwen3-VL 30B A3B Instruct: open-weight multimodal MoE (3B active).",
+	},
+	"qwen3-vl-30b-a3b-thinking": {
+		Ratio:                       0.00075 * 1000 * ratio.MilliTokensRmb,
+		CompletionRatio:             10, // 7.5 / 0.75
+		ContextLength:               262144,
+		MaxOutputTokens:             32768,
+		InputModalities:             []string{"text", "image", "file"},
+		OutputModalities:            []string{"text"},
+		SupportedFeatures:           qwenReasoningFeatures(),
+		SupportedSamplingParameters: qwenReasoningSamplingParameters(),
+		MaxReasoningTokens:          38912,
+		Quantization:                "bf16",
+		HuggingFaceID:               "Qwen/Qwen3-VL-30B-A3B-Thinking",
+		Description:                 "Qwen3-VL 30B A3B Thinking: open-weight multimodal MoE reasoning model (3B active).",
+	},
+	"qwen3-vl-8b-instruct": {
+		Ratio:                       0.0005 * 1000 * ratio.MilliTokensRmb,
+		CompletionRatio:             4, // 2 / 0.5
+		ContextLength:               262144,
+		MaxOutputTokens:             32768,
+		InputModalities:             []string{"text", "image", "file"},
+		OutputModalities:            []string{"text"},
+		SupportedFeatures:           qwenChatFeatures(),
+		SupportedSamplingParameters: qwenStandardSamplingParameters(),
+		Quantization:                "bf16",
+		HuggingFaceID:               "Qwen/Qwen3-VL-8B-Instruct",
+		Description:                 "Qwen3-VL 8B Instruct: open-weight compact multimodal model.",
+	},
+	"qwen3-vl-8b-thinking": {
+		Ratio:                       0.0005 * 1000 * ratio.MilliTokensRmb,
+		CompletionRatio:             10, // 5 / 0.5
+		ContextLength:               262144,
+		MaxOutputTokens:             32768,
+		InputModalities:             []string{"text", "image", "file"},
+		OutputModalities:            []string{"text"},
+		SupportedFeatures:           qwenReasoningFeatures(),
+		SupportedSamplingParameters: qwenReasoningSamplingParameters(),
+		MaxReasoningTokens:          38912,
+		Quantization:                "bf16",
+		HuggingFaceID:               "Qwen/Qwen3-VL-8B-Thinking",
+		Description:                 "Qwen3-VL 8B Thinking: open-weight compact multimodal reasoning model.",
 	},
 
 	// ----- Qwen 2 VL (open vision) --------------------------------------------

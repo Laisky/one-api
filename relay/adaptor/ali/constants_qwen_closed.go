@@ -156,11 +156,17 @@ var qwenClosedModelRatios = map[string]adaptor.ModelConfig{
 		Description:                 "Qwen Max long-context legacy variant; superseded by tiered qwen-max.",
 	},
 
-	// ----- Qwen3 (closed) ------------------------------------------------------
-	// Tiered: 2.57/10.30 CNY (0-32K), 7.21/28.86 CNY (128K-252K).
+	// ----- Qwen3 / Qwen3.5 / Qwen3.6 (closed) ----------------------------------
+	// Aliyun pricing (verified 2026-05-19, Beijing CNY/1M):
+	//   qwen3-max:           0-32K 2.5/10, 32K-128K 4/16, 128K-256K 7/28
+	//   qwen3.5-plus:        0-128K 0.8/4.8, 128K-256K 2/12, 256K-1M 4/24
+	//   qwen3.5-flash:       0-128K 0.2/2, 128K-256K 0.8/8, 256K-1M 1.2/12
+	//   qwen3.6-plus:        0-256K 2/12, 256K-1M 8/48 (released 2026-04-02)
+	//   qwen3.6-flash:       0-256K 1.2/7.2, 256K-1M 4.8/28.8 (released 2026-04-16)
+	//   qwen3.6-max-preview: 0-128K 9/54, 128K-256K 15/90 (released 2026-04-20)
 	"qwen3-max": {
-		Ratio:                       0.00257 * 1000 * ratio.MilliTokensRmb,
-		CompletionRatio:             4.0, // 10.30 / 2.57
+		Ratio:                       0.0025 * 1000 * ratio.MilliTokensRmb,
+		CompletionRatio:             4, // 10 / 2.5
 		ContextLength:               262144,
 		MaxOutputTokens:             32768,
 		InputModalities:             []string{"text"},
@@ -170,8 +176,8 @@ var qwenClosedModelRatios = map[string]adaptor.ModelConfig{
 		Description:                 "Qwen3 Max: closed-weight flagship with 256K context and tiered pricing (0-32K tier billed here).",
 	},
 	"qwen3-max-preview": {
-		Ratio:                       0.00257 * 1000 * ratio.MilliTokensRmb,
-		CompletionRatio:             4.0,
+		Ratio:                       0.0025 * 1000 * ratio.MilliTokensRmb,
+		CompletionRatio:             4,
 		ContextLength:               262144,
 		MaxOutputTokens:             32768,
 		InputModalities:             []string{"text"},
@@ -179,6 +185,62 @@ var qwenClosedModelRatios = map[string]adaptor.ModelConfig{
 		SupportedFeatures:           qwenChatFeatures(),
 		SupportedSamplingParameters: qwenStandardSamplingParameters(),
 		Description:                 "Qwen3 Max Preview alias (matches qwen3-max pricing).",
+	},
+	"qwen3.5-plus": {
+		Ratio:                       0.0008 * 1000 * ratio.MilliTokensRmb,
+		CompletionRatio:             6, // 4.8 / 0.8
+		ContextLength:               1000000,
+		MaxOutputTokens:             32768,
+		InputModalities:             []string{"text"},
+		OutputModalities:            []string{"text"},
+		SupportedFeatures:           qwenChatFeatures(),
+		SupportedSamplingParameters: qwenStandardSamplingParameters(),
+		Description:                 "Qwen3.5 Plus: closed-weight balanced tier with 1M context (0-128K base tier billed here).",
+	},
+	"qwen3.5-flash": {
+		Ratio:                       0.0002 * 1000 * ratio.MilliTokensRmb,
+		CompletionRatio:             10, // 2 / 0.2
+		ContextLength:               1000000,
+		MaxOutputTokens:             32768,
+		InputModalities:             []string{"text"},
+		OutputModalities:            []string{"text"},
+		SupportedFeatures:           qwenChatFeatures(),
+		SupportedSamplingParameters: qwenStandardSamplingParameters(),
+		Description:                 "Qwen3.5 Flash: closed-weight cost-optimized tier with 1M context (0-128K base tier billed here).",
+	},
+	"qwen3.6-plus": {
+		Ratio:                       0.002 * 1000 * ratio.MilliTokensRmb,
+		CompletionRatio:             6, // 12 / 2
+		ContextLength:               1000000,
+		MaxOutputTokens:             65536,
+		InputModalities:             []string{"text"},
+		OutputModalities:            []string{"text"},
+		SupportedFeatures:           qwenChatFeatures(),
+		SupportedSamplingParameters: qwenStandardSamplingParameters(),
+		Description:                 "Qwen3.6 Plus: closed-weight flagship released 2026-04-02 with 1M context (0-256K base tier billed here).",
+	},
+	"qwen3.6-flash": {
+		Ratio:                       0.0012 * 1000 * ratio.MilliTokensRmb,
+		CompletionRatio:             6, // 7.2 / 1.2
+		ContextLength:               1000000,
+		MaxOutputTokens:             65536,
+		InputModalities:             []string{"text"},
+		OutputModalities:            []string{"text"},
+		SupportedFeatures:           qwenChatFeatures(),
+		SupportedSamplingParameters: qwenStandardSamplingParameters(),
+		Description:                 "Qwen3.6 Flash: closed-weight cost-optimized tier released 2026-04-16 with 1M context (0-256K base tier billed here).",
+	},
+	"qwen3.6-max-preview": {
+		Ratio:                       0.009 * 1000 * ratio.MilliTokensRmb,
+		CompletionRatio:             6, // 54 / 9
+		ContextLength:               262144,
+		MaxOutputTokens:             65536,
+		InputModalities:             []string{"text"},
+		OutputModalities:            []string{"text"},
+		SupportedFeatures:           qwenReasoningFeatures(),
+		SupportedSamplingParameters: qwenStandardSamplingParameters(),
+		MaxReasoningTokens:          65536,
+		Description:                 "Qwen3.6 Max Preview: closed-weight reasoning flagship released 2026-04-20 (256K context, 0-128K base tier billed here).",
 	},
 
 	// ----- Qwen-VL (closed vision) --------------------------------------------
@@ -273,6 +335,37 @@ var qwenClosedModelRatios = map[string]adaptor.ModelConfig{
 		SupportedFeatures:           qwenChatFeatures(),
 		SupportedSamplingParameters: qwenStandardSamplingParameters(),
 		Description:                 "Qwen3-VL Flash: closed-weight cost-optimized multimodal tier (0-32K base tier billed here).",
+	},
+
+	// ----- Qwen Omni (closed, multimodal) --------------------------------------
+	// Aliyun pricing (verified 2026-05-19, Beijing CNY/1M, text-only billing
+	// shown here; audio/image inputs are billed at separate rates documented in
+	// the Aliyun model-pricing page):
+	//   qwen3-omni-flash:  text-in 6.9 / text+audio-out 62.6
+	//   qwen-omni-turbo:   text-in 1.6 / text+audio-out 50
+	// The relay records the text input/output rate; audio billing must be
+	// resolved upstream via the multimodal billing path.
+	"qwen3-omni-flash": {
+		Ratio:                       0.0069 * 1000 * ratio.MilliTokensRmb,
+		CompletionRatio:             2.29, // 15.8 / 6.9 (text-only audio-disabled output)
+		ContextLength:               262144,
+		MaxOutputTokens:             16384,
+		InputModalities:             []string{"text", "image", "file"},
+		OutputModalities:            []string{"text"},
+		SupportedFeatures:           qwenChatFeatures(),
+		SupportedSamplingParameters: qwenStandardSamplingParameters(),
+		Description:                 "Qwen3-Omni Flash: closed-weight multimodal (text/image/audio/video) tier (text I/O rate billed here; audio billing is per-modality upstream).",
+	},
+	"qwen-omni-turbo": {
+		Ratio:                       0.0016 * 1000 * ratio.MilliTokensRmb,
+		CompletionRatio:             15.625, // 25 / 1.6 (text-only audio-disabled output)
+		ContextLength:               32768,
+		MaxOutputTokens:             8192,
+		InputModalities:             []string{"text", "image", "file"},
+		OutputModalities:            []string{"text"},
+		SupportedFeatures:           qwenChatFeatures(),
+		SupportedSamplingParameters: qwenStandardSamplingParameters(),
+		Description:                 "Qwen-Omni Turbo: closed-weight multimodal tier (text I/O rate billed here; audio billing is per-modality upstream).",
 	},
 
 	// ----- Qwen-Audio (closed) -------------------------------------------------
@@ -383,10 +476,12 @@ var qwenClosedModelRatios = map[string]adaptor.ModelConfig{
 	},
 
 	// ----- Qwen3 Coder (closed, tiered) ----------------------------------------
-	// qwen3-coder-plus: tiered 4.11-20.56 in / 16.45-205.58 out CNY per 1M.
+	// Aliyun pricing (verified 2026-05-19, Beijing CNY/1M, 0-32K base tier):
+	//   qwen3-coder-plus:  4 / 16   (256K-1M: 20 / 200)
+	//   qwen3-coder-flash: 1 / 4    (256K-1M: 5 / 25)
 	"qwen3-coder-plus": {
-		Ratio:                       0.00411 * 1000 * ratio.MilliTokensRmb,
-		CompletionRatio:             4, // 16.45 / 4.11
+		Ratio:                       0.004 * 1000 * ratio.MilliTokensRmb,
+		CompletionRatio:             4, // 16 / 4
 		ContextLength:               1000000,
 		MaxOutputTokens:             65536,
 		InputModalities:             []string{"text"},
@@ -396,8 +491,8 @@ var qwenClosedModelRatios = map[string]adaptor.ModelConfig{
 		Description:                 "Qwen3-Coder Plus: closed-weight code flagship with tiered 1M context (0-32K base tier billed here).",
 	},
 	"qwen3-coder-flash": {
-		Ratio:                       0.00103 * 1000 * ratio.MilliTokensRmb,
-		CompletionRatio:             4, // 4.11 / 1.03
+		Ratio:                       0.001 * 1000 * ratio.MilliTokensRmb,
+		CompletionRatio:             4, // 4 / 1
 		ContextLength:               1000000,
 		MaxOutputTokens:             65536,
 		InputModalities:             []string{"text"},

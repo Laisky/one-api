@@ -90,17 +90,6 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		HuggingFaceID:               "meta-llama/Llama-3.1-8B-Instruct",
 		Description:                 "Meta's compact 8B Llama 3.1 instruct model with 131K context, optimized for low-latency chat.",
 	},
-	"meta-llama/llama-guard-4-12b": {
-		Ratio:                       0.2 * ratio.MilliTokensUsd,
-		CompletionRatio:             1,
-		ContextLength:               131072,
-		MaxOutputTokens:             1024,
-		InputModalities:             groqTextImageInModalities,
-		OutputModalities:            groqTextOnlyModalities,
-		SupportedSamplingParameters: groqClassifierSamplingParams,
-		HuggingFaceID:               "meta-llama/Llama-Guard-4-12B",
-		Description:                 "12B safety classifier built on the Llama 4 Scout backbone; accepts text and up to five image inputs.",
-	},
 	"whisper-large-v3": {
 		Ratio:                       0,
 		CompletionRatio:             1,
@@ -161,18 +150,6 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 	},
 
 	// Preview Models
-	"meta-llama/llama-4-maverick-17b-128e-instruct": {
-		Ratio:                       0.2 * ratio.MilliTokensUsd,
-		CompletionRatio:             0.6 / 0.2,
-		ContextLength:               131072,
-		MaxOutputTokens:             8192,
-		InputModalities:             groqTextImageInModalities,
-		OutputModalities:            groqTextOnlyModalities,
-		SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs"},
-		SupportedSamplingParameters: groqChatSamplingParams,
-		HuggingFaceID:               "meta-llama/Llama-4-Maverick-17B-128E-Instruct",
-		Description:                 "Meta Llama 4 Maverick (17B activated, 400B total MoE) multimodal model accepting up to 5 image inputs.",
-	},
 	"meta-llama/llama-4-scout-17b-16e-instruct": {
 		Ratio:                       0.11 * ratio.MilliTokensUsd,
 		CompletionRatio:             0.34 / 0.11,
@@ -206,19 +183,6 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		SupportedSamplingParameters: groqClassifierSamplingParams,
 		HuggingFaceID:               "meta-llama/Llama-Prompt-Guard-2-86M",
 		Description:                 "86M-parameter multilingual classifier (mDeBERTa) detecting prompt injections across 8 languages.",
-	},
-	"moonshotai/kimi-k2-instruct-0905": {
-		Ratio:                       1 * ratio.MilliTokensUsd,
-		CachedInputRatio:            0.5 * ratio.MilliTokensUsd,
-		CompletionRatio:             3,
-		ContextLength:               262144,
-		MaxOutputTokens:             16384,
-		InputModalities:             groqTextOnlyModalities,
-		OutputModalities:            groqTextOnlyModalities,
-		SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs"},
-		SupportedSamplingParameters: groqChatSamplingParams,
-		HuggingFaceID:               "moonshotai/Kimi-K2-Instruct-0905",
-		Description:                 "Moonshot AI Kimi K2 (1T-parameter MoE, 32B activated) coding/agent model with 256K context.",
 	},
 	"openai/gpt-oss-safeguard-20b": {
 		Ratio:                       0.075 * ratio.MilliTokensUsd,

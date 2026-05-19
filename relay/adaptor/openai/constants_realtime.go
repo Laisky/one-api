@@ -13,6 +13,7 @@ import (
 //   - https://developers.openai.com/api/docs/pricing (Realtime and audio table)
 var realtimeModelRatios = map[string]adaptor.ModelConfig{
 	// gpt-realtime-2: text $4/$24, audio $32/$64, cached text $0.40, image $5/$0.50
+	// MaxOutputTokens verified 32K per developers.openai.com/api/docs/models/gpt-realtime-2 (May 2026).
 	// Source: https://developers.openai.com/api/docs/pricing#multimodal-models
 	"gpt-realtime-2": {
 		Ratio:            4.0 * ratio.MilliTokensUsd,
@@ -24,12 +25,12 @@ var realtimeModelRatios = map[string]adaptor.ModelConfig{
 			PromptTokensPerSecond: 10,
 		},
 		ContextLength:               128000,
-		MaxOutputTokens:             4096,
+		MaxOutputTokens:             32000,
 		InputModalities:             []string{"text", "audio", "image"},
 		OutputModalities:            []string{"text", "audio"},
 		SupportedFeatures:           []string{"tools"},
 		SupportedSamplingParameters: standardSamplingParameters(),
-		Description:                 "GPT Realtime 2: next-gen bidirectional audio + image input with tool calls.",
+		Description:                 "GPT Realtime 2: next-gen bidirectional audio + image input with tool calls (128K context, 32K output).",
 	},
 	// gpt-realtime-translate: usd-per-minute audio translation endpoint
 	// Source: https://developers.openai.com/api/docs/pricing#multimodal-models
@@ -38,8 +39,20 @@ var realtimeModelRatios = map[string]adaptor.ModelConfig{
 			UsdPerSecond: 0.034 / 60.0, // $0.034 per minute
 		},
 		InputModalities:  []string{"audio"},
-		OutputModalities: []string{"audio"},
-		Description:      "GPT Realtime translate: usd-per-minute speech translation endpoint.",
+		OutputModalities: []string{"audio", "text"},
+		Description:      "GPT Realtime translate: usd-per-minute streaming speech translation endpoint (70+ input, 13 output languages).",
+	},
+	// gpt-realtime-whisper: streaming speech-to-text transcription, $0.017/minute audio duration.
+	// Released 2026-05-07 alongside gpt-realtime-2 voice intelligence rollout.
+	// Source: https://developers.openai.com/api/docs/models/gpt-realtime-whisper
+	"gpt-realtime-whisper": {
+		Audio: &adaptor.AudioPricingConfig{
+			UsdPerSecond: 0.017 / 60.0, // $0.017 per minute
+		},
+		ContextLength:    16000,
+		InputModalities:  []string{"audio", "text"},
+		OutputModalities: []string{"text"},
+		Description:      "GPT Realtime Whisper: low-latency streaming speech-to-text ($0.017/minute).",
 	},
 	// gpt-realtime-1.5: text $4/$16, audio $32/$64, cached text $0.40
 	"gpt-realtime-1.5": {

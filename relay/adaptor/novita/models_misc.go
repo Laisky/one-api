@@ -220,8 +220,10 @@ var miscModelRatios = map[string]adaptor.ModelConfig{
 		Description:                 "Moonshot Kimi K2.5 chat model with 256K context.",
 	},
 	"moonshotai/kimi-k2.6": {
-		Ratio:                       0.95 * ratio.MilliTokensUsd,
-		CompletionRatio:             4.21052631579,
+		// Novita repriced Kimi K2.6 to $0.80/$3.40 with $0.16 cache-read effective May 2026.
+		// Source: https://novita.ai/pricing (retrieved 2026-05-19)
+		Ratio:                       0.80 * ratio.MilliTokensUsd,
+		CompletionRatio:             3.40 / 0.80,
 		CachedInputRatio:            0.16 * ratio.MilliTokensUsd,
 		ContextLength:               262144,
 		MaxOutputTokens:             262144,

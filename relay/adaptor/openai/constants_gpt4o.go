@@ -179,12 +179,13 @@ var gpt4oModelRatios = map[string]adaptor.ModelConfig{
 		Description:                 "GPT-4o audio preview snapshot from 2025-06-03.",
 	},
 	// chatgpt-4o-latest: rolling alias mirroring the consumer ChatGPT default model.
-	// Note: the model behind this alias has been upgraded several times. As of 2026-05,
-	// the alias is billed at the ChatGPT-tier rate $5/$0.50/$30 per 1M tokens.
-	// Source: https://developers.openai.com/api/docs/pricing#specialized-models (chat-latest row).
+	// Retired from OpenAI API on 2026-02-17 (replaced by chat-latest). Kept here for
+	// backward compatibility with channels that still proxy this name; new traffic
+	// should use chat-latest (registered separately under the GPT-5 family pricing).
+	// Source: https://developers.openai.com/api/docs/deprecations
 	"chatgpt-4o-latest": {
 		Ratio:                       5.0 * ratio.MilliTokensUsd,
-		CompletionRatio:             30.0 / 5.0,
+		CompletionRatio:             15.0 / 5.0,
 		CachedInputRatio:            0.5 * ratio.MilliTokensUsd,
 		ContextLength:               128000,
 		MaxOutputTokens:             16384,
@@ -192,6 +193,6 @@ var gpt4oModelRatios = map[string]adaptor.ModelConfig{
 		OutputModalities:            []string{"text"},
 		SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs"},
 		SupportedSamplingParameters: standardSamplingParameters(),
-		Description:                 "ChatGPT-4o latest: rolling alias mirroring the consumer ChatGPT default model (chat-latest pricing).",
+		Description:                 "ChatGPT-4o latest: legacy alias (retired from OpenAI API 2026-02-17). Use chat-latest instead.",
 	},
 }
