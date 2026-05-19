@@ -22,15 +22,16 @@ import (
 //   - https://help.aliyun.com/zh/model-studio/wan-image-generation-and-editing-api-reference
 //
 // Mainland-China CNY/image pricing tables (Beijing, verified 2026-05-19):
-//   Wan image+edit:    wan2.7-image-pro 0.50, wan2.7-image 0.20, wan2.6-image 0.20
-//   Wan t2i (legacy):  wan2.6-t2i 0.20, wan2.5-t2i-preview 0.20,
-//                      wan2.2-t2i-plus 0.20, wan2.2-t2i-flash 0.14,
-//                      wanx2.1-t2i-plus 0.20, wanx2.1-t2i-turbo 0.14,
-//                      wanx2.0-t2i-turbo 0.04, wanx-v1 0.16
-//   Qwen image (txt2img): qwen-image-2.0-pro 0.50, qwen-image-2.0 0.20,
-//                         qwen-image-max 0.50, qwen-image-plus 0.20, qwen-image 0.25
-//   Qwen image (edit):    qwen-image-edit-max 0.50, qwen-image-edit-plus 0.20,
-//                         qwen-image-edit 0.30
+//
+//	Wan image+edit:    wan2.7-image-pro 0.50, wan2.7-image 0.20, wan2.6-image 0.20
+//	Wan t2i (legacy):  wan2.6-t2i 0.20, wan2.5-t2i-preview 0.20,
+//	                   wan2.2-t2i-plus 0.20, wan2.2-t2i-flash 0.14,
+//	                   wanx2.1-t2i-plus 0.20, wanx2.1-t2i-turbo 0.14,
+//	                   wanx2.0-t2i-turbo 0.04, wanx-v1 0.16
+//	Qwen image (txt2img): qwen-image-2.0-pro 0.50, qwen-image-2.0 0.20,
+//	                      qwen-image-max 0.50, qwen-image-plus 0.20, qwen-image 0.25
+//	Qwen image (edit):    qwen-image-edit-max 0.50, qwen-image-edit-plus 0.20,
+//	                      qwen-image-edit 0.30
 var wanxModelRatios = map[string]adaptor.ModelConfig{
 	"ali-stable-diffusion-xl": {
 		Ratio:           0,

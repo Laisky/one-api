@@ -278,14 +278,14 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		Description:                 "OpenAI gpt-oss default tag (20B); open-weight reasoning model with thinking mode, tool calling, and 128K context.",
 	},
 	"nomic-embed-text:latest": {
-		Ratio:                       0.005 * ratio.MilliTokensUsd,
-		CompletionRatio:             1,
-		ContextLength:               8192,
-		InputModalities:             ollamaTextModalities,
-		OutputModalities:            ollamaTextModalities,
-		Quantization:                "int4",
-		HuggingFaceID:               "nomic-ai/nomic-embed-text-v1.5",
-		Description:                 "Nomic AI nomic-embed-text v1.5 high-performing open embedding model with 8K context.",
+		Ratio:            0.005 * ratio.MilliTokensUsd,
+		CompletionRatio:  1,
+		ContextLength:    8192,
+		InputModalities:  ollamaTextModalities,
+		OutputModalities: ollamaTextModalities,
+		Quantization:     "int4",
+		HuggingFaceID:    "nomic-ai/nomic-embed-text-v1.5",
+		Description:      "Nomic AI nomic-embed-text v1.5 high-performing open embedding model with 8K context.",
 	},
 }
 

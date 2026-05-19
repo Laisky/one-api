@@ -337,12 +337,12 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 	// Audio models with published pricing.
 	"canopylabs/orpheus-3b-0.1-ft": {Ratio: 15.0 * ratio.MilliTokensUsd, CompletionRatio: 1},
 	// Kokoro 82M TTS repriced to $10/1M characters (Together pricing 2026-05-19).
-	"hexgrad/Kokoro-82M":           {Ratio: 10.0 * ratio.MilliTokensUsd, CompletionRatio: 1},
-	"cartesia/sonic-3":             {Ratio: 65.0 * ratio.MilliTokensUsd, CompletionRatio: 1},
-	"cartesia/sonic-2":             {Ratio: 65.0 * ratio.MilliTokensUsd, CompletionRatio: 1},
-	"cartesia/sonic":               {Ratio: 65.0 * ratio.MilliTokensUsd, CompletionRatio: 1},
-	"openai/whisper-large-v3":      {Ratio: 0, CompletionRatio: 1, Audio: &adaptor.AudioPricingConfig{UsdPerSecond: 0.0015 / 60}},
-	"nvidia/parakeet-tdt-0.6b-v3":  {Ratio: 0, CompletionRatio: 1, Audio: &adaptor.AudioPricingConfig{UsdPerSecond: 0.0015 / 60}},
+	"hexgrad/Kokoro-82M":          {Ratio: 10.0 * ratio.MilliTokensUsd, CompletionRatio: 1},
+	"cartesia/sonic-3":            {Ratio: 65.0 * ratio.MilliTokensUsd, CompletionRatio: 1},
+	"cartesia/sonic-2":            {Ratio: 65.0 * ratio.MilliTokensUsd, CompletionRatio: 1},
+	"cartesia/sonic":              {Ratio: 65.0 * ratio.MilliTokensUsd, CompletionRatio: 1},
+	"openai/whisper-large-v3":     {Ratio: 0, CompletionRatio: 1, Audio: &adaptor.AudioPricingConfig{UsdPerSecond: 0.0015 / 60}},
+	"nvidia/parakeet-tdt-0.6b-v3": {Ratio: 0, CompletionRatio: 1, Audio: &adaptor.AudioPricingConfig{UsdPerSecond: 0.0015 / 60}},
 }
 
 // ModelList captures the current public Together AI serverless catalog used by the OpenAI-compatible adapter.

@@ -172,7 +172,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		Ratio: 2.5 * ratio.MilliTokensUsd, CompletionRatio: 4,
 		ContextLength: 256000, MaxOutputTokens: 32768,
 		InputModalities: cohereTextInputs, OutputModalities: cohereTextOutputs,
-		SupportedFeatures: []string{"tools", "json_mode", "structured_outputs", "web_search", "reasoning"},
+		SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs", "web_search", "reasoning"},
 		SupportedSamplingParameters: cohereSamplingParams,
 		SupportedReasoningEfforts:   []string{"low", "medium", "high"},
 		Quantization:                "bf16",
