@@ -89,9 +89,9 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 	// on 2026-05-25 per the official notice; entries kept until that date.
 	// All prices per 1M tokens, in RMB. (cache-hit, cache-miss, output)
 	"kimi-k2-0905-preview": {
-		Ratio:                       4 * ratio.MilliTokensRmb,  // input (cache-miss)
-		CompletionRatio:             16.0 / 4.0,                // output / input
-		CachedInputRatio:            1 * ratio.MilliTokensRmb,  // input (cache-hit)
+		Ratio:                       4 * ratio.MilliTokensRmb, // input (cache-miss)
+		CompletionRatio:             16.0 / 4.0,               // output / input
+		CachedInputRatio:            1 * ratio.MilliTokensRmb, // input (cache-hit)
 		ContextLength:               262144,
 		MaxOutputTokens:             32768,
 		InputModalities:             moonshotTextInputs,

@@ -15,6 +15,7 @@ import (
 	"github.com/Laisky/one-api/relay/adaptor"
 	"github.com/Laisky/one-api/relay/adaptor/common/deepseekcompat"
 	"github.com/Laisky/one-api/relay/adaptor/common/structuredjson"
+	"github.com/Laisky/one-api/relay/adaptor/common/toolnamesafe"
 	"github.com/Laisky/one-api/relay/adaptor/openai_compatible"
 	"github.com/Laisky/one-api/relay/meta"
 	"github.com/Laisky/one-api/relay/model"
@@ -96,6 +97,13 @@ func (a *Adaptor) ConvertRequest(c *gin.Context, relayMode int, request *model.G
 	normalizeDeepSeekThinkingConfig(c, request)
 
 	normalizeDeepSeekToolMessageContent(c, request)
+
+	if rewrites := toolnamesafe.SanitizeRequestToolNames(c, request); rewrites > 0 {
+		gmw.GetLogger(c).Debug("sanitized deepseek tool/function names for provider compatibility",
+			zap.String("model", request.Model),
+			zap.Int("rewritten_count", rewrites),
+		)
+	}
 
 	if request.ResponseFormat != nil {
 		if request.ResponseFormat.JsonSchema != nil {

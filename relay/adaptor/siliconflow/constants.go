@@ -64,6 +64,7 @@ var (
 //   - https://www.siliconflow.com/pricing (English; USD per million tokens / image / second)
 //   - https://siliconflow.cn/pricing (Chinese; CNY per million tokens — converted at 0.14 USD/CNY for legacy aliases)
 //   - https://siliconflow.cn/zh-cn/models (catalog, partially login-gated)
+//
 // Capability metadata is derived from upstream HuggingFace model cards plus the
 // SiliconFlow text-generation guide.
 var ModelRatios = map[string]adaptor.ModelConfig{

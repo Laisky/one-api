@@ -283,6 +283,20 @@ const (
 	// before flushing them to the client.
 	ResponseStreamRewriteHandler = "response_stream_rewrite_handler"
 
+	// ToolNameSanitizeMap stores a per-request bidirectional rename table produced when
+	// tool/function names are sanitized for strict upstream validators (DeepSeek, OpenAI,
+	// Anthropic — all of which enforce `^[a-zA-Z0-9_-]+$`). The value is a map[string]string
+	// keyed by the sanitized name and yielding the original client-provided name. Response
+	// handlers consult this map to restore original names on
+	// `choices[].message.tool_calls[].function.name` (non-stream) and
+	// `choices[].delta.tool_calls[].function.name` (stream) before forwarding to the client,
+	// so the round-trip stays transparent to MCP-namespaced names like `server.tool`.
+	// Set in: relay/adaptor/common/toolnamesafe.SanitizeRequestToolNames.
+	// Read in: relay/adaptor/openai_compatible.Handler / UnifiedStreamProcessing and
+	// relay/adaptor/openai.Handler / StreamHandler / relay/adaptor/anthropic handlers when
+	// restoring names.
+	ToolNameSanitizeMap = "tool_name_sanitize_map"
+
 	// ResponseFormat is used by image APIs to carry desired output format when posted via JSON.
 	// Set in: image controller from request payload.
 	// Read in: image controller to format the response properly.

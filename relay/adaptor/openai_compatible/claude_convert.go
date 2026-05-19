@@ -17,12 +17,13 @@ import (
 	"github.com/Laisky/one-api/common"
 	"github.com/Laisky/one-api/common/render"
 	commonsse "github.com/Laisky/one-api/common/sse"
+	"github.com/Laisky/one-api/relay/adaptor/common/toolnamesafe"
 	relaymodel "github.com/Laisky/one-api/relay/model"
 )
 
 // ConvertOpenAIResponseToClaudeResponse converts an OpenAI-compatible response
 // (Chat Completions or Response API) into Claude Messages JSON http.Response.
-func ConvertOpenAIResponseToClaudeResponse(_ *gin.Context, resp *http.Response) (*http.Response, *relaymodel.ErrorWithStatusCode) {
+func ConvertOpenAIResponseToClaudeResponse(c *gin.Context, resp *http.Response) (*http.Response, *relaymodel.ErrorWithStatusCode) {
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, ErrorWrapper(err, "read_response_body_failed", http.StatusInternalServerError)
@@ -32,14 +33,14 @@ func ConvertOpenAIResponseToClaudeResponse(_ *gin.Context, resp *http.Response) 
 	// 1) Try Response API format first
 	var responseAPIResp responseAPIResponse
 	if err := json.Unmarshal(body, &responseAPIResp); err == nil && responseAPIResp.Object == "response" {
-		claudeResp := responseAPIResponseToClaude(&responseAPIResp)
+		claudeResp := responseAPIResponseToClaude(c, &responseAPIResp)
 		return marshalClaudeHTTPResponse(resp, claudeResp)
 	}
 
 	// 2) Fallback: Chat Completions format
 	var chatResp chatTextResponse
 	if err := json.Unmarshal(body, &chatResp); err == nil && len(chatResp.Choices) > 0 {
-		claudeResp := chatResponseToClaude(&chatResp)
+		claudeResp := chatResponseToClaude(c, &chatResp)
 		return marshalClaudeHTTPResponse(resp, claudeResp)
 	}
 
@@ -53,7 +54,7 @@ func ConvertOpenAIResponseToClaudeResponse(_ *gin.Context, resp *http.Response) 
 }
 
 // responseAPIResponseToClaude maps OpenAI Response API response to ClaudeMessages response
-func responseAPIResponseToClaude(r *responseAPIResponse) relaymodel.ClaudeResponse {
+func responseAPIResponseToClaude(c *gin.Context, r *responseAPIResponse) relaymodel.ClaudeResponse {
 	out := relaymodel.ClaudeResponse{
 		ID:         r.Id,
 		Type:       "message",
@@ -97,12 +98,13 @@ func responseAPIResponseToClaude(r *responseAPIResponse) relaymodel.ClaudeRespon
 				}
 			}
 		case "function_call":
-			// Map to Claude tool_use block
+			// Map to Claude tool_use block; restore any sanitized name so the
+			// client sees the original identifier it submitted.
 			input := json.RawMessage(item.Arguments)
 			out.Content = append(out.Content, relaymodel.ClaudeContent{
 				Type:  "tool_use",
 				ID:    item.CallId,
-				Name:  item.Name,
+				Name:  toolnamesafe.RestoreToolName(c, item.Name),
 				Input: input,
 			})
 		}
@@ -126,7 +128,7 @@ func responseAPIContentText(content responseAPIContent) string {
 }
 
 // chatResponseToClaude maps OpenAI Chat Completion response to ClaudeMessages response
-func chatResponseToClaude(r *chatTextResponse) relaymodel.ClaudeResponse {
+func chatResponseToClaude(c *gin.Context, r *chatTextResponse) relaymodel.ClaudeResponse {
 	out := relaymodel.ClaudeResponse{
 		ID:         r.Id,
 		Type:       "message",
@@ -181,8 +183,10 @@ func chatResponseToClaude(r *chatTextResponse) relaymodel.ClaudeResponse {
 			}
 		}
 
-		// Tool calls -> tool_use blocks
+		// Tool calls -> tool_use blocks; restore any sanitized name so the
+		// client sees the original identifier it submitted.
 		if len(choice.Message.ToolCalls) > 0 {
+			toolnamesafe.RestoreToolCallNames(c, choice.Message.ToolCalls)
 			for _, tc := range choice.Message.ToolCalls {
 				var input json.RawMessage
 				if tc.Function.Arguments != nil {
@@ -381,6 +385,10 @@ func ConvertOpenAIStreamToClaudeSSE(c *gin.Context, resp *http.Response, promptT
 				}
 
 				if len(choice.Delta.ToolCalls) > 0 {
+					// Restore any sanitized tool names in-place before emitting
+					// Claude tool_use content blocks so the client receives the
+					// original identifier it submitted.
+					toolnamesafe.RestoreToolCallNames(c, choice.Delta.ToolCalls)
 					for _, tc := range choice.Delta.ToolCalls {
 						id := tc.Id
 						if id == "" {
@@ -543,6 +551,9 @@ func ConvertOpenAIStreamToClaudeSSE(c *gin.Context, resp *http.Response, promptT
 
 			// Tool call deltas
 			if len(choice.Delta.ToolCalls) > 0 {
+				// Restore any sanitized tool names in-place before emitting Claude
+				// tool_use content blocks so the client sees the original names.
+				toolnamesafe.RestoreToolCallNames(c, choice.Delta.ToolCalls)
 				for _, tc := range choice.Delta.ToolCalls {
 					id := tc.Id
 					if id == "" {

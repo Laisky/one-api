@@ -11,6 +11,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/Laisky/one-api/common/ctxkey"
+	"github.com/Laisky/one-api/relay/adaptor/common/toolnamesafe"
 	"github.com/Laisky/one-api/relay/channeltype"
 	"github.com/Laisky/one-api/relay/meta"
 	"github.com/Laisky/one-api/relay/model"
@@ -145,6 +146,12 @@ func ConvertClaudeRequest(c *gin.Context, request *model.ClaudeRequest) (any, er
 	// Mark this as a Claude Messages conversion for response handling
 	c.Set(ctxkey.ClaudeMessagesConversion, true)
 	c.Set(ctxkey.OriginalClaudeRequest, request)
+
+	// Sanitize tool/function names so downstream providers with strict regex
+	// validators (OpenAI, DeepSeek, Anthropic) accept the converted payload.
+	// The reverse map stashed on c lets response handlers restore originals
+	// before forwarding to the client.
+	toolnamesafe.SanitizeRequestToolNames(c, openaiRequest)
 
 	return openaiRequest, nil
 }

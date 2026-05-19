@@ -11,6 +11,7 @@ import (
 
 	"github.com/Laisky/one-api/common/ctxkey"
 	"github.com/Laisky/one-api/relay/adaptor"
+	"github.com/Laisky/one-api/relay/adaptor/common/toolnamesafe"
 	billingratio "github.com/Laisky/one-api/relay/billing/ratio"
 	"github.com/Laisky/one-api/relay/meta"
 	"github.com/Laisky/one-api/relay/model"
@@ -92,6 +93,11 @@ func (a *Adaptor) ConvertRequest(c *gin.Context, relayMode int, request *model.G
 	}
 
 	c.Set(ctxkey.ClaudeModel, request.Model)
+	// Anthropic's `tools[].name` validator enforces `^[a-zA-Z0-9_-]{1,64}$`; sanitize
+	// the OpenAI-shaped payload before conversion so the resulting Anthropic tool
+	// definitions carry compliant names. Restoration happens in the response path
+	// (StreamHandler / Handler) using the rename map stashed on c.
+	toolnamesafe.SanitizeRequestToolNames(c, request)
 	return ConvertRequest(c, *request)
 }
 

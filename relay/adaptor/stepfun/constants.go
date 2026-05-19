@@ -90,7 +90,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 				InputTokenThreshold: 32000,
 			},
 		},
-		Description:                 "StepFun Step-3 multimodal reasoning model with tiered pricing (¥1.5-¥4 input / ¥4-¥10 output per 1M tokens).",
+		Description: "StepFun Step-3 multimodal reasoning model with tiered pricing (¥1.5-¥4 input / ¥4-¥10 output per 1M tokens).",
 	},
 	"step-3.5-flash": {
 		Ratio:                       0.7 * ratio.MilliTokensRmb,

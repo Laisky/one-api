@@ -22,6 +22,7 @@ import (
 	"github.com/Laisky/one-api/common/render"
 	commonsse "github.com/Laisky/one-api/common/sse"
 	"github.com/Laisky/one-api/common/tracing"
+	"github.com/Laisky/one-api/relay/adaptor/common/toolnamesafe"
 	"github.com/Laisky/one-api/relay/adaptor/openai"
 	"github.com/Laisky/one-api/relay/adaptor/openai_compatible"
 	"github.com/Laisky/one-api/relay/model"
@@ -699,11 +700,14 @@ func StreamResponseClaude2OpenAI(c *gin.Context, claudeResponse *StreamResponse)
 			if claudeResponse.ContentBlock.Type == "tool_use" {
 				// Set index for streaming tool calls - use the current index in the tools slice
 				index := len(tools)
+				// Restore any tool name that was sanitized in the request path so the
+				// client sees the original identifier it submitted.
+				toolName := toolnamesafe.RestoreToolName(c, claudeResponse.ContentBlock.Name)
 				tools = append(tools, model.Tool{
 					Id:   claudeResponse.ContentBlock.Id,
 					Type: "function",
 					Function: &model.Function{
-						Name:      claudeResponse.ContentBlock.Name,
+						Name:      toolName,
 						Arguments: "",
 					},
 					Index: &index, // Set index for streaming delta accumulation
@@ -855,11 +859,14 @@ func ResponseClaude2OpenAI(c *gin.Context, claudeResponse *Response) *openai.Tex
 
 		if v.Type == "tool_use" {
 			args, _ := json.Marshal(v.Input)
+			// Restore any tool name sanitized at the request boundary so the
+			// converted OpenAI response carries the original identifier.
+			toolName := toolnamesafe.RestoreToolName(c, v.Name)
 			tools = append(tools, model.Tool{
 				Id:   v.Id,
 				Type: "function", // compatible with other OpenAI derivative applications
 				Function: &model.Function{
-					Name:      v.Name,
+					Name:      toolName,
 					Arguments: string(args),
 				},
 			})
