@@ -44,7 +44,7 @@ func UnmarshalBodyReusable(c *gin.Context, v any) error {
 	}
 
 	// check v should be a pointer
-	if v == nil || reflect.TypeOf(v).Kind() != reflect.Ptr {
+	if v == nil || reflect.TypeOf(v).Kind() != reflect.Pointer {
 		return errors.Errorf("UnmarshalBodyReusable only accept pointer, got %v", reflect.TypeOf(v))
 	}
 

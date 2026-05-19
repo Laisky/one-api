@@ -615,4 +615,3 @@ func buildAnthropicStreamResponse(t *testing.T, toolName string) *http.Response 
 func stripClaudeFlag(c *gin.Context) {
 	c.Set(ctxkey.ClaudeMessagesConversion, false)
 }
-
