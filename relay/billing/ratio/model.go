@@ -9,7 +9,7 @@ import (
 
 const (
 	// ExchangeRateRmb represents the exchange rate between USD and RMB
-	ExchangeRateRmb = 8 // 1 USD = 8 RMB
+	ExchangeRateRmb = 7 // 1 USD = 7 RMB
 	// QuotaPerUsd represents the quota units granted per US dollar spent
 	QuotaPerUsd = 500000 // $1 = 500,000 quota
 	QuotaPerRMB = QuotaPerUsd / ExchangeRateRmb

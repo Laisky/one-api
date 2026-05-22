@@ -99,14 +99,16 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		HuggingFaceID:             "deepseek-ai/DeepSeek-V4-Flash",
 		Description:               "DeepSeek V4 Flash MoE chat model with thinking and non-thinking modes; 1M context.",
 	},
-	// deepseek-v4-pro list price: $1.74/1M cache-miss input, $0.0145/1M cache-hit input,
-	// $3.48/1M output, 1M context, 384K max output. A 75% promotional discount applies
-	// until 2026-05-31 15:59 UTC; the list price is preserved here since the upstream
-	// catalog records list rates, not promotional ones.
+	// deepseek-v4-pro list price: $0.435/1M cache-miss input, $0.003625/1M cache-hit input,
+	// $0.87/1M output, 1M context, 384K max output. DeepSeek announced that after the
+	// 75% promotional discount ends on 2026-05-31 15:59 UTC the API price officially
+	// adjusts to 1/4 of the previous list ($1.74 / $0.0145 / $3.48 → $0.435 / $0.003625 / $0.87),
+	// so the promo rate becomes the permanent list rate.
+	// Source: https://api-docs.deepseek.com/quick_start/pricing (footnote 3).
 	"deepseek-v4-pro": {
-		Ratio:                       1.74 * ratio.MilliTokensUsd,
-		CachedInputRatio:            0.0145 * ratio.MilliTokensUsd,
-		CompletionRatio:             3.48 / 1.74,
+		Ratio:                       0.435 * ratio.MilliTokensUsd,
+		CachedInputRatio:            0.003625 * ratio.MilliTokensUsd,
+		CompletionRatio:             0.87 / 0.435,
 		ContextLength:               1000000,
 		MaxOutputTokens:             393216,
 		InputModalities:             deepseekTextInputs,
