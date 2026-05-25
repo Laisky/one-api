@@ -224,6 +224,39 @@ export function ModelsPage() {
     return `$${price.toFixed(2)}`;
   };
 
+  /**
+   * True when the model carries pricing that isn't priced per input/output token —
+   * e.g. flat per-call, per-image, per-second, or per-document-page billing.
+   * Used to distinguish "truly free" from "non-token billed" when token-price columns
+   * would otherwise show $0 → "Free".
+   */
+  const hasNonTokenPricing = (data: ModelDisplayData): boolean => {
+    if (data.per_call_pricing && ((data.per_call_pricing.usd_per_thousand_calls ?? 0) > 0 || (data.per_call_pricing.usd_per_call ?? 0) > 0)) return true;
+    if ((data.image_price ?? 0) > 0) return true;
+    if (data.image_pricing && (data.image_pricing.price_per_image_usd ?? 0) > 0) return true;
+    if (data.video_pricing && (data.video_pricing.per_second_usd ?? 0) > 0) return true;
+    if (data.audio_pricing && (data.audio_pricing.usd_per_second ?? 0) > 0) return true;
+    if (data.embedding_pricing) {
+      const e = data.embedding_pricing;
+      if ((e.usd_per_image ?? 0) > 0) return true;
+      if ((e.usd_per_audio_second ?? 0) > 0) return true;
+      if ((e.usd_per_video_frame ?? 0) > 0) return true;
+      if ((e.usd_per_document_page ?? 0) > 0) return true;
+    }
+    return false;
+  };
+
+  /**
+   * Render a per-token price cell. A zero price means "Free" only when the model
+   * has no non-token billing surface; otherwise "Free" would be a lie (the model
+   * IS charged, just not by token) so we render an em dash to defer to the
+   * pricing badges + detail modal for the real story.
+   */
+  const formatTokenPrice = (price: number, data: ModelDisplayData): string => {
+    if (price > 0) return formatPrice(price);
+    return hasNonTokenPricing(data) ? '—' : formatPrice(price);
+  };
+
   const formatChannelName = (channelName: string): string => {
     const colonIndex = channelName.indexOf(':');
     if (colonIndex !== -1) {
@@ -280,6 +313,7 @@ export function ModelsPage() {
       data.audio_pricing ||
       data.image_pricing ||
       data.embedding_pricing ||
+      data.per_call_pricing ||
       (data.cache_write_5m_price && data.cache_write_5m_price > 0) ||
       (data.cache_write_1h_price && data.cache_write_1h_price > 0) ||
       (data.cached_input_price !== undefined && data.cached_input_price !== data.input_price)
@@ -318,6 +352,11 @@ export function ModelsPage() {
       {data.embedding_pricing && (
         <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
           {tr('labels.embedding', 'Embedding')}
+        </Badge>
+      )}
+      {data.per_call_pricing && (
+        <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+          {tr('labels.per_call', 'Per Call')}
         </Badge>
       )}
       {hasReasoning(data) && (
@@ -398,13 +437,13 @@ export function ModelsPage() {
                       <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
                         {tr('table.input_short', 'Input')}
                       </div>
-                      <div className="text-sm">{formatPrice(model.inputPrice)}</div>
+                      <div className="text-sm">{formatTokenPrice(model.inputPrice, model.data)}</div>
                     </div>
                     <div>
                       <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
                         {tr('table.output_short', 'Output')}
                       </div>
-                      <div className="text-sm">{formatPrice(model.outputPrice)}</div>
+                      <div className="text-sm">{formatTokenPrice(model.outputPrice, model.data)}</div>
                     </div>
                   </div>
                   {hasRichPricing(model.data) && <div className="flex flex-wrap gap-1">{renderPricingBadges(model.data)}</div>}
@@ -443,9 +482,9 @@ export function ModelsPage() {
                           {renderModalityBadges(model.data)}
                         </div>
                       </td>
-                      <td className="py-2 px-3">{formatPrice(model.inputPrice)}</td>
-                      <td className="py-2 px-3">{formatPrice(model.cachedInputPrice)}</td>
-                      <td className="py-2 px-3">{formatPrice(model.outputPrice)}</td>
+                      <td className="py-2 px-3">{formatTokenPrice(model.inputPrice, model.data)}</td>
+                      <td className="py-2 px-3">{formatTokenPrice(model.cachedInputPrice, model.data)}</td>
+                      <td className="py-2 px-3">{formatTokenPrice(model.outputPrice, model.data)}</td>
                       <td className="py-2 px-3">{model.imagePrice && model.imagePrice > 0 ? formatPrice(model.imagePrice) : '-'}</td>
                       <td className="py-2 px-1">
                         <ChevronRight className="h-4 w-4 text-muted-foreground" />

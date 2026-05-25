@@ -308,12 +308,15 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 
 	// Rerank Models. Cohere prices rerank v3.5 and v3.0 at $2.00 per 1,000 searches
 	// (one search = one query with up to 100 documents). Per-call pricing is encoded
-	// as USD-per-call divided over the QuotaPerUsd factor.
+	// as USD-per-call divided over the QuotaPerUsd factor in the Ratio field, and
+	// also surfaced through PerCall.UsdPerThousandCalls so the display layer can
+	// render it as flat per-call pricing instead of per-token.
 	// Source: https://cohere.com/pricing
 	"rerank-v4.0-pro": {
 		// Rerank v4.0 Pro: $2.50 per 1,000 searches.
 		// References: https://openrouter.ai/cohere/rerank-4-pro and Cohere pricing page.
 		Ratio:            (2.5 / 1000.0) * ratio.QuotaPerUsd,
+		PerCall:          &adaptor.PerCallPricingConfig{UsdPerThousandCalls: 2.5},
 		ContextLength:    32768,
 		InputModalities:  cohereTextInputs,
 		OutputModalities: cohereTextOutputs,
@@ -322,6 +325,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 	"rerank-v4.0-fast": {
 		// Rerank v4.0 Fast: $2.00 per 1,000 searches (lighter low-latency variant).
 		Ratio:            (2.0 / 1000.0) * ratio.QuotaPerUsd,
+		PerCall:          &adaptor.PerCallPricingConfig{UsdPerThousandCalls: 2.0},
 		ContextLength:    32768,
 		InputModalities:  cohereTextInputs,
 		OutputModalities: cohereTextOutputs,
@@ -329,6 +333,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 	},
 	"rerank-v3.5": {
 		Ratio:            (2.0 / 1000.0) * ratio.QuotaPerUsd,
+		PerCall:          &adaptor.PerCallPricingConfig{UsdPerThousandCalls: 2.0},
 		ContextLength:    4096,
 		InputModalities:  cohereTextInputs,
 		OutputModalities: cohereTextOutputs,
@@ -336,6 +341,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 	},
 	"rerank-english-v3.0": {
 		Ratio:            (2.0 / 1000.0) * ratio.QuotaPerUsd,
+		PerCall:          &adaptor.PerCallPricingConfig{UsdPerThousandCalls: 2.0},
 		ContextLength:    4096,
 		InputModalities:  cohereTextInputs,
 		OutputModalities: cohereTextOutputs,
@@ -343,6 +349,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 	},
 	"rerank-multilingual-v3.0": {
 		Ratio:            (2.0 / 1000.0) * ratio.QuotaPerUsd,
+		PerCall:          &adaptor.PerCallPricingConfig{UsdPerThousandCalls: 2.0},
 		ContextLength:    4096,
 		InputModalities:  cohereTextInputs,
 		OutputModalities: cohereTextOutputs,

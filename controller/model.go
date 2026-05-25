@@ -316,6 +316,7 @@ type ModelDisplayInfo struct {
 	AudioPricing              *AudioDisplayPricing     `json:"audio_pricing,omitempty"`                 // Audio prompt/completion pricing
 	ImagePricing              *ImageDisplayPricing     `json:"image_pricing,omitempty"`                 // Detailed image pricing with size/quality multipliers
 	EmbeddingPricing          *EmbeddingDisplayPricing `json:"embedding_pricing,omitempty"`             // Embedding pricing by modality
+	PerCallPricing            *PerCallDisplayPricing   `json:"per_call_pricing,omitempty"`              // Flat per-invocation pricing (mutually exclusive with token pricing)
 }
 
 // ModelDisplayTier represents a single tier in volume-based pricing
@@ -354,6 +355,14 @@ type ImageDisplayPricing struct {
 	SizeMultipliers        map[string]float64            `json:"size_multipliers,omitempty"`         // Resolution -> multiplier
 	QualityMultipliers     map[string]float64            `json:"quality_multipliers,omitempty"`      // Quality -> multiplier
 	QualitySizeMultipliers map[string]map[string]float64 `json:"quality_size_multipliers,omitempty"` // Quality -> Size -> multiplier
+}
+
+// PerCallDisplayPricing represents flat per-invocation pricing for display.
+// Providers commonly price by query ("$X per 1K calls"); rerank is the canonical
+// example. Display surfaces both per-1K-calls and the derived per-call USD figure.
+type PerCallDisplayPricing struct {
+	UsdPerThousandCalls float64 `json:"usd_per_thousand_calls,omitempty"` // USD per 1000 invocations
+	UsdPerCall          float64 `json:"usd_per_call,omitempty"`           // Derived USD per single invocation
 }
 
 // EmbeddingDisplayPricing represents embedding pricing for display
@@ -831,6 +840,34 @@ func GetModelsDisplay(c *gin.Context) {
 						InputPrice:                0,
 						CachedInputPrice:          0,
 						ImagePricing:              buildImageDisplayPricing(cfg.Image, cfg.Image),
+					}
+					if filters.matchesModel(info) {
+						result[modelName] = info
+					}
+					continue
+				}
+				if cfg.PerCall != nil && cfg.PerCall.HasData() {
+					info := ModelDisplayInfo{
+						MaxTokens:                 cfg.MaxTokens,
+						ContextLength:             cfg.ContextLength,
+						MaxOutputTokens:           cfg.MaxOutputTokens,
+						MaxReasoningTokens:        cfg.MaxReasoningTokens,
+						InputModalities:           append([]string(nil), cfg.InputModalities...),
+						OutputModalities:          append([]string(nil), cfg.OutputModalities...),
+						SupportedFeatures:         append([]string(nil), cfg.SupportedFeatures...),
+						SupportedSampling:         append([]string(nil), cfg.SupportedSamplingParameters...),
+						SupportedReasoningEfforts: append([]string(nil), cfg.SupportedReasoningEfforts...),
+						DefaultReasoningEffort:    cfg.DefaultReasoningEffort,
+						Quantization:              cfg.Quantization,
+						HuggingFaceID:             cfg.HuggingFaceID,
+						Description:               cfg.Description,
+						InputPrice:                0,
+						CachedInputPrice:          0,
+						OutputPrice:               0,
+						PerCallPricing: &PerCallDisplayPricing{
+							UsdPerThousandCalls: cfg.PerCall.UsdPerThousandCalls,
+							UsdPerCall:          cfg.PerCall.UsdPerThousandCalls / 1000.0,
+						},
 					}
 					if filters.matchesModel(info) {
 						result[modelName] = info

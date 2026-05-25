@@ -34,6 +34,7 @@ export interface ModelDisplayData {
   audio_pricing?: AudioPricingData;
   image_pricing?: ImagePricingData;
   embedding_pricing?: EmbeddingPricingData;
+  per_call_pricing?: PerCallPricingData;
 }
 
 interface TierData {
@@ -80,6 +81,11 @@ interface EmbeddingPricingData {
   usd_per_audio_second?: number;
   usd_per_video_frame?: number;
   usd_per_document_page?: number;
+}
+
+interface PerCallPricingData {
+  usd_per_thousand_calls?: number;
+  usd_per_call?: number;
 }
 
 // ---- Props ----
@@ -420,13 +426,41 @@ function PricingContent({
         </PricingSection>
       )}
 
-      {/* Base text token pricing */}
-      <PricingSection title={tr('text_tokens', 'Text Token Pricing')} icon="text">
-        <PriceGrid>
-          <PriceCell label={tr('input', 'Input')} sublabel={tr('per_1m', 'per 1M tokens')} value={data.input_price} tr={tr} />
-          <PriceCell label={tr('output', 'Output')} sublabel={tr('per_1m', 'per 1M tokens')} value={data.output_price} tr={tr} />
-        </PriceGrid>
-      </PricingSection>
+      {/* Base text token pricing — hidden for flat per-call billing models */}
+      {!data.per_call_pricing && (
+        <PricingSection title={tr('text_tokens', 'Text Token Pricing')} icon="text">
+          <PriceGrid>
+            <PriceCell label={tr('input', 'Input')} sublabel={tr('per_1m', 'per 1M tokens')} value={data.input_price} tr={tr} />
+            <PriceCell label={tr('output', 'Output')} sublabel={tr('per_1m', 'per 1M tokens')} value={data.output_price} tr={tr} />
+          </PriceGrid>
+        </PricingSection>
+      )}
+
+      {/* Per-call pricing — flat per-invocation billing (e.g. rerank) */}
+      {data.per_call_pricing && (data.per_call_pricing.usd_per_thousand_calls || data.per_call_pricing.usd_per_call) ? (
+        <PricingSection title={tr('per_call_pricing', 'Per-Call Pricing')} icon="text">
+          <PriceGrid>
+            {data.per_call_pricing.usd_per_thousand_calls !== undefined && data.per_call_pricing.usd_per_thousand_calls > 0 && (
+              <PriceCell
+                label={tr('base_rate', 'Base Rate')}
+                sublabel={tr('per_1k_calls', 'per 1K calls')}
+                value={data.per_call_pricing.usd_per_thousand_calls}
+                tr={tr}
+                raw
+              />
+            )}
+            {data.per_call_pricing.usd_per_call !== undefined && data.per_call_pricing.usd_per_call > 0 && (
+              <PriceCell
+                label={tr('per_call_label', 'Per Call')}
+                sublabel={tr('per_call', 'per call')}
+                value={data.per_call_pricing.usd_per_call}
+                tr={tr}
+                raw
+              />
+            )}
+          </PriceGrid>
+        </PricingSection>
+      ) : null}
 
       {/* Cache pricing */}
       {hasCache && (

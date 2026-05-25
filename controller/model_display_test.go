@@ -281,6 +281,59 @@ func TestGetModelsDisplay_GptImageShowsTokenPrice(t *testing.T) {
 	require.InDelta(t, pricingCfg.Image.PricePerImageUsd, modelInfo.ImagePrice, 1e-9)
 }
 
+// TestGetModelsDisplay_PerCallPricingForRerank verifies /api/models/display surfaces
+// flat per-call pricing through the generic PerCallPricing field instead of
+// misinterpreting the encoded Ratio as token pricing. Cohere's rerank-v3.5 is billed
+// at $2.00 per 1,000 searches, so the display response must expose
+// PerCallPricing.UsdPerThousandCalls=2.0 (and derived UsdPerCall=0.002) with token
+// prices zeroed out. The abstraction is generic — any per-call-billed model
+// (rerank, classification, etc.) should reuse this branch.
+func TestGetModelsDisplay_PerCallPricingForRerank(t *testing.T) {
+	setupModelsDisplayTestEnv(t)
+	gin.SetMode(gin.TestMode)
+	channel := &model.Channel{
+		Name:   "Cohere Rerank",
+		Type:   channeltype.Cohere,
+		Status: model.ChannelStatusEnabled,
+		Models: "rerank-v3.5",
+		Group:  "public",
+	}
+	require.NoError(t, model.DB.Create(channel).Error)
+
+	router := gin.New()
+	router.GET("/api/models/display", func(c *gin.Context) {
+		GetModelsDisplay(c)
+	})
+
+	req := httptest.NewRequest("GET", "/api/models/display", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+
+	var resp ModelsDisplayResponse
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	require.True(t, resp.Success)
+
+	key := fmt.Sprintf("%s:%s", channeltype.IdToName(channel.Type), channel.Name)
+	info, ok := resp.Data[key]
+	require.True(t, ok, "expected channel %s in response", key)
+	modelInfo, ok := info.Models["rerank-v3.5"]
+	require.True(t, ok, "expected rerank-v3.5 in model listing")
+
+	require.NotNil(t, modelInfo.PerCallPricing, "per-call-billed model must surface PerCallPricing")
+	assert.InDelta(t, 2.0, modelInfo.PerCallPricing.UsdPerThousandCalls, 1e-9)
+	assert.InDelta(t, 0.002, modelInfo.PerCallPricing.UsdPerCall, 1e-9)
+
+	// Per-call models must not leak misleading per-token pricing into the response.
+	assert.Equal(t, float64(0), modelInfo.InputPrice, "per-call model should not expose token InputPrice")
+	assert.Equal(t, float64(0), modelInfo.OutputPrice, "per-call model should not expose token OutputPrice")
+	assert.Equal(t, float64(0), modelInfo.CachedInputPrice, "per-call model should not expose CachedInputPrice")
+	assert.Nil(t, modelInfo.AudioPricing)
+	assert.Nil(t, modelInfo.EmbeddingPricing)
+	assert.Nil(t, modelInfo.ImagePricing)
+}
+
 // TestGetModelsDisplay_IncludesModelMetadata verifies /api/models/display exposes rich
 // model metadata (context, modalities, features, and sampling parameters) from adaptor ModelConfig.
 func TestGetModelsDisplay_IncludesModelMetadata(t *testing.T) {

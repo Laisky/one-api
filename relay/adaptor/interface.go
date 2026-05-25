@@ -49,6 +49,10 @@ type ModelConfig struct {
 	Image *ImagePricingConfig `json:"image,omitempty"`
 	// Embedding captures modality-specific pricing metadata for embedding requests.
 	Embedding *EmbeddingPricingConfig `json:"embedding,omitempty"`
+	// PerCall captures flat per-invocation pricing metadata. When set, the model
+	// is billed and displayed as flat per call rather than per token, regardless
+	// of model type (rerank is the canonical example, but the schema is generic).
+	PerCall *PerCallPricingConfig `json:"per_call,omitempty"`
 	// ContextLength is the total token context (input+output) the model supports.
 	// 0 means unspecified — caller should fall back to a reasonable default.
 	ContextLength int32 `json:"context_length,omitempty"`
@@ -114,6 +118,37 @@ func (cfg *EmbeddingPricingConfig) HasData() bool {
 
 // Clone returns a copy of the embedding pricing configuration.
 func (cfg *EmbeddingPricingConfig) Clone() *EmbeddingPricingConfig {
+	if cfg == nil {
+		return nil
+	}
+	clone := *cfg
+	return &clone
+}
+
+// PerCallPricingConfig captures flat per-invocation pricing metadata, applicable
+// to any model billed per request regardless of token count (rerank is the most
+// common case today). Providers typically publish "$X per 1K calls" so the
+// canonical unit is USD per 1000 calls. Presence of this struct signals to the
+// display layer that the model is per-call billed; the underlying
+// ModelConfig.Ratio field continues to carry the quota-per-call value consumed
+// by the billing pipeline.
+type PerCallPricingConfig struct {
+	// UsdPerThousandCalls is the USD price per 1000 invocations (one invocation =
+	// one upstream request; for rerank, one query against up to the provider's
+	// per-call document cap).
+	UsdPerThousandCalls float64 `json:"usd_per_thousand_calls,omitempty"`
+}
+
+// HasData reports whether the per-call pricing configuration carries any data.
+func (cfg *PerCallPricingConfig) HasData() bool {
+	if cfg == nil {
+		return false
+	}
+	return cfg.UsdPerThousandCalls != 0
+}
+
+// Clone returns a copy of the per-call pricing configuration.
+func (cfg *PerCallPricingConfig) Clone() *PerCallPricingConfig {
 	if cfg == nil {
 		return nil
 	}
