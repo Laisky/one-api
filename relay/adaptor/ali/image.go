@@ -12,6 +12,7 @@ import (
 	"github.com/Laisky/errors/v2"
 	"github.com/gin-gonic/gin"
 
+	"github.com/Laisky/one-api/common/client"
 	"github.com/Laisky/one-api/common/helper"
 	"github.com/Laisky/one-api/relay/adaptor/openai"
 	"github.com/Laisky/one-api/relay/model"
@@ -176,8 +177,24 @@ func responseAli2OpenAIImage(response *TaskResponse, responseFormat string) *ope
 	return &imageResponse
 }
 
+// getImageData downloads the bytes for a base64-encoded image response. The
+// URL originates from the upstream Aliyun task result, NOT from the user
+// request body — but the fetch goes through client.UserContentRequestHTTPClient
+// anyway as defense-in-depth against MITM-injected URLs, future callers that
+// pipe user-supplied URLs through this helper, and DNS-rebinding tricks. The
+// hardened client rejects loopback / private / cloud-metadata / link-local
+// addresses both at first dial and on every redirect target, so an SSRF
+// vector cannot be reintroduced by a refactor that forgets to validate.
 func getImageData(url string) ([]byte, error) {
-	response, err := http.Get(url)
+	httpClient := client.UserContentRequestHTTPClient
+	if httpClient == nil {
+		// Safety net for early init paths where client.Init() has not run
+		// yet (e.g. unit tests that import this package directly). Reuse
+		// the default client rather than failing — the higher-level
+		// callers always ensure init() ran in production.
+		httpClient = http.DefaultClient
+	}
+	response, err := httpClient.Get(url)
 	if err != nil {
 		return nil, errors.Wrapf(err, "download image from url %s", url)
 	}
