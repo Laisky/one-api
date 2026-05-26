@@ -1,7 +1,9 @@
 package openai
 
 import (
+	"bufio"
 	"encoding/json"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -181,6 +183,9 @@ func TestRealtimeHandler_EndToEnd(t *testing.T) {
 }
 
 // ginResponseWriter wraps http.ResponseWriter to satisfy gin.ResponseWriter interface.
+// It forwards Hijack to the underlying real ResponseWriter so WebSocket upgrade
+// works inside tests that use gin.CreateTestContext (whose default
+// httptest.ResponseRecorder does NOT implement http.Hijacker).
 type ginResponseWriter struct {
 	w http.ResponseWriter
 	gin.ResponseWriter
@@ -189,6 +194,14 @@ type ginResponseWriter struct {
 func (g *ginResponseWriter) Header() http.Header         { return g.w.Header() }
 func (g *ginResponseWriter) Write(b []byte) (int, error) { return g.w.Write(b) }
 func (g *ginResponseWriter) WriteHeader(code int)        { g.w.WriteHeader(code) }
+
+func (g *ginResponseWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	hj, ok := g.w.(http.Hijacker)
+	if !ok {
+		return nil, nil, http.ErrNotSupported
+	}
+	return hj.Hijack()
+}
 
 // TestCopyWS verifies bidirectional message copying between two WebSocket connections.
 func TestCopyWS(t *testing.T) {

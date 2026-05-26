@@ -103,7 +103,9 @@ func ResponseAPIWebSocketHandler(c *gin.Context, meta *rmeta.Meta) (*rmodel.Erro
 
 	usage := &rmodel.Usage{}
 	errc := make(chan error, 2)
-	go func() { errc <- copyWS(clientConn, upstreamConn) }()
+	go func() {
+		errc <- copyResponseAPIClientToUpstream(clientConn, upstreamConn, meta.OriginModelName, meta.ActualModelName)
+	}()
 	go func() { errc <- copyResponseAPIWSUpstreamToClient(upstreamConn, clientConn, usage) }()
 
 	// Wait for one direction to finish, then close both connections
@@ -151,6 +153,69 @@ func resolveResponseAPIWebSocketUpstreamURL(c *gin.Context, meta *rmeta.Meta) (s
 	u.Path = "/v1/responses"
 	u.RawQuery = c.Request.URL.RawQuery
 	return u.String(), nil
+}
+
+// copyResponseAPIClientToUpstream forwards client frames to the upstream
+// connection while enforcing model pinning on every `response.create` event.
+//
+// On the first frame that attempts to switch the model away from the
+// handshake-bound model, the function:
+//   - emits a `model_switch_denied` error event back to the client
+//   - returns ErrModelSwitchDenied (wrapped) so the caller closes both legs
+//
+// Text frames that are not `response.create` events are forwarded unchanged.
+// Binary frames are forwarded unchanged.
+//
+// Parameters:
+//   - src: client WebSocket connection (reader).
+//   - dst: upstream WebSocket connection (writer).
+//   - boundOriginModel: user-facing model bound at WS handshake; may be empty
+//     when the proxy could not resolve a user-facing model.
+//   - boundActualModel: upstream model bound at WS handshake; enforcement is
+//     skipped when this is empty (backward compat for legacy no-model handshakes).
+//
+// Returns:
+//   - error: nil on clean close; ErrModelSwitchDenied (wrapped) on rejected
+//     model switch; other errors propagate underlying I/O failures.
+func copyResponseAPIClientToUpstream(src, dst *websocket.Conn, boundOriginModel, boundActualModel string) error {
+	for {
+		mt, msg, err := src.ReadMessage()
+		if err != nil {
+			var closeErr *websocket.CloseError
+			if errors.As(err, &closeErr) {
+				_ = dst.WriteControl(
+					websocket.CloseMessage,
+					websocket.FormatCloseMessage(closeErr.Code, closeErr.Text),
+					time.Now().Add(time.Second),
+				)
+				return nil
+			}
+			return errors.WithStack(err)
+		}
+
+		outbound := msg
+		if mt == websocket.TextMessage && boundActualModel != "" {
+			rewritten, guardErr := enforceResponseCreateModel(msg, boundOriginModel, boundActualModel)
+			if guardErr != nil {
+				// Reject: notify the client with an error event and close the
+				// upstream side so billing reconciliation runs without any
+				// upstream charges accruing for the denied model.
+				errEvent := buildModelSwitchErrorEvent(guardErr.Error())
+				_ = src.WriteMessage(websocket.TextMessage, errEvent)
+				_ = src.WriteControl(
+					websocket.CloseMessage,
+					websocket.FormatCloseMessage(websocket.ClosePolicyViolation, "model_switch_denied"),
+					time.Now().Add(time.Second),
+				)
+				return errors.WithStack(guardErr)
+			}
+			outbound = rewritten
+		}
+
+		if werr := dst.WriteMessage(mt, outbound); werr != nil {
+			return errors.WithStack(werr)
+		}
+	}
 }
 
 // copyResponseAPIWSUpstreamToClient forwards upstream frames to the client and
