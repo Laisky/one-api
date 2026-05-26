@@ -75,6 +75,39 @@ Behavior:
 - Waits for terminal events such as `response.completed` or `response.error`.
 - Returns non-zero when websocket handshake fails, upstream returns websocket error events, or the probe times out.
 
+### Verifying the Response API WebSocket model-switch guard
+
+`chat ws-guard` exercises the proxy-side defence that prevents callers from
+opening a `/v1/responses` WS with a cheap model bound at handshake and then
+sending `response.create` events that name a more expensive model. The attack
+scenario does **not** require a working upstream channel — the proxy must
+reject the frame before any forwarding happens.
+
+```bash
+# Attack scenario only (recommended smoke test for the fix)
+API_TOKEN=sk-... API_BASE=http://127.0.0.1:3000 \
+  go run ./cmd/test chat ws-guard \
+    --bound-model gpt-5-mini --attack-model gpt-5
+
+# Attack + happy-path (requires a working OpenAI channel for the bound model)
+API_TOKEN=sk-... API_BASE=http://127.0.0.1:3000 \
+  go run ./cmd/test chat ws-guard \
+    --bound-model gpt-5-mini --attack-model gpt-5 --happy-path
+```
+
+Behavior:
+
+- Connects WS to `<endpoint>?model=<bound-model>` using the provided API token.
+- Sends a `response.create` event with `model=<attack-model>`.
+- Passes when the server replies with a `model_switch_denied` error event and
+  closes the connection with WebSocket code 1008 (`ClosePolicyViolation`).
+- With `--happy-path`, additionally validates that:
+  - `response.create` carrying the bound model reaches a terminal event.
+  - `response.create` with no `model` field has the bound model injected and
+    also reaches a terminal event.
+- Returns non-zero on any unexpected behaviour (no error event, wrong code,
+  wrong close status, or a successful upstream completion on the attack frame).
+
 ### Capturing payload samples
 
 Use the `generate` subcommand to execute the configured variants and write request/response artefacts to `cmd/test/generated`:
