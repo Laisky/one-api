@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/Laisky/errors/v2"
@@ -55,6 +56,20 @@ func maybeHandleResponseAPIWebSocket(c *gin.Context, meta *metalib.Meta) (bool, 
 		return true, openai.ErrorWrapper(
 			errors.New("response websocket is not supported for this channel"),
 			"response_websocket_not_supported_for_channel",
+			http.StatusBadRequest,
+		)
+	}
+
+	// Refuse handshakes that did not pin a model. Without a bound model the
+	// per-event WS guard skips enforcement (the guard's backward-compat
+	// branch), which would let a client send response.create events with
+	// any model and still be billed at whatever default the channel
+	// resolves to. Requiring `?model=` at handshake collapses that gap so
+	// billing is always pinned for the lifetime of the WS connection.
+	if strings.TrimSpace(meta.ActualModelName) == "" {
+		return true, openai.ErrorWrapper(
+			errors.New("response websocket handshake requires a `model` query parameter so billing can be pinned"),
+			"response_websocket_missing_model_query",
 			http.StatusBadRequest,
 		)
 	}
