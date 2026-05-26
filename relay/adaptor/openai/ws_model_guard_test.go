@@ -2,11 +2,129 @@ package openai
 
 import (
 	"encoding/json"
+	"net/http"
 	"testing"
 
 	"github.com/Laisky/errors/v2"
 	"github.com/stretchr/testify/require"
+
+	rmeta "github.com/Laisky/one-api/relay/meta"
 )
+
+func TestEnforceRealtimeSessionsBodyModel_NilMetaPassThrough(t *testing.T) {
+	t.Parallel()
+
+	body := []byte(`{"model":"anything"}`)
+	out, bizErr := enforceRealtimeSessionsBodyModel(body, nil)
+	require.Nil(t, bizErr)
+	require.Equal(t, body, out)
+}
+
+func TestEnforceRealtimeSessionsBodyModel_EmptyActualSkipsEnforcement(t *testing.T) {
+	t.Parallel()
+
+	meta := &rmeta.Meta{ActualModelName: ""}
+	body := []byte(`{"model":"gpt-5"}`)
+	out, bizErr := enforceRealtimeSessionsBodyModel(body, meta)
+	require.Nil(t, bizErr)
+	require.Equal(t, body, out)
+}
+
+func TestEnforceRealtimeSessionsBodyModel_EmptyBodyInjects(t *testing.T) {
+	t.Parallel()
+
+	meta := &rmeta.Meta{ActualModelName: "gpt-4o-realtime-preview"}
+	out, bizErr := enforceRealtimeSessionsBodyModel(nil, meta)
+	require.Nil(t, bizErr)
+
+	var parsed map[string]any
+	require.NoError(t, json.Unmarshal(out, &parsed))
+	require.Equal(t, "gpt-4o-realtime-preview", parsed["model"])
+}
+
+func TestEnforceRealtimeSessionsBodyModel_MissingModelFieldInjects(t *testing.T) {
+	t.Parallel()
+
+	meta := &rmeta.Meta{ActualModelName: "gpt-4o-realtime-preview"}
+	body := []byte(`{"voice":"verse"}`)
+	out, bizErr := enforceRealtimeSessionsBodyModel(body, meta)
+	require.Nil(t, bizErr)
+
+	var parsed map[string]any
+	require.NoError(t, json.Unmarshal(out, &parsed))
+	require.Equal(t, "gpt-4o-realtime-preview", parsed["model"])
+	require.Equal(t, "verse", parsed["voice"], "other fields must be preserved")
+}
+
+func TestEnforceRealtimeSessionsBodyModel_MatchingActualKeepsBody(t *testing.T) {
+	t.Parallel()
+
+	meta := &rmeta.Meta{
+		OriginModelName: "gpt-4o-realtime-preview",
+		ActualModelName: "gpt-4o-realtime-preview",
+	}
+	body := []byte(`{"model":"gpt-4o-realtime-preview","voice":"verse"}`)
+	out, bizErr := enforceRealtimeSessionsBodyModel(body, meta)
+	require.Nil(t, bizErr)
+	require.Equal(t, body, out, "matching model must forward as-is")
+}
+
+func TestEnforceRealtimeSessionsBodyModel_OriginAliasRewritten(t *testing.T) {
+	t.Parallel()
+
+	meta := &rmeta.Meta{
+		OriginModelName: "my-alias",
+		ActualModelName: "gpt-4o-realtime-preview",
+	}
+	body := []byte(`{"model":"my-alias","voice":"verse"}`)
+	out, bizErr := enforceRealtimeSessionsBodyModel(body, meta)
+	require.Nil(t, bizErr)
+
+	var parsed map[string]any
+	require.NoError(t, json.Unmarshal(out, &parsed))
+	require.Equal(t, "gpt-4o-realtime-preview", parsed["model"])
+}
+
+func TestEnforceRealtimeSessionsBodyModel_MismatchedModelDenied(t *testing.T) {
+	t.Parallel()
+
+	meta := &rmeta.Meta{
+		OriginModelName: "gpt-4o-realtime-preview",
+		ActualModelName: "gpt-4o-realtime-preview",
+	}
+	body := []byte(`{"model":"gpt-realtime-2"}`)
+	out, bizErr := enforceRealtimeSessionsBodyModel(body, meta)
+	require.NotNil(t, bizErr)
+	require.Equal(t, http.StatusBadRequest, bizErr.StatusCode)
+	require.Equal(t, "model_switch_denied", bizErr.Error.Code)
+	require.True(t, errors.Is(bizErr.Error.RawError, ErrModelSwitchDenied))
+	require.Nil(t, out)
+}
+
+func TestEnforceRealtimeSessionsBodyModel_EmptyStringModelInjects(t *testing.T) {
+	t.Parallel()
+
+	meta := &rmeta.Meta{ActualModelName: "gpt-4o-realtime-preview"}
+	body := []byte(`{"model":"","voice":"verse"}`)
+	out, bizErr := enforceRealtimeSessionsBodyModel(body, meta)
+	require.Nil(t, bizErr)
+
+	var parsed map[string]any
+	require.NoError(t, json.Unmarshal(out, &parsed))
+	require.Equal(t, "gpt-4o-realtime-preview", parsed["model"])
+}
+
+func TestEnforceRealtimeSessionsBodyModel_MalformedJSONRejected(t *testing.T) {
+	t.Parallel()
+
+	meta := &rmeta.Meta{ActualModelName: "gpt-4o-realtime-preview"}
+	body := []byte(`{not json`)
+	out, bizErr := enforceRealtimeSessionsBodyModel(body, meta)
+	require.NotNil(t, bizErr)
+	require.Equal(t, http.StatusBadRequest, bizErr.StatusCode)
+	require.Equal(t, "invalid_request_body", bizErr.Error.Code)
+	require.Nil(t, out)
+}
 
 func TestEnforceResponseCreateModel_NonCreateFramePassThrough(t *testing.T) {
 	t.Parallel()

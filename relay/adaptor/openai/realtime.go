@@ -23,6 +23,16 @@ import (
 // RealtimeSessionsHandler proxies a POST request to the upstream OpenAI
 // Realtime Sessions endpoint (/v1/realtime/sessions) which creates ephemeral
 // tokens for WebRTC browser clients.
+//
+// Security: the body's `model` field is enforced against `meta.ActualModelName`
+// before forwarding. If the client requests a model that does not match the
+// channel-bound model (and is not the channel's user-facing alias), the
+// handler returns 400 WITHOUT calling upstream. This prevents a billing-bypass
+// vector where a cheap channel mints an ephemeral token for an expensive
+// model and the token is then used over WebRTC (which the proxy cannot meter).
+//
+// When the proxy could not resolve a bound model (legacy path, empty
+// ActualModelName) enforcement is skipped and the body is forwarded as-is.
 func RealtimeSessionsHandler(c *gin.Context, meta *rmeta.Meta) (*rmodel.ErrorWithStatusCode, error) {
 	// Read the incoming request body
 	body, err := io.ReadAll(c.Request.Body)
@@ -31,6 +41,11 @@ func RealtimeSessionsHandler(c *gin.Context, meta *rmeta.Meta) (*rmodel.ErrorWit
 			Error:      rmodel.Error{Message: "failed to read request body: " + err.Error(), Type: rmodel.ErrorTypeOneAPI, Code: "read_body_failed", RawError: err},
 			StatusCode: http.StatusBadRequest,
 		}, errors.Wrap(err, "read request body")
+	}
+
+	body, bizErr := enforceRealtimeSessionsBodyModel(body, meta)
+	if bizErr != nil {
+		return bizErr, bizErr.Error.RawError
 	}
 
 	// Build upstream URL

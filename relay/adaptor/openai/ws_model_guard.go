@@ -2,8 +2,12 @@ package openai
 
 import (
 	"encoding/json"
+	"net/http"
 
 	"github.com/Laisky/errors/v2"
+
+	rmeta "github.com/Laisky/one-api/relay/meta"
+	rmodel "github.com/Laisky/one-api/relay/model"
 )
 
 // ErrModelSwitchDenied is returned when a client WebSocket frame attempts to
@@ -116,6 +120,113 @@ func enforceResponseCreateModel(frame []byte, boundOriginModel, boundActualModel
 		return nil, errors.Wrap(err, "marshal response.create with rewritten model")
 	}
 	return out, nil
+}
+
+// enforceRealtimeSessionsBodyModel validates and normalizes the JSON body of a
+// `POST /v1/realtime/sessions` request before it is forwarded upstream. The
+// body controls which model OpenAI mints the ephemeral token for, and that
+// token is used over WebRTC where the proxy never sees the realtime traffic —
+// so an unvalidated body lets a cheap channel mint a token for an expensive
+// model and have the channel's upstream API key charged for it.
+//
+// Rules mirror enforceResponseCreateModel:
+//   - empty/missing model field -> inject meta.ActualModelName
+//   - model == meta.ActualModelName -> forward as-is
+//   - model == meta.OriginModelName (alias) -> rewrite to meta.ActualModelName
+//   - any other value -> return a 400 error and do NOT forward upstream
+//
+// When meta is nil or meta.ActualModelName is empty (legacy code path where
+// the proxy could not resolve a bound model) the function is a no-op and
+// returns the body unchanged.
+//
+// Parameters:
+//   - body: raw request bytes from the client. May be empty.
+//   - meta: relay metadata; OriginModelName/ActualModelName drive the policy.
+//
+// Returns:
+//   - the possibly-rewritten body bytes to send upstream.
+//   - a business error (with 400 status) when the policy rejects the request;
+//     nil on success or when enforcement is skipped.
+func enforceRealtimeSessionsBodyModel(body []byte, meta *rmeta.Meta) ([]byte, *rmodel.ErrorWithStatusCode) {
+	if meta == nil || meta.ActualModelName == "" {
+		return body, nil
+	}
+	if len(body) == 0 {
+		// OpenAI rejects empty bodies anyway, but we still inject the bound
+		// model so the user gets the channel's model rather than a generic
+		// upstream failure.
+		out, err := json.Marshal(map[string]any{"model": meta.ActualModelName})
+		if err != nil {
+			return nil, &rmodel.ErrorWithStatusCode{
+				Error: rmodel.Error{
+					Message:  "marshal realtime sessions body failed",
+					Type:     rmodel.ErrorTypeInternal,
+					Code:     "marshal_failed",
+					RawError: errors.Wrap(err, "marshal realtime sessions body"),
+				},
+				StatusCode: http.StatusInternalServerError,
+			}
+		}
+		return out, nil
+	}
+
+	var raw map[string]any
+	if err := json.Unmarshal(body, &raw); err != nil {
+		return nil, &rmodel.ErrorWithStatusCode{
+			Error: rmodel.Error{
+				Message:  "invalid realtime sessions body: not JSON",
+				Type:     rmodel.ErrorTypeOneAPI,
+				Code:     "invalid_request_body",
+				RawError: errors.Wrap(err, "unmarshal realtime sessions body"),
+			},
+			StatusCode: http.StatusBadRequest,
+		}
+	}
+
+	rawModel, exists := raw["model"]
+	rewriteOrInject := func(target string) ([]byte, *rmodel.ErrorWithStatusCode) {
+		raw["model"] = target
+		out, err := json.Marshal(raw)
+		if err != nil {
+			return nil, &rmodel.ErrorWithStatusCode{
+				Error: rmodel.Error{
+					Message:  "marshal realtime sessions body failed",
+					Type:     rmodel.ErrorTypeInternal,
+					Code:     "marshal_failed",
+					RawError: errors.Wrap(err, "marshal realtime sessions body"),
+				},
+				StatusCode: http.StatusInternalServerError,
+			}
+		}
+		return out, nil
+	}
+
+	if !exists {
+		return rewriteOrInject(meta.ActualModelName)
+	}
+
+	clientModel, _ := rawModel.(string)
+	switch {
+	case clientModel == "":
+		return rewriteOrInject(meta.ActualModelName)
+	case clientModel == meta.ActualModelName:
+		return body, nil
+	case meta.OriginModelName != "" && clientModel == meta.OriginModelName:
+		return rewriteOrInject(meta.ActualModelName)
+	default:
+		denyMessage := errors.Wrapf(ErrModelSwitchDenied,
+			"realtime sessions body model %q does not match channel-bound model %q",
+			clientModel, meta.ActualModelName).Error()
+		return nil, &rmodel.ErrorWithStatusCode{
+			Error: rmodel.Error{
+				Message:  denyMessage,
+				Type:     rmodel.ErrorTypeOneAPI,
+				Code:     "model_switch_denied",
+				RawError: ErrModelSwitchDenied,
+			},
+			StatusCode: http.StatusBadRequest,
+		}
+	}
 }
 
 // enforceRealtimeSessionUpdate inspects one client-to-upstream WebSocket frame

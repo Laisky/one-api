@@ -185,6 +185,156 @@ func TestRealtimeSessionsHandler_EmptyBody(t *testing.T) {
 	require.Equal(t, http.StatusOK, w.Code)
 }
 
+// TestRealtimeSessionsHandler_RejectsMismatchedBodyModel reproduces a
+// billing-bypass vector: the client opens a session against a channel bound
+// to model X but specifies a different (more expensive) model Y in the
+// request body. OpenAI mints an ephemeral token for Y, and if the client
+// uses that token over WebRTC the proxy never sees the realtime traffic
+// while the upstream API key still pays Y's rate.
+//
+// The handler must reject the request with 400 before forwarding so the
+// channel's OpenAI account is not charged for a model the channel was not
+// authorized for.
+func TestRealtimeSessionsHandler_RejectsMismatchedBodyModel(t *testing.T) {
+	t.Parallel()
+
+	var upstreamCalled bool
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		upstreamCalled = true
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"id":"sess_should_not_appear"}`))
+	}))
+	defer upstream.Close()
+
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+
+	reqBody := `{"model":"gpt-realtime-2","voice":"verse"}`
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/realtime/sessions",
+		bytes.NewBufferString(reqBody))
+
+	meta := &rmeta.Meta{
+		BaseURL:         upstream.URL,
+		APIKey:          "sk-upstream-test-key",
+		OriginModelName: "gpt-4o-realtime-preview",
+		ActualModelName: "gpt-4o-realtime-preview",
+	}
+
+	bizErr, _ := RealtimeSessionsHandler(c, meta)
+	require.NotNil(t, bizErr, "mismatched body model must surface a business error")
+	require.Equal(t, http.StatusBadRequest, bizErr.StatusCode,
+		"mismatched body model must yield 400 so the channel is not charged")
+	require.False(t, upstreamCalled,
+		"upstream MUST NOT be called when the body model is denied")
+}
+
+// TestRealtimeSessionsHandler_InjectsBoundModelWhenMissing verifies that an
+// empty body (or a body without a `model` field) is sent upstream with the
+// channel-bound model injected. This is the legitimate default for clients
+// that rely on the channel's pinned configuration.
+func TestRealtimeSessionsHandler_InjectsBoundModelWhenMissing(t *testing.T) {
+	t.Parallel()
+
+	var capturedBody []byte
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		capturedBody, _ = io.ReadAll(r.Body)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"id":"sess_ok"}`))
+	}))
+	defer upstream.Close()
+
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/realtime/sessions",
+		bytes.NewBufferString(`{"voice":"verse"}`))
+
+	meta := &rmeta.Meta{
+		BaseURL:         upstream.URL,
+		APIKey:          "sk-upstream-test-key",
+		OriginModelName: "gpt-4o-realtime-preview",
+		ActualModelName: "gpt-4o-realtime-preview",
+	}
+
+	bizErr, err := RealtimeSessionsHandler(c, meta)
+	require.NoError(t, err)
+	require.Nil(t, bizErr)
+
+	var sent map[string]any
+	require.NoError(t, json.Unmarshal(capturedBody, &sent))
+	require.Equal(t, "gpt-4o-realtime-preview", sent["model"],
+		"upstream must see the channel-bound model injected when body omits it")
+	require.Equal(t, "verse", sent["voice"], "other body fields must be preserved")
+}
+
+// TestRealtimeSessionsHandler_OriginAliasRewrittenToActual verifies that a
+// client using a user-facing alias has it rewritten to the upstream-actual
+// model name (model mapping) before forwarding.
+func TestRealtimeSessionsHandler_OriginAliasRewrittenToActual(t *testing.T) {
+	t.Parallel()
+
+	var capturedBody []byte
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		capturedBody, _ = io.ReadAll(r.Body)
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"id":"sess_ok"}`))
+	}))
+	defer upstream.Close()
+
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/realtime/sessions",
+		bytes.NewBufferString(`{"model":"my-rt-alias","voice":"verse"}`))
+
+	meta := &rmeta.Meta{
+		BaseURL:         upstream.URL,
+		APIKey:          "sk-test",
+		OriginModelName: "my-rt-alias",
+		ActualModelName: "gpt-4o-realtime-preview",
+	}
+
+	bizErr, err := RealtimeSessionsHandler(c, meta)
+	require.NoError(t, err)
+	require.Nil(t, bizErr)
+
+	var sent map[string]any
+	require.NoError(t, json.Unmarshal(capturedBody, &sent))
+	require.Equal(t, "gpt-4o-realtime-preview", sent["model"],
+		"upstream must see the actual model, not the alias")
+}
+
+// TestRealtimeSessionsHandler_LegacyEmptyBoundModelDoesNotEnforce documents
+// the backward-compat branch: when the proxy could not resolve a channel
+// model (legacy path), the body is forwarded unchanged.
+func TestRealtimeSessionsHandler_LegacyEmptyBoundModelDoesNotEnforce(t *testing.T) {
+	t.Parallel()
+
+	var capturedBody []byte
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		capturedBody, _ = io.ReadAll(r.Body)
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"id":"sess_ok"}`))
+	}))
+	defer upstream.Close()
+
+	body := `{"model":"gpt-realtime-anything","voice":"alloy"}`
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/realtime/sessions",
+		bytes.NewBufferString(body))
+
+	meta := &rmeta.Meta{
+		BaseURL: upstream.URL,
+		APIKey:  "sk-test",
+	}
+
+	bizErr, err := RealtimeSessionsHandler(c, meta)
+	require.NoError(t, err)
+	require.Nil(t, bizErr)
+	require.JSONEq(t, body, string(capturedBody),
+		"legacy no-binding mode must forward the body unchanged")
+}
+
 // TestRealtimeSessionsHandler_ResponseHeaders verifies that upstream response
 // headers are forwarded to the client.
 func TestRealtimeSessionsHandler_ResponseHeaders(t *testing.T) {
