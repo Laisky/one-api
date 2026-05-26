@@ -6,6 +6,7 @@ import (
 
 	"github.com/Laisky/errors/v2"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 
 	"github.com/Laisky/one-api/common"
 	"github.com/Laisky/one-api/common/helper"
@@ -101,22 +102,53 @@ func Redeem(ctx context.Context, key string, userId int) (quota int64, err error
 	}
 
 	err = DB.Transaction(func(tx *gorm.DB) error {
-		err := tx.Set("gorm:query_option", "FOR UPDATE").Where(keyCol+" = ?", key).First(redemption).Error
+		// 1. Read the row with a row-level lock. clause.Locking is the
+		//    GORM-v2 API for `SELECT ... FOR UPDATE`; the previous
+		//    `tx.Set("gorm:query_option", "FOR UPDATE")` was a GORM-v1
+		//    hook key that v2 silently ignores, so without this line two
+		//    concurrent callers could both pass the status check below.
+		//    On SQLite the lock is a no-op but the CAS step (2) still
+		//    guarantees correctness.
+		err := tx.Clauses(clause.Locking{Strength: clause.LockingStrengthUpdate}).
+			Where(keyCol+" = ?", key).
+			First(redemption).Error
 		if err != nil {
 			return errors.New("Invalid redemption code")
 		}
 		if redemption.Status != RedemptionCodeStatusEnabled {
 			return errors.New("The redemption code has been used")
 		}
-		err = tx.Model(&User{}).Where("id = ?", userId).Update("quota", gorm.Expr("quota + ?", redemption.Quota)).Error
+
+		// 2. Compare-and-swap claim of the redemption row. The WHERE on
+		//    status = Enabled is the critical safety net: even if a peer
+		//    transaction snuck past the FOR UPDATE on a backend where it
+		//    is unsupported, only one UPDATE can flip the row from
+		//    Enabled to Used. RowsAffected == 0 means we lost the race.
+		now := helper.GetTimestamp()
+		claim := tx.Model(&Redemption{}).
+			Where("id = ? AND status = ?", redemption.Id, RedemptionCodeStatusEnabled).
+			Updates(map[string]any{
+				"status":        RedemptionCodeStatusUsed,
+				"redeemed_time": now,
+			})
+		if claim.Error != nil {
+			return errors.Wrap(claim.Error, "claim redemption")
+		}
+		if claim.RowsAffected == 0 {
+			return errors.New("The redemption code has been used")
+		}
+
+		// 3. Only after we own the row do we credit the user. Doing this
+		//    last means a failed CAS leaves the user untouched.
+		err = tx.Model(&User{}).Where("id = ?", userId).
+			Update("quota", gorm.Expr("quota + ?", redemption.Quota)).Error
 		if err != nil {
 			return errors.Wrapf(err, "increase user %d quota with redemption", userId)
 		}
-		redemption.RedeemedTime = helper.GetTimestamp()
+
+		// Reflect the persisted state for the audit log emitted below.
+		redemption.RedeemedTime = now
 		redemption.Status = RedemptionCodeStatusUsed
-		if err = tx.Save(redemption).Error; err != nil {
-			return errors.Wrap(err, "update redemption status")
-		}
 		return nil
 	})
 	if err != nil {
