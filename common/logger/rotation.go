@@ -16,9 +16,10 @@ import (
 )
 
 const (
-	rotationScheme             = "oneapi-rotate"
-	rotationFilenameDateLayout = "20060102"
-	defaultLoggerName          = "one-api"
+	rotationScheme               = "oneapi-rotate"
+	rotationFilenameDailyLayout  = "20060102"
+	rotationFilenameHourlyLayout = "2006010215"
+	defaultLoggerName            = "one-api"
 )
 
 type rotationInterval string
@@ -40,6 +41,17 @@ func (ri rotationInterval) valid() bool {
 	default:
 		return false
 	}
+}
+
+// filenameLayout returns the time.Format layout used to stamp the rotation
+// window into log filenames. Hourly windows need the hour component so each
+// window resolves to a distinct file; daily and weekly windows share the
+// date-only layout because their starts are already day-aligned.
+func (ri rotationInterval) filenameLayout() string {
+	if ri == rotationIntervalHourly {
+		return rotationFilenameHourlyLayout
+	}
+	return rotationFilenameDailyLayout
 }
 
 func (ri rotationInterval) windowBounds(ts time.Time) (time.Time, time.Time) {
@@ -298,7 +310,7 @@ func (w *rotationWriter) openNewFile(start, next time.Time) error {
 }
 
 func (w *rotationWriter) activePathFor(start time.Time) string {
-	dateStamp := start.Format(rotationFilenameDateLayout)
+	dateStamp := start.Format(w.interval.filenameLayout())
 	filename := fmt.Sprintf("%s-%s%s", w.loggerName, dateStamp, w.extension)
 	return filepath.Join(w.baseDir, filename)
 }
@@ -352,12 +364,8 @@ func (w *rotationWriter) purgeExpired(currentStart time.Time) error {
 		}
 
 		dateComponent := strings.TrimSuffix(strings.TrimPrefix(name, prefix), w.extension)
-		if len(dateComponent) != len(rotationFilenameDateLayout) {
-			continue
-		}
-
-		ts, err := time.ParseInLocation(rotationFilenameDateLayout, dateComponent, time.UTC)
-		if err != nil {
+		ts, ok := parseRotationStamp(dateComponent)
+		if !ok {
 			continue
 		}
 
@@ -370,6 +378,29 @@ func (w *rotationWriter) purgeExpired(currentStart time.Time) error {
 	}
 
 	return nil
+}
+
+// parseRotationStamp parses the date component of a rotation filename using
+// either the hourly (YYYYMMDDHH) or daily (YYYYMMDD) layout. Accepting both
+// lets retention clean up files written under the daily-only layout shipped
+// before hourly rotation produced distinct filenames.
+func parseRotationStamp(component string) (time.Time, bool) {
+	switch len(component) {
+	case len(rotationFilenameHourlyLayout):
+		ts, err := time.ParseInLocation(rotationFilenameHourlyLayout, component, time.UTC)
+		if err != nil {
+			return time.Time{}, false
+		}
+		return ts, true
+	case len(rotationFilenameDailyLayout):
+		ts, err := time.ParseInLocation(rotationFilenameDailyLayout, component, time.UTC)
+		if err != nil {
+			return time.Time{}, false
+		}
+		return ts, true
+	default:
+		return time.Time{}, false
+	}
 }
 
 func ensureDir(dir string) error {
