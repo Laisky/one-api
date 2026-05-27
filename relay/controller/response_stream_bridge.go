@@ -190,25 +190,24 @@ func (h *chatToResponseStreamBridge) HandleDone(c *gin.Context) (bool, bool) {
 		})
 	}
 
-	h.emitEvent(c, "response.output_item.done", openai.ResponseAPIStreamEvent{
-		Type:        "response.output_item.done",
-		OutputIndex: h.messageOutputIndex,
-		Item:        &messageItem,
-	})
-
-	finalOutputs := make([]openai.OutputItem, 0, 1+len(h.toolOrder)+1)
-	finalOutputs = append(finalOutputs, messageItem)
-
-	if reasoning := strings.TrimSpace(h.reasoningBuilder.String()); reasoning != "" {
-		finalOutputs = append(finalOutputs, openai.OutputItem{
-			Type:   "reasoning",
-			Status: "completed",
-			Summary: []openai.OutputContent{
-				{Type: "summary_text", Text: reasoning},
-			},
-		})
-	}
-
+	// Emit tool-call terminals BEFORE the message item's output_item.done so that
+	// downstream agent loops never observe an output_item.done event ahead of the
+	// matching function_call_arguments.done for the same call_id. The per-call
+	// invariant we guarantee here is:
+	//
+	//   response.output_item.added (function_call, arguments empty)
+	//     -> response.function_call_arguments.delta * N
+	//     -> response.function_call_arguments.done   (final arguments)
+	//     -> response.output_item.done               (final arguments, identical)
+	//
+	// Some consumers (notably go-ramjet's agentx oneAPI adapter) accumulate
+	// args from deltas and fire tool dispatch on output_item.done; emitting any
+	// output_item.done — even for an unrelated message item — before the
+	// args.done events for queued tool calls used to ship empty/partial args
+	// downstream. Tool-call events are flushed first to preserve the spec
+	// ordering for every function_call regardless of whether the response also
+	// carried a text message.
+	toolItems := make([]openai.OutputItem, 0, len(h.toolOrder))
 	for _, id := range h.toolOrder {
 		state := h.toolCalls[id]
 		args := state.arguments.String()
@@ -229,14 +228,39 @@ func (h *chatToResponseStreamBridge) HandleDone(c *gin.Context) (bool, bool) {
 			Arguments: args,
 		}
 
+		// output_item.done MUST come after function_call_arguments.done for the
+		// same call_id and MUST carry the full buffered arguments string (not a
+		// snapshot of empty state). See bug report on go-ramjet agent loop
+		// observing args="{" because output_item.done arrived first.
 		h.emitEvent(c, "response.output_item.done", openai.ResponseAPIStreamEvent{
 			Type:        "response.output_item.done",
 			OutputIndex: state.index,
 			Item:        &toolItem,
 		})
 
-		finalOutputs = append(finalOutputs, toolItem)
+		toolItems = append(toolItems, toolItem)
 	}
+
+	h.emitEvent(c, "response.output_item.done", openai.ResponseAPIStreamEvent{
+		Type:        "response.output_item.done",
+		OutputIndex: h.messageOutputIndex,
+		Item:        &messageItem,
+	})
+
+	finalOutputs := make([]openai.OutputItem, 0, 1+len(toolItems)+1)
+	finalOutputs = append(finalOutputs, messageItem)
+
+	if reasoning := strings.TrimSpace(h.reasoningBuilder.String()); reasoning != "" {
+		finalOutputs = append(finalOutputs, openai.OutputItem{
+			Type:   "reasoning",
+			Status: "completed",
+			Summary: []openai.OutputContent{
+				{Type: "summary_text", Text: reasoning},
+			},
+		})
+	}
+
+	finalOutputs = append(finalOutputs, toolItems...)
 
 	requiredAction := h.buildRequiredActionSnapshot()
 	if requiredAction != nil {
