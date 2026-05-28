@@ -255,6 +255,14 @@ var awsBedrockModelPricing = map[string]adaptor.ModelConfig{
 		SupportedFeatures: awsClaudeFeaturesWithReasoning, SupportedSamplingParameters: awsClaudeSamplingParams,
 		Description: "Claude Opus 4.7 on AWS Bedrock with 1M-token context and adaptive thinking.",
 	},
+	"claude-opus-4-8": {
+		Ratio: 5 * ratio.MilliTokensUsd, CompletionRatio: 25.0 / 5,
+		CachedInputRatio: 0.5 * ratio.MilliTokensUsd, CacheWrite5mRatio: 6.25 * ratio.MilliTokensUsd, CacheWrite1hRatio: 10 * ratio.MilliTokensUsd,
+		ContextLength: 1000000, MaxOutputTokens: 128000,
+		InputModalities: awsClaudeVisionInputs, OutputModalities: awsTextOutputs,
+		SupportedFeatures: awsClaudeFeaturesWithReasoning, SupportedSamplingParameters: awsClaudeSamplingParams,
+		Description: "Claude Opus 4.8 on AWS Bedrock with 1M-token context and adaptive thinking; flagship Anthropic model.",
+	},
 
 	// Llama Models on AWS Bedrock
 	// Llama 4 models - Pricing given per 1K tokens; normalize to $/1M then to $/token via ratio.MilliTokensUsd

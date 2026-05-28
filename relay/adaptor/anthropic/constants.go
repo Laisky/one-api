@@ -50,14 +50,18 @@ var (
 
 	// claudeSamplingParams lists the sampling parameters Claude chat completions accept.
 	claudeSamplingParams = []string{"temperature", "top_p", "top_k", "stop", "max_tokens"}
-	// claudeOpus47SamplingParams reflects Claude Opus 4.7's removal of temperature/top_p/top_k controls.
-	// Source: https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-anthropic-claude-opus-4-7.html
+	// claudeOpus47SamplingParams reflects the sampling profile Anthropic froze starting with
+	// Claude Opus 4.7: temperature/top_p/top_k are removed and only stop/max_tokens remain.
+	// Reused by later Opus models (4.8+) that inherit the same restriction.
+	// Sources:
+	//   - https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-anthropic-claude-opus-4-7.html
+	//   - https://platform.claude.com/docs/en/about-claude/models/overview (Claude Opus 4.8)
 	claudeOpus47SamplingParams = []string{"stop", "max_tokens"}
 )
 
 // ModelRatios contains all supported models and their pricing ratios.
 //
-// Sources (verified 2026-05-19):
+// Sources (verified 2026-05-28):
 //   - https://platform.claude.com/docs/en/about-claude/models/overview
 //   - https://platform.claude.com/docs/en/about-claude/pricing
 //   - https://platform.claude.com/docs/en/about-claude/model-deprecations
@@ -137,6 +141,14 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		InputModalities: claudeVisionInputs, OutputModalities: claudeTextOutputs,
 		SupportedFeatures: claudeFeaturesWithReasoning, SupportedSamplingParameters: claudeOpus47SamplingParams,
 		Description: "Claude Opus 4.7 most capable Anthropic model with 1M-token context and adaptive thinking; temperature/top_p/top_k are unsupported.",
+	},
+	"claude-opus-4-8": {
+		Ratio: 5 * ratio.MilliTokensUsd, CompletionRatio: 25.0 / 5,
+		CachedInputRatio: 0.5 * ratio.MilliTokensUsd, CacheWrite5mRatio: 6.25 * ratio.MilliTokensUsd, CacheWrite1hRatio: 10 * ratio.MilliTokensUsd,
+		ContextLength: 1000000, MaxOutputTokens: 128000,
+		InputModalities: claudeVisionInputs, OutputModalities: claudeTextOutputs,
+		SupportedFeatures: claudeFeaturesWithReasoning, SupportedSamplingParameters: claudeOpus47SamplingParams,
+		Description: "Claude Opus 4.8 flagship Anthropic model with 1M-token context and adaptive thinking; temperature/top_p/top_k are unsupported. Replaces deprecated claude-opus-4-20250514.",
 	},
 
 	// Claude 4 Sonnet Models

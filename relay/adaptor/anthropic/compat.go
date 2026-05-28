@@ -6,13 +6,26 @@ import (
 	"github.com/Laisky/one-api/relay/model"
 )
 
-const claudeOpus47ModelPrefix = "claude-opus-4-7"
+// claudeAdaptiveOpusPrefixes enumerates Claude Opus model families that share the
+// adaptive-thinking compatibility profile: temperature/top_p/top_k must be omitted
+// and any thinking block must be `{"type":"adaptive"}` without budget_tokens.
+// Starting with Opus 4.7 Anthropic froze this contract; later Opus releases inherit it.
+var claudeAdaptiveOpusPrefixes = []string{
+	"claude-opus-4-7",
+	"claude-opus-4-8",
+}
 
-// IsClaudeOpus47Model reports whether modelName targets Claude Opus 4.7.
-// It normalizes whitespace and casing and returns true for plain or versioned Claude Opus 4.7 identifiers.
+// IsClaudeOpus47Model reports whether modelName targets a Claude Opus release that
+// follows the Opus 4.7 adaptive-thinking compatibility profile (currently 4.7 and 4.8).
+// It normalizes whitespace and casing.
 func IsClaudeOpus47Model(modelName string) bool {
 	normalized := strings.ToLower(strings.TrimSpace(modelName))
-	return strings.HasPrefix(normalized, claudeOpus47ModelPrefix)
+	for _, prefix := range claudeAdaptiveOpusPrefixes {
+		if strings.HasPrefix(normalized, prefix) {
+			return true
+		}
+	}
+	return false
 }
 
 // NormalizeModelCompatibility normalizes Anthropic request parameters for model-specific compatibility.
