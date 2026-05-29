@@ -216,9 +216,6 @@ func (a *Adaptor) ConvertRequest(c *gin.Context, relayMode int, request *model.G
 		)
 	}
 
-	if config.DebugEnabled {
-	}
-
 	if relayMode == relaymode.ResponseAPI {
 		if err := a.applyRequestTransformations(metaInfo, request); err != nil {
 			return nil, errors.Wrap(err, "apply request transformations for Response API")

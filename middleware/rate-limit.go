@@ -106,7 +106,7 @@ func memoryRateLimiter(c *gin.Context, maxRequestNum int, duration int64, mark s
 }
 
 func rateLimitFactory(maxRequestNum int, duration int64, mark string) func(c *gin.Context) {
-	if maxRequestNum <= 0 || config.DebugEnabled {
+	if maxRequestNum <= 0 || config.RateLimitDisabled {
 		return func(c *gin.Context) {
 			c.Next()
 		}
@@ -162,17 +162,32 @@ func GlobalRelayRateLimit() func(c *gin.Context) {
 // so the client knows to top up.
 func LowBalanceRelayRateLimit() func(c *gin.Context) {
 	return func(c *gin.Context) {
-		// Mirror the other relay limiters: disabled in debug mode.
-		if config.DebugEnabled {
+		// Mirror the other relay limiters: disabled only via the explicit
+		// RATE_LIMIT_DISABLED toggle (never tied to DEBUG, which is logging-only).
+		if config.RateLimitDisabled {
 			c.Next()
 			return
 		}
 
 		maxRequestNum := config.LowBalanceRelayRateLimitNum
-		// Engage only when the configured limit is actually stricter than the global
-		// relay limit; otherwise this middleware is a transparent no-op and the
-		// default behavior is identical to the standard relay limit.
-		if maxRequestNum <= 0 || maxRequestNum >= config.GlobalRelayRateLimitNum {
+		duration := config.LowBalanceRelayRateLimitDuration
+		if maxRequestNum <= 0 || duration <= 0 {
+			c.Next()
+			return
+		}
+		// Engage only when the low-balance limit is actually stricter than the global
+		// relay limit; otherwise this middleware is a transparent no-op, so the default
+		// configuration (equal to the global limit) changes nothing. Compare the
+		// effective request rate (count / window) rather than the count alone, so
+		// tightening either LOW_BALANCE_RELAY_RATE_LIMIT or its duration takes effect.
+		// Cross-multiply to stay in integer math:
+		//   low.rate < global.rate  <=>  num*globalDuration < globalNum*duration
+		// A non-positive global limit means "unlimited", so any positive low-balance
+		// limit is stricter than it.
+		stricterThanGlobal := config.GlobalRelayRateLimitNum <= 0 ||
+			int64(maxRequestNum)*config.GlobalRelayRateLimitDuration <
+				int64(config.GlobalRelayRateLimitNum)*duration
+		if !stricterThanGlobal {
 			c.Next()
 			return
 		}
@@ -194,14 +209,24 @@ func LowBalanceRelayRateLimit() func(c *gin.Context) {
 			return
 		}
 
+		// Read the live balance (kept current as the user spends) rather than the
+		// cached user-object snapshot, so the throttle reacts promptly when a user
+		// drains their balance. Fall back to the snapshot if the lookup fails.
+		balance := user.Quota
+		if liveQuota, err := model.CacheGetUserQuota(gmw.Ctx(c), user.Id); err == nil {
+			balance = liveQuota
+		} else {
+			gmw.GetLogger(c).Warn("low-balance limiter: live quota lookup failed, using cached snapshot",
+				zap.Int("user_id", user.Id), zap.Error(err))
+		}
+
 		// Sufficient balance: standard limits apply.
 		thresholdQuota := int64(config.LowBalanceThreshold * config.QuotaPerUnit)
-		if user.Quota >= thresholdQuota {
+		if balance >= thresholdQuota {
 			c.Next()
 			return
 		}
 
-		duration := config.LowBalanceRelayRateLimitDuration
 		key := fmt.Sprintf("rateLimit:LB:%d", user.Id)
 
 		allowed := true
@@ -213,7 +238,7 @@ func LowBalanceRelayRateLimit() func(c *gin.Context) {
 		}
 
 		if !allowed {
-			balanceUSD := float64(user.Quota) / config.QuotaPerUnit
+			balanceUSD := float64(balance) / config.QuotaPerUnit
 			AbortWithError(c, http.StatusTooManyRequests, errors.Errorf(
 				"rate limit exceeded: your account balance ($%.4f) is below the $%.2f minimum, "+
 					"so a stricter limit of %d requests per %d seconds applies; "+
@@ -241,7 +266,7 @@ func TotpRateLimit() func(c *gin.Context) {
 
 // CheckTotpRateLimit checks if user can make TOTP verification request
 func CheckTotpRateLimit(c *gin.Context, userId int) bool {
-	if config.DebugEnabled {
+	if config.RateLimitDisabled {
 		return true
 	}
 

@@ -8,6 +8,9 @@ import (
 	gmw "github.com/Laisky/gin-middlewares/v7"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"gorm.io/driver/sqlite"
+	"gorm.io/gorm"
 
 	"github.com/Laisky/one-api/common"
 	"github.com/Laisky/one-api/common/config"
@@ -27,19 +30,19 @@ func TestLowBalanceRelayRateLimit(t *testing.T) {
 
 	// Preserve and restore config globals mutated by this test.
 	orig := struct {
-		num       int
-		dur       int64
-		global    int
-		threshold float64
-		perUnit   float64
-		debug     bool
+		num         int
+		dur         int64
+		global      int
+		threshold   float64
+		perUnit     float64
+		rateDisable bool
 	}{
-		num:       config.LowBalanceRelayRateLimitNum,
-		dur:       config.LowBalanceRelayRateLimitDuration,
-		global:    config.GlobalRelayRateLimitNum,
-		threshold: config.LowBalanceThreshold,
-		perUnit:   config.QuotaPerUnit,
-		debug:     config.DebugEnabled,
+		num:         config.LowBalanceRelayRateLimitNum,
+		dur:         config.LowBalanceRelayRateLimitDuration,
+		global:      config.GlobalRelayRateLimitNum,
+		threshold:   config.LowBalanceThreshold,
+		perUnit:     config.QuotaPerUnit,
+		rateDisable: config.RateLimitDisabled,
 	}
 	defer func() {
 		config.LowBalanceRelayRateLimitNum = orig.num
@@ -47,17 +50,39 @@ func TestLowBalanceRelayRateLimit(t *testing.T) {
 		config.GlobalRelayRateLimitNum = orig.global
 		config.LowBalanceThreshold = orig.threshold
 		config.QuotaPerUnit = orig.perUnit
-		config.DebugEnabled = orig.debug
+		config.RateLimitDisabled = orig.rateDisable
 	}()
 
 	// Force the in-memory limiter path: redisEnabled defaults to true but RDB is
-	// nil in unit tests (InitRedisClient never runs here).
+	// nil in unit tests (InitRedisClient never runs here). With Redis disabled the
+	// middleware reads balances via CacheGetUserQuota -> GetUserQuota -> DB, so stand
+	// up an in-memory SQLite DB seeded with the test users.
 	origRedis := common.IsRedisEnabled()
 	common.SetRedisEnabled(false)
 	defer common.SetRedisEnabled(origRedis)
 
+	origDB := model.DB
+	db, err := gorm.Open(sqlite.Open("file:lowbalancetest?mode=memory&cache=shared"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&model.User{}))
+	model.DB = db
+	defer func() { model.DB = origDB }()
+
+	// access_token and aff_code carry unique indexes, so give each row distinct values.
+	seedUsers := []*model.User{
+		{Id: 90001, Username: "lb-zero", Password: "placeholder", AccessToken: "lb-token-90001", AffCode: "lb-aff-90001", Role: model.RoleCommonUser, Status: model.UserStatusEnabled, Quota: 0},
+		{Id: 90002, Username: "lb-rich", Password: "placeholder", AccessToken: "lb-token-90002", AffCode: "lb-aff-90002", Role: model.RoleCommonUser, Status: model.UserStatusEnabled, Quota: 300000},
+		{Id: 90003, Username: "lb-admin", Password: "placeholder", AccessToken: "lb-token-90003", AffCode: "lb-aff-90003", Role: model.RoleAdminUser, Status: model.UserStatusEnabled, Quota: 0},
+		{Id: 90004, Username: "lb-noop", Password: "placeholder", AccessToken: "lb-token-90004", AffCode: "lb-aff-90004", Role: model.RoleCommonUser, Status: model.UserStatusEnabled, Quota: 0},
+		{Id: 90005, Username: "lb-debug", Password: "placeholder", AccessToken: "lb-token-90005", AffCode: "lb-aff-90005", Role: model.RoleCommonUser, Status: model.UserStatusEnabled, Quota: 0},
+		{Id: 90006, Username: "lb-dur", Password: "placeholder", AccessToken: "lb-token-90006", AffCode: "lb-aff-90006", Role: model.RoleCommonUser, Status: model.UserStatusEnabled, Quota: 0},
+	}
+	for _, u := range seedUsers {
+		require.NoError(t, db.Create(u).Error)
+	}
+
 	// Stricter-than-global config so the limiter engages.
-	config.DebugEnabled = false
+	config.RateLimitDisabled = false
 	config.GlobalRelayRateLimitNum = 480
 	config.LowBalanceRelayRateLimitNum = 2
 	config.LowBalanceRelayRateLimitDuration = 3600 // long window keeps the limit deterministic
@@ -125,9 +150,11 @@ func TestLowBalanceRelayRateLimit(t *testing.T) {
 		}
 	})
 
-	t.Run("debug_mode_disables_limiter", func(t *testing.T) {
-		config.DebugEnabled = true
-		defer func() { config.DebugEnabled = false }()
+	t.Run("rate_limit_disabled_flag_disables_limiter", func(t *testing.T) {
+		// DEBUG must NOT affect rate limiting; only the explicit RATE_LIMIT_DISABLED
+		// toggle bypasses the limiter.
+		config.RateLimitDisabled = true
+		defer func() { config.RateLimitDisabled = false }()
 
 		user := &model.User{Id: 90005, Role: model.RoleCommonUser, Quota: 0}
 		for i := 0; i < 10; i++ {
@@ -135,6 +162,33 @@ func TestLowBalanceRelayRateLimit(t *testing.T) {
 			assert.Equal(t, http.StatusOK, code)
 			assert.False(t, aborted)
 		}
+	})
+
+	t.Run("engages_when_only_duration_is_stricter", func(t *testing.T) {
+		// Same request count as the global limit, but a much longer window, so the
+		// effective rate is stricter. Count-only gating would treat this as a no-op;
+		// the effective-rate gate must still engage the limiter.
+		origG, origGD := config.GlobalRelayRateLimitNum, config.GlobalRelayRateLimitDuration
+		origN, origD := config.LowBalanceRelayRateLimitNum, config.LowBalanceRelayRateLimitDuration
+		defer func() {
+			config.GlobalRelayRateLimitNum, config.GlobalRelayRateLimitDuration = origG, origGD
+			config.LowBalanceRelayRateLimitNum, config.LowBalanceRelayRateLimitDuration = origN, origD
+		}()
+		config.GlobalRelayRateLimitNum = 3
+		config.GlobalRelayRateLimitDuration = 10
+		config.LowBalanceRelayRateLimitNum = 3           // identical count to the global limit
+		config.LowBalanceRelayRateLimitDuration = 100000 // longer window => stricter effective rate
+
+		user := &model.User{Id: 90006, Role: model.RoleCommonUser, Quota: 0}
+		for i := 0; i < 3; i++ {
+			code, _, aborted := run(user)
+			assert.Equal(t, http.StatusOK, code)
+			assert.False(t, aborted)
+		}
+		code, body, aborted := run(user)
+		assert.Equal(t, http.StatusTooManyRequests, code)
+		assert.True(t, aborted)
+		assert.Contains(t, body, "balance")
 	})
 
 	t.Run("missing_user_object_is_noop", func(t *testing.T) {
