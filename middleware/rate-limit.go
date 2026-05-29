@@ -15,6 +15,7 @@ import (
 	"github.com/Laisky/one-api/common"
 	"github.com/Laisky/one-api/common/config"
 	"github.com/Laisky/one-api/common/ctxkey"
+	"github.com/Laisky/one-api/model"
 )
 
 var timeFormat = "2006-01-02T15:04:05.000Z"
@@ -145,6 +146,84 @@ func UploadRateLimit() func(c *gin.Context) {
 
 func GlobalRelayRateLimit() func(c *gin.Context) {
 	return rateLimitFactory(config.GlobalRelayRateLimitNum, config.GlobalRelayRateLimitDuration, "GR")
+}
+
+// LowBalanceRelayRateLimit applies a stricter relay rate limit to users whose
+// account balance has fallen below config.LowBalanceThreshold (USD). These are
+// typically free users who never top up but keep hammering free models.
+//
+// The limit is configurable via LOW_BALANCE_RELAY_RATE_LIMIT and defaults to
+// GlobalRelayRateLimitNum, so the default behavior is unchanged: the limiter only
+// engages once an operator configures a value stricter than the global relay limit.
+// Privileged (admin/root) users and users with sufficient balance are never
+// throttled here. The limit is keyed per user (not per token) so a user cannot
+// bypass it by spreading traffic across multiple tokens. When the limit is
+// exceeded the response explains that the throttling is caused by the low balance,
+// so the client knows to top up.
+func LowBalanceRelayRateLimit() func(c *gin.Context) {
+	return func(c *gin.Context) {
+		// Mirror the other relay limiters: disabled in debug mode.
+		if config.DebugEnabled {
+			c.Next()
+			return
+		}
+
+		maxRequestNum := config.LowBalanceRelayRateLimitNum
+		// Engage only when the configured limit is actually stricter than the global
+		// relay limit; otherwise this middleware is a transparent no-op and the
+		// default behavior is identical to the standard relay limit.
+		if maxRequestNum <= 0 || maxRequestNum >= config.GlobalRelayRateLimitNum {
+			c.Next()
+			return
+		}
+
+		userObj, ok := c.Get(ctxkey.UserObj)
+		if !ok {
+			c.Next()
+			return
+		}
+		user, ok := userObj.(*model.User)
+		if !ok || user == nil {
+			c.Next()
+			return
+		}
+
+		// Never throttle privileged operators on balance grounds.
+		if user.Role >= model.RoleAdminUser {
+			c.Next()
+			return
+		}
+
+		// Sufficient balance: standard limits apply.
+		thresholdQuota := int64(config.LowBalanceThreshold * config.QuotaPerUnit)
+		if user.Quota >= thresholdQuota {
+			c.Next()
+			return
+		}
+
+		duration := config.LowBalanceRelayRateLimitDuration
+		key := fmt.Sprintf("rateLimit:LB:%d", user.Id)
+
+		allowed := true
+		if common.IsRedisEnabled() {
+			allowed = checkRedisRateLimit(c, key, maxRequestNum, duration)
+		} else {
+			inMemoryRateLimiter.Init(config.RateLimitKeyExpirationDuration)
+			allowed = inMemoryRateLimiter.Request(key, maxRequestNum, duration)
+		}
+
+		if !allowed {
+			balanceUSD := float64(user.Quota) / config.QuotaPerUnit
+			AbortWithError(c, http.StatusTooManyRequests, errors.Errorf(
+				"rate limit exceeded: your account balance ($%.4f) is below the $%.2f minimum, "+
+					"so a stricter limit of %d requests per %d seconds applies; "+
+					"please top up your account to restore the standard rate limit",
+				balanceUSD, config.LowBalanceThreshold, maxRequestNum, duration))
+			return
+		}
+
+		c.Next()
+	}
 }
 
 func ChannelRateLimit() func(c *gin.Context) {

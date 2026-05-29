@@ -497,6 +497,33 @@ var (
 	// Unit: seconds
 	GlobalRelayRateLimitDuration int64 = 3 * 60
 
+	// LowBalanceThreshold is the account balance, in USD, below which a stricter
+	// relay rate limit is applied. It targets free users who never top up but keep
+	// hammering free models. Users whose balance is at or above this value keep the
+	// standard GlobalRelayRateLimitNum limit.
+	//
+	// Environment variable: LOW_BALANCE_RATE_LIMIT_THRESHOLD
+	// Default: 0.5 (USD)
+	LowBalanceThreshold = env.Float64("LOW_BALANCE_RATE_LIMIT_THRESHOLD", 0.5)
+
+	// LowBalanceRelayRateLimitNum bounds the number of relay API calls allowed for a
+	// low-balance user (balance below LowBalanceThreshold) within
+	// LowBalanceRelayRateLimitDuration. It defaults to GlobalRelayRateLimitNum so the
+	// out-of-the-box behavior is identical to the standard relay limit; operators
+	// lower it to throttle users who have not topped up. When it is not stricter than
+	// GlobalRelayRateLimitNum the low-balance limiter stays a transparent no-op.
+	//
+	// Environment variable: LOW_BALANCE_RELAY_RATE_LIMIT
+	// Default: same as GlobalRelayRateLimitNum
+	LowBalanceRelayRateLimitNum = env.Int("LOW_BALANCE_RELAY_RATE_LIMIT", GlobalRelayRateLimitNum)
+
+	// LowBalanceRelayRateLimitDuration sets the window for the low-balance relay limit.
+	//
+	// Environment variable: LOW_BALANCE_RELAY_RATE_LIMIT_DURATION
+	// Default: same as GlobalRelayRateLimitDuration
+	// Unit: seconds
+	LowBalanceRelayRateLimitDuration = int64(env.Int("LOW_BALANCE_RELAY_RATE_LIMIT_DURATION", int(GlobalRelayRateLimitDuration)))
+
 	// ChannelRateLimitEnabled toggles per-channel rate limiting when true.
 	// When enabled, each channel has its own request limit defined in channel settings.
 	//

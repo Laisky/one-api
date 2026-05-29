@@ -54,6 +54,7 @@ func SetRelayRouter(router *gin.Engine) {
 		middleware.BindAsyncTaskChannel(),
 		middleware.Distribute(),
 		middleware.GlobalRelayRateLimit(),
+		middleware.LowBalanceRelayRateLimit(),
 		middleware.ChannelRateLimit(),
 	}
 
