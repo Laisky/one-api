@@ -9,7 +9,6 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/Laisky/one-api/relay/meta"
@@ -74,13 +73,13 @@ func TestDoResponse_Embeddings(t *testing.T) {
 	require.Nil(t, errResp)
 	require.NotNil(t, usage, "usage must be populated for billing")
 
-	assert.Equal(t, 10, usage.PromptTokens)
-	assert.Equal(t, 0, usage.CompletionTokens)
-	assert.Equal(t, 10, usage.TotalTokens)
+	require.Equal(t, 10, usage.PromptTokens)
+	require.Equal(t, 0, usage.CompletionTokens)
+	require.Equal(t, 10, usage.TotalTokens)
 
 	// The original OpenAI-compatible body must be forwarded verbatim so
 	// embedding SDKs can keep parsing it.
-	assert.Equal(t, http.StatusOK, w.Code)
-	assert.Equal(t, "application/json", w.Header().Get("Content-Type"))
-	assert.JSONEq(t, string(body), w.Body.String())
+	require.Equal(t, http.StatusOK, w.Code)
+	require.Equal(t, "application/json", w.Header().Get("Content-Type"))
+	require.JSONEq(t, string(body), w.Body.String())
 }
