@@ -11,6 +11,7 @@ import (
 	"github.com/Laisky/one-api/relay/adaptor/openai_compatible"
 	"github.com/Laisky/one-api/relay/meta"
 	"github.com/Laisky/one-api/relay/model"
+	"github.com/Laisky/one-api/relay/relaymode"
 )
 
 type Adaptor struct {
@@ -61,6 +62,15 @@ func (a *Adaptor) DoRequest(c *gin.Context, meta *meta.Meta, requestBody io.Read
 }
 
 func (a *Adaptor) DoResponse(c *gin.Context, resp *http.Response, meta *meta.Meta) (usage *model.Usage, err *model.ErrorWithStatusCode) {
+	// SiliconFlow exposes an OpenAI-compatible /v1/embeddings endpoint, so route
+	// the response through the shared embedding handler instead of the chat
+	// completion handler (which expects a `choices` field that embedding
+	// responses do not have).
+	if meta.Mode == relaymode.Embeddings {
+		errResp, embeddingUsage := openai_compatible.EmbeddingHandler(c, resp)
+		return embeddingUsage, errResp
+	}
+
 	return openai_compatible.HandleClaudeMessagesResponse(c, resp, meta, func(c *gin.Context, resp *http.Response, promptTokens int, modelName string) (*model.ErrorWithStatusCode, *model.Usage) {
 		if meta.IsStream {
 			return openai_compatible.StreamHandler(c, resp, promptTokens, modelName)
