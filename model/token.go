@@ -204,11 +204,14 @@ func ValidateUserToken(ctx context.Context, key string) (token *Token, err error
 	}
 	token, err = CacheGetTokenByKey(ctx, key)
 	if err != nil {
+		// Mask the key: it must never appear verbatim in logs/errors, but keep
+		// the "token not found for key:" prefix that shouldLogAsWarning matches.
+		maskedKey := helper.MaskAPIKey(key)
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, errors.Wrapf(err, "token not found for key: %s", key)
+			return nil, errors.Wrapf(err, "token not found for key: %s", maskedKey)
 		}
 
-		return nil, errors.Wrapf(err, "failed to get token by key: %s", key)
+		return nil, errors.Wrapf(err, "failed to get token by key: %s", maskedKey)
 	}
 
 	switch token.Status {

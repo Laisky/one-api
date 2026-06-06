@@ -207,10 +207,27 @@ func RootAuth() func(c *gin.Context) {
 func TokenAuth() func(c *gin.Context) {
 	return func(c *gin.Context) {
 		ctx := gmw.Ctx(c)
+		lg := gmw.GetLogger(c)
+
 		// Parse the token key from the request (could include channel specification)
-		// Parse the token key from the request (could include channel specification)
-		parts := GetTokenKeyParts(c)
+		parsed := parseTokenKey(c)
+		parts := parsed.Parts
 		key := parts[0]
+
+		// Diagnostic logging for client authentication issues (DEBUG only).
+		// It never logs the raw credential — only which header supplied it,
+		// whether a `Bearer` scheme was present, the number of '-'-separated
+		// parts (a count > 1 triggers admin channel-spec handling and would
+		// 403 a non-admin), and a masked key. This is essential for diagnosing
+		// third-party clients (e.g. GitHub Copilot BYOK) that send the key via
+		// a non-standard header or in an unexpected form.
+		lg.Debug("api token authentication",
+			zap.String("path", c.Request.URL.Path),
+			zap.String("auth_source", string(parsed.Source)),
+			zap.Bool("had_bearer_scheme", parsed.HadScheme),
+			zap.Int("key_parts", len(parts)),
+			zap.String("masked_key", helper.MaskAPIKey(key)),
+		)
 
 		// Validate the API token against the database
 		token, err := model.ValidateUserToken(ctx, key)
