@@ -16,6 +16,15 @@ var (
 	deepSeekVertexReasoningSampling = []string{"stop", "max_tokens"}
 )
 
+// Prompt cache: Vertex AI MaaS implicit caching grants a 90% discount on cached
+// input tokens (cache-hit billed at 0.1x standard input) and is documented as
+// supported only for deepseek-v3.1-maas and deepseek-v3.2-maas; r1-0528 and OCR
+// are not on the implicit-cache list and intentionally carry no CachedInputRatio.
+// Source: https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/maas/use-open-models
+// Note: this is a latent/defensive ratio — Vertex surfaces cached tokens via the
+// Gemini-style cachedContentTokenCount; one-api only bills it when the OpenAI-shaped
+// cached_tokens field is populated, so it is harmless when not yet emitted.
+//
 // ModelRatios contains DeepSeek models and their pricing ratios on Vertex AI MaaS.
 //
 // Pricing sources (retrieved 2026-05-19):
@@ -45,7 +54,11 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 	// Vertex GA 2025-12-10; global endpoint. Hybrid thinking via chat_template_kwargs.thinking;
 	// reasoning text surfaces in reasoning_content, response text in content.
 	"deepseek-ai/deepseek-v3.2-maas": {
-		Ratio:                       0.56 * ratio.MilliTokensUsd,
+		Ratio: 0.56 * ratio.MilliTokensUsd,
+		// Vertex implicit caching gives a 90% discount on cached input tokens
+		// (cache-hit billed at 0.1x standard input). deepseek-v3.2-maas is listed
+		// as implicit-cache supported by Vertex MaaS.
+		CachedInputRatio:            0.1 * 0.56 * ratio.MilliTokensUsd,
 		CompletionRatio:             1.68 / 0.56,
 		ContextLength:               163840,
 		MaxOutputTokens:             65536,
@@ -61,8 +74,12 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 	// Vertex GA 2025-08-28 in us-central1; hybrid thinking via chat_template_kwargs.thinking.
 	// (Vertex aligns V3.1 with R1 list pricing; cloudprice confirmed 2026-05-19.)
 	"deepseek-ai/deepseek-v3.1-maas": {
-		Ratio:                       1.35 * ratio.MilliTokensUsd, // Input price: $1.35 per million tokens
-		CompletionRatio:             5.40 / 1.35,                 // Output/Input ratio: $5.40 / $1.35 = 4.0
+		Ratio: 1.35 * ratio.MilliTokensUsd, // Input price: $1.35 per million tokens
+		// Vertex implicit caching gives a 90% discount on cached input tokens
+		// (cache-hit billed at 0.1x standard input). deepseek-v3.1-maas is listed
+		// as implicit-cache supported by Vertex MaaS.
+		CachedInputRatio:            0.1 * 1.35 * ratio.MilliTokensUsd,
+		CompletionRatio:             5.40 / 1.35, // Output/Input ratio: $5.40 / $1.35 = 4.0
 		ContextLength:               163840,
 		MaxOutputTokens:             32768,
 		InputModalities:             deepSeekVertexTextFileInputs,

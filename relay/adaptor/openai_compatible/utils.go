@@ -362,6 +362,10 @@ func Handler(c *gin.Context, resp *http.Response, promptTokens int, modelName st
 	if usage.TotalTokens == 0 {
 		usage.TotalTokens = usage.PromptTokens + usage.CompletionTokens
 	}
+	// Promote any top-level cached_tokens (e.g. StepFun) into the nested
+	// prompt_tokens_details.cached_tokens field so downstream billing applies
+	// the cache-hit ratio. No-op for OpenAI-shaped responses.
+	usage.NormalizeCachedTokens()
 	logger.Debug("finalized usage for non-stream (openai-compatible)",
 		zap.Int("prompt_tokens", usage.PromptTokens),
 		zap.Int("completion_tokens", usage.CompletionTokens),

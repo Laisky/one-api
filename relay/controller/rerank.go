@@ -153,8 +153,13 @@ func RelayRerankHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 		}
 	}
 
+	// Refund any pre-consumed quota that is safe to return (no-op on the
+	// forwarded success path). Do NOT zero preConsumedQuota here: postConsume
+	// settles via delta (quotaDelta = totalQuota - preConsumedQuota), so the
+	// kept pre-consume plus the delta equals exactly one charge. Zeroing it
+	// would make postConsume recharge the full totalQuota on top of the
+	// still-deducted pre-consume, double charging the user. Mirrors text.go.
 	_ = returnPreConsumedQuotaConservative(ctx, c, preConsumedQuota, meta.TokenId, "pre_billing_reconcile")
-	preConsumedQuota = 0
 
 	if usage != nil {
 		userIdStr := strconv.Itoa(meta.UserId)

@@ -325,6 +325,12 @@ func Relay(c *gin.Context) {
 			zap.Int("channel_id", channel.Id),
 			zap.Int("remaining_attempts", i),
 		)
+		// We have definitively decided to retry on a different channel. Refund and
+		// clear the just-failed attempt's per-attempt billing state so the next
+		// attempt's pre-consume/post-consume does not stack on top of the abandoned
+		// attempt's (conservative-skip) outstanding pre-consume, which would double
+		// charge the user. Terminal failures never reach this point.
+		rcontroller.ResetPerAttemptBillingForRetry(ctx, c)
 		middleware.SetupContextForSelectedChannel(c, channel, originalModel)
 		requestBody, err := common.GetRequestBody(c)
 		c.Request.Body = io.NopCloser(bytes.NewBuffer(requestBody))

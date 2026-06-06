@@ -336,7 +336,7 @@ func TestStreamHandler_OversizedChunk(t *testing.T) {
 		Body:       io.NopCloser(strings.NewReader(sse)),
 	}
 
-	apiErr, responseText := StreamHandler(c, resp)
+	apiErr, responseText, _ := StreamHandler(c, resp)
 	require.Nil(t, apiErr)
 	require.Equal(t, largeText, responseText)
 

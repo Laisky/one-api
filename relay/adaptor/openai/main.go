@@ -451,6 +451,11 @@ streamLoop:
 		render.LogHeartbeatLineReaderError(c, lg, streamErr, hbr)
 	}
 
+	// Promote any top-level cached_tokens into the nested
+	// prompt_tokens_details.cached_tokens field so downstream billing applies
+	// the cache-hit ratio. No-op for OpenAI-shaped responses.
+	usage.NormalizeCachedTokens()
+
 	// Let the streamRewriter finalize if present, but do NOT fabricate a
 	// [DONE] when the upstream didn't send one — be an honest proxy.
 	if streamRewriter != nil {
@@ -840,6 +845,11 @@ func calculateTokenUsage(response *SlimTextResponse, promptTokens int, modelName
 		// Handle audio tokens conversion
 		calculateAudioTokens(response, modelName)
 	}
+
+	// Promote any top-level cached_tokens into the nested
+	// prompt_tokens_details.cached_tokens field so downstream billing applies
+	// the cache-hit ratio. No-op for OpenAI-shaped responses.
+	response.Usage.NormalizeCachedTokens()
 }
 
 // Helper function to check if response has audio tokens

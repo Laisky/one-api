@@ -878,11 +878,44 @@ func recordGeminiOutputImageCount(c *gin.Context, count int) {
 	c.Set(ctxkey.OutputImageCount, count)
 }
 
+// geminiUsageMetadataToOpenAIUsage maps Gemini's authoritative usageMetadata into model.Usage.
+// Parameters: meta is the Gemini usage metadata from a (streaming or non-streaming) response.
+// Returns: an OpenAI-compatible usage snapshot, or nil when meta is nil.
+//
+// PromptTokens keeps Gemini's full promptTokenCount, which already includes the cached portion;
+// the cached portion is surfaced via PromptTokensDetails.CachedTokens so quota.Compute can
+// re-price it at CachedInputRatio. CompletionTokens folds in thoughtsTokenCount (reasoning).
+func geminiUsageMetadataToOpenAIUsage(meta *UsageMetadata) *model.Usage {
+	if meta == nil {
+		return nil
+	}
+
+	usage := &model.Usage{
+		PromptTokens:     meta.PromptTokenCount,
+		CompletionTokens: meta.CandidatesTokenCount + meta.ThoughtsTokenCount,
+		TotalTokens:      meta.TotalTokenCount,
+	}
+	if meta.CachedContentTokenCount > 0 {
+		usage.PromptTokensDetails = &model.UsagePromptTokensDetails{
+			CachedTokens: meta.CachedContentTokenCount,
+		}
+	}
+	if meta.ThoughtsTokenCount > 0 {
+		usage.CompletionTokensDetails = &model.UsageCompletionTokensDetails{
+			ReasoningTokens: meta.ThoughtsTokenCount,
+		}
+	}
+	return usage
+}
+
 // StreamHandler processes streaming responses from the Gemini API and converts them to OpenAI-compatible
 // Server-Sent Events (SSE) format. It reads the response body line by line, unmarshals each chunk,
 // converts it to OpenAI format, and streams it to the client.
-// Returns an error if the response processing fails, and the accumulated response text on success.
-func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusCode, string) {
+//
+// Returns an error if the response processing fails, the accumulated response text, and the
+// authoritative usage captured from the upstream usageMetadata. The returned usage is nil when no
+// usageMetadata was present in the stream, signalling the caller to fall back to a local estimate.
+func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusCode, string, *model.Usage) {
 	lg := gmw.GetLogger(c)
 	responseText := ""
 	outputImageCount := 0
@@ -896,6 +929,11 @@ func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusC
 	hbr := render.NewHeartbeatLineReader(c, lineReader, render.DefaultHeartbeatInterval)
 	defer hbr.Close()
 	var streamErr error
+
+	// usageMetadata captures the authoritative upstream token accounting. Gemini reports
+	// cumulative running totals (typically in the final chunk), so we overwrite with the
+	// latest non-empty snapshot rather than summing, to avoid double-counting.
+	var usageMetadata *UsageMetadata
 
 	for {
 		line, err := hbr.Next()
@@ -928,12 +966,21 @@ func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusC
 		data = strings.TrimPrefix(data, "data: ")
 		data = strings.TrimSuffix(data, "\"")
 
+		if data == "[DONE]" {
+			break
+		}
+
 		var geminiResponse ChatResponse
 		err = json.Unmarshal([]byte(data), &geminiResponse)
 		if err != nil {
 			lg.Error("error unmarshalling stream response",
 				zap.Error(errors.Wrap(err, "unmarshal stream")))
 			continue
+		}
+
+		// Capture the latest non-empty usageMetadata (cumulative totals, not deltas).
+		if geminiResponse.UsageMetadata != nil && geminiResponse.UsageMetadata.TotalTokenCount > 0 {
+			usageMetadata = geminiResponse.UsageMetadata
 		}
 
 		chunkCounts := countGeminiOutputImages(&geminiResponse)
@@ -973,10 +1020,10 @@ func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusC
 
 	err := resp.Body.Close()
 	if err != nil {
-		return openai.ErrorWrapper(errors.Wrap(err, "close_response_body_failed"), "close_response_body_failed", http.StatusInternalServerError), ""
+		return openai.ErrorWrapper(errors.Wrap(err, "close_response_body_failed"), "close_response_body_failed", http.StatusInternalServerError), "", nil
 	}
 
-	return nil, responseText
+	return nil, responseText, geminiUsageMetadataToOpenAIUsage(usageMetadata)
 }
 
 // Handler processes non-streaming responses from the Gemini API and converts them to OpenAI-compatible format.
@@ -1049,13 +1096,10 @@ func Handler(c *gin.Context, resp *http.Response, promptTokens int, modelName st
 	var usage model.Usage
 	if geminiResponse.UsageMetadata != nil &&
 		geminiResponse.UsageMetadata.TotalTokenCount > 0 {
-		// Use Gemini's provided token counts
-		usage = model.Usage{
-			PromptTokens: geminiResponse.UsageMetadata.PromptTokenCount,
-			CompletionTokens: geminiResponse.UsageMetadata.CandidatesTokenCount +
-				geminiResponse.UsageMetadata.ThoughtsTokenCount,
-			TotalTokens: geminiResponse.UsageMetadata.TotalTokenCount,
-		}
+		// Use Gemini's provided token counts. The helper keeps PromptTokens at the full
+		// promptTokenCount (which includes cached tokens) while surfacing the cached portion
+		// via PromptTokensDetails so it is billed at the discounted CachedInputRatio.
+		usage = *geminiUsageMetadataToOpenAIUsage(geminiResponse.UsageMetadata)
 	} else {
 		// Fall back to manual calculation if usageMetadata is unavailable or zero
 		completionTokens := openai.CountTokenText(geminiResponse.GetResponseText(), modelName)

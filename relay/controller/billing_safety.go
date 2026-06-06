@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/Laisky/errors/v2"
 	gmw "github.com/Laisky/gin-middlewares/v7"
 	"github.com/Laisky/zap"
 	"github.com/gin-gonic/gin"
@@ -95,7 +96,87 @@ func returnPreConsumedQuotaConservative(
 	}
 
 	billing.ReturnPreConsumedQuota(ctx, preConsumedQuota, tokenID)
+	if c != nil {
+		syncUserQuotaCacheAfterRefund(ctx, c.GetInt(ctxkey.Id), reason)
+	}
 	return true
+}
+
+// ResetPerAttemptBillingForRetry refunds and clears the request-scoped billing
+// state of a just-failed/abandoned relay attempt so the next cross-channel retry
+// starts from a clean slate.
+//
+// It must be called by the retry loop only once a retry channel has been
+// selected and the loop has definitively decided to retry (i.e. immediately
+// before middleware.SetupContextForSelectedChannel). Terminal failures never
+// reach this point, so the no-underbilling guarantee on terminal failures is
+// preserved.
+//
+// The four per-attempt billing ctxkeys (UpstreamRequestPossiblyForwarded,
+// PreConsumedQuotaAmount, ProvisionalLogId, BillingReconciled) are set per
+// attempt but never reset between attempts; SetupContextForSelectedChannel only
+// resets channel keys. Left untouched, the next attempt pre-consumes again and
+// post-consumes in full while the abandoned attempt's pre-consume is never
+// refunded (conservative skip on a forwarded-then-failed attempt), double
+// charging the user.
+//
+// Exactly-once reasoning (verified against billing_safety.go +
+// claude_messages.go refund call sites): the only refund chokepoint is
+// returnPreConsumedQuotaConservative, which NEVER zeroes PreConsumedQuotaAmount.
+// When the attempt was not forwarded it already refunded (or the billing audit
+// safety net did), so re-refunding here would over-credit. When the attempt was
+// forwarded, it skipped the refund and the pre-consumed quota is still
+// outstanding. Gating the refund on shouldSkipPreConsumedRefund (i.e. the
+// forwarded marker) therefore yields EXACTLY one outcome per attempt: one charge
+// on success, one refund when abandoned — never both, never twice.
+//
+// This helper is generic: all relay modes share the same retry loop and the same
+// per-attempt ctxkeys, so it covers text/response/claude/etc.
+func ResetPerAttemptBillingForRetry(ctx context.Context, c *gin.Context) {
+	if c == nil {
+		return
+	}
+
+	lg := gmw.GetLogger(c)
+	userID := c.GetInt(ctxkey.Id)
+	tokenID := c.GetInt(ctxkey.TokenId)
+	amount := c.GetInt64(ctxkey.PreConsumedQuotaAmount)
+	provID := c.GetInt(ctxkey.ProvisionalLogId)
+
+	// Only refund/void when the abandoned attempt left its pre-consumed quota
+	// outstanding, which happens exactly when the conservative policy skipped the
+	// refund because the request may have been forwarded upstream. In every other
+	// case the normal refund path (or the billing audit safety net) has already
+	// returned the quota, so doing it again would over-credit the user.
+	if amount > 0 && shouldSkipPreConsumedRefund(c) {
+		const reason = "refunded: superseded by cross-channel retry"
+		lg.Info("refunding abandoned attempt pre-consumed quota before cross-channel retry",
+			zap.Int64("pre_consumed_quota", amount),
+			zap.Int("token_id", tokenID),
+			zap.Int("provisional_log_id", provID),
+		)
+		// Mirror the existing best-effort refund pattern: run the side effects in a
+		// lifecycle-managed critical goroutine so a slow DB never blocks the retry.
+		graceful.GoCritical(gmw.BackgroundCtx(c), "resetPerAttemptBillingForRetry", func(bctx context.Context) {
+			billing.ReturnPreConsumedQuota(bctx, amount, tokenID)
+			syncUserQuotaCacheAfterRefund(bctx, userID, "cross_channel_retry")
+			if provID > 0 {
+				if err := model.ReconcileConsumeLog(bctx, provID, 0, reason, 0, 0, 0, nil); err != nil {
+					lg.Warn("failed to void provisional log on cross-channel retry refund",
+						zap.Error(errors.Wrapf(err, "reconcile provisional log %d to zero", provID)),
+						zap.Int("provisional_log_id", provID),
+					)
+				}
+			}
+		})
+	}
+
+	// Clear the per-attempt billing markers so the next attempt starts clean and
+	// its own pre-consume/refund accounting is independent of this attempt.
+	c.Set(ctxkey.UpstreamRequestPossiblyForwarded, false)
+	c.Set(ctxkey.PreConsumedQuotaAmount, int64(0))
+	c.Set(ctxkey.ProvisionalLogId, 0)
+	c.Set(ctxkey.BillingReconciled, false)
 }
 
 // markPreConsumed records the pre-consumed quota amount in the gin context

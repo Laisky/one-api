@@ -9,6 +9,13 @@ type Usage struct {
 	PromptTokens     int `json:"prompt_tokens,omitempty"`
 	CompletionTokens int `json:"completion_tokens,omitempty"`
 	TotalTokens      int `json:"total_tokens,omitempty"`
+	// CachedTokens captures a TOP-LEVEL cached-token count reported by some
+	// providers (e.g. StepFun) directly under usage rather than nested inside
+	// prompt_tokens_details. OpenAI and most providers omit this and instead
+	// populate PromptTokensDetails.CachedTokens. Use NormalizeCachedTokens to
+	// promote this value into the nested field so downstream billing only has
+	// to read one location.
+	CachedTokens int `json:"cached_tokens,omitempty"`
 	// PromptTokensDetails may be empty for some models
 	PromptTokensDetails *UsagePromptTokensDetails `json:"prompt_tokens_details,omitempty"`
 	// CompletionTokensDetails may be empty for some models
@@ -27,6 +34,27 @@ type Usage struct {
 	// They are optional and only set when providers return such details.
 	CacheWrite5mTokens int `json:"cache_write_5m_tokens,omitempty"`
 	CacheWrite1hTokens int `json:"cache_write_1h_tokens,omitempty"`
+}
+
+// NormalizeCachedTokens promotes a top-level CachedTokens count into the nested
+// PromptTokensDetails.CachedTokens field, which is the single location quota
+// billing reads cache-hit tokens from.
+//
+// It is a no-op when there is no top-level cached count, and it never overwrites
+// a nested count that an upstream provider already populated (such providers are
+// authoritative). After promotion, the top-level field is cleared so OpenAI-shaped
+// responses expose only the standard prompt_tokens_details.cached_tokens field.
+func (u *Usage) NormalizeCachedTokens() {
+	if u == nil || u.CachedTokens <= 0 {
+		return
+	}
+	if u.PromptTokensDetails == nil {
+		u.PromptTokensDetails = &UsagePromptTokensDetails{}
+	}
+	if u.PromptTokensDetails.CachedTokens == 0 {
+		u.PromptTokensDetails.CachedTokens = u.CachedTokens
+	}
+	u.CachedTokens = 0
 }
 
 // ErrorType enumerates the standardized error categories we expose to clients.

@@ -145,17 +145,50 @@ func embeddingResponseAli2OpenAI(response *EmbeddingResponse) *openai.EmbeddingR
 	return &openAIEmbeddingResponse
 }
 
+// applyAliStreamUsage updates the running billing usage snapshot from a streamed
+// DashScope chunk, preserving PromptTokens as the full input count and forwarding
+// any context-cache hit count into PromptTokensDetails.CachedTokens.
+func applyAliStreamUsage(usage *model.Usage, aliUsage Usage) {
+	usage.PromptTokens = aliUsage.InputTokens
+	usage.CompletionTokens = aliUsage.OutputTokens
+	usage.TotalTokens = aliUsage.InputTokens + aliUsage.OutputTokens
+	if cached := aliCachedTokens(aliUsage); cached > 0 {
+		if usage.PromptTokensDetails == nil {
+			usage.PromptTokensDetails = &model.UsagePromptTokensDetails{}
+		}
+		usage.PromptTokensDetails.CachedTokens = cached
+	}
+}
+
+// aliCachedTokens returns the number of input tokens served from DashScope's
+// context cache. DashScope text models report this under
+// usage.prompt_tokens_details.cached_tokens, while the multimodal (qwen-vl)
+// shape reports it as a top-level usage.cached_tokens. The cached count is part
+// of InputTokens (not a separate bucket), so PromptTokens stays the full input.
+func aliCachedTokens(usage Usage) int {
+	if usage.PromptTokensDetails != nil && usage.PromptTokensDetails.CachedTokens > 0 {
+		return usage.PromptTokensDetails.CachedTokens
+	}
+	return usage.CachedTokens
+}
+
 func responseAli2OpenAI(response *ChatResponse) *openai.TextResponse {
+	usage := model.Usage{
+		PromptTokens:     response.Usage.InputTokens,
+		CompletionTokens: response.Usage.OutputTokens,
+		TotalTokens:      response.Usage.InputTokens + response.Usage.OutputTokens,
+	}
+	if cached := aliCachedTokens(response.Usage); cached > 0 {
+		usage.PromptTokensDetails = &model.UsagePromptTokensDetails{
+			CachedTokens: cached,
+		}
+	}
 	fullTextResponse := openai.TextResponse{
 		Id:      response.RequestId,
 		Object:  "chat.completion",
 		Created: helper.GetTimestamp(),
 		Choices: response.Output.Choices,
-		Usage: model.Usage{
-			PromptTokens:     response.Usage.InputTokens,
-			CompletionTokens: response.Usage.OutputTokens,
-			TotalTokens:      response.Usage.InputTokens + response.Usage.OutputTokens,
-		},
+		Usage:   usage,
 	}
 	return &fullTextResponse
 }
@@ -207,9 +240,7 @@ func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusC
 				continue
 			}
 			if aliResponse.Usage.OutputTokens != 0 {
-				usage.PromptTokens = aliResponse.Usage.InputTokens
-				usage.CompletionTokens = aliResponse.Usage.OutputTokens
-				usage.TotalTokens = aliResponse.Usage.InputTokens + aliResponse.Usage.OutputTokens
+				applyAliStreamUsage(&usage, aliResponse.Usage)
 			}
 			response := streamResponseAli2OpenAI(&aliResponse)
 			if response == nil {
@@ -234,9 +265,7 @@ func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusC
 			continue
 		}
 		if aliResponse.Usage.OutputTokens != 0 {
-			usage.PromptTokens = aliResponse.Usage.InputTokens
-			usage.CompletionTokens = aliResponse.Usage.OutputTokens
-			usage.TotalTokens = aliResponse.Usage.InputTokens + aliResponse.Usage.OutputTokens
+			applyAliStreamUsage(&usage, aliResponse.Usage)
 		}
 		response := streamResponseAli2OpenAI(&aliResponse)
 		if response == nil {

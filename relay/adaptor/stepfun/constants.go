@@ -47,6 +47,13 @@ var stepfunSamplingParams = []string{
 // ModelRatios contains all supported models and their pricing ratios.
 // Model list is derived from the keys of this map, eliminating redundancy.
 // Based on StepFun pricing: https://platform.stepfun.com/docs/zh/guides/pricing/details.md
+//
+// Prompt cache: StepFun reports cache-hit tokens via a TOP-LEVEL usage.cached_tokens
+// field (promoted into prompt_tokens_details.cached_tokens by the shared
+// openai_compatible handler). Cache-hit input is billed at 20% of the input price
+// and is only supported on a subset of models (step-3.x-flash and
+// step-1o-turbo-vision); other models are left without a CachedInputRatio per
+// https://platform.stepfun.com/docs/zh/guides/developer/prompt-cache.
 var ModelRatios = map[string]adaptor.ModelConfig{
 	// Step-2 family (current generation).
 	"step-2-mini": {
@@ -94,6 +101,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 	},
 	"step-3.5-flash": {
 		Ratio:                       0.7 * ratio.MilliTokensRmb,
+		CachedInputRatio:            0.2 * 0.7 * ratio.MilliTokensRmb, // Prompt Cache: cached input billed at 20% of input price.
 		CompletionRatio:             2.1 / 0.7,
 		ContextLength:               65536,
 		MaxOutputTokens:             8192,
@@ -199,6 +207,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 	},
 	"step-1o-turbo-vision": {
 		Ratio:                       2.5 * ratio.MilliTokensRmb,
+		CachedInputRatio:            0.2 * 2.5 * ratio.MilliTokensRmb, // Prompt Cache: cached input billed at 20% of input price.
 		CompletionRatio:             8.0 / 2.5,
 		ContextLength:               32768,
 		MaxOutputTokens:             4096,

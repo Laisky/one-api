@@ -273,8 +273,15 @@ func (a *Adaptor) DoResponse(c *gin.Context, resp *http.Response, meta *meta.Met
 
 	if meta.IsStream {
 		var responseText string
-		err, responseText = StreamHandler(c, resp)
-		usage = openai.ResponseText2Usage(responseText, meta.ActualModelName, meta.PromptTokens)
+		var streamUsage *model.Usage
+		err, responseText, streamUsage = StreamHandler(c, resp)
+		// Prefer Gemini's authoritative usageMetadata (cached prompt + reasoning tokens) over
+		// the text-based estimate; only fall back when no usageMetadata was present in the stream.
+		if streamUsage != nil {
+			usage = streamUsage
+		} else {
+			usage = openai.ResponseText2Usage(responseText, meta.ActualModelName, meta.PromptTokens)
+		}
 	} else {
 		switch meta.Mode {
 		case relaymode.Embeddings:

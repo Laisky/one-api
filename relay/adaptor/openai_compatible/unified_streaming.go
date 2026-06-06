@@ -819,6 +819,11 @@ func (sc *StreamingContext) CalculateUsage(promptTokens int, modelName string) *
 			zap.Int("tool_args_len", len(toolArgsText)))
 	}
 
+	// Promote any top-level cached_tokens (e.g. StepFun) into the nested
+	// prompt_tokens_details.cached_tokens field so downstream billing applies
+	// the cache-hit ratio. No-op for OpenAI-shaped responses.
+	sc.usage.NormalizeCachedTokens()
+
 	return sc.usage
 }
 

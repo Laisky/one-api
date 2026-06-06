@@ -35,6 +35,7 @@ var qwenClosedModelRatios = map[string]adaptor.ModelConfig{
 	"qwen-turbo": {
 		Ratio:                       0.00031 * 1000 * ratio.MilliTokensRmb,
 		CompletionRatio:             2,
+		CachedInputRatio:            0.2 * 0.00031 * 1000 * ratio.MilliTokensRmb,
 		ContextLength:               1000000,
 		MaxOutputTokens:             8192,
 		InputModalities:             []string{"text"},
@@ -46,6 +47,7 @@ var qwenClosedModelRatios = map[string]adaptor.ModelConfig{
 	"qwen-turbo-latest": {
 		Ratio:                       0.00031 * 1000 * ratio.MilliTokensRmb,
 		CompletionRatio:             2,
+		CachedInputRatio:            0.2 * 0.00031 * 1000 * ratio.MilliTokensRmb,
 		ContextLength:               1000000,
 		MaxOutputTokens:             8192,
 		InputModalities:             []string{"text"},
@@ -61,6 +63,7 @@ var qwenClosedModelRatios = map[string]adaptor.ModelConfig{
 	"qwen-flash": {
 		Ratio:                       0.00016 * 1000 * ratio.MilliTokensRmb,
 		CompletionRatio:             9.6875, // 1.55 / 0.16
+		CachedInputRatio:            0.2 * 0.00016 * 1000 * ratio.MilliTokensRmb,
 		ContextLength:               1000000,
 		MaxOutputTokens:             8192,
 		InputModalities:             []string{"text"},
@@ -72,6 +75,7 @@ var qwenClosedModelRatios = map[string]adaptor.ModelConfig{
 	"qwen-flash-latest": {
 		Ratio:                       0.00016 * 1000 * ratio.MilliTokensRmb,
 		CompletionRatio:             9.6875,
+		CachedInputRatio:            0.2 * 0.00016 * 1000 * ratio.MilliTokensRmb,
 		ContextLength:               1000000,
 		MaxOutputTokens:             8192,
 		InputModalities:             []string{"text"},
@@ -86,6 +90,7 @@ var qwenClosedModelRatios = map[string]adaptor.ModelConfig{
 	"qwen-plus": {
 		Ratio:                       0.00082 * 1000 * ratio.MilliTokensRmb,
 		CompletionRatio:             2.51, // 2.06 / 0.82
+		CachedInputRatio:            0.2 * 0.00082 * 1000 * ratio.MilliTokensRmb,
 		ContextLength:               1000000,
 		MaxOutputTokens:             8192,
 		InputModalities:             []string{"text"},
@@ -97,6 +102,7 @@ var qwenClosedModelRatios = map[string]adaptor.ModelConfig{
 	"qwen-plus-latest": {
 		Ratio:                       0.00082 * 1000 * ratio.MilliTokensRmb,
 		CompletionRatio:             2.51,
+		CachedInputRatio:            0.2 * 0.00082 * 1000 * ratio.MilliTokensRmb,
 		ContextLength:               1000000,
 		MaxOutputTokens:             8192,
 		InputModalities:             []string{"text"},
@@ -111,6 +117,7 @@ var qwenClosedModelRatios = map[string]adaptor.ModelConfig{
 	"qwen-long": {
 		Ratio:                       0.0005 * 1000 * ratio.MilliTokensRmb,
 		CompletionRatio:             4, // 2.0 / 0.5 CNY per 1M
+		CachedInputRatio:            0.2 * 0.0005 * 1000 * ratio.MilliTokensRmb,
 		ContextLength:               10000000,
 		MaxOutputTokens:             8192,
 		InputModalities:             []string{"text"},
@@ -125,6 +132,7 @@ var qwenClosedModelRatios = map[string]adaptor.ModelConfig{
 	"qwen-max": {
 		Ratio:                       0.00247 * 1000 * ratio.MilliTokensRmb,
 		CompletionRatio:             4, // 9.88 / 2.47
+		CachedInputRatio:            0.2 * 0.00247 * 1000 * ratio.MilliTokensRmb,
 		ContextLength:               32768,
 		MaxOutputTokens:             8192,
 		InputModalities:             []string{"text"},
@@ -136,6 +144,7 @@ var qwenClosedModelRatios = map[string]adaptor.ModelConfig{
 	"qwen-max-latest": {
 		Ratio:                       0.00247 * 1000 * ratio.MilliTokensRmb,
 		CompletionRatio:             4,
+		CachedInputRatio:            0.2 * 0.00247 * 1000 * ratio.MilliTokensRmb,
 		ContextLength:               32768,
 		MaxOutputTokens:             8192,
 		InputModalities:             []string{"text"},
@@ -147,6 +156,7 @@ var qwenClosedModelRatios = map[string]adaptor.ModelConfig{
 	"qwen-max-longcontext": {
 		Ratio:                       0.00247 * 1000 * ratio.MilliTokensRmb,
 		CompletionRatio:             4,
+		CachedInputRatio:            0.2 * 0.00247 * 1000 * ratio.MilliTokensRmb,
 		ContextLength:               30720,
 		MaxOutputTokens:             8192,
 		InputModalities:             []string{"text"},

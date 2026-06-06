@@ -99,6 +99,63 @@ func AwsClaudeModelTransArn(c *gin.Context, awsCli *bedrockruntime.Client) strin
 // Deprecated: FastClaudeModelTransArn is no longer used
 // ARN mapping is now handled through channel configuration
 
+// buildClaudeUsage converts an unmarshaled Bedrock Claude response into the
+// billing usage snapshot. Bedrock's input_tokens EXCLUDES the cache-read and
+// cache-creation buckets, so those are mapped into dedicated fields instead of
+// being folded into PromptTokens. This mirrors the native Anthropic handler.
+func buildClaudeUsage(claudeResponse *anthropic.Response) relaymodel.Usage {
+	usage := relaymodel.Usage{
+		PromptTokens:     claudeResponse.Usage.InputTokens,
+		CompletionTokens: claudeResponse.Usage.OutputTokens,
+		TotalTokens:      claudeResponse.Usage.InputTokens + claudeResponse.Usage.OutputTokens,
+	}
+
+	if claudeResponse.Usage.CacheReadInputTokens > 0 {
+		usage.PromptTokensDetails = &relaymodel.UsagePromptTokensDetails{
+			CachedTokens: claudeResponse.Usage.CacheReadInputTokens,
+		}
+	}
+
+	// Map cache creation tokens to CacheWrite fields.
+	if claudeResponse.Usage.CacheCreation != nil {
+		usage.CacheWrite5mTokens = claudeResponse.Usage.CacheCreation.Ephemeral5mInputTokens
+		usage.CacheWrite1hTokens = claudeResponse.Usage.CacheCreation.Ephemeral1hInputTokens
+	} else if claudeResponse.Usage.CacheCreationInputTokens > 0 {
+		// Backward compatibility: legacy field carries total cache-write tokens.
+		usage.CacheWrite5mTokens = claudeResponse.Usage.CacheCreationInputTokens
+	}
+
+	return usage
+}
+
+// accumulateClaudeStreamUsage folds a streamed Bedrock Claude usage meta (returned
+// by anthropic.StreamResponseClaude2OpenAI for message_start / message_delta events)
+// into the running billing snapshot. Cache-read and cache-creation buckets are
+// accumulated separately because Bedrock's input_tokens excludes them.
+func accumulateClaudeStreamUsage(usage *relaymodel.Usage, meta *anthropic.Response) {
+	if meta == nil {
+		return
+	}
+	usage.PromptTokens += meta.Usage.InputTokens
+	usage.CompletionTokens += meta.Usage.OutputTokens
+
+	if meta.Usage.CacheReadInputTokens > 0 {
+		if usage.PromptTokensDetails == nil {
+			usage.PromptTokensDetails = &relaymodel.UsagePromptTokensDetails{}
+		}
+		usage.PromptTokensDetails.CachedTokens += meta.Usage.CacheReadInputTokens
+	}
+
+	// Accumulate cache creation tokens.
+	if meta.Usage.CacheCreation != nil {
+		usage.CacheWrite5mTokens += meta.Usage.CacheCreation.Ephemeral5mInputTokens
+		usage.CacheWrite1hTokens += meta.Usage.CacheCreation.Ephemeral1hInputTokens
+	} else if meta.Usage.CacheCreationInputTokens > 0 {
+		// Backward compatibility: legacy field carries total cache-write tokens.
+		usage.CacheWrite5mTokens += meta.Usage.CacheCreationInputTokens
+	}
+}
+
 func Handler(c *gin.Context, awsCli *bedrockruntime.Client, modelName string) (*relaymodel.ErrorWithStatusCode, *relaymodel.Usage) {
 	logger := gmw.GetLogger(c).With(
 		zap.String("model", modelName),
@@ -160,11 +217,7 @@ func Handler(c *gin.Context, awsCli *bedrockruntime.Client, modelName string) (*
 		return utils.WrapErr(errors.Wrap(err, "unmarshal response")), nil
 	}
 
-	usage := relaymodel.Usage{
-		PromptTokens:     claudeResponse.Usage.InputTokens,
-		CompletionTokens: claudeResponse.Usage.OutputTokens,
-		TotalTokens:      claudeResponse.Usage.InputTokens + claudeResponse.Usage.OutputTokens,
-	}
+	usage := buildClaudeUsage(claudeResponse)
 
 	if native, ok := c.Get(ctxkey.ClaudeMessagesNative); ok {
 		if useNative, _ := native.(bool); useNative {
@@ -263,8 +316,7 @@ func StreamHandler(c *gin.Context, awsCli *bedrockruntime.Client) (*relaymodel.E
 
 			response, meta := anthropic.StreamResponseClaude2OpenAI(c, claudeResp)
 			if meta != nil {
-				usage.PromptTokens += meta.Usage.InputTokens
-				usage.CompletionTokens += meta.Usage.OutputTokens
+				accumulateClaudeStreamUsage(&usage, meta)
 				if len(meta.Id) > 0 { // only message_start has an id, otherwise it's a finish_reason event.
 					id = tracing.GenerateChatCompletionID(c)
 					return true

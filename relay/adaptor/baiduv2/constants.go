@@ -85,10 +85,18 @@ var (
 //   - Baidu exposes reasoning on the X1 family as a binary thinking mode (no tunable
 //     budget), so MaxReasoningTokens is intentionally left at zero per the memory rule
 //     applied to Chinese-cloud reasoning models.
+//   - Prompt cache: Qianfan reports cache hits via the nested
+//     usage.prompt_tokens_details.cached_tokens field on the v2 endpoint (captured by
+//     the openai handler). Per the platform billing rule, cached_tokens are charged at
+//     40% of the standard input unit price, so every ERNIE entry sets
+//     CachedInputRatio = 0.4 * Ratio (https://ai.baidu.com/ai-doc/WENXINWORKSHOP/Rm6uq7jy9).
+//     Hosted DeepSeek models follow DeepSeek's own (unconfirmed-on-Baidu) cache economics
+//     and are intentionally left without a CachedInputRatio.
 var ModelRatios = map[string]adaptor.ModelConfig{
 	// ERNIE 4.5 Models (closed-weight flagship family released March 2025)
 	"ernie-4.5": {
 		Ratio:                       0.004 * ratio.MilliTokensRmb,
+		CachedInputRatio:            0.4 * (0.004 * ratio.MilliTokensRmb), // Prompt cache: cached input billed at 40% of input price.
 		CompletionRatio:             4,
 		ContextLength:               32768,
 		MaxOutputTokens:             8192,
@@ -100,6 +108,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 	}, // CNY 0.004 / 0.016 per 1k tokens (input/output)
 	"ernie-4.5-turbo-32k": {
 		Ratio:                       0.0008 * ratio.MilliTokensRmb,
+		CachedInputRatio:            0.4 * (0.0008 * ratio.MilliTokensRmb), // Prompt cache: cached input billed at 40% of input price.
 		CompletionRatio:             4,
 		ContextLength:               32768,
 		MaxOutputTokens:             8192,
@@ -111,6 +120,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 	}, // CNY 0.0008 / 0.0032 per 1k tokens
 	"ernie-4.5-turbo-128k": {
 		Ratio:                       0.0008 * ratio.MilliTokensRmb,
+		CachedInputRatio:            0.4 * (0.0008 * ratio.MilliTokensRmb), // Prompt cache: cached input billed at 40% of input price.
 		CompletionRatio:             4,
 		ContextLength:               131072,
 		MaxOutputTokens:             8192,
@@ -122,6 +132,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 	}, // CNY 0.0008 / 0.0032 per 1k tokens
 	"ernie-4.5-turbo-vl": {
 		Ratio:                       0.003 * ratio.MilliTokensRmb,
+		CachedInputRatio:            0.4 * (0.003 * ratio.MilliTokensRmb), // Prompt cache: cached input billed at 40% of input price.
 		CompletionRatio:             3,
 		ContextLength:               32768,
 		MaxOutputTokens:             8192,
@@ -135,6 +146,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 	// ERNIE X1 Models (closed-weight reasoning family)
 	"ernie-x1": {
 		Ratio:                       0.002 * ratio.MilliTokensRmb,
+		CachedInputRatio:            0.4 * (0.002 * ratio.MilliTokensRmb), // Prompt cache: cached input billed at 40% of input price.
 		CompletionRatio:             4,
 		ContextLength:               32768,
 		MaxOutputTokens:             8192,
@@ -146,6 +158,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 	}, // CNY 0.002 / 0.008 per 1k tokens
 	"ernie-x1-turbo": {
 		Ratio:                       0.001 * ratio.MilliTokensRmb,
+		CachedInputRatio:            0.4 * (0.001 * ratio.MilliTokensRmb), // Prompt cache: cached input billed at 40% of input price.
 		CompletionRatio:             4,
 		ContextLength:               32768,
 		MaxOutputTokens:             8192,
@@ -159,6 +172,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 	// ERNIE 4.0 Models
 	"ernie-4.0-8k-latest": {
 		Ratio:                       0.12 * ratio.MilliTokensRmb,
+		CachedInputRatio:            0.4 * (0.12 * ratio.MilliTokensRmb), // Prompt cache: cached input billed at 40% of input price.
 		CompletionRatio:             1,
 		ContextLength:               8192,
 		MaxOutputTokens:             2048,
@@ -170,6 +184,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 	}, // CNY 0.12 / 1k tokens
 	"ernie-4.0-8k-preview": {
 		Ratio:                       0.12 * ratio.MilliTokensRmb,
+		CachedInputRatio:            0.4 * (0.12 * ratio.MilliTokensRmb), // Prompt cache: cached input billed at 40% of input price.
 		CompletionRatio:             1,
 		ContextLength:               8192,
 		MaxOutputTokens:             2048,
@@ -181,6 +196,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 	}, // CNY 0.12 / 1k tokens
 	"ernie-4.0-8k": {
 		Ratio:                       0.12 * ratio.MilliTokensRmb,
+		CachedInputRatio:            0.4 * (0.12 * ratio.MilliTokensRmb), // Prompt cache: cached input billed at 40% of input price.
 		CompletionRatio:             1,
 		ContextLength:               8192,
 		MaxOutputTokens:             2048,
@@ -192,6 +208,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 	}, // CNY 0.12 / 1k tokens
 	"ernie-4.0-turbo-8k-latest": {
 		Ratio:                       0.02 * ratio.MilliTokensRmb,
+		CachedInputRatio:            0.4 * (0.02 * ratio.MilliTokensRmb), // Prompt cache: cached input billed at 40% of input price.
 		CompletionRatio:             1,
 		ContextLength:               8192,
 		MaxOutputTokens:             2048,
@@ -203,6 +220,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 	}, // CNY 0.02 / 1k tokens
 	"ernie-4.0-turbo-8k-preview": {
 		Ratio:                       0.02 * ratio.MilliTokensRmb,
+		CachedInputRatio:            0.4 * (0.02 * ratio.MilliTokensRmb), // Prompt cache: cached input billed at 40% of input price.
 		CompletionRatio:             1,
 		ContextLength:               8192,
 		MaxOutputTokens:             2048,
@@ -214,6 +232,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 	}, // CNY 0.02 / 1k tokens
 	"ernie-4.0-turbo-8k": {
 		Ratio:                       0.02 * ratio.MilliTokensRmb,
+		CachedInputRatio:            0.4 * (0.02 * ratio.MilliTokensRmb), // Prompt cache: cached input billed at 40% of input price.
 		CompletionRatio:             1,
 		ContextLength:               8192,
 		MaxOutputTokens:             2048,
@@ -225,6 +244,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 	}, // CNY 0.02 / 1k tokens
 	"ernie-4.0-turbo-128k": {
 		Ratio:                       0.02 * ratio.MilliTokensRmb,
+		CachedInputRatio:            0.4 * (0.02 * ratio.MilliTokensRmb), // Prompt cache: cached input billed at 40% of input price.
 		CompletionRatio:             1,
 		ContextLength:               131072,
 		MaxOutputTokens:             4096,
@@ -238,6 +258,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 	// ERNIE 3.5 Models
 	"ernie-3.5-8k-preview": {
 		Ratio:                       0.012 * ratio.MilliTokensRmb,
+		CachedInputRatio:            0.4 * (0.012 * ratio.MilliTokensRmb), // Prompt cache: cached input billed at 40% of input price.
 		CompletionRatio:             1,
 		ContextLength:               8192,
 		MaxOutputTokens:             2048,
@@ -249,6 +270,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 	}, // CNY 0.012 / 1k tokens
 	"ernie-3.5-8k": {
 		Ratio:                       0.012 * ratio.MilliTokensRmb,
+		CachedInputRatio:            0.4 * (0.012 * ratio.MilliTokensRmb), // Prompt cache: cached input billed at 40% of input price.
 		CompletionRatio:             1,
 		ContextLength:               8192,
 		MaxOutputTokens:             2048,
@@ -260,6 +282,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 	}, // CNY 0.012 / 1k tokens
 	"ernie-3.5-128k": {
 		Ratio:                       0.012 * ratio.MilliTokensRmb,
+		CachedInputRatio:            0.4 * (0.012 * ratio.MilliTokensRmb), // Prompt cache: cached input billed at 40% of input price.
 		CompletionRatio:             1,
 		ContextLength:               131072,
 		MaxOutputTokens:             4096,
@@ -273,6 +296,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 	// ERNIE Speed Models
 	"ernie-speed-8k": {
 		Ratio:                       0.004 * ratio.MilliTokensRmb,
+		CachedInputRatio:            0.4 * (0.004 * ratio.MilliTokensRmb), // Prompt cache: cached input billed at 40% of input price.
 		CompletionRatio:             1,
 		ContextLength:               8192,
 		MaxOutputTokens:             2048,
@@ -284,6 +308,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 	}, // CNY 0.004 / 1k tokens
 	"ernie-speed-128k": {
 		Ratio:                       0.004 * ratio.MilliTokensRmb,
+		CachedInputRatio:            0.4 * (0.004 * ratio.MilliTokensRmb), // Prompt cache: cached input billed at 40% of input price.
 		CompletionRatio:             1,
 		ContextLength:               131072,
 		MaxOutputTokens:             4096,
@@ -295,6 +320,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 	}, // CNY 0.004 / 1k tokens
 	"ernie-speed-pro-128k": {
 		Ratio:                       0.004 * ratio.MilliTokensRmb,
+		CachedInputRatio:            0.4 * (0.004 * ratio.MilliTokensRmb), // Prompt cache: cached input billed at 40% of input price.
 		CompletionRatio:             1,
 		ContextLength:               131072,
 		MaxOutputTokens:             4096,
@@ -308,6 +334,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 	// ERNIE Lite Models
 	"ernie-lite-8k": {
 		Ratio:                       0.008 * ratio.MilliTokensRmb,
+		CachedInputRatio:            0.4 * (0.008 * ratio.MilliTokensRmb), // Prompt cache: cached input billed at 40% of input price.
 		CompletionRatio:             1,
 		ContextLength:               8192,
 		MaxOutputTokens:             2048,
@@ -319,6 +346,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 	}, // CNY 0.008 / 1k tokens
 	"ernie-lite-pro-128k": {
 		Ratio:                       0.008 * ratio.MilliTokensRmb,
+		CachedInputRatio:            0.4 * (0.008 * ratio.MilliTokensRmb), // Prompt cache: cached input billed at 40% of input price.
 		CompletionRatio:             1,
 		ContextLength:               131072,
 		MaxOutputTokens:             4096,
@@ -332,6 +360,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 	// ERNIE Tiny Models
 	"ernie-tiny-8k": {
 		Ratio:                       0.004 * ratio.MilliTokensRmb,
+		CachedInputRatio:            0.4 * (0.004 * ratio.MilliTokensRmb), // Prompt cache: cached input billed at 40% of input price.
 		CompletionRatio:             1,
 		ContextLength:               8192,
 		MaxOutputTokens:             2048,
@@ -345,6 +374,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 	// ERNIE Character Models
 	"ernie-char-8k": {
 		Ratio:                       0.04 * ratio.MilliTokensRmb,
+		CachedInputRatio:            0.4 * (0.04 * ratio.MilliTokensRmb), // Prompt cache: cached input billed at 40% of input price.
 		CompletionRatio:             1,
 		ContextLength:               8192,
 		MaxOutputTokens:             2048,
@@ -356,6 +386,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 	}, // CNY 0.04 / 1k tokens
 	"ernie-char-fiction-8k": {
 		Ratio:                       0.04 * ratio.MilliTokensRmb,
+		CachedInputRatio:            0.4 * (0.04 * ratio.MilliTokensRmb), // Prompt cache: cached input billed at 40% of input price.
 		CompletionRatio:             1,
 		ContextLength:               8192,
 		MaxOutputTokens:             2048,
@@ -367,6 +398,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 	}, // CNY 0.04 / 1k tokens
 	"ernie-novel-8k": {
 		Ratio:                       0.04 * ratio.MilliTokensRmb,
+		CachedInputRatio:            0.4 * (0.04 * ratio.MilliTokensRmb), // Prompt cache: cached input billed at 40% of input price.
 		CompletionRatio:             1,
 		ContextLength:               8192,
 		MaxOutputTokens:             2048,
