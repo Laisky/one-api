@@ -5,6 +5,11 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
+// The build uses the latest locked caniuse-lite data. Suppress Browserslist's
+// age warning so CI stays deterministic when the system date is ahead of the
+// newest published browser metadata.
+process.env.BROWSERSLIST_IGNORE_OLD_DATA ??= '1';
+
 export default defineConfig(({ mode }) => ({
   plugins: [react()],
   resolve: {

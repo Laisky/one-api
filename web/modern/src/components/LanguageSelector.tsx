@@ -1,5 +1,6 @@
 import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { changeAppLanguage } from '@/i18n';
 import { cn } from '@/lib/utils';
 import { Check, Languages } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
@@ -16,7 +17,7 @@ export function LanguageSelector() {
   const { i18n, t } = useTranslation();
 
   const handleLanguageChange = (value: string) => {
-    i18n.changeLanguage(value);
+    void changeAppLanguage(value);
   };
 
   return (
