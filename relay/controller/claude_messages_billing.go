@@ -101,13 +101,13 @@ func postConsumeClaudeMessagesQuotaWithTraceID(ctx context.Context, requestId st
 
 	// Use centralized detailed billing function with explicit trace ID
 	quotaDelta := quota - preConsumedQuota - incrementalCharged
-	// If requestId somehow empty, try derive from ctx (best-effort)
-	var provisionalLogId int
-	if ginCtx, ok := gmw.GetGinCtxFromStdCtx(ctx); ok {
-		if requestId == "" {
-			requestId = ginCtx.GetString(ctxkey.RequestId)
-		}
-		provisionalLogId = ginCtx.GetInt(ctxkey.ProvisionalLogId)
+	// Resolve identifiers from the detached billing snapshot (or, for a synchronous
+	// caller, from the embedded gin context). NEVER read them off a live *gin.Context
+	// here: this runs inside a post-billing goroutine and gin recycles c.
+	billingID := billingIdentityFromContext(ctx)
+	provisionalLogId := billingID.provisionalLogID
+	if requestId == "" {
+		requestId = billingID.requestID
 	}
 	// For Claude models, upstream reports non-cached input tokens as PromptTokens
 	// and cached tokens separately. Sum them so the log shows the total prompt tokens.

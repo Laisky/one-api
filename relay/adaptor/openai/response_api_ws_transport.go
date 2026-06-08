@@ -567,6 +567,12 @@ const wsReadIdleTimeout = 30 * time.Second
 //   - *http.Response: synthetic 200 response with text/event-stream body.
 func buildStreamingWebSocketHTTPResponse(c *gin.Context, conn *websocket.Conn, firstMessage []byte) *http.Response {
 	lg := gmw.GetLogger(c)
+	// Capture the request context on the request goroutine. The streaming bridge
+	// goroutine below outlives the handler, and gin recycles *gin.Context (clearing
+	// c.Request) via sync.Pool once the handler returns; reading c.Request.Context()
+	// from inside the goroutine would race that recycle. The context object captured
+	// here still fires Done() on client disconnect / server shutdown.
+	reqCtx := c.Request.Context()
 	reader, writer := io.Pipe()
 
 	go func() {
@@ -581,7 +587,7 @@ func buildStreamingWebSocketHTTPResponse(c *gin.Context, conn *websocket.Conn, f
 		defer close(done)
 		go func() {
 			select {
-			case <-c.Request.Context().Done():
+			case <-reqCtx.Done():
 				lg.Debug("websocket stream bridge: client context cancelled, closing upstream websocket")
 				_ = conn.Close()
 			case <-done:

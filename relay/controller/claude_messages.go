@@ -7,7 +7,6 @@ import (
 	"io"
 	"net/http"
 	"strings"
-	"time"
 
 	"github.com/Laisky/errors/v2"
 	gmw "github.com/Laisky/gin-middlewares/v7"
@@ -15,10 +14,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/Laisky/one-api/common"
-	"github.com/Laisky/one-api/common/config"
 	"github.com/Laisky/one-api/common/ctxkey"
-	"github.com/Laisky/one-api/common/graceful"
-	"github.com/Laisky/one-api/common/metrics"
 	"github.com/Laisky/one-api/common/tracing"
 	"github.com/Laisky/one-api/model"
 	"github.com/Laisky/one-api/relay"
@@ -351,9 +347,7 @@ func RelayClaudeMessagesHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 			goto handleResponse
 		}
 
-		graceful.GoCritical(ctx, "returnPreConsumedQuota", func(cctx context.Context) {
-			_ = returnPreConsumedQuotaConservative(cctx, c, preConsumedQuota, c.GetInt(ctxkey.TokenId), "upstream_http_error")
-		})
+		scheduleConservativeRefund(c, preConsumedQuota, c.GetInt(ctxkey.TokenId), "upstream_http_error")
 		// Reconcile provisional record to 0 since upstream returned error
 		quotaId := c.GetInt(ctxkey.Id)
 		requestId := c.GetString(ctxkey.RequestId)
@@ -630,9 +624,7 @@ handleResponse:
 		// If usage is available (e.g., client disconnected after upstream response),
 		// proceed with billing; otherwise, refund pre-consumed quota and return error.
 		if usage == nil {
-			graceful.GoCritical(ctx, "returnPreConsumedQuota", func(cctx context.Context) {
-				_ = returnPreConsumedQuotaConservative(cctx, c, preConsumedQuota, c.GetInt(ctxkey.TokenId), "do_response_failed_without_usage")
-			})
+			scheduleConservativeRefund(c, preConsumedQuota, c.GetInt(ctxkey.TokenId), "do_response_failed_without_usage")
 			return respErr
 		}
 		// Fall through to billing with available usage
@@ -647,49 +639,22 @@ postConsume:
 	// Capture trace ID before launching goroutine
 	traceId := tracing.GetTraceID(c)
 	markBillingReconciled(c)
-	graceful.GoCritical(gmw.BackgroundCtx(c), "postBilling", func(ctx context.Context) {
-		// Use configurable billing timeout with model-specific adjustments
-		baseBillingTimeout := time.Duration(config.BillingTimeoutSec) * time.Second
-		billingTimeout := baseBillingTimeout
-
-		ctx, cancel := context.WithTimeout(gmw.BackgroundCtx(c), billingTimeout)
-		defer cancel()
-
-		// Monitor for timeout and log critical errors
-		done := make(chan bool, 1)
-		var quota int64
-
-		go func() {
-			quota = postConsumeClaudeMessagesQuotaWithTraceID(ctx, requestId, traceId, usage, meta, claudeRequest, ratio, preConsumedQuota, mcpIncrementalCharged, modelRatio, channelModelRatio, groupRatio, channelModelConfigs, channelCompletionRatio)
-
-			// Reconcile request cost with final quota (override provisional value)
-			if quota != 0 {
-				if err := model.UpdateUserRequestCostQuotaByRequestID(quotaId, requestId, quota); err != nil {
-					lg.Error("update user request cost failed", zap.Error(err))
-				}
-			}
-			done <- true
-		}()
-
-		select {
-		case <-done:
-			// Billing completed successfully
-		case <-ctx.Done():
-			if errors.Is(ctx.Err(), context.DeadlineExceeded) {
-				estimatedQuota := float64(usage.PromptTokens+usage.CompletionTokens) * ratio
-				elapsedTime := time.Since(meta.StartTime)
-
-				lg.Error("CRITICAL BILLING TIMEOUT",
-					zap.String("model", claudeRequest.Model),
-					zap.String("requestId", requestId),
-					zap.Int("userId", meta.UserId),
-					zap.Int64("estimatedQuota", int64(estimatedQuota)),
-					zap.Duration("elapsedTime", elapsedTime))
-
-				// Record billing timeout in metrics
-				metrics.GlobalRecorder.RecordBillingTimeout(meta.UserId, meta.ChannelId, claudeRequest.Model, estimatedQuota, elapsedTime)
-
-				// TODO: Implement dead letter queue or retry mechanism for failed billing
+	runPostBillingWithTimeout(detachForBilling(c), "postBilling", lg, postBillingTimeoutInfo{
+		userID:              meta.UserId,
+		channelID:           meta.ChannelId,
+		model:               claudeRequest.Model,
+		requestID:           requestId,
+		startTime:           meta.StartTime,
+		estimatedQuota:      func() float64 { return float64(usage.PromptTokens+usage.CompletionTokens) * ratio },
+		guardTimeoutLog:     func() bool { return true },
+		logMessage:          "CRITICAL BILLING TIMEOUT",
+		includeElapsedField: true,
+	}, func(ctx context.Context) {
+		quota := postConsumeClaudeMessagesQuotaWithTraceID(ctx, requestId, traceId, usage, meta, claudeRequest, ratio, preConsumedQuota, mcpIncrementalCharged, modelRatio, channelModelRatio, groupRatio, channelModelConfigs, channelCompletionRatio)
+		// Reconcile request cost with final quota (override provisional value)
+		if quota != 0 {
+			if err := model.UpdateUserRequestCostQuotaByRequestID(quotaId, requestId, quota); err != nil {
+				lg.Error("update user request cost failed", zap.Error(err))
 			}
 		}
 	})

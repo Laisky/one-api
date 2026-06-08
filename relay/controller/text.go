@@ -18,7 +18,6 @@ import (
 	"github.com/Laisky/one-api/common"
 	"github.com/Laisky/one-api/common/config"
 	"github.com/Laisky/one-api/common/ctxkey"
-	"github.com/Laisky/one-api/common/graceful"
 	"github.com/Laisky/one-api/common/metrics"
 	"github.com/Laisky/one-api/model"
 	"github.com/Laisky/one-api/relay"
@@ -231,40 +230,21 @@ func RelayTextHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 		quotaId := c.GetInt(ctxkey.Id)
 		requestId := c.GetString(ctxkey.RequestId)
 		markBillingReconciled(c)
-		graceful.GoCritical(gmw.BackgroundCtx(c), "postBilling", func(ctx context.Context) {
-			baseBillingTimeout := time.Duration(config.BillingTimeoutSec) * time.Second
-			billingTimeout := baseBillingTimeout
-
-			ctx, cancel := context.WithTimeout(gmw.BackgroundCtx(c), billingTimeout)
-			defer cancel()
-
-			done := make(chan bool, 1)
-			var quota int64
-
-			go func() {
-				quota = postConsumeQuota(ctx, usage, meta, textRequest, ratio, preConsumedQuota, incrementalCharged, modelRatio, channelModelRatio, groupRatio, systemPromptReset, channelModelConfigs, channelCompletionRatio)
-				if requestId != "" {
-					if err := model.UpdateUserRequestCostQuotaByRequestID(quotaId, requestId, quota); err != nil {
-						lg.Error("update user request cost failed", zap.Error(err), zap.String("request_id", requestId))
-					}
-				}
-				done <- true
-			}()
-
-			select {
-			case <-done:
-			case <-ctx.Done():
-				if errors.Is(ctx.Err(), context.DeadlineExceeded) && usage != nil {
-					estimatedQuota := float64(usage.PromptTokens+usage.CompletionTokens) * ratio
-					elapsedTime := time.Since(meta.StartTime)
-					lg.Error("CRITICAL BILLING TIMEOUT",
-						zap.String("model", textRequest.Model),
-						zap.String("requestId", requestId),
-						zap.Int("userId", meta.UserId),
-						zap.Int64("estimatedQuota", int64(estimatedQuota)),
-						zap.Duration("elapsedTime", elapsedTime))
-
-					metrics.GlobalRecorder.RecordBillingTimeout(meta.UserId, meta.ChannelId, textRequest.Model, estimatedQuota, elapsedTime)
+		runPostBillingWithTimeout(detachForBilling(c), "postBilling", lg, postBillingTimeoutInfo{
+			userID:              meta.UserId,
+			channelID:           meta.ChannelId,
+			model:               textRequest.Model,
+			requestID:           requestId,
+			startTime:           meta.StartTime,
+			estimatedQuota:      func() float64 { return float64(usage.PromptTokens+usage.CompletionTokens) * ratio },
+			guardTimeoutLog:     func() bool { return usage != nil },
+			logMessage:          "CRITICAL BILLING TIMEOUT",
+			includeElapsedField: true,
+		}, func(ctx context.Context) {
+			quota := postConsumeQuota(ctx, usage, meta, textRequest, ratio, preConsumedQuota, incrementalCharged, modelRatio, channelModelRatio, groupRatio, systemPromptReset, channelModelConfigs, channelCompletionRatio)
+			if requestId != "" {
+				if err := model.UpdateUserRequestCostQuotaByRequestID(quotaId, requestId, quota); err != nil {
+					lg.Error("update user request cost failed", zap.Error(err), zap.String("request_id", requestId))
 				}
 			}
 		})
@@ -310,9 +290,7 @@ func RelayTextHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 	}
 	if isErrorHappened(meta, resp) {
 		// refund pre-consumed quota under lifecycle management so shutdown waits for it
-		graceful.GoCritical(ctx, "returnPreConsumedQuota", func(cctx context.Context) {
-			_ = returnPreConsumedQuotaConservative(cctx, c, preConsumedQuota, meta.TokenId, "upstream_http_error")
-		})
+		scheduleConservativeRefund(c, preConsumedQuota, meta.TokenId, "upstream_http_error")
 		// Reconcile provisional record to 0 since upstream returned error
 		quotaId := c.GetInt(ctxkey.Id)
 		requestId := c.GetString(ctxkey.RequestId)
@@ -416,51 +394,28 @@ func RelayTextHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 		metrics.GlobalRecorder.RecordModelUsage(meta.ActualModelName, channeltype.IdToName(meta.ChannelType), time.Since(meta.StartTime))
 	}
 
+	// Capture requestId on the request goroutine BEFORE the spawn: reading it off c
+	// inside the goroutine would race gin's sync.Pool recycle of the context.
+	requestId := c.GetString(ctxkey.RequestId)
 	markBillingReconciled(c)
-	graceful.GoCritical(gmw.BackgroundCtx(c), "postBilling", func(ctx context.Context) {
-		// Use configurable billing timeout with model-specific adjustments
-		baseBillingTimeout := time.Duration(config.BillingTimeoutSec) * time.Second
-		billingTimeout := baseBillingTimeout
-
-		ctx, cancel := context.WithTimeout(gmw.BackgroundCtx(c), billingTimeout)
-		defer cancel()
-
-		// Monitor for timeout and log critical errors
-		done := make(chan bool, 1)
-		var quota int64
-
-		requestId := c.GetString(ctxkey.RequestId)
-		go func() {
-			quota = postConsumeQuota(ctx, usage, meta, textRequest, ratio, preConsumedQuota, incrementalCharged, modelRatio, channelModelRatio, groupRatio, systemPromptReset, channelModelConfigs, channelCompletionRatio)
-
-			// Reconcile request cost with final quota (override provisional pre-consumed value)
-			if requestId == "" {
-				lg.Warn("request id missing when finalizing user request cost",
-					zap.Int("user_id", quotaId))
-			} else if err := model.UpdateUserRequestCostQuotaByRequestID(quotaId, requestId, quota); err != nil {
-				lg.Error("update user request cost failed", zap.Error(err), zap.String("request_id", requestId))
-			}
-			done <- true
-		}()
-
-		select {
-		case <-done:
-			// Billing completed successfully
-		case <-ctx.Done():
-			if errors.Is(ctx.Err(), context.DeadlineExceeded) {
-				estimatedQuota := float64(usage.PromptTokens+usage.CompletionTokens) * ratio
-				elapsedTime := time.Since(meta.StartTime)
-
-				lg.Error("CRITICAL BILLING TIMEOUT",
-					zap.String("model", textRequest.Model),
-					zap.String("requestId", requestId),
-					zap.Int("userId", meta.UserId),
-					zap.Int64("estimatedQuota", int64(estimatedQuota)),
-					zap.Duration("elapsedTime", elapsedTime))
-
-				metrics.GlobalRecorder.RecordBillingTimeout(meta.UserId, meta.ChannelId, textRequest.Model, estimatedQuota, elapsedTime)
-				// TODO: Implement dead letter queue or retry mechanism for failed billing
-			}
+	runPostBillingWithTimeout(detachForBilling(c), "postBilling", lg, postBillingTimeoutInfo{
+		userID:              meta.UserId,
+		channelID:           meta.ChannelId,
+		model:               textRequest.Model,
+		requestID:           requestId,
+		startTime:           meta.StartTime,
+		estimatedQuota:      func() float64 { return float64(usage.PromptTokens+usage.CompletionTokens) * ratio },
+		guardTimeoutLog:     func() bool { return true },
+		logMessage:          "CRITICAL BILLING TIMEOUT",
+		includeElapsedField: true,
+	}, func(ctx context.Context) {
+		quota := postConsumeQuota(ctx, usage, meta, textRequest, ratio, preConsumedQuota, incrementalCharged, modelRatio, channelModelRatio, groupRatio, systemPromptReset, channelModelConfigs, channelCompletionRatio)
+		// Reconcile request cost with final quota (override provisional pre-consumed value)
+		if requestId == "" {
+			lg.Warn("request id missing when finalizing user request cost",
+				zap.Int("user_id", quotaId))
+		} else if err := model.UpdateUserRequestCostQuotaByRequestID(quotaId, requestId, quota); err != nil {
+			lg.Error("update user request cost failed", zap.Error(err), zap.String("request_id", requestId))
 		}
 	})
 

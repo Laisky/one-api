@@ -17,12 +17,9 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/Laisky/one-api/common"
-	"github.com/Laisky/one-api/common/config"
 	"github.com/Laisky/one-api/common/ctxkey"
-	"github.com/Laisky/one-api/common/graceful"
 	"github.com/Laisky/one-api/common/helper"
 	"github.com/Laisky/one-api/common/metrics"
-	"github.com/Laisky/one-api/common/tracing"
 	"github.com/Laisky/one-api/model"
 	"github.com/Laisky/one-api/relay"
 	"github.com/Laisky/one-api/relay/adaptor"
@@ -121,9 +118,7 @@ func RelayRerankHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 	}
 
 	if isErrorHappened(meta, resp) {
-		graceful.GoCritical(ctx, "returnPreConsumedQuota", func(cctx context.Context) {
-			_ = returnPreConsumedQuotaConservative(cctx, c, preConsumedQuota, meta.TokenId, "upstream_http_error")
-		})
+		scheduleConservativeRefund(c, preConsumedQuota, meta.TokenId, "upstream_http_error")
 		if requestId != "" {
 			if err := model.UpdateUserRequestCostQuotaByRequestID(quotaId, requestId, 0); err != nil {
 				lg.Warn("update user request cost to zero failed", zap.Error(err))
@@ -141,9 +136,7 @@ func RelayRerankHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 	}
 	if respErr != nil {
 		if usage == nil {
-			graceful.GoCritical(ctx, "returnPreConsumedQuota", func(cctx context.Context) {
-				_ = returnPreConsumedQuotaConservative(cctx, c, preConsumedQuota, meta.TokenId, "do_response_failed_without_usage")
-			})
+			scheduleConservativeRefund(c, preConsumedQuota, meta.TokenId, "do_response_failed_without_usage")
 			if requestId != "" {
 				if err := model.UpdateUserRequestCostQuotaByRequestID(quotaId, requestId, 0); err != nil {
 					lg.Warn("update user request cost to zero failed", zap.Error(err))
@@ -210,37 +203,21 @@ func RelayRerankHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 	}
 
 	markBillingReconciled(c)
-	graceful.GoCritical(gmw.BackgroundCtx(c), "postBillingRerank", func(bctx context.Context) {
-		baseBillingTimeout := time.Duration(config.BillingTimeoutSec) * time.Second
-		bctx, cancel := context.WithTimeout(gmw.BackgroundCtx(c), baseBillingTimeout)
-		defer cancel()
-
-		done := make(chan bool, 1)
-		var quota int64
-
-		go func() {
-			quota = postConsumeRerankQuota(bctx, usage, meta, rerankRequest, preConsumedQuota, totalQuota, modelRatio, groupRatio)
-			if requestId != "" {
-				if err := model.UpdateUserRequestCostQuotaByRequestID(quotaId, requestId, quota); err != nil {
-					lg.Error("update user request cost failed", zap.Error(err), zap.String("request_id", requestId))
-				}
-			}
-			done <- true
-		}()
-
-		select {
-		case <-done:
-		case <-bctx.Done():
-			if errors.Is(bctx.Err(), context.DeadlineExceeded) && usage != nil {
-				estimatedQuota := float64(totalQuota)
-				elapsedTime := time.Since(meta.StartTime)
-				lg.Error("CRITICAL BILLING TIMEOUT",
-					zap.String("model", rerankRequest.Model),
-					zap.String("requestId", requestId),
-					zap.Int("userId", meta.UserId),
-					zap.Int64("estimatedQuota", int64(estimatedQuota)),
-					zap.Duration("elapsedTime", elapsedTime))
-				metrics.GlobalRecorder.RecordBillingTimeout(meta.UserId, meta.ChannelId, rerankRequest.Model, estimatedQuota, elapsedTime)
+	runPostBillingWithTimeout(detachForBilling(c), "postBillingRerank", lg, postBillingTimeoutInfo{
+		userID:              meta.UserId,
+		channelID:           meta.ChannelId,
+		model:               rerankRequest.Model,
+		requestID:           requestId,
+		startTime:           meta.StartTime,
+		estimatedQuota:      func() float64 { return float64(totalQuota) },
+		guardTimeoutLog:     func() bool { return usage != nil },
+		logMessage:          "CRITICAL BILLING TIMEOUT",
+		includeElapsedField: true,
+	}, func(ctx context.Context) {
+		quota := postConsumeRerankQuota(ctx, usage, meta, rerankRequest, preConsumedQuota, totalQuota, modelRatio, groupRatio)
+		if requestId != "" {
+			if err := model.UpdateUserRequestCostQuotaByRequestID(quotaId, requestId, quota); err != nil {
+				lg.Error("update user request cost failed", zap.Error(err), zap.String("request_id", requestId))
 			}
 		}
 	})
@@ -357,13 +334,13 @@ func postConsumeRerankQuota(ctx context.Context,
 
 	quotaDelta := quota - preConsumedQuota
 
-	var requestId string
-	var provLogID int
-	if ginCtx, ok := gmw.GetGinCtxFromStdCtx(ctx); ok {
-		requestId = ginCtx.GetString(ctxkey.RequestId)
-		provLogID = ginCtx.GetInt(ctxkey.ProvisionalLogId)
-	}
-	traceId := tracing.GetTraceIDFromContext(ctx)
+	// Resolve identifiers from the detached billing snapshot (or, for a synchronous
+	// caller, from the embedded gin context). NEVER read them off a live *gin.Context
+	// here: this can run inside a post-billing goroutine and gin recycles c.
+	billingID := billingIdentityFromContext(ctx)
+	requestId := billingID.requestID
+	provLogID := billingID.provisionalLogID
+	traceId := billingID.traceID
 
 	var promptTokens, completionTokens int
 	if usage != nil {

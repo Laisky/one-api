@@ -19,6 +19,20 @@ lint:
 	# nilaway ./...
 	golangci-lint run -c .golangci.yml
 	govulncheck ./...
+	$(MAKE) lint-goroutine-guard
+
+# lint-goroutine-guard enforces the structural rule that no background goroutine may
+# reference the request *gin.Context (gin recycles it via sync.Pool after the handler
+# returns). See .ast-grep/rules/no-gin-context-in-goroutine.yml and
+# docs/proposals/20260608_relay-billing-async-sync-race-fixes.md.
+# Requires ast-grep (install: `pipx install ast-grep-cli`, `cargo install ast-grep --locked`,
+# or a prebuilt binary from https://github.com/ast-grep/ast-grep/releases); skips gracefully
+# when not installed.
+.PHONY: lint-goroutine-guard
+lint-goroutine-guard:
+	@command -v ast-grep >/dev/null 2>&1 || { echo "ast-grep not installed; skipping goroutine *gin.Context guardrail (install: pipx install ast-grep-cli, or a prebuilt binary from https://github.com/ast-grep/ast-grep/releases)"; exit 0; }
+	ast-grep test --skip-snapshot-tests
+	ast-grep scan
 
 # Development targets - Template specific
 .PHONY: dev-air dev-berry dev-modern

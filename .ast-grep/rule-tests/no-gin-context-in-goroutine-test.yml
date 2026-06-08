@@ -1,0 +1,100 @@
+id: no-gin-context-in-goroutine
+valid:
+  # Snapshotting on the request goroutine, then spawning with a detached context, is
+  # the sanctioned pattern. The c references are spawn ARGUMENTS, outside the closure.
+  - |
+    func ok(c *gin.Context) {
+        quotaId := c.GetInt("id")
+        graceful.GoCritical(relayctx.Detach(c), "postBilling", func(ctx context.Context) {
+            _ = quotaId
+            _ = gmw.GetLogger(ctx)
+        })
+    }
+  - |
+    func ok2(c *gin.Context) {
+        relayctx.GoRequestScoped(c, "log", func(ctx context.Context) {
+            _ = gmw.GetLogger(ctx)
+        })
+    }
+  - |
+    func ok3(c *gin.Context) {
+        graceful.GoCritical(detachForBilling(c), "x", func(ctx context.Context) {
+            doWork(ctx)
+        })
+    }
+  # A defer that immediately invokes a func literal and itself spawns a goroutine: the
+  # c reads in the defer body run on the request goroutine and must NOT be flagged.
+  - |
+    func ok4(c *gin.Context) {
+        defer func() {
+            markBillingReconciled(c)
+            graceful.GoCritical(detachForBilling(c), "x", func(ctx context.Context) {
+                doWork(ctx)
+            })
+        }()
+    }
+  # The shared post-billing helper: detachForBilling(c) is a spawn ARGUMENT (outside the
+  # work closure), and the work callback uses ctx, never c — the sanctioned pattern.
+  - |
+    func ok5(c *gin.Context) {
+        requestId := c.GetString("request_id")
+        runPostBillingWithTimeout(detachForBilling(c), "postBilling", lg, postBillingTimeoutInfo{}, func(ctx context.Context) {
+            _ = requestId
+            doWork(ctx)
+        })
+    }
+  # The shared refund/billing helper: relayctx.Detach(c) is a spawn ARGUMENT (outside the fn
+  # closure), and the fn callback uses ctx, never c — the sanctioned pattern.
+  - |
+    func ok6(c *gin.Context) {
+        tokenID := c.GetInt("token_id")
+        goDetachedBillingWork(relayctx.Detach(c), "refund", func(ctx context.Context) {
+            _ = tokenID
+            doWork(ctx)
+        })
+    }
+invalid:
+  # c.Get* inside a GoCritical closure.
+  - |
+    func bad1(c *gin.Context) {
+        graceful.GoCritical(gmw.BackgroundCtx(c), "x", func(ctx context.Context) {
+            _ = c.GetInt("id")
+        })
+    }
+  # gmw.*(c) inside a GoCritical closure.
+  - |
+    func bad2(c *gin.Context) {
+        graceful.GoCritical(gmw.BackgroundCtx(c), "x", func(ctx context.Context) {
+            _ = gmw.GetLogger(c)
+        })
+    }
+  # c referenced inside a bare go func.
+  - |
+    func bad3(c *gin.Context) {
+        go func() {
+            _ = c.GetString("x")
+        }()
+    }
+  # c referenced inside a GoRequestScoped closure (the closure must use ctx, not c).
+  - |
+    func bad4(c *gin.Context) {
+        relayctx.GoRequestScoped(c, "x", func(ctx context.Context) {
+            _ = c.GetInt("id")
+        })
+    }
+  # c read inside the runPostBillingWithTimeout work callback: the helper owns the
+  # GoCritical spawn, so reading c there races gin's pool recycle just like a bare go func.
+  - |
+    func bad5(c *gin.Context) {
+        runPostBillingWithTimeout(detachForBilling(c), "postBilling", lg, postBillingTimeoutInfo{}, func(ctx context.Context) {
+            _ = c.GetInt("id")
+        })
+    }
+  # c read inside the goDetachedBillingWork fn callback: the helper owns the GoCritical
+  # spawn, so reading c there races gin's pool recycle just like a bare go func.
+  - |
+    func bad6(c *gin.Context) {
+        goDetachedBillingWork(relayctx.Detach(c), "refund", func(ctx context.Context) {
+            _ = c.GetInt("id")
+        })
+    }

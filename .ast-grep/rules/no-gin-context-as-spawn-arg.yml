@@ -1,0 +1,65 @@
+id: no-gin-context-as-spawn-arg
+language: go
+severity: error
+message: >-
+  Do not pass gmw.Ctx(c)/gmw.BackgroundCtx(c) directly as the context argument of a
+  spawn helper (graceful.GoCritical / relayctx.GoRequestScoped). Both derive their
+  context from the request *gin.Context `c`, so the spawned goroutine ends up holding
+  the live/recycled c. gin v1.12.0 recycles c via sync.Pool the instant the handler
+  returns; the goroutine then races the next request's c.reset()/Set (concurrent map
+  access) and can bill the wrong user/token or crash the process.
+note: >-
+  Snapshot the values you need on the request goroutine BEFORE spawning, then detach at
+  the spawn site: graceful.GoCritical(relayctx.Detach(c), name, fn) or
+  graceful.GoCritical(detachForBilling(c), name, fn), or relayctx.GoRequestScoped(c,
+  name, fn) (which detaches internally). Inside the goroutine use the passed ctx
+  (gmw.GetLogger(ctx)), never c. See
+  docs/proposals/20260608_relay-billing-async-sync-race-fixes.md.
+# Complements no-gin-context-in-goroutine.yml. That rule flags references to `c`
+# lexically INSIDE the spawned closure; the spawn ARGUMENTS sit outside the closure and
+# so are not covered there. This rule closes that gap: it flags a `gmw.Ctx(...)` /
+# `gmw.BackgroundCtx(...)` call when it is a DIRECT argument of a spawn helper call
+# (graceful.GoCritical / relayctx.GoRequestScoped) — i.e. the unsafe context argument
+# itself. The sanctioned spawn-context expressions (relayctx.Detach(c),
+# detachForBilling(c), a plain background/lifecycle ctx) are left alone, and synchronous
+# (non-spawn) uses of gmw.Ctx(c)/gmw.BackgroundCtx(c) on the request goroutine are not
+# matched because they are not arguments of a spawn helper.
+#
+# KNOWN LIMITATION: this only catches the gmw.Ctx/BackgroundCtx call appearing
+# *directly* as the spawn argument. It does NOT catch a context wrapped one level
+# deeper (e.g. GoCritical(wrap(gmw.Ctx(c)), ...)) nor the aliased form
+# (`ctx := gmw.Ctx(c); graceful.GoCritical(ctx, ...)`) — that requires data-flow
+# analysis, which ast-grep does not do. Those forms are prevented by the
+# "snapshot/Detach at the spawn site" convention plus code review. The bare
+# `go func(){ work(gmw.Ctx(c)) }()` argument case is likewise not modeled here; the
+# request `c` it carries is already flagged by no-gin-context-in-goroutine.yml.
+rule:
+  kind: call_expression
+  all:
+    # The inner call is gmw.Ctx(...) or gmw.BackgroundCtx(...).
+    - has:
+        field: function
+        kind: selector_expression
+        all:
+          - has:
+              field: operand
+              kind: identifier
+              regex: "^gmw$"
+          - has:
+              field: field
+              regex: "^(Ctx|BackgroundCtx)$"
+    # ...and it is a DIRECT argument of a spawn helper call. `inside` defaults to
+    # stopBy: neighbor, so the argument_list must be the immediate child of the spawn
+    # call — wrapping gmw.Ctx(...) in another call breaks this match (by design).
+    - inside:
+        kind: argument_list
+        inside:
+          kind: call_expression
+          has:
+            field: function
+            kind: selector_expression
+            has:
+              field: field
+              regex: "^(GoCritical|GoRequestScoped)$"
+ignores:
+  - "**/*_test.go"

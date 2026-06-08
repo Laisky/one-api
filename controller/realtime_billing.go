@@ -12,6 +12,7 @@ import (
 
 	"github.com/Laisky/one-api/common/ctxkey"
 	"github.com/Laisky/one-api/common/graceful"
+	"github.com/Laisky/one-api/common/relayctx"
 	"github.com/Laisky/one-api/common/tracing"
 	"github.com/Laisky/one-api/model"
 	"github.com/Laisky/one-api/relay/adaptor"
@@ -96,7 +97,9 @@ func rtReturnPreConsumedQuota(
 		}
 	}
 
-	graceful.GoCritical(gmw.BackgroundCtx(c), "realtimeRefund", func(ctx context.Context) {
+	// Detach gives the refund a non-cancelled, c-free context; the provisional-log
+	// reconcile above already ran synchronously on the request goroutine.
+	graceful.GoCritical(relayctx.Detach(c), "realtimeRefund", func(ctx context.Context) {
 		billing.ReturnPreConsumedQuota(ctx, preConsumedQuota, tokenID)
 	})
 }

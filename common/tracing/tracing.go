@@ -4,6 +4,7 @@ import (
 	"context"
 
 	gmw "github.com/Laisky/gin-middlewares/v7"
+	gutils "github.com/Laisky/go-utils/v6"
 	"github.com/Laisky/zap"
 	"github.com/gin-gonic/gin"
 	oteltrace "go.opentelemetry.io/otel/trace"
@@ -44,13 +45,20 @@ func GetTraceID(c *gin.Context) string {
 
 // GetTraceIDFromContext extracts the per-request TraceID from a standard context.
 //
-// When the context contains an embedded gin.Context (gmw.BackgroundCtx pattern), the
-// gin-middlewares TraceID is returned.
-//
-// When no gin.Context is available, it falls back to the OpenTelemetry trace id.
+// Resolution order:
+//  1. When the context contains an embedded gin.Context (gmw.BackgroundCtx pattern),
+//     the span-scoped gin-middlewares TraceID is returned.
+//  2. Otherwise it reads the trace id snapshotted under gutils.TracingKey. This is the
+//     relayctx.Detach pattern: a c-free background context carries the trace id BY
+//     VALUE as a string under gutils.TracingKey (no embedded gin, no OTel span), so it
+//     would otherwise be lost here.
+//  3. When neither is available, it falls back to the OpenTelemetry trace id.
 func GetTraceIDFromContext(ctx context.Context) string {
 	if ginCtx, ok := gmw.GetGinCtxFromStdCtx(ctx); ok {
 		return GetTraceID(ginCtx)
+	}
+	if v, ok := ctx.Value(gutils.TracingKey).(string); ok && v != "" {
+		return v
 	}
 	if traceID := otelTraceIDFromContext(ctx); traceID != "" {
 		return traceID

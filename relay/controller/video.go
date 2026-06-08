@@ -168,12 +168,7 @@ func RelayVideoHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 		if !succeed {
 			markBillingReconciled(c)
 			if preConsumedQuota > 0 {
-				quotaToReturn := preConsumedQuota
-				graceful.GoCritical(ctx, "videoRollbackPreConsumed", func(bgctx context.Context) {
-					if err := model.PostConsumeTokenQuota(bgctx, tokenId, -quotaToReturn); err != nil {
-						gmw.GetLogger(bgctx).Error("error rolling back pre-consumed quota", zap.Error(err))
-					}
-				})
+				goVideoRollbackPreConsumed(c, tokenId, preConsumedQuota)
 			}
 			if provLogID > 0 {
 				if err := model.ReconcileConsumeLog(ctx, provLogID, 0,
@@ -204,7 +199,7 @@ func RelayVideoHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 			ElapsedTime: helper.CalcElapsedTime(meta.StartTime),
 		}
 
-		bgctx, cancel := context.WithTimeout(gmw.BackgroundCtx(c), time.Minute)
+		bgctx, cancel := context.WithTimeout(detachForBilling(c), time.Minute)
 		defer cancel()
 		graceful.GoCritical(bgctx, "videoPostConsume", func(cctx context.Context) {
 			billing.PostConsumeQuotaWithLog(cctx, tokenId, quotaDelta, usedQuota, entry, provLogID)
@@ -261,6 +256,24 @@ func RelayVideoHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 	succeed = true
 	markBillingReconciled(c)
 	return nil
+}
+
+// videoRollbackGateForTest, when non-nil, blocks the rollback goroutine spawned by
+// goVideoRollbackPreConsumed until the channel is closed. videoRollbackObservedCtxErrForTest,
+// when non-nil, records the context error observed by the rollback goroutine before it
+// performs the refund DB write. Both are test seams to verify the rollback goroutine runs
+// on a non-cancelled context after the request context is cancelled; they are always nil in
+// production builds.
+var videoRollbackGateForTest chan struct{}
+var videoRollbackObservedCtxErrForTest func(error)
+
+// goVideoRollbackPreConsumed refunds the pre-consumed quota of a failed video request.
+// It delegates to the shared goRollbackPreConsumed, which runs on a detached, c-free
+// context (see that function for why). The test seams are snapshotted here on the
+// request goroutine and passed by value.
+func goVideoRollbackPreConsumed(c *gin.Context, tokenId int, quotaToReturn int64) {
+	goRollbackPreConsumed(c, "videoRollbackPreConsumed", tokenId, quotaToReturn,
+		videoRollbackGateForTest, videoRollbackObservedCtxErrForTest)
 }
 
 func convertVideoLocalToAdaptor(local *model.VideoPricingLocal) *adaptor.VideoPricingConfig {

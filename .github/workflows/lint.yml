@@ -39,6 +39,39 @@ jobs:
           name: code-coverage
           path: coverage.txt # Make sure to use the same file name you chose for the "-coverprofile" in the "Test" step
 
+  goroutine_context_guard:
+    name: Goroutine *gin.Context guardrail
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install ast-grep
+        # Pinned prebuilt binary (no npm — project policy uses yarn for the frontend and
+        # avoids npm). Checksum-verified for reproducibility; the zip ships both ast-grep
+        # and its `sg` alias. Bump ASG_VERSION + ASG_SHA256 together when upgrading.
+        env:
+          ASG_VERSION: 0.43.0
+          ASG_SHA256: a26253a9c821d935f7e383e40f0de7c2ca62a4121de1f73a6d81ec32eae631e0
+        run: |
+          set -euo pipefail
+          curl -fsSL -o ast-grep.zip \
+            "https://github.com/ast-grep/ast-grep/releases/download/${ASG_VERSION}/app-x86_64-unknown-linux-gnu.zip"
+          echo "${ASG_SHA256}  ast-grep.zip" | sha256sum -c -
+          mkdir -p "$HOME/.local/bin"
+          unzip -o ast-grep.zip -d "$HOME/.local/bin"
+          chmod +x "$HOME/.local/bin/ast-grep" "$HOME/.local/bin/sg"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Verify ast-grep version
+        run: ast-grep --version
+
+      - name: Verify guardrail rule tests
+        run: ast-grep test --skip-snapshot-tests
+
+      - name: Scan for goroutines referencing the request *gin.Context
+        run: ast-grep scan
+
   modern_frontend_tests:
     name: Frontend tests (modern)
     runs-on: ubuntu-latest

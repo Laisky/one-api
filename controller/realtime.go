@@ -12,6 +12,7 @@ import (
 	"github.com/Laisky/one-api/common/config"
 	"github.com/Laisky/one-api/common/ctxkey"
 	"github.com/Laisky/one-api/common/graceful"
+	"github.com/Laisky/one-api/common/relayctx"
 	"github.com/Laisky/one-api/common/tracing"
 	"github.com/Laisky/one-api/model"
 	"github.com/Laisky/one-api/relay"
@@ -256,8 +257,10 @@ func postConsumeRealtimeQuota(
 	// Mark billing reconciled so the safety net doesn't fire
 	rtMarkBillingReconciled(c)
 
-	// Run billing in a critical goroutine so graceful shutdown waits for it
-	graceful.GoCritical(gmw.BackgroundCtx(c), "realtimePostBilling", func(ctx context.Context) {
+	// Run billing in a critical goroutine so graceful shutdown waits for it. Detach
+	// gives it a non-cancelled, c-free context; all identifiers it bills with
+	// (relayMeta, requestId, traceId) are value-captured above before the spawn.
+	graceful.GoCritical(relayctx.Detach(c), "realtimePostBilling", func(ctx context.Context) {
 		billingTimeout := time.Duration(config.BillingTimeoutSec) * time.Second
 		ctx, cancel := context.WithTimeout(ctx, billingTimeout)
 		defer cancel()

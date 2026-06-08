@@ -338,19 +338,57 @@ All phases landed. Summary of what shipped and where:
 
 ### P4 — Guardrail (regression prevention)
 
-- `ast-grep` rule `.ast-grep/rules/no-gin-context-in-goroutine.yml` flags any reference
-  to the identifier `c` inside a goroutine body (`go func`, `graceful.GoCritical`,
-  `relayctx.GoRequestScoped`). Spawn arguments (`relayctx.Detach(c)`/`detachForBilling(c)`)
-  are outside the closure and not flagged. It starts **green** on the current tree.
+- Two complementary `ast-grep` rules in `.ast-grep/rules/`:
+  - `no-gin-context-in-goroutine.yml` flags any reference to the identifier `c` inside a
+    goroutine body (`go func`, `graceful.GoCritical`, `relayctx.GoRequestScoped`,
+    `runPostBillingWithTimeout`, `goDetachedBillingWork`). Spawn arguments
+    (`relayctx.Detach(c)`/`detachForBilling(c)`) are outside the closure and not flagged.
+  - `no-gin-context-as-spawn-arg.yml` flags `gmw.Ctx(c)`/`gmw.BackgroundCtx(c)` passed
+    DIRECTLY as a spawn helper's context argument (the gap the first rule cannot see).
+  Both start **green** on the current tree.
+- **Known lexical limitation** (documented in both rules): the *aliased* form
+  `ctx := gmw.Ctx(c); graceful.GoCritical(ctx, ...)` is invisible to `ast-grep` (it needs
+  data-flow). This is intentionally backstopped by the CI `-race` gate (which catches the
+  runtime race regardless of how it is introduced) plus the "always pass
+  `relayctx.Detach(c)`/`detachForBilling(c)` at the spawn site" convention + review.
 - Self-tested via `.ast-grep/rule-tests/` (`ast-grep test --skip-snapshot-tests`).
 - Wired into `make lint` (`lint-goroutine-guard`, skips if ast-grep absent) and a CI job
-  in `.github/workflows/lint.yml`. The repo's existing `go test -race ./...` CI job is
-  the `-race` gate.
+  in `.github/workflows/lint.yml`. CI installs ast-grep from a **checksum-pinned prebuilt
+  binary** (no npm — project policy), not `npm i -g`. The repo's existing
+  `go test -race ./...` CI job is the `-race` gate.
 
 ### P5 — Hardening
 
 - Async-refund failure auditing (above) closes the "marking reconciled hides a later DB
   failure" gap.
+
+### P6 — Post-review hardening (timeout-bounded + lifecycle-tracked background billing)
+
+A review of the P1–P5 landing surfaced two correctness gaps in the *lifecycle* of the
+detached billing goroutines (not the c-safety, which P2–P3 closed). Both are now fixed:
+
+- **Post-billing timeout no longer orphans the worker.** `runPostBillingWithTimeout`
+  (`relay/controller/post_billing.go`) previously returned from the tracked
+  `graceful.GoCritical` closure the instant the timeout branch ran, leaving the inner
+  `work` goroutine running **untracked** — graceful shutdown could exit out from under an
+  in-flight billing DB write. The closure now **joins** the worker (`<-done`) on BOTH
+  select branches, so it stays tracked by `graceful.Drain`. The misleading "billing must
+  still complete" comment is corrected: the timeout **cancels the billing attempt** (work
+  runs on the timeout-bounded ctx); post-consume only reconciles an already-charged
+  estimate, so an aborted attempt is an un-reconciled estimate (visible via the CRITICAL
+  BILLING TIMEOUT audit + the DLQ TODO), never an un-charged request.
+- **Refund/rollback goroutines are now timeout-bounded.** A new shared primitive
+  `goDetachedBillingWork(spawnCtx, name, fn)` runs `fn` directly in a tracked
+  `graceful.GoCritical` closure bounded by `config.BillingTimeoutSec`, so a stuck billing
+  DB can neither leak a goroutine/connection nor extend graceful drain past the deadline.
+  `scheduleConservativeRefund`, `goRollbackPreConsumed`, `ResetPerAttemptBillingForRetry`,
+  and `billingAuditSafetyNet`'s emergency refund all route through it. The primitive is
+  registered in `no-gin-context-in-goroutine.yml`.
+- **Synchronous deferred billing paths audited & documented.** `relay/controller/image.go`
+  retains `gmw.BackgroundCtx(c)` for its image post-billing/refund, but that runs in a
+  SYNCHRONOUS defer (on the request goroutine, before `ServeHTTP` returns and gin recycles
+  `c`) — it is NOT the async race class. A NOTE there documents this and warns against
+  copying the pattern into a goroutine.
 
 ### Reproduce-first tests (fail-before / pass-after, under `-race`)
 
@@ -359,6 +397,23 @@ All phases landed. Summary of what shipped and where:
 - `billing_ctx_test.go`: snapshot survives `c` mutation; sync-fallback path.
 - `relayctx_test.go`: the primitive's invariants.
 - Existing audio/video rollback + WS post-billing + bizErr tests continue to pass.
+
+P6 reproduce-first / behavioral additions (all under `-race`):
+
+- `post_billing_test.go`: `…_DrainWaitsForInnerGoroutineAfterTimeout` — verified to FAIL
+  against the pre-fix orphaning path (Drain returns while work is in flight) and PASS with
+  the join.
+- `billing_timeout_bound_test.go`: `…_RefundBoundedByBillingTimeout` — verified to FAIL
+  against the pre-fix unbounded spawn (refund ctx error stays nil) and PASS with the bound
+  (ctx hits `DeadlineExceeded`); plus `…_DrainWaitsForParkedRefund` (lifecycle).
+- `rollback_accounting_test.go`: audio/video rollback **DB accounting** (refunds exactly
+  once; survives client disconnect; concurrent mix nets to start).
+- `billing_audit_accounting_test.go`: safety-net emergency refund **DB accounting**
+  (not-forwarded refunds; forwarded keeps; reconciled is a no-op).
+- `billing_crosspath_stress_test.go`: multi-round cross-path concurrency (success
+  post-billing + conservative refund + forwarded skip + rollback) through a real
+  `gin.Engine` with per-request cancellation, asserting the **exact** quota balance every
+  round and a clean `graceful.Drain`.
 
 ## 11. Convention (contributor rule)
 

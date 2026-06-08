@@ -13,6 +13,7 @@ import (
 
 	"github.com/Laisky/one-api/common/ctxkey"
 	"github.com/Laisky/one-api/common/helper"
+	"github.com/Laisky/one-api/common/relayctx"
 	"github.com/Laisky/one-api/common/tracing"
 	"github.com/Laisky/one-api/model"
 	"github.com/Laisky/one-api/relay"
@@ -59,8 +60,12 @@ func RelayProxyHelper(c *gin.Context, relayMode int) *relaymodel.ErrorWithStatus
 	isStream := meta.IsStream
 	modelName := "proxy"
 	elapsed := helper.CalcElapsedTime(meta.StartTime)
-	go func() {
-		ctx, cancel := context.WithTimeout(gmw.BackgroundCtx(c), 30*time.Second)
+	// GoRequestScoped hands the goroutine a detached, c-free context: it must not read
+	// the *gin.Context after the handler returns (gin recycles it via sync.Pool). All
+	// request-scoped values are value-captured above; deriving the timeout from the
+	// detached ctx (not gmw.BackgroundCtx(c)) keeps the goroutine off the recycled c.
+	relayctx.GoRequestScoped(c, "proxyLog", func(ctx context.Context) {
+		ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 		defer cancel()
 
 		// Log the proxy request with zero quota
@@ -85,7 +90,7 @@ func RelayProxyHelper(c *gin.Context, relayMode int) *relaymodel.ErrorWithStatus
 		if err := model.UpdateUserRequestCostQuotaByRequestID(quotaId, requestId, 0); err != nil {
 			gmw.GetLogger(ctx).Error("update user request cost failed", zap.Error(err))
 		}
-	}()
+	})
 
 	return nil
 }

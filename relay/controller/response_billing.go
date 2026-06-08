@@ -12,7 +12,6 @@ import (
 
 	"github.com/Laisky/one-api/common/config"
 	"github.com/Laisky/one-api/common/ctxkey"
-	"github.com/Laisky/one-api/common/tracing"
 	"github.com/Laisky/one-api/model"
 	"github.com/Laisky/one-api/relay/adaptor/openai"
 	"github.com/Laisky/one-api/relay/apitype"
@@ -159,23 +158,15 @@ func postConsumeResponseAPIQuota(ctx context.Context,
 		usedCompletionRatio = pricing.GetCompletionRatioWithThreeLayers(responseAPIRequest.Model, channelCompletionRatio, pricingAdaptor)
 	}
 
-	// Derive RequestId/TraceId/ProvisionalLogId from std context if possible
-	var requestId string
-	var provisionalLogId int
-	if ginCtx, ok := gmw.GetGinCtxFromStdCtx(ctx); ok {
-		requestId = ginCtx.GetString(ctxkey.RequestId)
-		provisionalLogId = ginCtx.GetInt(ctxkey.ProvisionalLogId)
-	}
-	traceId := tracing.GetTraceIDFromContext(ctx)
+	// Resolve request-scoped identifiers from the detached billing snapshot (or, for a
+	// synchronous caller, from the embedded gin context). NEVER read them off a live
+	// *gin.Context here: this runs inside a post-billing goroutine and gin recycles c.
+	billingID := billingIdentityFromContext(ctx)
+	requestId := billingID.requestID
+	provisionalLogId := billingID.provisionalLogID
+	traceId := billingID.traceID
 	if meta.TokenId > 0 && meta.UserId > 0 && meta.ChannelId > 0 {
-		var toolSummary *model.ToolUsageSummary
-		if ginCtx, ok := gmw.GetGinCtxFromStdCtx(ctx); ok {
-			if raw, exists := ginCtx.Get(ctxkey.ToolInvocationSummary); exists {
-				if summary, ok := raw.(*model.ToolUsageSummary); ok {
-					toolSummary = summary
-				}
-			}
-		}
+		toolSummary := billingID.toolSummary
 		metadata := model.AppendCacheWriteTokensMetadata(nil, usage.CacheWrite5mTokens, usage.CacheWrite1hTokens)
 
 		postConsumeResponseAPIQuotaDetailed(billing.QuotaConsumeDetail{
