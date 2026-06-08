@@ -17,6 +17,8 @@ Also welcome to register and use my deployed one-api gateway, which supports var
 
 Try it at <https://oneapi.laisky.com>, login with `test` / `12345678`. 🚀
 
+> 📖 **API reference** — see [docs/manuals/api_references.md](docs/manuals/api_references.md) for the complete HTTP API: authentication, conventions, errors, and every endpoint with `curl` examples, organized for both end-users (inference + API-key management) and administrators.
+
 ```plain
 === One-API Compatibility Matrix 2025-12-12T04:37:09Z ===
 
