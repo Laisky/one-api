@@ -12,7 +12,7 @@ if [ ! -f "package.json" ]; then
 fi
 
 echo "📦 Installing dependencies..."
-npm install
+yarn
 
 # Check if installation was successful
 if [ $? -ne 0 ]; then
@@ -21,7 +21,7 @@ if [ $? -ne 0 ]; then
 fi
 
 echo "🔨 Building for production..."
-npm run build
+yarn run build
 
 # Check if build was successful
 if [ $? -ne 0 ]; then

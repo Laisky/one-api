@@ -73,7 +73,7 @@ build-frontend-dev-berry:
 	@./web/berry/dev.sh build-dev
 
 build-frontend-dev-modern:
-	@cd web/modern && npm run build
+	@cd web/modern && yarn run build
 
 # Default dev build target
 .PHONY: build-frontend-dev

@@ -28,7 +28,7 @@ ENV DISABLE_ESLINT_PLUGIN=true
 RUN set -e; BUILD_ID=$(date +%s); \
         for theme in berry air modern; do \
                 echo "==> building $theme (build_id=$BUILD_ID)"; \
-                REACT_APP_VERSION=$BUILD_ID npm run build --prefix /web/$theme; \
+                REACT_APP_VERSION=$BUILD_ID yarn --cwd /web/$theme run build; \
         done
 
 ############################

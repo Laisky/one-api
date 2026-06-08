@@ -4,10 +4,10 @@
 
 ```shell
 # Runs the app in the development mode
-npm start
+yarn start
 
 # Builds the app for production to the `build` folder
-npm run build
+yarn run build
 ```
 
 If you want to change the default server, please set `REACT_APP_SERVER` environment variables before build,
