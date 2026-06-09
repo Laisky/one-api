@@ -280,6 +280,100 @@ func CheckTotpRateLimit(c *gin.Context, userId int) bool {
 	}
 }
 
+// redeemFailureKey builds the per-user rate-limit key for failed redemptions.
+func redeemFailureKey(userId int) string {
+	return fmt.Sprintf("rateLimit:RDMF:%d", userId)
+}
+
+// IsRedeemBlocked reports whether the user has used up their failed-redemption
+// budget within the configured window and should be rejected before any
+// redemption work is attempted. It is read-only: it never records an attempt,
+// so calling it on every redemption (including ones that go on to succeed) does
+// not consume the budget. Returns false when the limiter is disabled.
+func IsRedeemBlocked(c *gin.Context, userId int) bool {
+	if config.RateLimitDisabled || config.RedeemFailureRateLimitNum <= 0 {
+		return false
+	}
+
+	key := redeemFailureKey(userId)
+	maxNum := config.RedeemFailureRateLimitNum
+	duration := config.RedeemFailureRateLimitDuration
+
+	if common.IsRedisEnabled() {
+		return peekRedisRateLimit(c, key, maxNum, duration)
+	}
+	inMemoryRateLimiter.Init(config.RateLimitKeyExpirationDuration)
+	return inMemoryRateLimiter.PeekExceeded(key, maxNum, duration)
+}
+
+// RecordRedeemFailure records one failed redemption attempt against the user's
+// budget. Call this only after a redemption attempt actually fails, so that
+// successful redemptions never count toward the limit. It is a no-op when the
+// limiter is disabled.
+func RecordRedeemFailure(c *gin.Context, userId int) {
+	if config.RateLimitDisabled || config.RedeemFailureRateLimitNum <= 0 {
+		return
+	}
+
+	key := redeemFailureKey(userId)
+	maxNum := config.RedeemFailureRateLimitNum
+
+	if common.IsRedisEnabled() {
+		recordRedisRateLimit(c, key, maxNum)
+		return
+	}
+	inMemoryRateLimiter.Init(config.RateLimitKeyExpirationDuration)
+	inMemoryRateLimiter.Record(key, maxNum)
+}
+
+// peekRedisRateLimit reports whether key already holds at least maxRequestNum
+// timestamps within the sliding window, without recording a new one. It mirrors
+// the window logic of checkRedisRateLimit but is read-only. On any Redis error
+// it fails open (returns false) so a Redis outage never locks users out.
+func peekRedisRateLimit(c *gin.Context, key string, maxRequestNum int, duration int64) bool {
+	ctx := gmw.Ctx(c)
+	rdb := common.RDB
+	lg := gmw.GetLogger(c)
+
+	listLength, err := rdb.LLen(ctx, key).Result()
+	if err != nil {
+		lg.Warn("Redis redeem rate limit peek failed, allowing request", zap.String("key", key), zap.Error(err))
+		return false
+	}
+	if listLength < int64(maxRequestNum) {
+		return false
+	}
+
+	oldTimeStr, err := rdb.LIndex(ctx, key, -1).Result()
+	if err != nil {
+		lg.Warn("Redis redeem rate limit get old time failed, allowing request", zap.String("key", key), zap.Error(err))
+		return false
+	}
+	oldTime, err := time.Parse(timeFormat, oldTimeStr)
+	if err != nil {
+		lg.Warn("Redis redeem rate limit parse old time failed, allowing request", zap.String("key", key), zap.String("time_str", oldTimeStr), zap.Error(err))
+		return false
+	}
+
+	return int64(time.Since(oldTime).Seconds()) < duration
+}
+
+// recordRedisRateLimit appends a timestamp for key and bounds the list to the
+// most recent maxRequestNum entries. It is the write-only companion to
+// peekRedisRateLimit. Redis errors are logged and swallowed.
+func recordRedisRateLimit(c *gin.Context, key string, maxRequestNum int) {
+	ctx := gmw.Ctx(c)
+	rdb := common.RDB
+	lg := gmw.GetLogger(c)
+
+	if err := rdb.LPush(ctx, key, time.Now().Format(timeFormat)).Err(); err != nil {
+		lg.Warn("Redis redeem rate limit record failed", zap.String("key", key), zap.Error(err))
+		return
+	}
+	rdb.LTrim(ctx, key, 0, int64(maxRequestNum-1))
+	rdb.Expire(ctx, key, config.RateLimitKeyExpirationDuration)
+}
+
 // checkRedisRateLimit checks rate limit using Redis
 func checkRedisRateLimit(c *gin.Context, key string, maxRequestNum int, duration int64) bool {
 	ctx := gmw.Ctx(c)

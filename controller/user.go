@@ -1406,8 +1406,36 @@ func TopUp(c *gin.Context) {
 		return
 	}
 	id := c.GetInt("id")
+
+	// Throttle enumeration/brute-force of redemption codes: an authenticated user
+	// who has already burned through their failed-attempt budget is rejected
+	// before any DB work, without leaking whether the submitted code is valid.
+	if middleware.IsRedeemBlocked(c, id) {
+		gmw.GetLogger(c).Warn("redemption blocked: too many failed attempts",
+			zap.Int("user_id", id),
+			zap.String("client_ip", c.ClientIP()),
+		)
+		helper.RespondErrorWithStatus(c, http.StatusTooManyRequests,
+			errors.New("too many failed redemption attempts, please try again later"))
+		return
+	}
+
 	quota, err := model.Redeem(ctx, req.Key, id)
 	if err != nil {
+		// Record the failure against the user's budget and log who attempted the
+		// redemption and what code they tried, so brute-force / enumeration of
+		// redemption codes can be throttled and the offending account identified.
+		// The attempted key is logged because a failed attempt means the code is
+		// invalid or already used, so it has no residual value, and the pattern
+		// of attempts is useful forensically. Successful redemptions are not
+		// recorded, so a legitimate user is never throttled.
+		middleware.RecordRedeemFailure(c, id)
+		gmw.GetLogger(c).Warn("redemption attempt failed",
+			zap.Int("user_id", id),
+			zap.String("client_ip", c.ClientIP()),
+			zap.String("attempted_key", req.Key),
+			zap.Error(err),
+		)
 		helper.RespondError(c, err)
 		return
 	}

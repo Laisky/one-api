@@ -73,3 +73,41 @@ func (l *InMemoryRateLimiter) Request(key string, maxRequestNum int, duration in
 	}
 	return true
 }
+
+// PeekExceeded reports whether the key already has at least maxRequestNum
+// timestamps recorded within the sliding window, WITHOUT recording a new one.
+// This is the read-only companion to Record, used to gate an action before the
+// work is attempted so that probe checks never consume the budget themselves.
+func (l *InMemoryRateLimiter) PeekExceeded(key string, maxRequestNum int, duration int64) bool {
+	l.mutex.Lock()
+	defer l.mutex.Unlock()
+	queue, ok := l.store[key]
+	if !ok || len(*queue) < maxRequestNum {
+		return false
+	}
+	// The oldest retained timestamp is at the front. If it has aged out of the
+	// window the budget is no longer full, so the caller is not limited yet.
+	now := time.Now().Unix()
+	return now-(*queue)[0] < duration
+}
+
+// Record appends a timestamp for the key, bounding the stored slice to the most
+// recent maxRequestNum entries. Unlike Request it never rejects; it only logs
+// the event. Pair it with PeekExceeded to build a "gate then record on failure"
+// limiter where only failures consume the budget.
+func (l *InMemoryRateLimiter) Record(key string, maxRequestNum int) {
+	l.mutex.Lock()
+	defer l.mutex.Unlock()
+	now := time.Now().Unix()
+	queue, ok := l.store[key]
+	if !ok {
+		s := make([]int64, 0, maxRequestNum)
+		s = append(s, now)
+		l.store[key] = &s
+		return
+	}
+	*queue = append(*queue, now)
+	if len(*queue) > maxRequestNum {
+		*queue = (*queue)[len(*queue)-maxRequestNum:]
+	}
+}

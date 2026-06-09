@@ -565,6 +565,23 @@ var (
 	// Unit: seconds
 	CriticalRateLimitDuration int64 = 20 * 60
 
+	// RedeemFailureRateLimitNum bounds the number of FAILED redemption attempts a
+	// single authenticated user may make within RedeemFailureRateLimitDuration
+	// before further attempts are rejected with HTTP 429. This throttles
+	// enumeration/brute-force of redemption codes from a logged-in account.
+	// Successful redemptions never count toward this limit, so a legitimate user
+	// is unaffected. Set to 0 to disable.
+	//
+	// Environment variable: REDEEM_FAILURE_RATE_LIMIT
+	// Default: 5 failed attempts per 5 minutes
+	RedeemFailureRateLimitNum = env.Int("REDEEM_FAILURE_RATE_LIMIT", 5)
+
+	// RedeemFailureRateLimitDuration sets the window for redeem-failure rate limiting.
+	//
+	// Default: 600 seconds (10 minutes)
+	// Unit: seconds
+	RedeemFailureRateLimitDuration int64 = 10 * 60
+
 	// UploadRateLimitNum bounds the number of file uploads allowed per client
 	// within UploadRateLimitDuration.
 	//
