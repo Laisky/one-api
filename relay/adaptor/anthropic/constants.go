@@ -150,6 +150,15 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		SupportedFeatures: claudeFeaturesWithReasoning, SupportedSamplingParameters: claudeOpus47SamplingParams,
 		Description: "Claude Opus 4.8 flagship Anthropic model with 1M-token context and adaptive thinking; temperature/top_p/top_k are unsupported. Replaces deprecated claude-opus-4-20250514.",
 	},
+	"claude-fable-5": {
+		Ratio: 10 * ratio.MilliTokensUsd, CompletionRatio: 5,
+		CachedInputRatio: 1.25 * ratio.MilliTokensUsd, CacheWrite5mRatio: 12.5 * ratio.MilliTokensUsd, CacheWrite1hRatio: 20 * ratio.MilliTokensUsd,
+		ContextLength: 1000000, MaxOutputTokens: 128000,
+		InputModalities: claudeVisionInputs, OutputModalities: claudeTextOutputs,
+		SupportedFeatures: claudeFeaturesWithReasoning, SupportedSamplingParameters: claudeSamplingParams,
+		MaxReasoningTokens: 120000,
+		Description:        "Claude Fable 5 flagship Anthropic model with 1M-token context and frontier-level reasoning.",
+	},
 
 	// Claude 4 Sonnet Models
 	"claude-sonnet-4-0": {

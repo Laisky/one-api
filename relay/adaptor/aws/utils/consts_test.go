@@ -98,6 +98,18 @@ func TestConvertModelID2CrossRegionProfile(t *testing.T) {
 			expected: "global.anthropic.claude-sonnet-4-6",
 		},
 		{
+			name:     "Claude Fable 5 in us-east-1 uses global profile",
+			model:    "anthropic.claude-fable-5",
+			region:   "us-east-1",
+			expected: "global.anthropic.claude-fable-5",
+		},
+		{
+			name:     "Claude Fable 5 in eu-west-1 uses global profile",
+			model:    "anthropic.claude-fable-5",
+			region:   "eu-west-1",
+			expected: "global.anthropic.claude-fable-5",
+		},
+		{
 			name:     "Unsupported model returns original",
 			model:    "unsupported.model-v1:0",
 			region:   "us-east-1",
@@ -343,6 +355,37 @@ func TestClaudeOpus47RequiresGlobalProfile(t *testing.T) {
 		result := ConvertModelID2CrossRegionProfile(ctx, modelID, region)
 		require.Equalf(t, globalProfileID, result,
 			"claude-opus-4-7 in region %s should convert to global profile %s", region, globalProfileID)
+	}
+}
+
+// TestClaudeFable5RequiresGlobalProfile verifies that claude-fable-5 is configured
+// to use the global inference profile on AWS Bedrock.
+func TestClaudeFable5RequiresGlobalProfile(t *testing.T) {
+	t.Parallel()
+	modelID := "anthropic.claude-fable-5"
+	globalProfileID := "global." + modelID
+
+	allowedRegions, exists := GlobalProfileSourceRegions[modelID]
+	require.Truef(t, exists, "claude-fable-5 (%s) must be in GlobalProfileSourceRegions for AWS Bedrock on-demand invocation", modelID)
+
+	require.Containsf(t, CrossRegionInferences, globalProfileID,
+		"claude-fable-5 global profile (%s) must be in CrossRegionInferences", globalProfileID)
+
+	keyRegions := []string{
+		"us-east-1",
+		"eu-west-1",
+		"ap-southeast-1",
+	}
+	for _, region := range keyRegions {
+		require.Containsf(t, allowedRegions, region,
+			"region %s should be in GlobalProfileSourceRegions for claude-fable-5", region)
+	}
+
+	ctx := context.Background()
+	for _, region := range keyRegions {
+		result := ConvertModelID2CrossRegionProfile(ctx, modelID, region)
+		require.Equalf(t, globalProfileID, result,
+			"claude-fable-5 in region %s should convert to global profile %s", region, globalProfileID)
 	}
 }
 

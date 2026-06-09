@@ -45,6 +45,19 @@ func TestClaudeOpus48PricingMatchesPublishedRatios(t *testing.T) {
 		"Opus 4.8 must inherit Opus 4.7's adaptive-only sampling restriction")
 }
 
+func TestClaudeFable5PricingMatchesPublishedRatios(t *testing.T) {
+	pricing, ok := ModelRatios["claude-fable-5"]
+	require.True(t, ok, "Claude Fable 5 pricing missing from Anthropic model ratios")
+	require.InDelta(t, 10*ratio.MilliTokensUsd, pricing.Ratio, 1e-12)
+	require.InDelta(t, 5.0, pricing.CompletionRatio, 1e-12)
+	require.InDelta(t, 1.25*ratio.MilliTokensUsd, pricing.CachedInputRatio, 1e-12)
+	require.InDelta(t, 12.5*ratio.MilliTokensUsd, pricing.CacheWrite5mRatio, 1e-12)
+	require.InDelta(t, 20.0*ratio.MilliTokensUsd, pricing.CacheWrite1hRatio, 1e-12)
+	require.EqualValues(t, 1000000, pricing.ContextLength)
+	require.EqualValues(t, 128000, pricing.MaxOutputTokens)
+	require.EqualValues(t, 120000, pricing.MaxReasoningTokens)
+}
+
 func TestIsClaudeOpus47ModelCoversAdaptiveOpusVariants(t *testing.T) {
 	cases := map[string]bool{
 		"claude-opus-4-7":           true,
