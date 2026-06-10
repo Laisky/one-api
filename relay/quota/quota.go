@@ -38,8 +38,6 @@ type ComputeResult struct {
 }
 
 // Compute calculates the quota required for the provided usage snapshot.
-// It mirrors the logic used in controller helper functions so streaming
-// billing and final reconciliation share the same pricing semantics.
 func Compute(input ComputeInput) ComputeResult {
 	usage := input.Usage
 	if usage == nil {
@@ -51,9 +49,19 @@ func Compute(input ComputeInput) ComputeResult {
 
 	pricingAdaptor := input.PricingAdaptor
 	resolvedModelCfg, hasResolvedModelCfg := pricing.ResolveModelConfigRatioOnly(input.ModelName, input.ChannelModelConfigs, pricingAdaptor)
+
+	// Resolve the completion ratio using a priority-ordered check to avoid redundant lookups.
+	var completionRatioResolved float64
+	if override, ok := input.ChannelCompletionRatio[input.ModelName]; ok {
+		completionRatioResolved = override
+	} else if hasResolvedModelCfg && resolvedModelCfg.CompletionRatio != 0 {
+		completionRatioResolved = resolvedModelCfg.CompletionRatio
+	} else {
+		completionRatioResolved = pricing.GetCompletionRatioWithThreeLayers(input.ModelName, input.ChannelCompletionRatio, pricingAdaptor)
+	}
+
 	hasChannelModelRatioOverride := hasOverrideForModel(input.ModelName, input.ChannelModelRatio)
 	baseRatio := input.ModelRatio
-	completionRatioResolved := resolveCompletionRatio(input.ModelName, resolvedModelCfg, hasResolvedModelCfg, input.ChannelCompletionRatio, pricingAdaptor)
 
 	if hasResolvedModelCfg {
 		// Preserve legacy fallback behavior: when channel config omits base ratio/completion
@@ -81,39 +89,26 @@ func Compute(input ComputeInput) ComputeResult {
 		if !hasChannelModelRatioOverride {
 			usedModelRatio = eff.InputRatio
 		}
-		baseComp := eff.OutputRatio
-		completionBaseRatio := eff.InputRatio
-		if hasChannelModelRatioOverride {
-			completionBaseRatio = usedModelRatio
-			baseComp = usedModelRatio * completionRatioResolved
-			for _, tier := range resolvedModelCfg.Tiers {
-				if promptTokens < tier.InputTokenThreshold {
-					break
-				}
-				if tier.CompletionRatio != 0 {
-					baseComp = usedModelRatio * tier.CompletionRatio
-				}
-			}
-		}
-		if completionBaseRatio != 0 {
-			baseComp = baseComp / completionBaseRatio
+
+		// Optimization: Deriving the tiered completion ratio from eff.OutputRatio / eff.InputRatio
+		// avoids a redundant loop over tiers. Since eff.OutputRatio = eff.InputRatio * tierComp,
+		// the division recovers the effective completion ratio for the current tier.
+		if eff.InputRatio != 0 {
+			usedCompletionRatio = eff.OutputRatio / eff.InputRatio
 		} else {
-			baseComp = 1.0
+			usedCompletionRatio = 1.0
 		}
-		usedCompletionRatio = baseComp
 	} else if pricingAdaptor != nil {
 		// Optimized check: only use effective pricing if the input model ratio matches the adaptor base.
 		// This avoids extra GetDefaultModelPricing() map lookups when not needed.
 		adaptorBase := pricingAdaptor.GetModelRatio(input.ModelName)
 		if math.Abs(baseRatio-adaptorBase) < 1e-12 {
 			usedModelRatio = eff.InputRatio
-			baseComp := eff.OutputRatio
 			if eff.InputRatio != 0 {
-				baseComp = eff.OutputRatio / eff.InputRatio
+				usedCompletionRatio = eff.OutputRatio / eff.InputRatio
 			} else {
-				baseComp = 1.0
+				usedCompletionRatio = 1.0
 			}
-			usedCompletionRatio = baseComp
 		}
 	}
 
@@ -267,9 +262,21 @@ func containsASCIIFold(s string, substr string) bool {
 		return false
 	}
 
+	// substr is already expected to be lowercase from the caller (isClaudeModelName).
+	// We pre-calculate the uppercase variant of the first byte to allow a fast search
+	// that avoids calling asciiLower on every character in the model name string.
+	firstLower := substr[0]
+	var firstUpper byte
+	if firstLower >= 'a' && firstLower <= 'z' {
+		firstUpper = firstLower - ('a' - 'A')
+	} else {
+		firstUpper = firstLower
+	}
+
 	last := len(s) - len(substr)
 	for i := 0; i <= last; i++ {
-		if asciiLower(s[i]) != substr[0] {
+		// Fast path: match the first byte against both possible cases.
+		if s[i] != firstLower && s[i] != firstUpper {
 			continue
 		}
 
@@ -286,7 +293,6 @@ func containsASCIIFold(s string, substr string) bool {
 	}
 	return false
 }
-
 // asciiLower converts ASCII uppercase bytes to lowercase.
 // Parameter: b is the byte to normalize.
 // Returns: the lowercase byte when b is an ASCII uppercase letter, otherwise b unchanged.
