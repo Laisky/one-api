@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Separator } from '@/components/ui/separator';
 import { useSystemStatus } from '@/hooks/useSystemStatus';
 import { api, isSafeInternalPath } from '@/lib/api';
-import { buildGitHubOAuthUrl, buildOidcOAuthUrl, getOAuthState } from '@/lib/oauth';
+import { buildGitHubOAuthUrl, buildLarkOAuthUrl, buildOidcOAuthUrl, getOAuthState } from '@/lib/oauth';
 import { useAuthStore } from '@/lib/stores/auth';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { browserSupportsWebAuthn, startAuthentication } from '@simplewebauthn/browser';
@@ -133,6 +133,7 @@ export function LoginPage() {
 
   const onGitHubOAuth = async () => {
     if (!systemStatus.github_client_id) return;
+    form.clearErrors('root');
     try {
       // Request state from backend to prevent CSRF
       const state = await getOAuthState();
@@ -140,31 +141,38 @@ export function LoginPage() {
       const url = buildGitHubOAuthUrl(systemStatus.github_client_id, state, redirectUri);
       window.location.href = url;
     } catch (e) {
-      // Fallback: try without state if backend unavailable
-      const redirectUri = `${window.location.origin}/oauth/github`;
-      const url = buildGitHubOAuthUrl(systemStatus.github_client_id, '', redirectUri);
-      window.location.href = url;
+      form.setError('root', {
+        message: e instanceof Error && e.message ? e.message : t('auth.oauth.state_failed'),
+      });
     }
   };
 
-  const onLarkOAuth = () => {
-    if (systemStatus.lark_client_id) {
+  const onLarkOAuth = async () => {
+    if (!systemStatus.lark_client_id) return;
+    form.clearErrors('root');
+    try {
+      const state = await getOAuthState();
       const redirectUri = `${window.location.origin}/oauth/lark`;
-      window.location.href = `https://open.larksuite.com/open-apis/authen/v1/index?app_id=${encodeURIComponent(systemStatus.lark_client_id)}&redirect_uri=${encodeURIComponent(redirectUri)}`;
+      window.location.href = buildLarkOAuthUrl(systemStatus.lark_client_id, state, redirectUri);
+    } catch (error) {
+      form.setError('root', {
+        message: error instanceof Error && error.message ? error.message : t('auth.oauth.state_failed'),
+      });
     }
   };
 
   const onOidcOAuth = async () => {
     if (!systemStatus.oidc_client_id || !systemStatus.oidc_authorization_endpoint) return;
+    form.clearErrors('root');
     try {
       const state = await getOAuthState();
       const redirectUri = `${window.location.origin}/oauth/oidc`;
       const url = buildOidcOAuthUrl(systemStatus.oidc_authorization_endpoint, systemStatus.oidc_client_id, state, redirectUri);
       window.location.href = url;
-    } catch {
-      const redirectUri = `${window.location.origin}/oauth/oidc`;
-      const url = buildOidcOAuthUrl(systemStatus.oidc_authorization_endpoint, systemStatus.oidc_client_id, '', redirectUri);
-      window.location.href = url;
+    } catch (error) {
+      form.setError('root', {
+        message: error instanceof Error && error.message ? error.message : t('auth.oauth.state_failed'),
+      });
     }
   };
 

@@ -1,4 +1,5 @@
 import { api } from '@/lib/api';
+import * as oauth from '@/lib/oauth';
 import { useAuthStore } from '@/lib/stores/auth';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
@@ -8,10 +9,18 @@ import { LoginPage } from '../LoginPage.impl';
 // Mock the auth store
 vi.mock('@/lib/stores/auth');
 vi.mock('@/lib/api');
+vi.mock('@/lib/oauth', async () => {
+  const actual = await vi.importActual<typeof import('@/lib/oauth')>('@/lib/oauth');
+  return {
+    ...actual,
+    getOAuthState: vi.fn(),
+  };
+});
 
 const mockLogin = vi.fn();
 const mockUseAuthStore = useAuthStore as any;
 const mockApiGet = vi.mocked(api.get);
+const mockGetOAuthState = vi.mocked(oauth.getOAuthState);
 
 // Mock localStorage
 const mockLocalStorage = {
@@ -43,6 +52,7 @@ describe('LoginPage', () => {
         data: { turnstile_check: false },
       },
     } as any);
+    mockGetOAuthState.mockReset();
     mockUseAuthStore.mockReturnValue({
       login: mockLogin,
     });
@@ -273,5 +283,39 @@ describe('LoginPage', () => {
     expect(screen.queryByPlaceholderText(/6-digit totp code/i)).not.toBeInTheDocument();
     expect(usernameInput).not.toBeDisabled();
     expect(passwordInput).not.toBeDisabled();
+  });
+
+  it('shows the localized OAuth state error when state acquisition fails without a message', async () => {
+    mockApiGet.mockReset();
+    mockApiGet.mockResolvedValue({
+      data: {
+        success: true,
+        data: {
+          system_name: 'Test API',
+          turnstile_check: false,
+          oidc: true,
+          oidc_client_id: 'oidc-client',
+          oidc_authorization_endpoint: 'https://idp.example.com/authorize',
+        },
+      },
+    } as any);
+    mockLocalStorage.getItem.mockReturnValue(
+      JSON.stringify({
+        system_name: 'Test API',
+        oidc: true,
+        oidc_client_id: 'oidc-client',
+        oidc_authorization_endpoint: 'https://idp.example.com/authorize',
+      })
+    );
+    mockGetOAuthState.mockRejectedValueOnce(new Error(''));
+
+    renderLoginPage();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'OIDC' }));
+
+    await waitFor(() => {
+      expect(screen.getByText('Unable to start OAuth. Please try again.')).toBeInTheDocument();
+    });
+    expect(mockGetOAuthState).toHaveBeenCalledTimes(1);
   });
 });

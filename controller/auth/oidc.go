@@ -85,9 +85,7 @@ func getOidcUserInfoByCode(code string) (*OidcUser, error) {
 func OidcAuth(c *gin.Context) {
 	ctx := gmw.Ctx(c)
 	session := sessions.Default(c)
-	state := c.Query("state")
-	if state == "" || session.Get("oauth_state") == nil || state != session.Get("oauth_state").(string) {
-		helper.RespondErrorWithStatus(c, http.StatusForbidden, errors.New("state is empty or not same"))
+	if !validateOAuthState(c, "oidc") {
 		return
 	}
 	username := session.Get("username")

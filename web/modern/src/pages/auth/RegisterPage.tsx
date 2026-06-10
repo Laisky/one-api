@@ -60,13 +60,15 @@ export function RegisterPage() {
   const onGitHubOAuth = async () => {
     const clientId = systemStatus?.github_client_id;
     if (!clientId) return;
+    form.clearErrors('root');
     try {
       const state = await getOAuthState();
       const redirectUri = `${window.location.origin}/oauth/github`;
       window.location.href = buildGitHubOAuthUrl(clientId, state, redirectUri);
     } catch (e) {
-      const redirectUri = `${window.location.origin}/oauth/github`;
-      window.location.href = buildGitHubOAuthUrl(clientId, '', redirectUri);
+      form.setError('root', {
+        message: e instanceof Error && e.message ? e.message : t('auth.oauth.state_failed'),
+      });
     }
   };
 

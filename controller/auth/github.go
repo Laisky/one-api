@@ -97,9 +97,7 @@ func getGitHubUserInfoByCode(ctx context.Context, code string) (*GitHubUser, err
 func GitHubOAuth(c *gin.Context) {
 	ctx := gmw.Ctx(c)
 	session := sessions.Default(c)
-	state := c.Query("state")
-	if state == "" || session.Get("oauth_state") == nil || state != session.Get("oauth_state").(string) {
-		helper.RespondErrorWithStatus(c, http.StatusForbidden, errors.New("state is empty or not same"))
+	if !validateOAuthState(c, "github") {
 		return
 	}
 	username := session.Get("username")

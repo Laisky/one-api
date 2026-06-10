@@ -11,7 +11,7 @@ import { useNotifications } from '@/components/ui/notifications';
 import { Separator } from '@/components/ui/separator';
 import { useResponsive } from '@/hooks/useResponsive';
 import { api } from '@/lib/api';
-import { buildOidcOAuthUrl, getOAuthState } from '@/lib/oauth';
+import { buildLarkOAuthUrl, buildOidcOAuthUrl, getOAuthState } from '@/lib/oauth';
 import { useAuthStore } from '@/lib/stores/auth';
 import { loadSystemStatus, type SystemStatus } from '@/lib/utils';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -577,17 +577,21 @@ export function PersonalSettings() {
   // Bind a Lark account by redirecting to the Lark OAuth authorize URL.
   // The OAuth callback (/oauth/lark) detects bind vs login by inspecting the
   // backend response message, so no extra "intent" query param is needed.
-  const onBindLark = () => {
+  const onBindLark = async () => {
     setOauthBindingError('');
     if (!systemStatus.lark_client_id) {
       setOauthBindingError(t('personal_settings.oauth_binding.bind_failed'));
       return;
     }
     setOauthBindingPending('lark');
-    const redirectUri = `${window.location.origin}/oauth/lark`;
-    window.location.href = `https://open.larksuite.com/open-apis/authen/v1/index?app_id=${encodeURIComponent(
-      systemStatus.lark_client_id
-    )}&redirect_uri=${encodeURIComponent(redirectUri)}`;
+    try {
+      const state = await getOAuthState();
+      const redirectUri = `${window.location.origin}/oauth/lark`;
+      window.location.href = buildLarkOAuthUrl(systemStatus.lark_client_id, state, redirectUri);
+    } catch (error) {
+      setOauthBindingPending(null);
+      setOauthBindingError(error instanceof Error && error.message ? error.message : t('auth.oauth.state_failed'));
+    }
   };
 
   // Bind an OIDC account by redirecting to the configured authorization endpoint.
@@ -605,7 +609,7 @@ export function PersonalSettings() {
       window.location.href = url;
     } catch (error) {
       setOauthBindingPending(null);
-      setOauthBindingError(error instanceof Error ? error.message : t('personal_settings.oauth_binding.bind_failed'));
+      setOauthBindingError(error instanceof Error && error.message ? error.message : t('auth.oauth.state_failed'));
     }
   };
 
