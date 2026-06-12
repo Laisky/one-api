@@ -87,7 +87,20 @@ func ConvertResponseAPIToChatCompletionRequest(request *ResponseAPIRequest) (*mo
 		})
 	}
 
+	// openToolCallMsgIdx tracks an assistant message that was just emitted from a
+	// function_call item and is still "open" to receive sibling tool calls. The OpenAI
+	// Responses API represents parallel tool calls (issued in a single assistant turn) as
+	// multiple consecutive function_call items. ChatCompletion upstreams such as DeepSeek
+	// require those to live in ONE assistant message's tool_calls array; otherwise the
+	// trailing tool results end up following a tool message instead of an assistant message
+	// with tool_calls, producing the upstream 400 "Messages with role 'tool' must be a
+	// response to a preceding message with 'tool_calls'". The index is reset at the start of
+	// every iteration so only directly-adjacent function_call items are merged; anything else
+	// in between (a tool output, user/assistant text, etc.) starts a fresh assistant turn.
+	openToolCallMsgIdx := -1
 	for _, item := range request.Input {
+		currentToolCallMsgIdx := openToolCallMsgIdx
+		openToolCallMsgIdx = -1
 		switch v := item.(type) {
 		case string:
 			chatReq.Messages = append(chatReq.Messages, model.Message{Role: "user", Content: v})
@@ -121,10 +134,20 @@ func ConvertResponseAPIToChatCompletionRequest(request *ResponseAPIRequest) (*mo
 						role = r
 					}
 
+					// Merge consecutive function_call items from the same assistant turn into
+					// a single assistant message so parallel tool calls share one tool_calls array.
+					if currentToolCallMsgIdx >= 0 && chatReq.Messages[currentToolCallMsgIdx].Role == role {
+						chatReq.Messages[currentToolCallMsgIdx].ToolCalls = append(
+							chatReq.Messages[currentToolCallMsgIdx].ToolCalls, toolCall)
+						openToolCallMsgIdx = currentToolCallMsgIdx
+						continue
+					}
+
 					chatReq.Messages = append(chatReq.Messages, model.Message{
 						Role:      role,
 						ToolCalls: []model.Tool{toolCall},
 					})
+					openToolCallMsgIdx = len(chatReq.Messages) - 1
 					continue
 				case "function_call_output":
 					fcID, _ := v["id"].(string)

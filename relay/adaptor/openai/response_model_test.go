@@ -810,3 +810,150 @@ func TestConvertResponseAPIToChatCompletionWithFunctionCall(t *testing.T) {
 	require.Equal(t, 23, chatCompletion.Usage.CompletionTokens)
 	require.Equal(t, 314, chatCompletion.Usage.TotalTokens)
 }
+
+// assertToolMessagesFollowToolCalls enforces the ChatCompletion invariant that DeepSeek
+// (and OpenAI) require: every message with role "tool" must be immediately preceded by an
+// assistant message carrying tool_calls, or by another tool message that belongs to the same
+// preceding assistant tool_calls group. Violating this is exactly the upstream 400:
+// "Messages with role 'tool' must be a response to a preceding message with 'tool_calls'".
+func assertToolMessagesFollowToolCalls(t *testing.T, messages []model.Message) {
+	t.Helper()
+	for i, msg := range messages {
+		if msg.Role != "tool" {
+			continue
+		}
+		require.Greaterf(t, i, 0, "tool message at index %d has no preceding message", i)
+		prev := messages[i-1]
+		switch prev.Role {
+		case "assistant":
+			require.NotEmptyf(t, prev.ToolCalls,
+				"tool message at index %d follows an assistant message without tool_calls", i)
+		case "tool":
+			// allowed: part of a parallel tool-call response group
+		default:
+			t.Fatalf("tool message at index %d follows a %q message, not an assistant with tool_calls", i, prev.Role)
+		}
+	}
+}
+
+// TestConvertResponseAPIToChatCompletionRequest_ParallelToolCalls reproduces the upstream 400
+// "Messages with role 'tool' must be a response to a preceding message with 'tool_calls'".
+//
+// When an assistant turn issues parallel tool calls, the OpenAI Responses API represents them
+// as multiple consecutive function_call items. Converting each into its own assistant message
+// breaks the ChatCompletion adjacency rule, because the second tool result ends up following a
+// tool message instead of an assistant-with-tool_calls message.
+func TestConvertResponseAPIToChatCompletionRequest_ParallelToolCalls(t *testing.T) {
+	stream := false
+	responseReq := &ResponseAPIRequest{
+		Model:  "deepseek-v4-flash",
+		Stream: &stream,
+		Input: ResponseAPIInput{
+			map[string]any{
+				"role": "user",
+				"content": []any{
+					map[string]any{"type": "input_text", "text": "Read both files."},
+				},
+			},
+			// Parallel tool calls within a single assistant turn: two consecutive
+			// function_call items, no output between them.
+			map[string]any{
+				"type":      "function_call",
+				"id":        "fc_a",
+				"call_id":   "call_a",
+				"name":      "read_file",
+				"arguments": `{"path":"a.txt"}`,
+			},
+			map[string]any{
+				"type":      "function_call",
+				"id":        "fc_b",
+				"call_id":   "call_b",
+				"name":      "read_file",
+				"arguments": `{"path":"b.txt"}`,
+			},
+			map[string]any{
+				"type":    "function_call_output",
+				"call_id": "call_a",
+				"output":  "contents of a",
+			},
+			map[string]any{
+				"type":    "function_call_output",
+				"call_id": "call_b",
+				"output":  "contents of b",
+			},
+		},
+	}
+
+	chatReq, err := ConvertResponseAPIToChatCompletionRequest(responseReq)
+	require.NoError(t, err)
+	require.NotNil(t, chatReq)
+
+	// The two parallel function_call items must collapse into a single assistant message
+	// carrying both tool_calls, followed by the two tool results.
+	require.Len(t, chatReq.Messages, 4)
+
+	require.Equal(t, "user", chatReq.Messages[0].Role)
+
+	assistant := chatReq.Messages[1]
+	require.Equal(t, "assistant", assistant.Role)
+	require.Len(t, assistant.ToolCalls, 2,
+		"parallel function_call items must be merged into one assistant message")
+	// IDs are normalized by convertResponseAPIIDToToolCall (fc_/call_ prefixes stripped),
+	// and the function_call_output items normalize to the same values so they still match.
+	require.Equal(t, "a", assistant.ToolCalls[0].Id)
+	require.Equal(t, "b", assistant.ToolCalls[1].Id)
+
+	require.Equal(t, "tool", chatReq.Messages[2].Role)
+	require.Equal(t, assistant.ToolCalls[0].Id, chatReq.Messages[2].ToolCallId)
+	require.Equal(t, "tool", chatReq.Messages[3].Role)
+	require.Equal(t, assistant.ToolCalls[1].Id, chatReq.Messages[3].ToolCallId)
+
+	// The invariant DeepSeek enforces.
+	assertToolMessagesFollowToolCalls(t, chatReq.Messages)
+}
+
+// TestConvertResponseAPIToChatCompletionRequest_SequentialToolCallsNotMerged guards against
+// over-merging: tool calls from distinct turns (separated by their outputs) must remain on
+// separate assistant messages.
+func TestConvertResponseAPIToChatCompletionRequest_SequentialToolCallsNotMerged(t *testing.T) {
+	stream := false
+	responseReq := &ResponseAPIRequest{
+		Model:  "deepseek-v4-flash",
+		Stream: &stream,
+		Input: ResponseAPIInput{
+			map[string]any{
+				"role":    "user",
+				"content": []any{map[string]any{"type": "input_text", "text": "go"}},
+			},
+			map[string]any{
+				"type": "function_call", "id": "fc_1", "call_id": "call_1",
+				"name": "step", "arguments": `{"n":1}`,
+			},
+			map[string]any{
+				"type": "function_call_output", "call_id": "call_1", "output": "ok1",
+			},
+			map[string]any{
+				"type": "function_call", "id": "fc_2", "call_id": "call_2",
+				"name": "step", "arguments": `{"n":2}`,
+			},
+			map[string]any{
+				"type": "function_call_output", "call_id": "call_2", "output": "ok2",
+			},
+		},
+	}
+
+	chatReq, err := ConvertResponseAPIToChatCompletionRequest(responseReq)
+	require.NoError(t, err)
+	require.NotNil(t, chatReq)
+
+	// user, assistant(call_1), tool(call_1), assistant(call_2), tool(call_2)
+	require.Len(t, chatReq.Messages, 5)
+	require.Equal(t, "assistant", chatReq.Messages[1].Role)
+	require.Len(t, chatReq.Messages[1].ToolCalls, 1)
+	require.Equal(t, "1", chatReq.Messages[1].ToolCalls[0].Id)
+	require.Equal(t, "assistant", chatReq.Messages[3].Role)
+	require.Len(t, chatReq.Messages[3].ToolCalls, 1)
+	require.Equal(t, "2", chatReq.Messages[3].ToolCalls[0].Id)
+
+	assertToolMessagesFollowToolCalls(t, chatReq.Messages)
+}
