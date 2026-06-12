@@ -137,7 +137,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		OutputModalities:            textOnlyModalities,
 		SupportedFeatures:           chatFeatures,
 		SupportedSamplingParameters: commonSamplingParams,
-		Description:                 "Devstral Medium 2025-07 agentic coding model. Deprecated 2026-02-27; retires 2026-05-31.",
+		Description:                 "Devstral Medium 2025-07 agentic coding model. Deprecated 2026-02-27; RETIRED 2026-05-31.",
 	},
 
 	// --- Codestral / code completion family ---
@@ -238,7 +238,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		OutputModalities:            textOnlyModalities,
 		SupportedFeatures:           chatFeatures,
 		SupportedSamplingParameters: commonSamplingParams,
-		Description:                 "Pixtral Large 124B multimodal vision-language model (alias for pixtral-large-2411). Deprecated 2026-02-27; retires 2026-05-31.",
+		Description:                 "Pixtral Large 124B multimodal vision-language model (alias for pixtral-large-2411). Deprecated 2026-02-27; RETIRED 2026-05-31.",
 	},
 	"pixtral-large-2411": {
 		Ratio:                       2.0 * ratio.MilliTokensUsd,
@@ -251,7 +251,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		SupportedSamplingParameters: commonSamplingParams,
 		Quantization:                "bf16",
 		HuggingFaceID:               "mistralai/Pixtral-Large-Instruct-2411",
-		Description:                 "Pixtral Large 2024-11 124B open-weight multimodal vision-language model. Deprecated 2026-02-27; retires 2026-05-31.",
+		Description:                 "Pixtral Large 2024-11 124B open-weight multimodal vision-language model. Deprecated 2026-02-27; RETIRED 2026-05-31.",
 	},
 
 	// --- Mistral Small family ---
@@ -335,7 +335,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		SupportedSamplingParameters: commonSamplingParams,
 		Quantization:                "bf16",
 		HuggingFaceID:               "mistralai/Devstral-Small-2507",
-		Description:                 "Devstral Small 2025-07 open-weight agentic coding model. Deprecated 2026-02-27; retires 2026-05-31.",
+		Description:                 "Devstral Small 2025-07 open-weight agentic coding model. Deprecated 2026-02-27; RETIRED 2026-05-31.",
 	},
 	// Note: devstral-small-2512 / pixtral-12b / open-mistral-7b / open-mixtral-8x7b /
 	// open-mixtral-8x22b / mistral-saba-* are all retired per the Mistral legacy table

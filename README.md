@@ -1352,13 +1352,18 @@ Response:
 
 #### Support kimi-k2 Family
 
-Support:
+Current multimodal flagships (text + image + video, 256k context, open weights on HuggingFace):
 
-- `kimi-k2-0905-preview`
-- `kimi-k2-0711-preview`
-- `kimi-k2-turbo-preview`
-- `kimi-k2-thinking`
-- `kimi-k2-thinking-turbo`
+- `kimi-k2.7-code` — current top coding model, thinking-only deep reasoning
+- `kimi-k2.6` — multimodal flagship, thinking and non-thinking modes
+- `kimi-k2.5` — multimodal, thinking and non-thinking modes
+
+Classic Moonshot V1 chat models (text, plus vision-preview variants):
+
+- `moonshot-v1-8k` / `moonshot-v1-32k` / `moonshot-v1-128k`
+- `moonshot-v1-8k-vision-preview` / `moonshot-v1-32k-vision-preview` / `moonshot-v1-128k-vision-preview`
+
+> The legacy `kimi-k2-0905-preview`, `kimi-k2-0711-preview`, `kimi-k2-turbo-preview`, `kimi-k2-thinking` and `kimi-k2-thinking-turbo` models were discontinued by Moonshot on 2026-05-25.
 
 ### GLM Features
 

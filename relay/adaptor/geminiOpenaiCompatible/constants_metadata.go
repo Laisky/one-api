@@ -207,6 +207,15 @@ var geminiMetadataOverrides = map[string]adaptor.ModelConfig{
 		SupportedSamplingParameters: geminiSamplingImage,
 		Description:                 "Gemini 3.1 Flash native image-generation preview tier with up to 128K context.",
 	},
+	"gemini-3.1-flash-image": {
+		ContextLength:               131_072,
+		MaxOutputTokens:             32_768,
+		InputModalities:             geminiInputTextImageFile,
+		OutputModalities:            geminiOutputTextImage,
+		SupportedFeatures:           []string{"json_mode", "structured_outputs"},
+		SupportedSamplingParameters: geminiSamplingImage,
+		Description:                 "Gemini 3.1 Flash native image-generation GA tier with up to 128K context.",
+	},
 	"gemini-3.1-flash-live-preview": {
 		ContextLength:               32_768,
 		MaxOutputTokens:             8192,
@@ -296,6 +305,15 @@ var geminiMetadataOverrides = map[string]adaptor.ModelConfig{
 		SupportedFeatures:           []string{"json_mode", "structured_outputs"},
 		SupportedSamplingParameters: geminiSamplingImage,
 		Description:                 "Gemini 3 Pro native image-generation preview tier with 1K/2K/4K rendering.",
+	},
+	"gemini-3-pro-image": {
+		ContextLength:               65_536,
+		MaxOutputTokens:             32_768,
+		InputModalities:             geminiInputTextImageFile,
+		OutputModalities:            geminiOutputTextImage,
+		SupportedFeatures:           []string{"json_mode", "structured_outputs"},
+		SupportedSamplingParameters: geminiSamplingImage,
+		Description:                 "Gemini 3 Pro native image-generation GA tier with 1K/2K/4K rendering.",
 	},
 
 	// Gemini 2.5 Pro & Computer Use Models.
@@ -524,7 +542,7 @@ var geminiMetadataOverrides = map[string]adaptor.ModelConfig{
 		OutputModalities:            geminiOutputText,
 		SupportedFeatures:           geminiFeatures20,
 		SupportedSamplingParameters: geminiSamplingChat,
-		Description:                 "Gemini 2.0 Flash multimodal tier with 1M context.",
+		Description:                 "Gemini 2.0 Flash multimodal tier with 1M context. SHUT DOWN June 1, 2026; use gemini-2.5-flash instead.",
 	},
 	"gemini-2.0-flash-image": {
 		ContextLength:               gemini1MContext,
@@ -533,7 +551,7 @@ var geminiMetadataOverrides = map[string]adaptor.ModelConfig{
 		OutputModalities:            geminiOutputTextImage,
 		SupportedFeatures:           geminiFeatures20,
 		SupportedSamplingParameters: geminiSamplingImage,
-		Description:                 "Gemini 2.0 Flash multimodal tier with native image-generation output.",
+		Description:                 "Gemini 2.0 Flash multimodal tier with native image-generation output. SHUT DOWN June 1, 2026; use gemini-2.5-flash-image instead.",
 	},
 	"gemini-2.0-flash-lite": {
 		ContextLength:               gemini1MContext,
@@ -542,7 +560,7 @@ var geminiMetadataOverrides = map[string]adaptor.ModelConfig{
 		OutputModalities:            geminiOutputText,
 		SupportedFeatures:           geminiFeatures20,
 		SupportedSamplingParameters: geminiSamplingChat,
-		Description:                 "Gemini 2.0 Flash Lite cost-optimized multimodal tier.",
+		Description:                 "Gemini 2.0 Flash Lite cost-optimized multimodal tier. SHUT DOWN June 1, 2026; use gemini-2.5-flash-lite instead.",
 	},
 }
 

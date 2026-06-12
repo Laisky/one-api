@@ -245,9 +245,9 @@ var oSeriesModelRatios = map[string]adaptor.ModelConfig{
 	},
 	// o4 family
 	"o4-mini": {
-		Ratio:                       1.1 * ratio.MilliTokensUsd,
+		Ratio:                       0.55 * ratio.MilliTokensUsd,
 		CompletionRatio:             4.0,
-		CachedInputRatio:            0.275 * ratio.MilliTokensUsd,
+		CachedInputRatio:            0.1375 * ratio.MilliTokensUsd,
 		ContextLength:               200000,
 		MaxOutputTokens:             100000,
 		InputModalities:             []string{"text", "image"},
@@ -259,9 +259,9 @@ var oSeriesModelRatios = map[string]adaptor.ModelConfig{
 		Description:                 "o4 mini: fast reasoning model with 200K context.",
 	},
 	"o4-mini-2025-04-16": {
-		Ratio:                       1.1 * ratio.MilliTokensUsd,
+		Ratio:                       0.55 * ratio.MilliTokensUsd,
 		CompletionRatio:             4.0,
-		CachedInputRatio:            0.275 * ratio.MilliTokensUsd,
+		CachedInputRatio:            0.1375 * ratio.MilliTokensUsd,
 		ContextLength:               200000,
 		MaxOutputTokens:             100000,
 		InputModalities:             []string{"text", "image"},

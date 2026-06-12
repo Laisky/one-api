@@ -243,6 +243,12 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		CompletionRatio: 3.00 / 0.50,
 		Image:           gemini31FlashImageConfig(),
 	},
+	// GA alias for gemini-3.1-flash-image (same pricing as preview).
+	"gemini-3.1-flash-image": {
+		Ratio:           0.50 * ratio.MilliTokensUsd,
+		CompletionRatio: 3.00 / 0.50,
+		Image:           gemini31FlashImageConfig(),
+	},
 	"gemini-3.1-flash-live-preview": gemini31FlashLivePreviewPricing,
 	// Gemini 3.1 Flash-Lite reached GA per https://ai.google.dev/gemini-api/docs/models;
 	// preview snapshot retained for backward compatibility.
@@ -276,6 +282,21 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 	// and unified input pricing across text/image/audio/video modalities.
 	"gemini-3.5-flash": gemini35FlashPricing,
 	"gemini-3-pro-image-preview": {
+		Ratio:            2.0 * ratio.MilliTokensUsd,
+		CompletionRatio:  12.0 / 2.0,
+		CachedInputRatio: 0.20 * ratio.MilliTokensUsd,
+		Image:            gemini3ProImageConfig(),
+		Tiers: []adaptor.ModelRatioTier{
+			{
+				Ratio:               4.0 * ratio.MilliTokensUsd,
+				CompletionRatio:     18.0 / 4.0,
+				CachedInputRatio:    0.40 * ratio.MilliTokensUsd,
+				InputTokenThreshold: 200001,
+			},
+		},
+	},
+	// GA alias for gemini-3-pro-image (same pricing as preview).
+	"gemini-3-pro-image": {
 		Ratio:            2.0 * ratio.MilliTokensUsd,
 		CompletionRatio:  12.0 / 2.0,
 		CachedInputRatio: 0.20 * ratio.MilliTokensUsd,
