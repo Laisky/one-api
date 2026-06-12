@@ -56,6 +56,8 @@ func RespondErrorWithStatus(c *gin.Context, status int, err error) {
 	}
 	gmw.GetLogger(c).Error("http handler error",
 		zap.Int("status", status),
+		zap.String("method", c.Request.Method),
+		zap.String("url", c.Request.URL.String()),
 		zap.Error(err),
 	)
 	c.JSON(status, gin.H{
