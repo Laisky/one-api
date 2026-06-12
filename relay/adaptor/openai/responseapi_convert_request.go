@@ -98,12 +98,22 @@ func ConvertResponseAPIToChatCompletionRequest(request *ResponseAPIRequest) (*mo
 	// every iteration so only directly-adjacent function_call items are merged; anything else
 	// in between (a tool output, user/assistant text, etc.) starts a fresh assistant turn.
 	openToolCallMsgIdx := -1
+	// pendingToolCallIDs holds the normalized tool-call IDs from the current assistant
+	// tool-call turn that are still eligible to be answered by an adjacent tool message. It
+	// is populated by function_call items and cleared by anything that breaks the
+	// assistant->tool adjacency (a string/text item, an unrelated content message, or an
+	// orphan tool output we downgrade). A function_call_output whose ID is not pending is an
+	// orphan: emitting it as a `tool` message would violate the ChatCompletion rule that a
+	// tool message must follow an assistant message carrying the matching tool_calls, so it
+	// is downgraded to a user message instead of forwarding an invalid sequence upstream.
+	pendingToolCallIDs := make(map[string]struct{})
 	for _, item := range request.Input {
 		currentToolCallMsgIdx := openToolCallMsgIdx
 		openToolCallMsgIdx = -1
 		switch v := item.(type) {
 		case string:
 			chatReq.Messages = append(chatReq.Messages, model.Message{Role: "user", Content: v})
+			clear(pendingToolCallIDs)
 		case map[string]any:
 			if typeVal, ok := v["type"].(string); ok {
 				switch strings.ToLower(typeVal) {
@@ -132,6 +142,12 @@ func ConvertResponseAPIToChatCompletionRequest(request *ResponseAPIRequest) (*mo
 					role := "assistant"
 					if r, ok := v["role"].(string); ok && r != "" {
 						role = r
+					}
+
+					// This tool call is now in-flight and may be answered by an adjacent
+					// function_call_output later in the input.
+					if normalizedID != "" {
+						pendingToolCallIDs[normalizedID] = struct{}{}
 					}
 
 					// Merge consecutive function_call items from the same assistant turn into
@@ -169,11 +185,30 @@ func ConvertResponseAPIToChatCompletionRequest(request *ResponseAPIRequest) (*mo
 						role = r
 					}
 
+					// Only emit a `tool` message when it answers an in-flight tool call from
+					// the immediately preceding assistant turn. Otherwise it is an orphan
+					// (e.g. trimmed history dropped the matching function_call, or a mismatched
+					// call_id) and would be rejected upstream with "Messages with role 'tool'
+					// must be a response to a preceding message with 'tool_calls'". Downgrade
+					// such orphans to a user message so the content survives without forwarding
+					// an invalid sequence.
+					if _, answered := pendingToolCallIDs[normalizedID]; answered && role == "tool" && normalizedID != "" {
+						chatReq.Messages = append(chatReq.Messages, model.Message{
+							Role:       role,
+							ToolCallId: normalizedID,
+							Content:    output,
+						})
+						delete(pendingToolCallIDs, normalizedID)
+						continue
+					}
+
 					chatReq.Messages = append(chatReq.Messages, model.Message{
-						Role:       role,
-						ToolCallId: normalizedID,
-						Content:    output,
+						Role:    "user",
+						Content: output,
 					})
+					// The downgraded user message breaks adjacency, so any tool calls still
+					// awaiting a response can no longer be answered by a subsequent tool message.
+					clear(pendingToolCallIDs)
 					continue
 				}
 			}
@@ -182,6 +217,8 @@ func ConvertResponseAPIToChatCompletionRequest(request *ResponseAPIRequest) (*mo
 				return nil, errors.Wrap(err, "convert response api content to chat message")
 			}
 			chatReq.Messages = append(chatReq.Messages, *msg)
+			// A non-tool content message ends the current tool-call turn.
+			clear(pendingToolCallIDs)
 		default:
 			return nil, errors.Errorf("unsupported input item of type %T", item)
 		}

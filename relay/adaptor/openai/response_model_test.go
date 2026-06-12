@@ -957,3 +957,87 @@ func TestConvertResponseAPIToChatCompletionRequest_SequentialToolCallsNotMerged(
 
 	assertToolMessagesFollowToolCalls(t, chatReq.Messages)
 }
+
+// TestConvertResponseAPIToChatCompletionRequest_OrphanToolOutputDowngraded verifies that a
+// function_call_output with no matching in-flight function_call (e.g. trimmed history) is
+// downgraded to a user message instead of being forwarded as an invalid tool message.
+func TestConvertResponseAPIToChatCompletionRequest_OrphanToolOutputDowngraded(t *testing.T) {
+	stream := false
+	responseReq := &ResponseAPIRequest{
+		Model:  "deepseek-v4-flash",
+		Stream: &stream,
+		Input: ResponseAPIInput{
+			map[string]any{
+				"role":    "user",
+				"content": []any{map[string]any{"type": "input_text", "text": "hi"}},
+			},
+			// No preceding function_call for this output.
+			map[string]any{
+				"type": "function_call_output", "call_id": "call_ghost", "output": "ghost result",
+			},
+		},
+	}
+
+	chatReq, err := ConvertResponseAPIToChatCompletionRequest(responseReq)
+	require.NoError(t, err)
+	require.NotNil(t, chatReq)
+
+	require.Len(t, chatReq.Messages, 2)
+	require.Equal(t, "user", chatReq.Messages[0].Role)
+	downgraded := chatReq.Messages[1]
+	require.Equal(t, "user", downgraded.Role, "orphan tool output must be downgraded to a user message")
+	require.Empty(t, downgraded.ToolCallId)
+	require.Equal(t, "ghost result", downgraded.StringContent())
+
+	// No `tool` message must be emitted, so the upstream never sees an invalid sequence.
+	for _, msg := range chatReq.Messages {
+		require.NotEqual(t, "tool", msg.Role)
+	}
+	assertToolMessagesFollowToolCalls(t, chatReq.Messages)
+}
+
+// TestConvertResponseAPIToChatCompletionRequest_MismatchedToolOutputDowngraded verifies that
+// when a valid tool output is followed by an extra output with an unknown call_id, the valid
+// one stays a tool message and only the stray output is downgraded.
+func TestConvertResponseAPIToChatCompletionRequest_MismatchedToolOutputDowngraded(t *testing.T) {
+	stream := false
+	responseReq := &ResponseAPIRequest{
+		Model:  "deepseek-v4-flash",
+		Stream: &stream,
+		Input: ResponseAPIInput{
+			map[string]any{
+				"role":    "user",
+				"content": []any{map[string]any{"type": "input_text", "text": "go"}},
+			},
+			map[string]any{
+				"type": "function_call", "id": "fc_a", "call_id": "call_a",
+				"name": "tool", "arguments": `{}`,
+			},
+			map[string]any{
+				"type": "function_call_output", "call_id": "call_a", "output": "real",
+			},
+			// Stray output with no matching in-flight call.
+			map[string]any{
+				"type": "function_call_output", "call_id": "call_z", "output": "stray",
+			},
+		},
+	}
+
+	chatReq, err := ConvertResponseAPIToChatCompletionRequest(responseReq)
+	require.NoError(t, err)
+	require.NotNil(t, chatReq)
+
+	// user, assistant(call_a), tool(call_a), user(stray)
+	require.Len(t, chatReq.Messages, 4)
+	require.Equal(t, "assistant", chatReq.Messages[1].Role)
+	require.Len(t, chatReq.Messages[1].ToolCalls, 1)
+
+	require.Equal(t, "tool", chatReq.Messages[2].Role)
+	require.Equal(t, "real", chatReq.Messages[2].StringContent())
+
+	require.Equal(t, "user", chatReq.Messages[3].Role, "stray tool output must be downgraded")
+	require.Empty(t, chatReq.Messages[3].ToolCallId)
+	require.Equal(t, "stray", chatReq.Messages[3].StringContent())
+
+	assertToolMessagesFollowToolCalls(t, chatReq.Messages)
+}
