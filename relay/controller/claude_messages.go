@@ -97,6 +97,13 @@ func RelayClaudeMessagesHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 
 	sanitizeClaudeMessagesRequest(claudeRequest)
 
+	// Fold any mid-array role:"system" messages (Claude Code v2.1.154+ /
+	// Anthropic mid-conversation system messages, issue #350) into an adjacent
+	// turn for rebuilt upstream payloads, while preserving the cacheable top-level
+	// system prefix. Direct HTTP passthrough adaptors still forward the raw body
+	// verbatim; SDK/rebuilding paths use this normalized struct.
+	mergeMidArraySystemMessages(claudeRequest)
+
 	// get channel model ratio
 	channelModelRatio, channelCompletionRatio := getChannelRatios(c)
 	channelModelConfigs := getChannelModelConfigs(c)

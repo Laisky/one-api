@@ -2,13 +2,257 @@ package controller
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	relayadaptor "github.com/Laisky/one-api/relay/adaptor"
 	relaymodel "github.com/Laisky/one-api/relay/model"
 )
+
+// TestMergeMidArraySystemMessages locks the issue #350 cache-friendly fix: each
+// mid-array role:"system" message is folded IN PLACE into an adjacent turn (the
+// turn it precedes, else the preceding turn) and removed from the array, while the
+// top-level System field is left untouched (so the prompt-cache prefix survives).
+func TestMergeMidArraySystemMessages(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name          string
+		system        any
+		messages      []relaymodel.ClaudeMessage
+		wantRoles     []string
+		wantContains  [][]string // index-aligned with wantRoles: ordered substrings per message
+		headUnchanged bool
+	}{
+		{
+			name:   "system folds into the following turn it precedes; head untouched",
+			system: "HEAD",
+			messages: []relaymodel.ClaudeMessage{
+				{Role: "user", Content: "u1"},
+				{Role: "system", Content: "MID"},
+				{Role: "assistant", Content: "a1"},
+			},
+			wantRoles:     []string{"user", "assistant"},
+			wantContains:  [][]string{{"u1"}, {"MID", "a1"}},
+			headUnchanged: true,
+		},
+		{
+			name: "trailing system folds into the preceding turn",
+			messages: []relaymodel.ClaudeMessage{
+				{Role: "user", Content: "u1"},
+				{Role: "system", Content: "MIDT"},
+			},
+			wantRoles:    []string{"user"},
+			wantContains: [][]string{{"u1", "MIDT"}},
+		},
+		{
+			name: "consecutive systems concatenate onto the following turn in order",
+			messages: []relaymodel.ClaudeMessage{
+				{Role: "user", Content: "u1"},
+				{Role: "system", Content: "S1"},
+				{Role: "system", Content: []any{map[string]any{"type": "text", "text": "S2"}}},
+				{Role: "assistant", Content: "a1"},
+			},
+			wantRoles:    []string{"user", "assistant"},
+			wantContains: [][]string{{"u1"}, {"S1", "S2", "a1"}},
+		},
+		{
+			name: "array of only system messages becomes a single user turn",
+			messages: []relaymodel.ClaudeMessage{
+				{Role: "system", Content: "S1"},
+				{Role: "system", Content: "S2"},
+			},
+			wantRoles:    []string{"user"},
+			wantContains: [][]string{{"S1", "S2"}},
+		},
+		{
+			name:   "no system message leaves the request untouched",
+			system: []any{map[string]any{"type": "text", "text": "HEAD"}},
+			messages: []relaymodel.ClaudeMessage{
+				{Role: "user", Content: "u1"},
+				{Role: "assistant", Content: "a1"},
+			},
+			wantRoles:     []string{"user", "assistant"},
+			wantContains:  [][]string{{"u1"}, {"a1"}},
+			headUnchanged: true,
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			req := &ClaudeMessagesRequest{System: tt.system, Messages: tt.messages}
+			origSystem := tt.system
+			mergeMidArraySystemMessages(req)
+
+			if tt.headUnchanged {
+				require.Equal(t, origSystem, req.System, "top-level System must be untouched (cache prefix)")
+			}
+
+			var roles []string
+			for _, m := range req.Messages {
+				require.NotEqual(t, "system", m.Role, "no system role may remain in messages")
+				roles = append(roles, m.Role)
+			}
+			require.Equal(t, tt.wantRoles, roles)
+
+			require.Len(t, req.Messages, len(tt.wantContains))
+			for i, subs := range tt.wantContains {
+				text := relayadaptor.ExtractClaudeContentText(req.Messages[i].Content)
+				prev := -1
+				for _, s := range subs {
+					idx := strings.Index(text, s)
+					require.GreaterOrEqualf(t, idx, 0, "message[%d] content %q must contain %q", i, text, s)
+					require.Greaterf(t, idx, prev, "message[%d]: %q must appear in order", i, s)
+					prev = idx
+				}
+			}
+		})
+	}
+}
+
+// TestMergeMidArraySystemMessages_EdgeSystemContent covers system entries that
+// have no extractable text, have only non-text blocks, or carry cache_control
+// metadata on their text blocks.
+func TestMergeMidArraySystemMessages_EdgeSystemContent(t *testing.T) {
+	t.Parallel()
+
+	t.Run("whitespace only system does not leave an empty message array", func(t *testing.T) {
+		t.Parallel()
+		req := &ClaudeMessagesRequest{
+			Messages: []relaymodel.ClaudeMessage{
+				{Role: "system", Content: "   \n\t  "},
+			},
+		}
+
+		mergeMidArraySystemMessages(req)
+
+		require.Len(t, req.Messages, 1)
+		require.Equal(t, "user", req.Messages[0].Role)
+		require.Equal(t, " ", req.Messages[0].Content)
+	})
+
+	t.Run("non text system block is removed without changing nearby user text", func(t *testing.T) {
+		t.Parallel()
+		req := &ClaudeMessagesRequest{
+			Messages: []relaymodel.ClaudeMessage{
+				{Role: "system", Content: []any{
+					map[string]any{"type": "image", "source": map[string]any{"type": "base64", "media_type": "image/png", "data": "abc"}},
+				}},
+				{Role: "user", Content: "u1"},
+			},
+		}
+
+		mergeMidArraySystemMessages(req)
+
+		require.Len(t, req.Messages, 1)
+		require.Equal(t, "user", req.Messages[0].Role)
+		require.Equal(t, "u1", req.Messages[0].Content)
+	})
+
+	t.Run("cache control text block still contributes text", func(t *testing.T) {
+		t.Parallel()
+		req := &ClaudeMessagesRequest{
+			System: "HEAD",
+			Messages: []relaymodel.ClaudeMessage{
+				{Role: "user", Content: "u1"},
+				{Role: "system", Content: []any{
+					map[string]any{
+						"type":          "text",
+						"text":          "cacheable system text",
+						"cache_control": map[string]any{"type": "ephemeral"},
+					},
+				}},
+				{Role: "assistant", Content: "a1"},
+			},
+		}
+
+		mergeMidArraySystemMessages(req)
+
+		require.Equal(t, "HEAD", req.System)
+		require.Len(t, req.Messages, 2)
+		require.Equal(t, []string{"user", "assistant"}, []string{req.Messages[0].Role, req.Messages[1].Role})
+		require.Contains(t, relayadaptor.ExtractClaudeContentText(req.Messages[1].Content), "cacheable system text")
+		require.NotContains(t, relayadaptor.ExtractClaudeContentText(req.Messages[0].Content), "cacheable system text")
+	})
+}
+
+// TestMergeMidArraySystemMessages_CachePrefixStableAcrossTurns proves the transform
+// is deterministic and position-anchored: the shared historical prefix renders
+// byte-identically as the conversation grows, so prompt-cache continuity holds.
+func TestMergeMidArraySystemMessages_CachePrefixStableAcrossTurns(t *testing.T) {
+	t.Parallel()
+
+	turnN := &ClaudeMessagesRequest{
+		System: "HEAD",
+		Messages: []relaymodel.ClaudeMessage{
+			{Role: "user", Content: "u1"},
+			{Role: "system", Content: "MID"},
+			{Role: "assistant", Content: "a1"},
+			{Role: "user", Content: "u2"},
+		},
+	}
+	turnN1 := &ClaudeMessagesRequest{
+		System: "HEAD",
+		Messages: []relaymodel.ClaudeMessage{
+			{Role: "user", Content: "u1"},
+			{Role: "system", Content: "MID"},
+			{Role: "assistant", Content: "a1"},
+			{Role: "user", Content: "u2"},
+			{Role: "assistant", Content: "a2"},
+			{Role: "user", Content: "u3"},
+		},
+	}
+
+	mergeMidArraySystemMessages(turnN)
+	mergeMidArraySystemMessages(turnN1)
+
+	// Head system is never edited on either turn.
+	require.Equal(t, "HEAD", turnN.System)
+	require.Equal(t, "HEAD", turnN1.System)
+
+	// Every message of turn N must render byte-identically in turn N+1, otherwise
+	// the prompt-cache prefix would be invalidated each turn.
+	require.GreaterOrEqual(t, len(turnN1.Messages), len(turnN.Messages))
+	for i := range turnN.Messages {
+		a, err := json.Marshal(turnN.Messages[i])
+		require.NoError(t, err)
+		b, err := json.Marshal(turnN1.Messages[i])
+		require.NoError(t, err)
+		require.Equalf(t, string(a), string(b), "message[%d] must be byte-identical across turns", i)
+	}
+}
+
+// TestRewriteAndSanitizeClaudeRequestBody_PreservesMidArraySystemAndSignature proves the
+// direct HTTP passthrough path is invisible to the #350 fix: the raw body is
+// forwarded with the mid-array system message AND extended-thinking signatures intact
+// (the struct-level hoist never runs on the raw body).
+func TestRewriteAndSanitizeClaudeRequestBody_PreservesMidArraySystemAndSignature(t *testing.T) {
+	t.Parallel()
+
+	signature := "ErQCsig+/abcDEF0123=="
+	rawBody := `{"model":"claude-opus-4-8","max_tokens":1024,"system":"Head system","messages":[` +
+		`{"role":"user","content":"Hello"},` +
+		`{"role":"assistant","content":[{"type":"thinking","thinking":"reasoning","signature":"` + signature + `"},{"type":"text","text":"Hi"}]},` +
+		`{"role":"system","content":"Mid-conversation operator instruction"},` +
+		`{"role":"user","content":"More"}]}`
+
+	request := &ClaudeMessagesRequest{Model: "claude-opus-4-8"}
+	result, stats, err := rewriteAndSanitizeClaudeRequestBody([]byte(rawBody), request)
+	require.NoError(t, err)
+	require.True(t, json.Valid(result))
+
+	// Signature preserved byte-for-byte (no thinking stripped: it is signed).
+	require.Equal(t, 0, stats.RemovedThinkingBlocks)
+	require.Contains(t, string(result), `"signature":"`+signature+`"`)
+	// Mid-array system message forwarded verbatim (passthrough does NOT hoist it).
+	require.Contains(t, string(result), `"role":"system"`)
+	require.Contains(t, string(result), "Mid-conversation operator instruction")
+}
 
 func TestRewriteClaudeRequestBody_PreservesThinkingSignatures(t *testing.T) {
 	t.Parallel()

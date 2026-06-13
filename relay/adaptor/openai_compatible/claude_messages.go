@@ -11,6 +11,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/Laisky/one-api/common/ctxkey"
+	relayadaptor "github.com/Laisky/one-api/relay/adaptor"
 	"github.com/Laisky/one-api/relay/adaptor/common/toolnamesafe"
 	"github.com/Laisky/one-api/relay/channeltype"
 	"github.com/Laisky/one-api/relay/meta"
@@ -71,7 +72,12 @@ func ConvertClaudeRequest(c *gin.Context, request *model.ClaudeRequest) (any, er
 		openaiRequest.ToolChoice = nil
 	}
 
-	// Convert system message if present
+	// Convert system message if present.
+	//
+	// Mid-array role:"system" messages (Claude Code v2.1.154+, issue #350) are
+	// already folded into adjacent turns upstream by the controller's
+	// mergeMidArraySystemMessages, so request.Messages carries no system role here
+	// and the head System field is untouched (cache-preserving).
 	if request.System != nil {
 		switch system := request.System.(type) {
 		case string:
@@ -642,30 +648,7 @@ func containsKeyword(text string, keywords []string) bool {
 
 // extractClaudeContentText flattens Claude content payloads to a single text blob for keyword matching.
 func extractClaudeContentText(content any) string {
-	var parts []string
-	collectClaudeText(content, &parts)
-	return strings.Join(parts, "\n")
-}
-
-// collectClaudeText recursively gathers text fields from Claude content blocks.
-func collectClaudeText(content any, parts *[]string) {
-	switch val := content.(type) {
-	case string:
-		if strings.TrimSpace(val) != "" {
-			*parts = append(*parts, val)
-		}
-	case []any:
-		for _, entry := range val {
-			collectClaudeText(entry, parts)
-		}
-	case map[string]any:
-		if text, ok := val["text"].(string); ok && strings.TrimSpace(text) != "" {
-			*parts = append(*parts, text)
-		}
-		if content, ok := val["content"]; ok {
-			collectClaudeText(content, parts)
-		}
-	}
+	return relayadaptor.ExtractClaudeContentText(content)
 }
 
 // HandleClaudeMessagesResponse handles Claude Messages response conversion for OpenAI-compatible adapters

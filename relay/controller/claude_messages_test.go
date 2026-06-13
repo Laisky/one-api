@@ -12,10 +12,124 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/Laisky/one-api/relay/adaptor/anthropic"
+	awsclaude "github.com/Laisky/one-api/relay/adaptor/aws/claude"
 	"github.com/Laisky/one-api/relay/adaptor/openai"
+	vertexclaude "github.com/Laisky/one-api/relay/adaptor/vertexai/claude"
 	relaymodel "github.com/Laisky/one-api/relay/model"
 	"github.com/Laisky/one-api/relay/relaymode"
 )
+
+// TestMergeThenAnthropicConvert_NoSystemRoleLeaks proves the AWS Bedrock / Vertex
+// path (which rebuilds the request via anthropic.ConvertClaudeRequest, NOT raw-body
+// passthrough) is fixed by the central in-place merge: after merging, the typed
+// Anthropic payload contains zero system-role messages, the head system is left
+// UNCHANGED (cache-preserving), and the mid-array system text survives inside an
+// adjacent turn.
+func TestMergeThenAnthropicConvert_NoSystemRoleLeaks(t *testing.T) {
+	t.Parallel()
+	gin.SetMode(gin.TestMode)
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+
+	req := &ClaudeMessagesRequest{
+		Model:     "claude-opus-4-8",
+		MaxTokens: 256,
+		System:    "HEAD",
+		Messages: []relaymodel.ClaudeMessage{
+			{Role: "user", Content: "u1"},
+			{Role: "system", Content: "MID1"},
+			{Role: "assistant", Content: "a1"},
+			{Role: "user", Content: "u2"},
+			{Role: "system", Content: "MID2"},
+		},
+	}
+
+	mergeMidArraySystemMessages(req)
+	// Head system is untouched -> the cacheable prefix survives.
+	require.Equal(t, "HEAD", req.System)
+
+	converted, err := anthropic.ConvertClaudeRequest(c, *req)
+	require.NoError(t, err)
+	require.NotNil(t, converted)
+
+	b, err := json.Marshal(converted)
+	require.NoError(t, err)
+	js := string(b)
+	// Head system carries ONLY the original head text (not the mid-array text).
+	require.Contains(t, js, `"system":"HEAD"`)
+	// Zero system-role messages leak into the typed Bedrock/Vertex payload.
+	require.NotContains(t, js, `"role":"system"`)
+	// The mid-array system instructions survive inside adjacent turns.
+	require.Contains(t, js, "MID1")
+	require.Contains(t, js, "MID2")
+}
+
+// TestMergeThenNativeClaudeRebuiltPayload_PreservesSignedThinking proves that
+// AWS Bedrock and Vertex-style rebuilt Claude payloads keep signed assistant
+// thinking blocks untouched when a mid-array system message precedes them.
+func TestMergeThenNativeClaudeRebuiltPayload_PreservesSignedThinking(t *testing.T) {
+	t.Parallel()
+	gin.SetMode(gin.TestMode)
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+
+	signature := "ErQCsignedThinkingPayload=="
+	req := &ClaudeMessagesRequest{
+		Model:     "claude-opus-4-8",
+		MaxTokens: 256,
+		System:    "HEAD",
+		Messages: []relaymodel.ClaudeMessage{
+			{Role: "user", Content: "u1"},
+			{Role: "system", Content: "MID-before-signed-assistant"},
+			{Role: "assistant", Content: []any{
+				map[string]any{"type": "thinking", "thinking": "private chain", "signature": signature},
+				map[string]any{"type": "text", "text": "a1"},
+			}},
+		},
+	}
+
+	mergeMidArraySystemMessages(req)
+	require.Len(t, req.Messages, 3)
+	require.Equal(t, []string{"user", "user", "assistant"}, []string{req.Messages[0].Role, req.Messages[1].Role, req.Messages[2].Role})
+	require.Equal(t, "MID-before-signed-assistant", req.Messages[1].Content)
+
+	converted, err := anthropic.ConvertClaudeRequest(c, *req)
+	require.NoError(t, err)
+	require.NotNil(t, converted)
+	require.Len(t, converted.Messages, 3)
+	require.Equal(t, "assistant", converted.Messages[2].Role)
+	require.Len(t, converted.Messages[2].Content, 2)
+	require.Equal(t, "thinking", converted.Messages[2].Content[0].Type)
+	require.NotNil(t, converted.Messages[2].Content[0].Thinking)
+	require.NotNil(t, converted.Messages[2].Content[0].Signature)
+	require.Equal(t, signature, *converted.Messages[2].Content[0].Signature)
+	require.NotContains(t, *converted.Messages[2].Content[0].Thinking, "MID-before-signed-assistant")
+	require.NotContains(t, converted.Messages[2].Content[1].Text, "MID-before-signed-assistant")
+
+	awsPayload := awsclaude.Request{
+		AnthropicVersion: "bedrock-2023-05-31",
+		Messages:         converted.Messages,
+		System:           converted.System,
+		MaxTokens:        converted.MaxTokens,
+		Thinking:         converted.Thinking,
+	}
+	vertexPayload := vertexclaude.Request{
+		AnthropicVersion: "vertex-2023-10-16",
+		Messages:         converted.Messages,
+		System:           converted.System,
+		MaxTokens:        converted.MaxTokens,
+	}
+
+	for name, payload := range map[string]any{"aws": awsPayload, "vertex": vertexPayload} {
+		payloadBytes, err := json.Marshal(payload)
+		require.NoError(t, err, name)
+		payloadJSON := string(payloadBytes)
+		require.NotContains(t, payloadJSON, `"role":"system"`, name)
+		require.Contains(t, payloadJSON, `"signature":"`+signature+`"`, name)
+		require.Contains(t, payloadJSON, "MID-before-signed-assistant", name)
+	}
+}
 
 func TestGetAndValidateClaudeMessagesRequest(t *testing.T) {
 	t.Parallel()
@@ -86,13 +200,13 @@ func TestGetAndValidateClaudeMessagesRequest(t *testing.T) {
 				"max_tokens": 1024,
 				"messages": [
 					{
-						"role": "system",
+						"role": "function",
 						"content": "Hello"
 					}
 				]
 			}`,
 			expectError: true,
-			errorMsg:    "message[0].role must be 'user' or 'assistant'",
+			errorMsg:    "message[0].role must be 'user', 'assistant', or 'system'",
 		},
 	}
 
@@ -123,6 +237,65 @@ func TestGetAndValidateClaudeMessagesRequest(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestGetAndValidateClaudeMessagesRequest_MidArraySystemAllowed reproduces
+// one-api issue #350: Claude Code v2.1.154+ (e.g. "adaptive thinking") emits
+// role:"system" messages INSIDE the messages array. one-api must tolerate them
+// instead of rejecting the request with
+// "message[i].role must be 'user' or 'assistant'".
+func TestGetAndValidateClaudeMessagesRequest_MidArraySystemAllowed(t *testing.T) {
+	t.Parallel()
+	gin.SetMode(gin.TestMode)
+
+	requestBody := `{
+		"model": "claude-3-sonnet-20240229",
+		"max_tokens": 1024,
+		"system": "You are Claude Code.",
+		"messages": [
+			{"role": "user", "content": "Hello"},
+			{"role": "system", "content": "Adaptive thinking guidance injected mid-conversation."},
+			{"role": "assistant", "content": "Hi!"}
+		]
+	}`
+
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	req, _ := http.NewRequest("POST", "/v1/messages", bytes.NewBufferString(requestBody))
+	req.Header.Set("Content-Type", "application/json")
+	c.Request = req
+
+	result, err := getAndValidateClaudeMessagesRequest(c)
+	require.NoError(t, err, "mid-array system message must be tolerated (issue #350)")
+	require.NotNil(t, result)
+	assert.Len(t, result.Messages, 3)
+}
+
+// TestGetAndValidateClaudeMessagesRequest_RejectsUnknownRole guards that
+// genuinely invalid roles are still rejected after #350 relaxes the system role.
+func TestGetAndValidateClaudeMessagesRequest_RejectsUnknownRole(t *testing.T) {
+	t.Parallel()
+	gin.SetMode(gin.TestMode)
+
+	requestBody := `{
+		"model": "claude-3-sonnet-20240229",
+		"max_tokens": 1024,
+		"messages": [
+			{"role": "user", "content": "Hello"},
+			{"role": "tool", "content": "nope"}
+		]
+	}`
+
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	req, _ := http.NewRequest("POST", "/v1/messages", bytes.NewBufferString(requestBody))
+	req.Header.Set("Content-Type", "application/json")
+	c.Request = req
+
+	result, err := getAndValidateClaudeMessagesRequest(c)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "message[1].role")
+	assert.Nil(t, result)
 }
 
 func TestBuildClaudeToolsForMCP(t *testing.T) {

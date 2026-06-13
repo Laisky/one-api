@@ -550,8 +550,13 @@ func getAndValidateClaudeMessagesRequest(c *gin.Context) (*ClaudeMessagesRequest
 		if message.Role == "" {
 			return nil, errors.Errorf("message[%d].role is required", i)
 		}
-		if message.Role != "user" && message.Role != "assistant" {
-			return nil, errors.Errorf("message[%d].role must be 'user' or 'assistant'", i)
+		// Claude Code v2.1.154+ (e.g. "adaptive thinking") may inject role:"system"
+		// messages inside the messages array (issue #350). Tolerate them here; the
+		// downstream conversion folds mid-array system content into an adjacent
+		// turn for rebuilt upstreams, while direct HTTP passthrough forwards the
+		// raw body unchanged.
+		if message.Role != "user" && message.Role != "assistant" && message.Role != "system" {
+			return nil, errors.Errorf("message[%d].role must be 'user', 'assistant', or 'system'", i)
 		}
 		if message.Content == nil {
 			return nil, errors.Errorf("message[%d].content is required", i)
