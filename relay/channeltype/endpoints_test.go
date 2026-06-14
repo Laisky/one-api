@@ -232,6 +232,16 @@ func TestTogetherAISupportsDocumentedOpenAICompatibleEndpoints(t *testing.T) {
 	require.NotContains(t, endpoints, EndpointRerank)
 }
 
+func TestNVIDIADefaultEndpointsAreConservative(t *testing.T) {
+	t.Parallel()
+	endpoints := DefaultEndpointsForChannelType(NVIDIA)
+
+	require.Contains(t, endpoints, EndpointChatCompletions)
+	require.Contains(t, endpoints, EndpointResponseAPI)
+	require.Contains(t, endpoints, EndpointClaudeMessages)
+	require.NotContains(t, endpoints, EndpointEmbeddings)
+}
+
 // ---------------------------------------------------------------------------
 // OCR Endpoint Tests
 // ---------------------------------------------------------------------------

@@ -61,7 +61,13 @@ func relayResponseAPIThroughChat(c *gin.Context, meta *metalib.Meta, responseAPI
 	meta.OriginModelName = chatRequest.Model
 	chatRequest.Model = metalib.GetMappedModelName(meta.OriginModelName, meta.ModelMapping)
 	meta.ActualModelName = chatRequest.Model
-	if isDeepSeekModel(meta.ActualModelName) || isDeepSeekModel(meta.OriginModelName) {
+	// Route through the DeepSeek adaptor ONLY when the channel's upstream is
+	// actually DeepSeek's API. This override changes both the request adaptor
+	// and the pricing adaptor, so scoping it to real DeepSeek upstreams keeps
+	// third-party hosts of DeepSeek open weights (NVIDIA, Novita, SiliconFlow,
+	// ...) on their own adaptor and pricing. See
+	// shouldRouteResponseFallbackThroughDeepSeek for the rationale.
+	if shouldRouteResponseFallbackThroughDeepSeek(meta) {
 		meta.APIType = apitype.DeepSeek
 	}
 	applyThinkingQueryToChatRequest(c, chatRequest, meta)

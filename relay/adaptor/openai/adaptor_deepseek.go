@@ -3,12 +3,10 @@ package openai
 import (
 	"encoding/json"
 	"fmt"
-	"strings"
 
 	"github.com/Laisky/zap"
 
 	"github.com/Laisky/one-api/relay/adaptor/common/deepseekcompat"
-	"github.com/Laisky/one-api/relay/channeltype"
 	"github.com/Laisky/one-api/relay/meta"
 	"github.com/Laisky/one-api/relay/model"
 )
@@ -25,25 +23,7 @@ type deepSeekThinkingNormalizeLogger interface {
 // shouldNormalizeToolMessageContentForDeepSeek reports whether tool message content should
 // be normalized to string for DeepSeek-compatible upstreams.
 func shouldNormalizeToolMessageContentForDeepSeek(metaInfo *meta.Meta, request *model.GeneralOpenAIRequest) bool {
-	if metaInfo != nil {
-		if metaInfo.ChannelType == channeltype.DeepSeek {
-			return true
-		}
-		if strings.Contains(strings.ToLower(strings.TrimSpace(metaInfo.BaseURL)), "deepseek") {
-			return true
-		}
-		if strings.HasPrefix(strings.ToLower(strings.TrimSpace(metaInfo.ActualModelName)), "deepseek-") {
-			return true
-		}
-	}
-
-	if request != nil {
-		if strings.HasPrefix(strings.ToLower(strings.TrimSpace(request.Model)), "deepseek-") {
-			return true
-		}
-	}
-
-	return false
+	return deepseekcompat.UsesDeepSeekAPIContract(metaInfo)
 }
 
 // normalizeDeepSeekToolMessageContent converts non-string tool message content into strings.

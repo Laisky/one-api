@@ -51,14 +51,15 @@ func TestConvertRequest_NormalizesToolArrayForDeepSeekBaseURL(t *testing.T) {
 	require.Equal(t, "README.md\n", converted.Messages[1].Content)
 }
 
-func TestConvertRequest_NormalizesToolArrayForDeepSeekModelPrefix(t *testing.T) {
+func TestConvertRequest_DoesNotNormalizeToolArrayForDeepSeekModelPrefixOnly(t *testing.T) {
 	t.Parallel()
 	gin.SetMode(gin.TestMode)
 
+	original := []any{map[string]any{"type": "text", "text": "ok"}}
 	request := &relaymodel.GeneralOpenAIRequest{
 		Model: "deepseek-chat",
 		Messages: []relaymodel.Message{
-			{Role: "tool", ToolCallId: "call_2", Content: []any{map[string]any{"type": "text", "text": "ok"}}},
+			{Role: "tool", ToolCallId: "call_2", Content: original},
 		},
 	}
 
@@ -82,7 +83,7 @@ func TestConvertRequest_NormalizesToolArrayForDeepSeekModelPrefix(t *testing.T) 
 
 	converted, ok := convertedAny.(*relaymodel.GeneralOpenAIRequest)
 	require.True(t, ok)
-	require.Equal(t, "ok", converted.Messages[0].Content)
+	require.Equal(t, original, converted.Messages[0].Content)
 }
 
 func TestConvertRequest_DoesNotNormalizeToolArrayForNonDeepSeek(t *testing.T) {

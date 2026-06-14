@@ -18,6 +18,7 @@ import (
 	"github.com/Laisky/one-api/relay/adaptor/groq"
 	"github.com/Laisky/one-api/relay/adaptor/mistral"
 	"github.com/Laisky/one-api/relay/adaptor/moonshot"
+	"github.com/Laisky/one-api/relay/adaptor/nvidia"
 	"github.com/Laisky/one-api/relay/adaptor/ollama"
 	"github.com/Laisky/one-api/relay/adaptor/openai"
 	"github.com/Laisky/one-api/relay/adaptor/openrouter"
@@ -89,6 +90,8 @@ func GetAdaptor(apiType int) adaptor.Adaptor {
 		return &copilot.Adaptor{}
 	case apitype.Fireworks:
 		return &fireworks.Adaptor{}
+	case apitype.NVIDIA:
+		return &nvidia.Adaptor{}
 	}
 
 	return nil

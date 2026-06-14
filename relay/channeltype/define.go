@@ -56,5 +56,6 @@ const (
 	ClaudeCompatible
 	Copilot
 	Fireworks
+	NVIDIA
 	Dummy
 )

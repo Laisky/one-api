@@ -28,6 +28,7 @@ const (
 	OpenRouter
 	Copilot
 	Fireworks
+	NVIDIA
 
 	Dummy // this one is only for count, do not add any channel after this
 )

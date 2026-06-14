@@ -14,6 +14,7 @@ import (
 	"github.com/Laisky/one-api/common"
 	"github.com/Laisky/one-api/common/ctxkey"
 	"github.com/Laisky/one-api/model"
+	"github.com/Laisky/one-api/relay/adaptor/common/deepseekcompat"
 	"github.com/Laisky/one-api/relay/adaptor/openai"
 	"github.com/Laisky/one-api/relay/channeltype"
 	metalib "github.com/Laisky/one-api/relay/meta"
@@ -385,7 +386,7 @@ func supportsNativeResponseAPI(meta *metalib.Meta) bool {
 		return false
 	}
 
-	if isDeepSeekModel(meta.ActualModelName) || isDeepSeekModel(meta.OriginModelName) {
+	if hasDeepSeekModel(meta) && isDeepSeekUpstream(meta) {
 		return false
 	}
 
@@ -410,11 +411,45 @@ func supportsNativeResponseAPI(meta *metalib.Meta) bool {
 
 // isDeepSeekModel checks if the model is a DeepSeek model
 func isDeepSeekModel(modelName string) bool {
-	normalized := strings.TrimSpace(strings.ToLower(modelName))
-	if normalized == "" {
+	return deepseekcompat.IsDeepSeekModel(modelName)
+}
+
+// isDeepSeekUpstream reports whether the channel uses DeepSeek's own API
+// contract, as opposed to a third-party host (NVIDIA, Novita, SiliconFlow,
+// Together, ...) that merely serves DeepSeek open-weight checkpoints.
+//
+// DeepSeek-specific request handling (structured-output downgrade,
+// reasoning_effort stripping) and adaptor/pricing selection are properties of
+// DeepSeek's API contract, not of the model weights.
+func isDeepSeekUpstream(meta *metalib.Meta) bool {
+	return deepseekcompat.UsesDeepSeekAPIContract(meta)
+}
+
+// hasDeepSeekModel reports whether the request model belongs to the DeepSeek family.
+func hasDeepSeekModel(meta *metalib.Meta) bool {
+	if meta == nil {
 		return false
 	}
-	return strings.HasPrefix(normalized, "deepseek")
+	return isDeepSeekModel(meta.ActualModelName) || isDeepSeekModel(meta.OriginModelName)
+}
+
+// shouldRouteResponseFallbackThroughDeepSeek reports whether a Response API ->
+// Chat Completion fallback request must be handled by the DeepSeek adaptor so
+// DeepSeek's request-conversion quirks apply. This is true only when the model
+// is a DeepSeek model AND the channel's upstream is actually DeepSeek's API.
+//
+// Overriding meta.APIType drives BOTH request routing and pricing
+// (resolvePricingAdaptor keys off meta.APIType), so a model-name match alone
+// would mis-route and mis-bill third-party hosts — e.g. NVIDIA's free
+// deepseek-ai/* models would be billed at the default rate instead of free.
+func shouldRouteResponseFallbackThroughDeepSeek(meta *metalib.Meta) bool {
+	if meta == nil {
+		return false
+	}
+	if !hasDeepSeekModel(meta) {
+		return false
+	}
+	return isDeepSeekUpstream(meta)
 }
 
 // isReasoningModel checks if the model is a reasoning model

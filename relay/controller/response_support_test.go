@@ -22,11 +22,12 @@ func TestSupportsNativeResponseAPIOpenAICompatible(t *testing.T) {
 	require.False(t, supportsNativeResponseAPI(metaInfo))
 }
 
-func TestSupportsNativeResponseAPIDeepSeekForcesFallback(t *testing.T) {
+func TestSupportsNativeResponseAPIDeepSeekContractForcesFallback(t *testing.T) {
 	t.Parallel()
 	metaInfo := &metalib.Meta{
 		ChannelType:     channeltype.OpenAICompatible,
 		Config:          model.ChannelConfig{APIFormat: channeltype.OpenAICompatibleAPIFormatResponse},
+		BaseURL:         "https://api.deepseek.com/v1",
 		ActualModelName: "deepseek-chat",
 	}
 	require.False(t, supportsNativeResponseAPI(metaInfo))
@@ -34,6 +35,17 @@ func TestSupportsNativeResponseAPIDeepSeekForcesFallback(t *testing.T) {
 	metaInfo.ActualModelName = ""
 	metaInfo.OriginModelName = "DeepSeek-Coder"
 	require.False(t, supportsNativeResponseAPI(metaInfo))
+}
+
+func TestSupportsNativeResponseAPIDeepSeekModelOnNeutralProxyUsesConfiguredFormat(t *testing.T) {
+	t.Parallel()
+	metaInfo := &metalib.Meta{
+		ChannelType:     channeltype.OpenAICompatible,
+		Config:          model.ChannelConfig{APIFormat: channeltype.OpenAICompatibleAPIFormatResponse},
+		BaseURL:         "https://proxy.example.com/v1",
+		ActualModelName: "deepseek-chat",
+	}
+	require.True(t, supportsNativeResponseAPI(metaInfo))
 }
 
 func TestSupportsNativeResponseAPIAzureGpt5(t *testing.T) {

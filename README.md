@@ -5,7 +5,7 @@
 Open‑source version of OpenRouter, managed through a unified gateway that handles all AI SaaS model calls. Core functions include:
 
 1. Aggregating chat, image, speech, TTS, embeddings, rerank and other capabilities.
-2. Aggregating multiple model providers such as OpenAI, Anthropic, Azure, Google Vertex, OpenRouter, DeepSeek, Replicate, AWS Bedrock, etc.
+2. Aggregating multiple model providers such as OpenAI, Anthropic, Azure, Google Vertex, OpenRouter, DeepSeek, Replicate, AWS Bedrock, NVIDIA, etc.
 3. Aggregating various upstream API request formats like Chat Completion, Response, Claude Messages.
 4. Supporting different request formats; users can issue requests via Chat Completion, Response, or Claude Messages, which are automatically and transparently converted to the native request format of the upstream model. Even if the client sends a mismatched request format to wrong api endpoint, it will still be correctly processed.
 5. Supporting multi‑tenant management, allowing each tenant to set distinct quotas and permissions.
@@ -158,6 +158,8 @@ The original author stopped maintaining the project, leaving critical PRs and ne
       - [Support XAI/Grok Text \& Image Models](#support-xaigrok-text--image-models)
     - [Black Forest Labs Features](#black-forest-labs-features)
       - [Support black-forest-labs/flux-kontext-pro](#support-black-forest-labsflux-kontext-pro)
+    - [NVIDIA Features](#nvidia-features)
+      - [Support NVIDIA API Catalog (build.nvidia.com)](#support-nvidia-api-catalog-buildnvidiacom)
   - [Bug Fixes \& Enterprise-Grade Improvements (Including Security Enhancements)](#bug-fixes--enterprise-grade-improvements-including-security-enhancements)
 
 ## Tutorial
@@ -1504,6 +1506,16 @@ Response:
 #### Support black-forest-labs/flux-kontext-pro
 
 ![](https://s3.laisky.com/uploads/2025/05/flux-kontext-pro.png)
+
+### NVIDIA Features
+
+#### Support NVIDIA API Catalog (build.nvidia.com)
+
+Adds an `NVIDIA` channel type that targets NVIDIA's OpenAI-compatible hosted inference API at `https://integrate.api.nvidia.com/v1` (the models published on [build.nvidia.com](https://build.nvidia.com/models)). Authenticate with an `nvapi-...` API key. The channel serves Chat Completions natively, and transparently handles Claude Messages / Response API requests through one-api's OpenAI-compatible conversion layer. Embeddings are not enabled by default until NVIDIA's model-specific request requirements are represented in the catalog.
+
+Curated models include NVIDIA's own Nemotron family (e.g. `nvidia/nemotron-3-ultra-550b-a55b`, `nvidia/llama-3.3-nemotron-super-49b-v1.5`, `nvidia/nemotron-nano-12b-v2-vl`) plus popular hosted open models such as `meta/llama-3.3-70b-instruct`, `deepseek-ai/deepseek-v4-flash`, `qwen/qwen3-next-80b-a3b-instruct`, `openai/gpt-oss-120b`, and `moonshotai/kimi-k2.6`.
+
+NVIDIA does not publish per-token pricing for the hosted endpoint (it is metered in free API credits rather than currency), so every bundled model defaults to free. Operators routing to NVIDIA AI Enterprise or a paid partner endpoint with real costs can set per-channel pricing overrides.
 
 ## Bug Fixes & Enterprise-Grade Improvements (Including Security Enhancements)
 

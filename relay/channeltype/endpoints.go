@@ -373,6 +373,18 @@ func DefaultEndpointsForChannelType(channelType int) []Endpoint {
 			EndpointResponseAPI,
 			EndpointClaudeMessages,
 		}
+	case NVIDIA:
+		// NVIDIA's hosted API (https://integrate.api.nvidia.com/v1) natively serves
+		// OpenAI-compatible chat completions. The Responses API and Anthropic
+		// Messages surfaces are provided through one-api's shared OpenAI-compatible
+		// conversion/fallback layer rather than upstream-native. Embeddings are not
+		// advertised by default until NVIDIA's model-specific input_type requirements
+		// are represented in the model catalog.
+		return []Endpoint{
+			EndpointChatCompletions,
+			EndpointResponseAPI,
+			EndpointClaudeMessages,
+		}
 	case Custom, OpenAICompatible:
 		return openAICompatibleBasic
 	case ClaudeCompatible:

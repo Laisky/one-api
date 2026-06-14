@@ -56,6 +56,8 @@ func String(apiType int) string {
 		return "copilot"
 	case Fireworks:
 		return "fireworks"
+	case NVIDIA:
+		return "nvidia"
 	default:
 		return ""
 	}

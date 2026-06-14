@@ -170,6 +170,12 @@ export const CHANNEL_OPTIONS = {
     value: 54,
     color: 'primary'
   },
+  55: {
+    key: 55,
+    text: 'NVIDIA',
+    value: 55,
+    color: 'success'
+  },
   42: {
     key: 42,
     text: 'VertexAI',

@@ -7,7 +7,6 @@ import (
 	"io"
 	"net/http"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/Laisky/errors/v2"
@@ -22,6 +21,7 @@ import (
 	"github.com/Laisky/one-api/model"
 	"github.com/Laisky/one-api/relay"
 	"github.com/Laisky/one-api/relay/adaptor"
+	"github.com/Laisky/one-api/relay/adaptor/common/deepseekcompat"
 	"github.com/Laisky/one-api/relay/adaptor/common/structuredjson"
 	"github.com/Laisky/one-api/relay/adaptor/openai"
 	"github.com/Laisky/one-api/relay/apitype"
@@ -506,20 +506,5 @@ func requiresJSONSchemaDowngrade(meta *metalib.Meta, request *relaymodel.General
 	if request.ResponseFormat == nil || request.ResponseFormat.JsonSchema == nil {
 		return false
 	}
-
-	modelName := strings.ToLower(strings.TrimSpace(request.Model))
-	if strings.HasPrefix(modelName, "deepseek") {
-		return true
-	}
-
-	baseURL := strings.ToLower(strings.TrimSpace(meta.BaseURL))
-	if strings.Contains(baseURL, "deepseek.com") {
-		return true
-	}
-
-	if meta.ChannelType == channeltype.DeepSeek {
-		return true
-	}
-
-	return false
+	return deepseekcompat.UsesDeepSeekAPIContract(meta)
 }

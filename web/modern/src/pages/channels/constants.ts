@@ -271,6 +271,13 @@ export const CHANNEL_TYPES: ChannelType[] = [
     description: 'Fireworks AI serverless inference; native chat, Responses, embeddings, and Anthropic Messages surfaces under one key.',
   },
   {
+    key: 55,
+    text: 'NVIDIA',
+    value: 55,
+    color: 'green',
+    description: 'NVIDIA API Catalog (build.nvidia.com); OpenAI-compatible chat for Nemotron and hosted open models.',
+  },
+  {
     key: 42,
     text: 'VertexAI',
     value: 42,
