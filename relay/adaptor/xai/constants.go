@@ -142,12 +142,12 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 	},
 	"grok-4.20-multi-agent-0309": {
 		Ratio: 1.25 * ratio.MilliTokensUsd, CompletionRatio: 2.5 / 1.25, CachedInputRatio: 0.2 * ratio.MilliTokensUsd,
-		ContextLength:   2000000,
+		ContextLength:   1000000,
 		InputModalities: grokVisionInputs, OutputModalities: grokTextOutputs,
 		SupportedFeatures: grokFeaturesReasoning, SupportedSamplingParameters: grokReasoningSamplingParams,
 		// Multi-agent reasoning.effort governs agent count (4 on low/medium, 16 on high/xhigh), not depth.
 		SupportedReasoningEfforts: grokMultiAgentEfforts, DefaultReasoningEffort: "low",
-		Description: "Grok 4.20 Multi-Agent (March 9 snapshot) — 2M-context parallel-agent variant for deep research (4 agents on low/medium, 16 on high/xhigh).",
+		Description: "Grok 4.20 Multi-Agent (March 9 snapshot) — 1M-context parallel-agent variant for deep research (4 agents on low/medium, 16 on high/xhigh).",
 	},
 
 	// ============================================================
@@ -182,11 +182,11 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 	},
 	"grok-4.20-multi-agent": {
 		Ratio: 1.25 * ratio.MilliTokensUsd, CompletionRatio: 2.5 / 1.25, CachedInputRatio: 0.2 * ratio.MilliTokensUsd,
-		ContextLength:   2000000,
+		ContextLength:   1000000,
 		InputModalities: grokVisionInputs, OutputModalities: grokTextOutputs,
 		SupportedFeatures: grokFeaturesReasoning, SupportedSamplingParameters: grokReasoningSamplingParams,
 		SupportedReasoningEfforts: grokMultiAgentEfforts, DefaultReasoningEffort: "low",
-		Description: "Grok 4.20 Multi-Agent (legacy alias) — 2M-context parallel-agent variant. Prefer the -0309 snapshot slug.",
+		Description: "Grok 4.20 Multi-Agent (legacy alias) — 1M-context parallel-agent variant. Prefer the -0309 snapshot slug.",
 	},
 
 	// ============================================================
@@ -234,11 +234,22 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		Description: "Grok 4 Fast (non-reasoning) — RETIRED May 15, 2026; auto-redirects to grok-4.3 with reasoning_effort=none.",
 	},
 	"grok-code-fast-1": {
-		Ratio: 1.25 * ratio.MilliTokensUsd, CompletionRatio: 2.5 / 1.25, CachedInputRatio: 0.2 * ratio.MilliTokensUsd,
-		ContextLength:   1000000,
+		Ratio: 1.0 * ratio.MilliTokensUsd, CompletionRatio: 2.0 / 1.0, CachedInputRatio: 0.2 * ratio.MilliTokensUsd,
+		ContextLength:   256000,
 		InputModalities: grokVisionInputs, OutputModalities: grokTextOutputs,
 		SupportedFeatures: grokFeaturesReasoning, SupportedSamplingParameters: grokReasoningSamplingParams,
-		Description: "Grok Code Fast 1 — RETIRED May 15, 2026; auto-redirects to grok-4.3 with reasoning_effort=low.",
+		SupportedReasoningEfforts: grokFullReasoningEfforts, DefaultReasoningEffort: "low",
+		Description:               "Grok Code Fast 1 — RETIRED May 15, 2026; auto-redirects to grok-build-0.1 ($1.00 in / $0.20 cached / $2.00 out, 256K context).",
+	},
+	// grok-build-0.1 is the GA agentic coding model; grok-code-fast-1 / grok-code-fast
+	// redirect to it. Source: https://docs.x.ai/developers/models/grok-build-0.1
+	"grok-build-0.1": {
+		Ratio: 1.0 * ratio.MilliTokensUsd, CompletionRatio: 2.0 / 1.0, CachedInputRatio: 0.2 * ratio.MilliTokensUsd,
+		ContextLength:   256000,
+		InputModalities: grokVisionInputs, OutputModalities: grokTextOutputs,
+		SupportedFeatures: grokFeaturesReasoning, SupportedSamplingParameters: grokReasoningSamplingParams,
+		SupportedReasoningEfforts: grokFullReasoningEfforts, DefaultReasoningEffort: "low",
+		Description:               "Grok Build 0.1 — fast agentic coding model (256K context, vision input); $1.00 in / $0.20 cached / $2.00 out. Aliases: grok-code-fast-1, grok-code-fast, grok-code-fast-1-0825.",
 	},
 	"grok-3": {
 		Ratio: 1.25 * ratio.MilliTokensUsd, CompletionRatio: 2.5 / 1.25, CachedInputRatio: 0.2 * ratio.MilliTokensUsd,
@@ -340,12 +351,13 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 			MaxImages:        10,
 			SizeMultipliers: map[string]float64{
 				"1024x1024": 1,
+				"2048x2048": 1.4, // 2K = $0.07/image
 			},
 		},
 		ContextLength:    4000,
 		InputModalities:  []string{"text", "image"},
 		OutputModalities: []string{"image"},
-		Description:      "Grok Imagine Image Quality — higher-fidelity text-to-image generation at $0.05/image (replaces grok-imagine-image-pro).",
+		Description:      "Grok Imagine Image Quality — higher-fidelity text+image-to-image generation at $0.05/image (1K) / $0.07/image (2K); replaces grok-imagine-image-pro.",
 	},
 	"grok-imagine-image-pro": {
 		Ratio:           0,
@@ -362,9 +374,9 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 			},
 		},
 		ContextLength:    4000,
-		InputModalities:  grokTextInputs,
+		InputModalities:  []string{"text", "image"},
 		OutputModalities: []string{"image"},
-		Description:      "Grok Imagine Image Pro — RETIRED May 15, 2026; auto-redirects to grok-imagine-image-quality at $0.05/image.",
+		Description:      "Grok Imagine Image Pro — RETIRED May 15, 2026; auto-redirects to grok-imagine-image-quality (text+image-to-image) at $0.05/image (1K) / $0.07 (2K).",
 	},
 	"grok-2-image-1212": {
 		Ratio:           0,
@@ -413,10 +425,31 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		Ratio:           0,
 		CompletionRatio: 1.0,
 		Video: &adaptor.VideoPricingConfig{
-			PerSecondUsd: 0.05,
+			PerSecondUsd:   0.05, // 480p base
+			BaseResolution: "480p",
+			ResolutionMultipliers: map[string]float64{
+				"720p": 1.4, // $0.07/sec
+			},
 		},
-		InputModalities: grokTextInputs,
-		Description:     "Grok Imagine Video — text-to-video generation priced at $0.05 per rendered second.",
+		InputModalities:  grokTextInputs,
+		OutputModalities: []string{"video"},
+		Description:      "Grok Imagine Video — text-to-video generation; 480p $0.05/sec, 720p $0.07/sec.",
+	},
+	// grok-imagine-video-1.5-preview is image-to-video only (no text-to-video).
+	// Source: https://docs.x.ai/developers/models/grok-imagine-video-1.5-preview
+	"grok-imagine-video-1.5-preview": {
+		Ratio:           0,
+		CompletionRatio: 1.0,
+		Video: &adaptor.VideoPricingConfig{
+			PerSecondUsd:   0.08, // 480p base
+			BaseResolution: "480p",
+			ResolutionMultipliers: map[string]float64{
+				"720p": 1.75, // $0.14/sec
+			},
+		},
+		InputModalities:  []string{"image"},
+		OutputModalities: []string{"video"},
+		Description:      "Grok Imagine Video 1.5 Preview — image-to-video (no text-to-video); 480p $0.08/sec, 720p $0.14/sec, image input $0.01/img.",
 	},
 }
 

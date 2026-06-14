@@ -535,6 +535,9 @@ var geminiMetadataOverrides = map[string]adaptor.ModelConfig{
 	},
 
 	// Gemini 2.0 Flash Models.
+	// Sources verified 2026-06-13:
+	//   - https://ai.google.dev/gemini-api/docs/models
+	//   - https://ai.google.dev/gemini-api/docs/pricing
 	"gemini-2.0-flash": {
 		ContextLength:               gemini1MContext,
 		MaxOutputTokens:             geminiFlashMaxOutput,
@@ -542,7 +545,7 @@ var geminiMetadataOverrides = map[string]adaptor.ModelConfig{
 		OutputModalities:            geminiOutputText,
 		SupportedFeatures:           geminiFeatures20,
 		SupportedSamplingParameters: geminiSamplingChat,
-		Description:                 "Gemini 2.0 Flash multimodal tier with 1M context. SHUT DOWN June 1, 2026; use gemini-2.5-flash instead.",
+		Description:                 "Gemini 2.0 Flash multimodal tier with 1M context. (RETIRED 2026-06-01; use gemini-2.5-flash)",
 	},
 	"gemini-2.0-flash-image": {
 		ContextLength:               gemini1MContext,
@@ -551,7 +554,7 @@ var geminiMetadataOverrides = map[string]adaptor.ModelConfig{
 		OutputModalities:            geminiOutputTextImage,
 		SupportedFeatures:           geminiFeatures20,
 		SupportedSamplingParameters: geminiSamplingImage,
-		Description:                 "Gemini 2.0 Flash multimodal tier with native image-generation output. SHUT DOWN June 1, 2026; use gemini-2.5-flash-image instead.",
+		Description:                 "Gemini 2.0 Flash multimodal tier with native image-generation output. (RETIRED 2026-06-01; use gemini-2.5-flash-image)",
 	},
 	"gemini-2.0-flash-lite": {
 		ContextLength:               gemini1MContext,
@@ -560,7 +563,7 @@ var geminiMetadataOverrides = map[string]adaptor.ModelConfig{
 		OutputModalities:            geminiOutputText,
 		SupportedFeatures:           geminiFeatures20,
 		SupportedSamplingParameters: geminiSamplingChat,
-		Description:                 "Gemini 2.0 Flash Lite cost-optimized multimodal tier. SHUT DOWN June 1, 2026; use gemini-2.5-flash-lite instead.",
+		Description:                 "Gemini 2.0 Flash Lite cost-optimized multimodal tier. (RETIRED 2026-06-01; use gemini-2.5-flash-lite)",
 	},
 }
 

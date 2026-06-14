@@ -304,8 +304,8 @@ var replicateLanguageModelRatios = map[string]adaptor.ModelConfig{
 	},
 	"moonshotai/kimi-k2.5": {
 		Ratio: 0.72 * ratio.MilliTokensUsd, CompletionRatio: 3.60 / 0.72,
-		ContextLength: 131072, MaxOutputTokens: 8192,
-		InputModalities: textOnlyInputs, OutputModalities: textOnlyOutputs,
+		ContextLength: 256000, MaxOutputTokens: 8192,
+		InputModalities: visionTextInputs, OutputModalities: textOnlyOutputs,
 		SupportedFeatures: reasoningFeatures, SupportedSamplingParameters: commonSamplingParams,
 		Quantization:  "fp8",
 		HuggingFaceID: "moonshotai/Kimi-K2.5",

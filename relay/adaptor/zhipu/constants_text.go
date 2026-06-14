@@ -5,9 +5,10 @@ import (
 	"github.com/Laisky/one-api/relay/billing/ratio"
 )
 
-// flagshipTextModels enumerates Zhipu's flagship text-only chat models with tiered pricing.
+// flagshipTextModels enumerates Zhipu's flagship text-only chat models.
 // Pricing comes from https://open.bigmodel.cn/pricing; metadata derives from
 // https://docs.bigmodel.cn/cn/guide/start/model-overview and per-model spec pages.
+// Last updated: 2026-06-13.
 var flagshipTextModels = map[string]adaptor.ModelConfig{
 	// GLM-5-Turbo: input [0,32K) ¥5/¥22, input [32K+) ¥7/¥26
 	"glm-5-turbo": {
@@ -42,6 +43,38 @@ var flagshipTextModels = map[string]adaptor.ModelConfig{
 		HuggingFaceID:               "zai-org/GLM-5",
 		Quantization:                "bf16",
 		Description:                 "GLM-5: 754B agentic engineering flagship aligned with Claude Opus 4.5 on coding.",
+	},
+	// GLM-5.1: input [0,32K) ¥6/¥24, input [32K+) ¥8/¥28
+	"glm-5.1": {
+		Ratio:            6 * ratio.MilliTokensRmb,
+		CompletionRatio:  24.0 / 6.0,
+		CachedInputRatio: 1.3 * ratio.MilliTokensRmb,
+		Tiers: []adaptor.ModelRatioTier{
+			{Ratio: 8 * ratio.MilliTokensRmb, CompletionRatio: 28.0 / 8.0, CachedInputRatio: 2 * ratio.MilliTokensRmb, InputTokenThreshold: 32},
+		},
+		ContextLength:               200_000,
+		MaxOutputTokens:             128_000,
+		InputModalities:             textInput(),
+		OutputModalities:            textOutput(),
+		SupportedFeatures:           reasoningChatFeatures(),
+		SupportedSamplingParameters: chatSamplingParameters(),
+		HuggingFaceID:               "zai-org/GLM-5.1",
+		Quantization:                "bf16",
+		Description:                 "GLM-5.1: 754B MoE agentic flagship (released 2026-04-07) with stronger coding aligned with Claude Opus 4.6, MCP integration, and 8-hour autonomous task execution; 200K context.",
+	},
+	// GLM-5.2: ¥10.08/1M input (estimated, pending official announcement), 1M context
+	"glm-5.2": {
+		Ratio:                       10.08 * ratio.MilliTokensRmb,
+		CompletionRatio:             31.68 / 10.08,
+		ContextLength:               1_000_000,
+		MaxOutputTokens:             131_072,
+		InputModalities:             textInput(),
+		OutputModalities:            textOutput(),
+		SupportedFeatures:           reasoningChatFeatures(),
+		SupportedSamplingParameters: chatSamplingParameters(),
+		HuggingFaceID:               "zai-org/GLM-5.2",
+		Quantization:                "bf16",
+		Description:                 "GLM-5.2: 744B MoE coding-first model with 1M context and dual reasoning presets (High/Max); released 2026-06-13. Pricing estimated at glm-5.1 rates pending official announcement.",
 	},
 	// GLM-4.7: input [0,32K) output [0,0.2M) ¥2/¥8; output [0.2M+) ¥3/¥14; input [32K,200K) ¥4/¥16
 	"glm-4.7": {
@@ -272,7 +305,7 @@ var languageModels = map[string]adaptor.ModelConfig{
 		OutputModalities:            textOutput(),
 		SupportedFeatures:           reasoningChatFeatures(),
 		SupportedSamplingParameters: chatSamplingParameters(),
-		Description:                 "GLM-4.5-Flash: free GLM-4.5 sibling with thinking mode (slated for retirement).",
+		Description:                 "GLM-4.5-Flash: free GLM-4.5 sibling with thinking mode (slated for retirement) (deprecated; scheduled for retirement).",
 	},
 	"glm-4-flash": {
 		Ratio:                       0,
@@ -301,7 +334,7 @@ var reasoningModels = map[string]adaptor.ModelConfig{
 		OutputModalities:            textOutput(),
 		SupportedFeatures:           []string{"reasoning"},
 		SupportedSamplingParameters: reasoningSamplingParameters(),
-		Description:                 "GLM-Z1-Air: cost-efficient reasoning model (deprecated 2025-11-15).",
+		Description:                 "GLM-Z1-Air: cost-efficient reasoning model (deprecated 2025-11-15) (RETIRED 2025-11-15).",
 	},
 	"glm-z1-airx": {
 		Ratio:                       5 * ratio.MilliTokensRmb,
@@ -312,7 +345,7 @@ var reasoningModels = map[string]adaptor.ModelConfig{
 		OutputModalities:            textOutput(),
 		SupportedFeatures:           []string{"reasoning"},
 		SupportedSamplingParameters: reasoningSamplingParameters(),
-		Description:                 "GLM-Z1-AirX: speed-optimized reasoning model (deprecated 2025-11-15).",
+		Description:                 "GLM-Z1-AirX: speed-optimized reasoning model (deprecated 2025-11-15) (RETIRED 2025-11-15).",
 	},
 	"glm-z1-flashx": {
 		Ratio:                       0.1 * ratio.MilliTokensRmb,
@@ -323,7 +356,7 @@ var reasoningModels = map[string]adaptor.ModelConfig{
 		OutputModalities:            textOutput(),
 		SupportedFeatures:           []string{"reasoning"},
 		SupportedSamplingParameters: reasoningSamplingParameters(),
-		Description:                 "GLM-Z1-FlashX: high-throughput reasoning Flash variant (deprecated 2025-11-15).",
+		Description:                 "GLM-Z1-FlashX: high-throughput reasoning Flash variant (deprecated 2025-11-15) (RETIRED 2025-11-15).",
 	},
 	"glm-4.1v-thinking-flashx": {
 		Ratio:                       2 * ratio.MilliTokensRmb,

@@ -68,14 +68,16 @@ var doubaoSamplingParams = []string{
 // Pricing source: https://www.volcengine.com/docs/82379/1099320 (last verified 2026-05).
 var ModelRatios = map[string]adaptor.ModelConfig{
 	// --- Doubao Seed 1.6 (current flagship deep-thinking multimodal) ---
-	// Tiered input pricing: [0,32K] ¥0.8/¥2; (32K,128K] ¥1.2/¥3; (128K,256K] ¥2.4/¥24
+	// Tiered input pricing: [0,32K] ¥0.8/¥8; (32K,128K] ¥1.2/¥16; (128K,256K] ¥2.4/¥24
 	// Cached input ¥0.16; deep-thinking is binary (no published budget).
+	// Output uses the unconditional (>200-token) price; the ¥2 promo zone
+	// (output ≤200 tokens) cannot be expressed since one-api tiers by input only.
 	"doubao-seed-1.6": {
 		Ratio:            0.8 * ratio.MilliTokensRmb,
-		CompletionRatio:  2.0 / 0.8,
+		CompletionRatio:  8.0 / 0.8,
 		CachedInputRatio: 0.16 * ratio.MilliTokensRmb,
 		Tiers: []adaptor.ModelRatioTier{
-			{Ratio: 1.2 * ratio.MilliTokensRmb, CompletionRatio: 3.0 / 1.2, CachedInputRatio: 0.16 * ratio.MilliTokensRmb, InputTokenThreshold: 32},
+			{Ratio: 1.2 * ratio.MilliTokensRmb, CompletionRatio: 16.0 / 1.2, CachedInputRatio: 0.16 * ratio.MilliTokensRmb, InputTokenThreshold: 32},
 			{Ratio: 2.4 * ratio.MilliTokensRmb, CompletionRatio: 24.0 / 2.4, CachedInputRatio: 0.16 * ratio.MilliTokensRmb, InputTokenThreshold: 128},
 		},
 		ContextLength:               256000,
@@ -87,9 +89,14 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		Description:                 "ByteDance Doubao Seed 1.6: multimodal deep-thinking flagship with 256K context and text/image/video input.",
 	},
 	"doubao-seed-1.6-flash": {
-		Ratio:                       0.15 * ratio.MilliTokensRmb,
-		CompletionRatio:             1.5 / 0.15,
-		CachedInputRatio:            0.03 * ratio.MilliTokensRmb,
+		Ratio:            0.15 * ratio.MilliTokensRmb,
+		CompletionRatio:  1.5 / 0.15,
+		CachedInputRatio: 0.03 * ratio.MilliTokensRmb,
+		// Tiered input pricing: [0,32K] ¥0.15/¥1.5; (32K,128K] ¥0.3/¥3; (128K,256K] ¥0.6/¥6.
+		Tiers: []adaptor.ModelRatioTier{
+			{Ratio: 0.3 * ratio.MilliTokensRmb, CompletionRatio: 3.0 / 0.3, CachedInputRatio: 0.03 * ratio.MilliTokensRmb, InputTokenThreshold: 32},
+			{Ratio: 0.6 * ratio.MilliTokensRmb, CompletionRatio: 6.0 / 0.6, CachedInputRatio: 0.03 * ratio.MilliTokensRmb, InputTokenThreshold: 128},
+		},
 		ContextLength:               256000,
 		MaxOutputTokens:             16384,
 		InputModalities:             doubaoMultimodalInputs,
@@ -139,7 +146,6 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 	"doubao-1.5-vision-pro-32k": {
 		Ratio:                       3 * ratio.MilliTokensRmb,
 		CompletionRatio:             9.0 / 3.0,
-		CachedInputRatio:            0.6 * ratio.MilliTokensRmb,
 		ContextLength:               32000,
 		MaxOutputTokens:             12288,
 		InputModalities:             doubaoVisionInputs,

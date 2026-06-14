@@ -38,4 +38,19 @@ var minimaxModels = map[string]adaptor.ModelConfig{
 		HuggingFaceID:               "MiniMaxAI/MiniMax-M2.7",
 		Description:                 "MiniMax M2.7 (228.7B MoE) agentic model for complex agent harnesses, dynamic tool search, and elaborate productivity tasks.",
 	},
+
+	// MiniMax M3 — $0.30 in / $1.20 out, cached $0.06. Native text+image+video input.
+	"accounts/fireworks/models/minimax-m3": {
+		Ratio:                       0.30 * ratio.MilliTokensUsd,
+		CompletionRatio:             1.20 / 0.30,
+		CachedInputRatio:            0.06 * ratio.MilliTokensUsd,
+		ContextLength:               524288,
+		MaxOutputTokens:             524288,
+		InputModalities:             []string{"text", "image", "video"},
+		OutputModalities:            fwTextOnlyModalities,
+		SupportedFeatures:           fwReasoningFeatures,
+		SupportedSamplingParameters: fwChatSamplingParams,
+		HuggingFaceID:               "MiniMaxAI/MiniMax-M3",
+		Description:                 "MiniMax M3 on Fireworks, native multimodal (text+image+video), 512K context, $0.30/$1.20 per 1M.",
+	},
 }

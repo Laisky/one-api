@@ -11,6 +11,19 @@ import (
 // use the restricted reasoning sampling parameter set.
 // Source: https://novita.ai/llm-api  (retrieved 2026-04-28)
 var deepseekModelRatios = map[string]adaptor.ModelConfig{
+	"deepseek/deepseek-ocr": {
+		Ratio:                       0.03 * ratio.MilliTokensUsd,
+		CompletionRatio:             1,
+		ContextLength:               8192,
+		MaxOutputTokens:             8192,
+		InputModalities:             novitaTextImageInModalities,
+		OutputModalities:            novitaTextOnlyModalities,
+		SupportedFeatures:           novitaTextOnlyFeatures,
+		SupportedSamplingParameters: novitaSamplingParams,
+		Quantization:                "bf16",
+		HuggingFaceID:               "deepseek-ai/DeepSeek-OCR",
+		Description:                 "DeepSeek-OCR layout/parsing model accepting image input with 8K context.",
+	},
 	"deepseek/deepseek-ocr-2": {
 		Ratio:                       0.03 * ratio.MilliTokensUsd,
 		CompletionRatio:             1,
@@ -82,7 +95,7 @@ var deepseekModelRatios = map[string]adaptor.ModelConfig{
 		CompletionRatio:             4.14814814815,
 		CachedInputRatio:            0.135 * ratio.MilliTokensUsd,
 		ContextLength:               163840,
-		MaxOutputTokens:             163840,
+		MaxOutputTokens:             65536,
 		InputModalities:             novitaTextOnlyModalities,
 		OutputModalities:            novitaTextOnlyModalities,
 		SupportedFeatures:           novitaChatFeatures,
@@ -174,11 +187,11 @@ var deepseekModelRatios = map[string]adaptor.ModelConfig{
 		Description:                 "DeepSeek V4 Flash with 1M context, fast cache-read discount and reasoning support.",
 	},
 	"deepseek/deepseek-v4-pro": {
-		// Novita repriced DeepSeek-V4-Pro to $1.67/$3.38 with $0.13 cache-read effective May 2026.
-		// Source: https://novita.ai/pricing (retrieved 2026-05-19)
-		Ratio:                       1.67 * ratio.MilliTokensUsd,
-		CompletionRatio:             3.38 / 1.67,
-		CachedInputRatio:            0.13 * ratio.MilliTokensUsd,
+		// Novita repriced DeepSeek-V4-Pro to $1.60/$3.20 with $0.135 cache-read effective May 2026.
+		// Source: https://api.novita.ai/v3/openai/models (retrieved 2026-06-13)
+		Ratio:                       1.60 * ratio.MilliTokensUsd,
+		CompletionRatio:             3.20 / 1.60,
+		CachedInputRatio:            0.135 * ratio.MilliTokensUsd,
 		ContextLength:               1048576,
 		MaxOutputTokens:             393216,
 		InputModalities:             novitaTextOnlyModalities,

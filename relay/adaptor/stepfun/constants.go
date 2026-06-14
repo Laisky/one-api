@@ -8,9 +8,10 @@ import (
 // StepFun (阶跃星辰) hosts the Step-1 / Step-2 / Step-3 chat model families.
 // Reference docs:
 //   - https://platform.stepfun.com/docs (model overview)
-//   - https://platform.stepfun.com/docs/zh/guides/pricing/details.md (rates, retrieved 2026-05-18)
+//   - https://platform.stepfun.com/docs/zh/guides/pricing/details.md (rates, verified 2026-06-13)
 //
-// All Step-* SKUs are closed-weight; HuggingFaceID and Quantization stay empty.
+// Most Step-* SKUs are closed-weight; HuggingFaceID and Quantization stay empty.
+// Exception: step-3.5-flash is open-weight (Apache 2.0, stepfun-ai/Step-3.5-Flash).
 // step-1v-* and step-1o-* are vision-capable; step-1x-medium is an image
 // generation SKU billed per image (kept out of this token-pricing map).
 // step-3 / step-r1-v-mini are reasoning-capable models.
@@ -20,6 +21,10 @@ var stepfunTextInputs = []string{"text"}
 
 // stepfunVisionInputs is the modality set for vision-capable Step-1V / 1O / 3 models.
 var stepfunVisionInputs = []string{"text", "image"}
+
+// stepfunVideoVisionInputs is the modality set for Step models that natively
+// support image and video understanding (e.g. step-3.7-flash).
+var stepfunVideoVisionInputs = []string{"text", "image", "video"}
 
 // stepfunTextOutputs is the text-only output modality used by Step models.
 var stepfunTextOutputs = []string{"text"}
@@ -100,16 +105,35 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		Description: "StepFun Step-3 multimodal reasoning model with tiered pricing (¥1.5-¥4 input / ¥4-¥10 output per 1M tokens).",
 	},
 	"step-3.5-flash": {
-		Ratio:                       0.7 * ratio.MilliTokensRmb,
-		CachedInputRatio:            0.2 * 0.7 * ratio.MilliTokensRmb, // Prompt Cache: cached input billed at 20% of input price.
-		CompletionRatio:             2.1 / 0.7,
-		ContextLength:               65536,
+		Ratio:            0.7 * ratio.MilliTokensRmb,
+		CachedInputRatio: 0.2 * 0.7 * ratio.MilliTokensRmb, // Prompt Cache: cached input billed at 20% of input price.
+		CompletionRatio:  2.1 / 0.7,
+		// Note: corrected context length 65536→262144 per official docs 2026-06-13
+		ContextLength:               262144,
 		MaxOutputTokens:             8192,
 		InputModalities:             stepfunTextInputs,
 		OutputModalities:            stepfunTextOutputs,
 		SupportedFeatures:           stepfunReasoningFeatures,
 		SupportedSamplingParameters: stepfunSamplingParams,
-		Description:                 "StepFun Step-3.5 Flash low-latency reasoning model.",
+		// StepFun docs (platform.stepfun.ai/docs/llm/reasoning) document
+		// reasoning_effort low/medium/high on the Step-3.5-Flash family with
+		// model-default "medium". No tunable thinking_budget is published.
+		SupportedReasoningEfforts: []string{"low", "medium", "high"},
+		DefaultReasoningEffort:    "medium",
+		HuggingFaceID:             "stepfun-ai/Step-3.5-Flash",
+		Description:               "StepFun Step-3.5 Flash low-latency reasoning model (open-weight, Apache 2.0).",
+	},
+	"step-3.7-flash": {
+		Ratio:                       1.35 * ratio.MilliTokensRmb,
+		CompletionRatio:             8.1 / 1.35,                  // ¥8.1/1M output
+		CachedInputRatio:            0.27 * ratio.MilliTokensRmb, // ¥0.27/1M cached input
+		ContextLength:               262144,
+		MaxOutputTokens:             262144,
+		InputModalities:             stepfunVideoVisionInputs,
+		OutputModalities:            stepfunTextOutputs,
+		SupportedFeatures:           stepfunReasoningFeatures,
+		SupportedSamplingParameters: stepfunSamplingParams,
+		Description:                 "StepFun Step-3.7 Flash multimodal reasoning model (released 2026-05-29); 198B sparse MoE with 1.8B vision encoder; text+image+video input; selectable reasoning levels low/medium/high; 256K context and output.",
 	},
 	"step-r1-v-mini": {
 		Ratio:                       2.5 * ratio.MilliTokensRmb,
@@ -247,6 +271,6 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 // ModelList derived from ModelRatios for backward compatibility
 var ModelList = adaptor.GetModelListFromPricing(ModelRatios)
 
-// StepFunToolingDefaults notes that StepFun publishes model pricing only; no tool-specific fees are documented (retrieved 2026-05-18).
+// StepFunToolingDefaults notes that StepFun publishes model pricing only; no tool-specific fees are documented (verified 2026-06-13).
 // Source: https://platform.stepfun.com/docs/zh/guides/pricing/details.md
 var StepFunToolingDefaults = adaptor.ChannelToolConfig{}

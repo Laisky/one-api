@@ -20,7 +20,7 @@ import (
 var ModelRatios = map[string]adaptor.ModelConfig{
 	// Claude Models on VertexAI
 	"claude-3-haiku@20240307":       {Ratio: 0.25 * ratio.MilliTokensUsd, CompletionRatio: 5.0, CachedInputRatio: 0.025 * ratio.MilliTokensUsd, CacheWrite5mRatio: 0.3125 * ratio.MilliTokensUsd, CacheWrite1hRatio: 0.5 * ratio.MilliTokensUsd}, // $0.25/$1.25 per 1M tokens
-	"claude-3-5-haiku@20241022":     {Ratio: 1.0 * ratio.MilliTokensUsd, CompletionRatio: 5.0, CachedInputRatio: 0.1 * ratio.MilliTokensUsd, CacheWrite5mRatio: 1.25 * ratio.MilliTokensUsd, CacheWrite1hRatio: 1.6 * ratio.MilliTokensUsd},      // $1/$5 per 1M tokens
+	"claude-3-5-haiku@20241022":     {Ratio: 0.8 * ratio.MilliTokensUsd, CompletionRatio: 5.0, CachedInputRatio: 0.08 * ratio.MilliTokensUsd, CacheWrite5mRatio: 1.0 * ratio.MilliTokensUsd, CacheWrite1hRatio: 1.6 * ratio.MilliTokensUsd},      // $0.80/$4.00 per 1M tokens (Vertex matches Anthropic first-party)
 	"claude-haiku-4-5@20251001":     {Ratio: 1.0 * ratio.MilliTokensUsd, CompletionRatio: 5.0, CachedInputRatio: 0.1 * ratio.MilliTokensUsd, CacheWrite5mRatio: 1.25 * ratio.MilliTokensUsd, CacheWrite1hRatio: 2 * ratio.MilliTokensUsd},        // $1/$5 per 1M tokens
 	"claude-3-sonnet@20240229":      {Ratio: 3.0 * ratio.MilliTokensUsd, CompletionRatio: 5.0, CachedInputRatio: 0.3 * ratio.MilliTokensUsd, CacheWrite5mRatio: 3.75 * ratio.MilliTokensUsd, CacheWrite1hRatio: 6 * ratio.MilliTokensUsd},        // $3/$15 per 1M tokens
 	"claude-3-5-sonnet@20240620":    {Ratio: 3.0 * ratio.MilliTokensUsd, CompletionRatio: 5.0, CachedInputRatio: 0.3 * ratio.MilliTokensUsd, CacheWrite5mRatio: 3.75 * ratio.MilliTokensUsd, CacheWrite1hRatio: 6 * ratio.MilliTokensUsd},        // $3/$15 per 1M tokens
@@ -36,7 +36,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 	"claude-opus-4-6":               {Ratio: 5 * ratio.MilliTokensUsd, CompletionRatio: 25.0 / 5, CachedInputRatio: 0.5 * ratio.MilliTokensUsd, CacheWrite5mRatio: 6.25 * ratio.MilliTokensUsd, CacheWrite1hRatio: 10 * ratio.MilliTokensUsd},
 	"claude-opus-4-7":               {Ratio: 5 * ratio.MilliTokensUsd, CompletionRatio: 25.0 / 5, CachedInputRatio: 0.5 * ratio.MilliTokensUsd, CacheWrite5mRatio: 6.25 * ratio.MilliTokensUsd, CacheWrite1hRatio: 10 * ratio.MilliTokensUsd},
 	"claude-opus-4-8":               {Ratio: 5 * ratio.MilliTokensUsd, CompletionRatio: 25.0 / 5, CachedInputRatio: 0.5 * ratio.MilliTokensUsd, CacheWrite5mRatio: 6.25 * ratio.MilliTokensUsd, CacheWrite1hRatio: 10 * ratio.MilliTokensUsd},
-	"claude-fable-5":                {Ratio: 10 * ratio.MilliTokensUsd, CompletionRatio: 5, CachedInputRatio: 1.25 * ratio.MilliTokensUsd, CacheWrite5mRatio: 12.5 * ratio.MilliTokensUsd, CacheWrite1hRatio: 20 * ratio.MilliTokensUsd},
+	"claude-fable-5":                {Ratio: 10 * ratio.MilliTokensUsd, CompletionRatio: 5, CachedInputRatio: 1.0 * ratio.MilliTokensUsd, CacheWrite5mRatio: 12.5 * ratio.MilliTokensUsd, CacheWrite1hRatio: 20 * ratio.MilliTokensUsd},
 }
 
 // ModelList derived from ModelRatios for backward compatibility

@@ -38,4 +38,20 @@ var kimiModels = map[string]adaptor.ModelConfig{
 		HuggingFaceID:               "moonshotai/Kimi-K2.6",
 		Description:                 "Moonshot AI Kimi K2.6 (1T MoE) native multimodal agentic model for long-horizon coding, autonomous execution, and swarm orchestration.",
 	},
+
+	// Kimi K2.7 Code — $0.95 in / $4.00 out.
+	"accounts/fireworks/models/kimi-k2p7-code": {
+		Ratio:                       0.95 * ratio.MilliTokensUsd,
+		CompletionRatio:             4.00 / 0.95,
+		CachedInputRatio:            0.19 * ratio.MilliTokensUsd,
+		ContextLength:               262144,
+		MaxOutputTokens:             32768,
+		InputModalities:             fwTextImageInModalities,
+		OutputModalities:            fwTextOnlyModalities,
+		SupportedFeatures:           fwReasoningFeatures,
+		SupportedSamplingParameters: fwChatSamplingParams,
+		Quantization:                "fp8",
+		HuggingFaceID:               "moonshotai/Kimi-K2.7-Code",
+		Description:                 "Moonshot Kimi K2.7 Code on Fireworks, multimodal coding model, 262K context, $0.95/$4.00 per 1M.",
+	},
 }

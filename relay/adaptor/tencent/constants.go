@@ -49,7 +49,7 @@ var (
 // ModelRatios contains all supported models and their pricing/configuration metadata.
 // Model list is derived from the keys of this map, eliminating redundancy.
 //
-// Pricing source (verified 2026-05-18):
+// Pricing source (verified 2026-06-13):
 //   - https://cloud.tencent.com/document/product/1729/97731 (Hunyuan generative pricing)
 //   - https://cloud.tencent.com/document/product/1729/97732 (Hunyuan API overview / model catalog)
 //
@@ -77,7 +77,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		OutputModalities:            hunyuanTextOutputs,
 		SupportedFeatures:           hunyuanLiteFeatures,
 		SupportedSamplingParameters: hunyuanSamplingParameters,
-		Description:                 "Tencent Hunyuan Lite: lightweight closed-weight chat model with a 256K context window, offered free of charge.",
+		Description:                 "Tencent Hunyuan Lite: lightweight closed-weight chat model with a 256K context window, offered free of charge. (RETIRING 2026-06-22; use hy3-preview)",
 	},
 
 	// Hunyuan Standard family — retained for backward compatibility with channels grandfathered
@@ -91,7 +91,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		OutputModalities:            hunyuanTextOutputs,
 		SupportedFeatures:           hunyuanChatFeatures,
 		SupportedSamplingParameters: hunyuanSamplingParameters,
-		Description:                 "Tencent Hunyuan Standard: legacy closed-weight general-purpose chat model with a 32K context window.",
+		Description:                 "Tencent Hunyuan Standard: legacy closed-weight general-purpose chat model with a 32K context window. (RETIRING 2026-06-22; use hy3-preview)",
 	},
 	"hunyuan-standard-256K": {
 		Ratio:                       15 * ratio.MilliTokensRmb,
@@ -102,7 +102,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		OutputModalities:            hunyuanTextOutputs,
 		SupportedFeatures:           hunyuanChatFeatures,
 		SupportedSamplingParameters: hunyuanSamplingParameters,
-		Description:                 "Tencent Hunyuan Standard 256K: legacy long-context closed-weight chat model with a 256K context window.",
+		Description:                 "Tencent Hunyuan Standard 256K: legacy long-context closed-weight chat model with a 256K context window. (RETIRING 2026-06-22; use hy3-preview)",
 	},
 	"hunyuan-pro": {
 		Ratio:                       30 * ratio.MilliTokensRmb,
@@ -113,7 +113,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		OutputModalities:            hunyuanTextOutputs,
 		SupportedFeatures:           hunyuanChatFeatures,
 		SupportedSamplingParameters: hunyuanSamplingParameters,
-		Description:                 "Tencent Hunyuan Pro: legacy flagship closed-weight chat model targeted at complex reasoning and agent tasks.",
+		Description:                 "Tencent Hunyuan Pro: legacy flagship closed-weight chat model targeted at complex reasoning and agent tasks. (RETIRING 2026-06-22; use hy3-preview)",
 	},
 
 	// Hunyuan Turbo family — current flagship balanced-cost tier per the May 2026 pricing page.
@@ -126,7 +126,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		OutputModalities:            hunyuanTextOutputs,
 		SupportedFeatures:           hunyuanChatFeatures,
 		SupportedSamplingParameters: hunyuanSamplingParameters,
-		Description:                 "Tencent Hunyuan Turbo: closed-weight balanced-cost chat tier; predecessor of hunyuan-turbos.",
+		Description:                 "Tencent Hunyuan Turbo: closed-weight balanced-cost chat tier; predecessor of hunyuan-turbos. (RETIRING 2026-06-22; use hy3-preview)",
 	},
 	"hunyuan-turbos": {
 		Ratio:                       0.8 * ratio.MilliTokensRmb,
@@ -137,7 +137,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		OutputModalities:            hunyuanTextOutputs,
 		SupportedFeatures:           hunyuanChatFeatures,
 		SupportedSamplingParameters: hunyuanSamplingParameters,
-		Description:                 "Tencent Hunyuan TurboS: Mamba-Transformer hybrid closed-weight chat model with a 256K context window.",
+		Description:                 "Tencent Hunyuan TurboS: Mamba-Transformer hybrid closed-weight chat model with a 256K context window. (RETIRING 2026-06-22; use hy3-preview)",
 	},
 
 	// Hunyuan T1 reasoning family — exposes a binary thinking mode (no tunable budget).
@@ -150,15 +150,15 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		OutputModalities:            hunyuanTextOutputs,
 		SupportedFeatures:           hunyuanReasoningFeatures,
 		SupportedSamplingParameters: hunyuanSamplingParameters,
-		Description:                 "Tencent Hunyuan T1: closed-weight deep-thinking reasoning chat model with a 256K context window.",
+		Description:                 "Tencent Hunyuan T1: closed-weight deep-thinking reasoning chat model with a 256K context window. (RETIRING 2026-06-22; use hy3-preview)",
 	},
 
 	// Hunyuan A13B — open-weight (HuggingFace tencent/Hunyuan-A13B-Instruct).
 	"hunyuan-a13b": {
 		Ratio:                       0.5 * ratio.MilliTokensRmb,
 		CompletionRatio:             4,
-		ContextLength:               131072,
-		MaxOutputTokens:             8192,
+		ContextLength:               229376,
+		MaxOutputTokens:             32768,
 		InputModalities:             hunyuanTextInputs,
 		OutputModalities:            hunyuanTextOutputs,
 		SupportedFeatures:           hunyuanChatFeatures,
@@ -177,14 +177,14 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		OutputModalities:            hunyuanTextOutputs,
 		SupportedFeatures:           hunyuanChatFeatures,
 		SupportedSamplingParameters: hunyuanSamplingParameters,
-		Description:                 "Tencent Hunyuan Large Role: closed-weight role-play chat model derived from Hunyuan-Large.",
+		Description:                 "Tencent Hunyuan Large Role: closed-weight role-play chat model derived from Hunyuan-Large. (RETIRING 2026-06-22; use hunyuan-role-latest)",
 	},
 
 	// Hunyuan Translation models.
 	"hunyuan-translation": {
 		Ratio:                       1.2 * ratio.MilliTokensRmb,
 		CompletionRatio:             3,
-		ContextLength:               32768,
+		ContextLength:               4096,
 		MaxOutputTokens:             4096,
 		InputModalities:             hunyuanTextInputs,
 		OutputModalities:            hunyuanTextOutputs,
@@ -195,7 +195,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 	"hunyuan-translation-lite": {
 		Ratio:                       1 * ratio.MilliTokensRmb,
 		CompletionRatio:             3,
-		ContextLength:               32768,
+		ContextLength:               4096,
 		MaxOutputTokens:             4096,
 		InputModalities:             hunyuanTextInputs,
 		OutputModalities:            hunyuanTextOutputs,
@@ -214,7 +214,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		OutputModalities:            hunyuanTextOutputs,
 		SupportedFeatures:           hunyuanVisionFeatures,
 		SupportedSamplingParameters: hunyuanSamplingParameters,
-		Description:                 "Tencent Hunyuan Vision: legacy closed-weight multimodal chat model accepting text and image inputs.",
+		Description:                 "Tencent Hunyuan Vision: legacy closed-weight multimodal chat model accepting text and image inputs. (RETIRING 2026-06-22; use hunyuan-vision-1.5-instruct)",
 	},
 	"hunyuan-turbos-vision": {
 		Ratio:                       3 * ratio.MilliTokensRmb,
@@ -225,7 +225,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		OutputModalities:            hunyuanTextOutputs,
 		SupportedFeatures:           hunyuanVisionFeatures,
 		SupportedSamplingParameters: hunyuanSamplingParameters,
-		Description:                 "Tencent Hunyuan TurboS Vision: closed-weight multimodal chat model based on the TurboS hybrid architecture.",
+		Description:                 "Tencent Hunyuan TurboS Vision: closed-weight multimodal chat model based on the TurboS hybrid architecture. (RETIRING 2026-06-22; use hunyuan-vision-1.5-instruct)",
 	},
 	"hunyuan-turbos-vision-video": {
 		Ratio:                       3 * ratio.MilliTokensRmb,
@@ -258,6 +258,41 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		InputModalities:  hunyuanTextInputs,
 		OutputModalities: hunyuanTextOutputs,
 		Description:      "Tencent Hunyuan Embedding: closed-weight Chinese-first text embedding model.",
+	},
+
+	// Hunyuan 3 Preview — new MoE flagship model (2026-06-13).
+	// Pricing: ¥1.2/$0.167 input, ¥4/$0.556 output, ¥0.4/$0.056 cached input per 1M tokens.
+	"hy3-preview": {
+		Ratio:            1.2 * ratio.MilliTokensRmb,
+		CompletionRatio:  4.0 / 1.2,
+		CachedInputRatio: 0.4 * ratio.MilliTokensRmb,
+		// Tiered input-length pricing per Tencent TokenHub
+		// (https://cloud.tencent.com/document/product/1823/130055):
+		// (0,16k] -> 1.2/4/0.4 (base above), (16k,32k] -> 1.6/6.4/0.6, (32k,256k] -> 2/8/0.8 (RMB/1M tokens).
+		Tiers: []adaptor.ModelRatioTier{
+			{Ratio: 1.6 * ratio.MilliTokensRmb, CompletionRatio: 6.4 / 1.6, CachedInputRatio: 0.6 * ratio.MilliTokensRmb, InputTokenThreshold: 16384},
+			{Ratio: 2 * ratio.MilliTokensRmb, CompletionRatio: 8.0 / 2.0, CachedInputRatio: 0.8 * ratio.MilliTokensRmb, InputTokenThreshold: 32768},
+		},
+		ContextLength:               262144,
+		MaxOutputTokens:             32768,
+		InputModalities:             hunyuanTextInputs,
+		OutputModalities:            hunyuanTextOutputs,
+		SupportedFeatures:           hunyuanChatFeatures,
+		SupportedSamplingParameters: hunyuanSamplingParameters,
+		Description:                 "Tencent Hunyuan 3 Preview (hy3-preview): new MoE flagship model with 262K context, $0.167/$0.556 per 1M. Successor to retired hunyuan-t1/turbos/turbo/pro/standard/lite family.",
+	},
+
+	// Hunyuan Vision 1.5 Instruct — updated multimodal vision model (2026-06-13).
+	"hunyuan-vision-1.5-instruct": {
+		Ratio:                       3 * ratio.MilliTokensRmb,
+		CompletionRatio:             9.0 / 3.0,
+		ContextLength:               24576,
+		MaxOutputTokens:             8192,
+		InputModalities:             hunyuanVisionInputs,
+		OutputModalities:            hunyuanTextOutputs,
+		SupportedFeatures:           hunyuanVisionFeatures,
+		SupportedSamplingParameters: hunyuanSamplingParameters,
+		Description:                 "Tencent Hunyuan Vision 1.5 Instruct: updated multimodal vision model, 24K context. Replaces hunyuan-vision (retiring 2026-06-22).",
 	},
 }
 

@@ -42,7 +42,9 @@ var baichuanSamplingParams = []string{
 // ModelRatios contains all supported models and their pricing ratios.
 // Model list is derived from the keys of this map, eliminating redundancy.
 // Based on Baichuan pricing: https://platform.baichuan-ai.com/prices
-// All Baichuan rates have input == output pricing (CompletionRatio = 1).
+// Most Baichuan rates have input == output pricing (CompletionRatio = 1); the
+// medical-enhanced M-series (Baichuan-M2/M2-Plus/M3/M3-Plus) bills output above
+// input, so those entries carry an explicit CompletionRatio.
 var ModelRatios = map[string]adaptor.ModelConfig{
 	// Baichuan 4 family (current flagship).
 	"Baichuan4": {
@@ -117,6 +119,55 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		Quantization:                "bf16",
 		HuggingFaceID:               "baichuan-inc/Baichuan2-13B-Chat",
 		Description:                 "Baichuan2-Turbo production chat model. Smaller Baichuan2 variants are open-weight on HuggingFace.",
+	},
+
+	// Baichuan medical-enhanced (M-series) chat models. Pricing from
+	// https://platform.baichuan-ai.com/prices (verified 2026-06-14); these have
+	// input != output rates. Auto-triggered 医疗搜索 (medical search) on the
+	// M-Plus tiers is billed separately at ¥0.03/次 and is not modeled per-token.
+	"Baichuan-M3-Plus": {
+		Ratio:                       5 * ratio.MilliTokensRmb,
+		CompletionRatio:             9.0 / 5.0,
+		ContextLength:               32768,
+		MaxOutputTokens:             2048,
+		InputModalities:             baichuanTextInputs,
+		OutputModalities:            baichuanTextOutputs,
+		SupportedFeatures:           baichuanChatFeatures,
+		SupportedSamplingParameters: baichuanSamplingParams,
+		Description:                 "Baichuan-M3-Plus medical-enhanced flagship chat model with 32k context (auto medical-search billed separately ¥0.03/call).",
+	},
+	"Baichuan-M3": {
+		Ratio:                       10 * ratio.MilliTokensRmb,
+		CompletionRatio:             30.0 / 10.0,
+		ContextLength:               32768,
+		MaxOutputTokens:             2048,
+		InputModalities:             baichuanTextInputs,
+		OutputModalities:            baichuanTextOutputs,
+		SupportedFeatures:           baichuanChatFeatures,
+		SupportedSamplingParameters: baichuanSamplingParams,
+		Description:                 "Baichuan-M3 medical-enhanced chat model with 32k context.",
+	},
+	"Baichuan-M2-Plus": {
+		Ratio:                       10 * ratio.MilliTokensRmb,
+		CompletionRatio:             30.0 / 10.0,
+		ContextLength:               32768,
+		MaxOutputTokens:             2048,
+		InputModalities:             baichuanTextInputs,
+		OutputModalities:            baichuanTextOutputs,
+		SupportedFeatures:           baichuanChatFeatures,
+		SupportedSamplingParameters: baichuanSamplingParams,
+		Description:                 "Baichuan-M2-Plus medical-enhanced chat model with 32k context (auto medical-search billed separately ¥0.03/call).",
+	},
+	"Baichuan-M2": {
+		Ratio:                       2 * ratio.MilliTokensRmb,
+		CompletionRatio:             20.0 / 2.0,
+		ContextLength:               32768,
+		MaxOutputTokens:             2048,
+		InputModalities:             baichuanTextInputs,
+		OutputModalities:            baichuanTextOutputs,
+		SupportedFeatures:           baichuanChatFeatures,
+		SupportedSamplingParameters: baichuanSamplingParams,
+		Description:                 "Baichuan-M2 medical-enhanced reasoning chat model with 32k context.",
 	},
 
 	// Embedding model.

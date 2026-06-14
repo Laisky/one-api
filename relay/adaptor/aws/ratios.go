@@ -265,12 +265,11 @@ var awsBedrockModelPricing = map[string]adaptor.ModelConfig{
 	},
 	"claude-fable-5": {
 		Ratio: 10 * ratio.MilliTokensUsd, CompletionRatio: 5,
-		CachedInputRatio: 1.25 * ratio.MilliTokensUsd, CacheWrite5mRatio: 12.5 * ratio.MilliTokensUsd, CacheWrite1hRatio: 20 * ratio.MilliTokensUsd,
+		CachedInputRatio: 1.0 * ratio.MilliTokensUsd, CacheWrite5mRatio: 12.5 * ratio.MilliTokensUsd, CacheWrite1hRatio: 20 * ratio.MilliTokensUsd,
 		ContextLength: 1000000, MaxOutputTokens: 128000,
 		InputModalities: awsClaudeVisionInputs, OutputModalities: awsTextOutputs,
 		SupportedFeatures: awsClaudeFeaturesWithReasoning, SupportedSamplingParameters: awsClaudeSamplingParams,
-		MaxReasoningTokens: 120000,
-		Description:        "Claude Fable 5 on AWS Bedrock with 1M-token context and frontier-level reasoning.",
+		Description:       "Claude Fable 5 on AWS Bedrock with 1M-token context and frontier-level reasoning (adaptive thinking; budget_tokens not supported).",
 	},
 
 	// Llama Models on AWS Bedrock

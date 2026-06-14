@@ -15,9 +15,9 @@ var (
 
 	// deepseekChatFeatures advertises the capability set for non-thinking DeepSeek chat models.
 	// DeepSeek chat completions support tools, JSON mode and structured outputs per the official docs.
-	deepseekChatFeatures = []string{"tools", "json_mode", "structured_outputs"}
+	deepseekChatFeatures = []string{"tools", "json_mode", "structured_outputs", "logprobs"}
 	// deepseekReasoningFeatures advertises the capability set for thinking-mode DeepSeek models.
-	deepseekReasoningFeatures = []string{"tools", "json_mode", "structured_outputs", "reasoning"}
+	deepseekReasoningFeatures = []string{"tools", "json_mode", "structured_outputs", "logprobs", "reasoning"}
 
 	// deepseekSamplingParams lists the OpenAI-compatible sampling parameters DeepSeek chat accepts.
 	deepseekSamplingParams = []string{"temperature", "top_p", "frequency_penalty", "presence_penalty", "stop", "max_tokens"}

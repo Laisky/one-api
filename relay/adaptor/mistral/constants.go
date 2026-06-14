@@ -120,13 +120,13 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		CompletionRatio:             5.0,                        // $2.00 output
 		ContextLength:               262144,
 		MaxOutputTokens:             8192,
-		InputModalities:             multimodalInputModalities,
+		InputModalities:             textOnlyModalities,
 		OutputModalities:            textOnlyModalities,
 		SupportedFeatures:           chatFeatures,
 		SupportedSamplingParameters: commonSamplingParams,
 		Quantization:                "bf16",
 		HuggingFaceID:               "mistralai/Devstral-2-123B-Instruct-2512",
-		Description:                 "Devstral 2 (2025-12) 123B agentic coding model with 256k context and image input.",
+		Description:                 "Devstral 2 (2025-12) 123B agentic coding (text-to-text) model with 256k context.",
 	},
 	"devstral-medium-2507": {
 		Ratio:                       0.4 * ratio.MilliTokensUsd,

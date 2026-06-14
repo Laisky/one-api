@@ -36,7 +36,7 @@ var (
 
 // ModelRatios contains all supported models and their pricing ratios.
 // Model list is derived from the keys of this map, eliminating redundancy.
-// Official sources (verified May 2026):
+// Official sources (verified 2026-06-13):
 // - https://docs.cohere.com/docs/models
 // - https://docs.cohere.com/docs/structured-outputs
 // - https://docs.cohere.com/docs/how-does-cohere-pricing-work
@@ -51,7 +51,20 @@ var (
 // - https://huggingface.co/CohereLabs/aya-expanse-32b
 // - https://huggingface.co/CohereLabs/aya-vision-32b
 var ModelRatios = map[string]adaptor.ModelConfig{
-	// Current Command Models. Pricing per 1M tokens (May 2026).
+	// Current Command Models. Pricing per 1M tokens (2026-06-13).
+	"command-a-plus-05-2026": {
+		// No public per-token pricing listed; use same as command-a-03-2025 as placeholder.
+		// $2.50 input / $10.00 output per 1M tokens (estimated).
+		Ratio: 2.5 * ratio.MilliTokensUsd, CompletionRatio: 4,
+		ContextLength: 128000, MaxOutputTokens: 64000,
+		InputModalities: cohereMultimodalInputs, OutputModalities: cohereTextOutputs,
+		SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs", "reasoning"},
+		SupportedSamplingParameters: cohereSamplingParams,
+		MaxReasoningTokens:          64000,
+		Quantization:                "fp8",
+		HuggingFaceID:               "CohereLabs/command-a-plus-05-2026-fp8",
+		Description:                 "Cohere Command A+ (May 2026) first Mixture of Experts model (25B active/218B total); vision, agentic, reasoning, and translation capabilities; 48 languages; 128K context, 64K max output. No public per-token pricing; estimate based on command-a-03-2025.",
+	},
 	"command-a-03-2025": {
 		// $2.50 input / $10.00 output per 1M tokens.
 		Ratio: 2.5 * ratio.MilliTokensUsd, CompletionRatio: 4,
@@ -167,14 +180,15 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		Description:   "Cohere Command A Vision (July 2025) 112B multimodal model for document analysis, OCR, and chart interpretation.",
 	},
 	"command-a-reasoning-08-2025": {
-		// $2.50 input / $10.00 output per 1M tokens (inherits Command A rates).
-		// 256K context with toggleable thinking; multilingual reasoning across 23 languages.
+		// No public per-token pricing published by Cohere (free-until-rate-limits / Model Vault).
+		// $2.50 input / $10.00 output per 1M tokens is an estimate inherited from Command A.
+		// 256K context with budget-token thinking; multilingual reasoning across 23 languages.
 		Ratio: 2.5 * ratio.MilliTokensUsd, CompletionRatio: 4,
 		ContextLength: 256000, MaxOutputTokens: 32768,
 		InputModalities: cohereTextInputs, OutputModalities: cohereTextOutputs,
-		SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs", "web_search", "reasoning"},
+		SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs", "reasoning"},
 		SupportedSamplingParameters: cohereSamplingParams,
-		SupportedReasoningEfforts:   []string{"low", "medium", "high"},
+		MaxReasoningTokens:          32000,
 		Quantization:                "bf16",
 		HuggingFaceID:               "CohereLabs/command-a-reasoning-08-2025",
 		Description:                 "Cohere Command A Reasoning (August 2025) 111B hybrid reasoning model with toggleable thinking and 256k context.",
@@ -376,7 +390,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		Ratio:           0.10 * ratio.MilliTokensUsd,
 		CompletionRatio: 1.0,
 		ContextLength:   512,
-		InputModalities: cohereTextInputs,
+		InputModalities: cohereMultimodalInputs,
 		Embedding: &adaptor.EmbeddingPricingConfig{
 			TextTokenRatio: 0.10 * ratio.MilliTokensUsd,
 		},
@@ -387,7 +401,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		Ratio:           0.10 * ratio.MilliTokensUsd,
 		CompletionRatio: 1.0,
 		ContextLength:   512,
-		InputModalities: cohereTextInputs,
+		InputModalities: cohereMultimodalInputs,
 		Embedding: &adaptor.EmbeddingPricingConfig{
 			TextTokenRatio: 0.10 * ratio.MilliTokensUsd,
 		},
@@ -398,7 +412,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		Ratio:           0.10 * ratio.MilliTokensUsd,
 		CompletionRatio: 1.0,
 		ContextLength:   512,
-		InputModalities: cohereTextInputs,
+		InputModalities: cohereMultimodalInputs,
 		Embedding: &adaptor.EmbeddingPricingConfig{
 			TextTokenRatio: 0.10 * ratio.MilliTokensUsd,
 		},
@@ -409,7 +423,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		Ratio:           0.10 * ratio.MilliTokensUsd,
 		CompletionRatio: 1.0,
 		ContextLength:   512,
-		InputModalities: cohereTextInputs,
+		InputModalities: cohereMultimodalInputs,
 		Embedding: &adaptor.EmbeddingPricingConfig{
 			TextTokenRatio: 0.10 * ratio.MilliTokensUsd,
 		},

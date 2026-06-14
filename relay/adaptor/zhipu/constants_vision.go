@@ -21,12 +21,14 @@ var flagshipVisionModels = map[string]adaptor.ModelConfig{
 			{Ratio: 7 * ratio.MilliTokensRmb, CompletionRatio: 26.0 / 7.0, CachedInputRatio: 1.8 * ratio.MilliTokensRmb, InputTokenThreshold: 32},
 		},
 		ContextLength:               200_000,
-		MaxOutputTokens:             131_072,
+		MaxOutputTokens:             128_000,
 		InputModalities:             textImageVideoFileInput(),
 		OutputModalities:            textOutput(),
-		SupportedFeatures:           reasoningChatFeatures(),
+		SupportedFeatures:           commonChatFeatures(),
 		SupportedSamplingParameters: chatSamplingParameters(),
-		Description:                 "GLM-5V-Turbo: native multimodal foundation model for multimodal agents (200K context).",
+		HuggingFaceID:               "zai-org/GLM-5V-Turbo",
+		Quantization:                "bf16",
+		Description:                 "GLM-5V-Turbo: 744B MoE native multimodal agent (released 2026-04-01) for visual programming, GUI automation, and design-to-code; 200K context.",
 	},
 	// GLM-4.6V: input [0,32K) ¥1/¥3, input [32K,128K) ¥2/¥6
 	"glm-4.6v": {

@@ -60,7 +60,7 @@ var (
 
 // ModelRatios contains Together AI models with published pricing metadata from the public
 // serverless models catalog.
-// Source: https://docs.together.ai/docs/serverless-models (retrieved 2026-04-28)
+// Source: https://docs.together.ai/docs/serverless-models (retrieved 2026-06-13)
 var ModelRatios = map[string]adaptor.ModelConfig{
 	// Chat and vision-capable LLMs.
 	"MiniMaxAI/MiniMax-M2.7": {
@@ -79,6 +79,14 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		Quantization: "fp4", HuggingFaceID: "MiniMaxAI/MiniMax-M2",
 		Description: "Earlier checkpoint of MiniMax M2 interleaved-thinking MoE.",
 	},
+	"MiniMaxAI/MiniMax-M3": {
+		Ratio: 0.30 * ratio.MilliTokensUsd, CompletionRatio: 1.20 / 0.30, CachedInputRatio: 0.06 * ratio.MilliTokensUsd,
+		ContextLength: 1000000, MaxOutputTokens: 524288,
+		InputModalities: togetherVisionIn, OutputModalities: togetherTextOut,
+		SupportedFeatures: togetherReasonFeatures, SupportedSamplingParameters: togetherChatSampling,
+		Quantization: "fp8", HuggingFaceID: "MiniMaxAI/MiniMax-M3",
+		Description: "MiniMax M3 native multimodal (text+image+video) frontier model, 1M context, 512K max output, $0.30/$1.20 per 1M.",
+	},
 	// Qwen3.6-Plus released 2026-04-01; serverless price $0.50/$3.00 with hybrid linear-attention + MoE
 	// routing and 1M context. Multimodal (text+image+video input) with thinking mode.
 	// Source: https://www.together.ai/models/qwen36-plus
@@ -90,8 +98,16 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		Quantization: "fp8", HuggingFaceID: "Qwen/Qwen3.6-Plus",
 		Description: "Qwen 3.6 Plus multimodal agentic MoE with hybrid linear-attention routing, 1M context, and thinking mode.",
 	},
+	"Qwen/Qwen3.7-Max": {
+		Ratio: 1.25 * ratio.MilliTokensUsd, CompletionRatio: 3.75 / 1.25, CachedInputRatio: 0.13 * ratio.MilliTokensUsd,
+		ContextLength: 1000000, MaxOutputTokens: 65536,
+		InputModalities: togetherTextIn, OutputModalities: togetherTextOut,
+		SupportedFeatures: togetherReasonFeatures, SupportedSamplingParameters: togetherChatSampling,
+		Quantization: "fp8", HuggingFaceID: "Qwen/Qwen3.7-Max",
+		Description: "Alibaba Qwen3.7 Max reasoning flagship, 1M context, $1.25/$3.75 per 1M.",
+	},
 	"Qwen/Qwen3.5-397B-A17B": {
-		Ratio: 0.60 * ratio.MilliTokensUsd, CompletionRatio: 3.60 / 0.60,
+		Ratio: 0.60 * ratio.MilliTokensUsd, CompletionRatio: 3.60 / 0.60, CachedInputRatio: 0.35 * ratio.MilliTokensUsd,
 		ContextLength: 262144, MaxOutputTokens: 8192,
 		InputModalities: togetherVisionIn, OutputModalities: togetherTextOut,
 		SupportedFeatures: togetherChatFeatures, SupportedSamplingParameters: togetherChatSampling,
@@ -99,7 +115,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		Description: "Qwen 3.5 397B vision-language MoE with 262K context and strong multilingual coding.",
 	},
 	"Qwen/Qwen3.5-9B": {
-		Ratio: 0.10 * ratio.MilliTokensUsd, CompletionRatio: 0.15 / 0.10,
+		Ratio: 0.17 * ratio.MilliTokensUsd, CompletionRatio: 0.25 / 0.17,
 		ContextLength: 262144, MaxOutputTokens: 8192,
 		InputModalities: togetherVisionIn, OutputModalities: togetherTextOut,
 		SupportedFeatures: togetherChatFeatures, SupportedSamplingParameters: togetherChatSampling,
@@ -120,10 +136,10 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		InputModalities: togetherVisionIn, OutputModalities: togetherTextOut,
 		SupportedFeatures: togetherChatFeatures, SupportedSamplingParameters: togetherChatSampling,
 		Quantization: "fp4", HuggingFaceID: "moonshotai/Kimi-K2-Instruct",
-		Description: "Kimi K2.5 agentic MoE (1T/32B active) with vision support and 262K context.",
+		Description: "Kimi K2.5 agentic MoE (1T/32B active) with vision support and 262K context. (RETIRED 2026-05-21; use moonshotai/Kimi-K2.6)",
 	},
 	"zai-org/GLM-5.1": {
-		Ratio: 1.40 * ratio.MilliTokensUsd, CompletionRatio: 4.40 / 1.40,
+		Ratio: 1.40 * ratio.MilliTokensUsd, CompletionRatio: 4.40 / 1.40, CachedInputRatio: 0.26 * ratio.MilliTokensUsd,
 		ContextLength: 202752, MaxOutputTokens: 131072,
 		InputModalities: togetherTextIn, OutputModalities: togetherTextOut,
 		SupportedFeatures: togetherReasonFeatures, SupportedSamplingParameters: togetherChatSampling,
@@ -165,7 +181,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		Description: "OpenAI gpt-oss-20b compact dense open-weight model with 128K context.",
 	},
 	"deepseek-ai/DeepSeek-V4-Pro": {
-		Ratio: 2.10 * ratio.MilliTokensUsd, CompletionRatio: 4.40 / 2.10, CachedInputRatio: 0.20 * ratio.MilliTokensUsd,
+		Ratio: 1.74 * ratio.MilliTokensUsd, CompletionRatio: 3.48 / 1.74, CachedInputRatio: 0.20 * ratio.MilliTokensUsd,
 		ContextLength: 512000, MaxOutputTokens: 8192,
 		InputModalities: togetherTextIn, OutputModalities: togetherTextOut,
 		SupportedFeatures: togetherChatFeatures, SupportedSamplingParameters: togetherChatSampling,
@@ -178,7 +194,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		InputModalities: togetherTextIn, OutputModalities: togetherTextOut,
 		SupportedFeatures: togetherChatFeatures, SupportedSamplingParameters: togetherChatSampling,
 		Quantization: "fp8", HuggingFaceID: "deepseek-ai/DeepSeek-V3",
-		Description: "DeepSeek V3.1 MoE (671B/37B active) with 128K context.",
+		Description: "DeepSeek V3.1 MoE (671B/37B active) with 128K context. (RETIRED 2026-05-14)",
 	},
 	"Qwen/Qwen3-Coder-Next-FP8": {
 		Ratio: 0.50 * ratio.MilliTokensUsd, CompletionRatio: 1.20 / 0.50,
@@ -186,7 +202,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		InputModalities: togetherTextIn, OutputModalities: togetherTextOut,
 		SupportedFeatures: togetherChatFeatures, SupportedSamplingParameters: togetherChatSampling,
 		Quantization: "fp8",
-		Description:  "Next-generation Qwen3 coding model in FP8 (architecture not yet published).",
+		Description:  "Next-generation Qwen3 coding model in FP8 (architecture not yet published). (RETIRED 2026-05-14)",
 	},
 	"Qwen/Qwen3-Coder-480B-A35B-Instruct-FP8": {
 		Ratio: 2.00 * ratio.MilliTokensUsd, CompletionRatio: 1,
@@ -194,7 +210,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		InputModalities: togetherTextIn, OutputModalities: togetherTextOut,
 		SupportedFeatures: togetherChatFeatures, SupportedSamplingParameters: togetherChatSampling,
 		Quantization: "fp8", HuggingFaceID: "Qwen/Qwen3-Coder-480B-A35B-Instruct",
-		Description: "Qwen3 480B coding MoE (480B/35B active) in FP8, non-thinking mode, 256K context.",
+		Description: "Qwen3 480B coding MoE (480B/35B active) in FP8, non-thinking mode, 256K context. (RETIRED 2026-06-04)",
 	},
 	"Qwen/Qwen3-235B-A22B-Instruct-2507-tput": {
 		Ratio: 0.20 * ratio.MilliTokensUsd, CompletionRatio: 0.60 / 0.20,
@@ -210,10 +226,10 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		InputModalities: togetherTextIn, OutputModalities: togetherTextOut,
 		SupportedFeatures: togetherReasonFeatures, SupportedSamplingParameters: togetherR1Sampling,
 		Quantization: "fp8", HuggingFaceID: "deepseek-ai/DeepSeek-R1",
-		Description: "DeepSeek-R1 671B full reasoning model with extended CoT; restrict temperature to 0.5-0.7.",
+		Description: "DeepSeek-R1 671B full reasoning model with extended CoT; restrict temperature to 0.5-0.7. (RETIRED 2026-05-14; use deepseek-ai/DeepSeek-V4-Flash)",
 	},
 	"meta-llama/Llama-3.3-70B-Instruct-Turbo": {
-		Ratio: 0.88 * ratio.MilliTokensUsd, CompletionRatio: 1,
+		Ratio: 1.04 * ratio.MilliTokensUsd, CompletionRatio: 1.04 / 1.04,
 		ContextLength: 131072, MaxOutputTokens: 8192,
 		InputModalities: togetherTextIn, OutputModalities: togetherTextOut,
 		SupportedFeatures: togetherChatFeatures, SupportedSamplingParameters: togetherChatSampling,
@@ -281,12 +297,28 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		Description: "Liquid Foundation Model 2, 24B MoE with hybrid-conv/attn architecture for edge deployment.",
 	},
 	"meta-llama/Meta-Llama-3-8B-Instruct-Lite": {
-		Ratio: 0.10 * ratio.MilliTokensUsd, CompletionRatio: 1,
+		Ratio: 0.14 * ratio.MilliTokensUsd, CompletionRatio: 1,
 		ContextLength: 8192, MaxOutputTokens: 8192,
 		InputModalities: togetherTextIn, OutputModalities: togetherTextOut,
 		SupportedSamplingParameters: togetherChatSampling,
 		Quantization:                "bf16", HuggingFaceID: "meta-llama/Meta-Llama-3-8B-Instruct",
 		Description: "Lightweight quantised variant of Meta Llama 3 8B for fast low-cost inference.",
+	},
+	"nvidia/nemotron-3-ultra-550b-a55b": {
+		Ratio: 0.60 * ratio.MilliTokensUsd, CompletionRatio: 3.60 / 0.60,
+		ContextLength: 1000000, MaxOutputTokens: 32768,
+		InputModalities: togetherTextIn, OutputModalities: togetherTextOut,
+		SupportedFeatures: togetherReasonFeatures, SupportedSamplingParameters: togetherChatSampling,
+		HuggingFaceID: "nvidia/Nemotron-3-Ultra-550B-A55B",
+		Description:   "NVIDIA Nemotron-3 Ultra 550B A55B reasoning MoE, 1M context, $0.60/$3.60 per 1M.",
+	},
+	"moonshotai/Kimi-K2.7-Code": {
+		Ratio: 0.95 * ratio.MilliTokensUsd, CompletionRatio: 4.00 / 0.95,
+		ContextLength: 262144, MaxOutputTokens: 32768,
+		InputModalities: togetherVisionIn, OutputModalities: togetherTextOut,
+		SupportedFeatures: togetherReasonFeatures, SupportedSamplingParameters: togetherChatSampling,
+		HuggingFaceID: "moonshotai/Kimi-K2.7-Code",
+		Description:   "Moonshot Kimi K2.7 Code multimodal coding model, 256K context, $0.95/$4.00 per 1M.",
 	},
 
 	// Embeddings.
@@ -308,7 +340,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 	"black-forest-labs/FLUX.1.1-pro":       {Ratio: 0, CompletionRatio: 1, Image: togetherAIImagePerMegapixelConfig(0.04)},
 	"black-forest-labs/FLUX.1-kontext-pro": {Ratio: 0, CompletionRatio: 1, Image: togetherAIImagePerMegapixelConfig(0.04)},
 	"black-forest-labs/FLUX.1-kontext-max": {Ratio: 0, CompletionRatio: 1, Image: togetherAIImagePerMegapixelConfig(0.08)},
-	"black-forest-labs/FLUX.1-krea-dev":    {Ratio: 0, CompletionRatio: 1, Image: togetherAIImagePerMegapixelConfig(0.025)},
+	"black-forest-labs/FLUX.1-krea-dev":    {Ratio: 0, CompletionRatio: 1, Image: togetherAIImagePerMegapixelConfig(0.025), Description: "FLUX.1 Krea Dev image model. (RETIRED 2026-05-27)"},
 	// FLUX.2 family (Together AI pricing page, retrieved 2026-05-18).
 	// Source: https://www.together.ai/pricing
 	"black-forest-labs/FLUX.2-dev":  {Ratio: 0, CompletionRatio: 1, Image: togetherAIImagePerMegapixelConfig(0.0154)},
@@ -319,13 +351,27 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		MinImages:        1,
 	}},
 	"black-forest-labs/FLUX.2-max": {Ratio: 0, CompletionRatio: 1, Image: togetherAIImagePerMegapixelConfig(0.070)},
+	// gpt-image-1.5 and flash-image-3.1 (Gemini 3.1 Flash / Nano Banana 2) bill per image, not per MP.
+	// Sources: https://www.together.ai/models/gpt-image-1-5, https://www.together.ai/models/gemini-31-flash-image
+	"openai/gpt-image-1.5": {Ratio: 0, CompletionRatio: 1, Image: &adaptor.ImagePricingConfig{
+		PricePerImageUsd: 0.034,
+		DefaultSize:      togetherAIImageBaseSize,
+		MinImages:        1,
+	}},
+	"google/flash-image-3.1": {Ratio: 0, CompletionRatio: 1, Image: &adaptor.ImagePricingConfig{
+		PricePerImageUsd: 0.05,
+		DefaultSize:      "1920x1080",
+		MinImages:        1,
+	}},
 	// Additional 2026 image models served by Together AI.
 	// Source: https://docs.together.ai/docs/serverless-models
 	"Wan-AI/Wan2.6-image":                      {Ratio: 0, CompletionRatio: 1, Image: togetherAIImagePerMegapixelConfig(0.03)},
 	"ByteDance-Seed/Seedream-3.0":              {Ratio: 0, CompletionRatio: 1, Image: togetherAIImagePerMegapixelConfig(0.018)},
 	"ByteDance-Seed/Seedream-4.0":              {Ratio: 0, CompletionRatio: 1, Image: togetherAIImagePerMegapixelConfig(0.03)},
-	"Qwen/Qwen-Image":                          {Ratio: 0, CompletionRatio: 1, Image: togetherAIImagePerMegapixelConfig(0.005)},
-	"RunDiffusion/Juggernaut-pro-flux":         {Ratio: 0, CompletionRatio: 1, Image: togetherAIImagePerMegapixelConfig(0.004)},
+	"Qwen/Qwen-Image":                          {Ratio: 0, CompletionRatio: 1, Image: togetherAIImagePerMegapixelConfig(0.0058)},
+	"Qwen/Qwen-Image-2.0":                      {Ratio: 0, CompletionRatio: 1, Image: togetherAIImagePerMegapixelConfig(0.035)},
+	"Qwen/Qwen-Image-2.0-Pro":                  {Ratio: 0, CompletionRatio: 1, Image: togetherAIImagePerMegapixelConfig(0.075)},
+	"RunDiffusion/Juggernaut-pro-flux":         {Ratio: 0, CompletionRatio: 1, Image: togetherAIImagePerMegapixelConfig(0.0049)},
 	"HiDream-ai/HiDream-I1-Full":               {Ratio: 0, CompletionRatio: 1, Image: togetherAIImagePerMegapixelConfig(0.009)},
 	"HiDream-ai/HiDream-I1-Dev":                {Ratio: 0, CompletionRatio: 1, Image: togetherAIImagePerMegapixelConfig(0.0045)},
 	"HiDream-ai/HiDream-I1-Fast":               {Ratio: 0, CompletionRatio: 1, Image: togetherAIImagePerMegapixelConfig(0.0032)},
@@ -347,15 +393,18 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 
 // ModelList captures the current public Together AI serverless catalog used by the OpenAI-compatible adapter.
 // Pricing is currently published for only a subset of these models, so ModelRatios intentionally stays smaller.
-// Source: https://docs.together.ai/docs/serverless-models (retrieved 2026-04-28)
+// Source: https://docs.together.ai/docs/serverless-models (retrieved 2026-06-13)
 var ModelList = []string{
 	"MiniMaxAI/MiniMax-M2.7",
 	"MiniMaxAI/MiniMax-M2.5",
+	"MiniMaxAI/MiniMax-M3",
 	"Qwen/Qwen3.6-Plus",
+	"Qwen/Qwen3.7-Max",
 	"Qwen/Qwen3.5-397B-A17B",
 	"Qwen/Qwen3.5-9B",
 	"moonshotai/Kimi-K2.6",
 	"moonshotai/Kimi-K2.5",
+	"moonshotai/Kimi-K2.7-Code",
 	"zai-org/GLM-5.1",
 	"zai-org/GLM-5",
 	"openai/gpt-oss-120b",
@@ -375,6 +424,7 @@ var ModelList = []string{
 	"google/gemma-3n-E4B-it",
 	"LiquidAI/LFM2-24B-A2B",
 	"meta-llama/Meta-Llama-3-8B-Instruct-Lite",
+	"nvidia/nemotron-3-ultra-550b-a55b",
 	"google/imagen-4.0-preview",
 	"google/imagen-4.0-fast",
 	"google/imagen-4.0-ultra",

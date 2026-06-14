@@ -23,6 +23,9 @@ var (
 	ernieV2TurboFeatures = []string{"tools", "json_mode", "structured_outputs"}
 	// ernieV2VisionInputs lists the input modalities for multimodal ERNIE Turbo VL.
 	ernieV2VisionInputs = []string{"text", "image"}
+	// ernieV2OmniInputs lists the input modalities for native omni-modal ERNIE 5.0,
+	// which jointly models text, image, audio and video per the Qianfan reference.
+	ernieV2OmniInputs = []string{"text", "image", "audio", "video"}
 	// ernieV2ReasoningFeatures lists the capability set for the ERNIE X1 reasoning
 	// family. Baidu exposes reasoning as a binary thinking mode without a tunable
 	// budget so MaxReasoningTokens stays unset.
@@ -68,7 +71,7 @@ var (
 // ModelRatios contains all supported models and their pricing/configuration metadata.
 // Model list is derived from the keys of this map, eliminating redundancy.
 //
-// Pricing sources (verified 2026-05-18):
+// Pricing sources (verified 2026-06-13):
 //   - https://cloud.baidu.com/doc/qianfan/s/wmh4sv6ya (Qianfan inference pricing — primary)
 //   - https://cloud.baidu.com/doc/WENXINWORKSHOP/s/hlrk4akp7 (legacy ERNIE pricing — verified)
 //
@@ -93,6 +96,51 @@ var (
 //     Hosted DeepSeek models follow DeepSeek's own (unconfirmed-on-Baidu) cache economics
 //     and are intentionally left without a CachedInputRatio.
 var ModelRatios = map[string]adaptor.ModelConfig{
+	// ERNIE 5.x Models (next-generation flagship and reasoning family released 2026-05-09)
+	"ernie-5.1": {
+		// Tiered: ¥4 input / ¥18 output per 1M (input<=32k); ¥6 input / ¥22 output per 1M (32k<input<=128k)
+		Ratio:           4 * ratio.MilliTokensRmb,
+		CompletionRatio: 18.0 / 4.0,
+		Tiers: []adaptor.ModelRatioTier{
+			{InputTokenThreshold: 32768, Ratio: 0.006 * ratio.MilliTokensRmb, CompletionRatio: 0.022 / 0.006}, // 32k<input<=128k tier
+		},
+		ContextLength:               131072,
+		MaxOutputTokens:             65536,
+		MaxReasoningTokens:          61440,
+		InputModalities:             ernieV2TextInputs,
+		OutputModalities:            ernieV2TextOutputs,
+		SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs", "reasoning"},
+		SupportedSamplingParameters: qianfanV2SamplingParameters,
+		Description:                 "Baidu ERNIE 5.1 next-generation text chat model (released 2026-05-09) on Qianfan v2 API; 128K context.",
+	},
+	"ernie-5.0": {
+		// Tiered: ¥6 input / ¥24 output per 1M (input<=32k); ¥10 input / ¥40 output per 1M (32k<input<=128k)
+		Ratio:           6 * ratio.MilliTokensRmb,
+		CompletionRatio: 24.0 / 6.0,
+		Tiers: []adaptor.ModelRatioTier{
+			{InputTokenThreshold: 32768, Ratio: 0.01 * ratio.MilliTokensRmb, CompletionRatio: 0.04 / 0.01}, // 32k<input<=128k tier
+		},
+		ContextLength:               131072,
+		MaxOutputTokens:             8192,
+		InputModalities:             ernieV2OmniInputs,
+		OutputModalities:            ernieV2TextOutputs,
+		SupportedFeatures:           ernieV2TurboFeatures,
+		SupportedSamplingParameters: qianfanV2SamplingParameters,
+		Description:                 "Baidu ERNIE 5.0 native omni-modal flagship (released 2026-05-09) with text+image+audio+video input on Qianfan v2 API; 128K context.",
+	},
+	"ernie-x1.1": {
+		// ¥1 input ($0.139 USD) / ¥4 output ($0.556 USD) per 1M tokens, context 64K, reasoning
+		Ratio:                       1 * ratio.MilliTokensRmb,
+		CompletionRatio:             4.0 / 1.0,
+		ContextLength:               65536,
+		MaxOutputTokens:             65536,
+		InputModalities:             ernieV2TextInputs,
+		OutputModalities:            ernieV2TextOutputs,
+		SupportedFeatures:           ernieV2ReasoningFeatures,
+		SupportedSamplingParameters: qianfanV2SamplingParameters,
+		Description:                 "Baidu ERNIE X1.1 improved deep-reasoning model on Qianfan v2 API; 64K context.",
+	},
+
 	// ERNIE 4.5 Models (closed-weight flagship family released March 2025)
 	"ernie-4.5": {
 		Ratio:                       0.004 * ratio.MilliTokensRmb,
@@ -108,7 +156,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 	}, // CNY 0.004 / 0.016 per 1k tokens (input/output)
 	"ernie-4.5-turbo-32k": {
 		Ratio:                       0.0008 * ratio.MilliTokensRmb,
-		CachedInputRatio:            0.4 * (0.0008 * ratio.MilliTokensRmb), // Prompt cache: cached input billed at 40% of input price.
+		CachedInputRatio:            0.0002 * ratio.MilliTokensRmb, // Prompt cache: official cache-hit price ¥0.0002/1k (25% of input).
 		CompletionRatio:             4,
 		ContextLength:               32768,
 		MaxOutputTokens:             8192,
@@ -120,7 +168,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 	}, // CNY 0.0008 / 0.0032 per 1k tokens
 	"ernie-4.5-turbo-128k": {
 		Ratio:                       0.0008 * ratio.MilliTokensRmb,
-		CachedInputRatio:            0.4 * (0.0008 * ratio.MilliTokensRmb), // Prompt cache: cached input billed at 40% of input price.
+		CachedInputRatio:            0.0002 * ratio.MilliTokensRmb, // Prompt cache: official cache-hit price ¥0.0002/1k (25% of input).
 		CompletionRatio:             4,
 		ContextLength:               131072,
 		MaxOutputTokens:             8192,
@@ -134,8 +182,8 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		Ratio:                       0.003 * ratio.MilliTokensRmb,
 		CachedInputRatio:            0.4 * (0.003 * ratio.MilliTokensRmb), // Prompt cache: cached input billed at 40% of input price.
 		CompletionRatio:             3,
-		ContextLength:               32768,
-		MaxOutputTokens:             8192,
+		ContextLength:               131072,
+		MaxOutputTokens:             16384,
 		InputModalities:             ernieV2VisionInputs,
 		OutputModalities:            ernieV2TextOutputs,
 		SupportedFeatures:           ernieV2TurboFeatures,
@@ -319,9 +367,9 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		Description:                 "Baidu ERNIE Speed 128K: long-context throughput-optimized closed-weight chat tier.",
 	}, // CNY 0.004 / 1k tokens
 	"ernie-speed-pro-128k": {
-		Ratio:                       0.004 * ratio.MilliTokensRmb,
-		CachedInputRatio:            0.4 * (0.004 * ratio.MilliTokensRmb), // Prompt cache: cached input billed at 40% of input price.
-		CompletionRatio:             1,
+		Ratio:                       0.3 * ratio.MilliTokensRmb,
+		CachedInputRatio:            0.4 * (0.3 * ratio.MilliTokensRmb), // Prompt cache: cached input billed at 40% of input price.
+		CompletionRatio:             0.6 / 0.3,
 		ContextLength:               131072,
 		MaxOutputTokens:             4096,
 		InputModalities:             ernieV2TextInputs,
@@ -329,7 +377,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		SupportedFeatures:           ernieV2BasicFeatures,
 		SupportedSamplingParameters: qianfanV2SamplingParameters,
 		Description:                 "Baidu ERNIE Speed Pro 128K: enhanced throughput-optimized closed-weight chat tier.",
-	}, // CNY 0.004 / 1k tokens
+	}, // CNY 0.3 input / 0.6 output per 1M tokens
 
 	// ERNIE Lite Models
 	"ernie-lite-8k": {
@@ -345,9 +393,9 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		Description:                 "Baidu ERNIE Lite 8K: cost-efficient closed-weight chat tier on Qianfan v2.",
 	}, // CNY 0.008 / 1k tokens
 	"ernie-lite-pro-128k": {
-		Ratio:                       0.008 * ratio.MilliTokensRmb,
-		CachedInputRatio:            0.4 * (0.008 * ratio.MilliTokensRmb), // Prompt cache: cached input billed at 40% of input price.
-		CompletionRatio:             1,
+		Ratio:                       0.2 * ratio.MilliTokensRmb,
+		CachedInputRatio:            0.4 * (0.2 * ratio.MilliTokensRmb), // Prompt cache: cached input billed at 40% of input price.
+		CompletionRatio:             0.4 / 0.2,
 		ContextLength:               131072,
 		MaxOutputTokens:             4096,
 		InputModalities:             ernieV2TextInputs,
@@ -355,7 +403,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		SupportedFeatures:           ernieV2BasicFeatures,
 		SupportedSamplingParameters: qianfanV2SamplingParameters,
 		Description:                 "Baidu ERNIE Lite Pro 128K: long-context cost-efficient closed-weight chat tier.",
-	}, // CNY 0.008 / 1k tokens
+	}, // CNY 0.2 input / 0.4 output per 1M tokens
 
 	// ERNIE Tiny Models
 	"ernie-tiny-8k": {
@@ -411,8 +459,8 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 
 	// DeepSeek Models (hosted on Baidu)
 	"deepseek-v3": {
-		Ratio:                       0.01 * ratio.MilliTokensRmb,
-		CompletionRatio:             2,
+		Ratio:                       0.002 * ratio.MilliTokensRmb,
+		CompletionRatio:             0.008 / 0.002,
 		ContextLength:               65536,
 		MaxOutputTokens:             8192,
 		InputModalities:             ernieV2TextInputs,
@@ -422,10 +470,10 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		Quantization:                "fp8",
 		HuggingFaceID:               "deepseek-ai/DeepSeek-V3",
 		Description:                 "DeepSeek V3 hosted on Baidu Qianfan v2: open-weight MoE chat model (non-thinking mode).",
-	}, // CNY 0.01 / 1k tokens
+	}, // CNY 0.002 input / 0.008 output per 1k tokens
 	"deepseek-r1": {
-		Ratio:                       0.01 * ratio.MilliTokensRmb,
-		CompletionRatio:             8,
+		Ratio:                       0.004 * ratio.MilliTokensRmb,
+		CompletionRatio:             0.016 / 0.004,
 		ContextLength:               65536,
 		MaxOutputTokens:             8192,
 		InputModalities:             ernieV2TextInputs,
@@ -436,7 +484,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		Quantization:                "fp8",
 		HuggingFaceID:               "deepseek-ai/DeepSeek-R1",
 		Description:                 "DeepSeek R1 hosted on Baidu Qianfan v2: open-weight reasoning chat model (thinking mode).",
-	}, // CNY 0.01 / 1k tokens
+	}, // CNY 0.004 input / 0.016 output per 1k tokens
 	"deepseek-r1-distill-qwen-32b": {
 		Ratio:                       0.004 * ratio.MilliTokensRmb,
 		CompletionRatio:             1,

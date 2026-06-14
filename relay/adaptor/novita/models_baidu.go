@@ -11,6 +11,18 @@ import (
 // because Novita's public spec pages do not advertise low-precision serving.
 // Source: https://novita.ai/llm-api  (retrieved 2026-04-28)
 var baiduErnieModelRatios = map[string]adaptor.ModelConfig{
+	"baidu/cobuddy": {
+		Ratio:                       0.28 * ratio.MilliTokensUsd,
+		CompletionRatio:             1.13 / 0.28,
+		ContextLength:               131072,
+		MaxOutputTokens:             32768,
+		InputModalities:             novitaTextOnlyModalities,
+		OutputModalities:            novitaTextOnlyModalities,
+		SupportedFeatures:           novitaReasoningFeatures,
+		SupportedSamplingParameters: novitaSamplingParams,
+		Quantization:                "bf16",
+		Description:                 "Baidu CoBuddy reasoning chat model with 128K context.",
+	},
 	"baidu/ernie-4.5-21B-a3b": {
 		Ratio:                       0.07 * ratio.MilliTokensUsd,
 		CompletionRatio:             4,

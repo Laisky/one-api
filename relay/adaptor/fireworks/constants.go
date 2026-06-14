@@ -7,7 +7,7 @@ import (
 // Reusable metadata fragments. Fireworks publishes per-model cards at
 // https://fireworks.ai/models/<provider>/<slug> that report context length,
 // HuggingFace lineage, calibration (FP8 quantization), and function calling
-// support. The values below were retrieved 2026-04-21 .. 2026-05-01 from the
+// support. The values below were retrieved 2026-04-21 .. 2026-06-13 from the
 // model-card pages and standardized to the OpenRouter-compatible vocabulary
 // expected by adaptor.ModelConfig.
 //
@@ -95,6 +95,7 @@ var ModelRatios = mergeModelMaps(
 	gptOssModels,
 	qwenModels,
 	minimaxModels,
+	nvidiaModels,
 	llamaModels,
 	mistralModels,
 	rerankModels,

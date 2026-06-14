@@ -13,7 +13,7 @@ var deepseekModels = map[string]adaptor.ModelConfig{
 	"accounts/fireworks/models/deepseek-v4-pro": {
 		Ratio:                       1.74 * ratio.MilliTokensUsd,
 		CompletionRatio:             3.48 / 1.74,
-		CachedInputRatio:            0.15 * ratio.MilliTokensUsd,
+		CachedInputRatio:            0.145 * ratio.MilliTokensUsd,
 		ContextLength:               1048576,
 		MaxOutputTokens:             1048576,
 		InputModalities:             fwTextOnlyModalities,
@@ -85,5 +85,21 @@ var deepseekModels = map[string]adaptor.ModelConfig{
 		Quantization:              "fp8",
 		HuggingFaceID:             "deepseek-ai/DeepSeek-R1-0528",
 		Description:               "DeepSeek R1 05/28 reasoning checkpoint (674B MoE) approaching o3/Gemini 2.5 Pro on complex reasoning benchmarks.",
+	},
+
+	// DeepSeek V4 Flash — $0.14 in / $0.28 out, cached $0.028.
+	"accounts/fireworks/models/deepseek-v4-flash": {
+		Ratio:                       0.14 * ratio.MilliTokensUsd,
+		CompletionRatio:             0.28 / 0.14,
+		CachedInputRatio:            0.028 * ratio.MilliTokensUsd,
+		ContextLength:               1000000,
+		MaxOutputTokens:             393216,
+		InputModalities:             fwTextOnlyModalities,
+		OutputModalities:            fwTextOnlyModalities,
+		SupportedFeatures:           fwReasoningFeatures,
+		SupportedSamplingParameters: fwChatSamplingParams,
+		Quantization:                "fp8",
+		HuggingFaceID:               "deepseek-ai/DeepSeek-V4-Flash",
+		Description:                 "DeepSeek V4 Flash hosted on Fireworks, 1M context, $0.14/$0.28 per 1M tokens.",
 	},
 }

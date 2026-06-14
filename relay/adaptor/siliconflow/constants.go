@@ -60,7 +60,7 @@ var (
 // intentionally avoids speculative churn and only enumerates models with
 // publicly visible USD pricing on the English pricing page.
 //
-// Pricing sources (retrieved 2026-05-19):
+// Pricing sources (retrieved 2026-06-13):
 //   - https://www.siliconflow.com/pricing (English; USD per million tokens / image / second)
 //   - https://siliconflow.cn/pricing (Chinese; CNY per million tokens — converted at 0.14 USD/CNY for legacy aliases)
 //   - https://siliconflow.cn/zh-cn/models (catalog, partially login-gated)
@@ -325,10 +325,10 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 	// === 2026-era models (USD pricing from https://www.siliconflow.com/pricing) ===
 
 	"deepseek-ai/DeepSeek-V4-Pro": {
-		// $1.74/M input, $0.145/M cached, $3.48/M output (verified 2026-05-19).
+		// $1.6/M input, $0.145/M cached, $3.48/M output (verified 2026-06-14 against siliconflow.com/models/deepseek-v4-pro).
 		// MoE: 1.6T total / 49B activated, native 1M context, MIT license.
-		Ratio:                       1.74 * ratio.MilliTokensUsd,
-		CompletionRatio:             3.48 / 1.74,
+		Ratio:                       1.6 * ratio.MilliTokensUsd,
+		CompletionRatio:             3.48 / 1.6,
 		CachedInputRatio:            0.145 * ratio.MilliTokensUsd,
 		ContextLength:               1048576,
 		MaxOutputTokens:             393216,
@@ -343,10 +343,10 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		Description:                 "DeepSeek V4 Pro flagship MoE (1.6T/49B) with 1M context and switchable Non-Think/Think High/Think Max reasoning modes on SiliconFlow.",
 	},
 	"deepseek-ai/DeepSeek-V4-Flash": {
-		// $0.14/M input, $0.028/M cached, $0.28/M output (verified 2026-05-19).
+		// $0.13/M input, $0.028/M cached, $0.28/M output (verified 2026-06-14 against siliconflow.com/models/deepseek-v4-flash).
 		// MoE: 284B total / 13B activated, 1M context, MIT license.
-		Ratio:                       0.14 * ratio.MilliTokensUsd,
-		CompletionRatio:             0.28 / 0.14,
+		Ratio:                       0.13 * ratio.MilliTokensUsd,
+		CompletionRatio:             0.28 / 0.13,
 		CachedInputRatio:            0.028 * ratio.MilliTokensUsd,
 		ContextLength:               1048576,
 		MaxOutputTokens:             393216,
@@ -422,7 +422,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		SupportedSamplingParameters: siliconflowChatSamplingParams,
 		Quantization:                "fp8",
 		HuggingFaceID:               "Qwen/Qwen3-235B-A22B-Instruct-2507",
-		Description:                 "Alibaba Qwen3 235B/A22B Instruct MoE chat model with 256K context on SiliconFlow.",
+		Description:                 "Alibaba Qwen3 235B/A22B Instruct MoE chat model with 256K context on SiliconFlow. (RETIRED 2026-05-15)",
 	},
 	"moonshotai/Kimi-K2.5": {
 		// $0.45/M input, $0.07/M cached, $2.25/M output (verified 2026-05-19 on https://www.siliconflow.com/models/kimi-k2-5).
@@ -442,9 +442,9 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		Description:                 "Moonshot Kimi K2.5 native multimodal MoE (1T/32B) agentic model with 256K context and switchable thinking modes on SiliconFlow.",
 	},
 	"moonshotai/Kimi-K2.6": {
-		// $0.90/M input, $0.20/M cached, $4.00/M output.
-		Ratio:                       0.90 * ratio.MilliTokensUsd,
-		CompletionRatio:             4.00 / 0.90,
+		// $0.77/M input, $0.20/M cached, $4.00/M output.
+		Ratio:                       0.77 * ratio.MilliTokensUsd,
+		CompletionRatio:             4.00 / 0.77,
 		CachedInputRatio:            0.20 * ratio.MilliTokensUsd,
 		ContextLength:               262144,
 		MaxOutputTokens:             262144,
@@ -470,7 +470,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		SupportedSamplingParameters: siliconflowChatSamplingParams,
 		Quantization:                "fp8",
 		HuggingFaceID:               "moonshotai/Kimi-K2-Instruct-0905",
-		Description:                 "Moonshot Kimi K2 Instruct (0905 refresh) long-context MoE chat model with 256K context on SiliconFlow.",
+		Description:                 "Moonshot Kimi K2 Instruct (0905 refresh) long-context MoE chat model with 256K context on SiliconFlow. (RETIRED 2026-05-15)",
 	},
 	"zai-org/GLM-4.7": {
 		// $0.42/M input, $0.11/M cached, $2.20/M output. 205K context per public model page.
@@ -533,7 +533,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		SupportedSamplingParameters: siliconflowChatSamplingParams,
 		Quantization:                "fp8",
 		HuggingFaceID:               "zai-org/GLM-4.6",
-		Description:                 "Zhipu GLM-4.6 chat model with 205K context on SiliconFlow.",
+		Description:                 "Zhipu GLM-4.6 chat model with 205K context on SiliconFlow. (RETIRED 2026-05-15)",
 	},
 
 	// === Qwen3.5 / Qwen3.6 (April 2026 lineup, Apache-2.0) ===
@@ -659,6 +659,92 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		Quantization:                "fp8",
 		HuggingFaceID:               "MiniMaxAI/MiniMax-M2.5",
 		Description:                 "MiniMax M2.5 long-context chat model with 197K context on SiliconFlow.",
+	},
+
+	"MiniMaxAI/MiniMax-M3": {
+		Ratio:                       0.30 * ratio.MilliTokensUsd,
+		CompletionRatio:             1.20 / 0.30,
+		CachedInputRatio:            0.06 * ratio.MilliTokensUsd,
+		ContextLength:               1000000,
+		MaxOutputTokens:             524288,
+		InputModalities:             []string{"text", "image", "video"},
+		OutputModalities:            siliconflowTextModalities,
+		SupportedFeatures:           siliconflowChatFeatures,
+		SupportedSamplingParameters: siliconflowChatSamplingParams,
+		HuggingFaceID:               "MiniMaxAI/MiniMax-M3",
+		Description:                 "MiniMax M3 native multimodal flagship (text+image+video input, 1M context, 512K output, $0.30/$1.20 per 1M).",
+	},
+	"tencent/Hy3-preview": {
+		Ratio:                       0.066 * ratio.MilliTokensUsd,
+		CompletionRatio:             0.26 / 0.066,
+		CachedInputRatio:            0.029 * ratio.MilliTokensUsd, // $0.029/M cached (verified 2026-06-14 against siliconflow.com/models/hy3-preview)
+		ContextLength:               262144,
+		MaxOutputTokens:             32768,
+		InputModalities:             siliconflowTextModalities,
+		OutputModalities:            siliconflowTextModalities,
+		SupportedFeatures:           siliconflowChatFeatures,
+		SupportedSamplingParameters: siliconflowChatSamplingParams,
+		Description:                 "Tencent Hunyuan 3 Preview (hy3-preview) MoE flagship, 262K context, $0.066/$0.26 per 1M.",
+	},
+	"zai-org/GLM-5V-Turbo": {
+		Ratio:                       1.20 * ratio.MilliTokensUsd,
+		CompletionRatio:             4.00 / 1.20,
+		CachedInputRatio:            0.24 * ratio.MilliTokensUsd,
+		ContextLength:               200000,
+		MaxOutputTokens:             128000,
+		InputModalities:             []string{"text", "image"},
+		OutputModalities:            siliconflowTextModalities,
+		SupportedFeatures:           siliconflowChatFeatures,
+		SupportedSamplingParameters: siliconflowChatSamplingParams,
+		HuggingFaceID:               "zai-org/GLM-5V-Turbo",
+		Description:                 "Zhipu GLM-5V-Turbo native multimodal vision model (200K ctx, $1.20/$4.00 per 1M).",
+	},
+	"zai-org/GLM-4.5-Air": {
+		Ratio:                       0.14 * ratio.MilliTokensUsd,
+		CompletionRatio:             0.86 / 0.14,
+		CachedInputRatio:            0.028 * ratio.MilliTokensUsd,
+		ContextLength:               131072,
+		MaxOutputTokens:             32768,
+		InputModalities:             siliconflowTextModalities,
+		OutputModalities:            siliconflowTextModalities,
+		SupportedFeatures:           siliconflowChatFeatures,
+		SupportedSamplingParameters: siliconflowChatSamplingParams,
+		HuggingFaceID:               "zai-org/GLM-4.5-Air",
+		Description:                 "Zhipu GLM-4.5 Air reasoning model (131K ctx, $0.14/$0.86 per 1M).",
+	},
+	"openai/gpt-oss-120b": {
+		Ratio:                       0.05 * ratio.MilliTokensUsd,
+		CompletionRatio:             0.45 / 0.05,
+		ContextLength:               131072,
+		MaxOutputTokens:             65536,
+		InputModalities:             siliconflowTextModalities,
+		OutputModalities:            siliconflowTextModalities,
+		SupportedFeatures:           siliconflowChatFeatures,
+		SupportedSamplingParameters: siliconflowChatSamplingParams,
+		Description:                 "OpenAI GPT-OSS 120B reasoning MoE model hosted on SiliconFlow (131K ctx, $0.05/$0.45 per 1M).",
+	},
+	"openai/gpt-oss-20b": {
+		Ratio:                       0.04 * ratio.MilliTokensUsd,
+		CompletionRatio:             0.18 / 0.04,
+		ContextLength:               131072,
+		MaxOutputTokens:             65536,
+		InputModalities:             siliconflowTextModalities,
+		OutputModalities:            siliconflowTextModalities,
+		SupportedFeatures:           siliconflowChatFeatures,
+		SupportedSamplingParameters: siliconflowChatSamplingParams,
+		Description:                 "OpenAI GPT-OSS 20B reasoning model hosted on SiliconFlow (131K ctx, $0.04/$0.18 per 1M).",
+	},
+	"deepseek-ai/DeepSeek-V3.1-Terminus": {
+		Ratio:                       0.27 * ratio.MilliTokensUsd,
+		CompletionRatio:             1.00 / 0.27,
+		ContextLength:               163840,
+		MaxOutputTokens:             32768,
+		InputModalities:             siliconflowTextModalities,
+		OutputModalities:            siliconflowTextModalities,
+		SupportedFeatures:           siliconflowChatFeatures,
+		SupportedSamplingParameters: siliconflowChatSamplingParams,
+		HuggingFaceID:               "deepseek-ai/DeepSeek-V3.1-Terminus",
+		Description:                 "DeepSeek V3.1 Terminus reasoning model hosted on SiliconFlow (164K ctx, $0.27/$1.00 per 1M).",
 	},
 
 	// === Image models (USD per image) ===

@@ -31,7 +31,7 @@ const (
 	gemini31FlashImage512Price = 0.045
 	gemini31FlashImage1KPrice  = 0.067
 	gemini31FlashImage2KPrice  = 0.101
-	gemini31FlashImage4KPrice  = 0.15
+	gemini31FlashImage4KPrice  = 0.151 // 4K (2520 tokens) = $0.151/image per Google pricing footnote
 
 	geminiEmbedding001TextPrice              = 0.15
 	geminiEmbedding2PreviewTextPrice         = 0.20
@@ -374,7 +374,15 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 // ModelList derived from ModelRatios for backward compatibility
 var ModelList = adaptor.GetModelListFromPricing(ModelRatios)
 
-const geminiWebSearchUsdPerCall = 35.0 / 1000.0
+const (
+	// geminiWebSearchUsdPerCall is the grounded web search price for Gemini 2.5 models: $35/1K queries.
+	// Sources verified 2026-06-13:
+	//   - https://ai.google.dev/gemini-api/docs/models
+	//   - https://ai.google.dev/gemini-api/docs/pricing
+	geminiWebSearchUsdPerCall = 35.0 / 1000.0
+	// gemini3xWebSearchUsdPerCall is the grounded web search price for Gemini 3.x models: $14/1K queries.
+	gemini3xWebSearchUsdPerCall = 14.0 / 1000.0
+)
 
 // geminiWebSearchModels enumerates Gemini models with grounded web search pricing in Google documentation.
 // Source: https://ai.google.dev/gemini-api/docs/pricing (retrieved via https://r.jina.ai/https://ai.google.dev/gemini-api/docs/pricing)
@@ -402,23 +410,35 @@ var geminiWebSearchModels = map[string]struct{}{
 	"gemini-robotics-er-1.6-preview":          {},
 }
 
-var geminiToolingDefaults = buildGeminiToolingDefaults()
+var (
+	geminiToolingDefaults    = buildGeminiToolingDefaults(geminiWebSearchUsdPerCall)
+	gemini3xToolingDefaults  = buildGeminiToolingDefaults(gemini3xWebSearchUsdPerCall)
+)
 
 // buildGeminiToolingDefaults attaches channel-level web search pricing derived from Google documentation.
-func buildGeminiToolingDefaults() adaptor.ChannelToolConfig {
+func buildGeminiToolingDefaults(webSearchUsdPerCall float64) adaptor.ChannelToolConfig {
 	if len(geminiWebSearchModels) == 0 {
 		return adaptor.ChannelToolConfig{}
 	}
 	return adaptor.ChannelToolConfig{
 		Pricing: map[string]adaptor.ToolPricingConfig{
-			"web_search": {UsdPerCall: geminiWebSearchUsdPerCall},
+			"web_search": {UsdPerCall: webSearchUsdPerCall},
 		},
 	}
 }
 
-// GeminiToolingDefaults exposes the precomputed tooling defaults so callers
+// GeminiToolingDefaults exposes the precomputed tooling defaults (Gemini 2.5 pricing) so callers
 // can reuse them without rebuilding the configuration repeatedly.
 func GeminiToolingDefaults() adaptor.ChannelToolConfig {
+	return geminiToolingDefaults
+}
+
+// GeminiToolingDefaultsForModel returns the tooling defaults for the given model,
+// selecting $14/1K queries for Gemini 3.x models and $35/1K queries for 2.5 and earlier.
+func GeminiToolingDefaultsForModel(model string) adaptor.ChannelToolConfig {
+	if GeminiVersionAtLeast(model, 3.0) {
+		return gemini3xToolingDefaults
+	}
 	return geminiToolingDefaults
 }
 

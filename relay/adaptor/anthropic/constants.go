@@ -152,12 +152,11 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 	},
 	"claude-fable-5": {
 		Ratio: 10 * ratio.MilliTokensUsd, CompletionRatio: 5,
-		CachedInputRatio: 1.25 * ratio.MilliTokensUsd, CacheWrite5mRatio: 12.5 * ratio.MilliTokensUsd, CacheWrite1hRatio: 20 * ratio.MilliTokensUsd,
+		CachedInputRatio: 1.0 * ratio.MilliTokensUsd, CacheWrite5mRatio: 12.5 * ratio.MilliTokensUsd, CacheWrite1hRatio: 20 * ratio.MilliTokensUsd,
 		ContextLength: 1000000, MaxOutputTokens: 128000,
 		InputModalities: claudeVisionInputs, OutputModalities: claudeTextOutputs,
 		SupportedFeatures: claudeFeaturesWithReasoning, SupportedSamplingParameters: claudeSamplingParams,
-		MaxReasoningTokens: 120000,
-		Description:        "Claude Fable 5 flagship Anthropic model with 1M-token context and frontier-level reasoning.",
+		Description:       "Claude Fable 5 flagship Anthropic model with 1M-token context and frontier-level reasoning (adaptive thinking; budget_tokens not supported).",
 	},
 
 	// Claude 4 Sonnet Models

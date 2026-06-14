@@ -20,10 +20,6 @@ var GeminiToolingDefaults = geminiOpenaiCompatible.GeminiToolingDefaults()
 //
 // https://cloud.google.com/vertex-ai/generative-ai/docs/learn/prompts/system-instructions
 var ModelsSupportSystemInstruction = []string{
-	"gemini-2.0-flash", "gemini-2.0-flash-exp",
-	"gemini-2.0-flash-thinking-exp-01-21",
-	"gemini-2.0-flash-lite",
-	"gemini-2.0-pro-exp-02-05",
 	"gemini-2.5-flash", "gemini-2.5-flash-preview",
 	"gemini-2.5-flash-lite", "gemini-2.5-flash-lite-preview",
 	"gemini-2.5-flash-native-audio",

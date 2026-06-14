@@ -55,7 +55,7 @@ func textInput() []string { return []string{"text"} }
 func textImageInput() []string { return []string{"text", "image"} }
 
 // textImageVideoFileInput returns the full multimodal input set used by GLM-4.6V.
-func textImageVideoFileInput() []string { return []string{"text", "image", "file"} }
+func textImageVideoFileInput() []string { return []string{"text", "image", "video", "file"} }
 
 // ModelRatios contains all supported models and their pricing ratios.
 // The model list is derived from the keys of this map, eliminating redundancy.

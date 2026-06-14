@@ -229,6 +229,14 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 			SupportedSamplingParameters: []string{"temperature", "top_p", "top_k", "stop", "max_tokens"},
 			Description:                 "Claude 3.5 Haiku features offers enhanced capabilities in speed, coding accuracy, and tool use. Engineered to excel in real-time applications, it delivers quick response times that are essential for dynamic...",
 		}),
+	"anthropic/claude-fable-5": openRouterModelConfigWithMetadata(10, 50, 1, 12.5,
+		openRouterModelMetadata{
+			ContextLength:     1000000,
+			MaxOutputTokens:   128000,
+			InputModalities:   []string{"text", "image", "file"},
+			OutputModalities:  []string{"text"},
+			SupportedFeatures: []string{"tools", "structured_outputs", "reasoning"},
+		}),
 	"anthropic/claude-haiku-4.5": openRouterModelConfigWithMetadata(1, 5, 0.1, 1.25,
 		openRouterModelMetadata{
 			ContextLength:               200000,
@@ -622,7 +630,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 			SupportedSamplingParameters: []string{"temperature", "top_p", "top_k", "min_p", "frequency_penalty", "presence_penalty", "repetition_penalty", "stop", "max_tokens", "logit_bias"},
 			Description:                 "Cogito v2.1 671B MoE represents one of the strongest open models globally, matching performance of frontier closed and open models. This model is trained using self play with reinforcement learning...",
 		}),
-	"deepseek/deepseek-chat": openRouterModelConfigWithMetadata(0.32, 0.89, 0, 0,
+	"deepseek/deepseek-chat": openRouterModelConfigWithMetadata(0.2002, 0.8001, 0, 0,
 		openRouterModelMetadata{
 			ContextLength:               163840,
 			MaxOutputTokens:             16384,
@@ -710,7 +718,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 			HuggingFaceID:               "deepseek-ai/DeepSeek-V3.1-Terminus",
 			Description:                 "DeepSeek-V3.1 Terminus is an update to [DeepSeek V3.1](/deepseek/deepseek-chat-v3.1) that maintains the model's original capabilities while addressing issues reported by users, including language consistency and agent capabilities, further optimizing the model's...",
 		}),
-	"deepseek/deepseek-v3.2": openRouterModelConfigWithMetadata(0.252, 0.378, 0.0252, 0,
+	"deepseek/deepseek-v3.2": openRouterModelConfigWithMetadata(0.2288, 0.3432, 0, 0,
 		openRouterModelMetadata{
 			ContextLength:               131072,
 			MaxOutputTokens:             65536,
@@ -743,7 +751,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 			HuggingFaceID:               "deepseek-ai/DeepSeek-V3.2-Speciale",
 			Description:                 "DeepSeek-V3.2-Speciale is a high-compute variant of DeepSeek-V3.2 optimized for maximum reasoning and agentic performance. It builds on DeepSeek Sparse Attention (DSA) for efficient long-context processing, then scales post-training reinforcement learning...",
 		}),
-	"deepseek/deepseek-v4-flash": openRouterModelConfigWithMetadata(0.112, 0.224, 0.022, 0,
+	"deepseek/deepseek-v4-flash": openRouterModelConfigWithMetadata(0.09, 0.18, 0.02, 0,
 		openRouterModelMetadata{
 			ContextLength:               1048576,
 			MaxOutputTokens:             384000,
@@ -1030,7 +1038,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 			HuggingFaceID:               "google/gemma-4-26B-A4B-it",
 			Description:                 "Gemma 4 26B A4B IT is an instruction-tuned Mixture-of-Experts (MoE) model from Google DeepMind. Despite 25.2B total parameters, only 3.8B activate per token during inference — delivering near-31B quality at...",
 		}),
-	"google/gemma-4-31b-it": openRouterModelConfigWithMetadata(0.12, 0.37, 0, 0,
+	"google/gemma-4-31b-it": openRouterModelConfigWithMetadata(0.12, 0.35, 0.09, 0,
 		openRouterModelMetadata{
 			ContextLength:               262144,
 			MaxOutputTokens:             16384,
@@ -1113,7 +1121,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 			SupportedSamplingParameters: []string{"temperature", "stop", "max_tokens"},
 			Description:                 "Mercury 2 is an extremely fast reasoning LLM, and the first reasoning diffusion LLM (dLLM). Instead of generating tokens sequentially, Mercury 2 produces and refines multiple tokens in parallel, achieving...",
 		}),
-	"inclusionai/ling-2.6-1t": openRouterModelConfigWithMetadata(0.3, 2.5, 0.06, 0,
+	"inclusionai/ling-2.6-1t": openRouterModelConfigWithMetadata(0.075, 0.625, 0.015, 0,
 		openRouterModelMetadata{
 			ContextLength:               262144,
 			MaxOutputTokens:             32768,
@@ -1219,7 +1227,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 			HuggingFaceID:               "meta-llama/Meta-Llama-3-70B-Instruct",
 			Description:                 "Meta's latest class of model (Llama 3) launched with a variety of sizes & flavors. This 70B instruct-tuned version was optimized for high quality dialogue usecases. It has demonstrated strong...",
 		}),
-	"meta-llama/llama-3-8b-instruct": openRouterModelConfigWithMetadata(0.04, 0.04, 0, 0,
+	"meta-llama/llama-3-8b-instruct": openRouterModelConfigWithMetadata(0.14, 0.14, 0, 0,
 		openRouterModelMetadata{
 			ContextLength:               8192,
 			MaxOutputTokens:             16384,
@@ -1252,7 +1260,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 			HuggingFaceID:               "meta-llama/Meta-Llama-3.1-8B-Instruct",
 			Description:                 "Meta's latest class of model (Llama 3.1) launched with a variety of sizes & flavors. This 8B instruct-tuned version is fast and efficient. It has demonstrated strong performance compared to...",
 		}),
-	"meta-llama/llama-3.2-11b-vision-instruct": openRouterModelConfigWithMetadata(0.245, 0.245, 0, 0,
+	"meta-llama/llama-3.2-11b-vision-instruct": openRouterModelConfigWithMetadata(0.345, 0.345, 0, 0,
 		openRouterModelMetadata{
 			ContextLength:               131072,
 			MaxOutputTokens:             16384,
@@ -1436,7 +1444,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 			HuggingFaceID:               "MiniMaxAI/MiniMax-M2.1",
 			Description:                 "MiniMax-M2.1 is a lightweight, state-of-the-art large language model optimized for coding, agentic workflows, and modern application development. With only 10 billion activated parameters, it delivers a major jump in real-world...",
 		}),
-	"minimax/minimax-m2.5": openRouterModelConfigWithMetadata(0.15, 1.15, 0, 0,
+	"minimax/minimax-m2.5": openRouterModelConfigWithMetadata(0.15, 0.9, 0.05, 0,
 		openRouterModelMetadata{
 			ContextLength:               196608,
 			MaxOutputTokens:             131072,
@@ -1458,7 +1466,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 			HuggingFaceID:               "MiniMaxAI/MiniMax-M2.5",
 			Description:                 "MiniMax-M2.5 is a SOTA large language model designed for real-world productivity. Trained in a diverse range of complex real-world digital working environments, M2.5 builds upon the coding expertise of M2.1...",
 		}),
-	"minimax/minimax-m2.7": openRouterModelConfigWithMetadata(0.279, 1.2, 0, 0,
+	"minimax/minimax-m2.7": openRouterModelConfigWithMetadata(0.25, 1.0, 0.05, 0,
 		openRouterModelMetadata{
 			ContextLength:               196608,
 			InputModalities:             []string{"text"},
@@ -1467,6 +1475,14 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 			SupportedSamplingParameters: []string{"temperature", "top_p", "top_k", "min_p", "frequency_penalty", "presence_penalty", "repetition_penalty", "stop", "max_tokens", "logit_bias"},
 			HuggingFaceID:               "MiniMaxAI/MiniMax-M2.7",
 			Description:                 "MiniMax-M2.7 is a next-generation large language model designed for autonomous, real-world productivity and continuous improvement. Built to actively participate in its own evolution, M2.7 integrates advanced agentic capabilities through multi-agent...",
+		}),
+	"minimax/minimax-m3": openRouterModelConfigWithMetadata(0.3, 1.2, 0.06, 0,
+		openRouterModelMetadata{
+			ContextLength:     1048576,
+			MaxOutputTokens:   512000,
+			InputModalities:   []string{"text", "image", "video"},
+			OutputModalities:  []string{"text"},
+			SupportedFeatures: []string{"tools", "json_mode", "structured_outputs", "reasoning"},
 		}),
 	"mistralai/codestral-2508": openRouterModelConfigWithMetadata(0.3, 0.9, 0.03, 0,
 		openRouterModelMetadata{
@@ -1730,7 +1746,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 			HuggingFaceID:               "moonshotai/Kimi-K2-Thinking",
 			Description:                 "Kimi K2 Thinking is Moonshot AI’s most advanced open reasoning model to date, extending the K2 series into agentic, long-horizon reasoning. Built on the trillion-parameter Mixture-of-Experts (MoE) architecture introduced in...",
 		}),
-	"moonshotai/kimi-k2.5": openRouterModelConfigWithMetadata(0.4, 1.9, 0.09, 0,
+	"moonshotai/kimi-k2.5": openRouterModelConfigWithMetadata(0.375, 2.025, 0, 0,
 		openRouterModelMetadata{
 			ContextLength:               262144,
 			MaxOutputTokens:             65535,
@@ -1741,7 +1757,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 			HuggingFaceID:               "moonshotai/Kimi-K2.5",
 			Description:                 "Kimi K2.5 is Moonshot AI's native multimodal model, delivering state-of-the-art visual coding capability and a self-directed agent swarm paradigm. Built on Kimi K2 with continued pretraining over approximately 15T mixed...",
 		}),
-	"moonshotai/kimi-k2.6": openRouterModelConfigWithMetadata(0.73, 3.49, 0.25, 0,
+	"moonshotai/kimi-k2.6": openRouterModelConfigWithMetadata(0.68, 3.41, 0.34, 0,
 		openRouterModelMetadata{
 			ContextLength:               262142,
 			MaxOutputTokens:             262142,
@@ -1751,6 +1767,14 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 			SupportedSamplingParameters: []string{"temperature", "top_p", "top_k", "min_p", "frequency_penalty", "presence_penalty", "repetition_penalty", "stop", "seed", "max_tokens", "logit_bias", "parallel_tool_calls"},
 			HuggingFaceID:               "moonshotai/Kimi-K2.6",
 			Description:                 "Kimi K2.6 is Moonshot AI's next-generation multimodal model, designed for long-horizon coding, coding-driven UI/UX generation, and multi-agent orchestration. It handles complex end-to-end coding tasks across Python, Rust, and Go, and...",
+		}),
+	"moonshotai/kimi-k2.7-code": openRouterModelConfigWithMetadata(0.75, 3.5, 0.16, 0,
+		openRouterModelMetadata{
+			ContextLength:     262144,
+			MaxOutputTokens:   262144,
+			InputModalities:   []string{"text", "image"},
+			OutputModalities:  []string{"text"},
+			SupportedFeatures: []string{"tools", "structured_outputs", "reasoning", "logprobs"},
 		}),
 	"morph/morph-v3-fast": openRouterModelConfigWithMetadata(0.8, 1.2, 0, 0,
 		openRouterModelMetadata{
@@ -1780,6 +1804,14 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 			SupportedSamplingParameters: []string{"temperature", "top_p", "top_k", "frequency_penalty", "max_tokens"},
 			HuggingFaceID:               "nex-agi/DeepSeek-V3.1-Nex-N1",
 			Description:                 "DeepSeek V3.1 Nex-N1 is the flagship release of the Nex-N1 series — a post-trained model designed to highlight agent autonomy, tool use, and real-world productivity. Nex-N1 demonstrates competitive performance across...",
+		}),
+	"nex-agi/nex-n2-pro:free": openRouterModelConfigWithMetadata(0, 0, 0, 0,
+		openRouterModelMetadata{
+			ContextLength:     262144,
+			MaxOutputTokens:   262144,
+			InputModalities:   []string{"text", "image"},
+			OutputModalities:  []string{"text"},
+			SupportedFeatures: []string{"tools", "structured_outputs", "reasoning", "logprobs"},
 		}),
 	"nousresearch/hermes-2-pro-llama-3-8b": openRouterModelConfigWithMetadata(0.14, 0.14, 0, 0,
 		openRouterModelMetadata{
@@ -1812,7 +1844,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 			HuggingFaceID:               "NousResearch/Hermes-3-Llama-3.1-405B",
 			Description:                 "Hermes 3 is a generalist language model with many improvements over Hermes 2, including advanced agentic capabilities, much better roleplaying, reasoning, multi-turn conversation, long context coherence, and improvements across the...",
 		}),
-	"nousresearch/hermes-3-llama-3.1-70b": openRouterModelConfigWithMetadata(0.3, 0.3, 0, 0,
+	"nousresearch/hermes-3-llama-3.1-70b": openRouterModelConfigWithMetadata(0.7, 0.7, 0, 0,
 		openRouterModelMetadata{
 			ContextLength:               131072,
 			MaxOutputTokens:             16384,
@@ -1843,7 +1875,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 			HuggingFaceID:               "NousResearch/Hermes-4-70B",
 			Description:                 "Hermes 4 70B is a hybrid reasoning model from Nous Research, built on Meta-Llama-3.1-70B. It introduces the same hybrid mode as the larger 405B release, allowing the model to either...",
 		}),
-	"nvidia/llama-3.3-nemotron-super-49b-v1.5": openRouterModelConfigWithMetadata(0.1, 0.4, 0, 0,
+	"nvidia/llama-3.3-nemotron-super-49b-v1.5": openRouterModelConfigWithMetadata(0.4, 0.4, 0, 0,
 		openRouterModelMetadata{
 			ContextLength:               131072,
 			MaxOutputTokens:             16384,
@@ -1905,6 +1937,30 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 			SupportedSamplingParameters: []string{"temperature", "top_p", "seed", "max_tokens"},
 			HuggingFaceID:               "nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-FP8",
 			Description:                 "NVIDIA Nemotron 3 Super is a 120B-parameter open hybrid MoE model, activating just 12B parameters for maximum compute efficiency and accuracy in complex multi-agent applications. Built on a hybrid Mamba-Transformer...",
+		}),
+	"nvidia/nemotron-3-ultra-550b-a55b": openRouterModelConfigWithMetadata(0.5, 2.5, 0.15, 0,
+		openRouterModelMetadata{
+			ContextLength:     1000000,
+			MaxOutputTokens:   16384,
+			InputModalities:   []string{"text"},
+			OutputModalities:  []string{"text"},
+			SupportedFeatures: []string{"tools", "structured_outputs", "reasoning"},
+		}),
+	"nvidia/nemotron-3-ultra-550b-a55b:free": openRouterModelConfigWithMetadata(0, 0, 0, 0,
+		openRouterModelMetadata{
+			ContextLength:     1000000,
+			MaxOutputTokens:   65536,
+			InputModalities:   []string{"text"},
+			OutputModalities:  []string{"text"},
+			SupportedFeatures: []string{"tools", "reasoning"},
+		}),
+	"nvidia/nemotron-3.5-content-safety:free": openRouterModelConfigWithMetadata(0, 0, 0, 0,
+		openRouterModelMetadata{
+			ContextLength:     128000,
+			MaxOutputTokens:   8192,
+			InputModalities:   []string{"text", "image"},
+			OutputModalities:  []string{"text"},
+			SupportedFeatures: []string{"reasoning"},
 		}),
 	"nvidia/nemotron-nano-12b-v2-vl:free": openRouterModelConfigWithMetadata(0, 0, 0, 0,
 		openRouterModelMetadata{
@@ -2739,7 +2795,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 			SupportedSamplingParameters: []string{"temperature", "top_p", "presence_penalty", "seed", "max_tokens"},
 			Description:                 "Qwen-Plus, based on the Qwen2.5 foundation model, is a 131K context model with a balanced performance, speed, and cost combination.",
 		}),
-	"qwen/qwen-plus-2025-07-28": openRouterModelConfigWithMetadata(0.26, 0.78, 0, 0.325,
+	"qwen/qwen-plus-2025-07-28": openRouterModelConfigWithMetadata(0.26, 0.78, 0, 0,
 		openRouterModelMetadata{
 			ContextLength:               1000000,
 			MaxOutputTokens:             32768,
@@ -2759,7 +2815,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 			SupportedSamplingParameters: []string{"temperature", "top_p", "presence_penalty", "seed", "max_tokens"},
 			Description:                 "Qwen Plus 0728, based on the Qwen3 foundation model, is a 1 million context hybrid reasoning model with a balanced performance, speed, and cost combination.",
 		}),
-	"qwen/qwen2.5-vl-72b-instruct": openRouterModelConfigWithMetadata(0.25, 0.75, 0, 0,
+	"qwen/qwen2.5-vl-72b-instruct": openRouterModelConfigWithMetadata(0.8, 1.0, 0.4, 0,
 		openRouterModelMetadata{
 			ContextLength:               32000,
 			InputModalities:             []string{"text", "image"},
@@ -2791,7 +2847,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 			HuggingFaceID:               "Qwen/Qwen3-235B-A22B",
 			Description:                 "Qwen3-235B-A22B is a 235B parameter mixture-of-experts (MoE) model developed by Qwen, activating 22B parameters per forward pass. It supports seamless switching between a \"thinking\" mode for complex reasoning, math, and...",
 		}),
-	"qwen/qwen3-235b-a22b-2507": openRouterModelConfigWithMetadata(0.071, 0.1, 0, 0,
+	"qwen/qwen3-235b-a22b-2507": openRouterModelConfigWithMetadata(0.09, 0.1, 0, 0,
 		openRouterModelMetadata{
 			ContextLength:               262144,
 			MaxOutputTokens:             16384,
@@ -2802,9 +2858,9 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 			HuggingFaceID:               "Qwen/Qwen3-235B-A22B-Instruct-2507",
 			Description:                 "Qwen3-235B-A22B-Instruct-2507 is a multilingual, instruction-tuned mixture-of-experts language model based on the Qwen3-235B architecture, with 22B active parameters per forward pass. It is optimized for general-purpose text generation, including instruction following,...",
 		}),
-	"qwen/qwen3-235b-a22b-thinking-2507": openRouterModelConfigWithMetadata(0.1495, 1.495, 0, 0,
+	"qwen/qwen3-235b-a22b-thinking-2507": openRouterModelConfigWithMetadata(0.1, 0.1, 0.1, 0,
 		openRouterModelMetadata{
-			ContextLength:               131072,
+			ContextLength:               262144,
 			InputModalities:             []string{"text"},
 			OutputModalities:            []string{"text"},
 			SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs", "reasoning"},
@@ -2812,7 +2868,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 			HuggingFaceID:               "Qwen/Qwen3-235B-A22B-Thinking-2507",
 			Description:                 "Qwen3-235B-A22B-Thinking-2507 is a high-performance, open-weight Mixture-of-Experts (MoE) language model optimized for complex reasoning tasks. It activates 22B of its 235B parameters per forward pass and natively supports up to 262,144...",
 		}),
-	"qwen/qwen3-30b-a3b": openRouterModelConfigWithMetadata(0.09, 0.45, 0, 0,
+	"qwen/qwen3-30b-a3b": openRouterModelConfigWithMetadata(0.12, 0.5, 0, 0,
 		openRouterModelMetadata{
 			ContextLength:               40960,
 			MaxOutputTokens:             16384,
@@ -2823,7 +2879,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 			HuggingFaceID:               "Qwen/Qwen3-30B-A3B",
 			Description:                 "Qwen3, the latest generation in the Qwen large language model series, features both dense and mixture-of-experts (MoE) architectures to excel in reasoning, multilingual support, and advanced agent tasks. Its unique...",
 		}),
-	"qwen/qwen3-30b-a3b-instruct-2507": openRouterModelConfigWithMetadata(0.09, 0.3, 0, 0,
+	"qwen/qwen3-30b-a3b-instruct-2507": openRouterModelConfigWithMetadata(0.04815, 0.19305, 0, 0,
 		openRouterModelMetadata{
 			ContextLength:               262144,
 			MaxOutputTokens:             262144,
@@ -3082,7 +3138,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 			HuggingFaceID:               "Qwen/Qwen3.5-27B",
 			Description:                 "The Qwen3.5 27B native vision-language Dense model incorporates a linear attention mechanism, delivering fast response times while balancing inference speed and performance. Its overall capabilities are comparable to those of...",
 		}),
-	"qwen/qwen3.5-35b-a3b": openRouterModelConfigWithMetadata(0.139, 1.0, 0, 0,
+	"qwen/qwen3.5-35b-a3b": openRouterModelConfigWithMetadata(0.139, 1.0, 0.05, 0,
 		openRouterModelMetadata{
 			ContextLength:               262144,
 			MaxOutputTokens:             65536,
@@ -3093,7 +3149,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 			HuggingFaceID:               "Qwen/Qwen3.5-35B-A3B",
 			Description:                 "The Qwen3.5 Series 35B-A3B is a native vision-language model designed with a hybrid architecture that integrates linear attention mechanisms and a sparse mixture-of-experts model, achieving higher inference efficiency. Its overall...",
 		}),
-	"qwen/qwen3.5-397b-a17b": openRouterModelConfigWithMetadata(0.39, 2.34, 0.195, 0,
+	"qwen/qwen3.5-397b-a17b": openRouterModelConfigWithMetadata(0.39, 2.34, 0, 0,
 		openRouterModelMetadata{
 			ContextLength:               262144,
 			MaxOutputTokens:             65536,
@@ -3104,7 +3160,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 			HuggingFaceID:               "Qwen/Qwen3.5-397B-A17B",
 			Description:                 "The Qwen3.5 series 397B-A17B native vision-language model is built on a hybrid architecture that integrates a linear attention mechanism with a sparse mixture-of-experts model, achieving higher inference efficiency. It delivers...",
 		}),
-	"qwen/qwen3.5-9b": openRouterModelConfigWithMetadata(0.04, 0.15, 0, 0,
+	"qwen/qwen3.5-9b": openRouterModelConfigWithMetadata(0.1, 0.15, 0, 0,
 		openRouterModelMetadata{
 			ContextLength:               262144,
 			InputModalities:             []string{"text", "image", "video"},
@@ -3114,7 +3170,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 			HuggingFaceID:               "Qwen/Qwen3.5-9B",
 			Description:                 "Qwen3.5-9B is a multimodal foundation model from the Qwen3.5 family, designed to deliver strong reasoning, coding, and visual understanding in an efficient 9B-parameter architecture. It uses a unified vision-language design...",
 		}),
-	"qwen/qwen3.5-flash-02-23": openRouterModelConfigWithMetadata(0.065, 0.26, 0, 0.08125,
+	"qwen/qwen3.5-flash-02-23": openRouterModelConfigWithMetadata(0.065, 0.26, 0, 0,
 		openRouterModelMetadata{
 			ContextLength:               1000000,
 			MaxOutputTokens:             65536,
@@ -3124,7 +3180,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 			SupportedSamplingParameters: []string{"temperature", "top_p", "presence_penalty", "seed", "max_tokens"},
 			Description:                 "The Qwen3.5 native vision-language Flash models are built on a hybrid architecture that integrates a linear attention mechanism with a sparse mixture-of-experts model, achieving higher inference efficiency. Compared to the...",
 		}),
-	"qwen/qwen3.5-plus-02-15": openRouterModelConfigWithMetadata(0.26, 1.56, 0, 0.325,
+	"qwen/qwen3.5-plus-02-15": openRouterModelConfigWithMetadata(0.26, 1.56, 0, 0,
 		openRouterModelMetadata{
 			ContextLength:               1000000,
 			MaxOutputTokens:             65536,
@@ -3134,7 +3190,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 			SupportedSamplingParameters: []string{"temperature", "top_p", "presence_penalty", "seed", "max_tokens"},
 			Description:                 "The Qwen3.5 native vision-language series Plus models are built on a hybrid architecture that integrates linear attention mechanisms with sparse mixture-of-experts models, achieving higher inference efficiency. In a variety of...",
 		}),
-	"qwen/qwen3.5-plus-20260420": openRouterModelConfigWithMetadata(0.3, 1.8, 0, 0,
+	"qwen/qwen3.5-plus-20260420": openRouterModelConfigWithMetadata(0.3, 1.8, 0, 0.375,
 		openRouterModelMetadata{
 			ContextLength:               1000000,
 			MaxOutputTokens:             65536,
@@ -3144,7 +3200,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 			SupportedSamplingParameters: []string{"temperature", "top_p", "presence_penalty", "seed", "max_tokens"},
 			Description:                 "Qwen3.5 Plus (April 2026) is a large-scale multimodal language model from Alibaba. It accepts text, image, and video input and produces text output, with a 1M token context window. This...",
 		}),
-	"qwen/qwen3.6-27b": openRouterModelConfigWithMetadata(0.32, 3.2, 0, 0,
+	"qwen/qwen3.6-27b": openRouterModelConfigWithMetadata(0.2885, 3.17, 0, 0,
 		openRouterModelMetadata{
 			ContextLength:               256000,
 			MaxOutputTokens:             65536,
@@ -3195,6 +3251,22 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 			SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs", "reasoning"},
 			SupportedSamplingParameters: []string{"temperature", "top_p", "presence_penalty", "seed", "max_tokens"},
 			Description:                 "Qwen 3.6 Plus builds on a hybrid architecture that combines efficient linear attention with sparse mixture-of-experts routing, enabling strong scalability and high-performance inference. Compared to the 3.5 series, it delivers...",
+		}),
+	"qwen/qwen3.7-max": openRouterModelConfigWithMetadata(1.25, 3.75, 0.25, 1.5625,
+		openRouterModelMetadata{
+			ContextLength:     1000000,
+			MaxOutputTokens:   65536,
+			InputModalities:   []string{"text"},
+			OutputModalities:  []string{"text"},
+			SupportedFeatures: []string{"tools", "structured_outputs", "reasoning", "logprobs"},
+		}),
+	"qwen/qwen3.7-plus": openRouterModelConfigWithMetadata(0.32, 1.28, 0.064, 0.4,
+		openRouterModelMetadata{
+			ContextLength:     1000000,
+			MaxOutputTokens:   65536,
+			InputModalities:   []string{"text", "image"},
+			OutputModalities:  []string{"text"},
+			SupportedFeatures: []string{"tools", "structured_outputs", "reasoning", "logprobs"},
 		}),
 	"rekaai/reka-edge": openRouterModelConfigWithMetadata(0.1, 0.1, 0, 0,
 		openRouterModelMetadata{
@@ -3290,7 +3362,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 			HuggingFaceID:               "Sao10K/L3.3-70B-Euryale-v2.3",
 			Description:                 "Euryale L3.3 70B is a model focused on creative roleplay from [Sao10k](https://ko-fi.com/sao10k). It is the successor of [Euryale L3 70B v2.2](/models/sao10k/l3-euryale-70b).",
 		}),
-	"stepfun/step-3.5-flash": openRouterModelConfigWithMetadata(0.1, 0.3, 0, 0,
+	"stepfun/step-3.5-flash": openRouterModelConfigWithMetadata(0.09, 0.3, 0.02, 0,
 		openRouterModelMetadata{
 			ContextLength:               262144,
 			MaxOutputTokens:             65536,
@@ -3300,6 +3372,14 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 			SupportedSamplingParameters: []string{"temperature", "top_p", "top_k", "min_p", "frequency_penalty", "presence_penalty", "repetition_penalty", "stop", "seed", "max_tokens", "logit_bias"},
 			HuggingFaceID:               "stepfun-ai/Step-3.5-Flash",
 			Description:                 "Step 3.5 Flash is StepFun's most capable open-source foundation model. Built on a sparse Mixture of Experts (MoE) architecture, it selectively activates only 11B of its 196B parameters per token....",
+		}),
+	"stepfun/step-3.7-flash": openRouterModelConfigWithMetadata(0.2, 1.15, 0.04, 0,
+		openRouterModelMetadata{
+			ContextLength:     256000,
+			MaxOutputTokens:   256000,
+			InputModalities:   []string{"text", "image", "video"},
+			OutputModalities:  []string{"text"},
+			SupportedFeatures: []string{"tools", "structured_outputs", "reasoning", "logprobs"},
 		}),
 	"switchpoint/router": openRouterModelConfigWithMetadata(0.85, 3.4, 0, 0,
 		openRouterModelMetadata{
@@ -3321,7 +3401,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 			HuggingFaceID:               "tencent/Hunyuan-A13B-Instruct",
 			Description:                 "Hunyuan-A13B is a 13B active parameter Mixture-of-Experts (MoE) language model developed by Tencent, with a total parameter count of 80B and support for reasoning via Chain-of-Thought. It offers competitive benchmark...",
 		}),
-	"tencent/hy3-preview": openRouterModelConfigWithMetadata(0.066, 0.26, 0.029, 0,
+	"tencent/hy3-preview": openRouterModelConfigWithMetadata(0.063, 0.21, 0.021, 0,
 		openRouterModelMetadata{
 			ContextLength:               262144,
 			MaxOutputTokens:             262144,
@@ -3430,6 +3510,13 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 			SupportedSamplingParameters: []string{"temperature", "top_p", "frequency_penalty", "presence_penalty", "stop", "seed", "max_tokens"},
 			Description:                 "Grok 4.3 is a reasoning model from xAI. It accepts text and image inputs with text output, and is suited for agentic workflows, instruction-following tasks, and applications requiring high factual accuracy.",
 		}),
+	"x-ai/grok-build-0.1": openRouterModelConfigWithMetadata(1, 2, 0.2, 0,
+		openRouterModelMetadata{
+			ContextLength:     256000,
+			InputModalities:   []string{"text", "image"},
+			OutputModalities:  []string{"text"},
+			SupportedFeatures: []string{"tools", "structured_outputs", "reasoning", "logprobs"},
+		}),
 	"xiaomi/mimo-v2-flash": openRouterModelConfigWithMetadata(0.1, 0.3, 0.01, 0,
 		openRouterModelMetadata{
 			ContextLength:               262144,
@@ -3461,7 +3548,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 			SupportedSamplingParameters: []string{"temperature", "top_p", "frequency_penalty", "presence_penalty", "stop", "max_tokens"},
 			Description:                 "MiMo-V2-Pro is Xiaomi's flagship foundation model, featuring over 1T total parameters and a 1M context length, deeply optimized for agentic scenarios. It is highly adaptable to general agent frameworks like...",
 		}),
-	"xiaomi/mimo-v2.5": openRouterModelConfigWithMetadata(0.4, 2, 0.08, 0,
+	"xiaomi/mimo-v2.5": openRouterModelConfigWithMetadata(0.14, 0.28, 0.0028, 0,
 		openRouterModelMetadata{
 			ContextLength:               1048576,
 			MaxOutputTokens:             131072,
@@ -3472,7 +3559,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 			HuggingFaceID:               "XiaomiMiMo/MiMo-V2.5",
 			Description:                 "MiMo-V2.5 is a native omnimodal model by Xiaomi. It delivers Pro-level agentic performance at roughly half the inference cost, while surpassing MiMo-V2-Omni in multimodal perception across image and video understanding...",
 		}),
-	"xiaomi/mimo-v2.5-pro": openRouterModelConfigWithMetadata(1, 3, 0.2, 0,
+	"xiaomi/mimo-v2.5-pro": openRouterModelConfigWithMetadata(0.435, 0.87, 0.0036, 0,
 		openRouterModelMetadata{
 			ContextLength:               1048576,
 			MaxOutputTokens:             131072,
@@ -3503,7 +3590,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 			HuggingFaceID:               "zai-org/GLM-4.5",
 			Description:                 "GLM-4.5 is our latest flagship foundation model, purpose-built for agent-based applications. It leverages a Mixture-of-Experts (MoE) architecture and supports a context length of up to 128k tokens. GLM-4.5 delivers significantly...",
 		}),
-	"z-ai/glm-4.5-air": openRouterModelConfigWithMetadata(0.13, 0.85, 0.025, 0,
+	"z-ai/glm-4.5-air": openRouterModelConfigWithMetadata(0.125, 0.85, 0.06, 0,
 		openRouterModelMetadata{
 			ContextLength:               131072,
 			MaxOutputTokens:             98304,
@@ -3547,7 +3634,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 			HuggingFaceID:               "zai-org/GLM-4.6",
 			Description:                 "Compared with GLM-4.5, this generation brings several key improvements: Longer context window: The context window has been expanded from 128K to 200K tokens, enabling the model to handle more complex...",
 		}),
-	"z-ai/glm-4.6v": openRouterModelConfigWithMetadata(0.3, 0.9, 0.05, 0,
+	"z-ai/glm-4.6v": openRouterModelConfigWithMetadata(0.3, 0.9, 0.055, 0,
 		openRouterModelMetadata{
 			ContextLength:               131072,
 			MaxOutputTokens:             24000,
@@ -3600,7 +3687,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 			SupportedSamplingParameters: []string{"temperature", "top_p", "top_k", "min_p", "frequency_penalty", "presence_penalty", "repetition_penalty", "stop", "seed", "max_tokens", "logit_bias"},
 			Description:                 "GLM-5 Turbo is a new model from Z.ai designed for fast inference and strong performance in agent-driven environments such as OpenClaw scenarios. It is deeply optimized for real-world agent workflows...",
 		}),
-	"z-ai/glm-5.1": openRouterModelConfigWithMetadata(0.98, 3.08, 0.525, 0,
+	"z-ai/glm-5.1": openRouterModelConfigWithMetadata(0.98, 3.08, 0.182, 0,
 		openRouterModelMetadata{
 			ContextLength:               202752,
 			MaxOutputTokens:             65535,
@@ -3620,6 +3707,14 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 			SupportedFeatures:           []string{"tools", "json_mode", "reasoning"},
 			SupportedSamplingParameters: []string{"temperature", "top_p", "max_tokens"},
 			Description:                 "GLM-5V-Turbo is Z.ai’s first native multimodal agent foundation model, built for vision-based coding and agent-driven tasks. It natively handles image, video, and text inputs, excels at long-horizon planning, complex coding,...",
+		}),
+	"~anthropic/claude-fable-latest": openRouterModelConfigWithMetadata(10, 50, 1, 12.5,
+		openRouterModelMetadata{
+			ContextLength:     1000000,
+			MaxOutputTokens:   128000,
+			InputModalities:   []string{"text", "image", "file"},
+			OutputModalities:  []string{"text"},
+			SupportedFeatures: []string{"tools", "structured_outputs", "reasoning"},
 		}),
 	"~anthropic/claude-haiku-latest": openRouterModelConfigWithMetadata(1, 5, 0.1, 1.25,
 		openRouterModelMetadata{
@@ -3671,7 +3766,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 			SupportedSamplingParameters: []string{"temperature", "top_p", "stop", "seed", "max_tokens"},
 			Description:                 "This model always redirects to the latest model in the Google Gemini Pro family.",
 		}),
-	"~moonshotai/kimi-latest": openRouterModelConfigWithMetadata(0.73, 3.49, 0.25, 0,
+	"~moonshotai/kimi-latest": openRouterModelConfigWithMetadata(0.68, 3.41, 0.34, 0,
 		openRouterModelMetadata{
 			ContextLength:               262142,
 			MaxOutputTokens:             262142,
