@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"math"
 	"strings"
+	"sync"
 
 	"github.com/Laisky/errors/v2"
 	gmw "github.com/Laisky/gin-middlewares/v7"
@@ -20,62 +21,94 @@ import (
 	"github.com/Laisky/one-api/relay/pricing"
 )
 
-// tokenEncoderMap won't grow after initialization
-var tokenEncoderMap = map[string]*tiktoken.Tiktoken{}
-var defaultTokenEncoder *tiktoken.Tiktoken
+// defaultEncodingName is the tiktoken encoding used as a fallback for any model
+// whose encoding cannot be resolved. cl100k_base covers gpt-3.5/gpt-4 and is the
+// most broadly compatible choice for the many non-OpenAI models routed through
+// this token-counting path.
+const defaultEncodingName = "cl100k_base"
 
+// encoderByName caches one *tiktoken.Tiktoken per ENCODING name (not per model).
+// Models that share an encoding (e.g. gpt-3.5-turbo and gpt-4 both use
+// cl100k_base) therefore share a single CoreBPE instead of each building its own
+// (~7 MiB of decoder + sortedTokenBytes tables wasted per duplicate). Encoders
+// are loaded lazily on first use, so an encoding that is never requested (e.g.
+// o200k_base on a deployment that never serves gpt-4o-class models) is never
+// built and never occupies the heap.
+var (
+	encoderMu     sync.RWMutex
+	encoderByName = make(map[string]*tiktoken.Tiktoken)
+)
+
+// InitTokenEncoders warms the default encoder so a missing/offline BPE dictionary
+// fails fast at startup rather than on the first request. All other encodings are
+// loaded on demand by getTokenEncoder.
 func InitTokenEncoders() {
-	// Startup-time logging can use global logger; but per request logs below use request-scoped.
-	gpt35TokenEncoder, err := tiktoken.EncodingForModel("gpt-3.5-turbo")
-	if err != nil {
-		panic(fmt.Sprintf("failed to get gpt-3.5-turbo token encoder: %s, "+
-			"if you are using in offline environment, please set TIKTOKEN_CACHE_DIR to use exsited files, check this link for more information: https://stackoverflow.com/questions/76106366/how-to-use-tiktoken-in-offline-mode-computer ", err.Error()))
+	if _, err := loadEncoder(defaultEncodingName); err != nil {
+		panic(fmt.Sprintf("failed to load default token encoder (%s): %s, "+
+			"if you are running in an offline environment, set TIKTOKEN_CACHE_DIR to point at pre-downloaded files, "+
+			"see https://stackoverflow.com/questions/76106366/how-to-use-tiktoken-in-offline-mode-computer", defaultEncodingName, err.Error()))
 	}
-	defaultTokenEncoder = gpt35TokenEncoder
-	gpt4oTokenEncoder, err := tiktoken.EncodingForModel("gpt-4o")
-	if err != nil {
-		panic(fmt.Sprintf("failed to get gpt-4o token encoder: %s", err.Error()))
-	}
-	gpt4TokenEncoder, err := tiktoken.EncodingForModel("gpt-4")
-	if err != nil {
-		panic(fmt.Sprintf("failed to get gpt-4 token encoder: %s", err.Error()))
-	}
-	// Initialize token encoders for OpenAI models using adapter's own pricing
-	adaptor := &Adaptor{}
-	defaultPricing := adaptor.GetDefaultModelPricing()
-	for model := range defaultPricing {
-		if strings.HasPrefix(model, "gpt-3.5") {
-			tokenEncoderMap[model] = gpt35TokenEncoder
-		} else if strings.HasPrefix(model, "gpt-4o") {
-			tokenEncoderMap[model] = gpt4oTokenEncoder
-		} else if strings.HasPrefix(model, "gpt-4") {
-			tokenEncoderMap[model] = gpt4TokenEncoder
-		} else {
-			tokenEncoderMap[model] = nil
-		}
-	}
-	// token encoders initialized
 }
 
-func getTokenEncoder(model string) *tiktoken.Tiktoken {
-	tokenEncoder, ok := tokenEncoderMap[model]
-	if ok && tokenEncoder != nil {
-		return tokenEncoder
+// encodingNameForModel resolves the tiktoken encoding name for a model WITHOUT
+// building the (expensive) BPE core. It mirrors tiktoken.EncodingForModel's
+// lookup (exact match, then prefix match) but returns only the name, and falls
+// back to the default encoding for unknown models.
+func encodingNameForModel(model string) string {
+	if name, ok := tiktoken.MODEL_TO_ENCODING[model]; ok {
+		return name
 	}
-	if ok {
-		tokenEncoder, err := tiktoken.EncodingForModel(model)
-		if err != nil {
-			// No request context available here; silently fallback
-			tokenEncoder = defaultTokenEncoder
+	for prefix, name := range tiktoken.MODEL_PREFIX_TO_ENCODING {
+		if strings.HasPrefix(model, prefix) {
+			return name
 		}
-		tokenEncoderMap[model] = tokenEncoder
-		return tokenEncoder
 	}
-	return defaultTokenEncoder
+	return defaultEncodingName
+}
+
+// loadEncoder returns the cached encoder for an encoding name, building and
+// caching it on first use. It is safe for concurrent use.
+func loadEncoder(name string) (*tiktoken.Tiktoken, error) {
+	encoderMu.RLock()
+	enc := encoderByName[name]
+	encoderMu.RUnlock()
+	if enc != nil {
+		return enc, nil
+	}
+
+	encoderMu.Lock()
+	defer encoderMu.Unlock()
+	if enc = encoderByName[name]; enc != nil { // re-check after acquiring the write lock
+		return enc, nil
+	}
+	enc, err := tiktoken.GetEncoding(name)
+	if err != nil {
+		return nil, errors.Wrapf(err, "load tiktoken encoding %q", name)
+	}
+	encoderByName[name] = enc
+	return enc, nil
+}
+
+// getTokenEncoder returns a shared encoder for the model. For a healthy process
+// it never returns nil (the default encoder is warmed at startup); on an
+// unexpected load failure it falls back to the default encoder, and getTokenNum
+// degrades to an approximate count if even that is unavailable.
+func getTokenEncoder(model string) *tiktoken.Tiktoken {
+	name := encodingNameForModel(model)
+	enc, err := loadEncoder(name)
+	if err == nil {
+		return enc
+	}
+	if name != defaultEncodingName {
+		if def, derr := loadEncoder(defaultEncodingName); derr == nil {
+			return def
+		}
+	}
+	return nil
 }
 
 func getTokenNum(tokenEncoder *tiktoken.Tiktoken, text string) int {
-	if config.ApproximateTokenEnabled {
+	if config.ApproximateTokenEnabled || tokenEncoder == nil {
 		return int(float64(len(text)) * 0.38)
 	}
 	return len(tokenEncoder.Encode(text, nil, nil))

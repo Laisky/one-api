@@ -33,26 +33,31 @@ var (
 	}, []string{"path", "method"})
 
 	// API relay metrics
+	//
+	// NOTE: user_id and token_id labels are intentionally omitted. Their
+	// unbounded (user_id x token_id) cardinality created one permanent time
+	// series per user/token combination, causing unbounded memory growth.
+	// Per-user/per-token detail already lives in logs and the billing tables.
 	relayRequestDuration = promauto.NewHistogramVec(prometheus.HistogramOpts{
 		Name:    "one_api_relay_request_duration_seconds",
 		Help:    "Duration of API relay requests in seconds",
 		Buckets: []float64{.1, .25, .5, 1, 2.5, 5, 10, 30, 60, 120},
-	}, []string{"channel_id", "channel_type", "model", "user_id", "group", "token_id", "api_format", "api_type", "success"})
+	}, []string{"channel_id", "channel_type", "model", "group", "api_format", "api_type", "success"})
 
 	relayRequestsTotal = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "one_api_relay_requests_total",
 		Help: "Total number of API relay requests",
-	}, []string{"channel_id", "channel_type", "model", "user_id", "group", "token_id", "api_format", "api_type", "success"})
+	}, []string{"channel_id", "channel_type", "model", "group", "api_format", "api_type", "success"})
 
 	relayTokensUsed = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "one_api_relay_tokens_total",
 		Help: "Total number of tokens used in relay requests",
-	}, []string{"channel_id", "channel_type", "model", "user_id", "group", "token_id", "api_format", "api_type", "token_type"})
+	}, []string{"channel_id", "channel_type", "model", "group", "api_format", "api_type", "token_type"})
 
 	relayQuotaUsed = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "one_api_relay_quota_used_total",
 		Help: "Total quota used in relay requests",
-	}, []string{"channel_id", "channel_type", "model", "user_id", "group", "token_id", "api_format", "api_type"})
+	}, []string{"channel_id", "channel_type", "model", "group", "api_format", "api_type"})
 
 	// Channel metrics
 	channelStatus = promauto.NewGaugeVec(prometheus.GaugeOpts{
@@ -263,17 +268,25 @@ func (p *PrometheusRecorder) RecordRelayRequest(startTime time.Time, channelId i
 	channelIdStr := strconv.Itoa(channelId)
 	successStr := strconv.FormatBool(success)
 
-	relayRequestDuration.WithLabelValues(channelIdStr, channelType, model, userId, group, tokenId, apiFormat, apiType, successStr).Observe(duration)
-	relayRequestsTotal.WithLabelValues(channelIdStr, channelType, model, userId, group, tokenId, apiFormat, apiType, successStr).Inc()
+	// NOTE: user_id and token_id are intentionally NOT used as label values
+	// here. Their unbounded cardinality created one permanent time series per
+	// user/token combination, causing unbounded memory growth. The userId and
+	// tokenId parameters are kept in the signature for caller stability and
+	// potential logging use.
+	_ = userId
+	_ = tokenId
+
+	relayRequestDuration.WithLabelValues(channelIdStr, channelType, model, group, apiFormat, apiType, successStr).Observe(duration)
+	relayRequestsTotal.WithLabelValues(channelIdStr, channelType, model, group, apiFormat, apiType, successStr).Inc()
 
 	if promptTokens > 0 {
-		relayTokensUsed.WithLabelValues(channelIdStr, channelType, model, userId, group, tokenId, apiFormat, apiType, "prompt").Add(float64(promptTokens))
+		relayTokensUsed.WithLabelValues(channelIdStr, channelType, model, group, apiFormat, apiType, "prompt").Add(float64(promptTokens))
 	}
 	if completionTokens > 0 {
-		relayTokensUsed.WithLabelValues(channelIdStr, channelType, model, userId, group, tokenId, apiFormat, apiType, "completion").Add(float64(completionTokens))
+		relayTokensUsed.WithLabelValues(channelIdStr, channelType, model, group, apiFormat, apiType, "completion").Add(float64(completionTokens))
 	}
 	if quotaUsed > 0 {
-		relayQuotaUsed.WithLabelValues(channelIdStr, channelType, model, userId, group, tokenId, apiFormat, apiType).Add(quotaUsed)
+		relayQuotaUsed.WithLabelValues(channelIdStr, channelType, model, group, apiFormat, apiType).Add(quotaUsed)
 	}
 }
 

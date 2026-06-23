@@ -72,7 +72,9 @@ Labels: `path`, `method`, `status_code`
 - `one_api_relay_tokens_total`: Counter of total tokens used
 - `one_api_relay_quota_used_total`: Counter of total quota used
 
-Labels: `channel_id`, `channel_type`, `model`, `user_id`, `success`, `token_type`
+Labels: `channel_id`, `channel_type`, `model`, `group`, `api_format`, `api_type`, `success`, `token_type`
+
+> Note: `user_id` and `token_id` are intentionally omitted from relay metrics to avoid unbounded label cardinality (one series per user/token combination grows memory without bound). Use the per-user `one_api_user_*` metrics below for user-level breakdowns.
 
 ### Channel Metrics
 

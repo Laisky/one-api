@@ -199,13 +199,21 @@ func (r *OtelRecorder) RecordRelayRequest(startTime time.Time, channelId int, ch
 	channelIdStr := strconv.Itoa(channelId)
 	successStr := strconv.FormatBool(success)
 
+	// NOTE: user_id and token_id are intentionally NOT attached here.
+	// With cumulative temporality, every distinct attribute combination creates
+	// a permanent aggregator that is never freed. Adding the unbounded
+	// (user_id x token_id) cardinality caused unbounded heap growth in the
+	// metrics SDK. Per-user/per-token detail already lives in logs and the
+	// billing tables, so dropping these labels here is safe. The userId/tokenId
+	// parameters are kept in the signature for caller stability and potential
+	// logging use.
+	_ = userId
+	_ = tokenId
 	attrs := []attribute.KeyValue{
 		attribute.String("channel_id", channelIdStr),
 		attribute.String("channel_type", channelType),
 		attribute.String("model", model),
-		attribute.String("user_id", userId),
 		attribute.String("group", group),
-		attribute.String("token_id", tokenId),
 		attribute.String("api_format", apiFormat),
 		attribute.String("api_type", apiType),
 		attribute.String("success", successStr),
