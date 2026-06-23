@@ -46,6 +46,7 @@
 - **Completeness:** Exhaustively incorporate requirements and options; resolve conflicts by rule priority and avoid premature conclusions.
 - **Persistence and retries:** Persist intelligently; retry transient errors until a reasonable limit, and change strategy for non‑transient failures.
 - **Action finality:** Only take actions after completing the above reasoning; actions are final once executed.
+- **Sub Agents:** Actively use sub-agents for **parallelism** (dispatch independent subtasks concurrently in a single batch, not sequentially) and **context isolation** (offload searches/sweeps/lookups so their intermediate context never pollutes the main thread); each must follow the same instructions, stay scoped to a well-defined subtask, and return only the **distilled key information** for integration — not raw tool output or full file dumps.
 
 ## API conventions
 

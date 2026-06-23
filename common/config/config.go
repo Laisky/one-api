@@ -827,6 +827,26 @@ var (
 	// Default: "" (metrics endpoint blocked)
 	MetricsToken = strings.TrimSpace(env.String("METRICS_TOKEN", ""))
 
+	// EnablePprof exposes the Go net/http/pprof profiling endpoints on a
+	// dedicated listener (see PprofListen) when true. Use it to debug live
+	// memory/CPU/goroutine usage with `go tool pprof`. Disabled by default
+	// because the profiling surface can leak internal data and add load.
+	//
+	// Environment variable: ENABLE_PPROF
+	// Default: false
+	EnablePprof = env.Bool("ENABLE_PPROF", false)
+
+	// PprofListen is the bind address for the pprof listener. It defaults to
+	// loopback so the profiling endpoints are only reachable locally (e.g. via
+	// an SSH tunnel: `ssh -L 6060:localhost:6060 <host>`). Bind it to a
+	// non-loopback address only behind a firewall/auth proxy, since pprof has
+	// no built-in authentication.
+	//
+	// Environment variable: PPROF_LISTEN
+	// Default: "localhost:6060"
+	// Example: "0.0.0.0:6060"
+	PprofListen = strings.TrimSpace(env.String("PPROF_LISTEN", "localhost:6060"))
+
 	// MetricQueueSize configures the buffered queue that aggregates success/failure
 	// events before processing. Larger queues handle burst traffic better.
 	//

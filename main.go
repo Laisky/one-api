@@ -4,11 +4,14 @@ import (
 	"context"
 	"embed"
 	"encoding/base64"
+	"net"
 	"net/http"
+	nhpprof "net/http/pprof"
 	"os"
 	"os/signal"
 	"runtime"
 	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
@@ -226,6 +229,12 @@ func main() {
 	addr := ":" + port
 	srv := &http.Server{Addr: addr, Handler: server}
 
+	// Start the pprof profiling listener (separate from the API server) when enabled.
+	var pprofSrv *http.Server
+	if config.EnablePprof {
+		pprofSrv = startPprofServer(config.PprofListen)
+	}
+
 	// Start server in background
 	go func() {
 		logger.Logger.Info("server started", zap.String("address", "http://localhost:"+port))
@@ -246,6 +255,13 @@ func main() {
 	defer cancel()
 	if err := srv.Shutdown(shutdownCtx); err != nil {
 		logger.Logger.Error("server shutdown error", zap.Error(err))
+	}
+
+	// Shut down the pprof listener if it was started.
+	if pprofSrv != nil {
+		if err := pprofSrv.Shutdown(shutdownCtx); err != nil {
+			logger.Logger.Error("pprof server shutdown error", zap.Error(err))
+		}
 	}
 
 	// Stop batch updater and flush pending changes before draining other tasks.
@@ -269,6 +285,59 @@ func main() {
 	if derr := model.CloseDB(); derr != nil {
 		logger.Logger.Error("failed to close database", zap.Error(derr))
 	}
+}
+
+// startPprofServer starts a dedicated HTTP listener that serves the Go
+// net/http/pprof profiling endpoints. It is intentionally kept separate from
+// the public API server so the profiling surface is never mixed into normal
+// request routing. pprof has no built-in authentication, so the listener
+// defaults to loopback (config.PprofListen) and should only be bound to a
+// non-loopback address behind a firewall or auth proxy.
+func startPprofServer(addr string) *http.Server {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/debug/pprof/", nhpprof.Index)
+	mux.HandleFunc("/debug/pprof/cmdline", nhpprof.Cmdline)
+	mux.HandleFunc("/debug/pprof/profile", nhpprof.Profile)
+	mux.HandleFunc("/debug/pprof/symbol", nhpprof.Symbol)
+	mux.HandleFunc("/debug/pprof/trace", nhpprof.Trace)
+
+	srv := &http.Server{Addr: addr, Handler: mux}
+
+	if !isLoopbackListenAddr(addr) {
+		logger.Logger.Warn("pprof listener is bound to a non-loopback address; "+
+			"pprof has no authentication, ensure it is protected by a firewall or auth proxy",
+			zap.String("address", addr))
+	}
+
+	go func() {
+		logger.Logger.Info("pprof server started", zap.String("address", "http://"+addr+"/debug/pprof/"))
+		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			logger.Logger.Error("pprof server stopped unexpectedly", zap.Error(err))
+		}
+	}()
+
+	return srv
+}
+
+// isLoopbackListenAddr reports whether the given listen address is bound to the
+// loopback interface (and is therefore not reachable from other hosts).
+func isLoopbackListenAddr(addr string) bool {
+	host, _, err := net.SplitHostPort(addr)
+	if err != nil {
+		// Fall back to a best-effort string check when the address is malformed.
+		host = strings.TrimSpace(addr)
+	}
+	if host == "" {
+		// An empty host (e.g. ":6060") binds to all interfaces.
+		return false
+	}
+	if strings.EqualFold(host, "localhost") {
+		return true
+	}
+	if ip := net.ParseIP(host); ip != nil {
+		return ip.IsLoopback()
+	}
+	return false
 }
 
 func isThemeValid() error {
