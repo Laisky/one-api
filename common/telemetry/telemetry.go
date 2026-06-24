@@ -24,6 +24,24 @@ import (
 	"github.com/Laisky/one-api/common/logger"
 )
 
+// dropExemplarReservoir is a no-op exemplar.Reservoir: it stores nothing and
+// collects nothing. Installing it on every instrument disables metric exemplars
+// outright, which is what one-api wants (no trace-to-metric exemplar drilldown)
+// and incidentally removes the per-collect exemplar-reservoir reallocation that
+// dominated heap allocations.
+//
+// It deliberately does NOT embed the SDK's internal reservoir.ConcurrentSafe
+// marker (that type lives in an internal package and cannot be imported), so the
+// filtered wrapper guards each Offer with its own mutex. The cost is one
+// uncontended lock per sampled measurement against a method that does nothing —
+// negligible — and in exchange Offer is trivially concurrency-safe.
+type dropExemplarReservoir struct{}
+
+func (dropExemplarReservoir) Offer(context.Context, time.Time, exemplar.Value, []attribute.KeyValue) {
+}
+
+func (dropExemplarReservoir) Collect(*[]exemplar.Exemplar) {}
+
 // defaultMetricExportInterval is the OpenTelemetry metric export interval. It
 // matches the OTEL SDK default (60s). The previous 15s value quadrupled the
 // per-collect export churn (protobuf re-marshal of every cumulative series plus
@@ -44,8 +62,9 @@ func metricExportInterval() time.Duration {
 	return defaultMetricExportInterval
 }
 
-// newZeroExemplarReservoirView returns a wildcard view that installs a
-// zero-capacity exemplar reservoir on every instrument.
+// newZeroExemplarReservoirView returns a wildcard view that installs a no-op
+// exemplar reservoir (dropExemplarReservoir) on every instrument, so zero
+// exemplars are ever retained.
 //
 // With the default exemplar filter (TraceBasedFilter) and tracing enabled,
 // every sampled measurement reserves an exemplar slot, and the metric SDK
@@ -55,16 +74,26 @@ func metricExportInterval() time.Duration {
 //
 // NOTE: setting the exemplar FILTER to always_off does NOT fix this — the
 // reservoir backing array is sized to GOMAXPROCS regardless of the filter
-// (benchmarked: the filter cuts collect bytes by only ~1%). A zero-capacity
-// reservoir is the only effective lever (benchmarked: ~96% fewer bytes per
-// collect, ~8x faster). one-api does not use metric exemplars (no
+// (benchmarked: the filter cuts collect bytes by only ~1%). Dropping exemplars
+// at the reservoir is the only effective lever (benchmarked: ~96% fewer bytes
+// per collect, ~8x faster). one-api does not use metric exemplars (no
 // trace-to-metric exemplar drilldown), so dropping them is safe.
+//
+// WARNING: do NOT use exemplar.FixedSizeReservoirProvider(0) here. A
+// zero-capacity FixedSizeReservoir is NOT a no-op — its Algorithm-L sampler runs
+// `rand.IntN(int(r.k))` once a series receives its second offered measurement
+// within an export interval, and rand.IntN(0) panics with "invalid argument to
+// IntN". Under TraceBasedFilter every sampled request feeds the otelgin HTTP
+// histogram, so the panic fired on the 2nd request per 60s window. A dedicated
+// no-op reservoir is the correct way to suppress exemplars without panicking.
 func newZeroExemplarReservoirView() sdkmetric.View {
 	return sdkmetric.NewView(
 		sdkmetric.Instrument{Name: "*"},
 		sdkmetric.Stream{
 			ExemplarReservoirProviderSelector: func(sdkmetric.Aggregation) exemplar.ReservoirProvider {
-				return exemplar.FixedSizeReservoirProvider(0)
+				return func(attribute.Set) exemplar.Reservoir {
+					return dropExemplarReservoir{}
+				}
 			},
 		},
 	)

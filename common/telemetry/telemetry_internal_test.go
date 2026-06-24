@@ -123,3 +123,74 @@ func TestZeroExemplarReservoirViewSuppressesExemplars(t *testing.T) {
 	}
 	t.Logf("exemplars retained: default=%d, zero-reservoir-view=%d", baseline, withView)
 }
+
+// TestZeroExemplarReservoirViewDoesNotPanicOnRepeatedMeasurements is the
+// regression test for the "invalid argument to IntN" panic.
+//
+// The previous implementation installed exemplar.FixedSizeReservoirProvider(0).
+// A zero-capacity FixedSizeReservoir is not a no-op: on the SECOND measurement
+// offered to a series within an export interval, Algorithm-L calls
+// rand.IntN(int(r.k)) == rand.IntN(0), which panics. The older tests recorded
+// each series only once per collect, so they never reached the second offer and
+// missed the bug. Production offers each histogram series many measurements per
+// 60s interval (every sampled HTTP request feeds otelgin's duration histogram),
+// so the panic fired in the gin recovery path on the 2nd request.
+//
+// This test reproduces production: it records the SAME series many times between
+// collects, across multiple collect cycles, under a sampled trace context. With
+// the buggy FixedSizeReservoirProvider(0) it panics; with the no-op reservoir it
+// must complete and retain zero exemplars.
+func TestZeroExemplarReservoirViewDoesNotPanicOnRepeatedMeasurements(t *testing.T) {
+	reader := sdkmetric.NewManualReader()
+	mp := sdkmetric.NewMeterProvider(
+		sdkmetric.WithReader(reader),
+		sdkmetric.WithView(newZeroExemplarReservoirView()),
+	)
+	t.Cleanup(func() { _ = mp.Shutdown(context.Background()) })
+
+	meter := mp.Meter("telemetry-panic-regression")
+	ctr, err := meter.Int64Counter("repeat_counter")
+	if err != nil {
+		t.Fatalf("Int64Counter: %v", err)
+	}
+	hist, err := meter.Float64Histogram("repeat_hist")
+	if err != nil {
+		t.Fatalf("Float64Histogram: %v", err)
+	}
+
+	ctx := sampledTraceCtx()
+	// A single, fixed attribute set => one series. Offering it repeatedly is what
+	// drives count past `next` and reaches the rand.IntN(0) path.
+	attrs := apimetric.WithAttributes(attribute.String("route", "/api/status"))
+
+	var rm metricdata.ResourceMetrics
+	for cycle := 0; cycle < 3; cycle++ {
+		for i := 0; i < 50; i++ { // many measurements per series per interval
+			ctr.Add(ctx, 1, attrs)
+			hist.Record(ctx, 1.5, attrs)
+		}
+		if err := reader.Collect(ctx, &rm); err != nil {
+			t.Fatalf("collect cycle %d: %v", cycle, err)
+		}
+	}
+
+	// The no-op reservoir must still retain zero exemplars.
+	total := 0
+	for _, sm := range rm.ScopeMetrics {
+		for _, m := range sm.Metrics {
+			switch d := m.Data.(type) {
+			case metricdata.Sum[int64]:
+				for _, dp := range d.DataPoints {
+					total += len(dp.Exemplars)
+				}
+			case metricdata.Histogram[float64]:
+				for _, dp := range d.DataPoints {
+					total += len(dp.Exemplars)
+				}
+			}
+		}
+	}
+	if total != 0 {
+		t.Fatalf("no-op reservoir retained %d exemplars, want 0", total)
+	}
+}
