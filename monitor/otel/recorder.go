@@ -265,9 +265,17 @@ func (r *OtelRecorder) UpdateChannelRequestsInFlight(channelId int, channelName,
 // RecordUserMetrics records user-specific metrics
 func (r *OtelRecorder) RecordUserMetrics(userId, username, group string, quotaUsed float64, promptTokens, completionTokens int, balance float64) {
 	ctx := context.Background()
+
+	// NOTE: user_id and username are intentionally NOT attached here.
+	// With cumulative temporality, every distinct attribute combination creates
+	// a permanent aggregator that is never freed. Adding the unbounded
+	// (user_id x username) cardinality caused unbounded heap growth in the
+	// metrics SDK. Per-user detail already lives in the DB and logs, so dropping
+	// these labels here is safe. The userId/username parameters are kept in the
+	// signature for caller stability and potential logging use.
+	_ = userId
+	_ = username
 	attrs := []attribute.KeyValue{
-		attribute.String("user_id", userId),
-		attribute.String("username", username),
 		attribute.String("group", group),
 	}
 
@@ -283,7 +291,13 @@ func (r *OtelRecorder) RecordUserMetrics(userId, username, group string, quotaUs
 		completionAttrs := append(attrs, attribute.String("token_type", "completion"))
 		r.userTokensUsed.Add(ctx, int64(completionTokens), metric.WithAttributes(completionAttrs...))
 	}
-	r.userBalance.Record(ctx, balance, metric.WithAttributes(attrs...))
+	// NOTE: per-user balance is intentionally NOT exported as a metric. Once
+	// user_id/username are dropped a per-group gauge would be last-write-wins
+	// across all users in the group, which is misleading. Per-user balance lives
+	// in the DB, and site-wide quota is already covered by the one_api_site_*
+	// gauges. The userBalance instrument declaration is kept to avoid rippling
+	// changes, but it is no longer fed per-user values.
+	_ = balance
 }
 
 // RecordDBQuery records database query metrics

@@ -1,5 +1,7 @@
 # One API Grafana Dashboard Implementation Plan
 
+> **Update (2026-06):** This is a historical implementation plan. The `one_api_user_*` metrics no longer carry `user_id`/`username` labels (unbounded-cardinality removal); they are broken down by `group` (and `token_type` on `one_api_user_tokens_total`), and `one_api_user_balance` is no longer populated. Any PromQL/variable below that breaks `one_api_user_*` down by `username` is superseded by group-based breakdowns in the shipped `docs/grafana-dashboard.json`. Per-user detail now comes from the request logs / billing tables in the database.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Generate a complete Grafana Dashboard JSON configuration file, containing 7 Rows, 54 panels, top-level variables, and currency conversion logic.

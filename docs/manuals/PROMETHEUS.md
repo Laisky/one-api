@@ -74,7 +74,7 @@ Labels: `path`, `method`, `status_code`
 
 Labels: `channel_id`, `channel_type`, `model`, `group`, `api_format`, `api_type`, `success`, `token_type`
 
-> Note: `user_id` and `token_id` are intentionally omitted from relay metrics to avoid unbounded label cardinality (one series per user/token combination grows memory without bound). Use the per-user `one_api_user_*` metrics below for user-level breakdowns.
+> Note: `user_id` and `token_id` are intentionally omitted from relay metrics to avoid unbounded label cardinality (one series per user/token combination grows memory without bound). The per-user `one_api_user_*` metrics below are broken down by `group` only (also no `user_id`/`username`); for per-user detail, query the request logs and billing tables in the database.
 
 ### Channel Metrics
 
@@ -88,12 +88,15 @@ Labels: `channel_id`, `channel_name`, `channel_type`
 
 ### User Metrics
 
-- `one_api_user_requests_total`: Counter of total requests by user
-- `one_api_user_quota_used_total`: Counter of total quota used by user
-- `one_api_user_tokens_total`: Counter of total tokens used by user
-- `one_api_user_balance`: Gauge of user balance/quota remaining
+- `one_api_user_requests_total`: Counter of total requests by user group
+- `one_api_user_quota_used_total`: Counter of total quota used by user group
+- `one_api_user_tokens_total`: Counter of total tokens used by user group
 
-Labels: `user_id`, `username`, `group`, `token_type`
+Labels: `group` (and `token_type` on `one_api_user_tokens_total`)
+
+> Note: `user_id` and `username` are intentionally omitted from these metrics to avoid unbounded label cardinality (one permanent time series per user grows memory without bound). Per-user breakdowns are available from the request logs and billing tables in the database.
+>
+> `one_api_user_balance` is no longer populated: once `user_id`/`username` are dropped, a per-group balance gauge would be last-write-wins across all users in the group and therefore misleading. Per-user balance lives in the database, and site-wide quota is covered by the `one_api_site_*` gauges.
 
 ### Database Metrics
 
@@ -161,11 +164,13 @@ histogram_quantile(0.95, rate(one_api_http_request_duration_seconds_bucket[5m]))
 one_api_channel_success_rate
 ```
 
-#### Top Users by Quota Usage
+#### Top Groups by Quota Usage
 
 ```promql
-topk(10, rate(one_api_user_quota_used_total[1h]))
+topk(10, sum(rate(one_api_user_quota_used_total[1h])) by (group))
 ```
+
+(Per-user quota breakdowns are no longer available as a metric; query the request logs / billing tables in the database instead.)
 
 #### Database Query Performance
 
