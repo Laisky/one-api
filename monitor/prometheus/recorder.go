@@ -86,25 +86,31 @@ var (
 	}, []string{"channel_id", "channel_name", "channel_type"})
 
 	// User metrics
+	//
+	// NOTE: user_id and username labels are intentionally omitted. Their
+	// unbounded (user_id x username) cardinality created one permanent time
+	// series per user, causing unbounded memory growth. Per-user detail already
+	// lives in the DB and logs, so these metrics are now broken down only by
+	// group (and token_type for the tokens counter).
 	userRequestsTotal = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "one_api_user_requests_total",
-		Help: "Total number of requests by user",
-	}, []string{"user_id", "username", "group"})
+		Help: "Total number of requests by user group",
+	}, []string{"group"})
 
 	userQuotaUsed = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "one_api_user_quota_used_total",
-		Help: "Total quota used by user",
-	}, []string{"user_id", "username", "group"})
+		Help: "Total quota used by user group",
+	}, []string{"group"})
 
 	userTokensUsed = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "one_api_user_tokens_total",
-		Help: "Total tokens used by user",
-	}, []string{"user_id", "username", "group", "token_type"})
+		Help: "Total tokens used by user group",
+	}, []string{"group", "token_type"})
 
 	userBalance = promauto.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "one_api_user_balance",
-		Help: "User balance/quota remaining",
-	}, []string{"user_id", "username", "group"})
+		Help: "User balance/quota remaining (deprecated: no longer populated, see RecordUserMetrics)",
+	}, []string{"group"})
 
 	// Database metrics
 	dbConnectionsInUse = promauto.NewGauge(prometheus.GaugeOpts{
@@ -317,17 +323,31 @@ func (p *PrometheusRecorder) UpdateChannelRequestsInFlight(channelId int, channe
 
 // RecordUserMetrics records user-related metrics
 func (p *PrometheusRecorder) RecordUserMetrics(userId, username, group string, quotaUsed float64, promptTokens, completionTokens int, balance float64) {
-	userRequestsTotal.WithLabelValues(userId, username, group).Inc()
+	// NOTE: user_id and username are intentionally NOT used as label values
+	// here. Their unbounded (user_id x username) cardinality created one
+	// permanent time series per user, causing unbounded memory growth. The
+	// userId/username parameters are kept in the signature for caller stability
+	// and potential logging use.
+	_ = userId
+	_ = username
+
+	userRequestsTotal.WithLabelValues(group).Inc()
 	if quotaUsed > 0 {
-		userQuotaUsed.WithLabelValues(userId, username, group).Add(quotaUsed)
+		userQuotaUsed.WithLabelValues(group).Add(quotaUsed)
 	}
 	if promptTokens > 0 {
-		userTokensUsed.WithLabelValues(userId, username, group, "prompt").Add(float64(promptTokens))
+		userTokensUsed.WithLabelValues(group, "prompt").Add(float64(promptTokens))
 	}
 	if completionTokens > 0 {
-		userTokensUsed.WithLabelValues(userId, username, group, "completion").Add(float64(completionTokens))
+		userTokensUsed.WithLabelValues(group, "completion").Add(float64(completionTokens))
 	}
-	userBalance.WithLabelValues(userId, username, group).Set(balance)
+	// NOTE: per-user balance is intentionally NOT exported as a metric. Once
+	// user_id/username are dropped a per-group gauge would be last-write-wins
+	// across all users in the group, which is misleading. Per-user balance lives
+	// in the DB, and site-wide quota is already covered by the one_api_site_*
+	// gauges. The userBalance instrument declaration is kept to avoid rippling
+	// changes, but it is no longer fed per-user values.
+	_ = balance
 }
 
 // RecordDBQuery records database-related metrics

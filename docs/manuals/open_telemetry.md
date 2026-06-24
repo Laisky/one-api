@@ -116,9 +116,11 @@ These metrics track the core functionality of One-API: relaying requests to AI p
 
 ### User Metrics
 
-- **`one_api_user_requests_total`** (Counter): Total requests by user.
-- **`one_api_user_quota_used_total`** (Counter): Total quota used by user.
-- **`one_api_user_balance`** (Gauge): Current user balance.
+- **`one_api_user_requests_total`** (Counter): Total requests, broken down by `group`.
+- **`one_api_user_quota_used_total`** (Counter): Total quota used, broken down by `group`.
+- **`one_api_user_tokens_total`** (Counter): Total tokens used, broken down by `group` and `token_type`.
+
+> **Note:** `user_id` and `username` are intentionally **not** attached to these metrics. They are unbounded, so under cumulative temporality each distinct value creates a permanent time series and grows process memory without bound. Per-user detail lives in the request logs and billing tables. `one_api_user_balance` is no longer populated (a per-group balance gauge would be last-write-wins and misleading); use the database for per-user balance and the `one_api_site_*` gauges for site-wide quota.
 
 ### Dashboard & Site-wide Metrics
 
@@ -171,8 +173,7 @@ Open the dashboard in Grafana and ensure panels are not showing "No data". If th
 
 The dashboard uses the following core metrics to approximate quota and usage where direct quota metrics are not available per user/model:
 
-- **User usage trend:** `one_api_user_tokens_total` (token consumption over time).
-- **User balance (remaining):** `one_api_user_balance` (current balance per user).
+- **User usage trend:** `one_api_user_tokens_total` (token consumption over time, broken down by `group`/`token_type`).
 - **Model usage trend:** `one_api_relay_tokens_total` (token usage by model).
 
 If you need strict quota accounting per user/model, ensure the backend emits per-user and per-model quota metrics and update the queries accordingly.
@@ -206,7 +207,7 @@ Once the data sources are available, add panels for:
 - **Total Requests (Overview Card):** `sum(increase(one_api_relay_requests_total[24h]))`
 - **Total Quota Used (Overview Card):** `sum(increase(one_api_relay_quota_used_total[24h]))`
 - **Top Models by Request Count:** `topk(10, sum(increase(one_api_relay_requests_total[24h])) by (model))`
-- **Usage by User (Stacked Chart):** `sum(increase(one_api_user_requests_total[24h])) by (user_id)` (relay metrics no longer carry `user_id`; use the per-user `one_api_user_*` metrics)
+- **Usage by Group (Stacked Chart):** `sum(increase(one_api_user_requests_total[24h])) by (group)` (the `one_api_user_*` metrics no longer carry `user_id`/`username`; for per-user breakdowns query the request logs / billing tables in the database)
 - **Site Quota Usage Ratio:** `one_api_site_used_quota / one_api_site_total_quota`
 
 ### 5. Visualization Tips

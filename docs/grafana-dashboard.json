@@ -1404,7 +1404,7 @@
         {
           "id": 30,
           "type": "barchart",
-          "title": "用户请求量 Top10",
+          "title": "用户组请求量 Top10",
           "datasource": {
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
@@ -1417,8 +1417,8 @@
           },
           "targets": [
             {
-              "expr": "topk(10, sum(one_api_user_requests_total{username=~\"$username\",group=~\"$group\"}) by (username, group))",
-              "legendFormat": "{{username}}({{group}})",
+              "expr": "topk(10, sum(one_api_user_requests_total{group=~\"$group\"}) by (group))",
+              "legendFormat": "{{group}}",
               "refId": "A",
               "instant": true
             }
@@ -1484,7 +1484,7 @@
         {
           "id": 32,
           "type": "timeseries",
-          "title": "用户请求速率趋势",
+          "title": "用户组请求速率趋势",
           "datasource": {
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
@@ -1497,8 +1497,8 @@
           },
           "targets": [
             {
-              "expr": "sum(rate(one_api_user_requests_total{username=~\"$username\",group=~\"$group\"}[$__rate_interval])) by (username, group)",
-              "legendFormat": "{{username}}({{group}})",
+              "expr": "sum(rate(one_api_user_requests_total{group=~\"$group\"}[$__rate_interval])) by (group)",
+              "legendFormat": "{{group}}",
               "refId": "A"
             }
           ],
@@ -1531,7 +1531,7 @@
         {
           "id": 33,
           "type": "timeseries",
-          "title": "用户 Token 消耗趋势",
+          "title": "用户组 Token 消耗趋势",
           "datasource": {
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
@@ -1544,8 +1544,8 @@
           },
           "targets": [
             {
-              "expr": "sum(rate(one_api_user_tokens_total{username=~\"$username\"}[$__rate_interval])) by (username, token_type)",
-              "legendFormat": "{{username}}-{{token_type}}",
+              "expr": "sum(rate(one_api_user_tokens_total{group=~\"$group\"}[$__rate_interval])) by (group, token_type)",
+              "legendFormat": "{{group}}-{{token_type}}",
               "refId": "A"
             }
           ],
@@ -2944,7 +2944,7 @@
         "name": "username",
         "label": "用户名",
         "type": "query",
-        "query": "label_values(one_api_user_requests_total, username)",
+        "query": "label_values(one_api_billing_quota_processed_total, username)",
         "datasource": {
           "type": "prometheus",
           "uid": "${DS_PROMETHEUS}"

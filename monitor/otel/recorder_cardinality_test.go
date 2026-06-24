@@ -41,17 +41,17 @@ func TestRelayRequestMetricCardinality(t *testing.T) {
 	for i := 0; i < n; i++ {
 		recorder.RecordRelayRequest(
 			start,
-			1,                       // channelId (constant)
-			"openai",                // channelType (constant)
-			"gpt-4o",                // model (constant)
+			1,                          // channelId (constant)
+			"openai",                   // channelType (constant)
+			"gpt-4o",                   // model (constant)
 			fmt.Sprintf("user-%d", i),  // userId (DISTINCT)
-			"default",               // group (constant)
+			"default",                  // group (constant)
 			fmt.Sprintf("token-%d", i), // tokenId (DISTINCT)
-			"openai",                // apiFormat (constant)
-			"chat",                  // apiType (constant)
-			true,                    // success (constant)
-			10, 20,                  // promptTokens, completionTokens
-			1.5,                     // quotaUsed
+			"openai",                   // apiFormat (constant)
+			"chat",                     // apiType (constant)
+			true,                       // success (constant)
+			10, 20,                     // promptTokens, completionTokens
+			1.5, // quotaUsed
 		)
 	}
 
@@ -69,6 +69,61 @@ func TestRelayRequestMetricCardinality(t *testing.T) {
 	if count > 4 {
 		t.Fatalf("relay_requests_total produced %d data points for %d distinct user/token combinations; "+
 			"high-cardinality labels (user_id/token_id) are causing unbounded series growth", count, n)
+	}
+}
+
+// TestUserMetricCardinality verifies that RecordUserMetrics does not produce
+// one metric series per (user_id, username) pair. As with the relay metrics,
+// cumulative temporality makes every distinct attribute combination a PERMANENT
+// aggregator, so attaching high-cardinality user_id / username attributes to
+// per-user counters leads to unbounded heap growth. After the fix these metrics
+// are broken down only by group (and token_type), so the number of data points
+// must stay small (not grow with N).
+func TestUserMetricCardinality(t *testing.T) {
+	reader := sdkmetric.NewManualReader()
+	provider := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader))
+	otel.SetMeterProvider(provider)
+	t.Cleanup(func() {
+		_ = provider.Shutdown(context.Background())
+	})
+
+	recorder, err := NewOtelRecorder()
+	if err != nil {
+		t.Fatalf("NewOtelRecorder: %v", err)
+	}
+
+	const n = 100
+	for i := 0; i < n; i++ {
+		recorder.RecordUserMetrics(
+			fmt.Sprintf("user-%d", i), // userId (DISTINCT)
+			fmt.Sprintf("name-%d", i), // username (DISTINCT)
+			"default",                 // group (constant)
+			1.5,                       // quotaUsed
+			10, 20,                    // promptTokens, completionTokens
+			100.0, // balance
+		)
+	}
+
+	var rm metricdata.ResourceMetrics
+	if err := reader.Collect(context.Background(), &rm); err != nil {
+		t.Fatalf("collect: %v", err)
+	}
+
+	// one_api_user_requests_total varies only by group (constant here) -> 1 series.
+	reqCount := countDataPoints(t, &rm, "one_api_user_requests_total")
+	t.Logf("one_api_user_requests_total data points = %d (after %d distinct user requests)", reqCount, n)
+	if reqCount > 4 {
+		t.Fatalf("user_requests_total produced %d data points for %d distinct user combinations; "+
+			"high-cardinality labels (user_id/username) are causing unbounded series growth", reqCount, n)
+	}
+
+	// one_api_user_tokens_total varies by group (constant) x token_type
+	// (prompt, completion) -> at most 2 series, never scaling with n.
+	tokCount := countDataPoints(t, &rm, "one_api_user_tokens_total")
+	t.Logf("one_api_user_tokens_total data points = %d (after %d distinct user requests)", tokCount, n)
+	if tokCount > 4 {
+		t.Fatalf("user_tokens_total produced %d data points for %d distinct user combinations; "+
+			"high-cardinality labels (user_id/username) are causing unbounded series growth", tokCount, n)
 	}
 }
 

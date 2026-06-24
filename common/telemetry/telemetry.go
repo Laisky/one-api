@@ -3,6 +3,8 @@ package telemetry
 import (
 	"context"
 	stdErrors "errors"
+	"os"
+	"strconv"
 	"time"
 
 	laerrors "github.com/Laisky/errors/v2"
@@ -13,6 +15,7 @@ import (
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
 	"go.opentelemetry.io/otel/propagation"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
+	"go.opentelemetry.io/otel/sdk/metric/exemplar"
 	sdkresource "go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 
@@ -20,6 +23,52 @@ import (
 	"github.com/Laisky/one-api/common/config"
 	"github.com/Laisky/one-api/common/logger"
 )
+
+// defaultMetricExportInterval is the OpenTelemetry metric export interval. It
+// matches the OTEL SDK default (60s). The previous 15s value quadrupled the
+// per-collect export churn (protobuf re-marshal of every cumulative series plus
+// the exemplar-reservoir reallocation), which dominated heap allocations.
+// Operators can override it with the standard OTEL_METRIC_EXPORT_INTERVAL env
+// var (in milliseconds).
+const defaultMetricExportInterval = 60 * time.Second
+
+// metricExportInterval resolves the periodic-reader interval, honoring the
+// standard OTEL_METRIC_EXPORT_INTERVAL (milliseconds) override and falling back
+// to defaultMetricExportInterval.
+func metricExportInterval() time.Duration {
+	if v := os.Getenv("OTEL_METRIC_EXPORT_INTERVAL"); v != "" {
+		if ms, err := strconv.Atoi(v); err == nil && ms > 0 {
+			return time.Duration(ms) * time.Millisecond
+		}
+	}
+	return defaultMetricExportInterval
+}
+
+// newZeroExemplarReservoirView returns a wildcard view that installs a
+// zero-capacity exemplar reservoir on every instrument.
+//
+// With the default exemplar filter (TraceBasedFilter) and tracing enabled,
+// every sampled measurement reserves an exemplar slot, and the metric SDK
+// reallocates a GOMAXPROCS-sized []metricdata.Exemplar backing array per series
+// on EVERY collect cycle. That reservoir reallocation was ~38% of all process
+// heap allocations.
+//
+// NOTE: setting the exemplar FILTER to always_off does NOT fix this — the
+// reservoir backing array is sized to GOMAXPROCS regardless of the filter
+// (benchmarked: the filter cuts collect bytes by only ~1%). A zero-capacity
+// reservoir is the only effective lever (benchmarked: ~96% fewer bytes per
+// collect, ~8x faster). one-api does not use metric exemplars (no
+// trace-to-metric exemplar drilldown), so dropping them is safe.
+func newZeroExemplarReservoirView() sdkmetric.View {
+	return sdkmetric.NewView(
+		sdkmetric.Instrument{Name: "*"},
+		sdkmetric.Stream{
+			ExemplarReservoirProviderSelector: func(sdkmetric.Aggregation) exemplar.ReservoirProvider {
+				return exemplar.FixedSizeReservoirProvider(0)
+			},
+		},
+	)
+}
 
 // ProviderBundle holds the tracer and meter providers so they can be shut down gracefully.
 type ProviderBundle struct {
@@ -61,10 +110,13 @@ func InitOpenTelemetry(ctx context.Context) (*ProviderBundle, error) {
 		return nil, laerrors.Wrap(err, "create OTLP metric exporter")
 	}
 
-	reader := sdkmetric.NewPeriodicReader(metricExporter, sdkmetric.WithInterval(15*time.Second))
+	reader := sdkmetric.NewPeriodicReader(metricExporter,
+		sdkmetric.WithInterval(metricExportInterval()))
+
 	meterProvider := sdkmetric.NewMeterProvider(
 		sdkmetric.WithReader(reader),
 		sdkmetric.WithResource(res),
+		sdkmetric.WithView(newZeroExemplarReservoirView()),
 	)
 	otel.SetMeterProvider(meterProvider)
 
