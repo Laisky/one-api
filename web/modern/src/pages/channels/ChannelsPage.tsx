@@ -20,7 +20,7 @@ import { Ban, Banknote, CheckCircle, ChevronDown, Copy, FlaskConical, Plus, Refr
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { CHANNEL_TYPES as CHANNEL_TYPE_DEFINITIONS } from './constants';
+import { CHANNEL_TYPE_LABELS as CHANNEL_TYPES } from './constants';
 import { resolveChannelColor } from './utils/colorGenerator';
 
 interface Channel {
@@ -45,18 +45,6 @@ interface Channel {
 /**
  * Channel options defined at relay/channeltype/define.go
  */
-// Derive the channel-type lookup from the single canonical list in constants.ts
-// so the table always stays in sync with the edit/create dropdowns. Maintaining a
-// separate hand-written map here let new types (e.g. Fireworks=54) drift out and
-// render as the "Type N" fallback.
-const CHANNEL_TYPES: Record<number, { name: string; color?: string }> = CHANNEL_TYPE_DEFINITIONS.reduce(
-  (acc, def) => {
-    acc[def.value] = { name: def.text, color: def.color };
-    return acc;
-  },
-  {} as Record<number, { name: string; color?: string }>,
-);
-
 const formatResponseTime = (time?: number) => {
   if (!time) return '-';
   const color = time < 1000 ? 'text-success' : time < 3000 ? 'text-warning' : 'text-destructive';

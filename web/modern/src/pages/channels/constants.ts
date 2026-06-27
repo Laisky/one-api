@@ -405,6 +405,36 @@ export const CHANNEL_TYPES: ChannelType[] = [
   },
 ];
 
+/**
+ * Legacy channel types that are no longer offered in the create/edit dropdown but
+ * may still exist on stored channels. Type 8 ("Custom") is auto-migrated to
+ * OpenAICompatible at runtime (see relay/channeltype/define.go + the channel
+ * migration), so it is display-only here to keep the channel table from falling
+ * back to a raw "Type N" label.
+ */
+export const LEGACY_CHANNEL_TYPES: ChannelType[] = [
+  {
+    key: 8,
+    text: 'Custom',
+    value: 8,
+    color: 'pink',
+    description: 'Legacy custom OpenAI-compatible channel; auto-migrated to OpenAI Compatible.',
+  },
+];
+
+/**
+ * Complete channel-type -> display metadata map (creatable types plus legacy
+ * display-only types). Derive every type -> label/color lookup from this single
+ * source so the channel list never drifts out of sync with relay/channeltype/define.go.
+ */
+export const CHANNEL_TYPE_LABELS: Record<number, { name: string; color?: string }> = [
+  ...CHANNEL_TYPES,
+  ...LEGACY_CHANNEL_TYPES,
+].reduce<Record<number, { name: string; color?: string }>>((acc, def) => {
+  acc[def.value] = { name: def.text, color: def.color };
+  return acc;
+}, {});
+
 export const CHANNEL_TYPES_WITH_DEDICATED_BASE_URL = new Set<number>([3, 50, 52]);
 export const CHANNEL_TYPES_WITH_CUSTOM_KEY_FIELD = new Set<number>([18, 23, 33, 34, 42]);
 
