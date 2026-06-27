@@ -59,6 +59,8 @@ func ToAPIType(channelType int) int {
 		apiType = apitype.Fireworks
 	case NVIDIA:
 		apiType = apitype.NVIDIA
+	case Cerebras:
+		apiType = apitype.Cerebras
 	}
 
 	return apiType
@@ -186,6 +188,8 @@ func IdToName(channelType int) string {
 		return "fireworks"
 	case NVIDIA:
 		return "nvidia"
+	case Cerebras:
+		return "cerebras"
 	case Dummy:
 		return "dummy"
 	default:

@@ -7,6 +7,7 @@ import (
 	"github.com/Laisky/one-api/relay/adaptor/anthropic"
 	"github.com/Laisky/one-api/relay/adaptor/aws"
 	"github.com/Laisky/one-api/relay/adaptor/baidu"
+	"github.com/Laisky/one-api/relay/adaptor/cerebras"
 	"github.com/Laisky/one-api/relay/adaptor/cloudflare"
 	"github.com/Laisky/one-api/relay/adaptor/cohere"
 	"github.com/Laisky/one-api/relay/adaptor/copilot"
@@ -92,6 +93,8 @@ func GetAdaptor(apiType int) adaptor.Adaptor {
 		return &fireworks.Adaptor{}
 	case apitype.NVIDIA:
 		return &nvidia.Adaptor{}
+	case apitype.Cerebras:
+		return &cerebras.Adaptor{}
 	}
 
 	return nil

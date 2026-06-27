@@ -20,6 +20,7 @@ import { Ban, Banknote, CheckCircle, ChevronDown, Copy, FlaskConical, Plus, Refr
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import { CHANNEL_TYPES as CHANNEL_TYPE_DEFINITIONS } from './constants';
 import { resolveChannelColor } from './utils/colorGenerator';
 
 interface Channel {
@@ -44,50 +45,17 @@ interface Channel {
 /**
  * Channel options defined at relay/channeltype/define.go
  */
-const CHANNEL_TYPES: Record<number, { name: string; color: string }> = {
-  1: { name: 'OpenAI', color: 'green' },
-  50: { name: 'OpenAI Compatible', color: 'olive' },
-  14: { name: 'Anthropic', color: 'black' },
-  33: { name: 'AWS', color: 'orange' },
-  3: { name: 'Azure', color: 'blue' },
-  11: { name: 'PaLM2', color: 'orange' },
-  24: { name: 'Gemini', color: 'orange' },
-  51: { name: 'Gemini (OpenAI)', color: 'orange' },
-  28: { name: 'Mistral AI', color: 'purple' },
-  41: { name: 'Novita', color: 'purple' },
-  40: { name: 'ByteDance Volcano', color: 'blue' },
-  15: { name: 'Baidu Wenxin', color: 'blue' },
-  47: { name: 'Baidu Wenxin V2', color: 'blue' },
-  17: { name: 'Alibaba Qianwen', color: 'orange' },
-  49: { name: 'Alibaba Bailian', color: 'orange' },
-  18: { name: 'iFlytek Spark', color: 'blue' },
-  48: { name: 'iFlytek Spark V2', color: 'blue' },
-  16: { name: 'Zhipu ChatGLM', color: 'violet' },
-  19: { name: '360 ZhiNao', color: 'blue' },
-  25: { name: 'Moonshot AI', color: 'black' },
-  23: { name: 'Tencent Hunyuan', color: 'teal' },
-  26: { name: 'Baichuan', color: 'orange' },
-  27: { name: 'MiniMax', color: 'red' },
-  29: { name: 'Groq', color: 'orange' },
-  30: { name: 'Ollama', color: 'black' },
-  31: { name: '01.AI', color: 'green' },
-  32: { name: 'StepFun', color: 'blue' },
-  34: { name: 'Coze', color: 'blue' },
-  35: { name: 'Cohere', color: 'blue' },
-  36: { name: 'DeepSeek', color: 'black' },
-  37: { name: 'Cloudflare', color: 'orange' },
-  38: { name: 'DeepL', color: 'black' },
-  39: { name: 'together.ai', color: 'blue' },
-  42: { name: 'VertexAI', color: 'blue' },
-  43: { name: 'Proxy', color: 'blue' },
-  44: { name: 'SiliconFlow', color: 'blue' },
-  45: { name: 'xAI', color: 'blue' },
-  46: { name: 'Replicate', color: 'blue' },
-  8: { name: 'Custom', color: 'pink' },
-  22: { name: 'FastGPT', color: 'blue' },
-  21: { name: 'AI Proxy KB', color: 'purple' },
-  20: { name: 'OpenRouter', color: 'black' },
-};
+// Derive the channel-type lookup from the single canonical list in constants.ts
+// so the table always stays in sync with the edit/create dropdowns. Maintaining a
+// separate hand-written map here let new types (e.g. Fireworks=54) drift out and
+// render as the "Type N" fallback.
+const CHANNEL_TYPES: Record<number, { name: string; color?: string }> = CHANNEL_TYPE_DEFINITIONS.reduce(
+  (acc, def) => {
+    acc[def.value] = { name: def.text, color: def.color };
+    return acc;
+  },
+  {} as Record<number, { name: string; color?: string }>,
+);
 
 const formatResponseTime = (time?: number) => {
   if (!time) return '-';

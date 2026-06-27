@@ -5,7 +5,7 @@
 Open‑source version of OpenRouter, managed through a unified gateway that handles all AI SaaS model calls. Core functions include:
 
 1. Aggregating chat, image, speech, TTS, embeddings, rerank and other capabilities.
-2. Aggregating multiple model providers such as OpenAI, Anthropic, Azure, Google Vertex, OpenRouter, DeepSeek, Replicate, AWS Bedrock, NVIDIA, etc.
+2. Aggregating multiple model providers such as OpenAI, Anthropic, Azure, Google Vertex, OpenRouter, DeepSeek, Replicate, AWS Bedrock, Groq, Grok/xAI, Fireworks, NVIDIA, Cerebras, Cloudflare, ZHIPU GLM, Cohere, etc.
 3. Aggregating various upstream API request formats like Chat Completion, Response, Claude Messages.
 4. Supporting different request formats; users can issue requests via Chat Completion, Response, or Claude Messages, which are automatically and transparently converted to the native request format of the upstream model. Even if the client sends a mismatched request format to wrong api endpoint, it will still be correctly processed.
 5. Supporting multi‑tenant management, allowing each tenant to set distinct quotas and permissions.
@@ -160,6 +160,8 @@ The original author stopped maintaining the project, leaving critical PRs and ne
       - [Support black-forest-labs/flux-kontext-pro](#support-black-forest-labsflux-kontext-pro)
     - [NVIDIA Features](#nvidia-features)
       - [Support NVIDIA API Catalog (build.nvidia.com)](#support-nvidia-api-catalog-buildnvidiacom)
+    - [Cerebras Features](#cerebras-features)
+      - [Support Cerebras Inference (api.cerebras.ai)](#support-cerebras-inference-apicerebrasai)
   - [Bug Fixes \& Enterprise-Grade Improvements (Including Security Enhancements)](#bug-fixes--enterprise-grade-improvements-including-security-enhancements)
 
 ## Tutorial
@@ -1516,6 +1518,19 @@ Adds an `NVIDIA` channel type that targets NVIDIA's OpenAI-compatible hosted inf
 Curated models include NVIDIA's own Nemotron family (e.g. `nvidia/nemotron-3-ultra-550b-a55b`, `nvidia/llama-3.3-nemotron-super-49b-v1.5`, `nvidia/nemotron-nano-12b-v2-vl`) plus popular hosted open models such as `meta/llama-3.3-70b-instruct`, `deepseek-ai/deepseek-v4-flash`, `qwen/qwen3-next-80b-a3b-instruct`, `openai/gpt-oss-120b`, and `moonshotai/kimi-k2.6`.
 
 NVIDIA does not publish per-token pricing for the hosted endpoint (it is metered in free API credits rather than currency), so every bundled model defaults to free. Operators routing to NVIDIA AI Enterprise or a paid partner endpoint with real costs can set per-channel pricing overrides.
+
+### Cerebras Features
+
+#### Support Cerebras Inference (api.cerebras.ai)
+
+Adds a `Cerebras` channel type that targets [Cerebras Inference](https://inference-docs.cerebras.ai/), the OpenAI-compatible API served on Cerebras' wafer-scale (CS-3) hardware at `https://api.cerebras.ai/v1`. Authenticate with a Cerebras API key (`Authorization: Bearer ...`). The channel serves Chat Completions natively, and transparently handles Claude Messages / Response API requests through one-api's OpenAI-compatible conversion layer. Cerebras is chat-only — it does not expose embeddings or a native Anthropic Messages endpoint.
+
+Bundled models (live on the shared public API with officially published per-token pricing):
+
+- `gpt-oss-120b` — OpenAI gpt-oss 120B open-weight MoE reasoning model (Production / GA); 131K context, tools and structured outputs, `reasoning_effort` supported. Billed at $0.35 / 1M input and $0.75 / 1M output tokens.
+- `zai-glm-4.7` — Z.ai GLM-4.7 (355B) reasoning/agent model; 131K context. Marked **Preview** by Cerebras (evaluation only, may change on short notice). Billed at $2.25 / 1M input and $2.75 / 1M output tokens.
+
+`gemma-4-31b` is announced as "coming soon" and is not yet live, so it is intentionally not bundled. Per-token rates above are taken from the official Cerebras model cards; operators can override pricing per channel.
 
 ## Bug Fixes & Enterprise-Grade Improvements (Including Security Enhancements)
 

@@ -278,6 +278,13 @@ export const CHANNEL_TYPES: ChannelType[] = [
     description: 'NVIDIA API Catalog (build.nvidia.com); OpenAI-compatible chat for Nemotron and hosted open models.',
   },
   {
+    key: 56,
+    text: 'Cerebras',
+    value: 56,
+    color: 'orange',
+    description: 'Cerebras Inference (api.cerebras.ai); ultra-fast OpenAI-compatible chat on wafer-scale hardware (gpt-oss-120b, GLM-4.7).',
+  },
+  {
     key: 42,
     text: 'VertexAI',
     value: 42,

@@ -57,5 +57,6 @@ const (
 	Copilot
 	Fireworks
 	NVIDIA
+	Cerebras
 	Dummy
 )

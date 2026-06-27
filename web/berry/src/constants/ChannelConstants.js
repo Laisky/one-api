@@ -176,6 +176,12 @@ export const CHANNEL_OPTIONS = {
     value: 55,
     color: 'success'
   },
+  56: {
+    key: 56,
+    text: 'Cerebras',
+    value: 56,
+    color: 'orange'
+  },
   42: {
     key: 42,
     text: 'VertexAI',

@@ -67,6 +67,7 @@ var ChannelBaseURLConfigs = []ChannelBaseURLConfig{
 	{URL: "https://api.githubcopilot.com", Editable: true},                             // 53 Copilot
 	{URL: "https://api.fireworks.ai/inference", Editable: false},                       // 54 Fireworks
 	{URL: "https://integrate.api.nvidia.com/v1", Editable: true},                       // 55 NVIDIA
+	{URL: "https://api.cerebras.ai/v1", Editable: false},                               // 56 Cerebras
 }
 
 // ChannelBaseURLs provides backward compatibility by returning only the URL strings.

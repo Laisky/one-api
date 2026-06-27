@@ -385,6 +385,17 @@ func DefaultEndpointsForChannelType(channelType int) []Endpoint {
 			EndpointResponseAPI,
 			EndpointClaudeMessages,
 		}
+	case Cerebras:
+		// Cerebras' OpenAI-compatible API (https://api.cerebras.ai/v1) natively
+		// serves Chat Completions only. The Responses API and Anthropic Messages
+		// surfaces are provided through one-api's shared OpenAI-compatible
+		// conversion/fallback layer rather than upstream-native. Cerebras does
+		// not expose embeddings.
+		return []Endpoint{
+			EndpointChatCompletions,
+			EndpointResponseAPI,
+			EndpointClaudeMessages,
+		}
 	case Custom, OpenAICompatible:
 		return openAICompatibleBasic
 	case ClaudeCompatible:
