@@ -106,6 +106,38 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		Description:                 "ByteDance Doubao Seed 1.6 Flash: cost-optimized multimodal deep-thinking variant with 256K context.",
 	},
 
+	// --- Doubao Seed 2.1 (FORCE 2026 flagship deep-thinking multimodal) ---
+	// Unified (non input-length-tiered) pricing per Volcengine:
+	//   Pro:   ¥6 in / ¥30 out / ¥1.2 cached
+	//   Turbo: ¥3 in / ¥15 out / ¥0.6 cached
+	// Both have 256K context, deep-thinking, multimodal (text/image/video)
+	// understanding, and tool calling. ARK ids: doubao-seed-2-1-pro-260628 /
+	// doubao-seed-2-1-turbo-260628 (released 2026-06-23).
+	"doubao-seed-2.1-pro": {
+		Ratio:                       6 * ratio.MilliTokensRmb,
+		CompletionRatio:             30.0 / 6.0,
+		CachedInputRatio:            1.2 * ratio.MilliTokensRmb,
+		ContextLength:               256000,
+		MaxOutputTokens:             128000,
+		InputModalities:             doubaoMultimodalInputs,
+		OutputModalities:            doubaoTextOutputs,
+		SupportedFeatures:           doubaoReasoningFeatures,
+		SupportedSamplingParameters: doubaoSamplingParams,
+		Description:                 "ByteDance Doubao Seed 2.1 Pro: flagship deep-thinking multimodal model (text/image/video input) with 256K context, built for coding and agent workloads.",
+	},
+	"doubao-seed-2.1-turbo": {
+		Ratio:                       3 * ratio.MilliTokensRmb,
+		CompletionRatio:             15.0 / 3.0,
+		CachedInputRatio:            0.6 * ratio.MilliTokensRmb,
+		ContextLength:               256000,
+		MaxOutputTokens:             256000,
+		InputModalities:             doubaoMultimodalInputs,
+		OutputModalities:            doubaoTextOutputs,
+		SupportedFeatures:           doubaoReasoningFeatures,
+		SupportedSamplingParameters: doubaoSamplingParams,
+		Description:                 "ByteDance Doubao Seed 2.1 Turbo: low-cost low-latency deep-thinking multimodal model with 256K context, half the price of 2.1 Pro.",
+	},
+
 	// --- Doubao 1.5 series ---
 	"doubao-1.5-pro-32k": {
 		Ratio:                       0.8 * ratio.MilliTokensRmb,

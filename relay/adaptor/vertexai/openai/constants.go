@@ -26,8 +26,9 @@ var (
 // `reasoning_effort` parameter with low/medium/high tiers per the Vertex thinking capability doc.
 var ModelRatios = map[string]adaptor.ModelConfig{
 	"openai/gpt-oss-20b-maas": {
-		Ratio:                       0.075 * ratio.MilliTokensUsd, // $0.075 per million input tokens
-		CompletionRatio:             0.30 / 0.075,                 // Output/Input = $0.30 / $0.075 = 4
+		Ratio:                       0.07 * ratio.MilliTokensUsd,  // $0.07 per million input tokens
+		CompletionRatio:             0.25 / 0.07,                  // Output/Input = $0.25 / $0.07 = 3.5714
+		CachedInputRatio:            0.007 * ratio.MilliTokensUsd, // $0.007 per million cached input tokens
 		ContextLength:               131072,
 		MaxOutputTokens:             131072,
 		InputModalities:             vertexOpenAIMaaSTextInputs,
@@ -41,8 +42,8 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		Description:                 "OpenAI gpt-oss-20b MaaS on Vertex AI: open-weight reasoning model (Apache 2.0) with text-only I/O.",
 	},
 	"openai/gpt-oss-120b-maas": {
-		Ratio:                       0.15 * ratio.MilliTokensUsd, // $0.15 per million input tokens
-		CompletionRatio:             0.60 / 0.15,                 // Output/Input = $0.60 / $0.15 = 4
+		Ratio:                       0.09 * ratio.MilliTokensUsd, // $0.09 per million input tokens
+		CompletionRatio:             0.36 / 0.09,                 // Output/Input = $0.36 / $0.09 = 4
 		ContextLength:               131072,
 		MaxOutputTokens:             131072,
 		InputModalities:             vertexOpenAIMaaSTextInputs,

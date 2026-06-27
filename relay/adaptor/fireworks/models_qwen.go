@@ -68,4 +68,16 @@ var qwenModels = map[string]adaptor.ModelConfig{
 		HuggingFaceID:               "Qwen/Qwen3-0.6B",
 		Description:                 "Alibaba Qwen3 0.6B ultra-compact dense model for embedded chat workloads with 32K context.",
 	},
+	"accounts/fireworks/models/qwen3p7-plus": {
+		Ratio:                       0.40 * ratio.MilliTokensUsd,
+		CompletionRatio:             1.60 / 0.40,
+		CachedInputRatio:            0.08 * ratio.MilliTokensUsd,
+		ContextLength:               262144,
+		MaxOutputTokens:             262144,
+		InputModalities:             fwTextImageInModalities,
+		OutputModalities:            fwTextOnlyModalities,
+		SupportedFeatures:           fwReasoningFeatures,
+		SupportedSamplingParameters: fwChatSamplingParams,
+		Description:                 "Alibaba Qwen3.7 Plus (MoE) flagship closed multimodal model, available exclusively through Fireworks AI, with 256K context and function calling.",
+	},
 }

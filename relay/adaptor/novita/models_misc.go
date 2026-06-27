@@ -404,6 +404,26 @@ var miscModelRatios = map[string]adaptor.ModelConfig{
 		Description:                 "Sao10K Llama 3 8B Lunaris community role-play fine-tune.",
 	},
 
+	// StepFun Step — open-weight vision-language MoE reasoning chat model.
+	"stepfun/step-3.7-flash": {
+		// Novita prices Step 3.7 Flash at $0.2/$1.15 with $0.04 cache-read.
+		// Source: https://novita.ai/pricing (retrieved 2026-06-27)
+		Ratio:                       0.2 * ratio.MilliTokensUsd,
+		CompletionRatio:             1.15 / 0.2,
+		CachedInputRatio:            0.04 * ratio.MilliTokensUsd,
+		ContextLength:               262144,
+		MaxOutputTokens:             256000,
+		InputModalities:             novitaTextImageInModalities,
+		OutputModalities:            novitaTextOnlyModalities,
+		SupportedFeatures:           novitaReasoningFeatures,
+		SupportedSamplingParameters: novitaReasoningSamplingParams,
+		SupportedReasoningEfforts:   []string{"low", "medium", "high"},
+		DefaultReasoningEffort:      "medium",
+		Quantization:                "fp8",
+		HuggingFaceID:               "stepfun-ai/Step-3.7-Flash",
+		Description:                 "StepFun Step 3.7 Flash 196B/A11B vision-language MoE reasoning chat model with 256K context.",
+	},
+
 	// Xiaomi MiMo — small efficient chat model.
 	"xiaomimimo/mimo-v2-flash": {
 		// Novita repriced MiMo V2 Flash to $0.11/$0.33 with $0.024 cache-read.

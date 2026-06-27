@@ -175,6 +175,25 @@ var deepseekModelRatios = map[string]adaptor.ModelConfig{
 		HuggingFaceID:               "deepseek-ai/DeepSeek-R1-Distill-Llama-8B",
 		Description:                 "DeepSeek-R1 distilled into Llama 8B (reasoning-focused).",
 	},
+	// deepseek-v4-flash: Alibaba Model Studio China-mainland CNY pricing
+	// (verified 2026-06-27 against help.aliyun.com/zh/model-studio/model-pricing):
+	// input ¥1 / output ¥2 per 1M. Alibaba bills context-cache hits at 20% of the
+	// standard input price (¥1 * 0.20 = ¥0.2), per help.aliyun.com/zh/model-studio/context-cache.
+	"deepseek-v4-flash": {
+		Ratio:                       1 * ratio.MilliTokensRmb,
+		CachedInputRatio:            0.2 * ratio.MilliTokensRmb,
+		CompletionRatio:             2,
+		ContextLength:               1000000,
+		MaxOutputTokens:             393216,
+		InputModalities:             []string{"text"},
+		OutputModalities:            []string{"text"},
+		SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs", "reasoning"},
+		SupportedSamplingParameters: qwenStandardSamplingParameters(),
+		MaxReasoningTokens:          393216,
+		Quantization:                "fp8",
+		HuggingFaceID:               "deepseek-ai/DeepSeek-V4-Flash",
+		Description:                 "DeepSeek-V4-Flash MoE chat model (hybrid thinking, 1M context) hosted on Alibaba Model Studio.",
+	},
 	"deepseek-r1-distill-llama-70b": {
 		Ratio:                       1 * ratio.MilliTokensRmb,
 		CompletionRatio:             2,

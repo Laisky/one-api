@@ -27,8 +27,10 @@ import (
 // AwsModelIDMap provides mapping for OpenAI OSS models via Converse API
 // https://docs.aws.amazon.com/bedrock/latest/userguide/model-ids.html
 var AwsModelIDMap = map[string]string{
-	"gpt-oss-20b":  "openai.gpt-oss-20b-1:0",
-	"gpt-oss-120b": "openai.gpt-oss-120b-1:0",
+	"gpt-oss-20b":            "openai.gpt-oss-20b-1:0",
+	"gpt-oss-120b":           "openai.gpt-oss-120b-1:0",
+	"gpt-oss-safeguard-120b": "openai.gpt-oss-safeguard-120b",
+	"gpt-oss-safeguard-20b":  "openai.gpt-oss-safeguard-20b",
 }
 
 func awsModelID(requestModel string) (string, error) {

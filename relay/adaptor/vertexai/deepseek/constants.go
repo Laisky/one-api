@@ -70,16 +70,15 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		// thinking is toggled via chat_template_kwargs.thinking (boolean) in the request body.
 		Description: "DeepSeek V3.2 on Vertex AI MaaS with long context, tool use, and optional hybrid thinking.",
 	},
-	// DeepSeek V3.1 - Input: $1.35 / million tokens, Output: $5.40 / million tokens
+	// DeepSeek V3.1 - Input: $0.60 / million tokens, Output: $1.70 / million tokens
 	// Vertex GA 2025-08-28 in us-central1; hybrid thinking via chat_template_kwargs.thinking.
-	// (Vertex aligns V3.1 with R1 list pricing; cloudprice confirmed 2026-05-19.)
+	// (Vertex dropped V3.1 below R1 list pricing; live pricing page + cloudprice/portkey confirmed 2026-06-27.)
 	"deepseek-ai/deepseek-v3.1-maas": {
-		Ratio: 1.35 * ratio.MilliTokensUsd, // Input price: $1.35 per million tokens
-		// Vertex implicit caching gives a 90% discount on cached input tokens
-		// (cache-hit billed at 0.1x standard input). deepseek-v3.1-maas is listed
-		// as implicit-cache supported by Vertex MaaS.
-		CachedInputRatio:            0.1 * 1.35 * ratio.MilliTokensUsd,
-		CompletionRatio:             5.40 / 1.35, // Output/Input ratio: $5.40 / $1.35 = 4.0
+		Ratio: 0.60 * ratio.MilliTokensUsd, // Input price: $0.60 per million tokens
+		// Vertex implicit caching gives a discount on cached input tokens.
+		// deepseek-v3.1-maas publishes an explicit Cache Hit rate of $0.06/1M.
+		CachedInputRatio:            0.06 * ratio.MilliTokensUsd,
+		CompletionRatio:             1.70 / 0.60, // Output/Input ratio: $1.70 / $0.60 = 2.8333
 		ContextLength:               163840,
 		MaxOutputTokens:             32768,
 		InputModalities:             deepSeekVertexTextFileInputs,

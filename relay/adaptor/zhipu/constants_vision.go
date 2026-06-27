@@ -24,7 +24,7 @@ var flagshipVisionModels = map[string]adaptor.ModelConfig{
 		MaxOutputTokens:             128_000,
 		InputModalities:             textImageVideoFileInput(),
 		OutputModalities:            textOutput(),
-		SupportedFeatures:           commonChatFeatures(),
+		SupportedFeatures:           reasoningChatFeatures(),
 		SupportedSamplingParameters: chatSamplingParameters(),
 		HuggingFaceID:               "zai-org/GLM-5V-Turbo",
 		Quantization:                "bf16",

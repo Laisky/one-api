@@ -97,6 +97,24 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		Description:                 "Moonshot Kimi K2.7 Code, current top coding model (1.1T MoE, open weights); text + image + video input, 256k ctx, thinking-only deep reasoning.",
 	},
 
+	// Kimi K2.7 Code HighSpeed (2026-06). High-throughput (~180 tok/s) variant
+	// of K2.7 Code; same multimodal text + image + video input, thinking-only
+	// deep reasoning and context caching, priced at 2x standard K2.7 Code.
+	"kimi-k2.7-code-highspeed": {
+		Ratio:                       13.0 * ratio.MilliTokensRmb, // input (cache-miss)
+		CompletionRatio:             54.0 / 13.0,                 // output / input
+		CachedInputRatio:            2.6 * ratio.MilliTokensRmb,  // input (cache-hit)
+		ContextLength:               262144,
+		MaxOutputTokens:             32768,
+		InputModalities:             moonshotMultimodalInputs,
+		OutputModalities:            moonshotTextOutputs,
+		SupportedFeatures:           moonshotReasoningFeatures,
+		SupportedSamplingParameters: moonshotReasoningSamplingParams,
+		MaxReasoningTokens:          49152,
+		HuggingFaceID:               "moonshotai/Kimi-K2.7-Code",
+		Description:                 "Moonshot Kimi K2.7 Code HighSpeed, high-throughput (~180 tok/s) variant of K2.7 Code; text + image + video input, 256k ctx, thinking-only deep reasoning. Priced at 2x standard K2.7 Code.",
+	},
+
 	// Kimi K2.6 (2026-05). Multimodal text + image + video, supports thinking
 	// and non-thinking modes, automatic context caching, tool calls, JSON
 	// mode and web search. Open weights on HuggingFace.

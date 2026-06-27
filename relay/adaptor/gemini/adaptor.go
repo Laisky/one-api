@@ -695,6 +695,14 @@ func (a *Adaptor) DefaultToolingConfig() channelhelper.ChannelToolConfig {
 	return GeminiToolingDefaults
 }
 
+// DefaultToolingConfigForModel returns Google's grounded web search tooling
+// metadata for a specific model, billing Gemini 3.x web_search at $14/1K queries
+// and Gemini 2.5 and earlier at $35/1K queries. The tooling-policy builder prefers
+// this over DefaultToolingConfig when present.
+func (a *Adaptor) DefaultToolingConfigForModel(model string) channelhelper.ChannelToolConfig {
+	return geminiOpenaiCompatible.GeminiToolingDefaultsForModel(model)
+}
+
 func mapGeminiFinishReason(reason string) string {
 	switch reason {
 	case "MAX_TOKENS":

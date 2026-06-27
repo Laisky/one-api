@@ -174,8 +174,8 @@ var qwenOpenModelRatios = map[string]adaptor.ModelConfig{
 		Description:                 "Qwen3 32B: dense open-weight model with hybrid thinking/non-thinking modes.",
 	},
 	"qwen3-30b-a3b": {
-		Ratio:                       0.00078 * 1000 * ratio.MilliTokensRmb,
-		CompletionRatio:             3.96, // 3.09 / 0.78
+		Ratio:                       0.00075 * 1000 * ratio.MilliTokensRmb,
+		CompletionRatio:             4, // 3.0 / 0.75
 		ContextLength:               131072,
 		MaxOutputTokens:             16384,
 		InputModalities:             []string{"text"},
@@ -185,6 +185,35 @@ var qwenOpenModelRatios = map[string]adaptor.ModelConfig{
 		Quantization:                "bf16",
 		HuggingFaceID:               "Qwen/Qwen3-30B-A3B",
 		Description:                 "Qwen3 30B A3B: open-weight MoE (3B active) with hybrid thinking modes.",
+	},
+	// 2507 snapshots: distinct official rows (中国内地, verified 2026-06-27).
+	//   instruct (仅非思考): 0.75 / 3   thinking (仅思考): 0.75 / 7.5
+	"qwen3-30b-a3b-instruct-2507": {
+		Ratio:                       0.00075 * 1000 * ratio.MilliTokensRmb,
+		CompletionRatio:             4, // 3.0 / 0.75
+		ContextLength:               262144,
+		MaxOutputTokens:             32768,
+		InputModalities:             []string{"text"},
+		OutputModalities:            []string{"text"},
+		SupportedFeatures:           qwenChatFeatures(),
+		SupportedSamplingParameters: qwenStandardSamplingParameters(),
+		Quantization:                "bf16",
+		HuggingFaceID:               "Qwen/Qwen3-30B-A3B-Instruct-2507",
+		Description:                 "Qwen3 30B A3B Instruct (2507 snapshot): open-weight MoE (3B active), non-thinking instruct variant.",
+	},
+	"qwen3-30b-a3b-thinking-2507": {
+		Ratio:                       0.00075 * 1000 * ratio.MilliTokensRmb,
+		CompletionRatio:             10, // 7.5 / 0.75 (thinking output)
+		ContextLength:               262144,
+		MaxOutputTokens:             32768,
+		InputModalities:             []string{"text"},
+		OutputModalities:            []string{"text"},
+		SupportedFeatures:           qwenReasoningFeatures(),
+		SupportedSamplingParameters: qwenReasoningSamplingParameters(),
+		MaxReasoningTokens:          38912,
+		Quantization:                "bf16",
+		HuggingFaceID:               "Qwen/Qwen3-30B-A3B-Thinking-2507",
+		Description:                 "Qwen3 30B A3B Thinking (2507 snapshot): open-weight MoE reasoning variant.",
 	},
 	"qwen3-14b": {
 		Ratio:                       0.00103 * 1000 * ratio.MilliTokensRmb,
@@ -965,5 +994,93 @@ var qwenOpenModelRatios = map[string]adaptor.ModelConfig{
 		Quantization:                "bf16",
 		HuggingFaceID:               "Qwen/QVQ-72B-Preview",
 		Description:                 "QVQ Max: managed multimodal reasoning tier with 128K context.",
+	},
+
+	// ----- Qwen 3.5 / 3.6 medium open-weight family ---------------------------
+	// Aliyun China-mainland CNY/1M (verified 2026-06-27 against
+	// help.aliyun.com/zh/model-studio/model-pricing). Base tier billed here:
+	//   qwen3.5-397b-a17b: 0-128K 1.2 / 7.2   (128K-256K 3 / 18)
+	//   qwen3.5-122b-a10b: 0-128K 0.8 / 6.4   (128K-256K 2 / 16)
+	//   qwen3.5-35b-a3b:   0-128K 0.4 / 3.2   (128K-256K 1.6 / 12.8)
+	//   qwen3.5-27b:       0-128K 0.6 / 4.8   (128K-256K 1.8 / 14.4)
+	//   qwen3.6-35b-a3b:   0-256K 1.8 / 10.8
+	//   qwen3.6-27b:       0-256K 3 / 18
+	"qwen3.5-397b-a17b": {
+		Ratio:                       0.0012 * 1000 * ratio.MilliTokensRmb,
+		CompletionRatio:             6, // 7.2 / 1.2
+		ContextLength:               262144,
+		MaxOutputTokens:             32768,
+		InputModalities:             []string{"text", "image"},
+		OutputModalities:            []string{"text"},
+		SupportedFeatures:           qwenReasoningFeatures(),
+		SupportedSamplingParameters: qwenStandardSamplingParameters(),
+		Quantization:                "bf16",
+		HuggingFaceID:               "Qwen/Qwen3.5-397B-A17B",
+		Description:                 "Qwen3.5 397B-A17B: open-weight multimodal hybrid-reasoning MoE flagship (17B active, 256K context; 0-128K base tier billed here).",
+	},
+	"qwen3.5-122b-a10b": {
+		Ratio:                       0.0008 * 1000 * ratio.MilliTokensRmb,
+		CompletionRatio:             8, // 6.4 / 0.8
+		ContextLength:               262144,
+		MaxOutputTokens:             32768,
+		InputModalities:             []string{"text", "image"},
+		OutputModalities:            []string{"text"},
+		SupportedFeatures:           qwenReasoningFeatures(),
+		SupportedSamplingParameters: qwenStandardSamplingParameters(),
+		Quantization:                "bf16",
+		HuggingFaceID:               "Qwen/Qwen3.5-122B-A10B",
+		Description:                 "Qwen3.5 122B-A10B: open-weight multimodal hybrid-reasoning MoE (10B active, 256K context; 0-128K base tier billed here).",
+	},
+	"qwen3.5-35b-a3b": {
+		Ratio:                       0.0004 * 1000 * ratio.MilliTokensRmb,
+		CompletionRatio:             8, // 3.2 / 0.4
+		ContextLength:               262144,
+		MaxOutputTokens:             32768,
+		InputModalities:             []string{"text", "image"},
+		OutputModalities:            []string{"text"},
+		SupportedFeatures:           qwenReasoningFeatures(),
+		SupportedSamplingParameters: qwenStandardSamplingParameters(),
+		Quantization:                "bf16",
+		HuggingFaceID:               "Qwen/Qwen3.5-35B-A3B",
+		Description:                 "Qwen3.5 35B-A3B: open-weight multimodal hybrid-reasoning MoE (3B active, 256K context; 0-128K base tier billed here).",
+	},
+	"qwen3.5-27b": {
+		Ratio:                       0.0006 * 1000 * ratio.MilliTokensRmb,
+		CompletionRatio:             8, // 4.8 / 0.6
+		ContextLength:               262144,
+		MaxOutputTokens:             32768,
+		InputModalities:             []string{"text", "image"},
+		OutputModalities:            []string{"text"},
+		SupportedFeatures:           qwenReasoningFeatures(),
+		SupportedSamplingParameters: qwenStandardSamplingParameters(),
+		Quantization:                "bf16",
+		HuggingFaceID:               "Qwen/Qwen3.5-27B",
+		Description:                 "Qwen3.5 27B: open-weight dense multimodal hybrid-reasoning model (256K context; 0-128K base tier billed here).",
+	},
+	"qwen3.6-35b-a3b": {
+		Ratio:                       0.0018 * 1000 * ratio.MilliTokensRmb,
+		CompletionRatio:             6, // 10.8 / 1.8
+		ContextLength:               262144,
+		MaxOutputTokens:             65536,
+		InputModalities:             []string{"text"},
+		OutputModalities:            []string{"text"},
+		SupportedFeatures:           qwenReasoningFeatures(),
+		SupportedSamplingParameters: qwenStandardSamplingParameters(),
+		Quantization:                "bf16",
+		HuggingFaceID:               "Qwen/Qwen3.6-35B-A3B",
+		Description:                 "Qwen3.6 35B-A3B: open-weight MoE (3B active, 256K context; 0-256K base tier billed here).",
+	},
+	"qwen3.6-27b": {
+		Ratio:                       0.003 * 1000 * ratio.MilliTokensRmb,
+		CompletionRatio:             6, // 18 / 3
+		ContextLength:               262144,
+		MaxOutputTokens:             65536,
+		InputModalities:             []string{"text"},
+		OutputModalities:            []string{"text"},
+		SupportedFeatures:           qwenReasoningFeatures(),
+		SupportedSamplingParameters: qwenStandardSamplingParameters(),
+		Quantization:                "bf16",
+		HuggingFaceID:               "Qwen/Qwen3.6-27B",
+		Description:                 "Qwen3.6 27B: open-weight dense coding-focused model (256K context; 0-256K base tier billed here).",
 	},
 }

@@ -508,4 +508,29 @@ var wanxModelRatios = map[string]adaptor.ModelConfig{
 		OutputModalities: []string{"image"},
 		Description:      "DashScope wanx2.0-t2i-turbo: legacy Wan 2.0 cost-optimized text-to-image (¥0.04/image).",
 	},
+
+	// ----- Z-Image (lightweight text-to-image) ---------------------------------
+	"z-image-turbo": {
+		Ratio:           0,
+		CompletionRatio: 1,
+		Image: &adaptor.ImagePricingConfig{
+			// Aliyun output price (prompt_extend=false base tier): China-mainland
+			// ¥0.1/image, International USD $0.015/image. Encode the base rate.
+			// prompt_extend=true is billed at 2x upstream.
+			PricePerImageUsd: 0.015,
+			DefaultSize:      "1024x1024",
+			DefaultQuality:   "standard",
+			PromptTokenLimit: 4000,
+			MinImages:        1,
+			MaxImages:        1,
+			SizeMultipliers: map[string]float64{
+				"1024x1024": 1,
+				"1536x1536": 1,
+				"2048x2048": 1,
+			},
+		},
+		InputModalities:  []string{"text"},
+		OutputModalities: []string{"image"},
+		Description:      "DashScope z-image-turbo: lightweight fast text-to-image model, fixed 1 image/request, up to 2048x2048 ($0.015/image, $0.03 with prompt_extend).",
+	},
 }

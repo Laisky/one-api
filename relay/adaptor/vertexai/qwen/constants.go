@@ -57,8 +57,9 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 	},
 	// Qwen3-Coder-480B-A35B-Instruct - Vertex GA 2025-08-13 in us-south1 and global.
 	"qwen/qwen3-coder-480b-a35b-instruct-maas": {
-		Ratio:                       1.00 * ratio.MilliTokensUsd, // $1.00 per million input tokens (Vertex AI MaaS GA rate)
-		CompletionRatio:             4.00 / 1.00,                 // Output/Input = $4.00 / $1.00 = 4
+		Ratio:                       0.22 * ratio.MilliTokensUsd,  // $0.22 per million input tokens (Vertex AI MaaS rate, 2026-06-27)
+		CompletionRatio:             1.80 / 0.22,                  // Output/Input = $1.80 / $0.22 = 8.1818
+		CachedInputRatio:            0.022 * ratio.MilliTokensUsd, // Published Cache Hit rate: $0.022/1M
 		ContextLength:               262144,
 		MaxOutputTokens:             65536,
 		InputModalities:             qwenTextInputs,
@@ -70,8 +71,8 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 	},
 	// Qwen3-235B-A22B-Instruct-2507 - Vertex GA 2025-08-13 in us-south1 and global.
 	"qwen/qwen3-235b-a22b-instruct-2507-maas": {
-		Ratio:                       0.25 * ratio.MilliTokensUsd, // $0.25 per million input tokens (Vertex AI MaaS GA rate)
-		CompletionRatio:             1.00 / 0.25,                 // Output/Input = $1.00 / $0.25 = 4
+		Ratio:                       0.22 * ratio.MilliTokensUsd, // $0.22 per million input tokens (Vertex AI MaaS rate, 2026-06-27)
+		CompletionRatio:             0.88 / 0.22,                 // Output/Input = $0.88 / $0.22 = 4
 		ContextLength:               262144,
 		MaxOutputTokens:             16384,
 		InputModalities:             qwenTextInputs,

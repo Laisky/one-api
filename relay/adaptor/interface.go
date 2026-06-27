@@ -381,6 +381,16 @@ type ToolingDefaultsProvider interface {
 	DefaultToolingConfig() ChannelToolConfig
 }
 
+// ToolingDefaultsForModelProvider is implemented by adaptors whose built-in tool
+// defaults vary by model. When an adaptor implements this, the tooling-policy
+// builder prefers it over DefaultToolingConfig so per-model pricing is billed
+// correctly (e.g. Gemini grounded web search costs $14/1K queries for 3.x models
+// but $35/1K for 2.5 and earlier). Implementations must fall back to their
+// channel-wide defaults for unknown/empty model names.
+type ToolingDefaultsForModelProvider interface {
+	DefaultToolingConfigForModel(model string) ChannelToolConfig
+}
+
 type Adaptor interface {
 	Init(meta *meta.Meta)
 	GetRequestURL(meta *meta.Meta) (string, error)

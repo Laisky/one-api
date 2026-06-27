@@ -325,11 +325,11 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 	// === 2026-era models (USD pricing from https://www.siliconflow.com/pricing) ===
 
 	"deepseek-ai/DeepSeek-V4-Pro": {
-		// $1.6/M input, $0.145/M cached, $3.48/M output (verified 2026-06-14 against siliconflow.com/models/deepseek-v4-pro).
+		// $1.6/M input, $0.135/M cached, $3.135/M output (verified 2026-06-27 against siliconflow.com/models/deepseek-v4-pro).
 		// MoE: 1.6T total / 49B activated, native 1M context, MIT license.
 		Ratio:                       1.6 * ratio.MilliTokensUsd,
-		CompletionRatio:             3.48 / 1.6,
-		CachedInputRatio:            0.145 * ratio.MilliTokensUsd,
+		CompletionRatio:             3.135 / 1.6,
+		CachedInputRatio:            0.135 * ratio.MilliTokensUsd,
 		ContextLength:               1048576,
 		MaxOutputTokens:             393216,
 		InputModalities:             siliconflowTextModalities,
@@ -458,6 +458,21 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		HuggingFaceID:               "moonshotai/Kimi-K2.6",
 		Description:                 "Moonshot Kimi K2.6 frontier-scale multimodal MoE agentic model with 256K context on SiliconFlow.",
 	},
+	"moonshotai/Kimi-K2.7-Code": {
+		// $0.94/M input, $0.19/M cached, $4.00/M output. 262K context.
+		Ratio:                       0.94 * ratio.MilliTokensUsd,
+		CompletionRatio:             4.00 / 0.94,
+		CachedInputRatio:            0.19 * ratio.MilliTokensUsd,
+		ContextLength:               262144,
+		MaxOutputTokens:             262144,
+		InputModalities:             []string{"text", "image"},
+		OutputModalities:            siliconflowTextModalities,
+		SupportedFeatures:           []string{"tools"},
+		SupportedSamplingParameters: siliconflowChatSamplingParams,
+		Quantization:                "fp8",
+		HuggingFaceID:               "moonshotai/Kimi-K2.7-Code",
+		Description:                 "Moonshot Kimi K2.7 Code coding-focused agentic MoE model with 262K context on SiliconFlow.",
+	},
 	"moonshotai/Kimi-K2-Instruct-0905": {
 		// $0.40/M input, $2.00/M output. 262K context. Older but stable.
 		Ratio:                       0.40 * ratio.MilliTokensUsd,
@@ -505,9 +520,9 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		Description:                 "Zhipu GLM-5 next-gen sparse MoE (750B/40B) with DeepSeek Sparse Attention for agentic and long-horizon tasks on SiliconFlow.",
 	},
 	"zai-org/GLM-5.1": {
-		// $1.40/M input, $0.26/M cached, $4.40/M output. 205K context.
-		Ratio:                       1.40 * ratio.MilliTokensUsd,
-		CompletionRatio:             4.40 / 1.40,
+		// $1.19/M input, $0.26/M cached, $4.3/M output. 205K context.
+		Ratio:                       1.19 * ratio.MilliTokensUsd,
+		CompletionRatio:             4.3 / 1.19,
 		CachedInputRatio:            0.26 * ratio.MilliTokensUsd,
 		ContextLength:               204800,
 		MaxOutputTokens:             131072,
@@ -520,6 +535,23 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		Quantization:                "fp8",
 		HuggingFaceID:               "zai-org/GLM-5.1",
 		Description:                 "Zhipu GLM-5.1 flagship reasoning + agentic model with 205K context on SiliconFlow.",
+	},
+	"zai-org/GLM-5.2": {
+		// $1.40/M input, $0.26/M cached, $4.40/M output. 1M-token context.
+		Ratio:                       1.40 * ratio.MilliTokensUsd,
+		CompletionRatio:             4.40 / 1.40,
+		CachedInputRatio:            0.26 * ratio.MilliTokensUsd,
+		ContextLength:               1048576,
+		MaxOutputTokens:             131072,
+		InputModalities:             siliconflowTextModalities,
+		OutputModalities:            siliconflowTextModalities,
+		SupportedFeatures:           []string{"tools", "reasoning"},
+		SupportedSamplingParameters: siliconflowChatSamplingParams,
+		SupportedReasoningEfforts:   []string{"low", "medium", "high"},
+		DefaultReasoningEffort:      "medium",
+		Quantization:                "fp8",
+		HuggingFaceID:               "zai-org/GLM-5.2",
+		Description:                 "Zhipu GLM-5.2 flagship reasoning + agentic engineering model with a 1M-token context window on SiliconFlow.",
 	},
 	"zai-org/GLM-4.6": {
 		// $0.39/M input, $1.90/M output. 205K context.
@@ -645,6 +677,20 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		HuggingFaceID:               "google/gemma-4-31b-it",
 		Description:                 "Google Gemma 4 31B dense multimodal chat model with 262K context on SiliconFlow.",
 	},
+	"google/gemma-4-12B-it": {
+		// $0.10/M input, $0.30/M output. 262K context. Native function-calling.
+		Ratio:                       0.10 * ratio.MilliTokensUsd,
+		CompletionRatio:             0.30 / 0.10,
+		ContextLength:               262144,
+		MaxOutputTokens:             262144,
+		InputModalities:             siliconflowTextModalities,
+		OutputModalities:            siliconflowTextModalities,
+		SupportedFeatures:           siliconflowChatFeatures,
+		SupportedSamplingParameters: siliconflowChatSamplingParams,
+		Quantization:                "bf16",
+		HuggingFaceID:               "google/gemma-4-12B-it",
+		Description:                 "Google Gemma 4 12B instruction-tuned chat model with 262K context and native function-calling on SiliconFlow.",
+	},
 	"MiniMaxAI/MiniMax-M2.5": {
 		// $0.30/M input, $0.03/M cached, $1.20/M output. 197K context.
 		Ratio:                       0.30 * ratio.MilliTokensUsd,
@@ -685,6 +731,20 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		SupportedFeatures:           siliconflowChatFeatures,
 		SupportedSamplingParameters: siliconflowChatSamplingParams,
 		Description:                 "Tencent Hunyuan 3 Preview (hy3-preview) MoE flagship, 262K context, $0.066/$0.26 per 1M.",
+	},
+	"tencent/Hunyuan-A13B-Instruct": {
+		// $0.14/M input, $0.57/M output. MoE A13B, 131K context per metadata table.
+		Ratio:                       0.14 * ratio.MilliTokensUsd,
+		CompletionRatio:             0.57 / 0.14,
+		ContextLength:               131072,
+		MaxOutputTokens:             131072,
+		InputModalities:             siliconflowTextModalities,
+		OutputModalities:            siliconflowTextModalities,
+		SupportedFeatures:           []string{"json_mode"},
+		SupportedSamplingParameters: siliconflowChatSamplingParams,
+		Quantization:                "fp8",
+		HuggingFaceID:               "tencent/Hunyuan-A13B-Instruct",
+		Description:                 "Tencent Hunyuan A13B Instruct MoE chat model with 131K context on SiliconFlow.",
 	},
 	"zai-org/GLM-5V-Turbo": {
 		Ratio:                       1.20 * ratio.MilliTokensUsd,

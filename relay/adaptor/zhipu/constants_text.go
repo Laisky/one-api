@@ -62,10 +62,11 @@ var flagshipTextModels = map[string]adaptor.ModelConfig{
 		Quantization:                "bf16",
 		Description:                 "GLM-5.1: 754B MoE agentic flagship (released 2026-04-07) with stronger coding aligned with Claude Opus 4.6, MCP integration, and 8-hour autonomous task execution; 200K context.",
 	},
-	// GLM-5.2: ¥10.08/1M input (estimated, pending official announcement), 1M context
+	// GLM-5.2: ¥8/¥28 per 1M input/output, ¥2 cached-input, 1M context
 	"glm-5.2": {
-		Ratio:                       10.08 * ratio.MilliTokensRmb,
-		CompletionRatio:             31.68 / 10.08,
+		Ratio:                       8 * ratio.MilliTokensRmb,
+		CompletionRatio:             28.0 / 8.0,
+		CachedInputRatio:            2 * ratio.MilliTokensRmb,
 		ContextLength:               1_000_000,
 		MaxOutputTokens:             131_072,
 		InputModalities:             textInput(),
@@ -74,7 +75,7 @@ var flagshipTextModels = map[string]adaptor.ModelConfig{
 		SupportedSamplingParameters: chatSamplingParameters(),
 		HuggingFaceID:               "zai-org/GLM-5.2",
 		Quantization:                "bf16",
-		Description:                 "GLM-5.2: 744B MoE coding-first model with 1M context and dual reasoning presets (High/Max); released 2026-06-13. Pricing estimated at glm-5.1 rates pending official announcement.",
+		Description:                 "GLM-5.2: flagship long-task MoE coding model with Solid 1M lossless context and dual reasoning presets (High/Max); official API pricing ¥8/¥28 per 1M input/output, ¥2 cached-input.",
 	},
 	// GLM-4.7: input [0,32K) output [0,0.2M) ¥2/¥8; output [0.2M+) ¥3/¥14; input [32K,200K) ¥4/¥16
 	"glm-4.7": {

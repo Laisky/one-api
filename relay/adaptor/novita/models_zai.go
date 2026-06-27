@@ -137,6 +137,22 @@ var zaiGLMModelRatios = map[string]adaptor.ModelConfig{
 		HuggingFaceID:               "zai-org/GLM-5.1",
 		Description:                 "Z.AI GLM-5.1 chat model with 200K context.",
 	},
+	"zai-org/glm-5.2": {
+		// Novita prices GLM-5.2 at $1.4/$4.40 with $0.26 cache-read.
+		// Source: https://novita.ai/pricing (retrieved 2026-06-27)
+		Ratio:                       1.4 * ratio.MilliTokensUsd,
+		CompletionRatio:             4.40 / 1.4,
+		CachedInputRatio:            0.26 * ratio.MilliTokensUsd,
+		ContextLength:               1048576,
+		MaxOutputTokens:             131072,
+		InputModalities:             novitaTextOnlyModalities,
+		OutputModalities:            novitaTextOnlyModalities,
+		SupportedFeatures:           novitaReasoningFeatures,
+		SupportedSamplingParameters: novitaSamplingParams,
+		Quantization:                "bf16",
+		HuggingFaceID:               "zai-org/GLM-5.2",
+		Description:                 "Z.AI GLM-5.2 reasoning chat model with 1M context.",
+	},
 	"zai-org/glm-5": {
 		Ratio:                       1 * ratio.MilliTokensUsd,
 		CompletionRatio:             3.2,

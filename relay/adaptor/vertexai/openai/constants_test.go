@@ -15,8 +15,9 @@ func TestModelRatiosMetadata(t *testing.T) {
 
 	cfg20b, ok := ModelRatios["openai/gpt-oss-20b-maas"]
 	require.True(t, ok)
-	require.InDelta(t, 0.075*ratio.MilliTokensUsd, cfg20b.Ratio, 1e-9)
-	require.InDelta(t, 4.0, cfg20b.CompletionRatio, 1e-9)
+	require.InDelta(t, 0.07*ratio.MilliTokensUsd, cfg20b.Ratio, 1e-9)
+	require.InDelta(t, 0.25/0.07, cfg20b.CompletionRatio, 1e-9)
+	require.InDelta(t, 0.007*ratio.MilliTokensUsd, cfg20b.CachedInputRatio, 1e-9)
 	require.EqualValues(t, 131072, cfg20b.ContextLength)
 	require.EqualValues(t, 131072, cfg20b.MaxOutputTokens)
 	require.Equal(t, []string{"text"}, cfg20b.InputModalities)
@@ -30,7 +31,7 @@ func TestModelRatiosMetadata(t *testing.T) {
 
 	cfg120b, ok := ModelRatios["openai/gpt-oss-120b-maas"]
 	require.True(t, ok)
-	require.InDelta(t, 0.15*ratio.MilliTokensUsd, cfg120b.Ratio, 1e-9)
+	require.InDelta(t, 0.09*ratio.MilliTokensUsd, cfg120b.Ratio, 1e-9)
 	require.InDelta(t, 4.0, cfg120b.CompletionRatio, 1e-9)
 	require.EqualValues(t, 131072, cfg120b.ContextLength)
 	require.EqualValues(t, 131072, cfg120b.MaxOutputTokens)

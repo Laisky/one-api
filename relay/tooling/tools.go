@@ -440,7 +440,7 @@ func (p toolPolicy) isAllowed(tool string) bool {
 }
 
 // buildToolPolicy merges channel overrides with provider defaults to construct the effective policy.
-func buildToolPolicy(channel *model.Channel, provider adaptor.Adaptor, _ string) toolPolicy {
+func buildToolPolicy(channel *model.Channel, provider adaptor.Adaptor, modelName string) toolPolicy {
 	policy := toolPolicy{
 		allowed:         make(map[string]struct{}),
 		pricing:         make(map[string]int64),
@@ -487,7 +487,13 @@ func buildToolPolicy(channel *model.Channel, provider adaptor.Adaptor, _ string)
 
 	var providerTooling *adaptor.ChannelToolConfig
 	if provider != nil {
-		if defaults, ok := provider.(adaptor.ToolingDefaultsProvider); ok {
+		// Prefer per-model tooling defaults when the adaptor exposes them (e.g. Gemini
+		// bills grounded web search at $14/1K for 3.x vs $35/1K for 2.5 and earlier);
+		// fall back to the channel-wide defaults otherwise.
+		if perModel, ok := provider.(adaptor.ToolingDefaultsForModelProvider); ok {
+			cfg := perModel.DefaultToolingConfigForModel(modelName)
+			providerTooling = &cfg
+		} else if defaults, ok := provider.(adaptor.ToolingDefaultsProvider); ok {
 			cfg := defaults.DefaultToolingConfig()
 			providerTooling = &cfg
 		}

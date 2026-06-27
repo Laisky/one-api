@@ -212,6 +212,18 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		HuggingFaceID:               "Qwen/Qwen3-32B",
 		Description:                 "Alibaba Qwen3-32B with switchable thinking/non-thinking modes for reasoning and general dialog.",
 	},
+	"qwen/qwen3.6-27b": {
+		Ratio:                       0.60 * ratio.MilliTokensUsd,
+		CompletionRatio:             3.00 / 0.60,
+		ContextLength:               131072,
+		MaxOutputTokens:             32768,
+		InputModalities:             groqTextImageInModalities,
+		OutputModalities:            groqTextOnlyModalities,
+		SupportedFeatures:           []string{"tools", "json_mode", "reasoning"},
+		SupportedSamplingParameters: groqReasoningSamplingParams,
+		HuggingFaceID:               "Qwen/Qwen3.6-27B",
+		Description:                 "Alibaba Qwen3.6-27B multimodal model (text + image input) with switchable thinking/non-thinking modes via reasoning_effort.",
+	},
 
 	// New Models (Jan 2026)
 	"canopylabs/orpheus-arabic-saudi": {

@@ -595,6 +595,22 @@ var awsBedrockModelPricing = map[string]adaptor.ModelConfig{
 		HuggingFaceID: "openai/gpt-oss-120b",
 		Description:   "OpenAI gpt-oss 120B open-weight reasoning model on AWS Bedrock.",
 	},
+	"gpt-oss-safeguard-120b": {
+		Ratio: 0.15 * ratio.MilliTokensUsd, CompletionRatio: 4,
+		ContextLength: 128000, MaxOutputTokens: 16000,
+		InputModalities: awsTextInputs, OutputModalities: awsTextOutputs,
+		SupportedFeatures: awsOpenAIOSSFeatures, SupportedSamplingParameters: awsBasicSamplingParams,
+		HuggingFaceID: "openai/gpt-oss-safeguard-120b",
+		Description:   "OpenAI gpt-oss-safeguard 120B open-weight safety/content-moderation reasoning model on AWS Bedrock.",
+	},
+	"gpt-oss-safeguard-20b": {
+		Ratio: 0.07 * ratio.MilliTokensUsd, CompletionRatio: 20.0 / 7,
+		ContextLength: 128000, MaxOutputTokens: 16000,
+		InputModalities: awsTextInputs, OutputModalities: awsTextOutputs,
+		SupportedFeatures: awsOpenAIOSSFeatures, SupportedSamplingParameters: awsBasicSamplingParams,
+		HuggingFaceID: "openai/gpt-oss-safeguard-20b",
+		Description:   "OpenAI gpt-oss-safeguard 20B compact open-weight safety/content-moderation model on AWS Bedrock.",
+	},
 
 	// Writer Models
 	"palmyra-x4": {
@@ -610,5 +626,12 @@ var awsBedrockModelPricing = map[string]adaptor.ModelConfig{
 		InputModalities: awsTextInputs, OutputModalities: awsTextOutputs,
 		SupportedFeatures: awsWriterFeatures, SupportedSamplingParameters: awsBasicSamplingParams,
 		Description: "Writer Palmyra X5 enterprise chat model with 1M-token context on AWS Bedrock.",
+	},
+	"palmyra-vision-7b": {
+		Ratio: 0.15 * ratio.MilliTokensUsd, CompletionRatio: 4,
+		ContextLength: 4096, MaxOutputTokens: 4096,
+		InputModalities: awsVisionInputs, OutputModalities: awsTextOutputs,
+		SupportedFeatures: awsWriterFeatures, SupportedSamplingParameters: awsBasicSamplingParams,
+		Description: "Writer Palmyra Vision 7B multimodal (text+image) visual-understanding model on AWS Bedrock.",
 	},
 }

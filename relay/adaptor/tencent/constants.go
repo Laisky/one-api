@@ -180,6 +180,20 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		Description:                 "Tencent Hunyuan Large Role: closed-weight role-play chat model derived from Hunyuan-Large. (RETIRING 2026-06-22; use hunyuan-role-latest)",
 	},
 
+	// Hunyuan Role Latest — current role-play / character-chat tier; successor to hunyuan-large-role.
+	// Pricing (https://cloud.tencent.com/document/product/1729/97731): ¥2.4 input / ¥9.6 output per 1M tokens.
+	"hunyuan-role-latest": {
+		Ratio:                       2.4 * ratio.MilliTokensRmb,
+		CompletionRatio:             9.6 / 2.4,
+		ContextLength:               28672,
+		MaxOutputTokens:             4096,
+		InputModalities:             hunyuanTextInputs,
+		OutputModalities:            hunyuanTextOutputs,
+		SupportedFeatures:           hunyuanChatFeatures,
+		SupportedSamplingParameters: hunyuanSamplingParameters,
+		Description:                 "Tencent Hunyuan Role Latest: closed-weight role-play / character chat model (AI digital avatars, roleplay, emotional companionship), 28K input / 4K output. Successor to hunyuan-large-role.",
+	},
+
 	// Hunyuan Translation models.
 	"hunyuan-translation": {
 		Ratio:                       1.2 * ratio.MilliTokensRmb,
@@ -273,11 +287,14 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 			{Ratio: 1.6 * ratio.MilliTokensRmb, CompletionRatio: 6.4 / 1.6, CachedInputRatio: 0.6 * ratio.MilliTokensRmb, InputTokenThreshold: 16384},
 			{Ratio: 2 * ratio.MilliTokensRmb, CompletionRatio: 8.0 / 2.0, CachedInputRatio: 0.8 * ratio.MilliTokensRmb, InputTokenThreshold: 32768},
 		},
-		ContextLength:               262144,
-		MaxOutputTokens:             32768,
-		InputModalities:             hunyuanTextInputs,
-		OutputModalities:            hunyuanTextOutputs,
-		SupportedFeatures:           hunyuanChatFeatures,
+		ContextLength:    262144,
+		MaxOutputTokens:  131072,
+		InputModalities:  hunyuanTextInputs,
+		OutputModalities: hunyuanTextOutputs,
+		// hy3-preview advertises deep-thinking (reasoning), structured output, and
+		// function calling per Tencent docs, so it carries the full feature set
+		// rather than the shared hunyuanChatFeatures slice.
+		SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs", "reasoning"},
 		SupportedSamplingParameters: hunyuanSamplingParameters,
 		Description:                 "Tencent Hunyuan 3 Preview (hy3-preview): new MoE flagship model with 262K context, $0.167/$0.556 per 1M. Successor to retired hunyuan-t1/turbos/turbo/pro/standard/lite family.",
 	},
@@ -287,7 +304,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		Ratio:                       3 * ratio.MilliTokensRmb,
 		CompletionRatio:             9.0 / 3.0,
 		ContextLength:               24576,
-		MaxOutputTokens:             8192,
+		MaxOutputTokens:             16384,
 		InputModalities:             hunyuanVisionInputs,
 		OutputModalities:            hunyuanTextOutputs,
 		SupportedFeatures:           hunyuanVisionFeatures,

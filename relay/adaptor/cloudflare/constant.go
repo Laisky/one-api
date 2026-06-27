@@ -271,6 +271,17 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		HuggingFaceID: "zai-org/glm-4.7-flash",
 		Description:   "Zhipu GLM 4.7 Flash on Cloudflare Workers AI.",
 	},
+	"@cf/zai-org/glm-5.2": {
+		Ratio: 1.400 * ratio.MilliTokensUsd, CompletionRatio: 4.400 / 1.400, CachedInputRatio: 0.260 * ratio.MilliTokensUsd,
+		ContextLength: 262144, MaxOutputTokens: 8192,
+		InputModalities: cfTextInputs, OutputModalities: cfTextOutputs,
+		SupportedFeatures: []string{"tools", "reasoning"}, SupportedSamplingParameters: cfBasicSamplingParams,
+		SupportedReasoningEfforts: []string{"low", "medium", "high"},
+		DefaultReasoningEffort:    "medium",
+		Quantization:  "fp8",
+		HuggingFaceID: "zai-org/GLM-5.2",
+		Description:   "Z.ai GLM-5.2 flagship agentic coding model (262K context, reasoning, function calling) on Cloudflare Workers AI.",
+	},
 	"@cf/nvidia/nemotron-3-120b-a12b": {
 		Ratio: 0.500 * ratio.MilliTokensUsd, CompletionRatio: 1.500 / 0.500,
 		ContextLength: 256000, MaxOutputTokens: 8192,

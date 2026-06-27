@@ -6,10 +6,11 @@ import (
 )
 
 // glmModels contains Z.ai GLM family models served by Fireworks (GLM-4.7,
-// GLM-5, GLM-5.1). Sources:
+// GLM-5, GLM-5.1, GLM-5.2). Sources:
 //   - https://fireworks.ai/models/fireworks/glm-4p7
 //   - https://fireworks.ai/models/fireworks/glm-5
 //   - https://fireworks.ai/models/fireworks/glm-5p1
+//   - https://fireworks.ai/models/fireworks/glm-5p2
 var glmModels = map[string]adaptor.ModelConfig{
 	"accounts/fireworks/models/glm-4p7": {
 		Ratio:                       0.60 * ratio.MilliTokensUsd,
@@ -51,5 +52,19 @@ var glmModels = map[string]adaptor.ModelConfig{
 		Quantization:                "fp8",
 		HuggingFaceID:               "zai-org/GLM-5.1-FP8",
 		Description:                 "Z.ai GLM-5.1 (754B MoE) flagship for agentic engineering with stronger coding and sustained long-horizon multi-turn performance.",
+	},
+	"accounts/fireworks/models/glm-5p2": {
+		Ratio:                       1.40 * ratio.MilliTokensUsd,
+		CompletionRatio:             4.40 / 1.40,
+		CachedInputRatio:            0.26 * ratio.MilliTokensUsd,
+		ContextLength:               1048576,
+		MaxOutputTokens:             131072,
+		InputModalities:             fwTextOnlyModalities,
+		OutputModalities:            fwTextOnlyModalities,
+		SupportedFeatures:           fwReasoningFeatures,
+		SupportedSamplingParameters: fwChatSamplingParams,
+		Quantization:                "fp8",
+		HuggingFaceID:               "zai-org/GLM-5.2",
+		Description:                 "Z.ai GLM-5.2 (743B MoE) flagship with 1M-token context for long-horizon agentic engineering and coding.",
 	},
 }

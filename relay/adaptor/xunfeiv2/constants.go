@@ -84,7 +84,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		OutputModalities:            xunfeiv2TextOutputs,
 		SupportedFeatures:           xunfeiv2ChatFeatures,
 		SupportedSamplingParameters: xunfeiv2SamplingParams,
-		Description:                 "iFlytek Spark Max (HTTP API domain `generalv3.5`) closed-weight chat model with FunctionCall (scheduled deprecation 2026-03-10).",
+		Description:                 "iFlytek Spark Max (HTTP API domain `generalv3.5`) closed-weight chat model with FunctionCall; package retired 2026-03-10 (backend upgraded to Spark 4.0 Ultra / domain `4.0Ultra`, quota merged into Ultra). Kept for backward compatibility.",
 	},
 	"max-32k": {
 		Ratio:                       5.0 * ratio.MilliTokensRmb,
@@ -95,7 +95,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		OutputModalities:            xunfeiv2TextOutputs,
 		SupportedFeatures:           xunfeiv2ChatFeatures,
 		SupportedSamplingParameters: xunfeiv2SamplingParams,
-		Description:                 "iFlytek Spark Max long-context (HTTP API domain `max-32k`) with 32k context window and FunctionCall (scheduled deprecation 2026-03-10).",
+		Description:                 "iFlytek Spark Max long-context (HTTP API domain `max-32k`) with 32k context window and FunctionCall; package retired 2026-03-10 (backend upgraded to Spark 4.0 Ultra, quota merged into Ultra). Kept for backward compatibility.",
 	},
 	"4.0Ultra": {
 		Ratio:                       5.0 * ratio.MilliTokensRmb,

@@ -81,9 +81,9 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		Description:                 "Qwen Turbo on Bailian: cost-efficient chat tier with up to 1M context (deprecated; use qwen-flash).",
 	},
 	"qwen-flash": {
-		Ratio:                       0.00016 * 1000 * ratio.MilliTokensRmb,
-		CachedInputRatio:            0.2 * (0.00016 * 1000 * ratio.MilliTokensRmb),
-		CompletionRatio:             9.6875, // 1.55 / 0.16
+		Ratio:                       0.00015 * 1000 * ratio.MilliTokensRmb,
+		CachedInputRatio:            0.2 * (0.00015 * 1000 * ratio.MilliTokensRmb),
+		CompletionRatio:             10, // 1.5 / 0.15
 		ContextLength:               1000000,
 		MaxOutputTokens:             8192,
 		InputModalities:             bailianTextInputs,
@@ -94,9 +94,9 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		Description:                 "Qwen Flash on Bailian: closed-weight cost-optimized successor to qwen-turbo (0-128K base tier billed here).",
 	},
 	"qwen-plus": {
-		Ratio:                       0.00082 * 1000 * ratio.MilliTokensRmb,
-		CachedInputRatio:            0.2 * (0.00082 * 1000 * ratio.MilliTokensRmb),
-		CompletionRatio:             2.51, // 2.06 / 0.82
+		Ratio:                       0.0008 * 1000 * ratio.MilliTokensRmb,
+		CachedInputRatio:            0.2 * (0.0008 * 1000 * ratio.MilliTokensRmb),
+		CompletionRatio:             2.5, // 2.0 / 0.8
 		ContextLength:               1000000,
 		MaxOutputTokens:             8192,
 		InputModalities:             bailianTextInputs,
@@ -120,9 +120,9 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		Description:                 "Qwen Long on Bailian: longest-context chat tier (up to 10M tokens) for document QA.",
 	},
 	"qwen-max": {
-		Ratio:                       0.00247 * 1000 * ratio.MilliTokensRmb,
-		CachedInputRatio:            0.2 * (0.00247 * 1000 * ratio.MilliTokensRmb),
-		CompletionRatio:             4, // 9.88 / 2.47
+		Ratio:                       0.0024 * 1000 * ratio.MilliTokensRmb,
+		CachedInputRatio:            0.2 * (0.0024 * 1000 * ratio.MilliTokensRmb),
+		CompletionRatio:             4, // 9.6 / 2.4
 		ContextLength:               32768,
 		MaxOutputTokens:             8192,
 		InputModalities:             bailianTextInputs,
@@ -130,7 +130,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		SupportedFeatures:           bailianChatFeatures,
 		SupportedSamplingParameters: bailianSamplingParameters,
 		Quantization:                "bf16",
-		Description:                 "Qwen Max on Bailian: most capable Qwen flagship chat tier (32K context, 2.47/9.88 CNY/1M).",
+		Description:                 "Qwen Max on Bailian: most capable Qwen flagship chat tier (32K context, 2.4/9.6 CNY/1M).",
 	},
 
 	// ----- Qwen3 / Qwen3.5 / Qwen3.6 closed (Bailian) --------------------------
@@ -366,9 +366,9 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		Description:                 "Qwen-VL OCR on Bailian: OCR-tuned multimodal tier (5.15 CNY/1M).",
 	},
 	"qwen3-vl-plus": {
-		Ratio:                       0.00103 * 1000 * ratio.MilliTokensRmb,
-		CachedInputRatio:            0.2 * (0.00103 * 1000 * ratio.MilliTokensRmb),
-		CompletionRatio:             10, // 10.30 / 1.03
+		Ratio:                       0.001 * 1000 * ratio.MilliTokensRmb,
+		CachedInputRatio:            0.2 * (0.001 * 1000 * ratio.MilliTokensRmb),
+		CompletionRatio:             10, // 10 / 1.0
 		ContextLength:               262144,
 		MaxOutputTokens:             16384,
 		InputModalities:             bailianMultimodalInputs,
@@ -518,9 +518,9 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 	// ----- Qwen Omni (Bailian, multimodal) -------------------------------------
 	// Text I/O rate billed here; audio billing is per-modality upstream.
 	"qwen3-omni-flash": {
-		Ratio:                       0.0069 * 1000 * ratio.MilliTokensRmb,
-		CachedInputRatio:            0.2 * (0.0069 * 1000 * ratio.MilliTokensRmb),
-		CompletionRatio:             2.29, // 15.8 / 6.9
+		Ratio:                       0.0018 * 1000 * ratio.MilliTokensRmb,
+		CachedInputRatio:            0.2 * (0.0018 * 1000 * ratio.MilliTokensRmb),
+		CompletionRatio:             3.8333, // text output 6.9 / text input 1.8
 		ContextLength:               262144,
 		MaxOutputTokens:             16384,
 		InputModalities:             bailianMultimodalInputs,
@@ -531,9 +531,9 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		Description:                 "Qwen3-Omni Flash on Bailian: closed-weight multimodal tier (text I/O rate billed here).",
 	},
 	"qwen-omni-turbo": {
-		Ratio:                       0.0016 * 1000 * ratio.MilliTokensRmb,
-		CachedInputRatio:            0.2 * (0.0016 * 1000 * ratio.MilliTokensRmb),
-		CompletionRatio:             15.625, // 25 / 1.6
+		Ratio:                       0.0004 * 1000 * ratio.MilliTokensRmb,
+		CachedInputRatio:            0.2 * (0.0004 * 1000 * ratio.MilliTokensRmb),
+		CompletionRatio:             4.0, // text output 1.6 / text input 0.4
 		ContextLength:               32768,
 		MaxOutputTokens:             8192,
 		InputModalities:             bailianMultimodalInputs,

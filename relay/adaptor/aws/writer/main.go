@@ -30,8 +30,9 @@ import (
 // https://docs.aws.amazon.com/bedrock/latest/userguide/model-ids.html
 var AwsModelIDMap = map[string]string{
 	// Writer Palmyra models
-	"palmyra-x4": "writer.palmyra-x4-v1:0",
-	"palmyra-x5": "writer.palmyra-x5-v1:0",
+	"palmyra-x4":        "writer.palmyra-x4-v1:0",
+	"palmyra-x5":        "writer.palmyra-x5-v1:0",
+	"palmyra-vision-7b": "writer.palmyra-vision-7b",
 }
 
 // awsModelID retrieves the AWS Bedrock model ID for a given Writer model name.

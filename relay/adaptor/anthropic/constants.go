@@ -87,7 +87,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		InputModalities: claudeVisionInputs, OutputModalities: claudeTextOutputs,
 		SupportedFeatures: claudeFeaturesWithReasoning, SupportedSamplingParameters: claudeSamplingParams,
 		MaxReasoningTokens: 30000,
-		Description:        "Claude Opus 4 frontier model with extended thinking (deprecated 2026-04-14; retire 2026-06-15 on first-party API and 2026-05-31 on Bedrock).",
+		Description:        "Claude Opus 4 frontier model with extended thinking (retired 2026-06-15 on first-party API; still available on Google Cloud).",
 	},
 	"claude-opus-4-1": {
 		Ratio: 15 * ratio.MilliTokensUsd, CompletionRatio: 5.0,
@@ -96,7 +96,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		InputModalities: claudeVisionInputs, OutputModalities: claudeTextOutputs,
 		SupportedFeatures: claudeFeaturesWithReasoning, SupportedSamplingParameters: claudeSamplingParams,
 		MaxReasoningTokens: 30000,
-		Description:        "Claude Opus 4.1 (alias for claude-opus-4-1-20250805).",
+		Description:        "Claude Opus 4.1 (alias for claude-opus-4-1-20250805; deprecated 2026-06-05 on first-party API, retire 2026-08-05; migrate to claude-opus-4-8).",
 	},
 	"claude-opus-4-1-20250805": {
 		Ratio: 15 * ratio.MilliTokensUsd, CompletionRatio: 75.0 / 15,
@@ -105,7 +105,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		InputModalities: claudeVisionInputs, OutputModalities: claudeTextOutputs,
 		SupportedFeatures: claudeFeaturesWithReasoning, SupportedSamplingParameters: claudeSamplingParams,
 		MaxReasoningTokens: 30000,
-		Description:        "Claude Opus 4.1 frontier reasoning model with extended thinking.",
+		Description:        "Claude Opus 4.1 frontier reasoning model with extended thinking (deprecated 2026-06-05 on first-party API; retire 2026-08-05; migrate to claude-opus-4-8).",
 	},
 	"claude-opus-4-5": {
 		Ratio: 5 * ratio.MilliTokensUsd, CompletionRatio: 25.0 / 5,
@@ -158,6 +158,14 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		SupportedFeatures: claudeFeaturesWithReasoning, SupportedSamplingParameters: claudeSamplingParams,
 		Description:       "Claude Fable 5 flagship Anthropic model with 1M-token context and frontier-level reasoning (adaptive thinking; budget_tokens not supported).",
 	},
+	"claude-mythos-5": {
+		Ratio: 10 * ratio.MilliTokensUsd, CompletionRatio: 50.0 / 10,
+		CachedInputRatio: 1.0 * ratio.MilliTokensUsd, CacheWrite5mRatio: 12.5 * ratio.MilliTokensUsd, CacheWrite1hRatio: 20 * ratio.MilliTokensUsd,
+		ContextLength: 1000000, MaxOutputTokens: 128000,
+		InputModalities: claudeVisionInputs, OutputModalities: claudeTextOutputs,
+		SupportedFeatures: claudeFeaturesWithReasoning, SupportedSamplingParameters: claudeSamplingParams,
+		Description:       "Claude Mythos 5 (limited availability via Project Glasswing) with 1M-token context and adaptive thinking (always on; budget_tokens not supported).",
+	},
 
 	// Claude 4 Sonnet Models
 	"claude-sonnet-4-0": {
@@ -176,7 +184,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		InputModalities: claudeVisionInputs, OutputModalities: claudeTextOutputs,
 		SupportedFeatures: claudeFeaturesWithReasoning, SupportedSamplingParameters: claudeSamplingParams,
 		MaxReasoningTokens: 60000,
-		Description:        "Claude Sonnet 4 with extended thinking (deprecated 2026-04-14; retire 2026-06-15 on first-party API and 2026-10-14 on Bedrock).",
+		Description:        "Claude Sonnet 4 with extended thinking (retired 2026-06-15 on first-party API; still available on Bedrock and Google Cloud).",
 	},
 	"claude-sonnet-4-5": {
 		Ratio: 3 * ratio.MilliTokensUsd, CompletionRatio: 5.0,

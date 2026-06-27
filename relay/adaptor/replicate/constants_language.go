@@ -42,6 +42,36 @@ var replicateLanguageModelRatios = map[string]adaptor.ModelConfig{
 		SupportedSamplingParameters: commonSamplingParams,
 		Description:                 "Anthropic Claude 4 Sonnet hosted on Replicate; supports extended thinking.",
 	},
+	"anthropic/claude-4.5-haiku": {
+		// $1/M input, $5/M output; 200K context; up to 64K output; vision-capable.
+		// https://replicate.com/anthropic/claude-4.5-haiku
+		Ratio: 1.0 * ratio.MilliTokensUsd, CompletionRatio: 5.0 / 1.0,
+		ContextLength: 200000, MaxOutputTokens: 64000,
+		InputModalities: visionTextInputs, OutputModalities: textOnlyOutputs,
+		SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs", "reasoning"},
+		SupportedSamplingParameters: commonSamplingParams,
+		Description:                 "Anthropic Claude Haiku 4.5 hosted on Replicate; 200K context, 64K output, vision-capable.",
+	},
+	"anthropic/claude-4.5-sonnet": {
+		// $3/M input, $15/M output; 1M context window; vision-capable.
+		// https://replicate.com/anthropic/claude-4.5-sonnet
+		Ratio: 3.0 * ratio.MilliTokensUsd, CompletionRatio: 15.0 / 3.0,
+		ContextLength: 1000000, MaxOutputTokens: 64000,
+		InputModalities: visionTextInputs, OutputModalities: textOnlyOutputs,
+		SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs", "reasoning"},
+		SupportedSamplingParameters: commonSamplingParams,
+		Description:                 "Anthropic Claude Sonnet 4.5 hosted on Replicate; 1M context, vision-capable, extended thinking.",
+	},
+	"anthropic/claude-opus-4.6": {
+		// $5/M input, $0.025/thousand output = $25/M output. 1M context (beta), up to 128K output.
+		// https://replicate.com/anthropic/claude-opus-4.6#pricing
+		Ratio: 5.0 * ratio.MilliTokensUsd, CompletionRatio: 25.0 / 5.0,
+		ContextLength: 1000000, MaxOutputTokens: 128000,
+		InputModalities: visionTextInputs, OutputModalities: textOnlyOutputs,
+		SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs", "reasoning"},
+		SupportedSamplingParameters: commonSamplingParams,
+		Description:                 "Anthropic Claude Opus 4.6 flagship model hosted on Replicate; 1M context (beta), 128K output, extended thinking.",
+	},
 	"anthropic/claude-opus-4.7": {
 		// Anthropic published $5/M input and $25/M output for Opus 4.7 (unchanged from 4.6).
 		Ratio: 5.0 * ratio.MilliTokensUsd, CompletionRatio: 25.0 / 5.0,
@@ -85,6 +115,28 @@ var replicateLanguageModelRatios = map[string]adaptor.ModelConfig{
 		SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs", "reasoning"},
 		SupportedSamplingParameters: commonSamplingParams,
 		Description:                 "Google Gemini 2.5 Flash multimodal model with adaptive thinking and 1M context.",
+	},
+	"google/gemini-3-pro": {
+		// Tiered on Replicate: input ≤200K = $2/M in, $12/M out; >200K = $4/M in, $18/M out.
+		// Literal uses the base (≤200K) tier. Multimodal: accepts text/image/video/audio, outputs text.
+		// https://replicate.com/google/gemini-3-pro#pricing
+		Ratio: 2.0 * ratio.MilliTokensUsd, CompletionRatio: 12.0 / 2.0,
+		ContextLength: 1048576, MaxOutputTokens: 65535,
+		InputModalities: []string{"text", "image", "video", "audio"}, OutputModalities: textOnlyOutputs,
+		SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs", "reasoning"},
+		SupportedSamplingParameters: commonSamplingParams,
+		Description:                 "Google Gemini 3 Pro most-advanced reasoning Gemini model hosted on Replicate; 1M context, multimodal (text/image/video/audio).",
+	},
+	"google/gemini-3.1-pro": {
+		// Tiered on Replicate, identical scheme to gemini-3-pro: input ≤200K = $2/M in, $12/M out; >200K = $4/M in, $18/M out.
+		// Literal uses the base (≤200K) tier. Multimodal: accepts text/image/video/audio, outputs text.
+		// https://replicate.com/google/gemini-3.1-pro#pricing
+		Ratio: 2.0 * ratio.MilliTokensUsd, CompletionRatio: 12.0 / 2.0,
+		ContextLength: 1000000, MaxOutputTokens: 65535,
+		InputModalities: []string{"text", "image", "video", "audio"}, OutputModalities: textOnlyOutputs,
+		SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs", "reasoning"},
+		SupportedSamplingParameters: commonSamplingParams,
+		Description:                 "Google Gemini 3.1 Pro reasoning Gemini model hosted on Replicate; 1M context, multimodal (text/image/video/audio).",
 	},
 	"ibm-granite/granite-20b-code-instruct-8k": {
 		Ratio: 0.1 * ratio.MilliTokensUsd, CompletionRatio: 0.5 / 0.1,
@@ -345,6 +397,48 @@ var replicateLanguageModelRatios = map[string]adaptor.ModelConfig{
 		InputModalities: visionTextInputs, OutputModalities: textOnlyOutputs,
 		SupportedFeatures: reasoningFeatures, SupportedSamplingParameters: reasoningSamplingParams,
 		Description: "OpenAI GPT-5 Structured Outputs variant biased toward strict JSON schema adherence.",
+	},
+	"openai/gpt-5.2": {
+		// $1.75/M input, $0.014/thousand output = $14/M output; up to 256K context; vision + reasoning.
+		// https://replicate.com/openai/gpt-5.2#pricing
+		Ratio: 1.75 * ratio.MilliTokensUsd, CompletionRatio: 14.0 / 1.75,
+		ContextLength: 256000, MaxOutputTokens: 128000,
+		InputModalities: visionTextInputs, OutputModalities: textOnlyOutputs,
+		SupportedFeatures: reasoningFeatures, SupportedSamplingParameters: reasoningSamplingParams,
+		Description: "OpenAI GPT-5.2 frontier model hosted on Replicate; 256K context, vision, reasoning.",
+	},
+	"openai/gpt-oss-120b": {
+		// $0.18/M input, $0.72/M output; 131K context; Apache 2.0 open weights; reasoning + tools + structured outputs.
+		// https://replicate.com/openai/gpt-oss-120b#pricing
+		Ratio: 0.18 * ratio.MilliTokensUsd, CompletionRatio: 0.72 / 0.18,
+		ContextLength: 131072, MaxOutputTokens: 8192,
+		InputModalities: textOnlyInputs, OutputModalities: textOnlyOutputs,
+		SupportedFeatures: reasoningFeatures, SupportedSamplingParameters: commonSamplingParams,
+		Quantization:  "mxfp4",
+		HuggingFaceID: "openai/gpt-oss-120b",
+		Description:   "OpenAI gpt-oss-120b open-weight MoE (117B/5.1B active) reasoning model under Apache 2.0; 131K context.",
+	},
+	"openai/gpt-oss-20b": {
+		// $0.09/M input, $0.36/M output; 131K context; Apache 2.0 open weights; reasoning + tools + structured outputs.
+		// https://replicate.com/openai/gpt-oss-20b
+		Ratio: 0.09 * ratio.MilliTokensUsd, CompletionRatio: 0.36 / 0.09,
+		ContextLength: 131072, MaxOutputTokens: 8192,
+		InputModalities: textOnlyInputs, OutputModalities: textOnlyOutputs,
+		SupportedFeatures: reasoningFeatures, SupportedSamplingParameters: commonSamplingParams,
+		Quantization:  "mxfp4",
+		HuggingFaceID: "openai/gpt-oss-20b",
+		Description:   "OpenAI gpt-oss-20b open-weight MoE (21B/3.6B active) reasoning model under Apache 2.0; 131K context.",
+	},
+	"qwen/qwen3-235b-a22b-instruct-2507": {
+		// $0.264/M input, $1.06/M output; 262K native context; non-thinking instruct MoE (235B/22B active), FP8.
+		// https://replicate.com/qwen/qwen3-235b-a22b-instruct-2507#pricing
+		Ratio: 0.264 * ratio.MilliTokensUsd, CompletionRatio: 1.06 / 0.264,
+		ContextLength: 262144, MaxOutputTokens: 16384,
+		InputModalities: textOnlyInputs, OutputModalities: textOnlyOutputs,
+		SupportedFeatures: chatFeatures, SupportedSamplingParameters: commonSamplingParams,
+		Quantization:  "fp8",
+		HuggingFaceID: "Qwen/Qwen3-235B-A22B-Instruct-2507-FP8",
+		Description:   "Qwen3-235B-A22B-Instruct-2507 non-thinking MoE chat model (235B/22B active) with 262K context, hosted on Replicate.",
 	},
 	"xai/grok-4": {
 		Ratio: 7.2 * ratio.MilliTokensUsd, CompletionRatio: 36.0 / 7.2,

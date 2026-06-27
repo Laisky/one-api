@@ -85,7 +85,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		OutputModalities:            textOnlyModalities,
 		SupportedFeatures:           chatFeatures,
 		SupportedSamplingParameters: commonSamplingParams,
-		Description:                 "Mistral Medium 3.1 (2025-08) multimodal chat model with 128k context.",
+		Description:                 "Mistral Medium 3.1 (2025-08) multimodal chat model with 128k context. Deprecated 2026-05-22; retires 2026-08-31 (replaced by Mistral Medium 3.5).",
 	},
 
 	// --- Magistral reasoning family ---
@@ -99,7 +99,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		SupportedFeatures:           reasoningFeatures,
 		SupportedSamplingParameters: commonSamplingParams,
 		SupportedReasoningEfforts:   magistralReasoningEfforts,
-		Description:                 "Magistral Medium reasoning model (alias for the latest release).",
+		Description:                 "Magistral Medium reasoning model (alias for the latest release; currently magistral-medium-2509, which is deprecated 2026-05-22 and retires 2026-07-31, replaced by Mistral Medium 3.5).",
 	},
 	"magistral-medium-2509": {
 		Ratio:                       2.0 * ratio.MilliTokensUsd,
@@ -111,7 +111,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		SupportedFeatures:           reasoningFeatures,
 		SupportedSamplingParameters: commonSamplingParams,
 		SupportedReasoningEfforts:   magistralReasoningEfforts,
-		Description:                 "Magistral Medium 1.2 reasoning model snapshot 2509 with native vision and tool use.",
+		Description:                 "Magistral Medium 1.2 reasoning model snapshot 2509 with native vision and tool use. Deprecated 2026-05-22; retires 2026-07-31 (replaced by Mistral Medium 3.5).",
 	},
 
 	// --- Devstral / coding agent family ---
@@ -169,7 +169,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 	// https://docs.mistral.ai/models/voxtral-mini-transcribe-26-02
 	"voxtral-small-2507": {
 		Ratio:                       0.1 * ratio.MilliTokensUsd, // $0.10 input
-		CompletionRatio:             3.0,                        // $0.30 output
+		CompletionRatio:             4.0,                        // $0.40 output
 		ContextLength:               32768,
 		MaxOutputTokens:             8192,
 		InputModalities:             []string{"text", "audio"},
@@ -308,7 +308,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		SupportedReasoningEfforts:   magistralReasoningEfforts,
 		Quantization:                "bf16",
 		HuggingFaceID:               "mistralai/Magistral-Small-2509",
-		Description:                 "Magistral Small open-weight reasoning model (alias for the latest release).",
+		Description:                 "Magistral Small open-weight reasoning model (alias for the latest release; currently magistral-small-2509, which is deprecated 2026-04-30 and retires 2026-07-31, replaced by Mistral Small 4).",
 	},
 	"magistral-small-2509": {
 		Ratio:                       0.5 * ratio.MilliTokensUsd,
@@ -322,7 +322,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		SupportedReasoningEfforts:   magistralReasoningEfforts,
 		Quantization:                "bf16",
 		HuggingFaceID:               "mistralai/Magistral-Small-2509",
-		Description:                 "Magistral Small 2025-09 open-weight reasoning model with vision support.",
+		Description:                 "Magistral Small 2025-09 open-weight reasoning model with vision support. Deprecated 2026-04-30; retires 2026-07-31 (replaced by Mistral Small 4).",
 	},
 	"devstral-small-2507": {
 		Ratio:                       0.1 * ratio.MilliTokensUsd, // $0.10 input

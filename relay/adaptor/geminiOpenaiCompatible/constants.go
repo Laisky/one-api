@@ -250,6 +250,16 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		Image:           gemini31FlashImageConfig(),
 	},
 	"gemini-3.1-flash-live-preview": gemini31FlashLivePreviewPricing,
+	// Gemini 3.5 Live Translate preview: low-latency audio-to-audio real-time speech translation.
+	// Source: https://ai.google.dev/gemini-api/docs/pricing — $3.50 input / $21.00 output per 1M tokens.
+	"gemini-3.5-live-translate-preview": {
+		Ratio:           3.50 * ratio.MilliTokensUsd,
+		CompletionRatio: 21.0 / 3.50,
+		Audio: &adaptor.AudioPricingConfig{
+			PromptRatio:     1,
+			CompletionRatio: 1,
+		},
+	},
 	// Gemini 3.1 Flash-Lite reached GA per https://ai.google.dev/gemini-api/docs/models;
 	// preview snapshot retained for backward compatibility.
 	"gemini-3.1-flash-lite":         gemini31FlashLitePricing,
