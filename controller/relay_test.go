@@ -10,11 +10,14 @@ import (
 
 	"github.com/Laisky/errors/v2"
 	gmw "github.com/Laisky/gin-middlewares/v7"
+	glog "github.com/Laisky/go-utils/v6/log"
 	"github.com/Laisky/zap"
 	"github.com/Laisky/zap/zapcore"
+	"github.com/Laisky/zap/zaptest/observer"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 
 	"github.com/Laisky/one-api/common/config"
@@ -281,6 +284,65 @@ func TestProcessChannelRelayError_InternalAdaptorFailureDoesNotSuspend(t *testin
 		})
 	})
 }
+
+func TestProcessChannelRelayError_StatusTooManyRequestsLogsWarnNotError(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	originalSuspendDuration := config.ChannelSuspendSecondsFor429
+	config.ChannelSuspendSecondsFor429 = time.Minute
+	defer func() {
+		config.ChannelSuspendSecondsFor429 = originalSuspendDuration
+	}()
+
+	originalDB := dbmodel.DB
+	testDB, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	require.NoError(t, errors.Wrap(err, "open sqlite memory db"))
+	require.NoError(t, errors.Wrap(testDB.AutoMigrate(&dbmodel.Ability{}), "migrate abilities table"))
+	dbmodel.DB = testDB
+	defer func() {
+		dbmodel.DB = originalDB
+	}()
+
+	core, observed := observer.New(zapcore.DebugLevel)
+	testLogger, err := glog.New(
+		glog.WithName("relay-429-test"),
+		glog.WithLevel(glog.LevelDebug),
+		glog.WithZapOptions(zap.WrapCore(func(zapcore.Core) zapcore.Core {
+			return core
+		})),
+	)
+	require.NoError(t, errors.Wrap(err, "create observer logger"))
+	ctx := gmw.SetLogger(context.Background(), testLogger)
+
+	processChannelRelayError(ctx, processChannelRelayErrorParams{
+		RequestID:     "req-429",
+		UserId:        1,
+		TokenId:       2,
+		ChannelId:     3,
+		ChannelName:   "upstream-rate-limited",
+		Group:         "default",
+		OriginalModel: "glm-4.6v-flash",
+		ActualModel:   "glm-4.6v-flash",
+		RequestURL:    "/v1/chat/completions",
+		Err: model.ErrorWithStatusCode{
+			StatusCode: http.StatusTooManyRequests,
+			Error: model.Error{
+				Message:  "upstream rate limit",
+				Type:     model.ErrorTypeRateLimit,
+				Code:     "1305",
+				RawError: errors.New("upstream rate limit"),
+			},
+		},
+	})
+
+	require.Equal(t, 0, observed.FilterLevelExact(zapcore.ErrorLevel).Len())
+
+	warnLogs := observed.FilterLevelExact(zapcore.WarnLevel)
+	require.Equal(t, 2, warnLogs.Len())
+	require.Equal(t, 1, warnLogs.FilterMessage("relay error").Len())
+	require.Equal(t, 1, warnLogs.FilterMessage("ability suspended due to rate limit (429)").Len())
+}
+
 func TestProcessChannelRelayError_StatusTooManyRequests(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 

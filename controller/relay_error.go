@@ -323,13 +323,18 @@ func processChannelRelayError(ctx context.Context, params processChannelRelayErr
 	lg := gmw.GetLogger(ctx)
 	isUserError := isUserOriginatedRelayError(&params.Err)
 
-	// Downgrade to WARN for client-side cancellations/timeouts and user-originated errors
+	// Downgrade to WARN for client-side cancellations/timeouts, user-originated
+	// errors, and upstream rate limits.
 	if isClientContextCancel(params.Err.StatusCode, params.Err.RawError) {
 		lg.Warn("relay aborted by client (context canceled/deadline)",
 			appendRelayFailureFields(params, zap.Error(params.Err.RawError))...,
 		)
 	} else if isUserError {
 		lg.Warn("user-originated request error",
+			appendRelayFailureFields(params, zap.Error(params.Err.RawError))...,
+		)
+	} else if params.Err.StatusCode == http.StatusTooManyRequests {
+		lg.Warn("relay error",
 			appendRelayFailureFields(params, zap.Error(params.Err.RawError))...,
 		)
 	} else {
@@ -376,7 +381,7 @@ func processChannelRelayError(ctx context.Context, params processChannelRelayErr
 
 	if params.Err.StatusCode == http.StatusTooManyRequests {
 		// For 429, we will suspend the specific model for a while
-		lg.Error("ability suspended due to rate limit (429)",
+		lg.Warn("ability suspended due to rate limit (429)",
 			appendRelayFailureFields(params,
 				zap.Error(params.Err.RawError),
 				zap.String("suspension_rationale", "upstream rate limit exceeded; suspending ability to allow cooldown"),
