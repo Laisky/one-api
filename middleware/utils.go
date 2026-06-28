@@ -110,6 +110,11 @@ func shouldLogAsWarning(statusCode int, err error) bool {
 	switch {
 	case strings.Contains(err.Error(), "token not found for key:"):
 		return true
+	case strings.Contains(err.Error(), "No available channels for Model"):
+		// No channel is configured/available for the requested model under the
+		// group. This is an operator/configuration condition rather than a
+		// server fault, so it is logged as WARN to avoid noisy ERROR alerts.
+		return true
 	default:
 		return false
 	}

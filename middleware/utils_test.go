@@ -281,3 +281,10 @@ func TestShouldLogAsWarning_IgnoredErrorPattern(t *testing.T) {
 	shouldWarn := shouldLogAsWarning(http.StatusInternalServerError, err)
 	require.True(t, shouldWarn)
 }
+
+func TestShouldLogAsWarning_NoAvailableChannels(t *testing.T) {
+	err := errors.New("No available channels for Model glm-4.6v-flash under Group default")
+
+	shouldWarn := shouldLogAsWarning(http.StatusServiceUnavailable, err)
+	require.True(t, shouldWarn)
+}
