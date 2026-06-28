@@ -11,6 +11,7 @@ import (
 
 	"github.com/Laisky/one-api/relay/adaptor"
 	channelhelper "github.com/Laisky/one-api/relay/adaptor"
+	"github.com/Laisky/one-api/relay/adaptor/openai_compatible"
 	"github.com/Laisky/one-api/relay/meta"
 	"github.com/Laisky/one-api/relay/model"
 	relaymodel "github.com/Laisky/one-api/relay/model"
@@ -40,6 +41,18 @@ func (a *Adaptor) ConvertRequest(c *gin.Context, relayMode int, request *model.G
 
 // DoResponse writes the upstream response back to the caller while returning zero usage for proxy traffic.
 func (a *Adaptor) DoResponse(c *gin.Context, resp *http.Response, meta *meta.Meta) (usage *model.Usage, err *model.ErrorWithStatusCode) {
+	// When the Response API chat-completions fallback (relayResponseAPIThroughChat)
+	// is active it installs a stream-rewrite bridge in the context for streaming
+	// requests. In that case the upstream body is an OpenAI chat-completions SSE
+	// stream that must be converted into Responses API events; a verbatim byte
+	// copy would hand the /v1/responses client an unparseable stream (the same
+	// class of bug fixed for the replicate adaptor). Delegate to the shared
+	// streaming handler, which honors the bridge.
+	if openai_compatible.StreamRewriterFromContext(c) != nil {
+		streamErr, streamUsage := openai_compatible.StreamHandler(c, resp, meta.PromptTokens, meta.ActualModelName)
+		return streamUsage, streamErr
+	}
+
 	for k, v := range resp.Header {
 		for _, vv := range v {
 			c.Writer.Header().Set(k, vv)

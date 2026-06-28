@@ -14,11 +14,11 @@ import (
 	"github.com/Laisky/one-api/common"
 	"github.com/Laisky/one-api/common/conv"
 	"github.com/Laisky/one-api/common/helper"
-	"github.com/Laisky/one-api/common/render"
 	commonsse "github.com/Laisky/one-api/common/sse"
 	"github.com/Laisky/one-api/common/tracing"
 	"github.com/Laisky/one-api/relay/adaptor/coze/constant/messagetype"
 	"github.com/Laisky/one-api/relay/adaptor/openai"
+	"github.com/Laisky/one-api/relay/adaptor/openai_compatible"
 	"github.com/Laisky/one-api/relay/model"
 )
 
@@ -149,7 +149,7 @@ func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusC
 			response.Model = modelName
 			response.Created = createdTime
 
-			if err := render.ObjectData(c, response); err != nil {
+			if err := openai_compatible.RenderStreamChunkWithBridge(c, response); err != nil {
 				lg.Error("error rendering stream response", zap.Error(err))
 			}
 			continue
@@ -180,7 +180,7 @@ func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusC
 		response.Model = modelName
 		response.Created = createdTime
 
-		err = render.ObjectData(c, response)
+		err = openai_compatible.RenderStreamChunkWithBridge(c, response)
 		if err != nil {
 			lg.Error("error rendering stream response", zap.Error(err))
 		}
@@ -190,7 +190,7 @@ func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusC
 		lg.Error("error reading stream", zap.Error(streamErr))
 	}
 
-	render.Done(c)
+	openai_compatible.FinalizeStreamWithBridge(c, nil)
 
 	err := resp.Body.Close()
 	if err != nil {

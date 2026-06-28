@@ -23,6 +23,7 @@ import (
 	"github.com/Laisky/one-api/relay/adaptor/aws/internal/streamfinalizer"
 	"github.com/Laisky/one-api/relay/adaptor/aws/utils"
 	"github.com/Laisky/one-api/relay/adaptor/openai"
+	"github.com/Laisky/one-api/relay/adaptor/openai_compatible"
 	relaymodel "github.com/Laisky/one-api/relay/model"
 )
 
@@ -388,7 +389,7 @@ func handleStreamWithInvokeModel(c *gin.Context, awsCli *bedrockruntime.Client, 
 	c.Stream(func(w io.Writer) bool {
 		event, ok := <-stream.Events()
 		if !ok {
-			c.Render(-1, common.CustomEvent{Data: "data: [DONE]"})
+			openai_compatible.FinalizeStreamWithBridge(c, &usage)
 			return false
 		}
 
@@ -414,12 +415,10 @@ func handleStreamWithInvokeModel(c *gin.Context, awsCli *bedrockruntime.Client, 
 			openaiResp.Model = c.GetString(ctxkey.RequestModel)
 			openaiResp.Created = createdTime
 
-			jsonStr, err := json.Marshal(openaiResp)
-			if err != nil {
-				lg.Error("error marshalling stream response", zap.Error(err))
+			if err := openai_compatible.RenderStreamChunkWithBridge(c, openaiResp); err != nil {
+				lg.Error("error rendering stream response", zap.Error(err))
 				return true
 			}
-			c.Render(-1, common.CustomEvent{Data: "data: " + string(jsonStr)})
 			return true
 
 		case *types.UnknownUnionMember:
@@ -460,7 +459,20 @@ func handleStreamWithConverseAPI(c *gin.Context, awsCli *bedrockruntime.Client, 
 		&usage,
 		gmw.GetLogger(c),
 		func(payload []byte) bool {
-			c.Render(-1, common.CustomEvent{Data: "data: " + string(payload)})
+			// The finalizer marshals an openai.ChatCompletionsStreamResponse to
+			// bytes; decode it back into the chunk object so it can be routed
+			// through the Response API rewrite bridge (the /v1/responses chat
+			// fallback) when one is installed, instead of emitting raw
+			// chat-completion SSE.
+			var chunk openai.ChatCompletionsStreamResponse
+			if err := json.Unmarshal(payload, &chunk); err != nil {
+				lg.Error("error unmarshalling final stream response", zap.Error(err))
+				return false
+			}
+			if err := openai_compatible.RenderStreamChunkWithBridge(c, &chunk); err != nil {
+				lg.Error("error rendering final stream response", zap.Error(err))
+				return false
+			}
 			return true
 		},
 	)
@@ -471,7 +483,7 @@ func handleStreamWithConverseAPI(c *gin.Context, awsCli *bedrockruntime.Client, 
 			if !finalizer.FinalizeOnClose() {
 				return false
 			}
-			c.Render(-1, common.CustomEvent{Data: "data: [DONE]"})
+			openai_compatible.FinalizeStreamWithBridge(c, &usage)
 			return false
 		}
 
@@ -512,12 +524,10 @@ func handleStreamWithConverseAPI(c *gin.Context, awsCli *bedrockruntime.Client, 
 
 				// Send the response if we have one
 				if response != nil {
-					jsonStr, err := json.Marshal(response)
-					if err != nil {
-						lg.Error("error marshalling stream response", zap.Error(err))
+					if err := openai_compatible.RenderStreamChunkWithBridge(c, response); err != nil {
+						lg.Error("error rendering stream response", zap.Error(err))
 						return true
 					}
-					c.Render(-1, common.CustomEvent{Data: "data: " + string(jsonStr)})
 				}
 			}
 			return true

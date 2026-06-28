@@ -21,6 +21,7 @@ import (
 	"github.com/Laisky/one-api/relay/adaptor/aws/internal/streamfinalizer"
 	"github.com/Laisky/one-api/relay/adaptor/aws/utils"
 	"github.com/Laisky/one-api/relay/adaptor/openai"
+	"github.com/Laisky/one-api/relay/adaptor/openai_compatible"
 	relaymodel "github.com/Laisky/one-api/relay/model"
 )
 
@@ -186,7 +187,20 @@ func StreamHandler(c *gin.Context, awsCli *bedrockruntime.Client) (*relaymodel.E
 		&usage,
 		lg,
 		func(payload []byte) bool {
-			c.Render(-1, common.CustomEvent{Data: "data: " + string(payload)})
+			// The finalizer marshals an OpenAI chat-completion chunk (carrying
+			// finish_reason and usage) into payload. Reconstruct the object so the
+			// chunk can be routed through the Response API rewrite bridge when one is
+			// installed (the /v1/responses chat-fallback path); otherwise it is
+			// emitted verbatim.
+			var chunk openai.ChatCompletionsStreamResponse
+			if err := json.Unmarshal(payload, &chunk); err != nil {
+				lg.Error("error unmarshalling final stream response", zap.Error(err))
+				return false
+			}
+			if err := openai_compatible.RenderStreamChunkWithBridge(c, &chunk); err != nil {
+				lg.Error("error rendering final stream response", zap.Error(err))
+				return false
+			}
 			return true
 		},
 	)
@@ -197,7 +211,7 @@ func StreamHandler(c *gin.Context, awsCli *bedrockruntime.Client) (*relaymodel.E
 			if !finalizer.FinalizeOnClose() {
 				return false
 			}
-			c.Render(-1, common.CustomEvent{Data: "data: [DONE]"})
+			openai_compatible.FinalizeStreamWithBridge(c, &usage)
 			return false
 		}
 
@@ -262,14 +276,14 @@ func StreamHandler(c *gin.Context, awsCli *bedrockruntime.Client) (*relaymodel.E
 					}
 				}
 
-				// Send the response if we have one
+				// Send the response if we have one. Route it through the Response API
+				// rewrite bridge when one is installed (the /v1/responses chat-fallback
+				// path); otherwise it is emitted verbatim as a chat-completion chunk.
 				if response != nil {
-					jsonStr, err := json.Marshal(response)
-					if err != nil {
-						lg.Error("error marshalling stream response", zap.Error(err))
+					if err := openai_compatible.RenderStreamChunkWithBridge(c, response); err != nil {
+						lg.Error("error rendering stream response", zap.Error(err))
 						return true
 					}
-					c.Render(-1, common.CustomEvent{Data: "data: " + string(jsonStr)})
 				}
 			}
 			return true

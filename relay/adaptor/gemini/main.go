@@ -20,6 +20,7 @@ import (
 	commonsse "github.com/Laisky/one-api/common/sse"
 	"github.com/Laisky/one-api/relay/adaptor/geminiOpenaiCompatible"
 	"github.com/Laisky/one-api/relay/adaptor/openai"
+	"github.com/Laisky/one-api/relay/adaptor/openai_compatible"
 	"github.com/Laisky/one-api/relay/model"
 )
 
@@ -596,7 +597,7 @@ func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusC
 
 		responseText += response.Choices[0].Delta.StringContent()
 
-		err = render.ObjectData(c, response)
+		err = openai_compatible.RenderStreamChunkWithBridge(c, response)
 		if err != nil {
 			lg.Error("error rendering stream",
 				zap.Error(errors.Wrap(err, "render stream")))
@@ -617,14 +618,16 @@ func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusC
 		)
 	}
 
-	render.Done(c)
+	usage := geminiUsageMetadataToOpenAIUsage(usageMetadata)
+
+	openai_compatible.FinalizeStreamWithBridge(c, usage)
 
 	err := resp.Body.Close()
 	if err != nil {
 		return openai.ErrorWrapper(errors.Wrap(err, "close_response_body_failed"), "close_response_body_failed", http.StatusInternalServerError), "", nil
 	}
 
-	return nil, responseText, geminiUsageMetadataToOpenAIUsage(usageMetadata)
+	return nil, responseText, usage
 }
 
 // Handler processes non-streaming responses from the Gemini API and converts them to OpenAI-compatible format.

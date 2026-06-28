@@ -18,7 +18,6 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/jinzhu/copier"
 
-	"github.com/Laisky/one-api/common"
 	"github.com/Laisky/one-api/common/config"
 	"github.com/Laisky/one-api/common/ctxkey"
 	"github.com/Laisky/one-api/common/helper"
@@ -27,6 +26,7 @@ import (
 	"github.com/Laisky/one-api/relay/adaptor/anthropic"
 	"github.com/Laisky/one-api/relay/adaptor/aws/utils"
 	"github.com/Laisky/one-api/relay/adaptor/openai"
+	"github.com/Laisky/one-api/relay/adaptor/openai_compatible"
 	relaymodel "github.com/Laisky/one-api/relay/model"
 )
 
@@ -302,7 +302,7 @@ func StreamHandler(c *gin.Context, awsCli *bedrockruntime.Client) (*relaymodel.E
 	c.Stream(func(w io.Writer) bool {
 		event, ok := <-stream.Events()
 		if !ok {
-			c.Render(-1, common.CustomEvent{Data: "data: [DONE]"})
+			openai_compatible.FinalizeStreamWithBridge(c, &usage)
 			return false
 		}
 
@@ -345,12 +345,10 @@ func StreamHandler(c *gin.Context, awsCli *bedrockruntime.Client) (*relaymodel.E
 					lastToolCallChoice = choice
 				}
 			}
-			jsonStr, err := json.Marshal(response)
-			if err != nil {
-				gmw.GetLogger(c).Error("error marshalling stream response", zap.Error(err))
+			if err := openai_compatible.RenderStreamChunkWithBridge(c, response); err != nil {
+				gmw.GetLogger(c).Error("error rendering stream response", zap.Error(err))
 				return true
 			}
-			c.Render(-1, common.CustomEvent{Data: "data: " + string(jsonStr)})
 			return true
 		case *types.UnknownUnionMember:
 			fmt.Println("unknown tag:", v.Tag)

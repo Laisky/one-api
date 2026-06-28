@@ -13,9 +13,10 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/Laisky/one-api/common"
-	"github.com/Laisky/one-api/common/render"
 	commonsse "github.com/Laisky/one-api/common/sse"
+	"github.com/Laisky/one-api/common/tracing"
 	"github.com/Laisky/one-api/relay/adaptor/openai"
+	"github.com/Laisky/one-api/relay/adaptor/openai_compatible"
 	"github.com/Laisky/one-api/relay/meta"
 	"github.com/Laisky/one-api/relay/model"
 )
@@ -185,6 +186,45 @@ func chatStreamHandler(c *gin.Context, streamUrl string) (responseText string, e
 	lineReader := commonsse.NewLineReader(resp.Body, commonsse.DefaultLineBufferSize)
 
 	common.SetEventStreamHeaders(c)
+
+	ctxMeta := meta.GetByContext(c)
+
+	chunkID := tracing.GenerateChatCompletionID(c)
+
+	// emitToken forwards a single Replicate output token as a well-formed OpenAI
+	// chat-completion chunk. RenderStreamChunkWithBridge routes it through the
+	// Response API rewrite bridge when the /v1/responses chat fallback installed
+	// one (so the client receives Responses API delta events), otherwise it emits
+	// a plain chat-completion SSE chunk. Without this, Replicate's raw text tokens
+	// reached the client as unparseable `data: <raw text>` lines and rendered
+	// nothing (the gptchat UI showed "(no output)").
+	emitToken := func(token string) {
+		if token == "" {
+			return
+		}
+
+		chunk := openai_compatible.ChatCompletionsStreamResponse{
+			Id:      chunkID,
+			Object:  "chat.completion.chunk",
+			Created: time.Now().Unix(),
+			Model:   ctxMeta.ActualModelName,
+			Choices: []openai_compatible.ChatCompletionsStreamResponseChoice{{
+				Index: 0,
+				Delta: model.Message{Role: "assistant", Content: token},
+			}},
+		}
+
+		_ = openai_compatible.RenderStreamChunkWithBridge(c, &chunk)
+	}
+
+	// finalizeStream emits the terminal SSE events: Response API completion
+	// events (carrying usage) when the rewrite bridge is active, otherwise the
+	// chat-completion `[DONE]` sentinel.
+	finalizeStream := func() {
+		usage := openai.ResponseText2Usage(responseText, ctxMeta.ActualModelName, ctxMeta.PromptTokens)
+		openai_compatible.FinalizeStreamWithBridge(c, usage)
+	}
+
 	doneRendered := false
 	pendingEvent := ""
 	for {
@@ -206,10 +246,10 @@ func chatStreamHandler(c *gin.Context, streamUrl string) (responseText string, e
 			data := string(payloadBytes)
 			switch pendingEvent {
 			case "output":
-				render.StringData(c, data)
+				emitToken(data)
 				responseText += data
 			case "done":
-				render.Done(c)
+				finalizeStream()
 				doneRendered = true
 				return responseText, nil
 			}
@@ -237,10 +277,10 @@ func chatStreamHandler(c *gin.Context, streamUrl string) (responseText string, e
 			data := lineText[len(dataPrefix):]
 			switch pendingEvent {
 			case "output":
-				render.StringData(c, data)
+				emitToken(data)
 				responseText += data
 			case "done":
-				render.Done(c)
+				finalizeStream()
 				doneRendered = true
 				return responseText, nil
 			}
@@ -248,7 +288,7 @@ func chatStreamHandler(c *gin.Context, streamUrl string) (responseText string, e
 	}
 
 	if !doneRendered {
-		render.Done(c)
+		finalizeStream()
 	}
 
 	return responseText, nil
