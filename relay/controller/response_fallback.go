@@ -148,8 +148,8 @@ func relayResponseAPIThroughChat(c *gin.Context, meta *metalib.Meta, responseAPI
 	channelModelRatio, channelCompletionRatio := getChannelRatios(c)
 	channelModelConfigs := getChannelModelConfigs(c)
 	pricingAdaptor := resolvePricingAdaptor(meta)
-	modelRatio := pricing.GetModelRatioWithThreeLayers(chatRequest.Model, channelModelRatio, pricingAdaptor)
-	completionRatio := pricing.GetCompletionRatioWithThreeLayers(chatRequest.Model, channelCompletionRatio, pricingAdaptor)
+	modelRatio := pricing.ResolveModelRatioAt(chatRequest.Model, channelModelConfigs, channelModelRatio, pricingAdaptor, meta.StartTime)
+	completionRatio := pricing.ResolveCompletionRatioAt(chatRequest.Model, channelModelConfigs, channelCompletionRatio, pricingAdaptor, meta.StartTime)
 	groupRatio := c.GetFloat64(ctxkey.ChannelRatio)
 	ratio := modelRatio * groupRatio
 

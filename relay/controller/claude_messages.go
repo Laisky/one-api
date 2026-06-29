@@ -110,8 +110,8 @@ func RelayClaudeMessagesHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 
 	// get model ratio using three-layer pricing system
 	pricingAdaptor := resolvePricingAdaptor(meta)
-	modelRatio := pricing.GetModelRatioWithThreeLayers(claudeRequest.Model, channelModelRatio, pricingAdaptor)
-	completionRatio := pricing.GetCompletionRatioWithThreeLayers(claudeRequest.Model, channelCompletionRatio, pricingAdaptor)
+	modelRatio := pricing.ResolveModelRatioAt(claudeRequest.Model, channelModelConfigs, channelModelRatio, pricingAdaptor, meta.StartTime)
+	completionRatio := pricing.ResolveCompletionRatioAt(claudeRequest.Model, channelModelConfigs, channelCompletionRatio, pricingAdaptor, meta.StartTime)
 	groupRatio := c.GetFloat64(ctxkey.ChannelRatio)
 
 	ratio := modelRatio * groupRatio

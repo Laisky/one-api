@@ -197,6 +197,7 @@ func updateMCPRequestCostEstimate(c *gin.Context, meta *metalib.Meta, usage *rel
 		ChannelModelConfigs:    channelModelConfigs,
 		ChannelCompletionRatio: channelCompletionRatio,
 		PricingAdaptor:         pricingAdaptor,
+		RequestTime:            meta.StartTime,
 	})
 	quota := computeResult.TotalQuota
 	if quota < 0 {

@@ -23,6 +23,20 @@ const MODEL_CONFIGS_EXAMPLE = {
         'ratio': 0.03,
         'completion_ratio': 2.0,
         'max_tokens': 128000,
+    },
+    'deepseek-reasoner': {
+        'ratio': 0.00000055,
+        'completion_ratio': 4.0,
+        'cached_input_ratio': 0.00000014,
+        'time_windows': [{
+            'name': 'deepseek-offpeak',
+            'timezone': 'Asia/Shanghai',
+            'ranges': [{ 'start': '00:30', 'end': '08:30' }],
+            'overlay': {
+                'ratio': 0.0000001375,
+                'cached_input_ratio': 0.000000035,
+            },
+        }],
     }
 };
 
@@ -69,6 +83,23 @@ const validateModelConfigs = (configStr) => {
                 }
             }
 
+            if (config.time_windows !== undefined) {
+                if (!Array.isArray(config.time_windows)) {
+                    return { valid: false, error: `Model "${modelName}" time_windows must be an array` };
+                }
+                for (const [index, window] of config.time_windows.entries()) {
+                    if (typeof window !== 'object' || window === null || Array.isArray(window)) {
+                        return { valid: false, error: `Model "${modelName}" time window ${index + 1} must be an object` };
+                    }
+                    if (!Array.isArray(window.ranges) || window.ranges.length === 0) {
+                        return { valid: false, error: `Model "${modelName}" time window ${index + 1} ranges must be a non-empty array` };
+                    }
+                    if (typeof window.overlay !== 'object' || window.overlay === null || Array.isArray(window.overlay)) {
+                        return { valid: false, error: `Model "${modelName}" time window ${index + 1} overlay must be an object` };
+                    }
+                }
+            }
+
             if (config.tool_whitelist !== undefined) {
                 if (!Array.isArray(config.tool_whitelist)) {
                     return { valid: false, error: `模型"${modelName}"的tool_whitelist必须是字符串数组` };
@@ -109,7 +140,8 @@ const validateModelConfigs = (configStr) => {
             }
 
             // Check if at least one meaningful field is provided
-            const hasPricingField = config.ratio !== undefined || config.completion_ratio !== undefined || config.max_tokens !== undefined;
+            const hasPricingField = config.ratio !== undefined || config.completion_ratio !== undefined || config.max_tokens !== undefined ||
+                (Array.isArray(config.time_windows) && config.time_windows.length > 0);
             const hasToolField = (Array.isArray(config.tool_whitelist) && config.tool_whitelist.length > 0) ||
                 (config.tool_pricing && Object.keys(config.tool_pricing).length > 0);
             if (!hasPricingField && !hasToolField) {

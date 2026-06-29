@@ -8,6 +8,7 @@ import (
 	"math"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/Laisky/errors/v2"
 	gmw "github.com/Laisky/gin-middlewares/v7"
@@ -191,7 +192,7 @@ func CountTokenMessages(ctx context.Context,
 				}
 
 				if !audioTokensConfigured {
-					audioCfg, found := pricing.ResolveAudioPricing(actualModel, nil, &Adaptor{})
+					audioCfg, found := pricing.ResolveAudioPricing(actualModel, nil, &Adaptor{}, time.Time{})
 					if found && audioCfg != nil && audioCfg.PromptTokensPerSecond > 0 {
 						audioTokensPerSecond = audioCfg.PromptTokensPerSecond
 					} else {
@@ -401,7 +402,7 @@ func CountInputAudioTokens(ctx context.Context, base64Data string, model string)
 	}
 
 	audioTokensPerSecond := pricing.DefaultAudioPromptTokensPerSecond
-	audioCfg, found := pricing.ResolveAudioPricing(model, nil, &Adaptor{})
+	audioCfg, found := pricing.ResolveAudioPricing(model, nil, &Adaptor{}, time.Time{})
 	if found && audioCfg != nil && audioCfg.PromptTokensPerSecond > 0 {
 		audioTokensPerSecond = audioCfg.PromptTokensPerSecond
 	}

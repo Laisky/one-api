@@ -3,10 +3,12 @@ package pricing
 import (
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/Laisky/zap"
 
 	"github.com/Laisky/one-api/common/logger"
+	"github.com/Laisky/one-api/model"
 	"github.com/Laisky/one-api/relay/adaptor"
 	"github.com/Laisky/one-api/relay/apitype"
 	billingratio "github.com/Laisky/one-api/relay/billing/ratio"
@@ -268,6 +270,12 @@ func GetGlobalModelConfigRatioOnly(modelName string) (adaptor.ModelConfig, bool)
 		if cfg.Embedding != nil {
 			clone.Embedding = cfg.Embedding.Clone()
 		}
+		if len(cfg.TimeWindows) > 0 {
+			clone.TimeWindows = make([]adaptor.TimeWindow, 0, len(cfg.TimeWindows))
+			for _, window := range cfg.TimeWindows {
+				clone.TimeWindows = append(clone.TimeWindows, window.Clone())
+			}
+		}
 		return clone, true
 	}
 	return adaptor.ModelConfig{}, false
@@ -404,6 +412,56 @@ func GetCompletionRatioWithThreeLayers(modelName string, channelOverrides map[st
 	return 1.0 // Default completion ratio
 }
 
+// ResolveModelRatioAt resolves a model ratio while honoring time-of-day model configs.
+// Parameters: modelName is the billed model, channelConfigs contains JSON overrides, channelOverrides contains legacy flat ratios, provider supplies defaults, and at is request start time.
+// Returns: the effective input ratio, preserving legacy flat override precedence when present.
+func ResolveModelRatioAt(modelName string, channelConfigs map[string]model.ModelConfigLocal, channelOverrides map[string]float64, provider adaptor.Adaptor, at time.Time) float64 {
+	if channelOverrides != nil {
+		if override, exists := channelOverrides[modelName]; exists {
+			if !isConfigDerivedTimeWindowRatio(modelName, channelConfigs, override) {
+				return override
+			}
+		}
+	}
+	if cfg, ok := ResolveModelConfigRatioOnly(modelName, channelConfigs, provider, at); ok && cfg.Ratio != 0 {
+		return cfg.Ratio
+	}
+	return GetModelRatioWithThreeLayers(modelName, channelOverrides, provider)
+}
+
+// ResolveCompletionRatioAt resolves a completion ratio while honoring time-of-day model configs.
+// Parameters: modelName is the billed model, channelConfigs contains JSON overrides, channelOverrides contains legacy flat ratios, provider supplies defaults, and at is request start time.
+// Returns: the effective completion ratio, preserving legacy flat override precedence when present.
+func ResolveCompletionRatioAt(modelName string, channelConfigs map[string]model.ModelConfigLocal, channelOverrides map[string]float64, provider adaptor.Adaptor, at time.Time) float64 {
+	if channelOverrides != nil {
+		if override, exists := channelOverrides[modelName]; exists {
+			if !isConfigDerivedTimeWindowCompletionRatio(modelName, channelConfigs, override) {
+				return override
+			}
+		}
+	}
+	if cfg, ok := ResolveModelConfigRatioOnly(modelName, channelConfigs, provider, at); ok && cfg.CompletionRatio != 0 {
+		return cfg.CompletionRatio
+	}
+	return GetCompletionRatioWithThreeLayers(modelName, channelOverrides, provider)
+}
+
+// isConfigDerivedTimeWindowRatio reports whether an override value is the base ratio copied from a time-windowed ModelConfig.
+// Parameters: modelName identifies the model, channelConfigs contains modern JSON configs, and override is the scalar map value.
+// Returns: true when the scalar should not be treated as a legacy flat override.
+func isConfigDerivedTimeWindowRatio(modelName string, channelConfigs map[string]model.ModelConfigLocal, override float64) bool {
+	local, ok := channelConfigs[modelName]
+	return ok && len(local.TimeWindows) > 0 && local.Ratio != 0 && local.Ratio == override
+}
+
+// isConfigDerivedTimeWindowCompletionRatio reports whether an override is the base completion ratio copied from a time-windowed ModelConfig.
+// Parameters: modelName identifies the model, channelConfigs contains modern JSON configs, and override is the scalar map value.
+// Returns: true when the scalar should not be treated as a legacy flat override.
+func isConfigDerivedTimeWindowCompletionRatio(modelName string, channelConfigs map[string]model.ModelConfigLocal, override float64) bool {
+	local, ok := channelConfigs[modelName]
+	return ok && len(local.TimeWindows) > 0 && local.CompletionRatio != 0 && local.CompletionRatio == override
+}
+
 // GetVideoPricingWithThreeLayers resolves video pricing metadata using the same precedence rules
 // as token pricing: channel overrides, adapter defaults, then global pricing.
 func GetVideoPricingWithThreeLayers(modelName string, channelOverride *adaptor.VideoPricingConfig, provider adaptor.Adaptor) *adaptor.VideoPricingConfig {
@@ -429,23 +487,7 @@ func GetVideoPricingWithThreeLayers(modelName string, channelOverride *adaptor.V
 }
 
 func cloneModelConfig(src adaptor.ModelConfig) adaptor.ModelConfig {
-	clone := src
-	if len(src.Tiers) > 0 {
-		clone.Tiers = append([]adaptor.ModelRatioTier(nil), src.Tiers...)
-	}
-	if src.Video != nil {
-		clone.Video = src.Video.Clone()
-	}
-	if src.Audio != nil {
-		clone.Audio = src.Audio.Clone()
-	}
-	if src.Image != nil {
-		clone.Image = src.Image.Clone()
-	}
-	if src.Embedding != nil {
-		clone.Embedding = src.Embedding.Clone()
-	}
-	return clone
+	return src.Clone()
 }
 
 // EffectivePricing holds fully-resolved pricing numbers for the current request

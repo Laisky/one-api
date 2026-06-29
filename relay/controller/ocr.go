@@ -54,8 +54,9 @@ func RelayOCRHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 	metalib.Set2Context(c, meta)
 
 	channelModelRatio, _ := getChannelRatios(c)
+	channelModelConfigs := getChannelModelConfigs(c)
 	pricingAdaptor := resolvePricingAdaptor(meta)
-	modelRatio := pricing.GetModelRatioWithThreeLayers(ocrRequest.Model, channelModelRatio, pricingAdaptor)
+	modelRatio := pricing.ResolveModelRatioAt(ocrRequest.Model, channelModelConfigs, channelModelRatio, pricingAdaptor, meta.StartTime)
 	groupRatio := c.GetFloat64(ctxkey.ChannelRatio)
 	totalQuota := int64(math.Ceil(modelRatio * groupRatio))
 	if modelRatio > 0 && totalQuota == 0 {

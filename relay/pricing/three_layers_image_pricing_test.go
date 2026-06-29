@@ -2,6 +2,7 @@ package pricing
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
@@ -46,7 +47,7 @@ func TestResolveImagePricing_AllLayers(t *testing.T) {
 			},
 		},
 	}
-	cfg, ok := ResolveImagePricing(modelName, channelWithImage, provider)
+	cfg, ok := ResolveImagePricing(modelName, channelWithImage, provider, time.Now())
 	require.True(t, ok)
 	require.InDelta(t, 0.033, cfg.PricePerImageUsd, 1e-12)
 	require.Equal(t, "1536x1536", cfg.DefaultSize)
@@ -54,17 +55,17 @@ func TestResolveImagePricing_AllLayers(t *testing.T) {
 	channelWithoutImage := map[string]model.ModelConfigLocal{
 		modelName: {Ratio: 0.15},
 	}
-	cfg, ok = ResolveImagePricing(modelName, channelWithoutImage, provider)
+	cfg, ok = ResolveImagePricing(modelName, channelWithoutImage, provider, time.Now())
 	require.True(t, ok)
 	require.InDelta(t, 0.022, cfg.PricePerImageUsd, 1e-12)
 	require.Equal(t, "1024x1024", cfg.DefaultSize)
 
-	cfg, ok = ResolveImagePricing(modelName, channelWithoutImage, &MockAdaptor{name: "empty", pricing: map[string]adaptor.ModelConfig{}})
+	cfg, ok = ResolveImagePricing(modelName, channelWithoutImage, &MockAdaptor{name: "empty", pricing: map[string]adaptor.ModelConfig{}}, time.Now())
 	require.True(t, ok)
 	require.InDelta(t, 0.011, cfg.PricePerImageUsd, 1e-12)
 	require.Equal(t, "512x512", cfg.DefaultSize)
 
-	cfg, ok = ResolveImagePricing("missing-image-model", nil, &MockAdaptor{name: "empty", pricing: map[string]adaptor.ModelConfig{}})
+	cfg, ok = ResolveImagePricing("missing-image-model", nil, &MockAdaptor{name: "empty", pricing: map[string]adaptor.ModelConfig{}}, time.Now())
 	require.False(t, ok)
 	require.Nil(t, cfg)
 }

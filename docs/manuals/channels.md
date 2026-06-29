@@ -13,6 +13,7 @@ This guide explains how One-API channels work, how to set them up, and what ever
     - [2.3 Advanced JSON Fields](#23-advanced-json-fields)
     - [2.4 Operational Settings](#24-operational-settings)
   - [3. Model Pricing \& Quotas](#3-model-pricing--quotas)
+    - [Time-of-Day Pricing Windows](#time-of-day-pricing-windows)
   - [4. Tooling Policy](#4-tooling-policy)
     - [Tooling Config JSON Schema](#tooling-config-json-schema)
   - [5. Groups and Routing](#5-groups-and-routing)
@@ -108,6 +109,44 @@ One-API meters usage in unified quota units. Channel-level pricing can override 
 2. **Legacy fields** (`model_ratio`, `completion_ratio`): still respected during migration but replaced by `model_configs` in the UI.
 
 When pricing data is missing, One-API falls back to adapter defaults (see `relay/adaptor/*/constants.go`). For accurate billing, provide explicit values that match your provider contract.
+
+### Time-of-Day Pricing Windows
+
+`model_configs` can include `time_windows` for providers that charge different rates by local wall-clock time. Windows are evaluated once at request start time, before tiered pricing. A streaming request keeps the same rate even if it crosses a window boundary.
+
+Each window has:
+
+- `name`: optional display label.
+- `timezone`: IANA timezone name. Empty means `UTC`; daylight-saving changes follow that zone's local wall clock.
+- `ranges`: one or more `{ "start": "HH:MM", "end": "HH:MM" }` ranges. `end <= start` crosses midnight. `start == end` means all day.
+- `days_of_week`: optional list where Sunday is `0` and Saturday is `6`.
+- `date_from` / `date_to`: optional local calendar dates in `YYYY-MM-DD`; `date_from` is inclusive and `date_to` is exclusive.
+- `overlay`: sparse pricing fields. Non-zero numeric fields override the base model config; zero inherits. A non-empty `tiers` list replaces the base tier ladder. Nested media blocks merge field by field and map keys from the overlay win.
+
+DeepSeek-style off-peak example:
+
+```json
+{
+  "deepseek-reasoner": {
+    "ratio": 0.00000055,
+    "completion_ratio": 4.0,
+    "cached_input_ratio": 0.00000014,
+    "time_windows": [
+      {
+        "name": "deepseek-offpeak",
+        "timezone": "Asia/Shanghai",
+        "ranges": [{ "start": "00:30", "end": "08:30" }],
+        "overlay": {
+          "ratio": 0.0000001375,
+          "cached_input_ratio": 0.000000035
+        }
+      }
+    ]
+  }
+}
+```
+
+Window order is precedence: the first matching window wins. `overlay.time_windows` is rejected to prevent recursive pricing.
 
 **Balance & Usage:** Additional readonly fields (visible in the table, not the form) track balance, last update time, and consumed quota.
 

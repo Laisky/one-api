@@ -507,6 +507,7 @@ type ModelRatioTier struct {
 
 - **Tiered pricing**: Adapters can attach sorted `tiers` to alter input, completion, and cache-write prices once a request crosses a token threshold. `pricing.ResolveEffectivePricing()` applies these tiers at runtime and records which threshold was selected for observability.
 - **Cache-aware pricing**: `CachedInputRatio`, `CacheWrite5mRatio`, and `CacheWrite1hRatio` let adapters express Anthropic-style prompt caching economics. Negative values mark a bucket as free; zero means “inherit the base ratio.”
+- **Time-of-day pricing**: `time_windows` attach ordered wall-clock overlays to a model config. The resolver selects the first window matching `meta.StartTime`, deep-merges its sparse pricing overlay, clears `TimeWindows`, and then applies tiers. Windows use explicit IANA timezones, support daylight-saving changes through local wall-clock conversion, midnight-crossing ranges, optional weekday filters, and optional local-date bounds.
 - **Max token policy**: `MaxTokens` carries per-model token ceilings so controllers can clamp `max_tokens` before dispatching upstream.
 - **Multimedia metadata**: `Video`, `Audio`, and `Image` pointers hold secondary pricing dimensions (per-second, per-minute, or per-image tables) alongside text token billing. These blobs travel through the three-layer resolver so channel overrides, adapter defaults, and global fallbacks stay consistent across media types.
 - **Capability metadata**: `ContextLength`, `MaxOutputTokens`, `InputModalities`, `OutputModalities`, `SupportedFeatures`, `SupportedSamplingParameters`, `Quantization`, and `HuggingFaceID` describe the model surface so adaptors, request transformers, and the admin UI can advertise what each model actually accepts.
@@ -517,6 +518,7 @@ type ModelRatioTier struct {
 #### Tier Resolution Engine
 
 - `pricing.ResolveEffectivePricing(modelName, inputTokens, adaptor)` collapses the base config plus tier overrides into an `EffectivePricing` struct before quotas are debited.
+- `pricing.ApplyTimeWindow(config, at)` applies request-start pricing windows before tier resolution. Billing paths pass the request start time; read-only model display previews pass display time.
 - Tier thresholds are inclusive (>=) and the resolver tracks the winning threshold for observability and debugging.
 - Optional tier fields inherit from the previous layer unless explicitly overridden, so you only configure what changes at that scale break.
 - If no adapter pricing exists, the resolver falls back to adapter-provided defaults (`GetModelRatio()` / `GetCompletionRatio()`) and, failing that, the final USD-per-million default.

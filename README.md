@@ -222,7 +222,7 @@ Support internationalization (i18n) in the web frontend, including English, Chin
 
 #### Unified Billing System
 
-All channels share a four-layer billing pipeline (channel overrides → adapter defaults → global fallback → safe default) with support for tiered token pricing, cached prompt buckets, and per-second/per-image media meters. Administrators can fetch defaults, override specific models, and audit every call via `X-Oneapi-Request-Id`; see [docs/arch/billing.md](./docs/arch/billing.md) for internals and [docs/manuals/billing.md](./docs/manuals/billing.md) for the operational playbook.
+All channels share a four-layer billing pipeline (channel overrides → adapter defaults → global fallback → safe default) with support for tiered token pricing, time-of-day pricing windows, cached prompt buckets, and per-second/per-image media meters. Administrators can fetch defaults, override specific models, and audit every call via `X-Oneapi-Request-Id`; see [docs/arch/billing.md](./docs/arch/billing.md) for internals and [docs/manuals/billing.md](./docs/manuals/billing.md) for the operational playbook.
 
 Marketplace and aggregation-channel pricing snapshots such as OpenRouter, Together AI, Fireworks, Replicate, Cloudflare, and Novita are maintained from official provider docs or machine-readable official APIs rather than third-party trackers.
 

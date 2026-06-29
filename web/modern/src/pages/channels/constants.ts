@@ -469,6 +469,22 @@ export const MODEL_CONFIGS_EXAMPLE = {
     completion_ratio: 2.0,
     max_tokens: 128000,
   },
+  'deepseek-reasoner': {
+    ratio: 0.00000055,
+    completion_ratio: 4.0,
+    cached_input_ratio: 0.00000014,
+    time_windows: [
+      {
+        name: 'deepseek-offpeak',
+        timezone: 'Asia/Shanghai',
+        ranges: [{ start: '00:30', end: '08:30' }],
+        overlay: {
+          ratio: 0.0000001375,
+          cached_input_ratio: 0.000000035,
+        },
+      },
+    ],
+  },
 } satisfies Record<string, Record<string, unknown>>;
 
 export const TOOLING_CONFIG_EXAMPLE = {

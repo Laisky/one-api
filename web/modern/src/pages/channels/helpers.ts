@@ -281,8 +281,41 @@ export const validateModelConfigs = (configStr: string) => {
         }
       }
 
+      if (configObj.time_windows !== undefined) {
+        if (!Array.isArray(configObj.time_windows)) {
+          return { valid: false, error: `Invalid time_windows for model "${modelName}": must be an array` };
+        }
+        for (const [index, window] of configObj.time_windows.entries()) {
+          if (typeof window !== 'object' || window === null || Array.isArray(window)) {
+            return { valid: false, error: `Invalid time window ${index + 1} for model "${modelName}": must be an object` };
+          }
+          const windowObj = window as any;
+          if (!Array.isArray(windowObj.ranges) || windowObj.ranges.length === 0) {
+            return { valid: false, error: `Invalid time window ${index + 1} for model "${modelName}": ranges must be a non-empty array` };
+          }
+          for (const range of windowObj.ranges) {
+            if (
+              typeof range !== 'object' ||
+              range === null ||
+              typeof range.start !== 'string' ||
+              typeof range.end !== 'string' ||
+              !/^\d{2}:\d{2}$/.test(range.start) ||
+              !/^\d{2}:\d{2}$/.test(range.end)
+            ) {
+              return { valid: false, error: `Invalid time window ${index + 1} for model "${modelName}": ranges must use HH:MM strings` };
+            }
+          }
+          if (windowObj.overlay === undefined || typeof windowObj.overlay !== 'object' || windowObj.overlay === null || Array.isArray(windowObj.overlay)) {
+            return { valid: false, error: `Invalid time window ${index + 1} for model "${modelName}": overlay must be an object` };
+          }
+        }
+      }
+
       const hasPricingField =
-        configObj.ratio !== undefined || configObj.completion_ratio !== undefined || configObj.max_tokens !== undefined;
+        configObj.ratio !== undefined ||
+        configObj.completion_ratio !== undefined ||
+        configObj.max_tokens !== undefined ||
+        (Array.isArray(configObj.time_windows) && configObj.time_windows.length > 0);
       if (!hasPricingField) {
         return {
           valid: false,

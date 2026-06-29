@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"time"
 
 	gmw "github.com/Laisky/gin-middlewares/v7"
 	glog "github.com/Laisky/go-utils/v6/log"
@@ -126,6 +127,16 @@ func rtRecordProvisionalLog(c *gin.Context, meta *metalib.Meta, modelName string
 	return model.RecordProvisionalConsumeLog(gmw.Ctx(c), logEntry, estimatedQuota)
 }
 
+// optionalRequestTime returns the first supplied request time or the zero time.
+// Parameters: values is an optional single request-start instant.
+// Returns: the selected time used for time-window pricing evaluation.
+func optionalRequestTime(values []time.Time) time.Time {
+	if len(values) == 0 {
+		return time.Time{}
+	}
+	return values[0]
+}
+
 // estimateRealtimePreConsumeQuota computes the quota to pre-consume before a
 // realtime WebSocket session starts. Since audio is streamed live, we cannot
 // measure duration upfront. Instead we estimate based on a conservative minimum
@@ -142,8 +153,10 @@ func estimateRealtimePreConsumeQuota(
 	groupRatio float64,
 	channelModelConfigs map[string]model.ModelConfigLocal,
 	pricingAdaptor adaptor.Adaptor,
+	requestTime ...time.Time,
 ) int64 {
-	audioCfg, ok := pricing.ResolveAudioPricing(modelName, channelModelConfigs, pricingAdaptor)
+	at := optionalRequestTime(requestTime)
+	audioCfg, ok := pricing.ResolveAudioPricing(modelName, channelModelConfigs, pricingAdaptor, at)
 	if ok && audioCfg != nil && audioCfg.HasData() {
 		promptRatio := audioCfg.PromptRatio
 		if promptRatio <= 0 {
@@ -167,7 +180,7 @@ func estimateRealtimePreConsumeQuota(
 
 	// Fallback: text-rate estimation (underestimates for audio, but safe)
 	estimatedTokens := float64(realtimePreConsumeSeconds * (realtimeAudioInputTokensPerSec + realtimeAudioOutputTokensPerSec))
-	textCompletionRatio := pricing.GetCompletionRatioWithThreeLayers(modelName, nil, pricingAdaptor)
+	textCompletionRatio := pricing.ResolveCompletionRatioAt(modelName, channelModelConfigs, nil, pricingAdaptor, at)
 	return int64(math.Ceil(estimatedTokens * modelRatio * groupRatio * (1 + textCompletionRatio) / 2))
 }
 
@@ -194,6 +207,7 @@ func applyRealtimeAudioSurcharge(
 	channelModelConfigs map[string]model.ModelConfigLocal,
 	pricingAdaptor adaptor.Adaptor,
 	lg glog.Logger,
+	requestTime ...time.Time,
 ) {
 	if usage == nil {
 		return
@@ -212,7 +226,8 @@ func applyRealtimeAudioSurcharge(
 	}
 
 	// Resolve audio pricing
-	audioCfg, ok := pricing.ResolveAudioPricing(modelName, channelModelConfigs, pricingAdaptor)
+	at := optionalRequestTime(requestTime)
+	audioCfg, ok := pricing.ResolveAudioPricing(modelName, channelModelConfigs, pricingAdaptor, at)
 	if !ok || audioCfg == nil || !audioCfg.HasData() {
 		if lg != nil {
 			lg.Warn("realtime audio surcharge: no audio pricing config found, audio tokens billed at text rate",
@@ -233,7 +248,7 @@ func applyRealtimeAudioSurcharge(
 	}
 
 	// Get text completion ratio for the model (what Compute uses)
-	textCompletionRatio := pricing.GetCompletionRatioWithThreeLayers(modelName, nil, pricingAdaptor)
+	textCompletionRatio := pricing.ResolveCompletionRatioAt(modelName, channelModelConfigs, nil, pricingAdaptor, at)
 
 	// Prompt surcharge: audio is promptRatio times text, so the delta is (promptRatio - 1)
 	promptSurcharge := float64(audioInputTokens) * modelRatio * groupRatio * (promptRatio - 1)

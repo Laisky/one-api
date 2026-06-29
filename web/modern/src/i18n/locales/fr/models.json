@@ -63,8 +63,22 @@
       "text_tokens": "Tarification des jetons texte",
       "tier_threshold": "Seuil",
       "tiered_pricing": "Tarification par paliers",
+      "time_pricing": "Tarification selon l'heure",
       "video": "Vidéo",
-      "video_pricing": "Tarification vidéo"
+      "video_pricing": "Tarification vidéo",
+      "weekday_0": "Dim",
+      "weekday_1": "Lun",
+      "weekday_2": "Mar",
+      "weekday_3": "Mer",
+      "weekday_4": "Jeu",
+      "weekday_5": "Ven",
+      "weekday_6": "Sam",
+      "window_active": "Actif maintenant",
+      "window_dates": "Dates",
+      "window_days": "Jours",
+      "window_name": "Fenêtre",
+      "window_schedule": "Horaire",
+      "window_timezone": "Fuseau horaire"
     },
     "errors": {
       "fetch_failed": "Échec de la récupération des modèles"

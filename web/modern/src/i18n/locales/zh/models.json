@@ -63,8 +63,22 @@
       "text_tokens": "文本令牌定价",
       "tier_threshold": "阈值",
       "tiered_pricing": "阶梯定价",
+      "time_pricing": "分时段定价",
       "video": "视频",
-      "video_pricing": "视频定价"
+      "video_pricing": "视频定价",
+      "weekday_0": "周日",
+      "weekday_1": "周一",
+      "weekday_2": "周二",
+      "weekday_3": "周三",
+      "weekday_4": "周四",
+      "weekday_5": "周五",
+      "weekday_6": "周六",
+      "window_active": "当前生效",
+      "window_dates": "日期",
+      "window_days": "星期",
+      "window_name": "时段",
+      "window_schedule": "时间表",
+      "window_timezone": "时区"
     },
     "errors": {
       "fetch_failed": "获取模型失败"

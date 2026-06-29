@@ -102,17 +102,23 @@ func RelayVideoHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 	}
 	resolutionKey := videoRequest.RequestedResolution()
 
-	var channelVideoOverride *adaptor.VideoPricingConfig
+	var channelModelConfigs map[string]model.ModelConfigLocal
 	if channelModel, ok := c.Get(ctxkey.ChannelModel); ok {
 		if channel, ok := channelModel.(*model.Channel); ok {
-			if cfg := channel.GetModelPriceConfig(meta.ActualModelName); cfg != nil && cfg.Video != nil {
-				channelVideoOverride = convertVideoLocalToAdaptor(cfg.Video)
-			}
+			channelModelConfigs = channel.GetModelPriceConfigs()
 		}
 	}
 
 	pricingAdaptor := relay.GetAdaptor(meta.APIType)
-	videoPricing := pricing.GetVideoPricingWithThreeLayers(meta.ActualModelName, channelVideoOverride, pricingAdaptor)
+	var videoPricing *adaptor.VideoPricingConfig
+	if cfg, ok := pricing.ResolveModelConfig(meta.ActualModelName, channelModelConfigs, pricingAdaptor, meta.StartTime); ok && cfg.Video != nil && cfg.Video.HasData() {
+		videoPricing = cfg.Video
+	}
+	if videoPricing == nil {
+		if cfg, ok := pricing.ResolveModelConfig(meta.ActualModelName, nil, pricingAdaptor, meta.StartTime); ok && cfg.Video != nil && cfg.Video.HasData() {
+			videoPricing = cfg.Video
+		}
+	}
 	if videoPricing == nil {
 		return openai.ErrorWrapper(errors.Errorf("video pricing missing for model %s", meta.ActualModelName), "video_pricing_missing", http.StatusBadRequest)
 	}

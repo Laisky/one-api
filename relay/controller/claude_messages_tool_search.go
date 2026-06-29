@@ -227,8 +227,9 @@ func executeClaudeToolSearchMCPLoop(
 	}
 
 	channelModelRatio, _ := getChannelRatios(c)
+	channelModelConfigs := getChannelModelConfigs(c)
 	pricingAdaptor := resolvePricingAdaptor(meta)
-	modelRatio := pricing.GetModelRatioWithThreeLayers(request.Model, channelModelRatio, pricingAdaptor)
+	modelRatio := pricing.ResolveModelRatioAt(request.Model, channelModelConfigs, channelModelRatio, pricingAdaptor, meta.StartTime)
 	groupRatio := c.GetFloat64(ctxkey.ChannelRatio)
 	ratio := modelRatio * groupRatio
 

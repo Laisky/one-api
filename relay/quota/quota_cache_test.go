@@ -5,6 +5,7 @@ import (
 	"math"
 	"net/http"
 	"testing"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
@@ -78,6 +79,219 @@ func (s *stubQuotaAdaptor) GetModelRatio(modelName string) float64 { return s.pr
 // GetCompletionRatio returns the configured base completion ratio.
 func (s *stubQuotaAdaptor) GetCompletionRatio(modelName string) float64 {
 	return s.pricing[modelName].CompletionRatio
+}
+
+// TestComputeTimeWindowDeepSeekFixture verifies request-start time selects DeepSeek-style off-peak pricing.
+func TestComputeTimeWindowDeepSeekFixture(t *testing.T) {
+	t.Parallel()
+
+	const modelName = "deepseek-reasoner"
+	channelConfigs := map[string]model.ModelConfigLocal{
+		modelName: {
+			Ratio:             1,
+			CompletionRatio:   4,
+			CachedInputRatio:  0.5,
+			CacheWrite5mRatio: 0.6,
+			CacheWrite1hRatio: 0.7,
+			TimeWindows: []model.TimeWindowLocal{{
+				Name:     "deepseek-offpeak",
+				TimeZone: "Asia/Shanghai",
+				Ranges:   []model.ClockRangeLocal{{Start: "00:30", End: "08:30"}},
+				Overlay: model.ModelConfigLocal{
+					Ratio:             0.25,
+					CachedInputRatio:  0.1,
+					CacheWrite5mRatio: 0.2,
+					CacheWrite1hRatio: 0.3,
+				},
+			}},
+		},
+	}
+	usage := &relaymodel.Usage{
+		PromptTokens:     100,
+		CompletionTokens: 10,
+		PromptTokensDetails: &relaymodel.UsagePromptTokensDetails{
+			CachedTokens: 20,
+		},
+		CacheWrite5mTokens: 5,
+		CacheWrite1hTokens: 5,
+	}
+
+	inWindow := quotautil.Compute(quotautil.ComputeInput{
+		Usage:               usage,
+		ModelName:           modelName,
+		ModelRatio:          1,
+		GroupRatio:          1,
+		ChannelModelConfigs: channelConfigs,
+		RequestTime:         time.Date(2026, 6, 29, 19, 0, 0, 0, time.UTC),
+	})
+	require.Equal(t, int64(32), inWindow.TotalQuota)
+	require.InDelta(t, 0.25, inWindow.UsedModelRatio, 1e-12)
+	require.InDelta(t, 4.0, inWindow.UsedCompletionRatio, 1e-12)
+
+	outWindow := quotautil.Compute(quotautil.ComputeInput{
+		Usage:               usage,
+		ModelName:           modelName,
+		ModelRatio:          1,
+		GroupRatio:          1,
+		ChannelModelConfigs: channelConfigs,
+		RequestTime:         time.Date(2026, 6, 29, 4, 0, 0, 0, time.UTC),
+	})
+	require.Equal(t, int64(127), outWindow.TotalQuota)
+	require.InDelta(t, 1.0, outWindow.UsedModelRatio, 1e-12)
+}
+
+// TestComputeTimeWindowUsesRequestStartForSingleRate verifies billing is stable for a boundary-crossing request.
+func TestComputeTimeWindowUsesRequestStartForSingleRate(t *testing.T) {
+	t.Parallel()
+
+	const modelName = "boundary-model"
+	channelConfigs := map[string]model.ModelConfigLocal{
+		modelName: {
+			Ratio:           1,
+			CompletionRatio: 2,
+			TimeWindows: []model.TimeWindowLocal{{
+				Name:     "offpeak",
+				TimeZone: "UTC",
+				Ranges:   []model.ClockRangeLocal{{Start: "00:00", End: "01:00"}},
+				Overlay:  model.ModelConfigLocal{Ratio: 0.5},
+			}},
+		},
+	}
+	usage := &relaymodel.Usage{PromptTokens: 10, CompletionTokens: 10}
+
+	startedInWindow := quotautil.Compute(quotautil.ComputeInput{
+		Usage:               usage,
+		ModelName:           modelName,
+		ModelRatio:          1,
+		GroupRatio:          1,
+		ChannelModelConfigs: channelConfigs,
+		RequestTime:         time.Date(2026, 6, 29, 0, 59, 0, 0, time.UTC),
+	})
+	startedOutWindow := quotautil.Compute(quotautil.ComputeInput{
+		Usage:               usage,
+		ModelName:           modelName,
+		ModelRatio:          1,
+		GroupRatio:          1,
+		ChannelModelConfigs: channelConfigs,
+		RequestTime:         time.Date(2026, 6, 29, 1, 0, 0, 0, time.UTC),
+	})
+
+	require.Equal(t, int64(15), startedInWindow.TotalQuota)
+	require.Equal(t, int64(30), startedOutWindow.TotalQuota)
+}
+
+// TestComputeTimeWindowPreservesFlatOverridePrecedence verifies legacy flat ratios remain the input base.
+func TestComputeTimeWindowPreservesFlatOverridePrecedence(t *testing.T) {
+	t.Parallel()
+
+	const modelName = "flat-override-window"
+	channelConfigs := map[string]model.ModelConfigLocal{
+		modelName: {
+			Ratio:            1,
+			CompletionRatio:  2,
+			CachedInputRatio: 0.5,
+			TimeWindows: []model.TimeWindowLocal{{
+				TimeZone: "UTC",
+				Ranges:   []model.ClockRangeLocal{{Start: "00:00", End: "00:00"}},
+				Overlay: model.ModelConfigLocal{
+					Ratio:            0.25,
+					CachedInputRatio: 0.1,
+				},
+			}},
+		},
+	}
+	usage := &relaymodel.Usage{
+		PromptTokens:     10,
+		CompletionTokens: 1,
+		PromptTokensDetails: &relaymodel.UsagePromptTokensDetails{
+			CachedTokens: 2,
+		},
+	}
+
+	result := quotautil.Compute(quotautil.ComputeInput{
+		Usage:               usage,
+		ModelName:           modelName,
+		ModelRatio:          9,
+		ChannelModelRatio:   map[string]float64{modelName: 9},
+		GroupRatio:          1,
+		ChannelModelConfigs: channelConfigs,
+		RequestTime:         time.Date(2026, 6, 29, 12, 0, 0, 0, time.UTC),
+	})
+
+	require.Equal(t, int64(91), result.TotalQuota)
+	require.InDelta(t, 9.0, result.UsedModelRatio, 1e-12)
+	require.InDelta(t, 2.0, result.UsedCompletionRatio, 1e-12)
+}
+
+// TestComputeTimeWindowAdaptorDefaultOnly verifies adaptor-shipped windows apply without channel configs.
+func TestComputeTimeWindowAdaptorDefaultOnly(t *testing.T) {
+	t.Parallel()
+
+	const modelName = "provider-window-model"
+	pricingAdaptor := &stubQuotaAdaptor{pricing: map[string]adaptor.ModelConfig{
+		modelName: {
+			Ratio:           1,
+			CompletionRatio: 1,
+			TimeWindows: []adaptor.TimeWindow{{
+				TimeZone: "UTC",
+				Ranges:   []adaptor.ClockRange{{Start: "00:00", End: "00:00"}},
+				Overlay:  adaptor.ModelConfig{Ratio: 0.25},
+			}},
+		},
+	}}
+
+	result := quotautil.Compute(quotautil.ComputeInput{
+		Usage:          &relaymodel.Usage{PromptTokens: 100},
+		ModelName:      modelName,
+		ModelRatio:     1,
+		GroupRatio:     1,
+		PricingAdaptor: pricingAdaptor,
+		RequestTime:    time.Date(2026, 6, 29, 12, 0, 0, 0, time.UTC),
+	})
+
+	require.Equal(t, int64(25), result.TotalQuota)
+	require.InDelta(t, 0.25, result.UsedModelRatio, 1e-12)
+}
+
+// TestComputeTimeWindowEmbeddingOverlay verifies multimodal embedding prompt costs use windowed embedding blocks.
+func TestComputeTimeWindowEmbeddingOverlay(t *testing.T) {
+	t.Parallel()
+
+	const modelName = "embedding-window-model"
+	channelConfigs := map[string]model.ModelConfigLocal{
+		modelName: {
+			Ratio: 1,
+			Embedding: &model.EmbeddingPricingLocal{
+				TextTokenRatio:  1,
+				ImageTokenRatio: 2,
+			},
+			TimeWindows: []model.TimeWindowLocal{{
+				TimeZone: "UTC",
+				Ranges:   []model.ClockRangeLocal{{Start: "00:00", End: "00:00"}},
+				Overlay: model.ModelConfigLocal{
+					Embedding: &model.EmbeddingPricingLocal{
+						ImageTokenRatio: 4,
+					},
+				},
+			}},
+		},
+	}
+
+	result := quotautil.Compute(quotautil.ComputeInput{
+		Usage: &relaymodel.Usage{
+			PromptTokens: 10,
+			PromptTokensDetails: &relaymodel.UsagePromptTokensDetails{
+				ImageTokens: 10,
+			},
+		},
+		ModelName:           modelName,
+		ModelRatio:          1,
+		GroupRatio:          1,
+		ChannelModelConfigs: channelConfigs,
+		RequestTime:         time.Date(2026, 6, 29, 12, 0, 0, 0, time.UTC),
+	})
+
+	require.Equal(t, int64(40), result.TotalQuota)
 }
 
 // TestComputeEmbeddingPromptCostUsesModalityTokenRatios verifies modality-specific token ratios override the base input ratio for multimodal embedding billing.

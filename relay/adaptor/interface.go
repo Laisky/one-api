@@ -15,9 +15,11 @@ import (
 	"github.com/Laisky/one-api/relay/model"
 )
 
-// ModelConfig represents pricing and configuration information for a model
+// ModelConfig represents pricing and configuration information for a model.
 // This structure consolidates both pricing (Ratio, CompletionRatio) and
-// configuration (MaxTokens, etc.) to eliminate the need for separate ModelConfig
+// configuration (MaxTokens, etc.) to eliminate the need for separate ModelConfig.
+// TimeWindows are applied above Tiers: a matching time-of-day overlay is merged
+// into the base config before tier resolution.
 type ModelConfig struct {
 	Ratio float64 `json:"ratio"`
 	// CompletionRatio represents the output rate / input rate
@@ -53,6 +55,9 @@ type ModelConfig struct {
 	// is billed and displayed as flat per call rather than per token, regardless
 	// of model type (rerank is the canonical example, but the schema is generic).
 	PerCall *PerCallPricingConfig `json:"per_call,omitempty"`
+	// TimeWindows holds time-of-day pricing overlays applied above Tiers.
+	// Empty means pricing is invariant across the request start time.
+	TimeWindows []TimeWindow `json:"time_windows,omitempty"`
 	// ContextLength is the total token context (input+output) the model supports.
 	// 0 means unspecified — caller should fall back to a reasonable default.
 	ContextLength int32 `json:"context_length,omitempty"`
@@ -89,6 +94,89 @@ type ModelConfig struct {
 	HuggingFaceID string `json:"hugging_face_id,omitempty"`
 	// Description is a short human-readable description (optional).
 	Description string `json:"description,omitempty"`
+}
+
+// Clone returns a deep copy of the model configuration.
+// Parameters: none.
+// Returns: a copied ModelConfig whose slices, maps, and pricing blocks can be mutated safely.
+func (cfg ModelConfig) Clone() ModelConfig {
+	clone := cfg
+	if len(cfg.Tiers) > 0 {
+		clone.Tiers = append([]ModelRatioTier(nil), cfg.Tiers...)
+	}
+	if cfg.Video != nil {
+		clone.Video = cfg.Video.Clone()
+	}
+	if cfg.Audio != nil {
+		clone.Audio = cfg.Audio.Clone()
+	}
+	if cfg.Image != nil {
+		clone.Image = cfg.Image.Clone()
+	}
+	if cfg.Embedding != nil {
+		clone.Embedding = cfg.Embedding.Clone()
+	}
+	if cfg.PerCall != nil {
+		clone.PerCall = cfg.PerCall.Clone()
+	}
+	if len(cfg.TimeWindows) > 0 {
+		clone.TimeWindows = make([]TimeWindow, 0, len(cfg.TimeWindows))
+		for _, window := range cfg.TimeWindows {
+			clone.TimeWindows = append(clone.TimeWindows, window.Clone())
+		}
+	}
+	if len(cfg.InputModalities) > 0 {
+		clone.InputModalities = append([]string(nil), cfg.InputModalities...)
+	}
+	if len(cfg.OutputModalities) > 0 {
+		clone.OutputModalities = append([]string(nil), cfg.OutputModalities...)
+	}
+	if len(cfg.SupportedFeatures) > 0 {
+		clone.SupportedFeatures = append([]string(nil), cfg.SupportedFeatures...)
+	}
+	if len(cfg.SupportedSamplingParameters) > 0 {
+		clone.SupportedSamplingParameters = append([]string(nil), cfg.SupportedSamplingParameters...)
+	}
+	if len(cfg.SupportedReasoningEfforts) > 0 {
+		clone.SupportedReasoningEfforts = append([]string(nil), cfg.SupportedReasoningEfforts...)
+	}
+	return clone
+}
+
+// TimeWindow describes a wall-clock pricing overlay for a model.
+// Parameters: fields are JSON-configured schedule bounds and a sparse Overlay.
+// Returns: this type is data-only and does not return values.
+type TimeWindow struct {
+	Name       string       `json:"name,omitempty"`
+	TimeZone   string       `json:"timezone,omitempty"`
+	Ranges     []ClockRange `json:"ranges"`
+	DaysOfWeek []int        `json:"days_of_week,omitempty"`
+	DateFrom   string       `json:"date_from,omitempty"`
+	DateTo     string       `json:"date_to,omitempty"`
+	Overlay    ModelConfig  `json:"overlay"`
+}
+
+// Clone returns a deep copy of the time-window definition.
+// Parameters: none.
+// Returns: a copied TimeWindow whose overlay and slices can be mutated safely.
+func (w TimeWindow) Clone() TimeWindow {
+	clone := w
+	if len(w.Ranges) > 0 {
+		clone.Ranges = append([]ClockRange(nil), w.Ranges...)
+	}
+	if len(w.DaysOfWeek) > 0 {
+		clone.DaysOfWeek = append([]int(nil), w.DaysOfWeek...)
+	}
+	clone.Overlay = w.Overlay.Clone()
+	return clone
+}
+
+// ClockRange describes one local wall-clock span in a TimeWindow.
+// Parameters: Start and End use the "15:04" layout, where End <= Start crosses midnight.
+// Returns: this type is data-only and does not return values.
+type ClockRange struct {
+	Start string `json:"start"`
+	End   string `json:"end"`
 }
 
 // EmbeddingPricingConfig captures modality-specific pricing metadata for embedding requests.

@@ -63,8 +63,22 @@
       "text_tokens": "テキストトークン価格",
       "tier_threshold": "閾値",
       "tiered_pricing": "段階別価格",
+      "time_pricing": "時間帯別価格",
       "video": "動画",
-      "video_pricing": "動画価格"
+      "video_pricing": "動画価格",
+      "weekday_0": "日",
+      "weekday_1": "月",
+      "weekday_2": "火",
+      "weekday_3": "水",
+      "weekday_4": "木",
+      "weekday_5": "金",
+      "weekday_6": "土",
+      "window_active": "現在有効",
+      "window_dates": "日付",
+      "window_days": "曜日",
+      "window_name": "ウィンドウ",
+      "window_schedule": "スケジュール",
+      "window_timezone": "タイムゾーン"
     },
     "errors": {
       "fetch_failed": "モデルの取得に失敗しました"
