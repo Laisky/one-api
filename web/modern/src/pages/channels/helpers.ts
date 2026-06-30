@@ -225,6 +225,8 @@ export const sanitizeJsonField = (jsonString: string): string => {
   }
 };
 
+const isClockHHMM = (value: unknown): value is string => typeof value === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(value);
+
 // Enhanced model configs validation
 export const validateModelConfigs = (configStr: string) => {
   if (!configStr || configStr.trim() === '') {
@@ -297,10 +299,8 @@ export const validateModelConfigs = (configStr: string) => {
             if (
               typeof range !== 'object' ||
               range === null ||
-              typeof range.start !== 'string' ||
-              typeof range.end !== 'string' ||
-              !/^\d{2}:\d{2}$/.test(range.start) ||
-              !/^\d{2}:\d{2}$/.test(range.end)
+              !isClockHHMM((range as any).start) ||
+              !isClockHHMM((range as any).end)
             ) {
               return { valid: false, error: `Invalid time window ${index + 1} for model "${modelName}": ranges must use HH:MM strings` };
             }

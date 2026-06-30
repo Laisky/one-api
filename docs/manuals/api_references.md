@@ -8460,6 +8460,8 @@ All filters are optional; CSV and repeated parameters are both accepted. Boolean
 | supported_features | `supported_features` | string[] | Capability flags (omitted if empty) |
 | image_price | `image_price` | number | USD per image, image models only (omitted if 0) |
 | per_call_pricing | `per_call_pricing` | object | Flat per-invocation pricing `{usd_per_thousand_calls, usd_per_call}` (mutually exclusive with token pricing; omitted if absent) |
+| time_windows | `time_windows` | object[] | Ordered time-of-day pricing windows. Each item contains `name`, `timezone`, `ranges`, optional `days_of_week`/`date_from`/`date_to`, and an `overlay` object rendered as display prices. |
+| active_time_window | `active_time_window` | string | Name of the first window matching server display time. Historical billing still uses the request's own start time. |
 
 Other optional nested fields present where applicable (all `omitempty`): `cache_write_5m_price`, `cache_write_1h_price`, `max_output_tokens`, `max_reasoning_tokens`, `supported_sampling_parameters`, `supported_reasoning_efforts`, `default_reasoning_effort`, `quantization`, `hugging_face_id`, `description`, `tiers`, `time_windows`, `active_time_window`, `video_pricing`, `audio_pricing`, `image_pricing`, `embedding_pricing`.
 
@@ -8636,4 +8638,3 @@ Returns the configured homepage content block (the stored `HomePageContent` opti
 ```bash
 curl -s "$BASE_URL/api/home_page_content"
 ```
-

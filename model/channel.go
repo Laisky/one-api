@@ -1149,6 +1149,12 @@ func validateTimeWindowOverlayLocal(overlay ModelConfigLocal, modelName string, 
 	if overlay.CompletionRatio < 0 {
 		return errors.Errorf("model %s time window %d overlay completion_ratio cannot be negative", modelName, windowIdx)
 	}
+	if overlay.CacheWrite5mRatio < 0 {
+		return errors.Errorf("model %s time window %d overlay cache_write_5m_ratio cannot be negative", modelName, windowIdx)
+	}
+	if overlay.CacheWrite1hRatio < 0 {
+		return errors.Errorf("model %s time window %d overlay cache_write_1h_ratio cannot be negative", modelName, windowIdx)
+	}
 	for _, tier := range overlay.Tiers {
 		if tier.InputTokenThreshold < 0 {
 			return errors.Errorf("model %s time window %d overlay tier threshold cannot be negative", modelName, windowIdx)
@@ -1158,6 +1164,12 @@ func validateTimeWindowOverlayLocal(overlay ModelConfigLocal, modelName string, 
 		}
 		if tier.CompletionRatio < 0 {
 			return errors.Errorf("model %s time window %d overlay tier completion_ratio cannot be negative", modelName, windowIdx)
+		}
+		if tier.CacheWrite5mRatio < 0 {
+			return errors.Errorf("model %s time window %d overlay tier cache_write_5m_ratio cannot be negative", modelName, windowIdx)
+		}
+		if tier.CacheWrite1hRatio < 0 {
+			return errors.Errorf("model %s time window %d overlay tier cache_write_1h_ratio cannot be negative", modelName, windowIdx)
 		}
 	}
 	hasVideoData, err := validateVideoPricingLocal(overlay.Video, modelName)

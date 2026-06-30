@@ -1,6 +1,8 @@
 package pricing
 
 import (
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -322,4 +324,88 @@ func TestResolveModelRatioAtProviderDefaultWindow(t *testing.T) {
 
 	require.InDelta(t, 0.25, ResolveModelRatioAt("provider-model", nil, nil, provider, at), 1e-12)
 	require.InDelta(t, 4.0, ResolveCompletionRatioAt("provider-model", nil, nil, provider, at), 1e-12)
+}
+
+// TestApplyTimeWindowFastPathNoWindows verifies that a window-less config is returned
+// verbatim (no clone, no allocation), which is the zero-cost default for the vast
+// majority of models. Covers test matrix #12.
+func TestApplyTimeWindowFastPathNoWindows(t *testing.T) {
+	// No t.Parallel(): testing.AllocsPerRun must not run concurrently with other tests.
+
+	cfg := adaptor.ModelConfig{
+		Ratio:           1.5,
+		CompletionRatio: 3,
+		Tiers:           []adaptor.ModelRatioTier{{InputTokenThreshold: 1000, Ratio: 0.5}},
+		Image:           &adaptor.ImagePricingConfig{PricePerImageUsd: 0.1},
+	}
+	at := time.Date(2026, 6, 29, 12, 0, 0, 0, time.UTC)
+
+	got := ApplyTimeWindow(cfg, at)
+	require.InDelta(t, cfg.Ratio, got.Ratio, 1e-12)
+	require.InDelta(t, cfg.CompletionRatio, got.CompletionRatio, 1e-12)
+	require.Len(t, got.Tiers, len(cfg.Tiers))
+	// Fast path returns the input verbatim: nested blocks are the SAME pointer (no clone).
+	require.Same(t, cfg.Image, got.Image)
+
+	gotRatioOnly := ApplyTimeWindowRatioOnly(cfg, at)
+	require.InDelta(t, cfg.Ratio, gotRatioOnly.Ratio, 1e-12)
+	require.Same(t, cfg.Image, gotRatioOnly.Image)
+
+	allocs := testing.AllocsPerRun(1000, func() {
+		_ = ApplyTimeWindow(cfg, at)
+	})
+	require.Zero(t, allocs, "fast path must not allocate when no windows are configured")
+}
+
+// BenchmarkApplyTimeWindowFastPath measures the no-window hot path so a regression that
+// makes the default (window-less) case allocate or clone is visible. Covers test matrix #12.
+func BenchmarkApplyTimeWindowFastPath(b *testing.B) {
+	cfg := adaptor.ModelConfig{Ratio: 1.5, CompletionRatio: 3}
+	at := time.Date(2026, 6, 29, 12, 0, 0, 0, time.UTC)
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = ApplyTimeWindow(cfg, at)
+	}
+}
+
+// TestApplyTimeWindowConcurrentResolution drives many goroutines through the windowed
+// resolver concurrently to prove the timezone cache (sync.Map) and merge path are
+// race-free. Run with -race. Covers test matrix #24.
+func TestApplyTimeWindowConcurrentResolution(t *testing.T) {
+	t.Parallel()
+
+	// 2026-06-29T19:00:00Z == 03:00 Asia/Shanghai, inside the off-peak window.
+	at := time.Date(2026, 6, 29, 19, 0, 0, 0, time.UTC)
+	configs := map[string]model.ModelConfigLocal{
+		"windowed": {
+			Ratio:           1,
+			CompletionRatio: 2,
+			TimeWindows: []model.TimeWindowLocal{{
+				TimeZone: "Asia/Shanghai",
+				Ranges:   []model.ClockRangeLocal{{Start: "00:30", End: "08:30"}},
+				Overlay:  model.ModelConfigLocal{Ratio: 0.25},
+			}},
+		},
+	}
+
+	const goroutines = 64
+	const iterations = 200
+	var mismatches int64
+	var wg sync.WaitGroup
+	wg.Add(goroutines)
+	for g := 0; g < goroutines; g++ {
+		go func() {
+			defer wg.Done()
+			for i := 0; i < iterations; i++ {
+				cfg, ok := ResolveModelConfigRatioOnly("windowed", configs, nil, at)
+				// Overlay assigns 0.25 directly (no FP arithmetic), so exact compare is safe.
+				if !ok || cfg.Ratio != 0.25 {
+					atomic.AddInt64(&mismatches, 1)
+				}
+			}
+		}()
+	}
+	wg.Wait()
+	require.Zero(t, mismatches, "concurrent windowed resolution produced inconsistent ratios")
 }

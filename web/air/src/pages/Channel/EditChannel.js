@@ -40,6 +40,8 @@ const MODEL_CONFIGS_EXAMPLE = {
     }
 };
 
+const isClockHHMM = (value) => typeof value === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(value);
+
 // Enhanced validation for model configs
 const validateModelConfigs = (configStr) => {
     if (!configStr || configStr.trim() === '') {
@@ -93,6 +95,11 @@ const validateModelConfigs = (configStr) => {
                     }
                     if (!Array.isArray(window.ranges) || window.ranges.length === 0) {
                         return { valid: false, error: `Model "${modelName}" time window ${index + 1} ranges must be a non-empty array` };
+                    }
+                    for (const range of window.ranges) {
+                        if (typeof range !== 'object' || range === null || !isClockHHMM(range.start) || !isClockHHMM(range.end)) {
+                            return { valid: false, error: `Model "${modelName}" time window ${index + 1} ranges must use HH:MM strings` };
+                        }
                     }
                     if (typeof window.overlay !== 'object' || window.overlay === null || Array.isArray(window.overlay)) {
                         return { valid: false, error: `Model "${modelName}" time window ${index + 1} overlay must be an object` };

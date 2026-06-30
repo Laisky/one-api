@@ -248,7 +248,7 @@ Validation behavior you should expect:
 - Negative numbers are rejected for pricing/count fields.
 - Empty model name is rejected.
 - A model config entry must contain at least one meaningful field.
-- Modern frontend currently requires at least one of `ratio`, `completion_ratio`, or `max_tokens` in each model object.
+- Modern frontend accepts pricing metadata, `max_tokens`, or a non-empty `time_windows` list in each model object; the backend performs final validation for timezone, date, and overlay semantics.
 
 Practical examples by modality:
 
@@ -521,6 +521,12 @@ DeepSeek-style off-peak example:
 ```
 
 Window order is precedence: the first matching window wins. The selected overlay is merged into the model config, then tiered pricing is resolved. Streaming and realtime requests keep the rate selected by request start time.
+
+The DeepSeek adaptor ships this off-peak schedule by default for all V4 models
+(`deepseek-chat`, `deepseek-reasoner`, `deepseek-v4-flash`, `deepseek-v4-pro`): the
+base ratios are the peak (高峰) price and off-peak (平时) bills at 50%. Peak hours are
+`09:00–12:00` and `14:00–18:00` Asia/Shanghai; the shipped window covers the
+complement. A channel `model_configs` entry overrides the default for that channel.
 
 ### 3. Reconcile Request Cost by Request ID
 

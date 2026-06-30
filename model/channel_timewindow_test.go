@@ -27,8 +27,8 @@ func TestModelPriceConfigsTimeWindowsRoundTrip(t *testing.T) {
 				Overlay: ModelConfigLocal{
 					Ratio:             0.25,
 					CachedInputRatio:  -1,
-					CacheWrite5mRatio: -1,
-					CacheWrite1hRatio: -1,
+					CacheWrite5mRatio: 0.125,
+					CacheWrite1hRatio: 0.15,
 				},
 			}},
 		},
@@ -45,8 +45,8 @@ func TestModelPriceConfigsTimeWindowsRoundTrip(t *testing.T) {
 	require.Equal(t, []int{1, 2}, cfg.TimeWindows[0].DaysOfWeek)
 	require.InDelta(t, 0.25, cfg.TimeWindows[0].Overlay.Ratio, 1e-12)
 	require.InDelta(t, -1.0, cfg.TimeWindows[0].Overlay.CachedInputRatio, 1e-12)
-	require.InDelta(t, -1.0, cfg.TimeWindows[0].Overlay.CacheWrite5mRatio, 1e-12)
-	require.InDelta(t, -1.0, cfg.TimeWindows[0].Overlay.CacheWrite1hRatio, 1e-12)
+	require.InDelta(t, 0.125, cfg.TimeWindows[0].Overlay.CacheWrite5mRatio, 1e-12)
+	require.InDelta(t, 0.15, cfg.TimeWindows[0].Overlay.CacheWrite1hRatio, 1e-12)
 }
 
 // TestModelPriceConfigsOldJSONCompatibility verifies old rows decode with nil time windows.
@@ -70,6 +70,38 @@ func TestModelPriceConfigsWindowlessJSONStable(t *testing.T) {
 	require.Equal(t, `{"ratio":0.03,"completion_ratio":2}`, string(got))
 	require.JSONEq(t, `{"ratio":0.03,"completion_ratio":2}`, string(got))
 	require.NotContains(t, string(got), "time_windows")
+}
+
+// TestModelPriceConfigsOldBinaryDropsOnlyTimeWindows simulates an old binary
+// that does not know the TimeWindows field and verifies additive rollback safety.
+// Parameters: t is the current test handle.
+// Returns: nothing; assertions fail the test on mismatch.
+func TestModelPriceConfigsOldBinaryDropsOnlyTimeWindows(t *testing.T) {
+	type oldModelConfigLocal struct {
+		Ratio             float64                `json:"ratio"`
+		CompletionRatio   float64                `json:"completion_ratio,omitempty"`
+		CachedInputRatio  float64                `json:"cached_input_ratio,omitempty"`
+		CacheWrite5mRatio float64                `json:"cache_write_5m_ratio,omitempty"`
+		CacheWrite1hRatio float64                `json:"cache_write_1h_ratio,omitempty"`
+		Tiers             []ModelRatioTierLocal  `json:"tiers,omitempty"`
+		MaxTokens         int32                  `json:"max_tokens,omitempty"`
+		Video             *VideoPricingLocal     `json:"video,omitempty"`
+		Audio             *AudioPricingLocal     `json:"audio,omitempty"`
+		Image             *ImagePricingLocal     `json:"image,omitempty"`
+		Embedding         *EmbeddingPricingLocal `json:"embedding,omitempty"`
+	}
+
+	raw := []byte(`{"ratio":0.03,"completion_ratio":2,"cached_input_ratio":0.01,"max_tokens":8192,"embedding":{"text_token_ratio":0.5},"time_windows":[{"name":"night","ranges":[{"start":"00:00","end":"06:00"}],"overlay":{"ratio":0.01}}]}`)
+	var decoded oldModelConfigLocal
+	require.NoError(t, json.Unmarshal(raw, &decoded))
+	require.InDelta(t, 0.03, decoded.Ratio, 1e-12)
+	require.InDelta(t, 2.0, decoded.CompletionRatio, 1e-12)
+	require.NotNil(t, decoded.Embedding)
+
+	encoded, err := json.Marshal(decoded)
+	require.NoError(t, err)
+	require.NotContains(t, string(encoded), "time_windows")
+	require.JSONEq(t, `{"ratio":0.03,"completion_ratio":2,"cached_input_ratio":0.01,"max_tokens":8192,"embedding":{"text_token_ratio":0.5}}`, string(encoded))
 }
 
 // TestModelPriceConfigsRejectMalformedTimeWindows verifies save-time validation failures.
@@ -103,6 +135,22 @@ func TestModelPriceConfigsRejectMalformedTimeWindows(t *testing.T) {
 		{
 			name: "empty overlay",
 			cfg:  windowedConfig(TimeWindowLocal{TimeZone: "UTC", Ranges: []ClockRangeLocal{{Start: "00:00", End: "01:00"}}}),
+		},
+		{
+			name: "negative overlay cache write",
+			cfg: windowedConfig(TimeWindowLocal{
+				TimeZone: "UTC",
+				Ranges:   []ClockRangeLocal{{Start: "00:00", End: "01:00"}},
+				Overlay:  ModelConfigLocal{CacheWrite5mRatio: -1},
+			}),
+		},
+		{
+			name: "negative overlay tier cache write",
+			cfg: windowedConfig(TimeWindowLocal{
+				TimeZone: "UTC",
+				Ranges:   []ClockRangeLocal{{Start: "00:00", End: "01:00"}},
+				Overlay:  ModelConfigLocal{Tiers: []ModelRatioTierLocal{{InputTokenThreshold: 1, CacheWrite1hRatio: -1}}},
+			}),
 		},
 		{
 			name: "recursive overlay",

@@ -148,6 +148,15 @@ DeepSeek-style off-peak example:
 
 Window order is precedence: the first matching window wins. `overlay.time_windows` is rejected to prevent recursive pricing.
 
+**Built-in DeepSeek V4 schedule:** The DeepSeek adaptor ships an off-peak window by
+default for `deepseek-chat`, `deepseek-reasoner`, `deepseek-v4-flash`, and
+`deepseek-v4-pro`, so no manual `model_configs` entry is needed. The base ratios are
+the peak (高峰) price; off-peak (平时) bills at 50% across input, cache-hit input, and
+output. DeepSeek's peak hours are `09:00–12:00` and `14:00–18:00` Asia/Shanghai, so the
+shipped window covers the complement (`18:00–09:00` crossing midnight, plus
+`12:00–14:00`). A channel `model_configs` entry for the same model overrides this
+default window.
+
 **Balance & Usage:** Additional readonly fields (visible in the table, not the form) track balance, last update time, and consumed quota.
 
 ## 4. Tooling Policy

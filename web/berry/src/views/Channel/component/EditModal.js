@@ -42,6 +42,8 @@ const icon = <CheckBoxOutlineBlankIcon fontSize="small" />;
 const checkedIcon = <CheckBoxIcon fontSize="small" />;
 
 const filter = createFilterOptions();
+const isClockHHMM = (value) => typeof value === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(value);
+
 const validationSchema = Yup.object().shape({
   is_edit: Yup.boolean(),
   name: Yup.string().required('名称 不能为空'),
@@ -125,6 +127,11 @@ const validationSchema = Yup.object().shape({
             }
             if (!Array.isArray(window.ranges) || window.ranges.length === 0) {
               return this.createError({ message: `Model "${modelName}" time window ${index + 1} ranges must be a non-empty array` });
+            }
+            for (const range of window.ranges) {
+              if (typeof range !== 'object' || range === null || !isClockHHMM(range.start) || !isClockHHMM(range.end)) {
+                return this.createError({ message: `Model "${modelName}" time window ${index + 1} ranges must use HH:MM strings` });
+              }
             }
             if (typeof window.overlay !== 'object' || window.overlay === null || Array.isArray(window.overlay)) {
               return this.createError({ message: `Model "${modelName}" time window ${index + 1} overlay must be an object` });
