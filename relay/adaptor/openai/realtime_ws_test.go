@@ -28,7 +28,9 @@ func newMockWSUpstream(t *testing.T, opts ...func(conn *websocket.Conn)) *httpte
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		conn, err := upgrader.Upgrade(w, r, nil)
 		if err != nil {
-			t.Logf("mock upstream upgrade error: %v", err)
+			// Do not log via t here: this handler runs on the httptest server
+			// goroutine and can outlive the test, so calling t.Log* would race
+			// with the test framework's teardown (testing.common state).
 			return
 		}
 		defer conn.Close()
@@ -135,14 +137,14 @@ func TestRealtimeHandler_EndToEnd(t *testing.T) {
 			ActualModelName: "gpt-4o-realtime-preview",
 		}
 
-		bizErr, usage := RealtimeHandler(c, meta)
-		if bizErr != nil {
-			t.Logf("RealtimeHandler error: %v", bizErr.Error.Message)
+		// Do not log via t inside this handler. The WebSocket connection is
+		// hijacked, so httptest.Server.Close() does not wait for this handler
+		// goroutine; it can outlive the test, and any t.Log* call after the
+		// test returns is a data race against the test framework's teardown.
+		// Behavior is asserted through the client connection below, so
+		// handler-side diagnostics are unnecessary.
+		if bizErr, _ := RealtimeHandler(c, meta); bizErr != nil {
 			return
-		}
-		if usage != nil {
-			t.Logf("Usage: prompt=%d, completion=%d, total=%d",
-				usage.PromptTokens, usage.CompletionTokens, usage.TotalTokens)
 		}
 	}))
 	defer realtimeServer.Close()
