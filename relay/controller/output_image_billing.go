@@ -100,7 +100,7 @@ func applyOutputImageCharges(c *gin.Context, usagePtr **relaymodel.Usage, meta *
 		*usagePtr = usage
 	}
 
-	imagePricing, ok := pricing.ResolveImagePricing(billingCtx.ModelName, billingCtx.ChannelModelConfigs, billingCtx.PricingAdaptor)
+	imagePricing, ok := pricing.ResolveImagePricing(billingCtx.ModelName, billingCtx.ChannelModelConfigs, billingCtx.PricingAdaptor, billingCtx.RequestTime)
 	if !ok || imagePricing == nil || imagePricing.PricePerImageUsd <= 0 {
 		if billingCtx.Logger != nil {
 			channelHasConfig := false

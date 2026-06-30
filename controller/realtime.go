@@ -73,14 +73,14 @@ func RelayRealtime(c *gin.Context) {
 
 	pricingAdaptor := resolveRealtimePricingAdaptor(relayMeta)
 	modelName := relayMeta.ActualModelName
-	modelRatio := pricing.GetModelRatioWithThreeLayers(modelName, channelModelRatio, pricingAdaptor)
+	modelRatio := pricing.ResolveModelRatioAt(modelName, channelModelConfigs, channelModelRatio, pricingAdaptor, relayMeta.StartTime)
 	groupRatio := c.GetFloat64(ctxkey.ChannelRatio)
 
 	// ── Step 2: Pre-consume quota ───────────────────────────────────────
 	// Estimate based on a short audio conversation.
 	// Use audio pricing when available (much higher than text), fall back to text.
 	preConsumedQuota := estimateRealtimePreConsumeQuota(
-		modelName, modelRatio, groupRatio, channelModelConfigs, pricingAdaptor)
+		modelName, modelRatio, groupRatio, channelModelConfigs, pricingAdaptor, relayMeta.StartTime)
 
 	// Check user quota before allowing the session
 	userQuota, err := model.CacheGetUserQuota(ctx, relayMeta.UserId)
@@ -215,7 +215,7 @@ func postConsumeRealtimeQuota(
 	// contain audio tokens that cost significantly more. Add the delta as a
 	// surcharge to usage.ToolsCost so it's included in the total quota.
 	applyRealtimeAudioSurcharge(usage, modelName, modelRatio, groupRatio,
-		channelModelRatio, channelModelConfigs, pricingAdaptor, lg)
+		channelModelRatio, channelModelConfigs, pricingAdaptor, lg, relayMeta.StartTime)
 
 	// ── Compute actual quota from usage ─────────────────────────────────
 	computeResult := quotautil.Compute(quotautil.ComputeInput{
@@ -227,6 +227,7 @@ func postConsumeRealtimeQuota(
 		ChannelModelConfigs:    channelModelConfigs,
 		ChannelCompletionRatio: channelCompletionRatio,
 		PricingAdaptor:         pricingAdaptor,
+		RequestTime:            relayMeta.StartTime,
 	})
 
 	totalQuota := computeResult.TotalQuota

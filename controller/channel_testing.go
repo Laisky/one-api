@@ -82,8 +82,8 @@ func calculateTestCost(usage *relaymodel.Usage, meta *meta.Meta, request *relaym
 
 	// Get model ratio and completion ratio using three-layer pricing system
 	pricingAdaptor := relay.GetAdaptor(meta.ChannelType)
-	modelRatio := pricing.GetModelRatioWithThreeLayers(request.Model, nil, pricingAdaptor)
-	completionRatio := pricing.GetCompletionRatioWithThreeLayers(request.Model, nil, pricingAdaptor)
+	modelRatio := pricing.ResolveModelRatioAt(request.Model, nil, nil, pricingAdaptor, meta.StartTime)
+	completionRatio := pricing.ResolveCompletionRatioAt(request.Model, nil, nil, pricingAdaptor, meta.StartTime)
 
 	// Use the same group ratio as set in the context (typically 1.0 for tests)
 	groupRatio := 1.0 // Default group ratio for tests

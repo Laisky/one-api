@@ -194,6 +194,7 @@ func estimatePreConsumedQuota(
 			ChannelModelConfigs:    channelModelConfigs,
 			ChannelCompletionRatio: channelCompletionRatio,
 			PricingAdaptor:         resolvePricingAdaptor(meta),
+			RequestTime:            meta.StartTime,
 		})
 		bufferQuota := int64(float64(config.PreConsumedQuota) * modelRatio * groupRatio)
 		return computeResult.TotalQuota + bufferQuota
@@ -292,6 +293,7 @@ func postConsumeQuota(ctx context.Context,
 		ChannelModelConfigs:    channelModelConfigs,
 		ChannelCompletionRatio: channelCompletionRatio,
 		PricingAdaptor:         pricingAdaptor,
+		RequestTime:            meta.StartTime,
 	})
 
 	quota = computeResult.TotalQuota
@@ -411,6 +413,7 @@ func postConsumeQuotaWithTraceID(ctx context.Context, traceId string,
 		ChannelModelConfigs:    channelModelConfigs,
 		ChannelCompletionRatio: channelCompletionRatio,
 		PricingAdaptor:         pricingAdaptor,
+		RequestTime:            meta.StartTime,
 	})
 
 	quota = computeResult.TotalQuota

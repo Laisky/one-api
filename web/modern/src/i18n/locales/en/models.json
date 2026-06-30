@@ -63,8 +63,22 @@
       "text_tokens": "Text Token Pricing",
       "tier_threshold": "Threshold",
       "tiered_pricing": "Tiered Pricing",
+      "time_pricing": "Time-of-day Pricing",
       "video": "Video",
-      "video_pricing": "Video Pricing"
+      "video_pricing": "Video Pricing",
+      "weekday_0": "Sun",
+      "weekday_1": "Mon",
+      "weekday_2": "Tue",
+      "weekday_3": "Wed",
+      "weekday_4": "Thu",
+      "weekday_5": "Fri",
+      "weekday_6": "Sat",
+      "window_active": "Active now",
+      "window_dates": "Dates",
+      "window_days": "Days",
+      "window_name": "Window",
+      "window_schedule": "Schedule",
+      "window_timezone": "Timezone"
     },
     "errors": {
       "fetch_failed": "Failed to fetch models"

@@ -63,8 +63,22 @@
       "text_tokens": "Precio de tokens de texto",
       "tier_threshold": "Umbral",
       "tiered_pricing": "Precios escalonados",
+      "time_pricing": "Precios por hora del día",
       "video": "Video",
-      "video_pricing": "Precios de video"
+      "video_pricing": "Precios de video",
+      "weekday_0": "Dom",
+      "weekday_1": "Lun",
+      "weekday_2": "Mar",
+      "weekday_3": "Mié",
+      "weekday_4": "Jue",
+      "weekday_5": "Vie",
+      "weekday_6": "Sáb",
+      "window_active": "Activo ahora",
+      "window_dates": "Fechas",
+      "window_days": "Días",
+      "window_name": "Ventana",
+      "window_schedule": "Horario",
+      "window_timezone": "Zona horaria"
     },
     "errors": {
       "fetch_failed": "Error al obtener modelos"

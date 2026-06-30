@@ -171,10 +171,12 @@ In Modern UI (`web/modern/src/pages/channels`), billing-relevant fields are:
      - `cache_write_5m_ratio`
      - `cache_write_1h_ratio`
      - `tiers`
+     - `time_windows`
      - `max_tokens`
      - `video` (`per_second_usd`, `base_resolution`, `resolution_multipliers`)
      - `audio` (`prompt_ratio`, `completion_ratio`, `prompt_tokens_per_second`, `completion_tokens_per_second`, `usd_per_second`)
      - `image` (`price_per_image_usd`, `prompt_ratio`, size/quality multipliers, min/max images, etc.)
+     - `embedding` (`text_token_ratio`, modality token ratios, direct USD-per-unit fields)
    - Example:
 
 ```json
@@ -211,6 +213,13 @@ Per-model object keys currently accepted/persisted by channel config (`model.Mod
   - `cached_input_ratio` (`number`, optional)
   - `cache_write_5m_ratio` (`number`, optional)
   - `cache_write_1h_ratio` (`number`, optional)
+- `time_windows` (`array`): ordered wall-clock pricing overlays evaluated at request start time before tiers.
+  - `name` (`string`, optional): display/audit label.
+  - `timezone` (`string`, optional): IANA timezone. Empty defaults to `UTC`; daylight-saving changes follow that zone's local wall clock.
+  - `ranges` (`array`, required): one or more `{ "start": "HH:MM", "end": "HH:MM" }` ranges. `end <= start` crosses midnight; equal start/end means all day.
+  - `days_of_week` (`array`, optional): `0` Sunday through `6` Saturday, evaluated in the window timezone.
+  - `date_from` / `date_to` (`YYYY-MM-DD`, optional): local calendar bounds; from is inclusive, to is exclusive.
+  - `overlay` (`object`, required): sparse pricing fields. Non-zero numeric fields override the base; zero inherits. Non-empty `tiers` replaces the base ladder. `overlay.time_windows` is rejected.
 - `max_tokens` (`integer`, `>=0`): optional model max token cap metadata.
 - `video` (`object`):
   - `per_second_usd` (`number`, `>=0`): base USD/sec equivalent metadata.
@@ -239,7 +248,7 @@ Validation behavior you should expect:
 - Negative numbers are rejected for pricing/count fields.
 - Empty model name is rejected.
 - A model config entry must contain at least one meaningful field.
-- Modern frontend currently requires at least one of `ratio`, `completion_ratio`, or `max_tokens` in each model object.
+- Modern frontend accepts pricing metadata, `max_tokens`, or a non-empty `time_windows` list in each model object; the backend performs final validation for timezone, date, and overlay semantics.
 
 Practical examples by modality:
 
@@ -485,6 +494,39 @@ Alternative pricing-endpoint payload example (narrow override only):
   }
 }
 ```
+
+DeepSeek-style off-peak example:
+
+```json
+{
+  "model_configs": {
+    "deepseek-reasoner": {
+      "ratio": 0.00000055,
+      "completion_ratio": 4.0,
+      "cached_input_ratio": 0.00000014,
+      "time_windows": [
+        {
+          "name": "deepseek-offpeak",
+          "timezone": "Asia/Shanghai",
+          "ranges": [{ "start": "00:30", "end": "08:30" }],
+          "overlay": {
+            "ratio": 0.0000001375,
+            "cached_input_ratio": 0.000000035
+          }
+        }
+      ]
+    }
+  }
+}
+```
+
+Window order is precedence: the first matching window wins. The selected overlay is merged into the model config, then tiered pricing is resolved. Streaming and realtime requests keep the rate selected by request start time.
+
+The DeepSeek adaptor ships this off-peak schedule by default for all V4 models
+(`deepseek-chat`, `deepseek-reasoner`, `deepseek-v4-flash`, `deepseek-v4-pro`): the
+base ratios are the peak (高峰) price and off-peak (平时) bills at 50%. Peak hours are
+`09:00–12:00` and `14:00–18:00` Asia/Shanghai; the shipped window covers the
+complement. A channel `model_configs` entry overrides the default for that channel.
 
 ### 3. Reconcile Request Cost by Request ID
 

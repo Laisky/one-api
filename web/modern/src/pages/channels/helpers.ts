@@ -225,6 +225,8 @@ export const sanitizeJsonField = (jsonString: string): string => {
   }
 };
 
+const isClockHHMM = (value: unknown): value is string => typeof value === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(value);
+
 // Enhanced model configs validation
 export const validateModelConfigs = (configStr: string) => {
   if (!configStr || configStr.trim() === '') {
@@ -281,8 +283,39 @@ export const validateModelConfigs = (configStr: string) => {
         }
       }
 
+      if (configObj.time_windows !== undefined) {
+        if (!Array.isArray(configObj.time_windows)) {
+          return { valid: false, error: `Invalid time_windows for model "${modelName}": must be an array` };
+        }
+        for (const [index, window] of configObj.time_windows.entries()) {
+          if (typeof window !== 'object' || window === null || Array.isArray(window)) {
+            return { valid: false, error: `Invalid time window ${index + 1} for model "${modelName}": must be an object` };
+          }
+          const windowObj = window as any;
+          if (!Array.isArray(windowObj.ranges) || windowObj.ranges.length === 0) {
+            return { valid: false, error: `Invalid time window ${index + 1} for model "${modelName}": ranges must be a non-empty array` };
+          }
+          for (const range of windowObj.ranges) {
+            if (
+              typeof range !== 'object' ||
+              range === null ||
+              !isClockHHMM((range as any).start) ||
+              !isClockHHMM((range as any).end)
+            ) {
+              return { valid: false, error: `Invalid time window ${index + 1} for model "${modelName}": ranges must use HH:MM strings` };
+            }
+          }
+          if (windowObj.overlay === undefined || typeof windowObj.overlay !== 'object' || windowObj.overlay === null || Array.isArray(windowObj.overlay)) {
+            return { valid: false, error: `Invalid time window ${index + 1} for model "${modelName}": overlay must be an object` };
+          }
+        }
+      }
+
       const hasPricingField =
-        configObj.ratio !== undefined || configObj.completion_ratio !== undefined || configObj.max_tokens !== undefined;
+        configObj.ratio !== undefined ||
+        configObj.completion_ratio !== undefined ||
+        configObj.max_tokens !== undefined ||
+        (Array.isArray(configObj.time_windows) && configObj.time_windows.length > 0);
       if (!hasPricingField) {
         return {
           valid: false,

@@ -126,11 +126,11 @@ func RelayAudioHelper(c *gin.Context, relayMode int) *relaymodel.ErrorWithStatus
 
 	// Use three-layer pricing system
 	pricingAdaptor := resolvePricingAdaptor(meta)
-	modelRatio := pricing.GetModelRatioWithThreeLayers(audioModel, channelModelRatio, pricingAdaptor)
+	modelRatio := pricing.ResolveModelRatioAt(audioModel, channelModelConfigs, channelModelRatio, pricingAdaptor, meta.StartTime)
 	groupRatio := c.GetFloat64(ctxkey.ChannelRatio)
 	ratio := modelRatio * groupRatio
 
-	audioPricingCfg, hasAudioPricing := pricing.ResolveAudioPricing(audioModel, channelModelConfigs, pricingAdaptor)
+	audioPricingCfg, hasAudioPricing := pricing.ResolveAudioPricing(audioModel, channelModelConfigs, pricingAdaptor, meta.StartTime)
 	tokensPerSecond := pricing.DefaultAudioPromptTokensPerSecond
 	if hasAudioPricing && audioPricingCfg != nil && audioPricingCfg.PromptTokensPerSecond > 0 {
 		tokensPerSecond = audioPricingCfg.PromptTokensPerSecond

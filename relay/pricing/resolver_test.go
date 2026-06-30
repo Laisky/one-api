@@ -3,6 +3,7 @@ package pricing
 import (
 	"encoding/json"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
@@ -31,7 +32,7 @@ func TestResolveImagePricing_ChannelConfigMissingImageFallback(t *testing.T) {
 		},
 	}
 
-	cfg, ok := ResolveImagePricing(modelName, channelConfigs, provider)
+	cfg, ok := ResolveImagePricing(modelName, channelConfigs, provider, time.Now())
 
 	require.True(t, ok, "expected resolver to return image pricing")
 	require.NotNil(t, cfg, "expected non-nil image pricing config")
@@ -61,7 +62,7 @@ func TestResolveAudioPricing_ChannelConfigMissingAudioFallback(t *testing.T) {
 		},
 	}
 
-	cfg, ok := ResolveAudioPricing(modelName, channelConfigs, provider)
+	cfg, ok := ResolveAudioPricing(modelName, channelConfigs, provider, time.Now())
 
 	require.True(t, ok, "expected resolver to return audio pricing")
 	require.NotNil(t, cfg, "expected non-nil audio pricing config")
@@ -119,7 +120,7 @@ func TestResolveModelConfig_ChannelOverridePreservesCacheAndTiers(t *testing.T) 
 	}`), &channelConfigs)
 	require.NoError(t, err)
 
-	cfg, ok := ResolveModelConfig(modelName, channelConfigs, nil)
+	cfg, ok := ResolveModelConfig(modelName, channelConfigs, nil, time.Now())
 	require.True(t, ok)
 	require.InDelta(t, 1.543, cfg.CachedInputRatio, 0.0000001)
 	require.InDelta(t, 1.543, cfg.CacheWrite5mRatio, 0.0000001)
@@ -154,7 +155,7 @@ func TestResolveModelConfig_ChannelOverrideSortsUnorderedTiers(t *testing.T) {
 	}`), &channelConfigs)
 	require.NoError(t, err)
 
-	cfg, ok := ResolveModelConfig(modelName, channelConfigs, nil)
+	cfg, ok := ResolveModelConfig(modelName, channelConfigs, nil, time.Now())
 	require.True(t, ok)
 	require.Len(t, cfg.Tiers, 2)
 	require.Equal(t, 1000, cfg.Tiers[0].InputTokenThreshold)

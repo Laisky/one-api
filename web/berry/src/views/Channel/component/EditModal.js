@@ -42,6 +42,8 @@ const icon = <CheckBoxOutlineBlankIcon fontSize="small" />;
 const checkedIcon = <CheckBoxIcon fontSize="small" />;
 
 const filter = createFilterOptions();
+const isClockHHMM = (value) => typeof value === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(value);
+
 const validationSchema = Yup.object().shape({
   is_edit: Yup.boolean(),
   name: Yup.string().required('名称 不能为空'),
@@ -115,8 +117,35 @@ const validationSchema = Yup.object().shape({
           }
         }
 
+        if (config.time_windows !== undefined) {
+          if (!Array.isArray(config.time_windows)) {
+            return this.createError({ message: `Model "${modelName}" time_windows must be an array` });
+          }
+          for (const [index, window] of config.time_windows.entries()) {
+            if (typeof window !== 'object' || window === null || Array.isArray(window)) {
+              return this.createError({ message: `Model "${modelName}" time window ${index + 1} must be an object` });
+            }
+            if (!Array.isArray(window.ranges) || window.ranges.length === 0) {
+              return this.createError({ message: `Model "${modelName}" time window ${index + 1} ranges must be a non-empty array` });
+            }
+            for (const range of window.ranges) {
+              if (typeof range !== 'object' || range === null || !isClockHHMM(range.start) || !isClockHHMM(range.end)) {
+                return this.createError({ message: `Model "${modelName}" time window ${index + 1} ranges must use HH:MM strings` });
+              }
+            }
+            if (typeof window.overlay !== 'object' || window.overlay === null || Array.isArray(window.overlay)) {
+              return this.createError({ message: `Model "${modelName}" time window ${index + 1} overlay must be an object` });
+            }
+          }
+        }
+
         // Check if at least one meaningful field is provided
-        if (config.ratio === undefined && config.completion_ratio === undefined && config.max_tokens === undefined) {
+        if (
+          config.ratio === undefined &&
+          config.completion_ratio === undefined &&
+          config.max_tokens === undefined &&
+          (!Array.isArray(config.time_windows) || config.time_windows.length === 0)
+        ) {
           return this.createError({ message: `模型"${modelName}"必须至少有一个配置字段（ratio、completion_ratio或max_tokens）` });
         }
       }

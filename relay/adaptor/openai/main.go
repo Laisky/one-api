@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/Laisky/errors/v2"
 	gmw "github.com/Laisky/gin-middlewares/v7"
@@ -861,7 +862,7 @@ func hasAudioTokens(response *SlimTextResponse) bool {
 // Helper function to calculate audio token usage
 func calculateAudioTokens(response *SlimTextResponse, modelName string) {
 	// Convert audio tokens for prompt
-	audioCfg, found := pricing.ResolveAudioPricing(modelName, nil, &Adaptor{})
+	audioCfg, found := pricing.ResolveAudioPricing(modelName, nil, &Adaptor{}, time.Time{})
 	promptRatio := pricing.DefaultAudioPromptRatio
 	completionRatio := pricing.DefaultAudioCompletionRatio
 	if found && audioCfg != nil {

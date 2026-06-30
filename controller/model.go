@@ -29,6 +29,7 @@ import (
 	"github.com/Laisky/one-api/relay/channeltype"
 	"github.com/Laisky/one-api/relay/meta"
 	relaymodel "github.com/Laisky/one-api/relay/model"
+	relaypricing "github.com/Laisky/one-api/relay/pricing"
 )
 
 // https://platform.openai.com/docs/api-reference/models/list
@@ -317,6 +318,40 @@ type ModelDisplayInfo struct {
 	ImagePricing              *ImageDisplayPricing     `json:"image_pricing,omitempty"`                 // Detailed image pricing with size/quality multipliers
 	EmbeddingPricing          *EmbeddingDisplayPricing `json:"embedding_pricing,omitempty"`             // Embedding pricing by modality
 	PerCallPricing            *PerCallDisplayPricing   `json:"per_call_pricing,omitempty"`              // Flat per-invocation pricing (mutually exclusive with token pricing)
+	TimeWindows               []TimeWindowDisplay      `json:"time_windows,omitempty"`                  // Time-of-day pricing windows
+	ActiveTimeWindow          string                   `json:"active_time_window,omitempty"`            // First active window name at display time
+}
+
+// TimeWindowDisplay represents one time-of-day pricing window for read-only model display.
+type TimeWindowDisplay struct {
+	Name       string                   `json:"name,omitempty"`         // Human-readable window label
+	TimeZone   string                   `json:"timezone,omitempty"`     // IANA timezone name
+	Ranges     []ClockRangeDisplay      `json:"ranges"`                 // Local wall-clock ranges
+	DaysOfWeek []int                    `json:"days_of_week,omitempty"` // Optional weekday filter, Sunday=0
+	DateFrom   string                   `json:"date_from,omitempty"`    // Inclusive local date bound
+	DateTo     string                   `json:"date_to,omitempty"`      // Exclusive local date bound
+	Overlay    TimeWindowOverlayDisplay `json:"overlay"`                // Sparse price overlay rendered for display
+}
+
+// ClockRangeDisplay represents one local wall-clock range in a display window.
+type ClockRangeDisplay struct {
+	Start string `json:"start"` // Inclusive local HH:MM start
+	End   string `json:"end"`   // Exclusive local HH:MM end
+}
+
+// TimeWindowOverlayDisplay represents the displayable pricing fields overridden by a window.
+type TimeWindowOverlayDisplay struct {
+	InputPrice        float64                  `json:"input_price,omitempty"`
+	CachedInputPrice  float64                  `json:"cached_input_price,omitempty"`
+	CacheWrite5mPrice float64                  `json:"cache_write_5m_price,omitempty"`
+	CacheWrite1hPrice float64                  `json:"cache_write_1h_price,omitempty"`
+	OutputPrice       float64                  `json:"output_price,omitempty"`
+	Tiers             []ModelDisplayTier       `json:"tiers,omitempty"`
+	VideoPricing      *VideoDisplayPricing     `json:"video_pricing,omitempty"`
+	AudioPricing      *AudioDisplayPricing     `json:"audio_pricing,omitempty"`
+	ImagePricing      *ImageDisplayPricing     `json:"image_pricing,omitempty"`
+	EmbeddingPricing  *EmbeddingDisplayPricing `json:"embedding_pricing,omitempty"`
+	PerCallPricing    *PerCallDisplayPricing   `json:"per_call_pricing,omitempty"`
 }
 
 // ModelDisplayTier represents a single tier in volume-based pricing
@@ -376,6 +411,293 @@ type EmbeddingDisplayPricing struct {
 	UsdPerAudioSecond  float64 `json:"usd_per_audio_second,omitempty"`  // Direct USD per audio second
 	UsdPerVideoFrame   float64 `json:"usd_per_video_frame,omitempty"`   // Direct USD per video frame
 	UsdPerDocumentPage float64 `json:"usd_per_document_page,omitempty"` // Direct USD per document page
+}
+
+// buildDisplayTiers converts ratio tiers into display prices.
+// Parameters: tiers is the pricing tier list, baseCompletionRatio is inherited by tiers with no completion override, and convertRatioToPrice converts quota ratios to USD per million tokens.
+// Returns: display-ready tier entries.
+func buildDisplayTiers(tiers []adaptorpkg.ModelRatioTier, baseCompletionRatio float64, convertRatioToPrice func(float64) float64) []ModelDisplayTier {
+	if len(tiers) == 0 {
+		return nil
+	}
+	display := make([]ModelDisplayTier, 0, len(tiers))
+	for _, tier := range tiers {
+		tierInput := convertRatioToPrice(tier.Ratio)
+		tierCompletionRatio := tier.CompletionRatio
+		if tierCompletionRatio == 0 {
+			tierCompletionRatio = baseCompletionRatio
+		}
+		dt := ModelDisplayTier{
+			InputPrice:          tierInput,
+			OutputPrice:         tierInput * tierCompletionRatio,
+			InputTokenThreshold: tier.InputTokenThreshold,
+		}
+		if tier.CachedInputRatio != 0 {
+			dt.CachedInputPrice = convertRatioToPrice(tier.CachedInputRatio)
+		}
+		if tier.CacheWrite5mRatio != 0 {
+			dt.CacheWrite5mPrice = convertRatioToPrice(tier.CacheWrite5mRatio)
+		}
+		if tier.CacheWrite1hRatio != 0 {
+			dt.CacheWrite1hPrice = convertRatioToPrice(tier.CacheWrite1hRatio)
+		}
+		display = append(display, dt)
+	}
+	return display
+}
+
+// buildVideoDisplayPricing converts video pricing into display data.
+// Parameters: cfg is the video pricing block.
+// Returns: display pricing, or nil when no data is present.
+func buildVideoDisplayPricing(cfg *adaptorpkg.VideoPricingConfig) *VideoDisplayPricing {
+	if cfg == nil || !cfg.HasData() {
+		return nil
+	}
+	return &VideoDisplayPricing{
+		PerSecondUsd:          cfg.PerSecondUsd,
+		BaseResolution:        cfg.BaseResolution,
+		ResolutionMultipliers: cfg.ResolutionMultipliers,
+	}
+}
+
+// buildAudioDisplayPricing converts audio pricing into display data.
+// Parameters: cfg is the audio pricing block.
+// Returns: display pricing, or nil when no data is present.
+func buildAudioDisplayPricing(cfg *adaptorpkg.AudioPricingConfig) *AudioDisplayPricing {
+	if cfg == nil || !cfg.HasData() {
+		return nil
+	}
+	return &AudioDisplayPricing{
+		PromptTokenRatio:          cfg.PromptRatio,
+		CompletionTokenRatio:      cfg.CompletionRatio,
+		PromptTokensPerSecond:     cfg.PromptTokensPerSecond,
+		CompletionTokensPerSecond: cfg.CompletionTokensPerSecond,
+		UsdPerSecond:              cfg.UsdPerSecond,
+	}
+}
+
+// buildEmbeddingDisplayPricing converts embedding pricing into display data.
+// Parameters: cfg is the embedding pricing block and convertRatioToPrice converts quota ratios to USD per million tokens.
+// Returns: display pricing, or nil when no data is present.
+func buildEmbeddingDisplayPricing(cfg *adaptorpkg.EmbeddingPricingConfig, convertRatioToPrice func(float64) float64) *EmbeddingDisplayPricing {
+	if cfg == nil || !cfg.HasData() {
+		return nil
+	}
+	return &EmbeddingDisplayPricing{
+		TextTokenPrice:     convertRatioToPrice(cfg.TextTokenRatio),
+		ImageTokenPrice:    convertRatioToPrice(cfg.ImageTokenRatio),
+		AudioTokenPrice:    convertRatioToPrice(cfg.AudioTokenRatio),
+		VideoTokenPrice:    convertRatioToPrice(cfg.VideoTokenRatio),
+		DocumentTokenPrice: convertRatioToPrice(cfg.DocumentTokenRatio),
+		UsdPerImage:        cfg.UsdPerImage,
+		UsdPerAudioSecond:  cfg.UsdPerAudioSecond,
+		UsdPerVideoFrame:   cfg.UsdPerVideoFrame,
+		UsdPerDocumentPage: cfg.UsdPerDocumentPage,
+	}
+}
+
+// buildPerCallDisplayPricing converts per-call pricing into display data.
+// Parameters: cfg is the per-call pricing block.
+// Returns: display pricing, or nil when no data is present.
+func buildPerCallDisplayPricing(cfg *adaptorpkg.PerCallPricingConfig) *PerCallDisplayPricing {
+	if cfg == nil || !cfg.HasData() {
+		return nil
+	}
+	return &PerCallDisplayPricing{
+		UsdPerThousandCalls: cfg.UsdPerThousandCalls,
+		UsdPerCall:          cfg.UsdPerThousandCalls / 1000.0,
+	}
+}
+
+// buildTimeWindowOverlayDisplay converts a sparse pricing overlay into display prices.
+// Parameters: overlay is the sparse pricing overlay, baseInputPrice and baseCompletionRatio provide inherited output context, and convertRatioToPrice converts quota ratios to USD per million tokens.
+// Returns: displayable sparse overlay prices.
+func buildTimeWindowOverlayDisplayWithBase(overlay adaptorpkg.ModelConfig, baseInputPrice float64, baseCompletionRatio float64, convertRatioToPrice func(float64) float64) TimeWindowOverlayDisplay {
+	display := TimeWindowOverlayDisplay{}
+	inputPrice := baseInputPrice
+	if overlay.Ratio != 0 {
+		display.InputPrice = convertRatioToPrice(overlay.Ratio)
+		inputPrice = display.InputPrice
+	}
+	if overlay.CachedInputRatio != 0 {
+		display.CachedInputPrice = convertRatioToPrice(overlay.CachedInputRatio)
+	}
+	if overlay.CacheWrite5mRatio != 0 {
+		display.CacheWrite5mPrice = convertRatioToPrice(overlay.CacheWrite5mRatio)
+	}
+	if overlay.CacheWrite1hRatio != 0 {
+		display.CacheWrite1hPrice = convertRatioToPrice(overlay.CacheWrite1hRatio)
+	}
+	if overlay.Ratio != 0 || overlay.CompletionRatio != 0 {
+		completionRatio := baseCompletionRatio
+		if overlay.CompletionRatio != 0 {
+			completionRatio = overlay.CompletionRatio
+		}
+		display.OutputPrice = inputPrice * completionRatio
+	}
+	display.Tiers = buildDisplayTiers(overlay.Tiers, baseCompletionRatio, convertRatioToPrice)
+	display.VideoPricing = buildVideoDisplayPricing(overlay.Video)
+	display.AudioPricing = buildAudioDisplayPricing(overlay.Audio)
+	display.ImagePricing = buildAdaptorImageDisplayPricing(overlay.Image)
+	display.EmbeddingPricing = buildEmbeddingDisplayPricing(overlay.Embedding, convertRatioToPrice)
+	display.PerCallPricing = buildPerCallDisplayPricing(overlay.PerCall)
+	return display
+}
+
+// buildAdaptorImageDisplayPricing converts adaptor image pricing into display data.
+// Parameters: cfg is the adaptor image pricing block.
+// Returns: display pricing, or nil when no data is present.
+func buildAdaptorImageDisplayPricing(cfg *adaptorpkg.ImagePricingConfig) *ImageDisplayPricing {
+	if cfg == nil || !cfg.HasData() {
+		return nil
+	}
+	dp := &ImageDisplayPricing{
+		PricePerImageUsd: cfg.PricePerImageUsd,
+		DefaultSize:      cfg.DefaultSize,
+		DefaultQuality:   cfg.DefaultQuality,
+		MinImages:        cfg.MinImages,
+		MaxImages:        cfg.MaxImages,
+	}
+	if len(cfg.SizeMultipliers) > 0 {
+		dp.SizeMultipliers = cfg.SizeMultipliers
+	}
+	if len(cfg.QualityMultipliers) > 0 {
+		dp.QualityMultipliers = cfg.QualityMultipliers
+	}
+	if len(cfg.QualitySizeMultipliers) > 0 {
+		dp.QualitySizeMultipliers = cfg.QualitySizeMultipliers
+	}
+	return dp
+}
+
+// buildTimeWindowDisplays converts time windows into display data and active-window metadata.
+// Parameters: windows is the ordered window list, baseInputPrice and baseCompletionRatio provide inherited output context, now is the display-time instant, and convertRatioToPrice converts quota ratios to USD per million tokens.
+// Returns: display windows and the first active window name.
+func buildTimeWindowDisplays(windows []adaptorpkg.TimeWindow, baseInputPrice float64, baseCompletionRatio float64, now time.Time, convertRatioToPrice func(float64) float64) ([]TimeWindowDisplay, string) {
+	if len(windows) == 0 {
+		return nil, ""
+	}
+	display := make([]TimeWindowDisplay, 0, len(windows))
+	active := ""
+	for _, window := range windows {
+		ranges := make([]ClockRangeDisplay, 0, len(window.Ranges))
+		for _, clockRange := range window.Ranges {
+			ranges = append(ranges, ClockRangeDisplay{Start: clockRange.Start, End: clockRange.End})
+		}
+		display = append(display, TimeWindowDisplay{
+			Name:       window.Name,
+			TimeZone:   window.TimeZone,
+			Ranges:     ranges,
+			DaysOfWeek: append([]int(nil), window.DaysOfWeek...),
+			DateFrom:   window.DateFrom,
+			DateTo:     window.DateTo,
+			Overlay:    buildTimeWindowOverlayDisplayWithBase(window.Overlay, baseInputPrice, baseCompletionRatio, convertRatioToPrice),
+		})
+		if active == "" && relaypricing.MatchTimeWindow(window, now) {
+			active = window.Name
+		}
+	}
+	return display, active
+}
+
+// convertLocalDisplayConfig converts channel-local pricing fields into adaptor-shaped display data.
+// Parameters: cfg is the channel-local pricing configuration.
+// Returns: an adaptor-shaped config for display rendering only.
+func convertLocalDisplayConfig(cfg model.ModelConfigLocal) adaptorpkg.ModelConfig {
+	converted := adaptorpkg.ModelConfig{
+		Ratio:             cfg.Ratio,
+		CompletionRatio:   cfg.CompletionRatio,
+		CachedInputRatio:  cfg.CachedInputRatio,
+		CacheWrite5mRatio: cfg.CacheWrite5mRatio,
+		CacheWrite1hRatio: cfg.CacheWrite1hRatio,
+		MaxTokens:         cfg.MaxTokens,
+	}
+	if len(cfg.Tiers) > 0 {
+		converted.Tiers = make([]adaptorpkg.ModelRatioTier, 0, len(cfg.Tiers))
+		for _, tier := range cfg.Tiers {
+			converted.Tiers = append(converted.Tiers, adaptorpkg.ModelRatioTier{
+				Ratio:               tier.Ratio,
+				CompletionRatio:     tier.CompletionRatio,
+				CachedInputRatio:    tier.CachedInputRatio,
+				CacheWrite5mRatio:   tier.CacheWrite5mRatio,
+				CacheWrite1hRatio:   tier.CacheWrite1hRatio,
+				InputTokenThreshold: tier.InputTokenThreshold,
+			})
+		}
+	}
+	if cfg.Video != nil {
+		converted.Video = &adaptorpkg.VideoPricingConfig{
+			PerSecondUsd:          cfg.Video.PerSecondUsd,
+			BaseResolution:        cfg.Video.BaseResolution,
+			ResolutionMultipliers: cfg.Video.ResolutionMultipliers,
+		}
+	}
+	if cfg.Audio != nil {
+		converted.Audio = &adaptorpkg.AudioPricingConfig{
+			PromptRatio:               cfg.Audio.PromptRatio,
+			CompletionRatio:           cfg.Audio.CompletionRatio,
+			PromptTokensPerSecond:     cfg.Audio.PromptTokensPerSecond,
+			CompletionTokensPerSecond: cfg.Audio.CompletionTokensPerSecond,
+			UsdPerSecond:              cfg.Audio.UsdPerSecond,
+		}
+	}
+	if cfg.Image != nil {
+		converted.Image = &adaptorpkg.ImagePricingConfig{
+			PricePerImageUsd:       cfg.Image.PricePerImageUsd,
+			PromptRatio:            cfg.Image.PromptRatio,
+			DefaultSize:            cfg.Image.DefaultSize,
+			DefaultQuality:         cfg.Image.DefaultQuality,
+			PromptTokenLimit:       cfg.Image.PromptTokenLimit,
+			MinImages:              cfg.Image.MinImages,
+			MaxImages:              cfg.Image.MaxImages,
+			SizeMultipliers:        cfg.Image.SizeMultipliers,
+			QualityMultipliers:     cfg.Image.QualityMultipliers,
+			QualitySizeMultipliers: cfg.Image.QualitySizeMultipliers,
+		}
+	}
+	if cfg.Embedding != nil {
+		converted.Embedding = &adaptorpkg.EmbeddingPricingConfig{
+			TextTokenRatio:     cfg.Embedding.TextTokenRatio,
+			ImageTokenRatio:    cfg.Embedding.ImageTokenRatio,
+			AudioTokenRatio:    cfg.Embedding.AudioTokenRatio,
+			VideoTokenRatio:    cfg.Embedding.VideoTokenRatio,
+			DocumentTokenRatio: cfg.Embedding.DocumentTokenRatio,
+			UsdPerImage:        cfg.Embedding.UsdPerImage,
+			UsdPerAudioSecond:  cfg.Embedding.UsdPerAudioSecond,
+			UsdPerVideoFrame:   cfg.Embedding.UsdPerVideoFrame,
+			UsdPerDocumentPage: cfg.Embedding.UsdPerDocumentPage,
+		}
+	}
+	if len(cfg.TimeWindows) > 0 {
+		converted.TimeWindows = convertLocalDisplayTimeWindows(cfg.TimeWindows)
+	}
+	return converted
+}
+
+// convertLocalDisplayTimeWindows converts channel-local time windows into adaptor-shaped display data.
+// Parameters: windows is the local ordered time-window list.
+// Returns: an adaptor-shaped ordered time-window list.
+func convertLocalDisplayTimeWindows(windows []model.TimeWindowLocal) []adaptorpkg.TimeWindow {
+	if len(windows) == 0 {
+		return nil
+	}
+	converted := make([]adaptorpkg.TimeWindow, 0, len(windows))
+	for _, window := range windows {
+		ranges := make([]adaptorpkg.ClockRange, 0, len(window.Ranges))
+		for _, clockRange := range window.Ranges {
+			ranges = append(ranges, adaptorpkg.ClockRange{Start: clockRange.Start, End: clockRange.End})
+		}
+		converted = append(converted, adaptorpkg.TimeWindow{
+			Name:       window.Name,
+			TimeZone:   window.TimeZone,
+			Ranges:     ranges,
+			DaysOfWeek: append([]int(nil), window.DaysOfWeek...),
+			DateFrom:   window.DateFrom,
+			DateTo:     window.DateTo,
+			Overlay:    convertLocalDisplayConfig(window.Overlay),
+		})
+	}
+	return converted
 }
 
 // mergeModelNamesWithOverrides merges explicit channel models with pricing override entries, removing duplicates.
@@ -710,8 +1032,9 @@ func GetModelsDisplay(c *gin.Context) {
 		m := &meta.Meta{ChannelType: channel.Type}
 		adaptor.Init(m)
 
-		pricing := adaptor.GetDefaultModelPricing()
+		defaultPricing := adaptor.GetDefaultModelPricing()
 		modelMapping := channel.GetModelMapping()
+		displayNow := time.Now()
 		getOverride := func(key string) (*model.ModelConfigLocal, bool) {
 			if overrides == nil {
 				return nil, false
@@ -766,6 +1089,8 @@ func GetModelsDisplay(c *gin.Context) {
 			var audioPricing *AudioDisplayPricing
 			var imagePricing *ImageDisplayPricing
 			var embeddingPricing *EmbeddingDisplayPricing
+			var timeWindows []TimeWindowDisplay
+			var activeTimeWindow string
 			baseCompletionRatio := 0.0
 			overrideApplied := false
 
@@ -820,7 +1145,8 @@ func GetModelsDisplay(c *gin.Context) {
 			}
 			_ = buildImageDisplayPricing // used below
 
-			if cfg, ok := pricing[actual]; ok {
+			if cfg, ok := defaultPricing[actual]; ok {
+				timeWindows, activeTimeWindow = buildTimeWindowDisplays(cfg.TimeWindows, convertRatioToPrice(cfg.Ratio), cfg.CompletionRatio, displayNow, convertRatioToPrice)
 				if cfg.Image != nil && cfg.Image.PricePerImageUsd > 0 && cfg.Ratio == 0 && cfg.CachedInputRatio <= 0 {
 					info := ModelDisplayInfo{
 						MaxTokens:                 cfg.MaxTokens,
@@ -840,6 +1166,8 @@ func GetModelsDisplay(c *gin.Context) {
 						InputPrice:                0,
 						CachedInputPrice:          0,
 						ImagePricing:              buildImageDisplayPricing(cfg.Image, cfg.Image),
+						TimeWindows:               timeWindows,
+						ActiveTimeWindow:          activeTimeWindow,
 					}
 					if filters.matchesModel(info) {
 						result[modelName] = info
@@ -868,6 +1196,8 @@ func GetModelsDisplay(c *gin.Context) {
 							UsdPerThousandCalls: cfg.PerCall.UsdPerThousandCalls,
 							UsdPerCall:          cfg.PerCall.UsdPerThousandCalls / 1000.0,
 						},
+						TimeWindows:      timeWindows,
+						ActiveTimeWindow: activeTimeWindow,
 					}
 					if filters.matchesModel(info) {
 						result[modelName] = info
@@ -1002,6 +1332,9 @@ func GetModelsDisplay(c *gin.Context) {
 				} else if cfg.CompletionRatio != 0 && inputPrice > 0 {
 					outputPrice = inputPrice * cfg.CompletionRatio
 				}
+				if cfg.CompletionRatio != 0 {
+					baseCompletionRatio = cfg.CompletionRatio
+				}
 				if cfg.CacheWrite5mRatio != 0 {
 					cacheWrite5mPrice = convertRatioToPrice(cfg.CacheWrite5mRatio)
 				}
@@ -1012,6 +1345,7 @@ func GetModelsDisplay(c *gin.Context) {
 					imagePrice = cfg.Image.PricePerImageUsd
 					imagePricing = buildImageDisplayPricing(nil, cfg.Image)
 				}
+				timeWindows, activeTimeWindow = buildTimeWindowDisplays(convertLocalDisplayTimeWindows(cfg.TimeWindows), inputPrice, baseCompletionRatio, displayNow, convertRatioToPrice)
 			}
 
 			if cfg, ok := getOverride(modelName); ok {
@@ -1050,6 +1384,8 @@ func GetModelsDisplay(c *gin.Context) {
 				AudioPricing:              audioPricing,
 				ImagePricing:              imagePricing,
 				EmbeddingPricing:          embeddingPricing,
+				TimeWindows:               timeWindows,
+				ActiveTimeWindow:          activeTimeWindow,
 			}
 			if !filters.matchesModel(info) {
 				continue

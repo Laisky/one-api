@@ -323,7 +323,7 @@ func RelayImageHelper(c *gin.Context, relayMode int) *relaymodel.ErrorWithStatus
 		return openai.ErrorWrapper(errors.Errorf("invalid api type: %d", meta.APIType), "invalid_api_type", http.StatusBadRequest)
 	}
 
-	imagePricingCfg, _ := pricing.ResolveImagePricing(imageRequest.Model, channelModelConfigs, adaptor)
+	imagePricingCfg, _ := pricing.ResolveImagePricing(imageRequest.Model, channelModelConfigs, adaptor, meta.StartTime)
 	applyImageDefaults(imageRequest, imagePricingCfg)
 
 	bizErr := validateImageRequest(imageRequest, meta, imagePricingCfg)
@@ -402,7 +402,7 @@ func RelayImageHelper(c *gin.Context, relayMode int) *relaymodel.ErrorWithStatus
 	// Resolve model ratio using unified three-layer pricing (channel overrides → adapter defaults → global fallback)
 	// IMPORTANT: Use APIType here (adaptor family), not ChannelType. ChannelType IDs do not map to adaptor switch.
 	pricingAdaptor := adaptor
-	modelRatio := pricing.GetModelRatioWithThreeLayers(imageModel, channelModelRatio, pricingAdaptor)
+	modelRatio := pricing.ResolveModelRatioAt(imageModel, channelModelConfigs, channelModelRatio, pricingAdaptor, meta.StartTime)
 	// groupRatio := billingratio.GetGroupRatio(meta.Group)
 	groupRatio := c.GetFloat64(ctxkey.ChannelRatio)
 

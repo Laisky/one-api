@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
@@ -53,7 +54,7 @@ func withDummyFFprobe(t *testing.T, duration string) func() {
 // Parameters: modelName is the target model name.
 // Returns: the configured tokens per second or the default when not configured.
 func getAudioTokensPerSecond(modelName string) float64 {
-	audioCfg, found := pricing.ResolveAudioPricing(modelName, nil, &Adaptor{})
+	audioCfg, found := pricing.ResolveAudioPricing(modelName, nil, &Adaptor{}, time.Now())
 	if found && audioCfg != nil && audioCfg.PromptTokensPerSecond > 0 {
 		return audioCfg.PromptTokensPerSecond
 	}

@@ -34,6 +34,7 @@ type QuotaTrackerParams struct {
 	ChannelModelConfigs    map[string]model.ModelConfigLocal
 	ChannelCompletionRatio map[string]float64
 	PricingAdaptor         adaptor.Adaptor
+	RequestTime            time.Time
 	FlushInterval          time.Duration
 	Logger                 *zap.Logger
 	Ctx                    context.Context
@@ -229,6 +230,7 @@ func (t *QuotaTracker) computeTargetQuotaLocked() int64 {
 		ChannelModelConfigs:    t.params.ChannelModelConfigs,
 		ChannelCompletionRatio: t.params.ChannelCompletionRatio,
 		PricingAdaptor:         t.params.PricingAdaptor,
+		RequestTime:            t.params.RequestTime,
 	})
 	target := max(result.TotalQuota-t.params.PreConsumedQuota, 0)
 	return target

@@ -136,6 +136,7 @@ func postConsumeResponseAPIQuota(ctx context.Context,
 		ChannelModelConfigs:    channelModelConfigs,
 		ChannelCompletionRatio: channelCompletionRatio,
 		PricingAdaptor:         pricingAdaptor,
+		RequestTime:            meta.StartTime,
 	})
 
 	quota = computeResult.TotalQuota
@@ -155,7 +156,7 @@ func postConsumeResponseAPIQuota(ctx context.Context,
 	}
 	usedCompletionRatio := computeResult.UsedCompletionRatio
 	if usedCompletionRatio == 0 {
-		usedCompletionRatio = pricing.GetCompletionRatioWithThreeLayers(responseAPIRequest.Model, channelCompletionRatio, pricingAdaptor)
+		usedCompletionRatio = pricing.ResolveCompletionRatioAt(responseAPIRequest.Model, channelModelConfigs, channelCompletionRatio, pricingAdaptor, meta.StartTime)
 	}
 
 	// Resolve request-scoped identifiers from the detached billing snapshot (or, for a

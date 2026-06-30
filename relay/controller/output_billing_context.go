@@ -1,6 +1,8 @@
 package controller
 
 import (
+	"time"
+
 	gmw "github.com/Laisky/gin-middlewares/v7"
 	glog "github.com/Laisky/go-utils/v6/log"
 	"github.com/Laisky/zap"
@@ -47,6 +49,7 @@ func outputBillingContextFromRequest(c *gin.Context, meta *metalib.Meta) (output
 		GroupRatio:          c.GetFloat64(ctxkey.ChannelRatio),
 		ModelName:           meta.ActualModelName,
 		PromptTokens:        meta.PromptTokens,
+		RequestTime:         meta.StartTime,
 	}, true
 }
 
@@ -59,4 +62,5 @@ type outputBillingContext struct {
 	GroupRatio          float64
 	ModelName           string
 	PromptTokens        int
+	RequestTime         time.Time
 }

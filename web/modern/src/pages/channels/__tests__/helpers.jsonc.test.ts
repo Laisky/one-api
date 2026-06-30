@@ -124,3 +124,55 @@ describe('validateToolingConfig with JSONC input', () => {
     expect(validateToolingConfig(input)).toEqual({ valid: true });
   });
 });
+
+describe('validateModelConfigs time_windows', () => {
+  it('accepts a model_configs entry carrying a time_windows overlay', () => {
+    const input = `{
+  "deepseek-v4-pro": {
+    "ratio": 0.0002175,
+    "completion_ratio": 2.0,
+    "cached_input_ratio": 0.0000018125,
+    "time_windows": [
+      {
+        "name": "deepseek-offpeak",
+        "timezone": "Asia/Shanghai",
+        "ranges": [{ "start": "18:00", "end": "09:00" }, { "start": "12:00", "end": "14:00" }],
+        "overlay": { "ratio": 0.00010875, "cached_input_ratio": 0.00000090625 }
+      }
+    ]
+  }
+}`;
+    expect(validateModelConfigs(input)).toEqual({ valid: true });
+  });
+
+  it('treats a windows-only entry as a valid pricing config', () => {
+    const input = `{
+  "m": {
+    "time_windows": [
+      { "ranges": [{ "start": "00:00", "end": "00:00" }], "overlay": { "ratio": 0.5 } }
+    ]
+  }
+}`;
+    expect(validateModelConfigs(input)).toEqual({ valid: true });
+  });
+
+  it('rejects a window whose ranges are missing or empty', () => {
+    const input = '{ "m": { "ratio": 1, "time_windows": [{ "overlay": { "ratio": 0.5 } }] } }';
+    expect(validateModelConfigs(input).valid).toBe(false);
+  });
+
+  it('rejects a range that is not an HH:MM string', () => {
+    const input = '{ "m": { "ratio": 1, "time_windows": [{ "ranges": [{ "start": "9", "end": "17:00" }], "overlay": { "ratio": 0.5 } }] } }';
+    expect(validateModelConfigs(input).valid).toBe(false);
+  });
+
+  it('rejects impossible HH:MM clock values', () => {
+    const input = '{ "m": { "ratio": 1, "time_windows": [{ "ranges": [{ "start": "24:00", "end": "99:99" }], "overlay": { "ratio": 0.5 } }] } }';
+    expect(validateModelConfigs(input).valid).toBe(false);
+  });
+
+  it('rejects a window without an overlay object', () => {
+    const input = '{ "m": { "ratio": 1, "time_windows": [{ "ranges": [{ "start": "09:00", "end": "17:00" }] }] } }';
+    expect(validateModelConfigs(input).valid).toBe(false);
+  });
+});
