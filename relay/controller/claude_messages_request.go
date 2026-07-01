@@ -43,10 +43,10 @@ func applyClaudeRequestRewriteFields(obj map[string]json.RawMessage, request *Cl
 		delete(obj, "top_k")
 	}
 
-	if anthropic.IsClaudeOpus47Model(request.Model) {
-		rewrittenThinking, changed, err := rewriteClaudeOpus47Thinking(obj["thinking"])
+	if anthropic.IsClaudeAdaptiveThinkingModel(request.Model) {
+		rewrittenThinking, changed, err := rewriteClaudeAdaptiveThinking(obj["thinking"])
 		if err != nil {
-			return errors.Wrap(err, "rewrite Claude Opus 4.7 thinking")
+			return errors.Wrap(err, "rewrite Claude adaptive thinking")
 		}
 		if changed {
 			if len(rewrittenThinking) == 0 {
@@ -60,9 +60,10 @@ func applyClaudeRequestRewriteFields(obj map[string]json.RawMessage, request *Cl
 	return nil
 }
 
-// rewriteClaudeOpus47Thinking normalizes a raw thinking object for Claude Opus 4.7.
+// rewriteClaudeAdaptiveThinking normalizes a raw thinking object for Claude models on the
+// adaptive-thinking-only profile (Opus 4.7/4.8, Sonnet 5, ...).
 // It preserves valid adaptive settings where possible, rewrites legacy manual thinking to adaptive, and returns whether the raw field changed.
-func rewriteClaudeOpus47Thinking(rawThinking json.RawMessage) (json.RawMessage, bool, error) {
+func rewriteClaudeAdaptiveThinking(rawThinking json.RawMessage) (json.RawMessage, bool, error) {
 	if len(rawThinking) == 0 {
 		return nil, false, nil
 	}
@@ -114,7 +115,7 @@ func rewriteClaudeOpus47Thinking(rawThinking json.RawMessage) (json.RawMessage, 
 //   - Key reordering within nested objects
 //
 // By using json.RawMessage, only the top-level fields we explicitly modify (model,
-// extra_body, temperature, top_p, top_k, and Opus 4.7 thinking) are re-encoded;
+// extra_body, temperature, top_p, top_k, and adaptive-thinking normalization) are re-encoded;
 // all other fields pass through byte-for-byte.
 func rewriteClaudeRequestBody(raw []byte, request *ClaudeMessagesRequest) ([]byte, error) {
 	if len(raw) == 0 || request == nil {

@@ -183,6 +183,10 @@ const claudeSupportsThinking = (modelName: string): boolean => {
     lowerName.includes('claude-opus-4-20250514') ||
     lowerName.includes('claude-sonnet-4-20250514') ||
     lowerName.includes('claude-3-7-sonnet-20250219') ||
+    // Claude 5-series flagships (Sonnet 5, Fable 5, Mythos 5) all support adaptive thinking.
+    lowerName.includes('claude-sonnet-5') ||
+    lowerName.includes('claude-fable-5') ||
+    lowerName.includes('claude-mythos-5') ||
     // More flexible patterns for model variations
     (lowerName.includes('claude') && lowerName.includes('opus') && lowerName.includes('4')) ||
     (lowerName.includes('claude') && lowerName.includes('sonnet') && lowerName.includes('4')) ||

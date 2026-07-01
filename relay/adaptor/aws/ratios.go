@@ -176,6 +176,16 @@ var awsBedrockModelPricing = map[string]adaptor.ModelConfig{
 		MaxReasoningTokens: 120000,
 		Description:        "Claude Sonnet 4.6 on AWS Bedrock with 1M-token context and extended thinking.",
 	},
+	"claude-sonnet-5": {
+		Ratio: 3 * ratio.MilliTokensUsd, CompletionRatio: 5.0,
+		CachedInputRatio: 0.3 * ratio.MilliTokensUsd, CacheWrite5mRatio: 3.75 * ratio.MilliTokensUsd, CacheWrite1hRatio: 6 * ratio.MilliTokensUsd,
+		ContextLength: 1000000, MaxOutputTokens: 128000,
+		InputModalities: awsClaudeVisionInputs, OutputModalities: awsTextOutputs,
+		SupportedFeatures: awsClaudeFeaturesWithReasoning, SupportedSamplingParameters: awsClaudeSamplingParams,
+		// Sonnet 5 is adaptive-thinking-only: budget_tokens is rejected upstream, so
+		// MaxReasoningTokens stays unset (matches first-party Sonnet 5 and AWS Opus 4.8).
+		Description: "Claude Sonnet 5 on AWS Bedrock with 1M-token context and adaptive thinking.",
+	},
 	"claude-3-opus-20240229": {
 		Ratio: 15 * ratio.MilliTokensUsd, CompletionRatio: 5.0,
 		CachedInputRatio: 1.5 * ratio.MilliTokensUsd, CacheWrite5mRatio: 18.75 * ratio.MilliTokensUsd, CacheWrite1hRatio: 30 * ratio.MilliTokensUsd,
@@ -269,7 +279,7 @@ var awsBedrockModelPricing = map[string]adaptor.ModelConfig{
 		ContextLength: 1000000, MaxOutputTokens: 128000,
 		InputModalities: awsClaudeVisionInputs, OutputModalities: awsTextOutputs,
 		SupportedFeatures: awsClaudeFeaturesWithReasoning, SupportedSamplingParameters: awsClaudeSamplingParams,
-		Description:       "Claude Fable 5 on AWS Bedrock with 1M-token context and frontier-level reasoning (adaptive thinking; budget_tokens not supported).",
+		Description: "Claude Fable 5 on AWS Bedrock with 1M-token context and frontier-level reasoning (adaptive thinking; budget_tokens not supported).",
 	},
 
 	// Llama Models on AWS Bedrock

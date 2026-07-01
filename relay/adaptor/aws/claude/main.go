@@ -53,6 +53,7 @@ var AwsModelIDMap = map[string]string{
 	"claude-sonnet-4-5":          "anthropic.claude-sonnet-4-5-20250929-v1:0",
 	"claude-sonnet-4-5-20250929": "anthropic.claude-sonnet-4-5-20250929-v1:0",
 	"claude-sonnet-4-6":          "anthropic.claude-sonnet-4-6",
+	"claude-sonnet-5":            "anthropic.claude-sonnet-5",
 	// opus
 	"claude-3-opus-20240229":   "anthropic.claude-3-opus-20240229-v1:0",
 	"claude-opus-4-0":          "anthropic.claude-opus-4-20250514-v1:0",

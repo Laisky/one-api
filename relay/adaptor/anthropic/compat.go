@@ -6,21 +6,23 @@ import (
 	"github.com/Laisky/one-api/relay/model"
 )
 
-// claudeAdaptiveOpusPrefixes enumerates Claude Opus model families that share the
+// claudeAdaptiveThinkingPrefixes enumerates Claude model families that share the
 // adaptive-thinking compatibility profile: temperature/top_p/top_k must be omitted
 // and any thinking block must be `{"type":"adaptive"}` without budget_tokens.
-// Starting with Opus 4.7 Anthropic froze this contract; later Opus releases inherit it.
-var claudeAdaptiveOpusPrefixes = []string{
+// Starting with Opus 4.7 Anthropic froze this contract; later releases inherit it
+// (Opus 4.8, Sonnet 5, ...).
+var claudeAdaptiveThinkingPrefixes = []string{
 	"claude-opus-4-7",
 	"claude-opus-4-8",
+	"claude-sonnet-5",
 }
 
-// IsClaudeOpus47Model reports whether modelName targets a Claude Opus release that
-// follows the Opus 4.7 adaptive-thinking compatibility profile (currently 4.7 and 4.8).
-// It normalizes whitespace and casing.
-func IsClaudeOpus47Model(modelName string) bool {
+// IsClaudeAdaptiveThinkingModel reports whether modelName targets a Claude release that
+// follows the Opus 4.7 adaptive-thinking compatibility profile (currently Opus 4.7/4.8
+// and Sonnet 5). It normalizes whitespace and casing.
+func IsClaudeAdaptiveThinkingModel(modelName string) bool {
 	normalized := strings.ToLower(strings.TrimSpace(modelName))
-	for _, prefix := range claudeAdaptiveOpusPrefixes {
+	for _, prefix := range claudeAdaptiveThinkingPrefixes {
 		if strings.HasPrefix(normalized, prefix) {
 			return true
 		}
@@ -35,7 +37,7 @@ func NormalizeModelCompatibility(modelName string, temperature **float64, topP *
 		*topP = nil
 	}
 
-	if !IsClaudeOpus47Model(modelName) {
+	if !IsClaudeAdaptiveThinkingModel(modelName) {
 		return
 	}
 

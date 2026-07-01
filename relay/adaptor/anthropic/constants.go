@@ -50,13 +50,14 @@ var (
 
 	// claudeSamplingParams lists the sampling parameters Claude chat completions accept.
 	claudeSamplingParams = []string{"temperature", "top_p", "top_k", "stop", "max_tokens"}
-	// claudeOpus47SamplingParams reflects the sampling profile Anthropic froze starting with
-	// Claude Opus 4.7: temperature/top_p/top_k are removed and only stop/max_tokens remain.
-	// Reused by later Opus models (4.8+) that inherit the same restriction.
+	// claudeAdaptiveOnlySamplingParams reflects the sampling profile Anthropic froze starting
+	// with Claude Opus 4.7: temperature/top_p/top_k are removed and only stop/max_tokens remain.
+	// Reused by every later adaptive-thinking-only model that inherits the same restriction
+	// (Opus 4.8, Sonnet 5, ...).
 	// Sources:
 	//   - https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-anthropic-claude-opus-4-7.html
-	//   - https://platform.claude.com/docs/en/about-claude/models/overview (Claude Opus 4.8)
-	claudeOpus47SamplingParams = []string{"stop", "max_tokens"}
+	//   - https://platform.claude.com/docs/en/about-claude/models/overview (Claude Opus 4.8, Sonnet 5)
+	claudeAdaptiveOnlySamplingParams = []string{"stop", "max_tokens"}
 )
 
 // ModelRatios contains all supported models and their pricing ratios.
@@ -139,7 +140,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		CachedInputRatio: 0.5 * ratio.MilliTokensUsd, CacheWrite5mRatio: 6.25 * ratio.MilliTokensUsd, CacheWrite1hRatio: 10 * ratio.MilliTokensUsd,
 		ContextLength: 1000000, MaxOutputTokens: 128000,
 		InputModalities: claudeVisionInputs, OutputModalities: claudeTextOutputs,
-		SupportedFeatures: claudeFeaturesWithReasoning, SupportedSamplingParameters: claudeOpus47SamplingParams,
+		SupportedFeatures: claudeFeaturesWithReasoning, SupportedSamplingParameters: claudeAdaptiveOnlySamplingParams,
 		Description: "Claude Opus 4.7 most capable Anthropic model with 1M-token context and adaptive thinking; temperature/top_p/top_k are unsupported.",
 	},
 	"claude-opus-4-8": {
@@ -147,7 +148,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		CachedInputRatio: 0.5 * ratio.MilliTokensUsd, CacheWrite5mRatio: 6.25 * ratio.MilliTokensUsd, CacheWrite1hRatio: 10 * ratio.MilliTokensUsd,
 		ContextLength: 1000000, MaxOutputTokens: 128000,
 		InputModalities: claudeVisionInputs, OutputModalities: claudeTextOutputs,
-		SupportedFeatures: claudeFeaturesWithReasoning, SupportedSamplingParameters: claudeOpus47SamplingParams,
+		SupportedFeatures: claudeFeaturesWithReasoning, SupportedSamplingParameters: claudeAdaptiveOnlySamplingParams,
 		Description: "Claude Opus 4.8 flagship Anthropic model with 1M-token context and adaptive thinking; temperature/top_p/top_k are unsupported. Replaces deprecated claude-opus-4-20250514.",
 	},
 	"claude-fable-5": {
@@ -156,7 +157,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		ContextLength: 1000000, MaxOutputTokens: 128000,
 		InputModalities: claudeVisionInputs, OutputModalities: claudeTextOutputs,
 		SupportedFeatures: claudeFeaturesWithReasoning, SupportedSamplingParameters: claudeSamplingParams,
-		Description:       "Claude Fable 5 flagship Anthropic model with 1M-token context and frontier-level reasoning (adaptive thinking; budget_tokens not supported).",
+		Description: "Claude Fable 5 flagship Anthropic model with 1M-token context and frontier-level reasoning (adaptive thinking; budget_tokens not supported).",
 	},
 	"claude-mythos-5": {
 		Ratio: 10 * ratio.MilliTokensUsd, CompletionRatio: 50.0 / 10,
@@ -164,7 +165,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		ContextLength: 1000000, MaxOutputTokens: 128000,
 		InputModalities: claudeVisionInputs, OutputModalities: claudeTextOutputs,
 		SupportedFeatures: claudeFeaturesWithReasoning, SupportedSamplingParameters: claudeSamplingParams,
-		Description:       "Claude Mythos 5 (limited availability via Project Glasswing) with 1M-token context and adaptive thinking (always on; budget_tokens not supported).",
+		Description: "Claude Mythos 5 (limited availability via Project Glasswing) with 1M-token context and adaptive thinking (always on; budget_tokens not supported).",
 	},
 
 	// Claude 4 Sonnet Models
@@ -212,6 +213,14 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		SupportedFeatures: claudeFeaturesWithReasoning, SupportedSamplingParameters: claudeSamplingParams,
 		MaxReasoningTokens: 60000,
 		Description:        "Claude Sonnet 4.6 with 1M-token context, extended and adaptive thinking.",
+	},
+	"claude-sonnet-5": {
+		Ratio: 3 * ratio.MilliTokensUsd, CompletionRatio: 5.0,
+		CachedInputRatio: 0.3 * ratio.MilliTokensUsd, CacheWrite5mRatio: 3.75 * ratio.MilliTokensUsd, CacheWrite1hRatio: 6 * ratio.MilliTokensUsd,
+		ContextLength: 1000000, MaxOutputTokens: 128000,
+		InputModalities: claudeVisionInputs, OutputModalities: claudeTextOutputs,
+		SupportedFeatures: claudeFeaturesWithReasoning, SupportedSamplingParameters: claudeAdaptiveOnlySamplingParams,
+		Description: "Claude Sonnet 5 balanced flagship with 1M-token context and adaptive thinking; temperature/top_p/top_k and budget_tokens are unsupported. Billed at standard $3/$15 per MTok (Anthropic's introductory $2/$10 promo runs through 2026-08-31).",
 	},
 
 	// Claude 4 Haiku Models

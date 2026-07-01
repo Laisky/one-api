@@ -717,6 +717,38 @@ func TestRewriteClaudeRequestBody_ClaudeOpus47DeletesUnsupportedFieldsAndRewrite
 	assert.False(t, hasBudgetTokens)
 }
 
+func TestRewriteClaudeRequestBody_ClaudeSonnet5DeletesUnsupportedFieldsAndRewritesThinking(t *testing.T) {
+	t.Parallel()
+
+	rawBody := `{"model":"claude-sonnet-5","max_tokens":2048,"temperature":0.5,"top_p":0.8,"top_k":32,"thinking":{"type":"enabled","budget_tokens":4096},"messages":[{"role":"user","content":"test"}]}`
+
+	request := &ClaudeMessagesRequest{
+		Model:     "claude-sonnet-5",
+		MaxTokens: 2048,
+		Thinking: &relaymodel.Thinking{
+			Type: "adaptive",
+		},
+	}
+
+	result, err := rewriteClaudeRequestBody([]byte(rawBody), request)
+	require.NoError(t, err)
+
+	var parsed map[string]json.RawMessage
+	require.NoError(t, json.Unmarshal(result, &parsed))
+	_, hasTemperature := parsed["temperature"]
+	assert.False(t, hasTemperature)
+	_, hasTopP := parsed["top_p"]
+	assert.False(t, hasTopP)
+	_, hasTopK := parsed["top_k"]
+	assert.False(t, hasTopK)
+
+	var thinking map[string]any
+	require.NoError(t, json.Unmarshal(parsed["thinking"], &thinking))
+	assert.Equal(t, "adaptive", thinking["type"])
+	_, hasBudgetTokens := thinking["budget_tokens"]
+	assert.False(t, hasBudgetTokens)
+}
+
 func TestStripClaudeThinkingFromAssistantHistory(t *testing.T) {
 	t.Parallel()
 

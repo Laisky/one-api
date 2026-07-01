@@ -41,8 +41,26 @@ func TestClaudeOpus48PricingMatchesPublishedRatios(t *testing.T) {
 	require.InDelta(t, 10.0*ratio.MilliTokensUsd, pricing.CacheWrite1hRatio, 1e-12)
 	require.EqualValues(t, 1000000, pricing.ContextLength)
 	require.EqualValues(t, 128000, pricing.MaxOutputTokens)
-	require.Equal(t, claudeOpus47SamplingParams, pricing.SupportedSamplingParameters,
+	require.Equal(t, claudeAdaptiveOnlySamplingParams, pricing.SupportedSamplingParameters,
 		"Opus 4.8 must inherit Opus 4.7's adaptive-only sampling restriction")
+}
+
+func TestClaudeSonnet5PricingMatchesPublishedRatios(t *testing.T) {
+	pricing, ok := ModelRatios["claude-sonnet-5"]
+	require.True(t, ok, "Claude Sonnet 5 pricing missing from Anthropic model ratios")
+	// Standard pricing is $3/$15 per MTok (the introductory $2/$10 promo through
+	// 2026-08-31 is intentionally not encoded to avoid under-billing afterwards).
+	require.InDelta(t, 3*ratio.MilliTokensUsd, pricing.Ratio, 1e-12)
+	require.InDelta(t, 5.0, pricing.CompletionRatio, 1e-12)
+	require.InDelta(t, 0.3*ratio.MilliTokensUsd, pricing.CachedInputRatio, 1e-12)
+	require.InDelta(t, 3.75*ratio.MilliTokensUsd, pricing.CacheWrite5mRatio, 1e-12)
+	require.InDelta(t, 6.0*ratio.MilliTokensUsd, pricing.CacheWrite1hRatio, 1e-12)
+	require.EqualValues(t, 1000000, pricing.ContextLength)
+	require.EqualValues(t, 128000, pricing.MaxOutputTokens)
+	// Sonnet 5 shares Opus 4.7+'s adaptive-only sampling surface: temperature/top_p/top_k
+	// and thinking.budget_tokens are rejected upstream, so MaxReasoningTokens stays unset.
+	require.Equal(t, claudeAdaptiveOnlySamplingParams, pricing.SupportedSamplingParameters)
+	require.EqualValues(t, 0, pricing.MaxReasoningTokens)
 }
 
 func TestClaudeFable5PricingMatchesPublishedRatios(t *testing.T) {
@@ -62,19 +80,23 @@ func TestClaudeFable5PricingMatchesPublishedRatios(t *testing.T) {
 	require.EqualValues(t, 0, pricing.MaxReasoningTokens)
 }
 
-func TestIsClaudeOpus47ModelCoversAdaptiveOpusVariants(t *testing.T) {
+func TestIsClaudeAdaptiveThinkingModelCoversAdaptiveVariants(t *testing.T) {
 	cases := map[string]bool{
 		"claude-opus-4-7":           true,
 		"Claude-Opus-4-7":           true,
 		"  claude-opus-4-7-future ": true,
 		"claude-opus-4-8":           true,
 		"claude-opus-4-8-fast":      true,
+		"claude-sonnet-5":           true,
+		"Claude-Sonnet-5":           true,
+		"  claude-sonnet-5-future ": true,
 		"claude-opus-4-6":           false,
 		"claude-opus-4-1":           false,
 		"claude-opus-4-5-20251101":  false,
+		"claude-sonnet-4-6":         false,
 		"":                          false,
 	}
 	for name, want := range cases {
-		require.Equalf(t, want, IsClaudeOpus47Model(name), "IsClaudeOpus47Model(%q)", name)
+		require.Equalf(t, want, IsClaudeAdaptiveThinkingModel(name), "IsClaudeAdaptiveThinkingModel(%q)", name)
 	}
 }

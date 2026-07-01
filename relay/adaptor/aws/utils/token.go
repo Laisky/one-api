@@ -459,6 +459,8 @@ func getAWSModelID(requestModel string) (string, error) {
 		return "anthropic.claude-3-5-haiku-20241022-v1:0", nil
 	case "claude-fable-5":
 		return "anthropic.claude-fable-5", nil
+	case "claude-sonnet-5":
+		return "anthropic.claude-sonnet-5", nil
 
 	// Llama models
 	case "llama3-1-8b-128k":

@@ -98,6 +98,12 @@ func TestConvertModelID2CrossRegionProfile(t *testing.T) {
 			expected: "global.anthropic.claude-sonnet-4-6",
 		},
 		{
+			name:     "Claude Sonnet 5 in us-east-1 uses global profile",
+			model:    "anthropic.claude-sonnet-5",
+			region:   "us-east-1",
+			expected: "global.anthropic.claude-sonnet-5",
+		},
+		{
 			name:     "Claude Fable 5 in us-east-1 uses global profile",
 			model:    "anthropic.claude-fable-5",
 			region:   "us-east-1",
