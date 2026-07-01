@@ -15,7 +15,6 @@ import (
 	billingratio "github.com/Laisky/one-api/relay/billing/ratio"
 	"github.com/Laisky/one-api/relay/meta"
 	"github.com/Laisky/one-api/relay/model"
-	"github.com/Laisky/one-api/relay/relaymode"
 )
 
 type Adaptor struct {
@@ -28,13 +27,7 @@ func (a *Adaptor) Init(meta *meta.Meta) {
 // https://docs.anthropic.com/claude/reference/messages_post
 // anthopic migrate to Message API
 func (a *Adaptor) GetRequestURL(meta *meta.Meta) (string, error) {
-	// Handle different relay modes for Anthropic
-	switch meta.Mode {
-	case relaymode.ClaudeMessages:
-		return fmt.Sprintf("%s/v1/messages", meta.BaseURL), nil
-	default:
-		return fmt.Sprintf("%s/v1/messages", meta.BaseURL), nil
-	}
+	return fmt.Sprintf("%s/v1/messages", meta.BaseURL), nil
 }
 
 func (a *Adaptor) SetupRequestHeader(c *gin.Context, req *http.Request, meta *meta.Meta) error {

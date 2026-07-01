@@ -60,6 +60,8 @@ func String(apiType int) string {
 		return "nvidia"
 	case Cerebras:
 		return "cerebras"
+	case Azure:
+		return "azure"
 	default:
 		return ""
 	}

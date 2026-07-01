@@ -1129,6 +1129,16 @@ export ANTHROPIC_AUTH_TOKEN="sk-xxxxxxx"
 
 You can use any model you like for Claude Code, even if the model doesn’t natively support the Claude Messages API.
 
+#### Support Azure AI Foundry Claude models
+
+[Azure AI Foundry](https://learn.microsoft.com/en-us/azure/foundry/foundry-models/how-to/use-foundry-models-claude) serves Anthropic Claude through the native Anthropic Messages API — there is no OpenAI-compatible route for Claude on Foundry. one-api's existing **Azure** channel handles this automatically: on an Azure channel, `claude-*` models are routed to the resource's `/anthropic/v1/messages` surface (with the `x-api-key` and `anthropic-version` headers and Anthropic pricing), while `gpt-*` deployments continue to use the Azure OpenAI surface. No separate channel type is required.
+
+To use it:
+
+1. Create an **Azure** channel and set the base URL to your resource endpoint, e.g. `https://<resource>.services.ai.azure.com` (no `/anthropic` or `/openai` suffix — one-api appends the correct path per model).
+2. Use the Azure resource key as the channel key (forwarded as `x-api-key`).
+3. Add the Claude models you deployed (e.g. `claude-sonnet-5`, `claude-opus-4-8`). Naming your Azure deployment to match the one-api model id lets both routing and default Anthropic pricing resolve automatically. If the deployment name differs, add a model mapping (`claude-* → your-deployment`); routing still works because it keys off the requested model, but you should then set a per-channel price for the deployment name so billing stays correct.
+
 ### Support Claude 4.x Models
 
 ![](https://s3.laisky.com/uploads/2025/09/claude-sonnet-4-5.png)

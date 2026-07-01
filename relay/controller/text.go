@@ -431,7 +431,7 @@ func getRequestBody(c *gin.Context, meta *metalib.Meta, textRequest *relaymodel.
 
 	if textRequest.ResponseFormat == nil &&
 		!config.EnforceIncludeUsage &&
-		meta.APIType == apitype.OpenAI &&
+		(meta.APIType == apitype.OpenAI || (meta.APIType == apitype.Azure && !meta.AzureTargetsAnthropic())) &&
 		meta.OriginModelName == meta.ActualModelName &&
 		meta.ChannelType != channeltype.OpenAI &&
 		meta.ChannelType != channeltype.Baichuan &&
@@ -475,7 +475,7 @@ func getRequestBody(c *gin.Context, meta *metalib.Meta, textRequest *relaymodel.
 	// When upstream expects the native OpenAI chat payload and we didn't rewrite the
 	// system prompt, merge unknown user fields (e.g. encrypted extensions) back into
 	// the converted JSON so we can preserve pass-through semantics.
-	if _, isChatPayload := convertedRequest.(*relaymodel.GeneralOpenAIRequest); isChatPayload && meta.APIType == apitype.OpenAI {
+	if _, isChatPayload := convertedRequest.(*relaymodel.GeneralOpenAIRequest); isChatPayload && (meta.APIType == apitype.OpenAI || meta.APIType == apitype.Azure) {
 		allowUnknown := meta.ChannelType == channeltype.OpenAI && !config.EnforceIncludeUsage && !systemPromptReset
 		if merged, stats, changed, mergeErr := mergeControlledPassthroughJSON(originalBody, jsonData, allowUnknown); mergeErr == nil {
 			jsonData = merged

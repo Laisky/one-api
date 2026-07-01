@@ -15,6 +15,23 @@ import (
 	"github.com/Laisky/one-api/relay/model"
 )
 
+// TestGetRequestURL covers the native Anthropic Messages surface: the base URL is
+// suffixed with /v1/messages regardless of channel (Azure's /anthropic prefix is
+// handled by the dedicated azure adaptor, not here).
+func TestGetRequestURL(t *testing.T) {
+	t.Parallel()
+
+	a := &Adaptor{}
+
+	got, err := a.GetRequestURL(&metalib.Meta{BaseURL: "https://api.anthropic.com"})
+	require.NoError(t, err)
+	require.Equal(t, "https://api.anthropic.com/v1/messages", got)
+
+	got, err = a.GetRequestURL(&metalib.Meta{BaseURL: "https://proxy.example.com"})
+	require.NoError(t, err)
+	require.Equal(t, "https://proxy.example.com/v1/messages", got)
+}
+
 func TestSetupRequestHeader_MergesBetaHeadersAndToolSearchBeta(t *testing.T) {
 	t.Parallel()
 	gin.SetMode(gin.TestMode)

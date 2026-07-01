@@ -61,7 +61,8 @@ export const CHANNEL_TYPES: ChannelType[] = [
     text: 'Azure',
     value: 3,
     color: 'olive',
-    description: 'Azure OpenAI deployments; requires resource endpoint and API version.',
+    description:
+      'Azure OpenAI deployments, plus Azure AI Foundry Claude models (claude-* auto-route to the native /anthropic Messages API); set the base URL to your resource endpoint.',
   },
   {
     key: 11,

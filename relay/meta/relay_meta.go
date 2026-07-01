@@ -14,6 +14,27 @@ import (
 	"github.com/Laisky/one-api/relay/relaymode"
 )
 
+// IsClaudeModelName reports whether the model name belongs to the Anthropic
+// Claude family (case-insensitive "claude" prefix). Used to route Claude models
+// on multi-surface channels (Azure AI Foundry) to Anthropic handling.
+func IsClaudeModelName(modelName string) bool {
+	return strings.HasPrefix(strings.ToLower(strings.TrimSpace(modelName)), "claude")
+}
+
+// AzureTargetsAnthropic reports whether this request targets an Anthropic Claude
+// model on an Azure AI Foundry channel. Azure AI Foundry serves OpenAI models via
+// the Azure OpenAI surface (/openai/deployments/...) but serves Claude models ONLY
+// via the native Anthropic Messages API (/anthropic/v1/messages) — there is no
+// OpenAI-compatible route for Claude on Foundry. The dedicated Azure adaptor
+// (relay/adaptor/azure) and the chat passthrough fast-path in the relay controller
+// dispatch on this predicate. It is scoped strictly to the Azure channel.
+func (m *Meta) AzureTargetsAnthropic() bool {
+	if m == nil || m.ChannelType != channeltype.Azure {
+		return false
+	}
+	return IsClaudeModelName(m.OriginModelName) || IsClaudeModelName(m.ActualModelName)
+}
+
 type Meta struct {
 	Mode         int
 	ChannelType  int

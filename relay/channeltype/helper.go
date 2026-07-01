@@ -5,6 +5,8 @@ import "github.com/Laisky/one-api/relay/apitype"
 func ToAPIType(channelType int) int {
 	apiType := apitype.OpenAI
 	switch channelType {
+	case Azure:
+		apiType = apitype.Azure
 	case Anthropic:
 		apiType = apitype.Anthropic
 	case ClaudeCompatible:
