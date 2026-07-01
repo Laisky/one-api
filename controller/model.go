@@ -100,6 +100,16 @@ func init() {
 		if i == apitype.AIProxyLibrary {
 			continue
 		}
+		// apitype.Azure's adaptor advertises the entire OpenAI catalog plus the
+		// Foundry Claude models, which are already emitted under apitype.OpenAI and
+		// apitype.Anthropic respectively. Skip it here to avoid duplicate rows (and
+		// the "openai"-owner mislabel from a non-Init'd adaptor). The Azure channel
+		// still lists both families via channelId2Models below and the DB-channel
+		// pass in listAllSupportedModels. Mirrors the channeltype.Azure skips in the
+		// CompatibleChannels loop below and in openrouter_provider.go.
+		if i == apitype.Azure {
+			continue
+		}
 		adaptor := relay.GetAdaptor(i)
 		if adaptor == nil {
 			continue
