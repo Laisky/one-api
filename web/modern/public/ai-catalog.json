@@ -1,0 +1,33 @@
+{
+  "schemaVersion": "1.0",
+  "name": "Laisky One API Agentic Resource Discovery Catalog",
+  "description": "Machine-readable entry points for agents integrating with oneapi.laisky.com.",
+  "url": "https://oneapi.laisky.com/.well-known/ai-catalog.json",
+  "resources": [
+    {
+      "type": "llms-txt",
+      "url": "https://oneapi.laisky.com/llms.txt",
+      "description": "Concise instructions for LLMs and autonomous coding agents."
+    },
+    {
+      "type": "openapi",
+      "url": "https://oneapi.laisky.com/openapi.json",
+      "description": "OpenAPI 3.1 description of public relay, discovery, and MCP endpoints."
+    },
+    {
+      "type": "agent-card",
+      "url": "https://oneapi.laisky.com/.well-known/agent-card.json",
+      "description": "A2A-style agent card for Laisky One API."
+    },
+    {
+      "type": "mcp-manifest",
+      "url": "https://oneapi.laisky.com/.well-known/mcp/manifest.json",
+      "description": "MCP Streamable HTTP proxy manifest."
+    },
+    {
+      "type": "api-catalog",
+      "url": "https://oneapi.laisky.com/.well-known/api-catalog",
+      "description": "Linkset catalog of API and agent discovery resources."
+    }
+  ]
+}

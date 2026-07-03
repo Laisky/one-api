@@ -1,0 +1,34 @@
+{
+  "schemaVersion": "1.0",
+  "name": "Laisky One API MCP Proxy",
+  "description": "Authenticated MCP Streamable HTTP proxy for the oneapi.laisky.com AI gateway. It exposes administrator-configured upstream MCP tools through One API relay keys.",
+  "version": "0.6",
+  "homepageUrl": "https://oneapi.laisky.com/",
+  "documentationUrl": "https://oneapi.laisky.com/llms.txt",
+  "server": {
+    "url": "https://oneapi.laisky.com/mcp",
+    "transport": "streamable-http",
+    "protocol": "mcp"
+  },
+  "authentication": {
+    "type": "bearer",
+    "header": "Authorization",
+    "description": "Use Authorization: Bearer <relay-api-key>."
+  },
+  "discovery": {
+    "agentCard": "https://oneapi.laisky.com/.well-known/agent-card.json",
+    "serverCard": "https://oneapi.laisky.com/.well-known/mcp/server-card.json",
+    "openapi": "https://oneapi.laisky.com/openapi.json",
+    "llmsTxt": "https://oneapi.laisky.com/llms.txt"
+  },
+  "capabilities": {
+    "tools": true,
+    "resources": false,
+    "prompts": false,
+    "streaming": true
+  },
+  "notes": [
+    "The available MCP tools depend on administrator-configured upstream MCP servers and relay-key permissions.",
+    "Relay keys are secrets and must not be logged, exposed in URLs, or included in prompts."
+  ]
+}
