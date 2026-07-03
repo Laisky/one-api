@@ -28,6 +28,16 @@
       "type": "api-catalog",
       "url": "https://oneapi.laisky.com/.well-known/api-catalog",
       "description": "Linkset catalog of API and agent discovery resources."
+    },
+    {
+      "type": "sandbox",
+      "url": "https://oneapi.laisky.com/sandbox",
+      "description": "Free no-key mock API endpoints for agent integration testing."
+    },
+    {
+      "type": "developer-resources",
+      "url": "https://oneapi.laisky.com/developer-resources",
+      "description": "Laisky One API developer resource hub."
     }
   ]
 }

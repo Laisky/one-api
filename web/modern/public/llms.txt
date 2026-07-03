@@ -39,6 +39,8 @@ Laisky One API accepts several AI API formats and routes them to configured upst
 - [Public MCP discovery endpoint](https://oneapi.laisky.com/.well-known/mcp)
 - [MCP server card](https://oneapi.laisky.com/.well-known/mcp/server-card.json)
 - [Agent ask endpoint](https://oneapi.laisky.com/ask)
+- [Free sandbox](https://oneapi.laisky.com/sandbox)
+- [Laisky developer resources](https://oneapi.laisky.com/developer-resources)
 - [Documentation llms.txt](https://oneapi.laisky.com/docs/llms.txt)
 - [API llms.txt](https://oneapi.laisky.com/api/llms.txt)
 - [Developer llms.txt](https://oneapi.laisky.com/developers/llms.txt)
@@ -46,6 +48,12 @@ Laisky One API accepts several AI API formats and routes them to configured upst
 ## When To Use This
 
 Use Laisky One API when an agent already speaks OpenAI Chat Completions, OpenAI Responses, Claude Messages, or MCP and needs one gateway for routing, quota, billing, logs, and model/provider selection. Do not use it as a public unauthenticated model endpoint; relay calls require a bearer relay API key.
+
+Use the free sandbox when an agent needs no-key mock responses for parser and integration tests:
+
+- `POST https://oneapi.laisky.com/sandbox/v1/chat/completions`
+- `POST https://oneapi.laisky.com/sandbox/v1/responses`
+- `POST https://oneapi.laisky.com/sandbox/v1/messages`
 
 ## Supported Task Types
 

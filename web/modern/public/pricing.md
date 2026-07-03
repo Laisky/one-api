@@ -2,6 +2,12 @@
 
 One API is open-source software. A hosted deployment may configure its own quota, channel ratios, group ratios, model pricing, and top-up policy.
 
+## Free Sandbox
+
+Laisky One API exposes a no-key sandbox at [https://oneapi.laisky.com/sandbox](https://oneapi.laisky.com/sandbox). Sandbox calls are free because they return static mock responses and do not call upstream model providers.
+
+Real provider calls require a relay API key and account quota.
+
 ## Quota Model
 
 - Usage is billed against user or token quota.

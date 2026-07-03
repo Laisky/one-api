@@ -20,4 +20,11 @@
   <url><loc>https://oneapi.laisky.com/.well-known/mcp/manifest.json</loc></url>
   <url><loc>https://oneapi.laisky.com/.well-known/mcp/server-card.json</loc></url>
   <url><loc>https://oneapi.laisky.com/schemamap.json</loc></url>
+  <url><loc>https://oneapi.laisky.com/sandbox</loc></url>
+  <url><loc>https://oneapi.laisky.com/sandbox.md</loc></url>
+  <url><loc>https://oneapi.laisky.com/developer-resources</loc></url>
+  <url><loc>https://oneapi.laisky.com/developer-resources.md</loc></url>
+  <url><loc>https://oneapi.laisky.com/laisky-developer-resources</loc></url>
+  <url><loc>https://oneapi.laisky.com/laisky-developer-resources.md</loc></url>
+  <url><loc>https://oneapi.laisky.com/ask</loc></url>
 </urlset>

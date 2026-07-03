@@ -128,6 +128,12 @@ func SetWebRouter(router *gin.Engine, buildFS embed.FS) {
 	router.GET("/api-reference", serveMarkdownFromBuild(buildFS, "api.md"))
 	router.GET("/ask", serveAgentAsk)
 	router.POST("/ask", serveAgentAsk)
+	router.GET("/sandbox", serveMarkdownFromBuild(buildFS, "sandbox.md"))
+	router.GET("/developer-resources", serveMarkdownFromBuild(buildFS, "developer-resources.md"))
+	router.GET("/laisky-developer-resources", serveMarkdownFromBuild(buildFS, "laisky-developer-resources.md"))
+	router.POST("/sandbox/v1/chat/completions", serveSandboxChatCompletion)
+	router.POST("/sandbox/v1/responses", serveSandboxResponse)
+	router.POST("/sandbox/v1/messages", serveSandboxClaudeMessage)
 
 	router.Use(static.Serve("/", common.EmbedFolder(buildFS, fmt.Sprintf("web/build/%s", config.Theme))))
 	router.NoRoute(func(c *gin.Context) {
@@ -319,6 +325,74 @@ func agentAskResponse(question string) gin.H {
 			"type":   "agent-discovery-answer",
 		},
 	}
+}
+
+// serveSandboxChatCompletion returns a mock Chat Completions response for
+// unauthenticated agent testing. Parameters: c carries the incoming request.
+// Return value: none; the function writes a static OpenAI-compatible response.
+func serveSandboxChatCompletion(c *gin.Context) {
+	c.JSON(http.StatusOK, gin.H{
+		"id":      "chatcmpl-sandbox",
+		"object":  "chat.completion",
+		"created": 1783036800,
+		"model":   "oneapi-sandbox",
+		"choices": []gin.H{
+			{
+				"index": 0,
+				"message": gin.H{
+					"role":    "assistant",
+					"content": "This is a mock Laisky One API sandbox response. Use authenticated /v1/chat/completions with a relay API key for real provider calls.",
+				},
+				"finish_reason": "stop",
+			},
+		},
+		"usage": gin.H{"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0},
+	})
+}
+
+// serveSandboxResponse returns a mock Responses API object for unauthenticated
+// agent testing. Parameters: c carries the incoming request. Return value: none;
+// the function writes a static Responses-compatible response.
+func serveSandboxResponse(c *gin.Context) {
+	c.JSON(http.StatusOK, gin.H{
+		"id":     "resp_sandbox",
+		"object": "response",
+		"model":  "oneapi-sandbox",
+		"output": []gin.H{
+			{
+				"type": "message",
+				"role": "assistant",
+				"content": []gin.H{
+					{
+						"type": "output_text",
+						"text": "This is a mock Laisky One API sandbox response. Use authenticated /v1/responses with a relay API key for real provider calls.",
+					},
+				},
+			},
+		},
+		"usage": gin.H{"input_tokens": 0, "output_tokens": 0, "total_tokens": 0},
+	})
+}
+
+// serveSandboxClaudeMessage returns a mock Claude Messages response for
+// unauthenticated agent testing. Parameters: c carries the incoming request.
+// Return value: none; the function writes a static Claude-compatible response.
+func serveSandboxClaudeMessage(c *gin.Context) {
+	c.JSON(http.StatusOK, gin.H{
+		"id":            "msg_sandbox",
+		"type":          "message",
+		"role":          "assistant",
+		"model":         "oneapi-sandbox",
+		"stop_reason":   "end_turn",
+		"stop_sequence": nil,
+		"content": []gin.H{
+			{
+				"type": "text",
+				"text": "This is a mock Laisky One API sandbox response. Use authenticated /v1/messages with a relay API key for real provider calls.",
+			},
+		},
+		"usage": gin.H{"input_tokens": 0, "output_tokens": 0},
+	})
 }
 
 // serveMarkdownFromBuild returns a handler that serves a markdown document from

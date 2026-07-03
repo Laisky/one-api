@@ -364,6 +364,54 @@
           "200": { "description": "Agent discovery answer.", "content": { "application/json": { "schema": { "type": "object", "additionalProperties": true } }, "text/event-stream": { "schema": { "type": "string" } } } }
         }
       }
+    },
+    "/sandbox/v1/chat/completions": {
+      "post": {
+        "operationId": "sandboxChatCompletion",
+        "tags": ["discovery", "chat-completions"],
+        "summary": "Create a mock Chat Completions sandbox response.",
+        "description": "Free no-key sandbox endpoint that returns a static OpenAI-compatible response and never calls upstream providers.",
+        "security": [],
+        "requestBody": {
+          "required": false,
+          "content": { "application/json": { "schema": { "type": "object", "additionalProperties": true } } }
+        },
+        "responses": {
+          "200": { "description": "Mock Chat Completions response.", "content": { "application/json": { "schema": { "type": "object", "additionalProperties": true } } } }
+        }
+      }
+    },
+    "/sandbox/v1/responses": {
+      "post": {
+        "operationId": "sandboxResponse",
+        "tags": ["discovery", "responses"],
+        "summary": "Create a mock Responses API sandbox response.",
+        "description": "Free no-key sandbox endpoint that returns a static Responses-compatible object and never calls upstream providers.",
+        "security": [],
+        "requestBody": {
+          "required": false,
+          "content": { "application/json": { "schema": { "type": "object", "additionalProperties": true } } }
+        },
+        "responses": {
+          "200": { "description": "Mock Responses API object.", "content": { "application/json": { "schema": { "type": "object", "additionalProperties": true } } } }
+        }
+      }
+    },
+    "/sandbox/v1/messages": {
+      "post": {
+        "operationId": "sandboxClaudeMessage",
+        "tags": ["discovery", "claude-messages"],
+        "summary": "Create a mock Claude Messages sandbox response.",
+        "description": "Free no-key sandbox endpoint that returns a static Claude-compatible message and never calls upstream providers.",
+        "security": [],
+        "requestBody": {
+          "required": false,
+          "content": { "application/json": { "schema": { "type": "object", "additionalProperties": true } } }
+        },
+        "responses": {
+          "200": { "description": "Mock Claude Messages object.", "content": { "application/json": { "schema": { "type": "object", "additionalProperties": true } } } }
+        }
+      }
     }
   },
   "components": {

@@ -10,6 +10,8 @@ Use this page when a crawler or autonomous integration agent requests `https://o
 - [Agentic resource catalog](https://oneapi.laisky.com/.well-known/ai-catalog.json)
 - [MCP manifest](https://oneapi.laisky.com/.well-known/mcp/manifest.json)
 - [Authentication guide](https://oneapi.laisky.com/auth.md)
+- [Free sandbox](https://oneapi.laisky.com/sandbox)
+- [Laisky developer resources](https://oneapi.laisky.com/developer-resources)
 
 ## Capabilities
 
