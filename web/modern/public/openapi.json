@@ -1,0 +1,471 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "One API",
+    "version": "0.6",
+    "summary": "Agent-friendly AI gateway API.",
+    "description": "One API exposes OpenAI Chat Completions, OpenAI Responses, Claude Messages, embeddings, images, audio, rerank, realtime, video, and MCP proxy endpoints through one gateway."
+  },
+  "servers": [
+    {
+      "url": "https://oneapi.laisky.com",
+      "description": "Production"
+    }
+  ],
+  "security": [
+    {
+      "relayApiKey": []
+    }
+  ],
+  "paths": {
+    "/v1/chat/completions": {
+      "post": {
+        "operationId": "createChatCompletion",
+        "summary": "Create a Chat Completions response.",
+        "description": "Accepts OpenAI Chat Completions-compatible requests and may route or convert them to configured upstream providers.",
+        "security": [{ "relayApiKey": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/ChatCompletionRequest" },
+              "examples": {
+                "basic": {
+                  "value": {
+                    "model": "gpt-4o-mini",
+                    "messages": [{ "role": "user", "content": "Hello" }],
+                    "stream": false
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Model response.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ChatCompletionResponse" }
+              },
+              "text/event-stream": {
+                "schema": { "type": "string" }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/Error" },
+          "401": { "$ref": "#/components/responses/Error" },
+          "429": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/v1/responses": {
+      "get": {
+        "operationId": "listResponses",
+        "summary": "Relay Responses API GET requests.",
+        "security": [{ "relayApiKey": [] }],
+        "responses": {
+          "200": { "description": "Provider response.", "content": { "application/json": { "schema": { "type": "object", "additionalProperties": true } } } },
+          "401": { "$ref": "#/components/responses/Error" }
+        }
+      },
+      "post": {
+        "operationId": "createResponse",
+        "summary": "Create a Responses API response.",
+        "description": "Accepts OpenAI Responses-compatible requests and routes them through the configured gateway.",
+        "security": [{ "relayApiKey": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/ResponseCreateRequest" },
+              "examples": {
+                "basic": {
+                  "value": {
+                    "model": "gpt-4o-mini",
+                    "input": "Write a short status update."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Responses API object.", "content": { "application/json": { "schema": { "type": "object", "additionalProperties": true } }, "text/event-stream": { "schema": { "type": "string" } } } },
+          "400": { "$ref": "#/components/responses/Error" },
+          "401": { "$ref": "#/components/responses/Error" },
+          "429": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/v1/responses/{response_id}": {
+      "get": {
+        "operationId": "getResponse",
+        "summary": "Retrieve a Responses API object.",
+        "security": [{ "relayApiKey": [] }],
+        "parameters": [{ "name": "response_id", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "responses": {
+          "200": { "description": "Responses API object.", "content": { "application/json": { "schema": { "type": "object", "additionalProperties": true } } } },
+          "401": { "$ref": "#/components/responses/Error" }
+        }
+      },
+      "delete": {
+        "operationId": "deleteResponse",
+        "summary": "Delete a Responses API object.",
+        "security": [{ "relayApiKey": [] }],
+        "parameters": [{ "name": "response_id", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "responses": {
+          "200": { "description": "Delete result.", "content": { "application/json": { "schema": { "type": "object", "additionalProperties": true } } } },
+          "401": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/v1/messages": {
+      "post": {
+        "operationId": "createClaudeMessage",
+        "summary": "Create a Claude Messages response.",
+        "description": "Accepts Claude Messages-compatible requests and may route or convert them to configured upstream providers.",
+        "security": [{ "relayApiKey": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/ClaudeMessagesRequest" },
+              "examples": {
+                "basic": {
+                  "value": {
+                    "model": "claude-3-5-sonnet",
+                    "max_tokens": 1024,
+                    "messages": [{ "role": "user", "content": "Hello" }]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Claude Messages response.", "content": { "application/json": { "schema": { "type": "object", "additionalProperties": true } }, "text/event-stream": { "schema": { "type": "string" } } } },
+          "400": { "$ref": "#/components/responses/Error" },
+          "401": { "$ref": "#/components/responses/Error" },
+          "429": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/v1/models": {
+      "get": {
+        "operationId": "listModels",
+        "summary": "List models available to the relay key.",
+        "security": [{ "relayApiKey": [] }],
+        "responses": {
+          "200": {
+            "description": "OpenAI-compatible model list.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ModelList" }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/v1/embeddings": {
+      "post": {
+        "operationId": "createEmbedding",
+        "summary": "Create embeddings.",
+        "security": [{ "relayApiKey": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/EmbeddingRequest" }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Embedding response.", "content": { "application/json": { "schema": { "type": "object", "additionalProperties": true } } } },
+          "401": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/v1/rerank": {
+      "post": {
+        "operationId": "rerankDocuments",
+        "summary": "Rerank documents for a query.",
+        "security": [{ "relayApiKey": [] }],
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "type": "object", "additionalProperties": true } } }
+        },
+        "responses": {
+          "200": { "description": "Rerank response.", "content": { "application/json": { "schema": { "type": "object", "additionalProperties": true } } } },
+          "401": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/mcp": {
+      "post": {
+        "operationId": "callMCP",
+        "summary": "Call the MCP Streamable HTTP endpoint.",
+        "description": "Authenticated JSON-RPC endpoint for configured MCP tools.",
+        "security": [{ "relayApiKey": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/JSONRPCRequest" }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "JSON-RPC response.", "content": { "application/json": { "schema": { "type": "object", "additionalProperties": true } }, "text/event-stream": { "schema": { "type": "string" } } } },
+          "401": { "$ref": "#/components/responses/Error" }
+        }
+      },
+      "get": {
+        "operationId": "openMCPSession",
+        "summary": "Open optional MCP server-sent event stream.",
+        "security": [{ "relayApiKey": [] }],
+        "responses": {
+          "200": { "description": "SSE stream.", "content": { "text/event-stream": { "schema": { "type": "string" } } } },
+          "401": { "$ref": "#/components/responses/Error" }
+        }
+      },
+      "delete": {
+        "operationId": "closeMCPSession",
+        "summary": "Close an MCP session.",
+        "security": [{ "relayApiKey": [] }],
+        "responses": {
+          "200": { "description": "Session closed.", "content": { "application/json": { "schema": { "type": "object", "additionalProperties": true } } } },
+          "401": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/api/status": {
+      "get": {
+        "operationId": "getStatus",
+        "summary": "Get public service status.",
+        "security": [],
+        "responses": {
+          "200": { "description": "Status response.", "content": { "application/json": { "schema": { "type": "object", "additionalProperties": true } } } }
+        }
+      }
+    },
+    "/api/models/display": {
+      "get": {
+        "operationId": "displayModels",
+        "summary": "List public model metadata for UI and agents.",
+        "security": [],
+        "responses": {
+          "200": { "description": "Model display data.", "content": { "application/json": { "schema": { "type": "object", "additionalProperties": true } } } }
+        }
+      }
+    },
+    "/api/tools/display": {
+      "get": {
+        "operationId": "displayTools",
+        "summary": "List public MCP tool metadata for UI and agents.",
+        "security": [],
+        "responses": {
+          "200": { "description": "Tool display data.", "content": { "application/json": { "schema": { "type": "object", "additionalProperties": true } } } }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "relayApiKey": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "Relay API key used for inference and MCP calls."
+      }
+    },
+    "responses": {
+      "Error": {
+        "description": "JSON error response.",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+          }
+        }
+      }
+    },
+    "schemas": {
+      "ChatCompletionRequest": {
+        "type": "object",
+        "required": ["model", "messages"],
+        "properties": {
+          "model": { "type": "string" },
+          "messages": { "type": "array", "items": { "$ref": "#/components/schemas/ChatMessage" } },
+          "stream": { "type": "boolean", "default": false },
+          "temperature": { "type": "number" },
+          "max_tokens": { "type": "integer", "minimum": 1 },
+          "tools": { "type": "array", "items": { "type": "object", "additionalProperties": true } }
+        },
+        "additionalProperties": true
+      },
+      "ChatMessage": {
+        "type": "object",
+        "required": ["role", "content"],
+        "properties": {
+          "role": { "type": "string", "enum": ["system", "user", "assistant", "tool"] },
+          "content": {
+            "oneOf": [
+              { "type": "string" },
+              { "type": "array", "items": { "type": "object", "additionalProperties": true } },
+              { "type": "null" }
+            ]
+          },
+          "tool_call_id": { "type": "string" },
+          "tool_calls": { "type": "array", "items": { "type": "object", "additionalProperties": true } }
+        },
+        "additionalProperties": true
+      },
+      "ChatCompletionResponse": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "object": { "type": "string" },
+          "created": { "type": "integer" },
+          "model": { "type": "string" },
+          "choices": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "index": { "type": "integer" },
+                "message": { "$ref": "#/components/schemas/ChatMessage" },
+                "finish_reason": { "type": ["string", "null"] }
+              },
+              "additionalProperties": true
+            }
+          },
+          "usage": { "type": "object", "additionalProperties": true }
+        },
+        "additionalProperties": true
+      },
+      "ResponseCreateRequest": {
+        "type": "object",
+        "required": ["model", "input"],
+        "properties": {
+          "model": { "type": "string" },
+          "input": {
+            "oneOf": [
+              { "type": "string" },
+              { "type": "array", "items": { "type": "object", "additionalProperties": true } }
+            ]
+          },
+          "instructions": { "type": "string" },
+          "stream": { "type": "boolean", "default": false },
+          "tools": { "type": "array", "items": { "type": "object", "additionalProperties": true } },
+          "max_output_tokens": { "type": "integer", "minimum": 1 }
+        },
+        "additionalProperties": true
+      },
+      "ClaudeMessagesRequest": {
+        "type": "object",
+        "required": ["model", "messages"],
+        "properties": {
+          "model": { "type": "string" },
+          "messages": { "type": "array", "items": { "$ref": "#/components/schemas/ClaudeMessage" } },
+          "system": {
+            "oneOf": [
+              { "type": "string" },
+              { "type": "array", "items": { "type": "object", "additionalProperties": true } }
+            ]
+          },
+          "max_tokens": { "type": "integer", "minimum": 1 },
+          "stream": { "type": "boolean", "default": false },
+          "tools": { "type": "array", "items": { "type": "object", "additionalProperties": true } }
+        },
+        "additionalProperties": true
+      },
+      "ClaudeMessage": {
+        "type": "object",
+        "required": ["role", "content"],
+        "properties": {
+          "role": { "type": "string", "enum": ["user", "assistant"] },
+          "content": {
+            "oneOf": [
+              { "type": "string" },
+              { "type": "array", "items": { "type": "object", "additionalProperties": true } }
+            ]
+          }
+        },
+        "additionalProperties": true
+      },
+      "EmbeddingRequest": {
+        "type": "object",
+        "required": ["model", "input"],
+        "properties": {
+          "model": { "type": "string" },
+          "input": {
+            "oneOf": [
+              { "type": "string" },
+              { "type": "array", "items": { "type": "string" } }
+            ]
+          },
+          "encoding_format": { "type": "string", "enum": ["float", "base64"] },
+          "dimensions": { "type": "integer", "minimum": 1 }
+        },
+        "additionalProperties": true
+      },
+      "ModelList": {
+        "type": "object",
+        "properties": {
+          "object": { "type": "string" },
+          "data": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": { "type": "string" },
+                "object": { "type": "string" },
+                "created": { "type": "integer" },
+                "owned_by": { "type": "string" }
+              },
+              "additionalProperties": true
+            }
+          }
+        },
+        "additionalProperties": true
+      },
+      "JSONRPCRequest": {
+        "type": "object",
+        "required": ["jsonrpc", "method"],
+        "properties": {
+          "jsonrpc": { "type": "string", "const": "2.0" },
+          "id": { "oneOf": [{ "type": "string" }, { "type": "integer" }, { "type": "null" }] },
+          "method": { "type": "string" },
+          "params": { "type": "object", "additionalProperties": true }
+        },
+        "additionalProperties": true
+      },
+      "ErrorResponse": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "object",
+            "properties": {
+              "message": { "type": "string" },
+              "type": { "type": "string" },
+              "param": { "type": ["string", "null"] },
+              "code": { "type": ["string", "null"] }
+            },
+            "additionalProperties": true
+          }
+        },
+        "additionalProperties": true
+      }
+    }
+  },
+  "x-agent-info": {
+    "llmsTxt": "https://oneapi.laisky.com/llms.txt",
+    "apiCatalog": "https://oneapi.laisky.com/.well-known/api-catalog",
+    "mcpServer": "https://oneapi.laisky.com/mcp",
+    "payment": {
+      "required": false,
+      "description": "Quota is charged to authenticated accounts or relay keys."
+    }
+  }
+}

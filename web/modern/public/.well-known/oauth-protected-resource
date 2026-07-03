@@ -1,0 +1,12 @@
+{
+  "resource": "https://oneapi.laisky.com/",
+  "bearer_methods_supported": ["header"],
+  "scopes_supported": [
+    "models:read",
+    "chat:write",
+    "responses:write",
+    "messages:write",
+    "mcp:call"
+  ],
+  "resource_documentation": "https://oneapi.laisky.com/auth.md"
+}

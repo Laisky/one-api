@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url><loc>https://oneapi.laisky.com/</loc></url>
+  <url><loc>https://oneapi.laisky.com/models</loc></url>
+  <url><loc>https://oneapi.laisky.com/tools</loc></url>
+  <url><loc>https://oneapi.laisky.com/status</loc></url>
+  <url><loc>https://oneapi.laisky.com/llms.txt</loc></url>
+  <url><loc>https://oneapi.laisky.com/agents.md</loc></url>
+  <url><loc>https://oneapi.laisky.com/openapi.json</loc></url>
+  <url><loc>https://oneapi.laisky.com/api.md</loc></url>
+  <url><loc>https://oneapi.laisky.com/auth.md</loc></url>
+  <url><loc>https://oneapi.laisky.com/pricing.md</loc></url>
+</urlset>

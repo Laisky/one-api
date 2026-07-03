@@ -3,7 +3,21 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="description" content="One API - Unified interface for multiple AI model providers" />
+    <meta
+      name="description"
+      content="One API is an agent-friendly AI gateway for OpenAI Chat Completions, OpenAI Responses, Claude Messages, MCP tools, and multi-provider model routing."
+    />
+    <meta property="og:title" content="One API - Agent-friendly AI gateway" />
+    <meta
+      property="og:description"
+      content="Unified API gateway for Chat Completions, Responses, Claude Messages, MCP tools, model routing, billing, and observability."
+    />
+    <link rel="canonical" href="https://oneapi.laisky.com/" />
+    <link rel="alternate" type="text/markdown" href="/index.md" />
+    <link rel="describedby" href="/llms.txt" />
+    <link rel="service-desc" type="application/vnd.oai.openapi+json" href="/openapi.json" />
+    <link rel="sitemap" type="application/xml" href="/sitemap.xml" />
+    <link rel="api-catalog" type="application/linkset+json" href="/.well-known/api-catalog" />
     <meta name="theme-color" content="hsl(192, 40%, 24%)" media="(prefers-color-scheme: light)" />
     <meta name="theme-color" content="hsl(186, 38%, 52%)" media="(prefers-color-scheme: dark)" />
     <link
@@ -12,9 +26,78 @@
       href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23334155'/%3E%3Ctext x='16' y='23' font-size='20' font-weight='bold' text-anchor='middle' fill='%2338bdf8'%3E1%3C/text%3E%3C/svg%3E"
     />
     <title>OneAPI</title>
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "SoftwareApplication",
+        "name": "One API",
+        "alternateName": ["one-api", "oneapi.laisky.com"],
+        "url": "https://oneapi.laisky.com/",
+        "applicationCategory": "DeveloperApplication",
+        "operatingSystem": "Web",
+        "description": "Agent-friendly AI gateway that accepts OpenAI Chat Completions, OpenAI Responses, and Claude Messages formats and converts requests across providers.",
+        "softwareVersion": "0.6",
+        "offers": {
+          "@type": "Offer",
+          "price": "0",
+          "priceCurrency": "USD",
+          "description": "Self-hosted open-source software; hosted usage requires an API key."
+        },
+        "featureList": [
+          "OpenAI Chat Completions-compatible /v1/chat/completions endpoint",
+          "OpenAI Responses-compatible /v1/responses endpoint",
+          "Claude Messages-compatible /v1/messages endpoint",
+          "MCP Streamable HTTP proxy at /mcp",
+          "OpenAPI specification at /openapi.json",
+          "Agent instructions at /llms.txt"
+        ],
+        "sameAs": ["https://github.com/Laisky/one-api"]
+      }
+    </script>
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "WebSite",
+        "name": "One API",
+        "url": "https://oneapi.laisky.com/",
+        "description": "Developer and agent entry point for One API.",
+        "potentialAction": {
+          "@type": "SearchAction",
+          "target": "https://oneapi.laisky.com/models?search={search_term_string}",
+          "query-input": "required name=search_term_string"
+        }
+      }
+    </script>
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "Organization",
+        "name": "One API",
+        "url": "https://oneapi.laisky.com/",
+        "logo": "https://oneapi.laisky.com/favicon.ico",
+        "description": "Open-source AI API gateway for multi-provider routing, billing, and format conversion.",
+        "sameAs": ["https://github.com/Laisky/one-api"]
+      }
+    </script>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <main>
+        <h1>One API</h1>
+        <p>
+          One API is an agent-friendly AI gateway for developers and autonomous tools. It exposes OpenAI Chat
+          Completions, OpenAI Responses, Claude Messages, embeddings, image, audio, rerank, realtime, video, and MCP
+          proxy endpoints through one operational control plane.
+        </p>
+        <h2>Agent entry points</h2>
+        <ul>
+          <li><a href="/llms.txt">/llms.txt</a> - concise instructions for LLMs and agents.</li>
+          <li><a href="/openapi.json">/openapi.json</a> - machine-readable API surface.</li>
+          <li><a href="/.well-known/api-catalog">/.well-known/api-catalog</a> - API catalog linkset.</li>
+          <li><a href="/agents.md">/agents.md</a> - task guidance for coding and integration agents.</li>
+        </ul>
+      </main>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

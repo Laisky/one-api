@@ -1,0 +1,33 @@
+{
+  "linkset": [
+    {
+      "anchor": "https://oneapi.laisky.com/",
+      "item": [
+        {
+          "href": "https://oneapi.laisky.com/openapi.json",
+          "rel": ["service-desc"],
+          "type": "application/vnd.oai.openapi+json",
+          "title": "One API OpenAPI description"
+        },
+        {
+          "href": "https://oneapi.laisky.com/llms.txt",
+          "rel": ["describedby"],
+          "type": "text/plain",
+          "title": "One API LLM instructions"
+        },
+        {
+          "href": "https://oneapi.laisky.com/sitemap.xml",
+          "rel": ["sitemap"],
+          "type": "application/xml",
+          "title": "One API sitemap"
+        },
+        {
+          "href": "https://oneapi.laisky.com/index.md",
+          "rel": ["alternate"],
+          "type": "text/markdown",
+          "title": "One API markdown overview"
+        }
+      ]
+    }
+  ]
+}
