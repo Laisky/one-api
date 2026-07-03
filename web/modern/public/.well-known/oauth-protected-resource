@@ -1,5 +1,6 @@
 {
   "resource": "https://oneapi.laisky.com/",
+  "authorization_servers": ["https://oneapi.laisky.com/.well-known/oauth-authorization-server"],
   "bearer_methods_supported": ["header"],
   "scopes_supported": [
     "models:read",

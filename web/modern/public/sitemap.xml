@@ -10,4 +10,14 @@
   <url><loc>https://oneapi.laisky.com/api.md</loc></url>
   <url><loc>https://oneapi.laisky.com/auth.md</loc></url>
   <url><loc>https://oneapi.laisky.com/pricing.md</loc></url>
+  <url><loc>https://oneapi.laisky.com/openapi.json.md</loc></url>
+  <url><loc>https://oneapi.laisky.com/docs/llms.txt</loc></url>
+  <url><loc>https://oneapi.laisky.com/api/llms.txt</loc></url>
+  <url><loc>https://oneapi.laisky.com/developers/llms.txt</loc></url>
+  <url><loc>https://oneapi.laisky.com/.well-known/ai-catalog.json</loc></url>
+  <url><loc>https://oneapi.laisky.com/.well-known/agent-card.json</loc></url>
+  <url><loc>https://oneapi.laisky.com/.well-known/agent-skills/index.json</loc></url>
+  <url><loc>https://oneapi.laisky.com/.well-known/mcp/manifest.json</loc></url>
+  <url><loc>https://oneapi.laisky.com/.well-known/mcp/server-card.json</loc></url>
+  <url><loc>https://oneapi.laisky.com/schemamap.json</loc></url>
 </urlset>

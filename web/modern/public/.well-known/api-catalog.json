@@ -26,6 +26,30 @@
           "rel": ["alternate"],
           "type": "text/markdown",
           "title": "One API markdown overview"
+        },
+        {
+          "href": "https://oneapi.laisky.com/.well-known/mcp/manifest.json",
+          "rel": ["service-desc"],
+          "type": "application/json",
+          "title": "Laisky One API MCP manifest"
+        },
+        {
+          "href": "https://oneapi.laisky.com/.well-known/mcp/server-card.json",
+          "rel": ["describedby"],
+          "type": "application/json",
+          "title": "One API MCP server card"
+        },
+        {
+          "href": "https://oneapi.laisky.com/.well-known/ai-catalog.json",
+          "rel": ["describedby"],
+          "type": "application/json",
+          "title": "Laisky One API agentic resource catalog"
+        },
+        {
+          "href": "https://oneapi.laisky.com/.well-known/agent-skills/index.json",
+          "rel": ["describedby"],
+          "type": "application/json",
+          "title": "Laisky One API agent skills index"
         }
       ]
     }

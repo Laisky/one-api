@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/Laisky/errors/v2"
@@ -73,6 +74,7 @@ func redisRateLimiter(c *gin.Context, maxRequestNum int, duration int64, mark st
 		// time.Since will return negative number!
 		// See: https://stackoverflow.com/questions/50970900/why-is-time-since-returning-negative-durations-on-windows
 		if int64(nowTime.Sub(oldTime).Seconds()) < duration {
+			setRateLimitExceededHeaders(c, maxRequestNum, duration-int64(nowTime.Sub(oldTime).Seconds()))
 			rdb.Expire(ctx, key, config.RateLimitKeyExpirationDuration)
 			AbortWithError(c, http.StatusTooManyRequests, errors.New("rate limit exceeded"))
 		} else {
@@ -100,9 +102,27 @@ func memoryRateLimiter(c *gin.Context, maxRequestNum int, duration int64, mark s
 	}
 
 	if !inMemoryRateLimiter.Request(key, maxRequestNum, duration) {
+		setRateLimitExceededHeaders(c, maxRequestNum, duration)
 		AbortWithError(c, http.StatusTooManyRequests, errors.New("rate limit exceeded"))
 		return
 	}
+}
+
+// setRateLimitExceededHeaders attaches standard rate-limit metadata for a
+// rejected request. Parameters: c is the Gin request context, maxRequestNum is
+// the request allowance for the window, and resetSeconds is the retry delay in
+// seconds. Return value: none; the function mutates response headers.
+func setRateLimitExceededHeaders(c *gin.Context, maxRequestNum int, resetSeconds int64) {
+	if resetSeconds < 1 {
+		resetSeconds = 1
+	}
+
+	limit := strconv.Itoa(maxRequestNum)
+	reset := strconv.FormatInt(resetSeconds, 10)
+	c.Header("RateLimit-Limit", limit)
+	c.Header("RateLimit-Remaining", "0")
+	c.Header("RateLimit-Reset", reset)
+	c.Header("Retry-After", reset)
 }
 
 func rateLimitFactory(maxRequestNum int, duration int64, mark string) func(c *gin.Context) {
@@ -239,6 +259,7 @@ func LowBalanceRelayRateLimit() func(c *gin.Context) {
 
 		if !allowed {
 			balanceUSD := float64(balance) / config.QuotaPerUnit
+			setRateLimitExceededHeaders(c, maxRequestNum, duration)
 			AbortWithError(c, http.StatusTooManyRequests, errors.Errorf(
 				"rate limit exceeded: your account balance ($%.4f) is below the $%.2f minimum, "+
 					"so a stricter limit of %d requests per %d seconds applies; "+

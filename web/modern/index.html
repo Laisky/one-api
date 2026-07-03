@@ -5,9 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta
       name="description"
-      content="One API is an agent-friendly AI gateway for OpenAI Chat Completions, OpenAI Responses, Claude Messages, MCP tools, and multi-provider model routing."
+      content="Laisky One API is the agent-friendly AI gateway at oneapi.laisky.com for OpenAI Chat Completions, OpenAI Responses, Claude Messages, MCP tools, and multi-provider model routing."
     />
-    <meta property="og:title" content="One API - Agent-friendly AI gateway" />
+    <meta property="og:title" content="Laisky One API - Agent-friendly AI gateway" />
+    <meta property="og:type" content="website" />
+    <meta property="og:image" content="https://oneapi.laisky.com/og-image.svg" />
     <meta
       property="og:description"
       content="Unified API gateway for Chat Completions, Responses, Claude Messages, MCP tools, model routing, billing, and observability."
@@ -16,8 +18,10 @@
     <link rel="alternate" type="text/markdown" href="/index.md" />
     <link rel="describedby" href="/llms.txt" />
     <link rel="service-desc" type="application/vnd.oai.openapi+json" href="/openapi.json" />
+    <link rel="service-desc" type="application/json" href="/.well-known/mcp/manifest.json" />
     <link rel="sitemap" type="application/xml" href="/sitemap.xml" />
     <link rel="api-catalog" type="application/linkset+json" href="/.well-known/api-catalog" />
+    <link rel="alternate" type="application/json" href="/.well-known/ai-catalog.json" />
     <meta name="theme-color" content="hsl(192, 40%, 24%)" media="(prefers-color-scheme: light)" />
     <meta name="theme-color" content="hsl(186, 38%, 52%)" media="(prefers-color-scheme: dark)" />
     <link
@@ -30,12 +34,12 @@
       {
         "@context": "https://schema.org",
         "@type": "SoftwareApplication",
-        "name": "One API",
-        "alternateName": ["one-api", "oneapi.laisky.com"],
+        "name": "Laisky One API",
+        "alternateName": ["One API", "one-api", "oneapi.laisky.com", "Laisky AI gateway"],
         "url": "https://oneapi.laisky.com/",
         "applicationCategory": "DeveloperApplication",
         "operatingSystem": "Web",
-        "description": "Agent-friendly AI gateway that accepts OpenAI Chat Completions, OpenAI Responses, and Claude Messages formats and converts requests across providers.",
+        "description": "Agent-friendly AI gateway at oneapi.laisky.com that accepts OpenAI Chat Completions, OpenAI Responses, and Claude Messages formats and converts requests across providers.",
         "softwareVersion": "0.6",
         "offers": {
           "@type": "Offer",
@@ -47,7 +51,7 @@
           "OpenAI Chat Completions-compatible /v1/chat/completions endpoint",
           "OpenAI Responses-compatible /v1/responses endpoint",
           "Claude Messages-compatible /v1/messages endpoint",
-          "MCP Streamable HTTP proxy at /mcp",
+          "MCP Streamable HTTP proxy at /mcp with manifest at /.well-known/mcp/manifest.json",
           "OpenAPI specification at /openapi.json",
           "Agent instructions at /llms.txt"
         ],
@@ -58,9 +62,9 @@
       {
         "@context": "https://schema.org",
         "@type": "WebSite",
-        "name": "One API",
+        "name": "Laisky One API",
         "url": "https://oneapi.laisky.com/",
-        "description": "Developer and agent entry point for One API.",
+        "description": "Developer and agent entry point for Laisky One API.",
         "potentialAction": {
           "@type": "SearchAction",
           "target": "https://oneapi.laisky.com/models?search={search_term_string}",
@@ -72,20 +76,83 @@
       {
         "@context": "https://schema.org",
         "@type": "Organization",
-        "name": "One API",
+        "name": "Laisky One API",
         "url": "https://oneapi.laisky.com/",
-        "logo": "https://oneapi.laisky.com/favicon.ico",
+        "logo": "https://oneapi.laisky.com/og-image.svg",
         "description": "Open-source AI API gateway for multi-provider routing, billing, and format conversion.",
+        "contactPoint": {
+          "@type": "ContactPoint",
+          "contactType": "technical support",
+          "url": "https://github.com/Laisky/one-api/issues"
+        },
         "sameAs": ["https://github.com/Laisky/one-api"]
+      }
+    </script>
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "FAQPage",
+        "mainEntity": [
+          {
+            "@type": "Question",
+            "name": "What is Laisky One API?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Laisky One API is an agent-friendly AI gateway at oneapi.laisky.com for OpenAI Chat Completions, OpenAI Responses, Claude Messages, MCP tools, and multi-provider routing."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "Which endpoints should agents use first?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Agents should start with /llms.txt, /openapi.json, /.well-known/api-catalog, /.well-known/ai-catalog.json, and /.well-known/mcp/manifest.json."
+            }
+          }
+        ]
+      }
+    </script>
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "Service",
+        "name": "Laisky One API AI Gateway",
+        "url": "https://oneapi.laisky.com/",
+        "provider": {
+          "@type": "Organization",
+          "name": "Laisky",
+          "url": "https://github.com/Laisky/one-api",
+          "contactPoint": {
+            "@type": "ContactPoint",
+            "contactType": "technical support",
+            "url": "https://github.com/Laisky/one-api/issues"
+          }
+        },
+        "areaServed": "Worldwide",
+        "serviceType": "AI API gateway"
+      }
+    </script>
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "BreadcrumbList",
+        "itemListElement": [
+          {
+            "@type": "ListItem",
+            "position": 1,
+            "name": "Laisky One API",
+            "item": "https://oneapi.laisky.com/"
+          }
+        ]
       }
     </script>
   </head>
   <body>
     <div id="root">
       <main>
-        <h1>One API</h1>
+        <h1>Laisky One API</h1>
         <p>
-          One API is an agent-friendly AI gateway for developers and autonomous tools. It exposes OpenAI Chat
+          Laisky One API is an agent-friendly AI gateway for developers and autonomous tools at oneapi.laisky.com. It exposes OpenAI Chat
           Completions, OpenAI Responses, Claude Messages, embeddings, image, audio, rerank, realtime, video, and MCP
           proxy endpoints through one operational control plane.
         </p>
@@ -94,6 +161,8 @@
           <li><a href="/llms.txt">/llms.txt</a> - concise instructions for LLMs and agents.</li>
           <li><a href="/openapi.json">/openapi.json</a> - machine-readable API surface.</li>
           <li><a href="/.well-known/api-catalog">/.well-known/api-catalog</a> - API catalog linkset.</li>
+          <li><a href="/.well-known/mcp/manifest.json">/.well-known/mcp/manifest.json</a> - MCP proxy manifest.</li>
+          <li><a href="/.well-known/ai-catalog.json">/.well-known/ai-catalog.json</a> - agentic resource catalog.</li>
           <li><a href="/agents.md">/agents.md</a> - task guidance for coding and integration agents.</li>
         </ul>
       </main>

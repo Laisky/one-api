@@ -20,7 +20,10 @@ const agentDiscoveryLinks = "<https://oneapi.laisky.com/llms.txt>; rel=\"describ
 	"<https://oneapi.laisky.com/index.md>; rel=\"alternate\"; type=\"text/markdown\", " +
 	"<https://oneapi.laisky.com/sitemap.xml>; rel=\"sitemap\"; type=\"application/xml\", " +
 	"<https://oneapi.laisky.com/openapi.json>; rel=\"service-desc\"; type=\"application/vnd.oai.openapi+json\", " +
-	"<https://oneapi.laisky.com/.well-known/api-catalog>; rel=\"api-catalog\"; type=\"application/linkset+json\""
+	"<https://oneapi.laisky.com/.well-known/api-catalog>; rel=\"api-catalog\"; type=\"application/linkset+json\", " +
+	"<https://oneapi.laisky.com/.well-known/ai-catalog.json>; rel=\"describedby\"; type=\"application/json\", " +
+	"<https://oneapi.laisky.com/.well-known/agent-card.json>; rel=\"describedby\"; type=\"application/json\", " +
+	"<https://oneapi.laisky.com/.well-known/mcp/manifest.json>; rel=\"service-desc\"; type=\"application/json\""
 
 // SetWebRouter registers static frontend assets and agent-readable discovery
 // endpoints. Parameters: router is the Gin engine and buildFS contains the
@@ -28,8 +31,16 @@ const agentDiscoveryLinks = "<https://oneapi.laisky.com/llms.txt>; rel=\"describ
 func SetWebRouter(router *gin.Engine, buildFS embed.FS) {
 	indexPageData, _ := buildFS.ReadFile(fmt.Sprintf("web/build/%s/index.html", config.Theme))
 	indexMarkdownData, _ := buildFS.ReadFile(fmt.Sprintf("web/build/%s/index.md", config.Theme))
+	agentModeData, _ := buildFS.ReadFile(fmt.Sprintf("web/build/%s/agent-mode.md", config.Theme))
 	apiCatalogData, _ := buildFS.ReadFile(fmt.Sprintf("web/build/%s/.well-known/api-catalog.json", config.Theme))
+	aiCatalogData, _ := buildFS.ReadFile(fmt.Sprintf("web/build/%s/.well-known/ai-catalog.json", config.Theme))
+	agentCardData, _ := buildFS.ReadFile(fmt.Sprintf("web/build/%s/.well-known/agent-card.json", config.Theme))
+	agentSkillsIndexData, _ := buildFS.ReadFile(fmt.Sprintf("web/build/%s/.well-known/agent-skills/index.json", config.Theme))
+	httpMessageSignaturesDirectoryData, _ := buildFS.ReadFile(fmt.Sprintf("web/build/%s/.well-known/http-message-signatures-directory", config.Theme))
+	mcpManifestData, _ := buildFS.ReadFile(fmt.Sprintf("web/build/%s/.well-known/mcp/manifest.json", config.Theme))
 	openAPIData, _ := buildFS.ReadFile(fmt.Sprintf("web/build/%s/openapi.json", config.Theme))
+	openAPIMarkdownData, _ := buildFS.ReadFile(fmt.Sprintf("web/build/%s/openapi.json.md", config.Theme))
+	oauthAuthorizationServerData, _ := buildFS.ReadFile(fmt.Sprintf("web/build/%s/.well-known/oauth-authorization-server", config.Theme))
 	oauthProtectedResourceData, _ := buildFS.ReadFile(fmt.Sprintf("web/build/%s/.well-known/oauth-protected-resource", config.Theme))
 	router.Use(gzip.Gzip(gzip.DefaultCompression))
 	router.Use(middleware.GlobalWebRateLimit())
@@ -37,6 +48,12 @@ func SetWebRouter(router *gin.Engine, buildFS embed.FS) {
 	router.Use(addAgentDiscoveryHeaders())
 
 	router.GET("/", func(c *gin.Context) {
+		if c.Query("mode") == "agent" && len(agentModeData) > 0 {
+			c.Header("Cache-Control", "no-cache")
+			c.Data(http.StatusOK, "text/markdown; charset=utf-8", agentModeData)
+			return
+		}
+
 		if wantsMarkdown(c) && len(indexMarkdownData) > 0 {
 			c.Header("Cache-Control", "no-cache")
 			c.Data(http.StatusOK, "text/markdown; charset=utf-8", indexMarkdownData)
@@ -55,12 +72,44 @@ func SetWebRouter(router *gin.Engine, buildFS embed.FS) {
 		c.Header("Cache-Control", "max-age=604800")
 		c.Data(http.StatusOK, "application/linkset+json; charset=utf-8", apiCatalogData)
 	})
+	router.GET("/.well-known/api-catalog.json", func(c *gin.Context) {
+		if len(apiCatalogData) == 0 {
+			c.AbortWithStatus(http.StatusNotFound)
+			return
+		}
+
+		c.Header("Cache-Control", "max-age=604800")
+		c.Data(http.StatusOK, "application/linkset+json; charset=utf-8", apiCatalogData)
+	})
+	router.GET("/.well-known/ai-catalog.json", servePreparedAgentData(aiCatalogData, "application/json; charset=utf-8"))
+	router.GET("/.well-known/agent-card.json", servePreparedAgentData(agentCardData, "application/json; charset=utf-8"))
+	router.GET(
+		"/.well-known/agent-skills/index.json",
+		servePreparedAgentData(agentSkillsIndexData, "application/json; charset=utf-8"),
+	)
+	router.GET(
+		"/.well-known/http-message-signatures-directory",
+		servePreparedAgentData(httpMessageSignaturesDirectoryData, "application/json; charset=utf-8"),
+	)
 	router.GET("/openapi.json", servePreparedAgentData(openAPIData, "application/vnd.oai.openapi+json; charset=utf-8"))
 	router.GET("/swagger.json", servePreparedAgentData(openAPIData, "application/vnd.oai.openapi+json; charset=utf-8"))
+	router.GET("/openapi.json.md", servePreparedAgentData(openAPIMarkdownData, "text/markdown; charset=utf-8"))
+	router.GET(
+		"/.well-known/mcp/manifest.json",
+		servePreparedAgentData(mcpManifestData, "application/json; charset=utf-8"),
+	)
+	router.GET("/.well-known/mcp", servePreparedAgentData(mcpManifestData, "application/json; charset=utf-8"))
+	router.GET(
+		"/.well-known/oauth-authorization-server",
+		servePreparedAgentData(oauthAuthorizationServerData, "application/json; charset=utf-8"),
+	)
 	router.GET(
 		"/.well-known/oauth-protected-resource",
 		servePreparedAgentData(oauthProtectedResourceData, "application/json; charset=utf-8"),
 	)
+	router.GET("/docs/llms.txt", serveFileFromBuild(buildFS, "docs/llms.txt", "text/plain; charset=utf-8"))
+	router.GET("/api/llms.txt", serveFileFromBuild(buildFS, "api/llms.txt", "text/plain; charset=utf-8"))
+	router.GET("/developers/llms.txt", serveFileFromBuild(buildFS, "developers/llms.txt", "text/plain; charset=utf-8"))
 	router.GET("/docs", serveMarkdownFromBuild(buildFS, "docs.md"))
 	router.GET("/developers", serveMarkdownFromBuild(buildFS, "developers.md"))
 	router.GET("/api-reference", serveMarkdownFromBuild(buildFS, "api.md"))
@@ -82,6 +131,7 @@ func SetWebRouter(router *gin.Engine, buildFS embed.FS) {
 func addAgentDiscoveryHeaders() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		c.Header("Link", agentDiscoveryLinks)
+		c.Header("Vary", "Accept, Accept-Encoding")
 		c.Next()
 	}
 }
@@ -91,6 +141,15 @@ func addAgentDiscoveryHeaders() gin.HandlerFunc {
 // filesystem and filename is relative to the theme build root. Return value: a
 // Gin handler that serves text/markdown or 404 when the file is absent.
 func serveMarkdownFromBuild(buildFS embed.FS, filename string) gin.HandlerFunc {
+	return serveFileFromBuild(buildFS, filename, "text/markdown; charset=utf-8")
+}
+
+// serveFileFromBuild returns a handler that serves a static document from the
+// selected embedded frontend build. Parameters: buildFS is the embedded
+// filesystem, filename is relative to the theme build root, and contentType is
+// the HTTP Content-Type value. Return value: a Gin handler that serves bytes or
+// 404 when the file is absent.
+func serveFileFromBuild(buildFS embed.FS, filename string, contentType string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		data, err := buildFS.ReadFile(fmt.Sprintf("web/build/%s/%s", config.Theme, filename))
 		if err != nil {
@@ -99,7 +158,7 @@ func serveMarkdownFromBuild(buildFS embed.FS, filename string) gin.HandlerFunc {
 		}
 
 		c.Header("Cache-Control", "max-age=604800")
-		c.Data(http.StatusOK, "text/markdown; charset=utf-8", data)
+		c.Data(http.StatusOK, contentType, data)
 	}
 }
 

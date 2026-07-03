@@ -1,10 +1,10 @@
 {
   "openapi": "3.1.0",
   "info": {
-    "title": "One API",
+    "title": "Laisky One API",
     "version": "0.6",
     "summary": "Agent-friendly AI gateway API.",
-    "description": "One API exposes OpenAI Chat Completions, OpenAI Responses, Claude Messages, embeddings, images, audio, rerank, realtime, video, and MCP proxy endpoints through one gateway."
+    "description": "Laisky One API exposes OpenAI Chat Completions, OpenAI Responses, Claude Messages, embeddings, images, audio, rerank, realtime, video, and MCP proxy endpoints through the oneapi.laisky.com gateway."
   },
   "servers": [
     {
@@ -17,10 +17,20 @@
       "relayApiKey": []
     }
   ],
+  "tags": [
+    { "name": "chat-completions", "description": "OpenAI Chat Completions-compatible relay endpoints." },
+    { "name": "responses", "description": "OpenAI Responses-compatible relay endpoints." },
+    { "name": "claude-messages", "description": "Claude Messages-compatible relay endpoints." },
+    { "name": "embeddings", "description": "Embedding vector relay endpoints." },
+    { "name": "rerank", "description": "Document reranking relay endpoints." },
+    { "name": "mcp", "description": "MCP Streamable HTTP proxy and tool discovery." },
+    { "name": "discovery", "description": "Public status, model, and agent-readable discovery endpoints." }
+  ],
   "paths": {
     "/v1/chat/completions": {
       "post": {
         "operationId": "createChatCompletion",
+        "tags": ["chat-completions"],
         "summary": "Create a Chat Completions response.",
         "description": "Accepts OpenAI Chat Completions-compatible requests and may route or convert them to configured upstream providers.",
         "security": [{ "relayApiKey": [] }],
@@ -62,6 +72,7 @@
     "/v1/responses": {
       "get": {
         "operationId": "listResponses",
+        "tags": ["responses"],
         "summary": "Relay Responses API GET requests.",
         "security": [{ "relayApiKey": [] }],
         "responses": {
@@ -71,6 +82,7 @@
       },
       "post": {
         "operationId": "createResponse",
+        "tags": ["responses"],
         "summary": "Create a Responses API response.",
         "description": "Accepts OpenAI Responses-compatible requests and routes them through the configured gateway.",
         "security": [{ "relayApiKey": [] }],
@@ -101,6 +113,7 @@
     "/v1/responses/{response_id}": {
       "get": {
         "operationId": "getResponse",
+        "tags": ["responses"],
         "summary": "Retrieve a Responses API object.",
         "security": [{ "relayApiKey": [] }],
         "parameters": [{ "name": "response_id", "in": "path", "required": true, "schema": { "type": "string" } }],
@@ -111,6 +124,7 @@
       },
       "delete": {
         "operationId": "deleteResponse",
+        "tags": ["responses"],
         "summary": "Delete a Responses API object.",
         "security": [{ "relayApiKey": [] }],
         "parameters": [{ "name": "response_id", "in": "path", "required": true, "schema": { "type": "string" } }],
@@ -123,6 +137,7 @@
     "/v1/messages": {
       "post": {
         "operationId": "createClaudeMessage",
+        "tags": ["claude-messages"],
         "summary": "Create a Claude Messages response.",
         "description": "Accepts Claude Messages-compatible requests and may route or convert them to configured upstream providers.",
         "security": [{ "relayApiKey": [] }],
@@ -154,6 +169,7 @@
     "/v1/models": {
       "get": {
         "operationId": "listModels",
+        "tags": ["discovery"],
         "summary": "List models available to the relay key.",
         "security": [{ "relayApiKey": [] }],
         "responses": {
@@ -172,6 +188,7 @@
     "/v1/embeddings": {
       "post": {
         "operationId": "createEmbedding",
+        "tags": ["embeddings"],
         "summary": "Create embeddings.",
         "security": [{ "relayApiKey": [] }],
         "requestBody": {
@@ -191,6 +208,7 @@
     "/v1/rerank": {
       "post": {
         "operationId": "rerankDocuments",
+        "tags": ["rerank"],
         "summary": "Rerank documents for a query.",
         "security": [{ "relayApiKey": [] }],
         "requestBody": {
@@ -206,6 +224,7 @@
     "/mcp": {
       "post": {
         "operationId": "callMCP",
+        "tags": ["mcp"],
         "summary": "Call the MCP Streamable HTTP endpoint.",
         "description": "Authenticated JSON-RPC endpoint for configured MCP tools.",
         "security": [{ "relayApiKey": [] }],
@@ -224,6 +243,7 @@
       },
       "get": {
         "operationId": "openMCPSession",
+        "tags": ["mcp"],
         "summary": "Open optional MCP server-sent event stream.",
         "security": [{ "relayApiKey": [] }],
         "responses": {
@@ -233,6 +253,7 @@
       },
       "delete": {
         "operationId": "closeMCPSession",
+        "tags": ["mcp"],
         "summary": "Close an MCP session.",
         "security": [{ "relayApiKey": [] }],
         "responses": {
@@ -244,6 +265,7 @@
     "/api/status": {
       "get": {
         "operationId": "getStatus",
+        "tags": ["discovery"],
         "summary": "Get public service status.",
         "security": [],
         "responses": {
@@ -254,6 +276,7 @@
     "/api/models/display": {
       "get": {
         "operationId": "displayModels",
+        "tags": ["discovery"],
         "summary": "List public model metadata for UI and agents.",
         "security": [],
         "responses": {
@@ -264,10 +287,30 @@
     "/api/tools/display": {
       "get": {
         "operationId": "displayTools",
+        "tags": ["discovery", "mcp"],
         "summary": "List public MCP tool metadata for UI and agents.",
         "security": [],
         "responses": {
           "200": { "description": "Tool display data.", "content": { "application/json": { "schema": { "type": "object", "additionalProperties": true } } } }
+        }
+      }
+    },
+    "/.well-known/mcp/manifest.json": {
+      "get": {
+        "operationId": "getMCPManifest",
+        "tags": ["discovery", "mcp"],
+        "summary": "Get the MCP proxy manifest.",
+        "description": "Returns a machine-readable manifest for the Laisky One API MCP Streamable HTTP proxy.",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "MCP proxy manifest.",
+            "content": {
+              "application/json": {
+                "schema": { "type": "object", "additionalProperties": true }
+              }
+            }
+          }
         }
       }
     }
@@ -459,9 +502,16 @@
       }
     }
   },
+  "externalDocs": {
+    "description": "Laisky One API developer and agent instructions.",
+    "url": "https://oneapi.laisky.com/llms.txt"
+  },
   "x-agent-info": {
     "llmsTxt": "https://oneapi.laisky.com/llms.txt",
     "apiCatalog": "https://oneapi.laisky.com/.well-known/api-catalog",
+    "agentCard": "https://oneapi.laisky.com/.well-known/agent-card.json",
+    "mcpManifest": "https://oneapi.laisky.com/.well-known/mcp/manifest.json",
+    "mcpServerCard": "https://oneapi.laisky.com/.well-known/mcp/server-card.json",
     "mcpServer": "https://oneapi.laisky.com/mcp",
     "payment": {
       "required": false,

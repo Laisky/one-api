@@ -28,5 +28,7 @@ Base URL: `https://oneapi.laisky.com`
 | `GET` | `/api/tools/display` | Public MCP tool catalog for UI and agents. |
 | `GET` | `/openapi.json` | OpenAPI description. |
 | `GET` | `/.well-known/api-catalog` | API catalog linkset. |
+| `GET` | `/.well-known/mcp/manifest.json` | MCP proxy manifest for agent and tool clients. |
+| `GET` | `/.well-known/mcp/server-card.json` | MCP proxy server card. |
 
 See `/openapi.json` for machine-readable schemas and examples.

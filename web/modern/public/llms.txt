@@ -1,8 +1,8 @@
-# One API
+# Laisky One API
 
-> Agent-friendly AI gateway for OpenAI Chat Completions, OpenAI Responses, Claude Messages, MCP tools, multi-provider routing, billing, and observability.
+> Agent-friendly AI gateway at oneapi.laisky.com for OpenAI Chat Completions, OpenAI Responses, Claude Messages, MCP tools, multi-provider routing, billing, and observability.
 
-One API accepts several AI API formats and routes them to configured upstream providers:
+Laisky One API accepts several AI API formats and routes them to configured upstream providers:
 
 - OpenAI Chat Completions: `POST https://oneapi.laisky.com/v1/chat/completions`
 - OpenAI Responses: `POST https://oneapi.laisky.com/v1/responses`
@@ -25,13 +25,25 @@ One API accepts several AI API formats and routes them to configured upstream pr
 
 ## Documentation
 
-- Overview: https://oneapi.laisky.com/index.md
-- API reference: https://oneapi.laisky.com/api.md
-- Authentication: https://oneapi.laisky.com/auth.md
-- Pricing and quota: https://oneapi.laisky.com/pricing.md
-- OpenAPI: https://oneapi.laisky.com/openapi.json
-- API catalog: https://oneapi.laisky.com/.well-known/api-catalog
-- Agent card: https://oneapi.laisky.com/.well-known/agent-card.json
+- [Overview](https://oneapi.laisky.com/index.md)
+- [API reference](https://oneapi.laisky.com/api.md)
+- [Authentication](https://oneapi.laisky.com/auth.md)
+- [Pricing and quota](https://oneapi.laisky.com/pricing.md)
+- [OpenAPI](https://oneapi.laisky.com/openapi.json)
+- [OpenAPI markdown fallback](https://oneapi.laisky.com/openapi.json.md)
+- [API catalog](https://oneapi.laisky.com/.well-known/api-catalog)
+- [Agentic resource catalog](https://oneapi.laisky.com/.well-known/ai-catalog.json)
+- [Agent card](https://oneapi.laisky.com/.well-known/agent-card.json)
+- [Agent skills index](https://oneapi.laisky.com/.well-known/agent-skills/index.json)
+- [MCP manifest](https://oneapi.laisky.com/.well-known/mcp/manifest.json)
+- [MCP server card](https://oneapi.laisky.com/.well-known/mcp/server-card.json)
+- [Documentation llms.txt](https://oneapi.laisky.com/docs/llms.txt)
+- [API llms.txt](https://oneapi.laisky.com/api/llms.txt)
+- [Developer llms.txt](https://oneapi.laisky.com/developers/llms.txt)
+
+## When To Use This
+
+Use Laisky One API when an agent already speaks OpenAI Chat Completions, OpenAI Responses, Claude Messages, or MCP and needs one gateway for routing, quota, billing, logs, and model/provider selection. Do not use it as a public unauthenticated model endpoint; relay calls require a bearer relay API key.
 
 ## Supported Task Types
 

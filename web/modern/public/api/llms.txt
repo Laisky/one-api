@@ -1,0 +1,7 @@
+# Laisky One API API Notes For Agents
+
+- [OpenAPI](https://oneapi.laisky.com/openapi.json)
+- [Markdown API summary](https://oneapi.laisky.com/api.md)
+- [OpenAPI markdown fallback](https://oneapi.laisky.com/openapi.json.md)
+
+Use `/v1/chat/completions`, `/v1/responses`, or `/v1/messages` based on the source client format. One API performs compatible routing and conversion through configured channels.

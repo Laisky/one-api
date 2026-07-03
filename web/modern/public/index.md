@@ -1,6 +1,6 @@
-# One API
+# Laisky One API
 
-One API is an agent-friendly AI gateway for OpenAI Chat Completions, OpenAI Responses, Claude Messages, MCP tools, and multi-provider model routing.
+Laisky One API is the agent-friendly AI gateway at `oneapi.laisky.com` for OpenAI Chat Completions, OpenAI Responses, Claude Messages, MCP tools, and multi-provider model routing.
 
 ## What It Does
 
@@ -19,4 +19,6 @@ One API is an agent-friendly AI gateway for OpenAI Chat Completions, OpenAI Resp
 - `/openapi.json`
 - `/.well-known/api-catalog`
 - `/.well-known/agent-card.json`
+- `/.well-known/mcp/manifest.json`
+- `/.well-known/mcp/server-card.json`
 - `/.well-known/agent-skills/index.json`

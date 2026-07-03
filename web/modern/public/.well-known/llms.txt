@@ -1,5 +1,5 @@
-# One API Well-Known LLM Instructions
+# Laisky One API Well-Known LLM Instructions
 
-Canonical instructions are available at https://oneapi.laisky.com/llms.txt.
+Canonical instructions are available at [https://oneapi.laisky.com/llms.txt](https://oneapi.laisky.com/llms.txt).
 
-Agents should use the OpenAPI spec at https://oneapi.laisky.com/openapi.json, authenticate `/v1/*` and `/mcp` calls with `Authorization: Bearer <relay-api-key>`, and avoid exposing relay API keys in logs, prompts, or URLs.
+Agents should use the [OpenAPI spec](https://oneapi.laisky.com/openapi.json), [agentic resource catalog](https://oneapi.laisky.com/.well-known/ai-catalog.json), and [MCP manifest](https://oneapi.laisky.com/.well-known/mcp/manifest.json). Authenticate `/v1/*` and `/mcp` calls with `Authorization: Bearer <relay-api-key>`, and avoid exposing relay API keys in logs, prompts, or URLs.

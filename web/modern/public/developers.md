@@ -1,6 +1,6 @@
-# One API Developers
+# Laisky One API Developers
 
-Developers and agents can integrate with One API using OpenAI-compatible, Claude-compatible, and MCP-compatible clients.
+Developers and agents can integrate with Laisky One API at `oneapi.laisky.com` using OpenAI-compatible, Claude-compatible, and MCP-compatible clients.
 
 ## Quick Start
 
@@ -15,3 +15,5 @@ Developers and agents can integrate with One API using OpenAI-compatible, Claude
 - `/llms.txt`
 - `/.well-known/api-catalog`
 - `/.well-known/agent-card.json`
+- `/.well-known/mcp/manifest.json`
+- `/.well-known/mcp/server-card.json`

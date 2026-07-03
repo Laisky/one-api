@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" role="img" aria-labelledby="title desc">
+  <title id="title">Laisky One API</title>
+  <desc id="desc">Agent-friendly AI gateway for Chat Completions, Responses, Claude Messages, and MCP.</desc>
+  <rect width="1200" height="630" fill="#f8fafc"/>
+  <rect x="72" y="72" width="1056" height="486" rx="28" fill="#0f766e"/>
+  <circle cx="988" cy="174" r="82" fill="#facc15"/>
+  <circle cx="234" cy="456" r="56" fill="#fb7185"/>
+  <text x="132" y="230" font-family="Inter, Arial, sans-serif" font-size="82" font-weight="700" fill="#ffffff">Laisky One API</text>
+  <text x="132" y="326" font-family="Inter, Arial, sans-serif" font-size="40" fill="#ccfbf1">Agent-friendly AI gateway</text>
+  <text x="132" y="402" font-family="Inter, Arial, sans-serif" font-size="30" fill="#ffffff">Chat Completions · Responses · Claude Messages · MCP</text>
+  <text x="132" y="486" font-family="Inter, Arial, sans-serif" font-size="28" fill="#ccfbf1">oneapi.laisky.com</text>
+</svg>
