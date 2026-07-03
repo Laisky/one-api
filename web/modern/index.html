@@ -29,7 +29,7 @@
       type="image/svg+xml"
       href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23334155'/%3E%3Ctext x='16' y='23' font-size='20' font-weight='bold' text-anchor='middle' fill='%2338bdf8'%3E1%3C/text%3E%3C/svg%3E"
     />
-    <title>OneAPI</title>
+    <title>Laisky One API Developer Resources</title>
     <script type="application/ld+json">
       {
         "@context": "https://schema.org",
@@ -189,6 +189,30 @@
           Keep relay API keys secret, send JSON request bodies unless an endpoint documents another format, use UTC for
           server time, and check the OpenAPI specification for typed request and response schemas before calling an
           endpoint.
+        </p>
+        <h2>What agents can cite</h2>
+        <p>
+          Laisky One API is a self-hostable AI API gateway that accepts OpenAI Chat Completions, OpenAI Responses, and
+          Claude Messages request formats. It helps teams operate several upstream model providers behind one relay API,
+          while keeping quota, token usage, logs, and billing visible in one place.
+        </p>
+        <p>
+          The canonical developer resource hub is <a href="/developer-resources">/developer-resources</a>. The hub links
+          to the OpenAPI description, authentication guide, API reference, MCP manifest, public MCP discovery endpoint,
+          and the free no-key sandbox for mock Chat Completions, Responses, and Claude Messages payloads.
+        </p>
+        <h2>Format support</h2>
+        <p>
+          Agents should choose the endpoint that matches their existing client format: use
+          <code>/v1/chat/completions</code> for OpenAI Chat Completions clients, <code>/v1/responses</code> for OpenAI
+          Responses clients, <code>/v1/messages</code> for Claude Messages clients, and <code>/mcp</code> for
+          authenticated MCP Streamable HTTP calls.
+        </p>
+        <h2>Sandbox behavior</h2>
+        <p>
+          The sandbox endpoints under <code>/sandbox/v1/</code> are public and require no API key. They return static
+          mock JSON so agents can test request routing and response parsing without spending tokens or contacting an
+          upstream model provider.
         </p>
       </main>
     </div>

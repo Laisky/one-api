@@ -129,6 +129,7 @@ func SetWebRouter(router *gin.Engine, buildFS embed.FS) {
 	router.GET("/docs", serveMarkdownFromBuild(buildFS, "docs.md"))
 	router.GET("/developers", serveMarkdownFromBuild(buildFS, "developers.md"))
 	router.GET("/api-reference", serveMarkdownFromBuild(buildFS, "api.md"))
+	router.GET("/robots.txt", serveNoCacheFileFromBuild(buildFS, "robots.txt", "text/plain; charset=utf-8"))
 	router.GET("/ask", serveAgentAsk)
 	router.POST("/ask", serveAgentAsk)
 	router.GET("/sandbox", serveMarkdownFromBuild(buildFS, "sandbox.md"))
@@ -516,6 +517,24 @@ func serveFileFromBuild(buildFS embed.FS, filename string, contentType string) g
 		}
 
 		c.Header("Cache-Control", "max-age=604800")
+		c.Data(http.StatusOK, contentType, data)
+	}
+}
+
+// serveNoCacheFileFromBuild returns a handler that serves a static document
+// without long-lived cache headers. Parameters: buildFS is the embedded
+// filesystem, filename is relative to the theme build root, and contentType is
+// the HTTP Content-Type value. Return value: a Gin handler that serves bytes or
+// 404 when the file is absent.
+func serveNoCacheFileFromBuild(buildFS embed.FS, filename string, contentType string) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		data, err := buildFS.ReadFile(fmt.Sprintf("web/build/%s/%s", config.Theme, filename))
+		if err != nil {
+			c.AbortWithStatus(http.StatusNotFound)
+			return
+		}
+
+		c.Header("Cache-Control", "no-cache")
 		c.Data(http.StatusOK, contentType, data)
 	}
 }
