@@ -313,6 +313,57 @@
           }
         }
       }
+    },
+    "/.well-known/mcp": {
+      "get": {
+        "operationId": "getPublicMCPDiscoveryManifest",
+        "tags": ["discovery", "mcp"],
+        "summary": "Get the public MCP discovery manifest.",
+        "security": [],
+        "responses": {
+          "200": { "description": "MCP discovery manifest.", "content": { "application/json": { "schema": { "type": "object", "additionalProperties": true } } } }
+        }
+      },
+      "post": {
+        "operationId": "callPublicMCPDiscovery",
+        "tags": ["discovery", "mcp"],
+        "summary": "Call the public MCP discovery endpoint.",
+        "description": "Unauthenticated JSON-RPC endpoint for public documentation discovery. Authenticated configured MCP tools remain at /mcp.",
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/JSONRPCRequest" } } }
+        },
+        "responses": {
+          "200": { "description": "Public JSON-RPC discovery response.", "content": { "application/json": { "schema": { "type": "object", "additionalProperties": true } } } }
+        }
+      }
+    },
+    "/ask": {
+      "get": {
+        "operationId": "askAgentDiscovery",
+        "tags": ["discovery"],
+        "summary": "Ask a public agent-discovery question.",
+        "description": "Returns an NLWeb-style answer with _meta, citations, and integration links.",
+        "security": [],
+        "parameters": [{ "name": "q", "in": "query", "required": false, "schema": { "type": "string", "maxLength": 500 } }],
+        "responses": {
+          "200": { "description": "Agent discovery answer.", "content": { "application/json": { "schema": { "type": "object", "additionalProperties": true } }, "text/event-stream": { "schema": { "type": "string" } } } }
+        }
+      },
+      "post": {
+        "operationId": "postAgentDiscoveryQuestion",
+        "tags": ["discovery"],
+        "summary": "Post a public agent-discovery question.",
+        "security": [],
+        "requestBody": {
+          "required": false,
+          "content": { "application/json": { "schema": { "type": "object", "properties": { "question": { "type": "string", "maxLength": 500 }, "query": { "type": "string", "maxLength": 500 } }, "additionalProperties": false } } }
+        },
+        "responses": {
+          "200": { "description": "Agent discovery answer.", "content": { "application/json": { "schema": { "type": "object", "additionalProperties": true } }, "text/event-stream": { "schema": { "type": "string" } } } }
+        }
+      }
     }
   },
   "components": {

@@ -2,6 +2,7 @@ package router
 
 import (
 	"embed"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
@@ -100,6 +101,7 @@ func SetWebRouter(router *gin.Engine, buildFS embed.FS) {
 		servePreparedAgentData(mcpManifestData, "application/json; charset=utf-8"),
 	)
 	router.GET("/.well-known/mcp", servePreparedAgentData(mcpManifestData, "application/json; charset=utf-8"))
+	router.POST("/.well-known/mcp", servePublicMCPDiscovery)
 	router.GET(
 		"/.well-known/mcp/server-card.json",
 		servePreparedAgentData(mcpServerCardData, "application/json; charset=utf-8"),
@@ -124,6 +126,8 @@ func SetWebRouter(router *gin.Engine, buildFS embed.FS) {
 	router.GET("/docs", serveMarkdownFromBuild(buildFS, "docs.md"))
 	router.GET("/developers", serveMarkdownFromBuild(buildFS, "developers.md"))
 	router.GET("/api-reference", serveMarkdownFromBuild(buildFS, "api.md"))
+	router.GET("/ask", serveAgentAsk)
+	router.POST("/ask", serveAgentAsk)
 
 	router.Use(static.Serve("/", common.EmbedFolder(buildFS, fmt.Sprintf("web/build/%s", config.Theme))))
 	router.NoRoute(func(c *gin.Context) {
@@ -144,6 +148,176 @@ func addAgentDiscoveryHeaders() gin.HandlerFunc {
 		c.Header("Link", agentDiscoveryLinks)
 		c.Header("Vary", "Accept, Accept-Encoding")
 		c.Next()
+	}
+}
+
+type publicMCPRequest struct {
+	JSONRPC string `json:"jsonrpc"`
+	ID      any    `json:"id"`
+	Method  string `json:"method"`
+}
+
+// servePublicMCPDiscovery handles unauthenticated MCP discovery calls for
+// agents. Parameters: c carries the JSON-RPC request. Return value: none; the
+// function writes a JSON-RPC response describing public documentation only.
+func servePublicMCPDiscovery(c *gin.Context) {
+	var req publicMCPRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, publicMCPError(nil, -32700, "invalid JSON-RPC request"))
+		return
+	}
+
+	if req.JSONRPC == "" {
+		req.JSONRPC = "2.0"
+	}
+
+	switch req.Method {
+	case "initialize":
+		c.JSON(http.StatusOK, gin.H{
+			"jsonrpc": req.JSONRPC,
+			"id":      req.ID,
+			"result": gin.H{
+				"protocolVersion": "2025-06-18",
+				"capabilities": gin.H{
+					"tools": gin.H{"listChanged": false},
+				},
+				"serverInfo": gin.H{
+					"name":    "Laisky One API Public Discovery",
+					"version": "0.6",
+				},
+				"instructions": "This public MCP endpoint exposes documentation discovery only. Use Authorization: Bearer <relay-api-key> with https://oneapi.laisky.com/mcp for authenticated configured tools.",
+			},
+		})
+	case "tools/list":
+		c.JSON(http.StatusOK, gin.H{
+			"jsonrpc": req.JSONRPC,
+			"id":      req.ID,
+			"result": gin.H{
+				"tools": []gin.H{
+					{
+						"name":        "one_api_public_docs",
+						"description": "Return public Laisky One API integration links and capability notes.",
+						"inputSchema": gin.H{
+							"type":                 "object",
+							"additionalProperties": false,
+							"properties": gin.H{
+								"topic": gin.H{
+									"type":        "string",
+									"description": "Optional topic such as auth, openapi, mcp, pricing, or models.",
+								},
+							},
+						},
+					},
+				},
+			},
+		})
+	case "tools/call":
+		c.JSON(http.StatusOK, gin.H{
+			"jsonrpc": req.JSONRPC,
+			"id":      req.ID,
+			"result": gin.H{
+				"content": []gin.H{
+					{
+						"type": "text",
+						"text": "Laisky One API public docs: https://oneapi.laisky.com/llms.txt, https://oneapi.laisky.com/openapi.json, https://oneapi.laisky.com/auth.md, https://oneapi.laisky.com/api.md, and https://oneapi.laisky.com/.well-known/api-catalog. Authenticated MCP tools are available at https://oneapi.laisky.com/mcp with a relay API key.",
+					},
+				},
+				"isError": false,
+			},
+		})
+	default:
+		c.JSON(http.StatusOK, publicMCPError(req.ID, -32601, "method not found"))
+	}
+}
+
+// publicMCPError builds a JSON-RPC error response. Parameters: id is the
+// request identifier, code is the JSON-RPC error code, and message is the human
+// readable reason. Return value: a response object suitable for c.JSON.
+func publicMCPError(id any, code int, message string) gin.H {
+	return gin.H{
+		"jsonrpc": "2.0",
+		"id":      id,
+		"error": gin.H{
+			"code":    code,
+			"message": message,
+		},
+	}
+}
+
+// serveAgentAsk returns a public NLWeb-style discovery answer for agents.
+// Parameters: c carries an optional q query parameter or JSON question field.
+// Return value: none; the function writes JSON or text/event-stream.
+func serveAgentAsk(c *gin.Context) {
+	question := strings.TrimSpace(c.Query("q"))
+	if question == "" && c.Request.Method == http.MethodPost {
+		var body struct {
+			Question string `json:"question"`
+			Query    string `json:"query"`
+		}
+		if err := c.ShouldBindJSON(&body); err == nil {
+			if body.Question != "" {
+				question = body.Question
+			} else {
+				question = body.Query
+			}
+		}
+	}
+
+	response := agentAskResponse(trimAgentQuestion(question))
+	if strings.Contains(strings.ToLower(c.GetHeader("Accept")), "text/event-stream") {
+		payload, err := json.Marshal(response)
+		if err != nil {
+			c.AbortWithStatus(http.StatusInternalServerError)
+			return
+		}
+
+		c.Data(http.StatusOK, "text/event-stream; charset=utf-8", []byte("event: result\ndata: "+string(payload)+"\n\n"))
+		return
+	}
+
+	c.JSON(http.StatusOK, response)
+}
+
+// trimAgentQuestion normalizes and bounds public /ask input. Parameters:
+// question is untrusted user input. Return value: a trimmed string with a
+// maximum length suitable for lightweight discovery responses.
+func trimAgentQuestion(question string) string {
+	question = strings.TrimSpace(question)
+	if len(question) > 500 {
+		return question[:500]
+	}
+
+	return question
+}
+
+// agentAskResponse builds the public /ask response. Parameters: question is a
+// bounded user prompt. Return value: NLWeb-style metadata, answer, citations,
+// and capability links.
+func agentAskResponse(question string) gin.H {
+	if question == "" {
+		question = "How do agents integrate with Laisky One API?"
+	}
+
+	return gin.H{
+		"answer":   "Laisky One API is an agent-friendly AI gateway at oneapi.laisky.com. Start with /llms.txt and /openapi.json, authenticate relay calls with Authorization: Bearer <relay-api-key>, and use /v1/chat/completions, /v1/responses, /v1/messages, or authenticated /mcp according to your client format.",
+		"question": question,
+		"citations": []gin.H{
+			{"title": "LLM instructions", "url": "https://oneapi.laisky.com/llms.txt"},
+			{"title": "OpenAPI", "url": "https://oneapi.laisky.com/openapi.json"},
+			{"title": "Authentication", "url": "https://oneapi.laisky.com/auth.md"},
+			{"title": "MCP manifest", "url": "https://oneapi.laisky.com/.well-known/mcp/manifest.json"},
+		},
+		"capabilities": []string{
+			"OpenAI Chat Completions relay",
+			"OpenAI Responses relay",
+			"Claude Messages relay",
+			"MCP Streamable HTTP relay for authenticated configured tools",
+		},
+		"_meta": gin.H{
+			"schema": "nlweb",
+			"source": "oneapi.laisky.com",
+			"type":   "agent-discovery-answer",
+		},
 	}
 }
 

@@ -6,9 +6,16 @@
   "homepageUrl": "https://oneapi.laisky.com/",
   "documentationUrl": "https://oneapi.laisky.com/llms.txt",
   "server": {
+    "url": "https://oneapi.laisky.com/.well-known/mcp",
+    "transport": "streamable-http",
+    "protocol": "mcp",
+    "description": "Public MCP discovery endpoint for documentation and capability inspection."
+  },
+  "authenticatedServer": {
     "url": "https://oneapi.laisky.com/mcp",
     "transport": "streamable-http",
-    "protocol": "mcp"
+    "protocol": "mcp",
+    "description": "Authenticated MCP relay for administrator-configured upstream tools."
   },
   "authentication": {
     "type": "bearer",
@@ -18,6 +25,7 @@
   "discovery": {
     "agentCard": "https://oneapi.laisky.com/.well-known/agent-card.json",
     "serverCard": "https://oneapi.laisky.com/.well-known/mcp/server-card.json",
+    "ask": "https://oneapi.laisky.com/ask",
     "openapi": "https://oneapi.laisky.com/openapi.json",
     "llmsTxt": "https://oneapi.laisky.com/llms.txt"
   },
