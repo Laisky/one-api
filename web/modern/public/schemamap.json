@@ -11,6 +11,7 @@
     "https://oneapi.laisky.com/.well-known/api-catalog",
     "https://oneapi.laisky.com/.well-known/ai-catalog.json",
     "https://oneapi.laisky.com/.well-known/agent-card.json",
-    "https://oneapi.laisky.com/.well-known/mcp/manifest.json"
+    "https://oneapi.laisky.com/.well-known/mcp/manifest.json",
+    "https://oneapi.laisky.com/mcp-apps/public-discovery.html"
   ]
 }

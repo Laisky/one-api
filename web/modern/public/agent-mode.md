@@ -9,6 +9,7 @@ Use this page when a crawler or autonomous integration agent requests `https://o
 - [API catalog](https://oneapi.laisky.com/.well-known/api-catalog)
 - [Agentic resource catalog](https://oneapi.laisky.com/.well-known/ai-catalog.json)
 - [MCP manifest](https://oneapi.laisky.com/.well-known/mcp/manifest.json)
+- [MCP Apps public discovery view](https://oneapi.laisky.com/mcp-apps/public-discovery.html)
 - [Authentication guide](https://oneapi.laisky.com/auth.md)
 - [Free sandbox](https://oneapi.laisky.com/sandbox)
 - [Laisky developer resources](https://oneapi.laisky.com/developer-resources)

@@ -365,6 +365,25 @@
         }
       }
     },
+    "/mcp-apps/public-discovery.html": {
+      "get": {
+        "operationId": "getPublicMCPAppsDiscoveryView",
+        "tags": ["discovery", "mcp"],
+        "summary": "Get the public MCP Apps discovery view.",
+        "description": "Returns a CSP-protected text/html;profile=mcp-app resource with public developer-resource and sandbox links.",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "MCP Apps HTML resource.",
+            "content": {
+              "text/html;profile=mcp-app": {
+                "schema": { "type": "string" }
+              }
+            }
+          }
+        }
+      }
+    },
     "/sandbox/v1/chat/completions": {
       "post": {
         "operationId": "sandboxChatCompletion",

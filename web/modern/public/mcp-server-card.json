@@ -13,6 +13,18 @@
     {
       "name": "configured_upstream_tools",
       "description": "Tool list depends on administrator-configured MCP servers and token permissions."
+    },
+    {
+      "name": "one_api_public_docs",
+      "description": "Public documentation discovery tool with MCP Apps UI output template."
+    }
+  ],
+  "resources": [
+    {
+      "uri": "ui://oneapi/public-discovery.html",
+      "url": "https://oneapi.laisky.com/mcp-apps/public-discovery.html",
+      "mimeType": "text/html;profile=mcp-app",
+      "description": "Public MCP Apps UI for developer resources and sandbox links."
     }
   ],
   "documentationUrl": "https://oneapi.laisky.com/llms.txt",

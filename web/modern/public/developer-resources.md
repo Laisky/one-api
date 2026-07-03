@@ -10,6 +10,7 @@ Developer resources for `oneapi.laisky.com`, also known as Laisky One API.
 - [API reference](https://oneapi.laisky.com/api.md)
 - [Free sandbox](https://oneapi.laisky.com/sandbox)
 - [MCP manifest](https://oneapi.laisky.com/.well-known/mcp/manifest.json)
+- [MCP Apps public discovery view](https://oneapi.laisky.com/mcp-apps/public-discovery.html)
 - [Agent ask endpoint](https://oneapi.laisky.com/ask)
 
 ## Common Agent Tasks

@@ -1,8 +1,77 @@
 {
   "schemaVersion": "1.0",
+  "specVersion": "1.0",
   "name": "Laisky One API Agentic Resource Discovery Catalog",
   "description": "Machine-readable entry points for agents integrating with oneapi.laisky.com.",
   "url": "https://oneapi.laisky.com/.well-known/ai-catalog.json",
+  "host": {
+    "displayName": "Laisky One API",
+    "identifier": "did:web:oneapi.laisky.com",
+    "documentationUrl": "https://oneapi.laisky.com/developer-resources"
+  },
+  "entries": [
+    {
+      "identifier": "urn:air:oneapi.laisky.com:mcp:public-discovery",
+      "displayName": "Laisky One API public MCP discovery",
+      "type": "application/mcp-server-card+json",
+      "url": "https://oneapi.laisky.com/.well-known/mcp/server-card.json",
+      "description": "Public MCP discovery endpoint for Laisky One API documentation, sandbox links, and developer resources.",
+      "tags": ["ai-gateway", "mcp", "openai", "claude", "developer-resources", "sandbox"],
+      "capabilities": ["documentation_discovery", "sandbox_discovery", "resource_listing", "mcp_apps_ui"],
+      "representativeQueries": [
+        "find Laisky One API developer resources",
+        "test an OpenAI-compatible gateway with a no-key sandbox",
+        "discover Claude Messages and OpenAI Responses routing docs"
+      ],
+      "trustManifest": {
+        "identity": "did:web:oneapi.laisky.com",
+        "identityType": "did"
+      }
+    },
+    {
+      "identifier": "urn:air:oneapi.laisky.com:agent:one-api",
+      "displayName": "Laisky One API agent card",
+      "type": "application/a2a-agent-card+json",
+      "url": "https://oneapi.laisky.com/.well-known/agent-card.json",
+      "description": "Agent card for Laisky One API integration guidance and supported AI API formats.",
+      "tags": ["agent-card", "a2a", "ai-gateway", "api-conversion"],
+      "capabilities": ["chat_completions", "responses_api", "claude_messages", "mcp_relay"],
+      "representativeQueries": [
+        "how do agents integrate with oneapi.laisky.com",
+        "which AI API formats does Laisky One API support"
+      ],
+      "trustManifest": {
+        "identity": "did:web:oneapi.laisky.com",
+        "identityType": "did"
+      }
+    },
+    {
+      "identifier": "urn:air:oneapi.laisky.com:api:openapi",
+      "displayName": "Laisky One API OpenAPI",
+      "type": "application/vnd.oai.openapi+json;version=3.1",
+      "url": "https://oneapi.laisky.com/openapi.json",
+      "description": "OpenAPI 3.1 description of relay, discovery, MCP, and sandbox endpoints.",
+      "tags": ["openapi", "api", "sandbox", "developer-resources"],
+      "capabilities": ["chat_completions", "responses_api", "claude_messages", "sandbox_testing"],
+      "trustManifest": {
+        "identity": "did:web:oneapi.laisky.com",
+        "identityType": "did"
+      }
+    },
+    {
+      "identifier": "urn:air:oneapi.laisky.com:docs:developer-resources",
+      "displayName": "Laisky One API developer resources",
+      "type": "text/markdown",
+      "url": "https://oneapi.laisky.com/developer-resources",
+      "description": "Canonical Laisky developer resource hub for oneapi.laisky.com.",
+      "tags": ["documentation", "developer-resources", "laisky", "sandbox"],
+      "capabilities": ["integration_guidance", "authentication_guidance", "sandbox_testing"],
+      "trustManifest": {
+        "identity": "did:web:oneapi.laisky.com",
+        "identityType": "did"
+      }
+    }
+  ],
   "resources": [
     {
       "type": "llms-txt",

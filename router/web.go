@@ -24,7 +24,8 @@ const agentDiscoveryLinks = "<https://oneapi.laisky.com/llms.txt>; rel=\"describ
 	"<https://oneapi.laisky.com/.well-known/api-catalog>; rel=\"api-catalog\"; type=\"application/linkset+json\", " +
 	"<https://oneapi.laisky.com/.well-known/ai-catalog.json>; rel=\"describedby\"; type=\"application/json\", " +
 	"<https://oneapi.laisky.com/.well-known/agent-card.json>; rel=\"describedby\"; type=\"application/json\", " +
-	"<https://oneapi.laisky.com/.well-known/mcp/manifest.json>; rel=\"service-desc\"; type=\"application/json\""
+	"<https://oneapi.laisky.com/.well-known/mcp/manifest.json>; rel=\"service-desc\"; type=\"application/json\", " +
+	"<https://oneapi.laisky.com/mcp-apps/public-discovery.html>; rel=\"alternate\"; type=\"text/html;profile=mcp-app\""
 
 // SetWebRouter registers static frontend assets and agent-readable discovery
 // endpoints. Parameters: router is the Gin engine and buildFS contains the
@@ -131,6 +132,7 @@ func SetWebRouter(router *gin.Engine, buildFS embed.FS) {
 	router.GET("/sandbox", serveMarkdownFromBuild(buildFS, "sandbox.md"))
 	router.GET("/developer-resources", serveMarkdownFromBuild(buildFS, "developer-resources.md"))
 	router.GET("/laisky-developer-resources", serveMarkdownFromBuild(buildFS, "laisky-developer-resources.md"))
+	router.GET("/mcp-apps/public-discovery.html", serveMCPAppPublicDiscovery)
 	router.POST("/sandbox/v1/chat/completions", serveSandboxChatCompletion)
 	router.POST("/sandbox/v1/responses", serveSandboxResponse)
 	router.POST("/sandbox/v1/messages", serveSandboxClaudeMessage)
@@ -161,6 +163,7 @@ type publicMCPRequest struct {
 	JSONRPC string `json:"jsonrpc"`
 	ID      any    `json:"id"`
 	Method  string `json:"method"`
+	Params  any    `json:"params"`
 }
 
 // servePublicMCPDiscovery handles unauthenticated MCP discovery calls for
@@ -185,7 +188,8 @@ func servePublicMCPDiscovery(c *gin.Context) {
 			"result": gin.H{
 				"protocolVersion": "2025-06-18",
 				"capabilities": gin.H{
-					"tools": gin.H{"listChanged": false},
+					"resources": gin.H{"listChanged": false},
+					"tools":     gin.H{"listChanged": false},
 				},
 				"serverInfo": gin.H{
 					"name":    "Laisky One API Public Discovery",
@@ -213,6 +217,11 @@ func servePublicMCPDiscovery(c *gin.Context) {
 								},
 							},
 						},
+						"_meta": gin.H{
+							"openai/outputTemplate":          "ui://oneapi/public-discovery.html",
+							"openai/toolInvocation/invoking": "Reading Laisky One API public docs",
+							"openai/toolInvocation/invoked":  "Laisky One API public docs ready",
+						},
 					},
 				},
 			},
@@ -231,9 +240,91 @@ func servePublicMCPDiscovery(c *gin.Context) {
 				"isError": false,
 			},
 		})
+	case "resources/list":
+		c.JSON(http.StatusOK, gin.H{
+			"jsonrpc": req.JSONRPC,
+			"id":      req.ID,
+			"result": gin.H{
+				"resources": []gin.H{
+					{
+						"uri":         "ui://oneapi/public-discovery.html",
+						"name":        "Laisky One API public discovery",
+						"description": "MCP Apps UI resource with public documentation, sandbox, and developer links.",
+						"mimeType":    "text/html;profile=mcp-app",
+						"_meta": gin.H{
+							"openai/widgetDomain":      "https://oneapi.laisky.com",
+							"openai/widgetDescription": "Public Laisky One API developer resources and sandbox links.",
+						},
+					},
+				},
+			},
+		})
+	case "resources/read":
+		c.JSON(http.StatusOK, gin.H{
+			"jsonrpc": req.JSONRPC,
+			"id":      req.ID,
+			"result": gin.H{
+				"contents": []gin.H{
+					{
+						"uri":      "ui://oneapi/public-discovery.html",
+						"mimeType": "text/html;profile=mcp-app",
+						"text":     publicMCPDiscoveryHTML(),
+					},
+				},
+			},
+		})
 	default:
 		c.JSON(http.StatusOK, publicMCPError(req.ID, -32601, "method not found"))
 	}
+}
+
+// publicMCPDiscoveryHTML returns the static MCP Apps HTML resource. Parameters:
+// none. Return value: valid HTML for public discovery with no secrets.
+func publicMCPDiscoveryHTML() string {
+	return `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>Laisky One API Developer Resources</title>
+  <style>
+    :root { color-scheme: light dark; font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    body { margin: 0; padding: 24px; background: Canvas; color: CanvasText; }
+    main { max-width: 720px; }
+    h1 { margin: 0 0 12px; font-size: 24px; line-height: 1.2; }
+    p { line-height: 1.55; }
+    ul { padding-left: 20px; line-height: 1.7; }
+    a { color: LinkText; }
+    code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Laisky One API Developer Resources</h1>
+    <p>Use Laisky One API to route OpenAI Chat Completions, OpenAI Responses, Claude Messages, and authenticated MCP calls through one gateway.</p>
+    <ul>
+      <li><a href="https://oneapi.laisky.com/llms.txt">LLM instructions</a></li>
+      <li><a href="https://oneapi.laisky.com/openapi.json">OpenAPI specification</a></li>
+      <li><a href="https://oneapi.laisky.com/developer-resources">Developer resources</a></li>
+      <li><a href="https://oneapi.laisky.com/sandbox">Free no-key sandbox</a></li>
+      <li><a href="https://oneapi.laisky.com/.well-known/mcp/manifest.json">MCP manifest</a></li>
+    </ul>
+    <p>Authenticated production calls use <code>Authorization: Bearer &lt;relay-api-key&gt;</code>. Sandbox endpoints return static mock responses and do not call upstream providers.</p>
+  </main>
+</body>
+</html>`
+}
+
+// serveMCPAppPublicDiscovery serves the public MCP Apps HTML view. Parameters:
+// c carries the incoming request. Return value: none; the function writes HTML
+// with a scoped content security policy.
+func serveMCPAppPublicDiscovery(c *gin.Context) {
+	c.Header(
+		"Content-Security-Policy",
+		"default-src 'none'; style-src 'unsafe-inline'; img-src data:; connect-src https://oneapi.laisky.com; frame-ancestors https://chat.openai.com https://chatgpt.com https://claude.ai; form-action 'none'; base-uri 'none'",
+	)
+	c.Data(http.StatusOK, "text/html;profile=mcp-app; charset=utf-8", []byte(publicMCPDiscoveryHTML()))
 }
 
 // publicMCPError builds a JSON-RPC error response. Parameters: id is the
@@ -354,10 +445,12 @@ func serveSandboxChatCompletion(c *gin.Context) {
 // agent testing. Parameters: c carries the incoming request. Return value: none;
 // the function writes a static Responses-compatible response.
 func serveSandboxResponse(c *gin.Context) {
+	outputText := "This is a mock Laisky One API sandbox response. Use authenticated /v1/responses with a relay API key for real provider calls."
 	c.JSON(http.StatusOK, gin.H{
-		"id":     "resp_sandbox",
-		"object": "response",
-		"model":  "oneapi-sandbox",
+		"id":          "resp_sandbox",
+		"object":      "response",
+		"model":       "oneapi-sandbox",
+		"output_text": outputText,
 		"output": []gin.H{
 			{
 				"type": "message",
@@ -365,7 +458,7 @@ func serveSandboxResponse(c *gin.Context) {
 				"content": []gin.H{
 					{
 						"type": "output_text",
-						"text": "This is a mock Laisky One API sandbox response. Use authenticated /v1/responses with a relay API key for real provider calls.",
+						"text": outputText,
 					},
 				},
 			},

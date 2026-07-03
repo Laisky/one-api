@@ -38,6 +38,7 @@ Laisky One API accepts several AI API formats and routes them to configured upst
 - [MCP manifest](https://oneapi.laisky.com/.well-known/mcp/manifest.json)
 - [Public MCP discovery endpoint](https://oneapi.laisky.com/.well-known/mcp)
 - [MCP server card](https://oneapi.laisky.com/.well-known/mcp/server-card.json)
+- [MCP Apps public discovery view](https://oneapi.laisky.com/mcp-apps/public-discovery.html)
 - [Agent ask endpoint](https://oneapi.laisky.com/ask)
 - [Free sandbox](https://oneapi.laisky.com/sandbox)
 - [Laisky developer resources](https://oneapi.laisky.com/developer-resources)

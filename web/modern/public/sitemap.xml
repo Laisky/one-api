@@ -19,6 +19,7 @@
   <url><loc>https://oneapi.laisky.com/.well-known/agent-skills/index.json</loc></url>
   <url><loc>https://oneapi.laisky.com/.well-known/mcp/manifest.json</loc></url>
   <url><loc>https://oneapi.laisky.com/.well-known/mcp/server-card.json</loc></url>
+  <url><loc>https://oneapi.laisky.com/mcp-apps/public-discovery.html</loc></url>
   <url><loc>https://oneapi.laisky.com/schemamap.json</loc></url>
   <url><loc>https://oneapi.laisky.com/sandbox</loc></url>
   <url><loc>https://oneapi.laisky.com/sandbox.md</loc></url>
