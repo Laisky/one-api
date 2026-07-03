@@ -97,6 +97,8 @@ type ChannelConfig struct {
 	APIFormat         string                `json:"api_format,omitempty"`
 	Tooling           *ChannelToolingConfig `json:"tooling,omitempty"`
 	MCPToolBlacklist  []string              `json:"mcp_tool_blacklist,omitempty"`
+	// CustomHeaders are channel-owned upstream request headers. Values may use {{key}} to reference the channel API key.
+	CustomHeaders map[string]string `json:"custom_headers,omitempty"`
 	// SupportedEndpoints is a list of endpoint names that this channel supports.
 	// When nil or empty, the channel uses default endpoints for its type.
 	// Endpoint names: chat_completions, completions, embeddings, moderations,

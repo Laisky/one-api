@@ -428,10 +428,9 @@ export const LEGACY_CHANNEL_TYPES: ChannelType[] = [
  * display-only types). Derive every type -> label/color lookup from this single
  * source so the channel list never drifts out of sync with relay/channeltype/define.go.
  */
-export const CHANNEL_TYPE_LABELS: Record<number, { name: string; color?: string }> = [
-  ...CHANNEL_TYPES,
-  ...LEGACY_CHANNEL_TYPES,
-].reduce<Record<number, { name: string; color?: string }>>((acc, def) => {
+export const CHANNEL_TYPE_LABELS: Record<number, { name: string; color?: string }> = [...CHANNEL_TYPES, ...LEGACY_CHANNEL_TYPES].reduce<
+  Record<number, { name: string; color?: string }>
+>((acc, def) => {
   acc[def.value] = { name: def.text, color: def.color };
   return acc;
 }, {});

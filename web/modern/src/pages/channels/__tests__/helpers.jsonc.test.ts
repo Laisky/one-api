@@ -162,12 +162,14 @@ describe('validateModelConfigs time_windows', () => {
   });
 
   it('rejects a range that is not an HH:MM string', () => {
-    const input = '{ "m": { "ratio": 1, "time_windows": [{ "ranges": [{ "start": "9", "end": "17:00" }], "overlay": { "ratio": 0.5 } }] } }';
+    const input =
+      '{ "m": { "ratio": 1, "time_windows": [{ "ranges": [{ "start": "9", "end": "17:00" }], "overlay": { "ratio": 0.5 } }] } }';
     expect(validateModelConfigs(input).valid).toBe(false);
   });
 
   it('rejects impossible HH:MM clock values', () => {
-    const input = '{ "m": { "ratio": 1, "time_windows": [{ "ranges": [{ "start": "24:00", "end": "99:99" }], "overlay": { "ratio": 0.5 } }] } }';
+    const input =
+      '{ "m": { "ratio": 1, "time_windows": [{ "ranges": [{ "start": "24:00", "end": "99:99" }], "overlay": { "ratio": 0.5 } }] } }';
     expect(validateModelConfigs(input).valid).toBe(false);
   });
 

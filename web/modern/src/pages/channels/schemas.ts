@@ -42,6 +42,7 @@ export const createChannelSchema = (tr?: SchemaTranslationFn) => {
         // Supported endpoints for this channel (empty means use defaults)
         supported_endpoints: z.array(z.string()).optional(),
         mcp_tool_blacklist: z.array(z.string()).optional(),
+        custom_headers: z.record(z.string()).optional(),
         // iFlytek Spark (type 18): APPID|APISecret|APIKey
         spark_app_id: z.string().optional(),
         spark_api_secret: z.string().optional(),

@@ -76,7 +76,10 @@
         "summary": "Relay Responses API GET requests.",
         "security": [{ "relayApiKey": [] }],
         "responses": {
-          "200": { "description": "Provider response.", "content": { "application/json": { "schema": { "type": "object", "additionalProperties": true } } } },
+          "200": {
+            "description": "Provider response.",
+            "content": { "application/json": { "schema": { "type": "object", "additionalProperties": true } } }
+          },
           "401": { "$ref": "#/components/responses/Error" }
         }
       },
@@ -103,7 +106,13 @@
           }
         },
         "responses": {
-          "200": { "description": "Responses API object.", "content": { "application/json": { "schema": { "type": "object", "additionalProperties": true } }, "text/event-stream": { "schema": { "type": "string" } } } },
+          "200": {
+            "description": "Responses API object.",
+            "content": {
+              "application/json": { "schema": { "type": "object", "additionalProperties": true } },
+              "text/event-stream": { "schema": { "type": "string" } }
+            }
+          },
           "400": { "$ref": "#/components/responses/Error" },
           "401": { "$ref": "#/components/responses/Error" },
           "429": { "$ref": "#/components/responses/Error" }
@@ -118,7 +127,10 @@
         "security": [{ "relayApiKey": [] }],
         "parameters": [{ "name": "response_id", "in": "path", "required": true, "schema": { "type": "string" } }],
         "responses": {
-          "200": { "description": "Responses API object.", "content": { "application/json": { "schema": { "type": "object", "additionalProperties": true } } } },
+          "200": {
+            "description": "Responses API object.",
+            "content": { "application/json": { "schema": { "type": "object", "additionalProperties": true } } }
+          },
           "401": { "$ref": "#/components/responses/Error" }
         }
       },
@@ -129,7 +141,10 @@
         "security": [{ "relayApiKey": [] }],
         "parameters": [{ "name": "response_id", "in": "path", "required": true, "schema": { "type": "string" } }],
         "responses": {
-          "200": { "description": "Delete result.", "content": { "application/json": { "schema": { "type": "object", "additionalProperties": true } } } },
+          "200": {
+            "description": "Delete result.",
+            "content": { "application/json": { "schema": { "type": "object", "additionalProperties": true } } }
+          },
           "401": { "$ref": "#/components/responses/Error" }
         }
       }
@@ -159,7 +174,13 @@
           }
         },
         "responses": {
-          "200": { "description": "Claude Messages response.", "content": { "application/json": { "schema": { "type": "object", "additionalProperties": true } }, "text/event-stream": { "schema": { "type": "string" } } } },
+          "200": {
+            "description": "Claude Messages response.",
+            "content": {
+              "application/json": { "schema": { "type": "object", "additionalProperties": true } },
+              "text/event-stream": { "schema": { "type": "string" } }
+            }
+          },
           "400": { "$ref": "#/components/responses/Error" },
           "401": { "$ref": "#/components/responses/Error" },
           "429": { "$ref": "#/components/responses/Error" }
@@ -200,7 +221,10 @@
           }
         },
         "responses": {
-          "200": { "description": "Embedding response.", "content": { "application/json": { "schema": { "type": "object", "additionalProperties": true } } } },
+          "200": {
+            "description": "Embedding response.",
+            "content": { "application/json": { "schema": { "type": "object", "additionalProperties": true } } }
+          },
           "401": { "$ref": "#/components/responses/Error" }
         }
       }
@@ -216,7 +240,10 @@
           "content": { "application/json": { "schema": { "type": "object", "additionalProperties": true } } }
         },
         "responses": {
-          "200": { "description": "Rerank response.", "content": { "application/json": { "schema": { "type": "object", "additionalProperties": true } } } },
+          "200": {
+            "description": "Rerank response.",
+            "content": { "application/json": { "schema": { "type": "object", "additionalProperties": true } } }
+          },
           "401": { "$ref": "#/components/responses/Error" }
         }
       }
@@ -237,7 +264,13 @@
           }
         },
         "responses": {
-          "200": { "description": "JSON-RPC response.", "content": { "application/json": { "schema": { "type": "object", "additionalProperties": true } }, "text/event-stream": { "schema": { "type": "string" } } } },
+          "200": {
+            "description": "JSON-RPC response.",
+            "content": {
+              "application/json": { "schema": { "type": "object", "additionalProperties": true } },
+              "text/event-stream": { "schema": { "type": "string" } }
+            }
+          },
           "401": { "$ref": "#/components/responses/Error" }
         }
       },
@@ -257,7 +290,10 @@
         "summary": "Close an MCP session.",
         "security": [{ "relayApiKey": [] }],
         "responses": {
-          "200": { "description": "Session closed.", "content": { "application/json": { "schema": { "type": "object", "additionalProperties": true } } } },
+          "200": {
+            "description": "Session closed.",
+            "content": { "application/json": { "schema": { "type": "object", "additionalProperties": true } } }
+          },
           "401": { "$ref": "#/components/responses/Error" }
         }
       }
@@ -269,7 +305,10 @@
         "summary": "Get public service status.",
         "security": [],
         "responses": {
-          "200": { "description": "Status response.", "content": { "application/json": { "schema": { "type": "object", "additionalProperties": true } } } }
+          "200": {
+            "description": "Status response.",
+            "content": { "application/json": { "schema": { "type": "object", "additionalProperties": true } } }
+          }
         }
       }
     },
@@ -280,7 +319,10 @@
         "summary": "List public model metadata for UI and agents.",
         "security": [],
         "responses": {
-          "200": { "description": "Model display data.", "content": { "application/json": { "schema": { "type": "object", "additionalProperties": true } } } }
+          "200": {
+            "description": "Model display data.",
+            "content": { "application/json": { "schema": { "type": "object", "additionalProperties": true } } }
+          }
         }
       }
     },
@@ -291,7 +333,10 @@
         "summary": "List public MCP tool metadata for UI and agents.",
         "security": [],
         "responses": {
-          "200": { "description": "Tool display data.", "content": { "application/json": { "schema": { "type": "object", "additionalProperties": true } } } }
+          "200": {
+            "description": "Tool display data.",
+            "content": { "application/json": { "schema": { "type": "object", "additionalProperties": true } } }
+          }
         }
       }
     },
@@ -321,7 +366,10 @@
         "summary": "Get the public MCP discovery manifest.",
         "security": [],
         "responses": {
-          "200": { "description": "MCP discovery manifest.", "content": { "application/json": { "schema": { "type": "object", "additionalProperties": true } } } }
+          "200": {
+            "description": "MCP discovery manifest.",
+            "content": { "application/json": { "schema": { "type": "object", "additionalProperties": true } } }
+          }
         }
       },
       "post": {
@@ -335,7 +383,10 @@
           "content": { "application/json": { "schema": { "$ref": "#/components/schemas/JSONRPCRequest" } } }
         },
         "responses": {
-          "200": { "description": "Public JSON-RPC discovery response.", "content": { "application/json": { "schema": { "type": "object", "additionalProperties": true } } } }
+          "200": {
+            "description": "Public JSON-RPC discovery response.",
+            "content": { "application/json": { "schema": { "type": "object", "additionalProperties": true } } }
+          }
         }
       }
     },
@@ -348,7 +399,13 @@
         "security": [],
         "parameters": [{ "name": "q", "in": "query", "required": false, "schema": { "type": "string", "maxLength": 500 } }],
         "responses": {
-          "200": { "description": "Agent discovery answer.", "content": { "application/json": { "schema": { "type": "object", "additionalProperties": true } }, "text/event-stream": { "schema": { "type": "string" } } } }
+          "200": {
+            "description": "Agent discovery answer.",
+            "content": {
+              "application/json": { "schema": { "type": "object", "additionalProperties": true } },
+              "text/event-stream": { "schema": { "type": "string" } }
+            }
+          }
         }
       },
       "post": {
@@ -358,10 +415,24 @@
         "security": [],
         "requestBody": {
           "required": false,
-          "content": { "application/json": { "schema": { "type": "object", "properties": { "question": { "type": "string", "maxLength": 500 }, "query": { "type": "string", "maxLength": 500 } }, "additionalProperties": false } } }
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": { "question": { "type": "string", "maxLength": 500 }, "query": { "type": "string", "maxLength": 500 } },
+                "additionalProperties": false
+              }
+            }
+          }
         },
         "responses": {
-          "200": { "description": "Agent discovery answer.", "content": { "application/json": { "schema": { "type": "object", "additionalProperties": true } }, "text/event-stream": { "schema": { "type": "string" } } } }
+          "200": {
+            "description": "Agent discovery answer.",
+            "content": {
+              "application/json": { "schema": { "type": "object", "additionalProperties": true } },
+              "text/event-stream": { "schema": { "type": "string" } }
+            }
+          }
         }
       }
     },
@@ -396,7 +467,10 @@
           "content": { "application/json": { "schema": { "type": "object", "additionalProperties": true } } }
         },
         "responses": {
-          "200": { "description": "Mock Chat Completions response.", "content": { "application/json": { "schema": { "type": "object", "additionalProperties": true } } } }
+          "200": {
+            "description": "Mock Chat Completions response.",
+            "content": { "application/json": { "schema": { "type": "object", "additionalProperties": true } } }
+          }
         }
       }
     },
@@ -412,7 +486,10 @@
           "content": { "application/json": { "schema": { "type": "object", "additionalProperties": true } } }
         },
         "responses": {
-          "200": { "description": "Mock Responses API object.", "content": { "application/json": { "schema": { "type": "object", "additionalProperties": true } } } }
+          "200": {
+            "description": "Mock Responses API object.",
+            "content": { "application/json": { "schema": { "type": "object", "additionalProperties": true } } }
+          }
         }
       }
     },
@@ -428,7 +505,10 @@
           "content": { "application/json": { "schema": { "type": "object", "additionalProperties": true } } }
         },
         "responses": {
-          "200": { "description": "Mock Claude Messages object.", "content": { "application/json": { "schema": { "type": "object", "additionalProperties": true } } } }
+          "200": {
+            "description": "Mock Claude Messages object.",
+            "content": { "application/json": { "schema": { "type": "object", "additionalProperties": true } } }
+          }
         }
       }
     }
@@ -511,10 +591,7 @@
         "properties": {
           "model": { "type": "string" },
           "input": {
-            "oneOf": [
-              { "type": "string" },
-              { "type": "array", "items": { "type": "object", "additionalProperties": true } }
-            ]
+            "oneOf": [{ "type": "string" }, { "type": "array", "items": { "type": "object", "additionalProperties": true } }]
           },
           "instructions": { "type": "string" },
           "stream": { "type": "boolean", "default": false },
@@ -530,10 +607,7 @@
           "model": { "type": "string" },
           "messages": { "type": "array", "items": { "$ref": "#/components/schemas/ClaudeMessage" } },
           "system": {
-            "oneOf": [
-              { "type": "string" },
-              { "type": "array", "items": { "type": "object", "additionalProperties": true } }
-            ]
+            "oneOf": [{ "type": "string" }, { "type": "array", "items": { "type": "object", "additionalProperties": true } }]
           },
           "max_tokens": { "type": "integer", "minimum": 1 },
           "stream": { "type": "boolean", "default": false },
@@ -547,10 +621,7 @@
         "properties": {
           "role": { "type": "string", "enum": ["user", "assistant"] },
           "content": {
-            "oneOf": [
-              { "type": "string" },
-              { "type": "array", "items": { "type": "object", "additionalProperties": true } }
-            ]
+            "oneOf": [{ "type": "string" }, { "type": "array", "items": { "type": "object", "additionalProperties": true } }]
           }
         },
         "additionalProperties": true
@@ -561,10 +632,7 @@
         "properties": {
           "model": { "type": "string" },
           "input": {
-            "oneOf": [
-              { "type": "string" },
-              { "type": "array", "items": { "type": "string" } }
-            ]
+            "oneOf": [{ "type": "string" }, { "type": "array", "items": { "type": "string" } }]
           },
           "encoding_format": { "type": "string", "enum": ["float", "base64"] },
           "dimensions": { "type": "integer", "minimum": 1 }

@@ -2,10 +2,7 @@
   "schemaVersion": "1.0",
   "name": "Laisky One API Schema Map",
   "url": "https://oneapi.laisky.com/schemamap.json",
-  "jsonLd": [
-    "https://oneapi.laisky.com/",
-    "https://oneapi.laisky.com/index.md"
-  ],
+  "jsonLd": ["https://oneapi.laisky.com/", "https://oneapi.laisky.com/index.md"],
   "machineReadable": [
     "https://oneapi.laisky.com/openapi.json",
     "https://oneapi.laisky.com/.well-known/api-catalog",

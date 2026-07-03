@@ -381,19 +381,19 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 	}},
 	// Additional 2026 image models served by Together AI.
 	// Source: https://docs.together.ai/docs/serverless-models
-	"Wan-AI/Wan2.6-image":                      {Ratio: 0, CompletionRatio: 1, Image: togetherAIImagePerMegapixelConfig(0.03)},
-	"ByteDance-Seed/Seedream-3.0":              {Ratio: 0, CompletionRatio: 1, Image: togetherAIImagePerMegapixelConfig(0.018)},
-	"ByteDance-Seed/Seedream-4.0":              {Ratio: 0, CompletionRatio: 1, Image: togetherAIImagePerMegapixelConfig(0.03)},
-	"Qwen/Qwen-Image":                          {Ratio: 0, CompletionRatio: 1, Image: togetherAIImagePerMegapixelConfig(0.0058)},
+	"Wan-AI/Wan2.6-image":         {Ratio: 0, CompletionRatio: 1, Image: togetherAIImagePerMegapixelConfig(0.03)},
+	"ByteDance-Seed/Seedream-3.0": {Ratio: 0, CompletionRatio: 1, Image: togetherAIImagePerMegapixelConfig(0.018)},
+	"ByteDance-Seed/Seedream-4.0": {Ratio: 0, CompletionRatio: 1, Image: togetherAIImagePerMegapixelConfig(0.03)},
+	"Qwen/Qwen-Image":             {Ratio: 0, CompletionRatio: 1, Image: togetherAIImagePerMegapixelConfig(0.0058)},
 	// Qwen Image 2.0 / 2.0 Pro bill a flat per-image price, not per megapixel.
 	// Sources: https://www.together.ai/models/qwen-image-20, https://www.together.ai/models/qwen-image-20-pro
-	"Qwen/Qwen-Image-2.0":     {Ratio: 0, CompletionRatio: 1, Image: &adaptor.ImagePricingConfig{PricePerImageUsd: 0.04, DefaultSize: togetherAIImageBaseSize, MinImages: 1}},
-	"Qwen/Qwen-Image-2.0-Pro": {Ratio: 0, CompletionRatio: 1, Image: &adaptor.ImagePricingConfig{PricePerImageUsd: 0.08, DefaultSize: togetherAIImageBaseSize, MinImages: 1}},
-	"RunDiffusion/Juggernaut-pro-flux":         {Ratio: 0, CompletionRatio: 1, Image: togetherAIImagePerMegapixelConfig(0.0049)},
-	"HiDream-ai/HiDream-I1-Full":               {Ratio: 0, CompletionRatio: 1, Image: togetherAIImagePerMegapixelConfig(0.009)},
-	"HiDream-ai/HiDream-I1-Dev":                {Ratio: 0, CompletionRatio: 1, Image: togetherAIImagePerMegapixelConfig(0.0045)},
-	"HiDream-ai/HiDream-I1-Fast":               {Ratio: 0, CompletionRatio: 1, Image: togetherAIImagePerMegapixelConfig(0.0032)},
-	"ideogram/ideogram-3.0":                    {Ratio: 0, CompletionRatio: 1, Image: togetherAIImagePerMegapixelConfig(0.06)},
+	"Qwen/Qwen-Image-2.0":              {Ratio: 0, CompletionRatio: 1, Image: &adaptor.ImagePricingConfig{PricePerImageUsd: 0.04, DefaultSize: togetherAIImageBaseSize, MinImages: 1}},
+	"Qwen/Qwen-Image-2.0-Pro":          {Ratio: 0, CompletionRatio: 1, Image: &adaptor.ImagePricingConfig{PricePerImageUsd: 0.08, DefaultSize: togetherAIImageBaseSize, MinImages: 1}},
+	"RunDiffusion/Juggernaut-pro-flux": {Ratio: 0, CompletionRatio: 1, Image: togetherAIImagePerMegapixelConfig(0.0049)},
+	"HiDream-ai/HiDream-I1-Full":       {Ratio: 0, CompletionRatio: 1, Image: togetherAIImagePerMegapixelConfig(0.009)},
+	"HiDream-ai/HiDream-I1-Dev":        {Ratio: 0, CompletionRatio: 1, Image: togetherAIImagePerMegapixelConfig(0.0045)},
+	"HiDream-ai/HiDream-I1-Fast":       {Ratio: 0, CompletionRatio: 1, Image: togetherAIImagePerMegapixelConfig(0.0032)},
+	"ideogram/ideogram-3.0":            {Ratio: 0, CompletionRatio: 1, Image: togetherAIImagePerMegapixelConfig(0.06)},
 	// Ideogram 4.0 bills a flat per-image price. Source: https://www.together.ai/models/ideogram-40
 	"ideogram/ideogram-4.0":                    {Ratio: 0, CompletionRatio: 1, Image: &adaptor.ImagePricingConfig{PricePerImageUsd: 0.06, DefaultSize: togetherAIImageBaseSize, MinImages: 1}},
 	"Lykon/DreamShaper":                        {Ratio: 0, CompletionRatio: 1, Image: togetherAIImagePerMegapixelConfig(0.0006)},

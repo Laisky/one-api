@@ -296,16 +296,16 @@ export const validateModelConfigs = (configStr: string) => {
             return { valid: false, error: `Invalid time window ${index + 1} for model "${modelName}": ranges must be a non-empty array` };
           }
           for (const range of windowObj.ranges) {
-            if (
-              typeof range !== 'object' ||
-              range === null ||
-              !isClockHHMM((range as any).start) ||
-              !isClockHHMM((range as any).end)
-            ) {
+            if (typeof range !== 'object' || range === null || !isClockHHMM((range as any).start) || !isClockHHMM((range as any).end)) {
               return { valid: false, error: `Invalid time window ${index + 1} for model "${modelName}": ranges must use HH:MM strings` };
             }
           }
-          if (windowObj.overlay === undefined || typeof windowObj.overlay !== 'object' || windowObj.overlay === null || Array.isArray(windowObj.overlay)) {
+          if (
+            windowObj.overlay === undefined ||
+            typeof windowObj.overlay !== 'object' ||
+            windowObj.overlay === null ||
+            Array.isArray(windowObj.overlay)
+          ) {
             return { valid: false, error: `Invalid time window ${index + 1} for model "${modelName}": overlay must be an object` };
           }
         }

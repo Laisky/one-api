@@ -1,4 +1,3 @@
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import { FormControl, FormField, FormItem, FormMessage } from '@/components/ui/form';
@@ -13,18 +12,18 @@ import { CHANNEL_TYPES, CHANNEL_TYPES_WITH_CUSTOM_KEY_FIELD } from '../constants
 import { getKeyPrompt } from '../helpers';
 import type { ChannelForm } from '../schemas';
 import { resolveChannelColor } from '../utils/colorGenerator';
+import { ChannelCustomHeaders } from './ChannelCustomHeaders';
 import { LabelWithHelp } from './LabelWithHelp';
 
 interface ChannelBasicInfoProps {
   form: UseFormReturn<ChannelForm>;
-  groups: string[];
   normalizedChannelType: number | null;
   tr: (key: string, defaultValue: string, options?: Record<string, unknown>) => string;
   /** Callback to request a type change (may trigger confirmation dialog in edit mode) */
   onTypeChange?: (newType: number) => void;
 }
 
-export const ChannelBasicInfo = ({ form, groups, normalizedChannelType, tr, onTypeChange }: ChannelBasicInfoProps) => {
+export const ChannelBasicInfo = ({ form, normalizedChannelType, tr, onTypeChange }: ChannelBasicInfoProps) => {
   const [typePopoverOpen, setTypePopoverOpen] = useState(false);
   const watchType = form.watch('type');
   const channelTypeOverridesKeyField = normalizedChannelType !== null && CHANNEL_TYPES_WITH_CUSTOM_KEY_FIELD.has(normalizedChannelType);
@@ -34,35 +33,6 @@ export const ChannelBasicInfo = ({ form, groups, normalizedChannelType, tr, onTy
 
   const fieldHasError = (name: string) => !!(form.formState.errors as any)?.[name];
   const errorClass = (name: string) => (fieldHasError(name) ? 'border-destructive focus-visible:ring-destructive' : '');
-
-  const toggleGroup = (groupValue: string) => {
-    const currentGroups = form.getValues('groups');
-    if (currentGroups.includes(groupValue)) {
-      form.setValue(
-        'groups',
-        currentGroups.filter((g) => g !== groupValue)
-      );
-    } else {
-      form.setValue('groups', [...currentGroups, groupValue]);
-    }
-  };
-
-  const addGroup = (groupName: string) => {
-    const currentGroups = form.getValues('groups');
-    if (!currentGroups.includes(groupName)) {
-      form.setValue('groups', [...currentGroups, groupName]);
-    }
-  };
-
-  const removeGroup = (groupToRemove: string) => {
-    const currentGroups = form.getValues('groups');
-    const newGroups = currentGroups.filter((g) => g !== groupToRemove);
-    // Ensure at least 'default' group remains
-    if (newGroups.length === 0) {
-      newGroups.push('default');
-    }
-    form.setValue('groups', newGroups);
-  };
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -164,63 +134,6 @@ export const ChannelBasicInfo = ({ form, groups, normalizedChannelType, tr, onTy
         }}
       />
 
-      <FormField
-        control={form.control}
-        name="groups"
-        render={() => (
-          <FormItem className="col-span-1 md:col-span-2">
-            <LabelWithHelp
-              label={tr('groups.label', 'Groups *')}
-              help={tr('groups.help', 'User groups that can access this channel. "default" is standard for normal users.')}
-            />
-            <div className="flex flex-wrap gap-2 mb-2">
-              {groups.map((group) => {
-                const isSelected = form.watch('groups').includes(group);
-                return (
-                  <Badge
-                    key={group}
-                    variant={isSelected ? 'default' : 'outline'}
-                    className="cursor-pointer hover:bg-primary/90"
-                    onClick={() => toggleGroup(group)}
-                  >
-                    {group}
-                  </Badge>
-                );
-              })}
-            </div>
-            <div className="flex gap-2">
-              <Input
-                placeholder={tr('groups.add_placeholder', 'Add custom group...')}
-                onKeyDown={(e) => {
-                  if (e.nativeEvent.isComposing || e.keyCode === 229) return;
-                  if (e.key === 'Enter') {
-                    e.preventDefault();
-                    const val = (e.target as HTMLInputElement).value.trim();
-                    if (val) {
-                      addGroup(val);
-                      (e.target as HTMLInputElement).value = '';
-                    }
-                  }
-                }}
-              />
-            </div>
-            <div className="flex flex-wrap gap-2 mt-2">
-              {form.watch('groups').map((group) => (
-                <Badge key={group} variant="secondary" className="gap-1 max-w-full">
-                  <span className="truncate min-w-0" title={group}>
-                    {group}
-                  </span>
-                  <span className="cursor-pointer ml-1 hover:text-destructive shrink-0" onClick={() => removeGroup(group)}>
-                    ×
-                  </span>
-                </Badge>
-              ))}
-            </div>
-            <FormMessage />
-          </FormItem>
-        )}
-      />
-
       {!channelTypeOverridesKeyField && (
         <FormField
           control={form.control}
@@ -239,6 +152,9 @@ export const ChannelBasicInfo = ({ form, groups, normalizedChannelType, tr, onTy
           )}
         />
       )}
+
+      {/* Custom Headers sit directly below the API Key so channel-owned upstream headers read next to the credential. */}
+      <ChannelCustomHeaders form={form} tr={tr} />
     </div>
   );
 };

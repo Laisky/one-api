@@ -267,9 +267,9 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		SupportedFeatures: []string{"tools", "reasoning"}, SupportedSamplingParameters: cfBasicSamplingParams,
 		SupportedReasoningEfforts: []string{"low", "medium", "high"},
 		DefaultReasoningEffort:    "medium",
-		Quantization:  "fp16",
-		HuggingFaceID: "zai-org/glm-4.7-flash",
-		Description:   "Zhipu GLM 4.7 Flash on Cloudflare Workers AI.",
+		Quantization:              "fp16",
+		HuggingFaceID:             "zai-org/glm-4.7-flash",
+		Description:               "Zhipu GLM 4.7 Flash on Cloudflare Workers AI.",
 	},
 	"@cf/zai-org/glm-5.2": {
 		Ratio: 1.400 * ratio.MilliTokensUsd, CompletionRatio: 4.400 / 1.400, CachedInputRatio: 0.260 * ratio.MilliTokensUsd,
@@ -278,9 +278,9 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		SupportedFeatures: []string{"tools", "reasoning"}, SupportedSamplingParameters: cfBasicSamplingParams,
 		SupportedReasoningEfforts: []string{"low", "medium", "high"},
 		DefaultReasoningEffort:    "medium",
-		Quantization:  "fp8",
-		HuggingFaceID: "zai-org/GLM-5.2",
-		Description:   "Z.ai GLM-5.2 flagship agentic coding model (262K context, reasoning, function calling) on Cloudflare Workers AI.",
+		Quantization:              "fp8",
+		HuggingFaceID:             "zai-org/GLM-5.2",
+		Description:               "Z.ai GLM-5.2 flagship agentic coding model (262K context, reasoning, function calling) on Cloudflare Workers AI.",
 	},
 	"@cf/nvidia/nemotron-3-120b-a12b": {
 		Ratio: 0.500 * ratio.MilliTokensUsd, CompletionRatio: 1.500 / 0.500,
@@ -310,9 +310,9 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		SupportedFeatures: []string{"tools", "reasoning"}, SupportedSamplingParameters: cfBasicSamplingParams,
 		SupportedReasoningEfforts: []string{"low", "medium", "high"},
 		DefaultReasoningEffort:    "medium",
-		Quantization:  "fp8",
-		HuggingFaceID: "moonshotai/Kimi-K2.6",
-		Description:   "Moonshot Kimi K2.6 frontier-scale multimodal long-context chat model on Cloudflare Workers AI.",
+		Quantization:              "fp8",
+		HuggingFaceID:             "moonshotai/Kimi-K2.6",
+		Description:               "Moonshot Kimi K2.6 frontier-scale multimodal long-context chat model on Cloudflare Workers AI.",
 	},
 	"@cf/moonshotai/kimi-k2.7-code": {
 		// Added on Cloudflare Workers AI 2026-06-12; $0.95 in / $0.19 cached / $4.00 out.
@@ -322,9 +322,9 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		SupportedFeatures: []string{"tools", "reasoning"}, SupportedSamplingParameters: cfBasicSamplingParams,
 		SupportedReasoningEfforts: []string{"low", "medium", "high"},
 		DefaultReasoningEffort:    "medium",
-		Quantization:  "fp8",
-		HuggingFaceID: "moonshotai/Kimi-K2.7-Code",
-		Description:   "Moonshot Kimi K2.7 Code frontier-scale 1T-param MoE coding model (262K context, reasoning, vision, tools) on Cloudflare Workers AI.",
+		Quantization:              "fp8",
+		HuggingFaceID:             "moonshotai/Kimi-K2.7-Code",
+		Description:               "Moonshot Kimi K2.7 Code frontier-scale 1T-param MoE coding model (262K context, reasoning, vision, tools) on Cloudflare Workers AI.",
 	},
 
 	// OpenAI OSS

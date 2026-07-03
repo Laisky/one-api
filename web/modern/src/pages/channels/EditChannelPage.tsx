@@ -10,6 +10,7 @@ import { useEffect } from 'react';
 import { ChannelAdvancedSettings } from './components/ChannelAdvancedSettings';
 import { ChannelBasicInfo } from './components/ChannelBasicInfo';
 import { ChannelEndpointSettings } from './components/ChannelEndpointSettings';
+import { ChannelGroups } from './components/ChannelGroups';
 import { ChannelMCPSettings } from './components/ChannelMCPSettings';
 import { ChannelModelSettings } from './components/ChannelModelSettings';
 import { ChannelSpecificConfig } from './components/ChannelSpecificConfig';
@@ -156,7 +157,6 @@ export function EditChannelPage() {
               <form onSubmit={form.handleSubmit(onSubmit, onInvalid)} className="space-y-6">
                 <ChannelBasicInfo
                   form={form}
-                  groups={groups}
                   normalizedChannelType={normalizedChannelType}
                   tr={tr}
                   onTypeChange={requestTypeChange}
@@ -169,6 +169,8 @@ export function EditChannelPage() {
                   baseURLEditable={baseURLEditable}
                   tr={tr}
                 />
+
+                <ChannelGroups form={form} groups={groups} tr={tr} />
 
                 <ChannelModelSettings
                   form={form}

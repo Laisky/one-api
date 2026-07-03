@@ -251,8 +251,8 @@ func TestStripAuthScheme(t *testing.T) {
 		{"bearer abc", "abc"},
 		{"BEARER abc", "abc"},
 		{"Bearer   abc", "abc"},
-		{"abc", "abc"},          // no scheme
-		{"Bearer", "Bearer"},    // scheme word without trailing space/key
+		{"abc", "abc"},             // no scheme
+		{"Bearer", "Bearer"},       // scheme word without trailing space/key
 		{"Bearerabc", "Bearerabc"}, // not a scheme (no separating space)
 		{"", ""},
 	}

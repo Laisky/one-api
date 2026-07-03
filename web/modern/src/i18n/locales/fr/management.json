@@ -159,6 +159,15 @@
           "placeholder": "ID utilisateur pour les opérations de bot"
         }
       },
+      "custom_headers": {
+        "add": "Add Header",
+        "empty": "No custom headers configured.",
+        "help": "Headers configured here are always sent upstream and override client-provided headers. Use {{key}} to insert the channel API key.",
+        "key_placeholder": "Header key",
+        "label": "Custom Headers",
+        "remove": "Remove header",
+        "value_placeholder": "Header value, e.g. {{key}}"
+      },
       "description": {
         "create": "Créer un nouveau canal API",
         "edit": "Mettre à jour la configuration du canal"

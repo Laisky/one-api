@@ -4,10 +4,10 @@ import { useForm, type UseFormReturn } from 'react-hook-form';
 import { describe, expect, it, vi } from 'vitest';
 
 import { TooltipProvider } from '@/components/ui/tooltip';
+import { getKeyPrompt } from '../../helpers';
+import type { ChannelForm } from '../../schemas';
 import { ChannelBasicInfo } from '../ChannelBasicInfo';
 import { ChannelSpecificConfig } from '../ChannelSpecificConfig';
-import type { ChannelForm } from '../../schemas';
-import { getKeyPrompt } from '../../helpers';
 
 vi.mock('@/components/ui/notifications', () => ({
   useNotifications: () => ({ notify: vi.fn() }),
@@ -50,6 +50,7 @@ const baseDefaults: ChannelForm = {
     api_format: 'chat_completion',
     supported_endpoints: [],
     mcp_tool_blacklist: [],
+    custom_headers: {},
     spark_app_id: '',
     spark_api_secret: '',
     spark_api_key: '',
@@ -72,7 +73,7 @@ const BasicHarness = ({ type, onReady }: BasicHarnessProps) => {
   useEffect(() => onReady?.(form), [onReady, form]);
   return (
     <TooltipProvider>
-      <ChannelBasicInfo form={form} groups={['default']} normalizedChannelType={type} tr={tr} />
+      <ChannelBasicInfo form={form} normalizedChannelType={type} tr={tr} />
     </TooltipProvider>
   );
 };

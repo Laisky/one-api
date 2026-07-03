@@ -36,10 +36,7 @@
       "description": "Agent card for Laisky One API integration guidance and supported AI API formats.",
       "tags": ["agent-card", "a2a", "ai-gateway", "api-conversion"],
       "capabilities": ["chat_completions", "responses_api", "claude_messages", "mcp_relay"],
-      "representativeQueries": [
-        "how do agents integrate with oneapi.laisky.com",
-        "which AI API formats does Laisky One API support"
-      ],
+      "representativeQueries": ["how do agents integrate with oneapi.laisky.com", "which AI API formats does Laisky One API support"],
       "trustManifest": {
         "identity": "did:web:oneapi.laisky.com",
         "identityType": "did"

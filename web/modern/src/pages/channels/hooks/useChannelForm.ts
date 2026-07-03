@@ -84,6 +84,7 @@ export const useChannelForm = () => {
         api_format: 'chat_completion',
         supported_endpoints: [],
         mcp_tool_blacklist: [],
+        custom_headers: {},
         spark_app_id: '',
         spark_api_secret: '',
         spark_api_key: '',
@@ -173,6 +174,7 @@ export const useChannelForm = () => {
           api_format: 'chat_completion',
           supported_endpoints: [],
           mcp_tool_blacklist: [],
+          custom_headers: {},
           spark_app_id: '',
           spark_api_secret: '',
           spark_api_key: '',
@@ -189,6 +191,15 @@ export const useChannelForm = () => {
               api_format: parsed.api_format === 'response' ? 'response' : 'chat_completion',
               supported_endpoints: Array.isArray(parsed.supported_endpoints) ? parsed.supported_endpoints : [],
               mcp_tool_blacklist: Array.isArray(parsed.mcp_tool_blacklist) ? parsed.mcp_tool_blacklist : [],
+              custom_headers:
+                parsed.custom_headers && typeof parsed.custom_headers === 'object' && !Array.isArray(parsed.custom_headers)
+                  ? Object.fromEntries(
+                      Object.entries(parsed.custom_headers).map(([key, value]) => [
+                        key,
+                        typeof value === 'string' ? value : String(value ?? ''),
+                      ])
+                    )
+                  : {},
             };
           } catch (e) {
             console.error('Failed to parse config JSON:', e);
@@ -477,29 +488,8 @@ export const useChannelForm = () => {
   const performSubmit = async (data: ChannelForm) => {
     setIsSubmitting(true);
     try {
-      // Pre-flight: composite key materialisation for create-time validation.
-      // We compute the would-be key here so the "API key is required" check
-      // matches what `buildChannelSubmitPayload` will produce later.
-      let derivedKey: string | undefined = data.key;
-      if (watchType === 33 && watchConfig.ak && watchConfig.sk && watchConfig.region) {
-        derivedKey = `${watchConfig.ak}|${watchConfig.sk}|${watchConfig.region}`;
-      } else if (watchType === 42 && watchConfig.region && watchConfig.vertex_ai_project_id && watchConfig.vertex_ai_adc) {
-        derivedKey = `${watchConfig.region}|${watchConfig.vertex_ai_project_id}|${watchConfig.vertex_ai_adc}`;
-      } else if (watchType === 18 && (watchConfig.spark_app_id || watchConfig.spark_api_secret || watchConfig.spark_api_key)) {
-        derivedKey = `${watchConfig.spark_app_id || ''}|${watchConfig.spark_api_secret || ''}|${watchConfig.spark_api_key || ''}`;
-      } else if (watchType === 23 && (watchConfig.tencent_app_id || watchConfig.tencent_secret_id || watchConfig.tencent_secret_key)) {
-        derivedKey = `${watchConfig.tencent_app_id || ''}|${watchConfig.tencent_secret_id || ''}|${watchConfig.tencent_secret_key || ''}`;
-      }
-
-      if (!isEdit && (!derivedKey || derivedKey.trim() === '')) {
-        form.setError('key', { message: tr('validation.api_key_required', 'API key is required.') });
-        notify({
-          type: 'error',
-          title: tr('validation.error_title', 'Validation error'),
-          message: tr('validation.api_key_required', 'API key is required.'),
-        });
-        return;
-      }
+      // API Key is optional for every channel type: an empty key is accepted on
+      // both create and edit, so no presence validation is enforced here.
 
       if (data.model_mapping && !isValidJSON(data.model_mapping)) {
         form.setError('model_mapping', {
@@ -540,7 +530,9 @@ export const useChannelForm = () => {
         return;
       }
 
-      if (watchType === 34 && watchConfig.auth_type === 'oauth_jwt') {
+      // Only validate the Coze OAuth JWT payload when a key was actually
+      // provided; an empty key is permitted like every other channel type.
+      if (watchType === 34 && watchConfig.auth_type === 'oauth_jwt' && data.key && data.key.trim() !== '') {
         if (!isValidJSON(data.key)) {
           form.setError('key', {
             message: tr('validation.oauth_invalid_json', 'OAuth JWT configuration JSON is invalid.'),

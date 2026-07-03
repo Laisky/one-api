@@ -1,8 +1,8 @@
-import type { UseFormReturn } from 'react-hook-form';
 import { Button } from '@/components/ui/button';
 import { FormControl, FormField, FormItem, FormMessage } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
+import type { UseFormReturn } from 'react-hook-form';
 import { INFERENCE_PROFILE_ARN_MAP_EXAMPLE } from '../constants';
 import { formatJSON } from '../helpers';
 import type { ChannelForm } from '../schemas';

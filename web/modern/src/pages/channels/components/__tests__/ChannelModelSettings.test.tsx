@@ -51,6 +51,7 @@ const baseDefaults: ChannelForm = {
     api_format: 'chat_completion',
     supported_endpoints: [],
     mcp_tool_blacklist: [],
+    custom_headers: {},
   },
   inference_profile_arn_map: '',
 };

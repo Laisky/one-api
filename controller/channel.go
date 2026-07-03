@@ -366,6 +366,13 @@ func AddChannel(c *gin.Context) {
 		localChannel.Key = key
 		channels = append(channels, localChannel)
 	}
+	// API Key is optional: when no non-empty key line is provided, still create a
+	// single channel with an empty key instead of inserting an empty batch.
+	if len(channels) == 0 {
+		localChannel := *channel
+		localChannel.Key = ""
+		channels = append(channels, localChannel)
+	}
 	err = model.BatchInsertChannels(channels)
 	if err != nil {
 		helper.RespondError(c, err)

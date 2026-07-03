@@ -421,8 +421,8 @@ var geminiWebSearchModels = map[string]struct{}{
 }
 
 var (
-	geminiToolingDefaults    = buildGeminiToolingDefaults(geminiWebSearchUsdPerCall)
-	gemini3xToolingDefaults  = buildGeminiToolingDefaults(gemini3xWebSearchUsdPerCall)
+	geminiToolingDefaults   = buildGeminiToolingDefaults(geminiWebSearchUsdPerCall)
+	gemini3xToolingDefaults = buildGeminiToolingDefaults(gemini3xWebSearchUsdPerCall)
 )
 
 // buildGeminiToolingDefaults attaches channel-level web search pricing derived from Google documentation.

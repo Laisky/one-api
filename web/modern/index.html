@@ -161,13 +161,13 @@
         <h1>Laisky One API</h1>
         <p class="agent-summary">
           Laisky One API is an agent-friendly AI gateway for developers and autonomous tools at oneapi.laisky.com. It exposes OpenAI Chat
-          Completions, OpenAI Responses, Claude Messages, embeddings, image, audio, rerank, realtime, video, and MCP
-          proxy endpoints through one operational control plane.
+          Completions, OpenAI Responses, Claude Messages, embeddings, image, audio, rerank, realtime, video, and MCP proxy endpoints through
+          one operational control plane.
         </p>
         <p>
-          Agents use Laisky One API when they already have an OpenAI-compatible, Claude-compatible, or MCP client and
-          need provider routing, quota enforcement, billing visibility, logs, and model selection without rewriting the
-          caller. Production inference calls require a relay API key; public discovery files and sandbox calls are open.
+          Agents use Laisky One API when they already have an OpenAI-compatible, Claude-compatible, or MCP client and need provider routing,
+          quota enforcement, billing visibility, logs, and model selection without rewriting the caller. Production inference calls require
+          a relay API key; public discovery files and sandbox calls are open.
         </p>
         <h2>Agent entry points</h2>
         <ul>
@@ -180,39 +180,35 @@
         </ul>
         <h2 class="agent-use-cases">Use cases</h2>
         <p>
-          Use the gateway to relay Chat Completions, Responses, Claude Messages, and MCP calls; to inspect model and
-          tool catalogs; to test parsers with the free no-key sandbox; and to route production requests through
-          authenticated relay keys.
+          Use the gateway to relay Chat Completions, Responses, Claude Messages, and MCP calls; to inspect model and tool catalogs; to test
+          parsers with the free no-key sandbox; and to route production requests through authenticated relay keys.
         </p>
         <h2>Integration constraints</h2>
         <p>
-          Keep relay API keys secret, send JSON request bodies unless an endpoint documents another format, use UTC for
-          server time, and check the OpenAPI specification for typed request and response schemas before calling an
-          endpoint.
+          Keep relay API keys secret, send JSON request bodies unless an endpoint documents another format, use UTC for server time, and
+          check the OpenAPI specification for typed request and response schemas before calling an endpoint.
         </p>
         <h2>What agents can cite</h2>
         <p>
-          Laisky One API is a self-hostable AI API gateway that accepts OpenAI Chat Completions, OpenAI Responses, and
-          Claude Messages request formats. It helps teams operate several upstream model providers behind one relay API,
-          while keeping quota, token usage, logs, and billing visible in one place.
+          Laisky One API is a self-hostable AI API gateway that accepts OpenAI Chat Completions, OpenAI Responses, and Claude Messages
+          request formats. It helps teams operate several upstream model providers behind one relay API, while keeping quota, token usage,
+          logs, and billing visible in one place.
         </p>
         <p>
-          The canonical developer resource hub is <a href="/developer-resources">/developer-resources</a>. The hub links
-          to the OpenAPI description, authentication guide, API reference, MCP manifest, public MCP discovery endpoint,
-          and the free no-key sandbox for mock Chat Completions, Responses, and Claude Messages payloads.
+          The canonical developer resource hub is <a href="/developer-resources">/developer-resources</a>. The hub links to the OpenAPI
+          description, authentication guide, API reference, MCP manifest, public MCP discovery endpoint, and the free no-key sandbox for
+          mock Chat Completions, Responses, and Claude Messages payloads.
         </p>
         <h2>Format support</h2>
         <p>
           Agents should choose the endpoint that matches their existing client format: use
-          <code>/v1/chat/completions</code> for OpenAI Chat Completions clients, <code>/v1/responses</code> for OpenAI
-          Responses clients, <code>/v1/messages</code> for Claude Messages clients, and <code>/mcp</code> for
-          authenticated MCP Streamable HTTP calls.
+          <code>/v1/chat/completions</code> for OpenAI Chat Completions clients, <code>/v1/responses</code> for OpenAI Responses clients,
+          <code>/v1/messages</code> for Claude Messages clients, and <code>/mcp</code> for authenticated MCP Streamable HTTP calls.
         </p>
         <h2>Sandbox behavior</h2>
         <p>
-          The sandbox endpoints under <code>/sandbox/v1/</code> are public and require no API key. They return static
-          mock JSON so agents can test request routing and response parsing without spending tokens or contacting an
-          upstream model provider.
+          The sandbox endpoints under <code>/sandbox/v1/</code> are public and require no API key. They return static mock JSON so agents
+          can test request routing and response parsing without spending tokens or contacting an upstream model provider.
         </p>
       </main>
     </div>

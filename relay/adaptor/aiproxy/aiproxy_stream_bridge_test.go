@@ -10,9 +10,10 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/Laisky/one-api/common/ctxkey"
 	"github.com/Laisky/one-api/relay/adaptor/internal/streambridgetest"
-	"github.com/stretchr/testify/require"
 )
 
 // cannedUpstream builds an *http.Response whose body streams the aiproxy library

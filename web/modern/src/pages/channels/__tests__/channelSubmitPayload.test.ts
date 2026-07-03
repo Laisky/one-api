@@ -18,6 +18,7 @@ const baseConfig = (overrides: Partial<ChannelConfigForm> = {}): ChannelConfigFo
   api_format: 'chat_completion',
   supported_endpoints: [],
   mcp_tool_blacklist: [],
+  custom_headers: {},
   spark_app_id: '',
   spark_api_secret: '',
   spark_api_key: '',
@@ -213,6 +214,25 @@ describe('buildChannelSubmitPayload misc shape guarantees', () => {
 
     expect(Object.hasOwn(payload, 'hidden_models')).toBe(true);
     expect(payload.hidden_models).toBeNull();
+  });
+
+  it('serialises custom headers in channel config with API-key placeholders intact', () => {
+    const data = baseForm({
+      config: baseConfig({
+        custom_headers: {
+          'api-key': '{{key}}',
+          Authorization: 'Bearer {{key}}',
+        },
+      }),
+    });
+
+    const payload = buildChannelSubmitPayload(data, editOpts());
+    const config = JSON.parse(payload.config as string) as ChannelConfigForm;
+
+    expect(config.custom_headers).toEqual({
+      'api-key': '{{key}}',
+      Authorization: 'Bearer {{key}}',
+    });
   });
 
   it('joins groups[] into a comma-separated `group` field and removes `groups`', () => {

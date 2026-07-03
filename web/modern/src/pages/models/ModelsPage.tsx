@@ -162,9 +162,7 @@ export function ModelsPage() {
 
       if (filters.hasAudio) {
         const ok =
-          !!model.audio_pricing ||
-          (model.input_modalities ?? []).includes('audio') ||
-          (model.output_modalities ?? []).includes('audio');
+          !!model.audio_pricing || (model.input_modalities ?? []).includes('audio') || (model.output_modalities ?? []).includes('audio');
         if (!ok) return false;
       }
 
@@ -231,7 +229,8 @@ export function ModelsPage() {
    * would otherwise show $0 → "Free".
    */
   const hasNonTokenPricing = (data: ModelDisplayData): boolean => {
-    if (data.per_call_pricing && ((data.per_call_pricing.usd_per_thousand_calls ?? 0) > 0 || (data.per_call_pricing.usd_per_call ?? 0) > 0)) return true;
+    if (data.per_call_pricing && ((data.per_call_pricing.usd_per_thousand_calls ?? 0) > 0 || (data.per_call_pricing.usd_per_call ?? 0) > 0))
+      return true;
     if ((data.image_price ?? 0) > 0) return true;
     if (data.image_pricing && (data.image_pricing.price_per_image_usd ?? 0) > 0) return true;
     if (data.video_pricing && (data.video_pricing.per_second_usd ?? 0) > 0) return true;
@@ -426,9 +425,7 @@ export function ModelsPage() {
                         {tr('table.model', 'Model')}
                       </div>
                       <div className="font-mono text-sm break-all">{model.model}</div>
-                      {renderModalityBadges(model.data) && (
-                        <div className="mt-1.5">{renderModalityBadges(model.data)}</div>
-                      )}
+                      {renderModalityBadges(model.data) && <div className="mt-1.5">{renderModalityBadges(model.data)}</div>}
                     </div>
                     <ChevronRight className="h-4 w-4 text-muted-foreground flex-shrink-0" />
                   </div>

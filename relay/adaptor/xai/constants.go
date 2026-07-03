@@ -239,7 +239,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		InputModalities: grokVisionInputs, OutputModalities: grokTextOutputs,
 		SupportedFeatures: grokFeaturesReasoning, SupportedSamplingParameters: grokReasoningSamplingParams,
 		SupportedReasoningEfforts: grokFullReasoningEfforts, DefaultReasoningEffort: "low",
-		Description:               "Grok Code Fast 1 — RETIRED May 15, 2026; auto-redirects to grok-build-0.1 ($1.00 in / $0.20 cached / $2.00 out, 256K context).",
+		Description: "Grok Code Fast 1 — RETIRED May 15, 2026; auto-redirects to grok-build-0.1 ($1.00 in / $0.20 cached / $2.00 out, 256K context).",
 	},
 	// grok-build-0.1 is the GA agentic coding model; grok-code-fast-1 / grok-code-fast
 	// redirect to it. Source: https://docs.x.ai/developers/models/grok-build-0.1
@@ -249,7 +249,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		InputModalities: grokVisionInputs, OutputModalities: grokTextOutputs,
 		SupportedFeatures: grokFeaturesReasoning, SupportedSamplingParameters: grokReasoningSamplingParams,
 		SupportedReasoningEfforts: grokFullReasoningEfforts, DefaultReasoningEffort: "low",
-		Description:               "Grok Build 0.1 — fast agentic coding model (256K context, vision input); $1.00 in / $0.20 cached / $2.00 out. Aliases: grok-code-fast-1, grok-code-fast, grok-code-fast-1-0825.",
+		Description: "Grok Build 0.1 — fast agentic coding model (256K context, vision input); $1.00 in / $0.20 cached / $2.00 out. Aliases: grok-code-fast-1, grok-code-fast, grok-code-fast-1-0825.",
 	},
 	"grok-3": {
 		Ratio: 1.25 * ratio.MilliTokensUsd, CompletionRatio: 2.5 / 1.25, CachedInputRatio: 0.2 * ratio.MilliTokensUsd,
