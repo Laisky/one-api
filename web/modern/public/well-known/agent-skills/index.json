@@ -1,5 +1,5 @@
 {
-  "$schema": "https://schemas.agentcommunity.org/agent-skills-index/v0.2.0.json",
+  "$schema": "https://schemas.agentskills.io/discovery/0.2.0/schema.json",
   "type": "agent-skills-index",
   "name": "One API Agent Skills",
   "description": "Agent skill index for using One API as an AI gateway.",
@@ -9,9 +9,9 @@
       "id": "one-api-agent-guide",
       "name": "One API Agent Guide",
       "description": "Call One API through Chat Completions, Responses, Claude Messages, or MCP endpoints.",
-      "type": "markdown",
+      "type": "skill-md",
       "url": "https://oneapi.laisky.com/.well-known/agent-skills/one-api-agent-guide.md",
-      "digest": "sha256-d9eb50fb9f8977fa7267f1dee8cf44e7bf8e793d5af706d6e0092442d158a996"
+      "digest": "sha256:36f7ab4e5140db9e603ab316ea226bdacc6a402329b5d30fff0bc58f19ed2b96"
     }
   ]
 }

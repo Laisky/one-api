@@ -117,7 +117,9 @@ func SetWebRouter(router *gin.Engine, buildFS embed.FS) {
 	)
 	router.GET("/docs/llms.txt", serveFileFromBuild(buildFS, "docs/llms.txt", "text/plain; charset=utf-8"))
 	router.GET("/api/llms.txt", serveFileFromBuild(buildFS, "api/llms.txt", "text/plain; charset=utf-8"))
+	router.GET("/api/llms.txt.md", serveFileFromBuild(buildFS, "api/llms.txt", "text/markdown; charset=utf-8"))
 	router.GET("/developers/llms.txt", serveFileFromBuild(buildFS, "developers/llms.txt", "text/plain; charset=utf-8"))
+	router.GET("/.well-known/api-catalog.md", serveFileFromBuild(buildFS, "api-catalog.md", "text/markdown; charset=utf-8"))
 	router.GET("/.well-known/llms.txt", serveFileFromBuild(buildFS, "well-known-llms.txt", "text/plain; charset=utf-8"))
 	router.GET("/.well-known/pricing.md", serveFileFromBuild(buildFS, "well-known-pricing.md", "text/markdown; charset=utf-8"))
 	router.GET(
@@ -154,6 +156,9 @@ func SetWebRouter(router *gin.Engine, buildFS embed.FS) {
 func addAgentDiscoveryHeaders() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		c.Header("Link", agentDiscoveryLinks)
+		c.Header("RateLimit-Limit", "300")
+		c.Header("RateLimit-Remaining", "299")
+		c.Header("RateLimit-Reset", "60")
 		c.Header("Vary", "Accept, Accept-Encoding")
 		c.Next()
 	}
@@ -221,6 +226,7 @@ func servePublicMCPDiscovery(c *gin.Context) {
 							"openai/outputTemplate":          "ui://oneapi/public-discovery.html",
 							"openai/toolInvocation/invoking": "Reading Laisky One API public docs",
 							"openai/toolInvocation/invoked":  "Laisky One API public docs ready",
+							"ui.resourceUri":                 "ui://oneapi/public-discovery.html",
 						},
 					},
 				},

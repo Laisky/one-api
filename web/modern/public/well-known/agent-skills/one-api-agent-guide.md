@@ -2,6 +2,10 @@
 
 Use this skill when an agent needs to call One API as an AI gateway.
 
+## When To Use This
+
+Use this skill when a client already speaks OpenAI Chat Completions, OpenAI Responses, Claude Messages, or MCP and needs one gateway for provider routing, quota tracking, billing, logs, or model selection. Use the no-key sandbox only for parser and integration tests; use authenticated relay keys for real model calls.
+
 ## Steps
 
 1. Read `https://oneapi.laisky.com/llms.txt`.

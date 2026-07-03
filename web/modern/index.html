@@ -55,6 +55,10 @@
           "OpenAPI specification at /openapi.json",
           "Agent instructions at /llms.txt"
         ],
+        "speakable": {
+          "@type": "SpeakableSpecification",
+          "cssSelector": ["h1", ".agent-summary", ".agent-use-cases"]
+        },
         "sameAs": ["https://github.com/Laisky/one-api"]
       }
     </script>
@@ -80,6 +84,10 @@
         "url": "https://oneapi.laisky.com/",
         "logo": "https://oneapi.laisky.com/og-image.svg",
         "description": "Open-source AI API gateway for multi-provider routing, billing, and format conversion.",
+        "address": {
+          "@type": "PostalAddress",
+          "addressCountry": "US"
+        },
         "contactPoint": {
           "@type": "ContactPoint",
           "contactType": "technical support",
@@ -151,10 +159,15 @@
     <div id="root">
       <main>
         <h1>Laisky One API</h1>
-        <p>
+        <p class="agent-summary">
           Laisky One API is an agent-friendly AI gateway for developers and autonomous tools at oneapi.laisky.com. It exposes OpenAI Chat
           Completions, OpenAI Responses, Claude Messages, embeddings, image, audio, rerank, realtime, video, and MCP
           proxy endpoints through one operational control plane.
+        </p>
+        <p>
+          Agents use Laisky One API when they already have an OpenAI-compatible, Claude-compatible, or MCP client and
+          need provider routing, quota enforcement, billing visibility, logs, and model selection without rewriting the
+          caller. Production inference calls require a relay API key; public discovery files and sandbox calls are open.
         </p>
         <h2>Agent entry points</h2>
         <ul>
@@ -165,6 +178,18 @@
           <li><a href="/.well-known/ai-catalog.json">/.well-known/ai-catalog.json</a> - agentic resource catalog.</li>
           <li><a href="/agents.md">/agents.md</a> - task guidance for coding and integration agents.</li>
         </ul>
+        <h2 class="agent-use-cases">Use cases</h2>
+        <p>
+          Use the gateway to relay Chat Completions, Responses, Claude Messages, and MCP calls; to inspect model and
+          tool catalogs; to test parsers with the free no-key sandbox; and to route production requests through
+          authenticated relay keys.
+        </p>
+        <h2>Integration constraints</h2>
+        <p>
+          Keep relay API keys secret, send JSON request bodies unless an endpoint documents another format, use UTC for
+          server time, and check the OpenAPI specification for typed request and response schemas before calling an
+          endpoint.
+        </p>
       </main>
     </div>
     <script type="module" src="/src/main.tsx"></script>

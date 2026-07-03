@@ -2,7 +2,9 @@
 
 > Agent-friendly AI gateway at oneapi.laisky.com for OpenAI Chat Completions, OpenAI Responses, Claude Messages, MCP tools, multi-provider routing, billing, and observability.
 
-Laisky One API accepts several AI API formats and routes them to configured upstream providers:
+## Product Overview
+
+Laisky One API accepts several AI API formats and routes them to configured upstream providers. It is useful when an agent or application needs one operational control plane for model routing, quota, billing, logs, and API-format conversion.
 
 - OpenAI Chat Completions: `POST https://oneapi.laisky.com/v1/chat/completions`
 - OpenAI Responses: `POST https://oneapi.laisky.com/v1/responses`
@@ -11,6 +13,21 @@ Laisky One API accepts several AI API formats and routes them to configured upst
 - Models: `GET https://oneapi.laisky.com/v1/models`
 - Public model display: `GET https://oneapi.laisky.com/api/models/display`
 - Public MCP tool display: `GET https://oneapi.laisky.com/api/tools/display`
+
+## Use Cases
+
+- Route an OpenAI-compatible client to multiple upstream model providers.
+- Convert requests among Chat Completions, Responses, and Claude Messages shapes when a configured adapter supports the target format.
+- Expose configured MCP tools behind authenticated relay API keys.
+- Inspect model availability, token usage, billing, logs, and operational status.
+- Test parser integrations with the free no-key sandbox before using real provider calls.
+
+## Constraints
+
+- Production inference and MCP relay calls require `Authorization: Bearer <relay-api-key>`.
+- The free sandbox returns static mock responses and never calls upstream model providers.
+- Management endpoints use web-session or management-token authentication and are not relay inference keys.
+- Relay API keys are secrets and must not be placed in URLs, prompts, screenshots, browser logs, or public tickets.
 
 ## Agent Guidance
 

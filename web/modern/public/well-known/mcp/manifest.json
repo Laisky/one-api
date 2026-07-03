@@ -31,7 +31,7 @@
   },
   "capabilities": {
     "tools": true,
-    "resources": false,
+    "resources": true,
     "prompts": false,
     "streaming": true
   },
