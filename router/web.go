@@ -32,16 +32,17 @@ func SetWebRouter(router *gin.Engine, buildFS embed.FS) {
 	indexPageData, _ := buildFS.ReadFile(fmt.Sprintf("web/build/%s/index.html", config.Theme))
 	indexMarkdownData, _ := buildFS.ReadFile(fmt.Sprintf("web/build/%s/index.md", config.Theme))
 	agentModeData, _ := buildFS.ReadFile(fmt.Sprintf("web/build/%s/agent-mode.md", config.Theme))
-	apiCatalogData, _ := buildFS.ReadFile(fmt.Sprintf("web/build/%s/.well-known/api-catalog.json", config.Theme))
-	aiCatalogData, _ := buildFS.ReadFile(fmt.Sprintf("web/build/%s/.well-known/ai-catalog.json", config.Theme))
-	agentCardData, _ := buildFS.ReadFile(fmt.Sprintf("web/build/%s/.well-known/agent-card.json", config.Theme))
-	agentSkillsIndexData, _ := buildFS.ReadFile(fmt.Sprintf("web/build/%s/.well-known/agent-skills/index.json", config.Theme))
-	httpMessageSignaturesDirectoryData, _ := buildFS.ReadFile(fmt.Sprintf("web/build/%s/.well-known/http-message-signatures-directory", config.Theme))
-	mcpManifestData, _ := buildFS.ReadFile(fmt.Sprintf("web/build/%s/.well-known/mcp/manifest.json", config.Theme))
+	apiCatalogData, _ := buildFS.ReadFile(fmt.Sprintf("web/build/%s/well-known/api-catalog.json", config.Theme))
+	aiCatalogData, _ := buildFS.ReadFile(fmt.Sprintf("web/build/%s/well-known/ai-catalog.json", config.Theme))
+	agentCardData, _ := buildFS.ReadFile(fmt.Sprintf("web/build/%s/well-known/agent-card.json", config.Theme))
+	agentSkillsIndexData, _ := buildFS.ReadFile(fmt.Sprintf("web/build/%s/well-known/agent-skills/index.json", config.Theme))
+	httpMessageSignaturesDirectoryData, _ := buildFS.ReadFile(fmt.Sprintf("web/build/%s/well-known/http-message-signatures-directory", config.Theme))
+	mcpManifestData, _ := buildFS.ReadFile(fmt.Sprintf("web/build/%s/well-known/mcp/manifest.json", config.Theme))
+	mcpServerCardData, _ := buildFS.ReadFile(fmt.Sprintf("web/build/%s/well-known/mcp/server-card.json", config.Theme))
 	openAPIData, _ := buildFS.ReadFile(fmt.Sprintf("web/build/%s/openapi.json", config.Theme))
 	openAPIMarkdownData, _ := buildFS.ReadFile(fmt.Sprintf("web/build/%s/openapi.json.md", config.Theme))
-	oauthAuthorizationServerData, _ := buildFS.ReadFile(fmt.Sprintf("web/build/%s/.well-known/oauth-authorization-server", config.Theme))
-	oauthProtectedResourceData, _ := buildFS.ReadFile(fmt.Sprintf("web/build/%s/.well-known/oauth-protected-resource", config.Theme))
+	oauthAuthorizationServerData, _ := buildFS.ReadFile(fmt.Sprintf("web/build/%s/well-known/oauth-authorization-server", config.Theme))
+	oauthProtectedResourceData, _ := buildFS.ReadFile(fmt.Sprintf("web/build/%s/well-known/oauth-protected-resource", config.Theme))
 	router.Use(gzip.Gzip(gzip.DefaultCompression))
 	router.Use(middleware.GlobalWebRateLimit())
 	router.Use(middleware.Cache())
@@ -100,6 +101,10 @@ func SetWebRouter(router *gin.Engine, buildFS embed.FS) {
 	)
 	router.GET("/.well-known/mcp", servePreparedAgentData(mcpManifestData, "application/json; charset=utf-8"))
 	router.GET(
+		"/.well-known/mcp/server-card.json",
+		servePreparedAgentData(mcpServerCardData, "application/json; charset=utf-8"),
+	)
+	router.GET(
 		"/.well-known/oauth-authorization-server",
 		servePreparedAgentData(oauthAuthorizationServerData, "application/json; charset=utf-8"),
 	)
@@ -110,6 +115,12 @@ func SetWebRouter(router *gin.Engine, buildFS embed.FS) {
 	router.GET("/docs/llms.txt", serveFileFromBuild(buildFS, "docs/llms.txt", "text/plain; charset=utf-8"))
 	router.GET("/api/llms.txt", serveFileFromBuild(buildFS, "api/llms.txt", "text/plain; charset=utf-8"))
 	router.GET("/developers/llms.txt", serveFileFromBuild(buildFS, "developers/llms.txt", "text/plain; charset=utf-8"))
+	router.GET("/.well-known/llms.txt", serveFileFromBuild(buildFS, "well-known/llms.txt", "text/plain; charset=utf-8"))
+	router.GET("/.well-known/pricing.md", serveFileFromBuild(buildFS, "well-known/pricing.md", "text/markdown; charset=utf-8"))
+	router.GET(
+		"/.well-known/agent-skills/one-api-agent-guide.md",
+		serveFileFromBuild(buildFS, "well-known/agent-skills/one-api-agent-guide.md", "text/markdown; charset=utf-8"),
+	)
 	router.GET("/docs", serveMarkdownFromBuild(buildFS, "docs.md"))
 	router.GET("/developers", serveMarkdownFromBuild(buildFS, "developers.md"))
 	router.GET("/api-reference", serveMarkdownFromBuild(buildFS, "api.md"))
