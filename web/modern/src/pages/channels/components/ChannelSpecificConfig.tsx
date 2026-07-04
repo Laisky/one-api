@@ -4,8 +4,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@/components/ui/textarea';
 import { AlertCircle, Lock } from 'lucide-react';
 import { Controller, type UseFormReturn } from 'react-hook-form';
-import { COZE_AUTH_OPTIONS, OAUTH_JWT_CONFIG_EXAMPLE, OPENAI_COMPATIBLE_API_FORMAT_OPTIONS } from '../constants';
+import { COZE_AUTH_OPTIONS, CHANNEL_TYPES_WITH_CUSTOM_KEY_FIELD, OAUTH_JWT_CONFIG_EXAMPLE, OPENAI_COMPATIBLE_API_FORMAT_OPTIONS } from '../constants';
 import type { ChannelForm } from '../schemas';
+import { ChannelCustomHeaders } from './ChannelCustomHeaders';
 import { LabelWithHelp } from './LabelWithHelp';
 
 interface ChannelSpecificConfigProps {
@@ -707,8 +708,14 @@ export const ChannelSpecificConfig = ({ form, normalizedChannelType, defaultBase
 
   const channelSpecificConfig = renderChannelSpecificConfig();
 
-  // Return both the common base URL field and any channel-specific config
-  if (!commonBaseURLField && !channelSpecificConfig) {
+  // Composite-credential types carry their key inside this section, so the
+  // Custom Headers editor is rendered here to sit directly below the credentials.
+  const channelTypeOverridesKeyField = normalizedChannelType !== null && CHANNEL_TYPES_WITH_CUSTOM_KEY_FIELD.has(normalizedChannelType);
+  const customHeaders = channelTypeOverridesKeyField ? <ChannelCustomHeaders form={form} tr={tr} className="w-full" /> : null;
+
+  // Return the common base URL field, any channel-specific config, and (for
+  // composite-credential types) the custom headers editor.
+  if (!commonBaseURLField && !channelSpecificConfig && !customHeaders) {
     return null;
   }
 
@@ -716,6 +723,7 @@ export const ChannelSpecificConfig = ({ form, normalizedChannelType, defaultBase
     <div className="space-y-4">
       {commonBaseURLField}
       {channelSpecificConfig}
+      {customHeaders}
     </div>
   );
 };

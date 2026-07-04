@@ -134,27 +134,34 @@ export const ChannelBasicInfo = ({ form, normalizedChannelType, tr, onTypeChange
         }}
       />
 
+      {/*
+       * Standard channel types show a single API Key field here, with Custom
+       * Headers directly beneath it. Composite-credential types (AWS, Vertex,
+       * Spark, Tencent, Coze) instead render their credentials — and Custom
+       * Headers — inside ChannelSpecificConfig, so the header editor always
+       * sits below the credential inputs.
+       */}
       {!channelTypeOverridesKeyField && (
-        <FormField
-          control={form.control}
-          name="key"
-          render={({ field }) => (
-            <FormItem className="col-span-1 md:col-span-2">
-              <LabelWithHelp
-                label={tr('key.label', 'API Key')}
-                help={tr('key.help', 'The API key for authentication with the provider.')}
-              />
-              <FormControl>
-                <Textarea placeholder={getKeyPrompt(watchType)} className={`font-mono text-sm ${errorClass('key')}`} {...field} />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
+        <>
+          <FormField
+            control={form.control}
+            name="key"
+            render={({ field }) => (
+              <FormItem className="col-span-1 md:col-span-2">
+                <LabelWithHelp
+                  label={tr('key.label', 'API Key')}
+                  help={tr('key.help', 'The API key for authentication with the provider.')}
+                />
+                <FormControl>
+                  <Textarea placeholder={getKeyPrompt(watchType)} className={`font-mono text-sm ${errorClass('key')}`} {...field} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          <ChannelCustomHeaders form={form} tr={tr} />
+        </>
       )}
-
-      {/* Custom Headers sit directly below the API Key so channel-owned upstream headers read next to the credential. */}
-      <ChannelCustomHeaders form={form} tr={tr} />
     </div>
   );
 };

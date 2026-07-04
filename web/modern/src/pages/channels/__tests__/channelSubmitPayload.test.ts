@@ -176,10 +176,10 @@ describe('buildChannelSubmitPayload key handling on edit', () => {
     expect(payload.key).toBe('sk-new-rotation');
   });
 
-  it('keeps an empty key on create so downstream validation can reject it', () => {
-    // The hook enforces "API key is required" on create BEFORE building the
-    // payload. The helper itself must not silently strip the field on create
-    // — that would mask validation bugs.
+  it('keeps an empty key on create instead of dropping the field', () => {
+    // API Key is optional, so an empty key is valid on create. The helper must
+    // still emit an explicit empty `key` rather than silently stripping it, so
+    // the backend receives a well-formed payload.
     const data = baseForm({ key: '' });
 
     const payload = buildChannelSubmitPayload(data, createOpts());

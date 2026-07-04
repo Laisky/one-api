@@ -13,7 +13,8 @@ export const createChannelSchema = (tr?: SchemaTranslationFn) => {
     name: z.string().min(1, message('validation.name_required', 'Channel name is required')),
     // Coerce because Select returns string
     type: z.coerce.number().int().min(1, message('validation.type_required', 'Channel type is required')),
-    // key optional on edit; we enforce presence only on create in submit handler
+    // API Key is optional for every channel type on both create and edit; no
+    // presence validation is enforced anywhere.
     key: z.string().optional(),
     base_url: z.string().optional(),
     other: z.string().optional(),
