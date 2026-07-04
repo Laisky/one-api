@@ -15,6 +15,7 @@ import { STORAGE_KEYS, usePageSize } from '@/hooks/usePersistentState';
 import { useResponsive } from '@/hooks/useResponsive';
 import { api } from '@/lib/api';
 import { cn, formatTimestamp } from '@/lib/utils';
+import { NameWithId } from '@/components/shared/NameWithId';
 import type { ColumnDef } from '@tanstack/react-table';
 import { Ban, Banknote, CheckCircle, ChevronDown, Copy, FlaskConical, Plus, RefreshCw, Settings, Trash2 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
@@ -695,14 +696,15 @@ export function ChannelsPage() {
 
   const columns: ColumnDef<Channel>[] = [
     {
-      accessorKey: 'uuid',
-      header: t('channels.columns.id'),
-      cell: ({ row }) => <span className="font-mono text-sm break-all">{String(channelRef(row.original))}</span>,
-    },
-    {
       accessorKey: 'name',
       header: t('channels.columns.name'),
-      cell: ({ row }) => <div className="font-medium">{row.original.name}</div>,
+      cell: ({ row }) => (
+        <NameWithId
+          name={row.original.name}
+          refId={channelRef(row.original)}
+          idLabel={t('channels.columns.id')}
+        />
+      ),
     },
     {
       accessorKey: 'type',

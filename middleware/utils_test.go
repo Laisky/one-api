@@ -64,6 +64,30 @@ func TestGetTokenKeyParts_WebSocketSubprotocol(t *testing.T) {
 	require.Equal(t, "123", parts[1], "unexpected parts from subprotocol: %#v", parts)
 }
 
+// TestGetTokenKeyParts_UUIDChannelSuffix verifies UUID channel suffixes stay intact.
+func TestGetTokenKeyParts_UUIDChannelSuffix(t *testing.T) {
+	old := config.TokenKeyPrefix
+	config.TokenKeyPrefix = "sk-"
+	defer func() { config.TokenKeyPrefix = old }()
+
+	channelUUID := "018f0000-0000-7000-8000-000000000123"
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	req := httptest.NewRequest("GET", "/", nil)
+	req.Header.Set("Authorization", "Bearer sk-abc-"+channelUUID)
+	c.Request = req
+
+	parts := GetTokenKeyParts(c)
+	require.Equal(t, []string{"abc", channelUUID}, parts)
+}
+
+// TestSplitTokenKeyPartsOnlySplitsRecognizedChannelSuffixes keeps hyphenated non-channel keys intact.
+func TestSplitTokenKeyPartsOnlySplitsRecognizedChannelSuffixes(t *testing.T) {
+	require.Equal(t, []string{"abc", "123"}, splitTokenKeyParts("abc-123"))
+	require.Equal(t, []string{"abc", "018f0000-0000-7000-8000-000000000123"}, splitTokenKeyParts("abc-018f0000-0000-7000-8000-000000000123"))
+	require.Equal(t, []string{"abc-not-channel"}, splitTokenKeyParts("abc-not-channel"))
+}
+
 func TestGetTokenKeyParts_AuthorizationTakesPrecedenceOverSubprotocol(t *testing.T) {
 	old := config.TokenKeyPrefix
 	config.TokenKeyPrefix = "sk-"
@@ -78,7 +102,7 @@ func TestGetTokenKeyParts_AuthorizationTakesPrecedenceOverSubprotocol(t *testing
 
 	parts := GetTokenKeyParts(c)
 	// Authorization header should take precedence
-	require.Equal(t, "header", parts[0], "Authorization should take precedence: %#v", parts)
+	require.Equal(t, []string{"header-token"}, parts, "Authorization should take precedence: %#v", parts)
 }
 
 func TestGetTokenKeyParts_SubprotocolWithoutPrefix(t *testing.T) {

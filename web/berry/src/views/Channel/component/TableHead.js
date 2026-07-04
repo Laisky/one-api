@@ -4,7 +4,6 @@ const ChannelTableHead = () => {
   return (
     <TableHead>
       <TableRow>
-        <TableCell>ID</TableCell>
         <TableCell>名称</TableCell>
         <TableCell>分组</TableCell>
         <TableCell>类型</TableCell>

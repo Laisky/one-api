@@ -5,6 +5,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { ListActionButton } from '@/components/ui/list-action-button';
+import { NameWithId } from '@/components/shared/NameWithId';
 import { useNotifications } from '@/components/ui/notifications';
 import { ResponsiveActionGroup } from '@/components/ui/responsive-action-group';
 import { ResponsivePageContainer } from '@/components/ui/responsive-container';
@@ -147,10 +148,16 @@ export function RedemptionsPage() {
 
   const columns: ColumnDef<RedemptionRow>[] = [
     {
-      header: tr('columns.id', 'ID'),
-      cell: ({ row }) => <span className="font-mono text-xs break-all">{String(redemptionRef(row.original))}</span>,
+      header: tr('columns.name', 'Name'),
+      accessorKey: 'name',
+      cell: ({ row }) => (
+        <NameWithId
+          name={row.original.name}
+          refId={redemptionRef(row.original)}
+          idLabel={tr('columns.id', 'ID')}
+        />
+      ),
     },
-    { header: tr('columns.name', 'Name'), accessorKey: 'name' },
     { header: tr('columns.code', 'Code'), accessorKey: 'key' },
     {
       header: tr('columns.quota', 'Quota'),

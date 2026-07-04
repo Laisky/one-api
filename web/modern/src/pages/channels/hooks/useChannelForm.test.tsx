@@ -189,7 +189,7 @@ describe('useChannelForm', () => {
     expect(mockApiPut).toHaveBeenCalledWith(
       '/api/channel/',
       expect.objectContaining({
-        id: 1,
+        uuid: '1',
         hidden_models: '["gpt-4o","hidden-b"]',
       })
     );

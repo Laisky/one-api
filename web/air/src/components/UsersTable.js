@@ -23,9 +23,11 @@ function renderRole(role) {
 
 const UsersTable = () => {
   const columns = [{
-    title: 'ID', dataIndex: 'uuid', render: (text, record) => userRef(record)
-  }, {
-    title: '用户名', dataIndex: 'username'
+    title: '用户名', dataIndex: 'username', render: (text, record) => (
+      <Tooltip content={`ID: ${userRef(record)}`}>
+        <span className="resource-name-with-id">{text}</span>
+      </Tooltip>
+    )
   }, {
     title: '分组', dataIndex: 'group', render: (text, record, index) => {
       return (<div>

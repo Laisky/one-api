@@ -13,7 +13,8 @@ import {
   DialogContentText,
   DialogTitle,
   Button,
-  Stack
+  Stack,
+  Tooltip
 } from '@mui/material';
 
 import Label from 'ui-component/Label';
@@ -61,9 +62,11 @@ export default function RedemptionTableRow({ item, manageRedemption, handleOpenM
   return (
     <>
       <TableRow tabIndex={ref}>
-        <TableCell>{ref}</TableCell>
-
-        <TableCell>{item.name}</TableCell>
+        <TableCell>
+          <Tooltip title={`ID: ${ref}`} placement="top">
+            <span className="resource-name-with-id">{item.name}</span>
+          </Tooltip>
+        </TableCell>
 
         <TableCell>
           {item.status !== 1 && item.status !== 2 ? (

@@ -265,10 +265,109 @@ func parseTokenKey(c *gin.Context) TokenKeyInfo {
 	key = strings.TrimPrefix(key, "laisky-")
 
 	return TokenKeyInfo{
-		Parts:     strings.Split(key, "-"),
+		Parts:     splitTokenKeyParts(key),
 		Source:    source,
 		HadScheme: hadScheme,
 	}
+}
+
+// splitTokenKeyParts separates a token key from an optional admin channel suffix.
+// Parameters:
+//   - key: prefix-stripped credential in the form token, token-intChannel, or token-uuidChannel.
+//
+// Return values:
+//   - []string: one element for a plain token or two elements for token and channel reference.
+func splitTokenKeyParts(key string) []string {
+	if token, channelRef, ok := splitTokenKeyUUIDSuffix(key); ok {
+		return []string{token, channelRef}
+	}
+	if token, channelRef, ok := splitTokenKeyIntegerSuffix(key); ok {
+		return []string{token, channelRef}
+	}
+	return []string{key}
+}
+
+// splitTokenKeyUUIDSuffix extracts a final hyphenated UUID channel suffix from a token key.
+// Parameters:
+//   - key: prefix-stripped credential to inspect.
+//
+// Return values:
+//   - string: token portion before the UUID suffix.
+//   - string: UUID channel reference suffix.
+//   - bool: true when a valid final UUID suffix was found.
+func splitTokenKeyUUIDSuffix(key string) (string, string, bool) {
+	const uuidLen = 36
+	if len(key) <= uuidLen+1 {
+		return "", "", false
+	}
+	separator := len(key) - uuidLen - 1
+	if key[separator] != '-' {
+		return "", "", false
+	}
+	token := key[:separator]
+	channelRef := key[separator+1:]
+	if token == "" || !looksHyphenatedUUID(channelRef) {
+		return "", "", false
+	}
+	return token, channelRef, true
+}
+
+// splitTokenKeyIntegerSuffix extracts a final decimal integer channel suffix from a token key.
+// Parameters:
+//   - key: prefix-stripped credential to inspect.
+//
+// Return values:
+//   - string: token portion before the integer suffix.
+//   - string: integer channel reference suffix.
+//   - bool: true when a valid final integer suffix was found.
+func splitTokenKeyIntegerSuffix(key string) (string, string, bool) {
+	idx := strings.LastIndex(key, "-")
+	if idx <= 0 || idx == len(key)-1 {
+		return "", "", false
+	}
+	token := key[:idx]
+	channelRef := key[idx+1:]
+	for _, r := range channelRef {
+		if r < '0' || r > '9' {
+			return "", "", false
+		}
+	}
+	return token, channelRef, true
+}
+
+// looksHyphenatedUUID reports whether ref has canonical hyphenated UUID shape.
+// Parameters:
+//   - ref: candidate UUID string.
+//
+// Return values:
+//   - bool: true when ref is 36 characters with UUID hyphens and hexadecimal digits.
+func looksHyphenatedUUID(ref string) bool {
+	if len(ref) != 36 {
+		return false
+	}
+	for i, r := range ref {
+		switch i {
+		case 8, 13, 18, 23:
+			if r != '-' {
+				return false
+			}
+		default:
+			if !isASCIIHexDigit(r) {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+// isASCIIHexDigit reports whether r is an ASCII hexadecimal digit.
+// Parameters:
+//   - r: rune to inspect.
+//
+// Return values:
+//   - bool: true when r is 0-9, a-f, or A-F.
+func isASCIIHexDigit(r rune) bool {
+	return (r >= '0' && r <= '9') || (r >= 'a' && r <= 'f') || (r >= 'A' && r <= 'F')
 }
 
 // GetTokenKeyParts extracts the token key parts from the request credential.

@@ -3,7 +3,7 @@ import { API, copy, showError, showSuccess, timestamp2string } from '../helpers'
 
 import { ITEMS_PER_PAGE } from '../constants';
 import { renderQuota } from '../helpers/render';
-import { Button, Form, Modal, Popconfirm, Popover, Table, Tag } from '@douyinfe/semi-ui';
+import { Button, Form, Modal, Popconfirm, Popover, Table, Tag, Tooltip } from '@douyinfe/semi-ui';
 import EditRedemption from '../pages/Redemption/EditRedemption';
 
 function renderTimestamp(timestamp) {
@@ -30,13 +30,13 @@ function renderStatus(status) {
 const RedemptionsTable = () => {
   const columns = [
     {
-      title: 'ID',
-      dataIndex: 'uuid',
-      render: (text, record) => record.uuid || record.id
-    },
-    {
       title: '名称',
-      dataIndex: 'name'
+      dataIndex: 'name',
+      render: (text, record) => (
+        <Tooltip content={`ID: ${record.uuid || record.id}`}>
+          <span className="resource-name-with-id">{text}</span>
+        </Tooltip>
+      )
     },
     {
       title: '状态',

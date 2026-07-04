@@ -121,10 +121,8 @@ export default function ChannelTableRow({
   return (
     <>
       <TableRow tabIndex={ref}>
-        <TableCell>{ref}</TableCell>
-
         <TableCell>
-          <NameLabel name={item.name} models={item.models} />
+          <NameLabel name={item.name} models={item.models} refId={ref} />
         </TableCell>
 
         <TableCell>

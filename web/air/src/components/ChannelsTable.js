@@ -52,13 +52,13 @@ const ChannelsTable = () => {
     //     className: 'checkbox',
     // },
     {
-      title: 'ID',
-      dataIndex: 'uuid',
-      render: (text, record) => channelRef(record)
-    },
-    {
       title: '名称',
-      dataIndex: 'name'
+      dataIndex: 'name',
+      render: (text, record) => (
+        <Tooltip content={`ID: ${channelRef(record)}`}>
+          <span className="resource-name-with-id">{text}</span>
+        </Tooltip>
+      )
     },
     // {
     //   title: '分组',

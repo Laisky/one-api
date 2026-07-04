@@ -298,11 +298,11 @@ func TokenAuth() func(c *gin.Context) {
 		c.Set(ctxkey.TokenQuota, token.RemainQuota)
 		c.Set(ctxkey.TokenQuotaUnlimited, token.UnlimitedQuota)
 
-		// Handle channel-specific routing (admin feature)
-		// Format: token_key:channel_id allows admins to specify which channel to use
+		// Handle channel-specific routing (admin feature).
+		// Format: token_key-channel_ref allows admins to specify which channel to use.
 		if len(parts) > 1 {
 			if user.Role >= model.RoleAdminUser {
-				cid, err := strconv.Atoi(parts[1])
+				cid, err := resolveSpecificChannelRef(parts[1])
 				if err != nil {
 					AbortWithTokenError(c, http.StatusBadRequest, errors.Errorf("Invalid Channel Id: %s", parts[1]), tokenInfo)
 					return
@@ -328,6 +328,27 @@ func TokenAuth() func(c *gin.Context) {
 
 		c.Next()
 	}
+}
+
+// resolveSpecificChannelRef resolves an admin channel override to an internal channel id.
+// Parameters:
+//   - ref: admin-supplied channel reference, either a legacy integer id or a UUID.
+//
+// Return values:
+//   - int: internal channel primary key.
+//   - error: invalid-reference or not-found error.
+func resolveSpecificChannelRef(ref string) (int, error) {
+	ref = strings.TrimSpace(ref)
+	if ref == "" {
+		return 0, idresolve.ErrInvalidRef
+	}
+	if cid, err := strconv.Atoi(ref); err == nil {
+		if cid <= 0 {
+			return 0, idresolve.ErrInvalidRef
+		}
+		return cid, nil
+	}
+	return idresolve.Resolve(model.GetChannelIdByUUID, ref)
 }
 
 // shouldCheckModel determines whether the current endpoint requires model validation.

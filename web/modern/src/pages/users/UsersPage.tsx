@@ -6,6 +6,7 @@ import { EnhancedDataTable } from '@/components/ui/enhanced-data-table';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { ListActionButton } from '@/components/ui/list-action-button';
+import { NameWithId } from '@/components/shared/NameWithId';
 import { useNotifications } from '@/components/ui/notifications';
 import { ResponsiveActionGroup } from '@/components/ui/responsive-action-group';
 import { ResponsivePageContainer } from '@/components/ui/responsive-container';
@@ -233,11 +234,16 @@ export function UsersPage() {
 
   const columns: ColumnDef<UserRow>[] = [
     {
-      header: tr('columns.id', 'ID'),
-      accessorKey: 'uuid',
-      cell: ({ row }) => userRef(row.original),
+      header: tr('columns.username', 'Username'),
+      accessorKey: 'username',
+      cell: ({ row }) => (
+        <NameWithId
+          name={row.original.username}
+          refId={userRef(row.original)}
+          idLabel={tr('columns.id', 'ID')}
+        />
+      ),
     },
-    { header: tr('columns.username', 'Username'), accessorKey: 'username' },
     {
       header: tr('columns.display_name', 'Display Name'),
       accessorKey: 'display_name',

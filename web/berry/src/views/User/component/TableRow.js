@@ -76,9 +76,11 @@ export default function UsersTableRow({ item, manageUser, handleOpenModal, setMo
   return (
     <>
       <TableRow tabIndex={String(ref)}>
-        <TableCell>{ref}</TableCell>
-
-        <TableCell>{item.username}</TableCell>
+        <TableCell>
+          <Tooltip title={`ID: ${ref}`} placement="top">
+            <span className="resource-name-with-id">{item.username}</span>
+          </Tooltip>
+        </TableCell>
 
         <TableCell>
           <Label>{item.group}</Label>

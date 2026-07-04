@@ -6,6 +6,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { EnhancedDataTable } from '@/components/ui/enhanced-data-table';
 import { ListActionButton } from '@/components/ui/list-action-button';
+import { NameWithId } from '@/components/shared/NameWithId';
 import { useNotifications } from '@/components/ui/notifications';
 import { ResponsiveActionGroup } from '@/components/ui/responsive-action-group';
 import { ResponsivePageContainer } from '@/components/ui/responsive-container';
@@ -451,14 +452,15 @@ export function TokensPage() {
 
   const columns: ColumnDef<Token>[] = [
     {
-      accessorKey: 'uuid',
-      header: tr('columns.id', 'ID'),
-      cell: ({ row }) => <span className="font-mono text-sm">{tokenRefText(row.original)}</span>,
-    },
-    {
       accessorKey: 'name',
       header: tr('columns.name', 'Name'),
-      cell: ({ row }) => <div className="font-medium">{formatTokenLabel(row.original)}</div>,
+      cell: ({ row }) => (
+        <NameWithId
+          name={formatTokenLabel(row.original)}
+          refId={tokenRefText(row.original)}
+          idLabel={tr('columns.id', 'ID')}
+        />
+      ),
     },
     {
       accessorKey: 'key',
