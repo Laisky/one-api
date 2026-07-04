@@ -2,7 +2,6 @@ package controller
 
 import (
 	"net/http"
-	"strconv"
 
 	"github.com/Laisky/errors/v2"
 	gmw "github.com/Laisky/gin-middlewares/v7"
@@ -50,7 +49,7 @@ func GetTraceByTraceId(c *gin.Context) {
 	response := gin.H{
 		"success": true,
 		"data": gin.H{
-			"id":         trace.Id,
+			"uuid":       trace.UUID,
 			"trace_id":   trace.TraceId,
 			"url":        trace.URL,
 			"method":     trace.Method,
@@ -74,7 +73,7 @@ func GetTraceByLogId(c *gin.Context) {
 		return
 	}
 
-	logId, err := strconv.Atoi(logIdStr)
+	logId, err := resolveLogRef(logIdStr)
 	if err != nil {
 		helper.RespondErrorWithStatus(c, http.StatusBadRequest, errors.New("invalid log_id parameter"))
 		return
@@ -129,7 +128,7 @@ func GetTraceByLogId(c *gin.Context) {
 	response := gin.H{
 		"success": true,
 		"data": gin.H{
-			"id":         trace.Id,
+			"uuid":       trace.UUID,
 			"trace_id":   trace.TraceId,
 			"url":        trace.URL,
 			"method":     trace.Method,
@@ -140,11 +139,12 @@ func GetTraceByLogId(c *gin.Context) {
 			"timestamps": timestamps,
 			"durations":  durations,
 			"log": gin.H{
-				"id":       log.Id,
-				"user_id":  log.UserId,
-				"username": log.Username,
-				"content":  log.Content,
-				"type":     log.Type,
+				"uuid":         log.UUID,
+				"user_uuid":    log.UserUUID,
+				"channel_uuid": log.ChannelUUID,
+				"username":     log.Username,
+				"content":      log.Content,
+				"type":         log.Type,
 			},
 		},
 	}

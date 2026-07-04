@@ -42,24 +42,28 @@ const (
 //
 // GORM automatically manages CreatedAt/UpdatedAt as millisecond timestamps.
 type TokenTransaction struct {
-	Id            int    `json:"id"`
-	TransactionID string `json:"transaction_id" gorm:"size:128;uniqueIndex:uidx_token_txn"`
-	TokenId       int    `json:"token_id" gorm:"index;uniqueIndex:uidx_token_txn"`
-	UserId        int    `json:"user_id" gorm:"index"`
-	Status        int    `json:"status" gorm:"index"`
-	PreQuota      int64  `json:"pre_quota"`
-	FinalQuota    *int64 `json:"final_quota"`
-	Reason        string `json:"reason" gorm:"type:text"`
-	RequestId     string `json:"request_id" gorm:"size:64"`
-	TraceId       string `json:"trace_id" gorm:"size:64"`
-	ExpiresAt     int64  `json:"expires_at" gorm:"index"`
-	ConfirmedAt   *int64 `json:"confirmed_at"`
-	CanceledAt    *int64 `json:"canceled_at"`
-	AutoConfirmed bool   `json:"auto_confirmed" gorm:"default:false"`
-	LogId         *int   `json:"log_id" gorm:"index"`
-	ElapsedTimeMs *int64 `json:"elapsed_time_ms"`
-	CreatedAt     int64  `json:"created_at" gorm:"autoCreateTime:milli"`
-	UpdatedAt     int64  `json:"updated_at" gorm:"autoUpdateTime:milli"`
+	Id            int     `json:"-"`
+	UUID          string  `json:"uuid" gorm:"type:char(36);index;column:uuid"`
+	TransactionID string  `json:"transaction_id" gorm:"size:128;uniqueIndex:uidx_token_txn"`
+	TokenId       int     `json:"-" gorm:"index;uniqueIndex:uidx_token_txn"`
+	TokenUUID     *string `json:"token_uuid" gorm:"type:char(36);column:token_uuid;index"`
+	UserId        int     `json:"-" gorm:"index"`
+	UserUUID      *string `json:"user_uuid" gorm:"type:char(36);column:user_uuid;index"`
+	Status        int     `json:"status" gorm:"index"`
+	PreQuota      int64   `json:"pre_quota"`
+	FinalQuota    *int64  `json:"final_quota"`
+	Reason        string  `json:"reason" gorm:"type:text"`
+	RequestId     string  `json:"request_id" gorm:"size:64"`
+	TraceId       string  `json:"trace_id" gorm:"size:64"`
+	ExpiresAt     int64   `json:"expires_at" gorm:"index"`
+	ConfirmedAt   *int64  `json:"confirmed_at"`
+	CanceledAt    *int64  `json:"canceled_at"`
+	AutoConfirmed bool    `json:"auto_confirmed" gorm:"default:false"`
+	LogId         *int    `json:"-" gorm:"index"`
+	LogUUID       *string `json:"log_uuid" gorm:"type:char(36);column:log_uuid;index"`
+	ElapsedTimeMs *int64  `json:"elapsed_time_ms"`
+	CreatedAt     int64   `json:"created_at" gorm:"autoCreateTime:milli"`
+	UpdatedAt     int64   `json:"updated_at" gorm:"autoUpdateTime:milli"`
 }
 
 // TokenTransactionStatusString converts a status code into a human-readable label.

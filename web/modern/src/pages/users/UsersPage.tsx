@@ -34,7 +34,8 @@ interface ConfirmState {
 }
 
 interface UserRow {
-  id: number;
+  id?: number;
+  uuid?: string;
   username: string;
   display_name?: string;
   role: number;
@@ -46,6 +47,20 @@ interface UserRow {
   created_at?: number;
   updated_at?: number;
 }
+
+const userRef = (user: Pick<UserRow, 'id' | 'uuid'>): string | number => user.uuid || user.id || '';
+
+const sameUserRef = (left: Pick<UserRow, 'id' | 'uuid'>, right: Pick<UserRow, 'id' | 'uuid'>): boolean => {
+  return String(userRef(left)) === String(userRef(right));
+};
+
+const userRefPayload = (ref: string | number): { id: number } | { uuid: string } => {
+  return typeof ref === 'string' ? { uuid: ref } : { id: ref };
+};
+
+const topupUserPayload = (ref: string | number): { user_id: number } | { user_uuid: string } => {
+  return typeof ref === 'string' ? { user_uuid: ref } : { user_id: ref };
+};
 
 export function UsersPage() {
   const navigate = useNavigate();
@@ -70,7 +85,7 @@ export function UsersPage() {
   const [openCreate, setOpenCreate] = useState(false);
   const [openTopup, setOpenTopup] = useState<{
     open: boolean;
-    userId?: number;
+    userId?: string | number;
     username?: string;
   }>({ open: false });
   const [confirmState, setConfirmState] = useState<ConfirmState>({ open: false });
@@ -146,14 +161,14 @@ export function UsersPage() {
       const { success, data } = res.data;
       if (success && Array.isArray(data)) {
         const options: SearchOption[] = data.map((user: UserRow) => ({
-          key: user.id.toString(),
+          key: String(userRef(user)),
           value: user.username,
           text: user.username,
           content: (
             <div className="flex flex-col">
               <div className="font-medium">{user.username}</div>
               <div className="text-sm text-muted-foreground flex flex-wrap gap-2">
-                <span>{tr('search.id_label', 'ID: {{id}}', { id: user.id })}</span>
+                <span>{tr('search.id_label', 'ID: {{id}}', { id: userRef(user) })}</span>
                 <span>
                   {tr('search.role_label', 'Role: {{role}}', {
                     role: getRoleLabel(user.role),
@@ -217,7 +232,11 @@ export function UsersPage() {
   };
 
   const columns: ColumnDef<UserRow>[] = [
-    { header: tr('columns.id', 'ID'), accessorKey: 'id' },
+    {
+      header: tr('columns.id', 'ID'),
+      accessorKey: 'uuid',
+      cell: ({ row }) => userRef(row.original),
+    },
     { header: tr('columns.username', 'Username'), accessorKey: 'username' },
     {
       header: tr('columns.display_name', 'Display Name'),
@@ -281,15 +300,17 @@ export function UsersPage() {
       header: tr('columns.actions', 'Actions'),
       cell: ({ row }) => {
         const target = row.original;
+        const targetRef = userRef(target);
+        const currentUserRef = currentUser?.uuid || currentUser?.id;
         const canPromote = isSuperAdmin && target.role < 100;
-        const canDemote = isSuperAdmin && target.role > 1 && target.id !== currentUser?.id;
+        const canDemote = isSuperAdmin && target.role > 1 && String(targetRef) !== String(currentUserRef ?? '');
         const canDisable2fa = isSuperAdmin;
         return (
           <ResponsiveActionGroup justify="start">
-            <Button variant="outline" size="sm" onClick={() => navigate(`/users/edit/${target.id}`)}>
+            <Button variant="outline" size="sm" onClick={() => navigate(`/users/edit/${targetRef}`)}>
               {tr('actions.edit', 'Edit')}
             </Button>
-            <Button variant="outline" size="sm" onClick={() => manage(target.id, target.status === 1 ? 'disable' : 'enable', row.index)}>
+            <Button variant="outline" size="sm" onClick={() => manage(targetRef, target.status === 1 ? 'disable' : 'enable', row.index)}>
               {target.status === 1 ? tr('actions.disable', 'Disable') : tr('actions.enable', 'Enable')}
             </Button>
             {canPromote && (
@@ -307,7 +328,7 @@ export function UsersPage() {
                 {tr('actions.disable_2fa', 'Disable 2FA')}
               </Button>
             )}
-            <Button variant="destructive" size="sm" onClick={() => manage(target.id, 'delete', row.index)}>
+            <Button variant="destructive" size="sm" onClick={() => manage(targetRef, 'delete', row.index)}>
               {tr('actions.delete', 'Delete')}
             </Button>
             <Button
@@ -316,7 +337,7 @@ export function UsersPage() {
               onClick={() =>
                 setOpenTopup({
                   open: true,
-                  userId: target.id,
+                  userId: targetRef,
                   username: target.username,
                 })
               }
@@ -369,7 +390,7 @@ export function UsersPage() {
             : undefined;
         setData((prev) =>
           prev.map((u) => {
-            if (u.id !== user.id) return u;
+            if (!sameUserRef(u, user)) return u;
             if (typeof updatedRole === 'number') {
               return { ...u, role: updatedRole };
             }
@@ -388,7 +409,7 @@ export function UsersPage() {
           ),
         });
       } else if (kind === 'disable_2fa') {
-        const res = await api.post(`/api/user/totp/disable/${user.id}`);
+        const res = await api.post(`/api/user/totp/disable/${userRef(user)}`);
         const { success, message } = res.data || {};
         if (!success) {
           throw new Error(message || tr('notifications.disable_2fa_failed_message', 'Unable to disable 2FA.'));
@@ -429,14 +450,14 @@ export function UsersPage() {
     }
   };
 
-  const manage = async (id: number, action: 'enable' | 'disable' | 'delete', idx: number) => {
+  const manage = async (id: string | number, action: 'enable' | 'disable' | 'delete', idx: number) => {
     try {
       let res: any;
       if (action === 'delete') {
         // Unified API call - complete URL with /api prefix
         res = await api.delete(`/api/user/${id}`);
       } else {
-        const body: any = { id, status: action === 'enable' ? 1 : 2 };
+        const body: any = { ...userRefPayload(id), status: action === 'enable' ? 1 : 2 };
         res = await api.put('/api/user/?status_only=true', body);
       }
       const { success, message } = res.data || {};
@@ -529,14 +550,14 @@ export function UsersPage() {
             floatingRowActions={(row) => (
               <div className="flex items-center gap-1">
                 <ListActionButton
-                  onClick={() => navigate(`/users/edit/${row.id}`)}
+                  onClick={() => navigate(`/users/edit/${userRef(row)}`)}
                   title={tr('actions.edit', 'Edit')}
                   icon={<Settings className="h-4 w-4" />}
                 />
                 <ListActionButton
                   onClick={() => {
-                    const idx = data.findIndex((u) => u.id === row.id);
-                    manage(row.id, row.status === 1 ? 'disable' : 'enable', idx);
+                    const idx = data.findIndex((u) => sameUserRef(u, row));
+                    manage(userRef(row), row.status === 1 ? 'disable' : 'enable', idx);
                   }}
                   title={row.status === 1 ? tr('actions.disable', 'Disable') : tr('actions.enable', 'Enable')}
                   className={row.status === 1 ? 'text-warning hover:text-warning/80' : 'text-success hover:text-success/80'}
@@ -553,7 +574,7 @@ export function UsersPage() {
                   onClick={() =>
                     setOpenTopup({
                       open: true,
-                      userId: row.id,
+                      userId: userRef(row),
                       username: row.username,
                     })
                   }
@@ -562,8 +583,8 @@ export function UsersPage() {
                 />
                 <ListActionButton
                   onClick={() => {
-                    const idx = data.findIndex((u) => u.id === row.id);
-                    manage(row.id, 'delete', idx);
+                    const idx = data.findIndex((u) => sameUserRef(u, row));
+                    manage(userRef(row), 'delete', idx);
                   }}
                   title={tr('actions.delete', 'Delete')}
                   icon={<Trash2 className="h-4 w-4" />}
@@ -785,7 +806,7 @@ function TopUpDialog({
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
-  userId?: number;
+  userId?: string | number;
   username?: string;
   onDone: () => void;
 }) {
@@ -822,7 +843,7 @@ function TopUpDialog({
               try {
                 // Unified API call - complete URL with /api prefix
                 const res = await api.post('/api/topup', {
-                  user_id: userId,
+                  ...topupUserPayload(userId),
                   quota: values.quota,
                   remark: values.remark,
                 });

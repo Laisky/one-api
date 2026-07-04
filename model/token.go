@@ -26,7 +26,9 @@ const (
 
 type Token struct {
 	Id             int     `json:"id"`
+	UUID           string  `json:"uuid" gorm:"type:char(36);index;column:uuid"`
 	UserId         int     `json:"user_id"`
+	UserUUID       *string `json:"user_uuid" gorm:"type:char(36);column:user_uuid;index"`
 	Key            string  `json:"key" gorm:"type:char(48);uniqueIndex"`
 	Status         int     `json:"status" gorm:"default:1"`
 	Name           string  `json:"name" gorm:"index" `
@@ -44,6 +46,7 @@ type Token struct {
 
 var tokenSortFields = map[string]string{
 	"id":           "id",
+	"uuid":         "uuid",
 	"name":         "name",
 	"status":       "status",
 	"expired_time": "expired_time",
@@ -66,8 +69,8 @@ func (t Token) MarshalJSON() ([]byte, error) {
 	}
 
 	type tokenDTO struct {
-		Id             int     `json:"id"`
-		UserId         int     `json:"user_id"`
+		UUID           string  `json:"uuid"`
+		UserUUID       *string `json:"user_uuid"`
 		Key            string  `json:"key"`
 		Status         int     `json:"status"`
 		Name           string  `json:"name"`
@@ -83,8 +86,8 @@ func (t Token) MarshalJSON() ([]byte, error) {
 		Subnet         *string `json:"subnet"`
 	}
 	dto := tokenDTO{
-		Id:             t.Id,
-		UserId:         t.UserId,
+		UUID:           t.UUID,
+		UserUUID:       t.UserUUID,
 		Key:            prefix + raw,
 		Status:         t.Status,
 		Name:           t.Name,
@@ -286,6 +289,15 @@ func GetTokenById(id int) (*Token, error) {
 func (t *Token) Insert(ctx context.Context) error {
 	if ctx == nil {
 		ctx = context.Background()
+	}
+	if t.UserUUID == nil && t.UserId > 0 {
+		userUUID, err := GetUserUUIDByID(t.UserId)
+		if err != nil {
+			return errors.Wrapf(err, "get token user uuid: user_id=%d", t.UserId)
+		}
+		if userUUID != "" {
+			t.UserUUID = &userUUID
+		}
 	}
 	var err error
 	err = DB.Create(t).Error

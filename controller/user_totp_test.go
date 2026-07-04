@@ -393,8 +393,8 @@ func TestAdminDisableUserTotp(t *testing.T) {
 		AdminDisableUserTotp(c)
 	})
 
-	// Test with valid user ID
-	req, _ := http.NewRequest("POST", "/admin/totp/disable/3", nil)
+	// Test with valid user UUID
+	req, _ := http.NewRequest("POST", "/admin/totp/disable/"+targetUser.UUID, nil)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 	assert.Equal(t, http.StatusOK, w.Code)

@@ -379,7 +379,7 @@ func updateChannelBalance(channel *model.Channel) (float64, error) {
 
 // UpdateChannelBalance refreshes the balance information for the specified channel and returns the result.
 func UpdateChannelBalance(c *gin.Context) {
-	id, err := strconv.Atoi(c.Param("id"))
+	id, err := resolveChannelRef(c.Param("id"))
 	if err != nil {
 		helper.RespondError(c, err)
 		return

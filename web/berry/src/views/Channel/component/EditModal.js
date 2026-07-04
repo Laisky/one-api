@@ -366,7 +366,7 @@ const EditModal = ({ open, channelId, onCancel, onOk }) => {
     if (channelId) {
       res = await API.put(`/api/channel/`, {
         ...values,
-        id: parseInt(channelId),
+        uuid: channelId,
         models: modelsStr,
         config: configStr
       });
@@ -840,7 +840,7 @@ const EditModal = ({ open, channelId, onCancel, onOk }) => {
                         <FormHelperText id="helper-tex-channel-key-label"> {inputPrompt.key} </FormHelperText>
                       )}
                     </FormControl>
-                    {channelId === 0 && (
+                    {!channelId && (
                       <Container
                         sx={{
                           textAlign: 'right'
@@ -1165,7 +1165,7 @@ export default EditModal;
 
 EditModal.propTypes = {
   open: PropTypes.bool,
-  channelId: PropTypes.number,
+  channelId: PropTypes.oneOfType([PropTypes.number, PropTypes.string]),
   onCancel: PropTypes.func,
   onOk: PropTypes.func
 };

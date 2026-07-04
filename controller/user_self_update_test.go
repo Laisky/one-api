@@ -293,8 +293,8 @@ func TestUpdateUserMcpToolBlacklistWithoutGroup(t *testing.T) {
 		UpdateUser(c)
 	})
 
-	// Send only id and mcp_tool_blacklist, NO group field
-	payloadJSON := fmt.Sprintf(`{"id": %d, "mcp_tool_blacklist": ["tool1", "tool2"]}`, user.Id)
+	// Send only uuid and mcp_tool_blacklist, NO group field
+	payloadJSON := fmt.Sprintf(`{"uuid": %q, "mcp_tool_blacklist": ["tool1", "tool2"]}`, user.UUID)
 	req := httptest.NewRequest(http.MethodPut, "/api/user/", bytes.NewReader([]byte(payloadJSON)))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
@@ -312,6 +312,45 @@ func TestUpdateUserMcpToolBlacklistWithoutGroup(t *testing.T) {
 	require.Contains(t, updated.MCPToolBlacklist, "tool2")
 	// Group should remain unchanged
 	require.Equal(t, "default", updated.Group)
+}
+
+// TestUpdateUserIgnoresClientUUIDFields verifies bind-safety for admin user updates.
+func TestUpdateUserIgnoresClientUUIDFields(t *testing.T) {
+	setupSelfUpdateTest(t)
+
+	user := &model.User{
+		Username:    "uuid-safe-user",
+		Password:    "hashed",
+		DisplayName: "UUID Safe User",
+		Group:       "default",
+		Status:      model.UserStatusEnabled,
+	}
+	require.NoError(t, model.DB.Create(user).Error)
+	originalUUID := user.UUID
+	require.NotEmpty(t, originalUUID)
+
+	router := gin.New()
+	router.PUT("/api/user/", func(c *gin.Context) {
+		c.Set(ctxkey.Role, model.RoleRootUser)
+		c.Set(ctxkey.Id, 1)
+		UpdateUser(c)
+	})
+
+	payloadJSON := fmt.Sprintf(`{"uuid":%q,"username":"uuid-safe-user","display_name":"Updated","group":"default","status":1,"inviter_uuid":"018f0000-0000-7000-8000-00000000feed"}`, originalUUID)
+	req := httptest.NewRequest(http.MethodPut, "/api/user/", bytes.NewReader([]byte(payloadJSON)))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	var resp map[string]any
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	require.Equal(t, true, resp["success"], "expected success, got: %v", resp["message"])
+
+	var updated model.User
+	require.NoError(t, model.DB.First(&updated, user.Id).Error)
+	require.Equal(t, originalUUID, updated.UUID)
+	require.Nil(t, updated.InviterUUID)
+	require.Equal(t, "Updated", updated.DisplayName)
 }
 
 // createLockedSelfUser provisions a logged-in user whose Metadata.PasswordLocked

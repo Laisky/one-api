@@ -21,6 +21,8 @@ const OPEN_LINK_OPTIONS = [
   { key: 'lobechat', text: 'LobeChat', value: 'lobechat' }
 ];
 
+const tokenRef = (token) => token.uuid || token.id;
+
 function renderTimestamp(timestamp) {
   return (
     <>
@@ -203,7 +205,7 @@ const TokensTable = () => {
             okType={'danger'}
             position={'left'}
             onConfirm={() => {
-              manageToken(record.id, 'delete', record).then(
+              manageToken(tokenRef(record), 'delete', record).then(
                 () => {
                   removeRecord(record.key);
                 }
@@ -217,7 +219,7 @@ const TokensTable = () => {
               <Button theme="light" type="warning" style={{ marginRight: 1 }} onClick={
                 async () => {
                   manageToken(
-                    record.id,
+                    tokenRef(record),
                     'disable',
                     record
                   );
@@ -226,7 +228,7 @@ const TokensTable = () => {
               <Button theme="light" type="secondary" style={{ marginRight: 1 }} onClick={
                 async () => {
                   manageToken(
-                    record.id,
+                    tokenRef(record),
                     'enable',
                     record
                   );
@@ -430,7 +432,7 @@ const TokensTable = () => {
 
   const manageToken = async (id, action, record) => {
     setLoading(true);
-    let data = { id };
+    let data = typeof id === 'string' ? { uuid: id } : { id };
     let res;
     switch (action) {
       case 'delete':
@@ -499,7 +501,7 @@ const TokensTable = () => {
     sortedTokens.sort((a, b) => {
       return ('' + a[key]).localeCompare(b[key]);
     });
-    if (sortedTokens[0].id === tokens[0].id) {
+    if (tokenRef(sortedTokens[0]) === tokenRef(tokens[0])) {
       sortedTokens.reverse();
     }
     setTokens(sortedTokens);

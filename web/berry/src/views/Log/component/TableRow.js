@@ -35,7 +35,7 @@ export default function LogTableRow({ item, userIsAdmin, onRowClick }) {
       <TableRow
         tabIndex={item.id}
         sx={{ cursor: 'pointer', '&:hover': { backgroundColor: 'action.hover' } }}
-        onClick={() => onRowClick && onRowClick(item.id)}
+        onClick={() => onRowClick && onRowClick(item.uuid || item.id)}
       >
         <TableCell data-label="时间" title={fullTimestamp}>{compactTimestamp}</TableCell>
 

@@ -72,7 +72,7 @@ const LogsTable = () => {
     render: (text, record, index) => {
       return (isAdminUser ? <div>
         <Avatar size="small" color={stringToColor(text)} style={{ marginRight: 4 }}
-          onClick={() => showUserInfo(record.user_id)}>
+          onClick={() => showUserInfo(record.user_uuid || record.user_id)}>
           {typeof text === 'string' && text.slice(0, 1)}
         </Avatar>
         {text}
@@ -409,7 +409,7 @@ const LogsTable = () => {
   };
 
   const handleRowClick = (record) => {
-    setSelectedLogId(record.id);
+    setSelectedLogId(record.uuid || record.id);
     setTracingModalVisible(true);
   };
 

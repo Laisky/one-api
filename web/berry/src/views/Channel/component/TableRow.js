@@ -37,6 +37,7 @@ export default function ChannelTableRow({
   setModalChannelId,
   handleOpenPricingModal,
 }) {
+  const ref = item.uuid || item.id;
   const [open, setOpen] = useState(null);
   const [openDelete, setOpenDelete] = useState(false);
   const [statusSwitch, setStatusSwitch] = useState(item.status);
@@ -66,7 +67,7 @@ export default function ChannelTableRow({
 
   const handleStatus = async () => {
     const switchVlue = statusSwitch === 1 ? 2 : 1;
-    const { success } = await manageChannel(item.id, "status", switchVlue);
+    const { success } = await manageChannel(ref, "status", switchVlue);
     if (success) {
       setStatusSwitch(switchVlue);
     }
@@ -83,14 +84,14 @@ export default function ChannelTableRow({
       return;
     }
 
-    const { success, data } = await manageChannel(item.id, "priority", currentValue);
+    const { success, data } = await manageChannel(ref, "priority", currentValue);
     if (success) {
       setPriority(data?.priority ?? currentValue);
     }
   };
 
   const handleResponseTime = async () => {
-    const { success, time } = await manageChannel(item.id, "test", "");
+    const { success, time } = await manageChannel(ref, "test", "");
     if (success) {
       setResponseTimeData({
         test_time: Date.now() / 1000,
@@ -101,7 +102,7 @@ export default function ChannelTableRow({
   };
 
   const updateChannelBalance = async () => {
-    const res = await API.get(`/api/channel/update_balance/${item.id}`);
+    const res = await API.get(`/api/channel/update_balance/${ref}`);
     const { success, message, balance } = res.data;
     if (success) {
       setItemBalance(balance);
@@ -114,13 +115,13 @@ export default function ChannelTableRow({
 
   const handleDelete = async () => {
     handleCloseMenu();
-    await manageChannel(item.id, "delete", "");
+    await manageChannel(ref, "delete", "");
   };
 
   return (
     <>
-      <TableRow tabIndex={item.id}>
-        <TableCell>{item.id}</TableCell>
+      <TableRow tabIndex={ref}>
+        <TableCell>{ref}</TableCell>
 
         <TableCell>
           <NameLabel name={item.name} models={item.models} />
@@ -159,7 +160,7 @@ export default function ChannelTableRow({
             placement="top"
           >
             <TableSwitch
-              id={`switch-${item.id}`}
+              id={`switch-${ref}`}
               checked={statusSwitch === 1}
               onChange={handleStatus}
             />
@@ -185,7 +186,7 @@ export default function ChannelTableRow({
         </TableCell>
         <TableCell>
           <TextField
-            id={`priority-${item.id}`}
+            id={`priority-${ref}`}
             onBlur={handlePriority}
             type="number"
             label="优先级"
@@ -220,7 +221,7 @@ export default function ChannelTableRow({
           onClick={() => {
             handleCloseMenu();
             handleOpenModal();
-            setModalChannelId(item.id);
+            setModalChannelId(ref);
           }}
         >
           <IconEdit style={{ marginRight: "16px" }} />
@@ -229,7 +230,7 @@ export default function ChannelTableRow({
         <MenuItem
           onClick={() => {
             handleCloseMenu();
-            handleOpenPricingModal(item.id, item.name, item.type);
+            handleOpenPricingModal(ref, item.name, item.type);
           }}
         >
           <IconCurrencyDollar style={{ marginRight: "16px" }} />

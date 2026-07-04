@@ -202,7 +202,7 @@ const LabelWithTooltip = ({ label, helpText, children, ...props }) => (
 
 const EditChannel = (props) => {
     const navigate = useNavigate();
-    const channelId = props.editingChannel.id;
+    const channelId = props.editingChannel.uuid || props.editingChannel.id;
     const isEdit = channelId !== undefined;
     const [loading, setLoading] = useState(isEdit);
     const handleCancel = () => {
@@ -482,7 +482,7 @@ const EditChannel = (props) => {
             // Load default pricing for new channels
             loadDefaultPricing(originInputs.type);
         }
-    }, [props.editingChannel.id]);
+    }, [props.editingChannel.uuid, props.editingChannel.id]);
 
 
     const submit = async () => {
@@ -545,7 +545,7 @@ const EditChannel = (props) => {
         }
         localInputs.config = JSON.stringify(config);
         if (isEdit) {
-            res = await API.put(`/api/channel/`, { ...localInputs, id: parseInt(channelId) });
+            res = await API.put(`/api/channel/`, { ...localInputs, uuid: channelId });
         } else {
             res = await API.post(`/api/channel/`, localInputs);
         }

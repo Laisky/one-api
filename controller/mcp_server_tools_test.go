@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"strconv"
 	"testing"
 
 	"github.com/gin-gonic/gin"
@@ -64,7 +63,7 @@ func TestListMCPServerTools_EmptyServerEmitsDataArray(t *testing.T) {
 	router := gin.New()
 	router.GET("/api/mcp_servers/:id/tools", ListMCPServerTools)
 
-	request, _ := http.NewRequest(http.MethodGet, "/api/mcp_servers/"+strconv.Itoa(server.Id)+"/tools", nil)
+	request, _ := http.NewRequest(http.MethodGet, "/api/mcp_servers/"+server.UUID+"/tools", nil)
 	response := httptest.NewRecorder()
 	router.ServeHTTP(response, request)
 
@@ -98,7 +97,7 @@ func TestListMCPServerTools_PopulatedReturnsTools(t *testing.T) {
 		AuthType: model.MCPAuthTypeNone,
 	}
 	require.NoError(t, model.CreateMCPServer(server))
-	require.NoError(t, model.UpsertMCPTools(server.Id, []*model.MCPTool{
+	require.NoError(t, model.UpsertMCPTools(server.Id, server.UUID, []*model.MCPTool{
 		{Name: "echo", DisplayName: "echo"},
 	}))
 
@@ -106,7 +105,7 @@ func TestListMCPServerTools_PopulatedReturnsTools(t *testing.T) {
 	router := gin.New()
 	router.GET("/api/mcp_servers/:id/tools", ListMCPServerTools)
 
-	request, _ := http.NewRequest(http.MethodGet, "/api/mcp_servers/"+strconv.Itoa(server.Id)+"/tools", nil)
+	request, _ := http.NewRequest(http.MethodGet, "/api/mcp_servers/"+server.UUID+"/tools", nil)
 	response := httptest.NewRecorder()
 	router.ServeHTTP(response, request)
 
@@ -136,7 +135,7 @@ func TestListMCPServerToolsAppliesPricing(t *testing.T) {
 	}
 	require.NoError(t, model.CreateMCPServer(server))
 
-	require.NoError(t, model.UpsertMCPTools(server.Id, []*model.MCPTool{
+	require.NoError(t, model.UpsertMCPTools(server.Id, server.UUID, []*model.MCPTool{
 		{Name: "web_fetch", DisplayName: "web_fetch"},
 		{Name: "web_search", DisplayName: "web_search"},
 		{Name: "free_tool", DisplayName: "free_tool", InputSchema: "null"},
@@ -146,7 +145,7 @@ func TestListMCPServerToolsAppliesPricing(t *testing.T) {
 	router := gin.New()
 	router.GET("/api/mcp_servers/:id/tools", ListMCPServerTools)
 
-	request, _ := http.NewRequest(http.MethodGet, "/api/mcp_servers/"+strconv.Itoa(server.Id)+"/tools", nil)
+	request, _ := http.NewRequest(http.MethodGet, "/api/mcp_servers/"+server.UUID+"/tools", nil)
 	response := httptest.NewRecorder()
 	router.ServeHTTP(response, request)
 

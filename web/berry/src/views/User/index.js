@@ -19,6 +19,8 @@ import { ITEMS_PER_PAGE } from 'constants';
 import { IconRefresh, IconPlus } from '@tabler/icons-react';
 import EditeModal from './component/EditModal';
 
+const itemRef = (item) => item?.uuid || item?.id || '';
+
 // ----------------------------------------------------------------------
 export default function Users() {
   const [users, setUsers] = useState([]);
@@ -26,7 +28,7 @@ export default function Users() {
   const [searching, setSearching] = useState(false);
   const [searchKeyword, setSearchKeyword] = useState('');
   const [openModal, setOpenModal] = useState(false);
-  const [editUserId, setEditUserId] = useState(0);
+  const [editUserId, setEditUserId] = useState('');
 
   const loadUsers = async (startIdx) => {
     setSearching(true);
@@ -119,7 +121,7 @@ export default function Users() {
 
   const handleCloseModal = () => {
     setOpenModal(false);
-    setEditUserId(0);
+    setEditUserId('');
   };
 
   const handleOkModal = (status) => {
@@ -142,7 +144,7 @@ export default function Users() {
       <Stack direction="row" alignItems="center" justifyContent="space-between" mb={2.5}>
         <Typography variant="h4">用户</Typography>
 
-        <Button variant="contained" color="primary" startIcon={<IconPlus />} onClick={() => handleOpenModal(0)}>
+        <Button variant="contained" color="primary" startIcon={<IconPlus />} onClick={() => handleOpenModal('')}>
           新建用户
         </Button>
       </Stack>
@@ -181,7 +183,7 @@ export default function Users() {
                   <UsersTableRow
                     item={row}
                     manageUser={manageUser}
-                    key={row.id}
+                    key={itemRef(row)}
                     handleOpenModal={handleOpenModal}
                     setModalUserId={setEditUserId}
                   />

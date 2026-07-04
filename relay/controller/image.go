@@ -583,11 +583,14 @@ func RelayImageHelper(c *gin.Context, relayMode int) *relaymodel.ErrorWithStatus
 						zap.Error(err), zap.Int("provisional_log_id", provLogID))
 					model.RecordConsumeLog(bgCtx, &model.Log{
 						UserId:           meta.UserId,
+						UserUUID:         model.StringPtrIfNotEmpty(meta.UserUUID),
 						ChannelId:        meta.ChannelId,
+						ChannelUUID:      model.StringPtrIfNotEmpty(meta.ChannelUUID),
 						PromptTokens:     promptTokens,
 						CompletionTokens: completionTokens,
 						ModelName:        visibleModelName,
 						TokenName:        tokenName,
+						TokenUUID:        model.StringPtrIfNotEmpty(meta.TokenUUID),
 						Quota:            int(usedQuota),
 						Content:          logContent,
 						ElapsedTime:      elapsedTime,
@@ -598,11 +601,14 @@ func RelayImageHelper(c *gin.Context, relayMode int) *relaymodel.ErrorWithStatus
 			} else {
 				model.RecordConsumeLog(bgCtx, &model.Log{
 					UserId:           meta.UserId,
+					UserUUID:         model.StringPtrIfNotEmpty(meta.UserUUID),
 					ChannelId:        meta.ChannelId,
+					ChannelUUID:      model.StringPtrIfNotEmpty(meta.ChannelUUID),
 					PromptTokens:     promptTokens,
 					CompletionTokens: completionTokens,
 					ModelName:        visibleModelName,
 					TokenName:        tokenName,
+					TokenUUID:        model.StringPtrIfNotEmpty(meta.TokenUUID),
 					Quota:            int(usedQuota),
 					Content:          logContent,
 					ElapsedTime:      elapsedTime,

@@ -431,13 +431,16 @@ func recordProvisionalLog(c *gin.Context, meta *metalib.Meta, modelName string, 
 	traceId := tracing.GetTraceIDFromContext(gmw.Ctx(c))
 
 	logEntry := &model.Log{
-		UserId:    meta.UserId,
-		ChannelId: meta.ChannelId,
-		ModelName: modelName,
-		TokenName: meta.TokenName,
-		IsStream:  meta.IsStream,
-		RequestId: requestId,
-		TraceId:   traceId,
+		UserId:      meta.UserId,
+		UserUUID:    model.StringPtrIfNotEmpty(meta.UserUUID),
+		ChannelId:   meta.ChannelId,
+		ChannelUUID: model.StringPtrIfNotEmpty(meta.ChannelUUID),
+		ModelName:   modelName,
+		TokenName:   meta.TokenName,
+		TokenUUID:   model.StringPtrIfNotEmpty(meta.TokenUUID),
+		IsStream:    meta.IsStream,
+		RequestId:   requestId,
+		TraceId:     traceId,
 	}
 
 	return model.RecordProvisionalConsumeLog(gmw.Ctx(c), logEntry, estimatedQuota)

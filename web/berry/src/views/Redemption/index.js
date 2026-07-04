@@ -20,13 +20,15 @@ import { IconRefresh, IconPlus } from '@tabler/icons-react';
 import EditeModal from './component/EditModal';
 
 // ----------------------------------------------------------------------
+const refPayload = (ref) => (typeof ref === 'string' ? { uuid: ref } : { id: ref });
+
 export default function Redemption() {
   const [redemptions, setRedemptions] = useState([]);
   const [activePage, setActivePage] = useState(0);
   const [searching, setSearching] = useState(false);
   const [searchKeyword, setSearchKeyword] = useState('');
   const [openModal, setOpenModal] = useState(false);
-  const [editRedemptionId, setEditRedemptionId] = useState(0);
+  const [editRedemptionId, setEditRedemptionId] = useState('');
 
   const loadRedemptions = async (startIdx) => {
     setSearching(true);
@@ -81,7 +83,7 @@ export default function Redemption() {
 
   const manageRedemptions = async (id, action, value) => {
     const url = '/api/redemption/';
-    let data = { id };
+    let data = refPayload(id);
     let res;
     switch (action) {
       case 'delete':
@@ -121,7 +123,7 @@ export default function Redemption() {
 
   const handleCloseModal = () => {
     setOpenModal(false);
-    setEditRedemptionId(0);
+    setEditRedemptionId('');
   };
 
   const handleOkModal = (status) => {
@@ -144,7 +146,7 @@ export default function Redemption() {
       <Stack direction="row" alignItems="center" justifyContent="space-between" mb={2.5}>
         <Typography variant="h4">兑换</Typography>
 
-        <Button variant="contained" color="primary" startIcon={<IconPlus />} onClick={() => handleOpenModal(0)}>
+        <Button variant="contained" color="primary" startIcon={<IconPlus />} onClick={() => handleOpenModal('')}>
           新建兑换码
         </Button>
       </Stack>
@@ -179,7 +181,7 @@ export default function Redemption() {
                   <RedemptionTableRow
                     item={row}
                     manageRedemption={manageRedemptions}
-                    key={row.id}
+                    key={row.uuid || row.id}
                     handleOpenModal={handleOpenModal}
                     setModalRedemptionId={setEditRedemptionId}
                   />

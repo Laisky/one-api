@@ -39,9 +39,12 @@ type Meta struct {
 	Mode         int
 	ChannelType  int
 	ChannelId    int
+	ChannelUUID  string
 	TokenId      int
+	TokenUUID    string
 	TokenName    string
 	UserId       int
+	UserUUID     string
 	Group        string
 	ModelMapping map[string]string
 	// BaseURL is the proxy url set in the channel config
@@ -92,6 +95,7 @@ func GetByContext(c *gin.Context) *Meta {
 			}
 			existingMeta.ChannelType = c.GetInt(ctxkey.Channel)
 			existingMeta.ChannelId = currentChannelId
+			existingMeta.ChannelUUID = c.GetString(ctxkey.ChannelUUID)
 			existingMeta.BaseURL = c.GetString(ctxkey.BaseURL)
 			existingMeta.APIKey = strings.TrimPrefix(c.Request.Header.Get("Authorization"), "Bearer ")
 			existingMeta.ChannelRatio = c.GetFloat64(ctxkey.ChannelRatio)
@@ -123,9 +127,12 @@ func GetByContext(c *gin.Context) *Meta {
 		Mode:               relaymode.GetByPath(c.Request.URL.Path),
 		ChannelType:        c.GetInt(ctxkey.Channel),
 		ChannelId:          c.GetInt(ctxkey.ChannelId),
+		ChannelUUID:        c.GetString(ctxkey.ChannelUUID),
 		TokenId:            c.GetInt(ctxkey.TokenId),
+		TokenUUID:          c.GetString(ctxkey.TokenUUID),
 		TokenName:          c.GetString(ctxkey.TokenName),
 		UserId:             c.GetInt(ctxkey.Id),
+		UserUUID:           c.GetString(ctxkey.UserUUID),
 		Group:              c.GetString(ctxkey.Group),
 		ModelMapping:       c.GetStringMapString(ctxkey.ModelMapping),
 		OriginModelName:    c.GetString(ctxkey.RequestModel),

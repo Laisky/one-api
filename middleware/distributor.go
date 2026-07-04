@@ -330,6 +330,7 @@ func SetupContextForSelectedChannel(c *gin.Context, channel *model.Channel, mode
 
 	c.Set(ctxkey.Channel, channel.Type)
 	c.Set(ctxkey.ChannelId, channel.Id)
+	c.Set(ctxkey.ChannelUUID, channel.UUID)
 	c.Set(ctxkey.ChannelName, channel.Name)
 	c.Set(ctxkey.ContentType, c.Request.Header.Get("Content-Type"))
 	if channel.SystemPrompt != nil && *channel.SystemPrompt != "" {

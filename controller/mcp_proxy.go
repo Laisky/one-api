@@ -296,6 +296,8 @@ func resolveToolCost(server *model.MCPServer, toolName string) int64 {
 func recordMCPToolLog(ctx context.Context, c *gin.Context, userId int, serverId int, toolName string, cost int64, elapsedMs int64) {
 	model.RecordToolLog(ctx, &model.Log{
 		UserId:      userId,
+		UserUUID:    model.StringPtrIfNotEmpty(c.GetString(ctxkey.UserUUID)),
+		TokenUUID:   model.StringPtrIfNotEmpty(c.GetString(ctxkey.TokenUUID)),
 		ModelName:   toolName,
 		Quota:       int(cost),
 		Content:     fmt.Sprintf("MCP tool call: %s (server %d)", toolName, serverId),

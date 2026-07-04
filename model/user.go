@@ -34,6 +34,7 @@ const (
 // Otherwise, the sensitive information will be saved on local storage in plain text!
 type User struct {
 	Id               int             `json:"id"`
+	UUID             string          `json:"uuid" gorm:"type:char(36);index;column:uuid"`
 	Username         string          `json:"username" gorm:"unique;index" validate:"max=30"`
 	Password         string          `json:"password" gorm:"not null;" validate:"min=8,max=20"`
 	DisplayName      string          `json:"display_name" gorm:"index" validate:"max=20"`
@@ -53,6 +54,7 @@ type User struct {
 	Group            string          `json:"group" gorm:"type:varchar(32);default:'default'"`
 	AffCode          string          `json:"aff_code" gorm:"type:varchar(32);column:aff_code;uniqueIndex"`
 	InviterId        int             `json:"inviter_id" gorm:"type:int;column:inviter_id;index"`
+	InviterUUID      *string         `json:"inviter_uuid" gorm:"type:char(36);column:inviter_uuid;index"`
 	MCPToolBlacklist JSONStringSlice `json:"mcp_tool_blacklist" gorm:"type:text"`
 	Metadata         UserMetadata    `json:"metadata" gorm:"type:text;serializer:json"`
 	CreatedAt        int64           `json:"created_at" gorm:"bigint;autoCreateTime:milli"`
@@ -176,6 +178,15 @@ func (user *User) Insert(ctx context.Context, inviterId int) error {
 	user.Quota = config.QuotaForNewUser
 	user.AccessToken = random.GetUUID()
 	user.AffCode = random.GetRandomString(4)
+	if inviterId != 0 {
+		inviterUUID, err := GetUserUUIDByID(inviterId)
+		if err != nil {
+			return errors.Wrapf(err, "get inviter uuid for user: username=%s, inviterId=%d", user.Username, inviterId)
+		}
+		if inviterUUID != "" {
+			user.InviterUUID = &inviterUUID
+		}
+	}
 	result := DB.Create(user)
 	if result.Error != nil {
 		return errors.Wrapf(result.Error, "failed to create user: username=%s, inviterId=%d", user.Username, inviterId)
@@ -196,6 +207,7 @@ func (user *User) Insert(ctx context.Context, inviterId int) error {
 	// create default token
 	cleanToken := Token{
 		UserId:         user.Id,
+		UserUUID:       &user.UUID,
 		Name:           "default",
 		Key:            random.GenerateKey(),
 		CreatedTime:    helper.GetTimestamp(),
@@ -228,7 +240,7 @@ func (user *User) Update(updatePassword bool) error {
 	case UserStatusEnabled:
 		blacklist.UnbanUser(user.Id)
 	}
-	err = DB.Model(user).Updates(user).Error
+	err = DB.Model(user).Omit("uuid", "inviter_uuid").Updates(user).Error
 	if err != nil {
 		return errors.Wrapf(err, "failed to update user: id=%d, username=%s", user.Id, user.Username)
 	}

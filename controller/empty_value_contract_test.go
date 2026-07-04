@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
-	"strconv"
 	"testing"
 
 	"github.com/Laisky/errors/v2"
@@ -60,7 +59,7 @@ func TestEmptyValueContract(t *testing.T) {
 
 		// Step 2: PUT with explicit null model_mapping.
 		updatePayload := map[string]any{
-			"id":            ch.Id,
+			"uuid":          ch.UUID,
 			"name":          ch.Name,
 			"type":          ch.Type,
 			"models":        ch.Models,
@@ -70,7 +69,7 @@ func TestEmptyValueContract(t *testing.T) {
 		require.True(t, putChannel(t, router, updatePayload), "update must succeed")
 
 		// Step 3: GET /api/channel/:id and assert empty/nil.
-		got := getChannel(t, router, ch.Id)
+		got := getChannel(t, router, ch.UUID)
 		assertChannelMappingCleared(t, got, "model_mapping")
 	})
 
@@ -96,7 +95,7 @@ func TestEmptyValueContract(t *testing.T) {
 
 		// PUT WITHOUT model_mapping key at all.
 		updatePayload := map[string]any{
-			"id":     ch.Id,
+			"uuid":   ch.UUID,
 			"name":   ch.Name,
 			"type":   ch.Type,
 			"models": ch.Models,
@@ -104,7 +103,7 @@ func TestEmptyValueContract(t *testing.T) {
 		}
 		require.True(t, putChannel(t, router, updatePayload))
 
-		got := getChannel(t, router, ch.Id)
+		got := getChannel(t, router, ch.UUID)
 		require.NotNil(t, got.ModelMapping, "ModelMapping must be preserved when omitted")
 		require.Equal(t, `{"a":"b"}`, *got.ModelMapping)
 	})
@@ -131,7 +130,7 @@ func TestEmptyValueContract(t *testing.T) {
 
 		// PUT with explicit empty-string model_mapping.
 		updatePayload := map[string]any{
-			"id":            ch.Id,
+			"uuid":          ch.UUID,
 			"name":          ch.Name,
 			"type":          ch.Type,
 			"models":        ch.Models,
@@ -140,7 +139,7 @@ func TestEmptyValueContract(t *testing.T) {
 		}
 		require.True(t, putChannel(t, router, updatePayload))
 
-		got := getChannel(t, router, ch.Id)
+		got := getChannel(t, router, ch.UUID)
 		// Empty-string variant: the contract guarantees the value is
 		// either nil or empty after read-back.
 		assertChannelMappingCleared(t, got, "model_mapping")
@@ -177,7 +176,10 @@ func TestEmptyValueContract(t *testing.T) {
 		require.True(t, createResp.Success, "mcp create must succeed: %s", createResp.Message)
 		require.NotNil(t, createResp.Data)
 		require.Equal(t, "foo", createResp.Data.Description)
-		serverID := createResp.Data.Id
+		serverUUID := createResp.Data.UUID
+		require.NotEmpty(t, serverUUID)
+		serverID, err := model.GetMCPServerIdByUUID(serverUUID)
+		require.NoError(t, errors.Wrap(err, "resolve mcp server uuid"))
 		require.NotZero(t, serverID)
 
 		// PUT with description="" (and base_url is required by validate).
@@ -191,7 +193,7 @@ func TestEmptyValueContract(t *testing.T) {
 		require.NoError(t, errors.Wrap(err, "marshal mcp update payload"))
 
 		w = httptest.NewRecorder()
-		req = httptest.NewRequest(http.MethodPut, "/api/mcp_servers/"+strconv.Itoa(serverID), bytes.NewReader(body))
+		req = httptest.NewRequest(http.MethodPut, "/api/mcp_servers/"+serverUUID, bytes.NewReader(body))
 		req.Header.Set("Content-Type", "application/json")
 		router.ServeHTTP(w, req)
 		require.Equal(t, http.StatusOK, w.Code)
@@ -414,11 +416,11 @@ func putChannel(t *testing.T, r http.Handler, payload map[string]any) bool {
 	return resp["success"].(bool)
 }
 
-func getChannel(t *testing.T, r http.Handler, id int) *model.Channel {
+func getChannel(t *testing.T, r http.Handler, uuid string) *model.Channel {
 	t.Helper()
 
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/channel/%d", id), nil)
+	req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/channel/%s", uuid), nil)
 	r.ServeHTTP(w, req)
 	require.Equal(t, http.StatusOK, w.Code)
 

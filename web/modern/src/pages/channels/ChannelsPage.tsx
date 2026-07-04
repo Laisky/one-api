@@ -24,7 +24,8 @@ import { CHANNEL_TYPE_LABELS as CHANNEL_TYPES } from './constants';
 import { resolveChannelColor } from './utils/colorGenerator';
 
 interface Channel {
-  id: number;
+  id?: number;
+  uuid?: string;
   name: string;
   type: number;
   status: number;
@@ -41,6 +42,15 @@ interface Channel {
   balance?: number;
   balance_updated_time?: number;
 }
+
+const channelRef = (channel: Pick<Channel, 'id' | 'uuid'>): string | number => channel.uuid || channel.id || '';
+
+const channelRefPayload = (ref: string | number): { id: number } | { uuid: string } => {
+  return typeof ref === 'string' ? { uuid: ref } : { id: ref };
+};
+
+const sameChannelRef = (left: Pick<Channel, 'id' | 'uuid'>, right: Pick<Channel, 'id' | 'uuid'>) =>
+  String(channelRef(left)) === String(channelRef(right));
 
 /**
  * Channel options defined at relay/channeltype/define.go
@@ -116,7 +126,7 @@ export function ChannelsPage() {
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [bulkTesting, setBulkTesting] = useState(false);
   const [bulkBusy, setBulkBusy] = useState(false);
-  const [refreshingBalanceIds, setRefreshingBalanceIds] = useState<Set<number>>(new Set());
+  const [refreshingBalanceIds, setRefreshingBalanceIds] = useState<Set<string | number>>(new Set());
   const initializedRef = useRef(false);
   const skipFirstSortEffect = useRef(true);
 
@@ -211,14 +221,14 @@ export function ChannelsPage() {
 
       if (success && Array.isArray(responseData)) {
         const options: SearchOption[] = responseData.map((channel: Channel) => ({
-          key: channel.id.toString(),
+          key: String(channelRef(channel)),
           value: channel.name,
           text: channel.name,
           content: (
             <div className="flex flex-col">
               <div className="font-medium">{channel.name}</div>
               <div className="text-sm text-muted-foreground flex items-center gap-2">
-                {t('channels.search.id_label')}: {channel.id} • {renderChannelTypeBadge(channel.type)} •{' '}
+                {t('channels.search.id_label')}: {String(channelRef(channel))} • {renderChannelTypeBadge(channel.type)} •{' '}
                 {renderStatusBadge(channel.status, channel.priority)}
               </div>
             </div>
@@ -284,10 +294,10 @@ export function ChannelsPage() {
     }
   }, [sortBy, sortOrder]);
 
-  const manage = async (id: number, action: 'enable' | 'disable' | 'delete' | 'test', index?: number) => {
+  const manage = async (id: string | number, action: 'enable' | 'disable' | 'delete' | 'test', index?: number) => {
     try {
       if (action === 'delete') {
-        const targetChannel = data.find((channel) => channel.id === id);
+        const targetChannel = data.find((channel) => String(channelRef(channel)) === String(id) || String(channel.id) === String(id));
         const confirmed = await confirmAction({
           title: t('channels.confirm.delete_title', 'Delete Channel'),
           description: t('channels.confirm.delete'),
@@ -354,7 +364,7 @@ export function ChannelsPage() {
       }
 
       // Enable/disable - send status_only to avoid overwriting other fields
-      const payload = { id, status: action === 'enable' ? 1 : 2 };
+      const payload = { ...channelRefPayload(id), status: action === 'enable' ? 1 : 2 };
       const res = await api.put('/api/channel/?status_only=1', payload);
       if (!res.data?.success) {
         notify({
@@ -389,7 +399,7 @@ export function ChannelsPage() {
 
   const duplicateChannel = async (channel: Channel) => {
     try {
-      const duplicateResponse = await api.post(`/api/channel/${channel.id}/duplicate`);
+      const duplicateResponse = await api.post(`/api/channel/${channelRef(channel)}/duplicate`);
       if (duplicateResponse.data?.success) {
         notify({
           type: 'success',
@@ -420,10 +430,9 @@ export function ChannelsPage() {
     }
   };
 
-  const updateTestingModel = async (id: number, testingModel: string | null) => {
+  const updateTestingModel = async (channel: Channel, testingModel: string | null) => {
     try {
-      const current = data.find((c) => c.id === id);
-      const payload: any = { id, name: current?.name };
+      const payload: any = { ...channelRefPayload(channelRef(channel)), name: channel.name };
       // When null, let backend clear it (auto-cheapest)
       if (testingModel === null) {
         payload.testing_model = null;
@@ -434,7 +443,7 @@ export function ChannelsPage() {
       const res = await api.put('/api/channel/', payload);
       if (res.data?.success) {
         // Update local row to reflect change
-        setData((prev) => prev.map((ch) => (ch.id === id ? { ...ch, testing_model: testingModel } : ch)));
+        setData((prev) => prev.map((ch) => (sameChannelRef(ch, channel) ? { ...ch, testing_model: testingModel } : ch)));
         notify({
           type: 'success',
           message: t('channels.notifications.testing_model_saved'),
@@ -491,12 +500,12 @@ export function ChannelsPage() {
     if ((channel.priority ?? 0) === newPriority) return;
     try {
       const res = await api.put('/api/channel/', {
-        id: channel.id,
+        ...channelRefPayload(channelRef(channel)),
         name: channel.name,
         priority: newPriority,
       });
       if (res.data?.success) {
-        setData((prev) => prev.map((row) => (row.id === channel.id ? { ...row, priority: newPriority } : row)));
+        setData((prev) => prev.map((row) => (sameChannelRef(row, channel) ? { ...row, priority: newPriority } : row)));
         notify({
           type: 'success',
           message: t('channels.notifications.priority_saved', 'Priority updated.'),
@@ -537,7 +546,7 @@ export function ChannelsPage() {
       let failed = 0;
       for (const ch of targets) {
         try {
-          const res = await api.put('/api/channel/?status_only=1', { id: ch.id, status });
+          const res = await api.put('/api/channel/?status_only=1', { ...channelRefPayload(channelRef(ch)), status });
           if (res.data?.success) {
             success += 1;
           } else {
@@ -569,18 +578,19 @@ export function ChannelsPage() {
   };
 
   const handleBalanceRefresh = async (channel: Channel) => {
+    const ref = channelRef(channel);
     setRefreshingBalanceIds((prev) => {
       const next = new Set(prev);
-      next.add(channel.id);
+      next.add(ref);
       return next;
     });
     try {
-      const res = await api.get(`/api/channel/update_balance/${channel.id}`);
+      const res = await api.get(`/api/channel/update_balance/${ref}`);
       const { success, message, balance, balance_updated_time } = res.data || {};
       if (success) {
         setData((prev) =>
           prev.map((row) =>
-            row.id === channel.id
+            sameChannelRef(row, channel)
               ? {
                   ...row,
                   balance: typeof balance === 'number' ? balance : row.balance,
@@ -610,7 +620,7 @@ export function ChannelsPage() {
     } finally {
       setRefreshingBalanceIds((prev) => {
         const next = new Set(prev);
-        next.delete(channel.id);
+        next.delete(ref);
         return next;
       });
     }
@@ -685,9 +695,9 @@ export function ChannelsPage() {
 
   const columns: ColumnDef<Channel>[] = [
     {
-      accessorKey: 'id',
+      accessorKey: 'uuid',
       header: t('channels.columns.id'),
-      cell: ({ row }) => <span className="font-mono text-sm">{row.original.id}</span>,
+      cell: ({ row }) => <span className="font-mono text-sm break-all">{String(channelRef(row.original))}</span>,
     },
     {
       accessorKey: 'name',
@@ -730,7 +740,7 @@ export function ChannelsPage() {
       header: t('channels.columns.balance'),
       cell: ({ row }) => {
         const ch = row.original;
-        const refreshing = refreshingBalanceIds.has(ch.id);
+        const refreshing = refreshingBalanceIds.has(channelRef(ch));
         const formatted = typeof ch.balance === 'number' ? ch.balance.toFixed(2) : '-';
         const updatedAt = ch.balance_updated_time ? ch.balance_updated_time * 1000 : null;
         return (
@@ -801,7 +811,7 @@ export function ChannelsPage() {
               aria-label={t('channels.columns.testing_model')}
               onChange={(e) => {
                 const v = e.target.value;
-                updateTestingModel(ch.id, v === '' ? null : v);
+                updateTestingModel(ch, v === '' ? null : v);
               }}
             >
               <option value="">{t('channels.testing.auto')}</option>
@@ -829,7 +839,7 @@ export function ChannelsPage() {
             <ListActionButton
               variant="outline"
               size="sm"
-              onClick={() => navigate(`/channels/edit/${channel.id}`)}
+              onClick={() => navigate(`/channels/edit/${channelRef(channel)}`)}
               className="gap-1"
               icon={<Settings className="h-3 w-3" />}
             >
@@ -847,7 +857,7 @@ export function ChannelsPage() {
             <ListActionButton
               variant="outline"
               size="sm"
-              onClick={() => manage(channel.id, channel.status === 1 ? 'disable' : 'enable')}
+              onClick={() => manage(channelRef(channel), channel.status === 1 ? 'disable' : 'enable')}
               className={cn('gap-1', channel.status === 1 ? 'text-warning hover:text-warning/80' : 'text-success hover:text-success/80')}
             >
               {channel.status === 1 ? t('channels.actions.disable') : t('channels.actions.enable')}
@@ -855,7 +865,7 @@ export function ChannelsPage() {
             <ListActionButton
               variant="outline"
               size="sm"
-              onClick={() => manage(channel.id, 'test', row.index)}
+              onClick={() => manage(channelRef(channel), 'test', row.index)}
               className="gap-1"
               icon={<FlaskConical className="h-3 w-3" />}
             >
@@ -864,7 +874,7 @@ export function ChannelsPage() {
             <ListActionButton
               variant="destructive"
               size="sm"
-              onClick={() => manage(channel.id, 'delete')}
+              onClick={() => manage(channelRef(channel), 'delete')}
               className="gap-1"
               icon={<Trash2 className="h-3 w-3" />}
             >
@@ -988,7 +998,7 @@ export function ChannelsPage() {
               floatingRowActions={(row) => (
                 <div className="flex items-center gap-1">
                   <ListActionButton
-                    onClick={() => navigate(`/channels/edit/${row.id}`)}
+                    onClick={() => navigate(`/channels/edit/${channelRef(row)}`)}
                     title={t('channels.actions.edit')}
                     aria-label={t('channels.actions.edit')}
                     icon={<Settings className="h-4 w-4" />}
@@ -1000,7 +1010,7 @@ export function ChannelsPage() {
                     icon={<Copy className="h-4 w-4" />}
                   />
                   <ListActionButton
-                    onClick={() => manage(row.id, row.status === 1 ? 'disable' : 'enable')}
+                    onClick={() => manage(channelRef(row), row.status === 1 ? 'disable' : 'enable')}
                     title={row.status === 1 ? t('channels.actions.disable') : t('channels.actions.enable')}
                     aria-label={row.status === 1 ? t('channels.actions.disable') : t('channels.actions.enable')}
                     className={row.status === 1 ? 'text-warning hover:text-warning/80' : 'text-success hover:text-success/80'}
@@ -1008,8 +1018,8 @@ export function ChannelsPage() {
                   />
                   <ListActionButton
                     onClick={() => {
-                      const idx = data.findIndex((c) => c.id === row.id);
-                      manage(row.id, 'test', idx !== -1 ? idx : undefined);
+                      const idx = data.findIndex((c) => sameChannelRef(c, row));
+                      manage(channelRef(row), 'test', idx !== -1 ? idx : undefined);
                     }}
                     title={t('channels.actions.test')}
                     aria-label={t('channels.actions.test')}

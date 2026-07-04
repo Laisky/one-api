@@ -29,6 +29,8 @@ import { LogModelCell } from './components/LogModelCell';
 
 type LogRow = LogEntry;
 
+const logRef = (log: Pick<LogRow, 'id' | 'uuid'>): string | number => log.uuid || log.id || '';
+
 interface LogStatistics {
   quota: number;
   token_count?: number;
@@ -138,8 +140,7 @@ export function LogsPage() {
   const selectedLog = useMemo(() => {
     const idStr = searchParams.get('id');
     if (!idStr) return null;
-    const id = parseInt(idStr);
-    return data.find((row) => row.id === id) ?? null;
+    return data.find((row) => String(logRef(row)) === idStr || String(row.id) === idStr) ?? null;
   }, [searchParams, data]);
   const detailsModalOpen = selectedLog !== null;
 
@@ -248,7 +249,7 @@ export function LogsPage() {
 
       if (success && Array.isArray(responseData)) {
         const options: SearchOption[] = responseData.slice(0, 10).map((log: LogRow) => ({
-          key: log.id.toString(),
+          key: String(logRef(log)),
           value: log.content || log.model_name || t('logs.search.log_entry'),
           text: log.content || log.model_name || t('logs.search.log_entry'),
           content: (
@@ -386,27 +387,28 @@ export function LogsPage() {
       const exportData = await fetchAllPaginatedResults<LogRow>((url) => api.get(url), exportPath, params);
       const logsWithTrace = exportData.filter((log) => log.trace_id?.trim());
       const traceEntries = await mapWithConcurrency(logsWithTrace, async (log) => {
+        const ref = logRef(log);
         try {
-          const traceResponse = await api.get(`/api/trace/log/${log.id}`);
+          const traceResponse = await api.get(`/api/trace/log/${ref}`);
           if (traceResponse.data?.success === false) {
             return {
-              logId: log.id,
+              logId: ref,
               trace: { error: traceResponse.data?.message || t('logs.details.load_failed') } as ExportTracePayload | { error: string },
             };
           }
 
           return {
-            logId: log.id,
+            logId: ref,
             trace: (traceResponse.data?.data as ExportTracePayload | undefined) ?? null,
           };
         } catch (_error) {
           return {
-            logId: log.id,
+            logId: ref,
             trace: { error: t('logs.details.load_failed') } as ExportTracePayload | { error: string },
           };
         }
       });
-      const tracesByLogId = new Map<number, ExportTracePayload | { error: string } | null>(
+      const tracesByLogId = new Map<string | number, ExportTracePayload | { error: string } | null>(
         traceEntries.map((entry) => [entry.logId, entry.trace])
       );
 
@@ -439,16 +441,16 @@ export function LogsPage() {
       const csvData = exportData.map((log) => {
         const { fiveMinute, oneHour } = getCacheWriteSummaries(log.metadata);
         const totalTokens = (log.prompt_tokens ?? 0) + (log.completion_tokens ?? 0);
-        const tracePayload = tracesByLogId.get(log.id) ?? null;
+        const tracePayload = tracesByLogId.get(logRef(log)) ?? null;
         return [
           formatTimestamp(log.created_at),
           `${getLogTypeLabelText(log.type)} (${log.type})`,
-          log.id,
+          logRef(log),
           log.model_name,
           log.origin_model_name || '',
           log.token_name || '',
           log.username || '',
-          log.channel ?? '',
+          log.channel_uuid || log.channel || '',
           renderQuota(log.quota),
           log.quota,
           log.prompt_tokens || 0,
@@ -509,7 +511,9 @@ export function LogsPage() {
           {
             accessorKey: 'channel',
             header: t('logs.table.channel'),
-            cell: ({ row }: { row: any }) => <span className="font-mono text-sm">{row.original.channel || t('logs.labels.missing')}</span>,
+            cell: ({ row }: { row: any }) => (
+              <span className="font-mono text-sm">{row.original.channel_uuid || row.original.channel || t('logs.labels.missing')}</span>
+            ),
           } as ColumnDef<LogRow>,
         ]
       : []),
@@ -654,7 +658,7 @@ export function LogsPage() {
 
   const handleRowClick = (log: LogRow) => {
     setSearchParams((prev) => {
-      prev.set('id', log.id.toString());
+      prev.set('id', String(logRef(log)));
       return prev;
     });
   };

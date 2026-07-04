@@ -4,7 +4,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@/components/ui/textarea';
 import { AlertCircle, Lock } from 'lucide-react';
 import { Controller, type UseFormReturn } from 'react-hook-form';
-import { COZE_AUTH_OPTIONS, CHANNEL_TYPES_WITH_CUSTOM_KEY_FIELD, OAUTH_JWT_CONFIG_EXAMPLE, OPENAI_COMPATIBLE_API_FORMAT_OPTIONS } from '../constants';
+import {
+  COZE_AUTH_OPTIONS,
+  CHANNEL_TYPES_WITH_CUSTOM_KEY_FIELD,
+  OAUTH_JWT_CONFIG_EXAMPLE,
+  OPENAI_COMPATIBLE_API_FORMAT_OPTIONS,
+} from '../constants';
 import type { ChannelForm } from '../schemas';
 import { ChannelCustomHeaders } from './ChannelCustomHeaders';
 import { LabelWithHelp } from './LabelWithHelp';

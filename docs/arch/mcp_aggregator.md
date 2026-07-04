@@ -183,7 +183,7 @@ flowchart LR
 
 1. `mcp_servers`
 
-- `id`, `name`, `description`, `status`, `priority`, `base_url`, `protocol`, `auth_type`, `api_key`, `headers`
+- `id` (internal), `uuid` (external), `name`, `description`, `status`, `priority`, `base_url`, `protocol`, `auth_type`, `api_key`, `headers`
 - `tool_whitelist`, `tool_blacklist`, `tool_pricing`
 - `auto_sync_enabled`, `auto_sync_interval_minutes`
 - `last_sync_at`, `last_sync_status`, `last_sync_error`
@@ -191,7 +191,7 @@ flowchart LR
 - `created_at`, `updated_at`
 
 2. `mcp_tools`
-   - `id`, `server_id`, `name`, `display_name`, `description`, `input_schema`
+   - `id` (internal), `uuid` (external), `server_id` (internal), `server_uuid` (external), `name`, `display_name`, `description`, `input_schema`
 
 - `default_pricing` (per‑tool USD/quota hints from MCP server), `status`, `created_at`, `updated_at`
   - `input_schema` stores the full JSON schema synchronized from MCP (`input_schema`/`inputSchema`) and is used to generate upstream function tools.
@@ -227,7 +227,7 @@ flowchart LR
 
 ### Tool Catalog
 
-- `GET /api/mcp_tools?server_id=&status=`
+- `GET /api/mcp_tools?server_id=&status=` where `server_id` carries the MCP server UUID string in the external API.
 
 ### MCP Proxy
 

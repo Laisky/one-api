@@ -273,7 +273,8 @@ export function LoginPage() {
 
         // Handle default root password warning
         if (data.username === 'root' && data.password === '123456') {
-          navigate('/users/edit');
+          const selfUserRef = respData?.uuid || respData?.user_uuid;
+          navigate(selfUserRef ? `/users/edit/${selfUserRef}` : '/dashboard');
           console.warn(t('auth.login.root_password_warning'));
         } else if (redirectTo) {
           // Decode and navigate to the original page, enforcing same-origin

@@ -22,29 +22,33 @@ import (
 
 // Log represents a persisted usage or management entry emitted by the billing pipeline.
 type Log struct {
-	Id        int    `json:"id"`
-	UserId    int    `json:"user_id" gorm:"index;index:idx_user_token,priority:1"`
-	CreatedAt int64  `json:"created_at" gorm:"bigint;index:idx_created_at_type"`
-	Type      int    `json:"type" gorm:"index:idx_created_at_type"`
-	Content   string `json:"content" gorm:"type:text"`
-	Username  string `json:"username" gorm:"index:index_username_model_name,priority:2;default:''"`
-	TokenName string `json:"token_name" gorm:"index;index:idx_user_token,priority:2;default:''"`
-	ModelName string `json:"model_name" gorm:"index;index:index_username_model_name,priority:1;default:''"`
+	Id        int     `json:"id"`
+	UserId    int     `json:"user_id" gorm:"index;index:idx_user_token,priority:1"`
+	UUID      string  `json:"uuid" gorm:"type:char(36);index;column:uuid"`
+	UserUUID  *string `json:"user_uuid" gorm:"type:char(36);column:user_uuid;index"`
+	CreatedAt int64   `json:"created_at" gorm:"bigint;index:idx_created_at_type"`
+	Type      int     `json:"type" gorm:"index:idx_created_at_type"`
+	Content   string  `json:"content" gorm:"type:text"`
+	Username  string  `json:"username" gorm:"index:index_username_model_name,priority:2;default:''"`
+	TokenName string  `json:"token_name" gorm:"index;index:idx_user_token,priority:2;default:''"`
+	TokenUUID *string `json:"token_uuid" gorm:"type:char(36);column:token_uuid;index"`
+	ModelName string  `json:"model_name" gorm:"index;index:index_username_model_name,priority:1;default:''"`
 	// OriginModelName records the model name as requested by the client before any mapping.
 	// When a channel has model mapping configured (e.g., "my-model" -> "gpt-4"),
 	// this field preserves the original model name requested ("my-model") while ModelName
 	// holds the mapped model used for billing ("gpt-4").
-	OriginModelName   string `json:"origin_model_name" gorm:"index;default:''"`
-	Quota             int    `json:"quota" gorm:"default:0;index"`             // Added index for sorting
-	PromptTokens      int    `json:"prompt_tokens" gorm:"default:0;index"`     // Added index for sorting
-	CompletionTokens  int    `json:"completion_tokens" gorm:"default:0;index"` // Added index for sorting
-	ChannelId         int    `json:"channel" gorm:"index"`
-	RequestId         string `json:"request_id" gorm:"default:''"`
-	TraceId           string `json:"trace_id" gorm:"type:varchar(64);index;default:''"` // TraceID from gin-middlewares
-	UpdatedAt         int64  `json:"updated_at" gorm:"bigint;autoUpdateTime:milli"`
-	ElapsedTime       int64  `json:"elapsed_time" gorm:"default:0;index"` // Added index for sorting (unit is ms)
-	IsStream          bool   `json:"is_stream" gorm:"default:false"`
-	SystemPromptReset bool   `json:"system_prompt_reset" gorm:"default:false"`
+	OriginModelName   string  `json:"origin_model_name" gorm:"index;default:''"`
+	Quota             int     `json:"quota" gorm:"default:0;index"`             // Added index for sorting
+	PromptTokens      int     `json:"prompt_tokens" gorm:"default:0;index"`     // Added index for sorting
+	CompletionTokens  int     `json:"completion_tokens" gorm:"default:0;index"` // Added index for sorting
+	ChannelId         int     `json:"channel" gorm:"index"`
+	ChannelUUID       *string `json:"channel_uuid" gorm:"type:char(36);column:channel_uuid;index"`
+	RequestId         string  `json:"request_id" gorm:"default:''"`
+	TraceId           string  `json:"trace_id" gorm:"type:varchar(64);index;default:''"` // TraceID from gin-middlewares
+	UpdatedAt         int64   `json:"updated_at" gorm:"bigint;autoUpdateTime:milli"`
+	ElapsedTime       int64   `json:"elapsed_time" gorm:"default:0;index"` // Added index for sorting (unit is ms)
+	IsStream          bool    `json:"is_stream" gorm:"default:false"`
+	SystemPromptReset bool    `json:"system_prompt_reset" gorm:"default:false"`
 	// Cached prompt tokens for cost transparency.
 	CachedPromptTokens int `json:"cached_prompt_tokens" gorm:"default:0;index"`
 	// Metadata holds provider-specific attributes serialized as JSON (e.g., cache write tokens).
@@ -55,6 +59,64 @@ type Log struct {
 // It is serialized as JSON in the underlying database column to avoid schema churn when
 // new adaptor-specific fields appear.
 type LogMetadata map[string]any
+
+// SetLogExternalUUIDs copies external UUIDs onto a log when they are available.
+// Parameters:
+//   - log: log row being prepared for persistence.
+//   - userUUID: external UUID of the user associated with the log.
+//   - channelUUID: external UUID of the channel associated with the log.
+//   - tokenUUID: optional external UUID of the token associated with the log.
+//
+// Return values: none.
+func SetLogExternalUUIDs(log *Log, userUUID string, channelUUID string, tokenUUID ...string) {
+	if log == nil {
+		return
+	}
+	if userUUID != "" {
+		log.UserUUID = &userUUID
+	}
+	if channelUUID != "" {
+		log.ChannelUUID = &channelUUID
+	}
+	if len(tokenUUID) > 0 && tokenUUID[0] != "" {
+		log.TokenUUID = &tokenUUID[0]
+	}
+}
+
+// FillLogUserUUIDByID fills log.UserUUID from log.UserId when it is missing.
+// Parameters:
+//   - ctx: context used for structured warning logs.
+//   - log: log row being prepared for persistence.
+//
+// Return values: none. Lookup failures are logged and the log remains writable.
+func FillLogUserUUIDByID(ctx context.Context, log *Log) {
+	if log == nil || log.UserUUID != nil || log.UserId <= 0 {
+		return
+	}
+	userUUID, err := GetUserUUIDByID(log.UserId)
+	if err != nil {
+		logger.FromContext(ctx).Warn("failed to fill log user uuid",
+			zap.Int("user_id", log.UserId),
+			zap.Error(err))
+		return
+	}
+	if userUUID != "" {
+		log.UserUUID = &userUUID
+	}
+}
+
+// StringPtrIfNotEmpty returns a pointer to value when value is non-empty.
+// Parameters:
+//   - value: candidate string value.
+//
+// Return values:
+//   - *string: pointer to value, or nil when value is empty.
+func StringPtrIfNotEmpty(value string) *string {
+	if value == "" {
+		return nil
+	}
+	return &value
+}
 
 // logSortFields enumerates whitelisted columns for log sorting.
 var logSortFields = map[string]string{
@@ -472,6 +534,7 @@ func RecordLog(ctx context.Context, userId int, logType int, content string) {
 		Type:      logType,
 		Content:   content,
 	}
+	FillLogUserUUIDByID(ctx, log)
 	recordLogHelper(ctx, log)
 }
 
@@ -486,6 +549,7 @@ func RecordLogWithIDs(ctx context.Context, userId int, logType int, content stri
 		RequestId: requestId,
 		TraceId:   traceId,
 	}
+	FillLogUserUUIDByID(ctx, log)
 	recordLogHelper(ctx, log)
 }
 
@@ -498,6 +562,7 @@ func RecordManageLog(ctx context.Context, userId int, field string, previous any
 		Type:      LogTypeManage,
 		Content:   buildManageLogContent(field, previous, next, note),
 	}
+	FillLogUserUUIDByID(ctx, log)
 	recordLogHelper(ctx, log)
 }
 
@@ -511,6 +576,7 @@ func RecordTopupLog(ctx context.Context, userId int, content string, quota int) 
 		Content:   content,
 		Quota:     quota,
 	}
+	FillLogUserUUIDByID(ctx, log)
 	recordLogHelper(ctx, log)
 }
 
@@ -526,6 +592,7 @@ func RecordTopupLogWithIDs(ctx context.Context, userId int, content string, quot
 		RequestId: requestId,
 		TraceId:   traceId,
 	}
+	FillLogUserUUIDByID(ctx, log)
 	recordLogHelper(ctx, log)
 }
 
@@ -624,15 +691,18 @@ func RecordToolLogs(ctx context.Context, base *Log, summary *ToolUsageSummary) {
 			}
 			row := &Log{
 				UserId:          base.UserId,
+				UserUUID:        base.UserUUID,
 				Username:        username,
 				CreatedAt:       now,
 				Type:            LogTypeTool,
 				Content:         fmt.Sprintf("Tool invocation: %s", tool),
 				TokenName:       base.TokenName,
+				TokenUUID:       base.TokenUUID,
 				ModelName:       tool,
 				OriginModelName: originModelName,
 				Quota:           int(rowQuota),
 				ChannelId:       base.ChannelId,
+				ChannelUUID:     base.ChannelUUID,
 				RequestId:       base.RequestId,
 				TraceId:         base.TraceId,
 				ElapsedTime:     base.ElapsedTime,
@@ -1172,12 +1242,13 @@ func SearchToolLogsByDayAndUser(userId, start, endExclusive int) ([]*dto.ToolLog
 			SELECT ` + groupSelect + `,
 			COALESCE(username, '') as username,
 			user_id,
+			COALESCE(user_uuid, '') as user_uuid,
 			count(1) as request_count,
 			COALESCE(sum(quota), 0) as quota
 			FROM logs
 			WHERE type = ?
 			AND created_at >= ? AND created_at < ?
-			GROUP BY day, username, user_id
+			GROUP BY day, username, user_id, user_uuid
 			ORDER BY day, username, user_id
 		`
 		args = []any{LogTypeTool, start, endExclusive}
@@ -1186,13 +1257,14 @@ func SearchToolLogsByDayAndUser(userId, start, endExclusive int) ([]*dto.ToolLog
 			SELECT ` + groupSelect + `,
 			COALESCE(username, '') as username,
 			user_id,
+			COALESCE(user_uuid, '') as user_uuid,
 			count(1) as request_count,
 			COALESCE(sum(quota), 0) as quota
 			FROM logs
 			WHERE type = ?
 			AND user_id = ?
 			AND created_at >= ? AND created_at < ?
-			GROUP BY day, username, user_id
+			GROUP BY day, username, user_id, user_uuid
 			ORDER BY day, username, user_id
 		`
 		args = []any{LogTypeTool, userId, start, endExclusive}
@@ -1218,13 +1290,14 @@ func SearchToolLogsByDayAndToken(userId, start, endExclusive int) ([]*dto.ToolLo
 			SELECT ` + groupSelect + `,
 			COALESCE(username, '') as username,
 			user_id,
+			COALESCE(user_uuid, '') as user_uuid,
 			COALESCE(token_name, '') as token_name,
 			count(1) as request_count,
 			COALESCE(sum(quota), 0) as quota
 			FROM logs
 			WHERE type = ?
 			AND created_at >= ? AND created_at < ?
-			GROUP BY day, username, user_id, token_name
+			GROUP BY day, username, user_id, user_uuid, token_name
 			ORDER BY day, username, user_id, token_name
 		`
 		args = []any{LogTypeTool, start, endExclusive}
@@ -1233,6 +1306,7 @@ func SearchToolLogsByDayAndToken(userId, start, endExclusive int) ([]*dto.ToolLo
 			SELECT ` + groupSelect + `,
 			COALESCE(username, '') as username,
 			user_id,
+			COALESCE(user_uuid, '') as user_uuid,
 			COALESCE(token_name, '') as token_name,
 			count(1) as request_count,
 			COALESCE(sum(quota), 0) as quota
@@ -1240,7 +1314,7 @@ func SearchToolLogsByDayAndToken(userId, start, endExclusive int) ([]*dto.ToolLo
 			WHERE type = ?
 			AND user_id = ?
 			AND created_at >= ? AND created_at < ?
-			GROUP BY day, username, user_id, token_name
+			GROUP BY day, username, user_id, user_uuid, token_name
 			ORDER BY day, username, user_id, token_name
 		`
 		args = []any{LogTypeTool, userId, start, endExclusive}
@@ -1319,7 +1393,7 @@ func SearchLogsByDayAndUser(userId, start, endExclusive int) ([]*dto.LogStatisti
 	if userId == 0 {
 		query = `
 			SELECT ` + groupSelect + `,
-			username, user_id,
+			username, user_id, COALESCE(user_uuid, '') as user_uuid,
 			count(1) as request_count,
 			sum(quota) as quota,
 			sum(prompt_tokens) as prompt_tokens,
@@ -1330,14 +1404,14 @@ func SearchLogsByDayAndUser(userId, start, endExclusive int) ([]*dto.LogStatisti
 			FROM logs
 			WHERE type=2
 			AND created_at >= ? AND created_at < ?
-			GROUP BY day, username, user_id
+			GROUP BY day, username, user_id, user_uuid
 			ORDER BY day, username
 		`
 		args = []any{start, endExclusive}
 	} else {
 		query = `
 			SELECT ` + groupSelect + `,
-			username, user_id,
+			username, user_id, COALESCE(user_uuid, '') as user_uuid,
 			count(1) as request_count,
 			sum(quota) as quota,
 			sum(prompt_tokens) as prompt_tokens,
@@ -1349,7 +1423,7 @@ func SearchLogsByDayAndUser(userId, start, endExclusive int) ([]*dto.LogStatisti
 			WHERE type=2
 			AND user_id = ?
 			AND created_at >= ? AND created_at < ?
-			GROUP BY day, username, user_id
+			GROUP BY day, username, user_id, user_uuid
 			ORDER BY day, username
 		`
 		args = []any{userId, start, endExclusive}
@@ -1376,7 +1450,7 @@ func SearchLogsByDayAndToken(userId, start, endExclusive int) ([]*dto.LogStatist
 		query = `
 			SELECT ` + groupSelect + `,
 			COALESCE(token_name, '') as token_name,
-			username, user_id,
+			username, user_id, COALESCE(user_uuid, '') as user_uuid,
 			count(1) as request_count,
 			sum(quota) as quota,
 			sum(prompt_tokens) as prompt_tokens,
@@ -1387,7 +1461,7 @@ func SearchLogsByDayAndToken(userId, start, endExclusive int) ([]*dto.LogStatist
 			FROM logs
 			WHERE type=2
 			AND created_at >= ? AND created_at < ?
-			GROUP BY day, token_name, username, user_id
+			GROUP BY day, token_name, username, user_id, user_uuid
 			ORDER BY day, username, token_name
 		`
 		args = []any{start, endExclusive}
@@ -1395,7 +1469,7 @@ func SearchLogsByDayAndToken(userId, start, endExclusive int) ([]*dto.LogStatist
 		query = `
 			SELECT ` + groupSelect + `,
 			COALESCE(token_name, '') as token_name,
-			username, user_id,
+			username, user_id, COALESCE(user_uuid, '') as user_uuid,
 			count(1) as request_count,
 			sum(quota) as quota,
 			sum(prompt_tokens) as prompt_tokens,
@@ -1407,7 +1481,7 @@ func SearchLogsByDayAndToken(userId, start, endExclusive int) ([]*dto.LogStatist
 			WHERE type=2
 			AND user_id = ?
 			AND created_at >= ? AND created_at < ?
-			GROUP BY day, token_name, username, user_id
+			GROUP BY day, token_name, username, user_id, user_uuid
 			ORDER BY day, username, token_name
 		`
 		args = []any{userId, start, endExclusive}

@@ -23,13 +23,20 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import * as z from 'zod';
 
 interface RedemptionRow {
-  id: number;
+  id?: number;
+  uuid?: string;
   name: string;
   key: string;
   status: number;
   created_time: number;
   quota: number;
 }
+
+const redemptionRef = (redemption: Pick<RedemptionRow, 'id' | 'uuid'>): string | number => redemption.uuid || redemption.id || '';
+
+const redemptionRefPayload = (ref: string | number): { id: number } | { uuid: string } => {
+  return typeof ref === 'string' ? { uuid: ref } : { id: ref };
+};
 
 export function RedemptionsPage() {
   const navigate = useNavigate();
@@ -139,7 +146,10 @@ export function RedemptionsPage() {
   };
 
   const columns: ColumnDef<RedemptionRow>[] = [
-    { header: tr('columns.id', 'ID'), accessorKey: 'id' },
+    {
+      header: tr('columns.id', 'ID'),
+      cell: ({ row }) => <span className="font-mono text-xs break-all">{String(redemptionRef(row.original))}</span>,
+    },
     { header: tr('columns.name', 'Name'), accessorKey: 'name' },
     { header: tr('columns.code', 'Code'), accessorKey: 'key' },
     {
@@ -166,17 +176,17 @@ export function RedemptionsPage() {
       header: tr('columns.actions', 'Actions'),
       cell: ({ row }) => (
         <ResponsiveActionGroup justify="start">
-          <ListActionButton variant="outline" size="sm" onClick={() => navigate(`/redemptions/edit/${row.original.id}`)}>
+          <ListActionButton variant="outline" size="sm" onClick={() => navigate(`/redemptions/edit/${redemptionRef(row.original)}`)}>
             {tr('actions.edit', 'Edit')}
           </ListActionButton>
           <ListActionButton
             variant="outline"
             size="sm"
-            onClick={() => manage(row.original.id, row.original.status === 1 ? 'disable' : 'enable', row.index)}
+            onClick={() => manage(redemptionRef(row.original), row.original.status === 1 ? 'disable' : 'enable', row.index)}
           >
             {row.original.status === 1 ? tr('actions.disable', 'Disable') : tr('actions.enable', 'Enable')}
           </ListActionButton>
-          <ListActionButton variant="destructive" size="sm" onClick={() => manage(row.original.id, 'delete', row.index)}>
+          <ListActionButton variant="destructive" size="sm" onClick={() => manage(redemptionRef(row.original), 'delete', row.index)}>
             {tr('actions.delete', 'Delete')}
           </ListActionButton>
         </ResponsiveActionGroup>
@@ -184,14 +194,14 @@ export function RedemptionsPage() {
     },
   ];
 
-  const manage = async (id: number, action: 'enable' | 'disable' | 'delete', idx: number) => {
+  const manage = async (id: string | number, action: 'enable' | 'disable' | 'delete', idx: number) => {
     try {
       let res: any;
       if (action === 'delete') {
         // Unified API call - complete URL with /api prefix
         res = await api.delete(`/api/redemption/${id}`);
       } else {
-        const body: any = { id, status: action === 'enable' ? 1 : 2 };
+        const body: any = { ...redemptionRefPayload(id), status: action === 'enable' ? 1 : 2 };
         res = await api.put('/api/redemption/?status_only=true', body);
       }
       if (!res.data?.success) {
@@ -277,7 +287,7 @@ export function RedemptionsPage() {
               transformResponse={(data) =>
                 Array.isArray(data)
                   ? data.map((r: any) => ({
-                      key: String(r.id),
+                      key: String(r.uuid || r.id || ''),
                       value: r.name,
                       text: r.name,
                     }))

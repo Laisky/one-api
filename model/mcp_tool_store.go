@@ -71,7 +71,7 @@ func GetMCPToolsByServerID(serverID int) ([]*MCPTool, error) {
 }
 
 // UpsertMCPTools replaces tools for a server with the provided list.
-func UpsertMCPTools(serverID int, tools []*MCPTool) error {
+func UpsertMCPTools(serverID int, serverUUID string, tools []*MCPTool) error {
 	if serverID <= 0 {
 		return errors.New("server id is invalid")
 	}
@@ -83,6 +83,9 @@ func UpsertMCPTools(serverID int, tools []*MCPTool) error {
 			continue
 		}
 		tool.ServerId = serverID
+		if serverUUID != "" {
+			tool.ServerUUID = &serverUUID
+		}
 		tool.NormalizeName()
 		if err := DB.Create(tool).Error; err != nil {
 			return errors.Wrap(err, "create mcp tool")

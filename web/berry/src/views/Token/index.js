@@ -21,13 +21,17 @@ import { IconRefresh, IconPlus } from '@tabler/icons-react';
 import EditeModal from './component/EditModal';
 import { useSelector } from 'react-redux';
 
+const refPayload = (ref) => (typeof ref === 'string' ? { uuid: ref } : { id: ref });
+
+const tokenRef = (token) => token.uuid || token.id;
+
 export default function Token() {
   const [tokens, setTokens] = useState([]);
   const [activePage, setActivePage] = useState(0);
   const [searching, setSearching] = useState(false);
   const [searchKeyword, setSearchKeyword] = useState('');
   const [openModal, setOpenModal] = useState(false);
-  const [editTokenId, setEditTokenId] = useState(0);
+  const [editTokenId, setEditTokenId] = useState('');
   const siteInfo = useSelector((state) => state.siteInfo);
 
   const loadTokens = async (startIdx) => {
@@ -91,7 +95,7 @@ export default function Token() {
 
   const manageToken = async (id, action, value) => {
     const url = '/api/token/';
-    let data = { id };
+    let data = refPayload(id);
     let res;
     switch (action) {
       case 'delete':
@@ -129,7 +133,7 @@ export default function Token() {
 
   const handleCloseModal = () => {
     setOpenModal(false);
-    setEditTokenId(0);
+    setEditTokenId('');
   };
 
   const handleOkModal = (status) => {
@@ -147,7 +151,7 @@ export default function Token() {
           variant="contained"
           color="primary"
           onClick={() => {
-            handleOpenModal(0);
+            handleOpenModal('');
           }}
           startIcon={<IconPlus />}
         >
@@ -190,7 +194,7 @@ export default function Token() {
                   <TokensTableRow
                     item={row}
                     manageToken={manageToken}
-                    key={row.id}
+                    key={tokenRef(row)}
                     handleOpenModal={handleOpenModal}
                     setModalTokenId={setEditTokenId}
                   />

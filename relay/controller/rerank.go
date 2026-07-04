@@ -363,6 +363,7 @@ func postConsumeRerankQuota(ctx context.Context,
 			RequestId:        requestId,
 			TraceId:          traceId,
 		}
+		model.SetLogExternalUUIDs(logEntry, meta.UserUUID, meta.ChannelUUID, meta.TokenUUID)
 		billing.PostConsumeQuotaWithLog(ctx, meta.TokenId, quotaDelta, quota, logEntry, provLogID)
 	} else {
 		gmw.GetLogger(ctx).Error("meta information incomplete, cannot post consume rerank quota",

@@ -69,7 +69,7 @@ const EditModal = ({ open, tokenId, onCancel, onOk }) => {
     let res;
     let models = values.models.join(',');
     if (values.is_edit) {
-      res = await API.put(`/api/token/`, { ...values, id: parseInt(tokenId), models: models });
+      res = await API.put(`/api/token/`, { ...values, uuid: tokenId, models: models });
     } else {
       res = await API.post(`/api/token/`, { ...values, models: models });
     }
@@ -352,7 +352,7 @@ export default EditModal;
 
 EditModal.propTypes = {
   open: PropTypes.bool,
-  tokenId: PropTypes.number,
+  tokenId: PropTypes.oneOfType([PropTypes.number, PropTypes.string]),
   onCancel: PropTypes.func,
   onOk: PropTypes.func
 };

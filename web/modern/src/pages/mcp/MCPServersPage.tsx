@@ -15,7 +15,8 @@ import { useTranslation } from 'react-i18next';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 
 interface MCPServer {
-  id: number;
+  id?: number;
+  uuid?: string;
   name: string;
   status: number;
   priority: number;
@@ -37,6 +38,8 @@ interface MCPServerListItem {
 interface MCPServerRow extends MCPServer {
   tool_count: number;
 }
+
+const serverRef = (server: Pick<MCPServer, 'id' | 'uuid'>): string | number => server.uuid || server.id || '';
 
 export function MCPServersPage() {
   const { t } = useTranslation();
@@ -124,7 +127,7 @@ export function MCPServersPage() {
             <ListActionButton
               onClick={(event) => {
                 event.stopPropagation();
-                navigate(`/mcps/edit/${row.original.id}`);
+                navigate(`/mcps/edit/${serverRef(row.original)}`);
               }}
               aria-label={t('mcp.list.actions.edit', 'Edit')}
               icon={<Settings className="h-4 w-4" />}
@@ -132,7 +135,7 @@ export function MCPServersPage() {
             <ListActionButton
               onClick={(event) => {
                 event.stopPropagation();
-                syncServer(row.original.id);
+                syncServer(serverRef(row.original));
               }}
               aria-label={t('mcp.list.actions.sync', 'Sync')}
               icon={<RefreshCw className="h-4 w-4" />}
@@ -140,7 +143,7 @@ export function MCPServersPage() {
             <ListActionButton
               onClick={(event) => {
                 event.stopPropagation();
-                testServer(row.original.id);
+                testServer(serverRef(row.original));
               }}
               aria-label={t('mcp.list.actions.test', 'Test')}
               icon={<FlaskConical className="h-4 w-4" />}
@@ -148,7 +151,7 @@ export function MCPServersPage() {
             <ListActionButton
               onClick={(event) => {
                 event.stopPropagation();
-                deleteServer(row.original.id);
+                deleteServer(serverRef(row.original));
               }}
               aria-label={t('mcp.list.actions.delete', 'Delete')}
               className="text-destructive"
@@ -222,7 +225,7 @@ export function MCPServersPage() {
           .some((field) => field.toLowerCase().includes(keyword))
       )
       .map((server) => ({
-        key: server.id.toString(),
+        key: String(serverRef(server)),
         value: server.name,
         text: server.name,
         content: (
@@ -250,7 +253,7 @@ export function MCPServersPage() {
 
   const displayTotal = searchKeyword.trim() ? filteredData.length : total;
 
-  const syncServer = async (id: number) => {
+  const syncServer = async (id: string | number) => {
     try {
       const response = await api.post(`/api/mcp_servers/${id}/sync`);
       const { success, message } = response.data;
@@ -277,7 +280,7 @@ export function MCPServersPage() {
     }
   };
 
-  const testServer = async (id: number) => {
+  const testServer = async (id: string | number) => {
     try {
       const response = await api.post(`/api/mcp_servers/${id}/test`);
       const { success, message, data: payload } = response.data;
@@ -306,7 +309,7 @@ export function MCPServersPage() {
     }
   };
 
-  const deleteServer = async (id: number) => {
+  const deleteServer = async (id: string | number) => {
     try {
       const response = await api.delete(`/api/mcp_servers/${id}`);
       const { success, message } = response.data;
@@ -336,7 +339,7 @@ export function MCPServersPage() {
   const toggleStatus = async (server: MCPServerRow) => {
     const nextStatus = server.status === 1 ? 0 : 1;
     try {
-      const response = await api.put(`/api/mcp_servers/${server.id}`, { status: nextStatus });
+      const response = await api.put(`/api/mcp_servers/${serverRef(server)}`, { status: nextStatus });
       const { success, message } = response.data;
       if (!success) {
         notify({
@@ -398,11 +401,11 @@ export function MCPServersPage() {
           total={displayTotal}
           onPageChange={handlePageChange}
           onPageSizeChange={(size) => handlePageChange(0, size)}
-          onRowClick={(row) => navigate(`/mcps/edit/${row.id}`)}
+          onRowClick={(row) => navigate(`/mcps/edit/${serverRef(row)}`)}
           floatingRowActions={(row) => (
             <div className="flex items-center gap-1">
               <ListActionButton
-                onClick={() => navigate(`/mcps/edit/${row.id}`)}
+                onClick={() => navigate(`/mcps/edit/${serverRef(row)}`)}
                 title={t('mcp.list.actions.edit', 'Edit')}
                 aria-label={t('mcp.list.actions.edit', 'Edit')}
                 icon={<Settings className="h-4 w-4" />}
@@ -415,19 +418,19 @@ export function MCPServersPage() {
                 icon={row.status === 1 ? <Ban className="h-4 w-4" /> : <CheckCircle className="h-4 w-4" />}
               />
               <ListActionButton
-                onClick={() => syncServer(row.id)}
+                onClick={() => syncServer(serverRef(row))}
                 title={t('mcp.list.actions.sync', 'Sync')}
                 aria-label={t('mcp.list.actions.sync', 'Sync')}
                 icon={<RefreshCw className="h-4 w-4" />}
               />
               <ListActionButton
-                onClick={() => testServer(row.id)}
+                onClick={() => testServer(serverRef(row))}
                 title={t('mcp.list.actions.test', 'Test')}
                 aria-label={t('mcp.list.actions.test', 'Test')}
                 icon={<FlaskConical className="h-4 w-4" />}
               />
               <ListActionButton
-                onClick={() => deleteServer(row.id)}
+                onClick={() => deleteServer(serverRef(row))}
                 title={t('mcp.list.actions.delete', 'Delete')}
                 aria-label={t('mcp.list.actions.delete', 'Delete')}
                 className="text-destructive"

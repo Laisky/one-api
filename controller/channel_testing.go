@@ -10,7 +10,6 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"slices"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -204,6 +203,7 @@ func testChannel(ctx context.Context, channel *model.Channel, request *relaymode
 		// Create test log with actual usage information if available
 		testLog := &model.Log{
 			ChannelId:       channel.Id,
+			ChannelUUID:     model.StringPtrIfNotEmpty(channel.UUID),
 			ModelName:       resolvedModel,
 			OriginModelName: requestedModel,
 			Content:         logContent,
@@ -312,7 +312,7 @@ func responseStatus(resp *http.Response) int {
 func TestChannel(c *gin.Context) {
 	lg := gmw.GetLogger(c).Named("test_channel")
 
-	id, err := strconv.Atoi(c.Param("id"))
+	id, err := resolveChannelRef(c.Param("id"))
 	if err != nil {
 		lg.Debug("invalid channel id", zap.Error(err))
 		helper.RespondError(c, err)

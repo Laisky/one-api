@@ -33,6 +33,7 @@ import (
 	"github.com/Laisky/one-api/common/blacklist"
 	"github.com/Laisky/one-api/common/ctxkey"
 	"github.com/Laisky/one-api/common/helper"
+	"github.com/Laisky/one-api/common/idresolve"
 	"github.com/Laisky/one-api/common/network"
 	"github.com/Laisky/one-api/model"
 )
@@ -108,6 +109,7 @@ func authHelper(c *gin.Context, minRole int) {
 	// Authentication successful - set user context and continue
 	if userObj != nil {
 		c.Set(ctxkey.UserObj, userObj)
+		c.Set(ctxkey.UserUUID, userObj.UUID)
 	}
 	c.Set(ctxkey.Username, username)
 	c.Set(ctxkey.Role, role)
@@ -164,6 +166,7 @@ func OptionalUserAuth() func(c *gin.Context) {
 				}
 				if userObj != nil {
 					c.Set(ctxkey.UserObj, userObj)
+					c.Set(ctxkey.UserUUID, userObj.UUID)
 				}
 				c.Set(ctxkey.Username, username)
 				c.Set(ctxkey.Role, role)
@@ -287,8 +290,10 @@ func TokenAuth() func(c *gin.Context) {
 		// Set user and token context for downstream handlers
 		c.Set(ctxkey.UserObj, user)
 		c.Set(ctxkey.Id, user.Id)
+		c.Set(ctxkey.UserUUID, user.UUID)
 		c.Set(ctxkey.Username, user.Username)
 		c.Set(ctxkey.TokenId, token.Id)
+		c.Set(ctxkey.TokenUUID, token.UUID)
 		c.Set(ctxkey.TokenName, token.Name)
 		c.Set(ctxkey.TokenQuota, token.RemainQuota)
 		c.Set(ctxkey.TokenQuotaUnlimited, token.UnlimitedQuota)
@@ -312,7 +317,7 @@ func TokenAuth() func(c *gin.Context) {
 
 		// Handle channel specification via URL parameter (for proxy relay)
 		if channelId := c.Param("channelid"); channelId != "" {
-			cid, err := strconv.Atoi(channelId)
+			cid, err := idresolve.Resolve(model.GetChannelIdByUUID, channelId)
 			if err != nil {
 				AbortWithTokenError(c, http.StatusBadRequest, errors.Errorf("Invalid Channel Id: %s", channelId), tokenInfo)
 				return

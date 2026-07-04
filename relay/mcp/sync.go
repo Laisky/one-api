@@ -50,7 +50,7 @@ func SyncServerTools(ctx context.Context, server *model.MCPServer) (int, error) 
 		})
 	}
 
-	if err := model.UpsertMCPTools(server.Id, stored); err != nil {
+	if err := model.UpsertMCPTools(server.Id, server.UUID, stored); err != nil {
 		return 0, errors.Wrapf(err, "upsert mcp tools for server %d", server.Id)
 	}
 

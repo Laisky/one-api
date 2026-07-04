@@ -71,11 +71,14 @@ func RelayProxyHelper(c *gin.Context, relayMode int) *relaymodel.ErrorWithStatus
 		// Log the proxy request with zero quota
 		model.RecordConsumeLog(ctx, &model.Log{
 			UserId:           userId,
+			UserUUID:         model.StringPtrIfNotEmpty(meta.UserUUID),
 			ChannelId:        channelId,
+			ChannelUUID:      model.StringPtrIfNotEmpty(meta.ChannelUUID),
 			PromptTokens:     promptTokens,
 			CompletionTokens: completionTokens,
 			ModelName:        modelName,
 			TokenName:        tokenName,
+			TokenUUID:        model.StringPtrIfNotEmpty(meta.TokenUUID),
 			Quota:            0,
 			Content:          "proxy request, no quota consumption",
 			IsStream:         isStream,

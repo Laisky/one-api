@@ -618,7 +618,7 @@ export const useChannelForm = () => {
       if (isEdit && channelId) {
         response = await api.put('/api/channel/', {
           ...payload,
-          id: parseInt(channelId, 10),
+          uuid: channelId,
         });
       } else {
         response = await api.post('/api/channel/', payload);

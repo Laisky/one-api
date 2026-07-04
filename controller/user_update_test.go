@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
-	"strconv"
 	"testing"
 
 	"github.com/gin-gonic/gin"
@@ -67,7 +66,7 @@ func TestUpdateUserQuotaToZero(t *testing.T) {
 	})
 
 	payload := map[string]any{
-		"id":    user.Id,
+		"uuid":  user.UUID,
 		"quota": 0,
 	}
 	body, err := json.Marshal(payload)
@@ -115,7 +114,7 @@ func TestUpdateUserClearEmail(t *testing.T) {
 	})
 
 	payload := map[string]any{
-		"id":    user.Id,
+		"uuid":  user.UUID,
 		"email": "",
 	}
 	body, err := json.Marshal(payload)
@@ -163,7 +162,7 @@ func TestUpdateUserEmailNullSkipsChange(t *testing.T) {
 	})
 
 	payload := map[string]any{
-		"id":    user.Id,
+		"uuid":  user.UUID,
 		"email": nil,
 	}
 	body, err := json.Marshal(payload)
@@ -211,7 +210,7 @@ func TestDeleteUserRespondsWithSuccess(t *testing.T) {
 		DeleteUser(c)
 	})
 
-	req := httptest.NewRequest(http.MethodDelete, "/api/user/"+strconv.Itoa(target.Id), nil)
+	req := httptest.NewRequest(http.MethodDelete, "/api/user/"+target.UUID, nil)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
@@ -266,7 +265,7 @@ func TestUpdateUserMetadataPasswordLockByRoot(t *testing.T) {
 	})
 
 	payload := map[string]any{
-		"id":       target.Id,
+		"uuid":     target.UUID,
 		"metadata": map[string]any{"password_locked": true},
 	}
 	body, err := json.Marshal(payload)
@@ -307,7 +306,7 @@ func TestUpdateUserMetadataPasswordLockByAdminRejected(t *testing.T) {
 	})
 
 	payload := map[string]any{
-		"id":       target.Id,
+		"uuid":     target.UUID,
 		"metadata": map[string]any{"password_locked": true},
 	}
 	body, err := json.Marshal(payload)
@@ -349,7 +348,7 @@ func TestUpdateUserPasswordRejectedWhenLocked(t *testing.T) {
 	})
 
 	payload := map[string]any{
-		"id":       target.Id,
+		"uuid":     target.UUID,
 		"password": "newpass99",
 	}
 	body, err := json.Marshal(payload)
@@ -393,7 +392,7 @@ func TestUpdateUserRootCanUnlockAndChangePasswordInOneRequest(t *testing.T) {
 	})
 
 	payload := map[string]any{
-		"id":       target.Id,
+		"uuid":     target.UUID,
 		"metadata": map[string]any{"password_locked": false},
 		"password": "newpass99",
 	}

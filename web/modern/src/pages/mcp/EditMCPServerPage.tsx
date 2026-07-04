@@ -19,7 +19,6 @@ import { useNavigate, useParams } from 'react-router-dom';
 import * as z from 'zod';
 
 interface MCPTool {
-  id: number;
   name: string;
   description?: string;
 }

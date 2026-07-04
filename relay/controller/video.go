@@ -195,9 +195,12 @@ func RelayVideoHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 		logContent := fmt.Sprintf("video seconds %.2f, usd %.3f, multiplier %.2f, group rate %.2f", durationSeconds, videoPricing.PerSecondUsd, multiplier, groupRatio)
 		entry := &model.Log{
 			UserId:      userId,
+			UserUUID:    model.StringPtrIfNotEmpty(meta.UserUUID),
 			ChannelId:   channelId,
+			ChannelUUID: model.StringPtrIfNotEmpty(meta.ChannelUUID),
 			ModelName:   userVisibleModelName(meta, meta.ActualModelName),
 			TokenName:   tokenName,
+			TokenUUID:   model.StringPtrIfNotEmpty(meta.TokenUUID),
 			Quota:       int(usedQuota),
 			Content:     logContent,
 			RequestId:   requestId,

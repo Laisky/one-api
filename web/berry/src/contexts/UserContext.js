@@ -5,6 +5,12 @@ import { useDispatch } from 'react-redux';
 
 export const UserContext = createContext();
 
+const normalizeUser = (user) => {
+  if (!user) return user;
+  const uuid = user.uuid || user.user_uuid;
+  return uuid ? { ...user, uuid, id: uuid } : user;
+};
+
 // eslint-disable-next-line
 const UserProvider = ({ children }) => {
   const dispatch = useDispatch();
@@ -13,7 +19,8 @@ const UserProvider = ({ children }) => {
   const loadUser = useCallback(() => {
     let user = localStorage.getItem('user');
     if (user) {
-      let data = JSON.parse(user);
+      let data = normalizeUser(JSON.parse(user));
+      localStorage.setItem('user', JSON.stringify(data));
       dispatch({ type: LOGIN, payload: data });
     }
     setIsUserLoaded(true);

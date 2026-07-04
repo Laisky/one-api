@@ -118,7 +118,7 @@ func SearchTokens(c *gin.Context) {
 }
 
 func GetToken(c *gin.Context) {
-	id, err := strconv.Atoi(c.Param("id"))
+	id, err := resolveTokenRef(c.Param("id"))
 	userId := c.GetInt(ctxkey.Id)
 	if err != nil {
 		helper.RespondError(c, err)
@@ -179,6 +179,8 @@ func AddToken(c *gin.Context) {
 		helper.RespondError(c, err)
 		return
 	}
+	token.UUID = ""
+	token.UserUUID = nil
 
 	// Disallow empty name on create
 	if strings.TrimSpace(token.Name) == "" {
@@ -217,9 +219,13 @@ func AddToken(c *gin.Context) {
 }
 
 func DeleteToken(c *gin.Context) {
-	id, _ := strconv.Atoi(c.Param("id"))
+	id, err := resolveTokenRef(c.Param("id"))
+	if err != nil {
+		helper.RespondError(c, err)
+		return
+	}
 	userId := c.GetInt(ctxkey.Id)
-	err := model.DeleteTokenById(gmw.Ctx(c), id, userId)
+	err = model.DeleteTokenById(gmw.Ctx(c), id, userId)
 	if err != nil {
 		helper.RespondError(c, err)
 		return
@@ -383,8 +389,10 @@ func processPreConsume(ctx context.Context, _ *gin.Context, token *model.Token, 
 
 	logEntry := &model.Log{
 		UserId:    userID,
+		UserUUID:  token.UserUUID,
 		ModelName: req.AddReason,
 		TokenName: token.Name,
+		TokenUUID: &token.UUID,
 		Quota:     clampQuotaToInt(preQuota),
 		Content:   buildPreConsumeLogContent(req.AddReason, preQuota, transactionID, timeoutSeconds),
 		RequestId: requestID,
@@ -398,7 +406,9 @@ func processPreConsume(ctx context.Context, _ *gin.Context, token *model.Token, 
 	transaction := &model.TokenTransaction{
 		TransactionID: transactionID,
 		TokenId:       token.Id,
+		TokenUUID:     &token.UUID,
 		UserId:        userID,
+		UserUUID:      token.UserUUID,
 		Status:        model.TokenTransactionStatusPending,
 		PreQuota:      preQuota,
 		Reason:        req.AddReason,
@@ -406,6 +416,9 @@ func processPreConsume(ctx context.Context, _ *gin.Context, token *model.Token, 
 		TraceId:       traceID,
 		ExpiresAt:     expiresAt,
 		LogId:         &logEntry.Id,
+	}
+	if logEntry.UUID != "" {
+		transaction.LogUUID = &logEntry.UUID
 	}
 
 	if req.ElapsedTimeMs != nil && *req.ElapsedTimeMs > 0 {
@@ -653,8 +666,10 @@ func processZeroQuotaImmediateConsume(ctx context.Context, token *model.Token, u
 
 	logEntry := &model.Log{
 		UserId:    userID,
+		UserUUID:  token.UserUUID,
 		ModelName: req.AddReason,
 		TokenName: token.Name,
+		TokenUUID: &token.UUID,
 		Quota:     0,
 		Content:   buildPostConsumeLogContent(req.AddReason, 0, 0, transactionID),
 		RequestId: requestID,
@@ -670,7 +685,9 @@ func processZeroQuotaImmediateConsume(ctx context.Context, token *model.Token, u
 	transaction := &model.TokenTransaction{
 		TransactionID: transactionID,
 		TokenId:       token.Id,
+		TokenUUID:     &token.UUID,
 		UserId:        userID,
+		UserUUID:      token.UserUUID,
 		Status:        model.TokenTransactionStatusConfirmed,
 		PreQuota:      0,
 		FinalQuota:    &zeroQuota,
@@ -683,6 +700,9 @@ func processZeroQuotaImmediateConsume(ctx context.Context, token *model.Token, u
 	if logEntry.Id > 0 {
 		logID := logEntry.Id
 		transaction.LogId = &logID
+	}
+	if logEntry.UUID != "" {
+		transaction.LogUUID = &logEntry.UUID
 	}
 	if req.ElapsedTimeMs != nil && *req.ElapsedTimeMs > 0 {
 		elapsed := *req.ElapsedTimeMs
@@ -743,9 +763,11 @@ func buildTransactionResponse(txn *model.TokenTransaction) gin.H {
 	}
 
 	response := gin.H{
-		"id":             txn.Id,
+		"uuid":           txn.UUID,
 		"transaction_id": txn.TransactionID,
-		"token_id":       txn.TokenId,
+		"token_uuid":     txn.TokenUUID,
+		"user_uuid":      txn.UserUUID,
+		"log_uuid":       txn.LogUUID,
 		"status_code":    txn.Status,
 		"status":         model.TokenTransactionStatusString(txn.Status),
 		"pre_quota":      txn.PreQuota,
@@ -766,9 +788,6 @@ func buildTransactionResponse(txn *model.TokenTransaction) gin.H {
 	}
 	if txn.CanceledAt != nil {
 		response["canceled_at"] = *txn.CanceledAt
-	}
-	if txn.LogId != nil {
-		response["log_id"] = *txn.LogId
 	}
 	if txn.ElapsedTimeMs != nil {
 		response["elapsed_time_ms"] = *txn.ElapsedTimeMs
@@ -884,6 +903,19 @@ func UpdateToken(c *gin.Context) {
 		helper.RespondError(c, err)
 		return
 	}
+	ref, err := preferUUIDRef(tokenPatch.UUID, tokenPatch.Id)
+	if err != nil {
+		helper.RespondError(c, err)
+		return
+	}
+	resolvedTokenID, err := resolveTokenRef(ref)
+	if err != nil {
+		helper.RespondError(c, err)
+		return
+	}
+	tokenPatch.Id = resolvedTokenID
+	tokenPatch.UUID = ""
+	tokenPatch.UserUUID = nil
 
 	// Disallow empty name when not status_only
 	if statusOnly == "" && strings.TrimSpace(tokenPatch.Name) == "" {
@@ -1048,7 +1080,11 @@ func AdminGetAllTokens(c *gin.Context) {
 	if size > config.MaxItemsPerPage {
 		size = config.MaxItemsPerPage
 	}
-	userId, _ := strconv.Atoi(c.Query("user_id"))
+	userId, err := resolveOptionalUserRef(c.Query("user_id"))
+	if err != nil {
+		helper.RespondError(c, err)
+		return
+	}
 	sortBy := c.Query("sort")
 	sortOrder := c.Query("order")
 	if sortOrder == "" {
@@ -1105,7 +1141,7 @@ func AdminSearchTokens(c *gin.Context) {
 
 // AdminGetToken returns a token by id regardless of owner. Admin-only, read-only.
 func AdminGetToken(c *gin.Context) {
-	id, err := strconv.Atoi(c.Param("id"))
+	id, err := resolveTokenRef(c.Param("id"))
 	if err != nil {
 		helper.RespondError(c, errors.Wrap(err, "invalid token id"))
 		return

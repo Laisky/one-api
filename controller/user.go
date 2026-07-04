@@ -191,6 +191,7 @@ func SetupLogin(user *model.User, c *gin.Context) {
 
 	cleanUser := model.User{
 		Id:          user.Id,
+		UUID:        user.UUID,
 		Username:    user.Username,
 		DisplayName: user.DisplayName,
 		Role:        user.Role,
@@ -334,7 +335,7 @@ func SearchUsers(c *gin.Context) {
 }
 
 func GetUser(c *gin.Context) {
-	id, err := strconv.Atoi(c.Param("id"))
+	id, err := resolveUserRef(c.Param("id"))
 	if err != nil {
 		helper.RespondError(c, err)
 		return
@@ -417,7 +418,7 @@ func GetUserDashboard(c *gin.Context) {
 			targetUserId = 0 // 0 means site-wide statistics
 		} else {
 			var err error
-			targetUserId, err = strconv.Atoi(userIdParam)
+			targetUserId, err = resolveUserRef(userIdParam)
 			if err != nil {
 				c.JSON(http.StatusOK, gin.H{
 					"success": false,
@@ -580,7 +581,7 @@ func GetDashboardUsers(c *gin.Context) {
 
 	// Create simplified user list for dropdown
 	type UserOption struct {
-		Id          int    `json:"id"`
+		UUID        string `json:"uuid"`
 		Username    string `json:"username"`
 		DisplayName string `json:"display_name"`
 	}
@@ -588,7 +589,7 @@ func GetDashboardUsers(c *gin.Context) {
 	var userOptions []UserOption
 	// Add "All Users" option first
 	userOptions = append(userOptions, UserOption{
-		Id:          0,
+		UUID:        "all",
 		Username:    "all",
 		DisplayName: "All Users (Site-wide)",
 	})
@@ -596,7 +597,7 @@ func GetDashboardUsers(c *gin.Context) {
 	// Add individual users
 	for _, user := range users {
 		userOptions = append(userOptions, UserOption{
-			Id:          user.Id,
+			UUID:        user.UUID,
 			Username:    user.Username,
 			DisplayName: user.DisplayName,
 		})
@@ -678,7 +679,7 @@ func GetSelfByToken(c *gin.Context) {
 	}
 
 	userData := gin.H{
-		"id":           user.Id,
+		"uuid":         user.UUID,
 		"username":     user.Username,
 		"display_name": user.DisplayName,
 		"role":         user.Role,
@@ -705,7 +706,8 @@ func GetSelfByToken(c *gin.Context) {
 	}
 
 	tokenData := gin.H{
-		"id":               token.Id,
+		"uuid":             token.UUID,
+		"user_uuid":        token.UserUUID,
 		"name":             token.Name,
 		"status":           token.Status,
 		"remain_quota":     token.RemainQuota,
@@ -728,9 +730,9 @@ func GetSelfByToken(c *gin.Context) {
 			"user":  userData,
 			"token": tokenData,
 		},
-		"uid":                    user.Id,
+		"user_uuid":              user.UUID,
 		"username":               user.Username,
-		"token_id":               token.Id,
+		"token_uuid":             token.UUID,
 		"token_name":             token.Name,
 		"token_status":           token.Status,
 		"token_used_quota":       token.UsedQuota,
@@ -781,10 +783,17 @@ func UpdateUser(c *gin.Context) {
 		return
 	}
 
-	if payload.Id == 0 {
-		helper.RespondError(c, errors.New(invalidParameterMessage))
+	ref, err := preferUUIDRef(payload.UUID, payload.Id)
+	if err != nil {
+		helper.RespondError(c, err)
 		return
 	}
+	payload.Id, err = resolveUserRef(ref)
+	if err != nil {
+		helper.RespondError(c, err)
+		return
+	}
+	payload.UUID = ""
 
 	originUser, err := model.GetUserById(payload.Id, false)
 	if err != nil {
@@ -1169,7 +1178,7 @@ func UpdateSelf(c *gin.Context) {
 }
 
 func DeleteUser(c *gin.Context) {
-	id, err := strconv.Atoi(c.Param("id"))
+	id, err := resolveUserRef(c.Param("id"))
 	if err != nil {
 		helper.RespondError(c, err)
 		return
@@ -1224,6 +1233,8 @@ func CreateUser(c *gin.Context) {
 		helper.RespondError(c, errors.New(invalidParameterMessage))
 		return
 	}
+	user.UUID = ""
+	user.InviterUUID = nil
 	if err := common.Validate.Struct(&user); err != nil {
 		helper.RespondError(c, errors.New(invalidInputMessage))
 		return
@@ -1447,9 +1458,10 @@ func TopUp(c *gin.Context) {
 }
 
 type adminTopUpRequest struct {
-	UserId int    `json:"user_id"`
-	Quota  int    `json:"quota"`
-	Remark string `json:"remark"`
+	UserId   int    `json:"user_id"`
+	UserUUID string `json:"user_uuid"`
+	Quota    int    `json:"quota"`
+	Remark   string `json:"remark"`
 }
 
 func AdminTopUp(c *gin.Context) {
@@ -1460,6 +1472,17 @@ func AdminTopUp(c *gin.Context) {
 		helper.RespondError(c, err)
 		return
 	}
+	ref, err := preferUUIDRef(req.UserUUID, req.UserId)
+	if err != nil {
+		helper.RespondError(c, err)
+		return
+	}
+	req.UserId, err = resolveUserRef(ref)
+	if err != nil {
+		helper.RespondError(c, err)
+		return
+	}
+	req.UserUUID = ""
 	err = model.IncreaseUserQuota(ctx, req.UserId, int64(req.Quota))
 	if err != nil {
 		helper.RespondError(c, err)
@@ -1738,8 +1761,7 @@ func AdminDisableUserTotp(c *gin.Context) {
 		return
 	}
 
-	// Convert string ID to int
-	userId, err := strconv.Atoi(targetUserId)
+	userId, err := resolveUserRef(targetUserId)
 	if err != nil {
 		helper.RespondError(c, errors.New("Invalid user ID"))
 		return

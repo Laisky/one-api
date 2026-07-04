@@ -25,7 +25,8 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useClipboardManager } from './useClipboardManager';
 
 export interface Token {
-  id: number;
+  id?: number;
+  uuid: string;
   name: string;
   key: string;
   status: number;
@@ -38,6 +39,14 @@ export interface Token {
   models?: string;
   subnet?: string;
 }
+
+const tokenRef = (token: Pick<Token, 'id' | 'uuid'>): string | number => token.uuid || token.id || '';
+
+const tokenRefText = (token: Pick<Token, 'id' | 'uuid'>): string => String(tokenRef(token));
+
+const tokenRefPayload = (ref: string | number): { id: number } | { uuid: string } => {
+  return typeof ref === 'string' ? { uuid: ref } : { id: ref };
+};
 
 // Status constants
 const TOKEN_STATUS = {
@@ -184,7 +193,7 @@ export function TokensPage() {
   );
   const formatTokenLabel = useCallback(
     (token: Token) => {
-      return token.name || tr('table.id_placeholder', '(ID {{id}})', { id: token.id });
+      return token.name || tr('table.id_placeholder', '(ID {{id}})', { id: tokenRefText(token) });
     },
     [tr]
   );
@@ -196,7 +205,7 @@ export function TokensPage() {
       },
       {
         label: tr('columns.id', 'ID'),
-        value: token.id,
+        value: tokenRefText(token),
       },
     ],
     [formatTokenLabel, tr]
@@ -266,14 +275,14 @@ export function TokensPage() {
 
       if (success && Array.isArray(responseData)) {
         const options: SearchOption[] = responseData.map((token: Token) => ({
-          key: token.id.toString(),
+          key: tokenRefText(token),
           value: formatTokenLabel(token),
           text: formatTokenLabel(token),
           content: (
             <div className="flex flex-col">
               <div className="font-medium">{formatTokenLabel(token)}</div>
               <div className="text-sm text-muted-foreground flex items-center gap-2 flex-wrap">
-                <span>{tr('search.id_label', 'ID: {{id}}', { id: token.id })}</span>
+                <span>{tr('search.id_label', 'ID: {{id}}', { id: tokenRefText(token) })}</span>
                 {renderStatusBadge(token.status)}
                 <span>
                   {tr('search.quota_label', 'Quota: {{quota}}', {
@@ -329,7 +338,7 @@ export function TokensPage() {
     }
   };
 
-  const manage = async (id: number, action: 'enable' | 'disable' | 'delete') => {
+  const manage = async (id: string | number, action: 'enable' | 'disable' | 'delete') => {
     try {
       let res: any;
       if (action === 'delete') {
@@ -338,7 +347,7 @@ export function TokensPage() {
       } else {
         // Use status_only to avoid overwriting other fields like name/models when toggling status
         res = await api.put('/api/token/?status_only=1', {
-          id,
+          ...tokenRefPayload(id),
           status: action === 'enable' ? TOKEN_STATUS.ENABLED : TOKEN_STATUS.DISABLED,
         });
       }
@@ -371,17 +380,18 @@ export function TokensPage() {
   };
 
   const copyToClipboard = async (token: Token) => {
+    const ref = tokenRefText(token);
     if (!navigator?.clipboard?.writeText) {
-      handleCopyFailure({ id: token.id, key: token.key });
+      handleCopyFailure({ ref, key: token.key });
       return;
     }
 
     try {
       await navigator.clipboard.writeText(token.key);
-      handleCopySuccess(token.id);
+      handleCopySuccess(ref);
     } catch (error) {
       console.error('Failed to copy to clipboard:', error);
-      handleCopyFailure({ id: token.id, key: token.key });
+      handleCopyFailure({ ref, key: token.key });
     }
   };
 
@@ -396,6 +406,7 @@ export function TokensPage() {
 
   const renderClientDropdown = (token: Token, label?: string) => {
     const chatLink = (typeof window !== 'undefined' && window.localStorage.getItem('chat_link')) || '';
+    const ref = tokenRefText(token);
     return (
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
@@ -406,18 +417,18 @@ export function TokensPage() {
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
           {chatLink ? (
-            <DropdownMenuItem onSelect={() => openInClient(token, 'next')} data-testid={`token-share-next-${token.id}`}>
+            <DropdownMenuItem onSelect={() => openInClient(token, 'next')} data-testid={`token-share-next-${ref}`}>
               {tr('share.next_chat', 'ChatGPT Next Web')}
             </DropdownMenuItem>
           ) : null}
-          <DropdownMenuItem onSelect={() => openInClient(token, 'ama')} data-testid={`token-share-ama-${token.id}`}>
+          <DropdownMenuItem onSelect={() => openInClient(token, 'ama')} data-testid={`token-share-ama-${ref}`}>
             {tr('share.ama', 'AMA 问天')}
           </DropdownMenuItem>
-          <DropdownMenuItem onSelect={() => openInClient(token, 'opencat')} data-testid={`token-share-opencat-${token.id}`}>
+          <DropdownMenuItem onSelect={() => openInClient(token, 'opencat')} data-testid={`token-share-opencat-${ref}`}>
             {tr('share.opencat', 'OpenCat')}
           </DropdownMenuItem>
           {chatLink ? (
-            <DropdownMenuItem onSelect={() => openInClient(token, 'lobechat')} data-testid={`token-share-lobechat-${token.id}`}>
+            <DropdownMenuItem onSelect={() => openInClient(token, 'lobechat')} data-testid={`token-share-lobechat-${ref}`}>
               {tr('share.lobechat', 'LobeChat')}
             </DropdownMenuItem>
           ) : null}
@@ -426,10 +437,10 @@ export function TokensPage() {
     );
   };
 
-  const toggleKeyVisibility = (tokenId: number) => {
+  const toggleKeyVisibility = (tokenRef: string) => {
     setShowKeys((prev) => ({
       ...prev,
-      [tokenId]: !prev[tokenId],
+      [tokenRef]: !prev[tokenRef],
     }));
   };
 
@@ -440,9 +451,9 @@ export function TokensPage() {
 
   const columns: ColumnDef<Token>[] = [
     {
-      accessorKey: 'id',
+      accessorKey: 'uuid',
       header: tr('columns.id', 'ID'),
-      cell: ({ row }) => <span className="font-mono text-sm">{row.original.id}</span>,
+      cell: ({ row }) => <span className="font-mono text-sm">{tokenRefText(row.original)}</span>,
     },
     {
       accessorKey: 'name',
@@ -454,14 +465,15 @@ export function TokensPage() {
       header: tr('columns.key', 'Key'),
       cell: ({ row }) => {
         const token = row.original;
-        const isVisible = showKeys[token.id];
+        const ref = tokenRefText(token);
+        const isVisible = showKeys[ref];
         return (
           <div className="flex items-center gap-2">
             <span className="font-mono text-xs">{isVisible ? token.key : maskKey(token.key)}</span>
             <Button
               variant="ghost"
               size="icon"
-              onClick={() => toggleKeyVisibility(token.id)}
+              onClick={() => toggleKeyVisibility(ref)}
               className="h-8 w-8 touch-target"
               aria-label={isVisible ? tr('key.hide', 'Hide key') : tr('key.show', 'Show key')}
             >
@@ -472,11 +484,11 @@ export function TokensPage() {
               size="icon"
               onClick={() => copyToClipboard(token)}
               className="h-8 w-8 touch-target"
-              disabled={!!copiedTokens[token.id]}
-              aria-label={copiedTokens[token.id] ? tr('key.copied', 'Copied!') : tr('key.copy', 'Copy token')}
-              title={copiedTokens[token.id] ? tr('key.copied', 'Copied!') : tr('key.copy', 'Copy token')}
+              disabled={!!copiedTokens[ref]}
+              aria-label={copiedTokens[ref] ? tr('key.copied', 'Copied!') : tr('key.copy', 'Copy token')}
+              title={copiedTokens[ref] ? tr('key.copied', 'Copied!') : tr('key.copy', 'Copy token')}
             >
-              {copiedTokens[token.id] ? <Check className="h-3.5 w-3.5 text-success" /> : <Copy className="h-3.5 w-3.5" />}
+              {copiedTokens[ref] ? <Check className="h-3.5 w-3.5 text-success" /> : <Copy className="h-3.5 w-3.5" />}
             </Button>
           </div>
         );
@@ -577,14 +589,14 @@ export function TokensPage() {
         const token = row.original;
         return (
           <ResponsiveActionGroup className="mobile-table-cell" justify="start">
-            <Button variant="outline" size="sm" onClick={() => navigate(`/tokens/edit/${token.id}`)} className="touch-target">
+            <Button variant="outline" size="sm" onClick={() => navigate(`/tokens/edit/${tokenRef(token)}`)} className="touch-target">
               {tr('actions.edit', 'Edit')}
             </Button>
             {renderClientDropdown(token)}
             <Button
               variant="outline"
               size="sm"
-              onClick={() => manage(token.id, token.status === TOKEN_STATUS.ENABLED ? 'disable' : 'enable')}
+              onClick={() => manage(tokenRef(token), token.status === TOKEN_STATUS.ENABLED ? 'disable' : 'enable')}
               className={cn(
                 'touch-target',
                 token.status === TOKEN_STATUS.ENABLED ? 'text-warning hover:text-warning/80' : 'text-success hover:text-success/80'
@@ -602,7 +614,7 @@ export function TokensPage() {
                   description: tr('confirm.delete', 'Are you sure you want to delete token "{{label}}"?', { label }),
                   details: buildTokenDeleteDetails(token),
                 });
-                if (confirmed) manage(token.id, 'delete');
+                if (confirmed) manage(tokenRef(token), 'delete');
               }}
               className="touch-target"
             >
@@ -666,12 +678,12 @@ export function TokensPage() {
               floatingRowActions={(row) => (
                 <div className="flex items-center gap-1">
                   <ListActionButton
-                    onClick={() => navigate(`/tokens/edit/${row.id}`)}
+                    onClick={() => navigate(`/tokens/edit/${tokenRef(row)}`)}
                     title={tr('actions.edit', 'Edit')}
                     icon={<Settings className="h-4 w-4" />}
                   />
                   <ListActionButton
-                    onClick={() => manage(row.id, row.status === TOKEN_STATUS.ENABLED ? 'disable' : 'enable')}
+                    onClick={() => manage(tokenRef(row), row.status === TOKEN_STATUS.ENABLED ? 'disable' : 'enable')}
                     title={row.status === TOKEN_STATUS.ENABLED ? tr('actions.disable', 'Disable') : tr('actions.enable', 'Enable')}
                     className={
                       row.status === TOKEN_STATUS.ENABLED ? 'text-warning hover:text-warning/80' : 'text-success hover:text-success/80'
@@ -683,14 +695,14 @@ export function TokensPage() {
                       const label =
                         row.name ||
                         tr('table.id_placeholder', '(ID {{id}})', {
-                          id: row.id,
+                          id: tokenRefText(row),
                         });
                       const confirmed = await confirmDelete({
                         title: tr('confirm.delete_title', 'Delete Token'),
                         description: tr('confirm.delete', 'Are you sure you want to delete token "{{label}}"?', { label }),
                         details: buildTokenDeleteDetails(row),
                       });
-                      if (confirmed) manage(row.id, 'delete');
+                      if (confirmed) manage(tokenRef(row), 'delete');
                     }}
                     title={tr('actions.delete', 'Delete')}
                     icon={<Trash2 className="h-4 w-4" />}

@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/url"
-	"strconv"
 	"strings"
 	"sync"
 
@@ -248,8 +247,9 @@ func PasskeyRegisterFinish(c *gin.Context) {
 		"success": true,
 		"message": "Passkey registered successfully",
 		"data": gin.H{
-			"id":   dbCred.Id,
-			"name": dbCred.CredentialName,
+			"uuid":      dbCred.UUID,
+			"user_uuid": dbCred.UserUUID,
+			"name":      dbCred.CredentialName,
 		},
 	})
 }
@@ -371,16 +371,18 @@ func PasskeyList(c *gin.Context) {
 	}
 
 	type passkeyInfo struct {
-		Id             int    `json:"id"`
-		CredentialName string `json:"credential_name"`
-		SignCount      uint32 `json:"sign_count"`
-		CreatedAt      int64  `json:"created_at"`
+		UUID           string  `json:"uuid"`
+		UserUUID       *string `json:"user_uuid"`
+		CredentialName string  `json:"credential_name"`
+		SignCount      uint32  `json:"sign_count"`
+		CreatedAt      int64   `json:"created_at"`
 	}
 
 	list := make([]passkeyInfo, 0, len(creds))
 	for _, cr := range creds {
 		list = append(list, passkeyInfo{
-			Id:             cr.Id,
+			UUID:           cr.UUID,
+			UserUUID:       cr.UserUUID,
 			CredentialName: cr.CredentialName,
 			SignCount:      cr.SignCount,
 			CreatedAt:      cr.CreatedAt,
@@ -397,7 +399,7 @@ func PasskeyList(c *gin.Context) {
 func PasskeyDelete(c *gin.Context) {
 	userId := c.GetInt(ctxkey.Id)
 	idStr := c.Param("id")
-	id, err := strconv.Atoi(idStr)
+	id, err := resolvePasskeyCredentialRef(idStr)
 	if err != nil {
 		helper.RespondError(c, errors.New("invalid credential id"))
 		return
@@ -418,7 +420,7 @@ func PasskeyDelete(c *gin.Context) {
 func PasskeyRename(c *gin.Context) {
 	userId := c.GetInt(ctxkey.Id)
 	idStr := c.Param("id")
-	id, err := strconv.Atoi(idStr)
+	id, err := resolvePasskeyCredentialRef(idStr)
 	if err != nil {
 		helper.RespondError(c, errors.New("invalid credential id"))
 		return

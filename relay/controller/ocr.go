@@ -349,6 +349,7 @@ func postConsumeOCRQuota(ctx context.Context,
 			RequestId:        requestId,
 			TraceId:          traceId,
 		}
+		model.SetLogExternalUUIDs(logEntry, meta.UserUUID, meta.ChannelUUID, meta.TokenUUID)
 		billing.PostConsumeQuotaWithLog(ctx, meta.TokenId, quota-preConsumedQuota, quota, logEntry, provLogID)
 	} else {
 		gmw.GetLogger(ctx).Error("meta information incomplete, cannot post consume OCR quota",

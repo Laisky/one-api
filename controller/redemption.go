@@ -86,7 +86,7 @@ func SearchRedemptions(c *gin.Context) {
 
 // GetRedemption fetches a single redemption code by its identifier.
 func GetRedemption(c *gin.Context) {
-	id, err := strconv.Atoi(c.Param("id"))
+	id, err := resolveRedemptionRef(c.Param("id"))
 	if err != nil {
 		helper.RespondError(c, err)
 		return
@@ -111,6 +111,8 @@ func AddRedemption(c *gin.Context) {
 		helper.RespondError(c, err)
 		return
 	}
+	redemption.UUID = ""
+	redemption.UserUUID = nil
 	if strings.TrimSpace(redemption.Name) == "" {
 		helper.RespondError(c, errors.New("Redemption name is required"))
 		return
@@ -128,10 +130,12 @@ func AddRedemption(c *gin.Context) {
 		return
 	}
 	keys := make([]string, 0, redemption.Count)
+	userUUID := model.StringPtrIfNotEmpty(c.GetString(ctxkey.UserUUID))
 	for i := 0; i < redemption.Count; i++ {
 		key := random.GetUUID()
 		cleanRedemption := model.Redemption{
 			UserId:      c.GetInt(ctxkey.Id),
+			UserUUID:    userUUID,
 			Name:        redemption.Name,
 			Key:         key,
 			CreatedTime: helper.GetTimestamp(),
@@ -157,8 +161,12 @@ func AddRedemption(c *gin.Context) {
 
 // DeleteRedemption removes a redemption code by ID.
 func DeleteRedemption(c *gin.Context) {
-	id, _ := strconv.Atoi(c.Param("id"))
-	err := model.DeleteRedemptionById(id)
+	id, err := resolveRedemptionRef(c.Param("id"))
+	if err != nil {
+		helper.RespondError(c, err)
+		return
+	}
+	err = model.DeleteRedemptionById(id)
 	if err != nil {
 		helper.RespondError(c, err)
 		return
@@ -178,6 +186,18 @@ func UpdateRedemption(c *gin.Context) {
 		helper.RespondError(c, err)
 		return
 	}
+	ref, err := preferUUIDRef(redemption.UUID, redemption.Id)
+	if err != nil {
+		helper.RespondError(c, err)
+		return
+	}
+	redemption.Id, err = resolveRedemptionRef(ref)
+	if err != nil {
+		helper.RespondError(c, err)
+		return
+	}
+	redemption.UUID = ""
+	redemption.UserUUID = nil
 	cleanRedemption, err := model.GetRedemptionById(redemption.Id)
 	if err != nil {
 		helper.RespondError(c, err)

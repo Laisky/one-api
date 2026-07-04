@@ -105,7 +105,8 @@ interface TraceDurations {
 }
 
 interface TraceData {
-  id: number;
+  id?: number;
+  uuid?: string;
   trace_id: string;
   url: string;
   method: string;
@@ -116,8 +117,10 @@ interface TraceData {
   timestamps: TraceTimestamps;
   durations?: TraceDurations;
   log?: {
-    id: number;
-    user_id: number;
+    id?: number;
+    uuid?: string;
+    user_id?: number;
+    user_uuid?: string | null;
     username: string;
     content: string;
     type: number;
@@ -175,7 +178,8 @@ export function LogDetailsModal({ open, onOpenChange, log }: LogDetailsModalProp
   const [traceLoading, setTraceLoading] = useState(false);
   const [traceError, setTraceError] = useState<string | null>(null);
   const [traceCopied, setTraceCopied] = useState(false);
-  const hasTrace = Boolean(log && log.trace_id && log.trace_id.trim() !== '' && typeof log.id === 'number');
+  const logRef = log?.uuid || log?.id || '';
+  const hasTrace = Boolean(log && log.trace_id && log.trace_id.trim() !== '' && logRef);
 
   const timelineEvents = useMemo(
     () => [
@@ -234,7 +238,7 @@ export function LogDetailsModal({ open, onOpenChange, log }: LogDetailsModalProp
 
       setTraceLoading(true);
       try {
-        const response = await api.get(`/api/trace/log/${log.id}`);
+        const response = await api.get(`/api/trace/log/${logRef}`);
         if (active) {
           setTraceData(response.data.data);
         }
@@ -510,7 +514,7 @@ export function LogDetailsModal({ open, onOpenChange, log }: LogDetailsModalProp
     if (!log) return null;
 
     const username = log.username || user?.username || '—';
-    const channelDisplay = log.channel ?? '—';
+    const channelDisplay = log.channel_uuid || log.channel || '—';
     const promptTokens = log.prompt_tokens ?? 0;
     const cachedPromptTokens = log.cached_prompt_tokens ?? 0;
     const completionTokens = log.completion_tokens ?? 0;
@@ -523,7 +527,7 @@ export function LogDetailsModal({ open, onOpenChange, log }: LogDetailsModalProp
     return (
       <div className="space-y-5">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <DetailItem label={t('logs.details.log_id', 'Log ID')} value={<span className="font-mono text-sm">{log.id}</span>} />
+          <DetailItem label={t('logs.details.log_id', 'Log ID')} value={<span className="font-mono text-sm">{logRef}</span>} />
           <DetailItem label={t('logs.details.type', 'Type')} value={<Badge variant="outline">{logTypeLabel}</Badge>} />
           <DetailItem
             label={t('logs.details.recorded_at', 'Recorded At')}
@@ -534,11 +538,11 @@ export function LogDetailsModal({ open, onOpenChange, log }: LogDetailsModalProp
           <DetailItem
             label={t('logs.details.user', 'User')}
             value={
-              log.user_id ? (
+              log.user_uuid || log.user_id ? (
                 <button
                   type="button"
                   className="inline-flex items-center gap-1 text-blue-600 dark:text-blue-400 underline underline-offset-2 decoration-blue-600/40 dark:decoration-blue-400/40 hover:decoration-blue-600 dark:hover:decoration-blue-400 cursor-pointer text-left transition-colors"
-                  onClick={() => navigateTo(`/users/edit/${log.user_id}`)}
+                  onClick={() => navigateTo(`/users/edit/${log.user_uuid || log.user_id}`)}
                 >
                   {username}
                   <ExternalLink className="h-3 w-3 flex-shrink-0" />

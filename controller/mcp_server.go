@@ -91,7 +91,7 @@ func GetMCPServers(c *gin.Context) {
 
 // GetMCPServer returns details for a MCP server.
 func GetMCPServer(c *gin.Context) {
-	id, err := strconv.Atoi(c.Param("id"))
+	id, err := resolveMCPServerRef(c.Param("id"))
 	if err != nil {
 		helper.RespondError(c, err)
 		return
@@ -137,7 +137,7 @@ func CreateMCPServer(c *gin.Context) {
 // UpdateMCPServer updates an existing MCP server.
 func UpdateMCPServer(c *gin.Context) {
 	logger := gmw.GetLogger(c)
-	id, err := strconv.Atoi(c.Param("id"))
+	id, err := resolveMCPServerRef(c.Param("id"))
 	if err != nil {
 		helper.RespondError(c, err)
 		return
@@ -227,7 +227,7 @@ func bindMCPServerPayload(c *gin.Context) (MCPServerUpsertRequest, map[string]bo
 
 // DeleteMCPServer deletes a MCP server by ID.
 func DeleteMCPServer(c *gin.Context) {
-	id, err := strconv.Atoi(c.Param("id"))
+	id, err := resolveMCPServerRef(c.Param("id"))
 	if err != nil {
 		helper.RespondError(c, err)
 		return
@@ -246,7 +246,7 @@ func DeleteMCPServer(c *gin.Context) {
 
 // SyncMCPServer triggers a manual tool sync for a MCP server.
 func SyncMCPServer(c *gin.Context) {
-	id, err := strconv.Atoi(c.Param("id"))
+	id, err := resolveMCPServerRef(c.Param("id"))
 	if err != nil {
 		helper.RespondError(c, err)
 		return
@@ -282,7 +282,7 @@ func SyncMCPServer(c *gin.Context) {
 
 // TestMCPServer validates connectivity with a MCP server.
 func TestMCPServer(c *gin.Context) {
-	id, err := strconv.Atoi(c.Param("id"))
+	id, err := resolveMCPServerRef(c.Param("id"))
 	if err != nil {
 		helper.RespondError(c, err)
 		return
@@ -320,7 +320,7 @@ func TestMCPServer(c *gin.Context) {
 // ListMCPServerTools returns tools for a MCP server.
 func ListMCPServerTools(c *gin.Context) {
 	logger := gmw.GetLogger(c)
-	id, err := strconv.Atoi(c.Param("id"))
+	id, err := resolveMCPServerRef(c.Param("id"))
 	if err != nil {
 		helper.RespondError(c, err)
 		return
@@ -362,7 +362,7 @@ type ToolsDisplayServerEntry struct {
 
 // MCPServerDisplayInfo is a sanitized view of MCPServer for public display (no secrets).
 type MCPServerDisplayInfo struct {
-	Id       int    `json:"id"`
+	UUID     string `json:"uuid"`
 	Name     string `json:"name"`
 	Status   int    `json:"status"`
 	Protocol string `json:"protocol"`
@@ -402,7 +402,7 @@ func GetToolsDisplay(c *gin.Context) {
 
 		result = append(result, ToolsDisplayServerEntry{
 			Server: &MCPServerDisplayInfo{
-				Id:       server.Id,
+				UUID:     server.UUID,
 				Name:     server.Name,
 				Status:   server.Status,
 				Protocol: server.Protocol,

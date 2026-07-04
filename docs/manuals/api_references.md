@@ -227,7 +227,7 @@ The gateway uses **different envelopes for the two surfaces** — know which one
 **Management API** (`/api/*`) — a wrapper object, almost always returned with **HTTP 200** even on logical failure (inspect the `success` field, not only the status code):
 
 ```json
-{ "success": true, "message": "", "data": { "id": 3, "username": "alice", "quota": 250000 } }
+{ "success": true, "message": "", "data": { "uuid": "018f0000-0000-7000-8000-000000000003", "username": "alice", "quota": 250000 } }
 ```
 
 ```json
@@ -244,7 +244,7 @@ The gateway uses **different envelopes for the two surfaces** — know which one
 
 ### Identifiers & timestamps
 
-- Resource ids are integers (`id`, `user_id`, `channel_id`).
+- Management resource identifiers are UUID strings. Response payloads use `uuid` for the row itself and `*_uuid` keys for related resources, such as `user_uuid`, `channel_uuid`, `token_uuid`, `server_uuid`, and `log_uuid`. Numeric fields such as channel `type`, status codes, quotas, pagination, timestamps, and JSON-RPC echo `id` values remain integers.
 - Token timestamps `created_time`, `accessed_time`, `expired_time` are **Unix seconds** (`expired_time: -1` means "never"). GORM bookkeeping fields `created_at`/`updated_at` are millisecond timestamps.
 - Field names are `snake_case` in JSON. Use them verbatim — never paraphrase a field name.
 
@@ -2391,7 +2391,7 @@ Raw passthrough that forwards the request to one specific channel, identified by
 
 | Name | Type | Required | Description |
 |------|------|----------|-------------|
-| `channelid` | integer | Yes | Numeric id of the channel to forward to. Must parse as an integer or the request is rejected `400`. |
+| `channelid` | string (UUID) | Yes | Channel UUID to forward to. The legacy token-key suffix grammar is separate and remains integer-only because it splits keys on `-`. |
 | `target` | string (wildcard) | Yes | The remaining path. The `/v1/oneapi/proxy/:channelid` prefix is stripped; everything after it is appended to the channel base URL (the original query string is preserved). |
 
 **Request body**: any. The original request body is streamed to the upstream unchanged; the method (`GET`, `POST`, `PUT`, `DELETE`, etc.) is preserved because the route is registered for any HTTP method.
@@ -2403,14 +2403,14 @@ The upstream response is mirrored: the original HTTP status code, response heade
 **Example**
 
 ```bash
-# Forward GET /v1/models to channel 42's upstream base URL
-curl "$BASE_URL/v1/oneapi/proxy/42/v1/models" \
+# Forward GET /v1/models to the pinned channel's upstream base URL
+curl "$BASE_URL/v1/oneapi/proxy/018f0000-0000-7000-8000-000000000042/v1/models" \
   -H "Authorization: Bearer $API_KEY"
 ```
 
 ```bash
-# Forward a POST with a body verbatim to channel 42
-curl -X POST "$BASE_URL/v1/oneapi/proxy/42/v1/chat/completions" \
+# Forward a POST with a body verbatim to the pinned channel
+curl -X POST "$BASE_URL/v1/oneapi/proxy/018f0000-0000-7000-8000-000000000042/v1/chat/completions" \
   -H "Authorization: Bearer $API_KEY" \
   -H "Content-Type: application/json" \
   -d '{"model":"gpt-4o-mini","messages":[{"role":"user","content":"ping"}]}'
@@ -2420,7 +2420,7 @@ curl -X POST "$BASE_URL/v1/oneapi/proxy/42/v1/chat/completions" \
 
 | Status | Meaning |
 |--------|---------|
-| 400 | `:channelid` is not a valid integer (`Invalid Channel Id: <value>`, raised during auth), or the channel id does not resolve to a channel (`Invalid Channel Id`, raised during distribution). |
+| 400 | `:channelid` is not a valid channel UUID, or the channel UUID does not resolve to a channel (`Invalid Channel Id`). |
 | 403 | The pinned channel exists but is disabled (`The channel has been disabled`). |
 | 4xx/5xx | Any upstream status is passed through as-is once the request is forwarded (the gateway does not rewrite upstream errors on this route). |
 
@@ -2730,9 +2730,10 @@ Finalize that reservation (`post`):
 | — | `success` | boolean | `true` on success. |
 | — | `message` | string | Empty on success. |
 | — | `data` | object | The refreshed token record for the calling key. |
-| transaction.id | `transaction.id` | integer | Internal transaction row id. |
+| transaction.uuid | `transaction.uuid` | string (UUID) | Transaction resource UUID. |
 | transaction.transaction_id | `transaction.transaction_id` | string | The (possibly generated) external transaction id. |
-| transaction.token_id | `transaction.token_id` | integer | Owning key id. |
+| transaction.token_uuid | `transaction.token_uuid` | string (UUID) / null | Owning key UUID, when available. |
+| transaction.user_uuid | `transaction.user_uuid` | string (UUID) / null | Owning user UUID, when available. |
 | transaction.status_code | `transaction.status_code` | integer | 1=pending, 2=confirmed, 3=auto_confirmed, 4=canceled. |
 | transaction.status | `transaction.status` | string | Label for the status code. |
 | transaction.pre_quota | `transaction.pre_quota` | integer | Reserved quota. |
@@ -2744,7 +2745,7 @@ Finalize that reservation (`post`):
 | transaction.trace_id | `transaction.trace_id` | string | Originating trace id. |
 | transaction.confirmed_at | `transaction.confirmed_at` | integer | Present when confirmed (Unix seconds). |
 | transaction.canceled_at | `transaction.canceled_at` | integer | Present when canceled (Unix seconds). |
-| transaction.log_id | `transaction.log_id` | integer | Associated consumption log id, when present. |
+| transaction.log_uuid | `transaction.log_uuid` | string (UUID) / null | Associated consumption log UUID, when present. |
 | transaction.elapsed_time_ms | `transaction.elapsed_time_ms` | integer | Present when latency was supplied. |
 
 ```json
@@ -2752,8 +2753,8 @@ Finalize that reservation (`post`):
   "success": true,
   "message": "",
   "data": {
-    "id": 42,
-    "user_id": 7,
+    "uuid": "018f0000-0000-7000-8000-000000000042",
+    "user_uuid": "018f0000-0000-7000-8000-000000000007",
     "key": "sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
     "status": 1,
     "name": "tool-key",
@@ -2763,9 +2764,10 @@ Finalize that reservation (`post`):
     "expired_time": -1
   },
   "transaction": {
-    "id": 1001,
+    "uuid": "018f0000-0000-7000-8000-000000001001",
     "transaction_id": "f3b9c0e2-7a4d-4c1e-9b2a-8d6f0a1c3e54",
-    "token_id": 42,
+    "token_uuid": "018f0000-0000-7000-8000-000000000042",
+    "user_uuid": "018f0000-0000-7000-8000-000000000007",
     "status_code": 2,
     "status": "confirmed",
     "pre_quota": 5000,
@@ -2776,7 +2778,7 @@ Finalize that reservation (`post`):
     "request_id": "2026060812000000000000000",
     "trace_id": "a1b2c3d4e5f6",
     "confirmed_at": 1749384000,
-    "log_id": 55012,
+    "log_uuid": "018f0000-0000-7000-8000-000000055012",
     "elapsed_time_ms": 1830
   }
 }
@@ -2850,10 +2852,10 @@ Returns a paginated history of the calling key's external billing transactions (
 
 | Field | JSON key | Type | Description |
 |---|---|---|---|
-| — | `data[].id` | integer | Internal row id. |
+| — | `data[].uuid` | string (UUID) | Transaction resource UUID. |
 | — | `data[].transaction_id` | string | External transaction id. |
-| — | `data[].token_id` | integer | Owning key id. |
-| — | `data[].user_id` | integer | Owning user id. |
+| — | `data[].token_uuid` | string (UUID) / null | Owning key UUID, when available. |
+| — | `data[].user_uuid` | string (UUID) / null | Owning user UUID, when available. |
 | — | `data[].status` | integer | 1=pending, 2=confirmed, 3=auto_confirmed, 4=canceled. |
 | — | `data[].pre_quota` | integer | Reserved quota. |
 | — | `data[].final_quota` | integer / null | Reconciled quota; null while pending. |
@@ -2864,7 +2866,7 @@ Returns a paginated history of the calling key's external billing transactions (
 | — | `data[].confirmed_at` | integer / null | Confirmation time (Unix seconds). |
 | — | `data[].canceled_at` | integer / null | Cancellation time (Unix seconds). |
 | — | `data[].auto_confirmed` | boolean | Finalized by timeout flow. |
-| — | `data[].log_id` | integer / null | Associated consumption log id. |
+| — | `data[].log_uuid` | string (UUID) / null | Associated consumption log UUID. |
 | — | `data[].elapsed_time_ms` | integer / null | Upstream latency, when recorded. |
 | — | `data[].created_at` | integer | Creation time (Unix milliseconds). |
 | — | `data[].updated_at` | integer | Last update time (Unix milliseconds). |
@@ -2876,10 +2878,10 @@ Returns a paginated history of the calling key's external billing transactions (
   "message": "",
   "data": [
     {
-      "id": 1001,
+      "uuid": "018f0000-0000-7000-8000-000000001001",
       "transaction_id": "f3b9c0e2-7a4d-4c1e-9b2a-8d6f0a1c3e54",
-      "token_id": 42,
-      "user_id": 7,
+      "token_uuid": "018f0000-0000-7000-8000-000000000042",
+      "user_uuid": "018f0000-0000-7000-8000-000000000007",
       "status": 2,
       "pre_quota": 5000,
       "final_quota": 4200,
@@ -2890,7 +2892,7 @@ Returns a paginated history of the calling key's external billing transactions (
       "confirmed_at": 1749384000,
       "canceled_at": null,
       "auto_confirmed": false,
-      "log_id": 55012,
+      "log_uuid": "018f0000-0000-7000-8000-000000055012",
       "elapsed_time_ms": 1830,
       "created_at": 1749383990000,
       "updated_at": 1749384000000
@@ -2928,19 +2930,20 @@ Returns paginated consumption/billing log entries for the calling key, scoped to
 
 | Field | JSON key | Type | Description |
 |---|---|---|---|
-| — | `data[].id` | integer | Log row id. |
-| — | `data[].user_id` | integer | Owning user id. |
+| — | `data[].uuid` | string (UUID) | Log resource UUID. |
+| — | `data[].user_uuid` | string (UUID) / null | Owning user UUID, when available. |
 | — | `data[].created_at` | integer | Event time (Unix seconds). |
 | — | `data[].type` | integer | Log type (see `type` param). |
 | — | `data[].content` | string | Human-readable description. |
 | — | `data[].username` | string | Owning username. |
 | — | `data[].token_name` | string | Key name this log belongs to. |
+| — | `data[].token_uuid` | string (UUID) / null | Key UUID, when available. |
 | — | `data[].model_name` | string | Billed model name. |
 | — | `data[].origin_model_name` | string | Client-requested model before mapping. |
 | — | `data[].quota` | integer | Quota charged. |
 | — | `data[].prompt_tokens` | integer | Prompt tokens. |
 | — | `data[].completion_tokens` | integer | Completion tokens. |
-| — | `data[].channel` | integer | Channel id used. |
+| — | `data[].channel_uuid` | string (UUID) / null | Channel UUID used, when available. |
 | — | `data[].request_id` | string | Request id. |
 | — | `data[].trace_id` | string | Trace id. |
 | — | `data[].updated_at` | integer | Last update time (Unix milliseconds). |
@@ -2957,19 +2960,20 @@ Returns paginated consumption/billing log entries for the calling key, scoped to
   "message": "",
   "data": [
     {
-      "id": 55012,
-      "user_id": 7,
+      "uuid": "018f0000-0000-7000-8000-000000055012",
+      "user_uuid": "018f0000-0000-7000-8000-000000000007",
       "created_at": 1749384000,
       "type": 2,
       "content": "Model price ...",
       "username": "alice",
       "token_name": "tool-key",
+      "token_uuid": "018f0000-0000-7000-8000-000000000042",
       "model_name": "gpt-4o",
       "origin_model_name": "gpt-4o",
       "quota": 4200,
       "prompt_tokens": 1200,
       "completion_tokens": 340,
-      "channel": 3,
+      "channel_uuid": "018f0000-0000-7000-8000-000000000003",
       "request_id": "2026060812000000000000000",
       "trace_id": "a1b2c3d4e5f6",
       "updated_at": 1749384000000,
@@ -3036,7 +3040,7 @@ Returns the user that owns the calling key together with that key's own metadata
 
 | Field | JSON key | Type | Description |
 |---|---|---|---|
-| — | `data.user.id` | integer | Owning user id. |
+| — | `data.user.uuid` | string (UUID) | Owning user UUID. |
 | — | `data.user.username` | string | Username. |
 | — | `data.user.display_name` | string | Display name. |
 | — | `data.user.role` | integer | 1=common, 10=admin, 100=root. |
@@ -3046,7 +3050,8 @@ Returns the user that owns the calling key together with that key's own metadata
 | — | `data.user.used_quota` | integer | User total used quota. |
 | — | `data.user.created_at` | integer | User creation time (Unix milliseconds). |
 | — | `data.user.updated_at` | integer | User update time (Unix milliseconds). |
-| — | `data.token.id` | integer | Calling key id. |
+| — | `data.token.uuid` | string (UUID) | Calling key UUID. |
+| — | `data.token.user_uuid` | string (UUID) / null | Owning user UUID, when available. |
 | — | `data.token.name` | string | Key name. |
 | — | `data.token.status` | integer | Key status code. |
 | — | `data.token.remain_quota` | integer | Key remaining quota. |
@@ -3060,9 +3065,9 @@ Returns the user that owns the calling key together with that key's own metadata
 | — | `data.token.models` | string / null | Configured model restriction, raw. |
 | — | `data.token.subnet` | string / null | Configured subnet restriction, raw. |
 | — | `data.token.available_models` | string | Effective model list, comma-joined. |
-| — | `uid` | integer | Flattened owning user id. |
+| — | `user_uuid` | string (UUID) | Flattened owning user UUID. |
 | — | `username` | string | Flattened username. |
-| — | `token_id` | integer | Flattened key id. |
+| — | `token_uuid` | string (UUID) | Flattened key UUID. |
 | — | `token_name` | string | Flattened key name. |
 | — | `token_status` | integer | Flattened key status. |
 | — | `token_used_quota` | integer | Flattened key used quota. |
@@ -3080,7 +3085,7 @@ Returns the user that owns the calling key together with that key's own metadata
   "message": "",
   "data": {
     "user": {
-      "id": 7,
+      "uuid": "018f0000-0000-7000-8000-000000000007",
       "username": "alice",
       "display_name": "Alice",
       "role": 1,
@@ -3092,7 +3097,8 @@ Returns the user that owns the calling key together with that key's own metadata
       "updated_at": 1749384000000
     },
     "token": {
-      "id": 42,
+      "uuid": "018f0000-0000-7000-8000-000000000042",
+      "user_uuid": "018f0000-0000-7000-8000-000000000007",
       "name": "tool-key",
       "status": 1,
       "remain_quota": 95800,
@@ -3108,9 +3114,9 @@ Returns the user that owns the calling key together with that key's own metadata
       "available_models": "gpt-4o,claude-sonnet-4-20250514"
     }
   },
-  "uid": 7,
+  "user_uuid": "018f0000-0000-7000-8000-000000000007",
   "username": "alice",
-  "token_id": 42,
+  "token_uuid": "018f0000-0000-7000-8000-000000000042",
   "token_name": "tool-key",
   "token_status": 1,
   "token_used_quota": 4200,
@@ -3131,7 +3137,7 @@ curl "$BASE_URL/api/user/get-by-token" \
   -H "Authorization: Bearer $API_KEY"
 ```
 
-**Errors:** `400 Bad Request` with `{"success": false, "message": "missing token context"}` if the authenticated key context is incomplete (`uid` or `token_id` resolves to 0).
+**Errors:** `400 Bad Request` with `{"success": false, "message": "missing token context"}` if the authenticated key context is incomplete.
 
 
 ## Authentication & Account Lifecycle
@@ -3233,7 +3239,7 @@ HTTP 200. On success a `Set-Cookie` session header is returned and `data` holds 
 
 | Field | Type | Description |
 |---|---|---|
-| `data.id` | int | User id. |
+| `data.uuid` | string (UUID) | User UUID. |
 | `data.username` | string | Login name. |
 | `data.display_name` | string | Display name. |
 | `data.role` | int | 1 = common, 10 = admin, 100 = root. |
@@ -3244,7 +3250,7 @@ HTTP 200. On success a `Set-Cookie` session header is returned and `data` holds 
   "message": "",
   "success": true,
   "data": {
-    "id": 42,
+    "uuid": "018f0000-0000-7000-8000-000000000042",
     "username": "alice",
     "display_name": "Alice",
     "role": 1,
@@ -3383,7 +3389,7 @@ HTTP 200. On success returns the same sanitized user object and `Set-Cookie` ses
   "message": "",
   "success": true,
   "data": {
-    "id": 42,
+    "uuid": "018f0000-0000-7000-8000-000000000042",
     "username": "alice",
     "display_name": "Alice",
     "role": 1,
@@ -3431,7 +3437,7 @@ HTTP 200. On success returns the sanitized user object and the session cookie, i
   "message": "",
   "success": true,
   "data": {
-    "id": 51,
+    "uuid": "018f0000-0000-7000-8000-000000000051",
     "username": "github_52",
     "display_name": "Alice",
     "role": 1,
@@ -3478,7 +3484,7 @@ HTTP 200, same shape as `POST /api/user/login`.
   "message": "",
   "success": true,
   "data": {
-    "id": 60,
+    "uuid": "018f0000-0000-7000-8000-000000000060",
     "username": "alice",
     "display_name": "Alice",
     "role": 1,
@@ -3525,7 +3531,7 @@ HTTP 200, same shape as `POST /api/user/login`.
   "message": "",
   "success": true,
   "data": {
-    "id": 71,
+    "uuid": "018f0000-0000-7000-8000-000000000071",
     "username": "alice",
     "display_name": "Alice",
     "role": 1,
@@ -3572,7 +3578,7 @@ HTTP 200, same shape as `POST /api/user/login`.
   "message": "",
   "success": true,
   "data": {
-    "id": 80,
+    "uuid": "018f0000-0000-7000-8000-000000000080",
     "username": "wechat_81",
     "display_name": "WeChat User",
     "role": 1,
@@ -3853,7 +3859,7 @@ Returns the authenticated user's own profile record.
 
 | Field | JSON key | Type | Description |
 |---|---|---|---|
-| Id | `id` | integer | User ID. |
+| UUID | `uuid` | string (UUID) | User resource UUID. |
 | Username | `username` | string | Login identity (unique). |
 | DisplayName | `display_name` | string | Human-friendly name. |
 | Role | `role` | integer | 1 = common, 10 = admin, 100 = root. |
@@ -3864,6 +3870,7 @@ Returns the authenticated user's own profile record.
 | RequestCount | `request_count` | integer | Lifetime request count. |
 | Group | `group` | string | Pricing/permission group. |
 | AffCode | `aff_code` | string | Affiliate code (may be empty until first requested). |
+| InviterUUID | `inviter_uuid` | string (UUID) / null | Inviting user UUID, when present. |
 | Metadata | `metadata` | object | Account metadata; `password_locked` appears only when `true`. |
 | CreatedAt | `created_at` | integer | Creation time (ms epoch). |
 | UpdatedAt | `updated_at` | integer | Last update time (ms epoch). |
@@ -3873,7 +3880,7 @@ Returns the authenticated user's own profile record.
   "success": true,
   "message": "",
   "data": {
-    "id": 42,
+    "uuid": "018f0000-0000-7000-8000-000000000042",
     "username": "alice",
     "display_name": "Alice",
     "role": 1,
@@ -3888,7 +3895,7 @@ Returns the authenticated user's own profile record.
     "request_count": 128,
     "group": "default",
     "aff_code": "Ab3D",
-    "inviter_id": 0,
+    "inviter_uuid": null,
     "mcp_tool_blacklist": null,
     "metadata": {},
     "created_at": 1716000000000,
@@ -4036,7 +4043,7 @@ curl -s "$BASE_URL/api/user/dashboard?from_date=2026-06-01&to_date=2026-06-07" \
 
 ### GET /api/user/dashboard/users
 
-Returns a flat list of users (id, username, display_name) for populating the dashboard's user-selector dropdown, prefixed by an "All Users (Site-wide)" option with id 0. Root-only.
+Returns a flat list of users (`uuid`, `username`, `display_name`) for populating the dashboard's user-selector dropdown, prefixed by an "All Users (Site-wide)" option with `uuid: "all"`. Root-only.
 
 **Auth:** Management access token — `Authorization: $ACCESS_TOKEN` (or a web session cookie). Requires role 100 (root); non-root callers receive `{"success": false, "message": "No permission to access user list"}` (HTTP 200).
 
@@ -4047,8 +4054,8 @@ Returns a flat list of users (id, username, display_name) for populating the das
   "success": true,
   "message": "",
   "data": [
-    { "id": 0, "username": "all", "display_name": "All Users (Site-wide)" },
-    { "id": 42, "username": "alice", "display_name": "Alice" }
+    { "uuid": "all", "username": "all", "display_name": "All Users (Site-wide)" },
+    { "uuid": "018f0000-0000-7000-8000-000000000042", "username": "alice", "display_name": "Alice" }
   ]
 }
 ```
@@ -4342,7 +4349,8 @@ Lists the WebAuthn passkey credentials registered to the authenticated user.
 
 | Field | JSON key | Type | Description |
 |---|---|---|---|
-| Id | `id` | integer | Credential row ID (used in delete/rename paths). |
+| UUID | `uuid` | string (UUID) | Credential UUID (used in delete/rename paths). |
+| UserUUID | `user_uuid` | string (UUID) / null | Owning user UUID, when available. |
 | Credential name | `credential_name` | string | User-assigned label. |
 | Sign count | `sign_count` | integer | Authenticator signature counter. |
 | Created at | `created_at` | integer | Creation time (ms epoch). |
@@ -4352,7 +4360,8 @@ Lists the WebAuthn passkey credentials registered to the authenticated user.
   "success": true,
   "data": [
     {
-      "id": 7,
+      "uuid": "018f0000-0000-7000-8000-000000000007",
+      "user_uuid": "018f0000-0000-7000-8000-000000000042",
       "credential_name": "YubiKey 5C",
       "sign_count": 12,
       "created_at": 1716500000000
@@ -4432,14 +4441,15 @@ Completes the WebAuthn registration ceremony, verifying the authenticator's atte
 }
 ```
 
-**Response:** HTTP 200. `data` carries the new credential's id and name.
+**Response:** HTTP 200. `data` carries the new credential's UUID, owning user UUID, and name.
 
 ```json
 {
   "success": true,
   "message": "Passkey registered successfully",
   "data": {
-    "id": 7,
+    "uuid": "018f0000-0000-7000-8000-000000000007",
+    "user_uuid": "018f0000-0000-7000-8000-000000000042",
     "name": "YubiKey 5C"
   }
 }
@@ -4464,7 +4474,7 @@ curl -s -X POST "$BASE_URL/api/user/passkey/register/finish?name=YubiKey%205C" -
 
 ### DELETE /api/user/passkey/:id
 
-Removes one of the authenticated user's passkey credentials. Deletion is scoped to the caller via `(id, user_id)`, so passing another user's credential id deletes nothing.
+Removes one of the authenticated user's passkey credentials. Deletion is scoped to the caller, so passing another user's credential UUID deletes nothing.
 
 **Auth:** Management access token — `Authorization: $ACCESS_TOKEN` (or a web session cookie).
 
@@ -4472,7 +4482,7 @@ Removes one of the authenticated user's passkey credentials. Deletion is scoped 
 
 | Name | Type | Required | Description |
 |---|---|---|---|
-| `id` | integer | Yes | Passkey credential row id (from `GET /api/user/passkey`). |
+| `id` | string (UUID) | Yes | Passkey credential UUID (from `GET /api/user/passkey`). |
 
 **Response:** HTTP 200.
 
@@ -4486,7 +4496,7 @@ Removes one of the authenticated user's passkey credentials. Deletion is scoped 
 **Example**
 
 ```bash
-curl -s -X DELETE "$BASE_URL/api/user/passkey/7" \
+curl -s -X DELETE "$BASE_URL/api/user/passkey/018f0000-0000-7000-8000-000000000007" \
   -H "Authorization: $ACCESS_TOKEN"
 ```
 
@@ -4494,7 +4504,7 @@ curl -s -X DELETE "$BASE_URL/api/user/passkey/7" \
 
 | Condition | Meaning |
 |---|---|
-| `invalid credential id` | The path `id` was not an integer. |
+| `invalid credential id` | The path `id` was not a valid credential UUID or did not resolve for the caller. |
 
 ### PUT /api/user/passkey/:id
 
@@ -4506,7 +4516,7 @@ Renames one of the authenticated user's passkey credentials. Ownership is verifi
 
 | Name | Type | Required | Description |
 |---|---|---|---|
-| `id` | integer | Yes | Passkey credential row id. |
+| `id` | string (UUID) | Yes | Passkey credential UUID. |
 
 **Request body**
 
@@ -4532,7 +4542,7 @@ Renames one of the authenticated user's passkey credentials. Ownership is verifi
 **Example**
 
 ```bash
-curl -s -X PUT "$BASE_URL/api/user/passkey/7" \
+curl -s -X PUT "$BASE_URL/api/user/passkey/018f0000-0000-7000-8000-000000000007" \
   -H "Authorization: $ACCESS_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"name":"Work Laptop Touch ID"}'
@@ -4542,7 +4552,7 @@ curl -s -X PUT "$BASE_URL/api/user/passkey/7" \
 
 | Condition | Meaning |
 |---|---|
-| `invalid credential id` | The path `id` was not an integer. |
+| `invalid credential id` | The path `id` was not a valid credential UUID or did not resolve for the caller. |
 | `name must be 1-128 characters` | Empty or over-length name. |
 | `passkey not found ...` | The credential does not exist or is not owned by the caller. |
 
@@ -4572,18 +4582,19 @@ Lists the authenticated user's own request logs, paginated, with optional filter
 
 | Field | JSON key | Type | Description |
 |---|---|---|---|
-| Id | `id` | integer | Log row id. |
-| User id | `user_id` | integer | Owning user id. |
+| UUID | `uuid` | string (UUID) | Log resource UUID. |
+| User UUID | `user_uuid` | string (UUID) / null | Owning user UUID, when available. |
 | Type | `type` | integer | Log type. |
 | Content | `content` | string | Human-readable description / billing note. |
 | Username | `username` | string | Owner username. |
 | Model name | `model_name` | string | Billed model. |
 | Origin model name | `origin_model_name` | string | Client-requested model before mapping. |
 | Token name | `token_name` | string | Token used. |
+| Token UUID | `token_uuid` | string (UUID) / null | Token UUID, when available. |
 | Quota | `quota` | integer | Quota consumed (internal units). |
 | Prompt/Completion tokens | `prompt_tokens` / `completion_tokens` | integer | Token counts. |
 | Cached prompt tokens | `cached_prompt_tokens` | integer | Cached input tokens. |
-| Channel | `channel` | integer | Channel id. |
+| Channel UUID | `channel_uuid` | string (UUID) / null | Channel UUID, when available. |
 | Request id | `request_id` | string | Per-request id (use with `/api/cost/request/:request_id`). |
 | Trace id | `trace_id` | string | Trace id (use with `/api/trace/:trace_id`). |
 | Elapsed time | `elapsed_time` | integer | Latency in ms. |
@@ -4596,19 +4607,20 @@ Lists the authenticated user's own request logs, paginated, with optional filter
   "message": "",
   "data": [
     {
-      "id": 90211,
-      "user_id": 42,
+      "uuid": "018f0000-0000-7000-8000-000000090211",
+      "user_uuid": "018f0000-0000-7000-8000-000000000042",
       "created_at": 1717000000,
       "type": 2,
       "content": "Model fee $0.0048",
       "username": "alice",
       "token_name": "default",
+      "token_uuid": "018f0000-0000-7000-8000-000000000043",
       "model_name": "gpt-4o-mini",
       "origin_model_name": "gpt-4o-mini",
       "quota": 2400,
       "prompt_tokens": 1500,
       "completion_tokens": 800,
-      "channel": 3,
+      "channel_uuid": "018f0000-0000-7000-8000-000000000003",
       "request_id": "2026060812000042-aBcD",
       "trace_id": "9f8b1c2d3e4f5a6b",
       "elapsed_time": 1320,
@@ -4651,8 +4663,8 @@ Full-text searches the authenticated user's own logs by keyword and returns pagi
   "message": "",
   "data": [
     {
-      "id": 90211,
-      "user_id": 42,
+      "uuid": "018f0000-0000-7000-8000-000000090211",
+      "user_uuid": "018f0000-0000-7000-8000-000000000042",
       "created_at": 1717000000,
       "type": 2,
       "content": "Model fee $0.0048",
@@ -4687,7 +4699,7 @@ Returns the total quota consumed by the authenticated user across logs matching 
 | `type` | integer | No | 0 | Log type filter. |
 | `model_name` | string | No | — | Filter by model name. |
 | `token_name` | string | No | — | Filter by token name. |
-| `channel` | integer | No | 0 | Filter by channel id. |
+| `channel` | string (UUID) | No | empty | Filter by channel UUID. |
 | `start_timestamp` | integer (Unix sec) | No | 0 | Lower time bound. |
 | `end_timestamp` | integer (Unix sec) | No | 0 | Upper time bound. |
 
@@ -4720,13 +4732,13 @@ Returns the request trace associated with a specific log entry, resolved via the
 
 | Name | Type | Required | Description |
 |---|---|---|---|
-| `log_id` | integer | Yes | The log row id (the `id` field from `/api/log/self`). |
+| `log_id` | string (UUID) | Yes | The log UUID (the `uuid` field from `/api/log/self`). |
 
 **Response:** HTTP 200. The success envelope omits `message`. `data` holds the trace, its parsed `timestamps`, derived `durations` (milliseconds between milestones), and the source `log` summary.
 
 | Field (under `data`) | Type | Description |
 |---|---|---|
-| `id` | integer | Trace row id. |
+| `uuid` | string (UUID) | Trace resource UUID. |
 | `trace_id` | string | Trace identifier. |
 | `url` | string | Request URL. |
 | `method` | string | HTTP method. |
@@ -4735,13 +4747,13 @@ Returns the request trace associated with a specific log entry, resolved via the
 | `created_at` / `updated_at` | integer | Trace row create/update time (ms epoch). |
 | `timestamps` | object | Milestone times: `request_received`, `request_forwarded`, `first_upstream_response`, `first_client_response`, `upstream_completed`, `request_completed`, plus optional `external_calls[]`. All fields are omitted when unset. |
 | `durations` | object | Computed gaps (ms), each present only when both endpoints exist: `processing_time`, `upstream_response_time`, `response_processing_time`, `streaming_time`, `total_time`. |
-| `log` | object | `id`, `user_id`, `username`, `content`, `type` of the source log. |
+| `log` | object | `uuid`, `user_uuid`, `channel_uuid`, `username`, `content`, `type` of the source log. |
 
 ```json
 {
   "success": true,
   "data": {
-    "id": 5521,
+    "uuid": "018f0000-0000-7000-8000-000000005521",
     "trace_id": "9f8b1c2d3e4f5a6b",
     "url": "/v1/chat/completions",
     "method": "POST",
@@ -4765,8 +4777,9 @@ Returns the request trace associated with a specific log entry, resolved via the
       "total_time": 1320
     },
     "log": {
-      "id": 90211,
-      "user_id": 42,
+      "uuid": "018f0000-0000-7000-8000-000000090211",
+      "user_uuid": "018f0000-0000-7000-8000-000000000042",
+      "channel_uuid": "018f0000-0000-7000-8000-000000000003",
       "username": "alice",
       "content": "Model fee $0.0048",
       "type": 2
@@ -4778,7 +4791,7 @@ Returns the request trace associated with a specific log entry, resolved via the
 **Example**
 
 ```bash
-curl -s "$BASE_URL/api/trace/log/90211" \
+curl -s "$BASE_URL/api/trace/log/018f0000-0000-7000-8000-000000090211" \
   -H "Authorization: $ACCESS_TOKEN"
 ```
 
@@ -4786,7 +4799,7 @@ curl -s "$BASE_URL/api/trace/log/90211" \
 
 | Condition | Status / meaning |
 |---|---|
-| `invalid log_id parameter` | HTTP 400 — non-integer `log_id`. |
+| `invalid log_id parameter` | HTTP 400 — invalid log UUID. |
 | `log not found` | HTTP 404 — no such log. |
 | `no trace information available for this log entry` | HTTP 404 — the log has no `trace_id`. |
 | `trace information not found` | HTTP 404 — the referenced trace is missing. |
@@ -4809,7 +4822,7 @@ Returns the request trace for a given trace id directly (without computed durati
 {
   "success": true,
   "data": {
-    "id": 5521,
+    "uuid": "018f0000-0000-7000-8000-000000005521",
     "trace_id": "9f8b1c2d3e4f5a6b",
     "url": "/v1/chat/completions",
     "method": "POST",
@@ -4869,9 +4882,9 @@ Returns the recorded cost for a single relayed request, identified by its `reque
 
 | Field | JSON key | Type | Description |
 |---|---|---|---|
-| Id | `id` | integer | Cost row id. |
+| UUID | `uuid` | string (UUID) | Cost resource UUID. |
 | Created time | `created_time` | integer | Record creation time (Unix sec). |
-| User ID | `user_id` | integer | Owning user id. |
+| User UUID | `user_uuid` | string (UUID) / null | Owning user UUID, when available. |
 | Request ID | `request_id` | string | The request identifier. |
 | Quota | `quota` | integer | Quota charged (internal units). |
 | Cost (USD) | `cost_usd` | number | `quota / 500000`, i.e. the USD-equivalent cost (computed at read time; not stored). |
@@ -4880,9 +4893,9 @@ Returns the recorded cost for a single relayed request, identified by its `reque
 
 ```json
 {
-  "id": 30144,
+  "uuid": "018f0000-0000-7000-8000-000000030144",
   "created_time": 1717000000,
-  "user_id": 42,
+  "user_uuid": "018f0000-0000-7000-8000-000000000042",
   "request_id": "2026060812000042-aBcD",
   "quota": 2400,
   "cost_usd": 0.0048,
@@ -4920,8 +4933,8 @@ The `Token` object shape returned in `data` (verbatim JSON keys):
 
 | JSON key | Type | Description |
 | --- | --- | --- |
-| `id` | int | Token ID (used in `/api/token/:id` paths). |
-| `user_id` | int | Owner; always the caller. |
+| `uuid` | string (UUID) | Token UUID (used in `/api/token/:id` paths). |
+| `user_uuid` | string (UUID) / null | Owner UUID; always the caller when available. |
 | `key` | string | The relay API key, serialized with the configured prefix (e.g. `sk-...`). |
 | `status` | int | 1 = enabled, 2 = disabled, 3 = expired, 4 = exhausted. |
 | `name` | string | Token name (max 30 chars). |
@@ -4959,8 +4972,8 @@ Lists the calling user's tokens with pagination and sorting.
   "message": "",
   "data": [
     {
-      "id": 12,
-      "user_id": 3,
+      "uuid": "018f0000-0000-7000-8000-000000000012",
+      "user_uuid": "018f0000-0000-7000-8000-000000000003",
       "key": "sk-abcd1234ABCD5678EFGH9012ijkl3456MNOP7890qrst1234",
       "status": 1,
       "name": "production",
@@ -5011,8 +5024,8 @@ Searches the calling user's tokens by name prefix.
   "message": "",
   "data": [
     {
-      "id": 12,
-      "user_id": 3,
+      "uuid": "018f0000-0000-7000-8000-000000000012",
+      "user_uuid": "018f0000-0000-7000-8000-000000000003",
       "key": "sk-abcd1234ABCD5678EFGH9012ijkl3456MNOP7890qrst1234",
       "status": 1,
       "name": "prod-eu",
@@ -5049,7 +5062,7 @@ Retrieves a single token owned by the caller.
 
 | Name | Type | Required | Description |
 | --- | --- | --- | --- |
-| `id` | int | Yes | Token ID. The lookup is scoped to the caller's `user_id`; another user's token is treated as not found. |
+| `id` | string (UUID) | Yes | Token UUID. The lookup is scoped to the caller; another user's token is treated as not found. |
 
 **Response**: HTTP 200; `data` is a single token object.
 
@@ -5058,8 +5071,8 @@ Retrieves a single token owned by the caller.
   "success": true,
   "message": "",
   "data": {
-    "id": 12,
-    "user_id": 3,
+    "uuid": "018f0000-0000-7000-8000-000000000012",
+    "user_uuid": "018f0000-0000-7000-8000-000000000003",
     "key": "sk-abcd1234ABCD5678EFGH9012ijkl3456MNOP7890qrst1234",
     "status": 1,
     "name": "production",
@@ -5080,7 +5093,7 @@ Retrieves a single token owned by the caller.
 **Example**
 
 ```bash
-curl -s "$BASE_URL/api/token/12" \
+curl -s "$BASE_URL/api/token/018f0000-0000-7000-8000-000000000012" \
   -H "Authorization: $ACCESS_TOKEN"
 ```
 
@@ -5088,7 +5101,7 @@ curl -s "$BASE_URL/api/token/12" \
 
 | Status | Meaning |
 | --- | --- |
-| 200 with `success:false` | `id` not parseable as an integer, `id` is `0`, or no token with that `id` is owned by the caller (another user's token is treated as not found). The body carries `"message"` describing the failure. |
+| 200 with `success:false` | `id` is not a valid token UUID, or no token with that UUID is owned by the caller (another user's token is treated as not found). The body carries `"message"` describing the failure. |
 
 ### POST /api/token/
 
@@ -5107,7 +5120,7 @@ Creates (mints) a new relay API key for the calling user. **This is the endpoint
 | Models allow-list | `models` | string \| null | No | `null` | Comma-separated list of model names this key may call (e.g. `"gpt-4o,gpt-4o-mini"`). `null` or omitted = no per-key model restriction. |
 | Subnet allow-list | `subnet` | string \| null | No | `null` | Comma-separated CIDR list restricting which client IPs may use the key (e.g. `"10.0.0.0/8,192.168.0.0/16"`). Validated server-side; invalid CIDRs are rejected. `null`/empty = no IP restriction. |
 
-Fields you cannot set: `user_id` is forced to the caller; `key` is server-generated; `status`, `used_quota`, `created_time`, `accessed_time`, `created_at`, `updated_at` are server-maintained. Any values you send for those are ignored.
+Fields you cannot set: `user_uuid` is forced to the caller; `key` is server-generated; `status`, `used_quota`, `created_time`, `accessed_time`, `created_at`, `updated_at` are server-maintained. Any values you send for those are ignored.
 
 ```json
 {
@@ -5127,8 +5140,8 @@ Fields you cannot set: `user_id` is forced to the caller; `key` is server-genera
   "success": true,
   "message": "",
   "data": {
-    "id": 27,
-    "user_id": 3,
+    "uuid": "018f0000-0000-7000-8000-000000000027",
+    "user_uuid": "018f0000-0000-7000-8000-000000000003",
     "key": "sk-7Kp2mQ9xZ1aB3cD4ABCD1234EFGH5678IJKL9012MNOP3456",
     "status": 1,
     "name": "production",
@@ -5196,7 +5209,7 @@ curl -s -X POST "$BASE_URL/v1/chat/completions" \
 
 ### PUT /api/token/
 
-Updates an existing token owned by the caller. The token is identified by the `id` field in the body. By default this is a full-field update of editable fields; pass `?status_only=` (with any non-empty value) to change only the status.
+Updates an existing token owned by the caller. The token is identified by the `uuid` field in the body. By default this is a full-field update of editable fields; pass `?status_only=` (with any non-empty value) to change only the status.
 
 **Auth:** Management access token via `Authorization: $ACCESS_TOKEN` (a leading `Bearer ` is also accepted), or a session cookie.
 
@@ -5210,7 +5223,7 @@ Updates an existing token owned by the caller. The token is identified by the `i
 
 | Field | JSON key | Type | Required | Description |
 | --- | --- | --- | --- | --- |
-| Token ID | `id` | int | Yes | Which token to update; must belong to the caller. |
+| Token UUID | `uuid` | string (UUID) | Yes | Which token to update; must belong to the caller. |
 | Name | `name` | string | Required unless `status_only` | Max 30 chars; non-empty when not `status_only`. |
 | Status | `status` | int | No | 1 = enabled, 2 = disabled, 3 = expired, 4 = exhausted. Re-enabling (`1`) is rejected if the token is still expired or still has no quota; conversely the server may auto-correct a status of exhausted/expired to enabled when the new quota/expiry makes it usable. |
 | Expiry | `expired_time` | int64 | No | Unix seconds; `-1` = never. Applied only on full update. |
@@ -5223,7 +5236,7 @@ Updates an existing token owned by the caller. The token is identified by the `i
 
 ```json
 {
-  "id": 27,
+  "uuid": "018f0000-0000-7000-8000-000000000027",
   "name": "production-renamed",
   "status": 1,
   "expired_time": -1,
@@ -5241,8 +5254,8 @@ Updates an existing token owned by the caller. The token is identified by the `i
   "success": true,
   "message": "",
   "data": {
-    "id": 27,
-    "user_id": 3,
+    "uuid": "018f0000-0000-7000-8000-000000000027",
+    "user_uuid": "018f0000-0000-7000-8000-000000000003",
     "key": "sk-7Kp2mQ9xZ1aB3cD4ABCD1234EFGH5678IJKL9012MNOP3456",
     "status": 1,
     "name": "production-renamed",
@@ -5267,7 +5280,7 @@ curl -s -X PUT "$BASE_URL/api/token/" \
   -H "Authorization: $ACCESS_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
-    "id": 27,
+    "uuid": "018f0000-0000-7000-8000-000000000027",
     "name": "production-renamed",
     "status": 1,
     "expired_time": -1,
@@ -5284,14 +5297,14 @@ curl -s -X PUT "$BASE_URL/api/token/" \
 curl -s -X PUT "$BASE_URL/api/token/?status_only=1" \
   -H "Authorization: $ACCESS_TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"id": 27, "status": 2}'
+  -d '{"uuid": "018f0000-0000-7000-8000-000000000027", "status": 2}'
 ```
 
 **Errors**
 
 | Status | Meaning |
 | --- | --- |
-| 200 with `success:false` | `name` empty when not `status_only`; `name` over 30 chars; invalid `subnet`; `id` not found for caller (or `id` is `0`); attempting to enable a token that is still expired or still has zero/depleted quota. The body carries `"message"` describing the failure. |
+| 200 with `success:false` | `name` empty when not `status_only`; `name` over 30 chars; invalid `subnet`; token UUID not found for caller; attempting to enable a token that is still expired or still has zero/depleted quota. The body carries `"message"` describing the failure. |
 
 ### DELETE /api/token/:id
 
@@ -5303,7 +5316,7 @@ Permanently deletes a token owned by the caller. The owner check prevents deleti
 
 | Name | Type | Required | Description |
 | --- | --- | --- | --- |
-| `id` | int | Yes | Token ID to delete; must belong to the caller. |
+| `id` | string (UUID) | Yes | Token UUID to delete; must belong to the caller. |
 
 **Response**: HTTP 200. `data` is omitted; only `success` and `message` are returned.
 
@@ -5317,7 +5330,7 @@ Permanently deletes a token owned by the caller. The owner check prevents deleti
 **Example**
 
 ```bash
-curl -s -X DELETE "$BASE_URL/api/token/27" \
+curl -s -X DELETE "$BASE_URL/api/token/018f0000-0000-7000-8000-000000000027" \
   -H "Authorization: $ACCESS_TOKEN"
 ```
 
@@ -5325,7 +5338,7 @@ curl -s -X DELETE "$BASE_URL/api/token/27" \
 
 | Status | Meaning |
 | --- | --- |
-| 200 with `success:false` | `id` not found for the caller (including when it belongs to another user), or `id` is `0`/unparseable. The body carries `"message"` describing the failure. |
+| 200 with `success:false` | UUID not found for the caller (including when it belongs to another user), or the path is not a valid token UUID. The body carries `"message"` describing the failure. |
 
 
 ## User Administration & Top-up
@@ -5359,7 +5372,7 @@ Lists user accounts (excluding soft-deleted ones) with pagination and optional s
   "message": "",
   "data": [
     {
-      "id": 1,
+      "uuid": "018f0000-0000-7000-8000-000000000001",
       "username": "root",
       "display_name": "Root",
       "role": 100,
@@ -5375,7 +5388,7 @@ Lists user accounts (excluding soft-deleted ones) with pagination and optional s
       "request_count": 42,
       "group": "default",
       "aff_code": "a1b2",
-      "inviter_id": 0,
+      "inviter_uuid": null,
       "mcp_tool_blacklist": null,
       "metadata": {},
       "created_at": 1716200000000,
@@ -5403,7 +5416,7 @@ Searches users by a single keyword across id, username, email, and display name.
 
 | Name | Type | Required | Default | Description |
 | --- | --- | --- | --- | --- |
-| `keyword` | string | No | (empty) | Search term. On non-PostgreSQL backends it matches an exact `id = keyword` OR a prefix (`LIKE keyword%`) of `username`/`email`/`display_name`; on PostgreSQL only the prefix match on those three text columns applies. An empty keyword matches by the same rules (prefix `%` effectively returns all). |
+| `keyword` | string | No | (empty) | Search term. It matches UUID, username, email, or display-name prefixes where supported by the backend. An empty keyword matches by the same rules (prefix `%` effectively returns all). |
 | `sort` | string | No | (none) | Sort column, same allowed set as `GET /api/user/`. Invalid values fall back to `id desc`. |
 | `order` | string | No | `desc` | Sort direction (`asc`/`desc`). |
 
@@ -5415,7 +5428,7 @@ Searches users by a single keyword across id, username, email, and display name.
   "message": "",
   "data": [
     {
-      "id": 7,
+      "uuid": "018f0000-0000-7000-8000-000000000007",
       "username": "alice",
       "display_name": "Alice",
       "role": 1,
@@ -5427,7 +5440,7 @@ Searches users by a single keyword across id, username, email, and display name.
       "request_count": 0,
       "group": "default",
       "aff_code": "z9y8",
-      "inviter_id": 0,
+      "inviter_uuid": null,
       "mcp_tool_blacklist": null,
       "metadata": {},
       "created_at": 1716200000000,
@@ -5446,7 +5459,7 @@ curl -sS "$BASE_URL/api/user/search?keyword=alice&sort=created_at&order=desc" \
 
 ### GET /api/user/:id
 
-Fetches a single user by numeric id. Use it to load a user detail view.
+Fetches a single user by UUID. Use it to load a user detail view.
 
 **Auth:** Management access token - `Authorization: $ACCESS_TOKEN` (AdminAuth, role >= 10).
 
@@ -5454,7 +5467,7 @@ Fetches a single user by numeric id. Use it to load a user detail view.
 
 | Name | Type | Required | Description |
 | --- | --- | --- | --- |
-| `id` | integer | Yes | Target user id. |
+| `id` | string (UUID) | Yes | Target user UUID. |
 
 **Response**: HTTP 200. `data` is the user object (`password` and `access_token` both omitted).
 
@@ -5463,7 +5476,7 @@ Fetches a single user by numeric id. Use it to load a user detail view.
   "success": true,
   "message": "",
   "data": {
-    "id": 7,
+    "uuid": "018f0000-0000-7000-8000-000000000007",
     "username": "alice",
     "display_name": "Alice",
     "role": 1,
@@ -5474,7 +5487,7 @@ Fetches a single user by numeric id. Use it to load a user detail view.
     "request_count": 0,
     "group": "default",
     "aff_code": "z9y8",
-    "inviter_id": 0,
+    "inviter_uuid": null,
     "mcp_tool_blacklist": null,
     "metadata": {},
     "created_at": 1716200000000,
@@ -5486,7 +5499,7 @@ Fetches a single user by numeric id. Use it to load a user detail view.
 **Example**
 
 ```bash
-curl -sS "$BASE_URL/api/user/7" \
+curl -sS "$BASE_URL/api/user/018f0000-0000-7000-8000-000000000007" \
   -H "Authorization: $ACCESS_TOKEN"
 ```
 
@@ -5494,7 +5507,7 @@ curl -sS "$BASE_URL/api/user/7" \
 
 | Condition | Envelope |
 | --- | --- |
-| `id` is not an integer, or no such user | `{"success": false, "message": "..."}` (HTTP 200) |
+| `id` is not a valid UUID, or no such user | `{"success": false, "message": "..."}` (HTTP 200) |
 | Caller role <= target role and caller is not root | `{"success": false, "message": "No permission to get information of users at the same level or higher"}` |
 
 ### POST /api/user/
@@ -5626,7 +5639,7 @@ Partially updates an existing user. Only fields present in the JSON body are cha
 
 | Field | JSON key | Type | Required | Default | Description |
 | --- | --- | --- | --- | --- | --- |
-| Id | `id` | integer | Yes | - | Target user id. Must be non-zero. |
+| UUID | `uuid` | string (UUID) | Yes | - | Target user UUID. |
 | Username | `username` | string | No | unchanged | Trimmed; must be non-empty and 3-30 characters. Renaming a user at the same or higher level is forbidden unless caller is root. Explicit `null` is rejected. |
 | Display name | `display_name` | string | No | unchanged | Trimmed; max 20 characters. `null` => no change. |
 | Email | `email` | string | No | unchanged | Trimmed; max 50 characters; validated as an email when non-empty. `null` => no change. |
@@ -5638,11 +5651,11 @@ Partially updates an existing user. Only fields present in the JSON body are cha
 | MCP tool blacklist | `mcp_tool_blacklist` | string array | No | unchanged | Explicit `null` clears the list; an array replaces it. |
 | Metadata | `metadata` | object | No | unchanged | Object with `password_locked` (boolean), merged into existing metadata. Changing `password_locked` is root-only. `null` => no change. |
 
-If the body contains only `id` (no mutable fields, i.e. no field produced an update), the call is a no-op success.
+If the body contains only `uuid` (no mutable fields, i.e. no field produced an update), the call is a no-op success.
 
 ```json
 {
-  "id": 7,
+  "uuid": "018f0000-0000-7000-8000-000000000007",
   "display_name": "Alice Smith",
   "quota": 2000000,
   "status": 1,
@@ -5665,14 +5678,14 @@ If the body contains only `id` (no mutable fields, i.e. no field produced an upd
 curl -sS -X PUT "$BASE_URL/api/user/" \
   -H "Authorization: $ACCESS_TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"id":7,"display_name":"Alice Smith","quota":2000000,"status":1,"group":"vip"}'
+  -d '{"uuid":"018f0000-0000-7000-8000-000000000007","display_name":"Alice Smith","quota":2000000,"status":1,"group":"vip"}'
 ```
 
 **Errors**
 
 | Condition | Envelope |
 | --- | --- |
-| Malformed body or `id` == 0 | `{"success": false, "message": "invalid parameter"}` |
+| Malformed body or missing `uuid` | `{"success": false, "message": "invalid parameter"}` |
 | No such user | `{"success": false, "message": "..."}` |
 | Caller role <= target role and caller not root | `{"success": false, "message": "No permission to update user information with the same permission level or higher permission level"}` |
 | Explicit `null` username | `{"success": false, "message": "Username cannot be null"}` |
@@ -5685,7 +5698,7 @@ curl -sS -X PUT "$BASE_URL/api/user/" \
 
 ### DELETE /api/user/:id
 
-Soft-deletes a user by id. Use it to remove an account from the admin user list.
+Soft-deletes a user by UUID. Use it to remove an account from the admin user list.
 
 **Auth:** Management access token - `Authorization: $ACCESS_TOKEN` (AdminAuth, role >= 10).
 
@@ -5693,7 +5706,7 @@ Soft-deletes a user by id. Use it to remove an account from the admin user list.
 
 | Name | Type | Required | Description |
 | --- | --- | --- | --- |
-| `id` | integer | Yes | Target user id. |
+| `id` | string (UUID) | Yes | Target user UUID. |
 
 **Response**: HTTP 200, no `data` payload.
 
@@ -5707,7 +5720,7 @@ Soft-deletes a user by id. Use it to remove an account from the admin user list.
 **Example**
 
 ```bash
-curl -sS -X DELETE "$BASE_URL/api/user/7" \
+curl -sS -X DELETE "$BASE_URL/api/user/018f0000-0000-7000-8000-000000000007" \
   -H "Authorization: $ACCESS_TOKEN"
 ```
 
@@ -5715,7 +5728,7 @@ curl -sS -X DELETE "$BASE_URL/api/user/7" \
 
 | Condition | Envelope |
 | --- | --- |
-| `id` is not an integer, or no such user | `{"success": false, "message": "..."}` |
+| `id` is not a valid UUID, or no such user | `{"success": false, "message": "..."}` |
 | Caller role <= target role | `{"success": false, "message": "No permission to delete users with the same permission level or higher permission level"}` (this path requires the caller's role to be strictly greater than the target's, with NO root exemption) |
 
 ### POST /api/user/totp/disable/:id
@@ -5728,7 +5741,7 @@ Disables (clears) the TOTP/2FA secret for the target user. Use it to recover a u
 
 | Name | Type | Required | Description |
 | --- | --- | --- | --- |
-| `id` | integer | Yes | Target user id. |
+| `id` | string (UUID) | Yes | Target user UUID. |
 
 **Response**: HTTP 200, no `data` payload.
 
@@ -5742,7 +5755,7 @@ Disables (clears) the TOTP/2FA secret for the target user. Use it to recover a u
 **Example**
 
 ```bash
-curl -sS -X POST "$BASE_URL/api/user/totp/disable/7" \
+curl -sS -X POST "$BASE_URL/api/user/totp/disable/018f0000-0000-7000-8000-000000000007" \
   -H "Authorization: $ACCESS_TOKEN"
 ```
 
@@ -5750,7 +5763,7 @@ curl -sS -X POST "$BASE_URL/api/user/totp/disable/7" \
 
 | Condition | Envelope |
 | --- | --- |
-| `id` is not an integer | `{"success": false, "message": "Invalid user ID"}` |
+| `id` is not a valid UUID | `{"success": false, "message": "Invalid user ID"}` |
 | No such user | `{"success": false, "message": "..."}` |
 | Caller role <= target role and caller not root | `{"success": false, "message": "No permission to modify user with the same or higher permission level"}` |
 | Target has no TOTP enabled | `{"success": false, "message": "TOTP is not enabled for this user"}` |
@@ -5765,13 +5778,13 @@ Credits (increases) a user's quota balance administratively and records a top-up
 
 | Field | JSON key | Type | Required | Default | Description |
 | --- | --- | --- | --- | --- | --- |
-| User id | `user_id` | integer | Yes | - | Target user whose quota is increased. |
+| User UUID | `user_id` | string (UUID) | Yes | - | Target user whose quota is increased. The JSON key remains `user_id` for compatibility, but the value is a UUID string. |
 | Quota | `quota` | integer | Yes | - | Amount of quota to add (internal units). |
 | Remark | `remark` | string | No | auto-generated | Note stored on the top-up log. If empty, defaults to a generated string like `Recharged via API $X.XX`. |
 
 ```json
 {
-  "user_id": 7,
+  "user_id": "018f0000-0000-7000-8000-000000000007",
   "quota": 500000,
   "remark": "Manual grant for Q2 promo"
 }
@@ -5832,7 +5845,7 @@ Lists channel records with pagination and optional sorting. Secret fields (keys)
   "message": "",
   "data": [
     {
-      "id": 12,
+      "uuid": "018f0000-0000-7000-8000-000000000012",
       "type": 1,
       "key": "",
       "status": 1,
@@ -5885,7 +5898,7 @@ Performs a keyword search across channels (name, models, key fragment, etc.) and
   "message": "",
   "data": [
     {
-      "id": 12,
+      "uuid": "018f0000-0000-7000-8000-000000000012",
       "type": 1,
       "name": "OpenAI Prod",
       "status": 1,
@@ -6013,7 +6026,7 @@ curl -sS "$BASE_URL/api/channel/metadata?type=1" \
 
 ### GET /api/channel/:id
 
-Retrieves one channel by ID. Secret fields are masked; if a tooling config exists it is serialized into a `tooling` string field.
+Retrieves one channel by UUID. Secret fields are masked; if a tooling config exists it is serialized into a `tooling` string field.
 
 **Auth:** Management access token — `Authorization: $ACCESS_TOKEN` (AdminAuth).
 
@@ -6021,7 +6034,7 @@ Retrieves one channel by ID. Secret fields are masked; if a tooling config exist
 
 | Name | Type | Required | Description |
 |------|------|----------|-------------|
-| `id` | integer | Yes | Channel ID. |
+| `id` | string (UUID) | Yes | Channel UUID. |
 
 **Response**: HTTP 200. `data` is a channel object (see `docs/manuals/channels.md` for the full field list) plus an optional `tooling` JSON string (present only when a tooling config exists).
 
@@ -6030,7 +6043,7 @@ Retrieves one channel by ID. Secret fields are masked; if a tooling config exist
   "success": true,
   "message": "",
   "data": {
-    "id": 12,
+    "uuid": "018f0000-0000-7000-8000-000000000012",
     "type": 1,
     "key": "",
     "status": 1,
@@ -6052,7 +6065,7 @@ Retrieves one channel by ID. Secret fields are masked; if a tooling config exist
 **Example**
 
 ```bash
-curl -sS "$BASE_URL/api/channel/12" \
+curl -sS "$BASE_URL/api/channel/018f0000-0000-7000-8000-000000000012" \
   -H "Authorization: $ACCESS_TOKEN"
 ```
 
@@ -6134,16 +6147,16 @@ Clones an existing channel server-side. The duplicate copies configuration and c
 
 | Name | Type | Required | Description |
 |------|------|----------|-------------|
-| `id` | integer | Yes | Source channel ID. |
+| `id` | string (UUID) | Yes | Source channel UUID. |
 
-**Response**: HTTP 200. `data` contains the new channel's `id` and `name`.
+**Response**: HTTP 200. `data` contains the new channel's `uuid` and `name`.
 
 ```json
 {
   "success": true,
   "message": "",
   "data": {
-    "id": 41,
+    "uuid": "018f0000-0000-7000-8000-000000000041",
     "name": "OpenAI Prod Copy"
   }
 }
@@ -6152,7 +6165,7 @@ Clones an existing channel server-side. The duplicate copies configuration and c
 **Example**
 
 ```bash
-curl -sS -X POST "$BASE_URL/api/channel/12/duplicate" \
+curl -sS -X POST "$BASE_URL/api/channel/018f0000-0000-7000-8000-000000000012/duplicate" \
   -H "Authorization: $ACCESS_TOKEN"
 ```
 
@@ -6166,13 +6179,13 @@ Updates a channel. Two modes: a full update (default), or a status-only update w
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| `status_only` | string | No | (empty) | When non-empty, only `id` and `status` are applied; all other fields are ignored. |
+| `status_only` | string | No | (empty) | When non-empty, only `uuid` and `status` are applied; all other fields are ignored. |
 
-**Request body**: a channel object including `id`. For a full update the same fields as `POST /api/channel/` apply, and `name` must be non-empty. For a status-only update, only `id` and `status` are required. Note: `inference_profile_arn_map` (when non-empty) is validated before the `status_only` branch, so an invalid ARN map is rejected even in status-only mode.
+**Request body**: a channel object including `uuid`. For a full update the same fields as `POST /api/channel/` apply, and `name` must be non-empty. For a status-only update, only `uuid` and `status` are required. Note: `inference_profile_arn_map` (when non-empty) is validated before the `status_only` branch, so an invalid ARN map is rejected even in status-only mode.
 
 ```json
 {
-  "id": 12,
+  "uuid": "018f0000-0000-7000-8000-000000000012",
   "name": "OpenAI Prod",
   "type": 1,
   "base_url": "https://api.openai.com",
@@ -6191,7 +6204,7 @@ Updates a channel. Two modes: a full update (default), or a status-only update w
   "success": true,
   "message": "",
   "data": {
-    "id": 12,
+    "uuid": "018f0000-0000-7000-8000-000000000012",
     "name": "OpenAI Prod",
     "type": 1,
     "status": 1,
@@ -6208,27 +6221,27 @@ Updates a channel. Two modes: a full update (default), or a status-only update w
 curl -sS -X PUT "$BASE_URL/api/channel/" \
   -H "Authorization: $ACCESS_TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"id":12,"name":"OpenAI Prod","type":1,"models":"gpt-4o,gpt-4o-mini","group":"default","priority":20,"status":1}'
+  -d '{"uuid":"018f0000-0000-7000-8000-000000000012","name":"OpenAI Prod","type":1,"models":"gpt-4o,gpt-4o-mini","group":"default","priority":20,"status":1}'
 
-# Status-only update (disable channel 12)
+# Status-only update
 curl -sS -X PUT "$BASE_URL/api/channel/?status_only=1" \
   -H "Authorization: $ACCESS_TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"id":12,"status":2}'
+  -d '{"uuid":"018f0000-0000-7000-8000-000000000012","status":2}'
 ```
 
 **Errors**
 
 | Status | Meaning |
 |--------|---------|
-| 200 `{"success": false, "message": "Channel id is required"}` | Status-only mode with `id` of 0. |
+| 200 `{"success": false, "message": "Channel id is required"}` | Status-only mode without a valid `uuid`. |
 | 200 `{"success": false, "message": "Channel name cannot be empty"}` | Full update with blank `name`. |
 | 200 `{"success": false, "message": "Invalid inference profile ARN map: ..."}` | Bad `inference_profile_arn_map` JSON. |
 | 200 `{"success": false, "message": "Invalid tooling config: ..."}` | `tooling` payload cannot be parsed (full update only). |
 
 ### DELETE /api/channel/:id
 
-Deletes a single channel by ID.
+Deletes a single channel by UUID.
 
 **Auth:** Management access token — `Authorization: $ACCESS_TOKEN` (AdminAuth).
 
@@ -6236,7 +6249,7 @@ Deletes a single channel by ID.
 
 | Name | Type | Required | Description |
 |------|------|----------|-------------|
-| `id` | integer | Yes | Channel ID to delete. |
+| `id` | string (UUID) | Yes | Channel UUID to delete. |
 
 **Response**: HTTP 200. No `data`.
 
@@ -6250,7 +6263,7 @@ Deletes a single channel by ID.
 **Example**
 
 ```bash
-curl -sS -X DELETE "$BASE_URL/api/channel/12" \
+curl -sS -X DELETE "$BASE_URL/api/channel/018f0000-0000-7000-8000-000000000012" \
   -H "Authorization: $ACCESS_TOKEN"
 ```
 
@@ -6321,7 +6334,7 @@ Synchronously runs one live chat-completion request against a single channel to 
 
 | Name | Type | Required | Description |
 |------|------|----------|-------------|
-| `id` | integer | Yes | Channel ID to test. |
+| `id` | string (UUID) | Yes | Channel UUID to test. |
 
 **Query parameters**
 
@@ -6350,7 +6363,7 @@ Synchronously runs one live chat-completion request against a single channel to 
 **Example**
 
 ```bash
-curl -sS "$BASE_URL/api/channel/test/12?model=gpt-4o-mini" \
+curl -sS "$BASE_URL/api/channel/test/018f0000-0000-7000-8000-000000000012?model=gpt-4o-mini" \
   -H "Authorization: $ACCESS_TOKEN"
 ```
 
@@ -6386,7 +6399,7 @@ Refreshes the remaining balance for one channel by querying the upstream provide
 
 | Name | Type | Required | Description |
 |------|------|----------|-------------|
-| `id` | integer | Yes | Channel ID. |
+| `id` | string (UUID) | Yes | Channel UUID. |
 
 **Response**: HTTP 200. Note: the balance is returned in a flat `balance` field, not under `data`.
 
@@ -6407,7 +6420,7 @@ Refreshes the remaining balance for one channel by querying the upstream provide
 **Example**
 
 ```bash
-curl -sS "$BASE_URL/api/channel/update_balance/12" \
+curl -sS "$BASE_URL/api/channel/update_balance/018f0000-0000-7000-8000-000000000012" \
   -H "Authorization: $ACCESS_TOKEN"
 ```
 
@@ -6428,7 +6441,7 @@ Returns the effective pricing for a channel: derived model and completion ratios
 
 | Name | Type | Required | Description |
 |------|------|----------|-------------|
-| `id` | integer | Yes | Channel ID. |
+| `id` | string (UUID) | Yes | Channel UUID. |
 
 **Response**: HTTP 200.
 
@@ -6465,7 +6478,7 @@ Returns the effective pricing for a channel: derived model and completion ratios
 **Example**
 
 ```bash
-curl -sS "$BASE_URL/api/channel/pricing/12" \
+curl -sS "$BASE_URL/api/channel/pricing/018f0000-0000-7000-8000-000000000012" \
   -H "Authorization: $ACCESS_TOKEN"
 ```
 
@@ -6479,7 +6492,7 @@ Replaces a channel's pricing. Prefer the unified `model_configs` map; for backwa
 
 | Name | Type | Required | Description |
 |------|------|----------|-------------|
-| `id` | integer | Yes | Channel ID. |
+| `id` | string (UUID) | Yes | Channel UUID. |
 
 **Request body**
 
@@ -6520,7 +6533,7 @@ If neither `model_configs` nor the legacy ratios are supplied, pricing is left u
 **Example**
 
 ```bash
-curl -sS -X PUT "$BASE_URL/api/channel/pricing/12" \
+curl -sS -X PUT "$BASE_URL/api/channel/pricing/018f0000-0000-7000-8000-000000000012" \
   -H "Authorization: $ACCESS_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"model_configs":{"gpt-4o":{"ratio":2.5,"completion_ratio":4,"max_tokens":16384}}}'
@@ -6591,7 +6604,7 @@ Emits detailed model-config diagnostics for one channel to the application logs.
 
 | Name | Type | Required | Description |
 |------|------|----------|-------------|
-| `id` | integer | Yes | Channel ID. |
+| `id` | string (UUID) | Yes | Channel UUID. |
 
 **Response**: HTTP 200.
 
@@ -6605,7 +6618,7 @@ Emits detailed model-config diagnostics for one channel to the application logs.
 **Example**
 
 ```bash
-curl -sS -X POST "$BASE_URL/api/debug/channel/12/debug" \
+curl -sS -X POST "$BASE_URL/api/debug/channel/018f0000-0000-7000-8000-000000000012/debug" \
   -H "Authorization: $ACCESS_TOKEN"
 ```
 
@@ -6613,7 +6626,7 @@ curl -sS -X POST "$BASE_URL/api/debug/channel/12/debug" \
 
 | Status | Meaning |
 |--------|---------|
-| 400 `{"success": false, "message": "Invalid channel ID"}` | `id` is not an integer. |
+| 400 `{"success": false, "message": "Invalid channel ID"}` | `id` is not a valid channel UUID. |
 | 500 `{"success": false, "message": "Debug failed: ..."}` | Diagnostics could not be generated. |
 
 ### GET /api/debug/channels
@@ -6654,7 +6667,7 @@ Attempts to repair one channel's model configuration (e.g. normalize/migrate its
 
 | Name | Type | Required | Description |
 |------|------|----------|-------------|
-| `id` | integer | Yes | Channel ID. |
+| `id` | string (UUID) | Yes | Channel UUID. |
 
 **Response**: HTTP 200.
 
@@ -6668,7 +6681,7 @@ Attempts to repair one channel's model configuration (e.g. normalize/migrate its
 **Example**
 
 ```bash
-curl -sS -X POST "$BASE_URL/api/debug/channel/12/fix" \
+curl -sS -X POST "$BASE_URL/api/debug/channel/018f0000-0000-7000-8000-000000000012/fix" \
   -H "Authorization: $ACCESS_TOKEN"
 ```
 
@@ -6676,7 +6689,7 @@ curl -sS -X POST "$BASE_URL/api/debug/channel/12/fix" \
 
 | Status | Meaning |
 |--------|---------|
-| 400 `{"success": false, "message": "Invalid channel ID"}` | `id` is not an integer. |
+| 400 `{"success": false, "message": "Invalid channel ID"}` | `id` is not a valid channel UUID. |
 | 500 `{"success": false, "message": "Fix failed: ..."}` | Repair could not be applied. |
 
 ### GET /api/debug/channels/validate
@@ -6745,13 +6758,13 @@ Reports the migration state of one channel: whether it has unified configs and/o
 
 | Name | Type | Required | Description |
 |------|------|----------|-------------|
-| `id` | integer | Yes | Channel ID. |
+| `id` | string (UUID) | Yes | Channel UUID. |
 
 **Response**: HTTP 200. Note: the success body omits `message` and returns only `success` + `data`.
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `data.channel_id` | integer | Channel ID. |
+| `data.channel_uuid` | string (UUID) | Channel UUID. |
 | `data.channel_name` | string | Channel name. |
 | `data.channel_type` | integer | Channel type code. |
 | `data.has_model_configs` | bool | Whether unified `model_configs` is populated. |
@@ -6767,7 +6780,7 @@ Reports the migration state of one channel: whether it has unified configs and/o
 {
   "success": true,
   "data": {
-    "channel_id": 12,
+    "channel_uuid": "018f0000-0000-7000-8000-000000000012",
     "channel_name": "OpenAI Prod",
     "channel_type": 1,
     "has_model_configs": true,
@@ -6783,7 +6796,7 @@ Reports the migration state of one channel: whether it has unified configs and/o
 **Example**
 
 ```bash
-curl -sS "$BASE_URL/api/debug/channel/12/migration-status" \
+curl -sS "$BASE_URL/api/debug/channel/018f0000-0000-7000-8000-000000000012/migration-status" \
   -H "Authorization: $ACCESS_TOKEN"
 ```
 
@@ -6791,8 +6804,8 @@ curl -sS "$BASE_URL/api/debug/channel/12/migration-status" \
 
 | Status | Meaning |
 |--------|---------|
-| 400 `{"success": false, "message": "Invalid channel ID"}` | `id` is not an integer. |
-| 404 `{"success": false, "message": "Channel not found"}` | No channel with that ID. |
+| 400 `{"success": false, "message": "Invalid channel ID"}` | `id` is not a valid channel UUID. |
+| 404 `{"success": false, "message": "Channel not found"}` | No channel with that UUID. |
 
 ### POST /api/debug/channels/clean
 
@@ -6844,8 +6857,8 @@ Lists redemption codes with offset pagination, newest first (ordered by `id desc
 
 | Field | Type | Description |
 |-------|------|-------------|
-| id | integer | Redemption code identifier. |
-| user_id | integer | ID of the admin who created the code. |
+| uuid | string (UUID) | Redemption code UUID. |
+| user_uuid | string (UUID) / null | UUID of the admin who created the code. |
 | key | string | The 32-char redeem code (UUID with dashes removed). |
 | status | integer | 1 = enabled, 2 = disabled, 3 = used. |
 | name | string | Human-readable batch name. |
@@ -6863,8 +6876,8 @@ Note: the model also carries a write-only `count` field (used only on create, no
   "message": "",
   "data": [
     {
-      "id": 12,
-      "user_id": 1,
+      "uuid": "018f0000-0000-7000-8000-000000000012",
+      "user_uuid": "018f0000-0000-7000-8000-000000000001",
       "key": "9f2c1ab84d5e4f0b9c7a3e21d6b8f0aa",
       "status": 1,
       "name": "launch-promo",
@@ -6888,7 +6901,7 @@ curl -s "$BASE_URL/api/redemption/?p=0&size=20" \
 
 ### GET /api/redemption/search
 
-Keyword-searches redemption codes and returns paginated, optionally sorted results. The keyword matches an exact `id` OR a `name` prefix (`name LIKE keyword%`).
+Keyword-searches redemption codes and returns paginated, optionally sorted results. The keyword matches a UUID, exact legacy internal id for operator compatibility, or a `name` prefix (`name LIKE keyword%`).
 
 **Auth:** Management ACCESS TOKEN - `Authorization: $ACCESS_TOKEN` (admin role).
 
@@ -6910,8 +6923,8 @@ Keyword-searches redemption codes and returns paginated, optionally sorted resul
   "message": "",
   "data": [
     {
-      "id": 12,
-      "user_id": 1,
+      "uuid": "018f0000-0000-7000-8000-000000000012",
+      "user_uuid": "018f0000-0000-7000-8000-000000000001",
       "key": "9f2c1ab84d5e4f0b9c7a3e21d6b8f0aa",
       "status": 1,
       "name": "launch-promo",
@@ -6935,7 +6948,7 @@ curl -s "$BASE_URL/api/redemption/search?keyword=promo&sort=quota&order=desc" \
 
 ### GET /api/redemption/:id
 
-Fetches a single redemption code by its numeric identifier.
+Fetches a single redemption code by UUID.
 
 **Auth:** Management ACCESS TOKEN - `Authorization: $ACCESS_TOKEN` (admin role).
 
@@ -6943,7 +6956,7 @@ Fetches a single redemption code by its numeric identifier.
 
 | Name | Type | Required | Description |
 |------|------|----------|-------------|
-| id | integer | Yes | Redemption code identifier. |
+| id | string (UUID) | Yes | Redemption code UUID. |
 
 **Response:** HTTP 200. `data` is a single redemption object (shape as above).
 
@@ -6952,8 +6965,8 @@ Fetches a single redemption code by its numeric identifier.
   "success": true,
   "message": "",
   "data": {
-    "id": 12,
-    "user_id": 1,
+    "uuid": "018f0000-0000-7000-8000-000000000012",
+    "user_uuid": "018f0000-0000-7000-8000-000000000001",
     "key": "9f2c1ab84d5e4f0b9c7a3e21d6b8f0aa",
     "status": 1,
     "name": "launch-promo",
@@ -6969,18 +6982,18 @@ Fetches a single redemption code by its numeric identifier.
 **Example**
 
 ```bash
-curl -s "$BASE_URL/api/redemption/12" \
+curl -s "$BASE_URL/api/redemption/018f0000-0000-7000-8000-000000000012" \
   -H "Authorization: $ACCESS_TOKEN"
 ```
 
 **Errors**
 
-- A non-numeric `:id` returns `{"success": false, "message": "..."}` (a `strconv.Atoi` parse error).
-- An id that does not exist returns `{"success": false, "message": "get redemption by id <id>: record not found"}`.
+- An invalid `:id` returns `{"success": false, "message": "..."}`.
+- A UUID that does not exist returns `{"success": false, "message": "get redemption by uuid <uuid>: record not found"}`.
 
 ### POST /api/redemption/
 
-Creates a batch of redemption codes; each code grants the same quota when redeemed. The codes themselves are generated server-side as 32-char UUIDs (dashes removed). The creating admin's user ID is recorded as `user_id` on each code.
+Creates a batch of redemption codes; each code grants the same quota when redeemed. The codes themselves are generated server-side as 32-char UUIDs (dashes removed). The creating admin's UUID is recorded as `user_uuid` on each code.
 
 **Auth:** Management ACCESS TOKEN - `Authorization: $ACCESS_TOKEN` (admin role).
 
@@ -7033,7 +7046,7 @@ curl -s -X POST "$BASE_URL/api/redemption/" \
 
 ### PUT /api/redemption/
 
-Updates a redemption code. By default it updates `name` and `quota`; when `status_only` is present it updates only the `status`. The handler first loads the existing row by `id`, applies the changes, then persists.
+Updates a redemption code. By default it updates `name` and `quota`; when `status_only` is present it updates only the `status`. The handler first loads the existing row by `uuid`, applies the changes, then persists.
 
 **Auth:** Management ACCESS TOKEN - `Authorization: $ACCESS_TOKEN` (admin role).
 
@@ -7047,14 +7060,14 @@ Updates a redemption code. By default it updates `name` and `quota`; when `statu
 
 | Field | JSON key | Type | Required | Default | Description |
 |-------|----------|------|----------|---------|-------------|
-| Id | id | integer | Yes | - | Identifier of the redemption code to update; must reference an existing row. |
+| UUID | uuid | string (UUID) | Yes | - | Redemption code UUID to update; must reference an existing row. |
 | Name | name | string | Conditional | - | New name; required (non-blank) in default mode, ignored in status-only mode. |
 | Quota | quota | integer | No | - | New quota; applied in default mode. |
 | Status | status | integer | Conditional | - | New status (1/2/3); applied only in status-only mode. |
 
 ```json
 {
-  "id": 12,
+  "uuid": "018f0000-0000-7000-8000-000000000012",
   "name": "launch-promo-renamed",
   "quota": 1000000
 }
@@ -7067,8 +7080,8 @@ Updates a redemption code. By default it updates `name` and `quota`; when `statu
   "success": true,
   "message": "",
   "data": {
-    "id": 12,
-    "user_id": 1,
+    "uuid": "018f0000-0000-7000-8000-000000000012",
+    "user_uuid": "018f0000-0000-7000-8000-000000000001",
     "key": "9f2c1ab84d5e4f0b9c7a3e21d6b8f0aa",
     "status": 1,
     "name": "launch-promo-renamed",
@@ -7088,23 +7101,23 @@ Updates a redemption code. By default it updates `name` and `quota`; when `statu
 curl -s -X PUT "$BASE_URL/api/redemption/" \
   -H "Authorization: $ACCESS_TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"id":12,"name":"launch-promo-renamed","quota":1000000}'
+  -d '{"uuid":"018f0000-0000-7000-8000-000000000012","name":"launch-promo-renamed","quota":1000000}'
 
 # Status-only update (disable the code)
 curl -s -X PUT "$BASE_URL/api/redemption/?status_only=1" \
   -H "Authorization: $ACCESS_TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"id":12,"status":2}'
+  -d '{"uuid":"018f0000-0000-7000-8000-000000000012","status":2}'
 ```
 
 **Errors**
 
 - `"Redemption name cannot be empty"` - blank name in default (non status-only) mode.
-- `"get redemption by id <id>: record not found"` - the `id` does not exist.
+- `"get redemption by uuid <uuid>: record not found"` - the UUID does not exist.
 
 ### DELETE /api/redemption/:id
 
-Permanently deletes a redemption code by ID.
+Permanently deletes a redemption code by UUID.
 
 **Auth:** Management ACCESS TOKEN - `Authorization: $ACCESS_TOKEN` (admin role).
 
@@ -7112,7 +7125,7 @@ Permanently deletes a redemption code by ID.
 
 | Name | Type | Required | Description |
 |------|------|----------|-------------|
-| id | integer | Yes | Redemption code identifier. |
+| id | string (UUID) | Yes | Redemption code UUID. |
 
 **Response:** HTTP 200. No `data` payload.
 
@@ -7126,14 +7139,14 @@ Permanently deletes a redemption code by ID.
 **Example**
 
 ```bash
-curl -s -X DELETE "$BASE_URL/api/redemption/12" \
+curl -s -X DELETE "$BASE_URL/api/redemption/018f0000-0000-7000-8000-000000000012" \
   -H "Authorization: $ACCESS_TOKEN"
 ```
 
 **Errors**
 
-- A non-numeric or `0` `:id` parses to `0`, yielding `{"success": false, "message": "id is empty!"}`.
-- A non-existent id returns `{"success": false, "message": "find redemption <id>: record not found"}`.
+- An invalid `:id` yields `{"success": false, "message": "id is empty!"}` or a resolver error.
+- A non-existent UUID returns `{"success": false, "message": "find redemption <uuid>: record not found"}`.
 
 ### GET /api/group/
 
@@ -7177,7 +7190,7 @@ Lists usage/audit logs across all users with filtering, pagination, and optional
 | username | string | No | "" | Filter by username. |
 | token_name | string | No | "" | Filter by token name. |
 | model_name | string | No | "" | Filter by model name. |
-| channel | integer | No | 0 | Filter by channel ID (0 = any). |
+| channel | string (UUID) | No | empty | Filter by channel UUID. |
 | start_timestamp | integer | No | 0 | Lower bound (Unix seconds). |
 | end_timestamp | integer | No | 0 | Upper bound (Unix seconds). |
 | size | integer | No | DefaultItemsPerPage | Items per page; legacy alias `items_per_page` accepted (only used if `size` is absent); clamped to MaxItemsPerPage. |
@@ -7190,20 +7203,21 @@ Note: when a sort column is supplied together with both `start_timestamp` and `e
 
 | Field | Type | Description |
 |-------|------|-------------|
-| id | integer | Log row ID. |
-| user_id | integer | Owning user ID. |
+| uuid | string (UUID) | Log resource UUID. |
+| user_uuid | string (UUID) / null | Owning user UUID, when available. |
 | created_at | integer | Unix seconds of the event. |
 | type | integer | Log type (see filter values above). |
 | content | string | Human-readable description. |
 | username | string | User who triggered the event. |
 | token_name | string | Token used. |
+| token_uuid | string (UUID) / null | Token UUID, when available. |
 | model_name | string | Model invoked (after any channel model mapping; used for billing). |
 | origin_model_name | string | Model name as requested by the client before mapping. |
 | quota | integer | Quota consumed/granted. |
 | prompt_tokens | integer | Prompt token count. |
 | completion_tokens | integer | Completion token count. |
 | cached_prompt_tokens | integer | Cached prompt tokens. |
-| channel | integer | Channel ID used. |
+| channel_uuid | string (UUID) / null | Channel UUID used, when available. |
 | request_id | string | Request identifier. |
 | trace_id | string | Trace identifier. |
 | updated_at | integer | Unix milliseconds (ORM timestamp). |
@@ -7218,20 +7232,21 @@ Note: when a sort column is supplied together with both `start_timestamp` and `e
   "message": "",
   "data": [
     {
-      "id": 90871,
-      "user_id": 7,
+      "uuid": "018f0000-0000-7000-8000-000000090871",
+      "user_uuid": "018f0000-0000-7000-8000-000000000007",
       "created_at": 1717003600,
       "type": 2,
       "content": "model rate 0.000015 / completion rate 0.000060",
       "username": "alice",
       "token_name": "prod-key",
+      "token_uuid": "018f0000-0000-7000-8000-000000000041",
       "model_name": "gpt-4o",
       "origin_model_name": "",
       "quota": 1875,
       "prompt_tokens": 1024,
       "completion_tokens": 256,
       "cached_prompt_tokens": 0,
-      "channel": 3,
+      "channel_uuid": "018f0000-0000-7000-8000-000000000003",
       "request_id": "20260608120000-abc123",
       "trace_id": "4f9c1d2e7a8b",
       "updated_at": 1717003600456,
@@ -7302,7 +7317,7 @@ Returns the summed quota usage for logs matching the supplied filters (used for 
 | username | string | No | "" | Filter by username. |
 | token_name | string | No | "" | Filter by token name. |
 | model_name | string | No | "" | Filter by model name. |
-| channel | integer | No | 0 | Filter by channel ID. |
+| channel | string (UUID) | No | empty | Filter by channel UUID. |
 | start_timestamp | integer | No | 0 | Lower bound (Unix seconds). |
 | end_timestamp | integer | No | 0 | Upper bound (Unix seconds). |
 
@@ -7349,20 +7364,21 @@ Full-text keyword search across all users' logs, paginated and optionally sorted
   "message": "",
   "data": [
     {
-      "id": 90871,
-      "user_id": 7,
+      "uuid": "018f0000-0000-7000-8000-000000090871",
+      "user_uuid": "018f0000-0000-7000-8000-000000000007",
       "created_at": 1717003600,
       "type": 2,
       "content": "model rate 0.000015 / completion rate 0.000060",
       "username": "alice",
       "token_name": "prod-key",
+      "token_uuid": "018f0000-0000-7000-8000-000000000041",
       "model_name": "gpt-4o",
       "origin_model_name": "",
       "quota": 1875,
       "prompt_tokens": 1024,
       "completion_tokens": 256,
       "cached_prompt_tokens": 0,
-      "channel": 3,
+      "channel_uuid": "018f0000-0000-7000-8000-000000000003",
       "request_id": "20260608120000-abc123",
       "trace_id": "4f9c1d2e7a8b",
       "updated_at": 1717003600456,
@@ -7394,7 +7410,7 @@ Lists API keys (relay tokens) across all users, read-only, for administrative in
 |------|------|----------|---------|-------------|
 | p | integer | No | 0 | Zero-based page index; negatives clamped to 0. Offset = `p * size`. |
 | size | integer | No | DefaultItemsPerPage | Items per page; clamped to MaxItemsPerPage. |
-| user_id | integer | No | 0 | Filter to one user's tokens; 0 or absent = all users. |
+| user_id | string (UUID) | No | empty | Filter to one user's tokens; absent = all users. The JSON/query key remains `user_id`, but the value is a user UUID string. |
 | sort | string | No | "" | Sort column. |
 | order | string | No | desc | Sort direction asc/desc. |
 
@@ -7402,8 +7418,8 @@ Lists API keys (relay tokens) across all users, read-only, for administrative in
 
 | Field | Type | Description |
 |-------|------|-------------|
-| id | integer | Token ID. |
-| user_id | integer | Owning user ID. |
+| uuid | string (UUID) | Token UUID. |
+| user_uuid | string (UUID) / null | Owning user UUID, when available. |
 | key | string | The raw 48-char stored key (NOT prefixed). To call relay endpoints with it, prepend the configured prefix, e.g. `Authorization: Bearer sk-<key>`. |
 | status | integer | Token status (1 = enabled). |
 | name | string | Token name. |
@@ -7424,8 +7440,8 @@ Lists API keys (relay tokens) across all users, read-only, for administrative in
   "message": "",
   "data": [
     {
-      "id": 41,
-      "user_id": 7,
+      "uuid": "018f0000-0000-7000-8000-000000000041",
+      "user_uuid": "018f0000-0000-7000-8000-000000000007",
       "key": "AbCd1234EfGh5678ijklmnopqrstuvwx0123456789ABCDEF",
       "status": 1,
       "name": "prod-key",
@@ -7448,7 +7464,7 @@ Lists API keys (relay tokens) across all users, read-only, for administrative in
 **Example**
 
 ```bash
-curl -s "$BASE_URL/api/admin/tokens/?user_id=7&p=0&size=20" \
+curl -s "$BASE_URL/api/admin/tokens/?user_id=018f0000-0000-7000-8000-000000000007&p=0&size=20" \
   -H "Authorization: $ACCESS_TOKEN"
 ```
 
@@ -7476,8 +7492,8 @@ Keyword-searches tokens across all users by name prefix (`name LIKE keyword%`), 
   "message": "",
   "data": [
     {
-      "id": 41,
-      "user_id": 7,
+      "uuid": "018f0000-0000-7000-8000-000000000041",
+      "user_uuid": "018f0000-0000-7000-8000-000000000007",
       "key": "AbCd1234EfGh5678ijklmnopqrstuvwx0123456789ABCDEF",
       "status": 1,
       "name": "prod-key",
@@ -7506,7 +7522,7 @@ curl -s "$BASE_URL/api/admin/tokens/search?keyword=prod&sort=used_quota&order=de
 
 ### GET /api/admin/tokens/:id
 
-Fetches any token by ID regardless of owner, read-only.
+Fetches any token by UUID regardless of owner, read-only.
 
 **Auth:** Management ACCESS TOKEN - `Authorization: $ACCESS_TOKEN` (admin role).
 
@@ -7514,7 +7530,7 @@ Fetches any token by ID regardless of owner, read-only.
 
 | Name | Type | Required | Description |
 |------|------|----------|-------------|
-| id | integer | Yes | Token identifier. |
+| id | string (UUID) | Yes | Token UUID. |
 
 **Response:** HTTP 200. `data` is a single token object (same shape as `GET /api/admin/tokens/`).
 
@@ -7523,8 +7539,8 @@ Fetches any token by ID regardless of owner, read-only.
   "success": true,
   "message": "",
   "data": {
-    "id": 41,
-    "user_id": 7,
+    "uuid": "018f0000-0000-7000-8000-000000000041",
+    "user_uuid": "018f0000-0000-7000-8000-000000000007",
     "key": "AbCd1234EfGh5678ijklmnopqrstuvwx0123456789ABCDEF",
     "status": 1,
     "name": "prod-key",
@@ -7545,7 +7561,7 @@ Fetches any token by ID regardless of owner, read-only.
 **Example**
 
 ```bash
-curl -s "$BASE_URL/api/admin/tokens/41" \
+curl -s "$BASE_URL/api/admin/tokens/018f0000-0000-7000-8000-000000000041" \
   -H "Authorization: $ACCESS_TOKEN"
 ```
 
@@ -7602,7 +7618,7 @@ The persisted `MCPServer` object has the following shape (returned by the read/c
 
 | Field | JSON key | Type | Description |
 |---|---|---|---|
-| Id | `id` | integer | Server identifier. |
+| UUID | `uuid` | string (UUID) | Server UUID. |
 | Name | `name` | string | Unique display name (required, trimmed, `varchar(128)`). |
 | Description | `description` | string | Free-form description. |
 | Status | `status` | integer | `1` = enabled, `0` = disabled. |
@@ -7652,7 +7668,7 @@ Lists registered MCP servers with pagination and sorting; each entry pairs the (
   "data": [
     {
       "server": {
-        "id": 1,
+        "uuid": "018f0000-0000-7000-8000-000000000001",
         "name": "weather-mcp",
         "description": "Weather tools",
         "status": 1,
@@ -7700,7 +7716,7 @@ Returns the full configuration for a single MCP server (with `api_key` masked).
 
 | Name | Type | Required | Description |
 |---|---|---|---|
-| id | integer | Yes | MCP server identifier. |
+| id | string (UUID) | Yes | MCP server UUID. |
 
 **Response**: HTTP 200. `data` is a single `MCPServer` object (see the table above).
 
@@ -7709,7 +7725,7 @@ Returns the full configuration for a single MCP server (with `api_key` masked).
   "success": true,
   "message": "",
   "data": {
-    "id": 1,
+    "uuid": "018f0000-0000-7000-8000-000000000001",
     "name": "weather-mcp",
     "description": "Weather tools",
     "status": 1,
@@ -7739,7 +7755,7 @@ Returns the full configuration for a single MCP server (with `api_key` masked).
 **Example**
 
 ```bash
-curl -s "$BASE_URL/api/mcp_servers/1" \
+curl -s "$BASE_URL/api/mcp_servers/018f0000-0000-7000-8000-000000000001" \
   -H "Authorization: $ACCESS_TOKEN"
 ```
 
@@ -7747,8 +7763,8 @@ curl -s "$BASE_URL/api/mcp_servers/1" \
 
 | Status / body | Meaning |
 |---|---|
-| 200 `{"success": false, "message": "get mcp server: record not found"}` | No server with that id (errors use HTTP 200 with `success:false`). |
-| 200 `{"success": false, "message": "strconv.Atoi: parsing \"...\": invalid syntax"}` | Non-integer `id` in the path. |
+| 200 `{"success": false, "message": "get mcp server: record not found"}` | No server with that UUID (errors use HTTP 200 with `success:false`). |
+| 200 `{"success": false, "message": "invalid resource reference"}` | Invalid UUID in the path. |
 
 ### POST /api/mcp_servers/ (and /api/mcp_servers)
 
@@ -7796,14 +7812,14 @@ Registers a new MCP server. The payload is normalized and validated (`NormalizeA
 }
 ```
 
-**Response**: HTTP 200. `data` is the created `MCPServer` (with `api_key` masked and `id` assigned). Note that zero pricing fields are omitted in the echoed `tool_pricing` (here `quota_per_call` was omitted because it was 0).
+**Response**: HTTP 200. `data` is the created `MCPServer` (with `api_key` masked and `uuid` assigned). Note that zero pricing fields are omitted in the echoed `tool_pricing` (here `quota_per_call` was omitted because it was 0).
 
 ```json
 {
   "success": true,
   "message": "",
   "data": {
-    "id": 2,
+    "uuid": "018f0000-0000-7000-8000-000000000002",
     "name": "weather-mcp",
     "description": "Weather tools",
     "status": 1,
@@ -7872,7 +7888,7 @@ Updates an existing MCP server. The handler tracks which JSON keys were physical
 
 | Name | Type | Required | Description |
 |---|---|---|---|
-| id | integer | Yes | MCP server identifier. |
+| id | string (UUID) | Yes | MCP server UUID. |
 
 **Request body**: same fields as `POST /api/mcp_servers/`; all optional. Only the fields physically present in the body are applied. The following JSON keys are honored for per-column updates: `name`, `description`, `status`, `priority`, `base_url`, `protocol`, `auth_type`, `api_key`, `headers`, `tool_whitelist`, `tool_blacklist`, `tool_pricing`, `auto_sync_enabled`, `auto_sync_interval_minutes`.
 
@@ -7892,7 +7908,7 @@ Updates an existing MCP server. The handler tracks which JSON keys were physical
   "success": true,
   "message": "",
   "data": {
-    "id": 1,
+    "uuid": "018f0000-0000-7000-8000-000000000001",
     "name": "weather-mcp",
     "description": "Weather tools",
     "status": 0,
@@ -7922,17 +7938,17 @@ Updates an existing MCP server. The handler tracks which JSON keys were physical
 **Example**
 
 ```bash
-curl -s -X PUT "$BASE_URL/api/mcp_servers/1" \
+curl -s -X PUT "$BASE_URL/api/mcp_servers/018f0000-0000-7000-8000-000000000001" \
   -H "Authorization: $ACCESS_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"priority": 20, "status": 0, "auto_sync_interval_minutes": 120}'
 ```
 
-**Errors**: same validation errors as `POST` (name/base_url required, base_url scheme, interval range, pricing non-negative, empty pricing tool name). A non-existent `id` returns `{"success": false, "message": "get mcp server: record not found"}`; a non-integer `id` returns a `strconv.Atoi` parse error. Because the merged record is re-validated, a previously-stored server still cannot be saved with an out-of-range interval or invalid base_url.
+**Errors**: same validation errors as `POST` (name/base_url required, base_url scheme, interval range, pricing non-negative, empty pricing tool name). A non-existent UUID returns `{"success": false, "message": "get mcp server: record not found"}`; an invalid UUID returns a resource-reference validation error. Because the merged record is re-validated, a previously-stored server still cannot be saved with an out-of-range interval or invalid base_url.
 
 ### DELETE /api/mcp_servers/:id
 
-Permanently deletes an MCP server record by id. Its synchronized tools become orphaned and are no longer exposed downstream.
+Permanently deletes an MCP server record by UUID. Its synchronized tools become orphaned and are no longer exposed downstream.
 
 **Auth:** Admin access token via `Authorization: $ACCESS_TOKEN` (or admin session cookie). Requires role admin (>=10).
 
@@ -7940,7 +7956,7 @@ Permanently deletes an MCP server record by id. Its synchronized tools become or
 
 | Name | Type | Required | Description |
 |---|---|---|---|
-| id | integer | Yes | MCP server identifier. |
+| id | string (UUID) | Yes | MCP server UUID. |
 
 **Response**: HTTP 200. No `data` field is returned.
 
@@ -7954,7 +7970,7 @@ Permanently deletes an MCP server record by id. Its synchronized tools become or
 **Example**
 
 ```bash
-curl -s -X DELETE "$BASE_URL/api/mcp_servers/1" \
+curl -s -X DELETE "$BASE_URL/api/mcp_servers/018f0000-0000-7000-8000-000000000001" \
   -H "Authorization: $ACCESS_TOKEN"
 ```
 
@@ -7962,8 +7978,7 @@ curl -s -X DELETE "$BASE_URL/api/mcp_servers/1" \
 
 | Status / body | Meaning |
 |---|---|
-| 200 `{"success": false, "message": "mcp server id is invalid"}` | `id` <= 0. |
-| 200 `{"success": false, "message": "strconv.Atoi: parsing \"...\": invalid syntax"}` | Non-integer `id` in the path. |
+| 200 `{"success": false, "message": "mcp server id is invalid"}` | Invalid UUID or unresolved server. |
 
 ### POST /api/mcp_servers/:id/sync
 
@@ -7975,7 +7990,7 @@ Triggers an immediate, manual refresh of the server's tool catalogue: One API co
 
 | Name | Type | Required | Description |
 |---|---|---|---|
-| id | integer | Yes | MCP server identifier. |
+| id | string (UUID) | Yes | MCP server UUID. |
 
 **Response**: HTTP 200. `data.tool_count` is the number of tools synchronized and persisted.
 
@@ -7992,7 +8007,7 @@ Triggers an immediate, manual refresh of the server's tool catalogue: One API co
 **Example**
 
 ```bash
-curl -s -X POST "$BASE_URL/api/mcp_servers/1/sync" \
+curl -s -X POST "$BASE_URL/api/mcp_servers/018f0000-0000-7000-8000-000000000001/sync" \
   -H "Authorization: $ACCESS_TOKEN"
 ```
 
@@ -8000,7 +8015,7 @@ curl -s -X POST "$BASE_URL/api/mcp_servers/1/sync" \
 
 | Status / body | Meaning |
 |---|---|
-| 200 `{"success": false, "message": "get mcp server: record not found"}` | No server with that id. |
+| 200 `{"success": false, "message": "get mcp server: record not found"}` | No server with that UUID. |
 | 200 `{"success": false, "message": "<upstream sync error>"}` | Upstream sync failed (e.g. unreachable host, auth rejected); before responding, the server's `last_sync_status` is set to `error` with the message. |
 
 ### POST /api/mcp_servers/:id/test
@@ -8013,7 +8028,7 @@ Performs a connectivity check against the upstream MCP server using a short-live
 
 | Name | Type | Required | Description |
 |---|---|---|---|
-| id | integer | Yes | MCP server identifier. |
+| id | string (UUID) | Yes | MCP server UUID. |
 
 **Response**: HTTP 200. `data.tool_count` is the number of tools the upstream returned; `data.protocol` echoes the server's stored transport protocol.
 
@@ -8031,7 +8046,7 @@ Performs a connectivity check against the upstream MCP server using a short-live
 **Example**
 
 ```bash
-curl -s -X POST "$BASE_URL/api/mcp_servers/1/test" \
+curl -s -X POST "$BASE_URL/api/mcp_servers/018f0000-0000-7000-8000-000000000001/test" \
   -H "Authorization: $ACCESS_TOKEN"
 ```
 
@@ -8039,7 +8054,7 @@ curl -s -X POST "$BASE_URL/api/mcp_servers/1/test" \
 
 | Status / body | Meaning |
 |---|---|
-| 200 `{"success": false, "message": "get mcp server: record not found"}` | No server with that id. |
+| 200 `{"success": false, "message": "get mcp server: record not found"}` | No server with that UUID. |
 | 200 `{"success": false, "message": "<connection error>"}` | The upstream could not be reached or rejected the request within 15s; before responding, `last_test_status` is set to `error`. |
 
 ### GET /api/mcp_servers/:id/tools
@@ -8052,14 +8067,14 @@ Lists the tools currently stored for a single MCP server. The server's per-tool 
 
 | Name | Type | Required | Description |
 |---|---|---|---|
-| id | integer | Yes | MCP server identifier. |
+| id | string (UUID) | Yes | MCP server UUID. |
 
 **Response**: HTTP 200. `data` is an array of `MCPTool` objects (no `total` field for this endpoint).
 
 | Field | JSON key | Type | Description |
 |---|---|---|---|
-| Id | `id` | integer | Tool record identifier. |
-| ServerId | `server_id` | integer | Owning MCP server id. |
+| UUID | `uuid` | string (UUID) | Tool UUID. |
+| ServerUUID | `server_uuid` | string (UUID) / null | Owning MCP server UUID, when available. |
 | Name | `name` | string | Tool name (normalized to lowercase on storage). |
 | DisplayName | `display_name` | string | Human-readable name. |
 | Description | `description` | string | Tool description. |
@@ -8075,8 +8090,8 @@ Lists the tools currently stored for a single MCP server. The server's per-tool 
   "message": "",
   "data": [
     {
-      "id": 11,
-      "server_id": 1,
+      "uuid": "018f0000-0000-7000-8000-000000000011",
+      "server_uuid": "018f0000-0000-7000-8000-000000000001",
       "name": "get_forecast",
       "display_name": "Get Forecast",
       "description": "Return the weather forecast for a location.",
@@ -8093,7 +8108,7 @@ Lists the tools currently stored for a single MCP server. The server's per-tool 
 **Example**
 
 ```bash
-curl -s "$BASE_URL/api/mcp_servers/1/tools" \
+curl -s "$BASE_URL/api/mcp_servers/018f0000-0000-7000-8000-000000000001/tools" \
   -H "Authorization: $ACCESS_TOKEN"
 ```
 
@@ -8101,7 +8116,7 @@ curl -s "$BASE_URL/api/mcp_servers/1/tools" \
 
 | Status / body | Meaning |
 |---|---|
-| 200 `{"success": false, "message": "get mcp server: record not found"}` | No server with that id (the handler loads the server before its tools). |
+| 200 `{"success": false, "message": "get mcp server: record not found"}` | No server with that UUID (the handler loads the server before its tools). |
 
 ### GET /api/mcp_tools/ (and /api/mcp_tools)
 
@@ -8117,7 +8132,7 @@ Lists synchronized MCP tools across all servers (or filtered to one server and/o
 | size | integer | No | server default | Page size; non-positive values use the server default, values above the server max are clamped to it. |
 | sort | string | No | (none) | Sort column: one of `id`, `name`, `status`, `created_at`, `updated_at`. Unknown/empty values fall back to `id desc`. |
 | order | string | No | `desc` | Sort direction: `asc` or `desc` (any other value is treated as `desc`). |
-| server_id | integer | No | 0 (all servers) | Filter to tools belonging to this MCP server id; only applied when > 0. |
+| server_id | string (UUID) | No | empty (all servers) | Filter to tools belonging to this MCP server UUID. The query key remains `server_id`, but the value is a UUID string. |
 | status | integer | No | (no filter) | Filter by tool status (`1` enabled, `0` disabled). Omit or send empty for no filter; non-integer values are ignored (treated as no filter). |
 
 **Response**: HTTP 200. `data` is an array of `MCPTool` objects (see the field table under `GET /api/mcp_servers/:id/tools`). `total` is the count of rows matching the `server_id`/`status` filter.
@@ -8128,8 +8143,8 @@ Lists synchronized MCP tools across all servers (or filtered to one server and/o
   "message": "",
   "data": [
     {
-      "id": 11,
-      "server_id": 1,
+      "uuid": "018f0000-0000-7000-8000-000000000011",
+      "server_uuid": "018f0000-0000-7000-8000-000000000001",
       "name": "get_forecast",
       "display_name": "Get Forecast",
       "description": "Return the weather forecast for a location.",
@@ -8147,7 +8162,7 @@ Lists synchronized MCP tools across all servers (or filtered to one server and/o
 **Example**
 
 ```bash
-curl -s "$BASE_URL/api/mcp_tools/?server_id=1&status=1&p=0&size=50&sort=name&order=asc" \
+curl -s "$BASE_URL/api/mcp_tools/?server_id=018f0000-0000-7000-8000-000000000001&status=1&p=0&size=50&sort=name&order=asc" \
   -H "Authorization: $ACCESS_TOKEN"
 ```
 
@@ -8513,12 +8528,12 @@ Returns all enabled MCP servers and their enabled tools (with normalized input s
 
 | Field | JSON key | Type | Description |
 |-------|----------|------|-------------|
-| server.id | `server.id` | integer | MCP server id |
+| server.uuid | `server.uuid` | string (UUID) | MCP server UUID |
 | server.name | `server.name` | string | MCP server name |
 | server.status | `server.status` | integer | Server status code |
 | server.protocol | `server.protocol` | string | Transport protocol |
-| tools[].id | `id` | integer | Tool id |
-| tools[].server_id | `server_id` | integer | Owning server id |
+| tools[].uuid | `uuid` | string (UUID) | Tool UUID |
+| tools[].server_uuid | `server_uuid` | string (UUID) / null | Owning server UUID |
 | tools[].name | `name` | string | Normalized (lowercased) tool name |
 | tools[].display_name | `display_name` | string | Human-facing name |
 | tools[].description | `description` | string | Tool description |
@@ -8535,15 +8550,15 @@ Returns all enabled MCP servers and their enabled tools (with normalized input s
   "data": [
     {
       "server": {
-        "id": 3,
+        "uuid": "018f0000-0000-7000-8000-000000000003",
         "name": "web-search",
         "status": 1,
         "protocol": "http"
       },
       "tools": [
         {
-          "id": 12,
-          "server_id": 3,
+          "uuid": "018f0000-0000-7000-8000-000000000012",
+          "server_uuid": "018f0000-0000-7000-8000-000000000003",
           "name": "search",
           "display_name": "Web Search",
           "description": "Search the public web",

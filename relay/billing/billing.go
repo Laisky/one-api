@@ -155,7 +155,9 @@ type QuotaConsumeDetail struct {
 	QuotaDelta       int64
 	TotalQuota       int64
 	UserId           int
+	UserUUID         string
 	ChannelId        int
+	ChannelUUID      string
 	PromptTokens     int
 	CompletionTokens int
 	ModelRatio       float64
@@ -164,6 +166,7 @@ type QuotaConsumeDetail struct {
 	// ModelName is the mapped model used for billing.
 	OriginModelName    string
 	ModelName          string
+	TokenUUID          string
 	TokenName          string
 	IsStream           bool
 	StartTime          time.Time
@@ -195,6 +198,19 @@ type QuotaConsumeDetail struct {
 	// one LogTypeTool row per invocation so the dashboard tool charts can
 	// aggregate strictly on type. The originating consume log row is unchanged.
 	ToolUsageSummary *model.ToolUsageSummary
+}
+
+// stringPtrIfNotEmpty returns a string pointer only when value is non-empty.
+// Parameters:
+//   - value: candidate string value.
+//
+// Return values:
+//   - *string: pointer to value when non-empty, otherwise nil.
+func stringPtrIfNotEmpty(value string) *string {
+	if value == "" {
+		return nil
+	}
+	return &value
 }
 
 // PostConsumeQuotaDetailed handles detailed billing for ChatCompletion and Response API requests
@@ -247,12 +263,15 @@ func PostConsumeQuotaDetailed(detail QuotaConsumeDetail) {
 	}
 	entry := &model.Log{
 		UserId:             detail.UserId,
+		UserUUID:           stringPtrIfNotEmpty(detail.UserUUID),
 		ChannelId:          detail.ChannelId,
+		ChannelUUID:        stringPtrIfNotEmpty(detail.ChannelUUID),
 		PromptTokens:       detail.PromptTokens,
 		CompletionTokens:   detail.CompletionTokens,
 		ModelName:          detail.ModelName,
 		OriginModelName:    detail.OriginModelName,
 		TokenName:          detail.TokenName,
+		TokenUUID:          stringPtrIfNotEmpty(detail.TokenUUID),
 		Content:            logContent,
 		IsStream:           detail.IsStream,
 		ElapsedTime:        helper.CalcElapsedTime(detail.StartTime),

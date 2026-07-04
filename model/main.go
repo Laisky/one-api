@@ -1,6 +1,7 @@
 package model
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"os"
@@ -50,12 +51,15 @@ func CreateRootAccountIfNeed() error {
 			AccessToken: accessToken,
 			Quota:       500000000000000,
 		}
-		DB.Create(&rootUser)
+		if err := DB.Create(&rootUser).Error; err != nil {
+			return errors.Wrap(err, "create root user")
+		}
 		if config.InitialRootToken != "" {
 			logger.Logger.Info("creating initial root token as requested")
 			token := Token{
 				Id:             1,
 				UserId:         rootUser.Id,
+				UserUUID:       &rootUser.UUID,
 				Key:            config.InitialRootToken,
 				Status:         TokenStatusEnabled,
 				Name:           "Initial Root Token",
@@ -65,7 +69,9 @@ func CreateRootAccountIfNeed() error {
 				RemainQuota:    500000000000000,
 				UnlimitedQuota: true,
 			}
-			DB.Create(&token)
+			if err := DB.Create(&token).Error; err != nil {
+				return errors.Wrap(err, "create initial root token")
+			}
 		}
 	}
 	return nil
@@ -270,6 +276,11 @@ func InitDB() {
 		logger.Logger.Error("failed to migrate legacy image pricing", zap.Error(err))
 	}
 
+	if err = MigrateExternalUUIDs(context.Background()); err != nil {
+		logger.Logger.Fatal("failed to migrate external resource uuids", zap.Error(err))
+		return
+	}
+
 	logger.Logger.Info("database migration completed")
 }
 
@@ -367,6 +378,10 @@ func InitLogDB() {
 	err = migrateLOGDB()
 	if err != nil {
 		logger.Logger.Fatal("failed to migrate secondary database", zap.Error(err))
+		return
+	}
+	if err = MigrateLogExternalUUIDs(context.Background(), LOG_DB); err != nil {
+		logger.Logger.Fatal("failed to migrate secondary log resource uuids", zap.Error(err))
 		return
 	}
 	logger.Logger.Info("secondary database migrated")

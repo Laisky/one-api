@@ -19,7 +19,8 @@ import (
 
 // Trace represents a request tracing record with key timestamps
 type Trace struct {
-	Id         int    `json:"id" gorm:"primaryKey;autoIncrement"`
+	Id         int    `json:"-" gorm:"primaryKey;autoIncrement"`
+	UUID       string `json:"uuid" gorm:"type:char(36);index;column:uuid"`
 	TraceId    string `json:"trace_id" gorm:"type:varchar(64);uniqueIndex;not null"` // TraceID from gin-middlewares
 	URL        string `json:"url" gorm:"type:text;not null"`                         // Request URL
 	Method     string `json:"method" gorm:"type:varchar(16);not null"`               // HTTP method

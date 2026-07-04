@@ -52,7 +52,8 @@ export function PersonalSettings() {
 
   // Passkey related state
   interface PasskeyInfo {
-    id: number;
+    id?: number;
+    uuid?: string;
     credential_name: string;
     sign_count: number;
     created_at: number;
@@ -394,7 +395,8 @@ export function PersonalSettings() {
 
     setPasskeyLoading(true);
     try {
-      const res = await api.delete(`/api/user/passkey/${passkey.id}`);
+      const passkeyRef = passkey.uuid || passkey.id;
+      const res = await api.delete(`/api/user/passkey/${passkeyRef}`);
       if (res.data.success) {
         await loadPasskeys();
       } else {
@@ -907,7 +909,7 @@ export function PersonalSettings() {
                 {passkeys.length > 0 ? (
                   <div className="space-y-2">
                     {passkeys.map((pk) => (
-                      <div key={pk.id} className="flex items-center justify-between p-3 border rounded-lg bg-background">
+                      <div key={pk.uuid || pk.id} className="flex items-center justify-between p-3 border rounded-lg bg-background">
                         <div className="flex-1 min-w-0">
                           <div className="font-medium truncate">{pk.credential_name}</div>
                           <div className="text-xs text-muted-foreground">

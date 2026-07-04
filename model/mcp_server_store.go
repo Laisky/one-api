@@ -98,7 +98,7 @@ func UpdateMCPServer(server *MCPServer) error {
 	if err := encryptMCPServerSecret(server); err != nil {
 		return errors.Wrap(err, "encrypt mcp server secret")
 	}
-	if err := DB.Model(server).Updates(server).Error; err != nil {
+	if err := DB.Model(server).Omit("uuid").Updates(server).Error; err != nil {
 		return errors.Wrap(err, "update mcp server")
 	}
 	// GORM's struct-based Updates silently skips zero-value fields (empty

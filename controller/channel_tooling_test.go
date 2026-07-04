@@ -43,7 +43,7 @@ func TestUpdateChannelToolingLifecycle(t *testing.T) {
 	router.PUT("/api/channel/", UpdateChannel)
 
 	updatePayload := map[string]any{
-		"id":        channel.Id,
+		"uuid":      channel.UUID,
 		"name":      channel.Name,
 		"type":      channel.Type,
 		"models":    channel.Models,
@@ -136,7 +136,7 @@ func TestGetChannelIncludesToolingFieldWithoutKey(t *testing.T) {
 	})
 
 	router := gin.New()
-	route := fmt.Sprintf("/api/channel/%d", channel.Id)
+	route := fmt.Sprintf("/api/channel/%s", channel.UUID)
 	router.GET("/api/channel/:id", GetChannel)
 
 	req, err := http.NewRequest(http.MethodGet, route, nil)
@@ -202,7 +202,7 @@ func TestDuplicateChannelClonesServerSideWithoutExposingKey(t *testing.T) {
 	router := gin.New()
 	router.POST("/api/channel/:id/duplicate", DuplicateChannel)
 
-	requestPath := fmt.Sprintf("/api/channel/%d/duplicate", source.Id)
+	requestPath := fmt.Sprintf("/api/channel/%s/duplicate", source.UUID)
 	req, err := http.NewRequest(http.MethodPost, requestPath, nil)
 	require.NoError(t, err)
 
@@ -213,16 +213,16 @@ func TestDuplicateChannelClonesServerSideWithoutExposingKey(t *testing.T) {
 	var resp struct {
 		Success bool `json:"success"`
 		Data    struct {
-			ID   int    `json:"id"`
+			UUID string `json:"uuid"`
 			Name string `json:"name"`
 		} `json:"data"`
 	}
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
 	require.True(t, resp.Success)
-	require.NotZero(t, resp.Data.ID)
+	require.NotEmpty(t, resp.Data.UUID)
 	require.Equal(t, "duplicate-source Copy", resp.Data.Name)
 
-	duplicated, err := model.GetChannelById(resp.Data.ID, true)
+	duplicated, err := model.GetChannelByUUID(resp.Data.UUID)
 	require.NoError(t, err)
 	require.NotEqual(t, source.Id, duplicated.Id)
 	require.Equal(t, "duplicate-source Copy", duplicated.Name)

@@ -3,7 +3,8 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from 'reac
 import { api } from '@/lib/api';
 
 interface UserOption {
-  id: number;
+  id?: string | number;
+  uuid?: string;
   username: string;
   display_name: string;
 }

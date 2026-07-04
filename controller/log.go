@@ -25,7 +25,11 @@ func GetAllLogs(c *gin.Context) {
 	username := c.Query("username")
 	tokenName := c.Query("token_name")
 	modelName := c.Query("model_name")
-	channel, _ := strconv.Atoi(c.Query("channel"))
+	channel, err := resolveOptionalChannelRef(c.Query("channel"))
+	if err != nil {
+		helper.RespondError(c, err)
+		return
+	}
 	sortBy := c.DefaultQuery("sort_by", "")
 	if sortBy == "" { // frontend sends 'sort'
 		sortBy = c.Query("sort")
@@ -256,7 +260,11 @@ func GetLogsStat(c *gin.Context) {
 	tokenName := c.Query("token_name")
 	username := c.Query("username")
 	modelName := c.Query("model_name")
-	channel, _ := strconv.Atoi(c.Query("channel"))
+	channel, err := resolveOptionalChannelRef(c.Query("channel"))
+	if err != nil {
+		helper.RespondError(c, err)
+		return
+	}
 	quotaNum := model.SumUsedQuota(logType, startTimestamp, endTimestamp, modelName, username, tokenName, channel)
 	//tokenNum := model.SumUsedToken(logType, startTimestamp, endTimestamp, modelName, username, "")
 	c.JSON(http.StatusOK, gin.H{
@@ -277,7 +285,11 @@ func GetLogsSelfStat(c *gin.Context) {
 	endTimestamp, _ := strconv.ParseInt(c.Query("end_timestamp"), 10, 64)
 	tokenName := c.Query("token_name")
 	modelName := c.Query("model_name")
-	channel, _ := strconv.Atoi(c.Query("channel"))
+	channel, err := resolveOptionalChannelRef(c.Query("channel"))
+	if err != nil {
+		helper.RespondError(c, err)
+		return
+	}
 	quotaNum := model.SumUsedQuota(logType, startTimestamp, endTimestamp, modelName, username, tokenName, channel)
 	//tokenNum := model.SumUsedToken(logType, startTimestamp, endTimestamp, modelName, username, tokenName)
 	c.JSON(http.StatusOK, gin.H{

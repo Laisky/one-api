@@ -2,7 +2,6 @@ package controller
 
 import (
 	"net/http"
-	"strconv"
 
 	"github.com/Laisky/errors/v2"
 	"github.com/gin-gonic/gin"
@@ -14,7 +13,7 @@ import (
 // DebugChannelModelConfigs provides debugging information for a specific channel
 func DebugChannelModelConfigs(c *gin.Context) {
 	channelIdStr := c.Param("id")
-	channelId, err := strconv.Atoi(channelIdStr)
+	channelId, err := resolveChannelRef(channelIdStr)
 	if err != nil {
 		helper.RespondErrorWithStatus(c, http.StatusBadRequest, errors.New("Invalid channel ID"))
 		return
@@ -49,7 +48,7 @@ func DebugAllChannelModelConfigs(c *gin.Context) {
 // FixChannelModelConfigs attempts to fix a specific channel's model configuration
 func FixChannelModelConfigs(c *gin.Context) {
 	channelIdStr := c.Param("id")
-	channelId, err := strconv.Atoi(channelIdStr)
+	channelId, err := resolveChannelRef(channelIdStr)
 	if err != nil {
 		helper.RespondErrorWithStatus(c, http.StatusBadRequest, errors.New("Invalid channel ID"))
 		return
@@ -95,10 +94,14 @@ func RemigratAllChannels(c *gin.Context) {
 	})
 }
 
-// GetChannelMigrationStatus returns the migration status of a specific channel
+// GetChannelMigrationStatus returns the migration status of a specific channel.
+// Parameters:
+//   - c: Gin context containing the channel UUID path parameter and response writer.
+//
+// Return values: none.
 func GetChannelMigrationStatus(c *gin.Context) {
 	channelIdStr := c.Param("id")
-	channelId, err := strconv.Atoi(channelIdStr)
+	channelId, err := resolveChannelRef(channelIdStr)
 	if err != nil {
 		helper.RespondErrorWithStatus(c, http.StatusBadRequest, errors.New("Invalid channel ID"))
 		return
@@ -112,7 +115,7 @@ func GetChannelMigrationStatus(c *gin.Context) {
 	}
 
 	status := map[string]any{
-		"channel_id":           channel.Id,
+		"channel_uuid":         channel.UUID,
 		"channel_name":         channel.Name,
 		"channel_type":         channel.Type,
 		"has_model_configs":    channel.ModelConfigs != nil && *channel.ModelConfigs != "" && *channel.ModelConfigs != "{}",

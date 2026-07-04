@@ -89,7 +89,7 @@ export function EditUserPage() {
   const currentUser = useAuthStore((s) => s.user);
   const isAdmin = (currentUser?.role ?? 0) >= 10;
   const isRootAdmin = (currentUser?.role ?? 0) >= 100;
-  const editingOtherUser = isEdit && !!userId && currentUser?.id !== Number(userId);
+  const editingOtherUser = isEdit && !!userId && String(currentUser?.id ?? '') !== userId;
   const showDisable2faButton = isEdit && isAdmin && editingOtherUser;
   const showLockToggles = isRootAdmin && isEdit && editingOtherUser;
 
@@ -210,7 +210,7 @@ export function EditUserPage() {
       let response: any;
 
       if (isEdit && userId) {
-        const payload: Record<string, any> = { id: parseInt(userId, 10) };
+        const payload: Record<string, any> = { uuid: userId };
         const previous = initialSnapshot;
 
         if (!previous || snapshot.username !== previous.username) {

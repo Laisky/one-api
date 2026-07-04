@@ -360,11 +360,14 @@ func RelayAudioHelper(c *gin.Context, relayMode int) *relaymodel.ErrorWithStatus
 		logContent := fmt.Sprintf("model rate %.2f, group rate %.2f", modelRatio, groupRatio)
 		entry := &model.Log{
 			UserId:           userId,
+			UserUUID:         model.StringPtrIfNotEmpty(meta.UserUUID),
 			ChannelId:        channelId,
+			ChannelUUID:      model.StringPtrIfNotEmpty(meta.ChannelUUID),
 			PromptTokens:     int(quota), // audio API logs total as prompt tokens
 			CompletionTokens: 0,
 			ModelName:        audioModel,
 			TokenName:        tokenName,
+			TokenUUID:        model.StringPtrIfNotEmpty(meta.TokenUUID),
 			Content:          logContent,
 			RequestId:        c.GetString(ctxkey.RequestId),
 			TraceId:          traceID,

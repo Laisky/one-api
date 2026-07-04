@@ -250,7 +250,7 @@ export function EditTokenPage() {
         // Unified API call - complete URL with /api prefix
         response = await api.put('/api/token/', {
           ...payload,
-          id: parseInt(tokenId),
+          uuid: tokenId,
         });
       } else {
         response = await api.post('/api/token/', payload);

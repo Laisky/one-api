@@ -99,7 +99,7 @@ export function EditRedemptionPage() {
     count: z.coerce
       .number()
       .int()
-      .min(1, tr('validation.count_min', 'Count must be positive'))
+      .min(isEdit ? 0 : 1, tr('validation.count_min', 'Count must be positive'))
       .max(100, tr('validation.count_max', 'Count cannot exceed 100'))
       .default(1),
   });
@@ -153,7 +153,7 @@ export function EditRedemptionPage() {
         // Unified API call - complete URL with /api prefix
         response = await api.put('/api/redemption/', {
           ...data,
-          id: parseInt(redemptionId),
+          uuid: redemptionId,
         });
       } else {
         response = await api.post('/api/redemption/', data);
@@ -357,7 +357,7 @@ export function EditRedemptionPage() {
                       <FormControl>
                         <Input
                           type="number"
-                          min="1"
+                          min={isEdit ? '0' : '1'}
                           step="1"
                           {...field}
                           onChange={(e) => {

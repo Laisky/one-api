@@ -8,6 +8,7 @@ import (
 
 	"github.com/Laisky/errors/v2"
 	"github.com/Laisky/zap"
+	"gorm.io/gorm"
 
 	"github.com/Laisky/one-api/common"
 	"github.com/Laisky/one-api/common/helper"
@@ -18,9 +19,11 @@ import (
 const RequestIDMaxLen = 32
 
 type UserRequestCost struct {
-	Id          int   `json:"id"`
-	CreatedTime int64 `json:"created_time" gorm:"bigint"`
-	UserID      int   `json:"user_id"`
+	Id          int     `json:"-"`
+	UUID        string  `json:"uuid" gorm:"type:char(36);index;column:uuid"`
+	CreatedTime int64   `json:"created_time" gorm:"bigint"`
+	UserID      int     `json:"-"`
+	UserUUID    *string `json:"user_uuid" gorm:"type:char(36);column:user_uuid;index"`
 	// Enforce uniqueness to avoid duplicate rows for the same request
 	RequestID string  `json:"request_id" gorm:"size:32;uniqueIndex"` // size must match RequestIDMaxLen
 	Quota     int64   `json:"quota"`
@@ -42,6 +45,14 @@ func NewUserRequestCost(userID int, quotaID string, quota int64) *UserRequestCos
 func (docu *UserRequestCost) Insert() error {
 	go removeOldRequestCost()
 
+	if docu.UserUUID == nil && docu.UserID > 0 {
+		userUUID, err := lookupUserUUIDIfAvailable(docu.UserID)
+		if err != nil {
+			return errors.Wrap(err, "failed to get user uuid for UserRequestCost")
+		}
+		docu.UserUUID = userUUID
+	}
+
 	err := DB.Create(docu).Error
 	return errors.Wrap(err, "failed to insert UserRequestCost")
 }
@@ -55,11 +66,19 @@ func UpdateUserRequestCostQuotaByRequestID(userID int, requestID string, quota i
 
 	go removeOldRequestCost()
 
+	userUUID, err := lookupUserUUIDIfAvailable(userID)
+	if err != nil {
+		return errors.Wrap(err, "failed to get user uuid for UserRequestCost")
+	}
+
 	// Update-first approach to avoid unique conflict races without using clause.OnConflict
 	// 1) Try update by request_id
 	tx := DB.Model(&UserRequestCost{}).
 		Where("request_id = ?", requestID).
-		Update("quota", quota)
+		Updates(map[string]any{
+			"quota":     quota,
+			"user_uuid": userUUID,
+		})
 	if tx.Error != nil {
 		return errors.Wrap(tx.Error, "failed to update UserRequestCost quota")
 	}
@@ -71,6 +90,7 @@ func UpdateUserRequestCostQuotaByRequestID(userID int, requestID string, quota i
 	docu := &UserRequestCost{
 		CreatedTime: helper.GetTimestamp(),
 		UserID:      userID,
+		UserUUID:    userUUID,
 		RequestID:   requestID,
 		Quota:       quota,
 	}
@@ -84,6 +104,31 @@ func UpdateUserRequestCostQuotaByRequestID(userID int, requestID string, quota i
 		return errors.Wrap(err2, "failed to update UserRequestCost quota after create race")
 	}
 	return nil
+}
+
+// lookupUserUUIDIfAvailable returns a user's UUID when the users table and row are available.
+// Parameters:
+//   - userID: internal user id associated with a request-cost record.
+//
+// Return values:
+//   - *string: pointer to the user UUID, or nil when the table/row/UUID is unavailable.
+//   - error: wrapped database error for unexpected lookup failures.
+func lookupUserUUIDIfAvailable(userID int) (*string, error) {
+	if userID <= 0 || !DB.Migrator().HasTable(&User{}) {
+		return nil, nil
+	}
+	var userUUID string
+	err := DB.Model(&User{}).Select("uuid").Where("id = ?", userID).Take(&userUUID).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, errors.Wrapf(err, "lookup user uuid for id %d", userID)
+	}
+	if userUUID == "" {
+		return nil, nil
+	}
+	return &userUUID, nil
 }
 
 // GetCostByRequestId get cost by request id

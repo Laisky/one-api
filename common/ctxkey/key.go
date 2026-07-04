@@ -54,6 +54,11 @@ const (
 	// Read widely for billing, logging, and meta.
 	ChannelId = "channel_id"
 
+	// ChannelUUID is the external UUID of the selected channel.
+	// Set in: middleware/distributor after the channel row is selected.
+	// Read by relay metadata and log writers that need client-safe identifiers.
+	ChannelUUID = "channel_uuid"
+
 	// SpecificChannelId indicates the caller explicitly requested a particular channel.
 	// Set in: middleware/auth.TokenAuth via token suffix or :channelid route param (admin-only).
 	// Read in: middleware/distributor to bypass normal selection and use that specific channel.
@@ -139,6 +144,11 @@ const (
 	// Read in: billing and logs.
 	TokenId = "token_id"
 
+	// TokenUUID is the external UUID of the API token used for this request.
+	// Set in: middleware/auth.TokenAuth.
+	// Read by relay metadata and log writers that need client-safe identifiers.
+	TokenUUID = "token_uuid"
+
 	// TokenName is the name/label of the API token used for this request.
 	// Set in: middleware/auth.TokenAuth.
 	// Read in: image controller logs and metrics.
@@ -159,6 +169,11 @@ const (
 	// Read in: downstream handlers to avoid redundant DB/cache lookups for user fields
 	// (username, group, quota, status, etc.).
 	UserObj = "user_obj"
+
+	// UserUUID is the external UUID of the authenticated user.
+	// Set in: middleware/auth for session and token authentication.
+	// Read by relay metadata and log writers that need client-safe identifiers.
+	UserUUID = "user_uuid"
 
 	// BaseURL is the provider base URL resolved from the selected channel.
 	// Set in: middleware/distributor from channel.GetBaseURL().

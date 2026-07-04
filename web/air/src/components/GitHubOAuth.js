@@ -4,6 +4,12 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { API, showError, showSuccess } from '../helpers';
 import { UserContext } from '../context/User';
 
+const normalizeUser = (user) => {
+  if (!user) return user;
+  const uuid = user.uuid || user.user_uuid;
+  return uuid ? { ...user, uuid, id: uuid } : user;
+};
+
 const GitHubOAuth = () => {
   const [searchParams, setSearchParams] = useSearchParams();
 
@@ -21,8 +27,9 @@ const GitHubOAuth = () => {
         showSuccess('绑定成功！');
         navigate('/setting');
       } else {
-        userDispatch({ type: 'login', payload: data });
-        localStorage.setItem('user', JSON.stringify(data));
+        const user = normalizeUser(data);
+        userDispatch({ type: 'login', payload: user });
+        localStorage.setItem('user', JSON.stringify(user));
         showSuccess('登录成功！');
         navigate('/');
       }

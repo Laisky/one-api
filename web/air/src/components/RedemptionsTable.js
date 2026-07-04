@@ -31,7 +31,8 @@ const RedemptionsTable = () => {
   const columns = [
     {
       title: 'ID',
-      dataIndex: 'id'
+      dataIndex: 'uuid',
+      render: (text, record) => record.uuid || record.id
     },
     {
       title: '名称',
@@ -107,7 +108,7 @@ const RedemptionsTable = () => {
             okType={'danger'}
             position={'left'}
             onConfirm={() => {
-              manageRedemption(record.id, 'delete', record).then(
+              manageRedemption(record.uuid || record.id, 'delete', record).then(
                 () => {
                   removeRecord(record.key);
                 }
@@ -121,7 +122,7 @@ const RedemptionsTable = () => {
               <Button theme="light" type="warning" style={{ marginRight: 1 }} onClick={
                 async () => {
                   manageRedemption(
-                    record.id,
+                    record.uuid || record.id,
                     'disable',
                     record
                   );
@@ -130,7 +131,7 @@ const RedemptionsTable = () => {
               <Button theme="light" type="secondary" style={{ marginRight: 1 }} onClick={
                 async () => {
                   manageRedemption(
-                    record.id,
+                    record.uuid || record.id,
                     'enable',
                     record
                   );
@@ -246,7 +247,7 @@ const RedemptionsTable = () => {
   };
 
   const manageRedemption = async (id, action, record) => {
-    let data = { id };
+    let data = typeof id === 'string' ? { uuid: id } : { id };
     let res;
     switch (action) {
       case 'delete':
@@ -308,7 +309,7 @@ const RedemptionsTable = () => {
     sortedRedemptions.sort((a, b) => {
       return ('' + a[key]).localeCompare(b[key]);
     });
-    if (sortedRedemptions[0].id === redemptions[0].id) {
+    if ((sortedRedemptions[0].uuid || sortedRedemptions[0].id) === (redemptions[0].uuid || redemptions[0].id)) {
       sortedRedemptions.reverse();
     }
     setRedemptions(sortedRedemptions);

@@ -4,7 +4,7 @@
     "title": "Laisky One API",
     "version": "0.6",
     "summary": "Agent-friendly AI gateway API.",
-    "description": "Laisky One API exposes OpenAI Chat Completions, OpenAI Responses, Claude Messages, embeddings, images, audio, rerank, realtime, video, and MCP proxy endpoints through the oneapi.laisky.com gateway."
+    "description": "Laisky One API exposes OpenAI Chat Completions, OpenAI Responses, Claude Messages, embeddings, images, audio, rerank, realtime, video, and MCP proxy endpoints through the oneapi.laisky.com gateway. Management resources use UUID string identifiers in API payloads."
   },
   "servers": [
     {

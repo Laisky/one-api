@@ -172,6 +172,7 @@ func prepareChannelForCreate(channel *model.Channel) {
 func cloneChannelForDuplicate(source *model.Channel) *model.Channel {
 	duplicate := *source
 	duplicate.Id = 0
+	duplicate.UUID = ""
 	duplicate.Name = buildDuplicateChannelName(source.Name)
 	duplicate.CreatedAt = 0
 	duplicate.UpdatedAt = 0
@@ -187,16 +188,27 @@ func cloneChannelForDuplicate(source *model.Channel) *model.Channel {
 	return &duplicate
 }
 
+// buildChannelResponsePayload renders a channel response with strict external identifiers and optional tooling JSON.
+// Parameters:
+//   - lg: request-scoped logger used for non-fatal tooling serialization diagnostics.
+//   - channel: channel row to serialize.
+//
+// Return values:
+//   - any: JSON-ready channel response payload.
 func buildChannelResponsePayload(lg glog.Logger, channel *model.Channel) any {
-	response := struct {
-		*model.Channel
-		Tooling *string `json:"tooling,omitempty"`
-	}{Channel: channel}
+	response := gin.H{}
+	if payload, err := json.Marshal(channel); err == nil {
+		if err = json.Unmarshal(payload, &response); err != nil && lg != nil {
+			lg.Error("failed to unmarshal channel response payload", zap.Int("channel_id", channel.Id), zap.Error(err))
+		}
+	} else if lg != nil {
+		lg.Error("failed to marshal channel response payload", zap.Int("channel_id", channel.Id), zap.Error(err))
+	}
 
 	if tooling := channel.GetToolingConfig(); tooling != nil {
 		if data, err := json.Marshal(tooling); err == nil {
 			toolingStr := string(data)
-			response.Tooling = &toolingStr
+			response["tooling"] = toolingStr
 		} else if lg != nil {
 			lg.Error("failed to marshal tooling config", zap.Int("channel_id", channel.Id), zap.Error(err))
 		}
@@ -272,7 +284,7 @@ func SearchChannels(c *gin.Context) {
 // GetChannel retrieves a single channel by ID and returns its configuration with secret fields masked.
 func GetChannel(c *gin.Context) {
 	lg := gmw.GetLogger(c)
-	id, err := strconv.Atoi(c.Param("id"))
+	id, err := resolveChannelRef(c.Param("id"))
 	if err != nil {
 		helper.RespondError(c, err)
 		return
@@ -292,7 +304,7 @@ func GetChannel(c *gin.Context) {
 // DuplicateChannel clones the specified channel server-side and persists the duplicate.
 // It reads the original with secret fields available on the server, clears usage fields, and returns the new channel identifier and name.
 func DuplicateChannel(c *gin.Context) {
-	id, err := strconv.Atoi(c.Param("id"))
+	id, err := resolveChannelRef(c.Param("id"))
 	if err != nil {
 		helper.RespondError(c, err)
 		return
@@ -314,7 +326,7 @@ func DuplicateChannel(c *gin.Context) {
 		"success": true,
 		"message": "",
 		"data": gin.H{
-			"id":   duplicate.Id,
+			"uuid": duplicate.UUID,
 			"name": duplicate.Name,
 		},
 	})
@@ -327,6 +339,7 @@ func AddChannel(c *gin.Context) {
 		helper.RespondError(c, err)
 		return
 	}
+	channel.UUID = ""
 	channel.HiddenModelsProvided = payloadMeta.HiddenModelsProvided
 	channel.NullableFieldsProvided = payloadMeta.NullableFieldsProvided
 
@@ -386,9 +399,13 @@ func AddChannel(c *gin.Context) {
 
 // DeleteChannel removes the channel identified by the path parameter.
 func DeleteChannel(c *gin.Context) {
-	id, _ := strconv.Atoi(c.Param("id"))
+	id, err := resolveChannelRef(c.Param("id"))
+	if err != nil {
+		helper.RespondError(c, err)
+		return
+	}
 	channel := model.Channel{Id: id}
-	err := channel.Delete()
+	err = channel.Delete()
 	if err != nil {
 		helper.RespondError(c, err)
 		return
@@ -422,6 +439,17 @@ func UpdateChannel(c *gin.Context) {
 		helper.RespondError(c, err)
 		return
 	}
+	ref, err := preferUUIDRef(channel.UUID, channel.Id)
+	if err != nil {
+		helper.RespondError(c, err)
+		return
+	}
+	channel.Id, err = resolveChannelRef(ref)
+	if err != nil {
+		helper.RespondError(c, err)
+		return
+	}
+	channel.UUID = ""
 	channel.HiddenModelsProvided = payloadMeta.HiddenModelsProvided
 	channel.NullableFieldsProvided = payloadMeta.NullableFieldsProvided
 
@@ -476,7 +504,7 @@ func UpdateChannel(c *gin.Context) {
 // GetChannelPricing returns the pricing configuration associated with the specified channel.
 func GetChannelPricing(c *gin.Context) {
 	lg := gmw.GetLogger(c)
-	id, err := strconv.Atoi(c.Param("id"))
+	id, err := resolveChannelRef(c.Param("id"))
 	if err != nil {
 		helper.RespondError(c, err)
 		return
@@ -520,7 +548,7 @@ func GetChannelPricing(c *gin.Context) {
 
 // UpdateChannelPricing replaces the channel pricing configuration using either legacy ratios or the unified model config format.
 func UpdateChannelPricing(c *gin.Context) {
-	id, err := strconv.Atoi(c.Param("id"))
+	id, err := resolveChannelRef(c.Param("id"))
 	if err != nil {
 		helper.RespondError(c, err)
 		return

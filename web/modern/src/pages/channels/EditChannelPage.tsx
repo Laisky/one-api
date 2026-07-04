@@ -155,12 +155,7 @@ export function EditChannelPage() {
             )}
             <Form {...form}>
               <form onSubmit={form.handleSubmit(onSubmit, onInvalid)} className="space-y-6">
-                <ChannelBasicInfo
-                  form={form}
-                  normalizedChannelType={normalizedChannelType}
-                  tr={tr}
-                  onTypeChange={requestTypeChange}
-                />
+                <ChannelBasicInfo form={form} normalizedChannelType={normalizedChannelType} tr={tr} onTypeChange={requestTypeChange} />
 
                 <ChannelSpecificConfig
                   form={form}

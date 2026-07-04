@@ -4,8 +4,10 @@ import "strings"
 
 // MCPTool stores tool metadata synchronized from MCP servers.
 type MCPTool struct {
-	Id             int                  `json:"id"`
-	ServerId       int                  `json:"server_id" gorm:"index"`
+	Id             int                  `json:"-"`
+	UUID           string               `json:"uuid" gorm:"type:char(36);index;column:uuid"`
+	ServerId       int                  `json:"-" gorm:"index"`
+	ServerUUID     *string              `json:"server_uuid" gorm:"type:char(36);column:server_uuid;index"`
 	Name           string               `json:"name" gorm:"type:varchar(128);index"`
 	DisplayName    string               `json:"display_name" gorm:"type:varchar(128)"`
 	Description    string               `json:"description" gorm:"type:text"`
