@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { useState, type MouseEvent, type ReactNode } from 'react';
 
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
@@ -23,6 +23,7 @@ interface NameWithIdProps {
  * falls back to a plain name when no id is available.
  */
 export function NameWithId({ name, refId, idLabel = 'ID', className }: NameWithIdProps) {
+  const [open, setOpen] = useState(false);
   const id = refId == null ? '' : String(refId);
   if (!id) {
     return <span className={cn('font-medium', className)}>{name}</span>;
@@ -30,16 +31,21 @@ export function NameWithId({ name, refId, idLabel = 'ID', className }: NameWithI
 
   return (
     <TooltipProvider delayDuration={150}>
-      <Tooltip>
+      <Tooltip open={open} onOpenChange={setOpen}>
         <TooltipTrigger asChild>
-          <span
+          <button
+            type="button"
             className={cn(
-              'font-medium cursor-help underline decoration-dotted underline-offset-4',
+              'inline max-w-full border-0 bg-transparent p-0 text-left font-medium text-current cursor-help underline decoration-dotted underline-offset-4',
               className,
             )}
+            onClick={(event: MouseEvent<HTMLButtonElement>) => {
+              event.stopPropagation();
+              setOpen(true);
+            }}
           >
             {name}
-          </span>
+          </button>
         </TooltipTrigger>
         <TooltipContent align="start">
           <span className="font-mono text-xs break-all">
