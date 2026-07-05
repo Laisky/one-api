@@ -69,6 +69,7 @@ func TestLogStrictOutResponses(t *testing.T) {
 			require.Equal(t, fixture.log.UUID, row["uuid"])
 			require.Equal(t, fixture.user.UUID, row["user_uuid"])
 			require.Equal(t, fixture.channel.UUID, row["channel_uuid"])
+			require.Equal(t, fixture.channel.Name, row["channel_name"])
 			require.Equal(t, fixture.token.UUID, row["token_uuid"])
 			require.NotContains(t, row, "id")
 			require.NotContains(t, row, "user_id")

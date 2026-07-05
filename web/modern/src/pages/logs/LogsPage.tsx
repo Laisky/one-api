@@ -1,4 +1,5 @@
 import { LogDetailsModal } from '@/components/LogDetailsModal';
+import { NameWithId } from '@/components/shared/NameWithId';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -30,6 +31,13 @@ import { LogModelCell } from './components/LogModelCell';
 type LogRow = LogEntry;
 
 const logRef = (log: Pick<LogRow, 'id' | 'uuid'>): string | number => log.uuid || log.id || '';
+
+// channelDisplayName returns the visible channel label for a log row.
+const channelDisplayName = (log: Pick<LogRow, 'channel_name' | 'channel_uuid' | 'channel'>, fallback: string) =>
+  log.channel_name || log.channel_uuid || log.channel || fallback;
+
+// channelDisplayRef returns the external channel reference exposed on name click.
+const channelDisplayRef = (log: Pick<LogRow, 'channel_uuid' | 'channel'>): string | number | null => log.channel_uuid || log.channel || null;
 
 interface LogStatistics {
   quota: number;
@@ -512,7 +520,11 @@ export function LogsPage() {
             accessorKey: 'channel',
             header: t('logs.table.channel'),
             cell: ({ row }: { row: any }) => (
-              <span className="font-mono text-sm">{row.original.channel_uuid || row.original.channel || t('logs.labels.missing')}</span>
+              <NameWithId
+                name={channelDisplayName(row.original, t('logs.labels.missing'))}
+                refId={channelDisplayRef(row.original)}
+                idLabel={t('logs.table.channel')}
+              />
             ),
           } as ColumnDef<LogRow>,
         ]

@@ -28,6 +28,7 @@ func (log Log) MarshalJSON() ([]byte, error) {
 		PromptTokens       int         `json:"prompt_tokens"`
 		CompletionTokens   int         `json:"completion_tokens"`
 		ChannelUUID        *string     `json:"channel_uuid"`
+		ChannelName        string      `json:"channel_name,omitempty"`
 		RequestId          string      `json:"request_id"`
 		TraceId            string      `json:"trace_id"`
 		UpdatedAt          int64       `json:"updated_at"`
@@ -53,6 +54,7 @@ func (log Log) MarshalJSON() ([]byte, error) {
 		PromptTokens:       log.PromptTokens,
 		CompletionTokens:   log.CompletionTokens,
 		ChannelUUID:        log.ChannelUUID,
+		ChannelName:        log.ChannelName,
 		RequestId:          log.RequestId,
 		TraceId:            log.TraceId,
 		UpdatedAt:          log.UpdatedAt,

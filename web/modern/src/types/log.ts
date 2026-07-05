@@ -24,6 +24,7 @@ export interface LogEntry {
   user_uuid?: string | null;
   channel?: number | string;
   channel_uuid?: string | null;
+  channel_name?: string;
   token_uuid?: string | null;
   quota: number;
   prompt_tokens?: number;

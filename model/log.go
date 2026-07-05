@@ -43,6 +43,7 @@ type Log struct {
 	CompletionTokens  int     `json:"completion_tokens" gorm:"default:0;index"` // Added index for sorting
 	ChannelId         int     `json:"channel" gorm:"index"`
 	ChannelUUID       *string `json:"channel_uuid" gorm:"type:char(36);column:channel_uuid;index"`
+	ChannelName       string  `json:"channel_name,omitempty" gorm:"-"`
 	RequestId         string  `json:"request_id" gorm:"default:''"`
 	TraceId           string  `json:"trace_id" gorm:"type:varchar(64);index;default:''"` // TraceID from gin-middlewares
 	UpdatedAt         int64   `json:"updated_at" gorm:"bigint;autoUpdateTime:milli"`
@@ -965,6 +966,9 @@ func GetAllLogs(logType int, startTimestamp int64, endTimestamp int64, modelName
 	if err != nil {
 		return nil, errors.Wrap(err, "get all logs")
 	}
+	if err := fillLogChannelNames(logs); err != nil {
+		return nil, errors.Wrap(err, "fill all log channel names")
+	}
 	return logs, nil
 }
 
@@ -1037,6 +1041,9 @@ func GetUserLogs(userId int, logType int, startTimestamp int64, endTimestamp int
 	if err != nil {
 		return nil, errors.Wrapf(err, "get user %d logs", userId)
 	}
+	if err := fillLogChannelNames(logs); err != nil {
+		return nil, errors.Wrapf(err, "fill user %d log channel names", userId)
+	}
 	return logs, nil
 }
 
@@ -1081,6 +1088,9 @@ func SearchAllLogs(keyword string, startIdx int, num int, sortBy string, sortOrd
 	if err != nil {
 		return nil, 0, errors.Wrap(err, "search all logs")
 	}
+	if err := fillLogChannelNames(logs); err != nil {
+		return nil, 0, errors.Wrap(err, "fill searched all log channel names")
+	}
 	return logs, total, nil
 }
 
@@ -1095,6 +1105,9 @@ func SearchUserLogs(userId int, keyword string, startIdx int, num int, sortBy st
 	err = db.Count(&total).Limit(num).Offset(startIdx).Find(&logs).Error
 	if err != nil {
 		return nil, 0, errors.Wrapf(err, "search user %d logs", userId)
+	}
+	if err := fillLogChannelNames(logs); err != nil {
+		return nil, 0, errors.Wrapf(err, "fill searched user %d log channel names", userId)
 	}
 	return logs, total, nil
 }
