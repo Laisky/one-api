@@ -42,7 +42,7 @@
       "load_failed": "トレース情報の読み込みに失敗しました。",
       "log_id": "ログID",
       "metadata": "メタデータ",
-      "method_status": "メソッド \u0026 ステータス",
+      "method_status": "メソッド & ステータス",
       "model": "モデル",
       "no_content": "コンテンツは記録されていません。",
       "no_timeline": "このトレースのタイムラインデータはありません。",
@@ -147,6 +147,12 @@
       "tool": "ツール",
       "topup": "チャージ",
       "unknown": "不明"
+    },
+    "notifications": {
+      "clear_failed_title": "クリアに失敗しました",
+      "clear_failed_message": "ログをクリアできませんでした。",
+      "clear_success_title": "ログをクリアしました",
+      "clear_success_message": "ログを正常にクリアしました。"
     }
   }
 }

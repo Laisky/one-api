@@ -28,7 +28,9 @@
     },
     "confirm": {
       "delete": "Voulez-vous vraiment supprimer ce canal ?",
-      "delete_disabled": "Voulez-vous vraiment supprimer tous les canaux désactivés ? Cette action est irréversible."
+      "delete_disabled": "Voulez-vous vraiment supprimer tous les canaux désactivés ? Cette action est irréversible.",
+      "delete_title": "Supprimer le canal",
+      "delete_disabled_title": "Supprimer les canaux désactivés"
     },
     "description": "Configurer et gérer les canaux de routage API",
     "edit": {
@@ -160,13 +162,13 @@
         }
       },
       "custom_headers": {
-        "add": "Add Header",
-        "empty": "No custom headers configured.",
-        "help": "Headers configured here are always sent upstream and override client-provided headers. Use {{key}} to insert the channel API key.",
-        "key_placeholder": "Header key",
-        "label": "Custom Headers",
-        "remove": "Remove header",
-        "value_placeholder": "Header value, e.g. {{key}}"
+        "add": "Ajouter un en-tête",
+        "empty": "Aucun en-tête personnalisé configuré.",
+        "help": "Les en-têtes configurés ici sont toujours envoyés en amont et remplacent ceux fournis par le client. Utilisez {{key}} pour insérer la clé API du canal.",
+        "key_placeholder": "Clé d’en-tête",
+        "label": "En-têtes personnalisés",
+        "remove": "Supprimer l’en-tête",
+        "value_placeholder": "Valeur d’en-tête, p. ex. {{key}}"
       },
       "description": {
         "create": "Créer un nouveau canal API",
@@ -214,7 +216,9 @@
         "label": "Points de terminaison pris en charge",
         "modal": {
           "description": "Description",
-          "example": "Exemple cURL"
+          "example": "Exemple cURL",
+          "no_description": "Aucune documentation détaillée disponible pour cet endpoint.",
+          "no_example": "# Aucun exemple disponible"
         },
         "moderations": {
           "description": "L'API Moderations vérifie si un texte enfreint les politiques de contenu. Elle renvoie des catégories et des scores indiquant la probabilité d'une violation.",
@@ -303,7 +307,9 @@
       },
       "key": {
         "help": "La clé API utilisée pour l'authentification auprès du fournisseur.",
-        "label": "Clé API"
+        "label": "Clé API",
+        "placeholder": "Saisissez votre clé API",
+        "github_placeholder": "Saisissez un jeton d’accès GitHub (PAT ou OAuth) avec un abonnement Copilot actif"
       },
       "loading": "Chargement du canal...",
       "mcp": {
@@ -535,6 +541,14 @@
       "weight": {
         "help": "Utilisé pour l'équilibrage de charge entre les canaux de même priorité. La valeur par défaut est 0.",
         "label": "Poids"
+      },
+      "test": {
+        "success_title": "Test réussi",
+        "success_message": "Le test du canal s’est terminé avec succès.",
+        "failed_title": "Test échoué",
+        "failed_message": "Le test du canal a échoué.",
+        "error_title": "Erreur de test",
+        "error_message": "Impossible de tester le canal."
       }
     },
     "empty": "Aucun canal trouvé. Créez votre premier canal pour commencer.",
@@ -565,7 +579,9 @@
       "test_success": "Test du canal réussi.",
       "testing_model_failed_message": "Impossible de mettre à jour le modèle de test",
       "testing_model_failed_title": "Échec de l'enregistrement",
-      "testing_model_saved": "Modèle de test enregistré."
+      "testing_model_saved": "Modèle de test enregistré.",
+      "status_failed_title": "Échec de la mise à jour",
+      "status_failed_message": "Impossible de mettre à jour le statut du canal."
     },
     "response": {
       "not_tested": "Non testé",
@@ -696,6 +712,10 @@
       "quota": "Quota",
       "redeemed_time": "Heure d'utilisation",
       "status": "Statut"
+    },
+    "notifications": {
+      "action_failed_title": "Action échouée",
+      "action_failed_message": "Impossible d’appliquer la modification."
     }
   },
   "tokens": {
@@ -798,7 +818,8 @@
         "used_title": "Utilisé : {{label}}"
       },
       "confirm": {
-        "delete": "Voulez-vous vraiment supprimer le jeton \"{{label}}\" ?"
+        "delete": "Voulez-vous vraiment supprimer le jeton \"{{label}}\" ?",
+        "delete_title": "Supprimer le jeton"
       },
       "description": "Gérez vos jetons d'accès API",
       "dialog": {
@@ -809,7 +830,9 @@
       "empty": "Aucun jeton trouvé. Créez votre premier jeton pour commencer.",
       "key": {
         "copied": "Copié !",
-        "copy": "Copier le jeton"
+        "copy": "Copier le jeton",
+        "hide": "Masquer la clé",
+        "show": "Afficher la clé"
       },
       "quota": {
         "unlimited": "Illimité"
@@ -836,7 +859,11 @@
       "table": {
         "id_placeholder": "(ID {{id}})"
       },
-      "title": "Jetons"
+      "title": "Jetons",
+      "notifications": {
+        "action_failed_title": "Action échouée",
+        "action_failed_message": "Impossible d’appliquer la modification."
+      }
     }
   },
   "users": {
@@ -963,6 +990,12 @@
           "help": "Nom de connexion unique. Min 3 caractères.",
           "label": "Nom d'utilisateur *",
           "placeholder": "Entrez le nom d'utilisateur"
+        },
+        "created_at": {
+          "label": "Date d’inscription"
+        },
+        "updated_at": {
+          "label": "Dernière modification"
         }
       },
       "loading": "Chargement de l'utilisateur...",

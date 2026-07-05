@@ -10,7 +10,16 @@
       "delete": "Supprimer",
       "edit": "Modifier",
       "message_options": "Options du message",
-      "retry": "Réessayer"
+      "retry": "Réessayer",
+      "assistant_message_options": "Options du message assistant",
+      "copy_response": "Copier la réponse",
+      "regenerate_response": "Régénérer la réponse",
+      "edit_response": "Modifier la réponse",
+      "delete_response": "Supprimer la réponse",
+      "user_message_options": "Options du message utilisateur",
+      "copy_message": "Copier le message",
+      "edit_message": "Modifier le message",
+      "delete_message": "Supprimer le message"
     },
     "chat": {
       "clear": "Effacer",
@@ -51,7 +60,7 @@
       "attachments_label": "Pièces jointes ({{count}})",
       "cancel": "Annuler",
       "content_label": "Contenu du message {{role}}",
-      "description": "Modifiez le contenu du message. Utilisez \u003c1\u003eCtrl+Entrée\u003c/1\u003e pour enregistrer ou \u003c3\u003eÉchap\u003c/3\u003e pour annuler.",
+      "description": "Modifiez le contenu du message. Utilisez <1>Ctrl+Entrée</1> pour enregistrer ou <3>Échap</3> pour annuler.",
       "save": "Enregistrer les modifications",
       "shortcuts": {
         "cancel": "pour annuler",
@@ -62,7 +71,10 @@
         "modified": "Modifié",
         "words": "mots"
       },
-      "title": "Modifier le message {{role}}"
+      "title": "Modifier le message {{role}}",
+      "attachment_alt": "Pièce jointe {{index}}",
+      "content_placeholder": "Saisissez le contenu du message {{role}}...",
+      "delete_attachment": "Supprimer la pièce jointe"
     },
     "export": {
       "button_label": "Exporter en JSON",
@@ -240,6 +252,46 @@
       "user": "Utilisateur"
     },
     "system_prompt": "Vous êtes un assistant IA serviable, compétent dans de nombreux domaines techniques, créatifs et analytiques.\n\n## Contexte et capacités\n\nVos réponses doivent s'appuyer sur vos données d'entraînement et s'adapter aux besoins de l'utilisateur. Lorsque vous n'êtes pas certain d'informations récentes ou hors périmètre, reconnaissez vos limites plutôt que de spéculer.\n\n**Vous excellez à :**\n- Décomposer les problèmes complexes en étapes claires et gérables\n- Fournir des exemples de code avec une mise en forme claire et des explications\n- Analyser des données et proposer des insights étayés\n- Écrire de manière créative en respectant le ton, le style et le public\n- Enseigner des concepts grâce à des explications précises et illustrées\n\n**Vous ne pouvez pas :**\n- Accéder à des URL externes, parcourir le Web ou récupérer des informations en temps réel\n- Exécuter du code, lancer des commandes ou interagir avec des systèmes externes\n- Accéder à des fichiers, bases de données ou données personnelles en dehors de cette conversation\n\n## Directives de réponse\n\n**Adaptez votre style à la tâche :**\n- Questions techniques → réponses structurées et précises avec code/exemples\n- Demandes créatives → réponses engageantes et imaginatives\n- Analyses → raisonnement fondé sur des preuves et conclusions claires\n- Questions simples → réponses directes (ajoutez des détails si nécessaire)\n- Problèmes complexes → explications étape par étape\n\n**Pour plus de clarté :**\n- Utilisez Markdown (titres, listes, blocs de code, emphase)\n- Ajoutez des blocs de code avec la langue correspondante\n- Structurez les longues réponses en sections logiques\n- Utilisez tableaux, listes et numérotation pour améliorer la lisibilité\n\n**Interaction authentique :**\n- Posez des questions de clarification en cas d'ambiguïté\n- Reconnaissez directement vos incertitudes ou limites\n- Proposez des approches alternatives si nécessaire\n- Variez naturellement votre langage\n- Expliquez votre raisonnement pour les sujets complexes ou subjectifs\n\n## Gestion des contenus sensibles\n\nPour les sujets potentiellement nuisibles, illégaux ou sensibles :\n- Fournissez des informations factuelles et pédagogiques lorsque c'est pertinent\n- Expliquez les risques, aspects juridiques et implications éthiques\n- Orientez vers des alternatives constructives si une demande peut causer du tort\n- Refusez les requêtes qui encouragent clairement des activités illégales ou nocives\n\n## Critères de qualité\n\n- **Exactitude** : ancrez vos réponses dans vos connaissances et signalez les lacunes\n- **Clarté** : utilisez un langage précis, définissez les termes techniques\n- **Concision** : adaptez la profondeur au niveau de la question\n- **Utilité** : anticipez les besoins suivants et proposez des étapes\n- **Respect** : gardez un ton professionnel et empathique en toutes circonstances",
-    "title": "AI Playground"
+    "title": "AI Playground",
+    "attachments": {
+      "attached_image_alt": "Image jointe",
+      "delete_image": "Supprimer l’image",
+      "add_images": "Ajouter des images",
+      "attach_images": "Joindre des images",
+      "count": "{{count}}/{{max}} images",
+      "finalizing": "Finalisation...",
+      "info": "Formats pris en charge : JPG, PNG, GIF, WebP - 5 Mo max par image - Jusqu’à {{max}} images",
+      "optimizing": "Optimisation {{progress}}%",
+      "processing": "Traitement {{progress}}%",
+      "remove_image": "Retirer l’image",
+      "notifications": {
+        "all_processing_failed_message": "Impossible de traiter {{file}}. Essayez une autre image ou contactez le support.",
+        "all_processing_failed_title": "Toutes les méthodes de traitement ont échoué",
+        "image_processing_failed_message": "Échec du traitement de {{file}} : {{message}}",
+        "image_processing_failed_title": "Échec du traitement de l’image",
+        "mobile_processing_failed_message": "Échec du traitement de {{file}} sur mobile : {{message}}",
+        "mobile_processing_failed_title": "Échec du traitement mobile"
+      },
+      "validation": {
+        "dismiss_error": "Fermer l’erreur",
+        "extension_unsupported": "Extension de fichier non prise en charge. Formats pris en charge : {{formats}}",
+        "file_type_unsupported": "Le type de fichier « {{type}} » n’est pas pris en charge. Sélectionnez une image.",
+        "limit_exceeded": "Maximum de {{max}} images autorisées. Retirez des images avant d’en ajouter.",
+        "limit_skipped": "Maximum de {{max}} images autorisées. Ce fichier a été ignoré.",
+        "multiple_errors": "{{count}} erreurs de validation de fichier :",
+        "processing_error": "Une erreur est survenue pendant le traitement des images. Veuillez réessayer.",
+        "single_error": "Erreur de validation de fichier :",
+        "size_exceeded": "La taille du fichier ({{size}} Mo) dépasse la limite de 5 Mo. Compressez ou redimensionnez l’image.",
+        "tip": "Astuce : vous pouvez fermer ces erreurs avec le bouton de fermeture de chaque carte.",
+        "unknown_error": "Erreur inconnue",
+        "unknown_type": "inconnu"
+      }
+    },
+    "reasoning": {
+      "chars": "{{count}} caractères",
+      "processing": "Traitement...",
+      "streaming": "Raisonnement...",
+      "title": "Processus de raisonnement"
+    }
   }
 }

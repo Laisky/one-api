@@ -87,6 +87,7 @@
       "capabilities_title": "能力",
       "context_any": "不限",
       "context_title": "上下文窗口",
+      "description": "按模型名称搜索，或按渠道缩小范围。",
       "feature_json_mode": "JSON 模式",
       "feature_logprobs": "Logprobs",
       "feature_reasoning": "推理",
@@ -106,7 +107,8 @@
       "modality_video": "视频",
       "output_modality_title": "输出模态",
       "price_any": "不限",
-      "price_title": "最大输入价格"
+      "price_title": "最大输入价格",
+      "title": "筛选模型"
     },
     "found": "在 {{channels}} 个渠道中找到 {{count}} 个模型",
     "labels": {

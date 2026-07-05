@@ -87,6 +87,7 @@
       "capabilities_title": "Capacités",
       "context_any": "Tous",
       "context_title": "Fenêtre de contexte",
+      "description": "Recherchez par nom de modèle ou limitez la liste par canal.",
       "feature_json_mode": "Mode JSON",
       "feature_logprobs": "Logprobs",
       "feature_reasoning": "Raisonnement",
@@ -106,7 +107,8 @@
       "modality_video": "Vidéo",
       "output_modality_title": "Modalité de sortie",
       "price_any": "Tous",
-      "price_title": "Prix d'entrée max"
+      "price_title": "Prix d'entrée max",
+      "title": "Filtrer les modèles"
     },
     "found": "Trouvé {{count}} modèles dans {{channels}} canaux",
     "labels": {

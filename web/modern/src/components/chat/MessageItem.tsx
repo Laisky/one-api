@@ -25,9 +25,10 @@ interface SimpleImageProps {
   alt: string;
   className?: string;
   onDelete?: () => void;
+  deleteLabel?: string;
 }
 
-function SimpleImage({ src, alt, className = '', onDelete }: SimpleImageProps) {
+function SimpleImage({ src, alt, className = '', onDelete, deleteLabel }: SimpleImageProps) {
   return (
     <div className="relative group">
       <img
@@ -47,7 +48,7 @@ function SimpleImage({ src, alt, className = '', onDelete }: SimpleImageProps) {
           size="icon"
           onClick={onDelete}
           className="absolute top-2 right-2 h-8 w-8 p-0 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity duration-200 shadow-lg rounded-full"
-          aria-label="Delete image"
+          aria-label={deleteLabel}
         >
           <X className="h-4 w-4" />
         </Button>
@@ -81,6 +82,8 @@ function MixedContentRenderer({
   className?: string;
   onDeleteImage?: (imageIndex: number) => void;
 }) {
+  const { t } = useTranslation();
+
   if (typeof content === 'string') {
     return <MarkdownRenderer content={content} className={className} />;
   }
@@ -99,9 +102,10 @@ function MixedContentRenderer({
               <div key={index} className="mt-2">
                 <SimpleImage
                   src={item.image_url.url}
-                  alt="Attached image"
+                  alt={t('playground.attachments.attached_image_alt')}
                   className="max-w-full h-auto rounded-lg border shadow-sm max-h-96 object-contain"
                   onDelete={onDeleteImage ? () => onDeleteImage(currentImageIndex) : undefined}
+                  deleteLabel={t('playground.attachments.delete_image')}
                 />
               </div>
             );

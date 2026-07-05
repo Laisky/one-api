@@ -246,8 +246,8 @@ export const ChannelEndpointSettings = ({ form, allEndpoints, defaultEndpoints, 
   const getEndpointDoc = (name: string) => {
     return (
       ENDPOINT_DOCS[name] || {
-        description: 'No detailed documentation available for this endpoint.',
-        curlExample: '# No example available',
+        description: tr('endpoints.modal.no_description', 'No detailed documentation available for this endpoint.'),
+        curlExample: tr('endpoints.modal.no_example', '# No example available'),
       }
     );
   };

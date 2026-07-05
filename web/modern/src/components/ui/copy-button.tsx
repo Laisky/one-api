@@ -3,6 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Copy, Check } from 'lucide-react';
 import { copyToClipboard } from '@/lib/utils';
+import { useTranslation } from 'react-i18next';
 
 interface CopyButtonProps {
   text: string;
@@ -19,10 +20,11 @@ export function CopyButton({
   variant = 'ghost',
   size = 'sm',
   className = 'h-6 w-6 p-0',
-  successMessage = 'Copied!',
+  successMessage,
   onCopySuccess,
   onCopyError,
 }: CopyButtonProps) {
+  const { t } = useTranslation();
   const [copied, setCopied] = useState(false);
   const [copying, setCopying] = useState(false);
   const [tooltipOpen, setTooltipOpen] = useState(false);
@@ -71,7 +73,7 @@ export function CopyButton({
       onCopySuccess?.();
     } catch (error) {
       console.error('Failed to copy to clipboard:', error);
-      onCopyError?.(error instanceof Error ? error : new Error('Copy failed'));
+      onCopyError?.(error instanceof Error ? error : new Error(t('common.copy_failed', 'Copy failed')));
     } finally {
       setCopying(false);
     }
@@ -96,14 +98,14 @@ export function CopyButton({
             onClick={handleCopy}
             className={`${className} transition-colors duration-200 ${copied ? 'text-success hover:text-success/80' : ''}`}
             disabled={copying}
-            title="Copy to clipboard"
+            title={t('common.copy_to_clipboard', 'Copy to clipboard')}
           >
             {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
           </Button>
         </TooltipTrigger>
         <TooltipContent className="flex items-center gap-1">
           <Check className="h-3 w-3" />
-          {successMessage}
+          {successMessage ?? t('common.copied', 'Copied!')}
         </TooltipContent>
       </Tooltip>
     </TooltipProvider>

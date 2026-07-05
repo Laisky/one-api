@@ -2,6 +2,10 @@
   "tools": {
     "clear_filters": "Clear Filters",
     "description": "Browse tools synced from MCP servers, grouped by server with pricing and schema details.",
+    "filters": {
+      "description": "Search by tool name, description, or server.",
+      "title": "Filter Tools"
+    },
     "found": "Found {{count}} tools in {{servers}} servers",
     "labels": {
       "free": "Free",

@@ -149,7 +149,9 @@ export function Header() {
                           variant="ghost"
                           size="sm"
                           className="inline-flex items-center gap-1.5 touch-target max-w-48 px-2"
-                          aria-label={`Account menu for ${user.display_name || user.username}`}
+                          aria-label={t('header.account_menu_for', {
+                            name: user.display_name || user.username,
+                          })}
                         >
                           <span className="text-sm font-medium truncate">{user.display_name || user.username}</span>
                           <ChevronDown className="h-4 w-4 text-muted-foreground flex-shrink-0" aria-hidden="true" />
@@ -184,7 +186,7 @@ export function Header() {
                       size="sm"
                       onClick={() => setMobileMenuOpen(true)}
                       className="touch-target"
-                      aria-label="Open navigation menu"
+                      aria-label={t('header.open_navigation_menu')}
                     >
                       <Menu className="h-5 w-5" />
                     </Button>
@@ -200,7 +202,7 @@ export function Header() {
                       size="sm"
                       onClick={() => setMobileMenuOpen(true)}
                       className="touch-target"
-                      aria-label="Open navigation menu"
+                      aria-label={t('header.open_navigation_menu')}
                     >
                       <Menu className="h-5 w-5" />
                     </Button>

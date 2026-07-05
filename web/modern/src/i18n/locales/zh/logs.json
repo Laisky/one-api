@@ -42,7 +42,7 @@
       "load_failed": "加载追踪信息失败。",
       "log_id": "日志 ID",
       "metadata": "元数据",
-      "method_status": "方法 \u0026 状态",
+      "method_status": "方法 & 状态",
       "model": "模型",
       "no_content": "未记录内容。",
       "no_timeline": "此追踪没有时间轴数据。",
@@ -147,6 +147,12 @@
       "tool": "工具",
       "topup": "充值",
       "unknown": "未知"
+    },
+    "notifications": {
+      "clear_failed_title": "清理失败",
+      "clear_failed_message": "清理日志失败。",
+      "clear_success_title": "日志已清理",
+      "clear_success_message": "日志清理成功。"
     }
   }
 }

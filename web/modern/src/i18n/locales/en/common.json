@@ -32,13 +32,21 @@
     "confirm": "Confirm",
     "dashboard": "Dashboard",
     "email": "Email",
+    "add_colon": "Add: ",
+    "code_copied": "Code copied!",
+    "copied": "Copied!",
+    "copy_failed": "Copy failed",
+    "copy_to_clipboard": "Copy to clipboard",
+    "info": "Information",
     "language": "Language",
     "login": "Login",
     "logout": "Logout",
     "logs": "Logs",
     "mcps": "MCPs",
     "models": "Models",
+    "no_data": "No results.",
     "no_items": "No items",
+    "no_results": "No results found",
     "or": "Or",
     "pagination": {
       "first_page": "First page",
@@ -56,6 +64,12 @@
     "register": "Register",
     "remove": "Remove",
     "remove_item": "Remove {{item}}",
+    "refresh": "Refresh",
+    "search": "Search",
+    "search_for": "Search for: ",
+    "search_placeholder": "Search...",
+    "searching": "Searching...",
+    "select_option": "Select option...",
     "selected_count": "Selected ({{count}})",
     "settings": "Settings",
     "status": "Status",
@@ -64,20 +78,40 @@
     "tokens": "Tokens",
     "tools": "Tools",
     "topup": "Top Up",
+    "type_at_least_to_search": "Type at least {{count}} characters to search",
     "username": "Username",
     "users": "Users",
     "version": "Version",
     "welcome": "Welcome to One API"
   },
+  "dev": {
+    "validation": {
+      "error": "Error: {{message}}",
+      "errors_count": "Errors: {{count}}",
+      "failed_validation": "Failed validation",
+      "passed": "Passed",
+      "passed_count": "Passed: {{count}}",
+      "run_tests": "Run Tests",
+      "running": "Running...",
+      "running_tests": "Running validation tests... {{progress}}%",
+      "title": "Responsive Validation",
+      "total": "Total: {{count}}",
+      "unknown_error": "Unknown error",
+      "validate": "Validate",
+      "warnings_count": "Warnings: {{count}}"
+    }
+  },
   "footer": {
     "copyright": "© {{year}} One API. All rights reserved."
   },
   "header": {
+    "account_menu_for": "Account menu for {{name}}",
     "confirm_logout": "Confirm logout",
     "log_out": "Log out",
     "logging_out": "Logging out...",
     "logout_description": "Are you sure you want to log out? You'll need to sign in again to access your dashboard.",
     "navigation": "Navigation",
+    "open_navigation_menu": "Open navigation menu",
     "profile": "Profile",
     "signed_in_as": "Signed in as"
   },
@@ -92,6 +126,13 @@
   },
   "notice": {
     "dismiss": "Dismiss notice"
+  },
+  "notifications": {
+    "copy": "Copy notification",
+    "copy_content": "Copy notification content",
+    "dismiss": "Dismiss",
+    "dismiss_content": "Dismiss notification",
+    "region": "Notifications"
   },
   "passkey_prompt": {
     "dismiss": "Dismiss",

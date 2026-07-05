@@ -147,6 +147,12 @@
       "tool": "Herramienta",
       "topup": "Recarga",
       "unknown": "Desconocido"
+    },
+    "notifications": {
+      "clear_failed_title": "Error al limpiar",
+      "clear_failed_message": "No se pudieron limpiar los registros.",
+      "clear_success_title": "Registros limpiados",
+      "clear_success_message": "Los registros se limpiaron correctamente."
     }
   }
 }

@@ -9,6 +9,8 @@
         "sync_in_progress": "同期中…",
         "update": "サーバーを更新"
       },
+      "description_add": "新しい MCP サーバーを追加し、ツールの公開方法を設定します。",
+      "description_edit": "この MCP サーバーと公開ツール設定を更新します。",
       "fields": {
         "api_key": "API キー",
         "auth_type": "認証タイプ",

@@ -28,7 +28,9 @@
     },
     "confirm": {
       "delete": "¿Seguro que deseas eliminar este canal?",
-      "delete_disabled": "¿Eliminar todos los canales deshabilitados? Esta acción no se puede deshacer."
+      "delete_disabled": "¿Eliminar todos los canales deshabilitados? Esta acción no se puede deshacer.",
+      "delete_title": "Eliminar canal",
+      "delete_disabled_title": "Eliminar canales deshabilitados"
     },
     "description": "Configura y gestiona los canales de enrutamiento del API",
     "edit": {
@@ -160,13 +162,13 @@
         }
       },
       "custom_headers": {
-        "add": "Add Header",
-        "empty": "No custom headers configured.",
-        "help": "Headers configured here are always sent upstream and override client-provided headers. Use {{key}} to insert the channel API key.",
-        "key_placeholder": "Header key",
-        "label": "Custom Headers",
-        "remove": "Remove header",
-        "value_placeholder": "Header value, e.g. {{key}}"
+        "add": "Agregar encabezado",
+        "empty": "No hay encabezados personalizados configurados.",
+        "help": "Los encabezados configurados aquí siempre se envían al proveedor y reemplazan los encabezados enviados por el cliente. Usa {{key}} para insertar la clave API del canal.",
+        "key_placeholder": "Clave del encabezado",
+        "label": "Encabezados personalizados",
+        "remove": "Eliminar encabezado",
+        "value_placeholder": "Valor del encabezado, p. ej. {{key}}"
       },
       "description": {
         "create": "Crear un nuevo canal de API",
@@ -214,7 +216,9 @@
         "label": "Endpoints compatibles",
         "modal": {
           "description": "Descripción",
-          "example": "Ejemplo cURL"
+          "example": "Ejemplo cURL",
+          "no_description": "No hay documentación detallada disponible para este endpoint.",
+          "no_example": "# No hay ejemplo disponible"
         },
         "moderations": {
           "description": "La API Moderations comprueba si un texto viola las políticas de contenido. Devuelve categorías y puntuaciones que indican la probabilidad de infracciones.",
@@ -303,7 +307,9 @@
       },
       "key": {
         "help": "La clave API para autenticarse con el proveedor.",
-        "label": "Clave API"
+        "label": "Clave API",
+        "placeholder": "Introduce tu clave API",
+        "github_placeholder": "Introduce un token de acceso de GitHub (PAT u OAuth) con una suscripción activa de Copilot"
       },
       "loading": "Cargando canal...",
       "mcp": {
@@ -535,6 +541,14 @@
       "weight": {
         "help": "Se usa para el balanceo de carga entre canales con la misma prioridad. El valor predeterminado es 0.",
         "label": "Peso"
+      },
+      "test": {
+        "success_title": "Prueba aprobada",
+        "success_message": "La prueba del canal se completó correctamente.",
+        "failed_title": "Prueba fallida",
+        "failed_message": "La prueba del canal falló.",
+        "error_title": "Error de prueba",
+        "error_message": "No se pudo probar el canal."
       }
     },
     "empty": "No se encontraron canales. Crea tu primer canal para comenzar.",
@@ -565,7 +579,9 @@
       "test_success": "Prueba del canal exitosa.",
       "testing_model_failed_message": "No se pudo actualizar el modelo de prueba",
       "testing_model_failed_title": "Error al guardar",
-      "testing_model_saved": "Modelo de prueba guardado."
+      "testing_model_saved": "Modelo de prueba guardado.",
+      "status_failed_title": "Error al actualizar",
+      "status_failed_message": "No se pudo actualizar el estado del canal."
     },
     "response": {
       "not_tested": "No probado",
@@ -696,6 +712,10 @@
       "quota": "Cuota",
       "redeemed_time": "Fecha de canje",
       "status": "Estado"
+    },
+    "notifications": {
+      "action_failed_title": "Acción fallida",
+      "action_failed_message": "No se pudo aplicar el cambio."
     }
   },
   "tokens": {
@@ -798,7 +818,8 @@
         "used_title": "Utilizado: {{label}}"
       },
       "confirm": {
-        "delete": "¿Estás seguro de que quieres eliminar el token \"{{label}}\"?"
+        "delete": "¿Estás seguro de que quieres eliminar el token \"{{label}}\"?",
+        "delete_title": "Eliminar token"
       },
       "description": "Gestiona tus tokens de acceso a la API",
       "dialog": {
@@ -809,7 +830,9 @@
       "empty": "No se encontraron tokens. Crea tu primer token para comenzar.",
       "key": {
         "copied": "¡Copiado!",
-        "copy": "Copiar token"
+        "copy": "Copiar token",
+        "hide": "Ocultar clave",
+        "show": "Mostrar clave"
       },
       "quota": {
         "unlimited": "Ilimitado"
@@ -836,7 +859,11 @@
       "table": {
         "id_placeholder": "(ID {{id}})"
       },
-      "title": "Tokens"
+      "title": "Tokens",
+      "notifications": {
+        "action_failed_title": "Acción fallida",
+        "action_failed_message": "No se pudo aplicar el cambio."
+      }
     }
   },
   "users": {
@@ -963,6 +990,12 @@
           "help": "Nombre de inicio de sesión único. Mínimo 3 caracteres.",
           "label": "Nombre de usuario *",
           "placeholder": "Introduce el nombre de usuario"
+        },
+        "created_at": {
+          "label": "Fecha de registro"
+        },
+        "updated_at": {
+          "label": "Última modificación"
         }
       },
       "loading": "Cargando usuario...",

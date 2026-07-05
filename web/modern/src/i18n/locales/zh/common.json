@@ -32,13 +32,21 @@
     "confirm": "确认",
     "dashboard": "仪表盘",
     "email": "邮箱",
+    "add_colon": "添加：",
+    "code_copied": "代码已复制！",
+    "copied": "已复制！",
+    "copy_failed": "复制失败",
+    "copy_to_clipboard": "复制到剪贴板",
+    "info": "信息",
     "language": "语言",
     "login": "登录",
     "logout": "登出",
     "logs": "日志",
     "mcps": "MCPs",
     "models": "模型",
+    "no_data": "暂无结果。",
     "no_items": "暂无内容",
+    "no_results": "未找到结果",
     "or": "或",
     "pagination": {
       "first_page": "首页",
@@ -56,6 +64,12 @@
     "register": "注册",
     "remove": "移除",
     "remove_item": "移除 {{item}}",
+    "refresh": "刷新",
+    "search": "搜索",
+    "search_for": "搜索：",
+    "search_placeholder": "搜索...",
+    "searching": "正在搜索...",
+    "select_option": "选择选项...",
     "selected_count": "已选 ({{count}})",
     "settings": "设置",
     "status": "状态",
@@ -64,20 +78,40 @@
     "tokens": "令牌",
     "tools": "工具",
     "topup": "充值",
+    "type_at_least_to_search": "至少输入 {{count}} 个字符以搜索",
     "username": "用户名",
     "users": "用户",
     "version": "版本",
     "welcome": "欢迎使用 One API"
   },
+  "dev": {
+    "validation": {
+      "error": "错误：{{message}}",
+      "errors_count": "错误：{{count}}",
+      "failed_validation": "验证失败",
+      "passed": "通过",
+      "passed_count": "通过：{{count}}",
+      "run_tests": "运行测试",
+      "running": "正在运行...",
+      "running_tests": "正在运行验证测试... {{progress}}%",
+      "title": "响应式验证",
+      "total": "总计：{{count}}",
+      "unknown_error": "未知错误",
+      "validate": "验证",
+      "warnings_count": "警告：{{count}}"
+    }
+  },
   "footer": {
     "copyright": "© {{year}} One API. 保留所有权利。"
   },
   "header": {
+    "account_menu_for": "{{name}} 的账户菜单",
     "confirm_logout": "确认登出",
     "log_out": "登出",
     "logging_out": "正在登出...",
     "logout_description": "您确定要登出吗？您需要重新登录才能访问仪表盘。",
     "navigation": "导航",
+    "open_navigation_menu": "打开导航菜单",
     "profile": "个人设置",
     "signed_in_as": "登录身份"
   },
@@ -92,6 +126,13 @@
   },
   "notice": {
     "dismiss": "关闭通知"
+  },
+  "notifications": {
+    "copy": "复制通知",
+    "copy_content": "复制通知内容",
+    "dismiss": "关闭",
+    "dismiss_content": "关闭通知",
+    "region": "通知"
   },
   "passkey_prompt": {
     "dismiss": "关闭",

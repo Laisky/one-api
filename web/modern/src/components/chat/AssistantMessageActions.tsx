@@ -7,6 +7,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Copy, Edit2, MoreHorizontal, RotateCcw, Trash2 } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 interface AssistantMessageActionsProps {
   onCopyMessage: () => void;
@@ -23,6 +24,8 @@ export function AssistantMessageActions({
   onDeleteMessage,
   isStreaming = false,
 }: AssistantMessageActionsProps) {
+  const { t } = useTranslation();
+
   return (
     <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-200">
       <DropdownMenu>
@@ -31,7 +34,7 @@ export function AssistantMessageActions({
             variant="ghost"
             size="sm"
             className="h-6 w-6 p-0 text-muted-foreground hover:text-foreground hover:bg-muted/50"
-            aria-label="Assistant message options"
+            aria-label={t('playground.actions.assistant_message_options')}
           >
             <MoreHorizontal className="h-3 w-3" />
           </Button>
@@ -39,18 +42,18 @@ export function AssistantMessageActions({
         <DropdownMenuContent align="end" className="w-52">
           <DropdownMenuItem onClick={onCopyMessage}>
             <Copy className="mr-2 h-4 w-4" />
-            Copy Response
+            {t('playground.actions.copy_response')}
           </DropdownMenuItem>
           {onRegenerateMessage && !isStreaming && (
             <DropdownMenuItem onClick={onRegenerateMessage}>
               <RotateCcw className="mr-2 h-4 w-4" />
-              Regenerate Response
+              {t('playground.actions.regenerate_response')}
             </DropdownMenuItem>
           )}
           {onEditMessage && (
             <DropdownMenuItem onClick={onEditMessage}>
               <Edit2 className="mr-2 h-4 w-4" />
-              Edit Response
+              {t('playground.actions.edit_response')}
             </DropdownMenuItem>
           )}
           {onDeleteMessage && (
@@ -58,7 +61,7 @@ export function AssistantMessageActions({
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={onDeleteMessage} className="text-destructive focus:text-destructive">
                 <Trash2 className="mr-2 h-4 w-4" />
-                Delete Response
+                {t('playground.actions.delete_response')}
               </DropdownMenuItem>
             </>
           )}

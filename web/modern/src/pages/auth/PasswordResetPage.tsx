@@ -124,7 +124,7 @@ export function PasswordResetPage() {
               <div className="text-center text-sm">
                 {t('auth.reset.remember_password')}{' '}
                 <Link to="/login" className="text-primary hover:underline">
-                  {t('auth.login.sign_in')}
+                  {t('common.login')}
                 </Link>
               </div>
             </form>

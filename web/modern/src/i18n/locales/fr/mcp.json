@@ -9,6 +9,8 @@
         "sync_in_progress": "Synchronisation...",
         "update": "Mettre à jour le serveur"
       },
+      "description_add": "Ajoutez un nouveau serveur MCP et configurez l’exposition de ses outils.",
+      "description_edit": "Mettez à jour ce serveur MCP et la configuration des outils exposés.",
       "fields": {
         "api_key": "Clé API",
         "auth_type": "Type d'authentification",

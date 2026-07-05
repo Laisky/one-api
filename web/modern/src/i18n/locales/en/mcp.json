@@ -9,6 +9,8 @@
         "sync_in_progress": "Syncing...",
         "update": "Update Server"
       },
+      "description_add": "Add a new MCP server and configure how its tools are exposed.",
+      "description_edit": "Update this MCP server and its exposed tool configuration.",
       "fields": {
         "api_key": "API key",
         "auth_type": "Auth type",

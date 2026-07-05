@@ -5,6 +5,7 @@ import { api } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { Check, ChevronsUpDown, Loader2, Plus, X } from 'lucide-react';
 import * as React from 'react';
+import { useTranslation } from 'react-i18next';
 
 export interface SearchOption {
   key: string;
@@ -37,16 +38,16 @@ interface SearchableDropdownProps {
 
 export function SearchableDropdown({
   value,
-  placeholder = 'Select option...',
-  searchPlaceholder = 'Search...',
+  placeholder,
+  searchPlaceholder,
   options: initialOptions,
   onSearchChange,
   onChange,
   onSelect,
   onAddItem,
   loading = false,
-  noResultsMessage = 'No results found',
-  additionLabel = 'Add: ',
+  noResultsMessage,
+  additionLabel,
   allowAdditions = false,
   clearable = false,
   className,
@@ -55,6 +56,7 @@ export function SearchableDropdown({
   debounceMs = 300,
   minQueryLength = 2,
 }: SearchableDropdownProps) {
+  const { t } = useTranslation();
   const [open, setOpen] = React.useState(false);
   const [searchValue, setSearchValue] = React.useState('');
   const [apiOptions, setApiOptions] = React.useState<SearchOption[]>([]);
@@ -166,6 +168,10 @@ export function SearchableDropdown({
     allowAdditions && searchValue && !filteredOptions.some((option) => option.value.toLowerCase() === searchValue.toLowerCase());
 
   const currentLoading = loading || apiLoading;
+  const effectivePlaceholder = placeholder ?? t('common.select_option', 'Select option...');
+  const effectiveSearchPlaceholder = searchPlaceholder ?? t('common.search_placeholder', 'Search...');
+  const effectiveNoResultsMessage = noResultsMessage ?? t('common.no_results', 'No results found');
+  const effectiveAdditionLabel = additionLabel ?? t('common.add_colon', 'Add: ');
 
   // Cleanup timeout on unmount
   React.useEffect(() => {
@@ -183,7 +189,7 @@ export function SearchableDropdown({
           {selectedOption ? (
             <span className="truncate">{selectedOption.text}</span>
           ) : (
-            <span className="text-muted-foreground">{placeholder}</span>
+            <span className="text-muted-foreground">{effectivePlaceholder}</span>
           )}
           <div className="flex items-center ml-2 shrink-0">
             {clearable && selectedOption && <X className="h-4 w-4 opacity-50 hover:opacity-100 mr-1" onClick={handleClear} />}
@@ -200,20 +206,20 @@ export function SearchableDropdown({
         align="start"
       >
         <Command shouldFilter={!searchEndpoint}>
-          <CommandInput placeholder={searchPlaceholder} value={searchValue} onValueChange={handleSearchChange} />
+          <CommandInput placeholder={effectiveSearchPlaceholder} value={searchValue} onValueChange={handleSearchChange} />
           <CommandList>
             {currentLoading ? (
               <div className="flex items-center justify-center py-6">
                 <Loader2 className="h-4 w-4 animate-spin" />
-                <span className="ml-2 text-sm text-muted-foreground">Searching...</span>
+                <span className="ml-2 text-sm text-muted-foreground">{t('common.searching', 'Searching...')}</span>
               </div>
             ) : (
               <>
                 {filteredOptions.length === 0 && !showAddition ? (
                   <CommandEmpty>
                     {searchValue.length < minQueryLength && searchEndpoint
-                      ? `Type at least ${minQueryLength} characters to search`
-                      : noResultsMessage}
+                      ? t('common.type_at_least_to_search', 'Type at least {{count}} characters to search', { count: minQueryLength })
+                      : effectiveNoResultsMessage}
                   </CommandEmpty>
                 ) : (
                   <CommandGroup>
@@ -226,7 +232,7 @@ export function SearchableDropdown({
                     {showAddition && (
                       <CommandItem onSelect={handleAddItem} className="cursor-pointer">
                         <Plus className="mr-2 h-4 w-4" />
-                        <span className="text-muted-foreground">{additionLabel}</span>
+                        <span className="text-muted-foreground">{effectiveAdditionLabel}</span>
                         <span className="font-medium">{searchValue}</span>
                       </CommandItem>
                     )}

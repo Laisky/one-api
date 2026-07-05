@@ -87,6 +87,7 @@
       "capabilities_title": "Capabilities",
       "context_any": "Any",
       "context_title": "Context Window",
+      "description": "Search by model name or narrow the list by channel.",
       "feature_json_mode": "JSON Mode",
       "feature_logprobs": "Logprobs",
       "feature_reasoning": "Reasoning",
@@ -106,7 +107,8 @@
       "modality_video": "Video",
       "output_modality_title": "Output Modality",
       "price_any": "Any",
-      "price_title": "Max Input Price"
+      "price_title": "Max Input Price",
+      "title": "Filter Models"
     },
     "found": "Found {{count}} models in {{channels}} channels",
     "labels": {

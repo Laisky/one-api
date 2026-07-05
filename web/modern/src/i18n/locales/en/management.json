@@ -28,7 +28,9 @@
     },
     "confirm": {
       "delete": "Are you sure you want to delete this channel?",
-      "delete_disabled": "Are you sure you want to delete all disabled channels? This action cannot be undone."
+      "delete_disabled": "Are you sure you want to delete all disabled channels? This action cannot be undone.",
+      "delete_title": "Delete Channel",
+      "delete_disabled_title": "Delete Disabled Channels"
     },
     "description": "Configure and manage API routing channels",
     "edit": {
@@ -214,7 +216,9 @@
         "label": "Supported Endpoints",
         "modal": {
           "description": "Description",
-          "example": "cURL Example"
+          "example": "cURL Example",
+          "no_description": "No detailed documentation available for this endpoint.",
+          "no_example": "# No example available"
         },
         "moderations": {
           "description": "The Moderations API checks whether text violates content policies. It returns categories and scores indicating the likelihood of policy violations.",
@@ -303,7 +307,9 @@
       },
       "key": {
         "help": "The API key for authentication with the provider.",
-        "label": "API Key"
+        "label": "API Key",
+        "placeholder": "Please enter your API key",
+        "github_placeholder": "Please enter a GitHub access token (PAT or OAuth token) with an active Copilot subscription"
       },
       "loading": "Loading channel...",
       "mcp": {
@@ -535,6 +541,14 @@
       "weight": {
         "help": "Used for load balancing between channels of the same priority. Default is 0.",
         "label": "Weight"
+      },
+      "test": {
+        "success_title": "Test passed",
+        "success_message": "Channel test completed successfully.",
+        "failed_title": "Test failed",
+        "failed_message": "Channel test failed.",
+        "error_title": "Test error",
+        "error_message": "Unable to test channel."
       }
     },
     "empty": "No channels found. Create your first channel to get started.",
@@ -565,7 +579,9 @@
       "test_success": "Channel test successful.",
       "testing_model_failed_message": "Failed to update testing model",
       "testing_model_failed_title": "Save failed",
-      "testing_model_saved": "Testing model saved."
+      "testing_model_saved": "Testing model saved.",
+      "status_failed_title": "Update failed",
+      "status_failed_message": "Failed to update channel status."
     },
     "response": {
       "not_tested": "Not tested",
@@ -696,6 +712,10 @@
       "quota": "Quota",
       "redeemed_time": "Redeemed Time",
       "status": "Status"
+    },
+    "notifications": {
+      "action_failed_title": "Action failed",
+      "action_failed_message": "Unable to apply change."
     }
   },
   "tokens": {
@@ -798,7 +818,8 @@
         "used_title": "Used: {{label}}"
       },
       "confirm": {
-        "delete": "Are you sure you want to delete token \"{{label}}\"?"
+        "delete": "Are you sure you want to delete token \"{{label}}\"?",
+        "delete_title": "Delete Token"
       },
       "description": "Manage your API access tokens",
       "dialog": {
@@ -809,7 +830,9 @@
       "empty": "No tokens found. Create your first token to get started.",
       "key": {
         "copied": "Copied!",
-        "copy": "Copy token"
+        "copy": "Copy token",
+        "hide": "Hide key",
+        "show": "Show key"
       },
       "quota": {
         "unlimited": "Unlimited"
@@ -836,7 +859,11 @@
       "table": {
         "id_placeholder": "(ID {{id}})"
       },
-      "title": "Tokens"
+      "title": "Tokens",
+      "notifications": {
+        "action_failed_title": "Action failed",
+        "action_failed_message": "Unable to apply change."
+      }
     }
   },
   "users": {
@@ -963,6 +990,12 @@
           "help": "Unique login name. Min 3 characters.",
           "label": "Username *",
           "placeholder": "Enter username"
+        },
+        "created_at": {
+          "label": "Register Time"
+        },
+        "updated_at": {
+          "label": "Last Modified"
         }
       },
       "loading": "Loading user...",

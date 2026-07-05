@@ -113,8 +113,13 @@ export function AdvancedPagination({
             <span aria-hidden="true" className={cn('text-muted-foreground whitespace-nowrap', isMobile ? 'text-xs' : 'text-sm')}>
               {isMobile ? t('common.pagination.per_page', 'Per page:') : t('common.pagination.rows_per_page', 'Rows per page:')}
             </span>
-            <Select value={pageSize.toString()} onValueChange={handlePageSizeChange} disabled={loading} aria-label="Rows per page">
-              <SelectTrigger aria-label="Rows per page" className="h-8 w-20">
+            <Select
+              value={pageSize.toString()}
+              onValueChange={handlePageSizeChange}
+              disabled={loading}
+              aria-label={t('common.pagination.rows_per_page', 'Rows per page:')}
+            >
+              <SelectTrigger aria-label={t('common.pagination.rows_per_page', 'Rows per page:')} className="h-8 w-20">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>

@@ -27,6 +27,13 @@ export const ChannelBasicInfo = ({ form, normalizedChannelType, tr, onTypeChange
   const [typePopoverOpen, setTypePopoverOpen] = useState(false);
   const watchType = form.watch('type');
   const channelTypeOverridesKeyField = normalizedChannelType !== null && CHANNEL_TYPES_WITH_CUSTOM_KEY_FIELD.has(normalizedChannelType);
+  const keyPrompt = getKeyPrompt(watchType);
+  const translatedKeyPrompt =
+    keyPrompt === 'Please enter your API key'
+      ? tr('key.placeholder', keyPrompt)
+      : keyPrompt === 'Please enter a GitHub access token (PAT or OAuth token) with an active Copilot subscription'
+        ? tr('key.github_placeholder', keyPrompt)
+        : keyPrompt;
 
   // Sort channel types alphabetically by text
   const sortedChannelTypes = useMemo(() => [...CHANNEL_TYPES].sort((a, b) => a.text.localeCompare(b.text)), []);
@@ -153,7 +160,7 @@ export const ChannelBasicInfo = ({ form, normalizedChannelType, tr, onTypeChange
                   help={tr('key.help', 'The API key for authentication with the provider.')}
                 />
                 <FormControl>
-                  <Textarea placeholder={getKeyPrompt(watchType)} className={`font-mono text-sm ${errorClass('key')}`} {...field} />
+                  <Textarea placeholder={translatedKeyPrompt} className={`font-mono text-sm ${errorClass('key')}`} {...field} />
                 </FormControl>
                 <FormMessage />
               </FormItem>

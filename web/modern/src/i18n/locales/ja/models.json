@@ -87,6 +87,7 @@
       "capabilities_title": "機能",
       "context_any": "指定なし",
       "context_title": "コンテキストウィンドウ",
+      "description": "モデル名で検索するか、チャンネルで絞り込みます。",
       "feature_json_mode": "JSON モード",
       "feature_logprobs": "Logprobs",
       "feature_reasoning": "推論",
@@ -106,7 +107,8 @@
       "modality_video": "動画",
       "output_modality_title": "出力モダリティ",
       "price_any": "指定なし",
-      "price_title": "入力価格上限"
+      "price_title": "入力価格上限",
+      "title": "モデルをフィルター"
     },
     "found": "{{channels}} チャンネルで {{count}} モデルが見つかりました",
     "labels": {

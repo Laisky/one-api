@@ -28,7 +28,9 @@
     },
     "confirm": {
       "delete": "确定要删除该渠道吗？",
-      "delete_disabled": "确定要删除所有禁用渠道吗？此操作无法撤销。"
+      "delete_disabled": "确定要删除所有禁用渠道吗？此操作无法撤销。",
+      "delete_title": "删除渠道",
+      "delete_disabled_title": "删除已禁用渠道"
     },
     "description": "配置并管理 API 路由渠道",
     "edit": {
@@ -160,13 +162,13 @@
         }
       },
       "custom_headers": {
-        "add": "Add Header",
-        "empty": "No custom headers configured.",
-        "help": "Headers configured here are always sent upstream and override client-provided headers. Use {{key}} to insert the channel API key.",
-        "key_placeholder": "Header key",
-        "label": "Custom Headers",
-        "remove": "Remove header",
-        "value_placeholder": "Header value, e.g. {{key}}"
+        "add": "添加请求头",
+        "empty": "尚未配置自定义请求头。",
+        "help": "此处配置的请求头会始终发送到上游，并覆盖客户端提供的请求头。使用 {{key}} 插入渠道 API 密钥。",
+        "key_placeholder": "请求头键",
+        "label": "自定义请求头",
+        "remove": "移除请求头",
+        "value_placeholder": "请求头值，例如 {{key}}"
       },
       "description": {
         "create": "创建一个新的 API 渠道",
@@ -214,7 +216,9 @@
         "label": "支持的端点",
         "modal": {
           "description": "说明",
-          "example": "cURL 示例"
+          "example": "cURL 示例",
+          "no_description": "此端点暂无详细文档。",
+          "no_example": "# 暂无示例"
         },
         "moderations": {
           "description": "内容审核 API 用于检查文本是否违反内容策略。它会返回类别和分数，以表示违反策略的可能性。",
@@ -303,7 +307,9 @@
       },
       "key": {
         "help": "用于向提供商进行身份验证的 API 密钥。",
-        "label": "API 密钥"
+        "label": "API 密钥",
+        "placeholder": "请输入您的 API 密钥",
+        "github_placeholder": "请输入具有有效 Copilot 订阅的 GitHub 访问令牌（PAT 或 OAuth 令牌）"
       },
       "loading": "正在加载渠道...",
       "mcp": {
@@ -535,6 +541,14 @@
       "weight": {
         "help": "用于在相同优先级的渠道之间进行负载均衡。默认值为 0。",
         "label": "权重"
+      },
+      "test": {
+        "success_title": "测试通过",
+        "success_message": "渠道测试成功完成。",
+        "failed_title": "测试失败",
+        "failed_message": "渠道测试失败。",
+        "error_title": "测试出错",
+        "error_message": "无法测试渠道。"
       }
     },
     "empty": "尚未找到渠道，请先创建一个渠道。",
@@ -565,7 +579,9 @@
       "test_success": "渠道测试成功。",
       "testing_model_failed_message": "更新测试模型失败",
       "testing_model_failed_title": "保存失败",
-      "testing_model_saved": "测试模型已保存。"
+      "testing_model_saved": "测试模型已保存。",
+      "status_failed_title": "更新失败",
+      "status_failed_message": "更新渠道状态失败。"
     },
     "response": {
       "not_tested": "尚未测试",
@@ -696,6 +712,10 @@
       "quota": "额度",
       "redeemed_time": "兑换时间",
       "status": "状态"
+    },
+    "notifications": {
+      "action_failed_title": "操作失败",
+      "action_failed_message": "无法应用更改。"
     }
   },
   "tokens": {
@@ -798,7 +818,8 @@
         "used_title": "已用: {{label}}"
       },
       "confirm": {
-        "delete": "确定要删除令牌 \"{{label}}\" 吗？"
+        "delete": "确定要删除令牌 \"{{label}}\" 吗？",
+        "delete_title": "删除令牌"
       },
       "description": "管理您的 API 访问令牌",
       "dialog": {
@@ -809,7 +830,9 @@
       "empty": "未找到令牌。创建您的第一个令牌以开始使用。",
       "key": {
         "copied": "已复制！",
-        "copy": "复制令牌"
+        "copy": "复制令牌",
+        "hide": "隐藏密钥",
+        "show": "显示密钥"
       },
       "quota": {
         "unlimited": "无限"
@@ -836,7 +859,11 @@
       "table": {
         "id_placeholder": "(ID {{id}})"
       },
-      "title": "令牌"
+      "title": "令牌",
+      "notifications": {
+        "action_failed_title": "操作失败",
+        "action_failed_message": "无法应用更改。"
+      }
     }
   },
   "users": {
@@ -963,6 +990,12 @@
           "help": "唯一登录名。至少 3 个字符。",
           "label": "用户名 *",
           "placeholder": "输入用户名"
+        },
+        "created_at": {
+          "label": "注册时间"
+        },
+        "updated_at": {
+          "label": "最后修改"
         }
       },
       "loading": "正在加载用户...",

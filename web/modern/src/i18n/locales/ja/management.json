@@ -28,7 +28,9 @@
     },
     "confirm": {
       "delete": "このチャンネルを削除してよろしいですか？",
-      "delete_disabled": "無効なチャンネルをすべて削除しますか？この操作は元に戻せません。"
+      "delete_disabled": "無効なチャンネルをすべて削除しますか？この操作は元に戻せません。",
+      "delete_title": "チャンネルを削除",
+      "delete_disabled_title": "無効なチャンネルを削除"
     },
     "description": "API ルーティング チャンネルを設定・管理します",
     "edit": {
@@ -160,13 +162,13 @@
         }
       },
       "custom_headers": {
-        "add": "Add Header",
-        "empty": "No custom headers configured.",
-        "help": "Headers configured here are always sent upstream and override client-provided headers. Use {{key}} to insert the channel API key.",
-        "key_placeholder": "Header key",
-        "label": "Custom Headers",
-        "remove": "Remove header",
-        "value_placeholder": "Header value, e.g. {{key}}"
+        "add": "ヘッダーを追加",
+        "empty": "カスタムヘッダーは設定されていません。",
+        "help": "ここで設定したヘッダーは常に上流へ送信され、クライアント提供のヘッダーを上書きします。{{key}} を使用するとチャンネル API キーを挿入できます。",
+        "key_placeholder": "ヘッダーキー",
+        "label": "カスタムヘッダー",
+        "remove": "ヘッダーを削除",
+        "value_placeholder": "ヘッダー値、例: {{key}}"
       },
       "description": {
         "create": "新しい API チャンネルを作成",
@@ -214,7 +216,9 @@
         "label": "サポートされるエンドポイント",
         "modal": {
           "description": "説明",
-          "example": "cURL の例"
+          "example": "cURL の例",
+          "no_description": "このエンドポイントの詳細ドキュメントはありません。",
+          "no_example": "# 利用可能な例はありません"
         },
         "moderations": {
           "description": "Moderations API はテキストがコンテンツポリシーに違反しているかを判定します。違反の可能性を示すカテゴリとスコアを返します。",
@@ -303,7 +307,9 @@
       },
       "key": {
         "help": "プロバイダー認証に使用する API キーです。",
-        "label": "API キー"
+        "label": "API キー",
+        "placeholder": "API キーを入力してください",
+        "github_placeholder": "有効な Copilot サブスクリプションを持つ GitHub アクセストークン（PAT または OAuth トークン）を入力してください"
       },
       "loading": "チャンネルを読み込み中...",
       "mcp": {
@@ -535,6 +541,14 @@
       "weight": {
         "help": "同じ優先度のチャネル間での負荷分散に使用されます。デフォルトは 0 です。",
         "label": "重み"
+      },
+      "test": {
+        "success_title": "テスト成功",
+        "success_message": "チャンネルテストが正常に完了しました。",
+        "failed_title": "テスト失敗",
+        "failed_message": "チャンネルテストに失敗しました。",
+        "error_title": "テストエラー",
+        "error_message": "チャンネルをテストできませんでした。"
       }
     },
     "empty": "チャンネルが見つかりません。まずはチャンネルを作成してください。",
@@ -565,7 +579,9 @@
       "test_success": "チャンネルのテストに成功しました。",
       "testing_model_failed_message": "テスト用モデルの更新に失敗しました",
       "testing_model_failed_title": "保存に失敗しました",
-      "testing_model_saved": "テスト用モデルを保存しました。"
+      "testing_model_saved": "テスト用モデルを保存しました。",
+      "status_failed_title": "更新に失敗しました",
+      "status_failed_message": "チャンネル状態を更新できませんでした。"
     },
     "response": {
       "not_tested": "未テスト",
@@ -696,6 +712,10 @@
       "quota": "クォータ",
       "redeemed_time": "引き換え日時",
       "status": "ステータス"
+    },
+    "notifications": {
+      "action_failed_title": "操作に失敗しました",
+      "action_failed_message": "変更を適用できませんでした。"
     }
   },
   "tokens": {
@@ -798,7 +818,8 @@
         "used_title": "使用済み: {{label}}"
       },
       "confirm": {
-        "delete": "トークン \"{{label}}\" を削除してよろしいですか？"
+        "delete": "トークン \"{{label}}\" を削除してよろしいですか？",
+        "delete_title": "トークンを削除"
       },
       "description": "API アクセストークンを管理",
       "dialog": {
@@ -809,7 +830,9 @@
       "empty": "トークンが見つかりません。最初のトークンを作成して開始してください。",
       "key": {
         "copied": "コピーしました！",
-        "copy": "トークンをコピー"
+        "copy": "トークンをコピー",
+        "hide": "キーを非表示",
+        "show": "キーを表示"
       },
       "quota": {
         "unlimited": "無制限"
@@ -836,7 +859,11 @@
       "table": {
         "id_placeholder": "(ID {{id}})"
       },
-      "title": "トークン"
+      "title": "トークン",
+      "notifications": {
+        "action_failed_title": "操作に失敗しました",
+        "action_failed_message": "変更を適用できませんでした。"
+      }
     }
   },
   "users": {
@@ -963,6 +990,12 @@
           "help": "一意のログイン名。3文字以上。",
           "label": "ユーザー名 *",
           "placeholder": "ユーザー名を入力"
+        },
+        "created_at": {
+          "label": "登録日時"
+        },
+        "updated_at": {
+          "label": "最終更新"
         }
       },
       "loading": "ユーザーを読み込み中...",

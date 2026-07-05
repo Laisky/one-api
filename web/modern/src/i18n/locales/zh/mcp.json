@@ -9,6 +9,8 @@
         "sync_in_progress": "同步中…",
         "update": "更新服务器"
       },
+      "description_add": "添加新的 MCP 服务器，并配置其工具的暴露方式。",
+      "description_edit": "更新此 MCP 服务器及其暴露的工具配置。",
       "fields": {
         "api_key": "API 密钥",
         "auth_type": "认证类型",
