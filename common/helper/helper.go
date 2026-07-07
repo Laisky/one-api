@@ -54,12 +54,26 @@ func RespondErrorWithStatus(c *gin.Context, status int, err error) {
 	if err == nil {
 		err = errors.New("unknown error")
 	}
-	gmw.GetLogger(c).Error("http handler error",
+
+	log := gmw.GetLogger(c)
+	fields := []zap.Field{
 		zap.Int("status", status),
 		zap.String("method", c.Request.Method),
 		zap.String("url", c.Request.URL.String()),
-		zap.Error(err),
-	)
+	}
+
+	// Client errors (4xx) are expected in normal operation — e.g. unauthenticated
+	// clients probing endpoints, expired sessions, or bad input — so they are
+	// logged at WARN without the verbose stack trace to avoid alert noise. ERROR
+	// is reserved for genuine server-side exceptions (5xx), which trigger alerting.
+	if status >= http.StatusBadRequest && status < http.StatusInternalServerError {
+		log.Warn("http handler client error",
+			append(fields, zap.String("error", err.Error()))...)
+	} else {
+		log.Error("http handler error",
+			append(fields, zap.Error(err))...)
+	}
+
 	c.JSON(status, gin.H{
 		"success": false,
 		"message": err.Error(),
