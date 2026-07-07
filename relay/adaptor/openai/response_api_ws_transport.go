@@ -111,6 +111,12 @@ func doResponseAPIRequestViaWebSocket(
 	if err != nil {
 		return nil, true, errors.Wrap(err, "resolve response api websocket request url")
 	}
+	// Honor an administrator-configured per-endpoint upstream URL override before
+	// deriving the WebSocket URL, keeping the realtime path consistent with the
+	// HTTP relay dispatch layer.
+	if override := metaInfo.UpstreamEndpointURLOverride(); override != "" {
+		fullRequestURL = override
+	}
 
 	wsURL, err := toResponseAPIWebSocketURL(fullRequestURL)
 	if err != nil {

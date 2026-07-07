@@ -235,6 +235,23 @@ describe('buildChannelSubmitPayload misc shape guarantees', () => {
     });
   });
 
+  it('serialises per-endpoint upstream URL overrides in channel config', () => {
+    const data = baseForm({
+      config: baseConfig({
+        endpoint_urls: {
+          rerank: 'https://custom.example.com/v2/rerank',
+        },
+      }),
+    });
+
+    const payload = buildChannelSubmitPayload(data, editOpts());
+    const config = JSON.parse(payload.config as string) as ChannelConfigForm;
+
+    expect(config.endpoint_urls).toEqual({
+      rerank: 'https://custom.example.com/v2/rerank',
+    });
+  });
+
   it('joins groups[] into a comma-separated `group` field and removes `groups`', () => {
     const data = baseForm({ groups: ['default', 'vip'] });
 

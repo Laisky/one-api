@@ -6,20 +6,54 @@
   },
   "playground": {
     "actions": {
-      "copy": "Copiar",
-      "delete": "Eliminar",
-      "edit": "Editar",
-      "message_options": "Opciones del mensaje",
-      "retry": "Reintentar",
       "assistant_message_options": "Opciones del mensaje del asistente",
-      "copy_response": "Copiar respuesta",
-      "regenerate_response": "Regenerar respuesta",
-      "edit_response": "Editar respuesta",
-      "delete_response": "Eliminar respuesta",
-      "user_message_options": "Opciones del mensaje del usuario",
+      "copy": "Copiar",
       "copy_message": "Copiar mensaje",
+      "copy_response": "Copiar respuesta",
+      "delete": "Eliminar",
+      "delete_message": "Eliminar mensaje",
+      "delete_response": "Eliminar respuesta",
+      "edit": "Editar",
       "edit_message": "Editar mensaje",
-      "delete_message": "Eliminar mensaje"
+      "edit_response": "Editar respuesta",
+      "message_options": "Opciones del mensaje",
+      "regenerate_response": "Regenerar respuesta",
+      "retry": "Reintentar",
+      "user_message_options": "Opciones del mensaje del usuario"
+    },
+    "attachments": {
+      "add_images": "Agregar imágenes",
+      "attach_images": "Adjuntar imágenes",
+      "attached_image_alt": "Imagen adjunta",
+      "count": "{{count}}/{{max}} imágenes",
+      "delete_image": "Eliminar imagen",
+      "finalizing": "Finalizando...",
+      "info": "Compatible con: JPG, PNG, GIF, WebP - Máx. 5 MB por imagen - Hasta {{max}} imágenes",
+      "notifications": {
+        "all_processing_failed_message": "No se puede procesar {{file}}. Prueba con otra imagen o contacta con soporte.",
+        "all_processing_failed_title": "Todos los métodos de procesamiento fallaron",
+        "image_processing_failed_message": "No se pudo procesar {{file}}: {{message}}",
+        "image_processing_failed_title": "Error al procesar la imagen",
+        "mobile_processing_failed_message": "No se pudo procesar {{file}} en móvil: {{message}}",
+        "mobile_processing_failed_title": "Error de procesamiento móvil"
+      },
+      "optimizing": "Optimizando {{progress}}%",
+      "processing": "Procesando {{progress}}%",
+      "remove_image": "Quitar imagen",
+      "validation": {
+        "dismiss_error": "Descartar error",
+        "extension_unsupported": "La extensión del archivo no es compatible. Formatos compatibles: {{formats}}",
+        "file_type_unsupported": "El tipo de archivo \"{{type}}\" no es compatible. Selecciona un archivo de imagen.",
+        "limit_exceeded": "Se permite un máximo de {{max}} imágenes. Quita algunas imágenes antes de agregar más.",
+        "limit_skipped": "Se permite un máximo de {{max}} imágenes. Este archivo se omitió.",
+        "multiple_errors": "{{count}} errores de validación de archivo:",
+        "processing_error": "Ocurrió un error al procesar las imágenes. Inténtalo de nuevo.",
+        "single_error": "Error de validación de archivo:",
+        "size_exceeded": "El tamaño del archivo ({{size}} MB) supera el límite de 5 MB. Comprime o redimensiona la imagen.",
+        "tip": "Consejo: puedes descartar estos errores con el botón de cierre de cada tarjeta.",
+        "unknown_error": "Error desconocido",
+        "unknown_type": "desconocido"
+      }
     },
     "chat": {
       "clear": "Limpiar",
@@ -56,11 +90,14 @@
       "title": "Eliminar mensaje {{role}}"
     },
     "edit": {
+      "attachment_alt": "Adjunto {{index}}",
       "attachments_hint": "Puedes eliminar archivos adjuntos individuales haciendo clic en el botón × que aparece al pasar el cursor.",
       "attachments_label": "Archivos adjuntos ({{count}})",
       "cancel": "Cancelar",
       "content_label": "Contenido del mensaje {{role}}",
-      "description": "Modifica el contenido del mensaje. Usa <1>Ctrl+Enter</1> para guardar o <3>Esc</3> para cancelar.",
+      "content_placeholder": "Escribe el contenido del mensaje de {{role}}...",
+      "delete_attachment": "Eliminar adjunto",
+      "description": "Modifica el contenido del mensaje. Usa \u003c1\u003eCtrl+Enter\u003c/1\u003e para guardar o \u003c3\u003eEsc\u003c/3\u003e para cancelar.",
       "save": "Guardar cambios",
       "shortcuts": {
         "cancel": "para cancelar",
@@ -71,10 +108,7 @@
         "modified": "Modificado",
         "words": "palabras"
       },
-      "title": "Editar mensaje {{role}}",
-      "attachment_alt": "Adjunto {{index}}",
-      "content_placeholder": "Escribe el contenido del mensaje de {{role}}...",
-      "delete_attachment": "Eliminar adjunto"
+      "title": "Editar mensaje {{role}}"
     },
     "export": {
       "button_label": "Exportar como JSON",
@@ -243,6 +277,12 @@
       "user": "Tú",
       "voice": "Voz"
     },
+    "reasoning": {
+      "chars": "{{count}} caracteres",
+      "processing": "Procesando...",
+      "streaming": "Razonando...",
+      "title": "Proceso de razonamiento"
+    },
     "roles": {
       "assistant": "Asistente",
       "error": "Error",
@@ -252,46 +292,6 @@
       "user": "Usuario"
     },
     "system_prompt": "Eres un asistente de IA servicial con experiencia en múltiples dominios técnicos, creativos y analíticos.\n\n## Contexto y capacidades\n\nTus respuestas deben basarse en tus datos de entrenamiento y adaptarse a las necesidades del usuario. Cuando tengas dudas sobre hechos recientes o fuera de tu conocimiento, reconoce esas limitaciones en lugar de especular.\n\n**Destacas en:**\n- Descomponer problemas complejos en pasos claros y manejables\n- Proporcionar ejemplos de código bien explicados\n- Analizar datos y ofrecer conclusiones sustentadas\n- Escribir de forma creativa respetando el tono y la audiencia\n- Enseñar conceptos mediante explicaciones claras y ejemplos\n\n**No puedes:**\n- Acceder a URL externas, navegar por la web ni obtener información en tiempo real\n- Ejecutar código, comandos o interactuar con sistemas externos\n- Acceder a archivos, bases de datos o datos personales fuera de esta conversación\n\n## Guías de respuesta\n\n**Adapta tu estilo a la tarea:**\n- Preguntas técnicas → respuestas precisas y estructuradas con código/ejemplos\n- Solicitudes creativas → respuestas atractivas e imaginativas\n- Análisis → razonamiento sustentado con conclusiones claras\n- Consultas simples → respuestas directas (amplía si es útil)\n- Problemas complejos → explicaciones paso a paso\n\n**Formato para mayor claridad:**\n- Usa Markdown (encabezados, listas, bloques de código, énfasis)\n- Incluye bloques de código con etiquetas de lenguaje\n- Divide las respuestas largas en secciones lógicas\n- Emplea tablas, viñetas y numeraciones para facilitar la lectura\n\n**Interactúa con autenticidad:**\n- Haz preguntas aclaratorias cuando haya ambigüedad\n- Reconoce directamente la incertidumbre o los límites\n- Ofrece enfoques alternativos cuando corresponda\n- Varía tu lenguaje de forma natural\n- Explica tu razonamiento en temas complejos o subjetivos\n\n## Manejo de contenido sensible\n\nPara temas potencialmente dañinos, ilegales o sensibles:\n- Proporciona información factual y educativa cuando corresponda\n- Explica riesgos, consideraciones legales e implicaciones éticas\n- Redirige hacia alternativas constructivas si la solicitud puede causar daño\n- Rechaza solicitudes que promuevan actividades ilegales o dañinas\n\n## Estándares de calidad\n\n- **Precisión**: fundamenta las respuestas y reconoce las lagunas\n- **Claridad**: usa lenguaje preciso y define términos técnicos\n- **Concisión**: ajusta la profundidad según la complejidad\n- **Utilidad**: anticipa necesidades posteriores y ofrece próximos pasos\n- **Respeto**: mantén un tono profesional y empático en todo momento",
-    "title": "AI Playground",
-    "attachments": {
-      "attached_image_alt": "Imagen adjunta",
-      "delete_image": "Eliminar imagen",
-      "add_images": "Agregar imágenes",
-      "attach_images": "Adjuntar imágenes",
-      "count": "{{count}}/{{max}} imágenes",
-      "finalizing": "Finalizando...",
-      "info": "Compatible con: JPG, PNG, GIF, WebP - Máx. 5 MB por imagen - Hasta {{max}} imágenes",
-      "optimizing": "Optimizando {{progress}}%",
-      "processing": "Procesando {{progress}}%",
-      "remove_image": "Quitar imagen",
-      "notifications": {
-        "all_processing_failed_message": "No se puede procesar {{file}}. Prueba con otra imagen o contacta con soporte.",
-        "all_processing_failed_title": "Todos los métodos de procesamiento fallaron",
-        "image_processing_failed_message": "No se pudo procesar {{file}}: {{message}}",
-        "image_processing_failed_title": "Error al procesar la imagen",
-        "mobile_processing_failed_message": "No se pudo procesar {{file}} en móvil: {{message}}",
-        "mobile_processing_failed_title": "Error de procesamiento móvil"
-      },
-      "validation": {
-        "dismiss_error": "Descartar error",
-        "extension_unsupported": "La extensión del archivo no es compatible. Formatos compatibles: {{formats}}",
-        "file_type_unsupported": "El tipo de archivo \"{{type}}\" no es compatible. Selecciona un archivo de imagen.",
-        "limit_exceeded": "Se permite un máximo de {{max}} imágenes. Quita algunas imágenes antes de agregar más.",
-        "limit_skipped": "Se permite un máximo de {{max}} imágenes. Este archivo se omitió.",
-        "multiple_errors": "{{count}} errores de validación de archivo:",
-        "processing_error": "Ocurrió un error al procesar las imágenes. Inténtalo de nuevo.",
-        "single_error": "Error de validación de archivo:",
-        "size_exceeded": "El tamaño del archivo ({{size}} MB) supera el límite de 5 MB. Comprime o redimensiona la imagen.",
-        "tip": "Consejo: puedes descartar estos errores con el botón de cierre de cada tarjeta.",
-        "unknown_error": "Error desconocido",
-        "unknown_type": "desconocido"
-      }
-    },
-    "reasoning": {
-      "chars": "{{count}} caracteres",
-      "processing": "Procesando...",
-      "streaming": "Razonando...",
-      "title": "Proceso de razonamiento"
-    }
+    "title": "AI Playground"
   }
 }

@@ -42,6 +42,9 @@ export const createChannelSchema = (tr?: SchemaTranslationFn) => {
         api_format: z.enum(['chat_completion', 'response']).default('chat_completion'),
         // Supported endpoints for this channel (empty means use defaults)
         supported_endpoints: z.array(z.string()).optional(),
+        // Per-endpoint full upstream URL overrides, keyed by endpoint name.
+        // An empty/absent value for an endpoint means "use the default URL".
+        endpoint_urls: z.record(z.string()).optional(),
         mcp_tool_blacklist: z.array(z.string()).optional(),
         custom_headers: z.record(z.string()).optional(),
         // iFlytek Spark (type 18): APPID|APISecret|APIKey

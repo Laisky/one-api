@@ -178,7 +178,13 @@ export function EditChannelPage() {
 
                 <ChannelAdvancedSettings form={form} normalizedChannelType={normalizedChannelType} tr={tr} />
 
-                <ChannelEndpointSettings form={form} allEndpoints={allEndpoints} defaultEndpoints={defaultEndpoints} tr={tr} />
+                <ChannelEndpointSettings
+                  form={form}
+                  allEndpoints={allEndpoints}
+                  defaultEndpoints={defaultEndpoints}
+                  defaultBaseURL={defaultBaseURL}
+                  tr={tr}
+                />
 
                 <ChannelToolingSettings form={form} defaultTooling={defaultTooling} tr={tr} notify={notify} />
 

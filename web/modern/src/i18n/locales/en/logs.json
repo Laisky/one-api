@@ -42,7 +42,7 @@
       "load_failed": "Failed to load trace information.",
       "log_id": "Log ID",
       "metadata": "Metadata",
-      "method_status": "Method & Status",
+      "method_status": "Method \u0026 Status",
       "model": "Model",
       "no_content": "No content recorded.",
       "no_timeline": "Timeline data is not available for this trace.",
@@ -109,6 +109,12 @@
       "missing": "Unknown",
       "not_available": "N/A"
     },
+    "notifications": {
+      "clear_failed_message": "Failed to clear logs.",
+      "clear_failed_title": "Clear failed",
+      "clear_success_message": "Logs cleared successfully.",
+      "clear_success_title": "Logs cleared"
+    },
     "search": {
       "log_entry": "Log Entry",
       "quota": "Quota: {{value}}"
@@ -147,12 +153,6 @@
       "tool": "Tool",
       "topup": "Top Up",
       "unknown": "Unknown"
-    },
-    "notifications": {
-      "clear_failed_title": "Clear failed",
-      "clear_failed_message": "Failed to clear logs.",
-      "clear_success_title": "Logs cleared",
-      "clear_success_message": "Logs cleared successfully."
     }
   }
 }

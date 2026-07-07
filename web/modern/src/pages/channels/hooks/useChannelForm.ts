@@ -83,6 +83,7 @@ export const useChannelForm = () => {
         auth_type: 'personal_access_token',
         api_format: 'chat_completion',
         supported_endpoints: [],
+        endpoint_urls: {},
         mcp_tool_blacklist: [],
         custom_headers: {},
         spark_app_id: '',
@@ -173,6 +174,7 @@ export const useChannelForm = () => {
           auth_type: 'personal_access_token',
           api_format: 'chat_completion',
           supported_endpoints: [],
+          endpoint_urls: {},
           mcp_tool_blacklist: [],
           custom_headers: {},
           spark_app_id: '',
@@ -190,6 +192,14 @@ export const useChannelForm = () => {
               ...parsed,
               api_format: parsed.api_format === 'response' ? 'response' : 'chat_completion',
               supported_endpoints: Array.isArray(parsed.supported_endpoints) ? parsed.supported_endpoints : [],
+              endpoint_urls:
+                parsed.endpoint_urls && typeof parsed.endpoint_urls === 'object' && !Array.isArray(parsed.endpoint_urls)
+                  ? Object.fromEntries(
+                      Object.entries(parsed.endpoint_urls)
+                        .map(([key, value]) => [key, typeof value === 'string' ? value.trim() : String(value ?? '').trim()])
+                        .filter(([, value]) => value !== '')
+                    )
+                  : {},
               mcp_tool_blacklist: Array.isArray(parsed.mcp_tool_blacklist) ? parsed.mcp_tool_blacklist : [],
               custom_headers:
                 parsed.custom_headers && typeof parsed.custom_headers === 'object' && !Array.isArray(parsed.custom_headers)

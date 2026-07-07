@@ -42,7 +42,7 @@
       "load_failed": "Échec du chargement des informations de trace.",
       "log_id": "ID de journal",
       "metadata": "Métadonnées",
-      "method_status": "Méthode & Statut",
+      "method_status": "Méthode \u0026 Statut",
       "model": "Modèle",
       "no_content": "Aucun contenu enregistré.",
       "no_timeline": "Les données de chronologie ne sont pas disponibles pour cette trace.",
@@ -109,6 +109,12 @@
       "missing": "Inconnu",
       "not_available": "N/D"
     },
+    "notifications": {
+      "clear_failed_message": "Impossible de supprimer les journaux.",
+      "clear_failed_title": "Échec du nettoyage",
+      "clear_success_message": "Les journaux ont été supprimés.",
+      "clear_success_title": "Journaux supprimés"
+    },
     "search": {
       "log_entry": "Entrée de journal",
       "quota": "Quota : {{value}}"
@@ -147,12 +153,6 @@
       "tool": "Outil",
       "topup": "Recharge",
       "unknown": "Inconnu"
-    },
-    "notifications": {
-      "clear_failed_title": "Échec du nettoyage",
-      "clear_failed_message": "Impossible de supprimer les journaux.",
-      "clear_success_title": "Journaux supprimés",
-      "clear_success_message": "Les journaux ont été supprimés."
     }
   }
 }

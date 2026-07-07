@@ -29,8 +29,8 @@
     "confirm": {
       "delete": "¿Seguro que deseas eliminar este canal?",
       "delete_disabled": "¿Eliminar todos los canales deshabilitados? Esta acción no se puede deshacer.",
-      "delete_title": "Eliminar canal",
-      "delete_disabled_title": "Eliminar canales deshabilitados"
+      "delete_disabled_title": "Eliminar canales deshabilitados",
+      "delete_title": "Eliminar canal"
     },
     "description": "Configura y gestiona los canales de enrutamiento del API",
     "edit": {
@@ -199,7 +199,9 @@
           "description": "La API heredada Completions genera completions de texto para un prompt dado. Es la API original de generación de texto y hoy en día ha sido reemplazada en gran medida por Chat Completions.",
           "label": "Completions"
         },
+        "custom_url_badge": "URL personalizada",
         "default_badge": "predeterminado",
+        "edit_endpoint": "Ver documentación y editar la URL del endpoint",
         "embeddings": {
           "description": "La API Embeddings convierte texto en representaciones vectoriales numéricas. Estos vectores pueden usarse para búsqueda semántica, agrupación y comparaciones de similitud.",
           "label": "Embeddings"
@@ -218,7 +220,10 @@
           "description": "Descripción",
           "example": "Ejemplo cURL",
           "no_description": "No hay documentación detallada disponible para este endpoint.",
-          "no_example": "# No hay ejemplo disponible"
+          "no_example": "# No hay ejemplo disponible",
+          "url_override": "Anulación de URL upstream",
+          "url_override_help": "La URL de endpoint predeterminada está precargada. Edítala para enrutar este endpoint a una dirección upstream no estándar; déjala como la predeterminada para seguir automáticamente la URL base del canal.",
+          "url_override_reset": "Restablecer al valor predeterminado"
         },
         "moderations": {
           "description": "La API Moderations comprueba si un texto viola las políticas de contenido. Devuelve categorías y puntuaciones que indican la probabilidad de infracciones.",
@@ -306,10 +311,10 @@
         "placeholder": "Mapeo de ARN de perfil de inferencia de AWS Bedrock:\n{{example}}"
       },
       "key": {
+        "github_placeholder": "Introduce un token de acceso de GitHub (PAT u OAuth) con una suscripción activa de Copilot",
         "help": "La clave API para autenticarse con el proveedor.",
         "label": "Clave API",
-        "placeholder": "Introduce tu clave API",
-        "github_placeholder": "Introduce un token de acceso de GitHub (PAT u OAuth) con una suscripción activa de Copilot"
+        "placeholder": "Introduce tu clave API"
       },
       "loading": "Cargando canal...",
       "mcp": {
@@ -445,6 +450,14 @@
           "placeholder": "SecretKey"
         }
       },
+      "test": {
+        "error_message": "No se pudo probar el canal.",
+        "error_title": "Error de prueba",
+        "failed_message": "La prueba del canal falló.",
+        "failed_title": "Prueba fallida",
+        "success_message": "La prueba del canal se completó correctamente.",
+        "success_title": "Prueba aprobada"
+      },
       "title": {
         "create": "Crear canal",
         "edit": "Editar canal"
@@ -541,14 +554,6 @@
       "weight": {
         "help": "Se usa para el balanceo de carga entre canales con la misma prioridad. El valor predeterminado es 0.",
         "label": "Peso"
-      },
-      "test": {
-        "success_title": "Prueba aprobada",
-        "success_message": "La prueba del canal se completó correctamente.",
-        "failed_title": "Prueba fallida",
-        "failed_message": "La prueba del canal falló.",
-        "error_title": "Error de prueba",
-        "error_message": "No se pudo probar el canal."
       }
     },
     "empty": "No se encontraron canales. Crea tu primer canal para comenzar.",
@@ -574,14 +579,14 @@
       "priority_failed_message": "No se pudo actualizar la prioridad.",
       "priority_failed_title": "Error al actualizar",
       "priority_saved": "Prioridad actualizada.",
+      "status_failed_message": "No se pudo actualizar el estado del canal.",
+      "status_failed_title": "Error al actualizar",
       "test_failed_message": "Error desconocido",
       "test_failed_title": "La prueba del canal falló",
       "test_success": "Prueba del canal exitosa.",
       "testing_model_failed_message": "No se pudo actualizar el modelo de prueba",
       "testing_model_failed_title": "Error al guardar",
-      "testing_model_saved": "Modelo de prueba guardado.",
-      "status_failed_title": "Error al actualizar",
-      "status_failed_message": "No se pudo actualizar el estado del canal."
+      "testing_model_saved": "Modelo de prueba guardado."
     },
     "response": {
       "not_tested": "No probado",
@@ -693,6 +698,10 @@
         "label": "Cuota"
       }
     },
+    "notifications": {
+      "action_failed_message": "No se pudo aplicar el cambio.",
+      "action_failed_title": "Acción fallida"
+    },
     "search": {
       "dropdown_placeholder": "Escribe el nombre del canje...",
       "placeholder": "Buscar canjes por nombre..."
@@ -712,10 +721,6 @@
       "quota": "Cuota",
       "redeemed_time": "Fecha de canje",
       "status": "Estado"
-    },
-    "notifications": {
-      "action_failed_title": "Acción fallida",
-      "action_failed_message": "No se pudo aplicar el cambio."
     }
   },
   "tokens": {
@@ -834,6 +839,10 @@
         "hide": "Ocultar clave",
         "show": "Mostrar clave"
       },
+      "notifications": {
+        "action_failed_message": "No se pudo aplicar el cambio.",
+        "action_failed_title": "Acción fallida"
+      },
       "quota": {
         "unlimited": "Ilimitado"
       },
@@ -859,11 +868,7 @@
       "table": {
         "id_placeholder": "(ID {{id}})"
       },
-      "title": "Tokens",
-      "notifications": {
-        "action_failed_title": "Acción fallida",
-        "action_failed_message": "No se pudo aplicar el cambio."
-      }
+      "title": "Tokens"
     }
   },
   "users": {
@@ -951,6 +956,9 @@
         "unexpected_title": "Error inesperado"
       },
       "fields": {
+        "created_at": {
+          "label": "Fecha de registro"
+        },
         "display_name": {
           "help": "Nombre legible opcional que se muestra en la interfaz.",
           "label": "Nombre para mostrar",
@@ -986,16 +994,13 @@
           "help": "Las unidades de cuota son tokens. La estimación en USD utiliza la relación por unidad configurada por el administrador.",
           "label": "Cuota ({{usd}})"
         },
+        "updated_at": {
+          "label": "Última modificación"
+        },
         "username": {
           "help": "Nombre de inicio de sesión único. Mínimo 3 caracteres.",
           "label": "Nombre de usuario *",
           "placeholder": "Introduce el nombre de usuario"
-        },
-        "created_at": {
-          "label": "Fecha de registro"
-        },
-        "updated_at": {
-          "label": "Última modificación"
         }
       },
       "loading": "Cargando usuario...",

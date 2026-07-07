@@ -109,6 +109,12 @@
       "missing": "Desconocido",
       "not_available": "N/D"
     },
+    "notifications": {
+      "clear_failed_message": "No se pudieron limpiar los registros.",
+      "clear_failed_title": "Error al limpiar",
+      "clear_success_message": "Los registros se limpiaron correctamente.",
+      "clear_success_title": "Registros limpiados"
+    },
     "search": {
       "log_entry": "Entrada de registro",
       "quota": "Cuota: {{value}}"
@@ -147,12 +153,6 @@
       "tool": "Herramienta",
       "topup": "Recarga",
       "unknown": "Desconocido"
-    },
-    "notifications": {
-      "clear_failed_title": "Error al limpiar",
-      "clear_failed_message": "No se pudieron limpiar los registros.",
-      "clear_success_title": "Registros limpiados",
-      "clear_success_message": "Los registros se limpiaron correctamente."
     }
   }
 }

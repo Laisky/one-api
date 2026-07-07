@@ -103,6 +103,11 @@ func DoRequestHelper(a Adaptor, c *gin.Context, meta *meta.Meta, requestBody io.
 		return nil, errors.Wrap(err, "get request url failed")
 	}
 	if meta != nil {
+		// Honor an administrator-configured per-endpoint upstream URL override.
+		// When set, it fully replaces the adaptor-computed URL for this endpoint.
+		if override := meta.UpstreamEndpointURLOverride(); override != "" {
+			fullRequestURL = override
+		}
 		meta.UpstreamRequestURL = fullRequestURL
 	}
 

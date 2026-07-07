@@ -2,8 +2,9 @@ import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { FormControl, FormField, FormItem } from '@/components/ui/form';
-import { Info } from 'lucide-react';
-import { useState } from 'react';
+import { Input } from '@/components/ui/input';
+import { Pencil } from 'lucide-react';
+import { useEffect, useState } from 'react';
 import type { UseFormReturn } from 'react-hook-form';
 import type { ChannelForm, EndpointInfo } from '../schemas';
 import { LabelWithHelp } from './LabelWithHelp';
@@ -12,8 +13,22 @@ interface ChannelEndpointSettingsProps {
   form: UseFormReturn<ChannelForm>;
   allEndpoints: EndpointInfo[];
   defaultEndpoints: string[];
+  // defaultBaseURL is the channel-type default base URL, used to preview the
+  // effective default endpoint URL when the admin has not set a custom base URL.
+  defaultBaseURL?: string;
   tr: (key: string, defaultValue: string, options?: Record<string, unknown>) => string;
 }
+
+// buildDefaultEndpointURL renders the effective default upstream URL for an
+// endpoint by joining the (trimmed) base URL with the endpoint's canonical path.
+// Returns the bare path when no base URL is known yet.
+const buildDefaultEndpointURL = (baseURL: string, path: string): string => {
+  const trimmedBase = (baseURL || '').trim().replace(/\/+$/, '');
+  if (!trimmedBase) {
+    return path;
+  }
+  return `${trimmedBase}${path}`;
+};
 
 // Endpoint documentation with descriptions and curl examples
 const ENDPOINT_DOCS: Record<string, { description: string; curlExample: string }> = {
@@ -193,10 +208,68 @@ wscat -c "wss://api.example.com/v1/realtime?model=gpt-4o-realtime-preview" \\
   },
 };
 
-export const ChannelEndpointSettings = ({ form, allEndpoints, defaultEndpoints, tr }: ChannelEndpointSettingsProps) => {
+export const ChannelEndpointSettings = ({ form, allEndpoints, defaultEndpoints, defaultBaseURL, tr }: ChannelEndpointSettingsProps) => {
   const [selectedEndpoint, setSelectedEndpoint] = useState<EndpointInfo | null>(null);
+  // urlDraft is the editable text shown in the override input. It is seeded with
+  // the stored override or the computed default when a modal opens, so admins can
+  // edit directly from the default value instead of an empty field.
+  const [urlDraft, setUrlDraft] = useState<string>('');
   const currentEndpoints = form.watch('config.supported_endpoints') || [];
+  const endpointUrls = form.watch('config.endpoint_urls') || {};
+  const baseURL = form.watch('base_url') || '';
   const endpointError = (form.formState.errors as any)?.config?.supported_endpoints?.message;
+
+  // The effective default upstream URL for the endpoint whose modal is open.
+  const selectedDefaultURL = selectedEndpoint
+    ? buildDefaultEndpointURL(baseURL || defaultBaseURL || '', selectedEndpoint.path)
+    : '';
+
+  // Seed the draft when a modal opens: show the stored override if present,
+  // otherwise pre-fill the computed default so it can be edited in place.
+  useEffect(() => {
+    if (!selectedEndpoint) {
+      return;
+    }
+    const stored = form.getValues('config.endpoint_urls')?.[selectedEndpoint.name];
+    const def = buildDefaultEndpointURL(form.getValues('base_url') || defaultBaseURL || '', selectedEndpoint.path);
+    setUrlDraft(stored ?? def);
+    // Re-seed only when the selected endpoint changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedEndpoint]);
+
+  // persistEndpointURL stores a per-endpoint override, but drops it when the value
+  // is blank or equal to the computed default so the endpoint keeps following the
+  // automatic (BaseURL-derived) default.
+  const persistEndpointURL = (endpointName: string, value: string, defaultURL: string) => {
+    const next = { ...(form.getValues('config.endpoint_urls') || {}) };
+    const trimmed = value.trim();
+    if (trimmed === '' || trimmed === defaultURL.trim()) {
+      delete next[endpointName];
+    } else {
+      next[endpointName] = value;
+    }
+    form.setValue('config.endpoint_urls', next, { shouldDirty: true });
+  };
+
+  const handleEndpointURLInput = (value: string) => {
+    if (!selectedEndpoint) {
+      return;
+    }
+    setUrlDraft(value);
+    persistEndpointURL(selectedEndpoint.name, value, selectedDefaultURL);
+  };
+
+  // resetEndpointURL restores the default value into the field and removes any
+  // stored override.
+  const resetEndpointURL = () => {
+    if (!selectedEndpoint) {
+      return;
+    }
+    setUrlDraft(selectedDefaultURL);
+    const next = { ...(form.getValues('config.endpoint_urls') || {}) };
+    delete next[selectedEndpoint.name];
+    form.setValue('config.endpoint_urls', next, { shouldDirty: true });
+  };
 
   // Determine if we're using custom endpoints or defaults
   const isUsingDefaults = currentEndpoints.length === 0;
@@ -278,6 +351,31 @@ export const ChannelEndpointSettings = ({ form, allEndpoints, defaultEndpoints, 
                     <code>{getEndpointDoc(selectedEndpoint.name).curlExample}</code>
                   </pre>
                 </div>
+                <div>
+                  <div className="flex items-center justify-between gap-2 mb-2">
+                    <h4 className="font-medium">{tr('endpoints.modal.url_override', 'Upstream URL Override')}</h4>
+                    {urlDraft.trim() !== selectedDefaultURL.trim() && (
+                      <Button type="button" variant="outline" size="sm" onClick={resetEndpointURL}>
+                        {tr('endpoints.modal.url_override_reset', 'Reset to default')}
+                      </Button>
+                    )}
+                  </div>
+                  <Input
+                    type="url"
+                    inputMode="url"
+                    autoComplete="off"
+                    spellCheck={false}
+                    value={urlDraft}
+                    placeholder={selectedDefaultURL}
+                    onChange={(e) => handleEndpointURLInput(e.target.value)}
+                  />
+                  <p className="text-xs text-muted-foreground mt-2">
+                    {tr(
+                      'endpoints.modal.url_override_help',
+                      'The default endpoint URL is pre-filled. Edit it to route this endpoint to a non-standard upstream address; leave it as the default to keep following the channel base URL automatically.'
+                    )}
+                  </p>
+                </div>
               </div>
             </>
           )}
@@ -311,6 +409,7 @@ export const ChannelEndpointSettings = ({ form, allEndpoints, defaultEndpoints, 
         {allEndpoints.map((endpoint) => {
           const isChecked = effectiveEndpoints.includes(endpoint.name);
           const isDefault = defaultEndpoints.includes(endpoint.name);
+          const hasCustomURL = (endpointUrls[endpoint.name] || '').trim() !== '';
 
           return (
             <FormField
@@ -326,6 +425,11 @@ export const ChannelEndpointSettings = ({ form, allEndpoints, defaultEndpoints, 
                     <div className="flex items-center justify-between gap-2">
                       <span className="font-medium text-sm">{tr(`endpoints.${endpoint.name}.label`, endpoint.description)}</span>
                       <div className="flex items-center gap-1">
+                        {hasCustomURL && (
+                          <span className="text-xs text-primary bg-primary/10 px-1.5 py-0.5 rounded">
+                            {tr('endpoints.custom_url_badge', 'custom URL')}
+                          </span>
+                        )}
                         {isDefault && (
                           <span className="text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
                             {tr('endpoints.default_badge', 'default')}
@@ -337,12 +441,16 @@ export const ChannelEndpointSettings = ({ form, allEndpoints, defaultEndpoints, 
                           size="sm"
                           className="h-6 w-6 p-0"
                           onClick={() => setSelectedEndpoint(endpoint)}
+                          aria-label={tr('endpoints.edit_endpoint', 'View docs and edit endpoint URL')}
+                          title={tr('endpoints.edit_endpoint', 'View docs and edit endpoint URL')}
                         >
-                          <Info className="h-4 w-4 text-muted-foreground hover:text-foreground" />
+                          <Pencil className="h-4 w-4 text-muted-foreground hover:text-foreground" />
                         </Button>
                       </div>
                     </div>
-                    <p className="text-xs text-muted-foreground font-mono">{endpoint.path}</p>
+                    <p className="text-xs text-muted-foreground font-mono break-all">
+                      {hasCustomURL ? endpointUrls[endpoint.name] : endpoint.path}
+                    </p>
                   </div>
                 </FormItem>
               )}

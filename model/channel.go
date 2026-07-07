@@ -106,6 +106,17 @@ type ChannelConfig struct {
 	// images_generations, images_edits, audio_speech, audio_transcription,
 	// audio_translation, rerank, response_api, claude_messages, realtime, videos.
 	SupportedEndpoints []string `json:"supported_endpoints,omitempty"`
+	// EndpointURLs maps an endpoint name (same vocabulary as SupportedEndpoints)
+	// to a full upstream URL override for that endpoint. When a request's
+	// endpoint has a non-empty override here, the relay layer sends the request
+	// to this exact URL instead of the URL derived from BaseURL. This lets an
+	// administrator point an individual, non-standard endpoint (for example a
+	// rerank surface hosted on a different host/path) at a custom upstream URL.
+	// When an endpoint is absent or its value is empty, the channel's default
+	// BaseURL-derived URL is used. Applies to HTTP and WebSocket relay surfaces
+	// (including the realtime endpoint); SDK-based channels (e.g. AWS Bedrock,
+	// Vertex AI) ignore it.
+	EndpointURLs map[string]string `json:"endpoint_urls,omitempty"`
 }
 
 type ModelConfig struct {

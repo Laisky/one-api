@@ -227,6 +227,11 @@ func testChannel(ctx context.Context, channel *model.Channel, request *relaymode
 
 	// Pre-build and log the upstream URL for debugging consistency
 	if fullURL, urlErr := adaptor.GetRequestURL(meta); urlErr == nil {
+		// Mirror the per-endpoint override applied by the relay dispatch layer so
+		// the logged URL matches the URL the request is actually sent to.
+		if override := meta.UpstreamEndpointURLOverride(); override != "" {
+			fullURL = override
+		}
 		lg.Debug("prepare test request",
 			zap.String("actual_model", meta.ActualModelName),
 			zap.Int("channel_id", channel.Id),

@@ -82,6 +82,23 @@ func GetMappedModelName(modelName string, mapping map[string]string) string {
 	return modelName
 }
 
+// UpstreamEndpointURLOverride returns the administrator-configured full upstream
+// URL override for the endpoint that matches this request's relay mode, or an
+// empty string when no override is set. The relay layer uses this to redirect an
+// individual endpoint (for example a non-standard rerank surface) to a custom
+// upstream URL while leaving the channel's other endpoints on the BaseURL-derived
+// defaults. The returned value is trimmed of surrounding whitespace.
+func (m *Meta) UpstreamEndpointURLOverride() string {
+	if m == nil || len(m.Config.EndpointURLs) == 0 {
+		return ""
+	}
+	name := channeltype.RelayModeToEndpointName(m.Mode)
+	if name == "" {
+		return ""
+	}
+	return strings.TrimSpace(m.Config.EndpointURLs[name])
+}
+
 func GetByContext(c *gin.Context) *Meta {
 	lg := gmw.GetLogger(c)
 	if v, ok := c.Get(ctxkey.Meta); ok {
