@@ -277,7 +277,14 @@ const ChannelsTable = () => {
       formatted[i].key = '' + channelRef(formatted[i]);
       const testModels = [];
       const modelStr = formatted[i].models || '';
-      modelStr.split(',').forEach((item) => {
+      const hasServerTestModels = Array.isArray(formatted[i].test_models) &&
+        formatted[i].test_models.every((item) => typeof item === 'string');
+      const sourceModels = hasServerTestModels ? formatted[i].test_models : modelStr.split(',');
+      sourceModels.forEach((item) => {
+        if (!item) {
+          return;
+        }
+        item = item.trim();
         if (!item) {
           return;
         }

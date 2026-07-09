@@ -157,6 +157,80 @@ func TestMigrateExternalUUIDsRollingWindowT18(t *testing.T) {
 	requireUUIDUniqueIndex(t, db, uuidBackfillTarget{table: "tokens", model: &Token{}})
 }
 
+// TestHasPrimaryExternalUUIDBackfillIgnoresOrphanFKRows verifies orphan FK rows do not trigger repeated startup backfills.
+func TestHasPrimaryExternalUUIDBackfillIgnoresOrphanFKRows(t *testing.T) {
+	db := setupMigrationTestDB(t)
+	originalDB := DB
+	originalLOGDB := LOG_DB
+	DB = db
+	LOG_DB = db
+	t.Cleanup(func() {
+		DB = originalDB
+		LOG_DB = originalLOGDB
+	})
+
+	require.NoError(t, migrateDB())
+	require.NoError(t, db.Exec("INSERT INTO users (id, uuid, username, password) VALUES (1, '018f0000-0000-7000-8000-000000000001', 'root', 'password-hash')").Error)
+	require.NoError(t, db.Exec("INSERT INTO logs (id, uuid, user_id, type, content) VALUES (1, '018f0000-0000-7000-8000-000000000002', 999, 1, 'orphan log')").Error)
+
+	needsBackfill, err := hasPrimaryExternalUUIDBackfill(context.Background())
+	require.NoError(t, err)
+	require.False(t, needsBackfill)
+}
+
+// TestHasPrimaryExternalUUIDBackfillDetectsFillableFKRows verifies valid missing FK UUID rows trigger backfill work.
+func TestHasPrimaryExternalUUIDBackfillDetectsFillableFKRows(t *testing.T) {
+	db := setupMigrationTestDB(t)
+	originalDB := DB
+	originalLOGDB := LOG_DB
+	DB = db
+	LOG_DB = db
+	t.Cleanup(func() {
+		DB = originalDB
+		LOG_DB = originalLOGDB
+	})
+
+	require.NoError(t, migrateDB())
+	require.NoError(t, db.Exec("INSERT INTO users (id, uuid, username, password) VALUES (1, '018f0000-0000-7000-8000-000000000001', 'root', 'password-hash')").Error)
+	require.NoError(t, db.Exec("INSERT INTO tokens (id, uuid, user_id, `key`, name) VALUES (1, '018f0000-0000-7000-8000-000000000002', 1, 'legacy-token-key', 'default')").Error)
+
+	needsBackfill, err := hasPrimaryExternalUUIDBackfill(context.Background())
+	require.NoError(t, err)
+	require.True(t, needsBackfill)
+
+	require.NoError(t, MigrateExternalUUIDs(context.Background()))
+	var token Token
+	require.NoError(t, db.First(&token, "id = ?", 1).Error)
+	require.NotNil(t, token.UserUUID)
+	require.Equal(t, "018f0000-0000-7000-8000-000000000001", *token.UserUUID)
+}
+
+// TestHasMissingFKUUIDCandidateIgnoresZeroNullableFK verifies zero nullable FKs do not trigger backfill work.
+func TestHasMissingFKUUIDCandidateIgnoresZeroNullableFK(t *testing.T) {
+	db := setupMigrationTestDB(t)
+	originalDB := DB
+	originalLOGDB := LOG_DB
+	DB = db
+	LOG_DB = db
+	t.Cleanup(func() {
+		DB = originalDB
+		LOG_DB = originalLOGDB
+	})
+
+	require.NoError(t, migrateDB())
+	require.NoError(t, db.Exec("INSERT INTO token_transactions (id, uuid, transaction_id, status, pre_quota, log_id) VALUES (1, '018f0000-0000-7000-8000-000000000001', 'zero-log-id', 1, 10, 0)").Error)
+
+	hasCandidate, err := hasMissingFKUUIDCandidate(context.Background(), db, uuidRefProbeTarget{
+		table:      "token_transactions",
+		model:      &TokenTransaction{},
+		fkColumn:   "log_id",
+		uuidColumn: "log_uuid",
+		nullableFK: true,
+	})
+	require.NoError(t, err)
+	require.False(t, hasCandidate)
+}
+
 // TestNewBinaryBeforeMasterMigrationFailsT18 documents the master-first rolling-upgrade rule.
 func TestNewBinaryBeforeMasterMigrationFailsT18(t *testing.T) {
 	db := setupMigrationTestDB(t)

@@ -36,6 +36,7 @@ interface Channel {
   priority?: number;
   weight?: number;
   models?: string;
+  test_models?: string[];
   group?: string;
   used_quota?: number;
   test_time?: number;
@@ -52,6 +53,30 @@ const channelRefPayload = (ref: string | number): { id: number } | { uuid: strin
 
 const sameChannelRef = (left: Pick<Channel, 'id' | 'uuid'>, right: Pick<Channel, 'id' | 'uuid'>) =>
   String(channelRef(left)) === String(channelRef(right));
+
+const nonTextTestingModelMarkers = [
+  'embedding',
+  'rerank',
+  'sora',
+  'tts',
+  'transcribe',
+  'whisper',
+  'dall-e',
+  'gpt-image',
+  'imagen',
+  'veo',
+  'video',
+];
+
+/**
+ * isTextTestingModelName rejects known non-chat model families when older APIs
+ * do not provide the server-filtered test_models field.
+ */
+const isTextTestingModelName = (modelName: string) => {
+  const lowerName = modelName.trim().toLowerCase();
+  if (!lowerName) return false;
+  return !nonTextTestingModelMarkers.some((marker) => lowerName.includes(marker));
+};
 
 /**
  * Channel options defined at relay/channeltype/define.go
@@ -698,13 +723,7 @@ export function ChannelsPage() {
     {
       accessorKey: 'name',
       header: t('channels.columns.name'),
-      cell: ({ row }) => (
-        <NameWithId
-          name={row.original.name}
-          refId={channelRef(row.original)}
-          idLabel={t('channels.columns.id')}
-        />
-      ),
+      cell: ({ row }) => <NameWithId name={row.original.name} refId={channelRef(row.original)} idLabel={t('channels.columns.id')} />,
     },
     {
       accessorKey: 'type',
@@ -799,12 +818,12 @@ export function ChannelsPage() {
       header: t('channels.columns.testing_model'),
       cell: ({ row }) => {
         const ch = row.original;
-        const models = (ch.models || '')
-          .split(',')
-          .map((m) => m.trim())
+        const models = (Array.isArray(ch.test_models) ? ch.test_models : (ch.models || '').split(','))
+          .map((m) => String(m).trim())
           .filter(Boolean)
+          .filter(isTextTestingModelName)
           .sort();
-        const value = ch.testing_model ?? ''; // empty => Auto (cheapest)
+        const value = ch.testing_model && models.includes(ch.testing_model) ? ch.testing_model : ''; // empty => Auto (cheapest)
         return (
           <div className="w-[140px] md:w-[160px] max-w-[220px]">
             <select

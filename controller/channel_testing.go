@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
-	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -140,8 +139,8 @@ func testChannel(ctx context.Context, channel *model.Channel, request *relaymode
 		zap.String("stored_models", channel.Models),
 	)
 
-	if resolvedModel == "" || !strings.Contains(channel.Models, resolvedModel) {
-		modelNames := strings.Split(channel.Models, ",")
+	if resolvedModel == "" || !channel.SupportsModel(resolvedModel) {
+		modelNames := channel.GetSupportedModelNames()
 		if len(modelNames) > 0 {
 			resolvedModel = strings.TrimSpace(modelNames[0])
 		}
@@ -332,28 +331,17 @@ func TestChannel(c *gin.Context) {
 		return
 	}
 
-	modelName := strings.TrimSpace(c.Query("model"))
-	// If not explicitly provided by query, use stored testing_model; if missing, default to cheapest supported model
-	if modelName == "" {
-		if channel.TestingModel != nil && *channel.TestingModel != "" {
-			// ensure still supported; if not, clear per requirement
-			tm := *channel.TestingModel
-			supported := slices.Contains(channel.GetSupportedModelNames(), tm)
-
-			if supported {
-				modelName = tm
-			} else {
-				// clear invalid stored value and pick cheapest
-				channel.TestingModel = nil
-				if err := model.DB.Model(channel).Where("id = ?", channel.Id).Update("testing_model", nil).Error; err != nil {
-					lg.Error("failed to clear invalid testing_model", zap.Error(err))
-				}
-			}
+	modelName, clearTestingModel, err := chooseChannelTestModel(channel, c.Query("model"))
+	if clearTestingModel {
+		channel.TestingModel = nil
+		if updateErr := model.DB.Model(channel).Where("id = ?", channel.Id).Update("testing_model", nil).Error; updateErr != nil {
+			lg.Error("failed to clear invalid testing_model", zap.Error(updateErr))
 		}
-
-		if modelName == "" {
-			modelName = channel.GetCheapestSupportedModel()
-		}
+	}
+	if err != nil {
+		lg.Debug("failed to choose channel test model", zap.Error(err))
+		helper.RespondError(c, err)
+		return
 	}
 
 	ctx := gmw.SetLogger(c, lg)
@@ -422,25 +410,18 @@ func testChannels(ctx context.Context, notify bool, scope string) error {
 		for _, channel := range channels {
 			isChannelEnabled := channel.Status == model.ChannelStatusEnabled
 			tik := time.Now()
-			// Determine model for this channel: stored testing_model if valid, else cheapest
-			chosenModel := ""
-			if channel.TestingModel != nil && *channel.TestingModel != "" {
-				tm := *channel.TestingModel
-				valid := slices.Contains(channel.GetSupportedModelNames(), tm)
-				if valid {
-					chosenModel = tm
-				} else {
-					channel.TestingModel = nil
-					if err := model.DB.Model(channel).Where("id = ?", channel.Id).Update("testing_model", nil).Error; err != nil {
-						lg.Error("failed to clear invalid testing_model in bulk test", zap.Error(err))
-					}
+			chosenModel, clearTestingModel, err := chooseChannelTestModel(channel, "")
+			if clearTestingModel {
+				channel.TestingModel = nil
+				if updateErr := model.DB.Model(channel).Where("id = ?", channel.Id).Update("testing_model", nil).Error; updateErr != nil {
+					lg.Error("failed to clear invalid testing_model in bulk test", zap.Error(updateErr))
 				}
 			}
-			if chosenModel == "" {
-				chosenModel = channel.GetCheapestSupportedModel()
+			var openaiErr *relaymodel.Error
+			if err == nil {
+				testRequest := buildTestRequest(chosenModel)
+				_, err, openaiErr = testChannel(ctx, channel, testRequest)
 			}
-			testRequest := buildTestRequest(chosenModel)
-			_, err, openaiErr := testChannel(ctx, channel, testRequest)
 			tok := time.Now()
 			milliseconds := tok.Sub(tik).Milliseconds()
 			if isChannelEnabled && milliseconds > disableThreshold {

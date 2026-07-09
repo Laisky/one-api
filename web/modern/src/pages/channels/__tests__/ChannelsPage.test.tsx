@@ -260,4 +260,85 @@ describe('ChannelsPage Pagination', () => {
       );
     });
   });
+
+  it('only offers text-compatible testing models and clears to CHEAPEST', async () => {
+    const filteredChannelsData = {
+      success: true,
+      data: [
+        {
+          id: 1,
+          name: 'Filtered Channel',
+          type: 1,
+          status: 1,
+          created_time: Date.now(),
+          priority: 0,
+          weight: 0,
+          models: 'sora-2,gpt-4o-mini,text-embedding-3-small',
+          test_models: ['gpt-4o-mini'],
+          testing_model: 'gpt-4o-mini',
+          group: 'default',
+          balance: 100,
+          used_quota: 0,
+        },
+      ],
+      total: 1,
+    };
+    mockApiGet.mockResolvedValue({ data: filteredChannelsData });
+
+    renderChannelsPage();
+    const user = userEvent.setup();
+
+    const nameCell = await screen.findByText('Filtered Channel');
+    const row = nameCell.closest('tr');
+    expect(row).not.toBeNull();
+
+    const selector = within(row as HTMLElement).getByRole('combobox', { name: 'Testing Model' }) as HTMLSelectElement;
+    expect(Array.from(selector.options).map((option) => option.value)).toEqual(['', 'gpt-4o-mini']);
+    expect(selector).not.toHaveTextContent('sora-2');
+    expect(selector).not.toHaveTextContent('text-embedding-3-small');
+
+    await user.selectOptions(selector, '');
+
+    await waitFor(() => {
+      expect(mockApiPut).toHaveBeenCalledWith('/api/channel/', {
+        id: 1,
+        name: 'Filtered Channel',
+        testing_model: null,
+      });
+    });
+  });
+
+  it('filters non-text testing models when the server field is missing', async () => {
+    const legacyChannelsData = {
+      success: true,
+      data: [
+        {
+          id: 1,
+          name: 'Legacy Channel',
+          type: 1,
+          status: 1,
+          created_time: Date.now(),
+          priority: 0,
+          weight: 0,
+          models: 'dall-e-2,gpt-4o-mini,text-embedding-3-small',
+          group: 'default',
+          balance: 100,
+          used_quota: 0,
+        },
+      ],
+      total: 1,
+    };
+    mockApiGet.mockResolvedValue({ data: legacyChannelsData });
+
+    renderChannelsPage();
+
+    const nameCell = await screen.findByText('Legacy Channel');
+    const row = nameCell.closest('tr');
+    expect(row).not.toBeNull();
+
+    const selector = within(row as HTMLElement).getByRole('combobox', { name: 'Testing Model' }) as HTMLSelectElement;
+    expect(Array.from(selector.options).map((option) => option.value)).toEqual(['', 'gpt-4o-mini']);
+    expect(selector).not.toHaveTextContent('dall-e-2');
+    expect(selector).not.toHaveTextContent('text-embedding-3-small');
+  });
 });

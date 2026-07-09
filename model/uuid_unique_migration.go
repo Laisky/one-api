@@ -63,6 +63,37 @@ func ensureUUIDUniqueIndexes(ctx context.Context, db *gorm.DB, targets []uuidBac
 	return nil
 }
 
+// hasMissingUUIDUniqueIndexes reports whether any target UUID owner column lacks its unique index.
+// Parameters:
+//   - ctx: context controlling metadata reads.
+//   - db: database handle containing the target tables.
+//   - targets: table and model metadata for UUID owner columns.
+//
+// Return values:
+//   - bool: true when at least one existing UUID column still needs unique-index promotion.
+//   - error: wrapped database error when the database handle is nil.
+func hasMissingUUIDUniqueIndexes(ctx context.Context, db *gorm.DB, targets []uuidBackfillTarget) (bool, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if db == nil {
+		return false, errors.New("database is nil")
+	}
+
+	for _, target := range targets {
+		if !db.Migrator().HasTable(target.model) {
+			continue
+		}
+		if !db.Migrator().HasColumn(target.model, "uuid") {
+			continue
+		}
+		if !db.Migrator().HasIndex(target.model, uuidUniqueIndexName(target.table)) {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
 // ensureUUIDUniqueIndex creates one table's UUID unique index after confirming UUIDs are populated.
 // Parameters:
 //   - ctx: context controlling metadata reads and index creation.

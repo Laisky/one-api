@@ -28,6 +28,15 @@ type uuidRefTarget struct {
 	refs       map[int]string
 }
 
+type uuidRefProbeTarget struct {
+	table      string
+	model      any
+	fkColumn   string
+	uuidColumn string
+	refTable   string
+	nullableFK bool
+}
+
 type uuidIntRow struct {
 	Id int `gorm:"column:id"`
 }
@@ -65,19 +74,34 @@ func MigrateExternalUUIDs(ctx context.Context) error {
 		ctx = context.Background()
 	}
 
-	logger.Logger.Info("starting external uuid backfill")
 	targets := primaryUUIDBackfillTargets()
-	for _, target := range targets {
-		if err := backfillOwnUUIDs(ctx, DB, target); err != nil {
-			return errors.Wrapf(err, "backfill own uuid for %s", target.table)
-		}
+	needsBackfill, err := hasPrimaryExternalUUIDBackfill(ctx)
+	if err != nil {
+		return errors.Wrap(err, "check primary uuid backfill work")
+	}
+	needsIndexes, err := hasMissingUUIDUniqueIndexes(ctx, DB, targets)
+	if err != nil {
+		return errors.Wrap(err, "check primary uuid unique indexes")
+	}
+	if !needsBackfill && !needsIndexes {
+		logger.Logger.Debug("external uuid migration skipped because no pending work was found")
+		return nil
 	}
 
-	if err := backfillPrimaryFKUUIDs(ctx); err != nil {
-		return errors.Wrap(err, "backfill primary fk uuids")
-	}
-	if err := backfillLogTokenUUIDs(ctx, DB); err != nil {
-		return errors.Wrap(err, "backfill log token uuids")
+	if needsBackfill {
+		logger.Logger.Info("starting external uuid backfill")
+		for _, target := range targets {
+			if err := backfillOwnUUIDs(ctx, DB, target); err != nil {
+				return errors.Wrapf(err, "backfill own uuid for %s", target.table)
+			}
+		}
+
+		if err := backfillPrimaryFKUUIDs(ctx); err != nil {
+			return errors.Wrap(err, "backfill primary fk uuids")
+		}
+		if err := backfillLogTokenUUIDs(ctx, DB); err != nil {
+			return errors.Wrap(err, "backfill log token uuids")
+		}
 	}
 	if err := ensureUUIDUniqueIndexes(ctx, DB, targets); err != nil {
 		return errors.Wrap(err, "ensure unique uuid indexes")
@@ -101,135 +125,51 @@ func MigrateLogExternalUUIDs(ctx context.Context, logDB *gorm.DB) error {
 		return errors.New("log database is nil")
 	}
 
-	if err := backfillOwnUUIDs(ctx, logDB, uuidBackfillTarget{table: "logs", model: &Log{}}); err != nil {
-		return errors.Wrap(err, "backfill log own uuids")
-	}
-	userUUIDs, err := loadIDUUIDMap(ctx, DB, "users")
+	targets := []uuidBackfillTarget{{table: "logs", model: &Log{}}}
+	needsBackfill, err := hasLogExternalUUIDBackfill(ctx, logDB)
 	if err != nil {
-		return errors.Wrap(err, "load user uuid map for log db")
+		return errors.Wrap(err, "check log uuid backfill work")
 	}
-	channelUUIDs, err := loadIDUUIDMap(ctx, DB, "channels")
+	needsIndexes, err := hasMissingUUIDUniqueIndexes(ctx, logDB, targets)
 	if err != nil {
-		return errors.Wrap(err, "load channel uuid map for log db")
+		return errors.Wrap(err, "check log uuid unique indexes")
 	}
-	if err := backfillFKUUIDs(ctx, logDB, uuidRefTarget{
-		table:      "logs",
-		model:      &Log{},
-		fkColumn:   "user_id",
-		uuidColumn: "user_uuid",
-		refs:       userUUIDs,
-	}); err != nil {
-		return errors.Wrap(err, "backfill log user uuids")
+	if !needsBackfill && !needsIndexes {
+		logger.Logger.Debug("log uuid migration skipped because no pending work was found")
+		return nil
 	}
-	if err := backfillFKUUIDs(ctx, logDB, uuidRefTarget{
-		table:      "logs",
-		model:      &Log{},
-		fkColumn:   "channel_id",
-		uuidColumn: "channel_uuid",
-		refs:       channelUUIDs,
-	}); err != nil {
-		return errors.Wrap(err, "backfill log channel uuids")
-	}
-	if err := backfillLogTokenUUIDs(ctx, logDB); err != nil {
-		return errors.Wrap(err, "backfill log token uuids")
-	}
-	if logDB != DB {
-		if err := backfillTokenTransactionLogUUIDs(ctx, logDB); err != nil {
-			return errors.Wrap(err, "backfill token transaction log uuids from split log db")
+
+	if needsBackfill {
+		if err := backfillOwnUUIDs(ctx, logDB, uuidBackfillTarget{table: "logs", model: &Log{}}); err != nil {
+			return errors.Wrap(err, "backfill log own uuids")
+		}
+
+		if err := backfillLogFKUUIDs(ctx, logDB); err != nil {
+			return errors.Wrap(err, "backfill log fk uuids")
+		}
+		if err := backfillLogTokenUUIDs(ctx, logDB); err != nil {
+			return errors.Wrap(err, "backfill log token uuids")
+		}
+		if logDB != DB {
+			needsLogUUIDs, err := hasMissingFKUUIDCandidate(ctx, DB, uuidRefProbeTarget{
+				table:      "token_transactions",
+				model:      &TokenTransaction{},
+				fkColumn:   "log_id",
+				uuidColumn: "log_uuid",
+				nullableFK: true,
+			})
+			if err != nil {
+				return errors.Wrap(err, "check token transaction log uuid gaps")
+			}
+			if needsLogUUIDs {
+				if err := backfillTokenTransactionLogUUIDs(ctx, logDB); err != nil {
+					return errors.Wrap(err, "backfill token transaction log uuids from split log db")
+				}
+			}
 		}
 	}
-	if err := ensureUUIDUniqueIndexes(ctx, logDB, []uuidBackfillTarget{{table: "logs", model: &Log{}}}); err != nil {
+	if err := ensureUUIDUniqueIndexes(ctx, logDB, targets); err != nil {
 		return errors.Wrap(err, "ensure log unique uuid indexes")
-	}
-	return nil
-}
-
-// backfillPrimaryFKUUIDs fills denormalized FK UUID columns that live on the primary database.
-// Parameters:
-//   - ctx: context controlling batched migration writes.
-//
-// Return values:
-//   - error: wrapped migration error when any FK backfill fails.
-func backfillPrimaryFKUUIDs(ctx context.Context) error {
-	userUUIDs, err := loadIDUUIDMap(ctx, DB, "users")
-	if err != nil {
-		return errors.Wrap(err, "load user uuid map")
-	}
-	channelUUIDs, err := loadIDUUIDMap(ctx, DB, "channels")
-	if err != nil {
-		return errors.Wrap(err, "load channel uuid map")
-	}
-	tokenUUIDs, err := loadIDUUIDMap(ctx, DB, "tokens")
-	if err != nil {
-		return errors.Wrap(err, "load token uuid map")
-	}
-	serverUUIDs, err := loadIDUUIDMap(ctx, DB, "mcp_servers")
-	if err != nil {
-		return errors.Wrap(err, "load mcp server uuid map")
-	}
-
-	targets := []uuidRefTarget{
-		{table: "users", model: &User{}, fkColumn: "inviter_id", uuidColumn: "inviter_uuid", refs: userUUIDs},
-		{table: "tokens", model: &Token{}, fkColumn: "user_id", uuidColumn: "user_uuid", refs: userUUIDs},
-		{table: "redemptions", model: &Redemption{}, fkColumn: "user_id", uuidColumn: "user_uuid", refs: userUUIDs},
-		{table: "logs", model: &Log{}, fkColumn: "user_id", uuidColumn: "user_uuid", refs: userUUIDs},
-		{table: "logs", model: &Log{}, fkColumn: "channel_id", uuidColumn: "channel_uuid", refs: channelUUIDs},
-		{table: "token_transactions", model: &TokenTransaction{}, fkColumn: "token_id", uuidColumn: "token_uuid", refs: tokenUUIDs},
-		{table: "token_transactions", model: &TokenTransaction{}, fkColumn: "user_id", uuidColumn: "user_uuid", refs: userUUIDs},
-		{table: "user_request_costs", model: &UserRequestCost{}, fkColumn: "user_id", uuidColumn: "user_uuid", refs: userUUIDs},
-		{table: "async_task_bindings", model: &AsyncTaskBinding{}, fkColumn: "user_id", uuidColumn: "user_uuid", refs: userUUIDs},
-		{table: "async_task_bindings", model: &AsyncTaskBinding{}, fkColumn: "token_id", uuidColumn: "token_uuid", refs: tokenUUIDs},
-		{table: "async_task_bindings", model: &AsyncTaskBinding{}, fkColumn: "channel_id", uuidColumn: "channel_uuid", refs: channelUUIDs},
-		{table: "mcp_tools", model: &MCPTool{}, fkColumn: "server_id", uuidColumn: "server_uuid", refs: serverUUIDs},
-		{table: "passkey_credentials", model: &PasskeyCredential{}, fkColumn: "user_id", uuidColumn: "user_uuid", refs: userUUIDs},
-	}
-	for _, target := range targets {
-		if err := backfillFKUUIDs(ctx, DB, target); err != nil {
-			return errors.Wrapf(err, "backfill %s.%s", target.table, target.uuidColumn)
-		}
-	}
-	needsLogUUIDs, err := hasMissingStringColumn(ctx, DB, "token_transactions", "log_uuid")
-	if err != nil {
-		return errors.Wrap(err, "check token transaction log uuid gaps")
-	}
-	if needsLogUUIDs {
-		logUUIDs, err := loadIDUUIDMap(ctx, DB, "logs")
-		if err != nil {
-			return errors.Wrap(err, "load log uuid map")
-		}
-		if err := backfillNullableFKUUIDs(ctx, DB, uuidRefTarget{
-			table:      "token_transactions",
-			model:      &TokenTransaction{},
-			fkColumn:   "log_id",
-			uuidColumn: "log_uuid",
-			refs:       logUUIDs,
-		}); err != nil {
-			return errors.Wrap(err, "backfill token_transactions.log_uuid")
-		}
-	}
-	return nil
-}
-
-// backfillTokenTransactionLogUUIDs fills token transaction log UUIDs from the provided log database.
-// Parameters:
-//   - ctx: context controlling batched migration writes.
-//   - logDB: database handle containing authoritative log rows.
-//
-// Return values:
-//   - error: wrapped migration error when the log map or update fails.
-func backfillTokenTransactionLogUUIDs(ctx context.Context, logDB *gorm.DB) error {
-	logUUIDs, err := loadIDUUIDMap(ctx, logDB, "logs")
-	if err != nil {
-		return errors.Wrap(err, "load split log uuid map")
-	}
-	if err := backfillNullableFKUUIDs(ctx, DB, uuidRefTarget{
-		table:      "token_transactions",
-		model:      &TokenTransaction{},
-		fkColumn:   "log_id",
-		uuidColumn: "log_uuid",
-		refs:       logUUIDs,
-	}); err != nil {
-		return errors.Wrap(err, "backfill token_transactions.log_uuid")
 	}
 	return nil
 }
@@ -245,7 +185,7 @@ func backfillLogTokenUUIDs(ctx context.Context, logDB *gorm.DB) error {
 	if !logDB.Migrator().HasColumn(&Log{}, "token_uuid") {
 		return nil
 	}
-	hasMissing, err := hasMissingStringColumn(ctx, logDB, "logs", "token_uuid")
+	hasMissing, err := hasBackfillableLogTokenUUIDs(ctx, logDB)
 	if err != nil {
 		return errors.Wrap(err, "check missing log token uuids")
 	}
@@ -265,7 +205,7 @@ func backfillLogTokenUUIDs(ctx context.Context, logDB *gorm.DB) error {
 		err := logDB.WithContext(ctx).
 			Table("logs").
 			Select("id, user_id, token_name").
-			Where("id > ? AND user_id > 0 AND token_name != ''", lastID).
+			Where("id > ? AND user_id > 0 AND token_name != '' AND (token_uuid IS NULL OR token_uuid = '')", lastID).
 			Order("id ASC").
 			Limit(uuidBackfillBatchSize).
 			Find(&rows).Error
@@ -385,7 +325,12 @@ func backfillFKUUIDs(ctx context.Context, db *gorm.DB, target uuidRefTarget) err
 	if !db.Migrator().HasColumn(target.model, target.uuidColumn) {
 		return nil
 	}
-	hasMissing, err := hasMissingStringColumn(ctx, db, target.table, target.uuidColumn)
+	hasMissing, err := hasMissingFKUUIDCandidate(ctx, db, uuidRefProbeTarget{
+		table:      target.table,
+		model:      target.model,
+		fkColumn:   target.fkColumn,
+		uuidColumn: target.uuidColumn,
+	})
 	if err != nil {
 		return errors.Wrapf(err, "check missing fk uuid rows for %s.%s", target.table, target.uuidColumn)
 	}
@@ -398,7 +343,7 @@ func backfillFKUUIDs(ctx context.Context, db *gorm.DB, target uuidRefTarget) err
 		err := db.WithContext(ctx).
 			Table(target.table).
 			Select("id, "+target.fkColumn+" AS ref_id").
-			Where("id > ? AND "+target.fkColumn+" > 0", lastID).
+			Where("id > ? AND "+target.fkColumn+" > 0 AND ("+target.uuidColumn+" IS NULL OR "+target.uuidColumn+" = '')", lastID).
 			Order("id ASC").
 			Limit(uuidBackfillBatchSize).
 			Find(&rows).Error
@@ -429,7 +374,13 @@ func backfillNullableFKUUIDs(ctx context.Context, db *gorm.DB, target uuidRefTar
 	if !db.Migrator().HasColumn(target.model, target.uuidColumn) {
 		return nil
 	}
-	hasMissing, err := hasMissingStringColumn(ctx, db, target.table, target.uuidColumn)
+	hasMissing, err := hasMissingFKUUIDCandidate(ctx, db, uuidRefProbeTarget{
+		table:      target.table,
+		model:      target.model,
+		fkColumn:   target.fkColumn,
+		uuidColumn: target.uuidColumn,
+		nullableFK: true,
+	})
 	if err != nil {
 		return errors.Wrapf(err, "check missing nullable fk uuid rows for %s.%s", target.table, target.uuidColumn)
 	}
@@ -442,7 +393,7 @@ func backfillNullableFKUUIDs(ctx context.Context, db *gorm.DB, target uuidRefTar
 		err := db.WithContext(ctx).
 			Table(target.table).
 			Select("id, "+target.fkColumn+" AS ref_id").
-			Where("id > ? AND "+target.fkColumn+" IS NOT NULL", lastID).
+			Where("id > ? AND "+target.fkColumn+" > 0 AND ("+target.uuidColumn+" IS NULL OR "+target.uuidColumn+" = '')", lastID).
 			Order("id ASC").
 			Limit(uuidBackfillBatchSize).
 			Find(&rows).Error

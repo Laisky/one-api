@@ -255,7 +255,7 @@ func GetAllChannels(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
-		"data":    channels,
+		"data":    buildChannelListResponse(channels),
 		"total":   totalCount,
 	})
 }
@@ -277,7 +277,7 @@ func SearchChannels(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
-		"data":    channels,
+		"data":    buildChannelListResponse(channels),
 	})
 }
 
