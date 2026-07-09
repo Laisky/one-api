@@ -123,22 +123,27 @@ Each window has:
 - `date_from` / `date_to`: optional local calendar dates in `YYYY-MM-DD`; `date_from` is inclusive and `date_to` is exclusive.
 - `overlay`: sparse pricing fields. Non-zero numeric fields override the base model config; zero inherits. A non-empty `tiers` list replaces the base tier ladder. Nested media blocks merge field by field and map keys from the overlay win.
 
-DeepSeek-style off-peak example:
+DeepSeek-style peak-surcharge example (base ratios are the published list = off-peak
+price; peak hours bill at 2x):
 
 ```json
 {
-  "deepseek-reasoner": {
-    "ratio": 0.00000055,
-    "completion_ratio": 4.0,
-    "cached_input_ratio": 0.00000014,
+  "deepseek-v4-flash": {
+    "ratio": 0.00000014,
+    "completion_ratio": 2.0,
+    "cached_input_ratio": 0.0000000028,
     "time_windows": [
       {
-        "name": "deepseek-offpeak",
+        "name": "deepseek-peak",
         "timezone": "Asia/Shanghai",
-        "ranges": [{ "start": "00:30", "end": "08:30" }],
+        "date_from": "2026-07-15",
+        "ranges": [
+          { "start": "09:00", "end": "12:00" },
+          { "start": "14:00", "end": "18:00" }
+        ],
         "overlay": {
-          "ratio": 0.0000001375,
-          "cached_input_ratio": 0.000000035
+          "ratio": 0.00000028,
+          "cached_input_ratio": 0.0000000056
         }
       }
     ]
@@ -148,14 +153,14 @@ DeepSeek-style off-peak example:
 
 Window order is precedence: the first matching window wins. `overlay.time_windows` is rejected to prevent recursive pricing.
 
-**Built-in DeepSeek V4 schedule:** The DeepSeek adaptor ships an off-peak window by
+**Built-in DeepSeek V4 schedule:** The DeepSeek adaptor ships a peak window by
 default for `deepseek-chat`, `deepseek-reasoner`, `deepseek-v4-flash`, and
 `deepseek-v4-pro`, so no manual `model_configs` entry is needed. The base ratios are
-the peak (高峰) price; off-peak (平时) bills at 50% across input, cache-hit input, and
-output. DeepSeek's peak hours are `09:00–12:00` and `14:00–18:00` Asia/Shanghai, so the
-shipped window covers the complement (`18:00–09:00` crossing midnight, plus
-`12:00–14:00`). A channel `model_configs` entry for the same model overrides this
-default window.
+the published list (= off-peak / 平时) price; peak (高峰) hours bill input, cache-hit
+input, and output at 2x, per DeepSeek's 2026-06-29 峰谷定价 notice. DeepSeek's peak
+hours are `09:00–12:00` and `14:00–18:00` Asia/Shanghai, and the surcharge is gated
+by `date_from` to the V4 official release (mid-July 2026). A channel `model_configs`
+entry for the same model overrides this default window.
 
 **Balance & Usage:** Additional readonly fields (visible in the table, not the form) track balance, last update time, and consumed quota.
 

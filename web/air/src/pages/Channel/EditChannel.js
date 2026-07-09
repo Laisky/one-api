@@ -24,17 +24,21 @@ const MODEL_CONFIGS_EXAMPLE = {
         'completion_ratio': 2.0,
         'max_tokens': 128000,
     },
-    'deepseek-reasoner': {
-        'ratio': 0.00000055,
-        'completion_ratio': 4.0,
-        'cached_input_ratio': 0.00000014,
+    'deepseek-v4-flash': {
+        'ratio': 0.00000014,
+        'completion_ratio': 2.0,
+        'cached_input_ratio': 0.0000000028,
         'time_windows': [{
-            'name': 'deepseek-offpeak',
+            'name': 'deepseek-peak',
             'timezone': 'Asia/Shanghai',
-            'ranges': [{ 'start': '00:30', 'end': '08:30' }],
+            'date_from': '2026-07-15',
+            'ranges': [
+                { 'start': '09:00', 'end': '12:00' },
+                { 'start': '14:00', 'end': '18:00' },
+            ],
             'overlay': {
-                'ratio': 0.0000001375,
-                'cached_input_ratio': 0.000000035,
+                'ratio': 0.00000028,
+                'cached_input_ratio': 0.0000000056,
             },
         }],
     }

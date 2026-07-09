@@ -248,8 +248,13 @@ func (a *Adaptor) GetDefaultModelPricing() map[string]adaptor.ModelConfig {
 	// Import Veo models from veo subadaptor
 	maps.Copy(pricing, veo.ModelRatios)
 
-	// Import DeepSeek models from deepseek subadaptor
-	maps.Copy(pricing, deepseek.ModelRatios)
+	// Import DeepSeek models from deepseek subadaptor. Strip the DeepSeek
+	// first-party peak-hour time windows: Vertex AI bills these models at its
+	// own flat rate and has no Beijing peak-valley schedule.
+	for name, cfg := range deepseek.ModelRatios {
+		cfg.TimeWindows = nil
+		pricing[name] = cfg
+	}
 
 	// Import OpenAI models from openai subadaptor
 	maps.Copy(pricing, openai.ModelRatios)

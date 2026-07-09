@@ -33,57 +33,67 @@ var (
 	deepseekReasoningEfforts = []string{"high", "max"}
 )
 
-// DeepSeek V4 base (PEAK / 高峰) per-token ratios. The ModelRatios table treats
-// these as the default rate so a request bills at the peak price unless it falls
-// inside the off-peak window below. V4-Flash and V4-Pro share their cache-miss
-// input and cache-hit input ratios with the legacy deepseek-chat / deepseek-reasoner
-// aliases, so they are factored out here to keep the peak base and the off-peak
-// overlay in lock-step (a single source of truth for each price).
+// DeepSeek V4 base (list = off-peak / 平时·低谷) per-token ratios. The published
+// list price on api-docs.deepseek.com/quick_start/pricing IS the off-peak price:
+// a request bills at list unless it falls inside the peak window below, which
+// doubles every line item. V4-Flash and V4-Pro share their cache-miss input and
+// cache-hit input ratios with the legacy deepseek-chat / deepseek-reasoner
+// aliases, so they are factored out here to keep the base and the peak overlay
+// in lock-step (a single source of truth for each price).
 const (
-	// deepseekV4FlashInputRatio is the V4-Flash cache-miss input ratio at peak.
+	// deepseekV4FlashInputRatio is the V4-Flash cache-miss input ratio at list (off-peak).
 	deepseekV4FlashInputRatio = 0.14 * ratio.MilliTokensUsd
-	// deepseekV4FlashCachedInputRatio is the V4-Flash cache-hit input ratio at peak.
+	// deepseekV4FlashCachedInputRatio is the V4-Flash cache-hit input ratio at list (off-peak).
 	deepseekV4FlashCachedInputRatio = 0.0028 * ratio.MilliTokensUsd
-	// deepseekV4ProInputRatio is the V4-Pro cache-miss input ratio at peak.
+	// deepseekV4ProInputRatio is the V4-Pro cache-miss input ratio at list (off-peak).
 	deepseekV4ProInputRatio = 0.435 * ratio.MilliTokensUsd
-	// deepseekV4ProCachedInputRatio is the V4-Pro cache-hit input ratio at peak.
+	// deepseekV4ProCachedInputRatio is the V4-Pro cache-hit input ratio at list (off-peak).
 	deepseekV4ProCachedInputRatio = 0.003625 * ratio.MilliTokensUsd
 
-	// deepseekOffPeakDiscount is the fraction of the peak price charged during the
-	// off-peak (平时) window. DeepSeek's V4 launch notice prices every off-peak line
-	// item (cache-hit input, cache-miss input, output) at exactly 50% of peak, so a
-	// single uniform multiplier reproduces the published schedule for both models.
-	deepseekOffPeakDiscount = 0.5
+	// deepseekPeakSurcharge is the multiple of the list price charged during the
+	// peak (高峰) window. DeepSeek's 2026-06-29 peak-valley (峰谷) notice doubles
+	// every line item (cache-hit input, cache-miss input, output) during peak
+	// hours and keeps the published list price for all other hours, so a single
+	// uniform multiplier reproduces the schedule for both models.
+	deepseekPeakSurcharge = 2.0
+
+	// deepseekPeakEffectiveFrom gates the peak surcharge to the V4 official
+	// release ("mid-July 2026" per the 2026-06-29 notice; DeepSeek emails users
+	// 24h before the switch). Before this local date the API bills flat list at
+	// all hours. Adjust once DeepSeek announces the exact activation date.
+	deepseekPeakEffectiveFrom = "2026-07-15"
 )
 
-// deepseekOffPeakWindow builds the off-peak (平时) pricing overlay for a DeepSeek V4
-// model whose ModelConfig already carries the peak (高峰) price as its base ratios.
+// deepseekPeakWindow builds the peak (高峰) pricing overlay for a DeepSeek V4
+// model whose ModelConfig carries the published list (= off-peak) price as its
+// base ratios.
 //
-// DeepSeek's V4 launch notice defines the daily PEAK hours as 09:00–12:00 and
-// 14:00–18:00 Beijing time (Asia/Shanghai); everything else is off-peak. We model
-// the base/default as peak and describe the off-peak window as the COMPLEMENT of the
-// peak hours, expressed as two wall-clock ranges:
-//   - 18:00 → 09:00 (next day): covers 18:00–24:00 and 00:00–09:00 (crosses midnight)
-//   - 12:00 → 14:00
+// DeepSeek's 2026-06-29 峰谷定价 notice defines the daily PEAK hours as
+// 09:00–12:00 and 14:00–18:00 Beijing time (Asia/Shanghai) and bills them at 2x
+// the list price; all other hours keep the list price unchanged (维持当前定价不变).
+// There is never a discount below list.
 //
-// Only Ratio and CachedInputRatio are overlaid (each halved). Output is discounted
-// automatically because output price = Ratio * CompletionRatio and the overlay
-// inherits CompletionRatio, so halving Ratio halves output too. CompletionRatio is
-// therefore intentionally omitted from the overlay (0 == inherit).
+// Only Ratio and CachedInputRatio are overlaid (each doubled). Output is
+// surcharged automatically because output price = Ratio * CompletionRatio and
+// the overlay inherits CompletionRatio, so doubling Ratio doubles output too.
+// CompletionRatio is therefore intentionally omitted from the overlay (0 == inherit).
 //
-// Source: DeepSeek V4 launch pricing notice (峰谷定价机制).
-func deepseekOffPeakWindow(peakInputRatio, peakCachedInputRatio float64) []adaptor.TimeWindow {
+// Sources: DeepSeek 2026-06-29 user-notification email as reported by IT之家
+// (ithome.com/0/970/123.htm) and Sina Finance; api-docs.deepseek.com pricing page
+// (still flat list as of 2026-07-09, pending the mid-July V4 official release).
+func deepseekPeakWindow(listInputRatio, listCachedInputRatio float64) []adaptor.TimeWindow {
 	return []adaptor.TimeWindow{
 		{
-			Name:     "deepseek-offpeak",
+			Name:     "deepseek-peak",
 			TimeZone: "Asia/Shanghai",
+			DateFrom: deepseekPeakEffectiveFrom,
 			Ranges: []adaptor.ClockRange{
-				{Start: "18:00", End: "09:00"}, // 18:00 → next-day 09:00 (crosses midnight)
-				{Start: "12:00", End: "14:00"},
+				{Start: "09:00", End: "12:00"},
+				{Start: "14:00", End: "18:00"},
 			},
 			Overlay: adaptor.ModelConfig{
-				Ratio:            peakInputRatio * deepseekOffPeakDiscount,
-				CachedInputRatio: peakCachedInputRatio * deepseekOffPeakDiscount,
+				Ratio:            listInputRatio * deepseekPeakSurcharge,
+				CachedInputRatio: listCachedInputRatio * deepseekPeakSurcharge,
 			},
 		},
 	}
@@ -118,8 +128,8 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		Quantization:                "fp8",
 		HuggingFaceID:               "deepseek-ai/DeepSeek-V4-Flash",
 		Description:                 "Legacy alias of DeepSeek V4-Flash non-thinking mode; scheduled for deprecation 2026-07-24.",
-		// Base ratios are the peak (高峰) price; off-peak (平时) bills at 50% — see deepseekOffPeakWindow.
-		TimeWindows: deepseekOffPeakWindow(deepseekV4FlashInputRatio, deepseekV4FlashCachedInputRatio),
+		// Base ratios are the published list (= off-peak) price; peak (高峰) hours bill at 2x — see deepseekPeakWindow.
+		TimeWindows: deepseekPeakWindow(deepseekV4FlashInputRatio, deepseekV4FlashCachedInputRatio),
 	},
 	// deepseek-reasoner = V4-Flash thinking mode (always-on thinking).
 	"deepseek-reasoner": {
@@ -136,8 +146,8 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		Quantization:  "fp8",
 		HuggingFaceID: "deepseek-ai/DeepSeek-V4-Flash",
 		Description:   "Legacy alias of DeepSeek V4-Flash thinking mode; scheduled for deprecation 2026-07-24.",
-		// Base ratios are the peak (高峰) price; off-peak (平时) bills at 50% — see deepseekOffPeakWindow.
-		TimeWindows: deepseekOffPeakWindow(deepseekV4FlashInputRatio, deepseekV4FlashCachedInputRatio),
+		// Base ratios are the published list (= off-peak) price; peak (高峰) hours bill at 2x — see deepseekPeakWindow.
+		TimeWindows: deepseekPeakWindow(deepseekV4FlashInputRatio, deepseekV4FlashCachedInputRatio),
 	},
 	// deepseek-v4-flash list price: $0.14/1M cache-miss input, $0.0028/1M cache-hit input,
 	// $0.28/1M output, 1M context, 384K max output (= 384*1024 = 393216 tokens).
@@ -158,8 +168,8 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		Quantization:              "fp8",
 		HuggingFaceID:             "deepseek-ai/DeepSeek-V4-Flash",
 		Description:               "DeepSeek V4 Flash MoE chat model with thinking and non-thinking modes; 1M context.",
-		// Base ratios are the peak (高峰) price; off-peak (平时) bills at 50% — see deepseekOffPeakWindow.
-		TimeWindows: deepseekOffPeakWindow(deepseekV4FlashInputRatio, deepseekV4FlashCachedInputRatio),
+		// Base ratios are the published list (= off-peak) price; peak (高峰) hours bill at 2x — see deepseekPeakWindow.
+		TimeWindows: deepseekPeakWindow(deepseekV4FlashInputRatio, deepseekV4FlashCachedInputRatio),
 	},
 	// deepseek-v4-pro list price: $0.435/1M cache-miss input, $0.003625/1M cache-hit input,
 	// $0.87/1M output, 1M context, 384K max output. DeepSeek announced that after the
@@ -183,8 +193,8 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		Quantization:              "fp8",
 		HuggingFaceID:             "deepseek-ai/DeepSeek-V4-Pro",
 		Description:               "DeepSeek V4 Pro MoE chat model with thinking and non-thinking modes; 1M context.",
-		// Base ratios are the peak (高峰) price; off-peak (平时) bills at 50% — see deepseekOffPeakWindow.
-		TimeWindows: deepseekOffPeakWindow(deepseekV4ProInputRatio, deepseekV4ProCachedInputRatio),
+		// Base ratios are the published list (= off-peak) price; peak (高峰) hours bill at 2x — see deepseekPeakWindow.
+		TimeWindows: deepseekPeakWindow(deepseekV4ProInputRatio, deepseekV4ProCachedInputRatio),
 	},
 }
 

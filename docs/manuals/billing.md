@@ -495,23 +495,28 @@ Alternative pricing-endpoint payload example (narrow override only):
 }
 ```
 
-DeepSeek-style off-peak example:
+DeepSeek-style peak-surcharge example (base ratios are the published list = off-peak
+price; peak hours bill at 2x):
 
 ```json
 {
   "model_configs": {
-    "deepseek-reasoner": {
-      "ratio": 0.00000055,
-      "completion_ratio": 4.0,
-      "cached_input_ratio": 0.00000014,
+    "deepseek-v4-flash": {
+      "ratio": 0.00000014,
+      "completion_ratio": 2.0,
+      "cached_input_ratio": 0.0000000028,
       "time_windows": [
         {
-          "name": "deepseek-offpeak",
+          "name": "deepseek-peak",
           "timezone": "Asia/Shanghai",
-          "ranges": [{ "start": "00:30", "end": "08:30" }],
+          "date_from": "2026-07-15",
+          "ranges": [
+            { "start": "09:00", "end": "12:00" },
+            { "start": "14:00", "end": "18:00" }
+          ],
           "overlay": {
-            "ratio": 0.0000001375,
-            "cached_input_ratio": 0.000000035
+            "ratio": 0.00000028,
+            "cached_input_ratio": 0.0000000056
           }
         }
       ]
@@ -522,11 +527,13 @@ DeepSeek-style off-peak example:
 
 Window order is precedence: the first matching window wins. The selected overlay is merged into the model config, then tiered pricing is resolved. Streaming and realtime requests keep the rate selected by request start time.
 
-The DeepSeek adaptor ships this off-peak schedule by default for all V4 models
+The DeepSeek adaptor ships this peak schedule by default for all V4 models
 (`deepseek-chat`, `deepseek-reasoner`, `deepseek-v4-flash`, `deepseek-v4-pro`): the
-base ratios are the peak (高峰) price and off-peak (平时) bills at 50%. Peak hours are
-`09:00–12:00` and `14:00–18:00` Asia/Shanghai; the shipped window covers the
-complement. A channel `model_configs` entry overrides the default for that channel.
+base ratios are the published list (= off-peak / 平时) price, and peak (高峰) hours
+`09:00–12:00` and `14:00–18:00` Asia/Shanghai bill every line item at 2x, per
+DeepSeek's 2026-06-29 峰谷定价 notice (effective with the V4 official release,
+gated by `date_from`). A channel `model_configs` entry overrides the default for
+that channel.
 
 ### 3. Reconcile Request Cost by Request ID
 
