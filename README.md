@@ -922,17 +922,21 @@ Response:
 
 #### Support gpt-5 family
 
-gpt-5.6 / gpt-5.6-sol / gpt-5.6-terra / gpt-5.6-luna
+Models rendered with a ~~strikethrough~~ are retired (or scheduled for retirement) by OpenAI upstream; they stay in the pricing table so historical usage keeps billing correctly.
 
-gpt-5.5 / gpt-5.5-2026-04-23
+- **GPT-5.6** — Sol / Terra / Luna tiers (`gpt-5.6` aliases to `gpt-5.6-sol`; adds the new `max` reasoning effort): gpt-5.6 / gpt-5.6-sol / gpt-5.6-terra / gpt-5.6-luna
+- **GPT-5.5**: gpt-5.5 / gpt-5.5-pro / gpt-5.5-2026-04-23
+- **GPT-5.4**: gpt-5.4 / gpt-5.4-2026-03-05 / gpt-5.4-mini / gpt-5.4-nano / gpt-5.4-pro
+- **GPT-5.3**: gpt-5.3-codex / ~~gpt-5.3-chat-latest~~ (retires 2026-08-10)
+- **GPT-5.2**: gpt-5.2 / gpt-5.2-2025-12-11 / gpt-5.2-pro / gpt-5.2-pro-2025-12-11 / ~~gpt-5.2-codex~~ (retires 2026-07-23)
+- **GPT-5.1**: gpt-5.1 / gpt-5.1-2025-11-13 / gpt-5.1-codex / gpt-5.1-codex-mini / gpt-5.1-codex-max / ~~gpt-5.1-chat-latest~~ (retires 2026-07-23)
+- **GPT-5**: gpt-5 / gpt-5-2025-08-07 / gpt-5-mini / gpt-5-mini-2025-08-07 / gpt-5-nano / gpt-5-nano-2025-08-07 / gpt-5-pro / gpt-5-pro-2025-10-06 / ~~gpt-5-chat-latest~~ / ~~gpt-5-codex~~ (retire 2026-07-23)
+- **ChatGPT alias**: chat-latest — rolling alias to the latest Instant model used in ChatGPT
 
-gpt-5.4 / gpt-5.4-pro
+##### Realtime models
 
-gpt-5.2 / gpt-5.2-2025-12-11 / gpt-5.2-pro / gpt-5.2-pro-2025-12-11 / gpt-5.2-codex
-
-gpt-5.1-chat-latest / gpt-5.1 / gpt-5.1-2025-11-13 / gpt-5.1-codex / gpt-5.1-codex-mini
-
-gpt-5-chat-latest / gpt-5 / gpt-5-mini / gpt-5-nano / gpt-5-codex / gpt-5.1-codex-max/ gpt-5-pro
+- gpt-realtime-2.1 / gpt-realtime-2.1-mini / gpt-realtime-2 / gpt-realtime-1.5 / gpt-realtime (alias) / gpt-realtime-mini / gpt-realtime-translate / gpt-realtime-whisper
+- ~~gpt-4o-realtime-preview~~ / ~~gpt-4o-realtime-preview-2025-06-03~~ / ~~gpt-4o-mini-realtime-preview~~ / ~~gpt-4o-mini-realtime-preview-2024-12-17~~ (GPT-4o realtime previews retired upstream 2026-05-07)
 
 #### Support o3-deep-research & o4-mini-deep-research
 

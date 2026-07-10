@@ -680,6 +680,8 @@ export function ParametersPanel({
                     <SelectItem value="low">{t('playground.parameters.reasoning_effort.options.low')}</SelectItem>
                     <SelectItem value="medium">{t('playground.parameters.reasoning_effort.options.medium')}</SelectItem>
                     <SelectItem value="high">{t('playground.parameters.reasoning_effort.options.high')}</SelectItem>
+                    <SelectItem value="xhigh">{t('playground.parameters.reasoning_effort.options.xhigh')}</SelectItem>
+                    <SelectItem value="max">{t('playground.parameters.reasoning_effort.options.max')}</SelectItem>
                   </SelectContent>
                 </Select>
                 <div className="text-xs text-muted-foreground">{t('playground.parameters.reasoning_effort.description')}</div>

@@ -396,17 +396,25 @@ func isReasoningEffortAllowed(modelName, effort string) bool {
 	if effort == "" {
 		return false
 	}
-	switch effort {
-	case "low", "medium", "high":
-	default:
-		return false
-	}
 
 	name := strings.ToLower(strings.TrimSpace(modelName))
 	if strings.Contains(name, "deep-research") || isMediumOnlyOpenAIReasoningModel(name) {
 		return effort == "medium"
 	}
-	return true
+
+	switch effort {
+	case "low", "medium", "high":
+		return true
+	case "none", "minimal", "xhigh", "max":
+		// Extended GPT-5 effort ladder: xhigh (since GPT-5.4), max (since GPT-5.6),
+		// and the legacy none/minimal aliases. Gate to the GPT-5 (non-chat) family;
+		// the openai adaptor re-normalizes per model and coerces any value the
+		// specific model does not support to its default, so other providers keep
+		// their previous {low,medium,high} behaviour on the query-parameter path.
+		return strings.HasPrefix(name, "gpt-5") && !strings.HasPrefix(name, "gpt-5-chat")
+	default:
+		return false
+	}
 }
 
 // stringPtr returns a pointer to a copy of the provided string value.

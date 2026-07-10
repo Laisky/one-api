@@ -157,7 +157,16 @@ func TestUserCardinalityBoundsSeriesAndHeap(t *testing.T) {
 	const N = 10000
 	measure := func(withUserID bool) (series int, liveBytes uint64) {
 		reader := sdkmetric.NewManualReader()
-		mp := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader))
+		// Raise the cardinality limit above N so this measurement reveals the TRUE
+		// per-user series count. The SDK defaults to a 2000-series cap (which
+		// production keeps); beyond it every extra user is folded into a single
+		// lossy "otel.metric.overflow" series, which would understate the O(N)
+		// cardinality this test exists to quantify. Group-only stays at 1 series
+		// under any limit, so the comparison remains fair.
+		mp := sdkmetric.NewMeterProvider(
+			sdkmetric.WithReader(reader),
+			sdkmetric.WithCardinalityLimit(N+1),
+		)
 		ctr, err := mp.Meter("u").Int64Counter("one_api_user_requests_total")
 		if err != nil {
 			t.Fatal(err)

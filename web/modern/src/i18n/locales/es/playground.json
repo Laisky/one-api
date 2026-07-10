@@ -189,8 +189,10 @@
         "options": {
           "high": "Alto",
           "low": "Bajo",
+          "max": "Máximo",
           "medium": "Medio",
-          "none": "Ninguno"
+          "none": "Ninguno",
+          "xhigh": "Muy alto"
         }
       },
       "show_reasoning": {

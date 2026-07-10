@@ -189,8 +189,10 @@
         "options": {
           "high": "高",
           "low": "低",
+          "max": "最高",
           "medium": "中",
-          "none": "无"
+          "none": "无",
+          "xhigh": "极高"
         }
       },
       "show_reasoning": {

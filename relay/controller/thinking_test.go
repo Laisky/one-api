@@ -19,6 +19,44 @@ func init() {
 	gin.SetMode(gin.TestMode)
 }
 
+// TestIsReasoningEffortAllowedExtendedGPT5Efforts locks in the query-parameter
+// effort validator's support for the extended GPT-5 ladder (xhigh since 5.4,
+// max since 5.6) while keeping other providers on {low,medium,high} and
+// medium-only models on medium.
+func TestIsReasoningEffortAllowedExtendedGPT5Efforts(t *testing.T) {
+	cases := []struct {
+		model  string
+		effort string
+		want   bool
+	}{
+		// GPT-5.6 accepts the full extended ladder including the new "max".
+		{"gpt-5.6", "max", true},
+		{"gpt-5.6-sol", "max", true},
+		{"gpt-5.6-terra", "xhigh", true},
+		{"gpt-5.6", "high", true},
+		{"gpt-5.6", "bogus", false},
+		// Other GPT-5 (non-chat) accept xhigh/max at this layer; the openai
+		// adaptor coerces values a specific model does not support downstream.
+		{"gpt-5", "xhigh", true},
+		{"gpt-5.4", "max", true},
+		// GPT-5 chat aliases stay medium-tier: no xhigh/max here.
+		{"gpt-5-chat-latest", "max", false},
+		{"gpt-5.1-chat-latest", "xhigh", false}, // medium-only
+		{"gpt-5.1-chat-latest", "medium", true},
+		// Non-OpenAI reasoning models keep the {low,medium,high} contract.
+		{"grok-4", "max", false},
+		{"grok-4", "high", true},
+		{"deepseek-reasoner", "xhigh", false},
+		// o-series is medium-only.
+		{"o3", "high", false},
+		{"o3", "medium", true},
+	}
+	for _, c := range cases {
+		got := isReasoningEffortAllowed(c.model, c.effort)
+		require.Equalf(t, c.want, got, "isReasoningEffortAllowed(%q, %q)", c.model, c.effort)
+	}
+}
+
 func TestApplyThinkingQueryToChatRequestSetsReasoningEffort(t *testing.T) {
 	t.Parallel()
 	w := httptest.NewRecorder()

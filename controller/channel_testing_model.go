@@ -1,6 +1,8 @@
 package controller
 
 import (
+	"bytes"
+	"encoding/json"
 	"sort"
 	"strings"
 
@@ -72,6 +74,50 @@ func cheapestTextTestModel(channel *model.Channel) string {
 type channelListItem struct {
 	*model.Channel
 	TestModels []string `json:"test_models"`
+}
+
+// MarshalJSON surfaces test_models alongside the embedded channel fields.
+//
+// model.Channel defines a value-receiver MarshalJSON that the embedded *Channel
+// promotes onto channelListItem. Without this override, json.Marshal would call
+// the promoted Channel.MarshalJSON and silently drop test_models, breaking the
+// admin UI's per-channel test-model selector. We marshal the channel and splice
+// test_models in (as [] when empty, never omitted) while preserving field order.
+func (item channelListItem) MarshalJSON() ([]byte, error) {
+	testModels := item.TestModels
+	if testModels == nil {
+		testModels = []string{}
+	}
+	testModelsJSON, err := json.Marshal(testModels)
+	if err != nil {
+		return nil, errors.Wrap(err, "marshal test_models")
+	}
+
+	if item.Channel == nil {
+		return append(append([]byte(`{"test_models":`), testModelsJSON...), '}'), nil
+	}
+
+	channelJSON, err := json.Marshal(item.Channel)
+	if err != nil {
+		return nil, errors.Wrap(err, "marshal channel")
+	}
+	end := bytes.LastIndexByte(channelJSON, '}')
+	if end < 0 {
+		return nil, errors.Errorf("unexpected channel json payload: %s", channelJSON)
+	}
+
+	inner := bytes.TrimSpace(channelJSON[1:end])
+	var buf bytes.Buffer
+	buf.Grow(len(channelJSON) + len(testModelsJSON) + 16)
+	buf.WriteByte('{')
+	if len(inner) > 0 {
+		buf.Write(inner)
+		buf.WriteByte(',')
+	}
+	buf.WriteString(`"test_models":`)
+	buf.Write(testModelsJSON)
+	buf.WriteByte('}')
+	return buf.Bytes(), nil
 }
 
 // buildChannelListResponse wraps channel rows with text-compatible test model choices.
