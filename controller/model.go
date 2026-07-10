@@ -12,6 +12,7 @@ import (
 	"github.com/Laisky/errors/v2"
 	gmw "github.com/Laisky/gin-middlewares/v7"
 	gutils "github.com/Laisky/go-utils/v6"
+	glog "github.com/Laisky/go-utils/v6/log"
 	"github.com/Laisky/zap"
 	"github.com/gin-gonic/gin"
 	"golang.org/x/sync/singleflight"
@@ -1564,29 +1565,55 @@ func ListModels(c *gin.Context) {
 		return
 	}
 
+	userAvailableModels := resolveUserAvailableModels(availableAbilities, snapshot, int(time.Now().Unix()), channelCache, lg)
+
+	c.JSON(http.StatusOK, gin.H{
+		"object": "list",
+		"data":   userAvailableModels,
+	})
+}
+
+// withRoutableModelID returns a copy of entry whose Id/Root equal routableName,
+// the ability's actual (case-sensitive) model name that channel routing matches.
+// Display metadata (owner, permissions, created) is otherwise preserved. This
+// keeps every advertised model callable even when a case-insensitively-equal
+// snapshot/catalog entry supplies the metadata under a different casing (e.g.
+// the nvidia adaptor registers deepseek-ai/deepseek-v4-flash while a SiliconFlow
+// channel is configured as deepseek-ai/DeepSeek-V4-Flash). See issue #352.
+func withRoutableModelID(entry OpenAIModels, routableName string) OpenAIModels {
+	entry.Id = routableName
+	entry.Root = routableName
+	return entry
+}
+
+// resolveUserAvailableModels converts a user group's enabled abilities into
+// OpenAI-shaped model entries. Display metadata is inherited from the
+// supported-models snapshot via a case-insensitive match, but the returned entry
+// Id/Root always equals the ability's actual model name — the case-sensitive
+// routing key that /v1/chat/completions matches — so every listed model stays
+// callable. See issue #352.
+//
+// Entries are keyed by the exact ability model name: two abilities that differ
+// only in case are distinct routing keys and must both remain listable, while
+// identical names collapse to a single entry.
+func resolveUserAvailableModels(abilities []dto.EnabledAbility, snapshot []OpenAIModels, created int, channelCache map[int]*model.Channel, lg glog.Logger) []OpenAIModels {
 	snapshotByID := make(map[string]OpenAIModels, len(snapshot))
-	for _, model := range snapshot {
-		key := strings.ToLower(model.Id)
-		snapshotByID[key] = model
+	for _, entry := range snapshot {
+		snapshotByID[strings.ToLower(entry.Id)] = entry
 	}
 
-	allowed := make(map[string]OpenAIModels, len(availableAbilities))
-	created := int(time.Now().Unix())
-
-	for _, ability := range availableAbilities {
+	allowed := make(map[string]OpenAIModels, len(abilities))
+	for _, ability := range abilities {
 		modelName := strings.TrimSpace(ability.Model)
 		if modelName == "" {
 			continue
 		}
-		key := strings.ToLower(modelName)
-		if entry, ok := snapshotByID[key]; ok {
-			allowed[key] = entry
+		if entry, ok := snapshotByID[strings.ToLower(modelName)]; ok {
+			allowed[modelName] = withRoutableModelID(entry, modelName)
 			continue
 		}
-
-		entry, ok := buildModelEntryFromAbility(modelName, ability.ChannelId, ability.ChannelType, created, channelCache)
-		if ok {
-			allowed[key] = entry
+		if entry, ok := buildModelEntryFromAbility(modelName, ability.ChannelId, ability.ChannelType, created, channelCache); ok {
+			allowed[modelName] = entry
 			continue
 		}
 		if lg != nil {
@@ -1598,18 +1625,15 @@ func ListModels(c *gin.Context) {
 	}
 
 	userAvailableModels := make([]OpenAIModels, 0, len(allowed))
-	for _, model := range allowed {
-		userAvailableModels = append(userAvailableModels, model)
+	for _, entry := range allowed {
+		userAvailableModels = append(userAvailableModels, entry)
 	}
 
 	sort.Slice(userAvailableModels, func(i, j int) bool {
 		return userAvailableModels[i].Id < userAvailableModels[j].Id
 	})
 
-	c.JSON(http.StatusOK, gin.H{
-		"object": "list",
-		"data":   userAvailableModels,
-	})
+	return userAvailableModels
 }
 
 func buildModelEntryFromAbility(modelName string, channelID int, channelType int, created int, cache map[int]*model.Channel) (OpenAIModels, bool) {
@@ -1681,13 +1705,17 @@ func RetrieveModel(c *gin.Context) {
 		return
 	}
 
-	if model, ok := modelsMap[modelId]; ok {
-		c.JSON(http.StatusOK, model)
+	// modelId was rebound above to the ability's actual casing. Echo that
+	// case-sensitive routing key back to the client even when metadata is found
+	// under a different casing in the catalog/snapshot, so the retrieved id stays
+	// callable via /v1/chat/completions. See issue #352.
+	if entry, ok := modelsMap[modelId]; ok {
+		c.JSON(http.StatusOK, withRoutableModelID(entry, modelId))
 		return
 	}
 	for key, modelEntry := range modelsMap {
 		if strings.EqualFold(key, modelId) {
-			c.JSON(http.StatusOK, modelEntry)
+			c.JSON(http.StatusOK, withRoutableModelID(modelEntry, modelId))
 			return
 		}
 	}
@@ -1695,7 +1723,7 @@ func RetrieveModel(c *gin.Context) {
 	if snapshot, err := getSupportedModelsSnapshot(); err == nil {
 		for _, m := range snapshot {
 			if strings.EqualFold(m.Id, modelId) {
-				c.JSON(http.StatusOK, m)
+				c.JSON(http.StatusOK, withRoutableModelID(m, modelId))
 				return
 			}
 		}
