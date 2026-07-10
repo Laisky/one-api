@@ -298,6 +298,15 @@ func TestProcessChannelRelayError_StatusTooManyRequestsLogsWarnNotError(t *testi
 	testDB, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	require.NoError(t, errors.Wrap(err, "open sqlite memory db"))
 	require.NoError(t, errors.Wrap(testDB.AutoMigrate(&dbmodel.Ability{}), "migrate abilities table"))
+	// Seed the ability row that the 429 handler suspends. Without a matching row
+	// SuspendAbility reports 0 affected rows and logs an ERROR, which would defeat
+	// this test's purpose of asserting the 429 path stays at WARN level.
+	require.NoError(t, errors.Wrap(testDB.Create(&dbmodel.Ability{
+		Group:     "default",
+		Model:     "glm-4.6v-flash",
+		ChannelId: 3,
+		Enabled:   true,
+	}).Error, "seed ability row"))
 	dbmodel.DB = testDB
 	defer func() {
 		dbmodel.DB = originalDB
