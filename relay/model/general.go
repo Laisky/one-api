@@ -73,8 +73,10 @@ type GeneralOpenAIRequest struct {
 	// default to 1.
 	N *int `json:"n,omitempty" binding:"omitempty,min=0"`
 	// ReasoningEffort constrains effort on reasoning for reasoning models, reasoning models only.
-	// Supported values: low, medium, high, minimal (GPT-5 series also supports "minimal")
-	ReasoningEffort *string `json:"reasoning_effort,omitempty" binding:"omitempty,oneof=low medium high minimal"`
+	// The binding is the union of effort vocabularies across providers; per-model
+	// validation narrows it downstream (e.g. the GPT-5.6 family adds "xhigh"/"max",
+	// grok/gemini use "none", GPT-5 advertises the legacy "minimal" alias).
+	ReasoningEffort *string `json:"reasoning_effort,omitempty" binding:"omitempty,oneof=none minimal low medium high xhigh max"`
 	// Verbosity hints the model to be more or less expansive in its replies (GPT-5 series).
 	// Supported values: low, medium, high
 	Verbosity *string `json:"verbosity,omitempty" binding:"omitempty,oneof=low medium high"`
@@ -132,8 +134,10 @@ type GeneralOpenAIRequest struct {
 }
 
 type OpenAIResponseReasoning struct {
-	// Effort defines the reasoning effort level
-	Effort *string `json:"effort,omitempty" binding:"omitempty,oneof=low medium high"`
+	// Effort defines the reasoning effort level. The binding is the union across
+	// providers; per-model validation narrows it downstream (the GPT-5.6 family
+	// adds "xhigh"/"max").
+	Effort *string `json:"effort,omitempty" binding:"omitempty,oneof=none minimal low medium high xhigh max"`
 	// Summary defines whether to include a summary of the reasoning
 	Summary *string `json:"summary,omitempty" binding:"omitempty,oneof=auto concise detailed"`
 }

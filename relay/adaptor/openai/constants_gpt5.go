@@ -36,6 +36,13 @@ var gpt5FullEfforts = []string{"minimal", "low", "medium", "high", "xhigh"}
 // OpenAI clamps to medium-only since they mirror ChatGPT's default behavior.
 var gpt5ChatOnlyEfforts = []string{"medium"}
 
+// gpt56FullEfforts extends the GPT-5 effort ladder with the "max" level that
+// OpenAI introduced with the GPT-5.6 family. reasoning.effort now accepts
+// {none, low, medium, high, xhigh, max}; the relay advertises the legacy
+// "minimal" alias in place of "none" for continuity with earlier gpt-5 entries.
+// Source: https://developers.openai.com/api/docs/guides/latest-model
+var gpt56FullEfforts = []string{"minimal", "low", "medium", "high", "xhigh", "max"}
+
 // gpt55LongContextTier represents the >272K input-token tier applied to gpt-5.5:
 // 2x input, 1.5x output, 2x cached input. Per OpenAI's docs, the multiplier
 // applies for the full session once the threshold is crossed.
@@ -71,7 +78,109 @@ var gpt54ProLongContextTier = adaptor.ModelRatioTier{
 	InputTokenThreshold: 272_001,
 }
 
+// GPT-5.6 long-context tiers. Prompts with >272K input tokens are billed at the
+// long-context rate (2x input, 1.5x output, 2x cached input) for the whole
+// request. Values are dedicated (not aliased to the 5.4/5.5 tiers) so the 5.6
+// pricing stays decoupled from earlier families.
+// Source: https://developers.openai.com/api/docs/pricing
+
+// gpt56SolLongContextTier: gpt-5.6 / gpt-5.6-sol (>272K input): $10 in, $45 out.
+var gpt56SolLongContextTier = adaptor.ModelRatioTier{
+	Ratio:               10.0 * ratio.MilliTokensUsd,
+	CompletionRatio:     45.0 / 10.0,
+	CachedInputRatio:    1.0 * ratio.MilliTokensUsd,
+	InputTokenThreshold: 272_001,
+}
+
+// gpt56TerraLongContextTier: gpt-5.6-terra (>272K input): $5 in, $22.50 out.
+var gpt56TerraLongContextTier = adaptor.ModelRatioTier{
+	Ratio:               5.0 * ratio.MilliTokensUsd,
+	CompletionRatio:     22.5 / 5.0,
+	CachedInputRatio:    0.5 * ratio.MilliTokensUsd,
+	InputTokenThreshold: 272_001,
+}
+
+// gpt56LunaLongContextTier: gpt-5.6-luna (>272K input): $2 in, $9 out.
+var gpt56LunaLongContextTier = adaptor.ModelRatioTier{
+	Ratio:               2.0 * ratio.MilliTokensUsd,
+	CompletionRatio:     9.0 / 2.0,
+	CachedInputRatio:    0.2 * ratio.MilliTokensUsd,
+	InputTokenThreshold: 272_001,
+}
+
 var gpt5ModelRatios = map[string]adaptor.ModelConfig{
+	// ---- GPT-5.6 family (GA 2026-07-09) --------------------------------------
+	// GPT-5.6 replaces the mini/nano/pro suffix scheme with the Sol / Terra / Luna
+	// sub-tiers. The bare "gpt-5.6" alias routes to gpt-5.6-sol upstream, and Pro
+	// mode is now a request parameter (reasoning.mode="pro") rather than a distinct
+	// model, so there is no gpt-5.6-pro slug. All three tiers share a 1.05M context
+	// window with 128K max output and a >272K-input long-context surcharge (2x
+	// input, 1.5x output). reasoning.effort additionally accepts the new "max"
+	// level (gpt56FullEfforts). Knowledge cutoff 2026-02-16.
+	// Sources verified 2026-07-10:
+	//   - https://developers.openai.com/api/docs/pricing
+	//   - https://developers.openai.com/api/docs/models/gpt-5.6-sol
+	//   - https://developers.openai.com/api/docs/guides/latest-model
+	"gpt-5.6": {
+		Ratio:                       5.0 * ratio.MilliTokensUsd,
+		CompletionRatio:             30.0 / 5.0,
+		CachedInputRatio:            0.5 * ratio.MilliTokensUsd,
+		Tiers:                       []adaptor.ModelRatioTier{gpt56SolLongContextTier},
+		ContextLength:               1_050_000,
+		MaxOutputTokens:             128000,
+		InputModalities:             []string{"text", "image"},
+		OutputModalities:            []string{"text"},
+		SupportedFeatures:           append([]string{"web_search"}, gpt5ReasoningFeatures...),
+		SupportedSamplingParameters: reasoningSamplingParameters(),
+		SupportedReasoningEfforts:   gpt56FullEfforts,
+		DefaultReasoningEffort:      "medium",
+		Description:                 "GPT-5.6 (alias for gpt-5.6-sol): frontier reasoning model with 1.05M context and the new 'max' effort level (long-context surcharge >272K input).",
+	},
+	"gpt-5.6-sol": {
+		Ratio:                       5.0 * ratio.MilliTokensUsd,
+		CompletionRatio:             30.0 / 5.0,
+		CachedInputRatio:            0.5 * ratio.MilliTokensUsd,
+		Tiers:                       []adaptor.ModelRatioTier{gpt56SolLongContextTier},
+		ContextLength:               1_050_000,
+		MaxOutputTokens:             128000,
+		InputModalities:             []string{"text", "image"},
+		OutputModalities:            []string{"text"},
+		SupportedFeatures:           append([]string{"web_search"}, gpt5ReasoningFeatures...),
+		SupportedSamplingParameters: reasoningSamplingParameters(),
+		SupportedReasoningEfforts:   gpt56FullEfforts,
+		DefaultReasoningEffort:      "medium",
+		Description:                 "GPT-5.6 Sol: flagship 5.6 reasoning tier with 1.05M context (long-context surcharge >272K input).",
+	},
+	"gpt-5.6-terra": {
+		Ratio:                       2.5 * ratio.MilliTokensUsd,
+		CompletionRatio:             15.0 / 2.5,
+		CachedInputRatio:            0.25 * ratio.MilliTokensUsd,
+		Tiers:                       []adaptor.ModelRatioTier{gpt56TerraLongContextTier},
+		ContextLength:               1_050_000,
+		MaxOutputTokens:             128000,
+		InputModalities:             []string{"text", "image"},
+		OutputModalities:            []string{"text"},
+		SupportedFeatures:           append([]string{"web_search"}, gpt5ReasoningFeatures...),
+		SupportedSamplingParameters: reasoningSamplingParameters(),
+		SupportedReasoningEfforts:   gpt56FullEfforts,
+		DefaultReasoningEffort:      "medium",
+		Description:                 "GPT-5.6 Terra: balanced 5.6 reasoning tier with 1.05M context (long-context surcharge >272K input).",
+	},
+	"gpt-5.6-luna": {
+		Ratio:                       1.0 * ratio.MilliTokensUsd,
+		CompletionRatio:             6.0 / 1.0,
+		CachedInputRatio:            0.1 * ratio.MilliTokensUsd,
+		Tiers:                       []adaptor.ModelRatioTier{gpt56LunaLongContextTier},
+		ContextLength:               1_050_000,
+		MaxOutputTokens:             128000,
+		InputModalities:             []string{"text", "image"},
+		OutputModalities:            []string{"text"},
+		SupportedFeatures:           append([]string{"web_search"}, gpt5ReasoningFeatures...),
+		SupportedSamplingParameters: reasoningSamplingParameters(),
+		SupportedReasoningEfforts:   gpt56FullEfforts,
+		DefaultReasoningEffort:      "medium",
+		Description:                 "GPT-5.6 Luna: cost-efficient 5.6 reasoning tier with 1.05M context (long-context surcharge >272K input).",
+	},
 	// chat-latest: rolling alias to the latest GPT-5.5 Instant model used in ChatGPT.
 	// Replaces the retired chatgpt-4o-latest alias (sunset 2026-02-17). Released 2026-05-05.
 	// 400K context, 128K max output, $5/$0.50/$30 per 1M tokens.
