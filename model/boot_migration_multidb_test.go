@@ -119,6 +119,7 @@ func runBootMigrationPortable(t *testing.T) {
 	t.Helper()
 	require.NoError(t, migrateDB(), "migrateDB")
 	require.NoError(t, MigrateAbilitySuspendUntilColumn(), "MigrateAbilitySuspendUntilColumn")
+	require.NoError(t, MigrateAbilityModelCollation(), "MigrateAbilityModelCollation")
 	require.NoError(t, MigrateChannelFieldsToText(), "MigrateChannelFieldsToText")
 	require.NoError(t, MigrateTraceURLColumnToText(), "MigrateTraceURLColumnToText")
 	require.NoError(t, MigrateUserRequestCostEnsureUniqueRequestID(), "MigrateUserRequestCostEnsureUniqueRequestID")

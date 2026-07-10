@@ -62,9 +62,9 @@ Open **Channels → Create Channel** or select an existing channel and choose **
 | **API Key**          | Provider credential. Leave blank while editing to keep the stored secret. Some providers (AWS, Vertex, Coze OAuth) build the key automatically from other fields.               |
 | **Base URL**         | Endpoint root. Optional unless the provider demands it (Azure, OpenAI-compatible). Trailing slashes are trimmed automatically.                                                  |
 | **Group Membership** | Multi-select of logical user groups (default is always included). Channels are eligible only for the groups you assign here.                                                    |
-| **Models**           | Explicit allowlist of model IDs routed through this channel. Empty list means “all supported models”. The helper dialog offers search, bulk add, and clear actions.             |
+| **Models**           | Explicit allowlist of case-sensitive model IDs routed through this channel. `Foo` and `foo` are distinct routing identifiers. Empty list means “all supported models”. The helper dialog offers search, bulk add, and clear actions. |
 | **Model Mapping**    | JSON object translating external model names to upstream model IDs (string → string). Useful when clients send `gpt-4` but upstream expects a deployment alias.                 |
-| **Hidden Models**    | Models this channel can serve internally but must not expose publicly. Hidden models are removed from `/v1/models`, rejected for direct user requests, and still usable as Model Mapping targets. |
+| **Hidden Models**    | Models this channel can serve internally but must not expose publicly. Hidden-name matching is case-insensitive for compatibility with existing configurations, while routing IDs remain case-sensitive. Hidden models are removed from `/v1/models`, rejected from direct user requests, and remain usable as Model Mapping targets. |
 
 **Alias fan-out example:** if Channel 1 serves upstream `A` and Channel 2 serves upstream `B`, configure them as `Models="A,C"` + `Hidden Models=["A"]` + `Model Mapping={"C":"A"}` and `Models="B,C"` + `Hidden Models=["B"]` + `Model Mapping={"C":"B"}`. Users see only `C` in `/v1/models`, while the gateway still rewrites `C` to `A` or `B` upstream.
 
@@ -217,6 +217,7 @@ The UI offers helper buttons:
 - Azure `other` field defaults to the latest supported API version if left blank.
 - Clearing sensitive fields: leaving the API key empty when editing keeps the stored value. To remove credentials entirely, disable or delete the channel. The same convention applies to global options whose key ends in `Token`, `Secret`, or `Password`: an empty string in the form is ignored on save.
 - Hidden Models is a non-blocking warning field. If you hide a name that is not listed in **Models**, One-API treats it as a no-op. If you hide a name that is also a **Model Mapping** source, the public alias becomes unreachable.
+- Model routing and Model Mapping keys are case-sensitive. Hidden Models is intentionally case-insensitive so a legacy entry such as `modela` continues to hide a configured model named `ModelA`.
 
 ## 8. Troubleshooting Checklist
 

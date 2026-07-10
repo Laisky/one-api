@@ -134,7 +134,7 @@ export const useChannelForm = () => {
         }
       }
     } catch (error) {
-      console.error('Error loading default pricing:', error);
+      console.error(`Error loading default pricing: ${error instanceof Error ? error.message : String(error)}`);
     }
   }, []);
 
@@ -212,7 +212,7 @@ export const useChannelForm = () => {
                   : {},
             };
           } catch (e) {
-            console.error('Failed to parse config JSON:', e);
+            console.error(`Failed to parse config JSON: ${e instanceof Error ? e.message : String(e)}`);
           }
         }
 
@@ -298,14 +298,12 @@ export const useChannelForm = () => {
           inference_profile_arn_map: formatJsonField(data.inference_profile_arn_map),
         };
 
-        console.debug('[EditChannel] Loaded channel payload', {
-          channelId: data.id ?? channelId,
-          channelType,
-          hasModelMapping: Boolean(data.model_mapping),
-          modelMappingLength: typeof data.model_mapping === 'string' ? data.model_mapping.length : 0,
-          hasModelConfigs: Boolean(data.model_configs),
-          hasSystemPrompt: Boolean(data.system_prompt),
-        });
+        console.debug(
+          `[EditChannel] Loaded channel payload channelId=${data.id ?? channelId} channelType=${channelType} ` +
+            `hasModelMapping=${Boolean(data.model_mapping)} ` +
+            `modelMappingLength=${typeof data.model_mapping === 'string' ? data.model_mapping.length : 0} ` +
+            `hasModelConfigs=${Boolean(data.model_configs)} hasSystemPrompt=${Boolean(data.system_prompt)}`
+        );
 
         if (channelType) {
           await loadDefaultPricing(channelType);
@@ -329,7 +327,7 @@ export const useChannelForm = () => {
         throw new Error(message || 'Failed to load channel');
       }
     } catch (error) {
-      console.error('Error loading channel:', error);
+      console.error(`Error loading channel: ${error instanceof Error ? error.message : String(error)}`);
     } finally {
       setLoading(false);
     }
@@ -352,7 +350,7 @@ export const useChannelForm = () => {
         setModelsCatalog(catalog);
       }
     } catch (error) {
-      console.error('Error loading models catalog:', error);
+      console.error(`Error loading models catalog: ${error instanceof Error ? error.message : String(error)}`);
     }
   }, []);
 
@@ -374,7 +372,7 @@ export const useChannelForm = () => {
         }
       }
     } catch (error) {
-      console.error('Error loading groups:', error);
+      console.error(`Error loading groups: ${error instanceof Error ? error.message : String(error)}`);
       setGroups(['default']);
     }
   }, []);
@@ -453,10 +451,10 @@ export const useChannelForm = () => {
     if (!parsed || Array.isArray(parsed) || typeof parsed !== 'object') {
       return empty;
     }
-    const supported = new Set((data.models || []).map((model) => model.trim().toLowerCase()).filter((model) => model.length > 0));
+    const supported = new Set((data.models || []).map((model) => model.trim()).filter((model) => model.length > 0));
     const channelType = normalizeChannelType(data.type);
     const catalog = channelType !== null ? (modelsCatalog[channelType] ?? []) : [];
-    const catalogSet = new Set(catalog.map((model) => model.trim().toLowerCase()).filter((model) => model.length > 0));
+    const catalogSet = new Set(catalog.map((model) => model.trim()).filter((model) => model.length > 0));
     const knownTargets = new Set<string>();
     supported.forEach((entry) => knownTargets.add(entry));
     catalogSet.forEach((entry) => knownTargets.add(entry));
@@ -466,14 +464,14 @@ export const useChannelForm = () => {
     for (const [rawKey, rawValue] of Object.entries(parsed as Record<string, unknown>)) {
       const key = rawKey.trim();
       if (key.length === 0) continue;
-      if (!supported.has(key.toLowerCase())) {
+      if (!supported.has(key)) {
         unreachableKeys.push(key);
       }
       if (catalogSet.size === 0) continue; // Cannot judge target validity without a catalog.
       if (typeof rawValue !== 'string') continue;
       const target = rawValue.trim();
       if (target.length === 0) continue;
-      if (!knownTargets.has(target.toLowerCase())) {
+      if (!knownTargets.has(target)) {
         unknownTargets.push({ source: key, target });
       }
     }

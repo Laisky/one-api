@@ -14,7 +14,6 @@ import (
 
 	"github.com/Laisky/one-api/common"
 	"github.com/Laisky/one-api/common/logger"
-	"github.com/Laisky/one-api/common/utils"
 	"github.com/Laisky/one-api/dto"
 )
 
@@ -29,41 +28,78 @@ type Ability struct {
 	UpdatedAt    int64      `json:"updated_at" gorm:"bigint;autoUpdateTime:milli"`
 }
 
+// exactModelPredicate returns a parameterized equality predicate for a trusted,
+// optionally-qualified model column. MySQL casts the bound value during rollout
+// so exact routing remains correct before the model-column collation migration
+// completes; other supported backends use their schema comparison directly.
+func exactModelPredicate(column string) string {
+	if common.UsingMySQL.Load() {
+		return column + " = CAST(? AS BINARY)"
+	}
+	return column + " = ?"
+}
+
+// excludedChannelIDs returns a stable list of channel IDs excluded by routing.
+func excludedChannelIDs(excluded map[int]bool) []int {
+	ids := make([]int, 0, len(excluded))
+	for channelID := range excluded {
+		ids = append(ids, channelID)
+	}
+	sort.Ints(ids)
+	return ids
+}
+
+// availableAbilitiesQuery builds the shared enabled, unsuspended, exact-model
+// ability query and optionally excludes channel IDs. The returned query is not executed.
+func availableAbilitiesQuery(db *gorm.DB, group string, model string, now time.Time, excludeIDs []int) *gorm.DB {
+	groupCol := "`group`"
+	if common.UsingPostgreSQL.Load() {
+		groupCol = `"group"`
+	}
+
+	query := db.Model(&Ability{}).Where(
+		groupCol+" = ? AND "+exactModelPredicate("model")+" AND enabled = ? AND (suspend_until IS NULL OR suspend_until < ?)",
+		group, model, true, now,
+	)
+	if len(excludeIDs) > 0 {
+		query = query.Where("channel_id NOT IN ?", excludeIDs)
+	}
+	return query
+}
+
+// firstRandomAbility selects one random ability using the active SQL dialect.
+func firstRandomAbility(query *gorm.DB, ability *Ability) error {
+	order := "RAND()"
+	if common.UsingSQLite.Load() || common.UsingPostgreSQL.Load() {
+		order = "RANDOM()"
+	}
+	return query.Order(order).First(ability).Error
+}
+
+// GetRandomSatisfiedChannel selects a random enabled channel for an exact group
+// and model match, optionally considering all priority tiers.
 func GetRandomSatisfiedChannel(group string, model string, ignoreFirstPriority bool) (*Channel, error) {
 	if DB == nil {
 		return nil, errors.New("database not initialized")
 	}
 
 	ability := Ability{}
-	groupCol := "`group`"
-	trueVal := "1"
-	if common.UsingPostgreSQL.Load() {
-		groupCol = `"group"`
-		trueVal = "true"
-	}
-	now := time.Now()
+	now := time.Now().UTC()
 
-	var err error = nil
 	var channelQuery *gorm.DB
 	if ignoreFirstPriority {
-		channelQuery = DB.Where(groupCol+" = ? AND model = ? AND enabled = "+trueVal+" AND (suspend_until IS NULL OR suspend_until < ?)", group, model, now)
+		channelQuery = availableAbilitiesQuery(DB, group, model, now, nil)
 	} else {
-		maxPrioritySubQuery := DB.Model(&Ability{}).Select("MAX(priority)").Where(groupCol+" = ? AND model = ? AND enabled = "+trueVal+" AND (suspend_until IS NULL OR suspend_until < ?)", group, model, now)
-		channelQuery = DB.Where(groupCol+" = ? AND model = ? AND enabled = "+trueVal+" AND priority = (?) AND (suspend_until IS NULL OR suspend_until < ?)", group, model, maxPrioritySubQuery, now)
+		maxPrioritySubQuery := availableAbilitiesQuery(DB, group, model, now, nil).Select("MAX(priority)")
+		channelQuery = availableAbilitiesQuery(DB, group, model, now, nil).Where("priority = (?)", maxPrioritySubQuery)
 	}
-	if common.UsingSQLite.Load() || common.UsingPostgreSQL.Load() {
-		err = channelQuery.Order("RANDOM()").First(&ability).Error
-	} else {
-		err = channelQuery.Order("RAND()").First(&ability).Error
-	}
-	if err != nil {
+	if err := firstRandomAbility(channelQuery, &ability); err != nil {
 		return nil, errors.Wrap(err, "get random satisfied channel")
 	}
 
 	channel := Channel{}
 	channel.Id = ability.ChannelId
-	err = DB.First(&channel, "id = ?", ability.ChannelId).Error
-	if err != nil {
+	if err := DB.First(&channel, "id = ?", ability.ChannelId).Error; err != nil {
 		return nil, errors.Wrapf(err, "load channel %d for ability", ability.ChannelId)
 	}
 	if !channel.SupportsModel(model) {
@@ -72,8 +108,22 @@ func GetRandomSatisfiedChannel(group string, model string, ignoreFirstPriority b
 	return &channel, nil
 }
 
+// AddAbilities persists every visible ability advertised by channel.
 func (channel *Channel) AddAbilities() error {
-	models := utils.DeDuplication(channel.GetSupportedModelNames())
+	return addAbilitiesWithDB(DB, channel)
+}
+
+// addAbilitiesWithDB persists channel abilities through db so callers can include
+// the writes in a wider transaction. It returns a wrapped persistence error.
+func addAbilitiesWithDB(db *gorm.DB, channel *Channel) error {
+	if db == nil {
+		return errors.New("database not initialized")
+	}
+	if channel == nil {
+		return errors.New("channel must be specified when adding abilities")
+	}
+
+	models := channel.GetSupportedModelNames()
 	groups := channel.GetGroupNames()
 	hiddenModels := channel.GetHiddenModels()
 	abilities := make([]Ability, 0, len(models)*len(groups))
@@ -96,26 +146,42 @@ func (channel *Channel) AddAbilities() error {
 	if len(abilities) == 0 {
 		return nil
 	}
-	return DB.Create(&abilities).Error
+	if err := db.Create(&abilities).Error; err != nil {
+		return errors.Wrapf(err, "create abilities for channel %d", channel.Id)
+	}
+	return nil
 }
 
+// DeleteAbilities removes every ability persisted for channel.
 func (channel *Channel) DeleteAbilities() error {
-	return DB.Where("channel_id = ?", channel.Id).Delete(&Ability{}).Error
+	return deleteAbilitiesWithDB(DB, channel.Id)
+}
+
+// deleteAbilitiesWithDB removes a channel's abilities through db so callers can
+// include the delete in a wider transaction. It returns a wrapped persistence error.
+func deleteAbilitiesWithDB(db *gorm.DB, channelID int) error {
+	if db == nil {
+		return errors.New("database not initialized")
+	}
+	if err := db.Where("channel_id = ?", channelID).Delete(&Ability{}).Error; err != nil {
+		return errors.Wrapf(err, "delete abilities for channel %d", channelID)
+	}
+	return nil
 }
 
 // UpdateAbilities updates abilities of this channel.
 // Make sure the channel is completed before calling this function.
 func (channel *Channel) UpdateAbilities() error {
-	// A quick and dirty way to update abilities
-	// First delete all abilities of this channel
-	err := channel.DeleteAbilities()
-	if err != nil {
-		return errors.Wrapf(err, "delete abilities for channel %d", channel.Id)
+	if DB == nil {
+		return errors.New("database not initialized")
 	}
-	// Then add new abilities
-	err = channel.AddAbilities()
-	if err != nil {
-		return errors.Wrapf(err, "add abilities for channel %d", channel.Id)
+	if err := DB.Transaction(func(tx *gorm.DB) error {
+		if err := deleteAbilitiesWithDB(tx, channel.Id); err != nil {
+			return err
+		}
+		return addAbilitiesWithDB(tx, channel)
+	}); err != nil {
+		return errors.Wrapf(err, "update abilities for channel %d", channel.Id)
 	}
 	return nil
 }
@@ -249,10 +315,13 @@ func GetGroupModelsV2(ctx context.Context, group string) ([]dto.EnabledAbility, 
 
 // SuspendAbility sets the SuspendUntil timestamp for a given ability.
 func SuspendAbility(ctx context.Context, group string, modelName string, channelId int, duration time.Duration) error {
+	if DB == nil {
+		return errors.New("database not initialized")
+	}
 	if group == "" || modelName == "" || channelId == 0 {
 		return errors.New("group, modelName, and channelId must be specified for suspending ability")
 	}
-	suspendTime := time.Now().Add(duration)
+	suspendTime := time.Now().UTC().Add(duration)
 
 	// Handle database-specific identifier quoting like other functions
 	groupCol := "`group`"
@@ -263,116 +332,57 @@ func SuspendAbility(ctx context.Context, group string, modelName string, channel
 		modelCol = `"model"`
 		channelCol = `"channel_id"`
 	}
-
-	return DB.Model(&Ability{}).
-		Where(groupCol+" = ? AND "+modelCol+" = ? AND "+channelCol+" = ?",
+	result := DB.WithContext(ctx).Model(&Ability{}).
+		Where(groupCol+" = ? AND "+exactModelPredicate(modelCol)+" AND "+channelCol+" = ?",
 			group, modelName, channelId).
-		Update("suspend_until", suspendTime).Error
+		Update("suspend_until", suspendTime)
+	if result.Error != nil {
+		return errors.Wrapf(result.Error, "suspend ability for group %q, model %q, channel %d", group, modelName, channelId)
+	}
+	if result.RowsAffected != 1 {
+		return errors.Errorf("suspend ability for group %q, model %q, channel %d affected %d rows instead of 1",
+			group, modelName, channelId, result.RowsAffected)
+	}
+	return nil
 }
 
+// GetRandomSatisfiedChannelExcluding selects a random enabled channel for an
+// exact group and model match while omitting the supplied channel IDs.
 func GetRandomSatisfiedChannelExcluding(group string, model string, ignoreFirstPriority bool, excludeChannelIds map[int]bool) (*Channel, error) {
 	if DB == nil {
 		return nil, errors.New("database not initialized")
 	}
 	ability := Ability{}
-	groupCol := "`group`"
-	trueVal := "1"
-	if common.UsingPostgreSQL.Load() {
-		groupCol = `"group"`
-		trueVal = "true"
-	}
-	now := time.Now()
+	now := time.Now().UTC()
+	excludeIDs := excludedChannelIDs(excludeChannelIds)
 
-	var err error = nil
 	var channelQuery *gorm.DB
-
-	// Build base query with exclusions
-	baseCondition := groupCol + " = ? AND model = ? AND enabled = " + trueVal + " AND (suspend_until IS NULL OR suspend_until < ?)"
-	if len(excludeChannelIds) > 0 {
-		var excludeIds []int
-		for channelId := range excludeChannelIds {
-			excludeIds = append(excludeIds, channelId)
-		}
-		baseCondition += " AND channel_id NOT IN (?)"
-	}
-
 	if ignoreFirstPriority {
-		// For ignoreFirstPriority=true, we want to select from lower priority channels
-		// First, find the maximum priority among available channels (excluding failed ones)
-		maxPrioritySubQuery := DB.Model(&Ability{}).Select("MAX(priority)").Where(groupCol+" = ? AND model = ? AND enabled = "+trueVal+" AND (suspend_until IS NULL OR suspend_until < ?)", group, model, now)
-		if len(excludeChannelIds) > 0 {
-			var excludeIds []int
-			for channelId := range excludeChannelIds {
-				excludeIds = append(excludeIds, channelId)
-			}
-			maxPrioritySubQuery = maxPrioritySubQuery.Where("channel_id NOT IN (?)", excludeIds)
-		}
-
-		// Then select channels with priority less than the maximum priority
-		if len(excludeChannelIds) > 0 {
-			var excludeIds []int
-			for channelId := range excludeChannelIds {
-				excludeIds = append(excludeIds, channelId)
-			}
-			channelQuery = DB.Where(groupCol+" = ? AND model = ? AND enabled = "+trueVal+" AND priority < (?) AND (suspend_until IS NULL OR suspend_until < ?) AND channel_id NOT IN (?)", group, model, maxPrioritySubQuery, now, excludeIds)
-		} else {
-			channelQuery = DB.Where(groupCol+" = ? AND model = ? AND enabled = "+trueVal+" AND priority < (?) AND (suspend_until IS NULL OR suspend_until < ?)", group, model, maxPrioritySubQuery, now)
-		}
+		maxPrioritySubQuery := availableAbilitiesQuery(DB, group, model, now, excludeIDs).Select("MAX(priority)")
+		channelQuery = availableAbilitiesQuery(DB, group, model, now, excludeIDs).
+			Where("priority < (?)", maxPrioritySubQuery)
 	} else {
-		// For ignoreFirstPriority=false, select from highest priority channels
-		// First check if there are any available channels after exclusions
 		var availableCount int64
-		countQuery := DB.Model(&Ability{}).Where(groupCol+" = ? AND model = ? AND enabled = "+trueVal+" AND (suspend_until IS NULL OR suspend_until < ?)", group, model, now)
-		if len(excludeChannelIds) > 0 {
-			var excludeIds []int
-			for channelId := range excludeChannelIds {
-				excludeIds = append(excludeIds, channelId)
-			}
-			countQuery = countQuery.Where("channel_id NOT IN (?)", excludeIds)
+		if err := availableAbilitiesQuery(DB, group, model, now, excludeIDs).Count(&availableCount).Error; err != nil {
+			return nil, errors.Wrap(err, "count available channels after exclusions")
 		}
-		countQuery.Count(&availableCount)
-
 		if availableCount == 0 {
-			// Simple error message to avoid performance overhead
-			// Detailed diagnostics can be enabled via debug mode if needed
-			var excludeIds []int
-			for channelId := range excludeChannelIds {
-				excludeIds = append(excludeIds, channelId)
-			}
-
-			errorMsg := fmt.Sprintf("no channels available for model %s in group %s after excluding %d channels",
-				model, group, len(excludeIds))
-			return nil, errors.New(errorMsg)
+			return nil, errors.Errorf("no channels available for model %s in group %s after excluding %d channels",
+				model, group, len(excludeIDs))
 		}
 
-		// Now find the maximum priority among available channels
-		maxPrioritySubQuery := DB.Model(&Ability{}).Select("MAX(priority)").Where(groupCol+" = ? AND model = ? AND enabled = "+trueVal+" AND (suspend_until IS NULL OR suspend_until < ?)", group, model, now)
-		if len(excludeChannelIds) > 0 {
-			var excludeIds []int
-			for channelId := range excludeChannelIds {
-				excludeIds = append(excludeIds, channelId)
-			}
-			// Add exclusion to the subquery as well
-			maxPrioritySubQuery = maxPrioritySubQuery.Where("channel_id NOT IN (?)", excludeIds)
-			channelQuery = DB.Where(groupCol+" = ? AND model = ? AND enabled = "+trueVal+" AND priority = (?) AND (suspend_until IS NULL OR suspend_until < ?) AND channel_id NOT IN (?)", group, model, maxPrioritySubQuery, now, excludeIds)
-		} else {
-			channelQuery = DB.Where(groupCol+" = ? AND model = ? AND enabled = "+trueVal+" AND priority = (?) AND (suspend_until IS NULL OR suspend_until < ?)", group, model, maxPrioritySubQuery, now)
-		}
+		maxPrioritySubQuery := availableAbilitiesQuery(DB, group, model, now, excludeIDs).Select("MAX(priority)")
+		channelQuery = availableAbilitiesQuery(DB, group, model, now, excludeIDs).
+			Where("priority = (?)", maxPrioritySubQuery)
 	}
 
-	if common.UsingSQLite.Load() || common.UsingPostgreSQL.Load() {
-		err = channelQuery.Order("RANDOM()").First(&ability).Error
-	} else {
-		err = channelQuery.Order("RAND()").First(&ability).Error
-	}
-	if err != nil {
+	if err := firstRandomAbility(channelQuery, &ability); err != nil {
 		return nil, errors.Wrap(err, "get random satisfied channel excluding failed ones")
 	}
 
 	channel := Channel{}
 	channel.Id = ability.ChannelId
-	err = DB.First(&channel, "id = ?", ability.ChannelId).Error
-	if err != nil {
+	if err := DB.First(&channel, "id = ?", ability.ChannelId).Error; err != nil {
 		return nil, errors.Wrapf(err, "load channel %d for ability exclusion check", ability.ChannelId)
 	}
 	if !channel.SupportsModel(model) {

@@ -256,4 +256,55 @@ describe('useChannelForm', () => {
     expect(mockApiPut).toHaveBeenCalledTimes(1);
     expect(result.current.pendingSaveConfirmation).toBeNull();
   });
+
+  it('uses exact trimmed model IDs for Model Mapping save warnings', async () => {
+    mockApiGet.mockImplementation((url) => {
+      if (url.startsWith('/api/channel/1')) {
+        return Promise.resolve({
+          data: {
+            success: true,
+            data: {
+              id: 1,
+              type: 1,
+              name: 'Case-sensitive Channel',
+              models: 'Public-Alias',
+              group: 'default',
+              config: '{}',
+              tooling: '{}',
+            },
+          },
+        });
+      }
+      if (url.startsWith('/api/models')) {
+        return Promise.resolve({ data: { success: true, data: { 1: ['Public-Alias', 'GPT-4o'] } } });
+      }
+      if (url.startsWith('/api/option/')) {
+        return Promise.resolve({ data: { success: true, data: [] } });
+      }
+      if (url.startsWith('/api/channel/default-pricing')) {
+        return Promise.resolve({ data: { success: true, data: { model_configs: '{}', tooling: '{}' } } });
+      }
+      if (url.startsWith('/api/channel/metadata')) {
+        return Promise.resolve({ data: { success: true, data: { default_base_url: 'https://api.openai.com' } } });
+      }
+      return Promise.resolve({ data: { success: false } });
+    });
+    mockApiPut.mockResolvedValue({ data: { success: true, message: '' } });
+
+    const { result } = renderHook(() => useChannelForm());
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false);
+    });
+
+    await act(async () => {
+      await result.current.onSubmit({
+        ...result.current.form.getValues(),
+        model_mapping: '{"public-alias":"gpt-4o"}',
+      });
+    });
+
+    expect(mockApiPut).not.toHaveBeenCalled();
+    expect(result.current.pendingSaveConfirmation?.unreachableMappingKeys).toEqual(['public-alias']);
+    expect(result.current.pendingSaveConfirmation?.unknownMappingTargets).toEqual([{ source: 'public-alias', target: 'gpt-4o' }]);
+  });
 });

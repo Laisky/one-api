@@ -137,8 +137,16 @@ Invariants:
     `hidden_models` must be a JSON array of strings when provided; store
     the normalized JSON string with duplicates removed and original casing
     preserved.
-  - Leave `SupportsModel` unchanged so `SpecificChannelId` paths continue
-    to work for hidden upstream names.
+  - Keep hidden-model membership out of `SupportsModel` so `SpecificChannelId`
+    paths continue to work for hidden upstream names. Supported model names and
+    Model Mapping keys/targets use exact-case routing identity.
+
+  Model identifiers used for routing are case-sensitive: `Foo` and `foo`
+  produce distinct supported-model entries and abilities. Hidden-model
+  membership remains case-insensitive as a deliberate compatibility and
+  safety exception, preventing existing differently-cased hidden entries
+  from becoming publicly visible after an upgrade.
+
   - Extend `channelSortFields` only if we later sort by hidden state (not
     in this change).
 

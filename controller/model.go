@@ -1677,6 +1677,40 @@ func buildModelEntryFromAbility(modelName string, channelID int, channelType int
 	}, true
 }
 
+// matchVisibleAbilityByModelID selects an ability for a requested model ID. The
+// exact trimmed routing ID wins; otherwise, the lexicographically smallest
+// case-folded match is returned, with channel metadata used as a stable tie-breaker.
+func matchVisibleAbilityByModelID(abilities []dto.EnabledAbility, modelID string) (dto.EnabledAbility, bool) {
+	modelID = strings.TrimSpace(modelID)
+	candidates := make([]dto.EnabledAbility, 0, len(abilities))
+	for _, ability := range abilities {
+		ability.Model = strings.TrimSpace(ability.Model)
+		if ability.Model == "" || !strings.EqualFold(ability.Model, modelID) {
+			continue
+		}
+		candidates = append(candidates, ability)
+	}
+	if len(candidates) == 0 {
+		return dto.EnabledAbility{}, false
+	}
+
+	sort.Slice(candidates, func(i, j int) bool {
+		if candidates[i].Model != candidates[j].Model {
+			return candidates[i].Model < candidates[j].Model
+		}
+		if candidates[i].ChannelId != candidates[j].ChannelId {
+			return candidates[i].ChannelId < candidates[j].ChannelId
+		}
+		return candidates[i].ChannelType < candidates[j].ChannelType
+	})
+	for _, candidate := range candidates {
+		if candidate.Model == modelID {
+			return candidate, true
+		}
+	}
+	return candidates[0], true
+}
+
 // RetrieveModel returns details about a specific model or an error when it does not exist.
 func RetrieveModel(c *gin.Context) {
 	modelId := strings.TrimSpace(c.Param("model"))
@@ -1692,18 +1726,12 @@ func RetrieveModel(c *gin.Context) {
 	}
 	channelCache := make(map[int]*model.Channel)
 	visibleAbilities := filterVisibleAbilities(abilities, channelCache)
-	var matched *dto.EnabledAbility
-	for i := range visibleAbilities {
-		if strings.EqualFold(visibleAbilities[i].Model, modelId) {
-			matched = &visibleAbilities[i]
-			modelId = strings.TrimSpace(visibleAbilities[i].Model)
-			break
-		}
-	}
-	if matched == nil {
+	matched, ok := matchVisibleAbilityByModelID(visibleAbilities, modelId)
+	if !ok {
 		respondModelNotFound(c, modelId)
 		return
 	}
+	modelId = matched.Model
 
 	// modelId was rebound above to the ability's actual casing. Echo that
 	// case-sensitive routing key back to the client even when metadata is found
@@ -1770,6 +1798,37 @@ func GetUserAvailableModels(c *gin.Context) {
 	})
 }
 
+// intersectTokenModelIDs intersects a token's configured model IDs with visible
+// abilities using exact trimmed routing IDs. It returns each canonical ability ID
+// once, preserving the token configuration order.
+func intersectTokenModelIDs(modelsString string, abilities []dto.EnabledAbility) []string {
+	routingIDs := make(map[string]string, len(abilities))
+	for _, ability := range abilities {
+		modelName := strings.TrimSpace(ability.Model)
+		if modelName == "" {
+			continue
+		}
+		routingIDs[modelName] = modelName
+	}
+
+	tokenModels := strings.Split(modelsString, ",")
+	modelNames := make([]string, 0, len(tokenModels))
+	seen := make(map[string]struct{}, len(tokenModels))
+	for _, rawModel := range tokenModels {
+		modelName := strings.TrimSpace(rawModel)
+		canonicalModel, ok := routingIDs[modelName]
+		if !ok {
+			continue
+		}
+		if _, ok := seen[canonicalModel]; ok {
+			continue
+		}
+		seen[canonicalModel] = struct{}{}
+		modelNames = append(modelNames, canonicalModel)
+	}
+	return modelNames
+}
+
 // GetAvailableModelsByToken reports the models allowed for the current API token when explicitly restricted.
 func GetAvailableModelsByToken(c *gin.Context) {
 	// Get token information to determine status
@@ -1821,29 +1880,8 @@ func GetAvailableModelsByToken(c *gin.Context) {
 				return
 			}
 			channelCache := make(map[int]*model.Channel)
-			visibleModels := make(map[string]struct{}, len(abilities))
-			for _, ability := range filterVisibleAbilities(abilities, channelCache) {
-				visibleModels[strings.ToLower(strings.TrimSpace(ability.Model))] = struct{}{}
-			}
-
-			tokenModels := strings.Split(modelsString, ",")
-			modelNames := make([]string, 0, len(tokenModels))
-			seen := make(map[string]struct{}, len(tokenModels))
-			for _, rawModel := range tokenModels {
-				modelName := strings.TrimSpace(rawModel)
-				if modelName == "" {
-					continue
-				}
-				key := strings.ToLower(modelName)
-				if _, ok := visibleModels[key]; !ok {
-					continue
-				}
-				if _, ok := seen[key]; ok {
-					continue
-				}
-				seen[key] = struct{}{}
-				modelNames = append(modelNames, modelName)
-			}
+			visibleAbilities := filterVisibleAbilities(abilities, channelCache)
+			modelNames := intersectTokenModelIDs(modelsString, visibleAbilities)
 			c.JSON(http.StatusOK, gin.H{
 				"success": true,
 				"data": gin.H{

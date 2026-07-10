@@ -1088,7 +1088,7 @@ Relays a request in the Anthropic Messages format to a Claude-capable channel. T
 
 | Field | JSON key | Type | Required | Default | Description |
 |-------|----------|------|----------|---------|-------------|
-| Model | `model` | string | Yes | — | Requested model name; remapped to the resolved channel model. |
+| Model | `model` | string | Yes | — | Requested model name. Routing IDs are case-sensitive and must use the casing advertised by `/v1/models`; the selected channel may then remap the ID upstream. |
 | Max tokens | `max_tokens` | integer | Yes | — | Maximum tokens to generate; must be greater than 0. |
 | Messages | `messages` | array | Yes | — | Conversation turns; each has `role` (`user` or `assistant`) and `content` (non-empty string or non-empty array of content blocks). |
 | System | `system` | string or array | No | — | System prompt (string or array of text blocks). |
@@ -3000,7 +3000,7 @@ Returns the list of models the calling key may invoke, intersecting the key's co
 
 **Auth:** Relay API KEY. Header: `Authorization: Bearer $API_KEY` (or `X-Api-Key` / `Api-Key`).
 
-**Response:** `200 OK`. `data.available` is the array of permitted model names (de-duplicated, preserving the key's configured order, restricted to models visible to the user's group); `data.enabled` reflects whether the key's status is enabled. If the key has no model restriction configured (or the configured list is empty), the call returns `success: false` with message `the token has no available models` and `data.available: null` (still HTTP 200).
+**Response:** `200 OK`. `data.available` is the array of permitted model names (de-duplicated, preserving the key's configured order, and intersected with visible routing IDs using exact casing); `data.enabled` reflects whether the key's status is enabled. A differently-cased key entry is omitted because it would not be routable. If the key has no model restriction configured (or the configured list is empty), the call returns `success: false` with message `the token has no available models` and `data.available: null` (still HTTP 200).
 
 | Field | JSON key | Type | Description |
 |---|---|---|---|
@@ -5117,7 +5117,7 @@ Creates (mints) a new relay API key for the calling user. **This is the endpoint
 | Expiry | `expired_time` | int64 | No | `-1` | Unix seconds at which the key expires. Use `-1` for "never expires". To set a real expiry, send a future Unix-seconds timestamp. If omitted, the database default (`-1`, never expires) applies. |
 | Remaining quota | `remain_quota` | int64 | No | `0` | Quota units available to this key (500000 = $1). Ignored for enforcement when `unlimited_quota` is true. |
 | Unlimited | `unlimited_quota` | bool | No | `false` | If true, this key is not limited by `remain_quota` (it is still bounded by the owning user's quota). |
-| Models allow-list | `models` | string \| null | No | `null` | Comma-separated list of model names this key may call (e.g. `"gpt-4o,gpt-4o-mini"`). `null` or omitted = no per-key model restriction. |
+| Models allow-list | `models` | string \| null | No | `null` | Comma-separated, case-sensitive routing IDs this key may call (e.g. `"gpt-4o,gpt-4o-mini"`). `null` or omitted = no per-key model restriction. |
 | Subnet allow-list | `subnet` | string \| null | No | `null` | Comma-separated CIDR list restricting which client IPs may use the key (e.g. `"10.0.0.0/8,192.168.0.0/16"`). Validated server-side; invalid CIDRs are rejected. `null`/empty = no IP restriction. |
 
 Fields you cannot set: `user_uuid` is forced to the caller; `key` is server-generated; `status`, `used_quota`, `created_time`, `accessed_time`, `created_at`, `updated_at` are server-maintained. Any values you send for those are ignored.
@@ -6083,9 +6083,9 @@ Creates one or more channels from a posted channel object. The `key` field is sp
 | Type | `type` | integer | No | 0 | Provider type code (e.g. `1` = OpenAI). |
 | Key | `key` | string | No | "" | Upstream credential. Newline-separated to bulk-create multiple channels. |
 | Base URL | `base_url` | string | No | type default | Upstream origin; auto-filled from the type default when blank. |
-| Models | `models` | string | No | "" | Comma-separated model names served by the channel. |
+| Models | `models` | string | No | "" | Comma-separated, case-sensitive model IDs served by the channel; `Foo` and `foo` are distinct routing IDs. |
 | Group | `group` | string | No | `default` | User group(s) this channel serves. |
-| Model mapping | `model_mapping` | string (JSON) | No | null | JSON map of inbound model name → upstream model name. |
+| Model mapping | `model_mapping` | string (JSON) | No | null | JSON map of inbound model name → upstream model name. Keys and targets are matched with exact casing. |
 | Model configs | `model_configs` | string (JSON) | No | null | Unified per-model pricing/config JSON. |
 | Priority | `priority` | integer | No | 0 | Selection priority (higher = preferred). |
 | Weight | `weight` | integer | No | 0 | Load-balancing weight within a priority tier. |

@@ -243,19 +243,25 @@ func InitDB() {
 		return
 	}
 
-	// 2b) Convert ModelConfigs / ModelMapping columns from varchar(1024) to text on legacy MySQL/PG installs.
+	// 2b) Make MySQL ability model identity case-sensitive at the schema and index level.
+	if err = MigrateAbilityModelCollation(); err != nil {
+		logger.Logger.Fatal("failed to migrate ability model collation", zap.Error(err))
+		return
+	}
+
+	// 2c) Convert ModelConfigs / ModelMapping columns from varchar(1024) to text on legacy MySQL/PG installs.
 	if err = MigrateChannelFieldsToText(); err != nil {
 		logger.Logger.Fatal("failed to migrate channel field types", zap.Error(err))
 		return
 	}
 
-	// 2c) Ensure traces.url can store long URLs (Turnstile tokens, etc.).
+	// 2d) Ensure traces.url can store long URLs (Turnstile tokens, etc.).
 	if err = MigrateTraceURLColumnToText(); err != nil {
 		logger.Logger.Fatal("failed to migrate traces.url column", zap.Error(err))
 		return
 	}
 
-	// 2d) Ensure user_request_costs has a unique index on request_id and deduplicate old data quietly.
+	// 2e) Ensure user_request_costs has a unique index on request_id and deduplicate old data quietly.
 	if err = MigrateUserRequestCostEnsureUniqueRequestID(); err != nil {
 		logger.Logger.Fatal("failed to migrate user_request_costs unique index", zap.Error(err))
 		return

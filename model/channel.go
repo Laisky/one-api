@@ -564,18 +564,39 @@ func GetChannelById(id int, selectAll bool) (*Channel, error) {
 	return &channel, nil
 }
 
+// BatchInsertChannels validates and atomically persists channels with their abilities.
+// The channels parameter receives generated identifiers, and the function returns a
+// wrapped error without leaving partially-created channel rows on failure.
 func BatchInsertChannels(channels []Channel) error {
-	err := DB.Create(&channels).Error
-	if err != nil {
-		return errors.Wrapf(err, "failed to batch insert %d channels", len(channels))
+	if len(channels) == 0 {
+		return nil
 	}
-	for i, channel_ := range channels {
-		err = channel_.AddAbilities()
-		if err != nil {
-			return errors.Wrapf(err, "failed to add abilities for channel %d (index %d) during batch insert", channel_.Id, i)
+	for i := range channels {
+		if err := channels[i].NormalizeHiddenModels(); err != nil {
+			return errors.Wrapf(err, "normalize hidden models for channel at index %d", i)
 		}
 	}
-	InitChannelCache()
+
+	err := DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Create(&channels).Error; err != nil {
+			return errors.Wrapf(err, "batch insert %d channels", len(channels))
+		}
+		for i := range channels {
+			if err := addAbilitiesWithDB(tx, &channels[i]); err != nil {
+				return errors.Wrapf(err, "add abilities for channel %d at batch index %d", channels[i].Id, i)
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return errors.Wrap(err, "persist channel batch transaction")
+	}
+
+	groups := make([]string, 0, len(channels))
+	for i := range channels {
+		groups = append(groups, channels[i].Group)
+	}
+	InvalidateChannelModelCaches(groups...)
 	return nil
 }
 
@@ -613,183 +634,6 @@ func (channel *Channel) GetModelMapping() map[string]string {
 		return nil
 	}
 	return modelMapping
-}
-
-// splitCSVNames trims comma-separated names, removes empties, and deduplicates them case-insensitively.
-func splitCSVNames(raw string) []string {
-	trimmed := strings.TrimSpace(raw)
-	if trimmed == "" {
-		return nil
-	}
-	parts := strings.Split(trimmed, ",")
-	seen := make(map[string]struct{}, len(parts))
-	out := make([]string, 0, len(parts))
-	for _, part := range parts {
-		part = strings.TrimSpace(part)
-		if part == "" {
-			continue
-		}
-		key := strings.ToLower(part)
-		if _, exists := seen[key]; exists {
-			continue
-		}
-		seen[key] = struct{}{}
-		out = append(out, part)
-	}
-	if len(out) == 0 {
-		return nil
-	}
-	return out
-}
-
-// normalizeJSONStringArray validates, trims, and deduplicates a JSON string array field.
-func normalizeJSONStringArray(raw *string, fieldName string) (*string, error) {
-	if raw == nil {
-		return nil, nil
-	}
-	trimmed := strings.TrimSpace(*raw)
-	if trimmed == "" || strings.EqualFold(trimmed, "null") {
-		return nil, nil
-	}
-
-	var values []string
-	if err := json.Unmarshal([]byte(trimmed), &values); err != nil {
-		return nil, errors.Wrapf(err, "%s must be a JSON array of strings", fieldName)
-	}
-
-	seen := make(map[string]struct{}, len(values))
-	normalized := make([]string, 0, len(values))
-	for _, value := range values {
-		item := strings.TrimSpace(value)
-		if item == "" {
-			continue
-		}
-		key := strings.ToLower(item)
-		if _, exists := seen[key]; exists {
-			continue
-		}
-		seen[key] = struct{}{}
-		normalized = append(normalized, item)
-	}
-	if len(normalized) == 0 {
-		return nil, nil
-	}
-
-	data, err := json.Marshal(normalized)
-	if err != nil {
-		return nil, errors.Wrapf(err, "marshal normalized %s", fieldName)
-	}
-	result := string(data)
-	return &result, nil
-}
-
-// NormalizeHiddenModels validates and normalizes the channel hidden-model payload before persistence.
-func (channel *Channel) NormalizeHiddenModels() error {
-	normalized, err := normalizeJSONStringArray(channel.HiddenModels, "hidden_models")
-	if err != nil {
-		return errors.Wrap(err, "normalize hidden models")
-	}
-	channel.HiddenModels = normalized
-	return nil
-}
-
-// GetSupportedModelNames returns the list of model names the channel currently supports
-// based on the comma-separated Models field.
-func (channel *Channel) GetSupportedModelNames() []string {
-	return splitCSVNames(channel.Models)
-}
-
-// GetGroupNames returns the normalized group names configured on the channel.
-func (channel *Channel) GetGroupNames() []string {
-	return splitCSVNames(channel.Group)
-}
-
-// GetHiddenModels returns the normalized hidden-model membership set for this channel.
-func (channel *Channel) GetHiddenModels() map[string]struct{} {
-	if channel.HiddenModels == nil {
-		return nil
-	}
-	trimmed := strings.TrimSpace(*channel.HiddenModels)
-	if trimmed == "" || trimmed == "[]" || strings.EqualFold(trimmed, "null") {
-		return nil
-	}
-
-	var rawHidden []string
-	if err := json.Unmarshal([]byte(trimmed), &rawHidden); err != nil {
-		logger.Logger.Warn("failed to unmarshal hidden models for channel",
-			zap.Int("channel_id", channel.Id),
-			zap.Error(err))
-		return nil
-	}
-
-	supportedModels := channel.GetSupportedModelNames()
-	if len(supportedModels) == 0 {
-		return nil
-	}
-	supported := make(map[string]struct{}, len(supportedModels))
-	for _, modelName := range supportedModels {
-		supported[strings.ToLower(modelName)] = struct{}{}
-	}
-
-	hidden := make(map[string]struct{}, len(rawHidden))
-	for _, value := range rawHidden {
-		item := strings.TrimSpace(value)
-		if item == "" {
-			continue
-		}
-		key := strings.ToLower(item)
-		if _, ok := supported[key]; !ok {
-			continue
-		}
-		hidden[key] = struct{}{}
-	}
-	if len(hidden) == 0 {
-		return nil
-	}
-	return hidden
-}
-
-// IsModelHidden reports whether the provided model name is hidden for public selection on this channel.
-func (channel *Channel) IsModelHidden(name string) bool {
-	item := strings.ToLower(strings.TrimSpace(name))
-	if item == "" {
-		return false
-	}
-	hidden := channel.GetHiddenModels()
-	if len(hidden) == 0 {
-		return false
-	}
-	_, exists := hidden[item]
-	return exists
-}
-
-// SupportsModel reports whether the channel allows the provided model name.
-// When the channel has no explicit supported models configured (empty list),
-// the channel is treated as supporting all models.
-func (channel *Channel) SupportsModel(modelName string) bool {
-	modelName = strings.TrimSpace(modelName)
-	if modelName == "" {
-		return true
-	}
-	supported := channel.GetSupportedModelNames()
-	if len(supported) == 0 {
-		return true
-	}
-	for _, name := range supported {
-		if strings.EqualFold(name, modelName) {
-			return true
-		}
-	}
-	if mapping := channel.GetModelMapping(); mapping != nil {
-		if mapped := strings.TrimSpace(mapping[modelName]); mapped != "" {
-			for _, name := range supported {
-				if strings.EqualFold(name, mapped) {
-					return true
-				}
-			}
-		}
-	}
-	return false
 }
 
 // GetCheapestSupportedModel returns the cheapest model among the channel's currently
@@ -1885,13 +1729,17 @@ func (channel *Channel) Insert() error {
 	if err := channel.NormalizeHiddenModels(); err != nil {
 		return errors.Wrapf(err, "failed to normalize hidden models for channel: name=%s, type=%d", channel.Name, channel.Type)
 	}
-	err := DB.Create(channel).Error
+	err := DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Create(channel).Error; err != nil {
+			return errors.Wrapf(err, "insert channel: name=%s, type=%d", channel.Name, channel.Type)
+		}
+		if err := addAbilitiesWithDB(tx, channel); err != nil {
+			return errors.Wrapf(err, "add abilities for channel: id=%d, name=%s", channel.Id, channel.Name)
+		}
+		return nil
+	})
 	if err != nil {
-		return errors.Wrapf(err, "failed to insert channel: name=%s, type=%d", channel.Name, channel.Type)
-	}
-	err = channel.AddAbilities()
-	if err != nil {
-		return errors.Wrapf(err, "failed to add abilities for channel: id=%d, name=%s", channel.Id, channel.Name)
+		return errors.Wrap(err, "persist channel transaction")
 	}
 	InvalidateChannelModelCaches(channel.Group)
 	return nil
@@ -1905,7 +1753,9 @@ func (channel *Channel) Update() error {
 	clearTestingModel := false
 	var existing Channel
 	if channel.Id != 0 {
-		_ = DB.Select("id", "models", "testing_model", "group").First(&existing, "id = ?", channel.Id).Error
+		if err := DB.Select("id", "models", "testing_model", "group").First(&existing, "id = ?", channel.Id).Error; err != nil {
+			return errors.Wrapf(err, "load existing channel %d before update", channel.Id)
+		}
 	}
 	// Determine models to validate against: new value if provided, else existing
 	modelsForValidation := channel.Models
@@ -1938,60 +1788,67 @@ func (channel *Channel) Update() error {
 		}
 	}
 
-	err := DB.Model(channel).Omit("uuid").Updates(channel).Error
-	if err != nil {
-		return errors.Wrapf(err, "failed to update channel: id=%d, name=%s", channel.Id, channel.Name)
-	}
-	if channel.HiddenModelsProvided {
-		if err := DB.Model(&Channel{}).Where("id = ?", channel.Id).Update("hidden_models", channel.HiddenModels).Error; err != nil {
-			return errors.Wrapf(err, "failed to update hidden models for channel: id=%d, name=%s", channel.Id, channel.Name)
-		}
-	}
 	// Some nullable text fields are persisted as *string. GORM's struct-based
-	// Updates() skips nil pointers, which means clients clearing those fields
-	// (sending JSON null) would silently keep the previous value. The bind layer
-	// records which of those fields were explicitly present in the raw request
-	// body so we can issue per-column updates that respect nil.
-	if len(channel.NullableFieldsProvided) > 0 {
-		nullableColumnValues := map[string]*string{
-			"model_mapping":             channel.ModelMapping,
-			"model_configs":             channel.ModelConfigs,
-			"system_prompt":             channel.SystemPrompt,
-			"inference_profile_arn_map": channel.InferenceProfileArnMap,
+	// Updates() skips nil pointers, so collect explicitly provided values for a
+	// map update inside the same transaction as the channel and ability rebuild.
+	nullableColumnValues := map[string]*string{
+		"model_mapping":             channel.ModelMapping,
+		"model_configs":             channel.ModelConfigs,
+		"system_prompt":             channel.SystemPrompt,
+		"inference_profile_arn_map": channel.InferenceProfileArnMap,
+	}
+	forcedUpdates := make(map[string]any, len(channel.NullableFieldsProvided))
+	cleared := make([]string, 0, len(channel.NullableFieldsProvided))
+	for column, value := range nullableColumnValues {
+		if !channel.NullableFieldsProvided[column] {
+			continue
 		}
-		forcedUpdates := make(map[string]any, len(channel.NullableFieldsProvided))
-		cleared := make([]string, 0, len(channel.NullableFieldsProvided))
-		for column, value := range nullableColumnValues {
-			if !channel.NullableFieldsProvided[column] {
-				continue
-			}
-			forcedUpdates[column] = value
-			if value == nil {
-				cleared = append(cleared, column)
+		forcedUpdates[column] = value
+		if value == nil {
+			cleared = append(cleared, column)
+		}
+	}
+
+	persisted := *channel
+	err := DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Model(&persisted).Omit("uuid").Updates(&persisted).Error; err != nil {
+			return errors.Wrapf(err, "update channel: id=%d, name=%s", persisted.Id, persisted.Name)
+		}
+		if persisted.HiddenModelsProvided {
+			if err := tx.Model(&Channel{}).Where("id = ?", persisted.Id).Update("hidden_models", persisted.HiddenModels).Error; err != nil {
+				return errors.Wrapf(err, "update hidden models for channel: id=%d, name=%s", persisted.Id, persisted.Name)
 			}
 		}
 		if len(forcedUpdates) > 0 {
-			if err := DB.Model(&Channel{}).Where("id = ?", channel.Id).Updates(forcedUpdates).Error; err != nil {
-				return errors.Wrapf(err, "failed to update nullable fields for channel: id=%d, name=%s", channel.Id, channel.Name)
-			}
-			if len(cleared) > 0 {
-				logger.Logger.Debug("channel update cleared nullable fields",
-					zap.Int("channel_id", channel.Id),
-					zap.Strings("cleared_fields", cleared))
+			if err := tx.Model(&Channel{}).Where("id = ?", persisted.Id).Updates(forcedUpdates).Error; err != nil {
+				return errors.Wrapf(err, "update nullable fields for channel: id=%d, name=%s", persisted.Id, persisted.Name)
 			}
 		}
-	}
-	DB.Model(channel).First(channel, "id = ?", channel.Id)
-	if clearTestingModel {
-		if err := DB.Model(channel).Where("id = ?", channel.Id).Update("testing_model", nil).Error; err != nil {
-			return errors.Wrapf(err, "failed to clear testing_model for channel: id=%d", channel.Id)
+		if clearTestingModel {
+			if err := tx.Model(&Channel{}).Where("id = ?", persisted.Id).Update("testing_model", nil).Error; err != nil {
+				return errors.Wrapf(err, "clear testing_model for channel: id=%d", persisted.Id)
+			}
 		}
-		// refresh field after manual clear
-		channel.TestingModel = nil
-	}
-	err = channel.UpdateAbilities()
+		if err := tx.First(&persisted, "id = ?", persisted.Id).Error; err != nil {
+			return errors.Wrapf(err, "reload channel %d before rebuilding abilities", persisted.Id)
+		}
+		if err := deleteAbilitiesWithDB(tx, persisted.Id); err != nil {
+			return errors.Wrapf(err, "delete abilities for channel %d during update", persisted.Id)
+		}
+		if err := addAbilitiesWithDB(tx, &persisted); err != nil {
+			return errors.Wrapf(err, "add abilities for channel %d during update", persisted.Id)
+		}
+		return nil
+	})
 	if err != nil {
-		return errors.Wrapf(err, "failed to update abilities for channel: id=%d, name=%s", channel.Id, channel.Name)
+		return errors.Wrapf(err, "persist channel %d update transaction", channel.Id)
+	}
+
+	*channel = persisted
+	if len(cleared) > 0 {
+		logger.Logger.Debug("channel update cleared nullable fields",
+			zap.Int("channel_id", channel.Id),
+			zap.Strings("cleared_fields", cleared))
 	}
 	InvalidateChannelModelCaches(existing.Group, channel.Group)
 	return nil
