@@ -99,7 +99,6 @@ The original author stopped maintaining the project, leaving critical PRs and ne
     - [OpenAI Features](#openai-features)
       - [Support whisper](#support-whisper)
       - [Support openai images edits](#support-openai-images-edits)
-      - [Support OpenAI o1/o1-mini/o1-preview](#support-openai-o1o1-minio1-preview)
       - [Support gpt-4o-audio](#support-gpt-4o-audio)
       - [Support OpenAI web search models](#support-openai-web-search-models)
       - [Support gpt-image family for image generation \& edits](#support-gpt-image-family-for-image-generation--edits)
@@ -109,6 +108,7 @@ The original author stopped maintaining the project, leaving critical PRs and ne
       - [Support o3-deep-research \& o4-mini-deep-research](#support-o3-deep-research--o4-mini-deep-research)
       - [Support Codex Cli](#support-codex-cli)
       - [Support Sora](#support-sora)
+      - [Deprecated Models](#deprecated-models)
     - [Anthropic (Claude) Features](#anthropic-claude-features)
       - [(Merged) Support aws claude](#merged-support-aws-claude)
       - [Support claude-3-7-sonnet \& thinking](#support-claude-3-7-sonnet--thinking)
@@ -118,15 +118,12 @@ The original author stopped maintaining the project, leaving critical PRs and ne
         - [Support Claude Code](#support-claude-code)
     - [Support Claude 4.x Models](#support-claude-4x-models)
     - [Google (Gemini \& Vertex) Features](#google-gemini--vertex-features)
-      - [Support gemini-2.0-flash-exp](#support-gemini-20-flash-exp)
-      - [Support gemini-2.0-flash](#support-gemini-20-flash)
-      - [Support gemini-2.0-flash-thinking-exp-01-21](#support-gemini-20-flash-thinking-exp-01-21)
-      - [Support Vertex Imagen3](#support-vertex-imagen3)
       - [Support gemini multimodal output #2197](#support-gemini-multimodal-output-2197)
       - [Support gemini-2.5-pro](#support-gemini-25-pro)
       - [Support GCP Vertex gloabl region and gemini-2.5-pro-preview-06-05](#support-gcp-vertex-gloabl-region-and-gemini-25-pro-preview-06-05)
       - [Support gemini-2.5-flash-image-preview \& imagen-4 series](#support-gemini-25-flash-image-preview--imagen-4-series)
       - [Support gemini-3 family](#support-gemini-3-family)
+      - [Deprecated Models](#deprecated-models-1)
     - [OpenCode Support](#opencode-support)
     - [AWS Features](#aws-features)
       - [Support AWS cross-region inferences](#support-aws-cross-region-inferences)
@@ -579,10 +576,6 @@ Response:
 }
 ```
 
-#### Support OpenAI o1/o1-mini/o1-preview
-
-- [feat: add openai o1 #1990](https://github.com/Laisky/one-api/pull/1990)
-
 #### Support gpt-4o-audio
 
 - [feat: support gpt-4o-audio #2032](https://github.com/Laisky/one-api/pull/2032)
@@ -922,8 +915,6 @@ Response:
 
 #### Support gpt-5 family
 
-Models rendered with a ~~strikethrough~~ are retired (or scheduled for retirement) by OpenAI upstream; they stay in the pricing table so historical usage keeps billing correctly.
-
 - **GPT-5.6** — Sol / Terra / Luna tiers (`gpt-5.6` aliases to `gpt-5.6-sol`; adds the new `max` reasoning effort): gpt-5.6 / gpt-5.6-sol / gpt-5.6-terra / gpt-5.6-luna
 - **GPT-5.5**: gpt-5.5 / gpt-5.5-pro / gpt-5.5-2026-04-23
 - **GPT-5.4**: gpt-5.4 / gpt-5.4-2026-03-05 / gpt-5.4-mini / gpt-5.4-nano / gpt-5.4-pro
@@ -1097,6 +1088,10 @@ curl --location 'https://oneapi.laisky.com/v1/videos/video_691611812ca88190bfb12
   --header 'Authorization: sk-xxxxxxx'
 ```
 
+#### Deprecated Models
+
+- o1-preview (retired 2025-07-28), o1-mini (retired 2025-10-27), o1 (retires 2026-10-23) — [feat: add openai o1 #1990](https://github.com/Laisky/one-api/pull/1990)
+
 ### Anthropic (Claude) Features
 
 #### (Merged) Support aws claude
@@ -1149,29 +1144,9 @@ To use it:
 
 ![](https://s3.laisky.com/uploads/2025/09/claude-sonnet-4-5.png)
 
-claude-opus-4-0 / claude-opus-4-1 / claude-opus-4-5 / claude-opus-4-6 / claude-opus-4-7 / claude-opus-4-8 / claude-sonnet-4-0 / claude-sonnet-4-5 / claude-sonnet-4-6 / claude-sonnet-5 / claude-haiku-4-5
+~~claude-opus-4-0~~ (retired 2026-06-15) / ~~claude-opus-4-1~~ (retires 2026-08-05) / claude-opus-4-5 / claude-opus-4-6 / claude-opus-4-7 / claude-opus-4-8 / ~~claude-sonnet-4-0~~ (retired 2026-06-15) / claude-sonnet-4-5 / claude-sonnet-4-6 / claude-sonnet-5 / claude-haiku-4-5
 
 ### Google (Gemini & Vertex) Features
-
-#### Support gemini-2.0-flash-exp
-
-- [feat: add gemini-2.0-flash-exp #1983](https://github.com/Laisky/one-api/pull/1983)
-
-![](https://s3.laisky.com/uploads/2024/12/oneapi-gemini-flash.png)
-
-#### Support gemini-2.0-flash
-
-- [feat: support gemini-2.0-flash #2055](https://github.com/Laisky/one-api/pull/2055)
-
-#### Support gemini-2.0-flash-thinking-exp-01-21
-
-- [feature: add deepseek-reasoner & gemini-2.0-flash-thinking-exp-01-21 #2045](https://github.com/Laisky/one-api/pull/2045)
-
-#### Support Vertex Imagen3
-
-- [feat: support vertex imagen3 #2030](https://github.com/Laisky/one-api/pull/2030)
-
-![](https://s3.laisky.com/uploads/2025/01/oneapi-imagen3.png)
 
 #### Support gemini multimodal output #2197
 
@@ -1191,7 +1166,14 @@ claude-opus-4-0 / claude-opus-4-1 / claude-opus-4-5 / claude-opus-4-6 / claude-o
 
 #### Support gemini-3 family
 
-Support gemini-3.1-pro-preview / gemini-3.1-pro-preview-customtools / gemini-3-pro-preview / gemini-3-pro-image-preview / gemini-3-flash-preview / gemini-3.1-flash-image-preview / gemini-3.1-flash-lite-preview
+Support gemini-3.1-pro-preview / gemini-3.1-pro-preview-customtools / ~~gemini-3-pro-preview~~ (retired 2026-03-09) / ~~gemini-3-pro-image-preview~~ (retired 2026-06-25) / gemini-3-flash-preview / ~~gemini-3.1-flash-image-preview~~ (retired 2026-06-25) / ~~gemini-3.1-flash-lite-preview~~ (retired 2026-05-25)
+
+#### Deprecated Models
+
+- gemini-2.0-flash-exp — [feat: add gemini-2.0-flash-exp #1983](https://github.com/Laisky/one-api/pull/1983)
+- gemini-2.0-flash (retired 2026-06-01) — [feat: support gemini-2.0-flash #2055](https://github.com/Laisky/one-api/pull/2055)
+- gemini-2.0-flash-thinking-exp-01-21 — [feature: add deepseek-reasoner & gemini-2.0-flash-thinking-exp-01-21 #2045](https://github.com/Laisky/one-api/pull/2045)
+- imagen-3 (imagen-3.0-generate-002, retired 2025-11-10) — [feat: support vertex imagen3 #2030](https://github.com/Laisky/one-api/pull/2030)
 
 ### OpenCode Support
 
