@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/Laisky/errors/v2"
@@ -99,6 +100,9 @@ func relayResponseAPIThroughChat(c *gin.Context, meta *metalib.Meta, responseAPI
 		chatRequest.Tools = originalChatTools
 	}
 	if registry != nil {
+		if prunedTools := pruneResponseOnlyToolsAfterMCPExpansion(chatRequest); len(prunedTools) > 0 {
+			lg.Debug("pruned response-only tools after mcp expansion", zap.Strings("tools", prunedTools))
+		}
 		responseAPIRequest.ToolChoice = normalizeMCPToolChoiceForResponse(responseAPIRequest.ToolChoice, mcpToolNames)
 		chatRequest.ToolChoice = normalizeChatToolChoiceForMCP(chatRequest.ToolChoice, mcpToolNames)
 		if chatRequest.Stream {
@@ -450,4 +454,32 @@ func relayResponseAPIThroughChat(c *gin.Context, meta *metalib.Meta, responseAPI
 	})
 
 	return nil
+}
+
+// pruneResponseOnlyToolsAfterMCPExpansion removes Response API tool definitions that could not be represented as chat function tools after MCP alias expansion.
+func pruneResponseOnlyToolsAfterMCPExpansion(request *relaymodel.GeneralOpenAIRequest) []string {
+	if request == nil || len(request.Tools) == 0 {
+		return nil
+	}
+
+	pruned := make([]string, 0)
+	kept := make([]relaymodel.Tool, 0, len(request.Tools))
+	for _, tool := range request.Tools {
+		if tool.Function != nil {
+			kept = append(kept, tool)
+			continue
+		}
+
+		toolType := strings.TrimSpace(tool.Type)
+		if toolType == "" {
+			toolType = "<empty>"
+		}
+		pruned = append(pruned, toolType)
+	}
+
+	if len(pruned) == 0 {
+		return nil
+	}
+	request.Tools = kept
+	return pruned
 }
