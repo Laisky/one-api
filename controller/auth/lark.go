@@ -124,6 +124,10 @@ func LarkOAuth(c *gin.Context) {
 			user.Status = model.UserStatusEnabled
 
 			if err := user.Insert(ctx, 0); err != nil {
+				if controller.IsUsernameAlreadyTakenError(err) {
+					controller.RespondUsernameAlreadyExists(c)
+					return
+				}
 				helper.RespondError(c, err)
 				return
 			}

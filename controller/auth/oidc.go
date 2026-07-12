@@ -127,6 +127,10 @@ func OidcAuth(c *gin.Context) {
 			}
 			err := user.Insert(ctx, 0)
 			if err != nil {
+				if controller.IsUsernameAlreadyTakenError(err) {
+					controller.RespondUsernameAlreadyExists(c)
+					return
+				}
 				helper.RespondError(c, err)
 				return
 			}

@@ -121,7 +121,24 @@ func CreateMCPServer(c *gin.Context) {
 
 	server := &model.MCPServer{}
 	applyMCPServerPayload(server, payload)
+	if err := server.NormalizeAndValidate(); err != nil {
+		helper.RespondError(c, errors.Wrap(err, "normalize and validate mcp server"))
+		return
+	}
+	nameTaken, err := isMCPServerNameAlreadyUsed(server.Name, 0)
+	if err != nil {
+		helper.RespondError(c, err)
+		return
+	}
+	if nameTaken {
+		respondMCPServerNameTaken(c)
+		return
+	}
 	if err := model.CreateMCPServer(server); err != nil {
+		if isMCPServerNameTakenError(err) {
+			respondMCPServerNameTaken(c)
+			return
+		}
 		logger.Error("failed to create mcp server", zap.Error(err))
 		helper.RespondError(c, err)
 		return
@@ -162,8 +179,27 @@ func UpdateMCPServer(c *gin.Context) {
 	if payload.APIKey != nil && common.IsMaskedSecret(*payload.APIKey) {
 		delete(providedFields, "api_key")
 	}
+	if err := server.NormalizeAndValidate(); err != nil {
+		helper.RespondError(c, errors.Wrap(err, "normalize and validate mcp server"))
+		return
+	}
+	if providedFields["name"] {
+		nameTaken, err := isMCPServerNameAlreadyUsed(server.Name, server.Id)
+		if err != nil {
+			helper.RespondError(c, err)
+			return
+		}
+		if nameTaken {
+			respondMCPServerNameTaken(c)
+			return
+		}
+	}
 	server.ProvidedFields = providedFields
 	if err := model.UpdateMCPServer(server); err != nil {
+		if isMCPServerNameTakenError(err) {
+			respondMCPServerNameTaken(c)
+			return
+		}
 		logger.Error("failed to update mcp server", zap.Error(err))
 		helper.RespondError(c, err)
 		return
@@ -519,6 +555,32 @@ func applyMCPServerPayload(server *model.MCPServer, payload MCPServerUpsertReque
 	if payload.AutoSyncIntervalMinutes != nil {
 		server.AutoSyncIntervalMinutes = *payload.AutoSyncIntervalMinutes
 	}
+}
+
+// isMCPServerNameAlreadyUsed reports whether another MCP server already owns
+// the normalized name. excludedID lets update requests ignore the current row.
+func isMCPServerNameAlreadyUsed(name string, excludedID int) (bool, error) {
+	query := model.DB.Model(&model.MCPServer{}).Where("name = ?", strings.TrimSpace(name))
+	if excludedID > 0 {
+		query = query.Where("id <> ?", excludedID)
+	}
+	var count int64
+	if err := query.Count(&count).Error; err != nil {
+		return false, errors.Wrap(err, "check mcp server name")
+	}
+	return count > 0, nil
+}
+
+// isMCPServerNameTakenError reports whether an MCP server write failed because
+// the database rejected a duplicate unique name.
+func isMCPServerNameTakenError(err error) bool {
+	return isDuplicateDBErrorForField(err, "name", "mcp_servers.name", "idx_mcp_servers_name")
+}
+
+// respondMCPServerNameTaken returns a public duplicate-name response for MCP
+// server create and update requests.
+func respondMCPServerNameTaken(c *gin.Context) {
+	respondDuplicateOperation(c, "MCP server name already exists")
 }
 
 func sanitizeMCPServer(server *model.MCPServer) *model.MCPServer {

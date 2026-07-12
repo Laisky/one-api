@@ -281,25 +281,12 @@ func Register(c *gin.Context) {
 
 // respondRegisterUsernameTaken returns the public duplicate-username registration response while preserving the legacy HTTP 200 envelope.
 func respondRegisterUsernameTaken(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{
-		"success": false,
-		"message": "Username already exists",
-	})
+	RespondUsernameAlreadyExists(c)
 }
 
 // isRegisterUsernameTakenError reports whether an insert error came from the username unique constraint.
 func isRegisterUsernameTakenError(err error) bool {
-	if err == nil {
-		return false
-	}
-	msg := strings.ToLower(err.Error())
-	if !strings.Contains(msg, "username") {
-		return false
-	}
-	return strings.Contains(msg, "duplicate") ||
-		strings.Contains(msg, "unique constraint") ||
-		strings.Contains(msg, "uniqueindex") ||
-		strings.Contains(msg, "uni_users_username")
+	return IsUsernameAlreadyTakenError(err)
 }
 
 func GetAllUsers(c *gin.Context) {
@@ -1092,7 +1079,16 @@ func UpdateUser(c *gin.Context) {
 		return
 	}
 
+	if username, ok := updates["username"].(string); ok && username != originUser.Username && model.IsUsernameAlreadyTaken(username) {
+		respondRegisterUsernameTaken(c)
+		return
+	}
+
 	if err := model.DB.Model(&model.User{}).Where("id = ?", payload.Id).Updates(updates).Error; err != nil {
+		if isRegisterUsernameTakenError(err) {
+			respondRegisterUsernameTaken(c)
+			return
+		}
 		helper.RespondError(c, errors.Wrapf(err, "failed to update user: id=%d", payload.Id))
 		return
 	}
@@ -1187,7 +1183,15 @@ func UpdateSelf(c *gin.Context) {
 		cleanUser.Password = ""
 	}
 	updatePassword := user.Password != ""
+	if cleanUser.Username != currentUser.Username && model.IsUsernameAlreadyTaken(cleanUser.Username) {
+		respondRegisterUsernameTaken(c)
+		return
+	}
 	if err := cleanUser.Update(updatePassword); err != nil {
+		if isRegisterUsernameTakenError(err) {
+			respondRegisterUsernameTaken(c)
+			return
+		}
 		helper.RespondError(c, err)
 		return
 	}
@@ -1296,7 +1300,15 @@ func CreateUser(c *gin.Context) {
 		DisplayName: user.DisplayName,
 		Email:       user.Email,
 	}
+	if model.IsUsernameAlreadyTaken(cleanUser.Username) {
+		respondRegisterUsernameTaken(c)
+		return
+	}
 	if err := cleanUser.Insert(ctx, 0); err != nil {
+		if isRegisterUsernameTakenError(err) {
+			respondRegisterUsernameTaken(c)
+			return
+		}
 		helper.RespondError(c, err)
 		return
 	}
