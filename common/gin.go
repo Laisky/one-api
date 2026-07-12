@@ -81,7 +81,7 @@ func LogClientRequestPayload(c *gin.Context, label string, limit int) error {
 	preview, truncated := SanitizePayloadForLogging(body, limit)
 	fields := []zap.Field{
 		zap.String("method", c.Request.Method),
-		zap.String("url", c.Request.URL.String()),
+		zap.String("url", SanitizeURLForLogging(c.Request.URL.String())),
 		zap.Int("body_bytes", len(body)),
 		zap.Bool("body_truncated", truncated),
 		zap.ByteString("body_preview", preview),

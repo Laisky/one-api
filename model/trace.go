@@ -79,7 +79,8 @@ func CreateTrace(ctx context.Context, traceId, url, method string, bodySize int6
 		RequestReceived: &now,
 	}
 
-	urlToStore, truncated := enforceTraceURLLimit(url)
+	sanitizedURL := common.SanitizeURLForLogging(url)
+	urlToStore, truncated := enforceTraceURLLimit(sanitizedURL)
 	if truncated {
 		lg.Warn("trace url truncated to max length",
 			zap.String("trace_id", traceId),

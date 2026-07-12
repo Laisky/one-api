@@ -21,7 +21,7 @@ func TestCreateTraceWithLongURL(t *testing.T) {
 
 	require.NoError(t, DB.Exec("DELETE FROM traces WHERE trace_id LIKE 'test-trace-long-url%'").Error)
 
-	longURL := "/api/verification?token=" + strings.Repeat("abc123", 1000)
+	longURL := "/api/verification?payload=" + strings.Repeat("abc123", 1000)
 	require.Greater(t, len(longURL), maxTraceURLLength)
 
 	ctx := gmw.SetLogger(context.Background(), logger.Logger)
@@ -54,6 +54,25 @@ func TestCreateTraceURLWithinLimit(t *testing.T) {
 	err = DB.Where("trace_id = ?", "test-trace-within-limit").First(&stored).Error
 	require.NoError(t, err)
 	require.Equal(t, url, stored.URL)
+}
+
+// TestCreateTraceSanitizesSensitiveURLQuery verifies trace storage never persists sensitive query parameter values.
+func TestCreateTraceSanitizesSensitiveURLQuery(t *testing.T) {
+	setupTestDatabase(t)
+	require.NoError(t, DB.Exec("DELETE FROM traces WHERE trace_id = 'test-trace-sensitive-query'").Error)
+
+	ctx := gmw.SetLogger(context.Background(), logger.Logger)
+	trace, err := CreateTrace(ctx, "test-trace-sensitive-query", "/api/user/register?turnstile=secret-token&email=user@example.com", "POST", 0)
+	require.NoError(t, err)
+	require.NotContains(t, trace.URL, "secret-token")
+	require.Contains(t, trace.URL, "turnstile=%5Bredacted%5D")
+	require.Contains(t, trace.URL, "email=user%40example.com")
+
+	var stored Trace
+	err = DB.Where("trace_id = ?", "test-trace-sensitive-query").First(&stored).Error
+	require.NoError(t, err)
+	require.Equal(t, trace.URL, stored.URL)
+	require.NotContains(t, stored.URL, "secret-token")
 }
 
 func TestTraceDBSessionDisablesPreparedStatementsOnPostgres(t *testing.T) {

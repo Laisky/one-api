@@ -16,6 +16,7 @@ import (
 	"github.com/Laisky/zap"
 	"github.com/gin-gonic/gin"
 
+	"github.com/Laisky/one-api/common"
 	"github.com/Laisky/one-api/common/logger"
 	"github.com/Laisky/one-api/common/random"
 )
@@ -59,7 +60,7 @@ func RespondErrorWithStatus(c *gin.Context, status int, err error) {
 	fields := []zap.Field{
 		zap.Int("status", status),
 		zap.String("method", c.Request.Method),
-		zap.String("url", c.Request.URL.String()),
+		zap.String("url", common.SanitizeURLForLogging(c.Request.URL.String())),
 	}
 
 	// Client errors (4xx) are expected in normal operation — e.g. unauthenticated

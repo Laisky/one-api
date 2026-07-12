@@ -58,6 +58,8 @@ func jsonRawIsNull(raw json.RawMessage) bool {
 
 func Login(c *gin.Context) {
 	ctx := gmw.Ctx(c)
+	turnstileToken := c.Query("turnstile")
+	middleware.RedactTurnstileTokenFromURL(c)
 
 	var loginRequest LoginRequest
 	err := json.NewDecoder(c.Request.Body).Decode(&loginRequest)
@@ -75,7 +77,7 @@ func Login(c *gin.Context) {
 	// If this username has had a recent failed login and Turnstile is enabled, require verification.
 	turnstileRequired := config.TurnstileCheckEnabled && middleware.HasLoginFailure(username)
 	if turnstileRequired {
-		if err := middleware.VerifyTurnstileToken(c.Query("turnstile"), c.ClientIP()); err != nil {
+		if err := middleware.VerifyTurnstileToken(turnstileToken, c.ClientIP()); err != nil {
 			c.JSON(http.StatusOK, gin.H{
 				"success": false,
 				"message": err.Error(),
@@ -259,7 +261,15 @@ func Register(c *gin.Context) {
 	if config.EmailVerificationEnabled {
 		cleanUser.Email = user.Email
 	}
+	if model.IsUsernameAlreadyTaken(cleanUser.Username) {
+		respondRegisterUsernameTaken(c)
+		return
+	}
 	if err := cleanUser.Insert(ctx, inviterId); err != nil {
+		if isRegisterUsernameTakenError(err) {
+			respondRegisterUsernameTaken(c)
+			return
+		}
 		helper.RespondError(c, err)
 		return
 	}
@@ -267,6 +277,29 @@ func Register(c *gin.Context) {
 		"success": true,
 		"message": "",
 	})
+}
+
+// respondRegisterUsernameTaken returns the public duplicate-username registration response while preserving the legacy HTTP 200 envelope.
+func respondRegisterUsernameTaken(c *gin.Context) {
+	c.JSON(http.StatusOK, gin.H{
+		"success": false,
+		"message": "Username already exists",
+	})
+}
+
+// isRegisterUsernameTakenError reports whether an insert error came from the username unique constraint.
+func isRegisterUsernameTakenError(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	if !strings.Contains(msg, "username") {
+		return false
+	}
+	return strings.Contains(msg, "duplicate") ||
+		strings.Contains(msg, "unique constraint") ||
+		strings.Contains(msg, "uniqueindex") ||
+		strings.Contains(msg, "uni_users_username")
 }
 
 func GetAllUsers(c *gin.Context) {
