@@ -6,6 +6,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/Laisky/one-api/relay/adaptor/ali"
+	"github.com/Laisky/one-api/relay/adaptor/gemini"
 	"github.com/Laisky/one-api/relay/adaptor/openrouter"
 	"github.com/Laisky/one-api/relay/adaptor/xai"
 	"github.com/Laisky/one-api/relay/apitype"
@@ -194,22 +195,17 @@ func TestSpecificAdapterPricing(t *testing.T) {
 		adaptor := GetAdaptor(apitype.Gemini)
 		require.NotNil(t, adaptor, "Gemini adaptor not found")
 
-		// Gemini uses USD pricing with ratio.MilliTokensUsd = 0.5
-		testModels := map[string]struct {
-			expectedRatio           float64
-			expectedCompletionRatio float64
-		}{
-			"gemini-2.5-pro":   {1.25 * 0.5, 10.0 / 1.25},
-			"gemini-2.5-flash": {0.30 * 0.5, 2.5 / 0.30},
-			"gemini-2.0-flash": {0.15 * 0.5, 0.60 / 0.15},
-		}
+		testModels := []string{"gemini-2.5-pro", "gemini-2.5-flash", "gemini-2.0-flash"}
 
-		for model, expected := range testModels {
+		for _, model := range testModels {
+			expectedConfig, ok := gemini.ModelRatios[model]
+			require.True(t, ok, "Gemini model %s missing from ModelRatios", model)
+
 			ratio := adaptor.GetModelRatio(model)
 			completionRatio := adaptor.GetCompletionRatio(model)
 
-			require.Equal(t, expected.expectedRatio, ratio, "Gemini %s: expected ratio %.9f, got %.9f", model, expected.expectedRatio, ratio)
-			require.Equal(t, expected.expectedCompletionRatio, completionRatio, "Gemini %s: expected completion ratio %.2f, got %.2f", model, expected.expectedCompletionRatio, completionRatio)
+			require.Equal(t, expectedConfig.Ratio, ratio, "Gemini %s: expected ratio %.9f, got %.9f", model, expectedConfig.Ratio, ratio)
+			require.Equal(t, expectedConfig.CompletionRatio, completionRatio, "Gemini %s: expected completion ratio %.2f, got %.2f", model, expectedConfig.CompletionRatio, completionRatio)
 		}
 	})
 
