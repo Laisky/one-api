@@ -33,6 +33,9 @@ var (
 	// awsNovaFeatures advertises features for Amazon Nova chat models.
 	awsNovaFeatures = []string{"tools", "structured_outputs"}
 
+	// awsNovaReasoningFeatures advertises features for reasoning-capable Amazon Nova 2 models on Bedrock.
+	awsNovaReasoningFeatures = []string{"tools", "structured_outputs", "reasoning"}
+
 	// awsCohereFeatures advertises features for Cohere Command R/R+ on Bedrock.
 	awsCohereFeatures = []string{"tools", "structured_outputs"}
 

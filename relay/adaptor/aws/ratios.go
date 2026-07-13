@@ -228,7 +228,7 @@ var awsBedrockModelPricing = map[string]adaptor.ModelConfig{
 		InputModalities: awsClaudeVisionInputs, OutputModalities: awsTextOutputs,
 		SupportedFeatures: awsClaudeFeaturesWithReasoning, SupportedSamplingParameters: awsClaudeSamplingParams,
 		MaxReasoningTokens: 30000,
-		Description:        "Claude Opus 4.1 (August 2025 release) on AWS Bedrock with extended thinking.",
+		Description:        "Claude Opus 4.1 (August 2025 release) on AWS Bedrock with extended thinking. AWS Bedrock model entered Legacy state on 2026-07-08 with EOL scheduled 2027-01-08.",
 	},
 	"claude-opus-4-5": {
 		Ratio: 5 * ratio.MilliTokensUsd, CompletionRatio: 25.0 / 5,
@@ -286,7 +286,7 @@ var awsBedrockModelPricing = map[string]adaptor.ModelConfig{
 	// Llama 4 models - Pricing given per 1K tokens; normalize to $/1M then to $/token via ratio.MilliTokensUsd
 	"llama4-maverick-17b-1m": {
 		Ratio: 0.24 * ratio.MilliTokensUsd, CompletionRatio: 4.04,
-		ContextLength: 1000000, MaxOutputTokens: 4096,
+		ContextLength: 1000000, MaxOutputTokens: 8192,
 		InputModalities: awsVisionInputs, OutputModalities: awsTextOutputs,
 		SupportedFeatures: awsLlamaToolsFeatures, SupportedSamplingParameters: awsBasicSamplingParams,
 		HuggingFaceID: "meta-llama/Llama-4-Maverick-17B-128E-Instruct",
@@ -294,7 +294,7 @@ var awsBedrockModelPricing = map[string]adaptor.ModelConfig{
 	},
 	"llama4-scout-17b-3.5m": {
 		Ratio: 0.17 * ratio.MilliTokensUsd, CompletionRatio: 3.88,
-		ContextLength: 3500000, MaxOutputTokens: 4096,
+		ContextLength: 10000000, MaxOutputTokens: 8192,
 		InputModalities: awsVisionInputs, OutputModalities: awsTextOutputs,
 		SupportedFeatures: awsLlamaToolsFeatures, SupportedSamplingParameters: awsBasicSamplingParams,
 		HuggingFaceID: "meta-llama/Llama-4-Scout-17B-16E-Instruct",
@@ -383,14 +383,14 @@ var awsBedrockModelPricing = map[string]adaptor.ModelConfig{
 
 	// Amazon Nova Models
 	"amazon-nova-micro": {
-		Ratio: 0.035 * ratio.MilliTokensUsd, CompletionRatio: 4.28,
+		Ratio: 0.035 * ratio.MilliTokensUsd, CompletionRatio: 4.0,
 		ContextLength: 128000, MaxOutputTokens: 5120,
 		InputModalities: awsTextInputs, OutputModalities: awsTextOutputs,
 		SupportedFeatures: awsNovaFeatures, SupportedSamplingParameters: awsBasicSamplingParams,
 		Description: "Amazon Nova Micro fast text-only chat model.",
 	},
 	"amazon-nova-lite": {
-		Ratio: 0.06 * ratio.MilliTokensUsd, CompletionRatio: 4.17,
+		Ratio: 0.06 * ratio.MilliTokensUsd, CompletionRatio: 4.0,
 		ContextLength: 300000, MaxOutputTokens: 5120,
 		InputModalities: awsVisionInputs, OutputModalities: awsTextOutputs,
 		SupportedFeatures: awsNovaFeatures, SupportedSamplingParameters: awsBasicSamplingParams,
@@ -404,11 +404,18 @@ var awsBedrockModelPricing = map[string]adaptor.ModelConfig{
 		Description: "Amazon Nova Pro multimodal flagship with 300k context.",
 	},
 	"amazon-nova-premier": {
-		Ratio: 2.4 * ratio.MilliTokensUsd, CompletionRatio: 4.17,
+		Ratio: 2.5 * ratio.MilliTokensUsd, CompletionRatio: 5.0,
 		ContextLength: 1000000, MaxOutputTokens: 5120,
 		InputModalities: awsVisionInputs, OutputModalities: awsTextOutputs,
 		SupportedFeatures: awsNovaFeatures, SupportedSamplingParameters: awsBasicSamplingParams,
 		Description: "Amazon Nova Premier multimodal model with 1M-token context.",
+	},
+	"amazon-nova-2-lite": {
+		Ratio: 0.3 * ratio.MilliTokensUsd, CompletionRatio: 8.33,
+		ContextLength: 1000000, MaxOutputTokens: 64000,
+		InputModalities: awsVisionInputs, OutputModalities: awsTextOutputs,
+		SupportedFeatures: awsNovaReasoningFeatures, SupportedSamplingParameters: awsBasicSamplingParams,
+		Description: "Amazon Nova 2 Lite multimodal reasoning model with 1M-token context on AWS Bedrock (GA 2025-12-02).",
 	},
 
 	// Titan Models

@@ -30,7 +30,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		CompletionRatio:             0.25 / 0.07,                  // Output/Input = $0.25 / $0.07 = 3.5714
 		CachedInputRatio:            0.007 * ratio.MilliTokensUsd, // $0.007 per million cached input tokens
 		ContextLength:               131072,
-		MaxOutputTokens:             131072,
+		MaxOutputTokens:             32768,
 		InputModalities:             vertexOpenAIMaaSTextInputs,
 		OutputModalities:            vertexOpenAIMaaSTextOutputs,
 		SupportedFeatures:           vertexOpenAIGPTOSS20BFeatures,

@@ -19,7 +19,7 @@ func TestModelRatiosMetadata(t *testing.T) {
 	require.InDelta(t, 0.25/0.07, cfg20b.CompletionRatio, 1e-9)
 	require.InDelta(t, 0.007*ratio.MilliTokensUsd, cfg20b.CachedInputRatio, 1e-9)
 	require.EqualValues(t, 131072, cfg20b.ContextLength)
-	require.EqualValues(t, 131072, cfg20b.MaxOutputTokens)
+	require.EqualValues(t, 32768, cfg20b.MaxOutputTokens)
 	require.Equal(t, []string{"text"}, cfg20b.InputModalities)
 	require.Equal(t, []string{"text"}, cfg20b.OutputModalities)
 	require.Equal(t, []string{"tools", "json_mode", "structured_outputs", "reasoning"}, cfg20b.SupportedFeatures)

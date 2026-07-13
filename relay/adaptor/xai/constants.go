@@ -106,7 +106,32 @@ var (
 //   - https://docs.x.ai/developers/tools/web-search
 var ModelRatios = map[string]adaptor.ModelConfig{
 	// ============================================================
-	// Current flagship — Grok 4.3 (released May 6, 2026)
+	// Current flagship — Grok 4.5
+	// $2.00 input / $0.50 cached input / $6.00 output per 1M tokens, 500K context.
+	// Input price independently verified (docs.x.ai + OpenRouter); output/cached
+	// taken from the official model page. reasoning_effort schema is not published
+	// on the model page, so it mirrors grok-4.3's toggleable {none,low,medium,high}.
+	// Source: https://docs.x.ai/docs/models/grok-4.5
+	// ============================================================
+	"grok-4.5": {
+		Ratio: 2.0 * ratio.MilliTokensUsd, CompletionRatio: 6.0 / 2.0, CachedInputRatio: 0.5 * ratio.MilliTokensUsd,
+		ContextLength:   500000,
+		InputModalities: grokVisionInputs, OutputModalities: grokTextOutputs,
+		SupportedFeatures: grokFeaturesReasoning, SupportedSamplingParameters: grokReasoningSamplingParams,
+		SupportedReasoningEfforts: grokFullReasoningEfforts, DefaultReasoningEffort: "low",
+		Description: "Grok 4.5 is xAI's flagship reasoning model with a 500K-token context, vision input, agentic tool calling, structured outputs, and toggleable reasoning_effort {none,low,medium,high}.",
+	},
+	"grok-4.5-latest": {
+		Ratio: 2.0 * ratio.MilliTokensUsd, CompletionRatio: 6.0 / 2.0, CachedInputRatio: 0.5 * ratio.MilliTokensUsd,
+		ContextLength:   500000,
+		InputModalities: grokVisionInputs, OutputModalities: grokTextOutputs,
+		SupportedFeatures: grokFeaturesReasoning, SupportedSamplingParameters: grokReasoningSamplingParams,
+		SupportedReasoningEfforts: grokFullReasoningEfforts, DefaultReasoningEffort: "low",
+		Description: "Alias tracking the latest Grok 4.5 snapshot (same pricing and capabilities).",
+	},
+
+	// ============================================================
+	// Grok 4.3 (released May 6, 2026)
 	// $1.25 input / $0.20 cached input / $2.50 output per 1M tokens
 	// Source: https://docs.x.ai/developers/models/grok-4.3
 	// ============================================================

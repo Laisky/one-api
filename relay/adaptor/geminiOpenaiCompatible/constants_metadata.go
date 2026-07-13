@@ -53,6 +53,9 @@ var geminiOutputAudio = []string{"audio"}
 // geminiOutputImage lists output modalities for image-only generation models (Imagen).
 var geminiOutputImage = []string{"image"}
 
+// geminiOutputTextVideo lists output modalities for unified tiers that stream text alongside native video.
+var geminiOutputTextVideo = []string{"text", "video"}
+
 // geminiFeatures25Plus advertises capabilities for Gemini 2.5+ tiers (with thinking/reasoning).
 var geminiFeatures25Plus = []string{"tools", "json_mode", "structured_outputs", "web_search", "reasoning"}
 
@@ -216,6 +219,15 @@ var geminiMetadataOverrides = map[string]adaptor.ModelConfig{
 		SupportedSamplingParameters: geminiSamplingImage,
 		Description:                 "Gemini 3.1 Flash native image-generation GA tier with up to 128K context.",
 	},
+	"gemini-3.1-flash-lite-image": {
+		ContextLength:               131_072,
+		MaxOutputTokens:             32_768,
+		InputModalities:             geminiInputTextImageFile,
+		OutputModalities:            geminiOutputTextImage,
+		SupportedFeatures:           []string{"json_mode", "structured_outputs"},
+		SupportedSamplingParameters: geminiSamplingImage,
+		Description:                 "Gemini 3.1 Flash Lite native image-generation tier (flat single-tier image pricing, no 512/2K/4K tiers) with up to 128K context.",
+	},
 	"gemini-3.1-flash-live-preview": {
 		ContextLength:               32_768,
 		MaxOutputTokens:             8192,
@@ -305,6 +317,15 @@ var geminiMetadataOverrides = map[string]adaptor.ModelConfig{
 		DefaultReasoningEffort: "medium",
 		MaxReasoningTokens:     gemini3LevelMaxThinkingBudget,
 		Description:            "Gemini 3.5 Flash GA multimodal reasoning tier (1M context, dynamic thinking on by default).",
+	},
+	"gemini-omni-flash-preview": {
+		ContextLength:               gemini1MContext,
+		MaxOutputTokens:             gemini3FlashMaxOutput,
+		InputModalities:             geminiInputMultimodal,
+		OutputModalities:            geminiOutputTextVideo,
+		SupportedFeatures:           geminiFeatures25Plus,
+		SupportedSamplingParameters: geminiSamplingChat,
+		Description:                 "Gemini Omni Flash preview: unified any-to-any multimodal tier (text/image/video/audio in, native text+video out). Video output is billed at $17.50/1M output tokens upstream but tracked at the text-output rate here.",
 	},
 	"gemini-3-pro-image-preview": {
 		ContextLength:               65_536,
@@ -410,7 +431,7 @@ var geminiMetadataOverrides = map[string]adaptor.ModelConfig{
 		SupportedReasoningEfforts:   gemini25ReasoningEfforts,
 		DefaultReasoningEffort:      "medium",
 		MaxReasoningTokens:          gemini25FlashMaxThinkingBudget,
-		Description:                 "Gemini 2.5 Flash preview snapshot dated 09-2025.",
+		Description:                 "Gemini 2.5 Flash preview snapshot dated 09-2025. (RETIRED 2026-02-17; use gemini-3.5-flash)",
 	},
 	"gemini-2.5-flash-lite": {
 		ContextLength:               gemini1MContext,
@@ -446,7 +467,7 @@ var geminiMetadataOverrides = map[string]adaptor.ModelConfig{
 		SupportedReasoningEfforts:   gemini25ReasoningEfforts,
 		DefaultReasoningEffort:      "none",
 		MaxReasoningTokens:          gemini25FlashLiteMaxThinkingBudget,
-		Description:                 "Gemini 2.5 Flash Lite preview snapshot dated 09-2025.",
+		Description:                 "Gemini 2.5 Flash Lite preview snapshot dated 09-2025. (RETIRED 2026-03-31; use gemini-3.1-flash-lite)",
 	},
 	"gemini-2.5-flash-native-audio": {
 		ContextLength:               128_000,
@@ -491,7 +512,7 @@ var geminiMetadataOverrides = map[string]adaptor.ModelConfig{
 		OutputModalities:            geminiOutputTextImage,
 		SupportedFeatures:           []string{"json_mode", "structured_outputs"},
 		SupportedSamplingParameters: geminiSamplingImage,
-		Description:                 "Gemini 2.5 Flash native image-generation tier (Nano Banana family).",
+		Description:                 "Gemini 2.5 Flash native image-generation tier (Nano Banana family). (DEPRECATED, shutdown 2026-10-02; use gemini-3.1-flash-image)",
 	},
 	"gemini-2.5-flash-image-preview": {
 		ContextLength:               65_536,
@@ -500,7 +521,7 @@ var geminiMetadataOverrides = map[string]adaptor.ModelConfig{
 		OutputModalities:            geminiOutputTextImage,
 		SupportedFeatures:           []string{"json_mode", "structured_outputs"},
 		SupportedSamplingParameters: geminiSamplingImage,
-		Description:                 "Gemini 2.5 Flash native image-generation preview tier (Nano Banana preview).",
+		Description:                 "Gemini 2.5 Flash native image-generation preview tier (Nano Banana preview). (RETIRED 2026-01-15; use gemini-2.5-flash-image)",
 	},
 	"gemini-2.5-flash-preview-tts": {
 		ContextLength:               8192,
@@ -528,7 +549,7 @@ var geminiMetadataOverrides = map[string]adaptor.ModelConfig{
 		SupportedReasoningEfforts:   gemini25ReasoningEfforts,
 		DefaultReasoningEffort:      "medium",
 		MaxReasoningTokens:          gemini25FlashMaxThinkingBudget,
-		Description:                 "Gemini Robotics-ER 1.5 preview tier for embodied reasoning workloads.",
+		Description:                 "Gemini Robotics-ER 1.5 preview tier for embodied reasoning workloads. (RETIRED 2026-04-30; use gemini-robotics-er-1.6-preview)",
 	},
 	"gemini-robotics-er-1.6-preview": {
 		ContextLength:               1_000_000,

@@ -34,7 +34,7 @@ var oSeriesModelRatios = map[string]adaptor.ModelConfig{
 		SupportedSamplingParameters: reasoningSamplingParameters(),
 		SupportedReasoningEfforts:   oSeriesMediumOnlyEfforts,
 		DefaultReasoningEffort:      "medium",
-		Description:                 "o1: reasoning model with 200K context and 100K output budget.",
+		Description:                 "o1: reasoning model with 200K context and 100K output budget. (retires 2026-10-23; migrate to gpt-5.5)",
 	},
 	"o1-2024-12-17": {
 		Ratio:                       15.0 * ratio.MilliTokensUsd,
@@ -48,7 +48,7 @@ var oSeriesModelRatios = map[string]adaptor.ModelConfig{
 		SupportedSamplingParameters: reasoningSamplingParameters(),
 		SupportedReasoningEfforts:   oSeriesMediumOnlyEfforts,
 		DefaultReasoningEffort:      "medium",
-		Description:                 "o1 snapshot from 2024-12-17.",
+		Description:                 "o1 snapshot from 2024-12-17. (retires 2026-10-23; migrate to gpt-5.5)",
 	},
 	"o1-pro": {
 		Ratio:                       150.0 * ratio.MilliTokensUsd,
@@ -61,7 +61,7 @@ var oSeriesModelRatios = map[string]adaptor.ModelConfig{
 		SupportedSamplingParameters: reasoningSamplingParameters(),
 		SupportedReasoningEfforts:   oSeriesMediumOnlyEfforts,
 		DefaultReasoningEffort:      "medium",
-		Description:                 "o1 Pro: extended-reasoning premium tier of o1.",
+		Description:                 "o1 Pro: extended-reasoning premium tier of o1. (retires 2026-10-23; migrate to gpt-5.5-pro)",
 	},
 	"o1-pro-2025-03-19": {
 		Ratio:                       150.0 * ratio.MilliTokensUsd,
@@ -74,7 +74,7 @@ var oSeriesModelRatios = map[string]adaptor.ModelConfig{
 		SupportedSamplingParameters: reasoningSamplingParameters(),
 		SupportedReasoningEfforts:   oSeriesMediumOnlyEfforts,
 		DefaultReasoningEffort:      "medium",
-		Description:                 "o1 Pro snapshot from 2025-03-19.",
+		Description:                 "o1 Pro snapshot from 2025-03-19. (retires 2026-10-23; migrate to gpt-5.5-pro)",
 	},
 	"o1-preview": {
 		Ratio:                       15.0 * ratio.MilliTokensUsd,
@@ -159,7 +159,7 @@ var oSeriesModelRatios = map[string]adaptor.ModelConfig{
 		SupportedSamplingParameters: reasoningSamplingParameters(),
 		SupportedReasoningEfforts:   oSeriesMediumOnlyEfforts,
 		DefaultReasoningEffort:      "medium",
-		Description:                 "o3 snapshot from 2025-04-16.",
+		Description:                 "o3 snapshot from 2025-04-16. (retires 2026-12-11; migrate to gpt-5.5)",
 	},
 	"o3-mini": {
 		Ratio:                       1.1 * ratio.MilliTokensUsd,
@@ -213,7 +213,7 @@ var oSeriesModelRatios = map[string]adaptor.ModelConfig{
 		SupportedSamplingParameters: reasoningSamplingParameters(),
 		SupportedReasoningEfforts:   oSeriesMediumOnlyEfforts,
 		DefaultReasoningEffort:      "medium",
-		Description:                 "o3-pro snapshot 2025-06-10.",
+		Description:                 "o3-pro snapshot 2025-06-10. (retires 2026-12-11; migrate to gpt-5.5-pro)",
 	},
 	"o3-deep-research": {
 		Ratio:                       10.0 * ratio.MilliTokensUsd,

@@ -10,7 +10,6 @@ var (
 	deepSeekVertexTextFileInputs    = []string{"text", "file"}
 	deepSeekVertexOCRInputs         = []string{"text", "image", "file"}
 	deepSeekVertexTextOutputs       = []string{"text"}
-	deepSeekVertexStandardFeatures  = []string{"tools", "json_mode", "structured_outputs"}
 	deepSeekVertexReasoningFeatures = []string{"tools", "json_mode", "structured_outputs", "reasoning"}
 	deepSeekVertexStandardSampling  = []string{"temperature", "top_p", "stop", "max_tokens"}
 	deepSeekVertexReasoningSampling = []string{"stop", "max_tokens"}
@@ -40,13 +39,14 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 	// DeepSeek OCR - Input: $0.30 / million tokens, Output: $1.20 / million tokens
 	// Vertex GA 2025-10-23 in us-central1 only; accepts text, documents, and images.
 	"deepseek-ai/deepseek-ocr-maas": {
-		Ratio:                       0.30 * ratio.MilliTokensUsd,
-		CompletionRatio:             1.20 / 0.30,
-		ContextLength:               8192,
-		MaxOutputTokens:             8192,
-		InputModalities:             deepSeekVertexOCRInputs,
-		OutputModalities:            deepSeekVertexTextOutputs,
-		SupportedFeatures:           deepSeekVertexStandardFeatures,
+		Ratio:            0.30 * ratio.MilliTokensUsd,
+		CompletionRatio:  1.20 / 0.30,
+		ContextLength:    8192,
+		MaxOutputTokens:  8192,
+		InputModalities:  deepSeekVertexOCRInputs,
+		OutputModalities: deepSeekVertexTextOutputs,
+		// Vertex MaaS OCR card lists tools/json_mode/structured_outputs as NOT
+		// supported for DeepSeek OCR, so no SupportedFeatures are advertised.
 		SupportedSamplingParameters: deepSeekVertexStandardSampling,
 		Description:                 "DeepSeek OCR on Vertex AI MaaS (us-central1) for document and image understanding with text output.",
 	},

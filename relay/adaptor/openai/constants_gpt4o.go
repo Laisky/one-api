@@ -96,7 +96,7 @@ var gpt4oModelRatios = map[string]adaptor.ModelConfig{
 		OutputModalities:            []string{"text"},
 		SupportedFeatures:           []string{"tools"},
 		SupportedSamplingParameters: standardSamplingParameters(),
-		Description:                 "GPT-4o mini audio preview: speech in/out via dedicated audio endpoint.",
+		Description:                 "GPT-4o mini audio preview: speech in/out via dedicated audio endpoint. (RETIRED 2026-05-07; use gpt-audio-mini)",
 	},
 	"gpt-4o-mini-audio-preview-2024-12-17": {
 		Ratio:           0.15 * ratio.MilliTokensUsd,
@@ -112,7 +112,7 @@ var gpt4oModelRatios = map[string]adaptor.ModelConfig{
 		OutputModalities:            []string{"text"},
 		SupportedFeatures:           []string{"tools"},
 		SupportedSamplingParameters: standardSamplingParameters(),
-		Description:                 "GPT-4o mini audio preview snapshot from 2024-12-17.",
+		Description:                 "GPT-4o mini audio preview snapshot from 2024-12-17. (RETIRED 2026-05-07; use gpt-audio-mini)",
 	},
 	"gpt-4o-audio-preview": {
 		Ratio:           2.5 * ratio.MilliTokensUsd,
@@ -128,7 +128,7 @@ var gpt4oModelRatios = map[string]adaptor.ModelConfig{
 		OutputModalities:            []string{"text"},
 		SupportedFeatures:           []string{"tools"},
 		SupportedSamplingParameters: standardSamplingParameters(),
-		Description:                 "GPT-4o audio preview: speech in/out via dedicated audio endpoint.",
+		Description:                 "GPT-4o audio preview: speech in/out via dedicated audio endpoint. (RETIRED 2026-05-07; use gpt-audio-1.5)",
 	},
 	"gpt-4o-audio-preview-2024-12-17": {
 		Ratio:           2.5 * ratio.MilliTokensUsd,
@@ -144,7 +144,7 @@ var gpt4oModelRatios = map[string]adaptor.ModelConfig{
 		OutputModalities:            []string{"text"},
 		SupportedFeatures:           []string{"tools"},
 		SupportedSamplingParameters: standardSamplingParameters(),
-		Description:                 "GPT-4o audio preview snapshot from 2024-12-17.",
+		Description:                 "GPT-4o audio preview snapshot from 2024-12-17. (RETIRED 2026-05-07; use gpt-audio-1.5)",
 	},
 	"gpt-4o-audio-preview-2024-10-01": {
 		Ratio:           2.5 * ratio.MilliTokensUsd,
@@ -160,7 +160,7 @@ var gpt4oModelRatios = map[string]adaptor.ModelConfig{
 		OutputModalities:            []string{"text"},
 		SupportedFeatures:           []string{"tools"},
 		SupportedSamplingParameters: standardSamplingParameters(),
-		Description:                 "GPT-4o audio preview snapshot from 2024-10-01.",
+		Description:                 "GPT-4o audio preview snapshot from 2024-10-01. (RETIRED 2026-05-07; use gpt-audio-1.5)",
 	},
 	"gpt-4o-audio-preview-2025-06-03": {
 		Ratio:           2.5 * ratio.MilliTokensUsd,
@@ -176,7 +176,7 @@ var gpt4oModelRatios = map[string]adaptor.ModelConfig{
 		OutputModalities:            []string{"text"},
 		SupportedFeatures:           []string{"tools"},
 		SupportedSamplingParameters: standardSamplingParameters(),
-		Description:                 "GPT-4o audio preview snapshot from 2025-06-03.",
+		Description:                 "GPT-4o audio preview snapshot from 2025-06-03. (RETIRED 2026-05-07; use gpt-audio-1.5)",
 	},
 	// chatgpt-4o-latest: rolling alias mirroring the consumer ChatGPT default model.
 	// Retired from OpenAI API on 2026-02-17 (replaced by chat-latest). Kept here for

@@ -43,7 +43,7 @@ var imageModelRatios = map[string]adaptor.ModelConfig{
 		},
 		InputModalities:  []string{"text"},
 		OutputModalities: []string{"image"},
-		Description:      "DALL-E 2: legacy text-to-image diffusion model.",
+		Description:      "DALL-E 2: legacy text-to-image diffusion model. (RETIRED 2026-05-12; use gpt-image-2)",
 	},
 	"dall-e-3": {
 		Ratio:           0,
@@ -75,7 +75,7 @@ var imageModelRatios = map[string]adaptor.ModelConfig{
 		},
 		InputModalities:  []string{"text"},
 		OutputModalities: []string{"image"},
-		Description:      "DALL-E 3: advanced text-to-image model with HD quality option.",
+		Description:      "DALL-E 3: advanced text-to-image model with HD quality option. (RETIRED 2026-05-12; use gpt-image-2)",
 	},
 	"gpt-image-1": {
 		Ratio:            5.0 * ratio.MilliTokensUsd,
@@ -118,7 +118,7 @@ var imageModelRatios = map[string]adaptor.ModelConfig{
 		},
 		InputModalities:  []string{"text", "image"},
 		OutputModalities: []string{"image"},
-		Description:      "GPT Image 1: hybrid text+image input model that emits edited or generated images.",
+		Description:      "GPT Image 1: hybrid text+image input model that emits edited or generated images. (retires 2026-10-23; use gpt-image-2)",
 	},
 	"gpt-image-1-mini": {
 		Ratio:            2.0 * ratio.MilliTokensUsd,
@@ -161,7 +161,7 @@ var imageModelRatios = map[string]adaptor.ModelConfig{
 		},
 		InputModalities:  []string{"text", "image"},
 		OutputModalities: []string{"image"},
-		Description:      "GPT Image 1 mini: lower-cost hybrid text+image generation model.",
+		Description:      "GPT Image 1 mini: lower-cost hybrid text+image generation model. (retires 2026-12-01; use gpt-image-2)",
 	},
 	"chatgpt-image-latest": {
 		Ratio:            5.0 * ratio.MilliTokensUsd,
@@ -204,7 +204,7 @@ var imageModelRatios = map[string]adaptor.ModelConfig{
 		},
 		InputModalities:  []string{"text", "image"},
 		OutputModalities: []string{"image"},
-		Description:      "ChatGPT image latest: rolling alias for the consumer ChatGPT image model.",
+		Description:      "ChatGPT image latest: rolling alias for the consumer ChatGPT image model. (retires 2026-12-01; use gpt-image-2)",
 	},
 	"gpt-image-1.5": {
 		Ratio:            5.0 * ratio.MilliTokensUsd,
@@ -247,7 +247,7 @@ var imageModelRatios = map[string]adaptor.ModelConfig{
 		},
 		InputModalities:  []string{"text", "image"},
 		OutputModalities: []string{"image"},
-		Description:      "GPT Image 1.5: hybrid text+image generation/editing model.",
+		Description:      "GPT Image 1.5: hybrid text+image generation/editing model. (retires 2026-12-01; use gpt-image-2)",
 	},
 	"gpt-image-1.5-2025-12-16": {
 		Ratio:            5.0 * ratio.MilliTokensUsd,
@@ -290,7 +290,7 @@ var imageModelRatios = map[string]adaptor.ModelConfig{
 		},
 		InputModalities:  []string{"text", "image"},
 		OutputModalities: []string{"image"},
-		Description:      "GPT Image 1.5 snapshot from 2025-12-16.",
+		Description:      "GPT Image 1.5 snapshot from 2025-12-16. (retires 2026-12-01; use gpt-image-2)",
 	},
 	// OpenAI documents broader dynamic resolution support for GPT Image 2, but one-api
 	// currently prices the explicitly published 1024/1536 render tiers only.

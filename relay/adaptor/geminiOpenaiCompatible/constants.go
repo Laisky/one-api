@@ -91,7 +91,7 @@ var (
 	gemini25ProPricing = adaptor.ModelConfig{
 		Ratio:            1.25 * ratio.MilliTokensUsd,
 		CompletionRatio:  10.0 / 1.25,
-		CachedInputRatio: 0.13 * ratio.MilliTokensUsd,
+		CachedInputRatio: 0.125 * ratio.MilliTokensUsd,
 		Tiers: []adaptor.ModelRatioTier{
 			{
 				Ratio:               2.5 * ratio.MilliTokensUsd,
@@ -249,6 +249,14 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		CompletionRatio: 3.00 / 0.50,
 		Image:           gemini31FlashImageConfig(),
 	},
+	// gemini-3.1-flash-lite-image bills text input $0.25 / text output $1.50 (CompletionRatio 6)
+	// with native image output at a single flat $0.0336 per 1024x1024 render ($30/1M output tokens).
+	// Unlike gemini-3.1-flash-image it does NOT expose 512/2K/4K image-size tiers.
+	"gemini-3.1-flash-lite-image": {
+		Ratio:           0.25 * ratio.MilliTokensUsd,
+		CompletionRatio: 1.50 / 0.25,
+		Image:           geminiImageConfig(0.0336),
+	},
 	"gemini-3.1-flash-live-preview": gemini31FlashLivePreviewPricing,
 	// Gemini 3.5 Live Translate preview: low-latency audio-to-audio real-time speech translation.
 	// Source: https://ai.google.dev/gemini-api/docs/pricing — $3.50 input / $21.00 output per 1M tokens.
@@ -291,6 +299,16 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 	// It is Google's most intelligent Flash tier with 1M context, dynamic thinking by default,
 	// and unified input pricing across text/image/audio/video modalities.
 	"gemini-3.5-flash": gemini35FlashPricing,
+	// gemini-omni-flash-preview is Google's unified any-to-any Flash tier: it accepts
+	// text/image/video/audio input and can emit native video output. Text billing is
+	// $1.50 input / $9.00 output (CompletionRatio 6). Upstream also bills native video
+	// output at $17.50/1M output tokens, but ModelConfig has no per-modality output-token
+	// ratio (only a per-second Video config, which does not fit token-based video output),
+	// so all output tokens are billed at the $9.00/1M text rate via CompletionRatio.
+	"gemini-omni-flash-preview": {
+		Ratio:           1.50 * ratio.MilliTokensUsd,
+		CompletionRatio: 9.00 / 1.50,
+	},
 	"gemini-3-pro-image-preview": {
 		Ratio:            2.0 * ratio.MilliTokensUsd,
 		CompletionRatio:  12.0 / 2.0,
@@ -362,19 +380,21 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 
 	// Gemini 2.0 Flash Models
 	"gemini-2.0-flash": {
-		Ratio:           0.15 * ratio.MilliTokensUsd,
-		CompletionRatio: 0.60 / 0.15,
+		Ratio:            0.10 * ratio.MilliTokensUsd,
+		CompletionRatio:  0.40 / 0.10,
+		CachedInputRatio: 0.025 * ratio.MilliTokensUsd,
 		Audio: &adaptor.AudioPricingConfig{
-			PromptRatio:     1.00 / 0.15,
+			PromptRatio:     0.70 / 0.10,
 			CompletionRatio: 0.15 / 1.00,
 		},
 	},
 	"gemini-2.0-flash-image": {
-		Ratio:           0.15 * ratio.MilliTokensUsd,
-		CompletionRatio: 0.60 / 0.15,
-		Image:           geminiImageConfig(0.039),
+		Ratio:            0.10 * ratio.MilliTokensUsd,
+		CompletionRatio:  0.40 / 0.10,
+		CachedInputRatio: 0.025 * ratio.MilliTokensUsd,
+		Image:            geminiImageConfig(0.039),
 		Audio: &adaptor.AudioPricingConfig{
-			PromptRatio:     1.00 / 0.15,
+			PromptRatio:     0.70 / 0.10,
 			CompletionRatio: 0.15 / 1.00,
 		},
 	},

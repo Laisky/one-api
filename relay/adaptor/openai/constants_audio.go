@@ -201,6 +201,6 @@ var audioModelRatios = map[string]adaptor.ModelConfig{
 		OutputModalities:            []string{"text", "audio"},
 		SupportedFeatures:           []string{"tools"},
 		SupportedSamplingParameters: standardSamplingParameters(),
-		Description:                 "GPT Audio mini snapshot from 2025-10-06.",
+		Description:                 "GPT Audio mini snapshot from 2025-10-06. (retires 2026-07-23; use gpt-audio-1.5)",
 	},
 }

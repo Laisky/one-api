@@ -20,7 +20,10 @@ var (
 	deepseekReasoningFeatures = []string{"tools", "json_mode", "structured_outputs", "logprobs", "reasoning"}
 
 	// deepseekSamplingParams lists the OpenAI-compatible sampling parameters DeepSeek chat accepts.
-	deepseekSamplingParams = []string{"temperature", "top_p", "frequency_penalty", "presence_penalty", "stop", "max_tokens"}
+	// frequency_penalty and presence_penalty were deprecated in the DeepSeek V4
+	// chat-completions API (no-ops that never take effect), so they are no longer
+	// advertised. Source: https://api-docs.deepseek.com/api/create-chat-completion
+	deepseekSamplingParams = []string{"temperature", "top_p", "stop", "max_tokens"}
 	// deepseekReasonerSamplingParams lists the restricted sampling set for the legacy reasoner model.
 	// DeepSeek's reasoner endpoint historically ignored temperature/top_p; only the listed knobs apply.
 	deepseekReasonerSamplingParams = []string{"max_tokens", "stop"}
