@@ -239,12 +239,12 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		OutputModalities:            hunyuanTextOutputs,
 		SupportedFeatures:           hunyuanVisionFeatures,
 		SupportedSamplingParameters: hunyuanSamplingParameters,
-		Description:                 "Tencent Hunyuan TurboS Vision: closed-weight multimodal chat model based on the TurboS hybrid architecture. (RETIRING 2026-06-22; use hunyuan-vision-1.5-instruct)",
+		Description:                 "Tencent Hunyuan TurboS Vision: closed-weight multimodal chat model based on the TurboS hybrid architecture. Actively billed; not on Tencent's official legacy-model retirement list.",
 	},
 	"hunyuan-turbos-vision-video": {
 		Ratio:                       3 * ratio.MilliTokensRmb,
 		CompletionRatio:             3,
-		ContextLength:               32768,
+		ContextLength:               24576,
 		MaxOutputTokens:             8192,
 		InputModalities:             hunyuanVisionVideoInputs,
 		OutputModalities:            hunyuanTextOutputs,
@@ -255,8 +255,8 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 	"hunyuan-t1-vision": {
 		Ratio:                       3 * ratio.MilliTokensRmb,
 		CompletionRatio:             3,
-		ContextLength:               32768,
-		MaxOutputTokens:             8192,
+		ContextLength:               28672,
+		MaxOutputTokens:             20480,
 		InputModalities:             hunyuanVisionInputs,
 		OutputModalities:            hunyuanTextOutputs,
 		SupportedFeatures:           hunyuanReasoningFeatures,
@@ -297,6 +297,22 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs", "reasoning"},
 		SupportedSamplingParameters: hunyuanSamplingParameters,
 		Description:                 "Tencent Hunyuan 3 Preview (hy3-preview): new MoE flagship model with 262K context, $0.167/$0.556 per 1M. Successor to retired hunyuan-t1/turbos/turbo/pro/standard/lite family.",
+	},
+
+	// Hunyuan 3 (hy3) — GA flagship reasoning chat model, flat (non-tiered) pricing.
+	// Pricing per Tencent TokenHub (https://cloud.tencent.com/document/product/1823/130055):
+	// input 1 / output 4 / cached-hit 0.25 (RMB per 1M tokens).
+	"hy3": {
+		Ratio:                       1 * ratio.MilliTokensRmb,
+		CompletionRatio:             4,
+		CachedInputRatio:            0.25 * ratio.MilliTokensRmb,
+		ContextLength:               262144,
+		MaxOutputTokens:             8192,
+		InputModalities:             hunyuanTextInputs,
+		OutputModalities:            hunyuanTextOutputs,
+		SupportedFeatures:           hunyuanReasoningFeatures,
+		SupportedSamplingParameters: hunyuanSamplingParameters,
+		Description:                 "Tencent Hy3: GA flagship closed-weight reasoning chat model with a 256K context window and flat (non-tiered) pricing.",
 	},
 
 	// Hunyuan Vision 1.5 Instruct — updated multimodal vision model (2026-06-13).

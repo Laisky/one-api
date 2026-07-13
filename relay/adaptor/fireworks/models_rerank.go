@@ -29,7 +29,7 @@ var rerankModels = map[string]adaptor.ModelConfig{
 		SupportedSamplingParameters: fwRerankSamplingParams,
 		Quantization:                "fp16",
 		HuggingFaceID:               "Qwen/Qwen3-Reranker-4B",
-		Description:                 "Alibaba Qwen3 Reranker 4B mid-size cross-encoder relevance model with 32K context.",
+		Description:                 "Alibaba Qwen3 Reranker 4B mid-size cross-encoder relevance model with 32K context. Retired from Fireworks serverless (confirmed via model card, 2026-07-13); on-demand/dedicated only.",
 	},
 	"accounts/fireworks/models/qwen3-reranker-0p6b": {
 		Ratio:                       0.008 * ratio.MilliTokensUsd,
@@ -40,6 +40,6 @@ var rerankModels = map[string]adaptor.ModelConfig{
 		SupportedSamplingParameters: fwRerankSamplingParams,
 		Quantization:                "fp16",
 		HuggingFaceID:               "Qwen/Qwen3-Reranker-0.6B",
-		Description:                 "Alibaba Qwen3 Reranker 0.6B compact cross-encoder for low-latency relevance scoring.",
+		Description:                 "Alibaba Qwen3 Reranker 0.6B compact cross-encoder for low-latency relevance scoring. Retired from Fireworks serverless (confirmed via model card, 2026-07-13); on-demand/dedicated only.",
 	},
 }

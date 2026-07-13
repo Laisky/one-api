@@ -38,7 +38,7 @@ var deepseekModels = map[string]adaptor.ModelConfig{
 		SupportedSamplingParameters: fwChatSamplingParams,
 		Quantization:                "fp8",
 		HuggingFaceID:               "deepseek-ai/DeepSeek-V3",
-		Description:                 "DeepSeek V3 (671B MoE, 37B active per token) general-purpose model served by Fireworks at FP8.",
+		Description:                 "DeepSeek V3 (671B MoE, 37B active per token) general-purpose model served by Fireworks at FP8. Retired from Fireworks serverless (confirmed via model card, 2026-07-13); on-demand/dedicated only.",
 	},
 	"accounts/fireworks/models/deepseek-v3p1": {
 		Ratio:                       0.56 * ratio.MilliTokensUsd,
@@ -52,7 +52,7 @@ var deepseekModels = map[string]adaptor.ModelConfig{
 		SupportedSamplingParameters: fwChatSamplingParams,
 		Quantization:                "fp8",
 		HuggingFaceID:               "deepseek-ai/DeepSeek-V3.1",
-		Description:                 "DeepSeek V3.1 (674B MoE) with extended 128K-context post-training and UE8M0 FP8 quantization.",
+		Description:                 "DeepSeek V3.1 (674B MoE) with extended 128K-context post-training and UE8M0 FP8 quantization. Retired from Fireworks serverless 2026-05-14; on-demand/dedicated only; migrate to Kimi K2.6 or GLM 5.1.",
 	},
 	"accounts/fireworks/models/deepseek-v3p2": {
 		Ratio:                       0.56 * ratio.MilliTokensUsd,
@@ -66,7 +66,7 @@ var deepseekModels = map[string]adaptor.ModelConfig{
 		SupportedSamplingParameters: fwChatSamplingParams,
 		Quantization:                "fp8",
 		HuggingFaceID:               "deepseek-ai/DeepSeek-V3.2",
-		Description:                 "DeepSeek V3.2 (671B MoE) tuned for high computational efficiency with superior reasoning and agent performance.",
+		Description:                 "DeepSeek V3.2 (671B MoE) tuned for high computational efficiency with superior reasoning and agent performance. Retired from Fireworks serverless 2026-05-14; on-demand/dedicated only; migrate to Kimi K2.6 or GLM 5.1.",
 	},
 	"accounts/fireworks/models/deepseek-r1-0528": {
 		Ratio:                       0.56 * ratio.MilliTokensUsd,
@@ -84,7 +84,7 @@ var deepseekModels = map[string]adaptor.ModelConfig{
 		DefaultReasoningEffort:    "medium",
 		Quantization:              "fp8",
 		HuggingFaceID:             "deepseek-ai/DeepSeek-R1-0528",
-		Description:               "DeepSeek R1 05/28 reasoning checkpoint (674B MoE) approaching o3/Gemini 2.5 Pro on complex reasoning benchmarks.",
+		Description:               "DeepSeek R1 05/28 reasoning checkpoint (674B MoE) approaching o3/Gemini 2.5 Pro on complex reasoning benchmarks. Retired from Fireworks serverless (confirmed via model card, 2026-07-13); on-demand/dedicated only.",
 	},
 
 	// DeepSeek V4 Flash — $0.14 in / $0.28 out, cached $0.028.

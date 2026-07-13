@@ -22,7 +22,7 @@ var minimaxModels = map[string]adaptor.ModelConfig{
 		SupportedSamplingParameters: fwChatSamplingParams,
 		Quantization:                "fp8",
 		HuggingFaceID:               "MiniMaxAI/MiniMax-M2.5",
-		Description:                 "MiniMax-M2.5 (228.7B MoE) RL-trained for SOTA coding, agentic tool use, and multi-step office workflows.",
+		Description:                 "MiniMax-M2.5 (228.7B MoE) RL-trained for SOTA coding, agentic tool use, and multi-step office workflows. Retired from Fireworks serverless 2026-06-17; on-demand/dedicated only; migrate to MiniMax M2.7.",
 	},
 	"accounts/fireworks/models/minimax-m2p7": {
 		Ratio:                       0.30 * ratio.MilliTokensUsd,

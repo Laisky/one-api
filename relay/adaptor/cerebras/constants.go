@@ -7,18 +7,25 @@ import (
 
 // Reusable modality / feature / sampling fragments for Cerebras-hosted models.
 //
-// Sources (retrieved 2026-06-27):
+// Sources (retrieved 2026-06-27; gemma-4-31b added 2026-07-13):
 //   - https://inference-docs.cerebras.ai/models/overview      (public catalog: production vs preview)
 //   - https://inference-docs.cerebras.ai/models/openai-oss    (gpt-oss-120b card: context, pricing, reasoning, tools)
 //   - https://inference-docs.cerebras.ai/models/zai-glm-47    (zai-glm-4.7 card: context, pricing, reasoning, tools)
+//   - https://inference-docs.cerebras.ai/models/gemma-4-31b   (gemma-4-31b card: context, pricing, reasoning, image input)
+//   - https://inference-docs.cerebras.ai/capabilities/reasoning (reasoning_effort vocabulary per model)
 //   - https://inference-docs.cerebras.ai/api-reference/chat-completions
 //   - https://inference-docs.cerebras.ai/resources/openai     (OpenAI compatibility & supported parameters)
 var (
-	// textInputs advertises a chat model that consumes text only. Both GA-track
-	// Cerebras models are text-only; vision input is a Preview-only capability.
+	// textInputs advertises a chat model that consumes text only. The GA-track
+	// gpt-oss-120b and Preview zai-glm-4.7 models are text-only; vision input is
+	// a Preview-only capability (currently gemma-4-31b).
 	textInputs = []string{"text"}
 	// textOutputs advertises text-only output.
 	textOutputs = []string{"text"}
+	// visionInputs advertises text+image input (base64 PNG/JPEG data URIs only;
+	// external URLs unsupported; max 5 images / 10MB payload per request).
+	// Chat Completions only — the legacy Completions endpoint rejects images.
+	visionInputs = []string{"text", "image"}
 
 	// reasoningFeatures is the capability set Cerebras advertises for its
 	// reasoning chat models. Cerebras' chat completions endpoint exposes tool /
@@ -63,13 +70,15 @@ var (
 // ModelRatios contains the Cerebras Inference models exposed by this adaptor.
 //
 // Only models that are live on the shared public API (api.cerebras.ai) AND carry
-// a publicly published per-token price are registered. As of 2026-06-27 that is:
+// a publicly published per-token price are registered. As of 2026-07-13 that is:
 //
 //   - gpt-oss-120b   — Production / GA       ($0.35 in / $0.75 out per 1M tokens)
 //   - zai-glm-4.7    — Preview (still live)  ($2.25 in / $2.75 out per 1M tokens)
+//   - gemma-4-31b    — Preview (live)        ($0.99 in / $1.49 out per 1M tokens)
 //
-// gemma-4-31b is listed as "coming soon" (not yet live, no published price), so
-// it is intentionally omitted rather than registered with a fabricated rate.
+// gemma-4-31b previously shipped as a "coming soon" placeholder comment (no
+// published price); it is now live on the public Preview catalog with a
+// published rate and is registered below.
 //
 // Pricing is encoded as Ratio = <USD per 1M input tokens> * ratio.MilliTokensUsd
 // and CompletionRatio = <USD per 1M output> / <USD per 1M input>, following the
@@ -77,8 +86,11 @@ var (
 // card and corroborated by the public-models API
 // (https://inference-docs.cerebras.ai/api-reference/models/public-models).
 //
-// Context length is 131,072 tokens on the paid tier for both models; the
-// documented paid-tier max completion length is ~40k tokens.
+// Context length is 131,072 tokens on the paid tier for all three models (65,536
+// on the rate-limited free tier for gemma-4-31b); the documented paid-tier max
+// completion length is ~40k tokens (32k on gemma-4-31b's free tier). This file
+// registers only the paid-tier figures, matching the existing gpt-oss-120b /
+// zai-glm-4.7 entries.
 var ModelRatios = map[string]adaptor.ModelConfig{
 	// ---- OpenAI gpt-oss (Production / GA) ----
 	"gpt-oss-120b": {
@@ -108,6 +120,25 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		SupportedSamplingParameters: samplingParams,
 		HuggingFaceID:               "zai-org/GLM-4.7",
 		Description:                 "Z.ai GLM-4.7 (355B) reasoning/agent model on Cerebras; reasoning is on by default. Marked Preview by Cerebras (evaluation only, may change on short notice). Text-only, tools and structured outputs, 131K context.",
+	},
+
+	// ---- Google DeepMind Gemma (Preview — live on the public API with published pricing) ----
+	"gemma-4-31b": {
+		Ratio:                       0.99 * ratio.MilliTokensUsd,
+		CompletionRatio:             1.49 / 0.99,
+		ContextLength:               131072,
+		MaxOutputTokens:             40000,
+		InputModalities:             visionInputs,
+		OutputModalities:            textOutputs,
+		SupportedFeatures:           reasoningFeatures,
+		SupportedSamplingParameters: samplingParams,
+		SupportedReasoningEfforts:   reasoningEfforts,
+		// DefaultReasoningEffort is intentionally left unset: unlike gpt-oss-120b,
+		// gemma-4-31b's reasoning defaults to off and only activates when the
+		// caller explicitly sets reasoning_effort (low/medium/high are currently
+		// equivalent "on" toggles rather than graduated effort levels).
+		HuggingFaceID: "google/gemma-4-31B-it",
+		Description:   "Google DeepMind Gemma 4 31B multimodal (text+image) model on Cerebras wafer-scale hardware; ~1,850 tokens/s. Marked Preview by Cerebras (evaluation only, may change on short notice). Reasoning is supported via reasoning_effort but disabled by default (opt-in). Tools, JSON mode, and structured outputs supported, 131K context (paid tier).",
 	},
 }
 

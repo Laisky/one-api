@@ -64,6 +64,20 @@ var deepseekModelRatios = map[string]adaptor.ModelConfig{
 		HuggingFaceID:               "deepseek-ai/DeepSeek-R1-0528",
 		Description:                 "DeepSeek R1 0528 reasoning model with 160K context and cache-read discount.",
 	},
+	"deepseek/deepseek-r1-0528-qwen3-8b": {
+		// Source: https://api.novita.ai/v3/openai/models (retrieved 2026-07-13)
+		Ratio:                       0.06 * ratio.MilliTokensUsd,
+		CompletionRatio:             0.09 / 0.06, // =1.5
+		ContextLength:               128000,
+		MaxOutputTokens:             32000,
+		InputModalities:             novitaTextOnlyModalities,
+		OutputModalities:            novitaTextOnlyModalities,
+		SupportedFeatures:           novitaReasoningFeatures,
+		SupportedSamplingParameters: novitaReasoningSamplingParams,
+		Quantization:                "bf16",
+		HuggingFaceID:               "deepseek-ai/DeepSeek-R1-0528-Qwen3-8B",
+		Description:                 "DeepSeek R1 0528 reasoning distilled into Qwen3 8B with 128K context.",
+	},
 	"deepseek/deepseek-r1-distill-llama-70b": {
 		Ratio:                       0.8 * ratio.MilliTokensUsd,
 		CompletionRatio:             1,

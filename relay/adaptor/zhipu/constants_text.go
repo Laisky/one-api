@@ -179,7 +179,7 @@ var flagshipTextModels = map[string]adaptor.ModelConfig{
 		SupportedSamplingParameters: chatSamplingParameters(),
 		HuggingFaceID:               "zai-org/GLM-4.5",
 		Quantization:                "bf16",
-		Description:                 "GLM-4.5: 355B/32B-active MoE flagship for agent applications with hybrid thinking.",
+		Description:                 "GLM-4.5: 355B/32B-active MoE flagship for agent applications with hybrid thinking. (slated for retirement, along with GLM-4.5-X, in favor of GLM-4.7)",
 	},
 	// GLM-4.5-X
 	"glm-4.5-x": {
@@ -306,7 +306,7 @@ var languageModels = map[string]adaptor.ModelConfig{
 		OutputModalities:            textOutput(),
 		SupportedFeatures:           reasoningChatFeatures(),
 		SupportedSamplingParameters: chatSamplingParameters(),
-		Description:                 "GLM-4.5-Flash: free GLM-4.5 sibling with thinking mode (slated for retirement) (deprecated; scheduled for retirement).",
+		Description:                 "GLM-4.5-Flash: free GLM-4.5 sibling with thinking mode (slated for retirement) (deprecated; scheduled for retirement). RETIRED 2026-01-30.",
 	},
 	"glm-4-flash": {
 		Ratio:                       0,
@@ -340,7 +340,7 @@ var reasoningModels = map[string]adaptor.ModelConfig{
 	"glm-z1-airx": {
 		Ratio:                       5 * ratio.MilliTokensRmb,
 		CompletionRatio:             1,
-		ContextLength:               131_072,
+		ContextLength:               32_768,
 		MaxOutputTokens:             32_768,
 		InputModalities:             textInput(),
 		OutputModalities:            textOutput(),

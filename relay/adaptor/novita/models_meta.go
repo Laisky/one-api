@@ -23,6 +23,20 @@ var metaLlamaModelRatios = map[string]adaptor.ModelConfig{
 		HuggingFaceID:               "meta-llama/Llama-3.1-8B-Instruct",
 		Description:                 "Meta Llama 3.1 8B instruct chat model with 16K context on Novita.",
 	},
+	"meta-llama/llama-3.2-3b-instruct": {
+		// Source: https://api.novita.ai/v3/openai/models (retrieved 2026-07-13)
+		Ratio:                       0.03 * ratio.MilliTokensUsd,
+		CompletionRatio:             0.05 / 0.03, // =1.6667
+		ContextLength:               32768,
+		MaxOutputTokens:             32000,
+		InputModalities:             novitaTextOnlyModalities,
+		OutputModalities:            novitaTextOnlyModalities,
+		SupportedFeatures:           novitaChatFeatures,
+		SupportedSamplingParameters: novitaSamplingParams,
+		Quantization:                "bf16",
+		HuggingFaceID:               "meta-llama/Llama-3.2-3B-Instruct",
+		Description:                 "Meta Llama 3.2 3B instruct chat model with 32K context.",
+	},
 	"meta-llama/llama-3.3-70b-instruct": {
 		Ratio:                       0.135 * ratio.MilliTokensUsd,
 		CompletionRatio:             2.96296296296,

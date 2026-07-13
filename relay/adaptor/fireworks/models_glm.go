@@ -23,7 +23,7 @@ var glmModels = map[string]adaptor.ModelConfig{
 		SupportedSamplingParameters: fwChatSamplingParams,
 		Quantization:                "fp16",
 		HuggingFaceID:               "zai-org/GLM-4.7",
-		Description:                 "Z.ai GLM-4.7 (352.8B MoE) general-purpose model with interleaved/preserved/turn-level thinking controls for long-horizon agents.",
+		Description:                 "Z.ai GLM-4.7 (352.8B MoE) general-purpose model with interleaved/preserved/turn-level thinking controls for long-horizon agents. Retired from Fireworks serverless 2026-05-14; on-demand/dedicated only; migrate to GLM 5.1.",
 	},
 	"accounts/fireworks/models/glm-5": {
 		Ratio:                       1.00 * ratio.MilliTokensUsd,
@@ -37,7 +37,7 @@ var glmModels = map[string]adaptor.ModelConfig{
 		SupportedSamplingParameters: fwChatSamplingParams,
 		Quantization:                "fp16",
 		HuggingFaceID:               "zai-org/GLM-5",
-		Description:                 "Z.ai GLM-5 (744B MoE, 40B active) flagship with DeepSeek Sparse Attention for long-context systems engineering and agentic tasks.",
+		Description:                 "Z.ai GLM-5 (744B MoE, 40B active) flagship with DeepSeek Sparse Attention for long-context systems engineering and agentic tasks. Retired from Fireworks serverless 2026-05-14; on-demand/dedicated only; migrate to GLM 5.1.",
 	},
 	"accounts/fireworks/models/glm-5p1": {
 		Ratio:                       1.40 * ratio.MilliTokensUsd,
@@ -56,7 +56,7 @@ var glmModels = map[string]adaptor.ModelConfig{
 	"accounts/fireworks/models/glm-5p2": {
 		Ratio:                       1.40 * ratio.MilliTokensUsd,
 		CompletionRatio:             4.40 / 1.40,
-		CachedInputRatio:            0.26 * ratio.MilliTokensUsd,
+		CachedInputRatio:            0.14 * ratio.MilliTokensUsd,
 		ContextLength:               1048576,
 		MaxOutputTokens:             131072,
 		InputModalities:             fwTextOnlyModalities,

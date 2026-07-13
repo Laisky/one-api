@@ -22,7 +22,7 @@ var kimiModels = map[string]adaptor.ModelConfig{
 		SupportedSamplingParameters: fwChatSamplingParams,
 		Quantization:                "fp8",
 		HuggingFaceID:               "moonshotai/Kimi-K2.5",
-		Description:                 "Moonshot AI Kimi K2.5 (1T MoE) multimodal agentic model unifying vision/text with switchable thinking and multi-agent execution.",
+		Description:                 "Moonshot AI Kimi K2.5 (1T MoE) multimodal agentic model unifying vision/text with switchable thinking and multi-agent execution. Retired from Fireworks serverless 2026-06-26; on-demand/dedicated only; migrate to Kimi K2.6.",
 	},
 	"accounts/fireworks/models/kimi-k2p6": {
 		Ratio:                       0.95 * ratio.MilliTokensUsd,

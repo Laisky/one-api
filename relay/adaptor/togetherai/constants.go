@@ -168,7 +168,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		InputModalities: togetherTextIn, OutputModalities: togetherTextOut,
 		SupportedFeatures: togetherReasonFeatures, SupportedSamplingParameters: togetherChatSampling,
 		Quantization: "fp4", HuggingFaceID: "zai-org/GLM-5",
-		Description: "Z.ai GLM-5 hybrid-reasoning MoE (754B/40B active), state-of-the-art open-source agentic model.",
+		Description: "Z.ai GLM-5 hybrid-reasoning MoE (754B/40B active), state-of-the-art open-source agentic model. (RETIRED — not available on Together's Serverless API as of 2026-07-13; use zai-org/GLM-5.1 or zai-org/GLM-5.2)",
 	},
 	"openai/gpt-oss-120b": {
 		Ratio: 0.15 * ratio.MilliTokensUsd, CompletionRatio: 0.60 / 0.15,
@@ -321,7 +321,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		Description: "Lightweight quantised variant of Meta Llama 3 8B for fast low-cost inference.",
 	},
 	"nvidia/nemotron-3-ultra-550b-a55b": {
-		Ratio: 0.60 * ratio.MilliTokensUsd, CompletionRatio: 3.60 / 0.60,
+		Ratio: 0.60 * ratio.MilliTokensUsd, CompletionRatio: 3.60 / 0.60, CachedInputRatio: 0.20 * ratio.MilliTokensUsd,
 		ContextLength: 512300, MaxOutputTokens: 32768,
 		InputModalities: togetherTextIn, OutputModalities: togetherTextOut,
 		SupportedFeatures: togetherReasonFeatures, SupportedSamplingParameters: togetherChatSampling,
@@ -329,12 +329,30 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		Description:   "NVIDIA Nemotron-3 Ultra 550B A55B reasoning MoE, 512K context, $0.60/$3.60 per 1M.",
 	},
 	"moonshotai/Kimi-K2.7-Code": {
-		Ratio: 0.95 * ratio.MilliTokensUsd, CompletionRatio: 4.00 / 0.95,
+		Ratio: 0.95 * ratio.MilliTokensUsd, CompletionRatio: 4.00 / 0.95, CachedInputRatio: 0.19 * ratio.MilliTokensUsd,
 		ContextLength: 262144, MaxOutputTokens: 32768,
 		InputModalities: togetherVisionIn, OutputModalities: togetherTextOut,
 		SupportedFeatures: togetherReasonFeatures, SupportedSamplingParameters: togetherChatSampling,
 		HuggingFaceID: "moonshotai/Kimi-K2.7-Code",
 		Description:   "Moonshot Kimi K2.7 Code multimodal coding model, 256K context, $0.95/$4.00 per 1M.",
+	},
+	// Pearl Research Labs checkpoint of Gemma 4 31B, ~25% cheaper than google/gemma-4-31B-it
+	// via Together's Pearl Network integration. Source: https://www.together.ai/models/gemma-4-31b-it-pearl
+	"pearl-ai/gemma-4-31b-it": {
+		Ratio: 0.28 * ratio.MilliTokensUsd, CompletionRatio: 0.86 / 0.28,
+		ContextLength: 32000, MaxOutputTokens: 8192,
+		InputModalities: togetherTextIn, OutputModalities: togetherTextOut,
+		SupportedFeatures: togetherChatFeatures, SupportedSamplingParameters: togetherChatSampling,
+		Quantization: "int8", HuggingFaceID: "google/gemma-4-31b-it",
+		Description: "Pearl AI checkpoint of Google Gemma 4 31B instruction model, $0.28/$0.86 per 1M.",
+	},
+	"LiquidAI/LFM2.5-8B-A1B": {
+		Ratio: 0.03 * ratio.MilliTokensUsd, CompletionRatio: 0.12 / 0.03,
+		ContextLength: 32768, MaxOutputTokens: 8192,
+		InputModalities: togetherTextIn, OutputModalities: togetherTextOut,
+		SupportedSamplingParameters: togetherChatSampling,
+		Quantization:                "bf16", HuggingFaceID: "LiquidAI/LFM2.5-8B-A1B",
+		Description: "Liquid Foundation Model 2.5, 8B/1B-active edge MoE reasoning model, $0.03/$0.12 per 1M.",
 	},
 
 	// Embeddings.
@@ -379,6 +397,13 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		DefaultSize:      "1920x1080",
 		MinImages:        1,
 	}},
+	// gpt-image-2 bills a flat per-image price ($0.053) uniformly across 1K/2K/4K tiers.
+	// Source: https://www.together.ai/models/gpt-image-2
+	"openai/gpt-image-2": {Ratio: 0, CompletionRatio: 1, Image: &adaptor.ImagePricingConfig{
+		PricePerImageUsd: 0.053,
+		DefaultSize:      togetherAIImageBaseSize,
+		MinImages:        1,
+	}},
 	// Additional 2026 image models served by Together AI.
 	// Source: https://docs.together.ai/docs/serverless-models
 	"Wan-AI/Wan2.6-image":         {Ratio: 0, CompletionRatio: 1, Image: togetherAIImagePerMegapixelConfig(0.03)},
@@ -390,6 +415,9 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 	"Qwen/Qwen-Image-2.0":              {Ratio: 0, CompletionRatio: 1, Image: &adaptor.ImagePricingConfig{PricePerImageUsd: 0.04, DefaultSize: togetherAIImageBaseSize, MinImages: 1}},
 	"Qwen/Qwen-Image-2.0-Pro":          {Ratio: 0, CompletionRatio: 1, Image: &adaptor.ImagePricingConfig{PricePerImageUsd: 0.08, DefaultSize: togetherAIImageBaseSize, MinImages: 1}},
 	"RunDiffusion/Juggernaut-pro-flux": {Ratio: 0, CompletionRatio: 1, Image: togetherAIImagePerMegapixelConfig(0.0049)},
+	// Together docs list this variant with a lowercase-d "Rundiffusion/" org id (distinct from
+	// the "RunDiffusion/Juggernaut-pro-flux" casing above). Source: https://www.together.ai/models/juggernaut-lightning-flux
+	"Rundiffusion/Juggernaut-Lightning-Flux": {Ratio: 0, CompletionRatio: 1, Image: togetherAIImagePerMegapixelConfig(0.0017)},
 	"HiDream-ai/HiDream-I1-Full":       {Ratio: 0, CompletionRatio: 1, Image: togetherAIImagePerMegapixelConfig(0.009)},
 	"HiDream-ai/HiDream-I1-Dev":        {Ratio: 0, CompletionRatio: 1, Image: togetherAIImagePerMegapixelConfig(0.0045)},
 	"HiDream-ai/HiDream-I1-Fast":       {Ratio: 0, CompletionRatio: 1, Image: togetherAIImagePerMegapixelConfig(0.0032)},
@@ -409,6 +437,10 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 	"cartesia/sonic":              {Ratio: 65.0 * ratio.MilliTokensUsd, CompletionRatio: 1},
 	"openai/whisper-large-v3":     {Ratio: 0, CompletionRatio: 1, Audio: &adaptor.AudioPricingConfig{UsdPerSecond: 0.0015 / 60}},
 	"nvidia/parakeet-tdt-0.6b-v3": {Ratio: 0, CompletionRatio: 1, Audio: &adaptor.AudioPricingConfig{UsdPerSecond: 0.0015 / 60}},
+	// Nemotron ASR streaming models bill $0.0015 per audio minute.
+	// Source: https://docs.together.ai/docs/serverless-models
+	"nvidia/nemotron-3-asr-streaming-0.6b":   {Ratio: 0, CompletionRatio: 1, Audio: &adaptor.AudioPricingConfig{UsdPerSecond: 0.0015 / 60}},
+	"nvidia/nemotron-3.5-asr-streaming-0.6b": {Ratio: 0, CompletionRatio: 1, Audio: &adaptor.AudioPricingConfig{UsdPerSecond: 0.0015 / 60}},
 }
 
 // ModelList captures the current public Together AI serverless catalog used by the OpenAI-compatible adapter.
@@ -426,6 +458,8 @@ var ModelList = []string{
 	"moonshotai/Kimi-K2.6",
 	"moonshotai/Kimi-K2.5",
 	"moonshotai/Kimi-K2.7-Code",
+	"pearl-ai/gemma-4-31b-it",
+	"LiquidAI/LFM2.5-8B-A1B",
 	"zai-org/GLM-5.2",
 	"zai-org/GLM-5.1",
 	"zai-org/GLM-5",
@@ -466,10 +500,12 @@ var ModelList = []string{
 	"Qwen/Qwen-Image",
 	"google/flash-image-3.1",
 	"openai/gpt-image-1.5",
+	"openai/gpt-image-2",
 	"Qwen/Qwen-Image-2.0",
 	"Qwen/Qwen-Image-2.0-Pro",
 	"Wan-AI/Wan2.6-image",
 	"RunDiffusion/Juggernaut-pro-flux",
+	"Rundiffusion/Juggernaut-Lightning-Flux",
 	"HiDream-ai/HiDream-I1-Full",
 	"HiDream-ai/HiDream-I1-Dev",
 	"HiDream-ai/HiDream-I1-Fast",
@@ -485,6 +521,8 @@ var ModelList = []string{
 	"cartesia/sonic",
 	"openai/whisper-large-v3",
 	"nvidia/parakeet-tdt-0.6b-v3",
+	"nvidia/nemotron-3-asr-streaming-0.6b",
+	"nvidia/nemotron-3.5-asr-streaming-0.6b",
 	"intfloat/multilingual-e5-large-instruct",
 }
 

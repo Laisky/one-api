@@ -24,6 +24,8 @@ var (
 	novitaTextImageVideoInModalities = []string{"text", "image", "video"}
 	// novitaOmniInModalities advertises text+image+audio+video input with text output (omni models).
 	novitaOmniInModalities = []string{"text", "image", "audio", "video"}
+	// novitaTextAudioOutModalities advertises text+audio output (omni models that speak).
+	novitaTextAudioOutModalities = []string{"text", "audio"}
 
 	// novitaChatFeatures advertises the standard non-thinking capability set.
 	// Novita exposes OpenAI-compatible tools and JSON mode for these chat models.

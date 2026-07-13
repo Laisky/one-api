@@ -146,7 +146,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		SupportedFeatures: cohereChatFeaturesNoStructured, SupportedSamplingParameters: cohereSamplingParams,
 		Quantization:  "bf16",
 		HuggingFaceID: "CohereLabs/tiny-aya-earth",
-		Description:   "Tiny Aya Earth (2026-02) 3.35B regional multilingual model tuned for African languages.",
+		Description:   "Tiny Aya Earth (2026-02) 3.35B regional multilingual model tuned for West Asian and African languages.",
 	},
 	"tiny-aya-fire": {
 		Ratio: 0.5 * ratio.MilliTokensUsd, CompletionRatio: 3,
@@ -164,12 +164,14 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		SupportedFeatures: cohereChatFeaturesNoStructured, SupportedSamplingParameters: cohereSamplingParams,
 		Quantization:  "bf16",
 		HuggingFaceID: "CohereLabs/tiny-aya-water",
-		Description:   "Tiny Aya Water (2026-02) 3.35B regional multilingual model tuned for Asia-Pacific, West Asian, and European languages.",
+		Description:   "Tiny Aya Water (2026-02) 3.35B regional multilingual model tuned for Asia-Pacific and European languages.",
 	},
 
 	// Command A specialized variants released in 2025.
 	"command-a-vision-07-2025": {
-		// $2.50 input / $10.00 output per 1M tokens (vision variant inherits Command A rates).
+		// No public per-token pricing; free-until-rate-limit, contact sales for production
+		// (per https://docs.cohere.com/docs/command-a-vision: "free until rate limits are reached").
+		// $2.50 input / $10.00 output per 1M tokens is a placeholder estimate inherited from Command A.
 		// 128K context, supports up to 20 images per request; no tool use per docs.
 		Ratio: 2.5 * ratio.MilliTokensUsd, CompletionRatio: 4,
 		ContextLength: 128000, MaxOutputTokens: 8192,
@@ -177,7 +179,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		SupportedFeatures: []string{"json_mode"}, SupportedSamplingParameters: cohereSamplingParams,
 		Quantization:  "bf16",
 		HuggingFaceID: "CohereLabs/command-a-vision-07-2025",
-		Description:   "Cohere Command A Vision (July 2025) 112B multimodal model for document analysis, OCR, and chart interpretation.",
+		Description:   "Cohere Command A Vision (July 2025) 112B multimodal model for document analysis, OCR, and chart interpretation. No public per-token pricing; free until rate limits are reached, contact sales for production.",
 	},
 	"command-a-reasoning-08-2025": {
 		// No public per-token pricing published by Cohere (free-until-rate-limits / Model Vault).
@@ -194,7 +196,9 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		Description:                 "Cohere Command A Reasoning (August 2025) 111B hybrid reasoning model with toggleable thinking and 256k context.",
 	},
 	"command-a-translate-08-2025": {
-		// $2.50 input / $10.00 output per 1M tokens (inherits Command A rates).
+		// No public per-token pricing; free-until-rate-limit, contact sales for production
+		// (per https://docs.cohere.com/docs/command-a-translate: "free until rate limits are reached").
+		// $2.50 input / $10.00 output per 1M tokens is a placeholder estimate inherited from Command A.
 		// 16K total context split 8K input / 8K output; translation-focused, no tool use.
 		Ratio: 2.5 * ratio.MilliTokensUsd, CompletionRatio: 4,
 		ContextLength: 16000, MaxOutputTokens: 8192,
@@ -202,7 +206,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		SupportedFeatures: []string{}, SupportedSamplingParameters: cohereSamplingParams,
 		Quantization:  "bf16",
 		HuggingFaceID: "CohereLabs/command-a-translate-08-2025",
-		Description:   "Cohere Command A Translate (August 2025) 111B translation specialist covering 23 languages.",
+		Description:   "Cohere Command A Translate (August 2025) 111B translation specialist covering 23 languages. No public per-token pricing; free until rate limits are reached, contact sales for production.",
 	},
 
 	// Audio transcription model. cohere-transcribe is offered via Model Vault per-hour
@@ -215,7 +219,9 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		InputModalities: []string{"audio"},
 		Audio: &adaptor.AudioPricingConfig{
 			// Cohere Transcribe is currently free during API trial with rate limits;
-			// production deployment is per-hour Model Vault. No per-second public rate.
+			// dedicated production deployment via Model Vault starts from $3.75/hour/instance
+			// (per https://cohere.com/pricing). No public per-second/per-token rate for the
+			// free trial tier, so UsdPerSecond is left at 0 as a non-billing placeholder.
 			UsdPerSecond: 0.0,
 		},
 		HuggingFaceID: "CohereLabs/cohere-transcribe-03-2026",

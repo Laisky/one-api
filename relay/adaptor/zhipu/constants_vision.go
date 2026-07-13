@@ -116,7 +116,7 @@ var multimodalModels = map[string]adaptor.ModelConfig{
 	"glm-4v-plus-0111": {
 		Ratio:                       4 * ratio.MilliTokensRmb,
 		CompletionRatio:             1,
-		ContextLength:               16_384,
+		ContextLength:               8_192,
 		MaxOutputTokens:             1_024,
 		InputModalities:             textImageInput(),
 		OutputModalities:            textOutput(),
@@ -127,7 +127,7 @@ var multimodalModels = map[string]adaptor.ModelConfig{
 	"glm-4v-plus": {
 		Ratio:                       4 * ratio.MilliTokensRmb,
 		CompletionRatio:             1,
-		ContextLength:               16_384,
+		ContextLength:               8_192,
 		MaxOutputTokens:             1_024,
 		InputModalities:             textImageInput(),
 		OutputModalities:            textOutput(),
@@ -138,7 +138,7 @@ var multimodalModels = map[string]adaptor.ModelConfig{
 	"glm-4v": {
 		Ratio:                       50 * ratio.MilliTokensRmb,
 		CompletionRatio:             1,
-		ContextLength:               2_048,
+		ContextLength:               8_192,
 		MaxOutputTokens:             1_024,
 		InputModalities:             textImageInput(),
 		OutputModalities:            textOutput(),

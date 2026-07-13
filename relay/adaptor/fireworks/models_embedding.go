@@ -30,7 +30,7 @@ var embeddingModels = map[string]adaptor.ModelConfig{
 		SupportedSamplingParameters: fwEmbedSamplingParams,
 		Quantization:                "fp16",
 		HuggingFaceID:               "Qwen/Qwen3-Embedding-4B",
-		Description:                 "Alibaba Qwen3 Embedding 4B mid-size dense embedding model with 32K context.",
+		Description:                 "Alibaba Qwen3 Embedding 4B mid-size dense embedding model with 32K context. Retired from Fireworks serverless (confirmed via model card, 2026-07-13); on-demand/dedicated only.",
 	},
 	"accounts/fireworks/models/qwen3-embedding-0p6b": {
 		Ratio:                       0.008 * ratio.MilliTokensUsd,
@@ -41,7 +41,7 @@ var embeddingModels = map[string]adaptor.ModelConfig{
 		SupportedSamplingParameters: fwEmbedSamplingParams,
 		Quantization:                "fp16",
 		HuggingFaceID:               "Qwen/Qwen3-Embedding-0.6B",
-		Description:                 "Alibaba Qwen3 Embedding 0.6B compact dense embedding model for low-latency retrieval.",
+		Description:                 "Alibaba Qwen3 Embedding 0.6B compact dense embedding model for low-latency retrieval. Retired from Fireworks serverless (confirmed via model card, 2026-07-13); on-demand/dedicated only.",
 	},
 	// Legacy BERT-style embeddings — <150M = $0.008/1M, 150-350M = $0.016/1M.
 	"nomic-ai/nomic-embed-text-v1.5": {

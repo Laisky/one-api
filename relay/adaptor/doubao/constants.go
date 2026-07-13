@@ -81,7 +81,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 			{Ratio: 2.4 * ratio.MilliTokensRmb, CompletionRatio: 24.0 / 2.4, CachedInputRatio: 0.16 * ratio.MilliTokensRmb, InputTokenThreshold: 128},
 		},
 		ContextLength:               256000,
-		MaxOutputTokens:             16384,
+		MaxOutputTokens:             32000,
 		InputModalities:             doubaoMultimodalInputs,
 		OutputModalities:            doubaoTextOutputs,
 		SupportedFeatures:           doubaoReasoningFeatures,
@@ -98,12 +98,53 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 			{Ratio: 0.6 * ratio.MilliTokensRmb, CompletionRatio: 6.0 / 0.6, CachedInputRatio: 0.03 * ratio.MilliTokensRmb, InputTokenThreshold: 128},
 		},
 		ContextLength:               256000,
-		MaxOutputTokens:             16384,
+		MaxOutputTokens:             32000,
 		InputModalities:             doubaoMultimodalInputs,
 		OutputModalities:            doubaoTextOutputs,
 		SupportedFeatures:           doubaoReasoningFeatures,
 		SupportedSamplingParameters: doubaoSamplingParams,
 		Description:                 "ByteDance Doubao Seed 1.6 Flash: cost-optimized multimodal deep-thinking variant with 256K context.",
+	},
+
+	// doubao-seed-1.6-vision: vision-grounding deep-thinking variant (GUI task
+	// grounding + reasoning), text/image input only (no video).
+	// Tiered input pricing: [0,32K] ¥0.8/¥8; (32K,128K] ¥1.2/¥16; (128K,256K] ¥2.4/¥24.
+	// Cached input ¥0.16.
+	"doubao-seed-1.6-vision": {
+		Ratio:            0.8 * ratio.MilliTokensRmb,
+		CompletionRatio:  8.0 / 0.8,
+		CachedInputRatio: 0.16 * ratio.MilliTokensRmb,
+		Tiers: []adaptor.ModelRatioTier{
+			{Ratio: 1.2 * ratio.MilliTokensRmb, CompletionRatio: 16.0 / 1.2, CachedInputRatio: 0.16 * ratio.MilliTokensRmb, InputTokenThreshold: 32},
+			{Ratio: 2.4 * ratio.MilliTokensRmb, CompletionRatio: 24.0 / 2.4, CachedInputRatio: 0.16 * ratio.MilliTokensRmb, InputTokenThreshold: 128},
+		},
+		ContextLength:               256000,
+		MaxOutputTokens:             32000,
+		InputModalities:             doubaoVisionInputs,
+		OutputModalities:            doubaoTextOutputs,
+		SupportedFeatures:           doubaoReasoningFeatures,
+		SupportedSamplingParameters: doubaoSamplingParams,
+		Description:                 "ByteDance Doubao Seed 1.6 Vision: vision-grounding deep-thinking model for GUI/visual-agent tasks, with 256K context and text/image input.",
+	},
+	// doubao-seed-1.6-lite: cost-optimized Seed 1.6 variant.
+	// Tiered input pricing: [0,32K] ¥0.3/¥2.4; (32K,128K] ¥0.6/¥4; (128K,256K] ¥1.2/¥12.
+	// Cached input ¥0.06. ContextLength/MaxOutputTokens inferred by analogy to
+	// doubao-seed-1.6-flash (not independently confirmed on the capability page).
+	"doubao-seed-1.6-lite": {
+		Ratio:            0.3 * ratio.MilliTokensRmb,
+		CompletionRatio:  2.4 / 0.3,
+		CachedInputRatio: 0.06 * ratio.MilliTokensRmb,
+		Tiers: []adaptor.ModelRatioTier{
+			{Ratio: 0.6 * ratio.MilliTokensRmb, CompletionRatio: 4.0 / 0.6, CachedInputRatio: 0.06 * ratio.MilliTokensRmb, InputTokenThreshold: 32},
+			{Ratio: 1.2 * ratio.MilliTokensRmb, CompletionRatio: 12.0 / 1.2, CachedInputRatio: 0.06 * ratio.MilliTokensRmb, InputTokenThreshold: 128},
+		},
+		ContextLength:               256000,
+		MaxOutputTokens:             32000,
+		InputModalities:             doubaoMultimodalInputs,
+		OutputModalities:            doubaoTextOutputs,
+		SupportedFeatures:           doubaoReasoningFeatures,
+		SupportedSamplingParameters: doubaoSamplingParams,
+		Description:                 "ByteDance Doubao Seed 1.6 Lite: cost-optimized multimodal deep-thinking variant with 256K context.",
 	},
 
 	// --- Doubao Seed 2.1 (FORCE 2026 flagship deep-thinking multimodal) ---
@@ -118,7 +159,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		CompletionRatio:             30.0 / 6.0,
 		CachedInputRatio:            1.2 * ratio.MilliTokensRmb,
 		ContextLength:               256000,
-		MaxOutputTokens:             128000,
+		MaxOutputTokens:             256000,
 		InputModalities:             doubaoMultimodalInputs,
 		OutputModalities:            doubaoTextOutputs,
 		SupportedFeatures:           doubaoReasoningFeatures,
@@ -161,7 +202,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		OutputModalities:            doubaoTextOutputs,
 		SupportedFeatures:           doubaoChatFeatures,
 		SupportedSamplingParameters: doubaoSamplingParams,
-		Description:                 "ByteDance Doubao 1.5 Pro 256K long-context text chat model.",
+		Description:                 "ByteDance Doubao 1.5 Pro 256K long-context text chat model. [Legacy/likely retired: absent from the current per-token pricing table and full model-list page as of 2026-07; pricing retained as last-known value pending vendor confirmation.]",
 	},
 	"doubao-1.5-lite-32k": {
 		Ratio:                       0.3 * ratio.MilliTokensRmb,
@@ -275,7 +316,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		ContextLength:    4096,
 		InputModalities:  doubaoTextInputs,
 		OutputModalities: doubaoTextOutputs,
-		Description:      "ByteDance Doubao text embedding model.",
+		Description:      "ByteDance Doubao text embedding model. [Legacy/likely retired: absent from the direct-API vector-model pricing table and model list as of 2026-07; only doubao-embedding-vision remains listed there. The sole surviving reference is a Knowledge-Base bundled line item at a different price/billing path. Pricing retained as last-known value pending vendor confirmation.]",
 	},
 	"doubao-embedding-vision": {
 		Ratio:            0.7 * ratio.MilliTokensRmb,

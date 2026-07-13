@@ -76,7 +76,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs"},
 		SupportedSamplingParameters: groqChatSamplingParams,
 		HuggingFaceID:               "meta-llama/Llama-3.3-70B-Instruct",
-		Description:                 "Meta's 70B Llama 3.3 instruct model served on Groq's LPU with 131K context and tool/JSON support.",
+		Description:                 "Meta's 70B Llama 3.3 instruct model served on Groq's LPU with 131K context and tool/JSON support. DEPRECATED: Groq is shutting down this model on 2026-08-16; migrate to openai/gpt-oss-120b or qwen/qwen3.6-27b. Source: https://console.groq.com/docs/deprecations",
 	},
 	"llama-3.1-8b-instant": {
 		Ratio:                       0.05 * ratio.MilliTokensUsd,
@@ -88,7 +88,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs"},
 		SupportedSamplingParameters: groqChatSamplingParams,
 		HuggingFaceID:               "meta-llama/Llama-3.1-8B-Instruct",
-		Description:                 "Meta's compact 8B Llama 3.1 instruct model with 131K context, optimized for low-latency chat.",
+		Description:                 "Meta's compact 8B Llama 3.1 instruct model with 131K context, optimized for low-latency chat. DEPRECATED: Groq is shutting down this model on 2026-08-16; migrate to openai/gpt-oss-20b. Source: https://console.groq.com/docs/deprecations",
 	},
 	"whisper-large-v3": {
 		Ratio:                       0,
@@ -160,7 +160,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs"},
 		SupportedSamplingParameters: groqChatSamplingParams,
 		HuggingFaceID:               "meta-llama/Llama-4-Scout-17B-16E-Instruct",
-		Description:                 "Meta Llama 4 Scout (17B activated MoE) multimodal model with early-fusion image understanding.",
+		Description:                 "Meta Llama 4 Scout (17B activated MoE) multimodal model with early-fusion image understanding. DEPRECATED: Groq is shutting down this model on 2026-07-17; migrate to openai/gpt-oss-120b or qwen/qwen3.6-27b. Source: https://console.groq.com/docs/deprecations",
 	},
 	"meta-llama/llama-prompt-guard-2-22m": {
 		Ratio:                       0.03 * ratio.MilliTokensUsd,
@@ -209,8 +209,12 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		OutputModalities:            groqTextOnlyModalities,
 		SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs", "reasoning"},
 		SupportedSamplingParameters: groqReasoningSamplingParams,
-		HuggingFaceID:               "Qwen/Qwen3-32B",
-		Description:                 "Alibaba Qwen3-32B with switchable thinking/non-thinking modes for reasoning and general dialog.",
+		// Groq's qwen3 reasoning docs enumerate none/default (null also reasons by default).
+		// Source: https://console.groq.com/docs/model/openai/gpt-oss-safeguard-20b
+		SupportedReasoningEfforts: []string{"none", "default"},
+		DefaultReasoningEffort:    "default",
+		HuggingFaceID:             "Qwen/Qwen3-32B",
+		Description:               "Alibaba Qwen3-32B with switchable thinking/non-thinking modes for reasoning and general dialog. DEPRECATED: Groq is shutting down this model on 2026-07-17; migrate to openai/gpt-oss-120b. Source: https://console.groq.com/docs/deprecations",
 	},
 	"qwen/qwen3.6-27b": {
 		Ratio:                       0.60 * ratio.MilliTokensUsd,
@@ -221,8 +225,12 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		OutputModalities:            groqTextOnlyModalities,
 		SupportedFeatures:           []string{"tools", "json_mode", "reasoning"},
 		SupportedSamplingParameters: groqReasoningSamplingParams,
-		HuggingFaceID:               "Qwen/Qwen3.6-27B",
-		Description:                 "Alibaba Qwen3.6-27B multimodal model (text + image input) with switchable thinking/non-thinking modes via reasoning_effort.",
+		// Groq's qwen3 reasoning docs enumerate none/default (null also reasons by default).
+		// Source: https://console.groq.com/docs/model/openai/gpt-oss-safeguard-20b
+		SupportedReasoningEfforts: []string{"none", "default"},
+		DefaultReasoningEffort:    "default",
+		HuggingFaceID:             "Qwen/Qwen3.6-27B",
+		Description:               "Alibaba Qwen3.6-27B multimodal model (text + image input) with switchable thinking/non-thinking modes via reasoning_effort.",
 	},
 
 	// New Models (Jan 2026)

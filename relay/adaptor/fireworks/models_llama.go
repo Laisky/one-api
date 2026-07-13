@@ -21,7 +21,7 @@ var llamaModels = map[string]adaptor.ModelConfig{
 		SupportedSamplingParameters: fwChatSamplingParams,
 		Quantization:                "fp8",
 		HuggingFaceID:               "meta-llama/Llama-3.3-70B-Instruct",
-		Description:                 "Meta Llama 3.3 70B Instruct (Dec-2024 update of 3.1 70B) with improved tool calling, multilingual support, math, and coding.",
+		Description:                 "Meta Llama 3.3 70B Instruct (Dec-2024 update of 3.1 70B) with improved tool calling, multilingual support, math, and coding. Retired from Fireworks serverless 2026-05-14; on-demand/dedicated only; migrate to GPT-OSS 120B.",
 	},
 	"accounts/fireworks/models/llama-v3p1-70b-instruct": {
 		Ratio:                       0.90 * ratio.MilliTokensUsd,
@@ -34,7 +34,7 @@ var llamaModels = map[string]adaptor.ModelConfig{
 		SupportedSamplingParameters: fwChatSamplingParams,
 		Quantization:                "fp16",
 		HuggingFaceID:               "meta-llama/Llama-3.1-70B-Instruct",
-		Description:                 "Meta Llama 3.1 70B Instruct dense model with 128K context, instruction-tuned for chat, tools, and multilingual tasks.",
+		Description:                 "Meta Llama 3.1 70B Instruct dense model with 128K context, instruction-tuned for chat, tools, and multilingual tasks. Retired from Fireworks serverless (confirmed via model card, 2026-07-13); on-demand/dedicated only.",
 	},
 	"accounts/fireworks/models/llama-v3p1-8b-instruct": {
 		Ratio:                       0.20 * ratio.MilliTokensUsd,
@@ -47,7 +47,7 @@ var llamaModels = map[string]adaptor.ModelConfig{
 		SupportedSamplingParameters: fwChatSamplingParams,
 		Quantization:                "fp16",
 		HuggingFaceID:               "meta-llama/Llama-3.1-8B-Instruct",
-		Description:                 "Meta Llama 3.1 8B Instruct compact dense model with 128K context for low-latency chat and tool use.",
+		Description:                 "Meta Llama 3.1 8B Instruct compact dense model with 128K context for low-latency chat and tool use. Retired from Fireworks serverless (confirmed via model card, 2026-07-13); on-demand/dedicated only.",
 	},
 	"accounts/fireworks/models/llama-v3p2-3b-instruct": {
 		Ratio:                       0.10 * ratio.MilliTokensUsd,
@@ -60,7 +60,7 @@ var llamaModels = map[string]adaptor.ModelConfig{
 		SupportedSamplingParameters: fwChatSamplingParams,
 		Quantization:                "fp16",
 		HuggingFaceID:               "meta-llama/Llama-3.2-3B-Instruct",
-		Description:                 "Meta Llama 3.2 3B Instruct lightweight dense model with 128K context for edge-class chat workloads.",
+		Description:                 "Meta Llama 3.2 3B Instruct lightweight dense model with 128K context for edge-class chat workloads. Retired from Fireworks serverless (confirmed via model card, 2026-07-13); on-demand/dedicated only.",
 	},
 	"accounts/fireworks/models/llama-v3p2-1b-instruct": {
 		Ratio:                       0.10 * ratio.MilliTokensUsd,
@@ -73,7 +73,7 @@ var llamaModels = map[string]adaptor.ModelConfig{
 		SupportedSamplingParameters: fwChatSamplingParams,
 		Quantization:                "fp16",
 		HuggingFaceID:               "meta-llama/Llama-3.2-1B-Instruct",
-		Description:                 "Meta Llama 3.2 1B Instruct ultra-compact dense model with 128K context for embedded and on-device chat scenarios.",
+		Description:                 "Meta Llama 3.2 1B Instruct ultra-compact dense model with 128K context for embedded and on-device chat scenarios. Retired from Fireworks serverless (confirmed via model card, 2026-07-13); on-demand/dedicated only.",
 	},
 	"accounts/fireworks/models/llama-v3p2-11b-vision-instruct": {
 		Ratio:                       0.20 * ratio.MilliTokensUsd,
@@ -86,7 +86,7 @@ var llamaModels = map[string]adaptor.ModelConfig{
 		SupportedSamplingParameters: fwChatSamplingParams,
 		Quantization:                "fp16",
 		HuggingFaceID:               "meta-llama/Llama-3.2-11B-Vision-Instruct",
-		Description:                 "Meta Llama 3.2 11B Vision Instruct multimodal dense model accepting text and image inputs with 128K context.",
+		Description:                 "Meta Llama 3.2 11B Vision Instruct multimodal dense model accepting text and image inputs with 128K context. Retired from Fireworks serverless (confirmed via model card, 2026-07-13); on-demand/dedicated only.",
 	},
 	"accounts/fireworks/models/llama-v3p2-90b-vision-instruct": {
 		Ratio:                       0.90 * ratio.MilliTokensUsd,
@@ -99,6 +99,6 @@ var llamaModels = map[string]adaptor.ModelConfig{
 		SupportedSamplingParameters: fwChatSamplingParams,
 		Quantization:                "fp16",
 		HuggingFaceID:               "meta-llama/Llama-3.2-90B-Vision-Instruct",
-		Description:                 "Meta Llama 3.2 90B Vision Instruct flagship multimodal dense model with 128K context for advanced text+image reasoning.",
+		Description:                 "Meta Llama 3.2 90B Vision Instruct flagship multimodal dense model with 128K context for advanced text+image reasoning. Retired from Fireworks serverless (confirmed via model card, 2026-07-13); on-demand/dedicated only.",
 	},
 }

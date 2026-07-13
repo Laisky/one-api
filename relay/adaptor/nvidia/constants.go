@@ -85,6 +85,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 	},
 	"nvidia/nemotron-3-super-120b-a12b": {
 		Ratio: 0, CompletionRatio: 1,
+		ContextLength:               1000000,
 		InputModalities:             textInputs,
 		OutputModalities:            textOutputs,
 		SupportedFeatures:           reasoningFeatures,
@@ -99,6 +100,14 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		SupportedFeatures:           reasoningFeatures,
 		SupportedSamplingParameters: samplingParams,
 		Description:                 "NVIDIA Nemotron 3 Nano: efficient reasoning MoE with a 1M context window. Free hosted endpoint.",
+	},
+	"nvidia/nvidia-nemotron-nano-9b-v2": {
+		Ratio: 0, CompletionRatio: 1,
+		InputModalities:             textInputs,
+		OutputModalities:            textOutputs,
+		SupportedFeatures:           reasoningFeatures,
+		SupportedSamplingParameters: samplingParams,
+		Description:                 "NVIDIA Nemotron Nano 9B v2: high-efficiency hybrid Transformer-Mamba model excelling in reasoning and agentic tasks, with a configurable thinking budget. Free hosted endpoint.",
 	},
 	"nvidia/nemotron-mini-4b-instruct": {
 		Ratio: 0, CompletionRatio: 1,
@@ -381,7 +390,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		OutputModalities:            textOutputs,
 		SupportedFeatures:           chatFeatures,
 		SupportedSamplingParameters: samplingParams,
-		Description:                 "Microsoft Phi-4 Multimodal Instruct: image+audio multimodal chat model. Free hosted endpoint.",
+		Description:                 "Microsoft Phi-4 Multimodal Instruct: image+audio multimodal chat model. Free hosted endpoint. DEPRECATED: NVIDIA states this hosted API will be deprecated 2026-07-15 and no longer supported afterward.",
 	},
 
 	// ---- Other popular hosted chat models (Free Endpoint) ----
@@ -399,10 +408,20 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		OutputModalities:            textOutputs,
 		SupportedFeatures:           reasoningFeatures,
 		SupportedSamplingParameters: samplingParams,
-		Description:                 "Z.ai GLM-5.1: general-purpose reasoning chat model. Free hosted endpoint.",
+		Description:                 "Z.ai GLM-5.1: general-purpose reasoning chat model. Free hosted endpoint. DEPRECATED: Free Endpoint availability is now listed as Deprecated on NVIDIA's catalog (Partner Endpoint/Download remain available); superseded by z-ai/glm-5.2.",
+	},
+	"z-ai/glm-5.2": {
+		Ratio: 0, CompletionRatio: 1,
+		InputModalities:             textInputs,
+		OutputModalities:            textOutputs,
+		SupportedFeatures:           reasoningFeatures,
+		SupportedSamplingParameters: samplingParams,
+		Description:                 "Z.ai GLM-5.2: flagship LLM for agentic workflows, coding, and long-horizon reasoning tasks. Free hosted endpoint.",
 	},
 	"minimaxai/minimax-m3": {
 		Ratio: 0, CompletionRatio: 1,
+		ContextLength:               196608,
+		MaxOutputTokens:             8192,
 		InputModalities:             visionInputs,
 		OutputModalities:            textOutputs,
 		SupportedFeatures:           reasoningFeatures,

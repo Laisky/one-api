@@ -15,7 +15,7 @@ var zaiGLMModelRatios = map[string]adaptor.ModelConfig{
 		CompletionRatio:             3.94285714286,
 		ContextLength:               65536,
 		MaxOutputTokens:             65536,
-		InputModalities:             novitaTextOnlyModalities,
+		InputModalities:             novitaTextImageInModalities,
 		OutputModalities:            novitaTextOnlyModalities,
 		SupportedFeatures:           novitaChatFeatures,
 		SupportedSamplingParameters: novitaSamplingParams,
@@ -57,7 +57,7 @@ var zaiGLMModelRatios = map[string]adaptor.ModelConfig{
 		CachedInputRatio:            0.11 * ratio.MilliTokensUsd,
 		ContextLength:               65536,
 		MaxOutputTokens:             16384,
-		InputModalities:             novitaTextImageInModalities,
+		InputModalities:             novitaTextImageVideoInModalities,
 		OutputModalities:            novitaTextOnlyModalities,
 		SupportedFeatures:           novitaChatFeatures,
 		SupportedSamplingParameters: novitaSamplingParams,
@@ -85,7 +85,7 @@ var zaiGLMModelRatios = map[string]adaptor.ModelConfig{
 		CachedInputRatio:            0.055 * ratio.MilliTokensUsd,
 		ContextLength:               131072,
 		MaxOutputTokens:             32768,
-		InputModalities:             novitaTextImageInModalities,
+		InputModalities:             novitaTextImageVideoInModalities,
 		OutputModalities:            novitaTextOnlyModalities,
 		SupportedFeatures:           novitaChatFeatures,
 		SupportedSamplingParameters: novitaSamplingParams,
@@ -184,6 +184,7 @@ var zaiGLMModelRatios = map[string]adaptor.ModelConfig{
 	"zai-org/glm-5v-turbo": {
 		Ratio:                       1.20 * ratio.MilliTokensUsd,
 		CompletionRatio:             4.00 / 1.20,
+		CachedInputRatio:            0.24 * ratio.MilliTokensUsd, // cache-read $0.24/M
 		ContextLength:               204800,
 		MaxOutputTokens:             131072,
 		InputModalities:             novitaTextImageVideoInModalities,
@@ -219,6 +220,6 @@ var zaiGLMModelRatios = map[string]adaptor.ModelConfig{
 		SupportedSamplingParameters: novitaSamplingParams,
 		Quantization:                "bf16",
 		HuggingFaceID:               "zai-org/GLM-OCR",
-		Description:                 "Z.AI GLM-OCR layout/parsing model accepting image input.",
+		Description:                 "Z.AI GLM-OCR layout/parsing model accepting image input. Retired: absent from Novita's live serverless catalog and pricing page as of 2026-07-13.",
 	},
 }

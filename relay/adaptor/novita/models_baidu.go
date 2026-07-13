@@ -14,8 +14,9 @@ var baiduErnieModelRatios = map[string]adaptor.ModelConfig{
 	"baidu/cobuddy": {
 		Ratio:                       0.28 * ratio.MilliTokensUsd,
 		CompletionRatio:             1.13 / 0.28,
+		CachedInputRatio:            0.07 * ratio.MilliTokensUsd, // cache-read $0.07/M
 		ContextLength:               131072,
-		MaxOutputTokens:             32768,
+		MaxOutputTokens:             65536,
 		InputModalities:             novitaTextOnlyModalities,
 		OutputModalities:            novitaTextOnlyModalities,
 		SupportedFeatures:           novitaReasoningFeatures,
@@ -80,7 +81,7 @@ var baiduErnieModelRatios = map[string]adaptor.ModelConfig{
 		CompletionRatio:             1,
 		ContextLength:               131072,
 		MaxOutputTokens:             65536,
-		InputModalities:             novitaTextImageInModalities,
+		InputModalities:             novitaTextImageVideoInModalities,
 		OutputModalities:            novitaTextOnlyModalities,
 		SupportedFeatures:           novitaReasoningFeatures,
 		SupportedSamplingParameters: novitaReasoningSamplingParams,

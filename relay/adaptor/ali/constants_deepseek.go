@@ -23,8 +23,8 @@ import (
 //   - https://www.alibabacloud.com/help/en/model-studio/deepseek-api
 var deepseekModelRatios = map[string]adaptor.ModelConfig{
 	"deepseek-r1": {
-		Ratio:                       1 * ratio.MilliTokensRmb,
-		CompletionRatio:             8,
+		Ratio:                       4 * ratio.MilliTokensRmb,
+		CompletionRatio:             4,
 		ContextLength:               16384,
 		MaxOutputTokens:             16384,
 		InputModalities:             []string{"text"},
@@ -37,8 +37,8 @@ var deepseekModelRatios = map[string]adaptor.ModelConfig{
 		Description:                 "DeepSeek-R1: open-weight reasoning flagship hosted on Alibaba Model Studio.",
 	},
 	"deepseek-r1-0528": {
-		Ratio:                       1 * ratio.MilliTokensRmb,
-		CompletionRatio:             8,
+		Ratio:                       4 * ratio.MilliTokensRmb,
+		CompletionRatio:             4,
 		ContextLength:               16384,
 		MaxOutputTokens:             16384,
 		InputModalities:             []string{"text"},
@@ -51,8 +51,8 @@ var deepseekModelRatios = map[string]adaptor.ModelConfig{
 		Description:                 "DeepSeek-R1-0528 refreshed reasoning checkpoint hosted on Alibaba Model Studio.",
 	},
 	"deepseek-v3": {
-		Ratio:                       1 * ratio.MilliTokensRmb,
-		CompletionRatio:             2,
+		Ratio:                       2 * ratio.MilliTokensRmb,
+		CompletionRatio:             4,
 		ContextLength:               131072,
 		MaxOutputTokens:             8192,
 		InputModalities:             []string{"text"},
@@ -64,8 +64,8 @@ var deepseekModelRatios = map[string]adaptor.ModelConfig{
 		Description:                 "DeepSeek-V3: open-weight chat flagship hosted on Alibaba Model Studio.",
 	},
 	"deepseek-v3.1": {
-		Ratio:                       1 * ratio.MilliTokensRmb,
-		CompletionRatio:             4,
+		Ratio:                       4 * ratio.MilliTokensRmb,
+		CompletionRatio:             3,
 		ContextLength:               131072,
 		MaxOutputTokens:             65536,
 		InputModalities:             []string{"text"},
@@ -78,8 +78,9 @@ var deepseekModelRatios = map[string]adaptor.ModelConfig{
 		Description:                 "DeepSeek-V3.1 hybrid-thinking chat model hosted on Alibaba Model Studio.",
 	},
 	"deepseek-v3.2": {
-		Ratio:                       1 * ratio.MilliTokensRmb,
-		CompletionRatio:             4,
+		Ratio:                       2 * ratio.MilliTokensRmb,
+		CachedInputRatio:            0.2 * 2 * ratio.MilliTokensRmb,
+		CompletionRatio:             1.5,
 		ContextLength:               131072,
 		MaxOutputTokens:             65536,
 		InputModalities:             []string{"text"},
@@ -92,8 +93,8 @@ var deepseekModelRatios = map[string]adaptor.ModelConfig{
 		Description:                 "DeepSeek-V3.2 hybrid-thinking chat model hosted on Alibaba Model Studio (recommended default).",
 	},
 	"deepseek-v3.2-exp": {
-		Ratio:                       1 * ratio.MilliTokensRmb,
-		CompletionRatio:             4,
+		Ratio:                       2 * ratio.MilliTokensRmb,
+		CompletionRatio:             1.5,
 		ContextLength:               131072,
 		MaxOutputTokens:             65536,
 		InputModalities:             []string{"text"},
@@ -106,7 +107,7 @@ var deepseekModelRatios = map[string]adaptor.ModelConfig{
 		Description:                 "DeepSeek-V3.2 experimental snapshot hosted on Alibaba Model Studio.",
 	},
 	"deepseek-r1-distill-qwen-1.5b": {
-		Ratio:                       0.07 * ratio.MilliTokensRmb,
+		Ratio:                       0,
 		CompletionRatio:             0.28,
 		ContextLength:               32768,
 		MaxOutputTokens:             16384,
@@ -117,11 +118,11 @@ var deepseekModelRatios = map[string]adaptor.ModelConfig{
 		MaxReasoningTokens:          16384,
 		Quantization:                "bf16",
 		HuggingFaceID:               "deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B",
-		Description:                 "DeepSeek-R1 distilled into Qwen 1.5B (reasoning-focused).",
+		Description:                 "DeepSeek-R1 distilled into Qwen 1.5B (reasoning-focused). Limited-time free (限时免费) on Alibaba Model Studio: no listed per-token price.",
 	},
 	"deepseek-r1-distill-qwen-7b": {
-		Ratio:                       0.14 * ratio.MilliTokensRmb,
-		CompletionRatio:             0.28,
+		Ratio:                       0.5 * ratio.MilliTokensRmb,
+		CompletionRatio:             2,
 		ContextLength:               32768,
 		MaxOutputTokens:             16384,
 		InputModalities:             []string{"text"},
@@ -134,8 +135,8 @@ var deepseekModelRatios = map[string]adaptor.ModelConfig{
 		Description:                 "DeepSeek-R1 distilled into Qwen 7B (reasoning-focused).",
 	},
 	"deepseek-r1-distill-qwen-14b": {
-		Ratio:                       0.28 * ratio.MilliTokensRmb,
-		CompletionRatio:             0.28,
+		Ratio:                       1 * ratio.MilliTokensRmb,
+		CompletionRatio:             3,
 		ContextLength:               32768,
 		MaxOutputTokens:             16384,
 		InputModalities:             []string{"text"},
@@ -148,8 +149,8 @@ var deepseekModelRatios = map[string]adaptor.ModelConfig{
 		Description:                 "DeepSeek-R1 distilled into Qwen 14B (reasoning-focused).",
 	},
 	"deepseek-r1-distill-qwen-32b": {
-		Ratio:                       0.42 * ratio.MilliTokensRmb,
-		CompletionRatio:             0.28,
+		Ratio:                       2 * ratio.MilliTokensRmb,
+		CompletionRatio:             3,
 		ContextLength:               32768,
 		MaxOutputTokens:             16384,
 		InputModalities:             []string{"text"},
@@ -173,7 +174,7 @@ var deepseekModelRatios = map[string]adaptor.ModelConfig{
 		MaxReasoningTokens:          16384,
 		Quantization:                "bf16",
 		HuggingFaceID:               "deepseek-ai/DeepSeek-R1-Distill-Llama-8B",
-		Description:                 "DeepSeek-R1 distilled into Llama 8B (reasoning-focused).",
+		Description:                 "DeepSeek-R1 distilled into Llama 8B (reasoning-focused). Retired (已下线) on Alibaba Model Studio; Aliyun recommends 深度思考/DeepSeek-Ali/Kimi-Ali as replacements.",
 	},
 	// deepseek-v4-flash: Alibaba Model Studio China-mainland CNY pricing
 	// (verified 2026-06-27 against help.aliyun.com/zh/model-studio/model-pricing):
@@ -194,8 +195,27 @@ var deepseekModelRatios = map[string]adaptor.ModelConfig{
 		HuggingFaceID:               "deepseek-ai/DeepSeek-V4-Flash",
 		Description:                 "DeepSeek-V4-Flash MoE chat model (hybrid thinking, 1M context) hosted on Alibaba Model Studio.",
 	},
+	// deepseek-v4-pro: Alibaba Model Studio China-mainland CNY pricing
+	// (verified 2026-07-13 against help.aliyun.com/zh/model-studio/model-pricing):
+	// input ¥12 / output ¥24 per 1M. Alibaba bills context-cache hits at 20% of the
+	// standard input price (¥12 * 0.20 = ¥2.4), per help.aliyun.com/zh/model-studio/context-cache.
+	"deepseek-v4-pro": {
+		Ratio:                       12 * ratio.MilliTokensRmb,
+		CachedInputRatio:            0.2 * 12 * ratio.MilliTokensRmb,
+		CompletionRatio:             2,
+		ContextLength:               1000000,
+		MaxOutputTokens:             393216,
+		InputModalities:             []string{"text"},
+		OutputModalities:            []string{"text"},
+		SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs", "reasoning"},
+		SupportedSamplingParameters: qwenStandardSamplingParameters(),
+		MaxReasoningTokens:          393216,
+		Quantization:                "fp8",
+		HuggingFaceID:               "deepseek-ai/DeepSeek-V4-Pro",
+		Description:                 "DeepSeek-V4-Pro MoE chat model (hybrid thinking, 1M context) hosted on Alibaba Model Studio.",
+	},
 	"deepseek-r1-distill-llama-70b": {
-		Ratio:                       1 * ratio.MilliTokensRmb,
+		Ratio:                       0,
 		CompletionRatio:             2,
 		ContextLength:               32768,
 		MaxOutputTokens:             16384,
@@ -206,6 +226,6 @@ var deepseekModelRatios = map[string]adaptor.ModelConfig{
 		MaxReasoningTokens:          16384,
 		Quantization:                "bf16",
 		HuggingFaceID:               "deepseek-ai/DeepSeek-R1-Distill-Llama-70B",
-		Description:                 "DeepSeek-R1 distilled into Llama 70B (reasoning-focused).",
+		Description:                 "DeepSeek-R1 distilled into Llama 70B (reasoning-focused). Free-trial-only (目前仅供免费体验) on Alibaba Model Studio: not callable once the free quota is exhausted (no paid tier currently).",
 	},
 }

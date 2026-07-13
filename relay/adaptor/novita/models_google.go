@@ -10,12 +10,26 @@ import (
 // chat endpoints on the public pricing page.
 // Source: https://novita.ai/llm-api  (retrieved 2026-04-28)
 var googleGemmaModelRatios = map[string]adaptor.ModelConfig{
+	"google/gemma-3-12b-it": {
+		// Source: https://api.novita.ai/v3/openai/models (retrieved 2026-07-13)
+		Ratio:                       0.05 * ratio.MilliTokensUsd,
+		CompletionRatio:             0.1 / 0.05, // =2.0
+		ContextLength:               131072,
+		MaxOutputTokens:             8192,
+		InputModalities:             novitaTextImageInModalities,
+		OutputModalities:            novitaTextOnlyModalities,
+		SupportedFeatures:           novitaChatFeatures,
+		SupportedSamplingParameters: novitaSamplingParams,
+		Quantization:                "bf16",
+		HuggingFaceID:               "google/gemma-3-12b-it",
+		Description:                 "Google Gemma 3 12B instruction-tuned chat model with text+image input and 128K context.",
+	},
 	"google/gemma-3-27b-it": {
 		Ratio:                       0.119 * ratio.MilliTokensUsd,
 		CompletionRatio:             1.68067226891,
 		ContextLength:               98304,
 		MaxOutputTokens:             16384,
-		InputModalities:             novitaTextOnlyModalities,
+		InputModalities:             novitaTextImageInModalities,
 		OutputModalities:            novitaTextOnlyModalities,
 		SupportedFeatures:           novitaChatFeatures,
 		SupportedSamplingParameters: novitaSamplingParams,
@@ -28,7 +42,7 @@ var googleGemmaModelRatios = map[string]adaptor.ModelConfig{
 		CompletionRatio:             3.07692307692,
 		ContextLength:               262144,
 		MaxOutputTokens:             131072,
-		InputModalities:             novitaTextOnlyModalities,
+		InputModalities:             novitaTextImageInModalities,
 		OutputModalities:            novitaTextOnlyModalities,
 		SupportedFeatures:           novitaChatFeatures,
 		SupportedSamplingParameters: novitaSamplingParams,
@@ -41,7 +55,7 @@ var googleGemmaModelRatios = map[string]adaptor.ModelConfig{
 		CompletionRatio:             2.85714285714,
 		ContextLength:               262144,
 		MaxOutputTokens:             131072,
-		InputModalities:             novitaTextOnlyModalities,
+		InputModalities:             novitaTextImageInModalities,
 		OutputModalities:            novitaTextOnlyModalities,
 		SupportedFeatures:           novitaChatFeatures,
 		SupportedSamplingParameters: novitaSamplingParams,

@@ -249,6 +249,20 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		Description:   "Alibaba Qwen3 30B/A3B mixture-of-experts model (fp8) on Cloudflare Workers AI.",
 	},
 
+	// Moondream Models
+	"@cf/moondream/moondream3.1-9B-A2B": {
+		// Reasoning is a boolean toggle (default: true) enabling a reasoning
+		// trace on the `query` task, not an effort-tiered parameter, so no
+		// SupportedReasoningEfforts/DefaultReasoningEffort is set. No
+		// tools/function-calling documented for this model.
+		Ratio: 0.300 * ratio.MilliTokensUsd, CompletionRatio: 1.000 / 0.300,
+		ContextLength: 32768, MaxOutputTokens: 28672,
+		InputModalities: cfVisionInputs, OutputModalities: cfTextOutputs,
+		SupportedFeatures: cfReasoningFeatures, SupportedSamplingParameters: cfBasicSamplingParams,
+		HuggingFaceID: "moondream/moondream3.1-9B-A2B",
+		Description:   "Moondream 3.1 9B/A2B mixture-of-experts vision-language model (query, caption, point, detect tasks) on Cloudflare Workers AI.",
+	},
+
 	// IBM / ZAI / NVIDIA / Moonshot
 	"@cf/ibm-granite/granite-4.0-h-micro": {
 		// Catalog labels: Function calling.

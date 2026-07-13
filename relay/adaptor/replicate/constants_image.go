@@ -47,6 +47,28 @@ var replicateImageModelRatios = map[string]adaptor.ModelConfig{
 		InputModalities: imageEditInputs, OutputModalities: imageOutputs,
 		Description: "FLUX.2 [pro] high-resolution text-to-image and multi-reference editing model.",
 	},
+	"black-forest-labs/flux-2-flex": {
+		// FLUX.2 [flex] is priced per megapixel on Replicate: $0.06 per input-image MP +
+		// $0.06 per output-image MP. This adaptor's helper only encodes a flat per-image
+		// price, so we bill the 1MP-equivalent ($0.06), matching a default single 1024x1024
+		// (1MP) text-to-image. NOTE: high-resolution outputs and multi-image edits (which add
+		// per-input-MP charges) UNDERCHARGE here because per-MP pricing is not representable.
+		// https://replicate.com/black-forest-labs/flux-2-flex
+		Ratio: 0, CompletionRatio: 1.0, Image: replicateImageConfig(0.06),
+		InputModalities: imageEditInputs, OutputModalities: imageOutputs,
+		Description: "FLUX.2 [flex] tunable-quality text-to-image and multi-reference editing model (per-megapixel priced upstream).",
+	},
+	"black-forest-labs/flux-2-klein-4b": {
+		// FLUX.2 [klein 4B] is priced per megapixel on Replicate: $1 per 1,000 input-image MP +
+		// $1 per 1,000 output-image MP (i.e. $0.001/MP each). This adaptor's helper only encodes a
+		// flat per-image price, so we bill the 1MP-equivalent ($0.001), matching a default single
+		// 1024x1024 (1MP) text-to-image. NOTE: high-resolution outputs and multi-image edits
+		// UNDERCHARGE here because per-MP pricing is not representable.
+		// https://replicate.com/black-forest-labs/flux-2-klein-4b
+		Ratio: 0, CompletionRatio: 1.0, Image: replicateImageConfig(0.001),
+		InputModalities: imageEditInputs, OutputModalities: imageOutputs,
+		Description: "FLUX.2 [klein 4B] cheapest open-weight FLUX.2 text-to-image and editing tier (per-megapixel priced upstream).",
+	},
 	"black-forest-labs/flux-1.1-pro-ultra": {
 		Ratio: 0, CompletionRatio: 1.0, Image: replicateImageConfig(0.06),
 		InputModalities: imageInputs, OutputModalities: imageOutputs,
@@ -174,6 +196,13 @@ var replicateImageModelRatios = map[string]adaptor.ModelConfig{
 		Ratio: 0, CompletionRatio: 1.0, Image: replicateImageConfig(0.04),
 		InputModalities: imageInputs, OutputModalities: imageOutputs,
 		Description: "Google Imagen 4 high-quality managed text-to-image model.",
+	},
+	"google/imagen-4-ultra": {
+		// Flat $0.06 per output image, text-to-image only.
+		// https://replicate.com/google/imagen-4-ultra
+		Ratio: 0, CompletionRatio: 1.0, Image: replicateImageConfig(0.06),
+		InputModalities: imageInputs, OutputModalities: imageOutputs,
+		Description: "Google Imagen 4 Ultra highest-fidelity tier of the Imagen 4 text-to-image family.",
 	},
 	"google/imagen-4-fast": {
 		Ratio: 0, CompletionRatio: 1.0, Image: replicateImageConfig(0.02),

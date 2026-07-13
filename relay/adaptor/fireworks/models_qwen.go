@@ -27,7 +27,7 @@ var qwenModels = map[string]adaptor.ModelConfig{
 		MaxReasoningTokens:        38912,
 		Quantization:              "fp16",
 		HuggingFaceID:             "Qwen/Qwen3-VL-30B-A3B-Thinking",
-		Description:               "Alibaba Qwen3-VL-30B-A3B Thinking (31.1B MoE) multimodal reasoning model with 256K context and visual perception/agent skills.",
+		Description:               "Alibaba Qwen3-VL-30B-A3B Thinking (31.1B MoE) multimodal reasoning model with 256K context and visual perception/agent skills. Retired from Fireworks serverless 2026-05-14; on-demand/dedicated only; migrate to Kimi K2.6.",
 	},
 	"accounts/fireworks/models/qwen2p5-72b-instruct": {
 		Ratio:                       0.90 * ratio.MilliTokensUsd,
@@ -40,7 +40,7 @@ var qwenModels = map[string]adaptor.ModelConfig{
 		SupportedSamplingParameters: fwChatSamplingParams,
 		Quantization:                "fp16",
 		HuggingFaceID:               "Qwen/Qwen2.5-72B-Instruct",
-		Description:                 "Alibaba Qwen2.5 72B Instruct dense model with 128K context, strong multilingual coverage, coding, and math.",
+		Description:                 "Alibaba Qwen2.5 72B Instruct dense model with 128K context, strong multilingual coverage, coding, and math. Retired from Fireworks serverless (confirmed via model card, 2026-07-13); on-demand/dedicated only.",
 	},
 	"accounts/fireworks/models/qwen3-8b": {
 		Ratio:                       0.20 * ratio.MilliTokensUsd,
@@ -53,7 +53,7 @@ var qwenModels = map[string]adaptor.ModelConfig{
 		SupportedSamplingParameters: fwChatSamplingParams,
 		Quantization:                "fp16",
 		HuggingFaceID:               "Qwen/Qwen3-8B",
-		Description:                 "Alibaba Qwen3 8B dense model with switchable thinking/non-thinking modes and 128K context.",
+		Description:                 "Alibaba Qwen3 8B dense model with switchable thinking/non-thinking modes and 128K context. Retired from Fireworks serverless 2026-05-14; on-demand/dedicated only; migrate to GPT-OSS 20B.",
 	},
 	"accounts/fireworks/models/qwen3-0p6b": {
 		Ratio:                       0.10 * ratio.MilliTokensUsd,
@@ -66,7 +66,7 @@ var qwenModels = map[string]adaptor.ModelConfig{
 		SupportedSamplingParameters: fwChatSamplingParams,
 		Quantization:                "fp16",
 		HuggingFaceID:               "Qwen/Qwen3-0.6B",
-		Description:                 "Alibaba Qwen3 0.6B ultra-compact dense model for embedded chat workloads with 32K context.",
+		Description:                 "Alibaba Qwen3 0.6B ultra-compact dense model for embedded chat workloads with 32K context. Retired from Fireworks serverless (confirmed via model card, 2026-07-13); on-demand/dedicated only.",
 	},
 	"accounts/fireworks/models/qwen3p7-plus": {
 		Ratio:                       0.40 * ratio.MilliTokensUsd,

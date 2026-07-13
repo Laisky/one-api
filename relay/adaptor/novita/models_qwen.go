@@ -42,7 +42,7 @@ var qwenModelRatios = map[string]adaptor.ModelConfig{
 		CompletionRatio:             1,
 		ContextLength:               32768,
 		MaxOutputTokens:             32768,
-		InputModalities:             novitaTextImageInModalities,
+		InputModalities:             novitaTextImageVideoInModalities,
 		OutputModalities:            novitaTextOnlyModalities,
 		SupportedFeatures:           novitaChatFeatures,
 		SupportedSamplingParameters: novitaSamplingParams,
@@ -198,7 +198,7 @@ var qwenModelRatios = map[string]adaptor.ModelConfig{
 		CompletionRatio:             5,
 		ContextLength:               131072,
 		MaxOutputTokens:             32768,
-		InputModalities:             novitaTextImageInModalities,
+		InputModalities:             novitaTextImageVideoInModalities,
 		OutputModalities:            novitaTextOnlyModalities,
 		SupportedFeatures:           novitaChatFeatures,
 		SupportedSamplingParameters: novitaSamplingParams,
@@ -211,7 +211,7 @@ var qwenModelRatios = map[string]adaptor.ModelConfig{
 		CompletionRatio:             4.0306122449,
 		ContextLength:               131072,
 		MaxOutputTokens:             32768,
-		InputModalities:             novitaTextImageInModalities,
+		InputModalities:             novitaTextImageVideoInModalities,
 		OutputModalities:            novitaTextOnlyModalities,
 		SupportedFeatures:           novitaReasoningFeatures,
 		SupportedSamplingParameters: novitaReasoningSamplingParams,
@@ -224,7 +224,7 @@ var qwenModelRatios = map[string]adaptor.ModelConfig{
 		CompletionRatio:             3.5,
 		ContextLength:               131072,
 		MaxOutputTokens:             32768,
-		InputModalities:             novitaTextImageInModalities,
+		InputModalities:             novitaTextImageVideoInModalities,
 		OutputModalities:            novitaTextOnlyModalities,
 		SupportedFeatures:           novitaChatFeatures,
 		SupportedSamplingParameters: novitaSamplingParams,
@@ -237,7 +237,7 @@ var qwenModelRatios = map[string]adaptor.ModelConfig{
 		CompletionRatio:             5,
 		ContextLength:               131072,
 		MaxOutputTokens:             32768,
-		InputModalities:             novitaTextImageInModalities,
+		InputModalities:             novitaTextImageVideoInModalities,
 		OutputModalities:            novitaTextOnlyModalities,
 		SupportedFeatures:           novitaReasoningFeatures,
 		SupportedSamplingParameters: novitaReasoningSamplingParams,
@@ -250,7 +250,7 @@ var qwenModelRatios = map[string]adaptor.ModelConfig{
 		CompletionRatio:             6.25,
 		ContextLength:               131072,
 		MaxOutputTokens:             32768,
-		InputModalities:             novitaTextImageInModalities,
+		InputModalities:             novitaTextImageVideoInModalities,
 		OutputModalities:            novitaTextOnlyModalities,
 		SupportedFeatures:           novitaChatFeatures,
 		SupportedSamplingParameters: novitaSamplingParams,
@@ -322,17 +322,32 @@ var qwenModelRatios = map[string]adaptor.ModelConfig{
 		Description:                 "Qwen3.5 397B/A17B MoE flagship chat model with 256K context.",
 	},
 	"qwen/qwen3-max": {
-		// Novita lists qwen3-max with tiered billing; this flat rate tracks the
-		// top tier ($2.11/$8.45). Source: https://api.novita.ai/v3/openai/models (retrieved 2026-06-13)
-		Ratio:                       2.11 * ratio.MilliTokensUsd,
-		CompletionRatio:             8.45 / 2.11,
+		// Novita bills qwen3-max with three input-token tiers; the base struct holds
+		// tier 1 (input<=32768) and Tiers holds tiers 2 and 3.
+		// Source: https://api.novita.ai/v3/openai/models (retrieved 2026-07-13)
+		Ratio:           0.845 * ratio.MilliTokensUsd,
+		CompletionRatio: 3.38 / 0.845, // =4.0
+		Tiers: []adaptor.ModelRatioTier{
+			{
+				// tier 2: 32768 < input <= 131072 ($1.40/$5.64)
+				Ratio:               1.40 * ratio.MilliTokensUsd,
+				CompletionRatio:     5.64 / 1.40, // =4.0286
+				InputTokenThreshold: 32768,
+			},
+			{
+				// tier 3: 131072 < input <= 258048 ($2.11/$8.45)
+				Ratio:               2.11 * ratio.MilliTokensUsd,
+				CompletionRatio:     8.45 / 2.11, // =4.0047
+				InputTokenThreshold: 131072,
+			},
+		},
 		ContextLength:               262144,
 		MaxOutputTokens:             65536,
 		InputModalities:             novitaTextOnlyModalities,
 		OutputModalities:            novitaTextOnlyModalities,
 		SupportedFeatures:           novitaChatFeatures,
 		SupportedSamplingParameters: novitaSamplingParams,
-		Description:                 "Alibaba Qwen3 Max flagship chat model with 256K context.",
+		Description:                 "Alibaba Qwen3 Max flagship chat model with 256K context and tiered pricing.",
 	},
 	"qwen/qwen3.7-max": {
 		Ratio:                       1.25 * ratio.MilliTokensUsd,
@@ -373,12 +388,16 @@ var qwenModelRatios = map[string]adaptor.ModelConfig{
 		Description:                 "Qwen3.6 35B/A3B MoE multimodal reasoning chat model with 256K context.",
 	},
 	"qwen/qwen3-omni-30b-a3b-instruct": {
+		// LIMITATION: Novita prices this omni model per input modality (text $0.25/M,
+		// image/video $0.46/M, audio $2.20/M ~9x text). The single Ratio field can only
+		// encode the text rate, so audio/image/video input is under-billed here.
+		// Source: https://api.novita.ai/v3/openai/models (retrieved 2026-07-13)
 		Ratio:                       0.25 * ratio.MilliTokensUsd,
 		CompletionRatio:             0.97 / 0.25,
 		ContextLength:               65536,
 		MaxOutputTokens:             16384,
 		InputModalities:             novitaOmniInModalities,
-		OutputModalities:            novitaTextOnlyModalities,
+		OutputModalities:            novitaTextAudioOutModalities,
 		SupportedFeatures:           novitaChatFeatures,
 		SupportedSamplingParameters: novitaSamplingParams,
 		Quantization:                "bf16",
