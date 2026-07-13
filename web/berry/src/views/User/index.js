@@ -153,7 +153,7 @@ export default function Users() {
           <TableToolBar
             filterName={searchKeyword}
             handleFilterName={handleSearchKeyword}
-            placeholder={'搜索用户的ID，用户名，显示名称，以及邮箱地址...'}
+            placeholder={'搜索用户的ID，UUID，用户名，显示名称，以及邮箱地址...'}
           />
         </Box>
         <Toolbar

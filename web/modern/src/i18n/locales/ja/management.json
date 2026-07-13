@@ -595,7 +595,7 @@
     },
     "search": {
       "id_label": "ID",
-      "placeholder": "名前・タイプ・グループでチャンネルを検索..."
+      "placeholder": "名前・タイプ・グループ・UUIDでチャンネルを検索..."
     },
     "status": {
       "active": "有効",
@@ -704,7 +704,7 @@
     },
     "search": {
       "dropdown_placeholder": "引き換え名を入力...",
-      "placeholder": "名前で引き換えを検索..."
+      "placeholder": "名前またはUUIDで引き換えを検索..."
     },
     "status": {
       "disabled": "無効",
@@ -848,7 +848,7 @@
       },
       "search": {
         "id_label": "ID: {{id}}",
-        "placeholder": "名前でトークンを検索...",
+        "placeholder": "名前またはUUIDでトークンを検索...",
         "quota_label": "クォータ: {{quota}}"
       },
       "share": {
@@ -1093,7 +1093,7 @@
       },
       "search": {
         "id_label": "ID: {{id}}",
-        "placeholder": "ユーザー名でユーザーを検索...",
+        "placeholder": "ユーザー名またはUUIDでユーザーを検索...",
         "role_label": "ロール: {{role}}",
         "status_label": "ステータス: {{status}}"
       },

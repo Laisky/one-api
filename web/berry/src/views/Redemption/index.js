@@ -152,7 +152,7 @@ export default function Redemption() {
       </Stack>
       <Card>
         <Box component="form" onSubmit={searchRedemptions} noValidate sx={{marginTop: 2}}>
-          <TableToolBar filterName={searchKeyword} handleFilterName={handleSearchKeyword} placeholder={'搜索兑换码的ID和名称...'} />
+          <TableToolBar filterName={searchKeyword} handleFilterName={handleSearchKeyword} placeholder={'搜索兑换码的ID、名称和 UUID...'} />
         </Box>
         <Toolbar
           sx={{

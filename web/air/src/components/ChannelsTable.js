@@ -656,7 +656,7 @@ const ChannelsTable = () => {
               <Form.Input
                 field="search_keyword"
                 label="搜索"
-                placeholder="ID，名称和密钥 ..."
+                placeholder="ID，UUID，名称和密钥 ..."
                 value={searchKeyword}
                 loading={searching}
                 onChange={(v) => {

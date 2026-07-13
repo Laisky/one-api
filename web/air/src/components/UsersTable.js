@@ -338,7 +338,7 @@ const UsersTable = () => {
           icon="search"
           field="keyword"
           iconPosition="left"
-          placeholder="搜索用户的 ID，用户名，显示名称，以及邮箱地址 ..."
+          placeholder="搜索用户的 ID，UUID，用户名，显示名称，以及邮箱地址 ..."
           value={searchKeyword}
           loading={searching}
           onChange={value => handleKeywordChange(value)}

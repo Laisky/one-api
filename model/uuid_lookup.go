@@ -6,6 +6,20 @@ import (
 	"github.com/Laisky/errors/v2"
 )
 
+// normalizeUUIDKeyword canonicalizes a search keyword for exact UUID matching.
+// Server-generated UUIDs are stored as lowercase hyphenated strings, so trimming
+// surrounding whitespace and lowercasing lets a pasted UUID match regardless of
+// case or padding, uniformly across MySQL, PostgreSQL, and SQLite.
+//
+// Parameters:
+//   - keyword: raw search keyword supplied by the request.
+//
+// Return values:
+//   - string: trimmed, lowercased keyword suitable for a `uuid = ?` comparison.
+func normalizeUUIDKeyword(keyword string) string {
+	return strings.ToLower(strings.TrimSpace(keyword))
+}
+
 // GetUserByUUID retrieves a user by its external UUID.
 // Parameters:
 //   - uuid: canonical hyphenated UUID string.

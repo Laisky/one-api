@@ -595,7 +595,7 @@
     },
     "search": {
       "id_label": "ID",
-      "placeholder": "按名称、类型或分组搜索渠道..."
+      "placeholder": "按名称、类型、分组或 UUID 搜索渠道..."
     },
     "status": {
       "active": "运行中",
@@ -704,7 +704,7 @@
     },
     "search": {
       "dropdown_placeholder": "输入兑换码名称...",
-      "placeholder": "按名称搜索兑换码..."
+      "placeholder": "按名称或 UUID 搜索兑换码..."
     },
     "status": {
       "disabled": "已禁用",
@@ -848,7 +848,7 @@
       },
       "search": {
         "id_label": "ID: {{id}}",
-        "placeholder": "按名称搜索令牌...",
+        "placeholder": "按名称或 UUID 搜索令牌...",
         "quota_label": "额度: {{quota}}"
       },
       "share": {
@@ -1093,7 +1093,7 @@
       },
       "search": {
         "id_label": "ID: {{id}}",
-        "placeholder": "按用户名搜索用户...",
+        "placeholder": "按用户名或 UUID 搜索用户...",
         "role_label": "角色: {{role}}",
         "status_label": "状态: {{status}}"
       },

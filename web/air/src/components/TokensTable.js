@@ -564,7 +564,7 @@ const TokensTable = () => {
         <Form.Input
           field="keyword"
           label="搜索关键字"
-          placeholder="令牌名称"
+          placeholder="令牌名称或 UUID"
           value={searchKeyword}
           loading={searching}
           onChange={handleKeywordChange}

@@ -1080,7 +1080,7 @@ func GetUserLogsCount(userId int, logType int, startTimestamp int64, endTimestam
 func SearchAllLogs(keyword string, startIdx int, num int, sortBy string, sortOrder string) (logs []*Log, total int64, err error) {
 	db := excludeProvisionalScope(LOG_DB.Model(&Log{}))
 	if keyword != "" {
-		db = db.Where("content LIKE ?", "%"+keyword+"%")
+		db = db.Where("(content LIKE ? or uuid = ?)", "%"+keyword+"%", normalizeUUIDKeyword(keyword))
 	}
 	orderClause := GetLogOrderClause(sortBy, sortOrder)
 	db = db.Order(orderClause)
@@ -1098,7 +1098,7 @@ func SearchAllLogs(keyword string, startIdx int, num int, sortBy string, sortOrd
 func SearchUserLogs(userId int, keyword string, startIdx int, num int, sortBy string, sortOrder string) (logs []*Log, total int64, err error) {
 	db := excludeProvisionalScope(LOG_DB.Model(&Log{}).Where("user_id = ?", userId))
 	if keyword != "" {
-		db = db.Where("content LIKE ?", "%"+keyword+"%")
+		db = db.Where("(content LIKE ? or uuid = ?)", "%"+keyword+"%", normalizeUUIDKeyword(keyword))
 	}
 	orderClause := GetLogOrderClause(sortBy, sortOrder)
 	db = db.Order(orderClause)

@@ -179,7 +179,7 @@ func GetEnabledChannelsVersionSignature() (string, error) {
 func SearchChannels(keyword string, sortBy string, sortOrder string) (channels []*Channel, err error) {
 	orderClause := ValidateOrderClause(sortBy, sortOrder, channelSortFields, "id desc")
 
-	err = DB.Omit("key").Where("id = ? or name LIKE ?", helper.String2Int(keyword), keyword+"%").Order(orderClause).Find(&channels).Error
+	err = DB.Omit("key").Where("id = ? or name LIKE ? or uuid = ?", helper.String2Int(keyword), keyword+"%", normalizeUUIDKeyword(keyword)).Order(orderClause).Find(&channels).Error
 	if err != nil {
 		return nil, errors.Wrap(err, "search channels")
 	}

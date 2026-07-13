@@ -155,7 +155,7 @@ func GetUserTokenCount(userId int) (count int64, err error) {
 func SearchUserTokens(userId int, keyword string, startIdx int, num int, sortBy string, sortOrder string) (tokens []*Token, total int64, err error) {
 	db := DB.Model(&Token{}).Where("user_id = ?", userId)
 	if keyword != "" {
-		db = db.Where("name LIKE ?", keyword+"%")
+		db = db.Where("(name LIKE ? or uuid = ?)", keyword+"%", normalizeUUIDKeyword(keyword))
 	}
 	orderClause := ValidateOrderClause(sortBy, sortOrder, tokenSortFields, "id desc")
 	db = db.Order(orderClause)
@@ -187,7 +187,7 @@ func GetAllTokensForAdmin(userId int, startIdx int, num int, sortBy string, sort
 func SearchAllTokensForAdmin(keyword string, startIdx int, num int, sortBy string, sortOrder string) (tokens []*Token, total int64, err error) {
 	db := DB.Model(&Token{})
 	if keyword != "" {
-		db = db.Where("name LIKE ?", keyword+"%")
+		db = db.Where("(name LIKE ? or uuid = ?)", keyword+"%", normalizeUUIDKeyword(keyword))
 	}
 	orderClause := ValidateOrderClause(sortBy, sortOrder, tokenSortFields, "id desc")
 	db = db.Order(orderClause)

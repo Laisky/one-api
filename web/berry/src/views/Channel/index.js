@@ -258,7 +258,7 @@ export default function ChannelPage() {
       </Stack>
       <Card>
         <Box component="form" onSubmit={searchChannels} noValidate sx={{ marginTop: 2 }}>
-          <TableToolBar filterName={searchKeyword} handleFilterName={handleSearchKeyword} placeholder={'搜索渠道的 ID，名称和密钥 ...'} />
+          <TableToolBar filterName={searchKeyword} handleFilterName={handleSearchKeyword} placeholder={'搜索渠道的 ID，UUID，名称和密钥 ...'} />
         </Box>
         <Toolbar
           sx={{

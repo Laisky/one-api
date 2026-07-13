@@ -726,7 +726,7 @@ export function TokensPage() {
               onSearchValueChange={setSearchKeyword}
               onSearchSubmit={performSearch}
               onSearchSelect={(key) => navigate(`/tokens/edit/${key}`)}
-              searchPlaceholder={tr('search.placeholder', 'Search tokens by name...')}
+              searchPlaceholder={tr('search.placeholder', 'Search tokens by name or UUID...')}
               allowSearchAdditions={true}
               onRefresh={refresh}
               loading={loading}

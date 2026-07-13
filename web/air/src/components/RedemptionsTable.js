@@ -358,7 +358,7 @@ const RedemptionsTable = () => {
           field="keyword"
           icon="search"
           iconPosition="left"
-          placeholder="关键字(id或者名称)"
+          placeholder="关键字(id、名称或 UUID)"
           value={searchKeyword}
           loading={searching}
           onChange={handleKeywordChange}

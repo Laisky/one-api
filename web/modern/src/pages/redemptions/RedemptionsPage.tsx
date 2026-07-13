@@ -287,7 +287,7 @@ export function RedemptionsPage() {
           <div className={cn('flex gap-2 mb-3 flex-wrap', isMobile ? 'w-full flex-col' : 'items-center')}>
             <SearchableDropdown
               value={searchKeyword}
-              placeholder={tr('search.placeholder', 'Search redemptions by name...')}
+              placeholder={tr('search.placeholder', 'Search redemptions by name or UUID...')}
               searchPlaceholder={tr('search.dropdown_placeholder', 'Type redemption name...')}
               options={[]}
               searchEndpoint="/api/redemption/search"

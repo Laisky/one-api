@@ -595,7 +595,7 @@
     },
     "search": {
       "id_label": "ID",
-      "placeholder": "Buscar canales por nombre, tipo o grupo..."
+      "placeholder": "Buscar canales por nombre, tipo, grupo o UUID..."
     },
     "status": {
       "active": "Activo",
@@ -704,7 +704,7 @@
     },
     "search": {
       "dropdown_placeholder": "Escribe el nombre del canje...",
-      "placeholder": "Buscar canjes por nombre..."
+      "placeholder": "Buscar canjes por nombre o UUID..."
     },
     "status": {
       "disabled": "Deshabilitado",
@@ -848,7 +848,7 @@
       },
       "search": {
         "id_label": "ID: {{id}}",
-        "placeholder": "Buscar tokens por nombre...",
+        "placeholder": "Buscar tokens por nombre o UUID...",
         "quota_label": "Cuota: {{quota}}"
       },
       "share": {
@@ -1093,7 +1093,7 @@
       },
       "search": {
         "id_label": "ID: {{id}}",
-        "placeholder": "Buscar usuarios por nombre de usuario...",
+        "placeholder": "Buscar usuarios por nombre de usuario o UUID...",
         "role_label": "Rol: {{role}}",
         "status_label": "Estado: {{status}}"
       },

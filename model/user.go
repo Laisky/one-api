@@ -120,9 +120,9 @@ func SearchUsers(keyword string, sortBy string, sortOrder string) (users []*User
 	orderClause := ValidateOrderClause(sortBy, sortOrder, userSortFields, "id desc")
 
 	if !common.UsingPostgreSQL.Load() {
-		err = DB.Omit("password").Where("id = ? or username LIKE ? or email LIKE ? or display_name LIKE ?", keyword, keyword+"%", keyword+"%", keyword+"%").Order(orderClause).Find(&users).Error
+		err = DB.Omit("password").Where("id = ? or username LIKE ? or email LIKE ? or display_name LIKE ? or uuid = ?", helper.String2Int(keyword), keyword+"%", keyword+"%", keyword+"%", normalizeUUIDKeyword(keyword)).Order(orderClause).Find(&users).Error
 	} else {
-		err = DB.Omit("password").Where("username LIKE ? or email LIKE ? or display_name LIKE ?", keyword+"%", keyword+"%", keyword+"%").Order(orderClause).Find(&users).Error
+		err = DB.Omit("password").Where("username LIKE ? or email LIKE ? or display_name LIKE ? or uuid = ?", keyword+"%", keyword+"%", keyword+"%", normalizeUUIDKeyword(keyword)).Order(orderClause).Find(&users).Error
 	}
 	if err != nil {
 		return nil, errors.Wrap(err, "search users")

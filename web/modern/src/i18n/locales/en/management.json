@@ -595,7 +595,7 @@
     },
     "search": {
       "id_label": "ID",
-      "placeholder": "Search channels by name, type, or group..."
+      "placeholder": "Search channels by name, type, group, or UUID..."
     },
     "status": {
       "active": "Active",
@@ -704,7 +704,7 @@
     },
     "search": {
       "dropdown_placeholder": "Type redemption name...",
-      "placeholder": "Search redemptions by name..."
+      "placeholder": "Search redemptions by name or UUID..."
     },
     "status": {
       "disabled": "Disabled",
@@ -848,7 +848,7 @@
       },
       "search": {
         "id_label": "ID: {{id}}",
-        "placeholder": "Search tokens by name...",
+        "placeholder": "Search tokens by name or UUID...",
         "quota_label": "Quota: {{quota}}"
       },
       "share": {
@@ -1093,7 +1093,7 @@
       },
       "search": {
         "id_label": "ID: {{id}}",
-        "placeholder": "Search users by username...",
+        "placeholder": "Search users by username or UUID...",
         "role_label": "Role: {{role}}",
         "status_label": "Status: {{status}}"
       },

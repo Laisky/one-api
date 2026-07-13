@@ -595,7 +595,7 @@
     },
     "search": {
       "id_label": "ID",
-      "placeholder": "Rechercher un canal par nom, type ou groupe..."
+      "placeholder": "Rechercher un canal par nom, type, groupe ou UUID..."
     },
     "status": {
       "active": "Actif",
@@ -704,7 +704,7 @@
     },
     "search": {
       "dropdown_placeholder": "Tapez le nom du remboursement...",
-      "placeholder": "Rechercher des remboursements par nom..."
+      "placeholder": "Rechercher des remboursements par nom ou UUID..."
     },
     "status": {
       "disabled": "Désactivé",
@@ -848,7 +848,7 @@
       },
       "search": {
         "id_label": "ID : {{id}}",
-        "placeholder": "Rechercher des jetons par nom...",
+        "placeholder": "Rechercher des jetons par nom ou UUID...",
         "quota_label": "Quota : {{quota}}"
       },
       "share": {
@@ -1093,7 +1093,7 @@
       },
       "search": {
         "id_label": "ID : {{id}}",
-        "placeholder": "Rechercher des utilisateurs par nom d'utilisateur...",
+        "placeholder": "Rechercher des utilisateurs par nom d'utilisateur ou UUID...",
         "role_label": "Rôle : {{role}}",
         "status_label": "Statut : {{status}}"
       },
