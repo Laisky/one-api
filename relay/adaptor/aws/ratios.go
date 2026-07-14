@@ -184,7 +184,20 @@ var awsBedrockModelPricing = map[string]adaptor.ModelConfig{
 		SupportedFeatures: awsClaudeFeaturesWithReasoning, SupportedSamplingParameters: awsClaudeSamplingParams,
 		// Sonnet 5 is adaptive-thinking-only: budget_tokens is rejected upstream, so
 		// MaxReasoningTokens stays unset (matches first-party Sonnet 5 and AWS Opus 4.8).
-		Description: "Claude Sonnet 5 on AWS Bedrock with 1M-token context and adaptive thinking.",
+		Description: "Claude Sonnet 5 on AWS Bedrock with 1M-token context and adaptive thinking; base $3/$15 with an introductory $2/$10 promo applied as a time-window discount through 2026-08-31.",
+		// Bedrock mirrors Anthropic's introductory $2/$10 promo until 2026-09-01, then the $3/$15 base applies.
+		TimeWindows: []adaptor.TimeWindow{{
+			Name:     "claude-sonnet-5-intro-promo",
+			TimeZone: "UTC",
+			DateTo:   "2026-09-01",
+			Ranges:   []adaptor.ClockRange{{Start: "00:00", End: "00:00"}},
+			Overlay: adaptor.ModelConfig{
+				Ratio:             2 * ratio.MilliTokensUsd,
+				CachedInputRatio:  0.2 * ratio.MilliTokensUsd,
+				CacheWrite5mRatio: 2.5 * ratio.MilliTokensUsd,
+				CacheWrite1hRatio: 4 * ratio.MilliTokensUsd,
+			},
+		}},
 	},
 	"claude-3-opus-20240229": {
 		Ratio: 15 * ratio.MilliTokensUsd, CompletionRatio: 5.0,

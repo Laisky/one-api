@@ -221,6 +221,36 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		Description:                 "Qwen3.6 Max Preview on Bailian: closed-weight reasoning flagship released 2026-04-20 (256K context, 0-128K base tier billed here).",
 	},
 
+	// ----- Qwen3.7 (Bailian) ---------------------------------------------------
+	// Aliyun pricing (Beijing CNY/1M): qwen3.7-max 12/36 (cache 1.2, text-only
+	// reasoning); qwen3.7-plus 2/8 (cache 0.4, vision+GUI). Values mirror
+	// relay/adaptor/ali/constants_qwen_closed.go.
+	"qwen3.7-max": {
+		Ratio:                       12 * ratio.MilliTokensRmb,
+		CachedInputRatio:            1.2 * ratio.MilliTokensRmb,
+		CompletionRatio:             36.0 / 12.0,
+		ContextLength:               1000000,
+		MaxOutputTokens:             65536,
+		InputModalities:             bailianTextInputs,
+		OutputModalities:            bailianTextOutputs,
+		SupportedFeatures:           bailianReasoningFeatures,
+		SupportedSamplingParameters: bailianReasoningSamplingParameters,
+		MaxReasoningTokens:          65536,
+		Description:                 "Qwen3.7 Max on Bailian: closed-weight reasoning flagship (2026-05-20) with 1M context and native extended-thinking; text-only.",
+	},
+	"qwen3.7-plus": {
+		Ratio:                       2 * ratio.MilliTokensRmb,
+		CachedInputRatio:            0.2 * 2 * ratio.MilliTokensRmb,
+		CompletionRatio:             4, // 8 / 2 (0-256K base tier)
+		ContextLength:               1000000,
+		MaxOutputTokens:             8192,
+		InputModalities:             bailianMultimodalInputs,
+		OutputModalities:            bailianTextOutputs,
+		SupportedFeatures:           bailianChatFeatures,
+		SupportedSamplingParameters: bailianSamplingParameters,
+		Description:                 "Qwen3.7 Plus on Bailian: closed-weight multimodal vision+GUI agent (GA 2026-06-01) with 1M context; supports image input and computer-use tasks.",
+	},
+
 	// ----- Qwen Coder (Bailian) ------------------------------------------------
 	"qwen-coder-plus": {
 		Ratio:                       0.0036 * 1000 * ratio.MilliTokensRmb,
@@ -327,9 +357,9 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 
 	// ----- Qwen VL (Bailian) ---------------------------------------------------
 	"qwen-vl-max": {
-		Ratio:                       0.00165 * 1000 * ratio.MilliTokensRmb,
-		CachedInputRatio:            0.2 * (0.00165 * 1000 * ratio.MilliTokensRmb),
-		CompletionRatio:             2.49, // 4.11 / 1.65
+		Ratio:                       0.0016 * 1000 * ratio.MilliTokensRmb,
+		CachedInputRatio:            0.2 * (0.0016 * 1000 * ratio.MilliTokensRmb),
+		CompletionRatio:             2.5, // 4 / 1.6
 		ContextLength:               32000,
 		MaxOutputTokens:             2000,
 		InputModalities:             bailianMultimodalInputs,

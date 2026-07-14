@@ -220,7 +220,22 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		ContextLength: 1000000, MaxOutputTokens: 128000,
 		InputModalities: claudeVisionInputs, OutputModalities: claudeTextOutputs,
 		SupportedFeatures: claudeFeaturesWithReasoning, SupportedSamplingParameters: claudeAdaptiveOnlySamplingParams,
-		Description: "Claude Sonnet 5 balanced flagship with 1M-token context and adaptive thinking; temperature/top_p/top_k and budget_tokens are unsupported. Billed at standard $3/$15 per MTok (Anthropic's introductory $2/$10 promo runs through 2026-08-31).",
+		Description: "Claude Sonnet 5 balanced flagship with 1M-token context and adaptive thinking; temperature/top_p/top_k and budget_tokens are unsupported. Base billing is the standard $3/$15 per MTok; Anthropic's introductory $2/$10 promo is applied as a time-window discount through 2026-08-31.",
+		// Introductory promo: $2/$10 input/output (+cache-write 2.5/4, cached-read 0.2) until 2026-09-01,
+		// after which the $3/$15 standard base applies automatically. CompletionRatio (5.0) is inherited,
+		// so promo output = 2 * 5 = $10/MTok.
+		TimeWindows: []adaptor.TimeWindow{{
+			Name:     "claude-sonnet-5-intro-promo",
+			TimeZone: "UTC",
+			DateTo:   "2026-09-01",
+			Ranges:   []adaptor.ClockRange{{Start: "00:00", End: "00:00"}},
+			Overlay: adaptor.ModelConfig{
+				Ratio:             2 * ratio.MilliTokensUsd,
+				CachedInputRatio:  0.2 * ratio.MilliTokensUsd,
+				CacheWrite5mRatio: 2.5 * ratio.MilliTokensUsd,
+				CacheWrite1hRatio: 4 * ratio.MilliTokensUsd,
+			},
+		}},
 	},
 
 	// Claude 4 Haiku Models

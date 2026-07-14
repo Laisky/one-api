@@ -5,8 +5,9 @@ import (
 	"strings"
 
 	"github.com/Laisky/errors/v2"
-	"github.com/Laisky/one-api/common/logger"
 	"github.com/Laisky/zap"
+
+	"github.com/Laisky/one-api/common/logger"
 )
 
 // GetModelPriceConfigs returns the channel-specific model price configurations in the new unified format

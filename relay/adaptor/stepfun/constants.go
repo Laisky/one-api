@@ -70,7 +70,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		OutputModalities:            stepfunTextOutputs,
 		SupportedFeatures:           stepfunChatFeatures,
 		SupportedSamplingParameters: stepfunSamplingParams,
-		Description:                 "StepFun Step-2 Mini cost-optimized chat model.",
+		Description:                 "StepFun Step-2 Mini cost-optimized chat model. Officially retired 2026-07-08; migrate to step-3.7-flash (or step-1o-turbo-vision for vision / step-2x-large for image-gen).",
 	},
 	"step-2-16k": {
 		Ratio:                       38.0 * ratio.MilliTokensRmb,
@@ -81,7 +81,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		OutputModalities:            stepfunTextOutputs,
 		SupportedFeatures:           stepfunChatFeatures,
 		SupportedSamplingParameters: stepfunSamplingParams,
-		Description:                 "StepFun Step-2 second-generation closed-weight chat model with 16k context.",
+		Description:                 "StepFun Step-2 second-generation closed-weight chat model with 16k context. Officially retired 2026-07-08; migrate to step-3.7-flash (or step-1o-turbo-vision for vision / step-2x-large for image-gen).",
 	},
 
 	// Step-3 reasoning family. Context-dependent pricing; we encode the
@@ -102,7 +102,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 				InputTokenThreshold: 32000,
 			},
 		},
-		Description: "StepFun Step-3 multimodal reasoning model with tiered pricing (¥1.5-¥4 input / ¥4-¥10 output per 1M tokens).",
+		Description: "StepFun Step-3 multimodal reasoning model with tiered pricing (¥1.5-¥4 input / ¥4-¥10 output per 1M tokens). Officially retired 2026-07-08; migrate to step-3.7-flash (or step-1o-turbo-vision for vision / step-2x-large for image-gen).",
 	},
 	"step-3.5-flash": {
 		Ratio:            0.7 * ratio.MilliTokensRmb,
@@ -122,6 +122,21 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		DefaultReasoningEffort:    "medium",
 		HuggingFaceID:             "stepfun-ai/Step-3.5-Flash",
 		Description:               "StepFun Step-3.5 Flash low-latency reasoning model (open-weight, Apache 2.0).",
+	},
+	"step-3.5-flash-2603": {
+		Ratio:                       0.7 * ratio.MilliTokensRmb,
+		CachedInputRatio:            0.2 * 0.7 * ratio.MilliTokensRmb, // Prompt Cache: cached input billed at 20% of input price.
+		CompletionRatio:             2.1 / 0.7,
+		ContextLength:               262144,
+		MaxOutputTokens:             8192,
+		InputModalities:             stepfunTextInputs,
+		OutputModalities:            stepfunTextOutputs,
+		SupportedFeatures:           stepfunReasoningFeatures,
+		SupportedSamplingParameters: stepfunSamplingParams,
+		// Agent-optimized variant of step-3.5-flash: only low/high
+		// reasoning_effort is documented (no medium, no stated default).
+		SupportedReasoningEfforts: []string{"low", "high"},
+		Description:               "StepFun Step-3.5 Flash (2603) Agent-optimized variant: same pricing as step-3.5-flash, tuned for higher token efficiency and faster inference in Agent/Coding workflows; supports reasoning_effort low/high only.",
 	},
 	"step-3.7-flash": {
 		Ratio:                       1.35 * ratio.MilliTokensRmb,
@@ -144,7 +159,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		OutputModalities:            stepfunTextOutputs,
 		SupportedFeatures:           stepfunReasoningFeatures,
 		SupportedSamplingParameters: stepfunSamplingParams,
-		Description:                 "StepFun Step-R1-V Mini vision-capable reasoning model.",
+		Description:                 "StepFun Step-R1-V Mini vision-capable reasoning model. (absent from current official listings; likely deprecated)",
 	},
 
 	// Step-1 family (legacy general-purpose chat). step-1-128k / -256k are no
@@ -159,7 +174,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		OutputModalities:            stepfunTextOutputs,
 		SupportedFeatures:           stepfunChatFeatures,
 		SupportedSamplingParameters: stepfunSamplingParams,
-		Description:                 "StepFun Step-1 closed-weight chat model with 8k context.",
+		Description:                 "StepFun Step-1 closed-weight chat model with 8k context. Officially retired 2026-07-08; migrate to step-3.7-flash (or step-1o-turbo-vision for vision / step-2x-large for image-gen).",
 	},
 	"step-1-32k": {
 		Ratio:                       15.0 * ratio.MilliTokensRmb,
@@ -170,7 +185,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		OutputModalities:            stepfunTextOutputs,
 		SupportedFeatures:           stepfunChatFeatures,
 		SupportedSamplingParameters: stepfunSamplingParams,
-		Description:                 "StepFun Step-1 closed-weight chat model with 32k context.",
+		Description:                 "StepFun Step-1 closed-weight chat model with 32k context. Officially retired 2026-07-08; migrate to step-3.7-flash (or step-1o-turbo-vision for vision / step-2x-large for image-gen).",
 	},
 	"step-1-128k": {
 		Ratio:                       40.0 * ratio.MilliTokensRmb,
@@ -216,7 +231,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		OutputModalities:            stepfunTextOutputs,
 		SupportedFeatures:           stepfunChatFeatures,
 		SupportedSamplingParameters: stepfunSamplingParams,
-		Description:                 "StepFun Step-1V vision-capable chat model with 8k context.",
+		Description:                 "StepFun Step-1V vision-capable chat model with 8k context. Officially retired 2026-07-08; migrate to step-3.7-flash (or step-1o-turbo-vision for vision / step-2x-large for image-gen).",
 	},
 	"step-1v-32k": {
 		Ratio:                       15.0 * ratio.MilliTokensRmb,
@@ -227,7 +242,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		OutputModalities:            stepfunTextOutputs,
 		SupportedFeatures:           stepfunChatFeatures,
 		SupportedSamplingParameters: stepfunSamplingParams,
-		Description:                 "StepFun Step-1V vision-capable chat model with 32k context.",
+		Description:                 "StepFun Step-1V vision-capable chat model with 32k context. Officially retired 2026-07-08; migrate to step-3.7-flash (or step-1o-turbo-vision for vision / step-2x-large for image-gen).",
 	},
 	"step-1o-turbo-vision": {
 		Ratio:                       2.5 * ratio.MilliTokensRmb,
@@ -250,7 +265,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		OutputModalities:            stepfunTextOutputs,
 		SupportedFeatures:           stepfunChatFeatures,
 		SupportedSamplingParameters: stepfunSamplingParams,
-		Description:                 "StepFun Step-1O vision-capable chat model with 32k context.",
+		Description:                 "StepFun Step-1O vision-capable chat model with 32k context. Officially retired 2026-07-08; migrate to step-3.7-flash (or step-1o-turbo-vision for vision / step-2x-large for image-gen).",
 	},
 
 	// step-1x-medium retained as a multimodal chat SKU (image generation
@@ -264,7 +279,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		OutputModalities:            stepfunTextOutputs,
 		SupportedFeatures:           stepfunChatFeatures,
 		SupportedSamplingParameters: stepfunSamplingParams,
-		Description:                 "StepFun Step-1X mid-tier multimodal chat model (legacy estimated pricing; image generation billed per image).",
+		Description:                 "StepFun Step-1X mid-tier multimodal chat model (legacy estimated pricing; image generation billed per image). Officially retired 2026-07-08; migrate to step-3.7-flash (or step-1o-turbo-vision for vision / step-2x-large for image-gen).",
 	},
 }
 

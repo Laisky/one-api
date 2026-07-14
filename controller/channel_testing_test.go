@@ -5,10 +5,11 @@ import (
 	"net/http"
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/Laisky/one-api/model"
 	"github.com/Laisky/one-api/relay/adaptor"
 	"github.com/Laisky/one-api/relay/channeltype"
-	"github.com/stretchr/testify/require"
 )
 
 // TestResponseStatus ensures nil responses are handled without panics and return zero status.

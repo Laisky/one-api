@@ -98,7 +98,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		Description:                 "iFlytek Spark Max long-context (HTTP API domain `max-32k`) with 32k context window and FunctionCall; package retired 2026-03-10 (backend upgraded to Spark 4.0 Ultra, quota merged into Ultra). Kept for backward compatibility.",
 	},
 	"4.0Ultra": {
-		Ratio:                       5.0 * ratio.MilliTokensRmb,
+		Ratio:                       0.8 * ratio.MilliTokensRmb,
 		CompletionRatio:             1,
 		ContextLength:               32768,
 		MaxOutputTokens:             32768,
@@ -107,6 +107,23 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		SupportedFeatures:           xunfeiv2ChatFeatures,
 		SupportedSamplingParameters: xunfeiv2SamplingParams,
 		Description:                 "iFlytek Spark 4.0 Ultra (HTTP API domain `4.0Ultra`) flagship closed-weight chat model with FunctionCall.",
+	},
+	// Spark X2 deep-reasoning model (marketed X2 / X1.5, successor to Spark X1).
+	// OpenAI-compatible endpoint https://spark-api-open.xf-yun.com/x2/chat/completions,
+	// model id `spark-x` (legacy `x1` param maps to X1.5). Per X1http.html the model
+	// takes 64K input / 128K output, max_tokens range [1,131072] default 131072, and
+	// supports FunctionCall plus a dynamic thinking/reasoning mode (`thinking` field).
+	// Priced 2 元/百万tokens on xinghuo.xfyun.cn/sparkapi (retrieved 2026-07-14).
+	"spark-x": {
+		Ratio:                       2 * ratio.MilliTokensRmb,
+		CompletionRatio:             1,
+		ContextLength:               65536,
+		MaxOutputTokens:             131072,
+		InputModalities:             xunfeiv2TextInputs,
+		OutputModalities:            xunfeiv2TextOutputs,
+		SupportedFeatures:           []string{"tools", "json_mode", "reasoning"},
+		SupportedSamplingParameters: xunfeiv2SamplingParams,
+		Description:                 "iFlytek Spark X2 (HTTP API domain `spark-x`) deep-reasoning closed-weight model with FunctionCall and dynamic thinking mode; 64K input / 128K output.",
 	},
 }
 

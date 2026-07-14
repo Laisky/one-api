@@ -923,8 +923,8 @@ var qwenOpenModelRatios = map[string]adaptor.ModelConfig{
 	},
 
 	// ----- QwQ / QVQ reasoning models (open) ----------------------------------
-	// Aliyun pricing: qwq-32b-preview 2.06/6.17 CNY/1M; qwq-plus 1.65/4.11 CNY/1M;
-	// qvq-72b-preview 12.37/37.11 CNY/1M; qvq-max 8.24/32.96 CNY/1M.
+	// Aliyun pricing: qwq-32b-preview 2.06/6.17 CNY/1M; qwq-plus 1.6/4 CNY/1M;
+	// qvq-72b-preview 12.37/37.11 CNY/1M; qvq-max 8.24/32.96 CNY/1M; qvq-plus 2/5 CNY/1M.
 	"qwq-32b-preview": {
 		Ratio:                       0.00206 * 1000 * ratio.MilliTokensRmb,
 		CompletionRatio:             2.995, // 6.17 / 2.06
@@ -954,8 +954,8 @@ var qwenOpenModelRatios = map[string]adaptor.ModelConfig{
 		Description:                 "QwQ 32B: open-weight reasoning model with 128K context.",
 	},
 	"qwq-plus": {
-		Ratio:                       0.00165 * 1000 * ratio.MilliTokensRmb,
-		CompletionRatio:             2.49, // 4.11 / 1.65
+		Ratio:                       0.0016 * 1000 * ratio.MilliTokensRmb,
+		CompletionRatio:             2.5, // 4 / 1.6
 		ContextLength:               131072,
 		MaxOutputTokens:             16384,
 		InputModalities:             []string{"text"},
@@ -994,6 +994,18 @@ var qwenOpenModelRatios = map[string]adaptor.ModelConfig{
 		Quantization:                "bf16",
 		HuggingFaceID:               "Qwen/QVQ-72B-Preview",
 		Description:                 "QVQ Max: managed multimodal reasoning tier with 128K context.",
+	},
+	"qvq-plus": {
+		Ratio:                       0.002 * 1000 * ratio.MilliTokensRmb,
+		CompletionRatio:             2.5, // 5 / 2
+		ContextLength:               131072,
+		MaxOutputTokens:             16384,
+		InputModalities:             []string{"text", "image"},
+		OutputModalities:            []string{"text"},
+		SupportedFeatures:           qwenReasoningFeatures(),
+		SupportedSamplingParameters: qwenReasoningSamplingParameters(),
+		MaxReasoningTokens:          38912,
+		Description:                 "QVQ Plus: managed multimodal reasoning tier with 128K context.",
 	},
 
 	// ----- Qwen 3.5 / 3.6 medium open-weight family ---------------------------

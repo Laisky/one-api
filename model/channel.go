@@ -6,11 +6,12 @@ import (
 	"strings"
 
 	"github.com/Laisky/errors/v2"
+	"github.com/Laisky/zap"
+	"gorm.io/gorm"
+
 	"github.com/Laisky/one-api/common/config"
 	"github.com/Laisky/one-api/common/helper"
 	"github.com/Laisky/one-api/common/logger"
-	"github.com/Laisky/zap"
-	"gorm.io/gorm"
 )
 
 const (

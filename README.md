@@ -1529,8 +1529,9 @@ Bundled models (live on the shared public API with officially published per-toke
 
 - `gpt-oss-120b` — OpenAI gpt-oss 120B open-weight MoE reasoning model (Production / GA); 131K context, tools and structured outputs, `reasoning_effort` supported. Billed at $0.35 / 1M input and $0.75 / 1M output tokens.
 - `zai-glm-4.7` — Z.ai GLM-4.7 (355B) reasoning/agent model; 131K context. Marked **Preview** by Cerebras (evaluation only, may change on short notice). Billed at $2.25 / 1M input and $2.75 / 1M output tokens.
+- `gemma-4-31b` — Google Gemma 4 31B multimodal (text + image input) reasoning model; 131K context (paid tier), reasoning disabled by default (opt-in via `reasoning_effort`). Marked **Preview** by Cerebras. Billed at $0.99 / 1M input and $1.49 / 1M output tokens.
 
-`gemma-4-31b` is announced as "coming soon" and is not yet live, so it is intentionally not bundled. Per-token rates above are taken from the official Cerebras model cards; operators can override pricing per channel.
+Per-token rates above are taken from the official Cerebras model cards; operators can override pricing per channel.
 
 ## Bug Fixes & Enterprise-Grade Improvements (Including Security Enhancements)
 

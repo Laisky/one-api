@@ -73,7 +73,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		Description:                 "iFlytek Spark Pro closed-weight chat model (HTTP doc: no FunctionCall on Pro tier).",
 	},
 	"Spark-Pro-128K": {
-		Ratio:                       1.26 * ratio.MilliTokensRmb,
+		Ratio:                       5.0 * ratio.MilliTokensRmb,
 		CompletionRatio:             1,
 		ContextLength:               131072,
 		MaxOutputTokens:             32768,
@@ -111,7 +111,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 
 	// Spark 4.0 Ultra Models — WS doc lists 32K context / 32K output.
 	"Spark-4.0-Ultra": {
-		Ratio:                       5.6 * ratio.MilliTokensRmb,
+		Ratio:                       0.8 * ratio.MilliTokensRmb,
 		CompletionRatio:             1,
 		ContextLength:               32768,
 		MaxOutputTokens:             32768,

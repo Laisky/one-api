@@ -418,10 +418,10 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 	// Together docs list this variant with a lowercase-d "Rundiffusion/" org id (distinct from
 	// the "RunDiffusion/Juggernaut-pro-flux" casing above). Source: https://www.together.ai/models/juggernaut-lightning-flux
 	"Rundiffusion/Juggernaut-Lightning-Flux": {Ratio: 0, CompletionRatio: 1, Image: togetherAIImagePerMegapixelConfig(0.0017)},
-	"HiDream-ai/HiDream-I1-Full":       {Ratio: 0, CompletionRatio: 1, Image: togetherAIImagePerMegapixelConfig(0.009)},
-	"HiDream-ai/HiDream-I1-Dev":        {Ratio: 0, CompletionRatio: 1, Image: togetherAIImagePerMegapixelConfig(0.0045)},
-	"HiDream-ai/HiDream-I1-Fast":       {Ratio: 0, CompletionRatio: 1, Image: togetherAIImagePerMegapixelConfig(0.0032)},
-	"ideogram/ideogram-3.0":            {Ratio: 0, CompletionRatio: 1, Image: togetherAIImagePerMegapixelConfig(0.06)},
+	"HiDream-ai/HiDream-I1-Full":             {Ratio: 0, CompletionRatio: 1, Image: togetherAIImagePerMegapixelConfig(0.009)},
+	"HiDream-ai/HiDream-I1-Dev":              {Ratio: 0, CompletionRatio: 1, Image: togetherAIImagePerMegapixelConfig(0.0045)},
+	"HiDream-ai/HiDream-I1-Fast":             {Ratio: 0, CompletionRatio: 1, Image: togetherAIImagePerMegapixelConfig(0.0032)},
+	"ideogram/ideogram-3.0":                  {Ratio: 0, CompletionRatio: 1, Image: togetherAIImagePerMegapixelConfig(0.06)},
 	// Ideogram 4.0 bills a flat per-image price. Source: https://www.together.ai/models/ideogram-40
 	"ideogram/ideogram-4.0":                    {Ratio: 0, CompletionRatio: 1, Image: &adaptor.ImagePricingConfig{PricePerImageUsd: 0.06, DefaultSize: togetherAIImageBaseSize, MinImages: 1}},
 	"Lykon/DreamShaper":                        {Ratio: 0, CompletionRatio: 1, Image: togetherAIImagePerMegapixelConfig(0.0006)},

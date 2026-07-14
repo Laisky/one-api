@@ -57,9 +57,19 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 	// base price. Reasoning is a binary toggle (no tunable budget) so
 	// MaxReasoningTokens is left at 0 per memory note.
 	"MiniMax-M3": {
-		Ratio:                       2.16 * ratio.MilliTokensRmb,
-		CompletionRatio:             8.64 / 2.16,
-		CachedInputRatio:            0.432 * ratio.MilliTokensRmb,
+		Ratio:            2.10 * ratio.MilliTokensRmb,
+		CompletionRatio:  8.40 / 2.10,
+		CachedInputRatio: 0.42 * ratio.MilliTokensRmb,
+		// >512K input tokens moves to the long-context tier (¥4.20 input /
+		// ¥16.80 output / ¥0.84 cache-read per 1M, permanent 50% promo).
+		Tiers: []adaptor.ModelRatioTier{
+			{
+				Ratio:               4.20 * ratio.MilliTokensRmb,
+				CompletionRatio:     16.80 / 4.20,
+				CachedInputRatio:    0.84 * ratio.MilliTokensRmb,
+				InputTokenThreshold: 512001,
+			},
+		},
 		ContextLength:               1000000,
 		MaxOutputTokens:             131072,
 		InputModalities:             []string{"text", "image", "video"},
@@ -67,7 +77,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		SupportedFeatures:           minimaxReasoningFeatures,
 		SupportedSamplingParameters: minimaxSamplingParams,
 		HuggingFaceID:               "MiniMaxAI/MiniMax-M3",
-		Description:                 "MiniMax M3 native multimodal flagship (text+image+video input, 1M context, 128K max output); released 2026-06-01 with 50% promotional pricing at ¥2.16/$0.30 per 1M input.",
+		Description:                 "MiniMax M3 native multimodal flagship (text+image+video input, 1M context, 128K max output); released 2026-06-01 with 50% promotional pricing at ¥2.10/$0.30 per 1M input (>512K input tokens billed at ¥4.20 per 1M).",
 	},
 	"MiniMax-M2.7": {
 		Ratio:                       2.1 * ratio.MilliTokensRmb,
@@ -163,8 +173,8 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 	"M2-her": {
 		Ratio:                       2.1 * ratio.MilliTokensRmb,
 		CompletionRatio:             8.4 / 2.1,
-		ContextLength:               204800,
-		MaxOutputTokens:             32768,
+		ContextLength:               65536,
+		MaxOutputTokens:             2048,
 		InputModalities:             minimaxTextInputs,
 		OutputModalities:            minimaxTextOutputs,
 		SupportedFeatures:           minimaxChatFeatures,

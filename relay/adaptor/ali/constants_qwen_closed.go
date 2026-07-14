@@ -176,7 +176,8 @@ var qwenClosedModelRatios = map[string]adaptor.ModelConfig{
 	//   qwen3.6-max-preview: 0-128K 9/54, 128K-256K 15/90 (released 2026-04-20)
 	"qwen3-max": {
 		Ratio:                       0.0025 * 1000 * ratio.MilliTokensRmb,
-		CompletionRatio:             4, // 10 / 2.5
+		CachedInputRatio:            0.2 * 0.0025 * 1000 * ratio.MilliTokensRmb, // context-cache hit = 20% of input
+		CompletionRatio:             4,                                          // 10 / 2.5
 		ContextLength:               262144,
 		MaxOutputTokens:             32768,
 		InputModalities:             []string{"text"},
@@ -187,6 +188,7 @@ var qwenClosedModelRatios = map[string]adaptor.ModelConfig{
 	},
 	"qwen3-max-preview": {
 		Ratio:                       0.0025 * 1000 * ratio.MilliTokensRmb,
+		CachedInputRatio:            0.2 * 0.0025 * 1000 * ratio.MilliTokensRmb, // context-cache hit = 20% of input
 		CompletionRatio:             4,
 		ContextLength:               262144,
 		MaxOutputTokens:             32768,
@@ -198,7 +200,8 @@ var qwenClosedModelRatios = map[string]adaptor.ModelConfig{
 	},
 	"qwen3.5-plus": {
 		Ratio:                       0.0008 * 1000 * ratio.MilliTokensRmb,
-		CompletionRatio:             6, // 4.8 / 0.8
+		CachedInputRatio:            0.2 * 0.0008 * 1000 * ratio.MilliTokensRmb, // context-cache hit = 20% of input
+		CompletionRatio:             6,                                          // 4.8 / 0.8
 		ContextLength:               1000000,
 		MaxOutputTokens:             32768,
 		InputModalities:             []string{"text"},
@@ -209,7 +212,8 @@ var qwenClosedModelRatios = map[string]adaptor.ModelConfig{
 	},
 	"qwen3.5-flash": {
 		Ratio:                       0.0002 * 1000 * ratio.MilliTokensRmb,
-		CompletionRatio:             10, // 2 / 0.2
+		CachedInputRatio:            0.2 * 0.0002 * 1000 * ratio.MilliTokensRmb, // context-cache hit = 20% of input
+		CompletionRatio:             10,                                         // 2 / 0.2
 		ContextLength:               1000000,
 		MaxOutputTokens:             32768,
 		InputModalities:             []string{"text"},
@@ -220,7 +224,8 @@ var qwenClosedModelRatios = map[string]adaptor.ModelConfig{
 	},
 	"qwen3.6-plus": {
 		Ratio:                       0.002 * 1000 * ratio.MilliTokensRmb,
-		CompletionRatio:             6, // 12 / 2
+		CachedInputRatio:            0.2 * 0.002 * 1000 * ratio.MilliTokensRmb, // context-cache hit = 20% of input
+		CompletionRatio:             6,                                         // 12 / 2
 		ContextLength:               1000000,
 		MaxOutputTokens:             65536,
 		InputModalities:             []string{"text"},
@@ -231,7 +236,8 @@ var qwenClosedModelRatios = map[string]adaptor.ModelConfig{
 	},
 	"qwen3.6-flash": {
 		Ratio:                       0.0012 * 1000 * ratio.MilliTokensRmb,
-		CompletionRatio:             6, // 7.2 / 1.2
+		CachedInputRatio:            0.2 * 0.0012 * 1000 * ratio.MilliTokensRmb, // context-cache hit = 20% of input
+		CompletionRatio:             6,                                          // 7.2 / 1.2
 		ContextLength:               1000000,
 		MaxOutputTokens:             65536,
 		InputModalities:             []string{"text"},
@@ -242,7 +248,8 @@ var qwenClosedModelRatios = map[string]adaptor.ModelConfig{
 	},
 	"qwen3.6-max-preview": {
 		Ratio:                       0.009 * 1000 * ratio.MilliTokensRmb,
-		CompletionRatio:             6, // 54 / 9
+		CachedInputRatio:            0.2 * 0.009 * 1000 * ratio.MilliTokensRmb, // context-cache hit = 20% of input
+		CompletionRatio:             6,                                         // 54 / 9
 		ContextLength:               262144,
 		MaxOutputTokens:             65536,
 		InputModalities:             []string{"text"},
@@ -379,7 +386,8 @@ var qwenClosedModelRatios = map[string]adaptor.ModelConfig{
 	// qwen3-vl-plus: 1.03-3.09 CNY in / 10.30-30.87 CNY out; base tier 0-32K.
 	"qwen3-vl-plus": {
 		Ratio:                       0.001 * 1000 * ratio.MilliTokensRmb,
-		CompletionRatio:             10, // 10 / 1 (0-32K base tier)
+		CachedInputRatio:            0.2 * 0.001 * 1000 * ratio.MilliTokensRmb, // context-cache hit = 20% of input
+		CompletionRatio:             10,                                        // 10 / 1 (0-32K base tier)
 		ContextLength:               262144,
 		MaxOutputTokens:             16384,
 		InputModalities:             []string{"text", "image", "file"},
@@ -390,7 +398,8 @@ var qwenClosedModelRatios = map[string]adaptor.ModelConfig{
 	},
 	"qwen3-vl-flash": {
 		Ratio:                       0.00015 * 1000 * ratio.MilliTokensRmb,
-		CompletionRatio:             10, // 1.5 / 0.15
+		CachedInputRatio:            0.2 * 0.00015 * 1000 * ratio.MilliTokensRmb, // context-cache hit = 20% of input
+		CompletionRatio:             10,                                          // 1.5 / 0.15
 		ContextLength:               262144,
 		MaxOutputTokens:             16384,
 		InputModalities:             []string{"text", "image", "file"},
@@ -445,6 +454,21 @@ var qwenClosedModelRatios = map[string]adaptor.ModelConfig{
 		SupportedSamplingParameters: qwenStandardSamplingParameters(),
 		Description:                 "Qwen3.5 Omni Plus: closed-weight multimodal model accepting text/image/audio/video inputs with text and audio outputs; 262K context.",
 	},
+	// qwen3.5-omni-plus-realtime: Alibaba Model Studio China-mainland CNY/1M
+	// (verified 2026-07-13 against help.aliyun.com/zh/model-studio/model-pricing):
+	// text/image input 10, audio input 80, text output 60, text+audio output 300.
+	// The relay records the text input/output rate; audio billing resolves upstream.
+	"qwen3.5-omni-plus-realtime": {
+		Ratio:                       10 * ratio.MilliTokensRmb,
+		CompletionRatio:             60.0 / 10.0, // text output 60 / text-or-image input 10
+		ContextLength:               262144,
+		MaxOutputTokens:             8192,
+		InputModalities:             []string{"text", "image", "audio", "video"},
+		OutputModalities:            []string{"text", "audio"},
+		SupportedFeatures:           qwenChatFeatures(),
+		SupportedSamplingParameters: qwenStandardSamplingParameters(),
+		Description:                 "Qwen3.5 Omni Plus Realtime: closed-weight realtime multimodal model accepting text/image/audio/video inputs with text and audio outputs; 262K context (text I/O rate billed here; audio billing is per-modality upstream).",
+	},
 
 	// ----- Qwen-Audio (closed) -------------------------------------------------
 	"qwen-audio-turbo": {
@@ -460,10 +484,10 @@ var qwenClosedModelRatios = map[string]adaptor.ModelConfig{
 	},
 
 	// ----- Qwen Math (closed) --------------------------------------------------
-	// qwen-math-plus: 4.11 / 12.37 CNY per 1M.
+	// qwen-math-plus: 4 / 12 CNY per 1M.
 	"qwen-math-plus": {
-		Ratio:                       0.00411 * 1000 * ratio.MilliTokensRmb,
-		CompletionRatio:             3.01, // 12.37 / 4.11
+		Ratio:                       0.004 * 1000 * ratio.MilliTokensRmb,
+		CompletionRatio:             3.0, // 12 / 4
 		ContextLength:               4096,
 		MaxOutputTokens:             3072,
 		InputModalities:             []string{"text"},
@@ -473,8 +497,8 @@ var qwenClosedModelRatios = map[string]adaptor.ModelConfig{
 		Description:                 "Qwen-Math Plus: closed-weight model tuned for mathematical reasoning.",
 	},
 	"qwen-math-plus-latest": {
-		Ratio:                       0.00411 * 1000 * ratio.MilliTokensRmb,
-		CompletionRatio:             3.01,
+		Ratio:                       0.004 * 1000 * ratio.MilliTokensRmb,
+		CompletionRatio:             3.0,
 		ContextLength:               4096,
 		MaxOutputTokens:             3072,
 		InputModalities:             []string{"text"},
@@ -507,10 +531,10 @@ var qwenClosedModelRatios = map[string]adaptor.ModelConfig{
 	},
 
 	// ----- Qwen Coder (closed) -------------------------------------------------
-	// qwen-coder-plus: 3.60 / 7.21 CNY per 1M; turbo: 2.06 / 6.17 CNY per 1M.
+	// qwen-coder-plus: 3.5 / 7 CNY per 1M; turbo: 2.06 / 6.17 CNY per 1M.
 	"qwen-coder-plus": {
-		Ratio:                       0.0036 * 1000 * ratio.MilliTokensRmb,
-		CompletionRatio:             2.0, // 7.21 / 3.60
+		Ratio:                       0.0035 * 1000 * ratio.MilliTokensRmb,
+		CompletionRatio:             2.0, // 7 / 3.5
 		ContextLength:               131072,
 		MaxOutputTokens:             8192,
 		InputModalities:             []string{"text"},
@@ -520,7 +544,7 @@ var qwenClosedModelRatios = map[string]adaptor.ModelConfig{
 		Description:                 "Qwen-Coder Plus: closed-weight model tuned for code generation/completion.",
 	},
 	"qwen-coder-plus-latest": {
-		Ratio:                       0.0036 * 1000 * ratio.MilliTokensRmb,
+		Ratio:                       0.0035 * 1000 * ratio.MilliTokensRmb,
 		CompletionRatio:             2.0,
 		ContextLength:               131072,
 		MaxOutputTokens:             8192,
@@ -559,7 +583,8 @@ var qwenClosedModelRatios = map[string]adaptor.ModelConfig{
 	//   qwen3-coder-flash: 1 / 4    (256K-1M: 5 / 25)
 	"qwen3-coder-plus": {
 		Ratio:                       0.004 * 1000 * ratio.MilliTokensRmb,
-		CompletionRatio:             4, // 16 / 4
+		CachedInputRatio:            0.2 * 0.004 * 1000 * ratio.MilliTokensRmb, // context-cache hit = 20% of input
+		CompletionRatio:             4,                                         // 16 / 4
 		ContextLength:               1000000,
 		MaxOutputTokens:             65536,
 		InputModalities:             []string{"text"},
@@ -570,7 +595,8 @@ var qwenClosedModelRatios = map[string]adaptor.ModelConfig{
 	},
 	"qwen3-coder-flash": {
 		Ratio:                       0.001 * 1000 * ratio.MilliTokensRmb,
-		CompletionRatio:             4, // 4 / 1
+		CachedInputRatio:            0.2 * 0.001 * 1000 * ratio.MilliTokensRmb, // context-cache hit = 20% of input
+		CompletionRatio:             4,                                         // 4 / 1
 		ContextLength:               1000000,
 		MaxOutputTokens:             65536,
 		InputModalities:             []string{"text"},
@@ -603,6 +629,29 @@ var qwenClosedModelRatios = map[string]adaptor.ModelConfig{
 		SupportedFeatures:           []string{},
 		SupportedSamplingParameters: qwenStandardSamplingParameters(),
 		Description:                 "Qwen-MT Turbo: cost-optimized closed-weight translation model.",
+	},
+	// qwen-mt-flash: 0.7 / 1.95 CNY per 1M; qwen-mt-lite: 0.6 / 1.6 CNY per 1M.
+	"qwen-mt-flash": {
+		Ratio:                       0.0007 * 1000 * ratio.MilliTokensRmb,
+		CompletionRatio:             2.786, // 1.95 / 0.7
+		ContextLength:               4096,
+		MaxOutputTokens:             2048,
+		InputModalities:             []string{"text"},
+		OutputModalities:            []string{"text"},
+		SupportedFeatures:           []string{},
+		SupportedSamplingParameters: qwenStandardSamplingParameters(),
+		Description:                 "Qwen-MT Flash: cost-optimized closed-weight machine-translation tier.",
+	},
+	"qwen-mt-lite": {
+		Ratio:                       0.0006 * 1000 * ratio.MilliTokensRmb,
+		CompletionRatio:             2.667, // 1.6 / 0.6
+		ContextLength:               4096,
+		MaxOutputTokens:             2048,
+		InputModalities:             []string{"text"},
+		OutputModalities:            []string{"text"},
+		SupportedFeatures:           []string{},
+		SupportedSamplingParameters: qwenStandardSamplingParameters(),
+		Description:                 "Qwen-MT Lite: lowest-cost closed-weight machine-translation tier.",
 	},
 
 	// ----- Legacy closed-weight Qwen 1.x chat ---------------------------------
