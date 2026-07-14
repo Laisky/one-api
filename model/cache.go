@@ -100,7 +100,24 @@ func CacheGetUserById(ctx context.Context, id int) (*User, error) {
 	if err != nil {
 		return nil, errors.Wrapf(err, "get user %d from database", id)
 	}
-	payload, err := json.Marshal(user)
+	// User.MarshalJSON is an API-facing serializer that deliberately omits internal
+	// integer identifiers (Id, InviterId) and secrets, exposing only the external UUID.
+	// The Redis object cache must persist the internal Id — otherwise a later cache hit
+	// reconstructs a User with Id == 0 (issue #353), which propagates into ctxkey.Id and
+	// surfaces as a 500 "user id is empty". Marshaling *User directly would invoke that
+	// API marshaler and drop Id, so mirror the plainToken pattern above: alias User to
+	// bypass its custom MarshalJSON and serialize the raw fields (including Id).
+	//
+	// Secrets are still scrubbed before caching: the cached object is only consumed for
+	// auth context (Id, UUID, Status, Role, Group, Quota); no read path reads these
+	// secrets from the cache, and the buggy marshaler already excluded them, so keeping
+	// them out of Redis preserves current behavior without widening secret exposure.
+	type plainUser User
+	cacheView := plainUser(*user)
+	cacheView.Password = ""
+	cacheView.AccessToken = ""
+	cacheView.TotpSecret = ""
+	payload, err := json.Marshal(cacheView)
 	if err != nil {
 		lg.Warn("failed to marshal user for cache", zap.Int("user_id", id), zap.Error(err))
 		return user, nil
