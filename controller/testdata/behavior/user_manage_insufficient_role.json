@@ -1,0 +1,9 @@
+{
+  "case": "user/manage_insufficient_role",
+  "site": "U6 ManageUser (error)",
+  "status": 200,
+  "body": {
+    "message": "No permission to update user information with the same permission level or higher permission level",
+    "success": false
+  }
+}

@@ -197,7 +197,10 @@ func cloneChannelForDuplicate(source *model.Channel) *model.Channel {
 //   - any: JSON-ready channel response payload.
 func buildChannelResponsePayload(lg glog.Logger, channel *model.Channel) any {
 	response := gin.H{}
-	if payload, err := json.Marshal(channel); err == nil {
+	// Build from the explicit boundary DTO (byte-identical to the retired
+	// Channel.MarshalJSON) so the internal integer id never crosses the API, then
+	// splice the optional tooling JSON as before.
+	if payload, err := json.Marshal(channel.ToResponse()); err == nil {
 		if err = json.Unmarshal(payload, &response); err != nil && lg != nil {
 			lg.Error("failed to unmarshal channel response payload", zap.Int("channel_id", channel.Id), zap.Error(err))
 		}

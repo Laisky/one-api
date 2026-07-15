@@ -56,9 +56,13 @@ func CacheGetTokenByKey(ctx context.Context, key string) (*Token, error) {
 		if err != nil {
 			return nil, errors.Wrapf(err, "get token by key %s", key)
 		}
-		// Marshal without custom Token.MarshalJSON to keep raw key in cache
-		type plainToken Token
-		jsonBytes, err := json.Marshal(plainToken(token))
+		// Cache the raw token row. With Token.MarshalJSON retired, the default
+		// serialization already keeps the raw stored key (the response-time
+		// prefix now lives in Token.ToResponse, not in json.Marshal) and carries
+		// the internal id, which is exactly what the cache needs. (This file is
+		// allowlisted in the noentityresponse analyzer: marshaling the raw entity
+		// for the internal cache is intentional here.)
+		jsonBytes, err := json.Marshal(token)
 		if err != nil {
 			return nil, errors.Wrapf(err, "marshal token %d for cache", token.Id)
 		}
@@ -100,24 +104,15 @@ func CacheGetUserById(ctx context.Context, id int) (*User, error) {
 	if err != nil {
 		return nil, errors.Wrapf(err, "get user %d from database", id)
 	}
-	// User.MarshalJSON is an API-facing serializer that deliberately omits internal
-	// integer identifiers (Id, InviterId) and secrets, exposing only the external UUID.
-	// The Redis object cache must persist the internal Id — otherwise a later cache hit
-	// reconstructs a User with Id == 0 (issue #353), which propagates into ctxkey.Id and
-	// surfaces as a 500 "user id is empty". Marshaling *User directly would invoke that
-	// API marshaler and drop Id, so mirror the plainToken pattern above: alias User to
-	// bypass its custom MarshalJSON and serialize the raw fields (including Id).
-	//
-	// Secrets are still scrubbed before caching: the cached object is only consumed for
-	// auth context (Id, UUID, Status, Role, Group, Quota); no read path reads these
-	// secrets from the cache, and the buggy marshaler already excluded them, so keeping
-	// them out of Redis preserves current behavior without widening secret exposure.
-	type plainUser User
-	cacheView := plainUser(*user)
-	cacheView.Password = ""
-	cacheView.AccessToken = ""
-	cacheView.TotpSecret = ""
-	payload, err := json.Marshal(cacheView)
+	// The Redis object cache must persist the internal Id — otherwise a later
+	// cache hit reconstructs a User with Id == 0 (issue #353), which propagates
+	// into ctxkey.Id and surfaces as a 500 "user id is empty". With User.MarshalJSON
+	// retired, json.Marshal(user) is now honest by default: it carries the Id (the
+	// #353 fix) and, because Password/AccessToken/TotpSecret/VerificationCode are
+	// json:"-", it cannot emit secrets — so the old plainUser alias and the manual
+	// scrub are no longer needed. (This file is allowlisted in the noentityresponse
+	// analyzer: marshaling the raw entity for the internal cache is intentional.)
+	payload, err := json.Marshal(user)
 	if err != nil {
 		lg.Warn("failed to marshal user for cache", zap.Int("user_id", id), zap.Error(err))
 		return user, nil

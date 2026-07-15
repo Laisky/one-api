@@ -1,0 +1,9 @@
+{
+  "case": "redemption/update_wrong_field_type",
+  "site": "R4 UpdateRedemption (error)",
+  "status": 200,
+  "body": {
+    "message": "json: cannot unmarshal string into Go struct field Redemption.quota of type int64",
+    "success": false
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "uuid": "018f0000-0000-7000-8000-0000000000b1",
+  "user_uuid": "018f0000-0000-7000-8000-0000000000b2",
+  "created_at": 1710001000,
+  "type": 2,
+  "content": "golden log content",
+  "username": "golden-user",
+  "token_name": "golden-token",
+  "token_uuid": "018f0000-0000-7000-8000-0000000000b3",
+  "model_name": "gpt-golden",
+  "origin_model_name": "gpt-golden-origin",
+  "quota": 555,
+  "prompt_tokens": 111,
+  "completion_tokens": 222,
+  "channel_uuid": "018f0000-0000-7000-8000-0000000000b4",
+  "channel_name": "golden-channel",
+  "request_id": "req-golden-0001",
+  "trace_id": "trace-golden-0001",
+  "updated_at": 1710001002,
+  "elapsed_time": 1234,
+  "is_stream": true,
+  "system_prompt_reset": true,
+  "cached_prompt_tokens": 42,
+  "metadata": {
+    "cache_write_tokens": 17
+  }
+}

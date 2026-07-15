@@ -1,0 +1,26 @@
+{
+  "case": "token/admin_get_by_uuid",
+  "site": "T9 AdminGetToken",
+  "status": 200,
+  "body": {
+    "data": {
+      "accessed_time": 1720000002,
+      "created_at": 1730000000111,
+      "created_time": 1720000001,
+      "expired_time": 1990000003,
+      "key": "sk-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "models": "gpt-4o",
+      "name": "behaviordiff-other-token",
+      "remain_quota": 960006,
+      "status": 1,
+      "subnet": "10.0.0.0/8",
+      "unlimited_quota": true,
+      "updated_at": 1730000000222,
+      "used_quota": 860006,
+      "user_uuid": "<other-user-uuid>",
+      "uuid": "<other-token-uuid>"
+    },
+    "message": "",
+    "success": true
+  }
+}

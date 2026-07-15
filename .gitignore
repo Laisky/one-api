@@ -32,3 +32,7 @@ docs/requirements/observability.md
 /.claude/
 one-api.db-shm
 one-api.db-wal
+
+# Python bytecode from scripts/behavior-differential
+__pycache__/
+*.pyc

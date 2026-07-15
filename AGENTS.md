@@ -47,7 +47,3 @@
 - **Persistence and retries:** Persist intelligently; retry transient errors until a reasonable limit, and change strategy for non‑transient failures.
 - **Action finality:** Only take actions after completing the above reasoning; actions are final once executed.
 - **Sub Agents:** Actively use sub-agents for **parallelism** (dispatch independent subtasks concurrently in a single batch, not sequentially) and **context isolation** (offload searches/sweeps/lookups so their intermediate context never pollutes the main thread); each must follow the same instructions, stay scoped to a well-defined subtask, and return only the **distilled key information** for integration — not raw tool output or full file dumps.
-
-## API conventions
-
-- **Update endpoints — clearing vs. keeping fields:** Channel, MCP-server, and user-self updates inspect the raw request body to distinguish 'field omitted' from 'field present but empty/null'. Omit a key to keep the stored value. For nullable fields (`model_mapping`, `model_configs`, `system_prompt`, `inference_profile_arn_map`, MCP server description/headers/whitelists, user `display_name`), send `null` or `""` to clear. For options whose key ends in `Token`/`Secret`/`Password`, empty values are silently ignored to prevent UI form re-saves from wiping secrets.

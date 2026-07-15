@@ -1,0 +1,11 @@
+{
+  "case": "log/get_token_foreign_owner",
+  "site": "L3 GetTokenLogs (error)",
+  "status": 200,
+  "body": {
+    "data": [],
+    "message": "",
+    "success": true,
+    "total": 0
+  }
+}

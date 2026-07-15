@@ -191,8 +191,11 @@ func SetupLogin(user *model.User, c *gin.Context) {
 	// GenerateAccessToken(c)
 	// c.Header("Authorization", user.AccessToken)
 
+	// Id is intentionally omitted: ToResponse() emits only the external UUID, so
+	// setting the internal integer id here would be dead (it never reaches the
+	// wire). The boundary DTO makes that explicit instead of relying on an
+	// ambient marshaler to drop it.
 	cleanUser := model.User{
-		Id:          user.Id,
 		UUID:        user.UUID,
 		Username:    user.Username,
 		DisplayName: user.DisplayName,
@@ -202,7 +205,7 @@ func SetupLogin(user *model.User, c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"message": "",
 		"success": true,
-		"data":    cleanUser,
+		"data":    cleanUser.ToResponse(),
 	})
 }
 
@@ -230,36 +233,36 @@ func Register(c *gin.Context) {
 		helper.RespondError(c, errors.New("The administrator has turned off registration via password. Please use the form of third-party account verification to register"))
 		return
 	}
-	var user model.User
-	err := json.NewDecoder(c.Request.Body).Decode(&user)
+	var req dto.UserRegisterRequest
+	err := json.NewDecoder(c.Request.Body).Decode(&req)
 	if err != nil {
 		helper.RespondError(c, errors.New(invalidParameterMessage))
 		return
 	}
-	if err := common.Validate.Struct(&user); err != nil {
+	if err := common.Validate.Struct(&req); err != nil {
 		helper.RespondError(c, errors.New(invalidInputMessage))
 		return
 	}
 	if config.EmailVerificationEnabled {
-		if user.Email == "" || user.VerificationCode == "" {
+		if req.Email == "" || req.VerificationCode == "" {
 			helper.RespondError(c, errors.New("The administrator has turned on email verification, please enter the email address and verification code"))
 			return
 		}
-		if !common.VerifyCodeWithKey(user.Email, user.VerificationCode, common.EmailVerificationPurpose) {
+		if !common.VerifyCodeWithKey(req.Email, req.VerificationCode, common.EmailVerificationPurpose) {
 			helper.RespondError(c, errors.New("Verification code error or expired"))
 			return
 		}
 	}
-	affCode := user.AffCode // this code is the inviter's code, not the user's own code
+	affCode := req.AffCode // this code is the inviter's code, not the user's own code
 	inviterId, _ := model.GetUserIdByAffCode(affCode)
 	cleanUser := model.User{
-		Username:    user.Username,
-		Password:    user.Password,
-		DisplayName: user.Username,
+		Username:    req.Username,
+		Password:    req.Password,
+		DisplayName: req.Username,
 		InviterId:   inviterId,
 	}
 	if config.EmailVerificationEnabled {
-		cleanUser.Email = user.Email
+		cleanUser.Email = req.Email
 	}
 	if model.IsUsernameAlreadyTaken(cleanUser.Username) {
 		respondRegisterUsernameTaken(c)
@@ -329,7 +332,7 @@ func GetAllUsers(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
-		"data":    users,
+		"data":    model.UsersToResponses(users),
 		"total":   totalCount,
 	})
 }
@@ -350,7 +353,7 @@ func SearchUsers(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
-		"data":    users,
+		"data":    model.UsersToResponses(users),
 	})
 }
 
@@ -373,7 +376,7 @@ func GetUser(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
-		"data":    user,
+		"data":    user.ToResponse(),
 	})
 }
 
@@ -778,7 +781,7 @@ func GetSelf(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
-		"data":    user,
+		"data":    user.ToResponse(),
 	})
 }
 
@@ -1114,7 +1117,7 @@ func UpdateUser(c *gin.Context) {
 }
 
 func UpdateSelf(c *gin.Context) {
-	var user model.User
+	var user dto.UserSelfUpdateRequest
 	if err := common.UnmarshalBodyReusable(c, &user); err != nil {
 		helper.RespondError(c, errors.New(invalidParameterMessage))
 		return
@@ -1167,7 +1170,17 @@ func UpdateSelf(c *gin.Context) {
 	if user.Password == "" {
 		user.Password = "$I_LOVE_U" // make Validator happy :)
 	}
-	if err := common.Validate.Struct(&user); err != nil {
+	// Validate against a model.User (not the request DTO) so the go-playground
+	// validator error message keeps the exact "User.<Field>" struct prefix the
+	// client received before the request-DTO refactor. Only
+	// Username/Password/DisplayName/Email carry validate tags, so the validation
+	// result is identical while the error body stays byte-for-byte the same (T18).
+	if err := common.Validate.Struct(&model.User{
+		Username:    user.Username,
+		Password:    user.Password,
+		DisplayName: user.DisplayName,
+		Email:       user.Email,
+	}); err != nil {
 		helper.RespondError(c, errors.New("Input is illegal "+err.Error()))
 		return
 	}
@@ -1264,41 +1277,41 @@ func DeleteSelf(c *gin.Context) {
 func CreateUser(c *gin.Context) {
 	ctx := gmw.Ctx(c)
 	lg := gmw.GetLogger(c)
-	var user model.User
-	err := json.NewDecoder(c.Request.Body).Decode(&user)
-	if err != nil || user.Username == "" || user.Password == "" {
+	var req dto.UserCreateRequest
+	err := json.NewDecoder(c.Request.Body).Decode(&req)
+	if err != nil || req.Username == "" || req.Password == "" {
 		helper.RespondError(c, errors.New(invalidParameterMessage))
 		return
 	}
-	user.UUID = ""
-	user.InviterUUID = nil
-	if err := common.Validate.Struct(&user); err != nil {
+	// UUID/inviter_uuid are not part of the request DTO, so a client can no
+	// longer smuggle them in; the explicit resets are no longer needed.
+	if err := common.Validate.Struct(&req); err != nil {
 		helper.RespondError(c, errors.New(invalidInputMessage))
 		return
 	}
 	// Disallow empty username/display name
-	if strings.TrimSpace(user.Username) == "" {
+	if strings.TrimSpace(req.Username) == "" {
 		helper.RespondError(c, errors.New("Username cannot be empty"))
 		return
 	}
-	if user.DisplayName != "" && strings.TrimSpace(user.DisplayName) == "" {
+	if req.DisplayName != "" && strings.TrimSpace(req.DisplayName) == "" {
 		helper.RespondError(c, errors.New("Display name cannot be empty if provided"))
 		return
 	}
-	if user.DisplayName == "" {
-		user.DisplayName = user.Username
+	if req.DisplayName == "" {
+		req.DisplayName = req.Username
 	}
 	myRole := c.GetInt("role")
-	if user.Role >= myRole {
+	if req.Role >= myRole {
 		helper.RespondError(c, errors.New("Unable to create users with permissions greater than or equal to your own"))
 		return
 	}
 	// Even for admin users, we cannot fully trust them!
 	cleanUser := model.User{
-		Username:    user.Username,
-		Password:    user.Password,
-		DisplayName: user.DisplayName,
-		Email:       user.Email,
+		Username:    req.Username,
+		Password:    req.Password,
+		DisplayName: req.DisplayName,
+		Email:       req.Email,
 	}
 	if model.IsUsernameAlreadyTaken(cleanUser.Username) {
 		respondRegisterUsernameTaken(c)
@@ -1315,11 +1328,11 @@ func CreateUser(c *gin.Context) {
 
 	// Apply admin-specified quota and group after Insert, which resets them to defaults.
 	postUpdates := map[string]any{}
-	if user.Quota > 0 {
-		postUpdates["quota"] = user.Quota
+	if req.Quota > 0 {
+		postUpdates["quota"] = req.Quota
 	}
-	if user.Group != "" {
-		postUpdates["group"] = user.Group
+	if req.Group != "" {
+		postUpdates["group"] = req.Group
 	}
 	if len(postUpdates) > 0 {
 		if err := model.DB.Model(&model.User{}).Where("id = ?", cleanUser.Id).Updates(postUpdates).Error; err != nil {
@@ -1413,7 +1426,7 @@ func ManageUser(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
-		"data":    clearUser,
+		"data":    clearUser.ToResponse(),
 	})
 }
 

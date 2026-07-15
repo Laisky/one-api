@@ -1,0 +1,86 @@
+{
+  "case": "user/search",
+  "site": "U3 SearchUsers",
+  "status": 200,
+  "body": {
+    "data": [
+      {
+        "aff_code": "AFFOTHER",
+        "created_at": 1730000000111,
+        "display_name": "Behavior Diff Other",
+        "email": "other@behaviordiff.test",
+        "github_id": "gh-other",
+        "group": "vip",
+        "inviter_uuid": "<root-user-uuid>",
+        "lark_id": "lark-other",
+        "mcp_tool_blacklist": [
+          "other_blocked_tool"
+        ],
+        "metadata": {
+          "password_locked": true
+        },
+        "oidc_id": "oidc-other",
+        "quota": 930003,
+        "request_count": 73,
+        "role": 10,
+        "status": 1,
+        "updated_at": 1730000000222,
+        "used_quota": 830003,
+        "username": "behaviordiff-other",
+        "uuid": "<other-user-uuid>",
+        "wechat_id": "wx-other"
+      },
+      {
+        "aff_code": "AFFUSER",
+        "created_at": 1730000000111,
+        "display_name": "Behavior Diff User",
+        "email": "user@behaviordiff.test",
+        "github_id": "gh-user",
+        "group": "default",
+        "inviter_uuid": "<root-user-uuid>",
+        "lark_id": "lark-user",
+        "mcp_tool_blacklist": [
+          "user_blocked_tool_a",
+          "user_blocked_tool_b"
+        ],
+        "metadata": {},
+        "oidc_id": "oidc-user",
+        "quota": 920002,
+        "request_count": 72,
+        "role": 1,
+        "status": 1,
+        "updated_at": 1730000000222,
+        "used_quota": 820002,
+        "username": "behaviordiff-user",
+        "uuid": "<user-uuid>",
+        "wechat_id": "wx-user"
+      },
+      {
+        "aff_code": "AFFROOT",
+        "created_at": 1730000000111,
+        "display_name": "Behavior Diff Root",
+        "email": "root@behaviordiff.test",
+        "github_id": "gh-root",
+        "group": "roots",
+        "inviter_uuid": null,
+        "lark_id": "lark-root",
+        "mcp_tool_blacklist": [
+          "root_blocked_tool"
+        ],
+        "metadata": {},
+        "oidc_id": "oidc-root",
+        "quota": 910001,
+        "request_count": 71,
+        "role": 100,
+        "status": 1,
+        "updated_at": 1730000000222,
+        "used_quota": 810001,
+        "username": "behaviordiff-root",
+        "uuid": "<root-user-uuid>",
+        "wechat_id": "wx-root"
+      }
+    ],
+    "message": "",
+    "success": true
+  }
+}

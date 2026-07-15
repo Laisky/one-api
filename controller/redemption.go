@@ -47,7 +47,7 @@ func GetAllRedemptions(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
-		"data":    redemptions,
+		"data":    model.RedemptionsToResponses(redemptions),
 		"total":   totalCount,
 	})
 }
@@ -79,7 +79,7 @@ func SearchRedemptions(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
-		"data":    redemptions,
+		"data":    model.RedemptionsToResponses(redemptions),
 		"total":   total,
 	})
 }
@@ -99,7 +99,7 @@ func GetRedemption(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
-		"data":    redemption,
+		"data":    redemption.ToResponse(),
 	})
 }
 
@@ -222,6 +222,6 @@ func UpdateRedemption(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
-		"data":    cleanRedemption,
+		"data":    cleanRedemption.ToResponse(),
 	})
 }

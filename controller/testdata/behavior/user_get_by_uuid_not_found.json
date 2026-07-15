@@ -1,0 +1,9 @@
+{
+  "case": "user/get_by_uuid_not_found",
+  "site": "U4 GetUser (error)",
+  "status": 200,
+  "body": {
+    "message": "resource reference not found",
+    "success": false
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "case": "user/create_invalid_input",
+  "site": "CreateUser (request DTO, error)",
+  "status": 200,
+  "body": {
+    "message": "Invalid input, please check your input",
+    "success": false
+  }
+}

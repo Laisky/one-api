@@ -72,6 +72,25 @@ jobs:
       - name: Scan for goroutines referencing the request *gin.Context
         run: ast-grep scan
 
+  entity_response_guard:
+    name: Boundary entity-response guardrail
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: ^1.26
+
+      # Type-aware analyzer that forbids serializing raw management-API entities
+      # (model.User/Token/Channel/Redemption/Log) at the HTTP boundary. See
+      # tools/analyzers/noentityresponse and
+      # docs/proposals/20260714_boundary-response-dtos.md (gate E3).
+      - name: Run noentityresponse analyzer
+        run: go run ./tools/analyzers/noentityresponse/cmd/noentityresponse ./...
+
   modern_frontend_tests:
     name: Frontend tests (modern)
     runs-on: ubuntu-latest
