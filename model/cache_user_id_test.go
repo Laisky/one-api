@@ -135,27 +135,45 @@ func TestCacheGetUserByIdServesFromCacheWithCorrectId(t *testing.T) {
 	require.Equal(t, wantId, cached.Id, "cache-served user must keep its integer Id")
 }
 
-// TestUserMarshalJSON_StillHidesInternalIntId is a regression guard for the
-// DESIGN INTENT that must survive the fix: the API-facing User.MarshalJSON must
-// keep omitting the internal integer "id" (and "inviter_id") from responses,
-// exposing only the external UUID. This guards against the naive "fix" of adding
-// Id back to userJSON, which would re-leak internal integer identifiers to
-// clients. It passes both before and after the correct fix.
-func TestUserMarshalJSON_StillHidesInternalIntId(t *testing.T) {
+// TestUserDefaultMarshalIsHonestAndSecretFree replaces the retired
+// TestUserMarshalJSON_StillHidesInternalIntId. The boundary-DTO refactor
+// INVERTS the old design intent: model.User no longer has a whitelist
+// MarshalJSON, so a default json.Marshal(User) is now HONEST (it emits the
+// internal integer "id" — that is exactly what the Redis object cache relies on,
+// issue #353). The external contract (uuid-only, no int id) is instead enforced
+// by dto.UserResponse (see TestResponseGoldens/user).
+//
+// What must remain true forever: the three secret fields are json:"-", so NO
+// serialization path — cache, log, or a future queue — can emit them, even by
+// accident (G3). This is the security net that took over from the marshaler
+// (T4/T16).
+func TestUserDefaultMarshalIsHonestAndSecretFree(t *testing.T) {
 	inviterUUID := "018f0000-0000-7000-8000-000000000009"
 	u := User{
-		Id:          42,
-		InviterId:   7,
-		UUID:        "018f0000-0000-7000-8000-000000000001",
-		Username:    "alice",
-		InviterUUID: &inviterUUID,
+		Id:               42,
+		InviterId:        7,
+		UUID:             "018f0000-0000-7000-8000-000000000001",
+		Username:         "alice",
+		InviterUUID:      &inviterUUID,
+		Password:         "$2a$10$bcrypthashsecret",
+		AccessToken:      "access-token-secret-000000000000",
+		TotpSecret:       "JBSWY3DPEHPK3PXP",
+		VerificationCode: "verif-code",
 	}
 	b, err := json.Marshal(u)
 	require.NoError(t, err)
 
 	var got map[string]any
 	require.NoError(t, json.Unmarshal(b, &got))
-	require.NotContains(t, got, "id", "API response must not leak internal integer id")
-	require.NotContains(t, got, "inviter_id", "API response must not leak internal integer inviter_id")
-	require.Equal(t, "018f0000-0000-7000-8000-000000000001", got["uuid"], "API response must expose external UUID")
+
+	// Honest default serialization: the internal integer id is present (this is
+	// what fixed #353 — the cache round-trip preserves it).
+	require.Contains(t, got, "id", "default marshal must be honest and carry the internal integer id")
+	require.EqualValues(t, 42, got["id"])
+
+	// Secrets are unrepresentable in any serialization (json:"-").
+	require.NotContains(t, got, "password", "password must never be serialized")
+	require.NotContains(t, got, "access_token", "access_token must never be serialized")
+	require.NotContains(t, got, "totp_secret", "totp_secret must never be serialized")
+	require.NotContains(t, got, "verification_code", "verification_code must never be serialized")
 }

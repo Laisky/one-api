@@ -1,0 +1,9 @@
+{
+  "case": "user/create_malformed_json",
+  "site": "CreateUser (request DTO, error)",
+  "status": 200,
+  "body": {
+    "message": "invalid parameter",
+    "success": false
+  }
+}

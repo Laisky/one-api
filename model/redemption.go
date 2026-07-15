@@ -2,7 +2,6 @@ package model
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 
 	"github.com/Laisky/errors/v2"
@@ -33,42 +32,6 @@ type Redemption struct {
 	Count        int     `json:"count" gorm:"-:all"` // only for api request
 	CreatedAt    int64   `json:"created_at" gorm:"bigint;autoCreateTime:milli"`
 	UpdatedAt    int64   `json:"updated_at" gorm:"bigint;autoUpdateTime:milli"`
-}
-
-// MarshalJSON serializes Redemption with external UUID identifiers only.
-// Parameters: none.
-//
-// Return values:
-//   - []byte: JSON payload without integer id or user_id fields.
-//   - error: wrapped marshaling error when serialization fails.
-func (redemption Redemption) MarshalJSON() ([]byte, error) {
-	type redemptionDTO struct {
-		UUID         string  `json:"uuid"`
-		UserUUID     *string `json:"user_uuid"`
-		Key          string  `json:"key"`
-		Status       int     `json:"status"`
-		Name         string  `json:"name"`
-		Quota        int64   `json:"quota"`
-		CreatedTime  int64   `json:"created_time"`
-		RedeemedTime int64   `json:"redeemed_time"`
-		Count        int     `json:"count"`
-		CreatedAt    int64   `json:"created_at"`
-		UpdatedAt    int64   `json:"updated_at"`
-	}
-	payload, err := json.Marshal(redemptionDTO{
-		UUID:         redemption.UUID,
-		UserUUID:     redemption.UserUUID,
-		Key:          redemption.Key,
-		Status:       redemption.Status,
-		Name:         redemption.Name,
-		Quota:        redemption.Quota,
-		CreatedTime:  redemption.CreatedTime,
-		RedeemedTime: redemption.RedeemedTime,
-		Count:        redemption.Count,
-		CreatedAt:    redemption.CreatedAt,
-		UpdatedAt:    redemption.UpdatedAt,
-	})
-	return payload, errors.Wrap(err, "marshal redemption")
 }
 
 var redemptionSortFields = map[string]string{

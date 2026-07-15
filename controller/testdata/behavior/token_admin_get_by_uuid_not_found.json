@@ -1,0 +1,9 @@
+{
+  "case": "token/admin_get_by_uuid_not_found",
+  "site": "T9 AdminGetToken (error)",
+  "status": 200,
+  "body": {
+    "message": "invalid token id: resource reference not found",
+    "success": false
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "case": "token/consume_malformed_json",
+  "site": "T5 ConsumeToken (error)",
+  "status": 200,
+  "body": {
+    "message": "unexpected EOF",
+    "success": false
+  }
+}

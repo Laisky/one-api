@@ -36,7 +36,7 @@ type User struct {
 	Id               int             `json:"id"`
 	UUID             string          `json:"uuid" gorm:"type:char(36);index;column:uuid"`
 	Username         string          `json:"username" gorm:"unique;index" validate:"max=30"`
-	Password         string          `json:"password" gorm:"not null;" validate:"min=8,max=20"`
+	Password         string          `json:"-" gorm:"not null;" validate:"min=8,max=20"`
 	DisplayName      string          `json:"display_name" gorm:"index" validate:"max=20"`
 	Role             int             `json:"role" gorm:"type:int;default:1"`   // admin, util
 	Status           int             `json:"status" gorm:"type:int;default:1"` // enabled, disabled
@@ -45,9 +45,9 @@ type User struct {
 	WeChatId         string          `json:"wechat_id" gorm:"column:wechat_id;index"`
 	LarkId           string          `json:"lark_id" gorm:"column:lark_id;index"`
 	OidcId           string          `json:"oidc_id" gorm:"column:oidc_id;index"`
-	VerificationCode string          `json:"verification_code" gorm:"-:all"`                                    // this field is only for Email verification, don't save it to database!
-	AccessToken      string          `json:"access_token" gorm:"type:char(32);column:access_token;uniqueIndex"` // this token is for system management
-	TotpSecret       string          `json:"totp_secret,omitempty" gorm:"type:varchar(64);column:totp_secret"`  // TOTP secret for 2FA, omit from JSON when empty
+	VerificationCode string          `json:"-" gorm:"-:all"`                                         // Email verification code; inbound-only (bound via dto.UserRegisterRequest), never persisted or serialized
+	AccessToken      string          `json:"-" gorm:"type:char(32);column:access_token;uniqueIndex"` // system-management token; never serialized (GenerateAccessToken returns it as a raw string)
+	TotpSecret       string          `json:"-" gorm:"type:varchar(64);column:totp_secret"`           // TOTP 2FA secret; never serialized
 	Quota            int64           `json:"quota" gorm:"bigint;default:0"`
 	UsedQuota        int64           `json:"used_quota" gorm:"bigint;default:0;column:used_quota"` // used quota
 	RequestCount     int             `json:"request_count" gorm:"type:int;default:0;"`             // request number

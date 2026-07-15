@@ -9,14 +9,19 @@ import (
 	"github.com/Laisky/one-api/common/config"
 )
 
-func TestTokenMarshalJSON_DefaultPrefix(t *testing.T) {
+// These tests moved from asserting json.Marshal(Token) (the retired
+// Token.MarshalJSON whitelist) to asserting json.Marshal(tok.ToResponse()), the
+// explicit boundary DTO that replaced it. The external contract (prefixed key,
+// UUID identifiers, no legacy int id/user_id) is unchanged.
+
+func TestTokenToResponse_DefaultPrefix(t *testing.T) {
 	// backup and restore
 	old := config.TokenKeyPrefix
 	config.TokenKeyPrefix = "sk-"
 	defer func() { config.TokenKeyPrefix = old }()
 
 	tok := Token{Id: 1, UserId: 2, Key: "abcdef"}
-	b, err := json.Marshal(tok)
+	b, err := json.Marshal(tok.ToResponse())
 	require.NoError(t, err, "marshal error")
 	got := string(b)
 	require.True(t, containsJSONPair(got, `"key":"sk-abcdef"`), "expected key with sk- prefix, got: %s", got)
@@ -24,32 +29,32 @@ func TestTokenMarshalJSON_DefaultPrefix(t *testing.T) {
 	require.NotContains(t, got, `"user_id"`, "token S2 strict-out must omit legacy int user_id")
 }
 
-func TestTokenMarshalJSON_CustomPrefix(t *testing.T) {
+func TestTokenToResponse_CustomPrefix(t *testing.T) {
 	old := config.TokenKeyPrefix
 	config.TokenKeyPrefix = "custom-"
 	defer func() { config.TokenKeyPrefix = old }()
 
 	tok := Token{Id: 1, UserId: 2, Key: "abcdef"}
-	b, err := json.Marshal(tok)
+	b, err := json.Marshal(tok.ToResponse())
 	require.NoError(t, err, "marshal error")
 	got := string(b)
 	require.True(t, containsJSONPair(got, `"key":"custom-abcdef"`), "expected key with custom- prefix, got: %s", got)
 }
 
-func TestTokenMarshalJSON_StripsLegacyPrefix(t *testing.T) {
+func TestTokenToResponse_StripsLegacyPrefix(t *testing.T) {
 	old := config.TokenKeyPrefix
 	config.TokenKeyPrefix = "sk-"
 	defer func() { config.TokenKeyPrefix = old }()
 
 	tok := Token{Id: 1, UserId: 2, Key: "sk-abcdef"}
-	b, err := json.Marshal(tok)
+	b, err := json.Marshal(tok.ToResponse())
 	require.NoError(t, err, "marshal error")
 	got := string(b)
 	require.True(t, containsJSONPair(got, `"key":"sk-abcdef"`), "expected single sk- prefix, got: %s", got)
 }
 
-// TestTokenMarshalJSON_EmitsExternalUUIDs verifies token S2 responses keep UUID identifiers.
-func TestTokenMarshalJSON_EmitsExternalUUIDs(t *testing.T) {
+// TestTokenToResponse_EmitsExternalUUIDs verifies token S2 responses keep UUID identifiers.
+func TestTokenToResponse_EmitsExternalUUIDs(t *testing.T) {
 	userUUID := "018f0000-0000-7000-8000-000000000001"
 	tok := Token{
 		Id:       1,
@@ -58,7 +63,7 @@ func TestTokenMarshalJSON_EmitsExternalUUIDs(t *testing.T) {
 		UserUUID: &userUUID,
 		Key:      "abcdef",
 	}
-	b, err := json.Marshal(tok)
+	b, err := json.Marshal(tok.ToResponse())
 	require.NoError(t, err, "marshal error")
 	got := string(b)
 	require.True(t, containsJSONPair(got, `"uuid":"018f0000-0000-7000-8000-000000000002"`), "expected token uuid, got: %s", got)
@@ -91,7 +96,7 @@ func TestTokenRollbackDrillT29(t *testing.T) {
 	require.True(t, containsJSONPair(string(rollbackJSON), `"uuid":"018f0000-0000-7000-8000-000000000002"`))
 	require.True(t, containsJSONPair(string(rollbackJSON), `"user_uuid":"018f0000-0000-7000-8000-000000000001"`))
 
-	s2JSON, err := json.Marshal(tok)
+	s2JSON, err := json.Marshal(tok.ToResponse())
 	require.NoError(t, err)
 	require.NotContains(t, string(s2JSON), `"id"`, "re-applied S2 output must omit legacy int id")
 	require.NotContains(t, string(s2JSON), `"user_id"`, "re-applied S2 output must omit legacy int user_id")

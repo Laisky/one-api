@@ -1,0 +1,9 @@
+{
+  "case": "channel/update_not_found",
+  "site": "C4 UpdateChannel (error)",
+  "status": 200,
+  "body": {
+    "message": "resource reference not found",
+    "success": false
+  }
+}

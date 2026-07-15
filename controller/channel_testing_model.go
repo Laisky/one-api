@@ -1,13 +1,12 @@
 package controller
 
 import (
-	"bytes"
-	"encoding/json"
 	"sort"
 	"strings"
 
 	"github.com/Laisky/errors/v2"
 
+	"github.com/Laisky/one-api/dto"
 	"github.com/Laisky/one-api/model"
 	"github.com/Laisky/one-api/relay"
 	"github.com/Laisky/one-api/relay/adaptor"
@@ -71,53 +70,17 @@ func cheapestTextTestModel(channel *model.Channel) string {
 	return cheapestName
 }
 
-type channelListItem struct {
-	*model.Channel
-	TestModels []string `json:"test_models"`
-}
-
-// MarshalJSON surfaces test_models alongside the embedded channel fields.
+// channelListItem is the admin channel-list row: the boundary channel DTO plus
+// the text-compatible test-model choices for the per-channel test selector.
 //
-// model.Channel defines a value-receiver MarshalJSON that the embedded *Channel
-// promotes onto channelListItem. Without this override, json.Marshal would call
-// the promoted Channel.MarshalJSON and silently drop test_models, breaking the
-// admin UI's per-channel test-model selector. We marshal the channel and splice
-// test_models in (as [] when empty, never omitted) while preserving field order.
-func (item channelListItem) MarshalJSON() ([]byte, error) {
-	testModels := item.TestModels
-	if testModels == nil {
-		testModels = []string{}
-	}
-	testModelsJSON, err := json.Marshal(testModels)
-	if err != nil {
-		return nil, errors.Wrap(err, "marshal test_models")
-	}
-
-	if item.Channel == nil {
-		return append(append([]byte(`{"test_models":`), testModelsJSON...), '}'), nil
-	}
-
-	channelJSON, err := json.Marshal(item.Channel)
-	if err != nil {
-		return nil, errors.Wrap(err, "marshal channel")
-	}
-	end := bytes.LastIndexByte(channelJSON, '}')
-	if end < 0 {
-		return nil, errors.Errorf("unexpected channel json payload: %s", channelJSON)
-	}
-
-	inner := bytes.TrimSpace(channelJSON[1:end])
-	var buf bytes.Buffer
-	buf.Grow(len(channelJSON) + len(testModelsJSON) + 16)
-	buf.WriteByte('{')
-	if len(inner) > 0 {
-		buf.Write(inner)
-		buf.WriteByte(',')
-	}
-	buf.WriteString(`"test_models":`)
-	buf.Write(testModelsJSON)
-	buf.WriteByte('}')
-	return buf.Bytes(), nil
+// It embeds dto.ChannelResponse (a plain struct with no methods), so json.Marshal
+// promotes the channel fields inline and appends test_models — byte-identical to
+// the response the retired byte-splicing MarshalJSON produced, but without the
+// embedding-promotion hazard that override existed to work around (model.Channel
+// no longer carries a MarshalJSON to promote).
+type channelListItem struct {
+	dto.ChannelResponse
+	TestModels []string `json:"test_models"`
 }
 
 // buildChannelListResponse wraps channel rows with text-compatible test model choices.
@@ -129,9 +92,11 @@ func buildChannelListResponse(channels []*model.Channel) []channelListItem {
 		if channel == nil {
 			continue
 		}
+		// channelTextTestModels always returns a non-nil slice, so test_models
+		// serializes as [] (never null) when empty — matching the old splicer.
 		items = append(items, channelListItem{
-			Channel:    channel,
-			TestModels: channelTextTestModels(channel),
+			ChannelResponse: channel.ToResponse(),
+			TestModels:      channelTextTestModels(channel),
 		})
 	}
 	return items

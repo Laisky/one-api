@@ -1,0 +1,9 @@
+{
+  "case": "log/get_all_bad_channel_ref",
+  "site": "L1 GetAllLogs (error)",
+  "status": 200,
+  "body": {
+    "message": "resource reference not found",
+    "success": false
+  }
+}

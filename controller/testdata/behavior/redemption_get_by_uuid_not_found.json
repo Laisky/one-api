@@ -1,0 +1,9 @@
+{
+  "case": "redemption/get_by_uuid_not_found",
+  "site": "R3 GetRedemption (error)",
+  "status": 200,
+  "body": {
+    "message": "resource reference not found",
+    "success": false
+  }
+}

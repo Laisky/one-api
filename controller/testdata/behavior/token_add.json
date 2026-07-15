@@ -1,0 +1,26 @@
+{
+  "case": "token/add",
+  "site": "T4 AddToken",
+  "status": 200,
+  "body": {
+    "data": {
+      "accessed_time": "<ts>",
+      "created_at": "<ts-milli>",
+      "created_time": "<ts>",
+      "expired_time": -1,
+      "key": "sk-<new-token-key>",
+      "models": "gpt-4o",
+      "name": "behaviordiff-added-token",
+      "remain_quota": 4242,
+      "status": 1,
+      "subnet": "172.16.0.0/12",
+      "unlimited_quota": false,
+      "updated_at": "<ts-milli>",
+      "used_quota": 0,
+      "user_uuid": "<user-uuid>",
+      "uuid": "<new-token-uuid>"
+    },
+    "message": "",
+    "success": true
+  }
+}

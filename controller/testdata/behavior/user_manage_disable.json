@@ -1,0 +1,31 @@
+{
+  "case": "user/manage_disable",
+  "site": "U6 ManageUser",
+  "status": 200,
+  "body": {
+    "data": {
+      "aff_code": "",
+      "created_at": 0,
+      "display_name": "",
+      "email": "",
+      "github_id": "",
+      "group": "",
+      "inviter_uuid": null,
+      "lark_id": "",
+      "mcp_tool_blacklist": [],
+      "metadata": {},
+      "oidc_id": "",
+      "quota": 0,
+      "request_count": 0,
+      "role": 1,
+      "status": 2,
+      "updated_at": 0,
+      "used_quota": 0,
+      "username": "",
+      "uuid": "",
+      "wechat_id": ""
+    },
+    "message": "",
+    "success": true
+  }
+}

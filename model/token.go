@@ -2,9 +2,7 @@ package model
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"strings"
 
 	"github.com/Laisky/errors/v2"
 	"github.com/Laisky/zap"
@@ -54,55 +52,6 @@ var tokenSortFields = map[string]string{
 	"used_quota":   "used_quota",
 	"created_at":   "created_at",
 	"updated_at":   "updated_at",
-}
-
-// MarshalJSON ensures that any token serialized to JSON will include the configured key prefix.
-// This does not modify the stored key; it's applied only at response time.
-func (t Token) MarshalJSON() ([]byte, error) {
-	// Normalize: strip any known legacy prefixes from stored value, then apply configured prefix
-	raw := t.Key
-	raw = strings.TrimPrefix(raw, "sk-")
-	raw = strings.TrimPrefix(raw, "laisky-")
-	prefix := config.TokenKeyPrefix
-	if prefix == "" {
-		prefix = "sk-"
-	}
-
-	type tokenDTO struct {
-		UUID           string  `json:"uuid"`
-		UserUUID       *string `json:"user_uuid"`
-		Key            string  `json:"key"`
-		Status         int     `json:"status"`
-		Name           string  `json:"name"`
-		CreatedTime    int64   `json:"created_time"`
-		AccessedTime   int64   `json:"accessed_time"`
-		ExpiredTime    int64   `json:"expired_time"`
-		RemainQuota    int64   `json:"remain_quota"`
-		UnlimitedQuota bool    `json:"unlimited_quota"`
-		UsedQuota      int64   `json:"used_quota"`
-		CreatedAt      int64   `json:"created_at"`
-		UpdatedAt      int64   `json:"updated_at"`
-		Models         *string `json:"models"`
-		Subnet         *string `json:"subnet"`
-	}
-	dto := tokenDTO{
-		UUID:           t.UUID,
-		UserUUID:       t.UserUUID,
-		Key:            prefix + raw,
-		Status:         t.Status,
-		Name:           t.Name,
-		CreatedTime:    t.CreatedTime,
-		AccessedTime:   t.AccessedTime,
-		ExpiredTime:    t.ExpiredTime,
-		RemainQuota:    t.RemainQuota,
-		UnlimitedQuota: t.UnlimitedQuota,
-		UsedQuota:      t.UsedQuota,
-		CreatedAt:      t.CreatedAt,
-		UpdatedAt:      t.UpdatedAt,
-		Models:         t.Models,
-		Subnet:         t.Subnet,
-	}
-	return json.Marshal(dto)
 }
 
 func clearTokenCache(ctx context.Context, key string) {

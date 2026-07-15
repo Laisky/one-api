@@ -1,0 +1,9 @@
+{
+  "case": "user/manage_unknown_user",
+  "site": "U6 ManageUser (error)",
+  "status": 200,
+  "body": {
+    "message": "User does not exist",
+    "success": false
+  }
+}

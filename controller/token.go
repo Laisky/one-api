@@ -80,7 +80,7 @@ func GetAllTokens(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
-		"data":    tokens,
+		"data":    model.TokensToResponses(tokens),
 		"total":   totalCount,
 	})
 }
@@ -112,7 +112,7 @@ func SearchTokens(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
-		"data":    tokens,
+		"data":    model.TokensToResponses(tokens),
 		"total":   total,
 	})
 }
@@ -132,7 +132,7 @@ func GetToken(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
-		"data":    token,
+		"data":    token.ToResponse(),
 	})
 }
 
@@ -214,7 +214,7 @@ func AddToken(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
-		"data":    cleanToken,
+		"data":    cleanToken.ToResponse(),
 	})
 }
 
@@ -351,10 +351,16 @@ func ConsumeToken(c *gin.Context) {
 		return
 	}
 
+	// ToResponse returns the zero object for a nil receiver, so guard the nil
+	// case to preserve the historical `"data": null` when no token was updated.
+	var tokenData any
+	if updatedToken != nil {
+		tokenData = updatedToken.ToResponse()
+	}
 	response := gin.H{
 		"success": true,
 		"message": "",
-		"data":    updatedToken,
+		"data":    tokenData,
 	}
 	if transaction != nil {
 		response["transaction"] = buildTransactionResponse(transaction)
@@ -986,7 +992,7 @@ func UpdateToken(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
-		"data":    cleanToken,
+		"data":    cleanToken.ToResponse(),
 	})
 }
 
@@ -1100,7 +1106,7 @@ func AdminGetAllTokens(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
-		"data":    tokens,
+		"data":    model.TokensToResponses(tokens),
 		"total":   total,
 	})
 }
@@ -1134,7 +1140,7 @@ func AdminSearchTokens(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
-		"data":    tokens,
+		"data":    model.TokensToResponses(tokens),
 		"total":   total,
 	})
 }
@@ -1154,6 +1160,6 @@ func AdminGetToken(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
-		"data":    token,
+		"data":    token.ToResponse(),
 	})
 }

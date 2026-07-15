@@ -77,7 +77,7 @@ func GetAllLogs(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
-		"data":    logs,
+		"data":    model.LogsToResponses(logs),
 		"total":   totalCount,
 	})
 }
@@ -137,7 +137,7 @@ func GetUserLogs(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
-		"data":    logs,
+		"data":    model.LogsToResponses(logs),
 		"total":   totalCount,
 	})
 }
@@ -180,7 +180,7 @@ func GetTokenLogs(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
-		"data":    logs,
+		"data":    model.LogsToResponses(logs),
 		"total":   totalCount,
 	})
 }
@@ -213,7 +213,7 @@ func SearchAllLogs(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
-		"data":    logs,
+		"data":    model.LogsToResponses(logs),
 		"total":   total,
 	})
 }
@@ -247,7 +247,7 @@ func SearchUserLogs(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
-		"data":    logs,
+		"data":    model.LogsToResponses(logs),
 		"total":   total,
 	})
 }

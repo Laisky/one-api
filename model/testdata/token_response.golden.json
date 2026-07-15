@@ -1,0 +1,17 @@
+{
+  "uuid": "018f0000-0000-7000-8000-0000000000c1",
+  "user_uuid": "018f0000-0000-7000-8000-0000000000c2",
+  "key": "sk-goldenrawtokenkey0000000000000000000000000001",
+  "status": 1,
+  "name": "golden-token",
+  "created_time": 1710002000,
+  "accessed_time": 1710002100,
+  "expired_time": 1710002200,
+  "remain_quota": 900,
+  "unlimited_quota": true,
+  "used_quota": 100,
+  "created_at": 1710002001,
+  "updated_at": 1710002002,
+  "models": "gpt-golden,gpt-golden-2",
+  "subnet": "10.0.0.0/8"
+}

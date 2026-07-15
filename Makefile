@@ -20,6 +20,7 @@ lint:
 	golangci-lint run -c .golangci.yml
 	govulncheck ./...
 	$(MAKE) lint-goroutine-guard
+	$(MAKE) lint-entity-response
 
 # lint-goroutine-guard enforces the structural rule that no background goroutine may
 # reference the request *gin.Context (gin recycles it via sync.Pool after the handler
@@ -33,6 +34,15 @@ lint-goroutine-guard:
 	@command -v ast-grep >/dev/null 2>&1 || { echo "ast-grep not installed; skipping goroutine *gin.Context guardrail (install: pipx install ast-grep-cli, or a prebuilt binary from https://github.com/ast-grep/ast-grep/releases)"; exit 0; }
 	ast-grep test --skip-snapshot-tests
 	ast-grep scan
+
+# lint-entity-response enforces the boundary rule that no management-API entity
+# (model.User/Token/Channel/Redemption/Log) is serialized raw at the HTTP
+# boundary. It is a type-aware go/analysis analyzer (ast-grep is syntactic and
+# cannot see that gin.H{"data": users} carries []*model.User). See
+# tools/analyzers/noentityresponse and docs/proposals/20260714_boundary-response-dtos.md.
+.PHONY: lint-entity-response
+lint-entity-response:
+	go run ./tools/analyzers/noentityresponse/cmd/noentityresponse ./...
 
 # Development targets - Template specific
 .PHONY: dev-air dev-berry dev-modern
