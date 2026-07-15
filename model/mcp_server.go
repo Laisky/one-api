@@ -34,7 +34,7 @@ const (
 // MCPServer stores admin-managed MCP server metadata and policies.
 type MCPServer struct {
 	Id                      int               `json:"-"`
-	UUID                    string            `json:"uuid" gorm:"type:char(36);index;column:uuid"`
+	UUID                    string            `json:"uuid" gorm:"type:char(36);column:uuid"`
 	Name                    string            `json:"name" gorm:"uniqueIndex;type:varchar(128);not null"`
 	Description             string            `json:"description" gorm:"type:text"`
 	Status                  int               `json:"status" gorm:"type:int;default:1"`

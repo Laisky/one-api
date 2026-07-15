@@ -20,7 +20,7 @@ const RequestIDMaxLen = 32
 
 type UserRequestCost struct {
 	Id          int     `json:"-"`
-	UUID        string  `json:"uuid" gorm:"type:char(36);index;column:uuid"`
+	UUID        string  `json:"uuid" gorm:"type:char(36);column:uuid"`
 	CreatedTime int64   `json:"created_time" gorm:"bigint"`
 	UserID      int     `json:"-"`
 	UserUUID    *string `json:"user_uuid" gorm:"type:char(36);column:user_uuid;index"`

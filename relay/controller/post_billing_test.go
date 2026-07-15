@@ -38,11 +38,19 @@ import (
 //     ITS OWN request's identifiers from the detached snapshot, never another request's.
 
 // withBillingTimeout sets config.BillingTimeoutSec for the test and restores it afterward.
+// The knob is a plain package-level int that goDetachedBillingWork reads from its detached
+// goroutines, so any still-running billing task from a previous test races a bare swap.
+// Joining the tracked tasks before writing — on both the set and the restore — is what
+// makes the mutation safe.
 func withBillingTimeout(t *testing.T, sec int) {
 	t.Helper()
+	drainBilling(t)
 	prev := config.BillingTimeoutSec
 	config.BillingTimeoutSec = sec
-	t.Cleanup(func() { config.BillingTimeoutSec = prev })
+	t.Cleanup(func() {
+		drainBilling(t)
+		config.BillingTimeoutSec = prev
+	})
 }
 
 // newBillingTestContext builds a gin context with a cancellable request context.

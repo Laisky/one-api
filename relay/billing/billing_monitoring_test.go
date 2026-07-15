@@ -100,6 +100,12 @@ func (m *MockMetricsRecorder) RecordModelUsage(modelName, channelType string, la
 }
 func (m *MockMetricsRecorder) UpdateBillingStats(totalBillingOperations, successfulBillingOperations, failedBillingOperations int64) {
 }
+func (m *MockMetricsRecorder) RecordUUIDBackfillRows(role, phase, target, result string, count int) {
+}
+func (m *MockMetricsRecorder) UpdateUUIDBackfillBacklog(role, target string, backlog float64) {}
+func (m *MockMetricsRecorder) RecordUUIDBackfillCycle(role, mode, result string, duration time.Duration) {
+}
+func (m *MockMetricsRecorder) RecordUUIDBackfillFinalizer(role, result string) {}
 func (m *MockMetricsRecorder) InitSystemMetrics(version, buildTime, goVersion string, startTime time.Time) {
 }
 func (m *MockMetricsRecorder) UpdateSiteWideStats(totalQuota, usedQuota int64, totalUsers, activeUsers int) {

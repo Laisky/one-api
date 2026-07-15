@@ -2,7 +2,7 @@ package model
 
 import (
 	"context"
-	"strings"
+	"strconv"
 	"testing"
 	"time"
 
@@ -10,26 +10,24 @@ import (
 	"gorm.io/gorm"
 )
 
-// TestMigrateExternalUUIDsBackfillsLegacyRows verifies own UUID and FK UUID backfills for legacy rows.
-func TestMigrateExternalUUIDsBackfillsLegacyRows(t *testing.T) {
-	db := setupMigrationTestDB(t)
-	originalDB := DB
-	originalLOGDB := LOG_DB
-	DB = db
-	LOG_DB = db
-	t.Cleanup(func() {
-		DB = originalDB
-		LOG_DB = originalLOGDB
-	})
-
-	require.NoError(t, migrateDB())
+// seedUnifiedLegacyRows inserts legacy rows with no UUID values on a unified database.
+func seedUnifiedLegacyRows(t *testing.T, db *gorm.DB) {
+	t.Helper()
 	require.NoError(t, db.Exec("INSERT INTO users (id, username, password, inviter_id) VALUES (1, 'root', 'password-hash', 0), (2, 'child', 'password-hash', 1)").Error)
 	require.NoError(t, db.Exec("INSERT INTO channels (id, type, name, models, config) VALUES (1, 1, 'primary', 'gpt-4o', '{}')").Error)
 	require.NoError(t, db.Exec("INSERT INTO tokens (id, user_id, `key`, name) VALUES (1, 1, 'legacy-token-key', 'default')").Error)
 	require.NoError(t, db.Exec("INSERT INTO logs (id, user_id, channel_id, type, token_name, content) VALUES (1, 1, 1, 1, 'default', 'legacy log')").Error)
 	require.NoError(t, db.Exec("INSERT INTO redemptions (id, user_id, `key`, name) VALUES (1, 1, 'legacy-redemption-key', 'gift')").Error)
+}
 
-	require.NoError(t, MigrateExternalUUIDs(context.Background()))
+// TestUnifiedFinalizerBackfillsLegacyRows verifies owned and FK UUID backfill plus promotion.
+func TestUnifiedFinalizerBackfillsLegacyRows(t *testing.T) {
+	db, topology := newUnifiedTestTopology(t)
+	withFinalizerEnabled(t, true)
+	seedUnifiedLegacyRows(t, db)
+
+	_, err := runFinalizer(t, topology)
+	require.NoError(t, err)
 
 	var user User
 	require.NoError(t, db.First(&user, "id = ?", 1).Error)
@@ -60,321 +58,540 @@ func TestMigrateExternalUUIDsBackfillsLegacyRows(t *testing.T) {
 	require.NotNil(t, log.TokenUUID)
 	require.Equal(t, token.UUID, *log.TokenUUID)
 
-	created := &Channel{Name: "created", Type: 1, Models: "gpt-4o", Config: "{}"}
-	require.NoError(t, db.Create(created).Error)
-	requireHyphenatedUUID(t, created.UUID)
-
-	for _, target := range primaryUUIDBackfillTargets() {
+	for _, target := range uuidOwnedRegistry() {
 		requireUUIDUniqueIndex(t, db, target)
 	}
+	requireMarker(t, db, externalUUIDPrimaryMigrationKey, true)
 	require.Error(t, db.Model(&User{}).Where("id = ?", child.Id).Update("uuid", user.UUID).Error)
 }
 
-// TestMigrateLogExternalUUIDsBackfillsTokenTransactionLogUUIDFromSplitLogDB verifies split LOG_DB log references.
-func TestMigrateLogExternalUUIDsBackfillsTokenTransactionLogUUIDFromSplitLogDB(t *testing.T) {
-	primaryDB := setupMigrationTestDB(t)
-	logDB := setupMigrationTestDB(t)
-	originalDB := DB
-	originalLOGDB := LOG_DB
-	DB = primaryDB
-	LOG_DB = logDB
-	t.Cleanup(func() {
-		DB = originalDB
-		LOG_DB = originalLOGDB
-	})
+// TestSplitFinalizerBackfillsCrossDatabaseUUIDs covers UUID-A01: one split invocation with the
+// finalizer enabled fills primary owners, log owners, every cross-database FK UUID, and writes
+// both current-generation markers.
+func TestSplitFinalizerBackfillsCrossDatabaseUUIDs(t *testing.T) {
+	primary, logDB, topology := newSplitTestTopology(t)
+	withFinalizerEnabled(t, true)
 
-	require.NoError(t, migrateDB())
-	require.NoError(t, logDB.AutoMigrate(&Log{}))
-	require.NoError(t, primaryDB.Exec("INSERT INTO users (id, uuid, username, password) VALUES (1, '018f0000-0000-7000-8000-000000000001', 'root', 'password-hash')").Error)
-	require.NoError(t, primaryDB.Exec("INSERT INTO channels (id, uuid, type, name, models, config) VALUES (1, '018f0000-0000-7000-8000-000000000002', 1, 'primary', 'gpt-4o', '{}')").Error)
-	require.NoError(t, primaryDB.Exec("INSERT INTO token_transactions (id, transaction_id, token_id, user_id, status, pre_quota, log_id) VALUES (1, 'txn-split-log', 1, 1, 1, 10, 77)").Error)
-	require.NoError(t, logDB.Exec("INSERT INTO logs (id, user_id, channel_id, type, content) VALUES (77, 1, 1, 1, 'split log')").Error)
+	require.NoError(t, primary.Exec("INSERT INTO users (id, username, password) VALUES (1, 'root', 'password-hash')").Error)
+	require.NoError(t, primary.Exec("INSERT INTO channels (id, type, name, models, config) VALUES (1, 1, 'primary', 'gpt-4o', '{}')").Error)
+	require.NoError(t, primary.Exec("INSERT INTO tokens (id, user_id, `key`, name) VALUES (1, 1, 'legacy-token-key', 'default')").Error)
+	require.NoError(t, primary.Exec("INSERT INTO token_transactions (id, transaction_id, token_id, user_id, status, pre_quota, log_id) VALUES (1, 'txn-split-log', 1, 1, 1, 10, 77)").Error)
+	require.NoError(t, logDB.Exec("INSERT INTO logs (id, user_id, channel_id, type, token_name, content) VALUES (77, 1, 1, 1, 'default', 'split log')").Error)
 
-	require.NoError(t, MigrateLogExternalUUIDs(context.Background(), logDB))
+	_, err := runFinalizer(t, topology)
+	require.NoError(t, err)
+
+	var user User
+	require.NoError(t, primary.First(&user, "id = ?", 1).Error)
+	var channel Channel
+	require.NoError(t, primary.First(&channel, "id = ?", 1).Error)
+	var token Token
+	require.NoError(t, primary.First(&token, "id = ?", 1).Error)
 
 	var log Log
 	require.NoError(t, logDB.First(&log, "id = ?", 77).Error)
 	requireHyphenatedUUID(t, log.UUID)
+	require.NotNil(t, log.UserUUID)
+	require.Equal(t, user.UUID, *log.UserUUID)
+	require.NotNil(t, log.ChannelUUID)
+	require.Equal(t, channel.UUID, *log.ChannelUUID)
+	require.NotNil(t, log.TokenUUID)
+	require.Equal(t, token.UUID, *log.TokenUUID)
 
 	var txn TokenTransaction
-	require.NoError(t, primaryDB.First(&txn, "id = ?", 1).Error)
+	require.NoError(t, primary.First(&txn, "id = ?", 1).Error)
 	require.NotNil(t, txn.LogUUID)
 	require.Equal(t, log.UUID, *txn.LogUUID)
-	requireUUIDUniqueIndex(t, logDB, uuidBackfillTarget{table: "logs", model: &Log{}})
+
+	requireMarker(t, primary, externalUUIDPrimaryMigrationKey, true)
+	requireMarker(t, logDB, externalUUIDLogMigrationKey, true)
+	requireUUIDUniqueIndex(t, logDB, uuidOwnedTarget{role: uuidRoleLog, table: "logs", model: &Log{}})
 	require.Error(t, logDB.Exec("INSERT INTO logs (id, uuid, user_id, channel_id, type, content) VALUES (78, ?, 1, 1, 1, 'duplicate log')", log.UUID).Error)
 }
 
-// TestEnsureUUIDUniqueIndexesDefersMissingUUIDs verifies unique promotion is gated by completed backfill.
-func TestEnsureUUIDUniqueIndexesDefersMissingUUIDs(t *testing.T) {
-	db := setupMigrationTestDB(t)
-	require.NoError(t, db.AutoMigrate(&User{}))
+// TestSplitOnlyAuthoritativeLogRowsAreTouched covers UUID-A02: a log FK UUID that is missing only
+// because its primary owner has no UUID yet must not pass validation, and a conflicting primary
+// logs row with the same id must never be read or mutated in split mode.
+func TestSplitOnlyAuthoritativeLogRowsAreTouched(t *testing.T) {
+	primary, logDB, topology := newSplitTestTopology(t)
+	withFinalizerEnabled(t, true)
+
+	require.NoError(t, primary.Exec("INSERT INTO users (id, username, password) VALUES (1, 'root', 'password-hash')").Error)
+	// A stale primary logs row shares the authoritative row's id but is not authoritative.
+	require.NoError(t, primary.Exec("INSERT INTO logs (id, user_id, type, content) VALUES (5, 1, 1, 'stale primary log')").Error)
+	require.NoError(t, logDB.Exec("INSERT INTO logs (id, user_id, type, content) VALUES (5, 1, 1, 'authoritative log')").Error)
+
+	_, err := runFinalizer(t, topology)
+	require.NoError(t, err)
+
+	var authoritative Log
+	require.NoError(t, logDB.First(&authoritative, "id = ?", 5).Error)
+	requireHyphenatedUUID(t, authoritative.UUID)
+	require.NotNil(t, authoritative.UserUUID)
+	require.Equal(t, "authoritative log", authoritative.Content)
+
+	// The stale primary logs table is not authoritative, so it is neither scanned nor mutated.
+	var stale Log
+	require.NoError(t, primary.First(&stale, "id = ?", 5).Error)
+	require.Empty(t, stale.UUID)
+	require.Nil(t, stale.UserUUID)
+	require.Equal(t, "stale primary log", stale.Content)
+}
+
+// TestSplitValidationRejectsLogFKGapFromMissingPrimaryOwner covers the second half of UUID-A02:
+// validation must classify a log FK gap as blocking while its primary owner UUID is fillable.
+func TestSplitValidationRejectsLogFKGapFromMissingPrimaryOwner(t *testing.T) {
+	primary, logDB, topology := newSplitTestTopology(t)
+
+	require.NoError(t, primary.Exec("INSERT INTO users (id, uuid, username, password) VALUES (1, '018f0000-0000-7000-8000-000000000001', 'root', 'password-hash')").Error)
+	require.NoError(t, logDB.Exec("INSERT INTO logs (id, uuid, user_id, type, content) VALUES (1, '018f0000-0000-7000-8000-0000000000aa', 1, 1, 'gap log')").Error)
+
+	err := validateExternalUUIDs(context.Background(), topology)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "logs.user_uuid")
+	require.Contains(t, err.Error(), "fillable missing fk uuid")
+}
+
+// TestCatchUpFillsDataButWritesNoMarker covers UUID-A03.
+func TestCatchUpFillsDataButWritesNoMarker(t *testing.T) {
+	primary, logDB, topology := newSplitTestTopology(t)
+	withFinalizerEnabled(t, false)
+
+	require.NoError(t, primary.Exec("INSERT INTO users (id, username, password) VALUES (1, 'root', 'password-hash')").Error)
+	require.NoError(t, logDB.Exec("INSERT INTO logs (id, user_id, type, content) VALUES (1, 1, 1, 'catch-up log')").Error)
+
+	runCatchUp(t, topology)
+
+	var user User
+	require.NoError(t, primary.First(&user, "id = ?", 1).Error)
+	requireHyphenatedUUID(t, user.UUID)
+
+	var log Log
+	require.NoError(t, logDB.First(&log, "id = ?", 1).Error)
+	requireHyphenatedUUID(t, log.UUID)
+	require.NotNil(t, log.UserUUID)
+	require.Equal(t, user.UUID, *log.UserUUID)
+
+	requireMarker(t, primary, externalUUIDPrimaryMigrationKey, false)
+	requireMarker(t, logDB, externalUUIDLogMigrationKey, false)
+	// Catch-up never promotes, so the ordinary candidate index must still be the only one.
+	require.False(t, logDB.Migrator().HasIndex(&Log{}, uuidUniqueIndexName("logs")))
+	require.True(t, logDB.Migrator().HasIndex(&Log{}, ordinaryUUIDIndexName("logs")))
+}
+
+// TestFinalizerFindsRowsInsertedAfterCatchUp covers UUID-A04.
+func TestFinalizerFindsRowsInsertedAfterCatchUp(t *testing.T) {
+	db, topology := newUnifiedTestTopology(t)
+
 	require.NoError(t, db.Exec("INSERT INTO users (id, username, password) VALUES (1, 'root', 'password-hash')").Error)
+	runCatchUp(t, topology)
+	requireMarker(t, db, externalUUIDPrimaryMigrationKey, false)
 
-	err := ensureUUIDUniqueIndexes(context.Background(), db, []uuidBackfillTarget{{table: "users", model: &User{}}})
+	// A UUID-unaware writer inserts after catch-up completed.
+	require.NoError(t, db.Exec("INSERT INTO users (id, username, password) VALUES (2, 'late', 'password-hash')").Error)
+
+	withFinalizerEnabled(t, true)
+	_, err := runFinalizer(t, topology)
 	require.NoError(t, err)
-	require.False(t, db.Migrator().HasIndex(&User{}, uuidUniqueIndexName("users")))
 
-	require.NoError(t, db.Model(&User{}).Where("id = ?", 1).Update("uuid", "018f0000-0000-7000-8000-000000000001").Error)
-	require.NoError(t, ensureUUIDUniqueIndexes(context.Background(), db, []uuidBackfillTarget{{table: "users", model: &User{}}}))
-	requireUUIDUniqueIndex(t, db, uuidBackfillTarget{table: "users", model: &User{}})
+	var late User
+	require.NoError(t, db.First(&late, "id = ?", 2).Error)
+	requireHyphenatedUUID(t, late.UUID)
+	requireMarker(t, db, externalUUIDPrimaryMigrationKey, true)
 }
 
-// TestMigrateExternalUUIDsRollingWindowT18 verifies old-writer rows are tolerated and swept.
-func TestMigrateExternalUUIDsRollingWindowT18(t *testing.T) {
-	db := setupMigrationTestDB(t)
-	originalDB := DB
-	originalLOGDB := LOG_DB
-	DB = db
-	LOG_DB = db
-	t.Cleanup(func() {
-		DB = originalDB
-		LOG_DB = originalLOGDB
+// TestV2MarkersDoNotSuppressReconciliation covers UUID-A05 and invariant 10.
+func TestV2MarkersDoNotSuppressReconciliation(t *testing.T) {
+	primary, logDB, topology := newSplitTestTopology(t)
+	withFinalizerEnabled(t, true)
+
+	require.NoError(t, markDataMigrationComplete(context.Background(), primary, externalUUIDPrimaryMigrationKeyV2))
+	require.NoError(t, markDataMigrationComplete(context.Background(), logDB, externalUUIDLogMigrationKeyV2))
+	require.NoError(t, primary.Exec("INSERT INTO users (id, username, password) VALUES (1, 'root', 'password-hash')").Error)
+	require.NoError(t, logDB.Exec("INSERT INTO logs (id, user_id, type, content) VALUES (1, 1, 1, 'v2 era log')").Error)
+
+	_, err := runFinalizer(t, topology)
+	require.NoError(t, err)
+
+	var log Log
+	require.NoError(t, logDB.First(&log, "id = ?", 1).Error)
+	requireHyphenatedUUID(t, log.UUID)
+	require.NotNil(t, log.UserUUID, "a v2 marker must not suppress v3 reconciliation")
+	requireMarker(t, primary, externalUUIDPrimaryMigrationKey, true)
+	requireMarker(t, logDB, externalUUIDLogMigrationKey, true)
+}
+
+// TestRecoveryFromLogMarkerOnlyState covers UUID-A06.
+func TestRecoveryFromLogMarkerOnlyState(t *testing.T) {
+	primary, logDB, topology := newSplitTestTopology(t)
+	withFinalizerEnabled(t, true)
+
+	require.NoError(t, markDataMigrationComplete(context.Background(), logDB, externalUUIDLogMigrationKey))
+	require.NoError(t, primary.Exec("INSERT INTO users (id, username, password) VALUES (1, 'root', 'password-hash')").Error)
+	require.NoError(t, logDB.Exec("INSERT INTO logs (id, user_id, type, content) VALUES (1, 1, 1, 'log marker only')").Error)
+
+	_, err := runFinalizer(t, topology)
+	require.NoError(t, err)
+
+	// The absent primary marker forces a full rerun, so log rows are reconciled even though
+	// the log database already carried its marker.
+	var log Log
+	require.NoError(t, logDB.First(&log, "id = ?", 1).Error)
+	requireHyphenatedUUID(t, log.UUID)
+	require.NotNil(t, log.UserUUID)
+	requireMarker(t, primary, externalUUIDPrimaryMigrationKey, true)
+}
+
+// TestRecoveryFromPrimaryMarkerOnlyState covers UUID-A07: a primary marker alone must not be
+// reported as success while log state is incomplete.
+func TestRecoveryFromPrimaryMarkerOnlyState(t *testing.T) {
+	primary, logDB, topology := newSplitTestTopology(t)
+	withFinalizerEnabled(t, true)
+
+	require.NoError(t, markDataMigrationComplete(context.Background(), primary, externalUUIDPrimaryMigrationKey))
+	require.NoError(t, primary.Exec("INSERT INTO users (id, username, password) VALUES (1, 'root', 'password-hash')").Error)
+	require.NoError(t, logDB.Exec("INSERT INTO logs (id, user_id, type, content) VALUES (1, 1, 1, 'primary marker only')").Error)
+
+	result, err := runFinalizer(t, topology)
+	require.NoError(t, err)
+	require.True(t, result.completed)
+
+	var log Log
+	require.NoError(t, logDB.First(&log, "id = ?", 1).Error)
+	requireHyphenatedUUID(t, log.UUID)
+	require.NotNil(t, log.UserUUID)
+	requireMarker(t, logDB, externalUUIDLogMigrationKey, true)
+}
+
+// TestCompletedStartupIsMarkerOnly covers UUID-A08 and UUID-009: completed unified startup
+// issues one marker lookup, completed split startup issues two, with zero UUID target or
+// reference queries and zero migration writes.
+func TestCompletedStartupIsMarkerOnly(t *testing.T) {
+	t.Run("unified", func(t *testing.T) {
+		db, topology := newUnifiedTestTopology(t)
+		require.NoError(t, markDataMigrationComplete(context.Background(), db, externalUUIDPrimaryMigrationKey))
+
+		counter := installQueryCounter(t, db)
+		result := runCatchUp(t, topology)
+		require.True(t, result.completed)
+
+		require.Equal(t, 1, counter.count("data_migrations"), "exactly one marker lookup")
+		requireNoUUIDTableAccess(t, counter, uuidRolePrimary)
+		requireNoUUIDTableAccess(t, counter, uuidRoleLog)
 	})
 
-	require.NoError(t, migrateDB())
-	userUUID := "018f0000-0000-7000-8000-000000000101"
-	require.NoError(t, db.Table("users").Create(map[string]any{
-		"id": 1, "uuid": userUUID, "username": "root", "password": "password-hash",
-	}).Error)
-	require.NoError(t, db.Table("tokens").Create(map[string]any{
-		"id": 1, "uuid": "018f0000-0000-7000-8000-000000000102", "user_id": 1, "user_uuid": userUUID, "key": "new-token-key", "name": "new",
-	}).Error)
-	require.NoError(t, db.Exec("INSERT INTO tokens (id, user_id, `key`, name) VALUES (2, 1, 'old-token-key', 'old-slave')").Error)
+	t.Run("split", func(t *testing.T) {
+		primary, logDB, topology := newSplitTestTopology(t)
+		require.NoError(t, markDataMigrationComplete(context.Background(), primary, externalUUIDPrimaryMigrationKey))
+		require.NoError(t, markDataMigrationComplete(context.Background(), logDB, externalUUIDLogMigrationKey))
 
-	missing, err := countMissingUUIDs(context.Background(), db, "tokens")
-	require.NoError(t, err)
-	require.EqualValues(t, 1, missing)
-	require.NoError(t, ensureUUIDUniqueIndexes(context.Background(), db, []uuidBackfillTarget{{table: "tokens", model: &Token{}}}))
-	require.False(t, db.Migrator().HasIndex(&Token{}, uuidUniqueIndexName("tokens")))
+		primaryCounter := installQueryCounter(t, primary)
+		logCounter := installQueryCounter(t, logDB)
+		result := runCatchUp(t, topology)
+		require.True(t, result.completed)
 
-	require.NoError(t, MigrateExternalUUIDs(context.Background()))
-
-	var oldToken Token
-	require.NoError(t, db.First(&oldToken, "id = ?", 2).Error)
-	requireHyphenatedUUID(t, oldToken.UUID)
-	require.NotNil(t, oldToken.UserUUID)
-	require.Equal(t, userUUID, *oldToken.UserUUID)
-	requireUUIDUniqueIndex(t, db, uuidBackfillTarget{table: "tokens", model: &Token{}})
-}
-
-// TestHasPrimaryExternalUUIDBackfillIgnoresOrphanFKRows verifies orphan FK rows do not trigger repeated startup backfills.
-func TestHasPrimaryExternalUUIDBackfillIgnoresOrphanFKRows(t *testing.T) {
-	db := setupMigrationTestDB(t)
-	originalDB := DB
-	originalLOGDB := LOG_DB
-	DB = db
-	LOG_DB = db
-	t.Cleanup(func() {
-		DB = originalDB
-		LOG_DB = originalLOGDB
+		require.Equal(t, 1, primaryCounter.count("data_migrations"), "exactly one primary marker lookup")
+		require.Equal(t, 1, logCounter.count("data_migrations"), "exactly one log marker lookup")
+		requireNoUUIDTableAccess(t, primaryCounter, uuidRolePrimary)
+		requireNoUUIDTableAccess(t, logCounter, uuidRoleLog)
 	})
+}
 
-	require.NoError(t, migrateDB())
-	require.NoError(t, db.Exec("INSERT INTO users (id, uuid, username, password) VALUES (1, '018f0000-0000-7000-8000-000000000001', 'root', 'password-hash')").Error)
-	require.NoError(t, db.Exec("INSERT INTO logs (id, uuid, user_id, type, content) VALUES (1, '018f0000-0000-7000-8000-000000000002', 999, 1, 'orphan log')").Error)
+// TestTopologyIsNotInferredFromHandleIdentity covers UUID-A09 and UUID-002: a session clone or
+// instrumentation wrapper must not change an explicitly selected topology mode.
+func TestTopologyIsNotInferredFromHandleIdentity(t *testing.T) {
+	db, topology := newUnifiedTestTopology(t)
+	require.Equal(t, uuidTopologyUnified, topology.mode)
 
-	needsBackfill, err := hasPrimaryExternalUUIDBackfill(context.Background())
+	clone := db.Session(&gorm.Session{})
+	require.NotSame(t, db, clone)
+	cloned, err := newUnifiedTopology(clone)
 	require.NoError(t, err)
-	require.False(t, needsBackfill)
-}
+	require.Equal(t, uuidTopologyUnified, cloned.mode, "a session clone must not select split mode")
+	require.Equal(t, []uuidDBRole{uuidRolePrimary}, cloned.markerRoles())
 
-// TestHasPrimaryExternalUUIDBackfillDetectsFillableFKRows verifies valid missing FK UUID rows trigger backfill work.
-func TestHasPrimaryExternalUUIDBackfillDetectsFillableFKRows(t *testing.T) {
-	db := setupMigrationTestDB(t)
-	originalDB := DB
-	originalLOGDB := LOG_DB
-	DB = db
-	LOG_DB = db
-	t.Cleanup(func() {
-		DB = originalDB
-		LOG_DB = originalLOGDB
-	})
-
-	require.NoError(t, migrateDB())
-	require.NoError(t, db.Exec("INSERT INTO users (id, uuid, username, password) VALUES (1, '018f0000-0000-7000-8000-000000000001', 'root', 'password-hash')").Error)
-	require.NoError(t, db.Exec("INSERT INTO tokens (id, uuid, user_id, `key`, name) VALUES (1, '018f0000-0000-7000-8000-000000000002', 1, 'legacy-token-key', 'default')").Error)
-
-	needsBackfill, err := hasPrimaryExternalUUIDBackfill(context.Background())
+	// Pointing both roles at one physical handle is still split when configuration says so.
+	split, err := newSplitTopology(db, db)
 	require.NoError(t, err)
-	require.True(t, needsBackfill)
-
-	require.NoError(t, MigrateExternalUUIDs(context.Background()))
-	var token Token
-	require.NoError(t, db.First(&token, "id = ?", 1).Error)
-	require.NotNil(t, token.UserUUID)
-	require.Equal(t, "018f0000-0000-7000-8000-000000000001", *token.UserUUID)
+	require.Equal(t, uuidTopologySplit, split.mode)
+	require.Equal(t, []uuidDBRole{uuidRolePrimary, uuidRoleLog}, split.markerRoles())
 }
 
-// TestHasMissingFKUUIDCandidateIgnoresZeroNullableFK verifies zero nullable FKs do not trigger backfill work.
-func TestHasMissingFKUUIDCandidateIgnoresZeroNullableFK(t *testing.T) {
-	db := setupMigrationTestDB(t)
-	originalDB := DB
-	originalLOGDB := LOG_DB
-	DB = db
-	LOG_DB = db
-	t.Cleanup(func() {
-		DB = originalDB
-		LOG_DB = originalLOGDB
-	})
+// TestCoordinatorRejectsInvalidInput covers UUID-A10 and UUID-015.
+func TestCoordinatorRejectsInvalidInput(t *testing.T) {
+	db, topology := newUnifiedTestTopology(t)
 
-	require.NoError(t, migrateDB())
-	require.NoError(t, db.Exec("INSERT INTO token_transactions (id, uuid, transaction_id, status, pre_quota, log_id) VALUES (1, '018f0000-0000-7000-8000-000000000001', 'zero-log-id', 1, 10, 0)").Error)
+	_, err := runUUIDMigrationCoordinator(context.Background(), topology, uuidMigrationMode("bogus"))
+	require.ErrorContains(t, err, "unknown external uuid migration mode")
 
-	hasCandidate, err := hasMissingFKUUIDCandidate(context.Background(), db, uuidRefProbeTarget{
-		table:      "token_transactions",
-		model:      &TokenTransaction{},
-		fkColumn:   "log_id",
-		uuidColumn: "log_uuid",
-		nullableFK: true,
-	})
+	_, err = runUUIDMigrationCoordinator(context.Background(), nil, uuidMigrationModeCatchUp)
+	require.ErrorContains(t, err, "not initialized")
+
+	_, err = newUnifiedTopology(nil)
+	require.ErrorContains(t, err, "primary database handle is nil")
+
+	_, err = newSplitTopology(db, nil)
+	require.ErrorContains(t, err, "log database handle is nil")
+
+	// A schema-incomplete handle is rejected before any target access or marker write.
+	bare := setupMigrationTestDB(t)
+	bareTopology, err := newUnifiedTopology(bare)
 	require.NoError(t, err)
-	require.False(t, hasCandidate)
+	_, err = runUUIDMigrationCoordinator(context.Background(), bareTopology, uuidMigrationModeCatchUp)
+	require.ErrorContains(t, err, "data_migrations")
 }
 
-// TestNewBinaryBeforeMasterMigrationFailsT18 documents the master-first rolling-upgrade rule.
-func TestNewBinaryBeforeMasterMigrationFailsT18(t *testing.T) {
-	db := setupMigrationTestDB(t)
-	require.NoError(t, db.Exec("CREATE TABLE users (id integer primary key autoincrement, username text, password text)").Error)
+// TestTargetBoundaryRowCounts covers UUID-A11: batch boundaries produce no skipped or
+// duplicate updates.
+func TestTargetBoundaryRowCounts(t *testing.T) {
+	for _, total := range []int{0, 1, 999, 1000, 1001, 2001} {
+		total := total
+		t.Run(strconv.Itoa(total), func(t *testing.T) {
+			db, topology := newUnifiedTestTopology(t)
+			seedLegacyUsers(t, db, total)
 
-	err := db.Create(&User{Username: "new-node", Password: "password-hash"}).Error
-	require.Error(t, err)
+			runCatchUp(t, topology)
 
-	require.NoError(t, db.Exec("INSERT INTO users (id, username, password) VALUES (1, 'old-node', 'password-hash')").Error)
-	var users []User
-	err = db.Omit("password").Find(&users).Error
-	require.Error(t, err)
-}
+			var filled int64
+			require.NoError(t, db.Table("users").Where("uuid IS NOT NULL AND uuid != ''").Count(&filled).Error)
+			require.EqualValues(t, total, filled)
 
-// TestMigrateExternalUUIDsMultiDB verifies UUID backfill and unique promotion on live MySQL/PostgreSQL.
-func TestMigrateExternalUUIDsMultiDB(t *testing.T) {
-	for _, dialect := range []string{"mysql", "postgres"} {
-		dialect := dialect
-		t.Run(dialect, func(t *testing.T) {
-			originalDB := DB
-			originalLOGDB := LOG_DB
-			db := openBackend(t, dialect)
-			if db == nil {
-				t.Skipf("%s DSN not set, skipping UUID migration matrix test", dialect)
-			}
-			DB = db
-			LOG_DB = db
-			t.Cleanup(func() {
-				DB = originalDB
-				LOG_DB = originalLOGDB
-				resetBackendFlags()
-			})
-
-			dropUUIDMigrationTables(t, db)
-			require.NoError(t, migrateDB())
-			seedLegacyUUIDRows(t, db)
-
-			require.NoError(t, MigrateExternalUUIDs(context.Background()))
-
-			var user User
-			require.NoError(t, db.First(&user, "id = ?", 1).Error)
-			requireHyphenatedUUID(t, user.UUID)
-
-			var token Token
-			require.NoError(t, db.First(&token, "id = ?", 1).Error)
-			require.NotNil(t, token.UserUUID)
-			require.Equal(t, user.UUID, *token.UserUUID)
-
-			for _, target := range primaryUUIDBackfillTargets() {
-				requireUUIDUniqueIndex(t, db, target)
-			}
-			require.Error(t, db.Model(&User{}).Where("id = ?", 2).Update("uuid", user.UUID).Error)
+			var distinct int64
+			require.NoError(t, db.Raw("SELECT COUNT(DISTINCT uuid) FROM users WHERE uuid IS NOT NULL AND uuid != ''").Scan(&distinct).Error)
+			require.EqualValues(t, total, distinct, "no duplicate uuid assignment")
 		})
 	}
 }
 
-// TestBackfillFKUUIDsSkipsOrphanRows verifies orphaned integer references do not loop forever.
-func TestBackfillFKUUIDsSkipsOrphanRows(t *testing.T) {
-	db := setupMigrationTestDB(t)
-	originalDB := DB
-	originalLOGDB := LOG_DB
-	DB = db
-	LOG_DB = db
-	t.Cleanup(func() {
-		DB = originalDB
-		LOG_DB = originalLOGDB
-	})
+// TestOrphansAndAmbiguityDoNotBlockCompletion covers UUID-A15 and UUID-A36.
+func TestOrphansAndAmbiguityDoNotBlockCompletion(t *testing.T) {
+	db, topology := newUnifiedTestTopology(t)
+	withFinalizerEnabled(t, true)
 
-	require.NoError(t, migrateDB())
-	require.NoError(t, db.Exec("INSERT INTO users (id, uuid, username, password) VALUES (1, '018f0000-0000-7000-8000-000000000001', 'root', 'password-hash')").Error)
-	require.NoError(t, db.Exec("INSERT INTO logs (id, user_id, type, content) VALUES (1, 999, 1, 'orphan log'), (2, 1, 1, 'fillable log')").Error)
+	require.NoError(t, db.Exec("INSERT INTO users (id, username, password) VALUES (1, 'root', 'password-hash')").Error)
+	require.NoError(t, db.Exec("INSERT INTO channels (id, type, name, models, config) VALUES (1, 1, 'c', 'gpt-4o', '{}')").Error)
+	// Two tokens share one (user_id, name): the key is permanently ambiguous.
+	require.NoError(t, db.Exec("INSERT INTO tokens (id, user_id, `key`, name) VALUES (1, 1, 'k1', 'dup'), (2, 1, 'k2', 'dup'), (3, 1, 'k3', 'unique')").Error)
+	require.NoError(t, db.Exec(`INSERT INTO logs (id, user_id, channel_id, type, token_name, content) VALUES
+		(1, 999, 1, 1, 'unique', 'orphan user'),
+		(2, 1, 1, 1, 'dup', 'ambiguous token'),
+		(3, 1, 1, 1, '', 'empty token name'),
+		(4, 1, 1, 1, 'unique', 'fillable')`).Error)
+	require.NoError(t, db.Exec("INSERT INTO token_transactions (id, transaction_id, token_id, user_id, status, pre_quota, log_id) VALUES (1, 'txn-null-log', 3, 1, 1, 10, NULL)").Error)
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-	defer cancel()
-	err := backfillFKUUIDs(ctx, db, uuidRefTarget{
-		table:      "logs",
-		model:      &Log{},
-		fkColumn:   "user_id",
-		uuidColumn: "user_uuid",
-		refs:       map[int]string{1: "018f0000-0000-7000-8000-000000000001"},
-	})
-	require.NoError(t, err)
+	_, err := runFinalizer(t, topology)
+	require.NoError(t, err, "orphans and ambiguous names must not block completion")
 
 	var orphan Log
 	require.NoError(t, db.First(&orphan, "id = ?", 1).Error)
-	require.Nil(t, orphan.UserUUID)
+	require.Nil(t, orphan.UserUUID, "an orphan reference stays unresolved")
 
+	var ambiguous Log
+	require.NoError(t, db.First(&ambiguous, "id = ?", 2).Error)
+	require.Nil(t, ambiguous.TokenUUID, "an ambiguous token name stays unresolved")
+
+	var emptyName Log
+	require.NoError(t, db.First(&emptyName, "id = ?", 3).Error)
+	require.Nil(t, emptyName.TokenUUID)
+
+	// A later fillable row is not blocked by the unresolved rows before it.
 	var fillable Log
-	require.NoError(t, db.First(&fillable, "id = ?", 2).Error)
-	require.NotNil(t, fillable.UserUUID)
-	require.Equal(t, "018f0000-0000-7000-8000-000000000001", *fillable.UserUUID)
+	require.NoError(t, db.First(&fillable, "id = ?", 4).Error)
+	require.NotNil(t, fillable.TokenUUID)
+
+	var txn TokenTransaction
+	require.NoError(t, db.First(&txn, "id = ?", 1).Error)
+	require.Nil(t, txn.LogUUID, "an absent nullable reference stays unresolved")
+
+	requireMarker(t, db, externalUUIDPrimaryMigrationKey, true)
 }
 
-// requireHyphenatedUUID asserts that uuid looks like the canonical external UUID form.
-func requireHyphenatedUUID(t *testing.T, uuid string) {
-	t.Helper()
-	require.Len(t, uuid, 36)
-	require.Equal(t, 4, strings.Count(uuid, "-"))
+// TestConditionalUpdateRechecksObservedReference covers UUID-A16 and invariants 3 and 4.
+func TestConditionalUpdateRechecksObservedReference(t *testing.T) {
+	t.Run("integer fk", func(t *testing.T) {
+		db, _ := newUnifiedTestTopology(t)
+		require.NoError(t, db.Exec("INSERT INTO users (id, uuid, username, password) VALUES (1, '018f0000-0000-7000-8000-000000000001', 'root', 'password-hash'), (2, '018f0000-0000-7000-8000-000000000002', 'other', 'password-hash')").Error)
+		require.NoError(t, db.Exec("INSERT INTO logs (id, user_id, type, content) VALUES (1, 1, 1, 'moving ref')").Error)
+
+		rows := []uuidRefRow{{Id: 1, RefID: 1}}
+		// The FK moves after the candidate read.
+		require.NoError(t, db.Model(&Log{}).Where("id = ?", 1).Update("user_id", 2).Error)
+
+		target := uuidFKTarget{role: uuidRoleLog, table: "logs", model: &Log{}, fkColumn: "user_id",
+			uuidColumn: "user_uuid", refRole: uuidRolePrimary, refTable: "users", resolver: uuidResolverIntFK}
+		updated, err := applyFKUUIDRows(context.Background(), db, db, target, rows)
+		require.NoError(t, err)
+		require.Zero(t, updated, "a stale observed FK must not be written")
+
+		var logRow Log
+		require.NoError(t, db.First(&logRow, "id = ?", 1).Error)
+		require.Nil(t, logRow.UserUUID)
+	})
+
+	t.Run("token name", func(t *testing.T) {
+		db, topology := newUnifiedTestTopology(t)
+		require.NoError(t, db.Exec("INSERT INTO users (id, uuid, username, password) VALUES (1, '018f0000-0000-7000-8000-000000000001', 'root', 'password-hash')").Error)
+		require.NoError(t, db.Exec("INSERT INTO tokens (id, uuid, user_id, `key`, name) VALUES (1, '018f0000-0000-7000-8000-000000000003', 1, 'k', 'alpha')").Error)
+		require.NoError(t, db.Exec("INSERT INTO logs (id, user_id, type, token_name, content) VALUES (1, 1, 1, 'alpha', 'renamed')").Error)
+
+		run := &uuidMigrationRun{topology: topology, mode: uuidMigrationModeCatchUp}
+		values := []uuidConditionalValue{{
+			id: 1,
+			conditions: []uuidColumnValue{
+				{column: "user_id", value: 1},
+				{column: "token_name", value: "alpha"},
+			},
+			value: "018f0000-0000-7000-8000-000000000003",
+		}}
+		// token_name changes after the candidate read.
+		require.NoError(t, db.Model(&Log{}).Where("id = ?", 1).Update("token_name", "beta").Error)
+		updated, err := applyConditionalStringColumnRows(context.Background(), db, "logs", "token_uuid", values)
+		require.NoError(t, err)
+		require.Zero(t, updated, "a stale observed token_name must not be written")
+		_ = run
+	})
 }
 
-// requireUUIDUniqueIndex asserts that the target table has its explicit UUID unique index.
-func requireUUIDUniqueIndex(t *testing.T, db *gorm.DB, target uuidBackfillTarget) {
-	t.Helper()
-	require.True(t, db.Migrator().HasIndex(target.model, uuidUniqueIndexName(target.table)), "missing UUID unique index for %s", target.table)
+// TestPopulatedUUIDsAreNeverOverwritten covers invariants 1 and 2.
+func TestPopulatedUUIDsAreNeverOverwritten(t *testing.T) {
+	db, topology := newUnifiedTestTopology(t)
+
+	ownedUUID := "018f0000-0000-7000-8000-000000000001"
+	otherUUID := "018f0000-0000-7000-8000-000000000002"
+	require.NoError(t, db.Exec("INSERT INTO users (id, uuid, username, password) VALUES (1, ?, 'root', 'password-hash'), (2, ?, 'other', 'password-hash')", ownedUUID, otherUUID).Error)
+	// tokens.user_uuid deliberately points at the wrong user; catch-up must not silently fix it.
+	require.NoError(t, db.Exec("INSERT INTO tokens (id, uuid, user_id, user_uuid, `key`, name) VALUES (1, '018f0000-0000-7000-8000-000000000003', 1, ?, 'k', 'n')", otherUUID).Error)
+
+	runCatchUp(t, topology)
+
+	var user User
+	require.NoError(t, db.First(&user, "id = ?", 1).Error)
+	require.Equal(t, ownedUUID, user.UUID, "a populated owned uuid is immutable")
+
+	var token Token
+	require.NoError(t, db.First(&token, "id = ?", 1).Error)
+	require.NotNil(t, token.UserUUID)
+	require.Equal(t, otherUUID, *token.UserUUID, "catch-up must not overwrite a populated fk uuid")
+
+	// The mismatch is a finalization blocker, not something catch-up repairs.
+	err := validateExternalUUIDs(context.Background(), topology)
+	require.ErrorContains(t, err, "populated fk uuid disagrees with live owner")
 }
 
-// dropUUIDMigrationTables clears UUID-migrated tables for live-database matrix tests.
-func dropUUIDMigrationTables(t *testing.T, db *gorm.DB) {
-	t.Helper()
-	require.NoError(t, db.Migrator().DropTable(
-		&PasskeyCredential{},
-		&MCPTool{},
-		&MCPServer{},
-		&AsyncTaskBinding{},
-		&Trace{},
-		&UserRequestCost{},
-		&TokenTransaction{},
-		&Log{},
-		&Redemption{},
-		&Ability{},
-		&Option{},
-		&Token{},
-		&Channel{},
-		&User{},
-	))
+// TestMalformedAndDuplicateOwnedUUIDsBlockFinalization covers UUID-A19, UUID-A23, and UUID-A44.
+func TestMalformedAndDuplicateOwnedUUIDsBlockFinalization(t *testing.T) {
+	t.Run("malformed", func(t *testing.T) {
+		db, topology := newUnifiedTestTopology(t)
+		withFinalizerEnabled(t, true)
+		require.NoError(t, db.Exec("INSERT INTO users (id, uuid, username, password) VALUES (1, 'not-a-uuid', 'root', 'password-hash')").Error)
+
+		runCatchUp(t, topology)
+		var user User
+		require.NoError(t, db.First(&user, "id = ?", 1).Error)
+		require.Equal(t, "not-a-uuid", user.UUID, "catch-up preserves a malformed legacy value")
+
+		_, err := runFinalizer(t, topology)
+		require.ErrorContains(t, err, "malformed owned uuid")
+		requireMarker(t, db, externalUUIDPrimaryMigrationKey, false)
+		require.False(t, db.Migrator().HasIndex(&User{}, uuidUniqueIndexName("users")))
+		require.True(t, db.Migrator().HasIndex(&User{}, ordinaryUUIDIndexName("users")),
+			"the ordinary index must survive a failed promotion")
+	})
+
+	t.Run("duplicate", func(t *testing.T) {
+		db, topology := newUnifiedTestTopology(t)
+		withFinalizerEnabled(t, true)
+		shared := "018f0000-0000-7000-8000-000000000001"
+		require.NoError(t, db.Exec("INSERT INTO users (id, uuid, username, password) VALUES (1, ?, 'root', 'password-hash'), (2, ?, 'other', 'password-hash')", shared, shared).Error)
+
+		_, err := runFinalizer(t, topology)
+		require.ErrorContains(t, err, "duplicate owned uuid")
+		requireMarker(t, db, externalUUIDPrimaryMigrationKey, false)
+		require.False(t, db.Migrator().HasIndex(&User{}, uuidUniqueIndexName("users")))
+		require.True(t, db.Migrator().HasIndex(&User{}, ordinaryUUIDIndexName("users")))
+	})
 }
 
-// seedLegacyUUIDRows inserts rows without UUID values to simulate a pre-migration database.
-func seedLegacyUUIDRows(t *testing.T, db *gorm.DB) {
+// TestRepeatedCatchUpIsStable covers UUID-A24.
+func TestRepeatedCatchUpIsStable(t *testing.T) {
+	db, topology := newUnifiedTestTopology(t)
+	seedUnifiedLegacyRows(t, db)
+
+	runCatchUp(t, topology)
+	var first []User
+	require.NoError(t, db.Order("id").Find(&first).Error)
+	require.Len(t, first, 2)
+
+	for i := 0; i < 4; i++ {
+		result := runCatchUp(t, topology)
+		require.Zero(t, result.updated, "a settled catch-up pass rewrites nothing")
+		var users []User
+		require.NoError(t, db.Order("id").Find(&users).Error)
+		require.Equal(t, first[0].UUID, users[0].UUID, "uuids stay stable across restarts")
+		require.Equal(t, first[1].UUID, users[1].UUID)
+		requireMarker(t, db, externalUUIDPrimaryMigrationKey, false)
+	}
+}
+
+// TestCancellationWritesNoMarker covers UUID-A18.
+func TestCancellationWritesNoMarker(t *testing.T) {
+	db, topology := newUnifiedTestTopology(t)
+	withFinalizerEnabled(t, true)
+	seedLegacyUsers(t, db, 50)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	_, err := runUUIDMigrationCoordinator(ctx, topology, uuidMigrationModeFinalizer)
+	require.Error(t, err)
+	require.ErrorIs(t, ctx.Err(), context.Canceled)
+	requireMarker(t, db, externalUUIDPrimaryMigrationKey, false)
+}
+
+// TestCatchUpBudgetBoundsOneCycle covers UUID-A37: a cycle stops at its row budget and the
+// next cycle resumes the remaining work.
+func TestCatchUpBudgetBoundsOneCycle(t *testing.T) {
+	db, topology := newUnifiedTestTopology(t)
+	seedLegacyUsers(t, db, 2500)
+
+	run := &uuidMigrationRun{topology: topology, mode: uuidMigrationModeCatchUp,
+		budget: newUUIDCatchUpBudget(1000, uuidCatchUpTimeBudget())}
+	require.NoError(t, backfillOwnedUUIDsForRole(context.Background(), run, uuidRolePrimary))
+	require.True(t, run.budget.spent(), "the row budget must stop the cycle")
+	require.LessOrEqual(t, run.updated, 2000, "a bounded cycle cannot drain the whole backlog")
+
+	var remaining int64
+	require.NoError(t, db.Table("users").Where("uuid IS NULL OR uuid = ''").Count(&remaining).Error)
+	require.Positive(t, remaining)
+
+	// A later unbounded cycle finishes the rest.
+	runCatchUp(t, topology)
+	require.NoError(t, db.Table("users").Where("uuid IS NULL OR uuid = ''").Count(&remaining).Error)
+	require.Zero(t, remaining)
+}
+
+// TestCatchUpBudgetRespectsDeadline verifies the time half of the cycle budget.
+func TestCatchUpBudgetRespectsDeadline(t *testing.T) {
+	budget := newUUIDCatchUpBudget(uuidCatchUpRowBudget(), time.Nanosecond)
+	time.Sleep(time.Millisecond)
+	require.True(t, budget.consume(1), "an expired deadline must stop the cycle")
+	require.True(t, budget.spent())
+}
+
+// seedLegacyUsers inserts count legacy users with no UUID values.
+func seedLegacyUsers(t *testing.T, db *gorm.DB, count int) {
 	t.Helper()
-	require.NoError(t, db.Table("users").Create([]map[string]any{
-		{"id": 1, "username": "root", "password": "password-hash", "inviter_id": 0},
-		{"id": 2, "username": "child", "password": "password-hash", "inviter_id": 1},
-	}).Error)
-	require.NoError(t, db.Table("channels").Create(map[string]any{
-		"id": 1, "type": 1, "name": "primary", "models": "gpt-4o", "config": "{}",
-	}).Error)
-	require.NoError(t, db.Table("tokens").Create(map[string]any{
-		"id": 1, "user_id": 1, "key": "legacy-token-key", "name": "default",
-	}).Error)
-	require.NoError(t, db.Table("logs").Create(map[string]any{
-		"id": 1, "user_id": 1, "channel_id": 1, "type": 1, "token_name": "default", "content": "legacy log",
-	}).Error)
-	require.NoError(t, db.Table("redemptions").Create(map[string]any{
-		"id": 1, "user_id": 1, "key": "legacy-redemption-key", "name": "gift",
-	}).Error)
+	const chunk = 200
+	for start := 1; start <= count; start += chunk {
+		end := start + chunk - 1
+		if end > count {
+			end = count
+		}
+		rows := make([]map[string]any, 0, end-start+1)
+		for id := start; id <= end; id++ {
+			rows = append(rows, map[string]any{
+				"id": id, "username": "user-" + strconv.Itoa(id), "password": "password-hash",
+			})
+		}
+		require.NoError(t, db.Table("users").Create(rows).Error)
+	}
 }

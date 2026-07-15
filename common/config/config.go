@@ -1659,6 +1659,12 @@ func init() {
 	// Enable consumption logging by default
 	logConsumeEnabled.Store(true)
 
+	// Load the external UUID backfill settings. These are parsed strictly rather
+	// than through the silently-defaulting env helpers, so an out-of-range or
+	// unparseable value fails configuration loading instead of starting the
+	// backfill worker on an unintended budget or timeout.
+	MustLoadExternalUUIDBackfillSettings()
+
 	// Validate all environment variables with constraints
 	// This will panic if any validation fails, ensuring fast failure on misconfiguration
 	MustValidateEnvVars()

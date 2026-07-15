@@ -55,6 +55,12 @@ type OtelRecorder struct {
 	// Model metrics
 	modelUsageDuration metric.Float64Histogram
 
+	// External UUID backfill metrics
+	uuidBackfillRowsTotal      metric.Int64Counter
+	uuidBackfillLastBacklog    metric.Float64Gauge
+	uuidBackfillCycleDuration  metric.Float64Histogram
+	uuidBackfillFinalizerTotal metric.Int64Counter
+
 	// Site-wide statistics (Dashboard)
 	siteTotalQuota  metric.Int64Gauge
 	siteUsedQuota   metric.Int64Gauge
@@ -150,6 +156,25 @@ func NewOtelRecorder() (*OtelRecorder, error) {
 	// Model metrics
 	if r.modelUsageDuration, err = meter.Float64Histogram("one_api_model_usage_duration_seconds", metric.WithDescription("Duration of model usage")); err != nil {
 		return nil, errors.Wrap(err, "create model usage duration histogram")
+	}
+
+	// External UUID backfill metrics
+	//
+	// NOTE: these instruments intentionally use the "oneapi_" prefix rather
+	// than the "one_api_" prefix used by the other instruments here, because
+	// the names are specified literally by the incremental UUID backfill
+	// proposal (§6.9).
+	if r.uuidBackfillRowsTotal, err = meter.Int64Counter("oneapi_uuid_backfill_rows_total", metric.WithDescription("Total rows processed by the external UUID backfill")); err != nil {
+		return nil, errors.Wrap(err, "create uuid backfill rows total counter")
+	}
+	if r.uuidBackfillLastBacklog, err = meter.Float64Gauge("oneapi_uuid_backfill_last_backlog", metric.WithDescription("Last observed external UUID backfill backlog per target")); err != nil {
+		return nil, errors.Wrap(err, "create uuid backfill last backlog gauge")
+	}
+	if r.uuidBackfillCycleDuration, err = meter.Float64Histogram("oneapi_uuid_backfill_cycle_duration_seconds", metric.WithDescription("Duration of external UUID backfill cycles in seconds")); err != nil {
+		return nil, errors.Wrap(err, "create uuid backfill cycle duration histogram")
+	}
+	if r.uuidBackfillFinalizerTotal, err = meter.Int64Counter("oneapi_uuid_backfill_finalizer_total", metric.WithDescription("Total external UUID backfill finalizer attempts by result")); err != nil {
+		return nil, errors.Wrap(err, "create uuid backfill finalizer total counter")
 	}
 
 	// Site-wide statistics (Dashboard)
@@ -392,6 +417,62 @@ func (r *OtelRecorder) RecordBillingError(errorType, operation string, userId in
 
 // UpdateBillingStats updates billing statistics
 func (r *OtelRecorder) UpdateBillingStats(totalBillingOperations, successfulBillingOperations, failedBillingOperations int64) {
+}
+
+// RecordUUIDBackfillRows records rows processed by one external UUID backfill batch.
+//
+// role, phase, target, and result must be compile-time registry constants; they
+// become metric attributes and must never carry an ID, UUID, DSN, or error
+// message.
+func (r *OtelRecorder) RecordUUIDBackfillRows(role, phase, target, result string, count int) {
+	if count <= 0 {
+		return
+	}
+	ctx := context.Background()
+	attrs := []attribute.KeyValue{
+		attribute.String("role", role),
+		attribute.String("phase", phase),
+		attribute.String("target", target),
+		attribute.String("result", result),
+	}
+	r.uuidBackfillRowsTotal.Add(ctx, int64(count), metric.WithAttributes(attrs...))
+}
+
+// UpdateUUIDBackfillBacklog publishes the last observed backlog for one target.
+//
+// role and target must be compile-time registry constants.
+func (r *OtelRecorder) UpdateUUIDBackfillBacklog(role, target string, backlog float64) {
+	ctx := context.Background()
+	attrs := []attribute.KeyValue{
+		attribute.String("role", role),
+		attribute.String("target", target),
+	}
+	r.uuidBackfillLastBacklog.Record(ctx, backlog, metric.WithAttributes(attrs...))
+}
+
+// RecordUUIDBackfillCycle records one catch-up or finalizer cycle outcome and duration.
+//
+// role, mode, and result must be compile-time registry constants.
+func (r *OtelRecorder) RecordUUIDBackfillCycle(role, mode, result string, duration time.Duration) {
+	ctx := context.Background()
+	attrs := []attribute.KeyValue{
+		attribute.String("role", role),
+		attribute.String("mode", mode),
+		attribute.String("result", result),
+	}
+	r.uuidBackfillCycleDuration.Record(ctx, duration.Seconds(), metric.WithAttributes(attrs...))
+}
+
+// RecordUUIDBackfillFinalizer records one finalizer attempt result for a database role.
+//
+// role and result must be compile-time registry constants.
+func (r *OtelRecorder) RecordUUIDBackfillFinalizer(role, result string) {
+	ctx := context.Background()
+	attrs := []attribute.KeyValue{
+		attribute.String("role", role),
+		attribute.String("result", result),
+	}
+	r.uuidBackfillFinalizerTotal.Add(ctx, 1, metric.WithAttributes(attrs...))
 }
 
 // InitSystemMetrics initializes system metrics

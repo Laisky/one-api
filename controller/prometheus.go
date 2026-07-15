@@ -83,5 +83,34 @@ func (p *PrometheusRelayMonitor) RecordError(errorType, component string) {
 	metrics.GlobalRecorder.RecordError(errorType, component)
 }
 
+// RecordUUIDBackfillRows records rows processed by one external UUID backfill batch.
+//
+// role, phase, target, and result must be compile-time registry constants; they
+// become metric labels and must never carry an ID, UUID, DSN, or error message.
+func (p *PrometheusRelayMonitor) RecordUUIDBackfillRows(role, phase, target, result string, count int) {
+	metrics.GlobalRecorder.RecordUUIDBackfillRows(role, phase, target, result, count)
+}
+
+// UpdateUUIDBackfillBacklog publishes the last observed backlog for one target.
+//
+// role and target must be compile-time registry constants.
+func (p *PrometheusRelayMonitor) UpdateUUIDBackfillBacklog(role, target string, backlog float64) {
+	metrics.GlobalRecorder.UpdateUUIDBackfillBacklog(role, target, backlog)
+}
+
+// RecordUUIDBackfillCycle records one catch-up or finalizer cycle outcome and duration.
+//
+// role, mode, and result must be compile-time registry constants.
+func (p *PrometheusRelayMonitor) RecordUUIDBackfillCycle(role, mode, result string, duration time.Duration) {
+	metrics.GlobalRecorder.RecordUUIDBackfillCycle(role, mode, result, duration)
+}
+
+// RecordUUIDBackfillFinalizer records one finalizer attempt result for a database role.
+//
+// role and result must be compile-time registry constants.
+func (p *PrometheusRelayMonitor) RecordUUIDBackfillFinalizer(role, result string) {
+	metrics.GlobalRecorder.RecordUUIDBackfillFinalizer(role, result)
+}
+
 // Global instance
 var PrometheusMonitor = &PrometheusRelayMonitor{}

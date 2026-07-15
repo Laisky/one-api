@@ -80,9 +80,12 @@ func main() {
 		logger.Logger.Fatal("invalid theme", zap.Error(err))
 	}
 
-	// Initialize SQL Database
-	model.InitDB()
-	model.InitLogDB()
+	// Initialize SQL Database. The bootstrap orchestrator initializes both schemas,
+	// constructs the explicit database topology, and runs external UUID reconciliation
+	// exactly once, so the InitDB/InitLogDB compatibility wrappers are not used here.
+	if err := model.InitDatabases(ctx); err != nil {
+		logger.Logger.Fatal("database bootstrap error", zap.Error(err))
+	}
 	model.StartTraceRetentionCleaner(ctx, config.TraceRetentionDays)
 	model.StartAsyncTaskRetentionCleaner(ctx, config.AsyncTaskRetentionDays)
 	err = model.CreateRootAccountIfNeed()

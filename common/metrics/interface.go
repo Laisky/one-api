@@ -48,6 +48,18 @@ type MetricsRecorder interface {
 	RecordBillingError(errorType, operation string, userId int, channelId int, modelName string)
 	UpdateBillingStats(totalBillingOperations, successfulBillingOperations, failedBillingOperations int64)
 
+	// External UUID backfill metrics
+	//
+	// IMPORTANT: every label argument below (role, phase, target, mode, result)
+	// MUST come from a compile-time registry constant. Never pass an ID, UUID,
+	// DSN, error message, table row value, or any other unbounded value: these
+	// arguments become metric labels, and an unbounded label explodes time
+	// series cardinality.
+	RecordUUIDBackfillRows(role, phase, target, result string, count int)
+	UpdateUUIDBackfillBacklog(role, target string, backlog float64)
+	RecordUUIDBackfillCycle(role, mode, result string, duration time.Duration)
+	RecordUUIDBackfillFinalizer(role, result string)
+
 	// System metrics
 	InitSystemMetrics(version, buildTime, goVersion string, startTime time.Time)
 	UpdateSiteWideStats(totalQuota, usedQuota int64, totalUsers, activeUsers int)
@@ -126,6 +138,18 @@ func (n *NoOpRecorder) RecordBillingError(errorType, operation string, userId in
 // UpdateBillingStats implements MetricsRecorder.UpdateBillingStats without collecting any data.
 func (n *NoOpRecorder) UpdateBillingStats(totalBillingOperations, successfulBillingOperations, failedBillingOperations int64) {
 }
+
+// RecordUUIDBackfillRows implements MetricsRecorder.RecordUUIDBackfillRows without collecting any data.
+func (n *NoOpRecorder) RecordUUIDBackfillRows(role, phase, target, result string, count int) {}
+
+// UpdateUUIDBackfillBacklog implements MetricsRecorder.UpdateUUIDBackfillBacklog without collecting any data.
+func (n *NoOpRecorder) UpdateUUIDBackfillBacklog(role, target string, backlog float64) {}
+
+// RecordUUIDBackfillCycle implements MetricsRecorder.RecordUUIDBackfillCycle without collecting any data.
+func (n *NoOpRecorder) RecordUUIDBackfillCycle(role, mode, result string, duration time.Duration) {}
+
+// RecordUUIDBackfillFinalizer implements MetricsRecorder.RecordUUIDBackfillFinalizer without collecting any data.
+func (n *NoOpRecorder) RecordUUIDBackfillFinalizer(role, result string) {}
 
 // InitSystemMetrics implements MetricsRecorder.InitSystemMetrics without collecting any data.
 func (n *NoOpRecorder) InitSystemMetrics(version, buildTime, goVersion string, startTime time.Time) {}
@@ -281,6 +305,34 @@ func (m *MultiRecorder) RecordBillingError(errorType, operation string, userId i
 func (m *MultiRecorder) UpdateBillingStats(totalBillingOperations, successfulBillingOperations, failedBillingOperations int64) {
 	for _, r := range m.Recorders {
 		r.UpdateBillingStats(totalBillingOperations, successfulBillingOperations, failedBillingOperations)
+	}
+}
+
+// RecordUUIDBackfillRows implements MetricsRecorder.RecordUUIDBackfillRows
+func (m *MultiRecorder) RecordUUIDBackfillRows(role, phase, target, result string, count int) {
+	for _, r := range m.Recorders {
+		r.RecordUUIDBackfillRows(role, phase, target, result, count)
+	}
+}
+
+// UpdateUUIDBackfillBacklog implements MetricsRecorder.UpdateUUIDBackfillBacklog
+func (m *MultiRecorder) UpdateUUIDBackfillBacklog(role, target string, backlog float64) {
+	for _, r := range m.Recorders {
+		r.UpdateUUIDBackfillBacklog(role, target, backlog)
+	}
+}
+
+// RecordUUIDBackfillCycle implements MetricsRecorder.RecordUUIDBackfillCycle
+func (m *MultiRecorder) RecordUUIDBackfillCycle(role, mode, result string, duration time.Duration) {
+	for _, r := range m.Recorders {
+		r.RecordUUIDBackfillCycle(role, mode, result, duration)
+	}
+}
+
+// RecordUUIDBackfillFinalizer implements MetricsRecorder.RecordUUIDBackfillFinalizer
+func (m *MultiRecorder) RecordUUIDBackfillFinalizer(role, result string) {
+	for _, r := range m.Recorders {
+		r.RecordUUIDBackfillFinalizer(role, result)
 	}
 }
 

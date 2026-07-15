@@ -1063,6 +1063,16 @@ func ensureResponseFallbackDB(t *testing.T) {
 		}
 		db, err := gorm.Open(sqlite.Open("file:response_fallback_tests?mode=memory&cache=shared"), &gorm.Config{})
 		require.NoError(t, err, "failed to open sqlite database")
+		// Pin the pool to a single connection. Shared-cache SQLite raises SQLITE_LOCKED
+		// ("database table is locked") immediately when two pooled connections touch the
+		// same table, and busy_timeout does not apply to those table locks. The billing
+		// and logging tasks these tests spawn via graceful.GoCritical run on their own
+		// goroutines, so with the default pool the fixture resets race them and flake.
+		sqlDB, err := db.DB()
+		require.NoError(t, err, "failed to access sqlite pool")
+		sqlDB.SetMaxOpenConns(1)
+		sqlDB.SetMaxIdleConns(1)
+		sqlDB.SetConnMaxLifetime(0)
 		model.DB = db
 		model.LOG_DB = db
 	})

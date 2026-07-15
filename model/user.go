@@ -34,7 +34,7 @@ const (
 // Otherwise, the sensitive information will be saved on local storage in plain text!
 type User struct {
 	Id               int             `json:"id"`
-	UUID             string          `json:"uuid" gorm:"type:char(36);index;column:uuid"`
+	UUID             string          `json:"uuid" gorm:"type:char(36);column:uuid"`
 	Username         string          `json:"username" gorm:"unique;index" validate:"max=30"`
 	Password         string          `json:"-" gorm:"not null;" validate:"min=8,max=20"`
 	DisplayName      string          `json:"display_name" gorm:"index" validate:"max=20"`

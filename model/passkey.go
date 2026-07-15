@@ -16,7 +16,7 @@ import (
 // (e.g. varbinary for MySQL, bytea for PostgreSQL, blob for SQLite).
 type PasskeyCredential struct {
 	Id              int     `json:"id" gorm:"primaryKey;autoIncrement"`
-	UUID            string  `json:"uuid" gorm:"type:char(36);index;column:uuid"`
+	UUID            string  `json:"uuid" gorm:"type:char(36);column:uuid"`
 	UserId          int     `json:"user_id" gorm:"index;not null"`
 	UserUUID        *string `json:"user_uuid" gorm:"type:char(36);column:user_uuid;index"`
 	CredentialName  string  `json:"credential_name" gorm:"size:128;not null"` // human-friendly label

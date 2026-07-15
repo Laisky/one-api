@@ -24,7 +24,7 @@ const (
 
 type Token struct {
 	Id             int     `json:"id"`
-	UUID           string  `json:"uuid" gorm:"type:char(36);index;column:uuid"`
+	UUID           string  `json:"uuid" gorm:"type:char(36);column:uuid"`
 	UserId         int     `json:"user_id"`
 	UserUUID       *string `json:"user_uuid" gorm:"type:char(36);column:user_uuid;index"`
 	Key            string  `json:"key" gorm:"type:char(48);uniqueIndex"`
