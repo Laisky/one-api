@@ -60,6 +60,20 @@ type MetricsRecorder interface {
 	RecordUUIDBackfillCycle(role, mode, result string, duration time.Duration)
 	RecordUUIDBackfillFinalizer(role, result string)
 
+	// Compact UUID storage metrics
+	//
+	// IMPORTANT: every label argument below (role, state, target, kind, action,
+	// result, reason, operation) MUST come from a compile-time registry
+	// constant. Never pass an ID, UUID, DSN, credential, row content,
+	// fingerprint, or error message: these arguments become metric labels, and
+	// an unbounded label explodes time series cardinality.
+	UpdateCompactUUIDState(role, state string, active bool)
+	UpdateCompactUUIDBacklog(role, target, kind string, rows float64)
+	RecordCompactUUIDAction(role, action, result string)
+	RecordCompactUUIDLookupFallback(role, reason string)
+	UpdateCompactUUIDLastProgress(role string, unixTime float64)
+	RecordCompactUUIDDuration(role, operation string, duration time.Duration)
+
 	// System metrics
 	InitSystemMetrics(version, buildTime, goVersion string, startTime time.Time)
 	UpdateSiteWideStats(totalQuota, usedQuota int64, totalUsers, activeUsers int)
@@ -150,6 +164,24 @@ func (n *NoOpRecorder) RecordUUIDBackfillCycle(role, mode, result string, durati
 
 // RecordUUIDBackfillFinalizer implements MetricsRecorder.RecordUUIDBackfillFinalizer without collecting any data.
 func (n *NoOpRecorder) RecordUUIDBackfillFinalizer(role, result string) {}
+
+// UpdateCompactUUIDState implements MetricsRecorder.UpdateCompactUUIDState without collecting any data.
+func (n *NoOpRecorder) UpdateCompactUUIDState(role, state string, active bool) {}
+
+// UpdateCompactUUIDBacklog implements MetricsRecorder.UpdateCompactUUIDBacklog without collecting any data.
+func (n *NoOpRecorder) UpdateCompactUUIDBacklog(role, target, kind string, rows float64) {}
+
+// RecordCompactUUIDAction implements MetricsRecorder.RecordCompactUUIDAction without collecting any data.
+func (n *NoOpRecorder) RecordCompactUUIDAction(role, action, result string) {}
+
+// RecordCompactUUIDLookupFallback implements MetricsRecorder.RecordCompactUUIDLookupFallback without collecting any data.
+func (n *NoOpRecorder) RecordCompactUUIDLookupFallback(role, reason string) {}
+
+// UpdateCompactUUIDLastProgress implements MetricsRecorder.UpdateCompactUUIDLastProgress without collecting any data.
+func (n *NoOpRecorder) UpdateCompactUUIDLastProgress(role string, unixTime float64) {}
+
+// RecordCompactUUIDDuration implements MetricsRecorder.RecordCompactUUIDDuration without collecting any data.
+func (n *NoOpRecorder) RecordCompactUUIDDuration(role, operation string, duration time.Duration) {}
 
 // InitSystemMetrics implements MetricsRecorder.InitSystemMetrics without collecting any data.
 func (n *NoOpRecorder) InitSystemMetrics(version, buildTime, goVersion string, startTime time.Time) {}
@@ -333,6 +365,48 @@ func (m *MultiRecorder) RecordUUIDBackfillCycle(role, mode, result string, durat
 func (m *MultiRecorder) RecordUUIDBackfillFinalizer(role, result string) {
 	for _, r := range m.Recorders {
 		r.RecordUUIDBackfillFinalizer(role, result)
+	}
+}
+
+// UpdateCompactUUIDState implements MetricsRecorder.UpdateCompactUUIDState
+func (m *MultiRecorder) UpdateCompactUUIDState(role, state string, active bool) {
+	for _, r := range m.Recorders {
+		r.UpdateCompactUUIDState(role, state, active)
+	}
+}
+
+// UpdateCompactUUIDBacklog implements MetricsRecorder.UpdateCompactUUIDBacklog
+func (m *MultiRecorder) UpdateCompactUUIDBacklog(role, target, kind string, rows float64) {
+	for _, r := range m.Recorders {
+		r.UpdateCompactUUIDBacklog(role, target, kind, rows)
+	}
+}
+
+// RecordCompactUUIDAction implements MetricsRecorder.RecordCompactUUIDAction
+func (m *MultiRecorder) RecordCompactUUIDAction(role, action, result string) {
+	for _, r := range m.Recorders {
+		r.RecordCompactUUIDAction(role, action, result)
+	}
+}
+
+// RecordCompactUUIDLookupFallback implements MetricsRecorder.RecordCompactUUIDLookupFallback
+func (m *MultiRecorder) RecordCompactUUIDLookupFallback(role, reason string) {
+	for _, r := range m.Recorders {
+		r.RecordCompactUUIDLookupFallback(role, reason)
+	}
+}
+
+// UpdateCompactUUIDLastProgress implements MetricsRecorder.UpdateCompactUUIDLastProgress
+func (m *MultiRecorder) UpdateCompactUUIDLastProgress(role string, unixTime float64) {
+	for _, r := range m.Recorders {
+		r.UpdateCompactUUIDLastProgress(role, unixTime)
+	}
+}
+
+// RecordCompactUUIDDuration implements MetricsRecorder.RecordCompactUUIDDuration
+func (m *MultiRecorder) RecordCompactUUIDDuration(role, operation string, duration time.Duration) {
+	for _, r := range m.Recorders {
+		r.RecordCompactUUIDDuration(role, operation, duration)
 	}
 }
 

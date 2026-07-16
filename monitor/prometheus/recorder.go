@@ -220,6 +220,8 @@ var (
 		Help: "Total external UUID backfill finalizer attempts by result",
 	}, []string{"role", "result"})
 
+	// Compact UUID storage metrics are declared in recorder_compact_uuid.go.
+
 	// Model usage metrics
 	modelUsage = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "one_api_model_usage_total",
@@ -513,6 +515,8 @@ func (p *PrometheusRecorder) RecordUUIDBackfillCycle(role, mode, result string, 
 func (p *PrometheusRecorder) RecordUUIDBackfillFinalizer(role, result string) {
 	uuidBackfillFinalizerTotal.WithLabelValues(role, result).Inc()
 }
+
+// Compact UUID storage metrics are recorded in recorder_compact_uuid.go.
 
 // InitSystemMetrics initializes system-wide metrics
 func (p *PrometheusRecorder) InitSystemMetrics(version, buildTime, goVersion string, startTime time.Time) {

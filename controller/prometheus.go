@@ -112,5 +112,52 @@ func (p *PrometheusRelayMonitor) RecordUUIDBackfillFinalizer(role, result string
 	metrics.GlobalRecorder.RecordUUIDBackfillFinalizer(role, result)
 }
 
+// UpdateCompactUUIDState publishes whether one state is the current state of a role.
+//
+// Callers set active=true for the current state and active=false for every
+// other known state, so exactly one state per role/process reports 1.
+//
+// role and state must be compile-time registry constants; they become metric
+// labels and must never carry an ID, UUID, DSN, or error message.
+func (p *PrometheusRelayMonitor) UpdateCompactUUIDState(role, state string, active bool) {
+	metrics.GlobalRecorder.UpdateCompactUUIDState(role, state, active)
+}
+
+// UpdateCompactUUIDBacklog publishes the last bounded gap/mismatch/blocker observation.
+//
+// The value is one bounded observation, never a claimed global total. role,
+// target, and kind must be compile-time registry constants.
+func (p *PrometheusRelayMonitor) UpdateCompactUUIDBacklog(role, target, kind string, rows float64) {
+	metrics.GlobalRecorder.UpdateCompactUUIDBacklog(role, target, kind, rows)
+}
+
+// RecordCompactUUIDAction records one DDL, fill, validation, marker, audit, or repair outcome.
+//
+// role, action, and result must be compile-time registry constants.
+func (p *PrometheusRelayMonitor) RecordCompactUUIDAction(role, action, result string) {
+	metrics.GlobalRecorder.RecordCompactUUIDAction(role, action, result)
+}
+
+// RecordCompactUUIDLookupFallback records one compact UUID lookup fallback.
+//
+// role and reason must be compile-time registry constants.
+func (p *PrometheusRelayMonitor) RecordCompactUUIDLookupFallback(role, reason string) {
+	metrics.GlobalRecorder.RecordCompactUUIDLookupFallback(role, reason)
+}
+
+// UpdateCompactUUIDLastProgress publishes the UTC timestamp of the last durable progress.
+//
+// role must be a compile-time registry constant.
+func (p *PrometheusRelayMonitor) UpdateCompactUUIDLastProgress(role string, unixTime float64) {
+	metrics.GlobalRecorder.UpdateCompactUUIDLastProgress(role, unixTime)
+}
+
+// RecordCompactUUIDDuration records the duration of one compact UUID operation.
+//
+// role and operation must be compile-time registry constants.
+func (p *PrometheusRelayMonitor) RecordCompactUUIDDuration(role, operation string, duration time.Duration) {
+	metrics.GlobalRecorder.RecordCompactUUIDDuration(role, operation, duration)
+}
+
 // Global instance
 var PrometheusMonitor = &PrometheusRelayMonitor{}

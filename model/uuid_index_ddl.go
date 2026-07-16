@@ -34,10 +34,28 @@ const (
 // Return values:
 //   - error: raw database error so the caller can classify duplicate-object races.
 func execUUIDDDL(ctx context.Context, db *gorm.DB, sql string) error {
-	ddlCtx, cancel := context.WithTimeout(ctx, uuidDDLTimeout())
+	return execUUIDDDLWithTimeout(ctx, db, sql, uuidDDLTimeout())
+}
+
+// execUUIDDDLWithTimeout runs one DDL statement under an explicit statement timeout.
+//
+// The compact migration has its own DDL budget (COMPACT_UUID_DDL_TIMEOUT), separate from the
+// external UUID backfill's, so the timeout is a parameter rather than a global read. Sharing
+// the body matters more than the extra argument: the session-restore ordering below is subtle
+// and must not be reimplemented per migration generation.
+// Parameters:
+//   - ctx: context controlling the statement.
+//   - db: database handle to execute against.
+//   - sql: trusted DDL statement built from registry identifiers.
+//   - timeout: statement timeout for this DDL.
+//
+// Return values:
+//   - error: raw database error so the caller can classify duplicate-object races.
+func execUUIDDDLWithTimeout(ctx context.Context, db *gorm.DB, sql string, timeout time.Duration) error {
+	ddlCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	return db.WithContext(ddlCtx).Connection(func(tx *gorm.DB) error {
-		return withUUIDDDLTimeouts(tx, func() error {
+		return withUUIDDDLTimeoutsBounded(tx, uuidLockTimeout(), timeout, func() error {
 			return runWithSQLiteBusyRetry(ddlCtx, func() error {
 				return tx.Exec(sql).Error
 			})
@@ -61,6 +79,25 @@ func execUUIDDDL(ctx context.Context, db *gorm.DB, sql string) error {
 // Return values:
 //   - error: raw database error from setting a timeout or from fn.
 func withUUIDDDLTimeouts(tx *gorm.DB, fn func() error) error {
+	return withUUIDDDLTimeoutsBounded(tx, uuidLockTimeout(), uuidDDLTimeout(), fn)
+}
+
+// withUUIDDDLTimeoutsBounded installs explicit lock and statement timeouts on one pinned
+// session, runs fn, and always restores the session defaults.
+//
+// The timeouts are parameters because the external UUID backfill and the compact migration
+// carry independent budgets, and a compact DDL statement must not silently inherit the other
+// generation's timeout. See withUUIDDDLTimeouts for why restoration is registered before the
+// first SET and runs on a cancellation-detached context.
+// Parameters:
+//   - tx: pinned session that will run the DDL.
+//   - lockTimeout: maximum time the statement may wait for a lock.
+//   - statementTimeout: maximum duration of the statement itself.
+//   - fn: statement to run under the bounded timeouts.
+//
+// Return values:
+//   - error: raw database error from setting a timeout or from fn.
+func withUUIDDDLTimeoutsBounded(tx *gorm.DB, lockTimeout time.Duration, statementTimeout time.Duration, fn func() error) error {
 	// Restoration is registered BEFORE the first SET and runs on a context detached from
 	// cancellation. Both details are load-bearing:
 	//
@@ -92,8 +129,8 @@ func withUUIDDDLTimeouts(tx *gorm.DB, fn func() error) error {
 
 	switch dialectName(tx) {
 	case "postgres":
-		lock := strconv.Itoa(int(uuidLockTimeout() / time.Millisecond))
-		statement := strconv.Itoa(int(uuidDDLTimeout() / time.Millisecond))
+		lock := strconv.Itoa(int(lockTimeout / time.Millisecond))
+		statement := strconv.Itoa(int(statementTimeout / time.Millisecond))
 		restore = append(restore, "RESET lock_timeout")
 		if err := tx.Exec("SET lock_timeout = " + lock).Error; err != nil {
 			return err
@@ -106,7 +143,7 @@ func withUUIDDDLTimeouts(tx *gorm.DB, fn func() error) error {
 		// lock_wait_timeout is whole seconds and must be at least 1. MySQL applies
 		// max_execution_time to reads only, so the context deadline remains the
 		// authoritative statement bound for DDL.
-		lock := int(uuidLockTimeout() / time.Second)
+		lock := int(lockTimeout / time.Second)
 		if lock < 1 {
 			lock = 1
 		}

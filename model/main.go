@@ -220,8 +220,11 @@ func initPrimaryDatabase() error {
 	// Opening a new primary handle starts a new initialization generation, which clears the
 	// previous generation's reconciliation ownership and stops its worker. Without this a
 	// reinitialized process would keep a claim, and a topology, that point at replaced or
-	// closed handles.
+	// closed handles. The compact loops are stopped for the same reason and in the required
+	// order: mutation workers are joined before health monitors, and both before the handle
+	// they are issuing statements against is replaced.
 	stopUUIDCatchUpWorker()
+	stopCompactLoops()
 	beginInitGeneration()
 	setDatabaseTopology(nil)
 
@@ -546,7 +549,11 @@ func closeDB(db *gorm.DB) error {
 }
 
 func CloseDB() error {
+	// Cancel and join every background loop before either database is closed. Both migration
+	// generations own workers that issue statements, so a loop still in flight would run
+	// against a closed pool.
 	stopUUIDCatchUpWorker()
+	stopCompactLoops()
 	// LOG_DB is nil for an InitDB-only caller that never initialized the log database, so it
 	// must be checked before use rather than only compared against DB.
 	if LOG_DB != nil && LOG_DB != DB {

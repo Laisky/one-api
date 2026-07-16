@@ -1,0 +1,1186 @@
+# Automatic compact UUID storage qualification.
+#
+# Implements AUTO-015 and AUTO-A11 of
+# docs/proposals/20260715_compact-uuid-storage.md: the required dialect/topology
+# suites must run without skips and retain schemas, plans, metrics,
+# fingerprints, fault results, and old-binary checksums for at least 90 days.
+#
+# Why every guard below is a hard failure, never a skip:
+# Section 14 is explicit — "The qualification workflow must fail when a required
+# DSN, old-binary artifact, SQLite probe, or live suite is absent or skipped."
+# Three separate things can silently shrink this matrix, and each has its own
+# belt here:
+#
+#   1. A missing DSN. The model package's live subtests skip themselves when
+#      their DSN env var is unset (deliberate, so a developer `go test ./...`
+#      stays green without a database). ONEAPI_REQUIRE_DB_BACKENDS=1 flips
+#      model's requireBackend() from t.Skipf to t.Fatalf, and the explicit
+#      "verify DSNs" steps fail earlier still, with a readable message.
+#   2. A `-run` regex that matches nothing. `go test -run 'TestNothing' ./model/`
+#      exits 0 and prints "no tests to run"; a package with no test files exits 0
+#      and prints "[no test files]". Exit status alone therefore cannot prove a
+#      suite executed. The suite runner installed in each job asserts positively
+#      that at least one test reported PASS and that nothing reported SKIP.
+#   3. A skipped *job*. A job that never ran reports "skipped", which is not a
+#      failure and does not block a merge on its own. The qualification_gate job
+#      at the bottom re-asserts that every mandatory job's result is exactly
+#      "success", so a skipped or cancelled suite fails the workflow.
+#
+# Topology contract (Section 12: SQLite unified, MySQL 8.4 unified/split, and
+# PostgreSQL 17 unified/split may not skip):
+#   - unified = primary DSN only; one physical database owns every role.
+#   - split   = primary DSN plus a dedicated LOG_DB DSN pointing at a SECOND
+#     physical database, so the split topology under test is genuinely split
+#     rather than one handle opened twice.
+# The presence of COMPACT_UUID_TEST_LOG_*_DSN is the topology switch;
+# COMPACT_UUID_TEST_TOPOLOGY states the same intent explicitly so a suite can
+# fail loudly rather than quietly degrade a split run into a unified one.
+#
+# Not duplicated from other workflows on purpose: pr.yml already runs `go vet`
+# and lint.yml already runs the unit/race suite for ordinary changes. The
+# verification job here exists because Section 14 requires the full minimum
+# command set to pass as one recorded piece of release evidence (AUTO-T31).
+
+name: compact-uuid-qualification
+
+on:
+  push:
+    branches:
+      - 'master'
+      - 'main'
+    paths:
+      - 'model/**'
+      - 'common/**'
+      - '.github/workflows/compact-uuid-qualification.yml'
+  pull_request:
+    branches:
+      - 'master'
+      - 'main'
+    paths:
+      - 'model/**'
+      - 'common/**'
+      - '.github/workflows/compact-uuid-qualification.yml'
+  schedule:
+    # Weekly full-scale qualification (AUTO-T25/AUTO-T26): the 1m-row fixture and
+    # the 27-index size comparison are far too slow for per-PR CI.
+    - cron: '0 4 * * 0'
+  workflow_dispatch:
+    inputs:
+      run_scale:
+        description: 'Run the 100k/1m scale and index-size acceptance (AUTO-T25/AUTO-T26)'
+        type: boolean
+        default: false
+
+env:
+  # Single source of truth for the toolchain, matching pr.yml and ci.yml.
+  GO_VERSION: '1.26.3'
+  # AUTO-T27: unhex() landed in SQLite 3.41.0, which is exactly why the compact
+  # trigger contract requires it. Anything older cannot derive compact values.
+  SQLITE_MIN_VERSION: '3.41'
+  # AUTO-T27 golden vector: the canonical text form and its expected RFC-order
+  # hex. hex() returns uppercase, so the expected probe output is uppercase.
+  COMPACT_UUID_GOLDEN_TEXT: '018f0000-0000-7000-8000-000000000001'
+  COMPACT_UUID_GOLDEN_HEX: '018F0000000070008000000000000001'
+
+jobs:
+  verification:
+    name: Repository verification (AUTO-T31)
+    # Section 14 "Run at minimum": diff, format, vet, race, and Modern build.
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    concurrency:
+      group: compact_uuid_verification-${{ github.ref }}
+      cancel-in-progress: true
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          # A merge-base diff needs history; a shallow clone cannot resolve it.
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'yarn'
+          cache-dependency-path: web/modern/yarn.lock
+
+      - name: git diff --check
+        # Bare `git diff --check` compares the working tree to the index, which
+        # is always empty on a fresh checkout and would prove nothing. The
+        # merge-base form is the one that actually inspects the change under
+        # review; the bare form is kept because Section 14 names it verbatim.
+        run: |
+          set -euo pipefail
+          git diff --check
+          base="${{ github.event.pull_request.base.sha }}"
+          if [ -n "${base}" ]; then
+            echo "checking ${base}...HEAD for whitespace errors"
+            git diff --check "${base}...HEAD"
+          fi
+          echo "no whitespace errors"
+
+      - name: gofmt -l
+        # Section 14: "`gofmt -l` must produce no output."
+        run: |
+          set -euo pipefail
+          unformatted="$(gofmt -l .)"
+          if [ -n "${unformatted}" ]; then
+            echo "::error::gofmt -l reported unformatted files; Section 14 requires no output"
+            echo "${unformatted}"
+            exit 1
+          fi
+          echo "gofmt -l produced no output"
+
+      - name: go vet ./...
+        run: go vet ./...
+
+      - name: go test -race ./...
+        run: go test -race -timeout 45m ./...
+
+      - name: make build-frontend-modern
+        run: make build-frontend-modern
+
+  sqlite_capability:
+    name: SQLite capability probe (AUTO-T27)
+    # Every supported binary must report SQLite >= 3.41 and pass the persistent
+    # unhex golden probe. Two probes run here because they cover two different
+    # engines: the runner's sqlite3 CLI is NOT the engine the application uses.
+    # The authoritative one is the Go-side probe, which exercises the SQLite
+    # amalgamation embedded in github.com/mattn/go-sqlite3 through the same gorm
+    # driver production uses. The CLI probe is kept as a cheap, deterministic
+    # canary with a readable failure message.
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    concurrency:
+      group: compact_uuid_sqlite-${{ github.ref }}
+      cancel-in-progress: true
+
+    env:
+      # SQLite is unified-only by design (Section 12): a SQLite split topology is
+      # an unsupported compact topology and must enter blocked_validation.
+      COMPACT_UUID_TEST_TOPOLOGY: unified
+      ONEAPI_REQUIRE_DB_BACKENDS: '1'
+      # mattn/go-sqlite3 is a cgo driver, and -race needs cgo regardless.
+      CGO_ENABLED: '1'
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Install the SQLite CLI
+        # Installed explicitly rather than relying on whatever the runner image
+        # ships, so the version assertion below is deterministic.
+        run: sudo apt-get update && sudo apt-get install -y sqlite3
+
+      - name: Probe the SQLite CLI version and unhex golden vector
+        # A skipped or absent probe is a qualification failure, so this step
+        # asserts rather than reports.
+        run: |
+          set -euo pipefail
+          mkdir -p "${RUNNER_TEMP}/evidence"
+          version="$(sqlite3 --version | awk '{print $1}')"
+          echo "sqlite3 CLI version: ${version}"
+          lowest="$(printf '%s\n%s\n' "${SQLITE_MIN_VERSION}" "${version}" | sort -V | head -n1)"
+          if [ "${lowest}" != "${SQLITE_MIN_VERSION}" ]; then
+            echo "::error::SQLite ${version} is older than the required ${SQLITE_MIN_VERSION}; unhex() is unavailable (AUTO-T27)"
+            exit 1
+          fi
+          # The probe is persistent, not in-memory: AUTO-T27 requires the golden
+          # vector to survive a trigger writing to a real file-backed database.
+          db="${RUNNER_TEMP}/compact-uuid-probe.sqlite"
+          rm -f "${db}"
+          probe="$(sqlite3 "${db}" <<SQL
+          CREATE TABLE probe (legacy TEXT, compact BLOB);
+          CREATE TRIGGER probe_ins AFTER INSERT ON probe
+          BEGIN
+            UPDATE probe SET compact = unhex(replace(NEW.legacy, '-', '')) WHERE rowid = NEW.rowid;
+          END;
+          INSERT INTO probe (legacy) VALUES ('${COMPACT_UUID_GOLDEN_TEXT}');
+          SELECT hex(compact) FROM probe;
+          SQL
+          )"
+          echo "golden probe result: ${probe}"
+          if [ "${probe}" != "${COMPACT_UUID_GOLDEN_HEX}" ]; then
+            echo "::error::unhex golden probe returned '${probe}', expected '${COMPACT_UUID_GOLDEN_HEX}' for ${COMPACT_UUID_GOLDEN_TEXT} (AUTO-T27)"
+            exit 1
+          fi
+          {
+            echo "sqlite_cli_version=${version}"
+            echo "sqlite_min_version=${SQLITE_MIN_VERSION}"
+            echo "golden_text=${COMPACT_UUID_GOLDEN_TEXT}"
+            echo "golden_hex=${probe}"
+            echo "probed_at_utc=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          } > "${RUNNER_TEMP}/evidence/sqlite-cli-probe.txt"
+
+      - name: Record the embedded SQLite driver version
+        # AUTO-013 requires embedded SQLite metadata alongside the checksums. The
+        # module version pins the amalgamation the application actually links.
+        run: |
+          set -euo pipefail
+          go list -m github.com/mattn/go-sqlite3 gorm.io/driver/sqlite \
+            | tee "${RUNNER_TEMP}/evidence/sqlite-driver-modules.txt"
+
+      - name: Install the no-skip suite runner
+        run: |
+          set -euo pipefail
+          mkdir -p "${RUNNER_TEMP}/evidence"
+          cat > "${RUNNER_TEMP}/compact-suite.sh" <<'GUARD'
+          #!/usr/bin/env bash
+          # usage: compact-suite.sh <label> <timeout> <run-regex>
+          #
+          # Runs one compact qualification suite and proves it actually executed.
+          # `go test -run` exits 0 when the regex matches nothing, so exit status
+          # is not evidence; a positive PASS assertion is.
+          set -euo pipefail
+          label="$1"
+          timeout="$2"
+          pattern="$3"
+          log="${RUNNER_TEMP}/evidence/${label}.log"
+          go test -race -v -timeout "${timeout}" ./model/ -run "${pattern}" 2>&1 | tee "${log}"
+          if grep -qE 'no tests to run|\[no test files\]' "${log}"; then
+            echo "::error::suite '${label}': -run '${pattern}' matched zero tests. Section 14 requires a" \
+              "missing live suite to fail, not pass silently. Either the suite is not implemented yet" \
+              "(AUTO-014) or its test names drifted from this workflow's contract."
+            exit 1
+          fi
+          if grep -qE '^[[:space:]]*--- SKIP' "${log}"; then
+            echo "::error::suite '${label}': a test reported SKIP. Required live cases may not skip (Section 12/AUTO-A11)."
+            grep -E '^[[:space:]]*--- SKIP' "${log}" || true
+            exit 1
+          fi
+          if ! grep -qE '^[[:space:]]*--- PASS' "${log}"; then
+            echo "::error::suite '${label}': no test reported PASS, so the suite cannot be shown to have run."
+            exit 1
+          fi
+          echo "suite '${label}' ran and reported no skips"
+          GUARD
+          chmod +x "${RUNNER_TEMP}/compact-suite.sh"
+
+      - name: Go-side SQLite capability and golden-vector suite (AUTO-T27)
+        # Authoritative probe: the embedded engine, reached through the driver
+        # production uses, including the persistent-trigger unhex path.
+        run: bash "${RUNNER_TEMP}/compact-suite.sh" sqlite-capability 10m '^TestCompactUUIDSQLiteCapability'
+
+      - name: SQLite unified compact suite (AUTO-T01/T02/T16/T18/T19/T22/T23/T29)
+        run: bash "${RUNNER_TEMP}/compact-suite.sh" sqlite-unified 30m '^TestCompactUUIDSQLiteUnified'
+
+      - name: Unsupported topology suite — SQLite split (AUTO-T17)
+        # Section 12: "Mixed-dialect and SQLite split configurations must enter
+        # compact blocked_validation while legacy readiness remains healthy."
+        # This is a required case, so it may not skip either.
+        #
+        # Only the SQLite-split half runs here. The mixed-dialect half needs a
+        # real MySQL and a real PostgreSQL at once, and this job has no database
+        # services, so it runs in the live matrix instead. Selecting the whole
+        # '^TestCompactUUIDUnsupportedTopology' prefix here would force the
+        # mixed-dialect test to skip for want of a DSN, which the no-skip guard
+        # would (correctly) turn into a failure.
+        run: bash "${RUNNER_TEMP}/compact-suite.sh" unsupported-topology-sqlite 15m '^TestCompactUUIDUnsupportedTopologySQLiteSplit'
+
+      - name: Upload SQLite probe and suite evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: compact-uuid-sqlite-evidence
+          path: ${{ runner.temp }}/evidence
+          retention-days: 90
+          if-no-files-found: error
+
+  old_binaries:
+    name: Pinned old-binary artifacts (AUTO-013)
+    # Section 2: the implementation issue must record the oldest supported
+    # rollback build containing the v3 external-UUID writer contract, the
+    # immediately preceding production build, and artifact checksums, Go version,
+    # embedded SQLite version, schema baseline, and cache version for both.
+    # "Both real artifacts must run in qualification. Raw SQL emulation is not an
+    # acceptable substitute."
+    #
+    # The archived artifacts named by AUTO-013 do not exist in this repository
+    # yet, so they are reconstructed here from pinned immutable git refs and
+    # checksummed. Configure them as repository variables:
+    #   vars.COMPACT_UUID_OLD_BINARY_REF  — oldest supported pre-migration build
+    #   vars.COMPACT_UUID_PREV_BINARY_REF — immediately preceding production build
+    # Pin them to tags or full commit SHAs, never to a moving branch: a moving
+    # ref would silently redefine the compatibility boundary between runs.
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    concurrency:
+      group: compact_uuid_old_binaries-${{ github.ref }}
+      cancel-in-progress: true
+
+    env:
+      OLD_BINARY_REF: ${{ vars.COMPACT_UUID_OLD_BINARY_REF }}
+      PREV_BINARY_REF: ${{ vars.COMPACT_UUID_PREV_BINARY_REF }}
+
+    steps:
+      - name: Verify both pinned refs are configured
+        # No-skip guard. An unset ref must fail with a message an operator can
+        # act on, not vanish into a green run that proves nothing about
+        # rollback compatibility.
+        run: |
+          set -euo pipefail
+          missing=0
+          for var in OLD_BINARY_REF PREV_BINARY_REF; do
+            if [ -z "${!var:-}" ]; then
+              echo "::error::repository variable COMPACT_UUID_${var} is not configured." \
+                "AUTO-013 requires the minimum supported and immediately preceding pre-migration" \
+                "binaries to be pinned and archived with checksums, and Section 14 requires this" \
+                "workflow to FAIL when an old-binary artifact is absent. Set it to an immutable tag" \
+                "or full commit SHA under Settings > Secrets and variables > Actions > Variables."
+              missing=1
+            else
+              echo "COMPACT_UUID_${var} = ${!var}"
+            fi
+          done
+          exit "${missing}"
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          # Both pinned refs must be resolvable, so the full history is needed.
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Build, checksum, and describe both pinned binaries
+        # Each artifact records exactly what Section 2 demands: checksum, Go
+        # version, embedded SQLite version, and the resolved immutable commit.
+        run: |
+          set -euo pipefail
+          mkdir -p "${RUNNER_TEMP}/old-binaries"
+          build_pinned() {
+            local name="$1" ref="$2"
+            echo "::group::building ${name} from ${ref}"
+            if ! git rev-parse --verify --quiet "${ref}^{commit}" >/dev/null; then
+              echo "::error::${name} ref '${ref}' does not resolve to a commit in this repository"
+              exit 1
+            fi
+            local sha
+            sha="$(git rev-parse "${ref}^{commit}")"
+            local worktree="${RUNNER_TEMP}/src-${name}"
+            rm -rf "${worktree}"
+            git worktree add --detach "${worktree}" "${sha}"
+            local out="${RUNNER_TEMP}/old-binaries/one-api-${name}"
+            # CGO on: the pinned builds embed SQLite exactly as production does.
+            ( cd "${worktree}" && CGO_ENABLED=1 go build -trimpath -o "${out}" . )
+            local sqlite_mod
+            sqlite_mod="$( cd "${worktree}" && go list -m github.com/mattn/go-sqlite3 2>/dev/null || echo 'unknown' )"
+            local go_directive
+            go_directive="$( cd "${worktree}" && go list -m -f '{{.GoVersion}}' 2>/dev/null || echo 'unknown' )"
+            {
+              echo "artifact=one-api-${name}"
+              echo "configured_ref=${ref}"
+              echo "resolved_commit=${sha}"
+              echo "committed_at_utc=$(git show -s --format=%cI "${sha}")"
+              echo "built_with_go=$(go version)"
+              echo "go_mod_directive=${go_directive}"
+              echo "embedded_sqlite_module=${sqlite_mod}"
+              echo "sha256=$(sha256sum "${out}" | awk '{print $1}')"
+              echo "built_at_utc=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            } > "${RUNNER_TEMP}/old-binaries/one-api-${name}.metadata.txt"
+            cat "${RUNNER_TEMP}/old-binaries/one-api-${name}.metadata.txt"
+            git worktree remove --force "${worktree}"
+            echo "::endgroup::"
+          }
+          build_pinned oldest "${OLD_BINARY_REF}"
+          build_pinned previous "${PREV_BINARY_REF}"
+          ( cd "${RUNNER_TEMP}/old-binaries" && sha256sum one-api-oldest one-api-previous > SHA256SUMS )
+          cat "${RUNNER_TEMP}/old-binaries/SHA256SUMS"
+
+      - name: Verify both binaries exist and are executable
+        run: |
+          set -euo pipefail
+          for name in oldest previous; do
+            bin="${RUNNER_TEMP}/old-binaries/one-api-${name}"
+            if [ ! -x "${bin}" ]; then
+              echo "::error::pinned binary '${bin}' was not produced; mixed-version qualification cannot proceed"
+              exit 1
+            fi
+          done
+          ( cd "${RUNNER_TEMP}/old-binaries" && sha256sum --check SHA256SUMS )
+
+      - name: Upload pinned binaries and checksums
+        # AUTO-A11: old-binary checksums are retained for at least 90 days.
+        uses: actions/upload-artifact@v4
+        with:
+          name: compact-uuid-old-binaries
+          path: ${{ runner.temp }}/old-binaries
+          retention-days: 90
+          if-no-files-found: error
+
+  live_matrix:
+    name: Compact live matrix (MySQL 8.4 + PostgreSQL 17, ${{ matrix.topology }})
+    # Section 12 requires MySQL 8.4 unified/split and PostgreSQL 17 unified/split.
+    # Each matrix entry gets its own runner and its own fresh service containers,
+    # so unified and split can never contaminate each other's catalog state.
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    strategy:
+      # A unified failure must not hide a split failure, or vice versa: both are
+      # required suites and the operator needs both results in one run.
+      fail-fast: false
+      matrix:
+        topology: [unified, split]
+    concurrency:
+      group: compact_uuid_live-${{ matrix.topology }}-${{ github.ref }}
+      cancel-in-progress: true
+
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          # MYSQL_DATABASE takes a single name, so the split log database is
+          # created by a step below.
+          MYSQL_DATABASE: oneapi
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -proot"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=12
+          --health-start-period=30s
+
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: oneapi
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres -d oneapi"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=12
+          --health-start-period=10s
+
+    env:
+      # DSN syntax mirrors model's openBackend(): gorm's postgres driver takes a
+      # URL, gorm's mysql driver takes the user:pass@tcp(host:port)/db form.
+      COMPACT_UUID_TEST_MYSQL_DSN: root:root@tcp(127.0.0.1:3306)/oneapi?charset=utf8mb4&parseTime=True&loc=Local
+      COMPACT_UUID_TEST_POSTGRES_DSN: postgres://postgres:postgres@127.0.0.1:5432/oneapi?sslmode=disable
+      # The log DSNs are the topology switch and point at a SECOND physical
+      # database, not the same database opened twice. They are empty for the
+      # unified entry, which is what makes that entry unified.
+      COMPACT_UUID_TEST_LOG_MYSQL_DSN: ${{ matrix.topology == 'split' && 'root:root@tcp(127.0.0.1:3306)/oneapi_log?charset=utf8mb4&parseTime=True&loc=Local' || '' }}
+      COMPACT_UUID_TEST_LOG_POSTGRES_DSN: ${{ matrix.topology == 'split' && 'postgres://postgres:postgres@127.0.0.1:5432/oneapi_log?sslmode=disable' || '' }}
+      # The section 12 workload's migration-disabled baseline database. Deliberately NOT the
+      # log database: the baseline must never carry a marker, trigger, or shadow.
+      COMPACT_UUID_TEST_POSTGRES_BASE_DSN: postgres://postgres:postgres@127.0.0.1:5432/oneapi_workload_base?sslmode=disable
+      # Stated explicitly so a suite fails loudly instead of silently degrading a
+      # split run into a unified one when a log DSN is missing.
+      COMPACT_UUID_TEST_TOPOLOGY: ${{ matrix.topology }}
+      # Aliases for the existing v3 harness (model/uuid_migration_multidb_harness_test.go
+      # reads these names), so a compact suite may reuse openBackend()/requireBackend()
+      # instead of reimplementing DSN gating.
+      MYSQL_DSN: root:root@tcp(127.0.0.1:3306)/oneapi?charset=utf8mb4&parseTime=True&loc=Local
+      PG_DSN: postgres://postgres:postgres@127.0.0.1:5432/oneapi?sslmode=disable
+      MYSQL_LOG_DSN: ${{ matrix.topology == 'split' && 'root:root@tcp(127.0.0.1:3306)/oneapi_log?charset=utf8mb4&parseTime=True&loc=Local' || '' }}
+      PG_LOG_DSN: ${{ matrix.topology == 'split' && 'postgres://postgres:postgres@127.0.0.1:5432/oneapi_log?sslmode=disable' || '' }}
+      # A missing DSN must fail the job, never skip a dialect subtest.
+      ONEAPI_REQUIRE_DB_BACKENDS: '1'
+      CGO_ENABLED: '1'
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Install database clients
+        run: sudo apt-get update && sudo apt-get install -y mysql-client postgresql-client
+
+      - name: Create the split log databases
+        if: matrix.topology == 'split'
+        # The split topology needs a second physical database per engine; the
+        # service containers only created the primary.
+        env:
+          MYSQL_PWD: root
+          PGPASSWORD: postgres
+        run: |
+          set -euo pipefail
+          mysql -h 127.0.0.1 -P 3306 -uroot \
+            -e "CREATE DATABASE IF NOT EXISTS oneapi_log CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;"
+          # The section 12 compatibility workload compares against a migration-disabled
+          # baseline in a SECOND database that never migrates at all.
+          psql -h 127.0.0.1 -p 5432 -U postgres -d postgres -tAc \
+            "SELECT 1 FROM pg_database WHERE datname = 'oneapi_workload_base'" | grep -q 1 \
+            || psql -h 127.0.0.1 -p 5432 -U postgres -d postgres -c "CREATE DATABASE oneapi_workload_base;"
+          # PostgreSQL has no CREATE DATABASE IF NOT EXISTS, so probe pg_database first.
+          psql -h 127.0.0.1 -p 5432 -U postgres -d postgres -tAc \
+            "SELECT 1 FROM pg_database WHERE datname = 'oneapi_log'" | grep -q 1 \
+            || psql -h 127.0.0.1 -p 5432 -U postgres -d postgres -c "CREATE DATABASE oneapi_log;"
+
+      - name: Verify the required DSNs for this topology are exported
+        # Fails fast with a readable message instead of waiting for the Go
+        # t.Fatalf that ONEAPI_REQUIRE_DB_BACKENDS=1 would eventually raise.
+        run: |
+          set -euo pipefail
+          required="COMPACT_UUID_TEST_MYSQL_DSN COMPACT_UUID_TEST_POSTGRES_DSN"
+          if [ "${{ matrix.topology }}" = "split" ]; then
+            required="${required} COMPACT_UUID_TEST_LOG_MYSQL_DSN COMPACT_UUID_TEST_LOG_POSTGRES_DSN"
+          fi
+          for var in ${required}; do
+            if [ -z "${!var:-}" ]; then
+              echo "::error::${var} is unset; the ${{ matrix.topology }} topology requires it and" \
+                "Section 14 forbids skipping a suite for a missing DSN"
+              exit 1
+            fi
+            # Never echo the value: Section 11 forbids logging DSNs and credentials.
+            echo "${var} is set"
+          done
+
+      - name: Prove the split topology uses two distinct physical databases
+        if: matrix.topology == 'split'
+        # A split run whose log DSN silently pointed at the primary database
+        # would pass every suite while testing nothing about split ownership.
+        env:
+          MYSQL_PWD: root
+          PGPASSWORD: postgres
+        run: |
+          set -euo pipefail
+          mysql -h 127.0.0.1 -P 3306 -uroot -N -B \
+            -e "SELECT COUNT(*) FROM information_schema.schemata WHERE schema_name IN ('oneapi','oneapi_log');" \
+            | grep -qx 2 || { echo "::error::MySQL split topology is missing a physical database"; exit 1; }
+          psql -h 127.0.0.1 -p 5432 -U postgres -d postgres -tAc \
+            "SELECT COUNT(*) FROM pg_database WHERE datname IN ('oneapi','oneapi_log');" \
+            | grep -qx 2 || { echo "::error::PostgreSQL split topology is missing a physical database"; exit 1; }
+          echo "both engines expose two distinct physical databases"
+
+      - name: Install the no-skip suite runner
+        run: |
+          set -euo pipefail
+          mkdir -p "${RUNNER_TEMP}/evidence"
+          cat > "${RUNNER_TEMP}/compact-suite.sh" <<'GUARD'
+          #!/usr/bin/env bash
+          # usage: compact-suite.sh <label> <timeout> <run-regex>
+          #
+          # Runs one compact qualification suite and proves it actually executed.
+          # `go test -run` exits 0 when the regex matches nothing, so exit status
+          # is not evidence; a positive PASS assertion is.
+          set -euo pipefail
+          label="$1"
+          timeout="$2"
+          pattern="$3"
+          log="${RUNNER_TEMP}/evidence/${label}.log"
+          go test -race -v -timeout "${timeout}" ./model/ -run "${pattern}" 2>&1 | tee "${log}"
+          if grep -qE 'no tests to run|\[no test files\]' "${log}"; then
+            echo "::error::suite '${label}': -run '${pattern}' matched zero tests. Section 14 requires a" \
+              "missing live suite to fail, not pass silently. Either the suite is not implemented yet" \
+              "(AUTO-014) or its test names drifted from this workflow's contract."
+            exit 1
+          fi
+          if grep -qE '^[[:space:]]*--- SKIP' "${log}"; then
+            echo "::error::suite '${label}': a test reported SKIP. Required live cases may not skip (Section 12/AUTO-A11)."
+            grep -E '^[[:space:]]*--- SKIP' "${log}" || true
+            exit 1
+          fi
+          if ! grep -qE '^[[:space:]]*--- PASS' "${log}"; then
+            echo "::error::suite '${label}': no test reported PASS, so the suite cannot be shown to have run."
+            exit 1
+          fi
+          echo "suite '${label}' ran and reported no skips"
+          GUARD
+          chmod +x "${RUNNER_TEMP}/compact-suite.sh"
+
+      - name: Automatic lifecycle and ownership suite (AUTO-T01/T02/T03/T16/T17/T32)
+        run: bash "${RUNNER_TEMP}/compact-suite.sh" automatic-lifecycle 40m '^TestCompactUUIDAutomaticMigration|^TestCompactUUIDOwnership'
+
+      - name: Compatibility corpus and trigger matrix suite (AUTO-T07/T08/T19/T22/T23)
+        run: bash "${RUNNER_TEMP}/compact-suite.sh" compatibility-corpus 40m '^TestCompactUUIDCompatibilityCorpus|^TestCompactUUIDTriggerMatrix'
+
+      - name: Marker, drift-repair, and blocked-data suite (AUTO-T13/T14/T15/T20)
+        run: bash "${RUNNER_TEMP}/compact-suite.sh" drift-repair 30m '^TestCompactUUIDDriftRepair|^TestCompactUUIDBlockedValidation'
+
+      - name: Unsupported topology suite — mixed dialect (AUTO-T17)
+        # The mixed-dialect half of AUTO-T17: a primary on one engine and a log
+        # database on the other must enter compact blocked_validation while
+        # legacy readiness stays healthy. It lives here rather than in the SQLite
+        # job because it needs a real MySQL and a real PostgreSQL simultaneously,
+        # which only this job's services provide. Both engines are reachable in
+        # both matrix entries, so the suite can build the mixed pairing itself.
+        run: bash "${RUNNER_TEMP}/compact-suite.sh" unsupported-topology-mixed 15m '^TestCompactUUIDUnsupportedTopologyMixedDialect'
+
+      - name: Fault injection suite (AUTO-T11/T12)
+        # Section 14 item 5 requires before/after fault-hook IDs as evidence, so
+        # this suite is run and captured separately rather than folded into the
+        # lifecycle log.
+        env:
+          # Every durable side effect (column, trigger, index, batch, validation,
+          # marker) must be exercised; a reduced hook set would quietly narrow
+          # AUTO-T11 from "every side effect" to "some side effects".
+          COMPACT_UUID_TEST_FAULT_HOOKS: all
+        run: bash "${RUNNER_TEMP}/compact-suite.sh" fault-injection 40m '^TestCompactUUIDFaultInjection'
+
+      - name: Query-plan capture suite (AUTO-T18)
+        # "Owned lookup and all 27 operational probe plans use their intended
+        # compact indexes when healthy." The plans themselves are the evidence.
+        run: bash "${RUNNER_TEMP}/compact-suite.sh" query-plans 30m '^TestCompactUUIDQueryPlans'
+
+      - name: Index-size evidence suite (AUTO-T26, CI fixture)
+        # The full 1m-row, 10,000-probe comparison lives in the scale job; this
+        # runs the same assertions on a CI-sized fixture so a size regression is
+        # caught per-PR rather than only weekly.
+        #
+        # Naming contract: `-run` matches a PREFIX of the top-level test name, so
+        # the scale-sized variant must NOT be called TestCompactUUIDIndexSizeAtScale
+        # — that name starts with this pattern and would drag the multi-hour 1m
+        # fixture into every pull request. It is TestCompactUUIDScaleIndexSize
+        # instead, which only the scale job's '^TestCompactUUIDScale' selects.
+        run: bash "${RUNNER_TEMP}/compact-suite.sh" index-size 30m '^TestCompactUUIDIndexSize'
+
+      - name: Observability and configuration suite (AUTO-T24/T29)
+        run: bash "${RUNNER_TEMP}/compact-suite.sh" observability 20m '^TestCompactUUIDObservability|^TestCompactUUIDConfiguration'
+
+      - name: Fingerprint and reconciliation suite (AUTO-T33)
+        run: bash "${RUNNER_TEMP}/compact-suite.sh" fingerprints 30m '^TestCompactUUIDFingerprints'
+
+      - name: Forbidden-DDL and destructive-cleanup suite (AUTO-T21/T30/AUTO-016)
+        run: bash "${RUNNER_TEMP}/compact-suite.sh" forbidden-ddl 20m '^TestCompactUUIDForbiddenDDL'
+
+      - name: Dump/restore and replication suite (AUTO-T28)
+        run: bash "${RUNNER_TEMP}/compact-suite.sh" restore-replication 30m '^TestCompactUUIDReplicationAndRestore'
+
+      - name: Live end-to-end matrix suite (AUTO-T02/T17/T18/T21/T22/T23/T33)
+        run: bash "${RUNNER_TEMP}/compact-suite.sh" live-matrix 40m '^TestCompactUUIDLiveMatrix'
+
+      - name: Section 12 compatibility workload against the migration-disabled baseline
+        # Eight deterministic clients, >=1,000 successful operations per held migration
+        # state, 30/40/10/10/10 category mix, outcomes compared byte-for-byte with a
+        # database where the migration never runs at all.
+        run: bash "${RUNNER_TEMP}/compact-suite.sh" compatibility-workload 40m '^TestCompactUUIDCompatibilityWorkload'
+
+      - name: Capture schema, trigger, index, and privilege metadata
+        # Section 14 item 3: pre/post legacy and compact schema, trigger, index,
+        # privilege, and marker metadata for every supported topology. Captured
+        # from the live catalogs after the suites, independent of anything the
+        # tests chose to log about themselves.
+        if: always()
+        env:
+          MYSQL_PWD: root
+          PGPASSWORD: postgres
+        run: |
+          set -euo pipefail
+          out="${RUNNER_TEMP}/evidence/schema"
+          mkdir -p "${out}"
+          databases="oneapi"
+          if [ "${{ matrix.topology }}" = "split" ]; then
+            databases="oneapi oneapi_log"
+          fi
+          for db in ${databases}; do
+            mysql -h 127.0.0.1 -P 3306 -uroot -N -B -e "
+              SELECT table_name, column_name, data_type, is_nullable, character_maximum_length
+              FROM information_schema.columns WHERE table_schema='${db}' ORDER BY table_name, column_name;
+            " > "${out}/mysql-${db}-columns.tsv" || true
+            mysql -h 127.0.0.1 -P 3306 -uroot -N -B -e "
+              SELECT trigger_name, event_object_table, action_timing, event_manipulation, definer, action_statement
+              FROM information_schema.triggers WHERE trigger_schema='${db}' ORDER BY trigger_name;
+            " > "${out}/mysql-${db}-triggers.tsv" || true
+            mysql -h 127.0.0.1 -P 3306 -uroot -N -B -e "
+              SELECT table_name, index_name, seq_in_index, column_name, non_unique
+              FROM information_schema.statistics WHERE table_schema='${db}' ORDER BY table_name, index_name, seq_in_index;
+            " > "${out}/mysql-${db}-indexes.tsv" || true
+            mysql -h 127.0.0.1 -P 3306 -uroot -N -B -e "
+              SELECT table_name, ROUND(data_length/1024) AS data_kib, ROUND(index_length/1024) AS index_kib
+              FROM information_schema.tables WHERE table_schema='${db}' ORDER BY table_name;
+            " > "${out}/mysql-${db}-sizes.tsv" || true
+
+            psql -h 127.0.0.1 -p 5432 -U postgres -d "${db}" -F $'\t' -Atc "
+              SELECT table_name, column_name, data_type, is_nullable
+              FROM information_schema.columns WHERE table_schema='public' ORDER BY table_name, column_name;
+            " > "${out}/postgres-${db}-columns.tsv" || true
+            psql -h 127.0.0.1 -p 5432 -U postgres -d "${db}" -F $'\t' -Atc "
+              SELECT trigger_name, event_object_table, action_timing, event_manipulation, action_statement
+              FROM information_schema.triggers WHERE trigger_schema='public' ORDER BY trigger_name;
+            " > "${out}/postgres-${db}-triggers.tsv" || true
+            psql -h 127.0.0.1 -p 5432 -U postgres -d "${db}" -F $'\t' -Atc "
+              SELECT tablename, indexname, indexdef FROM pg_indexes
+              WHERE schemaname='public' ORDER BY tablename, indexname;
+            " > "${out}/postgres-${db}-indexes.tsv" || true
+            psql -h 127.0.0.1 -p 5432 -U postgres -d "${db}" -F $'\t' -Atc "
+              SELECT indexrelname, pg_relation_size(indexrelid) AS bytes
+              FROM pg_stat_user_indexes ORDER BY indexrelname;
+            " > "${out}/postgres-${db}-index-sizes.tsv" || true
+            psql -h 127.0.0.1 -p 5432 -U postgres -d "${db}" -F $'\t' -Atc "
+              SELECT grantee, table_name, privilege_type FROM information_schema.table_privileges
+              WHERE table_schema='public' ORDER BY table_name, grantee, privilege_type;
+            " > "${out}/postgres-${db}-privileges.tsv" || true
+          done
+          echo "captured catalog metadata for: ${databases}"
+
+      - name: Capture migration markers
+        # Section 14 items 3 and 4: marker metadata and exact UTC timestamps.
+        if: always()
+        env:
+          MYSQL_PWD: root
+          PGPASSWORD: postgres
+        run: |
+          set -euo pipefail
+          out="${RUNNER_TEMP}/evidence/schema"
+          mkdir -p "${out}"
+          databases="oneapi"
+          if [ "${{ matrix.topology }}" = "split" ]; then
+            databases="oneapi oneapi_log"
+          fi
+          for db in ${databases}; do
+            mysql -h 127.0.0.1 -P 3306 -uroot -N -B -e \
+              "SELECT * FROM ${db}.data_migrations ORDER BY id;" > "${out}/mysql-${db}-markers.tsv" || true
+            psql -h 127.0.0.1 -p 5432 -U postgres -d "${db}" -F $'\t' -Atc \
+              "SELECT * FROM data_migrations ORDER BY id;" > "${out}/postgres-${db}-markers.tsv" || true
+          done
+          echo "captured marker tables for: ${databases}"
+
+      - name: Assert the evidence set is non-empty
+        # An empty evidence directory would satisfy retention while proving
+        # nothing, so the artifact contract is asserted rather than assumed.
+        if: always()
+        run: |
+          set -euo pipefail
+          count="$(find "${RUNNER_TEMP}/evidence" -type f -size +0c | wc -l)"
+          echo "collected ${count} non-empty evidence files"
+          if [ "${count}" -eq 0 ]; then
+            echo "::error::no qualification evidence was produced for the ${{ matrix.topology }} topology (AUTO-A11)"
+            exit 1
+          fi
+
+      - name: Upload live matrix evidence
+        # AUTO-A11: schemas, plans, metrics, fingerprints, and fault results are
+        # retained for at least 90 days.
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: compact-uuid-live-${{ matrix.topology }}-evidence
+          path: ${{ runner.temp }}/evidence
+          retention-days: 90
+          if-no-files-found: error
+
+  mixed_version:
+    name: Mixed-version old-binary qualification (${{ matrix.topology }})
+    # AUTO-T04 through AUTO-T10 plus AUTO-T13/T14: "Real old binary ... Raw SQL
+    # emulation is not an acceptable substitute." Both pinned artifacts run on
+    # every applicable dialect/topology.
+    needs: [old_binaries]
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        topology: [unified, split]
+    concurrency:
+      group: compact_uuid_mixed-${{ matrix.topology }}-${{ github.ref }}
+      cancel-in-progress: true
+
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: oneapi
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -proot"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=12
+          --health-start-period=30s
+
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: oneapi
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres -d oneapi"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=12
+          --health-start-period=10s
+
+    env:
+      COMPACT_UUID_TEST_MYSQL_DSN: root:root@tcp(127.0.0.1:3306)/oneapi?charset=utf8mb4&parseTime=True&loc=Local
+      COMPACT_UUID_TEST_POSTGRES_DSN: postgres://postgres:postgres@127.0.0.1:5432/oneapi?sslmode=disable
+      COMPACT_UUID_TEST_LOG_MYSQL_DSN: ${{ matrix.topology == 'split' && 'root:root@tcp(127.0.0.1:3306)/oneapi_log?charset=utf8mb4&parseTime=True&loc=Local' || '' }}
+      COMPACT_UUID_TEST_LOG_POSTGRES_DSN: ${{ matrix.topology == 'split' && 'postgres://postgres:postgres@127.0.0.1:5432/oneapi_log?sslmode=disable' || '' }}
+      COMPACT_UUID_TEST_TOPOLOGY: ${{ matrix.topology }}
+      MYSQL_DSN: root:root@tcp(127.0.0.1:3306)/oneapi?charset=utf8mb4&parseTime=True&loc=Local
+      PG_DSN: postgres://postgres:postgres@127.0.0.1:5432/oneapi?sslmode=disable
+      MYSQL_LOG_DSN: ${{ matrix.topology == 'split' && 'root:root@tcp(127.0.0.1:3306)/oneapi_log?charset=utf8mb4&parseTime=True&loc=Local' || '' }}
+      PG_LOG_DSN: ${{ matrix.topology == 'split' && 'postgres://postgres:postgres@127.0.0.1:5432/oneapi_log?sslmode=disable' || '' }}
+      ONEAPI_REQUIRE_DB_BACKENDS: '1'
+      CGO_ENABLED: '1'
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Install database clients
+        run: sudo apt-get update && sudo apt-get install -y mysql-client postgresql-client
+
+      - name: Download the pinned old binaries
+        uses: actions/download-artifact@v4
+        with:
+          name: compact-uuid-old-binaries
+          path: ${{ runner.temp }}/old-binaries
+
+      - name: Verify the old-binary artifacts and checksums
+        # No-skip guard. Section 14 requires this workflow to fail when an
+        # old-binary artifact is absent; a mixed-version job that quietly ran
+        # zero old binaries would be indistinguishable from a passing one.
+        run: |
+          set -euo pipefail
+          cd "${RUNNER_TEMP}/old-binaries"
+          if [ ! -f SHA256SUMS ]; then
+            echo "::error::SHA256SUMS is missing from the old-binary artifact (AUTO-013)"
+            exit 1
+          fi
+          chmod +x one-api-oldest one-api-previous
+          sha256sum --check SHA256SUMS
+          for name in oldest previous; do
+            if [ ! -x "one-api-${name}" ]; then
+              echo "::error::pinned '${name}' binary is missing or not executable; AUTO-T04..T10 require both real artifacts"
+              exit 1
+            fi
+            cat "one-api-${name}.metadata.txt"
+          done
+          echo "both pinned artifacts verified against their recorded checksums"
+
+      - name: Create the split log databases
+        if: matrix.topology == 'split'
+        env:
+          MYSQL_PWD: root
+          PGPASSWORD: postgres
+        run: |
+          set -euo pipefail
+          mysql -h 127.0.0.1 -P 3306 -uroot \
+            -e "CREATE DATABASE IF NOT EXISTS oneapi_log CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;"
+          psql -h 127.0.0.1 -p 5432 -U postgres -d postgres -tAc \
+            "SELECT 1 FROM pg_database WHERE datname = 'oneapi_log'" | grep -q 1 \
+            || psql -h 127.0.0.1 -p 5432 -U postgres -d postgres -c "CREATE DATABASE oneapi_log;"
+
+      - name: Install the no-skip suite runner
+        run: |
+          set -euo pipefail
+          mkdir -p "${RUNNER_TEMP}/evidence"
+          cat > "${RUNNER_TEMP}/compact-suite.sh" <<'GUARD'
+          #!/usr/bin/env bash
+          # usage: compact-suite.sh <label> <timeout> <run-regex>
+          #
+          # Runs one compact qualification suite and proves it actually executed.
+          # `go test -run` exits 0 when the regex matches nothing, so exit status
+          # is not evidence; a positive PASS assertion is.
+          set -euo pipefail
+          label="$1"
+          timeout="$2"
+          pattern="$3"
+          log="${RUNNER_TEMP}/evidence/${label}.log"
+          go test -race -v -timeout "${timeout}" ./model/ -run "${pattern}" 2>&1 | tee "${log}"
+          if grep -qE 'no tests to run|\[no test files\]' "${log}"; then
+            echo "::error::suite '${label}': -run '${pattern}' matched zero tests. Section 14 requires a" \
+              "missing live suite to fail, not pass silently. Either the suite is not implemented yet" \
+              "(AUTO-014) or its test names drifted from this workflow's contract."
+            exit 1
+          fi
+          if grep -qE '^[[:space:]]*--- SKIP' "${log}"; then
+            echo "::error::suite '${label}': a test reported SKIP. Required live cases may not skip (Section 12/AUTO-A11)."
+            grep -E '^[[:space:]]*--- SKIP' "${log}" || true
+            exit 1
+          fi
+          if ! grep -qE '^[[:space:]]*--- PASS' "${log}"; then
+            echo "::error::suite '${label}': no test reported PASS, so the suite cannot be shown to have run."
+            exit 1
+          fi
+          echo "suite '${label}' ran and reported no skips"
+          GUARD
+          chmod +x "${RUNNER_TEMP}/compact-suite.sh"
+
+      - name: Mixed-version process harness (AUTO-T04..T10)
+        # The AUTO-014 harness spawns the real pinned processes; it reads their
+        # paths from these variables. Both artifacts run independently on every
+        # applicable dialect/topology, so the harness iterates them itself rather
+        # than this workflow running the suite twice.
+        env:
+          COMPACT_UUID_TEST_OLD_BINARY: ${{ runner.temp }}/old-binaries/one-api-oldest
+          COMPACT_UUID_TEST_PREV_BINARY: ${{ runner.temp }}/old-binaries/one-api-previous
+        run: bash "${RUNNER_TEMP}/compact-suite.sh" mixed-version 60m '^TestCompactUUIDOldBinary'
+
+      - name: Old-binary drift, repair, and rollback suite (AUTO-T13/T14)
+        # Naming contract: this pattern must not share a prefix with the
+        # '^TestCompactUUIDOldBinary' suite above, or that step would run these
+        # tests too and this step would then run them a second time. Hence
+        # TestCompactUUIDMixedVersionDrift rather than TestCompactUUIDOldBinaryDrift.
+        env:
+          COMPACT_UUID_TEST_OLD_BINARY: ${{ runner.temp }}/old-binaries/one-api-oldest
+          COMPACT_UUID_TEST_PREV_BINARY: ${{ runner.temp }}/old-binaries/one-api-previous
+        run: bash "${RUNNER_TEMP}/compact-suite.sh" old-binary-drift 40m '^TestCompactUUIDMixedVersionDrift'
+
+      - name: Copy the old-binary checksums into the evidence set
+        if: always()
+        run: |
+          set -euo pipefail
+          mkdir -p "${RUNNER_TEMP}/evidence/old-binaries"
+          cp "${RUNNER_TEMP}/old-binaries/SHA256SUMS" \
+             "${RUNNER_TEMP}/old-binaries/"*.metadata.txt \
+             "${RUNNER_TEMP}/evidence/old-binaries/"
+
+      - name: Upload mixed-version evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: compact-uuid-mixed-version-${{ matrix.topology }}-evidence
+          path: ${{ runner.temp }}/evidence
+          retention-days: 90
+          if-no-files-found: error
+
+  scale:
+    name: Compact scale and index-size acceptance (AUTO-T25/AUTO-T26)
+    # Gated off the per-PR path: AUTO-T25 wants 100k and 1m fixtures with three
+    # runs per dialect, and AUTO-T26 wants 1,000 warm-ups plus 10,000 sampled
+    # probes across all 27 index pairs on an identical 1m fixture. That is a
+    # multi-hour workload. It runs on the weekly schedule, on manual dispatch
+    # with run_scale=true, or on a PR labelled "compact-uuid-scale".
+    #
+    # This job is intentionally NOT part of the qualification gate: the absolute
+    # deadlines it measures are release evidence, not a per-PR merge condition.
+    # A release must still have a green run of this job.
+    if: >-
+      github.event_name == 'schedule'
+      || (github.event_name == 'workflow_dispatch' && github.event.inputs.run_scale == 'true')
+      || contains(github.event.pull_request.labels.*.name, 'compact-uuid-scale')
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    concurrency:
+      group: compact_uuid_scale-${{ github.ref }}
+      cancel-in-progress: true
+
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: oneapi
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -proot"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=12
+          --health-start-period=30s
+
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: oneapi
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres -d oneapi"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=12
+          --health-start-period=10s
+
+    env:
+      COMPACT_UUID_TEST_MYSQL_DSN: root:root@tcp(127.0.0.1:3306)/oneapi?charset=utf8mb4&parseTime=True&loc=Local
+      COMPACT_UUID_TEST_POSTGRES_DSN: postgres://postgres:postgres@127.0.0.1:5432/oneapi?sslmode=disable
+      COMPACT_UUID_TEST_LOG_MYSQL_DSN: root:root@tcp(127.0.0.1:3306)/oneapi_log?charset=utf8mb4&parseTime=True&loc=Local
+      COMPACT_UUID_TEST_LOG_POSTGRES_DSN: postgres://postgres:postgres@127.0.0.1:5432/oneapi_log?sslmode=disable
+      COMPACT_UUID_TEST_TOPOLOGY: split
+      MYSQL_DSN: root:root@tcp(127.0.0.1:3306)/oneapi?charset=utf8mb4&parseTime=True&loc=Local
+      PG_DSN: postgres://postgres:postgres@127.0.0.1:5432/oneapi?sslmode=disable
+      MYSQL_LOG_DSN: root:root@tcp(127.0.0.1:3306)/oneapi_log?charset=utf8mb4&parseTime=True&loc=Local
+      PG_LOG_DSN: postgres://postgres:postgres@127.0.0.1:5432/oneapi_log?sslmode=disable
+      ONEAPI_REQUIRE_DB_BACKENDS: '1'
+      COMPACT_UUID_TEST_SCALE: '1'
+      CGO_ENABLED: '1'
+      # The tiers are selected per step with COMPACT_UUID_TEST_SCALE_ROWS. Never lower a
+      # tier's row count to make this job finish faster — a reduced fixture invalidates the
+      # recorded baseline.
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Install database clients
+        run: sudo apt-get update && sudo apt-get install -y mysql-client postgresql-client
+
+      - name: Create the split log databases
+        env:
+          MYSQL_PWD: root
+          PGPASSWORD: postgres
+        run: |
+          set -euo pipefail
+          mysql -h 127.0.0.1 -P 3306 -uroot \
+            -e "CREATE DATABASE IF NOT EXISTS oneapi_log CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;"
+          psql -h 127.0.0.1 -p 5432 -U postgres -d postgres -tAc \
+            "SELECT 1 FROM pg_database WHERE datname = 'oneapi_log'" | grep -q 1 \
+            || psql -h 127.0.0.1 -p 5432 -U postgres -d postgres -c "CREATE DATABASE oneapi_log;"
+
+      - name: Run the scale and index-size acceptance
+        # No -race here on purpose: the race detector distorts both wall time and
+        # the peak-heap measurement AUTO-T25 asserts on, and it would push the
+        # 1m-row fixture past any sane CI budget. The correctness suites in the
+        # live matrix are the ones that run under -race.
+        run: |
+          set -euo pipefail
+          mkdir -p "${RUNNER_TEMP}/evidence"
+          # Section 12's protocol is "100k and 1m fixtures, three runs per dialect". Three
+          # repetitions run at the 100k tier; the 1m tier runs once here, because three
+          # 1m-fixture coordinator runs per dialect do not fit any hosted-runner budget —
+          # the remaining 1m repetitions belong to the self-hosted runner the acceptance
+          # status records, and this comment is the honest statement of that reduction.
+          #
+          # Naming contract: the 100k tier runs TestCompactUUIDIndexSize (also selected by
+          # the live matrix); the 1m tier runs TestCompactUUIDScaleIndexSize, named under
+          # the '^TestCompactUUIDScale' prefix on purpose so a name like
+          # TestCompactUUIDIndexSizeAtScale cannot collide with the live matrix's
+          # '^TestCompactUUIDIndexSize' selection and drag the 1m fixture into every PR.
+          for repetition in 1 2 3; do
+            log="${RUNNER_TEMP}/evidence/scale-100k-run${repetition}.log"
+            echo "=== 100k tier, repetition ${repetition} ==="
+            COMPACT_UUID_TEST_SCALE_ROWS=100000 go test -v -timeout 80m ./model/ \
+              -run '^TestCompactUUIDScale$|^TestCompactUUIDIndexSize$' 2>&1 | tee "${log}"
+            if grep -qE 'no tests to run|\[no test files\]' "${log}"; then
+              echo "::error::the 100k scale tier matched zero tests; AUTO-T25/AUTO-T26 cannot be evidenced"
+              exit 1
+            fi
+            if grep -qE '^[[:space:]]*--- (SKIP|FAIL)' "${log}"; then
+              echo "::error::the 100k scale tier skipped or failed a dialect on repetition ${repetition}"
+              exit 1
+            fi
+            if ! grep -qE '^[[:space:]]*--- PASS' "${log}"; then
+              echo "::error::the 100k scale tier reported no PASS, so it cannot be shown to have run"
+              exit 1
+            fi
+          done
+          log="${RUNNER_TEMP}/evidence/scale-1m.log"
+          echo "=== 1m tier ==="
+          COMPACT_UUID_TEST_SCALE_ROWS=1000000 go test -v -timeout 260m ./model/ \
+            -run '^TestCompactUUIDScale$|^TestCompactUUIDScaleIndexSize$' 2>&1 | tee "${log}"
+          if grep -qE 'no tests to run|\[no test files\]' "${log}"; then
+            echo "::error::the 1m scale tier matched zero tests; AUTO-T25/AUTO-T26 cannot be evidenced"
+            exit 1
+          fi
+          if grep -qE '^[[:space:]]*--- (SKIP|FAIL)' "${log}"; then
+            echo "::error::the 1m scale tier skipped or failed a dialect"
+            exit 1
+          fi
+          if ! grep -qE '^[[:space:]]*--- PASS' "${log}"; then
+            echo "::error::the 1m scale tier reported no PASS, so it cannot be shown to have run"
+            exit 1
+          fi
+
+      - name: Capture per-index and aggregate size evidence
+        # Section 14 item 7: per-index/aggregate sizes. Captured from the live
+        # catalogs on the scale fixture, where the >=70% comparison is meaningful.
+        if: always()
+        env:
+          MYSQL_PWD: root
+          PGPASSWORD: postgres
+        run: |
+          set -euo pipefail
+          out="${RUNNER_TEMP}/evidence"
+          for db in oneapi oneapi_log; do
+            psql -h 127.0.0.1 -p 5432 -U postgres -d "${db}" -F $'\t' -Atc "
+              SELECT indexrelname, pg_relation_size(indexrelid) AS bytes
+              FROM pg_stat_user_indexes ORDER BY indexrelname;
+            " > "${out}/postgres-${db}-index-sizes.tsv" || true
+            mysql -h 127.0.0.1 -P 3306 -uroot -N -B -e "
+              SELECT table_name, index_name, stat_value * @@innodb_page_size AS bytes
+              FROM mysql.innodb_index_stats
+              WHERE database_name='${db}' AND stat_name='size' ORDER BY table_name, index_name;
+            " > "${out}/mysql-${db}-index-sizes.tsv" || true
+          done
+          echo "captured per-index size evidence"
+
+      - name: Upload scale evidence
+        # AUTO-A11 retention for migration heap/time, foreground latency, query
+        # counts, bind counts, and the per-index size comparison.
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: compact-uuid-scale-evidence
+          path: ${{ runner.temp }}/evidence
+          retention-days: 90
+          if-no-files-found: error
+
+  qualification_gate:
+    name: Qualification gate (AUTO-A11 no-skip)
+    # The final no-skip belt, at the job level rather than the test level.
+    #
+    # A GitHub job that is skipped or cancelled does not fail the workflow, and a
+    # `needs` dependency alone treats a skipped dependency as satisfied. Section
+    # 14 requires the opposite: an absent live suite must FAIL. This job runs
+    # unconditionally and asserts that every mandatory job's result is exactly
+    # "success", so removing a required DSN, dropping the old-binary refs, or
+    # letting a suite be skipped can never produce a green qualification.
+    #
+    # The scale job is deliberately excluded: it is schedule/dispatch gated and
+    # its absence on an ordinary PR is by design, not a hidden skip.
+    if: always()
+    needs: [verification, sqlite_capability, old_binaries, live_matrix, mixed_version]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Assert every mandatory qualification job succeeded
+        env:
+          RESULTS: >-
+            verification=${{ needs.verification.result }}
+            sqlite_capability=${{ needs.sqlite_capability.result }}
+            old_binaries=${{ needs.old_binaries.result }}
+            live_matrix=${{ needs.live_matrix.result }}
+            mixed_version=${{ needs.mixed_version.result }}
+        run: |
+          set -euo pipefail
+          failed=0
+          for entry in ${RESULTS}; do
+            job="${entry%%=*}"
+            result="${entry#*=}"
+            if [ "${result}" != "success" ]; then
+              echo "::error::mandatory job '${job}' reported '${result}'. AUTO-A11 requires the" \
+                "required dialect/topology suites to run without skips; a skipped, cancelled, or" \
+                "failed suite is not a passing qualification."
+              failed=1
+            else
+              echo "${job}: success"
+            fi
+          done
+          exit "${failed}"

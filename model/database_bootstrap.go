@@ -58,12 +58,34 @@ func InitDatabases(ctx context.Context) error {
 	// the same generation does not repeat it.
 	claimCatchUpOwnership()
 
+	// Every process runs the read-only compact health monitor, master or not: a non-master
+	// may use compact predicates only from its own fresh audit, never from a marker alone or
+	// from another process's claim. Runtime lookups default to legacy-safe behavior until that
+	// first audit passes, so starting this before the worker cannot enable an unverified read.
+	startCompactHealthMonitor(ctx, topology)
+
 	if !config.IsMasterNode {
-		// Non-master nodes never execute catch-up, DDL, validation, or marker writes.
+		// Non-master nodes never execute catch-up, DDL, validation, or marker writes for
+		// either migration generation. While compact is incomplete, an all-non-master
+		// deployment therefore stays in passive_legacy: readiness and legacy traffic are
+		// unaffected, and starting or promoting a master resumes progress from database state.
 		logger.FromContext(ctx).Debug("external uuid migration skipped on non-master node")
 		return nil
 	}
-	return startExternalUUIDMigration(ctx, topology)
+
+	if err := startExternalUUIDMigration(ctx, topology); err != nil {
+		return err
+	}
+
+	// The compact worker starts only after the v3 worker has been scheduled or completed,
+	// because compact derives its shadows from the text v3 populates. It may still expand,
+	// trigger, and backfill while v3 runs; what it must not do is write a completion marker
+	// before v3's markers exist, which the coordinator enforces.
+	//
+	// The three loops (v3, compact mutation, compact health) hold independent cancel/done
+	// handles: starting one must never stop another.
+	startCompactWorker(ctx, topology)
+	return nil
 }
 
 // startExternalUUIDMigration runs finalizer mode synchronously or schedules catch-up.
@@ -318,6 +340,7 @@ func runCompatibilityCatchUp(ctx context.Context) error {
 // Return values: none.
 func resetBootstrapStateForTest() {
 	stopUUIDCatchUpWorker()
+	stopCompactLoops()
 	bootstrapMu.Lock()
 	catchUpOwnerClaimed = false
 	initGeneration++

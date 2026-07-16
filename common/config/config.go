@@ -1665,6 +1665,11 @@ func init() {
 	// backfill worker on an unintended budget or timeout.
 	MustLoadExternalUUIDBackfillSettings()
 
+	// Load the compact UUID storage settings under the same strict contract, so an
+	// invalid budget, interval, or timeout fails startup before the compact
+	// migration worker is created rather than after it has begun DDL.
+	MustLoadCompactUUIDSettings()
+
 	// Validate all environment variables with constraints
 	// This will panic if any validation fails, ensuring fast failure on misconfiguration
 	MustValidateEnvVars()

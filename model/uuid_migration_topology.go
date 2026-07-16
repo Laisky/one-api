@@ -106,6 +106,8 @@ func (topology *databaseTopology) handle(role uuidDBRole) *gorm.DB {
 
 // markerRoles returns the physical database roles that must carry completion markers.
 // Unified deployments have exactly one marker; split deployments have two.
+//
+// This is about MARKERS only. It is not the set of roles that own tables: see targetRoles.
 // Parameters: none.
 //
 // Return values:
@@ -114,6 +116,21 @@ func (topology *databaseTopology) markerRoles() []uuidDBRole {
 	if topology == nil || topology.mode != uuidTopologySplit {
 		return []uuidDBRole{uuidRolePrimary}
 	}
+	return []uuidDBRole{uuidRolePrimary, uuidRoleLog}
+}
+
+// targetRoles returns every registry role that authoritatively owns tables.
+//
+// Both roles always own tables, in both topologies — what changes is only which handle serves
+// them, which handle() already resolves. This is deliberately NOT markerRoles: a unified
+// deployment carries one marker but still owns all 27 targets, because its primary handle
+// serves the log role too. Driving table work from markerRoles would silently skip every logs
+// target in unified mode and then mark the migration complete over them.
+// Parameters: none.
+//
+// Return values:
+//   - []uuidDBRole: every role that owns registry tables.
+func (topology *databaseTopology) targetRoles() []uuidDBRole {
 	return []uuidDBRole{uuidRolePrimary, uuidRoleLog}
 }
 
