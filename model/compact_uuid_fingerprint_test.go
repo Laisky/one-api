@@ -212,11 +212,28 @@ func TestCompactUUIDReconciliationRespectsBounds(t *testing.T) {
 			"a candidate read must never materialize more than 1,000 rows")
 	})
 
-	t.Run("the cursor advances and wraps rather than starving later rows", func(t *testing.T) {
+	t.Run("gap probe advances on gaps, rests when clean, sweep always advances", func(t *testing.T) {
+		// The fixture's shadows were all derived by the triggers, so the gap probe must find
+		// NOTHING — resting at zero instead of re-reading 50 proved-valid rows is exactly the
+		// fix for the starvation that failed the first 1m qualification run. The bounded
+		// rolling sweep is what re-examines valid rows, one slice per cycle.
 		progress, err := reconcileCompactTarget(ctx, db, target, newCompactCursor(), 10)
 		require.NoError(t, err)
 		require.LessOrEqual(t, progress.examined, 10, "the row budget must bound the traversal")
-		require.Positive(t, progress.cursor, "the cursor must advance")
+		require.Zero(t, progress.cursor, "a clean target's gap cursor must rest, not re-scan")
+		require.True(t, progress.wrapped, "the gap probe must have yielded")
+		require.Positive(t, progress.sweepCursor, "the rolling sweep must advance through valid rows")
+
+		// Now open a real gap: the probe must find it and the gap cursor must advance to it.
+		require.NoError(t, db.Exec("UPDATE users SET uuid_compact = NULL WHERE id = 7").Error)
+		dropCompactSyncTriggers(t, db, "users")
+		require.NoError(t, db.Exec("UPDATE users SET uuid_compact = NULL WHERE id = 7").Error)
+
+		progress, err = reconcileCompactTarget(ctx, db, target, newCompactCursor(), 10)
+		require.NoError(t, err)
+		require.Equal(t, 1, progress.updated, "the gap probe must repair the reopened gap")
+		require.GreaterOrEqual(t, progress.cursor, int64(0),
+			"after repairing the only gap the probe wraps and rests")
 	})
 
 	t.Run("a cancelled cycle stops cleanly without starting a side effect", func(t *testing.T) {

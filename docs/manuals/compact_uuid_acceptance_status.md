@@ -98,11 +98,35 @@ non-vacuously by injecting a real violation into a production file and confirmin
 
 ### 2.4 Scale, faults, and replication
 
-- **AUTO-T25 (scale)**: 100k-row PostgreSQL 17 fixture, real coordinator. Reaches `ready` in
-  **12m56s** — 21.6% of the 60-minute absolute deadline — over 307 cycles. Bounds hold at scale:
-  max 3 binds/statement (ceiling 900), no query materializing over 1,000 rows, and heap sampled
-  every 100 ms against a justified 128 MiB ceiling. This run is also what exposed the starvation
-  defect below: before the fix the same fixture never completed at all.
+- **AUTO-T25 (scale)**: PostgreSQL 17, real coordinator, both tiers pass. 100k rows: `ready`
+  in **1m10s** (1.9% of the 60-minute deadline; 52 cycles, 102,200 rows examined, 116,162
+  statements). 1m rows: `ready` in **10m52s** (4.5% of the four-hour deadline; 142 cycles,
+  1,010,600 rows examined, 1,064,852 statements, peak heap 5.7 MiB against the 128 MiB
+  ceiling). Bounds hold at both tiers: max 3 binds/statement (ceiling 900), no query
+  materializing over 1,000 rows, heap sampled every 100 ms.
+
+  **Three real defects were found by this tier alone**, each fixed with the measurement that
+  exposed it:
+  1. An intra-cycle rescan starvation — before the fix the 100k fixture never completed at
+     all (a clean target re-read from zero inside one cycle consumed the whole budget).
+  2. **The first full 1m run FAILED its four-hour deadline by 42 seconds** (4h0m42s, 17.7M
+     statements): every repair was an individually conditional autocommit UPDATE, so a
+     million-row backfill paid one WAL flush per row and was fsync-bound. Fixed by grouping
+     each read-batch's repairs (at most 200 rows) under one transaction — per-row conditional
+     semantics and collision classification unchanged, with a row-by-row autocommit replay
+     when a batch hits a unique collision, because PostgreSQL poisons a transaction on the
+     first duplicate-key error.
+  3. The rerun then exposed a SECOND, inter-cycle starvation the 100k tier was too small to
+     show: reconciliation read EVERY row past its cursor, valid ones included, so a completed
+     million-row target ahead of an incomplete one in registry order consumed the whole
+     shared cycle budget re-proving proved rows — repairs collapsed to ~2k rows/minute.
+     Fixed by restructuring reconciliation to the proposal's own design: a compact-index
+     **NULL gap probe** (§8.4) as the repair feed, which answers "no gaps" in one indexed
+     read, plus a **bounded rolling equality sweep** (§8.6, one read-batch per target per
+     cycle, its own durable cursor) that still catches wrong-value and stale-shadow drift the
+     gap probe cannot see. Blank legacy values are excluded from the probe by engine-side
+     `<> ''` comparison, which agrees with the Go-side blank rule on every dialect including
+     PostgreSQL's space-padded bpchar.
 - **AUTO-T26 (index size)**: measured on the 100k fixture on BOTH engines
   (`pg_relation_size`; MySQL via `innodb_index_stats` pages × page size, an engine estimate the
   suite documents as such), both rounds logged on every run. The ceiling is **asserted on the

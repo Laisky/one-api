@@ -398,7 +398,11 @@ func runCompactReconciliation(ctx context.Context, coordinator *compactCoordinat
 		// and rewound; the next cycle must be free to traverse again, which is what keeps the
 		// post-completion rolling audit alive. Persisting it would freeze the audit forever.
 		coordinator.cursors[target.id()] = compactCursor{
-			position:  progress.cursor,
+			position: progress.cursor,
+			// The rolling sweep's position must survive the cycle: restarting it from zero
+			// every cycle would re-audit the same head-of-table slice forever and never reach
+			// the tail.
+			sweep:     progress.sweepCursor,
 			updatedAt: time.Now().UTC(),
 		}
 		result.examined += progress.examined
