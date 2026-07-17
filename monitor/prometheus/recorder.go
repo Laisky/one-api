@@ -190,6 +190,38 @@ var (
 		Help: "Total number of errors by type",
 	}, []string{"error_type", "component"})
 
+	// External UUID backfill metrics
+	//
+	// NOTE: these metrics intentionally use the "oneapi_" prefix rather than
+	// the "one_api_" prefix used elsewhere in this file, because the names are
+	// specified literally by the incremental UUID backfill proposal (§6.9).
+	//
+	// Every label is bounded: role, phase, target, mode, and result are all
+	// drawn from compile-time registries. No ID, UUID, DSN, or error message
+	// may ever reach these labels.
+	uuidBackfillRowsTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "oneapi_uuid_backfill_rows_total",
+		Help: "Total rows processed by the external UUID backfill",
+	}, []string{"role", "phase", "target", "result"})
+
+	uuidBackfillLastBacklog = promauto.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "oneapi_uuid_backfill_last_backlog",
+		Help: "Last observed external UUID backfill backlog per target",
+	}, []string{"role", "target"})
+
+	uuidBackfillCycleDuration = promauto.NewHistogramVec(prometheus.HistogramOpts{
+		Name:    "oneapi_uuid_backfill_cycle_duration_seconds",
+		Help:    "Duration of external UUID backfill cycles in seconds",
+		Buckets: []float64{.05, .1, .5, 1, 5, 15, 30, 60, 300, 900, 1800},
+	}, []string{"role", "mode", "result"})
+
+	uuidBackfillFinalizerTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "oneapi_uuid_backfill_finalizer_total",
+		Help: "Total external UUID backfill finalizer attempts by result",
+	}, []string{"role", "result"})
+
+	// Compact UUID storage metrics are declared in recorder_compact_uuid.go.
+
 	// Model usage metrics
 	modelUsage = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "one_api_model_usage_total",
@@ -451,6 +483,40 @@ func (p *PrometheusRecorder) UpdateBillingStats(totalBillingOperations, successf
 	billingStats.WithLabelValues("successful_operations").Set(float64(successfulBillingOperations))
 	billingStats.WithLabelValues("failed_operations").Set(float64(failedBillingOperations))
 }
+
+// RecordUUIDBackfillRows records rows processed by one external UUID backfill batch.
+//
+// role, phase, target, and result must be compile-time registry constants; they
+// become metric labels and must never carry an ID, UUID, DSN, or error message.
+func (p *PrometheusRecorder) RecordUUIDBackfillRows(role, phase, target, result string, count int) {
+	if count <= 0 {
+		return
+	}
+	uuidBackfillRowsTotal.WithLabelValues(role, phase, target, result).Add(float64(count))
+}
+
+// UpdateUUIDBackfillBacklog publishes the last observed backlog for one target.
+//
+// role and target must be compile-time registry constants.
+func (p *PrometheusRecorder) UpdateUUIDBackfillBacklog(role, target string, backlog float64) {
+	uuidBackfillLastBacklog.WithLabelValues(role, target).Set(backlog)
+}
+
+// RecordUUIDBackfillCycle records one catch-up or finalizer cycle outcome and duration.
+//
+// role, mode, and result must be compile-time registry constants.
+func (p *PrometheusRecorder) RecordUUIDBackfillCycle(role, mode, result string, duration time.Duration) {
+	uuidBackfillCycleDuration.WithLabelValues(role, mode, result).Observe(duration.Seconds())
+}
+
+// RecordUUIDBackfillFinalizer records one finalizer attempt result for a database role.
+//
+// role and result must be compile-time registry constants.
+func (p *PrometheusRecorder) RecordUUIDBackfillFinalizer(role, result string) {
+	uuidBackfillFinalizerTotal.WithLabelValues(role, result).Inc()
+}
+
+// Compact UUID storage metrics are recorded in recorder_compact_uuid.go.
 
 // InitSystemMetrics initializes system-wide metrics
 func (p *PrometheusRecorder) InitSystemMetrics(version, buildTime, goVersion string, startTime time.Time) {

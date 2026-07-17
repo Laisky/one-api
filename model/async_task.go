@@ -17,7 +17,7 @@ import (
 // Fields capture routing identifiers plus a trimmed request snapshot for diagnostics.
 type AsyncTaskBinding struct {
 	Id             int     `json:"id" gorm:"primaryKey;autoIncrement"`
-	UUID           string  `json:"uuid" gorm:"type:char(36);index;column:uuid"`
+	UUID           string  `json:"uuid" gorm:"type:char(36);column:uuid"`
 	TaskID         string  `json:"task_id" gorm:"size:191;uniqueIndex;not null"`
 	TaskType       string  `json:"task_type" gorm:"size:32;index;not null"`
 	UserID         int     `json:"user_id" gorm:"index;not null"`

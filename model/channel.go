@@ -23,7 +23,7 @@ const (
 
 type Channel struct {
 	Id                 int     `json:"id"`
-	UUID               string  `json:"uuid" gorm:"type:char(36);index;column:uuid"`
+	UUID               string  `json:"uuid" gorm:"type:char(36);column:uuid"`
 	Type               int     `json:"type" gorm:"default:0"`
 	Key                string  `json:"key" gorm:"type:text"`
 	Status             int     `json:"status" gorm:"default:1"`

@@ -188,18 +188,55 @@ func enableGormOpenTelemetry(db *gorm.DB, dbName string) error {
 	return nil
 }
 
+// InitDB initializes the primary database and runs its schema and data migrations.
+// It retains the pre-patch contract for callers that never invoke InitLogDB by running a
+// primary-only, marker-free catch-up. That path can never finalize: only the global
+// coordinator reached through InitLogDB or InitDatabases has completion authority.
+// Parameters: none.
+//
+// Return values: none; terminal errors are fatal at this bootstrap boundary.
 func InitDB() {
+	if err := initPrimaryDatabase(); err != nil {
+		logger.Logger.Fatal("failed to initialize database", zap.Error(err))
+		return
+	}
+	if !config.IsMasterNode {
+		return
+	}
+	if err := runCompatibilityCatchUp(context.Background()); err != nil {
+		logger.Logger.Fatal("failed to run primary external uuid catch-up", zap.Error(err))
+		return
+	}
+}
+
+// initPrimaryDatabase opens the primary database and applies schema and data migrations.
+// It performs no UUID reconciliation so the bootstrap orchestrator can decide when the
+// global coordinator runs.
+// Parameters: none.
+//
+// Return values:
+//   - error: wrapped error when the handle cannot be opened or a migration fails.
+func initPrimaryDatabase() error {
+	// Opening a new primary handle starts a new initialization generation, which clears the
+	// previous generation's reconciliation ownership and stops its worker. Without this a
+	// reinitialized process would keep a claim, and a topology, that point at replaced or
+	// closed handles. The compact loops are stopped for the same reason and in the required
+	// order: mutation workers are joined before health monitors, and both before the handle
+	// they are issuing statements against is replaced.
+	stopUUIDCatchUpWorker()
+	stopCompactLoops()
+	beginInitGeneration()
+	setDatabaseTopology(nil)
+
 	var err error
 	DB, err = chooseDB(config.SQLDSN)
 	if err != nil {
-		logger.Logger.Fatal("failed to initialize database", zap.Error(err))
-		return
+		return errors.Wrap(err, "open primary database")
 	}
 
 	if config.OpenTelemetryEnabled {
 		if err = enableGormOpenTelemetry(DB, "primary"); err != nil {
-			logger.Logger.Fatal("failed to enable OpenTelemetry for primary database", zap.Error(err))
-			return
+			return errors.Wrap(err, "enable OpenTelemetry for primary database")
 		}
 	}
 
@@ -211,7 +248,7 @@ func InitDB() {
 	sqlDB := setDBConns(DB)
 
 	if !config.IsMasterNode {
-		return
+		return nil
 	}
 
 	if common.UsingMySQL.Load() {
@@ -227,8 +264,7 @@ func InitDB() {
 	// AutoMigrate more than once per process can therefore fail with
 	// "duplicate column name" on SQLite. Keep this to a single invocation.
 	if err = migrateDB(); err != nil {
-		logger.Logger.Fatal("failed to migrate database", zap.Error(err))
-		return
+		return errors.Wrap(err, "migrate database schema")
 	}
 	logger.Logger.Info("database schema migrated")
 
@@ -239,38 +275,32 @@ func InitDB() {
 
 	// 2a) Normalize legacy ability suspend_until column values / type.
 	if err = MigrateAbilitySuspendUntilColumn(); err != nil {
-		logger.Logger.Fatal("failed to migrate ability suspend_until column", zap.Error(err))
-		return
+		return errors.Wrap(err, "migrate ability suspend_until column")
 	}
 
 	// 2b) Make MySQL ability model identity case-sensitive at the schema and index level.
 	if err = MigrateAbilityModelCollation(); err != nil {
-		logger.Logger.Fatal("failed to migrate ability model collation", zap.Error(err))
-		return
+		return errors.Wrap(err, "migrate ability model collation")
 	}
 
 	// 2c) Convert ModelConfigs / ModelMapping columns from varchar(1024) to text on legacy MySQL/PG installs.
 	if err = MigrateChannelFieldsToText(); err != nil {
-		logger.Logger.Fatal("failed to migrate channel field types", zap.Error(err))
-		return
+		return errors.Wrap(err, "migrate channel field types")
 	}
 
 	// 2d) Ensure traces.url can store long URLs (Turnstile tokens, etc.).
 	if err = MigrateTraceURLColumnToText(); err != nil {
-		logger.Logger.Fatal("failed to migrate traces.url column", zap.Error(err))
-		return
+		return errors.Wrap(err, "migrate traces.url column")
 	}
 
 	// 2e) Ensure user_request_costs has a unique index on request_id and deduplicate old data quietly.
 	if err = MigrateUserRequestCostEnsureUniqueRequestID(); err != nil {
-		logger.Logger.Fatal("failed to migrate user_request_costs unique index", zap.Error(err))
-		return
+		return errors.Wrap(err, "migrate user_request_costs unique index")
 	}
 
 	// STEP 3: Data-format migrations (schema is already correct at this point).
 	if err = MigrateCustomChannelsToOpenAICompatible(); err != nil {
-		logger.Logger.Fatal("failed to migrate custom channels", zap.Error(err))
-		return
+		return errors.Wrap(err, "migrate custom channels")
 	}
 
 	if err = MigrateAllChannelModelConfigs(); err != nil {
@@ -282,12 +312,8 @@ func InitDB() {
 		logger.Logger.Error("failed to migrate legacy image pricing", zap.Error(err))
 	}
 
-	if err = MigrateExternalUUIDs(context.Background()); err != nil {
-		logger.Logger.Fatal("failed to migrate external resource uuids", zap.Error(err))
-		return
-	}
-
 	logger.Logger.Info("database migration completed")
+	return nil
 }
 
 func migrateDB() error {
@@ -314,8 +340,14 @@ func migrateDB() error {
 	if err = DB.AutoMigrate(&Ability{}); err != nil {
 		return errors.Wrapf(err, "failed to migrate Ability")
 	}
-	if err = DB.AutoMigrate(&Log{}); err != nil {
-		return errors.Wrapf(err, "failed to migrate Log")
+	// In split mode LOG_DB is the only authoritative owner of logs, so the primary must not
+	// gain or keep evolving a stale logs table. migrateLOGDB owns that schema instead. A
+	// logs table left over from a unified deployment is simply ignored; every log read and
+	// write in this package goes through LOG_DB.
+	if config.LogSQLDSN == "" {
+		if err = DB.AutoMigrate(&Log{}); err != nil {
+			return errors.Wrapf(err, "failed to migrate Log")
+		}
 	}
 	if err = DB.AutoMigrate(&TokenTransaction{}); err != nil {
 		return errors.Wrapf(err, "failed to migrate TokenTransaction")
@@ -340,6 +372,9 @@ func migrateDB() error {
 	if err = DB.AutoMigrate(&PasskeyCredential{}); err != nil {
 		return errors.Wrapf(err, "failed to migrate PasskeyCredential")
 	}
+	if err = DB.AutoMigrate(&DataMigration{}); err != nil {
+		return errors.Wrapf(err, "failed to migrate DataMigration")
+	}
 	return nil
 }
 
@@ -353,50 +388,96 @@ func shouldIgnoreDuplicateColumn(err error, column string) bool {
 	return strings.Contains(message, "duplicate column") && strings.Contains(message, strings.ToLower(column))
 }
 
+// InitLogDB completes topology initialization and may invoke the global coordinator.
+// Unlike the primary-only InitDB catch-up, this path can finalize split-database state.
+// Parameters: none.
+//
+// Return values: none; terminal errors are fatal at this bootstrap boundary.
 func InitLogDB() {
+	topology, err := initLogDatabase()
+	if err != nil {
+		logger.Logger.Fatal("failed to initialize secondary database", zap.Error(err))
+		return
+	}
+	setDatabaseTopology(topology)
+
+	if !config.IsMasterNode {
+		return
+	}
+	if err := runWrapperUUIDMigration(context.Background(), topology); err != nil {
+		logger.Logger.Fatal("failed to migrate external resource uuids", zap.Error(err))
+		return
+	}
+}
+
+// initLogDatabase opens the log database when configured and returns the explicit topology.
+// Unified mode is selected by the configuration path that assigns LOG_DB to DB; split mode
+// is selected by a dedicated log DSN. Neither decision compares gorm.DB pointers, so a
+// deployment pointing both DSNs at one physical server is still treated as split.
+// Parameters: none.
+//
+// Return values:
+//   - *databaseTopology: explicitly constructed topology.
+//   - error: wrapped error when the handle cannot be opened or the schema fails to migrate.
+func initLogDatabase() (*databaseTopology, error) {
+	if DB == nil {
+		return nil, errors.New("primary database must be initialized before the log database")
+	}
 	if config.LogSQLDSN == "" {
 		LOG_DB = DB
-		return
+		return newUnifiedTopology(DB)
 	}
 
 	logger.Logger.Info("using secondary database for table logs")
 	var err error
 	LOG_DB, err = chooseDB(config.LogSQLDSN)
 	if err != nil {
-		logger.Logger.Fatal("failed to initialize secondary database", zap.Error(err))
-		return
+		return nil, errors.Wrap(err, "open secondary database")
 	}
 
-	if config.OpenTelemetryEnabled && LOG_DB != DB {
+	if config.OpenTelemetryEnabled {
 		if err = enableGormOpenTelemetry(LOG_DB, "log"); err != nil {
-			logger.Logger.Fatal("failed to enable OpenTelemetry for log database", zap.Error(err))
-			return
+			return nil, errors.Wrap(err, "enable OpenTelemetry for log database")
 		}
 	}
 
 	setDBConns(LOG_DB)
 
-	if !config.IsMasterNode {
-		return
+	if config.IsMasterNode {
+		logger.Logger.Info("secondary database migration started")
+		if err = migrateLOGDB(); err != nil {
+			return nil, errors.Wrap(err, "migrate secondary database")
+		}
+		logger.Logger.Info("secondary database migrated")
 	}
+	return newSplitTopology(DB, LOG_DB)
+}
 
-	logger.Logger.Info("secondary database migration started")
-	err = migrateLOGDB()
-	if err != nil {
-		logger.Logger.Fatal("failed to migrate secondary database", zap.Error(err))
-		return
+// runWrapperUUIDMigration runs the coordinator for the InitDB plus InitLogDB wrapper path.
+// A unified deployment whose primary-only catch-up already ran in this process does not
+// repeat the identical catch-up; finalizer mode always runs because the compatibility path
+// can never finalize.
+// Parameters:
+//   - ctx: context bounding the migration and any background worker.
+//   - topology: explicitly constructed database topology.
+//
+// Return values:
+//   - error: wrapped error when finalizer-mode migration fails.
+func runWrapperUUIDMigration(ctx context.Context, topology *databaseTopology) error {
+	ctx = withUUIDMigrationLogger(ctx)
+	if topology.mode == uuidTopologyUnified && !externalUUIDBackfillFinalizerEnabled && compatibilityCatchUpAlreadyRan() {
+		return nil
 	}
-	if err = MigrateLogExternalUUIDs(context.Background(), LOG_DB); err != nil {
-		logger.Logger.Fatal("failed to migrate secondary log resource uuids", zap.Error(err))
-		return
-	}
-	logger.Logger.Info("secondary database migrated")
+	return startExternalUUIDMigration(ctx, topology)
 }
 
 func migrateLOGDB() error {
 	var err error
 	if err = LOG_DB.AutoMigrate(&Log{}); err != nil {
 		return errors.Wrap(err, "auto migrate log database")
+	}
+	if err = LOG_DB.AutoMigrate(&DataMigration{}); err != nil {
+		return errors.Wrap(err, "auto migrate log data migrations")
 	}
 	return nil
 }
@@ -468,11 +549,21 @@ func closeDB(db *gorm.DB) error {
 }
 
 func CloseDB() error {
-	if LOG_DB != DB {
+	// Cancel and join every background loop before either database is closed. Both migration
+	// generations own workers that issue statements, so a loop still in flight would run
+	// against a closed pool.
+	stopUUIDCatchUpWorker()
+	stopCompactLoops()
+	// LOG_DB is nil for an InitDB-only caller that never initialized the log database, so it
+	// must be checked before use rather than only compared against DB.
+	if LOG_DB != nil && LOG_DB != DB {
 		err := closeDB(LOG_DB)
 		if err != nil {
 			return errors.Wrap(err, "close log database")
 		}
+	}
+	if DB == nil {
+		return nil
 	}
 	return closeDB(DB)
 }

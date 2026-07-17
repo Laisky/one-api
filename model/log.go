@@ -24,7 +24,7 @@ import (
 type Log struct {
 	Id        int     `json:"id"`
 	UserId    int     `json:"user_id" gorm:"index;index:idx_user_token,priority:1"`
-	UUID      string  `json:"uuid" gorm:"type:char(36);index;column:uuid"`
+	UUID      string  `json:"uuid" gorm:"type:char(36);column:uuid"`
 	UserUUID  *string `json:"user_uuid" gorm:"type:char(36);column:user_uuid;index"`
 	CreatedAt int64   `json:"created_at" gorm:"bigint;index:idx_created_at_type"`
 	Type      int     `json:"type" gorm:"index:idx_created_at_type"`

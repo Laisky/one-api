@@ -100,6 +100,19 @@ func (m *MockMetricsRecorder) RecordModelUsage(modelName, channelType string, la
 }
 func (m *MockMetricsRecorder) UpdateBillingStats(totalBillingOperations, successfulBillingOperations, failedBillingOperations int64) {
 }
+func (m *MockMetricsRecorder) RecordUUIDBackfillRows(role, phase, target, result string, count int) {
+}
+func (m *MockMetricsRecorder) UpdateUUIDBackfillBacklog(role, target string, backlog float64) {}
+func (m *MockMetricsRecorder) RecordUUIDBackfillCycle(role, mode, result string, duration time.Duration) {
+}
+func (m *MockMetricsRecorder) RecordUUIDBackfillFinalizer(role, result string)                  {}
+func (m *MockMetricsRecorder) UpdateCompactUUIDState(role, state string, active bool)           {}
+func (m *MockMetricsRecorder) UpdateCompactUUIDBacklog(role, target, kind string, rows float64) {}
+func (m *MockMetricsRecorder) RecordCompactUUIDAction(role, action, result string)              {}
+func (m *MockMetricsRecorder) RecordCompactUUIDLookupFallback(role, reason string)              {}
+func (m *MockMetricsRecorder) UpdateCompactUUIDLastProgress(role string, unixTime float64)      {}
+func (m *MockMetricsRecorder) RecordCompactUUIDDuration(role, operation string, duration time.Duration) {
+}
 func (m *MockMetricsRecorder) InitSystemMetrics(version, buildTime, goVersion string, startTime time.Time) {
 }
 func (m *MockMetricsRecorder) UpdateSiteWideStats(totalQuota, usedQuota int64, totalUsers, activeUsers int) {

@@ -43,7 +43,7 @@ const (
 // GORM automatically manages CreatedAt/UpdatedAt as millisecond timestamps.
 type TokenTransaction struct {
 	Id            int     `json:"-"`
-	UUID          string  `json:"uuid" gorm:"type:char(36);index;column:uuid"`
+	UUID          string  `json:"uuid" gorm:"type:char(36);column:uuid"`
 	TransactionID string  `json:"transaction_id" gorm:"size:128;uniqueIndex:uidx_token_txn"`
 	TokenId       int     `json:"-" gorm:"index;uniqueIndex:uidx_token_txn"`
 	TokenUUID     *string `json:"token_uuid" gorm:"type:char(36);column:token_uuid;index"`
