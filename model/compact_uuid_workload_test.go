@@ -41,10 +41,10 @@ import (
 func TestCompactUUIDCompatibilityWorkload(t *testing.T) {
 	dialect := compactFaultDialect()
 	if strings.TrimSpace(os.Getenv(dialect.primaryEnv)) == "" {
-		t.Skipf("%s is not configured; CI's no-skip guard enforces this suite", dialect.primaryEnv)
+		compactLiveSkipf(t, "%s is not configured", dialect.primaryEnv)
 	}
 	if strings.TrimSpace(os.Getenv(compactWorkloadBaseDSNEnv)) == "" {
-		t.Skipf("%s is not configured; CI's no-skip guard enforces this suite", compactWorkloadBaseDSNEnv)
+		compactLiveSkipf(t, "%s is not configured", compactWorkloadBaseDSNEnv)
 	}
 	// The cache category must exercise the real SQL fallback, so Redis is disabled for the
 	// test's duration. The flag cannot be asserted instead: it initializes to true and only
@@ -133,7 +133,7 @@ func compactWorkloadMigratedOutcome(t *testing.T, schedule compactWorkloadSchedu
 
 	db, topology, ok := newLiveCompactTopology(t, dialect, false)
 	if !ok {
-		t.Skipf("%s is not configured; CI's no-skip guard enforces this suite", dialect.primaryEnv)
+		compactLiveSkipf(t, "%s is not configured", dialect.primaryEnv)
 	}
 	ctx, cancel := context.WithTimeout(withCompactLogger(context.Background()), 15*time.Minute)
 	t.Cleanup(cancel)

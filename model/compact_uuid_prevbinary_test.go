@@ -75,16 +75,13 @@ func compactPrevArtifact(t *testing.T) (string, compactLiveDialect, string, bool
 	// to prove "unchanged" rather than merely "still present".
 	dialect := compactLiveDialects()[1]
 
-	binary := strings.TrimSpace(os.Getenv(compactPrevBinaryEnv))
-	if binary == "" {
-		t.Skipf("%s is not configured; CI's no-skip guard enforces this suite", compactPrevBinaryEnv)
-		return "", dialect, "", false
-	}
 	dsn := strings.TrimSpace(os.Getenv(dialect.primaryEnv))
 	if dsn == "" {
-		t.Skipf("%s is not configured; CI's no-skip guard enforces this suite", dialect.primaryEnv)
+		compactLiveSkipf(t, "%s is not configured", dialect.primaryEnv)
 		return "", dialect, "", false
 	}
+	// The artifact builds itself from the pinned commit; the env is only an override.
+	binary := resolvePinnedCompactBinary(t, compactPrevBinaryPinnedRef, compactPrevBinaryEnv)
 	return binary, dialect, dsn, true
 }
 

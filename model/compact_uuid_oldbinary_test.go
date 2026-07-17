@@ -136,15 +136,13 @@ func compactCatalogFingerprint(t *testing.T, db *gorm.DB) string {
 func TestCompactUUIDOldBinary(t *testing.T) {
 	// AUTO-T06/T21: a real pinned pre-migration binary starts against a compact-completed
 	// schema, runs its own AutoMigrate, and leaves every compact and legacy object unchanged.
-	binary := strings.TrimSpace(os.Getenv(compactOldBinaryEnv))
-	if binary == "" {
-		t.Skipf("%s is not configured; CI's no-skip guard enforces this suite", compactOldBinaryEnv)
-	}
 	dialect := compactLiveDialects()[1] // PostgreSQL: native uuid is the strictest shadow type.
 	dsn := strings.TrimSpace(os.Getenv(dialect.primaryEnv))
 	if dsn == "" {
-		t.Skipf("%s is not configured; CI's no-skip guard enforces this suite", dialect.primaryEnv)
+		compactLiveSkipf(t, "%s is not configured", dialect.primaryEnv)
 	}
+	// The artifact builds itself from the pinned commit; the env is only an override.
+	binary := resolvePinnedCompactBinary(t, compactOldBinaryPinnedRef, compactOldBinaryEnv)
 
 	db, topology, ok := newLiveCompactTopology(t, dialect, false)
 	require.True(t, ok)
@@ -171,15 +169,12 @@ func TestCompactUUIDCompatibilityCorpus(t *testing.T) {
 	// AUTO-T07/T08: the old binary writes through its own v3 writer contract, with no knowledge
 	// of compact columns, and the database derives the shadow atomically. A new reader then
 	// resolves that row correctly through the verified compact path.
-	binary := strings.TrimSpace(os.Getenv(compactOldBinaryEnv))
-	if binary == "" {
-		t.Skipf("%s is not configured; CI's no-skip guard enforces this suite", compactOldBinaryEnv)
-	}
 	dialect := compactLiveDialects()[1]
 	dsn := strings.TrimSpace(os.Getenv(dialect.primaryEnv))
 	if dsn == "" {
-		t.Skipf("%s is not configured; CI's no-skip guard enforces this suite", dialect.primaryEnv)
+		compactLiveSkipf(t, "%s is not configured", dialect.primaryEnv)
 	}
+	binary := resolvePinnedCompactBinary(t, compactOldBinaryPinnedRef, compactOldBinaryEnv)
 
 	db, topology, ok := newLiveCompactTopology(t, dialect, false)
 	require.True(t, ok)

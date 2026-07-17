@@ -101,7 +101,7 @@ func compactFaultFixture(t *testing.T, rows int, budget int) (*gorm.DB, *databas
 	dialect := compactFaultDialect()
 	db, topology, ok := newLiveCompactTopology(t, dialect, false)
 	if !ok {
-		t.Skipf("%s is not configured; CI's no-skip guard enforces this suite", dialect.primaryEnv)
+		compactLiveSkipf(t, "%s is not configured", dialect.primaryEnv)
 	}
 	if budget > 0 {
 		original := config.CompactUUIDMaxRowsPerCycle

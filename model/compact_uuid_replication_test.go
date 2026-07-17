@@ -306,7 +306,7 @@ func compactReplRunPGStreaming(t *testing.T) {
 	dialect := compactLiveDialects()[1]
 	primaryDB, topology, ok := newLiveCompactTopology(t, dialect, false)
 	if !ok {
-		t.Skipf("%s is not configured", dialect.primaryEnv)
+		compactLiveSkipf(t, "%s is not configured", dialect.primaryEnv)
 	}
 	parts := compactReplParsePG(t, strings.TrimSpace(os.Getenv(dialect.primaryEnv)))
 	compactReplSeedUsers(t, primaryDB)
@@ -451,7 +451,7 @@ func compactReplRunMySQLReplication(t *testing.T) {
 	dialect := compactLiveDialects()[0]
 	dsn := strings.TrimSpace(os.Getenv(dialect.primaryEnv))
 	if dsn == "" {
-		t.Skipf("%s is not configured", dialect.primaryEnv)
+		compactLiveSkipf(t, "%s is not configured", dialect.primaryEnv)
 	}
 	// Replication starts before any schema exists, so the whole migration flows through the
 	// binlog: the CREATE TABLE, the ADD COLUMN, the CREATE TRIGGER, and the backfilled rows.
@@ -532,7 +532,7 @@ func compactReplRunMySQLReplication(t *testing.T) {
 // Return values: none.
 func TestCompactUUIDReplicationAndRestore(t *testing.T) {
 	if strings.TrimSpace(os.Getenv(compactReplEnableEnv)) != "1" {
-		t.Skipf("%s is not set; CI's no-skip guard enforces this suite", compactReplEnableEnv)
+		t.Skipf("%s is not set; replica provisioning is a deliberate opt-in, heavier than PR CI", compactReplEnableEnv)
 	}
 
 	t.Run("postgres/physical-streaming", compactReplRunPGStreaming)
@@ -541,7 +541,7 @@ func TestCompactUUIDReplicationAndRestore(t *testing.T) {
 	t.Run("postgres/restore-modes", func(t *testing.T) {
 		dsn := strings.TrimSpace(os.Getenv(compactLiveDialects()[1].primaryEnv))
 		if dsn == "" {
-			t.Skipf("%s is not configured", compactLiveDialects()[1].primaryEnv)
+			compactLiveSkipf(t, "%s is not configured", compactLiveDialects()[1].primaryEnv)
 		}
 		parts := compactReplParsePG(t, dsn)
 		compactReplRunRestores(t, compactReplPGRestore(parts), parts.database)

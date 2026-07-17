@@ -15,15 +15,12 @@ import (
 func TestCompactUUIDMixedVersionDrift(t *testing.T) {
 	// AUTO-T10: old -> new -> old -> new at every migration percentage, where "old" is the real
 	// pinned pre-migration artifact executed against the same database, not an emulation of it.
-	binary := strings.TrimSpace(os.Getenv(compactOldBinaryEnv))
-	if binary == "" {
-		t.Skipf("%s is not configured; CI's no-skip guard enforces this suite", compactOldBinaryEnv)
-	}
 	dsn := strings.TrimSpace(os.Getenv(compactFaultDialect().primaryEnv))
 	if dsn == "" {
-		t.Skipf("%s is not configured; CI's no-skip guard enforces this suite",
-			compactFaultDialect().primaryEnv)
+		compactLiveSkipf(t, "%s is not configured", compactFaultDialect().primaryEnv)
 	}
+	// The artifact builds itself from the pinned commit; the env is only an override.
+	binary := resolvePinnedCompactBinary(t, compactOldBinaryPinnedRef, compactOldBinaryEnv)
 
 	for _, stage := range []struct {
 		name  string

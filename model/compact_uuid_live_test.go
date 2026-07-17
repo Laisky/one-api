@@ -225,7 +225,7 @@ func TestCompactUUIDLiveMatrix(t *testing.T) {
 			t.Run(dialect.name+"/"+topologyName, func(t *testing.T) {
 				db, topology, ok := newLiveCompactTopology(t, dialect, split)
 				if !ok {
-					t.Skipf("%s is not configured; CI's no-skip guard enforces this suite", dialect.primaryEnv)
+					compactLiveSkipf(t, "%s is not configured", dialect.primaryEnv)
 				}
 				runLiveCompactQualification(t, db, topology, dialect, split)
 			})

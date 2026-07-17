@@ -27,7 +27,7 @@ All sixteen work items are implemented with focused tests.
 | AUTO-012 metrics | `common/metrics/interface.go`, `monitor/*/recorder_compact_uuid.go`, `controller/prometheus.go` |
 | AUTO-013 old binaries | `model/compact_uuid_oldbinary_test.go`; artifact evidence below |
 | AUTO-014 harnesses | `model/compact_uuid_*_test.go`, incl. `_live_test.go` and `_oldbinary_test.go` |
-| AUTO-015 workflow | `.github/workflows/compact-uuid-qualification.yml` |
+| AUTO-015 qualification | In-test: `pr.yml` supplies MySQL 8.4 + PostgreSQL 17 and sets `ONEAPI_REQUIRE_DB_BACKENDS=1`; the no-skip guard and pinned-artifact builds live inside the tests (`model/compact_uuid_pinned_build_test.go`) |
 | AUTO-016 forbidden DDL | `model/compact_uuid_forbidden_ddl.go` + static assertion in `model/compact_uuid_forbidden_ddl_test.go` |
 
 ## 2. Verified
@@ -296,16 +296,30 @@ Choosing it later requires no test archaeology: the two reported rounds would si
 
 ## 4. Not verified — remaining gaps
 
-These are gaps, not passes. The workflow fails rather than skips when a required DSN, artifact,
-or suite is absent, so CI cannot go green without them.
+These are gaps, not passes.
+
+**Owner decision (2026-07-17): the bespoke qualification workflows were retired.** Regression
+prevention lives in test cases, not CI orchestration: every live scenario is an ordinary Go
+test, the pinned pre-migration artifacts build themselves from their recorded commits inside
+the tests, and `pr.yml` merely provides the two database engines and sets
+`ONEAPI_REQUIRE_DB_BACKENDS=1` — under which a live suite that cannot run FAILS instead of
+skipping, so PR CI cannot go green while silently not running them. Two consequences are
+accepted deliberately: the 90-day CI artifact retention that AUTO-A11 described is replaced by
+test logs, and the scheduled scale runs are replaced by the manual opt-in below.
 
 - **The 1m-row tier and the repetition protocol are partially measured.** The 100k tier is
-  measured on both engines (section 2.4), the suites are row-parameterized
-  (`COMPACT_UUID_TEST_SCALE_ROWS`), and the qualification workflow runs three 100k repetitions
-  plus one 1m run per dispatch. What is NOT done: three full 1m repetitions per dialect (the
-  workflow states this reduction in its own comments — they do not fit a hosted-runner budget),
-  and the commit/engine/fixture/hardware-keyed baseline recording, which wants a self-hosted
-  runner because GitHub hardware is not the stable baseline section 12 keys on.
+  measured on both engines (section 2.4) and the suites are row-parameterized. The scale tiers
+  are a deliberate opt-in, excluded from PR CI and run manually before a release:
+
+  ```bash
+  COMPACT_UUID_TEST_SCALE=1 COMPACT_UUID_TEST_SCALE_ROWS=1000000 \
+    COMPACT_UUID_TEST_MYSQL_DSN=... COMPACT_UUID_TEST_POSTGRES_DSN=... \
+    go test ./model/ -run 'TestCompactUUIDScale' -timeout 340m
+  ```
+
+  What is NOT done: three full 1m repetitions per dialect, and the
+  commit/engine/fixture/hardware-keyed baseline recording, which wants a stable dedicated
+  machine because shared hardware is not the baseline section 12 keys on.
 - **The section 12 workload runs on PostgreSQL only.** The corpus itself is to spec and passes
   (section 2.4): 8 clients, 6 held states, ≥1,000 ops per state, the 30/40/10/10/10 mix, writes
   covering all 12 owned writer targets, exact reads rotating through every owned type, and

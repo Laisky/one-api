@@ -91,7 +91,7 @@ func TestCompactUUIDObservabilityFallbackEmission(t *testing.T) {
 		dialect := compactLiveDialects()[1]
 		db, topology, ok := newLiveCompactTopology(t, dialect, false)
 		if !ok {
-			t.Skipf("%s is not configured; CI's no-skip guard enforces this suite", dialect.primaryEnv)
+			compactLiveSkipf(t, "%s is not configured", dialect.primaryEnv)
 		}
 		withCompactPrometheusRecorder(t)
 		ctx := compactTestContext(t)

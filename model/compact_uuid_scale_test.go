@@ -149,7 +149,7 @@ func compactScaleTopology(t *testing.T, dialect compactLiveDialect) (*gorm.DB, *
 	t.Helper()
 	db, topology, ok := newLiveCompactTopology(t, dialect, false)
 	if !ok {
-		t.Skipf("%s is not configured; CI's no-skip guard enforces this suite", dialect.primaryEnv)
+		t.Skipf("%s is not configured; the scale tiers are a deliberate opt-in (COMPACT_UUID_TEST_SCALE=1)", dialect.primaryEnv)
 	}
 	return db, topology
 }

@@ -25,7 +25,7 @@ func TestCompactUUIDUnsupportedTopologyMixedDialect(t *testing.T) {
 	mysqlDSN := strings.TrimSpace(os.Getenv(mysqlDialect.primaryEnv))
 	postgresDSN := strings.TrimSpace(os.Getenv(postgresDialect.primaryEnv))
 	if mysqlDSN == "" || postgresDSN == "" {
-		t.Skipf("%s and %s are both required; CI's no-skip guard enforces this suite",
+		compactLiveSkipf(t, "%s and %s are both required",
 			mysqlDialect.primaryEnv, postgresDialect.primaryEnv)
 	}
 	withCompactTestSettings(t)
