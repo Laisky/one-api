@@ -237,16 +237,23 @@ const PersonalSetting = () => {
       return;
     }
     setLoading(true);
-    const res = await API.get(
-      `/api/verification?email=${inputs.email}&turnstile=${turnstileToken}`
-    );
-    const { success, message } = res.data;
-    if (success) {
-      showSuccess('验证码发送成功，请检查邮箱！');
-    } else {
-      showError(message);
+    try {
+      const res = await API.get(
+        `/api/verification?email=${inputs.email}&turnstile=${turnstileToken}`
+      );
+      // The shared axios interceptor resolves to undefined on error; bail out before
+      // reading res.data so a failed request can't throw and leave `loading` stuck true,
+      // which would keep the 获取验证码 button disabled even after the resend countdown ends.
+      if (!res) return;
+      const { success, message } = res.data;
+      if (success) {
+        showSuccess('验证码发送成功，请检查邮箱！');
+      } else {
+        showError(message);
+      }
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   const bindEmail = async () => {

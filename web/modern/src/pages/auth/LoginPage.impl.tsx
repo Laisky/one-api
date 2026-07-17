@@ -39,6 +39,9 @@ export function LoginPage() {
   const [totpValue, setTotpValue] = useState('');
   const [turnstileToken, setTurnstileToken] = useState('');
   const [turnstileRequired, setTurnstileRequired] = useState(false);
+  // Bumping this remounts the Turnstile widget to force a fresh, unused token after the
+  // previous one is consumed by a failed login attempt.
+  const [turnstileNonce, setTurnstileNonce] = useState(0);
   const totpRef = useRef<HTMLInputElement | null>(null);
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -254,7 +257,13 @@ export function LoginPage() {
       // Check if the server is now requiring Turnstile (after failed login).
       if (!success && respData?.turnstile_required) {
         setTurnstileRequired(true);
+        // Login re-verifies the Turnstile token on every attempt (it does not mark the
+        // session), so the consumed token is now useless. Clear it AND remount the widget
+        // (via key bump) so it issues a fresh token — otherwise the login button, gated on
+        // `turnstileRequired && !turnstileToken`, would stay disabled until the widget's own
+        // ~5-minute expiry re-challenge, stranding the user after a failed retry.
         setTurnstileToken('');
+        setTurnstileNonce((n) => n + 1);
       }
 
       if (needsTotp) {
@@ -433,6 +442,7 @@ export function LoginPage() {
 
               {turnstileRenderable && systemStatus?.turnstile_site_key && (
                 <Turnstile
+                  key={turnstileNonce}
                   siteKey={systemStatus.turnstile_site_key}
                   onVerify={handleTurnstileVerify}
                   onExpire={handleTurnstileExpire}

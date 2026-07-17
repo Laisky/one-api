@@ -68,21 +68,28 @@ const OperationSetting = () => {
 
   const updateOption = async (key, value) => {
     setLoading(true);
-    if (key.endsWith("Enabled")) {
-      value = inputs[key] === "true" ? "false" : "true";
+    try {
+      if (key.endsWith("Enabled")) {
+        value = inputs[key] === "true" ? "false" : "true";
+      }
+      const res = await API.put("/api/option/", {
+        key,
+        value,
+      });
+      // The shared axios interceptor resolves to undefined on error; bail out before
+      // reading res.data so a failed request can't throw and leave `loading` stuck true,
+      // which would keep every settings button disabled until a page reload.
+      if (!res) return false;
+      const { success, message } = res.data;
+      if (success) {
+        setInputs((inputs) => ({ ...inputs, [key]: value }));
+      } else {
+        showError(message);
+      }
+      return success;
+    } finally {
+      setLoading(false);
     }
-    const res = await API.put("/api/option/", {
-      key,
-      value,
-    });
-    const { success, message } = res.data;
-    if (success) {
-      setInputs((inputs) => ({ ...inputs, [key]: value }));
-    } else {
-      showError(message);
-    }
-    setLoading(false);
-    return success;
   };
 
   const handleInputChange = async (event) => {

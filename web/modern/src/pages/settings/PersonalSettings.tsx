@@ -516,9 +516,10 @@ export function PersonalSettings() {
           type: 'success',
           message: message || t('personal_settings.profile_info.send_code_success'),
         });
-        if (turnstileEnabled) {
-          setTurnstileToken('');
-        }
+        // Keep the Turnstile token: the backend marks the session verified after this
+        // /api/verification call (middleware.TurnstileCheck) and skips the check on later
+        // requests, so wiping it here would only strand the "Send Code" button (which is
+        // gated on `turnstileEnabled && !turnstileToken`) with no way to re-issue a token.
         return;
       }
 

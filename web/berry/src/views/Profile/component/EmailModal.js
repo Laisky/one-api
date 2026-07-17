@@ -36,20 +36,27 @@ const EmailModal = ({ open, handleClose, turnstileToken }) => {
   const submit = async (values, { setErrors, setStatus, setSubmitting }) => {
     setLoading(true);
     setSubmitting(true);
-    const res = await API.get(
-      `/api/oauth/email/bind?email=${values.email}&code=${values.email_verification_code}`
-    );
-    const { success, message } = res.data;
-    if (success) {
-      showSuccess("邮箱账户绑定成功！");
+    try {
+      const res = await API.get(
+        `/api/oauth/email/bind?email=${values.email}&code=${values.email_verification_code}`
+      );
+      // The shared axios interceptor resolves to undefined on error; bail out before
+      // reading res.data so a failed request can't throw and leave the bind button
+      // (disabled={loading}) and Formik submit state stuck until the modal is reopened.
+      if (!res) return;
+      const { success, message } = res.data;
+      if (success) {
+        showSuccess("邮箱账户绑定成功！");
+        setStatus({ success: true });
+        handleClose();
+      } else {
+        showError(message);
+        setErrors({ submit: message });
+      }
+    } finally {
+      setLoading(false);
       setSubmitting(false);
-      setStatus({ success: true });
-      handleClose();
-    } else {
-      showError(message);
-      setErrors({ submit: message });
     }
-    setLoading(false);
   };
 
   useEffect(() => {
