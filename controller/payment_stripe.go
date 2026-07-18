@@ -12,7 +12,7 @@ import (
 	"github.com/Laisky/zap"
 	"github.com/gin-gonic/gin"
 	stripe "github.com/stripe/stripe-go/v82"
-	checkoutsession "github.com/stripe/stripe-go/v82/checkout/session"
+	"github.com/stripe/stripe-go/v82/client"
 	stripewebhook "github.com/stripe/stripe-go/v82/webhook"
 
 	"github.com/Laisky/one-api/common"
@@ -31,6 +31,7 @@ type createStripeCheckoutResponse struct {
 
 // CreateStripeCheckout creates a Stripe Checkout Session for a freeform USD top-up.
 // The fee is absorbed by the platform: the user is charged exactly AmountUSD.
+// It takes a gin.Context to read the authenticated user and request body, and writes a JSON response with the checkout URL.
 func CreateStripeCheckout(c *gin.Context) {
 	ctx := gmw.Ctx(c)
 	logger := gmw.GetLogger(c)
@@ -62,12 +63,13 @@ func CreateStripeCheckout(c *gin.Context) {
 		return
 	}
 
+	// Derive cents first so quota stays consistent with the charged amount.
 	amountCents := int64(req.AmountUSD*100 + 0.5)
 	if amountCents < int64(minUSD)*100 {
 		c.JSON(http.StatusOK, gin.H{"success": false, "message": "invalid amount"})
 		return
 	}
-	quota := int64(req.AmountUSD * config.QuotaPerUnit)
+	quota := (amountCents * int64(config.QuotaPerUnit)) / 100
 
 	userID := c.GetInt("id")
 	base := strings.TrimRight(strings.TrimSpace(config.ServerAddress), "/")
@@ -84,7 +86,8 @@ func CreateStripeCheckout(c *gin.Context) {
 	userEmail, _ := model.GetUserEmail(userID)
 	userEmail = strings.TrimSpace(userEmail)
 
-	stripe.Key = config.StripeSecretKey
+	// Per-request client avoids races on the package-level stripe.Key.
+	sc := client.New(config.StripeSecretKey, nil)
 	params := &stripe.CheckoutSessionParams{
 		Mode:              stripe.String(string(stripe.CheckoutSessionModePayment)),
 		ClientReferenceID: stripe.String(strconv.Itoa(userID)),
@@ -97,7 +100,7 @@ func CreateStripeCheckout(c *gin.Context) {
 					Currency:   stripe.String(string(stripe.CurrencyUSD)),
 					UnitAmount: stripe.Int64(amountCents),
 					ProductData: &stripe.CheckoutSessionLineItemPriceDataProductDataParams{
-						Name: stripe.String(fmt.Sprintf("Quota top-up: $%.2f", req.AmountUSD)),
+						Name: stripe.String(fmt.Sprintf("Quota top-up: $%.2f", float64(amountCents)/100)),
 					},
 				},
 			},
@@ -118,7 +121,7 @@ func CreateStripeCheckout(c *gin.Context) {
 		}
 	}
 
-	session, err := checkoutsession.New(params)
+	session, err := sc.CheckoutSessions.New(params)
 	if err != nil {
 		logger.Error("create stripe checkout session", zap.Error(err))
 		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
@@ -151,6 +154,7 @@ func CreateStripeCheckout(c *gin.Context) {
 
 // StripeWebhook handles checkout.session.completed events. The route MUST receive
 // the raw request body — do not interpose middleware that consumes it.
+// It takes a gin.Context to parse the signed Stripe payload and writes a JSON status response.
 func StripeWebhook(c *gin.Context) {
 	ctx := gmw.Ctx(c)
 	logger := gmw.GetLogger(c)
@@ -186,9 +190,10 @@ func StripeWebhook(c *gin.Context) {
 		return
 	}
 
-	order, err := model.GetPaymentOrderBySession(ctx, sessionID)
+	// Atomic settle: mark paid + credit quota in one DB transaction (idempotent).
+	transitioned, order, err := model.SettlePaidPaymentOrder(ctx, sessionID, time.Now().UnixMilli())
 	if err != nil {
-		logger.Error("lookup payment order", zap.Error(err))
+		logger.Error("settle payment order", zap.Error(err), zap.String("session_id", sessionID))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -197,23 +202,11 @@ func StripeWebhook(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"received": true})
 		return
 	}
-
-	transitioned, _, err := model.MarkPaymentOrderPaid(ctx, sessionID, time.Now().UnixMilli())
-	if err != nil {
-		logger.Error("mark payment paid", zap.Error(err))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
 	if !transitioned {
 		c.JSON(http.StatusOK, gin.H{"received": true})
 		return
 	}
 
-	if err := model.IncreaseUserQuota(ctx, order.UserId, order.Quota); err != nil {
-		logger.Error("increase user quota after payment", zap.Error(err), zap.Int("user_id", order.UserId))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
 	remark := fmt.Sprintf("Stripe top-up $%.2f (%s)", float64(order.AmountCents)/100, common.LogQuota(order.Quota))
 	model.RecordTopupLog(ctx, order.UserId, remark, int(order.Quota))
 
