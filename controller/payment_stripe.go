@@ -165,9 +165,15 @@ func StripeWebhook(c *gin.Context) {
 		return
 	}
 
-	payload, err := io.ReadAll(c.Request.Body)
+	// Cap body size to mitigate OOM on a public webhook endpoint (Stripe events are small).
+	const maxStripeWebhookBody = 1 << 20 // 1 MiB
+	payload, err := io.ReadAll(io.LimitReader(c.Request.Body, maxStripeWebhookBody))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if len(payload) >= maxStripeWebhookBody {
+		c.JSON(http.StatusRequestEntityTooLarge, gin.H{"error": "webhook payload too large"})
 		return
 	}
 

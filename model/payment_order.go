@@ -120,11 +120,19 @@ func SettlePaidPaymentOrder(ctx context.Context, sessionID string, paidAtMs int6
 			order = &found
 			return nil
 		}
-		if e := tx.Model(&found).Updates(map[string]any{
+		// Optimistic claim: only one concurrent settler can flip pending → paid.
+		res := tx.Model(&found).Where("status = ?", PaymentStatusPending).Updates(map[string]any{
 			"status":  PaymentStatusPaid,
 			"paid_at": paidAtMs,
-		}).Error; e != nil {
-			return errors.Wrap(e, "mark payment order paid in settle tx")
+		})
+		if res.Error != nil {
+			return errors.Wrap(res.Error, "mark payment order paid in settle tx")
+		}
+		if res.RowsAffected == 0 {
+			// Another worker settled this order between our read and update.
+			found.Status = PaymentStatusPaid
+			order = &found
+			return nil
 		}
 		// Credit quota in the same transaction so a crash cannot leave paid-without-quota.
 		// Bypass BatchUpdateEnabled so settlement is always durable in-tx.

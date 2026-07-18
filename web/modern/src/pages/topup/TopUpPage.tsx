@@ -452,7 +452,7 @@ export function TopUpPage() {
                                 type="number"
                                 inputMode="decimal"
                                 min={minTopUpUSD}
-                                step="1"
+                                step="0.01"
                                 placeholder={String(minTopUpUSD)}
                                 className="min-h-11 pl-7 tabular-nums"
                                 {...field}

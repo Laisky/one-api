@@ -52,8 +52,10 @@ func GetStatus(c *gin.Context) {
 			"oidc_userinfo_endpoint":      config.OidcUserinfoEndpoint,
 			"password_login":              config.PasswordLoginEnabled,
 			"password_register":           config.PasswordRegisterEnabled,
-			"stripe_enabled":              strings.TrimSpace(config.StripeSecretKey) != "",
-			"min_topup_usd":               effectiveMinTopUpUSD(),
+			// Require both secrets so the UI only offers Checkout when settlement can succeed.
+			"stripe_enabled": strings.TrimSpace(config.StripeSecretKey) != "" &&
+				strings.TrimSpace(config.StripeWebhookSecret) != "",
+			"min_topup_usd": effectiveMinTopUpUSD(),
 		},
 	})
 }
