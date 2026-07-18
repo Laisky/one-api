@@ -40,6 +40,11 @@ type ResendEmailResponse struct {
 // resendAPIURL is the Resend emails endpoint. Tests may override it to point at httptest.
 var resendAPIURL = "https://api.resend.com/emails"
 
+// resendHTTPClient is shared across Resend sends to reuse TCP connections.
+var resendHTTPClient = &http.Client{
+	Timeout: 30 * time.Second,
+}
+
 // loginAuth implements the LOGIN authentication mechanism
 type loginAuth struct {
 	username, password string
@@ -184,8 +189,7 @@ func sendEmailViaResend(subject, receiver, content string) error {
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("Authorization", "Bearer "+config.ResendAPIKey)
 
-	client := &http.Client{Timeout: 30 * time.Second}
-	resp, err := client.Do(req)
+	resp, err := resendHTTPClient.Do(req)
 	if err != nil {
 		return errors.Wrap(err, "failed to send request to Resend API")
 	}

@@ -202,7 +202,11 @@ func updateOptionMap(key string, value string) (err error) {
 	case "SMTPToken":
 		config.SMTPToken = value
 	case "EmailProvider":
-		config.EmailProvider = strings.ToLower(strings.TrimSpace(value))
+		val := strings.ToLower(strings.TrimSpace(value))
+		if val != "" && val != "smtp" && val != "resend" {
+			return errors.Errorf("invalid email provider %q (expected \"smtp\", \"resend\", or empty)", val)
+		}
+		config.EmailProvider = val
 	case "ResendAPIKey":
 		config.ResendAPIKey = strings.TrimSpace(value)
 	case "ServerAddress":

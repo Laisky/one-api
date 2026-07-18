@@ -78,6 +78,14 @@ func UpdateOption(c *gin.Context) {
 			helper.RespondError(c, errors.New("invalid theme"))
 			return
 		}
+	case "EmailProvider":
+		// Normalize and reject typos before they are persisted.
+		val := strings.ToLower(strings.TrimSpace(option.Value))
+		if val != "" && val != "smtp" && val != "resend" {
+			helper.RespondError(c, errors.Errorf("invalid email provider %q (expected \"smtp\", \"resend\", or empty)", val))
+			return
+		}
+		option.Value = val
 	case "GitHubOAuthEnabled":
 		if option.Value == "true" && config.GitHubClientId == "" {
 			helper.RespondError(c, errors.New("Unable to enable GitHub OAuth, please fill in the GitHub Client Id and GitHub Client Secret first!"))
