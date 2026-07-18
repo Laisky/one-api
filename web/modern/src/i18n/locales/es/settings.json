@@ -320,11 +320,13 @@
       "QuotaRemindThreshold": "Se notifica a los usuarios cuando la cuota restante baja de este valor.",
       "RegisterEnabled": "Interruptor maestro para los registros. Desactívalo para bloquear nuevos registros.",
       "RetryTimes": "Reintentos automáticos ante errores transitorios aguas arriba.",
-      "SMTPAccount": "Usuario o correo SMTP usado para autenticarse.",
-      "SMTPFrom": "Dirección del remitente para correos salientes.",
-      "SMTPPort": "Puerto del servidor SMTP (p. ej. 587 para STARTTLS, 465 para SMTPS).",
-      "SMTPServer": "Nombre de host del servidor SMTP.",
-      "SMTPToken": "Contraseña o token SMTP usado para autenticarse (se almacena de forma segura).",
+      "EmailProvider": "Backend para el envío de correo. Selecciona SMTP para un servidor tradicional o Resend para usar la API HTTP de Resend (recomendado en PaaS como Railway que bloquean SMTP saliente).",
+      "ResendAPIKey": "Clave API de Resend (empieza con re_). Solo se usa cuando el proveedor de correo es Resend. Se almacena de forma segura.",
+      "SMTPAccount": "Usuario o correo SMTP usado para autenticarse. Solo se usa con el backend SMTP.",
+      "SMTPFrom": "Dirección del remitente para correos salientes. Con Resend, el dominio debe estar verificado en tu cuenta de Resend.",
+      "SMTPPort": "Puerto del servidor SMTP (p. ej. 587 para STARTTLS, 465 para SMTPS). Solo se usa con el backend SMTP.",
+      "SMTPServer": "Nombre de host del servidor SMTP. Solo se usa con el backend SMTP.",
+      "SMTPToken": "Contraseña o token SMTP usado para autenticarse. Solo se usa con el backend SMTP (se almacena de forma segura).",
       "ServerAddress": "URL base pública del servidor (para enlaces y callbacks).",
       "SystemName": "Nombre del sistema mostrado en la interfaz y correos.",
       "Theme": "Tema de la UI (berry, air, modern).",
@@ -338,6 +340,10 @@
       "WeChatServerToken": "Token de verificación para la integración con WeChat (se almacena de forma segura)."
     },
     "disabled": "Desactivado",
+    "email_provider": {
+      "resend": "Resend (API HTTP)",
+      "smtp": "SMTP"
+    },
     "email_whitelist": {
       "add": "Añadir",
       "duplicate_domain": "El dominio \"{{domain}}\" ya está en la lista.",
@@ -364,8 +370,8 @@
         "title": "Canales y confiabilidad"
       },
       "email": {
-        "description": "Configura el envío de correo saliente.",
-        "title": "Correo (SMTP)"
+        "description": "Configura el envío de correo saliente. Elige entre SMTP y la API HTTP de Resend.",
+        "title": "Correo"
       },
       "links": {
         "description": "Controla los enlaces externos expuestos a los usuarios finales.",

@@ -320,11 +320,13 @@
       "QuotaRemindThreshold": "当剩余配额低于此值时，将提醒用户。",
       "RegisterEnabled": "用户注册总开关。关闭以停止所有新注册。",
       "RetryTimes": "上游请求出现瞬时错误时的自动重试次数。",
-      "SMTPAccount": "用于认证的 SMTP 用户名或帐户邮箱。",
-      "SMTPFrom": "外发邮件中使用的发件人地址（例如 no-reply@yourdomain）。",
-      "SMTPPort": "SMTP 服务器端口（例如 STARTTLS 为 587，SMTPS 为 465）。",
-      "SMTPServer": "用于发送邮件的 SMTP 服务器主机名。",
-      "SMTPToken": "用于认证的 SMTP 密码或应用令牌。安全存储，从不显示。",
+      "EmailProvider": "用于发送邮件的后端。选择 SMTP 使用传统邮件服务器，或选择 Resend 使用 Resend HTTP API（推荐用于 Railway 等封禁出站 SMTP 的 PaaS 平台）。",
+      "ResendAPIKey": "Resend API 密钥（以 re_ 开头）。仅在邮件后端选择 Resend 时使用。安全存储，从不显示。",
+      "SMTPAccount": "用于认证的 SMTP 用户名或帐户邮箱。仅在邮件后端选择 SMTP 时使用。",
+      "SMTPFrom": "外发邮件中使用的发件人地址（例如 no-reply@yourdomain）。使用 Resend 时，域名必须已在 Resend 后台完成验证。",
+      "SMTPPort": "SMTP 服务器端口（例如 STARTTLS 为 587，SMTPS 为 465）。仅在邮件后端选择 SMTP 时使用。",
+      "SMTPServer": "用于发送邮件的 SMTP 服务器主机名。仅在邮件后端选择 SMTP 时使用。",
+      "SMTPToken": "用于认证的 SMTP 密码或应用令牌。仅在邮件后端选择 SMTP 时使用。安全存储，从不显示。",
       "ServerAddress": "此服务器的公共 Base URL（用于链接/回调）。",
       "SystemName": "在 UI 和邮件中显示的系统显示名称。",
       "Theme": "UI 主题（berry, air, modern）。",
@@ -338,6 +340,10 @@
       "WeChatServerToken": "微信服务器集成的验证令牌。安全存储，从不显示。"
     },
     "disabled": "已禁用",
+    "email_provider": {
+      "resend": "Resend (HTTP API)",
+      "smtp": "SMTP"
+    },
     "email_whitelist": {
       "add": "添加",
       "duplicate_domain": "域名 \"{{domain}}\" 已经存在。",
@@ -364,8 +370,8 @@
         "title": "渠道与可靠性"
       },
       "email": {
-        "description": "设置出站邮件投递。",
-        "title": "邮件 (SMTP)"
+        "description": "设置出站邮件投递。可在 SMTP 和 Resend HTTP API 之间切换。",
+        "title": "邮件"
       },
       "links": {
         "description": "控制向最终用户暴露的外部链接。",

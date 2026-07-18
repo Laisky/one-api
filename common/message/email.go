@@ -1,12 +1,16 @@
 package message
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"crypto/tls"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
+	"io"
 	"net"
+	"net/http"
 	"net/smtp"
 	"strings"
 	"time"
@@ -15,6 +19,26 @@ import (
 
 	"github.com/Laisky/one-api/common/config"
 )
+
+// ResendEmailRequest is the JSON body sent to POST https://api.resend.com/emails.
+type ResendEmailRequest struct {
+	From    string   `json:"from"`
+	To      []string `json:"to"`
+	Subject string   `json:"subject"`
+	Html    string   `json:"html"`
+}
+
+// ResendEmailResponse models both the success and error payloads returned by the Resend API.
+// Success: {"id": "..."}. Error: {"statusCode": 422, "name": "validation_error", "message": "..."}.
+type ResendEmailResponse struct {
+	ID         string `json:"id,omitempty"`
+	StatusCode int    `json:"statusCode,omitempty"`
+	Name       string `json:"name,omitempty"`
+	Message    string `json:"message,omitempty"`
+}
+
+// resendAPIURL is the Resend emails endpoint. Tests may override it to point at httptest.
+var resendAPIURL = "https://api.resend.com/emails"
 
 // loginAuth implements the LOGIN authentication mechanism
 type loginAuth struct {
@@ -101,6 +125,98 @@ func shouldAuth() bool {
 	return config.SMTPAccount != "" || config.SMTPToken != ""
 }
 
+// sendEmailViaResend posts an HTML email through the Resend HTTP API.
+// It returns an error when the API key is missing, no recipients are valid,
+// the HTTP request fails, or Resend responds with a non-2xx status.
+func sendEmailViaResend(subject, receiver, content string) error {
+	if config.ResendAPIKey == "" {
+		return errors.New("Resend API key is not configured")
+	}
+
+	emails := []string{}
+	for email := range strings.SplitSeq(receiver, ";") {
+		email = strings.TrimSpace(email)
+		if email != "" {
+			emails = append(emails, email)
+		}
+	}
+
+	if len(emails) == 0 {
+		return errors.New("no valid recipient email addresses")
+	}
+
+	// Resend requires the from address to be on a verified domain. Prefer SMTPFrom,
+	// fall back to SMTPAccount, and wrap with the SystemName display name when both
+	// are set so the recipient inbox shows a friendly sender (e.g. "Acme <noreply@acme.com>").
+	fromAddr := strings.TrimSpace(config.SMTPFrom)
+	if fromAddr == "" {
+		fromAddr = strings.TrimSpace(config.SMTPAccount)
+	}
+	if fromAddr == "" {
+		return errors.New("Resend sender address is not configured (set SMTPFrom or SMTPAccount)")
+	}
+	from := fromAddr
+	if name := strings.TrimSpace(config.SystemName); name != "" && !strings.Contains(fromAddr, "<") {
+		from = fmt.Sprintf("%s <%s>", name, fromAddr)
+	}
+
+	reqBody := ResendEmailRequest{
+		From:    from,
+		To:      emails,
+		Subject: subject,
+		Html:    content,
+	}
+
+	body, err := json.Marshal(reqBody)
+	if err != nil {
+		return errors.Wrap(err, "failed to marshal Resend request")
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, resendAPIURL, bytes.NewReader(body))
+	if err != nil {
+		return errors.Wrap(err, "failed to create Resend request")
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Authorization", "Bearer "+config.ResendAPIKey)
+
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return errors.Wrap(err, "failed to send request to Resend API")
+	}
+	defer resp.Body.Close()
+
+	// Read the body once so we can include it in error messages even when it isn't JSON
+	// (e.g. an HTML error page from an upstream proxy or Railway edge).
+	rawBody, readErr := io.ReadAll(io.LimitReader(resp.Body, 1<<16))
+	if readErr != nil {
+		return errors.Wrapf(readErr, "failed to read Resend response (status %d)", resp.StatusCode)
+	}
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		var res ResendEmailResponse
+		if jsonErr := json.Unmarshal(rawBody, &res); jsonErr == nil && res.Message != "" {
+			return errors.Errorf("Resend API error (status %d, %s): %s", resp.StatusCode, res.Name, res.Message)
+		}
+		return errors.Errorf("Resend API returned status %d: %s", resp.StatusCode, strings.TrimSpace(string(rawBody)))
+	}
+
+	var res ResendEmailResponse
+	if err := json.Unmarshal(rawBody, &res); err != nil {
+		return errors.Wrapf(err, "failed to decode Resend success response: %s", strings.TrimSpace(string(rawBody)))
+	}
+	if res.ID == "" {
+		return errors.Errorf("Resend API returned success status %d but no message id; body: %s", resp.StatusCode, strings.TrimSpace(string(rawBody)))
+	}
+
+	return nil
+}
+
 // dialSMTPClient establishes a connection to the SMTP server, preferring implicit TLS when available.
 // It falls back to a plain connection with STARTTLS when the server does not accept immediate TLS.
 // localName is used for the EHLO/HELO greeting and should be a hostname (e.g., the sender domain or "localhost").
@@ -172,12 +288,32 @@ func dialSMTPClient(ctx context.Context, addr, localName string) (*smtp.Client, 
 	return client, authMechs, usingTLS, nil
 }
 
-// SendEmail transmits an HTML email using the configured SMTP server, authenticating when credentials are provided.
+// SendEmail transmits an HTML email using Resend API or SMTP server.
 // It returns an error when the message cannot be constructed or delivered.
 func SendEmail(subject string, receiver string, content string) error {
 	if receiver == "" {
 		return errors.Errorf("receiver is empty")
 	}
+
+	// Resolve provider: explicit EmailProvider wins; otherwise fall back to legacy
+	// auto-detection (Resend if API key present, else SMTP) for backwards compatibility.
+	provider := strings.ToLower(strings.TrimSpace(config.EmailProvider))
+	if provider == "" {
+		if config.ResendAPIKey != "" {
+			provider = "resend"
+		} else {
+			provider = "smtp"
+		}
+	}
+	switch provider {
+	case "resend":
+		return sendEmailViaResend(subject, receiver, content)
+	case "smtp":
+		// fall through to SMTP path below
+	default:
+		return errors.Errorf("unknown email provider %q (expected \"smtp\" or \"resend\")", provider)
+	}
+
 	if config.SMTPFrom == "" { // for compatibility
 		config.SMTPFrom = config.SMTPAccount
 	}

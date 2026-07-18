@@ -16,12 +16,13 @@ import (
 )
 
 // isSensitiveOptionKey reports whether the option key holds a secret value
-// (e.g. tokens, secrets, passwords) and should never be echoed back to the
-// client or overwritten with an empty value submitted by a UI form.
+// (e.g. tokens, secrets, passwords, API keys) and should never be echoed back
+// to the client or overwritten with an empty value submitted by a UI form.
 func isSensitiveOptionKey(key string) bool {
 	return strings.HasSuffix(key, "Token") ||
 		strings.HasSuffix(key, "Secret") ||
-		strings.HasSuffix(key, "Password")
+		strings.HasSuffix(key, "Password") ||
+		strings.HasSuffix(key, "APIKey")
 }
 
 // GetOptions returns the current configuration options excluding sensitive values.

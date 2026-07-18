@@ -320,11 +320,13 @@
       "QuotaRemindThreshold": "Seuil de rappel lorsque le quota restant est inférieur à la valeur indiquée.",
       "RegisterEnabled": "Interrupteur principal des inscriptions utilisateur. Désactivez pour bloquer les nouveaux comptes.",
       "RetryTimes": "Nombre de tentatives automatiques pour les erreurs amont transitoires.",
-      "SMTPAccount": "Nom d'utilisateur ou adresse e-mail SMTP utilisé pour l'authentification.",
-      "SMTPFrom": "Adresse d'expéditeur utilisée pour les e-mails sortants.",
-      "SMTPPort": "Port du serveur SMTP (ex. 587 pour STARTTLS, 465 pour SMTPS).",
-      "SMTPServer": "Nom d'hôte du serveur SMTP pour l'envoi d'e-mails.",
-      "SMTPToken": "Mot de passe ou jeton SMTP utilisé pour s'authentifier (stocké de façon sécurisée).",
+      "EmailProvider": "Backend utilisé pour l'envoi d'e-mails. Choisissez SMTP pour un serveur de messagerie classique, ou Resend pour l'API HTTP Resend (recommandé sur les PaaS comme Railway qui bloquent le SMTP sortant).",
+      "ResendAPIKey": "Clé API Resend (commençant par re_). Utilisée uniquement lorsque le backend e-mail est Resend. Stockée en toute sécurité.",
+      "SMTPAccount": "Nom d'utilisateur ou adresse e-mail SMTP utilisé pour l'authentification. Utilisé uniquement avec le backend SMTP.",
+      "SMTPFrom": "Adresse d'expéditeur utilisée pour les e-mails sortants. Avec Resend, le domaine doit être vérifié dans votre compte Resend.",
+      "SMTPPort": "Port du serveur SMTP (ex. 587 pour STARTTLS, 465 pour SMTPS). Utilisé uniquement avec le backend SMTP.",
+      "SMTPServer": "Nom d'hôte du serveur SMTP pour l'envoi d'e-mails. Utilisé uniquement avec le backend SMTP.",
+      "SMTPToken": "Mot de passe ou jeton SMTP utilisé pour s'authentifier. Utilisé uniquement avec le backend SMTP (stocké de façon sécurisée).",
       "ServerAddress": "URL publique de ce serveur (utilisée dans les liens/rappels).",
       "SystemName": "Nom d'affichage du système dans l'interface et les e-mails.",
       "Theme": "Thème UI (berry, air, modern).",
@@ -338,6 +340,10 @@
       "WeChatServerToken": "Jeton de vérification pour l'intégration WeChat (stocké de façon sécurisée)."
     },
     "disabled": "Désactivé",
+    "email_provider": {
+      "resend": "Resend (API HTTP)",
+      "smtp": "SMTP"
+    },
     "email_whitelist": {
       "add": "Ajouter",
       "duplicate_domain": "Le domaine \"{{domain}}\" est déjà dans la liste.",
@@ -364,8 +370,8 @@
         "title": "Canaux et fiabilité"
       },
       "email": {
-        "description": "Configurer l'envoi d'e-mails sortants.",
-        "title": "E-mail (SMTP)"
+        "description": "Configurer l'envoi d'e-mails sortants. Choisissez entre SMTP et l'API HTTP Resend.",
+        "title": "E-mail"
       },
       "links": {
         "description": "Contrôlez les liens externes exposés aux utilisateurs finaux.",

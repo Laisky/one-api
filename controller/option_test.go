@@ -99,6 +99,7 @@ func TestUpdateOption_SensitiveEmptyValueIsIgnored(t *testing.T) {
 		{name: "secret suffix", key: "GitHubClientSecret", value: "real-github-secret"},
 		{name: "token suffix", key: "SMTPToken", value: "real-smtp-token"},
 		{name: "password suffix", key: "SMTPPassword", value: "real-smtp-password"},
+		{name: "api key suffix", key: "ResendAPIKey", value: "re_test_key"},
 	}
 
 	for _, tc := range cases {

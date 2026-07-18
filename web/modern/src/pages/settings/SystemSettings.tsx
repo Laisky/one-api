@@ -67,9 +67,9 @@ const OPTION_GROUPS: OptionGroup[] = [
   },
   {
     id: 'email',
-    title: 'Email (SMTP)',
+    title: 'Email',
     description: 'Set up outbound email delivery.',
-    keys: ['SMTPServer', 'SMTPPort', 'SMTPAccount', 'SMTPToken', 'SMTPFrom'],
+    keys: ['EmailProvider', 'SMTPServer', 'SMTPPort', 'SMTPAccount', 'SMTPToken', 'SMTPFrom', 'ResendAPIKey'],
   },
   {
     id: 'branding',
@@ -115,12 +115,26 @@ const OPTION_GROUPS: OptionGroup[] = [
 
 const SENSITIVE_OPTION_KEYS = new Set<string>([
   'SMTPToken',
+  'ResendAPIKey',
   'GitHubClientSecret',
   'OidcClientSecret',
   'LarkClientSecret',
   'WeChatServerToken',
   'MessagePusherToken',
 ]);
+
+interface EnumChoice {
+  value: string;
+  labelKey: string;
+}
+
+// ENUM_OPTION_KEYS lists option keys whose value is a fixed enum, rendered as a select.
+const ENUM_OPTION_KEYS: Record<string, EnumChoice[]> = {
+  EmailProvider: [
+    { value: 'smtp', labelKey: 'system_settings.email_provider.smtp' },
+    { value: 'resend', labelKey: 'system_settings.email_provider.resend' },
+  ],
+};
 
 const OPTION_GROUP_KEY_SET = new Set(OPTION_GROUPS.flatMap((group) => group.keys));
 
@@ -209,7 +223,7 @@ export function SystemSettings() {
         id: 'email',
         title: t('system_settings.groups.email.title'),
         description: t('system_settings.groups.email.description'),
-        keys: ['SMTPServer', 'SMTPPort', 'SMTPAccount', 'SMTPToken', 'SMTPFrom'],
+        keys: ['EmailProvider', 'SMTPServer', 'SMTPPort', 'SMTPAccount', 'SMTPToken', 'SMTPFrom', 'ResendAPIKey'],
       },
       {
         id: 'branding',
@@ -289,12 +303,14 @@ export function SystemSettings() {
       TurnstileSiteKey: t('system_settings.descriptions.TurnstileSiteKey'),
       TurnstileSecretKey: t('system_settings.descriptions.TurnstileSecretKey'),
 
-      // Email (SMTP)
+      // Email
+      EmailProvider: t('system_settings.descriptions.EmailProvider'),
       SMTPServer: t('system_settings.descriptions.SMTPServer'),
       SMTPPort: t('system_settings.descriptions.SMTPPort'),
       SMTPAccount: t('system_settings.descriptions.SMTPAccount'),
       SMTPToken: t('system_settings.descriptions.SMTPToken'),
       SMTPFrom: t('system_settings.descriptions.SMTPFrom'),
+      ResendAPIKey: t('system_settings.descriptions.ResendAPIKey'),
 
       // Branding & Content
       SystemName: t('system_settings.descriptions.SystemName'),
@@ -533,6 +549,7 @@ export function SystemSettings() {
                             description={descriptions[option.key]}
                             isSensitive={isSensitive}
                             isBoolean={isBooleanOptionKey(option.key)}
+                            enumChoices={ENUM_OPTION_KEYS[option.key]}
                             onSave={save}
                           />
                         );
@@ -556,6 +573,7 @@ export function SystemSettings() {
                         description={descriptions[opt.key]}
                         isSensitive={SENSITIVE_OPTION_KEYS.has(opt.key)}
                         isBoolean={isBooleanOptionKey(opt.key)}
+                        enumChoices={ENUM_OPTION_KEYS[opt.key]}
                         onSave={save}
                       />
                     ))}
@@ -580,10 +598,11 @@ interface OptionItemProps {
   onSave: (key: string, value: string | string[]) => Promise<void>;
   isSensitive?: boolean;
   isBoolean?: boolean;
+  enumChoices?: EnumChoice[];
   extraAction?: React.ReactNode;
 }
 
-function OptionItem({ option, description, onSave, isSensitive, isBoolean, extraAction }: OptionItemProps) {
+function OptionItem({ option, description, onSave, isSensitive, isBoolean, enumChoices, extraAction }: OptionItemProps) {
   const { t } = useTranslation();
   const [value, setValue] = useState(option.value);
   const [isSaving, setIsSaving] = useState(false);
@@ -659,6 +678,19 @@ function OptionItem({ option, description, onSave, isSensitive, isBoolean, extra
             <SelectContent>
               <SelectItem value="true">{t('system_settings.enabled')}</SelectItem>
               <SelectItem value="false">{t('system_settings.disabled')}</SelectItem>
+            </SelectContent>
+          </Select>
+        ) : enumChoices && enumChoices.length > 0 ? (
+          <Select value={value === '' ? undefined : value} onValueChange={handleBooleanChange} disabled={isSaving}>
+            <SelectTrigger className="flex-1" aria-label={optionValueAriaLabel} disabled={isSaving}>
+              <SelectValue placeholder={t('system_settings.select_value')} />
+            </SelectTrigger>
+            <SelectContent>
+              {enumChoices.map((choice) => (
+                <SelectItem key={choice.value} value={choice.value}>
+                  {t(choice.labelKey)}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
         ) : (
