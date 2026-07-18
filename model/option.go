@@ -56,6 +56,9 @@ func InitOptionMap() {
 	config.OptionMap["SMTPPort"] = strconv.Itoa(config.SMTPPort)
 	config.OptionMap["SMTPAccount"] = ""
 	config.OptionMap["SMTPToken"] = ""
+	config.OptionMap["StripeSecretKey"] = config.StripeSecretKey
+	config.OptionMap["StripeWebhookSecret"] = config.StripeWebhookSecret
+	config.OptionMap["MinTopUpUSD"] = strconv.Itoa(config.MinTopUpUSD)
 	config.OptionMap["Notice"] = ""
 	config.OptionMap["About"] = ""
 	config.OptionMap["HomePageContent"] = ""
@@ -199,6 +202,16 @@ func updateOptionMap(key string, value string) (err error) {
 		config.SMTPFrom = value
 	case "SMTPToken":
 		config.SMTPToken = value
+	case "StripeSecretKey":
+		config.StripeSecretKey = strings.TrimSpace(value)
+	case "StripeWebhookSecret":
+		config.StripeWebhookSecret = strings.TrimSpace(value)
+	case "MinTopUpUSD":
+		intValue, _ := strconv.Atoi(value)
+		if intValue < 1 {
+			intValue = 1
+		}
+		config.MinTopUpUSD = intValue
 	case "ServerAddress":
 		config.ServerAddress = value
 	case "GitHubClientId":

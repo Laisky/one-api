@@ -1418,6 +1418,18 @@ var (
 	// Runtime variable (set via admin UI)
 	// Default: "" (no authentication)
 	SMTPToken = ""
+
+	// StripeSecretKey is the Stripe API secret key (sk_live_... or sk_test_...).
+	// Environment variable: STRIPE_SECRET_KEY
+	StripeSecretKey = env.String("STRIPE_SECRET_KEY", "")
+
+	// StripeWebhookSecret verifies incoming Stripe webhook signatures (whsec_...).
+	// Environment variable: STRIPE_WEBHOOK_SECRET
+	StripeWebhookSecret = env.String("STRIPE_WEBHOOK_SECRET", "")
+
+	// MinTopUpUSD is the minimum freeform USD top-up amount accepted via Stripe.
+	// Environment variable: MIN_TOPUP_USD. Default: 5.
+	MinTopUpUSD = env.Int("MIN_TOPUP_USD", 5)
 )
 
 // =============================================================================
