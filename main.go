@@ -39,6 +39,7 @@ import (
 	"github.com/Laisky/one-api/relay"
 	"github.com/Laisky/one-api/relay/adaptor/openai"
 	"github.com/Laisky/one-api/relay/mcp"
+	responsestate "github.com/Laisky/one-api/relay/state"
 	"github.com/Laisky/one-api/router"
 )
 
@@ -103,6 +104,14 @@ func main() {
 	err = common.InitRedisClient()
 	if err != nil {
 		logger.Logger.Fatal("failed to initialize Redis", zap.Error(err))
+	}
+
+	// Initialize the gateway Responses state layer. When RESPONSE_STATE_ENABLED is
+	// false this is a no-op and current behavior is preserved. When enabled it
+	// refuses to start without a healthy Redis backend and a stable encryption key
+	// rather than degrading to an in-process store.
+	if err = responsestate.Init(); err != nil {
+		logger.Logger.Fatal("failed to initialize response state layer", zap.Error(err))
 	}
 
 	// Initialize options

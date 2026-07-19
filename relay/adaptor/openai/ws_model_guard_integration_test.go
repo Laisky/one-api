@@ -40,7 +40,7 @@ func newGuardedProxyTestServer(
 			OriginModelName: originModel,
 			ActualModelName: actualModel,
 		}
-		_, usage := ResponseAPIWebSocketHandler(c, meta)
+		_, usage, _ := ResponseAPIWebSocketHandler(c, meta)
 		if usageOut != nil {
 			usageOut <- usage
 		}

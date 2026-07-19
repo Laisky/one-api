@@ -264,6 +264,14 @@ func RelayClaudeMessagesHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 		zap.String("outgoing_model", meta.ActualModelName),
 	)
 
+	// ST-022: when this Claude request is served by a Responses upstream and an exact
+	// transcript checkpoint exists, continue from the bound upstream handle and send
+	// only the delta. Fails open to the full body on any miss (pure optimization);
+	// no-op on the passthrough branch (no converted *ResponseAPIRequest present).
+	if newBody, matched := matchClaudeCheckpoint(c, meta, claudeRequest); matched {
+		requestBody = bytes.NewReader(newBody)
+	}
+
 	// do request
 	resp, err = adaptorInstance.DoRequest(c, meta, requestBody)
 	if err != nil {
@@ -481,6 +489,12 @@ handleResponse:
 		logUpstreamResponseFromCapture(lg, origResp, upstreamCapture, "claude_messages")
 	} else {
 		logUpstreamResponseFromBytes(lg, origResp, nil, "claude_messages")
+	}
+
+	if respErr == nil {
+		// ST-022: record a stateless-client continuation checkpoint when this Claude
+		// request was served by a Responses upstream. No-op otherwise; never fatal.
+		recordClaudeCheckpoint(c, meta, claudeRequest)
 	}
 
 	// If the adapter didn't handle the conversion (e.g., for native Anthropic),

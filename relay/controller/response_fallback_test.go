@@ -166,6 +166,9 @@ func TestRelayResponseAPIHelper_FallbackAzure(t *testing.T) {
 	c.Set(ctxkey.Config, model.ChannelConfig{APIVersion: "2024-02-15-preview"})
 
 	apiErr := RelayResponseAPIHelper(c)
+	// Drain async billing before assertions/cleanups so its DB writes cannot race
+	// this test's fixture teardown under -race (fixes the SQLITE_LOCKED flake).
+	drainResponseFallbackBilling(t)
 	require.Nil(t, apiErr, "RelayResponseAPIHelper returned error")
 
 	require.Equal(t, http.StatusOK, recorder.Code, "unexpected status code")
@@ -276,6 +279,9 @@ func TestRelayResponseAPIHelper_FallbackSearchPreviewModel(t *testing.T) {
 	c.Set(ctxkey.Config, model.ChannelConfig{})
 
 	apiErr := RelayResponseAPIHelper(c)
+	// Drain async billing before assertions/cleanups so its DB writes cannot race
+	// this test's fixture teardown under -race (fixes the SQLITE_LOCKED flake).
+	drainResponseFallbackBilling(t)
 	require.Nil(t, apiErr, "RelayResponseAPIHelper returned error")
 
 	require.Equal(t, http.StatusOK, recorder.Code, "unexpected status code")
@@ -379,6 +385,9 @@ func TestRelayResponseAPIHelper_FallbackNVIDIADeepSeekModelFullPath(t *testing.T
 	c.Set(ctxkey.Config, model.ChannelConfig{})
 
 	apiErr := RelayResponseAPIHelper(c)
+	// Drain async billing before assertions/cleanups so its DB writes cannot race
+	// this test's fixture teardown under -race (fixes the SQLITE_LOCKED flake).
+	drainResponseFallbackBilling(t)
 	require.Nil(t, apiErr, "RelayResponseAPIHelper returned error")
 
 	require.Equal(t, http.StatusOK, recorder.Code, "unexpected status code")
@@ -458,6 +467,9 @@ func TestRelayResponseAPIHelper_FallbackGroqGPTOSSMultimodalValidation(t *testin
 	c.Set(ctxkey.Config, model.ChannelConfig{})
 
 	apiErr := RelayResponseAPIHelper(c)
+	// Drain async billing before assertions/cleanups so its DB writes cannot race
+	// this test's fixture teardown under -race (fixes the SQLITE_LOCKED flake).
+	drainResponseFallbackBilling(t)
 	require.NotNil(t, apiErr, "expected validation error for multimodal gpt-oss request")
 	require.Equal(t, http.StatusBadRequest, apiErr.StatusCode)
 	require.Equal(t, "invalid_request_error", apiErr.Code)
@@ -517,6 +529,9 @@ func TestRelayResponseAPIHelper_FallbackBlocksDisallowedWebSearch(t *testing.T) 
 	c.Set(ctxkey.Config, model.ChannelConfig{})
 
 	apiErr := RelayResponseAPIHelper(c)
+	// Drain async billing before assertions/cleanups so its DB writes cannot race
+	// this test's fixture teardown under -race (fixes the SQLITE_LOCKED flake).
+	drainResponseFallbackBilling(t)
 	require.NotNil(t, apiErr, "expected error when web_search tool is not whitelisted")
 	require.Equal(t, http.StatusBadRequest, apiErr.StatusCode, "expected status 400")
 	require.Contains(t, apiErr.Message, "web_search", "expected error mentioning web_search")
@@ -601,6 +616,9 @@ func TestRelayResponseAPIHelper_FallbackStreaming(t *testing.T) {
 	c.Set(ctxkey.Config, model.ChannelConfig{})
 
 	apiErr := RelayResponseAPIHelper(c)
+	// Drain async billing before assertions/cleanups so its DB writes cannot race
+	// this test's fixture teardown under -race (fixes the SQLITE_LOCKED flake).
+	drainResponseFallbackBilling(t)
 	require.Nil(t, apiErr, "RelayResponseAPIHelper returned error")
 
 	require.Equal(t, http.StatusOK, recorder.Code, "unexpected status code")
@@ -724,6 +742,9 @@ func TestRelayResponseAPIHelper_FallbackStreamingToolCalls(t *testing.T) {
 	c.Set(ctxkey.Config, model.ChannelConfig{})
 
 	apiErr := RelayResponseAPIHelper(c)
+	// Drain async billing before assertions/cleanups so its DB writes cannot race
+	// this test's fixture teardown under -race (fixes the SQLITE_LOCKED flake).
+	drainResponseFallbackBilling(t)
 	require.Nil(t, apiErr, "RelayResponseAPIHelper returned error")
 
 	require.Equal(t, http.StatusOK, recorder.Code, "unexpected status code")
@@ -844,6 +865,9 @@ func TestRelayResponseAPIHelper_FallbackAnthropicStreamingHandled(t *testing.T) 
 	c.Set(ctxkey.Config, model.ChannelConfig{})
 
 	apiErr := RelayResponseAPIHelper(c)
+	// Drain async billing before assertions/cleanups so its DB writes cannot race
+	// this test's fixture teardown under -race (fixes the SQLITE_LOCKED flake).
+	drainResponseFallbackBilling(t)
 	require.Nil(t, apiErr, "expected anthropic streaming fallback to succeed")
 
 	require.Equal(t, http.StatusOK, recorder.Code, "expected status 200")
@@ -982,6 +1006,20 @@ func parseSSEEvents(raw string) []parsedSSE {
 	return events
 }
 
+// drainResponseFallbackBilling waits for the post-response billing/logging tasks
+// that RelayResponseAPIHelper spawns via graceful.GoCritical. Those tasks write to
+// the shared in-memory SQLite database on their own goroutines; under -race timing
+// they overlap the current test's own fixture cleanups (and the next test's setup),
+// which raised SQLITE_LOCKED ("database table is locked") and flaked ~1-in-3 -race
+// runs. Draining before any DB mutation serializes them out. Best-effort: a drain
+// timeout must not fail an otherwise-passing test.
+func drainResponseFallbackBilling(t *testing.T) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	_ = graceful.Drain(ctx)
+}
+
 func ensureResponseFallbackFixtures(t *testing.T) {
 	t.Helper()
 	responseFallbackFixtureMu.Lock()
@@ -1061,13 +1099,16 @@ func ensureResponseFallbackDB(t *testing.T) {
 			}
 			return
 		}
-		db, err := gorm.Open(sqlite.Open("file:response_fallback_tests?mode=memory&cache=shared"), &gorm.Config{})
-		require.NoError(t, err, "failed to open sqlite database")
 		// Pin the pool to a single connection. Shared-cache SQLite raises SQLITE_LOCKED
 		// ("database table is locked") immediately when two pooled connections touch the
 		// same table, and busy_timeout does not apply to those table locks. The billing
 		// and logging tasks these tests spawn via graceful.GoCritical run on their own
 		// goroutines, so with the default pool the fixture resets race them and flake.
+		// Every test in this package must additionally drain those tasks before mutating
+		// fixtures (see drainResponseFallbackBilling) so a leaked goroutine cannot collide
+		// with the next test's setup/cleanup under -race timing.
+		db, err := gorm.Open(sqlite.Open("file:response_fallback_tests?mode=memory&cache=shared&_busy_timeout=5000"), &gorm.Config{})
+		require.NoError(t, err, "failed to open sqlite database")
 		sqlDB, err := db.DB()
 		require.NoError(t, err, "failed to access sqlite pool")
 		sqlDB.SetMaxOpenConns(1)

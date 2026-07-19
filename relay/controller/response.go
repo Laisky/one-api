@@ -45,6 +45,11 @@ func RelayResponseAPIHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 	// get & validate Response API request
 	responseAPIRequest, err := getAndValidateResponseAPIRequest(c)
 	if err != nil {
+		if errors.Is(err, errStateSelectorsMutuallyExclusive) {
+			// Mutually exclusive state selectors get the documented state code
+			// (Section 6, rows A01/E01) instead of the generic request error.
+			return openai.ErrorWrapper(err, codeInvalidStateSelector, http.StatusBadRequest)
+		}
 		return openai.ErrorWrapper(err, "invalid_response_api_request", http.StatusBadRequest)
 	}
 	meta.OriginModelName = responseAPIRequest.Model
@@ -101,6 +106,20 @@ func RelayResponseAPIHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 	meta.ActualModelName = responseAPIRequest.Model
 	metalib.Set2Context(c, meta)
 	c.Set(ctxkey.ConvertedRequest, responseAPIRequest)
+
+	// Resolve a gateway previous_response_id against provider affinity before the
+	// native call (ST-021, Section 5.6 step 4). Same-provider continuations are
+	// rewritten to the upstream handle in place; a gateway parent that cannot be
+	// honored on this native provider diverts to the hydrating fallback path. Done
+	// before pre-consume so a divert bills once, on the path that actually runs.
+	if divert, gwErr := resolveNativePreviousResponse(c, meta, responseAPIRequest); gwErr != nil {
+		return gwErr
+	} else if divert {
+		return relayResponseAPIThroughChat(c, meta, responseAPIRequest)
+	}
+	// Snapshot the pre-call state so the native result can be committed with its
+	// upstream handle after completion (ST-021). No-op when the feature is inactive.
+	capturePendingStateCommit(c, meta, responseAPIRequest)
 
 	if pruned := tooling.PruneDisallowedResponseBuiltins(responseAPIRequest, meta, channelRecord, requestAdaptor); len(pruned) > 0 {
 		for _, name := range pruned {
@@ -247,6 +266,12 @@ func RelayResponseAPIHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 		)
 		// Fall through to billing with available usage
 	}
+
+	// Commit the native Responses result to gateway state so its upstream id is
+	// retrievable over HTTP and can back a same-provider continuation or a
+	// stateless-client checkpoint (ST-021). Runs on the same completion fact as
+	// billing; no-op when the feature is inactive or store=false.
+	commitNativeResponseState(c, meta)
 
 	applyOutputImageCharges(c, &usage, meta)
 	applyOutputAudioCharges(c, &usage, meta)

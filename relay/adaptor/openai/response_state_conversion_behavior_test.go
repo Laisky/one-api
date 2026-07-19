@@ -7,10 +7,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestResponseStateConversionBehaviorConversationIsNotRepresented verifies that
-// the typed request used by fallback conversion cannot retain either supported
-// Responses conversation selector shape.
-func TestResponseStateConversionBehaviorConversationIsNotRepresented(t *testing.T) {
+// TestResponseStateConversionBehaviorConversationIsRepresented verifies that the
+// typed request retains both supported Responses conversation selector shapes and
+// canonicalizes them to the same conversation ID. Closes B01.
+func TestResponseStateConversionBehaviorConversationIsRepresented(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -30,20 +30,27 @@ func TestResponseStateConversionBehaviorConversationIsNotRepresented(t *testing.
 			var request ResponseAPIRequest
 			require.NoError(t, json.Unmarshal(raw, &request))
 
+			// Both selector shapes canonicalize to the same conversation ID (A02).
+			require.NotNil(t, request.Conversation)
+			require.Equal(t, "conv_123", request.Conversation.ConversationID())
+
 			typedJSON, err := json.Marshal(&request)
 			require.NoError(t, err)
 
 			var typed map[string]any
 			require.NoError(t, json.Unmarshal(typedJSON, &typed))
-			require.NotContains(t, typed, "conversation")
+			require.Contains(t, typed, "conversation")
 		})
 	}
 }
 
-// TestResponseStateConversionBehaviorPreviousResponseContextIsNotResolved
-// verifies that Chat fallback converts only the current incremental input and
-// does not materialize the transcript referenced by previous_response_id.
-func TestResponseStateConversionBehaviorPreviousResponseContextIsNotResolved(t *testing.T) {
+// TestResponseAPIToChatConverterIsPureLowering documents that
+// ConvertResponseAPIToChatCompletionRequest is a pure lowering primitive: it
+// lowers exactly the items it is given and does not itself resolve state
+// selectors. State resolution is the hydrator's responsibility, which runs before
+// this converter (see relay/controller TestHydratePreviousResponseResolvesPriorContext,
+// closing B02). This keeps the converter a single-turn lowering step.
+func TestResponseAPIToChatConverterIsPureLowering(t *testing.T) {
 	t.Parallel()
 
 	previousResponseID := "resp_prior"
@@ -86,16 +93,17 @@ func TestResponseStateConversionBehaviorInstructionsRemainRequestLocal(t *testin
 	require.Equal(t, "continue", converted.Messages[0].StringContent())
 }
 
-// TestResponseStateConversionBehaviorPriorToolOutputLosesCallLink verifies that
-// a tool result linked to a function call in a prior stored response is treated
-// as an orphan when fallback conversion cannot resolve that prior response.
-func TestResponseStateConversionBehaviorPriorToolOutputLosesCallLink(t *testing.T) {
+// TestResponseAPIToChatConverterOrphanToolOutputDowngrades documents intentional
+// primitive behavior: a function_call_output with no matching preceding
+// function_call is an orphan (e.g. trimmed history), and is downgraded to a user
+// message to avoid emitting an invalid `tool`-after-nothing sequence upstream.
+// When the matching call IS hydrated the link is preserved end-to-end (see
+// relay/controller TestHydratePriorToolCallLink, closing B04).
+func TestResponseAPIToChatConverterOrphanToolOutputDowngrades(t *testing.T) {
 	t.Parallel()
 
-	previousResponseID := "resp_tool_call"
 	request := &ResponseAPIRequest{
-		Model:              "gpt-5",
-		PreviousResponseId: &previousResponseID,
+		Model: "gpt-5",
 		Input: ResponseAPIInput{
 			map[string]any{
 				"type":    "function_call_output",
@@ -113,58 +121,17 @@ func TestResponseStateConversionBehaviorPriorToolOutputLosesCallLink(t *testing.
 	require.JSONEq(t, `{"temperature":21}`, converted.Messages[0].StringContent())
 }
 
-// TestResponseStateConversionBehaviorTypedStateItemsDegrade verifies how
-// state-bearing Responses items without a Chat Completions equivalent are
-// currently converted into empty user messages.
-func TestResponseStateConversionBehaviorTypedStateItemsDegrade(t *testing.T) {
-	t.Parallel()
+// Note: the former TestResponseStateConversionBehaviorTypedStateItemsDegrade
+// (B05) is replaced by relay/controller TestHydrateResolvesItemReferenceAndDropsReasoning,
+// which proves reasoning items are dropped and item_reference items are resolved
+// by the hydrator before they ever reach this converter, so no empty message is
+// produced.
 
-	tests := []struct {
-		name string
-		item map[string]any
-	}{
-		{
-			name: "encrypted reasoning item",
-			item: map[string]any{
-				"type":              "reasoning",
-				"id":                "rs_123",
-				"encrypted_content": "opaque-state",
-				"summary": []any{
-					map[string]any{"type": "summary_text", "text": "private plan"},
-				},
-			},
-		},
-		{
-			name: "conversation item reference",
-			item: map[string]any{
-				"type": "item_reference",
-				"id":   "msg_123",
-			},
-		},
-	}
-
-	for _, tt := range tests {
-		tt := tt
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
-			request := &ResponseAPIRequest{
-				Model: "gpt-5",
-				Input: ResponseAPIInput{tt.item},
-			}
-			converted, err := ConvertResponseAPIToChatCompletionRequest(request)
-			require.NoError(t, err)
-			require.Len(t, converted.Messages, 1)
-			require.Equal(t, "user", converted.Messages[0].Role)
-			require.Empty(t, converted.Messages[0].StringContent())
-		})
-	}
-}
-
-// TestResponseStateConversionBehaviorResponseRoundTripDropsOpaqueState verifies
-// that decoding a native response into the conversion DTO and encoding it again
-// loses fields required for faithful manual replay.
-func TestResponseStateConversionBehaviorResponseRoundTripDropsOpaqueState(t *testing.T) {
+// TestResponseStateConversionBehaviorResponseRoundTripPreservesOpaqueState
+// verifies that decoding a native response into the DTO and encoding it again
+// preserves the fields required for faithful manual replay: store, conversation,
+// reasoning encrypted_content, and message phase. Closes B06.
+func TestResponseStateConversionBehaviorResponseRoundTripPreservesOpaqueState(t *testing.T) {
 	t.Parallel()
 
 	raw := []byte(`{
@@ -183,21 +150,29 @@ func TestResponseStateConversionBehaviorResponseRoundTripDropsOpaqueState(t *tes
 
 	var response ResponseAPIResponse
 	require.NoError(t, json.Unmarshal(raw, &response))
+	require.NotNil(t, response.Store)
+	require.False(t, *response.Store)
+	require.NotNil(t, response.Conversation)
+	require.Equal(t, "conv_123", response.Conversation.ConversationID())
+
 	roundTrip, err := json.Marshal(&response)
 	require.NoError(t, err)
 
 	var decoded map[string]any
 	require.NoError(t, json.Unmarshal(roundTrip, &decoded))
-	require.NotContains(t, decoded, "store")
-	require.NotContains(t, decoded, "conversation")
+	require.Contains(t, decoded, "store")
+	require.Equal(t, false, decoded["store"])
+	require.Contains(t, decoded, "conversation")
 
 	output, ok := decoded["output"].([]any)
 	require.True(t, ok)
 	require.Len(t, output, 2)
 	reasoning, ok := output[0].(map[string]any)
 	require.True(t, ok)
-	require.NotContains(t, reasoning, "encrypted_content")
+	require.Contains(t, reasoning, "encrypted_content")
+	require.Equal(t, "opaque-state", reasoning["encrypted_content"])
 	message, ok := output[1].(map[string]any)
 	require.True(t, ok)
-	require.NotContains(t, message, "phase")
+	require.Contains(t, message, "phase")
+	require.Equal(t, "final_answer", message["phase"])
 }

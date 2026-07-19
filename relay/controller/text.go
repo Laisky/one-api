@@ -268,6 +268,13 @@ func RelayTextHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 	requestBodyBytes, _ := io.ReadAll(requestBody)
 	requestBody = bytes.NewBuffer(requestBodyBytes)
 
+	// ST-022: when this Chat request is served by a Responses upstream and an exact
+	// transcript checkpoint exists, continue from the bound upstream handle and send
+	// only the delta. Fails open to the full body on any miss (pure optimization).
+	if newBody, matched := matchChatCheckpoint(c, meta, textRequest); matched {
+		requestBody = bytes.NewBuffer(newBody)
+	}
+
 	// do request
 	resp, err := requestAdaptor.DoRequest(c, meta, requestBody)
 	if err != nil {
@@ -318,6 +325,12 @@ func RelayTextHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 			return respErr
 		}
 		// Fall through to billing with available usage
+	}
+
+	if respErr == nil {
+		// ST-022: record a stateless-client continuation checkpoint when this Chat
+		// request was served by a Responses upstream. No-op otherwise; never fatal.
+		recordChatCheckpoint(c, meta, textRequest)
 	}
 
 	var incrementalCharged int64

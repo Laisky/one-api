@@ -53,12 +53,18 @@ type responseAPIEventUsage struct {
 // Returns:
 //   - *rmodel.ErrorWithStatusCode: business error when proxying fails.
 //   - *rmodel.Usage: best-effort aggregated usage parsed from upstream events.
-func ResponseAPIWebSocketHandler(c *gin.Context, meta *rmeta.Meta) (*rmodel.ErrorWithStatusCode, *rmodel.Usage) {
+//   - []*ResponseAPIResponse: store!=false completed response objects observed on
+//     the socket (proposal ST-011). The native passthrough leaves connection-local
+//     store=false state to the upstream; the caller commits these observed
+//     store=true responses to the gateway store so their IDs are retrievable over
+//     HTTP afterwards. The slice is populated only after both proxy directions
+//     drain, so it is safe to read without further synchronization.
+func ResponseAPIWebSocketHandler(c *gin.Context, meta *rmeta.Meta) (*rmodel.ErrorWithStatusCode, *rmodel.Usage, []*ResponseAPIResponse) {
 	if meta == nil || meta.Mode != relaymode.ResponseAPI {
 		return &rmodel.ErrorWithStatusCode{
 			Error:      rmodel.Error{Message: "invalid mode for response websocket handler", Type: rmodel.ErrorTypeOneAPI, Code: "invalid_mode", RawError: errors.New("invalid mode for response websocket handler")},
 			StatusCode: http.StatusBadRequest,
-		}, nil
+		}, nil, nil
 	}
 
 	upgrader := websocket.Upgrader{
@@ -71,7 +77,7 @@ func ResponseAPIWebSocketHandler(c *gin.Context, meta *rmeta.Meta) (*rmodel.Erro
 		return &rmodel.ErrorWithStatusCode{
 			Error:      rmodel.Error{Message: "websocket upgrade failed: " + err.Error(), Type: rmodel.ErrorTypeOneAPI, Code: "ws_upgrade_failed", RawError: err},
 			StatusCode: http.StatusBadRequest,
-		}, nil
+		}, nil, nil
 	}
 	defer func() { _ = clientConn.Close() }()
 
@@ -80,7 +86,7 @@ func ResponseAPIWebSocketHandler(c *gin.Context, meta *rmeta.Meta) (*rmodel.Erro
 		return &rmodel.ErrorWithStatusCode{
 			Error:      rmodel.Error{Message: "resolve upstream url failed", Type: rmodel.ErrorTypeInternal, Code: "upstream_url_resolve_failed", RawError: err},
 			StatusCode: http.StatusBadGateway,
-		}, nil
+		}, nil, nil
 	}
 
 	requestHeader := http.Header{}
@@ -97,16 +103,20 @@ func ResponseAPIWebSocketHandler(c *gin.Context, meta *rmeta.Meta) (*rmodel.Erro
 		return &rmodel.ErrorWithStatusCode{
 			Error:      rmodel.Error{Message: "upstream response websocket connect failed: " + dialErr.Error(), Type: rmodel.ErrorTypeUpstream, Code: "upstream_connect_failed", RawError: dialErr},
 			StatusCode: http.StatusBadGateway,
-		}, nil
+		}, nil, nil
 	}
 	defer func() { _ = upstreamConn.Close() }()
 
 	usage := &rmodel.Usage{}
+	// stored collects the store!=false completed response objects observed on the
+	// upstream->client leg. It is written only by that single goroutine and read
+	// only after both legs drain below, so no further synchronization is needed.
+	stored := &responseAPIWSStoreCollector{}
 	errc := make(chan error, 2)
 	go func() {
 		errc <- copyResponseAPIClientToUpstream(clientConn, upstreamConn, meta.OriginModelName, meta.ActualModelName)
 	}()
-	go func() { errc <- copyResponseAPIWSUpstreamToClient(upstreamConn, clientConn, usage) }()
+	go func() { errc <- copyResponseAPIWSUpstreamToClient(upstreamConn, clientConn, usage, stored) }()
 
 	// Wait for one direction to finish, then close both connections
 	// to unblock the other goroutine.
@@ -125,7 +135,51 @@ func ResponseAPIWebSocketHandler(c *gin.Context, meta *rmeta.Meta) (*rmodel.Erro
 		usage.TotalTokens = usage.PromptTokens + usage.CompletionTokens
 	}
 
-	return nil, usage
+	return nil, usage, stored.responses
+}
+
+// responseAPIWSStoreCollector accumulates store!=false completed response objects
+// observed on the upstream->client leg of a native Responses websocket. store=false
+// responses are connection-local upstream state and are intentionally excluded
+// (proposal Section 5.9, SEC06).
+type responseAPIWSStoreCollector struct {
+	responses []*ResponseAPIResponse
+	seen      map[string]struct{}
+}
+
+// collect records one completed response object if it is retrievable (store!=false)
+// and not already captured. It parses only the terminal response.completed event;
+// all other frames are ignored.
+func (c *responseAPIWSStoreCollector) collect(msg []byte) {
+	if len(msg) == 0 {
+		return
+	}
+	var probe struct {
+		Type     string          `json:"type"`
+		Response json.RawMessage `json:"response"`
+	}
+	if err := json.Unmarshal(msg, &probe); err != nil {
+		return
+	}
+	if probe.Type != "response.completed" || len(probe.Response) == 0 {
+		return
+	}
+	var resp ResponseAPIResponse
+	if err := json.Unmarshal(probe.Response, &resp); err != nil || resp.Id == "" {
+		return
+	}
+	// store defaults to true; only an explicit store=false is connection-local.
+	if resp.Store != nil && !*resp.Store {
+		return
+	}
+	if c.seen == nil {
+		c.seen = map[string]struct{}{}
+	}
+	if _, dup := c.seen[resp.Id]; dup {
+		return
+	}
+	c.seen[resp.Id] = struct{}{}
+	c.responses = append(c.responses, &resp)
 }
 
 // resolveResponseAPIWebSocketUpstreamURL builds the upstream ws(s) URL for the
@@ -219,8 +273,11 @@ func copyResponseAPIClientToUpstream(src, dst *websocket.Conn, boundOriginModel,
 }
 
 // copyResponseAPIWSUpstreamToClient forwards upstream frames to the client and
-// extracts best-effort usage metrics from response events.
-func copyResponseAPIWSUpstreamToClient(src, dst *websocket.Conn, usage *rmodel.Usage) error {
+// extracts best-effort usage metrics from response events. It also records
+// store!=false completed response objects into stored so the caller can commit
+// them to the gateway store (proposal ST-011). Collection happens after usage
+// accounting and never alters the forwarded frame.
+func copyResponseAPIWSUpstreamToClient(src, dst *websocket.Conn, usage *rmodel.Usage, stored *responseAPIWSStoreCollector) error {
 	countedResponseIDs := map[string]struct{}{}
 
 	for {
@@ -240,6 +297,9 @@ func copyResponseAPIWSUpstreamToClient(src, dst *websocket.Conn, usage *rmodel.U
 
 		if mt == websocket.TextMessage {
 			accumulateResponseAPIUsage(msg, usage, countedResponseIDs)
+			if stored != nil {
+				stored.collect(msg)
+			}
 		}
 
 		if werr := dst.WriteMessage(mt, msg); werr != nil {

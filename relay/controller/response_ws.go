@@ -108,7 +108,7 @@ func maybeHandleResponseAPIWebSocket(c *gin.Context, meta *metalib.Meta) (bool, 
 	c.Set(ctxkey.ProvisionalLogId, provisionalLogId)
 
 	// --- Execute WS proxy ---
-	bizErrResult, usage := openai.ResponseAPIWebSocketHandler(c, meta)
+	bizErrResult, usage, observedResponses := openai.ResponseAPIWebSocketHandler(c, meta)
 	if bizErrResult != nil {
 		// WS proxy failed - refund pre-consumed quota. scheduleConservativeRefund
 		// captures the token id on the request goroutine (value param) and marks
@@ -117,6 +117,12 @@ func maybeHandleResponseAPIWebSocket(c *gin.Context, meta *metalib.Meta) (bool, 
 		scheduleConservativeRefund(c, preConsumedQuota, c.GetInt(ctxkey.TokenId), "ws_proxy_failed")
 		return true, bizErrResult
 	}
+
+	// Commit store!=false completed responses observed on the socket so their
+	// upstream IDs are retrievable over HTTP afterwards (ST-011). No-op unless the
+	// gateway state feature is active for this owner; store=false responses were
+	// already excluded by the proxy collector (SEC06).
+	commitWebSocketObservedResponses(c, meta, observedResponses)
 
 	if usage == nil {
 		usage = &relaymodel.Usage{}

@@ -35,6 +35,21 @@ func relayResponseAPIThroughChat(c *gin.Context, meta *metalib.Meta, responseAPI
 	lg := gmw.GetLogger(c)
 	ctx := gmw.Ctx(c)
 
+	// Snapshot the pre-hydration request so a committed response node stores only
+	// this turn's incremental input (chain walking reconstructs prior history).
+	// No-op when the feature is inactive.
+	capturePendingStateCommit(c, meta, responseAPIRequest)
+
+	// Resolve gateway state selectors (previous_response_id, conversation,
+	// item_reference) into a fully hydrated effective turn before conversion. This
+	// is a no-op when the feature is disabled or the request carries no state, so
+	// current behavior is preserved exactly. See docs/proposals/20260719-*.md.
+	hydrated, stateErr := hydrateResponseAPIRequestForFallback(ctx, meta, responseAPIRequest, responseFallbackTarget(meta))
+	if stateErr != nil {
+		return stateErr
+	}
+	responseAPIRequest = hydrated
+
 	inputStats, inputChanged := openai.NormalizeResponseAPIInputContentTypes(&responseAPIRequest.Input)
 	dataURLStats, dataURLChanged := openai.NormalizeResponseAPIInputEmbeddedImageDataURLs(&responseAPIRequest.Input)
 	if config.DebugEnabled && (inputChanged || dataURLChanged) {

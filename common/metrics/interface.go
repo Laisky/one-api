@@ -74,6 +74,15 @@ type MetricsRecorder interface {
 	UpdateCompactUUIDLastProgress(role string, unixTime float64)
 	RecordCompactUUIDDuration(role, operation string, duration time.Duration)
 
+	// Gateway response-state metrics
+	//
+	// IMPORTANT: both label arguments (category, outcome) MUST come from a
+	// compile-time registry constant (see response_state.go). Never pass a
+	// gateway response/conversation id, prompt, model, error message, or any
+	// other unbounded value: these become metric labels and an unbounded label
+	// explodes time series cardinality.
+	RecordResponseStateEvent(category, outcome string)
+
 	// System metrics
 	InitSystemMetrics(version, buildTime, goVersion string, startTime time.Time)
 	UpdateSiteWideStats(totalQuota, usedQuota int64, totalUsers, activeUsers int)
@@ -189,6 +198,9 @@ func (n *NoOpRecorder) InitSystemMetrics(version, buildTime, goVersion string, s
 // UpdateSiteWideStats implements MetricsRecorder.UpdateSiteWideStats without collecting any data.
 func (n *NoOpRecorder) UpdateSiteWideStats(totalQuota, usedQuota int64, totalUsers, activeUsers int) {
 }
+
+// RecordResponseStateEvent implements MetricsRecorder.RecordResponseStateEvent without collecting any data.
+func (n *NoOpRecorder) RecordResponseStateEvent(category, outcome string) {}
 
 // Initialize with no-op recorder by default
 func init() {
@@ -421,5 +433,12 @@ func (m *MultiRecorder) InitSystemMetrics(version, buildTime, goVersion string, 
 func (m *MultiRecorder) UpdateSiteWideStats(totalQuota, usedQuota int64, totalUsers, activeUsers int) {
 	for _, r := range m.Recorders {
 		r.UpdateSiteWideStats(totalQuota, usedQuota, totalUsers, activeUsers)
+	}
+}
+
+// RecordResponseStateEvent implements MetricsRecorder.RecordResponseStateEvent
+func (m *MultiRecorder) RecordResponseStateEvent(category, outcome string) {
+	for _, r := range m.Recorders {
+		r.RecordResponseStateEvent(category, outcome)
 	}
 }

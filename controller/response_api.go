@@ -20,6 +20,7 @@ func RelayResponseGet(c *gin.Context) {
 	if bizErr := rcontroller.RelayResponseAPIGetHelper(c); bizErr != nil {
 		PrometheusMonitor.RecordRelayRequest(c, meta, startTime, false, 0, 0, 0)
 		monitor.Emit(meta.ChannelId, false)
+		logRelayStateBizError(c, "response_get", bizErr)
 
 		requestId := c.GetString(helper.RequestIdKey)
 		bizErr.Error.Message = helper.MessageWithRequestId(bizErr.Error.Message, requestId)
@@ -40,6 +41,7 @@ func RelayResponseDelete(c *gin.Context) {
 	if bizErr := rcontroller.RelayResponseAPIDeleteHelper(c); bizErr != nil {
 		PrometheusMonitor.RecordRelayRequest(c, meta, startTime, false, 0, 0, 0)
 		monitor.Emit(meta.ChannelId, false)
+		logRelayStateBizError(c, "response_delete", bizErr)
 
 		requestId := c.GetString(helper.RequestIdKey)
 		bizErr.Error.Message = helper.MessageWithRequestId(bizErr.Error.Message, requestId)
@@ -60,6 +62,7 @@ func RelayResponseCancel(c *gin.Context) {
 	if bizErr := rcontroller.RelayResponseAPICancelHelper(c); bizErr != nil {
 		PrometheusMonitor.RecordRelayRequest(c, meta, startTime, false, 0, 0, 0)
 		monitor.Emit(meta.ChannelId, false)
+		logRelayStateBizError(c, "response_cancel", bizErr)
 
 		requestId := c.GetString(helper.RequestIdKey)
 		bizErr.Error.Message = helper.MessageWithRequestId(bizErr.Error.Message, requestId)
