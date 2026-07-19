@@ -1,6 +1,74 @@
 # Response API
 
 - <https://platform.openai.com/docs/api-reference/responses>
+- <https://platform.openai.com/docs/guides/conversation-state>
+- <https://platform.openai.com/docs/guides/migrate-to-responses>
+- <https://platform.openai.com/docs/guides/websocket-mode>
+- <https://platform.openai.com/docs/guides/reasoning>
+
+## Mental model: Responses is stateful, not only a request format
+
+The OpenAI Responses API is a response-generation interface plus a state contract. A
+single request can be converted to and from Chat Completions or Claude Messages shapes,
+but OpenAI-managed continuation across requests is not just JSON translation.
+
+State can be managed in three ways:
+
+- `previous_response_id`: pass the previous response ID to let OpenAI attach prior
+  response context to the next call. This is the shortest stateful integration for a
+  threaded flow.
+- `conversation`: attach responses to a durable Conversation object. OpenAI prepends
+  existing conversation items to the new request and appends the new input/output items
+  after the response completes. `conversation` and `previous_response_id` are mutually
+  exclusive.
+- Manual replay: pass prior `response.output` items back in the next request `input`
+  when the client or proxy needs full control over trimming, storage, or cross-provider
+  portability.
+
+Important semantics for proxy and adaptor work:
+
+- `store` defaults to `true` in OpenAI's API. Stored responses can be retrieved or used
+  for later continuation when the upstream provider supports that state.
+- `store=false` is a stateless mode for persisted storage. In WebSocket mode, OpenAI can
+  still continue from the most recent response while it remains in the active
+  connection-local cache; if there is no cache hit and no stored fallback, the upstream
+  can return `previous_response_not_found`.
+- Top-level `instructions` are request-local when chaining with
+  `previous_response_id`. Resend stable developer/system instructions on every turn, or
+  include durable instruction messages in the replayed input when managing state
+  manually.
+- For reasoning models and tool loops, prior output items are part of the state, not
+  disposable metadata. Preserve relevant `reasoning`, `function_call`, and
+  `function_call_output` items in order, especially all items between the last user
+  message and a tool output. If running statelessly or under zero data retention, request
+  `include: ["reasoning.encrypted_content"]` where supported so encrypted reasoning
+  payloads can be replayed.
+- Context-window limits still apply. Server-managed state does not create an unlimited
+  transcript; long-running flows need truncation, compaction, or manual context
+  management.
+
+### one-api compatibility rule
+
+one-api can translate the current request/response envelope across Chat Completions,
+Responses, and Claude Messages. It cannot make a non-Responses upstream understand an
+opaque OpenAI `previous_response_id` or Conversation object.
+
+- Native OpenAI Responses pass-through can honor OpenAI-managed state fields, subject to
+  upstream support and storage settings.
+- WebSocket Responses pass-through preserves OpenAI's low-latency continuation path for
+  the active socket, but only for state available to that upstream connection.
+- Chat Completions fallback converts the current `input` items to `messages`. It does
+  not dereference `previous_response_id`, fetch a Conversation transcript, or synthesize
+  OpenAI server-side state. Clients that need portable fallback behavior must send the
+  complete replayable context in `input`.
+- When converting from Chat Completions to Responses, one-api should continue to send the
+  supplied `messages` history as explicit input items rather than relying on
+  `previous_response_id`; Chat Completions callers do not have OpenAI response IDs.
+
+Treat `previous_response_id`, `conversation`, `store`,
+`include: ["reasoning.encrypted_content"]`, and replayed output items as
+state-management features. Do not categorize them as ordinary format fields in adaptor
+design, tests, or operator documentation.
 
 ## Response
 

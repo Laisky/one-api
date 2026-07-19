@@ -823,7 +823,7 @@ curl -sS $BASE_URL/v1/edits \
 
 ### POST /v1/responses
 
-Creates a model response using the OpenAI Response API. Use it for the Responses workflow (server-side conversation chaining via `previous_response_id`, built-in tools, background runs). For channels with native Response API support the body is passed through; channels without it (and requests using MCP built-in tools) are transparently served through a Chat Completions fallback.
+Creates a model response using the OpenAI Response API shape. For channels with native Response API support, the body is passed through and upstream Responses state features such as `previous_response_id`, `conversation`, and persisted `store` can be honored by that upstream. Channels without native support, and requests that must use the MCP execution loop, are served through a Chat Completions fallback that rewrites the current request/response shape but does not hydrate OpenAI-managed state.
 
 **Auth:** Relay API Key - `Authorization: Bearer $API_KEY`.
 
@@ -838,8 +838,8 @@ Creates a model response using the OpenAI Response API. Use it for the Responses
 | Stream | `stream` | bool | No | `false` | If `true`, streams SSE response events ending in `[DONE]`. |
 | Max output tokens | `max_output_tokens` | int | No | - | Upper bound on generated tokens. |
 | Background | `background` | bool | No | `false` | Run the response asynchronously in the background. |
-| Previous response id | `previous_response_id` | string | No | - | Chain onto a prior stored response. |
-| Store | `store` | bool | No | - | Whether to persist the generated response. |
+| Previous response id | `previous_response_id` | string | No | - | Chain onto a prior stored upstream Responses object when native Responses state is available. |
+| Store | `store` | bool | No | - | Whether the native upstream should persist the generated response. Fallback paths may pass or echo the field but cannot provide OpenAI-managed persistence. |
 | Tools | `tools` | array | No | - | Tools (including built-ins) the model may call. |
 | Tool choice | `tool_choice` | string/object | No | - | How tools are selected. |
 | Reasoning | `reasoning` | object | No | - | Reasoning-model config (`effort`, `summary`). |
