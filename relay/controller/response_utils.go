@@ -19,6 +19,7 @@ import (
 	"github.com/Laisky/one-api/relay/channeltype"
 	metalib "github.com/Laisky/one-api/relay/meta"
 	relaymodel "github.com/Laisky/one-api/relay/model"
+	"github.com/Laisky/one-api/relay/state"
 )
 
 // getChannelRatios gets channel model and completion ratios from unified ModelConfigs
@@ -37,6 +38,12 @@ func getChannelModelConfigs(c *gin.Context) map[string]model.ModelConfigLocal {
 	return channel.GetModelPriceConfigs()
 }
 
+// errStateSelectorsMutuallyExclusive marks the dual-selector validation failure
+// (both conversation and previous_response_id supplied) so RelayResponseAPIHelper
+// can map it to the stable invalid_state_selector code (Section 6, E01). Its
+// message is preserved so message-based assertions keep working.
+var errStateSelectorsMutuallyExclusive = errors.New("conversation and previous_response_id are mutually exclusive")
+
 // getAndValidateResponseAPIRequest gets and validates Response API request
 func getAndValidateResponseAPIRequest(c *gin.Context) (*openai.ResponseAPIRequest, error) {
 	responseAPIRequest := &openai.ResponseAPIRequest{}
@@ -50,15 +57,34 @@ func getAndValidateResponseAPIRequest(c *gin.Context) (*openai.ResponseAPIReques
 		return nil, errors.New("model is required")
 	}
 
-	// Either input or prompt is required, but not both
 	hasInput := len(responseAPIRequest.Input) > 0
 	hasPrompt := responseAPIRequest.Prompt != nil
-
-	if !hasInput && !hasPrompt {
-		return nil, errors.New("either input or prompt is required")
-	}
 	if hasInput && hasPrompt {
 		return nil, errors.New("input and prompt are mutually exclusive - provide only one")
+	}
+
+	if state.Enabled() {
+		// With the gateway state layer active, a state selector can supply the
+		// prior context, so input/prompt becomes optional (A03/B09). The two
+		// selectors are mutually exclusive per the Responses contract (R3/B08).
+		hasPrev := responseAPIRequest.PreviousResponseId != nil &&
+			strings.TrimSpace(*responseAPIRequest.PreviousResponseId) != ""
+		hasConv := responseAPIRequest.Conversation.ConversationID() != ""
+		if hasPrev && hasConv {
+			// Surface a sentinel so the caller returns the documented
+			// invalid_state_selector error code rather than the generic
+			// invalid_response_api_request (Section 6, rows A01/E01).
+			return nil, errors.WithStack(errStateSelectorsMutuallyExclusive)
+		}
+		if !hasInput && !hasPrompt && !hasPrev && !hasConv {
+			return nil, errors.New("either input, prompt, or a state selector is required")
+		}
+		return responseAPIRequest, nil
+	}
+
+	// Feature disabled: preserve current behavior exactly (row O01).
+	if !hasInput && !hasPrompt {
+		return nil, errors.New("either input or prompt is required")
 	}
 
 	return responseAPIRequest, nil

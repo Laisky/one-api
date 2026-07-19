@@ -64,6 +64,14 @@ const (
 	// Read in: middleware/distributor to bypass normal selection and use that specific channel.
 	SpecificChannelId = "specific_channel_id"
 
+	// ResponseStateAffinityChannelId records the channel that a Responses request was
+	// pinned to by gateway provider affinity (proposal ST-005). Unlike
+	// SpecificChannelId it is a SOFT preference: it never disables retry/failover, so
+	// an ineligible or unhealthy binding transparently falls back to normal selection.
+	// Set in: middleware/distributor when a referenced gateway response/conversation
+	// resolves to a still-eligible bound channel. Read for observability/tests.
+	ResponseStateAffinityChannelId = "response_state_affinity_channel_id"
+
 	// RequestModel is the model name as requested by the client (e.g., "gpt-4o").
 	// Set in: middleware/auth.TokenAuth (parsed from body/query depending on endpoint) or early in adaptor handlers
 	//         when TokenAuth did not parse the body yet.

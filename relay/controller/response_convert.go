@@ -25,6 +25,24 @@ func renderChatResponseAsResponseAPI(c *gin.Context, status int, textResp *opena
 	output := buildResponseOutput(textResp.Choices)
 	toolCalls := buildRequiredActionToolCalls(textResp.Choices)
 
+	// Commit a gateway response node so the fallback ID is resolvable, retrievable,
+	// and deletable (closes B10). No-op when the feature is inactive; on any store
+	// failure the response still renders with a synthetic ID.
+	var storePtr *bool
+	var conversationPtr *openai.ResponseAPIConversation
+	if commit := pendingCommitFromContext(c); commit != nil {
+		res := commitFallbackResponseNode(c, commit, output, usage, statusText)
+		output = res.output
+		if res.committed {
+			responseID = res.gatewayID
+		}
+		storeMode := res.storeMode
+		storePtr = &storeMode
+		if res.conversation != "" {
+			conversationPtr = &openai.ResponseAPIConversation{Id: res.conversation}
+		}
+	}
+
 	response := openai.ResponseAPIResponse{
 		Id:                 responseID,
 		Object:             "response",
@@ -33,6 +51,8 @@ func renderChatResponseAsResponseAPI(c *gin.Context, status int, textResp *opena
 		Model:              userVisibleModelName(meta, originalReq.Model),
 		Output:             output,
 		Usage:              usage,
+		Store:              storePtr,
+		Conversation:       conversationPtr,
 		Instructions:       originalReq.Instructions,
 		MaxOutputTokens:    originalReq.MaxOutputTokens,
 		Metadata:           originalReq.Metadata,

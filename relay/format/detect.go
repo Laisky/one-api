@@ -9,6 +9,7 @@
 package format
 
 import (
+	"bytes"
 	"encoding/json"
 
 	"github.com/Laisky/errors/v2"
@@ -69,6 +70,12 @@ type requestProbe struct {
 	// Response API indicators
 	Input        json.RawMessage `json:"input,omitempty"`
 	Instructions *string         `json:"instructions,omitempty"`
+
+	// Response API state selectors — these fields are exclusive to the Responses
+	// API and let a stateful request (which may omit input entirely) be detected.
+	PreviousResponseId *string         `json:"previous_response_id,omitempty"`
+	Conversation       json.RawMessage `json:"conversation,omitempty"`
+	Prompt             json.RawMessage `json:"prompt,omitempty"`
 
 	// Claude-specific indicator: system as a separate top-level field
 	// (OpenAI puts system in messages array, Claude has it as a separate field)
@@ -150,6 +157,22 @@ func DetectFormat(body []byte) (APIFormat, error) {
 		return ResponseAPI, nil
 	}
 
+	// State selectors are exclusive to the Responses API. A stateful request may
+	// omit input entirely — continuing a chain via previous_response_id, resuming
+	// a conversation, or running a prompt template — so these must be recognized
+	// even when no input/messages discriminator is present.
+	if len(probe.Messages) == 0 {
+		if probe.PreviousResponseId != nil {
+			return ResponseAPI, nil
+		}
+		if isNonEmptyJSONValue(probe.Conversation) {
+			return ResponseAPI, nil
+		}
+		if isResponseAPIPromptObject(probe.Prompt) {
+			return ResponseAPI, nil
+		}
+	}
+
 	// ==========================================================================
 	// If no messages and no Response API indicators, we can't determine format
 	// ==========================================================================
@@ -191,6 +214,29 @@ func DetectFormat(body []byte) (APIFormat, error) {
 	// We do NOT try to distinguish these - let the endpoint handle them as-is
 
 	return Unknown, nil
+}
+
+// isNonEmptyJSONValue reports whether a raw JSON field carries a meaningful,
+// non-null value (used for the conversation selector, which may be a string or
+// an object).
+func isNonEmptyJSONValue(raw json.RawMessage) bool {
+	trimmed := bytes.TrimSpace(raw)
+	if len(trimmed) == 0 {
+		return false
+	}
+	return !bytes.Equal(trimmed, []byte("null"))
+}
+
+// isResponseAPIPromptObject reports whether the prompt field is a Responses API
+// prompt-template object ({"id": ...}). It deliberately rejects the legacy
+// Completions-style string prompt so that a bare string prompt is never
+// misclassified as a Responses request.
+func isResponseAPIPromptObject(raw json.RawMessage) bool {
+	trimmed := bytes.TrimSpace(raw)
+	if len(trimmed) == 0 {
+		return false
+	}
+	return trimmed[0] == '{'
 }
 
 // isClaudeToolFormat checks if the tools array uses Claude's format (input_schema).

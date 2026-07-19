@@ -45,6 +45,11 @@ func RelayResponseAPIHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 	// get & validate Response API request
 	responseAPIRequest, err := getAndValidateResponseAPIRequest(c)
 	if err != nil {
+		if errors.Is(err, errStateSelectorsMutuallyExclusive) {
+			// Mutually exclusive state selectors get the documented state code
+			// (Section 6, rows A01/E01) instead of the generic request error.
+			return openai.ErrorWrapper(err, codeInvalidStateSelector, http.StatusBadRequest)
+		}
 		return openai.ErrorWrapper(err, "invalid_response_api_request", http.StatusBadRequest)
 	}
 	meta.OriginModelName = responseAPIRequest.Model

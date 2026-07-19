@@ -256,48 +256,59 @@ func Distribute() func(c *gin.Context) {
 				}
 			}
 
-			selectChannel := func(ignoreFirstPriority bool, exclude map[int]bool) (*model.Channel, error) {
-				if requestModel == "" && isResponseWSHandshake {
-					return selectResponseWebSocketChannelWithoutModel(userGroup, relayMode, ignoreFirstPriority)
+			// ST-005: prefer the channel bound to a referenced gateway response or
+			// conversation (provider affinity). This is a soft preference resolved
+			// before normal selection; when no eligible binding exists it returns nil
+			// and selection proceeds normally so fallback routes replay canonical items
+			// (rows R01, R02, R05, R07). It never sets SpecificChannelId, so retry and
+			// failover remain enabled (row R03).
+			if pinned := responseStateAffinityChannel(c, relayMode, userGroup, requestModel, isResponseWSHandshake); pinned != nil {
+				channel = pinned
+				c.Set(ctxkey.ResponseStateAffinityChannelId, pinned.Id)
+			} else {
+				selectChannel := func(ignoreFirstPriority bool, exclude map[int]bool) (*model.Channel, error) {
+					if requestModel == "" && isResponseWSHandshake {
+						return selectResponseWebSocketChannelWithoutModel(userGroup, relayMode, ignoreFirstPriority)
+					}
+
+					for {
+						candidate, err := model.CacheGetRandomSatisfiedChannelExcluding(userGroup, requestModel, ignoreFirstPriority, exclude, false)
+						if err != nil {
+							return nil, errors.Wrap(err, "select channel from cache")
+						}
+
+						// Check endpoint support
+						if !channelSupportsEndpoint(candidate, relayMode) {
+							exclude[candidate.Id] = true
+							lg.Debug("channel skipped - does not support requested endpoint",
+								zap.Int("channel_id", candidate.Id),
+								zap.String("channel_name", candidate.Name),
+								zap.String("endpoint", channeltype.RelayModeToEndpointName(relayMode)))
+							continue
+						}
+						if !channelSupportsResponseWebSocket(candidate, relayMode, isResponseWSHandshake) {
+							exclude[candidate.Id] = true
+							lg.Debug("channel skipped - does not support response websocket transport",
+								zap.Int("channel_id", candidate.Id),
+								zap.String("channel_name", candidate.Name),
+								zap.Int("channel_type", candidate.Type))
+							continue
+						}
+						return candidate, nil
+					}
 				}
 
-				for {
-					candidate, err := model.CacheGetRandomSatisfiedChannelExcluding(userGroup, requestModel, ignoreFirstPriority, exclude, false)
-					if err != nil {
-						return nil, errors.Wrap(err, "select channel from cache")
-					}
-
-					// Check endpoint support
-					if !channelSupportsEndpoint(candidate, relayMode) {
-						exclude[candidate.Id] = true
-						lg.Debug("channel skipped - does not support requested endpoint",
-							zap.Int("channel_id", candidate.Id),
-							zap.String("channel_name", candidate.Name),
-							zap.String("endpoint", channeltype.RelayModeToEndpointName(relayMode)))
-						continue
-					}
-					if !channelSupportsResponseWebSocket(candidate, relayMode, isResponseWSHandshake) {
-						exclude[candidate.Id] = true
-						lg.Debug("channel skipped - does not support response websocket transport",
-							zap.Int("channel_id", candidate.Id),
-							zap.String("channel_name", candidate.Name),
-							zap.Int("channel_type", candidate.Type))
-						continue
-					}
-					return candidate, nil
-				}
-			}
-
-			exclude := make(map[int]bool)
-			var err error
-			channel, err = selectChannel(false, exclude)
-			if err != nil {
-				lg.Info(fmt.Sprintf("No highest priority channels available for model %s in group %s, trying lower priority channels", requestModel, userGroup))
-				channel, err = selectChannel(true, exclude)
+				exclude := make(map[int]bool)
+				var err error
+				channel, err = selectChannel(false, exclude)
 				if err != nil {
-					message := fmt.Sprintf("No available channels for Model %s under Group %s", requestModel, userGroup)
-					AbortWithError(c, http.StatusServiceUnavailable, errors.New(message))
-					return
+					lg.Info(fmt.Sprintf("No highest priority channels available for model %s in group %s, trying lower priority channels", requestModel, userGroup))
+					channel, err = selectChannel(true, exclude)
+					if err != nil {
+						message := fmt.Sprintf("No available channels for Model %s under Group %s", requestModel, userGroup)
+						AbortWithError(c, http.StatusServiceUnavailable, errors.New(message))
+						return
+					}
 				}
 			}
 		}

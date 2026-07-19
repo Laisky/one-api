@@ -192,7 +192,7 @@ func newProxyTestServer(t *testing.T, upstreamURL string, usageOut chan<- *rmode
 			BaseURL: upstreamURL,
 			APIKey:  "test-key",
 		}
-		_, usage := ResponseAPIWebSocketHandler(c, meta)
+		_, usage, _ := ResponseAPIWebSocketHandler(c, meta)
 		if usageOut != nil {
 			usageOut <- usage
 		}
@@ -279,7 +279,7 @@ func TestProxyInvalidMode(t *testing.T) {
 	ctx.Request = httptest.NewRequest(http.MethodGet, "/v1/responses", nil)
 
 	meta := &rmeta.Meta{Mode: 0}
-	bizErr, usage := ResponseAPIWebSocketHandler(ctx, meta)
+	bizErr, usage, _ := ResponseAPIWebSocketHandler(ctx, meta)
 	require.NotNil(t, bizErr)
 	require.Nil(t, usage)
 	require.Equal(t, http.StatusBadRequest, bizErr.StatusCode)
@@ -291,7 +291,7 @@ func TestProxyNilMeta(t *testing.T) {
 	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
 	ctx.Request = httptest.NewRequest(http.MethodGet, "/v1/responses", nil)
 
-	bizErr, usage := ResponseAPIWebSocketHandler(ctx, nil)
+	bizErr, usage, _ := ResponseAPIWebSocketHandler(ctx, nil)
 	require.NotNil(t, bizErr)
 	require.Nil(t, usage)
 	require.Equal(t, http.StatusBadRequest, bizErr.StatusCode)

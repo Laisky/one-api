@@ -362,6 +362,86 @@ var (
 )
 
 // =============================================================================
+// RESPONSE STATE (STATEFUL RESPONSES)
+// =============================================================================
+// Settings for the gateway-owned Responses state layer, which virtualizes
+// response/conversation IDs, hydrates previous_response_id / conversation
+// selectors before conversion, and stores an encrypted lossless item ledger.
+// The feature is OFF by default and refuses to enable without a healthy Redis
+// backend and a stable, explicitly configured encryption key. When disabled,
+// one-api behaves exactly as before (proposal row O01).
+
+var (
+	// ResponseStateEnabled turns on the gateway state layer. It is validated at
+	// startup and forced back off when Redis is unavailable or no stable
+	// encryption key is configured.
+	//
+	// When RESPONSE_STATE_ENABLED is not set explicitly, the state layer
+	// auto-enables at startup once both prerequisites are present: a stable
+	// RESPONSE_STATE_ENCRYPTION_KEYS and a healthy Redis. Setting the variable
+	// explicitly (true or false) always overrides that default. Either way, one
+	// INFO line at startup reports the resolved state and the reason.
+	//
+	// Environment variable: RESPONSE_STATE_ENABLED
+	// Default: false, or true when Redis + RESPONSE_STATE_ENCRYPTION_KEYS are set
+	ResponseStateEnabled = env.Bool("RESPONSE_STATE_ENABLED", false)
+
+	// ResponseStateShadow computes hydration/portability without altering the
+	// upstream payload or routing, emitting mismatch metrics only (row O02).
+	//
+	// Environment variable: RESPONSE_STATE_SHADOW
+	// Default: false
+	ResponseStateShadow = env.Bool("RESPONSE_STATE_SHADOW", false)
+
+	// ResponseStateAllowlist restricts gateway state behavior to a comma-separated
+	// set of user IDs, token IDs, or channel IDs (row O03). Empty means all when
+	// the feature is enabled.
+	//
+	// Environment variable: RESPONSE_STATE_ALLOWLIST
+	// Default: "" (all)
+	ResponseStateAllowlist = strings.TrimSpace(env.String("RESPONSE_STATE_ALLOWLIST", ""))
+
+	// ResponseStateLegacyPassthrough forwards an unknown incoming response ID on
+	// GET/DELETE/cancel to the upstream exactly as today (OpenAI-type channels
+	// only). It defaults OFF: at completion, unknown IDs return the standard
+	// not-found error and are never forwarded upstream (rows R08, SEC04). It is
+	// only consulted when the feature is enabled; with the feature disabled the
+	// action handlers keep their current forwarding behavior.
+	//
+	// Environment variable: RESPONSE_STATE_LEGACY_PASSTHROUGH
+	// Default: false
+	ResponseStateLegacyPassthrough = env.Bool("RESPONSE_STATE_LEGACY_PASSTHROUGH", false)
+
+	// ResponseStateEncryptionKeys carries the versioned AES-256 keys used to
+	// encrypt state payloads before Redis storage, newest first, as
+	// "<version>:<base64-key>" entries separated by commas or whitespace.
+	//
+	// When this is empty but SESSION_SECRET was set EXPLICITLY by the operator
+	// (SessionSecretEnvValue), the encryption key is derived from SESSION_SECRET
+	// instead. This is safe only because an explicitly configured SESSION_SECRET is
+	// stable across restarts; an AUTO-GENERATED per-boot SESSION_SECRET is never
+	// used, because it would orphan durable ciphertext after a restart (Section 5.4).
+	//
+	// Environment variable: RESPONSE_STATE_ENCRYPTION_KEYS
+	// Default: "" (falls back to an explicit SESSION_SECRET; else feature cannot enable)
+	ResponseStateEncryptionKeys = strings.TrimSpace(env.String("RESPONSE_STATE_ENCRYPTION_KEYS", ""))
+
+	// State limit knobs (rows L01-L05). A non-positive value disables that bound.
+	ResponseStateMaxChainDepth     = env.Int("RESPONSE_STATE_MAX_CHAIN_DEPTH", 64)
+	ResponseStateMaxItemCount      = env.Int("RESPONSE_STATE_MAX_ITEM_COUNT", 2048)
+	ResponseStateMaxRecordBytes    = env.Int("RESPONSE_STATE_MAX_RECORD_BYTES", 8<<20)
+	ResponseStateMaxHydratedBytes  = env.Int("RESPONSE_STATE_MAX_HYDRATED_BYTES", 32<<20)
+	ResponseStateMaxHydratedTokens = env.Int("RESPONSE_STATE_MAX_HYDRATED_TOKENS", 1_000_000)
+
+	// ResponseStateResponseTTLDays is the default lifetime of a stored response
+	// node. Conversations do not inherit this TTL (rows S02, S03).
+	//
+	// Environment variable: RESPONSE_STATE_RESPONSE_TTL_DAYS
+	// Default: 30
+	ResponseStateResponseTTLDays = env.Int("RESPONSE_STATE_RESPONSE_TTL_DAYS", 30)
+)
+
+// =============================================================================
 // CHANNEL MANAGEMENT
 // =============================================================================
 // Settings for managing upstream provider channels, including suspension
