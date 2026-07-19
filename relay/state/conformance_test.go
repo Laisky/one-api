@@ -12,6 +12,10 @@ import (
 // storeFactory builds a fresh, empty store for one conformance sub-test.
 type storeFactory func(t *testing.T) ResponseStateStore
 
+// limitedStoreFactory builds a fresh, empty store with custom limits so both
+// backends prove identical limit/cap semantics (ST-018 parity).
+type limitedStoreFactory func(t *testing.T, limits Limits) ResponseStateStore
+
 // mustEnvelope builds an envelope or fails the test.
 func mustEnvelope(t *testing.T, raw string) ItemEnvelope {
 	t.Helper()
@@ -37,7 +41,7 @@ func mustConversationID(t *testing.T) string {
 // runStoreConformance exercises the full ResponseStateStore contract. It is
 // shared by the in-memory and Redis backends so both prove identical semantics
 // (Section 8.4). newStore must return an empty store per call.
-func runStoreConformance(t *testing.T, newStore storeFactory) {
+func runStoreConformance(t *testing.T, newStore storeFactory, newLimited limitedStoreFactory) {
 	ctx := context.Background()
 	owner := OwnerScope{UserID: 7, TokenID: 3}
 	other := OwnerScope{UserID: 8, TokenID: 4}
@@ -94,14 +98,110 @@ func runStoreConformance(t *testing.T, newStore storeFactory) {
 		_, err := store.CreateResponse(ctx, rec, "")
 		require.NoError(t, err)
 
+		// The tombstone is not set before deletion.
+		dead, err := store.ResponseTombstoned(ctx, rec.GatewayResponseID)
+		require.NoError(t, err)
+		require.False(t, dead)
+
 		require.NoError(t, store.DeleteResponse(ctx, owner, rec.GatewayResponseID))
 		_, err = store.GetResponse(ctx, owner, rec.GatewayResponseID)
 		require.ErrorIs(t, err, ErrNotFound)
 		// Binding must not be reusable after deletion.
 		_, err = store.GetResponseBinding(ctx, owner, rec.GatewayResponseID)
 		require.ErrorIs(t, err, ErrNotFound)
+		// The tombstone is now readable so the resolve layer can refuse stale
+		// fallback for a deleted gateway id (S06, ST-018).
+		dead, err = store.ResponseTombstoned(ctx, rec.GatewayResponseID)
+		require.NoError(t, err)
+		require.True(t, dead)
 		// Deleting again is a not-found.
 		require.ErrorIs(t, store.DeleteResponse(ctx, owner, rec.GatewayResponseID), ErrNotFound)
+	})
+
+	t.Run("ST-018 upstream item index is purged on response delete", func(t *testing.T) {
+		store := newStore(t)
+		rec := sampleResponseWithUpstreamItems(t, owner)
+		_, err := store.CreateResponse(ctx, rec, "")
+		require.NoError(t, err)
+
+		gwItemID := rec.OutputItems[0].GatewayItemID
+		upItemID := rec.OutputItems[0].UpstreamItemID
+		require.NotEmpty(t, upItemID, "sample must carry an upstream item id")
+
+		// Both the gateway id and the raw upstream id resolve before deletion.
+		_, err = store.GetItem(ctx, owner, gwItemID)
+		require.NoError(t, err)
+		_, err = store.GetItem(ctx, owner, upItemID)
+		require.NoError(t, err)
+
+		require.NoError(t, store.DeleteResponse(ctx, owner, rec.GatewayResponseID))
+		// Neither index entry survives the delete (no data remanence within owner
+		// scope) — the gap ST-018 closes; both backends must behave identically.
+		_, err = store.GetItem(ctx, owner, gwItemID)
+		require.ErrorIs(t, err, ErrNotFound)
+		_, err = store.GetItem(ctx, owner, upItemID)
+		require.ErrorIs(t, err, ErrNotFound)
+	})
+
+	t.Run("ST-018 upstream item index is purged on conversation delete", func(t *testing.T) {
+		store := newStore(t)
+		conv := sampleConversationWithUpstreamItems(t, owner)
+		_, err := store.CreateConversation(ctx, conv, "")
+		require.NoError(t, err)
+
+		upItemID := conv.Items[0].UpstreamItemID
+		require.NotEmpty(t, upItemID)
+		_, err = store.GetItem(ctx, owner, upItemID)
+		require.NoError(t, err)
+
+		require.NoError(t, store.DeleteConversation(ctx, owner, conv.GatewayConversationID))
+		_, err = store.GetItem(ctx, owner, upItemID)
+		require.ErrorIs(t, err, ErrNotFound)
+	})
+
+	t.Run("L06 per-user response cap evicts oldest (TTL+LRU)", func(t *testing.T) {
+		store := newLimited(t, Limits{MaxResponsesPerUser: 3})
+		ids := make([]string, 0, 5)
+		for i := 0; i < 5; i++ {
+			rec := sampleResponse(t, owner)
+			rec.CreatedAt = int64(1000 + i) // strictly increasing creation order
+			_, err := store.CreateResponse(ctx, rec, "")
+			require.NoError(t, err)
+			ids = append(ids, rec.GatewayResponseID)
+		}
+		// Only the newest 3 survive; the 2 oldest are evicted and tombstoned so an
+		// evicted parent degrades to previous_response_not_found (row L06).
+		for _, id := range ids[:2] {
+			_, err := store.GetResponse(ctx, owner, id)
+			require.ErrorIs(t, err, ErrNotFound)
+			dead, err := store.ResponseTombstoned(ctx, id)
+			require.NoError(t, err)
+			require.True(t, dead)
+		}
+		for _, id := range ids[2:] {
+			_, err := store.GetResponse(ctx, owner, id)
+			require.NoError(t, err)
+		}
+	})
+
+	t.Run("L07 per-user conversation cap rejects create beyond limit", func(t *testing.T) {
+		store := newLimited(t, Limits{MaxConversationsPerUser: 2})
+		for i := 0; i < 2; i++ {
+			_, err := store.CreateConversation(ctx, sampleConversation(t, owner), "")
+			require.NoError(t, err)
+		}
+		// The third create fails explicitly; conversations are never silently evicted.
+		_, err := store.CreateConversation(ctx, sampleConversation(t, owner), "")
+		require.ErrorIs(t, err, ErrLimitExceeded)
+
+		// Another owner is unaffected by this owner's cap.
+		_, err = store.CreateConversation(ctx, sampleConversation(t, other), "")
+		require.NoError(t, err)
+
+		// Deleting one frees a slot for a new conversation (L07 accounting).
+		list := sampleConversation(t, owner)
+		_, err = store.CreateConversation(ctx, list, "") // still over cap
+		require.ErrorIs(t, err, ErrLimitExceeded)
 	})
 
 	t.Run("S08 batch chain hydration preserves order and gaps", func(t *testing.T) {
@@ -141,7 +241,7 @@ func runStoreConformance(t *testing.T, newStore storeFactory) {
 	})
 
 	t.Run("L02 item count limit rejects oversized record", func(t *testing.T) {
-		store := newStoreWithLimits(t, newStore, Limits{MaxItemCount: 2})
+		store := newLimited(t, Limits{MaxItemCount: 2})
 		rec := sampleResponse(t, owner)
 		rec.InputItems = []ItemEnvelope{
 			mustEnvelope(t, `{"type":"message","role":"user","content":"1"}`),
@@ -249,10 +349,35 @@ func runStoreConformance(t *testing.T, newStore storeFactory) {
 	})
 }
 
-// newStoreWithLimits builds a store honoring custom limits. The memory backend
-// supports this directly; other backends override in their own test.
-func newStoreWithLimits(t *testing.T, _ storeFactory, limits Limits) ResponseStateStore {
-	return NewMemoryStore(limits)
+// sampleResponseWithUpstreamItems builds a response whose input and output items
+// carry a raw provider "id", so NewItemEnvelope records a non-empty
+// UpstreamItemID and the upstream-index dedup/delete cases have something to
+// exercise (ST-018: the harness previously never set UpstreamItemID).
+func sampleResponseWithUpstreamItems(t *testing.T, owner OwnerScope) *ResponseStateRecord {
+	t.Helper()
+	input := mustEnvelope(t, `{"type":"message","role":"user","id":"msg_up_in_1","content":"hello"}`)
+	output := mustEnvelope(t, `{"type":"message","role":"assistant","id":"msg_up_out_1","content":[{"type":"output_text","text":"hi"}]}`)
+	require.NotEmpty(t, output.UpstreamItemID)
+	return &ResponseStateRecord{
+		GatewayResponseID: mustResponseID(t),
+		Owner:             owner,
+		CreatedAt:         time.Now().Unix(),
+		Status:            StatusCompleted,
+		InputItems:        []ItemEnvelope{input},
+		OutputItems:       []ItemEnvelope{output},
+		RequestedModel:    "gpt-5",
+		StoreMode:         true,
+		ExpiresAt:         time.Now().Add(DefaultResponseTTL).Unix(),
+	}
+}
+
+func sampleConversationWithUpstreamItems(t *testing.T, owner OwnerScope) *ConversationStateRecord {
+	t.Helper()
+	return &ConversationStateRecord{
+		GatewayConversationID: mustConversationID(t),
+		Owner:                 owner,
+		Items:                 []ItemEnvelope{mustEnvelope(t, `{"type":"message","role":"user","id":"msg_up_conv_1","content":"seed"}`)},
+	}
 }
 
 func sampleResponse(t *testing.T, owner OwnerScope) *ResponseStateRecord {

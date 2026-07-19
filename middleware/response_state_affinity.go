@@ -90,6 +90,13 @@ func responseStateAffinityChannel(c *gin.Context, relayMode int, userGroup, requ
 		return nil
 	}
 
+	// A selector is present: from here every non-pin outcome is a recorded
+	// "unpinned" so the pinned-vs-unpinned affinity ratio is derivable (OBS05).
+	unpinned := func() *model.Channel {
+		metrics.RecordStateEvent(metrics.StateCategoryAffinity, metrics.StateOutcomeUnpinned)
+		return nil
+	}
+
 	ctx := gmw.Ctx(c)
 	var binding *state.ProviderBinding
 	switch {
@@ -98,43 +105,43 @@ func responseStateAffinityChannel(c *gin.Context, relayMode int, userGroup, requ
 		if err != nil {
 			// Fail open to normal selection; the hydration path performs the
 			// authoritative lookup and surfaces the typed error if one is due.
-			return nil
+			return unpinned()
 		}
 		binding = b
 	case convID != "" && state.LooksLikeGatewayConversationID(convID):
 		conv, err := state.Store().GetConversation(ctx, owner, convID)
 		if err != nil {
-			return nil
+			return unpinned()
 		}
 		binding = conv.Binding
 	}
 	if binding == nil || binding.ChannelID == 0 {
-		return nil
+		return unpinned()
 	}
 
 	channel, err := model.GetChannelById(binding.ChannelID, true)
 	if err != nil || channel == nil {
-		return nil
+		return unpinned()
 	}
 	// Now that the bound channel is known, apply the owner/channel allowlist. This
 	// honors user, token, and channel-scoped allowlists (row O03).
 	if !state.AllowedFor(userID, tokenID, channel.Id) {
-		return nil
+		return unpinned()
 	}
 	if channel.Status != model.ChannelStatusEnabled {
-		return nil
+		return unpinned()
 	}
 	if !channelSupportsGroup(channel, userGroup) {
-		return nil
+		return unpinned()
 	}
 	if requestModel != "" && !channel.SupportsModel(requestModel) {
-		return nil
+		return unpinned()
 	}
 	if !channelSupportsEndpoint(channel, relayMode) {
-		return nil
+		return unpinned()
 	}
 	if !channelSupportsResponseWebSocket(channel, relayMode, isResponseWSHandshake) {
-		return nil
+		return unpinned()
 	}
 
 	metrics.RecordStateEvent(metrics.StateCategoryAffinity, metrics.StateOutcomePinned)

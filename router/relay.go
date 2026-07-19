@@ -136,6 +136,9 @@ func SetRelayRouter(router *gin.Engine) {
 		func(c *gin.Context) { done := graceful.BeginRequest(); defer done(); c.Next() },
 		middleware.RelayPanicRecover(),
 		middleware.TokenAuth(),
+		// Throttle the quota-free Conversations write path per token so it cannot be
+		// abused into unbounded gateway-state growth (proposal row L09, ST-019).
+		middleware.ConversationsRateLimit(),
 	}
 	conversationsRouter := router.Group("/v1/conversations")
 	conversationsRouter.Use(conversationsMws...)

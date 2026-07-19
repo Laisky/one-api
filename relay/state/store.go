@@ -27,6 +27,11 @@ type ResponseStateStore interface {
 	// DeleteResponse tombstones a node so the ID cannot be confused with a cache
 	// miss and its provider binding is never reused (S06).
 	DeleteResponse(ctx context.Context, owner OwnerScope, id string) error
+	// ResponseTombstoned reports whether an ID was explicitly deleted or evicted.
+	// The resolve layer consults it so legacy passthrough never forwards a known
+	// gateway ID upstream after deletion — the tombstone prevents stale fallback
+	// (row S06, ST-018).
+	ResponseTombstoned(ctx context.Context, id string) (bool, error)
 	// BatchGetResponses returns nodes in the requested order, preserving nil holes
 	// for missing middle nodes so chain hydration can detect gaps (S08).
 	BatchGetResponses(ctx context.Context, owner OwnerScope, ids []string) ([]*ResponseStateRecord, error)

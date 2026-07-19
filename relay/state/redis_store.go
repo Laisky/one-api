@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"strconv"
 	"time"
 
 	"github.com/Laisky/errors/v2"
@@ -18,12 +19,13 @@ import (
 // relay/adaptor/anthropic/signature_cache.go, with the difference that this
 // backend is the one used in production.
 type RedisStore struct {
-	rdb    redis.Cmdable
-	ring   *KeyRing
-	limits Limits
-	ttl    time.Duration
-	ns     string
-	clock  func() time.Time
+	rdb         redis.Cmdable
+	ring        *KeyRing
+	limits      Limits
+	ttl         time.Duration
+	convIdleTTL time.Duration
+	ns          string
+	clock       func() time.Time
 }
 
 // NewRedisStore builds a Redis-backed store. responseTTL is the default lifetime
@@ -51,6 +53,11 @@ func NewRedisStore(rdb redis.Cmdable, ring *KeyRing, limits Limits, responseTTL 
 
 func (s *RedisStore) now() time.Time { return s.clock() }
 
+// SetConversationIdleTTL configures the sliding idle time-to-live applied to
+// conversations (row L08). Zero retains conversations until explicit deletion
+// (today's S03 default).
+func (s *RedisStore) SetConversationIdleTTL(ttl time.Duration) { s.convIdleTTL = ttl }
+
 // Ping verifies the backend is reachable.
 func (s *RedisStore) Ping(ctx context.Context) error {
 	if err := s.rdb.Ping(ctx).Err(); err != nil {
@@ -71,6 +78,12 @@ func (s *RedisStore) convAppendIdemKey(id, k string) string {
 }
 func (s *RedisStore) leaseKey(id string) string    { return s.ns + ":lease:" + id }
 func (s *RedisStore) itemKey(itemID string) string { return s.ns + ":item:" + itemID }
+func (s *RedisStore) userRespZKey(userID int) string {
+	return s.ns + ":ucap:resp:" + strconv.Itoa(userID)
+}
+func (s *RedisStore) userConvZKey(userID int) string {
+	return s.ns + ":ucap:conv:" + strconv.Itoa(userID)
+}
 func (s *RedisStore) checkpointKey(owner OwnerScope, key string) string {
 	sum := sha256.Sum256([]byte(checkpointStoreKey(owner, key)))
 	return s.ns + ":cp:" + hex.EncodeToString(sum[:])
@@ -83,7 +96,7 @@ func (s *RedisStore) encode(v any) (string, error) {
 	if err != nil {
 		return "", errors.Wrap(err, "state: marshal record")
 	}
-	if s.limits.recordBytesExceeded(len(data)) {
+	if s.limits.RecordBytesExceeded(len(data)) {
 		return "", errors.Wrapf(ErrLimitExceeded, "record bytes %d", len(data))
 	}
 	token, err := s.ring.Encrypt(data)
@@ -140,23 +153,8 @@ func (s *RedisStore) CreateResponse(ctx context.Context, record *ResponseStateRe
 		return nil, ErrInvalidOwner
 	}
 	count := len(record.InputItems) + len(record.OutputItems)
-	if s.limits.itemCountExceeded(count) {
+	if s.limits.ItemCountExceeded(count) {
 		return nil, errors.Wrapf(ErrLimitExceeded, "response item count %d", count)
-	}
-
-	if idempotencyKey != "" {
-		// SetNX claims the idempotency key atomically; a loser reads the winner.
-		ok, err := s.rdb.SetNX(ctx, s.respIdemKey(idempotencyKey), record.GatewayResponseID, s.nodeTTL(record.ExpiresAt)).Result()
-		if err != nil {
-			return nil, errors.Wrap(ErrStoreUnavailable, err.Error())
-		}
-		if !ok {
-			existingID, err := s.getString(ctx, s.respIdemKey(idempotencyKey))
-			if err != nil {
-				return nil, err
-			}
-			return s.GetResponse(ctx, record.Owner, existingID)
-		}
 	}
 
 	stored, err := cloneResponseRecord(record)
@@ -171,13 +169,112 @@ func (s *RedisStore) CreateResponse(ctx context.Context, record *ResponseStateRe
 		return nil, err
 	}
 	ttl := s.nodeTTL(stored.ExpiresAt)
+	// Write the record and its item index BEFORE claiming the idempotency marker.
+	// If the process crashes between the two, a retry never finds a marker pointing
+	// at a missing record, so it cannot be stranded on ErrNotFound (ST-018). Since a
+	// retried commit re-uses the same content, a re-write is a harmless no-op.
 	if err := s.rdb.Set(ctx, s.respKey(stored.GatewayResponseID), token, ttl).Err(); err != nil {
 		return nil, errors.Wrap(ErrStoreUnavailable, err.Error())
 	}
 	if err := s.indexItems(ctx, stored.Owner, append(append([]ItemEnvelope{}, stored.InputItems...), stored.OutputItems...), ttl); err != nil {
 		return nil, err
 	}
+	if idempotencyKey != "" {
+		// Claim the marker; a loser reads the winner (whose record is already
+		// present because it was written before its own marker).
+		ok, err := s.rdb.SetNX(ctx, s.respIdemKey(idempotencyKey), stored.GatewayResponseID, ttl).Result()
+		if err != nil {
+			return nil, errors.Wrap(ErrStoreUnavailable, err.Error())
+		}
+		if !ok {
+			existingID, err := s.getString(ctx, s.respIdemKey(idempotencyKey))
+			if err != nil {
+				return nil, err
+			}
+			if existingID != stored.GatewayResponseID {
+				return s.GetResponse(ctx, record.Owner, existingID)
+			}
+		}
+	}
+	// Track against the owner's per-user budget and prune the oldest records on
+	// overflow (TTL+LRU, row L06).
+	s.trackAndEvictUserResponse(ctx, stored, ttl)
 	return cloneResponseRecord(stored)
+}
+
+// trackAndEvictUserResponse records a stored response in its owner's per-user
+// ZSET (scored by creation time) and evicts the oldest records once the cap is
+// exceeded. A non-positive cap disables the accounting so behavior is unchanged
+// when the feature is off (row L05). Failures are best-effort: the record is
+// already durably committed, so a governance hiccup must not fail the request.
+func (s *RedisStore) trackAndEvictUserResponse(ctx context.Context, rec *ResponseStateRecord, ttl time.Duration) {
+	limit := s.limits.MaxResponsesPerUser
+	if limit <= 0 {
+		return
+	}
+	zkey := s.userRespZKey(rec.Owner.UserID)
+	_ = s.rdb.ZAdd(ctx, zkey, &redis.Z{Score: float64(rec.CreatedAt), Member: rec.GatewayResponseID}).Err()
+	// Keep the index alive at least as long as the newest record it tracks.
+	if ttl > 0 {
+		_ = s.rdb.Expire(ctx, zkey, ttl+time.Hour).Err()
+	}
+	count, err := s.rdb.ZCard(ctx, zkey).Result()
+	if err != nil || int(count) <= limit {
+		return
+	}
+	overflow := int(count) - limit
+	oldest, err := s.rdb.ZRange(ctx, zkey, 0, int64(overflow-1)).Result()
+	if err != nil {
+		return
+	}
+	for _, oid := range oldest {
+		s.evictResponse(ctx, oid, zkey)
+	}
+}
+
+// evictResponse removes a response node during LRU pruning: it purges the record,
+// its item indexes (gateway and upstream), tombstones the id, and drops it from
+// the per-user ZSET (rows L06, S06).
+func (s *RedisStore) evictResponse(ctx context.Context, id, zkey string) {
+	if token, err := s.getString(ctx, s.respKey(id)); err == nil {
+		var rec ResponseStateRecord
+		if s.decode(token, &rec) == nil {
+			s.purgeResponse(ctx, id, &rec)
+		} else {
+			_ = s.rdb.Del(ctx, s.respKey(id)).Err()
+		}
+	}
+	// Tombstone even if the record already TTL'd out, so the id stays deleted.
+	tombTTL := s.ttl
+	if tombTTL <= 0 {
+		tombTTL = DefaultResponseTTL
+	}
+	_ = s.rdb.Set(ctx, s.respTombKey(id), "1", tombTTL).Err()
+	_ = s.rdb.ZRem(ctx, zkey, id).Err()
+}
+
+// purgeResponse deletes a response record key, tombstones it, and removes its
+// item index entries (both gateway and upstream ids). Shared by DeleteResponse
+// and eviction so the two paths behave identically (ST-018 backend parity).
+func (s *RedisStore) purgeResponse(ctx context.Context, id string, rec *ResponseStateRecord) {
+	_ = s.rdb.Del(ctx, s.respKey(id)).Err()
+	_ = s.rdb.Set(ctx, s.respTombKey(id), "1", s.nodeTTL(rec.ExpiresAt)).Err()
+	for _, env := range append(append([]ItemEnvelope{}, rec.InputItems...), rec.OutputItems...) {
+		_ = s.rdb.Del(ctx, s.itemKey(env.GatewayItemID)).Err()
+		if env.UpstreamItemID != "" {
+			_ = s.rdb.Del(ctx, s.itemKey(env.UpstreamItemID)).Err()
+		}
+	}
+}
+
+// ResponseTombstoned reports whether a response id was explicitly deleted or
+// LRU-evicted (row S06, ST-018).
+func (s *RedisStore) ResponseTombstoned(ctx context.Context, id string) (bool, error) {
+	n, err := s.rdb.Exists(ctx, s.respTombKey(id)).Result()
+	if err != nil {
+		return false, errors.Wrap(ErrStoreUnavailable, err.Error())
+	}
+	return n > 0, nil
 }
 
 // nodeTTL derives a TTL from an absolute expiry, falling back to the configured
@@ -237,15 +334,9 @@ func (s *RedisStore) DeleteResponse(ctx context.Context, owner OwnerScope, id st
 	if err != nil {
 		return err
 	}
-	if err := s.rdb.Del(ctx, s.respKey(id)).Err(); err != nil {
-		return errors.Wrap(ErrStoreUnavailable, err.Error())
-	}
-	_ = s.rdb.Set(ctx, s.respTombKey(id), "1", s.nodeTTL(rec.ExpiresAt)).Err()
-	for _, env := range append(append([]ItemEnvelope{}, rec.InputItems...), rec.OutputItems...) {
-		_ = s.rdb.Del(ctx, s.itemKey(env.GatewayItemID)).Err()
-		if env.UpstreamItemID != "" {
-			_ = s.rdb.Del(ctx, s.itemKey(env.UpstreamItemID)).Err()
-		}
+	s.purgeResponse(ctx, id, rec)
+	if s.limits.MaxResponsesPerUser > 0 {
+		_ = s.rdb.ZRem(ctx, s.userRespZKey(owner.UserID), id).Err()
 	}
 	return nil
 }
@@ -345,12 +436,12 @@ func (s *RedisStore) CreateConversation(ctx context.Context, record *Conversatio
 	if !record.Owner.Valid() {
 		return nil, ErrInvalidOwner
 	}
-	if s.limits.itemCountExceeded(len(record.Items)) {
+	if s.limits.ItemCountExceeded(len(record.Items)) {
 		return nil, errors.Wrapf(ErrLimitExceeded, "conversation item count %d", len(record.Items))
 	}
 
 	if idempotencyKey != "" {
-		ok, err := s.rdb.SetNX(ctx, s.convIdemKey(idempotencyKey), record.GatewayConversationID, s.convTTL(record.ExpiresAt)).Result()
+		ok, err := s.rdb.SetNX(ctx, s.convIdemKey(idempotencyKey), record.GatewayConversationID, s.convKeyTTL(record)).Result()
 		if err != nil {
 			return nil, errors.Wrap(ErrStoreUnavailable, err.Error())
 		}
@@ -360,6 +451,24 @@ func (s *RedisStore) CreateConversation(ctx context.Context, record *Conversatio
 				return nil, err
 			}
 			return s.GetConversation(ctx, record.Owner, existingID)
+		}
+	}
+
+	// Enforce the per-user active-conversation cap before writing. Idle-expired
+	// members are pruned first so the count reflects only live conversations; on
+	// overflow the create fails explicitly (row L07) — never silently evicted.
+	if s.limits.MaxConversationsPerUser > 0 {
+		zkey := s.userConvZKey(record.Owner.UserID)
+		if s.convIdleTTL > 0 {
+			cutoff := s.now().Add(-s.convIdleTTL).Unix()
+			_ = s.rdb.ZRemRangeByScore(ctx, zkey, "0", strconv.FormatInt(cutoff, 10)).Err()
+		}
+		count, err := s.rdb.ZCard(ctx, zkey).Result()
+		if err != nil {
+			return nil, errors.Wrap(ErrStoreUnavailable, err.Error())
+		}
+		if int(count) >= s.limits.MaxConversationsPerUser {
+			return nil, errors.Wrapf(ErrLimitExceeded, "active conversations per user %d", s.limits.MaxConversationsPerUser)
 		}
 	}
 
@@ -373,9 +482,10 @@ func (s *RedisStore) CreateConversation(ctx context.Context, record *Conversatio
 	if err := s.writeConversation(ctx, stored); err != nil {
 		return nil, err
 	}
-	if err := s.indexItems(ctx, stored.Owner, stored.Items, s.convTTL(stored.ExpiresAt)); err != nil {
+	if err := s.indexItems(ctx, stored.Owner, stored.Items, s.convKeyTTL(stored)); err != nil {
 		return nil, err
 	}
+	s.trackConversationActivity(ctx, stored.Owner.UserID, stored.GatewayConversationID)
 	return cloneConversationRecord(stored)
 }
 
@@ -390,15 +500,51 @@ func (s *RedisStore) convTTL(expiresAt int64) time.Duration {
 	return 0 // no automatic TTL (S03)
 }
 
+// convKeyTTL is the effective TTL for a conversation's keys. A configured idle
+// TTL takes precedence and is what makes an abandoned conversation expire (row
+// L08); otherwise an explicit ExpiresAt is honored, and a zero means no automatic
+// TTL (S03 default).
+func (s *RedisStore) convKeyTTL(rec *ConversationStateRecord) time.Duration {
+	if s.convIdleTTL > 0 {
+		return s.convIdleTTL
+	}
+	return s.convTTL(rec.ExpiresAt)
+}
+
 func (s *RedisStore) writeConversation(ctx context.Context, rec *ConversationStateRecord) error {
 	token, err := s.encode(rec)
 	if err != nil {
 		return err
 	}
-	if err := s.rdb.Set(ctx, s.convKey(rec.GatewayConversationID), token, s.convTTL(rec.ExpiresAt)).Err(); err != nil {
+	if err := s.rdb.Set(ctx, s.convKey(rec.GatewayConversationID), token, s.convKeyTTL(rec)).Err(); err != nil {
 		return errors.Wrap(ErrStoreUnavailable, err.Error())
 	}
 	return nil
+}
+
+// trackConversationActivity records a conversation's last-activity time in its
+// owner's per-user ZSET, so the L07 cap can prune idle entries. When an idle TTL
+// is configured the index is bounded to it; otherwise it persists (conversations
+// are retained until explicit deletion, S03). No-op when the cap is disabled.
+func (s *RedisStore) trackConversationActivity(ctx context.Context, userID int, id string) {
+	if s.limits.MaxConversationsPerUser <= 0 {
+		return
+	}
+	zkey := s.userConvZKey(userID)
+	_ = s.rdb.ZAdd(ctx, zkey, &redis.Z{Score: float64(s.now().Unix()), Member: id}).Err()
+	if s.convIdleTTL > 0 {
+		_ = s.rdb.Expire(ctx, zkey, s.convIdleTTL+time.Hour).Err()
+	}
+}
+
+// touchConversation slides a conversation's idle TTL forward on read/write and
+// refreshes its activity timestamp (row L08). No-op on the key TTL when idle TTL
+// is disabled.
+func (s *RedisStore) touchConversation(ctx context.Context, userID int, id string) {
+	if s.convIdleTTL > 0 {
+		_ = s.rdb.Expire(ctx, s.convKey(id), s.convIdleTTL).Err()
+	}
+	s.trackConversationActivity(ctx, userID, id)
 }
 
 // GetConversation returns the owner's conversation.
@@ -420,6 +566,8 @@ func (s *RedisStore) GetConversation(ctx context.Context, owner OwnerScope, id s
 	if rec.ExpiresAt > 0 && s.now().Unix() >= rec.ExpiresAt {
 		return nil, ErrNotFound
 	}
+	// Reading is activity: slide the idle TTL forward (row L08).
+	s.touchConversation(ctx, owner.UserID, id)
 	return &rec, nil
 }
 
@@ -433,8 +581,15 @@ func (s *RedisStore) DeleteConversation(ctx context.Context, owner OwnerScope, i
 		return errors.Wrap(ErrStoreUnavailable, err.Error())
 	}
 	_ = s.rdb.Del(ctx, s.leaseKey(id)).Err()
+	// Purge both gateway-id and upstream-id item index entries (ST-018 parity).
 	for _, env := range rec.Items {
 		_ = s.rdb.Del(ctx, s.itemKey(env.GatewayItemID)).Err()
+		if env.UpstreamItemID != "" {
+			_ = s.rdb.Del(ctx, s.itemKey(env.UpstreamItemID)).Err()
+		}
+	}
+	if s.limits.MaxConversationsPerUser > 0 {
+		_ = s.rdb.ZRem(ctx, s.userConvZKey(owner.UserID), id).Err()
 	}
 	return nil
 }
@@ -463,7 +618,7 @@ func (s *RedisStore) AppendConversationItems(ctx context.Context, owner OwnerSco
 		return nil, ErrVersionConflict
 	}
 	projected := len(rec.Items) + len(items)
-	if s.limits.itemCountExceeded(projected) {
+	if s.limits.ItemCountExceeded(projected) {
 		return nil, errors.Wrapf(ErrLimitExceeded, "conversation item count %d", projected)
 	}
 	rec.Items = append(rec.Items, items...)
@@ -471,9 +626,11 @@ func (s *RedisStore) AppendConversationItems(ctx context.Context, owner OwnerSco
 	if err := s.writeConversation(ctx, rec); err != nil {
 		return nil, err
 	}
-	if err := s.indexItems(ctx, owner, items, s.convTTL(rec.ExpiresAt)); err != nil {
+	if err := s.indexItems(ctx, owner, items, s.convKeyTTL(rec)); err != nil {
 		return nil, err
 	}
+	// Appending is activity: slide the idle TTL forward (row L08).
+	s.touchConversation(ctx, owner.UserID, id)
 	return rec, nil
 }
 
@@ -515,7 +672,11 @@ func (s *RedisStore) DeleteConversationItem(ctx context.Context, owner OwnerScop
 	for _, env := range rec.Items {
 		if env.GatewayItemID == itemID || (env.UpstreamItemID != "" && env.UpstreamItemID == itemID) {
 			removed = true
+			// Purge both gateway-id and upstream-id index entries (ST-018 parity).
 			_ = s.rdb.Del(ctx, s.itemKey(env.GatewayItemID)).Err()
+			if env.UpstreamItemID != "" {
+				_ = s.rdb.Del(ctx, s.itemKey(env.UpstreamItemID)).Err()
+			}
 			continue
 		}
 		filtered = append(filtered, env)
@@ -528,6 +689,7 @@ func (s *RedisStore) DeleteConversationItem(ctx context.Context, owner OwnerScop
 	if err := s.writeConversation(ctx, rec); err != nil {
 		return nil, err
 	}
+	s.touchConversation(ctx, owner.UserID, id)
 	return rec, nil
 }
 

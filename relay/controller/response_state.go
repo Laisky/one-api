@@ -160,9 +160,30 @@ func hydrateResponseAPIRequestForFallback(ctx context.Context, meta *metalib.Met
 		return nil, serr
 	}
 
-	if limits.MaxItemCount > 0 && len(combined) > limits.MaxItemCount {
+	if limits.ItemCountExceeded(len(combined)) {
 		return nil, stateErrorf(codeStateLimitExceeded, http.StatusRequestEntityTooLarge,
 			"hydrated item count %d exceeds limit %d", len(combined), limits.MaxItemCount)
+	}
+
+	// Enforce the hydrated byte and token budgets before lowering or any upstream
+	// call, so an oversized hydrated transcript is rejected before allocation
+	// (rows L03, L04). The encoded length bounds bytes exactly; the token count of
+	// the JSON-encoded transcript is a conservative upper bound (it also counts
+	// structural tokens), so a transcript that would overflow the model context
+	// window fails closed here rather than being silently truncated to fit.
+	if limits.MaxHydratedBytes > 0 || limits.MaxHydratedTokens > 0 {
+		if encoded, mErr := json.Marshal(combined); mErr == nil {
+			if limits.HydratedBytesExceeded(len(encoded)) {
+				return nil, stateErrorf(codeStateLimitExceeded, http.StatusRequestEntityTooLarge,
+					"hydrated transcript bytes %d exceeds limit %d", len(encoded), limits.MaxHydratedBytes)
+			}
+			if limits.MaxHydratedTokens > 0 {
+				if tokens := openai.CountTokenText(string(encoded), meta.ActualModelName); limits.HydratedTokensExceeded(tokens) {
+					return nil, stateErrorf(codeStateLimitExceeded, http.StatusRequestEntityTooLarge,
+						"hydrated transcript token estimate %d exceeds limit %d", tokens, limits.MaxHydratedTokens)
+				}
+			}
+		}
 	}
 
 	// Lower the resolved items for the target format. Portable items pass through;
@@ -190,7 +211,7 @@ func hydratePreviousResponseChain(ctx context.Context, store state.ResponseState
 	depth := 0
 	for cur != "" {
 		depth++
-		if limits.MaxChainDepth > 0 && depth > limits.MaxChainDepth {
+		if limits.ChainDepthExceeded(depth) {
 			return nil, stateErrorf(codeStateLimitExceeded, http.StatusRequestEntityTooLarge,
 				"response chain depth exceeds limit %d", limits.MaxChainDepth)
 		}
@@ -288,6 +309,7 @@ func lowerItemsForTarget(items []any, target hydrationTarget) ([]any, *relaymode
 		action, kind := state.FallbackLowering(raw)
 		switch action {
 		case state.FallbackActionCarry:
+			metrics.RecordStateEvent(metrics.StateCategoryPortability, metrics.StateOutcomePortable)
 			out = append(out, item)
 		case state.FallbackActionDrop:
 			// Sidecar: opaque provider-bound state dropped; the request proceeds.

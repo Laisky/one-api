@@ -2,6 +2,8 @@ package controller
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"strings"
 	"time"
@@ -219,8 +221,25 @@ func commitFallbackResponseNode(c *gin.Context, commit *pendingStateCommit, outp
 
 // detachedCommitContext returns a non-cancelled context for a state commit so a
 // client disconnect after upstream completion does not abort the commit (STR07).
+//
+// Safe ONLY while state commits run synchronously inside the request handler (as
+// they do today): it derives from the live request context. Before ever moving a
+// commit into a goroutine that outlives the handler, switch to the relayctx.Detach
+// helpers (as the deferred billing path does), so the goroutine never retains a
+// recycled *gin.Context (ST-023).
 func detachedCommitContext(c *gin.Context) context.Context {
 	return context.WithoutCancel(gmw.Ctx(c))
+}
+
+// fingerprintID returns a short, non-reversible fingerprint of an identifier for
+// logs and traces. Raw upstream provider IDs must never appear in logs (OBS07);
+// the fingerprint keeps entries correlatable without exposing the provider id.
+func fingerprintID(id string) string {
+	if id == "" {
+		return ""
+	}
+	sum := sha256.Sum256([]byte(id))
+	return hex.EncodeToString(sum[:6])
 }
 
 // commitWebSocketObservedResponses records the store!=false completed responses
@@ -302,8 +321,9 @@ func commitWebSocketObservedResponses(c *gin.Context, meta *metalib.Meta, respon
 		// re-observes the same completed response does not double-write (WS04, S05).
 		if _, err := store.CreateResponse(ctx, rec, resp.Id); err != nil {
 			metrics.RecordStateEvent(metrics.StateCategoryCommit, metrics.StateOutcomeCommitFailed)
+			// Log a short hash of the upstream id, never the raw provider id (OBS07).
 			lg.Warn("commit websocket observed response failed",
-				zap.Error(err), zap.String("upstream_response_id", resp.Id))
+				zap.Error(err), zap.String("upstream_response_fp", fingerprintID(resp.Id)))
 			continue
 		}
 		metrics.RecordStateEvent(metrics.StateCategoryCommit, metrics.StateOutcomeCommitted)

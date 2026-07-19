@@ -135,6 +135,9 @@ func TestRelayResponseAPIHelper_FallbackAnthropicMCPPrunesUnmatchedResponseTools
 	c.Set(ctxkey.Config, model.ChannelConfig{})
 
 	apiErr := RelayResponseAPIHelper(c)
+	// Drain async billing before assertions/cleanups so its DB writes cannot race
+	// this test's MCP-fixture teardown under -race (fixes the SQLITE_LOCKED flake).
+	drainResponseFallbackBilling(t)
 	require.Nil(t, apiErr, "expected anthropic MCP fallback to succeed")
 	require.True(t, upstreamCalled, "expected upstream to be called after pruning unmatched Response-only tools")
 	require.Equal(t, http.StatusOK, recorder.Code, "unexpected response status")

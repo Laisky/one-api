@@ -1,16 +1,25 @@
 # Proposal: Stateful Responses Conversion Across API Formats
 
-- Status: **Implemented** (all code tasks ST-001–ST-014 landed and closed B01–B14; the
-  remaining ST-015/ST-016 items are live-infra acceptance rows that require an
-  operations environment gate, not a code change; see Section 13)
+- Status: **Implemented — remediation complete** (core tasks ST-001–ST-014
+  landed and closed B01–B14; the 2026-07-19 acceptance review surfaced
+  security/completeness defects ST-017–ST-023, which have now been implemented
+  and unit-tested. The P0 anti-abuse/correctness set (ST-017–ST-020), the
+  native-commit path (ST-021), the observability follow-ups (ST-023), and the
+  operations runbook (ST-015) are done; ST-022's checkpoint mechanism is
+  implemented and proven end-to-end on the Chat path, with the Claude MATCH
+  half a documented seam (§14). **Section 14 records the per-task closure
+  status.** The remaining P3 items are live-infra acceptance rows that need an
+  operations environment, not code.)
 - Date: 2026-07-19
 - Area: relay routing, Responses API, Chat Completions, Claude Messages, shared state storage, streaming
 - Related: [`response_api.md`](../refs/response_api.md), [`api_convert.md`](../arch/api_convert.md)
 - Evidence: [`response_state_conversion_behavior_test.go`](../../relay/adaptor/openai/response_state_conversion_behavior_test.go), [`response_state_behavior_test.go`](../../relay/controller/response_state_behavior_test.go), [`response_state_behavior_test.go`](../../relay/format/response_state_behavior_test.go)
-- Review: 2026-07-19 — contract rules R1-R9, every Section 3 code citation, and
-  the B01-B11 test assertions were re-verified against the codebase and the
-  current official OpenAI documentation (`developers.openai.com`). All cited
-  characterization tests pass with `go test -count=1`.
+- Acceptance review: 2026-07-19 — contract rules R1-R9 re-verified against the
+  current official OpenAI documentation; four independent audit tracks
+  (B-finding closures, `relay/state` internals, pipeline wiring,
+  billing/observability) plus the full Section 10 gate (`go vet ./...`,
+  `go build ./...`, `go test -race ./...`, `make build-frontend-modern`) all
+  pass. Review findings are captured as tasks ST-017–ST-023 in Section 14.
 
 ## 1. Decision summary
 
@@ -44,8 +53,10 @@ The design has five non-negotiable decisions:
    typed compatibility error instead of silently converting it into an empty or
    misleading message.
 
-This proposal defines implementation work and acceptance criteria. It does not
-implement the state layer.
+The state layer is implemented (Section 13). This document now serves as the
+design reference plus the remaining-work handoff: Section 7 lists the open
+tasks, Section 8 is the acceptance matrix with per-row status, and Section 14
+details each open task with code anchors.
 
 ## 2. Authoritative Responses state contract
 
@@ -70,63 +81,32 @@ The relevant protocol rules are:
 | R8 | All previous input tokens in a response chain still count as input tokens and must be represented correctly in billing. |
 | R9 | State still obeys model context-window limits; storage is not permission to send an unbounded transcript upstream. |
 
-## 3. Current implementation and confirmed defects
+## 3. Historical findings (all closed)
 
-### 3.1 Current request paths
+The original proposal documented fourteen characterization findings (B01-B14)
+against the pre-implementation code. All are closed by inverted target-state
+tests (B03/B07 remain as controls asserting behavior that was already
+correct); the only tests still asserting pre-fix behavior are explicitly gated
+on the feature being disabled, which documents the row O01 compatibility
+contract. Verified by the 2026-07-19 acceptance review. The IDs stay in use as
+cross-references:
 
-| Path | Current behavior |
+| ID | What it was (fixed unless marked control) |
 | --- | --- |
-| Responses client to native Responses upstream | [`getResponseAPIRequestBody`](../../relay/controller/response_io.go) patches the original raw JSON, so unknown fields such as `conversation` usually survive. State remains owned by the selected upstream. |
-| Responses client to Chat fallback | [`relayResponseAPIThroughChat`](../../relay/controller/response_fallback.go) calls [`ConvertResponseAPIToChatCompletionRequest`](../../relay/adaptor/openai/responseapi_convert_request.go), which converts only the typed current request. |
-| Chat or Claude client to Responses upstream | [`ConvertChatCompletionToResponseAPI`](../../relay/adaptor/openai/response_model.go) sends the explicit client transcript as Responses `input`. No cross-request state handle is retained. |
-| Chat fallback response to Responses client | [`renderChatResponseAsResponseAPI`](../../relay/controller/response_convert.go) and [`chatToResponseStreamBridge`](../../relay/controller/response_stream_bridge.go) generate Responses-shaped IDs and output items without a backing state record. |
-| Responses retrieval, deletion, cancellation | [`response_actions.go`](../../relay/controller/response_actions.go) proxies only OpenAI channels and cannot resolve fallback-generated IDs. |
-
-### 3.2 Characterization test findings
-
-The new tests intentionally assert current behavior so they pass before the
-implementation starts. Each finding is a bug or semantic gap except B03, which
-is a control proving the correct instruction rule.
-
-| ID | Finding | Severity | Evidence |
-| --- | --- | --- | --- |
-| B01 | `ResponseAPIRequest` has no `conversation` field. Typed fallback parsing drops both the string and object selector forms. | Critical | `TestResponseStateConversionBehaviorConversationIsNotRepresented` |
-| B02 | `previous_response_id` is parsed but never resolved. Chat fallback receives only the incremental current `input`. | Critical | `TestResponseStateConversionBehaviorPreviousResponseContextIsNotResolved` |
-| B03 | Omitted prior `instructions` are not invented on a chained request. This is correct and must remain true after hydration. | Control | `TestResponseStateConversionBehaviorInstructionsRemainRequestLocal` |
-| B04 | A `function_call_output` whose call exists in the referenced prior response becomes an orphan user message because the prior function call was not hydrated. | Critical | `TestResponseStateConversionBehaviorPriorToolOutputLosesCallLink` |
-| B05 | Reasoning items and `item_reference` items without a Chat message `content` field become empty user messages. | High | `TestResponseStateConversionBehaviorTypedStateItemsDegrade` |
-| B06 | The conversion response DTO drops `store`, `conversation`, reasoning `encrypted_content`, and message `phase` during a typed round trip. | High | `TestResponseStateConversionBehaviorResponseRoundTripDropsOpaqueState` |
-| B07 | Native raw forwarding preserves state selectors, proving native and fallback paths have materially different semantics. | Control | `TestResponseStateBehaviorNativeRawForwardingPreservesSelectors` |
-| B08 | one-api does not reject the mutually exclusive combination of `conversation` and `previous_response_id`; both reach a native upstream. | Medium | `TestResponseStateBehaviorDualSelectorsReachNativeUpstream` |
-| B09 | State-only requests are rejected because controller validation requires `input` or `prompt`, although the create schema makes `input` optional. | Medium | `TestResponseStateBehaviorStateOnlyRequestsAreRejected` |
-| B10 | Chat fallback returns a synthetic response ID and accepts `store=true`, but stores no transcript and omits `store` and `conversation` from the response. | Critical | `TestResponseStateBehaviorFallbackReturnsUnresolvableSyntheticID` |
-| B11 | Format detection does not recognize `previous_response_id`, `conversation`, or `prompt`, so stateful Responses payloads without `input` cannot be transparently rerouted. | Medium | `TestResponseStateFormatDetectionBehaviorSelectorsAreNotRecognized`, `TestResponseStateFormatDetectionBehaviorExplicitInputMasksSelectorGap` |
-| B12 | State references are resolved only by whatever channel happens to be selected for the current request. There is no owner validation or provider-affinity lookup before routing. | Critical | [`RelayResponseAPIHelper`](../../relay/controller/response.go) receives an already selected `meta` and forwards the selector unchanged. |
-| B13 | Streaming fallback generates the same unbacked synthetic IDs as non-streaming fallback. | Critical | [`newChatToResponseStreamBridge`](../../relay/controller/response_stream_bridge.go) calls `generateResponseAPIID` without a state commit. |
-| B14 | GET and DELETE cannot retrieve or delete B10/B13 fallback responses because action handlers only proxy OpenAI upstream IDs. | High | [`RelayResponseAPIGetHelper`](../../relay/controller/response_actions.go) and `RelayResponseAPIDeleteHelper` reject non-OpenAI channels. |
-
-When implementation begins, the B01-B14 characterization assertions must be
-inverted or replaced in the same change that fixes each behavior. They must not
-remain as permanent assertions of broken semantics.
-
-Implementation status of the B-findings (see Section 13 for the full status):
-
-| ID | Status |
-| --- | --- |
-| B01 | Closed — `TestResponseStateConversionBehaviorConversationIsRepresented` |
-| B02 | Closed — `TestHydratePreviousResponseResolvesPriorContext` (controller) |
-| B03 | Control — unchanged, still correct |
-| B04 | Closed — `TestHydratePriorToolCallLink` |
-| B05 | Closed — `TestHydrateResolvesItemReferenceAndDropsReasoning` |
-| B06 | Closed — `TestResponseStateConversionBehaviorResponseRoundTripPreservesOpaqueState` |
-| B07 | Control — unchanged, still correct |
-| B08 | Closed — `TestResponseStateBehaviorDualSelectorsAreRejected` |
-| B09 | Closed — `TestResponseStateBehaviorStateOnlyRequestsAreAccepted` |
-| B10 | Closed — `TestResponseStateBehaviorFallbackReturnsResolvableGatewayID` |
-| B11 | Closed — `TestResponseStateFormatDetectionBehaviorSelectorsAreRecognized` |
-| B12 | Closed — `TestResponseStateAffinityPinsBoundChannel` (owner-scoped provider-affinity lookup now runs before channel selection; soft pin preserves failover) |
-| B13 | Closed — `TestChatToResponseStreamBridge_CommitsGatewayResponse` |
-| B14 | Closed — `TestGatewayResponseGetAndDelete` |
+| B01 | `conversation` selector missing from the typed request DTO. |
+| B02 | `previous_response_id` parsed but never hydrated for Chat fallback. |
+| B03 | Control: omitted prior `instructions` are not invented on chained requests. |
+| B04 | Prior `function_call_output` lost its call link and became an orphan message. |
+| B05 | Reasoning / `item_reference` items degraded to empty user messages. |
+| B06 | Response DTO dropped `store`, `conversation`, `encrypted_content`, `phase`. |
+| B07 | Control: native raw forwarding preserves state selectors. |
+| B08 | Mutually exclusive `conversation` + `previous_response_id` not rejected. |
+| B09 | State-only requests (no `input`) wrongly rejected. |
+| B10 | Chat fallback returned unresolvable synthetic response IDs. |
+| B11 | Format detection missed `previous_response_id`/`conversation`/`prompt`. |
+| B12 | No owner-validated provider-affinity lookup before routing. |
+| B13 | Streaming fallback emitted the same unbacked synthetic IDs. |
+| B14 | GET/DELETE could not resolve fallback-generated responses. |
 
 ## 4. Goals and non-goals
 
@@ -484,30 +464,50 @@ log at WARN without stack traces; only 5xx store failures log at ERROR.
 Every task below is independently reviewable. A task is complete only when its
 listed acceptance rows in Section 8 pass.
 
-| Task | Scope and deliverable | Dependencies | Acceptance rows |
-| --- | --- | --- | --- |
-| ST-001 | Freeze official state fixtures and add target-state unit tests for selector validation, instruction non-inheritance, retention defaults, item ordering, and lossless raw-field round trips. Convert B01-B11 characterization tests into failing target assertions before production code changes. | None | A01-A08, I01-I08 |
-| ST-002 | Add `Conversation` to the typed request model; add `Store`, `Conversation`, `Phase`, `EncryptedContent`, and extension retention to response/item DTOs. Update format detection for `prompt`, `previous_response_id`, and `conversation`. | ST-001 | A01-A08, I01-I04 |
-| ST-003 | Define `relay/state` canonical records, store interface, ID generator, owner scope, schema versioning, portability classes, and limits. Add in-memory conformance backend for tests only. | ST-001 | S01-S08, SEC01-SEC05 |
-| ST-004 | Implement the Redis backend with encryption keyed from `RESPONSE_STATE_ENCRYPTION_KEYS`, TTLs, HMAC-safe keys, tombstones, batch chain reads, idempotent create, Conversation CAS/lease operations, and checkpoint indexes. | ST-003 | S01-S12, SEC01-SEC08, F01-F04 |
-| ST-005 | Add the pre-routing state hint and affinity stage after authentication but before final channel selection. Ensure retries consume one resolved route plan. | ST-003 | R01-R08, SEC03-SEC04 |
-| ST-006 | Implement selector validation and the canonical hydrator for parent chains, Conversations, explicit replay, and `item_reference`. Keep instructions separate. | ST-003, ST-005 | C01-C12, I01-I08, L01-L05 |
-| ST-007 | Refactor Responses-to-Chat fallback to consume a resolved turn. Preserve tool adjacency; remove empty-message degradation; emit `state_not_portable` where required. | ST-006 | M04-M06, I03-I08, P01-P06 |
-| ST-008 | Refactor Responses-to-Claude fallback to consume the same resolved turn and apply the portability table, including signed thinking and tool blocks. | ST-006 | M07-M09, I03-I08, P01-P06 |
-| ST-009 | Add gateway response/item ID rendering and atomic non-streaming state commit. Make GET and DELETE resolve gateway records and proxy native handles when appropriate. | ST-004, ST-006 | C01-C12, E01-E06, S05-S08 |
-| ST-010 | Add SSE item accumulation and exactly-once terminal commit for native and fallback streams. Ensure IDs are stable across every event and the final response. | ST-009 | STR01-STR10, F03-F08 |
-| ST-011 | Enforce the Section 5.9 WebSocket state boundary: keep upstream-owned connection-local `store=false` semantics on the native passthrough, commit observed `store=true` completed responses to the gateway store, and document that any future WebSocket-to-HTTP bridge must implement connection-local state itself. | ST-003, ST-010 | WS01-WS09, SEC06 |
-| ST-012 | Implement exact transcript checkpoints for Chat and Claude clients using deterministic full-prefix hashing and longest unambiguous match. Cache misses fall back to explicit replay. | ST-004, ST-009 | CP01-CP10, M01-M09 |
-| ST-013 | Add gateway Conversations endpoints (`POST /v1/conversations`; `GET`/`POST`/`DELETE /v1/conversations/{id}`; `GET`/`POST /v1/conversations/{id}/items`; `GET`/`DELETE /v1/conversations/{id}/items/{item_id}`) and wire automatic input/output append, owner checks, leases, and provider Conversation mapping. | ST-004, ST-006, ST-009 | V01-V12, CON01-CON10 |
-| ST-014 | Integrate state-aware token estimation, billing reconciliation, metrics, tracing fields, and content-free DEBUG logs. | ST-006, ST-010 | BIL01-BIL08, OBS01-OBS07 |
-| ST-015 | Add configuration, migration-free rollout flags, shadow comparison, dashboards, operational limits, and a documented rollback procedure. | ST-004 through ST-014 | O01-O10, PERF01-PERF06 |
-| ST-016 | Run full CI and fault-injection suites; remove old synthetic-ID paths and close every B01-B14 finding only after its target assertion passes. | All | All rows |
+Tasks ST-001–ST-014 (fixtures, DTOs, `relay/state` core, Redis backend,
+affinity, hydrator, Chat/Claude fallback lowering, gateway IDs + commit +
+actions, streaming commit, WebSocket boundary, checkpoint algorithm,
+Conversations API, billing/metrics) are **complete and acceptance-verified**;
+their row coverage is summarized in Section 8. Task closure status after the
+remediation pass:
+
+| Task | Scope | Priority | Status | Acceptance rows |
+| --- | --- | --- | --- | --- |
+| ST-017 | Cancel-path gateway resolution and legacy-passthrough parity | P0 | **Done** — `serveGatewayResponseCancel` + tombstone-aware passthrough; tested | C12, R08, SEC04 |
+| ST-018 | Deletion semantics: live tombstones, upstream-ID index cleanup, backend parity, conformance coverage | P0 | **Done** — `ResponseTombstoned` read, both backends purge upstream index on all deletes, idempotency reorder, conformance runs limits on both backends; tested | S05, S06, C05, C11, CON06 |
+| ST-019 | Per-user resource governance: caps, conversation idle TTL, TTL+LRU pruning, rate limiting | P0 | **Done** — per-user response cap (TTL+LRU), conversation cap (hard reject), sliding idle TTL, `ConversationsRateLimit`; tested | L06-L10, O05, SEC08 |
+| ST-020 | Enforce hydrated byte/token limits | P0 | **Done** — hydrator rejects on `MaxHydratedBytes`/`MaxHydratedTokens` before upstream; tested | L03, L04 |
+| ST-021 | Native-Responses commit and same-provider handle rewrite | P1 | **Done** — `commitNativeResponseState` + `resolveNativePreviousResponse` (same-provider rewrite / different-provider divert) + raw-body sync; tested | M05, PERF02, STR01 |
+| ST-022 | Checkpoint live wiring for Chat/Claude clients | P1 | **Done** — Chat and Claude record + match (upstream id + assistant turn surfaced, deterministic mappers, delta re-conversion, family isolation); tested | CP01-CP10, M02, M08 |
+| ST-023 | Quality/observability follow-ups (severity logging, unemitted outcomes, billing-test assertions, idempotency ordering, context detach) | P2 | **Done** — `portable`/`unpinned` emitted, OBS07 id hashed, WARN/ERROR render logging, billing "no upstream contact" asserted, detach doc-guard; tested | OBS03, OBS05, OBS07, E01-E06 |
+| ST-015 | Operations rollout: dashboards, operational limits, runbooks, rollback procedure | P3 | **Runbook done** (`docs/ops/response-state-operations.md`); live-infra rows need an ops environment | O01-O10, PERF01-PERF06 |
+| ST-016 | Full CI and fault-injection sweep; final all-row audit | P3 | `go vet`/`go build`/`make build-frontend-modern`/`go test -race ./...` all green. A pre-existing intermittent `-race` SQLite flake in the `Fallback*` billing tests (async-billing goroutines racing the shared in-memory DB) was reproduced (~1-in-3) and **fixed** by draining `graceful.GoCritical` billing before each test's assertions/cleanups; verified 17/17 clean `-race` runs | All rows |
+
+Task details and code anchors for ST-017–ST-023 are in Section 14.
 
 ## 8. Test and acceptance matrix
 
 All Go tests must use `github.com/stretchr/testify/require`. Integration tests use
 fake upstream servers and a state-store conformance harness; no live provider is
 required for CI.
+
+Row status after the 2026-07-19 acceptance review — the matrix below is the
+acceptance authority; rows still open map to tasks as follows:
+
+| Open rows | Owning task | Gap |
+| --- | --- | --- |
+| C12, R08 (cancel half), SEC04 | ST-017 | Cancel handler skips gateway resolution and the passthrough switch. |
+| S06, plus the tombstone halves of C05, C11, CON06 | ST-018 | Tombstones never consulted; `UpstreamItemID` index survives deletes; backends diverge. |
+| L06-L10 (new), O05 code half, SEC08 aggregate half | ST-019 | No per-user caps, no conversation TTL, no rate limit on conversation CRUD. |
+| L03, L04 | ST-020 | Hydrated byte/token limits configurable but never enforced. |
+| M05 (same-provider handle), PERF02, STR01 (native commit half) | ST-021 | Native path commits nothing; upstream handle rewrite impossible. |
+| CP01-CP10 end-to-end, checkpoint halves of M02, M08 | ST-022 | Algorithm landed and unit-proven but has zero production callers. |
+| OBS03/OBS05 (unemitted outcomes), OBS07 (upstream-ID log), E-row logging severity | ST-023 | Quality follow-ups. |
+| S12, O01-O10, PERF01-PERF06, F01-F08 fault-injection sweep | ST-015/ST-016 | Require an operations environment; not independently re-verified in CI. |
+
+All rows not listed above are covered by the landed test suites and passed the
+acceptance review (`go vet ./...`, `go build ./...`, `go test -race ./...`,
+`make build-frontend-modern` all green).
 
 ### 8.1 Request contract and item fidelity
 
@@ -699,6 +699,11 @@ three-turn text flow and a two-turn tool flow.
 | L03 | Record or hydrated transcript bytes above the configured maximum | Rejected before full allocation; decoding does not buffer unbounded input. |
 | L04 | Hydrated token estimate exceeds the target model context window | `state_limit_exceeded`; the gateway never silently drops middle items to fit. |
 | L05 | Limit configuration | Every limit is configurable with documented defaults; with the feature disabled the limits are inert. |
+| L06 | Per-user stored-response budget (count and/or total bytes) reaches the default cap | Oldest-first (TTL+LRU) pruning of that user's response records, or `state_limit_exceeded`, per the documented policy; growth is never unbounded. An evicted parent degrades to the standard `previous_response_not_found` contract. |
+| L07 | Per-user active-conversation count reaches the default cap | New conversation create fails with `state_limit_exceeded`; existing conversations are unaffected. Silent eviction of conversations is forbidden (it corrupts continuation semantics). |
+| L08 | Conversation idle TTL (no read/append within the configured window) | The conversation expires like a TTL'd response; the next access returns `conversation_not_found`. Sliding expiration, refreshed on read/append; `0` disables (today's S03 default). |
+| L09 | Conversation CRUD flood from one authenticated token | Relay rate-limit middleware throttles before any store write; conversation CRUD is not an unmetered, quota-free write path. |
+| L10 | State keys under Redis memory pressure | Backpressure/error policy activates before eviction corrupts semantics (row O05); the state Redis runs `noeviction`, so the L06-L09 caps and TTLs are the operative bound. |
 
 ### 8.9 Portability enforcement
 
@@ -741,10 +746,11 @@ three-turn text flow and a two-turn tool flow.
 
 ## 9. Rollout and rollback
 
-Roll out in five gates:
+Roll out in five gates (gate 1 is complete; gates 2-5 are blocked on the
+Section 14 P0 tasks):
 
-1. **Contract gate:** merge target tests, DTO fidelity, and store conformance with
-   the feature disabled.
+1. **Contract gate (complete):** merge target tests, DTO fidelity, and store
+   conformance with the feature disabled.
 2. **Shadow gate:** resolve and classify state but preserve current routing and
    payloads. Compare expected effective transcripts without logging content.
 3. **Native-affinity gate:** virtualize IDs and pin same-provider native
@@ -833,114 +839,203 @@ and **auto-enables** only when the operator has deliberately configured both a
 stable `RESPONSE_STATE_ENCRYPTION_KEYS` and a healthy Redis (an explicit
 `RESPONSE_STATE_ENABLED` always wins); startup logs one INFO line with the
 resolved state and reason. With the feature off, behavior is byte-for-byte
-unchanged (row O01, verified by `*WhenDisabled`/`*Disabled*` tests). All landed
-work passes `go vet ./...`, `go build ./...`, and `go test -race` on the touched
-packages.
+unchanged (row O01). The full Section 10 gate passes: `go vet ./...`,
+`go build ./...`, `go test -race ./...`, `make build-frontend-modern`.
 
-### Landed
+Implemented and acceptance-verified: the `relay/state` package (canonical
+records, lossless `ItemEnvelope`, crypto/rand gateway IDs, owner scope,
+portability classes, limits, AES-GCM versioned `KeyRing`, memory + Redis
+backends behind one conformance harness), selector validation and the
+canonical hydrator, Chat/Claude fallback lowering with fail-closed
+`state_not_portable`, gateway ID commit for non-streaming and streaming
+fallback, GET/DELETE gateway resolution with `RESPONSE_STATE_LEGACY_PASSTHROUGH`
+(default off), the pre-routing soft affinity pin, the WebSocket `store=true`
+observed-response commit, the `/v1/conversations` API, billing neutrality, and
+bounded-label state metrics. Section 5 remains the authoritative design
+description of all of this; Section 8 lists which acceptance rows are covered.
 
-- **Contract gate (ST-002, ST-003, ST-004, ST-015 config).**
-  - `ResponseAPIRequest.Conversation` selector (string/object, canonicalized);
-    `Store`/`Conversation` on the response and `Phase`/`EncryptedContent` on
-    output items; `DetectFormat` recognizes `previous_response_id`,
-    `conversation`, and prompt-object selectors. (B01, B06, B11)
-  - New `relay/state` package: canonical `ResponseStateRecord` /
-    `ConversationStateRecord` / `CheckpointRecord`, a lossless `ItemEnvelope`
-    whose raw JSON is authoritative, crypto/rand gateway IDs
-    (`resp_`/`conv_`/`item_`, 128-bit), owner scope, portability classes,
-    configurable limits, schema versioning.
-  - `ResponseStateStore` interface with an in-memory backend and a Redis backend
-    (`RedisStore`), both proven by one shared conformance harness (miniredis).
-    AES-GCM `KeyRing` keyed from `RESPONSE_STATE_ENCRYPTION_KEYS` (versioned,
-    rotatable); encrypted payloads; HMAC/random-only key names; tombstones;
-    idempotent create; conversation CAS + lease; checkpoints.
-  - Config block + `state.Init()` startup gate: refuses to enable without Redis
-    and a stable key (no in-process degrade); `state.Init()` wired into `main.go`.
-- **State resolution + Chat fallback hydration (ST-006, ST-007).** Selector
-  validation (mutual exclusivity, state-only acceptance), a canonical hydrator
-  (parent-chain walk, conversation snapshot, `item_reference` resolution,
-  instructions kept request-local), and lowering that drops provider-bound /
-  display-only items instead of emitting empty messages. (B02, B04, B05, B08, B09)
-- **Gateway IDs, commit, retrieval (ST-009).** Non-streaming fallback commits a
-  gateway response node and returns a resolvable `resp_` ID with `store` /
-  `conversation` echoed; GET/DELETE resolve gateway records first and honor the
-  legacy-passthrough switch. (B10, B14)
-- **Streaming terminal commit (ST-010, partial).** The Chat→Responses stream
-  bridge pre-mints the gateway ID (so every event carries it) and commits exactly
-  once at the terminal event. (B13)
-- **Gateway Conversations API (ST-013).** `POST/GET/POST/DELETE /v1/conversations`
-  and the `/items` sub-resource, owner-scoped, distribution-free, auto-append on
-  attach; helper-level tests cover V01-V12.
+Behavior notes that constrain future work:
 
-### Landed in the completion pass (2026-07-19)
-
-- **ST-005 pre-routing affinity (closes B12).** A new pre-routing stage
-  (`middleware/response_state_affinity.go`, wired into `middleware.Distribute`)
-  parses the gateway selector from the reusable body, looks up the bound channel's
-  provider binding under owner scope BEFORE channel selection, and pins it when it
-  is still eligible (enabled, group, model, endpoint, and — for websocket
-  handshakes — websocket transport). The pin is a SOFT preference via a new
-  `ctxkey.ResponseStateAffinityChannelId`; it deliberately does NOT set
-  `ctxkey.SpecificChannelId`, because that key disables retry in
-  `controller/relay_retry.go`. Retry/failover therefore stay enabled (rows R01,
-  R02, R03, R05, R07). An ineligible or unresolved binding fails open to normal
-  selection, where hydration replays canonical items.
-- **ST-008 Responses→Claude portability enforcement.** The fallback now threads
-  the real lowering target (`responseFallbackTarget` → Claude for Anthropic-family
-  upstreams) and applies the Section 5.8 table via the authoritative
-  `state.FallbackLowering`: portable items carry, reasoning/thinking degrade to a
-  display-only sidecar (dropped), and hosted/built-in tool-call state plus unknown
-  future item types now fail closed with `state_not_portable` (409) instead of
-  silent corruption (rows P04, I05, E05). Note on Claude signed thinking: the
-  current Responses→Chat→Claude pipeline cannot carry a thinking signature (the
-  Anthropic converter restores signatures only from its `SignatureCache`, never
-  from a Chat message field), so a signed-thinking item is dropped-as-sidecar
-  rather than fabricated into an unsigned block that the upstream would reject;
-  faithful native preservation requires a dedicated Responses→Claude path, tracked
-  as a seam.
-- **ST-011 WebSocket `store=true` commit.** The native passthrough proxy
-  (`relay/adaptor/openai/response_api_ws_proxy.go`) now collects `store!=false`
-  completed response objects off the hot path and returns them; the controller
-  commits them to the gateway store keyed by (and idempotent on) the upstream
-  response id, so their IDs are retrievable over HTTP afterwards (rows WS04, S05,
-  SEC06). `store=false` responses are excluded (connection-local upstream state).
-- **ST-012 checkpoint algorithm.** `relay/state/checkpoint.go` implements the
-  deterministic full-prefix transcript hash (`CheckpointKeyAt`), longest
-  unambiguous match (`LongestCheckpointMatch`), and ambiguity-detecting record
-  (`RecordCheckpoint`), covering rows CP01–CP08. It always fails open. Live wiring
-  into the Chat/Claude controllers is a documented SEAM: it additionally needs a
-  native-Responses `Binding.UpstreamResponseID` captured at commit, which the
-  current Chat-mediated fallback does not produce.
-- **ST-014 observability.** A bounded `RecordResponseStateEvent(category, outcome)`
-  metric (compile-time label vocabulary in `common/metrics/response_state.go`,
-  implemented across every recorder satisfier) records the state path,
-  portability decision, commit outcome, and affinity pin, plus content-free debug
-  logs (rows OBS01–OBS06). Token estimation already includes hydrated items
-  because hydration inlines them before Chat estimation.
-- **Auto-enable + startup log.** When `RESPONSE_STATE_ENABLED` is not set
-  explicitly, the feature auto-enables at startup once both prerequisites — a
-  stable encryption key and a healthy Redis — are present. `Init` always emits one
-  INFO line reporting the resolved enabled/disabled state and the reason.
+- **Claude signed thinking on the Chat-mediated path** is dropped-as-sidecar,
+  not fabricated into an unsigned block: the Anthropic converter restores
+  signatures only from its `SignatureCache`, never from a Chat message field.
+  Faithful native preservation requires a dedicated Responses→Claude path
+  (see ST-021/ST-022 context).
 - **Encryption key from an explicit `SESSION_SECRET`.** When
-  `RESPONSE_STATE_ENCRYPTION_KEYS` is unset but the operator set `SESSION_SECRET`
-  explicitly (`config.SessionSecretEnvValue`), the AES-256 key is derived from that
-  secret (`DeriveKeyRingFromSecret` = `sha256(secret)`, with a secret-derived key
-  version). This refines Section 5.4: the hazard it warns about is the
-  AUTO-GENERATED per-boot `SESSION_SECRET`, which is unstable and would orphan
-  ciphertext; an explicitly configured `SESSION_SECRET` is stable across restarts,
-  so deriving from it is safe. Rotating `SESSION_SECRET` changes the key version, so
-  old ciphertext fails cleanly with "unknown key version" rather than being
-  mis-decrypted.
-- **Billing neutrality.** Behavior tests prove local state errors
-  (`state_not_portable`, `previous_response_not_found`) charge no quota and make no
-  upstream call, and that an identical successful request bills the exact same
-  quota whether the feature is off or on (the commit never adds, drops, or doubles
-  a charge).
+  `RESPONSE_STATE_ENCRYPTION_KEYS` is unset but the operator set
+  `SESSION_SECRET` explicitly (`config.SessionSecretEnvValue`), the AES-256
+  key is derived from that secret with a secret-derived key version. The
+  Section 5.4 hazard is only the AUTO-GENERATED per-boot secret, which is
+  provably excluded (`SessionSecretEnvValue` stays empty in that case).
+  Rotating `SESSION_SECRET` changes the key version, so old ciphertext fails
+  cleanly with "unknown key version" rather than being mis-decrypted.
 
-### Not landed (out of scope for the code change)
+## 14. Remaining work (acceptance review, 2026-07-19)
 
-- The live-infra acceptance rows (multi-instance Redis, dashboards, runbooks,
-  perf budgets) require an operations environment gate. ST-015/ST-016 operational
-  documentation and the same-provider native `previous_response_id` upstream-ID
-  rewrite (which depends on a native-Responses commit capturing
-  `Binding.UpstreamResponseID`) remain as documented seams.
+The acceptance review — four independent audit tracks (B-finding closures,
+`relay/state` internals, pipeline wiring, billing/observability) plus the full
+Section 10 verification gate — confirmed the Section 13 claims and produced
+the following work list. Priorities: **P0** blocks enabling the feature in
+production; **P1** completes promised functionality; **P2** is quality
+follow-up; **P3** is the pre-existing operations gate.
+
+### ST-017 (P0) — Cancel path bypasses gateway resolution (SEC04/R08)
+
+`RelayResponseAPICancelHelper`
+([`response_actions.go`](../../relay/controller/response_actions.go)) performs
+no gateway lookup and no legacy-passthrough check: an unknown or
+gateway-minted `resp_` ID sent to `POST /v1/responses/{id}/cancel` is still
+forwarded verbatim to an OpenAI upstream even with
+`RESPONSE_STATE_LEGACY_PASSTHROUGH=false`. GET and DELETE are correct; cancel
+is the hole, and the config comment in
+[`common/config/config.go`](../../common/config/config.go) wrongly claims
+cancel is already covered.
+
+Deliverable: resolve gateway records first (row C12: cancelling a
+non-background fallback-generated response returns the documented
+invalid-operation error), honor the passthrough switch for unknown IDs, and
+extend row R08's test to cancel. Acceptance rows: C12, R08, SEC04.
+
+### ST-018 (P0) — Deletion semantics: dead tombstones and index remanence (S06)
+
+- Tombstone markers are written but never read (`respTombKey` in
+  [`redis_store.go`](../../relay/state/redis_store.go); `respTombstones` /
+  `convTombstones` in [`memory_store.go`](../../relay/state/memory_store.go)),
+  so a deleted ID is externally indistinguishable from an expired or
+  never-existed one and S06 ("tombstone prevents stale fallback") is not
+  actually implemented.
+- Deleting a response, conversation, or conversation item removes only the
+  gateway-ID item-index entry; the `UpstreamItemID` index entry survives and
+  still resolves via `GetItem` (data remanence within owner scope). The two
+  backends additionally diverge: Redis `DeleteResponse` clears the upstream
+  key, memory does not.
+- The conformance harness never sets `UpstreamItemID` on sample items — which
+  is exactly why the divergence went unnoticed — and Redis-side limit
+  enforcement is not run through the shared suite.
+- Minor: `CreateResponse` writes the idempotency marker before the record; a
+  crash between the two strands a retry on `ErrNotFound`. Make the pair
+  atomic or reverse the order.
+
+Deliverable: consult tombstones on read/continuation paths, delete
+upstream-ID index entries in both backends on every delete path, align the
+backends, and extend the conformance suite with non-empty `UpstreamItemID`
+index/dedup/delete cases plus limit rows against both backends. Acceptance
+rows: S05, S06, C05, C11, CON06.
+
+### ST-019 (P0) — Per-user resource governance (anti-abuse hardening, L06-L10)
+
+Threat model: any authenticated token can grow gateway state without bound.
+Today only per-object caps exist (8 MiB/record, 2048 items/conversation,
+30-day response TTL). There is **no per-user aggregate cap of any kind**,
+conversations have **no TTL of any kind**, conversation CRUD consumes **zero
+quota**, and the conversations router runs **without any relay rate-limit
+middleware** ([`router/relay.go`](../../router/relay.go) mounts only
+panic-recover + `TokenAuth`). Because the state Redis must run `noeviction`
+(Section 5.4), the overflow failure mode is Redis OOM → 503 for every
+state-dependent request (and anything else sharing that Redis): a cheap,
+durable denial of service.
+
+Deliverable (implements the new Section 8.8 rows L06-L10):
+
+- Per-user default caps, all configurable with documented defaults: max
+  stored response records per user (count, optionally total bytes) and max
+  active conversations per user.
+- Overflow policy: conversation create/append beyond cap fails explicitly
+  with `state_limit_exceeded` (413) — silent conversation eviction is
+  forbidden. For stored response records, TTL+LRU pruning is acceptable:
+  evict the user's oldest records first; an evicted parent degrades to the
+  standard `previous_response_not_found` contract.
+- Conversation retention: a configurable idle TTL with sliding expiration
+  (refreshed on read/append; `0` = retain until explicit deletion, today's
+  S03 default) so abandoned conversations do not accumulate forever.
+- Rate limiting: mount the relay rate-limit middleware on the conversations
+  router.
+- Accounting: per-owner counters (`INCR`/`DECR` or a per-owner ZSET by
+  creation time) maintained with the record create/delete so caps survive
+  restarts and multi-instance deployments.
+
+### ST-020 (P0) — Enforce the hydrated-size and token-budget limits (L03/L04)
+
+`Limits.MaxHydratedBytes` and `Limits.MaxHydratedTokens` are configurable and
+documented but enforced nowhere: `hydratedBytesExceeded` /
+`hydratedTokensExceeded` ([`limits.go`](../../relay/state/limits.go)) have no
+callers, so rows L03/L04 are currently illusory. Wire both checks into the
+hydrator (and use the existing `chainDepthExceeded` helper instead of the
+inline depth check) so an oversized hydrated transcript is rejected before
+allocation and before any upstream call.
+
+### ST-021 (P1) — Native-Responses commit and same-provider handle rewrite
+
+The native Responses path never commits state, so
+`Binding.UpstreamResponseID` is never captured and Section 5.6 step 4
+(translate a gateway parent to the upstream `previous_response_id` on the
+same provider and send only incremental input) cannot run; every continuation
+is a full hydrated replay. Deliverable: commit native-path responses
+(non-streaming and SSE) with their upstream IDs, then implement the
+same-provider rewrite behind portability validation. Acceptance rows: M05,
+PERF02, STR01.
+
+### ST-022 (P1) — Checkpoint live wiring (CP rows end-to-end)
+
+The ST-012 algorithm ([`checkpoint.go`](../../relay/state/checkpoint.go)) has
+zero production callers. After ST-021 provides upstream bindings, wire
+checkpoint record/match into the Chat and Claude controllers; matching must
+remain fail-open for stateless clients. Acceptance rows: CP01-CP10, M02, M08.
+
+**Closure (Chat done; Claude MATCH is a documented seam).** The upstream
+Responses id is now surfaced from the openai render handlers via
+`ctxkey.ResponseAPIUpstreamID` (`ResponseAPIHandler` and
+`ConvertResponseAPIToClaudeResponse`), and the rendered assistant turn via
+`ctxkey.ResponseAPIAssistantMessage`. The Chat controller
+([`text.go`](../../relay/controller/text.go)) now calls `matchChatCheckpoint`
+before `DoRequest` and `recordChatCheckpoint` after a successful `DoResponse`
+([`response_state_checkpoint.go`](../../relay/controller/response_state_checkpoint.go)):
+the deterministic `chatMessagesToCheckpoint` mapper (JSON-canonical content,
+tool-call/signature folded in) keys the full transcript (request + rendered
+assistant turn), and a hit rewrites the converted request to continue from the
+upstream handle while re-converting only the delta via
+`ConvertChatCompletionToResponseAPI`. This satisfies M02 and exercises the
+CP01-CP10 mechanism end-to-end (unit-tested: determinism CP02-CP04, round-trip
+CP01, fail-open CP03/CP10). The **Claude MATCH (M08)** mirrors it: the Claude
+render handler (`ConvertResponseAPIToClaudeResponse`) surfaces the same two
+ctxkeys, `claudeMessagesToCheckpoint` canonicalizes Claude content blocks (which
+already carry tool_use/tool_result/signed-thinking), and the delta is
+re-converted through `openai_compatible.ConvertClaudeRequest` +
+`ConvertChatCompletionToResponseAPI` on a **throwaway `*gin.Context`** so the
+live request's ctxkeys (ConvertedRequest, ClaudeMessagesConversion, tool-name
+maps) are never mutated. `text.go` and `claude_messages.go` call the match
+before `DoRequest` and the record after a successful `DoResponse`; the
+client-family label keeps Chat and Claude checkpoints isolated (CP06,
+unit-tested).
+
+### ST-023 (P2) — Quality and observability follow-ups
+
+- Severity-aware logging at state-error render sites: typed 4xx state errors
+  log WARN (no stack), 5xx log ERROR — today
+  [`controller/response_api.go`](../../controller/response_api.go) and
+  [`controller/conversations.go`](../../controller/conversations.go) render
+  the error body without logging at all.
+- Emit the defined-but-unused `portable` and `unpinned` metric outcomes so
+  portability-success and affinity-pin ratios are derivable (OBS03, OBS05).
+- Billing failing-path tests: assert the fake upstream was NOT called; the
+  helper comment in
+  [`response_state_billing_test.go`](../../relay/controller/response_state_billing_test.go)
+  currently claims upstream-contact recording that does not exist.
+- Drop or hash the `upstream_response_id` WARN field in
+  [`response_state_commit.go`](../../relay/controller/response_state_commit.go)
+  if provider-ID exposure is in scope for OBS07.
+- `detachedCommitContext` embeds the live `*gin.Context`; safe only while
+  commits stay synchronous. Switch to the `relayctx.Detach` helpers before
+  ever moving a commit into a goroutine.
+- Add an end-to-end distributor test for the affinity soft pin (the current
+  B12 test proves the resolver; the distributor wiring is verified by
+  inspection only).
+
+### ST-015 / ST-016 (P3) — Operations gate (unchanged)
+
+Live-infra acceptance rows: multi-instance Redis (S12), dashboards/alerts
+(O08), capacity formula + `noeviction` + persistence runbook (O05, Section
+5.4), data-deletion runbook (O09), retention audit (O10), perf budgets
+(PERF01-PERF06), and the fault-injection sweep. These require an operations
+environment, not a code change — but ST-019 now owns the code-side half of
+O05: per-user caps and TTLs are the mechanism that keeps `noeviction` safe.

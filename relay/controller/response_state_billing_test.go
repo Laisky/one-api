@@ -5,6 +5,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -23,6 +24,25 @@ import (
 	"github.com/Laisky/one-api/relay/state"
 )
 
+// newCountingUpstream installs a fake upstream that records how many times it was
+// contacted and returns its URL plus the hit counter, so a test can prove a local
+// state rejection never reached the provider (rows E02, BIL05). Point the request's
+// BaseURL at the returned URL.
+func newCountingUpstream(t *testing.T) (string, *int64) {
+	t.Helper()
+	var hits int64
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt64(&hits, 1)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":"resp_should_not_be_used","object":"response","status":"completed","output":[]}`))
+	}))
+	t.Cleanup(srv.Close)
+	prev := client.HTTPClient
+	client.HTTPClient = srv.Client()
+	t.Cleanup(func() { client.HTTPClient = prev })
+	return srv.URL, &hits
+}
+
 // userQuota reads the persisted quota for the fallback fixture user.
 func fallbackUserQuota(t *testing.T) int64 {
 	t.Helper()
@@ -33,8 +53,8 @@ func fallbackUserQuota(t *testing.T) int64 {
 
 // setupResponseStateBillingContext builds a request context for a state-enabled
 // Responses fallback request, mirroring TestRelayResponseAPIHelper_FallbackAzure
-// but pointed at the OpenAI-compatible fallback channel. It records whether the
-// upstream was contacted.
+// but pointed at the OpenAI-compatible fallback channel. Whether the upstream is
+// actually contacted is asserted separately via newCountingUpstream.
 func setupResponseStateBillingContext(t *testing.T, recorder *httptest.ResponseRecorder, payload string) *gin.Context {
 	t.Helper()
 	c, _ := gin.CreateTestContext(recorder)
@@ -83,12 +103,14 @@ func TestResponseStateBilling_NotPortableChargesNoQuota(t *testing.T) {
 	t.Cleanup(func() { config.SetLogConsumeEnabled(prevLogConsume) })
 
 	before := fallbackUserQuota(t)
+	upstreamURL, upstreamHits := newCountingUpstream(t)
 
 	recorder := httptest.NewRecorder()
 	// A provider-hosted tool-call item that has no faithful Chat/Claude
 	// representation must fail closed BEFORE billing.
 	payload := `{"model":"gpt-4o-mini","stream":false,"input":[{"type":"web_search_call","id":"ws_1","status":"completed"}]}`
 	c := setupResponseStateBillingContext(t, recorder, payload)
+	c.Set(ctxkey.BaseURL, upstreamURL)
 
 	apiErr := RelayResponseAPIHelper(c)
 	require.NotNil(t, apiErr, "state_not_portable must be returned")
@@ -96,6 +118,7 @@ func TestResponseStateBilling_NotPortableChargesNoQuota(t *testing.T) {
 	require.Equal(t, "state_not_portable", apiErr.Code)
 
 	require.Equal(t, before, fallbackUserQuota(t), "a local state rejection must not consume quota")
+	require.Equal(t, int64(0), atomic.LoadInt64(upstreamHits), "a local state rejection must not contact the upstream (E02)")
 }
 
 // TestResponseStateBilling_PreviousResponseNotFoundChargesNoQuota proves an
@@ -114,15 +137,18 @@ func TestResponseStateBilling_PreviousResponseNotFoundChargesNoQuota(t *testing.
 	t.Cleanup(func() { config.SetLogConsumeEnabled(prevLogConsume) })
 
 	before := fallbackUserQuota(t)
+	upstreamURL, upstreamHits := newCountingUpstream(t)
 
 	recorder := httptest.NewRecorder()
 	payload := `{"model":"gpt-4o-mini","stream":false,"previous_response_id":"resp_ffffffffffffffffffffffffffffffff","input":"continue"}`
 	c := setupResponseStateBillingContext(t, recorder, payload)
+	c.Set(ctxkey.BaseURL, upstreamURL)
 
 	apiErr := RelayResponseAPIHelper(c)
 	require.NotNil(t, apiErr)
 	require.Equal(t, "previous_response_not_found", apiErr.Code)
 	require.Equal(t, before, fallbackUserQuota(t), "an unresolved parent must not consume quota")
+	require.Equal(t, int64(0), atomic.LoadInt64(upstreamHits), "an unresolved parent must not contact the upstream (E02)")
 }
 
 // resetFallbackUserQuota restores the fixture user's persisted quota so a second

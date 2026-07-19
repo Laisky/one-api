@@ -72,12 +72,24 @@ func AllowedFor(userID, tokenID, channelID int) bool {
 // LimitsFromConfig builds the state Limits from the configured knobs.
 func LimitsFromConfig() Limits {
 	return Limits{
-		MaxChainDepth:     config.ResponseStateMaxChainDepth,
-		MaxItemCount:      config.ResponseStateMaxItemCount,
-		MaxRecordBytes:    config.ResponseStateMaxRecordBytes,
-		MaxHydratedBytes:  config.ResponseStateMaxHydratedBytes,
-		MaxHydratedTokens: config.ResponseStateMaxHydratedTokens,
+		MaxChainDepth:           config.ResponseStateMaxChainDepth,
+		MaxItemCount:            config.ResponseStateMaxItemCount,
+		MaxRecordBytes:          config.ResponseStateMaxRecordBytes,
+		MaxHydratedBytes:        config.ResponseStateMaxHydratedBytes,
+		MaxHydratedTokens:       config.ResponseStateMaxHydratedTokens,
+		MaxResponsesPerUser:     config.ResponseStateMaxResponsesPerUser,
+		MaxConversationsPerUser: config.ResponseStateMaxConversationsPerUser,
 	}
+}
+
+// ConversationIdleTTLFromConfig returns the configured sliding idle TTL for
+// conversations (row L08). Zero retains conversations until explicit deletion.
+func ConversationIdleTTLFromConfig() time.Duration {
+	days := config.ResponseStateConversationIdleTTLDays
+	if days <= 0 {
+		return 0
+	}
+	return time.Duration(days) * 24 * time.Hour
 }
 
 // ResponseTTLFromConfig returns the configured default response node TTL.
@@ -171,6 +183,7 @@ func Init() error {
 		if err != nil {
 			return nil, errors.Wrap(err, "build redis state store")
 		}
+		store.SetConversationIdleTTL(ConversationIdleTTLFromConfig())
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		if err := store.Ping(ctx); err != nil {

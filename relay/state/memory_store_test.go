@@ -15,6 +15,8 @@ func TestMemoryStoreConformance(t *testing.T) {
 	t.Parallel()
 	runStoreConformance(t, func(t *testing.T) ResponseStateStore {
 		return NewMemoryStore(DefaultLimits())
+	}, func(t *testing.T, limits Limits) ResponseStateStore {
+		return NewMemoryStore(limits)
 	})
 }
 
@@ -64,6 +66,40 @@ func TestMemoryStoreConversationHasNoTTL(t *testing.T) {
 	store.SetClock(func() time.Time { return base.Add(365 * 24 * time.Hour) })
 	_, err = store.GetConversation(ctx, owner, conv.GatewayConversationID)
 	require.NoError(t, err, "conversation must not inherit the response TTL")
+}
+
+// TestMemoryStoreConversationIdleTTL verifies a conversation expires after the
+// configured idle window, and that a read slides the expiry forward (row L08).
+func TestMemoryStoreConversationIdleTTL(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	owner := OwnerScope{UserID: 1, TokenID: 1}
+
+	base := time.Date(2026, 7, 19, 0, 0, 0, 0, time.UTC)
+	now := base
+	store := NewMemoryStore(DefaultLimits())
+	store.SetConversationIdleTTL(30 * time.Second)
+	store.SetClock(func() time.Time { return now })
+
+	conv := sampleConversation(t, owner)
+	conv.ExpiresAt = 0
+	_, err := store.CreateConversation(ctx, conv, "")
+	require.NoError(t, err)
+
+	// A read within the window slides the idle TTL forward.
+	now = base.Add(25 * time.Second)
+	_, err = store.GetConversation(ctx, owner, conv.GatewayConversationID)
+	require.NoError(t, err)
+
+	// 20s after the slide (< 30s): still alive because the read refreshed it.
+	now = base.Add(45 * time.Second)
+	_, err = store.GetConversation(ctx, owner, conv.GatewayConversationID)
+	require.NoError(t, err)
+
+	// Now let it sit idle past the window: it expires as conversation_not_found.
+	now = base.Add(45*time.Second + 31*time.Second)
+	_, err = store.GetConversation(ctx, owner, conv.GatewayConversationID)
+	require.ErrorIs(t, err, ErrNotFound)
 }
 
 // TestMemoryStoreLeaseTimeout verifies an expired lease frees the conversation

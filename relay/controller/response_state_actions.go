@@ -36,7 +36,7 @@ func serveGatewayResponseGet(c *gin.Context, meta *metalib.Meta, responseID stri
 		}
 		return true, nil
 	}
-	return handleGatewayLookupMiss(err)
+	return handleGatewayLookupMiss(c, responseID, err)
 }
 
 // serveGatewayResponseDelete attempts to satisfy a DELETE from the gateway store.
@@ -54,13 +54,46 @@ func serveGatewayResponseDelete(c *gin.Context, meta *metalib.Meta, responseID s
 		c.JSON(http.StatusOK, body)
 		return true, nil
 	}
-	return handleGatewayLookupMiss(err)
+	return handleGatewayLookupMiss(c, responseID, err)
+}
+
+// serveGatewayResponseCancel resolves a cancel request against the gateway store
+// before any upstream call (ST-017). A gateway-committed (fallback-generated)
+// response is not a background upstream response, so it cannot be cancelled; the
+// documented invalid-operation error is returned rather than forwarding a gateway
+// ID upstream or pretending an upstream cancellation occurred (row C12). Unknown
+// IDs follow the same passthrough/not-found policy as GET and DELETE, so a
+// gateway-minted or deleted ID is never forwarded upstream when passthrough is off
+// (rows R08, SEC04) — closing the hole where cancel skipped this check entirely.
+func serveGatewayResponseCancel(c *gin.Context, meta *metalib.Meta, responseID string) (bool, *relaymodel.ErrorWithStatusCode) {
+	if !state.Enabled() || state.Store() == nil {
+		return false, nil
+	}
+	owner := stateOwnerFromMeta(meta)
+	if !owner.Valid() {
+		return false, nil
+	}
+	_, err := state.Store().GetResponse(gmw.Ctx(c), owner, responseID)
+	if err == nil {
+		return true, openai.ErrorWrapper(
+			errors.New("this response cannot be cancelled: only a background response still owned by its upstream provider supports cancellation"),
+			"invalid_operation", http.StatusBadRequest)
+	}
+	return handleGatewayLookupMiss(c, responseID, err)
 }
 
 // handleGatewayLookupMiss maps a store lookup error to the fall-through/not-found
-// decision shared by GET and DELETE.
-func handleGatewayLookupMiss(err error) (bool, *relaymodel.ErrorWithStatusCode) {
+// decision shared by GET, DELETE, and cancel.
+func handleGatewayLookupMiss(c *gin.Context, responseID string, err error) (bool, *relaymodel.ErrorWithStatusCode) {
 	if errors.Is(err, state.ErrNotFound) {
+		// A tombstoned (deleted or LRU-evicted) gateway ID must never be forwarded
+		// upstream, even in legacy passthrough mode: the tombstone prevents stale
+		// fallback (row S06, ST-018).
+		if store := state.Store(); store != nil {
+			if dead, terr := store.ResponseTombstoned(gmw.Ctx(c), responseID); terr == nil && dead {
+				return true, openai.ErrorWrapper(errors.New("response not found"), codeConversationNotFoundToResponse(), http.StatusNotFound)
+			}
+		}
 		if state.LegacyPassthroughEnabled() {
 			// Rollout compatibility: forward the unknown ID to the upstream exactly
 			// as today (OpenAI-type channels only, enforced by the legacy handler).

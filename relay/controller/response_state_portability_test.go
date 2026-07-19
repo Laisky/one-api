@@ -8,8 +8,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/Laisky/one-api/relay/adaptor/openai"
-	metalib "github.com/Laisky/one-api/relay/meta"
 	"github.com/Laisky/one-api/relay/apitype"
+	metalib "github.com/Laisky/one-api/relay/meta"
 	"github.com/Laisky/one-api/relay/state"
 )
 

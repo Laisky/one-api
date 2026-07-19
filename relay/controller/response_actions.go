@@ -118,6 +118,14 @@ func RelayResponseAPICancelHelper(c *gin.Context) *relaymodel.ErrorWithStatusCod
 	meta.IsStream = false
 	metalib.Set2Context(c, meta)
 
+	// Resolve gateway-stored responses first so a gateway-minted or deleted ID is
+	// never forwarded upstream when legacy passthrough is off, and a fallback
+	// response returns the documented invalid-operation error (ST-017: C12, R08,
+	// SEC04). No-op when the feature is disabled.
+	if handled, gwErr := serveGatewayResponseCancel(c, meta, c.Param("response_id")); handled {
+		return gwErr
+	}
+
 	if meta.ChannelType != channeltype.OpenAI {
 		return openai.ErrorWrapper(errors.New("Response API is only supported for OpenAI channels"), "unsupported_channel", http.StatusBadRequest)
 	}

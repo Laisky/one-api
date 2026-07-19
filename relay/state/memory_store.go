@@ -19,17 +19,20 @@ import (
 type MemoryStore struct {
 	mu sync.Mutex
 
-	limits Limits
-	clock  func() time.Time
+	limits      Limits
+	convIdleTTL time.Duration
+	clock       func() time.Time
 
 	responses      map[string]*ResponseStateRecord
 	respTombstones map[string]struct{}
 	respIdem       map[string]string // idempotencyKey -> gateway response id
+	respByUser     map[int][]userRespEntry
 
 	conversations  map[string]*ConversationStateRecord
 	convTombstones map[string]struct{}
-	convIdem       map[string]string   // idempotencyKey -> gateway conversation id
-	convAppendIdem map[string]struct{} // applied append idempotency keys
+	convIdem       map[string]string        // idempotencyKey -> gateway conversation id
+	convAppendIdem map[string]struct{}      // applied append idempotency keys
+	convByUser     map[int]map[string]int64 // userID -> convID -> last-activity unix
 	leases         map[string]leaseState
 
 	items       map[string]itemIndexEntry // itemID -> entry
@@ -46,6 +49,14 @@ type itemIndexEntry struct {
 	env   ItemEnvelope
 }
 
+// userRespEntry tracks one of a user's response records for the per-user cap.
+// Entries are appended in creation order, so index 0 is the oldest (TTL+LRU
+// eviction pops from the front, row L06).
+type userRespEntry struct {
+	id        string
+	createdAt int64
+}
+
 // NewMemoryStore builds an empty in-memory store with the given limits. A nil or
 // zero-value Limits uses DefaultLimits.
 func NewMemoryStore(limits Limits) *MemoryStore {
@@ -58,10 +69,12 @@ func NewMemoryStore(limits Limits) *MemoryStore {
 		responses:      make(map[string]*ResponseStateRecord),
 		respTombstones: make(map[string]struct{}),
 		respIdem:       make(map[string]string),
+		respByUser:     make(map[int][]userRespEntry),
 		conversations:  make(map[string]*ConversationStateRecord),
 		convTombstones: make(map[string]struct{}),
 		convIdem:       make(map[string]string),
 		convAppendIdem: make(map[string]struct{}),
+		convByUser:     make(map[int]map[string]int64),
 		leases:         make(map[string]leaseState),
 		items:          make(map[string]itemIndexEntry),
 		checkpoints:    make(map[string]*CheckpointRecord),
@@ -73,6 +86,15 @@ func (s *MemoryStore) SetClock(clock func() time.Time) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.clock = clock
+}
+
+// SetConversationIdleTTL configures the sliding idle time-to-live applied to
+// conversations (row L08). Zero retains conversations until explicit deletion
+// (today's S03 default).
+func (s *MemoryStore) SetConversationIdleTTL(ttl time.Duration) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.convIdleTTL = ttl
 }
 
 func (s *MemoryStore) now() time.Time { return s.clock() }
@@ -118,8 +140,59 @@ func (s *MemoryStore) CreateResponse(_ context.Context, record *ResponseStateRec
 	}
 	s.indexItems(stored.Owner, stored.InputItems)
 	s.indexItems(stored.Owner, stored.OutputItems)
+	s.trackAndEvictUserResponseLocked(stored)
 
 	return cloneResponseRecord(stored)
+}
+
+// trackAndEvictUserResponseLocked records a newly stored response against its
+// owner's per-user budget and prunes the owner's oldest records when the budget
+// is exceeded (TTL+LRU, row L06). An evicted parent degrades to the standard
+// previous_response_not_found contract because it is tombstoned like an explicit
+// delete. A non-positive cap disables the accounting entirely so behavior is
+// unchanged when the feature is off (row L05).
+func (s *MemoryStore) trackAndEvictUserResponseLocked(rec *ResponseStateRecord) {
+	limit := s.limits.MaxResponsesPerUser
+	if limit <= 0 {
+		return
+	}
+	uid := rec.Owner.UserID
+	s.respByUser[uid] = append(s.respByUser[uid], userRespEntry{id: rec.GatewayResponseID, createdAt: rec.CreatedAt})
+	for len(s.respByUser[uid]) > limit {
+		oldest := s.respByUser[uid][0]
+		s.respByUser[uid] = s.respByUser[uid][1:]
+		s.evictResponseLocked(oldest.id)
+	}
+	if len(s.respByUser[uid]) == 0 {
+		delete(s.respByUser, uid)
+	}
+}
+
+// evictResponseLocked removes a response node by id during LRU pruning: it drops
+// the record, tombstones the id, and purges its item-index entries (both gateway
+// and upstream ids) so nothing resolves after eviction (rows L06, S06).
+func (s *MemoryStore) evictResponseLocked(id string) {
+	rec, ok := s.responses[id]
+	if !ok {
+		return
+	}
+	delete(s.responses, id)
+	s.respTombstones[id] = struct{}{}
+	s.removeItemIndexLocked(rec.InputItems)
+	s.removeItemIndexLocked(rec.OutputItems)
+}
+
+// removeItemIndexLocked deletes both the gateway-id and upstream-id index entries
+// for each item, closing the UpstreamItemID remanence gap (ST-018).
+func (s *MemoryStore) removeItemIndexLocked(items []ItemEnvelope) {
+	for _, env := range items {
+		if env.GatewayItemID != "" {
+			delete(s.items, env.GatewayItemID)
+		}
+		if env.UpstreamItemID != "" {
+			delete(s.items, env.UpstreamItemID)
+		}
+	}
 }
 
 // GetResponse returns the owner's node.
@@ -158,15 +231,29 @@ func (s *MemoryStore) DeleteResponse(_ context.Context, owner OwnerScope, id str
 	}
 	delete(s.responses, id)
 	s.respTombstones[id] = struct{}{}
-	// Remove the node's items from the reference index so a stale reference cannot
-	// resolve after deletion (S06).
-	for _, env := range rec.InputItems {
-		delete(s.items, env.GatewayItemID)
-	}
-	for _, env := range rec.OutputItems {
-		delete(s.items, env.GatewayItemID)
-	}
+	// Remove the node's items from the reference index (both gateway and upstream
+	// ids) so a stale reference cannot resolve after deletion (S06, ST-018).
+	s.removeItemIndexLocked(rec.InputItems)
+	s.removeItemIndexLocked(rec.OutputItems)
+	s.untrackUserResponseLocked(rec.Owner.UserID, id)
 	return nil
+}
+
+// untrackUserResponseLocked drops a response id from its owner's per-user budget.
+func (s *MemoryStore) untrackUserResponseLocked(userID int, id string) {
+	entries, ok := s.respByUser[userID]
+	if !ok {
+		return
+	}
+	for i, e := range entries {
+		if e.id == id {
+			s.respByUser[userID] = append(entries[:i], entries[i+1:]...)
+			break
+		}
+	}
+	if len(s.respByUser[userID]) == 0 {
+		delete(s.respByUser, userID)
+	}
 }
 
 // BatchGetResponses returns nodes in order, with nil for missing/foreign nodes.
@@ -193,6 +280,12 @@ func (s *MemoryStore) lookupResponseLocked(owner OwnerScope, id string) (*Respon
 	if !owner.Valid() {
 		return nil, ErrInvalidOwner
 	}
+	// Consult the tombstone first so a deleted or evicted id can never resolve,
+	// even against a record that was somehow re-added (ST-018: tombstones are read,
+	// not just written).
+	if _, dead := s.respTombstones[id]; dead {
+		return nil, ErrNotFound
+	}
 	rec, ok := s.responses[id]
 	if !ok {
 		return nil, ErrNotFound
@@ -204,6 +297,16 @@ func (s *MemoryStore) lookupResponseLocked(owner OwnerScope, id string) (*Respon
 		return nil, ErrNotFound
 	}
 	return rec, nil
+}
+
+// ResponseTombstoned reports whether a response id was explicitly deleted or
+// LRU-evicted. The resolve layer consults it so legacy passthrough never
+// forwards a known gateway id upstream after deletion (row S06, ST-018).
+func (s *MemoryStore) ResponseTombstoned(_ context.Context, id string) (bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	_, dead := s.respTombstones[id]
+	return dead, nil
 }
 
 func (s *MemoryStore) isResponseExpiredLocked(rec *ResponseStateRecord) bool {
@@ -271,6 +374,18 @@ func (s *MemoryStore) CreateConversation(_ context.Context, record *Conversation
 		}
 	}
 
+	// Enforce the per-user active-conversation cap before writing. Idle-expired
+	// conversations are pruned first so the count reflects only live ones; on
+	// overflow the create fails explicitly — conversations are never silently
+	// evicted, which would corrupt continuation semantics (row L07).
+	if s.limits.MaxConversationsPerUser > 0 {
+		uid := record.Owner.UserID
+		s.pruneIdleConversationsLocked(uid)
+		if s.activeConversationCountLocked(uid) >= s.limits.MaxConversationsPerUser {
+			return nil, errors.Wrapf(ErrLimitExceeded, "active conversations per user %d", s.limits.MaxConversationsPerUser)
+		}
+	}
+
 	stored, err := cloneConversationRecord(record)
 	if err != nil {
 		return nil, errors.Wrap(err, "clone conversation record")
@@ -278,11 +393,17 @@ func (s *MemoryStore) CreateConversation(_ context.Context, record *Conversation
 	if stored.SchemaVersion == 0 {
 		stored.SchemaVersion = CurrentSchemaVersion
 	}
+	// Apply the sliding idle TTL to a conversation that did not carry an explicit
+	// expiry (row L08). A zero idle TTL leaves ExpiresAt untouched (S03 default).
+	if s.convIdleTTL > 0 && stored.ExpiresAt == 0 {
+		stored.ExpiresAt = s.now().Add(s.convIdleTTL).Unix()
+	}
 	s.conversations[stored.GatewayConversationID] = stored
 	if idempotencyKey != "" {
 		s.convIdem[idempotencyKey] = stored.GatewayConversationID
 	}
 	s.indexItems(stored.Owner, stored.Items)
+	s.trackConversationActivityLocked(stored.Owner.UserID, stored.GatewayConversationID)
 	return cloneConversationRecord(stored)
 }
 
@@ -294,6 +415,8 @@ func (s *MemoryStore) GetConversation(_ context.Context, owner OwnerScope, id st
 	if err != nil {
 		return nil, err
 	}
+	// Reading is activity: slide the idle TTL forward (row L08).
+	s.touchConversationLocked(rec)
 	return cloneConversationRecord(rec)
 }
 
@@ -308,9 +431,9 @@ func (s *MemoryStore) DeleteConversation(_ context.Context, owner OwnerScope, id
 	delete(s.conversations, id)
 	s.convTombstones[id] = struct{}{}
 	delete(s.leases, id)
-	for _, env := range rec.Items {
-		delete(s.items, env.GatewayItemID)
-	}
+	// Purge both gateway-id and upstream-id item index entries (ST-018).
+	s.removeItemIndexLocked(rec.Items)
+	s.untrackConversationLocked(rec.Owner.UserID, id)
 	return nil
 }
 
@@ -336,7 +459,7 @@ func (s *MemoryStore) AppendConversationItems(_ context.Context, owner OwnerScop
 	}
 
 	projected := len(rec.Items) + len(items)
-	if s.limits.itemCountExceeded(projected) {
+	if s.limits.ItemCountExceeded(projected) {
 		return nil, errors.Wrapf(ErrLimitExceeded, "conversation item count %d", projected)
 	}
 
@@ -352,6 +475,8 @@ func (s *MemoryStore) AppendConversationItems(_ context.Context, owner OwnerScop
 		s.convAppendIdem[appendIdemKey(id, idempotencyKey)] = struct{}{}
 	}
 	s.indexItems(owner, appended)
+	// Appending is activity: slide the idle TTL forward (row L08).
+	s.touchConversationLocked(rec)
 	return cloneConversationRecord(rec)
 }
 
@@ -387,7 +512,8 @@ func (s *MemoryStore) DeleteConversationItem(_ context.Context, owner OwnerScope
 	for _, env := range rec.Items {
 		if env.GatewayItemID == itemID || (env.UpstreamItemID != "" && env.UpstreamItemID == itemID) {
 			removed = true
-			delete(s.items, env.GatewayItemID)
+			// Purge both gateway-id and upstream-id index entries (ST-018).
+			s.removeItemIndexLocked([]ItemEnvelope{env})
 			continue
 		}
 		filtered = append(filtered, env)
@@ -397,12 +523,16 @@ func (s *MemoryStore) DeleteConversationItem(_ context.Context, owner OwnerScope
 	}
 	rec.Items = filtered
 	rec.Version++
+	s.touchConversationLocked(rec)
 	return cloneConversationRecord(rec)
 }
 
 func (s *MemoryStore) lookupConversationLocked(owner OwnerScope, id string) (*ConversationStateRecord, error) {
 	if !owner.Valid() {
 		return nil, ErrInvalidOwner
+	}
+	if _, dead := s.convTombstones[id]; dead {
+		return nil, ErrNotFound
 	}
 	rec, ok := s.conversations[id]
 	if !ok {
@@ -415,6 +545,73 @@ func (s *MemoryStore) lookupConversationLocked(owner OwnerScope, id string) (*Co
 		return nil, ErrNotFound
 	}
 	return rec, nil
+}
+
+// --- Per-user conversation governance (rows L07, L08) -----------------------
+
+// touchConversationLocked slides a conversation's idle TTL forward on any read
+// or write, and refreshes its per-user activity timestamp. A zero idle TTL means
+// conversations never expire on idle (S03 default) and only the activity index is
+// refreshed.
+func (s *MemoryStore) touchConversationLocked(rec *ConversationStateRecord) {
+	if rec == nil {
+		return
+	}
+	if s.convIdleTTL > 0 {
+		rec.ExpiresAt = s.now().Add(s.convIdleTTL).Unix()
+	}
+	s.trackConversationActivityLocked(rec.Owner.UserID, rec.GatewayConversationID)
+}
+
+// trackConversationActivityLocked records the last-activity time for a
+// conversation so the per-user cap can prune idle entries.
+func (s *MemoryStore) trackConversationActivityLocked(userID int, id string) {
+	if s.limits.MaxConversationsPerUser <= 0 {
+		return
+	}
+	m := s.convByUser[userID]
+	if m == nil {
+		m = make(map[string]int64)
+		s.convByUser[userID] = m
+	}
+	m[id] = s.now().Unix()
+}
+
+// untrackConversationLocked drops a conversation from its owner's activity index.
+func (s *MemoryStore) untrackConversationLocked(userID int, id string) {
+	if m, ok := s.convByUser[userID]; ok {
+		delete(m, id)
+		if len(m) == 0 {
+			delete(s.convByUser, userID)
+		}
+	}
+}
+
+// pruneIdleConversationsLocked removes activity-index entries whose idle TTL has
+// elapsed so the per-user active count reflects only live conversations. When the
+// idle TTL is zero, entries are retained until explicit deletion (S03).
+func (s *MemoryStore) pruneIdleConversationsLocked(userID int) {
+	if s.convIdleTTL <= 0 {
+		return
+	}
+	m, ok := s.convByUser[userID]
+	if !ok {
+		return
+	}
+	cutoff := s.now().Add(-s.convIdleTTL).Unix()
+	for id, last := range m {
+		if last <= cutoff {
+			delete(m, id)
+		}
+	}
+	if len(m) == 0 {
+		delete(s.convByUser, userID)
+	}
+}
+
+// activeConversationCountLocked returns the owner's live conversation count.
+func (s *MemoryStore) activeConversationCountLocked(userID int) int {
+	return len(s.convByUser[userID])
 }
 
 // --- Conversation lease -----------------------------------------------------
@@ -510,7 +707,7 @@ func (s *MemoryStore) GetCheckpoint(_ context.Context, owner OwnerScope, key str
 
 func (s *MemoryStore) validateResponseLimits(record *ResponseStateRecord) error {
 	count := len(record.InputItems) + len(record.OutputItems)
-	if s.limits.itemCountExceeded(count) {
+	if s.limits.ItemCountExceeded(count) {
 		return errors.Wrapf(ErrLimitExceeded, "response item count %d", count)
 	}
 	if s.limits.MaxRecordBytes > 0 {
@@ -518,7 +715,7 @@ func (s *MemoryStore) validateResponseLimits(record *ResponseStateRecord) error 
 		if err != nil {
 			return errors.Wrap(err, "measure response record")
 		}
-		if s.limits.recordBytesExceeded(len(data)) {
+		if s.limits.RecordBytesExceeded(len(data)) {
 			return errors.Wrapf(ErrLimitExceeded, "response record bytes %d", len(data))
 		}
 	}
@@ -526,7 +723,7 @@ func (s *MemoryStore) validateResponseLimits(record *ResponseStateRecord) error 
 }
 
 func (s *MemoryStore) validateConversationLimits(record *ConversationStateRecord) error {
-	if s.limits.itemCountExceeded(len(record.Items)) {
+	if s.limits.ItemCountExceeded(len(record.Items)) {
 		return errors.Wrapf(ErrLimitExceeded, "conversation item count %d", len(record.Items))
 	}
 	if s.limits.MaxRecordBytes > 0 {
@@ -534,7 +731,7 @@ func (s *MemoryStore) validateConversationLimits(record *ConversationStateRecord
 		if err != nil {
 			return errors.Wrap(err, "measure conversation record")
 		}
-		if s.limits.recordBytesExceeded(len(data)) {
+		if s.limits.RecordBytesExceeded(len(data)) {
 			return errors.Wrapf(ErrLimitExceeded, "conversation record bytes %d", len(data))
 		}
 	}
