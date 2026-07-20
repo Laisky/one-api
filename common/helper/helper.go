@@ -17,6 +17,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/Laisky/one-api/common"
+	"github.com/Laisky/one-api/common/identity"
 	"github.com/Laisky/one-api/common/logger"
 	"github.com/Laisky/one-api/common/random"
 )
@@ -62,6 +63,10 @@ func RespondErrorWithStatus(c *gin.Context, status int, err error) {
 		zap.String("method", c.Request.Method),
 		zap.String("url", common.SanitizeURLForLogging(c.Request.URL.String())),
 	}
+	// Identity the bound request logger does not already carry: values published
+	// on the gin context after the last bind, plus identity tagged onto the error
+	// where the entity struct was in hand. Duplicates are suppressed.
+	fields = append(fields, identity.ExtraFields(c, err)...)
 
 	// Client errors (4xx) are expected in normal operation — e.g. unauthenticated
 	// clients probing endpoints, expired sessions, or bad input — so they are

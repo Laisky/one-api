@@ -314,6 +314,11 @@ func CacheGetGroupModelsV2(ctx context.Context, group string) (models []dto.Enab
 }
 
 var group2model2channels map[string]map[string][]*Channel
+
+// channelId2channel is the id -> channel snapshot rebuilt by InitChannelCache.
+// Guarded by channelSyncLock. It makes channel log enrichment free for code that
+// holds only an integer channel id. It contains ENABLED channels only.
+var channelId2channel map[int]*Channel
 var channelSyncLock sync.RWMutex
 
 func InitChannelCache() {
@@ -382,8 +387,30 @@ func InitChannelCache() {
 
 	channelSyncLock.Lock()
 	group2model2channels = newGroup2model2channels
+	channelId2channel = newChannelId2channel
 	channelSyncLock.Unlock()
 	logger.Logger.Info("channels synced from database, considering suspensions")
+}
+
+// cachedChannelById returns the cached channel row, or nil when the in-memory
+// snapshot has not been built yet or the channel is disabled/unknown. It never
+// queries the database, so it is safe to call from a logging path.
+//
+// Parameters:
+//   - id: channel primary key.
+//
+// Return values:
+//   - *Channel: the cached row, or nil when unavailable.
+func cachedChannelById(id int) *Channel {
+	if id <= 0 {
+		return nil
+	}
+	channelSyncLock.RLock()
+	defer channelSyncLock.RUnlock()
+	if channelId2channel == nil {
+		return nil
+	}
+	return channelId2channel[id]
 }
 
 func SyncChannelCache(frequency int) {

@@ -14,6 +14,7 @@ import (
 	"github.com/gorilla/websocket"
 
 	"github.com/Laisky/one-api/common/ctxkey"
+	"github.com/Laisky/one-api/common/identity"
 	"github.com/Laisky/one-api/model"
 	"github.com/Laisky/one-api/relay/billing/ratio"
 	"github.com/Laisky/one-api/relay/channeltype"
@@ -343,6 +344,10 @@ func SetupContextForSelectedChannel(c *gin.Context, channel *model.Channel, mode
 	c.Set(ctxkey.ChannelId, channel.Id)
 	c.Set(ctxkey.ChannelUUID, channel.UUID)
 	c.Set(ctxkey.ChannelName, channel.Name)
+	// Rebind so every later log line of this request carries channel_id +
+	// channel_uuid + channel_name. On a relay retry this REPLACES the previous
+	// channel's fields rather than appending a second set.
+	identity.BindFromGin(c)
 	c.Set(ctxkey.ContentType, c.Request.Header.Get("Content-Type"))
 	if channel.SystemPrompt != nil && *channel.SystemPrompt != "" {
 		c.Set(ctxkey.SystemPrompt, *channel.SystemPrompt)

@@ -12,20 +12,26 @@ import (
 	"github.com/Laisky/one-api/common"
 	"github.com/Laisky/one-api/common/config"
 	"github.com/Laisky/one-api/common/helper"
+	"github.com/Laisky/one-api/common/identity"
 	"github.com/Laisky/one-api/relay/model"
 )
 
 // AbortWithError aborts the request with an error message
 func AbortWithError(c *gin.Context, statusCode int, err error) {
 	logger := gmw.GetLogger(c)
+	fields := []zap.Field{
+		zap.Int("status_code", statusCode),
+		zap.Error(err),
+	}
+	// Identity the bound logger does not already carry: late gin-context values
+	// and identity tagged onto the error deep in model/, where the entity struct
+	// was in hand. Duplicates of already-bound fields are suppressed.
+	fields = append(fields, identity.ExtraFields(c, err)...)
+
 	if shouldLogAsWarning(statusCode, err) {
-		logger.Warn("server abort",
-			zap.Int("status_code", statusCode),
-			zap.Error(err))
+		logger.Warn("server abort", fields...)
 	} else {
-		logger.Error("server abort",
-			zap.Int("status_code", statusCode),
-			zap.Error(err))
+		logger.Error("server abort", fields...)
 	}
 
 	c.JSON(statusCode, gin.H{
@@ -38,14 +44,17 @@ func AbortWithError(c *gin.Context, statusCode int, err error) {
 }
 
 // TokenInfo holds information about an API token for logging purposes.
-// All fields are masked or ID-based to avoid exposing sensitive data.
+// All fields are masked or reference-based to avoid exposing sensitive data.
 type TokenInfo struct {
 	MaskedKey   string // Masked API key (prefix...suffix)
-	TokenId     int    // Token ID
-	TokenName   string // Token name
-	UserId      int    // User ID who owns the token
-	Username    string // Username (optional, may be empty)
 	RequestedAt string // Request model (optional)
+
+	// Token identifies the API key by id + uuid + name. The uuid and name are
+	// what the web UI shows, so they are what an operator can search on.
+	Token identity.TokenRef
+	// User identifies the token owner by id + uuid + username. The username is
+	// only known once the owner row has been loaded.
+	User identity.UserRef
 }
 
 // AbortWithTokenError aborts the request with an error message and logs detailed token information.
@@ -58,21 +67,17 @@ func AbortWithTokenError(c *gin.Context, statusCode int, err error, tokenInfo *T
 		zap.Error(err),
 	}
 
-	// Add token info fields if available
+	// Add token info fields if available. The refs carry uuid + name next to the
+	// integer ids, because the web UI only exposes uuid and name.
 	if tokenInfo != nil {
-		logFields = append(logFields,
-			zap.String("api_key", tokenInfo.MaskedKey),
-			zap.Int("token_id", tokenInfo.TokenId),
-			zap.String("token_name", tokenInfo.TokenName),
-			zap.Int("user_id", tokenInfo.UserId),
-		)
-		if tokenInfo.Username != "" {
-			logFields = append(logFields, zap.String("username", tokenInfo.Username))
-		}
+		logFields = append(logFields, zap.String("api_key", tokenInfo.MaskedKey))
+		logFields = tokenInfo.Token.AppendZap(logFields)
+		logFields = tokenInfo.User.AppendZap(logFields)
 		if tokenInfo.RequestedAt != "" {
 			logFields = append(logFields, zap.String("requested_model", tokenInfo.RequestedAt))
 		}
 	}
+	logFields = append(logFields, identity.Fields(err)...)
 
 	if shouldLogAsWarning(statusCode, err) {
 		logger.Warn("server abort", logFields...)

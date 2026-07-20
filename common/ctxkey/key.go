@@ -369,4 +369,17 @@ const (
 	// created at pre-consume time. Post-billing uses this to reconcile the log
 	// with actual usage data.
 	ProvisionalLogId = "provisional_log_id"
+
+	// Identity holds the common/identity.Set bound for this request (user + token
+	// + channel references, each carrying id + uuid + name).
+	// Set in: common/identity.Bind, driven by middleware/auth and middleware/distributor.
+	// Read in: error funnels and any handler that needs identity without a lookup.
+	Identity = "identity"
+
+	// BaseLogger holds the pristine request logger captured before any identity
+	// field was bound, so common/identity.Bind can REBUILD the logger instead of
+	// appending a duplicate channel_id when the channel changes on a relay retry.
+	// Set in: common/identity.BindBase, driven by middleware.RequestId.
+	// Read in: common/identity.Bind only.
+	BaseLogger = "base_logger"
 )

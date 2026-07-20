@@ -33,6 +33,7 @@ import (
 	"github.com/Laisky/one-api/common/blacklist"
 	"github.com/Laisky/one-api/common/ctxkey"
 	"github.com/Laisky/one-api/common/helper"
+	"github.com/Laisky/one-api/common/identity"
 	"github.com/Laisky/one-api/common/idresolve"
 	"github.com/Laisky/one-api/common/network"
 	"github.com/Laisky/one-api/model"
@@ -114,6 +115,9 @@ func authHelper(c *gin.Context, minRole int) {
 	c.Set(ctxkey.Username, username)
 	c.Set(ctxkey.Role, role)
 	c.Set(ctxkey.Id, id)
+	// Bind the resolved identity onto the request logger so every later log line
+	// of this request carries user_id + user_uuid + username with no call-site edit.
+	identity.BindFromGin(c)
 	c.Next()
 }
 
@@ -171,6 +175,7 @@ func OptionalUserAuth() func(c *gin.Context) {
 				c.Set(ctxkey.Username, username)
 				c.Set(ctxkey.Role, role)
 				c.Set(ctxkey.Id, id)
+				identity.BindFromGin(c)
 			}
 		}
 
@@ -239,13 +244,18 @@ func TokenAuth() func(c *gin.Context) {
 			return
 		}
 
-		// Build token info for error logging (masked key for security)
+		// Build token info for error logging (masked key for security).
+		// OwnerRef carries the denormalised tokens.user_uuid; the username is only
+		// known after the owner row is loaded below.
 		tokenInfo := &TokenInfo{
 			MaskedKey: helper.MaskAPIKey(key),
-			TokenId:   token.Id,
-			TokenName: token.Name,
-			UserId:    token.UserId,
+			Token:     token.Ref(),
+			User:      token.OwnerRef(),
 		}
+
+		// Bind the partial identity immediately so the early aborts below (subnet,
+		// banned user, model restriction) already log token uuid + name.
+		identity.Bind(c, identity.Set{Token: tokenInfo.Token, User: tokenInfo.User})
 
 		// Check IP subnet restrictions (if configured for this token)
 		if token.Subnet != nil && *token.Subnet != "" {
@@ -262,6 +272,10 @@ func TokenAuth() func(c *gin.Context) {
 			AbortWithTokenError(c, http.StatusInternalServerError, errors.Wrap(err, "failed to get user"), tokenInfo)
 			return
 		}
+
+		// The owner row is loaded, so the username is now known.
+		tokenInfo.User = user.Ref()
+		identity.Bind(c, identity.Set{User: tokenInfo.User})
 
 		// Verify the token owner (user) is still enabled and not banned
 		if user.Status == model.UserStatusDisabled || blacklist.IsUserBanned(user.Id) {
@@ -297,6 +311,7 @@ func TokenAuth() func(c *gin.Context) {
 		c.Set(ctxkey.TokenName, token.Name)
 		c.Set(ctxkey.TokenQuota, token.RemainQuota)
 		c.Set(ctxkey.TokenQuotaUnlimited, token.UnlimitedQuota)
+		identity.BindFromGin(c)
 
 		// Handle channel-specific routing (admin feature).
 		// Format: token_key-channel_ref allows admins to specify which channel to use.
