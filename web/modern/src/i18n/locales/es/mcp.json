@@ -83,6 +83,7 @@
         "actions": "Acciones",
         "auth_type": "Autenticación",
         "base_url": "URL base",
+        "id": "ID",
         "last_sync": "Última sincronización",
         "name": "Nombre",
         "priority": "Prioridad",
@@ -94,7 +95,7 @@
       "labels": {
         "never": "Nunca"
       },
-      "search_placeholder": "Buscar servidores MCP...",
+      "search_placeholder": "Buscar servidores MCP por nombre, URL o UUID...",
       "subtitle": "Administrar el registro de servidores MCP y la sincronización de herramientas",
       "title": "Servidores MCP"
     },

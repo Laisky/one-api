@@ -18,6 +18,7 @@ import (
 	"github.com/Laisky/one-api/common"
 	"github.com/Laisky/one-api/common/config"
 	"github.com/Laisky/one-api/common/ctxkey"
+	"github.com/Laisky/one-api/common/errkind"
 	"github.com/Laisky/one-api/common/helper"
 	"github.com/Laisky/one-api/common/network"
 	"github.com/Laisky/one-api/common/random"
@@ -27,7 +28,7 @@ import (
 func GetRequestCost(c *gin.Context) {
 	reqId := c.Param("request_id")
 	if reqId == "" {
-		helper.RespondError(c, errors.New("request_id should not be empty"))
+		helper.RespondError(c, errkind.InvalidRequestErr(errors.New("request_id should not be empty")))
 
 	}
 
@@ -176,7 +177,8 @@ func AddToken(c *gin.Context) {
 	token := new(model.Token)
 	err := c.ShouldBindJSON(token)
 	if err != nil {
-		helper.RespondError(c, err)
+		// Malformed request body: the caller sent JSON this endpoint cannot bind.
+		helper.RespondError(c, errkind.InvalidRequestErr(err))
 		return
 	}
 	token.UUID = ""
@@ -184,13 +186,13 @@ func AddToken(c *gin.Context) {
 
 	// Disallow empty name on create
 	if strings.TrimSpace(token.Name) == "" {
-		helper.RespondError(c, errors.New("Token name is required"))
+		helper.RespondError(c, errkind.InvalidRequestErr(errors.New("Token name is required")))
 		return
 	}
 
 	err = validateToken(c, token)
 	if err != nil {
-		helper.RespondError(c, errors.Errorf("invalid token: %s", err.Error()))
+		helper.RespondError(c, errkind.InvalidRequestErr(errors.Errorf("invalid token: %s", err.Error())))
 		return
 	}
 
@@ -290,13 +292,14 @@ func ConsumeToken(c *gin.Context) {
 
 	req := new(consumeTokenRequest)
 	if err := c.ShouldBindJSON(req); err != nil {
-		helper.RespondError(c, err)
+		// Malformed request body: the caller sent JSON this endpoint cannot bind.
+		helper.RespondError(c, errkind.InvalidRequestErr(err))
 		return
 	}
 
 	req.AddReason = strings.TrimSpace(req.AddReason)
 	if req.AddReason == "" {
-		helper.RespondError(c, errors.New("add_reason cannot be empty"))
+		helper.RespondError(c, errkind.InvalidRequestErr(errors.New("add_reason cannot be empty")))
 		return
 	}
 
@@ -342,7 +345,7 @@ func ConsumeToken(c *gin.Context) {
 	case ConsumePhaseSingle:
 		transaction, updatedToken, err = processImmediateConsume(ctx, c, cleanToken, userID, req, requestID, traceID)
 	default:
-		helper.RespondError(c, errors.Errorf("unsupported phase: %s", phase))
+		helper.RespondError(c, errkind.InvalidRequestErr(errors.Errorf("unsupported phase: %s", phase)))
 		return
 	}
 
@@ -906,7 +909,8 @@ func UpdateToken(c *gin.Context) {
 	tokenPatch := new(model.Token)
 	err := c.ShouldBindJSON(tokenPatch)
 	if err != nil {
-		helper.RespondError(c, err)
+		// Malformed request body: the caller sent JSON this endpoint cannot bind.
+		helper.RespondError(c, errkind.InvalidRequestErr(err))
 		return
 	}
 	ref, err := preferUUIDRef(tokenPatch.UUID, tokenPatch.Id)
@@ -925,7 +929,7 @@ func UpdateToken(c *gin.Context) {
 
 	// Disallow empty name when not status_only
 	if statusOnly == "" && strings.TrimSpace(tokenPatch.Name) == "" {
-		helper.RespondError(c, errors.New("Token name cannot be empty"))
+		helper.RespondError(c, errkind.InvalidRequestErr(errors.New("Token name cannot be empty")))
 		return
 	}
 
@@ -937,7 +941,7 @@ func UpdateToken(c *gin.Context) {
 
 	err = validateToken(c, token)
 	if err != nil {
-		helper.RespondError(c, errors.Errorf("invalid token: %s", err.Error()))
+		helper.RespondError(c, errkind.InvalidRequestErr(errors.Errorf("invalid token: %s", err.Error())))
 		return
 	}
 
@@ -952,13 +956,13 @@ func UpdateToken(c *gin.Context) {
 		if cleanToken.Status == model.TokenStatusExpired &&
 			cleanToken.ExpiredTime <= helper.GetTimestamp() && cleanToken.ExpiredTime != -1 &&
 			token.ExpiredTime != -1 && token.ExpiredTime < helper.GetTimestamp() {
-			helper.RespondError(c, errors.New("The token has expired and cannot be enabled. Please modify the expiration time of the token, or set it to never expire."))
+			helper.RespondError(c, errkind.InvalidRequestErr(errors.New("The token has expired and cannot be enabled. Please modify the expiration time of the token, or set it to never expire.")))
 			return
 		}
 		if cleanToken.Status == model.TokenStatusExhausted &&
 			cleanToken.RemainQuota <= 0 && !cleanToken.UnlimitedQuota &&
 			token.RemainQuota <= 0 && !token.UnlimitedQuota {
-			helper.RespondError(c, errors.New("The available quota of the token has been used up and cannot be enabled. Please modify the remaining quota of the token, or set it to unlimited quota"))
+			helper.RespondError(c, errkind.InvalidRequestErr(errors.New("The available quota of the token has been used up and cannot be enabled. Please modify the remaining quota of the token, or set it to unlimited quota")))
 			return
 		}
 	case model.TokenStatusExhausted:

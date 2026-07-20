@@ -15,6 +15,7 @@ import (
 
 	"github.com/Laisky/one-api/common"
 	"github.com/Laisky/one-api/common/config"
+	"github.com/Laisky/one-api/common/errkind"
 	"github.com/Laisky/one-api/common/helper"
 	"github.com/Laisky/one-api/common/message"
 	"github.com/Laisky/one-api/model"
@@ -93,7 +94,7 @@ func GetHomePageContent(c *gin.Context) {
 func SendEmailVerification(c *gin.Context) {
 	email := c.Query("email")
 	if err := common.Validate.Var(email, "required,email"); err != nil {
-		helper.RespondError(c, errors.New(invalidParameterMessage))
+		helper.RespondError(c, errkind.InvalidRequestErr(errors.New(invalidParameterMessage)))
 		return
 	}
 
@@ -154,7 +155,7 @@ func SendEmailVerification(c *gin.Context) {
 func SendPasswordResetEmail(c *gin.Context) {
 	email := c.Query("email")
 	if err := common.Validate.Var(email, "required,email"); err != nil {
-		helper.RespondError(c, errors.New(invalidParameterMessage))
+		helper.RespondError(c, errkind.InvalidRequestErr(errors.New(invalidParameterMessage)))
 		return
 	}
 
@@ -214,20 +215,20 @@ func ResetPassword(c *gin.Context) {
 	err := json.NewDecoder(c.Request.Body).Decode(&req)
 	if err != nil {
 		lg.Debug("failed to decode password reset request", zap.Error(err))
-		helper.RespondError(c, errors.New(invalidParameterMessage))
+		helper.RespondError(c, errkind.InvalidRequestErr(errors.New(invalidParameterMessage)))
 		return
 	}
 	if req.Email == "" || req.Token == "" {
 		lg.Debug("password reset request missing email or token",
 			zap.Bool("email_empty", req.Email == ""),
 			zap.Bool("token_empty", req.Token == ""))
-		helper.RespondError(c, errors.New(invalidParameterMessage))
+		helper.RespondError(c, errkind.InvalidRequestErr(errors.New(invalidParameterMessage)))
 		return
 	}
 	if !common.VerifyCodeWithKey(req.Email, req.Token, common.PasswordResetPurpose) {
 		lg.Debug("password reset token verification failed",
 			zap.String("email", req.Email))
-		helper.RespondError(c, errors.New("Reset link is illegal or expired"))
+		helper.RespondError(c, errkind.UnauthorizedErr(errors.New("Reset link is illegal or expired")))
 		return
 	}
 
@@ -240,7 +241,7 @@ func ResetPassword(c *gin.Context) {
 		return
 	}
 	if lockedCheckUser.Metadata.PasswordLocked {
-		helper.RespondError(c, errors.New("Password is locked by administrator"))
+		helper.RespondError(c, errkind.ForbiddenErr(errors.New("Password is locked by administrator")))
 		return
 	}
 

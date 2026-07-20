@@ -17,6 +17,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/Laisky/one-api/common"
+	"github.com/Laisky/one-api/common/errkind"
 	"github.com/Laisky/one-api/common/identity"
 	"github.com/Laisky/one-api/common/logger"
 	"github.com/Laisky/one-api/common/random"
@@ -68,16 +69,25 @@ func RespondErrorWithStatus(c *gin.Context, status int, err error) {
 	// where the entity struct was in hand. Duplicates are suppressed.
 	fields = append(fields, identity.ExtraFields(c, err)...)
 
-	// Client errors (4xx) are expected in normal operation — e.g. unauthenticated
-	// clients probing endpoints, expired sessions, or bad input — so they are
-	// logged at WARN without the verbose stack trace to avoid alert noise. ERROR
-	// is reserved for genuine server-side exceptions (5xx), which trigger alerting.
-	if status >= http.StatusBadRequest && status < http.StatusInternalServerError {
+	// Client-caused conditions — bad input, an expired token, a user out of quota —
+	// are expected in normal operation and are logged at WARN without the verbose
+	// stack trace, to avoid alert noise. ERROR is reserved for genuine server-side
+	// faults, which page an on-call engineer.
+	//
+	// The decision comes from the error itself (errkind), NOT from the status code:
+	// this helper answers /api/* with HTTP 200 plus {"success":false,...}, so a
+	// status-derived rule logged every client mistake — including running out of
+	// quota — at ERROR with a full stack.
+	if errkind.LogAsWarn(status, err) {
 		log.Warn("http handler client error",
-			append(fields, zap.String("error", err.Error()))...)
+			append(fields,
+				zap.String("error_kind", errkind.Of(err).String()),
+				zap.String("error", err.Error()))...)
 	} else {
 		log.Error("http handler error",
-			append(fields, zap.Error(err))...)
+			append(fields,
+				zap.String("error_kind", errkind.Of(err).String()),
+				zap.Error(err))...)
 	}
 
 	c.JSON(status, gin.H{

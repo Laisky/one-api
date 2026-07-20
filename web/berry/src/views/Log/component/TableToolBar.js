@@ -6,12 +6,14 @@ import {
   IconKey,
   IconBrandGithubCopilot,
   IconSitemap,
+  IconSearch,
 } from "@tabler/icons-react";
 import {
   InputAdornment,
   OutlinedInput,
   Stack,
   FormControl,
+  FormHelperText,
   InputLabel,
   Select,
   MenuItem,
@@ -33,6 +35,10 @@ export default function TableToolBar({
 }) {
   const theme = useTheme();
   const grey500 = theme.palette.grey[500];
+  // The keyword search endpoint only understands the keyword itself, so the
+  // structured filters below are greyed out while a keyword is present rather
+  // than silently ignored.
+  const keywordActive = (filterName.keyword || "").trim() !== "";
   const [userOptions, setUserOptions] = useState([]);
   const [userSearchLoading, setUserSearchLoading] = useState(false);
 
@@ -71,10 +77,33 @@ export default function TableToolBar({
         paddingBottom={"0px"}
       >
         <FormControl>
+          <InputLabel htmlFor="log-keyword-label">关键字</InputLabel>
+          <OutlinedInput
+            id="keyword"
+            name="keyword"
+            sx={{
+              minWidth: "100%",
+            }}
+            label="关键字"
+            value={filterName.keyword}
+            onChange={handleFilterName}
+            placeholder="按 UUID 或详情搜索 ..."
+            startAdornment={
+              <InputAdornment position="start">
+                <IconSearch stroke={1.5} size="20px" color={grey500} />
+              </InputAdornment>
+            }
+          />
+          {keywordActive && (
+            <FormHelperText>关键字搜索会忽略其他筛选条件。</FormHelperText>
+          )}
+        </FormControl>
+        <FormControl>
           <InputLabel htmlFor="channel-token_name-label">令牌名称</InputLabel>
           <OutlinedInput
             id="token_name"
             name="token_name"
+            disabled={keywordActive}
             sx={{
               minWidth: "100%",
             }}
@@ -94,6 +123,7 @@ export default function TableToolBar({
           <OutlinedInput
             id="model_name"
             name="model_name"
+            disabled={keywordActive}
             sx={{
               minWidth: "100%",
             }}
@@ -122,6 +152,7 @@ export default function TableToolBar({
               label="起始时间"
               ampm={false}
               name="start_timestamp"
+              disabled={keywordActive}
               value={
                 filterName.start_timestamp === 0
                   ? null
@@ -155,6 +186,7 @@ export default function TableToolBar({
             <DateTimePicker
               label="结束时间"
               name="end_timestamp"
+              disabled={keywordActive}
               ampm={false}
               value={
                 filterName.end_timestamp === 0
@@ -193,6 +225,7 @@ export default function TableToolBar({
             <OutlinedInput
               id="channel"
               name="channel"
+              disabled={keywordActive}
               sx={{
                 minWidth: "100%",
               }}
@@ -213,6 +246,7 @@ export default function TableToolBar({
           <FormControl sx={{ minWidth: "100%" }}>
             <Autocomplete
               freeSolo
+              disabled={keywordActive}
               options={userOptions}
               getOptionLabel={(option) => typeof option === 'string' ? option : option.username}
               value={filterName.username}
@@ -266,6 +300,7 @@ export default function TableToolBar({
           <Select
             id="channel-type-label"
             label="类型"
+            disabled={keywordActive}
             value={filterName.type}
             name="type"
             onChange={handleFilterName}

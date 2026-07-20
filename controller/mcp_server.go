@@ -14,6 +14,7 @@ import (
 
 	"github.com/Laisky/one-api/common"
 	"github.com/Laisky/one-api/common/config"
+	"github.com/Laisky/one-api/common/errkind"
 	"github.com/Laisky/one-api/common/helper"
 	"github.com/Laisky/one-api/model"
 	"github.com/Laisky/one-api/relay/mcp"
@@ -58,7 +59,14 @@ func GetMCPServers(c *gin.Context) {
 		sortOrder = "desc"
 	}
 
-	servers, err := model.ListMCPServers(p*size, size, sortBy, sortOrder)
+	// Optional keyword search. "keyword" matches the other list endpoints; "q" is
+	// accepted as an alias so a caller cannot silently get an unfiltered page.
+	keyword := c.Query("keyword")
+	if keyword == "" {
+		keyword = c.Query("q")
+	}
+
+	servers, err := model.ListMCPServers(keyword, p*size, size, sortBy, sortOrder)
 	if err != nil {
 		helper.RespondError(c, err)
 		return
@@ -75,7 +83,7 @@ func GetMCPServers(c *gin.Context) {
 		})
 	}
 
-	total, err := model.CountMCPServers()
+	total, err := model.CountMCPServers(keyword)
 	if err != nil {
 		helper.RespondError(c, err)
 		return
@@ -115,14 +123,16 @@ func CreateMCPServer(c *gin.Context) {
 	logger := gmw.GetLogger(c)
 	var payload MCPServerUpsertRequest
 	if err := json.NewDecoder(c.Request.Body).Decode(&payload); err != nil {
-		helper.RespondError(c, errors.Wrap(err, "decode mcp server"))
+		// Unparsable request body.
+		helper.RespondError(c, errkind.InvalidRequestErr(errors.Wrap(err, "decode mcp server")))
 		return
 	}
 
 	server := &model.MCPServer{}
 	applyMCPServerPayload(server, payload)
 	if err := server.NormalizeAndValidate(); err != nil {
-		helper.RespondError(c, errors.Wrap(err, "normalize and validate mcp server"))
+		// Payload failed the entity's own validation rules.
+		helper.RespondError(c, errkind.InvalidRequestErr(errors.Wrap(err, "normalize and validate mcp server")))
 		return
 	}
 	nameTaken, err := isMCPServerNameAlreadyUsed(server.Name, 0)
@@ -180,7 +190,8 @@ func UpdateMCPServer(c *gin.Context) {
 		delete(providedFields, "api_key")
 	}
 	if err := server.NormalizeAndValidate(); err != nil {
-		helper.RespondError(c, errors.Wrap(err, "normalize and validate mcp server"))
+		// Payload failed the entity's own validation rules.
+		helper.RespondError(c, errkind.InvalidRequestErr(errors.Wrap(err, "normalize and validate mcp server")))
 		return
 	}
 	if providedFields["name"] {

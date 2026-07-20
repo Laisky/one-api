@@ -5,6 +5,7 @@ import { ITEMS_PER_PAGE } from '../constants';
 import { renderGroup, renderNumber, renderQuota } from '../helpers/render';
 import AddUser from '../pages/User/AddUser';
 import EditUser from '../pages/User/EditUser';
+import ResourceRefTooltip from './ResourceRefTooltip';
 
 const userRef = (user) => user?.uuid || user?.id || '';
 
@@ -24,9 +25,7 @@ function renderRole(role) {
 const UsersTable = () => {
   const columns = [{
     title: '用户名', dataIndex: 'username', render: (text, record) => (
-      <Tooltip content={`ID: ${userRef(record)}`}>
-        <span className="resource-name-with-id">{text}</span>
-      </Tooltip>
+      <ResourceRefTooltip refId={userRef(record)}>{text}</ResourceRefTooltip>
     )
   }, {
     title: '分组', dataIndex: 'group', render: (text, record, index) => {

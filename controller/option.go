@@ -10,6 +10,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/Laisky/one-api/common/config"
+	"github.com/Laisky/one-api/common/errkind"
 	"github.com/Laisky/one-api/common/helper"
 	"github.com/Laisky/one-api/common/logger"
 	"github.com/Laisky/one-api/model"
@@ -74,27 +75,27 @@ func UpdateOption(c *gin.Context) {
 			option.Value = "modern"
 		}
 		if !config.ValidThemes[option.Value] {
-			helper.RespondError(c, errors.New("invalid theme"))
+			helper.RespondError(c, errkind.InvalidRequestErr(errors.New("invalid theme")))
 			return
 		}
 	case "GitHubOAuthEnabled":
 		if option.Value == "true" && config.GitHubClientId == "" {
-			helper.RespondError(c, errors.New("Unable to enable GitHub OAuth, please fill in the GitHub Client Id and GitHub Client Secret first!"))
+			helper.RespondError(c, errkind.InvalidRequestErr(errors.New("Unable to enable GitHub OAuth, please fill in the GitHub Client Id and GitHub Client Secret first!")))
 			return
 		}
 	case "EmailDomainRestrictionEnabled":
 		if option.Value == "true" && len(config.EmailDomainWhitelist) == 0 {
-			helper.RespondError(c, errors.New("Unable to enable email domain restriction, please fill in the restricted email domains first!"))
+			helper.RespondError(c, errkind.InvalidRequestErr(errors.New("Unable to enable email domain restriction, please fill in the restricted email domains first!")))
 			return
 		}
 	case "WeChatAuthEnabled":
 		if option.Value == "true" && config.WeChatServerAddress == "" {
-			helper.RespondError(c, errors.New("Unable to enable WeChat login, please fill in the relevant configuration information for WeChat login first!"))
+			helper.RespondError(c, errkind.InvalidRequestErr(errors.New("Unable to enable WeChat login, please fill in the relevant configuration information for WeChat login first!")))
 			return
 		}
 	case "TurnstileCheckEnabled":
 		if option.Value == "true" && config.TurnstileSiteKey == "" {
-			helper.RespondError(c, errors.New("Unable to enable Turnstile verification, please fill in the relevant configuration information for Turnstile verification first!"))
+			helper.RespondError(c, errkind.InvalidRequestErr(errors.New("Unable to enable Turnstile verification, please fill in the relevant configuration information for Turnstile verification first!")))
 			return
 		}
 	}

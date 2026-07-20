@@ -9,6 +9,7 @@ import (
 
 	"github.com/Laisky/one-api/common/config"
 	"github.com/Laisky/one-api/common/ctxkey"
+	"github.com/Laisky/one-api/common/errkind"
 	"github.com/Laisky/one-api/common/helper"
 	"github.com/Laisky/one-api/model"
 )
@@ -43,7 +44,7 @@ func GetAllLogs(c *gin.Context) {
 	if sortBy != "" && startTimestamp > 0 && endTimestamp > 0 {
 		maxRange := int64(30 * 24 * 60 * 60) // 30 days in seconds
 		if endTimestamp-startTimestamp > maxRange {
-			helper.RespondError(c, errors.New("Date range for sorting cannot exceed 30 days"))
+			helper.RespondError(c, errkind.InvalidRequestErr(errors.New("Date range for sorting cannot exceed 30 days")))
 			return
 		}
 	}
@@ -107,7 +108,7 @@ func GetUserLogs(c *gin.Context) {
 	if sortBy != "" && startTimestamp > 0 && endTimestamp > 0 {
 		maxRange := int64(30 * 24 * 60 * 60) // 30 days in seconds
 		if endTimestamp-startTimestamp > maxRange {
-			helper.RespondError(c, errors.New("Date range for sorting cannot exceed 30 days"))
+			helper.RespondError(c, errkind.InvalidRequestErr(errors.New("Date range for sorting cannot exceed 30 days")))
 			return
 		}
 	}
@@ -306,7 +307,7 @@ func GetLogsSelfStat(c *gin.Context) {
 func DeleteHistoryLogs(c *gin.Context) {
 	targetTimestamp, _ := strconv.ParseInt(c.Query("target_timestamp"), 10, 64)
 	if targetTimestamp == 0 {
-		helper.RespondError(c, errors.New("target timestamp is required"))
+		helper.RespondError(c, errkind.InvalidRequestErr(errors.New("target timestamp is required")))
 		return
 	}
 	count, err := model.DeleteOldLog(targetTimestamp)

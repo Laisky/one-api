@@ -12,6 +12,11 @@ export interface SearchOption {
   value: string;
   text: string;
   content?: React.ReactNode;
+  /**
+   * Extra strings this option should match on during local filtering, e.g. the
+   * entity UUID which is usually not part of the visible `text`/`value`.
+   */
+  keywords?: string[];
 }
 
 interface SearchableDropdownProps {
@@ -29,6 +34,14 @@ interface SearchableDropdownProps {
   allowAdditions?: boolean;
   clearable?: boolean;
   className?: string;
+  /**
+   * Set when the caller (parent component or `searchEndpoint`) already applied
+   * the search query to produce `options`. The dropdown then renders the
+   * supplied options verbatim instead of re-filtering them locally, which would
+   * otherwise drop server matches whose `value` does not literally contain the
+   * query (e.g. searching a user by UUID while `value` is the username).
+   */
+  remoteFiltered?: boolean;
   // API-based search props
   searchEndpoint?: string;
   transformResponse?: (data: any[]) => SearchOption[];
@@ -51,6 +64,7 @@ export function SearchableDropdown({
   allowAdditions = false,
   clearable = false,
   className,
+  remoteFiltered = false,
   searchEndpoint,
   transformResponse,
   debounceMs = 300,
@@ -155,14 +169,17 @@ export function SearchableDropdown({
     onChange?.('');
   };
 
-  // Local filtering for initial options when not using API search
+  // Local filtering for locally-owned options only. Whenever the search was
+  // executed elsewhere (`searchEndpoint` or `remoteFiltered`), the options are
+  // already the answer to the query and must be rendered as-is.
   const filteredOptions = React.useMemo(() => {
-    if (searchEndpoint || !searchValue) return options;
-    return options.filter(
-      (option) =>
-        option.text.toLowerCase().includes(searchValue.toLowerCase()) || option.value.toLowerCase().includes(searchValue.toLowerCase())
-    );
-  }, [options, searchValue, searchEndpoint]);
+    if (searchEndpoint || remoteFiltered || !searchValue) return options;
+    const needle = searchValue.toLowerCase();
+    return options.filter((option) => {
+      const haystack = [option.text, option.value, ...(option.keywords ?? [])];
+      return haystack.some((field) => typeof field === 'string' && field.toLowerCase().includes(needle));
+    });
+  }, [options, searchValue, searchEndpoint, remoteFiltered]);
 
   const showAddition =
     allowAdditions && searchValue && !filteredOptions.some((option) => option.value.toLowerCase() === searchValue.toLowerCase());
@@ -205,7 +222,13 @@ export function SearchableDropdown({
         )}
         align="start"
       >
-        <Command shouldFilter={!searchEndpoint}>
+        {/*
+          Filtering is owned entirely by `filteredOptions` above (locally) or by
+          whoever produced `options` (server search). cmdk must never re-filter,
+          because it can only match an item's `value` string and would hide rows
+          the backend matched on another field such as a UUID.
+        */}
+        <Command shouldFilter={false}>
           <CommandInput placeholder={effectiveSearchPlaceholder} value={searchValue} onValueChange={handleSearchChange} />
           <CommandList>
             {currentLoading ? (

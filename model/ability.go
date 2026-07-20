@@ -13,6 +13,7 @@ import (
 	"gorm.io/gorm"
 
 	"github.com/Laisky/one-api/common"
+	"github.com/Laisky/one-api/common/errkind"
 	"github.com/Laisky/one-api/common/identity"
 	"github.com/Laisky/one-api/common/logger"
 	"github.com/Laisky/one-api/dto"
@@ -95,6 +96,12 @@ func GetRandomSatisfiedChannel(group string, model string, ignoreFirstPriority b
 		channelQuery = availableAbilitiesQuery(DB, group, model, now, nil).Where("priority = (?)", maxPrioritySubQuery)
 	}
 	if err := firstRandomAbility(channelQuery, &ability); err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			// No enabled channel serves this group/model pair. That is an operator
+			// configuration state (or a caller asking for a model nobody hosts) —
+			// not a code fault, so it must not page an on-call engineer.
+			return nil, errkind.ConfigErr(errors.Wrap(err, "get random satisfied channel"))
+		}
 		return nil, errors.Wrap(err, "get random satisfied channel")
 	}
 
@@ -382,8 +389,10 @@ func GetRandomSatisfiedChannelExcluding(group string, model string, ignoreFirstP
 			return nil, errors.Wrap(err, "count available channels after exclusions")
 		}
 		if availableCount == 0 {
-			return nil, errors.Errorf("no channels available for model %s in group %s after excluding %d channels",
-				model, group, len(excludeIDs))
+			// Every candidate channel has been excluded by earlier retries: a
+			// configuration/capacity state, not a server-side code fault.
+			return nil, errkind.ConfigErr(errors.Errorf("no channels available for model %s in group %s after excluding %d channels",
+				model, group, len(excludeIDs)))
 		}
 
 		maxPrioritySubQuery := availableAbilitiesQuery(DB, group, model, now, excludeIDs).Select("MAX(priority)")
@@ -392,6 +401,11 @@ func GetRandomSatisfiedChannelExcluding(group string, model string, ignoreFirstP
 	}
 
 	if err := firstRandomAbility(channelQuery, &ability); err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			// Same as GetRandomSatisfiedChannel: nothing left that serves this
+			// group/model pair, which is a configuration state, not a code fault.
+			return nil, errkind.ConfigErr(errors.Wrap(err, "get random satisfied channel excluding failed ones"))
+		}
 		return nil, errors.Wrap(err, "get random satisfied channel excluding failed ones")
 	}
 

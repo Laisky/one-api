@@ -13,12 +13,12 @@ import {
   DialogContentText,
   DialogTitle,
   Button,
-  Stack,
-  Tooltip
+  Stack
 } from '@mui/material';
 
 import Label from 'ui-component/Label';
 import TableSwitch from 'ui-component/Switch';
+import ResourceRefTooltip from 'ui-component/ResourceRefTooltip';
 import { timestamp2string, renderQuota, copy } from 'utils/common';
 
 import { IconDotsVertical, IconEdit, IconTrash } from '@tabler/icons-react';
@@ -63,9 +63,7 @@ export default function RedemptionTableRow({ item, manageRedemption, handleOpenM
     <>
       <TableRow tabIndex={ref}>
         <TableCell>
-          <Tooltip title={`ID: ${ref}`} placement="top">
-            <span className="resource-name-with-id">{item.name}</span>
-          </Tooltip>
+          <ResourceRefTooltip refId={ref}>{item.name}</ResourceRefTooltip>
         </TableCell>
 
         <TableCell>

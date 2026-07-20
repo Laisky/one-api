@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/Laisky/errors/v2"
+	"gorm.io/gorm"
 
 	"github.com/Laisky/one-api/common/identity"
 )
@@ -233,8 +234,44 @@ func AutoConfirmExpiredTokenTransactions(ctx context.Context, tokenID int, now i
 //   - []*TokenTransaction: list of transaction records.
 //   - error: wrapped error if the query fails.
 func GetTokenTransactionsByTokenID(ctx context.Context, tokenID int, startIdx int, num int) ([]*TokenTransaction, error) {
+	return SearchTokenTransactionsByTokenID(ctx, tokenID, "", startIdx, num)
+}
+
+// applyTokenTransactionKeyword narrows a token transaction query by a search keyword.
+//
+// Transactions carry no human-readable name, so only UUID keywords filter: the
+// transaction's own uuid plus the token/user/log uuids it references. A non-UUID keyword
+// is ignored, which preserves the endpoint's previous unfiltered behaviour exactly.
+//
+// Parameters:
+//   - query: query to narrow; never mutated, GORM returns a new statement.
+//   - keyword: raw search keyword supplied by the request.
+//
+// Return values:
+//   - *gorm.DB: narrowed query, or query unchanged when the keyword is not a UUID.
+func applyTokenTransactionKeyword(query *gorm.DB, keyword string) *gorm.DB {
+	scoped, _ := applyUUIDKeyword(query, keyword, "uuid", "token_uuid", "user_uuid", "log_uuid")
+	return scoped
+}
+
+// SearchTokenTransactionsByTokenID retrieves a paginated list of a token's transactions
+// narrowed by an optional UUID keyword.
+//
+// Parameters:
+//   - ctx: request context for cancellation.
+//   - tokenID: token ID whose transactions to retrieve; always ANDs, so a UUID keyword
+//     can never surface another token's transactions.
+//   - keyword: optional UUID keyword matching the transaction uuid or its token/user/log
+//     uuid; a non-UUID keyword applies no filter.
+//   - startIdx: offset for pagination.
+//   - num: number of records to return.
+//
+// Returns:
+//   - []*TokenTransaction: list of transaction records.
+//   - error: wrapped error if the query fails.
+func SearchTokenTransactionsByTokenID(ctx context.Context, tokenID int, keyword string, startIdx int, num int) ([]*TokenTransaction, error) {
 	var txns []*TokenTransaction
-	err := DB.WithContext(ctx).
+	err := applyTokenTransactionKeyword(DB.WithContext(ctx).Model(&TokenTransaction{}), keyword).
 		Where("token_id = ?", tokenID).
 		Order("id desc").
 		Limit(num).Offset(startIdx).
@@ -256,8 +293,26 @@ func GetTokenTransactionsByTokenID(ctx context.Context, tokenID int, startIdx in
 //   - int64: total count.
 //   - error: wrapped error if the query fails.
 func GetTokenTransactionCountByTokenID(ctx context.Context, tokenID int) (int64, error) {
+	return CountSearchedTokenTransactionsByTokenID(ctx, tokenID, "")
+}
+
+// CountSearchedTokenTransactionsByTokenID returns the number of a token's transactions
+// matching an optional UUID keyword.
+//
+// It applies exactly the same keyword filter as SearchTokenTransactionsByTokenID so the
+// reported total always agrees with the rows a client can page through.
+//
+// Parameters:
+//   - ctx: request context for cancellation.
+//   - tokenID: token ID to query.
+//   - keyword: optional UUID keyword; a non-UUID keyword applies no filter.
+//
+// Returns:
+//   - int64: total count.
+//   - error: wrapped error if the query fails.
+func CountSearchedTokenTransactionsByTokenID(ctx context.Context, tokenID int, keyword string) (int64, error) {
 	var count int64
-	err := DB.WithContext(ctx).Model(&TokenTransaction{}).
+	err := applyTokenTransactionKeyword(DB.WithContext(ctx).Model(&TokenTransaction{}), keyword).
 		Where("token_id = ?", tokenID).
 		Count(&count).Error
 	if err != nil {

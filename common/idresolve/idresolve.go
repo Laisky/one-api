@@ -5,13 +5,19 @@ import (
 
 	"github.com/Laisky/errors/v2"
 	"gorm.io/gorm"
+
+	"github.com/Laisky/one-api/common/errkind"
 )
 
 var (
-	// ErrInvalidRef identifies a malformed external identifier.
-	ErrInvalidRef = errors.New("invalid resource reference")
+	// ErrInvalidRef identifies a malformed external identifier. It is
+	// client-caused by definition: the reference came from the request.
+	// The mark is transparent, so errors.Is(err, ErrInvalidRef) and the
+	// message text are unchanged.
+	ErrInvalidRef = errkind.InvalidRequestErr(errors.New("invalid resource reference"))
 	// ErrNotFound identifies a well-formed identifier that does not match a row.
-	ErrNotFound = errors.New("resource reference not found")
+	// Also client-caused: the row simply does not exist.
+	ErrNotFound = errkind.NotFoundErr(errors.New("resource reference not found"))
 )
 
 // Resolve returns the internal integer id for an external UUID reference.

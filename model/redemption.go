@@ -9,6 +9,7 @@ import (
 	"gorm.io/gorm/clause"
 
 	"github.com/Laisky/one-api/common"
+	"github.com/Laisky/one-api/common/errkind"
 	"github.com/Laisky/one-api/common/helper"
 	"github.com/Laisky/one-api/common/identity"
 )
@@ -67,7 +68,14 @@ func GetRedemptionCount() (count int64, err error) {
 func SearchRedemptions(keyword string, startIdx int, num int, sortBy string, sortOrder string) (redemptions []*Redemption, total int64, err error) {
 	db := DB.Model(&Redemption{})
 	if keyword != "" {
-		db = db.Where("id = ? or name LIKE ? or uuid = ?", helper.String2Int(keyword), keyword+"%", normalizeUUIDKeyword(keyword))
+		// user_uuid lets an operator paste a user UUID to list that user's redemptions.
+		if scoped, matched := applyUUIDKeyword(db, keyword, "uuid", "user_uuid"); matched {
+			db = scoped
+		} else {
+			// The internal incremental id is deliberately not searchable; UUID is the
+			// only external identifier for a redemption.
+			db = db.Where("name LIKE ?", keyword+"%")
+		}
 	}
 	db = db.Order(ValidateOrderClause(sortBy, sortOrder, redemptionSortFields, "id desc"))
 	err = db.Count(&total).Limit(num).Offset(startIdx).Find(&redemptions).Error
@@ -85,19 +93,25 @@ func GetRedemptionById(id int) (*Redemption, error) {
 	var err error = nil
 	err = DB.First(&redemption, "id = ?", id).Error
 	if err != nil {
-		return nil, identity.Tag(
+		tagged := identity.Tag(
 			errors.Wrapf(err, "get redemption by id %d", id),
 			identity.NewRedemptionRef(id, "", ""))
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			// The id comes straight from the caller, so an absent row means the
+			// caller named a redemption that does not exist.
+			return nil, errkind.NotFoundErr(tagged)
+		}
+		return nil, tagged
 	}
 	return &redemption, nil
 }
 
 func Redeem(ctx context.Context, key string, userId int) (quota int64, err error) {
 	if key == "" {
-		return 0, errors.New("No redemption code provided")
+		return 0, errkind.InvalidRequestErr(errors.New("No redemption code provided"))
 	}
 	if userId == 0 {
-		return 0, errors.New("Invalid user id")
+		return 0, errkind.InvalidRequestErr(errors.New("Invalid user id"))
 	}
 	redemption := &Redemption{}
 
@@ -118,10 +132,19 @@ func Redeem(ctx context.Context, key string, userId int) (quota int64, err error
 			Where(keyCol+" = ?", key).
 			First(redemption).Error
 		if err != nil {
-			return errors.New("Invalid redemption code")
+			// The message is deliberately identical for both causes (it is what the
+			// client sees), but the fault attribution is not: only a genuinely
+			// absent row is the caller's fault. A driver failure swallowed here must
+			// stay unclassified so it can still surface as a server-side error.
+			notFound := errors.New("Invalid redemption code")
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return errkind.NotFoundErr(notFound)
+			}
+			return notFound
 		}
 		if redemption.Status != RedemptionCodeStatusEnabled {
-			return errors.New("The redemption code has been used")
+			// A code the caller already spent (or an operator disabled).
+			return errkind.InvalidRequestErr(errors.New("The redemption code has been used"))
 		}
 
 		// 2. Compare-and-swap claim of the redemption row. The WHERE on
@@ -140,7 +163,9 @@ func Redeem(ctx context.Context, key string, userId int) (quota int64, err error
 			return errors.Wrap(claim.Error, "claim redemption")
 		}
 		if claim.RowsAffected == 0 {
-			return errors.New("The redemption code has been used")
+			// Lost the compare-and-swap race against a concurrent redemption of the
+			// same code: a conflict, not a server fault.
+			return errkind.ConflictErr(errors.New("The redemption code has been used"))
 		}
 
 		// 3. Only after we own the row do we credit the user. Doing this
@@ -213,9 +238,14 @@ func DeleteRedemptionById(id int) (err error) {
 	redemption := Redemption{Id: id}
 	err = DB.Where(redemption).First(&redemption).Error
 	if err != nil {
-		return identity.Tag(
+		tagged := identity.Tag(
 			errors.Wrapf(err, "find redemption %d", id),
 			identity.NewRedemptionRef(id, "", ""))
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			// The caller asked to delete a redemption that is not there.
+			return errkind.NotFoundErr(tagged)
+		}
+		return tagged
 	}
 	return redemption.Delete()
 }

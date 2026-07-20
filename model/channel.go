@@ -182,7 +182,16 @@ func GetEnabledChannelsVersionSignature() (string, error) {
 func SearchChannels(keyword string, sortBy string, sortOrder string) (channels []*Channel, err error) {
 	orderClause := ValidateOrderClause(sortBy, sortOrder, channelSortFields, "id desc")
 
-	err = DB.Omit("key").Where("id = ? or name LIKE ? or uuid = ?", helper.String2Int(keyword), keyword+"%", normalizeUUIDKeyword(keyword)).Order(orderClause).Find(&channels).Error
+	db := DB.Omit("key")
+	if scoped, matched := applyUUIDKeyword(db, keyword, "uuid"); matched {
+		// A pasted UUID identifies exactly one channel; the LIKE arm cannot add matches.
+		db = scoped
+	} else {
+		// The internal incremental id is deliberately not searchable; UUID is the
+		// only external identifier for a channel.
+		db = db.Where("name LIKE ?", keyword+"%")
+	}
+	err = db.Order(orderClause).Find(&channels).Error
 	if err != nil {
 		return nil, errors.Wrap(err, "search channels")
 	}

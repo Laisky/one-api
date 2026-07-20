@@ -19,6 +19,7 @@ import {
 
 import Label from 'ui-component/Label';
 import TableSwitch from 'ui-component/Switch';
+import ResourceRefTooltip from 'ui-component/ResourceRefTooltip';
 import { renderQuota, renderNumber } from 'utils/common';
 import { IconDotsVertical, IconEdit, IconTrash, IconUser, IconBrandWechat, IconBrandGithub, IconMail } from '@tabler/icons-react';
 import { useTheme } from '@mui/material/styles';
@@ -77,9 +78,7 @@ export default function UsersTableRow({ item, manageUser, handleOpenModal, setMo
     <>
       <TableRow tabIndex={String(ref)}>
         <TableCell>
-          <Tooltip title={`ID: ${ref}`} placement="top">
-            <span className="resource-name-with-id">{item.username}</span>
-          </Tooltip>
+          <ResourceRefTooltip refId={ref}>{item.username}</ResourceRefTooltip>
         </TableCell>
 
         <TableCell>

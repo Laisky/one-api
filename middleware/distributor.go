@@ -14,6 +14,7 @@ import (
 	"github.com/gorilla/websocket"
 
 	"github.com/Laisky/one-api/common/ctxkey"
+	"github.com/Laisky/one-api/common/errkind"
 	"github.com/Laisky/one-api/common/identity"
 	"github.com/Laisky/one-api/model"
 	"github.com/Laisky/one-api/relay/billing/ratio"
@@ -219,27 +220,34 @@ func Distribute() func(c *gin.Context) {
 				return
 			}
 			if channel.Status != model.ChannelStatusEnabled {
-				AbortWithError(c, http.StatusForbidden, errors.New("The channel has been disabled"))
+				// The caller pinned a channel that an operator has disabled. Not a
+				// server fault, and it needs an operator, not an on-call engineer.
+				AbortWithError(c, http.StatusForbidden,
+					errkind.ConfigErr(errors.New("The channel has been disabled")))
 				return
 			}
 			requestModel = c.GetString(ctxkey.RequestModel)
 			if requestModel != "" && !channel.SupportsModel(requestModel) {
+				// The channel was pinned by the caller (API key suffix), so the
+				// model/channel mismatch is a property of the request itself.
 				AbortWithError(c, http.StatusBadRequest,
-					errors.Errorf("Channel #%d does not support the requested model: %s", channelId, requestModel))
+					errkind.InvalidRequestErr(errors.Errorf("Channel #%d does not support the requested model: %s", channelId, requestModel)))
 				return
 			}
 			isResponseWSHandshake := isResponseAPIWebSocketHandshake(c, relayMode)
 			if !channelSupportsResponseWebSocket(channel, relayMode, isResponseWSHandshake) {
+				// Caller-pinned channel plus caller-chosen transport: invalid request.
 				AbortWithError(c, http.StatusBadRequest,
-					errors.Errorf("Channel #%d does not support Response API websocket transport", channelId))
+					errkind.InvalidRequestErr(errors.Errorf("Channel #%d does not support Response API websocket transport", channelId)))
 				return
 			}
 
 			// Check endpoint support for specific channel
 			if !channelSupportsEndpoint(channel, relayMode) {
 				endpointName := channeltype.RelayModeToEndpointName(relayMode)
+				// Caller-pinned channel plus caller-chosen endpoint: invalid request.
 				AbortWithError(c, http.StatusBadRequest,
-					errors.Errorf("Channel #%d does not support the requested endpoint: %s", channelId, endpointName))
+					errkind.InvalidRequestErr(errors.Errorf("Channel #%d does not support the requested endpoint: %s", channelId, endpointName)))
 				return
 			}
 		} else {
@@ -307,7 +315,11 @@ func Distribute() func(c *gin.Context) {
 					channel, err = selectChannel(true, exclude)
 					if err != nil {
 						message := fmt.Sprintf("No available channels for Model %s under Group %s", requestModel, userGroup)
-						AbortWithError(c, http.StatusServiceUnavailable, errors.New(message))
+						// No channel serves this model for this group: an operator
+						// configuration condition, not a server fault. Marking it is
+						// what will allow the deprecated substring fallback in
+						// shouldLogAsWarning to be deleted.
+						AbortWithError(c, http.StatusServiceUnavailable, errkind.ConfigErr(errors.New(message)))
 						return
 					}
 				}

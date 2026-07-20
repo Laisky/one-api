@@ -16,6 +16,7 @@ import (
 
 	"github.com/Laisky/one-api/common"
 	"github.com/Laisky/one-api/common/config"
+	"github.com/Laisky/one-api/common/errkind"
 	"github.com/Laisky/one-api/common/helper"
 	"github.com/Laisky/one-api/model"
 	"github.com/Laisky/one-api/relay"
@@ -348,7 +349,7 @@ func AddChannel(c *gin.Context) {
 
 	// Disallow empty channel name
 	if strings.TrimSpace(channel.Name) == "" {
-		helper.RespondError(c, errors.New("Channel name is required"))
+		helper.RespondError(c, errkind.InvalidRequestErr(errors.New("Channel name is required")))
 		return
 	}
 
@@ -356,13 +357,13 @@ func AddChannel(c *gin.Context) {
 	if channel.InferenceProfileArnMap != nil && *channel.InferenceProfileArnMap != "" {
 		err = model.ValidateInferenceProfileArnMapJSON(*channel.InferenceProfileArnMap)
 		if err != nil {
-			helper.RespondError(c, errors.New("Invalid inference profile ARN map: "+err.Error()))
+			helper.RespondError(c, errkind.InvalidRequestErr(errors.New("Invalid inference profile ARN map: "+err.Error())))
 			return
 		}
 	}
 
 	if toolingCfg, provided, err := parseToolingConfigPayload(toolingRaw); err != nil {
-		helper.RespondError(c, errors.New("Invalid tooling config: "+err.Error()))
+		helper.RespondError(c, errkind.InvalidRequestErr(errors.New("Invalid tooling config: "+err.Error())))
 		return
 	} else if provided {
 		if err := channel.SetToolingConfig(toolingCfg); err != nil {
@@ -460,7 +461,7 @@ func UpdateChannel(c *gin.Context) {
 	if channel.InferenceProfileArnMap != nil && *channel.InferenceProfileArnMap != "" {
 		err = model.ValidateInferenceProfileArnMapJSON(*channel.InferenceProfileArnMap)
 		if err != nil {
-			helper.RespondError(c, errors.New("Invalid inference profile ARN map: "+err.Error()))
+			helper.RespondError(c, errkind.InvalidRequestErr(errors.New("Invalid inference profile ARN map: "+err.Error())))
 			return
 		}
 	}
@@ -468,7 +469,7 @@ func UpdateChannel(c *gin.Context) {
 	if statusOnly != "" {
 		// Only update status safely
 		if channel.Id == 0 {
-			helper.RespondError(c, errors.New("Channel id is required"))
+			helper.RespondError(c, errkind.InvalidRequestErr(errors.New("Channel id is required")))
 			return
 		}
 		model.UpdateChannelStatusById(channel.Id, channel.Status)
@@ -478,12 +479,12 @@ func UpdateChannel(c *gin.Context) {
 
 	// Disallow empty name on full update
 	if strings.TrimSpace(channel.Name) == "" {
-		helper.RespondError(c, errors.New("Channel name cannot be empty"))
+		helper.RespondError(c, errkind.InvalidRequestErr(errors.New("Channel name cannot be empty")))
 		return
 	}
 
 	if toolingCfg, provided, err := parseToolingConfigPayload(toolingRaw); err != nil {
-		helper.RespondError(c, errors.New("Invalid tooling config: "+err.Error()))
+		helper.RespondError(c, errkind.InvalidRequestErr(errors.New("Invalid tooling config: "+err.Error())))
 		return
 	} else if provided {
 		if err := channel.SetToolingConfig(toolingCfg); err != nil {
@@ -569,7 +570,8 @@ func UpdateChannelPricing(c *gin.Context) {
 
 	err = c.ShouldBindJSON(&request)
 	if err != nil {
-		helper.RespondError(c, err)
+		// Malformed request body: the caller sent JSON this endpoint cannot bind.
+		helper.RespondError(c, errkind.InvalidRequestErr(err))
 		return
 	}
 
@@ -631,7 +633,7 @@ func UpdateChannelPricing(c *gin.Context) {
 	}
 
 	if toolingCfg, provided, err := parseToolingConfigPayload(request.Tooling); err != nil {
-		helper.RespondError(c, errors.New("Invalid tooling config: "+err.Error()))
+		helper.RespondError(c, errkind.InvalidRequestErr(errors.New("Invalid tooling config: "+err.Error())))
 		return
 	} else if provided {
 		if err := channel.SetToolingConfig(toolingCfg); err != nil {
@@ -656,7 +658,7 @@ func UpdateChannelPricing(c *gin.Context) {
 func GetChannelDefaultPricing(c *gin.Context) {
 	channelType, err := strconv.Atoi(c.Query("type"))
 	if err != nil {
-		helper.RespondError(c, errors.New("Invalid channel type: "+err.Error()))
+		helper.RespondError(c, errkind.InvalidRequestErr(errors.New("Invalid channel type: "+err.Error())))
 		return
 	}
 
@@ -676,7 +678,7 @@ func GetChannelDefaultPricing(c *gin.Context) {
 		apiType := channeltype.ToAPIType(channelType)
 		providerAdaptor = relay.GetAdaptor(apiType)
 		if providerAdaptor == nil {
-			helper.RespondError(c, errors.New("Unsupported channel type"))
+			helper.RespondError(c, errkind.InvalidRequestErr(errors.New("Unsupported channel type")))
 			return
 		}
 		defaultPricing = providerAdaptor.GetDefaultModelPricing()

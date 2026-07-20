@@ -12,6 +12,7 @@ import (
 	"github.com/Laisky/one-api/common"
 	"github.com/Laisky/one-api/common/blacklist"
 	"github.com/Laisky/one-api/common/config"
+	"github.com/Laisky/one-api/common/errkind"
 	"github.com/Laisky/one-api/common/helper"
 	"github.com/Laisky/one-api/common/identity"
 	"github.com/Laisky/one-api/common/logger"
@@ -120,11 +121,17 @@ func GetUserCount() (count int64, err error) {
 func SearchUsers(keyword string, sortBy string, sortOrder string) (users []*User, err error) {
 	orderClause := ValidateOrderClause(sortBy, sortOrder, userSortFields, "id desc")
 
-	if !common.UsingPostgreSQL.Load() {
-		err = DB.Omit("password").Where("id = ? or username LIKE ? or email LIKE ? or display_name LIKE ? or uuid = ?", helper.String2Int(keyword), keyword+"%", keyword+"%", keyword+"%", normalizeUUIDKeyword(keyword)).Order(orderClause).Find(&users).Error
+	db := DB.Omit("password")
+	if scoped, matched := applyUUIDKeyword(db, keyword, "uuid"); matched {
+		// A pasted UUID identifies exactly one user; the LIKE arms cannot add matches.
+		db = scoped
 	} else {
-		err = DB.Omit("password").Where("username LIKE ? or email LIKE ? or display_name LIKE ? or uuid = ?", keyword+"%", keyword+"%", keyword+"%", normalizeUUIDKeyword(keyword)).Order(orderClause).Find(&users).Error
+		// The internal incremental id is deliberately NOT searchable: it is not
+		// exposed by the API or the UI, so accepting it here would leak an
+		// enumerable identifier that operators are not supposed to rely on.
+		db = db.Where("username LIKE ? or email LIKE ? or display_name LIKE ?", keyword+"%", keyword+"%", keyword+"%")
 	}
+	err = db.Order(orderClause).Find(&users).Error
 	if err != nil {
 		return nil, errors.Wrap(err, "search users")
 	}
@@ -157,6 +164,11 @@ func GetUserIdByAffCode(affCode string) (int, error) {
 	var user User
 	err := DB.Select("id").First(&user, "aff_code = ?", affCode).Error
 	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			// The affiliate code is typed in by the caller; an unknown one is a bad
+			// client reference, not a server fault.
+			return 0, errkind.NotFoundErr(errors.Wrapf(err, "get user id by aff code %s", affCode))
+		}
 		return 0, errors.Wrapf(err, "get user id by aff code %s", affCode)
 	}
 	return user.Id, nil
@@ -300,28 +312,38 @@ func (user *User) ValidateAndFill() (err error) {
 	// it won’t be used to build query conditions
 	password := user.Password
 	if user.Username == "" || password == "" {
-		return errors.New("Username or password is empty")
+		// Incomplete login form: bad client input, never a server fault.
+		return errkind.InvalidRequestErr(errors.New("Username or password is empty"))
 	}
 	err = DB.Where("username = ?", user.Username).First(user).Error
 	if err != nil {
 		// we must make sure check username firstly
 		// consider this case: a malicious user set his username as other's email
-		err := DB.Where("email = ?", user.Username).First(user).Error
-		if err != nil {
+		emailErr := DB.Where("email = ?", user.Username).First(user).Error
+		if emailErr != nil {
 			// NOT tagged: at this point user.Username still holds the raw login
 			// input, which this very branch exists to handle when it is somebody
 			// else's EMAIL address. Copying it into a structured `username` field
 			// would log an email (see the no-email rule).
-			return errors.Errorf("username or password is wrong, or user has been banned: username=%s", user.Username)
+			lookupErr := errors.Errorf("username or password is wrong, or user has been banned: username=%s", user.Username)
+			if errors.Is(err, gorm.ErrRecordNotFound) && errors.Is(emailErr, gorm.ErrRecordNotFound) {
+				// Both lookups positively reported "no such row": an unrecognised
+				// credential, i.e. the caller's fault.
+				return errkind.UnauthorizedErr(lookupErr)
+			}
+			// Anything else (connection refused, driver timeout, deadlock, a
+			// failover) is infrastructure. Leave it Unknown so it keeps logging
+			// at ERROR instead of being silenced as a bad password.
+			return lookupErr
 		}
 	}
 	okay := common.ValidatePasswordAndHash(password, user.Password)
 	if !okay || user.Status != UserStatusEnabled {
 		// The row was loaded successfully here, so the reference carries the real
 		// account identity rather than the submitted login string.
-		return identity.Tag(
+		return errkind.UnauthorizedErr(identity.Tag(
 			errors.New("Username or password is wrong, or user has been banned"),
-			user.Ref())
+			user.Ref()))
 	}
 	return nil
 }
@@ -569,6 +591,14 @@ func decreaseUserQuota(ctx context.Context, id int, quota int64) (err error) {
 			LookupUserRef(ctx, id))
 	}
 	if result.RowsAffected == 0 {
+		// Deliberately left unclassified (Unknown => today's ERROR treatment).
+		// This helper is shared by the pre-consume admission check and by the
+		// post-consume debit (PostConsumeTokenQuota, CacheDecreaseUserQuota).
+		// On the post-consume path a zero-rows conditional UPDATE means the
+		// request was already served but the debit failed, or the row vanished:
+		// a billing/data-integrity fault on our side that must keep paging.
+		// The genuine "caller is out of funds" case is marked upfront in
+		// PreConsumeTokenQuota, where the intent is unambiguous.
 		return identity.Tag(
 			errors.Errorf("insufficient user quota for user %d", id),
 			LookupUserRef(ctx, id))
