@@ -141,7 +141,7 @@ The original author stopped maintaining the project, leaving critical PRs and ne
     - [Coze Features](#coze-features)
       - [Support coze oauth authentication](#support-coze-oauth-authentication)
     - [Moonshot Features](#moonshot-features)
-      - [Support kimi-k2 Family](#support-kimi-k2-family)
+      - [Support Kimi Family](#support-kimi-family)
     - [GLM Features](#glm-features)
       - [Flagship Models - Text](#flagship-models---text)
       - [Flagship Models - Visual](#flagship-models---visual)
@@ -1354,12 +1354,21 @@ Response:
 
 ### Moonshot Features
 
-#### Support kimi-k2 Family
+#### Support Kimi Family
 
-Current multimodal flagships (text + image + video, 256k context, open weights on HuggingFace):
+Current flagship (1M context, text + image + video input):
 
-- `kimi-k2.7-code` — current top coding model, thinking-only deep reasoning
-- `kimi-k2.6` — multimodal flagship, thinking and non-thinking modes
+- `kimi-k3` — always-on thinking, depth selected by `reasoning_effort` (`low` / `high` / `max`, default `max`)
+
+K3 pins `temperature`, `top_p`, `n`, `presence_penalty` and `frequency_penalty` upstream and rejects other
+values, so the Moonshot adaptor drops those fields for this model and maps the OpenAI effort ladder onto
+K3's three tiers (`minimal`/`none` → `low`, `medium` → `high`, `xhigh` → `max`).
+
+K2 generation (text + image + video, 256k context, open weights on HuggingFace):
+
+- `kimi-k2.7-code` — top coding model, thinking-only deep reasoning
+- `kimi-k2.7-code-highspeed` — high-throughput variant, priced at 2x standard
+- `kimi-k2.6` — multimodal, thinking and non-thinking modes
 - `kimi-k2.5` — multimodal, thinking and non-thinking modes
 
 Classic Moonshot V1 chat models (text, plus vision-preview variants):
@@ -1367,7 +1376,14 @@ Classic Moonshot V1 chat models (text, plus vision-preview variants):
 - `moonshot-v1-8k` / `moonshot-v1-32k` / `moonshot-v1-128k`
 - `moonshot-v1-8k-vision-preview` / `moonshot-v1-32k-vision-preview` / `moonshot-v1-128k-vision-preview`
 
+> `kimi-k2.5` and the whole `moonshot-v1` series stopped accepting newly registered Moonshot accounts when
+> K3 launched, and go fully offline on 2026-08-31.
+
 > The legacy `kimi-k2-0905-preview`, `kimi-k2-0711-preview`, `kimi-k2-turbo-preview`, `kimi-k2-thinking` and `kimi-k2-thinking-turbo` models were discontinued by Moonshot on 2026-05-25.
+
+Kimi K3 is also available through several hosted providers, each with its own case-sensitive model id:
+`moonshotai/kimi-k3` (OpenRouter, Novita), `moonshotai/Kimi-K3` (SiliconFlow) and `kimi/kimi-k3`
+(Alibaba Bailian, billed in CNY with cache hits at 10% of input).
 
 ### GLM Features
 

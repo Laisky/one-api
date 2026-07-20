@@ -295,6 +295,22 @@ var miscModelRatios = map[string]adaptor.ModelConfig{
 		HuggingFaceID:               "moonshotai/Kimi-K2.6",
 		Description:                 "Moonshot Kimi K2.6 chat model with 256K context.",
 	},
+	// Kimi K3 — $3.00 in / $0.30 cache read / $15.00 out per 1M, matching Moonshot's
+	// own USD list. Source: https://novita.ai/models/model-detail/moonshotai-kimi-k3
+	// (retrieved 2026-07-20). Sampling is deliberately narrow: K3 pins temperature,
+	// top_p, n and both penalties upstream and rejects other values.
+	"moonshotai/kimi-k3": {
+		Ratio:                       3.00 * ratio.MilliTokensUsd,
+		CompletionRatio:             15.00 / 3.00,
+		CachedInputRatio:            0.30 * ratio.MilliTokensUsd,
+		ContextLength:               1048576,
+		MaxOutputTokens:             1048576,
+		InputModalities:             novitaTextImageVideoInModalities,
+		OutputModalities:            novitaTextOnlyModalities,
+		SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs", "reasoning"},
+		SupportedSamplingParameters: []string{"max_tokens", "stop"},
+		Description:                 "Moonshot Kimi K3 flagship multimodal reasoning model with 1M context and always-on thinking.",
+	},
 	"moonshotai/kimi-k2.7-code": {
 		Ratio:                       0.95 * ratio.MilliTokensUsd,
 		CompletionRatio:             4.0 / 0.95,

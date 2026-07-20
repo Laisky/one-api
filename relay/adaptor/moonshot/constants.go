@@ -10,20 +10,32 @@ import (
 // structured outputs. Reference docs:
 //   - https://platform.kimi.com/docs/intro
 //   - https://platform.kimi.com/docs/models   (canonical current model list)
-//   - https://platform.kimi.com/docs/pricing  (chat-k27-code / chat-k26 / chat-k25 / chat-v1 sub-pages)
+//   - https://platform.kimi.com/docs/pricing  (chat-k3 / chat-k27-code / chat-k26 / chat-k25 / chat-v1 sub-pages)
 //   - https://platform.moonshot.cn/docs/pricing (legacy, 301 → platform.kimi.com)
 //
-// Current multimodal flagships are Kimi K2.7 Code, K2.6 and K2.5; all three are
-// open-weight 1.1T MoE models on HuggingFace (moonshotai/Kimi-K2.7-Code,
-// moonshotai/Kimi-K2.6, moonshotai/Kimi-K2.5) and accept text + image + video
-// input. The legacy moonshot-v1 SKUs remain closed-weight.
+// Kimi K3 (2026-07-16) is the current flagship: a 1M-context, natively
+// multimodal, always-thinking model. It is the only k3 SKU on the platform —
+// there is no kimi-k3-code / -turbo / -preview / -highspeed variant, and its
+// weights were not yet published on HuggingFace when this table was written.
+// Below it sit Kimi K2.7 Code, K2.6 and K2.5, all open-weight 1.1T MoE models
+// on HuggingFace (moonshotai/Kimi-K2.7-Code, moonshotai/Kimi-K2.6,
+// moonshotai/Kimi-K2.5) accepting text + image + video input. The legacy
+// moonshot-v1 SKUs remain closed-weight.
+//
+// Sunsets announced with the K3 launch: kimi-k2.5 and the whole moonshot-v1
+// series stopped accepting newly registered users and go fully offline on
+// 2026-08-31. They are kept here until then so existing channels keep billing
+// correctly.
 //
 // The entire kimi-k2 series (kimi-k2-0905-preview, kimi-k2-0711-preview,
 // kimi-k2-turbo-preview, kimi-k2-thinking, kimi-k2-thinking-turbo) was
 // discontinued on 2026-05-25 (per platform.kimi.com/docs/models 已下线模型) and
 // is therefore removed here; kimi-latest (2026-01-28) and kimi-thinking-preview
-// (2025-11-11) were retired earlier. All prices retrieved 2026-06-12 from
-// platform.kimi.com pricing pages (RMB per 1M tokens).
+// (2025-11-11) were retired earlier. Prices retrieved 2026-07-20 from
+// platform.kimi.com pricing pages (RMB per 1M tokens). Note the international
+// mirror platform.kimi.ai publishes a separate USD list ($3.00 / $0.30 / $15.00
+// per 1M for K3); the two are independent price lists, not an FX conversion, and
+// this adaptor bills against the RMB one.
 
 // moonshotTextInputs is the input modality set for text-only Kimi chat models.
 var moonshotTextInputs = []string{"text"}
@@ -75,10 +87,44 @@ var moonshotReasoningSamplingParams = []string{
 	"seed",
 }
 
+// moonshotK3SamplingParams lists the sampling controls Kimi K3 actually honours.
+// K3 pins temperature to 1.0, top_p to 0.95, n to 1 and all penalties to 0, so
+// advertising those knobs would promise control the model does not give.
+var moonshotK3SamplingParams = []string{
+	"max_tokens",
+	"stop",
+}
+
+// moonshotK3ReasoningEfforts are the reasoning_effort levels Kimi K3 accepts.
+// K3 always thinks; effort selects how hard, it cannot turn thinking off.
+var moonshotK3ReasoningEfforts = []string{"low", "high", "max"}
+
 // ModelRatios contains all supported models and their pricing ratios
 // Model list is derived from the keys of this map, eliminating redundancy
 // Based on Moonshot pricing: https://platform.kimi.com/docs/pricing
 var ModelRatios = map[string]adaptor.ModelConfig{
+	// Kimi K3 (2026-07-16, current flagship). 1M context, native text + image +
+	// video understanding, always-on thinking whose depth is chosen by the
+	// top-level reasoning_effort field (low / high / max, default max).
+	// Automatic context caching bills cache hits at 10% of the input rate.
+	// MaxOutputTokens records the ceiling, not the default: max_completion_tokens
+	// starts at 131072 and may be raised to the full 1048576 window.
+	// Weights are not on HuggingFace yet, so no HuggingFaceID.
+	"kimi-k3": {
+		Ratio:                       20.0 * ratio.MilliTokensRmb, // input (cache-miss)
+		CompletionRatio:             100.0 / 20.0,                // output / input
+		CachedInputRatio:            2.0 * ratio.MilliTokensRmb,  // input (cache-hit)
+		ContextLength:               1048576,
+		MaxOutputTokens:             1048576,
+		InputModalities:             moonshotMultimodalInputs,
+		OutputModalities:            moonshotTextOutputs,
+		SupportedFeatures:           moonshotReasoningFeatures,
+		SupportedSamplingParameters: moonshotK3SamplingParams,
+		SupportedReasoningEfforts:   moonshotK3ReasoningEfforts,
+		DefaultReasoningEffort:      "max",
+		Description:                 "Moonshot Kimi K3 flagship: 1M-token context, native text + image + video understanding, always-on thinking with low/high/max reasoning effort.",
+	},
+
 	// Kimi K2.7 Code (2026-06, current top coding model). Multimodal text +
 	// image + video, thinking-only deep reasoning, automatic context caching,
 	// tool calls, JSON mode and Partial mode. Open weights on HuggingFace.
@@ -148,7 +194,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		SupportedSamplingParameters: moonshotSamplingParams,
 		MaxReasoningTokens:          49152,
 		HuggingFaceID:               "moonshotai/Kimi-K2.5",
-		Description:                 "Moonshot Kimi K2.5 multimodal model (text + image + video, 256k ctx) with thinking and non-thinking modes; open weights on HuggingFace.",
+		Description:                 "Moonshot Kimi K2.5 multimodal model (text + image + video, 256k ctx) with thinking and non-thinking modes; open weights on HuggingFace. Closed to newly registered users since the K3 launch; full sunset 2026-08-31.",
 	},
 
 	// Moonshot V1 classic chat models (closed-weight). Cache-hit pricing is
