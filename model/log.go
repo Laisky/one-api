@@ -549,7 +549,7 @@ func recordLogHelper(ctx context.Context, log *Log) {
 					zap.Error(err),
 					zap.String("model", log.ModelName),
 					zap.Int("quota", log.Quota),
-					zap.String("request_id", log.RequestId),
+					zap.String("log_request_id", log.RequestId),
 					zap.String("note", "billing completed successfully but log recording failed"))...)
 		} else {
 			lg.Error("failed to record log", logRowFields(ctx, log, zap.Error(err))...)
@@ -558,13 +558,17 @@ func recordLogHelper(ctx context.Context, log *Log) {
 		return
 	}
 
+	// log_request_id / log_trace_id are the correlators stored ON THE ROW. They are
+	// deliberately not called request_id / trace_id: the request-scoped logger already
+	// carries those for the CURRENT request, and on the reconciliation path the row's
+	// values belong to the earlier request that created it.
 	lg.Info("record log",
 		logRowFields(ctx, log,
 			zap.Int64("created_at", log.CreatedAt),
 			zap.Int("type", log.Type),
 			zap.String("content", log.Content),
-			zap.String("request_id", log.RequestId),
-			zap.String("trace_id", log.TraceId),
+			zap.String("log_request_id", log.RequestId),
+			zap.String("log_trace_id", log.TraceId),
 			zap.Int("quota", log.Quota),
 			zap.Int("prompt_tokens", log.PromptTokens),
 			zap.Int("completion_tokens", log.CompletionTokens),
@@ -767,7 +771,7 @@ func RecordToolLogs(ctx context.Context, base *Log, summary *ToolUsageSummary) {
 						zap.Error(err),
 						zap.String("tool", tool),
 						zap.Int64("quota", rowQuota),
-						zap.String("request_id", base.RequestId),
+						zap.String("log_request_id", base.RequestId),
 					)...,
 				)
 			}
@@ -816,7 +820,7 @@ func RecordProvisionalConsumeLog(ctx context.Context, log *Log, estimatedQuota i
 				zap.Error(err),
 				zap.String("model", log.ModelName),
 				zap.Int("quota", log.Quota),
-				zap.String("request_id", log.RequestId),
+				zap.String("log_request_id", log.RequestId),
 			)...,
 		)
 		return 0
@@ -826,7 +830,7 @@ func RecordProvisionalConsumeLog(ctx context.Context, log *Log, estimatedQuota i
 		logRowFields(ctx, log,
 			zap.Int64("estimated_quota", estimatedQuota),
 			zap.String("model", log.ModelName),
-			zap.String("request_id", log.RequestId),
+			zap.String("log_request_id", log.RequestId),
 		)...,
 	)
 
