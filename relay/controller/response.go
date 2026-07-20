@@ -94,7 +94,6 @@ func RelayResponseAPIHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 		lg.Debug("response api request routed through chat fallback",
 			zap.String("origin_model", meta.OriginModelName),
 			zap.String("actual_model", meta.ActualModelName),
-			zap.Int("channel_id", meta.ChannelId),
 			zap.Int("channel_type", meta.ChannelType),
 		)
 		return relayResponseAPIThroughChat(c, meta, responseAPIRequest)
@@ -210,8 +209,7 @@ func RelayResponseAPIHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 			estimated = preConsumedQuota
 		}
 		if requestId == "" {
-			lg.Warn("request id missing when recording provisional user request cost",
-				zap.Int("user_id", quotaId))
+			lg.Warn("request id missing when recording provisional user request cost")
 		} else if err := model.UpdateUserRequestCostQuotaByRequestID(quotaId, requestId, estimated); err != nil {
 			lg.Warn("record provisional user request cost failed", zap.Error(err), zap.String("request_id", requestId))
 		}
@@ -236,7 +234,6 @@ func RelayResponseAPIHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 		zap.Bool("has_usage", usage != nil),
 		zap.Bool("has_error", respErr != nil),
 		zap.Any("error_detail", respErr),
-		zap.Int("user_id", meta.UserId),
 		zap.String("model", meta.ActualModelName),
 		zap.String("request_id", c.GetString(ctxkey.RequestId)),
 	)
@@ -252,7 +249,6 @@ func RelayResponseAPIHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 		if usage == nil {
 			lg.Warn("response api DoResponse failed without usage, refunding pre-consumed quota",
 				zap.Int64("pre_consumed_quota", preConsumedQuota),
-				zap.Int("user_id", meta.UserId),
 				zap.String("request_id", c.GetString(ctxkey.RequestId)),
 			)
 			scheduleConservativeRefund(c, preConsumedQuota, c.GetInt(ctxkey.TokenId), "do_response_failed_without_usage")
@@ -261,7 +257,6 @@ func RelayResponseAPIHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 		lg.Debug("response api DoResponse failed but usage available, proceeding to billing",
 			zap.Int("prompt_tokens", usage.PromptTokens),
 			zap.Int("completion_tokens", usage.CompletionTokens),
-			zap.Int("user_id", meta.UserId),
 			zap.String("request_id", c.GetString(ctxkey.RequestId)),
 		)
 		// Fall through to billing with available usage
@@ -304,8 +299,7 @@ func RelayResponseAPIHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 		quota := postConsumeResponseAPIQuota(ctx, usage, meta, responseAPIRequest, preConsumedQuota, modelRatio, channelModelRatio, groupRatio, channelModelConfigs, channelCompletionRatio)
 		// Reconcile request cost with final quota (override provisional pre-consumed value)
 		if requestId == "" {
-			lg.Warn("request id missing when finalizing user request cost",
-				zap.Int("user_id", quotaId))
+			lg.Warn("request id missing when finalizing user request cost")
 		} else if err := model.UpdateUserRequestCostQuotaByRequestID(quotaId, requestId, quota); err != nil {
 			lg.Error("update user request cost failed", zap.Error(err), zap.String("request_id", requestId))
 		}

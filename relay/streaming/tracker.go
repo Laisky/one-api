@@ -10,6 +10,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/Laisky/one-api/common/ctxkey"
+	"github.com/Laisky/one-api/common/identity"
 	"github.com/Laisky/one-api/model"
 	"github.com/Laisky/one-api/relay/adaptor"
 	relaymodel "github.com/Laisky/one-api/relay/model"
@@ -71,6 +72,21 @@ func NewQuotaTracker(params QuotaTrackerParams) *QuotaTracker {
 		tracker.params.Logger = zap.NewNop()
 	}
 	return tracker
+}
+
+// userRef resolves the identity of the user this tracker bills. The tracker's
+// logger is not necessarily request-bound (it defaults to a no-op logger), so
+// log sites must carry the identity explicitly.
+//
+// Return values:
+//   - identity.UserRef: the request identity's user when available, otherwise a
+//     ref carrying only the configured user id.
+func (t *QuotaTracker) userRef() identity.UserRef {
+	ref := identity.FromContext(t.params.Ctx).User
+	if ref.ID == 0 {
+		ref.ID = t.params.UserID
+	}
+	return ref
 }
 
 // StoreTracker attaches the tracker to the gin context for downstream access.
@@ -210,8 +226,7 @@ func (t *QuotaTracker) flushLocked(force bool) error {
 
 	if err := model.CacheDecreaseUserQuota(ctx, t.params.UserID, delta); err != nil {
 		t.params.Logger.Warn("streaming quota tracker failed to update user cache",
-			zap.Int("user_id", t.params.UserID),
-			zap.Error(err))
+			append(t.userRef().Zap(), zap.Error(err))...)
 	}
 
 	t.chargedQuota += delta

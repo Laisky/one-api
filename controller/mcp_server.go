@@ -139,7 +139,7 @@ func CreateMCPServer(c *gin.Context) {
 			respondMCPServerNameTaken(c)
 			return
 		}
-		logger.Error("failed to create mcp server", zap.Error(err))
+		logger.Error("failed to create mcp server", append(server.Ref().Zap(), zap.Error(err))...)
 		helper.RespondError(c, err)
 		return
 	}
@@ -200,7 +200,7 @@ func UpdateMCPServer(c *gin.Context) {
 			respondMCPServerNameTaken(c)
 			return
 		}
-		logger.Error("failed to update mcp server", zap.Error(err))
+		logger.Error("failed to update mcp server", append(server.Ref().Zap(), zap.Error(err))...)
 		helper.RespondError(c, err)
 		return
 	}
@@ -377,10 +377,14 @@ func ListMCPServerTools(c *gin.Context) {
 	matched := applyMCPToolPricingToTools(tools, server.ToolPricing)
 	normalizedSchemas := normalizeMCPToolInputSchemas(tools)
 	if logger != nil && len(server.ToolPricing) > 0 {
-		logger.Debug("mcp tool pricing applied", zap.Int("server_id", server.Id), zap.Int("pricing_entries", len(server.ToolPricing)), zap.Int("tool_count", len(tools)), zap.Int("matched", matched))
+		logger.Debug("mcp tool pricing applied", server.Ref().AppendZap([]zap.Field{
+			zap.Int("pricing_entries", len(server.ToolPricing)),
+			zap.Int("tool_count", len(tools)),
+			zap.Int("matched", matched),
+		})...)
 	}
 	if logger != nil && normalizedSchemas > 0 {
-		logger.Debug("mcp tool schema normalized", zap.Int("server_id", server.Id), zap.Int("normalized", normalizedSchemas))
+		logger.Debug("mcp tool schema normalized", append(server.Ref().Zap(), zap.Int("normalized", normalizedSchemas))...)
 	}
 
 	c.JSON(http.StatusOK, gin.H{

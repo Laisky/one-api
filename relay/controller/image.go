@@ -476,7 +476,6 @@ func RelayImageHelper(c *gin.Context, relayMode int) *relaymodel.ErrorWithStatus
 			if shouldSkipPreConsumedRefund(c) {
 				lg.Warn("skip pre-consumed refund to prevent underbilling",
 					zap.Int64("pre_consumed_quota", preConsumedQuota),
-					zap.Int("token_id", meta.TokenId),
 					zap.String("reason", "do_request_failed"),
 				)
 			} else {
@@ -512,7 +511,6 @@ func RelayImageHelper(c *gin.Context, relayMode int) *relaymodel.ErrorWithStatus
 				if shouldSkipPreConsumedRefund(c) {
 					lg.Warn("skip pre-consumed refund to prevent underbilling",
 						zap.Int64("pre_consumed_quota", preConsumedQuota),
-						zap.Int("token_id", meta.TokenId),
 						zap.String("reason", "upstream_http_error"),
 					)
 				} else {

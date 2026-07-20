@@ -103,8 +103,7 @@ func proxyTokenSummary(c *gin.Context, meta *metalib.Meta, usage *relaymodel.Usa
 		if lg := gmw.GetLogger(c); lg != nil {
 			lg.Debug("proxy adaptor returned no usage payload; defaulting to zero tokens",
 				zap.String("method", c.Request.Method),
-				zap.String("path", c.Request.URL.Path),
-				zap.Int("channel_id", meta.ChannelId))
+				zap.String("path", c.Request.URL.Path))
 		}
 		return 0, 0
 	}

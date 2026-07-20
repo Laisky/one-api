@@ -142,15 +142,16 @@ func runPostBillingWithTimeout(
 				estimatedQuota := info.estimatedQuota()
 				elapsedTime := time.Since(info.startTime)
 
-				fields := make([]zap.Field, 0, 5)
+				// user_id/request_id are intentionally NOT re-emitted here: lg is the
+				// request-bound logger, which already carries the full request identity
+				// (user/token/channel id+uuid+name) and request_id.
+				fields := make([]zap.Field, 0, 3)
 				fields = append(fields,
 					zap.String("model", info.model),
-					zap.String("requestId", info.requestID),
-					zap.Int("userId", info.userID),
-					zap.Int64("estimatedQuota", int64(estimatedQuota)),
+					zap.Int64("estimated_quota", int64(estimatedQuota)),
 				)
 				if info.includeElapsedField {
-					fields = append(fields, zap.Duration("elapsedTime", elapsedTime))
+					fields = append(fields, zap.Duration("elapsed_time", elapsedTime))
 				}
 				lg.Error(info.logMessage, fields...)
 

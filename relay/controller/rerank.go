@@ -311,7 +311,7 @@ func preConsumeRerankQuota(c *gin.Context, perCallQuota int64, meta *metalib.Met
 	}
 
 	if userQuota > 100*perCallQuota && (tokenQuotaUnlimited || tokenQuota > 100*perCallQuota) {
-		lg.Info("user has enough quota, trusted and no need to pre-consume", zap.Int("user_id", meta.UserId), zap.Int64("user_quota", userQuota))
+		lg.Info("user has enough quota, trusted and no need to pre-consume", zap.Int64("user_quota", userQuota))
 		return 0, nil
 	}
 
@@ -367,9 +367,9 @@ func postConsumeRerankQuota(ctx context.Context,
 		billing.PostConsumeQuotaWithLog(ctx, meta.TokenId, quotaDelta, quota, logEntry, provLogID)
 	} else {
 		gmw.GetLogger(ctx).Error("meta information incomplete, cannot post consume rerank quota",
-			zap.Int("token_id", meta.TokenId),
-			zap.Int("user_id", meta.UserId),
-			zap.Int("channel_id", meta.ChannelId),
+			zap.Int("meta_token_id", meta.TokenId),
+			zap.Int("meta_user_id", meta.UserId),
+			zap.Int("meta_channel_id", meta.ChannelId),
 			zap.String("request_id", requestId),
 			zap.String("trace_id", traceId),
 		)

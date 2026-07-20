@@ -51,7 +51,6 @@ func preConsumeClaudeMessagesQuota(c *gin.Context, request *ClaudeMessagesReques
 		// because the user and token have enough quota
 		baseQuota = 0
 		lg.Info("user has enough quota, trusted and no need to pre-consume",
-			zap.Int("user_id", meta.UserId),
 			zap.Int64("user_quota", userQuota),
 		)
 	}

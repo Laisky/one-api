@@ -60,8 +60,8 @@ func getWebAuthn() (*webauthn.WebAuthn, error) {
 			logger.Logger.Error("failed to initialise WebAuthn", zap.Error(webAuthnErr))
 		} else {
 			logger.Logger.Info("WebAuthn initialised",
-				zap.String("rpId", rpID),
-				zap.Strings("rpOrigins", rpOrigins))
+				zap.String("rp_id", rpID),
+				zap.Strings("rp_origins", rpOrigins))
 		}
 	})
 	return webAuthnInstance, webAuthnErr

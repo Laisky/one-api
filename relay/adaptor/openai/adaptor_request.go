@@ -232,15 +232,13 @@ func (a *Adaptor) ConvertRequest(c *gin.Context, relayMode int, request *model.G
 		shouldForceResponseAPI(metaInfo) {
 		if unsupportedFieldCount := countResponseAPIUnsupportedContentFields(request.Messages); unsupportedFieldCount > 0 && lg != nil {
 			modelName := ""
-			channelID := 0
 			if metaInfo != nil {
 				modelName = metaInfo.ActualModelName
-				channelID = metaInfo.ChannelId
 			}
+			// The request-scoped logger already carries the channel identity.
 			lg.Debug("dropping unsupported content fields before response api conversion",
 				zap.Int("unsupported_field_count", unsupportedFieldCount),
 				zap.String("model", modelName),
-				zap.Int("channel_id", channelID),
 			)
 		}
 		responseAPIRequest := ConvertChatCompletionToResponseAPI(request)

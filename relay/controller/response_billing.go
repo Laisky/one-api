@@ -208,9 +208,9 @@ func postConsumeResponseAPIQuota(ctx context.Context,
 		// Should not happen; log for investigation
 		lg := gmw.GetLogger(ctx)
 		lg.Error("postConsumeResponseAPIQuota missing essential meta information",
-			zap.Int("token_id", meta.TokenId),
-			zap.Int("user_id", meta.UserId),
-			zap.Int("channel_id", meta.ChannelId),
+			zap.Int("meta_token_id", meta.TokenId),
+			zap.Int("meta_user_id", meta.UserId),
+			zap.Int("meta_channel_id", meta.ChannelId),
 			zap.String("request_id", requestId),
 			zap.String("trace_id", traceId),
 		)

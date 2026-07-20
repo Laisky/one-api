@@ -23,6 +23,7 @@ import (
 	"github.com/Laisky/one-api/common/config"
 	"github.com/Laisky/one-api/common/ctxkey"
 	"github.com/Laisky/one-api/common/helper"
+	"github.com/Laisky/one-api/common/identity"
 	"github.com/Laisky/one-api/common/logger"
 	"github.com/Laisky/one-api/common/random"
 	"github.com/Laisky/one-api/common/utils"
@@ -117,9 +118,10 @@ func Login(c *gin.Context) {
 	// runs after ValidateAndFill so we never reveal account existence to
 	// callers that supplied wrong credentials.
 	if !config.PasswordLoginEnabled && user.Role < model.RoleRootUser {
+		// Global logger: no request identity is bound at this point in the login
+		// flow, so the resolved account must be named explicitly.
 		logger.Logger.Debug("password login rejected: feature disabled for non-root user",
-			zap.Int("user_id", user.Id),
-			zap.Int("role", user.Role))
+			append(user.Ref().Zap(), zap.Int("role", user.Role))...)
 		helper.RespondError(c, errors.New("The administrator has disabled password login. Please use a third-party authentication method (e.g. OIDC) to log in."))
 		return
 	}
@@ -1092,7 +1094,10 @@ func UpdateUser(c *gin.Context) {
 			respondRegisterUsernameTaken(c)
 			return
 		}
-		helper.RespondError(c, errors.Wrapf(err, "failed to update user: id=%d", payload.Id))
+		// Admin endpoint: the updated account is not the caller, so tag the error
+		// with its identity (transparent to Error()/errors.Is/strings.Contains).
+		helper.RespondError(c, identity.Tag(
+			errors.Wrapf(err, "failed to update user: id=%d", payload.Id), originUser.Ref()))
 		return
 	}
 
@@ -1218,7 +1223,8 @@ func UpdateSelf(c *gin.Context) {
 			helper.RespondError(c, errors.Wrapf(err, "clear display_name for user: id=%d", userId))
 			return
 		}
-		logger.Logger.Debug("user cleared display_name", zap.Int("user_id", userId))
+		// Global logger: carries no request identity, so name the account here.
+		logger.Logger.Debug("user cleared display_name", currentUser.Ref().Zap()...)
 	}
 
 	c.JSON(http.StatusOK, gin.H{
@@ -1336,8 +1342,9 @@ func CreateUser(c *gin.Context) {
 	}
 	if len(postUpdates) > 0 {
 		if err := model.DB.Model(&model.User{}).Where("id = ?", cleanUser.Id).Updates(postUpdates).Error; err != nil {
+			// The created account is not the caller, so it is named explicitly.
 			lg.Error("failed to apply admin overrides on created user",
-				zap.Int("user_id", cleanUser.Id), zap.Error(err))
+				append(cleanUser.Ref().Zap(), zap.Error(err))...)
 		}
 	}
 
@@ -1480,8 +1487,8 @@ func TopUp(c *gin.Context) {
 	// who has already burned through their failed-attempt budget is rejected
 	// before any DB work, without leaking whether the submitted code is valid.
 	if middleware.IsRedeemBlocked(c, id) {
+		// The request-scoped logger already carries the caller's identity.
 		gmw.GetLogger(c).Warn("redemption blocked: too many failed attempts",
-			zap.Int("user_id", id),
 			zap.String("client_ip", c.ClientIP()),
 		)
 		helper.RespondErrorWithStatus(c, http.StatusTooManyRequests,
@@ -1499,8 +1506,8 @@ func TopUp(c *gin.Context) {
 		// of attempts is useful forensically. Successful redemptions are not
 		// recorded, so a legitimate user is never throttled.
 		middleware.RecordRedeemFailure(c, id)
+		// The request-scoped logger already carries the caller's identity.
 		gmw.GetLogger(c).Warn("redemption attempt failed",
-			zap.Int("user_id", id),
 			zap.String("client_ip", c.ClientIP()),
 			zap.String("attempted_key", req.Key),
 			zap.Error(err),
@@ -1764,7 +1771,10 @@ func verifyTotpCode(ctx context.Context, uid int, secret, code string) bool {
 
 	// Check if this TOTP code has been used recently (replay protection)
 	if common.IsTotpCodeUsed(ctx, uid, code) {
-		lg.Warn(fmt.Sprintf("TOTP code replay attempt detected for user %d", uid))
+		// ctx may be a bare background context here (TOTP is also verified off the
+		// request goroutine), so resolve the account explicitly. This branch only
+		// fires on a detected replay, never on the normal login path.
+		lg.Warn("TOTP code replay attempt detected", model.LookupUserRef(ctx, uid).Zap()...)
 		return false
 	}
 

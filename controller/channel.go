@@ -202,10 +202,10 @@ func buildChannelResponsePayload(lg glog.Logger, channel *model.Channel) any {
 	// splice the optional tooling JSON as before.
 	if payload, err := json.Marshal(channel.ToResponse()); err == nil {
 		if err = json.Unmarshal(payload, &response); err != nil && lg != nil {
-			lg.Error("failed to unmarshal channel response payload", zap.Int("channel_id", channel.Id), zap.Error(err))
+			lg.Error("failed to unmarshal channel response payload", append(channel.Ref().Zap(), zap.Error(err))...)
 		}
 	} else if lg != nil {
-		lg.Error("failed to marshal channel response payload", zap.Int("channel_id", channel.Id), zap.Error(err))
+		lg.Error("failed to marshal channel response payload", append(channel.Ref().Zap(), zap.Error(err))...)
 	}
 
 	if tooling := channel.GetToolingConfig(); tooling != nil {
@@ -213,7 +213,7 @@ func buildChannelResponsePayload(lg glog.Logger, channel *model.Channel) any {
 			toolingStr := string(data)
 			response["tooling"] = toolingStr
 		} else if lg != nil {
-			lg.Error("failed to marshal tooling config", zap.Int("channel_id", channel.Id), zap.Error(err))
+			lg.Error("failed to marshal tooling config", append(channel.Ref().Zap(), zap.Error(err))...)
 		}
 	}
 
@@ -533,7 +533,10 @@ func GetChannelPricing(c *gin.Context) {
 			modelNames = append(modelNames, modelName)
 		}
 		if lg != nil {
-			lg.Info("Channel returning model configs", zap.Int("id", channel.Id), zap.Int("type", channel.Type), zap.Any("models", modelNames))
+			lg.Info("Channel returning model configs",
+				append(channel.Ref().Zap(),
+					zap.Int("channel_type", channel.Type),
+					zap.Any("models", modelNames))...)
 		}
 	}
 

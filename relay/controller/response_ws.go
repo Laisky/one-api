@@ -132,7 +132,6 @@ func maybeHandleResponseAPIWebSocket(c *gin.Context, meta *metalib.Meta) (bool, 
 		zap.Int("prompt_tokens", usage.PromptTokens),
 		zap.Int("completion_tokens", usage.CompletionTokens),
 		zap.Int("total_tokens", usage.TotalTokens),
-		zap.Int("user_id", meta.UserId),
 		zap.String("model", meta.ActualModelName),
 	)
 
@@ -157,7 +156,6 @@ func maybeHandleResponseAPIWebSocket(c *gin.Context, meta *metalib.Meta) (bool, 
 	if usage.PromptTokens == 0 && usage.CompletionTokens == 0 {
 		lg.Warn("response api websocket returned zero usage, keeping pre-consumed quota as-is",
 			zap.Int64("pre_consumed_quota", preConsumedQuota),
-			zap.Int("user_id", meta.UserId),
 			zap.String("model", meta.ActualModelName),
 			zap.String("request_id", c.GetString(ctxkey.RequestId)),
 		)

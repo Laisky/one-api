@@ -11,6 +11,7 @@ import (
 
 	"github.com/Laisky/errors/v2"
 
+	"github.com/Laisky/one-api/common/identity"
 	"github.com/Laisky/one-api/model"
 )
 
@@ -124,7 +125,9 @@ func BuildToolCandidates(servers []*model.MCPServer, toolsByServer map[int][]*mo
 		}
 		resolved, err := ResolveTools(server, tools, channelBlacklist, userBlacklist, allowedTools)
 		if err != nil {
-			return nil, errors.Wrapf(err, "resolve tools for server %d", server.Id)
+			return nil, identity.Tag(
+				errors.Wrapf(err, "resolve tools for server %d", server.Id),
+				server.Ref())
 		}
 		for _, entry := range resolved {
 			if !entry.Policy.Allowed || entry.Tool == nil {

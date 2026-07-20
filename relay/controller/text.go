@@ -290,8 +290,7 @@ func RelayTextHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 		requestId := c.GetString(ctxkey.RequestId)
 		estimated := estimatePreConsumedQuota(textRequest, promptUsage, modelRatio, completionRatio, channelModelRatio, groupRatio, channelModelConfigs, channelCompletionRatio, meta)
 		if requestId == "" {
-			lg.Warn("request id missing when recording provisional user request cost",
-				zap.Int("user_id", quotaId))
+			lg.Warn("request id missing when recording provisional user request cost")
 		} else if err := model.UpdateUserRequestCostQuotaByRequestID(quotaId, requestId, estimated); err != nil {
 			lg.Warn("record provisional user request cost failed", zap.Error(err), zap.String("request_id", requestId))
 		}
@@ -426,8 +425,7 @@ func RelayTextHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 		quota := postConsumeQuota(ctx, usage, meta, textRequest, ratio, preConsumedQuota, incrementalCharged, modelRatio, channelModelRatio, groupRatio, systemPromptReset, channelModelConfigs, channelCompletionRatio)
 		// Reconcile request cost with final quota (override provisional pre-consumed value)
 		if requestId == "" {
-			lg.Warn("request id missing when finalizing user request cost",
-				zap.Int("user_id", quotaId))
+			lg.Warn("request id missing when finalizing user request cost")
 		} else if err := model.UpdateUserRequestCostQuotaByRequestID(quotaId, requestId, quota); err != nil {
 			lg.Error("update user request cost failed", zap.Error(err), zap.String("request_id", requestId))
 		}

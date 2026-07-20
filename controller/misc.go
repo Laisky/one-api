@@ -253,13 +253,16 @@ func ResetPassword(c *gin.Context) {
 
 	err = model.ResetUserPasswordByEmail(req.Email, password)
 	if err != nil {
-		lg.Error("failed to reset password", zap.String("email", req.Email), zap.Error(err))
+		// The account is resolved by email, so name it by id/uuid/username rather
+		// than by email address.
+		lg.Error("failed to reset password", append(lockedCheckUser.Ref().Zap(), zap.Error(err))...)
 		helper.RespondError(c, err)
 		return
 	}
 	common.DeleteKey(req.Email, common.PasswordResetPurpose)
-	lg.Info("password reset successful", zap.String("email", req.Email),
-		zap.Bool("user_provided_password", req.Password != ""))
+	lg.Info("password reset successful",
+		append(lockedCheckUser.Ref().Zap(),
+			zap.Bool("user_provided_password", req.Password != ""))...)
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",

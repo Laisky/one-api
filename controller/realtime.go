@@ -109,7 +109,6 @@ func RelayRealtime(c *gin.Context) {
 		// Trusted user with plenty of quota — skip pre-consumption
 		preConsumedQuota = 0
 		lg.Info("realtime: user has enough quota, skip pre-consume",
-			zap.Int("user_id", relayMeta.UserId),
 			zap.Int64("user_quota", userQuota))
 	}
 
@@ -186,10 +185,8 @@ func postConsumeRealtimeQuota(
 	lg := gmw.GetLogger(c)
 
 	if relayMeta.TokenId <= 0 || relayMeta.UserId <= 0 || relayMeta.ChannelId <= 0 {
-		lg.Error("realtime billing: meta information incomplete, cannot post consume quota",
-			zap.Int("token_id", relayMeta.TokenId),
-			zap.Int("user_id", relayMeta.UserId),
-			zap.Int("channel_id", relayMeta.ChannelId))
+		// The request-scoped logger already carries user/token/channel identity.
+		lg.Error("realtime billing: meta information incomplete, cannot post consume quota")
 		return 0
 	}
 
@@ -252,7 +249,6 @@ func postConsumeRealtimeQuota(
 		zap.Float64("model_ratio", computeResult.UsedModelRatio),
 		zap.Float64("group_ratio", groupRatio),
 		zap.Float64("completion_ratio", computeResult.UsedCompletionRatio),
-		zap.String("request_id", requestId),
 		zap.String("trace_id", traceId))
 
 	// Mark billing reconciled so the safety net doesn't fire

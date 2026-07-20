@@ -100,7 +100,7 @@ func getPromptTokens(ctx context.Context, textRequest *relaymodel.GeneralOpenAIR
 	default:
 		// Log error for unhandled relay modes that should have billing
 		gmw.GetLogger(ctx).Error("getPromptTokens: unhandled relay mode without billing logic",
-			zap.Int("relayMode", relayMode),
+			zap.Int("relay_mode", relayMode),
 			zap.String("model", textRequest.Model))
 	}
 
@@ -236,7 +236,7 @@ func preConsumeQuota(
 		// in this case, we do not pre-consume quota
 		// because the user and token have enough quota
 		preConsumedQuota = 0
-		lg.Info("user has enough quota, trusted and no need to pre-consume", zap.Int("user_id", meta.UserId), zap.Int64("user_quota", userQuota))
+		lg.Info("user has enough quota, trusted and no need to pre-consume", zap.Int64("user_quota", userQuota))
 	}
 	if preConsumedQuota > 0 {
 		err := model.PreConsumeTokenQuota(ctx, meta.TokenId, preConsumedQuota)
@@ -351,9 +351,9 @@ func postConsumeQuota(ctx context.Context,
 		})
 	} else {
 		gmw.GetLogger(ctx).Error("meta information incomplete, cannot post consume quota",
-			zap.Int("token_id", meta.TokenId),
-			zap.Int("user_id", meta.UserId),
-			zap.Int("channel_id", meta.ChannelId),
+			zap.Int("meta_token_id", meta.TokenId),
+			zap.Int("meta_user_id", meta.UserId),
+			zap.Int("meta_channel_id", meta.ChannelId),
 			zap.String("request_id", requestId),
 			zap.String("trace_id", traceId),
 		)
@@ -469,9 +469,9 @@ func postConsumeQuotaWithTraceID(ctx context.Context, traceId string,
 		})
 	} else {
 		gmw.GetLogger(ctx).Error("meta information incomplete, cannot post consume quota",
-			zap.Int("token_id", meta.TokenId),
-			zap.Int("user_id", meta.UserId),
-			zap.Int("channel_id", meta.ChannelId),
+			zap.Int("meta_token_id", meta.TokenId),
+			zap.Int("meta_user_id", meta.UserId),
+			zap.Int("meta_channel_id", meta.ChannelId),
 			zap.String("request_id", requestId),
 			zap.String("trace_id", traceId),
 		)
