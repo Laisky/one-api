@@ -120,8 +120,7 @@ func (channel *Channel) GetToolingConfig() *ChannelToolingConfig {
 	cfg, err := channel.LoadConfig()
 	if err != nil {
 		logger.Logger.Error("failed to load channel config for tooling",
-			zap.Int("channel_id", channel.Id),
-			zap.Error(err))
+			append(channel.Ref().Zap(), zap.Error(err))...)
 		return nil
 	}
 	return cloneChannelToolingConfig(cfg.Tooling)

@@ -113,7 +113,7 @@ func (m *MockMetricsRecorder) RecordCompactUUIDLookupFallback(role, reason strin
 func (m *MockMetricsRecorder) UpdateCompactUUIDLastProgress(role string, unixTime float64)      {}
 func (m *MockMetricsRecorder) RecordCompactUUIDDuration(role, operation string, duration time.Duration) {
 }
-func (m *MockMetricsRecorder) RecordResponseStateEvent(category, outcome string)                {}
+func (m *MockMetricsRecorder) RecordResponseStateEvent(category, outcome string) {}
 func (m *MockMetricsRecorder) InitSystemMetrics(version, buildTime, goVersion string, startTime time.Time) {
 }
 func (m *MockMetricsRecorder) UpdateSiteWideStats(totalQuota, usedQuota int64, totalUsers, activeUsers int) {

@@ -7,6 +7,7 @@ import (
 	"github.com/Laisky/zap"
 
 	"github.com/Laisky/one-api/common"
+	"github.com/Laisky/one-api/common/identity"
 	"github.com/Laisky/one-api/common/logger"
 )
 
@@ -141,13 +142,14 @@ func UpdateMCPServer(server *MCPServer) error {
 		}
 		if len(forcedUpdates) > 0 {
 			if err := DB.Model(&MCPServer{}).Where("id = ?", server.Id).Updates(forcedUpdates).Error; err != nil {
-				return errors.Wrapf(err, "update provided fields for mcp server id=%d", server.Id)
+				return identity.Tag(
+					errors.Wrapf(err, "update provided fields for mcp server id=%d", server.Id),
+					server.Ref())
 			}
 			if len(cleared) > 0 && logger.Logger != nil {
 				// Field NAMES only, never values (api_key, headers may contain secrets).
 				logger.Logger.Debug("mcp server update cleared fields",
-					zap.Int("mcp_server_id", server.Id),
-					zap.Strings("cleared_fields", cleared))
+					append(server.Ref().Zap(), zap.Strings("cleared_fields", cleared))...)
 			}
 		}
 	}

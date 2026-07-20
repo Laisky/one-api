@@ -13,6 +13,7 @@ import (
 	"gorm.io/gorm"
 
 	"github.com/Laisky/one-api/common"
+	"github.com/Laisky/one-api/common/identity"
 	"github.com/Laisky/one-api/common/logger"
 	"github.com/Laisky/one-api/dto"
 )
@@ -100,10 +101,14 @@ func GetRandomSatisfiedChannel(group string, model string, ignoreFirstPriority b
 	channel := Channel{}
 	channel.Id = ability.ChannelId
 	if err := DB.First(&channel, "id = ?", ability.ChannelId).Error; err != nil {
-		return nil, errors.Wrapf(err, "load channel %d for ability", ability.ChannelId)
+		return nil, identity.Tag(
+			errors.Wrapf(err, "load channel %d for ability", ability.ChannelId),
+			LookupChannelRef(context.Background(), ability.ChannelId))
 	}
 	if !channel.SupportsModel(model) {
-		return nil, errors.Errorf("channel #%d does not list support for model %s", channel.Id, model)
+		return nil, identity.Tag(
+			errors.Errorf("channel #%d does not list support for model %s", channel.Id, model),
+			channel.Ref())
 	}
 	return &channel, nil
 }
@@ -147,7 +152,9 @@ func addAbilitiesWithDB(db *gorm.DB, channel *Channel) error {
 		return nil
 	}
 	if err := db.Create(&abilities).Error; err != nil {
-		return errors.Wrapf(err, "create abilities for channel %d", channel.Id)
+		return identity.Tag(
+			errors.Wrapf(err, "create abilities for channel %d", channel.Id),
+			channel.Ref())
 	}
 	return nil
 }
@@ -164,7 +171,9 @@ func deleteAbilitiesWithDB(db *gorm.DB, channelID int) error {
 		return errors.New("database not initialized")
 	}
 	if err := db.Where("channel_id = ?", channelID).Delete(&Ability{}).Error; err != nil {
-		return errors.Wrapf(err, "delete abilities for channel %d", channelID)
+		return identity.Tag(
+			errors.Wrapf(err, "delete abilities for channel %d", channelID),
+			LookupChannelRef(context.Background(), channelID))
 	}
 	return nil
 }
@@ -181,7 +190,9 @@ func (channel *Channel) UpdateAbilities() error {
 		}
 		return addAbilitiesWithDB(tx, channel)
 	}); err != nil {
-		return errors.Wrapf(err, "update abilities for channel %d", channel.Id)
+		return identity.Tag(
+			errors.Wrapf(err, "update abilities for channel %d", channel.Id),
+			channel.Ref())
 	}
 	return nil
 }
@@ -337,11 +348,15 @@ func SuspendAbility(ctx context.Context, group string, modelName string, channel
 			group, modelName, channelId).
 		Update("suspend_until", suspendTime)
 	if result.Error != nil {
-		return errors.Wrapf(result.Error, "suspend ability for group %q, model %q, channel %d", group, modelName, channelId)
+		return identity.Tag(
+			errors.Wrapf(result.Error, "suspend ability for group %q, model %q, channel %d", group, modelName, channelId),
+			LookupChannelRef(ctx, channelId))
 	}
 	if result.RowsAffected != 1 {
-		return errors.Errorf("suspend ability for group %q, model %q, channel %d affected %d rows instead of 1",
-			group, modelName, channelId, result.RowsAffected)
+		return identity.Tag(
+			errors.Errorf("suspend ability for group %q, model %q, channel %d affected %d rows instead of 1",
+				group, modelName, channelId, result.RowsAffected),
+			LookupChannelRef(ctx, channelId))
 	}
 	return nil
 }
@@ -383,10 +398,14 @@ func GetRandomSatisfiedChannelExcluding(group string, model string, ignoreFirstP
 	channel := Channel{}
 	channel.Id = ability.ChannelId
 	if err := DB.First(&channel, "id = ?", ability.ChannelId).Error; err != nil {
-		return nil, errors.Wrapf(err, "load channel %d for ability exclusion check", ability.ChannelId)
+		return nil, identity.Tag(
+			errors.Wrapf(err, "load channel %d for ability exclusion check", ability.ChannelId),
+			LookupChannelRef(context.Background(), ability.ChannelId))
 	}
 	if !channel.SupportsModel(model) {
-		return nil, errors.Errorf("channel #%d does not list support for model %s", channel.Id, model)
+		return nil, identity.Tag(
+			errors.Errorf("channel #%d does not list support for model %s", channel.Id, model),
+			channel.Ref())
 	}
 	return &channel, nil
 }

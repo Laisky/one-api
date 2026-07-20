@@ -16,6 +16,7 @@ import (
 
 	"github.com/Laisky/one-api/common"
 	"github.com/Laisky/one-api/common/config"
+	"github.com/Laisky/one-api/common/identity"
 	"github.com/Laisky/one-api/common/logger"
 	"github.com/Laisky/one-api/common/random"
 	"github.com/Laisky/one-api/dto"
@@ -64,11 +65,16 @@ func CacheGetTokenByKey(ctx context.Context, key string) (*Token, error) {
 		// for the internal cache is intentional here.)
 		jsonBytes, err := json.Marshal(token)
 		if err != nil {
-			return nil, errors.Wrapf(err, "marshal token %d for cache", token.Id)
+			return nil, identity.Tag(
+				errors.Wrapf(err, "marshal token %d for cache", token.Id),
+				token.Ref(), token.OwnerRef())
 		}
 		err = common.RedisSet(ctx, fmt.Sprintf("token:%s", key), string(jsonBytes), time.Duration(TokenCacheSeconds)*time.Second)
 		if err != nil {
-			lg.Warn("Redis set token failed, continuing without cache", zap.String("key", key), zap.Error(err))
+			// The raw token key is a credential and must never reach the log; the
+			// token reference (id + uuid + name) is what an operator can act on.
+			lg.Warn("Redis set token failed, continuing without cache",
+				append(token.Ref().Zap(), zap.Error(err))...)
 		}
 		return &token, nil
 	}
@@ -114,11 +120,12 @@ func CacheGetUserById(ctx context.Context, id int) (*User, error) {
 	// analyzer: marshaling the raw entity for the internal cache is intentional.)
 	payload, err := json.Marshal(user)
 	if err != nil {
-		lg.Warn("failed to marshal user for cache", zap.Int("user_id", id), zap.Error(err))
+		lg.Warn("failed to marshal user for cache", append(user.Ref().Zap(), zap.Error(err))...)
 		return user, nil
 	}
 	if setErr := common.RedisSet(ctx, cacheKey, string(payload), time.Duration(UserId2UserCacheSeconds)*time.Second); setErr != nil {
-		lg.Warn("Redis set user object failed, continuing without cache", zap.Int("user_id", id), zap.Error(setErr))
+		lg.Warn("Redis set user object failed, continuing without cache",
+			append(user.Ref().Zap(), zap.Error(setErr))...)
 	}
 	return user, nil
 }
@@ -160,7 +167,8 @@ func CacheGetUsername(ctx context.Context, id int) string {
 			return username
 		}
 		if setErr := common.RedisSet(ctx, fmt.Sprintf("user_username:%d", id), username, time.Duration(UserId2UsernameCacheSeconds)*time.Second); setErr != nil {
-			lg.Warn("Redis set username failed, continuing without cache", zap.Int("user_id", id), zap.Error(setErr))
+			lg.Warn("Redis set username failed, continuing without cache",
+				append(identity.NewUserRef(id, "", username).Zap(), zap.Error(setErr))...)
 		}
 	}
 	return username
@@ -537,7 +545,7 @@ func CacheGetRandomSatisfiedChannel(group string, model string, ignoreFirstPrior
 		}
 	}
 	channel := candidateChannels[idx]
-	logger.Logger.Info("select channel in cache", zap.String("channel_name", channel.Name), zap.Int("channel_id", channel.Id))
+	logger.Logger.Info("select channel in cache", channel.Ref().Zap()...)
 	return channel, nil
 }
 
@@ -613,7 +621,7 @@ func CacheGetRandomSatisfiedChannelExcluding(group string, model string, ignoreF
 		if endIdx < len(candidateChannels) {
 			idx := random.RandRange(endIdx, len(candidateChannels))
 			channel := candidateChannels[idx]
-			logger.Logger.Info("select channel in cache", zap.String("channel_name", channel.Name), zap.Int("channel_id", channel.Id))
+			logger.Logger.Info("select channel in cache", channel.Ref().Zap()...)
 			return channel, nil
 		} else {
 			// No lower priority channels available, return error to indicate we should try a different approach
@@ -649,7 +657,7 @@ func CacheGetRandomSatisfiedChannelExcluding(group string, model string, ignoreF
 
 		idx := rand.Intn(len(maxPriorityChannels))
 		channel := maxPriorityChannels[idx]
-		logger.Logger.Info("select channel in cache", zap.String("channel_name", channel.Name), zap.Int("channel_id", channel.Id))
+		logger.Logger.Info("select channel in cache", channel.Ref().Zap()...)
 		return channel, nil
 	}
 }

@@ -16,6 +16,7 @@ import (
 	"github.com/Laisky/one-api/common"
 	"github.com/Laisky/one-api/common/config"
 	"github.com/Laisky/one-api/common/helper"
+	"github.com/Laisky/one-api/common/identity"
 	"github.com/Laisky/one-api/common/logger"
 	"github.com/Laisky/one-api/dto"
 )
@@ -97,8 +98,7 @@ func FillLogUserUUIDByID(ctx context.Context, log *Log) {
 	userUUID, err := GetUserUUIDByID(log.UserId)
 	if err != nil {
 		logger.FromContext(ctx).Warn("failed to fill log user uuid",
-			zap.Int("user_id", log.UserId),
-			zap.Error(err))
+			append(log.Refs().User.Zap(), zap.Error(err))...)
 		return
 	}
 	if userUUID != "" {
@@ -483,6 +483,58 @@ func GetLogOrderClause(sortBy string, sortOrder string) string {
 // We need a systematic audit of every function that attempts to fetch values
 // from `context.Context` and change the design to pass those values explicitly
 // as parameters, rather than trying to read them from a generic `context.Context`.
+// sameZapField reports whether two zap fields are identical for the field shapes
+// identity references emit (zap.Int and zap.String).
+func sameZapField(a, b zap.Field) bool {
+	return a.Key == b.Key && a.Type == b.Type &&
+		a.Integer == b.Integer && a.String == b.String
+}
+
+// logRowFields returns the log row's own reference (log_id/log_uuid) plus only
+// the denormalised user/token/channel fields that ctx's request-scoped logger
+// does not already carry.
+//
+// Rationale: on the billing hot path the logger bound by identity.Bind already
+// emits the request's user/token/channel identity, and zap performs no key
+// de-duplication, so emitting log.LogFields() there would repeat ~8 keys on every
+// billed request. A row field whose value DIFFERS from the bound identity is
+// kept: it means the row is about another entity (admin action, cron job), which
+// is information rather than noise. This mirrors identity.ExtraFields.
+//
+// Parameters:
+//   - ctx: request or background context; its bound identity is used to suppress duplicates.
+//   - log: the row being reported; nil contributes only extra.
+//   - extra: additional fields appended after the identity fields.
+//
+// Return values:
+//   - []zap.Field: ready-to-log field slice.
+func logRowFields(ctx context.Context, log *Log, extra ...zap.Field) []zap.Field {
+	if log == nil {
+		return extra
+	}
+
+	bound := identity.FromContext(ctx).Zap()
+	if len(bound) == 0 {
+		return log.LogFields(extra...)
+	}
+
+	fields := identity.NewLogRef(log.Id, log.UUID).Zap()
+	for _, f := range log.Refs().Zap() {
+		duplicate := false
+		for _, b := range bound {
+			if sameZapField(f, b) {
+				duplicate = true
+				break
+			}
+		}
+		if !duplicate {
+			fields = append(fields, f)
+		}
+	}
+
+	return append(fields, extra...)
+}
+
 func recordLogHelper(ctx context.Context, log *Log) {
 	lg := logger.FromContext(ctx)
 	// IDs must be pre-populated by the caller from gin.Context
@@ -493,31 +545,30 @@ func recordLogHelper(ctx context.Context, log *Log) {
 		// For billing logs (consume type), this is critical as it means we sent upstream request but failed to log it
 		if log.Type == LogTypeConsume {
 			lg.Error("failed to record billing log - audit trail incomplete",
-				zap.Error(err),
-				zap.Int("userId", log.UserId),
-				zap.Int("channelId", log.ChannelId),
-				zap.String("model", log.ModelName),
-				zap.Int("quota", log.Quota),
-				zap.String("requestId", log.RequestId),
-				zap.String("note", "billing completed successfully but log recording failed"))
+				logRowFields(ctx, log,
+					zap.Error(err),
+					zap.String("model", log.ModelName),
+					zap.Int("quota", log.Quota),
+					zap.String("request_id", log.RequestId),
+					zap.String("note", "billing completed successfully but log recording failed"))...)
 		} else {
-			lg.Error("failed to record log", zap.Error(err))
+			lg.Error("failed to record log", logRowFields(ctx, log, zap.Error(err))...)
 		}
 
 		return
 	}
 
 	lg.Info("record log",
-		zap.Int("user_id", log.UserId),
-		zap.String("username", log.Username),
-		zap.Int64("created_at", log.CreatedAt),
-		zap.Int("type", log.Type),
-		zap.String("content", log.Content),
-		zap.String("request_id", log.RequestId),
-		zap.String("trace_id", log.TraceId),
-		zap.Int("quota", log.Quota),
-		zap.Int("prompt_tokens", log.PromptTokens),
-		zap.Int("completion_tokens", log.CompletionTokens),
+		logRowFields(ctx, log,
+			zap.Int64("created_at", log.CreatedAt),
+			zap.Int("type", log.Type),
+			zap.String("content", log.Content),
+			zap.String("request_id", log.RequestId),
+			zap.String("trace_id", log.TraceId),
+			zap.Int("quota", log.Quota),
+			zap.Int("prompt_tokens", log.PromptTokens),
+			zap.Int("completion_tokens", log.CompletionTokens),
+		)...,
 	)
 }
 
@@ -712,11 +763,12 @@ func RecordToolLogs(ctx context.Context, base *Log, summary *ToolUsageSummary) {
 			ensureLogContent(row)
 			if err := LOG_DB.Create(row).Error; err != nil {
 				lg.Error("failed to record tool log",
-					zap.Error(err),
-					zap.Int("user_id", base.UserId),
-					zap.String("tool", tool),
-					zap.Int64("quota", rowQuota),
-					zap.String("request_id", base.RequestId),
+					logRowFields(ctx, row,
+						zap.Error(err),
+						zap.String("tool", tool),
+						zap.Int64("quota", rowQuota),
+						zap.String("request_id", base.RequestId),
+					)...,
 				)
 			}
 		}
@@ -760,22 +812,22 @@ func RecordProvisionalConsumeLog(ctx context.Context, log *Log, estimatedQuota i
 	err := LOG_DB.Create(log).Error
 	if err != nil {
 		lg.Error("failed to record provisional billing log",
-			zap.Error(err),
-			zap.Int("userId", log.UserId),
-			zap.Int("channelId", log.ChannelId),
-			zap.String("model", log.ModelName),
-			zap.Int("quota", log.Quota),
-			zap.String("requestId", log.RequestId),
+			logRowFields(ctx, log,
+				zap.Error(err),
+				zap.String("model", log.ModelName),
+				zap.Int("quota", log.Quota),
+				zap.String("request_id", log.RequestId),
+			)...,
 		)
 		return 0
 	}
 
 	lg.Debug("recorded provisional consume log",
-		zap.Int("log_id", log.Id),
-		zap.Int("user_id", log.UserId),
-		zap.Int64("estimated_quota", estimatedQuota),
-		zap.String("model", log.ModelName),
-		zap.String("request_id", log.RequestId),
+		logRowFields(ctx, log,
+			zap.Int64("estimated_quota", estimatedQuota),
+			zap.String("model", log.ModelName),
+			zap.String("request_id", log.RequestId),
+		)...,
 	)
 
 	return log.Id
@@ -856,7 +908,9 @@ func ReconcileConsumeLogDetailed(ctx context.Context, logID int, detail ConsumeL
 			zap.Int64("final_quota", detail.FinalQuota),
 			zap.NamedError("ctx_err", ctx.Err()),
 		)
-		return errors.Wrapf(err, "failed to reconcile consume log: id=%d", logID)
+		return identity.Tag(
+			errors.Wrapf(err, "failed to reconcile consume log: id=%d", logID),
+			identity.NewLogRef(logID, ""), identity.FromContext(ctx))
 	}
 
 	lg.Debug("reconciled provisional consume log",
@@ -921,7 +975,9 @@ func UpdateConsumeLogByID(ctx context.Context, logID int, updates map[string]any
 	if err := LOG_DB.WithContext(ctx).Model(&Log{}).
 		Where("id = ?", logID).
 		Updates(updates).Error; err != nil {
-		return errors.Wrapf(err, "failed to update consume log: id=%d", logID)
+		return identity.Tag(
+			errors.Wrapf(err, "failed to update consume log: id=%d", logID),
+			identity.NewLogRef(logID, ""), identity.FromContext(ctx))
 	}
 	return nil
 }
@@ -1039,10 +1095,10 @@ func GetUserLogs(userId int, logType int, startTimestamp int64, endTimestamp int
 		err = tx.Order(orderClause).Limit(num).Offset(startIdx).Find(&logs).Error
 	}
 	if err != nil {
-		return nil, errors.Wrapf(err, "get user %d logs", userId)
+		return nil, identity.Tag(errors.Wrapf(err, "get user %d logs", userId), LookupUserRef(context.Background(), userId))
 	}
 	if err := fillLogChannelNames(logs); err != nil {
-		return nil, errors.Wrapf(err, "fill user %d log channel names", userId)
+		return nil, identity.Tag(errors.Wrapf(err, "fill user %d log channel names", userId), LookupUserRef(context.Background(), userId))
 	}
 	return logs, nil
 }
@@ -1071,7 +1127,7 @@ func GetUserLogsCount(userId int, logType int, startTimestamp int64, endTimestam
 
 	err = tx.Model(&Log{}).Count(&count).Error
 	if err != nil {
-		return 0, errors.Wrapf(err, "count user %d logs", userId)
+		return 0, identity.Tag(errors.Wrapf(err, "count user %d logs", userId), LookupUserRef(context.Background(), userId))
 	}
 	return count, nil
 }
@@ -1104,10 +1160,10 @@ func SearchUserLogs(userId int, keyword string, startIdx int, num int, sortBy st
 	db = db.Order(orderClause)
 	err = db.Count(&total).Limit(num).Offset(startIdx).Find(&logs).Error
 	if err != nil {
-		return nil, 0, errors.Wrapf(err, "search user %d logs", userId)
+		return nil, 0, identity.Tag(errors.Wrapf(err, "search user %d logs", userId), LookupUserRef(context.Background(), userId))
 	}
 	if err := fillLogChannelNames(logs); err != nil {
-		return nil, 0, errors.Wrapf(err, "fill searched user %d log channel names", userId)
+		return nil, 0, identity.Tag(errors.Wrapf(err, "fill searched user %d log channel names", userId), LookupUserRef(context.Background(), userId))
 	}
 	return logs, total, nil
 }
@@ -1177,7 +1233,9 @@ func DeleteOldLog(targetTimestamp int64) (int64, error) {
 func GetLogById(id int) (*Log, error) {
 	var log Log
 	if err := LOG_DB.Where("id = ?", id).First(&log).Error; err != nil {
-		return nil, errors.Wrapf(err, "get log by id %d", id)
+		return nil, identity.Tag(
+			errors.Wrapf(err, "get log by id %d", id),
+			identity.NewLogRef(id, ""))
 	}
 	return &log, nil
 }

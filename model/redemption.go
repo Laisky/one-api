@@ -10,6 +10,7 @@ import (
 
 	"github.com/Laisky/one-api/common"
 	"github.com/Laisky/one-api/common/helper"
+	"github.com/Laisky/one-api/common/identity"
 )
 
 const (
@@ -84,7 +85,9 @@ func GetRedemptionById(id int) (*Redemption, error) {
 	var err error = nil
 	err = DB.First(&redemption, "id = ?", id).Error
 	if err != nil {
-		return nil, errors.Wrapf(err, "get redemption by id %d", id)
+		return nil, identity.Tag(
+			errors.Wrapf(err, "get redemption by id %d", id),
+			identity.NewRedemptionRef(id, "", ""))
 	}
 	return &redemption, nil
 }
@@ -145,7 +148,9 @@ func Redeem(ctx context.Context, key string, userId int) (quota int64, err error
 		err = tx.Model(&User{}).Where("id = ?", userId).
 			Update("quota", gorm.Expr("quota + ?", redemption.Quota)).Error
 		if err != nil {
-			return errors.Wrapf(err, "increase user %d quota with redemption", userId)
+			return identity.Tag(
+				errors.Wrapf(err, "increase user %d quota with redemption", userId),
+				redemption.Ref(), identity.NewUserRef(userId, "", ""))
 		}
 
 		// Reflect the persisted state for the audit log emitted below.
@@ -154,7 +159,11 @@ func Redeem(ctx context.Context, key string, userId int) (quota int64, err error
 		return nil
 	})
 	if err != nil {
-		return 0, errors.Wrap(err, "Redeem failed")
+		// redemption is zero when the code was never found, in which case Tag drops
+		// the reference. Error path only, so the user lookup is off the hot path.
+		return 0, identity.Tag(
+			errors.Wrap(err, "Redeem failed"),
+			redemption.Ref(), LookupUserRef(ctx, userId))
 	}
 	RecordLog(ctx, userId, LogTypeTopup, fmt.Sprintf("Recharged %s using redemption code", common.LogQuota(redemption.Quota)))
 	return redemption.Quota, nil
@@ -162,27 +171,37 @@ func Redeem(ctx context.Context, key string, userId int) (quota int64, err error
 
 func (redemption *Redemption) Insert() error {
 	if err := DB.Create(redemption).Error; err != nil {
-		return errors.Wrap(err, "insert redemption")
+		return identity.Tag(
+			errors.Wrap(err, "insert redemption"),
+			redemption.Ref(), redemption.OwnerRef())
 	}
 	return nil
 }
 
 func (redemption *Redemption) SelectUpdate() error {
-	// This can update zero values
-	return DB.Model(redemption).Select("redeemed_time", "status").Updates(redemption).Error
+	// This can update zero values.
+	// The driver error is returned as-is (no errors.Wrap) to keep the message
+	// byte-identical for callers; Tag only attaches identity beside it.
+	return identity.Tag(
+		DB.Model(redemption).Select("redeemed_time", "status").Updates(redemption).Error,
+		redemption.Ref(), redemption.OwnerRef())
 }
 
 // Update Make sure your token's fields is completed, because this will update non-zero values
 func (redemption *Redemption) Update() error {
 	if err := DB.Model(redemption).Select("name", "status", "quota", "redeemed_time").Updates(redemption).Error; err != nil {
-		return errors.Wrapf(err, "update redemption %d", redemption.Id)
+		return identity.Tag(
+			errors.Wrapf(err, "update redemption %d", redemption.Id),
+			redemption.Ref(), redemption.OwnerRef())
 	}
 	return nil
 }
 
 func (redemption *Redemption) Delete() error {
 	if err := DB.Delete(redemption).Error; err != nil {
-		return errors.Wrapf(err, "delete redemption %d", redemption.Id)
+		return identity.Tag(
+			errors.Wrapf(err, "delete redemption %d", redemption.Id),
+			redemption.Ref(), redemption.OwnerRef())
 	}
 	return nil
 }
@@ -194,7 +213,9 @@ func DeleteRedemptionById(id int) (err error) {
 	redemption := Redemption{Id: id}
 	err = DB.Where(redemption).First(&redemption).Error
 	if err != nil {
-		return errors.Wrapf(err, "find redemption %d", id)
+		return identity.Tag(
+			errors.Wrapf(err, "find redemption %d", id),
+			identity.NewRedemptionRef(id, "", ""))
 	}
 	return redemption.Delete()
 }

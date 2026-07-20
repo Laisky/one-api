@@ -4,7 +4,23 @@ import (
 	"context"
 
 	"github.com/Laisky/errors/v2"
+
+	"github.com/Laisky/one-api/common/identity"
 )
+
+// refs returns the token and user references denormalised on the transaction row.
+// No I/O: token_uuid and user_uuid are stored on the row itself.
+//
+// Return values:
+//   - identity.TokenRef: the token the hold was placed on (name unknown here).
+//   - identity.UserRef: the owner of that token (username unknown here).
+func (txn *TokenTransaction) refs() (identity.TokenRef, identity.UserRef) {
+	if txn == nil {
+		return identity.TokenRef{}, identity.UserRef{}
+	}
+	return identity.NewTokenRef(txn.TokenId, derefStr(txn.TokenUUID), ""),
+		identity.NewUserRef(txn.UserId, derefStr(txn.UserUUID), "")
+}
 
 const (
 	// TokenTransactionStatusPending indicates the pre-consume hold has been created
@@ -95,7 +111,10 @@ func CreateTokenTransaction(ctx context.Context, txn *TokenTransaction) error {
 	}
 
 	if err := DB.WithContext(ctx).Create(txn).Error; err != nil {
-		return errors.Wrap(err, "failed to create token transaction")
+		tokenRef, ownerRef := txn.refs()
+		return identity.Tag(
+			errors.Wrap(err, "failed to create token transaction"),
+			tokenRef, ownerRef)
 	}
 	return nil
 }
@@ -115,7 +134,9 @@ func GetTokenTransactionByTokenAndID(ctx context.Context, tokenID int, transacti
 		Where("token_id = ? AND transaction_id = ?", tokenID, transactionID).
 		First(txn).Error
 	if err != nil {
-		return nil, errors.Wrapf(err, "failed to fetch token transaction: token_id=%d, transaction_id=%s", tokenID, transactionID)
+		return nil, identity.Tag(
+			errors.Wrapf(err, "failed to fetch token transaction: token_id=%d, transaction_id=%s", tokenID, transactionID),
+			LookupTokenRef(ctx, tokenID))
 	}
 	return txn, nil
 }
@@ -165,7 +186,9 @@ func AutoConfirmExpiredTokenTransactions(ctx context.Context, tokenID int, now i
 		Where("token_id = ? AND status = ? AND expires_at > 0 AND expires_at <= ?", tokenID, TokenTransactionStatusPending, now).
 		Find(&pending).Error
 	if err != nil {
-		return nil, errors.Wrapf(err, "failed to find expired token transactions: token_id=%d", tokenID)
+		return nil, identity.Tag(
+			errors.Wrapf(err, "failed to find expired token transactions: token_id=%d", tokenID),
+			LookupTokenRef(ctx, tokenID))
 	}
 
 	if len(pending) == 0 {
@@ -184,7 +207,10 @@ func AutoConfirmExpiredTokenTransactions(ctx context.Context, tokenID int, now i
 		}
 
 		if err = UpdateTokenTransaction(ctx, txn.Id, updates); err != nil {
-			return nil, errors.Wrapf(err, "failed to auto-confirm token transaction: id=%d", txn.Id)
+			tokenRef, ownerRef := txn.refs()
+			return nil, identity.Tag(
+				errors.Wrapf(err, "failed to auto-confirm token transaction: id=%d", txn.Id),
+				tokenRef, ownerRef)
 		}
 
 		txn.Status = TokenTransactionStatusAutoConfirmed
@@ -214,7 +240,9 @@ func GetTokenTransactionsByTokenID(ctx context.Context, tokenID int, startIdx in
 		Limit(num).Offset(startIdx).
 		Find(&txns).Error
 	if err != nil {
-		return nil, errors.Wrapf(err, "failed to fetch token transactions: token_id=%d", tokenID)
+		return nil, identity.Tag(
+			errors.Wrapf(err, "failed to fetch token transactions: token_id=%d", tokenID),
+			LookupTokenRef(ctx, tokenID))
 	}
 	return txns, nil
 }
@@ -233,7 +261,9 @@ func GetTokenTransactionCountByTokenID(ctx context.Context, tokenID int) (int64,
 		Where("token_id = ?", tokenID).
 		Count(&count).Error
 	if err != nil {
-		return 0, errors.Wrapf(err, "failed to count token transactions: token_id=%d", tokenID)
+		return 0, identity.Tag(
+			errors.Wrapf(err, "failed to count token transactions: token_id=%d", tokenID),
+			LookupTokenRef(ctx, tokenID))
 	}
 	return count, nil
 }

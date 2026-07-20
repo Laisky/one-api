@@ -1,6 +1,7 @@
 package model
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/Laisky/one-api/common/config"
 	"github.com/Laisky/one-api/common/helper"
+	"github.com/Laisky/one-api/common/identity"
 	"github.com/Laisky/one-api/common/logger"
 )
 
@@ -196,7 +198,9 @@ func GetChannelById(id int, selectAll bool) (*Channel, error) {
 		err = DB.Omit("key").First(&channel, "id = ?", id).Error
 	}
 	if err != nil {
-		return nil, errors.Wrapf(err, "failed to get channel by id=%d, selectAll=%t", id, selectAll)
+		return nil, identity.Tag(
+			errors.Wrapf(err, "failed to get channel by id=%d, selectAll=%t", id, selectAll),
+			LookupChannelRef(context.Background(), id))
 	}
 	return &channel, nil
 }
@@ -266,8 +270,7 @@ func (channel *Channel) GetModelMapping() map[string]string {
 	err := json.Unmarshal([]byte(*channel.ModelMapping), &modelMapping)
 	if err != nil {
 		logger.Logger.Error("failed to unmarshal model mapping for channel",
-			zap.Int("channel_id", channel.Id),
-			zap.Error(err))
+			append(channel.Ref().Zap(), zap.Error(err))...)
 		return nil
 	}
 	return modelMapping
@@ -330,7 +333,9 @@ func (channel *Channel) GetModelConfig(modelName string) *ModelConfig {
 
 func (channel *Channel) Insert() error {
 	if err := channel.NormalizeHiddenModels(); err != nil {
-		return errors.Wrapf(err, "failed to normalize hidden models for channel: name=%s, type=%d", channel.Name, channel.Type)
+		return identity.Tag(
+			errors.Wrapf(err, "failed to normalize hidden models for channel: name=%s, type=%d", channel.Name, channel.Type),
+			channel.Ref())
 	}
 	err := DB.Transaction(func(tx *gorm.DB) error {
 		if err := tx.Create(channel).Error; err != nil {
@@ -342,7 +347,7 @@ func (channel *Channel) Insert() error {
 		return nil
 	})
 	if err != nil {
-		return errors.Wrap(err, "persist channel transaction")
+		return identity.Tag(errors.Wrap(err, "persist channel transaction"), channel.Ref())
 	}
 	InvalidateChannelModelCaches(channel.Group)
 	return nil
@@ -350,14 +355,18 @@ func (channel *Channel) Insert() error {
 
 func (channel *Channel) Update() error {
 	if err := channel.NormalizeHiddenModels(); err != nil {
-		return errors.Wrapf(err, "failed to normalize hidden models for channel: id=%d, name=%s", channel.Id, channel.Name)
+		return identity.Tag(
+			errors.Wrapf(err, "failed to normalize hidden models for channel: id=%d, name=%s", channel.Id, channel.Name),
+			channel.Ref())
 	}
 	// Validate/sync TestingModel with latest supported models
 	clearTestingModel := false
 	var existing Channel
 	if channel.Id != 0 {
 		if err := DB.Select("id", "models", "testing_model", "group").First(&existing, "id = ?", channel.Id).Error; err != nil {
-			return errors.Wrapf(err, "load existing channel %d before update", channel.Id)
+			return identity.Tag(
+				errors.Wrapf(err, "load existing channel %d before update", channel.Id),
+				channel.Ref())
 		}
 	}
 	// Determine models to validate against: new value if provided, else existing
@@ -444,14 +453,15 @@ func (channel *Channel) Update() error {
 		return nil
 	})
 	if err != nil {
-		return errors.Wrapf(err, "persist channel %d update transaction", channel.Id)
+		return identity.Tag(
+			errors.Wrapf(err, "persist channel %d update transaction", channel.Id),
+			channel.Ref())
 	}
 
 	*channel = persisted
 	if len(cleared) > 0 {
 		logger.Logger.Debug("channel update cleared nullable fields",
-			zap.Int("channel_id", channel.Id),
-			zap.Strings("cleared_fields", cleared))
+			append(channel.Ref().Zap(), zap.Strings("cleared_fields", cleared))...)
 	}
 	InvalidateChannelModelCaches(existing.Group, channel.Group)
 	return nil
@@ -463,7 +473,8 @@ func (channel *Channel) UpdateResponseTime(responseTime int64) {
 		ResponseTime: int(responseTime),
 	}).Error
 	if err != nil {
-		logger.Logger.Error("failed to update response time", zap.Error(err))
+		logger.Logger.Error("failed to update response time",
+			append(channel.Ref().Zap(), zap.Error(err))...)
 	}
 }
 
@@ -473,7 +484,8 @@ func (channel *Channel) UpdateBalance(balance float64) {
 		Balance:            balance,
 	}).Error
 	if err != nil {
-		logger.Logger.Error("failed to update balance", zap.Error(err))
+		logger.Logger.Error("failed to update balance",
+			append(channel.Ref().Zap(), zap.Error(err))...)
 	}
 }
 
@@ -486,10 +498,12 @@ func (channel *Channel) Delete() error {
 		}
 	}
 	if err := DB.Delete(channel).Error; err != nil {
-		return errors.Wrapf(err, "delete channel %d", channel.Id)
+		return identity.Tag(errors.Wrapf(err, "delete channel %d", channel.Id), channel.Ref())
 	}
 	if err := channel.DeleteAbilities(); err != nil {
-		return errors.Wrapf(err, "delete abilities for channel %d", channel.Id)
+		return identity.Tag(
+			errors.Wrapf(err, "delete abilities for channel %d", channel.Id),
+			channel.Ref())
 	}
 	InvalidateChannelModelCaches(oldGroups)
 	return nil
@@ -502,7 +516,9 @@ func (channel *Channel) LoadConfig() (ChannelConfig, error) {
 	}
 	err := json.Unmarshal([]byte(channel.Config), &cfg)
 	if err != nil {
-		return cfg, errors.Wrapf(err, "unmarshal channel %d config", channel.Id)
+		return cfg, identity.Tag(
+			errors.Wrapf(err, "unmarshal channel %d config", channel.Id),
+			channel.Ref())
 	}
 	return cfg, nil
 }
@@ -514,8 +530,7 @@ func (channel *Channel) GetSupportedEndpoints() []string {
 	cfg, err := channel.LoadConfig()
 	if err != nil {
 		logger.Logger.Error("failed to load channel config for endpoints",
-			zap.Int("channel_id", channel.Id),
-			zap.Error(err))
+			append(channel.Ref().Zap(), zap.Error(err))...)
 		return nil
 	}
 	if len(cfg.SupportedEndpoints) > 0 {
@@ -531,7 +546,9 @@ func (channel *Channel) GetSupportedEndpoints() []string {
 func (channel *Channel) storeConfig(cfg ChannelConfig) error {
 	data, err := json.Marshal(cfg)
 	if err != nil {
-		return errors.Wrapf(err, "marshal channel %d config", channel.Id)
+		return identity.Tag(
+			errors.Wrapf(err, "marshal channel %d config", channel.Id),
+			channel.Ref())
 	}
 	if len(data) == 0 || string(data) == "{}" {
 		channel.Config = ""
@@ -543,14 +560,21 @@ func (channel *Channel) storeConfig(cfg ChannelConfig) error {
 
 func UpdateChannelStatusById(id int, status int) {
 	var channel Channel
-	_ = DB.Select("id", "group").First(&channel, "id = ?", id).Error
+	// uuid and name are selected alongside the group so the failure logs below can
+	// name the channel without issuing a second query.
+	_ = DB.Select("id", "uuid", "name", "group").First(&channel, "id = ?", id).Error
+	if channel.Id == 0 {
+		channel.Id = id
+	}
 	err := UpdateAbilityStatus(id, status == ChannelStatusEnabled)
 	if err != nil {
-		logger.Logger.Error("failed to update ability status", zap.Error(err))
+		logger.Logger.Error("failed to update ability status",
+			append(channel.Ref().Zap(), zap.Error(err), zap.Int("status", status))...)
 	}
 	err = DB.Model(&Channel{}).Where("id = ?", id).Update("status", status).Error
 	if err != nil {
-		logger.Logger.Error("failed to update channel status", zap.Error(err))
+		logger.Logger.Error("failed to update channel status",
+			append(channel.Ref().Zap(), zap.Error(err), zap.Int("status", status))...)
 	}
 	if err == nil {
 		InvalidateChannelModelCaches(channel.Group)
@@ -569,10 +593,10 @@ func updateChannelUsedQuota(id int, quota int64) {
 	err := DB.Model(&Channel{}).Where("id = ?", id).Update("used_quota", gorm.Expr("used_quota + ?", quota)).Error
 	if err != nil {
 		logger.Logger.Error("failed to update channel used quota - channel statistics may be inaccurate",
-			zap.Error(err),
-			zap.Int("channelId", id),
-			zap.Int64("quota", quota),
-			zap.String("note", "billing completed successfully but channel usage statistics update failed"))
+			append(LookupChannelRef(context.Background(), id).Zap(),
+				zap.Error(err),
+				zap.Int64("quota", quota),
+				zap.String("note", "billing completed successfully but channel usage statistics update failed"))...)
 	}
 }
 
