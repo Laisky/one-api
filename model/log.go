@@ -146,6 +146,11 @@ const (
 	LogMetadataKeyUpstreamAPIFormat = "upstream_api_format"
 	// LogMetadataKeyUpstreamEndpoint records the final URL sent to the upstream provider.
 	LogMetadataKeyUpstreamEndpoint = "upstream_endpoint"
+	// LogMetadataKeyEstimatedCharge marks a consume log whose quota is the
+	// pre-consumed estimate rather than measured usage, because the upstream
+	// reported none. The charge is real and already debited; the flag tells an
+	// operator the token counts on the row are not authoritative.
+	LogMetadataKeyEstimatedCharge = "estimated_charge"
 )
 
 // ToolUsageEntry captures per-tool usage metadata for logging.

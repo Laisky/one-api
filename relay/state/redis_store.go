@@ -133,7 +133,7 @@ func (s *RedisStore) decode(token string, v any) error {
 // other error to ErrStoreUnavailable.
 func (s *RedisStore) getString(ctx context.Context, key string) (string, error) {
 	val, err := s.rdb.Get(ctx, key).Result()
-	if err == redis.Nil {
+	if errors.Is(err, redis.Nil) {
 		return "", ErrNotFound
 	}
 	if err != nil {
@@ -736,7 +736,7 @@ func (s *RedisStore) RenewConversationLease(ctx context.Context, owner OwnerScop
 // ReleaseConversationLease releases a held lease when the token matches.
 func (s *RedisStore) ReleaseConversationLease(ctx context.Context, owner OwnerScope, id, leaseToken string) error {
 	current, err := s.getString(ctx, s.leaseKey(id))
-	if err == ErrNotFound {
+	if errors.Is(err, ErrNotFound) {
 		return nil
 	}
 	if err != nil {

@@ -78,10 +78,9 @@ func Mark(err error, kind Kind) error {
 // Return values:
 //   - Kind: the recorded fault attribution.
 func Of(err error) Kind {
-	for e := err; e != nil; e = errors.Unwrap(e) {
-		if k, ok := e.(*kinded); ok {
-			return k.kind
-		}
+	var k *kinded
+	if errors.As(err, &k) {
+		return k.kind
 	}
 	return Unknown
 }

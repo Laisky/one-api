@@ -28,7 +28,7 @@ func tryLockFile(file *os.File) (bool, error) {
 	if err == nil {
 		return true, nil
 	}
-	if err == syscall.EWOULDBLOCK {
+	if errors.Is(err, syscall.EWOULDBLOCK) {
 		// Another instance holds the claim. Expected, not an error.
 		return false, nil
 	}

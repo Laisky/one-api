@@ -96,10 +96,10 @@ func Fields(err error) []zap.Field {
 	}
 	var out []zap.Field
 	seen := make(map[string]struct{}, 9)
-	for e := err; e != nil; e = errors.Unwrap(e) {
-		t, ok := e.(*tagged)
-		if !ok {
-			continue
+	for {
+		var t *tagged
+		if !errors.As(err, &t) {
+			break
 		}
 		for _, r := range t.refs {
 			for _, f := range r.AppendZap(nil) {
@@ -110,6 +110,7 @@ func Fields(err error) []zap.Field {
 				out = append(out, f)
 			}
 		}
+		err = t.err
 	}
 	return out
 }
@@ -124,10 +125,10 @@ func Fields(err error) []zap.Field {
 //   - Set: identity recovered from the chain.
 func SetFrom(err error) Set {
 	var s Set
-	for e := err; e != nil; e = errors.Unwrap(e) {
-		t, ok := e.(*tagged)
-		if !ok {
-			continue
+	for {
+		var t *tagged
+		if !errors.As(err, &t) {
+			break
 		}
 		for _, r := range t.refs {
 			switch v := r.(type) {
@@ -145,6 +146,7 @@ func SetFrom(err error) Set {
 				}
 			}
 		}
+		err = t.err
 	}
 	return s
 }
