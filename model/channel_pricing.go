@@ -20,8 +20,7 @@ func (channel *Channel) GetModelPriceConfigs() map[string]ModelConfigLocal {
 	err := json.Unmarshal([]byte(*channel.ModelConfigs), &modelPriceConfigs)
 	if err != nil {
 		logger.Logger.Error("failed to unmarshal model price configs for channel",
-			zap.Int("channel_id", channel.Id),
-			zap.Error(err))
+			append(channel.Ref().Zap(), zap.Error(err))...)
 		return nil
 	}
 
@@ -127,8 +126,7 @@ func (channel *Channel) GetInferenceProfileArnMap() map[string]string {
 	err := json.Unmarshal([]byte(*channel.InferenceProfileArnMap), &arnMap)
 	if err != nil {
 		logger.Logger.Error("failed to unmarshal inference profile ARN map for channel",
-			zap.Int("channel_id", channel.Id),
-			zap.Error(err))
+			append(channel.Ref().Zap(), zap.Error(err))...)
 		return nil
 	}
 	return arnMap
@@ -191,8 +189,7 @@ func (channel *Channel) GetModelRatio() map[string]float64 {
 	err := json.Unmarshal([]byte(*channel.ModelRatio), &modelRatio)
 	if err != nil {
 		logger.Logger.Error("failed to unmarshal model ratio for channel",
-			zap.Int("channel_id", channel.Id),
-			zap.Error(err))
+			append(channel.Ref().Zap(), zap.Error(err))...)
 		return nil
 	}
 	return modelRatio
@@ -208,8 +205,7 @@ func (channel *Channel) GetCompletionRatio() map[string]float64 {
 	err := json.Unmarshal([]byte(*channel.CompletionRatio), &completionRatio)
 	if err != nil {
 		logger.Logger.Error("failed to unmarshal completion ratio for channel",
-			zap.Int("channel_id", channel.Id),
-			zap.Error(err))
+			append(channel.Ref().Zap(), zap.Error(err))...)
 		return nil
 	}
 	return completionRatio

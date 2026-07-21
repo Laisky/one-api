@@ -23,6 +23,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/Laisky/one-api/common/graceful"
+	"github.com/Laisky/one-api/common/identity"
 )
 
 // Detach returns a non-cancellable background context that carries the request's
@@ -46,6 +47,11 @@ func Detach(c *gin.Context) context.Context {
 	// context key, and gmw.GetLogger reads it back from a non-gin context without
 	// ever touching c.
 	ctx = gmw.SetLogger(ctx, gmw.GetLogger(c))
+
+	// Snapshot the request identity (user/token/channel refs) by value too, so
+	// billing code that only receives a context.Context can still log — and tag
+	// errors with — uuid and name without any lookup.
+	ctx = identity.NewContext(ctx, identity.Current(c))
 
 	// Snapshot the trace id by value under the same key gin-middlewares uses, so
 	// downstream logging/tracing still resolves it. gmw.TraceID must run on the gin

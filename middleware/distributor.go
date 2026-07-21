@@ -14,6 +14,8 @@ import (
 	"github.com/gorilla/websocket"
 
 	"github.com/Laisky/one-api/common/ctxkey"
+	"github.com/Laisky/one-api/common/errkind"
+	"github.com/Laisky/one-api/common/identity"
 	"github.com/Laisky/one-api/model"
 	"github.com/Laisky/one-api/relay/billing/ratio"
 	"github.com/Laisky/one-api/relay/channeltype"
@@ -218,27 +220,34 @@ func Distribute() func(c *gin.Context) {
 				return
 			}
 			if channel.Status != model.ChannelStatusEnabled {
-				AbortWithError(c, http.StatusForbidden, errors.New("The channel has been disabled"))
+				// The caller pinned a channel that an operator has disabled. Not a
+				// server fault, and it needs an operator, not an on-call engineer.
+				AbortWithError(c, http.StatusForbidden,
+					errkind.ConfigErr(errors.New("The channel has been disabled")))
 				return
 			}
 			requestModel = c.GetString(ctxkey.RequestModel)
 			if requestModel != "" && !channel.SupportsModel(requestModel) {
+				// The channel was pinned by the caller (API key suffix), so the
+				// model/channel mismatch is a property of the request itself.
 				AbortWithError(c, http.StatusBadRequest,
-					errors.Errorf("Channel #%d does not support the requested model: %s", channelId, requestModel))
+					errkind.InvalidRequestErr(errors.Errorf("Channel #%d does not support the requested model: %s", channelId, requestModel)))
 				return
 			}
 			isResponseWSHandshake := isResponseAPIWebSocketHandshake(c, relayMode)
 			if !channelSupportsResponseWebSocket(channel, relayMode, isResponseWSHandshake) {
+				// Caller-pinned channel plus caller-chosen transport: invalid request.
 				AbortWithError(c, http.StatusBadRequest,
-					errors.Errorf("Channel #%d does not support Response API websocket transport", channelId))
+					errkind.InvalidRequestErr(errors.Errorf("Channel #%d does not support Response API websocket transport", channelId)))
 				return
 			}
 
 			// Check endpoint support for specific channel
 			if !channelSupportsEndpoint(channel, relayMode) {
 				endpointName := channeltype.RelayModeToEndpointName(relayMode)
+				// Caller-pinned channel plus caller-chosen endpoint: invalid request.
 				AbortWithError(c, http.StatusBadRequest,
-					errors.Errorf("Channel #%d does not support the requested endpoint: %s", channelId, endpointName))
+					errkind.InvalidRequestErr(errors.Errorf("Channel #%d does not support the requested endpoint: %s", channelId, endpointName)))
 				return
 			}
 		} else {
@@ -256,48 +265,63 @@ func Distribute() func(c *gin.Context) {
 				}
 			}
 
-			selectChannel := func(ignoreFirstPriority bool, exclude map[int]bool) (*model.Channel, error) {
-				if requestModel == "" && isResponseWSHandshake {
-					return selectResponseWebSocketChannelWithoutModel(userGroup, relayMode, ignoreFirstPriority)
+			// ST-005: prefer the channel bound to a referenced gateway response or
+			// conversation (provider affinity). This is a soft preference resolved
+			// before normal selection; when no eligible binding exists it returns nil
+			// and selection proceeds normally so fallback routes replay canonical items
+			// (rows R01, R02, R05, R07). It never sets SpecificChannelId, so retry and
+			// failover remain enabled (row R03).
+			if pinned := responseStateAffinityChannel(c, relayMode, userGroup, requestModel, isResponseWSHandshake); pinned != nil {
+				channel = pinned
+				c.Set(ctxkey.ResponseStateAffinityChannelId, pinned.Id)
+			} else {
+				selectChannel := func(ignoreFirstPriority bool, exclude map[int]bool) (*model.Channel, error) {
+					if requestModel == "" && isResponseWSHandshake {
+						return selectResponseWebSocketChannelWithoutModel(userGroup, relayMode, ignoreFirstPriority)
+					}
+
+					for {
+						candidate, err := model.CacheGetRandomSatisfiedChannelExcluding(userGroup, requestModel, ignoreFirstPriority, exclude, false)
+						if err != nil {
+							return nil, errors.Wrap(err, "select channel from cache")
+						}
+
+						// Check endpoint support
+						if !channelSupportsEndpoint(candidate, relayMode) {
+							exclude[candidate.Id] = true
+							lg.Debug("channel skipped - does not support requested endpoint",
+								zap.Int("channel_id", candidate.Id),
+								zap.String("channel_name", candidate.Name),
+								zap.String("endpoint", channeltype.RelayModeToEndpointName(relayMode)))
+							continue
+						}
+						if !channelSupportsResponseWebSocket(candidate, relayMode, isResponseWSHandshake) {
+							exclude[candidate.Id] = true
+							lg.Debug("channel skipped - does not support response websocket transport",
+								zap.Int("channel_id", candidate.Id),
+								zap.String("channel_name", candidate.Name),
+								zap.Int("channel_type", candidate.Type))
+							continue
+						}
+						return candidate, nil
+					}
 				}
 
-				for {
-					candidate, err := model.CacheGetRandomSatisfiedChannelExcluding(userGroup, requestModel, ignoreFirstPriority, exclude, false)
-					if err != nil {
-						return nil, errors.Wrap(err, "select channel from cache")
-					}
-
-					// Check endpoint support
-					if !channelSupportsEndpoint(candidate, relayMode) {
-						exclude[candidate.Id] = true
-						lg.Debug("channel skipped - does not support requested endpoint",
-							zap.Int("channel_id", candidate.Id),
-							zap.String("channel_name", candidate.Name),
-							zap.String("endpoint", channeltype.RelayModeToEndpointName(relayMode)))
-						continue
-					}
-					if !channelSupportsResponseWebSocket(candidate, relayMode, isResponseWSHandshake) {
-						exclude[candidate.Id] = true
-						lg.Debug("channel skipped - does not support response websocket transport",
-							zap.Int("channel_id", candidate.Id),
-							zap.String("channel_name", candidate.Name),
-							zap.Int("channel_type", candidate.Type))
-						continue
-					}
-					return candidate, nil
-				}
-			}
-
-			exclude := make(map[int]bool)
-			var err error
-			channel, err = selectChannel(false, exclude)
-			if err != nil {
-				lg.Info(fmt.Sprintf("No highest priority channels available for model %s in group %s, trying lower priority channels", requestModel, userGroup))
-				channel, err = selectChannel(true, exclude)
+				exclude := make(map[int]bool)
+				var err error
+				channel, err = selectChannel(false, exclude)
 				if err != nil {
-					message := fmt.Sprintf("No available channels for Model %s under Group %s", requestModel, userGroup)
-					AbortWithError(c, http.StatusServiceUnavailable, errors.New(message))
-					return
+					lg.Info(fmt.Sprintf("No highest priority channels available for model %s in group %s, trying lower priority channels", requestModel, userGroup))
+					channel, err = selectChannel(true, exclude)
+					if err != nil {
+						message := fmt.Sprintf("No available channels for Model %s under Group %s", requestModel, userGroup)
+						// No channel serves this model for this group: an operator
+						// configuration condition, not a server fault. Marking it is
+						// what will allow the deprecated substring fallback in
+						// shouldLogAsWarning to be deleted.
+						AbortWithError(c, http.StatusServiceUnavailable, errkind.ConfigErr(errors.New(message)))
+						return
+					}
 				}
 			}
 		}
@@ -332,6 +356,10 @@ func SetupContextForSelectedChannel(c *gin.Context, channel *model.Channel, mode
 	c.Set(ctxkey.ChannelId, channel.Id)
 	c.Set(ctxkey.ChannelUUID, channel.UUID)
 	c.Set(ctxkey.ChannelName, channel.Name)
+	// Rebind so every later log line of this request carries channel_id +
+	// channel_uuid + channel_name. On a relay retry this REPLACES the previous
+	// channel's fields rather than appending a second set.
+	identity.BindFromGin(c)
 	c.Set(ctxkey.ContentType, c.Request.Header.Get("Content-Type"))
 	if channel.SystemPrompt != nil && *channel.SystemPrompt != "" {
 		c.Set(ctxkey.SystemPrompt, *channel.SystemPrompt)

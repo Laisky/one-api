@@ -21,6 +21,7 @@ import (
 	"github.com/Laisky/one-api/common/config"
 	"github.com/Laisky/one-api/common/ctxkey"
 	"github.com/Laisky/one-api/common/helper"
+	"github.com/Laisky/one-api/common/identity"
 	"github.com/Laisky/one-api/common/logger"
 	"github.com/Laisky/one-api/common/message"
 	"github.com/Laisky/one-api/common/relayctx"
@@ -97,6 +98,11 @@ func calculateTestCost(usage *relaymodel.Usage, meta *meta.Meta, request *relaym
 	return computeResult.TotalQuota
 }
 
+// testChannel runs a single live probe against the given channel.
+//
+// The caller is responsible for binding the tested channel's identity onto the
+// logger carried by ctx (see TestChannel and testChannels); this function does
+// not repeat channel_id/channel_uuid/channel_name on every line.
 func testChannel(ctx context.Context, channel *model.Channel, request *relaymodel.GeneralOpenAIRequest) (responseMessage string, err error, openaiErr *relaymodel.Error) {
 	lg := gmw.GetLogger(ctx)
 	startTime := time.Now()
@@ -132,7 +138,6 @@ func testChannel(ctx context.Context, channel *model.Channel, request *relaymode
 
 	// initial context for debugging
 	lg.Debug("channel test: initial model context",
-		zap.Int("channel_id", channel.Id),
 		zap.Int("channel_type", channel.Type),
 		zap.String("base_url", channel.GetBaseURL()),
 		zap.String("requested_model", requestedModel),
@@ -233,7 +238,6 @@ func testChannel(ctx context.Context, channel *model.Channel, request *relaymode
 		}
 		lg.Debug("prepare test request",
 			zap.String("actual_model", meta.ActualModelName),
-			zap.Int("channel_id", channel.Id),
 			zap.Int("channel_type", channel.Type),
 			zap.String("upstream_url", fullURL),
 			zap.ByteString("test_request", jsonData))
@@ -296,7 +300,6 @@ func testChannel(ctx context.Context, channel *model.Channel, request *relaymode
 	statusCode := responseStatus(resp)
 
 	lg.Debug("testing channel response",
-		zap.Int("channel_id", channel.Id),
 		zap.Bool("response_nil", resp == nil),
 		zap.Int("status", statusCode),
 		zap.Int("response_bytes", len(respBody)))
@@ -323,13 +326,17 @@ func TestChannel(c *gin.Context) {
 		return
 	}
 
-	lg = lg.With(zap.Int("channel_id", id))
 	channel, err := model.GetChannelById(id, true)
 	if err != nil {
-		lg.Debug("failed to get channel by id", zap.Error(err))
+		lg.Debug("failed to get channel by id", zap.Error(err), zap.Int("channel_id", id))
 		helper.RespondError(c, err)
 		return
 	}
+
+	// The channel under test is NOT the request's own channel (this is an admin
+	// endpoint), so bind its identity explicitly for this handler and for
+	// testChannel, which relies on its caller having bound it.
+	lg = lg.With(channel.Ref().Zap()...)
 
 	modelName, clearTestingModel, err := chooseChannelTestModel(channel, c.Query("model"))
 	if clearTestingModel {
@@ -340,7 +347,7 @@ func TestChannel(c *gin.Context) {
 	}
 	if err != nil {
 		lg.Debug("failed to choose channel test model", zap.Error(err))
-		helper.RespondError(c, err)
+		helper.RespondError(c, identity.Tag(err, channel.Ref()))
 		return
 	}
 
@@ -408,19 +415,23 @@ func testChannels(ctx context.Context, notify bool, scope string) error {
 	go func() {
 		lg := gmw.GetLogger(ctx)
 		for _, channel := range channels {
+			// Bind the channel under test explicitly: this sweep runs off any
+			// request, so nothing else carries the channel identity.
+			clg := lg.With(channel.Ref().Zap()...)
+			cctx := gmw.SetLogger(ctx, clg)
 			isChannelEnabled := channel.Status == model.ChannelStatusEnabled
 			tik := time.Now()
 			chosenModel, clearTestingModel, err := chooseChannelTestModel(channel, "")
 			if clearTestingModel {
 				channel.TestingModel = nil
 				if updateErr := model.DB.Model(channel).Where("id = ?", channel.Id).Update("testing_model", nil).Error; updateErr != nil {
-					lg.Error("failed to clear invalid testing_model in bulk test", zap.Error(updateErr))
+					clg.Error("failed to clear invalid testing_model in bulk test", zap.Error(updateErr))
 				}
 			}
 			var openaiErr *relaymodel.Error
 			if err == nil {
 				testRequest := buildTestRequest(chosenModel)
-				_, err, openaiErr = testChannel(ctx, channel, testRequest)
+				_, err, openaiErr = testChannel(cctx, channel, testRequest)
 			}
 			tok := time.Now()
 			milliseconds := tok.Sub(tik).Milliseconds()
@@ -429,7 +440,7 @@ func testChannels(ctx context.Context, notify bool, scope string) error {
 				if config.AutomaticDisableChannelEnabled {
 					monitor.DisableChannel(channel.Id, channel.Name, err.Error())
 				} else {
-					_ = message.Notify(message.ByAll, fmt.Sprintf("Channel %s （%d）Test超时", channel.Name, channel.Id), "", err.Error())
+					_ = message.Notify(message.ByAll, fmt.Sprintf("Channel test timed out: %s", channel.Ref().String()), "", err.Error())
 				}
 			}
 			// Only disable a channel on failure when AutomaticDisableChannelEnabled is true.
@@ -445,7 +456,7 @@ func testChannels(ctx context.Context, notify bool, scope string) error {
 					monitor.DisableChannel(channel.Id, channel.Name, reason)
 				} else {
 					// Notify only when auto-disable is off
-					_ = message.Notify(message.ByAll, fmt.Sprintf("Channel %s （%d）Test失败", channel.Name, channel.Id), "", reason)
+					_ = message.Notify(message.ByAll, fmt.Sprintf("Channel test failed: %s", channel.Ref().String()), "", reason)
 				}
 			}
 			if !isChannelEnabled && (err == nil && monitor.ShouldEnableChannel(err, openaiErr)) {

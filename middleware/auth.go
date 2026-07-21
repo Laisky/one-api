@@ -32,7 +32,9 @@ import (
 
 	"github.com/Laisky/one-api/common/blacklist"
 	"github.com/Laisky/one-api/common/ctxkey"
+	"github.com/Laisky/one-api/common/errkind"
 	"github.com/Laisky/one-api/common/helper"
+	"github.com/Laisky/one-api/common/identity"
 	"github.com/Laisky/one-api/common/idresolve"
 	"github.com/Laisky/one-api/common/network"
 	"github.com/Laisky/one-api/model"
@@ -114,6 +116,9 @@ func authHelper(c *gin.Context, minRole int) {
 	c.Set(ctxkey.Username, username)
 	c.Set(ctxkey.Role, role)
 	c.Set(ctxkey.Id, id)
+	// Bind the resolved identity onto the request logger so every later log line
+	// of this request carries user_id + user_uuid + username with no call-site edit.
+	identity.BindFromGin(c)
 	c.Next()
 }
 
@@ -171,6 +176,7 @@ func OptionalUserAuth() func(c *gin.Context) {
 				c.Set(ctxkey.Username, username)
 				c.Set(ctxkey.Role, role)
 				c.Set(ctxkey.Id, id)
+				identity.BindFromGin(c)
 			}
 		}
 
@@ -239,18 +245,24 @@ func TokenAuth() func(c *gin.Context) {
 			return
 		}
 
-		// Build token info for error logging (masked key for security)
+		// Build token info for error logging (masked key for security).
+		// OwnerRef carries the denormalised tokens.user_uuid; the username is only
+		// known after the owner row is loaded below.
 		tokenInfo := &TokenInfo{
 			MaskedKey: helper.MaskAPIKey(key),
-			TokenId:   token.Id,
-			TokenName: token.Name,
-			UserId:    token.UserId,
+			Token:     token.Ref(),
+			User:      token.OwnerRef(),
 		}
+
+		// Bind the partial identity immediately so the early aborts below (subnet,
+		// banned user, model restriction) already log token uuid + name.
+		identity.Bind(c, identity.Set{Token: tokenInfo.Token, User: tokenInfo.User})
 
 		// Check IP subnet restrictions (if configured for this token)
 		if token.Subnet != nil && *token.Subnet != "" {
 			if !network.IsIpInSubnets(ctx, c.ClientIP(), *token.Subnet) {
-				AbortWithTokenError(c, http.StatusForbidden, errors.Errorf("This API key can only be used in the specified subnet: %s, current IP: %s", *token.Subnet, c.ClientIP()), tokenInfo)
+				// The caller presented a valid key from a disallowed network.
+				AbortWithTokenError(c, http.StatusForbidden, errkind.ForbiddenErr(errors.Errorf("This API key can only be used in the specified subnet: %s, current IP: %s", *token.Subnet, c.ClientIP())), tokenInfo)
 				return
 			}
 		}
@@ -263,16 +275,22 @@ func TokenAuth() func(c *gin.Context) {
 			return
 		}
 
+		// The owner row is loaded, so the username is now known.
+		tokenInfo.User = user.Ref()
+		identity.Bind(c, identity.Set{User: tokenInfo.User})
+
 		// Verify the token owner (user) is still enabled and not banned
 		if user.Status == model.UserStatusDisabled || blacklist.IsUserBanned(user.Id) {
-			AbortWithTokenError(c, http.StatusForbidden, errors.New("User has been banned"), tokenInfo)
+			// Disabled or blacklisted owner: an intentional denial, not a fault.
+			AbortWithTokenError(c, http.StatusForbidden, errkind.ForbiddenErr(errors.New("User has been banned")), tokenInfo)
 			return
 		}
 
 		// Extract and validate the requested model (for AI/ML API endpoints)
 		requestModel, err := getRequestModel(c)
 		if err != nil && shouldCheckModel(c) {
-			AbortWithTokenError(c, http.StatusBadRequest, err, tokenInfo)
+			// Unparsable body or missing `model` on an endpoint that requires it.
+			AbortWithTokenError(c, http.StatusBadRequest, errkind.InvalidRequestErr(err), tokenInfo)
 			return
 		}
 		c.Set(ctxkey.RequestModel, requestModel)
@@ -282,7 +300,8 @@ func TokenAuth() func(c *gin.Context) {
 		if token.Models != nil && *token.Models != "" {
 			c.Set(ctxkey.AvailableModels, *token.Models)
 			if requestModel != "" && !isModelInList(requestModel, *token.Models) {
-				AbortWithTokenError(c, http.StatusForbidden, errors.Errorf("This API key does not have permission to use the model: %s", requestModel), tokenInfo)
+				// Valid key, model outside the token's allow-list.
+				AbortWithTokenError(c, http.StatusForbidden, errkind.ForbiddenErr(errors.Errorf("This API key does not have permission to use the model: %s", requestModel)), tokenInfo)
 				return
 			}
 		}
@@ -297,6 +316,7 @@ func TokenAuth() func(c *gin.Context) {
 		c.Set(ctxkey.TokenName, token.Name)
 		c.Set(ctxkey.TokenQuota, token.RemainQuota)
 		c.Set(ctxkey.TokenQuotaUnlimited, token.UnlimitedQuota)
+		identity.BindFromGin(c)
 
 		// Handle channel-specific routing (admin feature).
 		// Format: token_key-channel_ref allows admins to specify which channel to use.
@@ -304,13 +324,15 @@ func TokenAuth() func(c *gin.Context) {
 			if user.Role >= model.RoleAdminUser {
 				cid, err := resolveSpecificChannelRef(parts[1])
 				if err != nil {
-					AbortWithTokenError(c, http.StatusBadRequest, errors.Errorf("Invalid Channel Id: %s", parts[1]), tokenInfo)
+					// The channel reference comes from the caller's API key suffix.
+					AbortWithTokenError(c, http.StatusBadRequest, errkind.InvalidRequestErr(errors.Errorf("Invalid Channel Id: %s", parts[1])), tokenInfo)
 					return
 				}
 
 				c.Set(ctxkey.SpecificChannelId, cid)
 			} else {
-				AbortWithTokenError(c, http.StatusForbidden, errors.New("Ordinary users do not support specifying channels"), tokenInfo)
+				// Non-admin attempted an admin-only routing override.
+				AbortWithTokenError(c, http.StatusForbidden, errkind.ForbiddenErr(errors.New("Ordinary users do not support specifying channels")), tokenInfo)
 				return
 			}
 		}
@@ -319,7 +341,8 @@ func TokenAuth() func(c *gin.Context) {
 		if channelId := c.Param("channelid"); channelId != "" {
 			cid, err := idresolve.Resolve(model.GetChannelIdByUUID, channelId)
 			if err != nil {
-				AbortWithTokenError(c, http.StatusBadRequest, errors.Errorf("Invalid Channel Id: %s", channelId), tokenInfo)
+				// The channel reference comes from the request URL.
+				AbortWithTokenError(c, http.StatusBadRequest, errkind.InvalidRequestErr(errors.Errorf("Invalid Channel Id: %s", channelId)), tokenInfo)
 				return
 			}
 
@@ -374,8 +397,24 @@ func shouldCheckModel(c *gin.Context) bool {
 	return false
 }
 
-// respondAuthError centralizes error responses for auth failures (DRY, KISS)
+// respondAuthError centralizes error responses for auth failures (DRY, KISS).
+//
+// Every call site here reports a credential or permission decision the server
+// made deliberately, so the error is marked client-caused and logged at WARN
+// without a stack trace. The message text and the status are unchanged.
+//
+// Parameters:
+//   - c: current gin context.
+//   - status: HTTP status to answer with; unchanged by this function.
+//   - message: client-facing message, used verbatim.
 func respondAuthError(c *gin.Context, status int, message string) {
-	helper.RespondErrorWithStatus(c, status, errors.New(message))
+	err := errors.New(message)
+	switch status {
+	case http.StatusUnauthorized:
+		err = errkind.UnauthorizedErr(err)
+	case http.StatusForbidden:
+		err = errkind.ForbiddenErr(err)
+	}
+	helper.RespondErrorWithStatus(c, status, err)
 	c.Abort()
 }

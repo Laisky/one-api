@@ -83,6 +83,7 @@
         "actions": "操作",
         "auth_type": "认证类型",
         "base_url": "基础 URL",
+        "id": "ID",
         "last_sync": "最近同步",
         "name": "名称",
         "priority": "优先级",
@@ -94,7 +95,7 @@
       "labels": {
         "never": "从不"
       },
-      "search_placeholder": "搜索 MCP 服务器...",
+      "search_placeholder": "按名称、URL 或 UUID 搜索 MCP 服务器...",
       "subtitle": "管理 MCP 服务器注册与工具同步",
       "title": "MCP 服务器"
     },

@@ -97,7 +97,6 @@ func (s conservativeRefundSnapshot) refund(ctx context.Context) bool {
 	if s.skipRefund {
 		lg.Warn("skip pre-consumed refund to prevent underbilling",
 			zap.Int64("pre_consumed_quota", s.quota),
-			zap.Int("token_id", s.tokenID),
 			zap.String("reason", s.reason),
 		)
 		return false
@@ -122,8 +121,6 @@ func (s conservativeRefundSnapshot) refund(ctx context.Context) bool {
 			"billing was already marked reconciled, manual reconciliation may be required",
 			zap.Error(err),
 			zap.Int64("pre_consumed_quota", s.quota),
-			zap.Int("user_id", s.userID),
-			zap.Int("token_id", s.tokenID),
 			zap.String("request_id", s.requestID),
 			zap.String("reason", s.reason),
 		)
@@ -225,7 +222,6 @@ func ResetPerAttemptBillingForRetry(ctx context.Context, c *gin.Context) {
 		const reason = "refunded: superseded by cross-channel retry"
 		lg.Info("refunding abandoned attempt pre-consumed quota before cross-channel retry",
 			zap.Int64("pre_consumed_quota", amount),
-			zap.Int("token_id", tokenID),
 			zap.Int("provisional_log_id", provID),
 		)
 		// Mirror the existing best-effort refund pattern: run the side effects in a
@@ -387,16 +383,11 @@ func billingAuditSafetyNet(c *gin.Context) {
 	}
 
 	lg := gmw.GetLogger(c)
-	userId := c.GetInt(ctxkey.Id)
 	tokenId := c.GetInt(ctxkey.TokenId)
 	requestId := c.GetString(ctxkey.RequestId)
-	channelId := c.GetInt(ctxkey.ChannelId)
 
 	lg.Error("CRITICAL BILLING AUDIT: pre-consumed quota was not reconciled (no post-billing or refund)",
 		zap.Int64("pre_consumed_quota", preConsumed),
-		zap.Int("user_id", userId),
-		zap.Int("token_id", tokenId),
-		zap.Int("channel_id", channelId),
 		zap.String("request_id", requestId),
 	)
 
@@ -404,7 +395,6 @@ func billingAuditSafetyNet(c *gin.Context) {
 	if !shouldSkipPreConsumedRefund(c) {
 		lg.Warn("billing audit safety net: attempting emergency refund of unreconciled pre-consumed quota",
 			zap.Int64("pre_consumed_quota", preConsumed),
-			zap.Int("user_id", userId),
 			zap.String("request_id", requestId),
 		)
 		goDetachedBillingWork(relayctx.Detach(c), "billingAuditRefund", func(ctx context.Context) {
@@ -413,7 +403,6 @@ func billingAuditSafetyNet(c *gin.Context) {
 	} else {
 		lg.Error("CRITICAL BILLING AUDIT: cannot refund - request was possibly forwarded upstream, manual reconciliation required",
 			zap.Int64("pre_consumed_quota", preConsumed),
-			zap.Int("user_id", userId),
 			zap.String("request_id", requestId),
 		)
 	}

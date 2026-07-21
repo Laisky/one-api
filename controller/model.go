@@ -19,6 +19,7 @@ import (
 
 	"github.com/Laisky/one-api/common/ctxkey"
 	"github.com/Laisky/one-api/common/helper"
+	"github.com/Laisky/one-api/common/identity"
 	"github.com/Laisky/one-api/dto"
 	"github.com/Laisky/one-api/middleware"
 	"github.com/Laisky/one-api/model"
@@ -1222,9 +1223,10 @@ func GetModelsDisplay(c *gin.Context) {
 					if inputPrice == 0 && cfg.CachedInputRatio > 0 {
 						if lg != nil {
 							lg.Debug("model display fell back to cached input ratio",
-								zap.String("channel", channel.Name),
-								zap.String("resolved_model", actual),
-								zap.Float64("cached_ratio", cfg.CachedInputRatio))
+								channel.Ref().AppendZap([]zap.Field{
+									zap.String("resolved_model", actual),
+									zap.Float64("cached_ratio", cfg.CachedInputRatio),
+								})...)
 						}
 						inputPrice = cachedInputPrice
 					}
@@ -1404,10 +1406,11 @@ func GetModelsDisplay(c *gin.Context) {
 			result[modelName] = info
 			if inputPrice == 0 && cachedInputPrice == 0 && outputPrice == 0 && imagePrice == 0 && lg != nil {
 				lg.Debug("model display missing pricing metadata",
-					zap.String("channel", channel.Name),
-					zap.String("model", modelName),
-					zap.String("resolved_model", actual),
-					zap.Bool("override_applied", overrideApplied))
+					channel.Ref().AppendZap([]zap.Field{
+						zap.String("model", modelName),
+						zap.String("resolved_model", actual),
+						zap.Bool("override_applied", overrideApplied),
+					})...)
 			}
 		}
 		return result
@@ -1586,6 +1589,25 @@ func withRoutableModelID(entry OpenAIModels, routableName string) OpenAIModels {
 	return entry
 }
 
+// abilityChannelRef resolves the log identity of the channel backing an ability.
+//
+// It reads only the caller-supplied channel cache, never the database, because it
+// runs inside the /v1/models listing loop. A cache miss degrades to an id-only
+// reference so an operator's `channel_id=` grep still matches.
+//
+// Parameters:
+//   - channelCache: channel snapshot keyed by channel id; may be nil.
+//   - channelID: the ability's channel primary key.
+//
+// Return values:
+//   - identity.ChannelRef: fullest reference resolvable without I/O.
+func abilityChannelRef(channelCache map[int]*model.Channel, channelID int) identity.ChannelRef {
+	if ch := channelCache[channelID]; ch != nil {
+		return ch.Ref()
+	}
+	return identity.NewChannelRef(channelID, "", "")
+}
+
 // resolveUserAvailableModels converts a user group's enabled abilities into
 // OpenAI-shaped model entries. Display metadata is inherited from the
 // supported-models snapshot via a case-insensitive match, but the returned entry
@@ -1617,10 +1639,13 @@ func resolveUserAvailableModels(abilities []dto.EnabledAbility, snapshot []OpenA
 			continue
 		}
 		if lg != nil {
+			// The ability's channel is not the request's own channel, so name it
+			// explicitly; the cache is already in hand, so this costs no query.
 			lg.Debug("unable to build model entry for ability",
-				zap.String("model", modelName),
-				zap.Int("channel_id", ability.ChannelId),
-				zap.Int("channel_type", ability.ChannelType))
+				abilityChannelRef(channelCache, ability.ChannelId).AppendZap([]zap.Field{
+					zap.String("model", modelName),
+					zap.Int("channel_type", ability.ChannelType),
+				})...)
 		}
 	}
 

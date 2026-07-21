@@ -9,6 +9,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/Laisky/one-api/common/ctxkey"
+	"github.com/Laisky/one-api/common/identity"
 	"github.com/Laisky/one-api/model"
 	"github.com/Laisky/one-api/relay/channeltype"
 	"github.com/Laisky/one-api/relay/relaymode"
@@ -40,11 +41,13 @@ type Meta struct {
 	ChannelType  int
 	ChannelId    int
 	ChannelUUID  string
+	ChannelName  string
 	TokenId      int
 	TokenUUID    string
 	TokenName    string
 	UserId       int
 	UserUUID     string
+	Username     string
 	Group        string
 	ModelMapping map[string]string
 	// BaseURL is the proxy url set in the channel config
@@ -113,6 +116,7 @@ func GetByContext(c *gin.Context) *Meta {
 			existingMeta.ChannelType = c.GetInt(ctxkey.Channel)
 			existingMeta.ChannelId = currentChannelId
 			existingMeta.ChannelUUID = c.GetString(ctxkey.ChannelUUID)
+			existingMeta.ChannelName = c.GetString(ctxkey.ChannelName)
 			existingMeta.BaseURL = c.GetString(ctxkey.BaseURL)
 			existingMeta.APIKey = strings.TrimPrefix(c.Request.Header.Get("Authorization"), "Bearer ")
 			existingMeta.ChannelRatio = c.GetFloat64(ctxkey.ChannelRatio)
@@ -145,11 +149,13 @@ func GetByContext(c *gin.Context) *Meta {
 		ChannelType:        c.GetInt(ctxkey.Channel),
 		ChannelId:          c.GetInt(ctxkey.ChannelId),
 		ChannelUUID:        c.GetString(ctxkey.ChannelUUID),
+		ChannelName:        c.GetString(ctxkey.ChannelName),
 		TokenId:            c.GetInt(ctxkey.TokenId),
 		TokenUUID:          c.GetString(ctxkey.TokenUUID),
 		TokenName:          c.GetString(ctxkey.TokenName),
 		UserId:             c.GetInt(ctxkey.Id),
 		UserUUID:           c.GetString(ctxkey.UserUUID),
+		Username:           c.GetString(ctxkey.Username),
 		Group:              c.GetString(ctxkey.Group),
 		ModelMapping:       c.GetStringMapString(ctxkey.ModelMapping),
 		OriginModelName:    c.GetString(ctxkey.RequestModel),
@@ -206,4 +212,33 @@ func (m *Meta) EnsureActualModelName(fallback string) {
 		mapped = fallback
 	}
 	m.ActualModelName = mapped
+}
+
+// Identity returns the full request identity this Meta describes, with each
+// entity carrying id + uuid + name. No I/O: every value was copied off the gin
+// context when the Meta was built.
+//
+// Return values:
+//   - identity.Set: the request's user, token and channel references.
+func (m *Meta) Identity() identity.Set {
+	if m == nil {
+		return identity.Set{}
+	}
+	return identity.Set{
+		User:    identity.NewUserRef(m.UserId, m.UserUUID, m.Username),
+		Token:   identity.NewTokenRef(m.TokenId, m.TokenUUID, m.TokenName),
+		Channel: identity.NewChannelRef(m.ChannelId, m.ChannelUUID, m.ChannelName),
+	}
+}
+
+// LogFields returns the request identity followed by extra, for log sites that
+// do not run on the request-scoped logger (detached goroutines, helper packages).
+//
+// Parameters:
+//   - extra: fields appended after the identity fields.
+//
+// Return values:
+//   - []zap.Field: ready-to-log field slice.
+func (m *Meta) LogFields(extra ...zap.Field) []zap.Field {
+	return append(m.Identity().Zap(), extra...)
 }

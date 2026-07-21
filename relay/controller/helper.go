@@ -100,7 +100,7 @@ func getPromptTokens(ctx context.Context, textRequest *relaymodel.GeneralOpenAIR
 	default:
 		// Log error for unhandled relay modes that should have billing
 		gmw.GetLogger(ctx).Error("getPromptTokens: unhandled relay mode without billing logic",
-			zap.Int("relayMode", relayMode),
+			zap.Int("relay_mode", relayMode),
 			zap.String("model", textRequest.Model))
 	}
 
@@ -236,7 +236,7 @@ func preConsumeQuota(
 		// in this case, we do not pre-consume quota
 		// because the user and token have enough quota
 		preConsumedQuota = 0
-		lg.Info("user has enough quota, trusted and no need to pre-consume", zap.Int("user_id", meta.UserId), zap.Int64("user_quota", userQuota))
+		lg.Info("user has enough quota, trusted and no need to pre-consume", zap.Int64("user_quota", userQuota))
 	}
 	if preConsumedQuota > 0 {
 		err := model.PreConsumeTokenQuota(ctx, meta.TokenId, preConsumedQuota)
@@ -261,26 +261,29 @@ func postConsumeQuota(ctx context.Context,
 	systemPromptReset bool,
 	channelModelConfigs map[string]model.ModelConfigLocal,
 	channelCompletionRatio map[string]float64) (quota int64) {
+	// !! NO-USAGE / ZERO-USAGE GUARD !!
+	//
+	// An upstream that reports no usage must not make the request free, and must
+	// not make it invisible either. Reconciling with zero usage yields
+	// quotaDelta = 0 - preConsumedQuota, which refunds the estimate; returning
+	// early skips settlement altogether and strands the provisional log row at
+	// LogTypeProvisional, which every Logs-page query filters out — leaving a real
+	// charge nobody can see. So settle at the pre-consumed estimate (a zero delta)
+	// and fall through to the single settlement call below.
+	settledAtEstimate := false
 	if usage == nil {
-		gmw.GetLogger(ctx).Error("usage is nil, which is unexpected")
-		return
-	}
-
-	// !! ZERO-USAGE GUARD !!
-	//
-	// Some upstream transports do not reliably return token usage. If we reconcile
-	// with zero usage, the result is quotaDelta = 0 - preConsumedQuota, which
-	// REFUNDS the pre-consumed amount and makes the request free. This is incorrect.
-	//
-	// When usage is zero and pre-consumed quota exists, we return the pre-consumed
-	// amount as the final charge.
-	if usage.PromptTokens == 0 && usage.CompletionTokens == 0 && preConsumedQuota > 0 {
-		gmw.GetLogger(ctx).Warn("postConsumeQuota: usage is zero but pre-consumed quota exists, keeping pre-consumed quota",
+		gmw.GetLogger(ctx).Error("post-billing received no usage; settling at the pre-consumed estimate",
 			zap.Int64("pre_consumed_quota", preConsumedQuota),
 			zap.String("model", textRequest.Model),
 		)
-		quota = preConsumedQuota
-		return
+		usage = &relaymodel.Usage{}
+		settledAtEstimate = true
+	} else if usage.PromptTokens == 0 && usage.CompletionTokens == 0 && preConsumedQuota > 0 {
+		gmw.GetLogger(ctx).Warn("post-billing received zero usage; settling at the pre-consumed estimate",
+			zap.Int64("pre_consumed_quota", preConsumedQuota),
+			zap.String("model", textRequest.Model),
+		)
+		settledAtEstimate = true
 	}
 
 	pricingAdaptor := resolvePricingAdaptor(meta)
@@ -300,6 +303,11 @@ func postConsumeQuota(ctx context.Context,
 	totalTokens := computeResult.PromptTokens + computeResult.CompletionTokens
 	if totalTokens == 0 {
 		quota = 0
+	}
+	if settledAtEstimate {
+		// Keep exactly what was already debited: a zero delta charges nothing
+		// extra and, crucially, refunds nothing.
+		quota = preConsumedQuota + incrementallyCharged
 	}
 
 	quotaDelta := quota - preConsumedQuota - incrementallyCharged
@@ -351,9 +359,9 @@ func postConsumeQuota(ctx context.Context,
 		})
 	} else {
 		gmw.GetLogger(ctx).Error("meta information incomplete, cannot post consume quota",
-			zap.Int("token_id", meta.TokenId),
-			zap.Int("user_id", meta.UserId),
-			zap.Int("channel_id", meta.ChannelId),
+			zap.Int("meta_token_id", meta.TokenId),
+			zap.Int("meta_user_id", meta.UserId),
+			zap.Int("meta_channel_id", meta.ChannelId),
 			zap.String("request_id", requestId),
 			zap.String("trace_id", traceId),
 		)
@@ -469,9 +477,9 @@ func postConsumeQuotaWithTraceID(ctx context.Context, traceId string,
 		})
 	} else {
 		gmw.GetLogger(ctx).Error("meta information incomplete, cannot post consume quota",
-			zap.Int("token_id", meta.TokenId),
-			zap.Int("user_id", meta.UserId),
-			zap.Int("channel_id", meta.ChannelId),
+			zap.Int("meta_token_id", meta.TokenId),
+			zap.Int("meta_user_id", meta.UserId),
+			zap.Int("meta_channel_id", meta.ChannelId),
 			zap.String("request_id", requestId),
 			zap.String("trace_id", traceId),
 		)

@@ -127,8 +127,7 @@ func (channel *Channel) GetHiddenModels() map[string]struct{} {
 	var rawHidden []string
 	if err := json.Unmarshal([]byte(trimmed), &rawHidden); err != nil {
 		logger.Logger.Warn("failed to unmarshal hidden models for channel",
-			zap.Int("channel_id", channel.Id),
-			zap.Error(err))
+			append(channel.Ref().Zap(), zap.Error(err))...)
 		return nil
 	}
 

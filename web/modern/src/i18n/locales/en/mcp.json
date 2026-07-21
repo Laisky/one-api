@@ -83,6 +83,7 @@
         "actions": "Actions",
         "auth_type": "Auth",
         "base_url": "Base URL",
+        "id": "ID",
         "last_sync": "Last Sync",
         "name": "Name",
         "priority": "Priority",
@@ -94,7 +95,7 @@
       "labels": {
         "never": "Never"
       },
-      "search_placeholder": "Search MCP servers...",
+      "search_placeholder": "Search MCP servers by name, URL, or UUID...",
       "subtitle": "Manage MCP server registry and tool sync",
       "title": "MCP Servers"
     },

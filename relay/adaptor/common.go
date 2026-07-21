@@ -13,6 +13,7 @@ import (
 
 	"github.com/Laisky/one-api/common/client"
 	"github.com/Laisky/one-api/common/ctxkey"
+	"github.com/Laisky/one-api/common/identity"
 	"github.com/Laisky/one-api/common/tracing"
 	"github.com/Laisky/one-api/model"
 	"github.com/Laisky/one-api/relay/meta"
@@ -163,13 +164,16 @@ func DoRequestHelper(a Adaptor, c *gin.Context, meta *meta.Meta, requestBody io.
 		return nil, errors.Wrap(err, "apply channel custom headers")
 	}
 
-	// Prepare tagged logger and propagate to context
+	// Prepare tagged logger and propagate to context.
+	// The request-scoped logger is already bound with the full user/token/channel
+	// identity (id + uuid + name) by the auth and distributor middlewares, so only
+	// the non-identity fields are added here. "adaptor" is the upstream provider
+	// implementation name (e.g. "aws", "zhipu"), which is distinct from the
+	// operator-chosen "channel_name" carried by the bound logger.
 	lg := gmw.GetLogger(c).With(
 		zap.String("url", fullRequestURL),
-		zap.Int("channelId", meta.ChannelId),
-		zap.Int("userId", meta.UserId),
+		zap.String("adaptor", a.GetChannelName()),
 		zap.String("model", meta.ActualModelName),
-		zap.String("channelName", a.GetChannelName()),
 	)
 	ctx := gmw.Ctx(c)
 	ctx = gmw.SetLogger(ctx, lg)
@@ -194,7 +198,9 @@ func DoRequestHelper(a Adaptor, c *gin.Context, meta *meta.Meta, requestBody io.
 	if err != nil {
 		// Return error without logging - let the calling ErrorWrapper function handle logging
 		// This prevents duplicate logging when ErrorWrapper also logs the error
-		return nil, errors.Wrapf(err, "upstream request failed for channel %s (id: %d)", a.GetChannelName(), meta.ChannelId)
+		return nil, identity.Tag(
+			errors.Wrapf(err, "upstream request failed for channel %s (id: %d)", a.GetChannelName(), meta.ChannelId),
+			meta.Identity().Channel)
 	}
 	// Add debug log for non-200 statuses to help diagnose model mapping issues
 	if resp != nil && resp.StatusCode >= 400 {

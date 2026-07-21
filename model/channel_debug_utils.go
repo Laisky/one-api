@@ -1,12 +1,14 @@
 package model
 
 import (
+	"context"
 	"encoding/json"
 	"slices"
 
 	"github.com/Laisky/errors/v2"
 	"github.com/Laisky/zap"
 
+	"github.com/Laisky/one-api/common/identity"
 	"github.com/Laisky/one-api/common/logger"
 	"github.com/Laisky/one-api/relay/channeltype"
 )
@@ -16,14 +18,15 @@ func DebugChannelModelConfigs(channelId int) error {
 	var channel Channel
 	err := DB.Where("id = ?", channelId).First(&channel).Error
 	if err != nil {
-		return errors.Wrapf(err, "failed to find channel %d", channelId)
+		return identity.Tag(
+			errors.Wrapf(err, "failed to find channel %d", channelId),
+			LookupChannelRef(context.Background(), channelId))
 	}
 
 	logger.Logger.Info("=== DEBUG CHANNEL ===",
-		zap.Int("channel_id", channelId),
-		zap.String("name", channel.Name),
-		zap.Int("type", channel.Type),
-		zap.Int("status", channel.Status))
+		append(channel.Ref().Zap(),
+			zap.Int("type", channel.Type),
+			zap.Int("status", channel.Status))...)
 
 	// Check ModelConfigs
 	if channel.ModelConfigs != nil && *channel.ModelConfigs != "" && *channel.ModelConfigs != "{}" {
@@ -99,7 +102,9 @@ func DebugChannelModelConfigs(channelId int) error {
 // DebugAllChannelModelConfigs prints summary information about all channels
 func DebugAllChannelModelConfigs() error {
 	var channels []Channel
-	err := DB.Select("id, name, type, status").Find(&channels).Error
+	// uuid is selected so the per-channel log lines below can report the
+	// identifier the web UI actually shows, not just the internal id.
+	err := DB.Select("id, uuid, name, type, status").Find(&channels).Error
 	if err != nil {
 		return errors.Wrapf(err, "failed to fetch channels")
 	}
@@ -110,7 +115,7 @@ func DebugAllChannelModelConfigs() error {
 		var fullChannel Channel
 		err := DB.Where("id = ?", channel.Id).First(&fullChannel).Error
 		if err != nil {
-			logger.Logger.Error("Failed to load channel", zap.Int("channel_id", channel.Id), zap.Error(err))
+			logger.Logger.Error("Failed to load channel", append(channel.Ref().Zap(), zap.Error(err))...)
 			continue
 		}
 
@@ -126,10 +131,7 @@ func DebugAllChannelModelConfigs() error {
 		}
 
 		logger.Logger.Info("Channel summary",
-			zap.Int("channel_id", channel.Id),
-			zap.String("name", channel.Name),
-			zap.Int("type", channel.Type),
-			zap.String("status", status))
+			append(channel.Ref().Zap(), zap.Int("type", channel.Type), zap.String("status", status))...)
 
 		if hasModelConfigs {
 			// Count models in unified format
@@ -168,10 +170,12 @@ func FixChannelModelConfigs(channelId int) error {
 	var channel Channel
 	err := DB.Where("id = ?", channelId).First(&channel).Error
 	if err != nil {
-		return errors.Wrapf(err, "failed to find channel %d", channelId)
+		return identity.Tag(
+			errors.Wrapf(err, "failed to find channel %d", channelId),
+			LookupChannelRef(context.Background(), channelId))
 	}
 
-	logger.Logger.Info("=== FIXING CHANNEL ===", zap.Int("channel_id", channelId))
+	logger.Logger.Info("=== FIXING CHANNEL ===", channel.Ref().Zap()...)
 
 	// First, debug current state
 	DebugChannelModelConfigs(channelId)
@@ -205,7 +209,9 @@ func FixChannelModelConfigs(channelId int) error {
 		"completion_ratio": channel.CompletionRatio,
 	}).Error
 	if err != nil {
-		return errors.Wrapf(err, "failed to save fixed data for channel %d", channelId)
+		return identity.Tag(
+			errors.Wrapf(err, "failed to save fixed data for channel %d", channelId),
+			channel.Ref())
 	}
 	logger.Logger.Info("Fixed data saved to database")
 
@@ -239,19 +245,17 @@ func CleanAllMixedModelData() error {
 				for modelName := range configs {
 					if !contains(channelTypeModels, modelName) {
 						logger.Logger.Info("Channel has unexpected model",
-							zap.Int("channel_id", channel.Id),
-							zap.Int("channel_type", channel.Type),
-							zap.String("model", modelName))
+							append(channel.Ref().Zap(), zap.Int("channel_type", channel.Type), zap.String("model", modelName))...)
 						hasMixedData = true
 						break
 					}
 				}
 
 				if hasMixedData {
-					logger.Logger.Info("Cleaning mixed data for channel", zap.Int("channel_id", channel.Id))
+					logger.Logger.Info("Cleaning mixed data for channel", channel.Ref().Zap()...)
 					err := FixChannelModelConfigs(channel.Id)
 					if err != nil {
-						logger.Logger.Error("Failed to clean channel", zap.Int("channel_id", channel.Id), zap.Error(err))
+						logger.Logger.Error("Failed to clean channel", append(channel.Ref().Zap(), zap.Error(err))...)
 					} else {
 						cleanedCount++
 					}
@@ -376,21 +380,21 @@ func ValidateAllChannelModelConfigs() error {
 			// Validate unified format
 			var configs map[string]ModelConfigLocal
 			if err := json.Unmarshal([]byte(*channel.ModelConfigs), &configs); err != nil {
-				logger.Logger.Error("Channel: Invalid ModelConfigs JSON", zap.Int("channel_id", channel.Id), zap.Error(err))
+				logger.Logger.Error("Channel: Invalid ModelConfigs JSON", append(channel.Ref().Zap(), zap.Error(err))...)
 				issueCount++
 				continue
 			}
 
 			// Validate each model config
 			if err := channel.validateModelPriceConfigs(configs); err != nil {
-				logger.Logger.Error("Channel: Invalid ModelConfigs data", zap.Int("channel_id", channel.Id), zap.Error(err))
+				logger.Logger.Error("Channel: Invalid ModelConfigs data", append(channel.Ref().Zap(), zap.Error(err))...)
 				issueCount++
 				continue
 			}
 
 			validCount++
 		} else if hasLegacyData {
-			logger.Logger.Info("Channel has legacy data, needs migration", zap.Int("channel_id", channel.Id))
+			logger.Logger.Info("Channel has legacy data, needs migration", channel.Ref().Zap()...)
 			issueCount++
 		}
 	}

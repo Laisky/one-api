@@ -100,30 +100,40 @@ func postConsumeResponseAPIQuota(ctx context.Context,
 	channelModelConfigs map[string]model.ModelConfigLocal,
 	channelCompletionRatio map[string]float64) (quota int64) {
 
+	// !! NO-USAGE / ZERO-USAGE GUARD !!
+	//
+	// Some upstreams do not report token usage at all (a transport that only
+	// passes bytes through, a truncated stream, the OpenAI WebSocket Response
+	// API). Two things must NOT happen when that occurs:
+	//
+	//  1. Reconciling with zero usage yields quotaDelta = 0 - preConsumedQuota,
+	//     which REFUNDS the pre-consumed amount and makes the request free.
+	//  2. Returning early skips settlement entirely, which strands the
+	//     provisional log row at LogTypeProvisional. That row is filtered out of
+	//     every Logs-page query, so the user is charged for a request nobody can
+	//     see, and the user/channel usage aggregates silently under-report.
+	//
+	// So an unmeasurable request settles at the pre-consumed estimate — a zero
+	// delta, keeping the money already debited — and still flows through the one
+	// settlement call below, which reconciles the provisional row into a visible
+	// consume log.
+	settledAtEstimate := false
 	if usage == nil {
-		// No gin context here; cannot use request-scoped logger
-		// Keep silent here to avoid global logger; caller should ensure usage
-		return
-	}
-
-	// !! ZERO-USAGE GUARD !!
-	//
-	// Some upstream transports (notably OpenAI WebSocket Response API) do not
-	// reliably return token usage. If we reconcile with zero usage, the result
-	// is quotaDelta = 0 - preConsumedQuota, which REFUNDS the pre-consumed
-	// amount and makes the request effectively free. This is incorrect.
-	//
-	// When usage is zero and pre-consumed quota exists, we return the
-	// pre-consumed amount as the final charge. The provisional log entry
-	// remains with the estimated amount for audit visibility.
-	if usage.PromptTokens == 0 && usage.CompletionTokens == 0 {
-		lg := gmw.GetLogger(ctx)
-		lg.Warn("postConsumeResponseAPIQuota: usage is zero, keeping pre-consumed quota",
+		// The upstream returned success without any usage. That is an adaptor
+		// defect, not a client error: report it loudly instead of silently
+		// dropping the charge from the ledger.
+		gmw.GetLogger(ctx).Error("response api post-billing received no usage; settling at the pre-consumed estimate",
 			zap.Int64("pre_consumed_quota", preConsumedQuota),
 			zap.String("model", responseAPIRequest.Model),
 		)
-		quota = preConsumedQuota
-		return
+		usage = &relaymodel.Usage{}
+		settledAtEstimate = true
+	} else if usage.PromptTokens == 0 && usage.CompletionTokens == 0 {
+		gmw.GetLogger(ctx).Warn("response api post-billing received zero usage; settling at the pre-consumed estimate",
+			zap.Int64("pre_consumed_quota", preConsumedQuota),
+			zap.String("model", responseAPIRequest.Model),
+		)
+		settledAtEstimate = true
 	}
 
 	pricingAdaptor := resolvePricingAdaptor(meta)
@@ -143,6 +153,11 @@ func postConsumeResponseAPIQuota(ctx context.Context,
 	totalTokens := computeResult.PromptTokens + computeResult.CompletionTokens
 	if totalTokens == 0 {
 		quota = 0
+	}
+	if settledAtEstimate {
+		// Keep exactly what was already debited: a zero delta charges nothing
+		// extra and, crucially, refunds nothing.
+		quota = preConsumedQuota
 	}
 
 	// Use centralized detailed billing function to follow DRY principle
@@ -169,6 +184,12 @@ func postConsumeResponseAPIQuota(ctx context.Context,
 	if meta.TokenId > 0 && meta.UserId > 0 && meta.ChannelId > 0 {
 		toolSummary := billingID.toolSummary
 		metadata := model.AppendCacheWriteTokensMetadata(nil, usage.CacheWrite5mTokens, usage.CacheWrite1hTokens)
+		if settledAtEstimate {
+			if metadata == nil {
+				metadata = model.LogMetadata{}
+			}
+			metadata[model.LogMetadataKeyEstimatedCharge] = true
+		}
 
 		postConsumeResponseAPIQuotaDetailed(billing.QuotaConsumeDetail{
 			Ctx:                ctx,
@@ -208,9 +229,9 @@ func postConsumeResponseAPIQuota(ctx context.Context,
 		// Should not happen; log for investigation
 		lg := gmw.GetLogger(ctx)
 		lg.Error("postConsumeResponseAPIQuota missing essential meta information",
-			zap.Int("token_id", meta.TokenId),
-			zap.Int("user_id", meta.UserId),
-			zap.Int("channel_id", meta.ChannelId),
+			zap.Int("meta_token_id", meta.TokenId),
+			zap.Int("meta_user_id", meta.UserId),
+			zap.Int("meta_channel_id", meta.ChannelId),
 			zap.String("request_id", requestId),
 			zap.String("trace_id", traceId),
 		)

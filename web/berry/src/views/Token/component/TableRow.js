@@ -20,6 +20,7 @@ import {
 } from '@mui/material';
 
 import TableSwitch from 'ui-component/Switch';
+import ResourceRefTooltip from 'ui-component/ResourceRefTooltip';
 import { renderQuota, timestamp2string, copy } from 'utils/common';
 
 import { IconDotsVertical, IconEdit, IconTrash, IconCaretDownFilled } from '@tabler/icons-react';
@@ -169,7 +170,9 @@ export default function TokensTableRow({ item, manageToken, handleOpenModal, set
   return (
     <>
       <TableRow tabIndex={item.id}>
-        <TableCell>{item.name}</TableCell>
+        <TableCell>
+          <ResourceRefTooltip refId={ref}>{item.name}</ResourceRefTooltip>
+        </TableCell>
 
         <TableCell>
           <Tooltip

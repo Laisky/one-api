@@ -180,7 +180,7 @@ func logChannelSuspensionStatus(ctx context.Context, group, model string, failed
 			zap.Error(err),
 			zap.String("group", group),
 			zap.String("model", model),
-			zap.Ints("failed_channel_ids", channelIds),
+			dbmodel.ChannelRefsField("failed_channel_ids", channelIds),
 		)
 		return
 	}
@@ -198,8 +198,8 @@ func logChannelSuspensionStatus(ctx context.Context, group, model string, failed
 
 	if len(suspended) > 0 {
 		lg.Info("Debug: Database suspension status",
-			zap.Ints("suspended_channels", suspended),
-			zap.Ints("available_channels", available),
+			dbmodel.ChannelRefsField("suspended_channels", suspended),
+			dbmodel.ChannelRefsField("available_channels", available),
 			zap.String("model", model),
 			zap.String("group", group),
 		)
@@ -208,6 +208,14 @@ func logChannelSuspensionStatus(ctx context.Context, group, model string, failed
 
 // processChannelRelayErrorParams contains all parameters needed for error processing.
 // This struct helps maintain readability when passing multiple context values.
+//
+// RequestID, UserId, TokenId, ChannelId and ChannelName are NOT logged by
+// appendRelayFailureFields: every emit site logs through the request-scoped logger,
+// which identity.Bind already loaded with request_id plus user_id/user_uuid/username,
+// token_id/token_uuid/token_name and channel_id/channel_uuid/channel_name. The ids and
+// name are kept here because the channel-health policy (SuspendAbility,
+// monitor.DisableChannel) still needs the raw values; RequestID is retained only as a
+// non-logged correlator for callers and tests.
 type processChannelRelayErrorParams struct {
 	RequestID     string
 	UserId        int
@@ -222,23 +230,19 @@ type processChannelRelayErrorParams struct {
 }
 
 // appendRelayFailureFields builds consistent relay failure context fields from params and appends extra fields.
-// Parameters: params carries request, user, token, channel, model, and upstream error context; extra adds log-specific details.
+//
+// It deliberately emits NO user/token/channel identity: every caller logs through the
+// request-scoped logger (gmw.GetLogger on the gin context or on the identity-carrying
+// context snapshotted by relayctx.Detach), which identity.Bind already loaded with the
+// full nine-field identity. Re-emitting them here would duplicate every key, because
+// zap does not de-duplicate fields.
+//
+// Parameters: params carries request, model, and upstream error context; extra adds log-specific details.
 // Returns: a zap field slice suitable for structured WARN/ERROR relay logs.
 func appendRelayFailureFields(params processChannelRelayErrorParams, extra ...zap.Field) []zap.Field {
 	fields := make([]zap.Field, 0, 12+len(extra))
-	if params.RequestID != "" {
-		fields = append(fields, zap.String("request_id", params.RequestID))
-	}
 	if params.RequestURL != "" {
 		fields = append(fields, zap.String("request_url", params.RequestURL))
-	}
-	fields = append(fields,
-		zap.Int("user_id", params.UserId),
-		zap.Int("token_id", params.TokenId),
-		zap.Int("channel_id", params.ChannelId),
-	)
-	if params.ChannelName != "" {
-		fields = append(fields, zap.String("channel_name", params.ChannelName))
 	}
 	if params.Group != "" {
 		fields = append(fields, zap.String("group", params.Group))

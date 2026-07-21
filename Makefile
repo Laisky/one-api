@@ -11,11 +11,19 @@ install:
 	# go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.2
 
 .PHONY: lint
+GO_FILE_FIND = find . \
+	-path './.git' -prune -o \
+	-path './node_modules' -prune -o \
+	-path './web/*/node_modules' -prune -o \
+	-path './web/build' -prune -o \
+	-path './.mypy_cache' -prune -o \
+	-name '*.go' -print0
+
 lint:
-	goimports -local module,github.com/Laisky/one-api -w .
+	$(GO_FILE_FIND) | xargs -0 -n 50 goimports -local module,github.com/Laisky/one-api -w
 	go mod tidy
-	gofmt -s -w .
-	go vet
+	$(GO_FILE_FIND) | xargs -0 -n 50 gofmt -s -w
+	go vet ./...
 	# nilaway ./...
 	golangci-lint run -c .golangci.yml
 	govulncheck ./...

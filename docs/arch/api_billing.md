@@ -418,14 +418,14 @@ This comprehensive billing system ensures accurate cost calculation for all Chat
 
 ## OpenAI Response API
 
-The OpenAI Response API represents a new interface for generating model responses with enhanced capabilities including stateful conversations, built-in tools, and advanced features. This section documents the **completed implementation** of direct Response API support with full billing integration.
+The OpenAI Response API represents a new interface for generating model responses with enhanced capabilities including stateful conversations, built-in tools, and advanced features. This section documents the billing implementation for direct Response API support and converted fallback paths. Native pass-through can preserve upstream Responses state; fallback conversion only bills and rewrites the current request/response shape.
 
 
 - ✅ **Direct Response API Support**: Users can send requests directly in Response API format to `/v1/responses`
 - ✅ **Native Response API Billing**: Dedicated billing path using the same pricing system as ChatCompletion
 - ✅ **Streaming Support**: Full streaming compatibility with direct pass-through of Response API events
 - ✅ **Backward Compatibility**: No breaking changes to existing ChatCompletion functionality
-- ✅ **Feature Parity**: Structured output, function calling, and multi-modal content support
+- ✅ **Feature Coverage**: Structured output, function calling, and multi-modal content support in the current exchange; server-side continuation requires native upstream Responses support
 
 **Dual API Support:**
 
@@ -606,7 +606,7 @@ Tools Cost = Function Call Cost + Web Search Cost
 - Extracts usage information from `response.completed` events
 - Maintains proper SSE headers and event formatting
 
-**Event Processing:** Supports all Response API streaming event types including text deltas, reasoning summaries, and completion events
+**Event Processing:** Supports the Response API streaming event types used for billing and forwarding, including text deltas, reasoning summaries, and completion events.
 
 #### Structured Output Support
 
@@ -663,13 +663,13 @@ Tools Cost = Function Call Cost + Web Search Cost
 **Native Response API Support:**
 
 - Users can leverage Response API features directly without conversion overhead
-- Full feature parity with OpenAI's Response API
-- Direct access to Response API-specific capabilities
+- Native pass-through preserves OpenAI Response API-specific capabilities that the upstream supports
+- Direct access to state features such as `previous_response_id` and `conversation` only on native upstream paths
 
 **Billing Consistency:**
 
 - Same billing logic and pricing system applies regardless of API format
-- Accurate cost calculation for all Response API features
+- Accurate cost calculation for supported Response API features and converted fallback responses
 - Transparent pricing across all supported models
 
 **Backward Compatibility:**
@@ -684,7 +684,7 @@ Tools Cost = Function Call Cost + Web Search Cost
 - Efficient streaming with minimal processing
 - Optimized token counting and billing
 
-This implementation successfully provides complete Response API support while maintaining full compatibility with the existing ChatCompletion billing system and ensuring accurate cost calculation for all Response API features.
+This implementation provides Response API billing support while maintaining compatibility with the existing ChatCompletion billing system and ensuring accurate cost calculation for native and converted Response API traffic.
 
 ## Claude Messages API
 

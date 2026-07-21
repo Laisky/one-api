@@ -19,6 +19,7 @@ import {
 } from '@douyinfe/semi-ui';
 import EditChannel from '../pages/Channel/EditChannel';
 import PricingModal from './PricingModal';
+import ResourceRefTooltip from './ResourceRefTooltip';
 import { IconTreeTriangleDown } from '@douyinfe/semi-icons';
 
 function renderTimestamp(timestamp) {
@@ -55,9 +56,7 @@ const ChannelsTable = () => {
       title: '名称',
       dataIndex: 'name',
       render: (text, record) => (
-        <Tooltip content={`ID: ${channelRef(record)}`}>
-          <span className="resource-name-with-id">{text}</span>
-        </Tooltip>
+        <ResourceRefTooltip refId={channelRef(record)}>{text}</ResourceRefTooltip>
       )
     },
     // {

@@ -6,6 +6,8 @@ import (
 	"time"
 
 	"github.com/Laisky/errors/v2"
+
+	"github.com/Laisky/one-api/common/errkind"
 )
 
 const (
@@ -79,21 +81,23 @@ func (s *MCPServer) NormalizeAndValidate() error {
 		return errors.New("mcp server is nil")
 	}
 
+	// Everything validated below comes from the submitted payload, so a failure
+	// here is bad client input, never a server fault.
 	s.Name = strings.TrimSpace(s.Name)
 	if s.Name == "" {
-		return errors.New("mcp server name is required")
+		return errkind.InvalidRequestErr(errors.New("mcp server name is required"))
 	}
 
 	s.BaseURL = strings.TrimSpace(s.BaseURL)
 	if s.BaseURL == "" {
-		return errors.New("mcp server base_url is required")
+		return errkind.InvalidRequestErr(errors.New("mcp server base_url is required"))
 	}
 	parsedURL, err := url.Parse(s.BaseURL)
 	if err != nil {
-		return errors.Wrap(err, "invalid mcp server base_url")
+		return errkind.InvalidRequestErr(errors.Wrap(err, "invalid mcp server base_url"))
 	}
 	if parsedURL.Scheme != "http" && parsedURL.Scheme != "https" {
-		return errors.New("mcp server base_url must use http or https")
+		return errkind.InvalidRequestErr(errors.New("mcp server base_url must use http or https"))
 	}
 
 	s.Protocol = strings.TrimSpace(strings.ToLower(s.Protocol))
@@ -111,7 +115,7 @@ func (s *MCPServer) NormalizeAndValidate() error {
 	}
 
 	if s.AutoSyncIntervalMinutes < 5 || s.AutoSyncIntervalMinutes > 1440 {
-		return errors.New("auto_sync_interval_minutes must be between 5 and 1440")
+		return errkind.InvalidRequestErr(errors.New("auto_sync_interval_minutes must be between 5 and 1440"))
 	}
 
 	if err := s.ValidateToolPricing(); err != nil {
@@ -125,14 +129,15 @@ func (s *MCPServer) NormalizeAndValidate() error {
 func (s *MCPServer) ValidateToolPricing() error {
 	for name, pricing := range s.ToolPricing {
 		trimmed := strings.TrimSpace(name)
+		// Submitted pricing map: invalid values are the caller's input error.
 		if trimmed == "" {
-			return errors.New("tool pricing contains empty tool name")
+			return errkind.InvalidRequestErr(errors.New("tool pricing contains empty tool name"))
 		}
 		if pricing.UsdPerCall < 0 {
-			return errors.Errorf("tool %s usd_per_call cannot be negative", trimmed)
+			return errkind.InvalidRequestErr(errors.Errorf("tool %s usd_per_call cannot be negative", trimmed))
 		}
 		if pricing.QuotaPerCall < 0 {
-			return errors.Errorf("tool %s quota_per_call cannot be negative", trimmed)
+			return errkind.InvalidRequestErr(errors.Errorf("tool %s quota_per_call cannot be negative", trimmed))
 		}
 	}
 	return nil

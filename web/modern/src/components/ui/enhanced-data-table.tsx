@@ -261,6 +261,9 @@ export function EnhancedDataTable<TData, TValue>({
                     placeholder={effectiveSearchPlaceholder}
                     searchPlaceholder={effectiveSearchPlaceholder}
                     options={searchOptions}
+                    // The page owns the search (onSearchChange feeds searchOptions),
+                    // so the dropdown must render those results verbatim.
+                    remoteFiltered
                     onSearchChange={onSearchChange}
                     onChange={onSearchValueChange}
                     onSelect={onSearchSelect}

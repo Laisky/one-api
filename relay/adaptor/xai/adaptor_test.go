@@ -448,20 +448,59 @@ func TestHandleResponseAPIResponse(t *testing.T) {
 	t.Parallel()
 	adaptor := &Adaptor{}
 
-	t.Run("Streaming Response API", func(t *testing.T) {
+	// A streaming Response API call must hand billing the usage x.AI publishes on
+	// its terminal response.completed event, and must forward the stream to the
+	// client untouched. Reporting no usage here is what strands the pre-consumed
+	// charge as an invisible provisional log entry.
+	t.Run("Streaming Response API reports usage and forwards the stream", func(t *testing.T) {
 		t.Parallel()
-		c, _ := gin.CreateTestContext(httptest.NewRecorder())
+		recorder := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(recorder)
+		meta := &meta.Meta{IsStream: true}
+
+		sse := "event: response.output_text.delta\n" +
+			`data: {"type":"response.output_text.delta","delta":"halo"}` + "\n\n" +
+			"event: response.completed\n" +
+			`data: {"type":"response.completed","response":{"id":"resp_1","status":"completed","usage":{"input_tokens":320,"output_tokens":40,"total_tokens":360}}}` + "\n\n" +
+			"data: [DONE]\n\n"
+
+		resp := &http.Response{
+			StatusCode: 200,
+			Header:     make(http.Header),
+			Body:       io.NopCloser(strings.NewReader(sse)),
+		}
+
+		usage, err := adaptor.handleResponseAPIResponse(c, resp, meta)
+		assert.Nil(t, err)
+		require.NotNil(t, usage, "usage from response.completed must reach billing")
+		assert.Equal(t, 320, usage.PromptTokens)
+		assert.Equal(t, 40, usage.CompletionTokens)
+		assert.Equal(t, 360, usage.TotalTokens)
+
+		body := recorder.Body.String()
+		assert.Equal(t, sse, body, "the client stream must be forwarded byte for byte")
+	})
+
+	// A stream that never reports usage still returns nil. This is not a silent
+	// free request: relay/controller/response_billing.go settles such a request at
+	// its pre-consumed estimate and reconciles the provisional log so the charge
+	// stays visible.
+	t.Run("Streaming Response API without usage returns nil", func(t *testing.T) {
+		t.Parallel()
+		recorder := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(recorder)
 		meta := &meta.Meta{IsStream: true}
 
 		resp := &http.Response{
 			StatusCode: 200,
 			Header:     make(http.Header),
-			Body:       io.NopCloser(strings.NewReader("streaming data")),
+			Body:       io.NopCloser(strings.NewReader("event: response.created\ndata: {\"type\":\"response.created\"}\n\n")),
 		}
 
 		usage, err := adaptor.handleResponseAPIResponse(c, resp, meta)
 		assert.Nil(t, err)
-		assert.Nil(t, usage) // Streaming doesn't return usage
+		assert.Nil(t, usage)
+		assert.Contains(t, recorder.Body.String(), "response.created")
 	})
 }
 

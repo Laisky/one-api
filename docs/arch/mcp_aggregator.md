@@ -133,7 +133,7 @@ flowchart LR
 
 4. **Response API fallback**
 
-- `/v1/responses` requests that reference MCP tools are routed through the ChatCompletion fallback so the MCP execution loop can run, then rewritten back to the Response API format.
+- `/v1/responses` requests that reference MCP tools are routed through the ChatCompletion fallback so the MCP execution loop can run, then rewritten back to the Response API format. This is a format bridge, not native OpenAI Responses state handling; clients must provide complete replayable `input` when they need portable multi-turn context.
 
 ## 3) Tool Ownership and Multi‑Round Orchestration
 

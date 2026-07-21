@@ -948,9 +948,22 @@ func ResponseAPIHandler(c *gin.Context, resp *http.Response, promptTokens int, m
 		c.Set(ctxkey.WebSearchCallCount, calls)
 	}
 
+	// Surface the upstream Responses id so the controller can record a
+	// stateless-client continuation checkpoint against it (ST-022). Internal only;
+	// never written to the client body.
+	if responseAPIResp.Id != "" {
+		c.Set(ctxkey.ResponseAPIUpstreamID, responseAPIResp.Id)
+	}
+
 	// Convert Response API response to ChatCompletion format
 	chatCompletionResp := ConvertResponseAPIToChatCompletion(&responseAPIResp)
 	chatCompletionResp.Model = modelName
+
+	// Surface the rendered assistant turn so a stateless-client checkpoint can key on
+	// the full transcript the client will resend next time (ST-022).
+	if len(chatCompletionResp.Choices) > 0 {
+		c.Set(ctxkey.ResponseAPIAssistantMessage, chatCompletionResp.Choices[0].Message)
+	}
 
 	// Handle reasoning content in the choice
 	if len(chatCompletionResp.Choices) > 0 {

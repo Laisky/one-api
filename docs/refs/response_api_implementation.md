@@ -2,7 +2,7 @@
 
 ## Overview
 
-This document describes the implementation of conversion from Response API format back to ChatCompletion format in the OpenAI adaptor. This ensures that when the system converts ChatCompletion requests to Response API format for upstream processing, the responses are converted back to the familiar ChatCompletion format before being returned to users.
+This document describes the implementation of conversion from Response API format back to ChatCompletion format in the OpenAI adaptor. This ensures that when the system converts ChatCompletion requests to Response API format for upstream processing, the responses are converted back to the familiar ChatCompletion format before being returned to users. The conversion covers the current request/response envelope; it does not create OpenAI-managed state for Chat Completions callers because they do not have `previous_response_id` or `conversation` handles.
 
 ## Implementation Summary
 
@@ -308,4 +308,4 @@ The conversion is transparent to users. When a ChatCompletion request is made:
 5. Converts Response API response back to ChatCompletion format (preserving function calls)
 6. Returns familiar ChatCompletion format to user
 
-This ensures backward compatibility while leveraging the new Response API capabilities. Function calling is fully supported - tools defined in ChatCompletion requests are preserved through the conversion, and function calls in Response API responses are properly converted back to `tool_calls` in the ChatCompletion format.
+This ensures backward compatibility while leveraging Response API capabilities that are visible in the current request/response exchange. Server-side continuation features remain native Responses features; function calling is fully supported because tools defined in ChatCompletion requests are preserved through the conversion, and function calls in Response API responses are properly converted back to `tool_calls` in the ChatCompletion format.

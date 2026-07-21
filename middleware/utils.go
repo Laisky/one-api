@@ -11,21 +11,30 @@ import (
 
 	"github.com/Laisky/one-api/common"
 	"github.com/Laisky/one-api/common/config"
+	"github.com/Laisky/one-api/common/errkind"
 	"github.com/Laisky/one-api/common/helper"
+	"github.com/Laisky/one-api/common/identity"
 	"github.com/Laisky/one-api/relay/model"
 )
 
 // AbortWithError aborts the request with an error message
 func AbortWithError(c *gin.Context, statusCode int, err error) {
 	logger := gmw.GetLogger(c)
+	fields := []zap.Field{
+		zap.Int("status_code", statusCode),
+		zap.String("error_kind", errkind.Of(err).String()),
+	}
+	// Identity the bound logger does not already carry: late gin-context values
+	// and identity tagged onto the error deep in model/, where the entity struct
+	// was in hand. Duplicates of already-bound fields are suppressed.
+	fields = append(fields, identity.ExtraFields(c, err)...)
+
+	// zap.Error is attached per branch, never to the shared slice: it renders the
+	// full errors/v2 stack, which must not appear on a WARN line.
 	if shouldLogAsWarning(statusCode, err) {
-		logger.Warn("server abort",
-			zap.Int("status_code", statusCode),
-			zap.Error(err))
+		logger.Warn("server abort", append(fields, zap.String("error", errMessage(err)))...)
 	} else {
-		logger.Error("server abort",
-			zap.Int("status_code", statusCode),
-			zap.Error(err))
+		logger.Error("server abort", append(fields, zap.Error(err))...)
 	}
 
 	c.JSON(statusCode, gin.H{
@@ -38,14 +47,17 @@ func AbortWithError(c *gin.Context, statusCode int, err error) {
 }
 
 // TokenInfo holds information about an API token for logging purposes.
-// All fields are masked or ID-based to avoid exposing sensitive data.
+// All fields are masked or reference-based to avoid exposing sensitive data.
 type TokenInfo struct {
 	MaskedKey   string // Masked API key (prefix...suffix)
-	TokenId     int    // Token ID
-	TokenName   string // Token name
-	UserId      int    // User ID who owns the token
-	Username    string // Username (optional, may be empty)
 	RequestedAt string // Request model (optional)
+
+	// Token identifies the API key by id + uuid + name. The uuid and name are
+	// what the web UI shows, so they are what an operator can search on.
+	Token identity.TokenRef
+	// User identifies the token owner by id + uuid + username. The username is
+	// only known once the owner row has been loaded.
+	User identity.UserRef
 }
 
 // AbortWithTokenError aborts the request with an error message and logs detailed token information.
@@ -55,29 +67,26 @@ func AbortWithTokenError(c *gin.Context, statusCode int, err error, tokenInfo *T
 	logger := gmw.GetLogger(c)
 	logFields := []zap.Field{
 		zap.Int("status_code", statusCode),
-		zap.Error(err),
+		zap.String("error_kind", errkind.Of(err).String()),
 	}
 
-	// Add token info fields if available
+	// Add token info fields if available. The refs carry uuid + name next to the
+	// integer ids, because the web UI only exposes uuid and name.
 	if tokenInfo != nil {
-		logFields = append(logFields,
-			zap.String("api_key", tokenInfo.MaskedKey),
-			zap.Int("token_id", tokenInfo.TokenId),
-			zap.String("token_name", tokenInfo.TokenName),
-			zap.Int("user_id", tokenInfo.UserId),
-		)
-		if tokenInfo.Username != "" {
-			logFields = append(logFields, zap.String("username", tokenInfo.Username))
-		}
+		logFields = append(logFields, zap.String("api_key", tokenInfo.MaskedKey))
+		logFields = tokenInfo.Token.AppendZap(logFields)
+		logFields = tokenInfo.User.AppendZap(logFields)
 		if tokenInfo.RequestedAt != "" {
 			logFields = append(logFields, zap.String("requested_model", tokenInfo.RequestedAt))
 		}
 	}
+	logFields = append(logFields, identity.Fields(err)...)
 
+	// zap.Error only on the ERROR branch: it renders the full errors/v2 stack.
 	if shouldLogAsWarning(statusCode, err) {
-		logger.Warn("server abort", logFields...)
+		logger.Warn("server abort", append(logFields, zap.String("error", errMessage(err)))...)
 	} else {
-		logger.Error("server abort", logFields...)
+		logger.Error("server abort", append(logFields, zap.Error(err))...)
 	}
 
 	c.JSON(statusCode, gin.H{
@@ -87,6 +96,22 @@ func AbortWithTokenError(c *gin.Context, statusCode int, err error, tokenInfo *T
 		},
 	})
 	c.Abort()
+}
+
+// errMessage renders an error for a WARN log line: the message only, never the
+// stack. zap.Error would attach the full errors/v2 trace, which is reserved for
+// genuine server faults.
+//
+// Parameters:
+//   - err: the error to render; nil yields an empty string.
+//
+// Return values:
+//   - string: err.Error(), or "" when err is nil.
+func errMessage(err error) string {
+	if err == nil {
+		return ""
+	}
+	return err.Error()
 }
 
 // shouldLogAsWarning determines whether an abort should be logged as WARN.
@@ -99,6 +124,14 @@ func AbortWithTokenError(c *gin.Context, statusCode int, err error, tokenInfo *T
 //   - true if this is a client-caused or intentionally ignored case.
 //   - false if this is a server-side failure that should be logged as ERROR.
 func shouldLogAsWarning(statusCode int, err error) bool {
+	// A recorded fault attribution wins over the transport in BOTH directions.
+	// Notably it is what stops a database outage on the auth path — which this
+	// middleware reports as HTTP 401 regardless of cause — from being logged at
+	// WARN and paging nobody.
+	if kind := errkind.Of(err); kind != errkind.Unknown {
+		return kind.IsClient()
+	}
+
 	if statusCode >= 400 && statusCode < 500 {
 		return true
 	}
@@ -106,6 +139,9 @@ func shouldLogAsWarning(statusCode int, err error) bool {
 	if err == nil {
 		return false
 	}
+
+	// Deprecated fallback for errors that have not been marked yet. Remove once
+	// every producer on these paths calls errkind.
 
 	switch {
 	case strings.Contains(err.Error(), "token not found for key:"):

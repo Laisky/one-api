@@ -60,14 +60,10 @@ func rtBillingAuditSafetyNet(c *gin.Context) {
 		return
 	}
 
-	lg := gmw.GetLogger(c)
-	tokenId := c.GetInt(ctxkey.TokenId)
-	requestId := c.GetString(ctxkey.RequestId)
-
-	lg.Error("CRITICAL BILLING AUDIT (realtime): pre-consumed quota was not reconciled",
+	// The request-scoped logger already carries request_id plus the full
+	// user/token/channel identity bound by the auth and distributor middlewares.
+	gmw.GetLogger(c).Error("CRITICAL BILLING AUDIT (realtime): pre-consumed quota was not reconciled",
 		zap.Int64("pre_consumed_quota", preConsumed),
-		zap.Int("token_id", tokenId),
-		zap.String("request_id", requestId),
 	)
 
 	// Do NOT refund — the request was forwarded upstream, so keeping the

@@ -254,10 +254,8 @@ func RelayAudioHelper(c *gin.Context, relayMode int) *relaymodel.ErrorWithStatus
 	// Log upstream request for billing tracking
 	lg.Info("sending audio request to upstream channel",
 		zap.String("url", fullRequestURL),
-		zap.Int("channelId", channelId),
-		zap.Int("userId", userId),
 		zap.String("model", audioModel),
-		zap.Int("relayMode", relayMode))
+		zap.Int("relay_mode", relayMode))
 
 	resp, err := client.HTTPClient.Do(req)
 	if err != nil {

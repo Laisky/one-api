@@ -55,12 +55,15 @@ func TestAppendRelayFailureFields(t *testing.T) {
 		field.AddTo(encoder)
 	}
 
-	require.Equal(t, "req-123", encoder.Fields["request_id"])
 	require.Equal(t, "/v1/chat/completions", encoder.Fields["request_url"])
-	require.EqualValues(t, 11, encoder.Fields["user_id"])
-	require.EqualValues(t, 22, encoder.Fields["token_id"])
-	require.EqualValues(t, 33, encoder.Fields["channel_id"])
-	require.Equal(t, "primary-openai", encoder.Fields["channel_name"])
+	// request_id and the user/token/channel identity are deliberately absent: the
+	// request-scoped logger identity.Bind hands to every emit site already carries them,
+	// and zap does not de-duplicate keys.
+	require.NotContains(t, encoder.Fields, "request_id")
+	require.NotContains(t, encoder.Fields, "user_id")
+	require.NotContains(t, encoder.Fields, "token_id")
+	require.NotContains(t, encoder.Fields, "channel_id")
+	require.NotContains(t, encoder.Fields, "channel_name")
 	require.Equal(t, "default", encoder.Fields["group"])
 	require.Equal(t, "gpt-4o", encoder.Fields["origin_model"])
 	require.Equal(t, "gpt-4.1", encoder.Fields["actual_model"])

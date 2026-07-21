@@ -358,23 +358,13 @@ func (a *Adaptor) DoResponse(c *gin.Context, resp *http.Response, meta *meta.Met
 // It handles both streaming and non-streaming Response API responses, passing them through
 // to the client while extracting billing information from the usage field.
 func (a *Adaptor) handleResponseAPIResponse(c *gin.Context, resp *http.Response, meta *meta.Meta) (usage *model.Usage, err *model.ErrorWithStatusCode) {
-	// For streaming Response API, pass through directly
+	// For streaming Response API, forward every byte to the client while sniffing
+	// the stream for the terminal response.completed usage block. A blind io.Copy
+	// here reports no usage at all, which leaves the pre-consumed quota
+	// unreconciled: the caller then charges its estimate while the consume log
+	// stays provisional, i.e. invisible on the Logs page.
 	if meta.IsStream {
-		// Copy response to client
-		for key, values := range resp.Header {
-			for _, value := range values {
-				c.Writer.Header().Add(key, value)
-			}
-		}
-		if resp.Header.Get("Content-Type") == "" {
-			c.Writer.Header().Set("Content-Type", "text/event-stream")
-		}
-		c.Writer.WriteHeader(resp.StatusCode)
-		if _, copyErr := io.Copy(c.Writer, resp.Body); copyErr != nil {
-			return nil, openai_compatible.ErrorWrapper(copyErr, "copy_response_body_failed", http.StatusInternalServerError)
-		}
-		resp.Body.Close()
-		return nil, nil
+		return a.streamResponseAPI(c, resp, meta)
 	}
 
 	// For non-streaming, read the entire response

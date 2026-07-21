@@ -279,6 +279,8 @@ export function TokensPage() {
           key: tokenRefText(token),
           value: formatTokenLabel(token),
           text: formatTokenLabel(token),
+          // Keep the UUID matchable even though the visible label is the name.
+          keywords: [tokenRefText(token), token.uuid || '', String(token.id ?? '')].filter(Boolean),
           content: (
             <div className="flex flex-col">
               <div className="font-medium">{formatTokenLabel(token)}</div>

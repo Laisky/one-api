@@ -245,7 +245,10 @@ func callMCPToolForUser(ctx context.Context, c *gin.Context, params mcpCallParam
 		client := mcp.NewStreamableHTTPClientWithLogger(server, nil, time.Duration(config.MCPToolCallTimeoutSec)*time.Second, logger)
 		callResult, err := client.CallTool(ctx, candidate.Tool.Name, params.Arguments)
 		if err != nil {
-			logger.Warn("mcp tool call failed", zap.Error(err), zap.Int("server_id", candidate.ServerID), zap.String("tool", candidate.Tool.Name))
+			logger.Warn("mcp tool call failed", server.Ref().AppendZap([]zap.Field{
+				zap.Error(err),
+				zap.String("tool", candidate.Tool.Name),
+			})...)
 			return nil, errors.Wrapf(err, "call mcp tool %q on server %d", candidate.Tool.Name, candidate.ServerID)
 		}
 		return callResult, nil

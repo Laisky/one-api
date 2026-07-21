@@ -17,6 +17,7 @@ import (
 
 	"github.com/Laisky/one-api/common/config"
 	"github.com/Laisky/one-api/common/ctxkey"
+	"github.com/Laisky/one-api/common/errkind"
 	"github.com/Laisky/one-api/common/helper"
 	"github.com/Laisky/one-api/common/logger"
 	"github.com/Laisky/one-api/model"
@@ -60,8 +61,8 @@ func getWebAuthn() (*webauthn.WebAuthn, error) {
 			logger.Logger.Error("failed to initialise WebAuthn", zap.Error(webAuthnErr))
 		} else {
 			logger.Logger.Info("WebAuthn initialised",
-				zap.String("rpId", rpID),
-				zap.Strings("rpOrigins", rpOrigins))
+				zap.String("rp_id", rpID),
+				zap.Strings("rp_origins", rpOrigins))
 		}
 	})
 	return webAuthnInstance, webAuthnErr
@@ -113,7 +114,7 @@ func PasskeyRegisterBegin(c *gin.Context) {
 	}
 
 	if user.Metadata.PasswordLocked {
-		helper.RespondError(c, errors.New("MFA enrollment is locked by administrator"))
+		helper.RespondError(c, errkind.ForbiddenErr(errors.New("MFA enrollment is locked by administrator")))
 		return
 	}
 
@@ -182,7 +183,7 @@ func PasskeyRegisterFinish(c *gin.Context) {
 	}
 
 	if user.Metadata.PasswordLocked {
-		helper.RespondError(c, errors.New("MFA enrollment is locked by administrator"))
+		helper.RespondError(c, errkind.ForbiddenErr(errors.New("MFA enrollment is locked by administrator")))
 		return
 	}
 
@@ -196,7 +197,7 @@ func PasskeyRegisterFinish(c *gin.Context) {
 	session := sessions.Default(c)
 	sessStr, ok := session.Get("webauthn_register_session").(string)
 	if !ok || sessStr == "" {
-		helper.RespondError(c, errors.New("no registration session found, please start again"))
+		helper.RespondError(c, errkind.UnauthorizedErr(errors.New("no registration session found, please start again")))
 		return
 	}
 
@@ -298,7 +299,7 @@ func PasskeyLoginFinish(c *gin.Context) {
 	session := sessions.Default(c)
 	sessStr, ok := session.Get("webauthn_login_session").(string)
 	if !ok || sessStr == "" {
-		helper.RespondError(c, errors.New("no login session found, please start again"))
+		helper.RespondError(c, errkind.UnauthorizedErr(errors.New("no login session found, please start again")))
 		return
 	}
 
@@ -401,7 +402,9 @@ func PasskeyDelete(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := resolvePasskeyCredentialRef(idStr)
 	if err != nil {
-		helper.RespondError(c, errors.New("invalid credential id"))
+		// Inherit the resolver's attribution so a database outage during UUID
+		// resolution stays Unknown (ERROR) instead of being blamed on the client.
+		helper.RespondError(c, errkind.Mark(errors.New("invalid credential id"), errkind.Of(err)))
 		return
 	}
 
@@ -422,7 +425,9 @@ func PasskeyRename(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := resolvePasskeyCredentialRef(idStr)
 	if err != nil {
-		helper.RespondError(c, errors.New("invalid credential id"))
+		// Inherit the resolver's attribution so a database outage during UUID
+		// resolution stays Unknown (ERROR) instead of being blamed on the client.
+		helper.RespondError(c, errkind.Mark(errors.New("invalid credential id"), errkind.Of(err)))
 		return
 	}
 
@@ -430,13 +435,13 @@ func PasskeyRename(c *gin.Context) {
 		Name string `json:"name"`
 	}
 	if err = json.NewDecoder(c.Request.Body).Decode(&req); err != nil {
-		helper.RespondError(c, errors.New(invalidParameterMessage))
+		helper.RespondError(c, errkind.InvalidRequestErr(errors.New(invalidParameterMessage)))
 		return
 	}
 
 	name := strings.TrimSpace(req.Name)
 	if name == "" || len(name) > 128 {
-		helper.RespondError(c, errors.New("name must be 1-128 characters"))
+		helper.RespondError(c, errkind.InvalidRequestErr(errors.New("name must be 1-128 characters")))
 		return
 	}
 

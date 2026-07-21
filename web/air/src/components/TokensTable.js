@@ -7,6 +7,7 @@ import { Button, Dropdown, Form, Modal, Popconfirm, Popover, SplitButtonGroup, T
 
 import { IconTreeTriangleDown } from '@douyinfe/semi-icons';
 import EditToken from '../pages/Token/EditToken';
+import ResourceRefTooltip from './ResourceRefTooltip';
 
 const COPY_OPTIONS = [
   { key: 'next', text: 'ChatGPT Next Web', value: 'next' },
@@ -75,7 +76,10 @@ const TokensTable = () => {
   const columns = [
     {
       title: '名称',
-      dataIndex: 'name'
+      dataIndex: 'name',
+      render: (text, record) => (
+        <ResourceRefTooltip refId={tokenRef(record)}>{text}</ResourceRefTooltip>
+      )
     },
     {
       title: '状态',
