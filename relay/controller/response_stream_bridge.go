@@ -16,6 +16,7 @@ import (
 	"github.com/Laisky/one-api/relay/adaptor/openai_compatible"
 	metalib "github.com/Laisky/one-api/relay/meta"
 	"github.com/Laisky/one-api/relay/model"
+	"github.com/Laisky/one-api/relay/state"
 )
 
 type chatToResponseStreamBridge struct {
@@ -47,6 +48,11 @@ type chatToResponseStreamBridge struct {
 	upstreamDone              bool
 	streamStarted             bool
 	requiredActionInitialized bool
+
+	// pendingCommit, when set, causes the terminal event to commit a gateway
+	// response node. The gateway response ID is pre-minted at construction so it is
+	// the ID carried by every emitted event (STR01).
+	pendingCommit *pendingStateCommit
 }
 
 type streamToolCallState struct {
@@ -84,10 +90,37 @@ func newChatToResponseStreamBridge(c *gin.Context, meta *metalib.Meta, request *
 		handler.model = request.Model
 	}
 
+	// If gateway state is active for this request, pre-mint a gateway response ID
+	// and remember the pre-hydration commit snapshot so the terminal event can
+	// commit a backing record and every emitted event carries the gateway ID
+	// (closes B13). No-op when the feature is inactive or store=false.
+	if commit := pendingCommitFromContext(c); commit != nil && commit.storeMode && state.Enabled() && state.Store() != nil {
+		if gwID, err := state.NewResponseID(); err == nil {
+			handler.responseID = gwID
+			handler.pendingCommit = commit
+		}
+	}
+
 	handler.messageItemID = fmt.Sprintf("msg_%s", random.GetRandomString(16))
 	handler.messageOutputIndex = handler.nextOutputIndex()
 
 	return handler
+}
+
+// commitStreamedResponse commits the accumulated streamed output as a gateway
+// response node (using the pre-minted gateway ID) and stamps store/conversation
+// onto the final response object. It is a no-op unless a commit is pending.
+func (h *chatToResponseStreamBridge) commitStreamedResponse(c *gin.Context, response *openai.ResponseAPIResponse, status string) {
+	if h.pendingCommit == nil || response == nil {
+		return
+	}
+	if commitResponseNodeWithID(c, h.pendingCommit, h.responseID, response.Output, h.usage, status) {
+		storeMode := true
+		response.Store = &storeMode
+		if h.pendingCommit.conversationID != "" {
+			response.Conversation = &openai.ResponseAPIConversation{Id: h.pendingCommit.conversationID}
+		}
+	}
 }
 
 func (h *chatToResponseStreamBridge) HandleChunk(c *gin.Context, chunk *openai_compatible.ChatCompletionsStreamResponse) (bool, bool) {
@@ -276,6 +309,10 @@ func (h *chatToResponseStreamBridge) HandleDone(c *gin.Context) (bool, bool) {
 	if h.incomplete != nil {
 		response.IncompleteDetails = h.incomplete
 	}
+
+	// Commit the gateway response node exactly once at the terminal event so the
+	// streamed fallback ID is backed by a retrievable record (closes B13).
+	h.commitStreamedResponse(c, response, status)
 
 	h.emitEvent(c, "response.completed", openai.ResponseAPIStreamEvent{
 		Type:     "response.completed",

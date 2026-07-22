@@ -141,7 +141,7 @@ The original author stopped maintaining the project, leaving critical PRs and ne
     - [Coze Features](#coze-features)
       - [Support coze oauth authentication](#support-coze-oauth-authentication)
     - [Moonshot Features](#moonshot-features)
-      - [Support kimi-k2 Family](#support-kimi-k2-family)
+      - [Support Kimi Family](#support-kimi-family)
     - [GLM Features](#glm-features)
       - [Flagship Models - Text](#flagship-models---text)
       - [Flagship Models - Visual](#flagship-models---visual)
@@ -196,6 +196,16 @@ oneapi:
 > [!IMPORTANT]
 >
 > Session cookies are marked `Secure` by default, so the browser will only send them over HTTPS. If you are serving the service over plain HTTP (for example accessing `http://<host>:3000` directly, or a reverse proxy that terminates HTTPS but is misconfigured), logins will appear to succeed but the next request is unauthenticated, looping the user back to the login page. In that case set `ENABLE_COOKIE_SECURE=false` in the `environment` section. Keep it at the default (`true`) for any production deployment served over HTTPS.
+
+### Outbound Email Configuration
+
+one-api can send verification, password reset, quota reminder, and operator notification emails through either SMTP or the Resend HTTP API.
+
+- `EMAIL_PROVIDER=smtp` forces the SMTP backend.
+- `EMAIL_PROVIDER=resend` forces the Resend backend and requires `RESEND_API_KEY`.
+- Leaving `EMAIL_PROVIDER` empty enables auto mode: one-api uses Resend when `RESEND_API_KEY` is configured, otherwise it falls back to SMTP.
+
+When `RESEND_API_KEY` or `EMAIL_PROVIDER` is set as a non-empty environment variable, that environment value is authoritative during startup, periodic option sync, and runtime option updates. A saved or cleared database option will not override it. To manage these values from the admin UI instead, remove the corresponding environment variable and restart the service.
 
 ### Kubernetes Deployment
 
@@ -1354,12 +1364,21 @@ Response:
 
 ### Moonshot Features
 
-#### Support kimi-k2 Family
+#### Support Kimi Family
 
-Current multimodal flagships (text + image + video, 256k context, open weights on HuggingFace):
+Current flagship (1M context, text + image + video input):
 
-- `kimi-k2.7-code` — current top coding model, thinking-only deep reasoning
-- `kimi-k2.6` — multimodal flagship, thinking and non-thinking modes
+- `kimi-k3` — always-on thinking, depth selected by `reasoning_effort` (`low` / `high` / `max`, default `max`)
+
+K3 pins `temperature`, `top_p`, `n`, `presence_penalty` and `frequency_penalty` upstream and rejects other
+values, so the Moonshot adaptor drops those fields for this model and maps the OpenAI effort ladder onto
+K3's three tiers (`minimal`/`none` → `low`, `medium` → `high`, `xhigh` → `max`).
+
+K2 generation (text + image + video, 256k context, open weights on HuggingFace):
+
+- `kimi-k2.7-code` — top coding model, thinking-only deep reasoning
+- `kimi-k2.7-code-highspeed` — high-throughput variant, priced at 2x standard
+- `kimi-k2.6` — multimodal, thinking and non-thinking modes
 - `kimi-k2.5` — multimodal, thinking and non-thinking modes
 
 Classic Moonshot V1 chat models (text, plus vision-preview variants):
@@ -1367,7 +1386,14 @@ Classic Moonshot V1 chat models (text, plus vision-preview variants):
 - `moonshot-v1-8k` / `moonshot-v1-32k` / `moonshot-v1-128k`
 - `moonshot-v1-8k-vision-preview` / `moonshot-v1-32k-vision-preview` / `moonshot-v1-128k-vision-preview`
 
+> `kimi-k2.5` and the whole `moonshot-v1` series stopped accepting newly registered Moonshot accounts when
+> K3 launched, and go fully offline on 2026-08-31.
+
 > The legacy `kimi-k2-0905-preview`, `kimi-k2-0711-preview`, `kimi-k2-turbo-preview`, `kimi-k2-thinking` and `kimi-k2-thinking-turbo` models were discontinued by Moonshot on 2026-05-25.
+
+Kimi K3 is also available through several hosted providers, each with its own case-sensitive model id:
+`moonshotai/kimi-k3` (OpenRouter, Novita), `moonshotai/Kimi-K3` (SiliconFlow) and `kimi/kimi-k3`
+(Alibaba Bailian, billed in CNY with cache hits at 10% of input).
 
 ### GLM Features
 

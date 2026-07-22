@@ -165,6 +165,9 @@ export function UsersPage() {
           key: String(userRef(user)),
           value: user.username,
           text: user.username,
+          // Operators copy UUIDs out of the UI / logs, so the UUID must be a
+          // first-class match target and not only the username.
+          keywords: [String(userRef(user)), user.uuid || '', String(user.id ?? '')].filter(Boolean),
           content: (
             <div className="flex flex-col">
               <div className="font-medium">{user.username}</div>

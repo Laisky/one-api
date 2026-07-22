@@ -300,7 +300,7 @@ _Notes:_
 
 - ✅ = Supported by default
 - ❌ = Not supported by default
-- \* = OpenAI-Compatible Response API support depends on the `API Format` configuration
+- \* = OpenAI-Compatible Response API support depends on the `API Format` configuration. Endpoint support means the gateway accepts the format; native Responses state such as `previous_response_id`, `conversation`, and persisted `store` requires upstream support.
 - Administrators can override these defaults on a per-channel basis
 
 ### 11.4 OpenAI-Compatible Channel Behavior
@@ -315,7 +315,7 @@ _Notes:_
    rerank requests are not supported by adaptor openai
    ```
 
-3. **Response API** → Supported if you configure `API Format: response` in the channel settings. Otherwise, requests are converted to Chat Completions format.
+3. **Response API** → Supported if you configure `API Format: response` in the channel settings. Otherwise, requests are converted to Chat Completions format, which preserves the current request/response shape but cannot dereference OpenAI `previous_response_id` or `conversation` state.
 
 ### 11.5 Setting Up Rerank with Custom Providers
 

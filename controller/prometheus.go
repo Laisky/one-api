@@ -159,5 +159,12 @@ func (p *PrometheusRelayMonitor) RecordCompactUUIDDuration(role, operation strin
 	metrics.GlobalRecorder.RecordCompactUUIDDuration(role, operation, duration)
 }
 
+// RecordResponseStateEvent records one bounded gateway response-state decision.
+//
+// category and outcome must be compile-time registry constants.
+func (p *PrometheusRelayMonitor) RecordResponseStateEvent(category, outcome string) {
+	metrics.GlobalRecorder.RecordResponseStateEvent(category, outcome)
+}
+
 // Global instance
 var PrometheusMonitor = &PrometheusRelayMonitor{}

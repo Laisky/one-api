@@ -10,6 +10,7 @@ import (
 
 	"github.com/Laisky/one-api/common/config"
 	"github.com/Laisky/one-api/common/ctxkey"
+	"github.com/Laisky/one-api/common/errkind"
 	"github.com/Laisky/one-api/common/helper"
 	"github.com/Laisky/one-api/common/random"
 	"github.com/Laisky/one-api/model"
@@ -108,25 +109,26 @@ func AddRedemption(c *gin.Context) {
 	redemption := model.Redemption{}
 	err := c.ShouldBindJSON(&redemption)
 	if err != nil {
-		helper.RespondError(c, err)
+		// Malformed request body: the caller sent JSON this endpoint cannot bind.
+		helper.RespondError(c, errkind.InvalidRequestErr(err))
 		return
 	}
 	redemption.UUID = ""
 	redemption.UserUUID = nil
 	if strings.TrimSpace(redemption.Name) == "" {
-		helper.RespondError(c, errors.New("Redemption name is required"))
+		helper.RespondError(c, errkind.InvalidRequestErr(errors.New("Redemption name is required")))
 		return
 	}
 	if len(redemption.Name) == 0 || len(redemption.Name) > 20 {
-		helper.RespondError(c, errors.New("The length of the redemption code name must be between 1-20"))
+		helper.RespondError(c, errkind.InvalidRequestErr(errors.New("The length of the redemption code name must be between 1-20")))
 		return
 	}
 	if redemption.Count <= 0 {
-		helper.RespondError(c, errors.New("The number of redemption codes must be greater than 0"))
+		helper.RespondError(c, errkind.InvalidRequestErr(errors.New("The number of redemption codes must be greater than 0")))
 		return
 	}
 	if redemption.Count > 100 {
-		helper.RespondError(c, errors.New("The number of redemption codes generated in a batch cannot be greater than 100"))
+		helper.RespondError(c, errkind.InvalidRequestErr(errors.New("The number of redemption codes generated in a batch cannot be greater than 100")))
 		return
 	}
 	keys := make([]string, 0, redemption.Count)
@@ -183,7 +185,8 @@ func UpdateRedemption(c *gin.Context) {
 	redemption := model.Redemption{}
 	err := c.ShouldBindJSON(&redemption)
 	if err != nil {
-		helper.RespondError(c, err)
+		// Malformed request body: the caller sent JSON this endpoint cannot bind.
+		helper.RespondError(c, errkind.InvalidRequestErr(err))
 		return
 	}
 	ref, err := preferUUIDRef(redemption.UUID, redemption.Id)
@@ -208,7 +211,7 @@ func UpdateRedemption(c *gin.Context) {
 	} else {
 		// If you add more fields, please also update redemption.Update()
 		if strings.TrimSpace(redemption.Name) == "" {
-			helper.RespondError(c, errors.New("Redemption name cannot be empty"))
+			helper.RespondError(c, errkind.InvalidRequestErr(errors.New("Redemption name cannot be empty")))
 			return
 		}
 		cleanRedemption.Name = redemption.Name

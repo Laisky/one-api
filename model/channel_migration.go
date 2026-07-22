@@ -13,6 +13,7 @@ import (
 	"gorm.io/gorm"
 
 	"github.com/Laisky/one-api/common"
+	"github.com/Laisky/one-api/common/identity"
 	"github.com/Laisky/one-api/common/logger"
 )
 
@@ -51,17 +52,25 @@ func (channel *Channel) MigrateModelConfigsToModelPrice() error {
 	// Validate JSON format first
 	var rawData any
 	if err := json.Unmarshal([]byte(*channel.ModelConfigs), &rawData); err != nil {
-		return errors.Wrapf(err, "invalid JSON in ModelConfigs for channel %d", channel.Id)
+		return identity.Tag(
+			errors.Wrapf(err, "invalid JSON in ModelConfigs for channel %d", channel.Id),
+			channel.Ref())
 	}
 
 	// Check if the JSON is null, array, or string (invalid types)
 	switch rawData.(type) {
 	case nil:
-		return errors.Errorf("ModelConfigs cannot be parsed: null value for channel %d", channel.Id)
+		return identity.Tag(
+			errors.Errorf("ModelConfigs cannot be parsed: null value for channel %d", channel.Id),
+			channel.Ref())
 	case []any:
-		return errors.Errorf("ModelConfigs cannot be parsed: array value for channel %d", channel.Id)
+		return identity.Tag(
+			errors.Errorf("ModelConfigs cannot be parsed: array value for channel %d", channel.Id),
+			channel.Ref())
 	case string:
-		return errors.Errorf("ModelConfigs cannot be parsed: string value for channel %d", channel.Id)
+		return identity.Tag(
+			errors.Errorf("ModelConfigs cannot be parsed: string value for channel %d", channel.Id),
+			channel.Ref())
 	}
 
 	// Try to unmarshal as the new format first
@@ -70,7 +79,9 @@ func (channel *Channel) MigrateModelConfigsToModelPrice() error {
 	if err == nil {
 		// Validate the new format data
 		if err := channel.validateModelPriceConfigs(newFormatConfigs); err != nil {
-			return errors.Wrapf(err, "invalid ModelPriceLocal data for channel %d", channel.Id)
+			return identity.Tag(
+				errors.Wrapf(err, "invalid ModelPriceLocal data for channel %d", channel.Id),
+				channel.Ref())
 		}
 
 		// Check if it has pricing data (already in new format)
@@ -83,29 +94,33 @@ func (channel *Channel) MigrateModelConfigsToModelPrice() error {
 		}
 
 		if hasPricingData {
-			logger.Logger.Info("Channel ModelConfigs already in new format with pricing data",
-				zap.Int("channel_id", channel.Id))
+			logger.Logger.Info("Channel ModelConfigs already in new format with pricing data", channel.Ref().Zap()...)
 			return nil
 		}
 
-		logger.Logger.Info("Channel ModelConfigs in new format but needs pricing migration",
-			zap.Int("channel_id", channel.Id))
+		logger.Logger.Info("Channel ModelConfigs in new format but needs pricing migration", channel.Ref().Zap()...)
 	}
 
 	// Try to unmarshal as the old format (map[string]ModelConfig)
 	var oldFormatConfigs map[string]ModelConfig
 	err = json.Unmarshal([]byte(*channel.ModelConfigs), &oldFormatConfigs)
 	if err != nil {
-		return errors.Wrapf(err, "ModelConfigs cannot be parsed in either format for channel %d", channel.Id)
+		return identity.Tag(
+			errors.Wrapf(err, "ModelConfigs cannot be parsed in either format for channel %d", channel.Id),
+			channel.Ref())
 	}
 
 	// Validate old format data
 	for modelName, config := range oldFormatConfigs {
 		if modelName == "" {
-			return errors.Errorf("empty model name found in ModelConfigs for channel %d", channel.Id)
+			return identity.Tag(
+				errors.Errorf("empty model name found in ModelConfigs for channel %d", channel.Id),
+				channel.Ref())
 		}
 		if config.MaxTokens < 0 {
-			return errors.Errorf("negative MaxTokens for model %s in channel %d", modelName, channel.Id)
+			return identity.Tag(
+				errors.Errorf("negative MaxTokens for model %s in channel %d", modelName, channel.Id),
+				channel.Ref())
 		}
 	}
 
@@ -179,21 +194,24 @@ func (channel *Channel) MigrateModelConfigsToModelPrice() error {
 
 	// Validate migrated data
 	if err := channel.validateModelPriceConfigs(migratedConfigs); err != nil {
-		return errors.Wrapf(err, "migration produced invalid data for channel %d", channel.Id)
+		return identity.Tag(
+			errors.Wrapf(err, "migration produced invalid data for channel %d", channel.Id),
+			channel.Ref())
 	}
 
 	// Save the migrated data back to ModelConfigs
 	jsonBytes, err := json.Marshal(migratedConfigs)
 	if err != nil {
-		return errors.Wrapf(err, "failed to marshal migrated data for channel %d", channel.Id)
+		return identity.Tag(
+			errors.Wrapf(err, "failed to marshal migrated data for channel %d", channel.Id),
+			channel.Ref())
 	}
 
 	jsonStr := string(jsonBytes)
 	channel.ModelConfigs = &jsonStr
 
 	logger.Logger.Info("Successfully migrated ModelConfigs from old format to new format",
-		zap.Int("channel_id", channel.Id),
-		zap.Int("model_count", len(migratedConfigs)))
+		append(channel.Ref().Zap(), zap.Int("model_count", len(migratedConfigs)))...)
 	return nil
 }
 
@@ -302,8 +320,7 @@ func (channel *Channel) MigrateHistoricalPricingToModelConfigs() error {
 	// Report validation errors but continue with valid data
 	if len(migrationErrors) > 0 {
 		logger.Logger.Error("Channel has validation errors in historical data",
-			zap.Int("channel_id", channel.Id),
-			zap.Any("errors", migrationErrors))
+			append(channel.Ref().Zap(), zap.Any("errors", migrationErrors))...)
 		// Don't return error - continue with valid data
 	}
 
@@ -326,13 +343,12 @@ func (channel *Channel) MigrateHistoricalPricingToModelConfigs() error {
 
 		if hasPricingData {
 			logger.Logger.Info("Channel already has pricing data in ModelConfigs, skipping historical migration",
-				zap.Int("channel_id", channel.Id))
+				channel.Ref().Zap()...)
 			return nil
 		}
 
 		// Merge historical pricing with existing MaxTokens data
-		logger.Logger.Info("Channel has MaxTokens data, merging with historical pricing",
-			zap.Int("channel_id", channel.Id))
+		logger.Logger.Info("Channel has MaxTokens data, merging with historical pricing", channel.Ref().Zap()...)
 	} else {
 		existingConfigs = make(map[string]ModelConfigLocal)
 	}
@@ -394,21 +410,19 @@ func (channel *Channel) MigrateHistoricalPricingToModelConfigs() error {
 			modelNames = append(modelNames, modelName)
 		}
 		logger.Logger.Info("Channel migrating models",
-			zap.Int("channel_id", channel.Id),
-			zap.Int("type", channel.Type),
-			zap.Strings("models", modelNames))
+			append(channel.Ref().Zap(), zap.Int("type", channel.Type), zap.Strings("models", modelNames))...)
 
 		err := channel.SetModelPriceConfigs(modelConfigs)
 		if err != nil {
 			logger.Logger.Error("Failed to set migrated ModelConfigs for channel",
-				zap.Int("channel_id", channel.Id),
-				zap.Error(err))
-			return errors.Wrapf(err, "set migrated model configs for channel %d", channel.Id)
+				append(channel.Ref().Zap(), zap.Error(err))...)
+			return identity.Tag(
+				errors.Wrapf(err, "set migrated model configs for channel %d", channel.Id),
+				channel.Ref())
 		}
 
 		logger.Logger.Info("Successfully migrated historical pricing data to ModelConfigs",
-			zap.Int("channel_id", channel.Id),
-			zap.Int("model_count", len(modelConfigs)))
+			append(channel.Ref().Zap(), zap.Int("model_count", len(modelConfigs)))...)
 	}
 
 	return nil
@@ -695,9 +709,7 @@ func MigrateAllChannelModelConfigs() error {
 		if channel.ModelConfigs != nil && *channel.ModelConfigs != "" && *channel.ModelConfigs != "{}" {
 			err := channel.MigrateModelConfigsToModelPrice()
 			if err != nil {
-				logger.Logger.Error("Failed to migrate ModelConfigs for channel",
-					zap.Int("channel_id", channel.Id),
-					zap.Error(err))
+				logger.Logger.Error("Failed to migrate ModelConfigs for channel", append(channel.Ref().Zap(), zap.Error(err))...)
 				errorMsg := getMigrationErrorContext(err, channel.Id, "ModelConfigs format migration")
 				migrationErrors = append(migrationErrors, errorMsg)
 				errorCount++
@@ -711,8 +723,7 @@ func MigrateAllChannelModelConfigs() error {
 		err := channel.MigrateHistoricalPricingToModelConfigs()
 		if err != nil {
 			logger.Logger.Error("Failed to migrate historical pricing for channel",
-				zap.Int("channel_id", channel.Id),
-				zap.Error(err))
+				append(channel.Ref().Zap(), zap.Error(err))...)
 			errorMsg := getMigrationErrorContext(err, channel.Id, "historical pricing migration")
 			migrationErrors = append(migrationErrors, errorMsg)
 			errorCount++
@@ -732,9 +743,7 @@ func MigrateAllChannelModelConfigs() error {
 			// Validate the final result before saving
 			finalConfigs := channel.GetModelPriceConfigs()
 			if err := channel.validateModelPriceConfigs(finalConfigs); err != nil {
-				logger.Logger.Error("Migration validation failed for channel",
-					zap.Int("channel_id", channel.Id),
-					zap.Error(err))
+				logger.Logger.Error("Migration validation failed for channel", append(channel.Ref().Zap(), zap.Error(err))...)
 				errorMsg := getMigrationErrorContext(err, channel.Id, "validation")
 				migrationErrors = append(migrationErrors, errorMsg)
 				errorCount++
@@ -752,11 +761,9 @@ func MigrateAllChannelModelConfigs() error {
 				// Detect MySQL column size overflow and attempt on-the-fly migration+retry
 				if common.UsingMySQL.Load() && isMySQLDataTooLongErr(saveErr) {
 					logger.Logger.Warn("Detected model_configs length overflow, attempting column type migration to TEXT and retry",
-						zap.Int("channel_id", channel.Id))
+						channel.Ref().Zap()...)
 					if migErr := performMySQLFieldMigration(DB); migErr != nil {
-						logger.Logger.Error("On-demand MySQL column migration failed",
-							zap.Int("channel_id", channel.Id),
-							zap.Error(migErr))
+						logger.Logger.Error("On-demand MySQL column migration failed", append(channel.Ref().Zap(), zap.Error(migErr))...)
 						errorMsg := fmt.Sprintf("Failed to save migrated ModelConfigs for channel %d after overflow & migration attempt: %s", channel.Id, saveErr.Error())
 						migrationErrors = append(migrationErrors, errorMsg)
 						errorCount++
@@ -765,19 +772,16 @@ func MigrateAllChannelModelConfigs() error {
 					// Retry save after migration
 					if retryErr := DB.Model(channel).Update("model_configs", channel.ModelConfigs).Error; retryErr != nil {
 						logger.Logger.Error("Retry save after column migration still failed",
-							zap.Int("channel_id", channel.Id),
-							zap.Error(retryErr))
+							append(channel.Ref().Zap(), zap.Error(retryErr))...)
 						errorMsg := fmt.Sprintf("Failed to save migrated ModelConfigs for channel %d after retry: %s", channel.Id, retryErr.Error())
 						migrationErrors = append(migrationErrors, errorMsg)
 						errorCount++
 						continue
 					}
-					logger.Logger.Info("Retry save after on-demand column migration succeeded",
-						zap.Int("channel_id", channel.Id))
+					logger.Logger.Info("Retry save after on-demand column migration succeeded", channel.Ref().Zap()...)
 				} else {
 					logger.Logger.Error("Failed to save migrated ModelConfigs for channel",
-						zap.Int("channel_id", channel.Id),
-						zap.Error(saveErr))
+						append(channel.Ref().Zap(), zap.Error(saveErr))...)
 					errorMsg := fmt.Sprintf("Failed to save migrated ModelConfigs for channel %d: %s", channel.Id, saveErr.Error())
 					migrationErrors = append(migrationErrors, errorMsg)
 					errorCount++
@@ -830,9 +834,7 @@ func MigrateChannelLegacyImagePricing() error {
 		}
 		updated, changed, err := migrateLegacyImagePriceInConfigs(*channel.ModelConfigs)
 		if err != nil {
-			logger.Logger.Error("failed to normalize image pricing for channel",
-				zap.Int("channel_id", channel.Id),
-				zap.Error(err))
+			logger.Logger.Error("failed to normalize image pricing for channel", append(channel.Ref().Zap(), zap.Error(err))...)
 			continue
 		}
 		if !changed {
@@ -842,16 +844,12 @@ func MigrateChannelLegacyImagePricing() error {
 		channel.ModelConfigs = &updated
 		configs := channel.GetModelPriceConfigs()
 		if err := channel.validateModelPriceConfigs(configs); err != nil {
-			logger.Logger.Error("validated migrated image pricing failed",
-				zap.Int("channel_id", channel.Id),
-				zap.Error(err))
+			logger.Logger.Error("validated migrated image pricing failed", append(channel.Ref().Zap(), zap.Error(err))...)
 			channel.ModelConfigs = &original
 			continue
 		}
 		if err := DB.Model(channel).Update("model_configs", channel.ModelConfigs).Error; err != nil {
-			logger.Logger.Error("failed to persist migrated image pricing",
-				zap.Int("channel_id", channel.Id),
-				zap.Error(err))
+			logger.Logger.Error("failed to persist migrated image pricing", append(channel.Ref().Zap(), zap.Error(err))...)
 			channel.ModelConfigs = &original
 			continue
 		}

@@ -117,9 +117,10 @@ func logConvertedRequest(c *gin.Context, metaInfo *meta.Meta, relayMode int, pay
 		zap.Int("relay_mode", relayMode),
 	}
 	if metaInfo != nil {
+		// The request-scoped logger already carries the channel identity
+		// (channel_id + channel_uuid + channel_name).
 		fields = append(fields,
 			zap.String("model", metaInfo.ActualModelName),
-			zap.Int("channel_id", metaInfo.ChannelId),
 		)
 	}
 	switch req := payload.(type) {

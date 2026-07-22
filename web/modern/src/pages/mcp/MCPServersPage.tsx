@@ -1,3 +1,4 @@
+import { NameWithId } from '@/components/shared/NameWithId';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { EnhancedDataTable } from '@/components/ui/enhanced-data-table';
@@ -41,6 +42,38 @@ interface MCPServerRow extends MCPServer {
 
 const serverRef = (server: Pick<MCPServer, 'id' | 'uuid'>): string | number => server.uuid || server.id || '';
 
+/**
+ * serverKeywords lists every string an MCP server row may legitimately be
+ * searched by, including its UUID and numeric id. The UUID is listed both in
+ * its hyphenated form and in the 32-hex compact form, mirroring the backend
+ * keyword canonicalisation so a locally computed match is never narrower than
+ * the server-side one.
+ *
+ * @param server MCP server row.
+ * @returns Lower-cased, non-empty match candidates.
+ */
+const serverKeywords = (server: MCPServer): string[] =>
+  [
+    server.name,
+    server.base_url,
+    server.protocol,
+    server.auth_type,
+    server.uuid,
+    server.uuid ? server.uuid.replace(/-/g, '') : '',
+    server.id == null ? '' : String(server.id),
+  ]
+    .filter((field): field is string => Boolean(field))
+    .map((field) => field.toLowerCase());
+
+/**
+ * matchesServer reports whether a server row matches a free-text keyword.
+ *
+ * @param server MCP server row.
+ * @param keyword Lower-cased, trimmed search keyword.
+ * @returns True when any searchable field contains the keyword.
+ */
+const matchesServer = (server: MCPServer, keyword: string): boolean => serverKeywords(server).some((field) => field.includes(keyword));
+
 export function MCPServersPage() {
   const { t } = useTranslation();
   const { notify } = useNotifications();
@@ -63,6 +96,9 @@ export function MCPServersPage() {
       {
         accessorKey: 'name',
         header: t('mcp.list.columns.name', 'Name'),
+        cell: ({ row }) => (
+          <NameWithId name={row.original.name} refId={serverRef(row.original)} idLabel={t('mcp.list.columns.id', 'ID')} />
+        ),
       },
       {
         accessorKey: 'status',
@@ -180,10 +216,16 @@ export function MCPServersPage() {
     updateSearchParamPage(nextPageIndex);
   };
 
-  const load = async (p = 0, size = pageSize) => {
+  const load = async (p = 0, size = pageSize, keyword = searchKeyword) => {
     setLoading(true);
     try {
-      const url = `/api/mcp_servers?p=${p}&size=${size}&sort=${sortBy}&order=${sortOrder}`;
+      // The backend owns keyword filtering (name / base URL / UUID, including a
+      // hyphen-less UUID), so the rows and total it returns are rendered as-is;
+      // re-filtering them here could only drop legitimate server matches.
+      let url = `/api/mcp_servers?p=${p}&size=${size}&sort=${sortBy}&order=${sortOrder}`;
+      if (keyword.trim()) {
+        url += `&keyword=${encodeURIComponent(keyword.trim())}`;
+      }
       const response = await api.get(url);
       const { success, data: payload, total: totalCount, message } = response.data;
       if (success) {
@@ -219,18 +261,16 @@ export function MCPServersPage() {
     setSearchLoading(true);
     const keyword = query.trim().toLowerCase();
     const options: SearchOption[] = data
-      .filter((server) =>
-        [server.name, server.base_url, server.protocol, server.auth_type]
-          .filter(Boolean)
-          .some((field) => field.toLowerCase().includes(keyword))
-      )
+      .filter((server) => matchesServer(server, keyword))
       .map((server) => ({
         key: String(serverRef(server)),
         value: server.name,
         text: server.name,
+        keywords: serverKeywords(server),
         content: (
           <div className="flex flex-col">
             <div className="font-medium">{server.name}</div>
+            <div className="text-xs text-muted-foreground font-mono break-all">{String(serverRef(server))}</div>
             <div className="text-xs text-muted-foreground">
               {server.base_url} • {t(`mcp.edit.fields.protocol_${server.protocol}`, server.protocol)}
             </div>
@@ -240,18 +280,6 @@ export function MCPServersPage() {
     setSearchOptions(options);
     setSearchLoading(false);
   };
-
-  const filteredData = useMemo(() => {
-    if (!searchKeyword.trim()) return data;
-    const keyword = searchKeyword.trim().toLowerCase();
-    return data.filter((server) =>
-      [server.name, server.base_url, server.protocol, server.auth_type]
-        .filter(Boolean)
-        .some((field) => field.toLowerCase().includes(keyword))
-    );
-  }, [data, searchKeyword]);
-
-  const displayTotal = searchKeyword.trim() ? filteredData.length : total;
 
   const syncServer = async (id: string | number) => {
     try {
@@ -394,11 +422,11 @@ export function MCPServersPage() {
       <Card>
         <EnhancedDataTable
           columns={columns}
-          data={filteredData}
+          data={data}
           loading={loading}
           pageIndex={pageIndex}
           pageSize={pageSize}
-          total={displayTotal}
+          total={total}
           onPageChange={handlePageChange}
           onPageSizeChange={(size) => handlePageChange(0, size)}
           onRowClick={(row) => navigate(`/mcps/edit/${serverRef(row)}`)}
@@ -450,8 +478,12 @@ export function MCPServersPage() {
           onSearchChange={searchServers}
           onSearchValueChange={setSearchKeyword}
           onSearchSelect={(key) => navigate(`/mcps/edit/${key}`)}
-          onSearchSubmit={() => searchServers(searchKeyword)}
-          searchPlaceholder={t('mcp.list.search_placeholder', 'Search MCP servers...')}
+          onSearchSubmit={() => {
+            setPageIndex(0);
+            searchServers(searchKeyword);
+            load(0, pageSize, searchKeyword);
+          }}
+          searchPlaceholder={t('mcp.list.search_placeholder', 'Search MCP servers by name, URL, or UUID...')}
           allowSearchAdditions={true}
           onRefresh={() => load(pageIndex, pageSize)}
         />

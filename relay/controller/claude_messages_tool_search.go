@@ -137,9 +137,7 @@ func injectDeferredMCPToolsForToolSearch(c *gin.Context, request *ClaudeMessages
 		resolved, err := mcp.ResolveTools(server, tools, channelBlacklist, user.MCPToolBlacklist, nil)
 		if err != nil {
 			lg.Warn("failed to resolve MCP tools for tool search injection",
-				zap.Int("server_id", server.Id),
-				zap.String("server_name", server.Name),
-				zap.Error(err),
+				append(server.Ref().Zap(), zap.Error(err))...,
 			)
 			continue
 		}

@@ -680,6 +680,32 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		Description:                 "DeepSeek V3 hosted on Bailian: open-weight MoE chat model (non-thinking mode).",
 	},
 
+	// ----- Kimi (月之暗面直供 / supplied directly by Moonshot) ---------------------
+	// Bailian resells Moonshot's own K3 endpoint in the Beijing region at
+	// 20元 in / 100元 out per 1M tokens. Cache hits bill at 10% of input here —
+	// NOT the 20% that Alibaba's own models use — per
+	// https://help.aliyun.com/zh/model-studio/kimi-api-by-moonshot-ai:
+	// "kimi/kimi-k3命中缓存的输入Token按输入价格的10%计费". Verified 2026-07-20 against
+	// https://help.aliyun.com/zh/model-studio/model-pricing.
+	//
+	// Thinking is always on (仅思考模型) and, unlike Moonshot direct, Bailian
+	// accepts only reasoning_effort="max". Chain-of-thought tokens bill at the
+	// output rate.
+	"kimi/kimi-k3": {
+		Ratio:                       20.0 * ratio.MilliTokensRmb,
+		CachedInputRatio:            0.1 * (20.0 * ratio.MilliTokensRmb),
+		CompletionRatio:             100.0 / 20.0,
+		ContextLength:               1048576,
+		MaxOutputTokens:             1048576,
+		InputModalities:             []string{"text", "image", "video"},
+		OutputModalities:            bailianTextOutputs,
+		SupportedFeatures:           bailianReasoningFeatures,
+		SupportedSamplingParameters: []string{"max_tokens", "stop"},
+		SupportedReasoningEfforts:   []string{"max"},
+		DefaultReasoningEffort:      "max",
+		Description:                 "Moonshot Kimi K3 on Bailian: 1M-context multimodal flagship with always-on thinking, served directly by Moonshot.",
+	},
+
 	// ----- Embeddings (Bailian) ------------------------------------------------
 	// 0.5 CNY / 1M tokens per Aliyun model-pricing (verified 2026-05-18).
 	"text-embedding-v3": {

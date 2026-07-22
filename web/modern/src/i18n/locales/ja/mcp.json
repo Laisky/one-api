@@ -83,6 +83,7 @@
         "actions": "操作",
         "auth_type": "認証",
         "base_url": "ベース URL",
+        "id": "ID",
         "last_sync": "最終同期",
         "name": "名前",
         "priority": "優先度",
@@ -94,7 +95,7 @@
       "labels": {
         "never": "未同期"
       },
-      "search_placeholder": "MCP サーバーを検索...",
+      "search_placeholder": "名前、URL、UUID で MCP サーバーを検索...",
       "subtitle": "MCP サーバーのレジストリとツールの同期を管理",
       "title": "MCP サーバー"
     },

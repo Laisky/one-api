@@ -9,6 +9,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/Laisky/one-api/common/helper"
+	"github.com/Laisky/one-api/common/identity"
 	"github.com/Laisky/one-api/model"
 )
 
@@ -103,9 +104,7 @@ func GetTraceByLogId(c *gin.Context) {
 	trace, err := model.GetTraceByTraceId(ctx, log.TraceId)
 	if err != nil {
 		lg.Error("failed to get trace by trace ID from log",
-			zap.Error(err),
-			zap.String("trace_id", log.TraceId),
-			zap.Int("log_id", logId))
+			traceLogFields(log, zap.Error(err), zap.String("trace_id", log.TraceId))...)
 		helper.RespondErrorWithStatus(c, http.StatusNotFound, errors.New("trace information not found"))
 		return
 	}
@@ -114,9 +113,7 @@ func GetTraceByLogId(c *gin.Context) {
 	timestamps, err := trace.GetTraceTimestamps()
 	if err != nil {
 		lg.Error("failed to parse trace timestamps from log",
-			zap.Error(err),
-			zap.String("trace_id", log.TraceId),
-			zap.Int("log_id", logId))
+			traceLogFields(log, zap.Error(err), zap.String("trace_id", log.TraceId))...)
 		helper.RespondErrorWithStatus(c, http.StatusInternalServerError, errors.New("failed to parse trace timestamps"))
 		return
 	}
@@ -150,6 +147,30 @@ func GetTraceByLogId(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, response)
+}
+
+// traceLogFields renders the identity of a consume-log row for a request-scoped
+// logger. Only the log row's own reference and the channel it billed are emitted:
+// the request logger is already bound to the CALLER's user and token identity, and
+// zap does not de-duplicate keys, so emitting the log row's user_id/username here
+// would double those keys — and silently disagree with the bound values whenever an
+// admin inspects another account's log. The log owner is still returned to the
+// client in the response payload.
+//
+// Parameters:
+//   - log: the consume-log row being inspected; may be nil.
+//   - extra: additional fields appended after the identity fields.
+//
+// Return values:
+//   - []zap.Field: ready-to-log field slice.
+func traceLogFields(log *model.Log, extra ...zap.Field) []zap.Field {
+	if log == nil {
+		return extra
+	}
+
+	fields := identity.NewLogRef(log.Id, log.UUID).Zap()
+	fields = log.Refs().Channel.AppendZap(fields)
+	return append(fields, extra...)
 }
 
 // calculateTraceDurations calculates durations between key timestamps

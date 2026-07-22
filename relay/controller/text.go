@@ -268,6 +268,13 @@ func RelayTextHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 	requestBodyBytes, _ := io.ReadAll(requestBody)
 	requestBody = bytes.NewBuffer(requestBodyBytes)
 
+	// ST-022: when this Chat request is served by a Responses upstream and an exact
+	// transcript checkpoint exists, continue from the bound upstream handle and send
+	// only the delta. Fails open to the full body on any miss (pure optimization).
+	if newBody, matched := matchChatCheckpoint(c, meta, textRequest); matched {
+		requestBody = bytes.NewBuffer(newBody)
+	}
+
 	// do request
 	resp, err := requestAdaptor.DoRequest(c, meta, requestBody)
 	if err != nil {
@@ -283,8 +290,7 @@ func RelayTextHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 		requestId := c.GetString(ctxkey.RequestId)
 		estimated := estimatePreConsumedQuota(textRequest, promptUsage, modelRatio, completionRatio, channelModelRatio, groupRatio, channelModelConfigs, channelCompletionRatio, meta)
 		if requestId == "" {
-			lg.Warn("request id missing when recording provisional user request cost",
-				zap.Int("user_id", quotaId))
+			lg.Warn("request id missing when recording provisional user request cost")
 		} else if err := model.UpdateUserRequestCostQuotaByRequestID(quotaId, requestId, estimated); err != nil {
 			lg.Warn("record provisional user request cost failed", zap.Error(err), zap.String("request_id", requestId))
 		}
@@ -318,6 +324,12 @@ func RelayTextHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 			return respErr
 		}
 		// Fall through to billing with available usage
+	}
+
+	if respErr == nil {
+		// ST-022: record a stateless-client continuation checkpoint when this Chat
+		// request was served by a Responses upstream. No-op otherwise; never fatal.
+		recordChatCheckpoint(c, meta, textRequest)
 	}
 
 	var incrementalCharged int64
@@ -413,8 +425,7 @@ func RelayTextHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 		quota := postConsumeQuota(ctx, usage, meta, textRequest, ratio, preConsumedQuota, incrementalCharged, modelRatio, channelModelRatio, groupRatio, systemPromptReset, channelModelConfigs, channelCompletionRatio)
 		// Reconcile request cost with final quota (override provisional pre-consumed value)
 		if requestId == "" {
-			lg.Warn("request id missing when finalizing user request cost",
-				zap.Int("user_id", quotaId))
+			lg.Warn("request id missing when finalizing user request cost")
 		} else if err := model.UpdateUserRequestCostQuotaByRequestID(quotaId, requestId, quota); err != nil {
 			lg.Error("update user request cost failed", zap.Error(err), zap.String("request_id", requestId))
 		}

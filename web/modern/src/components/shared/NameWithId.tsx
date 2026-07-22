@@ -1,7 +1,9 @@
+import { Check, Copy } from 'lucide-react';
 import { useEffect, useRef, useState, type MouseEvent, type ReactNode, type TouchEvent } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { cn } from '@/lib/utils';
+import { cn, copyToClipboard } from '@/lib/utils';
 
 /**
  * NameWithIdProps defines the visible label, optional resource id, tooltip
@@ -23,11 +25,41 @@ interface NameWithIdProps {
  * falls back to a plain name when no id is available.
  */
 export function NameWithId({ name, refId, idLabel = 'ID', className }: NameWithIdProps) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const [touchIdVisible, setTouchIdVisible] = useState(false);
+  const [copied, setCopied] = useState(false);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const lastTouchAtRef = useRef(0);
+  const copyResetRef = useRef<ReturnType<typeof setTimeout>>();
   const id = refId == null ? '' : String(refId);
+
+  useEffect(() => {
+    return () => {
+      if (copyResetRef.current) clearTimeout(copyResetRef.current);
+    };
+  }, []);
+
+  const handleCopy = async (event: MouseEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    await copyToClipboard(id);
+    setCopied(true);
+    if (copyResetRef.current) clearTimeout(copyResetRef.current);
+    copyResetRef.current = setTimeout(() => setCopied(false), 1500);
+  };
+
+  const copyButton = (
+    <button
+      type="button"
+      onClick={handleCopy}
+      aria-label={copied ? t('common.copied', 'Copied') : t('common.copy_id', 'Copy ID')}
+      title={copied ? t('common.copied', 'Copied') : t('common.copy_id', 'Copy ID')}
+      className="inline-flex shrink-0 items-center border-0 bg-transparent p-0 text-current opacity-70 hover:opacity-100"
+    >
+      {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+    </button>
+  );
 
   useEffect(() => {
     const trigger = triggerRef.current;
@@ -87,14 +119,20 @@ export function NameWithId({ name, refId, idLabel = 'ID', className }: NameWithI
           </button>
         </TooltipTrigger>
         <TooltipContent align="start">
-          <span className="font-mono text-xs break-all">
-            {idLabel}: {id}
+          <span className="inline-flex max-w-full items-center gap-2">
+            <span className="font-mono text-xs break-all">
+              {idLabel}: {id}
+            </span>
+            {copyButton}
           </span>
         </TooltipContent>
       </Tooltip>
       {touchIdVisible && (
-        <span className="mt-1 block max-w-full font-mono text-xs text-muted-foreground break-all sm:hidden">
-          {idLabel}: {id}
+        <span className="mt-1 flex max-w-full items-center gap-2 font-mono text-xs text-muted-foreground break-all sm:hidden">
+          <span className="break-all">
+            {idLabel}: {id}
+          </span>
+          {copyButton}
         </span>
       )}
     </TooltipProvider>

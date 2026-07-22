@@ -185,12 +185,14 @@ func (a *Adaptor) DoRequest(c *gin.Context, meta *meta.Meta, requestBody io.Read
 
 	// Add logging to match other adapters that use DoRequestHelper
 	// Since AWS uses SDK directly, we manually add the upstream request logging here
+	// The request-scoped logger already carries the full user/token/channel identity
+	// (id + uuid + name), so only the non-identity fields are added here. "adaptor"
+	// is the upstream provider implementation name, distinct from the
+	// operator-chosen "channel_name" carried by the bound logger.
 	lg := gmw.GetLogger(c).With(
 		zap.String("url", "AWS Bedrock SDK"),
-		zap.Int("channelId", meta.ChannelId),
-		zap.Int("userId", meta.UserId),
+		zap.String("adaptor", a.GetChannelName()),
 		zap.String("model", meta.ActualModelName),
-		zap.String("channelName", a.GetChannelName()),
 	)
 	// Log upstream request for billing tracking (matches common.go:70)
 	lg.Info("sending request to upstream channel")

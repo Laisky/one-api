@@ -83,10 +83,11 @@ func SaveAsyncTaskBinding(ctx context.Context, binding *AsyncTaskBinding) error 
 			return errors.Wrap(err, "create async task binding")
 		}
 		if lg := gmw.GetLogger(detached); lg != nil {
+			// channel/user/token identity is already bound on the request logger
+			// (the detached context keeps its values), so it is not repeated here.
 			lg.Debug("created async task binding",
 				zap.String("task_id", binding.TaskID),
-				zap.String("task_type", binding.TaskType),
-				zap.Int("channel_id", binding.ChannelID))
+				zap.String("task_type", binding.TaskType))
 		}
 		return nil
 	}
@@ -118,8 +119,7 @@ func SaveAsyncTaskBinding(ctx context.Context, binding *AsyncTaskBinding) error 
 	if lg := gmw.GetLogger(detached); lg != nil {
 		lg.Debug("updated async task binding",
 			zap.String("task_id", binding.TaskID),
-			zap.String("task_type", binding.TaskType),
-			zap.Int("channel_id", binding.ChannelID))
+			zap.String("task_type", binding.TaskType))
 	}
 	return nil
 }

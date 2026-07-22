@@ -128,6 +128,30 @@ func SetRelayRouter(router *gin.Engine) {
 	relayV1Router.GET("/threads/:id/runs/:runsId/steps", controller.RelayNotImplemented)
 
 	// -------------------------------------
+	// Gateway Conversations API. These endpoints are owner-scoped state CRUD that
+	// perform no upstream call and must NOT enter channel distribution (proposal
+	// row V11), so they use token auth but not the Distribute middleware. When the
+	// response-state feature is disabled the handlers report not-found.
+	conversationsMws := []gin.HandlerFunc{
+		func(c *gin.Context) { done := graceful.BeginRequest(); defer done(); c.Next() },
+		middleware.RelayPanicRecover(),
+		middleware.TokenAuth(),
+		// Throttle the quota-free Conversations write path per token so it cannot be
+		// abused into unbounded gateway-state growth (proposal row L09, ST-019).
+		middleware.ConversationsRateLimit(),
+	}
+	conversationsRouter := router.Group("/v1/conversations")
+	conversationsRouter.Use(conversationsMws...)
+	conversationsRouter.POST("", controller.RelayConversationCreate)
+	conversationsRouter.GET("/:conversation_id", controller.RelayConversationGet)
+	conversationsRouter.POST("/:conversation_id", controller.RelayConversationUpdate)
+	conversationsRouter.DELETE("/:conversation_id", controller.RelayConversationDelete)
+	conversationsRouter.POST("/:conversation_id/items", controller.RelayConversationItemsCreate)
+	conversationsRouter.GET("/:conversation_id/items", controller.RelayConversationItemsList)
+	conversationsRouter.GET("/:conversation_id/items/:item_id", controller.RelayConversationItemGet)
+	conversationsRouter.DELETE("/:conversation_id/items/:item_id", controller.RelayConversationItemDelete)
+
+	// -------------------------------------
 	relayV2Router := router.Group("/v2")
 	relayV2Router.Use(relayMws...)
 	relayV2Router.POST("/rerank", controller.Relay)

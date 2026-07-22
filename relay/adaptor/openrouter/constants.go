@@ -1808,6 +1808,20 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 			HuggingFaceID:               "moonshotai/Kimi-K2.6",
 			Description:                 "Kimi K2.6 is Moonshot AI's next-generation multimodal model, designed for long-horizon coding, coding-driven UI/UX generation, and multi-agent orchestration. It handles complex end-to-end coding tasks across Python, Rust, and Go, and...",
 		}),
+	// Kimi K3 routes to Moonshot's own endpoint only (int4), so it inherits the
+	// first-party $3/$0.30/$15 rates. OpenRouter reports text+image input (no
+	// video). The sampling list is short because K3 pins temperature, top_p, n
+	// and both penalties upstream and rejects any other value for them.
+	"moonshotai/kimi-k3": openRouterModelConfigWithMetadata(3, 15, 0.3, 0,
+		openRouterModelMetadata{
+			ContextLength:               1048576,
+			MaxOutputTokens:             1048576,
+			InputModalities:             []string{"text", "image"},
+			OutputModalities:            []string{"text"},
+			SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs", "reasoning"},
+			SupportedSamplingParameters: []string{"stop", "max_tokens"},
+			Description:                 "Kimi K3 is Moonshot AI's flagship model: a 1M-token context, natively multimodal system with always-on thinking whose depth is selected by a top-level reasoning_effort of low, high or max.",
+		}),
 	"moonshotai/kimi-k2.7-code": openRouterModelConfigWithMetadata(0.719, 3.49, 0.149, 0,
 		openRouterModelMetadata{
 			ContextLength:     262144,
@@ -3862,14 +3876,17 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 			SupportedSamplingParameters: []string{"temperature", "top_p", "stop", "seed", "max_tokens"},
 			Description:                 "This model always redirects to the latest model in the Google Gemini Pro family.",
 		}),
-	"~moonshotai/kimi-latest": openRouterModelConfigWithMetadata(0.66, 3.41, 0.15, 0,
+	// The Kimi alias now resolves to Kimi K3, so it inherits K3's 1M window,
+	// $3/$15 pricing and reduced sampling surface (K3 pins temperature, top_p,
+	// n and both penalties).
+	"~moonshotai/kimi-latest": openRouterModelConfigWithMetadata(3, 15, 0.3, 0,
 		openRouterModelMetadata{
-			ContextLength:               262142,
-			MaxOutputTokens:             262142,
+			ContextLength:               1048576,
+			MaxOutputTokens:             1048576,
 			InputModalities:             []string{"text", "image"},
 			OutputModalities:            []string{"text"},
-			SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs", "logprobs", "reasoning"},
-			SupportedSamplingParameters: []string{"temperature", "top_p", "top_k", "min_p", "frequency_penalty", "presence_penalty", "repetition_penalty", "stop", "seed", "max_tokens", "logit_bias", "parallel_tool_calls"},
+			SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs", "reasoning"},
+			SupportedSamplingParameters: []string{"stop", "max_tokens"},
 			Description:                 "This model always redirects to the latest model in the MoonshotAI Kimi family.",
 		}),
 	"~openai/gpt-latest": openRouterModelConfigWithMetadata(5, 30, 0.5, 6.25,

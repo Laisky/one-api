@@ -270,10 +270,11 @@ The `/mcp` endpoint exposes a Streamable HTTP MCP server backed by one-api’s c
 - Keep tool parameters consistent with the published schema to avoid validation errors upstream.
 - Review logs for tool usage and costs to confirm billing behavior.
 - Expect streaming responses to be downgraded to non-streaming when MCP tools are executed.
+- Do not rely on `previous_response_id` or `store` continuation when an MCP request forces Chat Completions fallback; send complete replayable `input` for portable multi-turn context.
 
 ### OpenAI Response API (cURL)
 
-The following example calls one-api using the Responses API format and standard tool types. If an MCP tool named `web_search` is configured, one-api will route the tool call through MCP execution.
+The following example calls one-api using the Responses API format and standard tool types. If an MCP tool named `web_search` is configured, one-api will route the tool call through MCP execution, which may force Chat Completions fallback and therefore will not hydrate native Responses server-side state.
 
 ```bash
 curl "https://oneapi.laisky.com/v1/responses" \

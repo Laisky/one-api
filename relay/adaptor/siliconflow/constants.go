@@ -424,6 +424,26 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		HuggingFaceID:               "Qwen/Qwen3-235B-A22B-Instruct-2507",
 		Description:                 "Alibaba Qwen3 235B/A22B Instruct MoE chat model with 256K context on SiliconFlow. (RETIRED 2026-05-15)",
 	},
+	"moonshotai/Kimi-K3": {
+		// $3.00/M input, $0.30/M cache read, $15.00/M output (verified 2026-07-20 on
+		// https://www.siliconflow.com/models/kimi-k3). SiliconFlow rounds the 1,048,576-token
+		// window to "1,049K" in its listing. Structured outputs are explicitly marked as not
+		// supported here, unlike Moonshot first-party. Temperature is omitted deliberately:
+		// K3 pins it upstream even though SiliconFlow's playground still renders the slider.
+		// The 2.8T parameter count below is SiliconFlow's own listing text, and matches
+		// Moonshot's platform docs; the weights themselves are not on HuggingFace yet.
+		Ratio:                       3.00 * ratio.MilliTokensUsd,
+		CompletionRatio:             15.00 / 3.00,
+		CachedInputRatio:            0.30 * ratio.MilliTokensUsd,
+		ContextLength:               1048576,
+		MaxOutputTokens:             1048576,
+		InputModalities:             []string{"text", "image"},
+		OutputModalities:            siliconflowTextModalities,
+		SupportedFeatures:           []string{"tools", "json_mode", "reasoning"},
+		SupportedSamplingParameters: []string{"max_tokens", "stop"},
+		Quantization:                "fp8",
+		Description:                 "Moonshot Kimi K3 flagship (2.8T MoE) with 1M context, native visual understanding and always-on thinking on SiliconFlow.",
+	},
 	"moonshotai/Kimi-K2.5": {
 		// $0.45/M input, $0.07/M cached, $2.25/M output (verified 2026-05-19 on https://www.siliconflow.com/models/kimi-k2-5).
 		Ratio:                       0.45 * ratio.MilliTokensUsd,

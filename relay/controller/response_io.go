@@ -166,6 +166,21 @@ func normalizeResponseAPIRawBody(rawBody []byte, request *openai.ResponseAPIRequ
 		}
 	}
 
+	// Sync previous_response_id from the typed request so the same-provider handle
+	// rewrite (ST-021) actually reaches the upstream. In the common case the typed
+	// value equals the raw value and this is a no-op; it never invents a selector
+	// the client did not send (a nil pointer leaves the raw body untouched).
+	if request.PreviousResponseId != nil {
+		prevBytes, err := json.Marshal(*request.PreviousResponseId)
+		if err != nil {
+			return nil, stats, false, errors.Wrap(err, "marshal previous_response_id")
+		}
+		if existing, ok := root["previous_response_id"]; !ok || !bytes.Equal(existing, prevBytes) {
+			root["previous_response_id"] = prevBytes
+			changed = true
+		}
+	}
+
 	if request.ToolChoice == nil {
 		if _, ok := root["tool_choice"]; ok {
 			delete(root, "tool_choice")

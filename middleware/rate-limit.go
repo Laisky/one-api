@@ -39,6 +39,11 @@ func redisRateLimiter(c *gin.Context, maxRequestNum int, duration int64, mark st
 		}
 		hashedToken := sha256.Sum256([]byte(GetTokenKeyParts(c)[0]))
 		key = fmt.Sprintf("rateLimit:%s:%s:%d", mark, hex.EncodeToString(hashedToken[:8]), c.GetInt(ctxkey.ChannelId))
+	case "CV":
+		// Conversations API: key per authenticated token so a single token cannot
+		// flood the quota-free state-write path (row L09).
+		hashedToken := sha256.Sum256([]byte(GetTokenKeyParts(c)[0]))
+		key = fmt.Sprintf("rateLimit:%s:%s", mark, hex.EncodeToString(hashedToken[:8]))
 	}
 
 	rdb := common.RDB
@@ -99,6 +104,10 @@ func memoryRateLimiter(c *gin.Context, maxRequestNum int, duration int64, mark s
 		}
 		hashedToken := sha256.Sum256([]byte(GetTokenKeyParts(c)[0]))
 		key = fmt.Sprintf("rateLimit:%s:%s:%d", mark, hex.EncodeToString(hashedToken[:8]), c.GetInt(ctxkey.ChannelId))
+	case "CV":
+		// Conversations API: key per authenticated token (row L09).
+		hashedToken := sha256.Sum256([]byte(GetTokenKeyParts(c)[0]))
+		key = fmt.Sprintf("rateLimit:%s:%s", mark, hex.EncodeToString(hashedToken[:8]))
 	}
 
 	if !inMemoryRateLimiter.Request(key, maxRequestNum, duration) {
@@ -166,6 +175,15 @@ func UploadRateLimit() func(c *gin.Context) {
 
 func GlobalRelayRateLimit() func(c *gin.Context) {
 	return rateLimitFactory(config.GlobalRelayRateLimitNum, config.GlobalRelayRateLimitDuration, "GR")
+}
+
+// ConversationsRateLimit throttles the gateway Conversations API per
+// authenticated token. Conversation CRUD is a quota-free store-write path, so
+// without this limit a single token could grow gateway state without bound — a
+// cheap, durable denial of service (row L09). Keyed per token via the "CV" mark;
+// disabled when CONVERSATION_RATE_LIMIT is non-positive or RATE_LIMIT_DISABLED.
+func ConversationsRateLimit() func(c *gin.Context) {
+	return rateLimitFactory(config.ConversationRateLimitNum, config.ConversationRateLimitDuration, "CV")
 }
 
 // LowBalanceRelayRateLimit applies a stricter relay rate limit to users whose

@@ -15,6 +15,7 @@ import (
 	glog "github.com/Laisky/go-utils/v6/log"
 	"github.com/Laisky/zap"
 
+	"github.com/Laisky/one-api/common/identity"
 	"github.com/Laisky/one-api/common/random"
 	"github.com/Laisky/one-api/model"
 )
@@ -35,6 +36,12 @@ type StreamableHTTPClient struct {
 	Headers map[string]string
 	Timeout time.Duration
 	Logger  glog.Logger
+
+	// serverRef identifies the MCP server this client talks to. It is logged on
+	// every client log line because the caller's logger, even when
+	// request-bound, carries the user/token/channel identity but not the MCP
+	// server's.
+	serverRef identity.MCPServerRef
 
 	initMu          sync.Mutex
 	initialized     bool
@@ -92,10 +99,11 @@ func newStreamableHTTPClient(server *model.MCPServer, headers map[string]string,
 	}
 
 	return &StreamableHTTPClient{
-		BaseURL: strings.TrimSpace(server.BaseURL),
-		Headers: merged,
-		Timeout: timeout,
-		Logger:  logger,
+		BaseURL:   strings.TrimSpace(server.BaseURL),
+		Headers:   merged,
+		Timeout:   timeout,
+		Logger:    logger,
+		serverRef: server.Ref(),
 	}
 }
 
@@ -149,7 +157,8 @@ func (c *StreamableHTTPClient) Initialize(ctx context.Context) error {
 		// Notification failure is non-fatal — log and proceed so a server
 		// that diverges on this notification does not block tool calls.
 		if c.Logger != nil {
-			c.Logger.Warn("mcp notifications/initialized failed", zap.Error(err))
+			c.Logger.Warn("mcp notifications/initialized failed",
+				append(c.serverRef.Zap(), zap.Error(err))...)
 		}
 	}
 
@@ -348,12 +357,13 @@ func (c *StreamableHTTPClient) debugLogRequest(method string, headers http.Heade
 	sanitizedHeaders := sanitizeHeadersForLog(headers)
 	sanitizedBody := sanitizeBodyForLog(body)
 	c.Logger.Debug("mcp outbound request",
-		zap.String("method", method),
-		zap.String("url", c.BaseURL),
-		zap.Any("headers", sanitizedHeaders),
-		zap.Int("body_bytes", len(body)),
-		zap.String("body", sanitizedBody),
-	)
+		append(c.serverRef.Zap(),
+			zap.String("method", method),
+			zap.String("url", c.BaseURL),
+			zap.Any("headers", sanitizedHeaders),
+			zap.Int("body_bytes", len(body)),
+			zap.String("body", sanitizedBody),
+		)...)
 }
 
 // debugLogResponse records sanitized inbound MCP response metadata and payload.
@@ -364,13 +374,14 @@ func (c *StreamableHTTPClient) debugLogResponse(method string, resp *http.Respon
 	sanitizedHeaders := sanitizeHeadersForLog(resp.Header)
 	sanitizedBody := sanitizeBodyForLog(body)
 	c.Logger.Debug("mcp inbound response",
-		zap.String("method", method),
-		zap.String("url", c.BaseURL),
-		zap.Int("status_code", resp.StatusCode),
-		zap.Any("headers", sanitizedHeaders),
-		zap.Int("body_bytes", len(body)),
-		zap.String("body", sanitizedBody),
-	)
+		append(c.serverRef.Zap(),
+			zap.String("method", method),
+			zap.String("url", c.BaseURL),
+			zap.Int("status_code", resp.StatusCode),
+			zap.Any("headers", sanitizedHeaders),
+			zap.Int("body_bytes", len(body)),
+			zap.String("body", sanitizedBody),
+		)...)
 }
 
 // sanitizeHeadersForLog redacts sensitive header values for logging.

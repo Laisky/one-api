@@ -486,7 +486,13 @@ export function LogDetailsModal({ open, onOpenChange, log }: LogDetailsModalProp
     <div className="flex items-center gap-2">
       <span className="font-mono text-xs bg-muted rounded px-2 py-1 break-all flex-1">{value || '—'}</span>
       {value && (
-        <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => handleCopy(value)} aria-label="Copy to clipboard">
+        <Button
+          size="icon"
+          variant="ghost"
+          className="h-7 w-7"
+          onClick={() => handleCopy(value)}
+          aria-label={t('common.copy_to_clipboard', 'Copy to clipboard')}
+        >
           <Copy className="h-3.5 w-3.5" />
         </Button>
       )}
@@ -527,7 +533,7 @@ export function LogDetailsModal({ open, onOpenChange, log }: LogDetailsModalProp
     return (
       <div className="space-y-5">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <DetailItem label={t('logs.details.log_id', 'Log ID')} value={<span className="font-mono text-sm">{logRef}</span>} />
+          <DetailItem label={t('logs.details.log_id', 'Log ID')} value={renderIdentifier(String(logRef))} />
           <DetailItem label={t('logs.details.type', 'Type')} value={<Badge variant="outline">{logTypeLabel}</Badge>} />
           <DetailItem
             label={t('logs.details.recorded_at', 'Recorded At')}
@@ -573,14 +579,25 @@ export function LogDetailsModal({ open, onOpenChange, log }: LogDetailsModalProp
             label={t('logs.details.channel', 'Channel')}
             value={
               log.channel != null ? (
-                <button
-                  type="button"
-                  className="inline-flex items-center gap-1 font-mono text-sm text-blue-600 dark:text-blue-400 underline underline-offset-2 decoration-blue-600/40 dark:decoration-blue-400/40 hover:decoration-blue-600 dark:hover:decoration-blue-400 cursor-pointer text-left transition-colors"
-                  onClick={() => navigateTo(`/channels/edit/${log.channel}`)}
-                >
-                  {channelDisplay}
-                  <ExternalLink className="h-3 w-3 flex-shrink-0" />
-                </button>
+                <span className="inline-flex items-center gap-1">
+                  <button
+                    type="button"
+                    className="inline-flex items-center gap-1 font-mono text-sm text-blue-600 dark:text-blue-400 underline underline-offset-2 decoration-blue-600/40 dark:decoration-blue-400/40 hover:decoration-blue-600 dark:hover:decoration-blue-400 cursor-pointer text-left transition-colors"
+                    onClick={() => navigateTo(`/channels/edit/${log.channel}`)}
+                  >
+                    {channelDisplay}
+                    <ExternalLink className="h-3 w-3 flex-shrink-0" />
+                  </button>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="h-6 w-6"
+                    onClick={() => handleCopy(String(channelDisplay))}
+                    aria-label={t('common.copy_id', 'Copy ID')}
+                  >
+                    <Copy className="h-3 w-3" />
+                  </Button>
+                </span>
               ) : (
                 <span className="font-mono text-sm">—</span>
               )

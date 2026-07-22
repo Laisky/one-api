@@ -823,7 +823,7 @@ curl -sS $BASE_URL/v1/edits \
 
 ### POST /v1/responses
 
-Creates a model response using the OpenAI Response API. Use it for the Responses workflow (server-side conversation chaining via `previous_response_id`, built-in tools, background runs). For channels with native Response API support the body is passed through; channels without it (and requests using MCP built-in tools) are transparently served through a Chat Completions fallback.
+Creates a model response using the OpenAI Response API shape. For channels with native Response API support, the body is passed through and upstream Responses state features such as `previous_response_id`, `conversation`, and persisted `store` can be honored by that upstream. Channels without native support, and requests that must use the MCP execution loop, are served through a Chat Completions fallback that rewrites the current request/response shape but does not hydrate OpenAI-managed state.
 
 **Auth:** Relay API Key - `Authorization: Bearer $API_KEY`.
 
@@ -838,8 +838,8 @@ Creates a model response using the OpenAI Response API. Use it for the Responses
 | Stream | `stream` | bool | No | `false` | If `true`, streams SSE response events ending in `[DONE]`. |
 | Max output tokens | `max_output_tokens` | int | No | - | Upper bound on generated tokens. |
 | Background | `background` | bool | No | `false` | Run the response asynchronously in the background. |
-| Previous response id | `previous_response_id` | string | No | - | Chain onto a prior stored response. |
-| Store | `store` | bool | No | - | Whether to persist the generated response. |
+| Previous response id | `previous_response_id` | string | No | - | Chain onto a prior stored upstream Responses object when native Responses state is available. |
+| Store | `store` | bool | No | - | Whether the native upstream should persist the generated response. Fallback paths may pass or echo the field but cannot provide OpenAI-managed persistence. |
 | Tools | `tools` | array | No | - | Tools (including built-ins) the model may call. |
 | Tool choice | `tool_choice` | string/object | No | - | How tools are selected. |
 | Reasoning | `reasoning` | object | No | - | Reasoning-model config (`effort`, `summary`). |
@@ -8169,13 +8169,13 @@ curl -s "$BASE_URL/api/mcp_tools/?server_id=018f0000-0000-7000-8000-000000000001
 
 ## System Options (Root) & Public Endpoints
 
-This section documents the root-only system configuration endpoints and the public/optional-auth endpoints that power the web dashboard (status banner, model catalog, MCP tools catalog, notice, about, and homepage content). The two `/api/option/` endpoints require a root-level credential (the management access token under `Authorization`, or a root session cookie) and read/write the server's key/value option store. The remaining endpoints are public (or never-reject optional auth) and return management-style envelopes `{"success", "message", "data"}` with HTTP 200. Sensitive option keys (any key ending in `Token`, `Secret`, or `Password`) are stripped from reads and protected from accidental empty-value overwrites on writes.
+This section documents the root-only system configuration endpoints and the public/optional-auth endpoints that power the web dashboard (status banner, model catalog, MCP tools catalog, notice, about, and homepage content). The two `/api/option/` endpoints require a root-level credential (the management access token under `Authorization`, or a root session cookie) and read/write the server's key/value option store. The remaining endpoints are public (or never-reject optional auth) and return management-style envelopes `{"success", "message", "data"}` with HTTP 200. Sensitive option keys (any key ending in `Token`, `Secret`, `SecretKey`, `Password`, or `APIKey`) are stripped from reads and protected from accidental empty-value overwrites on writes.
 
 > Auth note: none of the endpoints in this section accept the relay API key (`sk-...`). The two write/read option endpoints use the management **access token** (32-char UUID from `GET /api/user/token`) or a session cookie; `GET /api/models/display` optionally accepts the same access token / session but never the relay key; the rest are fully public.
 
 ### GET /api/option/
 
-Returns the full set of stored system configuration options as key/value pairs, omitting any sensitive key (suffix `Token`/`Secret`/`Password`).
+Returns the full set of stored system configuration options as key/value pairs, omitting any sensitive key (suffix `Token`/`Secret`/`SecretKey`/`Password`/`APIKey`).
 
 **Auth:** Root access token. Header: `Authorization: $ACCESS_TOKEN` (a leading `Bearer ` is also accepted), or a root session cookie. Requires role >= 100. Missing/invalid credential -> `401`; valid credential below root -> `403`.
 

@@ -3,8 +3,9 @@ import { API, copy, showError, showSuccess, timestamp2string } from '../helpers'
 
 import { ITEMS_PER_PAGE } from '../constants';
 import { renderQuota } from '../helpers/render';
-import { Button, Form, Modal, Popconfirm, Popover, Table, Tag, Tooltip } from '@douyinfe/semi-ui';
+import { Button, Form, Modal, Popconfirm, Popover, Table, Tag } from '@douyinfe/semi-ui';
 import EditRedemption from '../pages/Redemption/EditRedemption';
+import ResourceRefTooltip from './ResourceRefTooltip';
 
 function renderTimestamp(timestamp) {
   return (
@@ -33,9 +34,7 @@ const RedemptionsTable = () => {
       title: '名称',
       dataIndex: 'name',
       render: (text, record) => (
-        <Tooltip content={`ID: ${record.uuid || record.id}`}>
-          <span className="resource-name-with-id">{text}</span>
-        </Tooltip>
+        <ResourceRefTooltip refId={record.uuid || record.id}>{text}</ResourceRefTooltip>
       )
     },
     {

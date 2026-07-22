@@ -9,6 +9,7 @@ type ResponseAPIRequest struct {
 	Model              string                         `json:"model"`                          // Required: Model ID used to generate the response
 	ExtraBody          map[string]any                 `json:"extra_body,omitempty"`           // Optional: Allowlisted provider-specific parameters merged into the upstream root payload
 	Background         *bool                          `json:"background,omitempty"`           // Optional: Whether to run the model response in the background
+	Conversation       *ResponseAPIConversation       `json:"conversation,omitempty"`         // Optional: Conversation state selector (string ID or {"id":...}); mutually exclusive with previous_response_id
 	Include            []string                       `json:"include,omitempty"`              // Optional: Additional output data to include
 	Instructions       *string                        `json:"instructions,omitempty"`         // Optional: System message as the first item in the model's context
 	MaxOutputTokens    *int                           `json:"max_output_tokens,omitempty"`    // Optional: Upper bound for the number of tokens

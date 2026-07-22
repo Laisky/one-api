@@ -250,6 +250,8 @@ export function ChannelsPage() {
           key: String(channelRef(channel)),
           value: channel.name,
           text: channel.name,
+          // Keep the UUID matchable even though the visible label is the name.
+          keywords: [String(channelRef(channel)), channel.uuid || '', String(channel.id ?? '')].filter(Boolean),
           content: (
             <div className="flex flex-col">
               <div className="font-medium">{channel.name}</div>

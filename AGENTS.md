@@ -6,7 +6,7 @@
 - **Package manager:** Use **yarn** for package management; avoid `npm` to prevent `yarn.lock` conflicts.
 - **Frontend templates:** Project ships Modern, Default, Berry, and Air templates; prioritize development and new features for **Modern**; maintain others for compatibility.
 - **I18n:** All UI content must support internationalization; language files live in `web/modern/src/i18n/locales/`.
-- **File length limits:** No manually written code file may exceed **800 lines**; for Go prefer files ≤**600 lines**; split by responsibility when needed; generated files are exempt.
+- **File length limits:** no manually written code file may exceed **800 lines** (generated files exempt; documentation, runbooks, proposals, and evidence notes may exceed 800 lines when cohesion and completeness require it); split by responsibility when needed; generated files are exempt.
 - **Build and test checks:** After changes ensure syntax and build/tests pass: `go vet ./...`, `go test -race ./...`, and `make build-frontend-modern` (or equivalent CI checks).
 - **Debug logging discipline:** Add targeted DEBUG logs to aid diagnosis, keep useful logs after debugging, and **never** include secrets (API keys, passwords, tokens) in logs or outputs.
 - **Global logger and request context:** Provide a global logger foundation; middleware must attach a context-aware logger; business logic must pull the context-aware logger from `context.Context` rather than using a global logger.

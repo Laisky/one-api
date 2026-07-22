@@ -132,6 +132,11 @@ const getModelType = (modelName: string): string => {
   // Check for Vercel AI Gateway hosted models - these should be handled by vercel type
   // since they have specific capabilities but are hosted through Vercel
   if (lowerName.includes('alibaba/')) return 'vercel';
+  // Kimi K3 always thinks; the depth is chosen with reasoning_effort, and the
+  // model pins top_p and both penalties upstream. Matched before the generic
+  // `moonshotai/` branch so bare `kimi-k3` and `moonshotai/kimi-k3` behave the
+  // same. Earlier Kimi generations keep their previous handling.
+  if (lowerName.includes('kimi-k3')) return 'kimi';
   // Check for DeepInfra hosted models - these should be handled by deepinfra type
   // since they have similar capabilities but are hosted through DeepInfra
   if (
@@ -347,6 +352,24 @@ export const getModelCapabilities = (modelName: string): ModelCapabilities => {
         supportsMaxCompletionTokens: false,
         supportsVision: modelSupportsVision(modelName),
         isRealtime: modelIsRealtime(modelName),
+      };
+
+    case 'kimi':
+      return {
+        supportsTools: true,
+        // Thinking cannot be switched off on K3, so there is no toggle to show;
+        // reasoning_effort is the only control.
+        supportsThinking: false,
+        supportsStop: true,
+        supportsReasoningEffort: true,
+        supportsLogprobs: false,
+        supportsTopK: false,
+        supportsTopP: false,
+        supportsFrequencyPenalty: false,
+        supportsPresencePenalty: false,
+        supportsMaxCompletionTokens: true,
+        supportsVision: true,
+        isRealtime: false,
       };
 
     case 'deepseek':

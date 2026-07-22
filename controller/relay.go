@@ -79,15 +79,14 @@ func Relay(c *gin.Context) {
 	startTime := time.Now()
 
 	// Request start log for traceability
+	// user/token/channel identity and request_id are already bound onto lg by
+	// identity.Bind (middleware), so they must not be repeated here.
 	lg.Debug("incoming relay request",
 		zap.String("method", c.Request.Method),
 		zap.String("path", c.Request.URL.Path),
 		zap.Int("relay_mode", relayMode),
-		zap.Int("channel_id", channelId),
-		zap.Int("user_id", userId),
 		zap.String("content_type", c.GetHeader("Content-Type")),
 		zap.Int64("content_length", c.Request.ContentLength),
-		zap.String("request_id", c.GetString(helper.RequestIdKey)),
 	)
 
 	// Get metadata for monitoring
@@ -218,17 +217,14 @@ func Relay(c *gin.Context) {
 
 	// Debug logging to track channel exclusions (only when debug is enabled)
 	if config.DebugEnabled {
+		// lastFailedChannelId is the request's own channel here, already bound onto lg.
 		if retryTimes > 0 {
 			lg.Info("Debug: Starting retry logic - Initial failed channel",
-				zap.Int("initial_failed_channel", lastFailedChannelId),
 				zap.Int("error_code", bizErr.StatusCode),
-				zap.String("request_id", requestId),
 			)
 		} else {
 			lg.Info("Debug: No retry will be attempted (retryTimes=0)",
-				zap.Int("channel_id", lastFailedChannelId),
 				zap.Int("error_code", bizErr.StatusCode),
-				zap.String("request_id", requestId),
 			)
 		}
 	}
@@ -251,7 +247,7 @@ func Relay(c *gin.Context) {
 		if config.DebugEnabled {
 			lg.Info("Debug: Attempting retry",
 				zap.Int("retry_attempt", retryTimes-i+1),
-				zap.Ints("excluded_channels", getChannelIds(failedChannels)),
+				dbmodel.ChannelRefsField("excluded_channels", getChannelIds(failedChannels)),
 				zap.Bool("try_lower_priority_first", shouldTryLowerPriorityFirst),
 				zap.Bool("try_larger_max_tokens_first", shouldTryLargerMaxTokensFirst),
 				zap.Bool("server_transient", isServerTransient))
@@ -266,7 +262,7 @@ func Relay(c *gin.Context) {
 			if err != nil {
 				// If no lower priority channels available, try highest priority channels (excluding failed ones)
 				lg.Info("No lower priority channels available, trying highest priority channels",
-					zap.Ints("excluded_channels", getChannelIds(failedChannels)),
+					dbmodel.ChannelRefsField("excluded_channels", getChannelIds(failedChannels)),
 				)
 				channel, err = dbmodel.CacheGetRandomSatisfiedChannelExcluding(group, originalModel, false, failedChannels, false)
 			}
@@ -275,7 +271,7 @@ func Relay(c *gin.Context) {
 			channel, err = dbmodel.CacheGetRandomSatisfiedChannelExcluding(group, originalModel, false, failedChannels, false)
 			if err != nil {
 				lg.Info("No highest priority channels available, trying lower priority channels",
-					zap.Ints("excluded_channels", getChannelIds(failedChannels)))
+					dbmodel.ChannelRefsField("excluded_channels", getChannelIds(failedChannels)))
 				channel, err = dbmodel.CacheGetRandomSatisfiedChannelExcluding(group, originalModel, true, failedChannels, false)
 			}
 		}
@@ -294,7 +290,7 @@ func Relay(c *gin.Context) {
 				Err:           *bizErr,
 			}
 			selectionFields := appendRelayFailureFields(relayLogParams,
-				zap.Ints("excluded_channels", getChannelIds(failedChannels)),
+				dbmodel.ChannelRefsField("excluded_channels", getChannelIds(failedChannels)),
 				zap.Int("retry_attempt", retryTimes-i+1),
 				zap.Int("remaining_attempts", i-1),
 				zap.Bool("try_lower_priority_first", shouldTryLowerPriorityFirst),
@@ -317,8 +313,10 @@ func Relay(c *gin.Context) {
 			break
 		}
 
+		// channel is a DIFFERENT channel than the one bound onto lg, so name it
+		// explicitly under its own key instead of shadowing the bound channel_id.
 		lg.Info("using channel to retry",
-			zap.Int("channel_id", channel.Id),
+			zap.String("retry_channel", channel.Ref().String()),
 			zap.Int("remaining_attempts", i),
 		)
 		// We have definitively decided to retry on a different channel. Refund and
@@ -328,6 +326,12 @@ func Relay(c *gin.Context) {
 		// charge the user. Terminal failures never reach this point.
 		rcontroller.ResetPerAttemptBillingForRetry(ctx, c)
 		middleware.SetupContextForSelectedChannel(c, channel, originalModel)
+		// SetupContextForSelectedChannel re-binds the request identity onto a NEW
+		// request-scoped logger, so refresh both the logger value and the detached
+		// context; otherwise every later log line and the async error processor would
+		// still be labelled with the first channel.
+		lg = gmw.GetLogger(c)
+		ctx = relayctx.Detach(c)
 		requestBody, err := common.GetRequestBody(c)
 		c.Request.Body = io.NopCloser(bytes.NewBuffer(requestBody))
 
@@ -351,10 +355,9 @@ func Relay(c *gin.Context) {
 
 		// Debug logging to track which channels are being added to failed list (only when debug is enabled)
 		if config.DebugEnabled {
+			// channelId is the currently bound channel; only the other failed ones need naming.
 			lg.Info("Debug: Added channel to failed channels list",
-				zap.Int("channel_id", channelId),
-				zap.Ints("total_failed_channels", getChannelIds(failedChannels)),
-				zap.String("request_id", requestId))
+				dbmodel.ChannelRefsField("total_failed_channels", getChannelIds(failedChannels)))
 		}
 		channelName = c.GetString(ctxkey.ChannelName)
 		// Update group and originalModel potentially if changed by middleware, though unlikely for these.
