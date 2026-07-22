@@ -1516,6 +1516,13 @@ var (
 	}
 )
 
+const (
+	// EnvResendAPIKey names the environment variable that provides the Resend API key.
+	EnvResendAPIKey = "RESEND_API_KEY"
+	// EnvEmailProvider names the environment variable that forces the email backend.
+	EnvEmailProvider = "EMAIL_PROVIDER"
+)
+
 // SMTP server settings for outbound email (password reset, verification, alerts).
 // All settings are runtime variables configured via admin UI.
 var (
@@ -1556,19 +1563,19 @@ var (
 	// ResendAPIKey holds the API key for Resend.com email service.
 	// Used when EmailProvider is set to "resend".
 	//
-	// Runtime variable (set via admin UI; env override on startup)
+	// Runtime variable (set via admin UI; non-empty env value takes precedence)
 	// Default: ""
 	// Example: "re_123456789"
-	ResendAPIKey = env.String("RESEND_API_KEY", "")
+	ResendAPIKey = env.String(EnvResendAPIKey, "")
 
 	// EmailProvider selects the outbound email backend.
 	// Valid values: "smtp" (default), "resend".
 	// When unset, the backend falls back to "resend" if ResendAPIKey is configured,
 	// otherwise "smtp" — preserving behaviour for installations upgraded from older versions.
 	//
-	// Runtime variable (set via admin UI; env override on startup)
+	// Runtime variable (set via admin UI; non-empty env value takes precedence)
 	// Default: "" (auto-detected as described above)
-	EmailProvider = strings.ToLower(strings.TrimSpace(env.String("EMAIL_PROVIDER", "")))
+	EmailProvider = strings.ToLower(strings.TrimSpace(env.String(EnvEmailProvider, "")))
 )
 
 // =============================================================================

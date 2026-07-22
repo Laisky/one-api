@@ -119,6 +119,7 @@ func TestUpdateOption_SensitiveEmptyValueIsIgnored(t *testing.T) {
 		value string
 	}{
 		{name: "secret suffix", key: "GitHubClientSecret", value: "real-github-secret"},
+		{name: "secret key suffix", key: "TurnstileSecretKey", value: "real-turnstile-secret"},
 		{name: "token suffix", key: "SMTPToken", value: "real-smtp-token"},
 		{name: "password suffix", key: "SMTPPassword", value: "real-smtp-password"},
 		{name: "api key suffix", key: "ResendAPIKey", value: "re_test_key"},
@@ -201,6 +202,7 @@ func TestGetOptions_AllSensitiveFilteredEmitsDataArray(t *testing.T) {
 	config.OptionMap["GitHubClientSecret"] = "x"
 	config.OptionMap["SMTPToken"] = "y"
 	config.OptionMap["SMTPPassword"] = "z"
+	config.OptionMap["TurnstileSecretKey"] = "turnstile-secret"
 	config.OptionMapRWMutex.Unlock()
 
 	w := httptest.NewRecorder()

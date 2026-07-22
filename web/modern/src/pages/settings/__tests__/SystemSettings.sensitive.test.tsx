@@ -78,6 +78,59 @@ describe('SystemSettings sensitive secret handling', () => {
     );
   });
 
+  it('does not blur-save a dirty sensitive field before clearing it', async () => {
+    vi.spyOn(api, 'get').mockResolvedValue({
+      data: {
+        success: true,
+        data: [{ key: 'SMTPServer', value: 'smtp.example.com' }],
+      },
+    });
+    const putMock = vi.spyOn(api, 'put').mockResolvedValue({ data: { success: true } });
+
+    const user = userEvent.setup();
+    render(
+      <NotificationsProvider>
+        <SystemSettings />
+      </NotificationsProvider>
+    );
+
+    const input = (await screen.findByLabelText('SMTPToken value')) as HTMLInputElement;
+    await user.type(input, 'typed-but-clear-instead');
+    await user.click(screen.getByLabelText('Clear SMTPToken'));
+
+    await waitFor(() =>
+      expect(putMock).toHaveBeenCalledWith('/api/option/', {
+        key: 'SMTPToken',
+        value: '',
+        clear: true,
+      })
+    );
+    expect(putMock).not.toHaveBeenCalledWith('/api/option/', {
+      key: 'SMTPToken',
+      value: 'typed-but-clear-instead',
+    });
+  });
+
+  it('treats TurnstileSecretKey as a sensitive password field', async () => {
+    vi.spyOn(api, 'get').mockResolvedValue({
+      data: {
+        success: true,
+        data: [{ key: 'TurnstileSiteKey', value: 'site-key' }],
+      },
+    });
+    vi.spyOn(api, 'put').mockResolvedValue({ data: { success: true } });
+
+    render(
+      <NotificationsProvider>
+        <SystemSettings />
+      </NotificationsProvider>
+    );
+
+    const input = (await screen.findByLabelText('TurnstileSecretKey value')) as HTMLInputElement;
+    expect(input.type).toBe('password');
+    expect(await screen.findByLabelText('Clear TurnstileSecretKey')).toBeInTheDocument();
+  });
+
   it('maps an empty EmailProvider to the Auto option', async () => {
     vi.spyOn(api, 'get').mockResolvedValue({
       data: {

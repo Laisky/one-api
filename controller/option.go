@@ -17,11 +17,12 @@ import (
 )
 
 // isSensitiveOptionKey reports whether the option key holds a secret value
-// (e.g. tokens, secrets, passwords, API keys) and should never be echoed back
-// to the client or overwritten with an empty value submitted by a UI form.
+// (e.g. tokens, secrets, passwords, secret keys, API keys) and should never be
+// echoed back to the client or overwritten with an empty value submitted by a UI form.
 func isSensitiveOptionKey(key string) bool {
 	return strings.HasSuffix(key, "Token") ||
 		strings.HasSuffix(key, "Secret") ||
+		strings.HasSuffix(key, "SecretKey") ||
 		strings.HasSuffix(key, "Password") ||
 		strings.HasSuffix(key, "APIKey")
 }
@@ -61,12 +62,12 @@ func UpdateOption(c *gin.Context) {
 		return
 	}
 	option := model.Option{Key: req.Key, Value: req.Value}
-	// Protect sensitive options (Token/Secret/Password/APIKey suffix) from accidental
+	// Protect sensitive options from accidental
 	// overwrite when the client submits an empty string. GetOptions strips these values
 	// before returning them, so a UI form will always render them empty; saving the form
 	// must therefore treat empty as "no change" rather than wiping the stored secret —
 	// unless the client explicitly asks to clear it. NEVER log the value itself.
-	if req.Clear {
+	if req.Clear && isSensitiveOptionKey(option.Key) {
 		option.Value = ""
 	} else if strings.TrimSpace(option.Value) == "" && isSensitiveOptionKey(option.Key) {
 		logger.Logger.Debug("ignored empty value for sensitive option to prevent overwrite",
