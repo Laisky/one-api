@@ -8169,13 +8169,13 @@ curl -s "$BASE_URL/api/mcp_tools/?server_id=018f0000-0000-7000-8000-000000000001
 
 ## System Options (Root) & Public Endpoints
 
-This section documents the root-only system configuration endpoints and the public/optional-auth endpoints that power the web dashboard (status banner, model catalog, MCP tools catalog, notice, about, and homepage content). The two `/api/option/` endpoints require a root-level credential (the management access token under `Authorization`, or a root session cookie) and read/write the server's key/value option store. The remaining endpoints are public (or never-reject optional auth) and return management-style envelopes `{"success", "message", "data"}` with HTTP 200. Sensitive option keys (any key ending in `Token`, `Secret`, or `Password`) are stripped from reads and protected from accidental empty-value overwrites on writes.
+This section documents the root-only system configuration endpoints and the public/optional-auth endpoints that power the web dashboard (status banner, model catalog, MCP tools catalog, notice, about, and homepage content). The two `/api/option/` endpoints require a root-level credential (the management access token under `Authorization`, or a root session cookie) and read/write the server's key/value option store. The remaining endpoints are public (or never-reject optional auth) and return management-style envelopes `{"success", "message", "data"}` with HTTP 200. Sensitive option keys (any key ending in `Token`, `Secret`, `SecretKey`, `Password`, or `APIKey`) are stripped from reads and protected from accidental empty-value overwrites on writes.
 
 > Auth note: none of the endpoints in this section accept the relay API key (`sk-...`). The two write/read option endpoints use the management **access token** (32-char UUID from `GET /api/user/token`) or a session cookie; `GET /api/models/display` optionally accepts the same access token / session but never the relay key; the rest are fully public.
 
 ### GET /api/option/
 
-Returns the full set of stored system configuration options as key/value pairs, omitting any sensitive key (suffix `Token`/`Secret`/`Password`).
+Returns the full set of stored system configuration options as key/value pairs, omitting any sensitive key (suffix `Token`/`Secret`/`SecretKey`/`Password`/`APIKey`).
 
 **Auth:** Root access token. Header: `Authorization: $ACCESS_TOKEN` (a leading `Bearer ` is also accepted), or a root session cookie. Requires role >= 100. Missing/invalid credential -> `401`; valid credential below root -> `403`.
 

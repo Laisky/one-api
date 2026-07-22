@@ -197,6 +197,16 @@ oneapi:
 >
 > Session cookies are marked `Secure` by default, so the browser will only send them over HTTPS. If you are serving the service over plain HTTP (for example accessing `http://<host>:3000` directly, or a reverse proxy that terminates HTTPS but is misconfigured), logins will appear to succeed but the next request is unauthenticated, looping the user back to the login page. In that case set `ENABLE_COOKIE_SECURE=false` in the `environment` section. Keep it at the default (`true`) for any production deployment served over HTTPS.
 
+### Outbound Email Configuration
+
+one-api can send verification, password reset, quota reminder, and operator notification emails through either SMTP or the Resend HTTP API.
+
+- `EMAIL_PROVIDER=smtp` forces the SMTP backend.
+- `EMAIL_PROVIDER=resend` forces the Resend backend and requires `RESEND_API_KEY`.
+- Leaving `EMAIL_PROVIDER` empty enables auto mode: one-api uses Resend when `RESEND_API_KEY` is configured, otherwise it falls back to SMTP.
+
+When `RESEND_API_KEY` or `EMAIL_PROVIDER` is set as a non-empty environment variable, that environment value is authoritative during startup, periodic option sync, and runtime option updates. A saved or cleared database option will not override it. To manage these values from the admin UI instead, remove the corresponding environment variable and restart the service.
+
 ### Kubernetes Deployment
 
 The Kubernetes deployment guide has been moved into a dedicated document:

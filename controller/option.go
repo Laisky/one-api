@@ -17,12 +17,14 @@ import (
 )
 
 // isSensitiveOptionKey reports whether the option key holds a secret value
-// (e.g. tokens, secrets, passwords) and should never be echoed back to the
-// client or overwritten with an empty value submitted by a UI form.
+// (e.g. tokens, secrets, passwords, secret keys, API keys) and should never be
+// echoed back to the client or overwritten with an empty value submitted by a UI form.
 func isSensitiveOptionKey(key string) bool {
 	return strings.HasSuffix(key, "Token") ||
 		strings.HasSuffix(key, "Secret") ||
-		strings.HasSuffix(key, "Password")
+		strings.HasSuffix(key, "SecretKey") ||
+		strings.HasSuffix(key, "Password") ||
+		strings.HasSuffix(key, "APIKey")
 }
 
 // GetOptions returns the current configuration options excluding sensitive values.
@@ -48,18 +50,26 @@ func GetOptions(c *gin.Context) {
 
 // UpdateOption persists a configuration option after validating prerequisite fields for feature toggles.
 func UpdateOption(c *gin.Context) {
-	var option model.Option
-	err := json.NewDecoder(c.Request.Body).Decode(&option)
-	if err != nil {
+	var req struct {
+		Key   string `json:"key"`
+		Value string `json:"value"`
+		// Clear explicitly removes a stored secret, distinguishing an intentional
+		// wipe from an empty form submission (which is ignored for sensitive keys).
+		Clear bool `json:"clear"`
+	}
+	if err := json.NewDecoder(c.Request.Body).Decode(&req); err != nil {
 		helper.RespondErrorWithStatus(c, http.StatusBadRequest, errors.New(invalidParameterMessage))
 		return
 	}
-	// Protect sensitive options (Token/Secret/Password suffix) from accidental
-	// overwrite when the client submits an empty string. GetOptions strips
-	// these values before returning them, so a UI form will always render them
-	// empty; saving the form must therefore treat empty as "no change" rather
-	// than wiping the stored secret. NEVER log the value itself.
-	if strings.TrimSpace(option.Value) == "" && isSensitiveOptionKey(option.Key) {
+	option := model.Option{Key: req.Key, Value: req.Value}
+	// Protect sensitive options from accidental
+	// overwrite when the client submits an empty string. GetOptions strips these values
+	// before returning them, so a UI form will always render them empty; saving the form
+	// must therefore treat empty as "no change" rather than wiping the stored secret —
+	// unless the client explicitly asks to clear it. NEVER log the value itself.
+	if req.Clear && isSensitiveOptionKey(option.Key) {
+		option.Value = ""
+	} else if strings.TrimSpace(option.Value) == "" && isSensitiveOptionKey(option.Key) {
 		logger.Logger.Debug("ignored empty value for sensitive option to prevent overwrite",
 			zap.String("key", option.Key))
 		c.JSON(http.StatusOK, gin.H{
@@ -78,6 +88,15 @@ func UpdateOption(c *gin.Context) {
 			helper.RespondError(c, errkind.InvalidRequestErr(errors.New("invalid theme")))
 			return
 		}
+	case "EmailProvider":
+		// Normalize and reject typos before they are persisted. An empty value is
+		// accepted and means "auto" (Resend when an API key is set, otherwise SMTP).
+		val := strings.ToLower(strings.TrimSpace(option.Value))
+		if val != "" && val != "smtp" && val != "resend" {
+			helper.RespondError(c, errkind.InvalidRequestErr(errors.Errorf("invalid email provider %q (expected \"smtp\", \"resend\", or empty)", val)))
+			return
+		}
+		option.Value = val
 	case "GitHubOAuthEnabled":
 		if option.Value == "true" && config.GitHubClientId == "" {
 			helper.RespondError(c, errkind.InvalidRequestErr(errors.New("Unable to enable GitHub OAuth, please fill in the GitHub Client Id and GitHub Client Secret first!")))
@@ -99,8 +118,7 @@ func UpdateOption(c *gin.Context) {
 			return
 		}
 	}
-	err = model.UpdateOption(option.Key, option.Value)
-	if err != nil {
+	if err := model.UpdateOption(option.Key, option.Value); err != nil {
 		helper.RespondError(c, err)
 		return
 	}
