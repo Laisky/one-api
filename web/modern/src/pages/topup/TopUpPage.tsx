@@ -20,7 +20,7 @@ import {
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { useTranslation } from 'react-i18next';
-import { useLocation } from 'react-router-dom';
+import { useSearchParams } from 'react-router-dom';
 import * as z from 'zod';
 
 const QUOTA_PER_UNIT_FALLBACK = 500000;
@@ -47,7 +47,7 @@ function errorMessage(error: unknown): string {
  */
 export function TopUpPage() {
   const { user, updateUser } = useAuthStore();
-  const location = useLocation();
+  const [searchParams] = useSearchParams();
   const { t, i18n } = useTranslation();
   const tr = useCallback(
     (key: string, defaultValue: string, options?: Record<string, unknown>) =>
@@ -61,22 +61,27 @@ export function TopUpPage() {
   const [stripeEnabled, setStripeEnabled] = useState(false);
   const [minTopUpUSD, setMinTopUpUSD] = useState(DEFAULT_MIN_TOPUP_USD);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [fulfillmentStatus, setFulfillmentStatus] = useState<'processing' | 'paid' | 'failed' | null>(null);
 
   type HistoryEntry = {
     id: number;
     created_at: number;
+    amount_cents: number;
+    currency: string;
     quota: number;
-    content?: string;
+    status: string;
     source: 'stripe' | 'code' | 'admin' | 'system' | 'other';
   };
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [isHistoryLoading, setIsHistoryLoading] = useState(false);
 
   const stripeOutcome = useMemo<'success' | 'cancel' | null>(() => {
-    if (location.pathname.endsWith('/topup/success')) return 'success';
-    if (location.pathname.endsWith('/topup/cancel')) return 'cancel';
+    const flag = (searchParams.get('stripe') || '').toLowerCase();
+    if (flag === 'success') return 'success';
+    if (flag === 'cancel') return 'cancel';
     return null;
-  }, [location.pathname]);
+  }, [searchParams]);
+  const returnSessionId = searchParams.get('session_id') || '';
 
   const presets = useMemo(
     () => BASE_PRESETS.filter((n) => n >= minTopUpUSD),
@@ -121,6 +126,19 @@ export function TopUpPage() {
       return usd.toLocaleString(i18n.language || 'en', {
         style: 'currency',
         currency: 'USD',
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      });
+    },
+    [i18n.language]
+  );
+
+  /** formatCents formats an immutable Stripe amount in cents as currency. */
+  const formatCents = useCallback(
+    (cents: number, currency = 'usd'): string => {
+      return (cents / 100).toLocaleString(i18n.language || 'en', {
+        style: 'currency',
+        currency: (currency || 'usd').toUpperCase(),
         minimumFractionDigits: 2,
         maximumFractionDigits: 2,
       });
@@ -190,37 +208,23 @@ export function TopUpPage() {
     }
   };
 
-  /** classifySource maps top-up log content text to a coarse source category. */
-  const classifySource = (content: string): HistoryEntry['source'] => {
-    const c = content.toLowerCase();
-    if (c.includes('stripe')) return 'stripe';
-    if (c.includes('redemption') || c.includes('redeem') || c.includes('code')) return 'code';
-    if (c.includes('admin') || c.includes('via api')) return 'admin';
-    if (c.includes('welcome') || c.includes('system')) return 'system';
-    return 'other';
-  };
-
-  /** loadHistory loads the latest top-up log rows for the signed-in user. */
+  /** loadHistory loads immutable Stripe payment orders for the signed-in user. */
   const loadHistory = async () => {
     setIsHistoryLoading(true);
     try {
-      const res = await api.get('/api/log/self?type=1&p=0&size=10&sort=created_at&order=desc');
-      const { success, data, items } = res.data || {};
-      const rows: any[] = Array.isArray(items)
-        ? items
-        : Array.isArray(data)
-          ? data
-          : Array.isArray(data?.items)
-            ? data.items
-            : [];
+      const res = await api.get('/api/user/topup/stripe/orders');
+      const { success, data } = res.data || {};
+      const rows: any[] = Array.isArray(data) ? data : [];
       if (success || rows.length) {
         setHistory(
           rows.map((r) => ({
             id: r.id,
-            created_at: r.created_at,
+            created_at: Math.floor((r.created_at || 0) / 1000) || r.created_at,
+            amount_cents: r.amount_cents ?? 0,
+            currency: r.currency || 'usd',
             quota: r.quota ?? 0,
-            content: r.content || '',
-            source: classifySource(r.content || ''),
+            status: r.status || 'pending',
+            source: 'stripe' as const,
           }))
         );
       }
@@ -231,12 +235,43 @@ export function TopUpPage() {
     }
   };
 
+  /** pollReturnSession asks the server for fulfillment status after Stripe redirect. */
+  const pollReturnSession = useCallback(async () => {
+    if (!returnSessionId || stripeOutcome !== 'success') return;
+    setFulfillmentStatus('processing');
+    try {
+      for (let i = 0; i < 8; i++) {
+        const res = await api.get(`/api/user/topup/stripe/orders/${encodeURIComponent(returnSessionId)}`);
+        const order = res.data?.data;
+        if (res.data?.success && order?.status === 'paid') {
+          setFulfillmentStatus('paid');
+          loadUserData();
+          loadHistory();
+          return;
+        }
+        if (order?.status === 'manual_review' || order?.status === 'failed') {
+          setFulfillmentStatus('failed');
+          return;
+        }
+        await new Promise((r) => setTimeout(r, 1500));
+      }
+      setFulfillmentStatus('processing');
+    } catch (error) {
+      console.error(`Error polling payment order: ${errorMessage(error)}`);
+      setFulfillmentStatus('processing');
+    }
+  }, [returnSessionId, stripeOutcome]);
+
   useEffect(() => {
     loadUserData();
     loadSystemStatus();
     loadHistory();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    pollReturnSession();
+  }, [pollReturnSession]);
 
   /** onStripeSubmit creates a Checkout Session and redirects the browser to Stripe. */
   const onStripeSubmit = async (data: StripeForm) => {
@@ -348,12 +383,22 @@ export function TopUpPage() {
           <div className="flex items-start gap-3 rounded-lg border border-success-border bg-success-muted px-4 py-3 text-sm">
             <CheckCircle2 className="h-4 w-4 mt-0.5 text-success flex-shrink-0" />
             <div className="text-success-foreground">
-              <p className="font-medium mb-0.5">{tr('stripe.outcome_success_title', 'Payment received')}</p>
+              <p className="font-medium mb-0.5">
+                {fulfillmentStatus === 'paid'
+                  ? tr('stripe.outcome_credited_title', 'Credits added')
+                  : fulfillmentStatus === 'failed'
+                    ? tr('stripe.outcome_failed_title', 'Payment needs review')
+                    : tr('stripe.outcome_success_title', 'Payment received')}
+              </p>
               <p className="text-success-foreground/80">
-                {tr(
-                  'stripe.outcome_success',
-                  'Your balance will update within a moment once Stripe confirms the charge.'
-                )}
+                {fulfillmentStatus === 'paid'
+                  ? tr('stripe.outcome_credited', 'Your balance has been updated from the server order status.')
+                  : fulfillmentStatus === 'failed'
+                    ? tr('stripe.outcome_failed', 'Payment was recorded but needs operator review. Contact support if balance is wrong.')
+                    : tr(
+                        'stripe.outcome_success',
+                        'Confirming with the server… your balance updates after the webhook settles the order.'
+                      )}
               </p>
             </div>
           </div>
@@ -563,13 +608,13 @@ export function TopUpPage() {
               </Button>
             </div>
             <CardDescription>
-              {tr('history.description', 'The last 10 top-ups and code redemptions on this account.')}
+              {tr('history.description', 'Recent card top-ups with original charged amounts (immutable cents).')}
             </CardDescription>
           </CardHeader>
           <CardContent className="p-0">
             {history.length === 0 && !isHistoryLoading ? (
               <p className="px-6 pb-6 text-sm text-muted-foreground">
-                {tr('history.empty', 'No top-ups yet. Add credits or redeem a code to get started.')}
+                {tr('history.empty', 'No card top-ups yet. Add credits to get started.')}
               </p>
             ) : (
               <>
@@ -582,11 +627,11 @@ export function TopUpPage() {
                           {formatHistoryDate(entry.created_at)}
                         </span>
                         <span className="font-medium tabular-nums" data-label={tr('history.col.amount', 'Amount')}>
-                          {formatUSD(entry.quota)}
+                          {formatCents(entry.amount_cents, entry.currency)}
                         </span>
                       </div>
                       <div className="text-foreground/80" data-label={tr('history.col.source', 'Source')}>
-                        {sourceLabel(entry.source)}
+                        {sourceLabel(entry.source)} · {entry.status}
                       </div>
                     </div>
                   ))}
@@ -598,6 +643,7 @@ export function TopUpPage() {
                       <tr className="text-xs uppercase tracking-wider text-muted-foreground">
                         <th className="text-left font-medium px-6 py-2.5">{tr('history.col.date', 'Date')}</th>
                         <th className="text-left font-medium px-6 py-2.5">{tr('history.col.source', 'Source')}</th>
+                        <th className="text-left font-medium px-6 py-2.5">{tr('history.col.status', 'Status')}</th>
                         <th className="text-right font-medium px-6 py-2.5">{tr('history.col.amount', 'Amount')}</th>
                       </tr>
                     </thead>
@@ -609,21 +655,15 @@ export function TopUpPage() {
                           </td>
                           <td className="px-6 py-3 text-foreground/80" data-label={tr('history.col.source', 'Source')}>
                             <div className="flex items-center gap-2">
-                              <span
-                                className={cn(
-                                  'inline-block h-1.5 w-1.5 rounded-full',
-                                  entry.source === 'stripe' && 'bg-primary',
-                                  entry.source === 'code' && 'bg-accent',
-                                  entry.source === 'admin' && 'bg-warning',
-                                  entry.source === 'system' && 'bg-info',
-                                  entry.source === 'other' && 'bg-muted-foreground/40'
-                                )}
-                              />
+                              <span className="inline-block h-1.5 w-1.5 rounded-full bg-primary" />
                               <span>{sourceLabel(entry.source)}</span>
                             </div>
                           </td>
+                          <td className="px-6 py-3 text-foreground/80" data-label={tr('history.col.status', 'Status')}>
+                            {entry.status}
+                          </td>
                           <td className="px-6 py-3 text-right tabular-nums text-foreground font-medium" data-label={tr('history.col.amount', 'Amount')}>
-                            {formatUSD(entry.quota)}
+                            {formatCents(entry.amount_cents, entry.currency)}
                           </td>
                         </tr>
                       ))}

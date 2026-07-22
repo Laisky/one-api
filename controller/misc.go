@@ -52,10 +52,9 @@ func GetStatus(c *gin.Context) {
 			"oidc_userinfo_endpoint":      config.OidcUserinfoEndpoint,
 			"password_login":              config.PasswordLoginEnabled,
 			"password_register":           config.PasswordRegisterEnabled,
-			// Require both secrets so the UI only offers Checkout when settlement can succeed.
-			"stripe_enabled": strings.TrimSpace(config.StripeSecretKey) != "" &&
-				strings.TrimSpace(config.StripeWebhookSecret) != "",
-			"min_topup_usd": effectiveMinTopUpUSD(),
+			// Stripe is enabled only when secret, webhook secret, and public base URL are ready.
+			"stripe_enabled": StripeReady(),
+			"min_topup_usd":  effectiveMinTopUpUSD(),
 		},
 	})
 }

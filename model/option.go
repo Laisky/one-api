@@ -56,8 +56,9 @@ func InitOptionMap() {
 	config.OptionMap["SMTPPort"] = strconv.Itoa(config.SMTPPort)
 	config.OptionMap["SMTPAccount"] = ""
 	config.OptionMap["SMTPToken"] = ""
-	config.OptionMap["StripeSecretKey"] = config.StripeSecretKey
-	config.OptionMap["StripeWebhookSecret"] = config.StripeWebhookSecret
+	// Never seed secrets into OptionMap — GetOptions must not leak them if filtering regresses.
+	config.OptionMap["StripeSecretKey"] = ""
+	config.OptionMap["StripeWebhookSecret"] = ""
 	config.OptionMap["MinTopUpUSD"] = strconv.Itoa(config.MinTopUpUSD)
 	config.OptionMap["Notice"] = ""
 	config.OptionMap["About"] = ""
