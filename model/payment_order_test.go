@@ -2,6 +2,8 @@ package model
 
 import (
 	"context"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -75,7 +77,7 @@ func TestSettlePaidPaymentOrderUnknownSession(t *testing.T) {
 	require.Nil(t, order)
 }
 
-// TestSettlePaidPaymentOrderAmountMismatch rejects Stripe amount drift.
+// TestSettlePaidPaymentOrderAmountMismatch marks manual_review on Stripe amount drift.
 func TestSettlePaidPaymentOrderAmountMismatch(t *testing.T) {
 	setupPaymentTestDB(t)
 	require.NoError(t, DB.Create(&User{Id: 2, Username: "u2", Password: "x", DisplayName: "p", Role: 1, Status: 1, Quota: 0}).Error)
@@ -83,9 +85,14 @@ func TestSettlePaidPaymentOrderAmountMismatch(t *testing.T) {
 		UserId: 2, Provider: PaymentProviderStripe, RequestID: "req-2", SessionID: "cs_2",
 		AmountCents: 500, Currency: "usd", Quota: 10, Status: PaymentStatusPending,
 	}).Error)
-	_, _, err := SettlePaidPaymentOrder(context.Background(), "cs_2", time.Now().UnixMilli(), 999, "usd")
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "amount mismatch")
+	tr, order, err := SettlePaidPaymentOrder(context.Background(), "cs_2", time.Now().UnixMilli(), 999, "usd")
+	require.NoError(t, err)
+	require.False(t, tr)
+	require.NotNil(t, order)
+	require.Equal(t, PaymentStatusManualReview, order.Status)
+	var u User
+	require.NoError(t, DB.First(&u, 2).Error)
+	require.Equal(t, int64(0), u.Quota)
 }
 
 // TestClaimStripeWebhookEventDedupes inserts an event id only once.
@@ -112,4 +119,50 @@ func TestSettleMissingUserManualReview(t *testing.T) {
 	require.False(t, tr)
 	require.NotNil(t, order)
 	require.Equal(t, PaymentStatusManualReview, order.Status)
+}
+
+// TestSettlePaidPaymentOrderConcurrent credits quota exactly once under parallel settlers.
+func TestSettlePaidPaymentOrderConcurrent(t *testing.T) {
+	// Shared-cache SQLite with busy timeout so concurrent writers can retry locks.
+	db, err := gorm.Open(sqlite.Open("file:payconcur_"+t.Name()+"?mode=memory&cache=shared&_busy_timeout=5000"), &gorm.Config{})
+	require.NoError(t, err)
+	sqlDB, err := db.DB()
+	require.NoError(t, err)
+	sqlDB.SetMaxOpenConns(8)
+	prev := DB
+	DB = db
+	t.Cleanup(func() { DB = prev })
+	require.NoError(t, db.AutoMigrate(&PaymentOrder{}, &StripeWebhookEvent{}, &User{}))
+
+	require.NoError(t, DB.Create(&User{Id: 3, Username: "u3", Password: "x", DisplayName: "p", Role: 1, Status: 1, Quota: 0}).Error)
+	require.NoError(t, DB.Create(&PaymentOrder{
+		UserId: 3, Provider: PaymentProviderStripe, RequestID: "req-3", SessionID: "cs_3",
+		AmountCents: 500, Currency: "usd", Quota: 50, Status: PaymentStatusPending,
+	}).Error)
+
+	var wg sync.WaitGroup
+	var transitioned atomic.Int64
+	for i := 0; i < 8; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			// Retry brief SQLite lock contention; production Postgres uses row locks.
+			for attempt := 0; attempt < 20; attempt++ {
+				tr, _, err := SettlePaidPaymentOrder(context.Background(), "cs_3", time.Now().UnixMilli(), 500, "usd")
+				if err != nil {
+					time.Sleep(time.Millisecond * time.Duration(5+attempt))
+					continue
+				}
+				if tr {
+					transitioned.Add(1)
+				}
+				return
+			}
+		}()
+	}
+	wg.Wait()
+	require.Equal(t, int64(1), transitioned.Load())
+	var u User
+	require.NoError(t, DB.First(&u, 3).Error)
+	require.Equal(t, int64(50), u.Quota)
 }

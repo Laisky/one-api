@@ -372,6 +372,24 @@ export function TopUpPage() {
     }
   };
 
+  /** statusLabel returns a translated label for a payment order status. */
+  const statusLabel = (s: string): string => {
+    switch (s) {
+      case 'paid':
+        return tr('history.status.paid', 'Paid');
+      case 'pending':
+        return tr('history.status.pending', 'Pending');
+      case 'manual_review':
+        return tr('history.status.manual_review', 'Under review');
+      case 'failed':
+        return tr('history.status.failed', 'Failed');
+      case 'canceled':
+        return tr('history.status.canceled', 'Canceled');
+      default:
+        return s;
+    }
+  };
+
   return (
     <ResponsivePageContainer
       title={tr('title', 'Billing')}
@@ -469,6 +487,7 @@ export function TopUpPage() {
                             key={amount}
                             onClick={() => setPreset(amount)}
                             data-label={`$${amount}`}
+                            aria-pressed={active}
                             className={cn(
                               'inline-flex min-h-11 items-center justify-center rounded-md border px-3 py-2 text-sm font-medium tabular-nums transition-colors',
                               active
@@ -631,7 +650,7 @@ export function TopUpPage() {
                         </span>
                       </div>
                       <div className="text-foreground/80" data-label={tr('history.col.source', 'Source')}>
-                        {sourceLabel(entry.source)} · {entry.status}
+                        {sourceLabel(entry.source)} · {statusLabel(entry.status)}
                       </div>
                     </div>
                   ))}
@@ -660,7 +679,7 @@ export function TopUpPage() {
                             </div>
                           </td>
                           <td className="px-6 py-3 text-foreground/80" data-label={tr('history.col.status', 'Status')}>
-                            {entry.status}
+                            {statusLabel(entry.status)}
                           </td>
                           <td className="px-6 py-3 text-right tabular-nums text-foreground font-medium" data-label={tr('history.col.amount', 'Amount')}>
                             {formatCents(entry.amount_cents, entry.currency)}

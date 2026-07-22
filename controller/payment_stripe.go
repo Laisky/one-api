@@ -161,7 +161,10 @@ func CreateStripeCheckout(c *gin.Context) {
 		}
 	}
 
-	userEmail, _ := model.GetUserEmail(userID)
+	userEmail, emailErr := model.GetUserEmail(userID)
+	if emailErr != nil {
+		logger.Warn("lookup user email for stripe receipt", zap.Error(emailErr), zap.Int("user_id", userID))
+	}
 	userEmail = strings.TrimSpace(userEmail)
 
 	sc := client.New(config.StripeSecretKey, nil)
@@ -282,29 +285,45 @@ func StripeWebhook(c *gin.Context) {
 		return
 	}
 
-	claimed, err := model.ClaimStripeWebhookEvent(ctx, event.ID, string(event.Type))
-	if err != nil {
-		logger.Error("claim stripe webhook event", zap.Error(err), zap.String("event_id", event.ID))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "event claim failed"})
+	// Skip work when this event id was already successfully processed.
+	seen, seenErr := model.HasStripeWebhookEvent(ctx, event.ID)
+	if seenErr != nil {
+		logger.Error("check stripe webhook event", zap.Error(seenErr), zap.String("event_id", event.ID))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "event lookup failed"})
 		return
 	}
-	if !claimed {
+	if seen {
 		c.JSON(http.StatusOK, gin.H{"received": true, "duplicate": true})
 		return
 	}
 
+	// Process first; claim only after success so Stripe can safely retry 5xx failures.
+	// Settlement itself is idempotent via pending→paid; claim only records successful delivery.
+	var finished bool
 	switch event.Type {
 	case "checkout.session.completed", "checkout.session.async_payment_succeeded":
-		handleCheckoutPaid(c, event)
+		finished = handleCheckoutPaid(c, event)
 	case "checkout.session.expired", "checkout.session.async_payment_failed":
-		handleCheckoutTerminal(c, event)
+		finished = handleCheckoutTerminal(c, event)
 	default:
 		c.JSON(http.StatusOK, gin.H{"received": true})
+		finished = true
+	}
+	if !finished {
+		return
+	}
+	if _, claimErr := model.ClaimStripeWebhookEvent(ctx, event.ID, string(event.Type)); claimErr != nil {
+		// Settlement already succeeded; log only. Duplicate claim is fine under concurrency.
+		if !model.IsDuplicateKeyErrorPublic(claimErr) {
+			logger.Warn("record processed stripe event", zap.Error(claimErr), zap.String("event_id", event.ID))
+		}
 	}
 }
 
 // handleCheckoutPaid settles a paid Checkout session and credits quota.
-func handleCheckoutPaid(c *gin.Context, event stripe.Event) {
+// It returns true when the HTTP response is terminal for Stripe (2xx) and the event may be claimed.
+// It returns false when a 5xx was written and Stripe should retry with the same event id.
+func handleCheckoutPaid(c *gin.Context, event stripe.Event) bool {
 	ctx := gmw.Ctx(c)
 	logger := gmw.GetLogger(c)
 	sessionID, _ := event.Data.Object["id"].(string)
@@ -321,7 +340,7 @@ func handleCheckoutPaid(c *gin.Context, event stripe.Event) {
 	}
 	if sessionID == "" || paymentStatus != "paid" {
 		c.JSON(http.StatusOK, gin.H{"received": true})
-		return
+		return true
 	}
 
 	transitioned, order, err := model.SettlePaidPaymentOrder(ctx, sessionID, time.Now().UnixMilli(), amountTotal, currency)
@@ -330,20 +349,20 @@ func handleCheckoutPaid(c *gin.Context, event stripe.Event) {
 			logger.Warn("stripe webhook for unknown session", zap.String("session_id", sessionID), zap.String("event_id", event.ID))
 			// Acknowledge so Stripe stops retrying; operator can reconcile via dashboard.
 			c.JSON(http.StatusOK, gin.H{"received": true, "unknown_session": true})
-			return
+			return true
 		}
 		logger.Error("settle payment order", zap.Error(err), zap.String("session_id", sessionID))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
+		return false
 	}
 	if order != nil && order.Status == model.PaymentStatusManualReview {
 		logger.Error("payment needs manual review", zap.String("session_id", sessionID), zap.Int("user_id", order.UserId))
 		c.JSON(http.StatusOK, gin.H{"received": true, "manual_review": true})
-		return
+		return true
 	}
 	if order == nil || !transitioned {
 		c.JSON(http.StatusOK, gin.H{"received": true})
-		return
+		return true
 	}
 
 	// Best-effort cache refresh and audit log (must not undo settlement).
@@ -354,16 +373,18 @@ func handleCheckoutPaid(c *gin.Context, event stripe.Event) {
 	model.RecordTopupLog(ctx, order.UserId, remark, int(order.Quota))
 
 	c.JSON(http.StatusOK, gin.H{"received": true})
+	return true
 }
 
 // handleCheckoutTerminal marks pending orders expired/failed without crediting quota.
-func handleCheckoutTerminal(c *gin.Context, event stripe.Event) {
+// It returns true when the response is terminal for Stripe and the event may be claimed.
+func handleCheckoutTerminal(c *gin.Context, event stripe.Event) bool {
 	ctx := gmw.Ctx(c)
 	logger := gmw.GetLogger(c)
 	sessionID, _ := event.Data.Object["id"].(string)
 	if sessionID == "" {
 		c.JSON(http.StatusOK, gin.H{"received": true})
-		return
+		return true
 	}
 	status := model.PaymentStatusCanceled
 	if event.Type == "checkout.session.async_payment_failed" {
@@ -372,7 +393,8 @@ func handleCheckoutTerminal(c *gin.Context, event stripe.Event) {
 	if err := model.MarkPaymentOrderStatus(ctx, sessionID, status); err != nil {
 		logger.Error("mark payment terminal status", zap.Error(err), zap.String("session_id", sessionID))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
+		return false
 	}
 	c.JSON(http.StatusOK, gin.H{"received": true})
+	return true
 }

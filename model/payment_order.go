@@ -36,9 +36,9 @@ var ErrPaymentOrderNotFound = errors.New("payment order not found")
 // for checkout creation retries.
 type PaymentOrder struct {
 	Id          int    `json:"id" gorm:"primaryKey"`
-	UserId      int    `json:"user_id" gorm:"index"`
+	UserId      int    `json:"user_id" gorm:"uniqueIndex:idx_payment_orders_user_request,priority:1"`
 	Provider    string `json:"provider" gorm:"type:varchar(32);index"`
-	RequestID   string `json:"request_id" gorm:"type:varchar(64);uniqueIndex"`
+	RequestID   string `json:"request_id" gorm:"type:varchar(64);uniqueIndex:idx_payment_orders_user_request,priority:2"`
 	SessionID   string `json:"session_id" gorm:"type:varchar(191);uniqueIndex"`
 	AmountCents int64  `json:"amount_cents" gorm:"bigint"`
 	Currency    string `json:"currency" gorm:"type:varchar(8)"`
@@ -172,8 +172,21 @@ func ListPaymentOrdersForUser(ctx context.Context, userID int, limit int) ([]*Pa
 	return orders, nil
 }
 
+// HasStripeWebhookEvent reports whether eventID was already recorded as processed.
+func HasStripeWebhookEvent(ctx context.Context, eventID string) (bool, error) {
+	eventID = strings.TrimSpace(eventID)
+	if eventID == "" {
+		return false, nil
+	}
+	var n int64
+	if err := DB.WithContext(ctx).Model(&StripeWebhookEvent{}).Where("event_id = ?", eventID).Count(&n).Error; err != nil {
+		return false, errors.Wrap(err, "count stripe webhook event")
+	}
+	return n > 0, nil
+}
+
 // ClaimStripeWebhookEvent records eventID if it has not been seen before.
-// Returns claimed=true when this call inserted the row and the caller should process the event.
+// Returns claimed=true when this call inserted the row (first successful record of this event).
 func ClaimStripeWebhookEvent(ctx context.Context, eventID, eventType string) (claimed bool, err error) {
 	eventID = strings.TrimSpace(eventID)
 	if eventID == "" {
@@ -197,8 +210,16 @@ func ClaimStripeWebhookEvent(ctx context.Context, eventID, eventType string) (cl
 
 // isDuplicateKeyError reports whether err is a unique constraint violation.
 func isDuplicateKeyError(err error) bool {
+	return IsDuplicateKeyErrorPublic(err)
+}
+
+// IsDuplicateKeyErrorPublic reports whether err is a unique constraint violation (exported for controllers).
+func IsDuplicateKeyErrorPublic(err error) bool {
 	if err == nil {
 		return false
+	}
+	if errors.Is(err, gorm.ErrDuplicatedKey) {
+		return true
 	}
 	msg := strings.ToLower(err.Error())
 	return strings.Contains(msg, "duplicate") ||
@@ -242,10 +263,28 @@ func SettlePaidPaymentOrder(ctx context.Context, sessionID string, paidAtMs int6
 			return nil
 		}
 		if expectedAmountCents > 0 && found.AmountCents != expectedAmountCents {
-			return errors.Errorf("amount mismatch: local %d stripe %d", found.AmountCents, expectedAmountCents)
+			if e := tx.Model(&found).Updates(map[string]any{
+				"status":  PaymentStatusManualReview,
+				"paid_at": paidAtMs,
+			}).Error; e != nil {
+				return errors.Wrap(e, "mark payment order manual_review after amount mismatch")
+			}
+			found.Status = PaymentStatusManualReview
+			found.PaidAt = paidAtMs
+			order = &found
+			return nil
 		}
 		if expectedCurrency != "" && !strings.EqualFold(found.Currency, expectedCurrency) {
-			return errors.Errorf("currency mismatch: local %s stripe %s", found.Currency, expectedCurrency)
+			if e := tx.Model(&found).Updates(map[string]any{
+				"status":  PaymentStatusManualReview,
+				"paid_at": paidAtMs,
+			}).Error; e != nil {
+				return errors.Wrap(e, "mark payment order manual_review after currency mismatch")
+			}
+			found.Status = PaymentStatusManualReview
+			found.PaidAt = paidAtMs
+			order = &found
+			return nil
 		}
 
 		// Optimistic claim: only one concurrent settler can flip pending → paid.
