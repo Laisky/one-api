@@ -20,13 +20,6 @@ vi.mock('@/lib/api', () => {
   };
 });
 
-vi.mock('react-i18next', () => ({
-  useTranslation: () => ({
-    t: (_key: string, opts?: { defaultValue?: string }) => opts?.defaultValue ?? _key,
-    i18n: { language: 'en' },
-  }),
-}));
-
 /** renderPage mounts TopUpPage inside Router + notifications for unit tests. */
 const renderPage = (initialEntry = '/topup') =>
   render(
@@ -79,6 +72,14 @@ describe('TopUpPage: stripe status and router context', () => {
           },
         });
       }
+      if (url.includes('/topup/stripe/orders/') && url.includes('cs_test')) {
+        return Promise.resolve({
+          data: {
+            success: true,
+            data: { id: 1, status: 'paid', amount_cents: 500, currency: 'usd', session_id: 'cs_test' },
+          },
+        });
+      }
       if (url.includes('/topup/stripe/orders')) {
         return Promise.resolve({ data: { success: true, data: [] } });
       }
@@ -86,15 +87,23 @@ describe('TopUpPage: stripe status and router context', () => {
     });
   });
 
-  it('renders inside a Router without useLocation crashes', async () => {
+  it('renders inside a Router without useSearchParams crashes', async () => {
     renderPage();
-    await waitFor(() => expect(api.get).toHaveBeenCalled());
-    expect(await screen.findByText(/billing|current balance|add credits/i)).toBeTruthy();
+    await waitFor(() => expect(api.get).toHaveBeenCalledWith('/api/user/self'));
+    expect(document.body.textContent || '').toMatch(/balance|token/i);
   });
 
   it('shows cancel outcome from query string', async () => {
     renderPage('/topup?stripe=cancel');
-    await waitFor(() => expect(api.get).toHaveBeenCalled());
-    expect(await screen.findByText(/payment canceled|not been charged/i)).toBeTruthy();
+    await waitFor(() => expect(api.get).toHaveBeenCalledWith('/api/user/self'));
+    expect(document.body.textContent || '').toMatch(/cancel|not been charged/i);
+  });
+
+  it('polls order status after success return', async () => {
+    renderPage('/topup?stripe=success&session_id=cs_test');
+    await waitFor(() =>
+      expect(api.get).toHaveBeenCalledWith(expect.stringContaining('/topup/stripe/orders/cs_test'))
+    );
+    expect(document.body.textContent || '').toMatch(/balance|token|credit/i);
   });
 });

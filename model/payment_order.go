@@ -263,28 +263,10 @@ func SettlePaidPaymentOrder(ctx context.Context, sessionID string, paidAtMs int6
 			return nil
 		}
 		if expectedAmountCents > 0 && found.AmountCents != expectedAmountCents {
-			if e := tx.Model(&found).Updates(map[string]any{
-				"status":  PaymentStatusManualReview,
-				"paid_at": paidAtMs,
-			}).Error; e != nil {
-				return errors.Wrap(e, "mark payment order manual_review after amount mismatch")
-			}
-			found.Status = PaymentStatusManualReview
-			found.PaidAt = paidAtMs
-			order = &found
-			return nil
+			return markPendingManualReview(tx, &found, paidAtMs, &order, "amount mismatch")
 		}
 		if expectedCurrency != "" && !strings.EqualFold(found.Currency, expectedCurrency) {
-			if e := tx.Model(&found).Updates(map[string]any{
-				"status":  PaymentStatusManualReview,
-				"paid_at": paidAtMs,
-			}).Error; e != nil {
-				return errors.Wrap(e, "mark payment order manual_review after currency mismatch")
-			}
-			found.Status = PaymentStatusManualReview
-			found.PaidAt = paidAtMs
-			order = &found
-			return nil
+			return markPendingManualReview(tx, &found, paidAtMs, &order, "currency mismatch")
 		}
 
 		// Optimistic claim: only one concurrent settler can flip pending → paid.
@@ -318,8 +300,9 @@ func SettlePaidPaymentOrder(ctx context.Context, sessionID string, paidAtMs int6
 				return errors.Wrapf(qres.Error, "increase quota for user %d in settle tx", found.UserId)
 			}
 			if qres.RowsAffected != 1 {
-				// User missing/deleted: keep a durable manual_review row (do not rollback claim).
-				if e := tx.Model(&found).Updates(map[string]any{
+				// User missing/deleted after claim: order is already paid in this tx; rewrite to manual_review.
+				// Scope by id only inside this transaction after we own the pending→paid claim.
+				if e := tx.Model(&found).Where("id = ?", found.Id).Updates(map[string]any{
 					"status":  PaymentStatusManualReview,
 					"paid_at": paidAtMs,
 				}).Error; e != nil {
@@ -345,6 +328,30 @@ func SettlePaidPaymentOrder(ctx context.Context, sessionID string, paidAtMs int6
 		return false, nil, err
 	}
 	return transitioned, order, nil
+}
+
+// markPendingManualReview flips a still-pending order to manual_review inside tx.
+// If another settler already left a terminal status, reloads that status into orderOut and returns nil.
+func markPendingManualReview(tx *gorm.DB, found *PaymentOrder, paidAtMs int64, orderOut **PaymentOrder, reason string) error {
+	res := tx.Model(found).Where("status = ?", PaymentStatusPending).Updates(map[string]any{
+		"status":  PaymentStatusManualReview,
+		"paid_at": paidAtMs,
+	})
+	if res.Error != nil {
+		return errors.Wrapf(res.Error, "mark payment order manual_review after %s", reason)
+	}
+	if res.RowsAffected == 0 {
+		var latest PaymentOrder
+		if e := tx.Where("id = ?", found.Id).First(&latest).Error; e != nil {
+			return errors.Wrapf(e, "reload payment order after empty manual_review claim (%s)", reason)
+		}
+		*orderOut = &latest
+		return nil
+	}
+	found.Status = PaymentStatusManualReview
+	found.PaidAt = paidAtMs
+	*orderOut = found
+	return nil
 }
 
 // MarkPaymentOrderStatus sets a terminal non-paid status on a pending order by session id.

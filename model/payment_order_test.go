@@ -142,6 +142,7 @@ func TestSettlePaidPaymentOrderConcurrent(t *testing.T) {
 
 	var wg sync.WaitGroup
 	var transitioned atomic.Int64
+	var exhausted atomic.Int64
 	for i := 0; i < 8; i++ {
 		wg.Add(1)
 		go func() {
@@ -158,9 +159,11 @@ func TestSettlePaidPaymentOrderConcurrent(t *testing.T) {
 				}
 				return
 			}
+			exhausted.Add(1)
 		}()
 	}
 	wg.Wait()
+	require.Zero(t, exhausted.Load(), "concurrent settlers exhausted retries")
 	require.Equal(t, int64(1), transitioned.Load())
 	var u User
 	require.NoError(t, DB.First(&u, 3).Error)
