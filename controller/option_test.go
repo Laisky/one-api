@@ -72,6 +72,28 @@ func callUpdateOption(t *testing.T, key, value string) (int, map[string]any) {
 	return w.Code, resp
 }
 
+// callUpdateOptionBody posts an arbitrary JSON body to the UpdateOption handler,
+// allowing fields the model.Option struct does not carry (e.g. the "clear" flag).
+func callUpdateOptionBody(t *testing.T, body any) (int, map[string]any) {
+	t.Helper()
+
+	raw, err := json.Marshal(body)
+	require.NoError(t, errors.Wrap(err, "marshal option payload"))
+
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodPut, "/api/option", bytes.NewReader(raw))
+	c.Request.Header.Set("Content-Type", "application/json")
+
+	UpdateOption(c)
+
+	var resp map[string]any
+	if w.Body.Len() > 0 {
+		require.NoError(t, errors.Wrap(json.Unmarshal(w.Body.Bytes(), &resp), "decode handler response"))
+	}
+	return w.Code, resp
+}
+
 // loadStoredOption returns the persisted option row keyed by its primary key
 // or nil when no row exists.
 func loadStoredOption(t *testing.T, key string) *model.Option {
@@ -222,4 +244,74 @@ func TestUpdateOption_SensitiveValueStillUpdatable(t *testing.T) {
 	stored := loadStoredOption(t, "OidcClientSecret")
 	require.NotNil(t, stored)
 	assert.Equal(t, "second-secret", stored.Value, "rotation to a new secret must update the row")
+}
+
+// TestUpdateOption_ClearRemovesSensitiveSecret verifies an explicit clear:true wipes
+// a stored secret, whereas a plain empty submission would be ignored. This is what
+// makes a persisted ResendAPIKey removable through the admin UI.
+func TestUpdateOption_ClearRemovesSensitiveSecret(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	cleanup := setupOptionTestEnvironment(t)
+	t.Cleanup(cleanup)
+
+	// Store a real secret first.
+	status, resp := callUpdateOption(t, "ResendAPIKey", "re_live_key")
+	require.Equal(t, http.StatusOK, status)
+	require.True(t, resp["success"].(bool))
+	stored := loadStoredOption(t, "ResendAPIKey")
+	require.NotNil(t, stored)
+	require.Equal(t, "re_live_key", stored.Value)
+
+	// A plain empty save is still ignored (guards against accidental wipes).
+	status, resp = callUpdateOption(t, "ResendAPIKey", "")
+	require.Equal(t, http.StatusOK, status)
+	require.Equal(t, "empty value ignored for sensitive option", resp["message"])
+	stored = loadStoredOption(t, "ResendAPIKey")
+	require.NotNil(t, stored)
+	require.Equal(t, "re_live_key", stored.Value, "empty save must not clear the secret")
+
+	// An explicit clear removes it.
+	status, resp = callUpdateOptionBody(t, map[string]any{"key": "ResendAPIKey", "value": "", "clear": true})
+	require.Equal(t, http.StatusOK, status)
+	require.True(t, resp["success"].(bool))
+	assert.NotEqual(t, "empty value ignored for sensitive option", resp["message"],
+		"clear must bypass the empty-value protection")
+	stored = loadStoredOption(t, "ResendAPIKey")
+	require.NotNil(t, stored, "row should still exist after clear")
+	assert.Equal(t, "", stored.Value, "clear:true must remove the stored secret")
+	assert.Equal(t, "", config.ResendAPIKey, "in-memory config must reflect the cleared secret")
+}
+
+// TestUpdateOption_EmailProviderValidation verifies the provider is normalized,
+// accepts the empty (auto) value, and rejects unknown values.
+func TestUpdateOption_EmailProviderValidation(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	cleanup := setupOptionTestEnvironment(t)
+	t.Cleanup(cleanup)
+
+	// Explicit resend.
+	status, resp := callUpdateOption(t, "EmailProvider", "resend")
+	require.Equal(t, http.StatusOK, status)
+	require.True(t, resp["success"].(bool))
+	require.Equal(t, "resend", loadStoredOption(t, "EmailProvider").Value)
+
+	// Mixed-case is normalized.
+	status, _ = callUpdateOption(t, "EmailProvider", "SMTP")
+	require.Equal(t, http.StatusOK, status)
+	require.Equal(t, "smtp", loadStoredOption(t, "EmailProvider").Value)
+
+	// Empty (auto) is accepted and persisted — this is how the UI restores Auto.
+	status, resp = callUpdateOption(t, "EmailProvider", "")
+	require.Equal(t, http.StatusOK, status)
+	require.True(t, resp["success"].(bool))
+	assert.NotEqual(t, "empty value ignored for sensitive option", resp["message"],
+		"EmailProvider is not sensitive; empty must persist as auto")
+	require.Equal(t, "", loadStoredOption(t, "EmailProvider").Value)
+
+	// Unknown value is rejected. The /api convention answers with HTTP 200 and
+	// {success:false}, so assert on the body rather than the status code.
+	_, resp = callUpdateOption(t, "EmailProvider", "postfix")
+	require.False(t, resp["success"].(bool))
+	require.Contains(t, resp["message"], "invalid email provider")
+	require.Equal(t, "", loadStoredOption(t, "EmailProvider").Value, "invalid provider must not overwrite")
 }

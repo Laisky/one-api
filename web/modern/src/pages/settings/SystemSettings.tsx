@@ -124,13 +124,22 @@ const SENSITIVE_OPTION_KEYS = new Set<string>([
 ]);
 
 interface EnumChoice {
+  // value is what the Radix Select renders (must be non-empty; Radix forbids '').
   value: string;
+  // storedValue is what gets persisted; defaults to `value`. Use '' for an
+  // "auto/unset" choice so the empty backend state stays selectable and restorable.
+  storedValue?: string;
   labelKey: string;
 }
+
+// EMAIL_PROVIDER_AUTO is the UI sentinel for the empty ("auto") EmailProvider value,
+// since Radix Select items cannot use an empty string as their value.
+const EMAIL_PROVIDER_AUTO = '__auto__';
 
 // ENUM_OPTION_KEYS lists option keys whose value is a fixed enum, rendered as a select.
 const ENUM_OPTION_KEYS: Record<string, EnumChoice[]> = {
   EmailProvider: [
+    { value: EMAIL_PROVIDER_AUTO, storedValue: '', labelKey: 'system_settings.email_provider.auto' },
     { value: 'smtp', labelKey: 'system_settings.email_provider.smtp' },
     { value: 'resend', labelKey: 'system_settings.email_provider.resend' },
   ],
@@ -372,6 +381,10 @@ export function SystemSettings() {
     async (key: string, value: string | string[]) => {
       // Intercept array values for multi-tag options like EmailDomainWhitelist
       const serialized = Array.isArray(value) ? value.join(',') : value;
+      // Never retain a submitted secret in client state. GetOptions strips sensitive
+      // values on reload, so mirror that here: store '' for sensitive keys so the
+      // parent → child prop sync can never repopulate the plaintext secret.
+      const valueForState = SENSITIVE_OPTION_KEYS.has(key) ? '' : serialized;
       try {
         // Unified API call - complete URL with /api prefix
         const response = await api.put('/api/option/', { key, value: serialized });
@@ -381,9 +394,9 @@ export function SystemSettings() {
         setOptions((prev) => {
           const index = prev.findIndex((opt) => opt.key === key);
           if (index === -1) {
-            return [...prev, { key, value: serialized }];
+            return [...prev, { key, value: valueForState }];
           }
-          return prev.map((opt) => (opt.key === key ? { ...opt, value: serialized } : opt));
+          return prev.map((opt) => (opt.key === key ? { ...opt, value: valueForState } : opt));
         });
         notify({
           type: 'success',
@@ -392,6 +405,42 @@ export function SystemSettings() {
         });
       } catch (error: any) {
         console.error('Error saving option:', error);
+        const errMsg = error?.response?.data?.message || error?.message || 'Unknown error';
+        notify({
+          type: 'error',
+          title: t('system_settings.save_failed'),
+          message: String(errMsg),
+        });
+        throw error;
+      }
+    },
+    [notify, t]
+  );
+
+  // clearSensitive removes a stored secret via an explicit clear:true request.
+  // Empty saves are ignored server-side for sensitive keys, so this is the only
+  // way to wipe a persisted credential (e.g. a ResendAPIKey) from the admin UI.
+  const clearSensitive = useCallback(
+    async (key: string) => {
+      try {
+        const response = await api.put('/api/option/', { key, value: '', clear: true });
+        if (!response.data?.success) {
+          throw new Error(response.data?.message || t('system_settings.save_failed'));
+        }
+        setOptions((prev) => {
+          const index = prev.findIndex((opt) => opt.key === key);
+          if (index === -1) {
+            return [...prev, { key, value: '' }];
+          }
+          return prev.map((opt) => (opt.key === key ? { ...opt, value: '' } : opt));
+        });
+        notify({
+          type: 'success',
+          title: t('system_settings.saved_success'),
+          message: t('system_settings.saved_message', { key }),
+        });
+      } catch (error: any) {
+        console.error('Error clearing option:', error);
         const errMsg = error?.response?.data?.message || error?.message || 'Unknown error';
         notify({
           type: 'error',
@@ -534,6 +583,7 @@ export function SystemSettings() {
                               isSensitive={isSensitive}
                               isBoolean={isBooleanOptionKey(option.key)}
                               onSave={save}
+                              onClear={clearSensitive}
                               extraAction={
                                 <Button type="button" variant="outline" onClick={handleOidcDiscovery}>
                                   {t('system_settings.oidc_discovery.button')}
@@ -551,6 +601,7 @@ export function SystemSettings() {
                             isBoolean={isBooleanOptionKey(option.key)}
                             enumChoices={ENUM_OPTION_KEYS[option.key]}
                             onSave={save}
+                            onClear={clearSensitive}
                           />
                         );
                       })}
@@ -575,6 +626,7 @@ export function SystemSettings() {
                         isBoolean={isBooleanOptionKey(opt.key)}
                         enumChoices={ENUM_OPTION_KEYS[opt.key]}
                         onSave={save}
+                        onClear={clearSensitive}
                       />
                     ))}
                   </div>
@@ -596,13 +648,14 @@ interface OptionItemProps {
   option: OptionRow;
   description?: string;
   onSave: (key: string, value: string | string[]) => Promise<void>;
+  onClear?: (key: string) => Promise<void>;
   isSensitive?: boolean;
   isBoolean?: boolean;
   enumChoices?: EnumChoice[];
   extraAction?: React.ReactNode;
 }
 
-function OptionItem({ option, description, onSave, isSensitive, isBoolean, enumChoices, extraAction }: OptionItemProps) {
+function OptionItem({ option, description, onSave, onClear, isSensitive, isBoolean, enumChoices, extraAction }: OptionItemProps) {
   const { t } = useTranslation();
   const [value, setValue] = useState(option.value);
   const [isSaving, setIsSaving] = useState(false);
@@ -645,6 +698,34 @@ function OptionItem({ option, description, onSave, isSensitive, isBoolean, enumC
     [handleSave]
   );
 
+  // handleEnumChange maps the Radix Select UI value back to the persisted value
+  // (e.g. the Auto sentinel maps to an empty string) before saving.
+  const handleEnumChange = useCallback(
+    (uiValue: string) => {
+      const choice = enumChoices?.find((c) => c.value === uiValue);
+      const stored = choice ? choice.storedValue ?? choice.value : uiValue;
+      setValue(stored);
+      handleSave(stored);
+    },
+    [enumChoices, handleSave]
+  );
+
+  const handleClear = useCallback(async () => {
+    if (isSaving || !onClear) return;
+    setIsSaving(true);
+    try {
+      await onClear(option.key);
+      setValue('');
+    } catch (_error) {
+      // Leave the current input untouched on failure.
+    } finally {
+      setIsSaving(false);
+    }
+  }, [isSaving, onClear, option.key]);
+
+  // Map the persisted value to the Select's UI value (inverse of storedValue).
+  const enumSelected = enumChoices?.find((choice) => (choice.storedValue ?? choice.value) === value)?.value;
+
   const placeholder = isSensitive ? t('system_settings.sensitive_placeholder') : undefined;
   const optionValueAriaLabel = t('system_settings.option_value_aria', {
     key: option.key,
@@ -681,7 +762,7 @@ function OptionItem({ option, description, onSave, isSensitive, isBoolean, enumC
             </SelectContent>
           </Select>
         ) : enumChoices && enumChoices.length > 0 ? (
-          <Select value={value === '' ? undefined : value} onValueChange={handleBooleanChange} disabled={isSaving}>
+          <Select value={enumSelected} onValueChange={handleEnumChange} disabled={isSaving}>
             <SelectTrigger className="flex-1" aria-label={optionValueAriaLabel} disabled={isSaving}>
               <SelectValue placeholder={t('system_settings.select_value')} />
             </SelectTrigger>
@@ -695,6 +776,7 @@ function OptionItem({ option, description, onSave, isSensitive, isBoolean, enumC
           </Select>
         ) : (
           <Input
+            type={isSensitive ? 'password' : undefined}
             value={value}
             onChange={(e) => setValue(e.target.value)}
             onBlur={handleBlur}
@@ -707,6 +789,11 @@ function OptionItem({ option, description, onSave, isSensitive, isBoolean, enumC
         <Button variant="outline" onClick={() => handleSave()} disabled={isSaving}>
           {isSaving ? t('system_settings.saving') : t('system_settings.save')}
         </Button>
+        {isSensitive && onClear && (
+          <Button variant="ghost" onClick={handleClear} disabled={isSaving} aria-label={t('system_settings.clear_aria', { key: option.key })}>
+            {t('system_settings.clear')}
+          </Button>
+        )}
         {extraAction}
       </div>
       {isSensitive && <p className="text-xs text-muted-foreground">{t('system_settings.sensitive_hint')}</p>}

@@ -11,6 +11,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/mail"
 	"net/smtp"
 	"strings"
 	"time"
@@ -39,6 +40,11 @@ type ResendEmailResponse struct {
 
 // resendAPIURL is the Resend emails endpoint. Tests may override it to point at httptest.
 var resendAPIURL = "https://api.resend.com/emails"
+
+// resendMaxRecipientsPerRequest is the maximum number of addresses Resend accepts
+// in the "to" field of a single send request. Larger lists are split into batches.
+// See https://resend.com/docs/api-reference/emails/send-email ("to ... Max 50").
+const resendMaxRecipientsPerRequest = 50
 
 // resendHTTPClient is shared across Resend sends to reuse TCP connections.
 var resendHTTPClient = &http.Client{
@@ -130,9 +136,38 @@ func shouldAuth() bool {
 	return config.SMTPAccount != "" || config.SMTPToken != ""
 }
 
+// resendSenderAddress builds the RFC 5322 "from" header for Resend.
+// Resend requires the address to be on a verified domain. It prefers SMTPFrom,
+// falls back to SMTPAccount, and attaches the SystemName as the display name when
+// the base address does not already carry one. net/mail handles the quoting/encoding
+// so display names containing commas, quotes, or non-ASCII characters stay valid
+// (e.g. `"Acme, Inc." <noreply@acme.com>`); a raw concatenation would produce a
+// malformed mailbox that Resend rejects with invalid_from_address.
+func resendSenderAddress() (string, error) {
+	fromAddr := strings.TrimSpace(config.SMTPFrom)
+	if fromAddr == "" {
+		fromAddr = strings.TrimSpace(config.SMTPAccount)
+	}
+	if fromAddr == "" {
+		return "", errors.New("Resend sender address is not configured (set SMTPFrom or SMTPAccount)")
+	}
+
+	addr, err := mail.ParseAddress(fromAddr)
+	if err != nil {
+		return "", errors.Wrapf(err, "invalid Resend sender address %q", fromAddr)
+	}
+	if name := strings.TrimSpace(config.SystemName); name != "" && addr.Name == "" {
+		addr.Name = name
+	}
+
+	return addr.String(), nil
+}
+
 // sendEmailViaResend posts an HTML email through the Resend HTTP API.
 // It returns an error when the API key is missing, no recipients are valid,
-// the HTTP request fails, or Resend responds with a non-2xx status.
+// the sender address is unconfigured, the HTTP request fails, or Resend responds
+// with a non-2xx status. Recipient lists longer than resendMaxRecipientsPerRequest
+// are split into multiple requests so a large notification is never rejected wholesale.
 func sendEmailViaResend(subject, receiver, content string) error {
 	if config.ResendAPIKey == "" {
 		return errors.New("Resend API key is not configured")
@@ -150,24 +185,29 @@ func sendEmailViaResend(subject, receiver, content string) error {
 		return errors.New("no valid recipient email addresses")
 	}
 
-	// Resend requires the from address to be on a verified domain. Prefer SMTPFrom,
-	// fall back to SMTPAccount, and wrap with the SystemName display name when both
-	// are set so the recipient inbox shows a friendly sender (e.g. "Acme <noreply@acme.com>").
-	fromAddr := strings.TrimSpace(config.SMTPFrom)
-	if fromAddr == "" {
-		fromAddr = strings.TrimSpace(config.SMTPAccount)
-	}
-	if fromAddr == "" {
-		return errors.New("Resend sender address is not configured (set SMTPFrom or SMTPAccount)")
-	}
-	from := fromAddr
-	if name := strings.TrimSpace(config.SystemName); name != "" && !strings.Contains(fromAddr, "<") {
-		from = fmt.Sprintf("%s <%s>", name, fromAddr)
+	from, err := resendSenderAddress()
+	if err != nil {
+		return err
 	}
 
+	for start := 0; start < len(emails); start += resendMaxRecipientsPerRequest {
+		end := start + resendMaxRecipientsPerRequest
+		if end > len(emails) {
+			end = len(emails)
+		}
+		if err := postResendEmail(from, emails[start:end], subject, content); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// postResendEmail sends a single Resend request for at most resendMaxRecipientsPerRequest recipients.
+func postResendEmail(from string, to []string, subject, content string) error {
 	reqBody := ResendEmailRequest{
 		From:    from,
-		To:      emails,
+		To:      to,
 		Subject: subject,
 		Html:    content,
 	}

@@ -277,6 +277,8 @@
     "title": "設定"
   },
   "system_settings": {
+    "clear": "クリア",
+    "clear_aria": "{{key}} をクリア",
     "description": "システム全体の設定とオプションを管理します。",
     "descriptions": {
       "About": "About ページのコンテンツ（Markdown/HTML 対応）。",
@@ -289,6 +291,7 @@
       "DisplayTokenStatEnabled": "トークン統計をログ・ダッシュボードに表示します。",
       "EmailDomainRestrictionEnabled": "下記のドメインのみ登録を許可します。",
       "EmailDomainWhitelist": "許可されたメールドメイン（カンマ区切り。例: gmail.com, example.com）。",
+      "EmailProvider": "送信メールを送るバックエンド。自動（Auto）は API キーが設定されていれば Resend、なければ SMTP を使用します。SMTP または Resend を選ぶと固定できます。Railway など SMTP を遮断する PaaS では Resend を推奨します。",
       "EmailVerificationEnabled": "登録やパスワードリセットなどでメール認証を必須にします。",
       "Footer": "サイト全体で表示されるフッターのテキスト／HTML。",
       "GitHubClientId": "GitHub OAuth のクライアント ID（ログインに使用）。",
@@ -319,9 +322,8 @@
       "QuotaPerUnit": "通貨表示用の換算レート。値が大きいほど 1 ドルあたりのクォータが増えます。",
       "QuotaRemindThreshold": "残りクォータがこの値を下回ると通知します。",
       "RegisterEnabled": "ユーザー登録のマスタースイッチです。オフにすると新規登録が停止します。",
+      "ResendAPIKey": "Resend API キー（re_ で始まる）。メールプロバイダーが Resend、または自動（Auto）でキーが設定されている場合に使用します。安全に保管され、表示されません。保存済みのキーを削除するには「クリア」を使用します。",
       "RetryTimes": "上流への再試行回数を自動制御します。",
-      "EmailProvider": "送信メールのバックエンド。SMTP サーバーまたは Resend HTTP API を選択します（Railway など SMTP が遮断される PaaS では Resend 推奨）。",
-      "ResendAPIKey": "Resend API キー（re_ で始まる）。メールプロバイダーが Resend の場合にのみ使用します。安全に保管。",
       "SMTPAccount": "SMTP 認証に使用するユーザー名／メールアドレス。メールプロバイダーが SMTP の場合にのみ使用されます。",
       "SMTPFrom": "送信メールに使用する送信元アドレス。Resend の場合、ドメインは Resend 側で事前検証が必要です。",
       "SMTPPort": "SMTP サーバーのポート（例: STARTTLS=587, SMTPS=465）。メールプロバイダーが SMTP の場合にのみ使用。",
@@ -341,6 +343,7 @@
     },
     "disabled": "無効",
     "email_provider": {
+      "auto": "自動（キーがあれば Resend、なければ SMTP）",
       "resend": "Resend (HTTP API)",
       "smtp": "SMTP"
     },

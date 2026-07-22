@@ -277,6 +277,8 @@
     "title": "设置"
   },
   "system_settings": {
+    "clear": "清除",
+    "clear_aria": "清除 {{key}}",
     "description": "配置系统级设置和选项。",
     "descriptions": {
       "About": "关于页面内容（前端渲染支持 Markdown/HTML）。",
@@ -289,6 +291,7 @@
       "DisplayTokenStatEnabled": "在日志和仪表盘中显示 Token 统计信息（如果可用）。",
       "EmailDomainRestrictionEnabled": "仅允许下列域名的邮箱注册。",
       "EmailDomainWhitelist": "允许的邮箱域名列表，用逗号分隔（例如 gmail.com, example.com）。",
+      "EmailProvider": "用于发送邮件的后端。自动（Auto）：配置了 Resend 密钥则使用 Resend，否则使用 SMTP；也可强制选择 SMTP 或 Resend。Resend 推荐用于 Railway 等封禁出站 SMTP 的 PaaS 平台。",
       "EmailVerificationEnabled": "要求邮箱验证才能进行注册或重置密码等操作。",
       "Footer": "全站显示的页脚文本或 HTML。",
       "GitHubClientId": "用于登录的 GitHub OAuth 客户端 ID。",
@@ -319,9 +322,8 @@
       "QuotaPerUnit": "货币显示的转换比率。值越高，每 1 美元代表的配额越多。",
       "QuotaRemindThreshold": "当剩余配额低于此值时，将提醒用户。",
       "RegisterEnabled": "用户注册总开关。关闭以停止所有新注册。",
+      "ResendAPIKey": "Resend API 密钥（以 re_ 开头）。在邮件后端为 Resend，或为自动（Auto）且已配置密钥时使用。安全存储，从不显示；点击“清除”可移除已保存的密钥。",
       "RetryTimes": "上游请求出现瞬时错误时的自动重试次数。",
-      "EmailProvider": "用于发送邮件的后端。选择 SMTP 使用传统邮件服务器，或选择 Resend 使用 Resend HTTP API（推荐用于 Railway 等封禁出站 SMTP 的 PaaS 平台）。",
-      "ResendAPIKey": "Resend API 密钥（以 re_ 开头）。仅在邮件后端选择 Resend 时使用。安全存储，从不显示。",
       "SMTPAccount": "用于认证的 SMTP 用户名或帐户邮箱。仅在邮件后端选择 SMTP 时使用。",
       "SMTPFrom": "外发邮件中使用的发件人地址（例如 no-reply@yourdomain）。使用 Resend 时，域名必须已在 Resend 后台完成验证。",
       "SMTPPort": "SMTP 服务器端口（例如 STARTTLS 为 587，SMTPS 为 465）。仅在邮件后端选择 SMTP 时使用。",
@@ -341,6 +343,7 @@
     },
     "disabled": "已禁用",
     "email_provider": {
+      "auto": "自动（若配置了密钥则使用 Resend，否则 SMTP）",
       "resend": "Resend (HTTP API)",
       "smtp": "SMTP"
     },

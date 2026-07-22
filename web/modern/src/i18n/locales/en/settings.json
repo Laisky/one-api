@@ -277,6 +277,8 @@
     "title": "Settings"
   },
   "system_settings": {
+    "clear": "Clear",
+    "clear_aria": "Clear {{key}}",
     "description": "Configure system-wide settings and options.",
     "descriptions": {
       "About": "About page content (markdown/HTML supported by frontend rendering).",
@@ -289,6 +291,7 @@
       "DisplayTokenStatEnabled": "Display token statistics in logs and dashboards when available.",
       "EmailDomainRestrictionEnabled": "Only allow registrations from domains listed below.",
       "EmailDomainWhitelist": "Comma-separated allowed email domains (e.g., gmail.com, example.com).",
+      "EmailProvider": "Which backend sends outbound email. Auto uses Resend when an API key is set, otherwise SMTP; choose SMTP or Resend to force one backend. Resend is recommended for PaaS like Railway that block outbound SMTP.",
       "EmailVerificationEnabled": "Require email verification for actions like registration or password reset.",
       "Footer": "Footer text or HTML displayed site‑wide.",
       "GitHubClientId": "GitHub OAuth Client ID used for login.",
@@ -319,9 +322,8 @@
       "QuotaPerUnit": "Conversion ratio for currency display. Higher value makes each $ represent more quota.",
       "QuotaRemindThreshold": "When remaining quota falls below this value, users will be reminded.",
       "RegisterEnabled": "Master switch for user registration. Turn off to stop all new sign-ups.",
+      "ResendAPIKey": "Resend API key (starts with re_). Used when Email Provider is Resend, or Auto with a key present. Stored securely and never displayed; use Clear to remove a stored key.",
       "RetryTimes": "Automatic retry attempts for upstream requests on transient errors.",
-      "EmailProvider": "Which backend to use for outbound email. Pick SMTP for a traditional mail server, or Resend to send via the Resend HTTP API (recommended for PaaS like Railway that block outbound SMTP).",
-      "ResendAPIKey": "Resend API key (starts with re_). Only used when Email Provider is set to Resend. Stored securely and never displayed.",
       "SMTPAccount": "SMTP username or account email used to authenticate. Only used when Email Provider is SMTP.",
       "SMTPFrom": "From address used in outgoing emails (e.g., no-reply@yourdomain). For Resend, the domain must be verified in your Resend account.",
       "SMTPPort": "SMTP server port (e.g., 587 for STARTTLS, 465 for SMTPS). Only used when Email Provider is SMTP.",
@@ -341,6 +343,7 @@
     },
     "disabled": "Disabled",
     "email_provider": {
+      "auto": "Auto (Resend if key set, otherwise SMTP)",
       "resend": "Resend (HTTP API)",
       "smtp": "SMTP"
     },

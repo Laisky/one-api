@@ -277,6 +277,8 @@
     "title": "Configuración"
   },
   "system_settings": {
+    "clear": "Borrar",
+    "clear_aria": "Borrar {{key}}",
     "description": "Configura las opciones y ajustes globales del sistema.",
     "descriptions": {
       "About": "Contenido de la página Acerca de (Markdown/HTML compatibles con el frontend).",
@@ -289,6 +291,7 @@
       "DisplayTokenStatEnabled": "Muestra estadísticas de tokens en registros y paneles cuando existan.",
       "EmailDomainRestrictionEnabled": "Permite registros solo desde los dominios listados.",
       "EmailDomainWhitelist": "Dominios de correo permitidos separados por comas (p. ej. gmail.com, example.com).",
+      "EmailProvider": "Backend que envía el correo saliente. Auto usa Resend cuando hay una clave API configurada; de lo contrario, SMTP. Elige SMTP o Resend para forzar uno. Resend se recomienda en PaaS como Railway que bloquean el SMTP saliente.",
       "EmailVerificationEnabled": "Exige verificación por correo para acciones como registro o restablecimiento de contraseña.",
       "Footer": "Texto o HTML del pie de página mostrado en todo el sitio.",
       "GitHubClientId": "ID de cliente OAuth de GitHub usado para iniciar sesión.",
@@ -319,9 +322,8 @@
       "QuotaPerUnit": "Relación de conversión para mostrar cuotas como moneda.",
       "QuotaRemindThreshold": "Se notifica a los usuarios cuando la cuota restante baja de este valor.",
       "RegisterEnabled": "Interruptor maestro para los registros. Desactívalo para bloquear nuevos registros.",
+      "ResendAPIKey": "Clave API de Resend (empieza con re_). Se usa cuando el proveedor de correo es Resend, o Auto con una clave configurada. Se almacena de forma segura y nunca se muestra; usa Borrar para eliminar una clave guardada.",
       "RetryTimes": "Reintentos automáticos ante errores transitorios aguas arriba.",
-      "EmailProvider": "Backend para el envío de correo. Selecciona SMTP para un servidor tradicional o Resend para usar la API HTTP de Resend (recomendado en PaaS como Railway que bloquean SMTP saliente).",
-      "ResendAPIKey": "Clave API de Resend (empieza con re_). Solo se usa cuando el proveedor de correo es Resend. Se almacena de forma segura.",
       "SMTPAccount": "Usuario o correo SMTP usado para autenticarse. Solo se usa con el backend SMTP.",
       "SMTPFrom": "Dirección del remitente para correos salientes. Con Resend, el dominio debe estar verificado en tu cuenta de Resend.",
       "SMTPPort": "Puerto del servidor SMTP (p. ej. 587 para STARTTLS, 465 para SMTPS). Solo se usa con el backend SMTP.",
@@ -341,6 +343,7 @@
     },
     "disabled": "Desactivado",
     "email_provider": {
+      "auto": "Auto (Resend si hay clave, si no SMTP)",
       "resend": "Resend (API HTTP)",
       "smtp": "SMTP"
     },
