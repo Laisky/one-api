@@ -136,6 +136,20 @@ var (
 		CompletionRatio:  9.00 / 1.50,
 		CachedInputRatio: 0.15 * ratio.MilliTokensUsd,
 	}
+	// gemini36FlashPricing reflects Google Cloud Agent Platform standard pricing:
+	// $1.50 input / $7.50 output / $0.15 cached, with unified text/image/video/audio input.
+	gemini36FlashPricing = adaptor.ModelConfig{
+		Ratio:            1.50 * ratio.MilliTokensUsd,
+		CompletionRatio:  7.50 / 1.50,
+		CachedInputRatio: 0.15 * ratio.MilliTokensUsd,
+	}
+	// gemini35FlashLitePricing reflects Google Cloud Agent Platform standard pricing:
+	// $0.30 input / $2.50 output / $0.03 cached, with unified text/image/video/audio input.
+	gemini35FlashLitePricing = adaptor.ModelConfig{
+		Ratio:            0.30 * ratio.MilliTokensUsd,
+		CompletionRatio:  2.50 / 0.30,
+		CachedInputRatio: 0.03 * ratio.MilliTokensUsd,
+	}
 	gemini31FlashLivePreviewPricing = adaptor.ModelConfig{
 		Ratio:           0.75 * ratio.MilliTokensUsd,
 		CompletionRatio: 4.50 / 0.75,
@@ -190,7 +204,8 @@ var (
 
 // ModelRatios contains all supported models and their pricing ratios
 // Model list is derived from the keys of this map, eliminating redundancy
-// Based on Vertex AI pricing: https://cloud.google.com/vertex-ai/generative-ai/pricing
+// Based on Google Cloud Agent Platform pricing:
+// https://cloud.google.com/gemini-enterprise-agent-platform/generative-ai/pricing
 //
 // ⚠️ Note: should also check relay/adaptor/vertexai/adaptor.go:IsRequireGlobalEndpoint
 var ModelRatios = map[string]adaptor.ModelConfig{
@@ -299,6 +314,12 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 	// It is Google's most intelligent Flash tier with 1M context, dynamic thinking by default,
 	// and unified input pricing across text/image/audio/video modalities.
 	"gemini-3.5-flash": gemini35FlashPricing,
+	// Google Cloud Agent Platform pricing lists Gemini 3.6 Flash as the newer Flash tier.
+	// Source: https://cloud.google.com/gemini-enterprise-agent-platform/generative-ai/pricing
+	"gemini-3.6-flash": gemini36FlashPricing,
+	// Google Cloud Agent Platform pricing lists Gemini 3.5 Flash-Lite as a mid-tier Lite model.
+	// Source: https://cloud.google.com/gemini-enterprise-agent-platform/generative-ai/pricing
+	"gemini-3.5-flash-lite": gemini35FlashLitePricing,
 	// gemini-omni-flash-preview is Google's unified any-to-any Flash tier: it accepts
 	// text/image/video/audio input and can emit native video output. Text billing is
 	// $1.50 input / $9.00 output (CompletionRatio 6). Upstream also bills native video
@@ -380,22 +401,22 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 
 	// Gemini 2.0 Flash Models
 	"gemini-2.0-flash": {
-		Ratio:            0.10 * ratio.MilliTokensUsd,
-		CompletionRatio:  0.40 / 0.10,
-		CachedInputRatio: 0.025 * ratio.MilliTokensUsd,
+		Ratio:            0.15 * ratio.MilliTokensUsd,
+		CompletionRatio:  0.60 / 0.15,
+		CachedInputRatio: 0.0375 * ratio.MilliTokensUsd,
 		Audio: &adaptor.AudioPricingConfig{
-			PromptRatio:     0.70 / 0.10,
-			CompletionRatio: 0.15 / 1.00,
+			PromptRatio:     1.00 / 0.15,
+			CompletionRatio: 0.30 / 1.00,
 		},
 	},
 	"gemini-2.0-flash-image": {
-		Ratio:            0.10 * ratio.MilliTokensUsd,
-		CompletionRatio:  0.40 / 0.10,
-		CachedInputRatio: 0.025 * ratio.MilliTokensUsd,
+		Ratio:            0.15 * ratio.MilliTokensUsd,
+		CompletionRatio:  0.60 / 0.15,
+		CachedInputRatio: 0.0375 * ratio.MilliTokensUsd,
 		Image:            geminiImageConfig(0.039),
 		Audio: &adaptor.AudioPricingConfig{
-			PromptRatio:     0.70 / 0.10,
-			CompletionRatio: 0.15 / 1.00,
+			PromptRatio:     1.00 / 0.15,
+			CompletionRatio: 0.30 / 1.00,
 		},
 	},
 	"gemini-2.0-flash-lite": {Ratio: 0.075 * ratio.MilliTokensUsd, CompletionRatio: 0.30 / 0.075},
@@ -415,7 +436,9 @@ const (
 )
 
 // geminiWebSearchModels enumerates Gemini models with grounded web search pricing in Google documentation.
-// Source: https://ai.google.dev/gemini-api/docs/pricing (retrieved via https://r.jina.ai/https://ai.google.dev/gemini-api/docs/pricing)
+// Sources:
+//   - https://ai.google.dev/gemini-api/docs/pricing
+//   - https://cloud.google.com/gemini-enterprise-agent-platform/generative-ai/pricing
 var geminiWebSearchModels = map[string]struct{}{
 	"gemini-3.1-pro-preview":                  {},
 	"gemini-3.1-pro-preview-customtools":      {},
@@ -425,6 +448,8 @@ var geminiWebSearchModels = map[string]struct{}{
 	"gemini-3-pro-preview":                    {},
 	"gemini-3-flash-preview":                  {},
 	"gemini-3.5-flash":                        {},
+	"gemini-3.6-flash":                        {},
+	"gemini-3.5-flash-lite":                   {},
 	"gemini-2.5-pro":                          {},
 	"gemini-2.5-pro-preview":                  {},
 	"gemini-2.5-computer-use-preview":         {},
