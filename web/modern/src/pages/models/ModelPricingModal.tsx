@@ -1,4 +1,5 @@
 import { Badge } from '@/components/ui/badge';
+import { CopyButton } from '@/components/ui/copy-button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Separator } from '@/components/ui/separator';
 import { useResponsive } from '@/hooks/useResponsive';
@@ -126,6 +127,10 @@ interface ModelPricingModalProps {
 
 // ---- Component ----
 
+/**
+ * ModelPricingModal renders detailed pricing and metadata for a selected model
+ * and exposes a copy action for the model name in desktop and mobile headers.
+ */
 export function ModelPricingModal({ open, onOpenChange, modelName, data, channelName }: ModelPricingModalProps) {
   const { isMobile } = useResponsive();
   const { t, i18n } = useTranslation();
@@ -134,12 +139,25 @@ export function ModelPricingModal({ open, onOpenChange, modelName, data, channel
     [t]
   );
   const closeLabel = tr('close', 'Close');
+  const copyModelLabel = tr('copy_model_name', 'Copy model name');
+  const copyModelSuccess = tr('model_name_copied', 'Model name copied');
+  const modelTitle = (
+    <span className="inline-flex min-w-0 max-w-full items-center gap-2">
+      <span className="min-w-0 truncate font-mono">{modelName}</span>
+      <CopyButton
+        text={modelName}
+        label={copyModelLabel}
+        successMessage={copyModelSuccess}
+        className="h-7 w-7 shrink-0 p-0"
+      />
+    </span>
+  );
 
   const content = <PricingContent modelName={modelName} data={data} channelName={channelName} tr={tr} locale={i18n.language} />;
 
   if (isMobile) {
     return (
-      <MobileBottomSheet open={open} onClose={() => onOpenChange(false)} title={modelName} subtitle={channelName} closeLabel={closeLabel}>
+      <MobileBottomSheet open={open} onClose={() => onOpenChange(false)} title={modelTitle} subtitle={channelName} closeLabel={closeLabel}>
         {content}
       </MobileBottomSheet>
     );
@@ -149,7 +167,7 @@ export function ModelPricingModal({ open, onOpenChange, modelName, data, channel
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="font-mono text-base">{modelName}</DialogTitle>
+          <DialogTitle className="text-base">{modelTitle}</DialogTitle>
           <DialogDescription>{channelName}</DialogDescription>
         </DialogHeader>
         {content}
@@ -160,6 +178,10 @@ export function ModelPricingModal({ open, onOpenChange, modelName, data, channel
 
 // ---- Mobile bottom sheet ----
 
+/**
+ * MobileBottomSheet renders the mobile pricing sheet with drag-to-close and
+ * keyboard-close interactions, returning its content through a portal.
+ */
 function MobileBottomSheet({
   open,
   onClose,
@@ -170,7 +192,7 @@ function MobileBottomSheet({
 }: {
   open: boolean;
   onClose: () => void;
-  title: string;
+  title: React.ReactNode;
   subtitle?: string;
   closeLabel: string;
   children: React.ReactNode;
@@ -297,7 +319,7 @@ function MobileBottomSheet({
           {/* Header */}
           <div className="flex items-start justify-between px-4 pb-3 border-b">
             <div className="min-w-0 flex-1 pr-3">
-              <h2 id="mobile-sheet-title" className="font-mono text-sm font-semibold truncate">
+              <h2 id="mobile-sheet-title" className="text-sm font-semibold">
                 {title}
               </h2>
               {subtitle && <p className="text-xs text-muted-foreground truncate">{subtitle}</p>}

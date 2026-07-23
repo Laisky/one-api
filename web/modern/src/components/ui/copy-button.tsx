@@ -5,8 +5,13 @@ import { Copy, Check } from 'lucide-react';
 import { copyToClipboard } from '@/lib/utils';
 import { useTranslation } from 'react-i18next';
 
+/**
+ * CopyButtonProps describes the text to copy, optional accessible labels,
+ * visual button options, and callbacks invoked after copy attempts.
+ */
 interface CopyButtonProps {
   text: string;
+  label?: string;
   variant?: 'ghost' | 'outline' | 'default' | 'destructive' | 'secondary';
   size?: 'sm' | 'md' | 'lg' | 'icon';
   className?: string;
@@ -15,8 +20,13 @@ interface CopyButtonProps {
   onCopyError?: (error: Error) => void;
 }
 
+/**
+ * CopyButton renders an icon button that copies text to the clipboard and
+ * returns immediate visual feedback through its icon and tooltip.
+ */
 export function CopyButton({
   text,
+  label,
   variant = 'ghost',
   size = 'sm',
   className = 'h-6 w-6 p-0',
@@ -95,10 +105,12 @@ export function CopyButton({
           <Button
             variant={variant}
             size={size}
+            onPointerDown={(e) => e.stopPropagation()}
             onClick={handleCopy}
             className={`${className} transition-colors duration-200 ${copied ? 'text-success hover:text-success/80' : ''}`}
             disabled={copying}
-            title={t('common.copy_to_clipboard', 'Copy to clipboard')}
+            title={label ?? t('common.copy_to_clipboard', 'Copy to clipboard')}
+            aria-label={label ?? t('common.copy_to_clipboard', 'Copy to clipboard')}
           >
             {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
           </Button>

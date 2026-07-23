@@ -140,9 +140,6 @@ func ConvertResponseAPIToChatCompletionRequest(request *ResponseAPIRequest) (*mo
 					}
 
 					role := "assistant"
-					if r, ok := v["role"].(string); ok && r != "" {
-						role = r
-					}
 
 					// This tool call is now in-flight and may be answered by an adjacent
 					// function_call_output later in the input.
@@ -228,10 +225,7 @@ func ConvertResponseAPIToChatCompletionRequest(request *ResponseAPIRequest) (*mo
 }
 
 func responseContentItemToMessage(item map[string]any) (*model.Message, error) {
-	role := "user"
-	if r, ok := item["role"].(string); ok && r != "" {
-		role = r
-	}
+	role := normalizeResponseMessageRoleForChat(item["role"], "user")
 
 	var namePtr *string
 	if name, ok := item["name"].(string); ok && name != "" {
@@ -308,4 +302,22 @@ func responseContentItemToMessage(item map[string]any) (*model.Message, error) {
 	}
 
 	return message, nil
+}
+
+// normalizeResponseMessageRoleForChat maps Responses API message roles to the
+// portable ChatCompletion roles accepted by non-native fallback providers. The
+// raw parameter may be any decoded JSON value, and defaultRole is returned when
+// the value is empty or unsupported.
+func normalizeResponseMessageRoleForChat(raw any, defaultRole string) string {
+	role, _ := raw.(string)
+	switch strings.ToLower(strings.TrimSpace(role)) {
+	case "developer":
+		return "system"
+	case "system", "user", "assistant", "tool":
+		return strings.ToLower(strings.TrimSpace(role))
+	case "":
+		return defaultRole
+	default:
+		return defaultRole
+	}
 }
