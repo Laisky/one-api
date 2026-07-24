@@ -3,6 +3,7 @@ package model
 import (
 	"context"
 	"fmt"
+	"math/rand"
 	"sort"
 	"strings"
 	"time"
@@ -25,6 +26,7 @@ type Ability struct {
 	ChannelId    int        `json:"channel_id" gorm:"primaryKey;autoIncrement:false;index"`
 	Enabled      bool       `json:"enabled"`
 	Priority     *int64     `json:"priority" gorm:"bigint;default:0;index"`
+	Weight       *uint      `json:"weight" gorm:"default:0"`
 	SuspendUntil *time.Time `json:"suspend_until,omitempty" gorm:"index"`
 	CreatedAt    int64      `json:"created_at" gorm:"bigint;autoCreateTime:milli"`
 	UpdatedAt    int64      `json:"updated_at" gorm:"bigint;autoUpdateTime:milli"`
@@ -69,15 +71,6 @@ func availableAbilitiesQuery(db *gorm.DB, group string, model string, now time.T
 	return query
 }
 
-// firstRandomAbility selects one random ability using the active SQL dialect.
-func firstRandomAbility(query *gorm.DB, ability *Ability) error {
-	order := "RAND()"
-	if common.UsingSQLite.Load() || common.UsingPostgreSQL.Load() {
-		order = "RANDOM()"
-	}
-	return query.Order(order).First(ability).Error
-}
-
 // GetRandomSatisfiedChannel selects a random enabled channel for an exact group
 // and model match, optionally considering all priority tiers.
 func GetRandomSatisfiedChannel(group string, model string, ignoreFirstPriority bool) (*Channel, error) {
@@ -85,7 +78,6 @@ func GetRandomSatisfiedChannel(group string, model string, ignoreFirstPriority b
 		return nil, errors.New("database not initialized")
 	}
 
-	ability := Ability{}
 	now := time.Now().UTC()
 
 	var channelQuery *gorm.DB
@@ -95,22 +87,25 @@ func GetRandomSatisfiedChannel(group string, model string, ignoreFirstPriority b
 		maxPrioritySubQuery := availableAbilitiesQuery(DB, group, model, now, nil).Select("MAX(priority)")
 		channelQuery = availableAbilitiesQuery(DB, group, model, now, nil).Where("priority = (?)", maxPrioritySubQuery)
 	}
-	if err := firstRandomAbility(channelQuery, &ability); err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			// No enabled channel serves this group/model pair. That is an operator
-			// configuration state (or a caller asking for a model nobody hosts) —
-			// not a code fault, so it must not page an on-call engineer.
-			return nil, errkind.ConfigErr(errors.Wrap(err, "get random satisfied channel"))
-		}
+	var abilities []Ability
+	if err := channelQuery.Find(&abilities).Error; err != nil {
 		return nil, errors.Wrap(err, "get random satisfied channel")
+	}
+	if len(abilities) == 0 {
+		return nil, errkind.ConfigErr(errors.New("no channels available for this group/model pair"))
+	}
+
+	selectedAbility, err := selectAbilityByWeight(abilities)
+	if err != nil {
+		return nil, errkind.ConfigErr(errors.Wrap(err, "select ability by weight"))
 	}
 
 	channel := Channel{}
-	channel.Id = ability.ChannelId
-	if err := DB.First(&channel, "id = ?", ability.ChannelId).Error; err != nil {
+	channel.Id = selectedAbility.ChannelId
+	if err := DB.First(&channel, "id = ?", selectedAbility.ChannelId).Error; err != nil {
 		return nil, identity.Tag(
-			errors.Wrapf(err, "load channel %d for ability", ability.ChannelId),
-			LookupChannelRef(context.Background(), ability.ChannelId))
+			errors.Wrapf(err, "load channel %d for ability", selectedAbility.ChannelId),
+			LookupChannelRef(context.Background(), selectedAbility.ChannelId))
 	}
 	if !channel.SupportsModel(model) {
 		return nil, identity.Tag(
@@ -150,6 +145,7 @@ func addAbilitiesWithDB(db *gorm.DB, channel *Channel) error {
 				ChannelId:    channel.Id,
 				Enabled:      channel.Status == ChannelStatusEnabled,
 				Priority:     channel.Priority,
+				Weight:       channel.Weight,
 				SuspendUntil: nil, // Explicitly nil on new creation
 			}
 			abilities = append(abilities, ability)
@@ -374,7 +370,6 @@ func GetRandomSatisfiedChannelExcluding(group string, model string, ignoreFirstP
 	if DB == nil {
 		return nil, errors.New("database not initialized")
 	}
-	ability := Ability{}
 	now := time.Now().UTC()
 	excludeIDs := excludedChannelIDs(excludeChannelIds)
 
@@ -400,21 +395,26 @@ func GetRandomSatisfiedChannelExcluding(group string, model string, ignoreFirstP
 			Where("priority = (?)", maxPrioritySubQuery)
 	}
 
-	if err := firstRandomAbility(channelQuery, &ability); err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			// Same as GetRandomSatisfiedChannel: nothing left that serves this
-			// group/model pair, which is a configuration state, not a code fault.
-			return nil, errkind.ConfigErr(errors.Wrap(err, "get random satisfied channel excluding failed ones"))
-		}
+	var abilities []Ability
+	if err := channelQuery.Find(&abilities).Error; err != nil {
 		return nil, errors.Wrap(err, "get random satisfied channel excluding failed ones")
+	}
+	if len(abilities) == 0 {
+		return nil, errkind.ConfigErr(errors.Errorf("no channels available for model %s in group %s after excluding %d channels",
+			model, group, len(excludeIDs)))
+	}
+
+	selectedAbility, err := selectAbilityByWeight(abilities)
+	if err != nil {
+		return nil, errkind.ConfigErr(errors.Wrap(err, "select ability by weight"))
 	}
 
 	channel := Channel{}
-	channel.Id = ability.ChannelId
-	if err := DB.First(&channel, "id = ?", ability.ChannelId).Error; err != nil {
+	channel.Id = selectedAbility.ChannelId
+	if err := DB.First(&channel, "id = ?", selectedAbility.ChannelId).Error; err != nil {
 		return nil, identity.Tag(
-			errors.Wrapf(err, "load channel %d for ability exclusion check", ability.ChannelId),
-			LookupChannelRef(context.Background(), ability.ChannelId))
+			errors.Wrapf(err, "load channel %d for ability exclusion check", selectedAbility.ChannelId),
+			LookupChannelRef(context.Background(), selectedAbility.ChannelId))
 	}
 	if !channel.SupportsModel(model) {
 		return nil, identity.Tag(
@@ -422,4 +422,42 @@ func GetRandomSatisfiedChannelExcluding(group string, model string, ignoreFirstP
 			channel.Ref())
 	}
 	return &channel, nil
+}
+
+// selectAbilityByWeight picks one ability using weighted random selection.
+// When all weights are zero it falls back to uniform random.
+func selectAbilityByWeight(abilities []Ability) (Ability, error) {
+	if len(abilities) == 0 {
+		return Ability{}, errors.New("no abilities to select from")
+	}
+
+	// Calculate total weight
+	var totalWeight uint
+	for _, a := range abilities {
+		if a.Weight != nil {
+			totalWeight += *a.Weight
+		}
+	}
+
+	// If all weights are zero, fall back to uniform random
+	if totalWeight == 0 {
+		return abilities[rand.Intn(len(abilities))], nil
+	}
+
+	// Weighted random selection
+	r := rand.Intn(int(totalWeight))
+	var cumulative uint
+	for _, a := range abilities {
+		w := uint(0)
+		if a.Weight != nil {
+			w = *a.Weight
+		}
+		cumulative += w
+		if uint(r) < cumulative {
+			return a, nil
+		}
+	}
+
+	// Fallback (shouldn't reach here)
+	return abilities[len(abilities)-1], nil
 }

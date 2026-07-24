@@ -298,6 +298,11 @@ func initPrimaryDatabase() error {
 		return errors.Wrap(err, "migrate user_request_costs unique index")
 	}
 
+	// 2f) Backfill abilities.weight from channels.weight
+	if err = MigrateAbilityWeightBackfill(); err != nil {
+		return errors.Wrap(err, "backfill ability weights")
+	}
+
 	// STEP 3: Data-format migrations (schema is already correct at this point).
 	if err = MigrateCustomChannelsToOpenAICompatible(); err != nil {
 		return errors.Wrap(err, "migrate custom channels")
