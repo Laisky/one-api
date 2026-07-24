@@ -45,6 +45,21 @@ func TestClaudeOpus48PricingMatchesPublishedRatios(t *testing.T) {
 		"Opus 4.8 must inherit Opus 4.7's adaptive-only sampling restriction")
 }
 
+func TestClaudeOpus5PricingMatchesPublishedRatios(t *testing.T) {
+	pricing, ok := ModelRatios["claude-opus-5"]
+	require.True(t, ok, "Claude Opus 5 pricing missing from Anthropic model ratios")
+	require.InDelta(t, 5*ratio.MilliTokensUsd, pricing.Ratio, 1e-12)
+	require.InDelta(t, 5.0, pricing.CompletionRatio, 1e-12)
+	require.InDelta(t, 0.5*ratio.MilliTokensUsd, pricing.CachedInputRatio, 1e-12)
+	require.InDelta(t, 6.25*ratio.MilliTokensUsd, pricing.CacheWrite5mRatio, 1e-12)
+	require.InDelta(t, 10.0*ratio.MilliTokensUsd, pricing.CacheWrite1hRatio, 1e-12)
+	require.EqualValues(t, 1000000, pricing.ContextLength)
+	require.EqualValues(t, 128000, pricing.MaxOutputTokens)
+	require.Equal(t, claudeAdaptiveOnlySamplingParams, pricing.SupportedSamplingParameters,
+		"Opus 5 must inherit Opus 4.7/4.8's adaptive-only sampling restriction")
+	require.EqualValues(t, 0, pricing.MaxReasoningTokens)
+}
+
 func TestClaudeSonnet5PricingMatchesPublishedRatios(t *testing.T) {
 	pricing, ok := ModelRatios["claude-sonnet-5"]
 	require.True(t, ok, "Claude Sonnet 5 pricing missing from Anthropic model ratios")
@@ -76,8 +91,11 @@ func TestClaudeFable5PricingMatchesPublishedRatios(t *testing.T) {
 	require.EqualValues(t, 1000000, pricing.ContextLength)
 	require.EqualValues(t, 128000, pricing.MaxOutputTokens)
 	// Fable 5 supports only adaptive thinking; thinking.budget_tokens is rejected, so
-	// MaxReasoningTokens is intentionally unset (mirrors claude-opus-4-7/4-8).
+	// MaxReasoningTokens is intentionally unset (mirrors claude-opus-4-7/4-8). Its
+	// sampling surface is the adaptive-only set too: temperature/top_p/top_k are
+	// rejected upstream (400), so they must not be advertised.
 	require.EqualValues(t, 0, pricing.MaxReasoningTokens)
+	require.Equal(t, claudeAdaptiveOnlySamplingParams, pricing.SupportedSamplingParameters)
 }
 
 func TestIsClaudeAdaptiveThinkingModelCoversAdaptiveVariants(t *testing.T) {
@@ -87,9 +105,14 @@ func TestIsClaudeAdaptiveThinkingModelCoversAdaptiveVariants(t *testing.T) {
 		"  claude-opus-4-7-future ": true,
 		"claude-opus-4-8":           true,
 		"claude-opus-4-8-fast":      true,
+		"claude-opus-5":             true,
+		"Claude-Opus-5":             true,
+		"claude-opus-5-fast":        true,
 		"claude-sonnet-5":           true,
 		"Claude-Sonnet-5":           true,
 		"  claude-sonnet-5-future ": true,
+		"claude-fable-5":            true,
+		"claude-mythos-5":           true,
 		"claude-opus-4-6":           false,
 		"claude-opus-4-1":           false,
 		"claude-opus-4-5-20251101":  false,

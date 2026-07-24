@@ -151,21 +151,29 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		SupportedFeatures: claudeFeaturesWithReasoning, SupportedSamplingParameters: claudeAdaptiveOnlySamplingParams,
 		Description: "Claude Opus 4.8 flagship Anthropic model with 1M-token context and adaptive thinking; temperature/top_p/top_k are unsupported. Replaces deprecated claude-opus-4-20250514.",
 	},
+	"claude-opus-5": {
+		Ratio: 5 * ratio.MilliTokensUsd, CompletionRatio: 25.0 / 5,
+		CachedInputRatio: 0.5 * ratio.MilliTokensUsd, CacheWrite5mRatio: 6.25 * ratio.MilliTokensUsd, CacheWrite1hRatio: 10 * ratio.MilliTokensUsd,
+		ContextLength: 1000000, MaxOutputTokens: 128000,
+		InputModalities: claudeVisionInputs, OutputModalities: claudeTextOutputs,
+		SupportedFeatures: claudeFeaturesWithReasoning, SupportedSamplingParameters: claudeAdaptiveOnlySamplingParams,
+		Description: "Claude Opus 5 most capable Anthropic model with 1M-token context and adaptive thinking; temperature/top_p/top_k are unsupported. Supersedes Claude Opus 4.8 (now legacy).",
+	},
 	"claude-fable-5": {
 		Ratio: 10 * ratio.MilliTokensUsd, CompletionRatio: 5,
 		CachedInputRatio: 1.0 * ratio.MilliTokensUsd, CacheWrite5mRatio: 12.5 * ratio.MilliTokensUsd, CacheWrite1hRatio: 20 * ratio.MilliTokensUsd,
 		ContextLength: 1000000, MaxOutputTokens: 128000,
 		InputModalities: claudeVisionInputs, OutputModalities: claudeTextOutputs,
-		SupportedFeatures: claudeFeaturesWithReasoning, SupportedSamplingParameters: claudeSamplingParams,
-		Description: "Claude Fable 5 flagship Anthropic model with 1M-token context and frontier-level reasoning (adaptive thinking; budget_tokens not supported).",
+		SupportedFeatures: claudeFeaturesWithReasoning, SupportedSamplingParameters: claudeAdaptiveOnlySamplingParams,
+		Description: "Claude Fable 5 flagship Anthropic model with 1M-token context and frontier-level reasoning (adaptive thinking always on; temperature/top_p/top_k and budget_tokens are unsupported).",
 	},
 	"claude-mythos-5": {
 		Ratio: 10 * ratio.MilliTokensUsd, CompletionRatio: 50.0 / 10,
 		CachedInputRatio: 1.0 * ratio.MilliTokensUsd, CacheWrite5mRatio: 12.5 * ratio.MilliTokensUsd, CacheWrite1hRatio: 20 * ratio.MilliTokensUsd,
 		ContextLength: 1000000, MaxOutputTokens: 128000,
 		InputModalities: claudeVisionInputs, OutputModalities: claudeTextOutputs,
-		SupportedFeatures: claudeFeaturesWithReasoning, SupportedSamplingParameters: claudeSamplingParams,
-		Description: "Claude Mythos 5 (limited availability via Project Glasswing) with 1M-token context and adaptive thinking (always on; budget_tokens not supported).",
+		SupportedFeatures: claudeFeaturesWithReasoning, SupportedSamplingParameters: claudeAdaptiveOnlySamplingParams,
+		Description: "Claude Mythos 5 (limited availability via Project Glasswing) with 1M-token context and adaptive thinking (always on; temperature/top_p/top_k and budget_tokens are unsupported).",
 	},
 
 	// Claude 4 Sonnet Models

@@ -286,6 +286,14 @@ var awsBedrockModelPricing = map[string]adaptor.ModelConfig{
 		SupportedFeatures: awsClaudeFeaturesWithReasoning, SupportedSamplingParameters: awsClaudeSamplingParams,
 		Description: "Claude Opus 4.8 on AWS Bedrock with 1M-token context and adaptive thinking; flagship Anthropic model.",
 	},
+	"claude-opus-5": {
+		Ratio: 5 * ratio.MilliTokensUsd, CompletionRatio: 25.0 / 5,
+		CachedInputRatio: 0.5 * ratio.MilliTokensUsd, CacheWrite5mRatio: 6.25 * ratio.MilliTokensUsd, CacheWrite1hRatio: 10 * ratio.MilliTokensUsd,
+		ContextLength: 1000000, MaxOutputTokens: 128000,
+		InputModalities: awsClaudeVisionInputs, OutputModalities: awsTextOutputs,
+		SupportedFeatures: awsClaudeFeaturesWithReasoning, SupportedSamplingParameters: awsClaudeSamplingParams,
+		Description: "Claude Opus 5 on AWS Bedrock with 1M-token context and adaptive thinking; most capable Anthropic model.",
+	},
 	"claude-fable-5": {
 		Ratio: 10 * ratio.MilliTokensUsd, CompletionRatio: 5,
 		CachedInputRatio: 1.0 * ratio.MilliTokensUsd, CacheWrite5mRatio: 12.5 * ratio.MilliTokensUsd, CacheWrite1hRatio: 20 * ratio.MilliTokensUsd,

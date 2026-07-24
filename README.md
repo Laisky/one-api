@@ -1154,7 +1154,7 @@ To use it:
 
 ![](https://s3.laisky.com/uploads/2025/09/claude-sonnet-4-5.png)
 
-~~claude-opus-4-0~~ (retired 2026-06-15) / ~~claude-opus-4-1~~ (retires 2026-08-05) / claude-opus-4-5 / claude-opus-4-6 / claude-opus-4-7 / claude-opus-4-8 / ~~claude-sonnet-4-0~~ (retired 2026-06-15) / claude-sonnet-4-5 / claude-sonnet-4-6 / claude-sonnet-5 / claude-haiku-4-5
+~~claude-opus-4-0~~ (retired 2026-06-15) / ~~claude-opus-4-1~~ (retires 2026-08-05) / claude-opus-4-5 / claude-opus-4-6 / claude-opus-4-7 / claude-opus-4-8 / claude-opus-5 / ~~claude-sonnet-4-0~~ (retired 2026-06-15) / claude-sonnet-4-5 / claude-sonnet-4-6 / claude-sonnet-5 / claude-haiku-4-5
 
 ### Google (Gemini & Vertex) Features
 

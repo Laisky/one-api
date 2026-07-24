@@ -10,16 +10,19 @@ import (
 // adaptive-thinking compatibility profile: temperature/top_p/top_k must be omitted
 // and any thinking block must be `{"type":"adaptive"}` without budget_tokens.
 // Starting with Opus 4.7 Anthropic froze this contract; later releases inherit it
-// (Opus 4.8, Sonnet 5, ...).
+// (Opus 4.8, Opus 5, Sonnet 5, and the always-adaptive Fable 5 / Mythos 5).
 var claudeAdaptiveThinkingPrefixes = []string{
 	"claude-opus-4-7",
 	"claude-opus-4-8",
+	"claude-opus-5",
 	"claude-sonnet-5",
+	"claude-fable-5",
+	"claude-mythos-5",
 }
 
 // IsClaudeAdaptiveThinkingModel reports whether modelName targets a Claude release that
-// follows the Opus 4.7 adaptive-thinking compatibility profile (currently Opus 4.7/4.8
-// and Sonnet 5). It normalizes whitespace and casing.
+// follows the Opus 4.7 adaptive-thinking compatibility profile (currently Opus 4.7/4.8,
+// Opus 5, Sonnet 5, Fable 5, and Mythos 5). It normalizes whitespace and casing.
 func IsClaudeAdaptiveThinkingModel(modelName string) bool {
 	normalized := strings.ToLower(strings.TrimSpace(modelName))
 	for _, prefix := range claudeAdaptiveThinkingPrefixes {

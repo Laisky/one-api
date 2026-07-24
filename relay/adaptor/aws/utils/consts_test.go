@@ -395,6 +395,39 @@ func TestClaudeFable5RequiresGlobalProfile(t *testing.T) {
 	}
 }
 
+// TestClaudeOpus5RequiresGlobalProfile verifies that claude-opus-5 is configured
+// to use the global inference profile on AWS Bedrock, inheriting Opus 4.8's coverage.
+func TestClaudeOpus5RequiresGlobalProfile(t *testing.T) {
+	t.Parallel()
+	modelID := "anthropic.claude-opus-5"
+	globalProfileID := "global." + modelID
+
+	allowedRegions, exists := GlobalProfileSourceRegions[modelID]
+	require.Truef(t, exists, "claude-opus-5 (%s) must be in GlobalProfileSourceRegions", modelID)
+
+	require.Containsf(t, CrossRegionInferences, globalProfileID,
+		"claude-opus-5 global profile (%s) must be in CrossRegionInferences", globalProfileID)
+
+	keyRegions := []string{
+		"us-east-1",
+		"eu-west-1",
+		"ap-northeast-1",
+		"ap-southeast-2",
+		"ca-west-1",
+	}
+	for _, region := range keyRegions {
+		require.Containsf(t, allowedRegions, region,
+			"region %s should be in GlobalProfileSourceRegions for claude-opus-5", region)
+	}
+
+	ctx := context.Background()
+	for _, region := range keyRegions {
+		result := ConvertModelID2CrossRegionProfile(ctx, modelID, region)
+		require.Equalf(t, globalProfileID, result,
+			"claude-opus-5 in region %s should convert to global profile %s", region, globalProfileID)
+	}
+}
+
 func BenchmarkConvertModelID2CrossRegionProfile(b *testing.B) {
 	ctx := context.Background()
 	model := "anthropic.claude-3-haiku-20240307-v1:0"
