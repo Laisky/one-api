@@ -139,13 +139,18 @@ func addAbilitiesWithDB(db *gorm.DB, channel *Channel) error {
 			continue
 		}
 		for _, group := range groups {
+			// Use GetWeight() rather than channel.Weight directly so the value is
+			// always a concrete non-nil pointer, avoiding GORM inserting NULL when
+			// the channel has no weight configured (gorm:"default:0" only applies
+			// to zero-value Go types, not nil pointers).
+			weight := channel.GetWeight()
 			ability := Ability{
 				Group:        group,
 				Model:        model,
 				ChannelId:    channel.Id,
 				Enabled:      channel.Status == ChannelStatusEnabled,
 				Priority:     channel.Priority,
-				Weight:       channel.Weight,
+				Weight:       &weight,
 				SuspendUntil: nil, // Explicitly nil on new creation
 			}
 			abilities = append(abilities, ability)
@@ -431,11 +436,13 @@ func selectAbilityByWeight(abilities []Ability) (Ability, error) {
 		return Ability{}, errors.New("no abilities to select from")
 	}
 
-	// Calculate total weight
-	var totalWeight uint
+	// Calculate total weight using int64 to avoid overflow when converting to
+	// a signed type for rand.Int63n. Individual weights are uint but their sum
+	// across a tier of channels fits easily within int64 in practice.
+	var totalWeight int64
 	for _, a := range abilities {
 		if a.Weight != nil {
-			totalWeight += *a.Weight
+			totalWeight += int64(*a.Weight)
 		}
 	}
 
@@ -445,15 +452,15 @@ func selectAbilityByWeight(abilities []Ability) (Ability, error) {
 	}
 
 	// Weighted random selection
-	r := rand.Intn(int(totalWeight))
-	var cumulative uint
+	r := rand.Int63n(totalWeight)
+	var cumulative int64
 	for _, a := range abilities {
-		w := uint(0)
+		w := int64(0)
 		if a.Weight != nil {
-			w = *a.Weight
+			w = int64(*a.Weight)
 		}
 		cumulative += w
-		if uint(r) < cumulative {
+		if r < cumulative {
 			return a, nil
 		}
 	}

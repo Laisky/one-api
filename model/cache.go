@@ -663,20 +663,21 @@ func pickWeightedChannel(channels []*Channel) *Channel {
 		return nil
 	}
 
-	var totalWeight uint
+	// Use int64 to avoid overflow when converting to rand.Int63n's argument.
+	var totalWeight int64
 	for _, ch := range channels {
-		totalWeight += ch.GetWeight()
+		totalWeight += int64(ch.GetWeight())
 	}
 
 	if totalWeight == 0 {
 		return nil // signal caller to use uniform random
 	}
 
-	r := rand.Intn(int(totalWeight))
-	var cumulative uint
+	r := rand.Int63n(totalWeight)
+	var cumulative int64
 	for _, ch := range channels {
-		cumulative += ch.GetWeight()
-		if uint(r) < cumulative {
+		cumulative += int64(ch.GetWeight())
+		if r < cumulative {
 			return ch
 		}
 	}
