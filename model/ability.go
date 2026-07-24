@@ -3,6 +3,7 @@ package model
 import (
 	"context"
 	"fmt"
+	"math/rand"
 	"sort"
 	"strings"
 	"time"
@@ -20,11 +21,17 @@ import (
 )
 
 type Ability struct {
-	Group        string     `json:"group" gorm:"type:varchar(32);primaryKey;autoIncrement:false"`
-	Model        string     `json:"model" gorm:"primaryKey;autoIncrement:false"`
-	ChannelId    int        `json:"channel_id" gorm:"primaryKey;autoIncrement:false;index"`
-	Enabled      bool       `json:"enabled"`
-	Priority     *int64     `json:"priority" gorm:"bigint;default:0;index"`
+	Group     string `json:"group" gorm:"type:varchar(32);primaryKey;autoIncrement:false"`
+	Model     string `json:"model" gorm:"primaryKey;autoIncrement:false"`
+	ChannelId int    `json:"channel_id" gorm:"primaryKey;autoIncrement:false;index"`
+	Enabled   bool   `json:"enabled"`
+	Priority  *int64 `json:"priority" gorm:"bigint;default:0;index"`
+	// Weight is intentionally NOT stored on the ability. The abilities row is a
+	// routing projection whose columns are all query FILTERS (group, model, enabled,
+	// priority, suspend_until); weight is a post-filter SELECTION input, so it lives
+	// solely on the parent channel (channels.weight, the single source of truth) and
+	// is read there by both routing paths. See getRandomSatisfiedChannel and
+	// pickWeightedChannel.
 	SuspendUntil *time.Time `json:"suspend_until,omitempty" gorm:"index"`
 	CreatedAt    int64      `json:"created_at" gorm:"bigint;autoCreateTime:milli"`
 	UpdatedAt    int64      `json:"updated_at" gorm:"bigint;autoUpdateTime:milli"`
@@ -69,55 +76,118 @@ func availableAbilitiesQuery(db *gorm.DB, group string, model string, now time.T
 	return query
 }
 
-// firstRandomAbility selects one random ability using the active SQL dialect.
-func firstRandomAbility(query *gorm.DB, ability *Ability) error {
-	order := "RAND()"
-	if common.UsingSQLite.Load() || common.UsingPostgreSQL.Load() {
-		order = "RANDOM()"
+// priorityPolicy selects which priority tier participates in routing.
+type priorityPolicy uint8
+
+const (
+	// tierHighest keeps only the highest-priority tier (ignoreFirstPriority=false).
+	tierHighest priorityPolicy = iota
+	// tierSkipHighestLenient keeps tiers strictly below the highest, but falls back
+	// to the highest tier when none exists. Used by the non-excluding first-pass
+	// selection so "ignore first priority" still routes in a single-tier group.
+	tierSkipHighestLenient
+	// tierSkipHighestStrict keeps only tiers strictly below the highest and treats
+	// "no lower tier" as a configuration state (no candidates). Used by the retry
+	// (excluding) path so the caller can decide whether to fall back to the top tier.
+	tierSkipHighestStrict
+)
+
+// GetRandomSatisfiedChannel selects a random enabled channel for an exact group and
+// model match. With ignoreFirstPriority=false only the highest-priority tier is
+// eligible; with ignoreFirstPriority=true the highest tier is skipped in favour of
+// lower tiers, falling back to the highest tier only when no lower tier exists.
+// Within the eligible tier, selection is weighted by the channel's weight.
+func GetRandomSatisfiedChannel(group string, model string, ignoreFirstPriority bool) (*Channel, error) {
+	policy := tierHighest
+	if ignoreFirstPriority {
+		policy = tierSkipHighestLenient
 	}
-	return query.Order(order).First(ability).Error
+	return getRandomSatisfiedChannel(group, model, nil, policy)
 }
 
-// GetRandomSatisfiedChannel selects a random enabled channel for an exact group
-// and model match, optionally considering all priority tiers.
-func GetRandomSatisfiedChannel(group string, model string, ignoreFirstPriority bool) (*Channel, error) {
+// getRandomSatisfiedChannel is the shared implementation behind both
+// GetRandomSatisfiedChannel and GetRandomSatisfiedChannelExcluding. It resolves the
+// candidate channels serving (group, model) at the tier chosen by policy, then
+// weighted-selects one by the channel's weight (channels.weight is the single
+// source of truth; CacheGetRandomSatisfiedChannel uses the same pickWeightedChannel
+// helper). When every candidate weight is zero it falls back to uniform random.
+func getRandomSatisfiedChannel(group string, model string, excludeChannelIds map[int]bool, policy priorityPolicy) (*Channel, error) {
 	if DB == nil {
 		return nil, errors.New("database not initialized")
 	}
-
-	ability := Ability{}
 	now := time.Now().UTC()
+	excludeIDs := excludedChannelIDs(excludeChannelIds)
 
-	var channelQuery *gorm.DB
-	if ignoreFirstPriority {
-		channelQuery = availableAbilitiesQuery(DB, group, model, now, nil)
-	} else {
-		maxPrioritySubQuery := availableAbilitiesQuery(DB, group, model, now, nil).Select("MAX(priority)")
-		channelQuery = availableAbilitiesQuery(DB, group, model, now, nil).Where("priority = (?)", maxPrioritySubQuery)
+	channelIDs, err := candidateChannelIDs(group, model, now, excludeIDs, policy)
+	if err != nil {
+		return nil, err
 	}
-	if err := firstRandomAbility(channelQuery, &ability); err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			// No enabled channel serves this group/model pair. That is an operator
-			// configuration state (or a caller asking for a model nobody hosts) —
-			// not a code fault, so it must not page an on-call engineer.
-			return nil, errkind.ConfigErr(errors.Wrap(err, "get random satisfied channel"))
-		}
-		return nil, errors.Wrap(err, "get random satisfied channel")
+	if len(channelIDs) == 0 {
+		return nil, errkind.ConfigErr(noSatisfiedChannelError(group, model, excludeIDs))
 	}
 
-	channel := Channel{}
-	channel.Id = ability.ChannelId
-	if err := DB.First(&channel, "id = ?", ability.ChannelId).Error; err != nil {
-		return nil, identity.Tag(
-			errors.Wrapf(err, "load channel %d for ability", ability.ChannelId),
-			LookupChannelRef(context.Background(), ability.ChannelId))
+	var candidates []*Channel
+	if err := DB.Where("id IN ?", channelIDs).Find(&candidates).Error; err != nil {
+		return nil, errors.Wrap(err, "load candidate channels for routing")
+	}
+	if len(candidates) == 0 {
+		// The abilities projection referenced channels that no longer exist.
+		return nil, errkind.ConfigErr(noSatisfiedChannelError(group, model, excludeIDs))
+	}
+
+	channel := pickWeightedChannel(candidates)
+	if channel == nil {
+		// Every candidate weight is zero: fall back to uniform random.
+		channel = candidates[rand.Intn(len(candidates))]
 	}
 	if !channel.SupportsModel(model) {
 		return nil, identity.Tag(
 			errors.Errorf("channel #%d does not list support for model %s", channel.Id, model),
 			channel.Ref())
 	}
-	return &channel, nil
+	return channel, nil
+}
+
+// candidateChannelIDs returns the channel IDs whose abilities satisfy (group,
+// model) at the priority tier selected by policy. The maximum priority is computed
+// AFTER exclusions, so excluding a whole tier promotes the next one.
+func candidateChannelIDs(group string, model string, now time.Time, excludeIDs []int, policy priorityPolicy) ([]int, error) {
+	tierQuery := availableAbilitiesQuery(DB, group, model, now, excludeIDs)
+	switch policy {
+	case tierHighest:
+		maxSub := availableAbilitiesQuery(DB, group, model, now, excludeIDs).Select("MAX(priority)")
+		tierQuery = tierQuery.Where("priority = (?)", maxSub)
+	case tierSkipHighestLenient, tierSkipHighestStrict:
+		maxSub := availableAbilitiesQuery(DB, group, model, now, excludeIDs).Select("MAX(priority)")
+		tierQuery = tierQuery.Where("priority < (?)", maxSub)
+	}
+
+	var channelIDs []int
+	if err := tierQuery.Pluck("channel_id", &channelIDs).Error; err != nil {
+		return nil, errors.Wrap(err, "load candidate channel ids")
+	}
+
+	if len(channelIDs) == 0 && policy == tierSkipHighestLenient {
+		// No lower tier exists: fall back to the highest (only) tier so a
+		// single-tier group still routes when ignoreFirstPriority is requested.
+		maxSub := availableAbilitiesQuery(DB, group, model, now, excludeIDs).Select("MAX(priority)")
+		if err := availableAbilitiesQuery(DB, group, model, now, excludeIDs).
+			Where("priority = (?)", maxSub).
+			Pluck("channel_id", &channelIDs).Error; err != nil {
+			return nil, errors.Wrap(err, "load highest-tier candidate channel ids")
+		}
+	}
+	return channelIDs, nil
+}
+
+// noSatisfiedChannelError builds the "no channels available" configuration error,
+// noting the exclusion count when retries have narrowed the candidate set.
+func noSatisfiedChannelError(group string, model string, excludeIDs []int) error {
+	if len(excludeIDs) > 0 {
+		return errors.Errorf("no channels available for model %s in group %s after excluding %d channels",
+			model, group, len(excludeIDs))
+	}
+	return errors.Errorf("no channels available for model %s in group %s", model, group)
 }
 
 // AddAbilities persists every visible ability advertised by channel.
@@ -368,58 +438,15 @@ func SuspendAbility(ctx context.Context, group string, modelName string, channel
 	return nil
 }
 
-// GetRandomSatisfiedChannelExcluding selects a random enabled channel for an
-// exact group and model match while omitting the supplied channel IDs.
+// GetRandomSatisfiedChannelExcluding selects a random enabled channel for an exact
+// group and model match while omitting the supplied channel IDs. This is the retry
+// path: with ignoreFirstPriority=true only tiers strictly below the highest are
+// eligible and "no lower tier" is a configuration state (error), letting the caller
+// decide whether to fall back to the highest tier.
 func GetRandomSatisfiedChannelExcluding(group string, model string, ignoreFirstPriority bool, excludeChannelIds map[int]bool) (*Channel, error) {
-	if DB == nil {
-		return nil, errors.New("database not initialized")
-	}
-	ability := Ability{}
-	now := time.Now().UTC()
-	excludeIDs := excludedChannelIDs(excludeChannelIds)
-
-	var channelQuery *gorm.DB
+	policy := tierHighest
 	if ignoreFirstPriority {
-		maxPrioritySubQuery := availableAbilitiesQuery(DB, group, model, now, excludeIDs).Select("MAX(priority)")
-		channelQuery = availableAbilitiesQuery(DB, group, model, now, excludeIDs).
-			Where("priority < (?)", maxPrioritySubQuery)
-	} else {
-		var availableCount int64
-		if err := availableAbilitiesQuery(DB, group, model, now, excludeIDs).Count(&availableCount).Error; err != nil {
-			return nil, errors.Wrap(err, "count available channels after exclusions")
-		}
-		if availableCount == 0 {
-			// Every candidate channel has been excluded by earlier retries: a
-			// configuration/capacity state, not a server-side code fault.
-			return nil, errkind.ConfigErr(errors.Errorf("no channels available for model %s in group %s after excluding %d channels",
-				model, group, len(excludeIDs)))
-		}
-
-		maxPrioritySubQuery := availableAbilitiesQuery(DB, group, model, now, excludeIDs).Select("MAX(priority)")
-		channelQuery = availableAbilitiesQuery(DB, group, model, now, excludeIDs).
-			Where("priority = (?)", maxPrioritySubQuery)
+		policy = tierSkipHighestStrict
 	}
-
-	if err := firstRandomAbility(channelQuery, &ability); err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			// Same as GetRandomSatisfiedChannel: nothing left that serves this
-			// group/model pair, which is a configuration state, not a code fault.
-			return nil, errkind.ConfigErr(errors.Wrap(err, "get random satisfied channel excluding failed ones"))
-		}
-		return nil, errors.Wrap(err, "get random satisfied channel excluding failed ones")
-	}
-
-	channel := Channel{}
-	channel.Id = ability.ChannelId
-	if err := DB.First(&channel, "id = ?", ability.ChannelId).Error; err != nil {
-		return nil, identity.Tag(
-			errors.Wrapf(err, "load channel %d for ability exclusion check", ability.ChannelId),
-			LookupChannelRef(context.Background(), ability.ChannelId))
-	}
-	if !channel.SupportsModel(model) {
-		return nil, identity.Tag(
-			errors.Errorf("channel #%d does not list support for model %s", channel.Id, model),
-			channel.Ref())
-	}
-	return &channel, nil
+	return getRandomSatisfiedChannel(group, model, excludeChannelIds, policy)
 }

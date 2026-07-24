@@ -523,28 +523,18 @@ func CacheGetRandomSatisfiedChannel(group string, model string, ignoreFirstPrior
 		}
 	}
 
-	var idx int
+	var channel *Channel
 	if ignoreFirstPriority && endIdx < len(candidateChannels) {
-		idx = random.RandRange(endIdx, len(candidateChannels))
+		channel = pickWeightedChannel(candidateChannels[endIdx:])
+		if channel == nil {
+			channel = candidateChannels[random.RandRange(endIdx, len(candidateChannels))]
+		}
 	} else {
-		idx = rand.Intn(endIdx)
-		if ignoreFirstPriority {
-			// All channels have the same highest priority, or only one priority level exists.
-			// If ignoreFirstPriority is true, and we only have one priority level,
-			// it means we cannot satisfy "ignoreFirstPriority".
-			// This case might indicate no lower-priority channels exist.
-			// Depending on desired behavior, could return error or pick from existing.
-			// For now, let's assume it means "pick any if only one priority level".
-			// If truly no other channel to pick, the random selection will pick from current set.
-			// This part of logic might need refinement based on precise meaning of ignoreFirstPriority
-			// when only one priority tier exists.
-			// The original code implies if endIdx == len(channels), it picks from 0 to endIdx-1.
-			// If endIdx < len(channels), it picks from endIdx to len(channels)-1.
-			// So if ignoreFirstPriority is true and all are same priority, it will still pick from them.
-			// This seems okay.
+		channel = pickWeightedChannel(candidateChannels[:endIdx])
+		if channel == nil {
+			channel = candidateChannels[rand.Intn(endIdx)]
 		}
 	}
-	channel := candidateChannels[idx]
 	logger.Logger.Info("select channel in cache", channel.Ref().Zap()...)
 	return channel, nil
 }
@@ -619,8 +609,10 @@ func CacheGetRandomSatisfiedChannelExcluding(group string, model string, ignoreF
 
 		// If there are lower priority channels available, select from them
 		if endIdx < len(candidateChannels) {
-			idx := random.RandRange(endIdx, len(candidateChannels))
-			channel := candidateChannels[idx]
+			channel := pickWeightedChannel(candidateChannels[endIdx:])
+			if channel == nil {
+				channel = candidateChannels[random.RandRange(endIdx, len(candidateChannels))]
+			}
 			logger.Logger.Info("select channel in cache", channel.Ref().Zap()...)
 			return channel, nil
 		} else {
@@ -655,9 +647,34 @@ func CacheGetRandomSatisfiedChannelExcluding(group string, model string, ignoreF
 			return nil, errors.New("no channels with maximum priority available")
 		}
 
-		idx := rand.Intn(len(maxPriorityChannels))
-		channel := maxPriorityChannels[idx]
+		channel := pickWeightedChannel(maxPriorityChannels)
+		if channel == nil {
+			channel = maxPriorityChannels[rand.Intn(len(maxPriorityChannels))]
+		}
 		logger.Logger.Info("select channel in cache", channel.Ref().Zap()...)
 		return channel, nil
 	}
+}
+
+// pickWeightedChannel selects a channel using weighted random over the channels'
+// weights (channels.weight is the single source of truth for weight). When all
+// weights are zero (or the slice is empty) it returns nil so the caller can fall
+// back to uniform random. Both routing paths — this cache path and the DB path's
+// getRandomSatisfiedChannel — feed their candidate channels through this helper, so
+// they weight identically.
+func pickWeightedChannel(channels []*Channel) *Channel {
+	if len(channels) == 0 {
+		return nil
+	}
+
+	weights := make([]uint, len(channels))
+	for i, ch := range channels {
+		weights[i] = ch.GetWeight()
+	}
+
+	idx := weightedIndex(weights, rand.Int63n)
+	if idx < 0 {
+		return nil // signal caller to use uniform random
+	}
+	return channels[idx]
 }
