@@ -65,6 +65,7 @@ func relayResponseAPIThroughChat(c *gin.Context, meta *metalib.Meta, responseAPI
 	if err != nil {
 		return openai.ErrorWrapper(err, "convert_response_api_request_failed", http.StatusBadRequest)
 	}
+	downstreamStream := chatRequest.Stream
 	originalChatTools := append([]relaymodel.Tool(nil), chatRequest.Tools...)
 	responseTools := responseToolsForMCP(responseAPIRequest)
 	if len(responseTools) > 0 {
@@ -121,13 +122,9 @@ func relayResponseAPIThroughChat(c *gin.Context, meta *metalib.Meta, responseAPI
 		responseAPIRequest.ToolChoice = normalizeMCPToolChoiceForResponse(responseAPIRequest.ToolChoice, mcpToolNames)
 		chatRequest.ToolChoice = normalizeChatToolChoiceForMCP(chatRequest.ToolChoice, mcpToolNames)
 		if chatRequest.Stream {
-			lg.Warn("mcp tool execution forces non-streaming response")
+			lg.Debug("mcp tool execution uses non-streaming upstream rounds")
 			chatRequest.Stream = false
 			meta.IsStream = false
-			if responseAPIRequest.Stream != nil {
-				stream := false
-				responseAPIRequest.Stream = &stream
-			}
 		}
 	}
 
@@ -196,6 +193,8 @@ func relayResponseAPIThroughChat(c *gin.Context, meta *metalib.Meta, responseAPI
 		c.Set(ctxkey.ResponseRewriteHandler, nil)
 		c.Set(ctxkey.ResponseStreamRewriteHandler, nil)
 		response, usage, mcpSummary, incrementalCharged, execErr := executeChatMCPToolLoop(c, meta, chatRequest, registry, preConsumedQuota)
+		meta.IsStream = downstreamStream
+		metalib.Set2Context(c, meta)
 		if execErr != nil {
 			_ = returnPreConsumedQuotaConservative(ctx, c, preConsumedQuota, meta.TokenId, "mcp_tool_loop_failed")
 			return execErr
@@ -230,9 +229,16 @@ func relayResponseAPIThroughChat(c *gin.Context, meta *metalib.Meta, responseAPI
 				c.Writer = prevWriter
 			}()
 		}
-		if err := renderChatResponseAsResponseAPI(c, http.StatusOK, &openai_compatible.SlimTextResponse{Choices: choices, Usage: response.Usage}, responseAPIRequest, meta); err != nil {
+		slimResponse := &openai_compatible.SlimTextResponse{Choices: choices, Usage: response.Usage}
+		var renderErr error
+		if downstreamStream {
+			renderErr = renderChatResponseAsResponseAPIStream(c, http.StatusOK, slimResponse, responseAPIRequest, meta)
+		} else {
+			renderErr = renderChatResponseAsResponseAPI(c, http.StatusOK, slimResponse, responseAPIRequest, meta)
+		}
+		if renderErr != nil {
 			_ = returnPreConsumedQuotaConservative(ctx, c, preConsumedQuota, meta.TokenId, "response_rewrite_failed_mcp")
-			return openai.ErrorWrapper(err, "response_rewrite_failed", http.StatusInternalServerError)
+			return openai.ErrorWrapper(renderErr, "response_rewrite_failed", http.StatusInternalServerError)
 		}
 
 		// refund pre-consumed quota immediately before final billing reconciliation

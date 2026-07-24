@@ -9,6 +9,7 @@ import (
 	"github.com/Laisky/errors/v2"
 	"github.com/gin-gonic/gin"
 
+	"github.com/Laisky/one-api/common"
 	"github.com/Laisky/one-api/common/ctxkey"
 	"github.com/Laisky/one-api/relay/adaptor/openai"
 	"github.com/Laisky/one-api/relay/adaptor/openai_compatible"
@@ -94,6 +95,34 @@ func renderChatResponseAsResponseAPI(c *gin.Context, status int, textResp *opena
 	c.Writer.WriteHeader(status)
 	_, err = c.Writer.Write(data)
 	return errors.Wrap(err, "write response API response")
+}
+
+// renderChatResponseAsResponseAPIStream renders a completed Chat Completion response as a terminal Responses API SSE sequence.
+func renderChatResponseAsResponseAPIStream(c *gin.Context, status int, textResp *openai_compatible.SlimTextResponse, originalReq *openai.ResponseAPIRequest, meta *metalib.Meta) error {
+	c.Set(ctxkey.ResponseRewriteApplied, true)
+	c.Status(status)
+	common.SetEventStreamHeaders(c)
+
+	bridge := newChatToResponseStreamBridge(c, meta, originalReq)
+	choices := make([]openai_compatible.ChatCompletionsStreamResponseChoice, 0, len(textResp.Choices))
+	for _, choice := range textResp.Choices {
+		finishReason := choice.FinishReason
+		choices = append(choices, openai_compatible.ChatCompletionsStreamResponseChoice{
+			Index:        choice.Index,
+			Delta:        choice.Message,
+			FinishReason: &finishReason,
+		})
+	}
+
+	bridge.HandleChunk(c, &openai_compatible.ChatCompletionsStreamResponse{
+		Object:  "chat.completion.chunk",
+		Model:   meta.ActualModelName,
+		Choices: choices,
+		Usage:   &textResp.Usage,
+	})
+	bridge.FinalizeUsage(&textResp.Usage)
+	bridge.HandleDone(c)
+	return nil
 }
 
 // generateResponseAPIID generates a unique ID for a Response API response

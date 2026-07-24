@@ -152,9 +152,22 @@ func TestRelayResponseAPIHelper_FallbackAnthropicMCPPrunesUnmatchedResponseTools
 	require.ElementsMatch(t, []string{"section_edit", "web_search"}, toolNames)
 	require.NotContains(t, toolNames, "namespace", "unmatched Response-only namespace tool should be pruned")
 
-	var fallbackResp openai.ResponseAPIResponse
-	err = json.Unmarshal(recorder.Body.Bytes(), &fallbackResp)
-	require.NoError(t, err, "failed to unmarshal fallback response")
+	require.Contains(t, recorder.Header().Get("Content-Type"), "text/event-stream", "streaming Responses clients must receive SSE")
+	events := parseSSEEvents(recorder.Body.String())
+	require.NotEmpty(t, events, "expected downstream Responses SSE events")
+
+	var fallbackResp *openai.ResponseAPIResponse
+	for _, event := range events {
+		if event.event != "response.completed" {
+			continue
+		}
+		var streamEvent openai.ResponseAPIStreamEvent
+		err = json.Unmarshal([]byte(event.data), &streamEvent)
+		require.NoError(t, err, "failed to unmarshal response.completed event")
+		fallbackResp = streamEvent.Response
+	}
+	require.NotNil(t, fallbackResp, "stream must include a terminal response.completed event")
 	require.Equal(t, "completed", fallbackResp.Status, "expected completed response")
 	require.Equal(t, "MCP fallback ok", fallbackResp.Output[0].Content[0].Text, "unexpected fallback response text")
+	require.Equal(t, "[DONE]", strings.TrimSpace(events[len(events)-1].data), "stream must end with [DONE]")
 }
