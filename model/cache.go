@@ -657,10 +657,11 @@ func CacheGetRandomSatisfiedChannelExcluding(group string, model string, ignoreF
 }
 
 // pickWeightedChannel selects a channel using weighted random over the channels'
-// weights. When all weights are zero (or the slice is empty) it returns nil so the
-// caller can fall back to uniform random. It shares its core algorithm with the DB
-// path's selectAbilityByWeight via weightedIndex so both routing paths behave
-// identically.
+// weights (channels.weight is the single source of truth for weight). When all
+// weights are zero (or the slice is empty) it returns nil so the caller can fall
+// back to uniform random. Both routing paths — this cache path and the DB path's
+// getRandomSatisfiedChannel — feed their candidate channels through this helper, so
+// they weight identically.
 func pickWeightedChannel(channels []*Channel) *Channel {
 	if len(channels) == 0 {
 		return nil

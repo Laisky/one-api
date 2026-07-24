@@ -151,55 +151,33 @@ func FuzzWeightedIndex(f *testing.F) {
 	})
 }
 
-func TestSelectAbilityByWeight_EmptyErrors(t *testing.T) {
+func TestPickWeightedChannel_NilWeightTreatedAsZero(t *testing.T) {
 	t.Parallel()
-	_, err := selectAbilityByWeight(nil)
-	require.Error(t, err)
-}
-
-func TestSelectAbilityByWeight_NilWeightTreatedAsZero(t *testing.T) {
-	t.Parallel()
-	// One ability has nil weight (NULL in DB), the other a positive weight.
+	// One channel has nil weight (NULL in DB), the other a positive weight.
 	// Weighted selection must always choose the positive one.
-	abilities := []Ability{
-		{ChannelId: 1, Weight: nil},
-		{ChannelId: 2, Weight: uintPtr(5)},
+	channels := []*Channel{
+		{Id: 1, Weight: nil},
+		{Id: 2, Weight: uintPtr(5)},
 	}
 	for range 200 {
-		got, err := selectAbilityByWeight(abilities)
-		require.NoError(t, err)
-		require.Equal(t, 2, got.ChannelId)
+		got := pickWeightedChannel(channels)
+		require.NotNil(t, got)
+		require.Equal(t, 2, got.Id)
 	}
 }
 
-func TestSelectAbilityByWeight_AllZeroUniformCoversAll(t *testing.T) {
+func TestPickWeightedChannel_DistributionApproximatelyMatchesWeights(t *testing.T) {
 	t.Parallel()
-	abilities := []Ability{
-		{ChannelId: 1, Weight: uintPtr(0)},
-		{ChannelId: 2, Weight: nil},
-		{ChannelId: 3, Weight: uintPtr(0)},
-	}
-	seen := map[int]bool{}
-	for range 500 {
-		got, err := selectAbilityByWeight(abilities)
-		require.NoError(t, err)
-		seen[got.ChannelId] = true
-	}
-	require.Len(t, seen, 3, "uniform fallback must be able to pick every candidate")
-}
-
-func TestSelectAbilityByWeight_DistributionApproximatelyMatchesWeights(t *testing.T) {
-	t.Parallel()
-	abilities := []Ability{
-		{ChannelId: 1, Weight: uintPtr(7)},
-		{ChannelId: 2, Weight: uintPtr(3)},
+	channels := []*Channel{
+		{Id: 1, Weight: uintPtr(7)},
+		{Id: 2, Weight: uintPtr(3)},
 	}
 	counts := map[int]int{}
 	const n = 20000
 	for range n {
-		got, err := selectAbilityByWeight(abilities)
-		require.NoError(t, err)
-		counts[got.ChannelId]++
+		got := pickWeightedChannel(channels)
+		require.NotNil(t, got)
+		counts[got.Id]++
 	}
 	ratio1 := float64(counts[1]) / float64(n)
 	require.InDelta(t, 0.70, ratio1, 0.05, "channel 1 should get ~70%% of traffic, got %.3f", ratio1)

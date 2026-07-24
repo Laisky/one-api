@@ -6,7 +6,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gorm.io/driver/sqlite"
@@ -460,18 +459,20 @@ func TestExactModelPredicateMySQL(t *testing.T) {
 	require.Equal(t, "abilities.model = CAST(? AS BINARY)", exactModelPredicate("abilities.model"))
 }
 
-// TestGetRandomSatisfiedChannelExcludingMySQLCountError verifies that the
-// MySQL candidate count uses exact matching and propagates database failures.
-func TestGetRandomSatisfiedChannelExcludingMySQLCountError(t *testing.T) {
+// TestGetRandomSatisfiedChannelExcludingMySQLQueryError verifies that the MySQL
+// candidate-selection query uses exact (CAST-based) model matching and propagates
+// database failures wrapped.
+func TestGetRandomSatisfiedChannelExcludingMySQLQueryError(t *testing.T) {
 	mock, closeDB := setupMySQLMockDB(t)
-	mock.ExpectQuery("SELECT count\\(\\*\\) FROM `abilities` WHERE .*model = CAST\\(\\? AS BINARY\\).*").
-		WithArgs("default", "ModelA", true, sqlmock.AnyArg()).
-		WillReturnError(fmt.Errorf("count query failed"))
+	// The single candidate-id query embeds the MySQL exact-model predicate; a
+	// failure here must surface as a wrapped "load candidate channel ids" error.
+	mock.ExpectQuery("SELECT .*channel_id.* FROM `abilities` WHERE .*model = CAST\\(\\? AS BINARY\\).*").
+		WillReturnError(fmt.Errorf("candidate query failed"))
 
 	_, err := GetRandomSatisfiedChannelExcluding("default", "ModelA", false, nil)
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "count available channels after exclusions")
-	require.Contains(t, err.Error(), "count query failed")
+	require.Contains(t, err.Error(), "load candidate channel ids")
+	require.Contains(t, err.Error(), "candidate query failed")
 
 	require.NoError(t, closeDB())
 	require.NoError(t, mock.ExpectationsWereMet())
