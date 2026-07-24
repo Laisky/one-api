@@ -21,12 +21,20 @@ import (
 )
 
 type Ability struct {
-	Group        string     `json:"group" gorm:"type:varchar(32);primaryKey;autoIncrement:false"`
-	Model        string     `json:"model" gorm:"primaryKey;autoIncrement:false"`
-	ChannelId    int        `json:"channel_id" gorm:"primaryKey;autoIncrement:false;index"`
-	Enabled      bool       `json:"enabled"`
-	Priority     *int64     `json:"priority" gorm:"bigint;default:0;index"`
-	Weight       *uint      `json:"weight" gorm:"default:0"`
+	Group     string `json:"group" gorm:"type:varchar(32);primaryKey;autoIncrement:false"`
+	Model     string `json:"model" gorm:"primaryKey;autoIncrement:false"`
+	ChannelId int    `json:"channel_id" gorm:"primaryKey;autoIncrement:false;index"`
+	Enabled   bool   `json:"enabled"`
+	Priority  *int64 `json:"priority" gorm:"bigint;default:0;index"`
+	// Weight is deliberately created WITHOUT a database default. On an upgrade,
+	// AutoMigrate adds this column to the existing abilities table; a non-NULL
+	// default (e.g. default:0) would make every historical row read back as 0,
+	// silently defeating the NULL-guarded backfill in MigrateAbilityWeightBackfill.
+	// Leaving it nullable lets historical rows stay NULL until the backfill copies
+	// the parent channel's weight. All inserts go through addAbilitiesWithDB, which
+	// always writes a concrete weight, so new rows are never NULL. NULL is treated
+	// as 0 everywhere weight is read (see GetWeight / weightedIndex).
+	Weight       *uint      `json:"weight"`
 	SuspendUntil *time.Time `json:"suspend_until,omitempty" gorm:"index"`
 	CreatedAt    int64      `json:"created_at" gorm:"bigint;autoCreateTime:milli"`
 	UpdatedAt    int64      `json:"updated_at" gorm:"bigint;autoUpdateTime:milli"`
@@ -140,9 +148,10 @@ func addAbilitiesWithDB(db *gorm.DB, channel *Channel) error {
 		}
 		for _, group := range groups {
 			// Use GetWeight() rather than channel.Weight directly so the value is
-			// always a concrete non-nil pointer, avoiding GORM inserting NULL when
-			// the channel has no weight configured (gorm:"default:0" only applies
-			// to zero-value Go types, not nil pointers).
+			// always a concrete non-nil pointer. The abilities.weight column has no
+			// database default (see the Ability struct), so a nil pointer here would
+			// persist as NULL; writing an explicit 0 keeps new rows out of the
+			// backfill's NULL set and matches the parent channel exactly.
 			weight := channel.GetWeight()
 			ability := Ability{
 				Group:        group,
@@ -429,42 +438,26 @@ func GetRandomSatisfiedChannelExcluding(group string, model string, ignoreFirstP
 	return &channel, nil
 }
 
-// selectAbilityByWeight picks one ability using weighted random selection.
-// When all weights are zero it falls back to uniform random.
+// selectAbilityByWeight picks one ability using weighted random selection over the
+// abilities' weights (a NULL weight counts as zero). When every weight is zero it
+// falls back to uniform random. It shares its core algorithm with the cache path's
+// pickWeightedChannel via weightedIndex so both routing paths behave identically.
 func selectAbilityByWeight(abilities []Ability) (Ability, error) {
 	if len(abilities) == 0 {
 		return Ability{}, errors.New("no abilities to select from")
 	}
 
-	// Calculate total weight using int64 to avoid overflow when converting to
-	// a signed type for rand.Int63n. Individual weights are uint but their sum
-	// across a tier of channels fits easily within int64 in practice.
-	var totalWeight int64
-	for _, a := range abilities {
+	weights := make([]uint, len(abilities))
+	for i, a := range abilities {
 		if a.Weight != nil {
-			totalWeight += int64(*a.Weight)
+			weights[i] = *a.Weight
 		}
 	}
 
-	// If all weights are zero, fall back to uniform random
-	if totalWeight == 0 {
-		return abilities[rand.Intn(len(abilities))], nil
+	idx := weightedIndex(weights, rand.Int63n)
+	if idx < 0 {
+		// All weights zero: fall back to uniform random.
+		idx = rand.Intn(len(abilities))
 	}
-
-	// Weighted random selection
-	r := rand.Int63n(totalWeight)
-	var cumulative int64
-	for _, a := range abilities {
-		w := int64(0)
-		if a.Weight != nil {
-			w = int64(*a.Weight)
-		}
-		cumulative += w
-		if r < cumulative {
-			return a, nil
-		}
-	}
-
-	// Fallback (shouldn't reach here)
-	return abilities[len(abilities)-1], nil
+	return abilities[idx], nil
 }

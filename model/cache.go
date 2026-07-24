@@ -656,31 +656,24 @@ func CacheGetRandomSatisfiedChannelExcluding(group string, model string, ignoreF
 	}
 }
 
-// pickWeightedChannel selects a channel using weighted random.
-// When all weights are zero it returns nil so the caller can fall back to uniform random.
+// pickWeightedChannel selects a channel using weighted random over the channels'
+// weights. When all weights are zero (or the slice is empty) it returns nil so the
+// caller can fall back to uniform random. It shares its core algorithm with the DB
+// path's selectAbilityByWeight via weightedIndex so both routing paths behave
+// identically.
 func pickWeightedChannel(channels []*Channel) *Channel {
 	if len(channels) == 0 {
 		return nil
 	}
 
-	// Use int64 to avoid overflow when converting to rand.Int63n's argument.
-	var totalWeight int64
-	for _, ch := range channels {
-		totalWeight += int64(ch.GetWeight())
+	weights := make([]uint, len(channels))
+	for i, ch := range channels {
+		weights[i] = ch.GetWeight()
 	}
 
-	if totalWeight == 0 {
+	idx := weightedIndex(weights, rand.Int63n)
+	if idx < 0 {
 		return nil // signal caller to use uniform random
 	}
-
-	r := rand.Int63n(totalWeight)
-	var cumulative int64
-	for _, ch := range channels {
-		cumulative += int64(ch.GetWeight())
-		if r < cumulative {
-			return ch
-		}
-	}
-
-	return channels[len(channels)-1]
+	return channels[idx]
 }
