@@ -13,6 +13,7 @@ import (
 	model "github.com/Laisky/one-api/model"
 	"github.com/Laisky/one-api/relay"
 	"github.com/Laisky/one-api/relay/adaptor"
+	"github.com/Laisky/one-api/relay/adaptor/openai"
 	"github.com/Laisky/one-api/relay/apitype"
 	metalib "github.com/Laisky/one-api/relay/meta"
 	relaymodel "github.com/Laisky/one-api/relay/model"
@@ -138,6 +139,67 @@ func TestComputeTimeWindowDeepSeekFixture(t *testing.T) {
 	})
 	require.Equal(t, int64(127), outWindow.TotalQuota)
 	require.InDelta(t, 1.0, outWindow.UsedModelRatio, 1e-12)
+}
+
+// TestComputeOpenAIGPT56CacheWritePricing verifies GPT-5.6 cache writes use
+// OpenAI's 1.25x cache-write price instead of falling back to normal input cost.
+func TestComputeOpenAIGPT56CacheWritePricing(t *testing.T) {
+	t.Parallel()
+
+	pricingAdaptor := relay.GetAdaptor(apitype.OpenAI)
+	require.NotNil(t, pricingAdaptor)
+
+	tests := []struct {
+		name        string
+		modelName   string
+		usage       *relaymodel.Usage
+		expected    int64
+		expectedIn  float64
+		expectedOut float64
+	}{
+		{
+			name:      "base sol cache write",
+			modelName: "gpt-5.6-sol",
+			usage: &relaymodel.Usage{
+				PromptTokens:       100,
+				CompletionTokens:   10,
+				CacheWrite5mTokens: 20,
+			},
+			expected:    413,
+			expectedIn:  openai.ModelRatios["gpt-5.6-sol"].Ratio,
+			expectedOut: openai.ModelRatios["gpt-5.6-sol"].CompletionRatio,
+		},
+		{
+			name:      "long context sol cache write",
+			modelName: "gpt-5.6-sol",
+			usage: &relaymodel.Usage{
+				PromptTokens:       300000,
+				CompletionTokens:   1000,
+				CacheWrite5mTokens: 1000,
+			},
+			expected:    1523750,
+			expectedIn:  10.0 * openai.ModelRatios["gpt-5.6-sol"].Ratio / 5.0,
+			expectedOut: 4.5,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			result := quotautil.Compute(quotautil.ComputeInput{
+				Usage:          tt.usage,
+				ModelName:      tt.modelName,
+				ModelRatio:     pricingAdaptor.GetModelRatio(tt.modelName),
+				GroupRatio:     1,
+				PricingAdaptor: pricingAdaptor,
+			})
+
+			require.Equal(t, tt.expected, result.TotalQuota)
+			require.InDelta(t, tt.expectedIn, result.UsedModelRatio, 1e-12)
+			require.InDelta(t, tt.expectedOut, result.UsedCompletionRatio, 1e-12)
+		})
+	}
 }
 
 // TestComputeTimeWindowUsesRequestStartForSingleRate verifies billing is stable for a boundary-crossing request.

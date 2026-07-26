@@ -35,6 +35,9 @@ type responseAPIEventUsage struct {
 	InputTokens        int `json:"input_tokens,omitempty"`
 	OutputTokens       int `json:"output_tokens,omitempty"`
 	TotalTokens        int `json:"total_tokens,omitempty"`
+	CacheWriteTokens   int `json:"cache_write_tokens,omitempty"`
+	CacheWrite5mTokens int `json:"cache_write_5m_tokens,omitempty"`
+	CacheWrite1hTokens int `json:"cache_write_1h_tokens,omitempty"`
 	InputTokensDetails struct {
 		CachedTokens int `json:"cached_tokens,omitempty"`
 	} `json:"input_tokens_details,omitempty"`
@@ -328,6 +331,8 @@ func accumulateResponseAPIUsage(msg []byte, usage *rmodel.Usage, countedResponse
 	usage.PromptTokens += snapshot.PromptTokens
 	usage.CompletionTokens += snapshot.CompletionTokens
 	usage.TotalTokens += snapshot.TotalTokens
+	usage.CacheWrite5mTokens += snapshot.CacheWrite5mTokens
+	usage.CacheWrite1hTokens += snapshot.CacheWrite1hTokens
 
 	if snapshot.PromptTokensDetails != nil {
 		if usage.PromptTokensDetails == nil {
@@ -356,9 +361,11 @@ func extractResponseAPIUsage(msg []byte) (string, *rmodel.Usage, bool) {
 	}
 
 	usage := &rmodel.Usage{
-		PromptTokens:     event.Response.Usage.InputTokens,
-		CompletionTokens: event.Response.Usage.OutputTokens,
-		TotalTokens:      event.Response.Usage.TotalTokens,
+		PromptTokens:       event.Response.Usage.InputTokens,
+		CompletionTokens:   event.Response.Usage.OutputTokens,
+		TotalTokens:        event.Response.Usage.TotalTokens,
+		CacheWrite5mTokens: event.Response.Usage.CacheWriteTokens + event.Response.Usage.CacheWrite5mTokens,
+		CacheWrite1hTokens: event.Response.Usage.CacheWrite1hTokens,
 	}
 
 	if usage.TotalTokens == 0 {

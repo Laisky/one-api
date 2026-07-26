@@ -20,6 +20,9 @@ type ResponseAPIUsage struct {
 	TotalTokens         int                             `json:"total_tokens"`
 	InputTokensDetails  *ResponseAPIInputTokensDetails  `json:"input_tokens_details,omitempty"`
 	OutputTokensDetails *ResponseAPIOutputTokensDetails `json:"output_tokens_details,omitempty"`
+	CacheWriteTokens    int                             `json:"cache_write_tokens,omitempty"`
+	CacheWrite5mTokens  int                             `json:"cache_write_5m_tokens,omitempty"`
+	CacheWrite1hTokens  int                             `json:"cache_write_1h_tokens,omitempty"`
 }
 
 // ResponseAPIInputTokensDetails models the nested usage block returned by the OpenAI Response API.
@@ -402,9 +405,11 @@ func (r *ResponseAPIUsage) ToModelUsage() *model.Usage {
 	}
 
 	usage := &model.Usage{
-		PromptTokens:     r.InputTokens,
-		CompletionTokens: r.OutputTokens,
-		TotalTokens:      r.TotalTokens,
+		PromptTokens:       r.InputTokens,
+		CompletionTokens:   r.OutputTokens,
+		TotalTokens:        r.TotalTokens,
+		CacheWrite5mTokens: r.CacheWriteTokens + r.CacheWrite5mTokens,
+		CacheWrite1hTokens: r.CacheWrite1hTokens,
 	}
 	usage.PromptTokensDetails = r.InputTokensDetails.toModel()
 	usage.CompletionTokensDetails = r.OutputTokensDetails.toModel()
@@ -423,6 +428,8 @@ func (r *ResponseAPIUsage) FromModelUsage(usage *model.Usage) *ResponseAPIUsage 
 		TotalTokens:         usage.TotalTokens,
 		InputTokensDetails:  newResponseAPIInputTokensDetailsFromModel(usage.PromptTokensDetails),
 		OutputTokensDetails: newResponseAPIOutputTokensDetailsFromModel(usage.CompletionTokensDetails),
+		CacheWriteTokens:    usage.CacheWrite5mTokens,
+		CacheWrite1hTokens:  usage.CacheWrite1hTokens,
 	}
 
 	return converted

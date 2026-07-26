@@ -188,6 +188,30 @@ func TestApplyBuiltinToolCharges_WebSearchPreviewPricing(t *testing.T) {
 	}
 }
 
+// TestApplyBuiltinToolCharges_GPT56WebSearch verifies GPT-5.6 Responses web
+// search calls use the current OpenAI built-in tool pricing.
+func TestApplyBuiltinToolCharges_GPT56WebSearch(t *testing.T) {
+	t.Parallel()
+	gin.SetMode(gin.TestMode)
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Set(ctxkey.WebSearchCallCount, 2)
+
+	meta := &metalib.Meta{ActualModelName: "gpt-5.6"}
+	usage := &relaymodel.Usage{PromptTokens: 100, CompletionTokens: 10}
+
+	ApplyBuiltinToolCharges(c, &usage, meta, nil, &openai.Adaptor{})
+
+	expectedPerCall := int64(math.Ceil(0.01 * float64(ratio.QuotaPerUsd)))
+	require.Equal(t, expectedPerCall*2, usage.ToolsCost)
+
+	summaryAny, exists := c.Get(ctxkey.ToolInvocationSummary)
+	require.True(t, exists)
+	summary := summaryAny.(*model.ToolUsageSummary)
+	require.Equal(t, 2, summary.Counts["web_search"])
+	require.Equal(t, expectedPerCall*2, summary.CostByTool["web_search"])
+}
+
 func TestValidateChatBuiltinTools_Disallowed(t *testing.T) {
 	t.Parallel()
 	gin.SetMode(gin.TestMode)

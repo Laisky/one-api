@@ -456,6 +456,7 @@ streamLoop:
 	// prompt_tokens_details.cached_tokens field so downstream billing applies
 	// the cache-hit ratio. No-op for OpenAI-shaped responses.
 	usage.NormalizeCachedTokens()
+	usage.NormalizeCacheWriteTokens()
 
 	// Let the streamRewriter finalize if present, but do NOT fabricate a
 	// [DONE] when the upstream didn't send one — be an honest proxy.
@@ -851,6 +852,7 @@ func calculateTokenUsage(response *SlimTextResponse, promptTokens int, modelName
 	// prompt_tokens_details.cached_tokens field so downstream billing applies
 	// the cache-hit ratio. No-op for OpenAI-shaped responses.
 	response.Usage.NormalizeCachedTokens()
+	response.Usage.NormalizeCacheWriteTokens()
 }
 
 // Helper function to check if response has audio tokens

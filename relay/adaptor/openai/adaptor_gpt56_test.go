@@ -41,17 +41,19 @@ func TestGPT56Pricing(t *testing.T) {
 		ratio            float64 // input $/1M
 		completionRatio  float64 // output/input multiplier
 		cachedInputRatio float64 // cached input $/1M
+		cacheWriteRatio  float64 // cache write $/1M
 		tierRatio        float64 // >272K input $/1M
 		tierCompletion   float64 // >272K output/input multiplier
 		tierCached       float64 // >272K cached input $/1M
+		tierCacheWrite   float64 // >272K cache write $/1M
 	}
 
 	// gpt-5.6 is the alias for gpt-5.6-sol and must price identically.
 	expectations := map[string]expectation{
-		"gpt-5.6":       {5.0, 6.0, 0.5, 10.0, 4.5, 1.0},
-		"gpt-5.6-sol":   {5.0, 6.0, 0.5, 10.0, 4.5, 1.0},
-		"gpt-5.6-terra": {2.5, 6.0, 0.25, 5.0, 4.5, 0.5},
-		"gpt-5.6-luna":  {1.0, 6.0, 0.1, 2.0, 4.5, 0.2},
+		"gpt-5.6":       {5.0, 6.0, 0.5, 6.25, 10.0, 4.5, 1.0, 12.5},
+		"gpt-5.6-sol":   {5.0, 6.0, 0.5, 6.25, 10.0, 4.5, 1.0, 12.5},
+		"gpt-5.6-terra": {2.5, 6.0, 0.25, 3.125, 5.0, 4.5, 0.5, 6.25},
+		"gpt-5.6-luna":  {1.0, 6.0, 0.1, 1.25, 2.0, 4.5, 0.2, 2.5},
 	}
 
 	for name, exp := range expectations {
@@ -64,6 +66,9 @@ func TestGPT56Pricing(t *testing.T) {
 			"%s completion ratio", name)
 		assert.InDeltaf(t, exp.cachedInputRatio*ratio.MilliTokensUsd, cfg.CachedInputRatio, 1e-12,
 			"%s cached input ratio", name)
+		assert.InDeltaf(t, exp.cacheWriteRatio*ratio.MilliTokensUsd, cfg.CacheWrite5mRatio, 1e-12,
+			"%s cache write ratio", name)
+		assert.Zerof(t, cfg.CacheWrite1hRatio, "%s must not advertise an unsupported 1h cache write price", name)
 
 		assert.Equalf(t, int32(1_050_000), cfg.ContextLength, "%s context length", name)
 		assert.Equalf(t, int32(128000), cfg.MaxOutputTokens, "%s max output tokens", name)
@@ -79,6 +84,9 @@ func TestGPT56Pricing(t *testing.T) {
 			"%s long-context completion ratio", name)
 		assert.InDeltaf(t, exp.tierCached*ratio.MilliTokensUsd, tier.CachedInputRatio, 1e-12,
 			"%s long-context cached input ratio", name)
+		assert.InDeltaf(t, exp.tierCacheWrite*ratio.MilliTokensUsd, tier.CacheWrite5mRatio, 1e-12,
+			"%s long-context cache write ratio", name)
+		assert.Zerof(t, tier.CacheWrite1hRatio, "%s long-context tier must not advertise an unsupported 1h cache write price", name)
 	}
 }
 

@@ -823,6 +823,7 @@ func (sc *StreamingContext) CalculateUsage(promptTokens int, modelName string) *
 	// prompt_tokens_details.cached_tokens field so downstream billing applies
 	// the cache-hit ratio. No-op for OpenAI-shaped responses.
 	sc.usage.NormalizeCachedTokens()
+	sc.usage.NormalizeCacheWriteTokens()
 
 	return sc.usage
 }

@@ -366,6 +366,7 @@ func Handler(c *gin.Context, resp *http.Response, promptTokens int, modelName st
 	// prompt_tokens_details.cached_tokens field so downstream billing applies
 	// the cache-hit ratio. No-op for OpenAI-shaped responses.
 	usage.NormalizeCachedTokens()
+	usage.NormalizeCacheWriteTokens()
 	logger.Debug("finalized usage for non-stream (openai-compatible)",
 		zap.Int("prompt_tokens", usage.PromptTokens),
 		zap.Int("completion_tokens", usage.CompletionTokens),

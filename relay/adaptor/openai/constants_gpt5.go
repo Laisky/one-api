@@ -89,6 +89,7 @@ var gpt56SolLongContextTier = adaptor.ModelRatioTier{
 	Ratio:               10.0 * ratio.MilliTokensUsd,
 	CompletionRatio:     45.0 / 10.0,
 	CachedInputRatio:    1.0 * ratio.MilliTokensUsd,
+	CacheWrite5mRatio:   12.5 * ratio.MilliTokensUsd,
 	InputTokenThreshold: 272_001,
 }
 
@@ -97,6 +98,7 @@ var gpt56TerraLongContextTier = adaptor.ModelRatioTier{
 	Ratio:               5.0 * ratio.MilliTokensUsd,
 	CompletionRatio:     22.5 / 5.0,
 	CachedInputRatio:    0.5 * ratio.MilliTokensUsd,
+	CacheWrite5mRatio:   6.25 * ratio.MilliTokensUsd,
 	InputTokenThreshold: 272_001,
 }
 
@@ -105,6 +107,7 @@ var gpt56LunaLongContextTier = adaptor.ModelRatioTier{
 	Ratio:               2.0 * ratio.MilliTokensUsd,
 	CompletionRatio:     9.0 / 2.0,
 	CachedInputRatio:    0.2 * ratio.MilliTokensUsd,
+	CacheWrite5mRatio:   2.5 * ratio.MilliTokensUsd,
 	InputTokenThreshold: 272_001,
 }
 
@@ -125,6 +128,7 @@ var gpt5ModelRatios = map[string]adaptor.ModelConfig{
 		Ratio:                       5.0 * ratio.MilliTokensUsd,
 		CompletionRatio:             30.0 / 5.0,
 		CachedInputRatio:            0.5 * ratio.MilliTokensUsd,
+		CacheWrite5mRatio:           6.25 * ratio.MilliTokensUsd,
 		Tiers:                       []adaptor.ModelRatioTier{gpt56SolLongContextTier},
 		ContextLength:               1_050_000,
 		MaxOutputTokens:             128000,
@@ -140,6 +144,7 @@ var gpt5ModelRatios = map[string]adaptor.ModelConfig{
 		Ratio:                       5.0 * ratio.MilliTokensUsd,
 		CompletionRatio:             30.0 / 5.0,
 		CachedInputRatio:            0.5 * ratio.MilliTokensUsd,
+		CacheWrite5mRatio:           6.25 * ratio.MilliTokensUsd,
 		Tiers:                       []adaptor.ModelRatioTier{gpt56SolLongContextTier},
 		ContextLength:               1_050_000,
 		MaxOutputTokens:             128000,
@@ -155,6 +160,7 @@ var gpt5ModelRatios = map[string]adaptor.ModelConfig{
 		Ratio:                       2.5 * ratio.MilliTokensUsd,
 		CompletionRatio:             15.0 / 2.5,
 		CachedInputRatio:            0.25 * ratio.MilliTokensUsd,
+		CacheWrite5mRatio:           3.125 * ratio.MilliTokensUsd,
 		Tiers:                       []adaptor.ModelRatioTier{gpt56TerraLongContextTier},
 		ContextLength:               1_050_000,
 		MaxOutputTokens:             128000,
@@ -170,6 +176,7 @@ var gpt5ModelRatios = map[string]adaptor.ModelConfig{
 		Ratio:                       1.0 * ratio.MilliTokensUsd,
 		CompletionRatio:             6.0 / 1.0,
 		CachedInputRatio:            0.1 * ratio.MilliTokensUsd,
+		CacheWrite5mRatio:           1.25 * ratio.MilliTokensUsd,
 		Tiers:                       []adaptor.ModelRatioTier{gpt56LunaLongContextTier},
 		ContextLength:               1_050_000,
 		MaxOutputTokens:             128000,

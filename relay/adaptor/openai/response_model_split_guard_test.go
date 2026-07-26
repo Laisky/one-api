@@ -138,3 +138,37 @@ func TestResponseAPIInputTokensDetails_MarshalPreservesAdditional(t *testing.T) 
 	require.NotNil(t, decoded["web_search"])
 	require.Equal(t, "keep_me", decoded["future_field"])
 }
+
+func TestResponseAPIUsage_ToModelUsageCacheWriteTokens(t *testing.T) {
+	var usage ResponseAPIUsage
+	err := json.Unmarshal([]byte(`{
+		"input_tokens":100,
+		"output_tokens":20,
+		"total_tokens":120,
+		"cache_write_tokens":30,
+		"input_tokens_details":{"cached_tokens":40}
+	}`), &usage)
+	require.NoError(t, err)
+
+	converted := usage.ToModelUsage()
+	require.NotNil(t, converted)
+	require.Equal(t, 100, converted.PromptTokens)
+	require.Equal(t, 20, converted.CompletionTokens)
+	require.Equal(t, 120, converted.TotalTokens)
+	require.Equal(t, 30, converted.CacheWrite5mTokens)
+	require.Zero(t, converted.CacheWrite1hTokens)
+	require.NotNil(t, converted.PromptTokensDetails)
+	require.Equal(t, 40, converted.PromptTokensDetails.CachedTokens)
+}
+
+func TestUsageNormalizeCacheWriteTokens(t *testing.T) {
+	usage := &model.Usage{
+		CacheWriteTokens:   30,
+		CacheWrite5mTokens: 2,
+	}
+
+	usage.NormalizeCacheWriteTokens()
+
+	require.Zero(t, usage.CacheWriteTokens)
+	require.Equal(t, 32, usage.CacheWrite5mTokens)
+}

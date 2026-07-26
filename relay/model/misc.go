@@ -32,6 +32,7 @@ type Usage struct {
 	// Cache write token details (Anthropic Claude prompt caching)
 	// These fields capture how many input tokens were charged as cache creation writes.
 	// They are optional and only set when providers return such details.
+	CacheWriteTokens   int `json:"cache_write_tokens,omitempty"`
 	CacheWrite5mTokens int `json:"cache_write_5m_tokens,omitempty"`
 	CacheWrite1hTokens int `json:"cache_write_1h_tokens,omitempty"`
 }
@@ -55,6 +56,17 @@ func (u *Usage) NormalizeCachedTokens() {
 		u.PromptTokensDetails.CachedTokens = u.CachedTokens
 	}
 	u.CachedTokens = 0
+}
+
+// NormalizeCacheWriteTokens promotes OpenAI's top-level cache_write_tokens
+// usage field into the relay's generic cache-write bucket used for quota
+// billing.
+func (u *Usage) NormalizeCacheWriteTokens() {
+	if u == nil || u.CacheWriteTokens <= 0 {
+		return
+	}
+	u.CacheWrite5mTokens += u.CacheWriteTokens
+	u.CacheWriteTokens = 0
 }
 
 // ErrorType enumerates the standardized error categories we expose to clients.

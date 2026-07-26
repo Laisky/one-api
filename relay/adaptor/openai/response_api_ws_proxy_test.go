@@ -25,7 +25,7 @@ import (
 func TestExtractResponseAPIUsage(t *testing.T) {
 	t.Parallel()
 
-	payload := []byte(`{"type":"response.completed","response":{"id":"resp_123","usage":{"input_tokens":10,"output_tokens":20,"input_tokens_details":{"cached_tokens":3},"output_tokens_details":{"reasoning_tokens":5}}}}`)
+	payload := []byte(`{"type":"response.completed","response":{"id":"resp_123","usage":{"input_tokens":10,"output_tokens":20,"cache_write_tokens":4,"input_tokens_details":{"cached_tokens":3},"output_tokens_details":{"reasoning_tokens":5}}}}`)
 
 	responseID, usage, ok := extractResponseAPIUsage(payload)
 	require.True(t, ok)
@@ -34,6 +34,7 @@ func TestExtractResponseAPIUsage(t *testing.T) {
 	require.Equal(t, 10, usage.PromptTokens)
 	require.Equal(t, 20, usage.CompletionTokens)
 	require.Equal(t, 30, usage.TotalTokens)
+	require.Equal(t, 4, usage.CacheWrite5mTokens)
 	require.NotNil(t, usage.PromptTokensDetails)
 	require.Equal(t, 3, usage.PromptTokensDetails.CachedTokens)
 	require.NotNil(t, usage.CompletionTokensDetails)

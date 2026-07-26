@@ -6,9 +6,11 @@ import (
 )
 
 // specializedModelRatios captures pricing and metadata for OpenAI's specialized
-// chat models: codex, web-search-preview, computer-use, and moderation.
+// chat models: codex, web-search, computer-use, and moderation.
 // Sources:
 //   - https://platform.openai.com/docs/models/codex-mini-latest
+//   - https://developers.openai.com/api/docs/guides/tools-web-search
+//   - https://developers.openai.com/api/docs/pricing
 //   - https://platform.openai.com/docs/models/gpt-4o-search-preview
 //   - https://platform.openai.com/docs/models/computer-use-preview
 //   - https://platform.openai.com/docs/models/omni-moderation-latest
@@ -27,7 +29,20 @@ var specializedModelRatios = map[string]adaptor.ModelConfig{
 		Description:                 "Codex mini latest: lightweight Codex agent reasoning model.",
 	},
 
-	// Search-Preview Models (web-search-augmented chat completions)
+	// Search Models (web-search-augmented chat completions)
+	"gpt-5-search-api": {
+		Ratio:                       1.25 * ratio.MilliTokensUsd,
+		CompletionRatio:             10.0 / 1.25,
+		CachedInputRatio:            0.125 * ratio.MilliTokensUsd,
+		ContextLength:               200000,
+		MaxOutputTokens:             128000,
+		InputModalities:             []string{"text", "image"},
+		OutputModalities:            []string{"text"},
+		SupportedFeatures:           []string{"reasoning", "tools", "web_search"},
+		SupportedSamplingParameters: reasoningSamplingParameters(),
+		DefaultReasoningEffort:      "medium",
+		Description:                 "GPT-5 Search API: Chat Completions search model that always retrieves from the web; web search tool-call charges also apply.",
+	},
 	"gpt-4o-mini-search-preview": {
 		Ratio:                       0.15 * ratio.MilliTokensUsd,
 		CompletionRatio:             4.0,
