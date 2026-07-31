@@ -93,21 +93,21 @@ var gpt56SolLongContextTier = adaptor.ModelRatioTier{
 	InputTokenThreshold: 272_001,
 }
 
-// gpt56TerraLongContextTier: gpt-5.6-terra (>272K input): $5 in, $22.50 out.
+// gpt56TerraLongContextTier: gpt-5.6-terra (>272K input): $4 in, $18 out.
 var gpt56TerraLongContextTier = adaptor.ModelRatioTier{
-	Ratio:               5.0 * ratio.MilliTokensUsd,
-	CompletionRatio:     22.5 / 5.0,
-	CachedInputRatio:    0.5 * ratio.MilliTokensUsd,
-	CacheWrite5mRatio:   6.25 * ratio.MilliTokensUsd,
+	Ratio:               4.0 * ratio.MilliTokensUsd,
+	CompletionRatio:     18.0 / 4.0,
+	CachedInputRatio:    0.4 * ratio.MilliTokensUsd,
+	CacheWrite5mRatio:   5.0 * ratio.MilliTokensUsd,
 	InputTokenThreshold: 272_001,
 }
 
-// gpt56LunaLongContextTier: gpt-5.6-luna (>272K input): $2 in, $9 out.
+// gpt56LunaLongContextTier: gpt-5.6-luna (>272K input): $0.40 in, $1.80 out.
 var gpt56LunaLongContextTier = adaptor.ModelRatioTier{
-	Ratio:               2.0 * ratio.MilliTokensUsd,
-	CompletionRatio:     9.0 / 2.0,
-	CachedInputRatio:    0.2 * ratio.MilliTokensUsd,
-	CacheWrite5mRatio:   2.5 * ratio.MilliTokensUsd,
+	Ratio:               0.4 * ratio.MilliTokensUsd,
+	CompletionRatio:     1.8 / 0.4,
+	CachedInputRatio:    0.04 * ratio.MilliTokensUsd,
+	CacheWrite5mRatio:   0.5 * ratio.MilliTokensUsd,
 	InputTokenThreshold: 272_001,
 }
 
@@ -120,7 +120,7 @@ var gpt5ModelRatios = map[string]adaptor.ModelConfig{
 	// window with 128K max output and a >272K-input long-context surcharge (2x
 	// input, 1.5x output). reasoning.effort additionally accepts the new "max"
 	// level (gpt56FullEfforts). Knowledge cutoff 2026-02-16.
-	// Sources verified 2026-07-10:
+	// Sources verified 2026-07-31:
 	//   - https://developers.openai.com/api/docs/pricing
 	//   - https://developers.openai.com/api/docs/models/gpt-5.6-sol
 	//   - https://developers.openai.com/api/docs/guides/latest-model
@@ -157,10 +157,10 @@ var gpt5ModelRatios = map[string]adaptor.ModelConfig{
 		Description:                 "GPT-5.6 Sol: flagship 5.6 reasoning tier with 1.05M context (long-context surcharge >272K input).",
 	},
 	"gpt-5.6-terra": {
-		Ratio:                       2.5 * ratio.MilliTokensUsd,
-		CompletionRatio:             15.0 / 2.5,
-		CachedInputRatio:            0.25 * ratio.MilliTokensUsd,
-		CacheWrite5mRatio:           3.125 * ratio.MilliTokensUsd,
+		Ratio:                       2.0 * ratio.MilliTokensUsd,
+		CompletionRatio:             12.0 / 2.0,
+		CachedInputRatio:            0.2 * ratio.MilliTokensUsd,
+		CacheWrite5mRatio:           2.5 * ratio.MilliTokensUsd,
 		Tiers:                       []adaptor.ModelRatioTier{gpt56TerraLongContextTier},
 		ContextLength:               1_050_000,
 		MaxOutputTokens:             128000,
@@ -173,10 +173,10 @@ var gpt5ModelRatios = map[string]adaptor.ModelConfig{
 		Description:                 "GPT-5.6 Terra: balanced 5.6 reasoning tier with 1.05M context (long-context surcharge >272K input).",
 	},
 	"gpt-5.6-luna": {
-		Ratio:                       1.0 * ratio.MilliTokensUsd,
-		CompletionRatio:             6.0 / 1.0,
-		CachedInputRatio:            0.1 * ratio.MilliTokensUsd,
-		CacheWrite5mRatio:           1.25 * ratio.MilliTokensUsd,
+		Ratio:                       0.2 * ratio.MilliTokensUsd,
+		CompletionRatio:             1.2 / 0.2,
+		CachedInputRatio:            0.02 * ratio.MilliTokensUsd,
+		CacheWrite5mRatio:           0.25 * ratio.MilliTokensUsd,
 		Tiers:                       []adaptor.ModelRatioTier{gpt56LunaLongContextTier},
 		ContextLength:               1_050_000,
 		MaxOutputTokens:             128000,
