@@ -1570,10 +1570,7 @@ func ListModels(c *gin.Context) {
 
 	userAvailableModels := resolveUserAvailableModels(availableAbilities, snapshot, int(time.Now().Unix()), channelCache, lg)
 
-	c.JSON(http.StatusOK, gin.H{
-		"object": "list",
-		"data":   userAvailableModels,
-	})
+	respondModelList(c, userAvailableModels)
 }
 
 // withRoutableModelID returns a copy of entry whose Id/Root equal routableName,

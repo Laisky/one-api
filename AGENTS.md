@@ -14,6 +14,7 @@
 - **Structured logging:** Use structured Zap logging and `zap.Error(err)` for errors; avoid `fmt.Sprintf` for log messages.
 - **Multiple agents:** Multiple agents may edit code concurrently; **preserve others’ changes**, avoid overwriting, and only halt and notify when an irreconcilable conflict occurs.
 - **Task tracking:** Use the TODOs tool to track tasks and progress; keep TODOs current and actionable.
+
 - **Secrets handling:** Treat any API keys or secrets in repo/instructions as sensitive; never echo, log, commit, or expose them.
 - **Security—constant time:** Use constant‑time comparisons for sensitive values (tokens, signatures, etc.).
 - **Security—password hashing:** Follow OWASP recommendations for password hashing; use at least **10,000** iterations in this context.
@@ -37,13 +38,4 @@
 - **I18n completeness:** Ensure all UI strings are present in locale files and that translations are wired into the Modern frontend.
 - **Frontend build/dev:** Follow Modern template build/dev conventions and ensure `make build-frontend-modern` succeeds after changes.
 - **Preserve CI expectations:** Any change must respect CI and linting rules; fix tests or implementation as needed, but do not bypass checks.
-- **Planning discipline (pre-action):** Before any action, independently plan: check policy constraints and prerequisites, reorder operations if needed, and ensure required info/tools are available.
-- **Risk assessment:** Evaluate consequences of actions and prefer calling tools with available info rather than blocking on optional details unless required by dependencies.
-- **Hypothesis exploration:** When debugging, generate and prioritize hypotheses, test the most likely causes first, and iterate if disproven.
-- **Outcome adaptability:** If observations disprove hypotheses, update the plan and generate new hypotheses.
-- **Information sources:** Use all applicable sources: tools, policies, history, and user-provided info; ask the user only when missing info is required for the next step.
-- **Precision and grounding:** Be precise and ground claims in exact applicable instructions or evidence when referencing rules.
-- **Completeness:** Exhaustively incorporate requirements and options; resolve conflicts by rule priority and avoid premature conclusions.
-- **Persistence and retries:** Persist intelligently; retry transient errors until a reasonable limit, and change strategy for non‑transient failures.
-- **Action finality:** Only take actions after completing the above reasoning; actions are final once executed.
 - **Sub Agents:** Actively use sub-agents for **parallelism** (dispatch independent subtasks concurrently in a single batch, not sequentially) and **context isolation** (offload searches/sweeps/lookups so their intermediate context never pollutes the main thread); each must follow the same instructions, stay scoped to a well-defined subtask, and return only the **distilled key information** for integration — not raw tool output or full file dumps.
