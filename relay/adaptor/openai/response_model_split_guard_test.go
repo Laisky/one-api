@@ -139,6 +139,19 @@ func TestResponseAPIInputTokensDetails_MarshalPreservesAdditional(t *testing.T) 
 	require.Equal(t, "keep_me", decoded["future_field"])
 }
 
+// TestResponseAPITokenDetails_MarshalRequiredZeroValues verifies that present usage detail objects
+// retain the zero-valued fields required by strict Responses API clients. It accepts no parameters
+// beyond the test context and returns no value.
+func TestResponseAPITokenDetails_MarshalRequiredZeroValues(t *testing.T) {
+	inputData, err := json.Marshal(ResponseAPIInputTokensDetails{})
+	require.NoError(t, err)
+	require.JSONEq(t, `{"cached_tokens":0}`, string(inputData))
+
+	outputData, err := json.Marshal(ResponseAPIOutputTokensDetails{})
+	require.NoError(t, err)
+	require.JSONEq(t, `{"reasoning_tokens":0}`, string(outputData))
+}
+
 func TestResponseAPIUsage_ToModelUsageCacheWriteTokens(t *testing.T) {
 	var usage ResponseAPIUsage
 	err := json.Unmarshal([]byte(`{

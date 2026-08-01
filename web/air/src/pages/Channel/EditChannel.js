@@ -28,19 +28,6 @@ const MODEL_CONFIGS_EXAMPLE = {
         'ratio': 0.00000014,
         'completion_ratio': 2.0,
         'cached_input_ratio': 0.0000000028,
-        'time_windows': [{
-            'name': 'deepseek-peak',
-            'timezone': 'Asia/Shanghai',
-            'date_from': '2026-07-15',
-            'ranges': [
-                { 'start': '09:00', 'end': '12:00' },
-                { 'start': '14:00', 'end': '18:00' },
-            ],
-            'overlay': {
-                'ratio': 0.00000028,
-                'cached_input_ratio': 0.0000000056,
-            },
-        }],
     }
 };
 

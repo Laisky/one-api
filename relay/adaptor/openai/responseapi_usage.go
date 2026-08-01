@@ -85,16 +85,12 @@ func (d *ResponseAPIInputTokensDetails) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+// MarshalJSON serializes input token details and always includes the required cached token count.
+// It accepts the receiver as input details and returns JSON bytes or a serialization error.
 func (d ResponseAPIInputTokensDetails) MarshalJSON() ([]byte, error) {
-	if d.additional == nil && d.WebSearch == nil && d.CachedTokens == 0 && d.AudioTokens == 0 && d.TextTokens == 0 && d.ImageTokens == 0 {
-		return []byte("{}"), nil
-	}
-
 	raw := make(map[string]any, len(d.additional)+6)
 	maps.Copy(raw, d.additional)
-	if d.CachedTokens != 0 {
-		raw["cached_tokens"] = d.CachedTokens
-	}
+	raw["cached_tokens"] = d.CachedTokens
 	if d.AudioTokens != 0 {
 		raw["audio_tokens"] = d.AudioTokens
 	}
@@ -108,7 +104,11 @@ func (d ResponseAPIInputTokensDetails) MarshalJSON() ([]byte, error) {
 		raw["web_search"] = d.WebSearch
 	}
 
-	return json.Marshal(raw)
+	data, err := json.Marshal(raw)
+	if err != nil {
+		return nil, errors.Wrap(err, "marshal response API input token details")
+	}
+	return data, nil
 }
 
 // WebSearchInvocationCount extracts the number of billable web search invocations recorded in the
@@ -160,16 +160,12 @@ func (d *ResponseAPIOutputTokensDetails) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+// MarshalJSON serializes output token details and always includes the required reasoning token count.
+// It accepts the receiver as output details and returns JSON bytes or a serialization error.
 func (d ResponseAPIOutputTokensDetails) MarshalJSON() ([]byte, error) {
-	if d.additional == nil && d.ReasoningTokens == 0 && d.AudioTokens == 0 && d.AcceptedPredictionTokens == 0 && d.RejectedPredictionTokens == 0 && d.TextTokens == 0 && d.CachedTokens == 0 {
-		return []byte("{}"), nil
-	}
-
 	raw := make(map[string]any, len(d.additional)+6)
 	maps.Copy(raw, d.additional)
-	if d.ReasoningTokens != 0 {
-		raw["reasoning_tokens"] = d.ReasoningTokens
-	}
+	raw["reasoning_tokens"] = d.ReasoningTokens
 	if d.AudioTokens != 0 {
 		raw["audio_tokens"] = d.AudioTokens
 	}
@@ -186,7 +182,11 @@ func (d ResponseAPIOutputTokensDetails) MarshalJSON() ([]byte, error) {
 		raw["cached_tokens"] = d.CachedTokens
 	}
 
-	return json.Marshal(raw)
+	data, err := json.Marshal(raw)
+	if err != nil {
+		return nil, errors.Wrap(err, "marshal response API output token details")
+	}
+	return data, nil
 }
 
 // extractWebSearchInvocationCount normalizes disparate web search metadata structures into a

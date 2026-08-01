@@ -33,13 +33,16 @@ func (a *Adaptor) GetModelList() []string {
 	return adaptor.GetModelListFromPricing(ModelRatios)
 }
 
-// GetDefaultModelPricing returns the pricing information for DeepSeek models
-// Based on official DeepSeek pricing: https://platform.deepseek.com/api-docs/pricing/
+// GetDefaultModelPricing returns current DeepSeek model pricing and capability metadata.
+// Parameters: none. Returns: the official-model-ID keyed pricing configuration map.
+// Source: https://api-docs.deepseek.com/quick_start/pricing/
 func (a *Adaptor) GetDefaultModelPricing() map[string]adaptor.ModelConfig {
 	return ModelRatios
 }
 
-// DefaultToolingConfig returns DeepSeek's provider-level tooling defaults (none published as of 2025-11-12).
+// DefaultToolingConfig returns DeepSeek's provider-level tooling defaults.
+// Parameters: none. Returns: an empty separate-pricing map because built-in web
+// search is billed through normal model token usage as of 2026-08-01.
 func (a *Adaptor) DefaultToolingConfig() adaptor.ChannelToolConfig {
 	return DeepseekToolingDefaults
 }

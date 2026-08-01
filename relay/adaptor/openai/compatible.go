@@ -5,6 +5,7 @@ import (
 	"github.com/Laisky/one-api/relay/adaptor/alibailian"
 	"github.com/Laisky/one-api/relay/adaptor/baichuan"
 	"github.com/Laisky/one-api/relay/adaptor/baiduv2"
+	"github.com/Laisky/one-api/relay/adaptor/deepseek"
 	"github.com/Laisky/one-api/relay/adaptor/doubao"
 	"github.com/Laisky/one-api/relay/adaptor/geminiOpenaiCompatible"
 	"github.com/Laisky/one-api/relay/adaptor/groq"
@@ -63,7 +64,8 @@ func GetCompatibleChannelMeta(channelType int) (string, []string) {
 	case channeltype.StepFun:
 		return "stepfun", stepfun.ModelList
 	case channeltype.DeepSeek:
-		return "deepseek", []string{"deepseek-chat", "deepseek-reasoner"}
+		deepseekAdaptor := &deepseek.Adaptor{}
+		return "deepseek", deepseekAdaptor.GetModelList()
 	case channeltype.TogetherAI:
 		return "together.ai", togetherai.ModelList
 	case channeltype.Doubao:

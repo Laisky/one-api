@@ -156,16 +156,46 @@ func TestRelayResponseAPIHelper_FallbackAnthropicMCPPrunesUnmatchedResponseTools
 	events := parseSSEEvents(recorder.Body.String())
 	require.NotEmpty(t, events, "expected downstream Responses SSE events")
 
+	activeItems := make(map[string]struct{})
+	deltaCount := 0
+	completedCount := 0
 	var fallbackResp *openai.ResponseAPIResponse
 	for _, event := range events {
-		if event.event != "response.completed" {
-			continue
+		switch event.event {
+		case "response.output_item.added":
+			var payload struct {
+				Item struct {
+					ID      string                  `json:"id"`
+					Type    string                  `json:"type"`
+					Role    string                  `json:"role"`
+					Content *[]openai.OutputContent `json:"content"`
+				} `json:"item"`
+			}
+			err = json.Unmarshal([]byte(event.data), &payload)
+			require.NoError(t, err, "failed to unmarshal response.output_item.added event")
+			if payload.Item.Type == "message" && payload.Item.Role == "assistant" && payload.Item.Content != nil {
+				activeItems[payload.Item.ID] = struct{}{}
+			}
+		case "response.output_text.delta":
+			var payload struct {
+				ItemID string `json:"item_id"`
+			}
+			err = json.Unmarshal([]byte(event.data), &payload)
+			require.NoError(t, err, "failed to unmarshal response.output_text.delta event")
+			_, active := activeItems[payload.ItemID]
+			require.True(t, active,
+				"Codex would reconnect after receiving OutputTextDelta without an active item")
+			deltaCount++
+		case "response.completed":
+			var streamEvent openai.ResponseAPIStreamEvent
+			err = json.Unmarshal([]byte(event.data), &streamEvent)
+			require.NoError(t, err, "failed to unmarshal response.completed event")
+			fallbackResp = streamEvent.Response
+			completedCount++
 		}
-		var streamEvent openai.ResponseAPIStreamEvent
-		err = json.Unmarshal([]byte(event.data), &streamEvent)
-		require.NoError(t, err, "failed to unmarshal response.completed event")
-		fallbackResp = streamEvent.Response
 	}
+	require.Positive(t, deltaCount, "the fallback behavior test must exercise at least one text delta")
+	require.Equal(t, 1, completedCount, "the fallback stream must complete exactly once")
 	require.NotNil(t, fallbackResp, "stream must include a terminal response.completed event")
 	require.Equal(t, "completed", fallbackResp.Status, "expected completed response")
 	require.Equal(t, "MCP fallback ok", fallbackResp.Output[0].Content[0].Text, "unexpected fallback response text")

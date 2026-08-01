@@ -3,6 +3,8 @@ package openai
 import (
 	"encoding/json"
 
+	"github.com/Laisky/errors/v2"
+
 	"github.com/Laisky/one-api/relay/model"
 )
 
@@ -62,6 +64,35 @@ type OutputItem struct {
 	ApprovalRequestId *string      `json:"approval_request_id,omitempty"` // ID of approval request (for mcp_call)
 	Error             *string      `json:"error,omitempty"`               // Error message if MCP call failed (for mcp_call)
 	Output            string       `json:"output,omitempty"`              // Output from MCP tool call (for mcp_call)
+}
+
+// MarshalJSON serializes the output item and always includes the required content array for message items.
+// It accepts the receiver as the item to serialize and returns its JSON representation or a wrapped error.
+func (o OutputItem) MarshalJSON() ([]byte, error) {
+	type outputItemAlias OutputItem
+	if o.Type != "message" {
+		data, err := json.Marshal(outputItemAlias(o))
+		if err != nil {
+			return nil, errors.Wrap(err, "marshal response API output item")
+		}
+		return data, nil
+	}
+
+	content := o.Content
+	if content == nil {
+		content = make([]OutputContent, 0)
+	}
+	data, err := json.Marshal(struct {
+		outputItemAlias
+		Content []OutputContent `json:"content"`
+	}{
+		outputItemAlias: outputItemAlias(o),
+		Content:         content,
+	})
+	if err != nil {
+		return nil, errors.Wrap(err, "marshal response API message output item")
+	}
+	return data, nil
 }
 
 // OutputContent represents content within an output item

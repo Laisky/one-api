@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/Laisky/one-api/common/ctxkey"
 	"github.com/Laisky/one-api/relay/adaptor/openai"
 	"github.com/Laisky/one-api/relay/adaptor/openai_compatible"
 	metalib "github.com/Laisky/one-api/relay/meta"
@@ -33,6 +34,97 @@ func TestRenderChatResponseAsResponseAPIUsesOriginModel(t *testing.T) {
 	var response openai.ResponseAPIResponse
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &response))
 	require.Equal(t, "public-alias", response.Model)
+}
+
+// TestRenderChatResponseAsResponseAPIStream_CodexAcceptsTextLifecycle verifies that the rendered
+// SSE stream establishes a valid active message before sending text deltas, matching Codex's strict
+// Responses API lifecycle behavior. It accepts a completed Chat Completion response and returns no value.
+func TestRenderChatResponseAsResponseAPIStream_CodexAcceptsTextLifecycle(t *testing.T) {
+	t.Parallel()
+	gin.SetMode(gin.TestMode)
+
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
+	c.Set(ctxkey.RequestId, "codex-lifecycle-regression")
+
+	textResp := &openai_compatible.SlimTextResponse{
+		Choices: []openai_compatible.TextResponseChoice{
+			{
+				Message:      relaymodel.Message{Role: "assistant", Content: "Hello from the fallback"},
+				FinishReason: "stop",
+			},
+		},
+		Usage: relaymodel.Usage{
+			PromptTokens:     10,
+			CompletionTokens: 4,
+			TotalTokens:      14,
+			PromptTokensDetails: &relaymodel.UsagePromptTokensDetails{
+				CachedTokens: 0,
+			},
+			CompletionTokensDetails: &relaymodel.UsageCompletionTokensDetails{
+				ReasoningTokens: 0,
+			},
+		},
+	}
+	req := &openai.ResponseAPIRequest{Model: "deepseek-v4-flash"}
+	meta := &metalib.Meta{ActualModelName: "deepseek-v4-flash"}
+
+	require.NoError(t, renderChatResponseAsResponseAPIStream(c, http.StatusOK, textResp, req, meta))
+
+	activeItems := make(map[string]struct{})
+	deltaCount := 0
+	completedCount := 0
+	for _, event := range parseBridgeSSE(w.Body.String()) {
+		switch event.event {
+		case "response.output_item.added":
+			var payload struct {
+				Item struct {
+					ID      string                  `json:"id"`
+					Type    string                  `json:"type"`
+					Role    string                  `json:"role"`
+					Content *[]openai.OutputContent `json:"content"`
+				} `json:"item"`
+			}
+			require.NoError(t, json.Unmarshal(event.data, &payload))
+			if payload.Item.Type == "message" && payload.Item.Role == "assistant" && payload.Item.Content != nil {
+				activeItems[payload.Item.ID] = struct{}{}
+			}
+		case "response.output_text.delta":
+			var payload struct {
+				ItemID string `json:"item_id"`
+			}
+			require.NoError(t, json.Unmarshal(event.data, &payload))
+			_, active := activeItems[payload.ItemID]
+			require.True(t, active,
+				"Codex would reconnect after receiving OutputTextDelta without an active item")
+			deltaCount++
+		case "response.completed":
+			var payload struct {
+				Response struct {
+					Usage struct {
+						InputTokensDetails *struct {
+							CachedTokens *int `json:"cached_tokens"`
+						} `json:"input_tokens_details"`
+						OutputTokensDetails *struct {
+							ReasoningTokens *int `json:"reasoning_tokens"`
+						} `json:"output_tokens_details"`
+					} `json:"usage"`
+				} `json:"response"`
+			}
+			require.NoError(t, json.Unmarshal(event.data, &payload))
+			require.NotNil(t, payload.Response.Usage.InputTokensDetails)
+			require.NotNil(t, payload.Response.Usage.InputTokensDetails.CachedTokens,
+				"Codex rejects response.completed when input_tokens_details omits cached_tokens")
+			require.NotNil(t, payload.Response.Usage.OutputTokensDetails)
+			require.NotNil(t, payload.Response.Usage.OutputTokensDetails.ReasoningTokens,
+				"Codex rejects response.completed when output_tokens_details omits reasoning_tokens")
+			completedCount++
+		}
+	}
+
+	require.Positive(t, deltaCount, "the behavior test must exercise at least one text delta")
+	require.Equal(t, 1, completedCount, "Codex must accept exactly one terminal response.completed event")
 }
 
 // TestBuildResponseOutput_EmptyChoicesReturnsEmptySlice verifies that buildResponseOutput

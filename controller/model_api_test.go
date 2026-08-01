@@ -222,7 +222,7 @@ func TestDeepSeekModelsInDashboard(t *testing.T) {
 	assert.NotEmpty(t, deepSeekModels, "DeepSeek should have models")
 
 	// Verify that DeepSeek models are included
-	expectedModels := []string{"deepseek-chat", "deepseek-reasoner"}
+	expectedModels := []string{"deepseek-v4-flash", "deepseek-v4-pro"}
 	for _, expectedModel := range expectedModels {
 		found := slices.Contains(deepSeekModels, expectedModel)
 		assert.True(t, found, "Expected DeepSeek model %s should be present", expectedModel)

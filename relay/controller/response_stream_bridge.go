@@ -379,10 +379,11 @@ func (h *chatToResponseStreamBridge) ensureInitialized(c *gin.Context, chunk *op
 	})
 
 	messageItem := openai.OutputItem{
-		Id:     h.messageItemID,
-		Type:   "message",
-		Status: "in_progress",
-		Role:   "assistant",
+		Id:      h.messageItemID,
+		Type:    "message",
+		Status:  "in_progress",
+		Role:    "assistant",
+		Content: make([]openai.OutputContent, 0),
 	}
 
 	h.emitEvent(c, "response.output_item.added", openai.ResponseAPIStreamEvent{
