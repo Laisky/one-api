@@ -67,7 +67,7 @@ func relayResponseAPIThroughChat(c *gin.Context, meta *metalib.Meta, responseAPI
 	}
 	downstreamStream := chatRequest.Stream
 	originalChatTools := append([]relaymodel.Tool(nil), chatRequest.Tools...)
-	responseTools := responseToolsForMCP(responseAPIRequest)
+	responseTools := responseToolsForMCP(meta, responseAPIRequest)
 	if len(responseTools) > 0 {
 		chatRequest.Tools = append(chatRequest.Tools, responseTools...)
 	}

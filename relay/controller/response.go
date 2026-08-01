@@ -229,7 +229,24 @@ func RelayResponseAPIHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 
 	// do response
 	c.Set(ctxkey.SkipAdaptorResponseBodyLog, true)
-	usage, respErr := requestAdaptor.DoResponse(c, resp, meta)
+	var usage *relaymodel.Usage
+	var respErr *relaymodel.ErrorWithStatusCode
+	if supportsDeepSeekNativeResponseAPI(meta) {
+		// The dedicated DeepSeek adaptor handles Chat Completions responses. V4
+		// Flash's native Responses endpoint must retain its SSE/JSON wire format,
+		// especially plaintext reasoning items replayed after tool calls.
+		if meta.IsStream {
+			var responseText string
+			respErr, responseText, usage = openai.ResponseAPIDirectStreamHandler(c, resp, meta.Mode)
+			if usage == nil || usage.TotalTokens == 0 {
+				usage = openai.ResponseText2Usage(responseText, meta.ActualModelName, meta.PromptTokens)
+			}
+		} else {
+			respErr, usage = openai.ResponseAPIDirectHandler(c, resp, meta.PromptTokens, meta.ActualModelName)
+		}
+	} else {
+		usage, respErr = requestAdaptor.DoResponse(c, resp, meta)
+	}
 	lg.Debug("response api DoResponse returned",
 		zap.Bool("has_usage", usage != nil),
 		zap.Bool("has_error", respErr != nil),

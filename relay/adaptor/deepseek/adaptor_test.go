@@ -102,6 +102,96 @@ func TestConvertRequest_NormalizesNilToolContentToEmptyString(t *testing.T) {
 	require.Equal(t, "", converted.Messages[0].Content)
 }
 
+// TestConvertRequestNormalizesAssistantReasoningForReplay verifies that generic
+// reasoning fields are converted back to DeepSeek's provider-specific field on
+// a tool-call continuation and that assistant content remains non-null.
+func TestConvertRequestNormalizesAssistantReasoningForReplay(t *testing.T) {
+	t.Parallel()
+
+	gin.SetMode(gin.TestMode)
+	writer := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(writer)
+
+	reasoning := "Inspect the file before continuing."
+	request := &model.GeneralOpenAIRequest{
+		Model: "deepseek-v4-pro",
+		Messages: []model.Message{
+			{
+				Role:      "assistant",
+				Reasoning: &reasoning,
+				ToolCalls: []model.Tool{{
+					Id:   "call_read",
+					Type: "function",
+					Function: &model.Function{
+						Name:      "read_file",
+						Arguments: `{"path":"README.md"}`,
+					},
+				}},
+			},
+			{Role: "tool", ToolCallId: "call_read", Content: "file contents"},
+		},
+	}
+
+	convertedAny, err := (&Adaptor{}).ConvertRequest(c, 0, request)
+	require.NoError(t, err)
+	converted, ok := convertedAny.(*model.GeneralOpenAIRequest)
+	require.True(t, ok)
+
+	assistant := converted.Messages[0]
+	require.NotNil(t, assistant.ReasoningContent)
+	require.Equal(t, reasoning, *assistant.ReasoningContent)
+	require.Nil(t, assistant.Reasoning)
+	require.Nil(t, assistant.Thinking)
+	require.Equal(t, "", assistant.Content)
+}
+
+// TestConvertClaudeRequestNormalizesThinkingForReplay verifies that Claude
+// thinking plus tool_use history becomes a valid DeepSeek assistant tool-call
+// message with reasoning_content.
+func TestConvertClaudeRequestNormalizesThinkingForReplay(t *testing.T) {
+	t.Parallel()
+
+	gin.SetMode(gin.TestMode)
+	writer := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(writer)
+
+	request := &model.ClaudeRequest{
+		Model:     "deepseek-v4-pro",
+		MaxTokens: 1024,
+		Thinking:  &model.Thinking{Type: "adaptive", BudgetTokens: model.IntPtr(2048)},
+		Messages: []model.ClaudeMessage{
+			{
+				Role: "assistant",
+				Content: []any{
+					map[string]any{"type": "thinking", "thinking": "Inspect before calling the tool."},
+					map[string]any{
+						"type":  "tool_use",
+						"id":    "call_read",
+						"name":  "read_file",
+						"input": map[string]any{"path": "README.md"},
+					},
+				},
+			},
+		},
+	}
+
+	convertedAny, err := (&Adaptor{}).ConvertClaudeRequest(c, request)
+	require.NoError(t, err)
+	converted, ok := convertedAny.(*model.GeneralOpenAIRequest)
+	require.True(t, ok)
+	require.Len(t, converted.Messages, 1)
+
+	assistant := converted.Messages[0]
+	require.Len(t, assistant.ToolCalls, 1)
+	require.NotNil(t, assistant.ReasoningContent)
+	require.Equal(t, "Inspect before calling the tool.", *assistant.ReasoningContent)
+	require.Nil(t, assistant.Thinking)
+	require.Equal(t, "", assistant.Content)
+	require.NotNil(t, converted.Thinking)
+	require.Equal(t, "enabled", converted.Thinking.Type)
+	require.Equal(t, 2048, *converted.Thinking.BudgetTokens)
+}
+
 func TestConvertRequest_DoesNotChangeNonToolArrayContent(t *testing.T) {
 	t.Parallel()
 

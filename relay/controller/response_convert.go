@@ -170,6 +170,9 @@ func buildResponseOutput(choices []openai_compatible.TextResponseChoice) []opena
 			output = append(output, openai.OutputItem{
 				Type:   "reasoning",
 				Status: "completed",
+				Content: []openai.OutputContent{
+					{Type: "text", Text: reasoning},
+				},
 				Summary: []openai.OutputContent{
 					{Type: "summary_text", Text: reasoning},
 				},

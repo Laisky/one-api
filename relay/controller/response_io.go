@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"strings"
 
 	"github.com/Laisky/errors/v2"
 	gmw "github.com/Laisky/gin-middlewares/v7"
@@ -286,7 +287,29 @@ func normalizeResponseAPIRawBody(rawBody []byte, request *openai.ResponseAPIRequ
 		if err != nil {
 			return nil, stats, false, errors.Wrap(err, "marshal sanitized response tools")
 		}
-		if existing, ok := root["tools"]; !ok || !bytes.Equal(existing, toolsBytes) {
+
+		// Compare only the typed representation to determine whether sanitization
+		// actually changed the tools. If it did not, retain the raw array so custom
+		// provider fields (for example Codex apply_patch grammar metadata) survive
+		// native Responses passthrough.
+		existing, exists := root["tools"]
+		typedToolsChanged := true
+		if exists {
+			var originalTools []openai.ResponseAPITool
+			if err := json.Unmarshal(existing, &originalTools); err == nil {
+				if originalTypedBytes, err := json.Marshal(originalTools); err == nil {
+					typedToolsChanged = !bytes.Equal(originalTypedBytes, toolsBytes)
+				}
+			}
+		}
+		if !exists || typedToolsChanged {
+			if exists {
+				mergedTools, mergeErr := mergeResponseToolsPreservingUnknown(existing, request.Tools)
+				if mergeErr != nil {
+					return nil, stats, false, errors.Wrap(mergeErr, "merge sanitized response tools")
+				}
+				toolsBytes = mergedTools
+			}
 			root["tools"] = toolsBytes
 			changed = true
 		}
@@ -311,4 +334,91 @@ func normalizeResponseAPIRawBody(rawBody []byte, request *openai.ResponseAPIRequ
 	}
 
 	return merged, stats, changed || mergeChanged, nil
+}
+
+// mergeResponseToolsPreservingUnknown overlays sanitized typed tool fields on
+// their original raw objects while retaining provider extensions unknown to
+// one-api. The returned JSON array follows the sanitized tool order.
+func mergeResponseToolsPreservingUnknown(original json.RawMessage, sanitized []openai.ResponseAPITool) ([]byte, error) {
+	var rawTools []json.RawMessage
+	if err := json.Unmarshal(original, &rawTools); err != nil {
+		return nil, errors.Wrap(err, "unmarshal raw response tools")
+	}
+	var originalTools []openai.ResponseAPITool
+	if err := json.Unmarshal(original, &originalTools); err != nil {
+		return nil, errors.Wrap(err, "unmarshal typed response tools")
+	}
+
+	used := make([]bool, len(originalTools))
+	merged := make([]json.RawMessage, 0, len(sanitized))
+	for _, sanitizedTool := range sanitized {
+		match := -1
+		identity := responseToolIdentity(sanitizedTool)
+		for idx := range originalTools {
+			if used[idx] || responseToolIdentity(originalTools[idx]) != identity {
+				continue
+			}
+			match = idx
+			break
+		}
+
+		sanitizedBytes, err := json.Marshal(sanitizedTool)
+		if err != nil {
+			return nil, errors.Wrap(err, "marshal sanitized response tool")
+		}
+		if match < 0 || match >= len(rawTools) {
+			merged = append(merged, sanitizedBytes)
+			continue
+		}
+		used[match] = true
+
+		originalTypedBytes, err := json.Marshal(originalTools[match])
+		if err == nil && bytes.Equal(originalTypedBytes, sanitizedBytes) {
+			merged = append(merged, rawTools[match])
+			continue
+		}
+
+		var rawObject map[string]json.RawMessage
+		if err := json.Unmarshal(rawTools[match], &rawObject); err != nil {
+			merged = append(merged, sanitizedBytes)
+			continue
+		}
+		var sanitizedObject map[string]json.RawMessage
+		if err := json.Unmarshal(sanitizedBytes, &sanitizedObject); err != nil {
+			return nil, errors.Wrap(err, "unmarshal sanitized response tool")
+		}
+		for _, key := range responseToolKnownJSONKeys {
+			delete(rawObject, key)
+		}
+		for key, value := range sanitizedObject {
+			rawObject[key] = value
+		}
+		mergedBytes, err := json.Marshal(rawObject)
+		if err != nil {
+			return nil, errors.Wrap(err, "marshal merged response tool")
+		}
+		merged = append(merged, mergedBytes)
+	}
+
+	result, err := json.Marshal(merged)
+	if err != nil {
+		return nil, errors.Wrap(err, "marshal merged response tool array")
+	}
+	return result, nil
+}
+
+var responseToolKnownJSONKeys = []string{
+	"type", "name", "description", "parameters", "function",
+	"search_context_size", "filters", "user_location",
+	"server_label", "server_url", "require_approval", "allowed_tools", "headers",
+}
+
+// responseToolIdentity returns a stable matching key for correlating a typed
+// sanitized tool with its original raw object.
+func responseToolIdentity(tool openai.ResponseAPITool) string {
+	name := tool.Name
+	if tool.Function != nil && tool.Function.Name != "" {
+		name = tool.Function.Name
+	}
+	return strings.ToLower(strings.TrimSpace(tool.Type)) + "\x00" + name + "\x00" + tool.ServerLabel
 }

@@ -24,20 +24,6 @@ const (
 	Done             = "[DONE]"
 )
 
-// shouldLogDetailedUpstreamBody determines whether to log the full upstream response body
-// for debugging purposes based on query parameter or logger level.
-func shouldLogDetailedUpstreamBody(c *gin.Context) bool {
-	if c == nil {
-		return true
-	}
-	if skipRaw, exists := c.Get(ctxkey.SkipAdaptorResponseBodyLog); exists {
-		if flag, ok := skipRaw.(bool); ok {
-			return !flag
-		}
-	}
-	return true
-}
-
 // ChatCompletionsStreamResponse represents the streaming response structure
 type ChatCompletionsStreamResponse struct {
 	Id      string                                `json:"id"`
@@ -158,11 +144,7 @@ func EmbeddingHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStat
 	if contentType := resp.Header.Get("Content-Type"); contentType != "" {
 		fields = append(fields, zap.String("content_type", contentType))
 	}
-	if shouldLogDetailedUpstreamBody(c) {
-		fields = append(fields, zap.ByteString("response_body", responseBody))
-	} else {
-		fields = append(fields, zap.Bool("body_logging_suppressed", true))
-	}
+	fields = append(fields, zap.Bool("body_logging_suppressed", true))
 	logger.Debug("receive embedding response from upstream channel", fields...)
 	if err = resp.Body.Close(); err != nil {
 		return ErrorWrapper(err, "close_response_body_failed", http.StatusInternalServerError), nil
@@ -191,7 +173,8 @@ func EmbeddingHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStat
 
 	if err = json.Unmarshal(responseBody, &embeddingResponse); err != nil {
 		logger.Error("failed to unmarshal embedding response body",
-			zap.ByteString("response_body", responseBody),
+			zap.Int("body_bytes", len(responseBody)),
+			zap.Bool("body_logging_suppressed", true),
 			zap.Error(err))
 		return ErrorWrapper(err, "unmarshal_embedding_response_failed", http.StatusInternalServerError), nil
 	}
@@ -215,7 +198,8 @@ func EmbeddingHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStat
 	// Check if response has data - empty data might indicate an error
 	if len(embeddingResponse.Data) == 0 {
 		logger.Error("embedding response has no data, possible upstream error",
-			zap.ByteString("response_body", responseBody))
+			zap.Int("body_bytes", len(responseBody)),
+			zap.Bool("body_logging_suppressed", true))
 		return ErrorWrapper(errors.Errorf("no embedding data in response from upstream"),
 			"no_embedding_data", http.StatusInternalServerError), nil
 	}
@@ -254,11 +238,7 @@ func Handler(c *gin.Context, resp *http.Response, promptTokens int, modelName st
 	if contentType := resp.Header.Get("Content-Type"); contentType != "" {
 		fields = append(fields, zap.String("content_type", contentType))
 	}
-	if shouldLogDetailedUpstreamBody(c) {
-		fields = append(fields, zap.ByteString("response_body", responseBody))
-	} else {
-		fields = append(fields, zap.Bool("body_logging_suppressed", true))
-	}
+	fields = append(fields, zap.Bool("body_logging_suppressed", true))
 	logger.Debug("receive from upstream channel", fields...)
 	if err = resp.Body.Close(); err != nil {
 		return ErrorWrapper(err, "close_response_body_failed", http.StatusInternalServerError), nil
@@ -276,7 +256,8 @@ func Handler(c *gin.Context, resp *http.Response, promptTokens int, modelName st
 	var textResponse SlimTextResponse
 	if err = json.Unmarshal(responseBody, &textResponse); err != nil {
 		logger.Error("failed to unmarshal response body",
-			zap.ByteString("response_body", responseBody),
+			zap.Int("body_bytes", len(responseBody)),
+			zap.Bool("body_logging_suppressed", true),
 			zap.Error(err))
 		return ErrorWrapper(err, "unmarshal_response_body_failed", http.StatusInternalServerError), nil
 	}
@@ -300,7 +281,8 @@ func Handler(c *gin.Context, resp *http.Response, promptTokens int, modelName st
 	if len(textResponse.Choices) == 0 {
 		logger.Error("response has no choices, possible upstream error",
 			zap.String("model", modelName),
-			zap.ByteString("response_body", responseBody))
+			zap.Int("body_bytes", len(responseBody)),
+			zap.Bool("body_logging_suppressed", true))
 		return ErrorWrapper(errors.Errorf("no choices in response from upstream"),
 			"no_choices_in_response", http.StatusInternalServerError), nil
 	}
@@ -481,7 +463,9 @@ func HandlerWithThinking(c *gin.Context, resp *http.Response, promptTokens int, 
 		return ErrorWrapper(err, "read_response_body_failed", http.StatusInternalServerError), nil
 	}
 
-	logger.Debug("receive from upstream channel", zap.ByteString("response_body", responseBody))
+	logger.Debug("receive from upstream channel",
+		zap.Int("body_bytes", len(responseBody)),
+		zap.Bool("body_logging_suppressed", true))
 	if err = resp.Body.Close(); err != nil {
 		return ErrorWrapper(err, "close_response_body_failed", http.StatusInternalServerError), nil
 	}
@@ -498,7 +482,8 @@ func HandlerWithThinking(c *gin.Context, resp *http.Response, promptTokens int, 
 	var textResponse SlimTextResponse
 	if err = json.Unmarshal(responseBody, &textResponse); err != nil {
 		logger.Error("failed to unmarshal response body",
-			zap.ByteString("response_body", responseBody),
+			zap.Int("body_bytes", len(responseBody)),
+			zap.Bool("body_logging_suppressed", true),
 			zap.Error(err))
 		return ErrorWrapper(err, "unmarshal_response_body_failed", http.StatusInternalServerError), nil
 	}
@@ -522,7 +507,8 @@ func HandlerWithThinking(c *gin.Context, resp *http.Response, promptTokens int, 
 	if len(textResponse.Choices) == 0 {
 		logger.Error("response has no choices, possible upstream error",
 			zap.String("model", modelName),
-			zap.ByteString("response_body", responseBody))
+			zap.Int("body_bytes", len(responseBody)),
+			zap.Bool("body_logging_suppressed", true))
 		return ErrorWrapper(errors.Errorf("no choices in response from upstream"),
 			"no_choices_in_response", http.StatusInternalServerError), nil
 	}

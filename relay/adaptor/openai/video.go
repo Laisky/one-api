@@ -17,11 +17,10 @@ import (
 	relaymodel "github.com/Laisky/one-api/relay/model"
 )
 
-const maxLoggedVideoBytes = 64 * 1024
 const videoTaskType = "video"
 
 // VideoHandler forwards OpenAI video responses (JSON job metadata or binary content) unchanged to the caller.
-// It logs the upstream payload for diagnostics and surfaces provider errors without altering the body.
+// It logs only payload shape metadata and surfaces provider errors without altering the body.
 func VideoHandler(c *gin.Context, resp *http.Response) (*relaymodel.ErrorWithStatusCode, *relaymodel.Usage) {
 	logger := gmw.GetLogger(c)
 
@@ -33,15 +32,14 @@ func VideoHandler(c *gin.Context, resp *http.Response) (*relaymodel.ErrorWithSta
 		return ErrorWrapper(err, "close_response_body_failed", http.StatusInternalServerError), nil
 	}
 
-	logFields := []zap.Field{zap.Int("body_bytes", len(body))}
+	logFields := []zap.Field{
+		zap.Int("body_bytes", len(body)),
+		zap.Bool("body_logging_suppressed", true),
+	}
 	if len(body) == 0 {
 		logger.Debug("video handler upstream response empty", logFields...)
-	} else if len(body) <= maxLoggedVideoBytes {
-		logFields = append(logFields, zap.ByteString("body", body))
-		logger.Debug("video handler upstream response", logFields...)
 	} else {
-		logFields = append(logFields, zap.ByteString("body_preview", body[:maxLoggedVideoBytes]))
-		logger.Debug("video handler upstream response truncated", logFields...)
+		logger.Debug("video handler upstream response", logFields...)
 	}
 
 	var maybeError struct {

@@ -241,6 +241,21 @@ func TestChatToResponseStreamBridge_ReasoningContentField(t *testing.T) {
 	var s string
 	require.NoError(t, json.Unmarshal(ev.Delta, &s))
 	assert.Equal(t, "Deep thought", s)
+
+	completed := bridgeFindEvents(events, "response.completed")
+	require.Len(t, completed, 1)
+	bridgeUnmarshal(t, completed[0], &ev)
+	require.NotNil(t, ev.Response)
+	var reasoningItem *openai.OutputItem
+	for idx := range ev.Response.Output {
+		if ev.Response.Output[idx].Type == "reasoning" {
+			reasoningItem = &ev.Response.Output[idx]
+			break
+		}
+	}
+	require.NotNil(t, reasoningItem)
+	require.Equal(t, []openai.OutputContent{{Type: "text", Text: "Deep thought"}}, reasoningItem.Content,
+		"fallback output must retain replayable reasoning content for the next tool turn")
 }
 
 func TestChatToResponseStreamBridge_ThinkingField(t *testing.T) {

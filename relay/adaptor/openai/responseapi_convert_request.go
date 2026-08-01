@@ -107,6 +107,9 @@ func ConvertResponseAPIToChatCompletionRequest(request *ResponseAPIRequest) (*mo
 	// tool message must follow an assistant message carrying the matching tool_calls, so it
 	// is downgraded to a user message instead of forwarding an invalid sequence upstream.
 	pendingToolCallIDs := make(map[string]struct{})
+	// pendingReasoning holds replayable thinking state until its adjacent
+	// assistant message is lowered. DeepSeek requires it on tool-call history.
+	pendingReasoning := ""
 	for _, item := range request.Input {
 		currentToolCallMsgIdx := openToolCallMsgIdx
 		openToolCallMsgIdx = -1
@@ -114,9 +117,14 @@ func ConvertResponseAPIToChatCompletionRequest(request *ResponseAPIRequest) (*mo
 		case string:
 			chatReq.Messages = append(chatReq.Messages, model.Message{Role: "user", Content: v})
 			clear(pendingToolCallIDs)
+			pendingReasoning = ""
 		case map[string]any:
 			if typeVal, ok := v["type"].(string); ok {
 				switch strings.ToLower(typeVal) {
+				case "reasoning":
+					pendingReasoning = extractResponseAPIReasoningContent(v)
+					clear(pendingToolCallIDs)
+					continue
 				case "function_call":
 					fcID, _ := v["id"].(string)
 					callID, _ := v["call_id"].(string)
@@ -152,14 +160,26 @@ func ConvertResponseAPIToChatCompletionRequest(request *ResponseAPIRequest) (*mo
 					if currentToolCallMsgIdx >= 0 && chatReq.Messages[currentToolCallMsgIdx].Role == role {
 						chatReq.Messages[currentToolCallMsgIdx].ToolCalls = append(
 							chatReq.Messages[currentToolCallMsgIdx].ToolCalls, toolCall)
+						if pendingReasoning != "" && chatReq.Messages[currentToolCallMsgIdx].ReasoningContent == nil {
+							reasoning := pendingReasoning
+							chatReq.Messages[currentToolCallMsgIdx].ReasoningContent = &reasoning
+						}
+						pendingReasoning = ""
 						openToolCallMsgIdx = currentToolCallMsgIdx
 						continue
 					}
 
-					chatReq.Messages = append(chatReq.Messages, model.Message{
+					assistantMessage := model.Message{
 						Role:      role,
+						Content:   "",
 						ToolCalls: []model.Tool{toolCall},
-					})
+					}
+					if pendingReasoning != "" {
+						reasoning := pendingReasoning
+						assistantMessage.ReasoningContent = &reasoning
+					}
+					pendingReasoning = ""
+					chatReq.Messages = append(chatReq.Messages, assistantMessage)
 					openToolCallMsgIdx = len(chatReq.Messages) - 1
 					continue
 				case "function_call_output":
@@ -206,6 +226,7 @@ func ConvertResponseAPIToChatCompletionRequest(request *ResponseAPIRequest) (*mo
 					// The downgraded user message breaks adjacency, so any tool calls still
 					// awaiting a response can no longer be answered by a subsequent tool message.
 					clear(pendingToolCallIDs)
+					pendingReasoning = ""
 					continue
 				}
 			}
@@ -213,6 +234,11 @@ func ConvertResponseAPIToChatCompletionRequest(request *ResponseAPIRequest) (*mo
 			if err != nil {
 				return nil, errors.Wrap(err, "convert response api content to chat message")
 			}
+			if pendingReasoning != "" && msg.Role == "assistant" {
+				reasoning := pendingReasoning
+				msg.ReasoningContent = &reasoning
+			}
+			pendingReasoning = ""
 			chatReq.Messages = append(chatReq.Messages, *msg)
 			// A non-tool content message ends the current tool-call turn.
 			clear(pendingToolCallIDs)
@@ -222,6 +248,45 @@ func ConvertResponseAPIToChatCompletionRequest(request *ResponseAPIRequest) (*mo
 	}
 
 	return chatReq, nil
+}
+
+// extractResponseAPIReasoningContent returns replayable plaintext reasoning
+// from a Responses reasoning item. Raw content takes precedence over summary;
+// summaries remain a compatibility fallback for older one-api bridge output.
+func extractResponseAPIReasoningContent(item map[string]any) string {
+	for _, field := range []string{"content", "summary"} {
+		raw, ok := item[field]
+		if !ok {
+			continue
+		}
+
+		parts := make([]string, 0)
+		switch value := raw.(type) {
+		case string:
+			if value != "" {
+				parts = append(parts, value)
+			}
+		case []any:
+			for _, entry := range value {
+				part, ok := entry.(map[string]any)
+				if !ok {
+					continue
+				}
+				if text, ok := part["text"].(string); ok && text != "" {
+					parts = append(parts, text)
+				}
+			}
+		case map[string]any:
+			if text, ok := value["text"].(string); ok && text != "" {
+				parts = append(parts, text)
+			}
+		}
+
+		if len(parts) > 0 {
+			return strings.Join(parts, "\n")
+		}
+	}
+	return ""
 }
 
 func responseContentItemToMessage(item map[string]any) (*model.Message, error) {

@@ -413,7 +413,7 @@ func supportsNativeResponseAPI(meta *metalib.Meta) bool {
 	}
 
 	if hasDeepSeekModel(meta) && isDeepSeekUpstream(meta) {
-		return false
+		return supportsDeepSeekNativeResponseAPI(meta)
 	}
 
 	switch meta.ChannelType {
@@ -433,6 +433,27 @@ func supportsNativeResponseAPI(meta *metalib.Meta) bool {
 	default:
 		return false
 	}
+}
+
+// supportsDeepSeekNativeResponseAPI reports whether the request targets a model
+// served by DeepSeek's native, stateless Responses endpoint. DeepSeek currently
+// exposes that endpoint only for V4 Flash; other models retain the chat fallback.
+func supportsDeepSeekNativeResponseAPI(meta *metalib.Meta) bool {
+	if meta == nil || !isDeepSeekUpstream(meta) {
+		return false
+	}
+
+	modelName := strings.TrimSpace(strings.ToLower(meta.ActualModelName))
+	if modelName == "" {
+		modelName = strings.TrimSpace(strings.ToLower(meta.OriginModelName))
+	}
+
+	// The Responses API currently only supports the deepseek-v4-flash model,
+	// and does not yet support the deepseek-v4-pro model.
+	// We will add support for the deepseek-v4-pro model in early August 2026.
+	//
+	// https://api-docs.deepseek.com/guides/responses_api/
+	return modelName == "deepseek-v4-flash"
 }
 
 // isDeepSeekModel checks if the model is a DeepSeek model

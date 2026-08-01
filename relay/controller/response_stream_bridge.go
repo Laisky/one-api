@@ -287,6 +287,9 @@ func (h *chatToResponseStreamBridge) HandleDone(c *gin.Context) (bool, bool) {
 		finalOutputs = append(finalOutputs, openai.OutputItem{
 			Type:   "reasoning",
 			Status: "completed",
+			Content: []openai.OutputContent{
+				{Type: "text", Text: reasoning},
+			},
 			Summary: []openai.OutputContent{
 				{Type: "summary_text", Text: reasoning},
 			},

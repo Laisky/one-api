@@ -23,8 +23,6 @@ import (
 	rmeta "github.com/Laisky/one-api/relay/meta"
 )
 
-const wsRequestPreviewLimit = 4096
-
 // responseAPIWSErrorPayload represents the documented WebSocket error event payload.
 type responseAPIWSErrorPayload struct {
 	Type   string                 `json:"type"`
@@ -72,13 +70,6 @@ func doResponseAPIRequestViaWebSocket(
 			zap.String("reason", "empty_request_body"),
 		)
 		return nil, false, nil
-	}
-
-	preview := payload
-	truncated := false
-	if len(preview) > wsRequestPreviewLimit {
-		preview = preview[:wsRequestPreviewLimit]
-		truncated = true
 	}
 
 	var requestMap map[string]any
@@ -136,8 +127,7 @@ func doResponseAPIRequestViaWebSocket(
 		zap.Bool("stream", streamingRequested),
 		zap.String("model", metaInfo.ActualModelName),
 		zap.Int("body_bytes", len(payload)),
-		zap.Bool("body_truncated", truncated),
-		zap.ByteString("body_preview", preview),
+		zap.Bool("body_logging_suppressed", true),
 	)
 
 	requestMap["type"] = "response.create"

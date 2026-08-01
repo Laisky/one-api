@@ -21,7 +21,6 @@ import (
 
 const (
 	extraRequestHeaderPrefix = "X-"
-	requestPreviewLimit      = 4096
 	channelAPIKeyPlaceholder = "{{key}}"
 )
 
@@ -112,11 +111,7 @@ func DoRequestHelper(a Adaptor, c *gin.Context, meta *meta.Meta, requestBody io.
 		meta.UpstreamRequestURL = fullRequestURL
 	}
 
-	var (
-		preview   []byte
-		truncated bool
-		bodySize  = -1
-	)
+	bodySize := -1
 	if requestBody != nil {
 		if sized, ok := requestBody.(interface{ Len() int }); ok {
 			bodySize = sized.Len()
@@ -132,18 +127,6 @@ func DoRequestHelper(a Adaptor, c *gin.Context, meta *meta.Meta, requestBody io.
 				}
 			}
 			_, _ = seeker.Seek(currentPos, io.SeekStart)
-			buf := make([]byte, requestPreviewLimit+1)
-			n, err := seeker.Read(buf)
-			if err != nil && !errors.Is(err, io.EOF) {
-				n = 0
-			}
-			if n > requestPreviewLimit {
-				preview = append([]byte(nil), buf[:requestPreviewLimit]...)
-				truncated = true
-			} else {
-				preview = append([]byte(nil), buf[:n]...)
-				truncated = false
-			}
 			_, _ = seeker.Seek(currentPos, io.SeekStart)
 		}
 	}
@@ -182,8 +165,7 @@ func DoRequestHelper(a Adaptor, c *gin.Context, meta *meta.Meta, requestBody io.
 	fields := []zap.Field{
 		zap.String("method", req.Method),
 		zap.String("url", fullRequestURL),
-		zap.Bool("body_truncated", truncated),
-		zap.ByteString("body_preview", preview),
+		zap.Bool("body_logging_suppressed", true),
 	}
 	if bodySize >= 0 {
 		fields = append(fields, zap.Int("body_bytes", bodySize))

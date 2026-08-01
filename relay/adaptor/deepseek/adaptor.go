@@ -98,6 +98,7 @@ func (a *Adaptor) ConvertRequest(c *gin.Context, relayMode int, request *model.G
 	}
 
 	normalizeDeepSeekThinkingConfig(c, request)
+	normalizeDeepSeekMessageReasoning(request)
 
 	normalizeDeepSeekToolMessageContent(c, request)
 
@@ -198,7 +199,55 @@ func (a *Adaptor) ConvertImageRequest(c *gin.Context, request *model.ImageReques
 
 func (a *Adaptor) ConvertClaudeRequest(c *gin.Context, request *model.ClaudeRequest) (any, error) {
 	// Use the shared OpenAI-compatible Claude Messages conversion
-	return openai_compatible.ConvertClaudeRequest(c, request)
+	converted, err := openai_compatible.ConvertClaudeRequest(c, request)
+	if err != nil {
+		return nil, errors.Wrap(err, "convert Claude request for DeepSeek")
+	}
+	chatRequest, ok := converted.(*model.GeneralOpenAIRequest)
+	if !ok {
+		return nil, errors.Errorf("unexpected DeepSeek Claude conversion type %T", converted)
+	}
+	if request.Thinking != nil {
+		thinking := *request.Thinking
+		chatRequest.Thinking = &thinking
+	}
+	normalizeDeepSeekThinkingConfig(c, chatRequest)
+	normalizeDeepSeekMessageReasoning(chatRequest)
+	normalizeDeepSeekToolMessageContent(c, chatRequest)
+	return chatRequest, nil
+}
+
+// normalizeDeepSeekMessageReasoning converts portable reasoning fields on
+// assistant history into DeepSeek's reasoning_content contract. The request is
+// mutated in place; existing provider-native reasoning takes precedence.
+func normalizeDeepSeekMessageReasoning(request *model.GeneralOpenAIRequest) {
+	if request == nil {
+		return
+	}
+
+	for idx := range request.Messages {
+		message := &request.Messages[idx]
+		if message.Role != "assistant" {
+			continue
+		}
+
+		if message.ReasoningContent == nil {
+			switch {
+			case message.Reasoning != nil:
+				reasoning := *message.Reasoning
+				message.ReasoningContent = &reasoning
+			case message.Thinking != nil:
+				reasoning := *message.Thinking
+				message.ReasoningContent = &reasoning
+			}
+		}
+		message.Reasoning = nil
+		message.Thinking = nil
+
+		if len(message.ToolCalls) > 0 && message.Content == nil {
+			message.Content = ""
+		}
+	}
 }
 
 func (a *Adaptor) DoRequest(c *gin.Context, meta *meta.Meta, requestBody io.Reader) (*http.Response, error) {

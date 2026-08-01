@@ -37,6 +37,26 @@ func TestSupportsNativeResponseAPIDeepSeekContractForcesFallback(t *testing.T) {
 	require.False(t, supportsNativeResponseAPI(metaInfo))
 }
 
+// TestSupportsNativeResponseAPIDeepSeekV4Flash verifies that DeepSeek V4 Flash
+// uses DeepSeek's native Responses API so plaintext reasoning state survives a
+// Codex tool-call continuation without a lossy Chat Completions conversion.
+func TestSupportsNativeResponseAPIDeepSeekV4Flash(t *testing.T) {
+	t.Parallel()
+
+	for _, channelType := range []int{channeltype.DeepSeek, channeltype.OpenAICompatible} {
+		metaInfo := &metalib.Meta{
+			ChannelType:     channelType,
+			Config:          model.ChannelConfig{APIFormat: channeltype.OpenAICompatibleAPIFormatResponse},
+			BaseURL:         "https://api.deepseek.com/v1",
+			ActualModelName: "deepseek-v4-flash",
+		}
+		require.True(t, supportsNativeResponseAPI(metaInfo), "channel type %d must preserve native Responses state", channelType)
+
+		metaInfo.ActualModelName = "deepseek-v4-pro"
+		require.False(t, supportsNativeResponseAPI(metaInfo), "channel type %d must retain the V4 Pro chat fallback", channelType)
+	}
+}
+
 func TestSupportsNativeResponseAPIDeepSeekModelOnNeutralProxyUsesConfiguredFormat(t *testing.T) {
 	t.Parallel()
 	metaInfo := &metalib.Meta{

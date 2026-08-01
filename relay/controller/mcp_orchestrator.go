@@ -54,7 +54,7 @@ func hasMCPBuiltinsInResponseRequest(c *gin.Context, meta *metalib.Meta, channel
 	if request == nil {
 		return false, nil
 	}
-	chatRequest := &relaymodel.GeneralOpenAIRequest{Model: request.Model, Tools: responseToolsForMCP(request)}
+	chatRequest := &relaymodel.GeneralOpenAIRequest{Model: request.Model, Tools: responseToolsForMCP(meta, request)}
 	registry, _, err := expandMCPBuiltinsInChatRequest(c, meta, channelRecord, provider, chatRequest)
 	if err != nil {
 		return false, errors.Wrap(err, "expand mcp builtins in response request")
@@ -62,8 +62,10 @@ func hasMCPBuiltinsInResponseRequest(c *gin.Context, meta *metalib.Meta, channel
 	return registry != nil, nil
 }
 
-// responseToolsForMCP extracts non-function tools for MCP matching from a Response API request.
-func responseToolsForMCP(request *openai.ResponseAPIRequest) []relaymodel.Tool {
+// responseToolsForMCP extracts non-function tools eligible for gateway MCP
+// matching. Provider-native Responses tools retain provider ownership so a
+// same-named gateway alias cannot silently demote the request to Chat.
+func responseToolsForMCP(meta *metalib.Meta, request *openai.ResponseAPIRequest) []relaymodel.Tool {
 	if request == nil {
 		return nil
 	}
@@ -71,6 +73,9 @@ func responseToolsForMCP(request *openai.ResponseAPIRequest) []relaymodel.Tool {
 	for _, tool := range request.Tools {
 		toolType := strings.TrimSpace(tool.Type)
 		if toolType == "" || strings.EqualFold(toolType, "function") {
+			continue
+		}
+		if supportsDeepSeekNativeResponseAPI(meta) && tooling.NormalizeBuiltinType(toolType) == "web_search" {
 			continue
 		}
 		tools = append(tools, relaymodel.Tool{Type: toolType})

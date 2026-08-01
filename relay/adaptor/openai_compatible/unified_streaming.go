@@ -959,7 +959,8 @@ func UnifiedStreamProcessing(c *gin.Context, resp *http.Response, promptTokens i
 		}
 
 		logger.Error("received error response in stream handler",
-			zap.ByteString("response_body", responseBody))
+			zap.Int("body_bytes", len(responseBody)),
+			zap.Bool("body_logging_suppressed", true))
 
 		// Try to parse as error response
 		var errorResponse SlimTextResponse
@@ -971,7 +972,7 @@ func UnifiedStreamProcessing(c *gin.Context, resp *http.Response, promptTokens i
 		}
 
 		// Return generic error if parsing fails
-		return ErrorWrapper(errors.Errorf("unexpected non-streaming response: %s", string(responseBody)),
+		return ErrorWrapper(errors.Errorf("unexpected non-streaming response with %d bytes", len(responseBody)),
 			"unexpected_response_format", resp.StatusCode), nil
 	}
 
