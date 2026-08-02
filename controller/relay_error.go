@@ -209,13 +209,9 @@ func logChannelSuspensionStatus(ctx context.Context, group, model string, failed
 // processChannelRelayErrorParams contains all parameters needed for error processing.
 // This struct helps maintain readability when passing multiple context values.
 //
-// RequestID, UserId, TokenId, ChannelId and ChannelName are NOT logged by
-// appendRelayFailureFields: every emit site logs through the request-scoped logger,
-// which identity.Bind already loaded with request_id plus user_id/user_uuid/username,
-// token_id/token_uuid/token_name and channel_id/channel_uuid/channel_name. The ids and
-// name are kept here because the channel-health policy (SuspendAbility,
-// monitor.DisableChannel) still needs the raw values; RequestID is retained only as a
-// non-logged correlator for callers and tests.
+// RequestID, UserId, TokenId, ChannelId and ChannelName are logged explicitly by
+// appendRelayFailureFields so every relay failure remains self-contained even when
+// request-scoped logger bindings are unavailable.
 type processChannelRelayErrorParams struct {
 	RequestID     string
 	UserId        int
@@ -231,16 +227,29 @@ type processChannelRelayErrorParams struct {
 
 // appendRelayFailureFields builds consistent relay failure context fields from params and appends extra fields.
 //
-// It deliberately emits NO user/token/channel identity: every caller logs through the
-// request-scoped logger (gmw.GetLogger on the gin context or on the identity-carrying
-// context snapshotted by relayctx.Detach), which identity.Bind already loaded with the
-// full nine-field identity. Re-emitting them here would duplicate every key, because
-// zap does not de-duplicate fields.
+// Identity fields use the same canonical keys as the request-scoped logger. They are
+// emitted explicitly because complete failure context is more important than avoiding
+// duplicate keys when the logger already carries the same values.
 //
 // Parameters: params carries request, model, and upstream error context; extra adds log-specific details.
 // Returns: a zap field slice suitable for structured WARN/ERROR relay logs.
 func appendRelayFailureFields(params processChannelRelayErrorParams, extra ...zap.Field) []zap.Field {
-	fields := make([]zap.Field, 0, 12+len(extra))
+	fields := make([]zap.Field, 0, 16+len(extra))
+	if params.RequestID != "" {
+		fields = append(fields, zap.String("request_id", params.RequestID))
+	}
+	if params.UserId > 0 {
+		fields = append(fields, zap.Int("user_id", params.UserId))
+	}
+	if params.TokenId > 0 {
+		fields = append(fields, zap.Int("token_id", params.TokenId))
+	}
+	if params.ChannelId > 0 {
+		fields = append(fields, zap.Int("channel_id", params.ChannelId))
+	}
+	if params.ChannelName != "" {
+		fields = append(fields, zap.String("channel_name", params.ChannelName))
+	}
 	if params.RequestURL != "" {
 		fields = append(fields, zap.String("request_url", params.RequestURL))
 	}
@@ -256,17 +265,51 @@ func appendRelayFailureFields(params processChannelRelayErrorParams, extra ...za
 	if params.Err.StatusCode > 0 {
 		fields = append(fields, zap.Int("status_code", params.Err.StatusCode))
 	}
-	if errorCode := strings.TrimSpace(fmt.Sprint(params.Err.Code)); errorCode != "" && errorCode != "<nil>" {
+	errorCode := strings.TrimSpace(fmt.Sprint(params.Err.Code))
+	if errorCode != "" && errorCode != "<nil>" {
 		fields = append(fields, zap.String("error_code", errorCode))
 	}
 	if errorType := strings.TrimSpace(string(params.Err.Type)); errorType != "" {
 		fields = append(fields, zap.String("error_type", errorType))
 	}
+	if quotaScope := oneAPIQuotaScope(params.Err, errorCode); quotaScope != "" {
+		fields = append(fields, zap.String("quota_scope", quotaScope))
+	}
 	if upstreamError := strings.TrimSpace(params.Err.Message); upstreamError != "" {
-		fields = append(fields, zap.String("upstream_error", upstreamError))
+		if params.Err.Type == model.ErrorTypeOneAPI {
+			fields = append(fields, zap.String("one_api_error", upstreamError))
+		} else {
+			fields = append(fields, zap.String("upstream_error", upstreamError))
+		}
 	}
 
 	return append(fields, extra...)
+}
+
+// oneAPIQuotaScope identifies which local one-api balance caused a quota error.
+// Parameters: relayErr is the standardized relay error and errorCode is its normalized code.
+// Returns: one_api_user or one_api_token for local quota failures, otherwise an empty string.
+func oneAPIQuotaScope(relayErr model.ErrorWithStatusCode, errorCode string) string {
+	if relayErr.Type != model.ErrorTypeOneAPI {
+		return ""
+	}
+
+	switch strings.ToLower(errorCode) {
+	case "insufficient_user_quota":
+		return "one_api_user"
+	case "insufficient_token_quota":
+		return "one_api_token"
+	case "pre_consume_token_quota_failed":
+		message := strings.ToLower(relayErr.Message)
+		if strings.Contains(message, "user quota") {
+			return "one_api_user"
+		}
+		if strings.Contains(message, "token quota") {
+			return "one_api_token"
+		}
+	}
+
+	return ""
 }
 
 // isExpectedChannelSelectionExhaustedError reports whether err means retry candidates were exhausted rather than an infrastructure failure.
