@@ -757,6 +757,36 @@ func TestComputeChannelTierPricingWithInheritedBase(t *testing.T) {
 	require.Equal(t, expectedQuota, result.TotalQuota)
 }
 
+// TestComputeOutputTokenTierPricing verifies quota reconciliation applies a
+// tier whose price changes when completion usage reaches its output threshold.
+func TestComputeOutputTokenTierPricing(t *testing.T) {
+	t.Parallel()
+
+	const modelName = "output-tier-model"
+	provider := &stubQuotaAdaptor{pricing: map[string]adaptor.ModelConfig{
+		modelName: {
+			Ratio:           2,
+			CompletionRatio: 4,
+			Tiers: []adaptor.ModelRatioTier{
+				{OutputTokenThreshold: 200, Ratio: 3, CompletionRatio: 14.0 / 3.0},
+			},
+		},
+	}}
+	usage := &relaymodel.Usage{PromptTokens: 1_000, CompletionTokens: 200}
+
+	result := quotautil.Compute(quotautil.ComputeInput{
+		Usage:          usage,
+		ModelName:      modelName,
+		ModelRatio:     2,
+		GroupRatio:     1,
+		PricingAdaptor: provider,
+	})
+
+	require.InDelta(t, 3.0, result.UsedModelRatio, 1e-12)
+	require.InDelta(t, 14.0/3.0, result.UsedCompletionRatio, 1e-12)
+	require.Equal(t, int64(5_800), result.TotalQuota)
+}
+
 // TestComputeChannelZeroConfigInheritsProviderCompletionRatio verifies zero-valued channel config completion falls back to provider defaults.
 func TestComputeChannelZeroConfigInheritsProviderCompletionRatio(t *testing.T) {
 	t.Parallel()

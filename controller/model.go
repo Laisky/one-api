@@ -368,12 +368,13 @@ type TimeWindowOverlayDisplay struct {
 
 // ModelDisplayTier represents a single tier in volume-based pricing
 type ModelDisplayTier struct {
-	InputPrice          float64 `json:"input_price"`                    // Price per 1M input tokens for this tier
-	OutputPrice         float64 `json:"output_price"`                   // Price per 1M output tokens for this tier
-	CachedInputPrice    float64 `json:"cached_input_price,omitempty"`   // Cached input price for this tier
-	CacheWrite5mPrice   float64 `json:"cache_write_5m_price,omitempty"` // 5-min cache write price for this tier
-	CacheWrite1hPrice   float64 `json:"cache_write_1h_price,omitempty"` // 1-hour cache write price for this tier
-	InputTokenThreshold int     `json:"input_token_threshold"`          // Minimum input tokens to reach this tier
+	InputPrice           float64 `json:"input_price"`                      // Price per 1M input tokens for this tier
+	OutputPrice          float64 `json:"output_price"`                     // Price per 1M output tokens for this tier
+	CachedInputPrice     float64 `json:"cached_input_price,omitempty"`     // Cached input price for this tier
+	CacheWrite5mPrice    float64 `json:"cache_write_5m_price,omitempty"`   // 5-min cache write price for this tier
+	CacheWrite1hPrice    float64 `json:"cache_write_1h_price,omitempty"`   // 1-hour cache write price for this tier
+	InputTokenThreshold  int     `json:"input_token_threshold"`            // Minimum input tokens to reach this tier
+	OutputTokenThreshold int     `json:"output_token_threshold,omitempty"` // Minimum output tokens to reach this tier
 }
 
 // VideoDisplayPricing represents video generation pricing for display
@@ -440,9 +441,10 @@ func buildDisplayTiers(tiers []adaptorpkg.ModelRatioTier, baseCompletionRatio fl
 			tierCompletionRatio = baseCompletionRatio
 		}
 		dt := ModelDisplayTier{
-			InputPrice:          tierInput,
-			OutputPrice:         tierInput * tierCompletionRatio,
-			InputTokenThreshold: tier.InputTokenThreshold,
+			InputPrice:           tierInput,
+			OutputPrice:          tierInput * tierCompletionRatio,
+			InputTokenThreshold:  tier.InputTokenThreshold,
+			OutputTokenThreshold: tier.OutputTokenThreshold,
 		}
 		if tier.CachedInputRatio != 0 {
 			dt.CachedInputPrice = convertRatioToPrice(tier.CachedInputRatio)
@@ -628,12 +630,13 @@ func convertLocalDisplayConfig(cfg model.ModelConfigLocal) adaptorpkg.ModelConfi
 		converted.Tiers = make([]adaptorpkg.ModelRatioTier, 0, len(cfg.Tiers))
 		for _, tier := range cfg.Tiers {
 			converted.Tiers = append(converted.Tiers, adaptorpkg.ModelRatioTier{
-				Ratio:               tier.Ratio,
-				CompletionRatio:     tier.CompletionRatio,
-				CachedInputRatio:    tier.CachedInputRatio,
-				CacheWrite5mRatio:   tier.CacheWrite5mRatio,
-				CacheWrite1hRatio:   tier.CacheWrite1hRatio,
-				InputTokenThreshold: tier.InputTokenThreshold,
+				Ratio:                tier.Ratio,
+				CompletionRatio:      tier.CompletionRatio,
+				CachedInputRatio:     tier.CachedInputRatio,
+				CacheWrite5mRatio:    tier.CacheWrite5mRatio,
+				CacheWrite1hRatio:    tier.CacheWrite1hRatio,
+				InputTokenThreshold:  tier.InputTokenThreshold,
+				OutputTokenThreshold: tier.OutputTokenThreshold,
 			})
 		}
 	}
@@ -1262,9 +1265,10 @@ func GetModelsDisplay(c *gin.Context) {
 							tierOutput = tierInput * baseCompletionRatio
 						}
 						dt := ModelDisplayTier{
-							InputPrice:          tierInput,
-							OutputPrice:         tierOutput,
-							InputTokenThreshold: tier.InputTokenThreshold,
+							InputPrice:           tierInput,
+							OutputPrice:          tierOutput,
+							InputTokenThreshold:  tier.InputTokenThreshold,
+							OutputTokenThreshold: tier.OutputTokenThreshold,
 						}
 						if tier.CachedInputRatio != 0 {
 							dt.CachedInputPrice = convertRatioToPrice(tier.CachedInputRatio)

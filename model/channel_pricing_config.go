@@ -48,12 +48,13 @@ type ClockRangeLocal struct {
 }
 
 type ModelRatioTierLocal struct {
-	Ratio               float64 `json:"ratio"`
-	CompletionRatio     float64 `json:"completion_ratio,omitempty"`
-	CachedInputRatio    float64 `json:"cached_input_ratio,omitempty"`
-	CacheWrite5mRatio   float64 `json:"cache_write_5m_ratio,omitempty"`
-	CacheWrite1hRatio   float64 `json:"cache_write_1h_ratio,omitempty"`
-	InputTokenThreshold int     `json:"input_token_threshold"`
+	Ratio                float64 `json:"ratio"`
+	CompletionRatio      float64 `json:"completion_ratio,omitempty"`
+	CachedInputRatio     float64 `json:"cached_input_ratio,omitempty"`
+	CacheWrite5mRatio    float64 `json:"cache_write_5m_ratio,omitempty"`
+	CacheWrite1hRatio    float64 `json:"cache_write_1h_ratio,omitempty"`
+	InputTokenThreshold  int     `json:"input_token_threshold"`
+	OutputTokenThreshold int     `json:"output_token_threshold,omitempty"`
 }
 
 // VideoPricingLocal represents channel-scoped video pricing metadata stored alongside model configs.
@@ -262,6 +263,9 @@ func (channel *Channel) validateModelPriceConfigs(configs map[string]ModelConfig
 		for _, tier := range config.Tiers {
 			if tier.InputTokenThreshold < 0 {
 				return errors.Errorf("negative input_token_threshold for model %s tier: %d", modelName, tier.InputTokenThreshold)
+			}
+			if tier.OutputTokenThreshold < 0 {
+				return errors.Errorf("negative output_token_threshold for model %s tier: %d", modelName, tier.OutputTokenThreshold)
 			}
 			if tier.Ratio < 0 {
 				return errors.Errorf("negative tier ratio for model %s: %f", modelName, tier.Ratio)

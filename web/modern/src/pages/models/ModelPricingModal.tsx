@@ -3,6 +3,7 @@ import { CopyButton } from '@/components/ui/copy-button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Separator } from '@/components/ui/separator';
 import { useResponsive } from '@/hooks/useResponsive';
+import { formatTierThreshold } from '@/pages/models/tier-threshold';
 import { X } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
@@ -47,6 +48,7 @@ interface TierData {
   cache_write_5m_price?: number;
   cache_write_1h_price?: number;
   input_token_threshold: number;
+  output_token_threshold?: number;
 }
 
 interface VideoPricingData {
@@ -684,7 +686,7 @@ function PricingContent({
                               <tr key={tierIndex} className="border-b border-dashed last:border-0">
                                 <td className="py-1.5 pr-3">
                                   <Badge variant="outline" className="text-[11px]">
-                                    &ge; {formatTokenCount(tier.input_token_threshold)}
+                                    {formatTierThreshold(tier, tr('input', 'Input'), tr('output', 'Output'))}
                                   </Badge>
                                 </td>
                                 <td className="px-3 py-1.5 font-mono">{formatUsd(tier.input_price)}</td>
@@ -736,7 +738,7 @@ function PricingContent({
                   <tr key={i} className="border-b border-dashed last:border-0">
                     <td className="py-2 pr-3">
                       <Badge variant="outline" className="text-xs">
-                        &ge; {formatTokenCount(tier.input_token_threshold)}
+                        {formatTierThreshold(tier, tr('input', 'Input'), tr('output', 'Output'))}
                       </Badge>
                     </td>
                     <td className="py-2 px-3 font-mono text-sm">{formatUsd(tier.input_price)}</td>

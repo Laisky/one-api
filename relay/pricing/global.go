@@ -498,9 +498,10 @@ type EffectivePricing struct {
 	OutputRatio      float64 // equals InputRatio * CompletionRatio
 	CachedInputRatio float64 // negative means free
 	// Cache-write prices (per 1 token)
-	CacheWrite5mRatio    float64 // zero => use InputRatio; negative => free
-	CacheWrite1hRatio    float64 // zero => use InputRatio; negative => free
-	AppliedTierThreshold int     // 0 for base tier
+	CacheWrite5mRatio          float64 // zero => use InputRatio; negative => free
+	CacheWrite1hRatio          float64 // zero => use InputRatio; negative => free
+	AppliedTierThreshold       int     // 0 for base tier
+	AppliedOutputTierThreshold int     // 0 for a tier without an output threshold
 }
 
 // ResolveEffectivePricing determines the effective pricing for a model given the
@@ -513,6 +514,14 @@ type EffectivePricing struct {
 // - If tiers exist, finds the tier whose InputTokenThreshold <= inputTokens and is the highest such threshold.
 // - Optional tier fields inherit from base if zero. Negative cached ratios mean free.
 func ResolveEffectivePricing(modelName string, inputTokens int, adaptor adaptor.Adaptor) EffectivePricing {
+	return ResolveEffectivePricingForUsage(modelName, inputTokens, 0, adaptor)
+}
+
+// ResolveEffectivePricingForUsage determines effective pricing from both input
+// and output token counts. Parameters: modelName selects the provider model,
+// inputTokens and outputTokens contain raw token counts, and adaptor supplies
+// default pricing. Returns: the fully resolved token prices and applied tier.
+func ResolveEffectivePricingForUsage(modelName string, inputTokens, outputTokens int, adaptor adaptor.Adaptor) EffectivePricing {
 	if adaptor == nil {
 		baseIn := 2.5 * billingratio.MilliTokensUsd
 		baseComp := 1.0
@@ -528,7 +537,7 @@ func ResolveEffectivePricing(modelName string, inputTokens int, adaptor adaptor.
 
 	modelPricing := adaptor.GetDefaultModelPricing()
 	if base, ok := modelPricing[modelName]; ok {
-		return ResolveEffectivePricingFromConfig(inputTokens, base)
+		return ResolveEffectivePricingForUsageFromConfig(inputTokens, outputTokens, base)
 	}
 
 	baseRatio := adaptor.GetModelRatio(modelName)
@@ -543,18 +552,29 @@ func ResolveEffectivePricing(modelName string, inputTokens int, adaptor adaptor.
 	}
 }
 
+// ResolveEffectivePricingFromConfig determines pricing from input-token tiers.
+// Parameters: inputTokens is the raw prompt-token count and base is the model
+// configuration. Returns: the effective prices, excluding output-only tiers.
 func ResolveEffectivePricingFromConfig(inputTokens int, base adaptor.ModelConfig) EffectivePricing {
+	return ResolveEffectivePricingForUsageFromConfig(inputTokens, 0, base)
+}
+
+// ResolveEffectivePricingForUsageFromConfig determines pricing from input and
+// output token tiers. Parameters: inputTokens and outputTokens are raw usage
+// counts and base is the model configuration. Returns: the effective prices.
+func ResolveEffectivePricingForUsageFromConfig(inputTokens, outputTokens int, base adaptor.ModelConfig) EffectivePricing {
 	in := base.Ratio
 	comp := base.CompletionRatio
 	cachedIn := base.CachedInputRatio
 	cw5 := base.CacheWrite5mRatio
 	cw1 := base.CacheWrite1hRatio
 	appliedThreshold := 0
+	appliedOutputThreshold := 0
 
 	if len(base.Tiers) > 0 {
 		for _, t := range base.Tiers {
-			if inputTokens < t.InputTokenThreshold {
-				break
+			if !TierApplies(inputTokens, outputTokens, t) {
+				continue
 			}
 			if t.Ratio != 0 {
 				in = t.Ratio
@@ -572,15 +592,24 @@ func ResolveEffectivePricingFromConfig(inputTokens int, base adaptor.ModelConfig
 				cw1 = t.CacheWrite1hRatio
 			}
 			appliedThreshold = t.InputTokenThreshold
+			appliedOutputThreshold = t.OutputTokenThreshold
 		}
 	}
 
 	return EffectivePricing{
-		InputRatio:           in,
-		OutputRatio:          in * comp,
-		CachedInputRatio:     cachedIn,
-		CacheWrite5mRatio:    cw5,
-		CacheWrite1hRatio:    cw1,
-		AppliedTierThreshold: appliedThreshold,
+		InputRatio:                 in,
+		OutputRatio:                in * comp,
+		CachedInputRatio:           cachedIn,
+		CacheWrite5mRatio:          cw5,
+		CacheWrite1hRatio:          cw1,
+		AppliedTierThreshold:       appliedThreshold,
+		AppliedOutputTierThreshold: appliedOutputThreshold,
 	}
+}
+
+// TierApplies reports whether a pricing tier matches the supplied token usage.
+// Parameters: inputTokens and outputTokens are raw counts and tier contains the
+// inclusive lower bounds. Returns: true only when both thresholds are met.
+func TierApplies(inputTokens, outputTokens int, tier adaptor.ModelRatioTier) bool {
+	return inputTokens >= tier.InputTokenThreshold && outputTokens >= tier.OutputTokenThreshold
 }

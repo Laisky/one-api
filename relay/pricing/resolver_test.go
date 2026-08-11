@@ -109,6 +109,7 @@ func TestResolveModelConfig_ChannelOverridePreservesCacheAndTiers(t *testing.T) 
 			"tiers": [
 				{
 					"input_token_threshold": 200000,
+					"output_token_threshold": 1000,
 					"ratio": 3.086,
 					"completion_ratio": 11.571,
 					"cached_input_ratio": 3.086,
@@ -127,6 +128,7 @@ func TestResolveModelConfig_ChannelOverridePreservesCacheAndTiers(t *testing.T) 
 	require.InDelta(t, 1.543, cfg.CacheWrite1hRatio, 0.0000001)
 	require.Len(t, cfg.Tiers, 1)
 	require.Equal(t, 200000, cfg.Tiers[0].InputTokenThreshold)
+	require.Equal(t, 1000, cfg.Tiers[0].OutputTokenThreshold)
 	require.InDelta(t, 3.086, cfg.Tiers[0].Ratio, 0.0000001)
 	require.InDelta(t, 3.086, cfg.Tiers[0].CachedInputRatio, 0.0000001)
 	require.InDelta(t, 3.086, cfg.Tiers[0].CacheWrite5mRatio, 0.0000001)

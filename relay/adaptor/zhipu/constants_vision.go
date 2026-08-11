@@ -18,10 +18,10 @@ var flagshipVisionModels = map[string]adaptor.ModelConfig{
 		CompletionRatio:  22.0 / 5.0,
 		CachedInputRatio: 1.2 * ratio.MilliTokensRmb,
 		Tiers: []adaptor.ModelRatioTier{
-			{Ratio: 7 * ratio.MilliTokensRmb, CompletionRatio: 26.0 / 7.0, CachedInputRatio: 1.8 * ratio.MilliTokensRmb, InputTokenThreshold: 32},
+			{Ratio: 7 * ratio.MilliTokensRmb, CompletionRatio: 26.0 / 7.0, CachedInputRatio: 1.8 * ratio.MilliTokensRmb, InputTokenThreshold: 32_000},
 		},
 		ContextLength:               200_000,
-		MaxOutputTokens:             128_000,
+		MaxOutputTokens:             131_072,
 		InputModalities:             textImageVideoFileInput(),
 		OutputModalities:            textOutput(),
 		SupportedFeatures:           reasoningChatFeatures(),
@@ -36,7 +36,7 @@ var flagshipVisionModels = map[string]adaptor.ModelConfig{
 		CompletionRatio:  3.0 / 1.0,
 		CachedInputRatio: 0.2 * ratio.MilliTokensRmb,
 		Tiers: []adaptor.ModelRatioTier{
-			{Ratio: 2 * ratio.MilliTokensRmb, CompletionRatio: 6.0 / 2.0, CachedInputRatio: 0.4 * ratio.MilliTokensRmb, InputTokenThreshold: 32},
+			{Ratio: 2 * ratio.MilliTokensRmb, CompletionRatio: 6.0 / 2.0, CachedInputRatio: 0.4 * ratio.MilliTokensRmb, InputTokenThreshold: 32_000},
 		},
 		ContextLength:               131_072,
 		MaxOutputTokens:             32_768,
@@ -53,7 +53,7 @@ var flagshipVisionModels = map[string]adaptor.ModelConfig{
 		CompletionRatio:  1.5 / 0.15,
 		CachedInputRatio: 0.03 * ratio.MilliTokensRmb,
 		Tiers: []adaptor.ModelRatioTier{
-			{Ratio: 0.3 * ratio.MilliTokensRmb, CompletionRatio: 3.0 / 0.3, CachedInputRatio: 0.03 * ratio.MilliTokensRmb, InputTokenThreshold: 32},
+			{Ratio: 0.3 * ratio.MilliTokensRmb, CompletionRatio: 3.0 / 0.3, CachedInputRatio: 0.03 * ratio.MilliTokensRmb, InputTokenThreshold: 32_000},
 		},
 		ContextLength:               131_072,
 		MaxOutputTokens:             32_768,
@@ -70,7 +70,7 @@ var flagshipVisionModels = map[string]adaptor.ModelConfig{
 		CompletionRatio:  6.0 / 2.0,
 		CachedInputRatio: 0.4 * ratio.MilliTokensRmb,
 		Tiers: []adaptor.ModelRatioTier{
-			{Ratio: 4 * ratio.MilliTokensRmb, CompletionRatio: 12.0 / 4.0, CachedInputRatio: 0.8 * ratio.MilliTokensRmb, InputTokenThreshold: 32},
+			{Ratio: 4 * ratio.MilliTokensRmb, CompletionRatio: 12.0 / 4.0, CachedInputRatio: 0.8 * ratio.MilliTokensRmb, InputTokenThreshold: 32_000},
 		},
 		ContextLength:               65_536,
 		MaxOutputTokens:             16_384,
@@ -117,7 +117,7 @@ var multimodalModels = map[string]adaptor.ModelConfig{
 		Ratio:                       4 * ratio.MilliTokensRmb,
 		CompletionRatio:             1,
 		ContextLength:               8_192,
-		MaxOutputTokens:             1_024,
+		MaxOutputTokens:             8_192,
 		InputModalities:             textImageInput(),
 		OutputModalities:            textOutput(),
 		SupportedFeatures:           []string{"tools", "json_mode"},

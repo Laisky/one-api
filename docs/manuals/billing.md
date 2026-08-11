@@ -134,6 +134,7 @@ Tier pricing schema exists in runtime adaptor config (`relay/adaptor/interface.g
 Field meaning (runtime tier object):
 
 - `input_token_threshold`: this tier becomes active when request prompt tokens are `>= threshold`.
+- `output_token_threshold`: when non-zero, the tier also requires completion tokens to be `>= threshold`.
 - `ratio`: input token price for this tier.
 - `completion_ratio`: output multiplier for this tier; if omitted/zero, inherited from previous effective value.
 - `cached_input_ratio`: cached-read input price for this tier.
@@ -208,6 +209,7 @@ Per-model object keys currently accepted/persisted by channel config (`model.Mod
 - `cache_write_1h_ratio` (`number`, `>=0`): cache-write 1h price ratio. Zero falls back to normal input price.
 - `tiers` (`array`): tiered pricing entries, each containing:
   - `input_token_threshold` (`integer`, `>=0`)
+  - `output_token_threshold` (`integer`, `>=0`, optional)
   - `ratio` (`number`, optional)
   - `completion_ratio` (`number`, optional)
   - `cached_input_ratio` (`number`, optional)

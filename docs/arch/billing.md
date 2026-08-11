@@ -502,10 +502,11 @@ type ModelRatioTier struct {
     CacheWrite5mRatio float64 `json:"cache_write_5m_ratio,omitempty"`
     CacheWrite1hRatio float64 `json:"cache_write_1h_ratio,omitempty"`
     InputTokenThreshold int  `json:"input_token_threshold"`
+    OutputTokenThreshold int `json:"output_token_threshold,omitempty"`
 }
 ```
 
-- **Tiered pricing**: Adapters can attach sorted `tiers` to alter input, completion, and cache-write prices once a request crosses a token threshold. `pricing.ResolveEffectivePricing()` applies these tiers at runtime and records which threshold was selected for observability.
+- **Tiered pricing**: Adapters can attach sorted `tiers` to alter input, completion, and cache-write prices once a request crosses input and optional output token thresholds. `pricing.ResolveEffectivePricingForUsage()` applies both dimensions at runtime and records which thresholds were selected for observability.
 - **Cache-aware pricing**: `CachedInputRatio`, `CacheWrite5mRatio`, and `CacheWrite1hRatio` let adapters express Anthropic-style prompt caching economics. Negative values mark a bucket as free; zero means “inherit the base ratio.”
 - **Time-of-day pricing**: `time_windows` attach ordered wall-clock overlays to a model config. The resolver selects the first window matching `meta.StartTime`, deep-merges its sparse pricing overlay, clears `TimeWindows`, and then applies tiers. Windows use explicit IANA timezones, support daylight-saving changes through local wall-clock conversion, midnight-crossing ranges, optional weekday filters, and optional local-date bounds.
 - **Max token policy**: `MaxTokens` carries per-model token ceilings so controllers can clamp `max_tokens` before dispatching upstream.

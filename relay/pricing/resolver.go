@@ -124,15 +124,19 @@ func convertLocalModelConfig(local model.ModelConfigLocal) adaptor.ModelConfig {
 		cfg.Tiers = make([]adaptor.ModelRatioTier, 0, len(local.Tiers))
 		for _, t := range local.Tiers {
 			cfg.Tiers = append(cfg.Tiers, adaptor.ModelRatioTier{
-				Ratio:               t.Ratio,
-				CompletionRatio:     t.CompletionRatio,
-				CachedInputRatio:    t.CachedInputRatio,
-				CacheWrite5mRatio:   t.CacheWrite5mRatio,
-				CacheWrite1hRatio:   t.CacheWrite1hRatio,
-				InputTokenThreshold: t.InputTokenThreshold,
+				Ratio:                t.Ratio,
+				CompletionRatio:      t.CompletionRatio,
+				CachedInputRatio:     t.CachedInputRatio,
+				CacheWrite5mRatio:    t.CacheWrite5mRatio,
+				CacheWrite1hRatio:    t.CacheWrite1hRatio,
+				InputTokenThreshold:  t.InputTokenThreshold,
+				OutputTokenThreshold: t.OutputTokenThreshold,
 			})
 		}
 		sort.Slice(cfg.Tiers, func(i, j int) bool {
+			if cfg.Tiers[i].InputTokenThreshold == cfg.Tiers[j].InputTokenThreshold {
+				return cfg.Tiers[i].OutputTokenThreshold < cfg.Tiers[j].OutputTokenThreshold
+			}
 			return cfg.Tiers[i].InputTokenThreshold < cfg.Tiers[j].InputTokenThreshold
 		})
 	}
@@ -318,15 +322,19 @@ func convertLocalModelConfigRatioOnly(local model.ModelConfigLocal) adaptor.Mode
 		cfg.Tiers = make([]adaptor.ModelRatioTier, 0, len(local.Tiers))
 		for _, t := range local.Tiers {
 			cfg.Tiers = append(cfg.Tiers, adaptor.ModelRatioTier{
-				Ratio:               t.Ratio,
-				CompletionRatio:     t.CompletionRatio,
-				CachedInputRatio:    t.CachedInputRatio,
-				CacheWrite5mRatio:   t.CacheWrite5mRatio,
-				CacheWrite1hRatio:   t.CacheWrite1hRatio,
-				InputTokenThreshold: t.InputTokenThreshold,
+				Ratio:                t.Ratio,
+				CompletionRatio:      t.CompletionRatio,
+				CachedInputRatio:     t.CachedInputRatio,
+				CacheWrite5mRatio:    t.CacheWrite5mRatio,
+				CacheWrite1hRatio:    t.CacheWrite1hRatio,
+				InputTokenThreshold:  t.InputTokenThreshold,
+				OutputTokenThreshold: t.OutputTokenThreshold,
 			})
 		}
 		sort.Slice(cfg.Tiers, func(i, j int) bool {
+			if cfg.Tiers[i].InputTokenThreshold == cfg.Tiers[j].InputTokenThreshold {
+				return cfg.Tiers[i].OutputTokenThreshold < cfg.Tiers[j].OutputTokenThreshold
+			}
 			return cfg.Tiers[i].InputTokenThreshold < cfg.Tiers[j].InputTokenThreshold
 		})
 	}

@@ -38,7 +38,7 @@ type ModelConfig struct {
 	CacheWrite1hRatio float64 `json:"cache_write_1h_ratio,omitempty"`
 	// Tiers contains tiered pricing data. If present, the first tier is the base
 	// Ratio/CompletionRatio/Cached* fields in this struct. Elements must be sorted
-	// ascending by InputTokenThreshold and represent the 2nd+ tiers.
+	// by input and output thresholds and represent the 2nd+ tiers.
 	Tiers []ModelRatioTier `json:"tiers,omitempty"`
 	// MaxTokens represents the maximum token limit for this model on this channel
 	// 0 means no limit (infinity)
@@ -334,8 +334,8 @@ func normalizeResolutionKey(value string) string {
 	return strconv.Itoa(width) + "x" + strconv.Itoa(height)
 }
 
-// ModelRatioTier describes pricing for a specific input token tier. It overrides
-// the base ModelConfig starting at InputTokenThreshold. Zero values for optional
+// ModelRatioTier describes pricing for a token-usage tier. It overrides the base
+// ModelConfig when both non-zero thresholds are met. Zero values for pricing
 // fields mean "inherit from base"; negative cached ratios mean free tokens.
 type ModelRatioTier struct {
 	// Base price for this tier (per input token)
@@ -353,6 +353,9 @@ type ModelRatioTier struct {
 
 	// The minimum input‑token count at which this tier becomes applicable
 	InputTokenThreshold int `json:"input_token_threshold"`
+
+	// The minimum output-token count at which this tier becomes applicable
+	OutputTokenThreshold int `json:"output_token_threshold,omitempty"`
 }
 
 // ToolPricingConfig describes the per-invocation pricing for a provider built-in tool.
