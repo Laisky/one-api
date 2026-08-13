@@ -10,7 +10,7 @@ import (
 // quantization label, so the Quantization field is intentionally left empty
 // (omitempty) for those models.
 //
-// Sources:
+// Sources (last audited 2026-08-13):
 //   - https://console.groq.com/docs/models
 //   - https://console.groq.com/docs/agentic-tooling
 //   - Per-model pages under https://console.groq.com/docs/model/<id>
@@ -62,7 +62,7 @@ var (
 
 // ModelRatios contains all supported models and their pricing ratios.
 // Model list is derived from the keys of this map, eliminating redundancy.
-// Pricing source: https://groq.com/pricing/
+// Pricing source: https://console.groq.com/docs/models
 // Capability source: https://console.groq.com/docs/models
 var ModelRatios = map[string]adaptor.ModelConfig{
 	// Production Models
@@ -220,17 +220,30 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		Ratio:                       0.60 * ratio.MilliTokensUsd,
 		CompletionRatio:             3.00 / 0.60,
 		ContextLength:               131072,
-		MaxOutputTokens:             32768,
+		MaxOutputTokens:             16384,
 		InputModalities:             groqTextImageInModalities,
 		OutputModalities:            groqTextOnlyModalities,
 		SupportedFeatures:           []string{"tools", "json_mode", "reasoning"},
 		SupportedSamplingParameters: groqReasoningSamplingParams,
-		// Groq's qwen3 reasoning docs enumerate none/default (null also reasons by default).
-		// Source: https://console.groq.com/docs/model/openai/gpt-oss-safeguard-20b
-		SupportedReasoningEfforts: []string{"none", "default"},
+		// Groq's Qwen 3.6 API accepts none/default plus low/medium/high.
+		// Source: https://console.groq.com/docs/model/qwen/qwen3.6-27b
+		SupportedReasoningEfforts: []string{"none", "default", "low", "medium", "high"},
 		DefaultReasoningEffort:    "default",
 		HuggingFaceID:             "Qwen/Qwen3.6-27B",
 		Description:               "Alibaba Qwen3.6-27B multimodal model (text + image input) with switchable thinking/non-thinking modes via reasoning_effort.",
+	},
+	"minimaxai/minimax-m2.7": {
+		Ratio:                       0,
+		CompletionRatio:             1,
+		ContextLength:               196608,
+		MaxOutputTokens:             131072,
+		InputModalities:             groqTextOnlyModalities,
+		OutputModalities:            groqTextOnlyModalities,
+		SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs", "reasoning"},
+		SupportedSamplingParameters: groqReasoningSamplingParams,
+		SupportedReasoningEfforts:   []string{"low", "medium", "high"},
+		DefaultReasoningEffort:      "medium",
+		Description:                 "MiniMax M2.7 enterprise preview model with 196K context and 131K maximum output. Pricing is contact-sales only.",
 	},
 
 	// New Models (Jan 2026)
@@ -254,43 +267,35 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		Description:      "Canopy Labs Orpheus v1 English text-to-speech (Llama-3.2-3B backbone) with bracketed vocal direction tags.",
 	},
 	"groq/compound": {
-		Ratio:                       0.15 * ratio.MilliTokensUsd,
-		CompletionRatio:             0.60 / 0.15,
+		Ratio:                       0,
+		CompletionRatio:             1,
 		ContextLength:               131072,
 		MaxOutputTokens:             8192,
 		InputModalities:             groqTextOnlyModalities,
 		OutputModalities:            groqTextOnlyModalities,
-		SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs", "reasoning", "web_search"},
+		SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs", "web_search"},
 		SupportedSamplingParameters: groqChatSamplingParams,
-		Description:                 "Groq Compound agentic system with built-in web search, visit-website, code execution, browser automation, and Wolfram Alpha tools.",
+		Description:                 "Groq Compound agentic system with built-in web search, visit-website, code execution, and Wolfram Alpha tools. Usage is billed from the underlying models and is not represented by a standalone token rate.",
 	},
 	"groq/compound-mini": {
-		Ratio:                       0.11 * ratio.MilliTokensUsd,
-		CompletionRatio:             0.34 / 0.11,
+		Ratio:                       0,
+		CompletionRatio:             1,
 		ContextLength:               131072,
 		MaxOutputTokens:             8192,
 		InputModalities:             groqTextOnlyModalities,
 		OutputModalities:            groqTextOnlyModalities,
-		SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs", "reasoning", "web_search"},
+		SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs", "web_search"},
 		SupportedSamplingParameters: groqChatSamplingParams,
-		Description:                 "Lower-latency single-tool-call variant of Groq Compound, ~3x faster than groq/compound.",
+		Description:                 "Lower-latency single-tool-call variant of Groq Compound, ~3x faster than groq/compound. Usage is billed from the underlying models and is not represented by a standalone token rate.",
 	},
 }
 
 // ModelList derived from ModelRatios for backward compatibility.
 var ModelList = adaptor.GetModelListFromPricing(ModelRatios)
 
-// GroqToolingDefaults enumerates Groq's Compound and GPT-OSS built-in tool pricing.
-// Source: https://groq.com/pricing/
-var GroqToolingDefaults = adaptor.ChannelToolConfig{
-	Pricing: map[string]adaptor.ToolPricingConfig{
-		"basic_search":          {UsdPerCall: 0.005},
-		"advanced_search":       {UsdPerCall: 0.008},
-		"visit_website":         {UsdPerCall: 0.001},
-		"code_execution":        {UsdPerCall: 0.18},
-		"browser_automation":    {UsdPerCall: 0.08},
-		"browser_search_basic":  {UsdPerCall: 0.005},
-		"browser_search_visit":  {UsdPerCall: 0.001},
-		"code_execution_python": {UsdPerCall: 0.18},
-	},
-}
+// GroqToolingDefaults records no fixed tool tariff because the current Groq
+// documentation lists the available Compound tools but does not publish a
+// standalone per-call price; Compound usage is reported by underlying models.
+// Sources: https://console.groq.com/docs/compound and
+// https://console.groq.com/docs/compound/built-in-tools
+var GroqToolingDefaults = adaptor.ChannelToolConfig{}

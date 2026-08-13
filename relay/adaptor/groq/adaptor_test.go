@@ -70,6 +70,16 @@ func TestGetRequestURL(t *testing.T) {
 	}
 }
 
+func TestGetModelListIncludesCurrentPreviewModel(t *testing.T) {
+	t.Parallel()
+
+	models := (&Adaptor{}).GetModelList()
+	require.Contains(t, models, "minimaxai/minimax-m2.7")
+	require.Contains(t, models, "qwen/qwen3.6-27b")
+	// Retired IDs remain available for existing channels and billing continuity.
+	require.Contains(t, models, "qwen/qwen3-32b")
+}
+
 func TestConvertRequest_DropsReasoningFields(t *testing.T) {
 	t.Parallel()
 
@@ -97,6 +107,37 @@ func TestConvertRequest_DropsReasoningFields(t *testing.T) {
 	require.NoError(t, err)
 	require.NotContains(t, string(jsonBytes), `"reasoning"`)
 	require.Contains(t, string(jsonBytes), `"reasoning_effort"`)
+}
+
+func TestGroqReasoningEffortAllowedIsModelSpecific(t *testing.T) {
+	t.Parallel()
+
+	for _, effort := range []string{"none", "default", "low", "medium", "high"} {
+		require.True(t, groqReasoningEffortAllowed("qwen/qwen3.6-27b", effort), "Qwen 3.6 should accept %q", effort)
+	}
+	require.False(t, groqReasoningEffortAllowed("openai/gpt-oss-120b", "none"))
+	require.True(t, groqReasoningEffortAllowed("openai/gpt-oss-120b", "high"))
+	require.False(t, groqReasoningEffortAllowed("unknown-model", "minimal"))
+}
+
+func TestCurrentGroqModelMetadata(t *testing.T) {
+	t.Parallel()
+
+	qwen, ok := ModelRatios["qwen/qwen3.6-27b"]
+	require.True(t, ok)
+	require.EqualValues(t, 16_384, qwen.MaxOutputTokens)
+	require.EqualValues(t, 131_072, qwen.ContextLength)
+
+	minimax, ok := ModelRatios["minimaxai/minimax-m2.7"]
+	require.True(t, ok)
+	require.EqualValues(t, 196_608, minimax.ContextLength)
+	require.EqualValues(t, 131_072, minimax.MaxOutputTokens)
+	require.Zero(t, minimax.Ratio, "contact-sales models must not use a guessed token price")
+
+	compound, ok := ModelRatios["groq/compound"]
+	require.True(t, ok)
+	require.Zero(t, compound.Ratio, "Compound has no standalone token tariff")
+	require.NotContains(t, compound.SupportedFeatures, "reasoning")
 }
 
 func TestConvertRequest_RejectsMultimodalForGPTOSS(t *testing.T) {

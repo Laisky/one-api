@@ -334,7 +334,7 @@ All adapters now follow the same four-layer pricing system and fallback logic, w
 - **Xunfei**: 6 models with Spark pricing
 - **VertexAI**: 34 models with Google Cloud pricing
 - **DeepSeek**: 2 models with DeepSeek pricing
-- **Groq**: 20+ models with Groq pricing
+- **Groq**: 15 current production/preview models plus 2 retired compatibility entries with Groq metadata
 - **Mistral**: 10+ models with Mistral pricing
 - **Moonshot**: 3 models with Moonshot pricing
 - **Cohere**: 12 models with Command pricing
@@ -1147,7 +1147,7 @@ func (a *Adaptor) GetDefaultModelPricing() map[string]adaptor.ModelConfig {
 - `relay/adaptor/vertexai/adaptor.go` - 34 Google Cloud VertexAI models
 - `relay/adaptor/zhipu/constants.go` - 23 Zhipu GLM models
 - `relay/adaptor/deepseek/constants.go` - 2 DeepSeek models
-- `relay/adaptor/groq/constants.go` - 20+ Groq models
+- `relay/adaptor/groq/constants.go` - current Groq production/preview models plus retired compatibility entries
 - `relay/adaptor/mistral/constants.go` - 10+ Mistral models
 - `relay/adaptor/moonshot/constants.go` - 3 Moonshot models
 - `relay/adaptor/cohere/constant.go` - 12 Cohere Command models
