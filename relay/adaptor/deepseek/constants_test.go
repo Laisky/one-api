@@ -2,10 +2,12 @@ package deepseek
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
 	"github.com/Laisky/one-api/relay/billing/ratio"
+	"github.com/Laisky/one-api/relay/pricing"
 )
 
 // TestModelRatiosMatchOfficialCatalog verifies that the adapter exposes only
@@ -21,7 +23,7 @@ func TestModelRatiosMatchOfficialCatalog(t *testing.T) {
 }
 
 // TestModelRatiosMatchOfficialPricing verifies current regular prices, context
-// limits, and the absence of an unannounced peak-pricing overlay.
+// limits, and the scheduled peak/off-peak pricing overlays.
 func TestModelRatiosMatchOfficialPricing(t *testing.T) {
 	t.Parallel()
 
@@ -45,7 +47,30 @@ func TestModelRatiosMatchOfficialPricing(t *testing.T) {
 			require.InDelta(t, tt.output*ratio.MilliTokensUsd, cfg.Ratio*cfg.CompletionRatio, 1e-15)
 			require.Equal(t, int32(1048576), cfg.ContextLength)
 			require.Equal(t, int32(393216), cfg.MaxOutputTokens)
-			require.Empty(t, cfg.TimeWindows, "peak pricing has no announced effective date")
+			require.Len(t, cfg.TimeWindows, 2)
+			require.Equal(t, "2026-08-17", cfg.TimeWindows[0].DateFrom)
+			require.Equal(t, "Asia/Shanghai", cfg.TimeWindows[0].TimeZone)
+
+			beforeActivation := pricing.ApplyTimeWindow(cfg, time.Date(2026, 8, 16, 15, 59, 0, 0, time.UTC))
+			require.InDelta(t, cfg.Ratio, beforeActivation.Ratio, 1e-15)
+
+			offPeak := pricing.ApplyTimeWindow(cfg, time.Date(2026, 8, 17, 5, 0, 0, 0, time.UTC))
+			peak := pricing.ApplyTimeWindow(cfg, time.Date(2026, 8, 17, 2, 0, 0, 0, time.UTC))
+			if tt.name == "deepseek-v4-flash" {
+				require.InDelta(t, 0.22*ratio.MilliTokensUsd, offPeak.Ratio, 1e-15)
+				require.InDelta(t, 0.007*ratio.MilliTokensUsd, offPeak.CachedInputRatio, 1e-15)
+				require.InDelta(t, 0.66/0.22, offPeak.CompletionRatio, 1e-15)
+				require.InDelta(t, 0.44*ratio.MilliTokensUsd, peak.Ratio, 1e-15)
+				require.InDelta(t, 0.014*ratio.MilliTokensUsd, peak.CachedInputRatio, 1e-15)
+				require.InDelta(t, 1.32/0.44, peak.CompletionRatio, 1e-15)
+			} else {
+				require.InDelta(t, 0.66*ratio.MilliTokensUsd, offPeak.Ratio, 1e-15)
+				require.InDelta(t, 0.022*ratio.MilliTokensUsd, offPeak.CachedInputRatio, 1e-15)
+				require.InDelta(t, 1.98/0.66, offPeak.CompletionRatio, 1e-15)
+				require.InDelta(t, 1.32*ratio.MilliTokensUsd, peak.Ratio, 1e-15)
+				require.InDelta(t, 0.044*ratio.MilliTokensUsd, peak.CachedInputRatio, 1e-15)
+				require.InDelta(t, 3.96/1.32, peak.CompletionRatio, 1e-15)
+			}
 			require.NotContains(t, cfg.SupportedFeatures, "structured_outputs")
 			require.Equal(t, "fp4", cfg.Quantization)
 		})
@@ -64,6 +89,6 @@ func TestModelRatiosMatchOfficialCapabilities(t *testing.T) {
 
 	pro := ModelRatios["deepseek-v4-pro"]
 	require.ElementsMatch(t, []string{"high", "max"}, pro.SupportedReasoningEfforts)
-	require.NotContains(t, pro.SupportedFeatures, "web_search")
-	require.Contains(t, pro.Description, "Responses API support is pending")
+	require.Contains(t, pro.SupportedFeatures, "web_search")
+	require.Contains(t, pro.Description, "native Responses and Anthropic API support")
 }
