@@ -350,7 +350,7 @@ All adapters now follow the same four-layer pricing system and fallback logic, w
 - **Baichuan**: 2 models with Baichuan pricing
 - **TogetherAI**: 40+ models with Together AI pricing
 - **SiliconFlow**: 30+ models with SiliconFlow pricing
-- **XAI**: 2 models with Grok pricing
+- **XAI**: current Grok text, image, and video catalog with context-tier pricing
 
 **❌ Adapters Using DefaultPricingMethods (3 remaining)**:
 
@@ -1163,7 +1163,7 @@ func (a *Adaptor) GetDefaultModelPricing() map[string]adaptor.ModelConfig {
 - `relay/adaptor/baichuan/constants.go` - 2 Baichuan models
 - `relay/adaptor/togetherai/constants.go` - 40+ TogetherAI models
 - `relay/adaptor/siliconflow/constants.go` - 30+ SiliconFlow models
-- `relay/adaptor/xai/constants.go` - 2 XAI Grok models
+- `relay/adaptor/xai/constants.go` - current XAI/Grok text, image, and video catalog
 
 ### Global Pricing Enhancement and Clean Architecture
 

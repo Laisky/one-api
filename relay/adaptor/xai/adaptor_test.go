@@ -84,7 +84,7 @@ func TestConvertRequest(t *testing.T) {
 		expectedRequest *model.GeneralOpenAIRequest
 	}{
 		{
-			name: "Remove reasoning_effort",
+			name: "Remove reasoning_effort for non-reasoning model",
 			inputRequest: &model.GeneralOpenAIRequest{
 				Model:           "grok-3",
 				ReasoningEffort: stringPtr("high"),
@@ -93,6 +93,19 @@ func TestConvertRequest(t *testing.T) {
 			expectedRequest: &model.GeneralOpenAIRequest{
 				Model:    "grok-3",
 				Messages: []model.Message{{Role: "user", Content: "hello"}},
+			},
+		},
+		{
+			name: "Preserve reasoning_effort for Grok 4.6",
+			inputRequest: &model.GeneralOpenAIRequest{
+				Model:           "grok-4.6",
+				ReasoningEffort: stringPtr("high"),
+				Messages:        []model.Message{{Role: "user", Content: "hello"}},
+			},
+			expectedRequest: &model.GeneralOpenAIRequest{
+				Model:           "grok-4.6",
+				ReasoningEffort: stringPtr("high"),
+				Messages:        []model.Message{{Role: "user", Content: "hello"}},
 			},
 		},
 		{
@@ -225,17 +238,18 @@ func TestConvertImageRequest(t *testing.T) {
 			},
 		},
 		{
-			name: "Remove unsupported parameters",
+			name: "Map resolution and remove unsupported parameters",
 			inputRequest: &model.ImageRequest{
-				Model:   "grok-2-image",
+				Model:   "grok-imagine-image-quality",
 				Prompt:  "A beautiful sunset",
 				Quality: "hd",
 				Size:    "1024x1024",
 				Style:   "vivid",
 			},
 			expectedRequest: &model.ImageRequest{
-				Model:  "grok-2-image",
-				Prompt: "A beautiful sunset",
+				Model:      "grok-imagine-image-quality",
+				Prompt:     "A beautiful sunset",
+				Resolution: "1k",
 			},
 		},
 	}
@@ -254,6 +268,7 @@ func TestConvertImageRequest(t *testing.T) {
 			assert.Equal(t, tt.expectedRequest.Prompt, convertedReq.Prompt)
 			assert.Equal(t, tt.expectedRequest.Quality, convertedReq.Quality)
 			assert.Equal(t, tt.expectedRequest.Size, convertedReq.Size)
+			assert.Equal(t, tt.expectedRequest.Resolution, convertedReq.Resolution)
 			assert.Equal(t, tt.expectedRequest.Style, convertedReq.Style)
 		})
 	}
@@ -516,11 +531,15 @@ func TestGetModelList(t *testing.T) {
 	models := adaptor.GetModelList()
 	assert.NotEmpty(t, models)
 	// Should include current flagship and current snapshot models from ModelRatios
+	assert.Contains(t, models, "grok-4.6")
+	assert.Contains(t, models, "grok-4.6-latest")
 	assert.Contains(t, models, "grok-4.3")
 	assert.Contains(t, models, "grok-4.20-0309-reasoning")
 	assert.Contains(t, models, "grok-4.20-multi-agent-0309")
 	assert.Contains(t, models, "grok-imagine-image")
 	assert.Contains(t, models, "grok-imagine-image-quality")
+	assert.Contains(t, models, "grok-imagine-image-2.0")
+	assert.Contains(t, models, "grok-imagine-video-1.5")
 	// Retired-but-redirected slugs are still in the table for billing continuity
 	assert.Contains(t, models, "grok-code-fast-1")
 	assert.Contains(t, models, "grok-4-1-fast-non-reasoning")

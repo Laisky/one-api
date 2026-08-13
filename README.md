@@ -1529,6 +1529,12 @@ Response:
 
 ![](https://s3.laisky.com/uploads/2025/08/groq.png)
 
+The XAI adaptor tracks the current Grok 4.6 flagship, Grok 4.5/4.3 and
+Grok 4.20 snapshots, Grok Build 0.1, legacy redirect aliases, and the current
+Grok Imagine image/video model slugs. Pricing is sourced from the official
+[xAI pricing table](https://docs.x.ai/developers/pricing), including the
+published long-context surcharge at 200K input tokens.
+
 ### Black Forest Labs Features
 
 #### Support black-forest-labs/flux-kontext-pro

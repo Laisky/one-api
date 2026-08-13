@@ -351,6 +351,7 @@ func DefaultEndpointsForChannelType(channelType int) []Endpoint {
 			EndpointChatCompletions,
 			EndpointEmbeddings,
 			EndpointImagesGenerations,
+			EndpointVideos,
 			EndpointResponseAPI,
 			EndpointClaudeMessages,
 		}

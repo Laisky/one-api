@@ -20,6 +20,9 @@ import (
 //   - https://docs.x.ai/developers/model-capabilities/text/reasoning
 //   - https://docs.x.ai/developers/model-capabilities/text/multi-agent
 //   - https://docs.x.ai/developers/tools/web-search
+//   - https://docs.x.ai/developers/pricing
+//
+// Last verified: 2026-08-12.
 var (
 	// grokTextInputs lists the input modalities for text-only Grok chat models.
 	grokTextInputs = []string{"text"}
@@ -70,6 +73,9 @@ var (
 	// "none" disables reasoning entirely.
 	// Source: https://docs.x.ai/developers/model-capabilities/text/reasoning
 	grokFullReasoningEfforts = []string{"none", "low", "medium", "high"}
+	// grokFrontierReasoningEfforts is the non-disableable effort ladder used by
+	// Grok 4.5 and the current Grok 4.6 frontier model.
+	grokFrontierReasoningEfforts = []string{"low", "medium", "high"}
 
 	// grokMultiAgentEfforts lists the reasoning.effort values accepted by
 	// grok-4.20 multi-agent variants. For multi-agent the effort level
@@ -78,6 +84,19 @@ var (
 	// Source: https://docs.x.ai/developers/model-capabilities/text/multi-agent
 	grokMultiAgentEfforts = []string{"low", "medium", "high", "xhigh"}
 )
+
+// grokLongContextTier returns the published xAI surcharge for requests with
+// at least 200K input tokens. Parameters are the long-context input, output,
+// and cached-input prices in USD per million tokens. Returns a pricing tier
+// that can be attached to a model's short-context base pricing.
+func grokLongContextTier(input, output, cached float64) adaptor.ModelRatioTier {
+	return adaptor.ModelRatioTier{
+		Ratio:               input * ratio.MilliTokensUsd,
+		CompletionRatio:     output / input,
+		CachedInputRatio:    cached * ratio.MilliTokensUsd,
+		InputTokenThreshold: 200_000,
+	}
+}
 
 // ModelRatios contains all supported models and their pricing ratios.
 // Model list is derived from the keys of this map, eliminating redundancy.
@@ -88,11 +107,13 @@ var (
 // context window is the cap for input+output combined — so MaxOutputTokens is
 // left at zero (unspecified) and callers should fall back to ContextLength.
 //
-// Retirement notice (May 15, 2026): the following slugs were retired by xAI
-// and now auto-redirect to grok-4.3 (billed at grok-4.3 rates):
+// Retirement notice (May 15, 2026): most legacy chat slugs below were retired
+// by xAI and now auto-redirect to grok-4.3 (billed at grok-4.3 rates):
 //   - grok-4-1-fast-reasoning, grok-4-1-fast-non-reasoning
 //   - grok-4-fast-reasoning, grok-4-fast-non-reasoning
-//   - grok-4-0709, grok-code-fast-1, grok-3
+//   - grok-4-0709, grok-3
+//
+// grok-code-fast-1 instead redirects to grok-build-0.1.
 //   - grok-imagine-image-pro (redirects to grok-imagine-image-quality)
 //
 // We keep the retired slugs in this table so existing clients continue to be
@@ -101,32 +122,66 @@ var (
 //
 // Official sources:
 //   - https://docs.x.ai/developers/models
+//   - https://docs.x.ai/developers/pricing
 //   - https://docs.x.ai/developers/migration/may-15-retirement
 //   - https://docs.x.ai/developers/model-capabilities/text/multi-agent
 //   - https://docs.x.ai/developers/tools/web-search
 var ModelRatios = map[string]adaptor.ModelConfig{
 	// ============================================================
-	// Current flagship — Grok 4.5
-	// $2.00 input / $0.50 cached input / $6.00 output per 1M tokens, 500K context.
-	// Input price independently verified (docs.x.ai + OpenRouter); output/cached
-	// taken from the official model page. reasoning_effort schema is not published
-	// on the model page, so it mirrors grok-4.3's toggleable {none,low,medium,high}.
-	// Source: https://docs.x.ai/docs/models/grok-4.5
+	// Current flagship — Grok 4.6
+	// $2.00 input / $0.50 cached input / $6.00 output below 200K input;
+	// $4.00 / $1.00 / $12.00 at or above 200K; 500K context.
+	// Source: https://docs.x.ai/developers/models/grok-4.6
+	// ============================================================
+	"grok-4.6": {
+		Ratio: 2.0 * ratio.MilliTokensUsd, CompletionRatio: 6.0 / 2.0, CachedInputRatio: 0.5 * ratio.MilliTokensUsd,
+		Tiers: []adaptor.ModelRatioTier{
+			grokLongContextTier(4.0, 12.0, 1.0),
+		},
+		ContextLength:   500000,
+		InputModalities: grokVisionInputs, OutputModalities: grokTextOutputs,
+		SupportedFeatures: grokFeaturesReasoning, SupportedSamplingParameters: grokReasoningSamplingParams,
+		SupportedReasoningEfforts: grokFrontierReasoningEfforts, DefaultReasoningEffort: "high",
+		Description: "Grok 4.6 is xAI's current flagship for coding, agentic tasks, and knowledge work (500K context, vision, function calling, structured outputs, and configurable reasoning).",
+	},
+	"grok-4.6-latest": {
+		Ratio: 2.0 * ratio.MilliTokensUsd, CompletionRatio: 6.0 / 2.0, CachedInputRatio: 0.5 * ratio.MilliTokensUsd,
+		Tiers: []adaptor.ModelRatioTier{
+			grokLongContextTier(4.0, 12.0, 1.0),
+		},
+		ContextLength:   500000,
+		InputModalities: grokVisionInputs, OutputModalities: grokTextOutputs,
+		SupportedFeatures: grokFeaturesReasoning, SupportedSamplingParameters: grokReasoningSamplingParams,
+		SupportedReasoningEfforts: grokFrontierReasoningEfforts, DefaultReasoningEffort: "high",
+		Description: "Alias for the current Grok 4.6 release.",
+	},
+
+	// ============================================================
+	// Grok 4.5
+	// $2.00 input / $0.30 cached / $6.00 output below 200K input;
+	// $4.00 / $0.60 / $12.00 at or above 200K; 500K context.
+	// Source: https://docs.x.ai/developers/models/grok-4.5
 	// ============================================================
 	"grok-4.5": {
-		Ratio: 2.0 * ratio.MilliTokensUsd, CompletionRatio: 6.0 / 2.0, CachedInputRatio: 0.5 * ratio.MilliTokensUsd,
+		Ratio: 2.0 * ratio.MilliTokensUsd, CompletionRatio: 6.0 / 2.0, CachedInputRatio: 0.3 * ratio.MilliTokensUsd,
+		Tiers: []adaptor.ModelRatioTier{
+			grokLongContextTier(4.0, 12.0, 0.6),
+		},
 		ContextLength:   500000,
 		InputModalities: grokVisionInputs, OutputModalities: grokTextOutputs,
 		SupportedFeatures: grokFeaturesReasoning, SupportedSamplingParameters: grokReasoningSamplingParams,
-		SupportedReasoningEfforts: grokFullReasoningEfforts, DefaultReasoningEffort: "low",
-		Description: "Grok 4.5 is xAI's flagship reasoning model with a 500K-token context, vision input, agentic tool calling, structured outputs, and toggleable reasoning_effort {none,low,medium,high}.",
+		SupportedReasoningEfforts: grokFrontierReasoningEfforts, DefaultReasoningEffort: "high",
+		Description: "Grok 4.5 is xAI's frontier reasoning model with a 500K-token context, vision input, agentic tool calling, structured outputs, and non-disableable reasoning_effort {low,medium,high} (default high).",
 	},
 	"grok-4.5-latest": {
-		Ratio: 2.0 * ratio.MilliTokensUsd, CompletionRatio: 6.0 / 2.0, CachedInputRatio: 0.5 * ratio.MilliTokensUsd,
+		Ratio: 2.0 * ratio.MilliTokensUsd, CompletionRatio: 6.0 / 2.0, CachedInputRatio: 0.3 * ratio.MilliTokensUsd,
+		Tiers: []adaptor.ModelRatioTier{
+			grokLongContextTier(4.0, 12.0, 0.6),
+		},
 		ContextLength:   500000,
 		InputModalities: grokVisionInputs, OutputModalities: grokTextOutputs,
 		SupportedFeatures: grokFeaturesReasoning, SupportedSamplingParameters: grokReasoningSamplingParams,
-		SupportedReasoningEfforts: grokFullReasoningEfforts, DefaultReasoningEffort: "low",
+		SupportedReasoningEfforts: grokFrontierReasoningEfforts, DefaultReasoningEffort: "high",
 		Description: "Alias tracking the latest Grok 4.5 snapshot (same pricing and capabilities).",
 	},
 
@@ -137,6 +192,9 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 	// ============================================================
 	"grok-4.3": {
 		Ratio: 1.25 * ratio.MilliTokensUsd, CompletionRatio: 2.5 / 1.25, CachedInputRatio: 0.2 * ratio.MilliTokensUsd,
+		Tiers: []adaptor.ModelRatioTier{
+			grokLongContextTier(2.5, 5.0, 0.4),
+		},
 		ContextLength:   1000000,
 		InputModalities: grokVisionInputs, OutputModalities: grokTextOutputs,
 		SupportedFeatures: grokFeaturesReasoning, SupportedSamplingParameters: grokReasoningSamplingParams,
@@ -145,13 +203,16 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 	},
 
 	// ============================================================
-	// Grok 4.20 (March 9, 2026 snapshot) — 1M context reasoning/non-reasoning
-	// and 2M context multi-agent variant.
+	// Grok 4.20 (March 9, 2026 snapshot) — 1M context reasoning, non-reasoning,
+	// and multi-agent variants.
 	// $1.25 input / $0.20 cached input / $2.50 output per 1M tokens
 	// Source: https://docs.x.ai/developers/models
 	// ============================================================
 	"grok-4.20-0309-reasoning": {
 		Ratio: 1.25 * ratio.MilliTokensUsd, CompletionRatio: 2.5 / 1.25, CachedInputRatio: 0.2 * ratio.MilliTokensUsd,
+		Tiers: []adaptor.ModelRatioTier{
+			grokLongContextTier(2.5, 5.0, 0.4),
+		},
 		ContextLength:   1000000,
 		InputModalities: grokVisionInputs, OutputModalities: grokTextOutputs,
 		SupportedFeatures: grokFeaturesReasoning, SupportedSamplingParameters: grokReasoningSamplingParams,
@@ -160,6 +221,9 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 	},
 	"grok-4.20-0309-non-reasoning": {
 		Ratio: 1.25 * ratio.MilliTokensUsd, CompletionRatio: 2.5 / 1.25, CachedInputRatio: 0.2 * ratio.MilliTokensUsd,
+		Tiers: []adaptor.ModelRatioTier{
+			grokLongContextTier(2.5, 5.0, 0.4),
+		},
 		ContextLength:   1000000,
 		InputModalities: grokVisionInputs, OutputModalities: grokTextOutputs,
 		SupportedFeatures: grokFeaturesBase, SupportedSamplingParameters: grokSamplingParams,
@@ -167,6 +231,9 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 	},
 	"grok-4.20-multi-agent-0309": {
 		Ratio: 1.25 * ratio.MilliTokensUsd, CompletionRatio: 2.5 / 1.25, CachedInputRatio: 0.2 * ratio.MilliTokensUsd,
+		Tiers: []adaptor.ModelRatioTier{
+			grokLongContextTier(2.5, 5.0, 0.4),
+		},
 		ContextLength:   1000000,
 		InputModalities: grokVisionInputs, OutputModalities: grokTextOutputs,
 		SupportedFeatures: grokFeaturesReasoning, SupportedSamplingParameters: grokReasoningSamplingParams,
@@ -184,6 +251,9 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 	// ============================================================
 	"grok-4.20": {
 		Ratio: 1.25 * ratio.MilliTokensUsd, CompletionRatio: 2.5 / 1.25, CachedInputRatio: 0.2 * ratio.MilliTokensUsd,
+		Tiers: []adaptor.ModelRatioTier{
+			grokLongContextTier(2.5, 5.0, 0.4),
+		},
 		ContextLength:   1000000,
 		InputModalities: grokVisionInputs, OutputModalities: grokTextOutputs,
 		SupportedFeatures: grokFeaturesReasoning, SupportedSamplingParameters: grokReasoningSamplingParams,
@@ -192,6 +262,9 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 	},
 	"grok-4.20-reasoning": {
 		Ratio: 1.25 * ratio.MilliTokensUsd, CompletionRatio: 2.5 / 1.25, CachedInputRatio: 0.2 * ratio.MilliTokensUsd,
+		Tiers: []adaptor.ModelRatioTier{
+			grokLongContextTier(2.5, 5.0, 0.4),
+		},
 		ContextLength:   1000000,
 		InputModalities: grokVisionInputs, OutputModalities: grokTextOutputs,
 		SupportedFeatures: grokFeaturesReasoning, SupportedSamplingParameters: grokReasoningSamplingParams,
@@ -200,6 +273,9 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 	},
 	"grok-4.20-non-reasoning": {
 		Ratio: 1.25 * ratio.MilliTokensUsd, CompletionRatio: 2.5 / 1.25, CachedInputRatio: 0.2 * ratio.MilliTokensUsd,
+		Tiers: []adaptor.ModelRatioTier{
+			grokLongContextTier(2.5, 5.0, 0.4),
+		},
 		ContextLength:   1000000,
 		InputModalities: grokVisionInputs, OutputModalities: grokTextOutputs,
 		SupportedFeatures: grokFeaturesBase, SupportedSamplingParameters: grokSamplingParams,
@@ -207,6 +283,9 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 	},
 	"grok-4.20-multi-agent": {
 		Ratio: 1.25 * ratio.MilliTokensUsd, CompletionRatio: 2.5 / 1.25, CachedInputRatio: 0.2 * ratio.MilliTokensUsd,
+		Tiers: []adaptor.ModelRatioTier{
+			grokLongContextTier(2.5, 5.0, 0.4),
+		},
 		ContextLength:   1000000,
 		InputModalities: grokVisionInputs, OutputModalities: grokTextOutputs,
 		SupportedFeatures: grokFeaturesReasoning, SupportedSamplingParameters: grokReasoningSamplingParams,
@@ -222,6 +301,9 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 	// ============================================================
 	"grok-4-0709": {
 		Ratio: 1.25 * ratio.MilliTokensUsd, CompletionRatio: 2.5 / 1.25, CachedInputRatio: 0.2 * ratio.MilliTokensUsd,
+		Tiers: []adaptor.ModelRatioTier{
+			grokLongContextTier(2.5, 5.0, 0.4),
+		},
 		ContextLength:   1000000,
 		InputModalities: grokVisionInputs, OutputModalities: grokTextOutputs,
 		SupportedFeatures: grokFeaturesReasoning, SupportedSamplingParameters: grokReasoningSamplingParams,
@@ -230,6 +312,9 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 	},
 	"grok-4-1-fast-reasoning": {
 		Ratio: 1.25 * ratio.MilliTokensUsd, CompletionRatio: 2.5 / 1.25, CachedInputRatio: 0.2 * ratio.MilliTokensUsd,
+		Tiers: []adaptor.ModelRatioTier{
+			grokLongContextTier(2.5, 5.0, 0.4),
+		},
 		ContextLength:   1000000,
 		InputModalities: grokVisionInputs, OutputModalities: grokTextOutputs,
 		SupportedFeatures: grokFeaturesReasoning, SupportedSamplingParameters: grokReasoningSamplingParams,
@@ -238,6 +323,9 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 	},
 	"grok-4-1-fast-non-reasoning": {
 		Ratio: 1.25 * ratio.MilliTokensUsd, CompletionRatio: 2.5 / 1.25, CachedInputRatio: 0.2 * ratio.MilliTokensUsd,
+		Tiers: []adaptor.ModelRatioTier{
+			grokLongContextTier(2.5, 5.0, 0.4),
+		},
 		ContextLength:   1000000,
 		InputModalities: grokVisionInputs, OutputModalities: grokTextOutputs,
 		SupportedFeatures: grokFeaturesBase, SupportedSamplingParameters: grokSamplingParams,
@@ -245,6 +333,9 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 	},
 	"grok-4-fast-reasoning": {
 		Ratio: 1.25 * ratio.MilliTokensUsd, CompletionRatio: 2.5 / 1.25, CachedInputRatio: 0.2 * ratio.MilliTokensUsd,
+		Tiers: []adaptor.ModelRatioTier{
+			grokLongContextTier(2.5, 5.0, 0.4),
+		},
 		ContextLength:   1000000,
 		InputModalities: grokVisionInputs, OutputModalities: grokTextOutputs,
 		SupportedFeatures: grokFeaturesReasoning, SupportedSamplingParameters: grokReasoningSamplingParams,
@@ -253,6 +344,9 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 	},
 	"grok-4-fast-non-reasoning": {
 		Ratio: 1.25 * ratio.MilliTokensUsd, CompletionRatio: 2.5 / 1.25, CachedInputRatio: 0.2 * ratio.MilliTokensUsd,
+		Tiers: []adaptor.ModelRatioTier{
+			grokLongContextTier(2.5, 5.0, 0.4),
+		},
 		ContextLength:   1000000,
 		InputModalities: grokVisionInputs, OutputModalities: grokTextOutputs,
 		SupportedFeatures: grokFeaturesBase, SupportedSamplingParameters: grokSamplingParams,
@@ -260,6 +354,9 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 	},
 	"grok-code-fast-1": {
 		Ratio: 1.0 * ratio.MilliTokensUsd, CompletionRatio: 2.0 / 1.0, CachedInputRatio: 0.2 * ratio.MilliTokensUsd,
+		Tiers: []adaptor.ModelRatioTier{
+			grokLongContextTier(2.0, 4.0, 0.4),
+		},
 		ContextLength:   256000,
 		InputModalities: grokVisionInputs, OutputModalities: grokTextOutputs,
 		SupportedFeatures: grokFeaturesReasoning, SupportedSamplingParameters: grokReasoningSamplingParams,
@@ -270,6 +367,9 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 	// redirect to it. Source: https://docs.x.ai/developers/models/grok-build-0.1
 	"grok-build-0.1": {
 		Ratio: 1.0 * ratio.MilliTokensUsd, CompletionRatio: 2.0 / 1.0, CachedInputRatio: 0.2 * ratio.MilliTokensUsd,
+		Tiers: []adaptor.ModelRatioTier{
+			grokLongContextTier(2.0, 4.0, 0.4),
+		},
 		ContextLength:   256000,
 		InputModalities: grokVisionInputs, OutputModalities: grokTextOutputs,
 		SupportedFeatures: grokFeaturesReasoning, SupportedSamplingParameters: grokReasoningSamplingParams,
@@ -278,6 +378,9 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 	},
 	"grok-3": {
 		Ratio: 1.25 * ratio.MilliTokensUsd, CompletionRatio: 2.5 / 1.25, CachedInputRatio: 0.2 * ratio.MilliTokensUsd,
+		Tiers: []adaptor.ModelRatioTier{
+			grokLongContextTier(2.5, 5.0, 0.4),
+		},
 		ContextLength:   1000000,
 		InputModalities: grokVisionInputs, OutputModalities: grokTextOutputs,
 		SupportedFeatures: grokFeaturesBase, SupportedSamplingParameters: grokSamplingParams,
@@ -293,6 +396,9 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 	// ============================================================
 	"grok-3-mini": {
 		Ratio: 1.25 * ratio.MilliTokensUsd, CompletionRatio: 2.5 / 1.25, CachedInputRatio: 0.2 * ratio.MilliTokensUsd,
+		Tiers: []adaptor.ModelRatioTier{
+			grokLongContextTier(2.5, 5.0, 0.4),
+		},
 		ContextLength:   1000000,
 		InputModalities: grokVisionInputs, OutputModalities: grokTextOutputs,
 		SupportedFeatures: grokFeaturesReasoning, SupportedSamplingParameters: grokReasoningSamplingParams,
@@ -384,6 +490,72 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		OutputModalities: []string{"image"},
 		Description:      "Grok Imagine Image Quality — higher-fidelity text+image-to-image generation at $0.05/image (1K) / $0.07/image (2K); replaces grok-imagine-image-pro.",
 	},
+	"grok-imagine-image-quality-20260403": {
+		Ratio:           0,
+		CompletionRatio: 1.0,
+		Image: &adaptor.ImagePricingConfig{
+			PricePerImageUsd: 0.05,
+			DefaultSize:      "1024x1024",
+			DefaultQuality:   "standard",
+			PromptTokenLimit: 4000,
+			MinImages:        1,
+			MaxImages:        10,
+			SizeMultipliers: map[string]float64{
+				"1024x1024": 1,
+				"2048x2048": 1.4,
+			},
+		},
+		ContextLength:    4000,
+		InputModalities:  []string{"text", "image"},
+		OutputModalities: []string{"image"},
+		Description:      "Grok Imagine Image Quality dated alias (2026-04-03); $0.05/image at 1K and $0.07/image at 2K.",
+	},
+	"grok-imagine-image-quality-latest": {
+		Ratio:           0,
+		CompletionRatio: 1.0,
+		Image: &adaptor.ImagePricingConfig{
+			PricePerImageUsd: 0.05,
+			DefaultSize:      "1024x1024",
+			DefaultQuality:   "standard",
+			PromptTokenLimit: 4000,
+			MinImages:        1,
+			MaxImages:        10,
+			SizeMultipliers: map[string]float64{
+				"1024x1024": 1,
+				"2048x2048": 1.4,
+			},
+		},
+		ContextLength:    4000,
+		InputModalities:  []string{"text", "image"},
+		OutputModalities: []string{"image"},
+		Description:      "Alias for the current Grok Imagine Image Quality model.",
+	},
+	"grok-imagine-image-2.0": {
+		Ratio:           0,
+		CompletionRatio: 1.0,
+		Image: &adaptor.ImagePricingConfig{
+			PricePerImageUsd: 0.04,
+			DefaultSize:      "1024x1024",
+			DefaultQuality:   "low",
+			PromptTokenLimit: 4000,
+			MinImages:        1,
+			MaxImages:        10,
+			QualitySizeMultipliers: map[string]map[string]float64{
+				"low": {
+					"1024x1024": 1.0,
+					"2048x2048": 1.5,
+				},
+				"medium": {
+					"1024x1024": 1.5,
+					"2048x2048": 2.0,
+				},
+			},
+		},
+		ContextLength:    4000,
+		InputModalities:  []string{"text", "image"},
+		OutputModalities: []string{"image"},
+		Description:      "Grok Imagine Image 2.0 — $0.04 (1K low), $0.06 (2K low or 1K medium), and $0.08 (2K medium) per image.",
+	},
 	"grok-imagine-image-pro": {
 		Ratio:           0,
 		CompletionRatio: 1.0,
@@ -456,7 +628,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 				"720p": 1.4, // $0.07/sec
 			},
 		},
-		InputModalities:  grokTextInputs,
+		InputModalities:  []string{"text", "image"},
 		OutputModalities: []string{"video"},
 		Description:      "Grok Imagine Video — text-to-video generation; 480p $0.05/sec, 720p $0.07/sec.",
 	},
@@ -469,12 +641,43 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 			PerSecondUsd:   0.08, // 480p base
 			BaseResolution: "480p",
 			ResolutionMultipliers: map[string]float64{
-				"720p": 1.75, // $0.14/sec
+				"720p":  1.75,  // $0.14/sec
+				"1080p": 3.125, // $0.25/sec
 			},
 		},
 		InputModalities:  []string{"image"},
 		OutputModalities: []string{"video"},
 		Description:      "Grok Imagine Video 1.5 Preview — image-to-video (no text-to-video); 480p $0.08/sec, 720p $0.14/sec, image input $0.01/img.",
+	},
+	"grok-imagine-video-1.5": {
+		Ratio:           0,
+		CompletionRatio: 1.0,
+		Video: &adaptor.VideoPricingConfig{
+			PerSecondUsd:   0.08,
+			BaseResolution: "480p",
+			ResolutionMultipliers: map[string]float64{
+				"720p":  1.75,
+				"1080p": 3.125,
+			},
+		},
+		InputModalities:  []string{"image"},
+		OutputModalities: []string{"video"},
+		Description:      "Grok Imagine Video 1.5 — current image-to-video model (alias of the preview slug); 480p $0.08/sec, 720p $0.14/sec, 1080p $0.25/sec, image input $0.01/img.",
+	},
+	"grok-imagine-video-1.5-2026-05-30": {
+		Ratio:           0,
+		CompletionRatio: 1.0,
+		Video: &adaptor.VideoPricingConfig{
+			PerSecondUsd:   0.08,
+			BaseResolution: "480p",
+			ResolutionMultipliers: map[string]float64{
+				"720p":  1.75,
+				"1080p": 3.125,
+			},
+		},
+		InputModalities:  []string{"image"},
+		OutputModalities: []string{"video"},
+		Description:      "Grok Imagine Video 1.5 dated alias (2026-05-30); 480p $0.08/sec, 720p $0.14/sec, 1080p $0.25/sec.",
 	},
 }
 

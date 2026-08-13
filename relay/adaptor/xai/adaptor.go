@@ -258,19 +258,27 @@ func (a *Adaptor) SetupRequestHeader(c *gin.Context, req *http.Request, meta *me
 }
 
 // ConvertRequest converts and validates OpenAI-compatible requests for x.AI.
-// It removes unsupported parameters like reasoning_effort and adjusts model-specific parameters.
+// It preserves reasoning_effort for models that document it and removes it for
+// models without configurable reasoning, then adjusts model-specific parameters.
 // Returns the modified request or an error if conversion fails.
 func (a *Adaptor) ConvertRequest(c *gin.Context, relayMode int, request *model.GeneralOpenAIRequest) (any, error) {
 	// XAI is OpenAI-compatible, so we can pass the request through with minimal changes
-	// Remove reasoning_effort as XAI doesn't support it
+	// Keep reasoning_effort only for models whose metadata documents the parameter.
 	if request.ReasoningEffort != nil {
-		request.ReasoningEffort = nil
+		config, ok := ModelRatios[request.Model]
+		if !ok || len(config.SupportedReasoningEfforts) == 0 {
+			request.ReasoningEffort = nil
+		}
 	}
 	// Remove presence_penalty and frequency_penalty for grok-4 family reasoning models
 	// per xAI API reference: presencePenalty, frequencyPenalty, and stop cannot be used
 	// with reasoning models. Source: https://docs.x.ai/docs/api-reference#chat-completions
 	switch request.Model {
-	case "grok-4.3",
+	case "grok-4.6",
+		"grok-4.6-latest",
+		"grok-4.5",
+		"grok-4.5-latest",
+		"grok-4.3",
 		"grok-4-0709",
 		"grok-4.20",
 		"grok-4.20-reasoning",
@@ -283,7 +291,8 @@ func (a *Adaptor) ConvertRequest(c *gin.Context, relayMode int, request *model.G
 		"grok-4-1-fast-non-reasoning",
 		"grok-4-fast-reasoning",
 		"grok-4-fast-non-reasoning",
-		"grok-code-fast-1":
+		"grok-code-fast-1",
+		"grok-build-0.1":
 		if request.PresencePenalty != nil {
 			request.PresencePenalty = nil
 		}
@@ -295,7 +304,8 @@ func (a *Adaptor) ConvertRequest(c *gin.Context, relayMode int, request *model.G
 }
 
 // ConvertImageRequest converts and validates image generation requests for x.AI.
-// It ensures correct model naming and removes unsupported parameters like quality, size, and style.
+// It maps the shared OpenAI size field to xAI's resolution field and removes
+// parameters that xAI's Imagine endpoint does not accept.
 // Returns the modified request or an error if conversion fails.
 func (a *Adaptor) ConvertImageRequest(c *gin.Context, request *model.ImageRequest) (any, error) {
 	// XAI supports image generation with grok-2-image model
@@ -307,8 +317,17 @@ func (a *Adaptor) ConvertImageRequest(c *gin.Context, request *model.ImageReques
 		request.Model = "grok-2-image"
 	}
 
-	// XAI doesn't support quality, size, or style parameters according to their docs
-	// Remove unsupported parameters
+	// xAI's Imagine API uses resolution values such as "1k" and "2k" instead
+	// of OpenAI's pixel-size field. Preserve the billing/validation size while
+	// converting the upstream request field.
+	if request.Resolution == "" && strings.HasPrefix(request.Model, "grok-imagine-image") {
+		switch request.Size {
+		case "2048x2048":
+			request.Resolution = "2k"
+		case "1024x1024":
+			request.Resolution = "1k"
+		}
+	}
 	request.Quality = ""
 	request.Size = ""
 	request.Style = ""
