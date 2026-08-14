@@ -1,6 +1,7 @@
 package model
 
 import (
+	"context"
 	"maps"
 	"strings"
 
@@ -117,9 +118,16 @@ type ChannelToolingConfig struct {
 
 // GetToolingConfig returns the channel-level tooling policy configuration, if any.
 func (channel *Channel) GetToolingConfig() *ChannelToolingConfig {
+	return channel.GetToolingConfigWithContext(context.Background())
+}
+
+// GetToolingConfigWithContext loads channel tooling policy with a context-aware
+// logger. Parameters: ctx carries request correlation. Returns: a cloned policy
+// or nil when configuration is absent or malformed.
+func (channel *Channel) GetToolingConfigWithContext(ctx context.Context) *ChannelToolingConfig {
 	cfg, err := channel.LoadConfig()
 	if err != nil {
-		logger.Logger.Error("failed to load channel config for tooling",
+		logger.FromContext(ctx).Error("failed to load channel config for tooling",
 			append(channel.Ref().Zap(), zap.Error(err))...)
 		return nil
 	}

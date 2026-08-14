@@ -1,6 +1,7 @@
 package validator
 
 import (
+	"context"
 	"encoding/json"
 	"reflect"
 	"strings"
@@ -58,7 +59,7 @@ func ValidateUnknownParameters(requestBody []byte) error {
 	unknownParams := findUnknownParameters(requestBody)
 	if len(unknownParams) > 0 {
 		// Log warning but don't reject the request
-		logger.Logger.Warn("request contains unknown parameters that will be ignored",
+		logger.FromContext(context.Background()).Warn("request contains unknown parameters that will be ignored",
 			zap.Strings("unknown_params", unknownParams),
 		)
 	}

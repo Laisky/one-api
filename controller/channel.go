@@ -192,11 +192,12 @@ func cloneChannelForDuplicate(source *model.Channel) *model.Channel {
 // buildChannelResponsePayload renders a channel response with strict external identifiers and optional tooling JSON.
 // Parameters:
 //   - lg: request-scoped logger used for non-fatal tooling serialization diagnostics.
+//   - c: current request context used for channel configuration logging.
 //   - channel: channel row to serialize.
 //
 // Return values:
 //   - any: JSON-ready channel response payload.
-func buildChannelResponsePayload(lg glog.Logger, channel *model.Channel) any {
+func buildChannelResponsePayload(c *gin.Context, lg glog.Logger, channel *model.Channel) any {
 	response := gin.H{}
 	// Build from the explicit boundary DTO (byte-identical to the retired
 	// Channel.MarshalJSON) so the internal integer id never crosses the API, then
@@ -209,7 +210,7 @@ func buildChannelResponsePayload(lg glog.Logger, channel *model.Channel) any {
 		lg.Error("failed to marshal channel response payload", append(channel.Ref().Zap(), zap.Error(err))...)
 	}
 
-	if tooling := channel.GetToolingConfig(); tooling != nil {
+	if tooling := channel.GetToolingConfigWithContext(gmw.Ctx(c)); tooling != nil {
 		if data, err := json.Marshal(tooling); err == nil {
 			toolingStr := string(data)
 			response["tooling"] = toolingStr
@@ -301,7 +302,7 @@ func GetChannel(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
-		"data":    buildChannelResponsePayload(lg, channel),
+		"data":    buildChannelResponsePayload(c, lg, channel),
 	})
 }
 
@@ -472,7 +473,7 @@ func UpdateChannel(c *gin.Context) {
 			helper.RespondError(c, errkind.InvalidRequestErr(errors.New("Channel id is required")))
 			return
 		}
-		model.UpdateChannelStatusById(channel.Id, channel.Status)
+		model.UpdateChannelStatusByIdWithContext(gmw.Ctx(c), channel.Id, channel.Status)
 		c.JSON(http.StatusOK, gin.H{"success": true, "message": ""})
 		return
 	}
@@ -493,7 +494,7 @@ func UpdateChannel(c *gin.Context) {
 		}
 	}
 
-	err = channel.Update()
+	err = channel.UpdateWithContext(gmw.Ctx(c))
 	if err != nil {
 		helper.RespondError(c, err)
 		return
@@ -501,7 +502,7 @@ func UpdateChannel(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
-		"data":    buildChannelResponsePayload(lg, channel),
+		"data":    buildChannelResponsePayload(c, lg, channel),
 	})
 }
 
@@ -520,12 +521,13 @@ func GetChannelPricing(c *gin.Context) {
 	}
 
 	// Get from unified ModelConfigs only (after migration)
-	modelRatio := channel.GetModelRatioFromConfigs()
-	completionRatio := channel.GetCompletionRatioFromConfigs()
+	ctx := gmw.Ctx(c)
+	modelRatio := channel.GetModelRatioFromConfigsWithContext(ctx)
+	completionRatio := channel.GetCompletionRatioFromConfigsWithContext(ctx)
 
 	// Also get the unified ModelConfigs
-	modelConfigs := channel.GetModelPriceConfigs()
-	tooling := channel.GetToolingConfig()
+	modelConfigs := channel.GetModelPriceConfigsWithContext(ctx)
+	tooling := channel.GetToolingConfigWithContext(ctx)
 
 	// Debug logging to help identify data issues
 	if len(modelConfigs) > 0 {
@@ -642,7 +644,7 @@ func UpdateChannelPricing(c *gin.Context) {
 		}
 	}
 
-	err = channel.Update()
+	err = channel.UpdateWithContext(gmw.Ctx(c))
 	if err != nil {
 		helper.RespondError(c, err)
 		return

@@ -9,6 +9,7 @@ import (
 	"sync"
 
 	"github.com/Laisky/errors/v2"
+	gmw "github.com/Laisky/gin-middlewares/v7"
 	"github.com/Laisky/zap"
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
@@ -342,7 +343,7 @@ func PasskeyLoginFinish(c *gin.Context) {
 	// Update sign count and backup state.
 	dbCred, err := model.GetPasskeyCredentialByCredentialID(credential.ID)
 	if err == nil {
-		model.UpdatePasskeyAfterLogin(dbCred.Id, credential.Authenticator.SignCount, credential.Flags.BackupState)
+		model.UpdatePasskeyAfterLoginWithContext(gmw.Ctx(c), dbCred.Id, credential.Authenticator.SignCount, credential.Flags.BackupState)
 	}
 
 	if resolvedUser == nil {

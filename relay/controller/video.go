@@ -105,7 +105,7 @@ func RelayVideoHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 	var channelModelConfigs map[string]model.ModelConfigLocal
 	if channelModel, ok := c.Get(ctxkey.ChannelModel); ok {
 		if channel, ok := channelModel.(*model.Channel); ok {
-			channelModelConfigs = channel.GetModelPriceConfigs()
+			channelModelConfigs = channel.GetModelPriceConfigsWithContext(gmw.Ctx(c))
 		}
 	}
 

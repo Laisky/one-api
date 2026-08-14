@@ -1,6 +1,7 @@
 package model
 
 import (
+	"context"
 	"github.com/Laisky/errors/v2"
 	"github.com/Laisky/zap"
 
@@ -96,13 +97,21 @@ func DeletePasskeyCredential(id, userId int) error {
 
 // UpdatePasskeyAfterLogin updates the sign count and backup state after a successful authentication.
 func UpdatePasskeyAfterLogin(id int, signCount uint32, backupState bool) {
+	UpdatePasskeyAfterLoginWithContext(context.Background(), id, signCount, backupState)
+}
+
+// UpdatePasskeyAfterLoginWithContext updates passkey state with a context-aware
+// logger. Parameters: ctx carries request correlation, id identifies the
+// credential, and signCount/backupState are authenticator values. Returns: none;
+// persistence failures are logged.
+func UpdatePasskeyAfterLoginWithContext(ctx context.Context, id int, signCount uint32, backupState bool) {
 	err := DB.Model(&PasskeyCredential{}).Where("id = ?", id).
 		Updates(map[string]interface{}{
 			"sign_count":   signCount,
 			"backup_state": backupState,
 		}).Error
 	if err != nil {
-		logger.Logger.Error("failed to update passkey after login",
+		logger.FromContext(ctx).Error("failed to update passkey after login",
 			zap.Int("id", id), zap.Error(err))
 	}
 }

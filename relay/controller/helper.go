@@ -37,7 +37,7 @@ func getAndValidateTextRequest(c *gin.Context, relayMode int) (*relaymodel.Gener
 	}
 
 	// Validate for unknown parameters requests
-	if err = validator.ValidateUnknownParameters(requestBody); err != nil {
+	if err = validator.ValidateUnknownParametersWithContext(c, requestBody); err != nil {
 		return nil, errors.Wrap(err, "unknown parameter validation failed")
 	}
 

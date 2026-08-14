@@ -27,15 +27,16 @@ func getChannelRatios(c *gin.Context) (map[string]float64, map[string]float64) {
 	channel := c.MustGet(ctxkey.ChannelModel).(*model.Channel)
 
 	// Only use unified ModelConfigs after migration
-	modelRatios := channel.GetModelRatioFromConfigs()
-	completionRatios := channel.GetCompletionRatioFromConfigs()
+	ctx := gmw.Ctx(c)
+	modelRatios := channel.GetModelRatioFromConfigsWithContext(ctx)
+	completionRatios := channel.GetCompletionRatioFromConfigsWithContext(ctx)
 
 	return modelRatios, completionRatios
 }
 
 func getChannelModelConfigs(c *gin.Context) map[string]model.ModelConfigLocal {
 	channel := c.MustGet(ctxkey.ChannelModel).(*model.Channel)
-	return channel.GetModelPriceConfigs()
+	return channel.GetModelPriceConfigsWithContext(gmw.Ctx(c))
 }
 
 // errStateSelectorsMutuallyExclusive marks the dual-selector validation failure

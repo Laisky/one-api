@@ -255,24 +255,24 @@ func Relay(c *gin.Context) {
 
 		if shouldTryLargerMaxTokensFirst {
 			// For 413 errors, try larger max_tokens channels
-			channel, err = dbmodel.CacheGetRandomSatisfiedChannelExcluding(group, originalModel, false, failedChannels, true)
+			channel, err = dbmodel.CacheGetRandomSatisfiedChannelExcludingWithContext(gmw.Ctx(c), group, originalModel, false, failedChannels, true)
 		} else if shouldTryLowerPriorityFirst {
 			// For 429 errors, first try lower priority channels while excluding failed ones
-			channel, err = dbmodel.CacheGetRandomSatisfiedChannelExcluding(group, originalModel, true, failedChannels, false)
+			channel, err = dbmodel.CacheGetRandomSatisfiedChannelExcludingWithContext(gmw.Ctx(c), group, originalModel, true, failedChannels, false)
 			if err != nil {
 				// If no lower priority channels available, try highest priority channels (excluding failed ones)
 				lg.Info("No lower priority channels available, trying highest priority channels",
 					dbmodel.ChannelRefsField("excluded_channels", getChannelIds(failedChannels)),
 				)
-				channel, err = dbmodel.CacheGetRandomSatisfiedChannelExcluding(group, originalModel, false, failedChannels, false)
+				channel, err = dbmodel.CacheGetRandomSatisfiedChannelExcludingWithContext(gmw.Ctx(c), group, originalModel, false, failedChannels, false)
 			}
 		} else {
 			// For non-429 errors, try highest priority first, then lower priority (excluding failed ones)
-			channel, err = dbmodel.CacheGetRandomSatisfiedChannelExcluding(group, originalModel, false, failedChannels, false)
+			channel, err = dbmodel.CacheGetRandomSatisfiedChannelExcludingWithContext(gmw.Ctx(c), group, originalModel, false, failedChannels, false)
 			if err != nil {
 				lg.Info("No highest priority channels available, trying lower priority channels",
 					dbmodel.ChannelRefsField("excluded_channels", getChannelIds(failedChannels)))
-				channel, err = dbmodel.CacheGetRandomSatisfiedChannelExcluding(group, originalModel, true, failedChannels, false)
+				channel, err = dbmodel.CacheGetRandomSatisfiedChannelExcludingWithContext(gmw.Ctx(c), group, originalModel, true, failedChannels, false)
 			}
 		}
 

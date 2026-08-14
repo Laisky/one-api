@@ -86,8 +86,8 @@ func RelayProxyHelper(c *gin.Context, relayMode int) *relaymodel.ErrorWithStatus
 			TraceId:          traceId,
 			RequestId:        requestId,
 		})
-		model.UpdateUserUsedQuotaAndRequestCount(userId, 0)
-		model.UpdateChannelUsedQuota(channelId, 0)
+		model.UpdateUserUsedQuotaAndRequestCountWithContext(ctx, userId, 0)
+		model.UpdateChannelUsedQuotaWithContext(ctx, channelId, 0)
 
 		// Reconcile user request cost (proxy does not consume quota)
 		if err := model.UpdateUserRequestCostQuotaByRequestID(quotaId, requestId, 0); err != nil {

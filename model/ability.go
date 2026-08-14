@@ -336,17 +336,39 @@ func deleteRedisKeysByPattern(ctx context.Context, pattern string) error {
 
 // InvalidateChannelModelCaches refreshes the in-memory routing cache and clears group-model list caches.
 func InvalidateChannelModelCaches(groupCSVs ...string) {
+	InvalidateChannelModelCachesWithContext(context.Background(), groupCSVs...)
+}
+
+const channelModelCacheInvalidationTimeout = 5 * time.Second
+
+// newChannelModelCacheInvalidationContext detaches cache invalidation from
+// request cancellation while retaining context values, including the
+// request-scoped logger, and returns a bounded context plus its cancel function.
+func newChannelModelCacheInvalidationContext(ctx context.Context) (context.Context, context.CancelFunc) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	return context.WithTimeout(context.WithoutCancel(ctx), channelModelCacheInvalidationTimeout)
+}
+
+// InvalidateChannelModelCachesWithContext refreshes routing caches and binds Redis diagnostics to ctx.
+// Parameters: ctx carries request logging and groupCSVs lists affected channel groups.
+// Returns: none; cache invalidation failures are logged.
+func InvalidateChannelModelCachesWithContext(ctx context.Context, groupCSVs ...string) {
+	invalidationCtx, cancel := newChannelModelCacheInvalidationContext(ctx)
+	defer cancel()
+	lg := logger.FromContext(invalidationCtx)
+
 	InitChannelCache()
 	affectedGroups := collectChannelGroups(groupCSVs...)
-	ctx := context.Background()
 	redisReady := common.IsRedisEnabled() && common.RDB != nil
 	if len(affectedGroups) == 0 {
 		if redisReady {
-			if err := deleteRedisKeysByPattern(ctx, "group_models:*"); err != nil {
-				logger.Logger.Warn("failed to clear redis group_models cache by pattern", zap.Error(err))
+			if err := deleteRedisKeysByPattern(invalidationCtx, "group_models:*"); err != nil {
+				lg.Warn("failed to clear redis group_models cache by pattern", zap.Error(err))
 			}
-			if err := deleteRedisKeysByPattern(ctx, "group_models_v2:*"); err != nil {
-				logger.Logger.Warn("failed to clear redis group_models_v2 cache by pattern", zap.Error(err))
+			if err := deleteRedisKeysByPattern(invalidationCtx, "group_models_v2:*"); err != nil {
+				lg.Warn("failed to clear redis group_models_v2 cache by pattern", zap.Error(err))
 			}
 		}
 		return
@@ -357,11 +379,11 @@ func InvalidateChannelModelCaches(groupCSVs ...string) {
 		if !redisReady {
 			continue
 		}
-		if err := common.RedisDel(ctx, fmt.Sprintf("group_models:%s", group)); err != nil {
-			logger.Logger.Warn("failed to clear redis group_models cache", zap.String("group", group), zap.Error(err))
+		if err := common.RedisDel(invalidationCtx, fmt.Sprintf("group_models:%s", group)); err != nil {
+			lg.Warn("failed to clear redis group_models cache", zap.String("group", group), zap.Error(err))
 		}
-		if err := common.RedisDel(ctx, fmt.Sprintf("group_models_v2:%s", group)); err != nil {
-			logger.Logger.Warn("failed to clear redis group_models_v2 cache", zap.String("group", group), zap.Error(err))
+		if err := common.RedisDel(invalidationCtx, fmt.Sprintf("group_models_v2:%s", group)); err != nil {
+			lg.Warn("failed to clear redis group_models_v2 cache", zap.String("group", group), zap.Error(err))
 		}
 	}
 }

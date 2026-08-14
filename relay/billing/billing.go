@@ -156,8 +156,8 @@ func PostConsumeQuotaWithLog(ctx context.Context, tokenId int, quotaDelta int64,
 	// Update aggregates only when there is actual consumption.
 	// Zero totalQuota is allowed (e.g., free groups or zero ratios) and should not be treated as an error.
 	if totalQuota > 0 {
-		model.UpdateUserUsedQuotaAndRequestCount(logEntry.UserId, totalQuota)
-		model.UpdateChannelUsedQuota(logEntry.ChannelId, totalQuota)
+		model.UpdateUserUsedQuotaAndRequestCountWithContext(ctx, logEntry.UserId, totalQuota)
+		model.UpdateChannelUsedQuotaWithContext(ctx, logEntry.ChannelId, totalQuota)
 	} else if totalQuota < 0 {
 		// Negative consumption should never happen; flag as error for diagnostics.
 		lg.Error("invalid negative totalQuota consumed",

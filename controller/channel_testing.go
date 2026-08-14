@@ -134,7 +134,7 @@ func testChannel(ctx context.Context, channel *model.Channel, request *relaymode
 	// -----------------------------
 	requestedModel := strings.TrimSpace(request.Model)
 	resolvedModel := requestedModel
-	modelMap := channel.GetModelMapping()
+	modelMap := channel.GetModelMappingWithContext(ctx)
 
 	// initial context for debugging
 	lg.Debug("channel test: initial model context",
@@ -158,7 +158,7 @@ func testChannel(ctx context.Context, channel *model.Channel, request *relaymode
 	// Provider-specific actual model resolution (e.g., AWS ARN)
 	actualModel := resolvedModel
 	if channel.Type == channeltype.AwsClaude {
-		if arnMap := channel.GetInferenceProfileArnMap(); arnMap != nil {
+		if arnMap := channel.GetInferenceProfileArnMapWithContext(ctx); arnMap != nil {
 			if arn, ok := arnMap[resolvedModel]; ok && arn != "" {
 				actualModel = arn
 			}
@@ -338,7 +338,7 @@ func TestChannel(c *gin.Context) {
 	// testChannel, which relies on its caller having bound it.
 	lg = lg.With(channel.Ref().Zap()...)
 
-	modelName, clearTestingModel, err := chooseChannelTestModel(channel, c.Query("model"))
+	modelName, clearTestingModel, err := chooseChannelTestModelWithContext(gmw.Ctx(c), channel, c.Query("model"))
 	if clearTestingModel {
 		channel.TestingModel = nil
 		if updateErr := model.DB.Model(channel).Where("id = ?", channel.Id).Update("testing_model", nil).Error; updateErr != nil {
@@ -362,7 +362,7 @@ func TestChannel(c *gin.Context) {
 		milliseconds = 0
 	}
 
-	go channel.UpdateResponseTime(milliseconds)
+	go channel.UpdateResponseTimeWithContext(ctx, milliseconds)
 	consumedTime := float64(milliseconds) / 1000.0
 	if err != nil || openaiErr != nil {
 		c.JSON(http.StatusOK, gin.H{
@@ -421,7 +421,7 @@ func testChannels(ctx context.Context, notify bool, scope string) error {
 			cctx := gmw.SetLogger(ctx, clg)
 			isChannelEnabled := channel.Status == model.ChannelStatusEnabled
 			tik := time.Now()
-			chosenModel, clearTestingModel, err := chooseChannelTestModel(channel, "")
+			chosenModel, clearTestingModel, err := chooseChannelTestModelWithContext(cctx, channel, "")
 			if clearTestingModel {
 				channel.TestingModel = nil
 				if updateErr := model.DB.Model(channel).Where("id = ?", channel.Id).Update("testing_model", nil).Error; updateErr != nil {
@@ -462,7 +462,7 @@ func testChannels(ctx context.Context, notify bool, scope string) error {
 			if !isChannelEnabled && (err == nil && monitor.ShouldEnableChannel(err, openaiErr)) {
 				monitor.EnableChannel(channel.Id, channel.Name)
 			}
-			channel.UpdateResponseTime(milliseconds)
+			channel.UpdateResponseTimeWithContext(ctx, milliseconds)
 			time.Sleep(config.RequestInterval)
 		}
 		testAllChannelsLock.Lock()

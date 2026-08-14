@@ -186,7 +186,7 @@ var cachedListAllModels = gutils.NewSingleItemExpCache[listAllModelsCacheEntry](
 
 // ListAllModels returns every known model in the OpenAI-compatible format regardless of user permissions.
 func ListAllModels(c *gin.Context) {
-	models, err := getSupportedModelsSnapshot()
+	models, err := getSupportedModelsSnapshotWithContext(gmw.Ctx(c))
 	if err != nil {
 		middleware.AbortWithError(c, http.StatusInternalServerError, errors.Wrap(err, "load supported models"))
 		return
@@ -199,6 +199,14 @@ func ListAllModels(c *gin.Context) {
 }
 
 func getSupportedModelsSnapshot() ([]OpenAIModels, error) {
+	return getSupportedModelsSnapshotWithContext(context.Background())
+}
+
+// getSupportedModelsSnapshotWithContext returns the cached supported-model
+// snapshot, rebuilding it with request-correlated diagnostics when stale.
+// Parameters: ctx carries cancellation and logging values for snapshot loading.
+// Returns: the supported models or a wrapped loading error.
+func getSupportedModelsSnapshotWithContext(ctx context.Context) ([]OpenAIModels, error) {
 	version, err := model.GetEnabledChannelsVersionSignature()
 	if err != nil {
 		return nil, errors.Wrap(err, "channels version signature")
@@ -208,7 +216,7 @@ func getSupportedModelsSnapshot() ([]OpenAIModels, error) {
 		return entry.Models, nil
 	}
 
-	models, err := listAllSupportedModels()
+	models, err := listAllSupportedModels(ctx)
 	if err != nil {
 		return nil, errors.Wrap(err, "list models")
 	}
@@ -749,7 +757,9 @@ func mergeModelNamesWithOverrides(base []string, overrides map[string]model.Mode
 // listAllSupportedModels builds a snapshot of every supported model, including admin-defined channel entries.
 //
 // TRADE OFF: deduplicate by case-insensitive model name, could miss some models with same name but different channels.
-func listAllSupportedModels() ([]OpenAIModels, error) {
+// Parameters: ctx is the request context used for channel configuration diagnostics.
+// Returns: the supported model snapshot or a wrapped database error.
+func listAllSupportedModels(ctx context.Context) ([]OpenAIModels, error) {
 	models := make([]OpenAIModels, 0, len(allModels))
 	seen := make(map[string]struct{}, len(allModels))
 	for _, base := range allModels {
@@ -762,7 +772,7 @@ func listAllSupportedModels() ([]OpenAIModels, error) {
 	}
 	created := int(time.Now().Unix())
 	for _, ch := range channels {
-		overrides := ch.GetModelPriceConfigs()
+		overrides := ch.GetModelPriceConfigsWithContext(ctx)
 		names := mergeModelNamesWithOverrides(ch.GetSupportedModelNames(), overrides)
 		if len(names) == 0 {
 			continue
@@ -1048,7 +1058,7 @@ func GetModelsDisplay(c *gin.Context) {
 		adaptor.Init(m)
 
 		defaultPricing := adaptor.GetDefaultModelPricing()
-		modelMapping := channel.GetModelMapping()
+		modelMapping := channel.GetModelMappingWithContext(gmw.Ctx(c))
 		displayNow := time.Now()
 		getOverride := func(key string) (*model.ModelConfigLocal, bool) {
 			if overrides == nil {
@@ -1432,7 +1442,7 @@ func GetModelsDisplay(c *gin.Context) {
 				if !filters.matchesChannel(ch.Type) {
 					continue
 				}
-				overrides := ch.GetModelPriceConfigs()
+				overrides := ch.GetModelPriceConfigsWithContext(gmw.Ctx(c))
 				supported := mergeModelNamesWithOverrides(ch.GetSupportedModelNames(), overrides)
 				if len(supported) == 0 {
 					continue
@@ -1515,7 +1525,7 @@ func GetModelsDisplay(c *gin.Context) {
 		if !filters.matchesChannel(ch.Type) {
 			continue
 		}
-		overrides := ch.GetModelPriceConfigs()
+		overrides := ch.GetModelPriceConfigsWithContext(gmw.Ctx(c))
 		models := make([]string, 0, len(modelSet))
 		for m := range modelSet {
 			if ch.SupportsModel(m) {
@@ -1566,7 +1576,7 @@ func ListModels(c *gin.Context) {
 	channelCache := make(map[int]*model.Channel)
 	availableAbilities = filterVisibleAbilities(availableAbilities, channelCache)
 
-	snapshot, err := getSupportedModelsSnapshot()
+	snapshot, err := getSupportedModelsSnapshotWithContext(gmw.Ctx(c))
 	if err != nil {
 		middleware.AbortWithError(c, http.StatusInternalServerError, errors.Wrap(err, "load supported models snapshot"))
 		return
@@ -1774,7 +1784,7 @@ func RetrieveModel(c *gin.Context) {
 		}
 	}
 	lg := gmw.GetLogger(c)
-	if snapshot, err := getSupportedModelsSnapshot(); err == nil {
+	if snapshot, err := getSupportedModelsSnapshotWithContext(gmw.Ctx(c)); err == nil {
 		for _, m := range snapshot {
 			if strings.EqualFold(m.Id, modelId) {
 				c.JSON(http.StatusOK, withRoutableModelID(m, modelId))

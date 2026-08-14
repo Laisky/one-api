@@ -3,10 +3,6 @@ package model
 import (
 	"encoding/json"
 	"strings"
-
-	"github.com/Laisky/zap"
-
-	"github.com/Laisky/one-api/common/logger"
 )
 
 // ReasoningFormat is the format of reasoning content,
@@ -103,7 +99,7 @@ func (m *Message) SetReasoningContent(format string, reasoningContent string) {
 		m.Thinking = nil
 		m.Reasoning = &content
 	default:
-		logger.Logger.Warn("unknown reasoning format", zap.String("format", format))
+		return
 	}
 }
 
@@ -234,7 +230,7 @@ func (m Message) ParseContent() []MessageContent {
 					})
 				}
 			default:
-				logger.Logger.Warn("unknown content type", zap.Any("type", contentMap["type"]))
+				continue
 			}
 		}
 		if outputJSONSeen && jsonAccumulator.Len() > 0 {

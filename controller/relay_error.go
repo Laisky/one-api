@@ -272,6 +272,9 @@ func appendRelayFailureFields(params processChannelRelayErrorParams, extra ...za
 	if errorType := strings.TrimSpace(string(params.Err.Type)); errorType != "" {
 		fields = append(fields, zap.String("error_type", errorType))
 	}
+	if errorParam := strings.TrimSpace(params.Err.Param); errorParam != "" {
+		fields = append(fields, zap.String("error_param", errorParam))
+	}
 	if quotaScope := oneAPIQuotaScope(params.Err, errorCode); quotaScope != "" {
 		fields = append(fields, zap.String("quota_scope", quotaScope))
 	}

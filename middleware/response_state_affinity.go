@@ -137,7 +137,7 @@ func responseStateAffinityChannel(c *gin.Context, relayMode int, userGroup, requ
 	if requestModel != "" && !channel.SupportsModel(requestModel) {
 		return unpinned()
 	}
-	if !channelSupportsEndpoint(channel, relayMode) {
+	if !channelSupportsEndpointWithContext(c, channel, relayMode) {
 		return unpinned()
 	}
 	if !channelSupportsResponseWebSocket(channel, relayMode, isResponseWSHandshake) {

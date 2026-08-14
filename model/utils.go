@@ -228,7 +228,7 @@ func batchUpdate(ctx context.Context) {
 			case BatchUpdateTypeRequestCount:
 				updateUserRequestCount(key, int(value))
 			case BatchUpdateTypeChannelUsedQuota:
-				updateChannelUsedQuota(key, value)
+				updateChannelUsedQuota(ctx, key, value)
 			}
 		}
 	}

@@ -11,8 +11,6 @@ import (
 	"github.com/Laisky/zap"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/bedrockruntime"
-
-	"github.com/Laisky/one-api/common/logger"
 )
 
 // CrossRegionConfig holds configuration for cross-region inference
@@ -607,7 +605,6 @@ func getRegionPrefixes(region string) []string {
 	case "au":
 		return []string{"au"}
 	default:
-		logger.Logger.Debug("unknown region prefix", zap.String("region", region))
 		return nil
 	}
 }

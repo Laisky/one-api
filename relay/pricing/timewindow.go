@@ -5,9 +5,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Laisky/zap"
-
-	"github.com/Laisky/one-api/common/logger"
 	"github.com/Laisky/one-api/relay/adaptor"
 )
 
@@ -37,9 +34,6 @@ func ActiveTimeWindowName(cfg adaptor.ModelConfig, at time.Time) string {
 	for _, window := range cfg.TimeWindows {
 		matched, err := matchWindow(window, at)
 		if err != nil {
-			logger.Logger.Debug("skip invalid time pricing window",
-				zap.String("window", window.Name),
-				zap.Error(err))
 			continue
 		}
 		if matched {
@@ -67,9 +61,6 @@ func applyTimeWindow(cfg adaptor.ModelConfig, at time.Time, ratioOnly bool) adap
 	for _, window := range cfg.TimeWindows {
 		matched, err := matchWindow(window, at)
 		if err != nil {
-			logger.Logger.Debug("skip invalid time pricing window",
-				zap.String("window", window.Name),
-				zap.Error(err))
 			continue
 		}
 		if !matched {

@@ -232,7 +232,7 @@ func getAndValidateRerankRequest(c *gin.Context) (*relaymodel.RerankRequest, err
 		return nil, errors.Wrap(err, "get request body")
 	}
 
-	if err := validator.ValidateUnknownParameters(rawBody); err != nil {
+	if err := validator.ValidateUnknownParametersWithContext(c, rawBody); err != nil {
 		return nil, errors.Wrap(err, "unknown parameter validation failed")
 	}
 

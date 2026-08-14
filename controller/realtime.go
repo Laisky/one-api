@@ -65,9 +65,9 @@ func RelayRealtime(c *gin.Context) {
 	var channelCompletionRatio map[string]float64
 	if channelModel, ok := c.Get(ctxkey.ChannelModel); ok {
 		if channel, ok := channelModel.(*model.Channel); ok {
-			channelModelRatio = channel.GetModelRatioFromConfigs()
-			channelModelConfigs = channel.GetModelPriceConfigs()
-			channelCompletionRatio = channel.GetCompletionRatioFromConfigs()
+			channelModelRatio = channel.GetModelRatioFromConfigsWithContext(ctx)
+			channelModelConfigs = channel.GetModelPriceConfigsWithContext(ctx)
+			channelCompletionRatio = channel.GetCompletionRatioFromConfigsWithContext(ctx)
 		}
 	}
 

@@ -119,8 +119,8 @@ func RelayAudioHelper(c *gin.Context, relayMode int) *relaymodel.ErrorWithStatus
 	if channelModel, ok := c.Get(ctxkey.ChannelModel); ok {
 		if channel, ok := channelModel.(*model.Channel); ok {
 			// Get from unified ModelConfigs only (after migration)
-			channelModelRatio = channel.GetModelRatioFromConfigs()
-			channelModelConfigs = channel.GetModelPriceConfigs()
+			channelModelRatio = channel.GetModelRatioFromConfigsWithContext(ctx)
+			channelModelConfigs = channel.GetModelPriceConfigsWithContext(ctx)
 		}
 	}
 

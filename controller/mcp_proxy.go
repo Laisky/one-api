@@ -271,7 +271,7 @@ func callMCPToolForUser(ctx context.Context, c *gin.Context, params mcpCallParam
 		if err := model.DecreaseUserQuota(ctx, user.Id, cost); err != nil {
 			return nil, errors.Wrap(err, "decrease user quota for mcp tool call")
 		}
-		model.UpdateUserUsedQuotaAndRequestCount(user.Id, cost)
+		model.UpdateUserUsedQuotaAndRequestCountWithContext(ctx, user.Id, cost)
 	}
 
 	qualifiedName := server.Name + "." + selected.Tool.Name

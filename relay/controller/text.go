@@ -71,9 +71,9 @@ func RelayTextHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 		if channel, ok := channelModel.(*model.Channel); ok {
 			channelRecord = channel
 			// Get from unified ModelConfigs only (after migration)
-			channelModelRatio = channel.GetModelRatioFromConfigs()
-			channelModelConfigs = channel.GetModelPriceConfigs()
-			channelCompletionRatio = channel.GetCompletionRatioFromConfigs()
+			channelModelRatio = channel.GetModelRatioFromConfigsWithContext(ctx)
+			channelModelConfigs = channel.GetModelPriceConfigsWithContext(ctx)
+			channelCompletionRatio = channel.GetCompletionRatioFromConfigsWithContext(ctx)
 		}
 	}
 

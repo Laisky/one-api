@@ -60,6 +60,7 @@ func jsonRawIsNull(raw json.RawMessage) bool {
 
 func Login(c *gin.Context) {
 	ctx := gmw.Ctx(c)
+	lg := gmw.GetLogger(c)
 	turnstileToken := c.Query("turnstile")
 	middleware.RedactTurnstileTokenFromURL(c)
 
@@ -121,7 +122,7 @@ func Login(c *gin.Context) {
 	if !config.PasswordLoginEnabled && user.Role < model.RoleRootUser {
 		// Global logger: no request identity is bound at this point in the login
 		// flow, so the resolved account must be named explicitly.
-		logger.Logger.Debug("password login rejected: feature disabled for non-root user",
+		lg.Debug("password login rejected: feature disabled for non-root user",
 			append(user.Ref().Zap(), zap.Int("role", user.Role))...)
 		helper.RespondError(c, errkind.ForbiddenErr(errors.New("The administrator has disabled password login. Please use a third-party authentication method (e.g. OIDC) to log in.")))
 		return
@@ -1123,6 +1124,7 @@ func UpdateUser(c *gin.Context) {
 }
 
 func UpdateSelf(c *gin.Context) {
+	lg := gmw.GetLogger(c)
 	var user dto.UserSelfUpdateRequest
 	if err := common.UnmarshalBodyReusable(c, &user); err != nil {
 		helper.RespondError(c, errkind.InvalidRequestErr(errors.New(invalidParameterMessage)))
@@ -1226,7 +1228,7 @@ func UpdateSelf(c *gin.Context) {
 			return
 		}
 		// Global logger: carries no request identity, so name the account here.
-		logger.Logger.Debug("user cleared display_name", currentUser.Ref().Zap()...)
+		lg.Debug("user cleared display_name", currentUser.Ref().Zap()...)
 	}
 
 	c.JSON(http.StatusOK, gin.H{

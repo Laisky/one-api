@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"context"
 	"sort"
 	"strings"
 
@@ -20,6 +21,13 @@ const textTestModality = "text"
 // Parameters: channel is the channel being tested, and requestedModel is an optional explicit model name.
 // Returns: the selected model name, whether an incompatible stored testing model should be cleared, and an error.
 func chooseChannelTestModel(channel *model.Channel, requestedModel string) (string, bool, error) {
+	return chooseChannelTestModelWithContext(context.Background(), channel, requestedModel)
+}
+
+// chooseChannelTestModelWithContext selects a text-compatible test model with request-scoped configuration diagnostics.
+// Parameters: ctx carries request logging, channel is the channel being tested, and requestedModel is optional.
+// Returns: the selected model name, whether an incompatible stored model should be cleared, and an error.
+func chooseChannelTestModelWithContext(ctx context.Context, channel *model.Channel, requestedModel string) (string, bool, error) {
 	requestedModel = strings.TrimSpace(requestedModel)
 	if requestedModel != "" {
 		if !channel.SupportsModel(requestedModel) {
@@ -40,7 +48,7 @@ func chooseChannelTestModel(channel *model.Channel, requestedModel string) (stri
 		clearStored = true
 	}
 
-	modelName := cheapestTextTestModel(channel)
+	modelName := cheapestTextTestModel(ctx, channel)
 	if modelName == "" {
 		return "", clearStored, errors.New("channel has no model that supports both text input and text output for testing")
 	}
@@ -50,7 +58,7 @@ func chooseChannelTestModel(channel *model.Channel, requestedModel string) (stri
 // cheapestTextTestModel returns the cheapest text-in/text-out model available on the channel.
 // Parameters: channel provides the configured model list, model mapping, and channel-specific pricing.
 // Returns: the selected model name, or an empty string when no text-capable test model is available.
-func cheapestTextTestModel(channel *model.Channel) string {
+func cheapestTextTestModel(ctx context.Context, channel *model.Channel) string {
 	names := channelTextTestModels(channel)
 	defaultPricing := defaultModelPricingForChannel(channel)
 
@@ -60,7 +68,7 @@ func cheapestTextTestModel(channel *model.Channel) string {
 		initialized   bool
 	)
 	for _, name := range names {
-		ratio := testModelRatio(channel, name, defaultPricing)
+		ratio := testModelRatio(ctx, channel, name, defaultPricing)
 		if !initialized || ratio < cheapestRatio {
 			cheapestName = name
 			cheapestRatio = ratio
@@ -246,13 +254,13 @@ func modalitiesContainTextOrDefault(modalities []string) bool {
 // testModelRatio returns the configured ratio used to rank fallback test models.
 // Parameters: channel provides channel-specific pricing, modelName is the candidate, and defaultPricing is provider metadata.
 // Returns: the best available input ratio for ordering candidates.
-func testModelRatio(channel *model.Channel, modelName string, defaultPricing map[string]adaptor.ModelConfig) float64 {
-	if configs := channel.GetModelPriceConfigs(); len(configs) > 0 {
+func testModelRatio(ctx context.Context, channel *model.Channel, modelName string, defaultPricing map[string]adaptor.ModelConfig) float64 {
+	if configs := channel.GetModelPriceConfigsWithContext(ctx); len(configs) > 0 {
 		if cfg, ok := configs[modelName]; ok {
 			return cfg.Ratio
 		}
 	}
-	if ratios := channel.GetModelRatio(); len(ratios) > 0 {
+	if ratios := channel.GetModelRatioWithContext(ctx); len(ratios) > 0 {
 		if ratio, ok := ratios[modelName]; ok {
 			return ratio
 		}

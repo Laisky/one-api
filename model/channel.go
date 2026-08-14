@@ -279,13 +279,21 @@ func (channel *Channel) GetDefaultBaseURL() string {
 }
 
 func (channel *Channel) GetModelMapping() map[string]string {
+	return channel.GetModelMappingWithContext(context.Background())
+}
+
+// GetModelMappingWithContext parses the channel model mapping with a
+// context-aware logger. Parameters: ctx carries request correlation when the
+// mapping is read during an HTTP request. Returns: the mapping or nil when it
+// is empty or malformed.
+func (channel *Channel) GetModelMappingWithContext(ctx context.Context) map[string]string {
 	if channel.ModelMapping == nil || *channel.ModelMapping == "" || *channel.ModelMapping == "{}" {
 		return nil
 	}
 	modelMapping := make(map[string]string)
 	err := json.Unmarshal([]byte(*channel.ModelMapping), &modelMapping)
 	if err != nil {
-		logger.Logger.Error("failed to unmarshal model mapping for channel",
+		logger.FromContext(ctx).Error("failed to unmarshal model mapping for channel",
 			append(channel.Ref().Zap(), zap.Error(err))...)
 		return nil
 	}
@@ -370,6 +378,13 @@ func (channel *Channel) Insert() error {
 }
 
 func (channel *Channel) Update() error {
+	return channel.UpdateWithContext(context.Background())
+}
+
+// UpdateWithContext persists a channel update and binds safe diagnostics to ctx.
+// Parameters: ctx carries request logging and channel is the channel to persist.
+// Returns: a wrapped validation or persistence error.
+func (channel *Channel) UpdateWithContext(ctx context.Context) error {
 	if err := channel.NormalizeHiddenModels(); err != nil {
 		return identity.Tag(
 			errors.Wrapf(err, "failed to normalize hidden models for channel: id=%d, name=%s", channel.Id, channel.Name),
@@ -476,20 +491,27 @@ func (channel *Channel) Update() error {
 
 	*channel = persisted
 	if len(cleared) > 0 {
-		logger.Logger.Debug("channel update cleared nullable fields",
+		logger.FromContext(ctx).Debug("channel update cleared nullable fields",
 			append(channel.Ref().Zap(), zap.Strings("cleared_fields", cleared))...)
 	}
-	InvalidateChannelModelCaches(existing.Group, channel.Group)
+	InvalidateChannelModelCachesWithContext(ctx, existing.Group, channel.Group)
 	return nil
 }
 
 func (channel *Channel) UpdateResponseTime(responseTime int64) {
+	channel.UpdateResponseTimeWithContext(context.Background(), responseTime)
+}
+
+// UpdateResponseTimeWithContext stores channel probe latency and binds failures to ctx.
+// Parameters: ctx carries request logging and responseTime is the measured latency in milliseconds.
+// Returns: none; persistence failures are logged with channel identity.
+func (channel *Channel) UpdateResponseTimeWithContext(ctx context.Context, responseTime int64) {
 	err := DB.Model(channel).Select("response_time", "test_time").Updates(Channel{
 		TestTime:     helper.GetTimestamp(),
 		ResponseTime: int(responseTime),
 	}).Error
 	if err != nil {
-		logger.Logger.Error("failed to update response time",
+		logger.FromContext(ctx).Error("failed to update response time",
 			append(channel.Ref().Zap(), zap.Error(err))...)
 	}
 }
@@ -543,9 +565,16 @@ func (channel *Channel) LoadConfig() (ChannelConfig, error) {
 // If the channel has custom endpoints configured, those are returned.
 // Otherwise, the default endpoints for the channel type are returned.
 func (channel *Channel) GetSupportedEndpoints() []string {
+	return channel.GetSupportedEndpointsWithContext(context.Background())
+}
+
+// GetSupportedEndpointsWithContext returns configured endpoints while retaining
+// request correlation in ctx. Parameters: ctx carries the request logger when
+// called from middleware. Returns: configured endpoint names or nil for defaults.
+func (channel *Channel) GetSupportedEndpointsWithContext(ctx context.Context) []string {
 	cfg, err := channel.LoadConfig()
 	if err != nil {
-		logger.Logger.Error("failed to load channel config for endpoints",
+		logger.FromContext(ctx).Error("failed to load channel config for endpoints",
 			append(channel.Ref().Zap(), zap.Error(err))...)
 		return nil
 	}
@@ -575,6 +604,13 @@ func (channel *Channel) storeConfig(cfg ChannelConfig) error {
 }
 
 func UpdateChannelStatusById(id int, status int) {
+	UpdateChannelStatusByIdWithContext(context.Background(), id, status)
+}
+
+// UpdateChannelStatusByIdWithContext updates channel ability/status state with request-scoped diagnostics.
+// Parameters: ctx carries request logging, id identifies the channel, and status is the desired channel status.
+// Returns: none; persistence failures are logged with channel identity.
+func UpdateChannelStatusByIdWithContext(ctx context.Context, id int, status int) {
 	var channel Channel
 	// uuid and name are selected alongside the group so the failure logs below can
 	// name the channel without issuing a second query.
@@ -584,32 +620,40 @@ func UpdateChannelStatusById(id int, status int) {
 	}
 	err := UpdateAbilityStatus(id, status == ChannelStatusEnabled)
 	if err != nil {
-		logger.Logger.Error("failed to update ability status",
+		logger.FromContext(ctx).Error("failed to update ability status",
 			append(channel.Ref().Zap(), zap.Error(err), zap.Int("status", status))...)
 	}
 	err = DB.Model(&Channel{}).Where("id = ?", id).Update("status", status).Error
 	if err != nil {
-		logger.Logger.Error("failed to update channel status",
+		logger.FromContext(ctx).Error("failed to update channel status",
 			append(channel.Ref().Zap(), zap.Error(err), zap.Int("status", status))...)
 	}
 	if err == nil {
-		InvalidateChannelModelCaches(channel.Group)
+		InvalidateChannelModelCachesWithContext(ctx, channel.Group)
 	}
 }
 
 func UpdateChannelUsedQuota(id int, quota int64) {
+	UpdateChannelUsedQuotaWithContext(context.Background(), id, quota)
+}
+
+// UpdateChannelUsedQuotaWithContext updates channel usage while preserving
+// request correlation in ctx. Parameters: ctx carries the request logger, id
+// identifies the channel, and quota is the consumed amount. Returns: none;
+// persistence failures are logged with the context logger.
+func UpdateChannelUsedQuotaWithContext(ctx context.Context, id int, quota int64) {
 	if config.BatchUpdateEnabled {
 		addNewRecord(BatchUpdateTypeChannelUsedQuota, id, quota)
 		return
 	}
-	updateChannelUsedQuota(id, quota)
+	updateChannelUsedQuota(ctx, id, quota)
 }
 
-func updateChannelUsedQuota(id int, quota int64) {
+func updateChannelUsedQuota(ctx context.Context, id int, quota int64) {
 	err := DB.Model(&Channel{}).Where("id = ?", id).Update("used_quota", gorm.Expr("used_quota + ?", quota)).Error
 	if err != nil {
-		logger.Logger.Error("failed to update channel used quota - channel statistics may be inaccurate",
-			append(LookupChannelRef(context.Background(), id).Zap(),
+		logger.FromContext(ctx).Error("failed to update channel used quota - channel statistics may be inaccurate",
+			append(LookupChannelRef(ctx, id).Zap(),
 				zap.Error(err),
 				zap.Int64("quota", quota),
 				zap.String("note", "billing completed successfully but channel usage statistics update failed"))...)

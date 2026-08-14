@@ -5,9 +5,6 @@ import (
 	"strings"
 
 	"github.com/Laisky/errors/v2"
-	"github.com/Laisky/zap"
-
-	"github.com/Laisky/one-api/common/logger"
 )
 
 // splitCSVNames trims comma-separated names, removes empty entries, and deduplicates them.
@@ -114,7 +111,8 @@ func (channel *Channel) GetGroupNames() []string {
 
 // GetHiddenModels returns lowercase hidden-model membership keys for the channel.
 // Hidden names match supported models case-insensitively for backward compatibility;
-// malformed persisted JSON is logged and treated as having no hidden models.
+// malformed persisted JSON is treated as having no hidden models. Channel write
+// paths reject malformed JSON before persistence through NormalizeHiddenModels.
 func (channel *Channel) GetHiddenModels() map[string]struct{} {
 	if channel.HiddenModels == nil {
 		return nil
@@ -126,8 +124,6 @@ func (channel *Channel) GetHiddenModels() map[string]struct{} {
 
 	var rawHidden []string
 	if err := json.Unmarshal([]byte(trimmed), &rawHidden); err != nil {
-		logger.Logger.Warn("failed to unmarshal hidden models for channel",
-			append(channel.Ref().Zap(), zap.Error(err))...)
 		return nil
 	}
 

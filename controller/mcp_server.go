@@ -206,7 +206,7 @@ func UpdateMCPServer(c *gin.Context) {
 		}
 	}
 	server.ProvidedFields = providedFields
-	if err := model.UpdateMCPServer(server); err != nil {
+	if err := model.UpdateMCPServerWithContext(gmw.Ctx(c), server); err != nil {
 		if isMCPServerNameTakenError(err) {
 			respondMCPServerNameTaken(c)
 			return
@@ -307,13 +307,13 @@ func SyncMCPServer(c *gin.Context) {
 	count, err := mcp.SyncServerTools(gmw.Ctx(c), server)
 	if err != nil {
 		server.MarkSyncResult(false, err.Error())
-		_ = model.UpdateMCPServer(server)
+		_ = model.UpdateMCPServerWithContext(gmw.Ctx(c), server)
 		helper.RespondError(c, err)
 		return
 	}
 
 	server.MarkSyncResult(true, "")
-	if err := model.UpdateMCPServer(server); err != nil {
+	if err := model.UpdateMCPServerWithContext(gmw.Ctx(c), server); err != nil {
 		helper.RespondError(c, err)
 		return
 	}
@@ -343,13 +343,13 @@ func TestMCPServer(c *gin.Context) {
 	tools, err := client.ListTools(gmw.Ctx(c))
 	if err != nil {
 		server.MarkTestResult(false, err.Error())
-		_ = model.UpdateMCPServer(server)
+		_ = model.UpdateMCPServerWithContext(gmw.Ctx(c), server)
 		helper.RespondError(c, err)
 		return
 	}
 
 	server.MarkTestResult(true, "")
-	if err := model.UpdateMCPServer(server); err != nil {
+	if err := model.UpdateMCPServerWithContext(gmw.Ctx(c), server); err != nil {
 		helper.RespondError(c, err)
 		return
 	}

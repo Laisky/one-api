@@ -83,7 +83,7 @@ func channelSupportsGroup(channel *model.Channel, userGroup string) bool {
 // Returns:
 //   - *model.Channel: selected channel.
 //   - error: selection error when no channel matches.
-func selectResponseWebSocketChannelWithoutModel(userGroup string, relayMode int, ignoreFirstPriority bool) (*model.Channel, error) {
+func selectResponseWebSocketChannelWithoutModel(c *gin.Context, userGroup string, relayMode int, ignoreFirstPriority bool) (*model.Channel, error) {
 	channels, err := model.GetAllEnabledChannels()
 	if err != nil {
 		return nil, errors.Wrap(err, "list enabled channels")
@@ -101,7 +101,7 @@ func selectResponseWebSocketChannelWithoutModel(userGroup string, relayMode int,
 		if !channelSupportsGroup(candidate, userGroup) {
 			continue
 		}
-		if !channelSupportsEndpoint(candidate, relayMode) {
+		if !channelSupportsEndpointWithContext(c, candidate, relayMode) {
 			continue
 		}
 		if !channelSupportsResponseWebSocket(candidate, relayMode, true) {
@@ -150,6 +150,14 @@ func selectResponseWebSocketChannelWithoutModel(userGroup string, relayMode int,
 // It first checks the channel's custom supported_endpoints configuration,
 // then falls back to the default endpoints for the channel type.
 func channelSupportsEndpoint(channel *model.Channel, relayMode int) bool {
+	return channelSupportsEndpointWithContext(nil, channel, relayMode)
+}
+
+// channelSupportsEndpointWithContext checks an endpoint using request-aware
+// channel configuration logging. Parameters: c carries the request logger,
+// channel is the candidate, and relayMode identifies the endpoint. Returns:
+// true when the channel supports the endpoint.
+func channelSupportsEndpointWithContext(c *gin.Context, channel *model.Channel, relayMode int) bool {
 	// Get endpoint name for the relay mode
 	endpointName := channeltype.RelayModeToEndpointName(relayMode)
 	if endpointName == "" {
@@ -158,7 +166,12 @@ func channelSupportsEndpoint(channel *model.Channel, relayMode int) bool {
 	}
 
 	// Check channel's custom supported endpoints
-	customEndpoints := channel.GetSupportedEndpoints()
+	var customEndpoints []string
+	if c != nil {
+		customEndpoints = channel.GetSupportedEndpointsWithContext(gmw.Ctx(c))
+	} else {
+		customEndpoints = channel.GetSupportedEndpoints()
+	}
 	if len(customEndpoints) > 0 {
 		return channeltype.IsEndpointSupportedByName(endpointName, customEndpoints)
 	}
@@ -243,7 +256,7 @@ func Distribute() func(c *gin.Context) {
 			}
 
 			// Check endpoint support for specific channel
-			if !channelSupportsEndpoint(channel, relayMode) {
+			if !channelSupportsEndpointWithContext(c, channel, relayMode) {
 				endpointName := channeltype.RelayModeToEndpointName(relayMode)
 				// Caller-pinned channel plus caller-chosen endpoint: invalid request.
 				AbortWithError(c, http.StatusBadRequest,
@@ -277,17 +290,17 @@ func Distribute() func(c *gin.Context) {
 			} else {
 				selectChannel := func(ignoreFirstPriority bool, exclude map[int]bool) (*model.Channel, error) {
 					if requestModel == "" && isResponseWSHandshake {
-						return selectResponseWebSocketChannelWithoutModel(userGroup, relayMode, ignoreFirstPriority)
+						return selectResponseWebSocketChannelWithoutModel(c, userGroup, relayMode, ignoreFirstPriority)
 					}
 
 					for {
-						candidate, err := model.CacheGetRandomSatisfiedChannelExcluding(userGroup, requestModel, ignoreFirstPriority, exclude, false)
+						candidate, err := model.CacheGetRandomSatisfiedChannelExcludingWithContext(gmw.Ctx(c), userGroup, requestModel, ignoreFirstPriority, exclude, false)
 						if err != nil {
 							return nil, errors.Wrap(err, "select channel from cache")
 						}
 
 						// Check endpoint support
-						if !channelSupportsEndpoint(candidate, relayMode) {
+						if !channelSupportsEndpointWithContext(c, candidate, relayMode) {
 							exclude[candidate.Id] = true
 							lg.Debug("channel skipped - does not support requested endpoint",
 								zap.Int("channel_id", candidate.Id),
@@ -311,7 +324,10 @@ func Distribute() func(c *gin.Context) {
 				var err error
 				channel, err = selectChannel(false, exclude)
 				if err != nil {
-					lg.Info(fmt.Sprintf("No highest priority channels available for model %s in group %s, trying lower priority channels", requestModel, userGroup))
+					lg.Info("no highest priority channels available; trying lower priority channels",
+						zap.String("model", requestModel),
+						zap.String("group", userGroup),
+					)
 					channel, err = selectChannel(true, exclude)
 					if err != nil {
 						message := fmt.Sprintf("No available channels for Model %s under Group %s", requestModel, userGroup)
@@ -325,7 +341,12 @@ func Distribute() func(c *gin.Context) {
 				}
 			}
 		}
-		lg.Debug(fmt.Sprintf("user id %d, user group: %s, request model: %s, using channel #%d", userId, userGroup, requestModel, channel.Id))
+		lg.Debug("selected channel for request",
+			zap.Int("user_id", userId),
+			zap.String("group", userGroup),
+			zap.String("model", requestModel),
+			zap.Int("channel_id", channel.Id),
+		)
 		SetupContextForSelectedChannel(c, channel, requestModel)
 		c.Next()
 	}
@@ -338,12 +359,15 @@ func SetupContextForSelectedChannel(c *gin.Context, channel *model.Channel, mode
 	// set minimal group ratio as channel_ratio
 	var minimalRatio float64 = -1
 	for grp := range strings.SplitSeq(channel.Group, ",") {
-		v := ratio.GetGroupRatio(grp)
+		v := ratio.GetGroupRatioWithContext(gmw.Ctx(c), grp)
 		if minimalRatio < 0 || v < minimalRatio {
 			minimalRatio = v
 		}
 	}
-	lg.Info(fmt.Sprintf("set channel %s ratio to %f", channel.Name, minimalRatio))
+	lg.Info("set channel ratio",
+		zap.String("channel_name", channel.Name),
+		zap.Float64("channel_ratio", minimalRatio),
+	)
 	c.Set(ctxkey.ChannelRatio, minimalRatio)
 	c.Set(ctxkey.ChannelModel, channel)
 
@@ -364,7 +388,7 @@ func SetupContextForSelectedChannel(c *gin.Context, channel *model.Channel, mode
 	if channel.SystemPrompt != nil && *channel.SystemPrompt != "" {
 		c.Set(ctxkey.SystemPrompt, *channel.SystemPrompt)
 	}
-	c.Set(ctxkey.ModelMapping, channel.GetModelMapping())
+	c.Set(ctxkey.ModelMapping, channel.GetModelMappingWithContext(gmw.Ctx(c)))
 	c.Request.Header.Set("Authorization", fmt.Sprintf("Bearer %s", channel.Key))
 	c.Set(ctxkey.BaseURL, channel.GetBaseURL())
 	if channel.RateLimit != nil {

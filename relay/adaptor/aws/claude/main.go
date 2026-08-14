@@ -4,7 +4,6 @@ package aws
 import (
 	"bytes"
 	"encoding/json"
-	"fmt"
 	"io"
 	"net/http"
 	"time"
@@ -82,7 +81,7 @@ func AwsClaudeModelTransArn(c *gin.Context, awsCli *bedrockruntime.Client) strin
 	// First, try to get ARN from channel's inference profile ARN mapping
 	if channelModel, ok := c.Get(ctxkey.ChannelModel); ok {
 		if channel, ok := channelModel.(*model.Channel); ok {
-			arnMap := channel.GetInferenceProfileArnMap()
+			arnMap := channel.GetInferenceProfileArnMapWithContext(gmw.Ctx(c))
 			if arnMap != nil {
 				if arn, exists := arnMap[reqModelID]; exists && arn != "" {
 					gmw.GetLogger(c).Debug("using channel inference profile ARN",
@@ -243,6 +242,7 @@ func Handler(c *gin.Context, awsCli *bedrockruntime.Client, modelName string) (*
 }
 
 func StreamHandler(c *gin.Context, awsCli *bedrockruntime.Client) (*relaymodel.ErrorWithStatusCode, *relaymodel.Usage) {
+	lg := gmw.GetLogger(c)
 	createdTime := helper.GetTimestamp()
 	awsModelID, err := AwsModelID(c.GetString(ctxkey.RequestModel))
 	if err != nil {
@@ -259,7 +259,7 @@ func StreamHandler(c *gin.Context, awsCli *bedrockruntime.Client) (*relaymodel.E
 
 	if arn := AwsClaudeModelTransArn(c, awsCli); arn != "" {
 		awsReq.ModelId = aws.String(arn)
-		gmw.GetLogger(c).Debug("final modelId override applied", zap.String("model_id", arn))
+		lg.Debug("final modelId override applied", zap.String("model_id", arn))
 	}
 
 	claudeReq_, ok := c.Get(ctxkey.ConvertedRequest)
@@ -313,7 +313,7 @@ func StreamHandler(c *gin.Context, awsCli *bedrockruntime.Client) (*relaymodel.E
 			claudeResp := new(anthropic.StreamResponse)
 			err := json.NewDecoder(bytes.NewReader(v.Value.Bytes)).Decode(claudeResp)
 			if err != nil {
-				gmw.GetLogger(c).Error("error unmarshalling stream response", zap.Error(err))
+				lg.Error("error unmarshalling stream response", zap.Error(err))
 				return false
 			}
 
@@ -348,15 +348,15 @@ func StreamHandler(c *gin.Context, awsCli *bedrockruntime.Client) (*relaymodel.E
 				}
 			}
 			if err := openai_compatible.RenderStreamChunkWithBridge(c, response); err != nil {
-				gmw.GetLogger(c).Error("error rendering stream response", zap.Error(err))
+				lg.Error("error rendering stream response", zap.Error(err))
 				return true
 			}
 			return true
 		case *types.UnknownUnionMember:
-			fmt.Println("unknown tag:", v.Tag)
+			lg.Warn("received unknown AWS Claude response stream union", zap.String("union_tag", v.Tag))
 			return false
 		default:
-			fmt.Println("union is nil or unknown type")
+			lg.Warn("received empty or unsupported AWS Claude response stream union")
 			return false
 		}
 	})

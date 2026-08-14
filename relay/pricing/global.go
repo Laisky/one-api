@@ -377,11 +377,6 @@ func GetModelRatioWithThreeLayers(modelName string, channelOverrides map[string]
 
 	// Layer 4: Final fallback - reasonable default
 	fallbackRatio := 2.5 * billingratio.MilliTokensUsd
-	logger.Logger.Debug("pricing fallback used for unknown model",
-		zap.String("model_name", modelName),
-		zap.Float64("fallback_ratio", fallbackRatio),
-		zap.String("unit", "quota_per_token"),
-	)
 	return fallbackRatio // 2.5 USD per million tokens expressed in internal quota units
 }
 

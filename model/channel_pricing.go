@@ -1,6 +1,7 @@
 package model
 
 import (
+	"context"
 	"encoding/json"
 	"strings"
 
@@ -12,6 +13,14 @@ import (
 
 // GetModelPriceConfigs returns the channel-specific model price configurations in the new unified format
 func (channel *Channel) GetModelPriceConfigs() map[string]ModelConfigLocal {
+	return channel.GetModelPriceConfigsWithContext(context.Background())
+}
+
+// GetModelPriceConfigsWithContext parses channel pricing with a context-aware
+// logger. Parameters: ctx carries request correlation when pricing is resolved
+// during an HTTP request. Returns: parsed model pricing or nil when absent or
+// malformed.
+func (channel *Channel) GetModelPriceConfigsWithContext(ctx context.Context) map[string]ModelConfigLocal {
 	if channel.ModelConfigs == nil || *channel.ModelConfigs == "" || *channel.ModelConfigs == "{}" {
 		return nil
 	}
@@ -19,7 +28,7 @@ func (channel *Channel) GetModelPriceConfigs() map[string]ModelConfigLocal {
 	modelPriceConfigs := make(map[string]ModelConfigLocal)
 	err := json.Unmarshal([]byte(*channel.ModelConfigs), &modelPriceConfigs)
 	if err != nil {
-		logger.Logger.Error("failed to unmarshal model price configs for channel",
+		logger.FromContext(ctx).Error("failed to unmarshal model price configs for channel",
 			append(channel.Ref().Zap(), zap.Error(err))...)
 		return nil
 	}
@@ -78,7 +87,14 @@ func (channel *Channel) GetModelPriceConfig(modelName string) *ModelConfigLocal 
 
 // GetModelRatioFromConfigs extracts model ratios from the unified ModelConfigs
 func (channel *Channel) GetModelRatioFromConfigs() map[string]float64 {
-	configs := channel.GetModelPriceConfigs()
+	return channel.GetModelRatioFromConfigsWithContext(context.Background())
+}
+
+// GetModelRatioFromConfigsWithContext extracts model ratios while preserving
+// request correlation in ctx. Parameters: ctx carries the request logger.
+// Returns: non-zero channel model ratios or nil when none are configured.
+func (channel *Channel) GetModelRatioFromConfigsWithContext(ctx context.Context) map[string]float64 {
+	configs := channel.GetModelPriceConfigsWithContext(ctx)
 	if configs == nil {
 		return nil
 	}
@@ -99,7 +115,14 @@ func (channel *Channel) GetModelRatioFromConfigs() map[string]float64 {
 
 // GetCompletionRatioFromConfigs extracts completion ratios from the unified ModelConfigs
 func (channel *Channel) GetCompletionRatioFromConfigs() map[string]float64 {
-	configs := channel.GetModelPriceConfigs()
+	return channel.GetCompletionRatioFromConfigsWithContext(context.Background())
+}
+
+// GetCompletionRatioFromConfigsWithContext extracts completion ratios while
+// preserving request correlation in ctx. Parameters: ctx carries the request
+// logger. Returns: non-zero completion ratios or nil when none are configured.
+func (channel *Channel) GetCompletionRatioFromConfigsWithContext(ctx context.Context) map[string]float64 {
+	configs := channel.GetModelPriceConfigsWithContext(ctx)
 	if configs == nil {
 		return nil
 	}
@@ -119,13 +142,20 @@ func (channel *Channel) GetCompletionRatioFromConfigs() map[string]float64 {
 }
 
 func (channel *Channel) GetInferenceProfileArnMap() map[string]string {
+	return channel.GetInferenceProfileArnMapWithContext(context.Background())
+}
+
+// GetInferenceProfileArnMapWithContext parses inference-profile mappings with a
+// context-aware logger. Parameters: ctx carries request correlation. Returns:
+// the ARN mapping or nil when absent or malformed.
+func (channel *Channel) GetInferenceProfileArnMapWithContext(ctx context.Context) map[string]string {
 	if channel.InferenceProfileArnMap == nil || *channel.InferenceProfileArnMap == "" || *channel.InferenceProfileArnMap == "{}" {
 		return nil
 	}
 	arnMap := make(map[string]string)
 	err := json.Unmarshal([]byte(*channel.InferenceProfileArnMap), &arnMap)
 	if err != nil {
-		logger.Logger.Error("failed to unmarshal inference profile ARN map for channel",
+		logger.FromContext(ctx).Error("failed to unmarshal inference profile ARN map for channel",
 			append(channel.Ref().Zap(), zap.Error(err))...)
 		return nil
 	}
@@ -182,13 +212,20 @@ func ValidateInferenceProfileArnMapJSON(jsonStr string) error {
 // GetModelRatio returns the channel-specific model ratio map
 // DEPRECATED: Use GetModelPriceConfigs() instead. This method is kept for backward compatibility.
 func (channel *Channel) GetModelRatio() map[string]float64 {
+	return channel.GetModelRatioWithContext(context.Background())
+}
+
+// GetModelRatioWithContext returns the legacy channel ratio map with request-scoped diagnostics.
+// Parameters: ctx carries request logging.
+// Returns: parsed channel ratios, or nil when absent or malformed.
+func (channel *Channel) GetModelRatioWithContext(ctx context.Context) map[string]float64 {
 	if channel.ModelRatio == nil || *channel.ModelRatio == "" || *channel.ModelRatio == "{}" {
 		return nil
 	}
 	modelRatio := make(map[string]float64)
 	err := json.Unmarshal([]byte(*channel.ModelRatio), &modelRatio)
 	if err != nil {
-		logger.Logger.Error("failed to unmarshal model ratio for channel",
+		logger.FromContext(ctx).Error("failed to unmarshal model ratio for channel",
 			append(channel.Ref().Zap(), zap.Error(err))...)
 		return nil
 	}
@@ -198,13 +235,20 @@ func (channel *Channel) GetModelRatio() map[string]float64 {
 // GetCompletionRatio returns the channel-specific completion ratio map
 // DEPRECATED: Use GetModelPriceConfigs() instead. This method is kept for backward compatibility.
 func (channel *Channel) GetCompletionRatio() map[string]float64 {
+	return channel.GetCompletionRatioWithContext(context.Background())
+}
+
+// GetCompletionRatioWithContext returns the legacy completion ratio map with request-scoped diagnostics.
+// Parameters: ctx carries request logging.
+// Returns: parsed completion ratios, or nil when absent or malformed.
+func (channel *Channel) GetCompletionRatioWithContext(ctx context.Context) map[string]float64 {
 	if channel.CompletionRatio == nil || *channel.CompletionRatio == "" || *channel.CompletionRatio == "{}" {
 		return nil
 	}
 	completionRatio := make(map[string]float64)
 	err := json.Unmarshal([]byte(*channel.CompletionRatio), &completionRatio)
 	if err != nil {
-		logger.Logger.Error("failed to unmarshal completion ratio for channel",
+		logger.FromContext(ctx).Error("failed to unmarshal completion ratio for channel",
 			append(channel.Ref().Zap(), zap.Error(err))...)
 		return nil
 	}

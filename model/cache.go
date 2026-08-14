@@ -448,9 +448,19 @@ func GetChannelsFromCache(group string, model string) ([]*Channel, error) {
 }
 
 func CacheGetRandomSatisfiedChannel(group string, model string, ignoreFirstPriority bool) (*Channel, error) {
+	return CacheGetRandomSatisfiedChannelWithContext(context.Background(), group, model, ignoreFirstPriority)
+}
+
+// CacheGetRandomSatisfiedChannelWithContext selects a channel from the memory
+// cache while preserving the request logger in ctx. Parameters: ctx carries the
+// request-scoped logger, group and model identify the routing pool, and
+// ignoreFirstPriority controls tier selection. Returns: the selected channel or
+// a wrapped routing error.
+func CacheGetRandomSatisfiedChannelWithContext(ctx context.Context, group string, model string, ignoreFirstPriority bool) (*Channel, error) {
 	if !config.MemoryCacheEnabled {
 		return GetRandomSatisfiedChannel(group, model, ignoreFirstPriority)
 	}
+	lg := logger.FromContext(ctx)
 	channelSyncLock.RLock()
 	// It is important to make a copy if we are going to modify or iterate outside lock,
 	// or ensure operations are safe. Here, we are just reading.
@@ -535,15 +545,25 @@ func CacheGetRandomSatisfiedChannel(group string, model string, ignoreFirstPrior
 			channel = candidateChannels[rand.Intn(endIdx)]
 		}
 	}
-	logger.Logger.Info("select channel in cache", channel.Ref().Zap()...)
+	lg.Info("select channel in cache", channel.Ref().Zap()...)
 	return channel, nil
 }
 
 // CacheGetRandomSatisfiedChannelExcluding gets a random satisfied channel while excluding specified channel IDs
 func CacheGetRandomSatisfiedChannelExcluding(group string, model string, ignoreFirstPriority bool, excludeChannelIds map[int]bool, tryLargerMaxTokens bool) (*Channel, error) {
+	return CacheGetRandomSatisfiedChannelExcludingWithContext(context.Background(), group, model, ignoreFirstPriority, excludeChannelIds, tryLargerMaxTokens)
+}
+
+// CacheGetRandomSatisfiedChannelExcludingWithContext selects a channel while
+// preserving request correlation in ctx. Parameters: ctx carries the logger,
+// group and model identify the routing pool, ignoreFirstPriority selects a tier,
+// excludeChannelIds contains failed channels, and tryLargerMaxTokens enables the
+// 413 recovery policy. Returns: the selected channel or a wrapped routing error.
+func CacheGetRandomSatisfiedChannelExcludingWithContext(ctx context.Context, group string, model string, ignoreFirstPriority bool, excludeChannelIds map[int]bool, tryLargerMaxTokens bool) (*Channel, error) {
 	if !config.MemoryCacheEnabled {
 		return GetRandomSatisfiedChannelExcluding(group, model, ignoreFirstPriority, excludeChannelIds)
 	}
+	lg := logger.FromContext(ctx)
 	channelSyncLock.RLock()
 	channelsFromCache := group2model2channels[group][model]
 
@@ -613,7 +633,7 @@ func CacheGetRandomSatisfiedChannelExcluding(group string, model string, ignoreF
 			if channel == nil {
 				channel = candidateChannels[random.RandRange(endIdx, len(candidateChannels))]
 			}
-			logger.Logger.Info("select channel in cache", channel.Ref().Zap()...)
+			lg.Info("select channel in cache", channel.Ref().Zap()...)
 			return channel, nil
 		} else {
 			// No lower priority channels available, return error to indicate we should try a different approach
@@ -651,7 +671,7 @@ func CacheGetRandomSatisfiedChannelExcluding(group string, model string, ignoreF
 		if channel == nil {
 			channel = maxPriorityChannels[rand.Intn(len(maxPriorityChannels))]
 		}
-		logger.Logger.Info("select channel in cache", channel.Ref().Zap()...)
+		lg.Info("select channel in cache", channel.Ref().Zap()...)
 		return channel, nil
 	}
 }
