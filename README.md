@@ -1399,11 +1399,11 @@ Kimi K3 is also available through several hosted providers, each with its own ca
 
 #### Flagship Models - Text
 
-`glm-5-turbo` / `glm-5` / `glm-4.7` / `glm-4.7-flashx` / `glm-4.7-flash` / `glm-4.6` / `glm-4.5` / `glm-4.5-x` / `glm-4.5-air` / `glm-4.5-airx`
+`glm-5.3` / `glm-5.2` / `glm-5.1` / `glm-5-turbo` / `glm-5` / `glm-4.7` / `glm-4.7-flashx` / `glm-4.7-flash` / `glm-4.6` / `glm-4.5` / `glm-4.5-x` / `glm-4.5-air` / `glm-4.5-airx`
 
 #### Flagship Models - Visual
 
-`glm-5v-turbo` / `glm-4.6v` / `glm-4.6v-flashx` / `glm-4.5v` / `glm-4.6v-flash` / `glm-4v-flash`
+`autoglm-phone` / `glm-5v-turbo` / `glm-4.6v` / `glm-4.6v-flashx` / `glm-4.5v` / `glm-4.6v-flash` / `glm-4v-flash`
 
 #### Language Models
 
@@ -1419,7 +1419,7 @@ Kimi K3 is also available through several hosted providers, each with its own ca
 
 #### Image Generation Models
 
-`cogview-4` / `cogview-3-plus` / `cogview-3` / `cogview-3-flash` / `cogviewx` / `cogviewx-flash`
+`glm-image` / `cogview-4` / `cogview-3-plus` / `cogview-3` / `cogview-3-flash` / `cogvideox-3` / `cogviewx` / `cogviewx-flash` / `viduq1-image` / `viduq1-start-end` / `viduq1-text` / `vidu2-image` / `vidu2-start-end` / `vidu2-reference`
 
 #### Other Models
 

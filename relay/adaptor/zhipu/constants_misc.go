@@ -6,7 +6,10 @@ import (
 )
 
 // imageGenerationModels enumerates Zhipu's image and video generation models.
-// Pricing entries approximate per-request costs in token units.
+// Legacy image entries approximate per-request costs in token units; the Vidu
+// entries below encode the published per-call price directly as quota
+// (Ratio = price in RMB * ratio.QuotaPerRMB) and also surface it through
+// PerCall.UsdPerThousandCalls for the display layer.
 var imageGenerationModels = map[string]adaptor.ModelConfig{
 	"cogview-4": {
 		Ratio:            0.06 * ratio.MilliTokensRmb,
@@ -65,6 +68,58 @@ var imageGenerationModels = map[string]adaptor.ModelConfig{
 		InputModalities:  []string{"text", "image"},
 		OutputModalities: []string{"video"},
 		Description:      "CogVideoX-Flash: free fast text-to-video generator with 4K and 60fps support.",
+	},
+	// Vidu Q1: high-quality 5s / 1080P video generation, ¥2.5 per call.
+	// Source: https://docs.bigmodel.cn/cn/guide/models/video-generation/viduq1
+	"viduq1-image": {
+		Ratio:            2.5 * ratio.QuotaPerRMB,
+		CompletionRatio:  1,
+		InputModalities:  []string{"text", "image"},
+		OutputModalities: []string{"video"},
+		PerCall:          &adaptor.PerCallPricingConfig{UsdPerThousandCalls: 2.5 / 7 * 1000},
+		Description:      "Vidu Q1 (image-to-video): fixed 5s 1080P clips at ¥2.5/call; high-fidelity video generation for cinematic scenes.",
+	},
+	"viduq1-start-end": {
+		Ratio:            2.5 * ratio.QuotaPerRMB,
+		CompletionRatio:  1,
+		InputModalities:  []string{"text", "image"},
+		OutputModalities: []string{"video"},
+		PerCall:          &adaptor.PerCallPricingConfig{UsdPerThousandCalls: 2.5 / 7 * 1000},
+		Description:      "Vidu Q1 (first/last frame): generates 5s 1080P video from start and end frames at ¥2.5/call.",
+	},
+	"viduq1-text": {
+		Ratio:            2.5 * ratio.QuotaPerRMB,
+		CompletionRatio:  1,
+		InputModalities:  []string{"text"},
+		OutputModalities: []string{"video"},
+		PerCall:          &adaptor.PerCallPricingConfig{UsdPerThousandCalls: 2.5 / 7 * 1000},
+		Description:      "Vidu Q1 (text-to-video): fixed 5s 1080P clips from text prompts at ¥2.5/call.",
+	},
+	// Vidu 2: fast 4s / 720P video generation, ¥1.25 per call (reference mode ¥2.5).
+	// Source: https://docs.bigmodel.cn/cn/guide/models/video-generation/vidu2
+	"vidu2-image": {
+		Ratio:            1.25 * ratio.QuotaPerRMB,
+		CompletionRatio:  1,
+		InputModalities:  []string{"text", "image"},
+		OutputModalities: []string{"video"},
+		PerCall:          &adaptor.PerCallPricingConfig{UsdPerThousandCalls: 1.25 / 7 * 1000},
+		Description:      "Vidu 2 (image-to-video): fast 4s 720P clips at ¥1.25/call; stable and color-accurate for e-commerce scenes.",
+	},
+	"vidu2-start-end": {
+		Ratio:            1.25 * ratio.QuotaPerRMB,
+		CompletionRatio:  1,
+		InputModalities:  []string{"text", "image"},
+		OutputModalities: []string{"video"},
+		PerCall:          &adaptor.PerCallPricingConfig{UsdPerThousandCalls: 1.25 / 7 * 1000},
+		Description:      "Vidu 2 (first/last frame): fast 4s 720P video from start and end frames at ¥1.25/call.",
+	},
+	"vidu2-reference": {
+		Ratio:            2.5 * ratio.QuotaPerRMB,
+		CompletionRatio:  1,
+		InputModalities:  []string{"text", "image"},
+		OutputModalities: []string{"video"},
+		PerCall:          &adaptor.PerCallPricingConfig{UsdPerThousandCalls: 2.5 / 7 * 1000},
+		Description:      "Vidu 2 (reference-to-video): 4s 720P clips from reference images of people or objects at ¥2.5/call.",
 	},
 }
 

@@ -14,6 +14,14 @@ import (
 func TestCurrentTextModelMetadata(t *testing.T) {
 	t.Parallel()
 
+	glm53, ok := ModelRatios["glm-5.3"]
+	require.True(t, ok)
+	require.Equal(t, int32(1_000_000), glm53.ContextLength)
+	require.Equal(t, int32(131_072), glm53.MaxOutputTokens)
+	require.Equal(t, []string{"low", "high", "max"}, glm53.SupportedReasoningEfforts)
+	require.Equal(t, "max", glm53.DefaultReasoningEffort)
+	require.InDelta(t, 8*ratio.MilliTokensRmb, glm53.Ratio, 1e-12)
+
 	glm52, ok := ModelRatios["glm-5.2"]
 	require.True(t, ok)
 	require.Equal(t, int32(1_000_000), glm52.ContextLength)
@@ -40,6 +48,12 @@ func TestCurrentTextModelMetadata(t *testing.T) {
 func TestCurrentVisionModelMetadata(t *testing.T) {
 	t.Parallel()
 
+	autoglm, ok := ModelRatios["autoglm-phone"]
+	require.True(t, ok)
+	require.Equal(t, int32(20_000), autoglm.ContextLength)
+	require.Equal(t, int32(2_048), autoglm.MaxOutputTokens)
+	require.Equal(t, 0.0, autoglm.Ratio)
+
 	glm5v, ok := ModelRatios["glm-5v-turbo"]
 	require.True(t, ok)
 	require.Equal(t, int32(200_000), glm5v.ContextLength)
@@ -50,6 +64,28 @@ func TestCurrentVisionModelMetadata(t *testing.T) {
 	glm4v, ok := ModelRatios["glm-4v-plus-0111"]
 	require.True(t, ok)
 	require.Equal(t, int32(8_192), glm4v.MaxOutputTokens)
+}
+
+// TestViduPerCallPricing verifies the published per-call prices for Vidu Q1 and
+// Vidu 2 video generation models, encoded both as quota (Ratio) and per-call USD.
+func TestViduPerCallPricing(t *testing.T) {
+	t.Parallel()
+
+	for _, model := range []string{"viduq1-image", "viduq1-start-end", "viduq1-text", "vidu2-reference"} {
+		cfg, ok := ModelRatios[model]
+		require.True(t, ok)
+		require.NotNil(t, cfg.PerCall)
+		require.InDelta(t, 2.5*ratio.QuotaPerRMB, cfg.Ratio, 1e-9)
+		require.InDelta(t, 2.5/7*1000, cfg.PerCall.UsdPerThousandCalls, 1e-9)
+	}
+
+	for _, model := range []string{"vidu2-image", "vidu2-start-end"} {
+		cfg, ok := ModelRatios[model]
+		require.True(t, ok)
+		require.NotNil(t, cfg.PerCall)
+		require.InDelta(t, 1.25*ratio.QuotaPerRMB, cfg.Ratio, 1e-9)
+		require.InDelta(t, 1.25/7*1000, cfg.PerCall.UsdPerThousandCalls, 1e-9)
+	}
 }
 
 // TestZhipuTieredPricingResolution verifies BigModel's 32K input and 0.2K

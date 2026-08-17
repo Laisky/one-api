@@ -8,10 +8,24 @@ import (
 // flagshipVisionModels enumerates Zhipu's flagship multimodal vision-understanding models
 // with tiered pricing. Sources:
 //   - https://docs.bigmodel.cn/cn/guide/models/vlm/glm-5v-turbo
+//   - https://docs.bigmodel.cn/cn/guide/models/vlm/autoglm-phone
 //   - https://docs.bigmodel.cn/cn/guide/models/vlm/glm-4.6v
 //   - https://docs.bigmodel.cn/cn/guide/models/free/glm-4.6v-flash
 //   - https://docs.bigmodel.cn/cn/guide/models/free/glm-4v-flash
 var flagshipVisionModels = map[string]adaptor.ModelConfig{
+	// AutoGLM-Phone: vision-language AI phone assistant (free for a limited time).
+	"autoglm-phone": {
+		Ratio:                       0,
+		CompletionRatio:             1,
+		CachedInputRatio:            0,
+		ContextLength:               20_000,
+		MaxOutputTokens:             2_048,
+		InputModalities:             textImageInput(),
+		OutputModalities:            textOutput(),
+		SupportedFeatures:           []string{"tools", "json_mode"},
+		SupportedSamplingParameters: chatSamplingParameters(),
+		Description:                 "AutoGLM-Phone: vision-language AI phone assistant that understands screens and drives Android devices via ADB; 20K context, 2048 max output; free for a limited time.",
+	},
 	// GLM-5V-Turbo: input [0,32K) ¥5/¥22, input [32K+) ¥7/¥26 (same as GLM-5-Turbo)
 	"glm-5v-turbo": {
 		Ratio:            5 * ratio.MilliTokensRmb,
