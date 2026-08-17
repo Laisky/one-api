@@ -88,6 +88,50 @@ func TestViduPerCallPricing(t *testing.T) {
 	}
 }
 
+// TestAudioModelMetadata verifies the registered GLM audio models and their
+// placeholder pricing metadata.
+func TestAudioModelMetadata(t *testing.T) {
+	t.Parallel()
+
+	tts, ok := ModelRatios["glm-tts"]
+	require.True(t, ok)
+	require.Equal(t, []string{"text"}, tts.InputModalities)
+	require.Equal(t, []string{"audio"}, tts.OutputModalities)
+	require.NotNil(t, tts.Audio)
+	require.InDelta(t, (0.2/3000)*ratio.QuotaPerRMB, tts.Ratio, 1e-9)
+
+	asr, ok := ModelRatios["glm-asr-2512"]
+	require.True(t, ok)
+	require.Equal(t, []string{"audio"}, asr.InputModalities)
+	require.Equal(t, []string{"text"}, asr.OutputModalities)
+	require.NotNil(t, asr.Audio)
+	require.InDelta(t, 10.0, asr.Audio.PromptTokensPerSecond, 1e-9)
+	require.InDelta(t, (0.5/600)*ratio.QuotaPerRMB, asr.Ratio, 1e-9)
+
+	clone, ok := ModelRatios["glm-tts-clone"]
+	require.True(t, ok)
+	require.NotNil(t, clone.PerCall)
+	require.InDelta(t, 2*ratio.QuotaPerRMB, clone.Ratio, 1e-9)
+	require.InDelta(t, 2.0/7*1000, clone.PerCall.UsdPerThousandCalls, 1e-9)
+}
+
+// TestRealtimeModelMetadata verifies the GLM-Realtime models carry pricing
+// consistent with BigModel's published per-minute audio rates.
+func TestRealtimeModelMetadata(t *testing.T) {
+	t.Parallel()
+
+	flash, ok := ModelRatios["glm-realtime-flash"]
+	require.True(t, ok)
+	require.Equal(t, []string{"text", "audio", "video"}, flash.InputModalities)
+	require.Equal(t, []string{"audio"}, flash.OutputModalities)
+	require.InDelta(t, (0.18/1800)*ratio.QuotaPerRMB, flash.Ratio, 1e-12)
+
+	air, ok := ModelRatios["glm-realtime-air"]
+	require.True(t, ok)
+	require.Equal(t, []string{"text", "audio", "video"}, air.InputModalities)
+	require.InDelta(t, (0.3/1800)*ratio.QuotaPerRMB, air.Ratio, 1e-12)
+}
+
 // TestZhipuTieredPricingResolution verifies BigModel's 32K input and 0.2K
 // output boundaries without conflating thousands of tokens with raw tokens.
 func TestZhipuTieredPricingResolution(t *testing.T) {

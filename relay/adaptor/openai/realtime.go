@@ -11,6 +11,7 @@ import (
 
 	"github.com/Laisky/errors/v2"
 	gmw "github.com/Laisky/gin-middlewares/v7"
+	glog "github.com/Laisky/go-utils/v6/log"
 	"github.com/Laisky/zap"
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
@@ -184,7 +185,7 @@ func RealtimeHandler(c *gin.Context, meta *rmeta.Meta) (*rmodel.ErrorWithStatusC
 	upgrader := websocket.Upgrader{
 		CheckOrigin:      func(r *http.Request) bool { return true },
 		HandshakeTimeout: 10 * time.Second,
-		Subprotocols:     negotiateRealtimeSubprotocols(c.Request),
+		Subprotocols:     NegotiateRealtimeSubprotocols(c.Request),
 	}
 
 	clientConn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
@@ -225,12 +226,30 @@ func RealtimeHandler(c *gin.Context, meta *rmeta.Meta) (*rmodel.ErrorWithStatusC
 	}
 	defer func() { _ = upstreamConn.Close() }()
 
-	// Bi-directional pump
+	return nil, RealtimeBidirectionalPump(clientConn, upstreamConn, true, lg)
+}
+
+// RealtimeBidirectionalPump relays frames between the client and upstream
+// realtime WebSocket connections until either direction closes, parsing token
+// usage from upstream `response.done` events. When guardClientModel is true,
+// client `session.update` frames that mutate `session.model` are rejected;
+// providers that select the model through session.update (e.g. Zhipu
+// GLM-Realtime) pass false.
+//
+// Parameters:
+//   - clientConn: the downstream connection upgraded from the client.
+//   - upstreamConn: the dialed upstream realtime connection.
+//   - guardClientModel: whether to enforce the OpenAI session-model guard.
+//   - lg: request-scoped logger for close diagnostics.
+//
+// Returns: the accumulated usage parsed from upstream events, or nil when the
+// upstream never reported usage.
+func RealtimeBidirectionalPump(clientConn, upstreamConn *websocket.Conn, guardClientModel bool, lg glog.Logger) *rmodel.Usage {
 	errc := make(chan error, 2)
 	usage := &rmodel.Usage{}
 	countedResponseIDs := map[string]struct{}{}
 	go func() { errc <- copyWSUpstreamToClient(upstreamConn, clientConn, usage, countedResponseIDs) }()
-	go func() { errc <- copyRealtimeClientToUpstream(clientConn, upstreamConn) }()
+	go func() { errc <- copyRealtimeClientToUpstream(clientConn, upstreamConn, guardClientModel) }()
 
 	// Wait for one direction to finish, then close both connections
 	// to unblock the other goroutine.
@@ -249,24 +268,25 @@ func RealtimeHandler(c *gin.Context, meta *rmeta.Meta) (*rmodel.ErrorWithStatusC
 	if usage != nil && usage.TotalTokens == 0 {
 		usage.TotalTokens = usage.PromptTokens + usage.CompletionTokens
 	}
-
-	return nil, usage
+	return usage
 }
 
 // copyRealtimeClientToUpstream forwards client frames to the upstream realtime
-// connection while rejecting `session.update` events that attempt to change
-// the session model. OpenAI's Realtime API itself rejects model changes, but
-// defense-in-depth keeps the proxy authoritative against non-conformant
-// upstreams and prevents the proxy from forwarding billing-ambiguous frames.
+// connection while optionally rejecting `session.update` events that attempt
+// to change the session model. OpenAI's Realtime API itself rejects model
+// changes, but defense-in-depth keeps the proxy authoritative against
+// non-conformant upstreams and prevents the proxy from forwarding
+// billing-ambiguous frames.
 //
 // Parameters:
 //   - src: client WebSocket connection (reader).
 //   - dst: upstream realtime WebSocket connection (writer).
+//   - guardClientModel: when true, reject session.update model mutations.
 //
 // Returns:
 //   - error: nil on clean close; ErrModelSwitchDenied (wrapped) when a client
 //     attempts to mutate `session.model`; other errors propagate I/O failures.
-func copyRealtimeClientToUpstream(src, dst *websocket.Conn) error {
+func copyRealtimeClientToUpstream(src, dst *websocket.Conn, guardClientModel bool) error {
 	for {
 		mt, msg, err := src.ReadMessage()
 		if err != nil {
@@ -282,7 +302,7 @@ func copyRealtimeClientToUpstream(src, dst *websocket.Conn) error {
 			return errors.WithStack(err)
 		}
 
-		if mt == websocket.TextMessage {
+		if guardClientModel && mt == websocket.TextMessage {
 			if _, guardErr := enforceRealtimeSessionUpdate(msg); guardErr != nil {
 				errEvent := buildModelSwitchErrorEvent(guardErr.Error())
 				_ = src.WriteMessage(websocket.TextMessage, errEvent)
@@ -350,11 +370,11 @@ func copyWSUpstreamToClient(src, dst *websocket.Conn, usage *rmodel.Usage, count
 	}
 }
 
-// negotiateRealtimeSubprotocols extracts subprotocols from the client request
+// NegotiateRealtimeSubprotocols extracts subprotocols from the client request
 // that should be echoed back during the WebSocket handshake. Auth-related
 // subprotocols (openai-insecure-api-key.*) are filtered out so they are not
 // echoed to the client.
-func negotiateRealtimeSubprotocols(r *http.Request) []string {
+func NegotiateRealtimeSubprotocols(r *http.Request) []string {
 	sp := r.Header.Get("Sec-WebSocket-Protocol")
 	if sp == "" {
 		return nil

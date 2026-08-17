@@ -10,11 +10,11 @@ import (
 // https://docs.bigmodel.cn/cn/guide/start/model-overview and per-model spec pages.
 // Last updated: 2026-08-17.
 var flagshipTextModels = map[string]adaptor.ModelConfig{
-	// GLM-5.3: announced 2026-08 with the same base model as GLM-5.2.
-	// The model page (https://docs.bigmodel.cn/cn/guide/models/text/glm-5.3) states the
-	// model API is launching soon; BigModel has not published per-token pricing yet.
-	// Placeholder rate mirrors GLM-5.2 (¥8/¥28, ¥2 cached) until official pricing is
-	// announced; update the Ratio fields as soon as BigModel publishes the rate.
+	// GLM-5.3: same base model as GLM-5.2 with post-training improvements.
+	// Live on the API (verified 2026-08-17 via /api/paas/v4/models) but
+	// access-gated (unauthorized keys receive error code 1220). BigModel has not
+	// published per-token pricing yet, so the placeholder rate mirrors GLM-5.2
+	// (¥8/¥28, ¥2 cached); update the Ratio fields when official pricing lands.
 	"glm-5.3": {
 		Ratio:                       8 * ratio.MilliTokensRmb,
 		CompletionRatio:             28.0 / 8.0,
@@ -27,7 +27,7 @@ var flagshipTextModels = map[string]adaptor.ModelConfig{
 		SupportedSamplingParameters: chatSamplingParameters(),
 		SupportedReasoningEfforts:   []string{"low", "high", "max"},
 		DefaultReasoningEffort:      "max",
-		Description:                 "GLM-5.3: latest flagship text model built on the GLM-5.2 base; 1M context, 128K max output, always-on thinking with reasoning_effort low/high/max; coding SOTA and emergent cybersecurity capabilities. API launching soon; placeholder pricing mirrors GLM-5.2 until official rates publish.",
+		Description:                 "GLM-5.3: latest flagship text model built on the GLM-5.2 base; 1M context, 128K max output, always-on thinking with reasoning_effort low/high/max; coding SOTA and emergent cybersecurity capabilities. Live on the API but access-gated; placeholder pricing mirrors GLM-5.2 until official rates publish.",
 	},
 	// GLM-5-Turbo: input [0,32K) ¥5/¥22, input [32K+) ¥7/¥26
 	"glm-5-turbo": {

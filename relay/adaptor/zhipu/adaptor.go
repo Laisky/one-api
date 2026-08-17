@@ -39,6 +39,10 @@ func (a *Adaptor) GetRequestURL(meta *meta.Meta) (string, error) {
 	switch meta.Mode {
 	case relaymode.ImagesGenerations:
 		return fmt.Sprintf("%s/api/paas/v4/images/generations", meta.BaseURL), nil
+	case relaymode.Videos:
+		return fmt.Sprintf("%s/api/paas/v4/videos/generations", meta.BaseURL), nil
+	case relaymode.VoiceClone:
+		return fmt.Sprintf("%s/api/paas/v4/voice/clone", meta.BaseURL), nil
 	case relaymode.Embeddings:
 		return fmt.Sprintf("%s/api/paas/v4/embeddings", meta.BaseURL), nil
 	case relaymode.OCR:
@@ -272,6 +276,9 @@ func (a *Adaptor) DoResponse(c *gin.Context, resp *http.Response, meta *meta.Met
 		return
 	case relaymode.ImagesGenerations:
 		err, usage = openai.ImageHandler(c, resp)
+		return
+	case relaymode.Videos:
+		err, usage = VideoHandler(c, resp)
 		return
 	}
 	if isOCRModel(meta.ActualModelName) {

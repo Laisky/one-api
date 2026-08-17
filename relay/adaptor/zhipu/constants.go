@@ -62,7 +62,8 @@ func textImageVideoFileInput() []string { return []string{"text", "image", "vide
 // Pricing source: https://bigmodel.cn/pricing.
 //
 // The map is composed from family-specific sub-maps defined in sibling files
-// (constants_text.go, constants_vision.go, constants_misc.go) so that each
+// (constants_text.go, constants_vision.go, constants_misc.go,
+// constants_audio.go) so that each
 // file stays small and easy to navigate. Pricing entries are immutable.
 //
 // Metadata sources:
@@ -79,6 +80,8 @@ var ModelRatios = mergeModelRatios(
 	utilityModels,
 	embeddingModels,
 	ocrModels,
+	audioModels,
+	realtimeModels,
 	legacyModels,
 )
 

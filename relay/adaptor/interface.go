@@ -515,6 +515,15 @@ type RerankAdaptor interface {
 	ConvertRerankRequest(c *gin.Context, request *model.RerankRequest) (any, error)
 }
 
+// VoiceCloneAdaptor represents adaptors that can natively consume the dedicated
+// voice-clone DTO. Adaptors must implement this interface to accept
+// /v1/voice/clones requests; otherwise the controller will reject the call as
+// unsupported.
+type VoiceCloneAdaptor interface {
+	ConvertVoiceCloneRequest(c *gin.Context, request *model.VoiceCloneRequest) (any, error)
+	DoVoiceCloneResponse(c *gin.Context, resp *http.Response, meta *meta.Meta) (usage *model.Usage, err *model.ErrorWithStatusCode)
+}
+
 // DefaultPricingMethods provides default implementations for adapters without specific pricing
 type DefaultPricingMethods struct{}
 

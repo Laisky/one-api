@@ -156,7 +156,7 @@ func TestNegotiateRealtimeSubprotocols(t *testing.T) {
 			if tt.header != "" {
 				r.Header.Set("Sec-WebSocket-Protocol", tt.header)
 			}
-			result := negotiateRealtimeSubprotocols(r)
+			result := NegotiateRealtimeSubprotocols(r)
 			require.Equal(t, tt.expected, result)
 		})
 	}

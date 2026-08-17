@@ -97,10 +97,6 @@ func RelayVideoHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 	metalib.Set2Context(c, meta)
 
 	durationSeconds := videoRequest.RequestedDurationSeconds()
-	if durationSeconds <= 0 {
-		return openai.ErrorWrapper(errors.New("seconds must be positive for video generation"), "invalid_video_duration", http.StatusBadRequest)
-	}
-	resolutionKey := videoRequest.RequestedResolution()
 
 	var channelModelConfigs map[string]model.ModelConfigLocal
 	if channelModel, ok := c.Get(ctxkey.ChannelModel); ok {
@@ -110,23 +106,44 @@ func RelayVideoHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 	}
 
 	pricingAdaptor := relay.GetAdaptor(meta.APIType)
-	var videoPricing *adaptor.VideoPricingConfig
-	if cfg, ok := pricing.ResolveModelConfig(meta.ActualModelName, channelModelConfigs, pricingAdaptor, meta.StartTime); ok && cfg.Video != nil && cfg.Video.HasData() {
-		videoPricing = cfg.Video
-	}
-	if videoPricing == nil {
-		if cfg, ok := pricing.ResolveModelConfig(meta.ActualModelName, nil, pricingAdaptor, meta.StartTime); ok && cfg.Video != nil && cfg.Video.HasData() {
-			videoPricing = cfg.Video
-		}
-	}
-	if videoPricing == nil {
-		return openai.ErrorWrapper(errors.Errorf("video pricing missing for model %s", meta.ActualModelName), "video_pricing_missing", http.StatusBadRequest)
+	resolvedCfg, ok := pricing.ResolveModelConfig(meta.ActualModelName, channelModelConfigs, pricingAdaptor, meta.StartTime)
+	if !ok {
+		resolvedCfg, ok = pricing.ResolveModelConfig(meta.ActualModelName, nil, pricingAdaptor, meta.StartTime)
 	}
 
-	multiplier := videoPricing.EffectiveMultiplier(resolutionKey)
-	costUsd := videoPricing.PerSecondUsd * multiplier * durationSeconds
 	groupRatio := c.GetFloat64(ctxkey.ChannelRatio)
-	usedQuota := max(int64(math.Ceil(costUsd*billingratio.QuotaPerUsd*groupRatio)), 0)
+
+	// Per-call video models (e.g. Zhipu Vidu) are billed as a flat price per
+	// invocation. The upstream fixes the clip duration, so the client is not
+	// required to send `seconds` for these models.
+	var perCallUsd float64
+	if ok && resolvedCfg.PerCall != nil && resolvedCfg.PerCall.HasData() {
+		perCallUsd = resolvedCfg.PerCall.UsdPerThousandCalls / 1000
+	}
+
+	var videoPricing *adaptor.VideoPricingConfig
+	var multiplier float64
+	logContent := ""
+	usedQuota := int64(0)
+	if perCallUsd > 0 {
+		usedQuota = max(int64(math.Ceil(perCallUsd*billingratio.QuotaPerUsd*groupRatio)), 0)
+		logContent = fmt.Sprintf("video per-call usd %.4f, group rate %.2f", perCallUsd, groupRatio)
+	} else {
+		if durationSeconds <= 0 {
+			return openai.ErrorWrapper(errors.New("seconds must be positive for video generation"), "invalid_video_duration", http.StatusBadRequest)
+		}
+		if ok && resolvedCfg.Video != nil && resolvedCfg.Video.HasData() {
+			videoPricing = resolvedCfg.Video
+		}
+		if videoPricing == nil {
+			return openai.ErrorWrapper(errors.Errorf("video pricing missing for model %s", meta.ActualModelName), "video_pricing_missing", http.StatusBadRequest)
+		}
+		resolutionKey := videoRequest.RequestedResolution()
+		multiplier = videoPricing.EffectiveMultiplier(resolutionKey)
+		costUsd := videoPricing.PerSecondUsd * multiplier * durationSeconds
+		usedQuota = max(int64(math.Ceil(costUsd*billingratio.QuotaPerUsd*groupRatio)), 0)
+		logContent = fmt.Sprintf("video seconds %.2f, usd %.3f, multiplier %.2f, group rate %.2f", durationSeconds, videoPricing.PerSecondUsd, multiplier, groupRatio)
+	}
 
 	tokenId := c.GetInt(ctxkey.TokenId)
 	userId := meta.UserId
@@ -192,7 +209,6 @@ func RelayVideoHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 		}
 
 		quotaDelta := usedQuota - preConsumedQuota
-		logContent := fmt.Sprintf("video seconds %.2f, usd %.3f, multiplier %.2f, group rate %.2f", durationSeconds, videoPricing.PerSecondUsd, multiplier, groupRatio)
 		entry := &model.Log{
 			UserId:      userId,
 			UserUUID:    model.StringPtrIfNotEmpty(meta.UserUUID),

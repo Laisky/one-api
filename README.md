@@ -1421,6 +1421,17 @@ Kimi K3 is also available through several hosted providers, each with its own ca
 
 `glm-image` / `cogview-4` / `cogview-3-plus` / `cogview-3` / `cogview-3-flash` / `cogvideox-3` / `cogviewx` / `cogviewx-flash` / `viduq1-image` / `viduq1-start-end` / `viduq1-text` / `vidu2-image` / `vidu2-start-end` / `vidu2-reference`
 
+#### Audio Models
+
+`glm-tts` / `glm-asr-2512` / `glm-tts-clone`
+
+Voice cloning is exposed through `/v1/voice/clones` (Zhipu-compatible
+`/api/paas/v4/voice/clone` is also accepted).
+
+#### Realtime Models
+
+`glm-realtime-flash` / `glm-realtime-air`
+
 #### Other Models
 
 `charglm-4` / `emohaa` / `codegeex-4` / `rerank` / `embedding-3` / `embedding-2` / `glm-3-turbo` / `glm-zero-preview`

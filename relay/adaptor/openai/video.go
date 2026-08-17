@@ -58,7 +58,7 @@ func VideoHandler(c *gin.Context, resp *http.Response) (*relaymodel.ErrorWithSta
 	}
 
 	if resp.StatusCode < http.StatusBadRequest && c.Request.Method == http.MethodPost {
-		persistAsyncVideoTask(c, body)
+		PersistAsyncVideoTask(c, body)
 	}
 
 	resp.Body = io.NopCloser(bytes.NewReader(body))
@@ -80,7 +80,11 @@ func VideoHandler(c *gin.Context, resp *http.Response) (*relaymodel.ErrorWithSta
 	return nil, nil
 }
 
-func persistAsyncVideoTask(c *gin.Context, body []byte) {
+// PersistAsyncVideoTask binds an async video-generation task id to the channel
+// that created it, so follow-up status/content requests can be pinned to the
+// original upstream. It is exported for reuse by provider-specific video
+// handlers (e.g. zhipu) whose responses carry the same {id} task envelope.
+func PersistAsyncVideoTask(c *gin.Context, body []byte) {
 	if c == nil || len(body) == 0 {
 		return
 	}

@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/Laisky/errors/v2"
 	gmw "github.com/Laisky/gin-middlewares/v7"
 	"github.com/Laisky/zap"
 	"github.com/gin-gonic/gin"
@@ -18,6 +19,7 @@ import (
 	"github.com/Laisky/one-api/relay"
 	"github.com/Laisky/one-api/relay/adaptor"
 	"github.com/Laisky/one-api/relay/adaptor/openai"
+	"github.com/Laisky/one-api/relay/adaptor/zhipu"
 	"github.com/Laisky/one-api/relay/apitype"
 	"github.com/Laisky/one-api/relay/billing"
 	"github.com/Laisky/one-api/relay/meta"
@@ -134,7 +136,16 @@ func RelayRealtime(c *gin.Context) {
 	c.Set(ctxkey.UpstreamRequestPossiblyForwarded, true)
 
 	// ── Step 4: Run WebSocket session ───────────────────────────────────
-	bizErr, usage := openai.RealtimeHandler(c, relayMeta)
+	var bizErr *rmodel.ErrorWithStatusCode
+	var usage *rmodel.Usage
+	switch relayMeta.APIType {
+	case apitype.Zhipu:
+		// GLM-Realtime speaks an OpenAI-Realtime-like frame protocol at its own
+		// endpoint; the zhipu adaptor relays frames and parses usage the same way.
+		bizErr, usage = zhipu.RealtimeHandler(c, relayMeta)
+	default:
+		bizErr, usage = openai.RealtimeHandler(c, relayMeta)
+	}
 	if bizErr != nil {
 		// Handshake/connection error — upstream was NOT reached, safe to refund
 		c.Set(ctxkey.UpstreamRequestPossiblyForwarded, false)
@@ -313,6 +324,23 @@ func RelayRealtimeSessions(c *gin.Context) {
 	relayMeta := meta.GetByContext(c)
 
 	PrometheusMonitor.RecordChannelRequest(relayMeta, start)
+
+	if relayMeta.APIType != apitype.OpenAI {
+		// GLM-Realtime authenticates with the API key directly over WebSocket
+		// and has no ephemeral-session (WebRTC) minting surface.
+		bizErr := &rmodel.ErrorWithStatusCode{
+			Error: rmodel.Error{
+				Message:  "realtime sessions (ephemeral tokens) are only supported for OpenAI channels; Zhipu GLM-Realtime connects directly with the API key",
+				Type:     rmodel.ErrorTypeOneAPI,
+				Code:     "realtime_sessions_unsupported",
+				RawError: errors.New("realtime sessions unsupported for this channel"),
+			},
+			StatusCode: http.StatusBadRequest,
+		}
+		c.JSON(bizErr.StatusCode, gin.H{"error": bizErr.Error})
+		PrometheusMonitor.RecordRelayRequest(c, relayMeta, start, false, 0, 0, 0)
+		return
+	}
 
 	if bizErr, err := openai.RealtimeSessionsHandler(c, relayMeta); bizErr != nil {
 		if !c.Writer.Written() {
