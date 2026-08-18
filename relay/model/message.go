@@ -115,6 +115,7 @@ func (m Message) IsStringContent() bool {
 	return ok
 }
 
+// StringContent returns the textual message fragments concatenated in their original order.
 func (m Message) StringContent() string {
 	content, ok := m.Content.(string)
 	if ok {
@@ -122,7 +123,10 @@ func (m Message) StringContent() string {
 	}
 	contentList, ok := m.Content.([]any)
 	if ok {
-		var contentStr string
+		// Keep common small messages allocation-free, then join once to avoid
+		// repeatedly copying the accumulated output for long structured responses.
+		var inlineFragments [4]string
+		fragments := inlineFragments[:0]
 		for _, contentItem := range contentList {
 			contentMap, ok := contentItem.(map[string]any)
 			if !ok {
@@ -132,22 +136,22 @@ func (m Message) StringContent() string {
 			switch strings.ToLower(typeStr) {
 			case strings.ToLower(ContentTypeText):
 				if subStr, ok := contentMap["text"].(string); ok {
-					contentStr += subStr
+					fragments = append(fragments, subStr)
 				}
 			case "output_json":
 				if jsonText := extractJSONText(contentMap["json"]); jsonText != "" {
-					contentStr += jsonText
+					fragments = append(fragments, jsonText)
 				}
 				if text, ok := contentMap["text"].(string); ok {
-					contentStr += text
+					fragments = append(fragments, text)
 				}
 			case "output_json_delta":
 				if partial, ok := contentMap["partial_json"].(string); ok {
-					contentStr += partial
+					fragments = append(fragments, partial)
 				}
 			}
 		}
-		return contentStr
+		return strings.Join(fragments, "")
 	}
 
 	return ""
