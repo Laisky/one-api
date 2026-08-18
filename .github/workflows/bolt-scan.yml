@@ -1,0 +1,40 @@
+name: bolt-scan
+
+on:
+  push:
+    branches:
+      - 'bolt/perf-20260818'
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Inventory performance candidates
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo '=== Existing Go benchmarks ==='
+          grep -RIn --include='*_test.go' 'func Benchmark' . || true
+          echo '=== Runtime regexp compilation ==='
+          grep -RIn --include='*.go' -E 'regexp\.(Compile|MustCompile)\(' . || true
+          echo '=== JSON marshal sites ==='
+          grep -RIl --include='*.go' -E '(json|sonic|jsoniter)\.Marshal\(' . | sort || true
+          echo '=== fmt.Sprintf sites in relay/common/service ==='
+          grep -RIn --include='*.go' 'fmt\.Sprintf(' common relay service 2>/dev/null | head -n 300 || true
+
+      - name: Archive checked-out source
+        shell: bash
+        run: git archive --format=tar HEAD | gzip -9 > /tmp/one-api-source.tar.gz
+
+      - name: Upload source snapshot
+        uses: actions/upload-artifact@v4
+        with:
+          name: one-api-source-${{ github.sha }}
+          path: /tmp/one-api-source.tar.gz
+          retention-days: 1
