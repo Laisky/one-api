@@ -6,10 +6,11 @@ on:
       - 'bolt/perf-20260818'
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   go_quality:
+    if: github.actor != 'github-actions[bot]'
     name: Go format, vet, lint, and analyzers
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -54,6 +55,7 @@ jobs:
           args: --config=.golangci.yml
 
   goroutine_guard:
+    if: github.actor != 'github-actions[bot]'
     name: Goroutine gin.Context guardrail
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -81,6 +83,7 @@ jobs:
           ast-grep scan
 
   go_tests:
+    if: github.actor != 'github-actions[bot]'
     name: Full Go race tests
     runs-on: ubuntu-latest
     timeout-minutes: 45
@@ -158,6 +161,7 @@ jobs:
         run: go test -race -v ./...
 
   frontend:
+    if: github.actor != 'github-actions[bot]'
     name: Frontend ${{ matrix.app }} tests
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -199,3 +203,41 @@ jobs:
           yarn lint
           yarn type-check
           yarn build
+
+  report:
+    if: always() && github.actor != 'github-actions[bot]'
+    name: Record validation result
+    needs: [go_quality, goroutine_guard, go_tests, frontend]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Record results
+        shell: bash
+        env:
+          GO_QUALITY: ${{ needs.go_quality.result }}
+          GOROUTINE_GUARD: ${{ needs.goroutine_guard.result }}
+          GO_TESTS: ${{ needs.go_tests.result }}
+          FRONTEND: ${{ needs.frontend.result }}
+        run: |
+          set -euo pipefail
+          result=".bolt-tmp/full-validation-${GITHUB_SHA}.txt"
+          cat > "$result" <<EOF
+          commit=${GITHUB_SHA}
+          go_quality=${GO_QUALITY}
+          goroutine_guard=${GOROUTINE_GUARD}
+          go_tests=${GO_TESTS}
+          frontend=${FRONTEND}
+          EOF
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add "$result"
+          git commit -m "ci: record Bolt full validation for ${GITHUB_SHA}"
+          git push
+
+          [[ "$GO_QUALITY" == success ]]
+          [[ "$GOROUTINE_GUARD" == success ]]
+          [[ "$GO_TESTS" == success ]]
+          [[ "$FRONTEND" == success ]]
