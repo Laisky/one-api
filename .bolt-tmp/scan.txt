@@ -1,4 +1,4 @@
-Go files: 1171
+Go files: 1172
 
 === Existing benchmarks ===
 common/telemetry/optimization_proof_test.go:70: func BenchmarkCollect(b *testing.B) {
@@ -6,6 +6,7 @@ common/telemetry/optimization_proof_test.go:136: func BenchmarkUserRecord(b *tes
 controller/log_test.go:305: func BenchmarkGetLogOrderClause(b *testing.B) {
 model/log_view_test.go:40: func BenchmarkLogsToResponses(b *testing.B) {
 model/log_view_test.go:143: func BenchmarkLogListBoundarySerialization(b *testing.B) {
+relay/adaptor/aiproxy/documents_benchmark_test.go:50: func BenchmarkAIProxyDocuments2Markdown(b *testing.B) {
 relay/adaptor/aws/utils/consts_test.go:431: func BenchmarkConvertModelID2CrossRegionProfile(b *testing.B) {
 relay/adaptor/aws/utils/consts_test.go:441: func BenchmarkGetRegionPrefix(b *testing.B) {
 relay/adaptor/openai_compatible/benchmark_test.go:9: func BenchmarkStringConcatenation(b *testing.B) {
@@ -16,7 +17,7 @@ relay/adaptor/openai_compatible/benchmark_test.go:81: func BenchmarkMemoryAlloca
 relay/adaptor/openai_compatible/benchmark_test.go:111: func BenchmarkEnhancedUnifiedStreamHandler(b *testing.B) {
 relay/adaptor/openai_compatible/benchmark_test.go:163: func BenchmarkEnhancedVsOriginal(b *testing.B) {
 relay/pricing/timewindow_test.go:362: func BenchmarkApplyTimeWindowFastPath(b *testing.B) {
-Total benchmarks: 15
+Total benchmarks: 16
 
 === runtime regexp compilation ===
 
