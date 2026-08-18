@@ -1,0 +1,5 @@
+commit=2be02027f9e64df9474258d67e5ed7071772236c
+go_quality=success
+goroutine_guard=success
+go_tests=failure
+frontend=failure
