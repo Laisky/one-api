@@ -6,10 +6,11 @@ on:
       - 'bolt/perf-20260818'
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   scan:
+    if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -19,22 +20,66 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          echo '=== Existing Go benchmarks ==='
-          grep -RIn --include='*_test.go' 'func Benchmark' . || true
-          echo '=== Runtime regexp compilation ==='
-          grep -RIn --include='*.go' -E 'regexp\.(Compile|MustCompile)\(' . || true
-          echo '=== JSON marshal sites ==='
-          grep -RIl --include='*.go' -E '(json|sonic|jsoniter)\.Marshal\(' . | sort || true
-          echo '=== fmt.Sprintf sites in relay/common/service ==='
-          grep -RIn --include='*.go' 'fmt\.Sprintf(' common relay service 2>/dev/null | head -n 300 || true
+          mkdir -p .bolt-tmp
+          python3 - <<'PY' > .bolt-tmp/scan.txt
+          from __future__ import annotations
 
-      - name: Archive checked-out source
+          import pathlib
+          import re
+
+          root = pathlib.Path('.')
+          files = sorted(
+              path for path in root.rglob('*.go')
+              if '.git' not in path.parts and 'vendor' not in path.parts
+          )
+
+          patterns = {
+              'runtime regexp compilation': re.compile(r'\bregexp\.(?:Compile|MustCompile)\s*\('),
+              'fmt.Sprintf': re.compile(r'\bfmt\.Sprintf\s*\('),
+              'JSON marshal': re.compile(r'\b(?:json|sonic|jsoniter)\.Marshal\s*\('),
+              'strings.Split': re.compile(r'\bstrings\.Split(?:N)?\s*\('),
+              'case conversion': re.compile(r'\bstrings\.(?:ToLower|ToUpper)\s*\('),
+              'io.ReadAll': re.compile(r'\bio\.ReadAll\s*\('),
+              'bytes.NewBuffer': re.compile(r'\bbytes\.NewBuffer\s*\('),
+              'byte/string conversion': re.compile(r'(?:\[\]byte\s*\(|\bstring\s*\()'),
+              'linear membership': re.compile(r'\b(?:slices\.Contains|common\.InArray)\s*\('),
+          }
+
+          def context(lines: list[str], index: int, radius: int = 2) -> str:
+              start = max(0, index - radius)
+              end = min(len(lines), index + radius + 1)
+              return '\n'.join(f'{n + 1:5d}: {lines[n]}' for n in range(start, end))
+
+          print(f'Go files: {len(files)}')
+          print('\n=== Existing benchmarks ===')
+          benchmark_count = 0
+          for path in files:
+              lines = path.read_text(encoding='utf-8', errors='replace').splitlines()
+              for i, line in enumerate(lines):
+                  if re.search(r'^\s*func\s+Benchmark\w+\s*\(', line):
+                      benchmark_count += 1
+                      print(f'{path}:{i + 1}: {line.strip()}')
+          print(f'Total benchmarks: {benchmark_count}')
+
+          for title, pattern in patterns.items():
+              print(f'\n=== {title} ===')
+              count = 0
+              for path in files:
+                  lines = path.read_text(encoding='utf-8', errors='replace').splitlines()
+                  for i, line in enumerate(lines):
+                      if pattern.search(line):
+                          count += 1
+                          print(f'\n--- {path}:{i + 1} ---')
+                          print(context(lines, i))
+              print(f'\nTotal {title}: {count}')
+          PY
+
+      - name: Commit scan report to the isolated branch
         shell: bash
-        run: git archive --format=tar HEAD | gzip -9 > /tmp/one-api-source.tar.gz
-
-      - name: Upload source snapshot
-        uses: actions/upload-artifact@v4
-        with:
-          name: one-api-source-${{ github.sha }}
-          path: /tmp/one-api-source.tar.gz
-          retention-days: 1
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add .bolt-tmp/scan.txt
+          git commit -m 'ci: record temporary Bolt scan results'
+          git push
