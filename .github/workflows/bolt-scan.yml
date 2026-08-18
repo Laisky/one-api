@@ -1,4 +1,4 @@
-name: bolt-full-validation
+name: bolt-paired-diagnostics
 
 on:
   push:
@@ -9,84 +9,19 @@ permissions:
   contents: write
 
 jobs:
-  go_quality:
+  go_compare:
     if: github.actor != 'github-actions[bot]'
-    name: Go format, vet, lint, and analyzers
+    name: Go race ${{ matrix.variant }}
     runs-on: ubuntu-latest
-    timeout-minutes: 30
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: '1.26.3'
-          cache: true
-
-      - name: Check formatting
-        shell: bash
-        run: |
-          set -euo pipefail
-          files=(
-            relay/adaptor/aiproxy/main.go
-            relay/adaptor/aiproxy/documents_benchmark_test.go
-          )
-          unformatted="$(gofmt -s -l "${files[@]}")"
-          test -z "$unformatted" || {
-            echo "The following files require gofmt -s:"
-            echo "$unformatted"
-            exit 1
-          }
-
-      - name: Check module metadata
-        run: go mod tidy -diff
-
-      - name: Run go vet
-        run: go vet ./...
-
-      - name: Run entity response analyzer
-        run: go run ./tools/analyzers/noentityresponse/cmd/noentityresponse ./...
-
-      - name: Run golangci-lint
-        uses: golangci/golangci-lint-action@v8
-        with:
-          version: v2.10.1
-          args: --config=.golangci.yml
-
-  goroutine_guard:
-    if: github.actor != 'github-actions[bot]'
-    name: Goroutine gin.Context guardrail
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Install ast-grep
-        env:
-          ASG_VERSION: 0.43.0
-          ASG_SHA256: a26253a9c821d935f7e383e40f0de7c2ca62a4121de1f73a6d81ec32eae631e0
-        run: |
-          set -euo pipefail
-          curl -fsSL -o ast-grep.zip \
-            "https://github.com/ast-grep/ast-grep/releases/download/${ASG_VERSION}/app-x86_64-unknown-linux-gnu.zip"
-          echo "${ASG_SHA256}  ast-grep.zip" | sha256sum -c -
-          mkdir -p "$HOME/.local/bin"
-          unzip -o ast-grep.zip -d "$HOME/.local/bin"
-          chmod +x "$HOME/.local/bin/ast-grep" "$HOME/.local/bin/sg"
-          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
-
-      - name: Verify and scan guardrails
-        run: |
-          ast-grep test --skip-snapshot-tests
-          ast-grep scan
-
-  go_tests:
-    if: github.actor != 'github-actions[bot]'
-    name: Full Go race tests
-    runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 50
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - variant: baseline
+            ref: b59a43af8a32f0f570d70e8e79f799cc539674b7
+          - variant: optimized
+            ref: 751077d5ef653e404aa5eb2440ea35436ec233f4
     services:
       mysql:
         image: mysql:8.4
@@ -127,9 +62,10 @@ jobs:
       ONEAPI_REQUIRE_DB_BACKENDS: '1'
       CGO_ENABLED: '1'
     steps:
-      - name: Checkout repository
+      - name: Checkout compared revision
         uses: actions/checkout@v4
         with:
+          ref: ${{ matrix.ref }}
           fetch-depth: 0
 
       - name: Set up Go
@@ -157,21 +93,76 @@ jobs:
               || psql -h 127.0.0.1 -p 5432 -U postgres -d postgres -c "CREATE DATABASE ${db};"
           done
 
-      - name: Run full test suite with race detector
-        run: go test -race -v ./...
+      - name: Run and capture full race suite
+        id: tests
+        shell: bash
+        run: |
+          set +e
+          mkdir -p diagnostic
+          go test -race -v ./... > diagnostic/full.log 2>&1
+          status=$?
+          set -e
+          printf 'variant=%s\nref=%s\nstatus=%s\n' \
+            '${{ matrix.variant }}' '${{ matrix.ref }}' "$status" > diagnostic/status.txt
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
 
-  frontend:
+          lines = Path('diagnostic/full.log').read_text(errors='replace').splitlines()
+          patterns = re.compile(
+              r'(^--- FAIL:|^FAIL(?:\s|$)|panic:|fatal error:|WARNING: DATA RACE|'
+              r'Error Trace:|Error:|expected:|actual  :)'
+          )
+          selected = []
+          seen = set()
+          for i, line in enumerate(lines):
+              if patterns.search(line):
+                  for candidate in lines[max(0, i - 3):min(len(lines), i + 8)]:
+                      if candidate not in seen:
+                          selected.append(candidate)
+                          seen.add(candidate)
+          selected.extend(['', '=== FINAL 250 LINES ===', *lines[-250:]])
+          Path('diagnostic/failure-extract.txt').write_text('\n'.join(selected) + '\n')
+          PY
+          exit 0
+
+      - name: Upload Go diagnostic
+        uses: actions/upload-artifact@v4
+        with:
+          name: go-${{ matrix.variant }}
+          path: diagnostic/
+          retention-days: 1
+
+  frontend_compare:
     if: github.actor != 'github-actions[bot]'
-    name: Frontend ${{ matrix.app }} tests
+    name: Frontend ${{ matrix.app }} ${{ matrix.variant }}
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 35
     strategy:
       fail-fast: false
       matrix:
+        variant: [baseline, optimized]
         app: [modern, air, berry]
+        include:
+          - variant: baseline
+            ref: b59a43af8a32f0f570d70e8e79f799cc539674b7
+          - variant: optimized
+            ref: 751077d5ef653e404aa5eb2440ea35436ec233f4
     steps:
-      - name: Checkout repository
+      - name: Resolve revision
+        id: revision
+        shell: bash
+        run: |
+          if [[ '${{ matrix.variant }}' == baseline ]]; then
+            echo 'ref=b59a43af8a32f0f570d70e8e79f799cc539674b7' >> "$GITHUB_OUTPUT"
+          else
+            echo 'ref=751077d5ef653e404aa5eb2440ea35436ec233f4' >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Checkout compared revision
         uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.revision.outputs.ref }}
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -184,60 +175,96 @@ jobs:
         working-directory: web/${{ matrix.app }}
         run: yarn install --network-timeout 600000
 
-      - name: Run tests
+      - name: Run and capture frontend checks
         working-directory: web/${{ matrix.app }}
         env:
           CI: true
         shell: bash
         run: |
-          if [[ '${{ matrix.app }}' == 'modern' ]]; then
-            yarn test --run --passWithNoTests
+          set +e
+          mkdir -p diagnostic
+          if [[ '${{ matrix.app }}' == modern ]]; then
+            yarn test --run --passWithNoTests > diagnostic/test.log 2>&1
           else
-            yarn test --watchAll=false --passWithNoTests
+            yarn test --watchAll=false --passWithNoTests > diagnostic/test.log 2>&1
           fi
+          test_status=$?
 
-      - name: Lint, type-check, and build modern frontend
-        if: matrix.app == 'modern'
-        working-directory: web/modern
-        run: |
-          yarn lint
-          yarn type-check
-          yarn build
+          lint_status=0
+          type_status=0
+          build_status=0
+          if [[ '${{ matrix.app }}' == modern ]]; then
+            yarn lint > diagnostic/lint.log 2>&1
+            lint_status=$?
+            yarn type-check > diagnostic/type-check.log 2>&1
+            type_status=$?
+            yarn build > diagnostic/build.log 2>&1
+            build_status=$?
+          fi
+          set -e
+
+          printf 'variant=%s\nref=%s\napp=%s\ntest_status=%s\nlint_status=%s\ntype_status=%s\nbuild_status=%s\n' \
+            '${{ matrix.variant }}' '${{ steps.revision.outputs.ref }}' '${{ matrix.app }}' \
+            "$test_status" "$lint_status" "$type_status" "$build_status" \
+            > diagnostic/status.txt
+          for log in diagnostic/*.log; do
+            {
+              echo "=== $log ==="
+              tail -n 200 "$log"
+            } >> diagnostic/failure-extract.txt
+          done
+          exit 0
+
+      - name: Upload frontend diagnostic
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-${{ matrix.variant }}-${{ matrix.app }}
+          path: web/${{ matrix.app }}/diagnostic/
+          retention-days: 1
 
   report:
     if: always() && github.actor != 'github-actions[bot]'
-    name: Record validation result
-    needs: [go_quality, goroutine_guard, go_tests, frontend]
+    name: Record paired diagnostic
+    needs: [go_compare, frontend_compare]
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repository
+      - name: Checkout diagnostic branch
         uses: actions/checkout@v4
+        with:
+          ref: bolt/perf-20260818
 
-      - name: Record results
+      - name: Download diagnostics
+        uses: actions/download-artifact@v4
+        with:
+          pattern: '*-baseline*'
+          path: downloaded
+          merge-multiple: false
+
+      - name: Download optimized diagnostics
+        uses: actions/download-artifact@v4
+        with:
+          pattern: '*-optimized*'
+          path: downloaded
+          merge-multiple: false
+
+      - name: Commit concise comparison
         shell: bash
-        env:
-          GO_QUALITY: ${{ needs.go_quality.result }}
-          GOROUTINE_GUARD: ${{ needs.goroutine_guard.result }}
-          GO_TESTS: ${{ needs.go_tests.result }}
-          FRONTEND: ${{ needs.frontend.result }}
         run: |
           set -euo pipefail
-          result=".bolt-tmp/full-validation-${GITHUB_SHA}.txt"
-          cat > "$result" <<EOF
-          commit=${GITHUB_SHA}
-          go_quality=${GO_QUALITY}
-          goroutine_guard=${GOROUTINE_GUARD}
-          go_tests=${GO_TESTS}
-          frontend=${FRONTEND}
-          EOF
+          result=".bolt-tmp/paired-diagnostic-${GITHUB_SHA}.txt"
+          mkdir -p .bolt-tmp
+          {
+            echo "workflow_commit=${GITHUB_SHA}"
+            echo
+            echo '=== STATUS FILES ==='
+            find downloaded -name status.txt -print0 | sort -z | xargs -0 -r -I{} sh -c 'echo "--- {}"; cat "{}"; echo'
+            echo
+            echo '=== FAILURE EXTRACTS ==='
+            find downloaded -name failure-extract.txt -print0 | sort -z | xargs -0 -r -I{} sh -c 'echo "--- {}"; cat "{}"; echo'
+          } > "$result"
 
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add "$result"
-          git commit -m "ci: record Bolt full validation for ${GITHUB_SHA}"
+          git commit -m "ci: record paired Bolt diagnostics for ${GITHUB_SHA}"
           git push
-
-          [[ "$GO_QUALITY" == success ]]
-          [[ "$GOROUTINE_GUARD" == success ]]
-          [[ "$GO_TESTS" == success ]]
-          [[ "$FRONTEND" == success ]]
