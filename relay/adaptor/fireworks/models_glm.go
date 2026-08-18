@@ -7,10 +7,10 @@ import (
 
 // glmModels contains Z.ai GLM family models served by Fireworks (GLM-4.7,
 // GLM-5, GLM-5.1, GLM-5.2). Sources:
-//   - https://fireworks.ai/models/fireworks/glm-4p7
-//   - https://fireworks.ai/models/fireworks/glm-5
-//   - https://fireworks.ai/models/fireworks/glm-5p1
-//   - https://fireworks.ai/models/fireworks/glm-5p2
+//   - https://app.fireworks.ai/models/fireworks/glm-4p7
+//   - https://app.fireworks.ai/models/fireworks/glm-5
+//   - https://app.fireworks.ai/models/fireworks/glm-5p1
+//   - https://app.fireworks.ai/models/fireworks/glm-5p2
 var glmModels = map[string]adaptor.ModelConfig{
 	"accounts/fireworks/models/glm-4p7": {
 		Ratio:                       0.60 * ratio.MilliTokensUsd,
@@ -51,7 +51,7 @@ var glmModels = map[string]adaptor.ModelConfig{
 		SupportedSamplingParameters: fwChatSamplingParams,
 		Quantization:                "fp8",
 		HuggingFaceID:               "zai-org/GLM-5.1-FP8",
-		Description:                 "Z.ai GLM-5.1 (754B MoE) flagship for agentic engineering with stronger coding and sustained long-horizon multi-turn performance.",
+		Description:                 "Z.ai GLM-5.1 (754B MoE) for agentic engineering and sustained long-horizon work. No longer listed as serverless on 2026-08-18; retained for dedicated/on-demand deployments, with GLM 5.2 as the current serverless successor.",
 	},
 	"accounts/fireworks/models/glm-5p2": {
 		Ratio:                       1.40 * ratio.MilliTokensUsd,

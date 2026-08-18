@@ -5,16 +5,16 @@ import (
 )
 
 // Reusable metadata fragments. Fireworks publishes per-model cards at
-// https://fireworks.ai/models/<provider>/<slug> that report context length,
-// HuggingFace lineage, calibration (FP8 quantization), and function calling
-// support. The values below were retrieved 2026-04-21 .. 2026-06-13 from the
-// model-card pages and standardized to the OpenRouter-compatible vocabulary
-// expected by adaptor.ModelConfig.
+// https://app.fireworks.ai/models/<provider>/<slug> that report serverless
+// availability, pricing, context length, Hugging Face lineage, calibration,
+// modalities, and function-calling support. The values below were verified
+// against the live model library and model cards on 2026-08-18 and standardized
+// to the OpenRouter-compatible vocabulary expected by adaptor.ModelConfig.
 //
 // Sources:
-//   - https://fireworks.ai/models
+//   - https://app.fireworks.ai/models
 //   - https://fireworks.ai/pricing
-//   - Per-model cards under https://fireworks.ai/models/<provider>/<slug>
+//   - Per-model cards under https://app.fireworks.ai/models/<provider>/<slug>
 var (
 	// fwTextOnlyModalities advertises a chat model that consumes and emits text only.
 	fwTextOnlyModalities = []string{"text"}
@@ -52,9 +52,9 @@ var (
 		"stop",
 	}
 
-	// fwChatFeatures lists capabilities Fireworks advertises for general chat
-	// models — tool calling, JSON mode, and structured outputs are universally
-	// available on the Fireworks chat completions endpoint.
+	// fwChatFeatures lists the common capabilities advertised by Fireworks
+	// models that support tool calling. Models with narrower model-card support
+	// override this list instead of inheriting unsupported features.
 	fwChatFeatures = []string{"tools", "json_mode", "structured_outputs"}
 	// fwReasoningFeatures adds the "reasoning" capability for thinking models.
 	fwReasoningFeatures = []string{"tools", "json_mode", "structured_outputs", "reasoning"}
@@ -69,25 +69,21 @@ var (
 	fwRerankSamplingParams = []string{"query", "documents", "top_n", "return_documents"}
 )
 
-// ModelRatios contains Fireworks serverless models with their per-token pricing
-// and capability metadata. Family-specific maps are defined in dedicated files
-// (models_deepseek.go, models_glm.go, etc.) and merged here at package init.
+// ModelRatios contains curated Fireworks catalog models with their per-token
+// pricing and capability metadata. Family-specific maps are defined in
+// dedicated files and merged here at package init.
 //
-// Fireworks model IDs always use the "accounts/fireworks/models/<slug>" resource name.
-// Pricing reference: https://fireworks.ai/pricing#serverless-pricing (retrieved 2026-04-28).
+// Current serverless catalog entries use the
+// "accounts/fireworks/models/<slug>" resource name. Legacy dedicated-only
+// embedding entries retain the model IDs accepted by their older endpoints.
 //
-// Pricing buckets:
-//   - <4B dense: $0.10/1M flat
-//   - 4B-16B dense: $0.20/1M flat
-//   - >16B dense: $0.90/1M flat
-//   - MoE 0-56B: $0.50/1M flat
-//   - MoE 56.1-176B: $1.20/1M flat
+// Per-model serverless prices and availability are sourced from the live model
+// library and individual cards (verified 2026-08-18). Generic dedicated
+// deployment buckets remain documented at https://fireworks.ai/pricing.
 //
-// Popular flagship models use per-model pricing listed on each family page.
-//
-// Capability metadata (context length, modalities, HuggingFaceID, quantization)
-// is sourced from the per-model Fireworks cards. Fireworks typically serves
-// open-weight checkpoints as FP16/BF16; "Calibrated: Yes" cards run in FP8.
+// Capability metadata (context length, modalities, Hugging Face lineage, and
+// quantization where explicitly published) is sourced from the model cards and
+// upstream model repositories.
 var ModelRatios = mergeModelMaps(
 	deepseekModels,
 	glmModels,
@@ -96,6 +92,7 @@ var ModelRatios = mergeModelMaps(
 	qwenModels,
 	minimaxModels,
 	nvidiaModels,
+	frontierModels,
 	llamaModels,
 	mistralModels,
 	rerankModels,
@@ -119,5 +116,5 @@ func mergeModelMaps(maps ...map[string]adaptor.ModelConfig) map[string]adaptor.M
 }
 
 // FireworksToolingDefaults records that Fireworks does not publish provider-level
-// built-in tool pricing (retrieved 2026-04-21).
+// built-in tool pricing (retrieved 2026-08-18).
 var FireworksToolingDefaults = adaptor.ChannelToolConfig{}

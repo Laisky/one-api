@@ -5,11 +5,42 @@ import (
 	"github.com/Laisky/one-api/relay/billing/ratio"
 )
 
-// deepseekModels contains DeepSeek family models served by Fireworks (V3, V3.1,
-// V3.2, R1-0528, V4-Pro). Capability metadata sourced from the per-model
-// Fireworks cards under https://fireworks.ai/models/{fireworks,deepseek-ai}/...
+// deepseekModels contains DeepSeek family models served by Fireworks. Sources:
+//   - https://app.fireworks.ai/models/fireworks/deepseek-v4-pro-0813
+//   - https://app.fireworks.ai/models/fireworks/deepseek-v4-flash-0731
+//   - Historical per-model cards under https://app.fireworks.ai/models/{fireworks,deepseek-ai}/...
 var deepseekModels = map[string]adaptor.ModelConfig{
-	// DeepSeek V4 Pro — $1.74 in / $3.48 out, discounted cached input listed separately.
+	// Official DeepSeek V4 releases (August 2026).
+	"accounts/fireworks/models/deepseek-v4-pro-0813": {
+		Ratio:                       1.32 * ratio.MilliTokensUsd,
+		CompletionRatio:             3.96 / 1.32,
+		CachedInputRatio:            0.044 * ratio.MilliTokensUsd,
+		ContextLength:               1048576,
+		MaxOutputTokens:             131072,
+		InputModalities:             fwTextOnlyModalities,
+		OutputModalities:            fwTextOnlyModalities,
+		SupportedFeatures:           fwReasoningFeatures,
+		SupportedSamplingParameters: fwChatSamplingParams,
+		Quantization:                "fp8",
+		HuggingFaceID:               "deepseek-ai/DeepSeek-V4-Pro-0813",
+		Description:                 "Official DeepSeek V4 Pro release (1.6T MoE) with DSpark speculative decoding, 1M-token context, stronger production agent performance, and function calling.",
+	},
+	"accounts/fireworks/models/deepseek-v4-flash-0731": {
+		Ratio:                       0.14 * ratio.MilliTokensUsd,
+		CompletionRatio:             0.28 / 0.14,
+		CachedInputRatio:            0.028 * ratio.MilliTokensUsd,
+		ContextLength:               1048576,
+		MaxOutputTokens:             131072,
+		InputModalities:             fwTextOnlyModalities,
+		OutputModalities:            fwTextOnlyModalities,
+		SupportedFeatures:           fwReasoningFeatures,
+		SupportedSamplingParameters: fwChatSamplingParams,
+		Quantization:                "fp8",
+		HuggingFaceID:               "deepseek-ai/DeepSeek-V4-Flash-0731",
+		Description:                 "Official DeepSeek V4 Flash release (304B MoE) with DSpark speculative decoding, 1M-token context, enhanced agentic capability, and function calling.",
+	},
+
+	// DeepSeek V4 Pro preview — $1.74 in / $3.48 out, discounted cached input listed separately.
 	"accounts/fireworks/models/deepseek-v4-pro": {
 		Ratio:                       1.74 * ratio.MilliTokensUsd,
 		CompletionRatio:             3.48 / 1.74,
@@ -22,7 +53,7 @@ var deepseekModels = map[string]adaptor.ModelConfig{
 		SupportedSamplingParameters: fwReasoningSamplingParams,
 		Quantization:                "fp16",
 		HuggingFaceID:               "deepseek-ai/DeepSeek-V4-Pro",
-		Description:                 "DeepSeek V4 Pro flagship MoE (1.6T params) with hybrid attention for 1M-token context, frontier reasoning, and advanced coding.",
+		Description:                 "DeepSeek V4 Pro preview (1.6T MoE) with hybrid attention and 1M-token context. Still listed on Fireworks serverless as of 2026-08-18, but superseded by deepseek-v4-pro-0813.",
 	},
 
 	// DeepSeek V3 family — $0.56 in / $1.68 out, 50% cached discount.
@@ -87,7 +118,7 @@ var deepseekModels = map[string]adaptor.ModelConfig{
 		Description:               "DeepSeek R1 05/28 reasoning checkpoint (674B MoE) approaching o3/Gemini 2.5 Pro on complex reasoning benchmarks. Retired from Fireworks serverless (confirmed via model card, 2026-07-13); on-demand/dedicated only.",
 	},
 
-	// DeepSeek V4 Flash — $0.14 in / $0.28 out, cached $0.028.
+	// DeepSeek V4 Flash preview — retained for dedicated/on-demand compatibility.
 	"accounts/fireworks/models/deepseek-v4-flash": {
 		Ratio:                       0.14 * ratio.MilliTokensUsd,
 		CompletionRatio:             0.28 / 0.14,
@@ -100,6 +131,6 @@ var deepseekModels = map[string]adaptor.ModelConfig{
 		SupportedSamplingParameters: fwChatSamplingParams,
 		Quantization:                "fp8",
 		HuggingFaceID:               "deepseek-ai/DeepSeek-V4-Flash",
-		Description:                 "DeepSeek V4 Flash hosted on Fireworks, 1M context, $0.14/$0.28 per 1M tokens.",
+		Description:                 "DeepSeek V4 Flash preview with 1M-token context. No longer listed as serverless on 2026-08-18 and superseded by deepseek-v4-flash-0731; retained for dedicated/on-demand deployments.",
 	},
 }

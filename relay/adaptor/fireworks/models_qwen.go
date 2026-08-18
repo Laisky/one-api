@@ -9,6 +9,30 @@ import (
 // Reranker and embedding members of the Qwen3 family live in models_rerank.go
 // and models_embedding.go respectively.
 var qwenModels = map[string]adaptor.ModelConfig{
+	"accounts/fireworks/models/qwen3p8-max": {
+		Ratio:                       2.00 * ratio.MilliTokensUsd,
+		CompletionRatio:             6.00 / 2.00,
+		CachedInputRatio:            0.25 * ratio.MilliTokensUsd,
+		InputModalities:             fwTextImageInModalities,
+		OutputModalities:            fwTextOnlyModalities,
+		SupportedFeatures:           fwChatFeatures,
+		SupportedSamplingParameters: fwChatSamplingParams,
+		HuggingFaceID:               "Qwen/Qwen3.8-2.4T-A95B",
+		Description:                 "Fireworks Qwen 3.8 Max serverless endpoint for multimodal, long-horizon coding, professional work, research, and agentic tasks. The Fireworks card does not currently publish a context limit.",
+	},
+	"accounts/fireworks/models/qwen3p8-2p4t-a95b": {
+		Ratio:                       2.00 * ratio.MilliTokensUsd,
+		CompletionRatio:             6.00 / 2.00,
+		CachedInputRatio:            0.25 * ratio.MilliTokensUsd,
+		ContextLength:               262144,
+		MaxOutputTokens:             32768,
+		InputModalities:             fwTextOnlyModalities,
+		OutputModalities:            fwTextOnlyModalities,
+		SupportedFeatures:           fwChatFeatures,
+		SupportedSamplingParameters: fwChatSamplingParams,
+		HuggingFaceID:               "Qwen/Qwen3.8-2.4T-A95B",
+		Description:                 "Alibaba Qwen3.8 2.4T-A95B sparse MoE (about 95B active) for autonomous long-horizon coding and research, with 262K context and function calling.",
+	},
 	"accounts/fireworks/models/qwen3-vl-30b-a3b-thinking": {
 		Ratio:                       0.15 * ratio.MilliTokensUsd,
 		CompletionRatio:             0.60 / 0.15,
