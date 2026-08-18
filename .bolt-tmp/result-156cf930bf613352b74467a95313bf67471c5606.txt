@@ -1,0 +1,69 @@
+commit=156cf930bf613352b74467a95313bf67471c5606
+go version go1.26.3 linux/amd64
+
+=== Exact unit test ===
+SESSION_SECRET not set, using random secret
+=== RUN   TestAIProxyDocuments2Markdown
+=== PAUSE TestAIProxyDocuments2Markdown
+=== CONT  TestAIProxyDocuments2Markdown
+=== RUN   TestAIProxyDocuments2Markdown/empty
+=== PAUSE TestAIProxyDocuments2Markdown/empty
+=== RUN   TestAIProxyDocuments2Markdown/single_document
+=== PAUSE TestAIProxyDocuments2Markdown/single_document
+=== RUN   TestAIProxyDocuments2Markdown/preserves_order_and_raw_markdown_characters
+=== PAUSE TestAIProxyDocuments2Markdown/preserves_order_and_raw_markdown_characters
+=== CONT  TestAIProxyDocuments2Markdown/empty
+=== CONT  TestAIProxyDocuments2Markdown/preserves_order_and_raw_markdown_characters
+=== CONT  TestAIProxyDocuments2Markdown/single_document
+--- PASS: TestAIProxyDocuments2Markdown (0.00s)
+    --- PASS: TestAIProxyDocuments2Markdown/empty (0.00s)
+    --- PASS: TestAIProxyDocuments2Markdown/preserves_order_and_raw_markdown_characters (0.00s)
+    --- PASS: TestAIProxyDocuments2Markdown/single_document (0.00s)
+PASS
+ok  	github.com/Laisky/one-api/relay/adaptor/aiproxy	0.014s
+
+=== Existing externally observable stream behavior test ===
+SESSION_SECRET not set, using random secret
+=== RUN   TestStreamHandler_RoutesDocumentsThroughRewriter
+--- PASS: TestStreamHandler_RoutesDocumentsThroughRewriter (0.00s)
+PASS
+ok  	github.com/Laisky/one-api/relay/adaptor/aiproxy	0.008s
+
+=== Benchmark (same runner, 10 samples, 750 ms each) ===
+SESSION_SECRET not set, using random secret
+goos: linux
+goarch: amd64
+pkg: github.com/Laisky/one-api/relay/adaptor/aiproxy
+cpu: AMD EPYC 9V74 80-Core Processor                
+BenchmarkAIProxyDocuments2Markdown/1_documents-4         	13305525	        75.51 ns/op	1800.97 MB/s	     144 B/op	       1 allocs/op
+BenchmarkAIProxyDocuments2Markdown/1_documents-4         	 9560163	        84.66 ns/op	1606.49 MB/s	     144 B/op	       1 allocs/op
+BenchmarkAIProxyDocuments2Markdown/1_documents-4         	12856612	        67.03 ns/op	2029.08 MB/s	     144 B/op	       1 allocs/op
+BenchmarkAIProxyDocuments2Markdown/1_documents-4         	13256215	        66.96 ns/op	2031.16 MB/s	     144 B/op	       1 allocs/op
+BenchmarkAIProxyDocuments2Markdown/1_documents-4         	13285066	        67.65 ns/op	2010.37 MB/s	     144 B/op	       1 allocs/op
+BenchmarkAIProxyDocuments2Markdown/1_documents-4         	12827961	        68.01 ns/op	1999.84 MB/s	     144 B/op	       1 allocs/op
+BenchmarkAIProxyDocuments2Markdown/1_documents-4         	13493666	        67.30 ns/op	2020.81 MB/s	     144 B/op	       1 allocs/op
+BenchmarkAIProxyDocuments2Markdown/1_documents-4         	13041076	        67.26 ns/op	2022.03 MB/s	     144 B/op	       1 allocs/op
+BenchmarkAIProxyDocuments2Markdown/1_documents-4         	13300957	        66.81 ns/op	2035.60 MB/s	     144 B/op	       1 allocs/op
+BenchmarkAIProxyDocuments2Markdown/1_documents-4         	13276227	        67.85 ns/op	2004.47 MB/s	     144 B/op	       1 allocs/op
+BenchmarkAIProxyDocuments2Markdown/10_documents-4        	 2415460	       377.5 ns/op	3062.41 MB/s	    1280 B/op	       1 allocs/op
+BenchmarkAIProxyDocuments2Markdown/10_documents-4        	 2351887	       371.1 ns/op	3115.29 MB/s	    1280 B/op	       1 allocs/op
+BenchmarkAIProxyDocuments2Markdown/10_documents-4        	 2441304	       371.3 ns/op	3113.04 MB/s	    1280 B/op	       1 allocs/op
+BenchmarkAIProxyDocuments2Markdown/10_documents-4        	 2390350	       371.8 ns/op	3109.02 MB/s	    1280 B/op	       1 allocs/op
+BenchmarkAIProxyDocuments2Markdown/10_documents-4        	 2395004	       373.4 ns/op	3095.98 MB/s	    1280 B/op	       1 allocs/op
+BenchmarkAIProxyDocuments2Markdown/10_documents-4        	 2385660	       388.8 ns/op	2973.47 MB/s	    1280 B/op	       1 allocs/op
+BenchmarkAIProxyDocuments2Markdown/10_documents-4        	 2351532	       386.5 ns/op	2990.94 MB/s	    1280 B/op	       1 allocs/op
+BenchmarkAIProxyDocuments2Markdown/10_documents-4        	 2339544	       380.6 ns/op	3037.54 MB/s	    1280 B/op	       1 allocs/op
+BenchmarkAIProxyDocuments2Markdown/10_documents-4        	 2392322	       373.5 ns/op	3095.42 MB/s	    1280 B/op	       1 allocs/op
+BenchmarkAIProxyDocuments2Markdown/10_documents-4        	 2437869	       372.3 ns/op	3104.80 MB/s	    1280 B/op	       1 allocs/op
+BenchmarkAIProxyDocuments2Markdown/100_documents-4       	  282259	      3053 ns/op	3799.46 MB/s	   12294 B/op	       3 allocs/op
+BenchmarkAIProxyDocuments2Markdown/100_documents-4       	  276757	      3078 ns/op	3767.85 MB/s	   12294 B/op	       3 allocs/op
+BenchmarkAIProxyDocuments2Markdown/100_documents-4       	  277142	      3087 ns/op	3757.25 MB/s	   12294 B/op	       3 allocs/op
+BenchmarkAIProxyDocuments2Markdown/100_documents-4       	  271966	      3047 ns/op	3806.82 MB/s	   12294 B/op	       3 allocs/op
+BenchmarkAIProxyDocuments2Markdown/100_documents-4       	  279042	      3089 ns/op	3754.81 MB/s	   12294 B/op	       3 allocs/op
+BenchmarkAIProxyDocuments2Markdown/100_documents-4       	  284121	      3042 ns/op	3813.39 MB/s	   12294 B/op	       3 allocs/op
+BenchmarkAIProxyDocuments2Markdown/100_documents-4       	  281614	      3034 ns/op	3823.12 MB/s	   12294 B/op	       3 allocs/op
+BenchmarkAIProxyDocuments2Markdown/100_documents-4       	  282675	      3042 ns/op	3813.46 MB/s	   12294 B/op	       3 allocs/op
+BenchmarkAIProxyDocuments2Markdown/100_documents-4       	  275486	      3040 ns/op	3814.90 MB/s	   12294 B/op	       3 allocs/op
+BenchmarkAIProxyDocuments2Markdown/100_documents-4       	  286430	      3064 ns/op	3785.92 MB/s	   12294 B/op	       3 allocs/op
+PASS
+ok  	github.com/Laisky/one-api/relay/adaptor/aiproxy	31.447s
