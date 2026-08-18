@@ -1,4 +1,4 @@
-name: bolt-verify
+name: bolt-full-validation
 
 on:
   push:
@@ -6,12 +6,13 @@ on:
       - 'bolt/perf-20260818'
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  verify:
-    if: github.actor != 'github-actions[bot]'
+  go_quality:
+    name: Go format, vet, lint, and analyzers
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -22,33 +23,179 @@ jobs:
           go-version: '1.26.3'
           cache: true
 
-      - name: Run correctness checks and benchmark
+      - name: Check formatting
         shell: bash
         run: |
-          set -u
-          mkdir -p .bolt-tmp
-          result=".bolt-tmp/result-${GITHUB_SHA}.txt"
+          set -euo pipefail
+          files=(
+            relay/adaptor/aiproxy/main.go
+            relay/adaptor/aiproxy/documents_benchmark_test.go
+          )
+          unformatted="$(gofmt -s -l "${files[@]}")"
+          test -z "$unformatted" || {
+            echo "The following files require gofmt -s:"
+            echo "$unformatted"
+            exit 1
+          }
 
-          set +e
-          {
-            echo "commit=${GITHUB_SHA}"
-            go version
-            echo
-            echo '=== Exact unit test ==='
-            go test -count=1 -v ./relay/adaptor/aiproxy -run '^TestAIProxyDocuments2Markdown$' &&
-            echo &&
-            echo '=== Existing externally observable stream behavior test ===' &&
-            go test -count=1 -v ./relay/adaptor/aiproxy -run '^TestStreamHandler_RoutesDocumentsThroughRewriter$' &&
-            echo &&
-            echo '=== Benchmark (same runner, 10 samples, 750 ms each) ===' &&
-            go test ./relay/adaptor/aiproxy -run '^$' -bench '^BenchmarkAIProxyDocuments2Markdown$' -benchmem -benchtime=750ms -count=10
-          } > "$result" 2>&1
-          status=$?
-          set -e
+      - name: Check module metadata
+        run: go mod tidy -diff
 
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add "$result"
-          git commit -m "ci: record Bolt verification for ${GITHUB_SHA}"
-          git push
-          exit "$status"
+      - name: Run go vet
+        run: go vet ./...
+
+      - name: Run entity response analyzer
+        run: go run ./tools/analyzers/noentityresponse/cmd/noentityresponse ./...
+
+      - name: Run golangci-lint
+        uses: golangci/golangci-lint-action@v8
+        with:
+          version: v2.10.1
+          args: --config=.golangci.yml
+
+  goroutine_guard:
+    name: Goroutine gin.Context guardrail
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install ast-grep
+        env:
+          ASG_VERSION: 0.43.0
+          ASG_SHA256: a26253a9c821d935f7e383e40f0de7c2ca62a4121de1f73a6d81ec32eae631e0
+        run: |
+          set -euo pipefail
+          curl -fsSL -o ast-grep.zip \
+            "https://github.com/ast-grep/ast-grep/releases/download/${ASG_VERSION}/app-x86_64-unknown-linux-gnu.zip"
+          echo "${ASG_SHA256}  ast-grep.zip" | sha256sum -c -
+          mkdir -p "$HOME/.local/bin"
+          unzip -o ast-grep.zip -d "$HOME/.local/bin"
+          chmod +x "$HOME/.local/bin/ast-grep" "$HOME/.local/bin/sg"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Verify and scan guardrails
+        run: |
+          ast-grep test --skip-snapshot-tests
+          ast-grep scan
+
+  go_tests:
+    name: Full Go race tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: oneapi
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -proot"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=12
+          --health-start-period=20s
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: oneapi
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres -d oneapi"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=12
+          --health-start-period=10s
+    env:
+      MYSQL_DSN: root:root@tcp(127.0.0.1:3306)/oneapi?charset=utf8mb4&parseTime=True&loc=Local
+      PG_DSN: postgres://postgres:postgres@127.0.0.1:5432/oneapi?sslmode=disable
+      MYSQL_LOG_DSN: root:root@tcp(127.0.0.1:3306)/oneapi_log?charset=utf8mb4&parseTime=True&loc=Local
+      PG_LOG_DSN: postgres://postgres:postgres@127.0.0.1:5432/oneapi_log?sslmode=disable
+      COMPACT_UUID_TEST_MYSQL_DSN: root:root@tcp(127.0.0.1:3306)/oneapi?charset=utf8mb4&parseTime=True&loc=Local
+      COMPACT_UUID_TEST_POSTGRES_DSN: postgres://postgres:postgres@127.0.0.1:5432/oneapi?sslmode=disable
+      COMPACT_UUID_TEST_LOG_MYSQL_DSN: root:root@tcp(127.0.0.1:3306)/oneapi_log?charset=utf8mb4&parseTime=True&loc=Local
+      COMPACT_UUID_TEST_LOG_POSTGRES_DSN: postgres://postgres:postgres@127.0.0.1:5432/oneapi_log?sslmode=disable
+      COMPACT_UUID_TEST_POSTGRES_BASE_DSN: postgres://postgres:postgres@127.0.0.1:5432/oneapi_workload_base?sslmode=disable
+      ONEAPI_REQUIRE_DB_BACKENDS: '1'
+      CGO_ENABLED: '1'
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.26.3'
+          cache: true
+
+      - name: Install runtime and database clients
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q ffmpeg mysql-client postgresql-client
+
+      - name: Create secondary databases
+        env:
+          MYSQL_PWD: root
+          PGPASSWORD: postgres
+        run: |
+          set -euo pipefail
+          mysql -h 127.0.0.1 -P 3306 -uroot \
+            -e "CREATE DATABASE IF NOT EXISTS oneapi_log CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;"
+          for db in oneapi_log oneapi_workload_base; do
+            psql -h 127.0.0.1 -p 5432 -U postgres -d postgres -tAc \
+              "SELECT 1 FROM pg_database WHERE datname = '${db}'" | grep -q 1 \
+              || psql -h 127.0.0.1 -p 5432 -U postgres -d postgres -c "CREATE DATABASE ${db};"
+          done
+
+      - name: Run full test suite with race detector
+        run: go test -race -v ./...
+
+  frontend:
+    name: Frontend ${{ matrix.app }} tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        app: [modern, air, berry]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: yarn
+          cache-dependency-path: web/${{ matrix.app }}/yarn.lock
+
+      - name: Install dependencies
+        working-directory: web/${{ matrix.app }}
+        run: yarn install --network-timeout 600000
+
+      - name: Run tests
+        working-directory: web/${{ matrix.app }}
+        env:
+          CI: true
+        shell: bash
+        run: |
+          if [[ '${{ matrix.app }}' == 'modern' ]]; then
+            yarn test --run --passWithNoTests
+          else
+            yarn test --watchAll=false --passWithNoTests
+          fi
+
+      - name: Lint, type-check, and build modern frontend
+        if: matrix.app == 'modern'
+        working-directory: web/modern
+        run: |
+          yarn lint
+          yarn type-check
+          yarn build
