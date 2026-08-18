@@ -32,7 +32,7 @@ func (a *Adaptor) GetChannelName() string {
 }
 
 func (a *Adaptor) GetModelList() []string {
-	return adaptor.GetModelListFromPricing(ModelRatios)
+	return slices.Clone(ModelList)
 }
 
 // GetDefaultModelPricing returns the pricing information for Groq models
@@ -109,9 +109,10 @@ func (a *Adaptor) ConvertRequest(c *gin.Context, relayMode int, request *model.G
 		promotedEffort = true
 	}
 
-	// Normalize/guard against model-specific reasoning_effort values. GPT-OSS and
-	// MiniMax currently accept low/medium/high, while Qwen 3.6 also accepts
-	// none/default. Unknown models retain the conservative GPT-OSS set.
+	// Normalize/guard against model-specific reasoning_effort values. GPT-OSS
+	// models advertise low/medium/high, Qwen 3.6 advertises none/default, and
+	// known models without a published effort vocabulary drop the field.
+	// Unknown custom models retain the conservative GPT-OSS set.
 	if request.ReasoningEffort != nil {
 		val := strings.ToLower(strings.TrimSpace(*request.ReasoningEffort))
 		if !groqReasoningEffortAllowed(request.Model, val) {
@@ -161,7 +162,7 @@ func (a *Adaptor) ConvertRequest(c *gin.Context, relayMode int, request *model.G
 // published for the requested Groq model. Unknown models use the conservative
 // low/medium/high set to avoid forwarding provider-specific values blindly.
 func groqReasoningEffortAllowed(modelName, effort string) bool {
-	if config, ok := ModelRatios[modelName]; ok && len(config.SupportedReasoningEfforts) > 0 {
+	if config, ok := ModelRatios[modelName]; ok {
 		for _, supported := range config.SupportedReasoningEfforts {
 			if effort == strings.ToLower(strings.TrimSpace(supported)) {
 				return true

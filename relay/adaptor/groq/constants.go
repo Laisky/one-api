@@ -10,8 +10,11 @@ import (
 // quantization label, so the Quantization field is intentionally left empty
 // (omitempty) for those models.
 //
-// Sources (last audited 2026-08-13):
+// Sources (last audited 2026-08-18):
 //   - https://console.groq.com/docs/models
+//   - https://console.groq.com/docs/deprecations
+//   - https://console.groq.com/docs/reasoning
+//   - https://console.groq.com/docs/prompt-caching
 //   - https://console.groq.com/docs/agentic-tooling
 //   - Per-model pages under https://console.groq.com/docs/model/<id>
 var (
@@ -55,17 +58,29 @@ var (
 		"reasoning_effort",
 	}
 
+	// groqReasoningNoEffortSamplingParams is used by reasoning models for
+	// which Groq does not publish a discrete reasoning_effort vocabulary.
+	groqReasoningNoEffortSamplingParams = []string{
+		"max_tokens",
+		"stop",
+		"seed",
+		"response_format",
+		"tools",
+		"tool_choice",
+	}
+
 	// groqClassifierSamplingParams covers the minimal parameter set for
 	// classifier-style guard models that emit a fixed label set.
 	groqClassifierSamplingParams = []string{"max_tokens", "seed"}
 )
 
-// ModelRatios contains all supported models and their pricing ratios.
-// Model list is derived from the keys of this map, eliminating redundancy.
-// Pricing source: https://console.groq.com/docs/models
-// Capability source: https://console.groq.com/docs/models
+// ModelRatios contains the current Groq catalog plus retired model IDs kept
+// for enterprise committed-spend compatibility and historical billing.
+// The public model list is intentionally maintained separately below.
+// Pricing and capability source: https://console.groq.com/docs/models
 var ModelRatios = map[string]adaptor.ModelConfig{
-	// Production Models
+	// Retired production IDs. Groq removed these from free and developer plans
+	// on 2026-08-16; committed-spend enterprise access may continue.
 	"llama-3.3-70b-versatile": {
 		Ratio:                       0.59 * ratio.MilliTokensUsd,
 		CompletionRatio:             0.79 / 0.59,
@@ -76,7 +91,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs"},
 		SupportedSamplingParameters: groqChatSamplingParams,
 		HuggingFaceID:               "meta-llama/Llama-3.3-70B-Instruct",
-		Description:                 "Meta's 70B Llama 3.3 instruct model served on Groq's LPU with 131K context and tool/JSON support. DEPRECATED: Groq is shutting down this model on 2026-08-16; migrate to openai/gpt-oss-120b or qwen/qwen3.6-27b. Source: https://console.groq.com/docs/deprecations",
+		Description:                 "Meta's 70B Llama 3.3 instruct model served on Groq's LPU with 131K context and tool/JSON support. RETIRED from free and developer plans on 2026-08-16; committed-spend enterprise access may continue. Migrate to openai/gpt-oss-120b or qwen/qwen3.6-27b.",
 	},
 	"llama-3.1-8b-instant": {
 		Ratio:                       0.05 * ratio.MilliTokensUsd,
@@ -88,8 +103,9 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs"},
 		SupportedSamplingParameters: groqChatSamplingParams,
 		HuggingFaceID:               "meta-llama/Llama-3.1-8B-Instruct",
-		Description:                 "Meta's compact 8B Llama 3.1 instruct model with 131K context, optimized for low-latency chat. DEPRECATED: Groq is shutting down this model on 2026-08-16; migrate to openai/gpt-oss-20b. Source: https://console.groq.com/docs/deprecations",
+		Description:                 "Meta's compact 8B Llama 3.1 instruct model with 131K context, optimized for low-latency chat. RETIRED from free and developer plans on 2026-08-16; committed-spend enterprise access may continue. Migrate to openai/gpt-oss-20b.",
 	},
+	// Current production models.
 	"whisper-large-v3": {
 		Ratio:                       0,
 		CompletionRatio:             1,
@@ -149,7 +165,8 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		Description:               "OpenAI's 20B open-weight MoE reasoning model with browser search and code execution support.",
 	},
 
-	// Preview Models
+	// Retired preview ID. Groq removed it from free and developer plans on
+	// 2026-07-17; committed-spend enterprise access may continue.
 	"meta-llama/llama-4-scout-17b-16e-instruct": {
 		Ratio:                       0.11 * ratio.MilliTokensUsd,
 		CompletionRatio:             0.34 / 0.11,
@@ -160,8 +177,9 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs"},
 		SupportedSamplingParameters: groqChatSamplingParams,
 		HuggingFaceID:               "meta-llama/Llama-4-Scout-17B-16E-Instruct",
-		Description:                 "Meta Llama 4 Scout (17B activated MoE) multimodal model with early-fusion image understanding. DEPRECATED: Groq is shutting down this model on 2026-07-17; migrate to openai/gpt-oss-120b or qwen/qwen3.6-27b. Source: https://console.groq.com/docs/deprecations",
+		Description:                 "Meta Llama 4 Scout (17B activated MoE) multimodal model with early-fusion image understanding. RETIRED from free and developer plans on 2026-07-17; committed-spend enterprise access may continue. Migrate to openai/gpt-oss-120b or qwen/qwen3.6-27b.",
 	},
+	// Current preview models.
 	"meta-llama/llama-prompt-guard-2-22m": {
 		Ratio:                       0.03 * ratio.MilliTokensUsd,
 		CompletionRatio:             1,
@@ -186,19 +204,21 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 	},
 	"openai/gpt-oss-safeguard-20b": {
 		Ratio:                       0.075 * ratio.MilliTokensUsd,
+		CachedInputRatio:            0.0375 * ratio.MilliTokensUsd,
 		CompletionRatio:             0.30 / 0.075,
 		ContextLength:               131072,
 		MaxOutputTokens:             65536,
 		InputModalities:             groqTextOnlyModalities,
 		OutputModalities:            groqTextOnlyModalities,
-		SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs", "reasoning"},
+		SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs", "reasoning", "web_search"},
 		SupportedSamplingParameters: groqReasoningSamplingParams,
-		// Inherits the gpt-oss reasoning_effort surface (low/medium/high).
-		// Source: https://console.groq.com/docs/reasoning
+		// The safeguard model card recommends low/high effort for simple versus
+		// nuanced classifications.
+		// Source: https://console.groq.com/docs/model/openai/gpt-oss-safeguard-20b
 		SupportedReasoningEfforts: []string{"low", "medium", "high"},
 		DefaultReasoningEffort:    "medium",
 		HuggingFaceID:             "openai/gpt-oss-safeguard-20b",
-		Description:               "20B GPT-OSS variant fine-tuned for policy-following safety classification with custom taxonomies.",
+		Description:               "20B GPT-OSS variant for policy-following safety classification with custom taxonomies, prompt caching, browser search, and code execution.",
 	},
 	"qwen/qwen3-32b": {
 		Ratio:                       0.29 * ratio.MilliTokensUsd,
@@ -209,12 +229,12 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		OutputModalities:            groqTextOnlyModalities,
 		SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs", "reasoning"},
 		SupportedSamplingParameters: groqReasoningSamplingParams,
-		// Groq's qwen3 reasoning docs enumerate none/default (null also reasons by default).
-		// Source: https://console.groq.com/docs/model/openai/gpt-oss-safeguard-20b
+		// Groq's legacy Qwen3 reasoning docs enumerate none/default.
+		// Source: https://console.groq.com/docs/reasoning
 		SupportedReasoningEfforts: []string{"none", "default"},
 		DefaultReasoningEffort:    "default",
 		HuggingFaceID:             "Qwen/Qwen3-32B",
-		Description:               "Alibaba Qwen3-32B with switchable thinking/non-thinking modes for reasoning and general dialog. DEPRECATED: Groq is shutting down this model on 2026-07-17; migrate to openai/gpt-oss-120b. Source: https://console.groq.com/docs/deprecations",
+		Description:               "Alibaba Qwen3-32B with switchable thinking/non-thinking modes for reasoning and general dialog. RETIRED from free and developer plans on 2026-07-17; committed-spend enterprise access may continue. Migrate to openai/gpt-oss-120b.",
 	},
 	"qwen/qwen3.6-27b": {
 		Ratio:                       0.60 * ratio.MilliTokensUsd,
@@ -225,9 +245,9 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		OutputModalities:            groqTextOnlyModalities,
 		SupportedFeatures:           []string{"tools", "json_mode", "reasoning"},
 		SupportedSamplingParameters: groqReasoningSamplingParams,
-		// Groq's Qwen 3.6 API accepts none/default plus low/medium/high.
-		// Source: https://console.groq.com/docs/model/qwen/qwen3.6-27b
-		SupportedReasoningEfforts: []string{"none", "default", "low", "medium", "high"},
+		// Groq publishes only none/default for Qwen 3.6 reasoning_effort.
+		// Source: https://console.groq.com/docs/reasoning
+		SupportedReasoningEfforts: []string{"none", "default"},
 		DefaultReasoningEffort:    "default",
 		HuggingFaceID:             "Qwen/Qwen3.6-27B",
 		Description:               "Alibaba Qwen3.6-27B multimodal model (text + image input) with switchable thinking/non-thinking modes via reasoning_effort.",
@@ -239,14 +259,12 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		MaxOutputTokens:             131072,
 		InputModalities:             groqTextOnlyModalities,
 		OutputModalities:            groqTextOnlyModalities,
-		SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs", "reasoning"},
-		SupportedSamplingParameters: groqReasoningSamplingParams,
-		SupportedReasoningEfforts:   []string{"low", "medium", "high"},
-		DefaultReasoningEffort:      "medium",
-		Description:                 "MiniMax M2.7 enterprise preview model with 196K context and 131K maximum output. Pricing is contact-sales only.",
+		SupportedFeatures:           []string{"tools", "json_mode", "reasoning"},
+		SupportedSamplingParameters: groqReasoningNoEffortSamplingParams,
+		Description:                 "MiniMax M2.7 enterprise preview reasoning model with 196K context and 131K maximum output. Pricing is contact-sales only.",
 	},
 
-	// New Models (Jan 2026)
+	// Current preview text-to-speech models.
 	"canopylabs/orpheus-arabic-saudi": {
 		Ratio:            40.0 * ratio.MilliTokensUsd, // per 1M characters
 		CompletionRatio:  1,
@@ -266,6 +284,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		HuggingFaceID:    "canopylabs/orpheus-3b-0.1-ft",
 		Description:      "Canopy Labs Orpheus v1 English text-to-speech (Llama-3.2-3B backbone) with bracketed vocal direction tags.",
 	},
+	// Current production systems.
 	"groq/compound": {
 		Ratio:                       0,
 		CompletionRatio:             1,
@@ -290,8 +309,22 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 	},
 }
 
-// ModelList derived from ModelRatios for backward compatibility.
-var ModelList = adaptor.GetModelListFromPricing(ModelRatios)
+// ModelList mirrors the active model IDs published by Groq on 2026-08-18.
+var ModelList = []string{
+	"openai/gpt-oss-120b",
+	"openai/gpt-oss-20b",
+	"whisper-large-v3",
+	"whisper-large-v3-turbo",
+	"groq/compound",
+	"groq/compound-mini",
+	"canopylabs/orpheus-arabic-saudi",
+	"canopylabs/orpheus-v1-english",
+	"meta-llama/llama-prompt-guard-2-22m",
+	"meta-llama/llama-prompt-guard-2-86m",
+	"minimaxai/minimax-m2.7",
+	"openai/gpt-oss-safeguard-20b",
+	"qwen/qwen3.6-27b",
+}
 
 // GroqToolingDefaults records no fixed tool tariff because the current Groq
 // documentation lists the available Compound tools but does not publish a
