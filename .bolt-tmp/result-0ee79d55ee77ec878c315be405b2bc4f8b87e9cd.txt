@@ -1,0 +1,172 @@
+commit=0ee79d55ee77ec878c315be405b2bc4f8b87e9cd
+go version go1.26.3 linux/amd64
+
+=== Exact unit test ===
+go: downloading github.com/Laisky/gin-middlewares/v7 v7.0.3-0.20260320133617-ccf155d4ffea
+go: downloading github.com/Laisky/errors/v2 v2.0.1
+go: downloading github.com/Laisky/zap v1.27.1-0.20260318034917-6e5a9fb2b3d1
+go: downloading github.com/gin-gonic/gin v1.12.0
+go: downloading github.com/stretchr/testify v1.11.1
+go: downloading github.com/Laisky/go-utils/v6 v6.3.0
+go: downloading github.com/gin-contrib/static v1.1.6
+go: downloading github.com/go-playground/validator/v10 v10.30.3
+go: downloading github.com/go-redis/redis/v8 v8.11.5
+go: downloading github.com/go-sql-driver/mysql v1.10.0
+go: downloading golang.org/x/crypto v0.54.0
+go: downloading go.opentelemetry.io/otel/trace v1.44.0
+go: downloading go.opentelemetry.io/otel v1.44.0
+go: downloading github.com/gorilla/websocket v1.5.3
+go: downloading github.com/pkoukk/tiktoken-go v0.1.8
+go: downloading github.com/gin-contrib/sse v1.1.1
+go: downloading github.com/mattn/go-isatty v0.0.22
+go: downloading github.com/quic-go/quic-go v0.60.0
+go: downloading golang.org/x/net v0.57.0
+go: downloading github.com/Laisky/go-gin-prometheus v1.0.1
+go: downloading github.com/Laisky/pprof v0.0.0-20231102060718-a7a7fd2965ee
+go: downloading github.com/golang-jwt/jwt/v5 v5.3.1
+go: downloading go.uber.org/multierr v1.11.0
+go: downloading github.com/cespare/xxhash/v2 v2.3.0
+go: downloading github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f
+go: downloading github.com/cespare/xxhash v1.1.0
+go: downloading filippo.io/edwards25519 v1.2.0
+go: downloading github.com/gabriel-vasile/mimetype v1.4.13
+go: downloading github.com/go-playground/universal-translator v0.18.1
+go: downloading github.com/leodido/go-urn v1.4.0
+go: downloading golang.org/x/text v0.40.0
+go: downloading github.com/go-webauthn/webauthn v0.17.4
+go: downloading github.com/google/uuid v1.6.0
+go: downloading gorm.io/driver/mysql v1.6.0
+go: downloading gorm.io/driver/postgres v1.6.0
+go: downloading gorm.io/driver/sqlite v1.6.0
+go: downloading gorm.io/gorm v1.31.2
+go: downloading gorm.io/plugin/opentelemetry v0.1.16
+go: downloading github.com/Laisky/go-chaining v0.0.0-20180507092046-43dcdc5a21be
+go: downloading github.com/Laisky/golang-fifo v1.0.1-0.20240403092208-1d90c6c33e11
+go: downloading github.com/fsnotify/fsnotify v1.10.1
+go: downloading github.com/google/go-cpy v0.0.0-20211218193943-a9c933c06932
+go: downloading github.com/json-iterator/go v1.1.12
+go: downloading go.uber.org/automaxprocs v1.6.0
+go: downloading golang.org/x/sync v0.22.0
+go: downloading golang.org/x/term v0.45.0
+go: downloading github.com/Laisky/graphql v1.0.6
+go: downloading golang.org/x/image v0.44.0
+go: downloading github.com/dlclark/regexp2 v1.12.0
+go: downloading github.com/goccy/go-yaml v1.19.2
+go: downloading github.com/pelletier/go-toml/v2 v2.4.3
+go: downloading github.com/ugorji/go/codec v1.3.1
+go: downloading go.mongodb.org/mongo-driver/v2 v2.7.0
+go: downloading google.golang.org/protobuf v1.36.11
+go: downloading golang.org/x/sys v0.47.0
+go: downloading github.com/quic-go/qpack v0.6.0
+go: downloading github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc
+go: downloading github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2
+go: downloading github.com/prometheus/client_golang v1.23.2
+go: downloading github.com/sirupsen/logrus v1.9.4
+go: downloading github.com/go-playground/locales v0.14.1
+go: downloading github.com/go-viper/mapstructure/v2 v2.5.0
+go: downloading github.com/tinylib/msgp v1.6.4
+go: downloading github.com/google/go-tpm v0.9.8
+go: downloading github.com/go-logr/logr v1.4.3
+go: downloading go.opentelemetry.io/otel/metric v1.44.0
+go: downloading github.com/jackc/pgx/v5 v5.10.0
+go: downloading github.com/mattn/go-sqlite3 v1.14.47
+go: downloading github.com/jinzhu/now v1.1.5
+go: downloading gorm.io/driver/clickhouse v0.7.0
+go: downloading github.com/Laisky/fast-skiplist/v2 v2.0.1
+go: downloading github.com/gammazero/deque v1.2.1
+go: downloading github.com/tailscale/hujson v0.0.0-20260302212456-ecc657c15afd
+go: downloading github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd
+go: downloading github.com/modern-go/reflect2 v1.0.2
+go: downloading gopkg.in/yaml.v3 v3.0.1
+go: downloading github.com/beorn7/perks v1.0.1
+go: downloading github.com/prometheus/client_model v0.6.2
+go: downloading github.com/prometheus/common v0.69.0
+go: downloading github.com/prometheus/procfs v0.21.1
+go: downloading github.com/go-webauthn/x v0.2.6
+go: downloading github.com/fxamacker/cbor/v2 v2.9.2
+go: downloading github.com/go-logr/stdr v1.2.2
+go: downloading go.opentelemetry.io/auto/sdk v1.2.1
+go: downloading github.com/philhofer/fwd v1.2.0
+go: downloading github.com/jinzhu/inflection v1.0.0
+go: downloading github.com/jackc/pgpassfile v1.0.0
+go: downloading github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761
+go: downloading github.com/ClickHouse/clickhouse-go/v2 v2.47.0
+go: downloading github.com/hashicorp/go-version v1.9.0
+go: downloading github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822
+go: downloading github.com/x448/float16 v0.8.4
+go: downloading github.com/jackc/puddle/v2 v2.2.2
+go: downloading github.com/ClickHouse/ch-go v0.73.0
+go: downloading github.com/andybalholm/brotli v1.2.2
+go: downloading github.com/paulmach/orb v0.13.0
+go: downloading github.com/shopspring/decimal v1.4.0
+go: downloading go.yaml.in/yaml/v3 v3.0.4
+go: downloading github.com/go-faster/city v1.0.1
+go: downloading github.com/go-faster/errors v0.7.1
+go: downloading github.com/klauspost/compress v1.19.0
+go: downloading github.com/pierrec/lz4/v4 v4.1.27
+go: downloading github.com/segmentio/asm v1.2.1
+SESSION_SECRET not set, using random secret
+=== RUN   TestAIProxyDocuments2Markdown
+=== PAUSE TestAIProxyDocuments2Markdown
+=== CONT  TestAIProxyDocuments2Markdown
+=== RUN   TestAIProxyDocuments2Markdown/empty
+=== PAUSE TestAIProxyDocuments2Markdown/empty
+=== RUN   TestAIProxyDocuments2Markdown/single_document
+=== PAUSE TestAIProxyDocuments2Markdown/single_document
+=== RUN   TestAIProxyDocuments2Markdown/preserves_order_and_raw_markdown_characters
+=== PAUSE TestAIProxyDocuments2Markdown/preserves_order_and_raw_markdown_characters
+=== CONT  TestAIProxyDocuments2Markdown/empty
+=== CONT  TestAIProxyDocuments2Markdown/preserves_order_and_raw_markdown_characters
+=== CONT  TestAIProxyDocuments2Markdown/single_document
+--- PASS: TestAIProxyDocuments2Markdown (0.00s)
+    --- PASS: TestAIProxyDocuments2Markdown/empty (0.00s)
+    --- PASS: TestAIProxyDocuments2Markdown/single_document (0.00s)
+    --- PASS: TestAIProxyDocuments2Markdown/preserves_order_and_raw_markdown_characters (0.00s)
+PASS
+ok  	github.com/Laisky/one-api/relay/adaptor/aiproxy	0.017s
+
+=== Existing externally observable stream behavior test ===
+SESSION_SECRET not set, using random secret
+=== RUN   TestStreamHandler_RoutesDocumentsThroughRewriter
+--- PASS: TestStreamHandler_RoutesDocumentsThroughRewriter (0.00s)
+PASS
+ok  	github.com/Laisky/one-api/relay/adaptor/aiproxy	0.010s
+
+=== Benchmark (same runner, 10 samples, 750 ms each) ===
+SESSION_SECRET not set, using random secret
+goos: linux
+goarch: amd64
+pkg: github.com/Laisky/one-api/relay/adaptor/aiproxy
+cpu: AMD EPYC 7763 64-Core Processor                
+BenchmarkAIProxyDocuments2Markdown/1_documents-4         	 2758830	       327.3 ns/op	 415.58 MB/s	     304 B/op	       4 allocs/op
+BenchmarkAIProxyDocuments2Markdown/1_documents-4         	 2617760	       390.7 ns/op	 348.12 MB/s	     304 B/op	       4 allocs/op
+BenchmarkAIProxyDocuments2Markdown/1_documents-4         	 2087061	       374.5 ns/op	 363.15 MB/s	     304 B/op	       4 allocs/op
+BenchmarkAIProxyDocuments2Markdown/1_documents-4         	 2741143	       327.2 ns/op	 415.59 MB/s	     304 B/op	       4 allocs/op
+BenchmarkAIProxyDocuments2Markdown/1_documents-4         	 2725392	       331.9 ns/op	 409.80 MB/s	     304 B/op	       4 allocs/op
+BenchmarkAIProxyDocuments2Markdown/1_documents-4         	 2731192	       330.1 ns/op	 412.01 MB/s	     304 B/op	       4 allocs/op
+BenchmarkAIProxyDocuments2Markdown/1_documents-4         	 2733756	       327.4 ns/op	 415.36 MB/s	     304 B/op	       4 allocs/op
+BenchmarkAIProxyDocuments2Markdown/1_documents-4         	 2711536	       331.1 ns/op	 410.77 MB/s	     304 B/op	       4 allocs/op
+BenchmarkAIProxyDocuments2Markdown/1_documents-4         	 2770342	       331.7 ns/op	 410.06 MB/s	     304 B/op	       4 allocs/op
+BenchmarkAIProxyDocuments2Markdown/1_documents-4         	 2722489	       331.1 ns/op	 410.71 MB/s	     304 B/op	       4 allocs/op
+BenchmarkAIProxyDocuments2Markdown/10_documents-4        	  176942	      5005 ns/op	 230.99 MB/s	    8562 B/op	      40 allocs/op
+BenchmarkAIProxyDocuments2Markdown/10_documents-4        	  175407	      4986 ns/op	 231.85 MB/s	    8562 B/op	      40 allocs/op
+BenchmarkAIProxyDocuments2Markdown/10_documents-4        	  178279	      4987 ns/op	 231.81 MB/s	    8562 B/op	      40 allocs/op
+BenchmarkAIProxyDocuments2Markdown/10_documents-4        	  180988	      5009 ns/op	 230.78 MB/s	    8562 B/op	      40 allocs/op
+BenchmarkAIProxyDocuments2Markdown/10_documents-4        	  179306	      4981 ns/op	 232.10 MB/s	    8562 B/op	      40 allocs/op
+BenchmarkAIProxyDocuments2Markdown/10_documents-4        	  178051	      4978 ns/op	 232.22 MB/s	    8562 B/op	      40 allocs/op
+BenchmarkAIProxyDocuments2Markdown/10_documents-4        	  181117	      4975 ns/op	 232.36 MB/s	    8562 B/op	      40 allocs/op
+BenchmarkAIProxyDocuments2Markdown/10_documents-4        	  177764	      4994 ns/op	 231.46 MB/s	    8562 B/op	      40 allocs/op
+BenchmarkAIProxyDocuments2Markdown/10_documents-4        	  179548	      4979 ns/op	 232.16 MB/s	    8562 B/op	      40 allocs/op
+BenchmarkAIProxyDocuments2Markdown/10_documents-4        	  176451	      4985 ns/op	 231.91 MB/s	    8562 B/op	      40 allocs/op
+BenchmarkAIProxyDocuments2Markdown/100_documents-4       	    4166	    206210 ns/op	  56.25 MB/s	  638807 B/op	     401 allocs/op
+BenchmarkAIProxyDocuments2Markdown/100_documents-4       	    4045	    204099 ns/op	  56.83 MB/s	  638799 B/op	     400 allocs/op
+BenchmarkAIProxyDocuments2Markdown/100_documents-4       	    4140	    203272 ns/op	  57.06 MB/s	  638800 B/op	     400 allocs/op
+BenchmarkAIProxyDocuments2Markdown/100_documents-4       	    4215	    206554 ns/op	  56.15 MB/s	  638805 B/op	     401 allocs/op
+BenchmarkAIProxyDocuments2Markdown/100_documents-4       	    4094	    204917 ns/op	  56.60 MB/s	  638807 B/op	     401 allocs/op
+BenchmarkAIProxyDocuments2Markdown/100_documents-4       	    4028	    205699 ns/op	  56.39 MB/s	  638805 B/op	     401 allocs/op
+BenchmarkAIProxyDocuments2Markdown/100_documents-4       	    4168	    205219 ns/op	  56.52 MB/s	  638804 B/op	     401 allocs/op
+BenchmarkAIProxyDocuments2Markdown/100_documents-4       	    4498	    204962 ns/op	  56.59 MB/s	  638804 B/op	     401 allocs/op
+BenchmarkAIProxyDocuments2Markdown/100_documents-4       	    4383	    205699 ns/op	  56.39 MB/s	  638806 B/op	     401 allocs/op
+BenchmarkAIProxyDocuments2Markdown/100_documents-4       	    3914	    205869 ns/op	  56.34 MB/s	  638802 B/op	     401 allocs/op
+PASS
+ok  	github.com/Laisky/one-api/relay/adaptor/aiproxy	30.784s
