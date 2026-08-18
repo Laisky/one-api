@@ -2,10 +2,10 @@ package aiproxy
 
 import (
 	"encoding/json"
-	"fmt"
 	"io"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/Laisky/errors/v2"
 	gmw "github.com/Laisky/gin-middlewares/v7"
@@ -40,11 +40,28 @@ func aiProxyDocuments2Markdown(documents []LibraryDocument) string {
 	if len(documents) == 0 {
 		return ""
 	}
-	content := "\n\nReference Documents:\n"
-	for i, document := range documents {
-		content += fmt.Sprintf("%d. [%s](%s)\n", i+1, document.Title, document.URL)
+
+	const header = "\n\nReference Documents:\n"
+	estimatedLen := len(header)
+	maxIndexLen := len(strconv.Itoa(len(documents)))
+	for _, document := range documents {
+		estimatedLen += maxIndexLen + len(document.Title) + len(document.URL) + 7
 	}
-	return content
+
+	// Pre-size the builder so formatting multiple documents stays linear and
+	// normally uses one backing allocation instead of copying each prefix.
+	var content strings.Builder
+	content.Grow(estimatedLen)
+	content.WriteString(header)
+	for i, document := range documents {
+		content.WriteString(strconv.Itoa(i + 1))
+		content.WriteString(". [")
+		content.WriteString(document.Title)
+		content.WriteString("](")
+		content.WriteString(document.URL)
+		content.WriteString(")\n")
+	}
+	return content.String()
 }
 
 func responseAIProxyLibrary2OpenAI(c *gin.Context, response *LibraryResponse) *openai.TextResponse {
@@ -97,7 +114,6 @@ func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusC
 	lineReader := commonsse.NewLineReader(resp.Body, commonsse.DefaultLineBufferSize)
 
 	common.SetEventStreamHeaders(c)
-
 	lg := gmw.GetLogger(c)
 	var streamErr error
 	for {
@@ -106,7 +122,6 @@ func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusC
 			if errors.Is(err, io.EOF) {
 				break
 			}
-
 			streamErr = err
 			break
 		}
@@ -168,7 +183,6 @@ func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusC
 	if err != nil {
 		return openai.ErrorWrapper(err, "close_response_body_failed", http.StatusInternalServerError), nil
 	}
-
 	return nil, &usage
 }
 
