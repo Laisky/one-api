@@ -1,6 +1,7 @@
 package format
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 
@@ -17,6 +18,13 @@ var benchmarkDetectFormatPlainText = []byte(`{
 	]
 }`)
 
+var benchmarkPlainTextMessages = json.RawMessage(`[
+	{"role":"system","content":"You are helpful"},
+	{"role":"user","content":"Explain Kubernetes operators"},
+	{"role":"assistant","content":"Sure."},
+	{"role":"user","content":"Continue with examples"}
+]`)
+
 var benchmarkDetectFormatLargeSystem = []byte(`{
 	"model":"claude-sonnet-4",
 	"system":[{"type":"text","text":"` + strings.Repeat("A", 4096) + `"}],
@@ -26,6 +34,45 @@ var benchmarkDetectFormatLargeSystem = []byte(`{
 		{"role":"user","content":"Continue with examples"}
 	]
 }`)
+
+type legacyRequestProbe struct {
+	Model              string          `json:"model,omitempty"`
+	Messages           json.RawMessage `json:"messages,omitempty"`
+	Input              json.RawMessage `json:"input,omitempty"`
+	Instructions       *string         `json:"instructions,omitempty"`
+	PreviousResponseId *string         `json:"previous_response_id,omitempty"`
+	Conversation       json.RawMessage `json:"conversation,omitempty"`
+	Prompt             json.RawMessage `json:"prompt,omitempty"`
+	System             any             `json:"system,omitempty"`
+	MaxOutputTokens    *int            `json:"max_output_tokens,omitempty"`
+	Tools              json.RawMessage `json:"tools,omitempty"`
+}
+
+type legacyMessageProbe struct {
+	Role    string          `json:"role,omitempty"`
+	Content json.RawMessage `json:"content,omitempty"`
+}
+
+func hasClaudeContentBlocksLegacy(messagesRaw json.RawMessage) bool {
+	var messages []legacyMessageProbe
+	if err := json.Unmarshal(messagesRaw, &messages); err != nil {
+		return false
+	}
+
+	for _, msg := range messages {
+		var contentArray []contentBlockProbe
+		if err := json.Unmarshal(msg.Content, &contentArray); err == nil {
+			for _, block := range contentArray {
+				switch block.Type {
+				case "tool_use", "tool_result", "thinking":
+					return true
+				}
+			}
+		}
+	}
+
+	return false
+}
 
 func TestDetectFormatScalarContentBehavior(t *testing.T) {
 	t.Parallel()
@@ -50,31 +97,60 @@ func TestDetectFormatScalarContentBehavior(t *testing.T) {
 	}
 }
 
+func TestHasClaudeContentBlocksBehaviorEquivalent(t *testing.T) {
+	t.Parallel()
+	cases := []json.RawMessage{
+		benchmarkPlainTextMessages,
+		json.RawMessage(`[{"role":"assistant","content":null}]`),
+		json.RawMessage(`[{"role":"user","content":{"text":"hello"}}]`),
+		json.RawMessage(`[{"role":"user","content":[{"type":"text","text":"hello"}]}]`),
+		json.RawMessage(`[{"role":"assistant","content":[{"type":"tool_use","id":"1"}]}]`),
+		json.RawMessage(`[{"role":"user","content":[{"type":"tool_result","tool_use_id":"1"}]}]`),
+		json.RawMessage(`[{"role":"assistant","content":[{"type":"thinking","thinking":"..."}]}]`),
+	}
+
+	for _, raw := range cases {
+		require.Equal(t, hasClaudeContentBlocksLegacy(raw), hasClaudeContentBlocks(raw), string(raw))
+	}
+}
+
+func BenchmarkClaudeContentBlockScanPlainText(b *testing.B) {
+	b.Run("legacy", func(b *testing.B) {
+		b.ReportAllocs()
+		for b.Loop() {
+			_ = hasClaudeContentBlocksLegacy(benchmarkPlainTextMessages)
+		}
+	})
+	b.Run("optimized", func(b *testing.B) {
+		b.ReportAllocs()
+		for b.Loop() {
+			_ = hasClaudeContentBlocks(benchmarkPlainTextMessages)
+		}
+	})
+}
+
+func BenchmarkRequestProbeDecodeLargeUnusedFields(b *testing.B) {
+	b.Run("legacy", func(b *testing.B) {
+		b.ReportAllocs()
+		var probe legacyRequestProbe
+		for b.Loop() {
+			probe = legacyRequestProbe{}
+			_ = json.Unmarshal(benchmarkDetectFormatLargeSystem, &probe)
+		}
+	})
+	b.Run("optimized", func(b *testing.B) {
+		b.ReportAllocs()
+		var probe requestProbe
+		for b.Loop() {
+			probe = requestProbe{}
+			_ = json.Unmarshal(benchmarkDetectFormatLargeSystem, &probe)
+		}
+	})
+}
+
 func BenchmarkDetectFormatPlainText(b *testing.B) {
 	b.ReportAllocs()
 	for b.Loop() {
 		_, _ = DetectFormat(benchmarkDetectFormatPlainText)
-	}
-}
-
-func BenchmarkDetectFormatLargeSystem(b *testing.B) {
-	b.ReportAllocs()
-	for b.Loop() {
-		_, _ = DetectFormat(benchmarkDetectFormatLargeSystem)
-	}
-}
-
-// TestBoltFormatBenchmark is temporary instrumentation used to capture the
-// baseline and optimized results in the same PR CI environment.
-func TestBoltFormatBenchmark(t *testing.T) {
-	for _, tc := range []struct {
-		name string
-		fn   func(*testing.B)
-	}{
-		{name: "plain_text", fn: BenchmarkDetectFormatPlainText},
-		{name: "large_system", fn: BenchmarkDetectFormatLargeSystem},
-	} {
-		result := testing.Benchmark(tc.fn)
-		t.Logf("BOLT_BENCH format/%s: %d ns/op, %d B/op, %d allocs/op", tc.name, result.NsPerOp(), result.AllocedBytesPerOp(), result.AllocsPerOp())
 	}
 }
