@@ -1,0 +1,1505 @@
+workflow_commit=5aec9d1550d2f8f936cd65781bde389a5378e859
+
+=== STATUS FILES ===
+--- downloaded/frontend-baseline-air/status.txt
+variant=baseline
+ref=b59a43af8a32f0f570d70e8e79f799cc539674b7
+app=air
+test_status=0
+lint_status=0
+type_status=0
+build_status=0
+
+--- downloaded/frontend-baseline-berry/status.txt
+variant=baseline
+ref=b59a43af8a32f0f570d70e8e79f799cc539674b7
+app=berry
+test_status=0
+lint_status=0
+type_status=0
+build_status=0
+
+--- downloaded/frontend-baseline-modern/status.txt
+variant=baseline
+ref=b59a43af8a32f0f570d70e8e79f799cc539674b7
+app=modern
+test_status=0
+lint_status=2
+type_status=0
+build_status=0
+
+--- downloaded/frontend-optimized-air/status.txt
+variant=optimized
+ref=751077d5ef653e404aa5eb2440ea35436ec233f4
+app=air
+test_status=0
+lint_status=0
+type_status=0
+build_status=0
+
+--- downloaded/frontend-optimized-berry/status.txt
+variant=optimized
+ref=751077d5ef653e404aa5eb2440ea35436ec233f4
+app=berry
+test_status=0
+lint_status=0
+type_status=0
+build_status=0
+
+--- downloaded/frontend-optimized-modern/status.txt
+variant=optimized
+ref=751077d5ef653e404aa5eb2440ea35436ec233f4
+app=modern
+test_status=0
+lint_status=2
+type_status=0
+build_status=0
+
+--- downloaded/go-baseline/status.txt
+variant=baseline
+ref=b59a43af8a32f0f570d70e8e79f799cc539674b7
+status=1
+
+--- downloaded/go-optimized/status.txt
+variant=optimized
+ref=751077d5ef653e404aa5eb2440ea35436ec233f4
+status=1
+
+
+=== FAILURE EXTRACTS ===
+--- downloaded/frontend-baseline-air/failure-extract.txt
+=== diagnostic/test.log ===
+yarn run v1.22.22
+$ react-scripts test --watchAll=false --passWithNoTests
+No tests found, exiting with code 0
+Done in 0.50s.
+
+--- downloaded/frontend-baseline-berry/failure-extract.txt
+=== diagnostic/test.log ===
+yarn run v1.22.22
+$ react-scripts test --watchAll=false --passWithNoTests
+No tests found, exiting with code 0
+Done in 0.54s.
+
+--- downloaded/frontend-baseline-modern/failure-extract.txt
+=== diagnostic/build.log ===
+yarn run v1.22.22
+$ tsc -b && vite build --emptyOutDir
+[36mvite v7.1.2 [32mbuilding for production...[36m[39m
+transforming...
+[32m✓[39m 3055 modules transformed.
+rendering chunks...
+computing gzip size...
+[2m../build/modern/[22m[2massets/[22m[32mKaTeX_Size3-Regular-CTq5MqoE.woff         [39m[1m[2m  4.42 kB[22m[1m[22m
+[2m../build/modern/[22m[2massets/[22m[32mKaTeX_Size4-Regular-Dl5lxZxV.woff2        [39m[1m[2m  4.93 kB[22m[1m[22m
+[2m../build/modern/[22m[2massets/[22m[32mKaTeX_Size2-Regular-Dy4dx90m.woff2        [39m[1m[2m  5.21 kB[22m[1m[22m
+[2m../build/modern/[22m[2massets/[22m[32mKaTeX_Size1-Regular-mCD8mA8B.woff2        [39m[1m[2m  5.47 kB[22m[1m[22m
+[2m../build/modern/[22m[2massets/[22m[32mKaTeX_Size4-Regular-BF-4gkZK.woff         [39m[1m[2m  5.98 kB[22m[1m[22m
+[2m../build/modern/[22m[2massets/[22m[32mKaTeX_Size2-Regular-oD1tc_U0.woff         [39m[1m[2m  6.19 kB[22m[1m[22m
+[2m../build/modern/[22m[2massets/[22m[32mKaTeX_Size1-Regular-C195tn64.woff         [39m[1m[2m  6.50 kB[22m[1m[22m
+[2m../build/modern/[22m[2massets/[22m[32mKaTeX_Caligraphic-Regular-Di6jR-x-.woff2  [39m[1m[2m  6.91 kB[22m[1m[22m
+[2m../build/modern/[22m[2massets/[22m[32mKaTeX_Caligraphic-Bold-Dq_IR9rO.woff2     [39m[1m[2m  6.91 kB[22m[1m[22m
+[2m../build/modern/[22m[2massets/[22m[32mKaTeX_Size3-Regular-DgpXs0kz.ttf          [39m[1m[2m  7.59 kB[22m[1m[22m
+[2m../build/modern/[22m[2massets/[22m[32mKaTeX_Caligraphic-Regular-CTRA-rTL.woff   [39m[1m[2m  7.66 kB[22m[1m[22m
+[2m../build/modern/[22m[2massets/[22m[32mKaTeX_Caligraphic-Bold-BEiXGLvX.woff      [39m[1m[2m  7.72 kB[22m[1m[22m
+[2m../build/modern/[22m[2massets/[22m[32mKaTeX_Script-Regular-D3wIWfF6.woff2       [39m[1m[2m  9.64 kB[22m[1m[22m
+[2m../build/modern/[22m[2massets/[22m[32mKaTeX_SansSerif-Regular-DDBCnlJ7.woff2    [39m[1m[2m 10.34 kB[22m[1m[22m
+[2m../build/modern/[22m[2massets/[22m[32mKaTeX_Size4-Regular-DWFBv043.ttf          [39m[1m[2m 10.36 kB[22m[1m[22m
+[2m../build/modern/[22m[2massets/[22m[32mKaTeX_Script-Regular-D5yQViql.woff        [39m[1m[2m 10.59 kB[22m[1m[22m
+[2m../build/modern/[22m[2massets/[22m[32mKaTeX_Fraktur-Regular-CTYiF6lA.woff2      [39m[1m[2m 11.32 kB[22m[1m[22m
+[2m../build/modern/[22m[2massets/[22m[32mKaTeX_Fraktur-Bold-CL6g_b3V.woff2         [39m[1m[2m 11.35 kB[22m[1m[22m
+[2m../build/modern/[22m[2massets/[22m[32mKaTeX_Size2-Regular-B7gKUWhC.ttf          [39m[1m[2m 11.51 kB[22m[1m[22m
+[2m../build/modern/[22m[32mindex.html                                       [39m[1m[2m 11.68 kB[22m[1m[22m[2m │ gzip:   3.29 kB[22m
+[2m../build/modern/[22m[2massets/[22m[32mKaTeX_SansSerif-Italic-C3H0VqGB.woff2     [39m[1m[2m 12.03 kB[22m[1m[22m
+[2m../build/modern/[22m[2massets/[22m[32mKaTeX_SansSerif-Bold-D1sUS0GD.woff2       [39m[1m[2m 12.22 kB[22m[1m[22m
+[2m../build/modern/[22m[2massets/[22m[32mKaTeX_Size1-Regular-Dbsnue_I.ttf          [39m[1m[2m 12.23 kB[22m[1m[22m
+[2m../build/modern/[22m[2massets/[22m[32mKaTeX_SansSerif-Regular-CS6fqUqJ.woff     [39m[1m[2m 12.32 kB[22m[1m[22m
+[2m../build/modern/[22m[2massets/[22m[32mKaTeX_Caligraphic-Regular-wX97UBjC.ttf    [39m[1m[2m 12.34 kB[22m[1m[22m
+[2m../build/modern/[22m[2massets/[22m[32mKaTeX_Caligraphic-Bold-ATXxdsX0.ttf       [39m[1m[2m 12.37 kB[22m[1m[22m
+[2m../build/modern/[22m[2massets/[22m[32mKaTeX_Fraktur-Regular-Dxdc4cR9.woff       [39m[1m[2m 13.21 kB[22m[1m[22m
+[2m../build/modern/[22m[2massets/[22m[32mKaTeX_Fraktur-Bold-BsDP51OF.woff          [39m[1m[2m 13.30 kB[22m[1m[22m
+[2m../build/modern/[22m[2massets/[22m[32mKaTeX_Typewriter-Regular-CO6r4hn1.woff2   [39m[1m[2m 13.57 kB[22m[1m[22m
+[2m../build/modern/[22m[2massets/[22m[32mKaTeX_SansSerif-Italic-DN2j7dab.woff      [39m[1m[2m 14.11 kB[22m[1m[22m
+[2m../build/modern/[22m[2massets/[22m[32mKaTeX_SansSerif-Bold-DbIhKOiC.woff        [39m[1m[2m 14.41 kB[22m[1m[22m
+[2m../build/modern/[22m[2massets/[22m[32mKaTeX_Typewriter-Regular-C0xS9mPB.woff    [39m[1m[2m 16.03 kB[22m[1m[22m
+[2m../build/modern/[22m[2massets/[22m[32mKaTeX_Math-BoldItalic-CZnvNsCZ.woff2      [39m[1m[2m 16.40 kB[22m[1m[22m
+[2m../build/modern/[22m[2massets/[22m[32mKaTeX_Math-Italic-t53AETM-.woff2          [39m[1m[2m 16.44 kB[22m[1m[22m
+[2m../build/modern/[22m[2massets/[22m[32mKaTeX_Script-Regular-C5JkGWo-.ttf         [39m[1m[2m 16.65 kB[22m[1m[22m
+[2m../build/modern/[22m[2massets/[22m[32mKaTeX_Main-BoldItalic-DxDJ3AOS.woff2      [39m[1m[2m 16.78 kB[22m[1m[22m
+[2m../build/modern/[22m[2massets/[22m[32mKaTeX_Main-Italic-NWA7e6Wa.woff2          [39m[1m[2m 16.99 kB[22m[1m[22m
+[2m../build/modern/[22m[2massets/[22m[32mKaTeX_Math-BoldItalic-iY-2wyZ7.woff       [39m[1m[2m 18.67 kB[22m[1m[22m
+[2m../build/modern/[22m[2massets/[22m[32mKaTeX_Math-Italic-DA0__PXp.woff           [39m[1m[2m 18.75 kB[22m[1m[22m
+[2m../build/modern/[22m[2massets/[22m[32mKaTeX_Main-BoldItalic-SpSLRI95.woff       [39m[1m[2m 19.41 kB[22m[1m[22m
+[2m../build/modern/[22m[2massets/[22m[32mKaTeX_SansSerif-Regular-BNo7hRIc.ttf      [39m[1m[2m 19.44 kB[22m[1m[22m
+[2m../build/modern/[22m[2massets/[22m[32mKaTeX_Fraktur-Regular-CB_wures.ttf        [39m[1m[2m 19.57 kB[22m[1m[22m
+[2m../build/modern/[22m[2massets/[22m[32mKaTeX_Fraktur-Bold-BdnERNNW.ttf           [39m[1m[2m 19.58 kB[22m[1m[22m
+[2m../build/modern/[22m[2massets/[22m[32mKaTeX_Main-Italic-BMLOBm91.woff           [39m[1m[2m 19.68 kB[22m[1m[22m
+[2m../build/modern/[22m[2massets/[22m[32mKaTeX_SansSerif-Italic-YYjJ1zSn.ttf       [39m[1m[2m 22.36 kB[22m[1m[22m
+[2m../build/modern/[22m[2massets/[22m[32mKaTeX_SansSerif-Bold-CFMepnvq.ttf         [39m[1m[2m 24.50 kB[22m[1m[22m
+[2m../build/modern/[22m[2massets/[22m[32mKaTeX_Main-Bold-Cx986IdX.woff2            [39m[1m[2m 25.32 kB[22m[1m[22m
+[2m../build/modern/[22m[2massets/[22m[32mKaTeX_Main-Regular-B22Nviop.woff2         [39m[1m[2m 26.27 kB[22m[1m[22m
+[2m../build/modern/[22m[2massets/[22m[32mKaTeX_Typewriter-Regular-D3Ib7_Hf.ttf     [39m[1m[2m 27.56 kB[22m[1m[22m
+[2m../build/modern/[22m[2massets/[22m[32mKaTeX_AMS-Regular-BQhdFMY1.woff2          [39m[1m[2m 28.08 kB[22m[1m[22m
+[2m../build/modern/[22m[2massets/[22m[32mKaTeX_Main-Bold-Jm3AIy58.woff             [39m[1m[2m 29.91 kB[22m[1m[22m
+[2m../build/modern/[22m[2massets/[22m[32mKaTeX_Main-Regular-Dr94JaBh.woff          [39m[1m[2m 30.77 kB[22m[1m[22m
+[2m../build/modern/[22m[2massets/[22m[32mKaTeX_Math-BoldItalic-B3XSjfu4.ttf        [39m[1m[2m 31.20 kB[22m[1m[22m
+[2m../build/modern/[22m[2massets/[22m[32mKaTeX_Math-Italic-flOr_0UB.ttf            [39m[1m[2m 31.31 kB[22m[1m[22m
+[2m../build/modern/[22m[2massets/[22m[32mKaTeX_Main-BoldItalic-DzxPMmG6.ttf        [39m[1m[2m 32.97 kB[22m[1m[22m
+[2m../build/modern/[22m[2massets/[22m[32mKaTeX_AMS-Regular-DMm9YOAa.woff           [39m[1m[2m 33.52 kB[22m[1m[22m
+[2m../build/modern/[22m[2massets/[22m[32mKaTeX_Main-Italic-3WenGoN9.ttf            [39m[1m[2m 33.58 kB[22m[1m[22m
+[2m../build/modern/[22m[2massets/[22m[32mKaTeX_Main-Bold-waoOVXN0.ttf              [39m[1m[2m 51.34 kB[22m[1m[22m
+[2m../build/modern/[22m[2massets/[22m[32mKaTeX_Main-Regular-ypZvNtVU.ttf           [39m[1m[2m 53.58 kB[22m[1m[22m
+[2m../build/modern/[22m[2massets/[22m[32mKaTeX_AMS-Regular-DRggAlZN.ttf            [39m[1m[2m 63.63 kB[22m[1m[22m
+[2m../build/modern/[22m[2massets/[22m[35mPlaygroundPage-dExf98Xo.css               [39m[1m[2m  1.16 kB[22m[1m[22m[2m │ gzip:   0.54 kB[22m
+[2m../build/modern/[22m[2massets/[22m[35mindex-Cx56vY5z.css                        [39m[1m[2m127.52 kB[22m[1m[22m[2m │ gzip:  25.47 kB[22m
+[2m../build/modern/[22m[36mlist-action-button.CoqILd9w.js                   [39m[1m[2m  0.27 kB[22m[1m[22m[2m │ gzip:   0.22 kB[22m
+[2m../build/modern/[22m[36mseparator.BBFlinBW.js                            [39m[1m[2m  0.46 kB[22m[1m[22m[2m │ gzip:   0.31 kB[22m
+[2m../build/modern/[22m[36mlabel.B_l6qLwn.js                                [39m[1m[2m  0.46 kB[22m[1m[22m[2m │ gzip:   0.31 kB[22m
+[2m../build/modern/[22m[36mtextarea.D92ASZa1.js                             [39m[1m[2m  0.59 kB[22m[1m[22m[2m │ gzip:   0.37 kB[22m
+[2m../build/modern/[22m[36minput.DzTOih3A.js                                [39m[1m[2m  0.64 kB[22m[1m[22m[2m │ gzip:   0.41 kB[22m
+[2m../build/modern/[22m[36mtimestamp.BwhnmQkp.js                            [39m[1m[2m  0.66 kB[22m[1m[22m[2m │ gzip:   0.40 kB[22m
+[2m../build/modern/[22m[36mcard.BkQtOFh_.js                                 [39m[1m[2m  0.68 kB[22m[1m[22m[2m │ gzip:   0.32 kB[22m
+[2m../build/modern/[22m[36mcheckbox.SRXCmsNp.js                             [39m[1m[2m  0.79 kB[22m[1m[22m[2m │ gzip:   0.45 kB[22m
+[2m../build/modern/[22m[36mbadge.B2FpRaH1.js                                [39m[1m[2m  0.79 kB[22m[1m[22m[2m │ gzip:   0.42 kB[22m
+[2m../build/modern/[22m[36moauth.CkggFOtI.js                                [39m[1m[2m  0.86 kB[22m[1m[22m[2m │ gzip:   0.45 kB[22m
+[2m../build/modern/[22m[36mresponsive-action-group.39FEK0l8.js              [39m[1m[2m  0.89 kB[22m[1m[22m[2m │ gzip:   0.46 kB[22m
+[2m../build/modern/[22m[36mscroll-area.D4ujpZ4-.js                          [39m[1m[2m  0.89 kB[22m[1m[22m[2m │ gzip:   0.47 kB[22m
+[2m../build/modern/[22m[36mresponsive-debugger.CNsYchEf.js                  [39m[1m[2m  1.03 kB[22m[1m[22m[2m │ gzip:   0.53 kB[22m
+[2m../build/modern/[22m[36mpopover.CDbAQGHl.js                              [39m[1m[2m  1.07 kB[22m[1m[22m[2m │ gzip:   0.53 kB[22m
+[2m../build/modern/[22m[36mTurnstile.RamQGvQs.js                            [39m[1m[2m  1.28 kB[22m[1m[22m[2m │ gzip:   0.63 kB[22m
+[2m../build/modern/[22m[36mtoAuthenticatorAttachment.BvQQNb3C.js            [39m[1m[2m  1.46 kB[22m[1m[22m[2m │ gzip:   0.72 kB[22m
+[2m../build/modern/[22m[36mresponsive-container.BeBd_UA9.js                 [39m[1m[2m  1.56 kB[22m[1m[22m[2m │ gzip:   0.72 kB[22m
+[2m../build/modern/[22m[36mHomePage.CIDXmihF.js                             [39m[1m[2m  1.61 kB[22m[1m[22m[2m │ gzip:   0.88 kB[22m
+[2m../build/modern/[22m[36mconfirm-dialog.DjVSL5oV.js                       [39m[1m[2m  1.64 kB[22m[1m[22m[2m │ gzip:   0.81 kB[22m
+[2m../build/modern/[22m[36mToolListEditor.BZ06LGNu.js                       [39m[1m[2m  1.76 kB[22m[1m[22m[2m │ gzip:   0.91 kB[22m
+[2m../build/modern/[22m[36mzod.Cnmsd81d.js                                  [39m[1m[2m  1.82 kB[22m[1m[22m[2m │ gzip:   0.87 kB[22m
+[2m../build/modern/[22m[36mNotFoundPage.BL-uDpkS.js                         [39m[1m[2m  1.86 kB[22m[1m[22m[2m │ gzip:   0.87 kB[22m
+[2m../build/modern/[22m[36mcommand.toag3nt7.js                              [39m[1m[2m  2.10 kB[22m[1m[22m[2m │ gzip:   0.79 kB[22m
+[2m../build/modern/[22m[36mresponsive-validator.UFQsUOnb.js                 [39m[1m[2m  2.18 kB[22m[1m[22m[2m │ gzip:   0.98 kB[22m
+[2m../build/modern/[22m[36mLarkOAuthPage.BRMUowyC.js                        [39m[1m[2m  2.48 kB[22m[1m[22m[2m │ gzip:   1.16 kB[22m
+[2m../build/modern/[22m[36mOidcOAuthPage.C3amValb.js                        [39m[1m[2m  2.48 kB[22m[1m[22m[2m │ gzip:   1.16 kB[22m
+[2m../build/modern/[22m[36mGitHubOAuthPage.CeucM9xO.js                      [39m[1m[2m  2.50 kB[22m[1m[22m[2m │ gzip:   1.16 kB[22m
+[2m../build/modern/[22m[36mWeChatOAuthPage.DV3pvHdP.js                      [39m[1m[2m  2.50 kB[22m[1m[22m[2m │ gzip:   1.16 kB[22m
+[2m../build/modern/[22m[36mAboutPage.zW8LR8gd.js                            [39m[1m[2m  2.87 kB[22m[1m[22m[2m │ gzip:   1.26 kB[22m
+[2m../build/modern/[22m[36mPasswordResetConfirmPage.BycHQCJw.js             [39m[1m[2m  3.11 kB[22m[1m[22m[2m │ gzip:   1.30 kB[22m
+[2m../build/modern/[22m[36mlayout-debug.BEtcTD2N.js                         [39m[1m[2m  3.16 kB[22m[1m[22m[2m │ gzip:   1.35 kB[22m
+[2m../build/modern/[22m[36mselect.CDHX4RWE.js                               [39m[1m[2m  3.41 kB[22m[1m[22m[2m │ gzip:   1.24 kB[22m
+[2m../build/modern/[22m[36mPasswordResetPage.FoyDu2eD.js                    [39m[1m[2m  3.48 kB[22m[1m[22m[2m │ gzip:   1.43 kB[22m
+[2m../build/modern/[22m[36mselection-list-manager.CnVS8-m6.js               [39m[1m[2m  3.52 kB[22m[1m[22m[2m │ gzip:   1.46 kB[22m
+[2m../build/modern/[22m[36musePersistentState.CBpzpOSF.js                   [39m[1m[2m  4.38 kB[22m[1m[22m[2m │ gzip:   1.72 kB[22m
+[2m../build/modern/[22m[36mmarkdown-rehype-sanitize.DIvUEknc.js             [39m[1m[2m  5.19 kB[22m[1m[22m[2m │ gzip:   2.16 kB[22m
+[2m../build/modern/[22m[36mhelpers.DGyvmnZy.js                              [39m[1m[2m  6.37 kB[22m[1m[22m[2m │ gzip:   2.20 kB[22m
+[2m../build/modern/[22m[36mNameWithId.CdTraOBV.js                           [39m[1m[2m  6.64 kB[22m[1m[22m[2m │ gzip:   2.69 kB[22m
+[2m../build/modern/[22m[36menhanced-data-table.HTtTZmUv.js                  [39m[1m[2m  6.83 kB[22m[1m[22m[2m │ gzip:   2.59 kB[22m
+[2m../build/modern/[22m[36mRegisterPage.CQZbFcUM.js                         [39m[1m[2m  7.39 kB[22m[1m[22m[2m │ gzip:   2.66 kB[22m
+[2m../build/modern/[22m[36mToolsPage.BGLz6ojj.js                            [39m[1m[2m  7.69 kB[22m[1m[22m[2m │ gzip:   2.55 kB[22m
+[2m../build/modern/[22m[36mEditRedemptionPage.BrmZ4F4M.js                   [39m[1m[2m  8.14 kB[22m[1m[22m[2m │ gzip:   3.10 kB[22m
+[2m../build/modern/[22m[36mcolorGenerator.DJmFK_Ir.js                       [39m[1m[2m  8.19 kB[22m[1m[22m[2m │ gzip:   2.95 kB[22m
+[2m../build/modern/[22m[36mStatusPage.CwZ79zz8.js                           [39m[1m[2m  8.41 kB[22m[1m[22m[2m │ gzip:   2.57 kB[22m
+[2m../build/modern/[22m[36mTopUpPage.BJcr-mKl.js                            [39m[1m[2m  8.91 kB[22m[1m[22m[2m │ gzip:   3.16 kB[22m
+[2m../build/modern/[22m[36mMCPServersPage.DAObaTAw.js                       [39m[1m[2m  9.13 kB[22m[1m[22m[2m │ gzip:   3.00 kB[22m
+[2m../build/modern/[22m[36mEditTokenPage.CPB_Dwlz.js                        [39m[1m[2m 11.30 kB[22m[1m[22m[2m │ gzip:   4.15 kB[22m
+[2m../build/modern/[22m[36mRedemptionsPage.D7WFSL7i.js                      [39m[1m[2m 12.18 kB[22m[1m[22m[2m │ gzip:   4.44 kB[22m
+[2m../build/modern/[22m[36mEditMCPServerPage.CS2y8TmZ.js                    [39m[1m[2m 12.67 kB[22m[1m[22m[2m │ gzip:   3.61 kB[22m
+[2m../build/modern/[22m[36mTokensPage.T1w4MnFk.js                           [39m[1m[2m 14.51 kB[22m[1m[22m[2m │ gzip:   5.21 kB[22m
+[2m../build/modern/[22m[36mradix-ui-layout.CDjhc2I0.js                      [39m[1m[2m 15.96 kB[22m[1m[22m[2m │ gzip:   5.18 kB[22m
+[2m../build/modern/[22m[36mLoginPage.B__owaj3.js                            [39m[1m[2m 16.30 kB[22m[1m[22m[2m │ gzip:   6.06 kB[22m
+[2m../build/modern/[22m[36mEditUserPage.D_7B16TM.js                         [39m[1m[2m 16.53 kB[22m[1m[22m[2m │ gzip:   4.95 kB[22m
+[2m../build/modern/[22m[36mUsersPage.cS1rWW5_.js                            [39m[1m[2m 17.86 kB[22m[1m[22m[2m │ gzip:   5.53 kB[22m
+[2m../build/modern/[22m[36mChannelsPage.DOP2uMn3.js                         [39m[1m[2m 20.75 kB[22m[1m[22m[2m │ gzip:   5.91 kB[22m
+[2m../build/modern/[22m[36mrouter.DPya0keB.js                               [39m[1m[2m 21.24 kB[22m[1m[22m[2m │ gzip:   7.98 kB[22m
+[2m../build/modern/[22m[36mradix-ui-forms.DebRNr9n.js                       [39m[1m[2m 21.70 kB[22m[1m[22m[2m │ gzip:   7.61 kB[22m
+[2m../build/modern/[22m[36mtanstack-query.P-fyv8TF.js                       [39m[1m[2m 24.02 kB[22m[1m[22m[2m │ gzip:   7.51 kB[22m
+[2m../build/modern/[22m[36mmisc-utils.DNQQhxEu.js                           [39m[1m[2m 29.14 kB[22m[1m[22m[2m │ gzip:  11.49 kB[22m
+[2m../build/modern/[22m[36mnetwork.rHqBI9-h.js                              [39m[1m[2m 35.17 kB[22m[1m[22m[2m │ gzip:  14.10 kB[22m
+[2m../build/modern/[22m[36mLogsPage.D6yFrU-1.js                             [39m[1m[2m 36.42 kB[22m[1m[22m[2m │ gzip:   9.73 kB[22m
+[2m../build/modern/[22m[36mDashboardPage.BOjcTLRj.js                        [39m[1m[2m 39.95 kB[22m[1m[22m[2m │ gzip:   9.19 kB[22m
+[2m../build/modern/[22m[36mModelsPage.CVyZABrf.js                           [39m[1m[2m 44.45 kB[22m[1m[22m[2m │ gzip:   9.53 kB[22m
+[2m../build/modern/[22m[36mtanstack-table.utbV9O9t.js                       [39m[1m[2m 49.15 kB[22m[1m[22m[2m │ gzip:  13.21 kB[22m
+[2m../build/modern/[22m[36mEditChannelPage.D0ddg-6M.js                      [39m[1m[2m 77.19 kB[22m[1m[22m[2m │ gzip:  20.22 kB[22m
+[2m../build/modern/[22m[36mforms.DsgxbcWm.js                                [39m[1m[2m 80.53 kB[22m[1m[22m[2m │ gzip:  22.05 kB[22m
+[2m../build/modern/[22m[36mSettingsPage.DpwHK7fM.js                         [39m[1m[2m 81.80 kB[22m[1m[22m[2m │ gzip:  16.29 kB[22m
+[2m../build/modern/[22m[36mui-utils.CMotxCKF.js                             [39m[1m[2m 81.87 kB[22m[1m[22m[2m │ gzip:  23.74 kB[22m
+[2m../build/modern/[22m[36mindex.Bjjigl1H.js                                [39m[1m[2m 87.76 kB[22m[1m[22m[2m │ gzip:  30.14 kB[22m
+[2m../build/modern/[22m[36mradix-ui-core.B0xMJq0Z.js                        [39m[1m[2m 91.41 kB[22m[1m[22m[2m │ gzip:  29.47 kB[22m
+[2m../build/modern/[22m[36mindex.DvtHXMwK.js                                [39m[1m[2m103.57 kB[22m[1m[22m[2m │ gzip:  30.81 kB[22m
+[2m../build/modern/[22m[36mindex.CxFcwp5Q.js                                [39m[1m[2m106.64 kB[22m[1m[22m[2m │ gzip:  31.44 kB[22m
+[2m../build/modern/[22m[36mPlaygroundPage.8c2P8tH2.js                       [39m[1m[2m114.21 kB[22m[1m[22m[2m │ gzip:  29.10 kB[22m
+[2m../build/modern/[22m[36mindex.C1XBgTHB.js                                [39m[1m[2m114.26 kB[22m[1m[22m[2m │ gzip:  32.05 kB[22m
+[2m../build/modern/[22m[36mmarkdown-core.CgRCfPt_.js                        [39m[1m[2m117.86 kB[22m[1m[22m[2m │ gzip:  36.32 kB[22m
+[2m../build/modern/[22m[36mvendor.B-5jsS9y.js                               [39m[1m[2m141.79 kB[22m[1m[22m[2m │ gzip:  45.50 kB[22m
+[2m../build/modern/[22m[36mmarkdown-rehype-highlight.FXANBESn.js            [39m[1m[2m177.40 kB[22m[1m[22m[2m │ gzip:  54.33 kB[22m
+[2m../build/modern/[22m[36mmarkdown-rehype-katex.C_mSkZLi.js                [39m[1m[2m270.61 kB[22m[1m[22m[2m │ gzip:  79.94 kB[22m
+[2m../build/modern/[22m[36mmarkdown-remark.B3zALAzj.js                      [39m[1m[2m275.27 kB[22m[1m[22m[2m │ gzip:  62.63 kB[22m
+[2m../build/modern/[22m[36mcharts.DSp9tbgV.js                               [39m[1m[2m391.72 kB[22m[1m[22m[2m │ gzip: 107.44 kB[22m
+[2m../build/modern/[22m[2massets/[22m[36mindex-BnfGPDDP.js                         [39m[1m[2m410.82 kB[22m[1m[22m[2m │ gzip: 128.56 kB[22m
+[32m✓ built in 9.99s[39m
+Done in 20.71s.
+=== diagnostic/lint.log ===
+yarn run v1.22.22
+$ eslint .
+
+Oops! Something went wrong! :(
+
+ESLint: 9.33.0
+
+ESLint couldn't find an eslint.config.(js|mjs|cjs) file.
+
+From ESLint v9.0.0, the default configuration file is now eslint.config.js.
+If you are using a .eslintrc.* file, please follow the migration guide
+to update your configuration file to the new format:
+
+https://eslint.org/docs/latest/use/configure/migration-guide
+
+If you still have problems after following the migration guide, please stop by
+https://eslint.org/chat/help to chat with the team.
+
+error Command failed with exit code 2.
+info Visit https://yarnpkg.com/en/docs/cli/run for documentation about this command.
+=== diagnostic/test.log ===
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at Header (/home/runner/work/one-api/one-api/web/modern/src/components/layout/Header.tsx:50:51)
+    at Router (/home/runner/work/one-api/one-api/web/modern/node_modules/react-router/dist/umd/react-router.development.js:1207:17)
+    at MemoryRouter (/home/runner/work/one-api/one-api/web/modern/node_modules/react-router/dist/umd/react-router.development.js:1101:7)
+
+[90mstderr[2m | src/pages/auth/__tests__/RegisterPage.turnstile.test.tsx[2m > [22m[2mRegisterPage Turnstile integration[2m > [22m[2mrenders the Turnstile widget above the Create Account button[22m[39m
+⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+⚠️ React Router Future Flag Warning: Relative route resolution within Splat routes is changing in v7. You can use the `v7_relativeSplatPath` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_relativesplatpath.
+
+[90mstderr[2m | src/components/layout/Header.test.tsx[2m > [22m[2mHeader anonymous mobile layout[2m > [22m[2mhides inline Register/Login on mobile so the header fits 320px viewports[22m[39m
+Warning: An update to Header inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at Header (/home/runner/work/one-api/one-api/web/modern/src/components/layout/Header.tsx:50:51)
+    at Router (/home/runner/work/one-api/one-api/web/modern/node_modules/react-router/dist/umd/react-router.development.js:1207:17)
+    at MemoryRouter (/home/runner/work/one-api/one-api/web/modern/node_modules/react-router/dist/umd/react-router.development.js:1101:7)
+
+ [32m✓[39m src/components/layout/Header.test.tsx [2m ([22m[2m5 tests[22m[2m)[22m[33m 786[2mms[22m[39m
+ [32m✓[39m src/hooks/__tests__/usePersistentState.test.ts [2m ([22m[2m18 tests[22m[2m)[22m[90m 48[2mms[22m[39m
+ [32m✓[39m src/pages/auth/__tests__/RegisterPage.turnstile.test.tsx [2m ([22m[2m5 tests[22m[2m)[22m[33m 1128[2mms[22m[39m
+[90mstderr[2m | src/test/responsive-components.test.tsx[2m > [22m[2mResponsive Components[2m > [22m[2mshould render ResponsiveContainer without crashing[22m[39m
+⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+⚠️ React Router Future Flag Warning: Relative route resolution within Splat routes is changing in v7. You can use the `v7_relativeSplatPath` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_relativesplatpath.
+
+ [32m✓[39m src/test/responsive-components.test.tsx [2m ([22m[2m8 tests[22m[2m)[22m[90m 215[2mms[22m[39m
+ [32m✓[39m src/pages/topup/__tests__/TopUpPage.amount.test.tsx [2m ([22m[2m2 tests[22m[2m)[22m[33m 493[2mms[22m[39m
+ [32m✓[39m src/hooks/__tests__/useEventLog.test.ts [2m ([22m[2m8 tests[22m[2m)[22m[90m 41[2mms[22m[39m
+ [32m✓[39m src/lib/export.test.ts [2m ([22m[2m5 tests[22m[2m)[22m[90m 65[2mms[22m[39m
+ [32m✓[39m src/pages/settings/__tests__/SystemSettings.sensitive.test.tsx [2m ([22m[2m5 tests[22m[2m)[22m[33m 2403[2mms[22m[39m
+ [32m✓[39m src/hooks/__tests__/usePlaygroundChat.events.test.ts [2m ([22m[2m4 tests[22m[2m)[22m[90m 28[2mms[22m[39m
+ [32m✓[39m src/lib/__tests__/utils.test.ts [2m ([22m[2m9 tests[22m[2m)[22m[90m 11[2mms[22m[39m
+[90mstdout[2m | src/lib/__tests__/utils.test.ts[2m > [22m[2mdatetime-local helpers[2m > [22m[2mhandles empty input[22m[39m
+[datetime] fromDateTimeLocal received empty value
+[datetime] toDateTimeLocal received empty timestamp { timestamp: 0 }
+
+[90mstdout[2m | src/lib/__tests__/utils.test.ts[2m > [22m[2mformatTimestamp[2m > [22m[2mhandles invalid timestamps[22m[39m
+[datetime] formatTimestamp received invalid timestamp { timestamp: 0 }
+[datetime] formatTimestamp received invalid timestamp { timestamp: -1 }
+[datetime] formatTimestamp received empty timestamp { timestamp: undefined }
+[datetime] formatTimestamp received empty timestamp { timestamp: null }
+
+ [32m✓[39m src/components/chat/__tests__/EventLogPanel.test.tsx [2m ([22m[2m9 tests[22m[2m)[22m[90m 282[2mms[22m[39m
+ [32m✓[39m src/lib/__tests__/model-capabilities.test.ts [2m ([22m[2m18 tests[22m[2m)[22m[90m 12[2mms[22m[39m
+ [32m✓[39m src/pages/channels/components/__tests__/ChannelSpecificConfig.key-prompts.test.tsx [2m ([22m[2m5 tests[22m[2m)[22m[90m 268[2mms[22m[39m
+[90mstderr[2m | src/components/auth/__tests__/ProtectedRoute.test.tsx[2m > [22m[2mProtectedRoute[2m > [22m[2mshows loading spinner initially[22m[39m
+⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+⚠️ React Router Future Flag Warning: Relative route resolution within Splat routes is changing in v7. You can use the `v7_relativeSplatPath` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_relativesplatpath.
+
+ [32m✓[39m src/components/auth/__tests__/ProtectedRoute.test.tsx [2m ([22m[2m4 tests[22m[2m)[22m[90m 90[2mms[22m[39m
+[90mstderr[2m | src/pages/users/__tests__/EditUserPage.test.tsx[2m > [22m[2mEditUserPage 2FA disable button[2m > [22m[2mrenders disable 2FA button when admin views another user and triggers API call on confirm[22m[39m
+⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+⚠️ React Router Future Flag Warning: Relative route resolution within Splat routes is changing in v7. You can use the `v7_relativeSplatPath` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_relativesplatpath.
+
+ [32m✓[39m src/pages/users/__tests__/EditUserPage.test.tsx [2m ([22m[2m2 tests[22m[2m)[22m[33m 573[2mms[22m[39m
+[90mstderr[2m | src/pages/auth/__tests__/OidcOAuthPage.test.tsx[2m > [22m[2mOidcOAuthPage[2m > [22m[2mnavigates to / on successful OAuth login[22m[39m
+⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+⚠️ React Router Future Flag Warning: Relative route resolution within Splat routes is changing in v7. You can use the `v7_relativeSplatPath` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_relativesplatpath.
+
+[90mstderr[2m | src/pages/auth/__tests__/OidcOAuthPage.test.tsx[2m > [22m[2mOidcOAuthPage[2m > [22m[2msurfaces an error state when the OAuth call fails[22m[39m
+Warning: An update to OidcOAuthPage inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at OidcOAuthPage (/home/runner/work/one-api/one-api/web/modern/src/pages/auth/OidcOAuthPage.tsx:16:48)
+    at RenderedRoute (/home/runner/work/one-api/one-api/web/modern/node_modules/react-router/dist/umd/react-router.development.js:539:7)
+    at Routes (/home/runner/work/one-api/one-api/web/modern/node_modules/react-router/dist/umd/react-router.development.js:1273:7)
+    at Router (/home/runner/work/one-api/one-api/web/modern/node_modules/react-router/dist/umd/react-router.development.js:1207:17)
+    at MemoryRouter (/home/runner/work/one-api/one-api/web/modern/node_modules/react-router/dist/umd/react-router.development.js:1101:7)
+
+ [32m✓[39m src/pages/auth/__tests__/OidcOAuthPage.test.tsx [2m ([22m[2m3 tests[22m[2m)[22m[90m 138[2mms[22m[39m
+[90mstderr[2m | src/pages/logs/__tests__/LogsPage.test.tsx[2m > [22m[2mLogsPage action feedback[2m > [22m[2mshows an error when clear logs returns success false[22m[39m
+⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+⚠️ React Router Future Flag Warning: Relative route resolution within Splat routes is changing in v7. You can use the `v7_relativeSplatPath` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_relativesplatpath.
+
+ [32m✓[39m src/pages/logs/__tests__/LogsPage.test.tsx [2m ([22m[2m2 tests[22m[2m)[22m[33m 925[2mms[22m[39m
+[90mstderr[2m | src/pages/auth/__tests__/WeChatOAuthPage.test.tsx[2m > [22m[2mWeChatOAuthPage[2m > [22m[2mnavigates to / on successful OAuth login[22m[39m
+⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+⚠️ React Router Future Flag Warning: Relative route resolution within Splat routes is changing in v7. You can use the `v7_relativeSplatPath` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_relativesplatpath.
+
+[90mstderr[2m | src/pages/auth/__tests__/WeChatOAuthPage.test.tsx[2m > [22m[2mWeChatOAuthPage[2m > [22m[2msurfaces an error state when the OAuth call fails[22m[39m
+Warning: An update to WeChatOAuthPage inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at WeChatOAuthPage (/home/runner/work/one-api/one-api/web/modern/src/pages/auth/WeChatOAuthPage.tsx:16:48)
+    at RenderedRoute (/home/runner/work/one-api/one-api/web/modern/node_modules/react-router/dist/umd/react-router.development.js:539:7)
+    at Routes (/home/runner/work/one-api/one-api/web/modern/node_modules/react-router/dist/umd/react-router.development.js:1273:7)
+    at Router (/home/runner/work/one-api/one-api/web/modern/node_modules/react-router/dist/umd/react-router.development.js:1207:17)
+    at MemoryRouter (/home/runner/work/one-api/one-api/web/modern/node_modules/react-router/dist/umd/react-router.development.js:1101:7)
+
+ [32m✓[39m src/pages/auth/__tests__/WeChatOAuthPage.test.tsx [2m ([22m[2m3 tests[22m[2m)[22m[90m 179[2mms[22m[39m
+[90mstderr[2m | src/pages/channels/__tests__/ChannelsPage.balance.test.tsx[2m > [22m[2mChannelsPage balance refresh[2m > [22m[2mrefreshes a single row balance via per-row icon[22m[39m
+⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+⚠️ React Router Future Flag Warning: Relative route resolution within Splat routes is changing in v7. You can use the `v7_relativeSplatPath` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_relativesplatpath.
+
+ [32m✓[39m src/pages/settings/__tests__/SystemSettings.email-whitelist.test.tsx [2m ([22m[2m1 test[22m[2m)[22m[33m 1916[2mms[22m[39m
+ [32m✓[39m src/pages/channels/__tests__/ChannelsPage.balance.test.tsx [2m ([22m[2m2 tests[22m[2m)[22m[33m 1004[2mms[22m[39m
+[90mstderr[2m | src/pages/settings/__tests__/SystemSettings.failure.test.tsx[2m > [22m[2mSystemSettings failure handling[2m > [22m[2mrestores the previous value when save returns success false[22m[39m
+Error saving option: Error: save rejected
+    at /home/runner/work/one-api/one-api/web/modern/src/pages/settings/SystemSettings.tsx:374:17
+    at /home/runner/work/one-api/one-api/web/modern/src/pages/settings/SystemSettingsFields.tsx:51:9
+    at /home/runner/work/one-api/one-api/web/modern/src/pages/settings/SystemSettingsFields.tsx:68:5
+
+[90mstderr[2m | src/pages/settings/__tests__/SystemSettings.failure.test.tsx[2m > [22m[2mSystemSettings failure handling[2m > [22m[2mshows an error when oidc discovery save returns success false[22m[39m
+OIDC discovery failed: Error: endpoint save failed
+    at /home/runner/work/one-api/one-api/web/modern/src/pages/settings/SystemSettings.tsx:479:17
+
+ [32m✓[39m src/pages/settings/__tests__/SystemSettings.failure.test.tsx [2m ([22m[2m2 tests[22m[2m)[22m[33m 1860[2mms[22m[39m
+ [32m✓[39m src/pages/topup/TopUpPage.test.tsx [2m ([22m[2m2 tests[22m[2m)[22m[90m 208[2mms[22m[39m
+[90mstderr[2m | src/pages/tokens/__tests__/TokensPage.actions.test.tsx[2m > [22m[2mTokensPage action feedback[2m > [22m[2mshows an error when delete returns success false[22m[39m
+⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+⚠️ React Router Future Flag Warning: Relative route resolution within Splat routes is changing in v7. You can use the `v7_relativeSplatPath` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_relativesplatpath.
+
+ [32m✓[39m src/pages/tokens/__tests__/TokensPage.actions.test.tsx [2m ([22m[2m2 tests[22m[2m)[22m[33m 697[2mms[22m[39m
+ [32m✓[39m src/hooks/__tests__/useNotice.test.ts [2m ([22m[2m5 tests[22m[2m)[22m[90m 151[2mms[22m[39m
+ [32m✓[39m src/pages/settings/__tests__/SystemSettings.oidc-discovery.test.tsx [2m ([22m[2m1 test[22m[2m)[22m[33m 889[2mms[22m[39m
+[90mstderr[2m | src/pages/redemptions/__tests__/RedemptionsPage.test.tsx[2m > [22m[2mRedemptionsPage action feedback[2m > [22m[2mshows an error when delete returns success false[22m[39m
+⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+⚠️ React Router Future Flag Warning: Relative route resolution within Splat routes is changing in v7. You can use the `v7_relativeSplatPath` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_relativesplatpath.
+
+ [32m✓[39m src/pages/redemptions/__tests__/RedemptionsPage.test.tsx [2m ([22m[2m2 tests[22m[2m)[22m[33m 501[2mms[22m[39m
+[90mstderr[2m | src/pages/channels/__tests__/ChannelsPage.priority.test.tsx[2m > [22m[2mChannelsPage priority editor[2m > [22m[2msaves a changed priority on blur[22m[39m
+⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+⚠️ React Router Future Flag Warning: Relative route resolution within Splat routes is changing in v7. You can use the `v7_relativeSplatPath` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_relativesplatpath.
+
+ [32m✓[39m src/pages/channels/__tests__/ChannelsPage.priority.test.tsx [2m ([22m[2m2 tests[22m[2m)[22m[33m 673[2mms[22m[39m
+[90mstderr[2m | src/pages/channels/__tests__/ChannelsPage.bulk-status.test.tsx[2m > [22m[2mChannelsPage bulk enable/disable[2m > [22m[2mdisables all visible channels via bulk action[22m[39m
+⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+⚠️ React Router Future Flag Warning: Relative route resolution within Splat routes is changing in v7. You can use the `v7_relativeSplatPath` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_relativesplatpath.
+
+ [32m✓[39m src/pages/channels/__tests__/ChannelsPage.bulk-status.test.tsx [2m ([22m[2m1 test[22m[2m)[22m[33m 980[2mms[22m[39m
+[90mstderr[2m | src/pages/settings/__tests__/OperationSettings.test.tsx[2m > [22m[2mOperationSettings failure feedback[2m > [22m[2mshows an error when grouped save returns success false[22m[39m
+Error updating QuotaForNewUser: Error: quota save rejected
+    at persistOption (/home/runner/work/one-api/one-api/web/modern/src/pages/settings/OperationSettings.tsx:167:15)
+    at onSubmitGroup (/home/runner/work/one-api/one-api/web/modern/src/pages/settings/OperationSettings.tsx:185:11)
+
+ [32m✓[39m src/pages/settings/__tests__/OperationSettings.test.tsx [2m ([22m[2m2 tests[22m[2m)[22m[33m 505[2mms[22m[39m
+ [32m✓[39m src/pages/HomePage.test.tsx [2m ([22m[2m3 tests[22m[2m)[22m[90m 136[2mms[22m[39m
+ [32m✓[39m src/components/layout/__tests__/NoticeBanner.test.tsx [2m ([22m[2m3 tests[22m[2m)[22m[90m 150[2mms[22m[39m
+[90mstderr[2m | src/pages/auth/__tests__/RegisterPage.oauth.test.tsx[2m > [22m[2mRegisterPage OAuth state handling[2m > [22m[2mshows the localized OAuth state error instead of launching GitHub OAuth when state creation fails[22m[39m
+⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+⚠️ React Router Future Flag Warning: Relative route resolution within Splat routes is changing in v7. You can use the `v7_relativeSplatPath` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_relativesplatpath.
+
+ [32m✓[39m src/pages/auth/__tests__/RegisterPage.oauth.test.tsx [2m ([22m[2m1 test[22m[2m)[22m[90m 207[2mms[22m[39m
+ [32m✓[39m src/components/ui/__tests__/searchable-dropdown.test.tsx [2m ([22m[2m3 tests[22m[2m)[22m[33m 1088[2mms[22m[39m
+ [32m✓[39m src/components/shared/__tests__/NameWithId.test.tsx [2m ([22m[2m4 tests[22m[2m)[22m[33m 341[2mms[22m[39m
+ [32m✓[39m src/pages/logs/components/__tests__/LogModelCell.test.tsx [2m ([22m[2m3 tests[22m[2m)[22m[90m 55[2mms[22m[39m
+ [32m✓[39m src/pages/settings/SystemSettings.test.tsx [2m ([22m[2m1 test[22m[2m)[22m[33m 961[2mms[22m[39m
+ [32m✓[39m src/pages/tokens/__tests__/TokensPage.highlight.spec.ts [2m ([22m[2m5 tests[22m[2m)[22m[90m 3[2mms[22m[39m
+ [32m✓[39m src/pages/__tests__/NotFoundPage.test.tsx [2m ([22m[2m1 test[22m[2m)[22m[90m 81[2mms[22m[39m
+[90mstderr[2m | src/pages/__tests__/NotFoundPage.test.tsx[2m > [22m[2mNotFoundPage[2m > [22m[2mshows 404 and countdown, then navigates after 5s[22m[39m
+⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+⚠️ React Router Future Flag Warning: Relative route resolution within Splat routes is changing in v7. You can use the `v7_relativeSplatPath` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_relativesplatpath.
+Warning: `ReactDOMTestUtils.act` is deprecated in favor of `React.act`. Import `act` from `react` instead of `react-dom/test-utils`. See https://react.dev/warnings/react-dom-test-utils for more info.
+
+ [32m✓[39m src/pages/tokens/__tests__/useClipboardManager.spec.ts [2m ([22m[2m2 tests[22m[2m)[22m[90m 25[2mms[22m[39m
+[90mstderr[2m | src/pages/auth/__tests__/RegisterPage.test.tsx[2m > [22m[2mRegisterPage (modern)[2m > [22m[2mprefills affiliate code (aff) from URL into aff_code field[22m[39m
+⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+⚠️ React Router Future Flag Warning: Relative route resolution within Splat routes is changing in v7. You can use the `v7_relativeSplatPath` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_relativesplatpath.
+
+ [32m✓[39m src/pages/auth/__tests__/RegisterPage.test.tsx [2m ([22m[2m1 test[22m[2m)[22m[90m 96[2mms[22m[39m
+ [32m✓[39m src/pages/dashboard/components/ToolUsageCharts.test.tsx [2m ([22m[2m1 test[22m[2m)[22m[90m 169[2mms[22m[39m
+ [32m✓[39m src/components/ui/__tests__/timestamp.test.tsx [2m ([22m[2m3 tests[22m[2m)[22m[33m 302[2mms[22m[39m
+ [32m✓[39m src/components/ui/form.test.tsx [2m ([22m[2m2 tests[22m[2m)[22m[90m 132[2mms[22m[39m
+ [32m✓[39m src/pages/channels/EditChannelPage.test.ts [2m ([22m[2m4 tests[22m[2m)[22m[90m 5[2mms[22m[39m
+ [32m✓[39m src/pages/settings/__tests__/OtherSettings.test.tsx [2m ([22m[2m1 test[22m[2m)[22m[33m 334[2mms[22m[39m
+ [32m✓[39m src/components/layout/__tests__/Header.topup.test.tsx [2m ([22m[2m1 test[22m[2m)[22m[90m 158[2mms[22m[39m
+[90mstderr[2m | src/components/layout/__tests__/Header.topup.test.tsx[2m > [22m[2mHeader mobile overflow prevention[2m > [22m[2mrenders header with no horizontal overflow and truncates brand text[22m[39m
+⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+⚠️ React Router Future Flag Warning: Relative route resolution within Splat routes is changing in v7. You can use the `v7_relativeSplatPath` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_relativesplatpath.
+
+ [32m✓[39m src/pages/models/tier-threshold.test.ts [2m ([22m[2m3 tests[22m[2m)[22m[90m 2[2mms[22m[39m
+ [32m✓[39m src/lib/__tests__/oauth.test.ts [2m ([22m[2m1 test[22m[2m)[22m[90m 4[2mms[22m[39m
+ [32m✓[39m src/pages/dashboard/DashboardPage.test.ts [2m ([22m[2m1 test[22m[2m)[22m[90m 36[2mms[22m[39m
+
+[2m Test Files [22m [1m[32m63 passed[39m[22m[90m (63)[39m
+[2m      Tests [22m [1m[32m347 passed[39m[22m[2m | [22m[33m1 skipped[39m[90m (348)[39m
+[2m   Start at [22m 23:54:01
+[2m   Duration [22m 44.01s[2m (transform 2.84s, setup 6.97s, collect 30.25s, tests 39.48s, environment 33.81s, prepare 7.63s)[22m
+
+Done in 44.59s.
+=== diagnostic/type-check.log ===
+yarn run v1.22.22
+$ tsc --noEmit
+Done in 10.27s.
+
+--- downloaded/frontend-optimized-air/failure-extract.txt
+=== diagnostic/test.log ===
+yarn run v1.22.22
+$ react-scripts test --watchAll=false --passWithNoTests
+No tests found, exiting with code 0
+Done in 0.57s.
+
+--- downloaded/frontend-optimized-berry/failure-extract.txt
+=== diagnostic/test.log ===
+yarn run v1.22.22
+$ react-scripts test --watchAll=false --passWithNoTests
+No tests found, exiting with code 0
+Done in 0.64s.
+
+--- downloaded/frontend-optimized-modern/failure-extract.txt
+=== diagnostic/build.log ===
+yarn run v1.22.22
+$ tsc -b && vite build --emptyOutDir
+[36mvite v7.1.2 [32mbuilding for production...[36m[39m
+transforming...
+[32m✓[39m 3055 modules transformed.
+rendering chunks...
+computing gzip size...
+[2m../build/modern/[22m[2massets/[22m[32mKaTeX_Size3-Regular-CTq5MqoE.woff         [39m[1m[2m  4.42 kB[22m[1m[22m
+[2m../build/modern/[22m[2massets/[22m[32mKaTeX_Size4-Regular-Dl5lxZxV.woff2        [39m[1m[2m  4.93 kB[22m[1m[22m
+[2m../build/modern/[22m[2massets/[22m[32mKaTeX_Size2-Regular-Dy4dx90m.woff2        [39m[1m[2m  5.21 kB[22m[1m[22m
+[2m../build/modern/[22m[2massets/[22m[32mKaTeX_Size1-Regular-mCD8mA8B.woff2        [39m[1m[2m  5.47 kB[22m[1m[22m
+[2m../build/modern/[22m[2massets/[22m[32mKaTeX_Size4-Regular-BF-4gkZK.woff         [39m[1m[2m  5.98 kB[22m[1m[22m
+[2m../build/modern/[22m[2massets/[22m[32mKaTeX_Size2-Regular-oD1tc_U0.woff         [39m[1m[2m  6.19 kB[22m[1m[22m
+[2m../build/modern/[22m[2massets/[22m[32mKaTeX_Size1-Regular-C195tn64.woff         [39m[1m[2m  6.50 kB[22m[1m[22m
+[2m../build/modern/[22m[2massets/[22m[32mKaTeX_Caligraphic-Regular-Di6jR-x-.woff2  [39m[1m[2m  6.91 kB[22m[1m[22m
+[2m../build/modern/[22m[2massets/[22m[32mKaTeX_Caligraphic-Bold-Dq_IR9rO.woff2     [39m[1m[2m  6.91 kB[22m[1m[22m
+[2m../build/modern/[22m[2massets/[22m[32mKaTeX_Size3-Regular-DgpXs0kz.ttf          [39m[1m[2m  7.59 kB[22m[1m[22m
+[2m../build/modern/[22m[2massets/[22m[32mKaTeX_Caligraphic-Regular-CTRA-rTL.woff   [39m[1m[2m  7.66 kB[22m[1m[22m
+[2m../build/modern/[22m[2massets/[22m[32mKaTeX_Caligraphic-Bold-BEiXGLvX.woff      [39m[1m[2m  7.72 kB[22m[1m[22m
+[2m../build/modern/[22m[2massets/[22m[32mKaTeX_Script-Regular-D3wIWfF6.woff2       [39m[1m[2m  9.64 kB[22m[1m[22m
+[2m../build/modern/[22m[2massets/[22m[32mKaTeX_SansSerif-Regular-DDBCnlJ7.woff2    [39m[1m[2m 10.34 kB[22m[1m[22m
+[2m../build/modern/[22m[2massets/[22m[32mKaTeX_Size4-Regular-DWFBv043.ttf          [39m[1m[2m 10.36 kB[22m[1m[22m
+[2m../build/modern/[22m[2massets/[22m[32mKaTeX_Script-Regular-D5yQViql.woff        [39m[1m[2m 10.59 kB[22m[1m[22m
+[2m../build/modern/[22m[2massets/[22m[32mKaTeX_Fraktur-Regular-CTYiF6lA.woff2      [39m[1m[2m 11.32 kB[22m[1m[22m
+[2m../build/modern/[22m[2massets/[22m[32mKaTeX_Fraktur-Bold-CL6g_b3V.woff2         [39m[1m[2m 11.35 kB[22m[1m[22m
+[2m../build/modern/[22m[2massets/[22m[32mKaTeX_Size2-Regular-B7gKUWhC.ttf          [39m[1m[2m 11.51 kB[22m[1m[22m
+[2m../build/modern/[22m[32mindex.html                                       [39m[1m[2m 11.68 kB[22m[1m[22m[2m │ gzip:   3.29 kB[22m
+[2m../build/modern/[22m[2massets/[22m[32mKaTeX_SansSerif-Italic-C3H0VqGB.woff2     [39m[1m[2m 12.03 kB[22m[1m[22m
+[2m../build/modern/[22m[2massets/[22m[32mKaTeX_SansSerif-Bold-D1sUS0GD.woff2       [39m[1m[2m 12.22 kB[22m[1m[22m
+[2m../build/modern/[22m[2massets/[22m[32mKaTeX_Size1-Regular-Dbsnue_I.ttf          [39m[1m[2m 12.23 kB[22m[1m[22m
+[2m../build/modern/[22m[2massets/[22m[32mKaTeX_SansSerif-Regular-CS6fqUqJ.woff     [39m[1m[2m 12.32 kB[22m[1m[22m
+[2m../build/modern/[22m[2massets/[22m[32mKaTeX_Caligraphic-Regular-wX97UBjC.ttf    [39m[1m[2m 12.34 kB[22m[1m[22m
+[2m../build/modern/[22m[2massets/[22m[32mKaTeX_Caligraphic-Bold-ATXxdsX0.ttf       [39m[1m[2m 12.37 kB[22m[1m[22m
+[2m../build/modern/[22m[2massets/[22m[32mKaTeX_Fraktur-Regular-Dxdc4cR9.woff       [39m[1m[2m 13.21 kB[22m[1m[22m
+[2m../build/modern/[22m[2massets/[22m[32mKaTeX_Fraktur-Bold-BsDP51OF.woff          [39m[1m[2m 13.30 kB[22m[1m[22m
+[2m../build/modern/[22m[2massets/[22m[32mKaTeX_Typewriter-Regular-CO6r4hn1.woff2   [39m[1m[2m 13.57 kB[22m[1m[22m
+[2m../build/modern/[22m[2massets/[22m[32mKaTeX_SansSerif-Italic-DN2j7dab.woff      [39m[1m[2m 14.11 kB[22m[1m[22m
+[2m../build/modern/[22m[2massets/[22m[32mKaTeX_SansSerif-Bold-DbIhKOiC.woff        [39m[1m[2m 14.41 kB[22m[1m[22m
+[2m../build/modern/[22m[2massets/[22m[32mKaTeX_Typewriter-Regular-C0xS9mPB.woff    [39m[1m[2m 16.03 kB[22m[1m[22m
+[2m../build/modern/[22m[2massets/[22m[32mKaTeX_Math-BoldItalic-CZnvNsCZ.woff2      [39m[1m[2m 16.40 kB[22m[1m[22m
+[2m../build/modern/[22m[2massets/[22m[32mKaTeX_Math-Italic-t53AETM-.woff2          [39m[1m[2m 16.44 kB[22m[1m[22m
+[2m../build/modern/[22m[2massets/[22m[32mKaTeX_Script-Regular-C5JkGWo-.ttf         [39m[1m[2m 16.65 kB[22m[1m[22m
+[2m../build/modern/[22m[2massets/[22m[32mKaTeX_Main-BoldItalic-DxDJ3AOS.woff2      [39m[1m[2m 16.78 kB[22m[1m[22m
+[2m../build/modern/[22m[2massets/[22m[32mKaTeX_Main-Italic-NWA7e6Wa.woff2          [39m[1m[2m 16.99 kB[22m[1m[22m
+[2m../build/modern/[22m[2massets/[22m[32mKaTeX_Math-BoldItalic-iY-2wyZ7.woff       [39m[1m[2m 18.67 kB[22m[1m[22m
+[2m../build/modern/[22m[2massets/[22m[32mKaTeX_Math-Italic-DA0__PXp.woff           [39m[1m[2m 18.75 kB[22m[1m[22m
+[2m../build/modern/[22m[2massets/[22m[32mKaTeX_Main-BoldItalic-SpSLRI95.woff       [39m[1m[2m 19.41 kB[22m[1m[22m
+[2m../build/modern/[22m[2massets/[22m[32mKaTeX_SansSerif-Regular-BNo7hRIc.ttf      [39m[1m[2m 19.44 kB[22m[1m[22m
+[2m../build/modern/[22m[2massets/[22m[32mKaTeX_Fraktur-Regular-CB_wures.ttf        [39m[1m[2m 19.57 kB[22m[1m[22m
+[2m../build/modern/[22m[2massets/[22m[32mKaTeX_Fraktur-Bold-BdnERNNW.ttf           [39m[1m[2m 19.58 kB[22m[1m[22m
+[2m../build/modern/[22m[2massets/[22m[32mKaTeX_Main-Italic-BMLOBm91.woff           [39m[1m[2m 19.68 kB[22m[1m[22m
+[2m../build/modern/[22m[2massets/[22m[32mKaTeX_SansSerif-Italic-YYjJ1zSn.ttf       [39m[1m[2m 22.36 kB[22m[1m[22m
+[2m../build/modern/[22m[2massets/[22m[32mKaTeX_SansSerif-Bold-CFMepnvq.ttf         [39m[1m[2m 24.50 kB[22m[1m[22m
+[2m../build/modern/[22m[2massets/[22m[32mKaTeX_Main-Bold-Cx986IdX.woff2            [39m[1m[2m 25.32 kB[22m[1m[22m
+[2m../build/modern/[22m[2massets/[22m[32mKaTeX_Main-Regular-B22Nviop.woff2         [39m[1m[2m 26.27 kB[22m[1m[22m
+[2m../build/modern/[22m[2massets/[22m[32mKaTeX_Typewriter-Regular-D3Ib7_Hf.ttf     [39m[1m[2m 27.56 kB[22m[1m[22m
+[2m../build/modern/[22m[2massets/[22m[32mKaTeX_AMS-Regular-BQhdFMY1.woff2          [39m[1m[2m 28.08 kB[22m[1m[22m
+[2m../build/modern/[22m[2massets/[22m[32mKaTeX_Main-Bold-Jm3AIy58.woff             [39m[1m[2m 29.91 kB[22m[1m[22m
+[2m../build/modern/[22m[2massets/[22m[32mKaTeX_Main-Regular-Dr94JaBh.woff          [39m[1m[2m 30.77 kB[22m[1m[22m
+[2m../build/modern/[22m[2massets/[22m[32mKaTeX_Math-BoldItalic-B3XSjfu4.ttf        [39m[1m[2m 31.20 kB[22m[1m[22m
+[2m../build/modern/[22m[2massets/[22m[32mKaTeX_Math-Italic-flOr_0UB.ttf            [39m[1m[2m 31.31 kB[22m[1m[22m
+[2m../build/modern/[22m[2massets/[22m[32mKaTeX_Main-BoldItalic-DzxPMmG6.ttf        [39m[1m[2m 32.97 kB[22m[1m[22m
+[2m../build/modern/[22m[2massets/[22m[32mKaTeX_AMS-Regular-DMm9YOAa.woff           [39m[1m[2m 33.52 kB[22m[1m[22m
+[2m../build/modern/[22m[2massets/[22m[32mKaTeX_Main-Italic-3WenGoN9.ttf            [39m[1m[2m 33.58 kB[22m[1m[22m
+[2m../build/modern/[22m[2massets/[22m[32mKaTeX_Main-Bold-waoOVXN0.ttf              [39m[1m[2m 51.34 kB[22m[1m[22m
+[2m../build/modern/[22m[2massets/[22m[32mKaTeX_Main-Regular-ypZvNtVU.ttf           [39m[1m[2m 53.58 kB[22m[1m[22m
+[2m../build/modern/[22m[2massets/[22m[32mKaTeX_AMS-Regular-DRggAlZN.ttf            [39m[1m[2m 63.63 kB[22m[1m[22m
+[2m../build/modern/[22m[2massets/[22m[35mPlaygroundPage-dExf98Xo.css               [39m[1m[2m  1.16 kB[22m[1m[22m[2m │ gzip:   0.54 kB[22m
+[2m../build/modern/[22m[2massets/[22m[35mindex-Cx56vY5z.css                        [39m[1m[2m127.52 kB[22m[1m[22m[2m │ gzip:  25.47 kB[22m
+[2m../build/modern/[22m[36mlist-action-button.CoqILd9w.js                   [39m[1m[2m  0.27 kB[22m[1m[22m[2m │ gzip:   0.22 kB[22m
+[2m../build/modern/[22m[36mseparator.BBFlinBW.js                            [39m[1m[2m  0.46 kB[22m[1m[22m[2m │ gzip:   0.31 kB[22m
+[2m../build/modern/[22m[36mlabel.B_l6qLwn.js                                [39m[1m[2m  0.46 kB[22m[1m[22m[2m │ gzip:   0.31 kB[22m
+[2m../build/modern/[22m[36mtextarea.D92ASZa1.js                             [39m[1m[2m  0.59 kB[22m[1m[22m[2m │ gzip:   0.37 kB[22m
+[2m../build/modern/[22m[36minput.DzTOih3A.js                                [39m[1m[2m  0.64 kB[22m[1m[22m[2m │ gzip:   0.41 kB[22m
+[2m../build/modern/[22m[36mtimestamp.BwhnmQkp.js                            [39m[1m[2m  0.66 kB[22m[1m[22m[2m │ gzip:   0.40 kB[22m
+[2m../build/modern/[22m[36mcard.BkQtOFh_.js                                 [39m[1m[2m  0.68 kB[22m[1m[22m[2m │ gzip:   0.32 kB[22m
+[2m../build/modern/[22m[36mcheckbox.SRXCmsNp.js                             [39m[1m[2m  0.79 kB[22m[1m[22m[2m │ gzip:   0.45 kB[22m
+[2m../build/modern/[22m[36mbadge.B2FpRaH1.js                                [39m[1m[2m  0.79 kB[22m[1m[22m[2m │ gzip:   0.42 kB[22m
+[2m../build/modern/[22m[36moauth.CkggFOtI.js                                [39m[1m[2m  0.86 kB[22m[1m[22m[2m │ gzip:   0.45 kB[22m
+[2m../build/modern/[22m[36mresponsive-action-group.39FEK0l8.js              [39m[1m[2m  0.89 kB[22m[1m[22m[2m │ gzip:   0.46 kB[22m
+[2m../build/modern/[22m[36mscroll-area.D4ujpZ4-.js                          [39m[1m[2m  0.89 kB[22m[1m[22m[2m │ gzip:   0.47 kB[22m
+[2m../build/modern/[22m[36mresponsive-debugger.CNsYchEf.js                  [39m[1m[2m  1.03 kB[22m[1m[22m[2m │ gzip:   0.53 kB[22m
+[2m../build/modern/[22m[36mpopover.CDbAQGHl.js                              [39m[1m[2m  1.07 kB[22m[1m[22m[2m │ gzip:   0.53 kB[22m
+[2m../build/modern/[22m[36mTurnstile.RamQGvQs.js                            [39m[1m[2m  1.28 kB[22m[1m[22m[2m │ gzip:   0.63 kB[22m
+[2m../build/modern/[22m[36mtoAuthenticatorAttachment.BvQQNb3C.js            [39m[1m[2m  1.46 kB[22m[1m[22m[2m │ gzip:   0.72 kB[22m
+[2m../build/modern/[22m[36mresponsive-container.BeBd_UA9.js                 [39m[1m[2m  1.56 kB[22m[1m[22m[2m │ gzip:   0.72 kB[22m
+[2m../build/modern/[22m[36mHomePage.CIDXmihF.js                             [39m[1m[2m  1.61 kB[22m[1m[22m[2m │ gzip:   0.88 kB[22m
+[2m../build/modern/[22m[36mconfirm-dialog.DjVSL5oV.js                       [39m[1m[2m  1.64 kB[22m[1m[22m[2m │ gzip:   0.81 kB[22m
+[2m../build/modern/[22m[36mToolListEditor.BZ06LGNu.js                       [39m[1m[2m  1.76 kB[22m[1m[22m[2m │ gzip:   0.91 kB[22m
+[2m../build/modern/[22m[36mzod.Cnmsd81d.js                                  [39m[1m[2m  1.82 kB[22m[1m[22m[2m │ gzip:   0.87 kB[22m
+[2m../build/modern/[22m[36mNotFoundPage.BL-uDpkS.js                         [39m[1m[2m  1.86 kB[22m[1m[22m[2m │ gzip:   0.87 kB[22m
+[2m../build/modern/[22m[36mcommand.toag3nt7.js                              [39m[1m[2m  2.10 kB[22m[1m[22m[2m │ gzip:   0.79 kB[22m
+[2m../build/modern/[22m[36mresponsive-validator.UFQsUOnb.js                 [39m[1m[2m  2.18 kB[22m[1m[22m[2m │ gzip:   0.98 kB[22m
+[2m../build/modern/[22m[36mLarkOAuthPage.BRMUowyC.js                        [39m[1m[2m  2.48 kB[22m[1m[22m[2m │ gzip:   1.16 kB[22m
+[2m../build/modern/[22m[36mOidcOAuthPage.C3amValb.js                        [39m[1m[2m  2.48 kB[22m[1m[22m[2m │ gzip:   1.16 kB[22m
+[2m../build/modern/[22m[36mGitHubOAuthPage.CeucM9xO.js                      [39m[1m[2m  2.50 kB[22m[1m[22m[2m │ gzip:   1.16 kB[22m
+[2m../build/modern/[22m[36mWeChatOAuthPage.DV3pvHdP.js                      [39m[1m[2m  2.50 kB[22m[1m[22m[2m │ gzip:   1.16 kB[22m
+[2m../build/modern/[22m[36mAboutPage.zW8LR8gd.js                            [39m[1m[2m  2.87 kB[22m[1m[22m[2m │ gzip:   1.26 kB[22m
+[2m../build/modern/[22m[36mPasswordResetConfirmPage.BycHQCJw.js             [39m[1m[2m  3.11 kB[22m[1m[22m[2m │ gzip:   1.30 kB[22m
+[2m../build/modern/[22m[36mlayout-debug.BEtcTD2N.js                         [39m[1m[2m  3.16 kB[22m[1m[22m[2m │ gzip:   1.35 kB[22m
+[2m../build/modern/[22m[36mselect.CDHX4RWE.js                               [39m[1m[2m  3.41 kB[22m[1m[22m[2m │ gzip:   1.24 kB[22m
+[2m../build/modern/[22m[36mPasswordResetPage.FoyDu2eD.js                    [39m[1m[2m  3.48 kB[22m[1m[22m[2m │ gzip:   1.43 kB[22m
+[2m../build/modern/[22m[36mselection-list-manager.CnVS8-m6.js               [39m[1m[2m  3.52 kB[22m[1m[22m[2m │ gzip:   1.46 kB[22m
+[2m../build/modern/[22m[36musePersistentState.CBpzpOSF.js                   [39m[1m[2m  4.38 kB[22m[1m[22m[2m │ gzip:   1.72 kB[22m
+[2m../build/modern/[22m[36mmarkdown-rehype-sanitize.DIvUEknc.js             [39m[1m[2m  5.19 kB[22m[1m[22m[2m │ gzip:   2.16 kB[22m
+[2m../build/modern/[22m[36mhelpers.DGyvmnZy.js                              [39m[1m[2m  6.37 kB[22m[1m[22m[2m │ gzip:   2.20 kB[22m
+[2m../build/modern/[22m[36mNameWithId.CdTraOBV.js                           [39m[1m[2m  6.64 kB[22m[1m[22m[2m │ gzip:   2.69 kB[22m
+[2m../build/modern/[22m[36menhanced-data-table.HTtTZmUv.js                  [39m[1m[2m  6.83 kB[22m[1m[22m[2m │ gzip:   2.59 kB[22m
+[2m../build/modern/[22m[36mRegisterPage.CQZbFcUM.js                         [39m[1m[2m  7.39 kB[22m[1m[22m[2m │ gzip:   2.66 kB[22m
+[2m../build/modern/[22m[36mToolsPage.BGLz6ojj.js                            [39m[1m[2m  7.69 kB[22m[1m[22m[2m │ gzip:   2.55 kB[22m
+[2m../build/modern/[22m[36mEditRedemptionPage.BrmZ4F4M.js                   [39m[1m[2m  8.14 kB[22m[1m[22m[2m │ gzip:   3.10 kB[22m
+[2m../build/modern/[22m[36mcolorGenerator.DJmFK_Ir.js                       [39m[1m[2m  8.19 kB[22m[1m[22m[2m │ gzip:   2.95 kB[22m
+[2m../build/modern/[22m[36mStatusPage.CwZ79zz8.js                           [39m[1m[2m  8.41 kB[22m[1m[22m[2m │ gzip:   2.57 kB[22m
+[2m../build/modern/[22m[36mTopUpPage.BJcr-mKl.js                            [39m[1m[2m  8.91 kB[22m[1m[22m[2m │ gzip:   3.16 kB[22m
+[2m../build/modern/[22m[36mMCPServersPage.DAObaTAw.js                       [39m[1m[2m  9.13 kB[22m[1m[22m[2m │ gzip:   3.00 kB[22m
+[2m../build/modern/[22m[36mEditTokenPage.CPB_Dwlz.js                        [39m[1m[2m 11.30 kB[22m[1m[22m[2m │ gzip:   4.15 kB[22m
+[2m../build/modern/[22m[36mRedemptionsPage.D7WFSL7i.js                      [39m[1m[2m 12.18 kB[22m[1m[22m[2m │ gzip:   4.44 kB[22m
+[2m../build/modern/[22m[36mEditMCPServerPage.CS2y8TmZ.js                    [39m[1m[2m 12.67 kB[22m[1m[22m[2m │ gzip:   3.61 kB[22m
+[2m../build/modern/[22m[36mTokensPage.T1w4MnFk.js                           [39m[1m[2m 14.51 kB[22m[1m[22m[2m │ gzip:   5.21 kB[22m
+[2m../build/modern/[22m[36mradix-ui-layout.CDjhc2I0.js                      [39m[1m[2m 15.96 kB[22m[1m[22m[2m │ gzip:   5.18 kB[22m
+[2m../build/modern/[22m[36mLoginPage.B__owaj3.js                            [39m[1m[2m 16.30 kB[22m[1m[22m[2m │ gzip:   6.06 kB[22m
+[2m../build/modern/[22m[36mEditUserPage.D_7B16TM.js                         [39m[1m[2m 16.53 kB[22m[1m[22m[2m │ gzip:   4.95 kB[22m
+[2m../build/modern/[22m[36mUsersPage.cS1rWW5_.js                            [39m[1m[2m 17.86 kB[22m[1m[22m[2m │ gzip:   5.53 kB[22m
+[2m../build/modern/[22m[36mChannelsPage.DOP2uMn3.js                         [39m[1m[2m 20.75 kB[22m[1m[22m[2m │ gzip:   5.91 kB[22m
+[2m../build/modern/[22m[36mrouter.DPya0keB.js                               [39m[1m[2m 21.24 kB[22m[1m[22m[2m │ gzip:   7.98 kB[22m
+[2m../build/modern/[22m[36mradix-ui-forms.DebRNr9n.js                       [39m[1m[2m 21.70 kB[22m[1m[22m[2m │ gzip:   7.61 kB[22m
+[2m../build/modern/[22m[36mtanstack-query.P-fyv8TF.js                       [39m[1m[2m 24.02 kB[22m[1m[22m[2m │ gzip:   7.51 kB[22m
+[2m../build/modern/[22m[36mmisc-utils.DNQQhxEu.js                           [39m[1m[2m 29.14 kB[22m[1m[22m[2m │ gzip:  11.49 kB[22m
+[2m../build/modern/[22m[36mnetwork.rHqBI9-h.js                              [39m[1m[2m 35.17 kB[22m[1m[22m[2m │ gzip:  14.10 kB[22m
+[2m../build/modern/[22m[36mLogsPage.D6yFrU-1.js                             [39m[1m[2m 36.42 kB[22m[1m[22m[2m │ gzip:   9.73 kB[22m
+[2m../build/modern/[22m[36mDashboardPage.BOjcTLRj.js                        [39m[1m[2m 39.95 kB[22m[1m[22m[2m │ gzip:   9.19 kB[22m
+[2m../build/modern/[22m[36mModelsPage.CVyZABrf.js                           [39m[1m[2m 44.45 kB[22m[1m[22m[2m │ gzip:   9.53 kB[22m
+[2m../build/modern/[22m[36mtanstack-table.utbV9O9t.js                       [39m[1m[2m 49.15 kB[22m[1m[22m[2m │ gzip:  13.21 kB[22m
+[2m../build/modern/[22m[36mEditChannelPage.D0ddg-6M.js                      [39m[1m[2m 77.19 kB[22m[1m[22m[2m │ gzip:  20.22 kB[22m
+[2m../build/modern/[22m[36mforms.DsgxbcWm.js                                [39m[1m[2m 80.53 kB[22m[1m[22m[2m │ gzip:  22.05 kB[22m
+[2m../build/modern/[22m[36mSettingsPage.DpwHK7fM.js                         [39m[1m[2m 81.80 kB[22m[1m[22m[2m │ gzip:  16.29 kB[22m
+[2m../build/modern/[22m[36mui-utils.CMotxCKF.js                             [39m[1m[2m 81.87 kB[22m[1m[22m[2m │ gzip:  23.74 kB[22m
+[2m../build/modern/[22m[36mindex.Bjjigl1H.js                                [39m[1m[2m 87.76 kB[22m[1m[22m[2m │ gzip:  30.14 kB[22m
+[2m../build/modern/[22m[36mradix-ui-core.B0xMJq0Z.js                        [39m[1m[2m 91.41 kB[22m[1m[22m[2m │ gzip:  29.47 kB[22m
+[2m../build/modern/[22m[36mindex.DvtHXMwK.js                                [39m[1m[2m103.57 kB[22m[1m[22m[2m │ gzip:  30.81 kB[22m
+[2m../build/modern/[22m[36mindex.CxFcwp5Q.js                                [39m[1m[2m106.64 kB[22m[1m[22m[2m │ gzip:  31.44 kB[22m
+[2m../build/modern/[22m[36mPlaygroundPage.8c2P8tH2.js                       [39m[1m[2m114.21 kB[22m[1m[22m[2m │ gzip:  29.10 kB[22m
+[2m../build/modern/[22m[36mindex.C1XBgTHB.js                                [39m[1m[2m114.26 kB[22m[1m[22m[2m │ gzip:  32.05 kB[22m
+[2m../build/modern/[22m[36mmarkdown-core.CgRCfPt_.js                        [39m[1m[2m117.86 kB[22m[1m[22m[2m │ gzip:  36.32 kB[22m
+[2m../build/modern/[22m[36mvendor.B-5jsS9y.js                               [39m[1m[2m141.79 kB[22m[1m[22m[2m │ gzip:  45.50 kB[22m
+[2m../build/modern/[22m[36mmarkdown-rehype-highlight.FXANBESn.js            [39m[1m[2m177.40 kB[22m[1m[22m[2m │ gzip:  54.33 kB[22m
+[2m../build/modern/[22m[36mmarkdown-rehype-katex.C_mSkZLi.js                [39m[1m[2m270.61 kB[22m[1m[22m[2m │ gzip:  79.94 kB[22m
+[2m../build/modern/[22m[36mmarkdown-remark.B3zALAzj.js                      [39m[1m[2m275.27 kB[22m[1m[22m[2m │ gzip:  62.63 kB[22m
+[2m../build/modern/[22m[36mcharts.DSp9tbgV.js                               [39m[1m[2m391.72 kB[22m[1m[22m[2m │ gzip: 107.44 kB[22m
+[2m../build/modern/[22m[2massets/[22m[36mindex-BnfGPDDP.js                         [39m[1m[2m410.82 kB[22m[1m[22m[2m │ gzip: 128.56 kB[22m
+[32m✓ built in 8.65s[39m
+Done in 17.50s.
+=== diagnostic/lint.log ===
+yarn run v1.22.22
+$ eslint .
+
+Oops! Something went wrong! :(
+
+ESLint: 9.33.0
+
+ESLint couldn't find an eslint.config.(js|mjs|cjs) file.
+
+From ESLint v9.0.0, the default configuration file is now eslint.config.js.
+If you are using a .eslintrc.* file, please follow the migration guide
+to update your configuration file to the new format:
+
+https://eslint.org/docs/latest/use/configure/migration-guide
+
+If you still have problems after following the migration guide, please stop by
+https://eslint.org/chat/help to chat with the team.
+
+error Command failed with exit code 2.
+info Visit https://yarnpkg.com/en/docs/cli/run for documentation about this command.
+=== diagnostic/test.log ===
+[90mstderr[2m | src/components/chat/__tests__/ParametersPanel.realtime.test.tsx[2m > [22m[2mParametersPanel realtime gating[2m > [22m[2mshows the standard parameter set for a non-realtime model[22m[39m
+⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+⚠️ React Router Future Flag Warning: Relative route resolution within Splat routes is changing in v7. You can use the `v7_relativeSplatPath` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_relativesplatpath.
+
+ [32m✓[39m src/components/chat/__tests__/ParametersPanel.realtime.test.tsx [2m ([22m[2m8 tests[22m[2m)[22m[33m 378[2mms[22m[39m
+[90mstderr[2m | src/pages/auth/__tests__/RegisterPage.turnstile.test.tsx[2m > [22m[2mRegisterPage Turnstile integration[2m > [22m[2mrenders the Turnstile widget above the Create Account button[22m[39m
+⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+⚠️ React Router Future Flag Warning: Relative route resolution within Splat routes is changing in v7. You can use the `v7_relativeSplatPath` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_relativesplatpath.
+
+[90mstderr[2m | src/components/layout/Header.test.tsx[2m > [22m[2mHeader anonymous mobile layout[2m > [22m[2mhides inline Register/Login on mobile so the header fits 320px viewports[22m[39m
+Warning: An update to Header inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at Header (/home/runner/work/one-api/one-api/web/modern/src/components/layout/Header.tsx:50:51)
+    at Router (/home/runner/work/one-api/one-api/web/modern/node_modules/react-router/dist/umd/react-router.development.js:1207:17)
+    at MemoryRouter (/home/runner/work/one-api/one-api/web/modern/node_modules/react-router/dist/umd/react-router.development.js:1101:7)
+
+ [32m✓[39m src/components/layout/Header.test.tsx [2m ([22m[2m5 tests[22m[2m)[22m[33m 648[2mms[22m[39m
+ [32m✓[39m src/hooks/__tests__/usePersistentState.test.ts [2m ([22m[2m18 tests[22m[2m)[22m[90m 35[2mms[22m[39m
+ [32m✓[39m src/pages/auth/__tests__/RegisterPage.turnstile.test.tsx [2m ([22m[2m5 tests[22m[2m)[22m[33m 1044[2mms[22m[39m
+[90mstderr[2m | src/test/responsive-components.test.tsx[2m > [22m[2mResponsive Components[2m > [22m[2mshould render ResponsiveContainer without crashing[22m[39m
+⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+⚠️ React Router Future Flag Warning: Relative route resolution within Splat routes is changing in v7. You can use the `v7_relativeSplatPath` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_relativesplatpath.
+
+ [32m✓[39m src/test/responsive-components.test.tsx [2m ([22m[2m8 tests[22m[2m)[22m[90m 172[2mms[22m[39m
+ [32m✓[39m src/pages/topup/__tests__/TopUpPage.amount.test.tsx [2m ([22m[2m2 tests[22m[2m)[22m[33m 318[2mms[22m[39m
+ [32m✓[39m src/lib/export.test.ts [2m ([22m[2m5 tests[22m[2m)[22m[90m 58[2mms[22m[39m
+ [32m✓[39m src/hooks/__tests__/useEventLog.test.ts [2m ([22m[2m8 tests[22m[2m)[22m[90m 32[2mms[22m[39m
+ [32m✓[39m src/pages/settings/__tests__/SystemSettings.sensitive.test.tsx [2m ([22m[2m5 tests[22m[2m)[22m[33m 2143[2mms[22m[39m
+ [32m✓[39m src/lib/__tests__/utils.test.ts [2m ([22m[2m9 tests[22m[2m)[22m[90m 8[2mms[22m[39m
+[90mstdout[2m | src/lib/__tests__/utils.test.ts[2m > [22m[2mdatetime-local helpers[2m > [22m[2mhandles empty input[22m[39m
+[datetime] fromDateTimeLocal received empty value
+[datetime] toDateTimeLocal received empty timestamp { timestamp: 0 }
+
+[90mstdout[2m | src/lib/__tests__/utils.test.ts[2m > [22m[2mformatTimestamp[2m > [22m[2mhandles invalid timestamps[22m[39m
+[datetime] formatTimestamp received invalid timestamp { timestamp: 0 }
+[datetime] formatTimestamp received invalid timestamp { timestamp: -1 }
+[datetime] formatTimestamp received empty timestamp { timestamp: undefined }
+[datetime] formatTimestamp received empty timestamp { timestamp: null }
+
+ [32m✓[39m src/hooks/__tests__/usePlaygroundChat.events.test.ts [2m ([22m[2m4 tests[22m[2m)[22m[90m 35[2mms[22m[39m
+ [32m✓[39m src/components/chat/__tests__/EventLogPanel.test.tsx [2m ([22m[2m9 tests[22m[2m)[22m[90m 179[2mms[22m[39m
+ [32m✓[39m src/lib/__tests__/model-capabilities.test.ts [2m ([22m[2m18 tests[22m[2m)[22m[90m 6[2mms[22m[39m
+ [32m✓[39m src/pages/channels/components/__tests__/ChannelSpecificConfig.key-prompts.test.tsx [2m ([22m[2m5 tests[22m[2m)[22m[90m 235[2mms[22m[39m
+[90mstderr[2m | src/components/auth/__tests__/ProtectedRoute.test.tsx[2m > [22m[2mProtectedRoute[2m > [22m[2mshows loading spinner initially[22m[39m
+⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+⚠️ React Router Future Flag Warning: Relative route resolution within Splat routes is changing in v7. You can use the `v7_relativeSplatPath` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_relativesplatpath.
+
+ [32m✓[39m src/components/auth/__tests__/ProtectedRoute.test.tsx [2m ([22m[2m4 tests[22m[2m)[22m[90m 56[2mms[22m[39m
+[90mstderr[2m | src/pages/users/__tests__/EditUserPage.test.tsx[2m > [22m[2mEditUserPage 2FA disable button[2m > [22m[2mrenders disable 2FA button when admin views another user and triggers API call on confirm[22m[39m
+⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+⚠️ React Router Future Flag Warning: Relative route resolution within Splat routes is changing in v7. You can use the `v7_relativeSplatPath` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_relativesplatpath.
+
+ [32m✓[39m src/pages/users/__tests__/EditUserPage.test.tsx [2m ([22m[2m2 tests[22m[2m)[22m[33m 401[2mms[22m[39m
+[90mstderr[2m | src/pages/auth/__tests__/OidcOAuthPage.test.tsx[2m > [22m[2mOidcOAuthPage[2m > [22m[2mnavigates to / on successful OAuth login[22m[39m
+⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+⚠️ React Router Future Flag Warning: Relative route resolution within Splat routes is changing in v7. You can use the `v7_relativeSplatPath` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_relativesplatpath.
+
+[90mstderr[2m | src/pages/auth/__tests__/OidcOAuthPage.test.tsx[2m > [22m[2mOidcOAuthPage[2m > [22m[2msurfaces an error state when the OAuth call fails[22m[39m
+Warning: An update to OidcOAuthPage inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at OidcOAuthPage (/home/runner/work/one-api/one-api/web/modern/src/pages/auth/OidcOAuthPage.tsx:16:48)
+    at RenderedRoute (/home/runner/work/one-api/one-api/web/modern/node_modules/react-router/dist/umd/react-router.development.js:539:7)
+    at Routes (/home/runner/work/one-api/one-api/web/modern/node_modules/react-router/dist/umd/react-router.development.js:1273:7)
+    at Router (/home/runner/work/one-api/one-api/web/modern/node_modules/react-router/dist/umd/react-router.development.js:1207:17)
+    at MemoryRouter (/home/runner/work/one-api/one-api/web/modern/node_modules/react-router/dist/umd/react-router.development.js:1101:7)
+
+ [32m✓[39m src/pages/auth/__tests__/OidcOAuthPage.test.tsx [2m ([22m[2m3 tests[22m[2m)[22m[90m 136[2mms[22m[39m
+[90mstderr[2m | src/pages/logs/__tests__/LogsPage.test.tsx[2m > [22m[2mLogsPage action feedback[2m > [22m[2mshows an error when clear logs returns success false[22m[39m
+⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+⚠️ React Router Future Flag Warning: Relative route resolution within Splat routes is changing in v7. You can use the `v7_relativeSplatPath` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_relativesplatpath.
+
+[90mstderr[2m | src/pages/auth/__tests__/WeChatOAuthPage.test.tsx[2m > [22m[2mWeChatOAuthPage[2m > [22m[2mnavigates to / on successful OAuth login[22m[39m
+⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+⚠️ React Router Future Flag Warning: Relative route resolution within Splat routes is changing in v7. You can use the `v7_relativeSplatPath` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_relativesplatpath.
+
+[90mstderr[2m | src/pages/auth/__tests__/WeChatOAuthPage.test.tsx[2m > [22m[2mWeChatOAuthPage[2m > [22m[2msurfaces an error state when the OAuth call fails[22m[39m
+Warning: An update to WeChatOAuthPage inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at WeChatOAuthPage (/home/runner/work/one-api/one-api/web/modern/src/pages/auth/WeChatOAuthPage.tsx:16:48)
+    at RenderedRoute (/home/runner/work/one-api/one-api/web/modern/node_modules/react-router/dist/umd/react-router.development.js:539:7)
+    at Routes (/home/runner/work/one-api/one-api/web/modern/node_modules/react-router/dist/umd/react-router.development.js:1273:7)
+    at Router (/home/runner/work/one-api/one-api/web/modern/node_modules/react-router/dist/umd/react-router.development.js:1207:17)
+    at MemoryRouter (/home/runner/work/one-api/one-api/web/modern/node_modules/react-router/dist/umd/react-router.development.js:1101:7)
+
+ [32m✓[39m src/pages/logs/__tests__/LogsPage.test.tsx [2m ([22m[2m2 tests[22m[2m)[22m[33m 679[2mms[22m[39m
+ [32m✓[39m src/pages/auth/__tests__/WeChatOAuthPage.test.tsx [2m ([22m[2m3 tests[22m[2m)[22m[90m 136[2mms[22m[39m
+[90mstderr[2m | src/pages/channels/__tests__/ChannelsPage.balance.test.tsx[2m > [22m[2mChannelsPage balance refresh[2m > [22m[2mrefreshes a single row balance via per-row icon[22m[39m
+⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+⚠️ React Router Future Flag Warning: Relative route resolution within Splat routes is changing in v7. You can use the `v7_relativeSplatPath` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_relativesplatpath.
+
+ [32m✓[39m src/pages/settings/__tests__/SystemSettings.email-whitelist.test.tsx [2m ([22m[2m1 test[22m[2m)[22m[33m 1529[2mms[22m[39m
+ [32m✓[39m src/pages/channels/__tests__/ChannelsPage.balance.test.tsx [2m ([22m[2m2 tests[22m[2m)[22m[33m 798[2mms[22m[39m
+[90mstderr[2m | src/pages/settings/__tests__/SystemSettings.failure.test.tsx[2m > [22m[2mSystemSettings failure handling[2m > [22m[2mrestores the previous value when save returns success false[22m[39m
+Error saving option: Error: save rejected
+    at /home/runner/work/one-api/one-api/web/modern/src/pages/settings/SystemSettings.tsx:374:17
+    at /home/runner/work/one-api/one-api/web/modern/src/pages/settings/SystemSettingsFields.tsx:51:9
+    at /home/runner/work/one-api/one-api/web/modern/src/pages/settings/SystemSettingsFields.tsx:68:5
+
+[90mstderr[2m | src/pages/settings/__tests__/SystemSettings.failure.test.tsx[2m > [22m[2mSystemSettings failure handling[2m > [22m[2mshows an error when oidc discovery save returns success false[22m[39m
+OIDC discovery failed: Error: endpoint save failed
+    at /home/runner/work/one-api/one-api/web/modern/src/pages/settings/SystemSettings.tsx:479:17
+
+ [32m✓[39m src/pages/settings/__tests__/SystemSettings.failure.test.tsx [2m ([22m[2m2 tests[22m[2m)[22m[33m 1394[2mms[22m[39m
+ [32m✓[39m src/pages/topup/TopUpPage.test.tsx [2m ([22m[2m2 tests[22m[2m)[22m[90m 186[2mms[22m[39m
+[90mstderr[2m | src/pages/tokens/__tests__/TokensPage.actions.test.tsx[2m > [22m[2mTokensPage action feedback[2m > [22m[2mshows an error when delete returns success false[22m[39m
+⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+⚠️ React Router Future Flag Warning: Relative route resolution within Splat routes is changing in v7. You can use the `v7_relativeSplatPath` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_relativesplatpath.
+
+ [32m✓[39m src/pages/tokens/__tests__/TokensPage.actions.test.tsx [2m ([22m[2m2 tests[22m[2m)[22m[33m 506[2mms[22m[39m
+ [32m✓[39m src/hooks/__tests__/useNotice.test.ts [2m ([22m[2m5 tests[22m[2m)[22m[90m 152[2mms[22m[39m
+ [32m✓[39m src/pages/settings/__tests__/SystemSettings.oidc-discovery.test.tsx [2m ([22m[2m1 test[22m[2m)[22m[33m 709[2mms[22m[39m
+[90mstderr[2m | src/pages/redemptions/__tests__/RedemptionsPage.test.tsx[2m > [22m[2mRedemptionsPage action feedback[2m > [22m[2mshows an error when delete returns success false[22m[39m
+⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+⚠️ React Router Future Flag Warning: Relative route resolution within Splat routes is changing in v7. You can use the `v7_relativeSplatPath` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_relativesplatpath.
+
+ [32m✓[39m src/pages/redemptions/__tests__/RedemptionsPage.test.tsx [2m ([22m[2m2 tests[22m[2m)[22m[33m 438[2mms[22m[39m
+[90mstderr[2m | src/pages/channels/__tests__/ChannelsPage.priority.test.tsx[2m > [22m[2mChannelsPage priority editor[2m > [22m[2msaves a changed priority on blur[22m[39m
+⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+⚠️ React Router Future Flag Warning: Relative route resolution within Splat routes is changing in v7. You can use the `v7_relativeSplatPath` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_relativesplatpath.
+
+[90mstderr[2m | src/pages/channels/__tests__/ChannelsPage.bulk-status.test.tsx[2m > [22m[2mChannelsPage bulk enable/disable[2m > [22m[2mdisables all visible channels via bulk action[22m[39m
+⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+⚠️ React Router Future Flag Warning: Relative route resolution within Splat routes is changing in v7. You can use the `v7_relativeSplatPath` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_relativesplatpath.
+
+ [32m✓[39m src/pages/channels/__tests__/ChannelsPage.priority.test.tsx [2m ([22m[2m2 tests[22m[2m)[22m[33m 525[2mms[22m[39m
+ [32m✓[39m src/pages/channels/__tests__/ChannelsPage.bulk-status.test.tsx [2m ([22m[2m1 test[22m[2m)[22m[33m 735[2mms[22m[39m
+[90mstderr[2m | src/pages/settings/__tests__/OperationSettings.test.tsx[2m > [22m[2mOperationSettings failure feedback[2m > [22m[2mshows an error when grouped save returns success false[22m[39m
+Error updating QuotaForNewUser: Error: quota save rejected
+    at persistOption (/home/runner/work/one-api/one-api/web/modern/src/pages/settings/OperationSettings.tsx:167:15)
+    at onSubmitGroup (/home/runner/work/one-api/one-api/web/modern/src/pages/settings/OperationSettings.tsx:185:11)
+
+ [32m✓[39m src/pages/settings/__tests__/OperationSettings.test.tsx [2m ([22m[2m2 tests[22m[2m)[22m[33m 415[2mms[22m[39m
+ [32m✓[39m src/pages/HomePage.test.tsx [2m ([22m[2m3 tests[22m[2m)[22m[90m 119[2mms[22m[39m
+ [32m✓[39m src/components/layout/__tests__/NoticeBanner.test.tsx [2m ([22m[2m3 tests[22m[2m)[22m[90m 99[2mms[22m[39m
+[90mstderr[2m | src/pages/auth/__tests__/RegisterPage.oauth.test.tsx[2m > [22m[2mRegisterPage OAuth state handling[2m > [22m[2mshows the localized OAuth state error instead of launching GitHub OAuth when state creation fails[22m[39m
+⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+⚠️ React Router Future Flag Warning: Relative route resolution within Splat routes is changing in v7. You can use the `v7_relativeSplatPath` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_relativesplatpath.
+
+ [32m✓[39m src/pages/auth/__tests__/RegisterPage.oauth.test.tsx [2m ([22m[2m1 test[22m[2m)[22m[90m 169[2mms[22m[39m
+ [32m✓[39m src/components/ui/__tests__/searchable-dropdown.test.tsx [2m ([22m[2m3 tests[22m[2m)[22m[33m 852[2mms[22m[39m
+ [32m✓[39m src/components/shared/__tests__/NameWithId.test.tsx [2m ([22m[2m4 tests[22m[2m)[22m[90m 300[2mms[22m[39m
+ [32m✓[39m src/pages/logs/components/__tests__/LogModelCell.test.tsx [2m ([22m[2m3 tests[22m[2m)[22m[90m 37[2mms[22m[39m
+ [32m✓[39m src/pages/tokens/__tests__/TokensPage.highlight.spec.ts [2m ([22m[2m5 tests[22m[2m)[22m[90m 4[2mms[22m[39m
+ [32m✓[39m src/pages/__tests__/NotFoundPage.test.tsx [2m ([22m[2m1 test[22m[2m)[22m[90m 51[2mms[22m[39m
+[90mstderr[2m | src/pages/__tests__/NotFoundPage.test.tsx[2m > [22m[2mNotFoundPage[2m > [22m[2mshows 404 and countdown, then navigates after 5s[22m[39m
+⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+⚠️ React Router Future Flag Warning: Relative route resolution within Splat routes is changing in v7. You can use the `v7_relativeSplatPath` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_relativesplatpath.
+Warning: `ReactDOMTestUtils.act` is deprecated in favor of `React.act`. Import `act` from `react` instead of `react-dom/test-utils`. See https://react.dev/warnings/react-dom-test-utils for more info.
+
+ [32m✓[39m src/pages/settings/SystemSettings.test.tsx [2m ([22m[2m1 test[22m[2m)[22m[33m 752[2mms[22m[39m
+[90mstderr[2m | src/pages/auth/__tests__/RegisterPage.test.tsx[2m > [22m[2mRegisterPage (modern)[2m > [22m[2mprefills affiliate code (aff) from URL into aff_code field[22m[39m
+⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+⚠️ React Router Future Flag Warning: Relative route resolution within Splat routes is changing in v7. You can use the `v7_relativeSplatPath` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_relativesplatpath.
+
+ [32m✓[39m src/pages/auth/__tests__/RegisterPage.test.tsx [2m ([22m[2m1 test[22m[2m)[22m[90m 75[2mms[22m[39m
+ [32m✓[39m src/pages/tokens/__tests__/useClipboardManager.spec.ts [2m ([22m[2m2 tests[22m[2m)[22m[90m 20[2mms[22m[39m
+ [32m✓[39m src/pages/dashboard/components/ToolUsageCharts.test.tsx [2m ([22m[2m1 test[22m[2m)[22m[90m 122[2mms[22m[39m
+ [32m✓[39m src/components/ui/__tests__/timestamp.test.tsx [2m ([22m[2m3 tests[22m[2m)[22m[90m 300[2mms[22m[39m
+ [32m✓[39m src/components/ui/form.test.tsx [2m ([22m[2m2 tests[22m[2m)[22m[90m 120[2mms[22m[39m
+ [32m✓[39m src/pages/channels/EditChannelPage.test.ts [2m ([22m[2m4 tests[22m[2m)[22m[90m 3[2mms[22m[39m
+ [32m✓[39m src/pages/settings/__tests__/OtherSettings.test.tsx [2m ([22m[2m1 test[22m[2m)[22m[90m 234[2mms[22m[39m
+ [32m✓[39m src/components/layout/__tests__/Header.topup.test.tsx [2m ([22m[2m1 test[22m[2m)[22m[90m 115[2mms[22m[39m
+[90mstderr[2m | src/components/layout/__tests__/Header.topup.test.tsx[2m > [22m[2mHeader mobile overflow prevention[2m > [22m[2mrenders header with no horizontal overflow and truncates brand text[22m[39m
+⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+⚠️ React Router Future Flag Warning: Relative route resolution within Splat routes is changing in v7. You can use the `v7_relativeSplatPath` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_relativesplatpath.
+
+ [32m✓[39m src/pages/models/tier-threshold.test.ts [2m ([22m[2m3 tests[22m[2m)[22m[90m 3[2mms[22m[39m
+ [32m✓[39m src/lib/__tests__/oauth.test.ts [2m ([22m[2m1 test[22m[2m)[22m[90m 3[2mms[22m[39m
+ [32m✓[39m src/pages/dashboard/DashboardPage.test.ts [2m ([22m[2m1 test[22m[2m)[22m[90m 27[2mms[22m[39m
+
+[2m Test Files [22m [1m[32m63 passed[39m[22m[90m (63)[39m
+[2m      Tests [22m [1m[32m347 passed[39m[22m[2m | [22m[33m1 skipped[39m[90m (348)[39m
+[2m   Start at [22m 23:54:09
+[2m   Duration [22m 34.75s[2m (transform 2.48s, setup 5.46s, collect 24.50s, tests 31.00s, environment 25.80s, prepare 5.91s)[22m
+
+Done in 35.26s.
+=== diagnostic/type-check.log ===
+yarn run v1.22.22
+$ tsc --noEmit
+Done in 8.48s.
+
+--- downloaded/go-baseline/failure-extract.txt
+2026-08-18T23:59:23Z	[33mWARN[0m	one-api	helper/helper.go:82	http handler client error	{"status": 200, "method": "PUT", "url": "/api/user/self", "user_id": 2, "user_uuid": "01a01750-c133-7134-9f07-a438f98b9fda", "error_kind": "invalid_request", "error": "invalid parameter"}
+=== RUN   TestBehaviorDifferential/user/update_self_wrong_type_unbound_field
+=== RUN   TestBehaviorDifferential/user/update_self_validation_error
+2026-08-18T23:59:31Z	[33mWARN[0m	one-api	helper/helper.go:82	http handler client error	{"status": 200, "method": "PUT", "url": "/api/user/self", "user_id": 2, "user_uuid": "01a01750-e201-7ce2-8241-21058c76a9fc", "error_kind": "invalid_request", "error": "Input is illegal Key: 'User.DisplayName' Error:Field validation for 'DisplayName' failed on the 'max' tag"}
+=== RUN   TestBehaviorDifferential/token/get_all
+=== RUN   TestBehaviorDifferential/token/search
+=== RUN   TestBehaviorDifferential/token/get_by_uuid
+=== RUN   TestBehaviorDifferential/token/get_by_uuid_not_found
+
+2026/08/18 23:59:50 [31;1m/home/runner/work/one-api/one-api/model/uuid_lookup.go:140 [35;1mrecord not found
+[0m[33m[0.142ms] [34;1m[rows:0][0m SELECT * FROM `tokens` WHERE uuid = "018f0000-0000-7000-8000-0000deadbeef" ORDER BY `tokens`.`id` LIMIT 1
+2026-08-19T00:02:22Z	[34mINFO[0m	one-api	model/compact_uuid_migration.go:531	compact uuid storage reached validated completion	{"topology": "unified", "examined": 400}
+=== RUN   TestCompactUUIDFaultInjection/outage_lock_and_cancellation/database_outage
+    compact_uuid_fault_test.go:513: 
+        	Error Trace:	/home/runner/work/one-api/one-api/model/compact_uuid_fault_test.go:513
+        	Error:      	Received unexpected error:
+        	            	dsn must name a host and a port
+        	            	github.com/Laisky/one-api/model.compactFaultRedirectDSN
+        	            		/home/runner/work/one-api/one-api/model/compact_uuid_fault_harness_test.go:582
+        	            	github.com/Laisky/one-api/model.compactFaultInjectedFaults.func4
+        	            		/home/runner/work/one-api/one-api/model/compact_uuid_fault_test.go:512
+        	            	testing.tRunner
+        	            		/opt/hostedtoolcache/go/1.26.3/x64/src/testing/testing.go:2036
+        	            	runtime.goexit
+        	            		/opt/hostedtoolcache/go/1.26.3/x64/src/runtime/asm_amd64.s:1771
+        	Test:       	TestCompactUUIDFaultInjection/outage_lock_and_cancellation/database_outage
+--- FAIL: TestCompactUUIDFaultInjection (292.78s)
+    --- PASS: TestCompactUUIDFaultInjection/barrier_hold_under_traffic (118.45s)
+        --- PASS: TestCompactUUIDFaultInjection/barrier_hold_under_traffic/pre_expansion (3.10s)
+        --- PASS: TestCompactUUIDFaultInjection/barrier_hold_under_traffic/expansion (3.47s)
+        --- PASS: TestCompactUUIDFaultInjection/barrier_hold_under_traffic/indexing (19.98s)
+        --- PASS: TestCompactUUIDFaultInjection/barrier_hold_under_traffic/validation (77.72s)
+        --- PASS: TestCompactUUIDFaultInjection/barrier_hold_under_traffic/marked (13.51s)
+    --- PASS: TestCompactUUIDFaultInjection/partial_backfill_barrier (94.46s)
+=== RUN   TestCompactUUIDMixedVersionDrift
+=== RUN   TestCompactUUIDMixedVersionDrift/zero
+==================
+WARNING: DATA RACE
+Read at 0x00c0001ee588 by goroutine 1192925:
+  strings.(*Builder).String()
+      /opt/hostedtoolcache/go/1.26.3/x64/src/strings/builder.go:47 +0x724
+  github.com/Laisky/one-api/model.runPinnedOldBinary()
+      /home/runner/work/one-api/one-api/model/compact_uuid_oldbinary_test.go:87 +0x776
+  github.com/Laisky/one-api/model.compactFaultCycleVersions()
+      /home/runner/work/one-api/one-api/model/compact_uuid_mixedversion_test.go:59 +0x398
+2026-08-19T00:07:01Z	[34mINFO[0m	one-api	model/compact_uuid_migration.go:531	compact uuid storage reached validated completion	{"topology": "unified", "examined": 5000}
+    testing.go:1712: race detected during execution of test
+=== RUN   TestCompactUUIDMixedVersionDrift/expansion_partial
+panic: test timed out after 10m0s
+	running tests:
+		TestCompactUUIDMixedVersionDrift (1m32s)
+		TestCompactUUIDMixedVersionDrift/expansion_partial (22s)
+goroutine 1204175 [running]:
+testing.(*M).startAlarm.func1()
+	/opt/hostedtoolcache/go/1.26.3/x64/src/testing/testing.go:2802 +0x605
+	/opt/hostedtoolcache/go/1.26.3/x64/src/testing/testing.go:2036 +0x21d
+created by testing.(*T).Run in goroutine 1
+	/opt/hostedtoolcache/go/1.26.3/x64/src/testing/testing.go:2101 +0xb13
+FAIL	github.com/Laisky/one-api/model	600.074s
+SESSION_SECRET not set, using random secret
+=== RUN   TestShouldDisableChannel_RespectsFlag
+--- PASS: TestShouldDisableChannel_RespectsFlag (0.00s)
+PASS
+ok  	github.com/Laisky/one-api/monitor	1.050s
+=== RUN   TestRelayRequestMetricCardinality
+    recorder_cardinality_test.go:64: one_api_relay_requests_total data points = 1 (after 100 distinct user/token requests)
+ok  	github.com/Laisky/one-api/tools/analyzers/noentityresponse	6.055s
+?   	github.com/Laisky/one-api/tools/analyzers/noentityresponse/cmd/noentityresponse	[no test files]
+FAIL
+
+=== FINAL 250 LINES ===
+=== CONT  TestValidateResponseBuiltinTools_Excluded
+--- PASS: TestValidateResponseBuiltinTools_Excluded (0.00s)
+=== CONT  TestValidateChatBuiltinTools_WhitelistAllowsWithProviderPricing
+2026-08-19T00:00:13Z	[33mWARN[0m	gin-mw	v7@v7.0.3-0.20260320133617-ccf155d4ffea/log.go:116	gin request or request context is nil, using background context in Ctx()
+--- PASS: TestValidateChatBuiltinTools_WhitelistAllowsWithProviderPricing (0.00s)
+=== CONT  TestApplyBuiltinToolCharges_WebSearchPreviewPricing/reasoning_preview
+2026-08-19T00:00:13Z	[33mWARN[0m	gin-mw	v7@v7.0.3-0.20260320133617-ccf155d4ffea/log.go:116	gin request or request context is nil, using background context in Ctx()
+=== CONT  TestApplyBuiltinToolCharges_WebSearchPreviewPricing/non_reasoning_preview
+2026-08-19T00:00:13Z	[33mWARN[0m	gin-mw	v7@v7.0.3-0.20260320133617-ccf155d4ffea/log.go:116	gin request or request context is nil, using background context in Ctx()
+--- PASS: TestValidateChatBuiltinTools_MissingPricingBlocks (0.00s)
+=== RUN   TestNormalizeBuiltinType_ToolSearchAliases/unknown_stays_empty
+=== PAUSE TestNormalizeBuiltinType_ToolSearchAliases/unknown_stays_empty
+=== CONT  TestNormalizeBuiltinType_ToolSearchAliases/dash_alias
+=== CONT  TestNormalizeBuiltinType_ToolSearchAliases/bm25_tool_search
+=== CONT  TestNormalizeBuiltinType_ToolSearchAliases/regex_tool_search
+=== CONT  TestNormalizeBuiltinType_ToolSearchAliases/unknown_stays_empty
+=== CONT  TestNormalizeBuiltinType_ToolSearchAliases/preview_alias
+=== CONT  TestNormalizeBuiltinType_ToolSearchAliases/canonical_web_search
+--- PASS: TestNormalizeBuiltinType_ToolSearchAliases (0.00s)
+    --- PASS: TestNormalizeBuiltinType_ToolSearchAliases/dash_alias (0.00s)
+    --- PASS: TestNormalizeBuiltinType_ToolSearchAliases/bm25_tool_search (0.00s)
+    --- PASS: TestNormalizeBuiltinType_ToolSearchAliases/regex_tool_search (0.00s)
+    --- PASS: TestNormalizeBuiltinType_ToolSearchAliases/unknown_stays_empty (0.00s)
+    --- PASS: TestNormalizeBuiltinType_ToolSearchAliases/preview_alias (0.00s)
+    --- PASS: TestNormalizeBuiltinType_ToolSearchAliases/canonical_web_search (0.00s)
+--- PASS: TestApplyBuiltinToolCharges_ToolSearchCountsCanonicalized (0.00s)
+2026-08-19T00:00:13Z	[33mWARN[0m	gin-mw	v7@v7.0.3-0.20260320133617-ccf155d4ffea/log.go:116	gin request or request context is nil, using background context in Ctx()
+--- PASS: TestApplyBuiltinToolCharges_WebSearchPreviewPricing (0.00s)
+    --- PASS: TestApplyBuiltinToolCharges_WebSearchPreviewPricing/reasoning_preview (0.00s)
+    --- PASS: TestApplyBuiltinToolCharges_WebSearchPreviewPricing/non_reasoning_preview (0.00s)
+PASS
+ok  	github.com/Laisky/one-api/relay/tooling	1.098s
+?   	github.com/Laisky/one-api/router	[no test files]
+SESSION_SECRET not set, using random secret
+=== RUN   TestAdapterChatCompletionSupport
+=== RUN   TestAdapterChatCompletionSupport/Anthropic_ChatCompletion
+=== RUN   TestAdapterChatCompletionSupport/OpenAI_ChatCompletion
+=== RUN   TestAdapterChatCompletionSupport/Gemini_ChatCompletion
+=== RUN   TestAdapterChatCompletionSupport/Ali_ChatCompletion
+=== RUN   TestAdapterChatCompletionSupport/Baidu_ChatCompletion
+    adaptor_comprehensive_test.go:502: GetRequestURL failed for Baidu (expected for some adapters): get baidu access token: get baidu access token: invalid baidu apikey
+=== RUN   TestAdapterChatCompletionSupport/Zhipu_ChatCompletion
+=== RUN   TestAdapterChatCompletionSupport/Xunfei_ChatCompletion
+    adaptor_comprehensive_test.go:493: ConvertRequest returned nil for Xunfei (may be expected for some adapters)
+    adaptor_comprehensive_test.go:505: GetRequestURL returned empty URL for Xunfei (expected for some adapters)
+=== RUN   TestAdapterChatCompletionSupport/Tencent_ChatCompletion
+    adaptor_comprehensive_test.go:485: ConvertRequest failed for Tencent due to configuration requirements (expected): parse tencent channel config: invalid tencent config
+=== RUN   TestAdapterChatCompletionSupport/VertexAI_ChatCompletion
+    adaptor_comprehensive_test.go:485: ConvertRequest failed for VertexAI due to configuration requirements (expected): cannot found vertex chat adaptor for model 
+=== RUN   TestAdapterChatCompletionSupport/Replicate_ChatCompletion
+    adaptor_comprehensive_test.go:502: GetRequestURL failed for Replicate (expected for some adapters): model  not supported
+=== RUN   TestAdapterChatCompletionSupport/Cohere_ChatCompletion
+=== RUN   TestAdapterChatCompletionSupport/Cloudflare_ChatCompletion
+=== RUN   TestAdapterChatCompletionSupport/DeepSeek_ChatCompletion
+=== RUN   TestAdapterChatCompletionSupport/Groq_ChatCompletion
+=== RUN   TestAdapterChatCompletionSupport/Mistral_ChatCompletion
+=== RUN   TestAdapterChatCompletionSupport/Moonshot_ChatCompletion
+=== RUN   TestAdapterChatCompletionSupport/XAI_ChatCompletion
+=== RUN   TestAdapterChatCompletionSupport/TogetherAI_ChatCompletion
+=== RUN   TestAdapterChatCompletionSupport/OpenRouter_ChatCompletion
+=== RUN   TestAdapterChatCompletionSupport/SiliconFlow_ChatCompletion
+=== RUN   TestAdapterChatCompletionSupport/Doubao_ChatCompletion
+    adaptor_comprehensive_test.go:493: ConvertRequest returned nil for Doubao (may be expected for some adapters)
+    adaptor_comprehensive_test.go:505: GetRequestURL returned empty URL for Doubao (expected for some adapters)
+=== RUN   TestAdapterChatCompletionSupport/StepFun_ChatCompletion
+=== RUN   TestAdapterChatCompletionSupport/Novita_ChatCompletion
+=== RUN   TestAdapterChatCompletionSupport/AIProxy_ChatCompletion
+=== RUN   TestAdapterChatCompletionSupport/LingYiWanWu_ChatCompletion
+=== RUN   TestAdapterChatCompletionSupport/AI360_ChatCompletion
+=== RUN   TestAdapterChatCompletionSupport/VertexAI_Claude_ChatCompletion
+    adaptor_comprehensive_test.go:485: ConvertRequest failed for VertexAI_Claude due to configuration requirements (expected): cannot found vertex chat adaptor for model 
+=== RUN   TestAdapterChatCompletionSupport/AWS_ChatCompletion
+    adaptor_comprehensive_test.go:485: ConvertRequest failed for AWS due to configuration requirements (expected): adaptor not found
+=== RUN   TestAdapterChatCompletionSupport/Palm_ChatCompletion
+=== RUN   TestAdapterChatCompletionSupport/Ollama_ChatCompletion
+=== RUN   TestAdapterChatCompletionSupport/Coze_ChatCompletion
+=== RUN   TestAdapterChatCompletionSupport/BaiduV2_ChatCompletion
+    adaptor_comprehensive_test.go:493: ConvertRequest returned nil for BaiduV2 (may be expected for some adapters)
+    adaptor_comprehensive_test.go:505: GetRequestURL returned empty URL for BaiduV2 (expected for some adapters)
+=== RUN   TestAdapterChatCompletionSupport/XunfeiV2_ChatCompletion
+    adaptor_comprehensive_test.go:493: ConvertRequest returned nil for XunfeiV2 (may be expected for some adapters)
+    adaptor_comprehensive_test.go:505: GetRequestURL returned empty URL for XunfeiV2 (expected for some adapters)
+=== RUN   TestAdapterChatCompletionSupport/Proxy_ChatCompletion
+=== RUN   TestAdapterChatCompletionSupport/DeepL_ChatCompletion
+    adaptor_comprehensive_test.go:445: Adapter doesn't support ChatCompletion API
+=== RUN   TestAdapterChatCompletionSupport/Minimax_ChatCompletion
+    adaptor_comprehensive_test.go:445: Adapter doesn't support ChatCompletion API
+=== RUN   TestAdapterChatCompletionSupport/Baichuan_ChatCompletion
+    adaptor_comprehensive_test.go:445: Adapter doesn't support ChatCompletion API
+--- PASS: TestAdapterChatCompletionSupport (0.01s)
+    --- PASS: TestAdapterChatCompletionSupport/Anthropic_ChatCompletion (0.00s)
+    --- PASS: TestAdapterChatCompletionSupport/OpenAI_ChatCompletion (0.00s)
+    --- PASS: TestAdapterChatCompletionSupport/Gemini_ChatCompletion (0.00s)
+    --- PASS: TestAdapterChatCompletionSupport/Ali_ChatCompletion (0.00s)
+    --- PASS: TestAdapterChatCompletionSupport/Baidu_ChatCompletion (0.00s)
+    --- PASS: TestAdapterChatCompletionSupport/Zhipu_ChatCompletion (0.00s)
+    --- PASS: TestAdapterChatCompletionSupport/Xunfei_ChatCompletion (0.00s)
+    --- PASS: TestAdapterChatCompletionSupport/Tencent_ChatCompletion (0.00s)
+    --- PASS: TestAdapterChatCompletionSupport/VertexAI_ChatCompletion (0.00s)
+    --- PASS: TestAdapterChatCompletionSupport/Replicate_ChatCompletion (0.00s)
+    --- PASS: TestAdapterChatCompletionSupport/Cohere_ChatCompletion (0.00s)
+    --- PASS: TestAdapterChatCompletionSupport/Cloudflare_ChatCompletion (0.00s)
+    --- PASS: TestAdapterChatCompletionSupport/DeepSeek_ChatCompletion (0.00s)
+    --- PASS: TestAdapterChatCompletionSupport/Groq_ChatCompletion (0.00s)
+    --- PASS: TestAdapterChatCompletionSupport/Mistral_ChatCompletion (0.00s)
+    --- PASS: TestAdapterChatCompletionSupport/Moonshot_ChatCompletion (0.00s)
+    --- PASS: TestAdapterChatCompletionSupport/XAI_ChatCompletion (0.00s)
+    --- PASS: TestAdapterChatCompletionSupport/TogetherAI_ChatCompletion (0.00s)
+    --- PASS: TestAdapterChatCompletionSupport/OpenRouter_ChatCompletion (0.00s)
+    --- PASS: TestAdapterChatCompletionSupport/SiliconFlow_ChatCompletion (0.00s)
+    --- PASS: TestAdapterChatCompletionSupport/Doubao_ChatCompletion (0.00s)
+    --- PASS: TestAdapterChatCompletionSupport/StepFun_ChatCompletion (0.00s)
+    --- PASS: TestAdapterChatCompletionSupport/Novita_ChatCompletion (0.00s)
+    --- PASS: TestAdapterChatCompletionSupport/AIProxy_ChatCompletion (0.00s)
+    --- PASS: TestAdapterChatCompletionSupport/LingYiWanWu_ChatCompletion (0.00s)
+    --- PASS: TestAdapterChatCompletionSupport/AI360_ChatCompletion (0.00s)
+    --- PASS: TestAdapterChatCompletionSupport/VertexAI_Claude_ChatCompletion (0.00s)
+    --- PASS: TestAdapterChatCompletionSupport/AWS_ChatCompletion (0.00s)
+    --- PASS: TestAdapterChatCompletionSupport/Palm_ChatCompletion (0.00s)
+    --- PASS: TestAdapterChatCompletionSupport/Ollama_ChatCompletion (0.00s)
+    --- PASS: TestAdapterChatCompletionSupport/Coze_ChatCompletion (0.00s)
+    --- PASS: TestAdapterChatCompletionSupport/BaiduV2_ChatCompletion (0.00s)
+    --- PASS: TestAdapterChatCompletionSupport/XunfeiV2_ChatCompletion (0.00s)
+    --- PASS: TestAdapterChatCompletionSupport/Proxy_ChatCompletion (0.00s)
+    --- SKIP: TestAdapterChatCompletionSupport/DeepL_ChatCompletion (0.00s)
+    --- SKIP: TestAdapterChatCompletionSupport/Minimax_ChatCompletion (0.00s)
+    --- SKIP: TestAdapterChatCompletionSupport/Baichuan_ChatCompletion (0.00s)
+=== RUN   TestAdapterClaudeMessagesSupport
+=== RUN   TestAdapterClaudeMessagesSupport/Anthropic_ClaudeMessages
+=== RUN   TestAdapterClaudeMessagesSupport/OpenAI_ClaudeMessages
+=== RUN   TestAdapterClaudeMessagesSupport/Gemini_ClaudeMessages
+=== RUN   TestAdapterClaudeMessagesSupport/Ali_ClaudeMessages
+=== RUN   TestAdapterClaudeMessagesSupport/Baidu_ClaudeMessages
+    adaptor_comprehensive_test.go:628: GetRequestURL failed for Baidu in Claude Messages mode (expected for some adapters): get baidu access token: get baidu access token: invalid baidu apikey
+=== RUN   TestAdapterClaudeMessagesSupport/Zhipu_ClaudeMessages
+=== RUN   TestAdapterClaudeMessagesSupport/Xunfei_ClaudeMessages
+    adaptor_comprehensive_test.go:602: ConvertClaudeRequest returned nil for Xunfei (may be expected for some adapters)
+    adaptor_comprehensive_test.go:631: GetRequestURL returned empty URL for Xunfei in Claude Messages mode (expected for some adapters)
+=== RUN   TestAdapterClaudeMessagesSupport/Tencent_ClaudeMessages
+    adaptor_comprehensive_test.go:593: ConvertClaudeRequest failed for Tencent due to configuration requirements (expected): parse tencent channel config: invalid tencent config
+=== RUN   TestAdapterClaudeMessagesSupport/VertexAI_ClaudeMessages
+    adaptor_comprehensive_test.go:593: ConvertClaudeRequest failed for VertexAI due to configuration requirements (expected): cannot found vertex adaptor for model 
+=== RUN   TestAdapterClaudeMessagesSupport/Replicate_ClaudeMessages
+    adaptor_comprehensive_test.go:628: GetRequestURL failed for Replicate in Claude Messages mode (expected for some adapters): model  not supported
+=== RUN   TestAdapterClaudeMessagesSupport/Cohere_ClaudeMessages
+=== RUN   TestAdapterClaudeMessagesSupport/Cloudflare_ClaudeMessages
+=== RUN   TestAdapterClaudeMessagesSupport/DeepSeek_ClaudeMessages
+=== RUN   TestAdapterClaudeMessagesSupport/Groq_ClaudeMessages
+=== RUN   TestAdapterClaudeMessagesSupport/Mistral_ClaudeMessages
+=== RUN   TestAdapterClaudeMessagesSupport/Moonshot_ClaudeMessages
+=== RUN   TestAdapterClaudeMessagesSupport/XAI_ClaudeMessages
+=== RUN   TestAdapterClaudeMessagesSupport/TogetherAI_ClaudeMessages
+=== RUN   TestAdapterClaudeMessagesSupport/OpenRouter_ClaudeMessages
+=== RUN   TestAdapterClaudeMessagesSupport/SiliconFlow_ClaudeMessages
+=== RUN   TestAdapterClaudeMessagesSupport/Doubao_ClaudeMessages
+    adaptor_comprehensive_test.go:631: GetRequestURL returned empty URL for Doubao in Claude Messages mode (expected for some adapters)
+=== RUN   TestAdapterClaudeMessagesSupport/StepFun_ClaudeMessages
+=== RUN   TestAdapterClaudeMessagesSupport/Novita_ClaudeMessages
+=== RUN   TestAdapterClaudeMessagesSupport/AIProxy_ClaudeMessages
+=== RUN   TestAdapterClaudeMessagesSupport/LingYiWanWu_ClaudeMessages
+=== RUN   TestAdapterClaudeMessagesSupport/AI360_ClaudeMessages
+=== RUN   TestAdapterClaudeMessagesSupport/VertexAI_Claude_ClaudeMessages
+    adaptor_comprehensive_test.go:593: ConvertClaudeRequest failed for VertexAI_Claude due to configuration requirements (expected): cannot found vertex adaptor for model 
+=== RUN   TestAdapterClaudeMessagesSupport/AWS_ClaudeMessages
+    adaptor_comprehensive_test.go:631: GetRequestURL returned empty URL for AWS in Claude Messages mode (expected for some adapters)
+=== RUN   TestAdapterClaudeMessagesSupport/Palm_ClaudeMessages
+=== RUN   TestAdapterClaudeMessagesSupport/Ollama_ClaudeMessages
+=== RUN   TestAdapterClaudeMessagesSupport/Coze_ClaudeMessages
+=== RUN   TestAdapterClaudeMessagesSupport/BaiduV2_ClaudeMessages
+    adaptor_comprehensive_test.go:631: GetRequestURL returned empty URL for BaiduV2 in Claude Messages mode (expected for some adapters)
+=== RUN   TestAdapterClaudeMessagesSupport/XunfeiV2_ClaudeMessages
+    adaptor_comprehensive_test.go:631: GetRequestURL returned empty URL for XunfeiV2 in Claude Messages mode (expected for some adapters)
+=== RUN   TestAdapterClaudeMessagesSupport/Proxy_ClaudeMessages
+=== RUN   TestAdapterClaudeMessagesSupport/DeepL_ClaudeMessages
+=== RUN   TestAdapterClaudeMessagesSupport/Minimax_ClaudeMessages
+=== RUN   TestAdapterClaudeMessagesSupport/Baichuan_ClaudeMessages
+--- PASS: TestAdapterClaudeMessagesSupport (0.01s)
+    --- PASS: TestAdapterClaudeMessagesSupport/Anthropic_ClaudeMessages (0.00s)
+    --- PASS: TestAdapterClaudeMessagesSupport/OpenAI_ClaudeMessages (0.00s)
+    --- PASS: TestAdapterClaudeMessagesSupport/Gemini_ClaudeMessages (0.00s)
+    --- PASS: TestAdapterClaudeMessagesSupport/Ali_ClaudeMessages (0.00s)
+    --- PASS: TestAdapterClaudeMessagesSupport/Baidu_ClaudeMessages (0.00s)
+    --- PASS: TestAdapterClaudeMessagesSupport/Zhipu_ClaudeMessages (0.00s)
+    --- PASS: TestAdapterClaudeMessagesSupport/Xunfei_ClaudeMessages (0.00s)
+    --- PASS: TestAdapterClaudeMessagesSupport/Tencent_ClaudeMessages (0.00s)
+    --- PASS: TestAdapterClaudeMessagesSupport/VertexAI_ClaudeMessages (0.00s)
+    --- PASS: TestAdapterClaudeMessagesSupport/Replicate_ClaudeMessages (0.00s)
+    --- PASS: TestAdapterClaudeMessagesSupport/Cohere_ClaudeMessages (0.00s)
+    --- PASS: TestAdapterClaudeMessagesSupport/Cloudflare_ClaudeMessages (0.00s)
+    --- PASS: TestAdapterClaudeMessagesSupport/DeepSeek_ClaudeMessages (0.00s)
+    --- PASS: TestAdapterClaudeMessagesSupport/Groq_ClaudeMessages (0.00s)
+    --- PASS: TestAdapterClaudeMessagesSupport/Mistral_ClaudeMessages (0.00s)
+    --- PASS: TestAdapterClaudeMessagesSupport/Moonshot_ClaudeMessages (0.00s)
+    --- PASS: TestAdapterClaudeMessagesSupport/XAI_ClaudeMessages (0.00s)
+    --- PASS: TestAdapterClaudeMessagesSupport/TogetherAI_ClaudeMessages (0.00s)
+    --- PASS: TestAdapterClaudeMessagesSupport/OpenRouter_ClaudeMessages (0.00s)
+    --- PASS: TestAdapterClaudeMessagesSupport/SiliconFlow_ClaudeMessages (0.00s)
+    --- PASS: TestAdapterClaudeMessagesSupport/Doubao_ClaudeMessages (0.00s)
+    --- PASS: TestAdapterClaudeMessagesSupport/StepFun_ClaudeMessages (0.00s)
+    --- PASS: TestAdapterClaudeMessagesSupport/Novita_ClaudeMessages (0.00s)
+    --- PASS: TestAdapterClaudeMessagesSupport/AIProxy_ClaudeMessages (0.00s)
+    --- PASS: TestAdapterClaudeMessagesSupport/LingYiWanWu_ClaudeMessages (0.00s)
+    --- PASS: TestAdapterClaudeMessagesSupport/AI360_ClaudeMessages (0.00s)
+    --- PASS: TestAdapterClaudeMessagesSupport/VertexAI_Claude_ClaudeMessages (0.00s)
+    --- PASS: TestAdapterClaudeMessagesSupport/AWS_ClaudeMessages (0.00s)
+    --- PASS: TestAdapterClaudeMessagesSupport/Palm_ClaudeMessages (0.00s)
+    --- PASS: TestAdapterClaudeMessagesSupport/Ollama_ClaudeMessages (0.00s)
+    --- PASS: TestAdapterClaudeMessagesSupport/Coze_ClaudeMessages (0.00s)
+    --- PASS: TestAdapterClaudeMessagesSupport/BaiduV2_ClaudeMessages (0.00s)
+    --- PASS: TestAdapterClaudeMessagesSupport/XunfeiV2_ClaudeMessages (0.00s)
+    --- PASS: TestAdapterClaudeMessagesSupport/Proxy_ClaudeMessages (0.00s)
+    --- PASS: TestAdapterClaudeMessagesSupport/DeepL_ClaudeMessages (0.00s)
+    --- PASS: TestAdapterClaudeMessagesSupport/Minimax_ClaudeMessages (0.00s)
+    --- PASS: TestAdapterClaudeMessagesSupport/Baichuan_ClaudeMessages (0.00s)
+=== RUN   TestClaudeMessagesRequestConversion
+=== RUN   TestClaudeMessagesRequestConversion/OpenAI_ComplexConversion
+=== RUN   TestClaudeMessagesRequestConversion/DeepSeek_ComplexConversion
+=== RUN   TestClaudeMessagesRequestConversion/Groq_ComplexConversion
+=== RUN   TestClaudeMessagesRequestConversion/Anthropic_ComplexConversion
+--- PASS: TestClaudeMessagesRequestConversion (0.00s)
+    --- PASS: TestClaudeMessagesRequestConversion/OpenAI_ComplexConversion (0.00s)
+    --- PASS: TestClaudeMessagesRequestConversion/DeepSeek_ComplexConversion (0.00s)
+    --- PASS: TestClaudeMessagesRequestConversion/Groq_ComplexConversion (0.00s)
+    --- PASS: TestClaudeMessagesRequestConversion/Anthropic_ComplexConversion (0.00s)
+=== RUN   TestResponseConversionIntegration
+=== RUN   TestResponseConversionIntegration/OpenAI_to_Claude
+=== RUN   TestResponseConversionIntegration/Anthropic_Native
+--- PASS: TestResponseConversionIntegration (0.00s)
+    --- PASS: TestResponseConversionIntegration/OpenAI_to_Claude (0.00s)
+    --- PASS: TestResponseConversionIntegration/Anthropic_Native (0.00s)
+=== RUN   TestCreateReactThemesCleanupBuildOutput
+=== PAUSE TestCreateReactThemesCleanupBuildOutput
+=== CONT  TestCreateReactThemesCleanupBuildOutput
+=== RUN   TestCreateReactThemesCleanupBuildOutput/berry
+=== PAUSE TestCreateReactThemesCleanupBuildOutput/berry
+=== RUN   TestCreateReactThemesCleanupBuildOutput/air
+=== PAUSE TestCreateReactThemesCleanupBuildOutput/air
+=== CONT  TestCreateReactThemesCleanupBuildOutput/berry
+=== CONT  TestCreateReactThemesCleanupBuildOutput/air
+--- PASS: TestCreateReactThemesCleanupBuildOutput (0.00s)
+    --- PASS: TestCreateReactThemesCleanupBuildOutput/air (0.00s)
+    --- PASS: TestCreateReactThemesCleanupBuildOutput/berry (0.00s)
+PASS
+ok  	github.com/Laisky/one-api/test	1.149s
+=== RUN   TestAnalyzer
+--- PASS: TestAnalyzer (4.99s)
+PASS
+ok  	github.com/Laisky/one-api/tools/analyzers/noentityresponse	6.055s
+?   	github.com/Laisky/one-api/tools/analyzers/noentityresponse/cmd/noentityresponse	[no test files]
+FAIL
+
+--- downloaded/go-optimized/failure-extract.txt
+2026-08-18T23:59:36Z	[33mWARN[0m	one-api	helper/helper.go:82	http handler client error	{"status": 200, "method": "PUT", "url": "/api/user/self", "user_id": 2, "user_uuid": "01a01750-f3fd-7e12-8c21-cd2231af4c04", "error_kind": "invalid_request", "error": "invalid parameter"}
+=== RUN   TestBehaviorDifferential/user/update_self_wrong_type_unbound_field
+=== RUN   TestBehaviorDifferential/user/update_self_validation_error
+2026-08-18T23:59:45Z	[33mWARN[0m	one-api	helper/helper.go:82	http handler client error	{"status": 200, "method": "PUT", "url": "/api/user/self", "user_id": 2, "user_uuid": "01a01751-162e-712d-b910-b25bd5cb80ca", "error_kind": "invalid_request", "error": "Input is illegal Key: 'User.DisplayName' Error:Field validation for 'DisplayName' failed on the 'max' tag"}
+=== RUN   TestBehaviorDifferential/token/get_all
+=== RUN   TestBehaviorDifferential/token/search
+=== RUN   TestBehaviorDifferential/token/get_by_uuid
+=== RUN   TestBehaviorDifferential/token/get_by_uuid_not_found
+
+2026/08/19 00:00:04 [31;1m/home/runner/work/one-api/one-api/model/uuid_lookup.go:140 [35;1mrecord not found
+[0m[33m[0.171ms] [34;1m[rows:0][0m SELECT * FROM `tokens` WHERE uuid = "018f0000-0000-7000-8000-0000deadbeef" ORDER BY `tokens`.`id` LIMIT 1
+2026-08-19T00:02:32Z	[34mINFO[0m	one-api	model/compact_uuid_migration.go:531	compact uuid storage reached validated completion	{"topology": "unified", "examined": 400}
+=== RUN   TestCompactUUIDFaultInjection/outage_lock_and_cancellation/database_outage
+    compact_uuid_fault_test.go:513: 
+        	Error Trace:	/home/runner/work/one-api/one-api/model/compact_uuid_fault_test.go:513
+        	Error:      	Received unexpected error:
+        	            	dsn must name a host and a port
+        	            	github.com/Laisky/one-api/model.compactFaultRedirectDSN
+        	            		/home/runner/work/one-api/one-api/model/compact_uuid_fault_harness_test.go:582
+        	            	github.com/Laisky/one-api/model.compactFaultInjectedFaults.func4
+        	            		/home/runner/work/one-api/one-api/model/compact_uuid_fault_test.go:512
+        	            	testing.tRunner
+        	            		/opt/hostedtoolcache/go/1.26.3/x64/src/testing/testing.go:2036
+        	            	runtime.goexit
+        	            		/opt/hostedtoolcache/go/1.26.3/x64/src/runtime/asm_amd64.s:1771
+        	Test:       	TestCompactUUIDFaultInjection/outage_lock_and_cancellation/database_outage
+--- FAIL: TestCompactUUIDFaultInjection (288.83s)
+    --- PASS: TestCompactUUIDFaultInjection/barrier_hold_under_traffic (118.54s)
+        --- PASS: TestCompactUUIDFaultInjection/barrier_hold_under_traffic/pre_expansion (3.01s)
+        --- PASS: TestCompactUUIDFaultInjection/barrier_hold_under_traffic/expansion (3.43s)
+        --- PASS: TestCompactUUIDFaultInjection/barrier_hold_under_traffic/indexing (19.92s)
+        --- PASS: TestCompactUUIDFaultInjection/barrier_hold_under_traffic/validation (78.00s)
+        --- PASS: TestCompactUUIDFaultInjection/barrier_hold_under_traffic/marked (13.41s)
+    --- PASS: TestCompactUUIDFaultInjection/partial_backfill_barrier (94.09s)
+=== RUN   TestCompactUUIDMixedVersionDrift
+=== RUN   TestCompactUUIDMixedVersionDrift/zero
+==================
+WARNING: DATA RACE
+Read at 0x00c0004cc148 by goroutine 1192996:
+  strings.(*Builder).String()
+      /opt/hostedtoolcache/go/1.26.3/x64/src/strings/builder.go:47 +0x724
+  github.com/Laisky/one-api/model.runPinnedOldBinary()
+      /home/runner/work/one-api/one-api/model/compact_uuid_oldbinary_test.go:87 +0x776
+  github.com/Laisky/one-api/model.compactFaultCycleVersions()
+      /home/runner/work/one-api/one-api/model/compact_uuid_mixedversion_test.go:59 +0x398
+2026-08-19T00:07:22Z	[34mINFO[0m	one-api	model/compact_uuid_migration.go:531	compact uuid storage reached validated completion	{"topology": "unified", "examined": 5000}
+    testing.go:1712: race detected during execution of test
+=== RUN   TestCompactUUIDMixedVersionDrift/expansion_partial
+panic: test timed out after 10m0s
+	running tests:
+		TestCompactUUIDMixedVersionDrift (1m25s)
+		TestCompactUUIDMixedVersionDrift/expansion_partial (13s)
+goroutine 1204052 [running]:
+testing.(*M).startAlarm.func1()
+	/opt/hostedtoolcache/go/1.26.3/x64/src/testing/testing.go:2802 +0x605
+	/opt/hostedtoolcache/go/1.26.3/x64/src/database/sql/sql.go:1261 +0xed
+created by database/sql.OpenDB in goroutine 1192902
+	/opt/hostedtoolcache/go/1.26.3/x64/src/database/sql/sql.go:841 +0x287
+FAIL	github.com/Laisky/one-api/model	600.096s
+SESSION_SECRET not set, using random secret
+=== RUN   TestShouldDisableChannel_RespectsFlag
+--- PASS: TestShouldDisableChannel_RespectsFlag (0.01s)
+PASS
+ok  	github.com/Laisky/one-api/monitor	1.064s
+=== RUN   TestRelayRequestMetricCardinality
+    recorder_cardinality_test.go:64: one_api_relay_requests_total data points = 1 (after 100 distinct user/token requests)
+ok  	github.com/Laisky/one-api/tools/analyzers/noentityresponse	6.525s
+?   	github.com/Laisky/one-api/tools/analyzers/noentityresponse/cmd/noentityresponse	[no test files]
+FAIL
+
+=== FINAL 250 LINES ===
+=== CONT  TestValidateResponseBuiltinTools_Disallowed
+--- PASS: TestValidateResponseBuiltinTools_Disallowed (0.00s)
+=== CONT  TestNormalizeBuiltinType_ToolSearchAliases/canonical_web_search
+=== PAUSE TestApplyBuiltinToolCharges_WebSearchPreviewPricing/non_reasoning_preview
+=== CONT  TestNormalizeBuiltinType_ToolSearchAliases/unknown_stays_empty
+=== RUN   TestApplyBuiltinToolCharges_WebSearchPreviewPricing/reasoning_preview
+=== CONT  TestNormalizeBuiltinType_ToolSearchAliases/bm25_tool_search
+=== PAUSE TestApplyBuiltinToolCharges_WebSearchPreviewPricing/reasoning_preview
+=== CONT  TestNormalizeBuiltinType_ToolSearchAliases/regex_tool_search
+=== CONT  TestNormalizeBuiltinType_ToolSearchAliases/dash_alias
+=== CONT  TestNormalizeBuiltinType_ToolSearchAliases/preview_alias
+=== CONT  TestApplyBuiltinToolCharges_WebSearchPreviewPricing/reasoning_preview
+2026-08-19T00:00:23Z	[33mWARN[0m	gin-mw	v7@v7.0.3-0.20260320133617-ccf155d4ffea/log.go:116	gin request or request context is nil, using background context in Ctx()
+=== CONT  TestApplyBuiltinToolCharges_WebSearchPreviewPricing/non_reasoning_preview
+2026-08-19T00:00:23Z	[33mWARN[0m	gin-mw	v7@v7.0.3-0.20260320133617-ccf155d4ffea/log.go:116	gin request or request context is nil, using background context in Ctx()
+--- PASS: TestNormalizeBuiltinType_ToolSearchAliases (0.00s)
+    --- PASS: TestNormalizeBuiltinType_ToolSearchAliases/canonical_web_search (0.00s)
+    --- PASS: TestNormalizeBuiltinType_ToolSearchAliases/unknown_stays_empty (0.00s)
+    --- PASS: TestNormalizeBuiltinType_ToolSearchAliases/bm25_tool_search (0.00s)
+    --- PASS: TestNormalizeBuiltinType_ToolSearchAliases/regex_tool_search (0.00s)
+    --- PASS: TestNormalizeBuiltinType_ToolSearchAliases/dash_alias (0.00s)
+    --- PASS: TestNormalizeBuiltinType_ToolSearchAliases/preview_alias (0.00s)
+--- PASS: TestApplyBuiltinToolCharges_WebSearchPreviewPricing (0.00s)
+    --- PASS: TestApplyBuiltinToolCharges_WebSearchPreviewPricing/reasoning_preview (0.00s)
+    --- PASS: TestApplyBuiltinToolCharges_WebSearchPreviewPricing/non_reasoning_preview (0.00s)
+=== CONT  TestValidateChatBuiltinTools_RejectsWhenNeitherWhitelistedNorPriced
+2026-08-19T00:00:23Z	[33mWARN[0m	gin-mw	v7@v7.0.3-0.20260320133617-ccf155d4ffea/log.go:116	gin request or request context is nil, using background context in Ctx()
+--- PASS: TestValidateChatBuiltinTools_RejectsWhenNeitherWhitelistedNorPriced (0.00s)
+2026-08-19T00:00:23Z	[33mWARN[0m	gin-mw	v7@v7.0.3-0.20260320133617-ccf155d4ffea/log.go:116	gin request or request context is nil, using background context in Ctx()
+--- PASS: TestValidateChatBuiltinTools_AllowsPricedToolWithoutWhitelist (0.01s)
+PASS
+ok  	github.com/Laisky/one-api/relay/tooling	1.098s
+?   	github.com/Laisky/one-api/router	[no test files]
+SESSION_SECRET not set, using random secret
+=== RUN   TestAdapterChatCompletionSupport
+=== RUN   TestAdapterChatCompletionSupport/Anthropic_ChatCompletion
+=== RUN   TestAdapterChatCompletionSupport/OpenAI_ChatCompletion
+=== RUN   TestAdapterChatCompletionSupport/Gemini_ChatCompletion
+=== RUN   TestAdapterChatCompletionSupport/Ali_ChatCompletion
+=== RUN   TestAdapterChatCompletionSupport/Baidu_ChatCompletion
+    adaptor_comprehensive_test.go:502: GetRequestURL failed for Baidu (expected for some adapters): get baidu access token: get baidu access token: invalid baidu apikey
+=== RUN   TestAdapterChatCompletionSupport/Zhipu_ChatCompletion
+=== RUN   TestAdapterChatCompletionSupport/Xunfei_ChatCompletion
+    adaptor_comprehensive_test.go:493: ConvertRequest returned nil for Xunfei (may be expected for some adapters)
+    adaptor_comprehensive_test.go:505: GetRequestURL returned empty URL for Xunfei (expected for some adapters)
+=== RUN   TestAdapterChatCompletionSupport/Tencent_ChatCompletion
+    adaptor_comprehensive_test.go:485: ConvertRequest failed for Tencent due to configuration requirements (expected): parse tencent channel config: invalid tencent config
+=== RUN   TestAdapterChatCompletionSupport/VertexAI_ChatCompletion
+    adaptor_comprehensive_test.go:485: ConvertRequest failed for VertexAI due to configuration requirements (expected): cannot found vertex chat adaptor for model 
+=== RUN   TestAdapterChatCompletionSupport/Replicate_ChatCompletion
+    adaptor_comprehensive_test.go:502: GetRequestURL failed for Replicate (expected for some adapters): model  not supported
+=== RUN   TestAdapterChatCompletionSupport/Cohere_ChatCompletion
+=== RUN   TestAdapterChatCompletionSupport/Cloudflare_ChatCompletion
+=== RUN   TestAdapterChatCompletionSupport/DeepSeek_ChatCompletion
+=== RUN   TestAdapterChatCompletionSupport/Groq_ChatCompletion
+=== RUN   TestAdapterChatCompletionSupport/Mistral_ChatCompletion
+=== RUN   TestAdapterChatCompletionSupport/Moonshot_ChatCompletion
+=== RUN   TestAdapterChatCompletionSupport/XAI_ChatCompletion
+=== RUN   TestAdapterChatCompletionSupport/TogetherAI_ChatCompletion
+=== RUN   TestAdapterChatCompletionSupport/OpenRouter_ChatCompletion
+=== RUN   TestAdapterChatCompletionSupport/SiliconFlow_ChatCompletion
+=== RUN   TestAdapterChatCompletionSupport/Doubao_ChatCompletion
+    adaptor_comprehensive_test.go:493: ConvertRequest returned nil for Doubao (may be expected for some adapters)
+    adaptor_comprehensive_test.go:505: GetRequestURL returned empty URL for Doubao (expected for some adapters)
+=== RUN   TestAdapterChatCompletionSupport/StepFun_ChatCompletion
+=== RUN   TestAdapterChatCompletionSupport/Novita_ChatCompletion
+=== RUN   TestAdapterChatCompletionSupport/AIProxy_ChatCompletion
+=== RUN   TestAdapterChatCompletionSupport/LingYiWanWu_ChatCompletion
+=== RUN   TestAdapterChatCompletionSupport/AI360_ChatCompletion
+=== RUN   TestAdapterChatCompletionSupport/VertexAI_Claude_ChatCompletion
+    adaptor_comprehensive_test.go:485: ConvertRequest failed for VertexAI_Claude due to configuration requirements (expected): cannot found vertex chat adaptor for model 
+=== RUN   TestAdapterChatCompletionSupport/AWS_ChatCompletion
+    adaptor_comprehensive_test.go:485: ConvertRequest failed for AWS due to configuration requirements (expected): adaptor not found
+=== RUN   TestAdapterChatCompletionSupport/Palm_ChatCompletion
+=== RUN   TestAdapterChatCompletionSupport/Ollama_ChatCompletion
+=== RUN   TestAdapterChatCompletionSupport/Coze_ChatCompletion
+=== RUN   TestAdapterChatCompletionSupport/BaiduV2_ChatCompletion
+    adaptor_comprehensive_test.go:493: ConvertRequest returned nil for BaiduV2 (may be expected for some adapters)
+    adaptor_comprehensive_test.go:505: GetRequestURL returned empty URL for BaiduV2 (expected for some adapters)
+=== RUN   TestAdapterChatCompletionSupport/XunfeiV2_ChatCompletion
+    adaptor_comprehensive_test.go:493: ConvertRequest returned nil for XunfeiV2 (may be expected for some adapters)
+    adaptor_comprehensive_test.go:505: GetRequestURL returned empty URL for XunfeiV2 (expected for some adapters)
+=== RUN   TestAdapterChatCompletionSupport/Proxy_ChatCompletion
+=== RUN   TestAdapterChatCompletionSupport/DeepL_ChatCompletion
+    adaptor_comprehensive_test.go:445: Adapter doesn't support ChatCompletion API
+=== RUN   TestAdapterChatCompletionSupport/Minimax_ChatCompletion
+    adaptor_comprehensive_test.go:445: Adapter doesn't support ChatCompletion API
+=== RUN   TestAdapterChatCompletionSupport/Baichuan_ChatCompletion
+    adaptor_comprehensive_test.go:445: Adapter doesn't support ChatCompletion API
+--- PASS: TestAdapterChatCompletionSupport (0.02s)
+    --- PASS: TestAdapterChatCompletionSupport/Anthropic_ChatCompletion (0.00s)
+    --- PASS: TestAdapterChatCompletionSupport/OpenAI_ChatCompletion (0.00s)
+    --- PASS: TestAdapterChatCompletionSupport/Gemini_ChatCompletion (0.00s)
+    --- PASS: TestAdapterChatCompletionSupport/Ali_ChatCompletion (0.00s)
+    --- PASS: TestAdapterChatCompletionSupport/Baidu_ChatCompletion (0.00s)
+    --- PASS: TestAdapterChatCompletionSupport/Zhipu_ChatCompletion (0.00s)
+    --- PASS: TestAdapterChatCompletionSupport/Xunfei_ChatCompletion (0.00s)
+    --- PASS: TestAdapterChatCompletionSupport/Tencent_ChatCompletion (0.00s)
+    --- PASS: TestAdapterChatCompletionSupport/VertexAI_ChatCompletion (0.00s)
+    --- PASS: TestAdapterChatCompletionSupport/Replicate_ChatCompletion (0.00s)
+    --- PASS: TestAdapterChatCompletionSupport/Cohere_ChatCompletion (0.00s)
+    --- PASS: TestAdapterChatCompletionSupport/Cloudflare_ChatCompletion (0.00s)
+    --- PASS: TestAdapterChatCompletionSupport/DeepSeek_ChatCompletion (0.00s)
+    --- PASS: TestAdapterChatCompletionSupport/Groq_ChatCompletion (0.00s)
+    --- PASS: TestAdapterChatCompletionSupport/Mistral_ChatCompletion (0.00s)
+    --- PASS: TestAdapterChatCompletionSupport/Moonshot_ChatCompletion (0.00s)
+    --- PASS: TestAdapterChatCompletionSupport/XAI_ChatCompletion (0.00s)
+    --- PASS: TestAdapterChatCompletionSupport/TogetherAI_ChatCompletion (0.00s)
+    --- PASS: TestAdapterChatCompletionSupport/OpenRouter_ChatCompletion (0.00s)
+    --- PASS: TestAdapterChatCompletionSupport/SiliconFlow_ChatCompletion (0.00s)
+    --- PASS: TestAdapterChatCompletionSupport/Doubao_ChatCompletion (0.00s)
+    --- PASS: TestAdapterChatCompletionSupport/StepFun_ChatCompletion (0.00s)
+    --- PASS: TestAdapterChatCompletionSupport/Novita_ChatCompletion (0.00s)
+    --- PASS: TestAdapterChatCompletionSupport/AIProxy_ChatCompletion (0.00s)
+    --- PASS: TestAdapterChatCompletionSupport/LingYiWanWu_ChatCompletion (0.00s)
+    --- PASS: TestAdapterChatCompletionSupport/AI360_ChatCompletion (0.00s)
+    --- PASS: TestAdapterChatCompletionSupport/VertexAI_Claude_ChatCompletion (0.00s)
+    --- PASS: TestAdapterChatCompletionSupport/AWS_ChatCompletion (0.00s)
+    --- PASS: TestAdapterChatCompletionSupport/Palm_ChatCompletion (0.00s)
+    --- PASS: TestAdapterChatCompletionSupport/Ollama_ChatCompletion (0.00s)
+    --- PASS: TestAdapterChatCompletionSupport/Coze_ChatCompletion (0.00s)
+    --- PASS: TestAdapterChatCompletionSupport/BaiduV2_ChatCompletion (0.00s)
+    --- PASS: TestAdapterChatCompletionSupport/XunfeiV2_ChatCompletion (0.00s)
+    --- PASS: TestAdapterChatCompletionSupport/Proxy_ChatCompletion (0.00s)
+    --- SKIP: TestAdapterChatCompletionSupport/DeepL_ChatCompletion (0.00s)
+    --- SKIP: TestAdapterChatCompletionSupport/Minimax_ChatCompletion (0.00s)
+    --- SKIP: TestAdapterChatCompletionSupport/Baichuan_ChatCompletion (0.00s)
+=== RUN   TestAdapterClaudeMessagesSupport
+=== RUN   TestAdapterClaudeMessagesSupport/Anthropic_ClaudeMessages
+=== RUN   TestAdapterClaudeMessagesSupport/OpenAI_ClaudeMessages
+=== RUN   TestAdapterClaudeMessagesSupport/Gemini_ClaudeMessages
+=== RUN   TestAdapterClaudeMessagesSupport/Ali_ClaudeMessages
+=== RUN   TestAdapterClaudeMessagesSupport/Baidu_ClaudeMessages
+    adaptor_comprehensive_test.go:628: GetRequestURL failed for Baidu in Claude Messages mode (expected for some adapters): get baidu access token: get baidu access token: invalid baidu apikey
+=== RUN   TestAdapterClaudeMessagesSupport/Zhipu_ClaudeMessages
+=== RUN   TestAdapterClaudeMessagesSupport/Xunfei_ClaudeMessages
+    adaptor_comprehensive_test.go:602: ConvertClaudeRequest returned nil for Xunfei (may be expected for some adapters)
+    adaptor_comprehensive_test.go:631: GetRequestURL returned empty URL for Xunfei in Claude Messages mode (expected for some adapters)
+=== RUN   TestAdapterClaudeMessagesSupport/Tencent_ClaudeMessages
+    adaptor_comprehensive_test.go:593: ConvertClaudeRequest failed for Tencent due to configuration requirements (expected): parse tencent channel config: invalid tencent config
+=== RUN   TestAdapterClaudeMessagesSupport/VertexAI_ClaudeMessages
+    adaptor_comprehensive_test.go:593: ConvertClaudeRequest failed for VertexAI due to configuration requirements (expected): cannot found vertex adaptor for model 
+=== RUN   TestAdapterClaudeMessagesSupport/Replicate_ClaudeMessages
+    adaptor_comprehensive_test.go:628: GetRequestURL failed for Replicate in Claude Messages mode (expected for some adapters): model  not supported
+=== RUN   TestAdapterClaudeMessagesSupport/Cohere_ClaudeMessages
+=== RUN   TestAdapterClaudeMessagesSupport/Cloudflare_ClaudeMessages
+=== RUN   TestAdapterClaudeMessagesSupport/DeepSeek_ClaudeMessages
+=== RUN   TestAdapterClaudeMessagesSupport/Groq_ClaudeMessages
+=== RUN   TestAdapterClaudeMessagesSupport/Mistral_ClaudeMessages
+=== RUN   TestAdapterClaudeMessagesSupport/Moonshot_ClaudeMessages
+=== RUN   TestAdapterClaudeMessagesSupport/XAI_ClaudeMessages
+=== RUN   TestAdapterClaudeMessagesSupport/TogetherAI_ClaudeMessages
+=== RUN   TestAdapterClaudeMessagesSupport/OpenRouter_ClaudeMessages
+=== RUN   TestAdapterClaudeMessagesSupport/SiliconFlow_ClaudeMessages
+=== RUN   TestAdapterClaudeMessagesSupport/Doubao_ClaudeMessages
+    adaptor_comprehensive_test.go:631: GetRequestURL returned empty URL for Doubao in Claude Messages mode (expected for some adapters)
+=== RUN   TestAdapterClaudeMessagesSupport/StepFun_ClaudeMessages
+=== RUN   TestAdapterClaudeMessagesSupport/Novita_ClaudeMessages
+=== RUN   TestAdapterClaudeMessagesSupport/AIProxy_ClaudeMessages
+=== RUN   TestAdapterClaudeMessagesSupport/LingYiWanWu_ClaudeMessages
+=== RUN   TestAdapterClaudeMessagesSupport/AI360_ClaudeMessages
+=== RUN   TestAdapterClaudeMessagesSupport/VertexAI_Claude_ClaudeMessages
+    adaptor_comprehensive_test.go:593: ConvertClaudeRequest failed for VertexAI_Claude due to configuration requirements (expected): cannot found vertex adaptor for model 
+=== RUN   TestAdapterClaudeMessagesSupport/AWS_ClaudeMessages
+    adaptor_comprehensive_test.go:631: GetRequestURL returned empty URL for AWS in Claude Messages mode (expected for some adapters)
+=== RUN   TestAdapterClaudeMessagesSupport/Palm_ClaudeMessages
+=== RUN   TestAdapterClaudeMessagesSupport/Ollama_ClaudeMessages
+=== RUN   TestAdapterClaudeMessagesSupport/Coze_ClaudeMessages
+=== RUN   TestAdapterClaudeMessagesSupport/BaiduV2_ClaudeMessages
+    adaptor_comprehensive_test.go:631: GetRequestURL returned empty URL for BaiduV2 in Claude Messages mode (expected for some adapters)
+=== RUN   TestAdapterClaudeMessagesSupport/XunfeiV2_ClaudeMessages
+    adaptor_comprehensive_test.go:631: GetRequestURL returned empty URL for XunfeiV2 in Claude Messages mode (expected for some adapters)
+=== RUN   TestAdapterClaudeMessagesSupport/Proxy_ClaudeMessages
+=== RUN   TestAdapterClaudeMessagesSupport/DeepL_ClaudeMessages
+=== RUN   TestAdapterClaudeMessagesSupport/Minimax_ClaudeMessages
+=== RUN   TestAdapterClaudeMessagesSupport/Baichuan_ClaudeMessages
+--- PASS: TestAdapterClaudeMessagesSupport (0.01s)
+    --- PASS: TestAdapterClaudeMessagesSupport/Anthropic_ClaudeMessages (0.00s)
+    --- PASS: TestAdapterClaudeMessagesSupport/OpenAI_ClaudeMessages (0.00s)
+    --- PASS: TestAdapterClaudeMessagesSupport/Gemini_ClaudeMessages (0.00s)
+    --- PASS: TestAdapterClaudeMessagesSupport/Ali_ClaudeMessages (0.00s)
+    --- PASS: TestAdapterClaudeMessagesSupport/Baidu_ClaudeMessages (0.00s)
+    --- PASS: TestAdapterClaudeMessagesSupport/Zhipu_ClaudeMessages (0.00s)
+    --- PASS: TestAdapterClaudeMessagesSupport/Xunfei_ClaudeMessages (0.00s)
+    --- PASS: TestAdapterClaudeMessagesSupport/Tencent_ClaudeMessages (0.00s)
+    --- PASS: TestAdapterClaudeMessagesSupport/VertexAI_ClaudeMessages (0.00s)
+    --- PASS: TestAdapterClaudeMessagesSupport/Replicate_ClaudeMessages (0.00s)
+    --- PASS: TestAdapterClaudeMessagesSupport/Cohere_ClaudeMessages (0.00s)
+    --- PASS: TestAdapterClaudeMessagesSupport/Cloudflare_ClaudeMessages (0.00s)
+    --- PASS: TestAdapterClaudeMessagesSupport/DeepSeek_ClaudeMessages (0.00s)
+    --- PASS: TestAdapterClaudeMessagesSupport/Groq_ClaudeMessages (0.00s)
+    --- PASS: TestAdapterClaudeMessagesSupport/Mistral_ClaudeMessages (0.00s)
+    --- PASS: TestAdapterClaudeMessagesSupport/Moonshot_ClaudeMessages (0.00s)
+    --- PASS: TestAdapterClaudeMessagesSupport/XAI_ClaudeMessages (0.00s)
+    --- PASS: TestAdapterClaudeMessagesSupport/TogetherAI_ClaudeMessages (0.00s)
+    --- PASS: TestAdapterClaudeMessagesSupport/OpenRouter_ClaudeMessages (0.00s)
+    --- PASS: TestAdapterClaudeMessagesSupport/SiliconFlow_ClaudeMessages (0.00s)
+    --- PASS: TestAdapterClaudeMessagesSupport/Doubao_ClaudeMessages (0.00s)
+    --- PASS: TestAdapterClaudeMessagesSupport/StepFun_ClaudeMessages (0.00s)
+    --- PASS: TestAdapterClaudeMessagesSupport/Novita_ClaudeMessages (0.00s)
+    --- PASS: TestAdapterClaudeMessagesSupport/AIProxy_ClaudeMessages (0.00s)
+    --- PASS: TestAdapterClaudeMessagesSupport/LingYiWanWu_ClaudeMessages (0.00s)
+    --- PASS: TestAdapterClaudeMessagesSupport/AI360_ClaudeMessages (0.00s)
+    --- PASS: TestAdapterClaudeMessagesSupport/VertexAI_Claude_ClaudeMessages (0.00s)
+    --- PASS: TestAdapterClaudeMessagesSupport/AWS_ClaudeMessages (0.00s)
+    --- PASS: TestAdapterClaudeMessagesSupport/Palm_ClaudeMessages (0.00s)
+    --- PASS: TestAdapterClaudeMessagesSupport/Ollama_ClaudeMessages (0.00s)
+    --- PASS: TestAdapterClaudeMessagesSupport/Coze_ClaudeMessages (0.00s)
+    --- PASS: TestAdapterClaudeMessagesSupport/BaiduV2_ClaudeMessages (0.00s)
+    --- PASS: TestAdapterClaudeMessagesSupport/XunfeiV2_ClaudeMessages (0.00s)
+    --- PASS: TestAdapterClaudeMessagesSupport/Proxy_ClaudeMessages (0.00s)
+    --- PASS: TestAdapterClaudeMessagesSupport/DeepL_ClaudeMessages (0.00s)
+    --- PASS: TestAdapterClaudeMessagesSupport/Minimax_ClaudeMessages (0.00s)
+    --- PASS: TestAdapterClaudeMessagesSupport/Baichuan_ClaudeMessages (0.00s)
+=== RUN   TestClaudeMessagesRequestConversion
+=== RUN   TestClaudeMessagesRequestConversion/OpenAI_ComplexConversion
+=== RUN   TestClaudeMessagesRequestConversion/DeepSeek_ComplexConversion
+=== RUN   TestClaudeMessagesRequestConversion/Groq_ComplexConversion
+=== RUN   TestClaudeMessagesRequestConversion/Anthropic_ComplexConversion
+--- PASS: TestClaudeMessagesRequestConversion (0.00s)
+    --- PASS: TestClaudeMessagesRequestConversion/OpenAI_ComplexConversion (0.00s)
+    --- PASS: TestClaudeMessagesRequestConversion/DeepSeek_ComplexConversion (0.00s)
+    --- PASS: TestClaudeMessagesRequestConversion/Groq_ComplexConversion (0.00s)
+    --- PASS: TestClaudeMessagesRequestConversion/Anthropic_ComplexConversion (0.00s)
+=== RUN   TestResponseConversionIntegration
+=== RUN   TestResponseConversionIntegration/OpenAI_to_Claude
+=== RUN   TestResponseConversionIntegration/Anthropic_Native
+--- PASS: TestResponseConversionIntegration (0.01s)
+    --- PASS: TestResponseConversionIntegration/OpenAI_to_Claude (0.00s)
+    --- PASS: TestResponseConversionIntegration/Anthropic_Native (0.00s)
+=== RUN   TestCreateReactThemesCleanupBuildOutput
+=== PAUSE TestCreateReactThemesCleanupBuildOutput
+=== CONT  TestCreateReactThemesCleanupBuildOutput
+=== RUN   TestCreateReactThemesCleanupBuildOutput/berry
+=== PAUSE TestCreateReactThemesCleanupBuildOutput/berry
+=== RUN   TestCreateReactThemesCleanupBuildOutput/air
+=== PAUSE TestCreateReactThemesCleanupBuildOutput/air
+=== CONT  TestCreateReactThemesCleanupBuildOutput/air
+=== CONT  TestCreateReactThemesCleanupBuildOutput/berry
+--- PASS: TestCreateReactThemesCleanupBuildOutput (0.00s)
+    --- PASS: TestCreateReactThemesCleanupBuildOutput/berry (0.00s)
+    --- PASS: TestCreateReactThemesCleanupBuildOutput/air (0.00s)
+PASS
+ok  	github.com/Laisky/one-api/test	1.124s
+=== RUN   TestAnalyzer
+--- PASS: TestAnalyzer (5.47s)
+PASS
+ok  	github.com/Laisky/one-api/tools/analyzers/noentityresponse	6.525s
+?   	github.com/Laisky/one-api/tools/analyzers/noentityresponse/cmd/noentityresponse	[no test files]
+FAIL
+
