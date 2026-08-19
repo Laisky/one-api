@@ -1,0 +1,43 @@
+name: bolt-stream-performance
+
+on:
+  push:
+    branches:
+      - 'bolt/stream-bridge-allocations-20260818'
+
+permissions:
+  contents: read
+
+jobs:
+  benchmark:
+    name: Response stream benchmark
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.26.3'
+
+      - name: Run behavior contracts
+        run: >-
+          go test ./relay/controller
+          -run '^(TestChatToResponseStreamBridge_EmitEventExactBytes|TestChatToResponseStreamBridge_TextStreaming|TestChatToResponseStreamBridge_ReasoningStreaming|TestChatToResponseStreamBridge_ToolCallIndexLookup)$'
+          -count=1
+
+      - name: Vet optimized package
+        run: go vet ./relay/controller
+
+      - name: Measure allocations
+        env:
+          GOMAXPROCS: '1'
+        run: >-
+          go test ./relay/controller
+          -run '^$'
+          -bench '^BenchmarkChatToResponseStreamBridge'
+          -benchmem
+          -benchtime=1s
+          -count=10
+          -cpu=1
