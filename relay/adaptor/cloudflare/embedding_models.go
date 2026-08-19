@@ -15,6 +15,9 @@ var cloudflareEmbeddingModelNames = []string{
 	"@cf/qwen/qwen3-embedding-0.6b",
 }
 
+// init marks Cloudflare embedding models with explicit capability and pricing metadata.
+// Parameters: none.
+// Returns: no values.
 func init() {
 	for _, modelName := range cloudflareEmbeddingModelNames {
 		cfg, ok := ModelRatios[modelName]
