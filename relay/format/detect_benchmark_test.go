@@ -248,6 +248,7 @@ func BenchmarkDetectFormatPlainText(b *testing.B) {
 			if _, err := detectFormatLegacy(benchmarkDetectFormatPlainText); err != nil {
 				b.Fatal(err)
 			}
+		}
 	})
 	b.Run("optimized", func(b *testing.B) {
 		b.ReportAllocs()
@@ -255,6 +256,7 @@ func BenchmarkDetectFormatPlainText(b *testing.B) {
 			if _, err := DetectFormat(benchmarkDetectFormatPlainText); err != nil {
 				b.Fatal(err)
 			}
+		}
 	})
 }
 
@@ -266,6 +268,7 @@ func BenchmarkDetectFormatOpenAIToolSchema(b *testing.B) {
 			if _, err := detectFormatLegacy(benchmarkDetectFormatOpenAITool); err != nil {
 				b.Fatal(err)
 			}
+		}
 	})
 	b.Run("optimized", func(b *testing.B) {
 		b.ReportAllocs()
@@ -273,5 +276,6 @@ func BenchmarkDetectFormatOpenAIToolSchema(b *testing.B) {
 			if _, err := DetectFormat(benchmarkDetectFormatOpenAITool); err != nil {
 				b.Fatal(err)
 			}
+		}
 	})
 }
