@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
 
@@ -30,7 +30,7 @@ const renderPage = (initialEntry = '/topup') =>
     </MemoryRouter>
   );
 
-describe('TopUpPage: stripe status and router context', () => {
+describe('TopUpPage: Stripe checkout behavior', () => {
   beforeEach(() => {
     useAuthStore.setState({
       user: {
@@ -58,6 +58,9 @@ describe('TopUpPage: stripe status and router context', () => {
 
     (api.get as any).mockReset();
     (api.post as any).mockReset();
+    (api.post as any).mockResolvedValue({
+      data: { success: false, message: 'test stops before redirect' },
+    });
     (api.get as any).mockImplementation((url: string) => {
       if (url.includes('/api/user/self')) {
         return Promise.resolve({
@@ -87,23 +90,50 @@ describe('TopUpPage: stripe status and router context', () => {
     });
   });
 
-  it('renders inside a Router without useSearchParams crashes', async () => {
+  it('submits the exact two-decimal USD amount', async () => {
     renderPage();
-    await waitFor(() => expect(api.get).toHaveBeenCalledWith('/api/user/self'));
-    expect(document.body.textContent || '').toMatch(/balance|token/i);
-  });
 
-  it('shows cancel outcome from query string', async () => {
-    renderPage('/topup?stripe=cancel');
-    await waitFor(() => expect(api.get).toHaveBeenCalledWith('/api/user/self'));
-    expect(document.body.textContent || '').toMatch(/cancel|not been charged/i);
-  });
+    const amount = await screen.findByLabelText(/amount \(usd\)/i);
+    fireEvent.change(amount, { target: { value: '19.99' } });
+    fireEvent.click(screen.getByRole('button', { name: /continue to stripe/i }));
 
-  it('polls order status after success return', async () => {
-    renderPage('/topup?stripe=success&session_id=cs_test');
     await waitFor(() =>
-      expect(api.get).toHaveBeenCalledWith(expect.stringContaining('/topup/stripe/orders/cs_test'))
+      expect(api.post).toHaveBeenCalledWith('/api/user/topup/stripe', { amount_usd: 19.99 })
     );
-    expect(document.body.textContent || '').toMatch(/balance|token|credit/i);
+  });
+
+  it('blocks amounts below the server-advertised minimum', async () => {
+    renderPage();
+
+    const amount = await screen.findByLabelText(/amount \(usd\)/i);
+    fireEvent.change(amount, { target: { value: '4.99' } });
+    fireEvent.click(screen.getByRole('button', { name: /continue to stripe/i }));
+
+    await screen.findByText(/minimum is \$5/i);
+    expect(api.post).not.toHaveBeenCalled();
+  });
+
+  it('shows the cancel outcome from the query string', async () => {
+    renderPage('/topup?stripe=cancel');
+    await screen.findByText(/payment canceled/i);
+    expect(screen.getByText(/you have not been charged/i)).toBeInTheDocument();
+  });
+
+  it('polls fulfillment and refreshes balance and history after paid status', async () => {
+    renderPage('/topup?stripe=success&session_id=cs_test');
+
+    await waitFor(() =>
+      expect(api.get).toHaveBeenCalledWith('/api/user/topup/stripe/orders/cs_test')
+    );
+    await screen.findByText(/^credits added$/i);
+    expect(
+      screen.getByText(/your balance has been updated from the server order status/i)
+    ).toBeInTheDocument();
+
+    await waitFor(() => {
+      const calls = (api.get as any).mock.calls.map((args: unknown[]) => args[0]);
+      expect(calls.filter((url: string) => url === '/api/user/self')).toHaveLength(2);
+      expect(calls.filter((url: string) => url === '/api/user/topup/stripe/orders')).toHaveLength(2);
+    });
   });
 });
