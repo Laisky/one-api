@@ -21,7 +21,9 @@ jobs:
     if: >-
       github.event.pull_request.head.repo.full_name == github.repository &&
       github.event.pull_request.head.ref == 'agent/consolidate-frontend-security-updates'
-    runs-on: ubuntu-latest
+    # Public repositories have a distinct, production-grade ARM64 hosted pool.
+    # The final Docker gate below cross-builds the actual linux/amd64 target.
+    runs-on: ubuntu-24.04-arm
     timeout-minutes: 75
     env:
       YARN_VERSION: 1.22.22
@@ -134,8 +136,22 @@ jobs:
       - name: Add permanent lockfile and production-build gates
         run: python3 .github/scripts/run_frontend_security_update.py harden
 
-      - name: Validate the production Docker frontend build
-        run: docker build --target web-builder --progress=plain -t one-api-web-security-check .
+      - name: Enable linux/amd64 emulation
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: amd64
+
+      - name: Configure Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Validate the production linux/amd64 Docker frontend build
+        run: |
+          docker buildx build \
+            --platform linux/amd64 \
+            --target web-builder \
+            --progress=plain \
+            --load \
+            -t one-api-web-security-check .
 
       - name: Validate the generated patch scope
         run: python3 .github/scripts/run_frontend_security_update.py validate
