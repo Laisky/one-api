@@ -286,6 +286,14 @@ export const CHANNEL_TYPES: ChannelType[] = [
     description: 'Cerebras Inference (api.cerebras.ai); ultra-fast OpenAI-compatible chat on wafer-scale hardware (gpt-oss-120b, GLM-4.7).',
   },
   {
+    key: 57,
+    text: 'DeepInfra',
+    value: 57,
+    color: 'purple',
+    description:
+      'DeepInfra serverless inference; OpenAI-compatible chat, completions, embeddings, images, and audio, plus rerank and native Anthropic Messages.',
+  },
+  {
     key: 42,
     text: 'VertexAI',
     value: 42,

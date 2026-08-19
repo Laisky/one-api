@@ -88,7 +88,7 @@ func EndpointNameToID(name string) Endpoint {
 	return -1
 }
 
-// EndpointIDToName converts an Endpoint ID to its string name.
+// EndpointIDToName converts an endpoint ID to its string name.
 // Returns empty string if the ID is not recognized.
 func EndpointIDToName(id Endpoint) string {
 	if name, ok := endpointIDToName[id]; ok {
@@ -394,6 +394,25 @@ func DefaultEndpointsForChannelType(channelType int) []Endpoint {
 		// not expose embeddings.
 		return []Endpoint{
 			EndpointChatCompletions,
+			EndpointResponseAPI,
+			EndpointClaudeMessages,
+		}
+	case DeepInfra:
+		// DeepInfra combines OpenAI-compatible, native Anthropic Messages, and
+		// model-native inference surfaces under one Bearer-authenticated API.
+		// Responses uses one-api's Chat Completions fallback. DeepInfra video is
+		// intentionally omitted because its native inference contract does not
+		// match one-api's /v1/videos lifecycle API.
+		return []Endpoint{
+			EndpointChatCompletions,
+			EndpointCompletions,
+			EndpointEmbeddings,
+			EndpointImagesGenerations,
+			EndpointImagesEdits,
+			EndpointAudioSpeech,
+			EndpointAudioTranscription,
+			EndpointAudioTranslation,
+			EndpointRerank,
 			EndpointResponseAPI,
 			EndpointClaudeMessages,
 		}

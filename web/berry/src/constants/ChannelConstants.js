@@ -182,6 +182,12 @@ export const CHANNEL_OPTIONS = {
     value: 56,
     color: 'orange'
   },
+  57: {
+    key: 57,
+    text: 'DeepInfra',
+    value: 57,
+    color: 'primary'
+  },
   50: {
     key: 50,
     text: 'OpenAI Compatible',
@@ -280,7 +286,7 @@ export const CHANNEL_OPTIONS = {
   },
   20: {
     key: 20,
-      text: 'OpenRouter',
+    text: 'OpenRouter',
     value: 20,
     color: 'success'
   },

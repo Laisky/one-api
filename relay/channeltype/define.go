@@ -58,5 +58,6 @@ const (
 	Fireworks
 	NVIDIA
 	Cerebras
+	DeepInfra
 	Dummy
 )
