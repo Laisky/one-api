@@ -1,0 +1,52 @@
+commit=751077d5ef653e404aa5eb2440ea35436ec233f4
+go version go1.26.3 linux/amd64
+
+=== gofmt ===
+PASS
+
+=== full aiproxy package with race detector ===
+SESSION_SECRET not set, using random secret
+=== RUN   TestStreamHandler_RoutesThroughRewriter
+--- PASS: TestStreamHandler_RoutesThroughRewriter (0.00s)
+=== RUN   TestStreamHandler_RoutesDocumentsThroughRewriter
+--- PASS: TestStreamHandler_RoutesDocumentsThroughRewriter (0.00s)
+=== RUN   TestStreamHandler_ReadErrorDoesNotFinalizeAsCompleted
+--- PASS: TestStreamHandler_ReadErrorDoesNotFinalizeAsCompleted (0.00s)
+=== RUN   TestStreamHandler_ChunkDoneRenderedStillUsesBridge
+--- PASS: TestStreamHandler_ChunkDoneRenderedStillUsesBridge (0.00s)
+=== RUN   TestStreamHandler_EmitsChatCompletionChunks
+--- PASS: TestStreamHandler_EmitsChatCompletionChunks (0.00s)
+=== RUN   TestAIProxyDocuments2Markdown
+=== PAUSE TestAIProxyDocuments2Markdown
+=== CONT  TestAIProxyDocuments2Markdown
+=== RUN   TestAIProxyDocuments2Markdown/empty
+=== PAUSE TestAIProxyDocuments2Markdown/empty
+=== RUN   TestAIProxyDocuments2Markdown/single_document
+=== PAUSE TestAIProxyDocuments2Markdown/single_document
+=== RUN   TestAIProxyDocuments2Markdown/preserves_order_and_raw_markdown_characters
+=== PAUSE TestAIProxyDocuments2Markdown/preserves_order_and_raw_markdown_characters
+=== CONT  TestAIProxyDocuments2Markdown/empty
+=== CONT  TestAIProxyDocuments2Markdown/preserves_order_and_raw_markdown_characters
+=== CONT  TestAIProxyDocuments2Markdown/single_document
+--- PASS: TestAIProxyDocuments2Markdown (0.00s)
+    --- PASS: TestAIProxyDocuments2Markdown/empty (0.00s)
+    --- PASS: TestAIProxyDocuments2Markdown/preserves_order_and_raw_markdown_characters (0.00s)
+    --- PASS: TestAIProxyDocuments2Markdown/single_document (0.00s)
+PASS
+ok  	github.com/Laisky/one-api/relay/adaptor/aiproxy	1.046s
+
+=== focused behavior equivalence tests ===
+ok  	github.com/Laisky/one-api/relay/adaptor/aiproxy	1.043s
+
+=== benchmark smoke check ===
+SESSION_SECRET not set, using random secret
+goos: linux
+goarch: amd64
+pkg: github.com/Laisky/one-api/relay/adaptor/aiproxy
+cpu: AMD EPYC 7763 64-Core Processor                
+BenchmarkAIProxyDocuments2Markdown/1_documents-4         	 3275442	        91.59 ns/op	1484.82 MB/s	     144 B/op	       1 allocs/op
+BenchmarkAIProxyDocuments2Markdown/10_documents-4        	  574304	       514.3 ns/op	2247.85 MB/s	    1280 B/op	       1 allocs/op
+BenchmarkAIProxyDocuments2Markdown/100_documents-4       	   67710	      4250 ns/op	2729.29 MB/s	   12294 B/op	       3 allocs/op
+PASS
+ok  	github.com/Laisky/one-api/relay/adaptor/aiproxy	1.279s
+status=0
