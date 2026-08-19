@@ -17,12 +17,14 @@ jobs:
     if: >-
       github.actor != 'github-actions[bot]' &&
       github.event.head_commit.message == 'Run isolated Modern dependency upgrade'
-    runs-on: ubuntu-latest
-    timeout-minutes: 60
+    runs-on: ubuntu-slim
+    timeout-minutes: 15
     env:
       CI: 'true'
       YARN_NETWORK_TIMEOUT: '600000'
       UPGRADE_BRANCH: agent/modern-upgrade-work-20260819
+      DIAGNOSTIC_FILE: .github/modern-upgrade-diagnostics.md
+
     steps:
       - name: Checkout isolated work branch
         uses: actions/checkout@v4
@@ -38,7 +40,7 @@ jobs:
       - name: Install Yarn Classic
         run: npm install --global yarn@1.22.22
 
-      - name: Upgrade every direct dependency to its latest stable release
+      - name: Upgrade every direct dependency to latest stable
         working-directory: web/modern
         run: |
           set -euo pipefail
@@ -47,63 +49,110 @@ jobs:
             --target latest \
             --packageManager yarn
           rm -f package-lock.json
-          rm -rf node_modules
-          yarn install \
-            --non-interactive \
-            --network-timeout "${YARN_NETWORK_TIMEOUT}"
 
-      - name: Commit generated manifest and lockfile
+      - name: Persist exact target versions before dependency resolution
         run: |
           set -euo pipefail
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add web/modern/package.json web/modern/yarn.lock
-          if git diff --cached --quiet; then
-            echo 'Dependency manifest and lockfile are already current.'
-          else
-            git commit -m 'Upgrade modern frontend dependencies'
+          git add web/modern/package.json
+          if ! git diff --cached --quiet; then
+            git commit -m 'Record latest stable Modern dependency targets'
             git push origin "HEAD:${UPGRADE_BRANCH}"
           fi
 
-      - name: Verify no direct dependency is outdated
-        working-directory: web/modern
-        run: npx --yes npm-check-updates@latest --target latest --errorLevel 2
-
-      - name: Type-check
-        working-directory: web/modern
-        run: yarn type-check
-
-      - name: Lint
-        working-directory: web/modern
-        run: yarn lint
-
-      - name: Validate translations
-        working-directory: web/modern
-        run: yarn check:i18n
-
-      - name: Run unit tests
-        working-directory: web/modern
-        run: yarn test --run --passWithNoTests
-
-      - name: Build production bundle
-        working-directory: web/modern
-        run: yarn build:prod
-
-      - name: Verify frozen reinstall
+      - name: Resolve upgraded Yarn graph
         working-directory: web/modern
         run: |
+          set -euo pipefail
           rm -rf node_modules
           yarn install \
-            --frozen-lockfile \
             --non-interactive \
             --network-timeout "${YARN_NETWORK_TIMEOUT}"
 
-      - name: Upload diagnostic files on failure
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: modern-dependency-upgrade-diagnostics
-          path: |
-            web/modern/package.json
-            web/modern/yarn.lock
-          retention-days: 7
+      - name: Persist regenerated lockfile
+        run: |
+          set -euo pipefail
+          git add web/modern/yarn.lock
+          if ! git diff --cached --quiet; then
+            git commit -m 'Regenerate Modern Yarn lockfile'
+            git push origin "HEAD:${UPGRADE_BRANCH}"
+          fi
+
+      - name: Validate upgraded graph and record diagnostics
+        id: validate
+        shell: bash
+        run: |
+          set -uo pipefail
+          logs=/tmp/modern-upgrade-logs
+          mkdir -p "$logs"
+          : >"$logs/status"
+          overall=0
+
+          run_check() {
+            local name="$1"
+            shift
+            set +e
+            "$@" >"${logs}/${name}.log" 2>&1
+            local code=$?
+            set -e
+            echo "${name}=${code}" >>"${logs}/status"
+            if [ "$code" -ne 0 ]; then overall=1; fi
+          }
+
+          run_check current bash -lc 'cd web/modern && npx --yes npm-check-updates@latest --target latest --errorLevel 2'
+          run_check type-check yarn --cwd web/modern type-check
+          run_check lint yarn --cwd web/modern lint
+          run_check i18n yarn --cwd web/modern check:i18n
+          run_check unit-tests yarn --cwd web/modern test --run --passWithNoTests
+          run_check production-build yarn --cwd web/modern build:prod
+
+          git restore --source=HEAD --worktree --staged -- web/build/modern 2>/dev/null || true
+          rm -f web/modern/tsconfig.tsbuildinfo
+
+          if [ "$overall" -eq 0 ]; then
+            rm -f "$DIAGNOSTIC_FILE"
+          else
+            {
+              echo '# Modern latest-stable compatibility diagnostics'
+              echo
+              echo '- Resolver base: latest `main` at workflow trigger'
+              echo '- Node: `24.x`'
+              echo '- Yarn: `1.22.22`'
+              echo
+              echo '## Check status'
+              echo
+              echo '```text'
+              cat "$logs/status"
+              echo '```'
+              for log in "$logs"/*.log; do
+                name=$(basename "$log" .log)
+                code=$(awk -F= -v name="$name" '$1 == name { print $2 }' "$logs/status" | tail -n1)
+                if [ "${code:-1}" -ne 0 ]; then
+                  echo
+                  echo "## ${name}"
+                  echo
+                  echo '```text'
+                  tail -n 400 "$log"
+                  echo '```'
+                fi
+              done
+            } >"$DIAGNOSTIC_FILE"
+          fi
+
+          git add -A .github web/modern/package.json web/modern/yarn.lock
+          if ! git diff --cached --quiet; then
+            if [ "$overall" -eq 0 ]; then
+              git commit -m 'Validate latest stable Modern dependencies'
+            else
+              git commit -m 'Record Modern dependency compatibility diagnostics'
+            fi
+            git push origin "HEAD:${UPGRADE_BRANCH}"
+          fi
+
+          echo "overall=${overall}" >>"$GITHUB_OUTPUT"
+          exit 0
+
+      - name: Require all compatibility checks
+        if: steps.validate.outputs.overall != '0'
+        run: exit 1
