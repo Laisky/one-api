@@ -61,9 +61,6 @@ func (f APIFormat) Endpoint() string {
 // It only parses the fields necessary to distinguish between formats,
 // avoiding the overhead of full request parsing.
 type requestProbe struct {
-	// Common fields
-	Model string `json:"model,omitempty"`
-
 	// ChatCompletion / Claude Messages indicator
 	Messages json.RawMessage `json:"messages,omitempty"`
 
@@ -77,10 +74,6 @@ type requestProbe struct {
 	Conversation       json.RawMessage `json:"conversation,omitempty"`
 	Prompt             json.RawMessage `json:"prompt,omitempty"`
 
-	// Claude-specific indicator: system as a separate top-level field
-	// (OpenAI puts system in messages array, Claude has it as a separate field)
-	System any `json:"system,omitempty"`
-
 	// Response API specific
 	MaxOutputTokens *int `json:"max_output_tokens,omitempty"`
 
@@ -90,7 +83,6 @@ type requestProbe struct {
 
 // messageProbe is used to inspect the structure of messages array entries.
 type messageProbe struct {
-	Role    string          `json:"role,omitempty"`
 	Content json.RawMessage `json:"content,omitempty"`
 }
 
@@ -279,9 +271,15 @@ func hasClaudeContentBlocks(messagesRaw json.RawMessage) bool {
 	}
 
 	for _, msg := range messages {
-		// Check if content is an array (could be Claude structured content)
+		// Claude-specific content blocks can only appear in an array. Most text
+		// messages are JSON strings, so skip the failed array decode on that hot path.
+		content := bytes.TrimSpace(msg.Content)
+		if len(content) == 0 || content[0] != '[' {
+			continue
+		}
+
 		var contentArray []contentBlockProbe
-		if err := json.Unmarshal(msg.Content, &contentArray); err == nil {
+		if err := json.Unmarshal(content, &contentArray); err == nil {
 			for _, block := range contentArray {
 				// Claude-specific content types
 				switch block.Type {
