@@ -23,7 +23,7 @@ jobs:
       github.actor != 'github-actions[bot]' &&
       github.event.pull_request.head.repo.full_name == github.repository &&
       github.event.pull_request.head.ref == 'agent/modern-latest-stable-20260819'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     timeout-minutes: 90
     env:
       CI: 'true'
