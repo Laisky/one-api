@@ -1,0 +1,196 @@
+name: Generate consolidated frontend security update
+
+on:
+  pull_request:
+    branches:
+      - main
+    types:
+      - opened
+      - reopened
+      - synchronize
+
+permissions:
+  contents: read
+
+concurrency:
+  group: consolidated-frontend-security-update-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  generate:
+    if: >-
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.head.ref == 'agent/consolidate-frontend-security-updates'
+    # Public repositories have a distinct, production-grade ARM64 hosted pool.
+    # The final Docker gate below emulates the actual linux/amd64 web builder.
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 75
+    env:
+      YARN_VERSION: 1.22.22
+      YARN_NETWORK_TIMEOUT: 600000
+      FRONTEND_LOCK_BASELINE: /tmp/frontend-lock-baseline
+      FRONTEND_SECURITY_REPORT: /tmp/frontend-security-validation-report.md
+    steps:
+      - name: Checkout the pull-request head branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          fetch-depth: 0
+
+      - name: Refresh the base reference
+        run: git fetch --no-tags origin main
+
+      - name: Setup the production Node.js line
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Pin Yarn Classic
+        run: npm install --global "yarn@${YARN_VERSION}"
+
+      - name: Preserve the pre-update lockfiles
+        run: |
+          set -euo pipefail
+          mkdir -p "${FRONTEND_LOCK_BASELINE}"
+          for theme in air berry modern; do
+            cp "web/${theme}/yarn.lock" "${FRONTEND_LOCK_BASELINE}/${theme}.yarn.lock"
+          done
+
+      - name: Update manifests and invalidate only affected lock entries
+        run: python3 .github/scripts/run_frontend_security_update.py refresh
+
+      - name: Guard React Router v6 navigation compatibility
+        run: |
+          python3 <<'PY'
+          from pathlib import Path
+          import re
+
+          roots = [Path('web/air/src'), Path('web/berry/src'), Path('web/modern/src')]
+          suffixes = {'.js', '.jsx', '.ts', '.tsx'}
+          checks = {
+              'navigate/redirect external literal': re.compile(
+                  r"\b(?:navigate|redirect)\s*\(\s*['\"`]\s*(?:https?:|//)",
+                  re.MULTILINE,
+              ),
+              'React Router link external literal': re.compile(
+                  r"<(?:Link|NavLink|Navigate)\b[^>]*\bto\s*=\s*(?:\{\s*)?['\"`]\s*(?:https?:|//)",
+                  re.MULTILINE | re.DOTALL,
+              ),
+          }
+
+          findings = []
+          for root in roots:
+              for path in root.rglob('*'):
+                  if not path.is_file() or path.suffix not in suffixes:
+                      continue
+                  text = path.read_text(errors='replace')
+                  for label, pattern in checks.items():
+                      for match in pattern.finditer(text):
+                          line = text.count('\n', 0, match.start()) + 1
+                          findings.append(f'{path}:{line}: {label}')
+
+          if findings:
+              print('\n'.join(findings))
+              raise SystemExit(
+                  'React Router 6.30.6 no longer treats external URLs as in-app '
+                  'navigate() targets; use window.location or an ordinary anchor instead'
+              )
+          print('No direct external URL literals are passed to React Router navigation APIs')
+          PY
+
+      - name: Resolve refreshed entries without lifecycle scripts
+        run: |
+          set -euo pipefail
+          for theme in air berry modern; do
+            echo "==> resolving ${theme}"
+            yarn --cwd "web/${theme}" install \
+              --ignore-scripts \
+              --non-interactive \
+              --network-timeout "${YARN_NETWORK_TIMEOUT}"
+          done
+
+      - name: Verify patched floors and query OSV
+        run: python3 .github/scripts/run_frontend_security_update.py verify
+
+      - name: Reinstall cleanly from frozen lockfiles with lifecycle scripts
+        run: |
+          set -euo pipefail
+          for theme in air berry modern; do
+            echo "==> frozen install ${theme}"
+            rm -rf "web/${theme}/node_modules"
+            yarn --cwd "web/${theme}" install \
+              --frozen-lockfile \
+              --non-interactive \
+              --network-timeout "${YARN_NETWORK_TIMEOUT}"
+          done
+
+      - name: Run all frontend test suites
+        env:
+          CI: 'true'
+        run: |
+          set -euo pipefail
+          yarn --cwd web/modern test --run --passWithNoTests
+          yarn --cwd web/air test --watchAll=false --passWithNoTests
+          yarn --cwd web/berry test --watchAll=false --passWithNoTests
+
+      - name: Add permanent lockfile and production-build gates
+        run: python3 .github/scripts/run_frontend_security_update.py harden
+
+      - name: Enable linux/amd64 emulation
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: amd64
+
+      - name: Configure Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Materialize an amd64-only validation Dockerfile
+        run: |
+          python3 <<'PY'
+          from pathlib import Path
+
+          source = Path('Dockerfile').read_text()
+          current = 'FROM --platform=$BUILDPLATFORM ${NODE_IMAGE} AS web-builder'
+          forced = 'FROM --platform=linux/amd64 ${NODE_IMAGE} AS web-builder'
+          if source.count(current) != 1:
+              raise SystemExit('expected exactly one BUILDPLATFORM web-builder declaration')
+          Path('/tmp/Dockerfile.web-amd64').write_text(source.replace(current, forced))
+          PY
+
+      - name: Validate the production linux/amd64 Docker frontend build
+        run: |
+          docker buildx build \
+            --platform linux/amd64 \
+            --file /tmp/Dockerfile.web-amd64 \
+            --target web-builder \
+            --progress=plain \
+            --load \
+            -t one-api-web-security-check .
+
+      - name: Validate the generated patch scope
+        run: python3 .github/scripts/run_frontend_security_update.py validate
+
+      - name: Assemble the reviewed artifact
+        run: |
+          set -euo pipefail
+          artifact_root=/tmp/frontend-security-update
+          rm -rf "${artifact_root}"
+          mkdir -p "${artifact_root}"
+          cp --parents \
+            .github/workflows/lint.yml \
+            Dockerfile \
+            web/air/package.json web/air/yarn.lock \
+            web/berry/package.json web/berry/yarn.lock \
+            web/modern/package.json web/modern/yarn.lock \
+            "${artifact_root}"
+          cp "${FRONTEND_SECURITY_REPORT}" "${artifact_root}/validation-report.md"
+          tar -C /tmp -czf /tmp/frontend-security-update.tar.gz frontend-security-update
+          cat "${FRONTEND_SECURITY_REPORT}" >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Upload generated patch and validation report
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-security-update
+          path: /tmp/frontend-security-update.tar.gz
+          if-no-files-found: error
+          retention-days: 7
