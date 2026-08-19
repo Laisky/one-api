@@ -2,7 +2,6 @@ package controller
 
 import (
 	"encoding/json"
-	"fmt"
 	"strings"
 	"time"
 
@@ -82,8 +81,6 @@ func newChatToResponseStreamBridge(c *gin.Context, meta *metalib.Meta, request *
 		responseID: generateResponseAPIID(c, nil),
 		createdAt:  time.Now().Unix(),
 		model:      meta.ActualModelName,
-		toolCalls:  make(map[string]*streamToolCallState),
-		toolIndex:  make(map[int]*streamToolCallState),
 	}
 
 	if handler.model == "" {
@@ -101,7 +98,7 @@ func newChatToResponseStreamBridge(c *gin.Context, meta *metalib.Meta, request *
 		}
 	}
 
-	handler.messageItemID = fmt.Sprintf("msg_%s", random.GetRandomString(16))
+	handler.messageItemID = "msg_" + random.GetRandomString(16)
 	handler.messageOutputIndex = handler.nextOutputIndex()
 
 	return handler
@@ -469,6 +466,15 @@ func (h *chatToResponseStreamBridge) handleToolCalls(c *gin.Context, tools []mod
 }
 
 func (h *chatToResponseStreamBridge) ensureToolCallState(c *gin.Context, tool *model.Tool) *streamToolCallState {
+	// Text-only streams never use tool state, so allocate these maps only when
+	// the first tool delta arrives instead of on every bridged response.
+	if h.toolCalls == nil {
+		h.toolCalls = make(map[string]*streamToolCallState)
+	}
+	if tool.Index != nil && h.toolIndex == nil {
+		h.toolIndex = make(map[int]*streamToolCallState)
+	}
+
 	normalizedID := ""
 	if trimmed := strings.TrimSpace(tool.Id); trimmed != "" {
 		normalizedID = ensureResponseAPICallID(trimmed)
@@ -495,7 +501,7 @@ func (h *chatToResponseStreamBridge) ensureToolCallState(c *gin.Context, tool *m
 	if state == nil {
 		id := normalizedID
 		if id == "" {
-			id = fmt.Sprintf("call_%s", random.GetRandomString(16))
+			id = "call_" + random.GetRandomString(16)
 		}
 		state = &streamToolCallState{
 			id:       id,
@@ -702,17 +708,27 @@ func (h *chatToResponseStreamBridge) emitEvent(c *gin.Context, eventType string,
 		return
 	}
 
-	var builder strings.Builder
-	if eventType != "" {
-		builder.WriteString("event: ")
-		builder.WriteString(eventType)
-		builder.WriteByte('\n')
-	}
-	builder.WriteString("data: ")
-	builder.Write(payload)
-	builder.WriteString("\n\n")
+	const (
+		eventPrefix = "event: "
+		dataPrefix  = "data: "
+		frameSuffix = "\n\n"
+	)
 
-	if _, err := c.Writer.Write([]byte(builder.String())); err != nil {
+	frameSize := len(dataPrefix) + len(payload) + len(frameSuffix)
+	if eventType != "" {
+		frameSize += len(eventPrefix) + len(eventType) + 1
+	}
+	frame := make([]byte, 0, frameSize)
+	if eventType != "" {
+		frame = append(frame, eventPrefix...)
+		frame = append(frame, eventType...)
+		frame = append(frame, '\n')
+	}
+	frame = append(frame, dataPrefix...)
+	frame = append(frame, payload...)
+	frame = append(frame, frameSuffix...)
+
+	if _, err := c.Writer.Write(frame); err != nil {
 		gmw.GetLogger(c).Warn("failed to write response stream event", zap.String("event_type", eventType), zap.Error(err))
 	}
 	c.Writer.Flush()
