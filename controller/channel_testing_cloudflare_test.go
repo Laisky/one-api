@@ -12,6 +12,8 @@ import (
 // TestCloudflareChannelTestModelsAreChatOnly verifies channel tests only expose
 // and select text-in/text-out generation models. Text-input embedding models
 // such as bge-m3 must never be sent through Chat Completions.
+// Parameters: t is the test handle used to run assertions.
+// Returns: no values.
 func TestCloudflareChannelTestModelsAreChatOnly(t *testing.T) {
 	t.Parallel()
 
