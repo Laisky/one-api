@@ -1,10 +1,10 @@
 package deepinfra
 
-// textCatalog20260819 contains the active text-generation entries that are
-// not already present in the flagship catalog in models.go. Prices are USD
-// per one million input/output/cached-input tokens; contexts follow the live
-// DeepInfra catalog captured on 2026-08-19.
-var textCatalog20260819 = []catalogTextEntry{
+// extendedTextCatalog contains the active text-generation entries that are not
+// already present in the flagship catalog in constants.go. Prices are USD per
+// one million input/output/cached-input tokens; contexts follow the DeepInfra
+// catalog published on 2026-08-19.
+var extendedTextCatalog = []catalogTextEntry{
 	{"Gryphe/MythoMax-L2-13b", 0.4, 0.4, 0, 4000, deepInfraTextInput, false},
 	{"NousResearch/Hermes-3-Llama-3.1-405B", 1, 1, 0, 128000, deepInfraTextInput, false},
 	{"NousResearch/Hermes-3-Llama-3.1-70B", 0.7, 0.7, 0, 128000, deepInfraTextInput, false},
@@ -68,8 +68,8 @@ var textCatalog20260819 = []catalogTextEntry{
 }
 
 func init() {
-	for _, entry := range textCatalog20260819 {
-		addDeepInfraCatalogModel(entry.name, catalogTextModel(
+	for _, entry := range extendedTextCatalog {
+		addCatalogModel(entry.name, catalogTextModel(
 			entry.inputUSD,
 			entry.outputUSD,
 			entry.cachedInputUSD,

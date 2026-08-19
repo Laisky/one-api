@@ -1,14 +1,21 @@
 package deepinfra
 
 import (
+	"fmt"
+
 	"github.com/Laisky/one-api/relay/adaptor"
 	billingratio "github.com/Laisky/one-api/relay/billing/ratio"
 )
 
 var (
-	deepInfraTextInput              = []string{"text"}
-	deepInfraVisionInput            = []string{"text", "image"}
-	deepInfraTextOutput             = []string{"text"}
+	// deepInfraTextInput lists the input modalities of text-only models.
+	deepInfraTextInput = []string{"text"}
+	// deepInfraVisionInput lists the input modalities of vision-capable models.
+	deepInfraVisionInput = []string{"text", "image"}
+	// deepInfraTextOutput lists the output modalities of text-generation models.
+	deepInfraTextOutput = []string{"text"}
+	// deepInfraChatSamplingParameters lists the OpenAI-compatible sampling
+	// parameters accepted by DeepInfra chat completions.
 	deepInfraChatSamplingParameters = []string{
 		"temperature",
 		"top_p",
@@ -248,4 +255,51 @@ func imageModel(basePriceUSD float64, description string) adaptor.ModelConfig {
 		OutputModalities: []string{"image"},
 		Description:      description,
 	}
+}
+
+// catalogTextEntry is one table row of the extended text catalog defined in
+// constants_text.go.
+type catalogTextEntry struct {
+	name           string
+	inputUSD       float64
+	outputUSD      float64
+	cachedInputUSD float64
+	contextLength  int32
+	modalities     []string
+	reasoning      bool
+}
+
+// addCatalogModel registers an extended catalog entry into ModelRatios and
+// fails fast when a model is declared twice across the catalog files.
+func addCatalogModel(modelName string, config adaptor.ModelConfig) {
+	if _, exists := ModelRatios[modelName]; exists {
+		panic(fmt.Sprintf("duplicate DeepInfra model catalog entry %q", modelName))
+	}
+	ModelRatios[modelName] = config
+}
+
+// catalogTextModel builds text-model metadata with explicit input modalities.
+func catalogTextModel(inputUSD, outputUSD, cachedInputUSD float64, contextLength int32, modalities []string, reasoning bool, description string) adaptor.ModelConfig {
+	config := textModel(inputUSD, outputUSD, cachedInputUSD, contextLength, false, reasoning, description)
+	config.InputModalities = append([]string(nil), modalities...)
+	return config
+}
+
+// catalogEmbeddingModel builds embedding metadata with explicit input modalities.
+func catalogEmbeddingModel(inputUSD float64, contextLength int32, modalities []string, description string) adaptor.ModelConfig {
+	config := embeddingModel(inputUSD, contextLength, description)
+	config.InputModalities = append([]string(nil), modalities...)
+	return config
+}
+
+// flatImageModel builds per-image pricing that does not scale with image size.
+func flatImageModel(pricePerImageUSD float64, acceptsImageInput bool, description string) adaptor.ModelConfig {
+	config := imageModel(pricePerImageUSD, description)
+	// These catalog entries are flat per-image prices, independent of image size.
+	config.Image.SizeMultipliers = nil
+	config.InputModalities = []string{"text"}
+	if acceptsImageInput {
+		config.InputModalities = []string{"text", "image"}
+	}
+	return config
 }
