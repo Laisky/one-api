@@ -372,6 +372,12 @@ func migrateDB() error {
 	if err = DB.AutoMigrate(&PasskeyCredential{}); err != nil {
 		return errors.Wrapf(err, "failed to migrate PasskeyCredential")
 	}
+	if err = DB.AutoMigrate(&PaymentOrder{}); err != nil {
+		return errors.Wrapf(err, "failed to migrate PaymentOrder")
+	}
+	if err = DB.AutoMigrate(&StripeWebhookEvent{}); err != nil {
+		return errors.Wrapf(err, "failed to migrate StripeWebhookEvent")
+	}
 	if err = DB.AutoMigrate(&DataMigration{}); err != nil {
 		return errors.Wrapf(err, "failed to migrate DataMigration")
 	}

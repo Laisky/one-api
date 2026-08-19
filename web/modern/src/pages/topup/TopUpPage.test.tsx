@@ -4,9 +4,16 @@ import { useAuthStore } from '@/lib/stores/auth';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { ReactElement } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { MemoryRouter } from 'react-router-dom';
 import { TopUpPage } from './TopUpPage';
 
-const renderWithProviders = (ui: ReactElement) => render(<NotificationsProvider>{ui}</NotificationsProvider>);
+/** renderWithProviders mounts UI under notifications and a Router (required for useSearchParams). */
+const renderWithProviders = (ui: ReactElement) =>
+  render(
+    <MemoryRouter initialEntries={['/topup']}>
+      <NotificationsProvider>{ui}</NotificationsProvider>
+    </MemoryRouter>
+  );
 
 vi.mock('@/lib/api', () => {
   const get = vi.fn();
@@ -47,16 +54,32 @@ describe('TopUpPage', () => {
     localStorage.setItem('display_in_currency', 'true');
 
     // Mock system status with a payment link
-    localStorage.setItem('status', JSON.stringify({ top_up_link: 'https://pay.example.com' }));
+    localStorage.setItem(
+      'status',
+      JSON.stringify({ top_up_link: 'https://pay.example.com', stripe_enabled: false, min_topup_usd: 5 })
+    );
 
     // Reset API mocks
     (api.get as any).mockReset();
     (api.post as any).mockReset();
-    (api.get as any).mockResolvedValue({
-      data: {
-        success: true,
-        data: { id: 1, username: 'testuser', quota: 1000 },
-      },
+    (api.get as any).mockImplementation((url: string) => {
+      if (typeof url === 'string' && url.includes('/api/user/self')) {
+        return Promise.resolve({
+          data: { success: true, data: { id: 1, username: 'testuser', quota: 1000 } },
+        });
+      }
+      if (typeof url === 'string' && url.includes('/api/status')) {
+        return Promise.resolve({
+          data: {
+            success: true,
+            data: { top_up_link: 'https://pay.example.com', stripe_enabled: false, min_topup_usd: 5 },
+          },
+        });
+      }
+      if (typeof url === 'string' && url.includes('/topup/stripe/orders')) {
+        return Promise.resolve({ data: { success: true, data: [] } });
+      }
+      return Promise.resolve({ data: { success: true, data: {} } });
     });
     (api.post as any).mockResolvedValue({ data: { success: true, data: 500 } });
   });
@@ -69,7 +92,7 @@ describe('TopUpPage', () => {
 
     // Type code and submit
     fireEvent.change(input, { target: { value: 'ABC-123' } });
-    const redeemBtn = screen.getByRole('button', { name: /redeem code/i });
+    const redeemBtn = screen.getByRole('button', { name: /redeem/i });
     fireEvent.click(redeemBtn);
 
     await waitFor(() => {

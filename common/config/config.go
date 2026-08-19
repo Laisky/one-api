@@ -1576,6 +1576,24 @@ var (
 	// Runtime variable (set via admin UI; non-empty env value takes precedence)
 	// Default: "" (auto-detected as described above)
 	EmailProvider = strings.ToLower(strings.TrimSpace(env.String(EnvEmailProvider, "")))
+
+	// StripeSecretKey is the Stripe API secret key (sk_live_... or sk_test_...).
+	// Environment variable: STRIPE_SECRET_KEY
+	StripeSecretKey = env.String("STRIPE_SECRET_KEY", "")
+
+	// StripeWebhookSecret verifies incoming Stripe webhook signatures (whsec_...).
+	// Environment variable: STRIPE_WEBHOOK_SECRET
+	StripeWebhookSecret = env.String("STRIPE_WEBHOOK_SECRET", "")
+
+	// StripePublicBaseURL is the trusted public origin for Checkout success/cancel URLs.
+	// Prefer this over request Host headers. Example: https://oneapi.example.com
+	// Environment variable: STRIPE_PUBLIC_BASE_URL
+	// Default: "" (falls back to ServerAddress)
+	StripePublicBaseURL = strings.TrimRight(strings.TrimSpace(env.String("STRIPE_PUBLIC_BASE_URL", "")), "/")
+
+	// MinTopUpUSD is the minimum freeform USD top-up amount accepted via Stripe.
+	// Environment variable: MIN_TOPUP_USD. Default: 5.
+	MinTopUpUSD = env.Int("MIN_TOPUP_USD", 5)
 )
 
 // =============================================================================
