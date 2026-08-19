@@ -359,7 +359,6 @@ func modelDescriptionLooksNonChatTestable(description string) bool {
 		"image-to-text",
 		"video generation",
 		"summarization model",
-		"text summarization",
 		"document ocr",
 		"layout parsing",
 	}
