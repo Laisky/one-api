@@ -14,6 +14,7 @@ import (
 	"github.com/Laisky/one-api/relay/adaptor/copilot"
 	"github.com/Laisky/one-api/relay/adaptor/coze"
 	"github.com/Laisky/one-api/relay/adaptor/deepl"
+	"github.com/Laisky/one-api/relay/adaptor/deepinfra"
 	"github.com/Laisky/one-api/relay/adaptor/deepseek"
 	"github.com/Laisky/one-api/relay/adaptor/fireworks"
 	"github.com/Laisky/one-api/relay/adaptor/gemini"
@@ -78,6 +79,8 @@ func GetAdaptor(apiType int) adaptor.Adaptor {
 		return &replicate.Adaptor{}
 	case apitype.DeepSeek:
 		return &deepseek.Adaptor{}
+	case apitype.DeepInfra:
+		return &deepinfra.Adaptor{}
 	case apitype.Groq:
 		return &groq.Adaptor{}
 	case apitype.Mistral:

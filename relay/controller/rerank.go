@@ -58,14 +58,13 @@ func RelayRerankHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 	channelModelConfigs := getChannelModelConfigs(c)
 	pricingAdaptor := resolvePricingAdaptor(meta)
 	modelRatio := pricing.ResolveModelRatioAt(rerankRequest.Model, channelModelConfigs, channelModelRatio, pricingAdaptor, meta.StartTime)
+	modelConfig, hasModelConfig := pricing.ResolveModelConfig(rerankRequest.Model, channelModelConfigs, pricingAdaptor, meta.StartTime)
+	perCallBilling := hasModelConfig && modelConfig.PerCall != nil && modelConfig.PerCall.HasData()
 	groupRatio := c.GetFloat64(ctxkey.ChannelRatio)
-	totalQuota := int64(math.Ceil(modelRatio * groupRatio))
-	if modelRatio > 0 && totalQuota == 0 {
-		totalQuota = 1
-	}
 
 	promptTokens := countRerankPromptTokens(ctx, rerankRequest)
 	meta.PromptTokens = promptTokens
+	totalQuota := calculateRerankQuota(promptTokens, modelRatio, groupRatio, perCallBilling)
 
 	preConsumedQuota, bizErr := preConsumeRerankQuota(c, totalQuota, meta)
 	if bizErr != nil {
@@ -215,7 +214,7 @@ func RelayRerankHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 		logMessage:          "CRITICAL BILLING TIMEOUT",
 		includeElapsedField: true,
 	}, func(ctx context.Context) {
-		quota := postConsumeRerankQuota(ctx, usage, meta, rerankRequest, preConsumedQuota, totalQuota, modelRatio, groupRatio)
+		quota := postConsumeRerankQuota(ctx, usage, meta, rerankRequest, preConsumedQuota, totalQuota, modelRatio, groupRatio, perCallBilling)
 		if requestId != "" {
 			if err := model.UpdateUserRequestCostQuotaByRequestID(quotaId, requestId, quota); err != nil {
 				lg.Error("update user request cost failed", zap.Error(err), zap.String("request_id", requestId))
@@ -289,6 +288,26 @@ func countRerankPromptTokens(ctx context.Context, request *relaymodel.RerankRequ
 	return tokens
 }
 
+// calculateRerankQuota computes either token-priced or flat per-call rerank quota.
+func calculateRerankQuota(promptTokens int, modelRatio float64, groupRatio float64, perCall bool) int64 {
+	if modelRatio <= 0 || groupRatio <= 0 {
+		return 0
+	}
+
+	units := 1.0
+	if !perCall {
+		if promptTokens <= 0 {
+			return 0
+		}
+		units = float64(promptTokens)
+	}
+	quota := int64(math.Ceil(units * modelRatio * groupRatio))
+	if quota == 0 {
+		return 1
+	}
+	return quota
+}
+
 func preConsumeRerankQuota(c *gin.Context, perCallQuota int64, meta *metalib.Meta) (int64, *relaymodel.ErrorWithStatusCode) {
 	ctx := gmw.Ctx(c)
 	lg := gmw.GetLogger(c)
@@ -330,8 +349,12 @@ func postConsumeRerankQuota(ctx context.Context,
 	preConsumedQuota int64,
 	totalQuota int64,
 	modelRatio float64,
-	groupRatio float64) (quota int64) {
+	groupRatio float64,
+	perCallBilling bool) (quota int64) {
 	quota = max(totalQuota, 0)
+	if !perCallBilling && usage != nil && usage.PromptTokens > 0 {
+		quota = calculateRerankQuota(usage.PromptTokens, modelRatio, groupRatio, false)
+	}
 
 	quotaDelta := quota - preConsumedQuota
 
@@ -348,6 +371,10 @@ func postConsumeRerankQuota(ctx context.Context,
 		promptTokens = usage.PromptTokens
 		completionTokens = usage.CompletionTokens
 	}
+	billingMode := "token"
+	if perCallBilling {
+		billingMode = "per-call"
+	}
 
 	if meta.TokenId > 0 && meta.UserId > 0 && meta.ChannelId > 0 {
 		logEntry := &model.Log{
@@ -357,7 +384,7 @@ func postConsumeRerankQuota(ctx context.Context,
 			CompletionTokens: completionTokens,
 			ModelName:        request.Model,
 			TokenName:        meta.TokenName,
-			Content:          fmt.Sprintf("rerank per-call billing, base unit %.2f, group rate %.2f", modelRatio, groupRatio),
+			Content:          fmt.Sprintf("rerank %s billing, base unit %.6f, group rate %.2f", billingMode, modelRatio, groupRatio),
 			IsStream:         false,
 			ElapsedTime:      helper.CalcElapsedTime(meta.StartTime),
 			RequestId:        requestId,
