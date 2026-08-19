@@ -1,0 +1,105 @@
+name: Upgrade modern frontend dependencies
+
+on:
+  push:
+    branches:
+      - agent/upgrade-modern-dependencies-20260819
+
+permissions:
+  contents: write
+
+concurrency:
+  group: upgrade-modern-dependencies-20260819
+  cancel-in-progress: true
+
+jobs:
+  upgrade-and-test:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      CI: 'true'
+      YARN_NETWORK_TIMEOUT: '600000'
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Install Yarn Classic
+        run: npm install --global yarn@1.22.22
+
+      - name: Upgrade every direct dependency to its latest stable release
+        working-directory: web/modern
+        run: |
+          set -euo pipefail
+          npx --yes npm-check-updates@latest \
+            --upgrade \
+            --target latest \
+            --packageManager yarn
+          rm -f package-lock.json
+          rm -rf node_modules
+          yarn install \
+            --non-interactive \
+            --network-timeout "${YARN_NETWORK_TIMEOUT}"
+
+      - name: Commit generated manifest and lockfile
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add web/modern/package.json web/modern/yarn.lock
+          if git diff --cached --quiet; then
+            echo 'Dependency manifest and lockfile are already current.'
+          else
+            git commit -m 'Upgrade modern frontend dependencies'
+            git push origin HEAD:${GITHUB_REF_NAME}
+          fi
+
+      - name: Verify no direct dependency is outdated
+        working-directory: web/modern
+        run: npx --yes npm-check-updates@latest --target latest --errorLevel 2
+
+      - name: Type-check
+        working-directory: web/modern
+        run: yarn type-check
+
+      - name: Lint
+        working-directory: web/modern
+        run: yarn lint
+
+      - name: Validate translations
+        working-directory: web/modern
+        run: yarn check:i18n
+
+      - name: Run unit tests
+        working-directory: web/modern
+        run: yarn test --run --passWithNoTests
+
+      - name: Build production bundle
+        working-directory: web/modern
+        run: yarn build:prod
+
+      - name: Verify frozen reinstall
+        working-directory: web/modern
+        run: |
+          rm -rf node_modules
+          yarn install \
+            --frozen-lockfile \
+            --non-interactive \
+            --network-timeout "${YARN_NETWORK_TIMEOUT}"
+
+      - name: Upload diagnostic files on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: modern-dependency-upgrade-diagnostics
+          path: |
+            web/modern/package.json
+            web/modern/yarn.lock
+          retention-days: 7
