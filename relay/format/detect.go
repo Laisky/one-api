@@ -245,11 +245,11 @@ func isClaudeToolFormat(toolsRaw json.RawMessage) bool {
 			return true
 		}
 
-		// OpenAI tools have type="function" with a nested function object
+		// OpenAI tools have type="function" with a nested function object.
 		if tool.Type == "function" && len(tool.Function) > 0 {
-			// Check if the function has "parameters" (OpenAI) vs "input_schema" (Claude)
+			// Only input_schema affects detection. Skipping parameters avoids copying
+			// potentially large OpenAI JSON schemas into an unused RawMessage.
 			var fnProbe struct {
-				Parameters  json.RawMessage `json:"parameters,omitempty"`
 				InputSchema json.RawMessage `json:"input_schema,omitempty"`
 			}
 			if err := json.Unmarshal(tool.Function, &fnProbe); err == nil {

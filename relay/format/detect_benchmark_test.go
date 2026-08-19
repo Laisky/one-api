@@ -35,6 +35,8 @@ var benchmarkDetectFormatLargeSystem = []byte(`{
 	]
 }`)
 
+var benchmarkOpenAITools = json.RawMessage(`[{"type":"function","function":{"name":"lookup","parameters":{"type":"object","properties":{"payload":{"type":"string","description":"` + strings.Repeat("A", 4096) + `"}}}}}]`)
+
 type legacyRequestProbe struct {
 	Model              string          `json:"model,omitempty"`
 	Messages           json.RawMessage `json:"messages,omitempty"`
@@ -65,6 +67,33 @@ func hasClaudeContentBlocksLegacy(messagesRaw json.RawMessage) bool {
 			for _, block := range contentArray {
 				switch block.Type {
 				case "tool_use", "tool_result", "thinking":
+					return true
+				}
+			}
+		}
+	}
+
+	return false
+}
+
+func isClaudeToolFormatLegacy(toolsRaw json.RawMessage) bool {
+	var tools []toolProbe
+	if err := json.Unmarshal(toolsRaw, &tools); err != nil {
+		return false
+	}
+
+	for _, tool := range tools {
+		if len(tool.InputSchema) > 0 && tool.Name != "" {
+			return true
+		}
+
+		if tool.Type == "function" && len(tool.Function) > 0 {
+			var fnProbe struct {
+				Parameters  json.RawMessage `json:"parameters,omitempty"`
+				InputSchema json.RawMessage `json:"input_schema,omitempty"`
+			}
+			if err := json.Unmarshal(tool.Function, &fnProbe); err == nil {
+				if len(fnProbe.InputSchema) > 0 {
 					return true
 				}
 			}
@@ -114,6 +143,21 @@ func TestHasClaudeContentBlocksBehaviorEquivalent(t *testing.T) {
 	}
 }
 
+func TestIsClaudeToolFormatBehaviorEquivalent(t *testing.T) {
+	t.Parallel()
+	cases := []json.RawMessage{
+		benchmarkOpenAITools,
+		json.RawMessage(`[{"name":"lookup","input_schema":{"type":"object"}}]`),
+		json.RawMessage(`[{"type":"function","function":{"name":"lookup","input_schema":{"type":"object"}}}]`),
+		json.RawMessage(`[{"type":"function","function":{"name":"lookup","parameters":{}}}]`),
+		json.RawMessage(`not-json`),
+	}
+
+	for _, raw := range cases {
+		require.Equal(t, isClaudeToolFormatLegacy(raw), isClaudeToolFormat(raw), string(raw))
+	}
+}
+
 func BenchmarkClaudeContentBlockScanPlainText(b *testing.B) {
 	b.Run("legacy", func(b *testing.B) {
 		b.ReportAllocs()
@@ -144,6 +188,21 @@ func BenchmarkRequestProbeDecodeLargeUnusedFields(b *testing.B) {
 		for b.Loop() {
 			probe = requestProbe{}
 			_ = json.Unmarshal(benchmarkDetectFormatLargeSystem, &probe)
+		}
+	})
+}
+
+func BenchmarkClaudeToolFormatOpenAISchema(b *testing.B) {
+	b.Run("legacy", func(b *testing.B) {
+		b.ReportAllocs()
+		for b.Loop() {
+			_ = isClaudeToolFormatLegacy(benchmarkOpenAITools)
+		}
+	})
+	b.Run("optimized", func(b *testing.B) {
+		b.ReportAllocs()
+		for b.Loop() {
+			_ = isClaudeToolFormat(benchmarkOpenAITools)
 		}
 	})
 }
