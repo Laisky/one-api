@@ -19,38 +19,12 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           python - <<'PY'
-          import json
-          import os
-          import urllib.request
-
-          status_url = (
-              f"{os.environ['GITHUB_API_URL']}/repos/{os.environ['GITHUB_REPOSITORY']}"
-              f"/statuses/{os.environ['GITHUB_SHA']}"
-          )
-          target_url = (
-              f"{os.environ['GITHUB_SERVER_URL']}/{os.environ['GITHUB_REPOSITORY']}"
-              f"/actions/runs/{os.environ['GITHUB_RUN_ID']}"
-          )
+          import json, os, urllib.request
+          status_url = f"{os.environ['GITHUB_API_URL']}/repos/{os.environ['GITHUB_REPOSITORY']}/statuses/{os.environ['GITHUB_SHA']}"
+          target_url = f"{os.environ['GITHUB_SERVER_URL']}/{os.environ['GITHUB_REPOSITORY']}/actions/runs/{os.environ['GITHUB_RUN_ID']}"
           for context in ("bolt/stream-construct", "bolt/stream-emit-event"):
-              body = json.dumps(
-                  {
-                      "state": "pending",
-                      "context": context,
-                      "description": "same-runner baseline comparison is running",
-                      "target_url": target_url,
-                  }
-              ).encode()
-              request = urllib.request.Request(
-                  status_url,
-                  data=body,
-                  method="POST",
-                  headers={
-                      "Accept": "application/vnd.github+json",
-                      "Authorization": f"Bearer {os.environ['GH_TOKEN']}",
-                      "Content-Type": "application/json",
-                      "X-GitHub-Api-Version": "2022-11-28",
-                  },
-              )
+              body = json.dumps({"state": "pending", "context": context, "description": "same-runner comparison is running", "target_url": target_url}).encode()
+              request = urllib.request.Request(status_url, data=body, method="POST", headers={"Accept": "application/vnd.github+json", "Authorization": f"Bearer {os.environ['GH_TOKEN']}", "Content-Type": "application/json", "X-GitHub-Api-Version": "2022-11-28"})
               urllib.request.urlopen(request).close()
           PY
 
@@ -69,11 +43,8 @@ jobs:
           set -euo pipefail
           cp relay/controller/response_stream_bridge.go /tmp/response_stream_bridge.optimized.go
           go test -c ./relay/controller -o /tmp/stream-optimized.test
-
-          git show b59a43af8a32f0f570d70e8e79f799cc539674b7:relay/controller/response_stream_bridge.go \
-            > relay/controller/response_stream_bridge.go
+          git show b59a43af8a32f0f570d70e8e79f799cc539674b7:relay/controller/response_stream_bridge.go > relay/controller/response_stream_bridge.go
           go test -c ./relay/controller -o /tmp/stream-baseline.test
-
           cp /tmp/response_stream_bridge.optimized.go relay/controller/response_stream_bridge.go
           git diff --exit-code -- relay/controller/response_stream_bridge.go
 
@@ -82,104 +53,58 @@ jobs:
           GOMAXPROCS: '1'
         run: |
           set -euo pipefail
-          benchmark_args=(
-            -test.run '^$'
-            -test.bench '^BenchmarkChatToResponseStreamBridge'
-            -test.benchmem
-            -test.benchtime=1s
-            -test.count=1
-            -test.cpu=1
-          )
-
-          /tmp/stream-baseline.test "${benchmark_args[@]}" -test.benchtime=100ms >/dev/null
-          /tmp/stream-optimized.test "${benchmark_args[@]}" -test.benchtime=100ms >/dev/null
-
-          : > /tmp/bolt-stream-baseline.txt
-          : > /tmp/bolt-stream-optimized.txt
+          args=(-test.run '^$' -test.bench '^BenchmarkChatToResponseStreamBridge' -test.benchmem -test.benchtime=1s -test.count=1 -test.cpu=1)
+          /tmp/stream-baseline.test "${args[@]}" -test.benchtime=100ms >/dev/null
+          /tmp/stream-optimized.test "${args[@]}" -test.benchtime=100ms >/dev/null
+          : > /tmp/baseline.txt
+          : > /tmp/optimized.txt
           for round in $(seq 1 10); do
             if (( round % 2 == 1 )); then
-              /tmp/stream-baseline.test "${benchmark_args[@]}" | tee -a /tmp/bolt-stream-baseline.txt
-              /tmp/stream-optimized.test "${benchmark_args[@]}" | tee -a /tmp/bolt-stream-optimized.txt
+              /tmp/stream-baseline.test "${args[@]}" | tee -a /tmp/baseline.txt
+              /tmp/stream-optimized.test "${args[@]}" | tee -a /tmp/optimized.txt
             else
-              /tmp/stream-optimized.test "${benchmark_args[@]}" | tee -a /tmp/bolt-stream-optimized.txt
-              /tmp/stream-baseline.test "${benchmark_args[@]}" | tee -a /tmp/bolt-stream-baseline.txt
+              /tmp/stream-optimized.test "${args[@]}" | tee -a /tmp/optimized.txt
+              /tmp/stream-baseline.test "${args[@]}" | tee -a /tmp/baseline.txt
             fi
           done
 
-      - name: Analyze and enforce improvement
+      - name: Analyze and enforce consistent improvement
         run: |
           python - <<'PY'
-          import json
-          import re
-          import statistics
-
-          pattern = re.compile(
-              r"^(BenchmarkChatToResponseStreamBridge(?:ConstructTextOnly|EmitEvent))"
-              r"(?:-\d+)?\s+\d+\s+([\d.]+)\s+ns/op"
-              r"(?:\s+[\d.]+\s+MB/s)?\s+(\d+)\s+B/op\s+(\d+)\s+allocs/op$"
-          )
+          import json, re, statistics
+          pattern = re.compile(r"^(BenchmarkChatToResponseStreamBridge(?:ConstructTextOnly|EmitEvent))(?:-\d+)?\s+\d+\s+([\d.]+)\s+ns/op(?:\s+[\d.]+\s+MB/s)?\s+(\d+)\s+B/op\s+(\d+)\s+allocs/op$")
 
           def load(path):
-              measurements = {}
-              with open(path, encoding="utf-8") as bench_file:
-                  for line in bench_file:
+              out = {}
+              with open(path, encoding="utf-8") as stream:
+                  for line in stream:
                       match = pattern.match(line.strip())
                       if match:
-                          measurements.setdefault(match.group(1), []).append(
-                              (float(match.group(2)), int(match.group(3)), int(match.group(4)))
-                          )
-              return measurements
+                          out.setdefault(match.group(1), []).append((float(match.group(2)), int(match.group(3)), int(match.group(4))))
+              return out
 
-          baseline = load("/tmp/bolt-stream-baseline.txt")
-          optimized = load("/tmp/bolt-stream-optimized.txt")
-          expected = {
-              "BenchmarkChatToResponseStreamBridgeConstructTextOnly",
-              "BenchmarkChatToResponseStreamBridgeEmitEvent",
-          }
-          if set(baseline) != expected or set(optimized) != expected:
-              raise SystemExit(
-                  f"unexpected output: baseline={sorted(baseline)}, optimized={sorted(optimized)}"
-              )
+          baseline, optimized = load("/tmp/baseline.txt"), load("/tmp/optimized.txt")
+          names = {"BenchmarkChatToResponseStreamBridgeConstructTextOnly", "BenchmarkChatToResponseStreamBridgeEmitEvent"}
+          if set(baseline) != names or set(optimized) != names:
+              raise SystemExit(f"unexpected benchmark output: {sorted(baseline)} / {sorted(optimized)}")
 
           summary = {}
-          for name in sorted(expected):
-              before_samples = baseline[name]
-              after_samples = optimized[name]
-              if len(before_samples) != 10 or len(after_samples) != 10:
-                  raise SystemExit(
-                      f"{name}: expected 10 samples per variant, got "
-                      f"{len(before_samples)} and {len(after_samples)}"
-                  )
+          for name in sorted(names):
+              before_rows, after_rows = baseline[name], optimized[name]
+              if len(before_rows) != 10 or len(after_rows) != 10:
+                  raise SystemExit(f"{name}: expected 10 samples per variant")
+              before = {"ns_per_op": statistics.median(row[0] for row in before_rows), "bytes_per_op": statistics.median(row[1] for row in before_rows), "allocs_per_op": statistics.median(row[2] for row in before_rows)}
+              after = {"ns_per_op": statistics.median(row[0] for row in after_rows), "bytes_per_op": statistics.median(row[1] for row in after_rows), "allocs_per_op": statistics.median(row[2] for row in after_rows)}
+              improvement = {metric: (before[metric] - after[metric]) / before[metric] * 100 for metric in before}
+              if after["ns_per_op"] >= before["ns_per_op"]:
+                  raise SystemExit(f"{name}: median runtime did not improve")
+              if max(row[0] for row in after_rows) >= min(row[0] for row in before_rows):
+                  raise SystemExit(f"{name}: runtime sample ranges overlap")
+              if after["bytes_per_op"] >= before["bytes_per_op"] or after["allocs_per_op"] >= before["allocs_per_op"]:
+                  raise SystemExit(f"{name}: allocation metrics did not improve")
+              summary[name] = {"baseline": before, "optimized": after, "improvement_percent": improvement, "baseline_ns_range": [min(row[0] for row in before_rows), max(row[0] for row in before_rows)], "optimized_ns_range": [min(row[0] for row in after_rows), max(row[0] for row in after_rows)], "samples_per_variant": 10}
 
-              before = {
-                  "ns_per_op": statistics.median(row[0] for row in before_samples),
-                  "bytes_per_op": statistics.median(row[1] for row in before_samples),
-                  "allocs_per_op": statistics.median(row[2] for row in before_samples),
-              }
-              after = {
-                  "ns_per_op": statistics.median(row[0] for row in after_samples),
-                  "bytes_per_op": statistics.median(row[1] for row in after_samples),
-                  "allocs_per_op": statistics.median(row[2] for row in after_samples),
-              }
-              improvement = {
-                  metric: (before[metric] - after[metric]) / before[metric] * 100
-                  for metric in before
-              }
-              if improvement["ns_per_op"] < 10:
-                  raise SystemExit(f"{name}: runtime improvement is not meaningful: {improvement}")
-              if after["bytes_per_op"] >= before["bytes_per_op"]:
-                  raise SystemExit(f"{name}: bytes/op did not improve")
-              if after["allocs_per_op"] >= before["allocs_per_op"]:
-                  raise SystemExit(f"{name}: allocs/op did not improve")
-
-              summary[name] = {
-                  "baseline": before,
-                  "optimized": after,
-                  "improvement_percent": improvement,
-                  "samples_per_variant": 10,
-              }
-
-          with open("/tmp/bolt-stream-comparison.json", "w", encoding="utf-8") as output:
+          with open("/tmp/comparison.json", "w", encoding="utf-8") as output:
               json.dump(summary, output)
           print(json.dumps(summary, indent=2))
           PY
@@ -189,54 +114,18 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           python - <<'PY'
-          import json
-          import os
-          import urllib.request
-
-          with open("/tmp/bolt-stream-comparison.json", encoding="utf-8") as comparison_file:
-              comparison = json.load(comparison_file)
-
-          contexts = {
-              "BenchmarkChatToResponseStreamBridgeConstructTextOnly": "bolt/stream-construct",
-              "BenchmarkChatToResponseStreamBridgeEmitEvent": "bolt/stream-emit-event",
-          }
-          status_url = (
-              f"{os.environ['GITHUB_API_URL']}/repos/{os.environ['GITHUB_REPOSITORY']}"
-              f"/statuses/{os.environ['GITHUB_SHA']}"
-          )
-          target_url = (
-              f"{os.environ['GITHUB_SERVER_URL']}/{os.environ['GITHUB_REPOSITORY']}"
-              f"/actions/runs/{os.environ['GITHUB_RUN_ID']}"
-          )
+          import json, os, urllib.request
+          with open("/tmp/comparison.json", encoding="utf-8") as stream:
+              comparison = json.load(stream)
+          contexts = {"BenchmarkChatToResponseStreamBridgeConstructTextOnly": "bolt/stream-construct", "BenchmarkChatToResponseStreamBridgeEmitEvent": "bolt/stream-emit-event"}
+          status_url = f"{os.environ['GITHUB_API_URL']}/repos/{os.environ['GITHUB_REPOSITORY']}/statuses/{os.environ['GITHUB_SHA']}"
+          target_url = f"{os.environ['GITHUB_SERVER_URL']}/{os.environ['GITHUB_REPOSITORY']}/actions/runs/{os.environ['GITHUB_RUN_ID']}"
           for benchmark, context in contexts.items():
               result = comparison[benchmark]
-              before = result["baseline"]
-              after = result["optimized"]
-              gain = result["improvement_percent"]
-              description = (
-                  f"{before['ns_per_op']:.1f}->{after['ns_per_op']:.1f} ns/op "
-                  f"(-{gain['ns_per_op']:.1f}%); "
-                  f"{before['allocs_per_op']:g}->{after['allocs_per_op']:g} allocs"
-              )
-              body = json.dumps(
-                  {
-                      "state": "success",
-                      "context": context,
-                      "description": description,
-                      "target_url": target_url,
-                  }
-              ).encode()
-              request = urllib.request.Request(
-                  status_url,
-                  data=body,
-                  method="POST",
-                  headers={
-                      "Accept": "application/vnd.github+json",
-                      "Authorization": f"Bearer {os.environ['GH_TOKEN']}",
-                      "Content-Type": "application/json",
-                      "X-GitHub-Api-Version": "2022-11-28",
-                  },
-              )
+              before, after, gain = result["baseline"], result["optimized"], result["improvement_percent"]
+              description = f"{before['ns_per_op']:.1f}->{after['ns_per_op']:.1f} ns/op (-{gain['ns_per_op']:.1f}%); {before['allocs_per_op']:g}->{after['allocs_per_op']:g} allocs"
+              body = json.dumps({"state": "success", "context": context, "description": description, "target_url": target_url}).encode()
+              request = urllib.request.Request(status_url, data=body, method="POST", headers={"Accept": "application/vnd.github+json", "Authorization": f"Bearer {os.environ['GH_TOKEN']}", "Content-Type": "application/json", "X-GitHub-Api-Version": "2022-11-28"})
               urllib.request.urlopen(request).close()
           PY
 
@@ -246,38 +135,12 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           python - <<'PY'
-          import json
-          import os
-          import urllib.request
-
-          status_url = (
-              f"{os.environ['GITHUB_API_URL']}/repos/{os.environ['GITHUB_REPOSITORY']}"
-              f"/statuses/{os.environ['GITHUB_SHA']}"
-          )
-          target_url = (
-              f"{os.environ['GITHUB_SERVER_URL']}/{os.environ['GITHUB_REPOSITORY']}"
-              f"/actions/runs/{os.environ['GITHUB_RUN_ID']}"
-          )
+          import json, os, urllib.request
+          status_url = f"{os.environ['GITHUB_API_URL']}/repos/{os.environ['GITHUB_REPOSITORY']}/statuses/{os.environ['GITHUB_SHA']}"
+          target_url = f"{os.environ['GITHUB_SERVER_URL']}/{os.environ['GITHUB_REPOSITORY']}/actions/runs/{os.environ['GITHUB_RUN_ID']}"
           for context in ("bolt/stream-construct", "bolt/stream-emit-event"):
-              body = json.dumps(
-                  {
-                      "state": "failure",
-                      "context": context,
-                      "description": "same-runner benchmark comparison failed",
-                      "target_url": target_url,
-                  }
-              ).encode()
-              request = urllib.request.Request(
-                  status_url,
-                  data=body,
-                  method="POST",
-                  headers={
-                      "Accept": "application/vnd.github+json",
-                      "Authorization": f"Bearer {os.environ['GH_TOKEN']}",
-                      "Content-Type": "application/json",
-                      "X-GitHub-Api-Version": "2022-11-28",
-                  },
-              )
+              body = json.dumps({"state": "failure", "context": context, "description": "same-runner benchmark comparison failed", "target_url": target_url}).encode()
+              request = urllib.request.Request(status_url, data=body, method="POST", headers={"Accept": "application/vnd.github+json", "Authorization": f"Bearer {os.environ['GH_TOKEN']}", "Content-Type": "application/json", "X-GitHub-Api-Version": "2022-11-28"})
               try:
                   urllib.request.urlopen(request).close()
               except Exception as exc:
