@@ -55,6 +55,7 @@ type legacyMessageProbe struct {
 	Content json.RawMessage `json:"content,omitempty"`
 }
 
+// hasClaudeContentBlocksLegacy preserves the pre-optimization content-block scan for differential tests and benchmarks.
 func hasClaudeContentBlocksLegacy(messagesRaw json.RawMessage) bool {
 	var messages []legacyMessageProbe
 	if err := json.Unmarshal(messagesRaw, &messages); err != nil {
@@ -76,6 +77,7 @@ func hasClaudeContentBlocksLegacy(messagesRaw json.RawMessage) bool {
 	return false
 }
 
+// isClaudeToolFormatLegacy preserves the pre-optimization nested tool-schema decoder for differential tests and benchmarks.
 func isClaudeToolFormatLegacy(toolsRaw json.RawMessage) bool {
 	var tools []toolProbe
 	if err := json.Unmarshal(toolsRaw, &tools); err != nil {
@@ -103,6 +105,7 @@ func isClaudeToolFormatLegacy(toolsRaw json.RawMessage) bool {
 	return false
 }
 
+// TestDetectFormatScalarContentBehavior verifies scalar and structured message cases retain their expected API-format decisions.
 func TestDetectFormatScalarContentBehavior(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
@@ -126,6 +129,7 @@ func TestDetectFormatScalarContentBehavior(t *testing.T) {
 	}
 }
 
+// TestHasClaudeContentBlocksBehaviorEquivalent compares the optimized content-block scan against the exact legacy algorithm.
 func TestHasClaudeContentBlocksBehaviorEquivalent(t *testing.T) {
 	t.Parallel()
 	cases := []json.RawMessage{
@@ -143,6 +147,7 @@ func TestHasClaudeContentBlocksBehaviorEquivalent(t *testing.T) {
 	}
 }
 
+// TestIsClaudeToolFormatBehaviorEquivalent compares optimized tool detection against the exact legacy algorithm.
 func TestIsClaudeToolFormatBehaviorEquivalent(t *testing.T) {
 	t.Parallel()
 	cases := []json.RawMessage{
@@ -158,6 +163,7 @@ func TestIsClaudeToolFormatBehaviorEquivalent(t *testing.T) {
 	}
 }
 
+// BenchmarkClaudeContentBlockScanPlainText measures the plain-text message scan before and after skipping impossible array decodes.
 func BenchmarkClaudeContentBlockScanPlainText(b *testing.B) {
 	b.Run("legacy", func(b *testing.B) {
 		b.ReportAllocs()
@@ -173,13 +179,16 @@ func BenchmarkClaudeContentBlockScanPlainText(b *testing.B) {
 	})
 }
 
+// BenchmarkRequestProbeDecodeLargeUnusedFields measures decoding when large top-level fields are irrelevant to format detection.
 func BenchmarkRequestProbeDecodeLargeUnusedFields(b *testing.B) {
 	b.Run("legacy", func(b *testing.B) {
 		b.ReportAllocs()
 		var probe legacyRequestProbe
 		for b.Loop() {
 			probe = legacyRequestProbe{}
-			_ = json.Unmarshal(benchmarkDetectFormatLargeSystem, &probe)
+			if err := json.Unmarshal(benchmarkDetectFormatLargeSystem, &probe); err != nil {
+				b.Fatal(err)
+			}
 		}
 	})
 	b.Run("optimized", func(b *testing.B) {
@@ -187,11 +196,14 @@ func BenchmarkRequestProbeDecodeLargeUnusedFields(b *testing.B) {
 		var probe requestProbe
 		for b.Loop() {
 			probe = requestProbe{}
-			_ = json.Unmarshal(benchmarkDetectFormatLargeSystem, &probe)
+			if err := json.Unmarshal(benchmarkDetectFormatLargeSystem, &probe); err != nil {
+				b.Fatal(err)
+			}
 		}
 	})
 }
 
+// BenchmarkClaudeToolFormatOpenAISchema measures tool-format detection with a large OpenAI parameters schema.
 func BenchmarkClaudeToolFormatOpenAISchema(b *testing.B) {
 	b.Run("legacy", func(b *testing.B) {
 		b.ReportAllocs()
@@ -207,9 +219,12 @@ func BenchmarkClaudeToolFormatOpenAISchema(b *testing.B) {
 	})
 }
 
+// BenchmarkDetectFormatPlainText records the optimized end-to-end detector cost for a typical multi-message text request.
 func BenchmarkDetectFormatPlainText(b *testing.B) {
 	b.ReportAllocs()
 	for b.Loop() {
-		_, _ = DetectFormat(benchmarkDetectFormatPlainText)
+		if _, err := DetectFormat(benchmarkDetectFormatPlainText); err != nil {
+			b.Fatal(err)
+		}
 	}
 }

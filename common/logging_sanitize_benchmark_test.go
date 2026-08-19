@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestSanitizeURLForLoggingFastPathBehavior verifies the optimized sanitizer returns exactly the legacy output.
 func TestSanitizeURLForLoggingFastPathBehavior(t *testing.T) {
 	t.Parallel()
 	tests := []string{
@@ -25,6 +26,7 @@ func TestSanitizeURLForLoggingFastPathBehavior(t *testing.T) {
 	}
 }
 
+// sanitizeURLForLoggingLegacy preserves the pre-optimization implementation for side-by-side behavior and benchmarks.
 func sanitizeURLForLoggingLegacy(rawURL string) string {
 	if rawURL == "" {
 		return rawURL
@@ -51,6 +53,7 @@ func sanitizeURLForLoggingLegacy(rawURL string) string {
 	return parsed.String()
 }
 
+// BenchmarkSanitizeURLForLoggingNoQuery compares legacy and optimized handling of the common query-free request URL.
 func BenchmarkSanitizeURLForLoggingNoQuery(b *testing.B) {
 	const rawURL = "/v1/chat/completions"
 	b.Run("legacy", func(b *testing.B) {
@@ -67,6 +70,7 @@ func BenchmarkSanitizeURLForLoggingNoQuery(b *testing.B) {
 	})
 }
 
+// BenchmarkSanitizeURLForLoggingSensitiveQuery verifies the redaction path keeps comparable cost and allocations.
 func BenchmarkSanitizeURLForLoggingSensitiveQuery(b *testing.B) {
 	const rawURL = "/api/user/register?turnstile=secret-token&page=1&api_key=secret-key"
 	b.Run("legacy", func(b *testing.B) {
