@@ -3,13 +3,16 @@ package controller
 import (
 	"fmt"
 	"io"
+	"math"
+	"net"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
 
-	gmw "github.com/Laisky/gin-middlewares/v7"
 	"github.com/Laisky/errors/v2"
+	gmw "github.com/Laisky/gin-middlewares/v7"
 	"github.com/Laisky/zap"
 	"github.com/gin-gonic/gin"
 	stripe "github.com/stripe/stripe-go/v82"
@@ -19,6 +22,13 @@ import (
 	"github.com/Laisky/one-api/common"
 	"github.com/Laisky/one-api/common/config"
 	"github.com/Laisky/one-api/model"
+)
+
+const (
+	maxStripeTopUpUSD      = int64(100_000)
+	maxStripeWebhookBytes  = int64(64 << 10)
+	stripePaymentCurrency  = "usd"
+	stripePendingSessionID = "pending:stripe:"
 )
 
 type createStripeCheckoutRequest struct {
@@ -32,87 +42,157 @@ type createStripeCheckoutResponse struct {
 	RequestID string `json:"request_id"`
 }
 
+type stripeCheckoutSessionClient interface {
+	New(params *stripe.CheckoutSessionParams) (*stripe.CheckoutSession, error)
+	Expire(id string, params *stripe.CheckoutSessionExpireParams) (*stripe.CheckoutSession, error)
+}
+
+var newStripeCheckoutSessionClient = func(secretKey string) stripeCheckoutSessionClient {
+	return client.New(secretKey, nil).CheckoutSessions
+}
+
 // StripeReady reports whether Checkout and webhook settlement are fully configured.
-// It requires both the Stripe secret key and webhook secret, plus a trusted public HTTPS base URL.
 func StripeReady() bool {
-	if strings.TrimSpace(config.StripeSecretKey) == "" {
-		return false
-	}
-	if strings.TrimSpace(config.StripeWebhookSecret) == "" {
+	if strings.TrimSpace(config.StripeSecretKey) == "" || strings.TrimSpace(config.StripeWebhookSecret) == "" {
 		return false
 	}
 	_, err := stripePublicBaseURL(true)
 	return err == nil
 }
 
-// stripePublicBaseURL returns the trusted public origin used for Checkout return URLs.
-// When requireHTTPS is true, http:// origins are rejected (live Checkout must not bounce to HTTP).
+// stripePublicBaseURL returns a normalized origin used for Checkout return URLs.
+// HTTPS is required except for loopback development with an sk_test key.
 func stripePublicBaseURL(requireHTTPS bool) (string, error) {
-	base := strings.TrimRight(strings.TrimSpace(config.StripePublicBaseURL), "/")
-	if base == "" {
-		base = strings.TrimRight(strings.TrimSpace(config.ServerAddress), "/")
+	raw := strings.TrimSpace(config.StripePublicBaseURL)
+	if raw == "" {
+		raw = strings.TrimSpace(config.ServerAddress)
 	}
-	if base == "" {
-		return "", errors.New("stripe public base URL is not configured (set STRIPE_PUBLIC_BASE_URL or ServerAddress)")
+	if raw == "" {
+		return "", errors.New("stripe public base URL is not configured")
 	}
-	lower := strings.ToLower(base)
-	if !strings.HasPrefix(lower, "https://") && !strings.HasPrefix(lower, "http://") {
-		return "", errors.New("stripe public base URL must include http:// or https://")
+
+	parsed, err := url.Parse(raw)
+	if err != nil {
+		return "", errors.Wrap(err, "parse stripe public base URL")
 	}
-	if requireHTTPS && !strings.HasPrefix(lower, "https://") {
-		// Allow http only for explicit local/dev secrets (sk_test) without live keys.
-		if strings.HasPrefix(strings.TrimSpace(config.StripeSecretKey), "sk_live") {
-			return "", errors.New("live Stripe keys require an https public base URL")
+	parsed.Scheme = strings.ToLower(parsed.Scheme)
+	if (parsed.Scheme != "https" && parsed.Scheme != "http") || parsed.Host == "" {
+		return "", errors.New("stripe public base URL must be an absolute HTTP(S) origin")
+	}
+	if parsed.User != nil || parsed.RawQuery != "" || parsed.Fragment != "" {
+		return "", errors.New("stripe public base URL must not contain credentials, query, or fragment")
+	}
+	if parsed.Path != "" && parsed.Path != "/" {
+		return "", errors.New("stripe public base URL must not contain a path")
+	}
+
+	if requireHTTPS && parsed.Scheme != "https" {
+		isTestKey := strings.HasPrefix(strings.TrimSpace(config.StripeSecretKey), "sk_test_")
+		if !isTestKey || !isLoopbackHost(parsed.Hostname()) {
+			return "", errors.New("stripe public base URL must use HTTPS")
 		}
 	}
-	return base, nil
+
+	parsed.Path = ""
+	parsed.RawPath = ""
+	return strings.TrimRight(parsed.String(), "/"), nil
+}
+
+func isLoopbackHost(host string) bool {
+	if strings.EqualFold(host, "localhost") {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
+}
+
+func stripeAmountCents(amountUSD float64, minUSD int) (int64, error) {
+	if math.IsNaN(amountUSD) || math.IsInf(amountUSD, 0) || amountUSD <= 0 {
+		return 0, errors.New("amount must be a positive finite number")
+	}
+	if minUSD < 1 {
+		minUSD = 1
+	}
+
+	scaled := amountUSD * 100
+	rounded := math.Round(scaled)
+	if math.Abs(scaled-rounded) > 1e-7 {
+		return 0, errors.New("amount must have at most two decimal places")
+	}
+	if rounded > float64(maxStripeTopUpUSD*100) {
+		return 0, errors.New("amount too large")
+	}
+	cents := int64(rounded)
+	if cents < int64(minUSD)*100 {
+		return 0, errors.Errorf("minimum top-up amount is $%d", minUSD)
+	}
+	return cents, nil
+}
+
+func validStripeRequestID(requestID string) bool {
+	if requestID == "" || len(requestID) > 64 {
+		return false
+	}
+	for i := range requestID {
+		c := requestID[i]
+		if (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '-' || c == '_' {
+			continue
+		}
+		return false
+	}
+	return true
+}
+
+func stripeIdempotencyKey(userID int, requestID string) string {
+	return fmt.Sprintf("one-api:stripe:checkout:v1:%d:%s", userID, requestID)
+}
+
+func stripePendingSession(userID int, requestID string) string {
+	return fmt.Sprintf("%s%d:%s", stripePendingSessionID, userID, requestID)
+}
+
+func paymentOrderMatches(order *model.PaymentOrder, amountCents, quota int64) bool {
+	return order != nil &&
+		order.Provider == model.PaymentProviderStripe &&
+		order.AmountCents == amountCents &&
+		strings.EqualFold(order.Currency, stripePaymentCurrency) &&
+		order.Quota == quota &&
+		order.Status == model.PaymentStatusPending
 }
 
 // CreateStripeCheckout creates a Stripe Checkout Session for a freeform USD top-up.
-// The fee is absorbed by the platform: the user is charged exactly AmountUSD.
-// It takes a gin.Context to read the authenticated user and request body, and writes a JSON response with the checkout URL.
+// The local order is durable before a payment URL is returned to the caller.
 func CreateStripeCheckout(c *gin.Context) {
 	ctx := gmw.Ctx(c)
 	logger := gmw.GetLogger(c)
 
 	if !StripeReady() {
-		c.JSON(http.StatusOK, gin.H{"success": false, "message": "Stripe is not configured"})
+		c.JSON(http.StatusServiceUnavailable, gin.H{"success": false, "message": "Stripe is not configured"})
 		return
 	}
 
 	var req createStripeCheckoutRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "invalid checkout request"})
 		return
 	}
 
-	minUSD := config.MinTopUpUSD
-	if minUSD < 1 {
-		minUSD = 1
-	}
-	if req.AmountUSD < float64(minUSD) {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": fmt.Sprintf("minimum top-up amount is $%d", minUSD),
-		})
-		return
-	}
-	if req.AmountUSD > 100000 {
-		c.JSON(http.StatusOK, gin.H{"success": false, "message": "amount too large"})
-		return
-	}
-
-	amountCents := int64(req.AmountUSD*100 + 0.5)
-	if amountCents < int64(minUSD)*100 {
-		c.JSON(http.StatusOK, gin.H{"success": false, "message": "invalid amount"})
+	amountCents, err := stripeAmountCents(req.AmountUSD, config.MinTopUpUSD)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": err.Error()})
 		return
 	}
 	quota := (amountCents * int64(config.QuotaPerUnit)) / 100
+	if quota <= 0 {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"success": false, "message": "top-up quota is not configured"})
+		return
+	}
 
 	userID := c.GetInt("id")
 	base, err := stripePublicBaseURL(true)
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
+		logger.Error("validate Stripe public base URL", zap.Error(err))
+		c.JSON(http.StatusServiceUnavailable, gin.H{"success": false, "message": "Stripe is not configured"})
 		return
 	}
 
@@ -121,70 +201,60 @@ func CreateStripeCheckout(c *gin.Context) {
 		requestID, err = model.NewPaymentRequestID()
 		if err != nil {
 			logger.Error("generate payment request id", zap.Error(err))
-			c.JSON(http.StatusOK, gin.H{"success": false, "message": "failed to create order"})
+			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "failed to create order"})
 			return
 		}
 	}
-	if len(requestID) > 64 {
-		c.JSON(http.StatusOK, gin.H{"success": false, "message": "request_id too long"})
+	if !validStripeRequestID(requestID) {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "request_id must contain only letters, digits, '-' or '_' and be at most 64 characters"})
 		return
 	}
 
-	// Local order first so retries can reuse the same request_id / Idempotency-Key.
-	placeholderSession := "pending:" + requestID
 	order := &model.PaymentOrder{
 		UserId:      userID,
 		Provider:    model.PaymentProviderStripe,
 		RequestID:   requestID,
-		SessionID:   placeholderSession,
+		SessionID:   stripePendingSession(userID, requestID),
 		AmountCents: amountCents,
-		Currency:    "usd",
+		Currency:    stripePaymentCurrency,
 		Quota:       quota,
 		Status:      model.PaymentStatusPending,
 	}
 	if err := model.CreatePaymentOrder(ctx, order); err != nil {
-		// Idempotent retry: reuse the existing row for this request_id.
-		existing, lookErr := model.GetPaymentOrderByRequestID(ctx, userID, requestID)
-		if lookErr != nil {
-			logger.Error("lookup payment order by request id", zap.Error(lookErr))
-			c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
+		existing, lookupErr := model.GetPaymentOrderByRequestID(ctx, userID, requestID)
+		if lookupErr != nil {
+			logger.Error("lookup payment order by request id", zap.Error(lookupErr), zap.Int("user_id", userID))
+			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "failed to create order"})
 			return
 		}
-		if existing == nil {
-			logger.Error("persist payment order", zap.Error(err))
-			c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
+		if !paymentOrderMatches(existing, amountCents, quota) {
+			c.JSON(http.StatusConflict, gin.H{"success": false, "message": "request_id was already used for a different or completed order"})
 			return
 		}
 		order = existing
-		if !strings.HasPrefix(existing.SessionID, "pending:") && existing.SessionID != "" {
-			// Session already bound; Stripe Idempotency-Key will return the same session URL on New below.
-		}
 	}
 
 	userEmail, emailErr := model.GetUserEmail(userID)
 	if emailErr != nil {
-		logger.Warn("lookup user email for stripe receipt", zap.Error(emailErr), zap.Int("user_id", userID))
+		logger.Warn("lookup user email for Stripe receipt", zap.Error(emailErr), zap.Int("user_id", userID))
 	}
 	userEmail = strings.TrimSpace(userEmail)
 
-	sc := client.New(config.StripeSecretKey, nil)
 	params := &stripe.CheckoutSessionParams{
 		Mode:              stripe.String(string(stripe.CheckoutSessionModePayment)),
 		ClientReferenceID: stripe.String(strconv.Itoa(userID)),
 		SuccessURL:        stripe.String(base + "/topup?stripe=success&session_id={CHECKOUT_SESSION_ID}"),
 		CancelURL:         stripe.String(base + "/topup?stripe=cancel"),
-		LineItems: []*stripe.CheckoutSessionLineItemParams{
-			{
-				Quantity: stripe.Int64(1),
-				PriceData: &stripe.CheckoutSessionLineItemPriceDataParams{
-					Currency:   stripe.String(string(stripe.CurrencyUSD)),
-					UnitAmount: stripe.Int64(amountCents),
-					ProductData: &stripe.CheckoutSessionLineItemPriceDataProductDataParams{
-						Name: stripe.String(fmt.Sprintf("Quota top-up: $%.2f", float64(amountCents)/100)),
-					},
+		LineItems: []*stripe.CheckoutSessionLineItemParams{{
+			Quantity: stripe.Int64(1),
+			PriceData: &stripe.CheckoutSessionLineItemPriceDataParams{
+				Currency:   stripe.String(string(stripe.CurrencyUSD)),
+				UnitAmount: stripe.Int64(amountCents),
+				ProductData: &stripe.CheckoutSessionLineItemPriceDataProductDataParams{
+					Name: stripe.String(fmt.Sprintf("Quota top-up: $%.2f", float64(amountCents)/100)),
 				},
 			},
-		},
+		}},
 		Metadata: map[string]string{
 			"user_id":    strconv.Itoa(userID),
 			"quota":      strconv.FormatInt(quota, 10),
@@ -192,33 +262,37 @@ func CreateStripeCheckout(c *gin.Context) {
 			"order_id":   strconv.Itoa(order.Id),
 		},
 	}
-	params.SetIdempotencyKey(requestID)
+	params.SetIdempotencyKey(stripeIdempotencyKey(userID, requestID))
 	if userEmail != "" {
 		params.CustomerEmail = stripe.String(userEmail)
-		params.PaymentIntentData = &stripe.CheckoutSessionPaymentIntentDataParams{
-			ReceiptEmail: stripe.String(userEmail),
-		}
+		params.PaymentIntentData = &stripe.CheckoutSessionPaymentIntentDataParams{ReceiptEmail: stripe.String(userEmail)}
 	}
 
-	session, err := sc.CheckoutSessions.New(params)
+	stripeClient := newStripeCheckoutSessionClient(config.StripeSecretKey)
+	session, err := stripeClient.New(params)
 	if err != nil {
-		logger.Error("create stripe checkout session", zap.Error(err))
-		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
+		logger.Error("create Stripe Checkout Session", zap.Error(err), zap.Int("order_id", order.Id))
+		c.JSON(http.StatusBadGateway, gin.H{"success": false, "message": "failed to create Stripe Checkout Session"})
+		return
+	}
+	if session == nil || strings.TrimSpace(session.ID) == "" || strings.TrimSpace(session.URL) == "" {
+		logger.Error("Stripe returned an incomplete Checkout Session", zap.Int("order_id", order.Id))
+		c.JSON(http.StatusBadGateway, gin.H{"success": false, "message": "failed to create Stripe Checkout Session"})
 		return
 	}
 
 	if err := model.BindPaymentOrderSession(ctx, order.Id, session.ID); err != nil {
 		logger.Error("bind payment order session", zap.Error(err), zap.Int("order_id", order.Id), zap.String("session_id", session.ID))
-		// Session already exists at Stripe; surface URL so the user can still pay.
+		if _, expireErr := stripeClient.Expire(session.ID, &stripe.CheckoutSessionExpireParams{}); expireErr != nil {
+			logger.Error("expire unbound Stripe Checkout Session", zap.Error(expireErr), zap.String("session_id", session.ID))
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "failed to initialize checkout"})
+		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
-		"data": createStripeCheckoutResponse{
-			URL:       session.URL,
-			SessionID: session.ID,
-			RequestID: requestID,
-		},
+		"data":    createStripeCheckoutResponse{URL: session.URL, SessionID: session.ID, RequestID: requestID},
 	})
 }
 
@@ -228,16 +302,16 @@ func GetStripePaymentOrder(c *gin.Context) {
 	userID := c.GetInt("id")
 	sessionID := strings.TrimSpace(c.Param("session_id"))
 	if sessionID == "" {
-		c.JSON(http.StatusOK, gin.H{"success": false, "message": "session_id required"})
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "session_id required"})
 		return
 	}
 	order, err := model.GetPaymentOrderBySessionForUser(ctx, userID, sessionID)
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "failed to load order"})
 		return
 	}
 	if order == nil {
-		c.JSON(http.StatusOK, gin.H{"success": false, "message": "order not found"})
+		c.JSON(http.StatusNotFound, gin.H{"success": false, "message": "order not found"})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"success": true, "data": order})
@@ -249,14 +323,13 @@ func ListStripePaymentOrders(c *gin.Context) {
 	userID := c.GetInt("id")
 	orders, err := model.ListPaymentOrdersForUser(ctx, userID, 20)
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "failed to load orders"})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"success": true, "data": orders})
 }
 
-// StripeWebhook handles checkout.session.* payment events. The route MUST receive
-// the raw request body — do not interpose middleware that consumes it.
+// StripeWebhook handles checkout.session.* payment events. The route must receive the raw request body.
 func StripeWebhook(c *gin.Context) {
 	ctx := gmw.Ctx(c)
 	logger := gmw.GetLogger(c)
@@ -267,28 +340,31 @@ func StripeWebhook(c *gin.Context) {
 		return
 	}
 
-	const maxStripeWebhookBody = 1 << 20 // 1 MiB
-	payload, err := io.ReadAll(io.LimitReader(c.Request.Body, maxStripeWebhookBody))
+	payload, err := io.ReadAll(io.LimitReader(c.Request.Body, maxStripeWebhookBytes+1))
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid webhook payload"})
 		return
 	}
-	if len(payload) >= maxStripeWebhookBody {
+	if int64(len(payload)) > maxStripeWebhookBytes {
 		c.JSON(http.StatusRequestEntityTooLarge, gin.H{"error": "webhook payload too large"})
 		return
 	}
 
-	event, err := stripewebhook.ConstructEvent(payload, c.GetHeader("Stripe-Signature"), secret)
+	event, err := stripewebhook.ConstructEventWithOptions(
+		payload,
+		c.GetHeader("Stripe-Signature"),
+		secret,
+		stripewebhook.ConstructEventOptions{IgnoreAPIVersionMismatch: true},
+	)
 	if err != nil {
-		logger.Warn("stripe webhook signature verification failed", zap.Error(err))
+		logger.Warn("Stripe webhook signature verification failed", zap.Error(err))
 		c.JSON(http.StatusBadRequest, gin.H{"error": "signature verification failed"})
 		return
 	}
 
-	// Skip work when this event id was already successfully processed.
 	seen, seenErr := model.HasStripeWebhookEvent(ctx, event.ID)
 	if seenErr != nil {
-		logger.Error("check stripe webhook event", zap.Error(seenErr), zap.String("event_id", event.ID))
+		logger.Error("check Stripe webhook event", zap.Error(seenErr), zap.String("event_id", event.ID))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "event lookup failed"})
 		return
 	}
@@ -297,8 +373,6 @@ func StripeWebhook(c *gin.Context) {
 		return
 	}
 
-	// Process first; claim only after success so Stripe can safely retry 5xx failures.
-	// Settlement itself is idempotent via pending→paid; claim only records successful delivery.
 	var finished bool
 	switch event.Type {
 	case "checkout.session.completed", "checkout.session.async_payment_succeeded":
@@ -312,17 +386,12 @@ func StripeWebhook(c *gin.Context) {
 	if !finished {
 		return
 	}
-	if _, claimErr := model.ClaimStripeWebhookEvent(ctx, event.ID, string(event.Type)); claimErr != nil {
-		// Settlement already succeeded; log only. Duplicate claim is fine under concurrency.
-		if !model.IsDuplicateKeyErrorPublic(claimErr) {
-			logger.Warn("record processed stripe event", zap.Error(claimErr), zap.String("event_id", event.ID))
-		}
+	if _, claimErr := model.ClaimStripeWebhookEvent(ctx, event.ID, string(event.Type)); claimErr != nil && !model.IsDuplicateKeyErrorPublic(claimErr) {
+		logger.Warn("record processed Stripe event", zap.Error(claimErr), zap.String("event_id", event.ID))
 	}
 }
 
 // handleCheckoutPaid settles a paid Checkout session and credits quota.
-// It returns true when the HTTP response is terminal for Stripe (2xx) and the event may be claimed.
-// It returns false when a 5xx was written and Stripe should retry with the same event id.
 func handleCheckoutPaid(c *gin.Context, event stripe.Event) bool {
 	ctx := gmw.Ctx(c)
 	logger := gmw.GetLogger(c)
@@ -346,13 +415,12 @@ func handleCheckoutPaid(c *gin.Context, event stripe.Event) bool {
 	transitioned, order, err := model.SettlePaidPaymentOrder(ctx, sessionID, time.Now().UnixMilli(), amountTotal, currency)
 	if err != nil {
 		if errors.Is(err, model.ErrPaymentOrderNotFound) {
-			logger.Warn("stripe webhook for unknown session", zap.String("session_id", sessionID), zap.String("event_id", event.ID))
-			// Acknowledge so Stripe stops retrying; operator can reconcile via dashboard.
-			c.JSON(http.StatusOK, gin.H{"received": true, "unknown_session": true})
-			return true
+			logger.Error("Stripe webhook references an unknown session", zap.String("session_id", sessionID), zap.String("event_id", event.ID))
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "payment order not found"})
+			return false
 		}
 		logger.Error("settle payment order", zap.Error(err), zap.String("session_id", sessionID))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "settlement failed"})
 		return false
 	}
 	if order != nil && order.Status == model.PaymentStatusManualReview {
@@ -365,9 +433,8 @@ func handleCheckoutPaid(c *gin.Context, event stripe.Event) bool {
 		return true
 	}
 
-	// Best-effort cache refresh and audit log (must not undo settlement).
 	if cacheErr := model.CacheUpdateUserQuota(ctx, order.UserId); cacheErr != nil {
-		logger.Warn("refresh user quota cache after stripe top-up", zap.Error(cacheErr), zap.Int("user_id", order.UserId))
+		logger.Warn("refresh user quota cache after Stripe top-up", zap.Error(cacheErr), zap.Int("user_id", order.UserId))
 	}
 	remark := fmt.Sprintf("Stripe top-up $%.2f (%s)", float64(order.AmountCents)/100, common.LogQuota(order.Quota))
 	model.RecordTopupLog(ctx, order.UserId, remark, int(order.Quota))
@@ -376,8 +443,7 @@ func handleCheckoutPaid(c *gin.Context, event stripe.Event) bool {
 	return true
 }
 
-// handleCheckoutTerminal marks pending orders expired/failed without crediting quota.
-// It returns true when the response is terminal for Stripe and the event may be claimed.
+// handleCheckoutTerminal marks pending orders expired or failed without crediting quota.
 func handleCheckoutTerminal(c *gin.Context, event stripe.Event) bool {
 	ctx := gmw.Ctx(c)
 	logger := gmw.GetLogger(c)
@@ -392,7 +458,7 @@ func handleCheckoutTerminal(c *gin.Context, event stripe.Event) bool {
 	}
 	if err := model.MarkPaymentOrderStatus(ctx, sessionID, status); err != nil {
 		logger.Error("mark payment terminal status", zap.Error(err), zap.String("session_id", sessionID))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "status update failed"})
 		return false
 	}
 	c.JSON(http.StatusOK, gin.H{"received": true})
