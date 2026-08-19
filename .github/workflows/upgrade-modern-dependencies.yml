@@ -1,7 +1,7 @@
 name: Upgrade modern frontend dependencies
 
 on:
-  pull_request:
+  pull_request_target:
     branches:
       - agent/modern-upgrade-staging-20260819
     types:
@@ -33,6 +33,7 @@ jobs:
       - name: Checkout branch
         uses: actions/checkout@v4
         with:
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
           ref: ${{ github.event.pull_request.head.ref }}
           fetch-depth: 0
 
