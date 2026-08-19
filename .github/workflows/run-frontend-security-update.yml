@@ -14,7 +14,7 @@ permissions:
 
 concurrency:
   group: consolidated-frontend-security-update-${{ github.event.pull_request.number }}
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   generate:
@@ -55,7 +55,46 @@ jobs:
           done
 
       - name: Update manifests and invalidate only affected lock entries
-        run: python3 .github/scripts/prepare_frontend_security_update.py refresh
+        run: python3 .github/scripts/run_frontend_security_update.py refresh
+
+      - name: Guard React Router v6 navigation compatibility
+        run: |
+          python3 <<'PY'
+          from pathlib import Path
+          import re
+
+          roots = [Path('web/air/src'), Path('web/berry/src'), Path('web/modern/src')]
+          suffixes = {'.js', '.jsx', '.ts', '.tsx'}
+          checks = {
+              'navigate/redirect external literal': re.compile(
+                  r"\b(?:navigate|redirect)\s*\(\s*['\"`]\s*(?:https?:|//)",
+                  re.MULTILINE,
+              ),
+              'React Router link external literal': re.compile(
+                  r"<(?:Link|NavLink|Navigate)\b[^>]*\bto\s*=\s*(?:\{\s*)?['\"`]\s*(?:https?:|//)",
+                  re.MULTILINE | re.DOTALL,
+              ),
+          }
+
+          findings = []
+          for root in roots:
+              for path in root.rglob('*'):
+                  if not path.is_file() or path.suffix not in suffixes:
+                      continue
+                  text = path.read_text(errors='replace')
+                  for label, pattern in checks.items():
+                      for match in pattern.finditer(text):
+                          line = text.count('\n', 0, match.start()) + 1
+                          findings.append(f'{path}:{line}: {label}')
+
+          if findings:
+              print('\n'.join(findings))
+              raise SystemExit(
+                  'React Router 6.30.6 no longer treats external URLs as in-app '
+                  'navigate() targets; use window.location or an ordinary anchor instead'
+              )
+          print('No direct external URL literals are passed to React Router navigation APIs')
+          PY
 
       - name: Resolve refreshed entries without lifecycle scripts
         run: |
@@ -69,7 +108,7 @@ jobs:
           done
 
       - name: Verify patched floors and query OSV
-        run: python3 .github/scripts/prepare_frontend_security_update.py verify
+        run: python3 .github/scripts/run_frontend_security_update.py verify
 
       - name: Reinstall cleanly from frozen lockfiles with lifecycle scripts
         run: |
@@ -93,13 +132,13 @@ jobs:
           yarn --cwd web/berry test --watchAll=false --passWithNoTests
 
       - name: Add permanent lockfile and production-build gates
-        run: python3 .github/scripts/prepare_frontend_security_update.py harden
+        run: python3 .github/scripts/run_frontend_security_update.py harden
 
       - name: Validate the production Docker frontend build
         run: docker build --target web-builder --progress=plain -t one-api-web-security-check .
 
       - name: Validate the generated patch scope
-        run: python3 .github/scripts/prepare_frontend_security_update.py validate
+        run: python3 .github/scripts/run_frontend_security_update.py validate
 
       - name: Assemble the reviewed artifact
         run: |
