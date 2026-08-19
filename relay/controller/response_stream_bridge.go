@@ -2,7 +2,7 @@ package controller
 
 import (
 	"encoding/json"
-	"fmt"
+	"math"
 	"strings"
 	"time"
 
@@ -82,8 +82,6 @@ func newChatToResponseStreamBridge(c *gin.Context, meta *metalib.Meta, request *
 		responseID: generateResponseAPIID(c, nil),
 		createdAt:  time.Now().Unix(),
 		model:      meta.ActualModelName,
-		toolCalls:  make(map[string]*streamToolCallState),
-		toolIndex:  make(map[int]*streamToolCallState),
 	}
 
 	if handler.model == "" {
@@ -101,7 +99,7 @@ func newChatToResponseStreamBridge(c *gin.Context, meta *metalib.Meta, request *
 		}
 	}
 
-	handler.messageItemID = fmt.Sprintf("msg_%s", random.GetRandomString(16))
+	handler.messageItemID = "msg_" + random.GetRandomString(16)
 	handler.messageOutputIndex = handler.nextOutputIndex()
 
 	return handler
@@ -469,6 +467,15 @@ func (h *chatToResponseStreamBridge) handleToolCalls(c *gin.Context, tools []mod
 }
 
 func (h *chatToResponseStreamBridge) ensureToolCallState(c *gin.Context, tool *model.Tool) *streamToolCallState {
+	// Text-only streams never use tool state, so allocate these maps only when
+	// the first tool delta arrives instead of on every bridged response.
+	if h.toolCalls == nil {
+		h.toolCalls = make(map[string]*streamToolCallState)
+	}
+	if tool.Index != nil && h.toolIndex == nil {
+		h.toolIndex = make(map[int]*streamToolCallState)
+	}
+
 	normalizedID := ""
 	if trimmed := strings.TrimSpace(tool.Id); trimmed != "" {
 		normalizedID = ensureResponseAPICallID(trimmed)
@@ -495,7 +502,7 @@ func (h *chatToResponseStreamBridge) ensureToolCallState(c *gin.Context, tool *m
 	if state == nil {
 		id := normalizedID
 		if id == "" {
-			id = fmt.Sprintf("call_%s", random.GetRandomString(16))
+			id = "call_" + random.GetRandomString(16)
 		}
 		state = &streamToolCallState{
 			id:       id,
@@ -690,6 +697,34 @@ func (h *chatToResponseStreamBridge) finalStatus() (string, *openai.IncompleteDe
 	}
 }
 
+const (
+	responseStreamEventPrefix = "event: "
+	responseStreamDataPrefix  = "data: "
+	responseStreamFrameSuffix = "\n\n"
+)
+
+func responseStreamFrameCapacity(payloadLen, eventTypeLen int) (int, bool) {
+	const dataOnlyOverhead = len(responseStreamDataPrefix) + len(responseStreamFrameSuffix)
+	if payloadLen < 0 || eventTypeLen < 0 || payloadLen > math.MaxInt-dataOnlyOverhead {
+		return 0, false
+	}
+
+	frameSize := payloadLen + dataOnlyOverhead
+	if eventTypeLen == 0 {
+		return frameSize, true
+	}
+
+	const namedEventOverhead = len(responseStreamEventPrefix) + 1
+	if frameSize > math.MaxInt-namedEventOverhead {
+		return 0, false
+	}
+	frameSize += namedEventOverhead
+	if eventTypeLen > math.MaxInt-frameSize {
+		return 0, false
+	}
+	return frameSize + eventTypeLen, true
+}
+
 func (h *chatToResponseStreamBridge) emitEvent(c *gin.Context, eventType string, event openai.ResponseAPIStreamEvent) {
 	event.Type = eventType
 	if event.Id == "" {
@@ -702,17 +737,23 @@ func (h *chatToResponseStreamBridge) emitEvent(c *gin.Context, eventType string,
 		return
 	}
 
-	var builder strings.Builder
-	if eventType != "" {
-		builder.WriteString("event: ")
-		builder.WriteString(eventType)
-		builder.WriteByte('\n')
+	frameSize, ok := responseStreamFrameCapacity(len(payload), len(eventType))
+	if !ok {
+		gmw.GetLogger(c).Warn("response stream event is too large", zap.String("event_type", eventType))
+		return
 	}
-	builder.WriteString("data: ")
-	builder.Write(payload)
-	builder.WriteString("\n\n")
 
-	if _, err := c.Writer.Write([]byte(builder.String())); err != nil {
+	frame := make([]byte, 0, frameSize)
+	if eventType != "" {
+		frame = append(frame, responseStreamEventPrefix...)
+		frame = append(frame, eventType...)
+		frame = append(frame, '\n')
+	}
+	frame = append(frame, responseStreamDataPrefix...)
+	frame = append(frame, payload...)
+	frame = append(frame, responseStreamFrameSuffix...)
+
+	if _, err := c.Writer.Write(frame); err != nil {
 		gmw.GetLogger(c).Warn("failed to write response stream event", zap.String("event_type", eventType), zap.Error(err))
 	}
 	c.Writer.Flush()
