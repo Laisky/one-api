@@ -1,7 +1,7 @@
 name: Upgrade modern frontend dependencies
 
 on:
-  pull_request_target:
+  pull_request:
     branches:
       - agent/modern-upgrade-staging-20260819
     types:
