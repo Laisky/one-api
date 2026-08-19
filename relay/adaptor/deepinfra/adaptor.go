@@ -194,13 +194,20 @@ func (a *Adaptor) DoRequest(c *gin.Context, meta *meta.Meta, requestBody io.Read
 	return adaptor.DoRequestHelper(a, c, meta, requestBody)
 }
 
-// DoResponse dispatches DeepInfra responses to the matching shared response handler.
+// DoResponse dispatches DeepInfra responses to the matching response handler.
 func (a *Adaptor) DoResponse(c *gin.Context, resp *http.Response, meta *meta.Meta) (usage *model.Usage, err *model.ErrorWithStatusCode) {
 	if meta == nil {
 		return nil, openai_compatible.ErrorWrapper(errors.New("meta is nil"), "invalid_meta", http.StatusInternalServerError)
 	}
 
 	switch meta.Mode {
+	case relaymode.Completions:
+		if meta.IsStream {
+			err, usage = handleCompletionStream(c, resp, meta.PromptTokens, meta.ActualModelName)
+			return
+		}
+		err, usage = handleCompletionResponse(c, resp, meta.PromptTokens, meta.ActualModelName)
+		return
 	case relaymode.Rerank:
 		err, usage = handleRerankResponse(c, resp, meta.ActualModelName, meta.PromptTokens)
 		return
@@ -213,7 +220,8 @@ func (a *Adaptor) DoResponse(c *gin.Context, resp *http.Response, meta *meta.Met
 	}
 
 	// Native Claude Messages and audio requests use controller-level passthrough
-	// paths. The remaining modes use DeepInfra's OpenAI-compatible response shape.
+	// paths. Chat and Response-fallback modes use DeepInfra's OpenAI-compatible
+	// Chat Completions response shape.
 	if meta.IsStream {
 		err, usage = openai_compatible.StreamHandler(c, resp, meta.PromptTokens, meta.ActualModelName)
 		return
