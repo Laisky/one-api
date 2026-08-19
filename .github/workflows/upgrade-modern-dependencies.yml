@@ -15,7 +15,7 @@ permissions:
 
 concurrency:
   group: upgrade-modern-dependencies-${{ github.event.pull_request.number }}
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   upgrade-and-test:
