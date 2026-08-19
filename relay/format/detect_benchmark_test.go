@@ -117,6 +117,7 @@ func TestDetectFormatScalarContentBehavior(t *testing.T) {
 		{name: "null content", body: `{"messages":[{"role":"assistant","content":null}]}`, want: Unknown},
 		{name: "object content", body: `{"messages":[{"role":"user","content":{"text":"hello"}}]}`, want: Unknown},
 		{name: "claude array content", body: `{"messages":[{"role":"assistant","content":[{"type":"tool_use","id":"1"}]}]}`, want: ClaudeMessages},
+		{name: "wrong-type role remains unknown", body: `{"messages":[{"role":1,"content":[{"type":"tool_use","id":"1"}]}]}`, want: Unknown},
 		{name: "large unused fields stay ambiguous", body: string(benchmarkDetectFormatLargeSystem), want: Unknown},
 	}
 
@@ -127,6 +128,13 @@ func TestDetectFormatScalarContentBehavior(t *testing.T) {
 			require.Equal(t, tt.want, got)
 		})
 	}
+}
+
+// TestDetectFormatModelTypeValidation verifies wrong-type model values retain the legacy top-level parse error.
+func TestDetectFormatModelTypeValidation(t *testing.T) {
+	t.Parallel()
+	_, err := DetectFormat([]byte(`{"model":123,"messages":[{"role":"user","content":"hello"}]}`))
+	require.Error(t, err)
 }
 
 // TestHasClaudeContentBlocksBehaviorEquivalent compares the optimized content-block scan against the exact legacy algorithm.
@@ -140,6 +148,7 @@ func TestHasClaudeContentBlocksBehaviorEquivalent(t *testing.T) {
 		json.RawMessage(`[{"role":"assistant","content":[{"type":"tool_use","id":"1"}]}]`),
 		json.RawMessage(`[{"role":"user","content":[{"type":"tool_result","tool_use_id":"1"}]}]`),
 		json.RawMessage(`[{"role":"assistant","content":[{"type":"thinking","thinking":"..."}]}]`),
+		json.RawMessage(`[{"role":1,"content":[{"type":"tool_use","id":"1"}]}]`),
 	}
 
 	for _, raw := range cases {
@@ -179,7 +188,7 @@ func BenchmarkClaudeContentBlockScanPlainText(b *testing.B) {
 	})
 }
 
-// BenchmarkRequestProbeDecodeLargeUnusedFields measures decoding when large top-level fields are irrelevant to format detection.
+// BenchmarkRequestProbeDecodeLargeUnusedFields measures decoding when a large top-level system field is irrelevant to format detection.
 func BenchmarkRequestProbeDecodeLargeUnusedFields(b *testing.B) {
 	b.Run("legacy", func(b *testing.B) {
 		b.ReportAllocs()
