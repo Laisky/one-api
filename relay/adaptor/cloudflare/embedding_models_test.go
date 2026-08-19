@@ -9,6 +9,8 @@ import (
 // TestEmbeddingModelsDeclareEmbeddingCapability verifies every Cloudflare
 // embedding model is typed explicitly, even when its identifier does not
 // contain the word "embedding" (for example, bge-m3).
+// Parameters: t is the test handle used to run assertions and subtests.
+// Returns: no values.
 func TestEmbeddingModelsDeclareEmbeddingCapability(t *testing.T) {
 	t.Parallel()
 
