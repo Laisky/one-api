@@ -199,7 +199,6 @@ func ClaimStripeWebhookEvent(ctx context.Context, eventID, eventType string) (cl
 	}
 	err = DB.WithContext(ctx).Create(row).Error
 	if err != nil {
-		// Duplicate primary key → already processed.
 		if isDuplicateKeyError(err) {
 			return false, nil
 		}
@@ -234,7 +233,13 @@ func MarkPaymentOrderPaid(ctx context.Context, sessionID string, paidAtMs int64)
 	return SettlePaidPaymentOrder(ctx, sessionID, paidAtMs, 0, "")
 }
 
-// SettlePaidPaymentOrder marks a pending order paid and credits the user quota in one transaction.
+// paymentOrderClaimableStatuses returns states that a later authoritative paid event may settle.
+func paymentOrderClaimableStatuses() []string {
+	return []string{PaymentStatusPending, PaymentStatusFailed, PaymentStatusCanceled}
+}
+
+// SettlePaidPaymentOrder atomically marks a claimable order paid and credits the user quota.
+// Failed and canceled states remain claimable because Stripe does not guarantee webhook ordering.
 // expectedAmountCents and expectedCurrency, when non-zero/non-empty, must match the stored order.
 // Returns transitioned=false when the order was already paid (idempotent no-op).
 // Returns ErrPaymentOrderNotFound when no local order exists for the session.
@@ -263,14 +268,13 @@ func SettlePaidPaymentOrder(ctx context.Context, sessionID string, paidAtMs int6
 			return nil
 		}
 		if expectedAmountCents > 0 && found.AmountCents != expectedAmountCents {
-			return markPendingManualReview(tx, &found, paidAtMs, &order, "amount mismatch")
+			return markClaimableManualReview(tx, &found, paidAtMs, &order, "amount mismatch")
 		}
 		if expectedCurrency != "" && !strings.EqualFold(found.Currency, expectedCurrency) {
-			return markPendingManualReview(tx, &found, paidAtMs, &order, "currency mismatch")
+			return markClaimableManualReview(tx, &found, paidAtMs, &order, "currency mismatch")
 		}
 
-		// Optimistic claim: only one concurrent settler can flip pending → paid.
-		res := tx.Model(&found).Where("status = ?", PaymentStatusPending).Updates(map[string]any{
+		res := tx.Model(&found).Where("status IN ?", paymentOrderClaimableStatuses()).Updates(map[string]any{
 			"status":  PaymentStatusPaid,
 			"paid_at": paidAtMs,
 		})
@@ -278,7 +282,6 @@ func SettlePaidPaymentOrder(ctx context.Context, sessionID string, paidAtMs int6
 			return errors.Wrap(res.Error, "mark payment order paid in settle tx")
 		}
 		if res.RowsAffected == 0 {
-			// Reload to learn the real status instead of assuming paid.
 			var latest PaymentOrder
 			if e := tx.Where("session_id = ?", sessionID).First(&latest).Error; e != nil {
 				return errors.Wrap(e, "reload payment order after empty claim")
@@ -300,8 +303,6 @@ func SettlePaidPaymentOrder(ctx context.Context, sessionID string, paidAtMs int6
 				return errors.Wrapf(qres.Error, "increase quota for user %d in settle tx", found.UserId)
 			}
 			if qres.RowsAffected != 1 {
-				// User missing/deleted after claim: order is already paid in this tx; rewrite to manual_review.
-				// Scope by id only inside this transaction after we own the pending→paid claim.
 				if e := tx.Model(&found).Where("id = ?", found.Id).Updates(map[string]any{
 					"status":  PaymentStatusManualReview,
 					"paid_at": paidAtMs,
@@ -330,10 +331,9 @@ func SettlePaidPaymentOrder(ctx context.Context, sessionID string, paidAtMs int6
 	return transitioned, order, nil
 }
 
-// markPendingManualReview flips a still-pending order to manual_review inside tx.
-// If another settler already left a terminal status, reloads that status into orderOut and returns nil.
-func markPendingManualReview(tx *gorm.DB, found *PaymentOrder, paidAtMs int64, orderOut **PaymentOrder, reason string) error {
-	res := tx.Model(found).Where("status = ?", PaymentStatusPending).Updates(map[string]any{
+// markClaimableManualReview marks a claimable order for operator review inside the settlement transaction.
+func markClaimableManualReview(tx *gorm.DB, found *PaymentOrder, paidAtMs int64, orderOut **PaymentOrder, reason string) error {
+	res := tx.Model(found).Where("status IN ?", paymentOrderClaimableStatuses()).Updates(map[string]any{
 		"status":  PaymentStatusManualReview,
 		"paid_at": paidAtMs,
 	})
