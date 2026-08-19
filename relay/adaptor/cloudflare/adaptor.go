@@ -205,6 +205,9 @@ func cloudflareAPIBaseURL(rawBaseURL, accountID string) (string, error) {
 	if hasPathSuffix(segments, "client", "v4", "accounts", "*", "ai") {
 		return normalized, nil
 	}
+	if hasPathSuffix(segments, "client", "v4", "accounts", "*") {
+		return normalized + "/ai", nil
+	}
 
 	accountID = strings.TrimSpace(accountID)
 	if accountID == "" {
@@ -216,8 +219,6 @@ func cloudflareAPIBaseURL(rawBaseURL, accountID string) (string, error) {
 
 	escapedAccountID := url.PathEscape(accountID)
 	switch {
-	case hasPathSuffix(segments, "client", "v4", "accounts", "*"):
-		return normalized + "/ai", nil
 	case hasPathSuffix(segments, "client", "v4"):
 		return normalized + "/accounts/" + escapedAccountID + "/ai", nil
 	default:
