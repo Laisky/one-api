@@ -3,7 +3,7 @@ name: Upgrade modern frontend dependencies
 on:
   pull_request:
     branches:
-      - main
+      - agent/modern-upgrade-staging-20260819
     types:
       - opened
       - reopened
@@ -22,8 +22,8 @@ jobs:
     if: >-
       github.actor != 'github-actions[bot]' &&
       github.event.pull_request.head.repo.full_name == github.repository &&
-      github.event.pull_request.head.ref == 'agent/upgrade-modern-dependencies-20260819'
-    runs-on: ubuntu-latest
+      github.event.pull_request.head.ref == 'agent/modern-upgrade-work-20260819'
+    runs-on: macos-15
     timeout-minutes: 60
     env:
       CI: 'true'
