@@ -1,0 +1,214 @@
+name: Upgrade Modern frontend to latest stable dependencies
+
+on:
+  pull_request:
+    branches:
+      - main
+    types:
+      - opened
+      - reopened
+      - synchronize
+
+permissions:
+  contents: write
+  pull-requests: read
+
+concurrency:
+  group: modern-latest-stable-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  upgrade-and-validate:
+    if: >-
+      github.actor != 'github-actions[bot]' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.head.ref == 'agent/modern-latest-stable-20260819'
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      CI: 'true'
+      YARN_NETWORK_TIMEOUT: '600000'
+      UPGRADE_BRANCH: ${{ github.event.pull_request.head.ref }}
+      DIAGNOSTIC_FILE: .github/modern-latest-stable-diagnostics.md
+
+    steps:
+      - name: Checkout the exact pull-request branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          fetch-depth: 0
+
+      - name: Verify branch starts from the reviewed main commit
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin main
+          git merge-base --is-ancestor f414444b1796272231d4e78ea8b2bc1321343226 HEAD
+
+      - name: Set up the production Node.js line
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Install Yarn Classic
+        run: npm install --global yarn@1.22.22
+
+      - name: Upgrade, validate, and capture actionable diagnostics
+        id: validation
+        shell: bash
+        run: |
+          set -uo pipefail
+
+          logs=/tmp/modern-upgrade-logs
+          mkdir -p "$logs"
+          : >"$logs/status"
+          rm -f "$DIAGNOSTIC_FILE"
+          overall=0
+
+          run_check() {
+            local name="$1"
+            shift
+            echo "==> ${name}"
+            set +e
+            "$@" >"${logs}/${name}.log" 2>&1
+            local code=$?
+            set -e
+            echo "${name}=${code}" >>"${logs}/status"
+            if [ "$code" -ne 0 ]; then
+              overall=1
+            fi
+            return 0
+          }
+
+          set +e
+          cd web/modern
+          run_check upgrade-direct-dependencies \
+            npx --yes npm-check-updates@latest \
+              --upgrade \
+              --target latest \
+              --packageManager yarn
+
+          rm -f package-lock.json
+          rm -rf node_modules
+          run_check install-upgraded-graph \
+            yarn install \
+              --non-interactive \
+              --network-timeout "$YARN_NETWORK_TIMEOUT"
+
+          if grep -q '^install-upgraded-graph=0$' "$logs/status"; then
+            run_check verify-direct-dependencies-current \
+              npx --yes npm-check-updates@latest \
+                --target latest \
+                --errorLevel 2
+            run_check type-check yarn type-check
+            run_check lint yarn lint
+            run_check i18n yarn check:i18n
+            run_check unit-tests yarn test --run --passWithNoTests
+            run_check production-build yarn build:prod
+
+            rm -rf node_modules
+            run_check frozen-lockfile-install \
+              yarn install \
+                --frozen-lockfile \
+                --non-interactive \
+                --network-timeout "$YARN_NETWORK_TIMEOUT"
+          fi
+          cd ../..
+
+          git restore --source=HEAD --worktree --staged -- web/build/modern 2>/dev/null || true
+          rm -f web/modern/tsconfig.tsbuildinfo
+
+          if ! git diff --check >"$logs/diff-check.log" 2>&1; then
+            echo 'diff-check=1' >>"$logs/status"
+            overall=1
+          else
+            echo 'diff-check=0' >>"$logs/status"
+          fi
+
+          if [ "$overall" -eq 0 ]; then
+            python3 <<'PY'
+          from pathlib import Path
+
+          path = Path('.github/workflows/lint.yml')
+          text = path.read_text()
+          start = text.index('  modern_frontend_tests:')
+          end = text.index('\n  air_frontend_tests:', start)
+          block = text[start:end]
+          if "node-version: '20'" not in block:
+              raise SystemExit('modern_frontend_tests no longer contains the expected Node 20 setting')
+          block = block.replace("node-version: '20'", "node-version: '24'", 1)
+          old_install = 'run: yarn install --network-timeout 600000'
+          if old_install not in block:
+              raise SystemExit('modern_frontend_tests no longer contains the expected install command')
+          block = block.replace(
+              old_install,
+              'run: yarn install --frozen-lockfile --non-interactive --network-timeout 600000',
+              1,
+          )
+          path.write_text(text[:start] + block + text[end:])
+          PY
+
+            rm -f .github/workflows/upgrade-modern-dependencies.yml
+            rm -f .github/workflows/modern-latest-stable-upgrade.yml
+            rm -f "$DIAGNOSTIC_FILE"
+          else
+            {
+              echo '# Modern latest-stable upgrade diagnostics'
+              echo
+              echo '- Base main SHA: `f414444b1796272231d4e78ea8b2bc1321343226`'
+              echo '- Node: `24.x`'
+              echo '- Yarn: `1.22.22`'
+              echo
+              echo '## Resolved direct dependency manifest'
+              echo
+              echo '```json'
+              cat web/modern/package.json
+              echo '```'
+              echo
+              echo '## Check results'
+              echo
+              echo '```text'
+              cat "$logs/status" 2>/dev/null || true
+              echo '```'
+              for log in "$logs"/*.log; do
+                [ -f "$log" ] || continue
+                name=$(basename "$log" .log)
+                code=$(awk -F= -v name="$name" '$1 == name { print $2 }' "$logs/status" | tail -n1)
+                if [ "${code:-1}" -ne 0 ]; then
+                  echo
+                  echo "## ${name} (failed)"
+                  echo
+                  echo '```text'
+                  tail -n 300 "$log"
+                  echo '```'
+                fi
+              done
+            } >"$DIAGNOSTIC_FILE"
+          fi
+
+          echo "overall=${overall}" >>"$GITHUB_OUTPUT"
+          exit 0
+
+      - name: Commit the generated graph or compatibility diagnostics
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+
+          git add web/modern/package.json web/modern/yarn.lock
+          git add -A .github
+
+          if git diff --cached --quiet; then
+            echo 'No generated changes to commit.'
+          elif [ "${{ steps.validation.outputs.overall }}" = '0' ]; then
+            git commit -m 'chore(modern): upgrade dependencies to latest stable releases'
+            git push origin "HEAD:${UPGRADE_BRANCH}"
+          else
+            git commit -m 'chore(modern): record dependency upgrade diagnostics'
+            git push origin "HEAD:${UPGRADE_BRANCH}"
+          fi
+
+      - name: Fail the run when compatibility work remains
+        if: steps.validation.outputs.overall != '0'
+        run: |
+          echo 'The upgraded dependency graph was committed with diagnostics for follow-up fixes.'
+          exit 1
