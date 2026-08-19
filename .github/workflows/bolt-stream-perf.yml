@@ -1,4 +1,4 @@
-name: bolt-stream-performance
+name: bolt-pre-pr-validation
 
 on:
   push:
@@ -10,24 +10,48 @@ permissions:
   statuses: write
 
 jobs:
-  compare:
-    name: Same-runner baseline comparison
+  announce:
+    name: Start validation
     runs-on: ubuntu-latest
     steps:
-      - name: Publish running status
+      - name: Publish pending status
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           python - <<'PY'
-          import json, os, urllib.request
-          status_url = f"{os.environ['GITHUB_API_URL']}/repos/{os.environ['GITHUB_REPOSITORY']}/statuses/{os.environ['GITHUB_SHA']}"
-          target_url = f"{os.environ['GITHUB_SERVER_URL']}/{os.environ['GITHUB_REPOSITORY']}/actions/runs/{os.environ['GITHUB_RUN_ID']}"
-          for context in ("bolt/stream-construct", "bolt/stream-emit-event"):
-              body = json.dumps({"state": "pending", "context": context, "description": "same-runner comparison is running", "target_url": target_url}).encode()
-              request = urllib.request.Request(status_url, data=body, method="POST", headers={"Accept": "application/vnd.github+json", "Authorization": f"Bearer {os.environ['GH_TOKEN']}", "Content-Type": "application/json", "X-GitHub-Api-Version": "2022-11-28"})
-              urllib.request.urlopen(request).close()
+          import json
+          import os
+          import urllib.request
+
+          body = json.dumps({
+              "state": "pending",
+              "context": "bolt/full-validation",
+              "description": "repository-wide pre-PR validation is running",
+              "target_url": (
+                  f"{os.environ['GITHUB_SERVER_URL']}/{os.environ['GITHUB_REPOSITORY']}"
+                  f"/actions/runs/{os.environ['GITHUB_RUN_ID']}"
+              ),
+          }).encode()
+          request = urllib.request.Request(
+              f"{os.environ['GITHUB_API_URL']}/repos/{os.environ['GITHUB_REPOSITORY']}"
+              f"/statuses/{os.environ['GITHUB_SHA']}",
+              data=body,
+              method="POST",
+              headers={
+                  "Accept": "application/vnd.github+json",
+                  "Authorization": f"Bearer {os.environ['GH_TOKEN']}",
+                  "Content-Type": "application/json",
+                  "X-GitHub-Api-Version": "2022-11-28",
+              },
+          )
+          urllib.request.urlopen(request).close()
           PY
 
+  format_vet:
+    name: Formatting and Go vet
+    needs: announce
+    runs-on: ubuntu-latest
+    steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
@@ -38,111 +62,280 @@ jobs:
         with:
           go-version: '1.26.3'
 
-      - name: Build comparable benchmark binaries
+      - name: Check formatting and patch whitespace
         run: |
           set -euo pipefail
-          cp relay/controller/response_stream_bridge.go /tmp/response_stream_bridge.optimized.go
-          go test -c ./relay/controller -o /tmp/stream-optimized.test
-          git show b59a43af8a32f0f570d70e8e79f799cc539674b7:relay/controller/response_stream_bridge.go > relay/controller/response_stream_bridge.go
-          go test -c ./relay/controller -o /tmp/stream-baseline.test
-          cp /tmp/response_stream_bridge.optimized.go relay/controller/response_stream_bridge.go
-          git diff --exit-code -- relay/controller/response_stream_bridge.go
+          test -z "$(gofmt -l \
+            relay/controller/response_stream_bridge.go \
+            relay/controller/response_stream_bridge_benchmark_test.go)"
+          git diff --check b59a43af8a32f0f570d70e8e79f799cc539674b7 HEAD
 
-      - name: Alternate baseline and optimized benchmarks
+      - name: Run go vet
+        run: go vet ./...
+
+  go_tests:
+    name: Full Go race tests with live databases
+    needs: announce
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.4
         env:
-          GOMAXPROCS: '1'
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: oneapi
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -proot"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=12
+          --health-start-period=20s
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: oneapi
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres -d oneapi"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=12
+          --health-start-period=10s
+    env:
+      MYSQL_DSN: root:root@tcp(127.0.0.1:3306)/oneapi?charset=utf8mb4&parseTime=True&loc=Local
+      PG_DSN: postgres://postgres:postgres@127.0.0.1:5432/oneapi?sslmode=disable
+      MYSQL_LOG_DSN: root:root@tcp(127.0.0.1:3306)/oneapi_log?charset=utf8mb4&parseTime=True&loc=Local
+      PG_LOG_DSN: postgres://postgres:postgres@127.0.0.1:5432/oneapi_log?sslmode=disable
+      COMPACT_UUID_TEST_MYSQL_DSN: root:root@tcp(127.0.0.1:3306)/oneapi?charset=utf8mb4&parseTime=True&loc=Local
+      COMPACT_UUID_TEST_POSTGRES_DSN: postgres://postgres:postgres@127.0.0.1:5432/oneapi?sslmode=disable
+      COMPACT_UUID_TEST_LOG_MYSQL_DSN: root:root@tcp(127.0.0.1:3306)/oneapi_log?charset=utf8mb4&parseTime=True&loc=Local
+      COMPACT_UUID_TEST_LOG_POSTGRES_DSN: postgres://postgres:postgres@127.0.0.1:5432/oneapi_log?sslmode=disable
+      COMPACT_UUID_TEST_POSTGRES_BASE_DSN: postgres://postgres:postgres@127.0.0.1:5432/oneapi_workload_base?sslmode=disable
+      ONEAPI_REQUIRE_DB_BACKENDS: '1'
+      CGO_ENABLED: '1'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.26.3'
+
+      - name: Install runtime and database clients
         run: |
           set -euo pipefail
-          args=(-test.run '^$' -test.bench '^BenchmarkChatToResponseStreamBridge' -test.benchmem -test.benchtime=1s -test.count=1 -test.cpu=1)
-          /tmp/stream-baseline.test "${args[@]}" -test.benchtime=100ms >/dev/null
-          /tmp/stream-optimized.test "${args[@]}" -test.benchtime=100ms >/dev/null
-          : > /tmp/baseline.txt
-          : > /tmp/optimized.txt
-          for round in $(seq 1 10); do
-            if (( round % 2 == 1 )); then
-              /tmp/stream-baseline.test "${args[@]}" | tee -a /tmp/baseline.txt
-              /tmp/stream-optimized.test "${args[@]}" | tee -a /tmp/optimized.txt
-            else
-              /tmp/stream-optimized.test "${args[@]}" | tee -a /tmp/optimized.txt
-              /tmp/stream-baseline.test "${args[@]}" | tee -a /tmp/baseline.txt
-            fi
+          sudo apt-get update -q
+          sudo apt-get install -y -q ffmpeg mysql-client postgresql-client
+
+      - name: Create secondary databases
+        env:
+          MYSQL_PWD: root
+          PGPASSWORD: postgres
+        run: |
+          set -euo pipefail
+          mysql -h 127.0.0.1 -P 3306 -uroot \
+            -e "CREATE DATABASE IF NOT EXISTS oneapi_log CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;"
+          for db in oneapi_log oneapi_workload_base; do
+            psql -h 127.0.0.1 -p 5432 -U postgres -d postgres -tAc \
+              "SELECT 1 FROM pg_database WHERE datname = '${db}'" | grep -q 1 \
+              || psql -h 127.0.0.1 -p 5432 -U postgres -d postgres -c "CREATE DATABASE ${db};"
           done
 
-      - name: Analyze and enforce consistent improvement
-        run: |
-          python - <<'PY'
-          import json, re, statistics
-          pattern = re.compile(r"^(BenchmarkChatToResponseStreamBridge(?:ConstructTextOnly|EmitEvent))(?:-\d+)?\s+\d+\s+([\d.]+)\s+ns/op(?:\s+[\d.]+\s+MB/s)?\s+(\d+)\s+B/op\s+(\d+)\s+allocs/op$")
+      - name: Run full race test suite
+        run: go test -race -v ./...
 
-          def load(path):
-              out = {}
-              with open(path, encoding="utf-8") as stream:
-                  for line in stream:
-                      match = pattern.match(line.strip())
-                      if match:
-                          out.setdefault(match.group(1), []).append((float(match.group(2)), int(match.group(3)), int(match.group(4))))
-              return out
+  goroutine_guard:
+    name: Goroutine context guardrail
+    needs: announce
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-          baseline, optimized = load("/tmp/baseline.txt"), load("/tmp/optimized.txt")
-          names = {"BenchmarkChatToResponseStreamBridgeConstructTextOnly", "BenchmarkChatToResponseStreamBridgeEmitEvent"}
-          if set(baseline) != names or set(optimized) != names:
-              raise SystemExit(f"unexpected benchmark output: {sorted(baseline)} / {sorted(optimized)}")
-
-          summary = {}
-          for name in sorted(names):
-              before_rows, after_rows = baseline[name], optimized[name]
-              if len(before_rows) != 10 or len(after_rows) != 10:
-                  raise SystemExit(f"{name}: expected 10 samples per variant")
-              before = {"ns_per_op": statistics.median(row[0] for row in before_rows), "bytes_per_op": statistics.median(row[1] for row in before_rows), "allocs_per_op": statistics.median(row[2] for row in before_rows)}
-              after = {"ns_per_op": statistics.median(row[0] for row in after_rows), "bytes_per_op": statistics.median(row[1] for row in after_rows), "allocs_per_op": statistics.median(row[2] for row in after_rows)}
-              improvement = {metric: (before[metric] - after[metric]) / before[metric] * 100 for metric in before}
-              if after["ns_per_op"] >= before["ns_per_op"]:
-                  raise SystemExit(f"{name}: median runtime did not improve")
-              if max(row[0] for row in after_rows) >= min(row[0] for row in before_rows):
-                  raise SystemExit(f"{name}: runtime sample ranges overlap")
-              if after["bytes_per_op"] >= before["bytes_per_op"] or after["allocs_per_op"] >= before["allocs_per_op"]:
-                  raise SystemExit(f"{name}: allocation metrics did not improve")
-              summary[name] = {"baseline": before, "optimized": after, "improvement_percent": improvement, "baseline_ns_range": [min(row[0] for row in before_rows), max(row[0] for row in before_rows)], "optimized_ns_range": [min(row[0] for row in after_rows), max(row[0] for row in after_rows)], "samples_per_variant": 10}
-
-          with open("/tmp/comparison.json", "w", encoding="utf-8") as output:
-              json.dump(summary, output)
-          print(json.dumps(summary, indent=2))
-          PY
-
-      - name: Publish benchmark comparison
+      - name: Install ast-grep
         env:
-          GH_TOKEN: ${{ github.token }}
+          ASG_VERSION: 0.43.0
+          ASG_SHA256: a26253a9c821d935f7e383e40f0de7c2ca62a4121de1f73a6d81ec32eae631e0
         run: |
-          python - <<'PY'
-          import json, os, urllib.request
-          with open("/tmp/comparison.json", encoding="utf-8") as stream:
-              comparison = json.load(stream)
-          contexts = {"BenchmarkChatToResponseStreamBridgeConstructTextOnly": "bolt/stream-construct", "BenchmarkChatToResponseStreamBridgeEmitEvent": "bolt/stream-emit-event"}
-          status_url = f"{os.environ['GITHUB_API_URL']}/repos/{os.environ['GITHUB_REPOSITORY']}/statuses/{os.environ['GITHUB_SHA']}"
-          target_url = f"{os.environ['GITHUB_SERVER_URL']}/{os.environ['GITHUB_REPOSITORY']}/actions/runs/{os.environ['GITHUB_RUN_ID']}"
-          for benchmark, context in contexts.items():
-              result = comparison[benchmark]
-              before, after, gain = result["baseline"], result["optimized"], result["improvement_percent"]
-              description = f"{before['ns_per_op']:.1f}->{after['ns_per_op']:.1f} ns/op (-{gain['ns_per_op']:.1f}%); {before['allocs_per_op']:g}->{after['allocs_per_op']:g} allocs"
-              body = json.dumps({"state": "success", "context": context, "description": description, "target_url": target_url}).encode()
-              request = urllib.request.Request(status_url, data=body, method="POST", headers={"Accept": "application/vnd.github+json", "Authorization": f"Bearer {os.environ['GH_TOKEN']}", "Content-Type": "application/json", "X-GitHub-Api-Version": "2022-11-28"})
-              urllib.request.urlopen(request).close()
-          PY
+          set -euo pipefail
+          curl -fsSL -o ast-grep.zip \
+            "https://github.com/ast-grep/ast-grep/releases/download/${ASG_VERSION}/app-x86_64-unknown-linux-gnu.zip"
+          echo "${ASG_SHA256}  ast-grep.zip" | sha256sum -c -
+          mkdir -p "$HOME/.local/bin"
+          unzip -o ast-grep.zip -d "$HOME/.local/bin"
+          chmod +x "$HOME/.local/bin/ast-grep" "$HOME/.local/bin/sg"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
-      - name: Publish failed status
-        if: ${{ failure() }}
+      - name: Verify guardrail rules and scan
+        run: |
+          ast-grep --version
+          ast-grep test --skip-snapshot-tests
+          ast-grep scan
+
+  entity_guard:
+    name: Boundary entity-response guardrail
+    needs: announce
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.26.3'
+
+      - name: Run analyzer
+        run: go run ./tools/analyzers/noentityresponse/cmd/noentityresponse ./...
+
+  modern_frontend:
+    name: Frontend tests (modern)
+    needs: announce
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: yarn
+          cache-dependency-path: web/modern/yarn.lock
+
+      - name: Install dependencies
+        working-directory: web/modern
+        run: yarn install --network-timeout 600000
+
+      - name: Run tests
+        working-directory: web/modern
         env:
-          GH_TOKEN: ${{ github.token }}
+          CI: true
+        run: yarn test --run --passWithNoTests
+
+  air_frontend:
+    name: Frontend tests (air)
+    needs: announce
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: yarn
+          cache-dependency-path: web/air/yarn.lock
+
+      - name: Install dependencies
+        working-directory: web/air
+        run: yarn install --network-timeout 600000
+
+      - name: Run tests
+        working-directory: web/air
+        env:
+          CI: true
+        run: yarn test --watchAll=false --passWithNoTests
+
+  berry_frontend:
+    name: Frontend tests (berry)
+    needs: announce
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: yarn
+          cache-dependency-path: web/berry/yarn.lock
+
+      - name: Install dependencies
+        working-directory: web/berry
+        run: yarn install --network-timeout 600000
+
+      - name: Run tests
+        working-directory: web/berry
+        env:
+          CI: true
+        run: yarn test --watchAll=false --passWithNoTests
+
+  report:
+    name: Publish validation result
+    if: ${{ always() }}
+    needs:
+      - format_vet
+      - go_tests
+      - goroutine_guard
+      - entity_guard
+      - modern_frontend
+      - air_frontend
+      - berry_frontend
+    runs-on: ubuntu-latest
+    env:
+      FORMAT_VET: ${{ needs.format_vet.result }}
+      GO_TESTS: ${{ needs.go_tests.result }}
+      GOROUTINE_GUARD: ${{ needs.goroutine_guard.result }}
+      ENTITY_GUARD: ${{ needs.entity_guard.result }}
+      MODERN_FRONTEND: ${{ needs.modern_frontend.result }}
+      AIR_FRONTEND: ${{ needs.air_frontend.result }}
+      BERRY_FRONTEND: ${{ needs.berry_frontend.result }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Publish final status
         run: |
           python - <<'PY'
-          import json, os, urllib.request
-          status_url = f"{os.environ['GITHUB_API_URL']}/repos/{os.environ['GITHUB_REPOSITORY']}/statuses/{os.environ['GITHUB_SHA']}"
-          target_url = f"{os.environ['GITHUB_SERVER_URL']}/{os.environ['GITHUB_REPOSITORY']}/actions/runs/{os.environ['GITHUB_RUN_ID']}"
-          for context in ("bolt/stream-construct", "bolt/stream-emit-event"):
-              body = json.dumps({"state": "failure", "context": context, "description": "same-runner benchmark comparison failed", "target_url": target_url}).encode()
-              request = urllib.request.Request(status_url, data=body, method="POST", headers={"Accept": "application/vnd.github+json", "Authorization": f"Bearer {os.environ['GH_TOKEN']}", "Content-Type": "application/json", "X-GitHub-Api-Version": "2022-11-28"})
-              try:
-                  urllib.request.urlopen(request).close()
-              except Exception as exc:
-                  print(f"failed to publish {context}: {exc}")
+          import json
+          import os
+          import urllib.request
+
+          results = {
+              "format_vet": os.environ["FORMAT_VET"],
+              "go_tests": os.environ["GO_TESTS"],
+              "goroutine_guard": os.environ["GOROUTINE_GUARD"],
+              "entity_guard": os.environ["ENTITY_GUARD"],
+              "modern_frontend": os.environ["MODERN_FRONTEND"],
+              "air_frontend": os.environ["AIR_FRONTEND"],
+              "berry_frontend": os.environ["BERRY_FRONTEND"],
+          }
+          failed = [name for name, result in results.items() if result != "success"]
+          state = "failure" if failed else "success"
+          description = (
+              "failed: " + ", ".join(failed)
+              if failed
+              else "vet, race tests, guardrails, and frontend suites passed"
+          )
+          body = json.dumps({
+              "state": state,
+              "context": "bolt/full-validation",
+              "description": description[:140],
+              "target_url": (
+                  f"{os.environ['GITHUB_SERVER_URL']}/{os.environ['GITHUB_REPOSITORY']}"
+                  f"/actions/runs/{os.environ['GITHUB_RUN_ID']}"
+              ),
+          }).encode()
+          request = urllib.request.Request(
+              f"{os.environ['GITHUB_API_URL']}/repos/{os.environ['GITHUB_REPOSITORY']}"
+              f"/statuses/{os.environ['GITHUB_SHA']}",
+              data=body,
+              method="POST",
+              headers={
+                  "Accept": "application/vnd.github+json",
+                  "Authorization": f"Bearer {os.environ['GH_TOKEN']}",
+                  "Content-Type": "application/json",
+                  "X-GitHub-Api-Version": "2022-11-28",
+              },
+          )
+          urllib.request.urlopen(request).close()
+          if failed:
+              raise SystemExit(description)
           PY
