@@ -90,6 +90,11 @@ func TestIsExpectedChannelSelectionExhaustedError(t *testing.T) {
 			want: true,
 		},
 		{
+			name: "no available channels support model after exclusions",
+			err:  errors.New("no available channels support model gemini-3.5-flash after exclusions"),
+			want: true,
+		},
+		{
 			name: "memory cache miss",
 			err:  errors.New("channel not found in memory cache"),
 			want: true,
@@ -157,7 +162,7 @@ func TestShouldRetry(t *testing.T) {
 			c, _ := gin.CreateTestContext(nil)
 			c.Set(ctxkey.SpecificChannelId, tt.specificChannel)
 
-			err := shouldRetry(c, tt.statusCode, nil)
+			err := shouldRetry(c, &model.ErrorWithStatusCode{StatusCode: tt.statusCode})
 
 			if tt.expectError {
 				assert.Error(t, err)

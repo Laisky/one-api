@@ -328,7 +328,8 @@ func isExpectedChannelSelectionExhaustedError(err error) bool {
 	}
 
 	errMsg := strings.ToLower(strings.TrimSpace(err.Error()))
-	if strings.Contains(errMsg, "no channels available for model") {
+	if strings.Contains(errMsg, "no channels available for model") ||
+		strings.Contains(errMsg, "no available channels support model") {
 		return true
 	}
 

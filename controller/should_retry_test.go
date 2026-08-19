@@ -7,6 +7,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/Laisky/one-api/relay/model"
 )
 
 // TestShouldRetryContextCancellation ensures we do not retry when rawErr indicates
@@ -16,7 +18,10 @@ func TestShouldRetryContextCancellation(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	c, _ := gin.CreateTestContext(nil)
 
-	err := shouldRetry(c, http.StatusInternalServerError, context.Canceled)
+	err := shouldRetry(c, &model.ErrorWithStatusCode{
+		StatusCode: http.StatusInternalServerError,
+		Error:      model.Error{RawError: context.Canceled},
+	})
 	assert.Error(t, err, "should not retry when context is canceled causing 5xx")
 }
 
@@ -27,7 +32,10 @@ func TestShouldRetryDeadlineExceeded(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	c, _ := gin.CreateTestContext(nil)
 
-	err := shouldRetry(c, http.StatusInternalServerError, context.DeadlineExceeded)
+	err := shouldRetry(c, &model.ErrorWithStatusCode{
+		StatusCode: http.StatusInternalServerError,
+		Error:      model.Error{RawError: context.DeadlineExceeded},
+	})
 	assert.Error(t, err, "should not retry when context deadline exceeded causing 5xx")
 }
 
@@ -37,7 +45,7 @@ func TestShouldRetryNormal500(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	c, _ := gin.CreateTestContext(nil)
 
-	err := shouldRetry(c, http.StatusInternalServerError, nil)
+	err := shouldRetry(c, &model.ErrorWithStatusCode{StatusCode: http.StatusInternalServerError})
 	assert.NoError(t, err, "should retry for normal 500 error")
 }
 
@@ -47,6 +55,6 @@ func TestShouldRetryClientError(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	c, _ := gin.CreateTestContext(nil)
 
-	err := shouldRetry(c, http.StatusBadRequest, nil)
+	err := shouldRetry(c, &model.ErrorWithStatusCode{StatusCode: http.StatusBadRequest})
 	assert.Error(t, err, "should not retry for 400 bad request")
 }

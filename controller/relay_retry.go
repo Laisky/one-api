@@ -13,8 +13,18 @@ import (
 	"github.com/Laisky/one-api/relay/model"
 )
 
-// shouldRetry returns nil if should retry, otherwise returns error
-func shouldRetry(c *gin.Context, statusCode int, rawErr error) error {
+// shouldRetry returns nil if should retry, otherwise returns error.
+// Parameters: c carries the routing context (specific-channel pinning),
+// bizErr is the normalized relay failure whose status, raw error, and
+// user-originated classification drive the retry decision.
+// Returns: nil when a retry may help, otherwise an error explaining the skip.
+func shouldRetry(c *gin.Context, bizErr *model.ErrorWithStatusCode) error {
+	if bizErr == nil {
+		return nil
+	}
+	statusCode := bizErr.StatusCode
+	rawErr := bizErr.RawError
+
 	if specificChannelId := c.GetInt(ctxkey.SpecificChannelId); specificChannelId != 0 {
 		return errors.Errorf(
 			"specific channel ID (%d) was provided, retry is unvailable",
@@ -41,7 +51,35 @@ func shouldRetry(c *gin.Context, statusCode int, rawErr error) error {
 		return errors.Errorf("client error %d, not retrying", statusCode)
 	}
 
+	// A user-originated auth failure (insufficient quota, invalid/expired token,
+	// model/tool not allowed, ...) cannot be fixed by switching channels, so it
+	// must not enter the retry loop even though 401/403 are otherwise retryable:
+	// upstream auth/permission failures may still be resolved by another channel.
+	if (statusCode == http.StatusUnauthorized || statusCode == http.StatusForbidden) &&
+		isUserOriginatedRelayError(bizErr) {
+		return errors.Errorf("user-originated relay error (%s), not retrying", relayErrorCodeOrMessage(bizErr))
+	}
+
 	return nil
+}
+
+// relayErrorCodeOrMessage returns a stable diagnostic label for a relay error,
+// preferring the error code and falling back to the message when the code is empty.
+func relayErrorCodeOrMessage(e *model.ErrorWithStatusCode) string {
+	if e == nil {
+		return "unknown"
+	}
+	label := ""
+	if e.Code != nil {
+		label = strings.TrimSpace(fmt.Sprint(e.Code))
+	}
+	if label == "" {
+		label = strings.TrimSpace(e.Message)
+	}
+	if label == "" {
+		label = "unknown"
+	}
+	return label
 }
 
 // isRetryableUpstreamClientError reports whether a nominal 4xx upstream error should

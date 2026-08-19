@@ -134,7 +134,7 @@ func Relay(c *gin.Context) {
 
 	retryTimes := config.RetryTimes
 	retryableClientError, retryableClientReason := classifyRetryableUpstreamClientError(bizErr)
-	if err := shouldRetry(c, bizErr.StatusCode, bizErr.RawError); err != nil {
+	if err := shouldRetry(c, bizErr); err != nil {
 		if retryableClientError {
 			lg.Debug("retryable upstream client error detected; keeping retry logic enabled",
 				zap.Int("status_code", bizErr.StatusCode),
