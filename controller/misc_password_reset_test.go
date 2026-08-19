@@ -11,8 +11,8 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 
-	"github.com/songquanpeng/one-api/common"
-	"github.com/songquanpeng/one-api/model"
+	"github.com/Laisky/one-api/common"
+	"github.com/Laisky/one-api/model"
 )
 
 func setupPasswordResetTest(t *testing.T) {
@@ -250,4 +250,44 @@ func TestResetPasswordInvalidJSON(t *testing.T) {
 
 	resp := parseResponse(t, w)
 	require.Equal(t, false, resp["success"])
+}
+
+// TestResetPasswordRejectedWhenLocked verifies the public reset endpoint
+// blocks password resets for users whose password lock flag is set, that
+// the stored password hash is unchanged, and that the verification token
+// remains valid for a subsequent retry once the lock is cleared.
+func TestResetPasswordRejectedWhenLocked(t *testing.T) {
+	setupPasswordResetTest(t)
+
+	email := "locked@example.com"
+	oldPassword := "oldpassword123"
+	user := createTestUser(t, email, oldPassword)
+	user.Metadata = model.UserMetadata{PasswordLocked: true}
+	require.NoError(t, model.DB.Save(user).Error)
+	originalHash := user.Password
+
+	token := common.GenerateVerificationCode(0)
+	common.RegisterVerificationCodeWithKey(email, token, common.PasswordResetPurpose)
+
+	router := gin.New()
+	router.POST("/api/user/reset", ResetPassword)
+
+	w := postResetPassword(t, router, map[string]string{
+		"email":    email,
+		"token":    token,
+		"password": "newpass99",
+	})
+
+	resp := parseResponse(t, w)
+	require.Equal(t, false, resp["success"])
+	require.Contains(t, resp["message"], "Password is locked by administrator")
+
+	var stored model.User
+	require.NoError(t, model.DB.Where("email = ?", email).First(&stored).Error)
+	require.Equal(t, originalHash, stored.Password)
+	require.True(t, common.ValidatePasswordAndHash(oldPassword, stored.Password))
+
+	// The verification token must still be intact so the user can retry once
+	// the administrator clears the lock.
+	require.True(t, common.VerifyCodeWithKey(email, token, common.PasswordResetPurpose))
 }

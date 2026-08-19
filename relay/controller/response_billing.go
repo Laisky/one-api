@@ -10,17 +10,16 @@ import (
 	"github.com/Laisky/zap"
 	"github.com/gin-gonic/gin"
 
-	"github.com/songquanpeng/one-api/common/config"
-	"github.com/songquanpeng/one-api/common/ctxkey"
-	"github.com/songquanpeng/one-api/common/tracing"
-	"github.com/songquanpeng/one-api/model"
-	"github.com/songquanpeng/one-api/relay/adaptor/openai"
-	"github.com/songquanpeng/one-api/relay/apitype"
-	"github.com/songquanpeng/one-api/relay/billing"
-	metalib "github.com/songquanpeng/one-api/relay/meta"
-	relaymodel "github.com/songquanpeng/one-api/relay/model"
-	"github.com/songquanpeng/one-api/relay/pricing"
-	quotautil "github.com/songquanpeng/one-api/relay/quota"
+	"github.com/Laisky/one-api/common/config"
+	"github.com/Laisky/one-api/common/ctxkey"
+	"github.com/Laisky/one-api/model"
+	"github.com/Laisky/one-api/relay/adaptor/openai"
+	"github.com/Laisky/one-api/relay/apitype"
+	"github.com/Laisky/one-api/relay/billing"
+	metalib "github.com/Laisky/one-api/relay/meta"
+	relaymodel "github.com/Laisky/one-api/relay/model"
+	"github.com/Laisky/one-api/relay/pricing"
+	quotautil "github.com/Laisky/one-api/relay/quota"
 )
 
 // postConsumeResponseAPIQuotaDetailed lets tests capture the billing detail without DB writes.
@@ -101,30 +100,40 @@ func postConsumeResponseAPIQuota(ctx context.Context,
 	channelModelConfigs map[string]model.ModelConfigLocal,
 	channelCompletionRatio map[string]float64) (quota int64) {
 
+	// !! NO-USAGE / ZERO-USAGE GUARD !!
+	//
+	// Some upstreams do not report token usage at all (a transport that only
+	// passes bytes through, a truncated stream, the OpenAI WebSocket Response
+	// API). Two things must NOT happen when that occurs:
+	//
+	//  1. Reconciling with zero usage yields quotaDelta = 0 - preConsumedQuota,
+	//     which REFUNDS the pre-consumed amount and makes the request free.
+	//  2. Returning early skips settlement entirely, which strands the
+	//     provisional log row at LogTypeProvisional. That row is filtered out of
+	//     every Logs-page query, so the user is charged for a request nobody can
+	//     see, and the user/channel usage aggregates silently under-report.
+	//
+	// So an unmeasurable request settles at the pre-consumed estimate — a zero
+	// delta, keeping the money already debited — and still flows through the one
+	// settlement call below, which reconciles the provisional row into a visible
+	// consume log.
+	settledAtEstimate := false
 	if usage == nil {
-		// No gin context here; cannot use request-scoped logger
-		// Keep silent here to avoid global logger; caller should ensure usage
-		return
-	}
-
-	// !! ZERO-USAGE GUARD !!
-	//
-	// Some upstream transports (notably OpenAI WebSocket Response API) do not
-	// reliably return token usage. If we reconcile with zero usage, the result
-	// is quotaDelta = 0 - preConsumedQuota, which REFUNDS the pre-consumed
-	// amount and makes the request effectively free. This is incorrect.
-	//
-	// When usage is zero and pre-consumed quota exists, we return the
-	// pre-consumed amount as the final charge. The provisional log entry
-	// remains with the estimated amount for audit visibility.
-	if usage.PromptTokens == 0 && usage.CompletionTokens == 0 {
-		lg := gmw.GetLogger(ctx)
-		lg.Warn("postConsumeResponseAPIQuota: usage is zero, keeping pre-consumed quota",
+		// The upstream returned success without any usage. That is an adaptor
+		// defect, not a client error: report it loudly instead of silently
+		// dropping the charge from the ledger.
+		gmw.GetLogger(ctx).Error("response api post-billing received no usage; settling at the pre-consumed estimate",
 			zap.Int64("pre_consumed_quota", preConsumedQuota),
 			zap.String("model", responseAPIRequest.Model),
 		)
-		quota = preConsumedQuota
-		return
+		usage = &relaymodel.Usage{}
+		settledAtEstimate = true
+	} else if usage.PromptTokens == 0 && usage.CompletionTokens == 0 {
+		gmw.GetLogger(ctx).Warn("response api post-billing received zero usage; settling at the pre-consumed estimate",
+			zap.Int64("pre_consumed_quota", preConsumedQuota),
+			zap.String("model", responseAPIRequest.Model),
+		)
+		settledAtEstimate = true
 	}
 
 	pricingAdaptor := resolvePricingAdaptor(meta)
@@ -137,12 +146,18 @@ func postConsumeResponseAPIQuota(ctx context.Context,
 		ChannelModelConfigs:    channelModelConfigs,
 		ChannelCompletionRatio: channelCompletionRatio,
 		PricingAdaptor:         pricingAdaptor,
+		RequestTime:            meta.StartTime,
 	})
 
 	quota = computeResult.TotalQuota
 	totalTokens := computeResult.PromptTokens + computeResult.CompletionTokens
 	if totalTokens == 0 {
 		quota = 0
+	}
+	if settledAtEstimate {
+		// Keep exactly what was already debited: a zero delta charges nothing
+		// extra and, crucially, refunds nothing.
+		quota = preConsumedQuota
 	}
 
 	// Use centralized detailed billing function to follow DRY principle
@@ -156,28 +171,25 @@ func postConsumeResponseAPIQuota(ctx context.Context,
 	}
 	usedCompletionRatio := computeResult.UsedCompletionRatio
 	if usedCompletionRatio == 0 {
-		usedCompletionRatio = pricing.GetCompletionRatioWithThreeLayers(responseAPIRequest.Model, channelCompletionRatio, pricingAdaptor)
+		usedCompletionRatio = pricing.ResolveCompletionRatioAt(responseAPIRequest.Model, channelModelConfigs, channelCompletionRatio, pricingAdaptor, meta.StartTime)
 	}
 
-	// Derive RequestId/TraceId/ProvisionalLogId from std context if possible
-	var requestId string
-	var provisionalLogId int
-	if ginCtx, ok := gmw.GetGinCtxFromStdCtx(ctx); ok {
-		requestId = ginCtx.GetString(ctxkey.RequestId)
-		provisionalLogId = ginCtx.GetInt(ctxkey.ProvisionalLogId)
-	}
-	traceId := tracing.GetTraceIDFromContext(ctx)
+	// Resolve request-scoped identifiers from the detached billing snapshot (or, for a
+	// synchronous caller, from the embedded gin context). NEVER read them off a live
+	// *gin.Context here: this runs inside a post-billing goroutine and gin recycles c.
+	billingID := billingIdentityFromContext(ctx)
+	requestId := billingID.requestID
+	provisionalLogId := billingID.provisionalLogID
+	traceId := billingID.traceID
 	if meta.TokenId > 0 && meta.UserId > 0 && meta.ChannelId > 0 {
-		var toolSummary *model.ToolUsageSummary
-		if ginCtx, ok := gmw.GetGinCtxFromStdCtx(ctx); ok {
-			if raw, exists := ginCtx.Get(ctxkey.ToolInvocationSummary); exists {
-				if summary, ok := raw.(*model.ToolUsageSummary); ok {
-					toolSummary = summary
-				}
+		toolSummary := billingID.toolSummary
+		metadata := model.AppendCacheWriteTokensMetadata(nil, usage.CacheWrite5mTokens, usage.CacheWrite1hTokens)
+		if settledAtEstimate {
+			if metadata == nil {
+				metadata = model.LogMetadata{}
 			}
+			metadata[model.LogMetadataKeyEstimatedCharge] = true
 		}
-		metadata := model.AppendToolUsageMetadata(nil, toolSummary)
-		metadata = model.AppendCacheWriteTokensMetadata(metadata, usage.CacheWrite5mTokens, usage.CacheWrite1hTokens)
 
 		postConsumeResponseAPIQuotaDetailed(billing.QuotaConsumeDetail{
 			Ctx:                ctx,
@@ -185,13 +197,16 @@ func postConsumeResponseAPIQuota(ctx context.Context,
 			QuotaDelta:         quotaDelta,
 			TotalQuota:         quota,
 			UserId:             meta.UserId,
+			UserUUID:           meta.UserUUID,
 			ChannelId:          meta.ChannelId,
+			ChannelUUID:        meta.ChannelUUID,
 			PromptTokens:       promptTokens,
 			CompletionTokens:   completionTokens,
 			ModelRatio:         usedModelRatio,
 			GroupRatio:         groupRatio,
 			OriginModelName:    meta.OriginModelName,
 			ModelName:          responseAPIRequest.Model,
+			TokenUUID:          meta.TokenUUID,
 			TokenName:          meta.TokenName,
 			IsStream:           meta.IsStream,
 			StartTime:          meta.StartTime,
@@ -208,14 +223,15 @@ func postConsumeResponseAPIQuota(ctx context.Context,
 			UserAPIFormat:      resolveUserAPIFormat(meta.Mode),
 			UpstreamAPIFormat:  apitype.String(meta.APIType),
 			UpstreamEndpoint:   meta.UpstreamRequestURL,
+			ToolUsageSummary:   toolSummary,
 		})
 	} else {
 		// Should not happen; log for investigation
 		lg := gmw.GetLogger(ctx)
 		lg.Error("postConsumeResponseAPIQuota missing essential meta information",
-			zap.Int("token_id", meta.TokenId),
-			zap.Int("user_id", meta.UserId),
-			zap.Int("channel_id", meta.ChannelId),
+			zap.Int("meta_token_id", meta.TokenId),
+			zap.Int("meta_user_id", meta.UserId),
+			zap.Int("meta_channel_id", meta.ChannelId),
 			zap.String("request_id", requestId),
 			zap.String("trace_id", traceId),
 		)

@@ -6,7 +6,7 @@ package client
 // 	"time"
 
 // 	gutils "github.com/Laisky/go-utils/v6"
-// 	"github.com/songquanpeng/one-api/common/config"
+// 	"github.com/Laisky/one-api/common/config"
 // )
 
 // var HTTPClient *http.Client

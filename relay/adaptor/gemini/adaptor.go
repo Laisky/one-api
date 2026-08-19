@@ -15,18 +15,18 @@ import (
 	"github.com/Laisky/zap"
 	"github.com/gin-gonic/gin"
 
-	"github.com/songquanpeng/one-api/common/config"
-	"github.com/songquanpeng/one-api/common/ctxkey"
-	"github.com/songquanpeng/one-api/common/helper"
-	"github.com/songquanpeng/one-api/common/random"
-	commonsse "github.com/songquanpeng/one-api/common/sse"
-	channelhelper "github.com/songquanpeng/one-api/relay/adaptor"
-	"github.com/songquanpeng/one-api/relay/adaptor/geminiOpenaiCompatible"
-	"github.com/songquanpeng/one-api/relay/adaptor/openai"
-	"github.com/songquanpeng/one-api/relay/billing/ratio"
-	"github.com/songquanpeng/one-api/relay/meta"
-	"github.com/songquanpeng/one-api/relay/model"
-	"github.com/songquanpeng/one-api/relay/relaymode"
+	"github.com/Laisky/one-api/common/config"
+	"github.com/Laisky/one-api/common/ctxkey"
+	"github.com/Laisky/one-api/common/helper"
+	"github.com/Laisky/one-api/common/random"
+	commonsse "github.com/Laisky/one-api/common/sse"
+	channelhelper "github.com/Laisky/one-api/relay/adaptor"
+	"github.com/Laisky/one-api/relay/adaptor/geminiOpenaiCompatible"
+	"github.com/Laisky/one-api/relay/adaptor/openai"
+	"github.com/Laisky/one-api/relay/billing/ratio"
+	"github.com/Laisky/one-api/relay/meta"
+	"github.com/Laisky/one-api/relay/model"
+	"github.com/Laisky/one-api/relay/relaymode"
 )
 
 type Adaptor struct {
@@ -273,8 +273,15 @@ func (a *Adaptor) DoResponse(c *gin.Context, resp *http.Response, meta *meta.Met
 
 	if meta.IsStream {
 		var responseText string
-		err, responseText = StreamHandler(c, resp)
-		usage = openai.ResponseText2Usage(responseText, meta.ActualModelName, meta.PromptTokens)
+		var streamUsage *model.Usage
+		err, responseText, streamUsage = StreamHandler(c, resp)
+		// Prefer Gemini's authoritative usageMetadata (cached prompt + reasoning tokens) over
+		// the text-based estimate; only fall back when no usageMetadata was present in the stream.
+		if streamUsage != nil {
+			usage = streamUsage
+		} else {
+			usage = openai.ResponseText2Usage(responseText, meta.ActualModelName, meta.PromptTokens)
+		}
 	} else {
 		switch meta.Mode {
 		case relaymode.Embeddings:
@@ -686,6 +693,14 @@ func (a *Adaptor) GetChannelName() string {
 // metadata so channel policy builders can merge in provider pricing.
 func (a *Adaptor) DefaultToolingConfig() channelhelper.ChannelToolConfig {
 	return GeminiToolingDefaults
+}
+
+// DefaultToolingConfigForModel returns Google's grounded web search tooling
+// metadata for a specific model, billing Gemini 3.x web_search at $14/1K queries
+// and Gemini 2.5 and earlier at $35/1K queries. The tooling-policy builder prefers
+// this over DefaultToolingConfig when present.
+func (a *Adaptor) DefaultToolingConfigForModel(model string) channelhelper.ChannelToolConfig {
+	return geminiOpenaiCompatible.GeminiToolingDefaultsForModel(model)
 }
 
 func mapGeminiFinishReason(reason string) string {

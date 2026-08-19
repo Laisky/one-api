@@ -26,19 +26,28 @@
   },
   "common": {
     "about": "概要",
+    "add_colon": "追加: ",
     "back": "戻る",
     "cancel": "キャンセル",
     "channels": "チャンネル",
+    "code_copied": "コードをコピーしました。",
     "confirm": "確認",
+    "copied": "コピーしました。",
+    "copy_failed": "コピーに失敗しました",
+    "copy_id": "ID をコピー",
+    "copy_to_clipboard": "クリップボードにコピー",
     "dashboard": "ダッシュボード",
     "email": "メール",
+    "info": "情報",
     "language": "言語",
     "login": "ログイン",
     "logout": "ログアウト",
     "logs": "ログ",
     "mcps": "MCPs",
     "models": "モデル",
+    "no_data": "結果がありません。",
     "no_items": "項目がありません",
+    "no_results": "結果が見つかりません",
     "or": "または",
     "pagination": {
       "first_page": "最初のページ",
@@ -52,11 +61,16 @@
     },
     "password": "パスワード",
     "playground": "プレイグラウンド",
-    "realtime": "リアルタイム",
     "redemptions": "引き換え",
+    "refresh": "更新",
     "register": "登録",
     "remove": "削除",
     "remove_item": "{{item}} を削除",
+    "search": "検索",
+    "search_for": "検索: ",
+    "search_placeholder": "検索...",
+    "searching": "検索中...",
+    "select_option": "オプションを選択...",
     "selected_count": "{{count}} 個選択",
     "settings": "設定",
     "status": "ステータス",
@@ -65,20 +79,40 @@
     "tokens": "トークン",
     "tools": "ツール",
     "topup": "チャージ",
+    "type_at_least_to_search": "検索するには {{count}} 文字以上入力してください",
     "username": "ユーザー名",
     "users": "ユーザー",
     "version": "バージョン",
     "welcome": "One APIへようこそ"
   },
+  "dev": {
+    "validation": {
+      "error": "エラー: {{message}}",
+      "errors_count": "エラー: {{count}}",
+      "failed_validation": "検証に失敗しました",
+      "passed": "合格",
+      "passed_count": "合格: {{count}}",
+      "run_tests": "テストを実行",
+      "running": "実行中...",
+      "running_tests": "検証テストを実行中... {{progress}}%",
+      "title": "レスポンシブ検証",
+      "total": "合計: {{count}}",
+      "unknown_error": "不明なエラー",
+      "validate": "検証",
+      "warnings_count": "警告: {{count}}"
+    }
+  },
   "footer": {
-    "copyright": "© {{year}} One API. All rights reserved."
+    "copyright": "© {{year}} One API. 無断転載を禁じます。"
   },
   "header": {
+    "account_menu_for": "{{name}} のアカウントメニュー",
     "confirm_logout": "ログアウトの確認",
     "log_out": "ログアウト",
     "logging_out": "ログアウト中...",
     "logout_description": "ログアウトしてもよろしいですか？ダッシュボードにアクセスするには再度ログインする必要があります。",
     "navigation": "ナビゲーション",
+    "open_navigation_menu": "ナビゲーションメニューを開く",
     "profile": "プロフィール",
     "signed_in_as": "ログイン中:"
   },
@@ -90,6 +124,16 @@
     "message": "ページが見つかりません",
     "redirecting": "{{seconds}} 秒後にホームへリダイレクトします...",
     "stay_here": "このページに留まる"
+  },
+  "notice": {
+    "dismiss": "通知を閉じる"
+  },
+  "notifications": {
+    "copy": "通知をコピー",
+    "copy_content": "通知内容をコピー",
+    "dismiss": "閉じる",
+    "dismiss_content": "通知を閉じる",
+    "region": "通知"
   },
   "passkey_prompt": {
     "dismiss": "閉じる",

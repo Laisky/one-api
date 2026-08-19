@@ -68,86 +68,116 @@ const OperationSetting = () => {
 
   const updateOption = async (key, value) => {
     setLoading(true);
-    if (key.endsWith("Enabled")) {
-      value = inputs[key] === "true" ? "false" : "true";
+    try {
+      if (key.endsWith("Enabled")) {
+        value = inputs[key] === "true" ? "false" : "true";
+      }
+      const res = await API.put("/api/option/", {
+        key,
+        value,
+      });
+      // The shared axios interceptor resolves to undefined on error; bail out before
+      // reading res.data so a failed request can't throw and leave `loading` stuck true,
+      // which would keep every settings button disabled until a page reload.
+      if (!res) return false;
+      const { success, message } = res.data;
+      if (success) {
+        setInputs((inputs) => ({ ...inputs, [key]: value }));
+      } else {
+        showError(message);
+      }
+      return success;
+    } finally {
+      setLoading(false);
     }
-    const res = await API.put("/api/option/", {
-      key,
-      value,
-    });
-    const { success, message } = res.data;
-    if (success) {
-      setInputs((inputs) => ({ ...inputs, [key]: value }));
-    } else {
-      showError(message);
-    }
-    setLoading(false);
   };
 
   const handleInputChange = async (event) => {
     let { name, value } = event.target;
 
     if (name.endsWith("Enabled")) {
-      await updateOption(name, value);
-      showSuccess("设置成功！");
+      const success = await updateOption(name, value);
+      if (success) {
+        showSuccess("设置成功！");
+      }
     } else {
       setInputs((inputs) => ({ ...inputs, [name]: value }));
     }
   };
 
   const submitConfig = async (group) => {
+    let allSucceeded = true;
     switch (group) {
       case "monitor":
         if (
           originInputs["ChannelDisableThreshold"] !==
           inputs.ChannelDisableThreshold
         ) {
-          await updateOption(
+          allSucceeded =
+            (await updateOption(
             "ChannelDisableThreshold",
             inputs.ChannelDisableThreshold
-          );
+          )) && allSucceeded;
         }
         if (
           originInputs["QuotaRemindThreshold"] !== inputs.QuotaRemindThreshold
         ) {
-          await updateOption(
+          allSucceeded =
+            (await updateOption(
             "QuotaRemindThreshold",
             inputs.QuotaRemindThreshold
-          );
+          )) && allSucceeded;
         }
         break;
 
       case "quota":
         if (originInputs["QuotaForNewUser"] !== inputs.QuotaForNewUser) {
-          await updateOption("QuotaForNewUser", inputs.QuotaForNewUser);
+          allSucceeded =
+            (await updateOption("QuotaForNewUser", inputs.QuotaForNewUser)) &&
+            allSucceeded;
         }
         if (originInputs["QuotaForInvitee"] !== inputs.QuotaForInvitee) {
-          await updateOption("QuotaForInvitee", inputs.QuotaForInvitee);
+          allSucceeded =
+            (await updateOption("QuotaForInvitee", inputs.QuotaForInvitee)) &&
+            allSucceeded;
         }
         if (originInputs["QuotaForInviter"] !== inputs.QuotaForInviter) {
-          await updateOption("QuotaForInviter", inputs.QuotaForInviter);
+          allSucceeded =
+            (await updateOption("QuotaForInviter", inputs.QuotaForInviter)) &&
+            allSucceeded;
         }
         if (originInputs["PreConsumedQuota"] !== inputs.PreConsumedQuota) {
-          await updateOption("PreConsumedQuota", inputs.PreConsumedQuota);
+          allSucceeded =
+            (await updateOption("PreConsumedQuota", inputs.PreConsumedQuota)) &&
+            allSucceeded;
         }
         break;
       case "general":
         if (originInputs["TopUpLink"] !== inputs.TopUpLink) {
-          await updateOption("TopUpLink", inputs.TopUpLink);
+          allSucceeded =
+            (await updateOption("TopUpLink", inputs.TopUpLink)) &&
+            allSucceeded;
         }
         if (originInputs["ChatLink"] !== inputs.ChatLink) {
-          await updateOption("ChatLink", inputs.ChatLink);
+          allSucceeded =
+            (await updateOption("ChatLink", inputs.ChatLink)) && allSucceeded;
         }
         if (originInputs["QuotaPerUnit"] !== inputs.QuotaPerUnit) {
-          await updateOption("QuotaPerUnit", inputs.QuotaPerUnit);
+          allSucceeded =
+            (await updateOption("QuotaPerUnit", inputs.QuotaPerUnit)) &&
+            allSucceeded;
         }
         if (originInputs["RetryTimes"] !== inputs.RetryTimes) {
-          await updateOption("RetryTimes", inputs.RetryTimes);
+          allSucceeded =
+            (await updateOption("RetryTimes", inputs.RetryTimes)) &&
+            allSucceeded;
         }
         break;
     }
 
-    showSuccess("保存成功！");
+    if (allSucceeded) {
+      showSuccess("保存成功！");
+    }
   };
 
   const deleteHistoryLogs = async () => {

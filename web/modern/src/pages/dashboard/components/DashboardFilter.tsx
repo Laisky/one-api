@@ -93,7 +93,7 @@ export function DashboardFilter({
               >
                 <option value="all">{t('dashboard.filters.all_users')}</option>
                 {userOptions.map((u) => (
-                  <option key={u.id} value={String(u.id)}>
+                  <option key={u.uuid || u.id} value={String(u.uuid || u.id)}>
                     {u.display_name || u.username}
                   </option>
                 ))}

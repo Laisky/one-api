@@ -5,6 +5,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { ListActionButton } from '@/components/ui/list-action-button';
+import { NameWithId } from '@/components/shared/NameWithId';
+import { useNotifications } from '@/components/ui/notifications';
 import { ResponsiveActionGroup } from '@/components/ui/responsive-action-group';
 import { ResponsivePageContainer } from '@/components/ui/responsive-container';
 import { SearchableDropdown } from '@/components/ui/searchable-dropdown';
@@ -22,7 +24,8 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import * as z from 'zod';
 
 interface RedemptionRow {
-  id: number;
+  id?: number;
+  uuid?: string;
   name: string;
   key: string;
   status: number;
@@ -30,10 +33,17 @@ interface RedemptionRow {
   quota: number;
 }
 
+const redemptionRef = (redemption: Pick<RedemptionRow, 'id' | 'uuid'>): string | number => redemption.uuid || redemption.id || '';
+
+const redemptionRefPayload = (ref: string | number): { id: number } | { uuid: string } => {
+  return typeof ref === 'string' ? { uuid: ref } : { id: ref };
+};
+
 export function RedemptionsPage() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { isMobile } = useResponsive();
+  const { notify } = useNotifications();
   const { t } = useTranslation();
   const tr = useCallback(
     (key: string, defaultValue: string, options?: Record<string, unknown>) => t(`redemptions.${key}`, { defaultValue, ...options }),
@@ -137,8 +147,17 @@ export function RedemptionsPage() {
   };
 
   const columns: ColumnDef<RedemptionRow>[] = [
-    { header: tr('columns.id', 'ID'), accessorKey: 'id' },
-    { header: tr('columns.name', 'Name'), accessorKey: 'name' },
+    {
+      header: tr('columns.name', 'Name'),
+      accessorKey: 'name',
+      cell: ({ row }) => (
+        <NameWithId
+          name={row.original.name}
+          refId={redemptionRef(row.original)}
+          idLabel={tr('columns.id', 'ID')}
+        />
+      ),
+    },
     { header: tr('columns.code', 'Code'), accessorKey: 'key' },
     {
       header: tr('columns.quota', 'Quota'),
@@ -164,17 +183,17 @@ export function RedemptionsPage() {
       header: tr('columns.actions', 'Actions'),
       cell: ({ row }) => (
         <ResponsiveActionGroup justify="start">
-          <ListActionButton variant="outline" size="sm" onClick={() => navigate(`/redemptions/edit/${row.original.id}`)}>
+          <ListActionButton variant="outline" size="sm" onClick={() => navigate(`/redemptions/edit/${redemptionRef(row.original)}`)}>
             {tr('actions.edit', 'Edit')}
           </ListActionButton>
           <ListActionButton
             variant="outline"
             size="sm"
-            onClick={() => manage(row.original.id, row.original.status === 1 ? 'disable' : 'enable', row.index)}
+            onClick={() => manage(redemptionRef(row.original), row.original.status === 1 ? 'disable' : 'enable', row.index)}
           >
             {row.original.status === 1 ? tr('actions.disable', 'Disable') : tr('actions.enable', 'Enable')}
           </ListActionButton>
-          <ListActionButton variant="destructive" size="sm" onClick={() => manage(row.original.id, 'delete', row.index)}>
+          <ListActionButton variant="destructive" size="sm" onClick={() => manage(redemptionRef(row.original), 'delete', row.index)}>
             {tr('actions.delete', 'Delete')}
           </ListActionButton>
         </ResponsiveActionGroup>
@@ -182,20 +201,37 @@ export function RedemptionsPage() {
     },
   ];
 
-  const manage = async (id: number, action: 'enable' | 'disable' | 'delete', idx: number) => {
-    let res: any;
-    if (action === 'delete') {
-      // Unified API call - complete URL with /api prefix
-      res = await api.delete(`/api/redemption/${id}`);
-    } else {
-      const body: any = { id, status: action === 'enable' ? 1 : 2 };
-      res = await api.put('/api/redemption/?status_only=true', body);
-    }
-    if (res.data?.success) {
+  const manage = async (id: string | number, action: 'enable' | 'disable' | 'delete', idx: number) => {
+    try {
+      let res: any;
+      if (action === 'delete') {
+        // Unified API call - complete URL with /api prefix
+        res = await api.delete(`/api/redemption/${id}`);
+      } else {
+        const body: any = { ...redemptionRefPayload(id), status: action === 'enable' ? 1 : 2 };
+        res = await api.put('/api/redemption/?status_only=true', body);
+      }
+      if (!res.data?.success) {
+        notify({
+          type: 'error',
+          title: tr('notifications.action_failed_title', 'Action failed'),
+          message: res.data?.message || tr('notifications.action_failed_message', 'Unable to apply change.'),
+        });
+        return;
+      }
       const next = [...data];
       if (action === 'delete') next.splice(idx, 1);
       else next[idx].status = action === 'enable' ? 1 : 2;
       setData(next);
+    } catch (error) {
+      notify({
+        type: 'error',
+        title: tr('notifications.action_failed_title', 'Action failed'),
+        message:
+          (error as any)?.response?.data?.message ||
+          (error as Error)?.message ||
+          tr('notifications.action_failed_message', 'Unable to apply change.'),
+      });
     }
   };
 
@@ -251,14 +287,14 @@ export function RedemptionsPage() {
           <div className={cn('flex gap-2 mb-3 flex-wrap', isMobile ? 'w-full flex-col' : 'items-center')}>
             <SearchableDropdown
               value={searchKeyword}
-              placeholder={tr('search.placeholder', 'Search redemptions by name...')}
+              placeholder={tr('search.placeholder', 'Search redemptions by name or UUID...')}
               searchPlaceholder={tr('search.dropdown_placeholder', 'Type redemption name...')}
               options={[]}
               searchEndpoint="/api/redemption/search"
               transformResponse={(data) =>
                 Array.isArray(data)
                   ? data.map((r: any) => ({
-                      key: String(r.id),
+                      key: String(r.uuid || r.id || ''),
                       value: r.name,
                       text: r.name,
                     }))

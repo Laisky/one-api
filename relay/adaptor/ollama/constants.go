@@ -1,27 +1,309 @@
 package ollama
 
 import (
-	"github.com/songquanpeng/one-api/relay/adaptor"
-	"github.com/songquanpeng/one-api/relay/billing/ratio"
+	"github.com/Laisky/one-api/relay/adaptor"
+	"github.com/Laisky/one-api/relay/billing/ratio"
 )
 
-// ModelRatios contains all supported models and their pricing ratios
-// Model list is derived from the keys of this map, eliminating redundancy
-// Ollama is typically free for local usage, but we set minimal pricing for consistency
+// Reusable metadata fragments for Ollama-served open-weight models. Ollama runs
+// locally and ships GGUF builds quantized to q4_K_M by default, which maps to
+// the OpenRouter "int4" precision label.
+//
+// Sources:
+//   - https://ollama.com/library
+//   - Per-model pages under https://ollama.com/library/<id>
+//   - Upstream HuggingFace cards linked from each Ollama README.
+var (
+	// ollamaTextModalities advertises the text-only modality used by every model
+	// currently enumerated in this adaptor.
+	ollamaTextModalities = []string{"text"}
+
+	// ollamaChatSamplingParams enumerates the OpenAI-compatible sampling parameters
+	// the Ollama HTTP /api/chat bridge accepts for typical chat models. Ollama
+	// additionally honors top_k and repetition_penalty (mapped to repeat_penalty
+	// upstream), which are not part of the strict OpenAI schema but are surfaced
+	// here so callers can rely on them.
+	ollamaChatSamplingParams = []string{
+		"temperature",
+		"top_p",
+		"top_k",
+		"max_tokens",
+		"stop",
+		"presence_penalty",
+		"frequency_penalty",
+		"repetition_penalty",
+		"seed",
+	}
+
+	// ollamaChatFeatures lists the standard tool/JSON capabilities advertised by
+	// Ollama tool-capable chat builds (Llama 3, Qwen 2+, etc.). Older base models
+	// (Llama 2, original Qwen) override this with a nil slice.
+	ollamaChatFeatures = []string{"tools", "json_mode"}
+)
+
+// ModelRatios contains a curated Ollama compatibility list.
+// Model list is derived from the keys of this map, eliminating redundancy.
+// Ollama's official search page now exposes a much broader local and cloud catalog, but this adaptor intentionally keeps a
+// small stable set until there is an explicit product decision to broaden the supported surface.
+//
+// Catalog snapshot verified 2026-05-19 against https://ollama.com/library:
+// the top-pull entries (llama3.1 114M, deepseek-r1 85M, llama3.2 69M, gemma3 36M,
+// qwen2.5 30M, qwen3 29M, mistral 29M, llama3 23M, gemma2 23M, phi3 17M,
+// qwen2.5-coder 15M, gpt-oss 9.7M) are surfaced as the canonical default-tag
+// aliases so callers can pull "llama3.1" / "qwen3" etc. without picking sizes.
+//
+// Pricing is symbolic (Ollama runs locally with no metered billing); the
+// non-zero ratios preserve the historical behavior of charging a tiny token
+// fee so usage still surfaces in dashboards.
 var ModelRatios = map[string]adaptor.ModelConfig{
 	// Ollama Models - typically free for local usage
-	"codellama:7b-instruct": {Ratio: 0.01 * ratio.MilliTokensUsd, CompletionRatio: 1},
-	"llama2:7b":             {Ratio: 0.01 * ratio.MilliTokensUsd, CompletionRatio: 1},
-	"llama2:latest":         {Ratio: 0.01 * ratio.MilliTokensUsd, CompletionRatio: 1},
-	"llama3:latest":         {Ratio: 0.01 * ratio.MilliTokensUsd, CompletionRatio: 1},
-	"phi3:latest":           {Ratio: 0.01 * ratio.MilliTokensUsd, CompletionRatio: 1},
-	"qwen:0.5b-chat":        {Ratio: 0.005 * ratio.MilliTokensUsd, CompletionRatio: 1},
-	"qwen:7b":               {Ratio: 0.01 * ratio.MilliTokensUsd, CompletionRatio: 1},
+	"codellama:7b-instruct": {
+		Ratio:                       0.01 * ratio.MilliTokensUsd,
+		CompletionRatio:             1,
+		ContextLength:               16384,
+		MaxOutputTokens:             16384,
+		InputModalities:             ollamaTextModalities,
+		OutputModalities:            ollamaTextModalities,
+		SupportedSamplingParameters: ollamaChatSamplingParams,
+		Quantization:                "int4",
+		HuggingFaceID:               "codellama/CodeLlama-7b-Instruct-hf",
+		Description:                 "Meta Code Llama 7B instruct, fine-tuned for code generation and discussion; 16K context, q4_K_M GGUF.",
+	},
+	"llama2:7b": {
+		Ratio:                       0.01 * ratio.MilliTokensUsd,
+		CompletionRatio:             1,
+		ContextLength:               4096,
+		MaxOutputTokens:             4096,
+		InputModalities:             ollamaTextModalities,
+		OutputModalities:            ollamaTextModalities,
+		SupportedSamplingParameters: ollamaChatSamplingParams,
+		Quantization:                "int4",
+		HuggingFaceID:               "meta-llama/Llama-2-7b-chat-hf",
+		Description:                 "Meta Llama 2 7B chat-tuned foundation model with 4K context; predates native tool calling.",
+	},
+	"llama2:latest": {
+		Ratio:                       0.01 * ratio.MilliTokensUsd,
+		CompletionRatio:             1,
+		ContextLength:               4096,
+		MaxOutputTokens:             4096,
+		InputModalities:             ollamaTextModalities,
+		OutputModalities:            ollamaTextModalities,
+		SupportedSamplingParameters: ollamaChatSamplingParams,
+		Quantization:                "int4",
+		HuggingFaceID:               "meta-llama/Llama-2-7b-chat-hf",
+		Description:                 "Alias for llama2:7b chat (Meta Llama 2 7B chat, 4K context).",
+	},
+	"llama3:latest": {
+		Ratio:                       0.01 * ratio.MilliTokensUsd,
+		CompletionRatio:             1,
+		ContextLength:               8192,
+		MaxOutputTokens:             8192,
+		InputModalities:             ollamaTextModalities,
+		OutputModalities:            ollamaTextModalities,
+		SupportedFeatures:           ollamaChatFeatures,
+		SupportedSamplingParameters: ollamaChatSamplingParams,
+		Quantization:                "int4",
+		HuggingFaceID:               "meta-llama/Meta-Llama-3-8B-Instruct",
+		Description:                 "Meta Llama 3 8B Instruct chat model with 8K context; Ollama default tag points at the 8B build.",
+	},
+	"phi3:latest": {
+		Ratio:                       0.01 * ratio.MilliTokensUsd,
+		CompletionRatio:             1,
+		ContextLength:               131072,
+		MaxOutputTokens:             4096,
+		InputModalities:             ollamaTextModalities,
+		OutputModalities:            ollamaTextModalities,
+		SupportedSamplingParameters: ollamaChatSamplingParams,
+		Quantization:                "int4",
+		HuggingFaceID:               "microsoft/Phi-3-mini-128k-instruct",
+		Description:                 "Microsoft Phi-3 Mini 3.8B instruct, lightweight reasoning-focused open model with 128K context.",
+	},
+	"qwen:0.5b-chat": {
+		Ratio:                       0.005 * ratio.MilliTokensUsd,
+		CompletionRatio:             1,
+		ContextLength:               32768,
+		MaxOutputTokens:             8192,
+		InputModalities:             ollamaTextModalities,
+		OutputModalities:            ollamaTextModalities,
+		SupportedSamplingParameters: ollamaChatSamplingParams,
+		Quantization:                "int4",
+		HuggingFaceID:               "Qwen/Qwen1.5-0.5B-Chat",
+		Description:                 "Alibaba Qwen 1.5 0.5B chat-tuned model; ultra-compact 32K-context build for low-resource hosts.",
+	},
+	"qwen:7b": {
+		Ratio:                       0.01 * ratio.MilliTokensUsd,
+		CompletionRatio:             1,
+		ContextLength:               32768,
+		MaxOutputTokens:             8192,
+		InputModalities:             ollamaTextModalities,
+		OutputModalities:            ollamaTextModalities,
+		SupportedSamplingParameters: ollamaChatSamplingParams,
+		Quantization:                "int4",
+		HuggingFaceID:               "Qwen/Qwen-7B-Chat",
+		Description:                 "Alibaba Qwen 7B chat foundation model with 32K context; original Qwen lineage (pre-Qwen 1.5).",
+	},
+	"llama3.1:latest": {
+		Ratio:                       0.01 * ratio.MilliTokensUsd,
+		CompletionRatio:             1,
+		ContextLength:               131072,
+		MaxOutputTokens:             8192,
+		InputModalities:             ollamaTextModalities,
+		OutputModalities:            ollamaTextModalities,
+		SupportedFeatures:           ollamaChatFeatures,
+		SupportedSamplingParameters: ollamaChatSamplingParams,
+		Quantization:                "int4",
+		HuggingFaceID:               "meta-llama/Meta-Llama-3.1-8B-Instruct",
+		Description:                 "Meta Llama 3.1 default tag (8B Instruct) with 128K context and native tool calling.",
+	},
+	"llama3.2:latest": {
+		Ratio:                       0.01 * ratio.MilliTokensUsd,
+		CompletionRatio:             1,
+		ContextLength:               131072,
+		MaxOutputTokens:             8192,
+		InputModalities:             ollamaTextModalities,
+		OutputModalities:            ollamaTextModalities,
+		SupportedFeatures:           ollamaChatFeatures,
+		SupportedSamplingParameters: ollamaChatSamplingParams,
+		Quantization:                "int4",
+		HuggingFaceID:               "meta-llama/Llama-3.2-3B-Instruct",
+		Description:                 "Meta Llama 3.2 default tag (3B Instruct) with 128K context, tool calling, and agentic retrieval focus.",
+	},
+	"llama3.3:latest": {
+		Ratio:                       0.01 * ratio.MilliTokensUsd,
+		CompletionRatio:             1,
+		ContextLength:               131072,
+		MaxOutputTokens:             8192,
+		InputModalities:             ollamaTextModalities,
+		OutputModalities:            ollamaTextModalities,
+		SupportedFeatures:           ollamaChatFeatures,
+		SupportedSamplingParameters: ollamaChatSamplingParams,
+		Quantization:                "int4",
+		HuggingFaceID:               "meta-llama/Llama-3.3-70B-Instruct",
+		Description:                 "Meta Llama 3.3 70B Instruct frontier dense chat model with 128K context and tool calling.",
+	},
+	"deepseek-r1:latest": {
+		Ratio:                       0.01 * ratio.MilliTokensUsd,
+		CompletionRatio:             1,
+		ContextLength:               131072,
+		MaxOutputTokens:             32768,
+		InputModalities:             ollamaTextModalities,
+		OutputModalities:            ollamaTextModalities,
+		SupportedFeatures:           []string{"tools", "json_mode", "reasoning"},
+		SupportedSamplingParameters: ollamaChatSamplingParams,
+		SupportedReasoningEfforts:   []string{"low", "medium", "high"},
+		DefaultReasoningEffort:      "medium",
+		Quantization:                "int4",
+		HuggingFaceID:               "deepseek-ai/DeepSeek-R1-0528-Qwen3-8B",
+		Description:                 "DeepSeek R1 default tag (8B distill, DeepSeek-R1-0528-Qwen3-8B); open reasoning model family with thinking traces, tool support, and 128K context.",
+	},
+	"gemma3:latest": {
+		Ratio:                       0.01 * ratio.MilliTokensUsd,
+		CompletionRatio:             1,
+		ContextLength:               131072,
+		MaxOutputTokens:             8192,
+		InputModalities:             []string{"text", "image"},
+		OutputModalities:            ollamaTextModalities,
+		SupportedSamplingParameters: ollamaChatSamplingParams,
+		Quantization:                "int4",
+		HuggingFaceID:               "google/gemma-3-4b-it",
+		Description:                 "Google Gemma 3 default tag (4B Instruct) multimodal chat model with 128K context.",
+	},
+	"gemma2:latest": {
+		Ratio:                       0.01 * ratio.MilliTokensUsd,
+		CompletionRatio:             1,
+		ContextLength:               8192,
+		MaxOutputTokens:             8192,
+		InputModalities:             ollamaTextModalities,
+		OutputModalities:            ollamaTextModalities,
+		SupportedSamplingParameters: ollamaChatSamplingParams,
+		Quantization:                "int4",
+		HuggingFaceID:               "google/gemma-2-9b-it",
+		Description:                 "Google Gemma 2 default tag (9B Instruct) text-only chat model with 8K context.",
+	},
+	"qwen2.5:latest": {
+		Ratio:                       0.01 * ratio.MilliTokensUsd,
+		CompletionRatio:             1,
+		ContextLength:               32768,
+		MaxOutputTokens:             8192,
+		InputModalities:             ollamaTextModalities,
+		OutputModalities:            ollamaTextModalities,
+		SupportedFeatures:           ollamaChatFeatures,
+		SupportedSamplingParameters: ollamaChatSamplingParams,
+		Quantization:                "int4",
+		HuggingFaceID:               "Qwen/Qwen2.5-7B-Instruct",
+		Description:                 "Alibaba Qwen 2.5 default tag (7B Instruct) with 32K context and tool calling.",
+	},
+	"qwen2.5-coder:latest": {
+		Ratio:                       0.01 * ratio.MilliTokensUsd,
+		CompletionRatio:             1,
+		ContextLength:               32768,
+		MaxOutputTokens:             8192,
+		InputModalities:             ollamaTextModalities,
+		OutputModalities:            ollamaTextModalities,
+		SupportedFeatures:           ollamaChatFeatures,
+		SupportedSamplingParameters: ollamaChatSamplingParams,
+		Quantization:                "int4",
+		HuggingFaceID:               "Qwen/Qwen2.5-Coder-7B-Instruct",
+		Description:                 "Alibaba Qwen 2.5 Coder default tag (7B Instruct); code-specific chat/completion model with 32K context.",
+	},
+	"qwen3:latest": {
+		Ratio:                       0.01 * ratio.MilliTokensUsd,
+		CompletionRatio:             1,
+		ContextLength:               40960,
+		MaxOutputTokens:             16384,
+		InputModalities:             ollamaTextModalities,
+		OutputModalities:            ollamaTextModalities,
+		SupportedFeatures:           []string{"tools", "json_mode", "reasoning"},
+		SupportedSamplingParameters: ollamaChatSamplingParams,
+		SupportedReasoningEfforts:   []string{"low", "medium", "high"},
+		DefaultReasoningEffort:      "medium",
+		Quantization:                "int4",
+		HuggingFaceID:               "Qwen/Qwen3-8B",
+		Description:                 "Alibaba Qwen3 default tag (8B); dense reasoning + chat model with thinking-mode toggle and 40K context.",
+	},
+	"mistral:latest": {
+		Ratio:                       0.01 * ratio.MilliTokensUsd,
+		CompletionRatio:             1,
+		ContextLength:               32768,
+		MaxOutputTokens:             8192,
+		InputModalities:             ollamaTextModalities,
+		OutputModalities:            ollamaTextModalities,
+		SupportedFeatures:           ollamaChatFeatures,
+		SupportedSamplingParameters: ollamaChatSamplingParams,
+		Quantization:                "int4",
+		HuggingFaceID:               "mistralai/Mistral-7B-Instruct-v0.3",
+		Description:                 "Mistral default tag (7B Instruct v0.3) chat model with 32K context and tool calling.",
+	},
+	"gpt-oss:latest": {
+		Ratio:                       0.01 * ratio.MilliTokensUsd,
+		CompletionRatio:             1,
+		ContextLength:               131072,
+		MaxOutputTokens:             32768,
+		InputModalities:             ollamaTextModalities,
+		OutputModalities:            ollamaTextModalities,
+		SupportedFeatures:           []string{"tools", "reasoning"},
+		SupportedSamplingParameters: ollamaChatSamplingParams,
+		SupportedReasoningEfforts:   []string{"low", "medium", "high"},
+		DefaultReasoningEffort:      "medium",
+		Quantization:                "int4",
+		HuggingFaceID:               "openai/gpt-oss-20b",
+		Description:                 "OpenAI gpt-oss default tag (20B); open-weight reasoning model with thinking mode, tool calling, and 128K context.",
+	},
+	"nomic-embed-text:latest": {
+		Ratio:            0.005 * ratio.MilliTokensUsd,
+		CompletionRatio:  1,
+		ContextLength:    8192,
+		InputModalities:  ollamaTextModalities,
+		OutputModalities: ollamaTextModalities,
+		Quantization:     "int4",
+		HuggingFaceID:    "nomic-ai/nomic-embed-text-v1.5",
+		Description:      "Nomic AI nomic-embed-text v1.5 high-performing open embedding model with 8K context.",
+	},
 }
 
 // ModelList derived from ModelRatios for backward compatibility
 var ModelList = adaptor.GetModelListFromPricing(ModelRatios)
 
-// OllamaToolingDefaults notes that Ollama runs locally and publishes no tool pricing (retrieved 2025-11-12).
-// Source: https://r.jina.ai/https://ollama.com/
+// OllamaToolingDefaults notes that Ollama runs locally and publishes no tool pricing (retrieved 2026-04-28).
+// Source: https://ollama.com/search
 var OllamaToolingDefaults = adaptor.ChannelToolConfig{}

@@ -4,8 +4,8 @@ import (
 	"github.com/gin-contrib/gzip"
 	"github.com/gin-gonic/gin"
 
-	"github.com/songquanpeng/one-api/controller"
-	"github.com/songquanpeng/one-api/middleware"
+	"github.com/Laisky/one-api/controller"
+	"github.com/Laisky/one-api/middleware"
 )
 
 func SetDashboardRouter(router *gin.Engine) {

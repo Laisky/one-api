@@ -6,10 +6,10 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/songquanpeng/one-api/common/config"
-	"github.com/songquanpeng/one-api/relay"
-	"github.com/songquanpeng/one-api/relay/channeltype"
-	relaymodel "github.com/songquanpeng/one-api/relay/model"
+	"github.com/Laisky/one-api/common/config"
+	"github.com/Laisky/one-api/relay"
+	"github.com/Laisky/one-api/relay/channeltype"
+	relaymodel "github.com/Laisky/one-api/relay/model"
 )
 
 // Helper function to get model ratio using the new two-layer approach

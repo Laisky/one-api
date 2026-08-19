@@ -55,6 +55,20 @@ type OtelRecorder struct {
 	// Model metrics
 	modelUsageDuration metric.Float64Histogram
 
+	// External UUID backfill metrics
+	uuidBackfillRowsTotal      metric.Int64Counter
+	uuidBackfillLastBacklog    metric.Float64Gauge
+	uuidBackfillCycleDuration  metric.Float64Histogram
+	uuidBackfillFinalizerTotal metric.Int64Counter
+
+	// Compact UUID storage metrics
+	compactUUIDState                metric.Int64Gauge
+	compactUUIDBacklogRows          metric.Float64Gauge
+	compactUUIDActionsTotal         metric.Int64Counter
+	compactUUIDLookupFallbackTotal  metric.Int64Counter
+	compactUUIDLastProgressUnixtime metric.Float64Gauge
+	compactUUIDDuration             metric.Float64Histogram
+
 	// Site-wide statistics (Dashboard)
 	siteTotalQuota  metric.Int64Gauge
 	siteUsedQuota   metric.Int64Gauge
@@ -152,6 +166,56 @@ func NewOtelRecorder() (*OtelRecorder, error) {
 		return nil, errors.Wrap(err, "create model usage duration histogram")
 	}
 
+	// External UUID backfill metrics
+	//
+	// NOTE: these instruments intentionally use the "oneapi_" prefix rather
+	// than the "one_api_" prefix used by the other instruments here, because
+	// the names are specified literally by the incremental UUID backfill
+	// proposal (§6.9).
+	if r.uuidBackfillRowsTotal, err = meter.Int64Counter("oneapi_uuid_backfill_rows_total", metric.WithDescription("Total rows processed by the external UUID backfill")); err != nil {
+		return nil, errors.Wrap(err, "create uuid backfill rows total counter")
+	}
+	if r.uuidBackfillLastBacklog, err = meter.Float64Gauge("oneapi_uuid_backfill_last_backlog", metric.WithDescription("Last observed external UUID backfill backlog per target")); err != nil {
+		return nil, errors.Wrap(err, "create uuid backfill last backlog gauge")
+	}
+	if r.uuidBackfillCycleDuration, err = meter.Float64Histogram("oneapi_uuid_backfill_cycle_duration_seconds", metric.WithDescription("Duration of external UUID backfill cycles in seconds")); err != nil {
+		return nil, errors.Wrap(err, "create uuid backfill cycle duration histogram")
+	}
+	if r.uuidBackfillFinalizerTotal, err = meter.Int64Counter("oneapi_uuid_backfill_finalizer_total", metric.WithDescription("Total external UUID backfill finalizer attempts by result")); err != nil {
+		return nil, errors.Wrap(err, "create uuid backfill finalizer total counter")
+	}
+
+	// Compact UUID storage metrics
+	//
+	// NOTE: like the backfill instruments above, these intentionally use the
+	// "oneapi_" prefix rather than the "one_api_" prefix used by the other
+	// instruments here, because the names are specified literally by the
+	// compact UUID storage proposal (§11).
+	if r.compactUUIDState, err = meter.Int64Gauge("oneapi_compact_uuid_state", metric.WithDescription("Compact UUID storage state (1=current state for the role, 0=otherwise)")); err != nil {
+		return nil, errors.Wrap(err, "create compact uuid state gauge")
+	}
+	if r.compactUUIDBacklogRows, err = meter.Float64Gauge("oneapi_compact_uuid_backlog_rows", metric.WithDescription("Last bounded compact UUID gap/mismatch/blocker observation, not a claimed global total")); err != nil {
+		return nil, errors.Wrap(err, "create compact uuid backlog rows gauge")
+	}
+	if r.compactUUIDActionsTotal, err = meter.Int64Counter("oneapi_compact_uuid_actions_total", metric.WithDescription("Total compact UUID DDL, fill, validation, marker, audit, and repair outcomes")); err != nil {
+		return nil, errors.Wrap(err, "create compact uuid actions total counter")
+	}
+	if r.compactUUIDLookupFallbackTotal, err = meter.Int64Counter("oneapi_compact_uuid_lookup_fallback_total", metric.WithDescription("Total compact UUID lookup fallbacks by reason")); err != nil {
+		return nil, errors.Wrap(err, "create compact uuid lookup fallback total counter")
+	}
+	if r.compactUUIDLastProgressUnixtime, err = meter.Float64Gauge("oneapi_compact_uuid_last_progress_unixtime", metric.WithDescription("UTC unix timestamp of the last durable compact UUID progress")); err != nil {
+		return nil, errors.Wrap(err, "create compact uuid last progress gauge")
+	}
+	// Explicit boundaries mirror the Prometheus recorder: they span sub-second
+	// lock waits through multi-hour DDL and validation work, which the default
+	// SDK boundaries do not resolve at either end.
+	if r.compactUUIDDuration, err = meter.Float64Histogram("oneapi_compact_uuid_duration_seconds",
+		metric.WithDescription("Duration of compact UUID lock, DDL, fill, validation, and audit operations in seconds"),
+		metric.WithExplicitBucketBoundaries(.005, .025, .1, .5, 1, 5, 15, 60, 300, 900, 1800, 3600, 7200, 14400),
+	); err != nil {
+		return nil, errors.Wrap(err, "create compact uuid duration histogram")
+	}
+
 	// Site-wide statistics (Dashboard)
 	if r.siteTotalQuota, err = meter.Int64Gauge("one_api_site_total_quota", metric.WithDescription("Total quota across all users")); err != nil {
 		return nil, errors.Wrap(err, "create site total quota gauge")
@@ -199,13 +263,21 @@ func (r *OtelRecorder) RecordRelayRequest(startTime time.Time, channelId int, ch
 	channelIdStr := strconv.Itoa(channelId)
 	successStr := strconv.FormatBool(success)
 
+	// NOTE: user_id and token_id are intentionally NOT attached here.
+	// With cumulative temporality, every distinct attribute combination creates
+	// a permanent aggregator that is never freed. Adding the unbounded
+	// (user_id x token_id) cardinality caused unbounded heap growth in the
+	// metrics SDK. Per-user/per-token detail already lives in logs and the
+	// billing tables, so dropping these labels here is safe. The userId/tokenId
+	// parameters are kept in the signature for caller stability and potential
+	// logging use.
+	_ = userId
+	_ = tokenId
 	attrs := []attribute.KeyValue{
 		attribute.String("channel_id", channelIdStr),
 		attribute.String("channel_type", channelType),
 		attribute.String("model", model),
-		attribute.String("user_id", userId),
 		attribute.String("group", group),
-		attribute.String("token_id", tokenId),
 		attribute.String("api_format", apiFormat),
 		attribute.String("api_type", apiType),
 		attribute.String("success", successStr),
@@ -257,9 +329,17 @@ func (r *OtelRecorder) UpdateChannelRequestsInFlight(channelId int, channelName,
 // RecordUserMetrics records user-specific metrics
 func (r *OtelRecorder) RecordUserMetrics(userId, username, group string, quotaUsed float64, promptTokens, completionTokens int, balance float64) {
 	ctx := context.Background()
+
+	// NOTE: user_id and username are intentionally NOT attached here.
+	// With cumulative temporality, every distinct attribute combination creates
+	// a permanent aggregator that is never freed. Adding the unbounded
+	// (user_id x username) cardinality caused unbounded heap growth in the
+	// metrics SDK. Per-user detail already lives in the DB and logs, so dropping
+	// these labels here is safe. The userId/username parameters are kept in the
+	// signature for caller stability and potential logging use.
+	_ = userId
+	_ = username
 	attrs := []attribute.KeyValue{
-		attribute.String("user_id", userId),
-		attribute.String("username", username),
 		attribute.String("group", group),
 	}
 
@@ -275,7 +355,13 @@ func (r *OtelRecorder) RecordUserMetrics(userId, username, group string, quotaUs
 		completionAttrs := append(attrs, attribute.String("token_type", "completion"))
 		r.userTokensUsed.Add(ctx, int64(completionTokens), metric.WithAttributes(completionAttrs...))
 	}
-	r.userBalance.Record(ctx, balance, metric.WithAttributes(attrs...))
+	// NOTE: per-user balance is intentionally NOT exported as a metric. Once
+	// user_id/username are dropped a per-group gauge would be last-write-wins
+	// across all users in the group, which is misleading. Per-user balance lives
+	// in the DB, and site-wide quota is already covered by the one_api_site_*
+	// gauges. The userBalance instrument declaration is kept to avoid rippling
+	// changes, but it is no longer fed per-user values.
+	_ = balance
 }
 
 // RecordDBQuery records database query metrics
@@ -371,6 +457,64 @@ func (r *OtelRecorder) RecordBillingError(errorType, operation string, userId in
 // UpdateBillingStats updates billing statistics
 func (r *OtelRecorder) UpdateBillingStats(totalBillingOperations, successfulBillingOperations, failedBillingOperations int64) {
 }
+
+// RecordUUIDBackfillRows records rows processed by one external UUID backfill batch.
+//
+// role, phase, target, and result must be compile-time registry constants; they
+// become metric attributes and must never carry an ID, UUID, DSN, or error
+// message.
+func (r *OtelRecorder) RecordUUIDBackfillRows(role, phase, target, result string, count int) {
+	if count <= 0 {
+		return
+	}
+	ctx := context.Background()
+	attrs := []attribute.KeyValue{
+		attribute.String("role", role),
+		attribute.String("phase", phase),
+		attribute.String("target", target),
+		attribute.String("result", result),
+	}
+	r.uuidBackfillRowsTotal.Add(ctx, int64(count), metric.WithAttributes(attrs...))
+}
+
+// UpdateUUIDBackfillBacklog publishes the last observed backlog for one target.
+//
+// role and target must be compile-time registry constants.
+func (r *OtelRecorder) UpdateUUIDBackfillBacklog(role, target string, backlog float64) {
+	ctx := context.Background()
+	attrs := []attribute.KeyValue{
+		attribute.String("role", role),
+		attribute.String("target", target),
+	}
+	r.uuidBackfillLastBacklog.Record(ctx, backlog, metric.WithAttributes(attrs...))
+}
+
+// RecordUUIDBackfillCycle records one catch-up or finalizer cycle outcome and duration.
+//
+// role, mode, and result must be compile-time registry constants.
+func (r *OtelRecorder) RecordUUIDBackfillCycle(role, mode, result string, duration time.Duration) {
+	ctx := context.Background()
+	attrs := []attribute.KeyValue{
+		attribute.String("role", role),
+		attribute.String("mode", mode),
+		attribute.String("result", result),
+	}
+	r.uuidBackfillCycleDuration.Record(ctx, duration.Seconds(), metric.WithAttributes(attrs...))
+}
+
+// RecordUUIDBackfillFinalizer records one finalizer attempt result for a database role.
+//
+// role and result must be compile-time registry constants.
+func (r *OtelRecorder) RecordUUIDBackfillFinalizer(role, result string) {
+	ctx := context.Background()
+	attrs := []attribute.KeyValue{
+		attribute.String("role", role),
+		attribute.String("result", result),
+	}
+	r.uuidBackfillFinalizerTotal.Add(ctx, 1, metric.WithAttributes(attrs...))
+}
+
+// Compact UUID storage metrics are recorded in recorder_compact_uuid.go.
 
 // InitSystemMetrics initializes system metrics
 func (r *OtelRecorder) InitSystemMetrics(version, buildTime, goVersion string, startTime time.Time) {

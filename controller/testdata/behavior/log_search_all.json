@@ -1,0 +1,63 @@
+{
+  "case": "log/search_all",
+  "site": "L4 SearchAllLogs",
+  "status": 200,
+  "body": {
+    "data": [
+      {
+        "cached_prompt_tokens": 0,
+        "channel_name": "behaviordiff-channel",
+        "channel_uuid": "<channel-uuid>",
+        "completion_tokens": 1403,
+        "content": "behaviordiff topup log",
+        "created_at": 1720000007,
+        "elapsed_time": 1404,
+        "is_stream": false,
+        "model_name": "gpt-3.5-turbo",
+        "origin_model_name": "gpt-3.5-turbo",
+        "prompt_tokens": 1402,
+        "quota": 1401,
+        "request_id": "behaviordiff-other-log-request",
+        "system_prompt_reset": false,
+        "token_name": "behaviordiff-other-token",
+        "token_uuid": "<other-token-uuid>",
+        "trace_id": "behaviordiff-other-log-trace",
+        "type": 1,
+        "updated_at": 1730000000222,
+        "user_uuid": "<other-user-uuid>",
+        "username": "behaviordiff-other",
+        "uuid": "<other-log-uuid>"
+      },
+      {
+        "cached_prompt_tokens": 1305,
+        "channel_name": "behaviordiff-channel",
+        "channel_uuid": "<channel-uuid>",
+        "completion_tokens": 1303,
+        "content": "behaviordiff consume log",
+        "created_at": 1720000007,
+        "elapsed_time": 1304,
+        "is_stream": true,
+        "metadata": {
+          "cache_write_tokens": 7
+        },
+        "model_name": "gpt-4o",
+        "origin_model_name": "gpt-4o-alias",
+        "prompt_tokens": 1302,
+        "quota": 1301,
+        "request_id": "behaviordiff-log-request",
+        "system_prompt_reset": true,
+        "token_name": "behaviordiff-token",
+        "token_uuid": "<token-uuid>",
+        "trace_id": "behaviordiff-log-trace",
+        "type": 2,
+        "updated_at": 1730000000222,
+        "user_uuid": "<user-uuid>",
+        "username": "behaviordiff-user",
+        "uuid": "<log-uuid>"
+      }
+    ],
+    "message": "",
+    "success": true,
+    "total": 2
+  }
+}

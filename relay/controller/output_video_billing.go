@@ -7,12 +7,12 @@ import (
 	"github.com/Laisky/zap"
 	"github.com/gin-gonic/gin"
 
-	"github.com/songquanpeng/one-api/common/ctxkey"
-	"github.com/songquanpeng/one-api/relay/adaptor"
-	"github.com/songquanpeng/one-api/relay/billing/ratio"
-	metalib "github.com/songquanpeng/one-api/relay/meta"
-	relaymodel "github.com/songquanpeng/one-api/relay/model"
-	"github.com/songquanpeng/one-api/relay/pricing"
+	"github.com/Laisky/one-api/common/ctxkey"
+	"github.com/Laisky/one-api/relay/adaptor"
+	"github.com/Laisky/one-api/relay/billing/ratio"
+	metalib "github.com/Laisky/one-api/relay/meta"
+	relaymodel "github.com/Laisky/one-api/relay/model"
+	"github.com/Laisky/one-api/relay/pricing"
 )
 
 // getOutputVideoSeconds reads the output video duration from Gin context.
@@ -88,14 +88,17 @@ func applyOutputVideoCharges(c *gin.Context, usagePtr **relaymodel.Usage, meta *
 		*usagePtr = usage
 	}
 
-	var channelVideoOverride *adaptor.VideoPricingConfig
-	if billingCtx.ChannelModelConfigs != nil {
-		if cfg, ok := billingCtx.ChannelModelConfigs[billingCtx.ModelName]; ok && cfg.Video != nil {
-			channelVideoOverride = convertVideoLocalToAdaptor(cfg.Video)
+	var videoPricing *adaptor.VideoPricingConfig
+	if cfg, ok := pricing.ResolveModelConfig(billingCtx.ModelName, billingCtx.ChannelModelConfigs, billingCtx.PricingAdaptor, billingCtx.RequestTime); ok {
+		if cfg.Video != nil && cfg.Video.HasData() {
+			videoPricing = cfg.Video
 		}
 	}
-
-	videoPricing := pricing.GetVideoPricingWithThreeLayers(billingCtx.ModelName, channelVideoOverride, billingCtx.PricingAdaptor)
+	if videoPricing == nil {
+		if cfg, ok := pricing.ResolveModelConfig(billingCtx.ModelName, nil, billingCtx.PricingAdaptor, billingCtx.RequestTime); ok && cfg.Video != nil && cfg.Video.HasData() {
+			videoPricing = cfg.Video
+		}
+	}
 	if videoPricing == nil || videoPricing.PerSecondUsd <= 0 {
 		if billingCtx.Logger != nil {
 			billingCtx.Logger.Debug("output video billing skipped due to missing pricing metadata",

@@ -11,6 +11,8 @@ import * as React from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 
+const INTERACTIVE_ROW_TARGET_SELECTOR = ['button', 'a[href]', 'input', 'select', 'textarea', '[role="button"]', '[role="link"]'].join(', ');
+
 export interface EnhancedDataTableProps<TData, TValue> {
   columns: ColumnDef<TData, TValue>[];
   data: TData[];
@@ -99,9 +101,44 @@ export function EnhancedDataTable<TData, TValue>({
   const [floatingPos, setFloatingPos] = React.useState<{ top: number; left: number } | null>(null);
   const hoverTimeoutRef = React.useRef<NodeJS.Timeout>();
 
+  const clearFloatingActions = () => {
+    setHoveredRowData(null);
+    setFloatingPos(null);
+  };
+
+  const shouldIgnoreFloatingActions = (target: EventTarget | null) =>
+    target instanceof Element && Boolean(target.closest(INTERACTIVE_ROW_TARGET_SELECTOR));
+
   const handleRowMouseEnter = (event: React.MouseEvent<HTMLTableRowElement>, row: TData) => {
     if (!floatingRowActions) return;
     if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
+
+    if (shouldIgnoreFloatingActions(event.target)) {
+      clearFloatingActions();
+      return;
+    }
+
+    setFloatingPos({
+      top: event.clientY,
+      left: event.clientX + 16,
+    });
+    setHoveredRowData(row);
+  };
+
+  const handleRowMouseMove = (event: React.MouseEvent<HTMLTableRowElement>, row: TData) => {
+    if (!floatingRowActions) return;
+    if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
+
+    if (shouldIgnoreFloatingActions(event.target)) {
+      if (hoveredRowData !== null || floatingPos !== null) {
+        clearFloatingActions();
+      }
+      return;
+    }
+
+    if (hoveredRowData === row && floatingPos !== null) {
+      return;
+    }
 
     setFloatingPos({
       top: event.clientY,
@@ -113,8 +150,7 @@ export function EnhancedDataTable<TData, TValue>({
   const handleRowMouseLeave = () => {
     if (!floatingRowActions) return;
     hoverTimeoutRef.current = setTimeout(() => {
-      setHoveredRowData(null);
-      setFloatingPos(null);
+      clearFloatingActions();
     }, 100);
   };
 
@@ -124,8 +160,7 @@ export function EnhancedDataTable<TData, TValue>({
 
   const handleFloatingMouseLeave = () => {
     hoverTimeoutRef.current = setTimeout(() => {
-      setHoveredRowData(null);
-      setFloatingPos(null);
+      clearFloatingActions();
     }, 100);
   };
 
@@ -226,6 +261,9 @@ export function EnhancedDataTable<TData, TValue>({
                     placeholder={effectiveSearchPlaceholder}
                     searchPlaceholder={effectiveSearchPlaceholder}
                     options={searchOptions}
+                    // The page owns the search (onSearchChange feeds searchOptions),
+                    // so the dropdown must render those results verbatim.
+                    remoteFiltered
                     onSearchChange={onSearchChange}
                     onChange={onSearchValueChange}
                     onSelect={onSearchSelect}
@@ -353,6 +391,7 @@ export function EnhancedDataTable<TData, TValue>({
                         className={cn('hover:bg-muted/50 transition-colors', onRowClick && 'cursor-pointer')}
                         onClick={() => onRowClick?.(row.original)}
                         onMouseEnter={(e) => handleRowMouseEnter(e, row.original)}
+                        onMouseMove={(e) => handleRowMouseMove(e, row.original)}
                         onMouseLeave={handleRowMouseLeave}
                       >
                         {row.getVisibleCells().map((cell) => {

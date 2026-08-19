@@ -4,6 +4,7 @@ import { TableRow, TableCell } from '@mui/material';
 
 import { timestamp2string, renderQuota } from 'utils/common';
 import Label from 'ui-component/Label';
+import ResourceRefTooltip from 'ui-component/ResourceRefTooltip';
 import LogType from '../type/LogType';
 
 function renderType(type) {
@@ -35,23 +36,27 @@ export default function LogTableRow({ item, userIsAdmin, onRowClick }) {
       <TableRow
         tabIndex={item.id}
         sx={{ cursor: 'pointer', '&:hover': { backgroundColor: 'action.hover' } }}
-        onClick={() => onRowClick && onRowClick(item.id)}
+        onClick={() => onRowClick && onRowClick(item.uuid || item.id)}
       >
         <TableCell data-label="时间" title={fullTimestamp}>{compactTimestamp}</TableCell>
 
         {userIsAdmin && <TableCell data-label="渠道">{item.channel || ''}</TableCell>}
         {userIsAdmin && (
           <TableCell data-label="用户">
-            <Label color="default" variant="outlined">
-              {item.username}
-            </Label>
+            <ResourceRefTooltip refId={item.user_uuid || item.user_id} label="用户 ID">
+              <Label color="default" variant="outlined">
+                {item.username}
+              </Label>
+            </ResourceRefTooltip>
           </TableCell>
         )}
         <TableCell data-label="令牌">
           {item.token_name && (
-            <Label color="default" variant="soft">
-              {item.token_name}
-            </Label>
+            <ResourceRefTooltip refId={item.token_uuid} label="令牌 ID">
+              <Label color="default" variant="soft">
+                {item.token_name}
+              </Label>
+            </ResourceRefTooltip>
           )}
         </TableCell>
         <TableCell data-label="类型">{renderType(item.type)}</TableCell>

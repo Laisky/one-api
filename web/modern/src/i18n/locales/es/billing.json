@@ -1,5 +1,25 @@
 {
   "topup": {
+    "amount": {
+      "amount_label": "Cantidad",
+      "amount_placeholder": "Introduce una cantidad",
+      "calculate_button": "Calcular",
+      "calculate_first_message": "Por favor, calcula la cantidad antes de recargar.",
+      "calculate_first_title": "Calcula primero",
+      "calculated_message": "Pagarás: {{value}}",
+      "calculated_title": "Cantidad calculada",
+      "calculating": "Calculando...",
+      "code_label": "Código de recarga (opcional)",
+      "code_placeholder": "Introduce el código de recarga",
+      "description": "Introduce la cantidad deseada y un código opcional para previsualizar el total a pagar.",
+      "failed_message": "No se pudo calcular la cantidad",
+      "failed_title": "Cálculo fallido",
+      "invalid_message": "Introduce una cantidad de al menos 1.",
+      "invalid_title": "Cantidad no válida",
+      "recharge_button": "Recargar",
+      "result": "Pagarás: {{value}}",
+      "title": "Calcular cantidad a pagar"
+    },
     "balance": {
       "available": "Cuota disponible para uso de API",
       "description": "Tu saldo de cuota actual",

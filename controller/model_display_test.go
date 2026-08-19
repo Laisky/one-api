@@ -16,12 +16,12 @@ import (
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/singleflight"
 
-	"github.com/songquanpeng/one-api/common"
-	"github.com/songquanpeng/one-api/common/ctxkey"
-	"github.com/songquanpeng/one-api/model"
-	"github.com/songquanpeng/one-api/relay/adaptor/openai"
-	"github.com/songquanpeng/one-api/relay/billing/ratio"
-	"github.com/songquanpeng/one-api/relay/channeltype"
+	"github.com/Laisky/one-api/common"
+	"github.com/Laisky/one-api/common/ctxkey"
+	"github.com/Laisky/one-api/model"
+	"github.com/Laisky/one-api/relay/adaptor/openai"
+	"github.com/Laisky/one-api/relay/billing/ratio"
+	"github.com/Laisky/one-api/relay/channeltype"
 )
 
 func setupModelsDisplayTestEnv(t *testing.T) {
@@ -228,6 +228,61 @@ func TestGetModelsDisplay_AnonymousFiltersHiddenModels(t *testing.T) {
 	require.Contains(t, info.Models, "public-alias")
 }
 
+// TestGetModelsDisplay_TimeWindows verifies display payloads include pricing windows and the active window.
+func TestGetModelsDisplay_TimeWindows(t *testing.T) {
+	setupModelsDisplayTestEnv(t)
+	gin.SetMode(gin.TestMode)
+	modelConfigs := `{
+		"window-model": {
+			"ratio": 1,
+			"completion_ratio": 2,
+			"time_windows": [
+				{
+					"name": "always",
+					"timezone": "UTC",
+					"ranges": [{"start": "00:00", "end": "00:00"}],
+					"overlay": {"ratio": 0.5}
+				}
+			]
+		}
+	}`
+	channel := &model.Channel{
+		Name:         "Window Channel",
+		Type:         channeltype.OpenAI,
+		Status:       model.ChannelStatusEnabled,
+		Models:       "window-model",
+		Group:        "public",
+		ModelConfigs: &modelConfigs,
+	}
+	require.NoError(t, model.DB.Create(channel).Error)
+
+	router := gin.New()
+	router.GET("/api/models/display", func(c *gin.Context) {
+		GetModelsDisplay(c)
+	})
+
+	req := httptest.NewRequest("GET", "/api/models/display", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+
+	var resp ModelsDisplayResponse
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	require.True(t, resp.Success)
+
+	key := fmt.Sprintf("%s:%s", channeltype.IdToName(channel.Type), channel.Name)
+	info, ok := resp.Data[key]
+	require.True(t, ok, "expected channel %s in response", key)
+	display := info.Models["window-model"]
+	require.Len(t, display.TimeWindows, 1)
+	require.Equal(t, "always", display.TimeWindows[0].Name)
+	require.Equal(t, "UTC", display.TimeWindows[0].TimeZone)
+	require.Equal(t, "always", display.ActiveTimeWindow)
+	require.InDelta(t, 1, display.TimeWindows[0].Overlay.InputPrice, 1e-6)
+	require.InDelta(t, 2, display.TimeWindows[0].Overlay.OutputPrice, 1e-6)
+}
+
 // TestGetModelsDisplay_GptImageShowsTokenPrice verifies image models that bill prompt tokens expose input pricing.
 func TestGetModelsDisplay_GptImageShowsTokenPrice(t *testing.T) {
 	setupModelsDisplayTestEnv(t)
@@ -279,6 +334,107 @@ func TestGetModelsDisplay_GptImageShowsTokenPrice(t *testing.T) {
 	require.InDelta(t, expectedCached, modelInfo.CachedInputPrice, 1e-6)
 	require.NotNil(t, pricingCfg.Image, "expected image pricing metadata for gpt-image-1")
 	require.InDelta(t, pricingCfg.Image.PricePerImageUsd, modelInfo.ImagePrice, 1e-9)
+}
+
+// TestGetModelsDisplay_PerCallPricingForRerank verifies /api/models/display surfaces
+// flat per-call pricing through the generic PerCallPricing field instead of
+// misinterpreting the encoded Ratio as token pricing. Cohere's rerank-v3.5 is billed
+// at $2.00 per 1,000 searches, so the display response must expose
+// PerCallPricing.UsdPerThousandCalls=2.0 (and derived UsdPerCall=0.002) with token
+// prices zeroed out. The abstraction is generic — any per-call-billed model
+// (rerank, classification, etc.) should reuse this branch.
+func TestGetModelsDisplay_PerCallPricingForRerank(t *testing.T) {
+	setupModelsDisplayTestEnv(t)
+	gin.SetMode(gin.TestMode)
+	channel := &model.Channel{
+		Name:   "Cohere Rerank",
+		Type:   channeltype.Cohere,
+		Status: model.ChannelStatusEnabled,
+		Models: "rerank-v3.5",
+		Group:  "public",
+	}
+	require.NoError(t, model.DB.Create(channel).Error)
+
+	router := gin.New()
+	router.GET("/api/models/display", func(c *gin.Context) {
+		GetModelsDisplay(c)
+	})
+
+	req := httptest.NewRequest("GET", "/api/models/display", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+
+	var resp ModelsDisplayResponse
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	require.True(t, resp.Success)
+
+	key := fmt.Sprintf("%s:%s", channeltype.IdToName(channel.Type), channel.Name)
+	info, ok := resp.Data[key]
+	require.True(t, ok, "expected channel %s in response", key)
+	modelInfo, ok := info.Models["rerank-v3.5"]
+	require.True(t, ok, "expected rerank-v3.5 in model listing")
+
+	require.NotNil(t, modelInfo.PerCallPricing, "per-call-billed model must surface PerCallPricing")
+	assert.InDelta(t, 2.0, modelInfo.PerCallPricing.UsdPerThousandCalls, 1e-9)
+	assert.InDelta(t, 0.002, modelInfo.PerCallPricing.UsdPerCall, 1e-9)
+
+	// Per-call models must not leak misleading per-token pricing into the response.
+	assert.Equal(t, float64(0), modelInfo.InputPrice, "per-call model should not expose token InputPrice")
+	assert.Equal(t, float64(0), modelInfo.OutputPrice, "per-call model should not expose token OutputPrice")
+	assert.Equal(t, float64(0), modelInfo.CachedInputPrice, "per-call model should not expose CachedInputPrice")
+	assert.Nil(t, modelInfo.AudioPricing)
+	assert.Nil(t, modelInfo.EmbeddingPricing)
+	assert.Nil(t, modelInfo.ImagePricing)
+}
+
+// TestGetModelsDisplay_IncludesModelMetadata verifies /api/models/display exposes rich
+// model metadata (context, modalities, features, and sampling parameters) from adaptor ModelConfig.
+func TestGetModelsDisplay_IncludesModelMetadata(t *testing.T) {
+	setupModelsDisplayTestEnv(t)
+	gin.SetMode(gin.TestMode)
+
+	channel := &model.Channel{
+		Name:   "Metadata Channel",
+		Type:   channeltype.OpenAI,
+		Status: model.ChannelStatusEnabled,
+		Models: "gpt-4o-mini",
+		Group:  "public",
+	}
+	require.NoError(t, model.DB.Create(channel).Error)
+
+	router := gin.New()
+	router.GET("/api/models/display", func(c *gin.Context) {
+		GetModelsDisplay(c)
+	})
+
+	req := httptest.NewRequest("GET", "/api/models/display", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+
+	var resp ModelsDisplayResponse
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	require.True(t, resp.Success)
+
+	key := fmt.Sprintf("%s:%s", channeltype.IdToName(channel.Type), channel.Name)
+	info, ok := resp.Data[key]
+	require.True(t, ok, "expected channel %s in response", key)
+	modelInfo, ok := info.Models["gpt-4o-mini"]
+	require.True(t, ok, "expected gpt-4o-mini in model listing")
+
+	cfg := openai.ModelRatios["gpt-4o-mini"]
+	require.Equal(t, cfg.ContextLength, modelInfo.ContextLength)
+	require.Equal(t, cfg.MaxOutputTokens, modelInfo.MaxOutputTokens)
+	require.Equal(t, cfg.Quantization, modelInfo.Quantization)
+	require.Equal(t, cfg.HuggingFaceID, modelInfo.HuggingFaceID)
+	require.Equal(t, cfg.Description, modelInfo.Description)
+	require.ElementsMatch(t, cfg.InputModalities, modelInfo.InputModalities)
+	require.ElementsMatch(t, cfg.OutputModalities, modelInfo.OutputModalities)
+	require.ElementsMatch(t, cfg.SupportedFeatures, modelInfo.SupportedFeatures)
+	require.ElementsMatch(t, cfg.SupportedSamplingParameters, modelInfo.SupportedSampling)
 }
 
 // TestGetModelsDisplay_AnonymousIncludesModelConfigOnlyEntries ensures channels that only declare models via

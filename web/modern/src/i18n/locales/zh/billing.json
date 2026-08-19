@@ -1,5 +1,25 @@
 {
   "topup": {
+    "amount": {
+      "amount_label": "金额",
+      "amount_placeholder": "输入金额",
+      "calculate_button": "计算",
+      "calculate_first_message": "请先计算应付金额。",
+      "calculate_first_title": "请先计算",
+      "calculated_message": "应付金额: {{value}}",
+      "calculated_title": "已计算",
+      "calculating": "计算中...",
+      "code_label": "兑换码（可选）",
+      "code_placeholder": "输入兑换码",
+      "description": "输入希望充值的金额和可选兑换码，然后预览应付金额。",
+      "failed_message": "无法计算金额",
+      "failed_title": "计算失败",
+      "invalid_message": "请输入不小于 1 的金额。",
+      "invalid_title": "金额无效",
+      "recharge_button": "充值",
+      "result": "应付金额: {{value}}",
+      "title": "计算应付金额"
+    },
     "balance": {
       "available": "可用于 API 使用的额度",
       "description": "您当前的额度余额",

@@ -1,0 +1,55 @@
+id: no-gin-context-in-goroutine
+language: go
+severity: error
+message: >-
+  A background goroutine must not reference the request *gin.Context `c`. gin v1.12.0
+  recycles c via sync.Pool the instant the handler returns, so c.Get*/c.Set and
+  gmw.*(c) inside a goroutine race the next request's c.reset()/Set (concurrent map
+  access) and can bill the wrong user/token or crash the process.
+note: >-
+  Snapshot the values you need on the request goroutine BEFORE spawning, then spawn with
+  relayctx.GoRequestScoped(c, name, fn) or graceful.GoCritical(relayctx.Detach(c), ...)
+  / detachForBilling(c), and use the passed ctx inside (gmw.GetLogger(ctx), not
+  gmw.GetLogger(c)). See docs/proposals/20260608_relay-billing-async-sync-race-fixes.md.
+# Flags any reference to the identifier `c` (the gin context, by repo convention)
+# lexically inside a goroutine body: a `go func(){...}` or the closure passed to
+# graceful.GoCritical / relayctx.GoRequestScoped / runPostBillingWithTimeout /
+# goDetachedBillingWork (the shared post-billing/refund helpers that own the GoCritical
+# spawn — their `work`/`fn` func-literal args run inside the goroutine). The spawn ARGUMENTS
+# (e.g. relayctx.Detach(c), detachForBilling(c))
+# are outside the closure and so are not flagged — that is the sanctioned way to hand
+# request state to the goroutine.
+#
+# A companion rule, no-gin-context-as-spawn-arg.yml, covers the spawn-ARGUMENT gap by
+# flagging gmw.Ctx(c)/gmw.BackgroundCtx(c) passed directly as a spawn's context arg.
+#
+# KNOWN LIMITATION (neither rule catches it): the ALIASED form
+#   ctx := gmw.Ctx(c)            // ctx now carries the request *gin.Context
+#   graceful.GoCritical(ctx, ...) // spawns a goroutine holding it
+# is invisible to ast-grep because the unsafe value reaches the spawn through a
+# variable — detecting it needs data-flow analysis, which ast-grep does not perform.
+# This form is prevented by the "snapshot/Detach at the spawn site" convention (always
+# pass relayctx.Detach(c)/detachForBilling(c) — never a gmw.Ctx(c)-derived variable —
+# as the spawn context) plus code review.
+rule:
+  kind: identifier
+  regex: "^c$"
+  inside:
+    kind: func_literal
+    stopBy: end
+    inside:
+      any:
+        - kind: go_statement
+        - kind: call_expression
+          has:
+            field: function
+            any:
+              - kind: selector_expression
+                has:
+                  field: field
+                  regex: "^(GoCritical|GoRequestScoped)$"
+              - kind: identifier
+                regex: "^(GoCritical|GoRequestScoped|runPostBillingWithTimeout|goDetachedBillingWork)$"
+      stopBy: end
+ignores:
+  - "**/*_test.go"

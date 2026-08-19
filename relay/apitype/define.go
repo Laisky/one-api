@@ -28,6 +28,10 @@ const (
 	OpenRouter
 	Copilot
 	Fireworks
+	NVIDIA
+	Cerebras
+	Azure
+	DeepInfra
 
 	Dummy // this one is only for count, do not add any channel after this
 )

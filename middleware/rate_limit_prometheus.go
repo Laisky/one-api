@@ -5,7 +5,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/songquanpeng/one-api/common/metrics"
+	"github.com/Laisky/one-api/common/metrics"
 )
 
 // PrometheusRateLimitMiddleware tracks rate limiting metrics

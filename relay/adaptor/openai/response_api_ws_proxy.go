@@ -13,9 +13,9 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
 
-	rmeta "github.com/songquanpeng/one-api/relay/meta"
-	rmodel "github.com/songquanpeng/one-api/relay/model"
-	"github.com/songquanpeng/one-api/relay/relaymode"
+	rmeta "github.com/Laisky/one-api/relay/meta"
+	rmodel "github.com/Laisky/one-api/relay/model"
+	"github.com/Laisky/one-api/relay/relaymode"
 )
 
 type responseAPIWebSocketEvent struct {
@@ -35,6 +35,9 @@ type responseAPIEventUsage struct {
 	InputTokens        int `json:"input_tokens,omitempty"`
 	OutputTokens       int `json:"output_tokens,omitempty"`
 	TotalTokens        int `json:"total_tokens,omitempty"`
+	CacheWriteTokens   int `json:"cache_write_tokens,omitempty"`
+	CacheWrite5mTokens int `json:"cache_write_5m_tokens,omitempty"`
+	CacheWrite1hTokens int `json:"cache_write_1h_tokens,omitempty"`
 	InputTokensDetails struct {
 		CachedTokens int `json:"cached_tokens,omitempty"`
 	} `json:"input_tokens_details,omitempty"`
@@ -53,12 +56,18 @@ type responseAPIEventUsage struct {
 // Returns:
 //   - *rmodel.ErrorWithStatusCode: business error when proxying fails.
 //   - *rmodel.Usage: best-effort aggregated usage parsed from upstream events.
-func ResponseAPIWebSocketHandler(c *gin.Context, meta *rmeta.Meta) (*rmodel.ErrorWithStatusCode, *rmodel.Usage) {
+//   - []*ResponseAPIResponse: store!=false completed response objects observed on
+//     the socket (proposal ST-011). The native passthrough leaves connection-local
+//     store=false state to the upstream; the caller commits these observed
+//     store=true responses to the gateway store so their IDs are retrievable over
+//     HTTP afterwards. The slice is populated only after both proxy directions
+//     drain, so it is safe to read without further synchronization.
+func ResponseAPIWebSocketHandler(c *gin.Context, meta *rmeta.Meta) (*rmodel.ErrorWithStatusCode, *rmodel.Usage, []*ResponseAPIResponse) {
 	if meta == nil || meta.Mode != relaymode.ResponseAPI {
 		return &rmodel.ErrorWithStatusCode{
 			Error:      rmodel.Error{Message: "invalid mode for response websocket handler", Type: rmodel.ErrorTypeOneAPI, Code: "invalid_mode", RawError: errors.New("invalid mode for response websocket handler")},
 			StatusCode: http.StatusBadRequest,
-		}, nil
+		}, nil, nil
 	}
 
 	upgrader := websocket.Upgrader{
@@ -71,7 +80,7 @@ func ResponseAPIWebSocketHandler(c *gin.Context, meta *rmeta.Meta) (*rmodel.Erro
 		return &rmodel.ErrorWithStatusCode{
 			Error:      rmodel.Error{Message: "websocket upgrade failed: " + err.Error(), Type: rmodel.ErrorTypeOneAPI, Code: "ws_upgrade_failed", RawError: err},
 			StatusCode: http.StatusBadRequest,
-		}, nil
+		}, nil, nil
 	}
 	defer func() { _ = clientConn.Close() }()
 
@@ -80,7 +89,7 @@ func ResponseAPIWebSocketHandler(c *gin.Context, meta *rmeta.Meta) (*rmodel.Erro
 		return &rmodel.ErrorWithStatusCode{
 			Error:      rmodel.Error{Message: "resolve upstream url failed", Type: rmodel.ErrorTypeInternal, Code: "upstream_url_resolve_failed", RawError: err},
 			StatusCode: http.StatusBadGateway,
-		}, nil
+		}, nil, nil
 	}
 
 	requestHeader := http.Header{}
@@ -97,14 +106,20 @@ func ResponseAPIWebSocketHandler(c *gin.Context, meta *rmeta.Meta) (*rmodel.Erro
 		return &rmodel.ErrorWithStatusCode{
 			Error:      rmodel.Error{Message: "upstream response websocket connect failed: " + dialErr.Error(), Type: rmodel.ErrorTypeUpstream, Code: "upstream_connect_failed", RawError: dialErr},
 			StatusCode: http.StatusBadGateway,
-		}, nil
+		}, nil, nil
 	}
 	defer func() { _ = upstreamConn.Close() }()
 
 	usage := &rmodel.Usage{}
+	// stored collects the store!=false completed response objects observed on the
+	// upstream->client leg. It is written only by that single goroutine and read
+	// only after both legs drain below, so no further synchronization is needed.
+	stored := &responseAPIWSStoreCollector{}
 	errc := make(chan error, 2)
-	go func() { errc <- copyWS(clientConn, upstreamConn) }()
-	go func() { errc <- copyResponseAPIWSUpstreamToClient(upstreamConn, clientConn, usage) }()
+	go func() {
+		errc <- copyResponseAPIClientToUpstream(clientConn, upstreamConn, meta.OriginModelName, meta.ActualModelName)
+	}()
+	go func() { errc <- copyResponseAPIWSUpstreamToClient(upstreamConn, clientConn, usage, stored) }()
 
 	// Wait for one direction to finish, then close both connections
 	// to unblock the other goroutine.
@@ -123,7 +138,51 @@ func ResponseAPIWebSocketHandler(c *gin.Context, meta *rmeta.Meta) (*rmodel.Erro
 		usage.TotalTokens = usage.PromptTokens + usage.CompletionTokens
 	}
 
-	return nil, usage
+	return nil, usage, stored.responses
+}
+
+// responseAPIWSStoreCollector accumulates store!=false completed response objects
+// observed on the upstream->client leg of a native Responses websocket. store=false
+// responses are connection-local upstream state and are intentionally excluded
+// (proposal Section 5.9, SEC06).
+type responseAPIWSStoreCollector struct {
+	responses []*ResponseAPIResponse
+	seen      map[string]struct{}
+}
+
+// collect records one completed response object if it is retrievable (store!=false)
+// and not already captured. It parses only the terminal response.completed event;
+// all other frames are ignored.
+func (c *responseAPIWSStoreCollector) collect(msg []byte) {
+	if len(msg) == 0 {
+		return
+	}
+	var probe struct {
+		Type     string          `json:"type"`
+		Response json.RawMessage `json:"response"`
+	}
+	if err := json.Unmarshal(msg, &probe); err != nil {
+		return
+	}
+	if probe.Type != "response.completed" || len(probe.Response) == 0 {
+		return
+	}
+	var resp ResponseAPIResponse
+	if err := json.Unmarshal(probe.Response, &resp); err != nil || resp.Id == "" {
+		return
+	}
+	// store defaults to true; only an explicit store=false is connection-local.
+	if resp.Store != nil && !*resp.Store {
+		return
+	}
+	if c.seen == nil {
+		c.seen = map[string]struct{}{}
+	}
+	if _, dup := c.seen[resp.Id]; dup {
+		return
+	}
+	c.seen[resp.Id] = struct{}{}
+	c.responses = append(c.responses, &resp)
 }
 
 // resolveResponseAPIWebSocketUpstreamURL builds the upstream ws(s) URL for the
@@ -153,9 +212,75 @@ func resolveResponseAPIWebSocketUpstreamURL(c *gin.Context, meta *rmeta.Meta) (s
 	return u.String(), nil
 }
 
+// copyResponseAPIClientToUpstream forwards client frames to the upstream
+// connection while enforcing model pinning on every `response.create` event.
+//
+// On the first frame that attempts to switch the model away from the
+// handshake-bound model, the function:
+//   - emits a `model_switch_denied` error event back to the client
+//   - returns ErrModelSwitchDenied (wrapped) so the caller closes both legs
+//
+// Text frames that are not `response.create` events are forwarded unchanged.
+// Binary frames are forwarded unchanged.
+//
+// Parameters:
+//   - src: client WebSocket connection (reader).
+//   - dst: upstream WebSocket connection (writer).
+//   - boundOriginModel: user-facing model bound at WS handshake; may be empty
+//     when the proxy could not resolve a user-facing model.
+//   - boundActualModel: upstream model bound at WS handshake; enforcement is
+//     skipped when this is empty (backward compat for legacy no-model handshakes).
+//
+// Returns:
+//   - error: nil on clean close; ErrModelSwitchDenied (wrapped) on rejected
+//     model switch; other errors propagate underlying I/O failures.
+func copyResponseAPIClientToUpstream(src, dst *websocket.Conn, boundOriginModel, boundActualModel string) error {
+	for {
+		mt, msg, err := src.ReadMessage()
+		if err != nil {
+			var closeErr *websocket.CloseError
+			if errors.As(err, &closeErr) {
+				_ = dst.WriteControl(
+					websocket.CloseMessage,
+					websocket.FormatCloseMessage(closeErr.Code, closeErr.Text),
+					time.Now().Add(time.Second),
+				)
+				return nil
+			}
+			return errors.WithStack(err)
+		}
+
+		outbound := msg
+		if mt == websocket.TextMessage && boundActualModel != "" {
+			rewritten, guardErr := enforceResponseCreateModel(msg, boundOriginModel, boundActualModel)
+			if guardErr != nil {
+				// Reject: notify the client with an error event and close the
+				// upstream side so billing reconciliation runs without any
+				// upstream charges accruing for the denied model.
+				errEvent := buildModelSwitchErrorEvent(guardErr.Error())
+				_ = src.WriteMessage(websocket.TextMessage, errEvent)
+				_ = src.WriteControl(
+					websocket.CloseMessage,
+					websocket.FormatCloseMessage(websocket.ClosePolicyViolation, "model_switch_denied"),
+					time.Now().Add(time.Second),
+				)
+				return errors.WithStack(guardErr)
+			}
+			outbound = rewritten
+		}
+
+		if werr := dst.WriteMessage(mt, outbound); werr != nil {
+			return errors.WithStack(werr)
+		}
+	}
+}
+
 // copyResponseAPIWSUpstreamToClient forwards upstream frames to the client and
-// extracts best-effort usage metrics from response events.
-func copyResponseAPIWSUpstreamToClient(src, dst *websocket.Conn, usage *rmodel.Usage) error {
+// extracts best-effort usage metrics from response events. It also records
+// store!=false completed response objects into stored so the caller can commit
+// them to the gateway store (proposal ST-011). Collection happens after usage
+// accounting and never alters the forwarded frame.
+func copyResponseAPIWSUpstreamToClient(src, dst *websocket.Conn, usage *rmodel.Usage, stored *responseAPIWSStoreCollector) error {
 	countedResponseIDs := map[string]struct{}{}
 
 	for {
@@ -175,6 +300,9 @@ func copyResponseAPIWSUpstreamToClient(src, dst *websocket.Conn, usage *rmodel.U
 
 		if mt == websocket.TextMessage {
 			accumulateResponseAPIUsage(msg, usage, countedResponseIDs)
+			if stored != nil {
+				stored.collect(msg)
+			}
 		}
 
 		if werr := dst.WriteMessage(mt, msg); werr != nil {
@@ -203,6 +331,8 @@ func accumulateResponseAPIUsage(msg []byte, usage *rmodel.Usage, countedResponse
 	usage.PromptTokens += snapshot.PromptTokens
 	usage.CompletionTokens += snapshot.CompletionTokens
 	usage.TotalTokens += snapshot.TotalTokens
+	usage.CacheWrite5mTokens += snapshot.CacheWrite5mTokens
+	usage.CacheWrite1hTokens += snapshot.CacheWrite1hTokens
 
 	if snapshot.PromptTokensDetails != nil {
 		if usage.PromptTokensDetails == nil {
@@ -231,9 +361,11 @@ func extractResponseAPIUsage(msg []byte) (string, *rmodel.Usage, bool) {
 	}
 
 	usage := &rmodel.Usage{
-		PromptTokens:     event.Response.Usage.InputTokens,
-		CompletionTokens: event.Response.Usage.OutputTokens,
-		TotalTokens:      event.Response.Usage.TotalTokens,
+		PromptTokens:       event.Response.Usage.InputTokens,
+		CompletionTokens:   event.Response.Usage.OutputTokens,
+		TotalTokens:        event.Response.Usage.TotalTokens,
+		CacheWrite5mTokens: event.Response.Usage.CacheWriteTokens + event.Response.Usage.CacheWrite5mTokens,
+		CacheWrite1hTokens: event.Response.Usage.CacheWrite1hTokens,
 	}
 
 	if usage.TotalTokens == 0 {

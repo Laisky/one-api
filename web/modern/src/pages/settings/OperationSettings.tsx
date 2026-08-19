@@ -3,15 +3,18 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Checkbox } from '@/components/ui/checkbox';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
+import { useNotifications } from '@/components/ui/notifications';
 import { Separator } from '@/components/ui/separator';
+import { Textarea } from '@/components/ui/textarea';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { api } from '@/lib/api';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { Info } from 'lucide-react';
+import { AlertCircle, Info } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { useTranslation } from 'react-i18next';
 import * as z from 'zod';
+import { formatJSON, sanitizeJsonInput } from '../channels/helpers';
 
 const operationSchema = z.object({
   QuotaForNewUser: z.number().min(0).default(0),
@@ -34,10 +37,43 @@ const operationSchema = z.object({
 
 type OperationForm = z.infer<typeof operationSchema>;
 
+type GroupRatioIssue = { type: 'parse'; message: string } | { type: 'shape' } | { type: 'invalid-entries'; entries: string[] };
+
+const validateGroupRatioJSON = (raw: string): GroupRatioIssue | null => {
+  if (!raw.trim()) return { type: 'shape' };
+  try {
+    const parsed = JSON.parse(sanitizeJsonInput(raw));
+    if (!parsed || Array.isArray(parsed) || typeof parsed !== 'object') {
+      return { type: 'shape' };
+    }
+    const invalid: string[] = [];
+    for (const [rawKey, rawValue] of Object.entries(parsed as Record<string, unknown>)) {
+      const keyLabel = rawKey.trim().length > 0 ? rawKey : '(empty key)';
+      if (rawKey.trim().length === 0) {
+        invalid.push(keyLabel);
+        continue;
+      }
+      if (typeof rawValue !== 'number' || !Number.isFinite(rawValue) || rawValue < 0) {
+        invalid.push(keyLabel);
+      }
+    }
+    if (invalid.length > 0) {
+      return { type: 'invalid-entries', entries: invalid };
+    }
+    return null;
+  } catch (error) {
+    return { type: 'parse', message: error instanceof Error ? error.message : 'Invalid JSON' };
+  }
+};
+
 export function OperationSettings() {
   const { t } = useTranslation();
+  const { notify } = useNotifications();
   const [loading, setLoading] = useState(true);
   const [historyTimestamp, setHistoryTimestamp] = useState('');
+  const [groupRatioText, setGroupRatioText] = useState('');
+  const [groupRatioOriginal, setGroupRatioOriginal] = useState('');
+  const [savingGroupRatio, setSavingGroupRatio] = useState(false);
 
   // Descriptions for each setting used on this page
   const descriptions = useMemo<Record<string, string>>(
@@ -98,6 +134,13 @@ export function OperationSettings() {
         const formData: any = {};
         data.forEach((item: { key: string; value: string }) => {
           const key = item.key;
+          if (key === 'GroupRatio') {
+            const pretty = formatJSON(item.value || '');
+            const initial = pretty || item.value || '';
+            setGroupRatioText(initial);
+            setGroupRatioOriginal(initial);
+            return;
+          }
           if (key in form.getValues()) {
             if (key.endsWith('Enabled')) {
               formData[key] = item.value === 'true';
@@ -116,36 +159,99 @@ export function OperationSettings() {
     }
   };
 
-  const updateOption = async (key: string, value: string | number | boolean) => {
+  const persistOption = async (key: string, value: string | number | boolean) => {
     try {
       // Unified API call - complete URL with /api prefix
-      await api.put('/api/option/', { key, value: String(value) });
+      const response = await api.put('/api/option/', { key, value: String(value) });
+      if (!response.data?.success) {
+        throw new Error(response.data?.message || t('operation_settings.save_failed_generic'));
+      }
     } catch (error) {
       console.error(`Error updating ${key}:`, error);
+      throw error;
     }
+  };
+
+  const updateOption = async (key: string, value: string | number | boolean) => {
+    await persistOption(key, value);
   };
 
   const onSubmitGroup = async (group: 'quota' | 'general' | 'monitor') => {
     const values = form.getValues();
 
-    switch (group) {
-      case 'quota':
-        await updateOption('QuotaForNewUser', values.QuotaForNewUser);
-        await updateOption('QuotaForInviter', values.QuotaForInviter);
-        await updateOption('QuotaForInvitee', values.QuotaForInvitee);
-        await updateOption('PreConsumedQuota', values.PreConsumedQuota);
-        break;
-      case 'general':
-        await updateOption('TopUpLink', values.TopUpLink);
-        await updateOption('ChatLink', values.ChatLink);
-        await updateOption('QuotaPerUnit', values.QuotaPerUnit);
-        await updateOption('RetryTimes', values.RetryTimes);
-        break;
-      case 'monitor':
-        await updateOption('QuotaRemindThreshold', values.QuotaRemindThreshold);
-        await updateOption('ChannelDisableThreshold', values.ChannelDisableThreshold);
-        break;
+    try {
+      switch (group) {
+        case 'quota':
+          await persistOption('QuotaForNewUser', values.QuotaForNewUser);
+          await persistOption('QuotaForInviter', values.QuotaForInviter);
+          await persistOption('QuotaForInvitee', values.QuotaForInvitee);
+          await persistOption('PreConsumedQuota', values.PreConsumedQuota);
+          break;
+        case 'general':
+          await persistOption('TopUpLink', values.TopUpLink);
+          await persistOption('ChatLink', values.ChatLink);
+          await persistOption('QuotaPerUnit', values.QuotaPerUnit);
+          await persistOption('RetryTimes', values.RetryTimes);
+          break;
+        case 'monitor':
+          await persistOption('QuotaRemindThreshold', values.QuotaRemindThreshold);
+          await persistOption('ChannelDisableThreshold', values.ChannelDisableThreshold);
+          break;
+      }
+
+      notify({
+        type: 'success',
+        title: t('operation_settings.save_success_title'),
+        message: t('operation_settings.save_success_message'),
+      });
+    } catch (error: any) {
+      notify({
+        type: 'error',
+        title: t('operation_settings.save_failed_title'),
+        message: error?.response?.data?.message || error?.message || t('operation_settings.save_failed_generic'),
+      });
     }
+  };
+
+  const groupRatioIssue = useMemo(() => validateGroupRatioJSON(groupRatioText), [groupRatioText]);
+  const groupRatioDirty = groupRatioText !== groupRatioOriginal;
+
+  const saveGroupRatio = async () => {
+    const issue = validateGroupRatioJSON(groupRatioText);
+    if (issue) {
+      notify({
+        type: 'error',
+        title: t('operation_settings.group_ratio.save_failed'),
+        message: t('operation_settings.group_ratio.fix_errors_first'),
+      });
+      return;
+    }
+    setSavingGroupRatio(true);
+    try {
+      const sanitized = JSON.stringify(JSON.parse(sanitizeJsonInput(groupRatioText)));
+      await persistOption('GroupRatio', sanitized);
+      const pretty = formatJSON(sanitized) || sanitized;
+      setGroupRatioText(pretty);
+      setGroupRatioOriginal(pretty);
+      notify({
+        type: 'success',
+        title: t('operation_settings.group_ratio.saved_success'),
+        message: t('operation_settings.group_ratio.saved_message'),
+      });
+    } catch (error: any) {
+      const errMsg = error?.response?.data?.message || error?.message || 'Unknown error';
+      notify({
+        type: 'error',
+        title: t('operation_settings.group_ratio.save_failed'),
+        message: String(errMsg),
+      });
+    } finally {
+      setSavingGroupRatio(false);
+    }
+  };
+
+  const formatGroupRatio = () => {
+    setGroupRatioText((current) => formatJSON(current) || current);
   };
 
   const deleteHistoryLogs = async () => {
@@ -156,12 +262,25 @@ export function OperationSettings() {
       const res = await api.delete(`/api/log/?target_timestamp=${timestamp}`);
       const { success, message, data } = res.data;
       if (success) {
-        // Log clearing succeeded
+        notify({
+          type: 'success',
+          title: t('operation_settings.logs.clear_success_title'),
+          message: data || t('operation_settings.logs.clear_success_message'),
+        });
       } else {
-        console.error(t('operation_settings.logs.clear_failed', { message }));
+        notify({
+          type: 'error',
+          title: t('operation_settings.logs.clear_failed_title'),
+          message: message || t('operation_settings.logs.clear_failed_message'),
+        });
       }
     } catch (error) {
       console.error('Error clearing logs:', error);
+      notify({
+        type: 'error',
+        title: t('operation_settings.logs.clear_failed_title'),
+        message: error instanceof Error ? error.message : t('operation_settings.logs.clear_failed_message'),
+      });
     }
   };
 
@@ -433,9 +552,18 @@ export function OperationSettings() {
                       <FormControl>
                         <Checkbox
                           checked={field.value}
-                          onCheckedChange={(checked) => {
+                          onCheckedChange={async (checked) => {
                             field.onChange(checked);
-                            updateOption('LogConsumeEnabled', checked);
+                            try {
+                              await updateOption('LogConsumeEnabled', checked);
+                            } catch (error: any) {
+                              field.onChange(!checked);
+                              notify({
+                                type: 'error',
+                                title: t('operation_settings.save_failed_title'),
+                                message: error?.response?.data?.message || error?.message || t('operation_settings.save_failed_generic'),
+                              });
+                            }
                           }}
                         />
                       </FormControl>
@@ -464,9 +592,18 @@ export function OperationSettings() {
                       <FormControl>
                         <Checkbox
                           checked={field.value}
-                          onCheckedChange={(checked) => {
+                          onCheckedChange={async (checked) => {
                             field.onChange(checked);
-                            updateOption('DisplayInCurrencyEnabled', checked);
+                            try {
+                              await updateOption('DisplayInCurrencyEnabled', checked);
+                            } catch (error: any) {
+                              field.onChange(!checked);
+                              notify({
+                                type: 'error',
+                                title: t('operation_settings.save_failed_title'),
+                                message: error?.response?.data?.message || error?.message || t('operation_settings.save_failed_generic'),
+                              });
+                            }
                           }}
                         />
                       </FormControl>
@@ -495,9 +632,18 @@ export function OperationSettings() {
                       <FormControl>
                         <Checkbox
                           checked={field.value}
-                          onCheckedChange={(checked) => {
+                          onCheckedChange={async (checked) => {
                             field.onChange(checked);
-                            updateOption('DisplayTokenStatEnabled', checked);
+                            try {
+                              await updateOption('DisplayTokenStatEnabled', checked);
+                            } catch (error: any) {
+                              field.onChange(!checked);
+                              notify({
+                                type: 'error',
+                                title: t('operation_settings.save_failed_title'),
+                                message: error?.response?.data?.message || error?.message || t('operation_settings.save_failed_generic'),
+                              });
+                            }
                           }}
                         />
                       </FormControl>
@@ -526,9 +672,18 @@ export function OperationSettings() {
                       <FormControl>
                         <Checkbox
                           checked={field.value}
-                          onCheckedChange={(checked) => {
+                          onCheckedChange={async (checked) => {
                             field.onChange(checked);
-                            updateOption('ApproximateTokenEnabled', checked);
+                            try {
+                              await updateOption('ApproximateTokenEnabled', checked);
+                            } catch (error: any) {
+                              field.onChange(!checked);
+                              notify({
+                                type: 'error',
+                                title: t('operation_settings.save_failed_title'),
+                                message: error?.response?.data?.message || error?.message || t('operation_settings.save_failed_generic'),
+                              });
+                            }
                           }}
                         />
                       </FormControl>
@@ -630,9 +785,18 @@ export function OperationSettings() {
                       <FormControl>
                         <Checkbox
                           checked={field.value}
-                          onCheckedChange={(checked) => {
+                          onCheckedChange={async (checked) => {
                             field.onChange(checked);
-                            updateOption('AutomaticDisableChannelEnabled', checked);
+                            try {
+                              await updateOption('AutomaticDisableChannelEnabled', checked);
+                            } catch (error: any) {
+                              field.onChange(!checked);
+                              notify({
+                                type: 'error',
+                                title: t('operation_settings.save_failed_title'),
+                                message: error?.response?.data?.message || error?.message || t('operation_settings.save_failed_generic'),
+                              });
+                            }
                           }}
                         />
                       </FormControl>
@@ -661,9 +825,18 @@ export function OperationSettings() {
                       <FormControl>
                         <Checkbox
                           checked={field.value}
-                          onCheckedChange={(checked) => {
+                          onCheckedChange={async (checked) => {
                             field.onChange(checked);
-                            updateOption('AutomaticEnableChannelEnabled', checked);
+                            try {
+                              await updateOption('AutomaticEnableChannelEnabled', checked);
+                            } catch (error: any) {
+                              field.onChange(!checked);
+                              notify({
+                                type: 'error',
+                                title: t('operation_settings.save_failed_title'),
+                                message: error?.response?.data?.message || error?.message || t('operation_settings.save_failed_generic'),
+                              });
+                            }
                           }}
                         />
                       </FormControl>
@@ -689,6 +862,66 @@ export function OperationSettings() {
                 <Button onClick={() => onSubmitGroup('monitor')}>{t('operation_settings.monitoring.save')}</Button>
               </div>
             </Form>
+          </CardContent>
+        </Card>
+
+        {/* Group Ratio */}
+        <Card>
+          <CardHeader>
+            <CardTitle>{t('operation_settings.group_ratio.title')}</CardTitle>
+            <CardDescription>{t('operation_settings.group_ratio.description')}</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <label htmlFor="group-ratio-textarea" className="text-sm font-medium flex items-center gap-2">
+                  {t('operation_settings.group_ratio.label')}
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button type="button" className="text-muted-foreground hover:text-foreground" aria-label={t('common.info')}>
+                        <Info className="h-4 w-4" />
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent side="top" align="start" className="max-w-[320px]">
+                      {t('operation_settings.group_ratio.help')}
+                    </TooltipContent>
+                  </Tooltip>
+                </label>
+                <Button type="button" variant="ghost" size="sm" className="h-6 text-xs self-start sm:self-auto" onClick={formatGroupRatio}>
+                  {t('operation_settings.group_ratio.format')}
+                </Button>
+              </div>
+              <Textarea
+                id="group-ratio-textarea"
+                value={groupRatioText}
+                onChange={(e) => setGroupRatioText(e.target.value)}
+                placeholder={'{\n  "default": 1,\n  "vip": 0.8,\n  "svip": 0.5\n}'}
+                className={`font-mono text-xs min-h-[180px] ${groupRatioIssue ? 'border-destructive focus-visible:ring-destructive' : ''}`}
+                spellCheck={false}
+              />
+              {groupRatioIssue && (
+                <div className="flex items-start gap-2 rounded-lg border border-destructive bg-destructive/10 p-3">
+                  <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
+                  <span className="text-sm text-destructive">
+                    {groupRatioIssue.type === 'parse'
+                      ? t('operation_settings.group_ratio.invalid_json', { message: groupRatioIssue.message })
+                      : groupRatioIssue.type === 'shape'
+                        ? t('operation_settings.group_ratio.shape_invalid')
+                        : t('operation_settings.group_ratio.invalid_entries', {
+                            keys: groupRatioIssue.entries.join(', '),
+                          })}
+                  </span>
+                </div>
+              )}
+              <div className="flex items-center gap-2">
+                <Button onClick={saveGroupRatio} disabled={savingGroupRatio || !!groupRatioIssue || !groupRatioDirty}>
+                  {savingGroupRatio ? t('operation_settings.group_ratio.saving') : t('operation_settings.group_ratio.save')}
+                </Button>
+                {groupRatioDirty && !groupRatioIssue && (
+                  <span className="text-xs text-muted-foreground">{t('operation_settings.group_ratio.unsaved')}</span>
+                )}
+              </div>
+            </div>
           </CardContent>
         </Card>
 

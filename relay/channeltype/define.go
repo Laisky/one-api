@@ -56,5 +56,8 @@ const (
 	ClaudeCompatible
 	Copilot
 	Fireworks
+	NVIDIA
+	Cerebras
+	DeepInfra
 	Dummy
 )

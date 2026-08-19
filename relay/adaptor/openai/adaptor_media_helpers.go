@@ -5,7 +5,7 @@ import (
 
 	"github.com/Laisky/errors/v2"
 
-	imgutil "github.com/songquanpeng/one-api/common/image"
+	imgutil "github.com/Laisky/one-api/common/image"
 )
 
 // getImageFromURLFn is injectable for tests.

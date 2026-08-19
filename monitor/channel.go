@@ -1,15 +1,36 @@
 package monitor
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/Laisky/zap"
 
-	"github.com/songquanpeng/one-api/common/config"
-	"github.com/songquanpeng/one-api/common/logger"
-	"github.com/songquanpeng/one-api/common/message"
-	"github.com/songquanpeng/one-api/model"
+	"github.com/Laisky/one-api/common/config"
+	"github.com/Laisky/one-api/common/identity"
+	"github.com/Laisky/one-api/common/logger"
+	"github.com/Laisky/one-api/common/message"
+	"github.com/Laisky/one-api/model"
 )
+
+// resolveChannelRef builds the fullest available reference for a channel that is
+// being enabled or disabled. Channel status changes are rare events, so the
+// lookup (served from the in-memory channel snapshot) is affordable here.
+//
+// Parameters:
+//   - channelId: channel primary key.
+//   - channelName: name already known by the caller, used as a fallback when the
+//     snapshot cannot resolve the channel (e.g. it was just removed).
+//
+// Return values:
+//   - identity.ChannelRef: reference carrying id plus whatever uuid/name exist.
+func resolveChannelRef(channelId int, channelName string) identity.ChannelRef {
+	ref := model.LookupChannelRef(context.Background(), channelId)
+	if ref.Name == "" && channelName != "" {
+		ref = identity.NewChannelRef(channelId, ref.UUID, channelName)
+	}
+	return ref
+}
 
 func notifyRootUser(subject string, content string) {
 	if config.MessagePusherAddress != "" {
@@ -25,39 +46,44 @@ func notifyRootUser(subject string, content string) {
 	}
 	err := message.SendEmail(subject, config.RootUserEmail, content)
 	if err != nil {
-		logger.Logger.Error("failed to send email", zap.String("email", config.RootUserEmail), zap.Error(err))
+		// Deliberately no recipient field: rule 7 forbids logging email addresses.
+		logger.Logger.Error("failed to send email", zap.Error(err))
 	}
 }
 
 // DisableChannel disable & notify
 func DisableChannel(channelId int, channelName string, reason string) {
 	model.UpdateChannelStatusById(channelId, model.ChannelStatusAutoDisabled)
-	logger.Logger.Info("channel has been disabled", zap.Int("id", channelId), zap.String("reason", reason))
-	subject := fmt.Sprintf("Channel Status Change Reminder")
+	ref := resolveChannelRef(channelId, channelName)
+	logger.Logger.Info("channel has been disabled",
+		ref.AppendZap([]zap.Field{zap.String("reason", reason)})...)
+	subject := "Channel Status Change Reminder"
 	content := message.EmailTemplate(
 		subject,
 		fmt.Sprintf(`
             <p>Hello!</p>
-            <p>Channel “<strong>%s</strong>” (#%d) has been disabled.</p>
+            <p><strong>%s</strong> has been disabled.</p>
             <p>Reason for disabling:</p>
             <p style="background-color: #f8f8f8; padding: 10px; border-radius: 4px;">%s</p>
-        `, channelName, channelId, reason),
+        `, ref.String(), reason),
 	)
 	notifyRootUser(subject, content)
 }
 
 func MetricDisableChannel(channelId int, successRate float64) {
 	model.UpdateChannelStatusById(channelId, model.ChannelStatusAutoDisabled)
-	logger.Logger.Info("channel has been disabled due to low success rate", zap.Int("id", channelId), zap.Float64("success_rate", successRate*100))
-	subject := fmt.Sprintf("Channel Status Change Reminder")
+	ref := resolveChannelRef(channelId, "")
+	logger.Logger.Info("channel has been disabled due to low success rate",
+		ref.AppendZap([]zap.Field{zap.Float64("success_rate", successRate*100)})...)
+	subject := "Channel Status Change Reminder"
 	content := message.EmailTemplate(
 		subject,
 		fmt.Sprintf(`
             <p>Hello!</p>
-            <p>Channel #%d has been automatically disabled by the system.</p>
+            <p><strong>%s</strong> has been automatically disabled by the system.</p>
             <p>Reason for disabling:</p>
             <p style="background-color: #f8f8f8; padding: 10px; border-radius: 4px;">In the last %d calls, the success rate of this channel was <strong>%.2f%%</strong>, which is below the system threshold of <strong>%.2f%%</strong>.</p>
-        `, channelId, config.MetricQueueSize, successRate*100, config.MetricSuccessRateThreshold*100),
+        `, ref.String(), config.MetricQueueSize, successRate*100, config.MetricSuccessRateThreshold*100),
 	)
 	notifyRootUser(subject, content)
 }
@@ -65,15 +91,16 @@ func MetricDisableChannel(channelId int, successRate float64) {
 // EnableChannel enable & notify
 func EnableChannel(channelId int, channelName string) {
 	model.UpdateChannelStatusById(channelId, model.ChannelStatusEnabled)
-	logger.Logger.Info("channel has been enabled", zap.Int("id", channelId))
-	subject := fmt.Sprintf("Channel Status Change Reminder")
+	ref := resolveChannelRef(channelId, channelName)
+	logger.Logger.Info("channel has been enabled", ref.Zap()...)
+	subject := "Channel Status Change Reminder"
 	content := message.EmailTemplate(
 		subject,
 		fmt.Sprintf(`
             <p>Hello!</p>
-            <p>Channel “<strong>%s</strong>” (#%d) has been re-enabled.</p>
+            <p><strong>%s</strong> has been re-enabled.</p>
             <p>You can now continue using this channel.</p>
-        `, channelName, channelId),
+        `, ref.String()),
 	)
 	notifyRootUser(subject, content)
 }

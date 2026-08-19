@@ -3,16 +3,17 @@ package controller
 import (
 	"math"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/songquanpeng/one-api/relay"
-	"github.com/songquanpeng/one-api/relay/adaptor"
-	"github.com/songquanpeng/one-api/relay/adaptor/openai"
-	"github.com/songquanpeng/one-api/relay/billing/ratio"
-	rmodel "github.com/songquanpeng/one-api/relay/model"
-	"github.com/songquanpeng/one-api/relay/pricing"
-	quotautil "github.com/songquanpeng/one-api/relay/quota"
+	"github.com/Laisky/one-api/relay"
+	"github.com/Laisky/one-api/relay/adaptor"
+	"github.com/Laisky/one-api/relay/adaptor/openai"
+	"github.com/Laisky/one-api/relay/billing/ratio"
+	rmodel "github.com/Laisky/one-api/relay/model"
+	"github.com/Laisky/one-api/relay/pricing"
+	quotautil "github.com/Laisky/one-api/relay/quota"
 )
 
 // ==========================================================================
@@ -559,7 +560,7 @@ func TestAudioPricingResolvesViaAdaptor(t *testing.T) {
 		"gpt-4o-mini-realtime-preview",
 	} {
 		t.Run(modelName, func(t *testing.T) {
-			cfg, ok := pricing.ResolveAudioPricing(modelName, nil, pricingAdaptor)
+			cfg, ok := pricing.ResolveAudioPricing(modelName, nil, pricingAdaptor, time.Now())
 			require.True(t, ok, "%s: ResolveAudioPricing should succeed", modelName)
 			require.NotNil(t, cfg)
 			require.Greater(t, cfg.PromptRatio, 1.0,

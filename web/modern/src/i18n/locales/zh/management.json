@@ -5,17 +5,21 @@
       "add_mobile": "新增渠道",
       "delete": "删除",
       "disable": "禁用",
+      "duplicate": "复制",
       "edit": "编辑",
       "enable": "启用",
+      "refresh_balance": "刷新「{{name}}」余额",
       "test": "测试"
     },
     "columns": {
       "actions": "操作",
+      "balance": "余额",
       "created": "创建时间",
       "group": "分组",
       "id": "ID",
       "name": "名称",
       "priority": "优先级",
+      "priority_input_label": "「{{name}}」的优先级",
       "response": "响应",
       "status": "状态",
       "testing_model": "测试模型",
@@ -24,7 +28,9 @@
     },
     "confirm": {
       "delete": "确定要删除该渠道吗？",
-      "delete_disabled": "确定要删除所有禁用渠道吗？此操作无法撤销。"
+      "delete_disabled": "确定要删除所有禁用渠道吗？此操作无法撤销。",
+      "delete_disabled_title": "删除已禁用渠道",
+      "delete_title": "删除渠道"
     },
     "description": "配置并管理 API 路由渠道",
     "edit": {
@@ -121,15 +127,15 @@
         }
       },
       "common": {
-        "add": "Add",
+        "add": "添加",
         "base_url": {
-          "fixed_note": "Using default: {{url}}",
-          "help_editable": "Custom API base URL. Leave empty to use the default URL.",
-          "help_readonly": "The API base URL for this channel type is fixed and cannot be modified.",
-          "label": "API Base URL",
+          "fixed_note": "使用默认值: {{url}}",
+          "help_editable": "自定义 API 基础 URL。留空以使用默认 URL。",
+          "help_readonly": "此渠道类型的 API 基础 URL 是固定的，无法修改。",
+          "label": "API 基础 URL",
           "placeholder": "https://api.example.com"
         },
-        "format_json": "Format JSON"
+        "format_json": "格式化 JSON"
       },
       "coze": {
         "auth_type": {
@@ -155,9 +161,97 @@
           "placeholder": "用于机器人操作的用户 ID"
         }
       },
+      "custom_headers": {
+        "add": "添加请求头",
+        "empty": "尚未配置自定义请求头。",
+        "help": "此处配置的请求头会始终发送到上游，并覆盖客户端提供的请求头。使用 {{key}} 插入渠道 API 密钥。",
+        "key_placeholder": "请求头键",
+        "label": "自定义请求头",
+        "remove": "移除请求头",
+        "value_placeholder": "请求头值，例如 {{key}}"
+      },
       "description": {
         "create": "创建一个新的 API 渠道",
         "edit": "更新渠道配置"
+      },
+      "endpoints": {
+        "audio_speech": {
+          "description": "文本转语音 API 可将文本转换为语音音频。您可以选择多种声音和输出格式来生成自然语音。",
+          "label": "文本转语音"
+        },
+        "audio_transcription": {
+          "description": "语音转写 API 可将语音音频转换为文本。上传音频文件后，可获得指定语言的转写结果。",
+          "label": "语音转写"
+        },
+        "audio_translation": {
+          "description": "语音翻译 API 可将语音音频翻译为英文文本。上传任意受支持语言的音频文件后，可获得英文转写结果。",
+          "label": "语音翻译"
+        },
+        "chat_completions": {
+          "description": "聊天补全 API 为基于聊天的对话生成模型回复。发送一组消息并接收模型生成的回答，支持流式和非流式模式。",
+          "label": "聊天补全"
+        },
+        "claude_messages": {
+          "description": "Claude Messages API 是 Anthropic 与 Claude 模型交互的原生格式。One-API 会将该格式转换为适用于任何受支持后端的形式。",
+          "label": "Claude Messages"
+        },
+        "completions": {
+          "description": "传统补全 API 会根据给定提示词生成文本补全。这是最早的文本生成 API，如今大多已被聊天补全所取代。",
+          "label": "文本补全"
+        },
+        "custom_url_badge": "自定义 URL",
+        "default_badge": "默认",
+        "edit_endpoint": "查看文档并编辑 endpoint URL",
+        "embeddings": {
+          "description": "向量嵌入 API 可将文本转换为数值向量表示。这些向量可用于语义搜索、聚类和相似度比较。",
+          "label": "向量嵌入"
+        },
+        "help": "选择此渠道支持的 API 端点。点击端点旁的信息图标可查看详情和使用示例。",
+        "images_edits": {
+          "description": "图像编辑 API 会根据文本指令修改现有图像。上传带遮罩的图像和提示词后，可生成编辑后的版本。",
+          "label": "图像编辑"
+        },
+        "images_generations": {
+          "description": "图像生成 API 会根据文本描述生成图像。指定提示词后，可生成一种或多种不同格式和尺寸的图像。",
+          "label": "图像生成"
+        },
+        "label": "支持的端点",
+        "modal": {
+          "description": "说明",
+          "example": "cURL 示例",
+          "no_description": "此端点暂无详细文档。",
+          "no_example": "# 暂无示例",
+          "url_override": "上游 URL 覆盖",
+          "url_override_help": "已预填默认的 endpoint URL。修改它可将该 endpoint 路由到非标准的上游地址；保持为默认值则会自动跟随渠道的 base URL。",
+          "url_override_reset": "重置为默认"
+        },
+        "moderations": {
+          "description": "内容审核 API 用于检查文本是否违反内容策略。它会返回类别和分数，以表示违反策略的可能性。",
+          "label": "内容审核"
+        },
+        "ocr": {
+          "description": "OCR / 版面解析 API 可从文档和图像中提取文本与版面信息。上传文件 URL 后，可获得结构化的 Markdown 结果。由 Zhipu GLM-OCR 提供支持。",
+          "label": "OCR / 版面解析"
+        },
+        "realtime": {
+          "description": "实时 API 通过 WebSocket 提供低延迟、双向通信，非常适合语音助手和实时交互应用。",
+          "label": "实时 API"
+        },
+        "rerank": {
+          "description": "重排序 API 会根据文档与查询的相关性重新排序文档列表，适用于改进搜索结果和检索增强生成（RAG）系统。",
+          "label": "重排序"
+        },
+        "reset_defaults": "恢复默认",
+        "response_api": {
+          "description": "Response API 是 OpenAI 较新的有状态多轮对话 API。它在服务端管理对话状态，并支持工具和结构化输出等高级功能。",
+          "label": "Response API"
+        },
+        "select_all": "全选",
+        "select_none": "最小集",
+        "videos": {
+          "description": "视频生成 API 会根据文本描述或图像生成视频。指定提示词和参数后即可生成视频内容。",
+          "label": "视频生成"
+        }
       },
       "errors": {
         "operation_failed": "操作失败",
@@ -197,7 +291,7 @@
         }
       },
       "groups": {
-        "add_placeholder": "Add custom group...",
+        "add_placeholder": "添加自定义分组...",
         "help": "限制特定用户组的访问。留空表示所有用户都可以访问。默认分组始终保留。",
         "label": "分组 *"
       },
@@ -217,8 +311,10 @@
         "placeholder": "AWS Bedrock 推理配置文件 ARN 映射:\n{{example}}"
       },
       "key": {
-        "help": "The API key for authentication with the provider.",
-        "label": "API Key"
+        "github_placeholder": "请输入具有有效 Copilot 订阅的 GitHub 访问令牌（PAT 或 OAuth 令牌）",
+        "help": "用于向提供商进行身份验证的 API 密钥。",
+        "label": "API 密钥",
+        "placeholder": "请输入您的 API 密钥"
       },
       "loading": "正在加载渠道...",
       "mcp": {
@@ -233,7 +329,7 @@
         "invalid": "无效的模型配置格式",
         "invalid_short": "✗ 无效配置",
         "label": "模型配置 (JSON)",
-        "load_default": "Load Default",
+        "load_default": "加载默认值",
         "note": "配置每个模型的定价和限制 (可选)",
         "placeholder": "JSON 格式的模型配置:\n{{example}}",
         "select_type_notice": "选择渠道类型以配置模型配置。",
@@ -247,7 +343,7 @@
       },
       "models": {
         "add_custom": "添加",
-        "clear": "Clear",
+        "clear": "清除",
         "clear_all": "全部清除",
         "copy_title": "点击复制模型名称",
         "custom_placeholder": "添加自定义模型...",
@@ -255,16 +351,16 @@
         "fill_related": "填充相关模型 ({{count}})",
         "help": "此渠道可用的模型。留空以允许所有提供商模型。使用按钮填充相关/所有模型；重复项将被删除。",
         "label": "支持的模型 *",
-        "no_match": "No models found",
-        "no_selection": "No models selected",
+        "no_match": "未找到模型",
+        "no_selection": "未选择模型",
         "search_placeholder": "搜索模型...",
         "select_type_notice": "选择渠道类型以配置支持的模型。",
-        "selected_count": "Selected Models ({{count}})"
+        "selected_count": "已选模型（{{count}}）"
       },
       "name": {
-        "help": "A descriptive name for this channel to identify it in logs and lists.",
-        "label": "Channel Name *",
-        "placeholder": "My Channel"
+        "help": "用于在日志和列表中识别此渠道的描述性名称。",
+        "label": "渠道名称 *",
+        "placeholder": "我的渠道"
       },
       "openai_compatible": {
         "api_format": {
@@ -291,12 +387,12 @@
         }
       },
       "priority": {
-        "help": "Higher priority channels are tried first. Default is 0.",
-        "label": "Priority"
+        "help": "优先级更高的渠道会先尝试。默认值为 0。",
+        "label": "优先级"
       },
       "ratelimit": {
-        "help": "Maximum requests per minute. 0 means unlimited.",
-        "label": "Rate Limit"
+        "help": "每分钟最大请求数。0 表示不限制。",
+        "label": "速率限制"
       },
       "save_warning": {
         "cancel": "返回修改",
@@ -307,6 +403,23 @@
         "title": "模型映射存在可疑条目"
       },
       "spark": {
+        "api_key": {
+          "help": "在讯飞控制台获取的 APIKey，与 APISecret 一同使用。",
+          "label": "APIKey *",
+          "placeholder": "APIKey"
+        },
+        "api_secret": {
+          "help": "在讯飞控制台获取的 APISecret，与 APIKey 一同使用。",
+          "label": "APISecret *",
+          "placeholder": "APISecret"
+        },
+        "app_id": {
+          "help": "讯飞控制台中星火应用的 APPID。",
+          "label": "APPID *",
+          "placeholder": "APPID"
+        },
+        "heading": "讯飞星火配置",
+        "note": "最终 API Key 将拼接为：APPID|APISecret|APIKey",
         "version": {
           "help": "选择讯飞星火的 API 版本 (例如 v3.5)。",
           "label": "Spark 版本",
@@ -318,14 +431,41 @@
         "label": "系统提示",
         "placeholder": "预置到所有请求的可选系统提示"
       },
+      "tencent": {
+        "app_id": {
+          "help": "腾讯云账号 AppId。",
+          "label": "AppId *",
+          "placeholder": "AppId"
+        },
+        "heading": "腾讯混元配置",
+        "note": "最终 API Key 将拼接为：AppId|SecretId|SecretKey",
+        "secret_id": {
+          "help": "腾讯云 API SecretId。",
+          "label": "SecretId *",
+          "placeholder": "SecretId"
+        },
+        "secret_key": {
+          "help": "与 SecretId 配对的腾讯云 SecretKey。",
+          "label": "SecretKey *",
+          "placeholder": "SecretKey"
+        }
+      },
+      "test": {
+        "error_message": "无法测试渠道。",
+        "error_title": "测试出错",
+        "failed_message": "渠道测试失败。",
+        "failed_title": "测试失败",
+        "success_message": "渠道测试成功完成。",
+        "success_title": "测试通过"
+      },
       "title": {
         "create": "创建渠道",
         "edit": "编辑渠道"
       },
       "tooling": {
-        "add_custom": "Add custom tool...",
-        "available_tools": "Available Tools",
-        "editor_disabled": "Fix JSON error to enable editor",
+        "add_custom": "添加自定义工具...",
+        "available_tools": "可用工具",
+        "editor_disabled": "修复 JSON 错误后即可启用编辑器",
         "errors": {
           "invalid_json_message": "在编辑白名单之前修复工具 JSON。",
           "invalid_json_title": "无效 JSON"
@@ -335,7 +475,7 @@
         "help": "定义渠道范围的内置工具策略。配置提供商内置工具的白名单和每次调用的定价。支持注释（// 和 /* */）及尾逗号。",
         "invalid": "无效的工具配置格式",
         "label": "工具配置 (JSON)",
-        "no_whitelist": "No tools whitelisted",
+        "no_whitelist": "没有加入白名单的工具",
         "note": "配置内置工具允许列表和每次调用的定价 (可选)",
         "placeholder": "JSON 格式的工具配置:\n{{example}}",
         "whitelist": {
@@ -347,27 +487,29 @@
           "subtitle": "空白白名单保留所有提供商工具可用。",
           "title": "内置工具白名单"
         },
-        "whitelist_editor": "Whitelist Editor",
-        "whitelisted_tools": "Whitelisted Tools ({{count}})"
+        "whitelist_editor": "白名单编辑器",
+        "whitelisted_tools": "白名单工具 ({{count}})"
       },
       "type": {
-        "help": "The provider type for this channel. Changing this may reset some fields.",
-        "label": "Channel Type *",
-        "not_found": "No channel type found.",
-        "placeholder": "Select a channel type",
-        "search": "Search channel type..."
+        "help": "此渠道的提供商类型。更改后可能会重置某些字段。",
+        "label": "渠道类型 *",
+        "not_found": "未找到渠道类型。",
+        "placeholder": "选择渠道类型",
+        "search": "搜索渠道类型..."
       },
       "type_change": {
-        "cancel": "Cancel",
-        "confirm": "Change Type",
-        "description": "You are about to change the channel type from \"{{fromType}}\" to \"{{toType}}\".",
-        "title": "Change Channel Type?",
-        "warning": "Warning: This may reset some configuration fields specific to the previous channel type. Any unsaved changes may be lost."
+        "cancel": "取消",
+        "confirm": "更改类型",
+        "description": "您即将将渠道类型从 \"{{fromType}}\" 更改为 \"{{toType}}\"。",
+        "title": "更改渠道类型？",
+        "warning": "警告：这可能会重置上一种渠道类型特有的某些配置字段。任何未保存的更改都可能丢失。"
       },
       "validation": {
         "api_key_required": "API 密钥是必填项。",
         "base_url_required": "此渠道类型需要 Base URL。",
+        "endpoints_required": "保存前请至少启用一个端点。",
         "error_title": "验证错误",
+        "fix_fields": "请更正高亮显示的字段。",
         "hidden_models_not_supported": "这些隐藏模型当前并不在该渠道支持的模型列表中：{{models}}",
         "hidden_models_unreachable_alias": "这些隐藏模型被用作模型映射的来源，公开别名将因此无法访问：{{models}}",
         "inference_profile_invalid": "推理配置文件 ARN 映射包含无效 JSON。",
@@ -382,11 +524,13 @@
         "model_mapping_invalid_entries": "以下模型映射条目的值为空或不是字符串：{{keys}}",
         "model_mapping_parse_error": "模型映射 JSON 无效：{{error}}",
         "model_mapping_shape_invalid": "模型映射必须是形如 { \"from\": \"to\" } 的 JSON 对象。",
+        "name_required": "渠道名称是必填项",
         "oauth_invalid_json": "OAuth JWT 配置 JSON 无效。",
         "oauth_missing_field_message": "OAuth JWT 配置缺少: {{field}}",
         "oauth_missing_field_title": "缺少字段",
         "oauth_parse_message": "OAuth JWT 解析错误: {{error}}",
         "oauth_parse_title": "解析错误",
+        "type_required": "渠道类型是必填项",
         "valid_json": "✓ 有效 JSON"
       },
       "vertex": {
@@ -408,18 +552,35 @@
         }
       },
       "weight": {
-        "help": "Used for load balancing between channels of the same priority. Default is 0.",
-        "label": "Weight"
+        "help": "用于在相同优先级的渠道之间进行负载均衡。默认值为 0。",
+        "label": "权重"
       }
     },
     "empty": "尚未找到渠道，请先创建一个渠道。",
     "group_default": "default",
     "notifications": {
+      "balance_failed_message": "刷新余额失败。",
+      "balance_failed_title": "余额刷新失败",
+      "balance_success": "余额已刷新。",
+      "bulk_balance_success": "已刷新所有渠道的余额。",
+      "bulk_disable_summary_title": "禁用结果",
+      "bulk_enable_summary_title": "启用结果",
+      "bulk_status_empty": "没有可更新的渠道。",
+      "bulk_status_started": "正在更新 {{count}} 个渠道…",
+      "bulk_status_summary": "成功 {{success}} 个，失败 {{failed}} 个。",
       "bulk_test_failed_title": "批量测试失败",
       "bulk_test_started": "已开始批量渠道测试。",
       "delete_disabled_success": "已删除禁用渠道。",
       "delete_failed_message": "未知错误",
       "delete_failed_title": "删除失败",
+      "duplicate_failed_message": "复制渠道失败。",
+      "duplicate_failed_title": "复制失败",
+      "duplicate_success": "渠道已复制。",
+      "priority_failed_message": "更新优先级失败。",
+      "priority_failed_title": "更新失败",
+      "priority_saved": "优先级已更新。",
+      "status_failed_message": "更新渠道状态失败。",
+      "status_failed_title": "更新失败",
       "test_failed_message": "未知错误",
       "test_failed_title": "渠道测试失败",
       "test_success": "渠道测试成功。",
@@ -434,7 +595,7 @@
     },
     "search": {
       "id_label": "ID",
-      "placeholder": "按名称、类型或分组搜索渠道..."
+      "placeholder": "按名称、类型、分组或 UUID 搜索渠道..."
     },
     "status": {
       "active": "运行中",
@@ -446,8 +607,13 @@
     },
     "title": "渠道",
     "toolbar": {
+      "bulk_actions": "批量操作",
       "delete_disabled": "删除禁用",
       "delete_disabled_mobile": "删除所有禁用",
+      "disable_visible": "禁用可见渠道",
+      "enable_visible": "启用可见渠道",
+      "refresh_balances": "刷新所有余额",
+      "refresh_balances_mobile": "刷新余额",
       "test_all": "测试全部",
       "test_all_mobile": "测试所有渠道"
     },
@@ -485,10 +651,23 @@
       "title": "生成兑换码"
     },
     "edit": {
+      "actions": {
+        "back_to_list": "返回列表",
+        "copied": "已复制",
+        "copy": "复制",
+        "copy_all": "全部复制",
+        "download_codes": "下载兑换码"
+      },
+      "code_generated_hint": "请立即复制下方兑换码，离开此页后将无法与名称一同重新查看。",
+      "codes_generated": "已生成 {{count}} 个兑换码",
+      "codes_generated_aria": "生成的兑换码列表",
+      "codes_generated_hint": "请立即保存兑换码 — 离开此页面后将无法再次批量获取。",
       "description": {
         "create": "创建一个新的兑换码",
         "edit": "更新兑换码设置"
       },
+      "download_codes": "下载兑换码",
+      "download_filename_prefix": "redemption-codes",
       "loading": "正在加载兑换码...",
       "notifications": {
         "create_success": "兑换码创建成功",
@@ -519,9 +698,13 @@
         "label": "额度"
       }
     },
+    "notifications": {
+      "action_failed_message": "无法应用更改。",
+      "action_failed_title": "操作失败"
+    },
     "search": {
       "dropdown_placeholder": "输入兑换码名称...",
-      "placeholder": "按名称搜索兑换码..."
+      "placeholder": "按名称或 UUID 搜索兑换码..."
     },
     "status": {
       "disabled": "已禁用",
@@ -608,7 +791,9 @@
       "validation": {
         "error_title": "验证错误",
         "fix_fields": "请更正高亮显示的字段。",
-        "invalid_expiration": "无效的过期时间"
+        "invalid_expiration": "无效的过期时间",
+        "name_required": "令牌名称是必填项",
+        "quota_min": "额度必须为非负数"
       }
     },
     "page": {
@@ -638,7 +823,8 @@
         "used_title": "已用: {{label}}"
       },
       "confirm": {
-        "delete": "确定要删除令牌 \"{{label}}\" 吗？"
+        "delete": "确定要删除令牌 \"{{label}}\" 吗？",
+        "delete_title": "删除令牌"
       },
       "description": "管理您的 API 访问令牌",
       "dialog": {
@@ -649,15 +835,28 @@
       "empty": "未找到令牌。创建您的第一个令牌以开始使用。",
       "key": {
         "copied": "已复制！",
-        "copy": "复制令牌"
+        "copy": "复制令牌",
+        "hide": "隐藏密钥",
+        "show": "显示密钥"
+      },
+      "notifications": {
+        "action_failed_message": "无法应用更改。",
+        "action_failed_title": "操作失败"
       },
       "quota": {
         "unlimited": "无限"
       },
       "search": {
         "id_label": "ID: {{id}}",
-        "placeholder": "按名称搜索令牌...",
+        "placeholder": "按名称或 UUID 搜索令牌...",
         "quota_label": "额度: {{quota}}"
+      },
+      "share": {
+        "ama": "AMA 问天",
+        "lobechat": "LobeChat",
+        "next_chat": "ChatGPT Next Web",
+        "open_in_client": "在客户端打开",
+        "opencat": "OpenCat"
       },
       "status": {
         "disabled": "已禁用",
@@ -693,6 +892,10 @@
             "placeholder": "输入用户名"
           }
         },
+        "notifications": {
+          "create_failed_message": "无法创建用户。",
+          "create_failed_title": "创建失败"
+        },
         "title": "创建用户"
       },
       "topup": {
@@ -710,6 +913,10 @@
             "placeholder": "可选"
           }
         },
+        "notifications": {
+          "submit_failed_message": "无法为用户充值。",
+          "submit_failed_title": "充值失败"
+        },
         "title": "充值 {{username}}"
       }
     },
@@ -719,6 +926,8 @@
         "cancel": "取消",
         "create": "创建用户",
         "creating": "正在创建...",
+        "disable_2fa": "禁用用户 2FA",
+        "disabling_2fa": "正在禁用...",
         "update": "更新用户",
         "updating": "正在更新..."
       },
@@ -727,8 +936,15 @@
         "help_email": "帮助: 邮箱",
         "help_group": "帮助: 分组",
         "help_password": "帮助: 密码",
+        "help_password_locked": "帮助: 锁定密码",
         "help_quota": "帮助: 额度",
         "help_username": "帮助: 用户名"
+      },
+      "confirm_2fa": {
+        "cancel": "取消",
+        "confirm": "禁用 2FA",
+        "description": "禁用 {{username}} 的二步验证?该用户将无需 2FA 验证码即可登录。",
+        "title": "禁用 2FA"
       },
       "description": {
         "create": "创建一个新用户账户",
@@ -740,6 +956,9 @@
         "unexpected_title": "意外错误"
       },
       "fields": {
+        "created_at": {
+          "label": "注册时间"
+        },
         "display_name": {
           "help": "UI 中显示的可选可读名称。",
           "label": "显示名称",
@@ -764,11 +983,19 @@
           "help": "最小长度取决于策略。编辑时留空以保持不变。",
           "label_create": "密码 *",
           "label_edit": "新密码 (留空以保持当前密码)",
+          "locked_hint": "密码已锁定。关闭「锁定密码」后才能修改；锁定期间也无法启用 MFA。",
           "placeholder": "输入密码"
+        },
+        "password_locked": {
+          "help": "开启后，任何人（包括管理员）都无法修改该用户密码，同时该用户也无法启用 TOTP 或注册 passkey。只有 root 管理员可以解除锁定。",
+          "label": "锁定密码 (仅根管理员)"
         },
         "quota": {
           "help": "额度单位为令牌。USD 估算值使用管理员配置的单位比率。",
           "label": "额度 ({{usd}})"
+        },
+        "updated_at": {
+          "label": "最后修改"
         },
         "username": {
           "help": "唯一登录名。至少 3 个字符。",
@@ -780,6 +1007,18 @@
       "notifications": {
         "create_success": "用户创建成功",
         "update_success": "用户更新成功"
+      },
+      "notifications_2fa": {
+        "failed_message": "无法禁用 2FA。",
+        "failed_title": "禁用 2FA 失败",
+        "success_message": "已禁用二步验证。",
+        "success_title": "2FA 已禁用"
+      },
+      "sections": {
+        "security_lock": {
+          "description": "限制对该用户的敏感修改。开启后将同时阻止修改密码和注册新的 MFA 因素。仅根管理员可以切换该开关。",
+          "title": "安全锁定"
+        }
       },
       "title": {
         "create": "创建用户",
@@ -800,9 +1039,12 @@
     "page": {
       "actions": {
         "delete": "删除",
+        "demote": "降级",
         "disable": "禁用",
+        "disable_2fa": "禁用 2FA",
         "edit": "编辑",
         "enable": "启用",
+        "promote": "提升",
         "topup": "充值"
       },
       "columns": {
@@ -810,25 +1052,48 @@
         "display_name": "显示名称",
         "group": "分组",
         "id": "ID",
+        "register_time": "注册时间",
         "remaining_quota": "剩余额度",
         "role": "角色",
         "status": "状态",
         "used_quota": "已用额度",
         "username": "用户名"
       },
+      "confirm": {
+        "cancel": "取消",
+        "confirm": "确认",
+        "demote_description": "将 {{username}} 降级为普通用户?该用户将失去管理员权限。",
+        "demote_title": "降级用户",
+        "disable_2fa_description": "禁用 {{username}} 的二步验证?该用户将无需 2FA 验证码即可登录。",
+        "disable_2fa_title": "禁用 2FA",
+        "promote_description": "将 {{username}} 提升为管理员?该用户将获得管理员权限。",
+        "promote_title": "提升用户"
+      },
       "description": "管理用户",
       "empty": "未找到用户。添加您的第一个用户以开始使用。",
       "notifications": {
         "action_failed_message": "无法应用更改。",
         "action_failed_title": "操作失败",
+        "demote_failed_message": "无法降级该用户。",
+        "demote_failed_title": "降级失败",
+        "demote_success_message": "用户 {{username}} 已降级。",
+        "demote_success_title": "用户已降级",
+        "disable_2fa_failed_message": "无法禁用 2FA。",
+        "disable_2fa_failed_title": "禁用 2FA 失败",
+        "disable_2fa_success_message": "已禁用 {{username}} 的二步验证。",
+        "disable_2fa_success_title": "2FA 已禁用",
         "load_failed_message": "加载用户失败。",
         "load_failed_title": "访问被拒绝",
+        "promote_failed_message": "无法提升该用户。",
+        "promote_failed_title": "提升失败",
+        "promote_success_message": "用户 {{username}} 已提升。",
+        "promote_success_title": "用户已提升",
         "search_failed_message": "搜索失败。",
         "search_failed_title": "搜索失败"
       },
       "search": {
         "id_label": "ID: {{id}}",
-        "placeholder": "按用户名搜索用户...",
+        "placeholder": "按用户名或 UUID 搜索用户...",
         "role_label": "角色: {{role}}",
         "status_label": "状态: {{status}}"
       },
@@ -857,6 +1122,7 @@
           "default": "默认",
           "id": "ID",
           "quota": "剩余额度",
+          "register_time": "注册时间",
           "used_quota": "已用额度",
           "username": "用户名"
         },

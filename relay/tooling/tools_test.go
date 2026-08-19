@@ -10,14 +10,14 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 
-	"github.com/songquanpeng/one-api/common/ctxkey"
-	"github.com/songquanpeng/one-api/model"
-	"github.com/songquanpeng/one-api/relay/adaptor"
-	"github.com/songquanpeng/one-api/relay/adaptor/openai"
-	"github.com/songquanpeng/one-api/relay/billing/ratio"
-	"github.com/songquanpeng/one-api/relay/channeltype"
-	metalib "github.com/songquanpeng/one-api/relay/meta"
-	relaymodel "github.com/songquanpeng/one-api/relay/model"
+	"github.com/Laisky/one-api/common/ctxkey"
+	"github.com/Laisky/one-api/model"
+	"github.com/Laisky/one-api/relay/adaptor"
+	"github.com/Laisky/one-api/relay/adaptor/openai"
+	"github.com/Laisky/one-api/relay/billing/ratio"
+	"github.com/Laisky/one-api/relay/channeltype"
+	metalib "github.com/Laisky/one-api/relay/meta"
+	relaymodel "github.com/Laisky/one-api/relay/model"
 )
 
 type adaptorStub struct {
@@ -186,6 +186,30 @@ func TestApplyBuiltinToolCharges_WebSearchPreviewPricing(t *testing.T) {
 			require.Equal(t, expectedQuota, summary.CostByTool[toolName])
 		})
 	}
+}
+
+// TestApplyBuiltinToolCharges_GPT56WebSearch verifies GPT-5.6 Responses web
+// search calls use the current OpenAI built-in tool pricing.
+func TestApplyBuiltinToolCharges_GPT56WebSearch(t *testing.T) {
+	t.Parallel()
+	gin.SetMode(gin.TestMode)
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Set(ctxkey.WebSearchCallCount, 2)
+
+	meta := &metalib.Meta{ActualModelName: "gpt-5.6"}
+	usage := &relaymodel.Usage{PromptTokens: 100, CompletionTokens: 10}
+
+	ApplyBuiltinToolCharges(c, &usage, meta, nil, &openai.Adaptor{})
+
+	expectedPerCall := int64(math.Ceil(0.01 * float64(ratio.QuotaPerUsd)))
+	require.Equal(t, expectedPerCall*2, usage.ToolsCost)
+
+	summaryAny, exists := c.Get(ctxkey.ToolInvocationSummary)
+	require.True(t, exists)
+	summary := summaryAny.(*model.ToolUsageSummary)
+	require.Equal(t, 2, summary.Counts["web_search"])
+	require.Equal(t, expectedPerCall*2, summary.CostByTool["web_search"])
 }
 
 func TestValidateChatBuiltinTools_Disallowed(t *testing.T) {

@@ -7,8 +7,8 @@ import (
 
 	"github.com/Laisky/zap"
 
-	"github.com/songquanpeng/one-api/common/config"
-	"github.com/songquanpeng/one-api/common/logger"
+	"github.com/Laisky/one-api/common/config"
+	"github.com/Laisky/one-api/common/logger"
 )
 
 var (
@@ -27,7 +27,7 @@ var (
 
 // func printHelp() {
 // 	fmt.Println("One API " + Version + " - All in one API service for OpenAI API.")
-// 	fmt.Println("Copyright (C) 2025 JustSong. All rights reserved.")
+// 	fmt.Println("Copyright (C) 2026 Laisky. All rights reserved.")
 // 	fmt.Println("GitHub: https://github.com/Laisky/one-api")
 // 	fmt.Println("Usage: one-api [--port <port>] [--log-dir <log directory>] [--version] [--help]")
 // }

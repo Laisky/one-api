@@ -7,7 +7,6 @@ import (
 	"io"
 	"net/http"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/Laisky/errors/v2"
@@ -15,24 +14,24 @@ import (
 	"github.com/Laisky/zap"
 	"github.com/gin-gonic/gin"
 
-	"github.com/songquanpeng/one-api/common"
-	"github.com/songquanpeng/one-api/common/config"
-	"github.com/songquanpeng/one-api/common/ctxkey"
-	"github.com/songquanpeng/one-api/common/graceful"
-	"github.com/songquanpeng/one-api/common/metrics"
-	"github.com/songquanpeng/one-api/model"
-	"github.com/songquanpeng/one-api/relay"
-	"github.com/songquanpeng/one-api/relay/adaptor"
-	"github.com/songquanpeng/one-api/relay/adaptor/common/structuredjson"
-	"github.com/songquanpeng/one-api/relay/adaptor/openai"
-	"github.com/songquanpeng/one-api/relay/apitype"
-	"github.com/songquanpeng/one-api/relay/channeltype"
-	metalib "github.com/songquanpeng/one-api/relay/meta"
-	relaymodel "github.com/songquanpeng/one-api/relay/model"
-	"github.com/songquanpeng/one-api/relay/pricing"
-	"github.com/songquanpeng/one-api/relay/relaymode"
-	"github.com/songquanpeng/one-api/relay/streaming"
-	"github.com/songquanpeng/one-api/relay/tooling"
+	"github.com/Laisky/one-api/common"
+	"github.com/Laisky/one-api/common/config"
+	"github.com/Laisky/one-api/common/ctxkey"
+	"github.com/Laisky/one-api/common/metrics"
+	"github.com/Laisky/one-api/model"
+	"github.com/Laisky/one-api/relay"
+	"github.com/Laisky/one-api/relay/adaptor"
+	"github.com/Laisky/one-api/relay/adaptor/common/deepseekcompat"
+	"github.com/Laisky/one-api/relay/adaptor/common/structuredjson"
+	"github.com/Laisky/one-api/relay/adaptor/openai"
+	"github.com/Laisky/one-api/relay/apitype"
+	"github.com/Laisky/one-api/relay/channeltype"
+	metalib "github.com/Laisky/one-api/relay/meta"
+	relaymodel "github.com/Laisky/one-api/relay/model"
+	"github.com/Laisky/one-api/relay/pricing"
+	"github.com/Laisky/one-api/relay/relaymode"
+	"github.com/Laisky/one-api/relay/streaming"
+	"github.com/Laisky/one-api/relay/tooling"
 )
 
 func RelayTextHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
@@ -72,9 +71,9 @@ func RelayTextHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 		if channel, ok := channelModel.(*model.Channel); ok {
 			channelRecord = channel
 			// Get from unified ModelConfigs only (after migration)
-			channelModelRatio = channel.GetModelRatioFromConfigs()
-			channelModelConfigs = channel.GetModelPriceConfigs()
-			channelCompletionRatio = channel.GetCompletionRatioFromConfigs()
+			channelModelRatio = channel.GetModelRatioFromConfigsWithContext(ctx)
+			channelModelConfigs = channel.GetModelPriceConfigsWithContext(ctx)
+			channelCompletionRatio = channel.GetCompletionRatioFromConfigsWithContext(ctx)
 		}
 	}
 
@@ -98,8 +97,8 @@ func RelayTextHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 
 	// get model ratio using three-layer pricing system
 	pricingAdaptor := resolvePricingAdaptor(meta)
-	modelRatio := pricing.GetModelRatioWithThreeLayers(textRequest.Model, channelModelRatio, pricingAdaptor)
-	completionRatio := pricing.GetCompletionRatioWithThreeLayers(textRequest.Model, channelCompletionRatio, pricingAdaptor)
+	modelRatio := pricing.ResolveModelRatioAt(textRequest.Model, channelModelConfigs, channelModelRatio, pricingAdaptor, meta.StartTime)
+	completionRatio := pricing.ResolveCompletionRatioAt(textRequest.Model, channelModelConfigs, channelCompletionRatio, pricingAdaptor, meta.StartTime)
 	// groupRatio := billingratio.GetGroupRatio(meta.Group)
 	groupRatio := c.GetFloat64(ctxkey.ChannelRatio)
 
@@ -148,6 +147,7 @@ func RelayTextHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 			ChannelModelConfigs:    channelModelConfigs,
 			ChannelCompletionRatio: channelCompletionRatio,
 			PricingAdaptor:         pricingAdaptor,
+			RequestTime:            meta.StartTime,
 			FlushInterval:          time.Duration(config.StreamingBillingIntervalSec) * time.Second,
 			Ctx:                    gmw.Ctx(c),
 		})
@@ -231,40 +231,21 @@ func RelayTextHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 		quotaId := c.GetInt(ctxkey.Id)
 		requestId := c.GetString(ctxkey.RequestId)
 		markBillingReconciled(c)
-		graceful.GoCritical(gmw.BackgroundCtx(c), "postBilling", func(ctx context.Context) {
-			baseBillingTimeout := time.Duration(config.BillingTimeoutSec) * time.Second
-			billingTimeout := baseBillingTimeout
-
-			ctx, cancel := context.WithTimeout(gmw.BackgroundCtx(c), billingTimeout)
-			defer cancel()
-
-			done := make(chan bool, 1)
-			var quota int64
-
-			go func() {
-				quota = postConsumeQuota(ctx, usage, meta, textRequest, ratio, preConsumedQuota, incrementalCharged, modelRatio, channelModelRatio, groupRatio, systemPromptReset, channelModelConfigs, channelCompletionRatio)
-				if requestId != "" {
-					if err := model.UpdateUserRequestCostQuotaByRequestID(quotaId, requestId, quota); err != nil {
-						lg.Error("update user request cost failed", zap.Error(err), zap.String("request_id", requestId))
-					}
-				}
-				done <- true
-			}()
-
-			select {
-			case <-done:
-			case <-ctx.Done():
-				if errors.Is(ctx.Err(), context.DeadlineExceeded) && usage != nil {
-					estimatedQuota := float64(usage.PromptTokens+usage.CompletionTokens) * ratio
-					elapsedTime := time.Since(meta.StartTime)
-					lg.Error("CRITICAL BILLING TIMEOUT",
-						zap.String("model", textRequest.Model),
-						zap.String("requestId", requestId),
-						zap.Int("userId", meta.UserId),
-						zap.Int64("estimatedQuota", int64(estimatedQuota)),
-						zap.Duration("elapsedTime", elapsedTime))
-
-					metrics.GlobalRecorder.RecordBillingTimeout(meta.UserId, meta.ChannelId, textRequest.Model, estimatedQuota, elapsedTime)
+		runPostBillingWithTimeout(detachForBilling(c), "postBilling", lg, postBillingTimeoutInfo{
+			userID:              meta.UserId,
+			channelID:           meta.ChannelId,
+			model:               textRequest.Model,
+			requestID:           requestId,
+			startTime:           meta.StartTime,
+			estimatedQuota:      func() float64 { return float64(usage.PromptTokens+usage.CompletionTokens) * ratio },
+			guardTimeoutLog:     func() bool { return usage != nil },
+			logMessage:          "CRITICAL BILLING TIMEOUT",
+			includeElapsedField: true,
+		}, func(ctx context.Context) {
+			quota := postConsumeQuota(ctx, usage, meta, textRequest, ratio, preConsumedQuota, incrementalCharged, modelRatio, channelModelRatio, groupRatio, systemPromptReset, channelModelConfigs, channelCompletionRatio)
+			if requestId != "" {
+				if err := model.UpdateUserRequestCostQuotaByRequestID(quotaId, requestId, quota); err != nil {
+					lg.Error("update user request cost failed", zap.Error(err), zap.String("request_id", requestId))
 				}
 			}
 		})
@@ -287,6 +268,13 @@ func RelayTextHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 	requestBodyBytes, _ := io.ReadAll(requestBody)
 	requestBody = bytes.NewBuffer(requestBodyBytes)
 
+	// ST-022: when this Chat request is served by a Responses upstream and an exact
+	// transcript checkpoint exists, continue from the bound upstream handle and send
+	// only the delta. Fails open to the full body on any miss (pure optimization).
+	if newBody, matched := matchChatCheckpoint(c, meta, textRequest); matched {
+		requestBody = bytes.NewBuffer(newBody)
+	}
+
 	// do request
 	resp, err := requestAdaptor.DoRequest(c, meta, requestBody)
 	if err != nil {
@@ -302,17 +290,14 @@ func RelayTextHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 		requestId := c.GetString(ctxkey.RequestId)
 		estimated := estimatePreConsumedQuota(textRequest, promptUsage, modelRatio, completionRatio, channelModelRatio, groupRatio, channelModelConfigs, channelCompletionRatio, meta)
 		if requestId == "" {
-			lg.Warn("request id missing when recording provisional user request cost",
-				zap.Int("user_id", quotaId))
+			lg.Warn("request id missing when recording provisional user request cost")
 		} else if err := model.UpdateUserRequestCostQuotaByRequestID(quotaId, requestId, estimated); err != nil {
 			lg.Warn("record provisional user request cost failed", zap.Error(err), zap.String("request_id", requestId))
 		}
 	}
 	if isErrorHappened(meta, resp) {
 		// refund pre-consumed quota under lifecycle management so shutdown waits for it
-		graceful.GoCritical(ctx, "returnPreConsumedQuota", func(cctx context.Context) {
-			_ = returnPreConsumedQuotaConservative(cctx, c, preConsumedQuota, meta.TokenId, "upstream_http_error")
-		})
+		scheduleConservativeRefund(c, preConsumedQuota, meta.TokenId, "upstream_http_error")
 		// Reconcile provisional record to 0 since upstream returned error
 		quotaId := c.GetInt(ctxkey.Id)
 		requestId := c.GetString(ctxkey.RequestId)
@@ -339,6 +324,12 @@ func RelayTextHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 			return respErr
 		}
 		// Fall through to billing with available usage
+	}
+
+	if respErr == nil {
+		// ST-022: record a stateless-client continuation checkpoint when this Chat
+		// request was served by a Responses upstream. No-op otherwise; never fatal.
+		recordChatCheckpoint(c, meta, textRequest)
 	}
 
 	var incrementalCharged int64
@@ -416,51 +407,27 @@ func RelayTextHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 		metrics.GlobalRecorder.RecordModelUsage(meta.ActualModelName, channeltype.IdToName(meta.ChannelType), time.Since(meta.StartTime))
 	}
 
+	// Capture requestId on the request goroutine BEFORE the spawn: reading it off c
+	// inside the goroutine would race gin's sync.Pool recycle of the context.
+	requestId := c.GetString(ctxkey.RequestId)
 	markBillingReconciled(c)
-	graceful.GoCritical(gmw.BackgroundCtx(c), "postBilling", func(ctx context.Context) {
-		// Use configurable billing timeout with model-specific adjustments
-		baseBillingTimeout := time.Duration(config.BillingTimeoutSec) * time.Second
-		billingTimeout := baseBillingTimeout
-
-		ctx, cancel := context.WithTimeout(gmw.BackgroundCtx(c), billingTimeout)
-		defer cancel()
-
-		// Monitor for timeout and log critical errors
-		done := make(chan bool, 1)
-		var quota int64
-
-		requestId := c.GetString(ctxkey.RequestId)
-		go func() {
-			quota = postConsumeQuota(ctx, usage, meta, textRequest, ratio, preConsumedQuota, incrementalCharged, modelRatio, channelModelRatio, groupRatio, systemPromptReset, channelModelConfigs, channelCompletionRatio)
-
-			// Reconcile request cost with final quota (override provisional pre-consumed value)
-			if requestId == "" {
-				lg.Warn("request id missing when finalizing user request cost",
-					zap.Int("user_id", quotaId))
-			} else if err := model.UpdateUserRequestCostQuotaByRequestID(quotaId, requestId, quota); err != nil {
-				lg.Error("update user request cost failed", zap.Error(err), zap.String("request_id", requestId))
-			}
-			done <- true
-		}()
-
-		select {
-		case <-done:
-			// Billing completed successfully
-		case <-ctx.Done():
-			if errors.Is(ctx.Err(), context.DeadlineExceeded) {
-				estimatedQuota := float64(usage.PromptTokens+usage.CompletionTokens) * ratio
-				elapsedTime := time.Since(meta.StartTime)
-
-				lg.Error("CRITICAL BILLING TIMEOUT",
-					zap.String("model", textRequest.Model),
-					zap.String("requestId", requestId),
-					zap.Int("userId", meta.UserId),
-					zap.Int64("estimatedQuota", int64(estimatedQuota)),
-					zap.Duration("elapsedTime", elapsedTime))
-
-				metrics.GlobalRecorder.RecordBillingTimeout(meta.UserId, meta.ChannelId, textRequest.Model, estimatedQuota, elapsedTime)
-				// TODO: Implement dead letter queue or retry mechanism for failed billing
-			}
+	runPostBillingWithTimeout(detachForBilling(c), "postBilling", lg, postBillingTimeoutInfo{
+		userID:              meta.UserId,
+		channelID:           meta.ChannelId,
+		model:               textRequest.Model,
+		requestID:           requestId,
+		startTime:           meta.StartTime,
+		estimatedQuota:      func() float64 { return float64(usage.PromptTokens+usage.CompletionTokens) * ratio },
+		guardTimeoutLog:     func() bool { return true },
+		logMessage:          "CRITICAL BILLING TIMEOUT",
+		includeElapsedField: true,
+	}, func(ctx context.Context) {
+		quota := postConsumeQuota(ctx, usage, meta, textRequest, ratio, preConsumedQuota, incrementalCharged, modelRatio, channelModelRatio, groupRatio, systemPromptReset, channelModelConfigs, channelCompletionRatio)
+		// Reconcile request cost with final quota (override provisional pre-consumed value)
+		if requestId == "" {
+			lg.Warn("request id missing when finalizing user request cost")
+		} else if err := model.UpdateUserRequestCostQuotaByRequestID(quotaId, requestId, quota); err != nil {
+			lg.Error("update user request cost failed", zap.Error(err), zap.String("request_id", requestId))
 		}
 	})
 
@@ -475,7 +442,7 @@ func getRequestBody(c *gin.Context, meta *metalib.Meta, textRequest *relaymodel.
 
 	if textRequest.ResponseFormat == nil &&
 		!config.EnforceIncludeUsage &&
-		meta.APIType == apitype.OpenAI &&
+		(meta.APIType == apitype.OpenAI || (meta.APIType == apitype.Azure && !meta.AzureTargetsAnthropic())) &&
 		meta.OriginModelName == meta.ActualModelName &&
 		meta.ChannelType != channeltype.OpenAI &&
 		meta.ChannelType != channeltype.Baichuan &&
@@ -519,7 +486,7 @@ func getRequestBody(c *gin.Context, meta *metalib.Meta, textRequest *relaymodel.
 	// When upstream expects the native OpenAI chat payload and we didn't rewrite the
 	// system prompt, merge unknown user fields (e.g. encrypted extensions) back into
 	// the converted JSON so we can preserve pass-through semantics.
-	if _, isChatPayload := convertedRequest.(*relaymodel.GeneralOpenAIRequest); isChatPayload && meta.APIType == apitype.OpenAI {
+	if _, isChatPayload := convertedRequest.(*relaymodel.GeneralOpenAIRequest); isChatPayload && (meta.APIType == apitype.OpenAI || meta.APIType == apitype.Azure) {
 		allowUnknown := meta.ChannelType == channeltype.OpenAI && !config.EnforceIncludeUsage && !systemPromptReset
 		if merged, stats, changed, mergeErr := mergeControlledPassthroughJSON(originalBody, jsonData, allowUnknown); mergeErr == nil {
 			jsonData = merged
@@ -551,20 +518,5 @@ func requiresJSONSchemaDowngrade(meta *metalib.Meta, request *relaymodel.General
 	if request.ResponseFormat == nil || request.ResponseFormat.JsonSchema == nil {
 		return false
 	}
-
-	modelName := strings.ToLower(strings.TrimSpace(request.Model))
-	if strings.HasPrefix(modelName, "deepseek") {
-		return true
-	}
-
-	baseURL := strings.ToLower(strings.TrimSpace(meta.BaseURL))
-	if strings.Contains(baseURL, "deepseek.com") {
-		return true
-	}
-
-	if meta.ChannelType == channeltype.DeepSeek {
-		return true
-	}
-
-	return false
+	return deepseekcompat.UsesDeepSeekAPIContract(meta)
 }

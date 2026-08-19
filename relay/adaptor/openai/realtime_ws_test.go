@@ -1,7 +1,9 @@
 package openai
 
 import (
+	"bufio"
 	"encoding/json"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -12,9 +14,9 @@ import (
 	"github.com/gorilla/websocket"
 	"github.com/stretchr/testify/require"
 
-	rmeta "github.com/songquanpeng/one-api/relay/meta"
-	rmodel "github.com/songquanpeng/one-api/relay/model"
-	"github.com/songquanpeng/one-api/relay/relaymode"
+	rmeta "github.com/Laisky/one-api/relay/meta"
+	rmodel "github.com/Laisky/one-api/relay/model"
+	"github.com/Laisky/one-api/relay/relaymode"
 )
 
 // newMockWSUpstream creates a test WebSocket server that echoes text messages
@@ -26,7 +28,9 @@ func newMockWSUpstream(t *testing.T, opts ...func(conn *websocket.Conn)) *httpte
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		conn, err := upgrader.Upgrade(w, r, nil)
 		if err != nil {
-			t.Logf("mock upstream upgrade error: %v", err)
+			// Do not log via t here: this handler runs on the httptest server
+			// goroutine and can outlive the test, so calling t.Log* would race
+			// with the test framework's teardown (testing.common state).
 			return
 		}
 		defer conn.Close()
@@ -133,14 +137,14 @@ func TestRealtimeHandler_EndToEnd(t *testing.T) {
 			ActualModelName: "gpt-4o-realtime-preview",
 		}
 
-		bizErr, usage := RealtimeHandler(c, meta)
-		if bizErr != nil {
-			t.Logf("RealtimeHandler error: %v", bizErr.Error.Message)
+		// Do not log via t inside this handler. The WebSocket connection is
+		// hijacked, so httptest.Server.Close() does not wait for this handler
+		// goroutine; it can outlive the test, and any t.Log* call after the
+		// test returns is a data race against the test framework's teardown.
+		// Behavior is asserted through the client connection below, so
+		// handler-side diagnostics are unnecessary.
+		if bizErr, _ := RealtimeHandler(c, meta); bizErr != nil {
 			return
-		}
-		if usage != nil {
-			t.Logf("Usage: prompt=%d, completion=%d, total=%d",
-				usage.PromptTokens, usage.CompletionTokens, usage.TotalTokens)
 		}
 	}))
 	defer realtimeServer.Close()
@@ -181,6 +185,9 @@ func TestRealtimeHandler_EndToEnd(t *testing.T) {
 }
 
 // ginResponseWriter wraps http.ResponseWriter to satisfy gin.ResponseWriter interface.
+// It forwards Hijack to the underlying real ResponseWriter so WebSocket upgrade
+// works inside tests that use gin.CreateTestContext (whose default
+// httptest.ResponseRecorder does NOT implement http.Hijacker).
 type ginResponseWriter struct {
 	w http.ResponseWriter
 	gin.ResponseWriter
@@ -189,6 +196,14 @@ type ginResponseWriter struct {
 func (g *ginResponseWriter) Header() http.Header         { return g.w.Header() }
 func (g *ginResponseWriter) Write(b []byte) (int, error) { return g.w.Write(b) }
 func (g *ginResponseWriter) WriteHeader(code int)        { g.w.WriteHeader(code) }
+
+func (g *ginResponseWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	hj, ok := g.w.(http.Hijacker)
+	if !ok {
+		return nil, nil, http.ErrNotSupported
+	}
+	return hj.Hijack()
+}
 
 // TestCopyWS verifies bidirectional message copying between two WebSocket connections.
 func TestCopyWS(t *testing.T) {

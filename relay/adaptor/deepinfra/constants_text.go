@@ -1,0 +1,82 @@
+package deepinfra
+
+// extendedTextCatalog contains the active text-generation entries that are not
+// already present in the flagship catalog in constants.go. Prices are USD per
+// one million input/output/cached-input tokens; contexts follow the DeepInfra
+// catalog published on 2026-08-19.
+var extendedTextCatalog = []catalogTextEntry{
+	{"Gryphe/MythoMax-L2-13b", 0.4, 0.4, 0, 4000, deepInfraTextInput, false},
+	{"NousResearch/Hermes-3-Llama-3.1-405B", 1, 1, 0, 128000, deepInfraTextInput, false},
+	{"NousResearch/Hermes-3-Llama-3.1-70B", 0.7, 0.7, 0, 128000, deepInfraTextInput, false},
+	{"Qwen/Qwen2.5-72B-Instruct", 0.36, 0.4, 0, 32000, deepInfraTextInput, false},
+	{"Qwen/Qwen3-14B", 0.12, 0.24, 0, 40000, deepInfraTextInput, true},
+	{"Qwen/Qwen3-235B-A22B-Instruct-2507", 0.09, 0.55, 0, 256000, deepInfraTextInput, false},
+	{"Qwen/Qwen3-30B-A3B", 0.12, 0.5, 0, 40000, deepInfraTextInput, true},
+	{"Qwen/Qwen3-32B", 0.08, 0.28, 0, 40000, deepInfraTextInput, true},
+	{"Qwen/Qwen3-Coder-480B-A35B-Instruct-Turbo", 0.3, 1, 0.1, 256000, deepInfraTextInput, true},
+	{"Qwen/Qwen3-Next-80B-A3B-Instruct", 0.09, 1.1, 0, 256000, deepInfraTextInput, false},
+	{"Sao10K/L3-8B-Lunaris-v1-Turbo", 0.04, 0.05, 0, 8000, deepInfraTextInput, false},
+	{"Sao10K/L3.1-70B-Euryale-v2.2", 0.85, 0.85, 0, 128000, deepInfraTextInput, false},
+	{"anthropic/claude-fable-5", 10, 50, 0, 976000, deepInfraVisionInput, true},
+	{"anthropic/claude-haiku-4-5", 1, 5, 0, 195000, deepInfraVisionInput, true},
+	{"anthropic/claude-opus-4-7", 5, 25, 0, 976000, deepInfraVisionInput, true},
+	{"anthropic/claude-opus-4-8", 5, 25, 0, 976000, deepInfraVisionInput, true},
+	{"anthropic/claude-opus-5", 5, 25, 0, 976000, deepInfraVisionInput, true},
+	{"anthropic/claude-sonnet-4-6", 3, 15, 0, 976000, deepInfraVisionInput, true},
+	{"anthropic/claude-sonnet-5", 2, 10, 0, 976000, deepInfraVisionInput, true},
+	{"deepseek-ai/DeepSeek-R1-0528", 0.5, 2.15, 0.35, 160000, deepInfraTextInput, true},
+	{"deepseek-ai/DeepSeek-V3", 0.32, 0.89, 0, 160000, deepInfraTextInput, false},
+	{"deepseek-ai/DeepSeek-V3-0324", 0.24, 0.9, 0.135, 160000, deepInfraTextInput, false},
+	{"deepseek-ai/DeepSeek-V3.1", 0.25, 0.95, 0.13, 160000, deepInfraTextInput, true},
+	{"google/gemini-2.5-flash", 0.3, 2.5, 0, 976000, deepInfraVisionInput, true},
+	{"google/gemini-2.5-pro", 1.25, 10, 0, 976000, deepInfraVisionInput, true},
+	{"google/gemini-3.1-flash-lite", 0.25, 1.5, 0, 976000, deepInfraVisionInput, true},
+	{"google/gemini-3.1-pro", 2, 12, 0, 976000, deepInfraVisionInput, true},
+	{"google/gemini-3.5-flash", 0.5, 3, 0, 976000, deepInfraVisionInput, true},
+	{"google/gemini-3.7-flash", 0.5, 3, 0, 976000, deepInfraVisionInput, true},
+	{"google/gemma-3-12b-it", 0.09, 0.3, 0, 128000, deepInfraVisionInput, false},
+	{"google/gemma-3-27b-it", 0.09, 0.16, 0, 128000, deepInfraVisionInput, false},
+	{"google/gemma-3-4b-it", 0.05, 0.1, 0, 128000, deepInfraVisionInput, false},
+	{"google/gemma-4-31B-it-Ultra", 0.27, 0.76, 0, 128000, deepInfraVisionInput, false},
+	{"google/gemma-4-31B-it-turbo", 0.09, 0.34, 0.05, 256000, deepInfraVisionInput, false},
+	{"google/gemma-4-E4B-it", 0.02, 0.1, 0, 128000, deepInfraVisionInput, false},
+	{"inclusionAI/Ling-3.0-flash", 0.06, 0.18, 0.012, 128000, deepInfraTextInput, true},
+	{"meta-llama/Llama-3.3-70B-Instruct-Turbo", 0.1, 0.32, 0, 128000, deepInfraTextInput, false},
+	{"meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8", 0.2, 0.8, 0, 1024000, deepInfraVisionInput, false},
+	{"meta-llama/Llama-4-Scout-17B-16E-Instruct", 0.1, 0.3, 0, 320000, deepInfraVisionInput, false},
+	{"meta-llama/Llama-Guard-4-12B", 0.18, 0.18, 0, 160000, deepInfraVisionInput, false},
+	{"meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo", 0.4, 0.4, 0, 128000, deepInfraTextInput, false},
+	{"meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo", 0.02, 0.04, 0, 128000, deepInfraTextInput, false},
+	{"meta-models/Muse-Glimmer-30B", 0.3, 1.2, 0.04, 128000, deepInfraVisionInput, true},
+	{"microsoft/phi-4", 0.07, 0.14, 0, 16000, deepInfraTextInput, true},
+	{"mistralai/Mistral-Nemo-Instruct-2407", 0.019, 0.03, 0, 128000, deepInfraTextInput, false},
+	{"mistralai/Mistral-Small-24B-Instruct-2501", 0.05, 0.08, 0, 32000, deepInfraTextInput, false},
+	{"mistralai/Mistral-Small-3.2-24B-Instruct-2506", 0.075, 0.2, 0, 125000, deepInfraVisionInput, false},
+	{"nvidia/NVIDIA-Nemotron-3.5-Lightning", 0.08, 0.2, 0.04, 256000, deepInfraTextInput, true},
+	{"nvidia/Nemotron-3-Nano-30B-A3B", 0.05, 0.2, 0.025, 256000, deepInfraTextInput, true},
+	{"nvidia/Nemotron-Content-Safety-3.5", 0.2, 0.2, 0, 128000, deepInfraVisionInput, false},
+	{"openai/gpt-oss-120b", 0.037, 0.17, 0, 128000, deepInfraTextInput, true},
+	{"openai/gpt-oss-120b-Turbo", 0.15, 0.6, 0, 128000, deepInfraTextInput, true},
+	{"openai/gpt-oss-120b-Ultra", 0.2, 0.95, 0, 128000, deepInfraTextInput, true},
+	{"openai/gpt-oss-20b", 0.03, 0.14, 0, 128000, deepInfraTextInput, true},
+	{"stepfun-ai/Step-3.7-Flash", 0.2, 1.15, 0.04, 256000, deepInfraVisionInput, true},
+	{"tencent/Hy3", 0.14, 0.58, 0.035, 256000, deepInfraTextInput, false},
+	{"thinkingmachines/Inkling", 0.95, 4.05, 0.16, 512000, []string{"text", "image", "audio"}, true},
+	{"thinkingmachines/Inkling-Small", 0.45, 1.2, 0.1, 512000, []string{"text", "image", "audio"}, true},
+	{"zai-org/GLM-4.6", 0.5, 2, 0.1, 198000, deepInfraTextInput, true},
+	{"zai-org/GLM-4.7", 0.4, 1.75, 0.08, 198000, deepInfraTextInput, true},
+}
+
+func init() {
+	for _, entry := range extendedTextCatalog {
+		addCatalogModel(entry.name, catalogTextModel(
+			entry.inputUSD,
+			entry.outputUSD,
+			entry.cachedInputUSD,
+			entry.contextLength,
+			entry.modalities,
+			entry.reasoning,
+			"DeepInfra hosted text-generation model.",
+		))
+	}
+}

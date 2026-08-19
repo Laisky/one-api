@@ -7,6 +7,7 @@ import { ITEMS_PER_PAGE } from '../constants';
 import { renderNumber, renderQuota, stringToColor } from '../helpers/render';
 import Paragraph from '@douyinfe/semi-ui/lib/es/typography/paragraph';
 import TracingModal from './TracingModal';
+import ResourceRefTooltip from './ResourceRefTooltip';
 import './LogsTable.mobile.css';
 
 const { Header } = Layout;
@@ -72,18 +73,20 @@ const LogsTable = () => {
     render: (text, record, index) => {
       return (isAdminUser ? <div>
         <Avatar size="small" color={stringToColor(text)} style={{ marginRight: 4 }}
-          onClick={() => showUserInfo(record.user_id)}>
+          onClick={() => showUserInfo(record.user_uuid || record.user_id)}>
           {typeof text === 'string' && text.slice(0, 1)}
         </Avatar>
-        {text}
+        <ResourceRefTooltip refId={record.user_uuid || record.user_id} label="用户 ID">{text}</ResourceRefTooltip>
       </div> : <></>);
     }
   }, {
     title: '令牌', dataIndex: 'token_name', render: (text, record, index) => {
       return (record.type === 0 || record.type === 2 ? <div>
-        <Tag color="grey" size="large" onClick={() => {
-          copyText(text);
-        }}> {text} </Tag>
+        <ResourceRefTooltip refId={record.token_uuid} label="令牌 ID">
+          <Tag color="grey" size="large" onClick={() => {
+            copyText(text);
+          }}> {text} </Tag>
+        </ResourceRefTooltip>
       </div> : <></>);
     }
   }, {
@@ -199,6 +202,11 @@ const LogsTable = () => {
   const [userSearchLoading, setUserSearchLoading] = useState(false);
   const [tracingModalVisible, setTracingModalVisible] = useState(false);
   const [selectedLogId, setSelectedLogId] = useState(null);
+  // activeSearch holds the keyword the currently displayed rows were produced
+  // with. It is '' whenever the table shows the structured-filter listing, so
+  // pagination knows which endpoint it must keep calling.
+  const [activeSearch, setActiveSearch] = useState('');
+  const keywordActive = searchKeyword.trim() !== '';
 
   const handleInputChange = (value, name) => {
     setInputs((inputs) => ({ ...inputs, [name]: value }));
@@ -295,7 +303,14 @@ const LogsTable = () => {
     }
   };
 
-  const setLogsFormat = (logs) => {
+  // setLogsFormat decorates rows for display and refreshes the pager total.
+  //
+  // Parameters:
+  //   - logs: the rows to display.
+  //   - total: the authoritative row count when the caller knows it (the search
+  //     endpoint returns one). Omit it for the listing endpoint, which has no
+  //     count, so the pager keeps its optimistic "one more page" behaviour.
+  const setLogsFormat = (logs, total) => {
     for (let i = 0; i < logs.length; i++) {
       const fullTimestamp = timestamp2string(logs[i].created_at);
       // Extract MM-DD HH:MM:SS from YYYY-MM-DD HH:MM:SS for compact display
@@ -309,7 +324,7 @@ const LogsTable = () => {
     }
     // data.key = '' + data.id
     setLogs(logs);
-    setLogCount(logs.length + ITEMS_PER_PAGE);
+    setLogCount(total === undefined ? logs.length + ITEMS_PER_PAGE : total);
     // console.log(logCount);
   };
 
@@ -331,6 +346,8 @@ const LogsTable = () => {
     const res = await API.get(url);
     const { success, message, data } = res.data;
     if (success) {
+      // Leaving search mode: the rows now come from the structured listing.
+      setActiveSearch('');
       if (startIdx === 0) {
         setLogsFormat(data);
       } else {
@@ -344,12 +361,54 @@ const LogsTable = () => {
     setLoading(false);
   };
 
+  // loadSearchPage fetches one page from the keyword search endpoint and keeps
+  // the table in search mode, so paging never silently falls back to the
+  // unfiltered listing.
+  //
+  // Parameters:
+  //   - keyword: the non-empty keyword to search with.
+  //   - startIdx: zero-based page index.
+  //   - size: page size.
+  //
+  // Return values: none; errors are surfaced through showError.
+  const loadSearchPage = async (keyword, startIdx, size) => {
+    setSearching(true);
+    try {
+      const url = isAdminUser ? '/api/log/search' : '/api/log/self/search';
+      let sortParams = '';
+      if (sortBy) {
+        sortParams = `&sort=${sortBy}&order=${sortOrder}`;
+      }
+      const res = await API.get(`${url}?keyword=${encodeURIComponent(keyword)}&p=${startIdx}&size=${size}${sortParams}`);
+      const { success, message, data, total } = res.data;
+      if (success) {
+        setActiveSearch(keyword);
+        if (startIdx === 0) {
+          setLogsFormat(data, total);
+        } else {
+          let newLogs = [...logs];
+          newLogs.splice(startIdx * size, data.length, ...data);
+          setLogsFormat(newLogs, total);
+        }
+      } else {
+        showError(message);
+      }
+    } finally {
+      setSearching(false);
+    }
+  };
+
   const pageData = logs.slice((activePage - 1) * pageSize, activePage * pageSize);
 
   const handlePageChange = page => {
     setActivePage(page);
     if (page === Math.ceil(logs.length / pageSize) + 1) {
       // In this case we have to load more data and then append them.
+      if (activeSearch !== '') {
+        loadSearchPage(activeSearch, page - 1, pageSize).then(r => {
+        });
+        return;
+      }
       loadLogs(page - 1, pageSize).then(r => {
       });
     }
@@ -359,7 +418,8 @@ const LogsTable = () => {
     localStorage.setItem('page-size', size + '');
     setPageSize(size);
     setActivePage(1);
-    loadLogs(0, size)
+    const reload = activeSearch !== '' ? loadSearchPage(activeSearch, 0, size) : loadLogs(0, size);
+    reload
       .then()
       .catch((reason) => {
         showError(reason);
@@ -380,7 +440,11 @@ const LogsTable = () => {
     setSortLoading(true);
 
     try {
-      await loadLogs(0, pageSize, logType);
+      if (activeSearch !== '') {
+        await loadSearchPage(activeSearch, 0, pageSize);
+      } else {
+        await loadLogs(0, pageSize, logType);
+      }
     } finally {
       setSortLoading(false);
     }
@@ -409,7 +473,7 @@ const LogsTable = () => {
   };
 
   const handleRowClick = (record) => {
-    setSelectedLogId(record.id);
+    setSelectedLogId(record.uuid || record.id);
     setTracingModalVisible(true);
   };
 
@@ -429,23 +493,19 @@ const LogsTable = () => {
       });
   }, []);
 
+  // searchLogs resolves the keyword box against the server-side log search
+  // endpoint, which also matches a pasted log/user/token UUID. Admins search
+  // every log, regular users only their own.
   const searchLogs = async () => {
-    if (searchKeyword === '') {
-      // if keyword is blank, load files instead.
-      await loadLogs(0, pageSize);
+    const keyword = searchKeyword.trim();
+    if (keyword === '') {
+      // if keyword is blank, load logs instead.
+      await loadLogs(0, pageSize, logType);
       setActivePage(1);
       return;
     }
-    setSearching(true);
-    const res = await API.get(`/api/log/self/search?keyword=${searchKeyword}`);
-    const { success, message, data } = res.data;
-    if (success) {
-      setLogs(data);
-      setActivePage(1);
-    } else {
-      showError(message);
-    }
-    setSearching(false);
+    setActivePage(1);
+    await loadSearchPage(keyword, 0, pageSize);
   };
 
   return (<>
@@ -470,36 +530,42 @@ const LogsTable = () => {
             )}
             ）
           </h3>
+          {keywordActive && (
+            <div style={{ color: 'var(--semi-color-warning)', fontSize: 12, marginTop: -8 }}>
+              关键字搜索模式：额度统计仍按下方筛选条件计算，不含关键字。
+            </div>
+          )}
         </Spin>
       </Header>
       <Form layout="horizontal" className="logs-form" style={{ marginTop: 10 }}>
         <>
           <Form.Input field="token_name" label="令牌名称" style={{ width: 176 }} value={token_name}
-            placeholder={'可选值'} name="token_name"
+            placeholder={'可选值'} name="token_name" disabled={keywordActive}
             onChange={value => handleInputChange(value, 'token_name')} />
           <Form.Input field="model_name" label="模型名称" style={{ width: 176 }} value={model_name}
             placeholder="可选值"
-            name="model_name"
+            name="model_name" disabled={keywordActive}
             onChange={value => handleInputChange(value, 'model_name')} />
           <Form.DatePicker field="start_timestamp" label="起始时间" style={{ width: 272 }}
             initValue={start_timestamp}
             value={start_timestamp} type="dateTime"
-            name="start_timestamp"
+            name="start_timestamp" disabled={keywordActive}
             onChange={value => handleInputChange(value, 'start_timestamp')} />
           <Form.DatePicker field="end_timestamp" fluid label="结束时间" style={{ width: 272 }}
             initValue={end_timestamp}
             value={end_timestamp} type="dateTime"
-            name="end_timestamp"
+            name="end_timestamp" disabled={keywordActive}
             onChange={value => handleInputChange(value, 'end_timestamp')} />
           {isAdminUser && <>
             <Form.Input field="channel" label="渠道 ID" style={{ width: 176 }} value={channel}
-              placeholder="可选值" name="channel"
+              placeholder="可选值" name="channel" disabled={keywordActive}
               onChange={value => handleInputChange(value, 'channel')} />
             <Form.Field field="username" label="用户名称" style={{ width: 176 }}>
               <AutoComplete
                 data={userOptions}
                 value={username}
                 placeholder="搜索用户名称"
+                disabled={keywordActive}
                 onSearch={searchUsers}
                 onChange={value => handleInputChange(value, 'username')}
                 loading={userSearchLoading}
@@ -518,9 +584,21 @@ const LogsTable = () => {
               />
             </Form.Field>
           </>}
+          <Form.Input field="search_keyword" label="关键字" style={{ width: 272 }} value={searchKeyword}
+            placeholder="按 UUID 或详情搜索 ..."
+            extraText={keywordActive ? '关键字搜索会忽略上方筛选条件与日志类型。' : ''}
+            name="search_keyword"
+            onChange={value => setSearchKeyword(value)}
+            onEnterPress={() => {
+              searchLogs().then();
+            }} />
           <Form.Section>
             <Button label="查询" type="primary" htmlType="submit" className="btn-margin-right"
-              onClick={refresh} loading={loading}>查询</Button>
+              onClick={refresh} loading={loading} disabled={keywordActive}>查询</Button>
+            <Button label="搜索" type="tertiary" className="btn-margin-right"
+              onClick={() => {
+                searchLogs().then();
+              }} loading={searching}>搜索</Button>
           </Form.Section>
         </>
       </Form>
@@ -544,7 +622,7 @@ const LogsTable = () => {
           },
           onPageChange: handlePageChange
         }} />
-      <Select className="logs-select" defaultValue="0" style={{ width: 120 }} onChange={(value) => {
+      <Select className="logs-select" defaultValue="0" style={{ width: 120 }} disabled={keywordActive} onChange={(value) => {
         setLogType(parseInt(value));
         refresh(parseInt(value)).then();
       }}>

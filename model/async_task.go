@@ -16,21 +16,25 @@ import (
 // and the channel/user metadata required to resume or poll that task later.
 // Fields capture routing identifiers plus a trimmed request snapshot for diagnostics.
 type AsyncTaskBinding struct {
-	Id             int    `json:"id" gorm:"primaryKey;autoIncrement"`
-	TaskID         string `json:"task_id" gorm:"size:191;uniqueIndex;not null"`
-	TaskType       string `json:"task_type" gorm:"size:32;index;not null"`
-	UserID         int    `json:"user_id" gorm:"index;not null"`
-	TokenID        int    `json:"token_id" gorm:"index"`
-	ChannelID      int    `json:"channel_id" gorm:"index;not null"`
-	ChannelType    int    `json:"channel_type" gorm:"index;not null"`
-	OriginModel    string `json:"origin_model" gorm:"size:128"`
-	ActualModel    string `json:"actual_model" gorm:"size:128"`
-	RequestMethod  string `json:"request_method" gorm:"size:16"`
-	RequestPath    string `json:"request_path" gorm:"size:255"`
-	RequestParams  string `json:"request_params" gorm:"type:text"`
-	CreatedAt      int64  `json:"created_at" gorm:"autoCreateTime:milli;index"`
-	UpdatedAt      int64  `json:"updated_at" gorm:"autoUpdateTime:milli"`
-	LastAccessedAt int64  `json:"last_accessed_at" gorm:"index"`
+	Id             int     `json:"id" gorm:"primaryKey;autoIncrement"`
+	UUID           string  `json:"uuid" gorm:"type:char(36);column:uuid"`
+	TaskID         string  `json:"task_id" gorm:"size:191;uniqueIndex;not null"`
+	TaskType       string  `json:"task_type" gorm:"size:32;index;not null"`
+	UserID         int     `json:"user_id" gorm:"index;not null"`
+	UserUUID       *string `json:"user_uuid" gorm:"type:char(36);column:user_uuid;index"`
+	TokenID        int     `json:"token_id" gorm:"index"`
+	TokenUUID      *string `json:"token_uuid" gorm:"type:char(36);column:token_uuid;index"`
+	ChannelID      int     `json:"channel_id" gorm:"index;not null"`
+	ChannelUUID    *string `json:"channel_uuid" gorm:"type:char(36);column:channel_uuid;index"`
+	ChannelType    int     `json:"channel_type" gorm:"index;not null"`
+	OriginModel    string  `json:"origin_model" gorm:"size:128"`
+	ActualModel    string  `json:"actual_model" gorm:"size:128"`
+	RequestMethod  string  `json:"request_method" gorm:"size:16"`
+	RequestPath    string  `json:"request_path" gorm:"size:255"`
+	RequestParams  string  `json:"request_params" gorm:"type:text"`
+	CreatedAt      int64   `json:"created_at" gorm:"autoCreateTime:milli;index"`
+	UpdatedAt      int64   `json:"updated_at" gorm:"autoUpdateTime:milli"`
+	LastAccessedAt int64   `json:"last_accessed_at" gorm:"index"`
 }
 
 // SaveAsyncTaskBinding creates or updates an async task binding for the provided task id.
@@ -79,10 +83,11 @@ func SaveAsyncTaskBinding(ctx context.Context, binding *AsyncTaskBinding) error 
 			return errors.Wrap(err, "create async task binding")
 		}
 		if lg := gmw.GetLogger(detached); lg != nil {
+			// channel/user/token identity is already bound on the request logger
+			// (the detached context keeps its values), so it is not repeated here.
 			lg.Debug("created async task binding",
 				zap.String("task_id", binding.TaskID),
-				zap.String("task_type", binding.TaskType),
-				zap.Int("channel_id", binding.ChannelID))
+				zap.String("task_type", binding.TaskType))
 		}
 		return nil
 	}
@@ -93,8 +98,11 @@ func SaveAsyncTaskBinding(ctx context.Context, binding *AsyncTaskBinding) error 
 	updates := map[string]any{
 		"task_type":        binding.TaskType,
 		"user_id":          binding.UserID,
+		"user_uuid":        binding.UserUUID,
 		"token_id":         binding.TokenID,
+		"token_uuid":       binding.TokenUUID,
 		"channel_id":       binding.ChannelID,
+		"channel_uuid":     binding.ChannelUUID,
 		"channel_type":     binding.ChannelType,
 		"origin_model":     binding.OriginModel,
 		"actual_model":     binding.ActualModel,
@@ -111,8 +119,7 @@ func SaveAsyncTaskBinding(ctx context.Context, binding *AsyncTaskBinding) error 
 	if lg := gmw.GetLogger(detached); lg != nil {
 		lg.Debug("updated async task binding",
 			zap.String("task_id", binding.TaskID),
-			zap.String("task_type", binding.TaskType),
-			zap.Int("channel_id", binding.ChannelID))
+			zap.String("task_type", binding.TaskType))
 	}
 	return nil
 }

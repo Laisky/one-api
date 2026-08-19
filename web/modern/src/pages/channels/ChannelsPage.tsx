@@ -2,7 +2,9 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { useConfirmDialog } from '@/components/ui/confirm-dialog';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { EnhancedDataTable } from '@/components/ui/enhanced-data-table';
+import { Input } from '@/components/ui/input';
 import { ListActionButton } from '@/components/ui/list-action-button';
 import { useNotifications } from '@/components/ui/notifications';
 import { ResponsiveActionGroup } from '@/components/ui/responsive-action-group';
@@ -13,15 +15,18 @@ import { STORAGE_KEYS, usePageSize } from '@/hooks/usePersistentState';
 import { useResponsive } from '@/hooks/useResponsive';
 import { api } from '@/lib/api';
 import { cn, formatTimestamp } from '@/lib/utils';
+import { NameWithId } from '@/components/shared/NameWithId';
 import type { ColumnDef } from '@tanstack/react-table';
-import { Ban, CheckCircle, FlaskConical, Plus, RefreshCw, Settings, Trash2 } from 'lucide-react';
+import { Ban, Banknote, CheckCircle, ChevronDown, Copy, FlaskConical, Plus, RefreshCw, Settings, Trash2 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import { CHANNEL_TYPE_LABELS as CHANNEL_TYPES } from './constants';
 import { resolveChannelColor } from './utils/colorGenerator';
 
 interface Channel {
-  id: number;
+  id?: number;
+  uuid?: string;
   name: string;
   type: number;
   status: number;
@@ -31,64 +36,101 @@ interface Channel {
   priority?: number;
   weight?: number;
   models?: string;
+  test_models?: string[];
   group?: string;
   used_quota?: number;
   test_time?: number;
   testing_model?: string | null;
+  balance?: number;
+  balance_updated_time?: number;
 }
+
+const channelRef = (channel: Pick<Channel, 'id' | 'uuid'>): string | number => channel.uuid || channel.id || '';
+
+const channelRefPayload = (ref: string | number): { id: number } | { uuid: string } => {
+  return typeof ref === 'string' ? { uuid: ref } : { id: ref };
+};
+
+const sameChannelRef = (left: Pick<Channel, 'id' | 'uuid'>, right: Pick<Channel, 'id' | 'uuid'>) =>
+  String(channelRef(left)) === String(channelRef(right));
+
+const nonTextTestingModelMarkers = [
+  'embedding',
+  'rerank',
+  'sora',
+  'tts',
+  'transcribe',
+  'whisper',
+  'dall-e',
+  'gpt-image',
+  'imagen',
+  'veo',
+  'video',
+];
+
+/**
+ * isTextTestingModelName rejects known non-chat model families when older APIs
+ * do not provide the server-filtered test_models field.
+ */
+const isTextTestingModelName = (modelName: string) => {
+  const lowerName = modelName.trim().toLowerCase();
+  if (!lowerName) return false;
+  return !nonTextTestingModelMarkers.some((marker) => lowerName.includes(marker));
+};
 
 /**
  * Channel options defined at relay/channeltype/define.go
  */
-const CHANNEL_TYPES: Record<number, { name: string; color: string }> = {
-  1: { name: 'OpenAI', color: 'green' },
-  50: { name: 'OpenAI Compatible', color: 'olive' },
-  14: { name: 'Anthropic', color: 'black' },
-  33: { name: 'AWS', color: 'orange' },
-  3: { name: 'Azure', color: 'blue' },
-  11: { name: 'PaLM2', color: 'orange' },
-  24: { name: 'Gemini', color: 'orange' },
-  51: { name: 'Gemini (OpenAI)', color: 'orange' },
-  28: { name: 'Mistral AI', color: 'purple' },
-  41: { name: 'Novita', color: 'purple' },
-  40: { name: 'ByteDance Volcano', color: 'blue' },
-  15: { name: 'Baidu Wenxin', color: 'blue' },
-  47: { name: 'Baidu Wenxin V2', color: 'blue' },
-  17: { name: 'Alibaba Qianwen', color: 'orange' },
-  49: { name: 'Alibaba Bailian', color: 'orange' },
-  18: { name: 'iFlytek Spark', color: 'blue' },
-  48: { name: 'iFlytek Spark V2', color: 'blue' },
-  16: { name: 'Zhipu ChatGLM', color: 'violet' },
-  19: { name: '360 ZhiNao', color: 'blue' },
-  25: { name: 'Moonshot AI', color: 'black' },
-  23: { name: 'Tencent Hunyuan', color: 'teal' },
-  26: { name: 'Baichuan', color: 'orange' },
-  27: { name: 'MiniMax', color: 'red' },
-  29: { name: 'Groq', color: 'orange' },
-  30: { name: 'Ollama', color: 'black' },
-  31: { name: '01.AI', color: 'green' },
-  32: { name: 'StepFun', color: 'blue' },
-  34: { name: 'Coze', color: 'blue' },
-  35: { name: 'Cohere', color: 'blue' },
-  36: { name: 'DeepSeek', color: 'black' },
-  37: { name: 'Cloudflare', color: 'orange' },
-  38: { name: 'DeepL', color: 'black' },
-  39: { name: 'together.ai', color: 'blue' },
-  42: { name: 'VertexAI', color: 'blue' },
-  43: { name: 'Proxy', color: 'blue' },
-  44: { name: 'SiliconFlow', color: 'blue' },
-  45: { name: 'xAI', color: 'blue' },
-  46: { name: 'Replicate', color: 'blue' },
-  8: { name: 'Custom', color: 'pink' },
-  22: { name: 'FastGPT', color: 'blue' },
-  21: { name: 'AI Proxy KB', color: 'purple' },
-  20: { name: 'OpenRouter', color: 'black' },
-};
-
 const formatResponseTime = (time?: number) => {
   if (!time) return '-';
   const color = time < 1000 ? 'text-success' : time < 3000 ? 'text-warning' : 'text-destructive';
   return <span className={cn('font-mono text-sm', color)}>{time}ms</span>;
+};
+
+interface PriorityCellProps {
+  value: number;
+  ariaLabel: string;
+  onCommit: (value: number) => void;
+}
+
+/**
+ * PriorityCell renders an editable numeric input that commits on blur or Enter.
+ * It only fires onCommit when the parsed value differs from the initial value
+ * to avoid firing redundant PUT requests.
+ */
+const PriorityCell = ({ value, ariaLabel, onCommit }: PriorityCellProps) => {
+  const [draft, setDraft] = useState<string>(String(value));
+  useEffect(() => {
+    setDraft(String(value));
+  }, [value]);
+
+  const commit = () => {
+    const trimmed = draft.trim();
+    const parsed = parseInt(trimmed, 10);
+    if (!Number.isFinite(parsed)) {
+      setDraft(String(value));
+      return;
+    }
+    if (parsed === value) return;
+    onCommit(parsed);
+  };
+
+  return (
+    <Input
+      type="number"
+      value={draft}
+      aria-label={ariaLabel}
+      className="h-8 w-20 font-mono text-sm"
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          (e.target as HTMLInputElement).blur();
+        }
+      }}
+    />
+  );
 };
 
 export function ChannelsPage() {
@@ -109,12 +151,23 @@ export function ChannelsPage() {
   const [sortBy, setSortBy] = useState('id');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [bulkTesting, setBulkTesting] = useState(false);
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const [refreshingBalanceIds, setRefreshingBalanceIds] = useState<Set<string | number>>(new Set());
   const initializedRef = useRef(false);
   const skipFirstSortEffect = useRef(true);
 
+  const getChannelTypeLabel = (type: number) => {
+    return (
+      CHANNEL_TYPES[type]?.name ||
+      t('channels.type_unknown', {
+        type,
+      })
+    );
+  };
+
   const renderChannelTypeBadge = (type: number) => {
     const channelType = CHANNEL_TYPES[type] || {
-      name: t('channels.type_unknown', { type }),
+      name: getChannelTypeLabel(type),
       color: undefined,
     };
     const colorValue = resolveChannelColor(channelType.color, type);
@@ -194,14 +247,16 @@ export function ChannelsPage() {
 
       if (success && Array.isArray(responseData)) {
         const options: SearchOption[] = responseData.map((channel: Channel) => ({
-          key: channel.id.toString(),
+          key: String(channelRef(channel)),
           value: channel.name,
           text: channel.name,
+          // Keep the UUID matchable even though the visible label is the name.
+          keywords: [String(channelRef(channel)), channel.uuid || '', String(channel.id ?? '')].filter(Boolean),
           content: (
             <div className="flex flex-col">
               <div className="font-medium">{channel.name}</div>
               <div className="text-sm text-muted-foreground flex items-center gap-2">
-                {t('channels.search.id_label')}: {channel.id} • {renderChannelTypeBadge(channel.type)} •{' '}
+                {t('channels.search.id_label')}: {String(channelRef(channel))} • {renderChannelTypeBadge(channel.type)} •{' '}
                 {renderStatusBadge(channel.status, channel.priority)}
               </div>
             </div>
@@ -267,22 +322,43 @@ export function ChannelsPage() {
     }
   }, [sortBy, sortOrder]);
 
-  const manage = async (id: number, action: 'enable' | 'disable' | 'delete' | 'test', index?: number) => {
+  const manage = async (id: string | number, action: 'enable' | 'disable' | 'delete' | 'test', index?: number) => {
     try {
       if (action === 'delete') {
+        const targetChannel = data.find((channel) => String(channelRef(channel)) === String(id) || String(channel.id) === String(id));
         const confirmed = await confirmAction({
           title: t('channels.confirm.delete_title', 'Delete Channel'),
           description: t('channels.confirm.delete'),
+          details: [
+            {
+              label: t('channels.columns.name'),
+              value: targetChannel?.name || '-',
+            },
+            {
+              label: t('channels.columns.type'),
+              value: targetChannel ? getChannelTypeLabel(targetChannel.type) : '-',
+            },
+            {
+              label: t('channels.search.id_label'),
+              value: id,
+            },
+          ],
         });
         if (!confirmed) return;
         // Unified API call - complete URL with /api prefix
         const res = await api.delete(`/api/channel/${id}`);
-        if (res.data?.success) {
-          if (searchKeyword.trim()) {
-            performSearch();
-          } else {
-            load(pageIndex, pageSize);
-          }
+        if (!res.data?.success) {
+          notify({
+            type: 'error',
+            title: t('channels.notifications.delete_failed_title', 'Delete failed'),
+            message: res.data?.message || t('channels.notifications.delete_failed_message', 'Failed to delete channel.'),
+          });
+          return;
+        }
+        if (searchKeyword.trim()) {
+          performSearch();
+        } else {
+          load(pageIndex, pageSize);
         }
         return;
       }
@@ -316,24 +392,75 @@ export function ChannelsPage() {
       }
 
       // Enable/disable - send status_only to avoid overwriting other fields
-      const payload = { id, status: action === 'enable' ? 1 : 2 };
+      const payload = { ...channelRefPayload(id), status: action === 'enable' ? 1 : 2 };
       const res = await api.put('/api/channel/?status_only=1', payload);
-      if (res.data?.success) {
-        if (searchKeyword.trim()) {
-          performSearch();
-        } else {
-          load(pageIndex, pageSize);
-        }
+      if (!res.data?.success) {
+        notify({
+          type: 'error',
+          title: t('channels.notifications.status_failed_title', 'Update failed'),
+          message: res.data?.message || t('channels.notifications.status_failed_message', 'Failed to update channel status.'),
+        });
+        return;
+      }
+      if (searchKeyword.trim()) {
+        performSearch();
+      } else {
+        load(pageIndex, pageSize);
       }
     } catch (error) {
       console.error(`Failed to ${action} channel:`, error);
+      notify({
+        type: 'error',
+        title:
+          action === 'delete'
+            ? t('channels.notifications.delete_failed_title', 'Delete failed')
+            : t('channels.notifications.status_failed_title', 'Update failed'),
+        message:
+          error instanceof Error
+            ? error.message
+            : action === 'delete'
+              ? t('channels.notifications.delete_failed_message', 'Failed to delete channel.')
+              : t('channels.notifications.status_failed_message', 'Failed to update channel status.'),
+      });
     }
   };
 
-  const updateTestingModel = async (id: number, testingModel: string | null) => {
+  const duplicateChannel = async (channel: Channel) => {
     try {
-      const current = data.find((c) => c.id === id);
-      const payload: any = { id, name: current?.name };
+      const duplicateResponse = await api.post(`/api/channel/${channelRef(channel)}/duplicate`);
+      if (duplicateResponse.data?.success) {
+        notify({
+          type: 'success',
+          message: t('channels.notifications.duplicate_success', 'Channel duplicated.'),
+        });
+
+        if (searchKeyword.trim()) {
+          await performSearch();
+        } else {
+          await load(pageIndex, pageSize);
+        }
+        return;
+      }
+
+      notify({
+        type: 'error',
+        title: t('channels.notifications.duplicate_failed_title', 'Duplicate failed'),
+        message: duplicateResponse.data?.message || t('channels.notifications.duplicate_failed_message', 'Failed to duplicate channel.'),
+      });
+    } catch (error) {
+      console.error('Failed to duplicate channel:', error);
+      notify({
+        type: 'error',
+        title: t('channels.notifications.duplicate_failed_title', 'Duplicate failed'),
+        message:
+          error instanceof Error ? error.message : t('channels.notifications.duplicate_failed_message', 'Failed to duplicate channel.'),
+      });
+    }
+  };
+
+  const updateTestingModel = async (channel: Channel, testingModel: string | null) => {
+    try {
+      const payload: any = { ...channelRefPayload(channelRef(channel)), name: channel.name };
       // When null, let backend clear it (auto-cheapest)
       if (testingModel === null) {
         payload.testing_model = null;
@@ -344,7 +471,7 @@ export function ChannelsPage() {
       const res = await api.put('/api/channel/', payload);
       if (res.data?.success) {
         // Update local row to reflect change
-        setData((prev) => prev.map((ch) => (ch.id === id ? { ...ch, testing_model: testingModel } : ch)));
+        setData((prev) => prev.map((ch) => (sameChannelRef(ch, channel) ? { ...ch, testing_model: testingModel } : ch)));
         notify({
           type: 'success',
           message: t('channels.notifications.testing_model_saved'),
@@ -371,7 +498,15 @@ export function ChannelsPage() {
     setBulkTesting(true);
     try {
       // Unified API call - complete URL with /api prefix
-      await api.get('/api/channel/test');
+      const res = await api.get('/api/channel/test');
+      if (!res.data?.success) {
+        notify({
+          type: 'error',
+          title: t('channels.notifications.bulk_test_failed_title'),
+          message: res.data?.message || t('channels.notifications.test_failed_message'),
+        });
+        return;
+      }
       load(pageIndex, pageSize);
       notify({
         type: 'info',
@@ -389,6 +524,170 @@ export function ChannelsPage() {
     }
   };
 
+  const handlePriorityUpdate = async (channel: Channel, newPriority: number) => {
+    if ((channel.priority ?? 0) === newPriority) return;
+    try {
+      const res = await api.put('/api/channel/', {
+        ...channelRefPayload(channelRef(channel)),
+        name: channel.name,
+        priority: newPriority,
+      });
+      if (res.data?.success) {
+        setData((prev) => prev.map((row) => (sameChannelRef(row, channel) ? { ...row, priority: newPriority } : row)));
+        notify({
+          type: 'success',
+          message: t('channels.notifications.priority_saved', 'Priority updated.'),
+        });
+      } else {
+        notify({
+          type: 'error',
+          title: t('channels.notifications.priority_failed_title', 'Update failed'),
+          message: res.data?.message || t('channels.notifications.priority_failed_message', 'Failed to update priority.'),
+        });
+      }
+    } catch (error) {
+      console.error('Failed to update priority:', error);
+      notify({
+        type: 'error',
+        title: t('channels.notifications.priority_failed_title', 'Update failed'),
+        message: error instanceof Error ? error.message : t('channels.notifications.priority_failed_message', 'Failed to update priority.'),
+      });
+    }
+  };
+
+  const handleBulkStatus = async (status: 1 | 2) => {
+    const targets = data;
+    if (targets.length === 0) {
+      notify({
+        type: 'info',
+        message: t('channels.notifications.bulk_status_empty', 'No channels available to update.'),
+      });
+      return;
+    }
+    setBulkBusy(true);
+    try {
+      notify({
+        type: 'info',
+        message: t('channels.notifications.bulk_status_started', 'Updating {{count}} channels…', { count: targets.length }),
+      });
+      let success = 0;
+      let failed = 0;
+      for (const ch of targets) {
+        try {
+          const res = await api.put('/api/channel/?status_only=1', { ...channelRefPayload(channelRef(ch)), status });
+          if (res.data?.success) {
+            success += 1;
+          } else {
+            failed += 1;
+          }
+        } catch (_err) {
+          failed += 1;
+        }
+      }
+      notify({
+        type: failed === 0 ? 'success' : 'error',
+        title:
+          status === 1
+            ? t('channels.notifications.bulk_enable_summary_title', 'Enable summary')
+            : t('channels.notifications.bulk_disable_summary_title', 'Disable summary'),
+        message: t('channels.notifications.bulk_status_summary', 'Updated {{success}} channels, {{failed}} failed.', {
+          success,
+          failed,
+        }),
+      });
+      if (searchKeyword.trim()) {
+        performSearch();
+      } else {
+        load(pageIndex, pageSize);
+      }
+    } finally {
+      setBulkBusy(false);
+    }
+  };
+
+  const handleBalanceRefresh = async (channel: Channel) => {
+    const ref = channelRef(channel);
+    setRefreshingBalanceIds((prev) => {
+      const next = new Set(prev);
+      next.add(ref);
+      return next;
+    });
+    try {
+      const res = await api.get(`/api/channel/update_balance/${ref}`);
+      const { success, message, balance, balance_updated_time } = res.data || {};
+      if (success) {
+        setData((prev) =>
+          prev.map((row) =>
+            sameChannelRef(row, channel)
+              ? {
+                  ...row,
+                  balance: typeof balance === 'number' ? balance : row.balance,
+                  balance_updated_time: typeof balance_updated_time === 'number' ? balance_updated_time : Math.floor(Date.now() / 1000),
+                }
+              : row
+          )
+        );
+        notify({
+          type: 'success',
+          message: t('channels.notifications.balance_success', 'Balance refreshed.'),
+        });
+      } else {
+        notify({
+          type: 'error',
+          title: t('channels.notifications.balance_failed_title', 'Balance refresh failed'),
+          message: message || t('channels.notifications.balance_failed_message', 'Failed to refresh balance.'),
+        });
+      }
+    } catch (error) {
+      console.error('Failed to refresh balance:', error);
+      notify({
+        type: 'error',
+        title: t('channels.notifications.balance_failed_title', 'Balance refresh failed'),
+        message: error instanceof Error ? error.message : t('channels.notifications.balance_failed_message', 'Failed to refresh balance.'),
+      });
+    } finally {
+      setRefreshingBalanceIds((prev) => {
+        const next = new Set(prev);
+        next.delete(ref);
+        return next;
+      });
+    }
+  };
+
+  const handleBulkBalanceRefresh = async () => {
+    setBulkBusy(true);
+    try {
+      const res = await api.get('/api/channel/update_balance');
+      const { success, message } = res.data || {};
+      if (success) {
+        notify({
+          type: 'success',
+          message: t('channels.notifications.bulk_balance_success', 'All channel balances refreshed.'),
+        });
+      } else {
+        notify({
+          type: 'error',
+          title: t('channels.notifications.balance_failed_title', 'Balance refresh failed'),
+          message: message || t('channels.notifications.balance_failed_message', 'Failed to refresh balance.'),
+        });
+      }
+      if (searchKeyword.trim()) {
+        performSearch();
+      } else {
+        load(pageIndex, pageSize);
+      }
+    } catch (error) {
+      console.error('Bulk balance refresh failed:', error);
+      notify({
+        type: 'error',
+        title: t('channels.notifications.balance_failed_title', 'Balance refresh failed'),
+        message: error instanceof Error ? error.message : t('channels.notifications.balance_failed_message', 'Failed to refresh balance.'),
+      });
+    } finally {
+      setBulkBusy(false);
+    }
+  };
+
   const handleDeleteDisabled = async () => {
     const confirmed = await confirmAction({
       title: t('channels.confirm.delete_disabled_title', 'Delete Disabled Channels'),
@@ -398,7 +697,15 @@ export function ChannelsPage() {
 
     try {
       // Unified API call - complete URL with /api prefix
-      await api.delete('/api/channel/disabled');
+      const res = await api.delete('/api/channel/disabled');
+      if (!res.data?.success) {
+        notify({
+          type: 'error',
+          title: t('channels.notifications.delete_failed_title'),
+          message: res.data?.message || t('channels.notifications.delete_failed_message'),
+        });
+        return;
+      }
       load(pageIndex, pageSize);
       notify({
         type: 'success',
@@ -416,14 +723,9 @@ export function ChannelsPage() {
 
   const columns: ColumnDef<Channel>[] = [
     {
-      accessorKey: 'id',
-      header: t('channels.columns.id'),
-      cell: ({ row }) => <span className="font-mono text-sm">{row.original.id}</span>,
-    },
-    {
       accessorKey: 'name',
       header: t('channels.columns.name'),
-      cell: ({ row }) => <div className="font-medium">{row.original.name}</div>,
+      cell: ({ row }) => <NameWithId name={row.original.name} refId={channelRef(row.original)} idLabel={t('channels.columns.id')} />,
     },
     {
       accessorKey: 'type',
@@ -443,12 +745,49 @@ export function ChannelsPage() {
     {
       accessorKey: 'priority',
       header: t('channels.columns.priority'),
-      cell: ({ row }) => <span className="font-mono text-sm">{row.original.priority || 0}</span>,
+      cell: ({ row }) => (
+        <PriorityCell
+          value={row.original.priority ?? 0}
+          ariaLabel={t('channels.columns.priority_input_label', 'Priority for {{name}}', { name: row.original.name })}
+          onCommit={(next) => handlePriorityUpdate(row.original, next)}
+        />
+      ),
     },
     {
       accessorKey: 'weight',
       header: t('channels.columns.weight'),
       cell: ({ row }) => <span className="font-mono text-sm">{row.original.weight || 0}</span>,
+    },
+    {
+      accessorKey: 'balance',
+      header: t('channels.columns.balance'),
+      cell: ({ row }) => {
+        const ch = row.original;
+        const refreshing = refreshingBalanceIds.has(channelRef(ch));
+        const formatted = typeof ch.balance === 'number' ? ch.balance.toFixed(2) : '-';
+        const updatedAt = ch.balance_updated_time ? ch.balance_updated_time * 1000 : null;
+        return (
+          <div className="flex items-center gap-2">
+            <div className="font-mono text-sm">{formatted}</div>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 w-7 p-0"
+              onClick={() => handleBalanceRefresh(ch)}
+              disabled={refreshing}
+              aria-label={t('channels.actions.refresh_balance', 'Refresh balance for {{name}}', { name: ch.name })}
+              title={t('channels.actions.refresh_balance', 'Refresh balance for {{name}}', { name: ch.name })}
+            >
+              <RefreshCw className={cn('h-3.5 w-3.5', refreshing && 'animate-spin')} />
+            </Button>
+            {updatedAt && (
+              <span className="text-xs text-muted-foreground">
+                <TimestampDisplay timestamp={updatedAt} className="font-mono" />
+              </span>
+            )}
+          </div>
+        );
+      },
     },
     {
       accessorKey: 'response_time',
@@ -481,12 +820,12 @@ export function ChannelsPage() {
       header: t('channels.columns.testing_model'),
       cell: ({ row }) => {
         const ch = row.original;
-        const models = (ch.models || '')
-          .split(',')
-          .map((m) => m.trim())
+        const models = (Array.isArray(ch.test_models) ? ch.test_models : (ch.models || '').split(','))
+          .map((m) => String(m).trim())
           .filter(Boolean)
+          .filter(isTextTestingModelName)
           .sort();
-        const value = ch.testing_model ?? ''; // empty => Auto (cheapest)
+        const value = ch.testing_model && models.includes(ch.testing_model) ? ch.testing_model : ''; // empty => Auto (cheapest)
         return (
           <div className="w-[140px] md:w-[160px] max-w-[220px]">
             <select
@@ -495,7 +834,7 @@ export function ChannelsPage() {
               aria-label={t('channels.columns.testing_model')}
               onChange={(e) => {
                 const v = e.target.value;
-                updateTestingModel(ch.id, v === '' ? null : v);
+                updateTestingModel(ch, v === '' ? null : v);
               }}
             >
               <option value="">{t('channels.testing.auto')}</option>
@@ -523,7 +862,7 @@ export function ChannelsPage() {
             <ListActionButton
               variant="outline"
               size="sm"
-              onClick={() => navigate(`/channels/edit/${channel.id}`)}
+              onClick={() => navigate(`/channels/edit/${channelRef(channel)}`)}
               className="gap-1"
               icon={<Settings className="h-3 w-3" />}
             >
@@ -532,7 +871,16 @@ export function ChannelsPage() {
             <ListActionButton
               variant="outline"
               size="sm"
-              onClick={() => manage(channel.id, channel.status === 1 ? 'disable' : 'enable')}
+              onClick={() => duplicateChannel(channel)}
+              className="gap-1"
+              icon={<Copy className="h-3 w-3" />}
+            >
+              {t('channels.actions.duplicate', 'Duplicate')}
+            </ListActionButton>
+            <ListActionButton
+              variant="outline"
+              size="sm"
+              onClick={() => manage(channelRef(channel), channel.status === 1 ? 'disable' : 'enable')}
               className={cn('gap-1', channel.status === 1 ? 'text-warning hover:text-warning/80' : 'text-success hover:text-success/80')}
             >
               {channel.status === 1 ? t('channels.actions.disable') : t('channels.actions.enable')}
@@ -540,7 +888,7 @@ export function ChannelsPage() {
             <ListActionButton
               variant="outline"
               size="sm"
-              onClick={() => manage(channel.id, 'test', row.index)}
+              onClick={() => manage(channelRef(channel), 'test', row.index)}
               className="gap-1"
               icon={<FlaskConical className="h-3 w-3" />}
             >
@@ -549,7 +897,7 @@ export function ChannelsPage() {
             <ListActionButton
               variant="destructive"
               size="sm"
-              onClick={() => manage(channel.id, 'delete')}
+              onClick={() => manage(channelRef(channel), 'delete')}
               className="gap-1"
               icon={<Trash2 className="h-3 w-3" />}
             >
@@ -602,6 +950,41 @@ export function ChannelsPage() {
           {isMobile ? t('channels.toolbar.test_all_mobile') : t('channels.toolbar.test_all')}
         </Button>
         <Button
+          variant="outline"
+          onClick={handleBulkBalanceRefresh}
+          disabled={bulkBusy || loading}
+          className={cn('gap-2 flex-1 md:flex-none whitespace-nowrap', isMobile ? 'touch-target' : '')}
+          size="sm"
+        >
+          <Banknote className="h-4 w-4" />
+          {isMobile
+            ? t('channels.toolbar.refresh_balances_mobile', 'Refresh Balances')
+            : t('channels.toolbar.refresh_balances', 'Refresh All Balances')}
+        </Button>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={bulkBusy || loading || data.length === 0}
+              className={cn('gap-2 flex-1 md:flex-none whitespace-nowrap', isMobile ? 'touch-target' : '')}
+            >
+              {t('channels.toolbar.bulk_actions', 'Bulk Actions')}
+              <ChevronDown className="h-4 w-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onSelect={() => handleBulkStatus(1)} className="gap-2">
+              <CheckCircle className="h-4 w-4 text-success" />
+              {t('channels.toolbar.enable_visible', 'Enable visible channels')}
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => handleBulkStatus(2)} className="gap-2">
+              <Ban className="h-4 w-4 text-warning" />
+              {t('channels.toolbar.disable_visible', 'Disable visible channels')}
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+        <Button
           variant="destructive"
           onClick={handleDeleteDisabled}
           className={cn('gap-2 flex-1 md:flex-none whitespace-nowrap', isMobile ? 'touch-target' : '')}
@@ -638,13 +1021,19 @@ export function ChannelsPage() {
               floatingRowActions={(row) => (
                 <div className="flex items-center gap-1">
                   <ListActionButton
-                    onClick={() => navigate(`/channels/edit/${row.id}`)}
+                    onClick={() => navigate(`/channels/edit/${channelRef(row)}`)}
                     title={t('channels.actions.edit')}
                     aria-label={t('channels.actions.edit')}
                     icon={<Settings className="h-4 w-4" />}
                   />
                   <ListActionButton
-                    onClick={() => manage(row.id, row.status === 1 ? 'disable' : 'enable')}
+                    onClick={() => duplicateChannel(row)}
+                    title={t('channels.actions.duplicate', 'Duplicate')}
+                    aria-label={t('channels.actions.duplicate', 'Duplicate')}
+                    icon={<Copy className="h-4 w-4" />}
+                  />
+                  <ListActionButton
+                    onClick={() => manage(channelRef(row), row.status === 1 ? 'disable' : 'enable')}
                     title={row.status === 1 ? t('channels.actions.disable') : t('channels.actions.enable')}
                     aria-label={row.status === 1 ? t('channels.actions.disable') : t('channels.actions.enable')}
                     className={row.status === 1 ? 'text-warning hover:text-warning/80' : 'text-success hover:text-success/80'}
@@ -652,8 +1041,8 @@ export function ChannelsPage() {
                   />
                   <ListActionButton
                     onClick={() => {
-                      const idx = data.findIndex((c) => c.id === row.id);
-                      manage(row.id, 'test', idx !== -1 ? idx : undefined);
+                      const idx = data.findIndex((c) => sameChannelRef(c, row));
+                      manage(channelRef(row), 'test', idx !== -1 ? idx : undefined);
                     }}
                     title={t('channels.actions.test')}
                     aria-label={t('channels.actions.test')}
@@ -683,7 +1072,7 @@ export function ChannelsPage() {
               loading={loading}
               emptyMessage={t('channels.empty')}
               mobileCardLayout={true}
-              hideColumnsOnMobile={['created_time', 'response_time']}
+              hideColumnsOnMobile={['created_time', 'response_time', 'balance']}
               compactMode={isMobile}
             />
           </CardContent>

@@ -9,11 +9,12 @@ import (
 	"github.com/Laisky/errors/v2"
 	"github.com/gin-gonic/gin"
 
-	"github.com/songquanpeng/one-api/common/ctxkey"
-	"github.com/songquanpeng/one-api/relay/adaptor/openai"
-	"github.com/songquanpeng/one-api/relay/adaptor/openai_compatible"
-	metalib "github.com/songquanpeng/one-api/relay/meta"
-	relaymodel "github.com/songquanpeng/one-api/relay/model"
+	"github.com/Laisky/one-api/common"
+	"github.com/Laisky/one-api/common/ctxkey"
+	"github.com/Laisky/one-api/relay/adaptor/openai"
+	"github.com/Laisky/one-api/relay/adaptor/openai_compatible"
+	metalib "github.com/Laisky/one-api/relay/meta"
+	relaymodel "github.com/Laisky/one-api/relay/model"
 )
 
 // renderChatResponseAsResponseAPI renders a Chat Completion response as a Response API response
@@ -25,6 +26,24 @@ func renderChatResponseAsResponseAPI(c *gin.Context, status int, textResp *opena
 	output := buildResponseOutput(textResp.Choices)
 	toolCalls := buildRequiredActionToolCalls(textResp.Choices)
 
+	// Commit a gateway response node so the fallback ID is resolvable, retrievable,
+	// and deletable (closes B10). No-op when the feature is inactive; on any store
+	// failure the response still renders with a synthetic ID.
+	var storePtr *bool
+	var conversationPtr *openai.ResponseAPIConversation
+	if commit := pendingCommitFromContext(c); commit != nil {
+		res := commitFallbackResponseNode(c, commit, output, usage, statusText)
+		output = res.output
+		if res.committed {
+			responseID = res.gatewayID
+		}
+		storeMode := res.storeMode
+		storePtr = &storeMode
+		if res.conversation != "" {
+			conversationPtr = &openai.ResponseAPIConversation{Id: res.conversation}
+		}
+	}
+
 	response := openai.ResponseAPIResponse{
 		Id:                 responseID,
 		Object:             "response",
@@ -33,6 +52,8 @@ func renderChatResponseAsResponseAPI(c *gin.Context, status int, textResp *opena
 		Model:              userVisibleModelName(meta, originalReq.Model),
 		Output:             output,
 		Usage:              usage,
+		Store:              storePtr,
+		Conversation:       conversationPtr,
 		Instructions:       originalReq.Instructions,
 		MaxOutputTokens:    originalReq.MaxOutputTokens,
 		Metadata:           originalReq.Metadata,
@@ -76,6 +97,34 @@ func renderChatResponseAsResponseAPI(c *gin.Context, status int, textResp *opena
 	return errors.Wrap(err, "write response API response")
 }
 
+// renderChatResponseAsResponseAPIStream renders a completed Chat Completion response as a terminal Responses API SSE sequence.
+func renderChatResponseAsResponseAPIStream(c *gin.Context, status int, textResp *openai_compatible.SlimTextResponse, originalReq *openai.ResponseAPIRequest, meta *metalib.Meta) error {
+	c.Set(ctxkey.ResponseRewriteApplied, true)
+	c.Status(status)
+	common.SetEventStreamHeaders(c)
+
+	bridge := newChatToResponseStreamBridge(c, meta, originalReq)
+	choices := make([]openai_compatible.ChatCompletionsStreamResponseChoice, 0, len(textResp.Choices))
+	for _, choice := range textResp.Choices {
+		finishReason := choice.FinishReason
+		choices = append(choices, openai_compatible.ChatCompletionsStreamResponseChoice{
+			Index:        choice.Index,
+			Delta:        choice.Message,
+			FinishReason: &finishReason,
+		})
+	}
+
+	bridge.HandleChunk(c, &openai_compatible.ChatCompletionsStreamResponse{
+		Object:  "chat.completion.chunk",
+		Model:   meta.ActualModelName,
+		Choices: choices,
+		Usage:   &textResp.Usage,
+	})
+	bridge.FinalizeUsage(&textResp.Usage)
+	bridge.HandleDone(c)
+	return nil
+}
+
 // generateResponseAPIID generates a unique ID for a Response API response
 func generateResponseAPIID(c *gin.Context, _ *openai_compatible.SlimTextResponse) string {
 	if reqID := c.GetString(ctxkey.RequestId); reqID != "" {
@@ -100,9 +149,11 @@ func deriveResponseStatus(choices []openai_compatible.TextResponseChoice) (strin
 	return status, nil
 }
 
-// buildResponseOutput builds the output items for a Response API response from Chat Completion choices
+// buildResponseOutput builds the output items for a Response API response from Chat Completion choices.
+// The returned slice is always non-nil so that JSON serialization yields "output": [] instead of null,
+// which strict OpenAI SDK clients reject as a violation of the Responses API schema.
 func buildResponseOutput(choices []openai_compatible.TextResponseChoice) []openai.OutputItem {
-	var output []openai.OutputItem
+	output := make([]openai.OutputItem, 0)
 	for _, choice := range choices {
 		msg := choice.Message
 		contents := convertMessageContent(msg)
@@ -119,6 +170,9 @@ func buildResponseOutput(choices []openai_compatible.TextResponseChoice) []opena
 			output = append(output, openai.OutputItem{
 				Type:   "reasoning",
 				Status: "completed",
+				Content: []openai.OutputContent{
+					{Type: "text", Text: reasoning},
+				},
 				Summary: []openai.OutputContent{
 					{Type: "summary_text", Text: reasoning},
 				},

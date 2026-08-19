@@ -74,7 +74,7 @@ export function CacheHeatmaps({ modelHeatmap, userHeatmap, tokenHeatmap, statist
             <SelectContent>
               {TOP_N_OPTIONS.map((n) => (
                 <SelectItem key={n} value={String(n)}>
-                  {`Top ${n}`}
+                  {t('dashboard.cache.top_n_option', { count: n })}
                 </SelectItem>
               ))}
             </SelectContent>

@@ -15,11 +15,11 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/songquanpeng/one-api/common"
-	"github.com/songquanpeng/one-api/common/ctxkey"
-	"github.com/songquanpeng/one-api/model"
-	"github.com/songquanpeng/one-api/relay"
-	"github.com/songquanpeng/one-api/relay/channeltype"
+	"github.com/Laisky/one-api/common"
+	"github.com/Laisky/one-api/common/ctxkey"
+	"github.com/Laisky/one-api/model"
+	"github.com/Laisky/one-api/relay"
+	"github.com/Laisky/one-api/relay/channeltype"
 )
 
 // func min(a, b int) int {
@@ -222,7 +222,7 @@ func TestDeepSeekModelsInDashboard(t *testing.T) {
 	assert.NotEmpty(t, deepSeekModels, "DeepSeek should have models")
 
 	// Verify that DeepSeek models are included
-	expectedModels := []string{"deepseek-chat", "deepseek-reasoner"}
+	expectedModels := []string{"deepseek-v4-flash", "deepseek-v4-pro"}
 	for _, expectedModel := range expectedModels {
 		found := slices.Contains(deepSeekModels, expectedModel)
 		assert.True(t, found, "Expected DeepSeek model %s should be present", expectedModel)
@@ -435,6 +435,53 @@ func TestListModels_DeduplicatesModels(t *testing.T) {
 		}
 	}
 	require.Equal(t, 1, count, "mixtral-8x7b should appear exactly once")
+}
+
+// TestListModels_CodexCatalogCompatibility verifies that Codex model-discovery requests receive
+// the required models array without changing the standard OpenAI model-list contract. It accepts
+// no parameters beyond the test context and returns no value.
+func TestListModels_CodexCatalogCompatibility(t *testing.T) {
+	setupListModelsTestEnv(t)
+	gin.SetMode(gin.TestMode)
+	group := fmt.Sprintf("group-%d", time.Now().UnixNano())
+	user := createTestUserForGroup(t, group)
+
+	createTestChannelForGroup(t, "codex-catalog", group, "deepseek-v4-flash", channeltype.DeepSeek)
+
+	router := gin.New()
+	router.GET("/v1/models", func(c *gin.Context) {
+		c.Set(ctxkey.Id, user.Id)
+		ListModels(c)
+	})
+
+	t.Run("standard OpenAI request", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/v1/models", nil)
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+
+		require.Equal(t, http.StatusOK, w.Code)
+		var payload map[string]json.RawMessage
+		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &payload))
+		require.Contains(t, payload, "data")
+		require.NotContains(t, payload, "models")
+	})
+
+	t.Run("Codex catalog request", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/v1/models?client_version=0.146.0", nil)
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+
+		require.Equal(t, http.StatusOK, w.Code)
+		var payload struct {
+			Object string          `json:"object"`
+			Data   []OpenAIModels  `json:"data"`
+			Models json.RawMessage `json:"models"`
+		}
+		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &payload))
+		require.Equal(t, "list", payload.Object)
+		require.NotEmpty(t, payload.Data, "the OpenAI model list must remain available")
+		require.JSONEq(t, `[]`, string(payload.Models), "Codex requires a top-level models array")
+	})
 }
 
 func TestListModels_IncludesCustomChannelModels(t *testing.T) {

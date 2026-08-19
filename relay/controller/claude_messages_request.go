@@ -9,8 +9,8 @@ import (
 	"github.com/Laisky/errors/v2"
 	"github.com/gin-gonic/gin"
 
-	"github.com/songquanpeng/one-api/common"
-	"github.com/songquanpeng/one-api/relay/adaptor/anthropic"
+	"github.com/Laisky/one-api/common"
+	"github.com/Laisky/one-api/relay/adaptor/anthropic"
 )
 
 // sanitizeClaudeMessagesRequest enforces parameter constraints required by upstream providers.
@@ -43,10 +43,10 @@ func applyClaudeRequestRewriteFields(obj map[string]json.RawMessage, request *Cl
 		delete(obj, "top_k")
 	}
 
-	if anthropic.IsClaudeOpus47Model(request.Model) {
-		rewrittenThinking, changed, err := rewriteClaudeOpus47Thinking(obj["thinking"])
+	if anthropic.IsClaudeAdaptiveThinkingModel(request.Model) {
+		rewrittenThinking, changed, err := rewriteClaudeAdaptiveThinking(obj["thinking"])
 		if err != nil {
-			return errors.Wrap(err, "rewrite Claude Opus 4.7 thinking")
+			return errors.Wrap(err, "rewrite Claude adaptive thinking")
 		}
 		if changed {
 			if len(rewrittenThinking) == 0 {
@@ -60,9 +60,10 @@ func applyClaudeRequestRewriteFields(obj map[string]json.RawMessage, request *Cl
 	return nil
 }
 
-// rewriteClaudeOpus47Thinking normalizes a raw thinking object for Claude Opus 4.7.
+// rewriteClaudeAdaptiveThinking normalizes a raw thinking object for Claude models on the
+// adaptive-thinking-only profile (Opus 4.7/4.8, Sonnet 5, ...).
 // It preserves valid adaptive settings where possible, rewrites legacy manual thinking to adaptive, and returns whether the raw field changed.
-func rewriteClaudeOpus47Thinking(rawThinking json.RawMessage) (json.RawMessage, bool, error) {
+func rewriteClaudeAdaptiveThinking(rawThinking json.RawMessage) (json.RawMessage, bool, error) {
 	if len(rawThinking) == 0 {
 		return nil, false, nil
 	}
@@ -114,7 +115,7 @@ func rewriteClaudeOpus47Thinking(rawThinking json.RawMessage) (json.RawMessage, 
 //   - Key reordering within nested objects
 //
 // By using json.RawMessage, only the top-level fields we explicitly modify (model,
-// extra_body, temperature, top_p, top_k, and Opus 4.7 thinking) are re-encoded;
+// extra_body, temperature, top_p, top_k, and adaptive-thinking normalization) are re-encoded;
 // all other fields pass through byte-for-byte.
 func rewriteClaudeRequestBody(raw []byte, request *ClaudeMessagesRequest) ([]byte, error) {
 	if len(raw) == 0 || request == nil {
@@ -550,8 +551,13 @@ func getAndValidateClaudeMessagesRequest(c *gin.Context) (*ClaudeMessagesRequest
 		if message.Role == "" {
 			return nil, errors.Errorf("message[%d].role is required", i)
 		}
-		if message.Role != "user" && message.Role != "assistant" {
-			return nil, errors.Errorf("message[%d].role must be 'user' or 'assistant'", i)
+		// Claude Code v2.1.154+ (e.g. "adaptive thinking") may inject role:"system"
+		// messages inside the messages array (issue #350). Tolerate them here; the
+		// downstream conversion folds mid-array system content into an adjacent
+		// turn for rebuilt upstreams, while direct HTTP passthrough forwards the
+		// raw body unchanged.
+		if message.Role != "user" && message.Role != "assistant" && message.Role != "system" {
+			return nil, errors.Errorf("message[%d].role must be 'user', 'assistant', or 'system'", i)
 		}
 		if message.Content == nil {
 			return nil, errors.Errorf("message[%d].content is required", i)

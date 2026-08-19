@@ -1,0 +1,27 @@
+{
+  "uuid": "018f0000-0000-7000-8000-0000000000d1",
+  "username": "golden-user",
+  "display_name": "Golden User",
+  "role": 1,
+  "status": 1,
+  "email": "golden@example.com",
+  "github_id": "golden-github",
+  "wechat_id": "golden-wechat",
+  "lark_id": "golden-lark",
+  "oidc_id": "golden-oidc",
+  "quota": 50000,
+  "used_quota": 1500,
+  "request_count": 33,
+  "group": "vip",
+  "aff_code": "GOLDENAFF",
+  "inviter_uuid": "018f0000-0000-7000-8000-0000000000d2",
+  "mcp_tool_blacklist": [
+    "tool-a",
+    "tool-b"
+  ],
+  "metadata": {
+    "password_locked": true
+  },
+  "created_at": 1710003001,
+  "updated_at": 1710003002
+}

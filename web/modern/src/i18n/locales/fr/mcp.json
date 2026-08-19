@@ -5,8 +5,12 @@
         "add": "Ajouter",
         "cancel": "Annuler",
         "create": "Créer le serveur",
+        "sync": "Synchroniser maintenant",
+        "sync_in_progress": "Synchronisation...",
         "update": "Mettre à jour le serveur"
       },
+      "description_add": "Ajoutez un nouveau serveur MCP et configurez l’exposition de ses outils.",
+      "description_edit": "Mettez à jour ce serveur MCP et la configuration des outils exposés.",
       "fields": {
         "api_key": "Clé API",
         "auth_type": "Type d'authentification",
@@ -46,7 +50,9 @@
       "notifications": {
         "load_failed": "Échec du chargement du serveur MCP",
         "save_failed": "Échec de l'enregistrement",
-        "save_success": "Enregistré"
+        "save_success": "Enregistré",
+        "sync_failed": "Échec de la synchronisation : {{message}}",
+        "sync_success": "{{count}} outils synchronisés depuis l'amont"
       },
       "pricing": {
         "invalid": "Le JSON de tarification des outils est invalide",
@@ -56,6 +62,10 @@
       "title_edit": "Modifier le serveur MCP",
       "tools": {
         "title": "Outils synchronisés"
+      },
+      "validation": {
+        "base_url_required": "L'URL de base est requise",
+        "name_required": "Le nom est requis"
       }
     },
     "list": {
@@ -66,13 +76,14 @@
         "edit": "Modifier",
         "enable": "Activer",
         "refresh": "Actualiser",
-        "sync": "Sync",
+        "sync": "Synchroniser",
         "test": "Tester"
       },
       "columns": {
         "actions": "Actions",
         "auth_type": "Auth",
         "base_url": "URL de base",
+        "id": "ID",
         "last_sync": "Dernière synchro",
         "name": "Nom",
         "priority": "Priorité",
@@ -84,7 +95,7 @@
       "labels": {
         "never": "Jamais"
       },
-      "search_placeholder": "Rechercher des serveurs MCP...",
+      "search_placeholder": "Rechercher des serveurs MCP par nom, URL ou UUID...",
       "subtitle": "Gérer le registre des serveurs MCP et la synchronisation des outils",
       "title": "Serveurs MCP"
     },

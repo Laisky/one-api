@@ -9,7 +9,8 @@ import (
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
 
-	"github.com/songquanpeng/one-api/common/config"
+	"github.com/Laisky/one-api/common/config"
+	"github.com/Laisky/one-api/common/helper"
 )
 
 type turnstileCheckResponse struct {
@@ -41,8 +42,24 @@ func VerifyTurnstileToken(token, clientIP string) error {
 	return nil
 }
 
+// RedactTurnstileTokenFromURL replaces the Turnstile query value on the live request URL after callers capture the token.
+func RedactTurnstileTokenFromURL(c *gin.Context) {
+	if c == nil || c.Request == nil || c.Request.URL == nil {
+		return
+	}
+	query := c.Request.URL.Query()
+	if _, ok := query["turnstile"]; !ok {
+		return
+	}
+	query.Set("turnstile", "[redacted]")
+	c.Request.URL.RawQuery = query.Encode()
+}
+
+// TurnstileCheck verifies Turnstile challenges for protected public endpoints.
 func TurnstileCheck() gin.HandlerFunc {
 	return func(c *gin.Context) {
+		turnstileToken := c.Query("turnstile")
+		RedactTurnstileTokenFromURL(c)
 		if config.TurnstileCheckEnabled {
 			session := sessions.Default(c)
 			turnstileChecked := session.Get("turnstile")
@@ -50,11 +67,8 @@ func TurnstileCheck() gin.HandlerFunc {
 				c.Next()
 				return
 			}
-			if err := VerifyTurnstileToken(c.Query("turnstile"), c.ClientIP()); err != nil {
-				c.JSON(http.StatusOK, gin.H{
-					"success": false,
-					"message": err.Error(),
-				})
+			if err := VerifyTurnstileToken(turnstileToken, c.ClientIP()); err != nil {
+				helper.RespondError(c, err)
 				c.Abort()
 				return
 			}

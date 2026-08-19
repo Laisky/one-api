@@ -7,6 +7,7 @@ import { Button, Dropdown, Form, Modal, Popconfirm, Popover, SplitButtonGroup, T
 
 import { IconTreeTriangleDown } from '@douyinfe/semi-icons';
 import EditToken from '../pages/Token/EditToken';
+import ResourceRefTooltip from './ResourceRefTooltip';
 
 const COPY_OPTIONS = [
   { key: 'next', text: 'ChatGPT Next Web', value: 'next' },
@@ -20,6 +21,8 @@ const OPEN_LINK_OPTIONS = [
   { key: 'opencat', text: 'OpenCat', value: 'opencat' },
   { key: 'lobechat', text: 'LobeChat', value: 'lobechat' }
 ];
+
+const tokenRef = (token) => token.uuid || token.id;
 
 function renderTimestamp(timestamp) {
   return (
@@ -73,7 +76,10 @@ const TokensTable = () => {
   const columns = [
     {
       title: '名称',
-      dataIndex: 'name'
+      dataIndex: 'name',
+      render: (text, record) => (
+        <ResourceRefTooltip refId={tokenRef(record)}>{text}</ResourceRefTooltip>
+      )
     },
     {
       title: '状态',
@@ -203,7 +209,7 @@ const TokensTable = () => {
             okType={'danger'}
             position={'left'}
             onConfirm={() => {
-              manageToken(record.id, 'delete', record).then(
+              manageToken(tokenRef(record), 'delete', record).then(
                 () => {
                   removeRecord(record.key);
                 }
@@ -217,7 +223,7 @@ const TokensTable = () => {
               <Button theme="light" type="warning" style={{ marginRight: 1 }} onClick={
                 async () => {
                   manageToken(
-                    record.id,
+                    tokenRef(record),
                     'disable',
                     record
                   );
@@ -226,7 +232,7 @@ const TokensTable = () => {
               <Button theme="light" type="secondary" style={{ marginRight: 1 }} onClick={
                 async () => {
                   manageToken(
-                    record.id,
+                    tokenRef(record),
                     'enable',
                     record
                   );
@@ -430,7 +436,7 @@ const TokensTable = () => {
 
   const manageToken = async (id, action, record) => {
     setLoading(true);
-    let data = { id };
+    let data = typeof id === 'string' ? { uuid: id } : { id };
     let res;
     switch (action) {
       case 'delete':
@@ -499,7 +505,7 @@ const TokensTable = () => {
     sortedTokens.sort((a, b) => {
       return ('' + a[key]).localeCompare(b[key]);
     });
-    if (sortedTokens[0].id === tokens[0].id) {
+    if (tokenRef(sortedTokens[0]) === tokenRef(tokens[0])) {
       sortedTokens.reverse();
     }
     setTokens(sortedTokens);
@@ -562,7 +568,7 @@ const TokensTable = () => {
         <Form.Input
           field="keyword"
           label="搜索关键字"
-          placeholder="令牌名称"
+          placeholder="令牌名称或 UUID"
           value={searchKeyword}
           loading={searching}
           onChange={handleKeywordChange}

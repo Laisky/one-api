@@ -51,6 +51,7 @@ const baseDefaults: ChannelForm = {
     api_format: 'chat_completion',
     supported_endpoints: [],
     mcp_tool_blacklist: [],
+    custom_headers: {},
   },
   inference_profile_arn_map: '',
 };
@@ -252,5 +253,31 @@ describe('ChannelModelSettings', () => {
     );
 
     expect(screen.queryByText(/are not in Supported Models/)).not.toBeInTheDocument();
+  });
+
+  it('validates Model Mapping source and target casing exactly while keeping hidden-model support folded', () => {
+    render(
+      <TestHarness
+        defaultPricing=""
+        onReady={() => {}}
+        defaultValues={{
+          models: ['Public-Alias'],
+          hidden_models: ['public-alias'],
+          model_mapping: '{"public-alias":"gpt-4o"}',
+        }}
+        availableModels={[
+          { id: 'Public-Alias', name: 'Public-Alias' },
+          { id: 'GPT-4o', name: 'GPT-4o' },
+        ]}
+      />
+    );
+
+    expect(screen.queryByText(/hidden models are not currently supported/)).not.toBeInTheDocument();
+    expect(
+      screen.getByText('These mapping keys are not in Supported Models, so requests to these aliases will be rejected: public-alias')
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText('These mapping targets are not recognized as models for this channel: public-alias → gpt-4o')
+    ).toBeInTheDocument();
   });
 });

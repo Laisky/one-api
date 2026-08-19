@@ -10,7 +10,7 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 
-	"github.com/songquanpeng/one-api/common"
+	"github.com/Laisky/one-api/common"
 )
 
 // openBackend opens a GORM connection for the requested backend and installs
@@ -119,6 +119,7 @@ func runBootMigrationPortable(t *testing.T) {
 	t.Helper()
 	require.NoError(t, migrateDB(), "migrateDB")
 	require.NoError(t, MigrateAbilitySuspendUntilColumn(), "MigrateAbilitySuspendUntilColumn")
+	require.NoError(t, MigrateAbilityModelCollation(), "MigrateAbilityModelCollation")
 	require.NoError(t, MigrateChannelFieldsToText(), "MigrateChannelFieldsToText")
 	require.NoError(t, MigrateTraceURLColumnToText(), "MigrateTraceURLColumnToText")
 	require.NoError(t, MigrateUserRequestCostEnsureUniqueRequestID(), "MigrateUserRequestCostEnsureUniqueRequestID")

@@ -27,6 +27,7 @@ export default function Log() {
 
   const originalKeyword = {
     p: 0,
+    keyword: '',
     username: '',
     token_name: '',
     model_name: '',
@@ -49,10 +50,13 @@ export default function Log() {
   const [tracingModalOpen, setTracingModalOpen] = useState(false);
   const [selectedLogId, setSelectedLogId] = useState(null);
   const userIsAdmin = isAdmin();
+  // The stat endpoint only understands the structured filters, so it cannot
+  // describe a keyword result set. Suppress it instead of showing a total that
+  // belongs to a different set of rows than the table displays.
+  const keywordActive = (searchKeyword.keyword || '').trim() !== '';
 
   const loadLogs = async (startIdx) => {
     setSearching(true);
-    const url = userIsAdmin ? '/api/log/' : '/api/log/self';
     const query = { ...searchKeyword };
 
     query.p = startIdx;
@@ -64,7 +68,26 @@ export default function Log() {
       delete query.username;
       delete query.channel;
     }
-    const res = await API.get(url, { params: query });
+
+    // A non-empty keyword goes to the server-side log search endpoint, which
+    // also resolves a pasted log/user/token UUID. Admins search every log,
+    // regular users only their own.
+    const keyword = (query.keyword || '').trim();
+    let url;
+    let params;
+    if (keyword) {
+      url = userIsAdmin ? '/api/log/search' : '/api/log/self/search';
+      params = { keyword: keyword, p: startIdx, size: ITEMS_PER_PAGE };
+      if (sortBy) {
+        params.sort = sortBy;
+        params.order = sortOrder;
+      }
+    } else {
+      url = userIsAdmin ? '/api/log/' : '/api/log/self';
+      delete query.keyword;
+      params = query;
+    }
+    const res = await API.get(url, { params: params });
     const { success, message, data } = res.data;
     if (success) {
       if (startIdx === 0) {
@@ -124,6 +147,8 @@ export default function Log() {
   const getLogStat = async () => {
     const query = { ...searchKeyword };
     delete query.p;
+    // The stat endpoint only understands the structured filters.
+    delete query.keyword;
     if (!userIsAdmin) {
       delete query.username;
       delete query.channel;
@@ -192,7 +217,11 @@ export default function Log() {
           <Stack direction="row" alignItems="center" spacing={2}>
             <Typography variant="h6">
               使用详情（总配额：
-              {showStat ? (
+              {keywordActive ? (
+                <Typography variant="body2" component="span" color="text.secondary">
+                  关键字搜索模式下不统计
+                </Typography>
+              ) : showStat ? (
                 <>
                   <Chip
                     label={renderQuota(stat.quota)}

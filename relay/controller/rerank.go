@@ -16,24 +16,21 @@ import (
 	"github.com/Laisky/zap"
 	"github.com/gin-gonic/gin"
 
-	"github.com/songquanpeng/one-api/common"
-	"github.com/songquanpeng/one-api/common/config"
-	"github.com/songquanpeng/one-api/common/ctxkey"
-	"github.com/songquanpeng/one-api/common/graceful"
-	"github.com/songquanpeng/one-api/common/helper"
-	"github.com/songquanpeng/one-api/common/metrics"
-	"github.com/songquanpeng/one-api/common/tracing"
-	"github.com/songquanpeng/one-api/model"
-	"github.com/songquanpeng/one-api/relay"
-	"github.com/songquanpeng/one-api/relay/adaptor"
-	"github.com/songquanpeng/one-api/relay/adaptor/openai"
-	"github.com/songquanpeng/one-api/relay/billing"
-	"github.com/songquanpeng/one-api/relay/channeltype"
-	"github.com/songquanpeng/one-api/relay/controller/validator"
-	metalib "github.com/songquanpeng/one-api/relay/meta"
-	relaymodel "github.com/songquanpeng/one-api/relay/model"
-	"github.com/songquanpeng/one-api/relay/pricing"
-	"github.com/songquanpeng/one-api/relay/relaymode"
+	"github.com/Laisky/one-api/common"
+	"github.com/Laisky/one-api/common/ctxkey"
+	"github.com/Laisky/one-api/common/helper"
+	"github.com/Laisky/one-api/common/metrics"
+	"github.com/Laisky/one-api/model"
+	"github.com/Laisky/one-api/relay"
+	"github.com/Laisky/one-api/relay/adaptor"
+	"github.com/Laisky/one-api/relay/adaptor/openai"
+	"github.com/Laisky/one-api/relay/billing"
+	"github.com/Laisky/one-api/relay/channeltype"
+	"github.com/Laisky/one-api/relay/controller/validator"
+	metalib "github.com/Laisky/one-api/relay/meta"
+	relaymodel "github.com/Laisky/one-api/relay/model"
+	"github.com/Laisky/one-api/relay/pricing"
+	"github.com/Laisky/one-api/relay/relaymode"
 )
 
 // RelayRerankHelper handles POST /v1/rerank requests using the dedicated DTO pipeline.
@@ -58,16 +55,16 @@ func RelayRerankHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 	metalib.Set2Context(c, meta)
 
 	channelModelRatio, _ := getChannelRatios(c)
+	channelModelConfigs := getChannelModelConfigs(c)
 	pricingAdaptor := resolvePricingAdaptor(meta)
-	modelRatio := pricing.GetModelRatioWithThreeLayers(rerankRequest.Model, channelModelRatio, pricingAdaptor)
+	modelRatio := pricing.ResolveModelRatioAt(rerankRequest.Model, channelModelConfigs, channelModelRatio, pricingAdaptor, meta.StartTime)
+	modelConfig, hasModelConfig := pricing.ResolveModelConfig(rerankRequest.Model, channelModelConfigs, pricingAdaptor, meta.StartTime)
+	perCallBilling := hasModelConfig && modelConfig.PerCall != nil && modelConfig.PerCall.HasData()
 	groupRatio := c.GetFloat64(ctxkey.ChannelRatio)
-	totalQuota := int64(math.Ceil(modelRatio * groupRatio))
-	if modelRatio > 0 && totalQuota == 0 {
-		totalQuota = 1
-	}
 
 	promptTokens := countRerankPromptTokens(ctx, rerankRequest)
 	meta.PromptTokens = promptTokens
+	totalQuota := calculateRerankQuota(promptTokens, modelRatio, groupRatio, perCallBilling)
 
 	preConsumedQuota, bizErr := preConsumeRerankQuota(c, totalQuota, meta)
 	if bizErr != nil {
@@ -121,9 +118,7 @@ func RelayRerankHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 	}
 
 	if isErrorHappened(meta, resp) {
-		graceful.GoCritical(ctx, "returnPreConsumedQuota", func(cctx context.Context) {
-			_ = returnPreConsumedQuotaConservative(cctx, c, preConsumedQuota, meta.TokenId, "upstream_http_error")
-		})
+		scheduleConservativeRefund(c, preConsumedQuota, meta.TokenId, "upstream_http_error")
 		if requestId != "" {
 			if err := model.UpdateUserRequestCostQuotaByRequestID(quotaId, requestId, 0); err != nil {
 				lg.Warn("update user request cost to zero failed", zap.Error(err))
@@ -141,9 +136,7 @@ func RelayRerankHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 	}
 	if respErr != nil {
 		if usage == nil {
-			graceful.GoCritical(ctx, "returnPreConsumedQuota", func(cctx context.Context) {
-				_ = returnPreConsumedQuotaConservative(cctx, c, preConsumedQuota, meta.TokenId, "do_response_failed_without_usage")
-			})
+			scheduleConservativeRefund(c, preConsumedQuota, meta.TokenId, "do_response_failed_without_usage")
 			if requestId != "" {
 				if err := model.UpdateUserRequestCostQuotaByRequestID(quotaId, requestId, 0); err != nil {
 					lg.Warn("update user request cost to zero failed", zap.Error(err))
@@ -153,8 +146,13 @@ func RelayRerankHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 		}
 	}
 
+	// Refund any pre-consumed quota that is safe to return (no-op on the
+	// forwarded success path). Do NOT zero preConsumedQuota here: postConsume
+	// settles via delta (quotaDelta = totalQuota - preConsumedQuota), so the
+	// kept pre-consume plus the delta equals exactly one charge. Zeroing it
+	// would make postConsume recharge the full totalQuota on top of the
+	// still-deducted pre-consume, double charging the user. Mirrors text.go.
 	_ = returnPreConsumedQuotaConservative(ctx, c, preConsumedQuota, meta.TokenId, "pre_billing_reconcile")
-	preConsumedQuota = 0
 
 	if usage != nil {
 		userIdStr := strconv.Itoa(meta.UserId)
@@ -205,37 +203,21 @@ func RelayRerankHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 	}
 
 	markBillingReconciled(c)
-	graceful.GoCritical(gmw.BackgroundCtx(c), "postBillingRerank", func(bctx context.Context) {
-		baseBillingTimeout := time.Duration(config.BillingTimeoutSec) * time.Second
-		bctx, cancel := context.WithTimeout(gmw.BackgroundCtx(c), baseBillingTimeout)
-		defer cancel()
-
-		done := make(chan bool, 1)
-		var quota int64
-
-		go func() {
-			quota = postConsumeRerankQuota(bctx, usage, meta, rerankRequest, preConsumedQuota, totalQuota, modelRatio, groupRatio)
-			if requestId != "" {
-				if err := model.UpdateUserRequestCostQuotaByRequestID(quotaId, requestId, quota); err != nil {
-					lg.Error("update user request cost failed", zap.Error(err), zap.String("request_id", requestId))
-				}
-			}
-			done <- true
-		}()
-
-		select {
-		case <-done:
-		case <-bctx.Done():
-			if errors.Is(bctx.Err(), context.DeadlineExceeded) && usage != nil {
-				estimatedQuota := float64(totalQuota)
-				elapsedTime := time.Since(meta.StartTime)
-				lg.Error("CRITICAL BILLING TIMEOUT",
-					zap.String("model", rerankRequest.Model),
-					zap.String("requestId", requestId),
-					zap.Int("userId", meta.UserId),
-					zap.Int64("estimatedQuota", int64(estimatedQuota)),
-					zap.Duration("elapsedTime", elapsedTime))
-				metrics.GlobalRecorder.RecordBillingTimeout(meta.UserId, meta.ChannelId, rerankRequest.Model, estimatedQuota, elapsedTime)
+	runPostBillingWithTimeout(detachForBilling(c), "postBillingRerank", lg, postBillingTimeoutInfo{
+		userID:              meta.UserId,
+		channelID:           meta.ChannelId,
+		model:               rerankRequest.Model,
+		requestID:           requestId,
+		startTime:           meta.StartTime,
+		estimatedQuota:      func() float64 { return float64(totalQuota) },
+		guardTimeoutLog:     func() bool { return usage != nil },
+		logMessage:          "CRITICAL BILLING TIMEOUT",
+		includeElapsedField: true,
+	}, func(ctx context.Context) {
+		quota := postConsumeRerankQuota(ctx, usage, meta, rerankRequest, preConsumedQuota, totalQuota, modelRatio, groupRatio, perCallBilling)
+		if requestId != "" {
+			if err := model.UpdateUserRequestCostQuotaByRequestID(quotaId, requestId, quota); err != nil {
+				lg.Error("update user request cost failed", zap.Error(err), zap.String("request_id", requestId))
 			}
 		}
 	})
@@ -249,7 +231,7 @@ func getAndValidateRerankRequest(c *gin.Context) (*relaymodel.RerankRequest, err
 		return nil, errors.Wrap(err, "get request body")
 	}
 
-	if err := validator.ValidateUnknownParameters(rawBody); err != nil {
+	if err := validator.ValidateUnknownParametersWithContext(c, rawBody); err != nil {
 		return nil, errors.Wrap(err, "unknown parameter validation failed")
 	}
 
@@ -306,6 +288,26 @@ func countRerankPromptTokens(ctx context.Context, request *relaymodel.RerankRequ
 	return tokens
 }
 
+// calculateRerankQuota computes either token-priced or flat per-call rerank quota.
+func calculateRerankQuota(promptTokens int, modelRatio float64, groupRatio float64, perCall bool) int64 {
+	if modelRatio <= 0 || groupRatio <= 0 {
+		return 0
+	}
+
+	units := 1.0
+	if !perCall {
+		if promptTokens <= 0 {
+			return 0
+		}
+		units = float64(promptTokens)
+	}
+	quota := int64(math.Ceil(units * modelRatio * groupRatio))
+	if quota == 0 {
+		return 1
+	}
+	return quota
+}
+
 func preConsumeRerankQuota(c *gin.Context, perCallQuota int64, meta *metalib.Meta) (int64, *relaymodel.ErrorWithStatusCode) {
 	ctx := gmw.Ctx(c)
 	lg := gmw.GetLogger(c)
@@ -328,7 +330,7 @@ func preConsumeRerankQuota(c *gin.Context, perCallQuota int64, meta *metalib.Met
 	}
 
 	if userQuota > 100*perCallQuota && (tokenQuotaUnlimited || tokenQuota > 100*perCallQuota) {
-		lg.Info("user has enough quota, trusted and no need to pre-consume", zap.Int("user_id", meta.UserId), zap.Int64("user_quota", userQuota))
+		lg.Info("user has enough quota, trusted and no need to pre-consume", zap.Int64("user_quota", userQuota))
 		return 0, nil
 	}
 
@@ -347,23 +349,31 @@ func postConsumeRerankQuota(ctx context.Context,
 	preConsumedQuota int64,
 	totalQuota int64,
 	modelRatio float64,
-	groupRatio float64) (quota int64) {
+	groupRatio float64,
+	perCallBilling bool) (quota int64) {
 	quota = max(totalQuota, 0)
+	if !perCallBilling && usage != nil && usage.PromptTokens > 0 {
+		quota = calculateRerankQuota(usage.PromptTokens, modelRatio, groupRatio, false)
+	}
 
 	quotaDelta := quota - preConsumedQuota
 
-	var requestId string
-	var provLogID int
-	if ginCtx, ok := gmw.GetGinCtxFromStdCtx(ctx); ok {
-		requestId = ginCtx.GetString(ctxkey.RequestId)
-		provLogID = ginCtx.GetInt(ctxkey.ProvisionalLogId)
-	}
-	traceId := tracing.GetTraceIDFromContext(ctx)
+	// Resolve identifiers from the detached billing snapshot (or, for a synchronous
+	// caller, from the embedded gin context). NEVER read them off a live *gin.Context
+	// here: this can run inside a post-billing goroutine and gin recycles c.
+	billingID := billingIdentityFromContext(ctx)
+	requestId := billingID.requestID
+	provLogID := billingID.provisionalLogID
+	traceId := billingID.traceID
 
 	var promptTokens, completionTokens int
 	if usage != nil {
 		promptTokens = usage.PromptTokens
 		completionTokens = usage.CompletionTokens
+	}
+	billingMode := "token"
+	if perCallBilling {
+		billingMode = "per-call"
 	}
 
 	if meta.TokenId > 0 && meta.UserId > 0 && meta.ChannelId > 0 {
@@ -374,18 +384,19 @@ func postConsumeRerankQuota(ctx context.Context,
 			CompletionTokens: completionTokens,
 			ModelName:        request.Model,
 			TokenName:        meta.TokenName,
-			Content:          fmt.Sprintf("rerank per-call billing, base unit %.2f, group rate %.2f", modelRatio, groupRatio),
+			Content:          fmt.Sprintf("rerank %s billing, base unit %.6f, group rate %.2f", billingMode, modelRatio, groupRatio),
 			IsStream:         false,
 			ElapsedTime:      helper.CalcElapsedTime(meta.StartTime),
 			RequestId:        requestId,
 			TraceId:          traceId,
 		}
+		model.SetLogExternalUUIDs(logEntry, meta.UserUUID, meta.ChannelUUID, meta.TokenUUID)
 		billing.PostConsumeQuotaWithLog(ctx, meta.TokenId, quotaDelta, quota, logEntry, provLogID)
 	} else {
 		gmw.GetLogger(ctx).Error("meta information incomplete, cannot post consume rerank quota",
-			zap.Int("token_id", meta.TokenId),
-			zap.Int("user_id", meta.UserId),
-			zap.Int("channel_id", meta.ChannelId),
+			zap.Int("meta_token_id", meta.TokenId),
+			zap.Int("meta_user_id", meta.UserId),
+			zap.Int("meta_channel_id", meta.ChannelId),
 			zap.String("request_id", requestId),
 			zap.String("trace_id", traceId),
 		)

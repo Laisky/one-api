@@ -19,6 +19,7 @@ import {
 } from '@douyinfe/semi-ui';
 import EditChannel from '../pages/Channel/EditChannel';
 import PricingModal from './PricingModal';
+import ResourceRefTooltip from './ResourceRefTooltip';
 import { IconTreeTriangleDown } from '@douyinfe/semi-icons';
 
 function renderTimestamp(timestamp) {
@@ -30,6 +31,8 @@ function renderTimestamp(timestamp) {
 }
 
 let type2label = undefined;
+
+const channelRef = (channel) => channel?.uuid || channel?.id || '';
 
 function renderType(type) {
   if (!type2label) {
@@ -50,12 +53,11 @@ const ChannelsTable = () => {
     //     className: 'checkbox',
     // },
     {
-      title: 'ID',
-      dataIndex: 'id'
-    },
-    {
       title: '名称',
-      dataIndex: 'name'
+      dataIndex: 'name',
+      render: (text, record) => (
+        <ResourceRefTooltip refId={channelRef(record)}>{text}</ResourceRefTooltip>
+      )
     },
     // {
     //   title: '分组',
@@ -137,7 +139,7 @@ const ChannelsTable = () => {
               style={{ width: 70 }}
               name="priority"
               onBlur={e => {
-                manageChannel(record.id, 'priority', record, e.target.value);
+                manageChannel(channelRef(record), 'priority', record, e.target.value);
               }}
               keepFocus={true}
               innerButtons
@@ -190,9 +192,9 @@ const ChannelsTable = () => {
             okType={'danger'}
             position={'left'}
             onConfirm={() => {
-              manageChannel(record.id, 'delete', record).then(
+              manageChannel(channelRef(record), 'delete', record).then(
                 () => {
-                  removeRecord(record.id);
+                  removeRecord(channelRef(record));
                 }
               );
             }}
@@ -204,7 +206,7 @@ const ChannelsTable = () => {
               <Button theme="light" type="warning" style={{ marginRight: 1 }} onClick={
                 async () => {
                   manageChannel(
-                    record.id,
+                    channelRef(record),
                     'disable',
                     record
                   );
@@ -213,7 +215,7 @@ const ChannelsTable = () => {
               <Button theme="light" type="secondary" style={{ marginRight: 1 }} onClick={
                 async () => {
                   manageChannel(
-                    record.id,
+                    channelRef(record),
                     'enable',
                     record
                   );
@@ -259,7 +261,7 @@ const ChannelsTable = () => {
   const removeRecord = id => {
     let newDataSource = [...channels];
     if (id != null) {
-      let idx = newDataSource.findIndex(data => data.id === id);
+      let idx = newDataSource.findIndex(data => channelRef(data) === id || data.id === id);
 
       if (idx > -1) {
         newDataSource.splice(idx, 1);
@@ -271,10 +273,17 @@ const ChannelsTable = () => {
   const setChannelFormat = (list, totalCount = 0) => {
     const formatted = Array.isArray(list) ? [...list] : [];
     for (let i = 0; i < formatted.length; i++) {
-      formatted[i].key = '' + formatted[i].id;
+      formatted[i].key = '' + channelRef(formatted[i]);
       const testModels = [];
       const modelStr = formatted[i].models || '';
-      modelStr.split(',').forEach((item) => {
+      const hasServerTestModels = Array.isArray(formatted[i].test_models) &&
+        formatted[i].test_models.every((item) => typeof item === 'string');
+      const sourceModels = hasServerTestModels ? formatted[i].test_models : modelStr.split(',');
+      sourceModels.forEach((item) => {
+        if (!item) {
+          return;
+        }
+        item = item.trim();
         if (!item) {
           return;
         }
@@ -337,7 +346,7 @@ const ChannelsTable = () => {
   }, []);
 
   const manageChannel = async (id, action, record, value) => {
-    let data = { id };
+    let data = typeof id === 'string' ? { uuid: id } : { id };
     let res;
     switch (action) {
       case 'delete':
@@ -362,7 +371,7 @@ const ChannelsTable = () => {
         }
         data.name = record?.name;
         if (!data.name) {
-          const found = channels.find((item) => item.id === id);
+          const found = channels.find((item) => channelRef(item) === id || item.id === id);
           data.name = found?.name;
         }
         if (!data.name) {
@@ -381,7 +390,7 @@ const ChannelsTable = () => {
         }
         data.name = record?.name;
         if (!data.name) {
-          const found = channels.find((item) => item.id === id);
+          const found = channels.find((item) => channelRef(item) === id || item.id === id);
           data.name = found?.name;
         }
         if (!data.name) {
@@ -483,7 +492,7 @@ const ChannelsTable = () => {
   };
 
   const testChannel = async (record, model) => {
-    const res = await API.get(`/api/channel/test/${record.id}?model=${model}`);
+    const res = await API.get(`/api/channel/test/${channelRef(record)}?model=${model}`);
     const { success, message, time } = res.data;
     if (success) {
       record.response_time = time * 1000;
@@ -516,7 +525,7 @@ const ChannelsTable = () => {
   };
 
   const updateChannelBalance = async (record) => {
-    const res = await API.get(`/api/channel/update_balance/${record.id}/`);
+    const res = await API.get(`/api/channel/update_balance/${channelRef(record)}/`);
     const { success, message, balance } = res.data;
     if (success) {
       record.balance = balance;
@@ -547,7 +556,7 @@ const ChannelsTable = () => {
     setLoading(true);
     let ids = [];
     selectedChannels.forEach((channel) => {
-      ids.push(channel.id);
+      ids.push(channelRef(channel));
     });
     const res = await API.post(`/api/channel/batch`, { ids: ids });
     const { success, message, data } = res.data;
@@ -646,7 +655,7 @@ const ChannelsTable = () => {
               <Form.Input
                 field="search_keyword"
                 label="搜索"
-                placeholder="ID，名称和密钥 ..."
+                placeholder="ID，UUID，名称和密钥 ..."
                 value={searchKeyword}
                 loading={searching}
                 onChange={(v) => {
@@ -795,7 +804,7 @@ const ChannelsTable = () => {
       <PricingModal
         visible={pricingModalVisible}
         onClose={closePricingModal}
-        channelId={selectedChannel?.id}
+        channelId={channelRef(selectedChannel)}
         channelName={selectedChannel?.name}
         channelType={selectedChannel?.type}
       />

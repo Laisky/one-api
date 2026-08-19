@@ -10,11 +10,11 @@ import (
 	"github.com/Laisky/errors/v2"
 	"github.com/gin-gonic/gin"
 
-	"github.com/songquanpeng/one-api/common/ctxkey"
-	"github.com/songquanpeng/one-api/relay/adaptor"
-	"github.com/songquanpeng/one-api/relay/meta"
-	"github.com/songquanpeng/one-api/relay/model"
-	"github.com/songquanpeng/one-api/relay/relaymode"
+	"github.com/Laisky/one-api/common/ctxkey"
+	"github.com/Laisky/one-api/relay/adaptor"
+	"github.com/Laisky/one-api/relay/meta"
+	"github.com/Laisky/one-api/relay/model"
+	"github.com/Laisky/one-api/relay/relaymode"
 )
 
 type Adaptor struct {
@@ -315,7 +315,7 @@ func (a *Adaptor) GetCompletionRatio(modelName string) float64 {
 	return 1.0
 }
 
-// DefaultToolingConfig returns Baidu's tooling defaults (none publicly documented as of 2025-11-12).
+// DefaultToolingConfig returns Baidu's tooling defaults (none publicly documented as of 2026-05-18).
 func (a *Adaptor) DefaultToolingConfig() adaptor.ChannelToolConfig {
 	return BaiduToolingDefaults
 }

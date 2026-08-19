@@ -10,8 +10,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/songquanpeng/one-api/common/ctxkey"
-	"github.com/songquanpeng/one-api/model"
+	"github.com/Laisky/one-api/common/ctxkey"
+	"github.com/Laisky/one-api/model"
 )
 
 func TestGetSelfByTokenReturnsDetailedInfo(t *testing.T) {
@@ -35,6 +35,9 @@ func TestGetSelfByTokenReturnsDetailedInfo(t *testing.T) {
 		Models:         &models,
 		Subnet:         &subnet,
 	}
+	var user model.User
+	require.NoError(t, model.DB.First(&user, 1).Error)
+	token.UserUUID = &user.UUID
 	require.NoError(t, model.DB.Create(token).Error)
 
 	w := httptest.NewRecorder()
@@ -52,14 +55,19 @@ func TestGetSelfByTokenReturnsDetailedInfo(t *testing.T) {
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
 
 	assert.True(t, resp["success"].(bool))
-	assert.EqualValues(t, token.UserId, resp["uid"])
-	assert.EqualValues(t, token.Id, resp["token_id"])
+	assert.NotContains(t, resp, "uid")
+	assert.Equal(t, user.UUID, resp["user_uuid"])
+	assert.NotContains(t, resp, "token_id")
+	assert.Equal(t, token.UUID, resp["token_uuid"])
 	assert.Equal(t, token.Name, resp["token_name"])
 	assert.EqualValues(t, token.RemainQuota, resp["token_remain_quota"])
 	assert.EqualValues(t, token.UsedQuota, resp["token_used_quota"])
 
 	data := resp["data"].(map[string]any)
 	tokenData := data["token"].(map[string]any)
+	assert.NotContains(t, tokenData, "id")
+	assert.Equal(t, token.UUID, tokenData["uuid"])
+	assert.Equal(t, user.UUID, tokenData["user_uuid"])
 	assert.Equal(t, token.Name, tokenData["name"])
 	assert.EqualValues(t, token.AccessedTime, tokenData["accessed_time"])
 	assert.Equal(t, models, tokenData["models"])
@@ -68,7 +76,8 @@ func TestGetSelfByTokenReturnsDetailedInfo(t *testing.T) {
 
 	userData := data["user"].(map[string]any)
 	assert.Equal(t, "testuser", userData["username"])
-	assert.EqualValues(t, 1, userData["id"])
+	assert.NotContains(t, userData, "id")
+	assert.Equal(t, user.UUID, userData["uuid"])
 }
 
 func TestGetSelfByTokenMissingContext(t *testing.T) {

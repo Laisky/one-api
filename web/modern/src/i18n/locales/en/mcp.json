@@ -5,8 +5,12 @@
         "add": "Add",
         "cancel": "Cancel",
         "create": "Create Server",
+        "sync": "Sync now",
+        "sync_in_progress": "Syncing...",
         "update": "Update Server"
       },
+      "description_add": "Add a new MCP server and configure how its tools are exposed.",
+      "description_edit": "Update this MCP server and its exposed tool configuration.",
       "fields": {
         "api_key": "API key",
         "auth_type": "Auth type",
@@ -46,7 +50,9 @@
       "notifications": {
         "load_failed": "Failed to load MCP server",
         "save_failed": "Save failed",
-        "save_success": "Saved"
+        "save_success": "Saved",
+        "sync_failed": "Sync failed: {{message}}",
+        "sync_success": "Synced {{count}} tools from upstream"
       },
       "pricing": {
         "invalid": "Tool pricing JSON is invalid",
@@ -56,6 +62,10 @@
       "title_edit": "Edit MCP Server",
       "tools": {
         "title": "Synced tools"
+      },
+      "validation": {
+        "base_url_required": "Base URL is required",
+        "name_required": "Name is required"
       }
     },
     "list": {
@@ -73,6 +83,7 @@
         "actions": "Actions",
         "auth_type": "Auth",
         "base_url": "Base URL",
+        "id": "ID",
         "last_sync": "Last Sync",
         "name": "Name",
         "priority": "Priority",
@@ -84,7 +95,7 @@
       "labels": {
         "never": "Never"
       },
-      "search_placeholder": "Search MCP servers...",
+      "search_placeholder": "Search MCP servers by name, URL, or UUID...",
       "subtitle": "Manage MCP server registry and tool sync",
       "title": "MCP Servers"
     },

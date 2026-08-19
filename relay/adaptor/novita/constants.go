@@ -1,45 +1,115 @@
 package novita
 
 import (
-	"github.com/songquanpeng/one-api/relay/adaptor"
-	"github.com/songquanpeng/one-api/relay/billing/ratio"
+	"github.com/Laisky/one-api/relay/adaptor"
 )
 
-// ModelRatios contains all supported models and their pricing ratios
-// Model list is derived from the keys of this map, eliminating redundancy
-// Based on Novita pricing: https://novita.ai/pricing
-var ModelRatios = map[string]adaptor.ModelConfig{
-	// Novita Models - Based on https://novita.ai/pricing
-	"meta-llama/llama-3.1-8b-instruct":            {Ratio: 0.2 * ratio.MilliTokensUsd, CompletionRatio: 1},
-	"meta-llama/llama-3.1-70b-instruct":           {Ratio: 0.9 * ratio.MilliTokensUsd, CompletionRatio: 1},
-	"meta-llama/llama-3.1-405b-instruct":          {Ratio: 5.0 * ratio.MilliTokensUsd, CompletionRatio: 1},
-	"meta-llama/llama-3-8b-instruct":              {Ratio: 0.2 * ratio.MilliTokensUsd, CompletionRatio: 1},
-	"meta-llama/llama-3-70b-instruct":             {Ratio: 0.9 * ratio.MilliTokensUsd, CompletionRatio: 1},
-	"mistralai/mistral-7b-instruct":               {Ratio: 0.2 * ratio.MilliTokensUsd, CompletionRatio: 1},
-	"mistralai/mixtral-8x7b-instruct":             {Ratio: 0.6 * ratio.MilliTokensUsd, CompletionRatio: 1},
-	"mistralai/mixtral-8x22b-instruct":            {Ratio: 1.2 * ratio.MilliTokensUsd, CompletionRatio: 1},
-	"qwen/qwen-2-72b-instruct":                    {Ratio: 0.9 * ratio.MilliTokensUsd, CompletionRatio: 1},
-	"qwen/qwen-2-7b-instruct":                     {Ratio: 0.2 * ratio.MilliTokensUsd, CompletionRatio: 1},
-	"deepseek-ai/deepseek-coder-33b-instruct":     {Ratio: 0.8 * ratio.MilliTokensUsd, CompletionRatio: 1},
-	"01-ai/yi-34b-chat":                           {Ratio: 0.8 * ratio.MilliTokensUsd, CompletionRatio: 1},
-	"01-ai/yi-6b-chat":                            {Ratio: 0.2 * ratio.MilliTokensUsd, CompletionRatio: 1},
-	"google/gemma-2-9b-it":                        {Ratio: 0.2 * ratio.MilliTokensUsd, CompletionRatio: 1},
-	"google/gemma-2-27b-it":                       {Ratio: 0.5 * ratio.MilliTokensUsd, CompletionRatio: 1},
-	"nousresearch/hermes-2-pro-llama-3-8b":        {Ratio: 0.2 * ratio.MilliTokensUsd, CompletionRatio: 1},
-	"nousresearch/nous-hermes-llama2-13b":         {Ratio: 0.3 * ratio.MilliTokensUsd, CompletionRatio: 1},
-	"cognitivecomputations/dolphin-mixtral-8x22b": {Ratio: 1.2 * ratio.MilliTokensUsd, CompletionRatio: 1},
-	"sao10k/l3-70b-euryale-v2.1":                  {Ratio: 0.9 * ratio.MilliTokensUsd, CompletionRatio: 1},
-	"sophosympatheia/midnight-rose-70b":           {Ratio: 0.9 * ratio.MilliTokensUsd, CompletionRatio: 1},
-	"gryphe/mythomax-l2-13b":                      {Ratio: 0.3 * ratio.MilliTokensUsd, CompletionRatio: 1},
-	"Nous-Hermes-2-Mixtral-8x7B-DPO":              {Ratio: 0.6 * ratio.MilliTokensUsd, CompletionRatio: 1},
-	"lzlv_70b":                                    {Ratio: 0.9 * ratio.MilliTokensUsd, CompletionRatio: 1},
-	"teknium/openhermes-2.5-mistral-7b":           {Ratio: 0.2 * ratio.MilliTokensUsd, CompletionRatio: 1},
-	"microsoft/wizardlm-2-8x22b":                  {Ratio: 1.2 * ratio.MilliTokensUsd, CompletionRatio: 1},
+// Reusable metadata helpers for Novita-served models. Novita is an inference
+// aggregator hosting open-weight checkpoints, so most rows reuse a small set of
+// modality and feature constants.
+//
+// Sources (retrieved 2026-04-28):
+//   - https://novita.ai/llm-api  (per-model context, max output, cache pricing)
+//   - https://novita.ai/pricing  (token pricing baseline)
+//   - https://docs.litellm.ai/docs/providers/novita  (OpenAI-compatible
+//     parameter list including top_k, min_p, repetition_penalty)
+//   - https://novita.ai/docs/guides/llm-function-calling  (tool calling)
+//   - HuggingFace model cards for upstream weights and quantization defaults.
+var (
+	// novitaTextOnlyModalities advertises a chat model that consumes and emits text only.
+	novitaTextOnlyModalities = []string{"text"}
+	// novitaTextImageInModalities advertises text+image input with text output (VL/vision models).
+	novitaTextImageInModalities = []string{"text", "image"}
+	// novitaTextImageVideoInModalities advertises text+image+video input with text output.
+	novitaTextImageVideoInModalities = []string{"text", "image", "video"}
+	// novitaOmniInModalities advertises text+image+audio+video input with text output (omni models).
+	novitaOmniInModalities = []string{"text", "image", "audio", "video"}
+	// novitaTextAudioOutModalities advertises text+audio output (omni models that speak).
+	novitaTextAudioOutModalities = []string{"text", "audio"}
+
+	// novitaChatFeatures advertises the standard non-thinking capability set.
+	// Novita exposes OpenAI-compatible tools and JSON mode for these chat models.
+	novitaChatFeatures = []string{"tools", "json_mode"}
+	// novitaReasoningFeatures advertises tools/json_mode plus reasoning for thinking-mode models.
+	novitaReasoningFeatures = []string{"tools", "json_mode", "reasoning"}
+	// novitaReasoningOnlyFeatures applies to reasoning models that historically did not
+	// expose stable tool calling on Novita (e.g., legacy DeepSeek R1 distills).
+	novitaReasoningOnlyFeatures = []string{"reasoning"}
+	// novitaTextOnlyFeatures applies to legacy or lightweight chat models without
+	// documented tool/json_mode coverage on Novita.
+	novitaTextOnlyFeatures []string
+
+	// novitaSamplingParams enumerates the OpenAI-compatible sampling parameters Novita
+	// accepts on chat completions, including the vLLM-style top_k, min_p and
+	// repetition_penalty extensions documented by LiteLLM.
+	novitaSamplingParams = []string{
+		"temperature",
+		"top_p",
+		"top_k",
+		"min_p",
+		"max_tokens",
+		"stop",
+		"presence_penalty",
+		"frequency_penalty",
+		"repetition_penalty",
+		"seed",
+		"n",
+		"logit_bias",
+		"logprobs",
+		"top_logprobs",
+		"response_format",
+		"tools",
+		"tool_choice",
+	}
+	// novitaReasoningSamplingParams trims the sampling set for reasoning-mode endpoints
+	// where temperature/top_p style knobs are commonly disabled or ignored.
+	novitaReasoningSamplingParams = []string{
+		"max_tokens",
+		"stop",
+		"seed",
+		"response_format",
+		"tools",
+		"tool_choice",
+	}
+)
+
+// ModelRatios contains Novita serverless models with explicit token pricing from the public pricing page.
+// The map is assembled from per-family sub-maps in the models_*.go files in this package; the
+// derived model list reads from this aggregated map.
+// Source: https://novita.ai/pricing and https://novita.ai/llm-api (retrieved 2026-04-28)
+// Tiered or omnimodal rows without explicit token pricing on the public page are intentionally excluded.
+var ModelRatios = mergeModelRatios(
+	baiduErnieModelRatios,
+	deepseekModelRatios,
+	googleGemmaModelRatios,
+	metaLlamaModelRatios,
+	qwenModelRatios,
+	zaiGLMModelRatios,
+	miscModelRatios,
+)
+
+// mergeModelRatios merges several Novita sub-family pricing maps into a single map.
+// It panics on duplicate keys to prevent silent shadowing during refactors.
+func mergeModelRatios(sources ...map[string]adaptor.ModelConfig) map[string]adaptor.ModelConfig {
+	total := 0
+	for _, src := range sources {
+		total += len(src)
+	}
+	merged := make(map[string]adaptor.ModelConfig, total)
+	for _, src := range sources {
+		for name, cfg := range src {
+			if _, exists := merged[name]; exists {
+				panic("novita: duplicate model id in ModelRatios: " + name)
+			}
+			merged[name] = cfg
+		}
+	}
+	return merged
 }
 
 // ModelList derived from ModelRatios for backward compatibility
 var ModelList = adaptor.GetModelListFromPricing(ModelRatios)
 
-// NovitaToolingDefaults notes that Novita's public pricing focuses on model tokens; no tool metering is published (retrieved 2025-11-12).
-// Source: https://r.jina.ai/https://novita.ai/pricing
+// NovitaToolingDefaults notes that Novita's public pricing focuses on model tokens; no tool metering is published (retrieved 2026-04-28).
+// Source: https://novita.ai/pricing
 var NovitaToolingDefaults = adaptor.ChannelToolConfig{}

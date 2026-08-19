@@ -15,11 +15,11 @@ import (
 
 	gmw "github.com/Laisky/gin-middlewares/v7"
 
-	"github.com/songquanpeng/one-api/common/client"
-	"github.com/songquanpeng/one-api/common/ctxkey"
-	"github.com/songquanpeng/one-api/common/logger"
-	"github.com/songquanpeng/one-api/model"
-	"github.com/songquanpeng/one-api/relay/channeltype"
+	"github.com/Laisky/one-api/common/client"
+	"github.com/Laisky/one-api/common/ctxkey"
+	"github.com/Laisky/one-api/common/logger"
+	"github.com/Laisky/one-api/model"
+	"github.com/Laisky/one-api/relay/channeltype"
 )
 
 const responseAPISuccessPayload = `{
@@ -99,6 +99,19 @@ func init() {
 		if err != nil {
 			panic(err)
 		}
+
+		// Pin the pool to one connection. This handle can win the race to become the
+		// package-wide model.DB, and shared-cache SQLite raises SQLITE_LOCKED immediately
+		// when two pooled connections touch one table, which busy_timeout does not cover.
+		// The background billing/logging tasks other tests spawn would otherwise flake
+		// fixture resets with "database table is locked".
+		sqlDB, err := db.DB()
+		if err != nil {
+			panic(err)
+		}
+		sqlDB.SetMaxOpenConns(1)
+		sqlDB.SetMaxIdleConns(1)
+		sqlDB.SetConnMaxLifetime(0)
 
 		if err := db.AutoMigrate(&model.Trace{}); err != nil {
 			panic(err)

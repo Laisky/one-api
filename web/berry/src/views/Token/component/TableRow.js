@@ -20,6 +20,7 @@ import {
 } from '@mui/material';
 
 import TableSwitch from 'ui-component/Switch';
+import ResourceRefTooltip from 'ui-component/ResourceRefTooltip';
 import { renderQuota, timestamp2string, copy } from 'utils/common';
 
 import { IconDotsVertical, IconEdit, IconTrash, IconCaretDownFilled } from '@tabler/icons-react';
@@ -54,6 +55,7 @@ function createMenu(menuItems) {
 }
 
 export default function TokensTableRow({ item, manageToken, handleOpenModal, setModalTokenId }) {
+  const ref = item.uuid || item.id;
   const [open, setOpen] = useState(null);
   const [menuItems, setMenuItems] = useState(null);
   const [openDelete, setOpenDelete] = useState(false);
@@ -89,7 +91,7 @@ export default function TokensTableRow({ item, manageToken, handleOpenModal, set
 
   const handleStatus = async () => {
     const switchVlue = statusSwitch === 1 ? 2 : 1;
-    const { success } = await manageToken(item.id, 'status', switchVlue);
+    const { success } = await manageToken(ref, 'status', switchVlue);
     if (success) {
       setStatusSwitch(switchVlue);
     }
@@ -97,7 +99,7 @@ export default function TokensTableRow({ item, manageToken, handleOpenModal, set
 
   const handleDelete = async () => {
     handleCloseMenu();
-    await manageToken(item.id, 'delete', '');
+    await manageToken(ref, 'delete', '');
   };
 
   const actionItems = createMenu([
@@ -107,7 +109,7 @@ export default function TokensTableRow({ item, manageToken, handleOpenModal, set
       onClick: () => {
         handleCloseMenu();
         handleOpenModal();
-        setModalTokenId(item.id);
+        setModalTokenId(ref);
       },
       color: undefined
     },
@@ -168,7 +170,9 @@ export default function TokensTableRow({ item, manageToken, handleOpenModal, set
   return (
     <>
       <TableRow tabIndex={item.id}>
-        <TableCell>{item.name}</TableCell>
+        <TableCell>
+          <ResourceRefTooltip refId={ref}>{item.name}</ResourceRefTooltip>
+        </TableCell>
 
         <TableCell>
           <Tooltip

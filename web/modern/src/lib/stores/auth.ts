@@ -3,7 +3,8 @@ import { persist } from 'zustand/middleware';
 import { STORAGE_KEYS } from '../storage';
 
 interface User {
-  id: number;
+  id: string | number;
+  uuid?: string;
   username: string;
   display_name?: string;
   role: number;
@@ -12,7 +13,35 @@ interface User {
   quota: number;
   used_quota: number;
   group: string;
+  metadata?: {
+    password_locked?: boolean;
+  };
 }
+
+const AUTH_STORE_VERSION = 2;
+
+const normalizeUser = (user: User | null | undefined): User | null => {
+  if (!user) return null;
+  const raw = user as User & { user_uuid?: string };
+  const uuid = raw.uuid || raw.user_uuid;
+  return {
+    ...user,
+    ...(uuid ? { uuid, id: uuid } : {}),
+  };
+};
+
+const normalizePersistedUser = () => {
+  try {
+    const stored = localStorage.getItem('user');
+    if (!stored) return;
+    const user = normalizeUser(JSON.parse(stored));
+    if (user) {
+      localStorage.setItem('user', JSON.stringify(user));
+    }
+  } catch {
+    localStorage.removeItem('user');
+  }
+};
 
 interface AuthState {
   user: User | null;
@@ -30,9 +59,12 @@ export const useAuthStore = create<AuthState>()(
       token: null,
       isAuthenticated: false,
       login: (user, token) => {
+        const normalizedUser = normalizeUser(user);
         localStorage.setItem('token', token);
-        localStorage.setItem('user', JSON.stringify(user));
-        set({ user, token, isAuthenticated: true });
+        if (normalizedUser) {
+          localStorage.setItem('user', JSON.stringify(normalizedUser));
+        }
+        set({ user: normalizedUser, token, isAuthenticated: true });
       },
       logout: () => {
         // Clear authentication data
@@ -59,7 +91,7 @@ export const useAuthStore = create<AuthState>()(
       updateUser: (userData) => {
         const currentUser = get().user;
         if (currentUser) {
-          const updatedUser = { ...currentUser, ...userData };
+          const updatedUser = normalizeUser({ ...currentUser, ...userData });
           localStorage.setItem('user', JSON.stringify(updatedUser));
           set({ user: updatedUser });
         }
@@ -67,6 +99,18 @@ export const useAuthStore = create<AuthState>()(
     }),
     {
       name: 'auth-storage',
+      version: AUTH_STORE_VERSION,
+      migrate: (persistedState) => {
+        normalizePersistedUser();
+        if (!persistedState || typeof persistedState !== 'object') {
+          return persistedState;
+        }
+        const state = persistedState as AuthState;
+        return {
+          ...state,
+          user: normalizeUser(state.user),
+        };
+      },
     }
   )
 );

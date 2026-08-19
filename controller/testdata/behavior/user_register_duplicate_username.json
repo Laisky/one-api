@@ -1,0 +1,9 @@
+{
+  "case": "user/register_duplicate_username",
+  "site": "Register (request DTO, error)",
+  "status": 200,
+  "body": {
+    "message": "Username already exists",
+    "success": false
+  }
+}

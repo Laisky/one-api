@@ -6,7 +6,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/songquanpeng/one-api/relay/relaymode"
+	"github.com/Laisky/one-api/relay/relaymode"
 )
 
 // TestAllEndpointsConsistency verifies that all endpoint IDs match their corresponding relaymode constants.
@@ -230,6 +230,16 @@ func TestTogetherAISupportsDocumentedOpenAICompatibleEndpoints(t *testing.T) {
 	require.Contains(t, endpoints, EndpointClaudeMessages)
 	require.NotContains(t, endpoints, EndpointRealtime)
 	require.NotContains(t, endpoints, EndpointRerank)
+}
+
+func TestNVIDIADefaultEndpointsAreConservative(t *testing.T) {
+	t.Parallel()
+	endpoints := DefaultEndpointsForChannelType(NVIDIA)
+
+	require.Contains(t, endpoints, EndpointChatCompletions)
+	require.Contains(t, endpoints, EndpointResponseAPI)
+	require.Contains(t, endpoints, EndpointClaudeMessages)
+	require.NotContains(t, endpoints, EndpointEmbeddings)
 }
 
 // ---------------------------------------------------------------------------

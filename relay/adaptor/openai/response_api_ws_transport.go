@@ -16,14 +16,12 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
 
-	"github.com/songquanpeng/one-api/common/ctxkey"
-	"github.com/songquanpeng/one-api/common/tracing"
-	dbmodel "github.com/songquanpeng/one-api/model"
-	"github.com/songquanpeng/one-api/relay/adaptor"
-	rmeta "github.com/songquanpeng/one-api/relay/meta"
+	"github.com/Laisky/one-api/common/ctxkey"
+	"github.com/Laisky/one-api/common/tracing"
+	dbmodel "github.com/Laisky/one-api/model"
+	"github.com/Laisky/one-api/relay/adaptor"
+	rmeta "github.com/Laisky/one-api/relay/meta"
 )
-
-const wsRequestPreviewLimit = 4096
 
 // responseAPIWSErrorPayload represents the documented WebSocket error event payload.
 type responseAPIWSErrorPayload struct {
@@ -74,13 +72,6 @@ func doResponseAPIRequestViaWebSocket(
 		return nil, false, nil
 	}
 
-	preview := payload
-	truncated := false
-	if len(preview) > wsRequestPreviewLimit {
-		preview = preview[:wsRequestPreviewLimit]
-		truncated = true
-	}
-
 	var requestMap map[string]any
 	if err := json.Unmarshal(payload, &requestMap); err != nil {
 		lg.Debug("openai response api websocket not applicable",
@@ -111,6 +102,12 @@ func doResponseAPIRequestViaWebSocket(
 	if err != nil {
 		return nil, true, errors.Wrap(err, "resolve response api websocket request url")
 	}
+	// Honor an administrator-configured per-endpoint upstream URL override before
+	// deriving the WebSocket URL, keeping the realtime path consistent with the
+	// HTTP relay dispatch layer.
+	if override := metaInfo.UpstreamEndpointURLOverride(); override != "" {
+		fullRequestURL = override
+	}
 
 	wsURL, err := toResponseAPIWebSocketURL(fullRequestURL)
 	if err != nil {
@@ -130,8 +127,7 @@ func doResponseAPIRequestViaWebSocket(
 		zap.Bool("stream", streamingRequested),
 		zap.String("model", metaInfo.ActualModelName),
 		zap.Int("body_bytes", len(payload)),
-		zap.Bool("body_truncated", truncated),
-		zap.ByteString("body_preview", preview),
+		zap.Bool("body_logging_suppressed", true),
 	)
 
 	requestMap["type"] = "response.create"
@@ -567,6 +563,12 @@ const wsReadIdleTimeout = 30 * time.Second
 //   - *http.Response: synthetic 200 response with text/event-stream body.
 func buildStreamingWebSocketHTTPResponse(c *gin.Context, conn *websocket.Conn, firstMessage []byte) *http.Response {
 	lg := gmw.GetLogger(c)
+	// Capture the request context on the request goroutine. The streaming bridge
+	// goroutine below outlives the handler, and gin recycles *gin.Context (clearing
+	// c.Request) via sync.Pool once the handler returns; reading c.Request.Context()
+	// from inside the goroutine would race that recycle. The context object captured
+	// here still fires Done() on client disconnect / server shutdown.
+	reqCtx := c.Request.Context()
 	reader, writer := io.Pipe()
 
 	go func() {
@@ -581,7 +583,7 @@ func buildStreamingWebSocketHTTPResponse(c *gin.Context, conn *websocket.Conn, f
 		defer close(done)
 		go func() {
 			select {
-			case <-c.Request.Context().Done():
+			case <-reqCtx.Done():
 				lg.Debug("websocket stream bridge: client context cancelled, closing upstream websocket")
 				_ = conn.Close()
 			case <-done:

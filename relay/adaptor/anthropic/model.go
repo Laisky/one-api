@@ -1,6 +1,6 @@
 package anthropic
 
-import "github.com/songquanpeng/one-api/relay/model"
+import "github.com/Laisky/one-api/relay/model"
 
 // https://docs.anthropic.com/claude/reference/messages_post
 

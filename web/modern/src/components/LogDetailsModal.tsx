@@ -8,7 +8,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { TimestampDisplay } from '@/components/ui/timestamp';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { api } from '@/lib/api';
-import { LOG_TYPES, getLogTypeLabel } from '@/lib/constants/logs';
+import { getLogTypeLabel } from '@/lib/constants/logs';
 import { useAuthStore } from '@/lib/stores/auth';
 import { cn, renderQuota } from '@/lib/utils';
 import type { LogEntry, LogMetadata } from '@/types/log';
@@ -105,7 +105,8 @@ interface TraceDurations {
 }
 
 interface TraceData {
-  id: number;
+  id?: number;
+  uuid?: string;
   trace_id: string;
   url: string;
   method: string;
@@ -116,8 +117,10 @@ interface TraceData {
   timestamps: TraceTimestamps;
   durations?: TraceDurations;
   log?: {
-    id: number;
-    user_id: number;
+    id?: number;
+    uuid?: string;
+    user_id?: number;
+    user_uuid?: string | null;
     username: string;
     content: string;
     type: number;
@@ -175,9 +178,8 @@ export function LogDetailsModal({ open, onOpenChange, log }: LogDetailsModalProp
   const [traceLoading, setTraceLoading] = useState(false);
   const [traceError, setTraceError] = useState<string | null>(null);
   const [traceCopied, setTraceCopied] = useState(false);
-  const hasTrace = Boolean(
-    log && log.trace_id && log.trace_id.trim() !== '' && typeof log.id === 'number' && log.type === LOG_TYPES.CONSUME
-  );
+  const logRef = log?.uuid || log?.id || '';
+  const hasTrace = Boolean(log && log.trace_id && log.trace_id.trim() !== '' && logRef);
 
   const timelineEvents = useMemo(
     () => [
@@ -236,7 +238,7 @@ export function LogDetailsModal({ open, onOpenChange, log }: LogDetailsModalProp
 
       setTraceLoading(true);
       try {
-        const response = await api.get(`/api/trace/log/${log.id}`);
+        const response = await api.get(`/api/trace/log/${logRef}`);
         if (active) {
           setTraceData(response.data.data);
         }
@@ -484,7 +486,13 @@ export function LogDetailsModal({ open, onOpenChange, log }: LogDetailsModalProp
     <div className="flex items-center gap-2">
       <span className="font-mono text-xs bg-muted rounded px-2 py-1 break-all flex-1">{value || '—'}</span>
       {value && (
-        <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => handleCopy(value)} aria-label="Copy to clipboard">
+        <Button
+          size="icon"
+          variant="ghost"
+          className="h-7 w-7"
+          onClick={() => handleCopy(value)}
+          aria-label={t('common.copy_to_clipboard', 'Copy to clipboard')}
+        >
           <Copy className="h-3.5 w-3.5" />
         </Button>
       )}
@@ -512,7 +520,7 @@ export function LogDetailsModal({ open, onOpenChange, log }: LogDetailsModalProp
     if (!log) return null;
 
     const username = log.username || user?.username || '—';
-    const channelDisplay = log.channel ?? '—';
+    const channelDisplay = log.channel_uuid || log.channel || '—';
     const promptTokens = log.prompt_tokens ?? 0;
     const cachedPromptTokens = log.cached_prompt_tokens ?? 0;
     const completionTokens = log.completion_tokens ?? 0;
@@ -525,25 +533,22 @@ export function LogDetailsModal({ open, onOpenChange, log }: LogDetailsModalProp
     return (
       <div className="space-y-5">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <DetailItem label={t('logs.details.log_id', 'Log ID')} value={<span className="font-mono text-sm">{log.id}</span>} />
+          <DetailItem label={t('logs.details.log_id', 'Log ID')} value={renderIdentifier(String(logRef))} />
           <DetailItem label={t('logs.details.type', 'Type')} value={<Badge variant="outline">{logTypeLabel}</Badge>} />
           <DetailItem
             label={t('logs.details.recorded_at', 'Recorded At')}
             value={<TimestampDisplay timestamp={log.created_at} className="font-mono text-sm" />}
           />
-          <DetailItem
-            label={t('logs.details.model', 'Model')}
-            value={renderModelLink(log.model_name)}
-          />
+          <DetailItem label={t('logs.details.model', 'Model')} value={renderModelLink(log.model_name)} />
           <DetailItem label={t('logs.details.origin_model', 'Requested Model')} value={renderModelLink(log.origin_model_name)} />
           <DetailItem
             label={t('logs.details.user', 'User')}
             value={
-              log.user_id ? (
+              log.user_uuid || log.user_id ? (
                 <button
                   type="button"
                   className="inline-flex items-center gap-1 text-blue-600 dark:text-blue-400 underline underline-offset-2 decoration-blue-600/40 dark:decoration-blue-400/40 hover:decoration-blue-600 dark:hover:decoration-blue-400 cursor-pointer text-left transition-colors"
-                  onClick={() => navigateTo(`/users/edit/${log.user_id}`)}
+                  onClick={() => navigateTo(`/users/edit/${log.user_uuid || log.user_id}`)}
                 >
                   {username}
                   <ExternalLink className="h-3 w-3 flex-shrink-0" />
@@ -574,24 +579,32 @@ export function LogDetailsModal({ open, onOpenChange, log }: LogDetailsModalProp
             label={t('logs.details.channel', 'Channel')}
             value={
               log.channel != null ? (
-                <button
-                  type="button"
-                  className="inline-flex items-center gap-1 font-mono text-sm text-blue-600 dark:text-blue-400 underline underline-offset-2 decoration-blue-600/40 dark:decoration-blue-400/40 hover:decoration-blue-600 dark:hover:decoration-blue-400 cursor-pointer text-left transition-colors"
-                  onClick={() => navigateTo(`/channels/edit/${log.channel}`)}
-                >
-                  {channelDisplay}
-                  <ExternalLink className="h-3 w-3 flex-shrink-0" />
-                </button>
+                <span className="inline-flex items-center gap-1">
+                  <button
+                    type="button"
+                    className="inline-flex items-center gap-1 font-mono text-sm text-blue-600 dark:text-blue-400 underline underline-offset-2 decoration-blue-600/40 dark:decoration-blue-400/40 hover:decoration-blue-600 dark:hover:decoration-blue-400 cursor-pointer text-left transition-colors"
+                    onClick={() => navigateTo(`/channels/edit/${log.channel}`)}
+                  >
+                    {channelDisplay}
+                    <ExternalLink className="h-3 w-3 flex-shrink-0" />
+                  </button>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="h-6 w-6"
+                    onClick={() => handleCopy(String(channelDisplay))}
+                    aria-label={t('common.copy_id', 'Copy ID')}
+                  >
+                    <Copy className="h-3 w-3" />
+                  </Button>
+                </span>
               ) : (
                 <span className="font-mono text-sm">—</span>
               )
             }
           />
           <DetailItem label={t('logs.details.quota', 'Expense')} value={<span className="font-mono text-sm">{quotaDisplay}</span>} />
-          <DetailItem
-            label={t('logs.details.quota_raw', 'Quota')}
-            value={<span className="font-mono text-sm">{rawQuota}</span>}
-          />
+          <DetailItem label={t('logs.details.quota_raw', 'Quota')} value={<span className="font-mono text-sm">{rawQuota}</span>} />
           <DetailItem
             label={t('logs.details.latency', 'Latency')}
             value={<span className={cn('font-mono text-sm', latencyColor)}>{latencyValue}</span>}

@@ -12,6 +12,7 @@
       "showing_top": "Affichage des {{shown}} premiers sur {{total}}",
       "token_title": "Taux de succès du cache par jeton",
       "top_n_label": "Afficher",
+      "top_n_option": "Top {{count}}",
       "total": "Total",
       "user_title": "Taux de succès du cache par utilisateur"
     },
@@ -38,6 +39,7 @@
       "model": "Modèle inconnu",
       "owner": "inconnu",
       "token": "jeton sans nom",
+      "tool": "Outil inconnu",
       "user": "Utilisateur inconnu"
     },
     "filters": {
@@ -87,6 +89,9 @@
       "metric_placeholder": "Choisir un indicateur",
       "model_usage": "Utilisation des modèles",
       "token_usage": "Utilisation des jetons",
+      "tool_token_usage": "Utilisation des outils par jeton",
+      "tool_usage": "Utilisation des outils",
+      "tool_user_usage": "Utilisation des outils par utilisateur",
       "user_usage": "Utilisation par utilisateur"
     },
     "title": "Tableau de bord",

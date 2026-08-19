@@ -3,9 +3,9 @@ package router
 import (
 	"github.com/gin-gonic/gin"
 
-	"github.com/songquanpeng/one-api/common/graceful"
-	"github.com/songquanpeng/one-api/controller"
-	"github.com/songquanpeng/one-api/middleware"
+	"github.com/Laisky/one-api/common/graceful"
+	"github.com/Laisky/one-api/controller"
+	"github.com/Laisky/one-api/middleware"
 )
 
 func SetRelayRouter(router *gin.Engine) {
@@ -24,6 +24,16 @@ func SetRelayRouter(router *gin.Engine) {
 	router.Use(middleware.APIFormatAutoDetect(router))
 	router.Use(middleware.CORS())
 	router.Use(middleware.GzipDecodeMiddleware())
+
+	// OpenRouter provider listing endpoint. Public (no auth) since OpenRouter
+	// scrapes this during onboarding and periodic refresh. Returns the model
+	// catalog in the OpenRouter upstream-provider schema described at
+	// https://openrouter.ai/docs/guides/get-started/for-providers.
+	openRouterRouter := router.Group("/openrouter/v1")
+	{
+		openRouterRouter.GET("/models", controller.OpenRouterListModels)
+	}
+
 	// https://platform.openai.com/docs/api-reference/introduction
 	modelsRouter := router.Group("/v1/models")
 	modelsRouter.Use(middleware.TokenAuth())
@@ -32,7 +42,10 @@ func SetRelayRouter(router *gin.Engine) {
 		modelsRouter.GET("/:model", controller.RetrieveModel)
 	}
 
-	router.POST("/mcp", middleware.TokenAuth(), controller.MCPProxy)
+	// MCP Streamable HTTP transport: a single endpoint serves POST (JSON-RPC
+	// requests/notifications), GET (optional server-initiated SSE), and
+	// DELETE (session termination). The handler dispatches by method.
+	router.Any("/mcp", middleware.TokenAuth(), controller.MCPProxy)
 
 	relayMws := []gin.HandlerFunc{
 		// Track in-flight requests for graceful shutdown/drain
@@ -41,6 +54,7 @@ func SetRelayRouter(router *gin.Engine) {
 		middleware.BindAsyncTaskChannel(),
 		middleware.Distribute(),
 		middleware.GlobalRelayRateLimit(),
+		middleware.LowBalanceRelayRateLimit(),
 		middleware.ChannelRateLimit(),
 	}
 
@@ -68,6 +82,8 @@ func SetRelayRouter(router *gin.Engine) {
 	relayV1Router.GET("/videos/:video_id", controller.Relay)
 	relayV1Router.GET("/videos/:video_id/content", controller.Relay)
 	relayV1Router.DELETE("/videos/:video_id", controller.Relay)
+	relayV1Router.POST("/voice/clones", controller.Relay)
+	relayV1Router.POST("/voice/clone", controller.Relay)
 	relayV1Router.POST("/embeddings", controller.Relay)
 	relayV1Router.POST("/rerank", controller.Relay)
 	relayV1Router.POST("/engines/:model/embeddings", controller.Relay)
@@ -114,6 +130,30 @@ func SetRelayRouter(router *gin.Engine) {
 	relayV1Router.GET("/threads/:id/runs/:runsId/steps", controller.RelayNotImplemented)
 
 	// -------------------------------------
+	// Gateway Conversations API. These endpoints are owner-scoped state CRUD that
+	// perform no upstream call and must NOT enter channel distribution (proposal
+	// row V11), so they use token auth but not the Distribute middleware. When the
+	// response-state feature is disabled the handlers report not-found.
+	conversationsMws := []gin.HandlerFunc{
+		func(c *gin.Context) { done := graceful.BeginRequest(); defer done(); c.Next() },
+		middleware.RelayPanicRecover(),
+		middleware.TokenAuth(),
+		// Throttle the quota-free Conversations write path per token so it cannot be
+		// abused into unbounded gateway-state growth (proposal row L09, ST-019).
+		middleware.ConversationsRateLimit(),
+	}
+	conversationsRouter := router.Group("/v1/conversations")
+	conversationsRouter.Use(conversationsMws...)
+	conversationsRouter.POST("", controller.RelayConversationCreate)
+	conversationsRouter.GET("/:conversation_id", controller.RelayConversationGet)
+	conversationsRouter.POST("/:conversation_id", controller.RelayConversationUpdate)
+	conversationsRouter.DELETE("/:conversation_id", controller.RelayConversationDelete)
+	conversationsRouter.POST("/:conversation_id/items", controller.RelayConversationItemsCreate)
+	conversationsRouter.GET("/:conversation_id/items", controller.RelayConversationItemsList)
+	conversationsRouter.GET("/:conversation_id/items/:item_id", controller.RelayConversationItemGet)
+	conversationsRouter.DELETE("/:conversation_id/items/:item_id", controller.RelayConversationItemDelete)
+
+	// -------------------------------------
 	relayV2Router := router.Group("/v2")
 	relayV2Router.Use(relayMws...)
 	relayV2Router.POST("/rerank", controller.Relay)
@@ -123,4 +163,5 @@ func SetRelayRouter(router *gin.Engine) {
 	relayZhipuRouter := router.Group("/api/paas/v4")
 	relayZhipuRouter.Use(relayMws...)
 	relayZhipuRouter.POST("/layout_parsing", controller.Relay)
+	relayZhipuRouter.POST("/voice/clone", controller.Relay)
 }

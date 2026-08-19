@@ -9,8 +9,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
-	"slices"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -20,24 +18,26 @@ import (
 	"github.com/Laisky/zap"
 	"github.com/gin-gonic/gin"
 
-	"github.com/songquanpeng/one-api/common/config"
-	"github.com/songquanpeng/one-api/common/ctxkey"
-	"github.com/songquanpeng/one-api/common/helper"
-	"github.com/songquanpeng/one-api/common/logger"
-	"github.com/songquanpeng/one-api/common/message"
-	"github.com/songquanpeng/one-api/middleware"
-	"github.com/songquanpeng/one-api/model"
-	"github.com/songquanpeng/one-api/monitor"
-	"github.com/songquanpeng/one-api/relay"
-	"github.com/songquanpeng/one-api/relay/adaptor/openai"
+	"github.com/Laisky/one-api/common/config"
+	"github.com/Laisky/one-api/common/ctxkey"
+	"github.com/Laisky/one-api/common/helper"
+	"github.com/Laisky/one-api/common/identity"
+	"github.com/Laisky/one-api/common/logger"
+	"github.com/Laisky/one-api/common/message"
+	"github.com/Laisky/one-api/common/relayctx"
+	"github.com/Laisky/one-api/middleware"
+	"github.com/Laisky/one-api/model"
+	"github.com/Laisky/one-api/monitor"
+	"github.com/Laisky/one-api/relay"
+	"github.com/Laisky/one-api/relay/adaptor/openai"
 
-	"github.com/songquanpeng/one-api/relay/channeltype"
-	"github.com/songquanpeng/one-api/relay/controller"
-	"github.com/songquanpeng/one-api/relay/meta"
-	relaymodel "github.com/songquanpeng/one-api/relay/model"
-	"github.com/songquanpeng/one-api/relay/pricing"
-	quotautil "github.com/songquanpeng/one-api/relay/quota"
-	"github.com/songquanpeng/one-api/relay/relaymode"
+	"github.com/Laisky/one-api/relay/channeltype"
+	"github.com/Laisky/one-api/relay/controller"
+	"github.com/Laisky/one-api/relay/meta"
+	relaymodel "github.com/Laisky/one-api/relay/model"
+	"github.com/Laisky/one-api/relay/pricing"
+	quotautil "github.com/Laisky/one-api/relay/quota"
+	"github.com/Laisky/one-api/relay/relaymode"
 )
 
 func buildTestRequest(model string) *relaymodel.GeneralOpenAIRequest {
@@ -81,8 +81,8 @@ func calculateTestCost(usage *relaymodel.Usage, meta *meta.Meta, request *relaym
 
 	// Get model ratio and completion ratio using three-layer pricing system
 	pricingAdaptor := relay.GetAdaptor(meta.ChannelType)
-	modelRatio := pricing.GetModelRatioWithThreeLayers(request.Model, nil, pricingAdaptor)
-	completionRatio := pricing.GetCompletionRatioWithThreeLayers(request.Model, nil, pricingAdaptor)
+	modelRatio := pricing.ResolveModelRatioAt(request.Model, nil, nil, pricingAdaptor, meta.StartTime)
+	completionRatio := pricing.ResolveCompletionRatioAt(request.Model, nil, nil, pricingAdaptor, meta.StartTime)
 
 	// Use the same group ratio as set in the context (typically 1.0 for tests)
 	groupRatio := 1.0 // Default group ratio for tests
@@ -98,6 +98,11 @@ func calculateTestCost(usage *relaymodel.Usage, meta *meta.Meta, request *relaym
 	return computeResult.TotalQuota
 }
 
+// testChannel runs a single live probe against the given channel.
+//
+// The caller is responsible for binding the tested channel's identity onto the
+// logger carried by ctx (see TestChannel and testChannels); this function does
+// not repeat channel_id/channel_uuid/channel_name on every line.
 func testChannel(ctx context.Context, channel *model.Channel, request *relaymodel.GeneralOpenAIRequest) (responseMessage string, err error, openaiErr *relaymodel.Error) {
 	lg := gmw.GetLogger(ctx)
 	startTime := time.Now()
@@ -129,19 +134,18 @@ func testChannel(ctx context.Context, channel *model.Channel, request *relaymode
 	// -----------------------------
 	requestedModel := strings.TrimSpace(request.Model)
 	resolvedModel := requestedModel
-	modelMap := channel.GetModelMapping()
+	modelMap := channel.GetModelMappingWithContext(ctx)
 
 	// initial context for debugging
 	lg.Debug("channel test: initial model context",
-		zap.Int("channel_id", channel.Id),
 		zap.Int("channel_type", channel.Type),
 		zap.String("base_url", channel.GetBaseURL()),
 		zap.String("requested_model", requestedModel),
 		zap.String("stored_models", channel.Models),
 	)
 
-	if resolvedModel == "" || !strings.Contains(channel.Models, resolvedModel) {
-		modelNames := strings.Split(channel.Models, ",")
+	if resolvedModel == "" || !channel.SupportsModel(resolvedModel) {
+		modelNames := channel.GetSupportedModelNames()
 		if len(modelNames) > 0 {
 			resolvedModel = strings.TrimSpace(modelNames[0])
 		}
@@ -154,7 +158,7 @@ func testChannel(ctx context.Context, channel *model.Channel, request *relaymode
 	// Provider-specific actual model resolution (e.g., AWS ARN)
 	actualModel := resolvedModel
 	if channel.Type == channeltype.AwsClaude {
-		if arnMap := channel.GetInferenceProfileArnMap(); arnMap != nil {
+		if arnMap := channel.GetInferenceProfileArnMapWithContext(ctx); arnMap != nil {
 			if arn, ok := arnMap[resolvedModel]; ok && arn != "" {
 				actualModel = arn
 			}
@@ -203,6 +207,7 @@ func testChannel(ctx context.Context, channel *model.Channel, request *relaymode
 		// Create test log with actual usage information if available
 		testLog := &model.Log{
 			ChannelId:       channel.Id,
+			ChannelUUID:     model.StringPtrIfNotEmpty(channel.UUID),
 			ModelName:       resolvedModel,
 			OriginModelName: requestedModel,
 			Content:         logContent,
@@ -226,9 +231,13 @@ func testChannel(ctx context.Context, channel *model.Channel, request *relaymode
 
 	// Pre-build and log the upstream URL for debugging consistency
 	if fullURL, urlErr := adaptor.GetRequestURL(meta); urlErr == nil {
+		// Mirror the per-endpoint override applied by the relay dispatch layer so
+		// the logged URL matches the URL the request is actually sent to.
+		if override := meta.UpstreamEndpointURLOverride(); override != "" {
+			fullURL = override
+		}
 		lg.Debug("prepare test request",
 			zap.String("actual_model", meta.ActualModelName),
-			zap.Int("channel_id", channel.Id),
 			zap.Int("channel_type", channel.Type),
 			zap.String("upstream_url", fullURL),
 			zap.ByteString("test_request", jsonData))
@@ -291,7 +300,6 @@ func testChannel(ctx context.Context, channel *model.Channel, request *relaymode
 	statusCode := responseStatus(resp)
 
 	lg.Debug("testing channel response",
-		zap.Int("channel_id", channel.Id),
 		zap.Bool("response_nil", resp == nil),
 		zap.Int("status", statusCode),
 		zap.Int("response_bytes", len(respBody)))
@@ -311,49 +319,36 @@ func responseStatus(resp *http.Response) int {
 func TestChannel(c *gin.Context) {
 	lg := gmw.GetLogger(c).Named("test_channel")
 
-	id, err := strconv.Atoi(c.Param("id"))
+	id, err := resolveChannelRef(c.Param("id"))
 	if err != nil {
 		lg.Debug("invalid channel id", zap.Error(err))
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
+		helper.RespondError(c, err)
 		return
 	}
 
-	lg = lg.With(zap.Int("channel_id", id))
 	channel, err := model.GetChannelById(id, true)
 	if err != nil {
-		lg.Debug("failed to get channel by id", zap.Error(err))
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
+		lg.Debug("failed to get channel by id", zap.Error(err), zap.Int("channel_id", id))
+		helper.RespondError(c, err)
 		return
 	}
 
-	modelName := strings.TrimSpace(c.Query("model"))
-	// If not explicitly provided by query, use stored testing_model; if missing, default to cheapest supported model
-	if modelName == "" {
-		if channel.TestingModel != nil && *channel.TestingModel != "" {
-			// ensure still supported; if not, clear per requirement
-			tm := *channel.TestingModel
-			supported := slices.Contains(channel.GetSupportedModelNames(), tm)
+	// The channel under test is NOT the request's own channel (this is an admin
+	// endpoint), so bind its identity explicitly for this handler and for
+	// testChannel, which relies on its caller having bound it.
+	lg = lg.With(channel.Ref().Zap()...)
 
-			if supported {
-				modelName = tm
-			} else {
-				// clear invalid stored value and pick cheapest
-				channel.TestingModel = nil
-				if err := model.DB.Model(channel).Where("id = ?", channel.Id).Update("testing_model", nil).Error; err != nil {
-					lg.Error("failed to clear invalid testing_model", zap.Error(err))
-				}
-			}
+	modelName, clearTestingModel, err := chooseChannelTestModelWithContext(gmw.Ctx(c), channel, c.Query("model"))
+	if clearTestingModel {
+		channel.TestingModel = nil
+		if updateErr := model.DB.Model(channel).Where("id = ?", channel.Id).Update("testing_model", nil).Error; updateErr != nil {
+			lg.Error("failed to clear invalid testing_model", zap.Error(updateErr))
 		}
-
-		if modelName == "" {
-			modelName = channel.GetCheapestSupportedModel()
-		}
+	}
+	if err != nil {
+		lg.Debug("failed to choose channel test model", zap.Error(err))
+		helper.RespondError(c, identity.Tag(err, channel.Ref()))
+		return
 	}
 
 	ctx := gmw.SetLogger(c, lg)
@@ -367,7 +362,7 @@ func TestChannel(c *gin.Context) {
 		milliseconds = 0
 	}
 
-	go channel.UpdateResponseTime(milliseconds)
+	go channel.UpdateResponseTimeWithContext(ctx, milliseconds)
 	consumedTime := float64(milliseconds) / 1000.0
 	if err != nil || openaiErr != nil {
 		c.JSON(http.StatusOK, gin.H{
@@ -420,27 +415,24 @@ func testChannels(ctx context.Context, notify bool, scope string) error {
 	go func() {
 		lg := gmw.GetLogger(ctx)
 		for _, channel := range channels {
+			// Bind the channel under test explicitly: this sweep runs off any
+			// request, so nothing else carries the channel identity.
+			clg := lg.With(channel.Ref().Zap()...)
+			cctx := gmw.SetLogger(ctx, clg)
 			isChannelEnabled := channel.Status == model.ChannelStatusEnabled
 			tik := time.Now()
-			// Determine model for this channel: stored testing_model if valid, else cheapest
-			chosenModel := ""
-			if channel.TestingModel != nil && *channel.TestingModel != "" {
-				tm := *channel.TestingModel
-				valid := slices.Contains(channel.GetSupportedModelNames(), tm)
-				if valid {
-					chosenModel = tm
-				} else {
-					channel.TestingModel = nil
-					if err := model.DB.Model(channel).Where("id = ?", channel.Id).Update("testing_model", nil).Error; err != nil {
-						lg.Error("failed to clear invalid testing_model in bulk test", zap.Error(err))
-					}
+			chosenModel, clearTestingModel, err := chooseChannelTestModelWithContext(cctx, channel, "")
+			if clearTestingModel {
+				channel.TestingModel = nil
+				if updateErr := model.DB.Model(channel).Where("id = ?", channel.Id).Update("testing_model", nil).Error; updateErr != nil {
+					clg.Error("failed to clear invalid testing_model in bulk test", zap.Error(updateErr))
 				}
 			}
-			if chosenModel == "" {
-				chosenModel = channel.GetCheapestSupportedModel()
+			var openaiErr *relaymodel.Error
+			if err == nil {
+				testRequest := buildTestRequest(chosenModel)
+				_, err, openaiErr = testChannel(cctx, channel, testRequest)
 			}
-			testRequest := buildTestRequest(chosenModel)
-			_, err, openaiErr := testChannel(ctx, channel, testRequest)
 			tok := time.Now()
 			milliseconds := tok.Sub(tik).Milliseconds()
 			if isChannelEnabled && milliseconds > disableThreshold {
@@ -448,7 +440,7 @@ func testChannels(ctx context.Context, notify bool, scope string) error {
 				if config.AutomaticDisableChannelEnabled {
 					monitor.DisableChannel(channel.Id, channel.Name, err.Error())
 				} else {
-					_ = message.Notify(message.ByAll, fmt.Sprintf("Channel %s （%d）Test超时", channel.Name, channel.Id), "", err.Error())
+					_ = message.Notify(message.ByAll, fmt.Sprintf("Channel test timed out: %s", channel.Ref().String()), "", err.Error())
 				}
 			}
 			// Only disable a channel on failure when AutomaticDisableChannelEnabled is true.
@@ -464,13 +456,13 @@ func testChannels(ctx context.Context, notify bool, scope string) error {
 					monitor.DisableChannel(channel.Id, channel.Name, reason)
 				} else {
 					// Notify only when auto-disable is off
-					_ = message.Notify(message.ByAll, fmt.Sprintf("Channel %s （%d）Test失败", channel.Name, channel.Id), "", reason)
+					_ = message.Notify(message.ByAll, fmt.Sprintf("Channel test failed: %s", channel.Ref().String()), "", reason)
 				}
 			}
 			if !isChannelEnabled && (err == nil && monitor.ShouldEnableChannel(err, openaiErr)) {
 				monitor.EnableChannel(channel.Id, channel.Name)
 			}
-			channel.UpdateResponseTime(milliseconds)
+			channel.UpdateResponseTimeWithContext(ctx, milliseconds)
 			time.Sleep(config.RequestInterval)
 		}
 		testAllChannelsLock.Lock()
@@ -488,17 +480,14 @@ func testChannels(ctx context.Context, notify bool, scope string) error {
 
 // TestChannels initiates a background test sweep across a set of channels defined by scope.
 func TestChannels(c *gin.Context) {
-	ctx := gmw.Ctx(c)
+	ctx := relayctx.Detach(c)
 	scope := c.Query("scope")
 	if scope == "" {
 		scope = "all"
 	}
 	err := testChannels(ctx, true, scope)
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
+		helper.RespondError(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{

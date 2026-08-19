@@ -8,7 +8,7 @@ import (
 	"github.com/Laisky/errors/v2"
 	"github.com/Laisky/zap"
 
-	"github.com/songquanpeng/one-api/common/logger"
+	"github.com/Laisky/one-api/common/logger"
 )
 
 func splitSubnets(subnets string) []string {
@@ -30,7 +30,7 @@ func isValidSubnet(subnet string) error {
 func isIpInSubnet(ctx context.Context, ip string, subnet string) bool {
 	_, ipNet, err := net.ParseCIDR(subnet)
 	if err != nil {
-		logger.Logger.Error("failed to parse subnet", zap.String("subnet", subnet), zap.Error(errors.Wrapf(err, "parse subnet: %s", subnet)))
+		logger.FromContext(ctx).Error("failed to parse subnet", zap.String("subnet", subnet), zap.Error(errors.Wrapf(err, "parse subnet: %s", subnet)))
 		return false
 	}
 	return ipNet.Contains(net.ParseIP(ip))

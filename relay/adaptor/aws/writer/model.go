@@ -1,6 +1,6 @@
 package aws
 
-import relaymodel "github.com/songquanpeng/one-api/relay/model"
+import relaymodel "github.com/Laisky/one-api/relay/model"
 
 // Request represents a Writer-specific request structure for AWS Bedrock.
 // It contains the essential parameters needed for Writer model inference,

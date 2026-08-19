@@ -9,6 +9,7 @@ import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
 import { CopyButton } from './copy-button';
 import { codeBlockStyles } from './markdown-css';
+import { useTranslation } from 'react-i18next';
 
 // Import CSS for syntax highlighting and math
 import 'highlight.js/styles/github.css'; // Light theme base
@@ -20,6 +21,8 @@ export const MarkdownRenderer = React.memo<{
   className?: string;
   compact?: boolean;
 }>(({ content, className, compact = true }) => {
+  const { t } = useTranslation();
+
   // Inject custom styles once
   React.useEffect(() => {
     const styleId = 'markdown-custom-styles';
@@ -95,7 +98,7 @@ export const MarkdownRenderer = React.memo<{
                     variant="ghost"
                     size="sm"
                     className={`${buttonSize} bg-background/80 hover:bg-background border border-border/50 backdrop-blur-sm`}
-                    successMessage="Code copied!"
+                    successMessage={t('common.code_copied', 'Code copied!')}
                   />
                 </div>
               </div>

@@ -12,6 +12,7 @@
       "showing_top": "Mostrando los {{shown}} primeros de {{total}}",
       "token_title": "Tasa de aciertos por token",
       "top_n_label": "Mostrar",
+      "top_n_option": "Top {{count}}",
       "total": "Total",
       "user_title": "Tasa de aciertos por usuario"
     },
@@ -38,6 +39,7 @@
       "model": "Modelo desconocido",
       "owner": "desconocido",
       "token": "token sin nombre",
+      "tool": "Herramienta desconocida",
       "user": "Usuario desconocido"
     },
     "filters": {
@@ -87,6 +89,9 @@
       "metric_placeholder": "Selecciona el indicador",
       "model_usage": "Uso por modelo",
       "token_usage": "Uso de tokens",
+      "tool_token_usage": "Uso de herramientas por token",
+      "tool_usage": "Uso de herramientas",
+      "tool_user_usage": "Uso de herramientas por usuario",
       "user_usage": "Uso por usuario"
     },
     "title": "Panel",

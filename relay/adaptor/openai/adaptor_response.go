@@ -15,13 +15,13 @@ import (
 	"github.com/Laisky/zap"
 	"github.com/gin-gonic/gin"
 
-	"github.com/songquanpeng/one-api/common/ctxkey"
-	commonsse "github.com/songquanpeng/one-api/common/sse"
-	"github.com/songquanpeng/one-api/relay/adaptor"
-	"github.com/songquanpeng/one-api/relay/adaptor/openai_compatible"
-	"github.com/songquanpeng/one-api/relay/meta"
-	"github.com/songquanpeng/one-api/relay/model"
-	"github.com/songquanpeng/one-api/relay/relaymode"
+	"github.com/Laisky/one-api/common/ctxkey"
+	commonsse "github.com/Laisky/one-api/common/sse"
+	"github.com/Laisky/one-api/relay/adaptor"
+	"github.com/Laisky/one-api/relay/adaptor/openai_compatible"
+	"github.com/Laisky/one-api/relay/meta"
+	"github.com/Laisky/one-api/relay/model"
+	"github.com/Laisky/one-api/relay/relaymode"
 )
 
 func (a *Adaptor) DoRequest(c *gin.Context,
@@ -244,6 +244,10 @@ func (a *Adaptor) convertNonStreamingToClaudeResponse(c *gin.Context, resp *http
 
 // ConvertResponseAPIToClaudeResponse converts a Response API response to Claude Messages format.
 func (a *Adaptor) ConvertResponseAPIToClaudeResponse(c *gin.Context, resp *http.Response, responseAPIResp *ResponseAPIResponse) (*http.Response, *model.ErrorWithStatusCode) {
+	// Surface the upstream Responses id for a stateless-client checkpoint (ST-022).
+	if c != nil && responseAPIResp.Id != "" {
+		c.Set(ctxkey.ResponseAPIUpstreamID, responseAPIResp.Id)
+	}
 	claudeResp := model.ClaudeResponse{
 		ID:         responseAPIResp.Id,
 		Type:       "message",
@@ -315,6 +319,12 @@ func (a *Adaptor) ConvertResponseAPIToClaudeResponse(c *gin.Context, resp *http.
 
 	if toolUseAdded {
 		claudeResp.StopReason = "tool_use"
+	}
+
+	// Surface the rendered assistant turn for a stateless-client checkpoint (ST-022),
+	// as the client will echo the content blocks back on its next request.
+	if c != nil {
+		c.Set(ctxkey.ResponseAPIAssistantMessage, model.Message{Role: "assistant", Content: claudeResp.Content})
 	}
 
 	claudeBody, err := json.Marshal(claudeResp)

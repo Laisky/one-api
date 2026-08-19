@@ -5,8 +5,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/songquanpeng/one-api/common/config"
-	relaymodel "github.com/songquanpeng/one-api/relay/model"
+	"github.com/Laisky/one-api/common/config"
+	relaymodel "github.com/Laisky/one-api/relay/model"
 )
 
 func TestShouldDisableChannel_RespectsFlag(t *testing.T) {

@@ -3,7 +3,7 @@ package common
 import (
 	"sync/atomic"
 
-	"github.com/songquanpeng/one-api/common/config"
+	"github.com/Laisky/one-api/common/config"
 )
 
 // UsingSQLite reports whether the runtime is currently configured to use the SQLite backend.

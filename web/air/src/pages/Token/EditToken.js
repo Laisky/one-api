@@ -19,6 +19,7 @@ import Title from '@douyinfe/semi-ui/lib/es/typography/title';
 import { Divider } from 'semantic-ui-react';
 
 const EditToken = (props) => {
+  const tokenRef = props.editingToken.uuid || props.editingToken.id;
   const [isEdit, setIsEdit] = useState(false);
   const [loading, setLoading] = useState(isEdit);
   const originInputs = {
@@ -75,7 +76,7 @@ const EditToken = (props) => {
 
   const loadToken = async () => {
     setLoading(true);
-    let res = await API.get(`/api/token/${props.editingToken.id}`);
+    let res = await API.get(`/api/token/${tokenRef}`);
     const { success, message, data } = res.data;
     if (success) {
       if (data.expired_time !== -1) {
@@ -93,8 +94,8 @@ const EditToken = (props) => {
     setLoading(false);
   };
   useEffect(() => {
-    setIsEdit(props.editingToken.id !== undefined);
-  }, [props.editingToken.id]);
+    setIsEdit(props.editingToken.id !== undefined || props.editingToken.uuid !== undefined);
+  }, [props.editingToken.id, props.editingToken.uuid]);
 
   useEffect(() => {
     if (!isEdit) {
@@ -147,7 +148,7 @@ const EditToken = (props) => {
         localInputs.expired_time = Math.ceil(time / 1000);
       }
       // localInputs.model_limits = localInputs.model_limits.join(',');
-      let res = await API.put(`/api/token/`, { ...localInputs, id: parseInt(props.editingToken.id) });
+      let res = await API.put(`/api/token/`, { ...localInputs, uuid: tokenRef });
       const { success, message } = res.data;
       if (success) {
         showSuccess('令牌更新成功！');

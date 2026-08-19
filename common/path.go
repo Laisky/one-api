@@ -7,7 +7,7 @@ import (
 
 	"github.com/Laisky/zap"
 
-	"github.com/songquanpeng/one-api/common/logger"
+	"github.com/Laisky/one-api/common/logger"
 )
 
 var windowsEnvPattern = regexp.MustCompile(`%([A-Za-z0-9_]+)%`)

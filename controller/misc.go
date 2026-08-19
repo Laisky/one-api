@@ -8,14 +8,17 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Laisky/errors/v2"
 	gmw "github.com/Laisky/gin-middlewares/v7"
 	"github.com/Laisky/zap"
 	"github.com/gin-gonic/gin"
 
-	"github.com/songquanpeng/one-api/common"
-	"github.com/songquanpeng/one-api/common/config"
-	"github.com/songquanpeng/one-api/common/message"
-	"github.com/songquanpeng/one-api/model"
+	"github.com/Laisky/one-api/common"
+	"github.com/Laisky/one-api/common/config"
+	"github.com/Laisky/one-api/common/errkind"
+	"github.com/Laisky/one-api/common/helper"
+	"github.com/Laisky/one-api/common/message"
+	"github.com/Laisky/one-api/model"
 )
 
 // GetStatus returns application metadata and feature toggles for the public status endpoint.
@@ -48,6 +51,8 @@ func GetStatus(c *gin.Context) {
 			"oidc_authorization_endpoint": config.OidcAuthorizationEndpoint,
 			"oidc_token_endpoint":         config.OidcTokenEndpoint,
 			"oidc_userinfo_endpoint":      config.OidcUserinfoEndpoint,
+			"password_login":              config.PasswordLoginEnabled,
+			"password_register":           config.PasswordRegisterEnabled,
 		},
 	})
 }
@@ -89,10 +94,7 @@ func GetHomePageContent(c *gin.Context) {
 func SendEmailVerification(c *gin.Context) {
 	email := c.Query("email")
 	if err := common.Validate.Var(email, "required,email"); err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": invalidParameterMessage,
-		})
+		helper.RespondError(c, errkind.InvalidRequestErr(errors.New(invalidParameterMessage)))
 		return
 	}
 
@@ -153,10 +155,7 @@ func SendEmailVerification(c *gin.Context) {
 func SendPasswordResetEmail(c *gin.Context) {
 	email := c.Query("email")
 	if err := common.Validate.Var(email, "required,email"); err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": invalidParameterMessage,
-		})
+		helper.RespondError(c, errkind.InvalidRequestErr(errors.New(invalidParameterMessage)))
 		return
 	}
 
@@ -216,29 +215,33 @@ func ResetPassword(c *gin.Context) {
 	err := json.NewDecoder(c.Request.Body).Decode(&req)
 	if err != nil {
 		lg.Debug("failed to decode password reset request", zap.Error(err))
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": invalidParameterMessage,
-		})
+		helper.RespondError(c, errkind.InvalidRequestErr(errors.New(invalidParameterMessage)))
 		return
 	}
 	if req.Email == "" || req.Token == "" {
 		lg.Debug("password reset request missing email or token",
 			zap.Bool("email_empty", req.Email == ""),
 			zap.Bool("token_empty", req.Token == ""))
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": invalidParameterMessage,
-		})
+		helper.RespondError(c, errkind.InvalidRequestErr(errors.New(invalidParameterMessage)))
 		return
 	}
 	if !common.VerifyCodeWithKey(req.Email, req.Token, common.PasswordResetPurpose) {
 		lg.Debug("password reset token verification failed",
 			zap.String("email", req.Email))
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": "Reset link is illegal or expired",
-		})
+		helper.RespondError(c, errkind.UnauthorizedErr(errors.New("Reset link is illegal or expired")))
+		return
+	}
+
+	var lockedCheckUser model.User
+	if err := model.DB.Where("email = ?", req.Email).First(&lockedCheckUser).Error; err != nil {
+		lg.Error("failed to look up user for password reset",
+			zap.String("email", req.Email),
+			zap.Error(errors.Wrapf(err, "look up user by email %s", req.Email)))
+		helper.RespondError(c, err)
+		return
+	}
+	if lockedCheckUser.Metadata.PasswordLocked {
+		helper.RespondError(c, errkind.ForbiddenErr(errors.New("Password is locked by administrator")))
 		return
 	}
 
@@ -251,16 +254,16 @@ func ResetPassword(c *gin.Context) {
 
 	err = model.ResetUserPasswordByEmail(req.Email, password)
 	if err != nil {
-		lg.Error("failed to reset password", zap.String("email", req.Email), zap.Error(err))
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
+		// The account is resolved by email, so name it by id/uuid/username rather
+		// than by email address.
+		lg.Error("failed to reset password", append(lockedCheckUser.Ref().Zap(), zap.Error(err))...)
+		helper.RespondError(c, err)
 		return
 	}
 	common.DeleteKey(req.Email, common.PasswordResetPurpose)
-	lg.Info("password reset successful", zap.String("email", req.Email),
-		zap.Bool("user_provided_password", req.Password != ""))
+	lg.Info("password reset successful",
+		append(lockedCheckUser.Ref().Zap(),
+			zap.Bool("user_provided_password", req.Password != ""))...)
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
@@ -290,10 +293,7 @@ func GetChannelStatus(c *gin.Context) {
 	if err != nil {
 		// Return a generic "Internal Server Error" as per best practices,
 		// since database errors are rare and typically indicate an internal issue.
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
+		helper.RespondErrorWithStatus(c, http.StatusInternalServerError, err)
 		return
 	}
 
@@ -302,15 +302,12 @@ func GetChannelStatus(c *gin.Context) {
 	if err != nil {
 		// Return a generic "Internal Server Error" as per best practices,
 		// since database errors are rare and typically indicate an internal issue.
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
+		helper.RespondErrorWithStatus(c, http.StatusInternalServerError, err)
 		return
 	}
 
 	// Format channels for monitoring
-	var channelStatuses []gin.H
+	channelStatuses := make([]gin.H, 0, len(channels))
 	for _, channel := range channels {
 		var status string
 		var enabled bool

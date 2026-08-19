@@ -8,9 +8,9 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 
-	"github.com/songquanpeng/one-api/relay/channeltype"
-	"github.com/songquanpeng/one-api/relay/meta"
-	"github.com/songquanpeng/one-api/relay/model"
+	"github.com/Laisky/one-api/relay/channeltype"
+	"github.com/Laisky/one-api/relay/meta"
+	"github.com/Laisky/one-api/relay/model"
 )
 
 func TestGetRequestURL(t *testing.T) {
@@ -70,6 +70,42 @@ func TestGetRequestURL(t *testing.T) {
 	}
 }
 
+func TestGetModelListMatchesCurrentCatalog(t *testing.T) {
+	t.Parallel()
+
+	want := []string{
+		"openai/gpt-oss-120b",
+		"openai/gpt-oss-20b",
+		"whisper-large-v3",
+		"whisper-large-v3-turbo",
+		"groq/compound",
+		"groq/compound-mini",
+		"canopylabs/orpheus-arabic-saudi",
+		"canopylabs/orpheus-v1-english",
+		"meta-llama/llama-prompt-guard-2-22m",
+		"meta-llama/llama-prompt-guard-2-86m",
+		"minimaxai/minimax-m2.7",
+		"openai/gpt-oss-safeguard-20b",
+		"qwen/qwen3.6-27b",
+	}
+
+	models := (&Adaptor{}).GetModelList()
+	require.ElementsMatch(t, want, models)
+	require.Len(t, models, len(want))
+
+	// Retired IDs keep pricing metadata for enterprise and billing compatibility
+	// but are no longer advertised in the public Groq model list.
+	for _, retired := range []string{
+		"llama-3.1-8b-instant",
+		"llama-3.3-70b-versatile",
+		"meta-llama/llama-4-scout-17b-16e-instruct",
+		"qwen/qwen3-32b",
+	} {
+		require.NotContains(t, models, retired)
+		require.Contains(t, ModelRatios, retired)
+	}
+}
+
 func TestConvertRequest_DropsReasoningFields(t *testing.T) {
 	t.Parallel()
 
@@ -97,6 +133,46 @@ func TestConvertRequest_DropsReasoningFields(t *testing.T) {
 	require.NoError(t, err)
 	require.NotContains(t, string(jsonBytes), `"reasoning"`)
 	require.Contains(t, string(jsonBytes), `"reasoning_effort"`)
+}
+
+func TestGroqReasoningEffortAllowedIsModelSpecific(t *testing.T) {
+	t.Parallel()
+
+	for _, effort := range []string{"none", "default"} {
+		require.True(t, groqReasoningEffortAllowed("qwen/qwen3.6-27b", effort), "Qwen 3.6 should accept %q", effort)
+	}
+	for _, effort := range []string{"low", "medium", "high"} {
+		require.False(t, groqReasoningEffortAllowed("qwen/qwen3.6-27b", effort), "Qwen 3.6 should reject %q", effort)
+	}
+
+	require.False(t, groqReasoningEffortAllowed("openai/gpt-oss-120b", "none"))
+	require.True(t, groqReasoningEffortAllowed("openai/gpt-oss-120b", "high"))
+	require.True(t, groqReasoningEffortAllowed("openai/gpt-oss-safeguard-20b", "low"))
+	require.False(t, groqReasoningEffortAllowed("minimaxai/minimax-m2.7", "high"))
+	require.False(t, groqReasoningEffortAllowed("unknown-model", "minimal"))
+}
+
+func TestCurrentGroqModelMetadata(t *testing.T) {
+	t.Parallel()
+
+	qwen, ok := ModelRatios["qwen/qwen3.6-27b"]
+	require.True(t, ok)
+	require.EqualValues(t, 16_384, qwen.MaxOutputTokens)
+	require.EqualValues(t, 131_072, qwen.ContextLength)
+	require.Equal(t, []string{"none", "default"}, qwen.SupportedReasoningEfforts)
+
+	minimax, ok := ModelRatios["minimaxai/minimax-m2.7"]
+	require.True(t, ok)
+	require.EqualValues(t, 196_608, minimax.ContextLength)
+	require.EqualValues(t, 131_072, minimax.MaxOutputTokens)
+	require.Zero(t, minimax.Ratio, "contact-sales models must not use a guessed token price")
+	require.Empty(t, minimax.SupportedReasoningEfforts)
+	require.NotContains(t, minimax.SupportedFeatures, "structured_outputs")
+
+	compound, ok := ModelRatios["groq/compound"]
+	require.True(t, ok)
+	require.Zero(t, compound.Ratio, "Compound has no standalone token tariff")
+	require.NotContains(t, compound.SupportedFeatures, "reasoning")
 }
 
 func TestConvertRequest_RejectsMultimodalForGPTOSS(t *testing.T) {

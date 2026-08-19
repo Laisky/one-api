@@ -12,7 +12,8 @@ export type LogMetadata = {
 };
 
 export interface LogEntry {
-  id: number;
+  id?: number;
+  uuid?: string;
   type: number;
   created_at: number;
   model_name: string;
@@ -20,7 +21,11 @@ export interface LogEntry {
   token_name?: string;
   username?: string;
   user_id?: number;
-  channel?: number;
+  user_uuid?: string | null;
+  channel?: number | string;
+  channel_uuid?: string | null;
+  channel_name?: string;
+  token_uuid?: string | null;
   quota: number;
   prompt_tokens?: number;
   completion_tokens?: number;

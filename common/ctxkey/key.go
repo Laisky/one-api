@@ -54,10 +54,23 @@ const (
 	// Read widely for billing, logging, and meta.
 	ChannelId = "channel_id"
 
+	// ChannelUUID is the external UUID of the selected channel.
+	// Set in: middleware/distributor after the channel row is selected.
+	// Read by relay metadata and log writers that need client-safe identifiers.
+	ChannelUUID = "channel_uuid"
+
 	// SpecificChannelId indicates the caller explicitly requested a particular channel.
 	// Set in: middleware/auth.TokenAuth via token suffix or :channelid route param (admin-only).
 	// Read in: middleware/distributor to bypass normal selection and use that specific channel.
 	SpecificChannelId = "specific_channel_id"
+
+	// ResponseStateAffinityChannelId records the channel that a Responses request was
+	// pinned to by gateway provider affinity (proposal ST-005). Unlike
+	// SpecificChannelId it is a SOFT preference: it never disables retry/failover, so
+	// an ineligible or unhealthy binding transparently falls back to normal selection.
+	// Set in: middleware/distributor when a referenced gateway response/conversation
+	// resolves to a still-eligible bound channel. Read for observability/tests.
+	ResponseStateAffinityChannelId = "response_state_affinity_channel_id"
 
 	// RequestModel is the model name as requested by the client (e.g., "gpt-4o").
 	// Set in: middleware/auth.TokenAuth (parsed from body/query depending on endpoint) or early in adaptor handlers
@@ -139,6 +152,11 @@ const (
 	// Read in: billing and logs.
 	TokenId = "token_id"
 
+	// TokenUUID is the external UUID of the API token used for this request.
+	// Set in: middleware/auth.TokenAuth.
+	// Read by relay metadata and log writers that need client-safe identifiers.
+	TokenUUID = "token_uuid"
+
 	// TokenName is the name/label of the API token used for this request.
 	// Set in: middleware/auth.TokenAuth.
 	// Read in: image controller logs and metrics.
@@ -159,6 +177,11 @@ const (
 	// Read in: downstream handlers to avoid redundant DB/cache lookups for user fields
 	// (username, group, quota, status, etc.).
 	UserObj = "user_obj"
+
+	// UserUUID is the external UUID of the authenticated user.
+	// Set in: middleware/auth for session and token authentication.
+	// Read by relay metadata and log writers that need client-safe identifiers.
+	UserUUID = "user_uuid"
 
 	// BaseURL is the provider base URL resolved from the selected channel.
 	// Set in: middleware/distributor from channel.GetBaseURL().
@@ -256,6 +279,19 @@ const (
 	// Read in: controller/claude_messages to return converted responses.
 	ConvertedResponse = "converted_response"
 
+	// ResponseAPIUpstreamID carries the raw upstream Responses id (resp_...) observed
+	// when a Chat Completions or Claude Messages request was served by a
+	// Responses-format upstream. It is set by the openai Chat/Claude<-Responses render
+	// handlers so the controller can record a continuation checkpoint against that
+	// upstream handle (ST-022, stateless-client optimization). It is an internal
+	// gateway handle and must never be surfaced to the client.
+	ResponseAPIUpstreamID = "response_api_upstream_id"
+
+	// ResponseAPIAssistantMessage carries the rendered assistant turn (as the client
+	// will echo it back on its next stateless request) so the checkpoint key covers
+	// the full downstream-visible transcript, not only the request messages (ST-022).
+	ResponseAPIAssistantMessage = "response_api_assistant_message"
+
 	// SkipAdaptorResponseBodyLog suppresses verbose adaptor-level upstream body logging when the
 	// controller already captured and will emit a debug preview. This avoids duplicate payload logs
 	// while keeping high-level status metadata available.
@@ -282,6 +318,20 @@ const (
 	// upstream chat completion SSE chunks into another streaming format (e.g., Response API)
 	// before flushing them to the client.
 	ResponseStreamRewriteHandler = "response_stream_rewrite_handler"
+
+	// ToolNameSanitizeMap stores a per-request bidirectional rename table produced when
+	// tool/function names are sanitized for strict upstream validators (DeepSeek, OpenAI,
+	// Anthropic — all of which enforce `^[a-zA-Z0-9_-]+$`). The value is a map[string]string
+	// keyed by the sanitized name and yielding the original client-provided name. Response
+	// handlers consult this map to restore original names on
+	// `choices[].message.tool_calls[].function.name` (non-stream) and
+	// `choices[].delta.tool_calls[].function.name` (stream) before forwarding to the client,
+	// so the round-trip stays transparent to MCP-namespaced names like `server.tool`.
+	// Set in: relay/adaptor/common/toolnamesafe.SanitizeRequestToolNames.
+	// Read in: relay/adaptor/openai_compatible.Handler / UnifiedStreamProcessing and
+	// relay/adaptor/openai.Handler / StreamHandler / relay/adaptor/anthropic handlers when
+	// restoring names.
+	ToolNameSanitizeMap = "tool_name_sanitize_map"
 
 	// ResponseFormat is used by image APIs to carry desired output format when posted via JSON.
 	// Set in: image controller from request payload.
@@ -319,4 +369,17 @@ const (
 	// created at pre-consume time. Post-billing uses this to reconcile the log
 	// with actual usage data.
 	ProvisionalLogId = "provisional_log_id"
+
+	// Identity holds the common/identity.Set bound for this request (user + token
+	// + channel references, each carrying id + uuid + name).
+	// Set in: common/identity.Bind, driven by middleware/auth and middleware/distributor.
+	// Read in: error funnels and any handler that needs identity without a lookup.
+	Identity = "identity"
+
+	// BaseLogger holds the pristine request logger captured before any identity
+	// field was bound, so common/identity.Bind can REBUILD the logger instead of
+	// appending a duplicate channel_id when the channel changes on a relay retry.
+	// Set in: common/identity.BindBase, driven by middleware.RequestId.
+	// Read in: common/identity.Bind only.
+	BaseLogger = "base_logger"
 )

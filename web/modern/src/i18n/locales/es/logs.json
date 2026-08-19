@@ -23,10 +23,10 @@
         "first_client_response_desc": "Primera respuesta enviada al cliente",
         "first_upstream_response": "Primera respuesta upstream",
         "first_upstream_response_desc": "Primera respuesta recibida de upstream",
-        "mcp_call": "MCP Call",
-        "mcp_call_desc": "MCP tool call",
-        "mcp_call_server": "Server: {{server}}",
-        "mcp_call_tool": "Tool: {{tool}}",
+        "mcp_call": "Llamada MCP",
+        "mcp_call_desc": "Llamada de herramienta MCP",
+        "mcp_call_server": "Servidor: {{server}}",
+        "mcp_call_tool": "Herramienta: {{tool}}",
         "request_completed": "Solicitud completada",
         "request_completed_desc": "Solicitud completamente finalizada",
         "request_forwarded": "Reenviado a upstream",
@@ -47,6 +47,7 @@
       "no_content": "No hay contenido registrado.",
       "no_timeline": "Los datos de la línea de tiempo no están disponibles para este rastreo.",
       "no_tracing": "Los datos de rastreo no están disponibles para esta entrada de registro.",
+      "origin_model": "Modelo solicitado",
       "prompt_tokens_cached": "Tokens de prompt (en caché)",
       "prompt_tokens_input": "Tokens de prompt (entrada)",
       "quota": "Gasto",
@@ -79,6 +80,7 @@
         "content": "Contenido",
         "latency": "Latencia",
         "model": "Modelo",
+        "origin_model": "Modelo solicitado",
         "prompt_tokens": "Tokens de prompt",
         "quota": "Cuota",
         "time": "Hora",
@@ -107,6 +109,12 @@
       "missing": "Desconocido",
       "not_available": "N/D"
     },
+    "notifications": {
+      "clear_failed_message": "No se pudieron limpiar los registros.",
+      "clear_failed_title": "Error al limpiar",
+      "clear_success_message": "Los registros se limpiaron correctamente.",
+      "clear_success_title": "Registros limpiados"
+    },
     "search": {
       "log_entry": "Entrada de registro",
       "quota": "Cuota: {{value}}"
@@ -121,6 +129,7 @@
       "empty": "No se encontraron registros que coincidan con tus criterios.",
       "latency": "Latencia",
       "model": "Modelo",
+      "origin_model": "Modelo solicitado",
       "prompt": "Prompt",
       "time": "Hora",
       "token": "Token",
@@ -141,6 +150,7 @@
       "manage": "Gestión",
       "system": "Sistema",
       "test": "Prueba",
+      "tool": "Herramienta",
       "topup": "Recarga",
       "unknown": "Desconocido"
     }

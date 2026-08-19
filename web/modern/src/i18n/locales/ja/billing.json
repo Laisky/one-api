@@ -1,5 +1,25 @@
 {
   "topup": {
+    "amount": {
+      "amount_label": "金額",
+      "amount_placeholder": "金額を入力",
+      "calculate_button": "計算",
+      "calculate_first_message": "充電する前に金額を計算してください。",
+      "calculate_first_title": "先に計算してください",
+      "calculated_message": "支払額: {{value}}",
+      "calculated_title": "計算しました",
+      "calculating": "計算中...",
+      "code_label": "チャージコード（任意）",
+      "code_placeholder": "チャージコードを入力",
+      "description": "希望のチャージ金額と任意のコードを入力し、支払総額をプレビューします。",
+      "failed_message": "金額を計算できませんでした",
+      "failed_title": "計算失敗",
+      "invalid_message": "1 以上の金額を入力してください。",
+      "invalid_title": "無効な金額",
+      "recharge_button": "チャージ",
+      "result": "支払額: {{value}}",
+      "title": "支払額を計算"
+    },
     "balance": {
       "available": "API 利用可能なクォータ",
       "description": "現在のクォータ残高",

@@ -9,7 +9,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/bedrockruntime/types"
 	"github.com/stretchr/testify/require"
 
-	relaymodel "github.com/songquanpeng/one-api/relay/model"
+	relaymodel "github.com/Laisky/one-api/relay/model"
 )
 
 type capturedRender struct {

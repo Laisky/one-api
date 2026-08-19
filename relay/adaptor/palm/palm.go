@@ -10,13 +10,13 @@ import (
 	"github.com/Laisky/zap"
 	"github.com/gin-gonic/gin"
 
-	"github.com/songquanpeng/one-api/common"
-	"github.com/songquanpeng/one-api/common/helper"
-	"github.com/songquanpeng/one-api/common/render"
-	"github.com/songquanpeng/one-api/common/tracing"
-	"github.com/songquanpeng/one-api/relay/adaptor/openai"
-	"github.com/songquanpeng/one-api/relay/constant"
-	"github.com/songquanpeng/one-api/relay/model"
+	"github.com/Laisky/one-api/common"
+	"github.com/Laisky/one-api/common/helper"
+	"github.com/Laisky/one-api/common/tracing"
+	"github.com/Laisky/one-api/relay/adaptor/openai"
+	"github.com/Laisky/one-api/relay/adaptor/openai_compatible"
+	"github.com/Laisky/one-api/relay/constant"
+	"github.com/Laisky/one-api/relay/model"
 )
 
 // https://developers.generativeai.google/api/rest/generativelanguage/models/generateMessage#request-body
@@ -120,18 +120,11 @@ func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusC
 		responseText = palmResponse.Candidates[0].Content
 	}
 
-	jsonResponse, err := json.Marshal(fullTextResponse)
-	if err != nil {
-		lg.Error("error marshalling stream response", zap.Error(err))
-		return openai.ErrorWrapper(err, "marshal_response_body_failed", http.StatusInternalServerError), ""
-	}
-
-	err = render.ObjectData(c, string(jsonResponse))
-	if err != nil {
+	if err := openai_compatible.RenderStreamChunkWithBridge(c, fullTextResponse); err != nil {
 		lg.Error("error rendering response", zap.Error(err))
 	}
 
-	render.Done(c)
+	openai_compatible.FinalizeStreamWithBridge(c, nil)
 
 	return nil, responseText
 }

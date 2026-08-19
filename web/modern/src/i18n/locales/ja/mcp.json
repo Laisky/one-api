@@ -5,8 +5,12 @@
         "add": "追加",
         "cancel": "キャンセル",
         "create": "サーバーを作成",
+        "sync": "今すぐ同期",
+        "sync_in_progress": "同期中…",
         "update": "サーバーを更新"
       },
+      "description_add": "新しい MCP サーバーを追加し、ツールの公開方法を設定します。",
+      "description_edit": "この MCP サーバーと公開ツール設定を更新します。",
       "fields": {
         "api_key": "API キー",
         "auth_type": "認証タイプ",
@@ -46,7 +50,9 @@
       "notifications": {
         "load_failed": "MCP サーバーの読み込みに失敗しました",
         "save_failed": "保存に失敗しました",
-        "save_success": "保存しました"
+        "save_success": "保存しました",
+        "sync_failed": "同期に失敗しました：{{message}}",
+        "sync_success": "上流から {{count}} 個のツールを同期しました"
       },
       "pricing": {
         "invalid": "ツールの料金設定 JSON が無効です",
@@ -56,6 +62,10 @@
       "title_edit": "MCP サーバーを編集",
       "tools": {
         "title": "同期されたツール"
+      },
+      "validation": {
+        "base_url_required": "ベース URL は必須です",
+        "name_required": "名前は必須です"
       }
     },
     "list": {
@@ -73,6 +83,7 @@
         "actions": "操作",
         "auth_type": "認証",
         "base_url": "ベース URL",
+        "id": "ID",
         "last_sync": "最終同期",
         "name": "名前",
         "priority": "優先度",
@@ -84,7 +95,7 @@
       "labels": {
         "never": "未同期"
       },
-      "search_placeholder": "MCP サーバーを検索...",
+      "search_placeholder": "名前、URL、UUID で MCP サーバーを検索...",
       "subtitle": "MCP サーバーのレジストリとツールの同期を管理",
       "title": "MCP サーバー"
     },

@@ -9,7 +9,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 
-	metalib "github.com/songquanpeng/one-api/relay/meta"
+	metalib "github.com/Laisky/one-api/relay/meta"
 )
 
 func TestValidateImageRequest_DALLE3_RejectAutoQuality(t *testing.T) {

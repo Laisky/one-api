@@ -40,7 +40,9 @@ export function HomePage() {
     loadHome();
   }, [loadHome]);
 
-  // If home is a URL, render as iframe to allow embedding an external page
+  // If home is a URL, render as iframe to allow embedding an external page.
+  // Note: the site-wide notice banner is rendered globally in Layout, so it
+  // is intentionally not duplicated here.
   if (home.startsWith('https://')) {
     return (
       <iframe

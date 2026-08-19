@@ -6,7 +6,7 @@ import Title from '@douyinfe/semi-ui/lib/es/typography/title';
 import { Button, Divider, Input, Select, SideSheet, Space, Spin, Typography } from '@douyinfe/semi-ui';
 
 const EditUser = (props) => {
-  const userId = props.editingUser.id;
+  const userId = props.editingUser.uuid || props.editingUser.id;
   const [loading, setLoading] = useState(true);
   const [inputs, setInputs] = useState({
     username: '',
@@ -87,13 +87,13 @@ const EditUser = (props) => {
     if (userId) {
       fetchGroups().then();
     }
-  }, [props.editingUser.id]);
+  }, [props.editingUser.uuid, props.editingUser.id]);
 
   const submit = async () => {
     setLoading(true);
     let res = undefined;
     if (userId) {
-      let data = { ...inputs, id: parseInt(userId) };
+      let data = { ...inputs, uuid: userId };
       if (typeof data.quota === 'string') {
         data.quota = parseInt(data.quota);
       }

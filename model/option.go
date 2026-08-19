@@ -1,6 +1,7 @@
 package model
 
 import (
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -8,11 +9,12 @@ import (
 	"github.com/Laisky/errors/v2"
 	"github.com/Laisky/zap"
 
-	"github.com/songquanpeng/one-api/common/config"
-	"github.com/songquanpeng/one-api/common/logger"
-	billingratio "github.com/songquanpeng/one-api/relay/billing/ratio"
+	"github.com/Laisky/one-api/common/config"
+	"github.com/Laisky/one-api/common/logger"
+	billingratio "github.com/Laisky/one-api/relay/billing/ratio"
 )
 
+// Option stores one runtime configuration value by key.
 type Option struct {
 	Key       string `json:"key" gorm:"primaryKey"`
 	Value     string `json:"value"`
@@ -20,6 +22,7 @@ type Option struct {
 	UpdatedAt int64  `json:"updated_at" gorm:"bigint;autoUpdateTime:milli"`
 }
 
+// AllOption returns all persisted runtime configuration options.
 func AllOption() ([]*Option, error) {
 	var options []*Option
 	var err error
@@ -56,6 +59,8 @@ func InitOptionMap() {
 	config.OptionMap["SMTPPort"] = strconv.Itoa(config.SMTPPort)
 	config.OptionMap["SMTPAccount"] = ""
 	config.OptionMap["SMTPToken"] = ""
+	config.OptionMap["EmailProvider"] = config.EmailProvider
+	config.OptionMap["ResendAPIKey"] = config.ResendAPIKey
 	config.OptionMap["Notice"] = ""
 	config.OptionMap["About"] = ""
 	config.OptionMap["HomePageContent"] = ""
@@ -95,8 +100,13 @@ func InitOptionMap() {
 	loadOptionsFromDatabase()
 }
 
+// loadOptionsFromDatabase replays persisted options into the in-memory config map.
 func loadOptionsFromDatabase() {
-	options, _ := AllOption()
+	options, err := AllOption()
+	if err != nil {
+		logger.Logger.Error("failed to query options from database", zap.Error(err))
+		return
+	}
 	for _, option := range options {
 		// Skip deprecated global pricing options
 		if option.Key == "ModelRatio" || option.Key == "CompletionRatio" {
@@ -109,6 +119,7 @@ func loadOptionsFromDatabase() {
 	}
 }
 
+// SyncOptions periodically refreshes runtime configuration from persisted options.
 func SyncOptions(frequency int) {
 	for {
 		time.Sleep(time.Duration(frequency) * time.Second)
@@ -117,23 +128,47 @@ func SyncOptions(frequency int) {
 	}
 }
 
+// UpdateOption persists an option and updates the in-memory configuration only after storage succeeds.
 func UpdateOption(key string, value string) error {
 	// Save to database first
 	option := Option{
 		Key: key,
 	}
 	// https://gorm.io/docs/update.html#Save-All-Fields
-	DB.FirstOrCreate(&option, Option{Key: key})
+	if err := DB.FirstOrCreate(&option, Option{Key: key}).Error; err != nil {
+		return errors.Wrapf(err, "first or create option %q", key)
+	}
 	option.Value = value
 	// Save is a combination function.
 	// If save value does not contain primary key, it will execute Create,
 	// otherwise it will execute Update (with all fields).
-	DB.Save(&option)
+	if err := DB.Save(&option).Error; err != nil {
+		return errors.Wrapf(err, "save option %q", key)
+	}
 	// Update OptionMap
 	return updateOptionMap(key, value)
 }
 
+// envOverrideForOption returns an environment value that must override a persisted option.
+func envOverrideForOption(key string) (string, bool) {
+	switch key {
+	case "EmailProvider":
+		value := strings.ToLower(strings.TrimSpace(os.Getenv(config.EnvEmailProvider)))
+		return value, value != ""
+	case "ResendAPIKey":
+		value := strings.TrimSpace(os.Getenv(config.EnvResendAPIKey))
+		return value, value != ""
+	default:
+		return "", false
+	}
+}
+
+// updateOptionMap applies one option value to config.OptionMap and typed config variables.
 func updateOptionMap(key string, value string) (err error) {
+	if envValue, ok := envOverrideForOption(key); ok {
+		value = envValue
+	}
+
 	config.OptionMapRWMutex.Lock()
 	defer config.OptionMapRWMutex.Unlock()
 	config.OptionMap[key] = value
@@ -174,7 +209,20 @@ func updateOptionMap(key string, value string) (err error) {
 	}
 	switch key {
 	case "EmailDomainWhitelist":
-		config.EmailDomainWhitelist = strings.Split(value, ",")
+		if strings.TrimSpace(value) == "" {
+			config.EmailDomainWhitelist = nil
+		} else {
+			parts := strings.Split(value, ",")
+			domains := make([]string, 0, len(parts))
+			for _, p := range parts {
+				p = strings.TrimSpace(p)
+				if p == "" {
+					continue
+				}
+				domains = append(domains, p)
+			}
+			config.EmailDomainWhitelist = domains
+		}
 	case "SMTPServer":
 		config.SMTPServer = value
 	case "SMTPPort":
@@ -186,6 +234,14 @@ func updateOptionMap(key string, value string) (err error) {
 		config.SMTPFrom = value
 	case "SMTPToken":
 		config.SMTPToken = value
+	case "EmailProvider":
+		val := strings.ToLower(strings.TrimSpace(value))
+		if val != "" && val != "smtp" && val != "resend" {
+			return errors.Errorf("invalid email provider %q (expected \"smtp\", \"resend\", or empty)", val)
+		}
+		config.EmailProvider = val
+	case "ResendAPIKey":
+		config.ResendAPIKey = strings.TrimSpace(value)
 	case "ServerAddress":
 		config.ServerAddress = value
 	case "GitHubClientId":

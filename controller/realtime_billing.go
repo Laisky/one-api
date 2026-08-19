@@ -4,21 +4,23 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"time"
 
 	gmw "github.com/Laisky/gin-middlewares/v7"
 	glog "github.com/Laisky/go-utils/v6/log"
 	"github.com/Laisky/zap"
 	"github.com/gin-gonic/gin"
 
-	"github.com/songquanpeng/one-api/common/ctxkey"
-	"github.com/songquanpeng/one-api/common/graceful"
-	"github.com/songquanpeng/one-api/common/tracing"
-	"github.com/songquanpeng/one-api/model"
-	"github.com/songquanpeng/one-api/relay/adaptor"
-	"github.com/songquanpeng/one-api/relay/billing"
-	metalib "github.com/songquanpeng/one-api/relay/meta"
-	rmodel "github.com/songquanpeng/one-api/relay/model"
-	"github.com/songquanpeng/one-api/relay/pricing"
+	"github.com/Laisky/one-api/common/ctxkey"
+	"github.com/Laisky/one-api/common/graceful"
+	"github.com/Laisky/one-api/common/relayctx"
+	"github.com/Laisky/one-api/common/tracing"
+	"github.com/Laisky/one-api/model"
+	"github.com/Laisky/one-api/relay/adaptor"
+	"github.com/Laisky/one-api/relay/billing"
+	metalib "github.com/Laisky/one-api/relay/meta"
+	rmodel "github.com/Laisky/one-api/relay/model"
+	"github.com/Laisky/one-api/relay/pricing"
 )
 
 // Billing safety helpers for the top-level controller package.
@@ -58,14 +60,10 @@ func rtBillingAuditSafetyNet(c *gin.Context) {
 		return
 	}
 
-	lg := gmw.GetLogger(c)
-	tokenId := c.GetInt(ctxkey.TokenId)
-	requestId := c.GetString(ctxkey.RequestId)
-
-	lg.Error("CRITICAL BILLING AUDIT (realtime): pre-consumed quota was not reconciled",
+	// The request-scoped logger already carries request_id plus the full
+	// user/token/channel identity bound by the auth and distributor middlewares.
+	gmw.GetLogger(c).Error("CRITICAL BILLING AUDIT (realtime): pre-consumed quota was not reconciled",
 		zap.Int64("pre_consumed_quota", preConsumed),
-		zap.Int("token_id", tokenId),
-		zap.String("request_id", requestId),
 	)
 
 	// Do NOT refund — the request was forwarded upstream, so keeping the
@@ -96,7 +94,9 @@ func rtReturnPreConsumedQuota(
 		}
 	}
 
-	graceful.GoCritical(gmw.BackgroundCtx(c), "realtimeRefund", func(ctx context.Context) {
+	// Detach gives the refund a non-cancelled, c-free context; the provisional-log
+	// reconcile above already ran synchronously on the request goroutine.
+	graceful.GoCritical(relayctx.Detach(c), "realtimeRefund", func(ctx context.Context) {
 		billing.ReturnPreConsumedQuota(ctx, preConsumedQuota, tokenID)
 	})
 }
@@ -111,16 +111,29 @@ func rtRecordProvisionalLog(c *gin.Context, meta *metalib.Meta, modelName string
 	traceId := tracing.GetTraceIDFromContext(gmw.Ctx(c))
 
 	logEntry := &model.Log{
-		UserId:    meta.UserId,
-		ChannelId: meta.ChannelId,
-		ModelName: modelName,
-		TokenName: meta.TokenName,
-		IsStream:  true,
-		RequestId: requestId,
-		TraceId:   traceId,
+		UserId:      meta.UserId,
+		UserUUID:    model.StringPtrIfNotEmpty(meta.UserUUID),
+		ChannelId:   meta.ChannelId,
+		ChannelUUID: model.StringPtrIfNotEmpty(meta.ChannelUUID),
+		ModelName:   modelName,
+		TokenName:   meta.TokenName,
+		TokenUUID:   model.StringPtrIfNotEmpty(meta.TokenUUID),
+		IsStream:    true,
+		RequestId:   requestId,
+		TraceId:     traceId,
 	}
 
 	return model.RecordProvisionalConsumeLog(gmw.Ctx(c), logEntry, estimatedQuota)
+}
+
+// optionalRequestTime returns the first supplied request time or the zero time.
+// Parameters: values is an optional single request-start instant.
+// Returns: the selected time used for time-window pricing evaluation.
+func optionalRequestTime(values []time.Time) time.Time {
+	if len(values) == 0 {
+		return time.Time{}
+	}
+	return values[0]
 }
 
 // estimateRealtimePreConsumeQuota computes the quota to pre-consume before a
@@ -139,8 +152,10 @@ func estimateRealtimePreConsumeQuota(
 	groupRatio float64,
 	channelModelConfigs map[string]model.ModelConfigLocal,
 	pricingAdaptor adaptor.Adaptor,
+	requestTime ...time.Time,
 ) int64 {
-	audioCfg, ok := pricing.ResolveAudioPricing(modelName, channelModelConfigs, pricingAdaptor)
+	at := optionalRequestTime(requestTime)
+	audioCfg, ok := pricing.ResolveAudioPricing(modelName, channelModelConfigs, pricingAdaptor, at)
 	if ok && audioCfg != nil && audioCfg.HasData() {
 		promptRatio := audioCfg.PromptRatio
 		if promptRatio <= 0 {
@@ -164,7 +179,7 @@ func estimateRealtimePreConsumeQuota(
 
 	// Fallback: text-rate estimation (underestimates for audio, but safe)
 	estimatedTokens := float64(realtimePreConsumeSeconds * (realtimeAudioInputTokensPerSec + realtimeAudioOutputTokensPerSec))
-	textCompletionRatio := pricing.GetCompletionRatioWithThreeLayers(modelName, nil, pricingAdaptor)
+	textCompletionRatio := pricing.ResolveCompletionRatioAt(modelName, channelModelConfigs, nil, pricingAdaptor, at)
 	return int64(math.Ceil(estimatedTokens * modelRatio * groupRatio * (1 + textCompletionRatio) / 2))
 }
 
@@ -191,6 +206,7 @@ func applyRealtimeAudioSurcharge(
 	channelModelConfigs map[string]model.ModelConfigLocal,
 	pricingAdaptor adaptor.Adaptor,
 	lg glog.Logger,
+	requestTime ...time.Time,
 ) {
 	if usage == nil {
 		return
@@ -209,7 +225,8 @@ func applyRealtimeAudioSurcharge(
 	}
 
 	// Resolve audio pricing
-	audioCfg, ok := pricing.ResolveAudioPricing(modelName, channelModelConfigs, pricingAdaptor)
+	at := optionalRequestTime(requestTime)
+	audioCfg, ok := pricing.ResolveAudioPricing(modelName, channelModelConfigs, pricingAdaptor, at)
 	if !ok || audioCfg == nil || !audioCfg.HasData() {
 		if lg != nil {
 			lg.Warn("realtime audio surcharge: no audio pricing config found, audio tokens billed at text rate",
@@ -230,7 +247,7 @@ func applyRealtimeAudioSurcharge(
 	}
 
 	// Get text completion ratio for the model (what Compute uses)
-	textCompletionRatio := pricing.GetCompletionRatioWithThreeLayers(modelName, nil, pricingAdaptor)
+	textCompletionRatio := pricing.ResolveCompletionRatioAt(modelName, channelModelConfigs, nil, pricingAdaptor, at)
 
 	// Prompt surcharge: audio is promptRatio times text, so the delta is (promptRatio - 1)
 	promptSurcharge := float64(audioInputTokens) * modelRatio * groupRatio * (promptRatio - 1)

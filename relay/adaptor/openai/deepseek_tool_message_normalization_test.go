@@ -8,12 +8,12 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 
-	"github.com/songquanpeng/one-api/common/ctxkey"
-	"github.com/songquanpeng/one-api/model"
-	"github.com/songquanpeng/one-api/relay/channeltype"
-	"github.com/songquanpeng/one-api/relay/meta"
-	relaymodel "github.com/songquanpeng/one-api/relay/model"
-	"github.com/songquanpeng/one-api/relay/relaymode"
+	"github.com/Laisky/one-api/common/ctxkey"
+	"github.com/Laisky/one-api/model"
+	"github.com/Laisky/one-api/relay/channeltype"
+	"github.com/Laisky/one-api/relay/meta"
+	relaymodel "github.com/Laisky/one-api/relay/model"
+	"github.com/Laisky/one-api/relay/relaymode"
 )
 
 func TestConvertRequest_NormalizesToolArrayForDeepSeekBaseURL(t *testing.T) {
@@ -51,14 +51,15 @@ func TestConvertRequest_NormalizesToolArrayForDeepSeekBaseURL(t *testing.T) {
 	require.Equal(t, "README.md\n", converted.Messages[1].Content)
 }
 
-func TestConvertRequest_NormalizesToolArrayForDeepSeekModelPrefix(t *testing.T) {
+func TestConvertRequest_DoesNotNormalizeToolArrayForDeepSeekModelPrefixOnly(t *testing.T) {
 	t.Parallel()
 	gin.SetMode(gin.TestMode)
 
+	original := []any{map[string]any{"type": "text", "text": "ok"}}
 	request := &relaymodel.GeneralOpenAIRequest{
 		Model: "deepseek-chat",
 		Messages: []relaymodel.Message{
-			{Role: "tool", ToolCallId: "call_2", Content: []any{map[string]any{"type": "text", "text": "ok"}}},
+			{Role: "tool", ToolCallId: "call_2", Content: original},
 		},
 	}
 
@@ -82,7 +83,7 @@ func TestConvertRequest_NormalizesToolArrayForDeepSeekModelPrefix(t *testing.T) 
 
 	converted, ok := convertedAny.(*relaymodel.GeneralOpenAIRequest)
 	require.True(t, ok)
-	require.Equal(t, "ok", converted.Messages[0].Content)
+	require.Equal(t, original, converted.Messages[0].Content)
 }
 
 func TestConvertRequest_DoesNotNormalizeToolArrayForNonDeepSeek(t *testing.T) {

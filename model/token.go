@@ -2,19 +2,19 @@ package model
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"strings"
 
 	"github.com/Laisky/errors/v2"
 	"github.com/Laisky/zap"
 	"gorm.io/gorm"
 
-	"github.com/songquanpeng/one-api/common"
-	"github.com/songquanpeng/one-api/common/config"
-	"github.com/songquanpeng/one-api/common/helper"
-	"github.com/songquanpeng/one-api/common/logger"
-	"github.com/songquanpeng/one-api/common/message"
+	"github.com/Laisky/one-api/common"
+	"github.com/Laisky/one-api/common/config"
+	"github.com/Laisky/one-api/common/errkind"
+	"github.com/Laisky/one-api/common/helper"
+	"github.com/Laisky/one-api/common/identity"
+	"github.com/Laisky/one-api/common/logger"
+	"github.com/Laisky/one-api/common/message"
 )
 
 const (
@@ -26,7 +26,9 @@ const (
 
 type Token struct {
 	Id             int     `json:"id"`
+	UUID           string  `json:"uuid" gorm:"type:char(36);column:uuid"`
 	UserId         int     `json:"user_id"`
+	UserUUID       *string `json:"user_uuid" gorm:"type:char(36);column:user_uuid;index"`
 	Key            string  `json:"key" gorm:"type:char(48);uniqueIndex"`
 	Status         int     `json:"status" gorm:"default:1"`
 	Name           string  `json:"name" gorm:"index" `
@@ -44,6 +46,7 @@ type Token struct {
 
 var tokenSortFields = map[string]string{
 	"id":           "id",
+	"uuid":         "uuid",
 	"name":         "name",
 	"status":       "status",
 	"expired_time": "expired_time",
@@ -53,55 +56,6 @@ var tokenSortFields = map[string]string{
 	"updated_at":   "updated_at",
 }
 
-// MarshalJSON ensures that any token serialized to JSON will include the configured key prefix.
-// This does not modify the stored key; it's applied only at response time.
-func (t Token) MarshalJSON() ([]byte, error) {
-	// Normalize: strip any known legacy prefixes from stored value, then apply configured prefix
-	raw := t.Key
-	raw = strings.TrimPrefix(raw, "sk-")
-	raw = strings.TrimPrefix(raw, "laisky-")
-	prefix := config.TokenKeyPrefix
-	if prefix == "" {
-		prefix = "sk-"
-	}
-
-	type tokenDTO struct {
-		Id             int     `json:"id"`
-		UserId         int     `json:"user_id"`
-		Key            string  `json:"key"`
-		Status         int     `json:"status"`
-		Name           string  `json:"name"`
-		CreatedTime    int64   `json:"created_time"`
-		AccessedTime   int64   `json:"accessed_time"`
-		ExpiredTime    int64   `json:"expired_time"`
-		RemainQuota    int64   `json:"remain_quota"`
-		UnlimitedQuota bool    `json:"unlimited_quota"`
-		UsedQuota      int64   `json:"used_quota"`
-		CreatedAt      int64   `json:"created_at"`
-		UpdatedAt      int64   `json:"updated_at"`
-		Models         *string `json:"models"`
-		Subnet         *string `json:"subnet"`
-	}
-	dto := tokenDTO{
-		Id:             t.Id,
-		UserId:         t.UserId,
-		Key:            prefix + raw,
-		Status:         t.Status,
-		Name:           t.Name,
-		CreatedTime:    t.CreatedTime,
-		AccessedTime:   t.AccessedTime,
-		ExpiredTime:    t.ExpiredTime,
-		RemainQuota:    t.RemainQuota,
-		UnlimitedQuota: t.UnlimitedQuota,
-		UsedQuota:      t.UsedQuota,
-		CreatedAt:      t.CreatedAt,
-		UpdatedAt:      t.UpdatedAt,
-		Models:         t.Models,
-		Subnet:         t.Subnet,
-	}
-	return json.Marshal(dto)
-}
-
 func clearTokenCache(ctx context.Context, key string) {
 	if common.IsRedisEnabled() {
 		if ctx == nil {
@@ -109,7 +63,12 @@ func clearTokenCache(ctx context.Context, key string) {
 		}
 		err := common.RedisDel(ctx, fmt.Sprintf("token:%s", key))
 		if err != nil {
-			logger.Logger.Warn("failed to clear token cache, continuing", zap.String("key", key), zap.Error(err))
+			// The raw API key must never appear verbatim in a log (same invariant
+			// enforced in ValidateUserToken below). No identity reference is
+			// resolved here: this runs on every token write and a lookup by key
+			// would add a query to a hot path.
+			logger.FromContext(ctx).Warn("failed to clear token cache, continuing",
+				zap.String("key", helper.MaskAPIKey(key)), zap.Error(err))
 		}
 	}
 }
@@ -136,7 +95,9 @@ func GetAllUserTokens(userId int, startIdx int, num int, order string, sortBy st
 
 	err = query.Limit(num).Offset(startIdx).Find(&tokens).Error
 	if err != nil {
-		return nil, errors.Wrapf(err, "get user %d tokens", userId)
+		return nil, identity.Tag(
+			errors.Wrapf(err, "get user %d tokens", userId),
+			LookupUserRef(context.Background(), userId))
 	}
 	return tokens, nil
 }
@@ -144,7 +105,9 @@ func GetAllUserTokens(userId int, startIdx int, num int, order string, sortBy st
 func GetUserTokenCount(userId int) (count int64, err error) {
 	err = DB.Model(&Token{}).Where("user_id = ?", userId).Count(&count).Error
 	if err != nil {
-		return 0, errors.Wrapf(err, "count user %d tokens", userId)
+		return 0, identity.Tag(
+			errors.Wrapf(err, "count user %d tokens", userId),
+			LookupUserRef(context.Background(), userId))
 	}
 	return count, nil
 }
@@ -152,13 +115,60 @@ func GetUserTokenCount(userId int) (count int64, err error) {
 func SearchUserTokens(userId int, keyword string, startIdx int, num int, sortBy string, sortOrder string) (tokens []*Token, total int64, err error) {
 	db := DB.Model(&Token{}).Where("user_id = ?", userId)
 	if keyword != "" {
-		db = db.Where("name LIKE ?", keyword+"%")
+		// user_uuid lets an operator paste a user UUID to list that user's tokens; the
+		// user_id scope above still ANDs, so it can never cross into another owner.
+		if scoped, matched := applyUUIDKeyword(db, keyword, "uuid", "user_uuid"); matched {
+			db = scoped
+		} else {
+			db = db.Where("(name LIKE ?)", keyword+"%")
+		}
 	}
 	orderClause := ValidateOrderClause(sortBy, sortOrder, tokenSortFields, "id desc")
 	db = db.Order(orderClause)
 	err = db.Count(&total).Limit(num).Offset(startIdx).Find(&tokens).Error
 	if err != nil {
-		return nil, 0, errors.Wrapf(err, "search user %d tokens", userId)
+		return nil, 0, identity.Tag(
+			errors.Wrapf(err, "search user %d tokens", userId),
+			LookupUserRef(context.Background(), userId))
+	}
+	return tokens, total, nil
+}
+
+// GetAllTokensForAdmin lists tokens across any user. Pass userId > 0 to filter to a single owner,
+// or 0 to see every user's tokens. Admin-scoped and read-only — callers must enforce auth.
+func GetAllTokensForAdmin(userId int, startIdx int, num int, sortBy string, sortOrder string) (tokens []*Token, total int64, err error) {
+	db := DB.Model(&Token{})
+	if userId > 0 {
+		db = db.Where("user_id = ?", userId)
+	}
+	orderClause := ValidateOrderClause(sortBy, sortOrder, tokenSortFields, "id desc")
+	db = db.Order(orderClause)
+	err = db.Count(&total).Limit(num).Offset(startIdx).Find(&tokens).Error
+	if err != nil {
+		return nil, 0, identity.Tag(
+			errors.Wrapf(err, "admin list tokens for user_id=%d", userId),
+			LookupUserRef(context.Background(), userId))
+	}
+	return tokens, total, nil
+}
+
+// SearchAllTokensForAdmin searches tokens across any user by keyword (token name prefix match).
+// Admin-scoped and read-only — callers must enforce auth.
+func SearchAllTokensForAdmin(keyword string, startIdx int, num int, sortBy string, sortOrder string) (tokens []*Token, total int64, err error) {
+	db := DB.Model(&Token{})
+	if keyword != "" {
+		// user_uuid lets an admin paste a user UUID to list every token that user owns.
+		if scoped, matched := applyUUIDKeyword(db, keyword, "uuid", "user_uuid"); matched {
+			db = scoped
+		} else {
+			db = db.Where("(name LIKE ?)", keyword+"%")
+		}
+	}
+	orderClause := ValidateOrderClause(sortBy, sortOrder, tokenSortFields, "id desc")
+	db = db.Order(orderClause)
+	err = db.Count(&total).Limit(num).Offset(startIdx).Find(&tokens).Error
+	if err != nil {
+		return nil, 0, errors.Wrapf(err, "admin search tokens by keyword=%q", keyword)
 	}
 	return tokens, total, nil
 }
@@ -168,33 +178,52 @@ func ValidateUserToken(ctx context.Context, key string) (token *Token, err error
 		ctx = context.Background()
 	}
 	if key == "" {
-		return nil, errors.New("No token provided")
+		// No credential was presented at all: the caller's fault, never the server's.
+		return nil, errkind.UnauthorizedErr(errors.New("No token provided"))
 	}
 	token, err = CacheGetTokenByKey(ctx, key)
 	if err != nil {
+		// Mask the key: it must never appear verbatim in logs/errors, but keep
+		// the "token not found for key:" prefix that shouldLogAsWarning matches.
+		maskedKey := helper.MaskAPIKey(key)
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, errors.Wrapf(err, "token not found for key: %s", key)
+			// The key simply does not exist: an unrecognised credential.
+			return nil, errkind.UnauthorizedErr(
+				errors.Wrapf(err, "token not found for key: %s", maskedKey))
 		}
 
-		return nil, errors.Wrapf(err, "failed to get token by key: %s", key)
+		// Anything else here is a database/Redis failure. Middleware answers every
+		// token validation failure with HTTP 401, so without this mark a real
+		// outage would be logged at WARN and page nobody.
+		return nil, errkind.ServerErr(
+			errors.Wrapf(err, "failed to get token by key: %s", maskedKey))
 	}
 
 	switch token.Status {
 	case TokenStatusExhausted:
-		return nil, errors.Errorf("API Key %s (#%d) quota has been exhausted", token.Name, token.Id)
+		// Specifically about funds.
+		return nil, errkind.Quota(identity.Tag(
+			errors.Errorf("API Key %s (#%d) quota has been exhausted", token.Name, token.Id),
+			token.Ref(), token.OwnerRef()))
 	case TokenStatusExpired:
-		return nil, errors.Errorf("token %s (#%d) has expired", token.Name, token.Id)
+		return nil, errkind.ForbiddenErr(identity.Tag(
+			errors.Errorf("token %s (#%d) has expired", token.Name, token.Id),
+			token.Ref(), token.OwnerRef()))
 	}
 
 	if token.Status != TokenStatusEnabled {
-		return nil, errors.Errorf("token %s (#%d) status is not available (status: %d)", token.Name, token.Id, token.Status)
+		// A valid credential that the operator or the owner has disabled.
+		return nil, errkind.ForbiddenErr(identity.Tag(
+			errors.Errorf("token %s (#%d) status is not available (status: %d)", token.Name, token.Id, token.Status),
+			token.Ref(), token.OwnerRef()))
 	}
 	if token.ExpiredTime != -1 && token.ExpiredTime < helper.GetTimestamp() {
 		if !common.IsRedisEnabled() {
 			token.Status = TokenStatusExpired
 			err := token.SelectUpdate(ctx)
 			if err != nil {
-				logger.Logger.Error("failed to update token status", zap.Int("token_id", token.Id), zap.Error(err))
+				logger.FromContext(ctx).Error("failed to update token status",
+					append(token.OwnerRef().AppendZap(token.Ref().Zap()), zap.Error(err))...)
 			}
 		} else {
 			// If Redis is enabled, the cache will be updated by the next fetch
@@ -204,7 +233,9 @@ func ValidateUserToken(ctx context.Context, key string) (token *Token, err error
 			// So, if Redis IS enabled, and token is expired, we should clear it.
 			clearTokenCache(ctx, token.Key)
 		}
-		return nil, errors.Errorf("token %s (#%d) has expired at timestamp %d", token.Name, token.Id, token.ExpiredTime)
+		return nil, errkind.ForbiddenErr(identity.Tag(
+			errors.Errorf("token %s (#%d) has expired at timestamp %d", token.Name, token.Id, token.ExpiredTime),
+			token.Ref(), token.OwnerRef()))
 	}
 	if !token.UnlimitedQuota && token.RemainQuota <= 0 {
 		if !common.IsRedisEnabled() {
@@ -212,13 +243,17 @@ func ValidateUserToken(ctx context.Context, key string) (token *Token, err error
 			token.Status = TokenStatusExhausted
 			err := token.SelectUpdate(ctx)
 			if err != nil {
-				logger.Logger.Error("failed to update token status", zap.Int("token_id", token.Id), zap.Error(err))
+				logger.FromContext(ctx).Error("failed to update token status",
+					append(token.OwnerRef().AppendZap(token.Ref().Zap()), zap.Error(err))...)
 			}
 		} else {
 			// If Redis IS enabled, and token is exhausted, we should clear it.
 			clearTokenCache(ctx, token.Key)
 		}
-		return nil, errors.Errorf("token %s (#%d) quota has been used up (remaining: %d)", token.Name, token.Id, token.RemainQuota)
+		// Out of funds: the caller's condition, not a server fault.
+		return nil, errkind.Quota(identity.Tag(
+			errors.Errorf("token %s (#%d) quota has been used up (remaining: %d)", token.Name, token.Id, token.RemainQuota),
+			token.Ref(), token.OwnerRef()))
 	}
 
 	return token, nil
@@ -231,7 +266,16 @@ func GetTokenByIds(id int, userId int) (*Token, error) {
 	token := Token{Id: id, UserId: userId}
 	err := DB.First(&token, "id = ? and user_id = ?", id, userId).Error
 	if err != nil {
-		return nil, errors.Wrapf(err, "failed to get token by id=%d and userId=%d", id, userId)
+		tagged := identity.Tag(
+			errors.Wrapf(err, "failed to get token by id=%d and userId=%d", id, userId),
+			identity.NewTokenRef(id, "", ""), identity.NewUserRef(userId, "", ""))
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			// Both ids come from the request (the id from the caller, the owner
+			// from its session), so an absent row means the caller named a token
+			// that does not exist — not a broken internal invariant.
+			return nil, errkind.NotFoundErr(tagged)
+		}
+		return nil, tagged
 	}
 	return &token, nil
 }
@@ -243,7 +287,9 @@ func GetTokenById(id int) (*Token, error) {
 	token := Token{Id: id}
 	err := DB.First(&token, "id = ?", id).Error
 	if err != nil {
-		return nil, errors.Wrapf(err, "failed to get token by id=%d", id)
+		return nil, identity.Tag(
+			errors.Wrapf(err, "failed to get token by id=%d", id),
+			identity.NewTokenRef(id, "", ""))
 	}
 	return &token, nil
 }
@@ -252,13 +298,26 @@ func (t *Token) Insert(ctx context.Context) error {
 	if ctx == nil {
 		ctx = context.Background()
 	}
+	if t.UserUUID == nil && t.UserId > 0 {
+		userUUID, err := GetUserUUIDByID(t.UserId)
+		if err != nil {
+			return identity.Tag(
+				errors.Wrapf(err, "get token user uuid: user_id=%d", t.UserId),
+				identity.NewUserRef(t.UserId, "", ""))
+		}
+		if userUUID != "" {
+			t.UserUUID = &userUUID
+		}
+	}
 	var err error
 	err = DB.Create(t).Error
 	if err == nil {
 		clearTokenCache(ctx, t.Key)
 		return nil
 	}
-	return errors.Wrapf(err, "failed to insert token: id=%d, user_id=%d", t.Id, t.UserId)
+	return identity.Tag(
+		errors.Wrapf(err, "failed to insert token: id=%d, user_id=%d", t.Id, t.UserId),
+		t.Ref(), t.OwnerRef())
 }
 
 // Update Make sure your token's fields is completed, because this will update non-zero values
@@ -272,7 +331,9 @@ func (t *Token) Update(ctx context.Context) error {
 		clearTokenCache(ctx, t.Key)
 		return nil
 	}
-	return errors.Wrapf(err, "failed to update token: id=%d, user_id=%d", t.Id, t.UserId)
+	return identity.Tag(
+		errors.Wrapf(err, "failed to update token: id=%d, user_id=%d", t.Id, t.UserId),
+		t.Ref(), t.OwnerRef())
 }
 
 func (t *Token) SelectUpdate(ctx context.Context) error {
@@ -285,7 +346,9 @@ func (t *Token) SelectUpdate(ctx context.Context) error {
 		clearTokenCache(ctx, t.Key)
 		return nil
 	}
-	return errors.Wrapf(err, "failed to select update token: id=%d, user_id=%d", t.Id, t.UserId)
+	return identity.Tag(
+		errors.Wrapf(err, "failed to select update token: id=%d, user_id=%d", t.Id, t.UserId),
+		t.Ref(), t.OwnerRef())
 }
 
 func (t *Token) Delete(ctx context.Context) error {
@@ -298,7 +361,9 @@ func (t *Token) Delete(ctx context.Context) error {
 		clearTokenCache(ctx, t.Key)
 		return nil
 	}
-	return errors.Wrapf(err, "failed to delete token: id=%d, user_id=%d", t.Id, t.UserId)
+	return identity.Tag(
+		errors.Wrapf(err, "failed to delete token: id=%d, user_id=%d", t.Id, t.UserId),
+		t.Ref(), t.OwnerRef())
 }
 
 func (t *Token) GetModels() string {
@@ -319,13 +384,22 @@ func DeleteTokenById(ctx context.Context, id int, userId int) (err error) {
 	token := Token{Id: id, UserId: userId}
 	err = DB.Where(token).First(&token).Error
 	if err != nil {
-		return errors.Wrapf(err, "failed to find token for deletion: id=%d, userId=%d", id, userId)
+		tagged := identity.Tag(
+			errors.Wrapf(err, "failed to find token for deletion: id=%d, userId=%d", id, userId),
+			identity.NewTokenRef(id, "", ""), identity.NewUserRef(userId, "", ""))
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			// The caller asked to delete a token that is not theirs or not there.
+			return errkind.NotFoundErr(tagged)
+		}
+		return tagged
 	}
 	// The key is now populated in token object
 	// token.Delete() will handle clearing the cache
 	err = token.Delete(ctx)
 	if err != nil {
-		return errors.Wrapf(err, "failed to delete token: id=%d, userId=%d", id, userId)
+		return identity.Tag(
+			errors.Wrapf(err, "failed to delete token: id=%d, userId=%d", id, userId),
+			token.Ref(), token.OwnerRef())
 	}
 	return nil
 }
@@ -357,14 +431,19 @@ func increaseTokenQuota(ctx context.Context, id int, quota int64) (err error) {
 		return result.Error
 	})
 	if err != nil {
-		return errors.Wrapf(err, "failed to increase token quota: id=%d", id)
+		return identity.Tag(
+			errors.Wrapf(err, "failed to increase token quota: id=%d", id),
+			LookupTokenRef(ctx, id))
 	}
 
 	token, fetchErr := GetTokenById(id)
 	if fetchErr == nil && token != nil {
 		clearTokenCache(ctx, token.Key)
 	} else if fetchErr != nil {
-		logger.Logger.Error("failed to fetch token for cache clearing after quota increase", zap.Int("token_id", id), zap.Error(fetchErr))
+		// Error path only: LookupTokenRef consults the context identity first and
+		// only falls back to a narrow SELECT.
+		logger.FromContext(ctx).Error("failed to fetch token for cache clearing after quota increase",
+			append(LookupTokenRef(ctx, id).Zap(), zap.Error(fetchErr))...)
 	}
 	return nil
 }
@@ -396,17 +475,31 @@ func decreaseTokenQuota(ctx context.Context, id int, quota int64) (err error) {
 		return result.Error
 	})
 	if err != nil {
-		return errors.Wrapf(err, "failed to decrease token quota: id=%d", id)
+		return identity.Tag(
+			errors.Wrapf(err, "failed to decrease token quota: id=%d", id),
+			LookupTokenRef(ctx, id))
 	}
 	if result.RowsAffected == 0 {
-		return errors.Errorf("insufficient token quota for token %d", id)
+		// Deliberately left unclassified (Unknown => today's ERROR treatment).
+		// This helper serves both the pre-consume admission check and the
+		// post-consume debit (PostConsumeTokenQuota). After the response has
+		// already been delivered, a zero-rows conditional UPDATE means the debit
+		// silently failed or the token row vanished: unbilled usage and a
+		// data-integrity break that must keep paging. The genuine "caller is out
+		// of funds" case is marked upfront in PreConsumeTokenQuota.
+		return identity.Tag(
+			errors.Errorf("insufficient token quota for token %d", id),
+			LookupTokenRef(ctx, id))
 	}
 
 	token, fetchErr := GetTokenById(id)
 	if fetchErr == nil && token != nil {
 		clearTokenCache(ctx, token.Key)
 	} else if fetchErr != nil {
-		logger.Logger.Error("failed to fetch token for cache clearing after quota decrease", zap.Int("token_id", id), zap.Error(fetchErr))
+		// Error path only: LookupTokenRef consults the context identity first and
+		// only falls back to a narrow SELECT.
+		logger.FromContext(ctx).Error("failed to fetch token for cache clearing after quota decrease",
+			append(LookupTokenRef(ctx, id).Zap(), zap.Error(fetchErr))...)
 	}
 	return nil
 }
@@ -420,26 +513,39 @@ func PreConsumeTokenQuota(ctx context.Context, tokenId int, quota int64) (err er
 	}
 	token, err := GetTokenById(tokenId)
 	if err != nil {
-		return errors.Wrapf(err, "failed to get token for pre-consume: tokenId=%d", tokenId)
+		return identity.Tag(
+			errors.Wrapf(err, "failed to get token for pre-consume: tokenId=%d", tokenId),
+			identity.NewTokenRef(tokenId, "", ""))
 	}
 	if !token.UnlimitedQuota && token.RemainQuota < quota {
-		return errors.Errorf("insufficient token quota: required=%d, available=%d, tokenId=%d", quota, token.RemainQuota, tokenId)
+		return errkind.Quota(identity.Tag(
+			errors.Errorf("insufficient token quota: required=%d, available=%d, tokenId=%d", quota, token.RemainQuota, tokenId),
+			token.Ref(), token.OwnerRef()))
 	}
 	userQuota, err := GetUserQuota(token.UserId)
 	if err != nil {
-		return errors.Wrapf(err, "failed to get user quota for pre-consume: userId=%d, tokenId=%d", token.UserId, tokenId)
+		return identity.Tag(
+			errors.Wrapf(err, "failed to get user quota for pre-consume: userId=%d, tokenId=%d", token.UserId, tokenId),
+			token.Ref(), token.OwnerRef())
 	}
 	if userQuota < quota {
-		return errors.Errorf("insufficient user quota: required=%d, available=%d, userId=%d, tokenId=%d", quota, userQuota, token.UserId, tokenId)
+		// Running out of funds is the caller's condition, not a server fault: it
+		// must log at WARN without a stack, whatever HTTP status the transport uses.
+		return errkind.Quota(identity.Tag(
+			errors.Errorf("insufficient user quota: required=%d, available=%d, userId=%d, tokenId=%d", quota, userQuota, token.UserId, tokenId),
+			token.Ref(), token.OwnerRef()))
 	}
 	quotaTooLow := userQuota >= config.QuotaRemindThreshold && userQuota-quota < config.QuotaRemindThreshold
 	noMoreQuota := userQuota-quota <= 0
 	var reminderEmail string
 	if quotaTooLow || noMoreQuota {
+		// Value copies: safe to capture in the reminder goroutine below.
+		tokenRef, ownerRef := token.Ref(), token.OwnerRef()
 		var emailErr error
 		reminderEmail, emailErr = GetUserEmail(token.UserId)
 		if emailErr != nil {
-			logger.Logger.Error("failed to fetch user email", zap.Int("user_id", token.UserId), zap.Error(emailErr))
+			logger.FromContext(ctx).Error("failed to fetch user email",
+				append(ownerRef.AppendZap(tokenRef.Zap()), zap.Error(emailErr))...)
 		}
 		go func(email string, exhausted bool, quotaRemaining int64) {
 			prompt := "Quota Reminder"
@@ -464,46 +570,104 @@ func PreConsumeTokenQuota(ctx context.Context, tokenId int, quota int64) (err er
 								<p style="background-color: #f8f8f8; padding: 10px; border-radius: 4px; word-break: break-all;">%s</p>
 					`, contentText, quotaRemaining, topUpLink, topUpLink),
 				)
-				err = message.SendEmail(prompt, email, content)
-				if err != nil {
-					logger.Logger.Error("failed to send email", zap.String("email", email), zap.Error(err))
+				// Local variable: assigning to the enclosing function's named
+				// return value from this goroutine would race with the caller.
+				// The address is never logged (see the no-email rule).
+				if sendErr := message.SendEmail(prompt, email, content); sendErr != nil {
+					logger.FromContext(ctx).Error("failed to send email",
+						append(ownerRef.AppendZap(tokenRef.Zap()), zap.Error(sendErr))...)
 				}
 			}
 		}(reminderEmail, noMoreQuota, userQuota)
 	}
 	if !token.UnlimitedQuota {
 		if err = DecreaseTokenQuota(ctx, tokenId, quota); err != nil {
-			return errors.Wrapf(err, "decrease quota for token %d", tokenId)
+			return identity.Tag(
+				errors.Wrapf(err, "decrease quota for token %d", tokenId),
+				token.Ref(), token.OwnerRef())
 		}
 	}
 	if err = DecreaseUserQuota(ctx, token.UserId, quota); err != nil {
-		return errors.Wrapf(err, "decrease quota for user %d in pre-consume", token.UserId)
+		return identity.Tag(
+			errors.Wrapf(err, "decrease quota for user %d in pre-consume", token.UserId),
+			token.Ref(), token.OwnerRef())
 	}
 	return nil
 }
 
+// PostConsumeTokenQuota atomically adjusts the owning user's quota and the
+// token quota by quota. Positive values consume quota, negative values refund
+// quota, and zero leaves balances unchanged. It returns a wrapped error when
+// either balance cannot be adjusted.
 func PostConsumeTokenQuota(ctx context.Context, tokenId int, quota int64) (err error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
 	token, err := GetTokenById(tokenId)
 	if err != nil {
-		return errors.Wrapf(err, "get token %d for post-consume", tokenId)
+		return identity.Tag(
+			errors.Wrapf(err, "get token %d for post-consume", tokenId),
+			identity.NewTokenRef(tokenId, "", ""))
 	}
+	if quota == 0 {
+		return nil
+	}
+	if config.BatchUpdateEnabled {
+		addNewRecord(BatchUpdateTypeUserQuota, token.UserId, -quota)
+		if !token.UnlimitedQuota {
+			addNewRecord(BatchUpdateTypeTokenQuota, tokenId, -quota)
+		}
+		return nil
+	}
+
+	err = runWithSQLiteBusyRetry(ctx, func() error {
+		return DB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+			return adjustPostConsumeQuota(tx, token, quota)
+		})
+	})
+	if err != nil {
+		return identity.Tag(
+			errors.Wrapf(err, "adjust quotas in post-consume for token %d", tokenId),
+			token.Ref(), token.OwnerRef())
+	}
+	clearTokenCache(ctx, token.Key)
+	return nil
+}
+
+// adjustPostConsumeQuota updates both persistent quota balances within tx.
+// token identifies the token and its owner, while quota is positive for a
+// debit and negative for a refund. It returns an error when either row is
+// missing, has insufficient quota, or cannot be updated.
+func adjustPostConsumeQuota(tx *gorm.DB, token *Token, quota int64) error {
+	userQuery := tx.Model(&User{}).Where("id = ?", token.UserId)
 	if quota > 0 {
-		err = DecreaseUserQuota(ctx, token.UserId, quota)
-	} else {
-		err = IncreaseUserQuota(ctx, token.UserId, -quota)
+		userQuery = userQuery.Where("quota >= ?", quota)
 	}
-	if !token.UnlimitedQuota {
-		if quota > 0 {
-			err = DecreaseTokenQuota(ctx, tokenId, quota)
-		} else {
-			err = IncreaseTokenQuota(ctx, tokenId, -quota)
-		}
-		if err != nil {
-			return errors.Wrapf(err, "adjust token %d quota in post-consume", tokenId)
-		}
+	userResult := userQuery.Update("quota", gorm.Expr("quota - ?", quota))
+	if userResult.Error != nil {
+		return errors.Wrapf(userResult.Error, "adjust quota for user %d", token.UserId)
+	}
+	if userResult.RowsAffected == 0 {
+		return errors.Errorf("insufficient user quota or missing user %d", token.UserId)
+	}
+
+	if token.UnlimitedQuota {
+		return nil
+	}
+	tokenQuery := tx.Model(&Token{}).Where("id = ?", token.Id)
+	if quota > 0 {
+		tokenQuery = tokenQuery.Where("remain_quota >= ?", quota)
+	}
+	tokenResult := tokenQuery.Updates(map[string]any{
+		"remain_quota":  gorm.Expr("remain_quota - ?", quota),
+		"used_quota":    gorm.Expr("used_quota + ?", quota),
+		"accessed_time": helper.GetTimestamp(),
+	})
+	if tokenResult.Error != nil {
+		return errors.Wrapf(tokenResult.Error, "adjust quota for token %d", token.Id)
+	}
+	if tokenResult.RowsAffected == 0 {
+		return errors.Errorf("insufficient token quota or missing token %d", token.Id)
 	}
 	return nil
 }

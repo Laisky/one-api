@@ -9,12 +9,14 @@ import (
 	"github.com/Laisky/zap"
 	"gorm.io/gorm"
 
-	"github.com/songquanpeng/one-api/common"
-	"github.com/songquanpeng/one-api/common/blacklist"
-	"github.com/songquanpeng/one-api/common/config"
-	"github.com/songquanpeng/one-api/common/helper"
-	"github.com/songquanpeng/one-api/common/logger"
-	"github.com/songquanpeng/one-api/common/random"
+	"github.com/Laisky/one-api/common"
+	"github.com/Laisky/one-api/common/blacklist"
+	"github.com/Laisky/one-api/common/config"
+	"github.com/Laisky/one-api/common/errkind"
+	"github.com/Laisky/one-api/common/helper"
+	"github.com/Laisky/one-api/common/identity"
+	"github.com/Laisky/one-api/common/logger"
+	"github.com/Laisky/one-api/common/random"
 )
 
 const (
@@ -34,8 +36,9 @@ const (
 // Otherwise, the sensitive information will be saved on local storage in plain text!
 type User struct {
 	Id               int             `json:"id"`
+	UUID             string          `json:"uuid" gorm:"type:char(36);column:uuid"`
 	Username         string          `json:"username" gorm:"unique;index" validate:"max=30"`
-	Password         string          `json:"password" gorm:"not null;" validate:"min=8,max=20"`
+	Password         string          `json:"-" gorm:"not null;" validate:"min=8,max=20"`
 	DisplayName      string          `json:"display_name" gorm:"index" validate:"max=20"`
 	Role             int             `json:"role" gorm:"type:int;default:1"`   // admin, util
 	Status           int             `json:"status" gorm:"type:int;default:1"` // enabled, disabled
@@ -44,16 +47,18 @@ type User struct {
 	WeChatId         string          `json:"wechat_id" gorm:"column:wechat_id;index"`
 	LarkId           string          `json:"lark_id" gorm:"column:lark_id;index"`
 	OidcId           string          `json:"oidc_id" gorm:"column:oidc_id;index"`
-	VerificationCode string          `json:"verification_code" gorm:"-:all"`                                    // this field is only for Email verification, don't save it to database!
-	AccessToken      string          `json:"access_token" gorm:"type:char(32);column:access_token;uniqueIndex"` // this token is for system management
-	TotpSecret       string          `json:"totp_secret,omitempty" gorm:"type:varchar(64);column:totp_secret"`  // TOTP secret for 2FA, omit from JSON when empty
+	VerificationCode string          `json:"-" gorm:"-:all"`                                         // Email verification code; inbound-only (bound via dto.UserRegisterRequest), never persisted or serialized
+	AccessToken      string          `json:"-" gorm:"type:char(32);column:access_token;uniqueIndex"` // system-management token; never serialized (GenerateAccessToken returns it as a raw string)
+	TotpSecret       string          `json:"-" gorm:"type:varchar(64);column:totp_secret"`           // TOTP 2FA secret; never serialized
 	Quota            int64           `json:"quota" gorm:"bigint;default:0"`
 	UsedQuota        int64           `json:"used_quota" gorm:"bigint;default:0;column:used_quota"` // used quota
 	RequestCount     int             `json:"request_count" gorm:"type:int;default:0;"`             // request number
 	Group            string          `json:"group" gorm:"type:varchar(32);default:'default'"`
 	AffCode          string          `json:"aff_code" gorm:"type:varchar(32);column:aff_code;uniqueIndex"`
 	InviterId        int             `json:"inviter_id" gorm:"type:int;column:inviter_id;index"`
+	InviterUUID      *string         `json:"inviter_uuid" gorm:"type:char(36);column:inviter_uuid;index"`
 	MCPToolBlacklist JSONStringSlice `json:"mcp_tool_blacklist" gorm:"type:text"`
+	Metadata         UserMetadata    `json:"metadata" gorm:"type:text;serializer:json"`
 	CreatedAt        int64           `json:"created_at" gorm:"bigint;autoCreateTime:milli"`
 	UpdatedAt        int64           `json:"updated_at" gorm:"bigint;autoUpdateTime:milli"`
 }
@@ -116,11 +121,17 @@ func GetUserCount() (count int64, err error) {
 func SearchUsers(keyword string, sortBy string, sortOrder string) (users []*User, err error) {
 	orderClause := ValidateOrderClause(sortBy, sortOrder, userSortFields, "id desc")
 
-	if !common.UsingPostgreSQL.Load() {
-		err = DB.Omit("password").Where("id = ? or username LIKE ? or email LIKE ? or display_name LIKE ?", keyword, keyword+"%", keyword+"%", keyword+"%").Order(orderClause).Find(&users).Error
+	db := DB.Omit("password")
+	if scoped, matched := applyUUIDKeyword(db, keyword, "uuid"); matched {
+		// A pasted UUID identifies exactly one user; the LIKE arms cannot add matches.
+		db = scoped
 	} else {
-		err = DB.Omit("password").Where("username LIKE ? or email LIKE ? or display_name LIKE ?", keyword+"%", keyword+"%", keyword+"%").Order(orderClause).Find(&users).Error
+		// The internal incremental id is deliberately NOT searchable: it is not
+		// exposed by the API or the UI, so accepting it here would leak an
+		// enumerable identifier that operators are not supposed to rely on.
+		db = db.Where("username LIKE ? or email LIKE ? or display_name LIKE ?", keyword+"%", keyword+"%", keyword+"%")
 	}
+	err = db.Order(orderClause).Find(&users).Error
 	if err != nil {
 		return nil, errors.Wrap(err, "search users")
 	}
@@ -139,7 +150,9 @@ func GetUserById(id int, selectAll bool) (*User, error) {
 		err = DB.Omit("password", "access_token").First(&user, "id = ?", id).Error
 	}
 	if err != nil {
-		return nil, errors.Wrapf(err, "get user by id %d", id)
+		return nil, identity.Tag(
+			errors.Wrapf(err, "get user by id %d", id),
+			identity.NewUserRef(id, "", ""))
 	}
 	return &user, nil
 }
@@ -151,6 +164,11 @@ func GetUserIdByAffCode(affCode string) (int, error) {
 	var user User
 	err := DB.Select("id").First(&user, "aff_code = ?", affCode).Error
 	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			// The affiliate code is typed in by the caller; an unknown one is a bad
+			// client reference, not a server fault.
+			return 0, errkind.NotFoundErr(errors.Wrapf(err, "get user id by aff code %s", affCode))
+		}
 		return 0, errors.Wrapf(err, "get user id by aff code %s", affCode)
 	}
 	return user.Id, nil
@@ -169,15 +187,32 @@ func (user *User) Insert(ctx context.Context, inviterId int) error {
 	if user.Password != "" {
 		user.Password, err = common.Password2Hash(user.Password)
 		if err != nil {
-			return errors.Wrapf(err, "failed to hash password for user: username=%s", user.Username)
+			return identity.Tag(
+				errors.Wrapf(err, "failed to hash password for user: username=%s", user.Username),
+				user.Ref())
 		}
 	}
 	user.Quota = config.QuotaForNewUser
 	user.AccessToken = random.GetUUID()
 	user.AffCode = random.GetRandomString(4)
+	if inviterId != 0 {
+		inviterUUID, err := GetUserUUIDByID(inviterId)
+		if err != nil {
+			// The inviter is a DIFFERENT user from the one being inserted, so the
+			// reference deliberately carries the inviter's id, not user.Ref().
+			return identity.Tag(
+				errors.Wrapf(err, "get inviter uuid for user: username=%s, inviterId=%d", user.Username, inviterId),
+				identity.NewUserRef(inviterId, "", ""))
+		}
+		if inviterUUID != "" {
+			user.InviterUUID = &inviterUUID
+		}
+	}
 	result := DB.Create(user)
 	if result.Error != nil {
-		return errors.Wrapf(result.Error, "failed to create user: username=%s, inviterId=%d", user.Username, inviterId)
+		return identity.Tag(
+			errors.Wrapf(result.Error, "failed to create user: username=%s, inviterId=%d", user.Username, inviterId),
+			user.Ref())
 	}
 	if config.QuotaForNewUser > 0 {
 		RecordLog(ctx, user.Id, LogTypeSystem, fmt.Sprintf("New user registration gift %s", common.LogQuota(config.QuotaForNewUser)))
@@ -195,6 +230,7 @@ func (user *User) Insert(ctx context.Context, inviterId int) error {
 	// create default token
 	cleanToken := Token{
 		UserId:         user.Id,
+		UserUUID:       &user.UUID,
 		Name:           "default",
 		Key:            random.GenerateKey(),
 		CreatedTime:    helper.GetTimestamp(),
@@ -206,9 +242,8 @@ func (user *User) Insert(ctx context.Context, inviterId int) error {
 	result.Error = cleanToken.Insert(ctx)
 	if result.Error != nil {
 		// do not block
-		logger.Logger.Error("create default token for user failed",
-			zap.Int("user_id", user.Id),
-			zap.Error(result.Error))
+		logger.FromContext(ctx).Error("create default token for user failed",
+			append(user.Ref().Zap(), zap.Error(result.Error))...)
 	}
 	return nil
 }
@@ -218,7 +253,9 @@ func (user *User) Update(updatePassword bool) error {
 	if updatePassword {
 		user.Password, err = common.Password2Hash(user.Password)
 		if err != nil {
-			return errors.Wrapf(err, "failed to hash password for user update: id=%d, username=%s", user.Id, user.Username)
+			return identity.Tag(
+				errors.Wrapf(err, "failed to hash password for user update: id=%d, username=%s", user.Id, user.Username),
+				user.Ref())
 		}
 	}
 	switch user.Status {
@@ -227,9 +264,11 @@ func (user *User) Update(updatePassword bool) error {
 	case UserStatusEnabled:
 		blacklist.UnbanUser(user.Id)
 	}
-	err = DB.Model(user).Updates(user).Error
+	err = DB.Model(user).Omit("uuid", "inviter_uuid").Updates(user).Error
 	if err != nil {
-		return errors.Wrapf(err, "failed to update user: id=%d, username=%s", user.Id, user.Username)
+		return identity.Tag(
+			errors.Wrapf(err, "failed to update user: id=%d, username=%s", user.Id, user.Username),
+			user.Ref())
 	}
 	return nil
 }
@@ -240,7 +279,9 @@ func (user *User) ClearTotpSecret() error {
 		"totp_secret": "",
 	}).Error
 	if err != nil {
-		return errors.Wrapf(err, "failed to clear TOTP secret for user: id=%d", user.Id)
+		return identity.Tag(
+			errors.Wrapf(err, "failed to clear TOTP secret for user: id=%d", user.Id),
+			user.Ref())
 	}
 	return nil
 }
@@ -250,11 +291,16 @@ func (user *User) Delete() error {
 		return errors.New("id is empty!")
 	}
 	blacklist.BanUser(user.Id)
+	// Snapshot the reference before the username is scrambled below, so a failure
+	// still reports the real account rather than the tombstone name.
+	ref := user.Ref()
 	user.Username = fmt.Sprintf("deleted_%s", random.GetUUID())
 	user.Status = UserStatusDeleted
 	err := DB.Model(user).Updates(user).Error
 	if err != nil {
-		return errors.Wrapf(err, "failed to delete user: id=%d", user.Id)
+		return identity.Tag(
+			errors.Wrapf(err, "failed to delete user: id=%d", user.Id),
+			ref)
 	}
 	return nil
 }
@@ -266,20 +312,38 @@ func (user *User) ValidateAndFill() (err error) {
 	// it won’t be used to build query conditions
 	password := user.Password
 	if user.Username == "" || password == "" {
-		return errors.New("Username or password is empty")
+		// Incomplete login form: bad client input, never a server fault.
+		return errkind.InvalidRequestErr(errors.New("Username or password is empty"))
 	}
 	err = DB.Where("username = ?", user.Username).First(user).Error
 	if err != nil {
 		// we must make sure check username firstly
 		// consider this case: a malicious user set his username as other's email
-		err := DB.Where("email = ?", user.Username).First(user).Error
-		if err != nil {
-			return errors.Errorf("username or password is wrong, or user has been banned: username=%s", user.Username)
+		emailErr := DB.Where("email = ?", user.Username).First(user).Error
+		if emailErr != nil {
+			// NOT tagged: at this point user.Username still holds the raw login
+			// input, which this very branch exists to handle when it is somebody
+			// else's EMAIL address. Copying it into a structured `username` field
+			// would log an email (see the no-email rule).
+			lookupErr := errors.Errorf("username or password is wrong, or user has been banned: username=%s", user.Username)
+			if errors.Is(err, gorm.ErrRecordNotFound) && errors.Is(emailErr, gorm.ErrRecordNotFound) {
+				// Both lookups positively reported "no such row": an unrecognised
+				// credential, i.e. the caller's fault.
+				return errkind.UnauthorizedErr(lookupErr)
+			}
+			// Anything else (connection refused, driver timeout, deadlock, a
+			// failover) is infrastructure. Leave it Unknown so it keeps logging
+			// at ERROR instead of being silenced as a bad password.
+			return lookupErr
 		}
 	}
 	okay := common.ValidatePasswordAndHash(password, user.Password)
 	if !okay || user.Status != UserStatusEnabled {
-		return errors.New("Username or password is wrong, or user has been banned")
+		// The row was loaded successfully here, so the reference carries the real
+		// account identity rather than the submitted login string.
+		return errkind.UnauthorizedErr(identity.Tag(
+			errors.New("Username or password is wrong, or user has been banned"),
+			user.Ref()))
 	}
 	return nil
 }
@@ -385,7 +449,8 @@ func IsAdmin(userId int) bool {
 	var user User
 	err := DB.Where("id = ?", userId).Select("role").Find(&user).Error
 	if err != nil {
-		logger.Logger.Error("no such user", zap.Error(err))
+		logger.Logger.Error("no such user",
+			append(identity.NewUserRef(userId, "", "").Zap(), zap.Error(err))...)
 		return false
 	}
 	return user.Role >= RoleAdminUser
@@ -398,7 +463,9 @@ func IsUserEnabled(userId int) (bool, error) {
 	var user User
 	err := DB.Where("id = ?", userId).Select("status").Find(&user).Error
 	if err != nil {
-		return false, errors.Wrapf(err, "query user %d status", userId)
+		return false, identity.Tag(
+			errors.Wrapf(err, "query user %d status", userId),
+			identity.NewUserRef(userId, "", ""))
 	}
 	return user.Status == UserStatusEnabled, nil
 }
@@ -418,7 +485,9 @@ func ValidateAccessToken(token string) (user *User) {
 func GetUserQuota(id int) (quota int64, err error) {
 	err = DB.Model(&User{}).Where("id = ?", id).Select("quota").Find(&quota).Error
 	if err != nil {
-		return 0, errors.Wrapf(err, "get quota for user %d", id)
+		return 0, identity.Tag(
+			errors.Wrapf(err, "get quota for user %d", id),
+			identity.NewUserRef(id, "", ""))
 	}
 	return quota, nil
 }
@@ -426,7 +495,9 @@ func GetUserQuota(id int) (quota int64, err error) {
 func GetUserUsedQuota(id int) (quota int64, err error) {
 	err = DB.Model(&User{}).Where("id = ?", id).Select("used_quota").Find(&quota).Error
 	if err != nil {
-		return 0, errors.Wrapf(err, "get used quota for user %d", id)
+		return 0, identity.Tag(
+			errors.Wrapf(err, "get used quota for user %d", id),
+			identity.NewUserRef(id, "", ""))
 	}
 	return quota, nil
 }
@@ -434,7 +505,9 @@ func GetUserUsedQuota(id int) (quota int64, err error) {
 func GetUserEmail(id int) (email string, err error) {
 	err = DB.Model(&User{}).Where("id = ?", id).Select("email").Find(&email).Error
 	if err != nil {
-		return "", errors.Wrapf(err, "get email for user %d", id)
+		return "", identity.Tag(
+			errors.Wrapf(err, "get email for user %d", id),
+			identity.NewUserRef(id, "", ""))
 	}
 	return email, nil
 }
@@ -447,7 +520,9 @@ func GetUserGroup(id int) (group string, err error) {
 
 	err = DB.Model(&User{}).Where("id = ?", id).Select(groupCol).Find(&group).Error
 	if err != nil {
-		return "", errors.Wrapf(err, "get group for user %d", id)
+		return "", identity.Tag(
+			errors.Wrapf(err, "get group for user %d", id),
+			identity.NewUserRef(id, "", ""))
 	}
 	return group, nil
 }
@@ -476,7 +551,9 @@ func increaseUserQuota(ctx context.Context, id int, quota int64) (err error) {
 		return DB.Model(&User{}).Where("id = ?", id).Update("quota", gorm.Expr("quota + ?", quota)).Error
 	})
 	if err != nil {
-		return errors.Wrapf(err, "increase quota for user %d", id)
+		return identity.Tag(
+			errors.Wrapf(err, "increase quota for user %d", id),
+			LookupUserRef(ctx, id))
 	}
 	return nil
 }
@@ -509,10 +586,22 @@ func decreaseUserQuota(ctx context.Context, id int, quota int64) (err error) {
 		return result.Error
 	})
 	if err != nil {
-		return errors.Wrapf(err, "decrease quota for user %d", id)
+		return identity.Tag(
+			errors.Wrapf(err, "decrease quota for user %d", id),
+			LookupUserRef(ctx, id))
 	}
 	if result.RowsAffected == 0 {
-		return errors.Errorf("insufficient user quota for user %d", id)
+		// Deliberately left unclassified (Unknown => today's ERROR treatment).
+		// This helper is shared by the pre-consume admission check and by the
+		// post-consume debit (PostConsumeTokenQuota, CacheDecreaseUserQuota).
+		// On the post-consume path a zero-rows conditional UPDATE means the
+		// request was already served but the debit failed, or the row vanished:
+		// a billing/data-integrity fault on our side that must keep paging.
+		// The genuine "caller is out of funds" case is marked upfront in
+		// PreConsumeTokenQuota, where the intent is unambiguous.
+		return identity.Tag(
+			errors.Errorf("insufficient user quota for user %d", id),
+			LookupUserRef(ctx, id))
 	}
 	return nil
 }
@@ -523,15 +612,23 @@ func GetRootUserEmail() (email string) {
 }
 
 func UpdateUserUsedQuotaAndRequestCount(id int, quota int64) {
+	UpdateUserUsedQuotaAndRequestCountWithContext(context.Background(), id, quota)
+}
+
+// UpdateUserUsedQuotaAndRequestCountWithContext updates aggregate usage while
+// preserving request correlation in ctx. Parameters: ctx carries the request
+// logger, id identifies the user, and quota is the consumed amount. Returns: none;
+// persistence failures are logged with the context logger.
+func UpdateUserUsedQuotaAndRequestCountWithContext(ctx context.Context, id int, quota int64) {
 	if config.BatchUpdateEnabled {
 		addNewRecord(BatchUpdateTypeUsedQuota, id, quota)
 		addNewRecord(BatchUpdateTypeRequestCount, id, 1)
 		return
 	}
-	updateUserUsedQuotaAndRequestCount(id, quota, 1)
+	updateUserUsedQuotaAndRequestCount(ctx, id, quota, 1)
 }
 
-func updateUserUsedQuotaAndRequestCount(id int, quota int64, count int) {
+func updateUserUsedQuotaAndRequestCount(ctx context.Context, id int, quota int64, count int) {
 	err := DB.Model(&User{}).Where("id = ?", id).Updates(
 		map[string]any{
 			"used_quota":    gorm.Expr("used_quota + ?", quota),
@@ -539,12 +636,14 @@ func updateUserUsedQuotaAndRequestCount(id int, quota int64, count int) {
 		},
 	).Error
 	if err != nil {
-		logger.Logger.Error("failed to update user used quota and request count - statistics may be inaccurate",
-			zap.Error(err),
-			zap.Int("userId", id),
-			zap.Int64("quota", quota),
-			zap.Int("count", count),
-			zap.String("note", "billing completed successfully but usage statistics update failed"))
+		// Error path only, so resolving the reference here costs at most one narrow
+		// SELECT and never runs on the successful billing path.
+		logger.FromContext(ctx).Error("failed to update user used quota and request count - statistics may be inaccurate",
+			append(LookupUserRef(ctx, id).Zap(),
+				zap.Error(err),
+				zap.Int64("quota", quota),
+				zap.Int("count", count),
+				zap.String("note", "billing completed successfully but usage statistics update failed"))...)
 	}
 }
 
@@ -555,14 +654,16 @@ func updateUserUsedQuota(id int, quota int64) {
 		},
 	).Error
 	if err != nil {
-		logger.Logger.Error("failed to update user used quota", zap.Error(err))
+		logger.Logger.Error("failed to update user used quota",
+			append(LookupUserRef(context.Background(), id).Zap(), zap.Error(err))...)
 	}
 }
 
 func updateUserRequestCount(id int, count int) {
 	err := DB.Model(&User{}).Where("id = ?", id).Update("request_count", gorm.Expr("request_count + ?", count)).Error
 	if err != nil {
-		logger.Logger.Error("failed to update user request count", zap.Error(err))
+		logger.Logger.Error("failed to update user request count",
+			append(LookupUserRef(context.Background(), id).Zap(), zap.Error(err))...)
 	}
 }
 

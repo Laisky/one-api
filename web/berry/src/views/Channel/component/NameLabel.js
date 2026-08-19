@@ -12,7 +12,7 @@ const TooltipContainer = styled(Container)({
   }
 });
 
-const NameLabel = ({ name, models }) => {
+const NameLabel = ({ name, models, refId }) => {
   let modelMap = [];
   modelMap = models.split(',');
   modelMap.sort();
@@ -22,6 +22,16 @@ const NameLabel = ({ name, models }) => {
       title={
         <TooltipContainer>
           <Stack spacing={1}>
+            {refId ? (
+              <Label
+                variant="ghost"
+                onClick={() => {
+                  copy(String(refId), 'ID');
+                }}
+              >
+                ID: {refId}
+              </Label>
+            ) : null}
             {modelMap.map((item, index) => {
               return (
                 <Label
@@ -40,14 +50,15 @@ const NameLabel = ({ name, models }) => {
       }
       placement="top"
     >
-      <span>{name}</span>
+      <span className="resource-name-with-id">{name}</span>
     </Tooltip>
   );
 };
 
 NameLabel.propTypes = {
   name: PropTypes.string,
-  models: PropTypes.string
+  models: PropTypes.string,
+  refId: PropTypes.oneOfType([PropTypes.string, PropTypes.number])
 };
 
 export default NameLabel;

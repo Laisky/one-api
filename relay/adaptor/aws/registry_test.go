@@ -5,7 +5,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	qwen "github.com/songquanpeng/one-api/relay/adaptor/aws/qwen"
+	qwen "github.com/Laisky/one-api/relay/adaptor/aws/qwen"
 )
 
 func TestGetAdaptorReturnsQwenAdaptor(t *testing.T) {

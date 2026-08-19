@@ -12,9 +12,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/songquanpeng/one-api/relay/meta"
-	"github.com/songquanpeng/one-api/relay/model"
-	"github.com/songquanpeng/one-api/relay/relaymode"
+	"github.com/Laisky/one-api/relay/meta"
+	"github.com/Laisky/one-api/relay/model"
+	"github.com/Laisky/one-api/relay/relaymode"
 )
 
 func TestGetRequestURL(t *testing.T) {
@@ -84,7 +84,7 @@ func TestConvertRequest(t *testing.T) {
 		expectedRequest *model.GeneralOpenAIRequest
 	}{
 		{
-			name: "Remove reasoning_effort",
+			name: "Remove reasoning_effort for non-reasoning model",
 			inputRequest: &model.GeneralOpenAIRequest{
 				Model:           "grok-3",
 				ReasoningEffort: stringPtr("high"),
@@ -93,6 +93,19 @@ func TestConvertRequest(t *testing.T) {
 			expectedRequest: &model.GeneralOpenAIRequest{
 				Model:    "grok-3",
 				Messages: []model.Message{{Role: "user", Content: "hello"}},
+			},
+		},
+		{
+			name: "Preserve reasoning_effort for Grok 4.6",
+			inputRequest: &model.GeneralOpenAIRequest{
+				Model:           "grok-4.6",
+				ReasoningEffort: stringPtr("high"),
+				Messages:        []model.Message{{Role: "user", Content: "hello"}},
+			},
+			expectedRequest: &model.GeneralOpenAIRequest{
+				Model:           "grok-4.6",
+				ReasoningEffort: stringPtr("high"),
+				Messages:        []model.Message{{Role: "user", Content: "hello"}},
 			},
 		},
 		{
@@ -135,7 +148,10 @@ func TestConvertRequest(t *testing.T) {
 			},
 		},
 		{
-			name: "Keep penalty parameters for other models",
+			// grok-code-fast-1 was retired on May 15, 2026 and now auto-redirects to
+			// grok-4.3, which rejects presence_penalty/frequency_penalty per the xAI
+			// API reference. The adaptor strips these params to avoid upstream errors.
+			name: "Strip penalty parameters for grok-code-fast-1 (redirects to grok-4.3)",
 			inputRequest: &model.GeneralOpenAIRequest{
 				Model:            "grok-code-fast-1",
 				PresencePenalty:  float64Ptr(0.5),
@@ -143,7 +159,38 @@ func TestConvertRequest(t *testing.T) {
 				Messages:         []model.Message{{Role: "user", Content: "hello"}},
 			},
 			expectedRequest: &model.GeneralOpenAIRequest{
-				Model:            "grok-code-fast-1",
+				Model:    "grok-code-fast-1",
+				Messages: []model.Message{{Role: "user", Content: "hello"}},
+			},
+		},
+		{
+			// grok-4.3 is xAI's flagship reasoning model released May 6, 2026.
+			// Per the API reference it does not support presence_penalty,
+			// frequency_penalty, or stop. The adaptor strips them.
+			name: "Strip penalty parameters for grok-4.3",
+			inputRequest: &model.GeneralOpenAIRequest{
+				Model:            "grok-4.3",
+				PresencePenalty:  float64Ptr(0.5),
+				FrequencyPenalty: float64Ptr(0.3),
+				Messages:         []model.Message{{Role: "user", Content: "hello"}},
+			},
+			expectedRequest: &model.GeneralOpenAIRequest{
+				Model:    "grok-4.3",
+				Messages: []model.Message{{Role: "user", Content: "hello"}},
+			},
+		},
+		{
+			// Non-reasoning legacy models (e.g. grok-2-vision-1212) accept penalty
+			// parameters; the adaptor must leave them untouched.
+			name: "Keep penalty parameters for grok-2-vision-1212",
+			inputRequest: &model.GeneralOpenAIRequest{
+				Model:            "grok-2-vision-1212",
+				PresencePenalty:  float64Ptr(0.5),
+				FrequencyPenalty: float64Ptr(0.3),
+				Messages:         []model.Message{{Role: "user", Content: "hello"}},
+			},
+			expectedRequest: &model.GeneralOpenAIRequest{
+				Model:            "grok-2-vision-1212",
 				PresencePenalty:  float64Ptr(0.5),
 				FrequencyPenalty: float64Ptr(0.3),
 				Messages:         []model.Message{{Role: "user", Content: "hello"}},
@@ -191,17 +238,18 @@ func TestConvertImageRequest(t *testing.T) {
 			},
 		},
 		{
-			name: "Remove unsupported parameters",
+			name: "Map resolution and remove unsupported parameters",
 			inputRequest: &model.ImageRequest{
-				Model:   "grok-2-image",
+				Model:   "grok-imagine-image-quality",
 				Prompt:  "A beautiful sunset",
 				Quality: "hd",
 				Size:    "1024x1024",
 				Style:   "vivid",
 			},
 			expectedRequest: &model.ImageRequest{
-				Model:  "grok-2-image",
-				Prompt: "A beautiful sunset",
+				Model:      "grok-imagine-image-quality",
+				Prompt:     "A beautiful sunset",
+				Resolution: "1k",
 			},
 		},
 	}
@@ -220,6 +268,7 @@ func TestConvertImageRequest(t *testing.T) {
 			assert.Equal(t, tt.expectedRequest.Prompt, convertedReq.Prompt)
 			assert.Equal(t, tt.expectedRequest.Quality, convertedReq.Quality)
 			assert.Equal(t, tt.expectedRequest.Size, convertedReq.Size)
+			assert.Equal(t, tt.expectedRequest.Resolution, convertedReq.Resolution)
 			assert.Equal(t, tt.expectedRequest.Style, convertedReq.Style)
 		})
 	}
@@ -414,20 +463,59 @@ func TestHandleResponseAPIResponse(t *testing.T) {
 	t.Parallel()
 	adaptor := &Adaptor{}
 
-	t.Run("Streaming Response API", func(t *testing.T) {
+	// A streaming Response API call must hand billing the usage x.AI publishes on
+	// its terminal response.completed event, and must forward the stream to the
+	// client untouched. Reporting no usage here is what strands the pre-consumed
+	// charge as an invisible provisional log entry.
+	t.Run("Streaming Response API reports usage and forwards the stream", func(t *testing.T) {
 		t.Parallel()
-		c, _ := gin.CreateTestContext(httptest.NewRecorder())
+		recorder := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(recorder)
+		meta := &meta.Meta{IsStream: true}
+
+		sse := "event: response.output_text.delta\n" +
+			`data: {"type":"response.output_text.delta","delta":"halo"}` + "\n\n" +
+			"event: response.completed\n" +
+			`data: {"type":"response.completed","response":{"id":"resp_1","status":"completed","usage":{"input_tokens":320,"output_tokens":40,"total_tokens":360}}}` + "\n\n" +
+			"data: [DONE]\n\n"
+
+		resp := &http.Response{
+			StatusCode: 200,
+			Header:     make(http.Header),
+			Body:       io.NopCloser(strings.NewReader(sse)),
+		}
+
+		usage, err := adaptor.handleResponseAPIResponse(c, resp, meta)
+		assert.Nil(t, err)
+		require.NotNil(t, usage, "usage from response.completed must reach billing")
+		assert.Equal(t, 320, usage.PromptTokens)
+		assert.Equal(t, 40, usage.CompletionTokens)
+		assert.Equal(t, 360, usage.TotalTokens)
+
+		body := recorder.Body.String()
+		assert.Equal(t, sse, body, "the client stream must be forwarded byte for byte")
+	})
+
+	// A stream that never reports usage still returns nil. This is not a silent
+	// free request: relay/controller/response_billing.go settles such a request at
+	// its pre-consumed estimate and reconciles the provisional log so the charge
+	// stays visible.
+	t.Run("Streaming Response API without usage returns nil", func(t *testing.T) {
+		t.Parallel()
+		recorder := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(recorder)
 		meta := &meta.Meta{IsStream: true}
 
 		resp := &http.Response{
 			StatusCode: 200,
 			Header:     make(http.Header),
-			Body:       io.NopCloser(strings.NewReader("streaming data")),
+			Body:       io.NopCloser(strings.NewReader("event: response.created\ndata: {\"type\":\"response.created\"}\n\n")),
 		}
 
 		usage, err := adaptor.handleResponseAPIResponse(c, resp, meta)
 		assert.Nil(t, err)
-		assert.Nil(t, usage) // Streaming doesn't return usage
+		assert.Nil(t, usage)
+		assert.Contains(t, recorder.Body.String(), "response.created")
 	})
 }
 
@@ -442,7 +530,17 @@ func TestGetModelList(t *testing.T) {
 	adaptor := &Adaptor{}
 	models := adaptor.GetModelList()
 	assert.NotEmpty(t, models)
-	// Should include grok models from ModelRatios
+	// Should include current flagship and current snapshot models from ModelRatios
+	assert.Contains(t, models, "grok-4.6")
+	assert.Contains(t, models, "grok-4.6-latest")
+	assert.Contains(t, models, "grok-4.3")
+	assert.Contains(t, models, "grok-4.20-0309-reasoning")
+	assert.Contains(t, models, "grok-4.20-multi-agent-0309")
+	assert.Contains(t, models, "grok-imagine-image")
+	assert.Contains(t, models, "grok-imagine-image-quality")
+	assert.Contains(t, models, "grok-imagine-image-2.0")
+	assert.Contains(t, models, "grok-imagine-video-1.5")
+	// Retired-but-redirected slugs are still in the table for billing continuity
 	assert.Contains(t, models, "grok-code-fast-1")
 	assert.Contains(t, models, "grok-4-1-fast-non-reasoning")
 }
@@ -665,4 +763,83 @@ func stringPtr(s string) *string {
 
 func float64Ptr(f float64) *float64 {
 	return &f
+}
+
+// TestHandleImageResponse_UpstreamEmptyDataEmitsDataArray verifies that an
+// upstream payload with `"data": []` is forwarded with `"data":[]` (never null).
+func TestHandleImageResponse_UpstreamEmptyDataEmitsDataArray(t *testing.T) {
+	t.Parallel()
+	gin.SetMode(gin.TestMode)
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+
+	body := `{"data":[]}`
+	resp := &http.Response{
+		StatusCode: 200,
+		Header:     http.Header{},
+		Body:       io.NopCloser(strings.NewReader(body)),
+	}
+
+	a := &Adaptor{}
+	usage, errWS := a.handleImageResponse(c, resp)
+	require.Nil(t, errWS)
+	require.Nil(t, usage)
+
+	out := rec.Body.String()
+	require.Contains(t, out, `"data":[]`)
+	require.NotContains(t, out, `"data":null`)
+}
+
+// TestHandleImageResponse_UpstreamErrorEnvelopeEmitsDataArray verifies that an
+// upstream payload missing the data key (e.g. an error envelope without data)
+// still produces a valid OpenAI-shaped response with `"data":[]`.
+func TestHandleImageResponse_UpstreamErrorEnvelopeEmitsDataArray(t *testing.T) {
+	t.Parallel()
+	gin.SetMode(gin.TestMode)
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+
+	body := `{"error":{"message":"upstream rejected"}}`
+	resp := &http.Response{
+		StatusCode: 200,
+		Header:     http.Header{},
+		Body:       io.NopCloser(strings.NewReader(body)),
+	}
+
+	a := &Adaptor{}
+	usage, errWS := a.handleImageResponse(c, resp)
+	require.Nil(t, errWS)
+	require.Nil(t, usage)
+
+	out := rec.Body.String()
+	require.Contains(t, out, `"data":[]`)
+	require.NotContains(t, out, `"data":null`)
+}
+
+// TestHandleImageResponse_PopulatedRoundTrips sanity-checks normal upstream
+// payloads with images.
+func TestHandleImageResponse_PopulatedRoundTrips(t *testing.T) {
+	t.Parallel()
+	gin.SetMode(gin.TestMode)
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+
+	body := `{"data":[{"url":"https://example.com/a.png","b64_json":"AAAA","revised_prompt":"p"}]}`
+	resp := &http.Response{
+		StatusCode: 200,
+		Header:     http.Header{},
+		Body:       io.NopCloser(strings.NewReader(body)),
+	}
+
+	a := &Adaptor{}
+	usage, errWS := a.handleImageResponse(c, resp)
+	require.Nil(t, errWS)
+	require.Nil(t, usage)
+
+	var parsed ImageResponse
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &parsed))
+	require.Len(t, parsed.Data, 1)
+	require.Equal(t, "https://example.com/a.png", parsed.Data[0].URL)
+	require.Equal(t, "AAAA", parsed.Data[0].B64Json)
+	require.Equal(t, "p", parsed.Data[0].RevisedPrompt)
 }

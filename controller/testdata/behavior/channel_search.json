@@ -1,0 +1,46 @@
+{
+  "case": "channel/search",
+  "site": "C2 SearchChannels",
+  "status": 200,
+  "body": {
+    "data": [
+      {
+        "balance": 12.5,
+        "balance_updated_time": 1720000006,
+        "base_url": "https://upstream.behaviordiff.test",
+        "completion_ratio": "{\"gpt-4o\":3}",
+        "config": "{\"region\":\"us-east-1\",\"tooling\":{\"whitelist\":[\"search\"]}}",
+        "created_at": 1730000000111,
+        "created_time": 1720000001,
+        "group": "default,vip",
+        "hidden_models": "gpt-3.5-turbo",
+        "inference_profile_arn_map": "{\"gpt-4o\":\"arn:aws:bedrock:us-east-1:1:inference-profile/x\"}",
+        "key": "",
+        "model_configs": "{\"gpt-4o\":{\"ratio\":2.5,\"completion_ratio\":3}}",
+        "model_mapping": "{\"gpt-4o-alias\":\"gpt-4o\"}",
+        "model_ratio": "{\"gpt-4o\":2.5}",
+        "models": "gpt-4o,gpt-3.5-turbo",
+        "name": "behaviordiff-channel",
+        "other": "behaviordiff-other-field",
+        "priority": 6,
+        "ratelimit": 55,
+        "response_time": 321,
+        "status": 1,
+        "system_prompt": "behavior diff system prompt",
+        "test_models": [
+          "gpt-3.5-turbo",
+          "gpt-4o"
+        ],
+        "test_time": 1720000005,
+        "testing_model": "gpt-4o",
+        "type": 1,
+        "updated_at": 1730000000222,
+        "used_quota": 940004,
+        "uuid": "<channel-uuid>",
+        "weight": 9
+      }
+    ],
+    "message": "",
+    "success": true
+  }
+}

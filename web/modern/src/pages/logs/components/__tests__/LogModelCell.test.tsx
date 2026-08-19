@@ -13,14 +13,7 @@ import { LogModelCell } from '../LogModelCell';
 
 describe('LogModelCell', () => {
   it('shows the billed model in the cell and both names in the tooltip content', () => {
-    render(
-      <LogModelCell
-        modelName="gpt-4o-mini"
-        originModelName="alias-model"
-        targetLabel="Model"
-        originLabel="Requested Model"
-      />
-    );
+    render(<LogModelCell modelName="gpt-4o-mini" originModelName="alias-model" targetLabel="Model" originLabel="Requested Model" />);
 
     expect(screen.getAllByText('gpt-4o-mini').length).toBeGreaterThan(0);
     expect(screen.getByText('alias-model')).toBeInTheDocument();
@@ -30,6 +23,13 @@ describe('LogModelCell', () => {
 
   it('renders plain billed model text when the requested model is unavailable', () => {
     render(<LogModelCell modelName="gpt-4o-mini" targetLabel="Model" originLabel="Requested Model" />);
+
+    expect(screen.getByText('gpt-4o-mini')).toBeInTheDocument();
+    expect(screen.queryByText('Requested Model:')).not.toBeInTheDocument();
+  });
+
+  it('renders plain billed model text when requested and target models match', () => {
+    render(<LogModelCell modelName="gpt-4o-mini" originModelName="gpt-4o-mini" targetLabel="Model" originLabel="Requested Model" />);
 
     expect(screen.getByText('gpt-4o-mini')).toBeInTheDocument();
     expect(screen.queryByText('Requested Model:')).not.toBeInTheDocument();

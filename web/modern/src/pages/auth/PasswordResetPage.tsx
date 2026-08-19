@@ -64,7 +64,7 @@ export function PasswordResetPage() {
 
   if (isEmailSent) {
     return (
-      <main className="min-h-screen flex items-center justify-center p-4">
+      <div className="flex items-center justify-center min-h-[calc(100dvh-12rem)] py-4">
         <Card className="w-full max-w-md">
           <CardHeader className="text-center">
             <CardTitle className="text-2xl">{t('auth.reset.sent_title')}</CardTitle>
@@ -79,12 +79,12 @@ export function PasswordResetPage() {
             </Link>
           </CardContent>
         </Card>
-      </main>
+      </div>
     );
   }
 
   return (
-    <main className="min-h-screen flex items-center justify-center p-4">
+    <div className="flex items-center justify-center min-h-[calc(100dvh-12rem)] py-4">
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
           <CardTitle className="text-2xl">{t('auth.reset.title')}</CardTitle>
@@ -124,14 +124,14 @@ export function PasswordResetPage() {
               <div className="text-center text-sm">
                 {t('auth.reset.remember_password')}{' '}
                 <Link to="/login" className="text-primary hover:underline">
-                  {t('auth.login.sign_in')}
+                  {t('common.login')}
                 </Link>
               </div>
             </form>
           </Form>
         </CardContent>
       </Card>
-    </main>
+    </div>
   );
 }
 

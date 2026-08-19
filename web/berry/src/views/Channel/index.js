@@ -24,6 +24,9 @@ import PricingModal from './component/PricingModal';
 
 // ----------------------------------------------------------------------
 // CHANNEL_OPTIONS,
+const refPayload = (ref) => (typeof ref === 'string' ? { uuid: ref } : { id: ref });
+const itemRef = (item) => item?.uuid || item?.id;
+
 export default function ChannelPage() {
   const [channels, setChannels] = useState([]);
   const [totalChannels, setTotalChannels] = useState(0);
@@ -33,7 +36,7 @@ export default function ChannelPage() {
   const theme = useTheme();
   const matchUpMd = useMediaQuery(theme.breakpoints.up('sm'));
   const [openModal, setOpenModal] = useState(false);
-  const [editChannelId, setEditChannelId] = useState(0);
+  const [editChannelId, setEditChannelId] = useState('');
   const [openPricingModal, setOpenPricingModal] = useState(false);
   const [pricingChannelId, setPricingChannelId] = useState(0);
   const [pricingChannelName, setPricingChannelName] = useState('');
@@ -106,7 +109,7 @@ export default function ChannelPage() {
 
   const manageChannel = async (id, action, value) => {
     const url = '/api/channel/';
-    let data = { id };
+    let data = refPayload(id);
     let res;
     switch (action) {
       case 'delete':
@@ -128,7 +131,7 @@ export default function ChannelPage() {
             showError('优先级必须是数字');
             return;
           }
-          const channel = channels.find((item) => item.id === id);
+          const channel = channels.find((item) => itemRef(item) === id || item.id === id);
           if (!channel) {
             showError('未找到对应的渠道，稍后重试');
             return;
@@ -153,7 +156,9 @@ export default function ChannelPage() {
       if (action === 'delete') {
         await handleRefresh();
       } else if (action === 'priority') {
-        setChannels((prev) => prev.map((item) => (item.id === id ? { ...item, priority: responseData?.priority ?? item.priority } : item)));
+        setChannels((prev) =>
+          prev.map((item) => (itemRef(item) === id || item.id === id ? { ...item, priority: responseData?.priority ?? item.priority } : item))
+        );
       }
     } else {
       showError(message);
@@ -210,7 +215,7 @@ export default function ChannelPage() {
 
   const handleCloseModal = () => {
     setOpenModal(false);
-    setEditChannelId(0);
+    setEditChannelId('');
   };
 
   const handleOkModal = (status) => {
@@ -247,13 +252,13 @@ export default function ChannelPage() {
     <>
       <Stack direction="row" alignItems="center" justifyContent="space-between" mb={2.5}>
         <Typography variant="h4">渠道</Typography>
-        <Button variant="contained" color="primary" startIcon={<IconPlus />} onClick={() => handleOpenModal(0)}>
+        <Button variant="contained" color="primary" startIcon={<IconPlus />} onClick={() => handleOpenModal('')}>
           新建渠道
         </Button>
       </Stack>
       <Card>
         <Box component="form" onSubmit={searchChannels} noValidate sx={{ marginTop: 2 }}>
-          <TableToolBar filterName={searchKeyword} handleFilterName={handleSearchKeyword} placeholder={'搜索渠道的 ID，名称和密钥 ...'} />
+          <TableToolBar filterName={searchKeyword} handleFilterName={handleSearchKeyword} placeholder={'搜索渠道的 ID，UUID，名称和密钥 ...'} />
         </Box>
         <Toolbar
           sx={{
@@ -314,7 +319,7 @@ export default function ChannelPage() {
                   <ChannelTableRow
                     item={row}
                     manageChannel={manageChannel}
-                    key={row.id}
+                    key={itemRef(row)}
                     handleOpenModal={handleOpenModal}
                     setModalChannelId={setEditChannelId}
                     handleOpenPricingModal={handleOpenPricingModal}

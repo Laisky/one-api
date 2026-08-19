@@ -73,8 +73,11 @@ type GeneralOpenAIRequest struct {
 	// default to 1.
 	N *int `json:"n,omitempty" binding:"omitempty,min=0"`
 	// ReasoningEffort constrains effort on reasoning for reasoning models, reasoning models only.
-	// Supported values: low, medium, high, minimal (GPT-5 series also supports "minimal")
-	ReasoningEffort *string `json:"reasoning_effort,omitempty" binding:"omitempty,oneof=low medium high minimal"`
+	// The binding is the union of effort vocabularies across providers; per-model
+	// validation narrows it downstream (e.g. Qwen uses "default", the GPT-5.6
+	// family adds "xhigh"/"max", grok/gemini use "none", and GPT-5 advertises
+	// the legacy "minimal" alias).
+	ReasoningEffort *string `json:"reasoning_effort,omitempty" binding:"omitempty,oneof=none default minimal low medium high xhigh max"`
 	// Verbosity hints the model to be more or less expansive in its replies (GPT-5 series).
 	// Supported values: low, medium, high
 	Verbosity *string `json:"verbosity,omitempty" binding:"omitempty,oneof=low medium high"`
@@ -83,7 +86,8 @@ type GeneralOpenAIRequest struct {
 	Prediction any      `json:"prediction,omitempty"`
 	Audio      *Audio   `json:"audio,omitempty"`
 	// PresencePenalty is a number between -2.0 and 2.0 that penalizes
-	// new tokens based on whether they appear in the text so far, default is 0.
+	// new tokens based on whether they appear in the text so far,
+	// default is 0.
 	PresencePenalty  *float64        `json:"presence_penalty,omitempty" binding:"omitempty,min=-2,max=2"`
 	ResponseFormat   *ResponseFormat `json:"response_format,omitempty"`
 	Seed             float64         `json:"seed,omitempty"`
@@ -132,8 +136,10 @@ type GeneralOpenAIRequest struct {
 }
 
 type OpenAIResponseReasoning struct {
-	// Effort defines the reasoning effort level
-	Effort *string `json:"effort,omitempty" binding:"omitempty,oneof=low medium high"`
+	// Effort defines the reasoning effort level. The binding is the union across
+	// providers; per-model validation narrows it downstream (Qwen uses
+	// "default", while the GPT-5.6 family adds "xhigh"/"max").
+	Effort *string `json:"effort,omitempty" binding:"omitempty,oneof=none default minimal low medium high xhigh max"`
 	// Summary defines whether to include a summary of the reasoning
 	Summary *string `json:"summary,omitempty" binding:"omitempty,oneof=auto concise detailed"`
 }

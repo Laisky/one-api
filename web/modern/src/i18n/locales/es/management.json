@@ -5,17 +5,21 @@
       "add_mobile": "Agregar nuevo canal",
       "delete": "Eliminar",
       "disable": "Deshabilitar",
+      "duplicate": "Duplicar",
       "edit": "Editar",
       "enable": "Habilitar",
+      "refresh_balance": "Actualizar saldo de {{name}}",
       "test": "Probar"
     },
     "columns": {
       "actions": "Acciones",
+      "balance": "Saldo",
       "created": "Creado",
       "group": "Grupo",
       "id": "ID",
       "name": "Nombre",
       "priority": "Prioridad",
+      "priority_input_label": "Prioridad de {{name}}",
       "response": "Respuesta",
       "status": "Estado",
       "testing_model": "Modelo de prueba",
@@ -24,7 +28,9 @@
     },
     "confirm": {
       "delete": "¿Seguro que deseas eliminar este canal?",
-      "delete_disabled": "¿Eliminar todos los canales deshabilitados? Esta acción no se puede deshacer."
+      "delete_disabled": "¿Eliminar todos los canales deshabilitados? Esta acción no se puede deshacer.",
+      "delete_disabled_title": "Eliminar canales deshabilitados",
+      "delete_title": "Eliminar canal"
     },
     "description": "Configura y gestiona los canales de enrutamiento del API",
     "edit": {
@@ -121,15 +127,15 @@
         }
       },
       "common": {
-        "add": "Add",
+        "add": "Agregar",
         "base_url": {
-          "fixed_note": "Using default: {{url}}",
-          "help_editable": "Custom API base URL. Leave empty to use the default URL.",
-          "help_readonly": "The API base URL for this channel type is fixed and cannot be modified.",
-          "label": "API Base URL",
+          "fixed_note": "Usando el valor predeterminado: {{url}}",
+          "help_editable": "URL base de API personalizada. Déjala vacía para usar la URL predeterminada.",
+          "help_readonly": "La URL base de API para este tipo de canal es fija y no se puede modificar.",
+          "label": "URL base de API",
           "placeholder": "https://api.example.com"
         },
-        "format_json": "Format JSON"
+        "format_json": "Formatear JSON"
       },
       "coze": {
         "auth_type": {
@@ -155,9 +161,97 @@
           "placeholder": "ID de usuario para operaciones de bot"
         }
       },
+      "custom_headers": {
+        "add": "Agregar encabezado",
+        "empty": "No hay encabezados personalizados configurados.",
+        "help": "Los encabezados configurados aquí siempre se envían al proveedor y reemplazan los encabezados enviados por el cliente. Usa {{key}} para insertar la clave API del canal.",
+        "key_placeholder": "Clave del encabezado",
+        "label": "Encabezados personalizados",
+        "remove": "Eliminar encabezado",
+        "value_placeholder": "Valor del encabezado, p. ej. {{key}}"
+      },
       "description": {
         "create": "Crear un nuevo canal de API",
         "edit": "Actualizar configuración del canal"
+      },
+      "endpoints": {
+        "audio_speech": {
+          "description": "La API de texto a voz convierte texto en audio hablado. Elige entre múltiples voces y formatos de salida para generar una voz natural.",
+          "label": "Texto a voz"
+        },
+        "audio_transcription": {
+          "description": "La API de transcripción de audio convierte audio hablado en texto. Sube un archivo de audio para recibir una transcripción en el idioma especificado.",
+          "label": "Transcripción de audio"
+        },
+        "audio_translation": {
+          "description": "La API de traducción de audio traduce audio hablado a texto en inglés. Sube un archivo de audio en cualquier idioma compatible para recibir una transcripción en inglés.",
+          "label": "Traducción de audio"
+        },
+        "chat_completions": {
+          "description": "La API Chat Completions crea respuestas del modelo para conversaciones basadas en chat. Envía una lista de mensajes y recibe una respuesta generada por el modelo. Admite modos con streaming y sin streaming.",
+          "label": "Chat Completions"
+        },
+        "claude_messages": {
+          "description": "La API Claude Messages es el formato nativo de Anthropic para interactuar con modelos Claude. One-API convierte este formato para que funcione con cualquier backend compatible.",
+          "label": "Claude Messages"
+        },
+        "completions": {
+          "description": "La API heredada Completions genera completions de texto para un prompt dado. Es la API original de generación de texto y hoy en día ha sido reemplazada en gran medida por Chat Completions.",
+          "label": "Completions"
+        },
+        "custom_url_badge": "URL personalizada",
+        "default_badge": "predeterminado",
+        "edit_endpoint": "Ver documentación y editar la URL del endpoint",
+        "embeddings": {
+          "description": "La API Embeddings convierte texto en representaciones vectoriales numéricas. Estos vectores pueden usarse para búsqueda semántica, agrupación y comparaciones de similitud.",
+          "label": "Embeddings"
+        },
+        "help": "Selecciona qué endpoints API admite este canal. Haz clic en el icono de información de un endpoint para ver detalles y ejemplos de uso.",
+        "images_edits": {
+          "description": "La API Image Edits modifica imágenes existentes según instrucciones de texto. Sube una imagen con una máscara y un prompt para generar versiones editadas.",
+          "label": "Edición de imágenes"
+        },
+        "images_generations": {
+          "description": "La API Image Generation crea imágenes a partir de descripciones de texto. Especifica un prompt y recibe una o más imágenes generadas en varios formatos y tamaños.",
+          "label": "Generación de imágenes"
+        },
+        "label": "Endpoints compatibles",
+        "modal": {
+          "description": "Descripción",
+          "example": "Ejemplo cURL",
+          "no_description": "No hay documentación detallada disponible para este endpoint.",
+          "no_example": "# No hay ejemplo disponible",
+          "url_override": "Anulación de URL upstream",
+          "url_override_help": "La URL de endpoint predeterminada está precargada. Edítala para enrutar este endpoint a una dirección upstream no estándar; déjala como la predeterminada para seguir automáticamente la URL base del canal.",
+          "url_override_reset": "Restablecer al valor predeterminado"
+        },
+        "moderations": {
+          "description": "La API Moderations comprueba si un texto viola las políticas de contenido. Devuelve categorías y puntuaciones que indican la probabilidad de infracciones.",
+          "label": "Moderaciones"
+        },
+        "ocr": {
+          "description": "La API OCR / análisis de diseño extrae texto e información de diseño de documentos e imágenes. Sube una URL de archivo y recibe resultados Markdown estructurados. Impulsado por Zhipu GLM-OCR.",
+          "label": "OCR / análisis de diseño"
+        },
+        "realtime": {
+          "description": "La API Realtime permite comunicación bidireccional de baja latencia mediante WebSocket. Es ideal para asistentes de voz y aplicaciones interactivas en tiempo real.",
+          "label": "API Realtime"
+        },
+        "rerank": {
+          "description": "La API Rerank reordena una lista de documentos según su relevancia para una consulta. Es útil para mejorar resultados de búsqueda y sistemas RAG.",
+          "label": "Rerank"
+        },
+        "reset_defaults": "Restablecer predeterminados",
+        "response_api": {
+          "description": "La API Response es la API con estado más reciente de OpenAI para conversaciones de múltiples turnos. Gestiona el estado de la conversación en el servidor y admite funciones avanzadas como herramientas y salida estructurada.",
+          "label": "API Response"
+        },
+        "select_all": "Seleccionar todo",
+        "select_none": "Mínimo",
+        "videos": {
+          "description": "La API de generación de video crea videos a partir de descripciones de texto o imágenes. Especifica prompts y parámetros para generar contenido de video.",
+          "label": "Generación de video"
+        }
       },
       "errors": {
         "operation_failed": "Operación fallida",
@@ -197,7 +291,7 @@
         }
       },
       "groups": {
-        "add_placeholder": "Add custom group...",
+        "add_placeholder": "Agregar grupo personalizado...",
         "help": "Restringir el acceso a grupos de usuarios específicos. Vacío significa que todos los usuarios pueden acceder. El grupo predeterminado siempre se mantiene.",
         "label": "Grupos *"
       },
@@ -217,8 +311,10 @@
         "placeholder": "Mapeo de ARN de perfil de inferencia de AWS Bedrock:\n{{example}}"
       },
       "key": {
-        "help": "The API key for authentication with the provider.",
-        "label": "API Key"
+        "github_placeholder": "Introduce un token de acceso de GitHub (PAT u OAuth) con una suscripción activa de Copilot",
+        "help": "La clave API para autenticarse con el proveedor.",
+        "label": "Clave API",
+        "placeholder": "Introduce tu clave API"
       },
       "loading": "Cargando canal...",
       "mcp": {
@@ -233,7 +329,7 @@
         "invalid": "Formato de configuraciones de modelos inválido",
         "invalid_short": "✗ Configuración inválida",
         "label": "Configuraciones de modelos (JSON)",
-        "load_default": "Load Default",
+        "load_default": "Cargar valores predeterminados",
         "note": "Configurar precios y límites por modelo (opcional)",
         "placeholder": "Configuraciones de modelos en formato JSON:\n{{example}}",
         "select_type_notice": "Selecciona un tipo de canal para configurar las configuraciones de modelos.",
@@ -247,7 +343,7 @@
       },
       "models": {
         "add_custom": "Agregar",
-        "clear": "Clear",
+        "clear": "Borrar",
         "clear_all": "Borrar todo",
         "copy_title": "Haz clic para copiar el nombre del modelo",
         "custom_placeholder": "Agregar modelo personalizado...",
@@ -255,16 +351,16 @@
         "fill_related": "Rellenar modelos relacionados ({{count}})",
         "help": "Modelos disponibles a través de este canal. Deja vacío para permitir todos los modelos del proveedor. Usa los botones para rellenar modelos relacionados/todos; se eliminan los duplicados.",
         "label": "Modelos compatibles *",
-        "no_match": "No models found",
-        "no_selection": "No models selected",
+        "no_match": "No se encontraron modelos",
+        "no_selection": "No hay modelos seleccionados",
         "search_placeholder": "Buscar modelos...",
         "select_type_notice": "Selecciona un tipo de canal para configurar los modelos compatibles.",
-        "selected_count": "Selected Models ({{count}})"
+        "selected_count": "Modelos seleccionados ({{count}})"
       },
       "name": {
-        "help": "A descriptive name for this channel to identify it in logs and lists.",
-        "label": "Channel Name *",
-        "placeholder": "My Channel"
+        "help": "Un nombre descriptivo para identificar este canal en registros y listas.",
+        "label": "Nombre del canal *",
+        "placeholder": "Mi canal"
       },
       "openai_compatible": {
         "api_format": {
@@ -291,12 +387,12 @@
         }
       },
       "priority": {
-        "help": "Higher priority channels are tried first. Default is 0.",
-        "label": "Priority"
+        "help": "Los canales con mayor prioridad se prueban primero. El valor predeterminado es 0.",
+        "label": "Prioridad"
       },
       "ratelimit": {
-        "help": "Maximum requests per minute. 0 means unlimited.",
-        "label": "Rate Limit"
+        "help": "Máximo de solicitudes por minuto. 0 significa ilimitado.",
+        "label": "Límite de tasa"
       },
       "save_warning": {
         "cancel": "Volver",
@@ -307,6 +403,23 @@
         "title": "Model Mapping tiene entradas sospechosas"
       },
       "spark": {
+        "api_key": {
+          "help": "APIKey de la consola iFlytek emparejado con el APISecret.",
+          "label": "APIKey *",
+          "placeholder": "APIKey"
+        },
+        "api_secret": {
+          "help": "APISecret de la consola iFlytek emparejado con el APIKey.",
+          "label": "APISecret *",
+          "placeholder": "APISecret"
+        },
+        "app_id": {
+          "help": "APPID de la consola iFlytek para la aplicación Spark.",
+          "label": "APPID *",
+          "placeholder": "APPID"
+        },
+        "heading": "Configuración de iFlytek Spark",
+        "note": "La clave API final se construirá como: APPID|APISecret|APIKey",
         "version": {
           "help": "Selecciona la versión de API para iFlytek Spark (ej. v3.5).",
           "label": "Versión de Spark",
@@ -318,14 +431,41 @@
         "label": "Prompt del sistema",
         "placeholder": "Prompt del sistema opcional para anteponer a todas las solicitudes"
       },
+      "tencent": {
+        "app_id": {
+          "help": "AppId de Tencent Cloud asociado a las credenciales de API.",
+          "label": "AppId *",
+          "placeholder": "AppId"
+        },
+        "heading": "Configuración de Tencent Hunyuan",
+        "note": "La clave API final se construirá como: AppId|SecretId|SecretKey",
+        "secret_id": {
+          "help": "SecretId de Tencent Cloud para autenticación de API.",
+          "label": "SecretId *",
+          "placeholder": "SecretId"
+        },
+        "secret_key": {
+          "help": "SecretKey de Tencent Cloud emparejado con el SecretId.",
+          "label": "SecretKey *",
+          "placeholder": "SecretKey"
+        }
+      },
+      "test": {
+        "error_message": "No se pudo probar el canal.",
+        "error_title": "Error de prueba",
+        "failed_message": "La prueba del canal falló.",
+        "failed_title": "Prueba fallida",
+        "success_message": "La prueba del canal se completó correctamente.",
+        "success_title": "Prueba aprobada"
+      },
       "title": {
         "create": "Crear canal",
         "edit": "Editar canal"
       },
       "tooling": {
-        "add_custom": "Add custom tool...",
-        "available_tools": "Available Tools",
-        "editor_disabled": "Fix JSON error to enable editor",
+        "add_custom": "Agregar herramienta personalizada...",
+        "available_tools": "Herramientas disponibles",
+        "editor_disabled": "Corrige el error de JSON para habilitar el editor",
         "errors": {
           "invalid_json_message": "Corrige el JSON de herramientas antes de editar la lista blanca.",
           "invalid_json_title": "JSON inválido"
@@ -335,7 +475,7 @@
         "help": "Definir política de herramientas integradas en todo el canal. Configura la lista blanca y el precio por llamada para las herramientas integradas del proveedor.",
         "invalid": "Formato de configuración de herramientas inválido",
         "label": "Configuración de herramientas (JSON)",
-        "no_whitelist": "No tools whitelisted",
+        "no_whitelist": "No hay herramientas en la lista blanca",
         "note": "Configurar listas blancas de herramientas integradas y precios por llamada (opcional)",
         "placeholder": "Configuración de herramientas en formato JSON:\n{{example}}",
         "whitelist": {
@@ -347,27 +487,29 @@
           "subtitle": "La lista blanca vacía mantiene disponibles todas las herramientas del proveedor.",
           "title": "Lista blanca de herramientas integradas"
         },
-        "whitelist_editor": "Whitelist Editor",
-        "whitelisted_tools": "Whitelisted Tools ({{count}})"
+        "whitelist_editor": "Editor de lista blanca",
+        "whitelisted_tools": "Herramientas en lista blanca ({{count}})"
       },
       "type": {
-        "help": "The provider type for this channel. Changing this may reset some fields.",
-        "label": "Channel Type *",
-        "not_found": "No channel type found.",
-        "placeholder": "Select a channel type",
-        "search": "Search channel type..."
+        "help": "El tipo de proveedor de este canal. Cambiarlo puede restablecer algunos campos.",
+        "label": "Tipo de canal *",
+        "not_found": "No se encontró ningún tipo de canal.",
+        "placeholder": "Selecciona un tipo de canal",
+        "search": "Buscar tipo de canal..."
       },
       "type_change": {
-        "cancel": "Cancel",
-        "confirm": "Change Type",
-        "description": "You are about to change the channel type from \"{{fromType}}\" to \"{{toType}}\".",
-        "title": "Change Channel Type?",
-        "warning": "Warning: This may reset some configuration fields specific to the previous channel type. Any unsaved changes may be lost."
+        "cancel": "Cancelar",
+        "confirm": "Cambiar tipo",
+        "description": "Está a punto de cambiar el tipo de canal de \"{{fromType}}\" a \"{{toType}}\".",
+        "title": "¿Cambiar el tipo de canal?",
+        "warning": "Advertencia: esto puede restablecer algunos campos de configuración específicos del tipo de canal anterior. Los cambios no guardados pueden perderse."
       },
       "validation": {
         "api_key_required": "La clave API es obligatoria.",
         "base_url_required": "La URL base es obligatoria para este tipo de canal.",
+        "endpoints_required": "Habilita al menos un endpoint antes de guardar.",
         "error_title": "Error de validación",
+        "fix_fields": "Por favor corrige los campos resaltados.",
         "hidden_models_not_supported": "Estos modelos ocultos no están soportados actualmente por el canal: {{models}}",
         "hidden_models_unreachable_alias": "Estos modelos ocultos se usan como fuentes de Model Mapping, por lo que los alias públicos quedarán inaccesibles: {{models}}",
         "inference_profile_invalid": "El mapa de ARN de perfil de inferencia tiene un JSON inválido.",
@@ -382,11 +524,13 @@
         "model_mapping_invalid_entries": "Estas entradas de Model Mapping tienen valores vacíos o no de tipo string: {{keys}}",
         "model_mapping_parse_error": "El JSON de Model Mapping es inválido: {{error}}",
         "model_mapping_shape_invalid": "Model Mapping debe ser un objeto JSON con la forma { \"from\": \"to\" }.",
+        "name_required": "El nombre del canal es obligatorio",
         "oauth_invalid_json": "El JSON de configuración de OAuth JWT es inválido.",
         "oauth_missing_field_message": "Falta configuración de OAuth JWT: {{field}}",
         "oauth_missing_field_title": "Campo faltante",
         "oauth_parse_message": "Error de análisis de OAuth JWT: {{error}}",
         "oauth_parse_title": "Error de análisis",
+        "type_required": "El tipo de canal es obligatorio",
         "valid_json": "✓ JSON válido"
       },
       "vertex": {
@@ -408,18 +552,35 @@
         }
       },
       "weight": {
-        "help": "Used for load balancing between channels of the same priority. Default is 0.",
-        "label": "Weight"
+        "help": "Se usa para el balanceo de carga entre canales con la misma prioridad. El valor predeterminado es 0.",
+        "label": "Peso"
       }
     },
     "empty": "No se encontraron canales. Crea tu primer canal para comenzar.",
     "group_default": "default",
     "notifications": {
+      "balance_failed_message": "No se pudo actualizar el saldo.",
+      "balance_failed_title": "Error al actualizar el saldo",
+      "balance_success": "Saldo actualizado.",
+      "bulk_balance_success": "Se actualizaron todos los saldos de canales.",
+      "bulk_disable_summary_title": "Resumen de deshabilitación",
+      "bulk_enable_summary_title": "Resumen de habilitación",
+      "bulk_status_empty": "No hay canales disponibles para actualizar.",
+      "bulk_status_started": "Actualizando {{count}} canales…",
+      "bulk_status_summary": "{{success}} canales actualizados, {{failed}} fallidos.",
       "bulk_test_failed_title": "La prueba masiva falló",
       "bulk_test_started": "Se inició la prueba masiva de canales.",
       "delete_disabled_success": "Canales deshabilitados eliminados.",
       "delete_failed_message": "Error desconocido",
       "delete_failed_title": "Error al eliminar",
+      "duplicate_failed_message": "No se pudo duplicar el canal.",
+      "duplicate_failed_title": "Error al duplicar",
+      "duplicate_success": "Canal duplicado.",
+      "priority_failed_message": "No se pudo actualizar la prioridad.",
+      "priority_failed_title": "Error al actualizar",
+      "priority_saved": "Prioridad actualizada.",
+      "status_failed_message": "No se pudo actualizar el estado del canal.",
+      "status_failed_title": "Error al actualizar",
       "test_failed_message": "Error desconocido",
       "test_failed_title": "La prueba del canal falló",
       "test_success": "Prueba del canal exitosa.",
@@ -434,7 +595,7 @@
     },
     "search": {
       "id_label": "ID",
-      "placeholder": "Buscar canales por nombre, tipo o grupo..."
+      "placeholder": "Buscar canales por nombre, tipo, grupo o UUID..."
     },
     "status": {
       "active": "Activo",
@@ -446,8 +607,13 @@
     },
     "title": "Canales",
     "toolbar": {
+      "bulk_actions": "Acciones masivas",
       "delete_disabled": "Eliminar deshabilitados",
       "delete_disabled_mobile": "Eliminar todos los deshabilitados",
+      "disable_visible": "Deshabilitar canales visibles",
+      "enable_visible": "Habilitar canales visibles",
+      "refresh_balances": "Actualizar todos los saldos",
+      "refresh_balances_mobile": "Actualizar saldos",
       "test_all": "Probar todo",
       "test_all_mobile": "Probar todos los canales"
     },
@@ -485,10 +651,23 @@
       "title": "Generar códigos de canje"
     },
     "edit": {
+      "actions": {
+        "back_to_list": "Volver a la lista",
+        "copied": "Copiado",
+        "copy": "Copiar",
+        "copy_all": "Copiar todo",
+        "download_codes": "Descargar códigos"
+      },
+      "code_generated_hint": "Copia el código a continuación; no se mostrará junto con su nombre de nuevo.",
+      "codes_generated": "{{count}} códigos generados",
+      "codes_generated_aria": "Códigos de canje generados",
+      "codes_generated_hint": "Guarda los códigos ahora — una vez que salgas de esta página no podrán recuperarse como un lote.",
       "description": {
         "create": "Crear un nuevo código de canje",
         "edit": "Actualizar configuración del código de canje"
       },
+      "download_codes": "Descargar códigos",
+      "download_filename_prefix": "redemption-codes",
       "loading": "Cargando canje...",
       "notifications": {
         "create_success": "Canje creado exitosamente",
@@ -519,9 +698,13 @@
         "label": "Cuota"
       }
     },
+    "notifications": {
+      "action_failed_message": "No se pudo aplicar el cambio.",
+      "action_failed_title": "Acción fallida"
+    },
     "search": {
       "dropdown_placeholder": "Escribe el nombre del canje...",
-      "placeholder": "Buscar canjes por nombre..."
+      "placeholder": "Buscar canjes por nombre o UUID..."
     },
     "status": {
       "disabled": "Deshabilitado",
@@ -608,7 +791,9 @@
       "validation": {
         "error_title": "Error de validación",
         "fix_fields": "Por favor corrige los campos resaltados.",
-        "invalid_expiration": "Tiempo de expiración inválido"
+        "invalid_expiration": "Tiempo de expiración inválido",
+        "name_required": "El nombre del token es obligatorio",
+        "quota_min": "La cuota no puede ser negativa"
       }
     },
     "page": {
@@ -638,7 +823,8 @@
         "used_title": "Utilizado: {{label}}"
       },
       "confirm": {
-        "delete": "¿Estás seguro de que quieres eliminar el token \"{{label}}\"?"
+        "delete": "¿Estás seguro de que quieres eliminar el token \"{{label}}\"?",
+        "delete_title": "Eliminar token"
       },
       "description": "Gestiona tus tokens de acceso a la API",
       "dialog": {
@@ -649,15 +835,28 @@
       "empty": "No se encontraron tokens. Crea tu primer token para comenzar.",
       "key": {
         "copied": "¡Copiado!",
-        "copy": "Copiar token"
+        "copy": "Copiar token",
+        "hide": "Ocultar clave",
+        "show": "Mostrar clave"
+      },
+      "notifications": {
+        "action_failed_message": "No se pudo aplicar el cambio.",
+        "action_failed_title": "Acción fallida"
       },
       "quota": {
         "unlimited": "Ilimitado"
       },
       "search": {
         "id_label": "ID: {{id}}",
-        "placeholder": "Buscar tokens por nombre...",
+        "placeholder": "Buscar tokens por nombre o UUID...",
         "quota_label": "Cuota: {{quota}}"
+      },
+      "share": {
+        "ama": "AMA 问天",
+        "lobechat": "LobeChat",
+        "next_chat": "ChatGPT Next Web",
+        "open_in_client": "Abrir en cliente",
+        "opencat": "OpenCat"
       },
       "status": {
         "disabled": "Deshabilitado",
@@ -693,6 +892,10 @@
             "placeholder": "Introduce el nombre de usuario"
           }
         },
+        "notifications": {
+          "create_failed_message": "No se pudo crear el usuario.",
+          "create_failed_title": "Error al crear"
+        },
         "title": "Crear usuario"
       },
       "topup": {
@@ -710,15 +913,21 @@
             "placeholder": "Opcional"
           }
         },
+        "notifications": {
+          "submit_failed_message": "No se pudo recargar al usuario.",
+          "submit_failed_title": "Error al recargar"
+        },
         "title": "Recargar {{username}}"
       }
     },
     "edit": {
       "actions": {
-        "add": "Add",
+        "add": "Agregar",
         "cancel": "Cancelar",
         "create": "Crear usuario",
         "creating": "Creando...",
+        "disable_2fa": "Deshabilitar 2FA del usuario",
+        "disabling_2fa": "Deshabilitando...",
         "update": "Actualizar usuario",
         "updating": "Actualizando..."
       },
@@ -727,8 +936,15 @@
         "help_email": "Ayuda: Correo electrónico",
         "help_group": "Ayuda: Grupo",
         "help_password": "Ayuda: Contraseña",
+        "help_password_locked": "Ayuda: Bloquear contraseña",
         "help_quota": "Ayuda: Cuota",
         "help_username": "Ayuda: Nombre de usuario"
+      },
+      "confirm_2fa": {
+        "cancel": "Cancelar",
+        "confirm": "Deshabilitar 2FA",
+        "description": "¿Deshabilitar la autenticación de dos factores para {{username}}? Podrá iniciar sesión sin un código 2FA.",
+        "title": "Deshabilitar 2FA"
       },
       "description": {
         "create": "Crear una nueva cuenta de usuario",
@@ -740,6 +956,9 @@
         "unexpected_title": "Error inesperado"
       },
       "fields": {
+        "created_at": {
+          "label": "Fecha de registro"
+        },
         "display_name": {
           "help": "Nombre legible opcional que se muestra en la interfaz.",
           "label": "Nombre para mostrar",
@@ -764,11 +983,19 @@
           "help": "La longitud mínima depende de la política. Deja vacío al editar para mantener sin cambios.",
           "label_create": "Contraseña *",
           "label_edit": "Nueva contraseña (dejar vacío para mantener la actual)",
+          "locked_hint": "La contraseña está bloqueada. Desactiva \"Bloquear contraseña\" para cambiarla. La inscripción de nuevo MFA también está bloqueada mientras esté así.",
           "placeholder": "Introduce la contraseña"
+        },
+        "password_locked": {
+          "help": "Cuando está activo, nadie puede cambiar la contraseña de este usuario y el usuario no puede habilitar nuevos TOTP/passkey. Solo un administrador root puede desbloquearlo.",
+          "label": "Bloquear contraseña (solo root)"
         },
         "quota": {
           "help": "Las unidades de cuota son tokens. La estimación en USD utiliza la relación por unidad configurada por el administrador.",
           "label": "Cuota ({{usd}})"
+        },
+        "updated_at": {
+          "label": "Última modificación"
         },
         "username": {
           "help": "Nombre de inicio de sesión único. Mínimo 3 caracteres.",
@@ -780,6 +1007,18 @@
       "notifications": {
         "create_success": "Usuario creado exitosamente",
         "update_success": "Usuario actualizado exitosamente"
+      },
+      "notifications_2fa": {
+        "failed_message": "No se pudo deshabilitar 2FA.",
+        "failed_title": "Falló deshabilitar 2FA",
+        "success_message": "Autenticación de dos factores deshabilitada.",
+        "success_title": "2FA deshabilitada"
+      },
+      "sections": {
+        "security_lock": {
+          "description": "Restringir cambios sensibles para este usuario. Cuando está bloqueado, se impiden tanto la edición de contraseña como el registro de nuevo MFA. Solo los administradores root pueden alternar esto.",
+          "title": "Bloqueo de seguridad"
+        }
       },
       "title": {
         "create": "Crear usuario",
@@ -800,9 +1039,12 @@
     "page": {
       "actions": {
         "delete": "Eliminar",
+        "demote": "Degradar",
         "disable": "Deshabilitar",
+        "disable_2fa": "Deshabilitar 2FA",
         "edit": "Editar",
         "enable": "Habilitar",
+        "promote": "Promover",
         "topup": "Recargar"
       },
       "columns": {
@@ -810,25 +1052,48 @@
         "display_name": "Nombre para mostrar",
         "group": "Grupo",
         "id": "ID",
+        "register_time": "Fecha de registro",
         "remaining_quota": "Cuota restante",
         "role": "Rol",
         "status": "Estado",
         "used_quota": "Cuota utilizada",
         "username": "Nombre de usuario"
       },
+      "confirm": {
+        "cancel": "Cancelar",
+        "confirm": "Confirmar",
+        "demote_description": "¿Degradar a {{username}} a usuario regular? Perderá los privilegios de administrador.",
+        "demote_title": "Degradar usuario",
+        "disable_2fa_description": "¿Deshabilitar la autenticación de dos factores para {{username}}? Podrá iniciar sesión sin un código 2FA.",
+        "disable_2fa_title": "Deshabilitar 2FA",
+        "promote_description": "¿Promover a {{username}} a administrador? Obtendrá privilegios de administrador.",
+        "promote_title": "Promover usuario"
+      },
       "description": "Gestionar usuarios",
       "empty": "No se encontraron usuarios. Agrega tu primer usuario para comenzar.",
       "notifications": {
         "action_failed_message": "No se pudo aplicar el cambio.",
         "action_failed_title": "Acción fallida",
+        "demote_failed_message": "No se pudo degradar al usuario.",
+        "demote_failed_title": "La degradación falló",
+        "demote_success_message": "Usuario {{username}} degradado.",
+        "demote_success_title": "Usuario degradado",
+        "disable_2fa_failed_message": "No se pudo deshabilitar 2FA.",
+        "disable_2fa_failed_title": "Falló deshabilitar 2FA",
+        "disable_2fa_success_message": "Autenticación de dos factores deshabilitada para {{username}}.",
+        "disable_2fa_success_title": "2FA deshabilitada",
         "load_failed_message": "Error al cargar usuarios.",
         "load_failed_title": "Acceso denegado",
+        "promote_failed_message": "No se pudo promover al usuario.",
+        "promote_failed_title": "La promoción falló",
+        "promote_success_message": "Usuario {{username}} promovido.",
+        "promote_success_title": "Usuario promovido",
         "search_failed_message": "La búsqueda falló.",
         "search_failed_title": "Búsqueda fallida"
       },
       "search": {
         "id_label": "ID: {{id}}",
-        "placeholder": "Buscar usuarios por nombre de usuario...",
+        "placeholder": "Buscar usuarios por nombre de usuario o UUID...",
         "role_label": "Rol: {{role}}",
         "status_label": "Estado: {{status}}"
       },
@@ -857,6 +1122,7 @@
           "default": "Por defecto",
           "id": "ID",
           "quota": "Cuota restante",
+          "register_time": "Fecha de registro",
           "used_quota": "Cuota utilizada",
           "username": "Nombre de usuario"
         },

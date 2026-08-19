@@ -7,11 +7,11 @@ import (
 	"github.com/Laisky/zap"
 	"github.com/gin-gonic/gin"
 
-	openaipayload "github.com/songquanpeng/one-api/relay/adaptor/openai"
-	"github.com/songquanpeng/one-api/relay/apitype"
-	"github.com/songquanpeng/one-api/relay/channeltype"
-	metalib "github.com/songquanpeng/one-api/relay/meta"
-	relaymodel "github.com/songquanpeng/one-api/relay/model"
+	openaipayload "github.com/Laisky/one-api/relay/adaptor/openai"
+	"github.com/Laisky/one-api/relay/apitype"
+	"github.com/Laisky/one-api/relay/channeltype"
+	metalib "github.com/Laisky/one-api/relay/meta"
+	relaymodel "github.com/Laisky/one-api/relay/model"
 )
 
 type thinkingQueryState int
@@ -396,17 +396,25 @@ func isReasoningEffortAllowed(modelName, effort string) bool {
 	if effort == "" {
 		return false
 	}
-	switch effort {
-	case "low", "medium", "high":
-	default:
-		return false
-	}
 
 	name := strings.ToLower(strings.TrimSpace(modelName))
 	if strings.Contains(name, "deep-research") || isMediumOnlyOpenAIReasoningModel(name) {
 		return effort == "medium"
 	}
-	return true
+
+	switch effort {
+	case "low", "medium", "high":
+		return true
+	case "none", "minimal", "xhigh", "max":
+		// Extended GPT-5 effort ladder: xhigh (since GPT-5.4), max (since GPT-5.6),
+		// and the legacy none/minimal aliases. Gate to the GPT-5 (non-chat) family;
+		// the openai adaptor re-normalizes per model and coerces any value the
+		// specific model does not support to its default, so other providers keep
+		// their previous {low,medium,high} behaviour on the query-parameter path.
+		return strings.HasPrefix(name, "gpt-5") && !strings.HasPrefix(name, "gpt-5-chat")
+	default:
+		return false
+	}
 }
 
 // stringPtr returns a pointer to a copy of the provided string value.

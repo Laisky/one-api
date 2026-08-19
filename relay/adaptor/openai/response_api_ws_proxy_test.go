@@ -13,9 +13,9 @@ import (
 	"github.com/gorilla/websocket"
 	"github.com/stretchr/testify/require"
 
-	rmeta "github.com/songquanpeng/one-api/relay/meta"
-	rmodel "github.com/songquanpeng/one-api/relay/model"
-	"github.com/songquanpeng/one-api/relay/relaymode"
+	rmeta "github.com/Laisky/one-api/relay/meta"
+	rmodel "github.com/Laisky/one-api/relay/model"
+	"github.com/Laisky/one-api/relay/relaymode"
 )
 
 // ---------------------------------------------------------------------------
@@ -25,7 +25,7 @@ import (
 func TestExtractResponseAPIUsage(t *testing.T) {
 	t.Parallel()
 
-	payload := []byte(`{"type":"response.completed","response":{"id":"resp_123","usage":{"input_tokens":10,"output_tokens":20,"input_tokens_details":{"cached_tokens":3},"output_tokens_details":{"reasoning_tokens":5}}}}`)
+	payload := []byte(`{"type":"response.completed","response":{"id":"resp_123","usage":{"input_tokens":10,"output_tokens":20,"cache_write_tokens":4,"input_tokens_details":{"cached_tokens":3},"output_tokens_details":{"reasoning_tokens":5}}}}`)
 
 	responseID, usage, ok := extractResponseAPIUsage(payload)
 	require.True(t, ok)
@@ -34,6 +34,7 @@ func TestExtractResponseAPIUsage(t *testing.T) {
 	require.Equal(t, 10, usage.PromptTokens)
 	require.Equal(t, 20, usage.CompletionTokens)
 	require.Equal(t, 30, usage.TotalTokens)
+	require.Equal(t, 4, usage.CacheWrite5mTokens)
 	require.NotNil(t, usage.PromptTokensDetails)
 	require.Equal(t, 3, usage.PromptTokensDetails.CachedTokens)
 	require.NotNil(t, usage.CompletionTokensDetails)
@@ -192,7 +193,7 @@ func newProxyTestServer(t *testing.T, upstreamURL string, usageOut chan<- *rmode
 			BaseURL: upstreamURL,
 			APIKey:  "test-key",
 		}
-		_, usage := ResponseAPIWebSocketHandler(c, meta)
+		_, usage, _ := ResponseAPIWebSocketHandler(c, meta)
 		if usageOut != nil {
 			usageOut <- usage
 		}
@@ -279,7 +280,7 @@ func TestProxyInvalidMode(t *testing.T) {
 	ctx.Request = httptest.NewRequest(http.MethodGet, "/v1/responses", nil)
 
 	meta := &rmeta.Meta{Mode: 0}
-	bizErr, usage := ResponseAPIWebSocketHandler(ctx, meta)
+	bizErr, usage, _ := ResponseAPIWebSocketHandler(ctx, meta)
 	require.NotNil(t, bizErr)
 	require.Nil(t, usage)
 	require.Equal(t, http.StatusBadRequest, bizErr.StatusCode)
@@ -291,7 +292,7 @@ func TestProxyNilMeta(t *testing.T) {
 	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
 	ctx.Request = httptest.NewRequest(http.MethodGet, "/v1/responses", nil)
 
-	bizErr, usage := ResponseAPIWebSocketHandler(ctx, nil)
+	bizErr, usage, _ := ResponseAPIWebSocketHandler(ctx, nil)
 	require.NotNil(t, bizErr)
 	require.Nil(t, usage)
 	require.Equal(t, http.StatusBadRequest, bizErr.StatusCode)

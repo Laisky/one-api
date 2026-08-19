@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/songquanpeng/one-api/relay/model"
+	"github.com/Laisky/one-api/relay/model"
 )
 
 // SignatureCacheBackend defines the interface for signature cache backends

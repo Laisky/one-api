@@ -1,10 +1,12 @@
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { ConfirmDetailsList } from '@/components/ui/confirm-dialog';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { EnhancedDataTable } from '@/components/ui/enhanced-data-table';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { ListActionButton } from '@/components/ui/list-action-button';
+import { NameWithId } from '@/components/shared/NameWithId';
 import { useNotifications } from '@/components/ui/notifications';
 import { ResponsiveActionGroup } from '@/components/ui/responsive-action-group';
 import { ResponsivePageContainer } from '@/components/ui/responsive-container';
@@ -13,18 +15,28 @@ import { TimestampDisplay } from '@/components/ui/timestamp';
 import { STORAGE_KEYS, usePageSize } from '@/hooks/usePersistentState';
 import { useResponsive } from '@/hooks/useResponsive';
 import { api } from '@/lib/api';
+import { useAuthStore } from '@/lib/stores/auth';
 import { cn, renderQuota } from '@/lib/utils';
 import { zodResolver } from '@hookform/resolvers/zod';
 import type { ColumnDef } from '@tanstack/react-table';
-import { Ban, CheckCircle, CreditCard, Settings, Trash2 } from 'lucide-react';
+import { Ban, CheckCircle, CreditCard, Settings, ShieldOff, Trash2 } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import * as z from 'zod';
 
+type ConfirmKind = 'promote' | 'demote' | 'disable_2fa';
+
+interface ConfirmState {
+  open: boolean;
+  kind?: ConfirmKind;
+  user?: UserRow;
+}
+
 interface UserRow {
-  id: number;
+  id?: number;
+  uuid?: string;
   username: string;
   display_name?: string;
   role: number;
@@ -36,6 +48,20 @@ interface UserRow {
   created_at?: number;
   updated_at?: number;
 }
+
+const userRef = (user: Pick<UserRow, 'id' | 'uuid'>): string | number => user.uuid || user.id || '';
+
+const sameUserRef = (left: Pick<UserRow, 'id' | 'uuid'>, right: Pick<UserRow, 'id' | 'uuid'>): boolean => {
+  return String(userRef(left)) === String(userRef(right));
+};
+
+const userRefPayload = (ref: string | number): { id: number } | { uuid: string } => {
+  return typeof ref === 'string' ? { uuid: ref } : { id: ref };
+};
+
+const topupUserPayload = (ref: string | number): { user_id: number } | { user_uuid: string } => {
+  return typeof ref === 'string' ? { user_uuid: ref } : { user_id: ref };
+};
 
 export function UsersPage() {
   const navigate = useNavigate();
@@ -60,9 +86,13 @@ export function UsersPage() {
   const [openCreate, setOpenCreate] = useState(false);
   const [openTopup, setOpenTopup] = useState<{
     open: boolean;
-    userId?: number;
+    userId?: string | number;
     username?: string;
   }>({ open: false });
+  const [confirmState, setConfirmState] = useState<ConfirmState>({ open: false });
+  const [confirmBusy, setConfirmBusy] = useState(false);
+  const currentUser = useAuthStore((s) => s.user);
+  const isSuperAdmin = (currentUser?.role ?? 0) >= 100;
   const mounted = useRef(false);
   const getRoleLabel = useCallback(
     (role: number) => {
@@ -132,14 +162,17 @@ export function UsersPage() {
       const { success, data } = res.data;
       if (success && Array.isArray(data)) {
         const options: SearchOption[] = data.map((user: UserRow) => ({
-          key: user.id.toString(),
+          key: String(userRef(user)),
           value: user.username,
           text: user.username,
+          // Operators copy UUIDs out of the UI / logs, so the UUID must be a
+          // first-class match target and not only the username.
+          keywords: [String(userRef(user)), user.uuid || '', String(user.id ?? '')].filter(Boolean),
           content: (
             <div className="flex flex-col">
               <div className="font-medium">{user.username}</div>
               <div className="text-sm text-muted-foreground flex flex-wrap gap-2">
-                <span>{tr('search.id_label', 'ID: {{id}}', { id: user.id })}</span>
+                <span>{tr('search.id_label', 'ID: {{id}}', { id: userRef(user) })}</span>
                 <span>
                   {tr('search.role_label', 'Role: {{role}}', {
                     role: getRoleLabel(user.role),
@@ -203,8 +236,17 @@ export function UsersPage() {
   };
 
   const columns: ColumnDef<UserRow>[] = [
-    { header: tr('columns.id', 'ID'), accessorKey: 'id' },
-    { header: tr('columns.username', 'Username'), accessorKey: 'username' },
+    {
+      header: tr('columns.username', 'Username'),
+      accessorKey: 'username',
+      cell: ({ row }) => (
+        <NameWithId
+          name={row.original.username}
+          refId={userRef(row.original)}
+          idLabel={tr('columns.id', 'ID')}
+        />
+      ),
+    },
     {
       header: tr('columns.display_name', 'Display Name'),
       accessorKey: 'display_name',
@@ -265,60 +307,186 @@ export function UsersPage() {
     },
     {
       header: tr('columns.actions', 'Actions'),
-      cell: ({ row }) => (
-        <ResponsiveActionGroup justify="start">
-          <Button variant="outline" size="sm" onClick={() => navigate(`/users/edit/${row.original.id}`)}>
-            {tr('actions.edit', 'Edit')}
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => manage(row.original.id, row.original.status === 1 ? 'disable' : 'enable', row.index)}
-          >
-            {row.original.status === 1 ? tr('actions.disable', 'Disable') : tr('actions.enable', 'Enable')}
-          </Button>
-          <Button variant="destructive" size="sm" onClick={() => manage(row.original.id, 'delete', row.index)}>
-            {tr('actions.delete', 'Delete')}
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() =>
-              setOpenTopup({
-                open: true,
-                userId: row.original.id,
-                username: row.original.username,
-              })
-            }
-          >
-            {tr('actions.topup', 'Top Up')}
-          </Button>
-        </ResponsiveActionGroup>
-      ),
+      cell: ({ row }) => {
+        const target = row.original;
+        const targetRef = userRef(target);
+        const currentUserRef = currentUser?.uuid || currentUser?.id;
+        const canPromote = isSuperAdmin && target.role < 100;
+        const canDemote = isSuperAdmin && target.role > 1 && String(targetRef) !== String(currentUserRef ?? '');
+        const canDisable2fa = isSuperAdmin;
+        return (
+          <ResponsiveActionGroup justify="start">
+            <Button variant="outline" size="sm" onClick={() => navigate(`/users/edit/${targetRef}`)}>
+              {tr('actions.edit', 'Edit')}
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => manage(targetRef, target.status === 1 ? 'disable' : 'enable', row.index)}>
+              {target.status === 1 ? tr('actions.disable', 'Disable') : tr('actions.enable', 'Enable')}
+            </Button>
+            {canPromote && (
+              <Button variant="outline" size="sm" onClick={() => setConfirmState({ open: true, kind: 'promote', user: target })}>
+                {tr('actions.promote', 'Promote')}
+              </Button>
+            )}
+            {canDemote && (
+              <Button variant="outline" size="sm" onClick={() => setConfirmState({ open: true, kind: 'demote', user: target })}>
+                {tr('actions.demote', 'Demote')}
+              </Button>
+            )}
+            {canDisable2fa && (
+              <Button variant="outline" size="sm" onClick={() => setConfirmState({ open: true, kind: 'disable_2fa', user: target })}>
+                {tr('actions.disable_2fa', 'Disable 2FA')}
+              </Button>
+            )}
+            <Button variant="destructive" size="sm" onClick={() => manage(targetRef, 'delete', row.index)}>
+              {tr('actions.delete', 'Delete')}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() =>
+                setOpenTopup({
+                  open: true,
+                  userId: targetRef,
+                  username: target.username,
+                })
+              }
+            >
+              {tr('actions.topup', 'Top Up')}
+            </Button>
+          </ResponsiveActionGroup>
+        );
+      },
     },
   ];
 
-  const manage = async (id: number, action: 'enable' | 'disable' | 'delete', idx: number) => {
+  const closeConfirm = () => {
+    if (confirmBusy) return;
+    setConfirmState({ open: false });
+  };
+
+  const confirmDetails = confirmState.user
+    ? [
+        {
+          label: tr('columns.username', 'Username'),
+          value: confirmState.user.username,
+        },
+        {
+          label: tr('columns.role', 'Role'),
+          value: getRoleLabel(confirmState.user.role),
+        },
+      ]
+    : [];
+
+  const runConfirmAction = async () => {
+    const { kind, user } = confirmState;
+    if (!kind || !user) return;
+    setConfirmBusy(true);
+    try {
+      if (kind === 'promote' || kind === 'demote') {
+        const res = await api.post('/api/user/manage', {
+          username: user.username,
+          action: kind,
+        });
+        const { success, message, data: payload } = res.data || {};
+        if (!success) {
+          throw new Error(
+            message || tr(`notifications.${kind}_failed_message`, kind === 'promote' ? 'Unable to promote user.' : 'Unable to demote user.')
+          );
+        }
+        const updatedRole =
+          payload && typeof payload === 'object' && 'role' in payload && typeof (payload as any).role === 'number'
+            ? ((payload as any).role as number)
+            : undefined;
+        setData((prev) =>
+          prev.map((u) => {
+            if (!sameUserRef(u, user)) return u;
+            if (typeof updatedRole === 'number') {
+              return { ...u, role: updatedRole };
+            }
+            return { ...u, role: kind === 'promote' ? 10 : 1 };
+          })
+        );
+        notify({
+          type: 'success',
+          title: tr(`notifications.${kind}_success_title`, kind === 'promote' ? 'User promoted' : 'User demoted'),
+          message: tr(
+            `notifications.${kind}_success_message`,
+            kind === 'promote' ? 'User {{username}} promoted.' : 'User {{username}} demoted.',
+            {
+              username: user.username,
+            }
+          ),
+        });
+      } else if (kind === 'disable_2fa') {
+        const res = await api.post(`/api/user/totp/disable/${userRef(user)}`);
+        const { success, message } = res.data || {};
+        if (!success) {
+          throw new Error(message || tr('notifications.disable_2fa_failed_message', 'Unable to disable 2FA.'));
+        }
+        notify({
+          type: 'success',
+          title: tr('notifications.disable_2fa_success_title', '2FA disabled'),
+          message: tr('notifications.disable_2fa_success_message', 'Two-factor authentication disabled for {{username}}.', {
+            username: user.username,
+          }),
+        });
+      }
+      setConfirmState({ open: false });
+    } catch (error) {
+      const fallbackTitleKey =
+        kind === 'promote'
+          ? 'notifications.promote_failed_title'
+          : kind === 'demote'
+            ? 'notifications.demote_failed_title'
+            : 'notifications.disable_2fa_failed_title';
+      const fallbackMessageKey =
+        kind === 'promote'
+          ? 'notifications.promote_failed_message'
+          : kind === 'demote'
+            ? 'notifications.demote_failed_message'
+            : 'notifications.disable_2fa_failed_message';
+      const fallbackTitle = kind === 'promote' ? 'Promote failed' : kind === 'demote' ? 'Demote failed' : 'Disable 2FA failed';
+      const fallbackMessage =
+        kind === 'promote' ? 'Unable to promote user.' : kind === 'demote' ? 'Unable to demote user.' : 'Unable to disable 2FA.';
+      const apiMessage = (error as any)?.response?.data?.message || (error as Error)?.message;
+      notify({
+        type: 'error',
+        title: tr(fallbackTitleKey, fallbackTitle),
+        message: apiMessage || tr(fallbackMessageKey, fallbackMessage),
+      });
+    } finally {
+      setConfirmBusy(false);
+    }
+  };
+
+  const manage = async (id: string | number, action: 'enable' | 'disable' | 'delete', idx: number) => {
     try {
       let res: any;
       if (action === 'delete') {
         // Unified API call - complete URL with /api prefix
         res = await api.delete(`/api/user/${id}`);
       } else {
-        const body: any = { id, status: action === 'enable' ? 1 : 2 };
+        const body: any = { ...userRefPayload(id), status: action === 'enable' ? 1 : 2 };
         res = await api.put('/api/user/?status_only=true', body);
       }
-      const { success } = res.data;
-      if (success) {
-        // Optimistic update like legacy
-        const next = [...data];
-        if (action === 'delete') {
-          next.splice(idx, 1);
-        } else {
-          next[idx].status = action === 'enable' ? 1 : 2;
-        }
-        setData(next);
+      const { success, message } = res.data || {};
+      if (!success) {
+        notify({
+          type: 'error',
+          title: tr('notifications.action_failed_title', 'Action failed'),
+          message: message || tr('notifications.action_failed_message', 'Unable to apply change.'),
+        });
+        return;
       }
+
+      // Optimistic update like legacy
+      const next = [...data];
+      if (action === 'delete') {
+        next.splice(idx, 1);
+      } else {
+        next[idx].status = action === 'enable' ? 1 : 2;
+      }
+      setData(next);
     } catch (error) {
       const message = (error as any)?.response?.data?.message || tr('notifications.action_failed_message', 'Unable to apply change.');
       notify({
@@ -391,24 +559,31 @@ export function UsersPage() {
             floatingRowActions={(row) => (
               <div className="flex items-center gap-1">
                 <ListActionButton
-                  onClick={() => navigate(`/users/edit/${row.id}`)}
+                  onClick={() => navigate(`/users/edit/${userRef(row)}`)}
                   title={tr('actions.edit', 'Edit')}
                   icon={<Settings className="h-4 w-4" />}
                 />
                 <ListActionButton
                   onClick={() => {
-                    const idx = data.findIndex((u) => u.id === row.id);
-                    manage(row.id, row.status === 1 ? 'disable' : 'enable', idx);
+                    const idx = data.findIndex((u) => sameUserRef(u, row));
+                    manage(userRef(row), row.status === 1 ? 'disable' : 'enable', idx);
                   }}
                   title={row.status === 1 ? tr('actions.disable', 'Disable') : tr('actions.enable', 'Enable')}
                   className={row.status === 1 ? 'text-warning hover:text-warning/80' : 'text-success hover:text-success/80'}
                   icon={row.status === 1 ? <Ban className="h-4 w-4" /> : <CheckCircle className="h-4 w-4" />}
                 />
+                {isSuperAdmin && (
+                  <ListActionButton
+                    onClick={() => setConfirmState({ open: true, kind: 'disable_2fa', user: row })}
+                    title={tr('actions.disable_2fa', 'Disable 2FA')}
+                    icon={<ShieldOff className="h-4 w-4" />}
+                  />
+                )}
                 <ListActionButton
                   onClick={() =>
                     setOpenTopup({
                       open: true,
-                      userId: row.id,
+                      userId: userRef(row),
                       username: row.username,
                     })
                   }
@@ -417,8 +592,8 @@ export function UsersPage() {
                 />
                 <ListActionButton
                   onClick={() => {
-                    const idx = data.findIndex((u) => u.id === row.id);
-                    manage(row.id, 'delete', idx);
+                    const idx = data.findIndex((u) => sameUserRef(u, row));
+                    manage(userRef(row), 'delete', idx);
                   }}
                   title={tr('actions.delete', 'Delete')}
                   icon={<Trash2 className="h-4 w-4" />}
@@ -444,7 +619,7 @@ export function UsersPage() {
             onSearchValueChange={setSearchKeyword}
             onSearchSubmit={search}
             onSearchSelect={(key) => navigate(`/users/edit/${key}`)}
-            searchPlaceholder={tr('search.placeholder', 'Search users by username...')}
+            searchPlaceholder={tr('search.placeholder', 'Search users by username or UUID...')}
             allowSearchAdditions={true}
             onRefresh={() => load(pageIndex, pageSize)}
             loading={loading}
@@ -466,6 +641,55 @@ export function UsersPage() {
         username={openTopup.username}
         onDone={() => load(pageIndex, pageSize)}
       />
+      {/* Confirm dialog for promote / demote / disable 2FA */}
+      <Dialog
+        open={confirmState.open}
+        onOpenChange={(open) => {
+          if (!open) closeConfirm();
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              {confirmState.kind === 'promote'
+                ? tr('confirm.promote_title', 'Promote user')
+                : confirmState.kind === 'demote'
+                  ? tr('confirm.demote_title', 'Demote user')
+                  : tr('confirm.disable_2fa_title', 'Disable 2FA')}
+            </DialogTitle>
+            <DialogDescription asChild>
+              <div className="space-y-3 text-sm text-muted-foreground">
+                <div>
+                  {confirmState.kind === 'promote'
+                    ? tr('confirm.promote_description', 'Promote {{username}} to administrator? They will gain admin privileges.', {
+                        username: confirmState.user?.username ?? '',
+                      })
+                    : confirmState.kind === 'demote'
+                      ? tr('confirm.demote_description', 'Demote {{username}} to a regular user? They will lose admin privileges.', {
+                          username: confirmState.user?.username ?? '',
+                        })
+                      : tr(
+                          'confirm.disable_2fa_description',
+                          'Disable two-factor authentication for {{username}}? They will be able to sign in without a 2FA code.',
+                          {
+                            username: confirmState.user?.username ?? '',
+                          }
+                        )}
+                </div>
+                {confirmDetails.length > 0 ? <ConfirmDetailsList details={confirmDetails} /> : null}
+              </div>
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={closeConfirm} disabled={confirmBusy}>
+              {tr('confirm.cancel', 'Cancel')}
+            </Button>
+            <Button type="button" onClick={runConfirmAction} disabled={confirmBusy}>
+              {tr('confirm.confirm', 'Confirm')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </ResponsivePageContainer>
   );
 }
@@ -483,6 +707,7 @@ function CreateUserDialog({ open, onOpenChange, onCreated }: { open: boolean; on
     defaultValues: { username: '', password: '', display_name: '' },
   });
   const { t } = useTranslation();
+  const { notify } = useNotifications();
   const tr = useCallback(
     (key: string, defaultValue: string, options?: Record<string, unknown>) =>
       t(`users.dialogs.create.${key}`, { defaultValue, ...options }),
@@ -498,16 +723,33 @@ function CreateUserDialog({ open, onOpenChange, onCreated }: { open: boolean; on
           <form
             className="space-y-3"
             onSubmit={form.handleSubmit(async (values) => {
-              // Unified API call - complete URL with /api prefix
-              const res = await api.post('/api/user/', {
-                username: values.username,
-                password: values.password,
-                display_name: values.display_name || values.username,
-              });
-              if (res.data?.success) {
+              try {
+                // Unified API call - complete URL with /api prefix
+                const res = await api.post('/api/user/', {
+                  username: values.username,
+                  password: values.password,
+                  display_name: values.display_name || values.username,
+                });
+                if (!res.data?.success) {
+                  notify({
+                    type: 'error',
+                    title: tr('notifications.create_failed_title', 'Create failed'),
+                    message: res.data?.message || tr('notifications.create_failed_message', 'Unable to create user.'),
+                  });
+                  return;
+                }
                 onOpenChange(false);
                 form.reset();
                 onCreated();
+              } catch (error) {
+                notify({
+                  type: 'error',
+                  title: tr('notifications.create_failed_title', 'Create failed'),
+                  message:
+                    (error as any)?.response?.data?.message ||
+                    (error as Error)?.message ||
+                    tr('notifications.create_failed_message', 'Unable to create user.'),
+                });
               }
             })}
           >
@@ -573,7 +815,7 @@ function TopUpDialog({
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
-  userId?: number;
+  userId?: string | number;
   username?: string;
   onDone: () => void;
 }) {
@@ -587,6 +829,7 @@ function TopUpDialog({
     defaultValues: { quota: 0, remark: '' },
   });
   const { t } = useTranslation();
+  const { notify } = useNotifications();
   const tr = useCallback(
     (key: string, defaultValue: string, options?: Record<string, unknown>) => t(`users.dialogs.topup.${key}`, { defaultValue, ...options }),
     [t]
@@ -606,16 +849,33 @@ function TopUpDialog({
             className="space-y-3"
             onSubmit={form.handleSubmit(async (values) => {
               if (!userId) return;
-              // Unified API call - complete URL with /api prefix
-              const res = await api.post('/api/topup', {
-                user_id: userId,
-                quota: values.quota,
-                remark: values.remark,
-              });
-              if (res.data?.success) {
+              try {
+                // Unified API call - complete URL with /api prefix
+                const res = await api.post('/api/topup', {
+                  ...topupUserPayload(userId),
+                  quota: values.quota,
+                  remark: values.remark,
+                });
+                if (!res.data?.success) {
+                  notify({
+                    type: 'error',
+                    title: tr('notifications.submit_failed_title', 'Top up failed'),
+                    message: res.data?.message || tr('notifications.submit_failed_message', 'Unable to top up user.'),
+                  });
+                  return;
+                }
                 onOpenChange(false);
                 form.reset();
                 onDone();
+              } catch (error) {
+                notify({
+                  type: 'error',
+                  title: tr('notifications.submit_failed_title', 'Top up failed'),
+                  message:
+                    (error as any)?.response?.data?.message ||
+                    (error as Error)?.message ||
+                    tr('notifications.submit_failed_message', 'Unable to top up user.'),
+                });
               }
             })}
           >

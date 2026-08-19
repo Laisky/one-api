@@ -24,9 +24,12 @@ func TestChannelSupportsModel(t *testing.T) {
 		assert.True(t, channel.SupportsModel("gpt-4"))
 	})
 
-	t.Run("case insensitive match", func(t *testing.T) {
+	t.Run("case sensitive match", func(t *testing.T) {
 		t.Parallel()
-		assert.True(t, channel.SupportsModel("GPT-4O-MINI"))
+		// Model names are matched case-sensitively (issue #352): a differently
+		// cased request is NOT supported, but the exact casing is.
+		assert.False(t, channel.SupportsModel("GPT-4O-MINI"))
+		assert.True(t, channel.SupportsModel("gpt-4o-mini"))
 	})
 
 	t.Run("unlisted model", func(t *testing.T) {
@@ -44,6 +47,24 @@ func TestChannelSupportsModel(t *testing.T) {
 		t.Parallel()
 		assert.True(t, channel.SupportsModel(""))
 	})
+}
+
+// TestChannelSupportedModelNamesPreserveCaseVariants verifies that routing model
+// identifiers are trimmed and deduplicated by exact value while group names retain
+// their historical case-insensitive deduplication behavior.
+func TestChannelSupportedModelNamesPreserveCaseVariants(t *testing.T) {
+	t.Parallel()
+
+	channel := &Channel{
+		Models: " Foo,foo,Foo, BAR,bar, ",
+		Group:  " Default,default,VIP,vip ",
+	}
+
+	require.Equal(t, []string{"Foo", "foo", "BAR", "bar"}, channel.GetSupportedModelNames())
+	require.Equal(t, []string{"Default", "VIP"}, channel.GetGroupNames())
+	require.True(t, channel.SupportsModel("Foo"))
+	require.True(t, channel.SupportsModel("foo"))
+	require.False(t, channel.SupportsModel("FOO"))
 }
 
 func TestChannel_MigrateModelConfigsToModelPrice(t *testing.T) {

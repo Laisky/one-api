@@ -1,6 +1,6 @@
 package openai
 
-import "github.com/songquanpeng/one-api/relay/adaptor"
+import "github.com/Laisky/one-api/relay/adaptor"
 
 // DefaultToolingConfig returns OpenAI's upstream tooling defaults so channel
 // policy resolution can merge in provider pricing and allowlists.

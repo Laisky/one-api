@@ -12,7 +12,7 @@ import (
 
 	"github.com/Laisky/errors/v2"
 
-	"github.com/songquanpeng/one-api/common/client"
+	"github.com/Laisky/one-api/common/client"
 )
 
 const (

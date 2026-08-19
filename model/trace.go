@@ -14,12 +14,13 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	"gorm.io/gorm"
 
-	"github.com/songquanpeng/one-api/common"
+	"github.com/Laisky/one-api/common"
 )
 
 // Trace represents a request tracing record with key timestamps
 type Trace struct {
-	Id         int    `json:"id" gorm:"primaryKey;autoIncrement"`
+	Id         int    `json:"-" gorm:"primaryKey;autoIncrement"`
+	UUID       string `json:"uuid" gorm:"type:char(36);column:uuid"`
 	TraceId    string `json:"trace_id" gorm:"type:varchar(64);uniqueIndex;not null"` // TraceID from gin-middlewares
 	URL        string `json:"url" gorm:"type:text;not null"`                         // Request URL
 	Method     string `json:"method" gorm:"type:varchar(16);not null"`               // HTTP method
@@ -78,7 +79,8 @@ func CreateTrace(ctx context.Context, traceId, url, method string, bodySize int6
 		RequestReceived: &now,
 	}
 
-	urlToStore, truncated := enforceTraceURLLimit(url)
+	sanitizedURL := common.SanitizeURLForLogging(url)
+	urlToStore, truncated := enforceTraceURLLimit(sanitizedURL)
 	if truncated {
 		lg.Warn("trace url truncated to max length",
 			zap.String("trace_id", traceId),

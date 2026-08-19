@@ -7,9 +7,9 @@ import (
 	"io"
 	"net/http"
 
-	"github.com/songquanpeng/one-api/common/ctxkey"
-	"github.com/songquanpeng/one-api/common/image"
-	"github.com/songquanpeng/one-api/common/tracing"
+	"github.com/Laisky/one-api/common/ctxkey"
+	"github.com/Laisky/one-api/common/image"
+	"github.com/Laisky/one-api/common/tracing"
 
 	"github.com/Laisky/errors/v2"
 	gmw "github.com/Laisky/gin-middlewares/v7"
@@ -19,13 +19,14 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/bedrockruntime/types"
 	"github.com/gin-gonic/gin"
 
-	"github.com/songquanpeng/one-api/common"
-	"github.com/songquanpeng/one-api/common/config"
-	"github.com/songquanpeng/one-api/common/helper"
-	"github.com/songquanpeng/one-api/relay/adaptor/aws/internal/streamfinalizer"
-	"github.com/songquanpeng/one-api/relay/adaptor/aws/utils"
-	"github.com/songquanpeng/one-api/relay/adaptor/openai"
-	relaymodel "github.com/songquanpeng/one-api/relay/model"
+	"github.com/Laisky/one-api/common"
+	"github.com/Laisky/one-api/common/config"
+	"github.com/Laisky/one-api/common/helper"
+	"github.com/Laisky/one-api/relay/adaptor/aws/internal/streamfinalizer"
+	"github.com/Laisky/one-api/relay/adaptor/aws/utils"
+	"github.com/Laisky/one-api/relay/adaptor/openai"
+	"github.com/Laisky/one-api/relay/adaptor/openai_compatible"
+	relaymodel "github.com/Laisky/one-api/relay/model"
 )
 
 // Support for Llama 3, 3.1, 3.2, 3.3, and 4.0 instruction models
@@ -424,7 +425,15 @@ func StreamHandler(c *gin.Context, awsCli *bedrockruntime.Client) (*relaymodel.E
 		&usage,
 		lg,
 		func(payload []byte) bool {
-			c.Render(-1, common.CustomEvent{Data: "data: " + string(payload)})
+			// The finalizer hands us the already-marshalled final chat-completion
+			// chunk. Route it through the Response API rewrite bridge (when the
+			// /v1/responses chat-fallback installed one) by handing the bridge the
+			// raw JSON so it can introspect the chunk; otherwise it is emitted
+			// verbatim exactly like render.ObjectData.
+			if err := openai_compatible.RenderStreamChunkWithBridge(c, json.RawMessage(payload)); err != nil {
+				lg.Error("error rendering final stream chunk", zap.Error(err))
+				return false
+			}
 			return true
 		},
 	)
@@ -435,7 +444,10 @@ func StreamHandler(c *gin.Context, awsCli *bedrockruntime.Client) (*relaymodel.E
 			if !finalizer.FinalizeOnClose() {
 				return false
 			}
-			c.Render(-1, common.CustomEvent{Data: "data: [DONE]"})
+			// Emit the terminal events: with a bridge -> Responses completion
+			// events carrying usage; without -> the chat-completion `[DONE]`
+			// sentinel.
+			openai_compatible.FinalizeStreamWithBridge(c, &usage)
 			return false
 		}
 
@@ -474,14 +486,17 @@ func StreamHandler(c *gin.Context, awsCli *bedrockruntime.Client) (*relaymodel.E
 					}
 				}
 
-				// Send the response if we have one
+				// Send the response if we have one.
+				//
+				// Route the chunk through the Response API rewrite bridge when the
+				// /v1/responses chat-fallback installed one; otherwise it is emitted
+				// verbatim exactly like render.ObjectData. Pass the chunk OBJECT so
+				// the bridge can introspect choices[].delta.
 				if response != nil {
-					jsonStr, err := json.Marshal(response)
-					if err != nil {
-						lg.Error("error marshalling stream response", zap.Error(err))
+					if err := openai_compatible.RenderStreamChunkWithBridge(c, response); err != nil {
+						lg.Error("error rendering stream response", zap.Error(err))
 						return true
 					}
-					c.Render(-1, common.CustomEvent{Data: "data: " + string(jsonStr)})
 				}
 			}
 			return true

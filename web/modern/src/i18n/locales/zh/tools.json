@@ -2,6 +2,10 @@
   "tools": {
     "clear_filters": "清除筛选",
     "description": "浏览从 MCP 服务器同步的工具，按服务器分组展示定价与结构信息。",
+    "filters": {
+      "description": "按工具名称、描述或服务器搜索。",
+      "title": "筛选工具"
+    },
     "found": "在 {{servers}} 个服务器中找到 {{count}} 个工具",
     "labels": {
       "free": "免费",
@@ -11,6 +15,7 @@
     "no_tools": "未找到工具",
     "no_tools_desc": "请尝试调整搜索或筛选条件。",
     "search": "搜索工具...",
+    "server_count": "{{count}} 个工具",
     "status": {
       "disabled": "已禁用",
       "enabled": "已启用"

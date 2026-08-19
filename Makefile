@@ -11,14 +11,46 @@ install:
 	# go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.2
 
 .PHONY: lint
+GO_FILE_FIND = find . \
+	-path './.git' -prune -o \
+	-path './node_modules' -prune -o \
+	-path './web/*/node_modules' -prune -o \
+	-path './web/build' -prune -o \
+	-path './.mypy_cache' -prune -o \
+	-name '*.go' -print0
+
 lint:
-	goimports -local module,github.com/songquanpeng/one-api -w .
+	$(GO_FILE_FIND) | xargs -0 -n 50 goimports -local module,github.com/Laisky/one-api -w
 	go mod tidy
-	gofmt -s -w .
-	go vet
+	$(GO_FILE_FIND) | xargs -0 -n 50 gofmt -s -w
+	go vet ./...
 	# nilaway ./...
 	golangci-lint run -c .golangci.yml
 	govulncheck ./...
+	$(MAKE) lint-goroutine-guard
+	$(MAKE) lint-entity-response
+
+# lint-goroutine-guard enforces the structural rule that no background goroutine may
+# reference the request *gin.Context (gin recycles it via sync.Pool after the handler
+# returns). See .ast-grep/rules/no-gin-context-in-goroutine.yml and
+# docs/proposals/20260608_relay-billing-async-sync-race-fixes.md.
+# Requires ast-grep (install: `pipx install ast-grep-cli`, `cargo install ast-grep --locked`,
+# or a prebuilt binary from https://github.com/ast-grep/ast-grep/releases); skips gracefully
+# when not installed.
+.PHONY: lint-goroutine-guard
+lint-goroutine-guard:
+	@command -v ast-grep >/dev/null 2>&1 || { echo "ast-grep not installed; skipping goroutine *gin.Context guardrail (install: pipx install ast-grep-cli, or a prebuilt binary from https://github.com/ast-grep/ast-grep/releases)"; exit 0; }
+	ast-grep test --skip-snapshot-tests
+	ast-grep scan
+
+# lint-entity-response enforces the boundary rule that no management-API entity
+# (model.User/Token/Channel/Redemption/Log) is serialized raw at the HTTP
+# boundary. It is a type-aware go/analysis analyzer (ast-grep is syntactic and
+# cannot see that gin.H{"data": users} carries []*model.User). See
+# tools/analyzers/noentityresponse and docs/proposals/20260714_boundary-response-dtos.md.
+.PHONY: lint-entity-response
+lint-entity-response:
+	go run ./tools/analyzers/noentityresponse/cmd/noentityresponse ./...
 
 # Development targets - Template specific
 .PHONY: dev-air dev-berry dev-modern
@@ -29,7 +61,7 @@ dev-berry:
 	@./web/berry/dev.sh dev
 
 dev-modern:
-	@cd web/modern && npm run dev
+	@cd web/modern && CHOKIDAR_USEPOLLING=$${CHOKIDAR_USEPOLLING:-1} CHOKIDAR_INTERVAL=$${CHOKIDAR_INTERVAL:-1000} yarn dev
 
 # Default dev target
 .PHONY: dev
@@ -59,7 +91,7 @@ build-frontend-dev-berry:
 	@./web/berry/dev.sh build-dev
 
 build-frontend-dev-modern:
-	@cd web/modern && npm run build
+	@cd web/modern && yarn run build
 
 # Default dev build target
 .PHONY: build-frontend-dev

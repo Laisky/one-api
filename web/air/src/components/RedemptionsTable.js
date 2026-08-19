@@ -5,6 +5,7 @@ import { ITEMS_PER_PAGE } from '../constants';
 import { renderQuota } from '../helpers/render';
 import { Button, Form, Modal, Popconfirm, Popover, Table, Tag } from '@douyinfe/semi-ui';
 import EditRedemption from '../pages/Redemption/EditRedemption';
+import ResourceRefTooltip from './ResourceRefTooltip';
 
 function renderTimestamp(timestamp) {
   return (
@@ -30,12 +31,11 @@ function renderStatus(status) {
 const RedemptionsTable = () => {
   const columns = [
     {
-      title: 'ID',
-      dataIndex: 'id'
-    },
-    {
       title: '名称',
-      dataIndex: 'name'
+      dataIndex: 'name',
+      render: (text, record) => (
+        <ResourceRefTooltip refId={record.uuid || record.id}>{text}</ResourceRefTooltip>
+      )
     },
     {
       title: '状态',
@@ -107,7 +107,7 @@ const RedemptionsTable = () => {
             okType={'danger'}
             position={'left'}
             onConfirm={() => {
-              manageRedemption(record.id, 'delete', record).then(
+              manageRedemption(record.uuid || record.id, 'delete', record).then(
                 () => {
                   removeRecord(record.key);
                 }
@@ -121,7 +121,7 @@ const RedemptionsTable = () => {
               <Button theme="light" type="warning" style={{ marginRight: 1 }} onClick={
                 async () => {
                   manageRedemption(
-                    record.id,
+                    record.uuid || record.id,
                     'disable',
                     record
                   );
@@ -130,7 +130,7 @@ const RedemptionsTable = () => {
               <Button theme="light" type="secondary" style={{ marginRight: 1 }} onClick={
                 async () => {
                   manageRedemption(
-                    record.id,
+                    record.uuid || record.id,
                     'enable',
                     record
                   );
@@ -246,7 +246,7 @@ const RedemptionsTable = () => {
   };
 
   const manageRedemption = async (id, action, record) => {
-    let data = { id };
+    let data = typeof id === 'string' ? { uuid: id } : { id };
     let res;
     switch (action) {
       case 'delete':
@@ -308,7 +308,7 @@ const RedemptionsTable = () => {
     sortedRedemptions.sort((a, b) => {
       return ('' + a[key]).localeCompare(b[key]);
     });
-    if (sortedRedemptions[0].id === redemptions[0].id) {
+    if ((sortedRedemptions[0].uuid || sortedRedemptions[0].id) === (redemptions[0].uuid || redemptions[0].id)) {
       sortedRedemptions.reverse();
     }
     setRedemptions(sortedRedemptions);
@@ -357,7 +357,7 @@ const RedemptionsTable = () => {
           field="keyword"
           icon="search"
           iconPosition="left"
-          placeholder="关键字(id或者名称)"
+          placeholder="关键字(id、名称或 UUID)"
           value={searchKeyword}
           loading={searching}
           onChange={handleKeywordChange}

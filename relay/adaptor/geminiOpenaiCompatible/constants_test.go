@@ -5,7 +5,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/songquanpeng/one-api/relay/billing/ratio"
+	"github.com/Laisky/one-api/relay/billing/ratio"
 )
 
 func TestGeminiWebSearchPricingApplied(t *testing.T) {
@@ -166,4 +166,157 @@ func TestGeminiVersionAtLeast(t *testing.T) {
 	for _, tc := range testCases {
 		require.Equal(t, tc.expected, GeminiVersionAtLeast(tc.model, tc.min), tc.model)
 	}
+}
+
+// TestGeminiMetadataOverrides verifies researched model limits and feature metadata for Gemini image and flash families.
+// Parameter t drives test execution. Returns no values.
+func TestGeminiMetadataOverrides(t *testing.T) {
+	t.Parallel()
+
+	flashCfg, ok := ModelRatios["gemini-3-flash-preview"]
+	require.True(t, ok)
+	require.EqualValues(t, 65536, flashCfg.MaxOutputTokens)
+	// Gemini 3 Flash defaults to "minimal" thinking per the official docs.
+	require.Equal(t, "minimal", flashCfg.DefaultReasoningEffort)
+
+	flashLiteCfg, ok := ModelRatios["gemini-3.1-flash-lite-preview"]
+	require.True(t, ok)
+	require.EqualValues(t, 65536, flashLiteCfg.MaxOutputTokens)
+
+	flashImageCfg, ok := ModelRatios["gemini-3.1-flash-image-preview"]
+	require.True(t, ok)
+	require.EqualValues(t, 131072, flashImageCfg.ContextLength)
+	require.EqualValues(t, 32768, flashImageCfg.MaxOutputTokens)
+	require.ElementsMatch(t, []string{"json_mode", "structured_outputs"}, flashImageCfg.SupportedFeatures)
+
+	proImageCfg, ok := ModelRatios["gemini-3-pro-image-preview"]
+	require.True(t, ok)
+	require.EqualValues(t, 65536, proImageCfg.ContextLength)
+	require.EqualValues(t, 32768, proImageCfg.MaxOutputTokens)
+
+	flash25ImageCfg, ok := ModelRatios["gemini-2.5-flash-image"]
+	require.True(t, ok)
+	require.EqualValues(t, 65536, flash25ImageCfg.ContextLength)
+	require.EqualValues(t, 32768, flash25ImageCfg.MaxOutputTokens)
+	require.ElementsMatch(t, []string{"json_mode", "structured_outputs"}, flash25ImageCfg.SupportedFeatures)
+}
+
+// TestGemini31FlashLiteGAPricing verifies the newly registered GA tier mirrors the preview pricing
+// and exposes parity metadata (context, modalities, reasoning levels) for OpenRouter discovery.
+func TestGemini31FlashLiteGAPricing(t *testing.T) {
+	t.Parallel()
+
+	ga, ok := ModelRatios["gemini-3.1-flash-lite"]
+	require.True(t, ok, "gemini-3.1-flash-lite missing from pricing map")
+	require.InDelta(t, 0.25*ratio.MilliTokensUsd, ga.Ratio, 1e-12)
+	require.InDelta(t, 1.50/0.25, ga.CompletionRatio, 1e-9)
+	require.InDelta(t, 0.025*ratio.MilliTokensUsd, ga.CachedInputRatio, 1e-12)
+	require.NotNil(t, ga.Audio, "expected audio pricing for Flash Lite GA")
+	require.InDelta(t, 0.50/0.25, ga.Audio.PromptRatio, 1e-9)
+	require.EqualValues(t, 1_048_576, ga.ContextLength)
+	require.EqualValues(t, 65536, ga.MaxOutputTokens)
+	require.Equal(t, "minimal", ga.DefaultReasoningEffort)
+
+	preview, ok := ModelRatios["gemini-3.1-flash-lite-preview"]
+	require.True(t, ok)
+	require.InDelta(t, ga.Ratio, preview.Ratio, 1e-12)
+	require.InDelta(t, ga.CompletionRatio, preview.CompletionRatio, 1e-9)
+}
+
+// TestGemini31FlashTtsPreviewPricing verifies the new Gemini 3.1 Flash TTS preview entry charges
+// $1.00 input / $20.00 output per Google's published pricing.
+func TestGemini31FlashTtsPreviewPricing(t *testing.T) {
+	t.Parallel()
+
+	cfg, ok := ModelRatios["gemini-3.1-flash-tts-preview"]
+	require.True(t, ok, "gemini-3.1-flash-tts-preview missing from pricing map")
+	require.InDelta(t, 1.0*ratio.MilliTokensUsd, cfg.Ratio, 1e-12)
+	require.InDelta(t, 20.0/1.0, cfg.CompletionRatio, 1e-9)
+	require.NotNil(t, cfg.Audio, "expected audio pricing for TTS preview")
+}
+
+// TestGeminiRoboticsER16Pricing verifies the new Gemini Robotics-ER 1.6 preview entry charges
+// $1.00 input (text/image/video), $2.00 audio input, and $5.00 output per Google's pricing.
+func TestGeminiRoboticsER16Pricing(t *testing.T) {
+	t.Parallel()
+
+	cfg, ok := ModelRatios["gemini-robotics-er-1.6-preview"]
+	require.True(t, ok, "gemini-robotics-er-1.6-preview missing from pricing map")
+	require.InDelta(t, 1.0*ratio.MilliTokensUsd, cfg.Ratio, 1e-12)
+	require.InDelta(t, 5.0/1.0, cfg.CompletionRatio, 1e-9)
+	require.NotNil(t, cfg.Audio, "expected audio pricing for robotics 1.6")
+	require.InDelta(t, 2.0/1.0, cfg.Audio.PromptRatio, 1e-9)
+}
+
+// TestGemini35FlashGAPricing verifies the Gemini 3.5 Flash GA entry (2026-05-19 launch) at
+// $1.50 input / $9.00 output / $0.15 cached per Google's published pricing.
+func TestGemini35FlashGAPricing(t *testing.T) {
+	t.Parallel()
+
+	cfg, ok := ModelRatios["gemini-3.5-flash"]
+	require.True(t, ok, "gemini-3.5-flash missing from pricing map")
+	require.InDelta(t, 1.50*ratio.MilliTokensUsd, cfg.Ratio, 1e-12)
+	require.InDelta(t, 9.00/1.50, cfg.CompletionRatio, 1e-9)
+	require.InDelta(t, 0.15*ratio.MilliTokensUsd, cfg.CachedInputRatio, 1e-12)
+	require.EqualValues(t, 1_048_576, cfg.ContextLength)
+	require.EqualValues(t, 65536, cfg.MaxOutputTokens)
+	require.Equal(t, "medium", cfg.DefaultReasoningEffort)
+	require.Contains(t, geminiWebSearchModels, "gemini-3.5-flash")
+}
+
+// TestGemini36FlashPricing verifies Gemini 3.6 Flash pricing from Google Cloud Agent Platform.
+// Parameter t drives test execution, and the function returns no values.
+func TestGemini36FlashPricing(t *testing.T) {
+	t.Parallel()
+
+	cfg, ok := ModelRatios["gemini-3.6-flash"]
+	require.True(t, ok, "gemini-3.6-flash missing from pricing map")
+	require.InDelta(t, 1.50*ratio.MilliTokensUsd, cfg.Ratio, 1e-12)
+	require.InDelta(t, 7.50/1.50, cfg.CompletionRatio, 1e-9)
+	require.InDelta(t, 0.15*ratio.MilliTokensUsd, cfg.CachedInputRatio, 1e-12)
+	require.EqualValues(t, 1_048_576, cfg.ContextLength)
+	require.EqualValues(t, 65536, cfg.MaxOutputTokens)
+	require.Equal(t, "medium", cfg.DefaultReasoningEffort)
+	require.Contains(t, geminiWebSearchModels, "gemini-3.6-flash")
+}
+
+// TestGemini35FlashLitePricing verifies Gemini 3.5 Flash-Lite pricing from Google Cloud Agent Platform.
+// Parameter t drives test execution, and the function returns no values.
+func TestGemini35FlashLitePricing(t *testing.T) {
+	t.Parallel()
+
+	cfg, ok := ModelRatios["gemini-3.5-flash-lite"]
+	require.True(t, ok, "gemini-3.5-flash-lite missing from pricing map")
+	require.InDelta(t, 0.30*ratio.MilliTokensUsd, cfg.Ratio, 1e-12)
+	require.InDelta(t, 2.50/0.30, cfg.CompletionRatio, 1e-9)
+	require.InDelta(t, 0.03*ratio.MilliTokensUsd, cfg.CachedInputRatio, 1e-12)
+	require.EqualValues(t, 1_048_576, cfg.ContextLength)
+	require.EqualValues(t, 65536, cfg.MaxOutputTokens)
+	require.Equal(t, "minimal", cfg.DefaultReasoningEffort)
+	require.Contains(t, geminiWebSearchModels, "gemini-3.5-flash-lite")
+}
+
+// TestGemini20FlashCloudPricing verifies Gemini 2.0 Flash uses Google Cloud pricing.
+// Parameter t drives test execution, and the function returns no values.
+func TestGemini20FlashCloudPricing(t *testing.T) {
+	t.Parallel()
+
+	cfg, ok := ModelRatios["gemini-2.0-flash"]
+	require.True(t, ok, "gemini-2.0-flash missing from pricing map")
+	require.InDelta(t, 0.15*ratio.MilliTokensUsd, cfg.Ratio, 1e-12)
+	require.InDelta(t, 0.60/0.15, cfg.CompletionRatio, 1e-9)
+	require.InDelta(t, 0.0375*ratio.MilliTokensUsd, cfg.CachedInputRatio, 1e-12)
+	require.NotNil(t, cfg.Audio, "expected audio input pricing for Gemini 2.0 Flash")
+	require.InDelta(t, 1.00/0.15, cfg.Audio.PromptRatio, 1e-9)
+}
+
+// TestGeminiEmbedding2GAAlias verifies that the GA gemini-embedding-2 alias mirrors the preview entry.
+func TestGeminiEmbedding2GAAlias(t *testing.T) {
+	t.Parallel()
+
+	ga, ok := ModelRatios["gemini-embedding-2"]
+	require.True(t, ok, "gemini-embedding-2 missing from pricing map")
+	require.InDelta(t, geminiEmbedding2PreviewTextPrice*ratio.MilliTokensUsd, ga.Ratio, 1e-12)
+	require.NotNil(t, ga.Embedding, "expected multimodal embedding metadata for GA tier")
+	require.InDelta(t, geminiEmbedding2PreviewImagePrice*ratio.MilliTokensUsd, ga.Embedding.ImageTokenRatio, 1e-12)
 }

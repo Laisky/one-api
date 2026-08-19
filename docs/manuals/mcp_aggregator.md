@@ -142,6 +142,8 @@ If the whitelist is empty, no MCP tools from that server are available until exp
 - **Auto sync enabled**: Whether to periodically sync the tool catalog.
 - **Auto sync interval**: Minutes between syncs (default 60, bounded 5–1440).
 
+**Updating an MCP server**: send only the keys you want to change. Sending a key with an empty value (`""`, `false`, `0`, `{}`) clears that column on the server. Special case: `api_key` set to a masked-secret placeholder (e.g. `********`) is treated as 'no change'.
+
 ![](https://s3.laisky.com/uploads/2026/01/one-mcp-4.png)
 
 ### Configuration examples
@@ -268,10 +270,11 @@ The `/mcp` endpoint exposes a Streamable HTTP MCP server backed by one-api’s c
 - Keep tool parameters consistent with the published schema to avoid validation errors upstream.
 - Review logs for tool usage and costs to confirm billing behavior.
 - Expect streaming responses to be downgraded to non-streaming when MCP tools are executed.
+- Do not rely on `previous_response_id` or `store` continuation when an MCP request forces Chat Completions fallback; send complete replayable `input` for portable multi-turn context.
 
 ### OpenAI Response API (cURL)
 
-The following example calls one-api using the Responses API format and standard tool types. If an MCP tool named `web_search` is configured, one-api will route the tool call through MCP execution.
+The following example calls one-api using the Responses API format and standard tool types. If an MCP tool named `web_search` is configured, one-api will route the tool call through MCP execution, which may force Chat Completions fallback and therefore will not hydrate native Responses server-side state.
 
 ```bash
 curl "https://oneapi.laisky.com/v1/responses" \

@@ -5,12 +5,18 @@ import { api } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { Check, ChevronsUpDown, Loader2, Plus, X } from 'lucide-react';
 import * as React from 'react';
+import { useTranslation } from 'react-i18next';
 
 export interface SearchOption {
   key: string;
   value: string;
   text: string;
   content?: React.ReactNode;
+  /**
+   * Extra strings this option should match on during local filtering, e.g. the
+   * entity UUID which is usually not part of the visible `text`/`value`.
+   */
+  keywords?: string[];
 }
 
 interface SearchableDropdownProps {
@@ -28,6 +34,14 @@ interface SearchableDropdownProps {
   allowAdditions?: boolean;
   clearable?: boolean;
   className?: string;
+  /**
+   * Set when the caller (parent component or `searchEndpoint`) already applied
+   * the search query to produce `options`. The dropdown then renders the
+   * supplied options verbatim instead of re-filtering them locally, which would
+   * otherwise drop server matches whose `value` does not literally contain the
+   * query (e.g. searching a user by UUID while `value` is the username).
+   */
+  remoteFiltered?: boolean;
   // API-based search props
   searchEndpoint?: string;
   transformResponse?: (data: any[]) => SearchOption[];
@@ -37,24 +51,26 @@ interface SearchableDropdownProps {
 
 export function SearchableDropdown({
   value,
-  placeholder = 'Select option...',
-  searchPlaceholder = 'Search...',
+  placeholder,
+  searchPlaceholder,
   options: initialOptions,
   onSearchChange,
   onChange,
   onSelect,
   onAddItem,
   loading = false,
-  noResultsMessage = 'No results found',
-  additionLabel = 'Add: ',
+  noResultsMessage,
+  additionLabel,
   allowAdditions = false,
   clearable = false,
   className,
+  remoteFiltered = false,
   searchEndpoint,
   transformResponse,
   debounceMs = 300,
   minQueryLength = 2,
 }: SearchableDropdownProps) {
+  const { t } = useTranslation();
   const [open, setOpen] = React.useState(false);
   const [searchValue, setSearchValue] = React.useState('');
   const [apiOptions, setApiOptions] = React.useState<SearchOption[]>([]);
@@ -153,19 +169,26 @@ export function SearchableDropdown({
     onChange?.('');
   };
 
-  // Local filtering for initial options when not using API search
+  // Local filtering for locally-owned options only. Whenever the search was
+  // executed elsewhere (`searchEndpoint` or `remoteFiltered`), the options are
+  // already the answer to the query and must be rendered as-is.
   const filteredOptions = React.useMemo(() => {
-    if (searchEndpoint || !searchValue) return options;
-    return options.filter(
-      (option) =>
-        option.text.toLowerCase().includes(searchValue.toLowerCase()) || option.value.toLowerCase().includes(searchValue.toLowerCase())
-    );
-  }, [options, searchValue, searchEndpoint]);
+    if (searchEndpoint || remoteFiltered || !searchValue) return options;
+    const needle = searchValue.toLowerCase();
+    return options.filter((option) => {
+      const haystack = [option.text, option.value, ...(option.keywords ?? [])];
+      return haystack.some((field) => typeof field === 'string' && field.toLowerCase().includes(needle));
+    });
+  }, [options, searchValue, searchEndpoint, remoteFiltered]);
 
   const showAddition =
     allowAdditions && searchValue && !filteredOptions.some((option) => option.value.toLowerCase() === searchValue.toLowerCase());
 
   const currentLoading = loading || apiLoading;
+  const effectivePlaceholder = placeholder ?? t('common.select_option', 'Select option...');
+  const effectiveSearchPlaceholder = searchPlaceholder ?? t('common.search_placeholder', 'Search...');
+  const effectiveNoResultsMessage = noResultsMessage ?? t('common.no_results', 'No results found');
+  const effectiveAdditionLabel = additionLabel ?? t('common.add_colon', 'Add: ');
 
   // Cleanup timeout on unmount
   React.useEffect(() => {
@@ -183,7 +206,7 @@ export function SearchableDropdown({
           {selectedOption ? (
             <span className="truncate">{selectedOption.text}</span>
           ) : (
-            <span className="text-muted-foreground">{placeholder}</span>
+            <span className="text-muted-foreground">{effectivePlaceholder}</span>
           )}
           <div className="flex items-center ml-2 shrink-0">
             {clearable && selectedOption && <X className="h-4 w-4 opacity-50 hover:opacity-100 mr-1" onClick={handleClear} />}
@@ -199,21 +222,27 @@ export function SearchableDropdown({
         )}
         align="start"
       >
-        <Command shouldFilter={!searchEndpoint}>
-          <CommandInput placeholder={searchPlaceholder} value={searchValue} onValueChange={handleSearchChange} />
+        {/*
+          Filtering is owned entirely by `filteredOptions` above (locally) or by
+          whoever produced `options` (server search). cmdk must never re-filter,
+          because it can only match an item's `value` string and would hide rows
+          the backend matched on another field such as a UUID.
+        */}
+        <Command shouldFilter={false}>
+          <CommandInput placeholder={effectiveSearchPlaceholder} value={searchValue} onValueChange={handleSearchChange} />
           <CommandList>
             {currentLoading ? (
               <div className="flex items-center justify-center py-6">
                 <Loader2 className="h-4 w-4 animate-spin" />
-                <span className="ml-2 text-sm text-muted-foreground">Searching...</span>
+                <span className="ml-2 text-sm text-muted-foreground">{t('common.searching', 'Searching...')}</span>
               </div>
             ) : (
               <>
                 {filteredOptions.length === 0 && !showAddition ? (
                   <CommandEmpty>
                     {searchValue.length < minQueryLength && searchEndpoint
-                      ? `Type at least ${minQueryLength} characters to search`
-                      : noResultsMessage}
+                      ? t('common.type_at_least_to_search', 'Type at least {{count}} characters to search', { count: minQueryLength })
+                      : effectiveNoResultsMessage}
                   </CommandEmpty>
                 ) : (
                   <CommandGroup>
@@ -226,7 +255,7 @@ export function SearchableDropdown({
                     {showAddition && (
                       <CommandItem onSelect={handleAddItem} className="cursor-pointer">
                         <Plus className="mr-2 h-4 w-4" />
-                        <span className="text-muted-foreground">{additionLabel}</span>
+                        <span className="text-muted-foreground">{effectiveAdditionLabel}</span>
                         <span className="font-medium">{searchValue}</span>
                       </CommandItem>
                     )}

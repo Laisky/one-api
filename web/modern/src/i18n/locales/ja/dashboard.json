@@ -12,6 +12,7 @@
       "showing_top": "上位 {{shown}} 件を表示（全 {{total}} 件）",
       "token_title": "トークン別キャッシュヒット率",
       "top_n_label": "表示",
+      "top_n_option": "上位 {{count}}",
       "total": "合計",
       "user_title": "ユーザー別キャッシュヒット率"
     },
@@ -38,6 +39,7 @@
       "model": "不明なモデル",
       "owner": "不明",
       "token": "名称未設定トークン",
+      "tool": "不明なツール",
       "user": "不明なユーザー"
     },
     "filters": {
@@ -87,6 +89,9 @@
       "metric_placeholder": "指標を選択",
       "model_usage": "モデル別利用状況",
       "token_usage": "トークン利用状況",
+      "tool_token_usage": "トークン別ツール利用状況",
+      "tool_usage": "ツール利用状況",
+      "tool_user_usage": "ユーザー別ツール利用状況",
       "user_usage": "ユーザー別利用状況"
     },
     "title": "ダッシュボード",

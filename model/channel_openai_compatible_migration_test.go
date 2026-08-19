@@ -7,7 +7,7 @@ import (
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 
-	"github.com/songquanpeng/one-api/relay/channeltype"
+	"github.com/Laisky/one-api/relay/channeltype"
 )
 
 // TestMigrateCustomChannelsToOpenAICompatible verifies that legacy custom channels are upgraded

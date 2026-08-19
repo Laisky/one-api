@@ -30,11 +30,14 @@ import (
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
 
-	"github.com/songquanpeng/one-api/common/blacklist"
-	"github.com/songquanpeng/one-api/common/ctxkey"
-	"github.com/songquanpeng/one-api/common/helper"
-	"github.com/songquanpeng/one-api/common/network"
-	"github.com/songquanpeng/one-api/model"
+	"github.com/Laisky/one-api/common/blacklist"
+	"github.com/Laisky/one-api/common/ctxkey"
+	"github.com/Laisky/one-api/common/errkind"
+	"github.com/Laisky/one-api/common/helper"
+	"github.com/Laisky/one-api/common/identity"
+	"github.com/Laisky/one-api/common/idresolve"
+	"github.com/Laisky/one-api/common/network"
+	"github.com/Laisky/one-api/model"
 )
 
 // authHelper is a shared authentication helper function that validates user sessions or access tokens.
@@ -108,10 +111,14 @@ func authHelper(c *gin.Context, minRole int) {
 	// Authentication successful - set user context and continue
 	if userObj != nil {
 		c.Set(ctxkey.UserObj, userObj)
+		c.Set(ctxkey.UserUUID, userObj.UUID)
 	}
 	c.Set(ctxkey.Username, username)
 	c.Set(ctxkey.Role, role)
 	c.Set(ctxkey.Id, id)
+	// Bind the resolved identity onto the request logger so every later log line
+	// of this request carries user_id + user_uuid + username with no call-site edit.
+	identity.BindFromGin(c)
 	c.Next()
 }
 
@@ -164,10 +171,12 @@ func OptionalUserAuth() func(c *gin.Context) {
 				}
 				if userObj != nil {
 					c.Set(ctxkey.UserObj, userObj)
+					c.Set(ctxkey.UserUUID, userObj.UUID)
 				}
 				c.Set(ctxkey.Username, username)
 				c.Set(ctxkey.Role, role)
 				c.Set(ctxkey.Id, id)
+				identity.BindFromGin(c)
 			}
 		}
 
@@ -207,10 +216,27 @@ func RootAuth() func(c *gin.Context) {
 func TokenAuth() func(c *gin.Context) {
 	return func(c *gin.Context) {
 		ctx := gmw.Ctx(c)
+		lg := gmw.GetLogger(c)
+
 		// Parse the token key from the request (could include channel specification)
-		// Parse the token key from the request (could include channel specification)
-		parts := GetTokenKeyParts(c)
+		parsed := parseTokenKey(c)
+		parts := parsed.Parts
 		key := parts[0]
+
+		// Diagnostic logging for client authentication issues (DEBUG only).
+		// It never logs the raw credential — only which header supplied it,
+		// whether a `Bearer` scheme was present, the number of '-'-separated
+		// parts (a count > 1 triggers admin channel-spec handling and would
+		// 403 a non-admin), and a masked key. This is essential for diagnosing
+		// third-party clients (e.g. GitHub Copilot BYOK) that send the key via
+		// a non-standard header or in an unexpected form.
+		lg.Debug("api token authentication",
+			zap.String("path", c.Request.URL.Path),
+			zap.String("auth_source", string(parsed.Source)),
+			zap.Bool("had_bearer_scheme", parsed.HadScheme),
+			zap.Int("key_parts", len(parts)),
+			zap.String("masked_key", helper.MaskAPIKey(key)),
+		)
 
 		// Validate the API token against the database
 		token, err := model.ValidateUserToken(ctx, key)
@@ -219,18 +245,24 @@ func TokenAuth() func(c *gin.Context) {
 			return
 		}
 
-		// Build token info for error logging (masked key for security)
+		// Build token info for error logging (masked key for security).
+		// OwnerRef carries the denormalised tokens.user_uuid; the username is only
+		// known after the owner row is loaded below.
 		tokenInfo := &TokenInfo{
 			MaskedKey: helper.MaskAPIKey(key),
-			TokenId:   token.Id,
-			TokenName: token.Name,
-			UserId:    token.UserId,
+			Token:     token.Ref(),
+			User:      token.OwnerRef(),
 		}
+
+		// Bind the partial identity immediately so the early aborts below (subnet,
+		// banned user, model restriction) already log token uuid + name.
+		identity.Bind(c, identity.Set{Token: tokenInfo.Token, User: tokenInfo.User})
 
 		// Check IP subnet restrictions (if configured for this token)
 		if token.Subnet != nil && *token.Subnet != "" {
 			if !network.IsIpInSubnets(ctx, c.ClientIP(), *token.Subnet) {
-				AbortWithTokenError(c, http.StatusForbidden, errors.Errorf("This API key can only be used in the specified subnet: %s, current IP: %s", *token.Subnet, c.ClientIP()), tokenInfo)
+				// The caller presented a valid key from a disallowed network.
+				AbortWithTokenError(c, http.StatusForbidden, errkind.ForbiddenErr(errors.Errorf("This API key can only be used in the specified subnet: %s, current IP: %s", *token.Subnet, c.ClientIP())), tokenInfo)
 				return
 			}
 		}
@@ -243,16 +275,22 @@ func TokenAuth() func(c *gin.Context) {
 			return
 		}
 
+		// The owner row is loaded, so the username is now known.
+		tokenInfo.User = user.Ref()
+		identity.Bind(c, identity.Set{User: tokenInfo.User})
+
 		// Verify the token owner (user) is still enabled and not banned
 		if user.Status == model.UserStatusDisabled || blacklist.IsUserBanned(user.Id) {
-			AbortWithTokenError(c, http.StatusForbidden, errors.New("User has been banned"), tokenInfo)
+			// Disabled or blacklisted owner: an intentional denial, not a fault.
+			AbortWithTokenError(c, http.StatusForbidden, errkind.ForbiddenErr(errors.New("User has been banned")), tokenInfo)
 			return
 		}
 
 		// Extract and validate the requested model (for AI/ML API endpoints)
 		requestModel, err := getRequestModel(c)
 		if err != nil && shouldCheckModel(c) {
-			AbortWithTokenError(c, http.StatusBadRequest, err, tokenInfo)
+			// Unparsable body or missing `model` on an endpoint that requires it.
+			AbortWithTokenError(c, http.StatusBadRequest, errkind.InvalidRequestErr(err), tokenInfo)
 			return
 		}
 		c.Set(ctxkey.RequestModel, requestModel)
@@ -262,7 +300,8 @@ func TokenAuth() func(c *gin.Context) {
 		if token.Models != nil && *token.Models != "" {
 			c.Set(ctxkey.AvailableModels, *token.Models)
 			if requestModel != "" && !isModelInList(requestModel, *token.Models) {
-				AbortWithTokenError(c, http.StatusForbidden, errors.Errorf("This API key does not have permission to use the model: %s", requestModel), tokenInfo)
+				// Valid key, model outside the token's allow-list.
+				AbortWithTokenError(c, http.StatusForbidden, errkind.ForbiddenErr(errors.Errorf("This API key does not have permission to use the model: %s", requestModel)), tokenInfo)
 				return
 			}
 		}
@@ -270,34 +309,40 @@ func TokenAuth() func(c *gin.Context) {
 		// Set user and token context for downstream handlers
 		c.Set(ctxkey.UserObj, user)
 		c.Set(ctxkey.Id, user.Id)
+		c.Set(ctxkey.UserUUID, user.UUID)
 		c.Set(ctxkey.Username, user.Username)
 		c.Set(ctxkey.TokenId, token.Id)
+		c.Set(ctxkey.TokenUUID, token.UUID)
 		c.Set(ctxkey.TokenName, token.Name)
 		c.Set(ctxkey.TokenQuota, token.RemainQuota)
 		c.Set(ctxkey.TokenQuotaUnlimited, token.UnlimitedQuota)
+		identity.BindFromGin(c)
 
-		// Handle channel-specific routing (admin feature)
-		// Format: token_key:channel_id allows admins to specify which channel to use
+		// Handle channel-specific routing (admin feature).
+		// Format: token_key-channel_ref allows admins to specify which channel to use.
 		if len(parts) > 1 {
 			if user.Role >= model.RoleAdminUser {
-				cid, err := strconv.Atoi(parts[1])
+				cid, err := resolveSpecificChannelRef(parts[1])
 				if err != nil {
-					AbortWithTokenError(c, http.StatusBadRequest, errors.Errorf("Invalid Channel Id: %s", parts[1]), tokenInfo)
+					// The channel reference comes from the caller's API key suffix.
+					AbortWithTokenError(c, http.StatusBadRequest, errkind.InvalidRequestErr(errors.Errorf("Invalid Channel Id: %s", parts[1])), tokenInfo)
 					return
 				}
 
 				c.Set(ctxkey.SpecificChannelId, cid)
 			} else {
-				AbortWithTokenError(c, http.StatusForbidden, errors.New("Ordinary users do not support specifying channels"), tokenInfo)
+				// Non-admin attempted an admin-only routing override.
+				AbortWithTokenError(c, http.StatusForbidden, errkind.ForbiddenErr(errors.New("Ordinary users do not support specifying channels")), tokenInfo)
 				return
 			}
 		}
 
 		// Handle channel specification via URL parameter (for proxy relay)
 		if channelId := c.Param("channelid"); channelId != "" {
-			cid, err := strconv.Atoi(channelId)
+			cid, err := idresolve.Resolve(model.GetChannelIdByUUID, channelId)
 			if err != nil {
-				AbortWithTokenError(c, http.StatusBadRequest, errors.Errorf("Invalid Channel Id: %s", channelId), tokenInfo)
+				// The channel reference comes from the request URL.
+				AbortWithTokenError(c, http.StatusBadRequest, errkind.InvalidRequestErr(errors.Errorf("Invalid Channel Id: %s", channelId)), tokenInfo)
 				return
 			}
 
@@ -306,6 +351,27 @@ func TokenAuth() func(c *gin.Context) {
 
 		c.Next()
 	}
+}
+
+// resolveSpecificChannelRef resolves an admin channel override to an internal channel id.
+// Parameters:
+//   - ref: admin-supplied channel reference, either a legacy integer id or a UUID.
+//
+// Return values:
+//   - int: internal channel primary key.
+//   - error: invalid-reference or not-found error.
+func resolveSpecificChannelRef(ref string) (int, error) {
+	ref = strings.TrimSpace(ref)
+	if ref == "" {
+		return 0, idresolve.ErrInvalidRef
+	}
+	if cid, err := strconv.Atoi(ref); err == nil {
+		if cid <= 0 {
+			return 0, idresolve.ErrInvalidRef
+		}
+		return cid, nil
+	}
+	return idresolve.Resolve(model.GetChannelIdByUUID, ref)
 }
 
 // shouldCheckModel determines whether the current endpoint requires model validation.
@@ -331,8 +397,24 @@ func shouldCheckModel(c *gin.Context) bool {
 	return false
 }
 
-// respondAuthError centralizes error responses for auth failures (DRY, KISS)
+// respondAuthError centralizes error responses for auth failures (DRY, KISS).
+//
+// Every call site here reports a credential or permission decision the server
+// made deliberately, so the error is marked client-caused and logged at WARN
+// without a stack trace. The message text and the status are unchanged.
+//
+// Parameters:
+//   - c: current gin context.
+//   - status: HTTP status to answer with; unchanged by this function.
+//   - message: client-facing message, used verbatim.
 func respondAuthError(c *gin.Context, status int, message string) {
-	c.JSON(status, gin.H{"success": false, "message": message})
+	err := errors.New(message)
+	switch status {
+	case http.StatusUnauthorized:
+		err = errkind.UnauthorizedErr(err)
+	case http.StatusForbidden:
+		err = errkind.ForbiddenErr(err)
+	}
+	helper.RespondErrorWithStatus(c, status, err)
 	c.Abort()
 }

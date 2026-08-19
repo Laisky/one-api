@@ -5,17 +5,21 @@
       "add_mobile": "Add New Channel",
       "delete": "Delete",
       "disable": "Disable",
+      "duplicate": "Duplicate",
       "edit": "Edit",
       "enable": "Enable",
+      "refresh_balance": "Refresh balance for {{name}}",
       "test": "Test"
     },
     "columns": {
       "actions": "Actions",
+      "balance": "Balance",
       "created": "Created",
       "group": "Group",
       "id": "ID",
       "name": "Name",
       "priority": "Priority",
+      "priority_input_label": "Priority for {{name}}",
       "response": "Response",
       "status": "Status",
       "testing_model": "Testing Model",
@@ -24,7 +28,9 @@
     },
     "confirm": {
       "delete": "Are you sure you want to delete this channel?",
-      "delete_disabled": "Are you sure you want to delete all disabled channels? This action cannot be undone."
+      "delete_disabled": "Are you sure you want to delete all disabled channels? This action cannot be undone.",
+      "delete_disabled_title": "Delete Disabled Channels",
+      "delete_title": "Delete Channel"
     },
     "description": "Configure and manage API routing channels",
     "edit": {
@@ -155,9 +161,97 @@
           "placeholder": "User ID for bot operations"
         }
       },
+      "custom_headers": {
+        "add": "Add Header",
+        "empty": "No custom headers configured.",
+        "help": "Headers configured here are always sent upstream and override client-provided headers. Use {{key}} to insert the channel API key.",
+        "key_placeholder": "Header key",
+        "label": "Custom Headers",
+        "remove": "Remove header",
+        "value_placeholder": "Header value, e.g. {{key}}"
+      },
       "description": {
         "create": "Create a new API channel",
         "edit": "Update channel configuration"
+      },
+      "endpoints": {
+        "audio_speech": {
+          "description": "The Text-to-Speech API converts text into spoken audio. Choose from multiple voices and output formats to generate natural-sounding speech.",
+          "label": "Text-to-Speech"
+        },
+        "audio_transcription": {
+          "description": "The Audio Transcription API converts spoken audio into text. Upload an audio file to receive a transcript in the specified language.",
+          "label": "Audio Transcription"
+        },
+        "audio_translation": {
+          "description": "The Audio Translation API translates spoken audio into English text. Upload an audio file in any supported language to receive an English transcript.",
+          "label": "Audio Translation"
+        },
+        "chat_completions": {
+          "description": "The Chat Completions API creates model responses for chat-based conversations. Send a list of messages and receive a model-generated reply. Supports both streaming and non-streaming modes.",
+          "label": "Chat Completions"
+        },
+        "claude_messages": {
+          "description": "The Claude Messages API is Anthropic's native format for interacting with Claude models. One-API converts this format to work with any supported backend.",
+          "label": "Claude Messages"
+        },
+        "completions": {
+          "description": "The legacy Completions API generates text completions for a given prompt. This is the original text generation API, now largely superseded by Chat Completions.",
+          "label": "Completions"
+        },
+        "custom_url_badge": "custom URL",
+        "default_badge": "default",
+        "edit_endpoint": "View docs and edit endpoint URL",
+        "embeddings": {
+          "description": "The Embeddings API converts text into numerical vector representations. These vectors can be used for semantic search, clustering, and similarity comparisons.",
+          "label": "Embeddings"
+        },
+        "help": "Select which API endpoints this channel supports. Click an endpoint's info icon for details and usage examples.",
+        "images_edits": {
+          "description": "The Image Edits API modifies existing images based on text instructions. Upload an image with a mask and prompt to generate edited versions.",
+          "label": "Image Edits"
+        },
+        "images_generations": {
+          "description": "The Image Generation API creates images from text descriptions. Specify a prompt and receive one or more generated images in various formats and sizes.",
+          "label": "Image Generation"
+        },
+        "label": "Supported Endpoints",
+        "modal": {
+          "description": "Description",
+          "example": "cURL Example",
+          "no_description": "No detailed documentation available for this endpoint.",
+          "no_example": "# No example available",
+          "url_override": "Upstream URL Override",
+          "url_override_help": "The default endpoint URL is pre-filled. Edit it to route this endpoint to a non-standard upstream address; leave it as the default to keep following the channel base URL automatically.",
+          "url_override_reset": "Reset to default"
+        },
+        "moderations": {
+          "description": "The Moderations API checks whether text violates content policies. It returns categories and scores indicating the likelihood of policy violations.",
+          "label": "Moderations"
+        },
+        "ocr": {
+          "description": "The OCR / Layout Parsing API extracts text and layout information from documents and images. Upload a file URL and receive structured markdown results. Powered by Zhipu GLM-OCR.",
+          "label": "OCR / Layout Parsing"
+        },
+        "realtime": {
+          "description": "The Realtime API enables low-latency, bidirectional communication via WebSocket. Ideal for voice assistants and real-time interactive applications.",
+          "label": "Realtime"
+        },
+        "rerank": {
+          "description": "The Rerank API reorders a list of documents based on their relevance to a query. Useful for improving search results and retrieval-augmented generation (RAG) systems.",
+          "label": "Rerank"
+        },
+        "reset_defaults": "Reset to Defaults",
+        "response_api": {
+          "description": "The Response API is OpenAI's newer stateful API for multi-turn conversations. It manages conversation state server-side and supports advanced features like tools and structured output.",
+          "label": "Response API"
+        },
+        "select_all": "Select All",
+        "select_none": "Minimal",
+        "videos": {
+          "description": "The Video Generation API creates videos from text descriptions or images. Specify prompts and parameters to generate video content.",
+          "label": "Video Generation"
+        }
       },
       "errors": {
         "operation_failed": "Operation failed",
@@ -217,8 +311,10 @@
         "placeholder": "AWS Bedrock inference profile ARN mapping:\n{{example}}"
       },
       "key": {
+        "github_placeholder": "Please enter a GitHub access token (PAT or OAuth token) with an active Copilot subscription",
         "help": "The API key for authentication with the provider.",
-        "label": "API Key"
+        "label": "API Key",
+        "placeholder": "Please enter your API key"
       },
       "loading": "Loading channel...",
       "mcp": {
@@ -307,6 +403,23 @@
         "title": "Model Mapping has suspicious entries"
       },
       "spark": {
+        "api_key": {
+          "help": "iFlytek console APIKey paired with the APISecret.",
+          "label": "APIKey *",
+          "placeholder": "APIKey"
+        },
+        "api_secret": {
+          "help": "iFlytek console APISecret paired with the APIKey.",
+          "label": "APISecret *",
+          "placeholder": "APISecret"
+        },
+        "app_id": {
+          "help": "iFlytek console APPID for the Spark application.",
+          "label": "APPID *",
+          "placeholder": "APPID"
+        },
+        "heading": "iFlytek Spark Configuration",
+        "note": "The final API key will be constructed as: APPID|APISecret|APIKey",
         "version": {
           "help": "Select the API version for iFlytek Spark (e.g., v3.5).",
           "label": "Spark Version",
@@ -317,6 +430,33 @@
         "help": "Optional text prepended as a system message to every request sent through this channel. Use for guardrails or style. Clients can still override with their own system messages.",
         "label": "System Prompt",
         "placeholder": "Optional system prompt to prepend to all requests"
+      },
+      "tencent": {
+        "app_id": {
+          "help": "Tencent Cloud account AppId associated with the API credentials.",
+          "label": "AppId *",
+          "placeholder": "AppId"
+        },
+        "heading": "Tencent Hunyuan Configuration",
+        "note": "The final API key will be constructed as: AppId|SecretId|SecretKey",
+        "secret_id": {
+          "help": "Tencent Cloud SecretId for API authentication.",
+          "label": "SecretId *",
+          "placeholder": "SecretId"
+        },
+        "secret_key": {
+          "help": "Tencent Cloud SecretKey paired with the SecretId.",
+          "label": "SecretKey *",
+          "placeholder": "SecretKey"
+        }
+      },
+      "test": {
+        "error_message": "Unable to test channel.",
+        "error_title": "Test error",
+        "failed_message": "Channel test failed.",
+        "failed_title": "Test failed",
+        "success_message": "Channel test completed successfully.",
+        "success_title": "Test passed"
       },
       "title": {
         "create": "Create Channel",
@@ -367,7 +507,9 @@
       "validation": {
         "api_key_required": "API key is required.",
         "base_url_required": "Base URL is required for this channel type.",
+        "endpoints_required": "Enable at least one endpoint before saving.",
         "error_title": "Validation error",
+        "fix_fields": "Please correct the highlighted fields.",
         "hidden_models_not_supported": "These hidden models are not currently supported by the channel: {{models}}",
         "hidden_models_unreachable_alias": "These hidden models are used as Model Mapping sources, so the public aliases will become unreachable: {{models}}",
         "inference_profile_invalid": "Inference Profile ARN Map has invalid JSON.",
@@ -382,11 +524,13 @@
         "model_mapping_invalid_entries": "These Model Mapping entries have empty or non-string values: {{keys}}",
         "model_mapping_parse_error": "Model Mapping JSON is invalid: {{error}}",
         "model_mapping_shape_invalid": "Model Mapping must be a JSON object of the form { \"from\": \"to\" }.",
+        "name_required": "Channel name is required",
         "oauth_invalid_json": "OAuth JWT configuration JSON is invalid.",
         "oauth_missing_field_message": "OAuth JWT configuration missing: {{field}}",
         "oauth_missing_field_title": "Missing field",
         "oauth_parse_message": "OAuth JWT parse error: {{error}}",
         "oauth_parse_title": "Parse error",
+        "type_required": "Channel type is required",
         "valid_json": "✓ Valid JSON"
       },
       "vertex": {
@@ -415,11 +559,28 @@
     "empty": "No channels found. Create your first channel to get started.",
     "group_default": "default",
     "notifications": {
+      "balance_failed_message": "Failed to refresh balance.",
+      "balance_failed_title": "Balance refresh failed",
+      "balance_success": "Balance refreshed.",
+      "bulk_balance_success": "All channel balances refreshed.",
+      "bulk_disable_summary_title": "Disable summary",
+      "bulk_enable_summary_title": "Enable summary",
+      "bulk_status_empty": "No channels available to update.",
+      "bulk_status_started": "Updating {{count}} channels…",
+      "bulk_status_summary": "Updated {{success}} channels, {{failed}} failed.",
       "bulk_test_failed_title": "Bulk test failed",
       "bulk_test_started": "Bulk channel test started.",
       "delete_disabled_success": "Disabled channels deleted.",
       "delete_failed_message": "Unknown error",
       "delete_failed_title": "Delete failed",
+      "duplicate_failed_message": "Failed to duplicate channel.",
+      "duplicate_failed_title": "Duplicate failed",
+      "duplicate_success": "Channel duplicated.",
+      "priority_failed_message": "Failed to update priority.",
+      "priority_failed_title": "Update failed",
+      "priority_saved": "Priority updated.",
+      "status_failed_message": "Failed to update channel status.",
+      "status_failed_title": "Update failed",
       "test_failed_message": "Unknown error",
       "test_failed_title": "Channel test failed",
       "test_success": "Channel test successful.",
@@ -434,7 +595,7 @@
     },
     "search": {
       "id_label": "ID",
-      "placeholder": "Search channels by name, type, or group..."
+      "placeholder": "Search channels by name, type, group, or UUID..."
     },
     "status": {
       "active": "Active",
@@ -446,8 +607,13 @@
     },
     "title": "Channels",
     "toolbar": {
+      "bulk_actions": "Bulk Actions",
       "delete_disabled": "Delete Disabled",
       "delete_disabled_mobile": "Delete All Disabled",
+      "disable_visible": "Disable visible channels",
+      "enable_visible": "Enable visible channels",
+      "refresh_balances": "Refresh All Balances",
+      "refresh_balances_mobile": "Refresh Balances",
       "test_all": "Test All",
       "test_all_mobile": "Test All Channels"
     },
@@ -485,10 +651,23 @@
       "title": "Generate Redemption Codes"
     },
     "edit": {
+      "actions": {
+        "back_to_list": "Back to list",
+        "copied": "Copied",
+        "copy": "Copy",
+        "copy_all": "Copy all",
+        "download_codes": "Download codes"
+      },
+      "code_generated_hint": "Copy the code below; it will not be shown together with its name again.",
+      "codes_generated": "{{count}} codes generated",
+      "codes_generated_aria": "Generated redemption codes",
+      "codes_generated_hint": "Save the codes now — once you leave this page they cannot be retrieved as a batch.",
       "description": {
         "create": "Create a new redemption code",
         "edit": "Update redemption code settings"
       },
+      "download_codes": "Download codes",
+      "download_filename_prefix": "redemption-codes",
       "loading": "Loading redemption...",
       "notifications": {
         "create_success": "Redemption created successfully",
@@ -519,9 +698,13 @@
         "label": "Quota"
       }
     },
+    "notifications": {
+      "action_failed_message": "Unable to apply change.",
+      "action_failed_title": "Action failed"
+    },
     "search": {
       "dropdown_placeholder": "Type redemption name...",
-      "placeholder": "Search redemptions by name..."
+      "placeholder": "Search redemptions by name or UUID..."
     },
     "status": {
       "disabled": "Disabled",
@@ -608,7 +791,9 @@
       "validation": {
         "error_title": "Validation error",
         "fix_fields": "Please correct the highlighted fields.",
-        "invalid_expiration": "Invalid expiration time"
+        "invalid_expiration": "Invalid expiration time",
+        "name_required": "Token name is required",
+        "quota_min": "Quota must be non-negative"
       }
     },
     "page": {
@@ -638,7 +823,8 @@
         "used_title": "Used: {{label}}"
       },
       "confirm": {
-        "delete": "Are you sure you want to delete token \"{{label}}\"?"
+        "delete": "Are you sure you want to delete token \"{{label}}\"?",
+        "delete_title": "Delete Token"
       },
       "description": "Manage your API access tokens",
       "dialog": {
@@ -649,15 +835,28 @@
       "empty": "No tokens found. Create your first token to get started.",
       "key": {
         "copied": "Copied!",
-        "copy": "Copy token"
+        "copy": "Copy token",
+        "hide": "Hide key",
+        "show": "Show key"
+      },
+      "notifications": {
+        "action_failed_message": "Unable to apply change.",
+        "action_failed_title": "Action failed"
       },
       "quota": {
         "unlimited": "Unlimited"
       },
       "search": {
         "id_label": "ID: {{id}}",
-        "placeholder": "Search tokens by name...",
+        "placeholder": "Search tokens by name or UUID...",
         "quota_label": "Quota: {{quota}}"
+      },
+      "share": {
+        "ama": "AMA 问天",
+        "lobechat": "LobeChat",
+        "next_chat": "ChatGPT Next Web",
+        "open_in_client": "Open in client",
+        "opencat": "OpenCat"
       },
       "status": {
         "disabled": "Disabled",
@@ -693,6 +892,10 @@
             "placeholder": "Enter username"
           }
         },
+        "notifications": {
+          "create_failed_message": "Unable to create user.",
+          "create_failed_title": "Create failed"
+        },
         "title": "Create User"
       },
       "topup": {
@@ -710,6 +913,10 @@
             "placeholder": "Optional"
           }
         },
+        "notifications": {
+          "submit_failed_message": "Unable to top up user.",
+          "submit_failed_title": "Top up failed"
+        },
         "title": "Top Up {{username}}"
       }
     },
@@ -719,6 +926,8 @@
         "cancel": "Cancel",
         "create": "Create User",
         "creating": "Creating...",
+        "disable_2fa": "Disable user 2FA",
+        "disabling_2fa": "Disabling...",
         "update": "Update User",
         "updating": "Updating..."
       },
@@ -727,8 +936,15 @@
         "help_email": "Help: Email",
         "help_group": "Help: Group",
         "help_password": "Help: Password",
+        "help_password_locked": "Help: Lock password",
         "help_quota": "Help: Quota",
         "help_username": "Help: Username"
+      },
+      "confirm_2fa": {
+        "cancel": "Cancel",
+        "confirm": "Disable 2FA",
+        "description": "Disable two-factor authentication for {{username}}? They will be able to sign in without a 2FA code.",
+        "title": "Disable 2FA"
       },
       "description": {
         "create": "Create a new user account",
@@ -740,6 +956,9 @@
         "unexpected_title": "Unexpected error"
       },
       "fields": {
+        "created_at": {
+          "label": "Register Time"
+        },
         "display_name": {
           "help": "Optional human-readable name shown in the UI.",
           "label": "Display Name",
@@ -764,11 +983,19 @@
           "help": "Minimum length depends on policy. Leave empty when editing to keep unchanged.",
           "label_create": "Password *",
           "label_edit": "New Password (leave empty to keep current)",
+          "locked_hint": "Password is locked. Turn off Lock password to change it. New MFA enrollment is also blocked while locked.",
           "placeholder": "Enter password"
+        },
+        "password_locked": {
+          "help": "When on, no one can change this user's password and the user cannot enable new TOTP/passkey. Only a root admin can unlock it.",
+          "label": "Lock password (root only)"
         },
         "quota": {
           "help": "Quota units are tokens. USD estimate uses the per-unit ratio configured by admin.",
           "label": "Quota ({{usd}})"
+        },
+        "updated_at": {
+          "label": "Last Modified"
         },
         "username": {
           "help": "Unique login name. Min 3 characters.",
@@ -780,6 +1007,18 @@
       "notifications": {
         "create_success": "User created successfully",
         "update_success": "User updated successfully"
+      },
+      "notifications_2fa": {
+        "failed_message": "Unable to disable 2FA.",
+        "failed_title": "Disable 2FA failed",
+        "success_message": "Two-factor authentication disabled.",
+        "success_title": "2FA disabled"
+      },
+      "sections": {
+        "security_lock": {
+          "description": "Restrict sensitive changes for this user. When locked, password edits and new MFA enrollment are both blocked. Only root admins can toggle this.",
+          "title": "Security lock"
+        }
       },
       "title": {
         "create": "Create User",
@@ -800,9 +1039,12 @@
     "page": {
       "actions": {
         "delete": "Delete",
+        "demote": "Demote",
         "disable": "Disable",
+        "disable_2fa": "Disable 2FA",
         "edit": "Edit",
         "enable": "Enable",
+        "promote": "Promote",
         "topup": "Top Up"
       },
       "columns": {
@@ -810,25 +1052,48 @@
         "display_name": "Display Name",
         "group": "Group",
         "id": "ID",
+        "register_time": "Register Time",
         "remaining_quota": "Remaining Quota",
         "role": "Role",
         "status": "Status",
         "used_quota": "Used Quota",
         "username": "Username"
       },
+      "confirm": {
+        "cancel": "Cancel",
+        "confirm": "Confirm",
+        "demote_description": "Demote {{username}} to a regular user? They will lose admin privileges.",
+        "demote_title": "Demote user",
+        "disable_2fa_description": "Disable two-factor authentication for {{username}}? They will be able to sign in without a 2FA code.",
+        "disable_2fa_title": "Disable 2FA",
+        "promote_description": "Promote {{username}} to administrator? They will gain admin privileges.",
+        "promote_title": "Promote user"
+      },
       "description": "Manage users",
       "empty": "No users found. Add your first user to get started.",
       "notifications": {
         "action_failed_message": "Unable to apply change.",
         "action_failed_title": "Action failed",
+        "demote_failed_message": "Unable to demote user.",
+        "demote_failed_title": "Demote failed",
+        "demote_success_message": "User {{username}} demoted.",
+        "demote_success_title": "User demoted",
+        "disable_2fa_failed_message": "Unable to disable 2FA.",
+        "disable_2fa_failed_title": "Disable 2FA failed",
+        "disable_2fa_success_message": "Two-factor authentication disabled for {{username}}.",
+        "disable_2fa_success_title": "2FA disabled",
         "load_failed_message": "Failed to load users.",
         "load_failed_title": "Access denied",
+        "promote_failed_message": "Unable to promote user.",
+        "promote_failed_title": "Promote failed",
+        "promote_success_message": "User {{username}} promoted.",
+        "promote_success_title": "User promoted",
         "search_failed_message": "Search failed.",
         "search_failed_title": "Search failed"
       },
       "search": {
         "id_label": "ID: {{id}}",
-        "placeholder": "Search users by username...",
+        "placeholder": "Search users by username or UUID...",
         "role_label": "Role: {{role}}",
         "status_label": "Status: {{status}}"
       },
@@ -857,6 +1122,7 @@
           "default": "Default",
           "id": "ID",
           "quota": "Remaining Quota",
+          "register_time": "Register Time",
           "used_quota": "Used Quota",
           "username": "Username"
         },

@@ -7,10 +7,10 @@ import (
 	"github.com/Laisky/errors/v2"
 	"github.com/gin-gonic/gin"
 
-	"github.com/songquanpeng/one-api/relay/adaptor"
-	"github.com/songquanpeng/one-api/relay/adaptor/openai_compatible"
-	"github.com/songquanpeng/one-api/relay/meta"
-	"github.com/songquanpeng/one-api/relay/model"
+	"github.com/Laisky/one-api/relay/adaptor"
+	"github.com/Laisky/one-api/relay/adaptor/openai_compatible"
+	"github.com/Laisky/one-api/relay/meta"
+	"github.com/Laisky/one-api/relay/model"
 )
 
 type Adaptor struct {
@@ -77,23 +77,14 @@ func (a *Adaptor) GetChannelName() string {
 	return "stepfun"
 }
 
-// GetDefaultModelPricing returns the pricing information for StepFun models
-// Based on StepFun pricing: https://platform.stepfun.com/docs/pricing/details
+// GetDefaultModelPricing returns the pricing information for StepFun models.
+// It returns the full ModelRatios table from constants.go (the single source of
+// truth, kept in sync with https://platform.stepfun.com/docs/pricing/details).
+// Previously this method returned a stale hardcoded 9-model map that shadowed
+// ModelRatios, so the audited constants.go rates (step-3, step-3.5-flash, the
+// tiered/cache-aware entries, etc.) were never actually used for billing.
 func (a *Adaptor) GetDefaultModelPricing() map[string]adaptor.ModelConfig {
-	const MilliRmb = 3.5 // 0.000007 * 500000 = 3.5 quota per milli-token
-
-	return map[string]adaptor.ModelConfig{
-		// StepFun Models - Based on https://platform.stepfun.com/docs/pricing/details
-		"step-1-8k":      {Ratio: 0.005 * MilliRmb, CompletionRatio: 1},
-		"step-1-32k":     {Ratio: 0.015 * MilliRmb, CompletionRatio: 1},
-		"step-1-128k":    {Ratio: 0.040 * MilliRmb, CompletionRatio: 1},
-		"step-1-256k":    {Ratio: 0.095 * MilliRmb, CompletionRatio: 1},
-		"step-1-flash":   {Ratio: 0.001 * MilliRmb, CompletionRatio: 1},
-		"step-2-16k":     {Ratio: 0.038 * MilliRmb, CompletionRatio: 1},
-		"step-1v-8k":     {Ratio: 0.005 * MilliRmb, CompletionRatio: 1},
-		"step-1v-32k":    {Ratio: 0.015 * MilliRmb, CompletionRatio: 1},
-		"step-1x-medium": {Ratio: 0.020 * MilliRmb, CompletionRatio: 1}, // Estimated pricing
-	}
+	return ModelRatios
 }
 
 func (a *Adaptor) GetModelRatio(modelName string) float64 {

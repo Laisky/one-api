@@ -4,11 +4,14 @@ import (
 	"context"
 	"embed"
 	"encoding/base64"
+	"net"
 	"net/http"
+	nhpprof "net/http/pprof"
 	"os"
 	"os/signal"
 	"runtime"
 	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
@@ -23,20 +26,21 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
 
-	"github.com/songquanpeng/one-api/common"
-	"github.com/songquanpeng/one-api/common/client"
-	"github.com/songquanpeng/one-api/common/config"
-	"github.com/songquanpeng/one-api/common/graceful"
-	"github.com/songquanpeng/one-api/common/logger"
-	"github.com/songquanpeng/one-api/common/telemetry"
-	"github.com/songquanpeng/one-api/controller"
-	"github.com/songquanpeng/one-api/middleware"
-	"github.com/songquanpeng/one-api/model"
-	"github.com/songquanpeng/one-api/monitor"
-	"github.com/songquanpeng/one-api/relay"
-	"github.com/songquanpeng/one-api/relay/adaptor/openai"
-	"github.com/songquanpeng/one-api/relay/mcp"
-	"github.com/songquanpeng/one-api/router"
+	"github.com/Laisky/one-api/common"
+	"github.com/Laisky/one-api/common/client"
+	"github.com/Laisky/one-api/common/config"
+	"github.com/Laisky/one-api/common/graceful"
+	"github.com/Laisky/one-api/common/logger"
+	"github.com/Laisky/one-api/common/telemetry"
+	"github.com/Laisky/one-api/controller"
+	"github.com/Laisky/one-api/middleware"
+	"github.com/Laisky/one-api/model"
+	"github.com/Laisky/one-api/monitor"
+	"github.com/Laisky/one-api/relay"
+	"github.com/Laisky/one-api/relay/adaptor/openai"
+	"github.com/Laisky/one-api/relay/mcp"
+	responsestate "github.com/Laisky/one-api/relay/state"
+	"github.com/Laisky/one-api/router"
 )
 
 //go:embed web/build/*
@@ -77,9 +81,12 @@ func main() {
 		logger.Logger.Fatal("invalid theme", zap.Error(err))
 	}
 
-	// Initialize SQL Database
-	model.InitDB()
-	model.InitLogDB()
+	// Initialize SQL Database. The bootstrap orchestrator initializes both schemas,
+	// constructs the explicit database topology, and runs external UUID reconciliation
+	// exactly once, so the InitDB/InitLogDB compatibility wrappers are not used here.
+	if err := model.InitDatabases(ctx); err != nil {
+		logger.Logger.Fatal("database bootstrap error", zap.Error(err))
+	}
 	model.StartTraceRetentionCleaner(ctx, config.TraceRetentionDays)
 	model.StartAsyncTaskRetentionCleaner(ctx, config.AsyncTaskRetentionDays)
 	err = model.CreateRootAccountIfNeed()
@@ -97,6 +104,14 @@ func main() {
 	err = common.InitRedisClient()
 	if err != nil {
 		logger.Logger.Fatal("failed to initialize Redis", zap.Error(err))
+	}
+
+	// Initialize the gateway Responses state layer. When RESPONSE_STATE_ENABLED is
+	// false this is a no-op and current behavior is preserved. When enabled it
+	// refuses to start without a healthy Redis backend and a stable encryption key
+	// rather than degrading to an in-process store.
+	if err = responsestate.Init(); err != nil {
+		logger.Logger.Fatal("failed to initialize response state layer", zap.Error(err))
 	}
 
 	// Initialize options
@@ -197,11 +212,11 @@ func main() {
 		sessionStore = cookie.NewStore(sessionSecret, sessionSecret)
 	}
 
-	cookieSecure := false
-	if config.EnableCookieSecure {
-		cookieSecure = true
-	} else {
-		logger.Logger.Warn("ENABLE_COOKIE_SECURE is not set, using insecure cookie store")
+	// Defaults to Secure=true (production-safe). Local HTTP development must
+	// explicitly set ENABLE_COOKIE_SECURE=false.
+	cookieSecure := config.EnableCookieSecure
+	if !cookieSecure {
+		logger.Logger.Warn("ENABLE_COOKIE_SECURE=false: session cookies will be sent over plain HTTP; do not use this configuration in production")
 	}
 	sessionStore.Options(sessions.Options{
 		Path:     "/",
@@ -226,6 +241,12 @@ func main() {
 	addr := ":" + port
 	srv := &http.Server{Addr: addr, Handler: server}
 
+	// Start the pprof profiling listener (separate from the API server) when enabled.
+	var pprofSrv *http.Server
+	if config.EnablePprof {
+		pprofSrv = startPprofServer(config.PprofListen)
+	}
+
 	// Start server in background
 	go func() {
 		logger.Logger.Info("server started", zap.String("address", "http://localhost:"+port))
@@ -246,6 +267,13 @@ func main() {
 	defer cancel()
 	if err := srv.Shutdown(shutdownCtx); err != nil {
 		logger.Logger.Error("server shutdown error", zap.Error(err))
+	}
+
+	// Shut down the pprof listener if it was started.
+	if pprofSrv != nil {
+		if err := pprofSrv.Shutdown(shutdownCtx); err != nil {
+			logger.Logger.Error("pprof server shutdown error", zap.Error(err))
+		}
 	}
 
 	// Stop batch updater and flush pending changes before draining other tasks.
@@ -269,6 +297,59 @@ func main() {
 	if derr := model.CloseDB(); derr != nil {
 		logger.Logger.Error("failed to close database", zap.Error(derr))
 	}
+}
+
+// startPprofServer starts a dedicated HTTP listener that serves the Go
+// net/http/pprof profiling endpoints. It is intentionally kept separate from
+// the public API server so the profiling surface is never mixed into normal
+// request routing. pprof has no built-in authentication, so the listener
+// defaults to loopback (config.PprofListen) and should only be bound to a
+// non-loopback address behind a firewall or auth proxy.
+func startPprofServer(addr string) *http.Server {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/debug/pprof/", nhpprof.Index)
+	mux.HandleFunc("/debug/pprof/cmdline", nhpprof.Cmdline)
+	mux.HandleFunc("/debug/pprof/profile", nhpprof.Profile)
+	mux.HandleFunc("/debug/pprof/symbol", nhpprof.Symbol)
+	mux.HandleFunc("/debug/pprof/trace", nhpprof.Trace)
+
+	srv := &http.Server{Addr: addr, Handler: mux}
+
+	if !isLoopbackListenAddr(addr) {
+		logger.Logger.Warn("pprof listener is bound to a non-loopback address; "+
+			"pprof has no authentication, ensure it is protected by a firewall or auth proxy",
+			zap.String("address", addr))
+	}
+
+	go func() {
+		logger.Logger.Info("pprof server started", zap.String("address", "http://"+addr+"/debug/pprof/"))
+		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			logger.Logger.Error("pprof server stopped unexpectedly", zap.Error(err))
+		}
+	}()
+
+	return srv
+}
+
+// isLoopbackListenAddr reports whether the given listen address is bound to the
+// loopback interface (and is therefore not reachable from other hosts).
+func isLoopbackListenAddr(addr string) bool {
+	host, _, err := net.SplitHostPort(addr)
+	if err != nil {
+		// Fall back to a best-effort string check when the address is malformed.
+		host = strings.TrimSpace(addr)
+	}
+	if host == "" {
+		// An empty host (e.g. ":6060") binds to all interfaces.
+		return false
+	}
+	if strings.EqualFold(host, "localhost") {
+		return true
+	}
+	if ip := net.ParseIP(host); ip != nil {
+		return ip.IsLoopback()
+	}
+	return false
 }
 
 func isThemeValid() error {

@@ -9,12 +9,12 @@ import (
 	"github.com/Laisky/errors/v2"
 	"github.com/gin-gonic/gin"
 
-	"github.com/songquanpeng/one-api/common/ctxkey"
-	"github.com/songquanpeng/one-api/relay/adaptor"
-	billingratio "github.com/songquanpeng/one-api/relay/billing/ratio"
-	"github.com/songquanpeng/one-api/relay/meta"
-	"github.com/songquanpeng/one-api/relay/model"
-	"github.com/songquanpeng/one-api/relay/relaymode"
+	"github.com/Laisky/one-api/common/ctxkey"
+	"github.com/Laisky/one-api/relay/adaptor"
+	"github.com/Laisky/one-api/relay/adaptor/common/toolnamesafe"
+	billingratio "github.com/Laisky/one-api/relay/billing/ratio"
+	"github.com/Laisky/one-api/relay/meta"
+	"github.com/Laisky/one-api/relay/model"
 )
 
 type Adaptor struct {
@@ -27,13 +27,7 @@ func (a *Adaptor) Init(meta *meta.Meta) {
 // https://docs.anthropic.com/claude/reference/messages_post
 // anthopic migrate to Message API
 func (a *Adaptor) GetRequestURL(meta *meta.Meta) (string, error) {
-	// Handle different relay modes for Anthropic
-	switch meta.Mode {
-	case relaymode.ClaudeMessages:
-		return fmt.Sprintf("%s/v1/messages", meta.BaseURL), nil
-	default:
-		return fmt.Sprintf("%s/v1/messages", meta.BaseURL), nil
-	}
+	return fmt.Sprintf("%s/v1/messages", meta.BaseURL), nil
 }
 
 func (a *Adaptor) SetupRequestHeader(c *gin.Context, req *http.Request, meta *meta.Meta) error {
@@ -92,6 +86,11 @@ func (a *Adaptor) ConvertRequest(c *gin.Context, relayMode int, request *model.G
 	}
 
 	c.Set(ctxkey.ClaudeModel, request.Model)
+	// Anthropic's `tools[].name` validator enforces `^[a-zA-Z0-9_-]{1,64}$`; sanitize
+	// the OpenAI-shaped payload before conversion so the resulting Anthropic tool
+	// definitions carry compliant names. Restoration happens in the response path
+	// (StreamHandler / Handler) using the rename map stashed on c.
+	toolnamesafe.SanitizeRequestToolNames(c, request)
 	return ConvertRequest(c, *request)
 }
 

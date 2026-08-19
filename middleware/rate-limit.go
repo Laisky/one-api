@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/Laisky/errors/v2"
@@ -12,9 +13,10 @@ import (
 	"github.com/Laisky/zap"
 	"github.com/gin-gonic/gin"
 
-	"github.com/songquanpeng/one-api/common"
-	"github.com/songquanpeng/one-api/common/config"
-	"github.com/songquanpeng/one-api/common/ctxkey"
+	"github.com/Laisky/one-api/common"
+	"github.com/Laisky/one-api/common/config"
+	"github.com/Laisky/one-api/common/ctxkey"
+	"github.com/Laisky/one-api/model"
 )
 
 var timeFormat = "2006-01-02T15:04:05.000Z"
@@ -37,6 +39,11 @@ func redisRateLimiter(c *gin.Context, maxRequestNum int, duration int64, mark st
 		}
 		hashedToken := sha256.Sum256([]byte(GetTokenKeyParts(c)[0]))
 		key = fmt.Sprintf("rateLimit:%s:%s:%d", mark, hex.EncodeToString(hashedToken[:8]), c.GetInt(ctxkey.ChannelId))
+	case "CV":
+		// Conversations API: key per authenticated token so a single token cannot
+		// flood the quota-free state-write path (row L09).
+		hashedToken := sha256.Sum256([]byte(GetTokenKeyParts(c)[0]))
+		key = fmt.Sprintf("rateLimit:%s:%s", mark, hex.EncodeToString(hashedToken[:8]))
 	}
 
 	rdb := common.RDB
@@ -72,6 +79,7 @@ func redisRateLimiter(c *gin.Context, maxRequestNum int, duration int64, mark st
 		// time.Since will return negative number!
 		// See: https://stackoverflow.com/questions/50970900/why-is-time-since-returning-negative-durations-on-windows
 		if int64(nowTime.Sub(oldTime).Seconds()) < duration {
+			setRateLimitExceededHeaders(c, maxRequestNum, duration-int64(nowTime.Sub(oldTime).Seconds()))
 			rdb.Expire(ctx, key, config.RateLimitKeyExpirationDuration)
 			AbortWithError(c, http.StatusTooManyRequests, errors.New("rate limit exceeded"))
 		} else {
@@ -96,16 +104,38 @@ func memoryRateLimiter(c *gin.Context, maxRequestNum int, duration int64, mark s
 		}
 		hashedToken := sha256.Sum256([]byte(GetTokenKeyParts(c)[0]))
 		key = fmt.Sprintf("rateLimit:%s:%s:%d", mark, hex.EncodeToString(hashedToken[:8]), c.GetInt(ctxkey.ChannelId))
+	case "CV":
+		// Conversations API: key per authenticated token (row L09).
+		hashedToken := sha256.Sum256([]byte(GetTokenKeyParts(c)[0]))
+		key = fmt.Sprintf("rateLimit:%s:%s", mark, hex.EncodeToString(hashedToken[:8]))
 	}
 
 	if !inMemoryRateLimiter.Request(key, maxRequestNum, duration) {
+		setRateLimitExceededHeaders(c, maxRequestNum, duration)
 		AbortWithError(c, http.StatusTooManyRequests, errors.New("rate limit exceeded"))
 		return
 	}
 }
 
+// setRateLimitExceededHeaders attaches standard rate-limit metadata for a
+// rejected request. Parameters: c is the Gin request context, maxRequestNum is
+// the request allowance for the window, and resetSeconds is the retry delay in
+// seconds. Return value: none; the function mutates response headers.
+func setRateLimitExceededHeaders(c *gin.Context, maxRequestNum int, resetSeconds int64) {
+	if resetSeconds < 1 {
+		resetSeconds = 1
+	}
+
+	limit := strconv.Itoa(maxRequestNum)
+	reset := strconv.FormatInt(resetSeconds, 10)
+	c.Header("RateLimit-Limit", limit)
+	c.Header("RateLimit-Remaining", "0")
+	c.Header("RateLimit-Reset", reset)
+	c.Header("Retry-After", reset)
+}
+
 func rateLimitFactory(maxRequestNum int, duration int64, mark string) func(c *gin.Context) {
-	if maxRequestNum <= 0 || config.DebugEnabled {
+	if maxRequestNum <= 0 || config.RateLimitDisabled {
 		return func(c *gin.Context) {
 			c.Next()
 		}
@@ -147,6 +177,119 @@ func GlobalRelayRateLimit() func(c *gin.Context) {
 	return rateLimitFactory(config.GlobalRelayRateLimitNum, config.GlobalRelayRateLimitDuration, "GR")
 }
 
+// ConversationsRateLimit throttles the gateway Conversations API per
+// authenticated token. Conversation CRUD is a quota-free store-write path, so
+// without this limit a single token could grow gateway state without bound — a
+// cheap, durable denial of service (row L09). Keyed per token via the "CV" mark;
+// disabled when CONVERSATION_RATE_LIMIT is non-positive or RATE_LIMIT_DISABLED.
+func ConversationsRateLimit() func(c *gin.Context) {
+	return rateLimitFactory(config.ConversationRateLimitNum, config.ConversationRateLimitDuration, "CV")
+}
+
+// LowBalanceRelayRateLimit applies a stricter relay rate limit to users whose
+// account balance has fallen below config.LowBalanceThreshold (USD). These are
+// typically free users who never top up but keep hammering free models.
+//
+// The limit is configurable via LOW_BALANCE_RELAY_RATE_LIMIT and defaults to
+// GlobalRelayRateLimitNum, so the default behavior is unchanged: the limiter only
+// engages once an operator configures a value stricter than the global relay limit.
+// Privileged (admin/root) users and users with sufficient balance are never
+// throttled here. The limit is keyed per user (not per token) so a user cannot
+// bypass it by spreading traffic across multiple tokens. When the limit is
+// exceeded the response explains that the throttling is caused by the low balance,
+// so the client knows to top up.
+func LowBalanceRelayRateLimit() func(c *gin.Context) {
+	return func(c *gin.Context) {
+		// Mirror the other relay limiters: disabled only via the explicit
+		// RATE_LIMIT_DISABLED toggle (never tied to DEBUG, which is logging-only).
+		if config.RateLimitDisabled {
+			c.Next()
+			return
+		}
+
+		maxRequestNum := config.LowBalanceRelayRateLimitNum
+		duration := config.LowBalanceRelayRateLimitDuration
+		if maxRequestNum <= 0 || duration <= 0 {
+			c.Next()
+			return
+		}
+		// Engage only when the low-balance limit is actually stricter than the global
+		// relay limit; otherwise this middleware is a transparent no-op, so the default
+		// configuration (equal to the global limit) changes nothing. Compare the
+		// effective request rate (count / window) rather than the count alone, so
+		// tightening either LOW_BALANCE_RELAY_RATE_LIMIT or its duration takes effect.
+		// Cross-multiply to stay in integer math:
+		//   low.rate < global.rate  <=>  num*globalDuration < globalNum*duration
+		// A non-positive global limit means "unlimited", so any positive low-balance
+		// limit is stricter than it.
+		stricterThanGlobal := config.GlobalRelayRateLimitNum <= 0 ||
+			int64(maxRequestNum)*config.GlobalRelayRateLimitDuration <
+				int64(config.GlobalRelayRateLimitNum)*duration
+		if !stricterThanGlobal {
+			c.Next()
+			return
+		}
+
+		userObj, ok := c.Get(ctxkey.UserObj)
+		if !ok {
+			c.Next()
+			return
+		}
+		user, ok := userObj.(*model.User)
+		if !ok || user == nil {
+			c.Next()
+			return
+		}
+
+		// Never throttle privileged operators on balance grounds.
+		if user.Role >= model.RoleAdminUser {
+			c.Next()
+			return
+		}
+
+		// Read the live balance (kept current as the user spends) rather than the
+		// cached user-object snapshot, so the throttle reacts promptly when a user
+		// drains their balance. Fall back to the snapshot if the lookup fails.
+		balance := user.Quota
+		if liveQuota, err := model.CacheGetUserQuota(gmw.Ctx(c), user.Id); err == nil {
+			balance = liveQuota
+		} else {
+			gmw.GetLogger(c).Warn("low-balance limiter: live quota lookup failed, using cached snapshot",
+				zap.Int("user_id", user.Id), zap.Error(err))
+		}
+
+		// Sufficient balance: standard limits apply.
+		thresholdQuota := int64(config.LowBalanceThreshold * config.QuotaPerUnit)
+		if balance >= thresholdQuota {
+			c.Next()
+			return
+		}
+
+		key := fmt.Sprintf("rateLimit:LB:%d", user.Id)
+
+		allowed := true
+		if common.IsRedisEnabled() {
+			allowed = checkRedisRateLimit(c, key, maxRequestNum, duration)
+		} else {
+			inMemoryRateLimiter.Init(config.RateLimitKeyExpirationDuration)
+			allowed = inMemoryRateLimiter.Request(key, maxRequestNum, duration)
+		}
+
+		if !allowed {
+			balanceUSD := float64(balance) / config.QuotaPerUnit
+			setRateLimitExceededHeaders(c, maxRequestNum, duration)
+			AbortWithError(c, http.StatusTooManyRequests, errors.Errorf(
+				"rate limit exceeded: your account balance ($%.4f) is below the $%.2f minimum, "+
+					"so a stricter limit of %d requests per %d seconds applies; "+
+					"please top up your account to restore the standard rate limit",
+				balanceUSD, config.LowBalanceThreshold, maxRequestNum, duration))
+			return
+		}
+
+		c.Next()
+	}
+}
+
 func ChannelRateLimit() func(c *gin.Context) {
 	maxRequestNum := 0
 	if config.ChannelRateLimitEnabled {
@@ -162,7 +305,7 @@ func TotpRateLimit() func(c *gin.Context) {
 
 // CheckTotpRateLimit checks if user can make TOTP verification request
 func CheckTotpRateLimit(c *gin.Context, userId int) bool {
-	if config.DebugEnabled {
+	if config.RateLimitDisabled {
 		return true
 	}
 
@@ -174,6 +317,100 @@ func CheckTotpRateLimit(c *gin.Context, userId int) bool {
 		inMemoryRateLimiter.Init(config.RateLimitKeyExpirationDuration)
 		return inMemoryRateLimiter.Request(key, 1, 1)
 	}
+}
+
+// redeemFailureKey builds the per-user rate-limit key for failed redemptions.
+func redeemFailureKey(userId int) string {
+	return fmt.Sprintf("rateLimit:RDMF:%d", userId)
+}
+
+// IsRedeemBlocked reports whether the user has used up their failed-redemption
+// budget within the configured window and should be rejected before any
+// redemption work is attempted. It is read-only: it never records an attempt,
+// so calling it on every redemption (including ones that go on to succeed) does
+// not consume the budget. Returns false when the limiter is disabled.
+func IsRedeemBlocked(c *gin.Context, userId int) bool {
+	if config.RateLimitDisabled || config.RedeemFailureRateLimitNum <= 0 {
+		return false
+	}
+
+	key := redeemFailureKey(userId)
+	maxNum := config.RedeemFailureRateLimitNum
+	duration := config.RedeemFailureRateLimitDuration
+
+	if common.IsRedisEnabled() {
+		return peekRedisRateLimit(c, key, maxNum, duration)
+	}
+	inMemoryRateLimiter.Init(config.RateLimitKeyExpirationDuration)
+	return inMemoryRateLimiter.PeekExceeded(key, maxNum, duration)
+}
+
+// RecordRedeemFailure records one failed redemption attempt against the user's
+// budget. Call this only after a redemption attempt actually fails, so that
+// successful redemptions never count toward the limit. It is a no-op when the
+// limiter is disabled.
+func RecordRedeemFailure(c *gin.Context, userId int) {
+	if config.RateLimitDisabled || config.RedeemFailureRateLimitNum <= 0 {
+		return
+	}
+
+	key := redeemFailureKey(userId)
+	maxNum := config.RedeemFailureRateLimitNum
+
+	if common.IsRedisEnabled() {
+		recordRedisRateLimit(c, key, maxNum)
+		return
+	}
+	inMemoryRateLimiter.Init(config.RateLimitKeyExpirationDuration)
+	inMemoryRateLimiter.Record(key, maxNum)
+}
+
+// peekRedisRateLimit reports whether key already holds at least maxRequestNum
+// timestamps within the sliding window, without recording a new one. It mirrors
+// the window logic of checkRedisRateLimit but is read-only. On any Redis error
+// it fails open (returns false) so a Redis outage never locks users out.
+func peekRedisRateLimit(c *gin.Context, key string, maxRequestNum int, duration int64) bool {
+	ctx := gmw.Ctx(c)
+	rdb := common.RDB
+	lg := gmw.GetLogger(c)
+
+	listLength, err := rdb.LLen(ctx, key).Result()
+	if err != nil {
+		lg.Warn("Redis redeem rate limit peek failed, allowing request", zap.String("key", key), zap.Error(err))
+		return false
+	}
+	if listLength < int64(maxRequestNum) {
+		return false
+	}
+
+	oldTimeStr, err := rdb.LIndex(ctx, key, -1).Result()
+	if err != nil {
+		lg.Warn("Redis redeem rate limit get old time failed, allowing request", zap.String("key", key), zap.Error(err))
+		return false
+	}
+	oldTime, err := time.Parse(timeFormat, oldTimeStr)
+	if err != nil {
+		lg.Warn("Redis redeem rate limit parse old time failed, allowing request", zap.String("key", key), zap.String("time_str", oldTimeStr), zap.Error(err))
+		return false
+	}
+
+	return int64(time.Since(oldTime).Seconds()) < duration
+}
+
+// recordRedisRateLimit appends a timestamp for key and bounds the list to the
+// most recent maxRequestNum entries. It is the write-only companion to
+// peekRedisRateLimit. Redis errors are logged and swallowed.
+func recordRedisRateLimit(c *gin.Context, key string, maxRequestNum int) {
+	ctx := gmw.Ctx(c)
+	rdb := common.RDB
+	lg := gmw.GetLogger(c)
+
+	if err := rdb.LPush(ctx, key, time.Now().Format(timeFormat)).Err(); err != nil {
+		lg.Warn("Redis redeem rate limit record failed", zap.String("key", key), zap.Error(err))
+		return
+	}
+	rdb.LTrim(ctx, key, 0, int64(maxRequestNum-1))
+	rdb.Expire(ctx, key, config.RateLimitKeyExpirationDuration)
 }
 
 // checkRedisRateLimit checks rate limit using Redis

@@ -12,7 +12,7 @@ import (
 	"github.com/Laisky/zap"
 	"github.com/gin-gonic/gin"
 
-	"github.com/songquanpeng/one-api/common/ctxkey"
+	"github.com/Laisky/one-api/common/ctxkey"
 )
 
 // GetRequestBody reads and caches the request body so it can be reused later in the handler chain.
@@ -44,7 +44,7 @@ func UnmarshalBodyReusable(c *gin.Context, v any) error {
 	}
 
 	// check v should be a pointer
-	if v == nil || reflect.TypeOf(v).Kind() != reflect.Ptr {
+	if v == nil || reflect.TypeOf(v).Kind() != reflect.Pointer {
 		return errors.Errorf("UnmarshalBodyReusable only accept pointer, got %v", reflect.TypeOf(v))
 	}
 
@@ -64,8 +64,9 @@ func UnmarshalBodyReusable(c *gin.Context, v any) error {
 	return nil
 }
 
-// LogClientRequestPayload emits a DEBUG log for inbound request payload once per request.
-// It truncates oversized values using SanitizePayloadForLogging and restores request body for reuse.
+// LogClientRequestPayload emits shape-only DEBUG metadata for an inbound request
+// once per request and restores its body for reuse. Payload content is never
+// logged because prompts, reasoning, and tool results may contain secrets.
 func LogClientRequestPayload(c *gin.Context, label string, limit int) error {
 	if logged, ok := c.Get(ctxkey.ClientRequestPayloadLogged); ok {
 		if loggedFlag, ok := logged.(bool); ok && loggedFlag {
@@ -78,13 +79,12 @@ func LogClientRequestPayload(c *gin.Context, label string, limit int) error {
 		return errors.Wrap(err, "get request body failed")
 	}
 
-	preview, truncated := SanitizePayloadForLogging(body, limit)
 	fields := []zap.Field{
 		zap.String("method", c.Request.Method),
-		zap.String("url", c.Request.URL.String()),
+		zap.String("url", SanitizeURLForLogging(c.Request.URL.String())),
 		zap.Int("body_bytes", len(body)),
-		zap.Bool("body_truncated", truncated),
-		zap.ByteString("body_preview", preview),
+		zap.Bool("body_truncated", limit > 0 && len(body) > limit),
+		zap.Bool("body_logging_suppressed", true),
 	}
 	if label != "" {
 		fields = append(fields, zap.String("label", label))

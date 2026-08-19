@@ -10,6 +10,21 @@ import (
 // JSONStringSlice stores a string slice as JSON in the database.
 type JSONStringSlice []string
 
+// MarshalJSON renders an empty JSON array when the slice is nil.
+//
+// Why: Scan leaves nil on NULL/empty columns; without this, default reflection
+// emits JSON null which strict clients reject.
+func (s JSONStringSlice) MarshalJSON() ([]byte, error) {
+	if s == nil {
+		return []byte("[]"), nil
+	}
+	payload, err := json.Marshal([]string(s))
+	if err != nil {
+		return nil, errors.Wrap(err, "marshal json string slice")
+	}
+	return payload, nil
+}
+
 // Value converts the JSONStringSlice into a driver value.
 func (s JSONStringSlice) Value() (driver.Value, error) {
 	if len(s) == 0 {
@@ -62,6 +77,21 @@ func (s *JSONStringSlice) Scan(value any) error {
 // JSONStringMap stores a string map as JSON in the database.
 type JSONStringMap map[string]string
 
+// MarshalJSON renders an empty JSON object when the map is nil.
+//
+// Why: Scan leaves nil on NULL/empty columns; without this, default reflection
+// emits JSON null which strict clients reject.
+func (m JSONStringMap) MarshalJSON() ([]byte, error) {
+	if m == nil {
+		return []byte("{}"), nil
+	}
+	payload, err := json.Marshal(map[string]string(m))
+	if err != nil {
+		return nil, errors.Wrap(err, "marshal json string map")
+	}
+	return payload, nil
+}
+
 // Value converts the JSONStringMap into a driver value.
 func (m JSONStringMap) Value() (driver.Value, error) {
 	if len(m) == 0 {
@@ -113,6 +143,21 @@ func (m *JSONStringMap) Scan(value any) error {
 
 // MCPToolPricingMap stores per-tool pricing as JSON in the database.
 type MCPToolPricingMap map[string]ToolPricingLocal
+
+// MarshalJSON renders an empty JSON object when the map is nil.
+//
+// Why: Scan leaves nil on NULL/empty columns; without this, default reflection
+// emits JSON null which strict clients reject.
+func (m MCPToolPricingMap) MarshalJSON() ([]byte, error) {
+	if m == nil {
+		return []byte("{}"), nil
+	}
+	payload, err := json.Marshal(map[string]ToolPricingLocal(m))
+	if err != nil {
+		return nil, errors.Wrap(err, "marshal mcp tool pricing map")
+	}
+	return payload, nil
+}
 
 // Value converts the MCPToolPricingMap into a driver value.
 func (m MCPToolPricingMap) Value() (driver.Value, error) {

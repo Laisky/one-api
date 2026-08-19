@@ -4,17 +4,17 @@ import (
 	"fmt"
 	"regexp"
 
-	"github.com/songquanpeng/one-api/common/logger"
-	claude "github.com/songquanpeng/one-api/relay/adaptor/aws/claude"
-	cohere "github.com/songquanpeng/one-api/relay/adaptor/aws/cohere"
-	deepseek "github.com/songquanpeng/one-api/relay/adaptor/aws/deepseek"
-	llama3 "github.com/songquanpeng/one-api/relay/adaptor/aws/llama3"
-	mistral "github.com/songquanpeng/one-api/relay/adaptor/aws/mistral"
-	openai "github.com/songquanpeng/one-api/relay/adaptor/aws/openai"
-	qwen "github.com/songquanpeng/one-api/relay/adaptor/aws/qwen"
+	"github.com/Laisky/one-api/common/logger"
+	claude "github.com/Laisky/one-api/relay/adaptor/aws/claude"
+	cohere "github.com/Laisky/one-api/relay/adaptor/aws/cohere"
+	deepseek "github.com/Laisky/one-api/relay/adaptor/aws/deepseek"
+	llama3 "github.com/Laisky/one-api/relay/adaptor/aws/llama3"
+	mistral "github.com/Laisky/one-api/relay/adaptor/aws/mistral"
+	openai "github.com/Laisky/one-api/relay/adaptor/aws/openai"
+	qwen "github.com/Laisky/one-api/relay/adaptor/aws/qwen"
 
-	"github.com/songquanpeng/one-api/relay/adaptor/aws/utils"
-	writer "github.com/songquanpeng/one-api/relay/adaptor/aws/writer"
+	"github.com/Laisky/one-api/relay/adaptor/aws/utils"
+	writer "github.com/Laisky/one-api/relay/adaptor/aws/writer"
 )
 
 type AwsModelType int

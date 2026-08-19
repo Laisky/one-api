@@ -9,11 +9,12 @@ import (
 	"github.com/Laisky/zap"
 	"github.com/gin-gonic/gin"
 
-	"github.com/songquanpeng/one-api/common/ctxkey"
-	"github.com/songquanpeng/one-api/model"
-	"github.com/songquanpeng/one-api/relay/adaptor"
-	relaymodel "github.com/songquanpeng/one-api/relay/model"
-	quotautil "github.com/songquanpeng/one-api/relay/quota"
+	"github.com/Laisky/one-api/common/ctxkey"
+	"github.com/Laisky/one-api/common/identity"
+	"github.com/Laisky/one-api/model"
+	"github.com/Laisky/one-api/relay/adaptor"
+	relaymodel "github.com/Laisky/one-api/relay/model"
+	quotautil "github.com/Laisky/one-api/relay/quota"
 )
 
 // ErrQuotaExceeded indicates the user's quota was exhausted during streaming.
@@ -34,6 +35,7 @@ type QuotaTrackerParams struct {
 	ChannelModelConfigs    map[string]model.ModelConfigLocal
 	ChannelCompletionRatio map[string]float64
 	PricingAdaptor         adaptor.Adaptor
+	RequestTime            time.Time
 	FlushInterval          time.Duration
 	Logger                 *zap.Logger
 	Ctx                    context.Context
@@ -70,6 +72,21 @@ func NewQuotaTracker(params QuotaTrackerParams) *QuotaTracker {
 		tracker.params.Logger = zap.NewNop()
 	}
 	return tracker
+}
+
+// userRef resolves the identity of the user this tracker bills. The tracker's
+// logger is not necessarily request-bound (it defaults to a no-op logger), so
+// log sites must carry the identity explicitly.
+//
+// Return values:
+//   - identity.UserRef: the request identity's user when available, otherwise a
+//     ref carrying only the configured user id.
+func (t *QuotaTracker) userRef() identity.UserRef {
+	ref := identity.FromContext(t.params.Ctx).User
+	if ref.ID == 0 {
+		ref.ID = t.params.UserID
+	}
+	return ref
 }
 
 // StoreTracker attaches the tracker to the gin context for downstream access.
@@ -209,8 +226,7 @@ func (t *QuotaTracker) flushLocked(force bool) error {
 
 	if err := model.CacheDecreaseUserQuota(ctx, t.params.UserID, delta); err != nil {
 		t.params.Logger.Warn("streaming quota tracker failed to update user cache",
-			zap.Int("user_id", t.params.UserID),
-			zap.Error(err))
+			append(t.userRef().Zap(), zap.Error(err))...)
 	}
 
 	t.chargedQuota += delta
@@ -229,6 +245,7 @@ func (t *QuotaTracker) computeTargetQuotaLocked() int64 {
 		ChannelModelConfigs:    t.params.ChannelModelConfigs,
 		ChannelCompletionRatio: t.params.ChannelCompletionRatio,
 		PricingAdaptor:         t.params.PricingAdaptor,
+		RequestTime:            t.params.RequestTime,
 	})
 	target := max(result.TotalQuota-t.params.PreConsumedQuota, 0)
 	return target

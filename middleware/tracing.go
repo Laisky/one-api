@@ -3,8 +3,8 @@ package middleware
 import (
 	"github.com/gin-gonic/gin"
 
-	"github.com/songquanpeng/one-api/common/tracing"
-	"github.com/songquanpeng/one-api/model"
+	"github.com/Laisky/one-api/common/tracing"
+	"github.com/Laisky/one-api/model"
 )
 
 // TracingMiddleware creates a middleware that records request tracing information

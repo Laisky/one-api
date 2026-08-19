@@ -6,11 +6,54 @@
   },
   "playground": {
     "actions": {
+      "assistant_message_options": "アシスタントメッセージのオプション",
       "copy": "コピー",
+      "copy_message": "メッセージをコピー",
+      "copy_response": "応答をコピー",
       "delete": "削除",
+      "delete_message": "メッセージを削除",
+      "delete_response": "応答を削除",
       "edit": "編集",
+      "edit_message": "メッセージを編集",
+      "edit_response": "応答を編集",
       "message_options": "メッセージオプション",
-      "retry": "再試行"
+      "regenerate_response": "応答を再生成",
+      "retry": "再試行",
+      "user_message_options": "ユーザーメッセージのオプション"
+    },
+    "attachments": {
+      "add_images": "画像を追加",
+      "attach_images": "画像を添付",
+      "attached_image_alt": "添付画像",
+      "count": "{{count}}/{{max}} 枚の画像",
+      "delete_image": "画像を削除",
+      "finalizing": "完了処理中...",
+      "info": "対応形式: JPG、PNG、GIF、WebP - 画像ごとに最大 5MB - 最大 {{max}} 枚",
+      "notifications": {
+        "all_processing_failed_message": "{{file}} を処理できません。別の画像を試すかサポートへ連絡してください。",
+        "all_processing_failed_title": "すべての処理方法に失敗しました",
+        "image_processing_failed_message": "{{file}} の処理に失敗しました: {{message}}",
+        "image_processing_failed_title": "画像処理に失敗しました",
+        "mobile_processing_failed_message": "モバイルで {{file}} の処理に失敗しました: {{message}}",
+        "mobile_processing_failed_title": "モバイル処理に失敗しました"
+      },
+      "optimizing": "最適化中 {{progress}}%",
+      "processing": "処理中 {{progress}}%",
+      "remove_image": "画像を削除",
+      "validation": {
+        "dismiss_error": "エラーを閉じる",
+        "extension_unsupported": "ファイル拡張子はサポートされていません。対応形式: {{formats}}",
+        "file_type_unsupported": "ファイルタイプ「{{type}}」はサポートされていません。画像ファイルを選択してください。",
+        "limit_exceeded": "画像は最大 {{max}} 枚までです。追加する前に画像を削除してください。",
+        "limit_skipped": "画像は最大 {{max}} 枚までです。このファイルはスキップされました。",
+        "multiple_errors": "{{count}} 件のファイル検証エラー:",
+        "processing_error": "画像の処理中にエラーが発生しました。もう一度お試しください。",
+        "single_error": "ファイル検証エラー:",
+        "size_exceeded": "ファイルサイズ（{{size}}MB）が 5MB の制限を超えています。画像を圧縮またはリサイズしてください。",
+        "tip": "ヒント: 各カードの閉じるボタンでこれらのエラーを閉じられます。",
+        "unknown_error": "不明なエラー",
+        "unknown_type": "不明"
+      }
     },
     "chat": {
       "clear": "クリア",
@@ -47,10 +90,13 @@
       "title": "{{role}} のメッセージを削除"
     },
     "edit": {
+      "attachment_alt": "添付ファイル {{index}}",
       "attachments_hint": "添付ファイル上にマウスを重ねると表示される × ボタンから個別に削除できます。",
       "attachments_label": "添付ファイル ({{count}})",
       "cancel": "キャンセル",
       "content_label": "{{role}} のメッセージ内容",
+      "content_placeholder": "{{role}}メッセージの内容を入力...",
+      "delete_attachment": "添付ファイルを削除",
       "description": "メッセージ内容を編集します。\u003c1\u003eCtrl+Enter\u003c/1\u003e で保存、\u003c3\u003eEsc\u003c/3\u003e でキャンセルできます。",
       "save": "変更を保存",
       "shortcuts": {
@@ -143,8 +189,10 @@
         "options": {
           "high": "高",
           "low": "低",
+          "max": "最大",
           "medium": "中",
-          "none": "なし"
+          "none": "なし",
+          "xhigh": "超高"
         }
       },
       "show_reasoning": {
@@ -187,6 +235,55 @@
         "description": "Nucleus サンプリング：0.1=集中, 1.0=多様",
         "label": "Top P"
       }
+    },
+    "realtime": {
+      "assistant": "アシスタント",
+      "audio": "オーディオ",
+      "clear_events": "クリア",
+      "connect": "接続",
+      "connected": "接続済み",
+      "connecting": "接続中...",
+      "connection_closed": "接続が閉じられました",
+      "connection_error": "接続エラー",
+      "conversation": "会話",
+      "description": "WebSocket接続でOpenAI Realtime APIをテスト",
+      "disconnect": "切断",
+      "disconnected": "未接続",
+      "error_connect": "接続に失敗しました。トークンとモデルを確認してください。",
+      "error_send": "メッセージを送信できません。接続されていません。",
+      "event_log": "イベントログ",
+      "events": "イベント",
+      "input_tokens": "入力トークン",
+      "instructions": "指示",
+      "modalities": "モダリティ",
+      "model": "モデル",
+      "no_messages": "メッセージはまだありません。接続してメッセージを送信してください。",
+      "no_models": "このトークンで利用可能なリアルタイムモデルがありません。",
+      "no_tokens": "利用可能なトークンがありません。まずトークンを作成してください。",
+      "output_tokens": "出力トークン",
+      "placeholder": "メッセージを入力...",
+      "received": "受信済み",
+      "select_model": "モデルを選択",
+      "select_token": "トークンを選択",
+      "send": "送信",
+      "sent": "送信済み",
+      "session_created": "セッションが作成されました",
+      "session_instructions_placeholder": "オプション：セッションのシステム指示を入力...",
+      "settings": "設定",
+      "system": "システム",
+      "text": "テキスト",
+      "title": "リアルタイム Playground",
+      "token": "トークン",
+      "total_tokens": "合計トークン",
+      "usage": "使用量",
+      "user": "あなた",
+      "voice": "音声"
+    },
+    "reasoning": {
+      "chars": "{{count}} 文字",
+      "processing": "処理中...",
+      "streaming": "推論中...",
+      "title": "推論プロセス"
     },
     "roles": {
       "assistant": "アシスタント",

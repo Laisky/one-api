@@ -10,18 +10,18 @@ import (
 	"github.com/Laisky/zap"
 	"github.com/gin-gonic/gin"
 
-	"github.com/songquanpeng/one-api/common/config"
-	"github.com/songquanpeng/one-api/common/ctxkey"
-	"github.com/songquanpeng/one-api/model"
-	"github.com/songquanpeng/one-api/relay"
-	"github.com/songquanpeng/one-api/relay/adaptor"
-	"github.com/songquanpeng/one-api/relay/adaptor/openai"
-	"github.com/songquanpeng/one-api/relay/billing"
-	"github.com/songquanpeng/one-api/relay/mcp"
-	metalib "github.com/songquanpeng/one-api/relay/meta"
-	relaymodel "github.com/songquanpeng/one-api/relay/model"
-	"github.com/songquanpeng/one-api/relay/pricing"
-	"github.com/songquanpeng/one-api/relay/tooling"
+	"github.com/Laisky/one-api/common/config"
+	"github.com/Laisky/one-api/common/ctxkey"
+	"github.com/Laisky/one-api/model"
+	"github.com/Laisky/one-api/relay"
+	"github.com/Laisky/one-api/relay/adaptor"
+	"github.com/Laisky/one-api/relay/adaptor/openai"
+	"github.com/Laisky/one-api/relay/billing"
+	"github.com/Laisky/one-api/relay/mcp"
+	metalib "github.com/Laisky/one-api/relay/meta"
+	relaymodel "github.com/Laisky/one-api/relay/model"
+	"github.com/Laisky/one-api/relay/pricing"
+	"github.com/Laisky/one-api/relay/tooling"
 )
 
 const (
@@ -54,7 +54,7 @@ func hasMCPBuiltinsInResponseRequest(c *gin.Context, meta *metalib.Meta, channel
 	if request == nil {
 		return false, nil
 	}
-	chatRequest := &relaymodel.GeneralOpenAIRequest{Model: request.Model, Tools: responseToolsForMCP(request)}
+	chatRequest := &relaymodel.GeneralOpenAIRequest{Model: request.Model, Tools: responseToolsForMCP(meta, request)}
 	registry, _, err := expandMCPBuiltinsInChatRequest(c, meta, channelRecord, provider, chatRequest)
 	if err != nil {
 		return false, errors.Wrap(err, "expand mcp builtins in response request")
@@ -62,8 +62,10 @@ func hasMCPBuiltinsInResponseRequest(c *gin.Context, meta *metalib.Meta, channel
 	return registry != nil, nil
 }
 
-// responseToolsForMCP extracts non-function tools for MCP matching from a Response API request.
-func responseToolsForMCP(request *openai.ResponseAPIRequest) []relaymodel.Tool {
+// responseToolsForMCP extracts non-function tools eligible for gateway MCP
+// matching. Provider-native Responses tools retain provider ownership so a
+// same-named gateway alias cannot silently demote the request to Chat.
+func responseToolsForMCP(meta *metalib.Meta, request *openai.ResponseAPIRequest) []relaymodel.Tool {
 	if request == nil {
 		return nil
 	}
@@ -71,6 +73,9 @@ func responseToolsForMCP(request *openai.ResponseAPIRequest) []relaymodel.Tool {
 	for _, tool := range request.Tools {
 		toolType := strings.TrimSpace(tool.Type)
 		if toolType == "" || strings.EqualFold(toolType, "function") {
+			continue
+		}
+		if supportsDeepSeekNativeResponseAPI(meta) && tooling.NormalizeBuiltinType(toolType) == "web_search" {
 			continue
 		}
 		tools = append(tools, relaymodel.Tool{Type: toolType})
@@ -360,7 +365,7 @@ func executeChatMCPToolLoop(c *gin.Context, meta *metalib.Meta, request *relaymo
 	channelModelRatio, channelCompletionRatio := getChannelRatios(c)
 	channelModelConfigs := getChannelModelConfigs(c)
 	pricingAdaptor := resolvePricingAdaptor(meta)
-	modelRatio := pricing.GetModelRatioWithThreeLayers(request.Model, channelModelRatio, pricingAdaptor)
+	modelRatio := pricing.ResolveModelRatioAt(request.Model, channelModelConfigs, channelModelRatio, pricingAdaptor, meta.StartTime)
 	groupRatio := c.GetFloat64(ctxkey.ChannelRatio)
 	ratio := modelRatio * groupRatio
 

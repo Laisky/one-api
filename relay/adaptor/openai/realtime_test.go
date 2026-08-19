@@ -7,7 +7,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	rmodel "github.com/songquanpeng/one-api/relay/model"
+	rmodel "github.com/Laisky/one-api/relay/model"
 )
 
 // TestMaybeParseRealtimeUsage verifies basic usage extraction from realtime events.
@@ -156,7 +156,7 @@ func TestNegotiateRealtimeSubprotocols(t *testing.T) {
 			if tt.header != "" {
 				r.Header.Set("Sec-WebSocket-Protocol", tt.header)
 			}
-			result := negotiateRealtimeSubprotocols(r)
+			result := NegotiateRealtimeSubprotocols(r)
 			require.Equal(t, tt.expected, result)
 		})
 	}

@@ -21,6 +21,7 @@ The request tracing system provides comprehensive tracking of API requests throu
 ```sql
 CREATE TABLE traces (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+    uuid CHAR(36),
     trace_id VARCHAR(64) UNIQUE NOT NULL,
     url VARCHAR(512) NOT NULL,
     method VARCHAR(16) NOT NULL,
@@ -140,7 +141,7 @@ Retrieve tracing information by trace ID.
 {
   "success": true,
   "data": {
-    "id": 1,
+    "uuid": "018f0000-0000-7000-8000-000000000001",
     "trace_id": "01234567-89ab-cdef-0123-456789abcdef",
     "url": "/v1/chat/completions",
     "method": "POST",
@@ -155,7 +156,7 @@ Retrieve tracing information by trace ID.
 
 ### GET /api/trace/log/:log_id
 
-Retrieve tracing information for a specific log entry.
+Retrieve tracing information for a specific log entry by log UUID.
 
 **Response**:
 
@@ -173,7 +174,7 @@ Retrieve tracing information for a specific log entry.
       "total_time": 1020
     },
     "log": {
-      "id": 123,
+      "uuid": "018f0000-0000-7000-8000-000000000123",
       "username": "user123",
       "content": "Request processed successfully"
     }

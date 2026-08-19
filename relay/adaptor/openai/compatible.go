@@ -1,25 +1,26 @@
 package openai
 
 import (
-	"github.com/songquanpeng/one-api/relay/adaptor/ai360"
-	"github.com/songquanpeng/one-api/relay/adaptor/alibailian"
-	"github.com/songquanpeng/one-api/relay/adaptor/baichuan"
-	"github.com/songquanpeng/one-api/relay/adaptor/baiduv2"
-	"github.com/songquanpeng/one-api/relay/adaptor/doubao"
-	"github.com/songquanpeng/one-api/relay/adaptor/geminiOpenaiCompatible"
-	"github.com/songquanpeng/one-api/relay/adaptor/groq"
-	"github.com/songquanpeng/one-api/relay/adaptor/lingyiwanwu"
-	"github.com/songquanpeng/one-api/relay/adaptor/minimax"
-	"github.com/songquanpeng/one-api/relay/adaptor/mistral"
-	"github.com/songquanpeng/one-api/relay/adaptor/moonshot"
-	"github.com/songquanpeng/one-api/relay/adaptor/novita"
-	"github.com/songquanpeng/one-api/relay/adaptor/openrouter"
-	"github.com/songquanpeng/one-api/relay/adaptor/siliconflow"
-	"github.com/songquanpeng/one-api/relay/adaptor/stepfun"
-	"github.com/songquanpeng/one-api/relay/adaptor/togetherai"
-	"github.com/songquanpeng/one-api/relay/adaptor/xai"
-	"github.com/songquanpeng/one-api/relay/adaptor/xunfeiv2"
-	"github.com/songquanpeng/one-api/relay/channeltype"
+	"github.com/Laisky/one-api/relay/adaptor/ai360"
+	"github.com/Laisky/one-api/relay/adaptor/alibailian"
+	"github.com/Laisky/one-api/relay/adaptor/baichuan"
+	"github.com/Laisky/one-api/relay/adaptor/baiduv2"
+	"github.com/Laisky/one-api/relay/adaptor/deepseek"
+	"github.com/Laisky/one-api/relay/adaptor/doubao"
+	"github.com/Laisky/one-api/relay/adaptor/geminiOpenaiCompatible"
+	"github.com/Laisky/one-api/relay/adaptor/groq"
+	"github.com/Laisky/one-api/relay/adaptor/lingyiwanwu"
+	"github.com/Laisky/one-api/relay/adaptor/minimax"
+	"github.com/Laisky/one-api/relay/adaptor/mistral"
+	"github.com/Laisky/one-api/relay/adaptor/moonshot"
+	"github.com/Laisky/one-api/relay/adaptor/novita"
+	"github.com/Laisky/one-api/relay/adaptor/openrouter"
+	"github.com/Laisky/one-api/relay/adaptor/siliconflow"
+	"github.com/Laisky/one-api/relay/adaptor/stepfun"
+	"github.com/Laisky/one-api/relay/adaptor/togetherai"
+	"github.com/Laisky/one-api/relay/adaptor/xai"
+	"github.com/Laisky/one-api/relay/adaptor/xunfeiv2"
+	"github.com/Laisky/one-api/relay/channeltype"
 )
 
 var CompatibleChannels = []int{
@@ -63,7 +64,8 @@ func GetCompatibleChannelMeta(channelType int) (string, []string) {
 	case channeltype.StepFun:
 		return "stepfun", stepfun.ModelList
 	case channeltype.DeepSeek:
-		return "deepseek", []string{"deepseek-chat", "deepseek-reasoner"}
+		deepseekAdaptor := &deepseek.Adaptor{}
+		return "deepseek", deepseekAdaptor.GetModelList()
 	case channeltype.TogetherAI:
 		return "together.ai", togetherai.ModelList
 	case channeltype.Doubao:

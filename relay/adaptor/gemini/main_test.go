@@ -15,8 +15,8 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 
-	"github.com/songquanpeng/one-api/common/ctxkey"
-	"github.com/songquanpeng/one-api/relay/model"
+	"github.com/Laisky/one-api/common/ctxkey"
+	"github.com/Laisky/one-api/relay/model"
 )
 
 // TestEmbeddingHandlerFallsBackToPromptTokens verifies Gemini embedding responses keep the locally counted prompt tokens when upstream omits usage.
@@ -336,7 +336,7 @@ func TestStreamHandler_OversizedChunk(t *testing.T) {
 		Body:       io.NopCloser(strings.NewReader(sse)),
 	}
 
-	apiErr, responseText := StreamHandler(c, resp)
+	apiErr, responseText, _ := StreamHandler(c, resp)
 	require.Nil(t, apiErr)
 	require.Equal(t, largeText, responseText)
 

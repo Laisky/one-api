@@ -44,20 +44,20 @@ start_dev() {
     echo ""
     cd "${FRONTEND_DIR}"
     export REACT_APP_VERSION=$(date +%s)
-    npm run dev:backend
+    yarn run dev:backend
 }
 
 build_prod() {
     echo -e "${GREEN}Building ${TEMPLATE_NAME} template for production...${NC}"
     cd "${FRONTEND_DIR}"
-    npm run build:prod
+    yarn run build:prod
     echo -e "${GREEN}${TEMPLATE_NAME} template built successfully!${NC}"
 }
 
 build_dev() {
     echo -e "${GREEN}Building ${TEMPLATE_NAME} template for development...${NC}"
     cd "${FRONTEND_DIR}"
-    npm run build:dev
+    yarn run build:dev
     echo -e "${GREEN}${TEMPLATE_NAME} template built successfully!${NC}"
 }
 

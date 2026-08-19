@@ -40,6 +40,11 @@ func GetByPath(path string) int {
 		return ImagesEdits
 	case strings.HasPrefix(path, "/v1/videos"):
 		return Videos
+	case strings.HasPrefix(path, "/v1/voice/clones"),
+		strings.HasPrefix(path, "/v1/voice/clone"),
+		strings.HasSuffix(path, "/voice/clone"),
+		strings.HasSuffix(path, "/voice_clone"):
+		return VoiceClone
 	case strings.HasPrefix(path, "/api/paas/v4/layout_parsing"):
 		return OCR
 	default:

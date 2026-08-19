@@ -3,7 +3,7 @@ package openai
 import (
 	"strings"
 
-	"github.com/songquanpeng/one-api/relay/channeltype"
+	"github.com/Laisky/one-api/relay/channeltype"
 )
 
 var disallowedSchemaKeys = map[string]struct{}{

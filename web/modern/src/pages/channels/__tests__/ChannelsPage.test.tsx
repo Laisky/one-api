@@ -1,11 +1,12 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { BrowserRouter } from 'react-router-dom';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { ChannelsPage } from '../ChannelsPage';
 import { api } from '@/lib/api';
+const notify = vi.fn();
 vi.mock('@/components/ui/notifications', () => ({
-  useNotifications: () => ({ notify: vi.fn() }),
+  useNotifications: () => ({ notify }),
 }));
 
 // Mock the API
@@ -13,6 +14,7 @@ vi.mock('@/lib/api', () => ({
   api: {
     get: vi.fn(),
     delete: vi.fn(),
+    post: vi.fn(),
     put: vi.fn(),
   },
 }));
@@ -33,6 +35,9 @@ vi.mock('react-router-dom', async () => {
 });
 
 const mockApiGet = vi.mocked(api.get);
+const mockApiPost = vi.mocked(api.post);
+const mockApiDelete = vi.mocked(api.delete);
+const mockApiPut = vi.mocked(api.put);
 
 const mockChannelsData = {
   success: true,
@@ -58,6 +63,9 @@ describe('ChannelsPage Pagination', () => {
     // Clear localStorage to ensure consistent page size defaults
     localStorage.clear();
     mockApiGet.mockResolvedValue({ data: mockChannelsData });
+    mockApiPost.mockResolvedValue({ data: { success: true } });
+    mockApiDelete.mockResolvedValue({ data: { success: true } });
+    mockApiPut.mockResolvedValue({ data: { success: true } });
   });
 
   const renderChannelsPage = () => {
@@ -159,5 +167,178 @@ describe('ChannelsPage Pagination', () => {
     });
 
     expect(mockApiGet).toHaveBeenCalledTimes(1);
+  });
+
+  it('should duplicate a channel with copied configuration', async () => {
+    renderChannelsPage();
+    const user = userEvent.setup();
+
+    await waitFor(() => {
+      expect(mockApiGet).toHaveBeenCalledWith('/api/channel/?p=0&size=10&sort=id&order=desc');
+    });
+
+    mockApiGet.mockClear();
+    mockApiPost.mockClear();
+
+    const duplicateButtons = await screen.findAllByRole('button', { name: 'Duplicate' });
+    await user.click(duplicateButtons[0]);
+
+    await waitFor(() => {
+      expect(mockApiPost).toHaveBeenCalledWith('/api/channel/1/duplicate');
+    });
+
+    expect(mockApiGet.mock.calls).not.toContainEqual(['/api/channel/1']);
+
+    await waitFor(() => {
+      expect(mockApiGet).toHaveBeenCalledWith('/api/channel/?p=0&size=10&sort=id&order=desc');
+    });
+  });
+
+  it('should show the channel name and type in the delete confirmation dialog', async () => {
+    renderChannelsPage();
+    const user = userEvent.setup();
+
+    const nameCell = await screen.findByText('Channel 1');
+    const row = nameCell.closest('tr');
+
+    expect(row).not.toBeNull();
+    await user.click(within(row as HTMLElement).getByRole('button', { name: 'Delete' }));
+
+    const dialog = await screen.findByRole('dialog');
+
+    expect(within(dialog).getByText('Channel 1')).toBeInTheDocument();
+    expect(within(dialog).getByText('OpenAI')).toBeInTheDocument();
+    expect(within(dialog).getByText('Name')).toBeInTheDocument();
+    expect(within(dialog).getByText('Type')).toBeInTheDocument();
+  });
+
+  it('shows an error notification when delete returns success false', async () => {
+    mockApiDelete.mockResolvedValueOnce({ data: { success: false, message: 'cannot delete channel' } });
+
+    renderChannelsPage();
+    const user = userEvent.setup();
+
+    const nameCell = await screen.findByText('Channel 1');
+    const row = nameCell.closest('tr');
+
+    expect(row).not.toBeNull();
+    await user.click(within(row as HTMLElement).getByRole('button', { name: 'Delete' }));
+
+    const dialog = await screen.findByRole('dialog');
+    await user.click(within(dialog).getByRole('button', { name: 'Confirm' }));
+
+    await waitFor(() => {
+      expect(notify).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'error',
+          message: 'cannot delete channel',
+        })
+      );
+    });
+  });
+
+  it('shows an error notification when bulk test returns success false', async () => {
+    mockApiGet.mockImplementation((url: string) => {
+      if (url === '/api/channel/test') {
+        return Promise.resolve({ data: { success: false, message: 'bulk test rejected' } }) as any;
+      }
+      return Promise.resolve({ data: mockChannelsData }) as any;
+    });
+
+    renderChannelsPage();
+    const user = userEvent.setup();
+
+    await screen.findByText('Channel 1');
+    await user.click(screen.getByRole('button', { name: /test all/i }));
+
+    await waitFor(() => {
+      expect(notify).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'error',
+          message: 'bulk test rejected',
+        })
+      );
+    });
+  });
+
+  it('only offers text-compatible testing models and clears to CHEAPEST', async () => {
+    const filteredChannelsData = {
+      success: true,
+      data: [
+        {
+          id: 1,
+          name: 'Filtered Channel',
+          type: 1,
+          status: 1,
+          created_time: Date.now(),
+          priority: 0,
+          weight: 0,
+          models: 'sora-2,gpt-4o-mini,text-embedding-3-small',
+          test_models: ['gpt-4o-mini'],
+          testing_model: 'gpt-4o-mini',
+          group: 'default',
+          balance: 100,
+          used_quota: 0,
+        },
+      ],
+      total: 1,
+    };
+    mockApiGet.mockResolvedValue({ data: filteredChannelsData });
+
+    renderChannelsPage();
+    const user = userEvent.setup();
+
+    const nameCell = await screen.findByText('Filtered Channel');
+    const row = nameCell.closest('tr');
+    expect(row).not.toBeNull();
+
+    const selector = within(row as HTMLElement).getByRole('combobox', { name: 'Testing Model' }) as HTMLSelectElement;
+    expect(Array.from(selector.options).map((option) => option.value)).toEqual(['', 'gpt-4o-mini']);
+    expect(selector).not.toHaveTextContent('sora-2');
+    expect(selector).not.toHaveTextContent('text-embedding-3-small');
+
+    await user.selectOptions(selector, '');
+
+    await waitFor(() => {
+      expect(mockApiPut).toHaveBeenCalledWith('/api/channel/', {
+        id: 1,
+        name: 'Filtered Channel',
+        testing_model: null,
+      });
+    });
+  });
+
+  it('filters non-text testing models when the server field is missing', async () => {
+    const legacyChannelsData = {
+      success: true,
+      data: [
+        {
+          id: 1,
+          name: 'Legacy Channel',
+          type: 1,
+          status: 1,
+          created_time: Date.now(),
+          priority: 0,
+          weight: 0,
+          models: 'dall-e-2,gpt-4o-mini,text-embedding-3-small',
+          group: 'default',
+          balance: 100,
+          used_quota: 0,
+        },
+      ],
+      total: 1,
+    };
+    mockApiGet.mockResolvedValue({ data: legacyChannelsData });
+
+    renderChannelsPage();
+
+    const nameCell = await screen.findByText('Legacy Channel');
+    const row = nameCell.closest('tr');
+    expect(row).not.toBeNull();
+
+    const selector = within(row as HTMLElement).getByRole('combobox', { name: 'Testing Model' }) as HTMLSelectElement;
+    expect(Array.from(selector.options).map((option) => option.value)).toEqual(['', 'gpt-4o-mini']);
+    expect(selector).not.toHaveTextContent('dall-e-2');
+    expect(selector).not.toHaveTextContent('text-embedding-3-small');
   });
 });

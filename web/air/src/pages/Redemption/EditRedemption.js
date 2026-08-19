@@ -7,7 +7,8 @@ import Title from '@douyinfe/semi-ui/lib/es/typography/title';
 import { Divider } from 'semantic-ui-react';
 
 const EditRedemption = (props) => {
-  const isEdit = props.editingRedemption.id !== undefined;
+  const redemptionRef = props.editingRedemption.uuid || props.editingRedemption.id;
+  const isEdit = props.editingRedemption.id !== undefined || props.editingRedemption.uuid !== undefined;
   const [loading, setLoading] = useState(isEdit);
 
   const params = useParams();
@@ -30,7 +31,7 @@ const EditRedemption = (props) => {
 
   const loadRedemption = async () => {
     setLoading(true);
-    let res = await API.get(`/api/redemption/${props.editingRedemption.id}`);
+    let res = await API.get(`/api/redemption/${redemptionRef}`);
     const { success, message, data } = res.data;
     if (success) {
       setInputs(data);
@@ -50,7 +51,7 @@ const EditRedemption = (props) => {
     } else {
       setInputs(originInputs);
     }
-  }, [props.editingRedemption.id]);
+  }, [props.editingRedemption.id, props.editingRedemption.uuid]);
 
   const submit = async () => {
     if (!isEdit && inputs.name === '') return;
@@ -60,7 +61,7 @@ const EditRedemption = (props) => {
     localInputs.quota = parseInt(localInputs.quota);
     let res;
     if (isEdit) {
-      res = await API.put(`/api/redemption/`, { ...localInputs, id: parseInt(props.editingRedemption.id) });
+      res = await API.put(`/api/redemption/`, { ...localInputs, uuid: redemptionRef });
     } else {
       res = await API.post(`/api/redemption/`, {
         ...localInputs

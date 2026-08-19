@@ -1,10 +1,11 @@
 package model
 
 import (
+	"context"
 	"github.com/Laisky/errors/v2"
 	"github.com/Laisky/zap"
 
-	"github.com/songquanpeng/one-api/common/logger"
+	"github.com/Laisky/one-api/common/logger"
 )
 
 // PasskeyCredential stores a single WebAuthn credential (passkey) for a user.
@@ -15,19 +16,21 @@ import (
 // Use `gorm:"size:N"` instead, which lets GORM auto-select the correct type per dialect
 // (e.g. varbinary for MySQL, bytea for PostgreSQL, blob for SQLite).
 type PasskeyCredential struct {
-	Id              int    `json:"id" gorm:"primaryKey;autoIncrement"`
-	UserId          int    `json:"user_id" gorm:"index;not null"`
-	CredentialName  string `json:"credential_name" gorm:"size:128;not null"` // human-friendly label
-	CredentialID    []byte `json:"-" gorm:"size:1024;uniqueIndex;not null"`  // raw credential ID
-	PublicKey       []byte `json:"-" gorm:"size:1024;not null"`              // COSE public key
-	AttestationType string `json:"-" gorm:"size:64"`                         // attestation type
-	AAGUID          []byte `json:"-" gorm:"size:64"`                         // authenticator AAGUID
-	SignCount       uint32 `json:"sign_count" gorm:"default:0"`              // signature counter
-	BackupEligible  bool   `json:"-" gorm:"default:false"`                   // BE flag
-	BackupState     bool   `json:"-" gorm:"default:false"`                   // BS flag
-	Transport       string `json:"-" gorm:"size:256"`                        // comma-separated transports
-	CreatedAt       int64  `json:"created_at" gorm:"bigint;autoCreateTime:milli"`
-	UpdatedAt       int64  `json:"updated_at" gorm:"bigint;autoUpdateTime:milli"`
+	Id              int     `json:"id" gorm:"primaryKey;autoIncrement"`
+	UUID            string  `json:"uuid" gorm:"type:char(36);column:uuid"`
+	UserId          int     `json:"user_id" gorm:"index;not null"`
+	UserUUID        *string `json:"user_uuid" gorm:"type:char(36);column:user_uuid;index"`
+	CredentialName  string  `json:"credential_name" gorm:"size:128;not null"` // human-friendly label
+	CredentialID    []byte  `json:"-" gorm:"size:1024;uniqueIndex;not null"`  // raw credential ID
+	PublicKey       []byte  `json:"-" gorm:"size:1024;not null"`              // COSE public key
+	AttestationType string  `json:"-" gorm:"size:64"`                         // attestation type
+	AAGUID          []byte  `json:"-" gorm:"size:64"`                         // authenticator AAGUID
+	SignCount       uint32  `json:"sign_count" gorm:"default:0"`              // signature counter
+	BackupEligible  bool    `json:"-" gorm:"default:false"`                   // BE flag
+	BackupState     bool    `json:"-" gorm:"default:false"`                   // BS flag
+	Transport       string  `json:"-" gorm:"size:256"`                        // comma-separated transports
+	CreatedAt       int64   `json:"created_at" gorm:"bigint;autoCreateTime:milli"`
+	UpdatedAt       int64   `json:"updated_at" gorm:"bigint;autoUpdateTime:milli"`
 }
 
 func (PasskeyCredential) TableName() string {
@@ -66,6 +69,13 @@ func GetPasskeyCredentialByCredentialID(credID []byte) (*PasskeyCredential, erro
 
 // CreatePasskeyCredential inserts a new passkey credential.
 func CreatePasskeyCredential(cred *PasskeyCredential) error {
+	if cred.UserUUID == nil && cred.UserId > 0 {
+		userUUID, err := GetUserUUIDByID(cred.UserId)
+		if err != nil {
+			return errors.Wrapf(err, "get user uuid for passkey credential user %d", cred.UserId)
+		}
+		cred.UserUUID = &userUUID
+	}
 	err := DB.Create(cred).Error
 	if err != nil {
 		return errors.Wrapf(err, "create passkey credential for user %d", cred.UserId)
@@ -87,13 +97,21 @@ func DeletePasskeyCredential(id, userId int) error {
 
 // UpdatePasskeyAfterLogin updates the sign count and backup state after a successful authentication.
 func UpdatePasskeyAfterLogin(id int, signCount uint32, backupState bool) {
+	UpdatePasskeyAfterLoginWithContext(context.Background(), id, signCount, backupState)
+}
+
+// UpdatePasskeyAfterLoginWithContext updates passkey state with a context-aware
+// logger. Parameters: ctx carries request correlation, id identifies the
+// credential, and signCount/backupState are authenticator values. Returns: none;
+// persistence failures are logged.
+func UpdatePasskeyAfterLoginWithContext(ctx context.Context, id int, signCount uint32, backupState bool) {
 	err := DB.Model(&PasskeyCredential{}).Where("id = ?", id).
 		Updates(map[string]interface{}{
 			"sign_count":   signCount,
 			"backup_state": backupState,
 		}).Error
 	if err != nil {
-		logger.Logger.Error("failed to update passkey after login",
+		logger.FromContext(ctx).Error("failed to update passkey after login",
 			zap.Int("id", id), zap.Error(err))
 	}
 }

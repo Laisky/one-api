@@ -11,10 +11,11 @@ import (
 	gmw "github.com/Laisky/gin-middlewares/v7"
 	"github.com/gin-gonic/gin"
 
-	"github.com/songquanpeng/one-api/common/config"
-	"github.com/songquanpeng/one-api/common/ctxkey"
-	"github.com/songquanpeng/one-api/controller"
-	"github.com/songquanpeng/one-api/model"
+	"github.com/Laisky/one-api/common/config"
+	"github.com/Laisky/one-api/common/ctxkey"
+	"github.com/Laisky/one-api/common/helper"
+	"github.com/Laisky/one-api/controller"
+	"github.com/Laisky/one-api/model"
 )
 
 type wechatLoginResponse struct {
@@ -57,19 +58,13 @@ func getWeChatIdByCode(code string) (string, error) {
 func WeChatAuth(c *gin.Context) {
 	ctx := gmw.Ctx(c)
 	if !config.WeChatAuthEnabled {
-		c.JSON(http.StatusOK, gin.H{
-			"message": "The administrator has not enabled login and registration via WeChat",
-			"success": false,
-		})
+		helper.RespondError(c, errors.New("The administrator has not enabled login and registration via WeChat"))
 		return
 	}
 	code := c.Query("code")
 	wechatId, err := getWeChatIdByCode(code)
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"message": err.Error(),
-			"success": false,
-		})
+		helper.RespondError(c, err)
 		return
 	}
 	user := model.User{
@@ -78,10 +73,7 @@ func WeChatAuth(c *gin.Context) {
 	if model.IsWeChatIdAlreadyTaken(wechatId) {
 		err := user.FillUserByWeChatId()
 		if err != nil {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": err.Error(),
-			})
+			helper.RespondError(c, err)
 			return
 		}
 	} else {
@@ -92,26 +84,21 @@ func WeChatAuth(c *gin.Context) {
 			user.Status = model.UserStatusEnabled
 
 			if err := user.Insert(ctx, 0); err != nil {
-				c.JSON(http.StatusOK, gin.H{
-					"success": false,
-					"message": err.Error(),
-				})
+				if controller.IsUsernameAlreadyTakenError(err) {
+					controller.RespondUsernameAlreadyExists(c)
+					return
+				}
+				helper.RespondError(c, err)
 				return
 			}
 		} else {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": "The administrator has turned off new user registration",
-			})
+			helper.RespondError(c, errors.New("The administrator has turned off new user registration"))
 			return
 		}
 	}
 
 	if user.Status != model.UserStatusEnabled {
-		c.JSON(http.StatusOK, gin.H{
-			"message": "User has been banned",
-			"success": false,
-		})
+		helper.RespondError(c, errors.New("User has been banned"))
 		return
 	}
 	controller.SetupLogin(&user, c)
@@ -119,26 +106,17 @@ func WeChatAuth(c *gin.Context) {
 
 func WeChatBind(c *gin.Context) {
 	if !config.WeChatAuthEnabled {
-		c.JSON(http.StatusOK, gin.H{
-			"message": "The administrator has not enabled login and registration via WeChat",
-			"success": false,
-		})
+		helper.RespondError(c, errors.New("The administrator has not enabled login and registration via WeChat"))
 		return
 	}
 	code := c.Query("code")
 	wechatId, err := getWeChatIdByCode(code)
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"message": err.Error(),
-			"success": false,
-		})
+		helper.RespondError(c, err)
 		return
 	}
 	if model.IsWeChatIdAlreadyTaken(wechatId) {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": "The WeChat account has been bound",
-		})
+		helper.RespondError(c, errors.New("The WeChat account has been bound"))
 		return
 	}
 	id := c.GetInt(ctxkey.Id)
@@ -147,19 +125,13 @@ func WeChatBind(c *gin.Context) {
 	}
 	err = user.FillUserById()
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
+		helper.RespondError(c, err)
 		return
 	}
 	user.WeChatId = wechatId
 	err = user.Update(false)
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
+		helper.RespondError(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{

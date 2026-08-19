@@ -7,10 +7,10 @@ import (
 	"github.com/Laisky/errors/v2"
 	"github.com/gin-gonic/gin"
 
-	"github.com/songquanpeng/one-api/relay/adaptor"
-	"github.com/songquanpeng/one-api/relay/adaptor/openai_compatible"
-	"github.com/songquanpeng/one-api/relay/meta"
-	"github.com/songquanpeng/one-api/relay/model"
+	"github.com/Laisky/one-api/relay/adaptor"
+	"github.com/Laisky/one-api/relay/adaptor/openai_compatible"
+	"github.com/Laisky/one-api/relay/meta"
+	"github.com/Laisky/one-api/relay/model"
 )
 
 type Adaptor struct {
@@ -76,11 +76,17 @@ func (a *Adaptor) SetupRequestHeader(c *gin.Context, req *http.Request, meta *me
 }
 
 func (a *Adaptor) ConvertRequest(c *gin.Context, relayMode int, request *model.GeneralOpenAIRequest) (any, error) {
-	// Moonshot is OpenAI-compatible, so we can pass the request through with minimal changes
-	// Remove reasoning_effort as Moonshot doesn't support it
-	if request.ReasoningEffort != nil {
-		request.ReasoningEffort = nil
+	if request == nil {
+		return nil, errors.New("request is nil")
 	}
+
+	// Moonshot is OpenAI-compatible, so the request passes through with only the
+	// per-model parameter adjustments the upstream enforces: Kimi K3 accepts
+	// reasoning_effort (every other model rejects it) and pins the sampling
+	// knobs it does not advertise, answering 400 when they are sent.
+	normalizeReasoningEffort(request)
+	stripPinnedSamplingParams(request)
+
 	return request, nil
 }
 
@@ -90,7 +96,21 @@ func (a *Adaptor) ConvertImageRequest(c *gin.Context, request *model.ImageReques
 
 func (a *Adaptor) ConvertClaudeRequest(c *gin.Context, request *model.ClaudeRequest) (any, error) {
 	// Use the shared OpenAI-compatible Claude Messages conversion
-	return openai_compatible.ConvertClaudeRequest(c, request)
+	converted, err := openai_compatible.ConvertClaudeRequest(c, request)
+	if err != nil {
+		return nil, err
+	}
+
+	// The shared conversion copies temperature and top_p straight off the Claude
+	// request, so /v1/messages traffic needs the same per-model adjustments the
+	// chat-completions path gets; without this a Kimi K3 request carrying a
+	// temperature is rejected upstream.
+	if openaiRequest, ok := converted.(*model.GeneralOpenAIRequest); ok && openaiRequest != nil {
+		normalizeReasoningEffort(openaiRequest)
+		stripPinnedSamplingParams(openaiRequest)
+	}
+
+	return converted, nil
 }
 
 func (a *Adaptor) DoRequest(c *gin.Context, meta *meta.Meta, requestBody io.Reader) (*http.Response, error) {

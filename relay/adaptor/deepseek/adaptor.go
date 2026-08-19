@@ -12,12 +12,13 @@ import (
 	"github.com/Laisky/zap"
 	"github.com/gin-gonic/gin"
 
-	"github.com/songquanpeng/one-api/relay/adaptor"
-	"github.com/songquanpeng/one-api/relay/adaptor/common/deepseekcompat"
-	"github.com/songquanpeng/one-api/relay/adaptor/common/structuredjson"
-	"github.com/songquanpeng/one-api/relay/adaptor/openai_compatible"
-	"github.com/songquanpeng/one-api/relay/meta"
-	"github.com/songquanpeng/one-api/relay/model"
+	"github.com/Laisky/one-api/relay/adaptor"
+	"github.com/Laisky/one-api/relay/adaptor/common/deepseekcompat"
+	"github.com/Laisky/one-api/relay/adaptor/common/structuredjson"
+	"github.com/Laisky/one-api/relay/adaptor/common/toolnamesafe"
+	"github.com/Laisky/one-api/relay/adaptor/openai_compatible"
+	"github.com/Laisky/one-api/relay/meta"
+	"github.com/Laisky/one-api/relay/model"
 )
 
 type Adaptor struct {
@@ -32,13 +33,16 @@ func (a *Adaptor) GetModelList() []string {
 	return adaptor.GetModelListFromPricing(ModelRatios)
 }
 
-// GetDefaultModelPricing returns the pricing information for DeepSeek models
-// Based on official DeepSeek pricing: https://platform.deepseek.com/api-docs/pricing/
+// GetDefaultModelPricing returns current DeepSeek model pricing and capability metadata.
+// Parameters: none. Returns: the official-model-ID keyed pricing configuration map.
+// Source: https://api-docs.deepseek.com/quick_start/pricing/
 func (a *Adaptor) GetDefaultModelPricing() map[string]adaptor.ModelConfig {
 	return ModelRatios
 }
 
-// DefaultToolingConfig returns DeepSeek's provider-level tooling defaults (none published as of 2025-11-12).
+// DefaultToolingConfig returns DeepSeek's provider-level tooling defaults.
+// Parameters: none. Returns: an empty separate-pricing map because built-in web
+// search is billed through normal model token usage as of 2026-08-01.
 func (a *Adaptor) DefaultToolingConfig() adaptor.ChannelToolConfig {
 	return DeepseekToolingDefaults
 }
@@ -94,8 +98,16 @@ func (a *Adaptor) ConvertRequest(c *gin.Context, relayMode int, request *model.G
 	}
 
 	normalizeDeepSeekThinkingConfig(c, request)
+	normalizeDeepSeekMessageReasoning(request)
 
 	normalizeDeepSeekToolMessageContent(c, request)
+
+	if rewrites := toolnamesafe.SanitizeRequestToolNames(c, request); rewrites > 0 {
+		gmw.GetLogger(c).Debug("sanitized deepseek tool/function names for provider compatibility",
+			zap.String("model", request.Model),
+			zap.Int("rewritten_count", rewrites),
+		)
+	}
 
 	if request.ResponseFormat != nil {
 		if request.ResponseFormat.JsonSchema != nil {
@@ -187,7 +199,55 @@ func (a *Adaptor) ConvertImageRequest(c *gin.Context, request *model.ImageReques
 
 func (a *Adaptor) ConvertClaudeRequest(c *gin.Context, request *model.ClaudeRequest) (any, error) {
 	// Use the shared OpenAI-compatible Claude Messages conversion
-	return openai_compatible.ConvertClaudeRequest(c, request)
+	converted, err := openai_compatible.ConvertClaudeRequest(c, request)
+	if err != nil {
+		return nil, errors.Wrap(err, "convert Claude request for DeepSeek")
+	}
+	chatRequest, ok := converted.(*model.GeneralOpenAIRequest)
+	if !ok {
+		return nil, errors.Errorf("unexpected DeepSeek Claude conversion type %T", converted)
+	}
+	if request.Thinking != nil {
+		thinking := *request.Thinking
+		chatRequest.Thinking = &thinking
+	}
+	normalizeDeepSeekThinkingConfig(c, chatRequest)
+	normalizeDeepSeekMessageReasoning(chatRequest)
+	normalizeDeepSeekToolMessageContent(c, chatRequest)
+	return chatRequest, nil
+}
+
+// normalizeDeepSeekMessageReasoning converts portable reasoning fields on
+// assistant history into DeepSeek's reasoning_content contract. The request is
+// mutated in place; existing provider-native reasoning takes precedence.
+func normalizeDeepSeekMessageReasoning(request *model.GeneralOpenAIRequest) {
+	if request == nil {
+		return
+	}
+
+	for idx := range request.Messages {
+		message := &request.Messages[idx]
+		if message.Role != "assistant" {
+			continue
+		}
+
+		if message.ReasoningContent == nil {
+			switch {
+			case message.Reasoning != nil:
+				reasoning := *message.Reasoning
+				message.ReasoningContent = &reasoning
+			case message.Thinking != nil:
+				reasoning := *message.Thinking
+				message.ReasoningContent = &reasoning
+			}
+		}
+		message.Reasoning = nil
+		message.Thinking = nil
+
+		if len(message.ToolCalls) > 0 && message.Content == nil {
+			message.Content = ""
+		}
+	}
 }
 
 func (a *Adaptor) DoRequest(c *gin.Context, meta *meta.Meta, requestBody io.Reader) (*http.Response, error) {

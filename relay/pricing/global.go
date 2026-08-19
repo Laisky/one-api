@@ -3,13 +3,15 @@ package pricing
 import (
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/Laisky/zap"
 
-	"github.com/songquanpeng/one-api/common/logger"
-	"github.com/songquanpeng/one-api/relay/adaptor"
-	"github.com/songquanpeng/one-api/relay/apitype"
-	billingratio "github.com/songquanpeng/one-api/relay/billing/ratio"
+	"github.com/Laisky/one-api/common/logger"
+	"github.com/Laisky/one-api/model"
+	"github.com/Laisky/one-api/relay/adaptor"
+	"github.com/Laisky/one-api/relay/apitype"
+	billingratio "github.com/Laisky/one-api/relay/billing/ratio"
 )
 
 // DefaultGlobalPricingAdapters defines which adapters contribute to global pricing fallback
@@ -268,6 +270,12 @@ func GetGlobalModelConfigRatioOnly(modelName string) (adaptor.ModelConfig, bool)
 		if cfg.Embedding != nil {
 			clone.Embedding = cfg.Embedding.Clone()
 		}
+		if len(cfg.TimeWindows) > 0 {
+			clone.TimeWindows = make([]adaptor.TimeWindow, 0, len(cfg.TimeWindows))
+			for _, window := range cfg.TimeWindows {
+				clone.TimeWindows = append(clone.TimeWindows, window.Clone())
+			}
+		}
 		return clone, true
 	}
 	return adaptor.ModelConfig{}, false
@@ -369,11 +377,6 @@ func GetModelRatioWithThreeLayers(modelName string, channelOverrides map[string]
 
 	// Layer 4: Final fallback - reasonable default
 	fallbackRatio := 2.5 * billingratio.MilliTokensUsd
-	logger.Logger.Debug("pricing fallback used for unknown model",
-		zap.String("model_name", modelName),
-		zap.Float64("fallback_ratio", fallbackRatio),
-		zap.String("unit", "quota_per_token"),
-	)
 	return fallbackRatio // 2.5 USD per million tokens expressed in internal quota units
 }
 
@@ -404,6 +407,56 @@ func GetCompletionRatioWithThreeLayers(modelName string, channelOverrides map[st
 	return 1.0 // Default completion ratio
 }
 
+// ResolveModelRatioAt resolves a model ratio while honoring time-of-day model configs.
+// Parameters: modelName is the billed model, channelConfigs contains JSON overrides, channelOverrides contains legacy flat ratios, provider supplies defaults, and at is request start time.
+// Returns: the effective input ratio, preserving legacy flat override precedence when present.
+func ResolveModelRatioAt(modelName string, channelConfigs map[string]model.ModelConfigLocal, channelOverrides map[string]float64, provider adaptor.Adaptor, at time.Time) float64 {
+	if channelOverrides != nil {
+		if override, exists := channelOverrides[modelName]; exists {
+			if !isConfigDerivedTimeWindowRatio(modelName, channelConfigs, override) {
+				return override
+			}
+		}
+	}
+	if cfg, ok := ResolveModelConfigRatioOnly(modelName, channelConfigs, provider, at); ok && cfg.Ratio != 0 {
+		return cfg.Ratio
+	}
+	return GetModelRatioWithThreeLayers(modelName, channelOverrides, provider)
+}
+
+// ResolveCompletionRatioAt resolves a completion ratio while honoring time-of-day model configs.
+// Parameters: modelName is the billed model, channelConfigs contains JSON overrides, channelOverrides contains legacy flat ratios, provider supplies defaults, and at is request start time.
+// Returns: the effective completion ratio, preserving legacy flat override precedence when present.
+func ResolveCompletionRatioAt(modelName string, channelConfigs map[string]model.ModelConfigLocal, channelOverrides map[string]float64, provider adaptor.Adaptor, at time.Time) float64 {
+	if channelOverrides != nil {
+		if override, exists := channelOverrides[modelName]; exists {
+			if !isConfigDerivedTimeWindowCompletionRatio(modelName, channelConfigs, override) {
+				return override
+			}
+		}
+	}
+	if cfg, ok := ResolveModelConfigRatioOnly(modelName, channelConfigs, provider, at); ok && cfg.CompletionRatio != 0 {
+		return cfg.CompletionRatio
+	}
+	return GetCompletionRatioWithThreeLayers(modelName, channelOverrides, provider)
+}
+
+// isConfigDerivedTimeWindowRatio reports whether an override value is the base ratio copied from a time-windowed ModelConfig.
+// Parameters: modelName identifies the model, channelConfigs contains modern JSON configs, and override is the scalar map value.
+// Returns: true when the scalar should not be treated as a legacy flat override.
+func isConfigDerivedTimeWindowRatio(modelName string, channelConfigs map[string]model.ModelConfigLocal, override float64) bool {
+	local, ok := channelConfigs[modelName]
+	return ok && len(local.TimeWindows) > 0 && local.Ratio != 0 && local.Ratio == override
+}
+
+// isConfigDerivedTimeWindowCompletionRatio reports whether an override is the base completion ratio copied from a time-windowed ModelConfig.
+// Parameters: modelName identifies the model, channelConfigs contains modern JSON configs, and override is the scalar map value.
+// Returns: true when the scalar should not be treated as a legacy flat override.
+func isConfigDerivedTimeWindowCompletionRatio(modelName string, channelConfigs map[string]model.ModelConfigLocal, override float64) bool {
+	local, ok := channelConfigs[modelName]
+	return ok && len(local.TimeWindows) > 0 && local.CompletionRatio != 0 && local.CompletionRatio == override
+}
+
 // GetVideoPricingWithThreeLayers resolves video pricing metadata using the same precedence rules
 // as token pricing: channel overrides, adapter defaults, then global pricing.
 func GetVideoPricingWithThreeLayers(modelName string, channelOverride *adaptor.VideoPricingConfig, provider adaptor.Adaptor) *adaptor.VideoPricingConfig {
@@ -429,23 +482,7 @@ func GetVideoPricingWithThreeLayers(modelName string, channelOverride *adaptor.V
 }
 
 func cloneModelConfig(src adaptor.ModelConfig) adaptor.ModelConfig {
-	clone := src
-	if len(src.Tiers) > 0 {
-		clone.Tiers = append([]adaptor.ModelRatioTier(nil), src.Tiers...)
-	}
-	if src.Video != nil {
-		clone.Video = src.Video.Clone()
-	}
-	if src.Audio != nil {
-		clone.Audio = src.Audio.Clone()
-	}
-	if src.Image != nil {
-		clone.Image = src.Image.Clone()
-	}
-	if src.Embedding != nil {
-		clone.Embedding = src.Embedding.Clone()
-	}
-	return clone
+	return src.Clone()
 }
 
 // EffectivePricing holds fully-resolved pricing numbers for the current request
@@ -456,9 +493,10 @@ type EffectivePricing struct {
 	OutputRatio      float64 // equals InputRatio * CompletionRatio
 	CachedInputRatio float64 // negative means free
 	// Cache-write prices (per 1 token)
-	CacheWrite5mRatio    float64 // zero => use InputRatio; negative => free
-	CacheWrite1hRatio    float64 // zero => use InputRatio; negative => free
-	AppliedTierThreshold int     // 0 for base tier
+	CacheWrite5mRatio          float64 // zero => use InputRatio; negative => free
+	CacheWrite1hRatio          float64 // zero => use InputRatio; negative => free
+	AppliedTierThreshold       int     // 0 for base tier
+	AppliedOutputTierThreshold int     // 0 for a tier without an output threshold
 }
 
 // ResolveEffectivePricing determines the effective pricing for a model given the
@@ -471,6 +509,14 @@ type EffectivePricing struct {
 // - If tiers exist, finds the tier whose InputTokenThreshold <= inputTokens and is the highest such threshold.
 // - Optional tier fields inherit from base if zero. Negative cached ratios mean free.
 func ResolveEffectivePricing(modelName string, inputTokens int, adaptor adaptor.Adaptor) EffectivePricing {
+	return ResolveEffectivePricingForUsage(modelName, inputTokens, 0, adaptor)
+}
+
+// ResolveEffectivePricingForUsage determines effective pricing from both input
+// and output token counts. Parameters: modelName selects the provider model,
+// inputTokens and outputTokens contain raw token counts, and adaptor supplies
+// default pricing. Returns: the fully resolved token prices and applied tier.
+func ResolveEffectivePricingForUsage(modelName string, inputTokens, outputTokens int, adaptor adaptor.Adaptor) EffectivePricing {
 	if adaptor == nil {
 		baseIn := 2.5 * billingratio.MilliTokensUsd
 		baseComp := 1.0
@@ -486,7 +532,7 @@ func ResolveEffectivePricing(modelName string, inputTokens int, adaptor adaptor.
 
 	modelPricing := adaptor.GetDefaultModelPricing()
 	if base, ok := modelPricing[modelName]; ok {
-		return ResolveEffectivePricingFromConfig(inputTokens, base)
+		return ResolveEffectivePricingForUsageFromConfig(inputTokens, outputTokens, base)
 	}
 
 	baseRatio := adaptor.GetModelRatio(modelName)
@@ -501,18 +547,29 @@ func ResolveEffectivePricing(modelName string, inputTokens int, adaptor adaptor.
 	}
 }
 
+// ResolveEffectivePricingFromConfig determines pricing from input-token tiers.
+// Parameters: inputTokens is the raw prompt-token count and base is the model
+// configuration. Returns: the effective prices, excluding output-only tiers.
 func ResolveEffectivePricingFromConfig(inputTokens int, base adaptor.ModelConfig) EffectivePricing {
+	return ResolveEffectivePricingForUsageFromConfig(inputTokens, 0, base)
+}
+
+// ResolveEffectivePricingForUsageFromConfig determines pricing from input and
+// output token tiers. Parameters: inputTokens and outputTokens are raw usage
+// counts and base is the model configuration. Returns: the effective prices.
+func ResolveEffectivePricingForUsageFromConfig(inputTokens, outputTokens int, base adaptor.ModelConfig) EffectivePricing {
 	in := base.Ratio
 	comp := base.CompletionRatio
 	cachedIn := base.CachedInputRatio
 	cw5 := base.CacheWrite5mRatio
 	cw1 := base.CacheWrite1hRatio
 	appliedThreshold := 0
+	appliedOutputThreshold := 0
 
 	if len(base.Tiers) > 0 {
 		for _, t := range base.Tiers {
-			if inputTokens < t.InputTokenThreshold {
-				break
+			if !TierApplies(inputTokens, outputTokens, t) {
+				continue
 			}
 			if t.Ratio != 0 {
 				in = t.Ratio
@@ -530,15 +587,24 @@ func ResolveEffectivePricingFromConfig(inputTokens int, base adaptor.ModelConfig
 				cw1 = t.CacheWrite1hRatio
 			}
 			appliedThreshold = t.InputTokenThreshold
+			appliedOutputThreshold = t.OutputTokenThreshold
 		}
 	}
 
 	return EffectivePricing{
-		InputRatio:           in,
-		OutputRatio:          in * comp,
-		CachedInputRatio:     cachedIn,
-		CacheWrite5mRatio:    cw5,
-		CacheWrite1hRatio:    cw1,
-		AppliedTierThreshold: appliedThreshold,
+		InputRatio:                 in,
+		OutputRatio:                in * comp,
+		CachedInputRatio:           cachedIn,
+		CacheWrite5mRatio:          cw5,
+		CacheWrite1hRatio:          cw1,
+		AppliedTierThreshold:       appliedThreshold,
+		AppliedOutputTierThreshold: appliedOutputThreshold,
 	}
+}
+
+// TierApplies reports whether a pricing tier matches the supplied token usage.
+// Parameters: inputTokens and outputTokens are raw counts and tier contains the
+// inclusive lower bounds. Returns: true only when both thresholds are met.
+func TierApplies(inputTokens, outputTokens int, tier adaptor.ModelRatioTier) bool {
+	return inputTokens >= tier.InputTokenThreshold && outputTokens >= tier.OutputTokenThreshold
 }

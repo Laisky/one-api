@@ -26,19 +26,28 @@
   },
   "common": {
     "about": "À propos",
+    "add_colon": "Ajouter : ",
     "back": "Retour",
     "cancel": "Annuler",
     "channels": "Canaux",
+    "code_copied": "Code copié !",
     "confirm": "Confirmer",
+    "copied": "Copié !",
+    "copy_failed": "Échec de la copie",
+    "copy_id": "Copier l’ID",
+    "copy_to_clipboard": "Copier dans le presse-papiers",
     "dashboard": "Tableau de bord",
     "email": "E-mail",
+    "info": "Informations",
     "language": "Langue",
     "login": "Connexion",
     "logout": "Déconnexion",
     "logs": "Journaux",
     "mcps": "MCPs",
     "models": "Modèles",
+    "no_data": "Aucun résultat.",
     "no_items": "Aucun élément",
+    "no_results": "Aucun résultat trouvé",
     "or": "Ou",
     "pagination": {
       "first_page": "Première page",
@@ -51,12 +60,17 @@
       "showing": "Affichage de {{start}}-{{end}} sur {{total}} éléments"
     },
     "password": "Mot de passe",
-    "playground": "Playground",
-    "realtime": "Temps Réel",
+    "playground": "Bac à sable",
     "redemptions": "Remboursements",
+    "refresh": "Actualiser",
     "register": "S'inscrire",
     "remove": "Retirer",
     "remove_item": "Retirer {{item}}",
+    "search": "Rechercher",
+    "search_for": "Rechercher : ",
+    "search_placeholder": "Rechercher...",
+    "searching": "Recherche...",
+    "select_option": "Sélectionner une option...",
     "selected_count": "Sélectionné ({{count}})",
     "settings": "Paramètres",
     "status": "Statut",
@@ -65,20 +79,40 @@
     "tokens": "Jetons",
     "tools": "Outils",
     "topup": "Recharger",
+    "type_at_least_to_search": "Saisissez au moins {{count}} caractères pour rechercher",
     "username": "Nom d'utilisateur",
     "users": "Utilisateurs",
     "version": "Version",
     "welcome": "Bienvenue sur One API"
   },
+  "dev": {
+    "validation": {
+      "error": "Erreur : {{message}}",
+      "errors_count": "Erreurs : {{count}}",
+      "failed_validation": "Validation échouée",
+      "passed": "Réussi",
+      "passed_count": "Réussis : {{count}}",
+      "run_tests": "Lancer les tests",
+      "running": "En cours...",
+      "running_tests": "Tests de validation en cours... {{progress}}%",
+      "title": "Validation responsive",
+      "total": "Total : {{count}}",
+      "unknown_error": "Erreur inconnue",
+      "validate": "Valider",
+      "warnings_count": "Avertissements : {{count}}"
+    }
+  },
   "footer": {
     "copyright": "© {{year}} One API. Tous droits réservés."
   },
   "header": {
+    "account_menu_for": "Menu du compte de {{name}}",
     "confirm_logout": "Confirmer la déconnexion",
     "log_out": "Se déconnecter",
     "logging_out": "Déconnexion...",
     "logout_description": "Êtes-vous sûr de vouloir vous déconnecter ? Vous devrez vous reconnecter pour accéder à votre tableau de bord.",
     "navigation": "Navigation",
+    "open_navigation_menu": "Ouvrir le menu de navigation",
     "profile": "Profil",
     "signed_in_as": "Connecté en tant que"
   },
@@ -90,6 +124,16 @@
     "message": "Page introuvable",
     "redirecting": "Redirection vers l’accueil dans {{seconds}} s...",
     "stay_here": "Rester sur cette page"
+  },
+  "notice": {
+    "dismiss": "Fermer la notification"
+  },
+  "notifications": {
+    "copy": "Copier la notification",
+    "copy_content": "Copier le contenu de la notification",
+    "dismiss": "Fermer",
+    "dismiss_content": "Fermer la notification",
+    "region": "Notifications"
   },
   "passkey_prompt": {
     "dismiss": "Fermer",

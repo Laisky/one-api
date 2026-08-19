@@ -19,6 +19,7 @@ import {
 
 import Label from 'ui-component/Label';
 import TableSwitch from 'ui-component/Switch';
+import ResourceRefTooltip from 'ui-component/ResourceRefTooltip';
 import { renderQuota, renderNumber } from 'utils/common';
 import { IconDotsVertical, IconEdit, IconTrash, IconUser, IconBrandWechat, IconBrandGithub, IconMail } from '@tabler/icons-react';
 import { useTheme } from '@mui/material/styles';
@@ -37,6 +38,7 @@ function renderRole(role) {
 }
 
 export default function UsersTableRow({ item, manageUser, handleOpenModal, setModalUserId }) {
+  const ref = item.uuid || item.id;
   const theme = useTheme();
   const [open, setOpen] = useState(null);
   const [openDelete, setOpenDelete] = useState(false);
@@ -74,10 +76,10 @@ export default function UsersTableRow({ item, manageUser, handleOpenModal, setMo
 
   return (
     <>
-      <TableRow tabIndex={item.id}>
-        <TableCell>{item.id}</TableCell>
-
-        <TableCell>{item.username}</TableCell>
+      <TableRow tabIndex={String(ref)}>
+        <TableCell>
+          <ResourceRefTooltip refId={ref}>{item.username}</ResourceRefTooltip>
+        </TableCell>
 
         <TableCell>
           <Label>{item.group}</Label>
@@ -122,7 +124,7 @@ export default function UsersTableRow({ item, manageUser, handleOpenModal, setMo
 
         <TableCell>
           {' '}
-          <TableSwitch id={`switch-${item.id}`} checked={statusSwitch === 1} onChange={handleStatus} />
+          <TableSwitch id={`switch-${ref}`} checked={statusSwitch === 1} onChange={handleStatus} />
         </TableCell>
         <TableCell>
           <IconButton onClick={handleOpenMenu} sx={{ color: 'rgb(99, 115, 129)' }}>
@@ -157,7 +159,7 @@ export default function UsersTableRow({ item, manageUser, handleOpenModal, setMo
           onClick={() => {
             handleCloseMenu();
             handleOpenModal();
-            setModalUserId(item.id);
+            setModalUserId(ref);
           }}
         >
           <IconEdit style={{ marginRight: '16px' }} />

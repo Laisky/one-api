@@ -14,14 +14,15 @@ import (
 	"github.com/Laisky/zap"
 	"github.com/gin-gonic/gin"
 
-	"github.com/songquanpeng/one-api/common"
-	"github.com/songquanpeng/one-api/common/config"
-	"github.com/songquanpeng/one-api/common/helper"
-	"github.com/songquanpeng/one-api/model"
-	"github.com/songquanpeng/one-api/relay"
-	"github.com/songquanpeng/one-api/relay/adaptor"
-	"github.com/songquanpeng/one-api/relay/channeltype"
-	"github.com/songquanpeng/one-api/relay/pricing"
+	"github.com/Laisky/one-api/common"
+	"github.com/Laisky/one-api/common/config"
+	"github.com/Laisky/one-api/common/errkind"
+	"github.com/Laisky/one-api/common/helper"
+	"github.com/Laisky/one-api/model"
+	"github.com/Laisky/one-api/relay"
+	"github.com/Laisky/one-api/relay/adaptor"
+	"github.com/Laisky/one-api/relay/channeltype"
+	"github.com/Laisky/one-api/relay/pricing"
 )
 
 type channelPayload struct {
@@ -30,8 +31,11 @@ type channelPayload struct {
 }
 
 type channelPayloadMeta struct {
-	HiddenModelsProvided bool
+	HiddenModelsProvided   bool
+	NullableFieldsProvided map[string]bool
 }
+
+const duplicateChannelNameSuffix = " Copy"
 
 func bindChannelPayload(c *gin.Context) (*model.Channel, json.RawMessage, channelPayloadMeta, error) {
 	payload := channelPayload{Channel: &model.Channel{}}
@@ -50,7 +54,17 @@ func bindChannelPayload(c *gin.Context) (*model.Channel, json.RawMessage, channe
 		}
 	}
 	_, hiddenModelsProvided := rawFields["hidden_models"]
-	return payload.Channel, payload.Tooling, channelPayloadMeta{HiddenModelsProvided: hiddenModelsProvided}, nil
+	nullableFieldNames := []string{"model_mapping", "model_configs", "system_prompt", "inference_profile_arn_map"}
+	nullableProvided := make(map[string]bool, len(nullableFieldNames))
+	for _, name := range nullableFieldNames {
+		if _, ok := rawFields[name]; ok {
+			nullableProvided[name] = true
+		}
+	}
+	return payload.Channel, payload.Tooling, channelPayloadMeta{
+		HiddenModelsProvided:   hiddenModelsProvided,
+		NullableFieldsProvided: nullableProvided,
+	}, nil
 }
 
 func parseToolingConfigPayload(raw json.RawMessage) (*model.ChannelToolingConfig, bool, error) {
@@ -108,18 +122,100 @@ func convertAdaptorVideoPricing(cfg *adaptor.VideoPricingConfig) *model.VideoPri
 	return local
 }
 
-func buildChannelResponsePayload(lg glog.Logger, channel *model.Channel) any {
-	response := struct {
-		*model.Channel
-		Tooling *string `json:"tooling,omitempty"`
-	}{Channel: channel}
+// buildDuplicateChannelName returns the duplicated channel name for the provided source name.
+// It trims surrounding whitespace and falls back to "Channel" when the source name is empty.
+func buildDuplicateChannelName(name string) string {
+	trimmed := strings.TrimSpace(name)
+	if trimmed == "" {
+		trimmed = "Channel"
+	}
+	return trimmed + duplicateChannelNameSuffix
+}
 
-	if tooling := channel.GetToolingConfig(); tooling != nil {
+// prepareChannelForCreate normalizes a channel before insert.
+// It mutates the channel by setting creation timestamps, validating TestingModel, and applying default BaseURL values when needed.
+func prepareChannelForCreate(channel *model.Channel) {
+	channel.CreatedTime = helper.GetTimestamp()
+
+	// Sanitize testing model at creation: only keep if present in models list.
+	if channel.TestingModel != nil {
+		tm := strings.TrimSpace(*channel.TestingModel)
+		if tm == "" {
+			channel.TestingModel = nil
+		} else {
+			ok := false
+			for name := range strings.SplitSeq(channel.Models, ",") {
+				if strings.TrimSpace(name) == tm {
+					ok = true
+					break
+				}
+			}
+			if !ok {
+				channel.TestingModel = nil
+			}
+		}
+	}
+
+	// Auto-populate default BaseURL on creation if blank and default exists.
+	if (channel.BaseURL == nil || *channel.BaseURL == "") && channel.Type >= 0 {
+		if channel.Type < len(channeltype.ChannelBaseURLs) {
+			def := channeltype.ChannelBaseURLs[channel.Type]
+			if strings.TrimSpace(def) != "" {
+				value := strings.TrimRight(def, "/")
+				channel.BaseURL = &value
+			}
+		}
+	}
+}
+
+// cloneChannelForDuplicate returns a new channel record cloned from the source channel.
+// It preserves configuration fields, clears identity and usage fields, and prepares the result for insertion.
+func cloneChannelForDuplicate(source *model.Channel) *model.Channel {
+	duplicate := *source
+	duplicate.Id = 0
+	duplicate.UUID = ""
+	duplicate.Name = buildDuplicateChannelName(source.Name)
+	duplicate.CreatedAt = 0
+	duplicate.UpdatedAt = 0
+	duplicate.CreatedTime = 0
+	duplicate.TestTime = 0
+	duplicate.ResponseTime = 0
+	duplicate.Balance = 0
+	duplicate.BalanceUpdatedTime = 0
+	duplicate.UsedQuota = 0
+	duplicate.HiddenModelsProvided = false
+	duplicate.NullableFieldsProvided = nil
+	prepareChannelForCreate(&duplicate)
+	return &duplicate
+}
+
+// buildChannelResponsePayload renders a channel response with strict external identifiers and optional tooling JSON.
+// Parameters:
+//   - lg: request-scoped logger used for non-fatal tooling serialization diagnostics.
+//   - c: current request context used for channel configuration logging.
+//   - channel: channel row to serialize.
+//
+// Return values:
+//   - any: JSON-ready channel response payload.
+func buildChannelResponsePayload(c *gin.Context, lg glog.Logger, channel *model.Channel) any {
+	response := gin.H{}
+	// Build from the explicit boundary DTO (byte-identical to the retired
+	// Channel.MarshalJSON) so the internal integer id never crosses the API, then
+	// splice the optional tooling JSON as before.
+	if payload, err := json.Marshal(channel.ToResponse()); err == nil {
+		if err = json.Unmarshal(payload, &response); err != nil && lg != nil {
+			lg.Error("failed to unmarshal channel response payload", append(channel.Ref().Zap(), zap.Error(err))...)
+		}
+	} else if lg != nil {
+		lg.Error("failed to marshal channel response payload", append(channel.Ref().Zap(), zap.Error(err))...)
+	}
+
+	if tooling := channel.GetToolingConfigWithContext(gmw.Ctx(c)); tooling != nil {
 		if data, err := json.Marshal(tooling); err == nil {
 			toolingStr := string(data)
-			response.Tooling = &toolingStr
+			response["tooling"] = toolingStr
 		} else if lg != nil {
-			lg.Error("failed to marshal tooling config", zap.Int("channel_id", channel.Id), zap.Error(err))
+			lg.Error("failed to marshal tooling config", append(channel.Ref().Zap(), zap.Error(err))...)
 		}
 	}
 
@@ -150,27 +246,21 @@ func GetAllChannels(c *gin.Context) {
 
 	channels, err := model.GetAllChannels(p*size, size, "limited", sortBy, sortOrder)
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
+		helper.RespondError(c, err)
 		return
 	}
 
 	// Get total count for pagination
 	totalCount, err := model.GetChannelCount()
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
+		helper.RespondError(c, err)
 		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
-		"data":    channels,
+		"data":    buildChannelListResponse(channels),
 		"total":   totalCount,
 	})
 }
@@ -186,42 +276,64 @@ func SearchChannels(c *gin.Context) {
 
 	channels, err := model.SearchChannels(keyword, sortBy, sortOrder)
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
+		helper.RespondError(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
-		"data":    channels,
+		"data":    buildChannelListResponse(channels),
 	})
 }
 
-// GetChannel retrieves a single channel by ID and returns its full configuration.
+// GetChannel retrieves a single channel by ID and returns its configuration with secret fields masked.
 func GetChannel(c *gin.Context) {
 	lg := gmw.GetLogger(c)
-	id, err := strconv.Atoi(c.Param("id"))
+	id, err := resolveChannelRef(c.Param("id"))
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
+		helper.RespondError(c, err)
 		return
 	}
 	channel, err := model.GetChannelById(id, false)
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
+		helper.RespondError(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
-		"data":    buildChannelResponsePayload(lg, channel),
+		"data":    buildChannelResponsePayload(c, lg, channel),
+	})
+}
+
+// DuplicateChannel clones the specified channel server-side and persists the duplicate.
+// It reads the original with secret fields available on the server, clears usage fields, and returns the new channel identifier and name.
+func DuplicateChannel(c *gin.Context) {
+	id, err := resolveChannelRef(c.Param("id"))
+	if err != nil {
+		helper.RespondError(c, err)
+		return
+	}
+
+	source, err := model.GetChannelById(id, true)
+	if err != nil {
+		helper.RespondError(c, err)
+		return
+	}
+
+	duplicate := cloneChannelForDuplicate(source)
+	if err := duplicate.Insert(); err != nil {
+		helper.RespondError(c, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "",
+		"data": gin.H{
+			"uuid": duplicate.UUID,
+			"name": duplicate.Name,
+		},
 	})
 }
 
@@ -229,20 +341,16 @@ func GetChannel(c *gin.Context) {
 func AddChannel(c *gin.Context) {
 	channel, toolingRaw, payloadMeta, err := bindChannelPayload(c)
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
+		helper.RespondError(c, err)
 		return
 	}
+	channel.UUID = ""
 	channel.HiddenModelsProvided = payloadMeta.HiddenModelsProvided
+	channel.NullableFieldsProvided = payloadMeta.NullableFieldsProvided
 
 	// Disallow empty channel name
 	if strings.TrimSpace(channel.Name) == "" {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": "Channel name is required",
-		})
+		helper.RespondError(c, errkind.InvalidRequestErr(errors.New("Channel name is required")))
 		return
 	}
 
@@ -250,49 +358,22 @@ func AddChannel(c *gin.Context) {
 	if channel.InferenceProfileArnMap != nil && *channel.InferenceProfileArnMap != "" {
 		err = model.ValidateInferenceProfileArnMapJSON(*channel.InferenceProfileArnMap)
 		if err != nil {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": "Invalid inference profile ARN map: " + err.Error(),
-			})
+			helper.RespondError(c, errkind.InvalidRequestErr(errors.New("Invalid inference profile ARN map: "+err.Error())))
 			return
 		}
 	}
 
 	if toolingCfg, provided, err := parseToolingConfigPayload(toolingRaw); err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": "Invalid tooling config: " + err.Error(),
-		})
+		helper.RespondError(c, errkind.InvalidRequestErr(errors.New("Invalid tooling config: "+err.Error())))
 		return
 	} else if provided {
 		if err := channel.SetToolingConfig(toolingCfg); err != nil {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": "Failed to persist tooling config: " + err.Error(),
-			})
+			helper.RespondError(c, errors.New("Failed to persist tooling config: "+err.Error()))
 			return
 		}
 	}
 
-	channel.CreatedTime = helper.GetTimestamp()
-	// Sanitize testing model at creation: only keep if present in models list
-	if channel.TestingModel != nil {
-		tm := strings.TrimSpace(*channel.TestingModel)
-		if tm == "" {
-			channel.TestingModel = nil
-		} else {
-			ok := false
-			for name := range strings.SplitSeq(channel.Models, ",") {
-				if strings.TrimSpace(name) == tm {
-					ok = true
-					break
-				}
-			}
-			if !ok {
-				channel.TestingModel = nil
-			}
-		}
-	}
+	prepareChannelForCreate(channel)
 	keys := strings.Split(channel.Key, "\n")
 	channels := make([]model.Channel, 0, len(keys))
 	for _, key := range keys {
@@ -301,25 +382,18 @@ func AddChannel(c *gin.Context) {
 		}
 		localChannel := *channel
 		localChannel.Key = key
-		// Auto-populate default BaseURL on creation if blank and default exists
-		if (localChannel.BaseURL == nil || *localChannel.BaseURL == "") && localChannel.Type >= 0 {
-			// Defensive bounds check against channeltype.ChannelBaseURLs
-			if localChannel.Type < len(channeltype.ChannelBaseURLs) {
-				def := channeltype.ChannelBaseURLs[localChannel.Type]
-				if strings.TrimSpace(def) != "" {
-					v := strings.TrimRight(def, "/")
-					localChannel.BaseURL = &v
-				}
-			}
-		}
+		channels = append(channels, localChannel)
+	}
+	// API Key is optional: when no non-empty key line is provided, still create a
+	// single channel with an empty key instead of inserting an empty batch.
+	if len(channels) == 0 {
+		localChannel := *channel
+		localChannel.Key = ""
 		channels = append(channels, localChannel)
 	}
 	err = model.BatchInsertChannels(channels)
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
+		helper.RespondError(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{
@@ -330,14 +404,15 @@ func AddChannel(c *gin.Context) {
 
 // DeleteChannel removes the channel identified by the path parameter.
 func DeleteChannel(c *gin.Context) {
-	id, _ := strconv.Atoi(c.Param("id"))
-	channel := model.Channel{Id: id}
-	err := channel.Delete()
+	id, err := resolveChannelRef(c.Param("id"))
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
+		helper.RespondError(c, err)
+		return
+	}
+	channel := model.Channel{Id: id}
+	err = channel.Delete()
+	if err != nil {
+		helper.RespondError(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{
@@ -350,10 +425,7 @@ func DeleteChannel(c *gin.Context) {
 func DeleteDisabledChannel(c *gin.Context) {
 	rows, err := model.DeleteDisabledChannel()
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
+		helper.RespondError(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{
@@ -369,22 +441,28 @@ func UpdateChannel(c *gin.Context) {
 	statusOnly := c.Query("status_only")
 	channel, toolingRaw, payloadMeta, err := bindChannelPayload(c)
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
+		helper.RespondError(c, err)
 		return
 	}
+	ref, err := preferUUIDRef(channel.UUID, channel.Id)
+	if err != nil {
+		helper.RespondError(c, err)
+		return
+	}
+	channel.Id, err = resolveChannelRef(ref)
+	if err != nil {
+		helper.RespondError(c, err)
+		return
+	}
+	channel.UUID = ""
 	channel.HiddenModelsProvided = payloadMeta.HiddenModelsProvided
+	channel.NullableFieldsProvided = payloadMeta.NullableFieldsProvided
 
 	// Validate inference profile ARN map if provided
 	if channel.InferenceProfileArnMap != nil && *channel.InferenceProfileArnMap != "" {
 		err = model.ValidateInferenceProfileArnMapJSON(*channel.InferenceProfileArnMap)
 		if err != nil {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": "Invalid inference profile ARN map: " + err.Error(),
-			})
+			helper.RespondError(c, errkind.InvalidRequestErr(errors.New("Invalid inference profile ARN map: "+err.Error())))
 			return
 		}
 	}
@@ -392,81 +470,64 @@ func UpdateChannel(c *gin.Context) {
 	if statusOnly != "" {
 		// Only update status safely
 		if channel.Id == 0 {
-			c.JSON(http.StatusOK, gin.H{"success": false, "message": "Channel id is required"})
+			helper.RespondError(c, errkind.InvalidRequestErr(errors.New("Channel id is required")))
 			return
 		}
-		model.UpdateChannelStatusById(channel.Id, channel.Status)
+		model.UpdateChannelStatusByIdWithContext(gmw.Ctx(c), channel.Id, channel.Status)
 		c.JSON(http.StatusOK, gin.H{"success": true, "message": ""})
 		return
 	}
 
 	// Disallow empty name on full update
 	if strings.TrimSpace(channel.Name) == "" {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": "Channel name cannot be empty",
-		})
+		helper.RespondError(c, errkind.InvalidRequestErr(errors.New("Channel name cannot be empty")))
 		return
 	}
 
 	if toolingCfg, provided, err := parseToolingConfigPayload(toolingRaw); err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": "Invalid tooling config: " + err.Error(),
-		})
+		helper.RespondError(c, errkind.InvalidRequestErr(errors.New("Invalid tooling config: "+err.Error())))
 		return
 	} else if provided {
 		if err := channel.SetToolingConfig(toolingCfg); err != nil {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": "Failed to persist tooling config: " + err.Error(),
-			})
+			helper.RespondError(c, errors.New("Failed to persist tooling config: "+err.Error()))
 			return
 		}
 	}
 
-	err = channel.Update()
+	err = channel.UpdateWithContext(gmw.Ctx(c))
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
+		helper.RespondError(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
-		"data":    buildChannelResponsePayload(lg, channel),
+		"data":    buildChannelResponsePayload(c, lg, channel),
 	})
 }
 
 // GetChannelPricing returns the pricing configuration associated with the specified channel.
 func GetChannelPricing(c *gin.Context) {
 	lg := gmw.GetLogger(c)
-	id, err := strconv.Atoi(c.Param("id"))
+	id, err := resolveChannelRef(c.Param("id"))
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
+		helper.RespondError(c, err)
 		return
 	}
 	channel, err := model.GetChannelById(id, false)
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
+		helper.RespondError(c, err)
 		return
 	}
 
 	// Get from unified ModelConfigs only (after migration)
-	modelRatio := channel.GetModelRatioFromConfigs()
-	completionRatio := channel.GetCompletionRatioFromConfigs()
+	ctx := gmw.Ctx(c)
+	modelRatio := channel.GetModelRatioFromConfigsWithContext(ctx)
+	completionRatio := channel.GetCompletionRatioFromConfigsWithContext(ctx)
 
 	// Also get the unified ModelConfigs
-	modelConfigs := channel.GetModelPriceConfigs()
-	tooling := channel.GetToolingConfig()
+	modelConfigs := channel.GetModelPriceConfigsWithContext(ctx)
+	tooling := channel.GetToolingConfigWithContext(ctx)
 
 	// Debug logging to help identify data issues
 	if len(modelConfigs) > 0 {
@@ -475,7 +536,10 @@ func GetChannelPricing(c *gin.Context) {
 			modelNames = append(modelNames, modelName)
 		}
 		if lg != nil {
-			lg.Info("Channel returning model configs", zap.Int("id", channel.Id), zap.Int("type", channel.Type), zap.Any("models", modelNames))
+			lg.Info("Channel returning model configs",
+				append(channel.Ref().Zap(),
+					zap.Int("channel_type", channel.Type),
+					zap.Any("models", modelNames))...)
 		}
 	}
 
@@ -493,12 +557,9 @@ func GetChannelPricing(c *gin.Context) {
 
 // UpdateChannelPricing replaces the channel pricing configuration using either legacy ratios or the unified model config format.
 func UpdateChannelPricing(c *gin.Context) {
-	id, err := strconv.Atoi(c.Param("id"))
+	id, err := resolveChannelRef(c.Param("id"))
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
+		helper.RespondError(c, err)
 		return
 	}
 
@@ -511,19 +572,14 @@ func UpdateChannelPricing(c *gin.Context) {
 
 	err = c.ShouldBindJSON(&request)
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
+		// Malformed request body: the caller sent JSON this endpoint cannot bind.
+		helper.RespondError(c, errkind.InvalidRequestErr(err))
 		return
 	}
 
 	channel, err := model.GetChannelById(id, false)
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
+		helper.RespondError(c, err)
 		return
 	}
 
@@ -532,10 +588,7 @@ func UpdateChannelPricing(c *gin.Context) {
 		// New unified format - preferred approach
 		err = channel.SetModelPriceConfigs(request.ModelConfigs)
 		if err != nil {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": "Failed to set model configs: " + err.Error(),
-			})
+			helper.RespondError(c, errors.New("Failed to set model configs: "+err.Error()))
 			return
 		}
 	} else if len(request.ModelRatio) > 0 || len(request.CompletionRatio) > 0 {
@@ -576,36 +629,24 @@ func UpdateChannelPricing(c *gin.Context) {
 		// Save to unified ModelConfigs only
 		err = channel.SetModelPriceConfigs(modelConfigs)
 		if err != nil {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": "Failed to set model configs: " + err.Error(),
-			})
+			helper.RespondError(c, errors.New("Failed to set model configs: "+err.Error()))
 			return
 		}
 	}
 
 	if toolingCfg, provided, err := parseToolingConfigPayload(request.Tooling); err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": "Invalid tooling config: " + err.Error(),
-		})
+		helper.RespondError(c, errkind.InvalidRequestErr(errors.New("Invalid tooling config: "+err.Error())))
 		return
 	} else if provided {
 		if err := channel.SetToolingConfig(toolingCfg); err != nil {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": "Failed to set tooling config: " + err.Error(),
-			})
+			helper.RespondError(c, errors.New("Failed to set tooling config: "+err.Error()))
 			return
 		}
 	}
 
-	err = channel.Update()
+	err = channel.UpdateWithContext(gmw.Ctx(c))
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
+		helper.RespondError(c, err)
 		return
 	}
 
@@ -619,10 +660,7 @@ func UpdateChannelPricing(c *gin.Context) {
 func GetChannelDefaultPricing(c *gin.Context) {
 	channelType, err := strconv.Atoi(c.Query("type"))
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": "Invalid channel type: " + err.Error(),
-		})
+		helper.RespondError(c, errkind.InvalidRequestErr(errors.New("Invalid channel type: "+err.Error())))
 		return
 	}
 
@@ -642,10 +680,7 @@ func GetChannelDefaultPricing(c *gin.Context) {
 		apiType := channeltype.ToAPIType(channelType)
 		providerAdaptor = relay.GetAdaptor(apiType)
 		if providerAdaptor == nil {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": "Unsupported channel type",
-			})
+			helper.RespondError(c, errkind.InvalidRequestErr(errors.New("Unsupported channel type")))
 			return
 		}
 		defaultPricing = providerAdaptor.GetDefaultModelPricing()
@@ -678,10 +713,7 @@ func GetChannelDefaultPricing(c *gin.Context) {
 		if tooling != nil {
 			data, err := json.Marshal(tooling)
 			if err != nil {
-				c.JSON(http.StatusOK, gin.H{
-					"success": false,
-					"message": "Failed to serialize tooling config: " + err.Error(),
-				})
+				helper.RespondError(c, errors.New("Failed to serialize tooling config: "+err.Error()))
 				return
 			}
 			toolingConfigJSON = string(data)
@@ -691,28 +723,19 @@ func GetChannelDefaultPricing(c *gin.Context) {
 	// Convert to JSON
 	modelRatioJSON, err := json.Marshal(modelRatios)
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": "Failed to serialize model ratios: " + err.Error(),
-		})
+		helper.RespondError(c, errors.New("Failed to serialize model ratios: "+err.Error()))
 		return
 	}
 
 	completionRatioJSON, err := json.Marshal(completionRatios)
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": "Failed to serialize completion ratios: " + err.Error(),
-		})
+		helper.RespondError(c, errors.New("Failed to serialize completion ratios: "+err.Error()))
 		return
 	}
 
 	modelConfigsJSON, err := json.Marshal(modelConfigs)
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": "Failed to serialize model configs: " + err.Error(),
-		})
+		helper.RespondError(c, errors.New("Failed to serialize model configs: "+err.Error()))
 		return
 	}
 

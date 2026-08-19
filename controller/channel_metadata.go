@@ -4,9 +4,12 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/Laisky/errors/v2"
 	"github.com/gin-gonic/gin"
 
-	"github.com/songquanpeng/one-api/relay/channeltype"
+	"github.com/Laisky/one-api/common/errkind"
+	"github.com/Laisky/one-api/common/helper"
+	"github.com/Laisky/one-api/relay/channeltype"
 )
 
 // GetChannelMetadata returns server-side metadata about a channel type
@@ -19,19 +22,13 @@ import (
 func GetChannelMetadata(c *gin.Context) {
 	typeStr := c.Query("type")
 	if typeStr == "" {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": "type is required",
-		})
+		helper.RespondError(c, errkind.InvalidRequestErr(errors.New("type is required")))
 		return
 	}
 
 	channelType, err := strconv.Atoi(typeStr)
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": "invalid type",
-		})
+		helper.RespondError(c, errkind.InvalidRequestErr(errors.New("invalid type")))
 		return
 	}
 

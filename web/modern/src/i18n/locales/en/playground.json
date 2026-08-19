@@ -6,11 +6,54 @@
   },
   "playground": {
     "actions": {
+      "assistant_message_options": "Assistant message options",
       "copy": "Copy",
+      "copy_message": "Copy Message",
+      "copy_response": "Copy Response",
       "delete": "Delete",
+      "delete_message": "Delete Message",
+      "delete_response": "Delete Response",
       "edit": "Edit",
+      "edit_message": "Edit Message",
+      "edit_response": "Edit Response",
       "message_options": "Message options",
-      "retry": "Retry"
+      "regenerate_response": "Regenerate Response",
+      "retry": "Retry",
+      "user_message_options": "User message options"
+    },
+    "attachments": {
+      "add_images": "Add Images",
+      "attach_images": "Attach Images",
+      "attached_image_alt": "Attached image",
+      "count": "{{count}}/{{max}} images",
+      "delete_image": "Delete image",
+      "finalizing": "Finalizing...",
+      "info": "Supports: JPG, PNG, GIF, WebP - Max 5MB per image - Up to {{max}} images",
+      "notifications": {
+        "all_processing_failed_message": "Cannot process {{file}}. Please try a different image or contact support.",
+        "all_processing_failed_title": "All Processing Methods Failed",
+        "image_processing_failed_message": "Failed to process {{file}}: {{message}}",
+        "image_processing_failed_title": "Image Processing Failed",
+        "mobile_processing_failed_message": "Failed to process {{file}} on mobile: {{message}}",
+        "mobile_processing_failed_title": "Mobile Processing Failed"
+      },
+      "optimizing": "Optimizing {{progress}}%",
+      "processing": "Processing {{progress}}%",
+      "remove_image": "Remove image",
+      "validation": {
+        "dismiss_error": "Dismiss error",
+        "extension_unsupported": "File extension is not supported. Supported formats: {{formats}}",
+        "file_type_unsupported": "File type \"{{type}}\" is not supported. Please select an image file.",
+        "limit_exceeded": "Maximum of {{max}} images allowed. Please remove some images before adding more.",
+        "limit_skipped": "Maximum of {{max}} images allowed. This file was skipped.",
+        "multiple_errors": "{{count}} file validation errors:",
+        "processing_error": "An error occurred while processing the images. Please try again.",
+        "single_error": "File validation error:",
+        "size_exceeded": "File size ({{size}}MB) exceeds the 5MB limit. Please compress or resize the image.",
+        "tip": "Tip: You can dismiss these errors by clicking the close button on each card.",
+        "unknown_error": "Unknown error",
+        "unknown_type": "unknown"
+      }
     },
     "chat": {
       "clear": "Clear",
@@ -47,10 +90,13 @@
       "title": "Delete {{role}} Message"
     },
     "edit": {
+      "attachment_alt": "Attachment {{index}}",
       "attachments_hint": "You can delete individual attachments by clicking the × button that appears when you hover over them.",
       "attachments_label": "Message Attachments ({{count}})",
       "cancel": "Cancel",
       "content_label": "{{role}} Message Content",
+      "content_placeholder": "Enter {{role}} message content...",
+      "delete_attachment": "Delete attachment",
       "description": "Make changes to the message content. You can use \u003c1\u003eCtrl+Enter\u003c/1\u003e to save or \u003c3\u003eEsc\u003c/3\u003e to cancel.",
       "save": "Save Changes",
       "shortcuts": {
@@ -143,8 +189,10 @@
         "options": {
           "high": "High",
           "low": "Low",
+          "max": "Max",
           "medium": "Medium",
-          "none": "None"
+          "none": "None",
+          "xhigh": "Extra High"
         }
       },
       "show_reasoning": {
@@ -187,6 +235,55 @@
         "description": "Nucleus sampling: 0.1 = focused, 1.0 = diverse",
         "label": "Top P"
       }
+    },
+    "realtime": {
+      "assistant": "Assistant",
+      "audio": "Audio",
+      "clear_events": "Clear",
+      "connect": "Connect",
+      "connected": "Connected",
+      "connecting": "Connecting...",
+      "connection_closed": "Connection closed",
+      "connection_error": "Connection error",
+      "conversation": "Conversation",
+      "description": "Test the OpenAI Realtime API with WebSocket connections",
+      "disconnect": "Disconnect",
+      "disconnected": "Disconnected",
+      "error_connect": "Failed to connect. Please check your token and model.",
+      "error_send": "Cannot send message. Not connected.",
+      "event_log": "Event Log",
+      "events": "Events",
+      "input_tokens": "Input tokens",
+      "instructions": "Instructions",
+      "modalities": "Modalities",
+      "model": "Model",
+      "no_messages": "No messages yet. Connect and send a message to start.",
+      "no_models": "No realtime models available for this token.",
+      "no_tokens": "No tokens available. Please create a token first.",
+      "output_tokens": "Output tokens",
+      "placeholder": "Type a message...",
+      "received": "Received",
+      "select_model": "Select a model",
+      "select_token": "Select a token",
+      "send": "Send",
+      "sent": "Sent",
+      "session_created": "Session created",
+      "session_instructions_placeholder": "Optional: Enter system instructions for the session...",
+      "settings": "Settings",
+      "system": "System",
+      "text": "Text",
+      "title": "Realtime Playground",
+      "token": "Token",
+      "total_tokens": "Total tokens",
+      "usage": "Usage",
+      "user": "You",
+      "voice": "Voice"
+    },
+    "reasoning": {
+      "chars": "{{count}} chars",
+      "processing": "Processing...",
+      "streaming": "Reasoning...",
+      "title": "Reasoning Process"
     },
     "roles": {
       "assistant": "Assistant",

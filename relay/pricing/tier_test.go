@@ -8,10 +8,10 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 
-	"github.com/songquanpeng/one-api/relay/adaptor"
-	billingratio "github.com/songquanpeng/one-api/relay/billing/ratio"
-	"github.com/songquanpeng/one-api/relay/meta"
-	relaymodel "github.com/songquanpeng/one-api/relay/model"
+	"github.com/Laisky/one-api/relay/adaptor"
+	billingratio "github.com/Laisky/one-api/relay/billing/ratio"
+	"github.com/Laisky/one-api/relay/meta"
+	relaymodel "github.com/Laisky/one-api/relay/model"
 )
 
 // localMockAdaptor implements adaptor.Adaptor for tests
@@ -90,6 +90,35 @@ func TestResolveEffectivePricing_TierSelection(t *testing.T) {
 	require.Equal(t, 0.2, eff.InputRatio, "expected input ratio 0.2")
 	// Expect inherited completion ratio 3.0 from first tier since second does not set it
 	require.InDelta(t, 0.6, eff.OutputRatio, 1e-8, "expected output ratio 0.6 (0.2*3.0)")
+}
+
+// TestResolveEffectivePricing_OutputTierSelection verifies that output-only and
+// combined token thresholds are selected from raw usage counts.
+func TestResolveEffectivePricing_OutputTierSelection(t *testing.T) {
+	base := adaptor.ModelConfig{
+		Ratio:            2.0,
+		CompletionRatio:  4.0,
+		CachedInputRatio: 0.4,
+		Tiers: []adaptor.ModelRatioTier{
+			{OutputTokenThreshold: 200, Ratio: 3.0, CompletionRatio: 14.0 / 3.0, CachedInputRatio: 0.6},
+			{InputTokenThreshold: 32_000, Ratio: 4.0, CompletionRatio: 4.0, CachedInputRatio: 0.8},
+		},
+	}
+
+	short := ResolveEffectivePricingForUsageFromConfig(1_000, 199, base)
+	require.InDelta(t, 2.0, short.InputRatio, 1e-9)
+	require.InDelta(t, 8.0, short.OutputRatio, 1e-9)
+	require.Zero(t, short.AppliedOutputTierThreshold)
+
+	longOutput := ResolveEffectivePricingForUsageFromConfig(1_000, 200, base)
+	require.InDelta(t, 3.0, longOutput.InputRatio, 1e-9)
+	require.InDelta(t, 14.0, longOutput.OutputRatio, 1e-9)
+	require.Equal(t, 200, longOutput.AppliedOutputTierThreshold)
+
+	longInput := ResolveEffectivePricingForUsageFromConfig(32_000, 50, base)
+	require.InDelta(t, 4.0, longInput.InputRatio, 1e-9)
+	require.InDelta(t, 16.0, longInput.OutputRatio, 1e-9)
+	require.Equal(t, 32_000, longInput.AppliedTierThreshold)
 }
 
 func TestResolveEffectivePricing_CachedNegativeFree(t *testing.T) {

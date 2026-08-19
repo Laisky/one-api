@@ -49,7 +49,7 @@ const Dashboard = () => {
     let url = '/api/user/dashboard';
     const params = new URLSearchParams();
 
-    if (isRootUser && userId) {
+    if (isRootUser && userId && userId !== 'all') {
       params.append('user_id', userId);
     }
 
@@ -208,10 +208,10 @@ const Dashboard = () => {
                       option.id === 0 ? option.display_name : `${option.display_name || option.username} (${option.username})`
                     }
                     value={dashboardUsers.find(user =>
-                      (user.id === 0 ? 'all' : user.id.toString()) === selectedUserId
+                      (user.id === 0 ? 'all' : String(user.uuid || user.id)) === selectedUserId
                     ) || null}
                     onChange={(_, newValue) => {
-                      const value = newValue ? (newValue.id === 0 ? 'all' : newValue.id.toString()) : '';
+                      const value = newValue ? (newValue.id === 0 ? 'all' : String(newValue.uuid || newValue.id)) : '';
                       setSelectedUserId(value);
                     }}
                     renderInput={(params) => (

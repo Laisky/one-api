@@ -34,8 +34,10 @@ export const ChannelModelSettings = ({
   const modelMapping = form.watch('model_mapping') || '';
 
   const selectedModelSet = useMemo(() => {
-    return new Set(selectedModels.map((model) => model.trim().toLowerCase()).filter((model) => model.length > 0));
+    return new Set(selectedModels.map((model) => model.trim()).filter((model) => model.length > 0));
   }, [selectedModels]);
+
+  const foldedSelectedModelSet = useMemo(() => new Set([...selectedModelSet].map((model) => model.toLowerCase())), [selectedModelSet]);
 
   const mappingSources = useMemo(() => {
     if (!modelMapping.trim()) {
@@ -66,8 +68,8 @@ export const ChannelModelSettings = ({
   );
 
   const hiddenModelsOutsideSupported = useMemo(
-    () => hiddenModels.filter((model) => !selectedModelSet.has(model.trim().toLowerCase())),
-    [hiddenModels, selectedModelSet]
+    () => hiddenModels.filter((model) => !foldedSelectedModelSet.has(model.trim().toLowerCase())),
+    [hiddenModels, foldedSelectedModelSet]
   );
 
   const hiddenMappingSources = useMemo(
@@ -109,7 +111,7 @@ export const ChannelModelSettings = ({
   const hasMappingJsonIssue = mappingJsonIssue !== null;
 
   const availableModelSet = useMemo(
-    () => new Set(availableModels.map((model) => model.id.trim().toLowerCase()).filter((model) => model.length > 0)),
+    () => new Set(availableModels.map((model) => model.id.trim()).filter((model) => model.length > 0)),
     [availableModels]
   );
 
@@ -128,7 +130,7 @@ export const ChannelModelSettings = ({
       const parsed = JSON.parse(sanitizeJsonInput(modelMapping)) as Record<string, unknown>;
       return Object.keys(parsed)
         .map((key) => key.trim())
-        .filter((key) => key.length > 0 && !selectedModelSet.has(key.toLowerCase()));
+        .filter((key) => key.length > 0 && !selectedModelSet.has(key));
     } catch (_error) {
       return [] as string[];
     }
@@ -146,7 +148,7 @@ export const ChannelModelSettings = ({
         if (typeof rawValue !== 'string') continue;
         const target = rawValue.trim();
         if (!target) continue;
-        if (!knownTargetSet.has(target.toLowerCase())) {
+        if (!knownTargetSet.has(target)) {
           offending.push({ source: rawKey.trim(), target });
         }
       }
@@ -201,9 +203,7 @@ export const ChannelModelSettings = ({
    * @returns void
    */
   const loadDefaultModelConfigs = () => {
-    console.debug('[ChannelModelSettings] Load default model configs', {
-      hasDefaultPricing: Boolean(defaultPricing),
-    });
+    console.debug(`[ChannelModelSettings] Load default model configs hasDefaultPricing=${Boolean(defaultPricing)}`);
     if (!defaultPricing) {
       return;
     }

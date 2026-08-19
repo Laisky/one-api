@@ -14,8 +14,8 @@ interface MCPToolPricing {
 }
 
 interface MCPTool {
-  id: number;
-  server_id: number;
+  uuid?: string;
+  server_uuid?: string;
   name: string;
   display_name?: string;
   description?: string;
@@ -25,7 +25,7 @@ interface MCPTool {
 }
 
 interface MCPServerDisplay {
-  id: number;
+  uuid?: string;
   name: string;
   status: number;
   protocol: string;
@@ -233,7 +233,7 @@ export function ToolsPage() {
                     <Card key={serverName} className="mb-6 border-0 shadow-none md:border md:shadow-sm">
                       <CardHeader>
                         <CardTitle className="text-lg">
-                          {serverName} ({tools.length} tools)
+                          {serverName} ({tr('server_count', '{{count}} tools', { count: tools.length })})
                         </CardTitle>
                       </CardHeader>
                       <CardContent>

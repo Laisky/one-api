@@ -7,7 +7,7 @@ import (
 
 	// bring in model.Log type for constructing log entries
 
-	modelpkg "github.com/songquanpeng/one-api/model"
+	modelpkg "github.com/Laisky/one-api/model"
 )
 
 // TestZeroQuotaFix verifies that the billing functions handle zero quota correctly

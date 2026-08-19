@@ -26,19 +26,28 @@
   },
   "common": {
     "about": "Acerca de",
+    "add_colon": "Agregar: ",
     "back": "Atrás",
     "cancel": "Cancelar",
     "channels": "Canales",
+    "code_copied": "Código copiado.",
     "confirm": "Confirmar",
+    "copied": "Copiado.",
+    "copy_failed": "Error al copiar",
+    "copy_id": "Copiar ID",
+    "copy_to_clipboard": "Copiar al portapapeles",
     "dashboard": "Panel de control",
     "email": "Correo electrónico",
+    "info": "Información",
     "language": "Idioma",
     "login": "Iniciar sesión",
     "logout": "Cerrar sesión",
     "logs": "Registros",
     "mcps": "MCPs",
     "models": "Modelos",
+    "no_data": "Sin resultados.",
     "no_items": "Sin elementos",
+    "no_results": "No se encontraron resultados",
     "or": "O",
     "pagination": {
       "first_page": "Primera página",
@@ -51,34 +60,59 @@
       "showing": "Mostrando {{start}}-{{end}} de {{total}} elementos"
     },
     "password": "Contraseña",
-    "playground": "Playground",
-    "realtime": "Tiempo Real",
+    "playground": "Zona de pruebas",
     "redemptions": "Canjes",
+    "refresh": "Actualizar",
     "register": "Registrarse",
     "remove": "Eliminar",
     "remove_item": "Eliminar {{item}}",
+    "search": "Buscar",
+    "search_for": "Buscar: ",
+    "search_placeholder": "Buscar...",
+    "searching": "Buscando...",
+    "select_option": "Seleccionar opción...",
     "selected_count": "Seleccionados ({{count}})",
     "settings": "Configuración",
     "status": "Estado",
     "submit": "Enviar",
     "to": "a",
     "tokens": "Tokens",
-    "tools": "Tools",
+    "tools": "Herramientas",
     "topup": "Recargar",
+    "type_at_least_to_search": "Escribe al menos {{count}} caracteres para buscar",
     "username": "Nombre de usuario",
     "users": "Usuarios",
     "version": "Versión",
     "welcome": "Bienvenido a One API"
   },
+  "dev": {
+    "validation": {
+      "error": "Error: {{message}}",
+      "errors_count": "Errores: {{count}}",
+      "failed_validation": "Validación fallida",
+      "passed": "Aprobado",
+      "passed_count": "Aprobados: {{count}}",
+      "run_tests": "Ejecutar pruebas",
+      "running": "Ejecutando...",
+      "running_tests": "Ejecutando pruebas de validación... {{progress}}%",
+      "title": "Validación adaptable",
+      "total": "Total: {{count}}",
+      "unknown_error": "Error desconocido",
+      "validate": "Validar",
+      "warnings_count": "Advertencias: {{count}}"
+    }
+  },
   "footer": {
     "copyright": "© {{year}} One API. Todos los derechos reservados."
   },
   "header": {
+    "account_menu_for": "Menú de cuenta de {{name}}",
     "confirm_logout": "Confirmar cierre de sesión",
     "log_out": "Cerrar sesión",
     "logging_out": "Cerrando sesión...",
     "logout_description": "¿Estás seguro de que quieres cerrar sesión? Tendrás que volver a iniciar sesión para acceder a tu panel de control.",
     "navigation": "Navegación",
+    "open_navigation_menu": "Abrir menú de navegación",
     "profile": "Perfil",
     "signed_in_as": "Iniciado sesión como"
   },
@@ -90,6 +124,16 @@
     "message": "Página no encontrada",
     "redirecting": "Redirigiendo al inicio en {{seconds}} s...",
     "stay_here": "Quedarse en esta página"
+  },
+  "notice": {
+    "dismiss": "Descartar aviso"
+  },
+  "notifications": {
+    "copy": "Copiar notificación",
+    "copy_content": "Copiar contenido de la notificación",
+    "dismiss": "Descartar",
+    "dismiss_content": "Descartar notificación",
+    "region": "Notificaciones"
   },
   "passkey_prompt": {
     "dismiss": "Cerrar",

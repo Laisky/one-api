@@ -1,12 +1,13 @@
 package ratio
 
 import (
+	"context"
 	"encoding/json"
 	"sync"
 
 	"github.com/Laisky/zap"
 
-	"github.com/songquanpeng/one-api/common/logger"
+	"github.com/Laisky/one-api/common/logger"
 )
 
 var groupRatioLock sync.RWMutex
@@ -32,11 +33,18 @@ func UpdateGroupRatioByJSONString(jsonStr string) error {
 }
 
 func GetGroupRatio(name string) float64 {
+	return GetGroupRatioWithContext(context.Background(), name)
+}
+
+// GetGroupRatioWithContext returns a group ratio and includes request context in diagnostics.
+// Parameters: ctx carries the request logger, and name identifies the group.
+// Returns: the configured group ratio, or one when the group is unknown.
+func GetGroupRatioWithContext(ctx context.Context, name string) float64 {
 	groupRatioLock.RLock()
 	defer groupRatioLock.RUnlock()
 	ratio, ok := GroupRatio[name]
 	if !ok {
-		logger.Logger.Error("group ratio not found: " + name)
+		logger.FromContext(ctx).Error("group ratio not found", zap.String("group", name))
 		return 1
 	}
 	return ratio

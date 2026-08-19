@@ -1,5 +1,5 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { api } from '@/lib/api';
+import { api, isSafeInternalPath } from '@/lib/api';
 import { useAuthStore } from '@/lib/stores/auth';
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -34,7 +34,7 @@ export function LarkOAuthPage() {
             if (redirectTo) {
               try {
                 const decodedPath = decodeURIComponent(redirectTo);
-                if (decodedPath.startsWith('/')) {
+                if (isSafeInternalPath(decodedPath) && !decodedPath.startsWith('/login')) {
                   navigate(decodedPath, {
                     state: { message: t('auth.oauth.lark.login_success') },
                   });

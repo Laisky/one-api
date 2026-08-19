@@ -18,16 +18,16 @@ import (
 	gmw "github.com/Laisky/gin-middlewares/v7"
 	"github.com/gin-gonic/gin"
 
-	"github.com/songquanpeng/one-api/common"
-	"github.com/songquanpeng/one-api/common/conv"
-	"github.com/songquanpeng/one-api/common/ctxkey"
-	"github.com/songquanpeng/one-api/common/helper"
-	"github.com/songquanpeng/one-api/common/render"
-	commonsse "github.com/songquanpeng/one-api/common/sse"
-	"github.com/songquanpeng/one-api/common/tracing"
-	"github.com/songquanpeng/one-api/relay/adaptor/openai"
-	"github.com/songquanpeng/one-api/relay/constant"
-	"github.com/songquanpeng/one-api/relay/model"
+	"github.com/Laisky/one-api/common"
+	"github.com/Laisky/one-api/common/conv"
+	"github.com/Laisky/one-api/common/ctxkey"
+	"github.com/Laisky/one-api/common/helper"
+	commonsse "github.com/Laisky/one-api/common/sse"
+	"github.com/Laisky/one-api/common/tracing"
+	"github.com/Laisky/one-api/relay/adaptor/openai"
+	"github.com/Laisky/one-api/relay/adaptor/openai_compatible"
+	"github.com/Laisky/one-api/relay/constant"
+	"github.com/Laisky/one-api/relay/model"
 )
 
 func ConvertRequest(request model.GeneralOpenAIRequest) *ChatRequest {
@@ -109,10 +109,13 @@ func embeddingResponseTencent2OpenAI(response *EmbeddingResponse) *openai.Embedd
 }
 
 func responseTencent2OpenAI(response *ChatResponse) *openai.TextResponse {
+	// Initialize Choices to a non-nil empty slice so JSON-encoded responses always
+	// emit `"choices":[]` instead of `null` when upstream returns no choices.
 	fullTextResponse := openai.TextResponse{
 		Id:      response.ReqID,
 		Object:  "chat.completion",
 		Created: helper.GetTimestamp(),
+		Choices: make([]openai.TextResponseChoice, 0, len(response.Choices)),
 		Usage: model.Usage{
 			PromptTokens:     response.Usage.PromptTokens,
 			CompletionTokens: response.Usage.CompletionTokens,
@@ -134,11 +137,14 @@ func responseTencent2OpenAI(response *ChatResponse) *openai.TextResponse {
 }
 
 func streamResponseTencent2OpenAI(c *gin.Context, TencentResponse *ChatResponse) *openai.ChatCompletionsStreamResponse {
+	// Pre-size Choices to capacity 1 since each Tencent stream chunk carries at most
+	// one choice; ensures `"choices":[]` on the wire for empty frames.
 	response := openai.ChatCompletionsStreamResponse{
 		Id:      tracing.GenerateChatCompletionID(c),
 		Object:  "chat.completion.chunk",
 		Created: helper.GetTimestamp(),
 		Model:   "tencent-hunyuan",
+		Choices: make([]openai.ChatCompletionsStreamResponseChoice, 0, 1),
 	}
 	if len(TencentResponse.Choices) > 0 {
 		var choice openai.ChatCompletionsStreamResponseChoice
@@ -182,7 +188,7 @@ func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusC
 				responseText += conv.AsString(response.Choices[0].Delta.Content)
 			}
 
-			if err := render.ObjectData(c, response); err != nil {
+			if err := openai_compatible.RenderStreamChunkWithBridge(c, response); err != nil {
 				lg.Error("error rendering stream response", zap.Error(err))
 			}
 			continue
@@ -206,7 +212,7 @@ func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusC
 			responseText += conv.AsString(response.Choices[0].Delta.Content)
 		}
 
-		err = render.ObjectData(c, response)
+		err = openai_compatible.RenderStreamChunkWithBridge(c, response)
 		if err != nil {
 			lg.Error("error rendering stream response", zap.Error(err))
 		}
@@ -216,7 +222,7 @@ func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusC
 		lg.Error("error reading stream", zap.Error(streamErr))
 	}
 
-	render.Done(c)
+	openai_compatible.FinalizeStreamWithBridge(c, nil)
 
 	err := resp.Body.Close()
 	if err != nil {

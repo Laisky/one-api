@@ -74,7 +74,7 @@ const EditModal = ({ open, userId, onCancel, onOk }) => {
 
     let res;
     if (values.is_edit) {
-      res = await API.put(`/api/user/`, { ...values, id: parseInt(userId) });
+      res = await API.put(`/api/user/`, { ...values, uuid: userId });
     } else {
       res = await API.post(`/api/user/`, values);
     }
@@ -388,7 +388,7 @@ export default EditModal;
 
 EditModal.propTypes = {
   open: PropTypes.bool,
-  userId: PropTypes.number,
+  userId: PropTypes.oneOfType([PropTypes.number, PropTypes.string]),
   onCancel: PropTypes.func,
   onOk: PropTypes.func
 };

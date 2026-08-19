@@ -8,8 +8,9 @@ import (
 	"github.com/Laisky/errors/v2"
 	"github.com/Laisky/zap"
 
-	"github.com/songquanpeng/one-api/common/logger"
-	"github.com/songquanpeng/one-api/model"
+	"github.com/Laisky/one-api/common/identity"
+	"github.com/Laisky/one-api/common/logger"
+	"github.com/Laisky/one-api/model"
 )
 
 const defaultSyncTimeout = 20 * time.Second
@@ -50,8 +51,10 @@ func SyncServerTools(ctx context.Context, server *model.MCPServer) (int, error) 
 		})
 	}
 
-	if err := model.UpsertMCPTools(server.Id, stored); err != nil {
-		return 0, errors.Wrapf(err, "upsert mcp tools for server %d", server.Id)
+	if err := model.UpsertMCPTools(server.Id, server.UUID, stored); err != nil {
+		return 0, identity.Tag(
+			errors.Wrapf(err, "upsert mcp tools for server %d", server.Id),
+			server.Ref())
 	}
 
 	return len(stored), nil
@@ -92,19 +95,25 @@ func StartAutoSync(ctx context.Context) {
 					syncCtx, cancel := context.WithTimeout(ctx, defaultSyncTimeout)
 					count, err := SyncServerTools(syncCtx, server)
 					cancel()
+					// This is a background job: the logger is not request-bound,
+					// so every line must carry the MCP server identity explicitly.
+					serverRef := server.Ref()
 					if err != nil {
 						server.MarkSyncResult(false, err.Error())
 						if updateErr := model.UpdateMCPServer(server); updateErr != nil {
-							log.Error("failed to update mcp sync status", zap.Error(updateErr))
+							log.Error("failed to update mcp sync status",
+								append(serverRef.Zap(), zap.Error(updateErr))...)
 						}
-						log.Warn("mcp auto sync failed", zap.Int("server_id", server.Id), zap.Error(err))
+						log.Warn("mcp auto sync failed", append(serverRef.Zap(), zap.Error(err))...)
 						continue
 					}
 					server.MarkSyncResult(true, "")
 					if updateErr := model.UpdateMCPServer(server); updateErr != nil {
-						log.Error("failed to update mcp sync status", zap.Error(updateErr))
+						log.Error("failed to update mcp sync status",
+							append(serverRef.Zap(), zap.Error(updateErr))...)
 					}
-					log.Info("mcp auto sync succeeded", zap.Int("server_id", server.Id), zap.Int("tool_count", count))
+					log.Info("mcp auto sync succeeded",
+						append(serverRef.Zap(), zap.Int("tool_count", count))...)
 				}
 			}
 		}

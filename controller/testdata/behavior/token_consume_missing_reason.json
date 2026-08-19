@@ -1,0 +1,9 @@
+{
+  "case": "token/consume_missing_reason",
+  "site": "T5 ConsumeToken (error)",
+  "status": 200,
+  "body": {
+    "message": "add_reason cannot be empty",
+    "success": false
+  }
+}

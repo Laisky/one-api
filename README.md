@@ -5,7 +5,7 @@
 Open‑source version of OpenRouter, managed through a unified gateway that handles all AI SaaS model calls. Core functions include:
 
 1. Aggregating chat, image, speech, TTS, embeddings, rerank and other capabilities.
-2. Aggregating multiple model providers such as OpenAI, Anthropic, Azure, Google Vertex, OpenRouter, DeepSeek, Replicate, AWS Bedrock, etc.
+2. Aggregating multiple model providers such as OpenAI, Anthropic, Azure, Google Vertex, OpenRouter, DeepSeek, Replicate, AWS Bedrock, Groq, Grok/xAI, Fireworks, NVIDIA, Cerebras, Cloudflare, ZHIPU GLM, Cohere, etc.
 3. Aggregating various upstream API request formats like Chat Completion, Response, Claude Messages.
 4. Supporting different request formats; users can issue requests via Chat Completion, Response, or Claude Messages, which are automatically and transparently converted to the native request format of the upstream model. Even if the client sends a mismatched request format to wrong api endpoint, it will still be correctly processed.
 5. Supporting multi‑tenant management, allowing each tenant to set distinct quotas and permissions.
@@ -16,6 +16,8 @@ Open‑source version of OpenRouter, managed through a unified gateway that hand
 Also welcome to register and use my deployed one-api gateway, which supports various mainstream models. For usage instructions, please refer to <https://wiki.laisky.com/projects/gpt/pay/>.
 
 Try it at <https://oneapi.laisky.com>, login with `test` / `12345678`. 🚀
+
+> 📖 **API reference** — see [docs/manuals/api_references.md](docs/manuals/api_references.md) for the complete HTTP API: authentication, conventions, errors, and every endpoint with `curl` examples, organized for both end-users (inference + API-key management) and administrators.
 
 ```plain
 === One-API Compatibility Matrix 2025-12-12T04:37:09Z ===
@@ -97,7 +99,6 @@ The original author stopped maintaining the project, leaving critical PRs and ne
     - [OpenAI Features](#openai-features)
       - [Support whisper](#support-whisper)
       - [Support openai images edits](#support-openai-images-edits)
-      - [Support OpenAI o1/o1-mini/o1-preview](#support-openai-o1o1-minio1-preview)
       - [Support gpt-4o-audio](#support-gpt-4o-audio)
       - [Support OpenAI web search models](#support-openai-web-search-models)
       - [Support gpt-image family for image generation \& edits](#support-gpt-image-family-for-image-generation--edits)
@@ -107,6 +108,7 @@ The original author stopped maintaining the project, leaving critical PRs and ne
       - [Support o3-deep-research \& o4-mini-deep-research](#support-o3-deep-research--o4-mini-deep-research)
       - [Support Codex Cli](#support-codex-cli)
       - [Support Sora](#support-sora)
+      - [Deprecated Models](#deprecated-models)
     - [Anthropic (Claude) Features](#anthropic-claude-features)
       - [(Merged) Support aws claude](#merged-support-aws-claude)
       - [Support claude-3-7-sonnet \& thinking](#support-claude-3-7-sonnet--thinking)
@@ -116,15 +118,12 @@ The original author stopped maintaining the project, leaving critical PRs and ne
         - [Support Claude Code](#support-claude-code)
     - [Support Claude 4.x Models](#support-claude-4x-models)
     - [Google (Gemini \& Vertex) Features](#google-gemini--vertex-features)
-      - [Support gemini-2.0-flash-exp](#support-gemini-20-flash-exp)
-      - [Support gemini-2.0-flash](#support-gemini-20-flash)
-      - [Support gemini-2.0-flash-thinking-exp-01-21](#support-gemini-20-flash-thinking-exp-01-21)
-      - [Support Vertex Imagen3](#support-vertex-imagen3)
       - [Support gemini multimodal output #2197](#support-gemini-multimodal-output-2197)
       - [Support gemini-2.5-pro](#support-gemini-25-pro)
       - [Support GCP Vertex gloabl region and gemini-2.5-pro-preview-06-05](#support-gcp-vertex-gloabl-region-and-gemini-25-pro-preview-06-05)
       - [Support gemini-2.5-flash-image-preview \& imagen-4 series](#support-gemini-25-flash-image-preview--imagen-4-series)
       - [Support gemini-3 family](#support-gemini-3-family)
+      - [Deprecated Models](#deprecated-models-1)
     - [OpenCode Support](#opencode-support)
     - [AWS Features](#aws-features)
       - [Support AWS cross-region inferences](#support-aws-cross-region-inferences)
@@ -134,6 +133,7 @@ The original author stopped maintaining the project, leaving critical PRs and ne
       - [Support replicate chat models](#support-replicate-chat-models)
     - [DeepSeek Features](#deepseek-features)
       - [Support deepseek-reasoner](#support-deepseek-reasoner)
+      - [DeepSeek V4](#deepseek-v4)
     - [OpenRouter Features](#openrouter-features)
       - [Support OpenRouter's reasoning content](#support-openrouters-reasoning-content)
     - [Cohere](#cohere)
@@ -141,7 +141,7 @@ The original author stopped maintaining the project, leaving critical PRs and ne
     - [Coze Features](#coze-features)
       - [Support coze oauth authentication](#support-coze-oauth-authentication)
     - [Moonshot Features](#moonshot-features)
-      - [Support kimi-k2 Family](#support-kimi-k2-family)
+      - [Support Kimi Family](#support-kimi-family)
     - [GLM Features](#glm-features)
       - [Flagship Models - Text](#flagship-models---text)
       - [Flagship Models - Visual](#flagship-models---visual)
@@ -155,6 +155,10 @@ The original author stopped maintaining the project, leaving critical PRs and ne
       - [Support XAI/Grok Text \& Image Models](#support-xaigrok-text--image-models)
     - [Black Forest Labs Features](#black-forest-labs-features)
       - [Support black-forest-labs/flux-kontext-pro](#support-black-forest-labsflux-kontext-pro)
+    - [NVIDIA Features](#nvidia-features)
+      - [Support NVIDIA API Catalog (build.nvidia.com)](#support-nvidia-api-catalog-buildnvidiacom)
+    - [Cerebras Features](#cerebras-features)
+      - [Support Cerebras Inference (api.cerebras.ai)](#support-cerebras-inference-apicerebrasai)
   - [Bug Fixes \& Enterprise-Grade Improvements (Including Security Enhancements)](#bug-fixes--enterprise-grade-improvements-including-security-enhancements)
 
 ## Tutorial
@@ -180,15 +184,28 @@ oneapi:
     driver: 'json-file'
     options:
       max-size: '10m'
+  environment:
+    # ⚠️ Only set ENABLE_COOKIE_SECURE=false for HTTP deployments; keep it true for HTTPS to ensure session security
+    - ENABLE_COOKIE_SECURE=false
   volumes:
     - /var/lib/oneapi:/data
   ports:
     - 3000:3000
 ```
 
-> [!TIP]
+> [!IMPORTANT]
 >
-> For production environments, consider using proper secret management solutions instead of hardcoding sensitive values in environment variables.
+> Session cookies are marked `Secure` by default, so the browser will only send them over HTTPS. If you are serving the service over plain HTTP (for example accessing `http://<host>:3000` directly, or a reverse proxy that terminates HTTPS but is misconfigured), logins will appear to succeed but the next request is unauthenticated, looping the user back to the login page. In that case set `ENABLE_COOKIE_SECURE=false` in the `environment` section. Keep it at the default (`true`) for any production deployment served over HTTPS.
+
+### Outbound Email Configuration
+
+one-api can send verification, password reset, quota reminder, and operator notification emails through either SMTP or the Resend HTTP API.
+
+- `EMAIL_PROVIDER=smtp` forces the SMTP backend.
+- `EMAIL_PROVIDER=resend` forces the Resend backend and requires `RESEND_API_KEY`.
+- Leaving `EMAIL_PROVIDER` empty enables auto mode: one-api uses Resend when `RESEND_API_KEY` is configured, otherwise it falls back to SMTP.
+
+When `RESEND_API_KEY` or `EMAIL_PROVIDER` is set as a non-empty environment variable, that environment value is authoritative during startup, periodic option sync, and runtime option updates. A saved or cleared database option will not override it. To manage these values from the admin UI instead, remove the corresponding environment variable and restart the service.
 
 ### Kubernetes Deployment
 
@@ -212,7 +229,11 @@ Support internationalization (i18n) in the web frontend, including English, Chin
 
 #### Unified Billing System
 
-All channels share a four-layer billing pipeline (channel overrides → adapter defaults → global fallback → safe default) with support for tiered token pricing, cached prompt buckets, and per-second/per-image media meters. Administrators can fetch defaults, override specific models, and audit every call via `X-Oneapi-Request-Id`; see [docs/arch/billing.md](./docs/arch/billing.md) for internals and [docs/manuals/billing.md](./docs/manuals/billing.md) for the operational playbook.
+All channels share a four-layer billing pipeline (channel overrides → adapter defaults → global fallback → safe default) with support for tiered token pricing, time-of-day pricing windows, cached prompt buckets, and per-second/per-image media meters. Administrators can fetch defaults, override specific models, and audit every call via `X-Oneapi-Request-Id`; see [docs/arch/billing.md](./docs/arch/billing.md) for internals and [docs/manuals/billing.md](./docs/manuals/billing.md) for the operational playbook.
+
+Per-channel `model_configs` can define `ratio`, `completion_ratio`, cache-read/cache-write ratios, `tiers`, `time_windows`, `max_tokens`, and media pricing blocks (`video`, `audio`, `image`, `embedding`). `time_windows` are ordered wall-clock overlays with explicit timezones; the first matching window at request start time is merged before tiers, so streaming requests keep one consistent rate even when they cross a boundary.
+
+Marketplace and aggregation-channel pricing snapshots such as OpenRouter, Together AI, Fireworks, Replicate, Cloudflare, and Novita are maintained from official provider docs or machine-readable official APIs rather than third-party trackers.
 
 #### Support Open Telemetry
 
@@ -541,7 +562,7 @@ Response:
 
 #### Support openai images edits
 
-- [feat: support openai images edits api #1369](https://github.com/songquanpeng/one-api/pull/1369)
+- [feat: support openai images edits api #1369](https://github.com/Laisky/one-api/pull/1369)
 
 ```sh
 curl --location 'https://oneapi.laisky.com/v1/images/edits' \
@@ -565,13 +586,9 @@ Response:
 }
 ```
 
-#### Support OpenAI o1/o1-mini/o1-preview
-
-- [feat: add openai o1 #1990](https://github.com/songquanpeng/one-api/pull/1990)
-
 #### Support gpt-4o-audio
 
-- [feat: support gpt-4o-audio #2032](https://github.com/songquanpeng/one-api/pull/2032)
+- [feat: support gpt-4o-audio #2032](https://github.com/Laisky/one-api/pull/2032)
 
 ```sh
 
@@ -660,7 +677,7 @@ Response:
 
 #### Support OpenAI web search models
 
-- [feature: support openai web search models #2189](https://github.com/songquanpeng/one-api/pull/2189)
+- [feature: support openai web search models #2189](https://github.com/Laisky/one-api/pull/2189)
 
 support `gpt-4o-search-preview` & `gpt-4o-mini-search-preview`
 
@@ -857,7 +874,7 @@ Response:
 
 #### Support o3-mini & o3 & o4-mini & gpt-4.1 & o3-pro & reasoning content
 
-- [feat: extend support for o3 models and update model ratios #2048](https://github.com/songquanpeng/one-api/pull/2048)
+- [feat: extend support for o3 models and update model ratios #2048](https://github.com/Laisky/one-api/pull/2048)
 
 ![](https://s3.laisky.com/uploads/2025/06/o3-pro.png)
 
@@ -908,13 +925,19 @@ Response:
 
 #### Support gpt-5 family
 
-gpt-5.4 / gpt-5.4-pro
+- **GPT-5.6** — Sol / Terra / Luna tiers (`gpt-5.6` aliases to `gpt-5.6-sol`; adds the new `max` reasoning effort): gpt-5.6 / gpt-5.6-sol / gpt-5.6-terra / gpt-5.6-luna
+- **GPT-5.5**: gpt-5.5 / gpt-5.5-pro / gpt-5.5-2026-04-23
+- **GPT-5.4**: gpt-5.4 / gpt-5.4-2026-03-05 / gpt-5.4-mini / gpt-5.4-nano / gpt-5.4-pro
+- **GPT-5.3**: gpt-5.3-codex / ~~gpt-5.3-chat-latest~~ (retires 2026-08-10)
+- **GPT-5.2**: gpt-5.2 / gpt-5.2-2025-12-11 / gpt-5.2-pro / gpt-5.2-pro-2025-12-11 / ~~gpt-5.2-codex~~ (retires 2026-07-23)
+- **GPT-5.1**: gpt-5.1 / gpt-5.1-2025-11-13 / gpt-5.1-codex / gpt-5.1-codex-mini / gpt-5.1-codex-max / ~~gpt-5.1-chat-latest~~ (retires 2026-07-23)
+- **GPT-5**: gpt-5 / gpt-5-2025-08-07 / gpt-5-mini / gpt-5-mini-2025-08-07 / gpt-5-nano / gpt-5-nano-2025-08-07 / gpt-5-pro / gpt-5-pro-2025-10-06 / ~~gpt-5-chat-latest~~ / ~~gpt-5-codex~~ (retire 2026-07-23)
+- **ChatGPT alias**: chat-latest — rolling alias to the latest Instant model used in ChatGPT
 
-gpt-5.2 / gpt-5.2-2025-12-11 / gpt-5.2-pro / gpt-5.2-pro-2025-12-11 / gpt-5.2-codex
+##### Realtime models
 
-gpt-5.1-chat-latest / gpt-5.1 / gpt-5.1-2025-11-13 / gpt-5.1-codex / gpt-5.1-codex-mini
-
-gpt-5-chat-latest / gpt-5 / gpt-5-mini / gpt-5-nano / gpt-5-codex / gpt-5.1-codex-max/ gpt-5-pro
+- gpt-realtime-2.1 / gpt-realtime-2.1-mini / gpt-realtime-2 / gpt-realtime-1.5 / gpt-realtime (alias) / gpt-realtime-mini / gpt-realtime-translate / gpt-realtime-whisper
+- ~~gpt-4o-realtime-preview~~ / ~~gpt-4o-realtime-preview-2025-06-03~~ / ~~gpt-4o-mini-realtime-preview~~ / ~~gpt-4o-mini-realtime-preview-2024-12-17~~ (GPT-4o realtime previews retired upstream 2026-05-07)
 
 #### Support o3-deep-research & o4-mini-deep-research
 
@@ -1075,19 +1098,23 @@ curl --location 'https://oneapi.laisky.com/v1/videos/video_691611812ca88190bfb12
   --header 'Authorization: sk-xxxxxxx'
 ```
 
+#### Deprecated Models
+
+- o1-preview (retired 2025-07-28), o1-mini (retired 2025-10-27), o1 (retires 2026-10-23) — [feat: add openai o1 #1990](https://github.com/Laisky/one-api/pull/1990)
+
 ### Anthropic (Claude) Features
 
 #### (Merged) Support aws claude
 
-- [feat: support aws bedrockruntime claude3 #1328](https://github.com/songquanpeng/one-api/pull/1328)
-- [feat: add new claude models #1910](https://github.com/songquanpeng/one-api/pull/1910)
+- [feat: support aws bedrockruntime claude3 #1328](https://github.com/Laisky/one-api/pull/1328)
+- [feat: add new claude models #1910](https://github.com/Laisky/one-api/pull/1910)
 
 ![](https://s3.laisky.com/uploads/2024/12/oneapi-claude.png)
 
 #### Support claude-3-7-sonnet & thinking
 
-- [feat: support claude-3-7-sonnet #2143](https://github.com/songquanpeng/one-api/pull/2143/files)
-- [feat: support claude thinking #2144](https://github.com/songquanpeng/one-api/pull/2144)
+- [feat: support claude-3-7-sonnet #2143](https://github.com/Laisky/one-api/pull/2143/files)
+- [feat: support claude thinking #2144](https://github.com/Laisky/one-api/pull/2144)
 
 By default, the thinking mode is not enabled. You need to manually pass the `thinking` field in the request body to enable it.
 
@@ -1113,37 +1140,27 @@ export ANTHROPIC_AUTH_TOKEN="sk-xxxxxxx"
 
 You can use any model you like for Claude Code, even if the model doesn’t natively support the Claude Messages API.
 
+#### Support Azure AI Foundry Claude models
+
+[Azure AI Foundry](https://learn.microsoft.com/en-us/azure/foundry/foundry-models/how-to/use-foundry-models-claude) serves Anthropic Claude through the native Anthropic Messages API — there is no OpenAI-compatible route for Claude on Foundry. one-api's existing **Azure** channel handles this automatically: on an Azure channel, `claude-*` models are routed to the resource's `/anthropic/v1/messages` surface (with the `x-api-key` and `anthropic-version` headers and Anthropic pricing), while `gpt-*` deployments continue to use the Azure OpenAI surface. No separate channel type is required.
+
+To use it:
+
+1. Create an **Azure** channel and set the base URL to your resource endpoint, e.g. `https://<resource>.services.ai.azure.com` (no `/anthropic` or `/openai` suffix — one-api appends the correct path per model).
+2. Use the Azure resource key as the channel key (forwarded as `x-api-key`).
+3. Add the Claude models you deployed (e.g. `claude-sonnet-5`, `claude-opus-4-8`). Naming your Azure deployment to match the one-api model id lets both routing and default Anthropic pricing resolve automatically. If the deployment name differs, add a model mapping (`claude-* → your-deployment`); routing still works because it keys off the requested model, but you should then set a per-channel price for the deployment name so billing stays correct.
+
 ### Support Claude 4.x Models
 
 ![](https://s3.laisky.com/uploads/2025/09/claude-sonnet-4-5.png)
 
-claude-opus-4-0 / claude-opus-4-1 / claude-opus-4-5 / claude-opus-4-6 / claude-opus-4-7 / claude-sonnet-4-0 / claude-sonnet-4-5 / claude-sonnet-4-6 / claude-haiku-4-5
+~~claude-opus-4-0~~ (retired 2026-06-15) / ~~claude-opus-4-1~~ (retires 2026-08-05) / claude-opus-4-5 / claude-opus-4-6 / claude-opus-4-7 / claude-opus-4-8 / claude-opus-5 / ~~claude-sonnet-4-0~~ (retired 2026-06-15) / claude-sonnet-4-5 / claude-sonnet-4-6 / claude-sonnet-5 / claude-haiku-4-5
 
 ### Google (Gemini & Vertex) Features
 
-#### Support gemini-2.0-flash-exp
-
-- [feat: add gemini-2.0-flash-exp #1983](https://github.com/songquanpeng/one-api/pull/1983)
-
-![](https://s3.laisky.com/uploads/2024/12/oneapi-gemini-flash.png)
-
-#### Support gemini-2.0-flash
-
-- [feat: support gemini-2.0-flash #2055](https://github.com/songquanpeng/one-api/pull/2055)
-
-#### Support gemini-2.0-flash-thinking-exp-01-21
-
-- [feature: add deepseek-reasoner & gemini-2.0-flash-thinking-exp-01-21 #2045](https://github.com/songquanpeng/one-api/pull/2045)
-
-#### Support Vertex Imagen3
-
-- [feat: support vertex imagen3 #2030](https://github.com/songquanpeng/one-api/pull/2030)
-
-![](https://s3.laisky.com/uploads/2025/01/oneapi-imagen3.png)
-
 #### Support gemini multimodal output #2197
 
-- [feature: support gemini multimodal output #2197](https://github.com/songquanpeng/one-api/pull/2197)
+- [feature: support gemini multimodal output #2197](https://github.com/Laisky/one-api/pull/2197)
 
 ![](https://s3.laisky.com/uploads/2025/03/gemini-multimodal.png)
 
@@ -1159,7 +1176,14 @@ claude-opus-4-0 / claude-opus-4-1 / claude-opus-4-5 / claude-opus-4-6 / claude-o
 
 #### Support gemini-3 family
 
-Support gemini-3.1-pro-preview / gemini-3.1-pro-preview-customtools / gemini-3-pro-preview / gemini-3-pro-image-preview / gemini-3-flash-preview / gemini-3.1-flash-image-preview / gemini-3.1-flash-lite-preview
+Support gemini-3.1-pro-preview / gemini-3.1-pro-preview-customtools / ~~gemini-3-pro-preview~~ (retired 2026-03-09) / ~~gemini-3-pro-image-preview~~ (retired 2026-06-25) / gemini-3-flash-preview / ~~gemini-3.1-flash-image-preview~~ (retired 2026-06-25) / ~~gemini-3.1-flash-lite-preview~~ (retired 2026-05-25)
+
+#### Deprecated Models
+
+- gemini-2.0-flash-exp — [feat: add gemini-2.0-flash-exp #1983](https://github.com/Laisky/one-api/pull/1983)
+- gemini-2.0-flash (retired 2026-06-01) — [feat: support gemini-2.0-flash #2055](https://github.com/Laisky/one-api/pull/2055)
+- gemini-2.0-flash-thinking-exp-01-21 — [feature: add deepseek-reasoner & gemini-2.0-flash-thinking-exp-01-21 #2045](https://github.com/Laisky/one-api/pull/2045)
+- imagen-3 (imagen-3.0-generate-002, retired 2025-11-10) — [feat: support vertex imagen3 #2030](https://github.com/Laisky/one-api/pull/2030)
 
 ### OpenCode Support
 
@@ -1229,7 +1253,7 @@ To get started, create or edit `~/.config/opencode/opencode.json` like this:
 
 #### Support AWS cross-region inferences
 
-- [fix: support aws cross region inferences #2182](https://github.com/songquanpeng/one-api/pull/2182)
+- [fix: support aws cross region inferences #2182](https://github.com/Laisky/one-api/pull/2182)
 
 #### Support AWS BedRock Inference Profile
 
@@ -1239,8 +1263,8 @@ To get started, create or edit `~/.config/opencode/opencode.json` like this:
 
 #### Support replicate flux & remix
 
-- [feature: 支持 replicate 的绘图 #1954](https://github.com/songquanpeng/one-api/pull/1954)
-- [feat: image edits/inpaiting 支持 replicate 的 flux remix #1986](https://github.com/songquanpeng/one-api/pull/1986)
+- [feature: 支持 replicate 的绘图 #1954](https://github.com/Laisky/one-api/pull/1954)
+- [feat: image edits/inpaiting 支持 replicate 的 flux remix #1986](https://github.com/Laisky/one-api/pull/1986)
 
 ![](https://s3.laisky.com/uploads/2024/12/oneapi-replicate-1.png)
 
@@ -1250,19 +1274,23 @@ To get started, create or edit `~/.config/opencode/opencode.json` like this:
 
 #### Support replicate chat models
 
-- [feat: 支持 replicate chat models #1989](https://github.com/songquanpeng/one-api/pull/1989)
+- [feat: 支持 replicate chat models #1989](https://github.com/Laisky/one-api/pull/1989)
 
 ### DeepSeek Features
 
 #### Support deepseek-reasoner
 
-- [feature: add deepseek-reasoner & gemini-2.0-flash-thinking-exp-01-21 #2045](https://github.com/songquanpeng/one-api/pull/2045)
+- [feature: add deepseek-reasoner & gemini-2.0-flash-thinking-exp-01-21 #2045](https://github.com/Laisky/one-api/pull/2045)
+
+#### DeepSeek V4
+
+Support deepseek-v4-flash / deepseek-v4-pro
 
 ### OpenRouter Features
 
 #### Support OpenRouter's reasoning content
 
-- [feat: support OpenRouter reasoning #2108](https://github.com/songquanpeng/one-api/pull/2108)
+- [feat: support OpenRouter reasoning #2108](https://github.com/Laisky/one-api/pull/2108)
 
 By default, the thinking mode is automatically enabled for the deepseek-r1 model, and the response is returned in the open-router format.
 
@@ -1336,25 +1364,46 @@ Response:
 
 ### Moonshot Features
 
-#### Support kimi-k2 Family
+#### Support Kimi Family
 
-Support:
+Current flagship (1M context, text + image + video input):
 
-- `kimi-k2-0905-preview`
-- `kimi-k2-0711-preview`
-- `kimi-k2-turbo-preview`
-- `kimi-k2-thinking`
-- `kimi-k2-thinking-turbo`
+- `kimi-k3` — always-on thinking, depth selected by `reasoning_effort` (`low` / `high` / `max`, default `max`)
+
+K3 pins `temperature`, `top_p`, `n`, `presence_penalty` and `frequency_penalty` upstream and rejects other
+values, so the Moonshot adaptor drops those fields for this model and maps the OpenAI effort ladder onto
+K3's three tiers (`minimal`/`none` → `low`, `medium` → `high`, `xhigh` → `max`).
+
+K2 generation (text + image + video, 256k context, open weights on HuggingFace):
+
+- `kimi-k2.7-code` — top coding model, thinking-only deep reasoning
+- `kimi-k2.7-code-highspeed` — high-throughput variant, priced at 2x standard
+- `kimi-k2.6` — multimodal, thinking and non-thinking modes
+- `kimi-k2.5` — multimodal, thinking and non-thinking modes
+
+Classic Moonshot V1 chat models (text, plus vision-preview variants):
+
+- `moonshot-v1-8k` / `moonshot-v1-32k` / `moonshot-v1-128k`
+- `moonshot-v1-8k-vision-preview` / `moonshot-v1-32k-vision-preview` / `moonshot-v1-128k-vision-preview`
+
+> `kimi-k2.5` and the whole `moonshot-v1` series stopped accepting newly registered Moonshot accounts when
+> K3 launched, and go fully offline on 2026-08-31.
+
+> The legacy `kimi-k2-0905-preview`, `kimi-k2-0711-preview`, `kimi-k2-turbo-preview`, `kimi-k2-thinking` and `kimi-k2-thinking-turbo` models were discontinued by Moonshot on 2026-05-25.
+
+Kimi K3 is also available through several hosted providers, each with its own case-sensitive model id:
+`moonshotai/kimi-k3` (OpenRouter, Novita), `moonshotai/Kimi-K3` (SiliconFlow) and `kimi/kimi-k3`
+(Alibaba Bailian, billed in CNY with cache hits at 10% of input).
 
 ### GLM Features
 
 #### Flagship Models - Text
 
-`glm-5-turbo` / `glm-5` / `glm-4.7` / `glm-4.7-flashx` / `glm-4.7-flash` / `glm-4.6` / `glm-4.5` / `glm-4.5-x` / `glm-4.5-air` / `glm-4.5-airx`
+`glm-5.3` / `glm-5.2` / `glm-5.1` / `glm-5-turbo` / `glm-5` / `glm-4.7` / `glm-4.7-flashx` / `glm-4.7-flash` / `glm-4.6` / `glm-4.5` / `glm-4.5-x` / `glm-4.5-air` / `glm-4.5-airx`
 
 #### Flagship Models - Visual
 
-`glm-5v-turbo` / `glm-4.6v` / `glm-4.6v-flashx` / `glm-4.5v` / `glm-4.6v-flash` / `glm-4v-flash`
+`autoglm-phone` / `glm-5v-turbo` / `glm-4.6v` / `glm-4.6v-flashx` / `glm-4.5v` / `glm-4.6v-flash` / `glm-4v-flash`
 
 #### Language Models
 
@@ -1370,7 +1419,18 @@ Support:
 
 #### Image Generation Models
 
-`cogview-4` / `cogview-3-plus` / `cogview-3` / `cogview-3-flash` / `cogviewx` / `cogviewx-flash`
+`glm-image` / `cogview-4` / `cogview-3-plus` / `cogview-3` / `cogview-3-flash` / `cogvideox-3` / `cogviewx` / `cogviewx-flash` / `viduq1-image` / `viduq1-start-end` / `viduq1-text` / `vidu2-image` / `vidu2-start-end` / `vidu2-reference`
+
+#### Audio Models
+
+`glm-tts` / `glm-asr-2512` / `glm-tts-clone`
+
+Voice cloning is exposed through `/v1/voice/clones` (Zhipu-compatible
+`/api/paas/v4/voice/clone` is also accepted).
+
+#### Realtime Models
+
+`glm-realtime-flash` / `glm-realtime-air`
 
 #### Other Models
 
@@ -1480,21 +1540,51 @@ Response:
 
 ![](https://s3.laisky.com/uploads/2025/08/groq.png)
 
+The XAI adaptor tracks the current Grok 4.6 flagship, Grok 4.5/4.3 and
+Grok 4.20 snapshots, Grok Build 0.1, legacy redirect aliases, and the current
+Grok Imagine image/video model slugs. Pricing is sourced from the official
+[xAI pricing table](https://docs.x.ai/developers/pricing), including the
+published long-context surcharge at 200K input tokens.
+
 ### Black Forest Labs Features
 
 #### Support black-forest-labs/flux-kontext-pro
 
 ![](https://s3.laisky.com/uploads/2025/05/flux-kontext-pro.png)
 
+### NVIDIA Features
+
+#### Support NVIDIA API Catalog (build.nvidia.com)
+
+Adds an `NVIDIA` channel type that targets NVIDIA's OpenAI-compatible hosted inference API at `https://integrate.api.nvidia.com/v1` (the models published on [build.nvidia.com](https://build.nvidia.com/models)). Authenticate with an `nvapi-...` API key. The channel serves Chat Completions natively, and transparently handles Claude Messages / Response API requests through one-api's OpenAI-compatible conversion layer. Embeddings are not enabled by default until NVIDIA's model-specific request requirements are represented in the catalog.
+
+Curated models include NVIDIA's own Nemotron family (e.g. `nvidia/nemotron-3-ultra-550b-a55b`, `nvidia/llama-3.3-nemotron-super-49b-v1.5`, `nvidia/nemotron-nano-12b-v2-vl`) plus popular hosted open models such as `meta/llama-3.3-70b-instruct`, `deepseek-ai/deepseek-v4-flash`, `qwen/qwen3-next-80b-a3b-instruct`, `openai/gpt-oss-120b`, and `moonshotai/kimi-k2.6`.
+
+NVIDIA does not publish per-token pricing for the hosted endpoint (it is metered in free API credits rather than currency), so every bundled model defaults to free. Operators routing to NVIDIA AI Enterprise or a paid partner endpoint with real costs can set per-channel pricing overrides.
+
+### Cerebras Features
+
+#### Support Cerebras Inference (api.cerebras.ai)
+
+Adds a `Cerebras` channel type that targets [Cerebras Inference](https://inference-docs.cerebras.ai/), the OpenAI-compatible API served on Cerebras' wafer-scale (CS-3) hardware at `https://api.cerebras.ai/v1`. Authenticate with a Cerebras API key (`Authorization: Bearer ...`). The channel serves Chat Completions natively, and transparently handles Claude Messages / Response API requests through one-api's OpenAI-compatible conversion layer. Cerebras is chat-only — it does not expose embeddings or a native Anthropic Messages endpoint.
+
+Bundled models (live on the shared public API with officially published per-token pricing):
+
+- `gpt-oss-120b` — OpenAI gpt-oss 120B open-weight MoE reasoning model (Production / GA); 131K context, tools and structured outputs, `reasoning_effort` supported. Billed at $0.35 / 1M input and $0.75 / 1M output tokens.
+- `zai-glm-4.7` — Z.ai GLM-4.7 (355B) reasoning/agent model; 131K context. Marked **Preview** by Cerebras (evaluation only, may change on short notice). Billed at $2.25 / 1M input and $2.75 / 1M output tokens.
+- `gemma-4-31b` — Google Gemma 4 31B multimodal (text + image input) reasoning model; 131K context (paid tier), reasoning disabled by default (opt-in via `reasoning_effort`). Marked **Preview** by Cerebras. Billed at $0.99 / 1M input and $1.49 / 1M output tokens.
+
+Per-token rates above are taken from the official Cerebras model cards; operators can override pricing per channel.
+
 ## Bug Fixes & Enterprise-Grade Improvements (Including Security Enhancements)
 
-- [BUGFIX: Several issues when updating tokens #1933](https://github.com/songquanpeng/one-api/pull/1933)
-- [feat(audio): count whisper-1 quota by audio duration #2022](https://github.com/songquanpeng/one-api/pull/2022)
+- [BUGFIX: Several issues when updating tokens #1933](https://github.com/Laisky/one-api/pull/1933)
+- [feat(audio): count whisper-1 quota by audio duration #2022](https://github.com/Laisky/one-api/pull/2022)
 - [fix: Fix issue where high-quota users using low-quota tokens aren't pre-charged, causing large token deficits under high concurrency #25](https://github.com/Laisky/one-api/pull/25)
-- [fix: channel test false negative #2065](https://github.com/songquanpeng/one-api/pull/2065)
-- [fix: resolve "bufio.Scanner: token too long" error by increasing buffer size #2128](https://github.com/songquanpeng/one-api/pull/2128)
-- [feat: Enhance VolcEngine channel support with bot model #2131](https://github.com/songquanpeng/one-api/pull/2131)
-- [fix: models API returns models in deactivated channels #2150](https://github.com/songquanpeng/one-api/pull/2150)
+- [fix: channel test false negative #2065](https://github.com/Laisky/one-api/pull/2065)
+- [fix: resolve "bufio.Scanner: token too long" error by increasing buffer size #2128](https://github.com/Laisky/one-api/pull/2128)
+- [feat: Enhance VolcEngine channel support with bot model #2131](https://github.com/Laisky/one-api/pull/2131)
+- [fix: models API returns models in deactivated channels #2150](https://github.com/Laisky/one-api/pull/2150)
 - [fix: Automatically close channel when connection fails](https://github.com/Laisky/one-api/pull/34)
 - [fix: update EmailDomainWhitelist submission logic #33](https://github.com/Laisky/one-api/pull/33)
 - [fix: send ByAll](https://github.com/Laisky/one-api/pull/35)

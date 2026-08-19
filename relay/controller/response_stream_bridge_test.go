@@ -10,12 +10,12 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/songquanpeng/one-api/common"
-	"github.com/songquanpeng/one-api/common/ctxkey"
-	"github.com/songquanpeng/one-api/relay/adaptor/openai"
-	"github.com/songquanpeng/one-api/relay/adaptor/openai_compatible"
-	metalib "github.com/songquanpeng/one-api/relay/meta"
-	"github.com/songquanpeng/one-api/relay/model"
+	"github.com/Laisky/one-api/common"
+	"github.com/Laisky/one-api/common/ctxkey"
+	"github.com/Laisky/one-api/relay/adaptor/openai"
+	"github.com/Laisky/one-api/relay/adaptor/openai_compatible"
+	metalib "github.com/Laisky/one-api/relay/meta"
+	"github.com/Laisky/one-api/relay/model"
 )
 
 // --- bridge test helpers (prefixed to avoid collisions with response_fallback_test.go) ---
@@ -241,6 +241,21 @@ func TestChatToResponseStreamBridge_ReasoningContentField(t *testing.T) {
 	var s string
 	require.NoError(t, json.Unmarshal(ev.Delta, &s))
 	assert.Equal(t, "Deep thought", s)
+
+	completed := bridgeFindEvents(events, "response.completed")
+	require.Len(t, completed, 1)
+	bridgeUnmarshal(t, completed[0], &ev)
+	require.NotNil(t, ev.Response)
+	var reasoningItem *openai.OutputItem
+	for idx := range ev.Response.Output {
+		if ev.Response.Output[idx].Type == "reasoning" {
+			reasoningItem = &ev.Response.Output[idx]
+			break
+		}
+	}
+	require.NotNil(t, reasoningItem)
+	require.Equal(t, []openai.OutputContent{{Type: "text", Text: "Deep thought"}}, reasoningItem.Content,
+		"fallback output must retain replayable reasoning content for the next tool turn")
 }
 
 func TestChatToResponseStreamBridge_ThinkingField(t *testing.T) {
@@ -302,6 +317,283 @@ func TestChatToResponseStreamBridge_MultipleToolCalls(t *testing.T) {
 	assert.Equal(t, "call_second", ev2.ItemId)
 	assert.Equal(t, `{"city":"NYC"}`, ev1.Arguments)
 	assert.Equal(t, `{"tz":"EST"}`, ev2.Arguments)
+}
+
+// TestChatToResponseStreamBridge_ToolCallArgsDoneBeforeOutputItemDone is the
+// regression test for the OneAPI agent-loop event ordering bug. Downstream
+// consumers (e.g. go-ramjet's agentx oneAPI adapter) rely on the Responses
+// API spec contract:
+//
+//	response.output_item.added         (function_call, arguments empty)
+//	response.function_call_arguments.delta * N
+//	response.function_call_arguments.done   (final arguments)
+//	response.output_item.done               (final arguments, identical)
+//
+// In particular, output_item.done for a function_call MUST be emitted AFTER
+// the matching function_call_arguments.done and MUST carry the complete
+// buffered arguments JSON. Failing this invariant ships empty/partial args
+// to downstream tool dispatchers ("args: {" instead of "args: {\"q\":...}").
+//
+// The test feeds a realistic chunked tool-call stream and asserts (1) the
+// per-call ordering, (2) that no function_call output_item.done arrives
+// before its matching args.done in the global wire order, and (3) that the
+// tool-call output_item.done carries the full buffered arguments.
+func TestChatToResponseStreamBridge_ToolCallArgsDoneBeforeOutputItemDone(t *testing.T) {
+	t.Parallel()
+	c, w := newBridgeTestContext(t)
+	bridge := newTestBridge(t, c)
+
+	bridge.HandleChunk(c, bridgeToolCallChunk("call_b", 0, "web_search", `{"q":`))
+	bridge.HandleChunk(c, bridgeToolCallChunk("call_b", 0, "", `"weather"}`))
+	bridge.HandleChunk(c, bridgeFinishChunk("tool_calls"))
+	bridge.HandleDone(c)
+
+	events := parseBridgeSSE(w.Body.String())
+
+	// 1. Locate the function_call_arguments.added/delta/done and the matching
+	//    output_item.done for call_b. The added event corresponds to the
+	//    function_call output_item.added (with empty arguments), the delta
+	//    events stream the JSON in fragments, and the done event carries the
+	//    full arguments.
+	var (
+		toolAddedIdx     = -1
+		toolDeltaIndices []int
+		argsDoneIdx      = -1
+		toolDoneIdx      = -1
+	)
+	for i, e := range events {
+		switch e.event {
+		case "response.output_item.added":
+			var ev openai.ResponseAPIStreamEvent
+			bridgeUnmarshal(t, e, &ev)
+			if ev.Item != nil && ev.Item.Type == "function_call" {
+				toolAddedIdx = i
+			}
+		case "response.function_call_arguments.delta":
+			toolDeltaIndices = append(toolDeltaIndices, i)
+		case "response.function_call_arguments.done":
+			argsDoneIdx = i
+		case "response.output_item.done":
+			var ev openai.ResponseAPIStreamEvent
+			bridgeUnmarshal(t, e, &ev)
+			if ev.Item != nil && ev.Item.Type == "function_call" {
+				toolDoneIdx = i
+			}
+		}
+	}
+
+	require.NotEqual(t, -1, toolAddedIdx, "expected a function_call output_item.added event")
+	require.NotEmpty(t, toolDeltaIndices, "expected at least one function_call_arguments.delta")
+	require.NotEqual(t, -1, argsDoneIdx, "expected a function_call_arguments.done event")
+	require.NotEqual(t, -1, toolDoneIdx, "expected a function_call output_item.done event")
+
+	// 2. Per-call spec ordering: added < delta(s) < args.done < output_item.done.
+	assert.Less(t, toolAddedIdx, toolDeltaIndices[0], "added must precede delta events")
+	for _, di := range toolDeltaIndices {
+		assert.Less(t, di, argsDoneIdx, "delta events must precede args.done")
+	}
+	assert.Less(t, argsDoneIdx, toolDoneIdx,
+		"function_call_arguments.done must be emitted BEFORE output_item.done for the same call_id; "+
+			"downstream agent loops fire tool dispatch on output_item.done with the args buffered "+
+			"to that point — emitting output_item.done first ships empty/partial args")
+
+	// 3. output_item.done for the function_call carries the complete arguments JSON.
+	var doneEv openai.ResponseAPIStreamEvent
+	bridgeUnmarshal(t, events[toolDoneIdx], &doneEv)
+	require.NotNil(t, doneEv.Item)
+	assert.Equal(t, "function_call", doneEv.Item.Type)
+	assert.Equal(t, `{"q":"weather"}`, doneEv.Item.Arguments,
+		"output_item.done.Item.Arguments must hold the complete buffered JSON, not a partial state")
+
+	// 4. The matching args.done event also carries the complete arguments JSON.
+	var argsDoneEv openai.ResponseAPIStreamEvent
+	bridgeUnmarshal(t, events[argsDoneIdx], &argsDoneEv)
+	assert.Equal(t, `{"q":"weather"}`, argsDoneEv.Arguments)
+	assert.Equal(t, "call_b", argsDoneEv.ItemId)
+}
+
+// TestChatToResponseStreamBridge_MultiCallEventOrderingInterleaved exercises two
+// interleaved tool calls in a single response and asserts that for every
+// call_id, the per-call spec ordering (args.done before output_item.done) holds
+// and that the calls are not interleaved such that output_item.done for call A
+// fires before args.done for call A.
+func TestChatToResponseStreamBridge_MultiCallEventOrderingInterleaved(t *testing.T) {
+	t.Parallel()
+	c, w := newBridgeTestContext(t)
+	bridge := newTestBridge(t, c)
+
+	// Two interleaved tool calls — fragments delivered in alternating chunks.
+	bridge.HandleChunk(c, bridgeToolCallChunk("call_a", 0, "tool_a", `{"x":`))
+	bridge.HandleChunk(c, bridgeToolCallChunk("call_b", 1, "tool_b", `{"y":`))
+	bridge.HandleChunk(c, bridgeToolCallChunk("call_a", 0, "", `1}`))
+	bridge.HandleChunk(c, bridgeToolCallChunk("call_b", 1, "", `2}`))
+	bridge.HandleChunk(c, bridgeFinishChunk("tool_calls"))
+	bridge.HandleDone(c)
+
+	events := parseBridgeSSE(w.Body.String())
+
+	// Track per-call event positions.
+	argsDoneByCall := make(map[string]int)
+	toolDoneByCall := make(map[string]int)
+	for i, e := range events {
+		switch e.event {
+		case "response.function_call_arguments.done":
+			var ev openai.ResponseAPIStreamEvent
+			bridgeUnmarshal(t, e, &ev)
+			argsDoneByCall[ev.ItemId] = i
+		case "response.output_item.done":
+			var ev openai.ResponseAPIStreamEvent
+			bridgeUnmarshal(t, e, &ev)
+			if ev.Item != nil && ev.Item.Type == "function_call" {
+				toolDoneByCall[ev.Item.Id] = i
+			}
+		}
+	}
+
+	require.Contains(t, argsDoneByCall, "call_a")
+	require.Contains(t, argsDoneByCall, "call_b")
+	require.Contains(t, toolDoneByCall, "call_a")
+	require.Contains(t, toolDoneByCall, "call_b")
+
+	// Per-call invariant: args.done strictly precedes output_item.done.
+	assert.Less(t, argsDoneByCall["call_a"], toolDoneByCall["call_a"],
+		"call_a: args.done must precede output_item.done")
+	assert.Less(t, argsDoneByCall["call_b"], toolDoneByCall["call_b"],
+		"call_b: args.done must precede output_item.done")
+
+	// Cross-call invariant: neither call's output_item.done may precede the
+	// other call's args.done such that a stream consumer using a single
+	// arg-buffer-per-call accumulator would fire with the wrong call's args.
+	// In the bridge's HandleDone the tool-call terminals are emitted
+	// per-call, so we expect: call_a.args.done, call_a.output_item.done,
+	// call_b.args.done, call_b.output_item.done.
+	assert.Less(t, toolDoneByCall["call_a"], argsDoneByCall["call_b"],
+		"call_a's output_item.done should be emitted before call_b's args.done (interleave-safety)")
+
+	// Sanity check on arg content per call.
+	var aDone, bDone openai.ResponseAPIStreamEvent
+	bridgeUnmarshal(t, events[argsDoneByCall["call_a"]], &aDone)
+	bridgeUnmarshal(t, events[argsDoneByCall["call_b"]], &bDone)
+	assert.Equal(t, `{"x":1}`, aDone.Arguments)
+	assert.Equal(t, `{"y":2}`, bDone.Arguments)
+
+	var aItem, bItem openai.ResponseAPIStreamEvent
+	bridgeUnmarshal(t, events[toolDoneByCall["call_a"]], &aItem)
+	bridgeUnmarshal(t, events[toolDoneByCall["call_b"]], &bItem)
+	require.NotNil(t, aItem.Item)
+	require.NotNil(t, bItem.Item)
+	assert.Equal(t, `{"x":1}`, aItem.Item.Arguments)
+	assert.Equal(t, `{"y":2}`, bItem.Item.Arguments)
+}
+
+// TestChatToResponseStreamBridge_ToolCallWithEmptyArguments handles the legit
+// arg-less tool case: a function_call whose arguments are empty must still
+// produce well-ordered terminals (args.done with arguments="" then
+// output_item.done with item.arguments=""). The bridge must not panic.
+func TestChatToResponseStreamBridge_ToolCallWithEmptyArguments(t *testing.T) {
+	t.Parallel()
+	c, w := newBridgeTestContext(t)
+	bridge := newTestBridge(t, c)
+
+	// Tool call where the function takes no arguments — only the name+id arrive.
+	idx := 0
+	bridge.HandleChunk(c, &openai_compatible.ChatCompletionsStreamResponse{
+		Choices: []openai_compatible.ChatCompletionsStreamResponseChoice{
+			{
+				Delta: model.Message{
+					ToolCalls: []model.Tool{
+						{Id: "call_noop", Index: &idx, Function: &model.Function{Name: "noop"}},
+					},
+				},
+			},
+		},
+	})
+	bridge.HandleChunk(c, bridgeFinishChunk("tool_calls"))
+	bridge.HandleDone(c)
+
+	events := parseBridgeSSE(w.Body.String())
+
+	// args.done event must exist even for empty arguments.
+	argsDone := bridgeFindEvents(events, "response.function_call_arguments.done")
+	require.Len(t, argsDone, 1)
+	var argsDoneEv openai.ResponseAPIStreamEvent
+	bridgeUnmarshal(t, argsDone[0], &argsDoneEv)
+	assert.Equal(t, "call_noop", argsDoneEv.ItemId)
+	assert.Equal(t, "", argsDoneEv.Arguments)
+
+	// function_call output_item.done must follow and carry the same arguments.
+	argsDoneIdx, toolDoneIdx := -1, -1
+	for i, e := range events {
+		switch e.event {
+		case "response.function_call_arguments.done":
+			argsDoneIdx = i
+		case "response.output_item.done":
+			var ev openai.ResponseAPIStreamEvent
+			bridgeUnmarshal(t, e, &ev)
+			if ev.Item != nil && ev.Item.Type == "function_call" {
+				toolDoneIdx = i
+			}
+		}
+	}
+	require.NotEqual(t, -1, argsDoneIdx)
+	require.NotEqual(t, -1, toolDoneIdx)
+	assert.Less(t, argsDoneIdx, toolDoneIdx)
+
+	var doneEv openai.ResponseAPIStreamEvent
+	bridgeUnmarshal(t, events[toolDoneIdx], &doneEv)
+	require.NotNil(t, doneEv.Item)
+	assert.Equal(t, "function_call", doneEv.Item.Type)
+	assert.Equal(t, "", doneEv.Item.Arguments)
+	assert.Equal(t, "noop", doneEv.Item.Name)
+}
+
+// TestChatToResponseStreamBridge_ToolCallsPrecedeMessageOutputItemDone asserts
+// that all function_call terminals (args.done + output_item.done) are flushed
+// BEFORE the message item's output_item.done. This protects defensive
+// downstream agent parsers that watch *any* output_item.done event as a tool
+// dispatch trigger — previously, the message item.done fired first while tool
+// calls were still pending args.done, shipping empty args downstream.
+func TestChatToResponseStreamBridge_ToolCallsPrecedeMessageOutputItemDone(t *testing.T) {
+	t.Parallel()
+	c, w := newBridgeTestContext(t)
+	bridge := newTestBridge(t, c)
+
+	// Mix text + tool call so we exercise both message and function_call items.
+	bridge.HandleChunk(c, bridgeTextChunk("hi"))
+	bridge.HandleChunk(c, bridgeToolCallChunk("call_mix", 0, "do_thing", `{"k":"v"}`))
+	bridge.HandleChunk(c, bridgeFinishChunk("tool_calls"))
+	bridge.HandleDone(c)
+
+	events := parseBridgeSSE(w.Body.String())
+
+	toolDoneIdx, msgDoneIdx, argsDoneIdx := -1, -1, -1
+	for i, e := range events {
+		switch e.event {
+		case "response.function_call_arguments.done":
+			argsDoneIdx = i
+		case "response.output_item.done":
+			var ev openai.ResponseAPIStreamEvent
+			bridgeUnmarshal(t, e, &ev)
+			if ev.Item == nil {
+				continue
+			}
+			switch ev.Item.Type {
+			case "function_call":
+				toolDoneIdx = i
+			case "message":
+				msgDoneIdx = i
+			}
+		}
+	}
+
+	require.NotEqual(t, -1, argsDoneIdx, "args.done must be emitted")
+	require.NotEqual(t, -1, toolDoneIdx, "function_call output_item.done must be emitted")
+	require.NotEqual(t, -1, msgDoneIdx, "message output_item.done must be emitted")
+
+	assert.Less(t, argsDoneIdx, toolDoneIdx, "args.done must precede function_call output_item.done")
+	assert.Less(t, toolDoneIdx, msgDoneIdx,
+		"function_call terminals must be flushed BEFORE the message item's output_item.done so "+
+			"naive downstream parsers that trigger on any output_item.done observe complete args")
 }
 
 func TestChatToResponseStreamBridge_HandleDoneTerminalEvents(t *testing.T) {
@@ -922,6 +1214,113 @@ func TestChatToResponseStreamBridge_UpstreamDropWithoutDone(t *testing.T) {
 			}
 		}
 	}
+}
+
+// TestChatToResponseStreamBridge_ResponseCreatedHasOutputArray asserts that the very
+// first SSE event emitted by the bridge (response.created) carries "output":[] rather
+// than "output":null. This is the regression for strict OpenAI Python/TS SDK clients
+// — the bug fired on every bridged stream's initial event.
+func TestChatToResponseStreamBridge_ResponseCreatedHasOutputArray(t *testing.T) {
+	t.Parallel()
+	c, w := newBridgeTestContext(t)
+	bridge := newTestBridge(t, c)
+
+	bridge.ensureInitialized(c, &openai_compatible.ChatCompletionsStreamResponse{})
+
+	body := w.Body.String()
+	assert.NotContains(t, body, `"output":null`, "response.created event must never serialize output as null")
+
+	events := parseBridgeSSE(body)
+	created := bridgeFindEvents(events, "response.created")
+	require.Len(t, created, 1)
+
+	// Decode the data payload and inspect "response.output" raw bytes.
+	var envelope struct {
+		Response map[string]json.RawMessage `json:"response"`
+	}
+	require.NoError(t, json.Unmarshal(created[0].data, &envelope))
+	require.Contains(t, envelope.Response, "output", "response.created payload must include output field")
+	outputRaw := strings.TrimSpace(string(envelope.Response["output"]))
+	assert.Equal(t, "[]", outputRaw, "output must serialize as an empty JSON array")
+
+	// And via the typed accessor as a belt-and-braces check.
+	var ev openai.ResponseAPIStreamEvent
+	bridgeUnmarshal(t, created[0], &ev)
+	require.NotNil(t, ev.Response)
+	require.NotNil(t, ev.Response.Output, "Output must be a non-nil slice")
+	assert.Equal(t, 0, len(ev.Response.Output))
+}
+
+// TestChatToResponseStreamBridge_FullEmptyStreamEmitsOutputArray drives the bridge with
+// zero deltas (immediate HandleDone, simulating an upstream that emits [DONE] without
+// any content). Every emitted event whose payload includes "output" must have it as []
+// and never null.
+func TestChatToResponseStreamBridge_FullEmptyStreamEmitsOutputArray(t *testing.T) {
+	t.Parallel()
+	c, w := newBridgeTestContext(t)
+	bridge := newTestBridge(t, c)
+
+	ok, done := bridge.HandleDone(c)
+	require.True(t, ok)
+	require.True(t, done)
+
+	body := w.Body.String()
+	assert.NotContains(t, body, `"output":null`, "no event may serialize output as null")
+
+	events := parseBridgeSSE(body)
+	require.NotEmpty(t, events)
+
+	// Walk every event and, where "response.output" is present, require it to be [].
+	// On response.completed the bridge places the in-progress message item into
+	// response.output, so we only assert non-null (never null), not always empty.
+	sawCreated := false
+	sawCompleted := false
+	for _, e := range events {
+		var envelope struct {
+			Response map[string]json.RawMessage `json:"response,omitempty"`
+		}
+		if err := json.Unmarshal(e.data, &envelope); err != nil {
+			continue
+		}
+		raw, ok := envelope.Response["output"]
+		if !ok {
+			continue
+		}
+		trimmed := strings.TrimSpace(string(raw))
+		assert.NotEqual(t, "null", trimmed, "event %q must not emit output:null", e.event)
+
+		switch e.event {
+		case "response.created":
+			sawCreated = true
+			assert.Equal(t, "[]", trimmed, "response.created must emit output:[]")
+		case "response.completed":
+			sawCompleted = true
+			// The bridge always stages a message OutputItem on done, so this is a
+			// non-empty array; the only invariant we enforce here is "not null".
+			assert.True(t, strings.HasPrefix(trimmed, "["), "response.completed.output must be an array, got %q", trimmed)
+		}
+	}
+	assert.True(t, sawCreated, "expected to observe a response.created event")
+	assert.True(t, sawCompleted, "expected to observe a response.completed event")
+}
+
+// TestChatToResponseStreamBridge_BuildFinalResponseNilOutputDefaultsToEmptySlice
+// guards the buildFinalResponse seam: even if a future caller passes nil, the wire
+// response must still carry output:[] not output:null.
+func TestChatToResponseStreamBridge_BuildFinalResponseNilOutputDefaultsToEmptySlice(t *testing.T) {
+	t.Parallel()
+	c, _ := newBridgeTestContext(t)
+	bridge := newTestBridge(t, c)
+
+	resp := bridge.buildFinalResponse("completed", nil, nil)
+	require.NotNil(t, resp)
+	require.NotNil(t, resp.Output, "buildFinalResponse must coerce nil outputs to a non-nil slice")
+	assert.Equal(t, 0, len(resp.Output))
+
+	data, err := json.Marshal(resp)
+	require.NoError(t, err)
+	assert.Contains(t, string(data), `"output":[]`)
+	assert.NotContains(t, string(data), `"output":null`)
 }
 
 // TestChatToResponseStreamBridge_UpstreamDropWithFinishLength verifies that

@@ -6,11 +6,54 @@
   },
   "playground": {
     "actions": {
+      "assistant_message_options": "助手消息选项",
       "copy": "复制",
+      "copy_message": "复制消息",
+      "copy_response": "复制回复",
       "delete": "删除",
+      "delete_message": "删除消息",
+      "delete_response": "删除回复",
       "edit": "编辑",
+      "edit_message": "编辑消息",
+      "edit_response": "编辑回复",
       "message_options": "消息选项",
-      "retry": "重试"
+      "regenerate_response": "重新生成回复",
+      "retry": "重试",
+      "user_message_options": "用户消息选项"
+    },
+    "attachments": {
+      "add_images": "添加图片",
+      "attach_images": "附加图片",
+      "attached_image_alt": "已附加图片",
+      "count": "{{count}}/{{max}} 张图片",
+      "delete_image": "删除图片",
+      "finalizing": "正在完成...",
+      "info": "支持：JPG、PNG、GIF、WebP - 每张最大 5MB - 最多 {{max}} 张图片",
+      "notifications": {
+        "all_processing_failed_message": "无法处理 {{file}}。请尝试其他图片或联系支持。",
+        "all_processing_failed_title": "所有处理方式均失败",
+        "image_processing_failed_message": "处理 {{file}} 失败：{{message}}",
+        "image_processing_failed_title": "图片处理失败",
+        "mobile_processing_failed_message": "在移动端处理 {{file}} 失败：{{message}}",
+        "mobile_processing_failed_title": "移动端处理失败"
+      },
+      "optimizing": "正在优化 {{progress}}%",
+      "processing": "正在处理 {{progress}}%",
+      "remove_image": "移除图片",
+      "validation": {
+        "dismiss_error": "关闭错误",
+        "extension_unsupported": "不支持该文件扩展名。支持格式：{{formats}}",
+        "file_type_unsupported": "不支持文件类型“{{type}}”。请选择图片文件。",
+        "limit_exceeded": "最多允许 {{max}} 张图片。请先移除一些图片再添加。",
+        "limit_skipped": "最多允许 {{max}} 张图片。已跳过此文件。",
+        "multiple_errors": "{{count}} 个文件验证错误：",
+        "processing_error": "处理图片时发生错误，请重试。",
+        "single_error": "文件验证错误：",
+        "size_exceeded": "文件大小（{{size}}MB）超过 5MB 限制。请压缩或调整图片大小。",
+        "tip": "提示：可以点击每张卡片上的关闭按钮来关闭这些错误。",
+        "unknown_error": "未知错误",
+        "unknown_type": "未知"
+      }
     },
     "chat": {
       "clear": "清除",
@@ -47,10 +90,13 @@
       "title": "删除 {{role}} 消息"
     },
     "edit": {
+      "attachment_alt": "附件 {{index}}",
       "attachments_hint": "您可以将鼠标悬停在附件上并点击 × 按钮来删除单个附件。",
       "attachments_label": "消息附件 ({{count}})",
       "cancel": "取消",
       "content_label": "{{role}} 消息内容",
+      "content_placeholder": "输入{{role}}消息内容...",
+      "delete_attachment": "删除附件",
       "description": "修改消息内容。您可以使用 \u003c1\u003eCtrl+Enter\u003c/1\u003e 保存或 \u003c3\u003eEsc\u003c/3\u003e 取消。",
       "save": "保存更改",
       "shortcuts": {
@@ -143,8 +189,10 @@
         "options": {
           "high": "高",
           "low": "低",
+          "max": "最高",
           "medium": "中",
-          "none": "无"
+          "none": "无",
+          "xhigh": "极高"
         }
       },
       "show_reasoning": {
@@ -187,6 +235,55 @@
         "description": "核采样: 0.1 = 专注, 1.0 = 多样",
         "label": "Top P"
       }
+    },
+    "realtime": {
+      "assistant": "助手",
+      "audio": "音频",
+      "clear_events": "清除",
+      "connect": "连接",
+      "connected": "已连接",
+      "connecting": "连接中...",
+      "connection_closed": "连接已关闭",
+      "connection_error": "连接错误",
+      "conversation": "对话",
+      "description": "通过 WebSocket 连接测试 OpenAI Realtime API",
+      "disconnect": "断开",
+      "disconnected": "未连接",
+      "error_connect": "连接失败，请检查令牌和模型设置。",
+      "error_send": "无法发送消息，未连接。",
+      "event_log": "事件日志",
+      "events": "事件",
+      "input_tokens": "输入 tokens",
+      "instructions": "指令",
+      "modalities": "模态",
+      "model": "模型",
+      "no_messages": "暂无消息。请连接后发送消息开始对话。",
+      "no_models": "该令牌下没有可用的实时模型。",
+      "no_tokens": "暂无可用令牌，请先创建令牌。",
+      "output_tokens": "输出 tokens",
+      "placeholder": "输入消息...",
+      "received": "已接收",
+      "select_model": "选择模型",
+      "select_token": "选择令牌",
+      "send": "发送",
+      "sent": "已发送",
+      "session_created": "会话已创建",
+      "session_instructions_placeholder": "可选：输入会话系统指令...",
+      "settings": "设置",
+      "system": "系统",
+      "text": "文本",
+      "title": "实时对话 Playground",
+      "token": "令牌",
+      "total_tokens": "总 tokens",
+      "usage": "用量",
+      "user": "你",
+      "voice": "语音"
+    },
+    "reasoning": {
+      "chars": "{{count}} 个字符",
+      "processing": "正在处理...",
+      "streaming": "正在推理...",
+      "title": "推理过程"
     },
     "roles": {
       "assistant": "助手",

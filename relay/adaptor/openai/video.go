@@ -11,17 +11,16 @@ import (
 	"github.com/Laisky/zap"
 	"github.com/gin-gonic/gin"
 
-	"github.com/songquanpeng/one-api/common/ctxkey"
-	dbmodel "github.com/songquanpeng/one-api/model"
-	metalib "github.com/songquanpeng/one-api/relay/meta"
-	relaymodel "github.com/songquanpeng/one-api/relay/model"
+	"github.com/Laisky/one-api/common/ctxkey"
+	dbmodel "github.com/Laisky/one-api/model"
+	metalib "github.com/Laisky/one-api/relay/meta"
+	relaymodel "github.com/Laisky/one-api/relay/model"
 )
 
-const maxLoggedVideoBytes = 64 * 1024
 const videoTaskType = "video"
 
 // VideoHandler forwards OpenAI video responses (JSON job metadata or binary content) unchanged to the caller.
-// It logs the upstream payload for diagnostics and surfaces provider errors without altering the body.
+// It logs only payload shape metadata and surfaces provider errors without altering the body.
 func VideoHandler(c *gin.Context, resp *http.Response) (*relaymodel.ErrorWithStatusCode, *relaymodel.Usage) {
 	logger := gmw.GetLogger(c)
 
@@ -33,15 +32,14 @@ func VideoHandler(c *gin.Context, resp *http.Response) (*relaymodel.ErrorWithSta
 		return ErrorWrapper(err, "close_response_body_failed", http.StatusInternalServerError), nil
 	}
 
-	logFields := []zap.Field{zap.Int("body_bytes", len(body))}
+	logFields := []zap.Field{
+		zap.Int("body_bytes", len(body)),
+		zap.Bool("body_logging_suppressed", true),
+	}
 	if len(body) == 0 {
 		logger.Debug("video handler upstream response empty", logFields...)
-	} else if len(body) <= maxLoggedVideoBytes {
-		logFields = append(logFields, zap.ByteString("body", body))
-		logger.Debug("video handler upstream response", logFields...)
 	} else {
-		logFields = append(logFields, zap.ByteString("body_preview", body[:maxLoggedVideoBytes]))
-		logger.Debug("video handler upstream response truncated", logFields...)
+		logger.Debug("video handler upstream response", logFields...)
 	}
 
 	var maybeError struct {
@@ -60,7 +58,7 @@ func VideoHandler(c *gin.Context, resp *http.Response) (*relaymodel.ErrorWithSta
 	}
 
 	if resp.StatusCode < http.StatusBadRequest && c.Request.Method == http.MethodPost {
-		persistAsyncVideoTask(c, body)
+		PersistAsyncVideoTask(c, body)
 	}
 
 	resp.Body = io.NopCloser(bytes.NewReader(body))
@@ -82,7 +80,11 @@ func VideoHandler(c *gin.Context, resp *http.Response) (*relaymodel.ErrorWithSta
 	return nil, nil
 }
 
-func persistAsyncVideoTask(c *gin.Context, body []byte) {
+// PersistAsyncVideoTask binds an async video-generation task id to the channel
+// that created it, so follow-up status/content requests can be pinned to the
+// original upstream. It is exported for reuse by provider-specific video
+// handlers (e.g. zhipu) whose responses carry the same {id} task envelope.
+func PersistAsyncVideoTask(c *gin.Context, body []byte) {
 	if c == nil || len(body) == 0 {
 		return
 	}
@@ -128,8 +130,11 @@ func persistAsyncVideoTask(c *gin.Context, body []byte) {
 		TaskID:        taskID,
 		TaskType:      videoTaskType,
 		UserID:        metaInfo.UserId,
+		UserUUID:      dbmodel.StringPtrIfNotEmpty(metaInfo.UserUUID),
 		TokenID:       metaInfo.TokenId,
+		TokenUUID:     dbmodel.StringPtrIfNotEmpty(metaInfo.TokenUUID),
 		ChannelID:     metaInfo.ChannelId,
+		ChannelUUID:   dbmodel.StringPtrIfNotEmpty(metaInfo.ChannelUUID),
 		ChannelType:   metaInfo.ChannelType,
 		OriginModel:   metaInfo.OriginModelName,
 		ActualModel:   metaInfo.ActualModelName,

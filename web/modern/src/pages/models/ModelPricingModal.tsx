@@ -1,7 +1,9 @@
 import { Badge } from '@/components/ui/badge';
+import { CopyButton } from '@/components/ui/copy-button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Separator } from '@/components/ui/separator';
 import { useResponsive } from '@/hooks/useResponsive';
+import { formatTierThreshold } from '@/pages/models/tier-threshold';
 import { X } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
@@ -16,12 +18,27 @@ export interface ModelDisplayData {
   cache_write_1h_price?: number;
   output_price: number;
   max_tokens?: number;
+  context_length?: number;
+  max_output_tokens?: number;
+  input_modalities?: string[];
+  output_modalities?: string[];
+  supported_features?: string[];
+  supported_sampling_parameters?: string[];
+  max_reasoning_tokens?: number;
+  supported_reasoning_efforts?: string[];
+  default_reasoning_effort?: string;
+  quantization?: string;
+  hugging_face_id?: string;
+  description?: string;
   image_price?: number;
   tiers?: TierData[];
   video_pricing?: VideoPricingData;
   audio_pricing?: AudioPricingData;
   image_pricing?: ImagePricingData;
   embedding_pricing?: EmbeddingPricingData;
+  per_call_pricing?: PerCallPricingData;
+  time_windows?: TimeWindowData[];
+  active_time_window?: string;
 }
 
 interface TierData {
@@ -31,6 +48,7 @@ interface TierData {
   cache_write_5m_price?: number;
   cache_write_1h_price?: number;
   input_token_threshold: number;
+  output_token_threshold?: number;
 }
 
 interface VideoPricingData {
@@ -70,6 +88,35 @@ interface EmbeddingPricingData {
   usd_per_document_page?: number;
 }
 
+interface PerCallPricingData {
+  usd_per_thousand_calls?: number;
+  usd_per_call?: number;
+}
+
+interface TimeWindowData {
+  name?: string;
+  timezone?: string;
+  ranges: { start: string; end: string }[];
+  days_of_week?: number[];
+  date_from?: string;
+  date_to?: string;
+  overlay: TimeWindowOverlayData;
+}
+
+interface TimeWindowOverlayData {
+  input_price?: number;
+  cached_input_price?: number;
+  cache_write_5m_price?: number;
+  cache_write_1h_price?: number;
+  output_price?: number;
+  tiers?: TierData[];
+  video_pricing?: VideoPricingData;
+  audio_pricing?: AudioPricingData;
+  image_pricing?: ImagePricingData;
+  embedding_pricing?: EmbeddingPricingData;
+  per_call_pricing?: PerCallPricingData;
+}
+
 // ---- Props ----
 
 interface ModelPricingModalProps {
@@ -82,19 +129,37 @@ interface ModelPricingModalProps {
 
 // ---- Component ----
 
+/**
+ * ModelPricingModal renders detailed pricing and metadata for a selected model
+ * and exposes a copy action for the model name in desktop and mobile headers.
+ */
 export function ModelPricingModal({ open, onOpenChange, modelName, data, channelName }: ModelPricingModalProps) {
   const { isMobile } = useResponsive();
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const tr = useCallback(
     (key: string, defaultValue: string, options?: Record<string, unknown>) => t(`models.detail.${key}`, { defaultValue, ...options }),
     [t]
   );
+  const closeLabel = tr('close', 'Close');
+  const copyModelLabel = tr('copy_model_name', 'Copy model name');
+  const copyModelSuccess = tr('model_name_copied', 'Model name copied');
+  const modelTitle = (
+    <span className="inline-flex min-w-0 max-w-full items-center gap-2">
+      <span className="min-w-0 truncate font-mono">{modelName}</span>
+      <CopyButton
+        text={modelName}
+        label={copyModelLabel}
+        successMessage={copyModelSuccess}
+        className="h-7 w-7 shrink-0 p-0"
+      />
+    </span>
+  );
 
-  const content = <PricingContent modelName={modelName} data={data} channelName={channelName} tr={tr} />;
+  const content = <PricingContent modelName={modelName} data={data} channelName={channelName} tr={tr} locale={i18n.language} />;
 
   if (isMobile) {
     return (
-      <MobileBottomSheet open={open} onClose={() => onOpenChange(false)} title={modelName} subtitle={channelName}>
+      <MobileBottomSheet open={open} onClose={() => onOpenChange(false)} title={modelTitle} subtitle={channelName} closeLabel={closeLabel}>
         {content}
       </MobileBottomSheet>
     );
@@ -104,7 +169,7 @@ export function ModelPricingModal({ open, onOpenChange, modelName, data, channel
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="font-mono text-base">{modelName}</DialogTitle>
+          <DialogTitle className="text-base">{modelTitle}</DialogTitle>
           <DialogDescription>{channelName}</DialogDescription>
         </DialogHeader>
         {content}
@@ -115,17 +180,23 @@ export function ModelPricingModal({ open, onOpenChange, modelName, data, channel
 
 // ---- Mobile bottom sheet ----
 
+/**
+ * MobileBottomSheet renders the mobile pricing sheet with drag-to-close and
+ * keyboard-close interactions, returning its content through a portal.
+ */
 function MobileBottomSheet({
   open,
   onClose,
   title,
   subtitle,
+  closeLabel,
   children,
 }: {
   open: boolean;
   onClose: () => void;
-  title: string;
+  title: React.ReactNode;
   subtitle?: string;
+  closeLabel: string;
   children: React.ReactNode;
 }) {
   const sheetRef = useRef<HTMLDivElement>(null);
@@ -250,12 +321,12 @@ function MobileBottomSheet({
           {/* Header */}
           <div className="flex items-start justify-between px-4 pb-3 border-b">
             <div className="min-w-0 flex-1 pr-3">
-              <h2 id="mobile-sheet-title" className="font-mono text-sm font-semibold truncate">
+              <h2 id="mobile-sheet-title" className="text-sm font-semibold">
                 {title}
               </h2>
               {subtitle && <p className="text-xs text-muted-foreground truncate">{subtitle}</p>}
             </div>
-            <button onClick={onClose} className="shrink-0 rounded-full p-1.5 hover:bg-muted transition-colors" aria-label="Close">
+            <button onClick={onClose} className="shrink-0 rounded-full p-1.5 hover:bg-muted transition-colors" aria-label={closeLabel}>
               <X className="h-4 w-4" />
             </button>
           </div>
@@ -277,26 +348,171 @@ function PricingContent({
   data,
   channelName: _channelName,
   tr,
+  locale,
 }: {
   modelName: string;
   data: ModelDisplayData;
   channelName: string;
   tr: TrFn;
+  locale: string;
 }) {
   const hasCache =
     (data.cached_input_price !== undefined && data.cached_input_price !== data.input_price) ||
     (data.cache_write_5m_price !== undefined && data.cache_write_5m_price > 0) ||
     (data.cache_write_1h_price !== undefined && data.cache_write_1h_price > 0);
+  const hasMetadata =
+    (data.description && data.description.trim().length > 0) ||
+    (data.context_length !== undefined && data.context_length > 0) ||
+    (data.max_output_tokens !== undefined && data.max_output_tokens > 0) ||
+    (data.max_tokens !== undefined && data.max_tokens > 0) ||
+    (data.max_reasoning_tokens !== undefined && data.max_reasoning_tokens > 0) ||
+    (data.default_reasoning_effort && data.default_reasoning_effort.trim().length > 0) ||
+    (data.quantization && data.quantization.trim().length > 0) ||
+    (data.hugging_face_id && data.hugging_face_id.trim().length > 0) ||
+    (data.input_modalities && data.input_modalities.length > 0) ||
+    (data.output_modalities && data.output_modalities.length > 0) ||
+    (data.supported_features && data.supported_features.length > 0) ||
+    (data.supported_sampling_parameters && data.supported_sampling_parameters.length > 0) ||
+    (data.supported_reasoning_efforts && data.supported_reasoning_efforts.length > 0);
 
   return (
     <div className="space-y-5">
-      {/* Base text token pricing */}
-      <PricingSection title={tr('text_tokens', 'Text Token Pricing')} icon="text">
-        <PriceGrid>
-          <PriceCell label={tr('input', 'Input')} sublabel={tr('per_1m', 'per 1M tokens')} value={data.input_price} tr={tr} />
-          <PriceCell label={tr('output', 'Output')} sublabel={tr('per_1m', 'per 1M tokens')} value={data.output_price} tr={tr} />
-        </PriceGrid>
-      </PricingSection>
+      {/* General model metadata */}
+      {hasMetadata && (
+        <PricingSection title={tr('model_profile', 'Model Profile')} icon="profile">
+          <div className="space-y-3">
+            {data.description && data.description.trim().length > 0 && (
+              <div className="rounded-lg border bg-muted/30 p-3 text-sm leading-relaxed text-foreground/90">{data.description}</div>
+            )}
+
+            <PriceGrid>
+              {data.context_length !== undefined && data.context_length > 0 && (
+                <div className="rounded-lg border bg-muted/30 p-3">
+                  <div className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
+                    {tr('context_length', 'Context Length')}
+                  </div>
+                  <div className="mt-1 text-lg font-semibold tabular-nums">{formatTokenCountFull(data.context_length)}</div>
+                </div>
+              )}
+              {data.max_output_tokens !== undefined && data.max_output_tokens > 0 && (
+                <div className="rounded-lg border bg-muted/30 p-3">
+                  <div className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
+                    {tr('max_output_tokens', 'Max Output Tokens')}
+                  </div>
+                  <div className="mt-1 text-lg font-semibold tabular-nums">{formatTokenCountFull(data.max_output_tokens)}</div>
+                </div>
+              )}
+              {data.max_tokens !== undefined && data.max_tokens > 0 && (
+                <div className="rounded-lg border bg-muted/30 p-3">
+                  <div className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
+                    {tr('max_tokens', 'Max Tokens')}
+                  </div>
+                  <div className="mt-1 text-lg font-semibold tabular-nums">{formatTokenCountFull(data.max_tokens)}</div>
+                </div>
+              )}
+              {data.max_reasoning_tokens !== undefined && data.max_reasoning_tokens > 0 && (
+                <div className="rounded-lg border bg-muted/30 p-3">
+                  <div className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
+                    {tr('max_reasoning_tokens', 'Max Reasoning Tokens')}
+                  </div>
+                  <div className="mt-1 text-lg font-semibold tabular-nums">{formatTokenCountFull(data.max_reasoning_tokens)}</div>
+                </div>
+              )}
+              {data.default_reasoning_effort && data.default_reasoning_effort.trim().length > 0 && (
+                <div className="rounded-lg border bg-muted/30 p-3">
+                  <div className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
+                    {tr('default_reasoning_effort', 'Default Reasoning Effort')}
+                  </div>
+                  <div className="mt-1 text-lg font-semibold tabular-nums capitalize">{data.default_reasoning_effort}</div>
+                </div>
+              )}
+              {data.quantization && data.quantization.trim().length > 0 && (
+                <div className="rounded-lg border bg-muted/30 p-3">
+                  <div className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
+                    {tr('quantization', 'Quantization')}
+                  </div>
+                  <div className="mt-1 text-lg font-semibold tabular-nums">{data.quantization}</div>
+                </div>
+              )}
+            </PriceGrid>
+
+            {data.hugging_face_id && data.hugging_face_id.trim().length > 0 && (
+              <div className="rounded-lg border bg-muted/30 p-3">
+                <div className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
+                  {tr('hugging_face_id', 'HuggingFace ID')}
+                </div>
+                <div className="mt-1 font-mono text-xs break-all">{data.hugging_face_id}</div>
+              </div>
+            )}
+
+            {(data.input_modalities && data.input_modalities.length > 0) ||
+            (data.output_modalities && data.output_modalities.length > 0) ||
+            (data.supported_features && data.supported_features.length > 0) ||
+            (data.supported_sampling_parameters && data.supported_sampling_parameters.length > 0) ||
+            (data.supported_reasoning_efforts && data.supported_reasoning_efforts.length > 0) ? (
+              <div className="space-y-2">
+                {data.input_modalities && data.input_modalities.length > 0 && (
+                  <TagRow label={tr('input_modalities', 'Input Modalities')} values={data.input_modalities} />
+                )}
+                {data.output_modalities && data.output_modalities.length > 0 && (
+                  <TagRow label={tr('output_modalities', 'Output Modalities')} values={data.output_modalities} />
+                )}
+                {data.supported_features && data.supported_features.length > 0 && (
+                  <TagRow label={tr('supported_features', 'Supported Features')} values={data.supported_features} />
+                )}
+                {data.supported_reasoning_efforts && data.supported_reasoning_efforts.length > 0 && (
+                  <TagRow
+                    label={tr('supported_reasoning_efforts', 'Supported Reasoning Efforts')}
+                    values={data.supported_reasoning_efforts}
+                  />
+                )}
+                {data.supported_sampling_parameters && data.supported_sampling_parameters.length > 0 && (
+                  <TagRow
+                    label={tr('supported_sampling_parameters', 'Supported Sampling Parameters')}
+                    values={data.supported_sampling_parameters}
+                  />
+                )}
+              </div>
+            ) : null}
+          </div>
+        </PricingSection>
+      )}
+
+      {/* Base text token pricing — hidden for flat per-call billing models */}
+      {!data.per_call_pricing && (
+        <PricingSection title={tr('text_tokens', 'Text Token Pricing')} icon="text">
+          <PriceGrid>
+            <PriceCell label={tr('input', 'Input')} sublabel={tr('per_1m', 'per 1M tokens')} value={data.input_price} tr={tr} />
+            <PriceCell label={tr('output', 'Output')} sublabel={tr('per_1m', 'per 1M tokens')} value={data.output_price} tr={tr} />
+          </PriceGrid>
+        </PricingSection>
+      )}
+
+      {/* Per-call pricing — flat per-invocation billing (e.g. rerank) */}
+      {data.per_call_pricing && (data.per_call_pricing.usd_per_thousand_calls || data.per_call_pricing.usd_per_call) ? (
+        <PricingSection title={tr('per_call_pricing', 'Per-Call Pricing')} icon="text">
+          <PriceGrid>
+            {data.per_call_pricing.usd_per_thousand_calls !== undefined && data.per_call_pricing.usd_per_thousand_calls > 0 && (
+              <PriceCell
+                label={tr('base_rate', 'Base Rate')}
+                sublabel={tr('per_1k_calls', 'per 1K calls')}
+                value={data.per_call_pricing.usd_per_thousand_calls}
+                tr={tr}
+                raw
+              />
+            )}
+            {data.per_call_pricing.usd_per_call !== undefined && data.per_call_pricing.usd_per_call > 0 && (
+              <PriceCell
+                label={tr('per_call_label', 'Per Call')}
+                sublabel={tr('per_call', 'per call')}
+                value={data.per_call_pricing.usd_per_call}
+                tr={tr}
+                raw
+              />
+            )}
+          </PriceGrid>
+        </PricingSection>
+      ) : null}
 
       {/* Cache pricing */}
       {hasCache && (
@@ -327,6 +543,165 @@ function PricingContent({
               />
             )}
           </PriceGrid>
+        </PricingSection>
+      )}
+
+      {/* Time-of-day pricing */}
+      {data.time_windows && data.time_windows.length > 0 && (
+        <PricingSection title={tr('time_pricing', 'Time-of-day Pricing')} icon="time">
+          <div className="space-y-3">
+            {data.time_windows.map((window, index) => {
+              const label = window.name || `${tr('window_name', 'Window')} ${index + 1}`;
+              const isActive = data.active_time_window && window.name === data.active_time_window;
+              return (
+                <div key={`${label}-${index}`} className="rounded-lg border bg-muted/20 p-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="font-medium">{label}</div>
+                    {isActive && (
+                      <Badge variant="secondary" className="text-xs">
+                        {tr('window_active', 'Active now')}
+                      </Badge>
+                    )}
+                  </div>
+                  <div className="mt-2 flex flex-wrap gap-1.5 text-xs text-muted-foreground">
+                    <Badge variant="outline" className="font-mono text-[11px]">
+                      {formatWindowSchedule(window, locale)}
+                    </Badge>
+                    <Badge variant="outline" className="text-[11px]">
+                      {tr('window_timezone', 'Timezone')}: {window.timezone || 'UTC'}
+                    </Badge>
+                    {window.days_of_week && window.days_of_week.length > 0 && (
+                      <Badge variant="outline" className="text-[11px]">
+                        {tr('window_days', 'Days')}: {formatWeekdays(window.days_of_week, tr)}
+                      </Badge>
+                    )}
+                    {(window.date_from || window.date_to) && (
+                      <Badge variant="outline" className="text-[11px]">
+                        {tr('window_dates', 'Dates')}: {window.date_from || '...'} - {window.date_to || '...'}
+                      </Badge>
+                    )}
+                  </div>
+                  <div className="mt-3">
+                    <PriceGrid>
+                      {window.overlay.input_price !== undefined && window.overlay.input_price > 0 && (
+                        <PriceCell
+                          label={tr('input', 'Input')}
+                          sublabel={tr('per_1m', 'per 1M tokens')}
+                          value={window.overlay.input_price}
+                          tr={tr}
+                        />
+                      )}
+                      {window.overlay.output_price !== undefined && window.overlay.output_price > 0 && (
+                        <PriceCell
+                          label={tr('output', 'Output')}
+                          sublabel={tr('per_1m', 'per 1M tokens')}
+                          value={window.overlay.output_price}
+                          tr={tr}
+                        />
+                      )}
+                      {window.overlay.cached_input_price !== undefined && window.overlay.cached_input_price > 0 && (
+                        <PriceCell
+                          label={tr('cached_read', 'Cache Read')}
+                          sublabel={tr('per_1m', 'per 1M tokens')}
+                          value={window.overlay.cached_input_price}
+                          tr={tr}
+                        />
+                      )}
+                      {window.overlay.cache_write_5m_price !== undefined && window.overlay.cache_write_5m_price > 0 && (
+                        <PriceCell
+                          label={tr('cache_write_5m', '5-min Cache Write')}
+                          sublabel={tr('per_1m', 'per 1M tokens')}
+                          value={window.overlay.cache_write_5m_price}
+                          tr={tr}
+                        />
+                      )}
+                      {window.overlay.cache_write_1h_price !== undefined && window.overlay.cache_write_1h_price > 0 && (
+                        <PriceCell
+                          label={tr('cache_write_1h', '1-hour Cache Write')}
+                          sublabel={tr('per_1m', 'per 1M tokens')}
+                          value={window.overlay.cache_write_1h_price}
+                          tr={tr}
+                        />
+                      )}
+                      {window.overlay.per_call_pricing?.usd_per_thousand_calls !== undefined &&
+                        window.overlay.per_call_pricing.usd_per_thousand_calls > 0 && (
+                          <PriceCell
+                            label={tr('per_call_pricing', 'Per-call Pricing')}
+                            sublabel={tr('per_1k_calls', 'per 1K calls')}
+                            value={window.overlay.per_call_pricing.usd_per_thousand_calls}
+                            tr={tr}
+                            raw
+                          />
+                        )}
+                      {window.overlay.image_pricing?.price_per_image_usd !== undefined &&
+                        window.overlay.image_pricing.price_per_image_usd > 0 && (
+                          <PriceCell
+                            label={tr('image_pricing', 'Image Pricing')}
+                            sublabel={tr('per_image', 'per image')}
+                            value={window.overlay.image_pricing.price_per_image_usd}
+                            tr={tr}
+                            raw
+                          />
+                        )}
+                      {window.overlay.video_pricing?.per_second_usd !== undefined && window.overlay.video_pricing.per_second_usd > 0 && (
+                        <PriceCell
+                          label={tr('video_pricing', 'Video Pricing')}
+                          sublabel={tr('per_second', 'per second')}
+                          value={window.overlay.video_pricing.per_second_usd}
+                          tr={tr}
+                          raw
+                        />
+                      )}
+                      {window.overlay.audio_pricing?.usd_per_second !== undefined && window.overlay.audio_pricing.usd_per_second > 0 && (
+                        <PriceCell
+                          label={tr('audio_pricing', 'Audio Pricing')}
+                          sublabel={tr('per_second', 'per second')}
+                          value={window.overlay.audio_pricing.usd_per_second}
+                          tr={tr}
+                          raw
+                        />
+                      )}
+                      {window.overlay.embedding_pricing?.text_token_price !== undefined &&
+                        window.overlay.embedding_pricing.text_token_price > 0 && (
+                          <PriceCell
+                            label={tr('text_tokens', 'Text Token Pricing')}
+                            sublabel={tr('per_1m', 'per 1M tokens')}
+                            value={window.overlay.embedding_pricing.text_token_price}
+                            tr={tr}
+                          />
+                        )}
+                    </PriceGrid>
+                    {window.overlay.tiers && window.overlay.tiers.length > 0 && (
+                      <div className="mt-3 overflow-x-auto">
+                        <table className="w-full text-xs">
+                          <thead>
+                            <tr className="border-b text-muted-foreground">
+                              <th className="py-1.5 pr-3 text-left font-medium">{tr('tier_threshold', 'Threshold')}</th>
+                              <th className="px-3 py-1.5 text-left font-medium">{tr('input', 'Input')}</th>
+                              <th className="px-3 py-1.5 text-left font-medium">{tr('output', 'Output')}</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {window.overlay.tiers.map((tier, tierIndex) => (
+                              <tr key={tierIndex} className="border-b border-dashed last:border-0">
+                                <td className="py-1.5 pr-3">
+                                  <Badge variant="outline" className="text-[11px]">
+                                    {formatTierThreshold(tier, tr('input', 'Input'), tr('output', 'Output'))}
+                                  </Badge>
+                                </td>
+                                <td className="px-3 py-1.5 font-mono">{formatUsd(tier.input_price)}</td>
+                                <td className="px-3 py-1.5 font-mono">{formatUsd(tier.output_price)}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </PricingSection>
       )}
 
@@ -363,7 +738,7 @@ function PricingContent({
                   <tr key={i} className="border-b border-dashed last:border-0">
                     <td className="py-2 pr-3">
                       <Badge variant="outline" className="text-xs">
-                        &ge; {formatTokenCount(tier.input_token_threshold)}
+                        {formatTierThreshold(tier, tr('input', 'Input'), tr('output', 'Output'))}
                       </Badge>
                     </td>
                     <td className="py-2 px-3 font-mono text-sm">{formatUsd(tier.input_price)}</td>
@@ -436,6 +811,7 @@ function PricingContent({
                 data={data.image_pricing.size_multipliers}
                 basePrice={data.image_pricing.price_per_image_usd}
                 label={tr('size', 'Size')}
+                tr={tr}
               />
             )}
 
@@ -447,6 +823,7 @@ function PricingContent({
                 data={data.image_pricing.quality_multipliers}
                 basePrice={data.image_pricing.price_per_image_usd}
                 label={tr('quality', 'Quality')}
+                tr={tr}
               />
             )}
         </PricingSection>
@@ -477,6 +854,7 @@ function PricingContent({
                 data={data.video_pricing.resolution_multipliers}
                 basePrice={data.video_pricing.per_second_usd}
                 label={tr('resolution', 'Resolution')}
+                tr={tr}
                 unit={tr('per_second', 'per second')}
               />
             </div>
@@ -613,9 +991,11 @@ function PricingContent({
 // ---- Reusable sub-components ----
 
 const sectionIcons: Record<string, string> = {
+  profile: '\u{1F9ED}',
   text: '\u{1F4DD}',
   cache: '\u{1F4BE}',
   tiers: '\u{1F4CA}',
+  time: '\u{23F1}',
   image: '\u{1F5BC}',
   video: '\u{1F3AC}',
   audio: '\u{1F3B5}',
@@ -646,6 +1026,25 @@ function PriceCell({ label, sublabel, value, tr, raw }: { label: string; sublabe
       <div className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">{label}</div>
       {sublabel && <div className="text-[10px] text-muted-foreground/70">{sublabel}</div>}
       <div className="mt-1 text-lg font-semibold tabular-nums">{raw ? formatUsdRaw(value) : formatUsdForTokens(value, tr)}</div>
+    </div>
+  );
+}
+
+function TagRow({ label, values }: { label: string; values: string[] }) {
+  const normalized = values.map((value) => value.trim()).filter((value, idx, arr) => value.length > 0 && arr.indexOf(value) === idx);
+  if (normalized.length === 0) {
+    return null;
+  }
+  return (
+    <div className="rounded-lg border bg-muted/20 p-2.5">
+      <div className="mb-2 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">{label}</div>
+      <div className="flex flex-wrap gap-1.5">
+        {normalized.map((value) => (
+          <Badge key={value} variant="outline" className="font-mono text-[11px]">
+            {value}
+          </Badge>
+        ))}
+      </div>
     </div>
   );
 }
@@ -713,11 +1112,13 @@ function SimpleMultiplierTable({
   data,
   basePrice,
   label,
+  tr,
   unit: _unit,
 }: {
   data: Record<string, number>;
   basePrice?: number;
   label: string;
+  tr: TrFn;
   unit?: string;
 }) {
   const entries = Object.entries(data).sort(([, a], [, b]) => a - b);
@@ -727,8 +1128,8 @@ function SimpleMultiplierTable({
         <thead>
           <tr className="border-b text-muted-foreground">
             <th className="text-left py-1.5 pr-3 font-medium">{label}</th>
-            <th className="text-right py-1.5 px-3 font-medium">Multiplier</th>
-            {basePrice !== undefined && basePrice > 0 && <th className="text-right py-1.5 pl-3 font-medium">Price</th>}
+            <th className="text-right py-1.5 px-3 font-medium">{tr('multiplier', 'Multiplier')}</th>
+            {basePrice !== undefined && basePrice > 0 && <th className="text-right py-1.5 pl-3 font-medium">{tr('price', 'Price')}</th>}
           </tr>
         </thead>
         <tbody>
@@ -777,4 +1178,33 @@ function formatTokenCount(count: number): string {
   if (count >= 1_000_000) return `${(count / 1_000_000).toFixed(1)}M`;
   if (count >= 1_000) return `${(count / 1_000).toFixed(0)}K`;
   return count.toString();
+}
+
+function formatTokenCountFull(count: number): string {
+  return count.toLocaleString();
+}
+
+function formatWindowSchedule(window: TimeWindowData, locale: string): string {
+  return window.ranges.map((range) => `${formatClockTime(range.start, locale)}-${formatClockTime(range.end, locale)}`).join(', ');
+}
+
+function formatClockTime(value: string, locale: string): string {
+  const match = /^(\d{2}):(\d{2})$/.exec(value);
+  if (!match) {
+    return value;
+  }
+  const date = new Date(Date.UTC(2026, 0, 1, Number(match[1]), Number(match[2])));
+  return new Intl.DateTimeFormat(locale || undefined, {
+    hour: 'numeric',
+    minute: '2-digit',
+    timeZone: 'UTC',
+  }).format(date);
+}
+
+function formatWeekdays(days: number[], tr: TrFn): string {
+  return days.map((day) => tr(`weekday_${day}`, weekdayFallback(day))).join(', ');
+}
+
+function weekdayFallback(day: number): string {
+  return ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][day] || String(day);
 }

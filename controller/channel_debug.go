@@ -2,31 +2,26 @@ package controller
 
 import (
 	"net/http"
-	"strconv"
 
+	"github.com/Laisky/errors/v2"
 	"github.com/gin-gonic/gin"
 
-	"github.com/songquanpeng/one-api/model"
+	"github.com/Laisky/one-api/common/helper"
+	"github.com/Laisky/one-api/model"
 )
 
 // DebugChannelModelConfigs provides debugging information for a specific channel
 func DebugChannelModelConfigs(c *gin.Context) {
 	channelIdStr := c.Param("id")
-	channelId, err := strconv.Atoi(channelIdStr)
+	channelId, err := resolveChannelRef(channelIdStr)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"success": false,
-			"message": "Invalid channel ID",
-		})
+		helper.RespondErrorWithStatus(c, http.StatusBadRequest, errors.New("Invalid channel ID"))
 		return
 	}
 
 	err = model.DebugChannelModelConfigs(channelId)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"success": false,
-			"message": "Debug failed: " + err.Error(),
-		})
+		helper.RespondErrorWithStatus(c, http.StatusInternalServerError, errors.Wrap(err, "Debug failed"))
 		return
 	}
 
@@ -40,10 +35,7 @@ func DebugChannelModelConfigs(c *gin.Context) {
 func DebugAllChannelModelConfigs(c *gin.Context) {
 	err := model.DebugAllChannelModelConfigs()
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"success": false,
-			"message": "Debug failed: " + err.Error(),
-		})
+		helper.RespondErrorWithStatus(c, http.StatusInternalServerError, errors.Wrap(err, "Debug failed"))
 		return
 	}
 
@@ -56,21 +48,15 @@ func DebugAllChannelModelConfigs(c *gin.Context) {
 // FixChannelModelConfigs attempts to fix a specific channel's model configuration
 func FixChannelModelConfigs(c *gin.Context) {
 	channelIdStr := c.Param("id")
-	channelId, err := strconv.Atoi(channelIdStr)
+	channelId, err := resolveChannelRef(channelIdStr)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"success": false,
-			"message": "Invalid channel ID",
-		})
+		helper.RespondErrorWithStatus(c, http.StatusBadRequest, errors.New("Invalid channel ID"))
 		return
 	}
 
 	err = model.FixChannelModelConfigs(channelId)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"success": false,
-			"message": "Fix failed: " + err.Error(),
-		})
+		helper.RespondErrorWithStatus(c, http.StatusInternalServerError, errors.Wrap(err, "Fix failed"))
 		return
 	}
 
@@ -84,10 +70,7 @@ func FixChannelModelConfigs(c *gin.Context) {
 func ValidateAllChannelModelConfigs(c *gin.Context) {
 	err := model.ValidateAllChannelModelConfigs()
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"success": false,
-			"message": "Validation failed: " + err.Error(),
-		})
+		helper.RespondErrorWithStatus(c, http.StatusInternalServerError, errors.Wrap(err, "Validation failed"))
 		return
 	}
 
@@ -101,10 +84,7 @@ func ValidateAllChannelModelConfigs(c *gin.Context) {
 func RemigratAllChannels(c *gin.Context) {
 	err := model.MigrateAllChannelModelConfigs()
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"success": false,
-			"message": "Re-migration failed: " + err.Error(),
-		})
+		helper.RespondErrorWithStatus(c, http.StatusInternalServerError, errors.Wrap(err, "Re-migration failed"))
 		return
 	}
 
@@ -114,30 +94,28 @@ func RemigratAllChannels(c *gin.Context) {
 	})
 }
 
-// GetChannelMigrationStatus returns the migration status of a specific channel
+// GetChannelMigrationStatus returns the migration status of a specific channel.
+// Parameters:
+//   - c: Gin context containing the channel UUID path parameter and response writer.
+//
+// Return values: none.
 func GetChannelMigrationStatus(c *gin.Context) {
 	channelIdStr := c.Param("id")
-	channelId, err := strconv.Atoi(channelIdStr)
+	channelId, err := resolveChannelRef(channelIdStr)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"success": false,
-			"message": "Invalid channel ID",
-		})
+		helper.RespondErrorWithStatus(c, http.StatusBadRequest, errors.New("Invalid channel ID"))
 		return
 	}
 
 	var channel model.Channel
 	err = model.DB.Where("id = ?", channelId).First(&channel).Error
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{
-			"success": false,
-			"message": "Channel not found",
-		})
+		helper.RespondErrorWithStatus(c, http.StatusNotFound, errors.New("Channel not found"))
 		return
 	}
 
 	status := map[string]any{
-		"channel_id":           channel.Id,
+		"channel_uuid":         channel.UUID,
 		"channel_name":         channel.Name,
 		"channel_type":         channel.Type,
 		"has_model_configs":    channel.ModelConfigs != nil && *channel.ModelConfigs != "" && *channel.ModelConfigs != "{}",
@@ -196,10 +174,7 @@ func GetChannelMigrationStatus(c *gin.Context) {
 func CleanAllMixedModelData(c *gin.Context) {
 	err := model.CleanAllMixedModelData()
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"success": false,
-			"message": "Cleaning failed: " + err.Error(),
-		})
+		helper.RespondErrorWithStatus(c, http.StatusInternalServerError, errors.Wrap(err, "Cleaning failed"))
 		return
 	}
 

@@ -109,6 +109,12 @@
       "missing": "Unknown",
       "not_available": "N/A"
     },
+    "notifications": {
+      "clear_failed_message": "Failed to clear logs.",
+      "clear_failed_title": "Clear failed",
+      "clear_success_message": "Logs cleared successfully.",
+      "clear_success_title": "Logs cleared"
+    },
     "search": {
       "log_entry": "Log Entry",
       "quota": "Quota: {{value}}"
@@ -144,6 +150,7 @@
       "manage": "Manage",
       "system": "System",
       "test": "Test",
+      "tool": "Tool",
       "topup": "Top Up",
       "unknown": "Unknown"
     }

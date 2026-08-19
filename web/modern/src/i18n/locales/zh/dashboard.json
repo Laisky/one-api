@@ -12,6 +12,7 @@
       "showing_top": "展示前 {{shown}} 条，共 {{total}} 条",
       "token_title": "Token 缓存命中率",
       "top_n_label": "展示",
+      "top_n_option": "前 {{count}}",
       "total": "总量",
       "user_title": "用户缓存命中率"
     },
@@ -38,6 +39,7 @@
       "model": "未知模型",
       "owner": "未知",
       "token": "未命名令牌",
+      "tool": "未知工具",
       "user": "未知用户"
     },
     "filters": {
@@ -87,6 +89,9 @@
       "metric_placeholder": "选择指标",
       "model_usage": "模型用量",
       "token_usage": "令牌用量",
+      "tool_token_usage": "按令牌统计工具调用",
+      "tool_usage": "工具调用统计",
+      "tool_user_usage": "按用户统计工具调用",
       "user_usage": "用户用量"
     },
     "title": "仪表盘",

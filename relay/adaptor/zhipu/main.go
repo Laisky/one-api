@@ -14,13 +14,13 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
 
-	"github.com/songquanpeng/one-api/common"
-	"github.com/songquanpeng/one-api/common/helper"
-	"github.com/songquanpeng/one-api/common/render"
-	commonsse "github.com/songquanpeng/one-api/common/sse"
-	"github.com/songquanpeng/one-api/relay/adaptor/openai"
-	"github.com/songquanpeng/one-api/relay/constant"
-	"github.com/songquanpeng/one-api/relay/model"
+	"github.com/Laisky/one-api/common"
+	"github.com/Laisky/one-api/common/helper"
+	commonsse "github.com/Laisky/one-api/common/sse"
+	"github.com/Laisky/one-api/relay/adaptor/openai"
+	"github.com/Laisky/one-api/relay/adaptor/openai_compatible"
+	"github.com/Laisky/one-api/relay/constant"
+	"github.com/Laisky/one-api/relay/model"
 )
 
 // https://open.bigmodel.cn/doc/api#chatglm_std
@@ -171,7 +171,7 @@ func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusC
 				break
 			}
 			response := streamResponseZhipu2OpenAI(string(payloadBytes))
-			if err := render.ObjectData(c, response); err != nil {
+			if err := openai_compatible.RenderStreamChunkWithBridge(c, response); err != nil {
 				lg.Error("error marshalling oversized stream response", zap.Error(err))
 			}
 			continue
@@ -183,7 +183,7 @@ func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusC
 		}
 		if strings.HasPrefix(lineText, "data:") {
 			response := streamResponseZhipu2OpenAI(lineText[5:])
-			if err := render.ObjectData(c, response); err != nil {
+			if err := openai_compatible.RenderStreamChunkWithBridge(c, response); err != nil {
 				lg.Error("error marshalling stream response", zap.Error(err))
 			}
 		} else if strings.HasPrefix(lineText, "meta:") {
@@ -194,7 +194,7 @@ func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusC
 				continue
 			}
 			response, zhipuUsage := streamMetaResponseZhipu2OpenAI(&zhipuResponse)
-			if err := render.ObjectData(c, response); err != nil {
+			if err := openai_compatible.RenderStreamChunkWithBridge(c, response); err != nil {
 				lg.Error("error marshalling stream response", zap.Error(err))
 			}
 			usage = zhipuUsage
@@ -205,7 +205,7 @@ func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusC
 		lg.Error("error reading stream", zap.Error(streamErr))
 	}
 
-	render.Done(c)
+	openai_compatible.FinalizeStreamWithBridge(c, usage)
 
 	err := resp.Body.Close()
 	if err != nil {

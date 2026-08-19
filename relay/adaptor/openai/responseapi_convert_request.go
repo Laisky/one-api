@@ -6,7 +6,7 @@ import (
 
 	"github.com/Laisky/errors/v2"
 
-	"github.com/songquanpeng/one-api/relay/model"
+	"github.com/Laisky/one-api/relay/model"
 )
 
 // ConvertResponseAPIToChatCompletionRequest converts a Response API request into a
@@ -87,13 +87,44 @@ func ConvertResponseAPIToChatCompletionRequest(request *ResponseAPIRequest) (*mo
 		})
 	}
 
+	// openToolCallMsgIdx tracks an assistant message that was just emitted from a
+	// function_call item and is still "open" to receive sibling tool calls. The OpenAI
+	// Responses API represents parallel tool calls (issued in a single assistant turn) as
+	// multiple consecutive function_call items. ChatCompletion upstreams such as DeepSeek
+	// require those to live in ONE assistant message's tool_calls array; otherwise the
+	// trailing tool results end up following a tool message instead of an assistant message
+	// with tool_calls, producing the upstream 400 "Messages with role 'tool' must be a
+	// response to a preceding message with 'tool_calls'". The index is reset at the start of
+	// every iteration so only directly-adjacent function_call items are merged; anything else
+	// in between (a tool output, user/assistant text, etc.) starts a fresh assistant turn.
+	openToolCallMsgIdx := -1
+	// pendingToolCallIDs holds the normalized tool-call IDs from the current assistant
+	// tool-call turn that are still eligible to be answered by an adjacent tool message. It
+	// is populated by function_call items and cleared by anything that breaks the
+	// assistant->tool adjacency (a string/text item, an unrelated content message, or an
+	// orphan tool output we downgrade). A function_call_output whose ID is not pending is an
+	// orphan: emitting it as a `tool` message would violate the ChatCompletion rule that a
+	// tool message must follow an assistant message carrying the matching tool_calls, so it
+	// is downgraded to a user message instead of forwarding an invalid sequence upstream.
+	pendingToolCallIDs := make(map[string]struct{})
+	// pendingReasoning holds replayable thinking state until its adjacent
+	// assistant message is lowered. DeepSeek requires it on tool-call history.
+	pendingReasoning := ""
 	for _, item := range request.Input {
+		currentToolCallMsgIdx := openToolCallMsgIdx
+		openToolCallMsgIdx = -1
 		switch v := item.(type) {
 		case string:
 			chatReq.Messages = append(chatReq.Messages, model.Message{Role: "user", Content: v})
+			clear(pendingToolCallIDs)
+			pendingReasoning = ""
 		case map[string]any:
 			if typeVal, ok := v["type"].(string); ok {
 				switch strings.ToLower(typeVal) {
+				case "reasoning":
+					pendingReasoning = extractResponseAPIReasoningContent(v)
+					clear(pendingToolCallIDs)
+					continue
 				case "function_call":
 					fcID, _ := v["id"].(string)
 					callID, _ := v["call_id"].(string)
@@ -117,14 +148,39 @@ func ConvertResponseAPIToChatCompletionRequest(request *ResponseAPIRequest) (*mo
 					}
 
 					role := "assistant"
-					if r, ok := v["role"].(string); ok && r != "" {
-						role = r
+
+					// This tool call is now in-flight and may be answered by an adjacent
+					// function_call_output later in the input.
+					if normalizedID != "" {
+						pendingToolCallIDs[normalizedID] = struct{}{}
 					}
 
-					chatReq.Messages = append(chatReq.Messages, model.Message{
+					// Merge consecutive function_call items from the same assistant turn into
+					// a single assistant message so parallel tool calls share one tool_calls array.
+					if currentToolCallMsgIdx >= 0 && chatReq.Messages[currentToolCallMsgIdx].Role == role {
+						chatReq.Messages[currentToolCallMsgIdx].ToolCalls = append(
+							chatReq.Messages[currentToolCallMsgIdx].ToolCalls, toolCall)
+						if pendingReasoning != "" && chatReq.Messages[currentToolCallMsgIdx].ReasoningContent == nil {
+							reasoning := pendingReasoning
+							chatReq.Messages[currentToolCallMsgIdx].ReasoningContent = &reasoning
+						}
+						pendingReasoning = ""
+						openToolCallMsgIdx = currentToolCallMsgIdx
+						continue
+					}
+
+					assistantMessage := model.Message{
 						Role:      role,
+						Content:   "",
 						ToolCalls: []model.Tool{toolCall},
-					})
+					}
+					if pendingReasoning != "" {
+						reasoning := pendingReasoning
+						assistantMessage.ReasoningContent = &reasoning
+					}
+					pendingReasoning = ""
+					chatReq.Messages = append(chatReq.Messages, assistantMessage)
+					openToolCallMsgIdx = len(chatReq.Messages) - 1
 					continue
 				case "function_call_output":
 					fcID, _ := v["id"].(string)
@@ -146,11 +202,31 @@ func ConvertResponseAPIToChatCompletionRequest(request *ResponseAPIRequest) (*mo
 						role = r
 					}
 
+					// Only emit a `tool` message when it answers an in-flight tool call from
+					// the immediately preceding assistant turn. Otherwise it is an orphan
+					// (e.g. trimmed history dropped the matching function_call, or a mismatched
+					// call_id) and would be rejected upstream with "Messages with role 'tool'
+					// must be a response to a preceding message with 'tool_calls'". Downgrade
+					// such orphans to a user message so the content survives without forwarding
+					// an invalid sequence.
+					if _, answered := pendingToolCallIDs[normalizedID]; answered && role == "tool" && normalizedID != "" {
+						chatReq.Messages = append(chatReq.Messages, model.Message{
+							Role:       role,
+							ToolCallId: normalizedID,
+							Content:    output,
+						})
+						delete(pendingToolCallIDs, normalizedID)
+						continue
+					}
+
 					chatReq.Messages = append(chatReq.Messages, model.Message{
-						Role:       role,
-						ToolCallId: normalizedID,
-						Content:    output,
+						Role:    "user",
+						Content: output,
 					})
+					// The downgraded user message breaks adjacency, so any tool calls still
+					// awaiting a response can no longer be answered by a subsequent tool message.
+					clear(pendingToolCallIDs)
+					pendingReasoning = ""
 					continue
 				}
 			}
@@ -158,7 +234,14 @@ func ConvertResponseAPIToChatCompletionRequest(request *ResponseAPIRequest) (*mo
 			if err != nil {
 				return nil, errors.Wrap(err, "convert response api content to chat message")
 			}
+			if pendingReasoning != "" && msg.Role == "assistant" {
+				reasoning := pendingReasoning
+				msg.ReasoningContent = &reasoning
+			}
+			pendingReasoning = ""
 			chatReq.Messages = append(chatReq.Messages, *msg)
+			// A non-tool content message ends the current tool-call turn.
+			clear(pendingToolCallIDs)
 		default:
 			return nil, errors.Errorf("unsupported input item of type %T", item)
 		}
@@ -167,11 +250,47 @@ func ConvertResponseAPIToChatCompletionRequest(request *ResponseAPIRequest) (*mo
 	return chatReq, nil
 }
 
-func responseContentItemToMessage(item map[string]any) (*model.Message, error) {
-	role := "user"
-	if r, ok := item["role"].(string); ok && r != "" {
-		role = r
+// extractResponseAPIReasoningContent returns replayable plaintext reasoning
+// from a Responses reasoning item. Raw content takes precedence over summary;
+// summaries remain a compatibility fallback for older one-api bridge output.
+func extractResponseAPIReasoningContent(item map[string]any) string {
+	for _, field := range []string{"content", "summary"} {
+		raw, ok := item[field]
+		if !ok {
+			continue
+		}
+
+		parts := make([]string, 0)
+		switch value := raw.(type) {
+		case string:
+			if value != "" {
+				parts = append(parts, value)
+			}
+		case []any:
+			for _, entry := range value {
+				part, ok := entry.(map[string]any)
+				if !ok {
+					continue
+				}
+				if text, ok := part["text"].(string); ok && text != "" {
+					parts = append(parts, text)
+				}
+			}
+		case map[string]any:
+			if text, ok := value["text"].(string); ok && text != "" {
+				parts = append(parts, text)
+			}
+		}
+
+		if len(parts) > 0 {
+			return strings.Join(parts, "\n")
+		}
 	}
+	return ""
+}
+
+func responseContentItemToMessage(item map[string]any) (*model.Message, error) {
+	role := normalizeResponseMessageRoleForChat(item["role"], "user")
 
 	var namePtr *string
 	if name, ok := item["name"].(string); ok && name != "" {
@@ -248,4 +367,22 @@ func responseContentItemToMessage(item map[string]any) (*model.Message, error) {
 	}
 
 	return message, nil
+}
+
+// normalizeResponseMessageRoleForChat maps Responses API message roles to the
+// portable ChatCompletion roles accepted by non-native fallback providers. The
+// raw parameter may be any decoded JSON value, and defaultRole is returned when
+// the value is empty or unsupported.
+func normalizeResponseMessageRoleForChat(raw any, defaultRole string) string {
+	role, _ := raw.(string)
+	switch strings.ToLower(strings.TrimSpace(role)) {
+	case "developer":
+		return "system"
+	case "system", "user", "assistant", "tool":
+		return strings.ToLower(strings.TrimSpace(role))
+	case "":
+		return defaultRole
+	default:
+		return defaultRole
+	}
 }

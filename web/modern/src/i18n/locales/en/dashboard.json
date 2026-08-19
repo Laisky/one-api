@@ -12,6 +12,7 @@
       "showing_top": "Showing top {{shown}} of {{total}}",
       "token_title": "Token Cache Hit Rate",
       "top_n_label": "Show",
+      "top_n_option": "Top {{count}}",
       "total": "Total",
       "user_title": "User Cache Hit Rate"
     },
@@ -38,6 +39,7 @@
       "model": "Unknown model",
       "owner": "unknown",
       "token": "unnamed token",
+      "tool": "Unknown tool",
       "user": "Unknown user"
     },
     "filters": {
@@ -87,6 +89,9 @@
       "metric_placeholder": "Select metric",
       "model_usage": "Model Usage",
       "token_usage": "Token Usage",
+      "tool_token_usage": "Tool Usage by Token",
+      "tool_usage": "Tool Usage",
+      "tool_user_usage": "Tool Usage by User",
       "user_usage": "User Usage"
     },
     "title": "Dashboard",

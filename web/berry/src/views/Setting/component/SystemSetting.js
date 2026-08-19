@@ -107,24 +107,32 @@ const SystemSetting = () => {
       default:
         break;
     }
-    const res = await API.put('/api/option/', {
-      key,
-      value
-    });
-    const { success, message } = res.data;
-    if (success) {
-      if (key === 'EmailDomainWhitelist') {
-        value = value.split(',');
+    let res;
+    try {
+      res = await API.put('/api/option/', {
+        key,
+        value
+      });
+      // The shared axios interceptor resolves to undefined on error; bail out before
+      // reading res.data so a failed request can't throw and leave `loading` stuck true,
+      // which would keep every settings button disabled until a page reload.
+      if (!res) return;
+      const { success, message } = res.data;
+      if (success) {
+        if (key === 'EmailDomainWhitelist') {
+          value = value.split(',');
+        }
+        setInputs((inputs) => ({
+          ...inputs,
+          [key]: value
+        }));
+        showSuccess('设置成功！');
+      } else {
+        showError(message);
       }
-      setInputs((inputs) => ({
-        ...inputs,
-        [key]: value
-      }));
-      showSuccess('设置成功！');
-    } else {
-      showError(message);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   const handleInputChange = async (event) => {

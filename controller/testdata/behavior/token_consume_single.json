@@ -1,0 +1,43 @@
+{
+  "case": "token/consume_single",
+  "site": "T5 ConsumeToken",
+  "status": 200,
+  "body": {
+    "data": {
+      "accessed_time": "<ts>",
+      "created_at": 1730000000111,
+      "created_time": 1720000001,
+      "expired_time": 1990000003,
+      "key": "sk-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "models": "gpt-4o,gpt-3.5-turbo",
+      "name": "behaviordiff-token",
+      "remain_quota": 949855,
+      "status": 1,
+      "subnet": "192.168.0.0/24",
+      "unlimited_quota": false,
+      "updated_at": "<ts-milli>",
+      "used_quota": 850155,
+      "user_uuid": "<user-uuid>",
+      "uuid": "<token-uuid>"
+    },
+    "message": "",
+    "success": true,
+    "transaction": {
+      "auto_confirmed": false,
+      "confirmed_at": "<ts>",
+      "expires_at": "<ts>",
+      "final_quota": 150,
+      "log_uuid": "<consume-log-uuid>",
+      "pre_quota": 150,
+      "reason": "behaviordiff-consume",
+      "request_id": "behaviordiff-request-id",
+      "status": "confirmed",
+      "status_code": 2,
+      "token_uuid": "<token-uuid>",
+      "trace_id": "<trace-id>",
+      "transaction_id": "<consume-txn-id>",
+      "user_uuid": "<user-uuid>",
+      "uuid": "<consume-txn-uuid>"
+    }
+  }
+}

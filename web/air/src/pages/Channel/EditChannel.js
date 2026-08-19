@@ -23,8 +23,15 @@ const MODEL_CONFIGS_EXAMPLE = {
         'ratio': 0.03,
         'completion_ratio': 2.0,
         'max_tokens': 128000,
+    },
+    'deepseek-v4-flash': {
+        'ratio': 0.00000014,
+        'completion_ratio': 2.0,
+        'cached_input_ratio': 0.0000000028,
     }
 };
+
+const isClockHHMM = (value) => typeof value === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(value);
 
 // Enhanced validation for model configs
 const validateModelConfigs = (configStr) => {
@@ -69,6 +76,28 @@ const validateModelConfigs = (configStr) => {
                 }
             }
 
+            if (config.time_windows !== undefined) {
+                if (!Array.isArray(config.time_windows)) {
+                    return { valid: false, error: `Model "${modelName}" time_windows must be an array` };
+                }
+                for (const [index, window] of config.time_windows.entries()) {
+                    if (typeof window !== 'object' || window === null || Array.isArray(window)) {
+                        return { valid: false, error: `Model "${modelName}" time window ${index + 1} must be an object` };
+                    }
+                    if (!Array.isArray(window.ranges) || window.ranges.length === 0) {
+                        return { valid: false, error: `Model "${modelName}" time window ${index + 1} ranges must be a non-empty array` };
+                    }
+                    for (const range of window.ranges) {
+                        if (typeof range !== 'object' || range === null || !isClockHHMM(range.start) || !isClockHHMM(range.end)) {
+                            return { valid: false, error: `Model "${modelName}" time window ${index + 1} ranges must use HH:MM strings` };
+                        }
+                    }
+                    if (typeof window.overlay !== 'object' || window.overlay === null || Array.isArray(window.overlay)) {
+                        return { valid: false, error: `Model "${modelName}" time window ${index + 1} overlay must be an object` };
+                    }
+                }
+            }
+
             if (config.tool_whitelist !== undefined) {
                 if (!Array.isArray(config.tool_whitelist)) {
                     return { valid: false, error: `模型"${modelName}"的tool_whitelist必须是字符串数组` };
@@ -109,7 +138,8 @@ const validateModelConfigs = (configStr) => {
             }
 
             // Check if at least one meaningful field is provided
-            const hasPricingField = config.ratio !== undefined || config.completion_ratio !== undefined || config.max_tokens !== undefined;
+            const hasPricingField = config.ratio !== undefined || config.completion_ratio !== undefined || config.max_tokens !== undefined ||
+                (Array.isArray(config.time_windows) && config.time_windows.length > 0);
             const hasToolField = (Array.isArray(config.tool_whitelist) && config.tool_whitelist.length > 0) ||
                 (config.tool_pricing && Object.keys(config.tool_pricing).length > 0);
             if (!hasPricingField && !hasToolField) {
@@ -163,7 +193,7 @@ const LabelWithTooltip = ({ label, helpText, children, ...props }) => (
 
 const EditChannel = (props) => {
     const navigate = useNavigate();
-    const channelId = props.editingChannel.id;
+    const channelId = props.editingChannel.uuid || props.editingChannel.id;
     const isEdit = channelId !== undefined;
     const [loading, setLoading] = useState(isEdit);
     const handleCancel = () => {
@@ -443,7 +473,7 @@ const EditChannel = (props) => {
             // Load default pricing for new channels
             loadDefaultPricing(originInputs.type);
         }
-    }, [props.editingChannel.id]);
+    }, [props.editingChannel.uuid, props.editingChannel.id]);
 
 
     const submit = async () => {
@@ -506,7 +536,7 @@ const EditChannel = (props) => {
         }
         localInputs.config = JSON.stringify(config);
         if (isEdit) {
-            res = await API.put(`/api/channel/`, { ...localInputs, id: parseInt(channelId) });
+            res = await API.put(`/api/channel/`, { ...localInputs, uuid: channelId });
         } else {
             res = await API.post(`/api/channel/`, localInputs);
         }
@@ -618,7 +648,7 @@ const EditChannel = (props) => {
                                                 注意，<strong>模型部署名称必须和模型名称保持一致</strong>，因为 One API 会把请求体中的
                                                 model
                                                 参数替换为你的部署名称（模型名称中的点会被剔除），<a target='_blank'
-                                                    href='https://github.com/songquanpeng/one-api/issues/133?notification_referrer_id=NT_kwDOAmJSYrM2NjIwMzI3NDgyOjM5OTk4MDUw#issuecomment-1571602271'>图片演示</a>。
+                                                    href='https://github.com/Laisky/one-api/issues/133?notification_referrer_id=NT_kwDOAmJSYrM2NjIwMzI3NDgyOjM5OTk4MDUw#issuecomment-1571602271'>图片演示</a>。
                                             </>
                                         }>
                                         </Banner>

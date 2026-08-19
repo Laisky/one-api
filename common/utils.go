@@ -3,7 +3,7 @@ package common
 import (
 	"fmt"
 
-	"github.com/songquanpeng/one-api/common/config"
+	"github.com/Laisky/one-api/common/config"
 )
 
 // LogQuota formats a quota value either as currency or points depending on configuration.

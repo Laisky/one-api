@@ -6,7 +6,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/songquanpeng/one-api/relay/adaptor/openai"
+	"github.com/Laisky/one-api/relay/adaptor/openai"
 )
 
 // TestGetResponseAPIPromptTokens_CountsImageInputs verifies image inputs are counted.

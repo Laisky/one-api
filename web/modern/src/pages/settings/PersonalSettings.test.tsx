@@ -211,4 +211,84 @@ describe('PersonalSettings', () => {
 
     expect(useAuthStore.getState().user?.email).toBe('new@example.com');
   });
+
+  it('shows an error notification when generate access token returns success false', async () => {
+    (api.get as any).mockImplementation((url: string) => {
+      if (url === '/api/user/self') {
+        return Promise.resolve({
+          data: {
+            success: true,
+            data: {
+              ...currentProfile,
+            },
+          },
+        });
+      }
+      if (url === '/api/user/totp/status') {
+        return Promise.resolve({
+          data: {
+            success: true,
+            data: { totp_enabled: false },
+          },
+        });
+      }
+      if (url === '/api/user/token') {
+        return Promise.resolve({ data: { success: false, message: 'token rejected' } });
+      }
+      return Promise.resolve({ data: { success: true } });
+    });
+
+    render(<PersonalSettings />);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'personal_settings.access_token.generate_token' }));
+
+    await waitFor(() => {
+      expect(notify).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'error',
+          message: 'token rejected',
+        })
+      );
+    });
+  });
+
+  it('shows an error notification when getting the invite link returns success false', async () => {
+    (api.get as any).mockImplementation((url: string) => {
+      if (url === '/api/user/self') {
+        return Promise.resolve({
+          data: {
+            success: true,
+            data: {
+              ...currentProfile,
+            },
+          },
+        });
+      }
+      if (url === '/api/user/totp/status') {
+        return Promise.resolve({
+          data: {
+            success: true,
+            data: { totp_enabled: false },
+          },
+        });
+      }
+      if (url === '/api/user/aff') {
+        return Promise.resolve({ data: { success: false, message: 'invite rejected' } });
+      }
+      return Promise.resolve({ data: { success: true } });
+    });
+
+    render(<PersonalSettings />);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'personal_settings.access_token.get_invite_link' }));
+
+    await waitFor(() => {
+      expect(notify).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'error',
+          message: 'invite rejected',
+        })
+      );
+    });
+  });
 });

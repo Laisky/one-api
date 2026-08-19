@@ -1,6 +1,8 @@
 import { ToolListEditor } from '@/components/mcp/ToolListEditor';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { useNotifications } from '@/components/ui/notifications';
@@ -9,8 +11,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { TimestampDisplay } from '@/components/ui/timestamp';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { api } from '@/lib/api';
+import { useAuthStore } from '@/lib/stores/auth';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { Info } from 'lucide-react';
+import { Info, ShieldOff } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useForm, useWatch } from 'react-hook-form';
 import { useTranslation } from 'react-i18next';
@@ -34,6 +37,7 @@ type UserForm = {
   quota: number;
   group: string;
   mcp_tool_blacklist: string[];
+  password_locked: boolean;
 };
 
 interface Group {
@@ -49,6 +53,7 @@ type UserSnapshot = {
   quota: number;
   group: string;
   mcp_tool_blacklist: string[];
+  password_locked: boolean;
 };
 
 const snapshotUserForm = (values: UserForm): UserSnapshot => ({
@@ -58,6 +63,7 @@ const snapshotUserForm = (values: UserForm): UserSnapshot => ({
   quota: values.quota,
   group: values.group,
   mcp_tool_blacklist: values.mcp_tool_blacklist,
+  password_locked: !!values.password_locked,
 });
 
 export function EditUserPage() {
@@ -77,7 +83,15 @@ export function EditUserPage() {
   const [initialSnapshot, setInitialSnapshot] = useState<UserSnapshot | null>(null);
   const [createdAt, setCreatedAt] = useState<number | null>(null);
   const [updatedAt, setUpdatedAt] = useState<number | null>(null);
+  const [confirm2faOpen, setConfirm2faOpen] = useState(false);
+  const [disabling2fa, setDisabling2fa] = useState(false);
   const { notify } = useNotifications();
+  const currentUser = useAuthStore((s) => s.user);
+  const isAdmin = (currentUser?.role ?? 0) >= 10;
+  const isRootAdmin = (currentUser?.role ?? 0) >= 100;
+  const editingOtherUser = isEdit && !!userId && String(currentUser?.id ?? '') !== userId;
+  const showDisable2faButton = isEdit && isAdmin && editingOtherUser;
+  const showLockToggles = isRootAdmin && isEdit && editingOtherUser;
 
   const userSchema = useMemo(
     () =>
@@ -100,6 +114,7 @@ export function EditUserPage() {
         quota: z.coerce.number().min(0, tr('validation.quota_min', 'Quota must be non-negative')),
         group: z.string().min(1, tr('validation.group_required', 'Group is required')),
         mcp_tool_blacklist: z.array(z.string()).optional().default([]),
+        password_locked: z.boolean().default(false),
       }),
     [tr]
   );
@@ -114,10 +129,12 @@ export function EditUserPage() {
       quota: 0,
       group: 'default',
       mcp_tool_blacklist: [],
+      password_locked: false,
     },
   });
 
   const watchQuota = useWatch({ control: form.control, name: 'quota' });
+  const watchPasswordLocked = useWatch({ control: form.control, name: 'password_locked' });
 
   const loadUser = async () => {
     if (!userId) return;
@@ -136,6 +153,7 @@ export function EditUserPage() {
           quota: Number(data.quota ?? 0),
           group: (data.group ?? 'default') as string,
           mcp_tool_blacklist: Array.isArray(data.mcp_tool_blacklist) ? data.mcp_tool_blacklist : [],
+          password_locked: !!data.metadata?.password_locked,
         };
         form.reset(normalized);
         setInitialSnapshot(snapshotUserForm(normalized));
@@ -192,7 +210,7 @@ export function EditUserPage() {
       let response: any;
 
       if (isEdit && userId) {
-        const payload: Record<string, any> = { id: parseInt(userId, 10) };
+        const payload: Record<string, any> = { uuid: userId };
         const previous = initialSnapshot;
 
         if (!previous || snapshot.username !== previous.username) {
@@ -212,6 +230,9 @@ export function EditUserPage() {
         }
         if (!previous || JSON.stringify(snapshot.mcp_tool_blacklist) !== JSON.stringify(previous.mcp_tool_blacklist)) {
           payload.mcp_tool_blacklist = snapshot.mcp_tool_blacklist;
+        }
+        if (!previous || snapshot.password_locked !== previous.password_locked) {
+          payload.metadata = { ...(payload.metadata ?? {}), password_locked: snapshot.password_locked };
         }
         if (data.password) {
           payload.password = data.password;
@@ -286,6 +307,33 @@ export function EditUserPage() {
   // Error highlighting helpers
   const hasError = (path: string): boolean => !!(form.formState.errors as any)?.[path];
   const errorClass = (path: string) => (hasError(path) ? 'border-destructive focus-visible:ring-destructive' : '');
+
+  const handleDisable2fa = async () => {
+    if (!userId) return;
+    setDisabling2fa(true);
+    try {
+      const res = await api.post(`/api/user/totp/disable/${userId}`);
+      const { success, message } = res.data || {};
+      if (!success) {
+        throw new Error(message || tr('notifications_2fa.failed_message', 'Unable to disable 2FA.'));
+      }
+      notify({
+        type: 'success',
+        title: tr('notifications_2fa.success_title', '2FA disabled'),
+        message: tr('notifications_2fa.success_message', 'Two-factor authentication disabled.'),
+      });
+      setConfirm2faOpen(false);
+    } catch (error) {
+      const apiMessage = (error as any)?.response?.data?.message || (error as Error)?.message;
+      notify({
+        type: 'error',
+        title: tr('notifications_2fa.failed_title', 'Disable 2FA failed'),
+        message: apiMessage || tr('notifications_2fa.failed_message', 'Unable to disable 2FA.'),
+      });
+    } finally {
+      setDisabling2fa(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -456,14 +504,82 @@ export function EditUserPage() {
                             type="password"
                             placeholder={tr('fields.password.placeholder', 'Enter password')}
                             className={errorClass('password')}
+                            disabled={!!watchPasswordLocked}
                             {...field}
                           />
                         </FormControl>
+                        {watchPasswordLocked && (
+                          <p className="text-xs text-muted-foreground">
+                            {tr(
+                              'fields.password.locked_hint',
+                              'Password is locked. Turn off Lock password to change it. New MFA enrollment is also blocked while locked.'
+                            )}
+                          </p>
+                        )}
                         <FormMessage />
                       </FormItem>
                     )}
                   />
                 </div>
+
+                {showLockToggles && (
+                  <Card className="border-dashed">
+                    <CardHeader className="pb-3">
+                      <CardTitle className="text-base">{tr('sections.security_lock.title', 'Security lock')}</CardTitle>
+                      <CardDescription>
+                        {tr(
+                          'sections.security_lock.description',
+                          'Restrict sensitive changes for this user. When locked, password edits and new MFA enrollment are both blocked. Only root admins can toggle this.'
+                        )}
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <FormField
+                        control={form.control}
+                        name="password_locked"
+                        render={({ field }) => (
+                          <FormItem className="flex items-start gap-3 space-y-0">
+                            <FormControl>
+                              <Checkbox
+                                checked={!!field.value}
+                                onCheckedChange={(checked) => field.onChange(checked === true)}
+                                aria-label={tr('fields.password_locked.label', 'Lock password (root only)')}
+                              />
+                            </FormControl>
+                            <div className="space-y-1 leading-none">
+                              <div className="flex items-center gap-1">
+                                <FormLabel className="cursor-pointer">
+                                  {tr('fields.password_locked.label', 'Lock password (root only)')}
+                                </FormLabel>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Info
+                                      className="h-4 w-4 text-muted-foreground cursor-help"
+                                      aria-label={tr('aria.help_password_locked', 'Help: Lock password')}
+                                    />
+                                  </TooltipTrigger>
+                                  <TooltipContent className="max-w-xs">
+                                    {tr(
+                                      'fields.password_locked.help',
+                                      "When on, no one can change this user's password and the user cannot enable new TOTP/passkey. Only a root admin can unlock it."
+                                    )}
+                                  </TooltipContent>
+                                </Tooltip>
+                              </div>
+                              <p className="text-xs text-muted-foreground">
+                                {tr(
+                                  'fields.password_locked.help',
+                                  "When on, no one can change this user's password and the user cannot enable new TOTP/passkey. Only a root admin can unlock it."
+                                )}
+                              </p>
+                            </div>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </CardContent>
+                  </Card>
+                )}
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <FormField
@@ -576,6 +692,18 @@ export function EditUserPage() {
                 {form.formState.errors.root && <div className="text-sm text-destructive">{form.formState.errors.root.message}</div>}
 
                 <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                  {showDisable2faButton && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => setConfirm2faOpen(true)}
+                      disabled={disabling2fa}
+                      className="w-full sm:w-auto sm:mr-auto"
+                    >
+                      <ShieldOff className="mr-1 h-4 w-4" />
+                      {disabling2fa ? tr('actions.disabling_2fa', 'Disabling...') : tr('actions.disable_2fa', 'Disable user 2FA')}
+                    </Button>
+                  )}
                   <Button type="button" variant="outline" onClick={() => navigate('/users')} className="w-full sm:w-auto">
                     {tr('actions.cancel', 'Cancel')}
                   </Button>
@@ -594,6 +722,35 @@ export function EditUserPage() {
           </CardContent>
         </Card>
       </TooltipProvider>
+      <Dialog
+        open={confirm2faOpen}
+        onOpenChange={(open) => {
+          if (!open && !disabling2fa) {
+            setConfirm2faOpen(false);
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{tr('confirm_2fa.title', 'Disable 2FA')}</DialogTitle>
+            <DialogDescription>
+              {tr(
+                'confirm_2fa.description',
+                'Disable two-factor authentication for {{username}}? They will be able to sign in without a 2FA code.',
+                { username: form.getValues('username') || initialSnapshot?.username || '' }
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setConfirm2faOpen(false)} disabled={disabling2fa}>
+              {tr('confirm_2fa.cancel', 'Cancel')}
+            </Button>
+            <Button type="button" onClick={handleDisable2fa} disabled={disabling2fa}>
+              {disabling2fa ? tr('actions.disabling_2fa', 'Disabling...') : tr('confirm_2fa.confirm', 'Disable 2FA')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </ResponsivePageContainer>
   );
 }

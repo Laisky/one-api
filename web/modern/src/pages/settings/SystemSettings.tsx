@@ -1,18 +1,11 @@
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
 import { useNotifications } from '@/components/ui/notifications';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { TooltipProvider } from '@/components/ui/tooltip';
 import { api } from '@/lib/api';
-import { Info } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-
-interface OptionRow {
-  key: string;
-  value: string;
-}
+import { EmailDomainWhitelistItem, OptionItem, type EnumChoice, type OptionRow } from './SystemSettingsFields';
 
 interface OptionGroup {
   id: string;
@@ -66,9 +59,9 @@ const OPTION_GROUPS: OptionGroup[] = [
   },
   {
     id: 'email',
-    title: 'Email (SMTP)',
+    title: 'Email',
     description: 'Set up outbound email delivery.',
-    keys: ['SMTPServer', 'SMTPPort', 'SMTPAccount', 'SMTPToken', 'SMTPFrom'],
+    keys: ['EmailProvider', 'SMTPServer', 'SMTPPort', 'SMTPAccount', 'SMTPToken', 'SMTPFrom', 'ResendAPIKey'],
   },
   {
     id: 'branding',
@@ -92,7 +85,6 @@ const OPTION_GROUPS: OptionGroup[] = [
       'QuotaForInvitee',
       'QuotaRemindThreshold',
       'PreConsumedQuota',
-      'GroupRatio',
       'QuotaPerUnit',
       'DisplayInCurrencyEnabled',
       'DisplayTokenStatEnabled',
@@ -115,12 +107,27 @@ const OPTION_GROUPS: OptionGroup[] = [
 
 const SENSITIVE_OPTION_KEYS = new Set<string>([
   'SMTPToken',
+  'ResendAPIKey',
+  'TurnstileSecretKey',
   'GitHubClientSecret',
   'OidcClientSecret',
   'LarkClientSecret',
   'WeChatServerToken',
   'MessagePusherToken',
 ]);
+
+// EMAIL_PROVIDER_AUTO is the UI sentinel for the empty ("auto") EmailProvider value,
+// since Radix Select items cannot use an empty string as their value.
+const EMAIL_PROVIDER_AUTO = '__auto__';
+
+// ENUM_OPTION_KEYS lists option keys whose value is a fixed enum, rendered as a select.
+const ENUM_OPTION_KEYS: Record<string, EnumChoice[]> = {
+  EmailProvider: [
+    { value: EMAIL_PROVIDER_AUTO, storedValue: '', labelKey: 'system_settings.email_provider.auto' },
+    { value: 'smtp', labelKey: 'system_settings.email_provider.smtp' },
+    { value: 'resend', labelKey: 'system_settings.email_provider.resend' },
+  ],
+};
 
 const OPTION_GROUP_KEY_SET = new Set(OPTION_GROUPS.flatMap((group) => group.keys));
 
@@ -145,6 +152,12 @@ const BOOLEAN_OPTION_KEYS = new Set<string>([
 ]);
 
 const isBooleanOptionKey = (key: string) => BOOLEAN_OPTION_KEYS.has(key);
+
+const OIDC_DISCOVERY_KEY_MAP: Record<string, string> = {
+  authorization_endpoint: 'OidcAuthorizationEndpoint',
+  token_endpoint: 'OidcTokenEndpoint',
+  userinfo_endpoint: 'OidcUserinfoEndpoint',
+};
 
 export function SystemSettings() {
   const { t } = useTranslation();
@@ -201,7 +214,7 @@ export function SystemSettings() {
         id: 'email',
         title: t('system_settings.groups.email.title'),
         description: t('system_settings.groups.email.description'),
-        keys: ['SMTPServer', 'SMTPPort', 'SMTPAccount', 'SMTPToken', 'SMTPFrom'],
+        keys: ['EmailProvider', 'SMTPServer', 'SMTPPort', 'SMTPAccount', 'SMTPToken', 'SMTPFrom', 'ResendAPIKey'],
       },
       {
         id: 'branding',
@@ -225,7 +238,6 @@ export function SystemSettings() {
           'QuotaForInvitee',
           'QuotaRemindThreshold',
           'PreConsumedQuota',
-          'GroupRatio',
           'QuotaPerUnit',
           'DisplayInCurrencyEnabled',
           'DisplayTokenStatEnabled',
@@ -282,12 +294,14 @@ export function SystemSettings() {
       TurnstileSiteKey: t('system_settings.descriptions.TurnstileSiteKey'),
       TurnstileSecretKey: t('system_settings.descriptions.TurnstileSecretKey'),
 
-      // Email (SMTP)
+      // Email
+      EmailProvider: t('system_settings.descriptions.EmailProvider'),
       SMTPServer: t('system_settings.descriptions.SMTPServer'),
       SMTPPort: t('system_settings.descriptions.SMTPPort'),
       SMTPAccount: t('system_settings.descriptions.SMTPAccount'),
       SMTPToken: t('system_settings.descriptions.SMTPToken'),
       SMTPFrom: t('system_settings.descriptions.SMTPFrom'),
+      ResendAPIKey: t('system_settings.descriptions.ResendAPIKey'),
 
       // Branding & Content
       SystemName: t('system_settings.descriptions.SystemName'),
@@ -346,16 +360,25 @@ export function SystemSettings() {
   }, []);
 
   const save = useCallback(
-    async (key: string, value: string) => {
+    async (key: string, value: string | string[]) => {
+      // Intercept array values for multi-tag options like EmailDomainWhitelist
+      const serialized = Array.isArray(value) ? value.join(',') : value;
+      // Never retain a submitted secret in client state. GetOptions strips sensitive
+      // values on reload, so mirror that here: store '' for sensitive keys so the
+      // parent → child prop sync can never repopulate the plaintext secret.
+      const valueForState = SENSITIVE_OPTION_KEYS.has(key) ? '' : serialized;
       try {
         // Unified API call - complete URL with /api prefix
-        await api.put('/api/option/', { key, value });
+        const response = await api.put('/api/option/', { key, value: serialized });
+        if (!response.data?.success) {
+          throw new Error(response.data?.message || t('system_settings.save_failed'));
+        }
         setOptions((prev) => {
           const index = prev.findIndex((opt) => opt.key === key);
           if (index === -1) {
-            return [...prev, { key, value }];
+            return [...prev, { key, value: valueForState }];
           }
-          return prev.map((opt) => (opt.key === key ? { ...opt, value } : opt));
+          return prev.map((opt) => (opt.key === key ? { ...opt, value: valueForState } : opt));
         });
         notify({
           type: 'success',
@@ -376,6 +399,42 @@ export function SystemSettings() {
     [notify, t]
   );
 
+  // clearSensitive removes a stored secret via an explicit clear:true request.
+  // Empty saves are ignored server-side for sensitive keys, so this is the only
+  // way to wipe a persisted credential (e.g. a ResendAPIKey) from the admin UI.
+  const clearSensitive = useCallback(
+    async (key: string) => {
+      try {
+        const response = await api.put('/api/option/', { key, value: '', clear: true });
+        if (!response.data?.success) {
+          throw new Error(response.data?.message || t('system_settings.save_failed'));
+        }
+        setOptions((prev) => {
+          const index = prev.findIndex((opt) => opt.key === key);
+          if (index === -1) {
+            return [...prev, { key, value: '' }];
+          }
+          return prev.map((opt) => (opt.key === key ? { ...opt, value: '' } : opt));
+        });
+        notify({
+          type: 'success',
+          title: t('system_settings.saved_success'),
+          message: t('system_settings.saved_message', { key }),
+        });
+      } catch (error: any) {
+        console.error('Error clearing option:', error);
+        const errMsg = error?.response?.data?.message || error?.message || 'Unknown error';
+        notify({
+          type: 'error',
+          title: t('system_settings.save_failed'),
+          message: String(errMsg),
+        });
+        throw error;
+      }
+    },
+    [notify, t]
+  );
+
   const optionsMap = useMemo(() => {
     const map: Record<string, OptionRow> = {};
     for (const opt of options) {
@@ -383,6 +442,75 @@ export function SystemSettings() {
     }
     return map;
   }, [options]);
+
+  const oidcWellKnownValue = optionsMap['OidcWellKnown']?.value ?? '';
+
+  const handleOidcDiscovery = useCallback(async () => {
+    const url = (oidcWellKnownValue || '').trim();
+    if (!/^https?:\/\//i.test(url)) {
+      notify({
+        type: 'error',
+        title: t('system_settings.oidc_discovery.failed_title'),
+        message: t('system_settings.oidc_discovery.invalid_url'),
+      });
+      return;
+    }
+
+    try {
+      // Direct browser fetch (NOT through api client) — IDP is external.
+      const res = await fetch(url);
+      const payload = await res.json();
+      const targetKeys = Object.keys(OIDC_DISCOVERY_KEY_MAP);
+      const missing = targetKeys.filter((k) => !payload?.[k]);
+      if (missing.length > 0) {
+        notify({
+          type: 'error',
+          title: t('system_settings.oidc_discovery.failed_title'),
+          message: t('system_settings.oidc_discovery.missing_endpoints', { endpoints: missing.join(', ') }),
+        });
+        return;
+      }
+
+      // Save each endpoint via existing per-key save logic
+      for (const sourceKey of targetKeys) {
+        const optionKey = OIDC_DISCOVERY_KEY_MAP[sourceKey];
+        const response = await api.put('/api/option/', { key: optionKey, value: String(payload[sourceKey]) });
+        if (!response.data?.success) {
+          throw new Error(response.data?.message || t('system_settings.oidc_discovery.failed_title'));
+        }
+      }
+
+      // Update local options state in one pass
+      setOptions((prev) => {
+        const next = [...prev];
+        for (const sourceKey of targetKeys) {
+          const optionKey = OIDC_DISCOVERY_KEY_MAP[sourceKey];
+          const value = String(payload[sourceKey]);
+          const idx = next.findIndex((opt) => opt.key === optionKey);
+          if (idx === -1) {
+            next.push({ key: optionKey, value });
+          } else {
+            next[idx] = { ...next[idx], value };
+          }
+        }
+        return next;
+      });
+
+      notify({
+        type: 'success',
+        title: t('system_settings.oidc_discovery.success_title'),
+        message: t('system_settings.oidc_discovery.success_message'),
+      });
+    } catch (error: any) {
+      console.error('OIDC discovery failed:', error);
+      const errMsg = error?.message || 'Unknown error';
+      notify({
+        type: 'error',
+        title: t('system_settings.oidc_discovery.failed_title'),
+        message: String(errMsg),
+      });
+    }
+  }, [notify, oidcWellKnownValue, t]);
 
   const uncategorizedOptions = useMemo(() => options.filter((opt) => !OPTION_GROUP_KEY_SET.has(opt.key)), [options]);
 
@@ -417,16 +545,48 @@ export function SystemSettings() {
                       {group.description && <p className="text-sm text-muted-foreground">{group.description}</p>}
                     </div>
                     <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                      {groupOptions.map(({ option, isSensitive }) => (
-                        <OptionItem
-                          key={option.key}
-                          option={option}
-                          description={descriptions[option.key]}
-                          isSensitive={isSensitive}
-                          isBoolean={isBooleanOptionKey(option.key)}
-                          onSave={save}
-                        />
-                      ))}
+                      {groupOptions.map(({ option, isSensitive }) => {
+                        if (option.key === 'EmailDomainWhitelist') {
+                          return (
+                            <EmailDomainWhitelistItem
+                              key={option.key}
+                              option={option}
+                              description={descriptions[option.key]}
+                              onSave={save}
+                            />
+                          );
+                        }
+                        if (option.key === 'OidcWellKnown') {
+                          return (
+                            <OptionItem
+                              key={option.key}
+                              option={option}
+                              description={descriptions[option.key]}
+                              isSensitive={isSensitive}
+                              isBoolean={isBooleanOptionKey(option.key)}
+                              onSave={save}
+                              onClear={clearSensitive}
+                              extraAction={
+                                <Button type="button" variant="outline" onClick={handleOidcDiscovery}>
+                                  {t('system_settings.oidc_discovery.button')}
+                                </Button>
+                              }
+                            />
+                          );
+                        }
+                        return (
+                          <OptionItem
+                            key={option.key}
+                            option={option}
+                            description={descriptions[option.key]}
+                            isSensitive={isSensitive}
+                            isBoolean={isBooleanOptionKey(option.key)}
+                            enumChoices={ENUM_OPTION_KEYS[option.key]}
+                            onSave={save}
+                            onClear={clearSensitive}
+                          />
+                        );
+                      })}
                     </div>
                   </section>
                 );
@@ -446,7 +606,9 @@ export function SystemSettings() {
                         description={descriptions[opt.key]}
                         isSensitive={SENSITIVE_OPTION_KEYS.has(opt.key)}
                         isBoolean={isBooleanOptionKey(opt.key)}
+                        enumChoices={ENUM_OPTION_KEYS[opt.key]}
                         onSave={save}
+                        onClear={clearSensitive}
                       />
                     ))}
                   </div>
@@ -461,112 +623,6 @@ export function SystemSettings() {
         )}
       </CardContent>
     </Card>
-  );
-}
-
-interface OptionItemProps {
-  option: OptionRow;
-  description?: string;
-  onSave: (key: string, value: string) => Promise<void>;
-  isSensitive?: boolean;
-  isBoolean?: boolean;
-}
-
-function OptionItem({ option, description, onSave, isSensitive, isBoolean }: OptionItemProps) {
-  const { t } = useTranslation();
-  const [value, setValue] = useState(option.value);
-  const [isSaving, setIsSaving] = useState(false);
-
-  useEffect(() => {
-    setValue(option.value);
-  }, [option.value]);
-
-  const handleSave = useCallback(
-    async (overrideValue?: string) => {
-      const nextValue = overrideValue ?? value;
-      if (isSaving || nextValue === option.value) return;
-      setIsSaving(true);
-      try {
-        await onSave(option.key, nextValue);
-        if (isSensitive) {
-          setValue('');
-        } else {
-          setValue(nextValue);
-        }
-      } catch (_error) {
-        setValue(option.value);
-      } finally {
-        setIsSaving(false);
-      }
-    },
-    [isSaving, isSensitive, onSave, option.key, option.value, value]
-  );
-
-  const handleBlur = useCallback(async () => {
-    if (value === option.value) return;
-    await handleSave();
-  }, [handleSave, option.value, value]);
-
-  const handleBooleanChange = useCallback(
-    (newValue: string) => {
-      setValue(newValue);
-      handleSave(newValue);
-    },
-    [handleSave]
-  );
-
-  const placeholder = isSensitive ? t('system_settings.sensitive_placeholder') : undefined;
-  const optionValueAriaLabel = t('system_settings.option_value_aria', {
-    key: option.key,
-  });
-
-  return (
-    <div className="border rounded-lg p-4 space-y-3">
-      <div className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-        <span>{option.key}</span>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <button
-              type="button"
-              className="inline-flex items-center text-muted-foreground hover:text-foreground focus:outline-none"
-              aria-label={t('system_settings.info_about', { key: option.key })}
-            >
-              <Info className="h-4 w-4" />
-            </button>
-          </TooltipTrigger>
-          <TooltipContent side="top" align="start" className="max-w-[320px]">
-            {description || t('system_settings.no_description')}
-          </TooltipContent>
-        </Tooltip>
-      </div>
-      <div className="flex flex-col gap-2 sm:flex-row">
-        {isBoolean ? (
-          <Select value={value === '' ? undefined : value} onValueChange={handleBooleanChange} disabled={isSaving}>
-            <SelectTrigger className="flex-1" aria-label={optionValueAriaLabel} disabled={isSaving}>
-              <SelectValue placeholder={t('system_settings.select_value')} />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="true">{t('system_settings.enabled')}</SelectItem>
-              <SelectItem value="false">{t('system_settings.disabled')}</SelectItem>
-            </SelectContent>
-          </Select>
-        ) : (
-          <Input
-            value={value}
-            onChange={(e) => setValue(e.target.value)}
-            onBlur={handleBlur}
-            className="flex-1"
-            aria-label={optionValueAriaLabel}
-            placeholder={placeholder}
-            disabled={isSaving}
-          />
-        )}
-        <Button variant="outline" onClick={() => handleSave()} disabled={isSaving}>
-          {isSaving ? t('system_settings.saving') : t('system_settings.save')}
-        </Button>
-      </div>
-      {isSensitive && <p className="text-xs text-muted-foreground">{t('system_settings.sensitive_hint')}</p>}
-    </div>
   );
 }
 

@@ -23,10 +23,10 @@
         "first_client_response_desc": "クライアントに送信された最初のレスポンス",
         "first_upstream_response": "最初のアップストリームレスポンス",
         "first_upstream_response_desc": "アップストリームから受信した最初のレスポンス",
-        "mcp_call": "MCP Call",
-        "mcp_call_desc": "MCP tool call",
-        "mcp_call_server": "Server: {{server}}",
-        "mcp_call_tool": "Tool: {{tool}}",
+        "mcp_call": "MCP 呼び出し",
+        "mcp_call_desc": "MCP ツール呼び出し",
+        "mcp_call_server": "サーバー: {{server}}",
+        "mcp_call_tool": "ツール: {{tool}}",
         "request_completed": "リクエスト完了",
         "request_completed_desc": "リクエストが完全に完了しました",
         "request_forwarded": "アップストリームへ転送",
@@ -47,6 +47,7 @@
       "no_content": "コンテンツは記録されていません。",
       "no_timeline": "このトレースのタイムラインデータはありません。",
       "no_tracing": "このログエントリのトレースデータはありません。",
+      "origin_model": "要求されたモデル",
       "prompt_tokens_cached": "プロンプトトークン (キャッシュ済み)",
       "prompt_tokens_input": "プロンプトトークン (入力)",
       "quota": "費用",
@@ -79,6 +80,7 @@
         "content": "コンテンツ",
         "latency": "レイテンシ",
         "model": "モデル",
+        "origin_model": "要求されたモデル",
         "prompt_tokens": "プロンプトトークン",
         "quota": "クォータ",
         "time": "時間",
@@ -107,6 +109,12 @@
       "missing": "不明",
       "not_available": "N/A"
     },
+    "notifications": {
+      "clear_failed_message": "ログをクリアできませんでした。",
+      "clear_failed_title": "クリアに失敗しました",
+      "clear_success_message": "ログを正常にクリアしました。",
+      "clear_success_title": "ログをクリアしました"
+    },
     "search": {
       "log_entry": "ログエントリ",
       "quota": "クォータ: {{value}}"
@@ -121,6 +129,7 @@
       "empty": "条件に一致するログは見つかりませんでした。",
       "latency": "レイテンシ",
       "model": "モデル",
+      "origin_model": "要求されたモデル",
       "prompt": "プロンプト",
       "time": "時間",
       "token": "トークン",
@@ -141,6 +150,7 @@
       "manage": "管理",
       "system": "システム",
       "test": "テスト",
+      "tool": "ツール",
       "topup": "チャージ",
       "unknown": "不明"
     }

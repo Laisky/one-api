@@ -3,7 +3,7 @@ package openai
 import (
 	"strings"
 
-	"github.com/songquanpeng/one-api/relay/model"
+	"github.com/Laisky/one-api/relay/model"
 )
 
 // ReasoningSummaryNormalization captures an in-place reasoning.summary adjustment.

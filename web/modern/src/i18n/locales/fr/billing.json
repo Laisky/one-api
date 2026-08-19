@@ -1,5 +1,25 @@
 {
   "topup": {
+    "amount": {
+      "amount_label": "Montant",
+      "amount_placeholder": "Saisir un montant",
+      "calculate_button": "Calculer",
+      "calculate_first_message": "Veuillez calculer le montant avant de recharger.",
+      "calculate_first_title": "Calculer d'abord",
+      "calculated_message": "Vous paierez : {{value}}",
+      "calculated_title": "Montant calculé",
+      "calculating": "Calcul...",
+      "code_label": "Code de recharge (facultatif)",
+      "code_placeholder": "Saisir le code de recharge",
+      "description": "Saisissez le montant de recharge souhaité et un code optionnel, puis prévisualisez le total à payer.",
+      "failed_message": "Impossible de calculer le montant",
+      "failed_title": "Échec du calcul",
+      "invalid_message": "Veuillez saisir un montant d'au moins 1.",
+      "invalid_title": "Montant invalide",
+      "recharge_button": "Recharger",
+      "result": "Vous paierez : {{value}}",
+      "title": "Calculer le montant à payer"
+    },
     "balance": {
       "available": "Quota disponible pour l'utilisation de l'API",
       "description": "Votre solde de quota actuel",

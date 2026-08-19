@@ -12,8 +12,10 @@ const formatModelName = (value?: string) => value?.trim() || '—';
 export function LogModelCell({ modelName, originModelName, targetLabel, originLabel }: LogModelCellProps) {
   const billedModelName = formatModelName(modelName);
   const requestedModelName = formatModelName(originModelName);
+  const trimmedOrigin = originModelName?.trim() ?? '';
+  const trimmedTarget = modelName?.trim() ?? '';
 
-  if (!originModelName?.trim()) {
+  if (!trimmedOrigin || trimmedOrigin === trimmedTarget) {
     return <span className="font-medium">{billedModelName}</span>;
   }
 

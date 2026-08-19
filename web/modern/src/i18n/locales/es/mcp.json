@@ -5,8 +5,12 @@
         "add": "Agregar",
         "cancel": "Cancelar",
         "create": "Crear servidor",
+        "sync": "Sincronizar ahora",
+        "sync_in_progress": "Sincronizando...",
         "update": "Actualizar servidor"
       },
+      "description_add": "Agrega un nuevo servidor MCP y configura cómo se exponen sus herramientas.",
+      "description_edit": "Actualiza este servidor MCP y la configuración de herramientas expuestas.",
       "fields": {
         "api_key": "Clave API",
         "auth_type": "Tipo de autenticación",
@@ -46,7 +50,9 @@
       "notifications": {
         "load_failed": "Error al cargar el servidor MCP",
         "save_failed": "Error al guardar",
-        "save_success": "Guardado"
+        "save_success": "Guardado",
+        "sync_failed": "Sincronización fallida: {{message}}",
+        "sync_success": "Se sincronizaron {{count}} herramientas desde el origen"
       },
       "pricing": {
         "invalid": "El JSON de precios de herramientas no es válido",
@@ -56,6 +62,10 @@
       "title_edit": "Editar servidor MCP",
       "tools": {
         "title": "Herramientas sincronizadas"
+      },
+      "validation": {
+        "base_url_required": "La URL base es obligatoria",
+        "name_required": "El nombre es obligatorio"
       }
     },
     "list": {
@@ -73,6 +83,7 @@
         "actions": "Acciones",
         "auth_type": "Autenticación",
         "base_url": "URL base",
+        "id": "ID",
         "last_sync": "Última sincronización",
         "name": "Nombre",
         "priority": "Prioridad",
@@ -84,7 +95,7 @@
       "labels": {
         "never": "Nunca"
       },
-      "search_placeholder": "Buscar servidores MCP...",
+      "search_placeholder": "Buscar servidores MCP por nombre, URL o UUID...",
       "subtitle": "Administrar el registro de servidores MCP y la sincronización de herramientas",
       "title": "Servidores MCP"
     },

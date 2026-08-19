@@ -11,10 +11,10 @@ import (
 	"github.com/Laisky/zap"
 	"github.com/gin-gonic/gin"
 
-	"github.com/songquanpeng/one-api/relay/adaptor"
-	"github.com/songquanpeng/one-api/relay/adaptor/openai_compatible"
-	"github.com/songquanpeng/one-api/relay/meta"
-	"github.com/songquanpeng/one-api/relay/model"
+	"github.com/Laisky/one-api/relay/adaptor"
+	"github.com/Laisky/one-api/relay/adaptor/openai_compatible"
+	"github.com/Laisky/one-api/relay/meta"
+	"github.com/Laisky/one-api/relay/model"
 )
 
 type Adaptor struct {
@@ -32,7 +32,7 @@ func (a *Adaptor) GetChannelName() string {
 }
 
 func (a *Adaptor) GetModelList() []string {
-	return adaptor.GetModelListFromPricing(ModelRatios)
+	return slices.Clone(ModelList)
 }
 
 // GetDefaultModelPricing returns the pricing information for Groq models
@@ -109,12 +109,13 @@ func (a *Adaptor) ConvertRequest(c *gin.Context, relayMode int, request *model.G
 		promotedEffort = true
 	}
 
-	// Normalize/guard: Groq GPT-OSS reasoning_effort supports {low, medium, high}.
-	// If callers send unsupported values (e.g. "minimal" from GPT-5 semantics),
-	// drop it to avoid upstream 400s.
+	// Normalize/guard against model-specific reasoning_effort values. GPT-OSS
+	// models advertise low/medium/high, Qwen 3.6 advertises none/default, and
+	// known models without a published effort vocabulary drop the field.
+	// Unknown custom models retain the conservative GPT-OSS set.
 	if request.ReasoningEffort != nil {
 		val := strings.ToLower(strings.TrimSpace(*request.ReasoningEffort))
-		if val != "low" && val != "medium" && val != "high" {
+		if !groqReasoningEffortAllowed(request.Model, val) {
 			logger.Debug("dropping unsupported groq reasoning_effort",
 				zap.String("model", request.Model),
 				zap.String("reasoning_effort", val),
@@ -155,6 +156,27 @@ func (a *Adaptor) ConvertRequest(c *gin.Context, relayMode int, request *model.G
 	request.TopK = nil // Groq does not support TopK
 
 	return request, nil
+}
+
+// groqReasoningEffortAllowed reports whether a normalized reasoning effort is
+// published for the requested Groq model. Unknown models use the conservative
+// low/medium/high set to avoid forwarding provider-specific values blindly.
+func groqReasoningEffortAllowed(modelName, effort string) bool {
+	if config, ok := ModelRatios[modelName]; ok {
+		for _, supported := range config.SupportedReasoningEfforts {
+			if effort == strings.ToLower(strings.TrimSpace(supported)) {
+				return true
+			}
+		}
+		return false
+	}
+
+	switch effort {
+	case "low", "medium", "high":
+		return true
+	default:
+		return false
+	}
 }
 
 func (a *Adaptor) ConvertImageRequest(c *gin.Context, request *model.ImageRequest) (any, error) {

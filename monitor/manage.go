@@ -4,8 +4,8 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/songquanpeng/one-api/common/config"
-	"github.com/songquanpeng/one-api/relay/model"
+	"github.com/Laisky/one-api/common/config"
+	"github.com/Laisky/one-api/relay/model"
 )
 
 // ShouldDisableChannel determines if a channel should be automatically disabled based on the error received.

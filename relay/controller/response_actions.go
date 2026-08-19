@@ -7,16 +7,23 @@ import (
 	"github.com/Laisky/errors/v2"
 	"github.com/gin-gonic/gin"
 
-	"github.com/songquanpeng/one-api/relay"
-	"github.com/songquanpeng/one-api/relay/adaptor/openai"
-	"github.com/songquanpeng/one-api/relay/channeltype"
-	metalib "github.com/songquanpeng/one-api/relay/meta"
-	relaymodel "github.com/songquanpeng/one-api/relay/model"
+	"github.com/Laisky/one-api/relay"
+	"github.com/Laisky/one-api/relay/adaptor/openai"
+	"github.com/Laisky/one-api/relay/channeltype"
+	metalib "github.com/Laisky/one-api/relay/meta"
+	relaymodel "github.com/Laisky/one-api/relay/model"
 )
 
 // RelayResponseAPIGetHelper handles GET /v1/responses/:response_id requests
 func RelayResponseAPIGetHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 	meta := metalib.GetByContext(c)
+
+	// Resolve gateway-stored (including fallback-generated) responses first. When
+	// the feature is disabled this is a no-op and the legacy upstream proxy below
+	// runs exactly as before (closes B14).
+	if handled, gwErr := serveGatewayResponseGet(c, meta, c.Param("response_id")); handled {
+		return gwErr
+	}
 
 	if meta.ChannelType != channeltype.OpenAI {
 		return openai.ErrorWrapper(errors.New("Response API is only supported for OpenAI channels"), "unsupported_channel", http.StatusBadRequest)
@@ -55,6 +62,12 @@ func RelayResponseAPIDeleteHelper(c *gin.Context) *relaymodel.ErrorWithStatusCod
 	meta := metalib.GetByContext(c)
 	meta.IsStream = false
 	metalib.Set2Context(c, meta)
+
+	// Delete/tombstone gateway-stored responses first (closes B14). No-op when the
+	// feature is disabled.
+	if handled, gwErr := serveGatewayResponseDelete(c, meta, c.Param("response_id")); handled {
+		return gwErr
+	}
 
 	if meta.ChannelType != channeltype.OpenAI {
 		return openai.ErrorWrapper(errors.New("Response API is only supported for OpenAI channels"), "unsupported_channel", http.StatusBadRequest)
@@ -104,6 +117,14 @@ func RelayResponseAPICancelHelper(c *gin.Context) *relaymodel.ErrorWithStatusCod
 	meta := metalib.GetByContext(c)
 	meta.IsStream = false
 	metalib.Set2Context(c, meta)
+
+	// Resolve gateway-stored responses first so a gateway-minted or deleted ID is
+	// never forwarded upstream when legacy passthrough is off, and a fallback
+	// response returns the documented invalid-operation error (ST-017: C12, R08,
+	// SEC04). No-op when the feature is disabled.
+	if handled, gwErr := serveGatewayResponseCancel(c, meta, c.Param("response_id")); handled {
+		return gwErr
+	}
 
 	if meta.ChannelType != channeltype.OpenAI {
 		return openai.ErrorWrapper(errors.New("Response API is only supported for OpenAI channels"), "unsupported_channel", http.StatusBadRequest)

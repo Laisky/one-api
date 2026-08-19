@@ -11,8 +11,8 @@ import (
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 
-	"github.com/songquanpeng/one-api/common/ctxkey"
-	dbmodel "github.com/songquanpeng/one-api/model"
+	"github.com/Laisky/one-api/common/ctxkey"
+	dbmodel "github.com/Laisky/one-api/model"
 )
 
 func setupVideoBindingTestDB(t *testing.T) *gorm.DB {

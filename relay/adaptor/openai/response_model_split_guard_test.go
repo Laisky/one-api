@@ -6,7 +6,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/songquanpeng/one-api/relay/model"
+	"github.com/Laisky/one-api/relay/model"
 )
 
 func TestResponseAPIInput_MarshalUnmarshal(t *testing.T) {
@@ -137,4 +137,51 @@ func TestResponseAPIInputTokensDetails_MarshalPreservesAdditional(t *testing.T) 
 	require.Equal(t, float64(1), decoded["cached_tokens"])
 	require.NotNil(t, decoded["web_search"])
 	require.Equal(t, "keep_me", decoded["future_field"])
+}
+
+// TestResponseAPITokenDetails_MarshalRequiredZeroValues verifies that present usage detail objects
+// retain the zero-valued fields required by strict Responses API clients. It accepts no parameters
+// beyond the test context and returns no value.
+func TestResponseAPITokenDetails_MarshalRequiredZeroValues(t *testing.T) {
+	inputData, err := json.Marshal(ResponseAPIInputTokensDetails{})
+	require.NoError(t, err)
+	require.JSONEq(t, `{"cached_tokens":0}`, string(inputData))
+
+	outputData, err := json.Marshal(ResponseAPIOutputTokensDetails{})
+	require.NoError(t, err)
+	require.JSONEq(t, `{"reasoning_tokens":0}`, string(outputData))
+}
+
+func TestResponseAPIUsage_ToModelUsageCacheWriteTokens(t *testing.T) {
+	var usage ResponseAPIUsage
+	err := json.Unmarshal([]byte(`{
+		"input_tokens":100,
+		"output_tokens":20,
+		"total_tokens":120,
+		"cache_write_tokens":30,
+		"input_tokens_details":{"cached_tokens":40}
+	}`), &usage)
+	require.NoError(t, err)
+
+	converted := usage.ToModelUsage()
+	require.NotNil(t, converted)
+	require.Equal(t, 100, converted.PromptTokens)
+	require.Equal(t, 20, converted.CompletionTokens)
+	require.Equal(t, 120, converted.TotalTokens)
+	require.Equal(t, 30, converted.CacheWrite5mTokens)
+	require.Zero(t, converted.CacheWrite1hTokens)
+	require.NotNil(t, converted.PromptTokensDetails)
+	require.Equal(t, 40, converted.PromptTokensDetails.CachedTokens)
+}
+
+func TestUsageNormalizeCacheWriteTokens(t *testing.T) {
+	usage := &model.Usage{
+		CacheWriteTokens:   30,
+		CacheWrite5mTokens: 2,
+	}
+
+	usage.NormalizeCacheWriteTokens()
+
+	require.Zero(t, usage.CacheWriteTokens)
+	require.Equal(t, 32, usage.CacheWrite5mTokens)
 }

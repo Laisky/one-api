@@ -1,9 +1,9 @@
 package aws
 
-import "github.com/songquanpeng/one-api/relay/adaptor"
+import "github.com/Laisky/one-api/relay/adaptor"
 
-// AWSToolingDefaults captures Amazon Bedrock AgentCore pricing for common server-side tools (retrieved 2025-11-12).
-// Source: https://r.jina.ai/https://aws.amazon.com/bedrock/agentcore/pricing/
+// AWSToolingDefaults captures Amazon Bedrock AgentCore pricing for common server-side tools (retrieved 2026-04-28).
+// Source: https://aws.amazon.com/bedrock/agentcore/pricing/
 var AWSToolingDefaults = adaptor.ChannelToolConfig{
 	Pricing: map[string]adaptor.ToolPricingConfig{
 		"agentcore_search_api":                {UsdPerCall: 0.000025},

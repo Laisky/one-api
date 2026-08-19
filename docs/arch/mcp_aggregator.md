@@ -133,7 +133,7 @@ flowchart LR
 
 4. **Response API fallback**
 
-- `/v1/responses` requests that reference MCP tools are routed through the ChatCompletion fallback so the MCP execution loop can run, then rewritten back to the Response API format.
+- `/v1/responses` requests that reference MCP tools are routed through the ChatCompletion fallback so the MCP execution loop can run, then rewritten back to the Response API format. This is a format bridge, not native OpenAI Responses state handling; clients must provide complete replayable `input` when they need portable multi-turn context.
 
 ## 3) Tool Ownership and Multi‑Round Orchestration
 
@@ -183,7 +183,7 @@ flowchart LR
 
 1. `mcp_servers`
 
-- `id`, `name`, `description`, `status`, `priority`, `base_url`, `protocol`, `auth_type`, `api_key`, `headers`
+- `id` (internal), `uuid` (external), `name`, `description`, `status`, `priority`, `base_url`, `protocol`, `auth_type`, `api_key`, `headers`
 - `tool_whitelist`, `tool_blacklist`, `tool_pricing`
 - `auto_sync_enabled`, `auto_sync_interval_minutes`
 - `last_sync_at`, `last_sync_status`, `last_sync_error`
@@ -191,7 +191,7 @@ flowchart LR
 - `created_at`, `updated_at`
 
 2. `mcp_tools`
-   - `id`, `server_id`, `name`, `display_name`, `description`, `input_schema`
+   - `id` (internal), `uuid` (external), `server_id` (internal), `server_uuid` (external), `name`, `display_name`, `description`, `input_schema`
 
 - `default_pricing` (per‑tool USD/quota hints from MCP server), `status`, `created_at`, `updated_at`
   - `input_schema` stores the full JSON schema synchronized from MCP (`input_schema`/`inputSchema`) and is used to generate upstream function tools.
@@ -223,9 +223,11 @@ flowchart LR
 - `POST /api/mcp_servers/:id/test`
 - `GET /api/mcp_servers/:id/tools`
 
+**Updating an MCP server**: send only the keys you want to change. Sending a key with an empty value (`""`, `false`, `0`, `{}`) clears that column on the server. Special case: `api_key` set to a masked-secret placeholder (e.g. `********`) is treated as 'no change'.
+
 ### Tool Catalog
 
-- `GET /api/mcp_tools?server_id=&status=`
+- `GET /api/mcp_tools?server_id=&status=` where `server_id` carries the MCP server UUID string in the external API.
 
 ### MCP Proxy
 

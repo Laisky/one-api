@@ -2,15 +2,13 @@ package quota
 
 import (
 	"math"
+	"time"
 
-	"github.com/Laisky/zap"
-
-	"github.com/songquanpeng/one-api/common/logger"
-	modelcfg "github.com/songquanpeng/one-api/model"
-	"github.com/songquanpeng/one-api/relay/adaptor"
-	billingratio "github.com/songquanpeng/one-api/relay/billing/ratio"
-	relaymodel "github.com/songquanpeng/one-api/relay/model"
-	"github.com/songquanpeng/one-api/relay/pricing"
+	modelcfg "github.com/Laisky/one-api/model"
+	"github.com/Laisky/one-api/relay/adaptor"
+	billingratio "github.com/Laisky/one-api/relay/billing/ratio"
+	relaymodel "github.com/Laisky/one-api/relay/model"
+	"github.com/Laisky/one-api/relay/pricing"
 )
 
 // ComputeInput describes all parameters required to calculate quota consumption
@@ -24,6 +22,7 @@ type ComputeInput struct {
 	ChannelModelConfigs    map[string]modelcfg.ModelConfigLocal
 	ChannelCompletionRatio map[string]float64
 	PricingAdaptor         adaptor.Adaptor
+	RequestTime            time.Time
 }
 
 // ComputeResult captures the outcome of a quota calculation, including
@@ -38,6 +37,8 @@ type ComputeResult struct {
 }
 
 // Compute calculates the quota required for the provided usage snapshot.
+// It mirrors the logic used in controller helper functions so streaming
+// billing and final reconciliation share the same pricing semantics.
 func Compute(input ComputeInput) ComputeResult {
 	usage := input.Usage
 	if usage == nil {
@@ -48,20 +49,10 @@ func Compute(input ComputeInput) ComputeResult {
 	completionTokens := usage.CompletionTokens
 
 	pricingAdaptor := input.PricingAdaptor
-	resolvedModelCfg, hasResolvedModelCfg := pricing.ResolveModelConfigRatioOnly(input.ModelName, input.ChannelModelConfigs, pricingAdaptor)
-
-	// Resolve the completion ratio using a priority-ordered check to avoid redundant lookups.
-	var completionRatioResolved float64
-	if override, ok := input.ChannelCompletionRatio[input.ModelName]; ok {
-		completionRatioResolved = override
-	} else if hasResolvedModelCfg && resolvedModelCfg.CompletionRatio != 0 {
-		completionRatioResolved = resolvedModelCfg.CompletionRatio
-	} else {
-		completionRatioResolved = pricing.GetCompletionRatioWithThreeLayers(input.ModelName, input.ChannelCompletionRatio, pricingAdaptor)
-	}
-
-	hasChannelModelRatioOverride := hasOverrideForModel(input.ModelName, input.ChannelModelRatio)
+	resolvedModelCfg, hasResolvedModelCfg := pricing.ResolveModelConfigRatioOnly(input.ModelName, input.ChannelModelConfigs, pricingAdaptor, input.RequestTime)
+	hasChannelModelRatioOverride := hasModelRatioFlatOverride(input.ModelName, input.ChannelModelRatio, input.ChannelModelConfigs)
 	baseRatio := input.ModelRatio
+	completionRatioResolved := resolveCompletionRatio(input.ModelName, resolvedModelCfg, hasResolvedModelCfg, input.ChannelCompletionRatio, input.ChannelModelConfigs, pricingAdaptor, input.RequestTime)
 
 	if hasResolvedModelCfg {
 		// Preserve legacy fallback behavior: when channel config omits base ratio/completion
@@ -80,7 +71,7 @@ func Compute(input ComputeInput) ComputeResult {
 		}
 	}
 
-	eff := pricing.ResolveEffectivePricingFromConfig(promptTokens, resolvedModelCfg)
+	eff := pricing.ResolveEffectivePricingForUsageFromConfig(promptTokens, completionTokens, resolvedModelCfg)
 
 	usedModelRatio := baseRatio
 	usedCompletionRatio := completionRatioResolved
@@ -89,26 +80,39 @@ func Compute(input ComputeInput) ComputeResult {
 		if !hasChannelModelRatioOverride {
 			usedModelRatio = eff.InputRatio
 		}
-
-		// Optimization: Deriving the tiered completion ratio from eff.OutputRatio / eff.InputRatio
-		// avoids a redundant loop over tiers. Since eff.OutputRatio = eff.InputRatio * tierComp,
-		// the division recovers the effective completion ratio for the current tier.
-		if eff.InputRatio != 0 {
-			usedCompletionRatio = eff.OutputRatio / eff.InputRatio
-		} else {
-			usedCompletionRatio = 1.0
+		baseComp := eff.OutputRatio
+		completionBaseRatio := eff.InputRatio
+		if hasChannelModelRatioOverride {
+			completionBaseRatio = usedModelRatio
+			baseComp = usedModelRatio * completionRatioResolved
+			for _, tier := range resolvedModelCfg.Tiers {
+				if !pricing.TierApplies(promptTokens, completionTokens, tier) {
+					continue
+				}
+				if tier.CompletionRatio != 0 {
+					baseComp = usedModelRatio * tier.CompletionRatio
+				}
+			}
 		}
+		if completionBaseRatio != 0 {
+			baseComp = baseComp / completionBaseRatio
+		} else {
+			baseComp = 1.0
+		}
+		usedCompletionRatio = baseComp
 	} else if pricingAdaptor != nil {
 		// Optimized check: only use effective pricing if the input model ratio matches the adaptor base.
 		// This avoids extra GetDefaultModelPricing() map lookups when not needed.
 		adaptorBase := pricingAdaptor.GetModelRatio(input.ModelName)
 		if math.Abs(baseRatio-adaptorBase) < 1e-12 {
 			usedModelRatio = eff.InputRatio
+			baseComp := eff.OutputRatio
 			if eff.InputRatio != 0 {
-				usedCompletionRatio = eff.OutputRatio / eff.InputRatio
+				baseComp = eff.OutputRatio / eff.InputRatio
 			} else {
-				usedCompletionRatio = 1.0
+				baseComp = 1.0
 			}
+			usedCompletionRatio = baseComp
 		}
 	}
 
@@ -196,15 +200,6 @@ func Compute(input ComputeInput) ComputeResult {
 
 	totalQuota := int64(math.Ceil(cost)) + usage.ToolsCost
 	if (usedModelRatio*input.GroupRatio) != 0 && totalQuota <= 0 {
-		logger.Logger.Debug("quota calculation clamped to minimum charge",
-			zap.String("model_name", input.ModelName),
-			zap.Int("prompt_tokens", promptTokens),
-			zap.Int("completion_tokens", completionTokens),
-			zap.Float64("raw_cost", cost),
-			zap.Float64("model_ratio", usedModelRatio),
-			zap.Float64("group_ratio", input.GroupRatio),
-			zap.Float64("completion_ratio", usedCompletionRatio),
-		)
 		totalQuota = 1
 	}
 
@@ -218,13 +213,19 @@ func Compute(input ComputeInput) ComputeResult {
 	}
 }
 
-// hasOverrideForModel reports whether overrides contains modelName, preserving explicit zero values.
-func hasOverrideForModel(modelName string, overrides map[string]float64) bool {
+// hasModelRatioFlatOverride reports whether overrides contains a true legacy flat model-ratio override.
+// Parameters: modelName names the model, overrides contains scalar ratios, and channelConfigs contains modern JSON configs.
+// Returns: true when the scalar override should keep precedence over windowed base ratios.
+func hasModelRatioFlatOverride(modelName string, overrides map[string]float64, channelConfigs map[string]modelcfg.ModelConfigLocal) bool {
 	if overrides == nil {
 		return false
 	}
-	_, ok := overrides[modelName]
-	return ok
+	override, ok := overrides[modelName]
+	if !ok {
+		return false
+	}
+	local, hasConfig := channelConfigs[modelName]
+	return !hasConfig || len(local.TimeWindows) == 0 || local.Ratio == 0 || local.Ratio != override
 }
 
 // resolveCompletionRatio returns the effective completion ratio for modelName.
@@ -235,15 +236,20 @@ func resolveCompletionRatio(
 	resolvedModelCfg adaptor.ModelConfig,
 	hasResolvedModelCfg bool,
 	channelOverrides map[string]float64,
+	channelConfigs map[string]modelcfg.ModelConfigLocal,
 	provider adaptor.Adaptor,
+	at time.Time,
 ) float64 {
 	if override, ok := channelOverrides[modelName]; ok {
-		return override
+		local, hasConfig := channelConfigs[modelName]
+		if !hasConfig || len(local.TimeWindows) == 0 || local.CompletionRatio == 0 || local.CompletionRatio != override {
+			return override
+		}
 	}
 	if hasResolvedModelCfg && resolvedModelCfg.CompletionRatio != 0 {
 		return resolvedModelCfg.CompletionRatio
 	}
-	return pricing.GetCompletionRatioWithThreeLayers(modelName, channelOverrides, provider)
+	return pricing.ResolveCompletionRatioAt(modelName, nil, channelOverrides, provider, at)
 }
 
 // isClaudeModelName reports whether modelName contains the ASCII token "claude" regardless of case.
@@ -262,21 +268,9 @@ func containsASCIIFold(s string, substr string) bool {
 		return false
 	}
 
-	// substr is already expected to be lowercase from the caller (isClaudeModelName).
-	// We pre-calculate the uppercase variant of the first byte to allow a fast search
-	// that avoids calling asciiLower on every character in the model name string.
-	firstLower := substr[0]
-	var firstUpper byte
-	if firstLower >= 'a' && firstLower <= 'z' {
-		firstUpper = firstLower - ('a' - 'A')
-	} else {
-		firstUpper = firstLower
-	}
-
 	last := len(s) - len(substr)
 	for i := 0; i <= last; i++ {
-		// Fast path: match the first byte against both possible cases.
-		if s[i] != firstLower && s[i] != firstUpper {
+		if asciiLower(s[i]) != substr[0] {
 			continue
 		}
 
@@ -293,6 +287,7 @@ func containsASCIIFold(s string, substr string) bool {
 	}
 	return false
 }
+
 // asciiLower converts ASCII uppercase bytes to lowercase.
 // Parameter: b is the byte to normalize.
 // Returns: the lowercase byte when b is an ASCII uppercase letter, otherwise b unchanged.

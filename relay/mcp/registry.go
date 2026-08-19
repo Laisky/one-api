@@ -11,7 +11,8 @@ import (
 
 	"github.com/Laisky/errors/v2"
 
-	"github.com/songquanpeng/one-api/model"
+	"github.com/Laisky/one-api/common/identity"
+	"github.com/Laisky/one-api/model"
 )
 
 // ToolPolicySnapshot captures policy and pricing decisions for a MCP tool.
@@ -60,12 +61,17 @@ func ResolveTools(server *model.MCPServer, tools []*model.MCPTool, channelBlackl
 			continue
 		}
 
+		// Empty server whitelist = no whitelist filter (allow all subject to
+		// blacklists). Treating empty as deny-all would break the common case
+		// where a freshly synced server has no whitelist configured — sync
+		// itself never populates ToolWhitelist, so requiring an explicit
+		// whitelist would silently hide every tool from /mcp tools/list and
+		// from chat-completion tool aggregation. See issue #340.
 		allowed := true
-		if len(serverWhitelist) == 0 {
-			allowed = false
-		}
-		if _, ok := serverWhitelist[name]; !ok {
-			allowed = false
+		if len(serverWhitelist) > 0 {
+			if _, ok := serverWhitelist[name]; !ok {
+				allowed = false
+			}
 		}
 		if _, ok := serverBlacklist[name]; ok {
 			allowed = false
@@ -119,7 +125,9 @@ func BuildToolCandidates(servers []*model.MCPServer, toolsByServer map[int][]*mo
 		}
 		resolved, err := ResolveTools(server, tools, channelBlacklist, userBlacklist, allowedTools)
 		if err != nil {
-			return nil, errors.Wrapf(err, "resolve tools for server %d", server.Id)
+			return nil, identity.Tag(
+				errors.Wrapf(err, "resolve tools for server %d", server.Id),
+				server.Ref())
 		}
 		for _, entry := range resolved {
 			if !entry.Policy.Allowed || entry.Tool == nil {

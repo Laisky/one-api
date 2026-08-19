@@ -1,8 +1,36 @@
 package model
 
 import (
+	"strings"
+
 	"github.com/Laisky/errors/v2"
+	"gorm.io/gorm"
 )
+
+// applyMCPToolKeyword narrows an MCP tool query by a search keyword.
+//
+// A pasted UUID matches the tool's own uuid or its owning server_uuid by equality, so an
+// operator can paste either identifier copied out of the UI. Any other keyword falls back
+// to a case-insensitive substring match over name/display_name. An empty keyword leaves
+// the query untouched.
+//
+// Parameters:
+//   - query: query to narrow; never mutated, GORM returns a new statement.
+//   - keyword: raw search keyword supplied by the request.
+//
+// Return values:
+//   - *gorm.DB: narrowed query, or query unchanged when the keyword is empty.
+func applyMCPToolKeyword(query *gorm.DB, keyword string) *gorm.DB {
+	trimmed := strings.TrimSpace(keyword)
+	if trimmed == "" {
+		return query
+	}
+	if scoped, matched := applyUUIDKeyword(query, trimmed, "uuid", "server_uuid"); matched {
+		return scoped
+	}
+	pattern := "%" + strings.ToLower(trimmed) + "%"
+	return query.Where("(LOWER(name) LIKE ? or LOWER(display_name) LIKE ?)", pattern, pattern)
+}
 
 // MCPToolSortFields enumerates whitelisted columns for MCP tool sorting.
 var MCPToolSortFields = map[string]string{
@@ -15,7 +43,26 @@ var MCPToolSortFields = map[string]string{
 
 // ListMCPTools returns MCP tools filtered by server id and status.
 func ListMCPTools(serverID int, status *int, offset int, limit int, sortBy string, sortOrder string) ([]*MCPTool, error) {
-	query := DB.Model(&MCPTool{})
+	return SearchMCPTools(serverID, status, "", offset, limit, sortBy, sortOrder)
+}
+
+// SearchMCPTools returns MCP tools filtered by server id, status, and a search keyword.
+//
+// Parameters:
+//   - serverID: owning server id; non-positive means every server.
+//   - status: optional status filter.
+//   - keyword: optional search keyword; a UUID matches the tool uuid or its server_uuid
+//     exactly, anything else substring-matches name/display_name. Empty means no filter.
+//   - offset: pagination offset.
+//   - limit: page size; non-positive means unlimited.
+//   - sortBy: whitelisted sort column.
+//   - sortOrder: "asc" or "desc".
+//
+// Return values:
+//   - []*MCPTool: matching tools.
+//   - error: wrapped database error when the query fails.
+func SearchMCPTools(serverID int, status *int, keyword string, offset int, limit int, sortBy string, sortOrder string) ([]*MCPTool, error) {
+	query := applyMCPToolKeyword(DB.Model(&MCPTool{}), keyword)
 	if serverID > 0 {
 		query = query.Where("server_id = ?", serverID)
 	}
@@ -41,7 +88,24 @@ func ListMCPTools(serverID int, status *int, offset int, limit int, sortBy strin
 
 // CountMCPTools returns the total number of MCP tools matching filters.
 func CountMCPTools(serverID int, status *int) (int64, error) {
-	query := DB.Model(&MCPTool{})
+	return CountSearchedMCPTools(serverID, status, "")
+}
+
+// CountSearchedMCPTools returns the number of MCP tools matching filters and a keyword.
+//
+// It applies exactly the same keyword filter as SearchMCPTools so the reported total
+// always agrees with the rows a client can page through.
+//
+// Parameters:
+//   - serverID: owning server id; non-positive means every server.
+//   - status: optional status filter.
+//   - keyword: optional search keyword; empty means count every matching tool.
+//
+// Return values:
+//   - int64: number of matching tools.
+//   - error: wrapped database error when the query fails.
+func CountSearchedMCPTools(serverID int, status *int, keyword string) (int64, error) {
+	query := applyMCPToolKeyword(DB.Model(&MCPTool{}), keyword)
 	if serverID > 0 {
 		query = query.Where("server_id = ?", serverID)
 	}
@@ -56,11 +120,14 @@ func CountMCPTools(serverID int, status *int) (int64, error) {
 }
 
 // GetMCPToolsByServerID fetches tools for a specific server.
+//
+// The empty case returns a non-nil zero-length slice so HTTP handlers that
+// pass the result straight to c.JSON marshal "data" as [] rather than null.
 func GetMCPToolsByServerID(serverID int) ([]*MCPTool, error) {
 	if serverID <= 0 {
 		return nil, errors.New("server id is invalid")
 	}
-	var tools []*MCPTool
+	tools := make([]*MCPTool, 0)
 	if err := DB.Where("server_id = ?", serverID).Find(&tools).Error; err != nil {
 		return nil, errors.Wrap(err, "get mcp tools")
 	}
@@ -68,7 +135,7 @@ func GetMCPToolsByServerID(serverID int) ([]*MCPTool, error) {
 }
 
 // UpsertMCPTools replaces tools for a server with the provided list.
-func UpsertMCPTools(serverID int, tools []*MCPTool) error {
+func UpsertMCPTools(serverID int, serverUUID string, tools []*MCPTool) error {
 	if serverID <= 0 {
 		return errors.New("server id is invalid")
 	}
@@ -80,6 +147,9 @@ func UpsertMCPTools(serverID int, tools []*MCPTool) error {
 			continue
 		}
 		tool.ServerId = serverID
+		if serverUUID != "" {
+			tool.ServerUUID = &serverUUID
+		}
 		tool.NormalizeName()
 		if err := DB.Create(tool).Error; err != nil {
 			return errors.Wrap(err, "create mcp tool")

@@ -16,281 +16,24 @@ import (
 	"github.com/Laisky/zap"
 	"github.com/gin-gonic/gin"
 
-	"github.com/songquanpeng/one-api/common"
-	"github.com/songquanpeng/one-api/common/ctxkey"
-	"github.com/songquanpeng/one-api/common/helper"
-	"github.com/songquanpeng/one-api/common/tracing"
-	"github.com/songquanpeng/one-api/model"
-	"github.com/songquanpeng/one-api/relay"
-	relayadaptor "github.com/songquanpeng/one-api/relay/adaptor"
-	"github.com/songquanpeng/one-api/relay/adaptor/openai"
-	"github.com/songquanpeng/one-api/relay/adaptor/replicate"
-	billingratio "github.com/songquanpeng/one-api/relay/billing/ratio"
-	"github.com/songquanpeng/one-api/relay/channeltype"
-	metalib "github.com/songquanpeng/one-api/relay/meta"
-	relaymodel "github.com/songquanpeng/one-api/relay/model"
-	"github.com/songquanpeng/one-api/relay/pricing"
-	"github.com/songquanpeng/one-api/relay/relaymode"
+	"github.com/Laisky/one-api/common/ctxkey"
+	"github.com/Laisky/one-api/common/helper"
+	"github.com/Laisky/one-api/common/tracing"
+	"github.com/Laisky/one-api/model"
+	"github.com/Laisky/one-api/relay"
+	"github.com/Laisky/one-api/relay/adaptor/openai"
+	"github.com/Laisky/one-api/relay/adaptor/replicate"
+	billingratio "github.com/Laisky/one-api/relay/billing/ratio"
+	"github.com/Laisky/one-api/relay/channeltype"
+	metalib "github.com/Laisky/one-api/relay/meta"
+	relaymodel "github.com/Laisky/one-api/relay/model"
+	"github.com/Laisky/one-api/relay/pricing"
+	"github.com/Laisky/one-api/relay/relaymode"
 )
 
-func getImageRequest(c *gin.Context, _ int) (*relaymodel.ImageRequest, error) {
-	imageRequest := &relaymodel.ImageRequest{}
-	err := common.UnmarshalBodyReusable(c, imageRequest)
-	if err != nil {
-		return nil, errors.WithStack(err)
-	}
-
-	if imageRequest.N == 0 {
-		imageRequest.N = 1
-	}
-
-	if imageRequest.Model == "" {
-		imageRequest.Model = "dall-e-2"
-	}
-
-	if strings.HasPrefix(imageRequest.Model, "gpt-image-") {
-		imageRequest.ResponseFormat = nil
-	}
-
-	return imageRequest, nil
-}
-
-func normalizeImageSizeKey(value string) string {
-	trimmed := strings.TrimSpace(strings.ToLower(value))
-	trimmed = strings.ReplaceAll(trimmed, "×", "x")
-	trimmed = strings.ReplaceAll(trimmed, "*", "x")
-	trimmed = strings.ReplaceAll(trimmed, " ", "")
-	return trimmed
-}
-
-func normalizeImageQualityKey(value string) string {
-	return strings.TrimSpace(strings.ToLower(value))
-}
-
-func applyImageDefaults(req *relaymodel.ImageRequest, cfg *relayadaptor.ImagePricingConfig) {
-	if cfg != nil {
-		if req.Size == "" && cfg.DefaultSize != "" {
-			req.Size = cfg.DefaultSize
-		}
-		if req.Quality == "" && cfg.DefaultQuality != "" {
-			req.Quality = cfg.DefaultQuality
-		}
-		if cfg.MinImages > 0 && req.N < cfg.MinImages {
-			req.N = cfg.MinImages
-		}
-		if cfg.MaxImages > 0 && cfg.MaxImages >= cfg.MinImages && req.N > cfg.MaxImages {
-			req.N = cfg.MaxImages
-		}
-	}
-
-	if req.Size == "" {
-		switch req.Model {
-		case "gpt-image-1", "gpt-image-1-mini", "chatgpt-image-latest", "gpt-image-1.5", "gpt-image-1.5-2025-12-16":
-			req.Size = "1024x1536"
-		case "dall-e-2", "dall-e-3", "grok-2-image", "grok-2-image-1212":
-			req.Size = "1024x1024"
-		default:
-			req.Size = "1024x1024"
-		}
-	}
-
-	if req.Quality == "" {
-		switch req.Model {
-		case "gpt-image-1", "gpt-image-1-mini", "chatgpt-image-latest", "gpt-image-1.5", "gpt-image-1.5-2025-12-16":
-			req.Quality = "high"
-		case "dall-e-2", "dall-e-3":
-			req.Quality = "standard"
-		default:
-			req.Quality = "standard"
-		}
-	}
-}
-
-func isValidImageSize(req *relaymodel.ImageRequest, cfg *relayadaptor.ImagePricingConfig) bool {
-	sizeKey := normalizeImageSizeKey(req.Size)
-	qualityKey := normalizeImageQualityKey(req.Quality)
-	if qualityKey == "" {
-		qualityKey = "default"
-	}
-	if cfg != nil {
-		if len(cfg.QualitySizeMultipliers) > 0 {
-			if table, ok := cfg.QualitySizeMultipliers[qualityKey]; ok {
-				if _, exists := table[sizeKey]; exists {
-					return true
-				}
-			}
-			if qualityKey != "default" {
-				return false
-			}
-			if table, ok := cfg.QualitySizeMultipliers["default"]; ok {
-				if _, exists := table[sizeKey]; exists {
-					return true
-				}
-			}
-			return false
-		}
-		if len(cfg.SizeMultipliers) > 0 {
-			_, exists := cfg.SizeMultipliers[sizeKey]
-			return exists
-		}
-		return req.Size != ""
-	}
-	if req.Model == "cogview-3" || billingratio.ImageSizeRatios[req.Model] == nil {
-		return true
-	}
-	_, ok := billingratio.ImageSizeRatios[req.Model][req.Size]
-	return ok
-}
-
-func isValidImagePromptLength(req *relaymodel.ImageRequest, cfg *relayadaptor.ImagePricingConfig) bool {
-	if cfg != nil && cfg.PromptTokenLimit > 0 {
-		return len(req.Prompt) <= cfg.PromptTokenLimit
-	}
-	maxPromptLength, ok := billingratio.ImagePromptLengthLimitations[req.Model]
-	return !ok || len(req.Prompt) <= maxPromptLength
-}
-
-func isWithinRange(req *relaymodel.ImageRequest, cfg *relayadaptor.ImagePricingConfig) bool {
-	if cfg != nil {
-		if cfg.MinImages > 0 && req.N < cfg.MinImages {
-			return false
-		}
-		if cfg.MaxImages > 0 && req.N > cfg.MaxImages {
-			return false
-		}
-		return true
-	}
-	amounts, ok := billingratio.ImageGenerationAmounts[req.Model]
-	return !ok || (req.N >= amounts[0] && req.N <= amounts[1])
-}
-
-func getImageCostRatio(imageRequest *relaymodel.ImageRequest, cfg *relayadaptor.ImagePricingConfig) (float64, error) {
-	if cfg != nil {
-		sizeKey := normalizeImageSizeKey(imageRequest.Size)
-		qualityKey := normalizeImageQualityKey(imageRequest.Quality)
-		if qualityKey == "" {
-			qualityKey = "default"
-		}
-		if len(cfg.QualitySizeMultipliers) > 0 {
-			if table, ok := cfg.QualitySizeMultipliers[qualityKey]; ok {
-				if v, exists := table[sizeKey]; exists && v > 0 {
-					return v, nil
-				}
-			}
-			if qualityKey != "default" {
-				return 0, errors.Errorf("quality %s not supported for model %s", imageRequest.Quality, imageRequest.Model)
-			}
-			if table, ok := cfg.QualitySizeMultipliers["default"]; ok {
-				if v, exists := table[sizeKey]; exists && v > 0 {
-					return v, nil
-				}
-			}
-			return 0, errors.Errorf("size %s not supported for quality %s", imageRequest.Size, imageRequest.Quality)
-		}
-		multiplier := 1.0
-		if len(cfg.SizeMultipliers) > 0 {
-			if v, ok := cfg.SizeMultipliers[sizeKey]; ok && v > 0 {
-				multiplier = v
-			} else {
-				return 0, errors.Errorf("size %s not supported for model %s", imageRequest.Size, imageRequest.Model)
-			}
-		}
-		if len(cfg.QualityMultipliers) > 0 {
-			if v, ok := cfg.QualityMultipliers[qualityKey]; ok && v > 0 {
-				multiplier *= v
-			} else if qualityKey != "default" {
-				return 0, errors.Errorf("quality %s not supported for model %s", imageRequest.Quality, imageRequest.Model)
-			}
-		}
-		if multiplier <= 0 {
-			multiplier = 1
-		}
-		return multiplier, nil
-	}
-
-	imageCostRatio := getImageSizeRatioFallback(imageRequest.Model, imageRequest.Size)
-	if imageRequest.Quality == "hd" && imageRequest.Model == "dall-e-3" {
-		if imageRequest.Size == "1024x1024" {
-			imageCostRatio *= 2
-		} else {
-			imageCostRatio *= 1.5
-		}
-	}
-	if imageCostRatio <= 0 {
-		imageCostRatio = 1
-	}
-	return imageCostRatio, nil
-}
-
-func getImageSizeRatioFallback(model string, size string) float64 {
-	if ratio, ok := billingratio.ImageSizeRatios[model][size]; ok {
-		return ratio
-	}
-	return 1
-}
-
-func validateImageRequest(imageRequest *relaymodel.ImageRequest, _ *metalib.Meta, cfg *relayadaptor.ImagePricingConfig) *relaymodel.ErrorWithStatusCode {
-	// check prompt length
-	if imageRequest.Prompt == "" {
-		return openai.ErrorWrapper(errors.New("prompt is required"), "prompt_missing", http.StatusBadRequest)
-	}
-
-	// model validation
-	if !isValidImageSize(imageRequest, cfg) {
-		return openai.ErrorWrapper(errors.New("size not supported for this image model"), "size_not_supported", http.StatusBadRequest)
-	}
-
-	if !isValidImagePromptLength(imageRequest, cfg) {
-		return openai.ErrorWrapper(errors.New("prompt is too long"), "prompt_too_long", http.StatusBadRequest)
-	}
-
-	// Number of generated images validation
-	if !isWithinRange(imageRequest, cfg) {
-		return openai.ErrorWrapper(errors.New("invalid value of n"), "n_not_within_range", http.StatusBadRequest)
-	}
-
-	// Model-specific quality validation
-	if cfg == nil && imageRequest.Model == "dall-e-3" && imageRequest.Quality != "" {
-		q := strings.ToLower(imageRequest.Quality)
-		if q != "standard" && q != "hd" {
-			return openai.ErrorWrapper(
-				errors.Errorf("Invalid value: '%s'. Supported values are: 'standard' and 'hd'.", imageRequest.Quality),
-				"invalid_value",
-				http.StatusBadRequest,
-			)
-		}
-	}
-	return nil
-}
-
-// getChannelImageTierOverride reads model tier overrides from channel model-configs map.
-// Convention keys (in channel ModelConfigs Ratio map):
-//
-//	$image-tier:<model>|size=<WxH>|quality=<q>  (highest priority)
-//	$image-tier:<model>|size=<WxH>
-//	$image-tier:<model>|quality=<q>
-func getChannelImageTierOverride(channelModelRatio map[string]float64, model, size, quality string) (float64, bool) {
-	if channelModelRatio == nil {
-		return 0, false
-	}
-	// Combined override
-	key := "$image-tier:" + model + "|size=" + size + "|quality=" + quality
-	if v, ok := channelModelRatio[key]; ok && v > 0 {
-		return v, true
-	}
-	// Size-only override
-	key = "$image-tier:" + model + "|size=" + size
-	if v, ok := channelModelRatio[key]; ok && v > 0 {
-		return v, true
-	}
-	// Quality-only override
-	key = "$image-tier:" + model + "|quality=" + quality
-	if v, ok := channelModelRatio[key]; ok && v > 0 {
-		return v, true
-	}
-	return 0, false
-}
-
+// RelayImageHelper relays one image request and reconciles its billing state.
+// Parameters: c carries request, routing, and quota metadata; relayMode selects
+// the image operation. Returns: a client-facing relay error or nil on success.
 func RelayImageHelper(c *gin.Context, relayMode int) *relaymodel.ErrorWithStatusCode {
 	lg := gmw.GetLogger(c)
 	ctx := gmw.Ctx(c)
@@ -313,8 +56,8 @@ func RelayImageHelper(c *gin.Context, relayMode int) *relaymodel.ErrorWithStatus
 	var channelModelConfigs map[string]model.ModelConfigLocal
 	if channelModel, ok := c.Get(ctxkey.ChannelModel); ok {
 		if channel, ok := channelModel.(*model.Channel); ok {
-			channelModelRatio = channel.GetModelRatioFromConfigs()
-			channelModelConfigs = channel.GetModelPriceConfigs()
+			channelModelRatio = channel.GetModelRatioFromConfigsWithContext(ctx)
+			channelModelConfigs = channel.GetModelPriceConfigsWithContext(ctx)
 		}
 	}
 
@@ -323,7 +66,7 @@ func RelayImageHelper(c *gin.Context, relayMode int) *relaymodel.ErrorWithStatus
 		return openai.ErrorWrapper(errors.Errorf("invalid api type: %d", meta.APIType), "invalid_api_type", http.StatusBadRequest)
 	}
 
-	imagePricingCfg, _ := pricing.ResolveImagePricing(imageRequest.Model, channelModelConfigs, adaptor)
+	imagePricingCfg, _ := pricing.ResolveImagePricing(imageRequest.Model, channelModelConfigs, adaptor, meta.StartTime)
 	applyImageDefaults(imageRequest, imagePricingCfg)
 
 	bizErr := validateImageRequest(imageRequest, meta, imagePricingCfg)
@@ -345,7 +88,12 @@ func RelayImageHelper(c *gin.Context, relayMode int) *relaymodel.ErrorWithStatus
 	var requestBody io.Reader
 	if strings.ToLower(c.GetString(ctxkey.ContentType)) == "application/json" &&
 		isModelMapped || meta.ChannelType == channeltype.Azure { // make Azure channel request body
-		jsonStr, err := json.Marshal(imageRequest)
+		requestToMarshal := any(imageRequest)
+		if meta.Mode != relaymode.ImagesEdits &&
+			(meta.ChannelType == channeltype.OpenAI || meta.ChannelType == channeltype.Azure) {
+			requestToMarshal = buildOpenAIImageRequest(imageRequest)
+		}
+		jsonStr, err := json.Marshal(requestToMarshal)
 		if err != nil {
 			return openai.ErrorWrapper(err, "marshal_image_request_failed", http.StatusInternalServerError)
 		}
@@ -390,7 +138,7 @@ func RelayImageHelper(c *gin.Context, relayMode int) *relaymodel.ErrorWithStatus
 		requestBody = bytes.NewBuffer(jsonStr)
 	case channeltype.OpenAI:
 		if meta.Mode != relaymode.ImagesEdits {
-			jsonStr, err := json.Marshal(imageRequest)
+			jsonStr, err := json.Marshal(buildOpenAIImageRequest(imageRequest))
 			if err != nil {
 				return openai.ErrorWrapper(err, "marshal_image_request_failed", http.StatusInternalServerError)
 			}
@@ -402,7 +150,7 @@ func RelayImageHelper(c *gin.Context, relayMode int) *relaymodel.ErrorWithStatus
 	// Resolve model ratio using unified three-layer pricing (channel overrides → adapter defaults → global fallback)
 	// IMPORTANT: Use APIType here (adaptor family), not ChannelType. ChannelType IDs do not map to adaptor switch.
 	pricingAdaptor := adaptor
-	modelRatio := pricing.GetModelRatioWithThreeLayers(imageModel, channelModelRatio, pricingAdaptor)
+	modelRatio := pricing.ResolveModelRatioAt(imageModel, channelModelConfigs, channelModelRatio, pricingAdaptor, meta.StartTime)
 	// groupRatio := billingratio.GetGroupRatio(meta.Group)
 	groupRatio := c.GetFloat64(ctxkey.ChannelRatio)
 
@@ -470,19 +218,10 @@ func RelayImageHelper(c *gin.Context, relayMode int) *relaymodel.ErrorWithStatus
 	resp, err := adaptor.DoRequest(c, meta, requestBody)
 	if err != nil {
 		// ErrorWrapper will log the error, so we don't need to log it here
-		// Refund any pre-consumed quota if request failed
-		markBillingReconciled(c)
-		if preConsumedQuota > 0 {
-			if shouldSkipPreConsumedRefund(c) {
-				lg.Warn("skip pre-consumed refund to prevent underbilling",
-					zap.Int64("pre_consumed_quota", preConsumedQuota),
-					zap.Int("token_id", meta.TokenId),
-					zap.String("reason", "do_request_failed"),
-				)
-			} else {
-				_ = model.PostConsumeTokenQuota(ctx, meta.TokenId, -preConsumedQuota)
-			}
-		}
+		bgCtx, cancel := context.WithTimeout(gmw.BackgroundCtx(c), time.Minute)
+		reconcileImageFailureBilling(c, bgCtx, meta.TokenId, preConsumedQuota,
+			c.GetInt(ctxkey.ProvisionalLogId), "do_request_failed")
+		cancel()
 		return openai.ErrorWrapper(err, "do_request_failed", http.StatusInternalServerError)
 	}
 
@@ -491,42 +230,20 @@ func RelayImageHelper(c *gin.Context, relayMode int) *relaymodel.ErrorWithStatus
 	requestId := c.GetString(ctxkey.RequestId)
 	traceId := tracing.GetTraceID(c)
 	provLogID := c.GetInt(ctxkey.ProvisionalLogId)
+	// NOTE: This image post-billing/refund runs in a SYNCHRONOUS defer — it executes on the
+	// request goroutine, inside the handler call stack, BEFORE ServeHTTP returns and gin
+	// recycles c via sync.Pool. It is therefore NOT the async-goroutine race class the
+	// proposal addresses (docs/proposals/20260608_relay-billing-async-sync-race-fixes.md):
+	// reading c here is safe. gmw.BackgroundCtx(c) is used only to DETACH the DB writes from
+	// request-context cancellation (a client disconnect must not abort the refund), not to
+	// hand c to a goroutine. Do NOT copy this pattern into a `go func`/GoCritical — there it
+	// would be a use-after-return; use detachForBilling(c)/goDetachedBillingWork instead.
 	defer func() {
 		bgCtx, cancel := context.WithTimeout(gmw.BackgroundCtx(c), time.Minute)
 		defer cancel()
 
-		if resp != nil &&
-			resp.StatusCode != http.StatusCreated && // replicate returns 201
-			resp.StatusCode != http.StatusOK {
-			// Refund pre-consumed quota when upstream not successful
-			markBillingReconciled(c)
-			if preConsumedQuota > 0 {
-				if shouldSkipPreConsumedRefund(c) {
-					lg.Warn("skip pre-consumed refund to prevent underbilling",
-						zap.Int64("pre_consumed_quota", preConsumedQuota),
-						zap.Int("token_id", meta.TokenId),
-						zap.String("reason", "upstream_http_error"),
-					)
-				} else {
-					_ = model.PostConsumeTokenQuota(bgCtx, meta.TokenId, -preConsumedQuota)
-				}
-			}
-			// Reconcile provisional log to 0 on upstream error
-			if provLogID > 0 {
-				if err := model.ReconcileConsumeLog(bgCtx, provLogID, 0,
-					"upstream error, refunded", 0, 0, 0, nil); err != nil {
-					lg.Warn("failed to reconcile provisional log on upstream error",
-						zap.Error(err), zap.Int("provisional_log_id", provLogID))
-				}
-			}
-			// Reconcile provisional record to 0
-			if err := model.UpdateUserRequestCostQuotaByRequestID(
-				c.GetInt(ctxkey.Id),
-				c.GetString(ctxkey.RequestId),
-				0,
-			); err != nil {
-				lg.Warn("update user request cost to zero failed", zap.Error(err))
-			}
+		if imageResponseRequiresFailureReconciliation(resp) {
+			reconcileImageFailureBilling(c, bgCtx, meta.TokenId, preConsumedQuota, provLogID, "upstream_http_error")
 			return
 		}
 
@@ -575,11 +292,14 @@ func RelayImageHelper(c *gin.Context, relayMode int) *relaymodel.ErrorWithStatus
 						zap.Error(err), zap.Int("provisional_log_id", provLogID))
 					model.RecordConsumeLog(bgCtx, &model.Log{
 						UserId:           meta.UserId,
+						UserUUID:         model.StringPtrIfNotEmpty(meta.UserUUID),
 						ChannelId:        meta.ChannelId,
+						ChannelUUID:      model.StringPtrIfNotEmpty(meta.ChannelUUID),
 						PromptTokens:     promptTokens,
 						CompletionTokens: completionTokens,
 						ModelName:        visibleModelName,
 						TokenName:        tokenName,
+						TokenUUID:        model.StringPtrIfNotEmpty(meta.TokenUUID),
 						Quota:            int(usedQuota),
 						Content:          logContent,
 						ElapsedTime:      elapsedTime,
@@ -590,11 +310,14 @@ func RelayImageHelper(c *gin.Context, relayMode int) *relaymodel.ErrorWithStatus
 			} else {
 				model.RecordConsumeLog(bgCtx, &model.Log{
 					UserId:           meta.UserId,
+					UserUUID:         model.StringPtrIfNotEmpty(meta.UserUUID),
 					ChannelId:        meta.ChannelId,
+					ChannelUUID:      model.StringPtrIfNotEmpty(meta.ChannelUUID),
 					PromptTokens:     promptTokens,
 					CompletionTokens: completionTokens,
 					ModelName:        visibleModelName,
 					TokenName:        tokenName,
+					TokenUUID:        model.StringPtrIfNotEmpty(meta.TokenUUID),
 					Quota:            int(usedQuota),
 					Content:          logContent,
 					ElapsedTime:      elapsedTime,
@@ -602,9 +325,9 @@ func RelayImageHelper(c *gin.Context, relayMode int) *relaymodel.ErrorWithStatus
 					TraceId:          traceId,
 				})
 			}
-			model.UpdateUserUsedQuotaAndRequestCount(meta.UserId, usedQuota)
+			model.UpdateUserUsedQuotaAndRequestCountWithContext(bgCtx, meta.UserId, usedQuota)
 			channelId := c.GetInt(ctxkey.ChannelId)
-			model.UpdateChannelUsedQuota(channelId, usedQuota)
+			model.UpdateChannelUsedQuotaWithContext(bgCtx, channelId, usedQuota)
 
 			// Reconcile request cost with final usedQuota (override provisional value if any)
 			if err := model.UpdateUserRequestCostQuotaByRequestID(
@@ -645,6 +368,72 @@ func RelayImageHelper(c *gin.Context, relayMode int) *relaymodel.ErrorWithStatus
 	}
 
 	return nil
+}
+
+// reconcileImageFailureBilling settles image billing after an upstream or
+// transport failure. Parameters: c is the live request context, bgCtx is a
+// detached database context, tokenID identifies the charged token,
+// preConsumedQuota is the provisional debit, provisionalLogID identifies its
+// audit row, and reason labels the failure. Returns: none; persistence errors are
+// logged for manual reconciliation.
+func reconcileImageFailureBilling(
+	c *gin.Context,
+	bgCtx context.Context,
+	tokenID int,
+	preConsumedQuota int64,
+	provisionalLogID int,
+	reason string,
+) {
+	lg := gmw.GetLogger(c)
+	markBillingReconciled(c)
+
+	finalQuota := int64(0)
+	requestCost := int64(0)
+	logContent := "request failed, refunded"
+	if reason == "upstream_http_error" {
+		logContent = "upstream error, refunded"
+	}
+	if preConsumedQuota > 0 {
+		if shouldSkipPreConsumedRefund(c) {
+			finalQuota = preConsumedQuota
+			requestCost = preConsumedQuota
+			logContent = "request failed, charge retained after forwarding"
+			if reason == "upstream_http_error" {
+				logContent = "upstream error, charge retained after forwarding"
+			}
+			lg.Warn("skip pre-consumed refund to prevent underbilling",
+				zap.Int64("pre_consumed_quota", preConsumedQuota),
+				zap.String("reason", reason),
+			)
+		} else if err := model.PostConsumeTokenQuota(bgCtx, tokenID, -preConsumedQuota); err != nil {
+			finalQuota = preConsumedQuota
+			requestCost = preConsumedQuota
+			logContent = "request failed, refund failed; charge retained"
+			if reason == "upstream_http_error" {
+				logContent = "upstream error, refund failed; charge retained"
+			}
+			lg.Error("CRITICAL BILLING AUDIT: image upstream error refund failed",
+				zap.Error(err),
+				zap.Int64("pre_consumed_quota", preConsumedQuota),
+				zap.String("reason", reason),
+			)
+		}
+	}
+
+	if provisionalLogID > 0 {
+		if err := model.ReconcileConsumeLog(bgCtx, provisionalLogID, finalQuota,
+			logContent, 0, 0, 0, nil); err != nil {
+			lg.Warn("failed to reconcile provisional image log on upstream error",
+				zap.Error(err), zap.Int("provisional_log_id", provisionalLogID))
+		}
+	}
+	if err := model.UpdateUserRequestCostQuotaByRequestID(
+		c.GetInt(ctxkey.Id),
+		c.GetString(ctxkey.RequestId),
+		requestCost,
+	); err != nil {
+		lg.Warn("failed to reconcile image request cost on upstream error", zap.Error(err))
+	}
 }
 
 // gptImageTokenBucketPricing stores USD per 1M token prices for GPT Image models.

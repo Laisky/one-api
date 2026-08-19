@@ -15,9 +15,10 @@ func runBootMigration(t *testing.T) {
 	t.Helper()
 	require.NoError(t, migrateDB(), "STEP 1: migrateDB must succeed")
 	require.NoError(t, MigrateAbilitySuspendUntilColumn(), "STEP 2a: ability suspend_until migration")
-	require.NoError(t, MigrateChannelFieldsToText(), "STEP 2b: channel field type migration")
-	require.NoError(t, MigrateTraceURLColumnToText(), "STEP 2c: trace URL migration")
-	require.NoError(t, MigrateUserRequestCostEnsureUniqueRequestID(), "STEP 2d: user_request_costs unique index")
+	require.NoError(t, MigrateAbilityModelCollation(), "STEP 2b: ability model collation migration")
+	require.NoError(t, MigrateChannelFieldsToText(), "STEP 2c: channel field type migration")
+	require.NoError(t, MigrateTraceURLColumnToText(), "STEP 2d: trace URL migration")
+	require.NoError(t, MigrateUserRequestCostEnsureUniqueRequestID(), "STEP 2e: user_request_costs unique index")
 	require.NoError(t, MigrateCustomChannelsToOpenAICompatible(), "STEP 3: custom channel migration")
 }
 

@@ -9,12 +9,12 @@ import (
 	"github.com/Laisky/errors/v2"
 	"github.com/gin-gonic/gin"
 
-	"github.com/songquanpeng/one-api/common/helper"
-	"github.com/songquanpeng/one-api/relay/adaptor"
-	"github.com/songquanpeng/one-api/relay/adaptor/openai_compatible"
-	"github.com/songquanpeng/one-api/relay/meta"
-	"github.com/songquanpeng/one-api/relay/model"
-	"github.com/songquanpeng/one-api/relay/relaymode"
+	"github.com/Laisky/one-api/common/helper"
+	"github.com/Laisky/one-api/relay/adaptor"
+	"github.com/Laisky/one-api/relay/adaptor/openai_compatible"
+	"github.com/Laisky/one-api/relay/meta"
+	"github.com/Laisky/one-api/relay/model"
+	"github.com/Laisky/one-api/relay/relaymode"
 )
 
 // ResponseAPIInputTokensDetails models the nested usage block returned by the OpenAI Response API.
@@ -258,17 +258,41 @@ func (a *Adaptor) SetupRequestHeader(c *gin.Context, req *http.Request, meta *me
 }
 
 // ConvertRequest converts and validates OpenAI-compatible requests for x.AI.
-// It removes unsupported parameters like reasoning_effort and adjusts model-specific parameters.
+// It preserves reasoning_effort for models that document it and removes it for
+// models without configurable reasoning, then adjusts model-specific parameters.
 // Returns the modified request or an error if conversion fails.
 func (a *Adaptor) ConvertRequest(c *gin.Context, relayMode int, request *model.GeneralOpenAIRequest) (any, error) {
 	// XAI is OpenAI-compatible, so we can pass the request through with minimal changes
-	// Remove reasoning_effort as XAI doesn't support it
+	// Keep reasoning_effort only for models whose metadata documents the parameter.
 	if request.ReasoningEffort != nil {
-		request.ReasoningEffort = nil
+		config, ok := ModelRatios[request.Model]
+		if !ok || len(config.SupportedReasoningEfforts) == 0 {
+			request.ReasoningEffort = nil
+		}
 	}
-	// Remove presence_penalty and frequency_penalty for certain grok-4 models as they don't support them
+	// Remove presence_penalty and frequency_penalty for grok-4 family reasoning models
+	// per xAI API reference: presencePenalty, frequencyPenalty, and stop cannot be used
+	// with reasoning models. Source: https://docs.x.ai/docs/api-reference#chat-completions
 	switch request.Model {
-	case "grok-4-0709", "grok-4.20-0309-reasoning", "grok-4.20-0309-non-reasoning", "grok-4.20-multi-agent-0309", "grok-4-1-fast-reasoning", "grok-4-1-fast-non-reasoning":
+	case "grok-4.6",
+		"grok-4.6-latest",
+		"grok-4.5",
+		"grok-4.5-latest",
+		"grok-4.3",
+		"grok-4-0709",
+		"grok-4.20",
+		"grok-4.20-reasoning",
+		"grok-4.20-non-reasoning",
+		"grok-4.20-multi-agent",
+		"grok-4.20-0309-reasoning",
+		"grok-4.20-0309-non-reasoning",
+		"grok-4.20-multi-agent-0309",
+		"grok-4-1-fast-reasoning",
+		"grok-4-1-fast-non-reasoning",
+		"grok-4-fast-reasoning",
+		"grok-4-fast-non-reasoning",
+		"grok-code-fast-1",
+		"grok-build-0.1":
 		if request.PresencePenalty != nil {
 			request.PresencePenalty = nil
 		}
@@ -280,7 +304,8 @@ func (a *Adaptor) ConvertRequest(c *gin.Context, relayMode int, request *model.G
 }
 
 // ConvertImageRequest converts and validates image generation requests for x.AI.
-// It ensures correct model naming and removes unsupported parameters like quality, size, and style.
+// It maps the shared OpenAI size field to xAI's resolution field and removes
+// parameters that xAI's Imagine endpoint does not accept.
 // Returns the modified request or an error if conversion fails.
 func (a *Adaptor) ConvertImageRequest(c *gin.Context, request *model.ImageRequest) (any, error) {
 	// XAI supports image generation with grok-2-image model
@@ -292,8 +317,17 @@ func (a *Adaptor) ConvertImageRequest(c *gin.Context, request *model.ImageReques
 		request.Model = "grok-2-image"
 	}
 
-	// XAI doesn't support quality, size, or style parameters according to their docs
-	// Remove unsupported parameters
+	// xAI's Imagine API uses resolution values such as "1k" and "2k" instead
+	// of OpenAI's pixel-size field. Preserve the billing/validation size while
+	// converting the upstream request field.
+	if request.Resolution == "" && strings.HasPrefix(request.Model, "grok-imagine-image") {
+		switch request.Size {
+		case "2048x2048":
+			request.Resolution = "2k"
+		case "1024x1024":
+			request.Resolution = "1k"
+		}
+	}
 	request.Quality = ""
 	request.Size = ""
 	request.Style = ""
@@ -343,23 +377,13 @@ func (a *Adaptor) DoResponse(c *gin.Context, resp *http.Response, meta *meta.Met
 // It handles both streaming and non-streaming Response API responses, passing them through
 // to the client while extracting billing information from the usage field.
 func (a *Adaptor) handleResponseAPIResponse(c *gin.Context, resp *http.Response, meta *meta.Meta) (usage *model.Usage, err *model.ErrorWithStatusCode) {
-	// For streaming Response API, pass through directly
+	// For streaming Response API, forward every byte to the client while sniffing
+	// the stream for the terminal response.completed usage block. A blind io.Copy
+	// here reports no usage at all, which leaves the pre-consumed quota
+	// unreconciled: the caller then charges its estimate while the consume log
+	// stays provisional, i.e. invisible on the Logs page.
 	if meta.IsStream {
-		// Copy response to client
-		for key, values := range resp.Header {
-			for _, value := range values {
-				c.Writer.Header().Add(key, value)
-			}
-		}
-		if resp.Header.Get("Content-Type") == "" {
-			c.Writer.Header().Set("Content-Type", "text/event-stream")
-		}
-		c.Writer.WriteHeader(resp.StatusCode)
-		if _, copyErr := io.Copy(c.Writer, resp.Body); copyErr != nil {
-			return nil, openai_compatible.ErrorWrapper(copyErr, "copy_response_body_failed", http.StatusInternalServerError)
-		}
-		resp.Body.Close()
-		return nil, nil
+		return a.streamResponseAPI(c, resp, meta)
 	}
 
 	// For non-streaming, read the entire response
@@ -412,8 +436,9 @@ func (a *Adaptor) handleImageResponse(c *gin.Context, resp *http.Response) (usag
 		return nil, openai_compatible.ErrorWrapper(errors.Wrap(parseErr, "parse xai image response"), "parse_response_failed", http.StatusInternalServerError)
 	}
 
-	// Convert to OpenAI format
-	var imageDataList []ImageData
+	// Convert to OpenAI format. Pre-size to a non-nil empty slice so the wire-level
+	// JSON always emits `"data":[]` instead of `null` for empty/error upstream payloads.
+	imageDataList := make([]ImageData, 0, len(xaiResponse.Data))
 	for _, xaiData := range xaiResponse.Data {
 		imageData := ImageData{
 			URL:           xaiData.URL,

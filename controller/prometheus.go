@@ -6,12 +6,12 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/songquanpeng/one-api/common/ctxkey"
-	"github.com/songquanpeng/one-api/common/metrics"
-	"github.com/songquanpeng/one-api/model"
-	"github.com/songquanpeng/one-api/relay/channeltype"
-	"github.com/songquanpeng/one-api/relay/meta"
-	"github.com/songquanpeng/one-api/relay/relaymode"
+	"github.com/Laisky/one-api/common/ctxkey"
+	"github.com/Laisky/one-api/common/metrics"
+	"github.com/Laisky/one-api/model"
+	"github.com/Laisky/one-api/relay/channeltype"
+	"github.com/Laisky/one-api/relay/meta"
+	"github.com/Laisky/one-api/relay/relaymode"
 )
 
 // PrometheusRelayMonitor provides Prometheus monitoring for relay operations
@@ -81,6 +81,89 @@ func (p *PrometheusRelayMonitor) RecordChannelRequest(meta *meta.Meta, startTime
 // RecordError records an error metric
 func (p *PrometheusRelayMonitor) RecordError(errorType, component string) {
 	metrics.GlobalRecorder.RecordError(errorType, component)
+}
+
+// RecordUUIDBackfillRows records rows processed by one external UUID backfill batch.
+//
+// role, phase, target, and result must be compile-time registry constants; they
+// become metric labels and must never carry an ID, UUID, DSN, or error message.
+func (p *PrometheusRelayMonitor) RecordUUIDBackfillRows(role, phase, target, result string, count int) {
+	metrics.GlobalRecorder.RecordUUIDBackfillRows(role, phase, target, result, count)
+}
+
+// UpdateUUIDBackfillBacklog publishes the last observed backlog for one target.
+//
+// role and target must be compile-time registry constants.
+func (p *PrometheusRelayMonitor) UpdateUUIDBackfillBacklog(role, target string, backlog float64) {
+	metrics.GlobalRecorder.UpdateUUIDBackfillBacklog(role, target, backlog)
+}
+
+// RecordUUIDBackfillCycle records one catch-up or finalizer cycle outcome and duration.
+//
+// role, mode, and result must be compile-time registry constants.
+func (p *PrometheusRelayMonitor) RecordUUIDBackfillCycle(role, mode, result string, duration time.Duration) {
+	metrics.GlobalRecorder.RecordUUIDBackfillCycle(role, mode, result, duration)
+}
+
+// RecordUUIDBackfillFinalizer records one finalizer attempt result for a database role.
+//
+// role and result must be compile-time registry constants.
+func (p *PrometheusRelayMonitor) RecordUUIDBackfillFinalizer(role, result string) {
+	metrics.GlobalRecorder.RecordUUIDBackfillFinalizer(role, result)
+}
+
+// UpdateCompactUUIDState publishes whether one state is the current state of a role.
+//
+// Callers set active=true for the current state and active=false for every
+// other known state, so exactly one state per role/process reports 1.
+//
+// role and state must be compile-time registry constants; they become metric
+// labels and must never carry an ID, UUID, DSN, or error message.
+func (p *PrometheusRelayMonitor) UpdateCompactUUIDState(role, state string, active bool) {
+	metrics.GlobalRecorder.UpdateCompactUUIDState(role, state, active)
+}
+
+// UpdateCompactUUIDBacklog publishes the last bounded gap/mismatch/blocker observation.
+//
+// The value is one bounded observation, never a claimed global total. role,
+// target, and kind must be compile-time registry constants.
+func (p *PrometheusRelayMonitor) UpdateCompactUUIDBacklog(role, target, kind string, rows float64) {
+	metrics.GlobalRecorder.UpdateCompactUUIDBacklog(role, target, kind, rows)
+}
+
+// RecordCompactUUIDAction records one DDL, fill, validation, marker, audit, or repair outcome.
+//
+// role, action, and result must be compile-time registry constants.
+func (p *PrometheusRelayMonitor) RecordCompactUUIDAction(role, action, result string) {
+	metrics.GlobalRecorder.RecordCompactUUIDAction(role, action, result)
+}
+
+// RecordCompactUUIDLookupFallback records one compact UUID lookup fallback.
+//
+// role and reason must be compile-time registry constants.
+func (p *PrometheusRelayMonitor) RecordCompactUUIDLookupFallback(role, reason string) {
+	metrics.GlobalRecorder.RecordCompactUUIDLookupFallback(role, reason)
+}
+
+// UpdateCompactUUIDLastProgress publishes the UTC timestamp of the last durable progress.
+//
+// role must be a compile-time registry constant.
+func (p *PrometheusRelayMonitor) UpdateCompactUUIDLastProgress(role string, unixTime float64) {
+	metrics.GlobalRecorder.UpdateCompactUUIDLastProgress(role, unixTime)
+}
+
+// RecordCompactUUIDDuration records the duration of one compact UUID operation.
+//
+// role and operation must be compile-time registry constants.
+func (p *PrometheusRelayMonitor) RecordCompactUUIDDuration(role, operation string, duration time.Duration) {
+	metrics.GlobalRecorder.RecordCompactUUIDDuration(role, operation, duration)
+}
+
+// RecordResponseStateEvent records one bounded gateway response-state decision.
+//
+// category and outcome must be compile-time registry constants.
+func (p *PrometheusRelayMonitor) RecordResponseStateEvent(category, outcome string) {
+	metrics.GlobalRecorder.RecordResponseStateEvent(category, outcome)
 }
 
 // Global instance

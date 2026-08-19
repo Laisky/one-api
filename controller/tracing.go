@@ -2,13 +2,15 @@ package controller
 
 import (
 	"net/http"
-	"strconv"
 
+	"github.com/Laisky/errors/v2"
 	gmw "github.com/Laisky/gin-middlewares/v7"
 	"github.com/Laisky/zap"
 	"github.com/gin-gonic/gin"
 
-	"github.com/songquanpeng/one-api/model"
+	"github.com/Laisky/one-api/common/helper"
+	"github.com/Laisky/one-api/common/identity"
+	"github.com/Laisky/one-api/model"
 )
 
 // GetTraceByTraceId retrieves tracing information for a specific trace ID
@@ -16,10 +18,7 @@ func GetTraceByTraceId(c *gin.Context) {
 	lg := gmw.GetLogger(c)
 	traceId := c.Param("trace_id")
 	if traceId == "" {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"success": false,
-			"message": "trace_id parameter is required",
-		})
+		helper.RespondErrorWithStatus(c, http.StatusBadRequest, errors.New("trace_id parameter is required"))
 		return
 	}
 
@@ -33,10 +32,7 @@ func GetTraceByTraceId(c *gin.Context) {
 		lg.Error("failed to get trace by trace ID",
 			zap.Error(err),
 			zap.String("trace_id", traceId))
-		c.JSON(http.StatusNotFound, gin.H{
-			"success": false,
-			"message": "trace not found",
-		})
+		helper.RespondErrorWithStatus(c, http.StatusNotFound, errors.New("trace not found"))
 		return
 	}
 
@@ -46,10 +42,7 @@ func GetTraceByTraceId(c *gin.Context) {
 		lg.Error("failed to parse trace timestamps",
 			zap.Error(err),
 			zap.String("trace_id", traceId))
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"success": false,
-			"message": "failed to parse trace timestamps",
-		})
+		helper.RespondErrorWithStatus(c, http.StatusInternalServerError, errors.New("failed to parse trace timestamps"))
 		return
 	}
 
@@ -57,7 +50,7 @@ func GetTraceByTraceId(c *gin.Context) {
 	response := gin.H{
 		"success": true,
 		"data": gin.H{
-			"id":         trace.Id,
+			"uuid":       trace.UUID,
 			"trace_id":   trace.TraceId,
 			"url":        trace.URL,
 			"method":     trace.Method,
@@ -77,19 +70,13 @@ func GetTraceByLogId(c *gin.Context) {
 	lg := gmw.GetLogger(c)
 	logIdStr := c.Param("log_id")
 	if logIdStr == "" {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"success": false,
-			"message": "log_id parameter is required",
-		})
+		helper.RespondErrorWithStatus(c, http.StatusBadRequest, errors.New("log_id parameter is required"))
 		return
 	}
 
-	logId, err := strconv.Atoi(logIdStr)
+	logId, err := resolveLogRef(logIdStr)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"success": false,
-			"message": "invalid log_id parameter",
-		})
+		helper.RespondErrorWithStatus(c, http.StatusBadRequest, errors.New("invalid log_id parameter"))
 		return
 	}
 
@@ -99,18 +86,12 @@ func GetTraceByLogId(c *gin.Context) {
 		lg.Error("failed to get log by ID",
 			zap.Error(err),
 			zap.Int("log_id", logId))
-		c.JSON(http.StatusNotFound, gin.H{
-			"success": false,
-			"message": "log not found",
-		})
+		helper.RespondErrorWithStatus(c, http.StatusNotFound, errors.New("log not found"))
 		return
 	}
 
 	if log.TraceId == "" {
-		c.JSON(http.StatusNotFound, gin.H{
-			"success": false,
-			"message": "no trace information available for this log entry",
-		})
+		helper.RespondErrorWithStatus(c, http.StatusNotFound, errors.New("no trace information available for this log entry"))
 		return
 	}
 
@@ -123,13 +104,8 @@ func GetTraceByLogId(c *gin.Context) {
 	trace, err := model.GetTraceByTraceId(ctx, log.TraceId)
 	if err != nil {
 		lg.Error("failed to get trace by trace ID from log",
-			zap.Error(err),
-			zap.String("trace_id", log.TraceId),
-			zap.Int("log_id", logId))
-		c.JSON(http.StatusNotFound, gin.H{
-			"success": false,
-			"message": "trace information not found",
-		})
+			traceLogFields(log, zap.Error(err), zap.String("trace_id", log.TraceId))...)
+		helper.RespondErrorWithStatus(c, http.StatusNotFound, errors.New("trace information not found"))
 		return
 	}
 
@@ -137,13 +113,8 @@ func GetTraceByLogId(c *gin.Context) {
 	timestamps, err := trace.GetTraceTimestamps()
 	if err != nil {
 		lg.Error("failed to parse trace timestamps from log",
-			zap.Error(err),
-			zap.String("trace_id", log.TraceId),
-			zap.Int("log_id", logId))
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"success": false,
-			"message": "failed to parse trace timestamps",
-		})
+			traceLogFields(log, zap.Error(err), zap.String("trace_id", log.TraceId))...)
+		helper.RespondErrorWithStatus(c, http.StatusInternalServerError, errors.New("failed to parse trace timestamps"))
 		return
 	}
 
@@ -154,7 +125,7 @@ func GetTraceByLogId(c *gin.Context) {
 	response := gin.H{
 		"success": true,
 		"data": gin.H{
-			"id":         trace.Id,
+			"uuid":       trace.UUID,
 			"trace_id":   trace.TraceId,
 			"url":        trace.URL,
 			"method":     trace.Method,
@@ -165,16 +136,41 @@ func GetTraceByLogId(c *gin.Context) {
 			"timestamps": timestamps,
 			"durations":  durations,
 			"log": gin.H{
-				"id":       log.Id,
-				"user_id":  log.UserId,
-				"username": log.Username,
-				"content":  log.Content,
-				"type":     log.Type,
+				"uuid":         log.UUID,
+				"user_uuid":    log.UserUUID,
+				"channel_uuid": log.ChannelUUID,
+				"username":     log.Username,
+				"content":      log.Content,
+				"type":         log.Type,
 			},
 		},
 	}
 
 	c.JSON(http.StatusOK, response)
+}
+
+// traceLogFields renders the identity of a consume-log row for a request-scoped
+// logger. Only the log row's own reference and the channel it billed are emitted:
+// the request logger is already bound to the CALLER's user and token identity, and
+// zap does not de-duplicate keys, so emitting the log row's user_id/username here
+// would double those keys — and silently disagree with the bound values whenever an
+// admin inspects another account's log. The log owner is still returned to the
+// client in the response payload.
+//
+// Parameters:
+//   - log: the consume-log row being inspected; may be nil.
+//   - extra: additional fields appended after the identity fields.
+//
+// Return values:
+//   - []zap.Field: ready-to-log field slice.
+func traceLogFields(log *model.Log, extra ...zap.Field) []zap.Field {
+	if log == nil {
+		return extra
+	}
+
+	fields := identity.NewLogRef(log.Id, log.UUID).Zap()
+	fields = log.Refs().Channel.AppendZap(fields)
+	return append(fields, extra...)
 }
 
 // calculateTraceDurations calculates durations between key timestamps

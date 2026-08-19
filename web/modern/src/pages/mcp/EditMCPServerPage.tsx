@@ -11,7 +11,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { api } from '@/lib/api';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { Info } from 'lucide-react';
+import { Info, RefreshCw } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { useTranslation } from 'react-i18next';
@@ -19,29 +19,29 @@ import { useNavigate, useParams } from 'react-router-dom';
 import * as z from 'zod';
 
 interface MCPTool {
-  id: number;
   name: string;
   description?: string;
 }
 
-const serverSchema = z.object({
-  name: z.string().min(1, 'Name is required'),
-  description: z.string().optional(),
-  status: z.coerce.number().int().default(1),
-  priority: z.coerce.number().int().default(0),
-  base_url: z.string().min(1, 'Base URL is required'),
-  protocol: z.string().default('streamable_http'),
-  auth_type: z.string().default('none'),
-  api_key: z.string().optional(),
-  headers: z.string().optional(),
-  tool_whitelist: z.array(z.string()).default([]),
-  tool_blacklist: z.array(z.string()).default([]),
-  tool_pricing: z.string().optional(),
-  auto_sync_enabled: z.boolean().default(true),
-  auto_sync_interval_minutes: z.coerce.number().int().min(5).max(1440).default(60),
-});
+const createServerSchema = (translate: (key: string, defaultValue: string) => string) =>
+  z.object({
+    name: z.string().min(1, translate('mcp.edit.validation.name_required', 'Name is required')),
+    description: z.string().optional(),
+    status: z.coerce.number().int().default(1),
+    priority: z.coerce.number().int().default(0),
+    base_url: z.string().min(1, translate('mcp.edit.validation.base_url_required', 'Base URL is required')),
+    protocol: z.string().default('streamable_http'),
+    auth_type: z.string().default('none'),
+    api_key: z.string().optional(),
+    headers: z.string().optional(),
+    tool_whitelist: z.array(z.string()).default([]),
+    tool_blacklist: z.array(z.string()).default([]),
+    tool_pricing: z.string().optional(),
+    auto_sync_enabled: z.boolean().default(true),
+    auto_sync_interval_minutes: z.coerce.number().int().min(5).max(1440).default(60),
+  });
 
-type ServerForm = z.infer<typeof serverSchema>;
+type ServerForm = z.infer<ReturnType<typeof createServerSchema>>;
 
 export function EditMCPServerPage() {
   const { t } = useTranslation();
@@ -52,9 +52,11 @@ export function EditMCPServerPage() {
   const isEdit = Boolean(serverId);
   const [loading, setLoading] = useState(isEdit);
   const [tools, setTools] = useState<MCPTool[]>([]);
+  const [syncing, setSyncing] = useState(false);
+  const validationSchema = useMemo(() => createServerSchema((key, defaultValue) => String(t(key, defaultValue))), [t]);
 
   const form = useForm<ServerForm>({
-    resolver: zodResolver(serverSchema),
+    resolver: zodResolver(validationSchema),
     defaultValues: {
       name: '',
       description: '',
@@ -137,6 +139,41 @@ export function EditMCPServerPage() {
       loadTools();
     }
   }, [serverId]);
+
+  const handleSync = async () => {
+    if (!serverId) return;
+    setSyncing(true);
+    try {
+      const response = await api.post(`/api/mcp_servers/${serverId}/sync`);
+      const { success, data, message } = response.data;
+      if (!success) {
+        notify({
+          type: 'error',
+          title: t('mcp.edit.notifications.sync_failed', 'Sync failed: {{message}}', {
+            message: message || '',
+          }),
+          message: message || '',
+        });
+        return;
+      }
+      const count = data?.tool_count ?? 0;
+      notify({
+        type: 'success',
+        title: t('mcp.edit.notifications.sync_success', 'Synced {{count}} tools from upstream', { count }),
+        message: '',
+      });
+      await loadTools();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      notify({
+        type: 'error',
+        title: t('mcp.edit.notifications.sync_failed', 'Sync failed: {{message}}', { message }),
+        message,
+      });
+    } finally {
+      setSyncing(false);
+    }
+  };
 
   const parseJSON = (value?: string) => {
     if (!value || value.trim() === '') return undefined;
@@ -484,6 +521,12 @@ export function EditMCPServerPage() {
                 </div>
 
                 <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                  {isEdit && (
+                    <Button type="button" variant="outline" onClick={handleSync} disabled={syncing} className="w-full sm:w-auto">
+                      <RefreshCw className={`mr-2 h-4 w-4 ${syncing ? 'animate-spin' : ''}`} />
+                      {syncing ? t('mcp.edit.actions.sync_in_progress', 'Syncing...') : t('mcp.edit.actions.sync', 'Sync now')}
+                    </Button>
+                  )}
                   <Button type="button" variant="outline" onClick={() => navigate('/mcps')} className="w-full sm:w-auto">
                     {t('mcp.edit.actions.cancel', 'Cancel')}
                   </Button>

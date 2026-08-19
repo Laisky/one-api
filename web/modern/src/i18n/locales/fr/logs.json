@@ -23,10 +23,10 @@
         "first_client_response_desc": "Première réponse envoyée au client",
         "first_upstream_response": "Première réponse en amont",
         "first_upstream_response_desc": "Première réponse reçue de l'amont",
-        "mcp_call": "MCP Call",
-        "mcp_call_desc": "MCP tool call",
-        "mcp_call_server": "Server: {{server}}",
-        "mcp_call_tool": "Tool: {{tool}}",
+        "mcp_call": "Appel MCP",
+        "mcp_call_desc": "Appel d'outil MCP",
+        "mcp_call_server": "Serveur : {{server}}",
+        "mcp_call_tool": "Outil : {{tool}}",
         "request_completed": "Requête terminée",
         "request_completed_desc": "Requête entièrement terminée",
         "request_forwarded": "Transmis en amont",
@@ -47,6 +47,7 @@
       "no_content": "Aucun contenu enregistré.",
       "no_timeline": "Les données de chronologie ne sont pas disponibles pour cette trace.",
       "no_tracing": "Les données de traçage ne sont pas disponibles pour cette entrée de journal.",
+      "origin_model": "Modèle demandé",
       "prompt_tokens_cached": "Jetons d'invite (mis en cache)",
       "prompt_tokens_input": "Jetons d'invite (entrée)",
       "quota": "Dépense",
@@ -79,6 +80,7 @@
         "content": "Contenu",
         "latency": "Latence",
         "model": "Modèle",
+        "origin_model": "Modèle demandé",
         "prompt_tokens": "Jetons d'invite",
         "quota": "Quota",
         "time": "Heure",
@@ -107,6 +109,12 @@
       "missing": "Inconnu",
       "not_available": "N/D"
     },
+    "notifications": {
+      "clear_failed_message": "Impossible de supprimer les journaux.",
+      "clear_failed_title": "Échec du nettoyage",
+      "clear_success_message": "Les journaux ont été supprimés.",
+      "clear_success_title": "Journaux supprimés"
+    },
     "search": {
       "log_entry": "Entrée de journal",
       "quota": "Quota : {{value}}"
@@ -121,6 +129,7 @@
       "empty": "Aucun journal trouvé correspondant à vos critères.",
       "latency": "Latence",
       "model": "Modèle",
+      "origin_model": "Modèle demandé",
       "prompt": "Invite",
       "time": "Heure",
       "token": "Jeton",
@@ -141,6 +150,7 @@
       "manage": "Gestion",
       "system": "Système",
       "test": "Test",
+      "tool": "Outil",
       "topup": "Recharge",
       "unknown": "Inconnu"
     }

@@ -5,17 +5,21 @@
       "add_mobile": "新規チャンネル",
       "delete": "削除",
       "disable": "無効化",
+      "duplicate": "複製",
       "edit": "編集",
       "enable": "有効化",
+      "refresh_balance": "{{name}} の残高を更新",
       "test": "テスト"
     },
     "columns": {
       "actions": "操作",
+      "balance": "残高",
       "created": "作成日",
       "group": "グループ",
       "id": "ID",
       "name": "名前",
       "priority": "優先度",
+      "priority_input_label": "{{name}} の優先度",
       "response": "レスポンス",
       "status": "状態",
       "testing_model": "テスト用モデル",
@@ -24,7 +28,9 @@
     },
     "confirm": {
       "delete": "このチャンネルを削除してよろしいですか？",
-      "delete_disabled": "無効なチャンネルをすべて削除しますか？この操作は元に戻せません。"
+      "delete_disabled": "無効なチャンネルをすべて削除しますか？この操作は元に戻せません。",
+      "delete_disabled_title": "無効なチャンネルを削除",
+      "delete_title": "チャンネルを削除"
     },
     "description": "API ルーティング チャンネルを設定・管理します",
     "edit": {
@@ -121,15 +127,15 @@
         }
       },
       "common": {
-        "add": "Add",
+        "add": "追加",
         "base_url": {
-          "fixed_note": "Using default: {{url}}",
-          "help_editable": "Custom API base URL. Leave empty to use the default URL.",
-          "help_readonly": "The API base URL for this channel type is fixed and cannot be modified.",
-          "label": "API Base URL",
+          "fixed_note": "デフォルトを使用中: {{url}}",
+          "help_editable": "カスタム API ベース URL です。デフォルト URL を使用する場合は空のままにしてください。",
+          "help_readonly": "このチャネルタイプの API ベース URL は固定されており、変更できません。",
+          "label": "API ベース URL",
           "placeholder": "https://api.example.com"
         },
-        "format_json": "Format JSON"
+        "format_json": "JSON を整形"
       },
       "coze": {
         "auth_type": {
@@ -155,9 +161,97 @@
           "placeholder": "ボット操作用ユーザー ID"
         }
       },
+      "custom_headers": {
+        "add": "ヘッダーを追加",
+        "empty": "カスタムヘッダーは設定されていません。",
+        "help": "ここで設定したヘッダーは常に上流へ送信され、クライアント提供のヘッダーを上書きします。{{key}} を使用するとチャンネル API キーを挿入できます。",
+        "key_placeholder": "ヘッダーキー",
+        "label": "カスタムヘッダー",
+        "remove": "ヘッダーを削除",
+        "value_placeholder": "ヘッダー値、例: {{key}}"
+      },
       "description": {
         "create": "新しい API チャンネルを作成",
         "edit": "チャンネル設定を更新"
+      },
+      "endpoints": {
+        "audio_speech": {
+          "description": "テキスト読み上げ API はテキストを音声に変換します。複数の音声や出力形式を選んで自然な読み上げ音声を生成できます。",
+          "label": "テキスト読み上げ"
+        },
+        "audio_transcription": {
+          "description": "音声文字起こし API は音声をテキストに変換します。音声ファイルをアップロードすると、指定した言語の文字起こし結果を受け取れます。",
+          "label": "音声文字起こし"
+        },
+        "audio_translation": {
+          "description": "音声翻訳 API は音声を英語テキストに翻訳します。対応言語の音声ファイルをアップロードすると英語の文字起こしを受け取れます。",
+          "label": "音声翻訳"
+        },
+        "chat_completions": {
+          "description": "Chat Completions API はチャットベースの会話に対するモデル応答を生成します。メッセージの一覧を送ると、モデルが生成した返信を受け取れます。ストリーミングと非ストリーミングの両方に対応します。",
+          "label": "Chat Completions"
+        },
+        "claude_messages": {
+          "description": "Claude Messages API は Claude モデルとやり取りするための Anthropic ネイティブ形式です。One-API はこの形式を任意の対応バックエンドで使えるように変換します。",
+          "label": "Claude Messages"
+        },
+        "completions": {
+          "description": "従来の Completions API は指定したプロンプトに対するテキスト補完を生成します。これは初期のテキスト生成 API で、現在は主に Chat Completions に置き換えられています。",
+          "label": "Completions"
+        },
+        "custom_url_badge": "カスタム URL",
+        "default_badge": "デフォルト",
+        "edit_endpoint": "ドキュメントを表示してエンドポイント URL を編集",
+        "embeddings": {
+          "description": "Embeddings API はテキストを数値ベクトル表現に変換します。これらのベクトルは意味検索、クラスタリング、類似度比較に利用できます。",
+          "label": "埋め込み"
+        },
+        "help": "このチャネルがサポートする API エンドポイントを選択します。情報アイコンをクリックすると詳細や使用例を確認できます。",
+        "images_edits": {
+          "description": "画像編集 API はテキスト指示に基づいて既存の画像を編集します。画像、マスク、プロンプトをアップロードして編集版を生成します。",
+          "label": "画像編集"
+        },
+        "images_generations": {
+          "description": "画像生成 API はテキスト説明から画像を生成します。プロンプトを指定すると、さまざまな形式やサイズの画像を 1 つ以上受け取れます。",
+          "label": "画像生成"
+        },
+        "label": "サポートされるエンドポイント",
+        "modal": {
+          "description": "説明",
+          "example": "cURL の例",
+          "no_description": "このエンドポイントの詳細ドキュメントはありません。",
+          "no_example": "# 利用可能な例はありません",
+          "url_override": "アップストリーム URL の上書き",
+          "url_override_help": "デフォルトのエンドポイント URL があらかじめ入力されています。編集すると、このエンドポイントを標準外のアップストリームアドレスにルーティングできます。デフォルトのままにすると、チャネルのベース URL に自動的に追従します。",
+          "url_override_reset": "デフォルトに戻す"
+        },
+        "moderations": {
+          "description": "Moderations API はテキストがコンテンツポリシーに違反しているかを判定します。違反の可能性を示すカテゴリとスコアを返します。",
+          "label": "モデレーション"
+        },
+        "ocr": {
+          "description": "OCR / レイアウト解析 API は文書や画像からテキストとレイアウト情報を抽出します。ファイル URL をアップロードすると、構造化された Markdown 結果を受け取れます。Zhipu GLM-OCR により提供されます。",
+          "label": "OCR / レイアウト解析"
+        },
+        "realtime": {
+          "description": "Realtime API は WebSocket を通じて低遅延の双方向通信を実現します。音声アシスタントやリアルタイム対話アプリに最適です。",
+          "label": "Realtime API"
+        },
+        "rerank": {
+          "description": "Rerank API は文書一覧をクエリとの関連度に基づいて並べ替えます。検索結果や RAG システムの改善に役立ちます。",
+          "label": "Rerank"
+        },
+        "reset_defaults": "デフォルトに戻す",
+        "response_api": {
+          "description": "Response API は OpenAI の新しいステートフルな複数ターン会話 API です。サーバー側で会話状態を管理し、ツールや構造化出力などの高度な機能をサポートします。",
+          "label": "Response API"
+        },
+        "select_all": "すべて選択",
+        "select_none": "最小構成",
+        "videos": {
+          "description": "動画生成 API はテキスト説明や画像から動画を生成します。プロンプトやパラメータを指定して動画コンテンツを作成します。",
+          "label": "動画生成"
+        }
       },
       "errors": {
         "operation_failed": "操作に失敗しました",
@@ -197,7 +291,7 @@
         }
       },
       "groups": {
-        "add_placeholder": "Add custom group...",
+        "add_placeholder": "カスタムグループを追加...",
         "help": "特定のユーザーグループへのアクセスを制限します。空の場合はすべてのユーザーがアクセスできます。デフォルトグループは常に保持されます。",
         "label": "グループ *"
       },
@@ -217,8 +311,10 @@
         "placeholder": "AWS Bedrock 推論プロファイル ARN マッピング:\n{{example}}"
       },
       "key": {
-        "help": "The API key for authentication with the provider.",
-        "label": "API Key"
+        "github_placeholder": "有効な Copilot サブスクリプションを持つ GitHub アクセストークン（PAT または OAuth トークン）を入力してください",
+        "help": "プロバイダー認証に使用する API キーです。",
+        "label": "API キー",
+        "placeholder": "API キーを入力してください"
       },
       "loading": "チャンネルを読み込み中...",
       "mcp": {
@@ -233,7 +329,7 @@
         "invalid": "無効なモデル設定フォーマット",
         "invalid_short": "✗ 無効な設定",
         "label": "モデル設定 (JSON)",
-        "load_default": "Load Default",
+        "load_default": "デフォルトを読み込む",
         "note": "モデルごとの価格と制限を設定 (任意)",
         "placeholder": "JSON 形式のモデル設定:\n{{example}}",
         "select_type_notice": "モデル設定を構成するにはチャンネルタイプを選択してください。",
@@ -247,7 +343,7 @@
       },
       "models": {
         "add_custom": "追加",
-        "clear": "Clear",
+        "clear": "クリア",
         "clear_all": "すべてクリア",
         "copy_title": "クリックしてモデル名をコピー",
         "custom_placeholder": "カスタムモデルを追加...",
@@ -255,16 +351,16 @@
         "fill_related": "関連モデルを入力 ({{count}})",
         "help": "このチャンネルで利用可能なモデル。すべてのプロバイダーモデルを許可するには空のままにしてください。ボタンを使用して関連/すべてのモデルを入力します。重複は削除されます。",
         "label": "サポートされているモデル *",
-        "no_match": "No models found",
-        "no_selection": "No models selected",
+        "no_match": "モデルが見つかりません",
+        "no_selection": "モデルが選択されていません",
         "search_placeholder": "モデルを検索...",
         "select_type_notice": "サポートされているモデルを構成するにはチャンネルタイプを選択してください。",
-        "selected_count": "Selected Models ({{count}})"
+        "selected_count": "選択済みモデル ({{count}})"
       },
       "name": {
-        "help": "A descriptive name for this channel to identify it in logs and lists.",
-        "label": "Channel Name *",
-        "placeholder": "My Channel"
+        "help": "ログや一覧でこのチャネルを識別するための説明的な名前です。",
+        "label": "チャネル名 *",
+        "placeholder": "マイチャネル"
       },
       "openai_compatible": {
         "api_format": {
@@ -291,12 +387,12 @@
         }
       },
       "priority": {
-        "help": "Higher priority channels are tried first. Default is 0.",
-        "label": "Priority"
+        "help": "優先度の高いチャネルから先に試行されます。デフォルトは 0 です。",
+        "label": "優先度"
       },
       "ratelimit": {
-        "help": "Maximum requests per minute. 0 means unlimited.",
-        "label": "Rate Limit"
+        "help": "1 分あたりの最大リクエスト数です。0 は無制限を意味します。",
+        "label": "レート制限"
       },
       "save_warning": {
         "cancel": "戻る",
@@ -307,6 +403,23 @@
         "title": "Model Mapping に疑わしい項目があります"
       },
       "spark": {
+        "api_key": {
+          "help": "APISecret と組み合わせて使用する iFlytek コンソールの APIKey。",
+          "label": "APIKey *",
+          "placeholder": "APIKey"
+        },
+        "api_secret": {
+          "help": "APIKey と組み合わせて使用する iFlytek コンソールの APISecret。",
+          "label": "APISecret *",
+          "placeholder": "APISecret"
+        },
+        "app_id": {
+          "help": "Spark アプリケーション用の iFlytek コンソール APPID。",
+          "label": "APPID *",
+          "placeholder": "APPID"
+        },
+        "heading": "iFlytek Spark の設定",
+        "note": "最終的な API キーは APPID|APISecret|APIKey の形で構成されます。",
         "version": {
           "help": "iFlytek Spark の API バージョンを選択します (例: v3.5)。",
           "label": "Spark バージョン",
@@ -318,14 +431,41 @@
         "label": "システムプロンプト",
         "placeholder": "すべてのリクエストに追加するオプションのシステムプロンプト"
       },
+      "tencent": {
+        "app_id": {
+          "help": "API 認証情報に紐づく Tencent Cloud アカウントの AppId。",
+          "label": "AppId *",
+          "placeholder": "AppId"
+        },
+        "heading": "Tencent Hunyuan の設定",
+        "note": "最終的な API キーは AppId|SecretId|SecretKey の形で構成されます。",
+        "secret_id": {
+          "help": "API 認証用の Tencent Cloud SecretId。",
+          "label": "SecretId *",
+          "placeholder": "SecretId"
+        },
+        "secret_key": {
+          "help": "SecretId と組み合わせて使用する Tencent Cloud SecretKey。",
+          "label": "SecretKey *",
+          "placeholder": "SecretKey"
+        }
+      },
+      "test": {
+        "error_message": "チャンネルをテストできませんでした。",
+        "error_title": "テストエラー",
+        "failed_message": "チャンネルテストに失敗しました。",
+        "failed_title": "テスト失敗",
+        "success_message": "チャンネルテストが正常に完了しました。",
+        "success_title": "テスト成功"
+      },
       "title": {
         "create": "チャンネルを作成",
         "edit": "チャンネルを編集"
       },
       "tooling": {
-        "add_custom": "Add custom tool...",
-        "available_tools": "Available Tools",
-        "editor_disabled": "Fix JSON error to enable editor",
+        "add_custom": "カスタムツールを追加...",
+        "available_tools": "利用可能なツール",
+        "editor_disabled": "JSON エラーを修正するとエディターを有効化できます",
         "errors": {
           "invalid_json_message": "ホワイトリストを編集する前にツール JSON を修正してください。",
           "invalid_json_title": "無効な JSON"
@@ -335,7 +475,7 @@
         "help": "チャンネル全体の組み込みツールポリシーを定義します。プロバイダーの組み込みツールのホワイトリストと呼び出しごとの価格を設定します。",
         "invalid": "無効なツール設定フォーマット",
         "label": "ツール設定 (JSON)",
-        "no_whitelist": "No tools whitelisted",
+        "no_whitelist": "ホワイトリストに登録されたツールはありません",
         "note": "組み込みツール許可リストと呼び出しごとの価格を設定 (任意)",
         "placeholder": "JSON 形式のツール設定:\n{{example}}",
         "whitelist": {
@@ -347,27 +487,29 @@
           "subtitle": "空のホワイトリストはすべてのプロバイダーツールを利用可能にします。",
           "title": "組み込みツールホワイトリスト"
         },
-        "whitelist_editor": "Whitelist Editor",
-        "whitelisted_tools": "Whitelisted Tools ({{count}})"
+        "whitelist_editor": "ホワイトリストエディター",
+        "whitelisted_tools": "ホワイトリスト済みツール ({{count}})"
       },
       "type": {
-        "help": "The provider type for this channel. Changing this may reset some fields.",
-        "label": "Channel Type *",
-        "not_found": "No channel type found.",
-        "placeholder": "Select a channel type",
-        "search": "Search channel type..."
+        "help": "このチャネルのプロバイダー種別です。変更すると一部の項目がリセットされる場合があります。",
+        "label": "チャネルタイプ *",
+        "not_found": "チャネルタイプが見つかりません。",
+        "placeholder": "チャネルタイプを選択",
+        "search": "チャネルタイプを検索..."
       },
       "type_change": {
-        "cancel": "Cancel",
-        "confirm": "Change Type",
-        "description": "You are about to change the channel type from \"{{fromType}}\" to \"{{toType}}\".",
-        "title": "Change Channel Type?",
-        "warning": "Warning: This may reset some configuration fields specific to the previous channel type. Any unsaved changes may be lost."
+        "cancel": "キャンセル",
+        "confirm": "タイプを変更",
+        "description": "チャネルタイプを \"{{fromType}}\" から \"{{toType}}\" に変更しようとしています。",
+        "title": "チャネルタイプを変更しますか？",
+        "warning": "警告: 以前のチャネルタイプ固有の設定項目がリセットされる場合があります。未保存の変更は失われる可能性があります。"
       },
       "validation": {
         "api_key_required": "API キーは必須です。",
         "base_url_required": "このチャンネルタイプには Base URL が必要です。",
+        "endpoints_required": "保存する前に少なくとも 1 つのエンドポイントを有効にしてください。",
         "error_title": "検証エラー",
+        "fix_fields": "ハイライトされたフィールドを修正してください。",
         "hidden_models_not_supported": "これらの非表示モデルは現在このチャンネルでサポートされていません: {{models}}",
         "hidden_models_unreachable_alias": "これらの非表示モデルは Model Mapping のソースとして使われているため、公開エイリアスに到達できなくなります: {{models}}",
         "inference_profile_invalid": "推論プロファイル ARN マップに無効な JSON が含まれています。",
@@ -382,11 +524,13 @@
         "model_mapping_invalid_entries": "これらのモデルマッピング項目は値が空、または文字列ではありません: {{keys}}",
         "model_mapping_parse_error": "モデルマッピングの JSON が無効です: {{error}}",
         "model_mapping_shape_invalid": "モデルマッピングは { \"from\": \"to\" } 形式の JSON オブジェクトである必要があります。",
+        "name_required": "チャネル名は必須です",
         "oauth_invalid_json": "OAuth JWT 設定 JSON が無効です。",
         "oauth_missing_field_message": "OAuth JWT 設定が不足しています: {{field}}",
         "oauth_missing_field_title": "不足しているフィールド",
         "oauth_parse_message": "OAuth JWT 解析エラー: {{error}}",
         "oauth_parse_title": "解析エラー",
+        "type_required": "チャネルタイプは必須です",
         "valid_json": "✓ 有効な JSON"
       },
       "vertex": {
@@ -408,18 +552,35 @@
         }
       },
       "weight": {
-        "help": "Used for load balancing between channels of the same priority. Default is 0.",
-        "label": "Weight"
+        "help": "同じ優先度のチャネル間での負荷分散に使用されます。デフォルトは 0 です。",
+        "label": "重み"
       }
     },
     "empty": "チャンネルが見つかりません。まずはチャンネルを作成してください。",
     "group_default": "default",
     "notifications": {
+      "balance_failed_message": "残高の更新に失敗しました。",
+      "balance_failed_title": "残高更新に失敗",
+      "balance_success": "残高を更新しました。",
+      "bulk_balance_success": "すべてのチャンネルの残高を更新しました。",
+      "bulk_disable_summary_title": "無効化サマリ",
+      "bulk_enable_summary_title": "有効化サマリ",
+      "bulk_status_empty": "更新できるチャンネルがありません。",
+      "bulk_status_started": "{{count}} 件のチャンネルを更新中…",
+      "bulk_status_summary": "{{success}} 件成功、{{failed}} 件失敗。",
       "bulk_test_failed_title": "一括テストに失敗しました",
       "bulk_test_started": "チャンネル一括テストを開始しました。",
       "delete_disabled_success": "無効なチャンネルを削除しました。",
       "delete_failed_message": "不明なエラー",
       "delete_failed_title": "削除に失敗しました",
+      "duplicate_failed_message": "チャネルの複製に失敗しました。",
+      "duplicate_failed_title": "複製に失敗しました",
+      "duplicate_success": "チャネルを複製しました。",
+      "priority_failed_message": "優先度の更新に失敗しました。",
+      "priority_failed_title": "更新に失敗しました",
+      "priority_saved": "優先度を更新しました。",
+      "status_failed_message": "チャンネル状態を更新できませんでした。",
+      "status_failed_title": "更新に失敗しました",
       "test_failed_message": "不明なエラー",
       "test_failed_title": "チャンネルのテストに失敗しました",
       "test_success": "チャンネルのテストに成功しました。",
@@ -434,7 +595,7 @@
     },
     "search": {
       "id_label": "ID",
-      "placeholder": "名前・タイプ・グループでチャンネルを検索..."
+      "placeholder": "名前・タイプ・グループ・UUIDでチャンネルを検索..."
     },
     "status": {
       "active": "有効",
@@ -446,8 +607,13 @@
     },
     "title": "チャンネル",
     "toolbar": {
+      "bulk_actions": "一括操作",
       "delete_disabled": "無効を削除",
       "delete_disabled_mobile": "無効をすべて削除",
+      "disable_visible": "表示中のチャンネルを無効化",
+      "enable_visible": "表示中のチャンネルを有効化",
+      "refresh_balances": "全残高を更新",
+      "refresh_balances_mobile": "残高を更新",
       "test_all": "すべてテスト",
       "test_all_mobile": "全チャンネルをテスト"
     },
@@ -485,10 +651,23 @@
       "title": "引き換えコードを生成"
     },
     "edit": {
+      "actions": {
+        "back_to_list": "一覧に戻る",
+        "copied": "コピー済み",
+        "copy": "コピー",
+        "copy_all": "すべてコピー",
+        "download_codes": "コードをダウンロード"
+      },
+      "code_generated_hint": "下のコードをコピーしてください。名前と一緒に再表示されることはありません。",
+      "codes_generated": "{{count}} 件のコードを生成しました",
+      "codes_generated_aria": "生成された引き換えコード",
+      "codes_generated_hint": "今すぐコードを保存してください — このページを離れるとまとめて取得できなくなります。",
       "description": {
         "create": "新しい引き換えコードを作成",
         "edit": "引き換えコード設定を更新"
       },
+      "download_codes": "コードをダウンロード",
+      "download_filename_prefix": "redemption-codes",
       "loading": "引き換えを読み込み中...",
       "notifications": {
         "create_success": "引き換えを作成しました",
@@ -519,9 +698,13 @@
         "label": "クォータ"
       }
     },
+    "notifications": {
+      "action_failed_message": "変更を適用できませんでした。",
+      "action_failed_title": "操作に失敗しました"
+    },
     "search": {
       "dropdown_placeholder": "引き換え名を入力...",
-      "placeholder": "名前で引き換えを検索..."
+      "placeholder": "名前またはUUIDで引き換えを検索..."
     },
     "status": {
       "disabled": "無効",
@@ -608,7 +791,9 @@
       "validation": {
         "error_title": "検証エラー",
         "fix_fields": "ハイライトされたフィールドを修正してください。",
-        "invalid_expiration": "無効な有効期限"
+        "invalid_expiration": "無効な有効期限",
+        "name_required": "トークン名は必須です",
+        "quota_min": "クォータは負にできません"
       }
     },
     "page": {
@@ -638,7 +823,8 @@
         "used_title": "使用済み: {{label}}"
       },
       "confirm": {
-        "delete": "トークン \"{{label}}\" を削除してよろしいですか？"
+        "delete": "トークン \"{{label}}\" を削除してよろしいですか？",
+        "delete_title": "トークンを削除"
       },
       "description": "API アクセストークンを管理",
       "dialog": {
@@ -649,15 +835,28 @@
       "empty": "トークンが見つかりません。最初のトークンを作成して開始してください。",
       "key": {
         "copied": "コピーしました！",
-        "copy": "トークンをコピー"
+        "copy": "トークンをコピー",
+        "hide": "キーを非表示",
+        "show": "キーを表示"
+      },
+      "notifications": {
+        "action_failed_message": "変更を適用できませんでした。",
+        "action_failed_title": "操作に失敗しました"
       },
       "quota": {
         "unlimited": "無制限"
       },
       "search": {
         "id_label": "ID: {{id}}",
-        "placeholder": "名前でトークンを検索...",
+        "placeholder": "名前またはUUIDでトークンを検索...",
         "quota_label": "クォータ: {{quota}}"
+      },
+      "share": {
+        "ama": "AMA 问天",
+        "lobechat": "LobeChat",
+        "next_chat": "ChatGPT Next Web",
+        "open_in_client": "クライアントで開く",
+        "opencat": "OpenCat"
       },
       "status": {
         "disabled": "無効",
@@ -693,6 +892,10 @@
             "placeholder": "ユーザー名を入力"
           }
         },
+        "notifications": {
+          "create_failed_message": "ユーザーを作成できません。",
+          "create_failed_title": "作成に失敗"
+        },
         "title": "ユーザーを作成"
       },
       "topup": {
@@ -710,15 +913,21 @@
             "placeholder": "任意"
           }
         },
+        "notifications": {
+          "submit_failed_message": "ユーザーにチャージできません。",
+          "submit_failed_title": "チャージに失敗"
+        },
         "title": "{{username}} にチャージ"
       }
     },
     "edit": {
       "actions": {
-        "add": "Add",
+        "add": "追加",
         "cancel": "キャンセル",
         "create": "ユーザーを作成",
         "creating": "作成中...",
+        "disable_2fa": "ユーザーの 2FA を無効化",
+        "disabling_2fa": "無効化中...",
         "update": "ユーザーを更新",
         "updating": "更新中..."
       },
@@ -727,8 +936,15 @@
         "help_email": "ヘルプ: メール",
         "help_group": "ヘルプ: グループ",
         "help_password": "ヘルプ: パスワード",
+        "help_password_locked": "ヘルプ: パスワードをロック",
         "help_quota": "ヘルプ: クォータ",
         "help_username": "ヘルプ: ユーザー名"
+      },
+      "confirm_2fa": {
+        "cancel": "キャンセル",
+        "confirm": "2FA を無効化",
+        "description": "{{username}} の二要素認証を無効化しますか？2FA コードなしでサインインできるようになります。",
+        "title": "2FA を無効化"
       },
       "description": {
         "create": "新しいユーザーアカウントを作成",
@@ -740,6 +956,9 @@
         "unexpected_title": "予期しないエラー"
       },
       "fields": {
+        "created_at": {
+          "label": "登録日時"
+        },
         "display_name": {
           "help": "UI に表示される任意の読みやすい名前。",
           "label": "表示名",
@@ -764,11 +983,19 @@
           "help": "最小長はポリシーに依存します。変更しない場合は空のままにしてください。",
           "label_create": "パスワード *",
           "label_edit": "新しいパスワード (現在のままにする場合は空)",
+          "locked_hint": "パスワードはロックされています。変更するには「パスワードをロック」をオフにしてください。ロック中は新しい MFA の登録もブロックされます。",
           "placeholder": "パスワードを入力"
+        },
+        "password_locked": {
+          "help": "オンにすると、このユーザーのパスワードを誰も変更できず、ユーザー自身も新しい TOTP / パスキーを有効化できません。解除できるのは root 管理者のみです。",
+          "label": "パスワードをロック (root のみ)"
         },
         "quota": {
           "help": "クォータの単位はトークンです。USD 推定値は管理者が設定した単位比率を使用します。",
           "label": "クォータ ({{usd}})"
+        },
+        "updated_at": {
+          "label": "最終更新"
         },
         "username": {
           "help": "一意のログイン名。3文字以上。",
@@ -780,6 +1007,18 @@
       "notifications": {
         "create_success": "ユーザーを作成しました",
         "update_success": "ユーザーを更新しました"
+      },
+      "notifications_2fa": {
+        "failed_message": "2FA を無効化できません。",
+        "failed_title": "2FA 無効化に失敗",
+        "success_message": "二要素認証を無効化しました。",
+        "success_title": "2FA 無効化"
+      },
+      "sections": {
+        "security_lock": {
+          "description": "このユーザーに対する機微な変更を制限します。ロック中はパスワードの変更と新しい MFA 登録の両方がブロックされます。切り替えできるのは root 管理者のみです。",
+          "title": "セキュリティロック"
+        }
       },
       "title": {
         "create": "ユーザーを作成",
@@ -800,9 +1039,12 @@
     "page": {
       "actions": {
         "delete": "削除",
+        "demote": "降格",
         "disable": "無効化",
+        "disable_2fa": "2FA を無効化",
         "edit": "編集",
         "enable": "有効化",
+        "promote": "昇格",
         "topup": "チャージ"
       },
       "columns": {
@@ -810,25 +1052,48 @@
         "display_name": "表示名",
         "group": "グループ",
         "id": "ID",
+        "register_time": "登録日時",
         "remaining_quota": "残りクォータ",
         "role": "ロール",
         "status": "ステータス",
         "used_quota": "使用済みクォータ",
         "username": "ユーザー名"
       },
+      "confirm": {
+        "cancel": "キャンセル",
+        "confirm": "確認",
+        "demote_description": "{{username}} を一般ユーザーに降格しますか？管理者権限が失われます。",
+        "demote_title": "ユーザーを降格",
+        "disable_2fa_description": "{{username}} の二要素認証を無効化しますか？2FA コードなしでサインインできるようになります。",
+        "disable_2fa_title": "2FA を無効化",
+        "promote_description": "{{username}} を管理者に昇格しますか？管理者権限が付与されます。",
+        "promote_title": "ユーザーを昇格"
+      },
       "description": "ユーザーを管理",
       "empty": "ユーザーが見つかりません。最初のユーザーを追加して開始してください。",
       "notifications": {
         "action_failed_message": "変更を適用できません。",
         "action_failed_title": "操作に失敗しました",
+        "demote_failed_message": "ユーザーを降格できません。",
+        "demote_failed_title": "降格に失敗しました",
+        "demote_success_message": "ユーザー {{username}} を降格しました。",
+        "demote_success_title": "ユーザーを降格しました",
+        "disable_2fa_failed_message": "2FA を無効化できません。",
+        "disable_2fa_failed_title": "2FA 無効化に失敗",
+        "disable_2fa_success_message": "{{username}} の二要素認証を無効化しました。",
+        "disable_2fa_success_title": "2FA 無効化",
         "load_failed_message": "ユーザーの読み込みに失敗しました。",
         "load_failed_title": "アクセス拒否",
+        "promote_failed_message": "ユーザーを昇格できません。",
+        "promote_failed_title": "昇格に失敗しました",
+        "promote_success_message": "ユーザー {{username}} を昇格しました。",
+        "promote_success_title": "ユーザーを昇格しました",
         "search_failed_message": "検索に失敗しました。",
         "search_failed_title": "検索失敗"
       },
       "search": {
         "id_label": "ID: {{id}}",
-        "placeholder": "ユーザー名でユーザーを検索...",
+        "placeholder": "ユーザー名またはUUIDでユーザーを検索...",
         "role_label": "ロール: {{role}}",
         "status_label": "ステータス: {{status}}"
       },
@@ -857,6 +1122,7 @@
           "default": "デフォルト",
           "id": "ID",
           "quota": "残りクォータ",
+          "register_time": "登録日時",
           "used_quota": "使用済みクォータ",
           "username": "ユーザー名"
         },

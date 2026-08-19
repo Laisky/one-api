@@ -3,8 +3,8 @@ package gemini
 import (
 	"slices"
 
-	"github.com/songquanpeng/one-api/relay/adaptor"
-	"github.com/songquanpeng/one-api/relay/adaptor/geminiOpenaiCompatible"
+	"github.com/Laisky/one-api/relay/adaptor"
+	"github.com/Laisky/one-api/relay/adaptor/geminiOpenaiCompatible"
 )
 
 // ModelRatios uses the shared Gemini pricing from geminiOpenaiCompatible
@@ -20,10 +20,6 @@ var GeminiToolingDefaults = geminiOpenaiCompatible.GeminiToolingDefaults()
 //
 // https://cloud.google.com/vertex-ai/generative-ai/docs/learn/prompts/system-instructions
 var ModelsSupportSystemInstruction = []string{
-	"gemini-2.0-flash", "gemini-2.0-flash-exp",
-	"gemini-2.0-flash-thinking-exp-01-21",
-	"gemini-2.0-flash-lite",
-	"gemini-2.0-pro-exp-02-05",
 	"gemini-2.5-flash", "gemini-2.5-flash-preview",
 	"gemini-2.5-flash-lite", "gemini-2.5-flash-lite-preview",
 	"gemini-2.5-flash-native-audio",
@@ -31,7 +27,9 @@ var ModelsSupportSystemInstruction = []string{
 	"gemini-2.5-computer-use-preview",
 	"gemini-3-pro-preview", "gemini-3-flash-preview", "gemini-3-pro-image-preview",
 	"gemini-3.1-pro-preview", "gemini-3.1-pro-preview-customtools",
-	"gemini-3.1-flash-image-preview", "gemini-3.1-flash-lite-preview",
+	"gemini-3.1-flash-image-preview", "gemini-3.1-flash-lite", "gemini-3.1-flash-lite-preview",
+	"gemini-3.5-flash",
+	"gemini-robotics-er-1.6-preview",
 }
 
 // IsModelSupportSystemInstruction check if the model support system instruction.

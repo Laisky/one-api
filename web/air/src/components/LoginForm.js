@@ -12,6 +12,12 @@ import TelegramLoginButton from 'react-telegram-login';
 import { IconGithubLogo } from '@douyinfe/semi-icons';
 import WeChatIcon from './WeChatIcon';
 
+const normalizeUser = (user) => {
+  if (!user) return user;
+  const uuid = user.uuid || user.user_uuid;
+  return uuid ? { ...user, uuid, id: uuid } : user;
+};
+
 const LoginForm = () => {
   const [inputs, setInputs] = useState({
     username: '',
@@ -63,8 +69,9 @@ const LoginForm = () => {
     );
     const { success, message, data } = res.data;
     if (success) {
-      userDispatch({ type: 'login', payload: data });
-      localStorage.setItem('user', JSON.stringify(data));
+      const user = normalizeUser(data);
+      userDispatch({ type: 'login', payload: user });
+      localStorage.setItem('user', JSON.stringify(user));
       navigate('/');
       showSuccess('登录成功！');
       setShowWeChatLoginModal(false);
@@ -98,8 +105,9 @@ const LoginForm = () => {
       const { success, message, data } = res.data;
 
       if (success) {
-        userDispatch({ type: 'login', payload: data });
-        localStorage.setItem('user', JSON.stringify(data));
+        const user = normalizeUser(data);
+        userDispatch({ type: 'login', payload: user });
+        localStorage.setItem('user', JSON.stringify(user));
         showSuccess('登录成功！');
         if (username === 'root' && password === '123456') {
           Modal.error({ title: '您正在使用默认密码！', content: '请立刻修改默认密码！', centered: true });
@@ -132,8 +140,9 @@ const LoginForm = () => {
     const res = await API.get(`/api/oauth/telegram/login`, { params });
     const { success, message, data } = res.data;
     if (success) {
-      userDispatch({ type: 'login', payload: data });
-      localStorage.setItem('user', JSON.stringify(data));
+      const user = normalizeUser(data);
+      userDispatch({ type: 'login', payload: user });
+      localStorage.setItem('user', JSON.stringify(user));
       showSuccess('登录成功！');
       navigate('/');
     } else {

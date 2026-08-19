@@ -17,21 +17,21 @@ import (
 	"github.com/Laisky/zap"
 	"github.com/gin-gonic/gin"
 
-	"github.com/songquanpeng/one-api/common"
-	"github.com/songquanpeng/one-api/common/ctxkey"
-	"github.com/songquanpeng/one-api/common/graceful"
-	"github.com/songquanpeng/one-api/common/helper"
-	"github.com/songquanpeng/one-api/common/tracing"
-	"github.com/songquanpeng/one-api/model"
-	"github.com/songquanpeng/one-api/relay"
-	"github.com/songquanpeng/one-api/relay/adaptor"
-	"github.com/songquanpeng/one-api/relay/adaptor/openai"
-	"github.com/songquanpeng/one-api/relay/billing"
-	billingratio "github.com/songquanpeng/one-api/relay/billing/ratio"
-	metalib "github.com/songquanpeng/one-api/relay/meta"
-	relaymodel "github.com/songquanpeng/one-api/relay/model"
-	"github.com/songquanpeng/one-api/relay/pricing"
-	"github.com/songquanpeng/one-api/relay/relaymode"
+	"github.com/Laisky/one-api/common"
+	"github.com/Laisky/one-api/common/ctxkey"
+	"github.com/Laisky/one-api/common/graceful"
+	"github.com/Laisky/one-api/common/helper"
+	"github.com/Laisky/one-api/common/tracing"
+	"github.com/Laisky/one-api/model"
+	"github.com/Laisky/one-api/relay"
+	"github.com/Laisky/one-api/relay/adaptor"
+	"github.com/Laisky/one-api/relay/adaptor/openai"
+	"github.com/Laisky/one-api/relay/billing"
+	billingratio "github.com/Laisky/one-api/relay/billing/ratio"
+	metalib "github.com/Laisky/one-api/relay/meta"
+	relaymodel "github.com/Laisky/one-api/relay/model"
+	"github.com/Laisky/one-api/relay/pricing"
+	"github.com/Laisky/one-api/relay/relaymode"
 )
 
 // RelayVideoHelper handles OpenAI /v1/videos requests, performing quota accounting
@@ -97,30 +97,53 @@ func RelayVideoHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 	metalib.Set2Context(c, meta)
 
 	durationSeconds := videoRequest.RequestedDurationSeconds()
-	if durationSeconds <= 0 {
-		return openai.ErrorWrapper(errors.New("seconds must be positive for video generation"), "invalid_video_duration", http.StatusBadRequest)
-	}
-	resolutionKey := videoRequest.RequestedResolution()
 
-	var channelVideoOverride *adaptor.VideoPricingConfig
+	var channelModelConfigs map[string]model.ModelConfigLocal
 	if channelModel, ok := c.Get(ctxkey.ChannelModel); ok {
 		if channel, ok := channelModel.(*model.Channel); ok {
-			if cfg := channel.GetModelPriceConfig(meta.ActualModelName); cfg != nil && cfg.Video != nil {
-				channelVideoOverride = convertVideoLocalToAdaptor(cfg.Video)
-			}
+			channelModelConfigs = channel.GetModelPriceConfigsWithContext(gmw.Ctx(c))
 		}
 	}
 
 	pricingAdaptor := relay.GetAdaptor(meta.APIType)
-	videoPricing := pricing.GetVideoPricingWithThreeLayers(meta.ActualModelName, channelVideoOverride, pricingAdaptor)
-	if videoPricing == nil {
-		return openai.ErrorWrapper(errors.Errorf("video pricing missing for model %s", meta.ActualModelName), "video_pricing_missing", http.StatusBadRequest)
+	resolvedCfg, ok := pricing.ResolveModelConfig(meta.ActualModelName, channelModelConfigs, pricingAdaptor, meta.StartTime)
+	if !ok {
+		resolvedCfg, ok = pricing.ResolveModelConfig(meta.ActualModelName, nil, pricingAdaptor, meta.StartTime)
 	}
 
-	multiplier := videoPricing.EffectiveMultiplier(resolutionKey)
-	costUsd := videoPricing.PerSecondUsd * multiplier * durationSeconds
 	groupRatio := c.GetFloat64(ctxkey.ChannelRatio)
-	usedQuota := max(int64(math.Ceil(costUsd*billingratio.QuotaPerUsd*groupRatio)), 0)
+
+	// Per-call video models (e.g. Zhipu Vidu) are billed as a flat price per
+	// invocation. The upstream fixes the clip duration, so the client is not
+	// required to send `seconds` for these models.
+	var perCallUsd float64
+	if ok && resolvedCfg.PerCall != nil && resolvedCfg.PerCall.HasData() {
+		perCallUsd = resolvedCfg.PerCall.UsdPerThousandCalls / 1000
+	}
+
+	var videoPricing *adaptor.VideoPricingConfig
+	var multiplier float64
+	logContent := ""
+	usedQuota := int64(0)
+	if perCallUsd > 0 {
+		usedQuota = max(int64(math.Ceil(perCallUsd*billingratio.QuotaPerUsd*groupRatio)), 0)
+		logContent = fmt.Sprintf("video per-call usd %.4f, group rate %.2f", perCallUsd, groupRatio)
+	} else {
+		if durationSeconds <= 0 {
+			return openai.ErrorWrapper(errors.New("seconds must be positive for video generation"), "invalid_video_duration", http.StatusBadRequest)
+		}
+		if ok && resolvedCfg.Video != nil && resolvedCfg.Video.HasData() {
+			videoPricing = resolvedCfg.Video
+		}
+		if videoPricing == nil {
+			return openai.ErrorWrapper(errors.Errorf("video pricing missing for model %s", meta.ActualModelName), "video_pricing_missing", http.StatusBadRequest)
+		}
+		resolutionKey := videoRequest.RequestedResolution()
+		multiplier = videoPricing.EffectiveMultiplier(resolutionKey)
+		costUsd := videoPricing.PerSecondUsd * multiplier * durationSeconds
+		usedQuota = max(int64(math.Ceil(costUsd*billingratio.QuotaPerUsd*groupRatio)), 0)
+		logContent = fmt.Sprintf("video seconds %.2f, usd %.3f, multiplier %.2f, group rate %.2f", durationSeconds, videoPricing.PerSecondUsd, multiplier, groupRatio)
+	}
 
 	tokenId := c.GetInt(ctxkey.TokenId)
 	userId := meta.UserId
@@ -168,12 +191,7 @@ func RelayVideoHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 		if !succeed {
 			markBillingReconciled(c)
 			if preConsumedQuota > 0 {
-				quotaToReturn := preConsumedQuota
-				graceful.GoCritical(ctx, "videoRollbackPreConsumed", func(bgctx context.Context) {
-					if err := model.PostConsumeTokenQuota(bgctx, tokenId, -quotaToReturn); err != nil {
-						gmw.GetLogger(bgctx).Error("error rolling back pre-consumed quota", zap.Error(err))
-					}
-				})
+				goVideoRollbackPreConsumed(c, tokenId, preConsumedQuota)
 			}
 			if provLogID > 0 {
 				if err := model.ReconcileConsumeLog(ctx, provLogID, 0,
@@ -191,12 +209,14 @@ func RelayVideoHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 		}
 
 		quotaDelta := usedQuota - preConsumedQuota
-		logContent := fmt.Sprintf("video seconds %.2f, usd %.3f, multiplier %.2f, group rate %.2f", durationSeconds, videoPricing.PerSecondUsd, multiplier, groupRatio)
 		entry := &model.Log{
 			UserId:      userId,
+			UserUUID:    model.StringPtrIfNotEmpty(meta.UserUUID),
 			ChannelId:   channelId,
+			ChannelUUID: model.StringPtrIfNotEmpty(meta.ChannelUUID),
 			ModelName:   userVisibleModelName(meta, meta.ActualModelName),
 			TokenName:   tokenName,
+			TokenUUID:   model.StringPtrIfNotEmpty(meta.TokenUUID),
 			Quota:       int(usedQuota),
 			Content:     logContent,
 			RequestId:   requestId,
@@ -204,7 +224,7 @@ func RelayVideoHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 			ElapsedTime: helper.CalcElapsedTime(meta.StartTime),
 		}
 
-		bgctx, cancel := context.WithTimeout(gmw.BackgroundCtx(c), time.Minute)
+		bgctx, cancel := context.WithTimeout(detachForBilling(c), time.Minute)
 		defer cancel()
 		graceful.GoCritical(bgctx, "videoPostConsume", func(cctx context.Context) {
 			billing.PostConsumeQuotaWithLog(cctx, tokenId, quotaDelta, usedQuota, entry, provLogID)
@@ -261,6 +281,24 @@ func RelayVideoHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 	succeed = true
 	markBillingReconciled(c)
 	return nil
+}
+
+// videoRollbackGateForTest, when non-nil, blocks the rollback goroutine spawned by
+// goVideoRollbackPreConsumed until the channel is closed. videoRollbackObservedCtxErrForTest,
+// when non-nil, records the context error observed by the rollback goroutine before it
+// performs the refund DB write. Both are test seams to verify the rollback goroutine runs
+// on a non-cancelled context after the request context is cancelled; they are always nil in
+// production builds.
+var videoRollbackGateForTest chan struct{}
+var videoRollbackObservedCtxErrForTest func(error)
+
+// goVideoRollbackPreConsumed refunds the pre-consumed quota of a failed video request.
+// It delegates to the shared goRollbackPreConsumed, which runs on a detached, c-free
+// context (see that function for why). The test seams are snapshotted here on the
+// request goroutine and passed by value.
+func goVideoRollbackPreConsumed(c *gin.Context, tokenId int, quotaToReturn int64) {
+	goRollbackPreConsumed(c, "videoRollbackPreConsumed", tokenId, quotaToReturn,
+		videoRollbackGateForTest, videoRollbackObservedCtxErrForTest)
 }
 
 func convertVideoLocalToAdaptor(local *model.VideoPricingLocal) *adaptor.VideoPricingConfig {

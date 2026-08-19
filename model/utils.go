@@ -8,9 +8,9 @@ import (
 
 	"github.com/Laisky/zap"
 
-	"github.com/songquanpeng/one-api/common/config"
-	"github.com/songquanpeng/one-api/common/graceful"
-	"github.com/songquanpeng/one-api/common/logger"
+	"github.com/Laisky/one-api/common/config"
+	"github.com/Laisky/one-api/common/graceful"
+	"github.com/Laisky/one-api/common/logger"
 )
 
 const (
@@ -206,25 +206,29 @@ func batchUpdate(ctx context.Context) {
 			case BatchUpdateTypeUserQuota:
 				err := increaseUserQuota(ctx, key, value)
 				if err != nil {
+					// Background flush: the logger carries no request identity, so
+					// the affected user is resolved explicitly on this error path.
 					lg.Error("failed to batch update user quota",
-						zap.Int("user_id", key),
-						zap.Int64("value", value),
-						zap.Error(err))
+						append(LookupUserRef(ctx, key).Zap(),
+							zap.Int64("value", value),
+							zap.Error(err))...)
 				}
 			case BatchUpdateTypeTokenQuota:
 				err := increaseTokenQuota(ctx, key, value)
 				if err != nil {
+					// Background flush: the logger carries no request identity, so
+					// the affected token is resolved explicitly on this error path.
 					lg.Error("failed to batch update token quota",
-						zap.Int("token_id", key),
-						zap.Int64("value", value),
-						zap.Error(err))
+						append(LookupTokenRef(ctx, key).Zap(),
+							zap.Int64("value", value),
+							zap.Error(err))...)
 				}
 			case BatchUpdateTypeUsedQuota:
 				updateUserUsedQuota(key, value)
 			case BatchUpdateTypeRequestCount:
 				updateUserRequestCount(key, int(value))
 			case BatchUpdateTypeChannelUsedQuota:
-				updateChannelUsedQuota(key, value)
+				updateChannelUsedQuota(ctx, key, value)
 			}
 		}
 	}

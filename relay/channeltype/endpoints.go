@@ -4,7 +4,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/songquanpeng/one-api/relay/relaymode"
+	"github.com/Laisky/one-api/relay/relaymode"
 )
 
 // Endpoint represents an API endpoint type that can be enabled/disabled per channel.
@@ -88,7 +88,7 @@ func EndpointNameToID(name string) Endpoint {
 	return -1
 }
 
-// EndpointIDToName converts an Endpoint ID to its string name.
+// EndpointIDToName converts an endpoint ID to its string name.
 // Returns empty string if the ID is not recognized.
 func EndpointIDToName(id Endpoint) string {
 	if name, ok := endpointIDToName[id]; ok {
@@ -351,6 +351,7 @@ func DefaultEndpointsForChannelType(channelType int) []Endpoint {
 			EndpointChatCompletions,
 			EndpointEmbeddings,
 			EndpointImagesGenerations,
+			EndpointVideos,
 			EndpointResponseAPI,
 			EndpointClaudeMessages,
 		}
@@ -369,6 +370,48 @@ func DefaultEndpointsForChannelType(channelType int) []Endpoint {
 			EndpointChatCompletions,
 			EndpointCompletions,
 			EndpointEmbeddings,
+			EndpointRerank,
+			EndpointResponseAPI,
+			EndpointClaudeMessages,
+		}
+	case NVIDIA:
+		// NVIDIA's hosted API (https://integrate.api.nvidia.com/v1) natively serves
+		// OpenAI-compatible chat completions. The Responses API and Anthropic
+		// Messages surfaces are provided through one-api's shared OpenAI-compatible
+		// conversion/fallback layer rather than upstream-native. Embeddings are not
+		// advertised by default until NVIDIA's model-specific input_type requirements
+		// are represented in the model catalog.
+		return []Endpoint{
+			EndpointChatCompletions,
+			EndpointResponseAPI,
+			EndpointClaudeMessages,
+		}
+	case Cerebras:
+		// Cerebras' OpenAI-compatible API (https://api.cerebras.ai/v1) natively
+		// serves Chat Completions only. The Responses API and Anthropic Messages
+		// surfaces are provided through one-api's shared OpenAI-compatible
+		// conversion/fallback layer rather than upstream-native. Cerebras does
+		// not expose embeddings.
+		return []Endpoint{
+			EndpointChatCompletions,
+			EndpointResponseAPI,
+			EndpointClaudeMessages,
+		}
+	case DeepInfra:
+		// DeepInfra combines OpenAI-compatible, native Anthropic Messages, and
+		// model-native inference surfaces under one Bearer-authenticated API.
+		// Responses uses one-api's Chat Completions fallback. DeepInfra video is
+		// intentionally omitted because its native inference contract does not
+		// match one-api's /v1/videos lifecycle API.
+		return []Endpoint{
+			EndpointChatCompletions,
+			EndpointCompletions,
+			EndpointEmbeddings,
+			EndpointImagesGenerations,
+			EndpointImagesEdits,
+			EndpointAudioSpeech,
+			EndpointAudioTranscription,
+			EndpointAudioTranslation,
 			EndpointRerank,
 			EndpointResponseAPI,
 			EndpointClaudeMessages,

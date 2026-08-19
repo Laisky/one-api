@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/songquanpeng/one-api/relay/meta"
+	"github.com/Laisky/one-api/relay/meta"
 )
 
 func GetRequestURL(meta *meta.Meta) (string, error) {

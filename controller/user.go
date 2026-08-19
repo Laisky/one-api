@@ -18,17 +18,19 @@ import (
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
 
-	"github.com/songquanpeng/one-api/common"
-	"github.com/songquanpeng/one-api/common/blacklist"
-	"github.com/songquanpeng/one-api/common/config"
-	"github.com/songquanpeng/one-api/common/ctxkey"
-	"github.com/songquanpeng/one-api/common/helper"
-	"github.com/songquanpeng/one-api/common/logger"
-	"github.com/songquanpeng/one-api/common/random"
-	"github.com/songquanpeng/one-api/common/utils"
-	"github.com/songquanpeng/one-api/dto"
-	"github.com/songquanpeng/one-api/middleware"
-	"github.com/songquanpeng/one-api/model"
+	"github.com/Laisky/one-api/common"
+	"github.com/Laisky/one-api/common/blacklist"
+	"github.com/Laisky/one-api/common/config"
+	"github.com/Laisky/one-api/common/ctxkey"
+	"github.com/Laisky/one-api/common/errkind"
+	"github.com/Laisky/one-api/common/helper"
+	"github.com/Laisky/one-api/common/identity"
+	"github.com/Laisky/one-api/common/logger"
+	"github.com/Laisky/one-api/common/random"
+	"github.com/Laisky/one-api/common/utils"
+	"github.com/Laisky/one-api/dto"
+	"github.com/Laisky/one-api/middleware"
+	"github.com/Laisky/one-api/model"
 )
 
 type LoginRequest struct {
@@ -58,30 +60,27 @@ func jsonRawIsNull(raw json.RawMessage) bool {
 
 func Login(c *gin.Context) {
 	ctx := gmw.Ctx(c)
+	lg := gmw.GetLogger(c)
+	turnstileToken := c.Query("turnstile")
+	middleware.RedactTurnstileTokenFromURL(c)
 
 	var loginRequest LoginRequest
 	err := json.NewDecoder(c.Request.Body).Decode(&loginRequest)
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"message": invalidParameterMessage,
-			"success": false,
-		})
+		helper.RespondError(c, errkind.InvalidRequestErr(errors.New(invalidParameterMessage)))
 		return
 	}
 	username := loginRequest.Username
 	password := loginRequest.Password
 	if username == "" || password == "" {
-		c.JSON(http.StatusOK, gin.H{
-			"message": invalidParameterMessage,
-			"success": false,
-		})
+		helper.RespondError(c, errkind.InvalidRequestErr(errors.New(invalidParameterMessage)))
 		return
 	}
 
 	// If this username has had a recent failed login and Turnstile is enabled, require verification.
 	turnstileRequired := config.TurnstileCheckEnabled && middleware.HasLoginFailure(username)
 	if turnstileRequired {
-		if err := middleware.VerifyTurnstileToken(c.Query("turnstile"), c.ClientIP()); err != nil {
+		if err := middleware.VerifyTurnstileToken(turnstileToken, c.ClientIP()); err != nil {
 			c.JSON(http.StatusOK, gin.H{
 				"success": false,
 				"message": err.Error(),
@@ -114,6 +113,21 @@ func Login(c *gin.Context) {
 		return
 	}
 
+	// Enforce PasswordLoginEnabled: when the admin disables password login,
+	// only root users may still authenticate with username/password (so a
+	// site operator can recover access if the SSO/IdP is unreachable).
+	// All other roles must use a third-party method such as OIDC. The check
+	// runs after ValidateAndFill so we never reveal account existence to
+	// callers that supplied wrong credentials.
+	if !config.PasswordLoginEnabled && user.Role < model.RoleRootUser {
+		// Global logger: no request identity is bound at this point in the login
+		// flow, so the resolved account must be named explicitly.
+		lg.Debug("password login rejected: feature disabled for non-root user",
+			append(user.Ref().Zap(), zap.Int("role", user.Role))...)
+		helper.RespondError(c, errkind.ForbiddenErr(errors.New("The administrator has disabled password login. Please use a third-party authentication method (e.g. OIDC) to log in.")))
+		return
+	}
+
 	// Check if TOTP is enabled for this user
 	if user.TotpSecret != "" {
 		// TOTP is enabled, check if code is provided
@@ -131,19 +145,13 @@ func Login(c *gin.Context) {
 
 		// Check rate limit for TOTP verification during login
 		if !middleware.CheckTotpRateLimit(c, user.Id) {
-			c.JSON(http.StatusTooManyRequests, gin.H{
-				"success": false,
-				"message": "Too many TOTP verification attempts. Please wait before trying again.",
-			})
+			helper.RespondErrorWithStatus(c, http.StatusTooManyRequests, errors.New("Too many TOTP verification attempts. Please wait before trying again."))
 			return
 		}
 
 		// Verify TOTP code
 		if !verifyTotpCode(ctx, user.Id, user.TotpSecret, loginRequest.TotpCode) {
-			c.JSON(http.StatusOK, gin.H{
-				"message": "Invalid TOTP code",
-				"success": false,
-			})
+			helper.RespondError(c, errkind.UnauthorizedErr(errors.New("Invalid TOTP code")))
 			return
 		}
 	}
@@ -187,8 +195,12 @@ func SetupLogin(user *model.User, c *gin.Context) {
 	// GenerateAccessToken(c)
 	// c.Header("Authorization", user.AccessToken)
 
+	// Id is intentionally omitted: ToResponse() emits only the external UUID, so
+	// setting the internal integer id here would be dead (it never reaches the
+	// wire). The boundary DTO makes that explicit instead of relying on an
+	// ambient marshaler to drop it.
 	cleanUser := model.User{
-		Id:          user.Id,
+		UUID:        user.UUID,
 		Username:    user.Username,
 		DisplayName: user.DisplayName,
 		Role:        user.Role,
@@ -197,7 +209,7 @@ func SetupLogin(user *model.User, c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"message": "",
 		"success": true,
-		"data":    cleanUser,
+		"data":    cleanUser.ToResponse(),
 	})
 }
 
@@ -206,10 +218,7 @@ func Logout(c *gin.Context) {
 	session.Clear()
 	err := session.Save()
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"message": err.Error(),
-			"success": false,
-		})
+		helper.RespondError(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{
@@ -221,73 +230,70 @@ func Logout(c *gin.Context) {
 func Register(c *gin.Context) {
 	ctx := gmw.Ctx(c)
 	if !config.RegisterEnabled {
-		c.JSON(http.StatusOK, gin.H{
-			"message": "The administrator has turned off new user registration",
-			"success": false,
-		})
+		helper.RespondError(c, errkind.ForbiddenErr(errors.New("The administrator has turned off new user registration")))
 		return
 	}
 	if !config.PasswordRegisterEnabled {
-		c.JSON(http.StatusOK, gin.H{
-			"message": "The administrator has turned off registration via password. Please use the form of third-party account verification to register",
-			"success": false,
-		})
+		helper.RespondError(c, errkind.ForbiddenErr(errors.New("The administrator has turned off registration via password. Please use the form of third-party account verification to register")))
 		return
 	}
-	var user model.User
-	err := json.NewDecoder(c.Request.Body).Decode(&user)
+	var req dto.UserRegisterRequest
+	err := json.NewDecoder(c.Request.Body).Decode(&req)
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": invalidParameterMessage,
-		})
+		helper.RespondError(c, errkind.InvalidRequestErr(errors.New(invalidParameterMessage)))
 		return
 	}
-	if err := common.Validate.Struct(&user); err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": invalidInputMessage,
-		})
+	if err := common.Validate.Struct(&req); err != nil {
+		helper.RespondError(c, errkind.InvalidRequestErr(errors.New(invalidInputMessage)))
 		return
 	}
 	if config.EmailVerificationEnabled {
-		if user.Email == "" || user.VerificationCode == "" {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": "The administrator has turned on email verification, please enter the email address and verification code",
-			})
+		if req.Email == "" || req.VerificationCode == "" {
+			helper.RespondError(c, errkind.InvalidRequestErr(errors.New("The administrator has turned on email verification, please enter the email address and verification code")))
 			return
 		}
-		if !common.VerifyCodeWithKey(user.Email, user.VerificationCode, common.EmailVerificationPurpose) {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": "Verification code error or expired",
-			})
+		if !common.VerifyCodeWithKey(req.Email, req.VerificationCode, common.EmailVerificationPurpose) {
+			helper.RespondError(c, errkind.UnauthorizedErr(errors.New("Verification code error or expired")))
 			return
 		}
 	}
-	affCode := user.AffCode // this code is the inviter's code, not the user's own code
+	affCode := req.AffCode // this code is the inviter's code, not the user's own code
 	inviterId, _ := model.GetUserIdByAffCode(affCode)
 	cleanUser := model.User{
-		Username:    user.Username,
-		Password:    user.Password,
-		DisplayName: user.Username,
+		Username:    req.Username,
+		Password:    req.Password,
+		DisplayName: req.Username,
 		InviterId:   inviterId,
 	}
 	if config.EmailVerificationEnabled {
-		cleanUser.Email = user.Email
+		cleanUser.Email = req.Email
+	}
+	if model.IsUsernameAlreadyTaken(cleanUser.Username) {
+		respondRegisterUsernameTaken(c)
+		return
 	}
 	if err := cleanUser.Insert(ctx, inviterId); err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
+		if isRegisterUsernameTakenError(err) {
+			respondRegisterUsernameTaken(c)
+			return
+		}
+		helper.RespondError(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
 	})
+}
+
+// respondRegisterUsernameTaken returns the public duplicate-username registration response while preserving the legacy HTTP 200 envelope.
+func respondRegisterUsernameTaken(c *gin.Context) {
+	RespondUsernameAlreadyExists(c)
+}
+
+// isRegisterUsernameTakenError reports whether an insert error came from the username unique constraint.
+func isRegisterUsernameTakenError(err error) bool {
+	return IsUsernameAlreadyTakenError(err)
 }
 
 func GetAllUsers(c *gin.Context) {
@@ -316,27 +322,21 @@ func GetAllUsers(c *gin.Context) {
 	users, err := model.GetAllUsers(p*size, size, order, sortBy, sortOrder)
 
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
+		helper.RespondError(c, err)
 		return
 	}
 
 	// Get total count for pagination
 	totalCount, err := model.GetUserCount()
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
+		helper.RespondError(c, err)
 		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
-		"data":    users,
+		"data":    model.UsersToResponses(users),
 		"total":   totalCount,
 	})
 }
@@ -351,48 +351,36 @@ func SearchUsers(c *gin.Context) {
 
 	users, err := model.SearchUsers(keyword, sortBy, sortOrder)
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
+		helper.RespondError(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
-		"data":    users,
+		"data":    model.UsersToResponses(users),
 	})
 }
 
 func GetUser(c *gin.Context) {
-	id, err := strconv.Atoi(c.Param("id"))
+	id, err := resolveUserRef(c.Param("id"))
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
+		helper.RespondError(c, err)
 		return
 	}
 	user, err := model.GetUserById(id, false)
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
+		helper.RespondError(c, err)
 		return
 	}
 	myRole := c.GetInt(ctxkey.Role)
 	if myRole <= user.Role && myRole != model.RoleRootUser {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": "No permission to get information of users at the same level or higher",
-		})
+		helper.RespondError(c, errkind.ForbiddenErr(errors.New("No permission to get information of users at the same level or higher")))
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
-		"data":    user,
+		"data":    user.ToResponse(),
 	})
 }
 
@@ -457,7 +445,7 @@ func GetUserDashboard(c *gin.Context) {
 			targetUserId = 0 // 0 means site-wide statistics
 		} else {
 			var err error
-			targetUserId, err = strconv.Atoi(userIdParam)
+			targetUserId, err = resolveUserRef(userIdParam)
 			if err != nil {
 				c.JSON(http.StatusOK, gin.H{
 					"success": false,
@@ -499,6 +487,36 @@ func GetUserDashboard(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
 			"message": "Failed to get token usage data: " + err.Error(),
+			"data":    nil,
+		})
+		return
+	}
+
+	toolStats, err := model.SearchToolLogsByDayAndTool(targetUserId, int(startTs), int(endTsExclusive))
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": "Failed to get tool usage data: " + err.Error(),
+			"data":    nil,
+		})
+		return
+	}
+
+	toolUserStats, err := model.SearchToolLogsByDayAndUser(targetUserId, int(startTs), int(endTsExclusive))
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": "Failed to get tool user usage data: " + err.Error(),
+			"data":    nil,
+		})
+		return
+	}
+
+	toolTokenStats, err := model.SearchToolLogsByDayAndToken(targetUserId, int(startTs), int(endTsExclusive))
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": "Failed to get tool token usage data: " + err.Error(),
 			"data":    nil,
 		})
 		return
@@ -546,12 +564,15 @@ func GetUserDashboard(c *gin.Context) {
 
 	// Create response with both log data and quota/status info
 	response := gin.H{
-		"logs":        dashboards,
-		"user_logs":   userStats,
-		"token_logs":  tokenStats,
-		"total_quota": totalQuota,
-		"used_quota":  usedQuota,
-		"status":      status,
+		"logs":            dashboards,
+		"user_logs":       userStats,
+		"token_logs":      tokenStats,
+		"tool_logs":       toolStats,
+		"tool_user_logs":  toolUserStats,
+		"tool_token_logs": toolTokenStats,
+		"total_quota":     totalQuota,
+		"used_quota":      usedQuota,
+		"status":          status,
 	}
 
 	c.JSON(http.StatusOK, gin.H{
@@ -587,7 +608,7 @@ func GetDashboardUsers(c *gin.Context) {
 
 	// Create simplified user list for dropdown
 	type UserOption struct {
-		Id          int    `json:"id"`
+		UUID        string `json:"uuid"`
 		Username    string `json:"username"`
 		DisplayName string `json:"display_name"`
 	}
@@ -595,7 +616,7 @@ func GetDashboardUsers(c *gin.Context) {
 	var userOptions []UserOption
 	// Add "All Users" option first
 	userOptions = append(userOptions, UserOption{
-		Id:          0,
+		UUID:        "all",
 		Username:    "all",
 		DisplayName: "All Users (Site-wide)",
 	})
@@ -603,7 +624,7 @@ func GetDashboardUsers(c *gin.Context) {
 	// Add individual users
 	for _, user := range users {
 		userOptions = append(userOptions, UserOption{
-			Id:          user.Id,
+			UUID:        user.UUID,
 			Username:    user.Username,
 			DisplayName: user.DisplayName,
 		})
@@ -620,27 +641,18 @@ func GenerateAccessToken(c *gin.Context) {
 	id := c.GetInt(ctxkey.Id)
 	user, err := model.GetUserById(id, true)
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
+		helper.RespondError(c, err)
 		return
 	}
 	user.AccessToken = random.GetUUID()
 
 	if model.DB.Where("access_token = ?", user.AccessToken).First(user).RowsAffected != 0 {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": "Please try again, the system-generated UUID is actually duplicated!",
-		})
+		helper.RespondError(c, errors.New("Please try again, the system-generated UUID is actually duplicated!"))
 		return
 	}
 
 	if err := user.Update(false); err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
+		helper.RespondError(c, err)
 		return
 	}
 
@@ -655,19 +667,13 @@ func GetAffCode(c *gin.Context) {
 	id := c.GetInt(ctxkey.Id)
 	user, err := model.GetUserById(id, true)
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
+		helper.RespondError(c, err)
 		return
 	}
 	if user.AffCode == "" {
 		user.AffCode = random.GetRandomString(4)
 		if err := user.Update(false); err != nil {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": err.Error(),
-			})
+			helper.RespondError(c, err)
 			return
 		}
 	}
@@ -683,10 +689,7 @@ func GetSelfByToken(c *gin.Context) {
 	userID := c.GetInt(ctxkey.Id)
 	tokenID := c.GetInt(ctxkey.TokenId)
 	if userID == 0 || tokenID == 0 {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"success": false,
-			"message": "missing token context",
-		})
+		helper.RespondErrorWithStatus(c, http.StatusBadRequest, errors.New("missing token context"))
 		return
 	}
 
@@ -703,7 +706,7 @@ func GetSelfByToken(c *gin.Context) {
 	}
 
 	userData := gin.H{
-		"id":           user.Id,
+		"uuid":         user.UUID,
 		"username":     user.Username,
 		"display_name": user.DisplayName,
 		"role":         user.Role,
@@ -730,7 +733,8 @@ func GetSelfByToken(c *gin.Context) {
 	}
 
 	tokenData := gin.H{
-		"id":               token.Id,
+		"uuid":             token.UUID,
+		"user_uuid":        token.UserUUID,
 		"name":             token.Name,
 		"status":           token.Status,
 		"remain_quota":     token.RemainQuota,
@@ -753,9 +757,9 @@ func GetSelfByToken(c *gin.Context) {
 			"user":  userData,
 			"token": tokenData,
 		},
-		"uid":                    user.Id,
+		"user_uuid":              user.UUID,
 		"username":               user.Username,
-		"token_id":               token.Id,
+		"token_uuid":             token.UUID,
 		"token_name":             token.Name,
 		"token_status":           token.Status,
 		"token_used_quota":       token.UsedQuota,
@@ -775,16 +779,13 @@ func GetSelf(c *gin.Context) {
 	id := c.GetInt(ctxkey.Id)
 	user, err := model.GetUserById(id, false)
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
+		helper.RespondError(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
-		"data":    user,
+		"data":    user.ToResponse(),
 	})
 }
 
@@ -793,54 +794,43 @@ func UpdateUser(c *gin.Context) {
 	adminUserID := c.GetInt(ctxkey.Id)
 	body, err := common.GetRequestBody(c)
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": invalidParameterMessage,
-		})
+		helper.RespondError(c, errkind.InvalidRequestErr(errors.New(invalidParameterMessage)))
 		return
 	}
 
 	var raw map[string]json.RawMessage
 	if err := json.Unmarshal(body, &raw); err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": invalidParameterMessage,
-		})
+		helper.RespondError(c, errkind.InvalidRequestErr(errors.New(invalidParameterMessage)))
 		return
 	}
 
 	var payload dto.UserAdminUpdatePayload
 	if err := json.Unmarshal(body, &payload); err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": invalidParameterMessage,
-		})
+		helper.RespondError(c, errkind.InvalidRequestErr(errors.New(invalidParameterMessage)))
 		return
 	}
 
-	if payload.Id == 0 {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": invalidParameterMessage,
-		})
+	ref, err := preferUUIDRef(payload.UUID, payload.Id)
+	if err != nil {
+		helper.RespondError(c, err)
 		return
 	}
+	payload.Id, err = resolveUserRef(ref)
+	if err != nil {
+		helper.RespondError(c, err)
+		return
+	}
+	payload.UUID = ""
 
 	originUser, err := model.GetUserById(payload.Id, false)
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
+		helper.RespondError(c, err)
 		return
 	}
 
 	myRole := c.GetInt(ctxkey.Role)
 	if myRole <= originUser.Role && myRole != model.RoleRootUser {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": "No permission to update user information with the same permission level or higher permission level",
-		})
+		helper.RespondError(c, errkind.ForbiddenErr(errors.New("No permission to update user information with the same permission level or higher permission level")))
 		return
 	}
 
@@ -854,28 +844,25 @@ func UpdateUser(c *gin.Context) {
 
 	if rawFieldPresent(raw, "username") {
 		if jsonRawIsNull(raw["username"]) {
-			c.JSON(http.StatusOK, gin.H{"success": false, "message": "Username cannot be null"})
+			helper.RespondError(c, errkind.InvalidRequestErr(errors.New("Username cannot be null")))
 			return
 		}
 		var username string
 		if err := json.Unmarshal(raw["username"], &username); err != nil {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": invalidParameterMessage,
-			})
+			helper.RespondError(c, errkind.InvalidRequestErr(errors.New(invalidParameterMessage)))
 			return
 		}
 		username = strings.TrimSpace(username)
 		if username == "" {
-			c.JSON(http.StatusOK, gin.H{"success": false, "message": "Username cannot be empty"})
+			helper.RespondError(c, errkind.InvalidRequestErr(errors.New("Username cannot be empty")))
 			return
 		}
 		if utf8.RuneCountInString(username) < 3 || utf8.RuneCountInString(username) > 30 {
-			c.JSON(http.StatusOK, gin.H{"success": false, "message": "Username must be between 3 and 30 characters"})
+			helper.RespondError(c, errkind.InvalidRequestErr(errors.New("Username must be between 3 and 30 characters")))
 			return
 		}
 		if myRole <= originUser.Role && myRole != model.RoleRootUser && username != originUser.Username {
-			c.JSON(http.StatusOK, gin.H{"success": false, "message": "No permission to rename this user"})
+			helper.RespondError(c, errkind.ForbiddenErr(errors.New("No permission to rename this user")))
 			return
 		}
 		updates["username"] = username
@@ -887,15 +874,12 @@ func UpdateUser(c *gin.Context) {
 		} else {
 			var displayName string
 			if err := json.Unmarshal(raw["display_name"], &displayName); err != nil {
-				c.JSON(http.StatusOK, gin.H{
-					"success": false,
-					"message": invalidParameterMessage,
-				})
+				helper.RespondError(c, errkind.InvalidRequestErr(errors.New(invalidParameterMessage)))
 				return
 			}
 			displayName = strings.TrimSpace(displayName)
 			if utf8.RuneCountInString(displayName) > 20 {
-				c.JSON(http.StatusOK, gin.H{"success": false, "message": "Display name cannot exceed 20 characters"})
+				helper.RespondError(c, errkind.InvalidRequestErr(errors.New("Display name cannot exceed 20 characters")))
 				return
 			}
 			updates["display_name"] = displayName
@@ -908,20 +892,17 @@ func UpdateUser(c *gin.Context) {
 		} else {
 			var email string
 			if err := json.Unmarshal(raw["email"], &email); err != nil {
-				c.JSON(http.StatusOK, gin.H{
-					"success": false,
-					"message": invalidParameterMessage,
-				})
+				helper.RespondError(c, errkind.InvalidRequestErr(errors.New(invalidParameterMessage)))
 				return
 			}
 			email = strings.TrimSpace(email)
 			if email != "" {
 				if utf8.RuneCountInString(email) > 50 {
-					c.JSON(http.StatusOK, gin.H{"success": false, "message": "Email cannot exceed 50 characters"})
+					helper.RespondError(c, errkind.InvalidRequestErr(errors.New("Email cannot exceed 50 characters")))
 					return
 				}
 				if err := common.Validate.Var(email, "email"); err != nil {
-					c.JSON(http.StatusOK, gin.H{"success": false, "message": "Valid email is required"})
+					helper.RespondError(c, errkind.InvalidRequestErr(errors.New("Valid email is required")))
 					return
 				}
 			}
@@ -935,19 +916,16 @@ func UpdateUser(c *gin.Context) {
 		} else {
 			var group string
 			if err := json.Unmarshal(raw["group"], &group); err != nil {
-				c.JSON(http.StatusOK, gin.H{
-					"success": false,
-					"message": invalidParameterMessage,
-				})
+				helper.RespondError(c, errkind.InvalidRequestErr(errors.New(invalidParameterMessage)))
 				return
 			}
 			group = strings.TrimSpace(group)
 			if group == "" {
-				c.JSON(http.StatusOK, gin.H{"success": false, "message": "Group cannot be empty"})
+				helper.RespondError(c, errkind.InvalidRequestErr(errors.New("Group cannot be empty")))
 				return
 			}
 			if utf8.RuneCountInString(group) > 32 {
-				c.JSON(http.StatusOK, gin.H{"success": false, "message": "Group cannot exceed 32 characters"})
+				helper.RespondError(c, errkind.InvalidRequestErr(errors.New("Group cannot exceed 32 characters")))
 				return
 			}
 			updates["group"] = group
@@ -960,10 +938,7 @@ func UpdateUser(c *gin.Context) {
 		} else {
 			var blacklist model.JSONStringSlice
 			if err := json.Unmarshal(raw["mcp_tool_blacklist"], &blacklist); err != nil {
-				c.JSON(http.StatusOK, gin.H{
-					"success": false,
-					"message": invalidParameterMessage,
-				})
+				helper.RespondError(c, errkind.InvalidRequestErr(errors.New(invalidParameterMessage)))
 				return
 			}
 			updates["mcp_tool_blacklist"] = blacklist
@@ -977,16 +952,13 @@ func UpdateUser(c *gin.Context) {
 			if payload.Quota == nil {
 				var quotaValue int64
 				if err := json.Unmarshal(raw["quota"], &quotaValue); err != nil {
-					c.JSON(http.StatusOK, gin.H{
-						"success": false,
-						"message": invalidParameterMessage,
-					})
+					helper.RespondError(c, errkind.InvalidRequestErr(errors.New(invalidParameterMessage)))
 					return
 				}
 				payload.Quota = &quotaValue
 			}
 			if *payload.Quota < 0 {
-				c.JSON(http.StatusOK, gin.H{"success": false, "message": "Quota must be non-negative"})
+				helper.RespondError(c, errkind.InvalidRequestErr(errors.New("Quota must be non-negative")))
 				return
 			}
 			newQuota = *payload.Quota
@@ -995,30 +967,69 @@ func UpdateUser(c *gin.Context) {
 		}
 	}
 
+	var (
+		metadataUpdated bool
+		mergedMetadata  model.UserMetadata
+	)
+
+	if rawFieldPresent(raw, "metadata") {
+		if jsonRawIsNull(raw["metadata"]) {
+			// nil => no change
+		} else {
+			var metaPayload dto.UserMetadataPayload
+			if err := json.Unmarshal(raw["metadata"], &metaPayload); err != nil {
+				helper.RespondError(c, errkind.InvalidRequestErr(errors.New(invalidParameterMessage)))
+				return
+			}
+			merged := originUser.Metadata
+			if metaPayload.PasswordLocked != nil {
+				if myRole != model.RoleRootUser {
+					helper.RespondError(c, errkind.ForbiddenErr(errors.New("Only root admin can change password lock")))
+					return
+				}
+				merged.PasswordLocked = *metaPayload.PasswordLocked
+			}
+			encoded, encErr := json.Marshal(merged)
+			if encErr != nil {
+				helper.RespondError(c, errors.Wrap(encErr, "encode user metadata"))
+				return
+			}
+			updates["metadata"] = string(encoded)
+			mergedMetadata = merged
+			metadataUpdated = true
+		}
+	}
+
+	effectivePasswordLocked := originUser.Metadata.PasswordLocked
+	if metadataUpdated {
+		effectivePasswordLocked = mergedMetadata.PasswordLocked
+	}
+
 	if rawFieldPresent(raw, "password") {
 		if jsonRawIsNull(raw["password"]) {
 			// nil => no change
 		} else {
 			var password string
 			if err := json.Unmarshal(raw["password"], &password); err != nil {
-				c.JSON(http.StatusOK, gin.H{
-					"success": false,
-					"message": invalidParameterMessage,
-				})
+				helper.RespondError(c, errkind.InvalidRequestErr(errors.New(invalidParameterMessage)))
 				return
 			}
 			password = strings.TrimSpace(password)
 			if password == "" {
-				c.JSON(http.StatusOK, gin.H{"success": false, "message": "Password cannot be empty"})
+				helper.RespondError(c, errkind.InvalidRequestErr(errors.New("Password cannot be empty")))
+				return
+			}
+			if effectivePasswordLocked {
+				helper.RespondError(c, errkind.ForbiddenErr(errors.New("Password is locked for this user")))
 				return
 			}
 			if utf8.RuneCountInString(password) < 8 || utf8.RuneCountInString(password) > 20 {
-				c.JSON(http.StatusOK, gin.H{"success": false, "message": "Password length must be between 8 and 20 characters"})
+				helper.RespondError(c, errkind.InvalidRequestErr(errors.New("Password length must be between 8 and 20 characters")))
 				return
 			}
 			hashed, hashErr := common.Password2Hash(password)
 			if hashErr != nil {
-				c.JSON(http.StatusOK, gin.H{"success": false, "message": hashErr.Error()})
+				helper.RespondError(c, hashErr)
 				return
 			}
 			updates["password"] = hashed
@@ -1033,17 +1044,11 @@ func UpdateUser(c *gin.Context) {
 			if payload.Role != nil {
 				roleValue = *payload.Role
 			} else if err := json.Unmarshal(raw["role"], &roleValue); err != nil {
-				c.JSON(http.StatusOK, gin.H{
-					"success": false,
-					"message": invalidParameterMessage,
-				})
+				helper.RespondError(c, errkind.InvalidRequestErr(errors.New(invalidParameterMessage)))
 				return
 			}
 			if myRole <= roleValue && myRole != model.RoleRootUser {
-				c.JSON(http.StatusOK, gin.H{
-					"success": false,
-					"message": "No permission to promote other users to a permission level greater than or equal to your own",
-				})
+				helper.RespondError(c, errkind.ForbiddenErr(errors.New("No permission to promote other users to a permission level greater than or equal to your own")))
 				return
 			}
 			updates["role"] = roleValue
@@ -1058,16 +1063,13 @@ func UpdateUser(c *gin.Context) {
 			if payload.Status != nil {
 				statusValue = *payload.Status
 			} else if err := json.Unmarshal(raw["status"], &statusValue); err != nil {
-				c.JSON(http.StatusOK, gin.H{
-					"success": false,
-					"message": invalidParameterMessage,
-				})
+				helper.RespondError(c, errkind.InvalidRequestErr(errors.New(invalidParameterMessage)))
 				return
 			}
 			switch statusValue {
 			case model.UserStatusEnabled, model.UserStatusDisabled, model.UserStatusDeleted:
 			default:
-				c.JSON(http.StatusOK, gin.H{"success": false, "message": "Invalid status provided"})
+				helper.RespondError(c, errkind.InvalidRequestErr(errors.New("Invalid status provided")))
 				return
 			}
 			updates["status"] = statusValue
@@ -1084,11 +1086,20 @@ func UpdateUser(c *gin.Context) {
 		return
 	}
 
+	if username, ok := updates["username"].(string); ok && username != originUser.Username && model.IsUsernameAlreadyTaken(username) {
+		respondRegisterUsernameTaken(c)
+		return
+	}
+
 	if err := model.DB.Model(&model.User{}).Where("id = ?", payload.Id).Updates(updates).Error; err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": errors.Wrapf(err, "failed to update user: id=%d", payload.Id).Error(),
-		})
+		if isRegisterUsernameTakenError(err) {
+			respondRegisterUsernameTaken(c)
+			return
+		}
+		// Admin endpoint: the updated account is not the caller, so tag the error
+		// with its identity (transparent to Error()/errors.Is/strings.Contains).
+		helper.RespondError(c, identity.Tag(
+			errors.Wrapf(err, "failed to update user: id=%d", payload.Id), originUser.Ref()))
 		return
 	}
 
@@ -1113,45 +1124,73 @@ func UpdateUser(c *gin.Context) {
 }
 
 func UpdateSelf(c *gin.Context) {
-	var user model.User
-	err := json.NewDecoder(c.Request.Body).Decode(&user)
-	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": invalidParameterMessage,
-		})
+	lg := gmw.GetLogger(c)
+	var user dto.UserSelfUpdateRequest
+	if err := common.UnmarshalBodyReusable(c, &user); err != nil {
+		helper.RespondError(c, errkind.InvalidRequestErr(errors.New(invalidParameterMessage)))
 		return
 	}
+
+	// Inspect the raw payload so we can distinguish "field omitted" from
+	// "field provided but empty". This matters for fields like display_name
+	// that the user may legitimately want to clear.
+	requestBody, err := common.GetRequestBody(c)
+	if err != nil {
+		helper.RespondError(c, errors.Wrap(err, "get request body"))
+		return
+	}
+	rawFields := make(map[string]json.RawMessage)
+	if len(requestBody) > 0 {
+		if err := json.Unmarshal(requestBody, &rawFields); err != nil {
+			// Body is not valid JSON.
+			helper.RespondError(c, errkind.InvalidRequestErr(errors.Wrap(err, "unmarshal raw user self payload")))
+			return
+		}
+	}
+	displayNameProvided := rawFieldPresent(rawFields, "display_name")
 
 	// When frontend sends only a subset of fields (e.g. password-only update),
 	// fill in missing username/display_name from the current user record so that
 	// partial updates don't fail with "cannot be empty" errors.
 	userId := c.GetInt(ctxkey.Id)
-	if strings.TrimSpace(user.Username) == "" || strings.TrimSpace(user.DisplayName) == "" {
-		currentUser, fetchErr := model.GetUserById(userId, false)
-		if fetchErr != nil {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": fetchErr.Error(),
-			})
-			return
-		}
-		if strings.TrimSpace(user.Username) == "" {
-			user.Username = currentUser.Username
-		}
-		if strings.TrimSpace(user.DisplayName) == "" {
-			user.DisplayName = currentUser.DisplayName
-		}
+	currentUser, fetchErr := model.GetUserById(userId, false)
+	if fetchErr != nil {
+		helper.RespondError(c, fetchErr)
+		return
+	}
+	// Username is the user's login identity (unique, max=30) and is treated as
+	// required. Keep the silent-restore so partial payloads (e.g. password-only)
+	// continue to work and never accidentally blank out the login key.
+	if strings.TrimSpace(user.Username) == "" {
+		user.Username = currentUser.Username
+	}
+	// DisplayName is optional; only fall back to the existing value when the
+	// caller did NOT supply the field at all. An explicitly provided empty
+	// string must clear the value.
+	if !displayNameProvided {
+		user.DisplayName = currentUser.DisplayName
+	}
+
+	if user.Password != "" && currentUser.Metadata.PasswordLocked {
+		helper.RespondError(c, errkind.ForbiddenErr(errors.New("Password is locked by administrator")))
+		return
 	}
 
 	if user.Password == "" {
 		user.Password = "$I_LOVE_U" // make Validator happy :)
 	}
-	if err := common.Validate.Struct(&user); err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": "Input is illegal " + err.Error(),
-		})
+	// Validate against a model.User (not the request DTO) so the go-playground
+	// validator error message keeps the exact "User.<Field>" struct prefix the
+	// client received before the request-DTO refactor. Only
+	// Username/Password/DisplayName/Email carry validate tags, so the validation
+	// result is identical while the error body stays byte-for-byte the same (T18).
+	if err := common.Validate.Struct(&model.User{
+		Username:    user.Username,
+		Password:    user.Password,
+		DisplayName: user.DisplayName,
+		Email:       user.Email,
+	}); err != nil {
+		helper.RespondError(c, errkind.InvalidRequestErr(errors.New("Input is illegal "+err.Error())))
 		return
 	}
 
@@ -1166,12 +1205,30 @@ func UpdateSelf(c *gin.Context) {
 		cleanUser.Password = ""
 	}
 	updatePassword := user.Password != ""
-	if err := cleanUser.Update(updatePassword); err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
+	if cleanUser.Username != currentUser.Username && model.IsUsernameAlreadyTaken(cleanUser.Username) {
+		respondRegisterUsernameTaken(c)
 		return
+	}
+	if err := cleanUser.Update(updatePassword); err != nil {
+		if isRegisterUsernameTakenError(err) {
+			respondRegisterUsernameTaken(c)
+			return
+		}
+		helper.RespondError(c, err)
+		return
+	}
+
+	// User.Update relies on GORM's Updates(struct), which skips zero-value
+	// strings. To honor an explicit empty display_name we need a targeted
+	// update that includes the column unconditionally. Avoid logging the
+	// value itself (potential PII), only the user id.
+	if displayNameProvided && strings.TrimSpace(user.DisplayName) == "" {
+		if err := model.DB.Model(&model.User{}).Where("id = ?", userId).Update("display_name", "").Error; err != nil {
+			helper.RespondError(c, errors.Wrapf(err, "clear display_name for user: id=%d", userId))
+			return
+		}
+		// Global logger: carries no request identity, so name the account here.
+		lg.Debug("user cleared display_name", currentUser.Ref().Zap()...)
 	}
 
 	c.JSON(http.StatusOK, gin.H{
@@ -1181,38 +1238,30 @@ func UpdateSelf(c *gin.Context) {
 }
 
 func DeleteUser(c *gin.Context) {
-	id, err := strconv.Atoi(c.Param("id"))
+	id, err := resolveUserRef(c.Param("id"))
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
+		helper.RespondError(c, err)
 		return
 	}
 	originUser, err := model.GetUserById(id, false)
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
+		helper.RespondError(c, err)
 		return
 	}
 	myRole := c.GetInt("role")
 	if myRole <= originUser.Role {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": "No permission to delete users with the same permission level or higher permission level",
-		})
+		helper.RespondError(c, errkind.ForbiddenErr(errors.New("No permission to delete users with the same permission level or higher permission level")))
 		return
 	}
 	err = model.DeleteUserById(id)
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": true,
-			"message": "",
-		})
+		helper.RespondError(c, err)
 		return
 	}
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "",
+	})
 }
 
 func DeleteSelf(c *gin.Context) {
@@ -1220,19 +1269,13 @@ func DeleteSelf(c *gin.Context) {
 	user, _ := model.GetUserById(id, false)
 
 	if user.Role == model.RoleRootUser {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": "Cannot delete super administrator account",
-		})
+		helper.RespondError(c, errkind.ForbiddenErr(errors.New("Cannot delete super administrator account")))
 		return
 	}
 
 	err := model.DeleteUserById(id)
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
+		helper.RespondError(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{
@@ -1244,69 +1287,68 @@ func DeleteSelf(c *gin.Context) {
 func CreateUser(c *gin.Context) {
 	ctx := gmw.Ctx(c)
 	lg := gmw.GetLogger(c)
-	var user model.User
-	err := json.NewDecoder(c.Request.Body).Decode(&user)
-	if err != nil || user.Username == "" || user.Password == "" {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": invalidParameterMessage,
-		})
+	var req dto.UserCreateRequest
+	err := json.NewDecoder(c.Request.Body).Decode(&req)
+	if err != nil || req.Username == "" || req.Password == "" {
+		helper.RespondError(c, errkind.InvalidRequestErr(errors.New(invalidParameterMessage)))
 		return
 	}
-	if err := common.Validate.Struct(&user); err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": invalidInputMessage,
-		})
+	// UUID/inviter_uuid are not part of the request DTO, so a client can no
+	// longer smuggle them in; the explicit resets are no longer needed.
+	if err := common.Validate.Struct(&req); err != nil {
+		helper.RespondError(c, errkind.InvalidRequestErr(errors.New(invalidInputMessage)))
 		return
 	}
 	// Disallow empty username/display name
-	if strings.TrimSpace(user.Username) == "" {
-		c.JSON(http.StatusOK, gin.H{"success": false, "message": "Username cannot be empty"})
+	if strings.TrimSpace(req.Username) == "" {
+		helper.RespondError(c, errkind.InvalidRequestErr(errors.New("Username cannot be empty")))
 		return
 	}
-	if user.DisplayName != "" && strings.TrimSpace(user.DisplayName) == "" {
-		c.JSON(http.StatusOK, gin.H{"success": false, "message": "Display name cannot be empty if provided"})
+	if req.DisplayName != "" && strings.TrimSpace(req.DisplayName) == "" {
+		helper.RespondError(c, errkind.InvalidRequestErr(errors.New("Display name cannot be empty if provided")))
 		return
 	}
-	if user.DisplayName == "" {
-		user.DisplayName = user.Username
+	if req.DisplayName == "" {
+		req.DisplayName = req.Username
 	}
 	myRole := c.GetInt("role")
-	if user.Role >= myRole {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": "Unable to create users with permissions greater than or equal to your own",
-		})
+	if req.Role >= myRole {
+		helper.RespondError(c, errkind.ForbiddenErr(errors.New("Unable to create users with permissions greater than or equal to your own")))
 		return
 	}
 	// Even for admin users, we cannot fully trust them!
 	cleanUser := model.User{
-		Username:    user.Username,
-		Password:    user.Password,
-		DisplayName: user.DisplayName,
-		Email:       user.Email,
+		Username:    req.Username,
+		Password:    req.Password,
+		DisplayName: req.DisplayName,
+		Email:       req.Email,
+	}
+	if model.IsUsernameAlreadyTaken(cleanUser.Username) {
+		respondRegisterUsernameTaken(c)
+		return
 	}
 	if err := cleanUser.Insert(ctx, 0); err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
+		if isRegisterUsernameTakenError(err) {
+			respondRegisterUsernameTaken(c)
+			return
+		}
+		helper.RespondError(c, err)
 		return
 	}
 
 	// Apply admin-specified quota and group after Insert, which resets them to defaults.
 	postUpdates := map[string]any{}
-	if user.Quota > 0 {
-		postUpdates["quota"] = user.Quota
+	if req.Quota > 0 {
+		postUpdates["quota"] = req.Quota
 	}
-	if user.Group != "" {
-		postUpdates["group"] = user.Group
+	if req.Group != "" {
+		postUpdates["group"] = req.Group
 	}
 	if len(postUpdates) > 0 {
 		if err := model.DB.Model(&model.User{}).Where("id = ?", cleanUser.Id).Updates(postUpdates).Error; err != nil {
+			// The created account is not the caller, so it is named explicitly.
 			lg.Error("failed to apply admin overrides on created user",
-				zap.Int("user_id", cleanUser.Id), zap.Error(err))
+				append(cleanUser.Ref().Zap(), zap.Error(err))...)
 		}
 	}
 
@@ -1327,10 +1369,7 @@ func ManageUser(c *gin.Context) {
 	err := json.NewDecoder(c.Request.Body).Decode(&req)
 
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": invalidParameterMessage,
-		})
+		helper.RespondError(c, errkind.InvalidRequestErr(errors.New(invalidParameterMessage)))
 		return
 	}
 	user := model.User{
@@ -1339,86 +1378,56 @@ func ManageUser(c *gin.Context) {
 	// Fill attributes
 	model.DB.Where(&user).First(&user)
 	if user.Id == 0 {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": "User does not exist",
-		})
+		helper.RespondError(c, errkind.NotFoundErr(errors.New("User does not exist")))
 		return
 	}
 	myRole := c.GetInt("role")
 	if myRole <= user.Role && myRole != model.RoleRootUser {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": "No permission to update user information with the same permission level or higher permission level",
-		})
+		helper.RespondError(c, errkind.ForbiddenErr(errors.New("No permission to update user information with the same permission level or higher permission level")))
 		return
 	}
 	switch req.Action {
 	case "disable":
 		user.Status = model.UserStatusDisabled
 		if user.Role == model.RoleRootUser {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": "Unable to disable super administrator user",
-			})
+			helper.RespondError(c, errkind.ForbiddenErr(errors.New("Unable to disable super administrator user")))
 			return
 		}
 	case "enable":
 		user.Status = model.UserStatusEnabled
 	case "delete":
 		if user.Role == model.RoleRootUser {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": "Unable to delete super administrator user",
-			})
+			helper.RespondError(c, errkind.ForbiddenErr(errors.New("Unable to delete super administrator user")))
 			return
 		}
 		if err := user.Delete(); err != nil {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": err.Error(),
-			})
+			helper.RespondError(c, err)
 			return
 		}
 	case "promote":
 		if myRole != model.RoleRootUser {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": "Ordinary administrator users cannot promote other users to administrators",
-			})
+			helper.RespondError(c, errkind.ForbiddenErr(errors.New("Ordinary administrator users cannot promote other users to administrators")))
 			return
 		}
 		if user.Role >= model.RoleAdminUser {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": "The user is already an administrator",
-			})
+			helper.RespondError(c, errkind.ConflictErr(errors.New("The user is already an administrator")))
 			return
 		}
 		user.Role = model.RoleAdminUser
 	case "demote":
 		if user.Role == model.RoleRootUser {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": "Unable to downgrade super administrator user",
-			})
+			helper.RespondError(c, errkind.ForbiddenErr(errors.New("Unable to downgrade super administrator user")))
 			return
 		}
 		if user.Role == model.RoleCommonUser {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": "The user is already an ordinary user",
-			})
+			helper.RespondError(c, errkind.ConflictErr(errors.New("The user is already an ordinary user")))
 			return
 		}
 		user.Role = model.RoleCommonUser
 	}
 
 	if err := user.Update(false); err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
+		helper.RespondError(c, err)
 		return
 	}
 	clearUser := model.User{
@@ -1428,7 +1437,7 @@ func ManageUser(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
-		"data":    clearUser,
+		"data":    clearUser.ToResponse(),
 	})
 }
 
@@ -1436,10 +1445,7 @@ func EmailBind(c *gin.Context) {
 	email := c.Query("email")
 	code := c.Query("code")
 	if !common.VerifyCodeWithKey(email, code, common.EmailVerificationPurpose) {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": "Verification code error or expired",
-		})
+		helper.RespondError(c, errkind.UnauthorizedErr(errors.New("Verification code error or expired")))
 		return
 	}
 	id := c.GetInt("id")
@@ -1448,20 +1454,14 @@ func EmailBind(c *gin.Context) {
 	}
 	err := user.FillUserById()
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
+		helper.RespondError(c, err)
 		return
 	}
 	user.Email = email
 	// no need to check if this email already taken, because we have used verification code to check it
 	err = user.Update(false)
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
+		helper.RespondError(c, err)
 		return
 	}
 	if user.Role == model.RoleRootUser {
@@ -1482,19 +1482,42 @@ func TopUp(c *gin.Context) {
 	req := topUpRequest{}
 	err := c.ShouldBindJSON(&req)
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
+		// Malformed request body: the caller sent JSON this endpoint cannot bind.
+		helper.RespondError(c, errkind.InvalidRequestErr(err))
 		return
 	}
 	id := c.GetInt("id")
+
+	// Throttle enumeration/brute-force of redemption codes: an authenticated user
+	// who has already burned through their failed-attempt budget is rejected
+	// before any DB work, without leaking whether the submitted code is valid.
+	if middleware.IsRedeemBlocked(c, id) {
+		// The request-scoped logger already carries the caller's identity.
+		gmw.GetLogger(c).Warn("redemption blocked: too many failed attempts",
+			zap.String("client_ip", c.ClientIP()),
+		)
+		helper.RespondErrorWithStatus(c, http.StatusTooManyRequests,
+			errors.New("too many failed redemption attempts, please try again later"))
+		return
+	}
+
 	quota, err := model.Redeem(ctx, req.Key, id)
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
+		// Record the failure against the user's budget and log who attempted the
+		// redemption and what code they tried, so brute-force / enumeration of
+		// redemption codes can be throttled and the offending account identified.
+		// The attempted key is logged because a failed attempt means the code is
+		// invalid or already used, so it has no residual value, and the pattern
+		// of attempts is useful forensically. Successful redemptions are not
+		// recorded, so a legitimate user is never throttled.
+		middleware.RecordRedeemFailure(c, id)
+		// The request-scoped logger already carries the caller's identity.
+		gmw.GetLogger(c).Warn("redemption attempt failed",
+			zap.String("client_ip", c.ClientIP()),
+			zap.String("attempted_key", req.Key),
+			zap.Error(err),
+		)
+		helper.RespondError(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{
@@ -1505,9 +1528,10 @@ func TopUp(c *gin.Context) {
 }
 
 type adminTopUpRequest struct {
-	UserId int    `json:"user_id"`
-	Quota  int    `json:"quota"`
-	Remark string `json:"remark"`
+	UserId   int    `json:"user_id"`
+	UserUUID string `json:"user_uuid"`
+	Quota    int    `json:"quota"`
+	Remark   string `json:"remark"`
 }
 
 func AdminTopUp(c *gin.Context) {
@@ -1515,18 +1539,24 @@ func AdminTopUp(c *gin.Context) {
 	req := adminTopUpRequest{}
 	err := c.ShouldBindJSON(&req)
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
+		// Malformed request body: the caller sent JSON this endpoint cannot bind.
+		helper.RespondError(c, errkind.InvalidRequestErr(err))
 		return
 	}
+	ref, err := preferUUIDRef(req.UserUUID, req.UserId)
+	if err != nil {
+		helper.RespondError(c, err)
+		return
+	}
+	req.UserId, err = resolveUserRef(ref)
+	if err != nil {
+		helper.RespondError(c, err)
+		return
+	}
+	req.UserUUID = ""
 	err = model.IncreaseUserQuota(ctx, req.UserId, int64(req.Quota))
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
+		helper.RespondError(c, err)
 		return
 	}
 	if req.Remark == "" {
@@ -1550,10 +1580,11 @@ func SetupTotp(c *gin.Context) {
 	userID := c.GetInt(ctxkey.Id)
 	user, err := model.GetUserById(userID, true)
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
+		helper.RespondError(c, errors.Wrapf(err, "get user %d", userID))
+		return
+	}
+	if user.Metadata.PasswordLocked {
+		helper.RespondError(c, errkind.ForbiddenErr(errors.New("MFA enrollment is locked by administrator")))
 		return
 	}
 	// Generate a new secret
@@ -1566,10 +1597,7 @@ func SetupTotp(c *gin.Context) {
 		IssuerName:   config.SystemName,
 	})
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": "Failed to generate TOTP: " + err.Error(),
-		})
+		helper.RespondError(c, errors.New("Failed to generate TOTP: "+err.Error()))
 		return
 	}
 
@@ -1626,37 +1654,29 @@ func ConfirmTotp(c *gin.Context) {
 
 	// Check rate limit for TOTP verification
 	if !middleware.CheckTotpRateLimit(c, userId) {
-		c.JSON(http.StatusTooManyRequests, gin.H{
-			"success": false,
-			"message": "Too many TOTP verification attempts. Please wait before trying again.",
-		})
+		helper.RespondErrorWithStatus(c, http.StatusTooManyRequests, errors.New("Too many TOTP verification attempts. Please wait before trying again."))
 		return
 	}
 
 	var req TotpSetupRequest
 	err := json.NewDecoder(c.Request.Body).Decode(&req)
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": invalidParameterMessage,
-		})
+		helper.RespondError(c, errkind.InvalidRequestErr(errors.New(invalidParameterMessage)))
 		return
 	}
 
 	if req.TotpCode == "" {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": "TOTP code is required",
-		})
+		helper.RespondError(c, errkind.InvalidRequestErr(errors.New("TOTP code is required")))
 		return
 	}
 
 	user, err := model.GetUserById(userId, true)
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
+		helper.RespondError(c, errors.Wrapf(err, "get user %d", userId))
+		return
+	}
+	if user.Metadata.PasswordLocked {
+		helper.RespondError(c, errkind.ForbiddenErr(errors.New("MFA enrollment is locked by administrator")))
 		return
 	}
 
@@ -1664,10 +1684,7 @@ func ConfirmTotp(c *gin.Context) {
 	session := sessions.Default(c)
 	tempSecret := session.Get("temp_totp_secret")
 	if tempSecret == nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": "No TOTP setup session found. Please start setup again.",
-		})
+		helper.RespondError(c, errkind.UnauthorizedErr(errors.New("No TOTP setup session found. Please start setup again.")))
 		return
 	}
 
@@ -1675,10 +1692,7 @@ func ConfirmTotp(c *gin.Context) {
 
 	// Verify the TOTP code
 	if !verifyTotpCode(ctx, user.Id, secret, req.TotpCode) {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": "Invalid TOTP code",
-		})
+		helper.RespondError(c, errkind.UnauthorizedErr(errors.New("Invalid TOTP code")))
 		return
 	}
 
@@ -1686,10 +1700,7 @@ func ConfirmTotp(c *gin.Context) {
 	user.TotpSecret = secret
 	err = user.Update(false)
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
+		helper.RespondError(c, err)
 		return
 	}
 
@@ -1710,56 +1721,38 @@ func DisableTotp(c *gin.Context) {
 
 	// Check rate limit for TOTP verification
 	if !middleware.CheckTotpRateLimit(c, userId) {
-		c.JSON(http.StatusTooManyRequests, gin.H{
-			"success": false,
-			"message": "Too many TOTP verification attempts. Please wait before trying again.",
-		})
+		helper.RespondErrorWithStatus(c, http.StatusTooManyRequests, errors.New("Too many TOTP verification attempts. Please wait before trying again."))
 		return
 	}
 
 	var req TotpSetupRequest
 	err := json.NewDecoder(c.Request.Body).Decode(&req)
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": invalidParameterMessage,
-		})
+		helper.RespondError(c, errkind.InvalidRequestErr(errors.New(invalidParameterMessage)))
 		return
 	}
 
 	user, err := model.GetUserById(userId, true)
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
+		helper.RespondError(c, err)
 		return
 	}
 
 	if user.TotpSecret == "" {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": "TOTP is not enabled for this user",
-		})
+		helper.RespondError(c, errkind.InvalidRequestErr(errors.New("TOTP is not enabled for this user")))
 		return
 	}
 
 	// Verify the TOTP code before disabling
 	if !verifyTotpCode(ctx, user.Id, user.TotpSecret, req.TotpCode) {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": "Invalid TOTP code",
-		})
+		helper.RespondError(c, errkind.UnauthorizedErr(errors.New("Invalid TOTP code")))
 		return
 	}
 
 	// Clear the TOTP secret
 	err = user.ClearTotpSecret()
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
+		helper.RespondError(c, err)
 		return
 	}
 
@@ -1784,7 +1777,10 @@ func verifyTotpCode(ctx context.Context, uid int, secret, code string) bool {
 
 	// Check if this TOTP code has been used recently (replay protection)
 	if common.IsTotpCodeUsed(ctx, uid, code) {
-		lg.Warn(fmt.Sprintf("TOTP code replay attempt detected for user %d", uid))
+		// ctx may be a bare background context here (TOTP is also verified off the
+		// request goroutine), so resolve the account explicitly. This branch only
+		// fires on a detected replay, never on the normal login path.
+		lg.Warn("TOTP code replay attempt detected", model.LookupUserRef(ctx, uid).Zap()...)
 		return false
 	}
 
@@ -1817,10 +1813,7 @@ func GetTotpStatus(c *gin.Context) {
 	userId := c.GetInt(ctxkey.Id)
 	user, err := model.GetUserById(userId, true)
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
+		helper.RespondError(c, err)
 		return
 	}
 
@@ -1838,59 +1831,43 @@ func AdminDisableUserTotp(c *gin.Context) {
 	ctx := gmw.Ctx(c)
 	targetUserId := c.Param("id")
 	if targetUserId == "" {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": invalidParameterMessage,
-		})
+		helper.RespondError(c, errkind.InvalidRequestErr(errors.New(invalidParameterMessage)))
 		return
 	}
 
-	// Convert string ID to int
-	userId, err := strconv.Atoi(targetUserId)
+	userId, err := resolveUserRef(targetUserId)
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": "Invalid user ID",
-		})
+		// Inherit the resolver's attribution: only the malformed-reference and
+		// not-found sentinels are client-caused. A lookup failure (database or
+		// cache outage) stays Unknown so it keeps reaching the ERROR branch.
+		helper.RespondError(c, errkind.Mark(errors.New("Invalid user ID"), errkind.Of(err)))
 		return
 	}
 
 	// Get the target user
 	user, err := model.GetUserById(userId, true)
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
+		helper.RespondError(c, err)
 		return
 	}
 
 	// Check if admin has permission to modify this user
 	myRole := c.GetInt(ctxkey.Role)
 	if myRole <= user.Role && myRole != model.RoleRootUser {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": "No permission to modify user with the same or higher permission level",
-		})
+		helper.RespondError(c, errkind.ForbiddenErr(errors.New("No permission to modify user with the same or higher permission level")))
 		return
 	}
 
 	// Check if TOTP is already disabled
 	if user.TotpSecret == "" {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": "TOTP is not enabled for this user",
-		})
+		helper.RespondError(c, errkind.InvalidRequestErr(errors.New("TOTP is not enabled for this user")))
 		return
 	}
 
 	// Clear the TOTP secret
 	err = user.ClearTotpSecret()
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
+		helper.RespondError(c, err)
 		return
 	}
 

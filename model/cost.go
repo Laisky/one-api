@@ -8,19 +8,22 @@ import (
 
 	"github.com/Laisky/errors/v2"
 	"github.com/Laisky/zap"
+	"gorm.io/gorm"
 
-	"github.com/songquanpeng/one-api/common"
-	"github.com/songquanpeng/one-api/common/helper"
-	"github.com/songquanpeng/one-api/common/logger"
+	"github.com/Laisky/one-api/common"
+	"github.com/Laisky/one-api/common/helper"
+	"github.com/Laisky/one-api/common/logger"
 )
 
 // RequestIDMaxLen is the maximum length of request_id column to enforce indexing
 const RequestIDMaxLen = 32
 
 type UserRequestCost struct {
-	Id          int   `json:"id"`
-	CreatedTime int64 `json:"created_time" gorm:"bigint"`
-	UserID      int   `json:"user_id"`
+	Id          int     `json:"-"`
+	UUID        string  `json:"uuid" gorm:"type:char(36);column:uuid"`
+	CreatedTime int64   `json:"created_time" gorm:"bigint"`
+	UserID      int     `json:"-"`
+	UserUUID    *string `json:"user_uuid" gorm:"type:char(36);column:user_uuid;index"`
 	// Enforce uniqueness to avoid duplicate rows for the same request
 	RequestID string  `json:"request_id" gorm:"size:32;uniqueIndex"` // size must match RequestIDMaxLen
 	Quota     int64   `json:"quota"`
@@ -42,6 +45,14 @@ func NewUserRequestCost(userID int, quotaID string, quota int64) *UserRequestCos
 func (docu *UserRequestCost) Insert() error {
 	go removeOldRequestCost()
 
+	if docu.UserUUID == nil && docu.UserID > 0 {
+		userUUID, err := lookupUserUUIDIfAvailable(docu.UserID)
+		if err != nil {
+			return errors.Wrap(err, "failed to get user uuid for UserRequestCost")
+		}
+		docu.UserUUID = userUUID
+	}
+
 	err := DB.Create(docu).Error
 	return errors.Wrap(err, "failed to insert UserRequestCost")
 }
@@ -55,11 +66,19 @@ func UpdateUserRequestCostQuotaByRequestID(userID int, requestID string, quota i
 
 	go removeOldRequestCost()
 
+	userUUID, err := lookupUserUUIDIfAvailable(userID)
+	if err != nil {
+		return errors.Wrap(err, "failed to get user uuid for UserRequestCost")
+	}
+
 	// Update-first approach to avoid unique conflict races without using clause.OnConflict
 	// 1) Try update by request_id
 	tx := DB.Model(&UserRequestCost{}).
 		Where("request_id = ?", requestID).
-		Update("quota", quota)
+		Updates(map[string]any{
+			"quota":     quota,
+			"user_uuid": userUUID,
+		})
 	if tx.Error != nil {
 		return errors.Wrap(tx.Error, "failed to update UserRequestCost quota")
 	}
@@ -71,6 +90,7 @@ func UpdateUserRequestCostQuotaByRequestID(userID int, requestID string, quota i
 	docu := &UserRequestCost{
 		CreatedTime: helper.GetTimestamp(),
 		UserID:      userID,
+		UserUUID:    userUUID,
 		RequestID:   requestID,
 		Quota:       quota,
 	}
@@ -84,6 +104,31 @@ func UpdateUserRequestCostQuotaByRequestID(userID int, requestID string, quota i
 		return errors.Wrap(err2, "failed to update UserRequestCost quota after create race")
 	}
 	return nil
+}
+
+// lookupUserUUIDIfAvailable returns a user's UUID when the users table and row are available.
+// Parameters:
+//   - userID: internal user id associated with a request-cost record.
+//
+// Return values:
+//   - *string: pointer to the user UUID, or nil when the table/row/UUID is unavailable.
+//   - error: wrapped database error for unexpected lookup failures.
+func lookupUserUUIDIfAvailable(userID int) (*string, error) {
+	if userID <= 0 || !DB.Migrator().HasTable(&User{}) {
+		return nil, nil
+	}
+	var userUUID string
+	err := DB.Model(&User{}).Select("uuid").Where("id = ?", userID).Take(&userUUID).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, errors.Wrapf(err, "lookup user uuid for id %d", userID)
+	}
+	if userUUID == "" {
+		return nil, nil
+	}
+	return &userUUID, nil
 }
 
 // GetCostByRequestId get cost by request id
@@ -408,45 +453,6 @@ func userRequestCostHasIDColumn() (bool, error) {
 	default:
 		return DB.Migrator().HasColumn("user_request_costs", "id"), nil
 	}
-}
-
-// mysqlTableExists returns whether the given table is present in the current MySQL schema.
-func mysqlTableExists(table string) (bool, error) {
-	type result struct {
-		Count int `gorm:"column:count"`
-	}
-	var res result
-	query := "SELECT COUNT(*) AS count FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = ?"
-	if err := DB.Raw(query, table).Scan(&res).Error; err != nil {
-		return false, errors.Wrapf(err, "check mysql table %s exists", table)
-	}
-	return res.Count > 0, nil
-}
-
-// mysqlColumnExists reports whether the provided column exists for the table in the current MySQL schema.
-func mysqlColumnExists(table, column string) (bool, error) {
-	type result struct {
-		Count int `gorm:"column:count"`
-	}
-	var res result
-	query := "SELECT COUNT(*) AS count FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = ? AND column_name = ?"
-	if err := DB.Raw(query, table, column).Scan(&res).Error; err != nil {
-		return false, errors.Wrapf(err, "check mysql column %s.%s exists", table, column)
-	}
-	return res.Count > 0, nil
-}
-
-// mysqlIndexExists reports whether the provided index exists for the table in the current MySQL schema.
-func mysqlIndexExists(table, index string) (bool, error) {
-	type result struct {
-		Count int `gorm:"column:count"`
-	}
-	var res result
-	query := "SELECT COUNT(*) AS count FROM information_schema.statistics WHERE table_schema = DATABASE() AND table_name = ? AND index_name = ?"
-	if err := DB.Raw(query, table, index).Scan(&res).Error; err != nil {
-		return false, errors.Wrapf(err, "check mysql index %s on %s exists", index, table)
-	}
-	return res.Count > 0, nil
 }
 
 // ensureMySQLRequestIDColumnSized converts legacy TEXT request_id columns to VARCHAR(32) for index support.

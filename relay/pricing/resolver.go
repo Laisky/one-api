@@ -2,9 +2,10 @@ package pricing
 
 import (
 	"sort"
+	"time"
 
-	"github.com/songquanpeng/one-api/model"
-	"github.com/songquanpeng/one-api/relay/adaptor"
+	"github.com/Laisky/one-api/model"
+	"github.com/Laisky/one-api/relay/adaptor"
 )
 
 const (
@@ -19,24 +20,24 @@ const (
 // ResolveModelConfig returns the effective model configuration by applying
 // channel overrides first, then adaptor defaults, then global fallbacks.
 // The returned configuration is a clone that callers can mutate safely.
-func ResolveModelConfig(modelName string, channelConfigs map[string]model.ModelConfigLocal, provider adaptor.Adaptor) (adaptor.ModelConfig, bool) {
+func ResolveModelConfig(modelName string, channelConfigs map[string]model.ModelConfigLocal, provider adaptor.Adaptor, at time.Time) (adaptor.ModelConfig, bool) {
 	if channelConfigs != nil {
 		if local, ok := channelConfigs[modelName]; ok {
 			cfg := convertLocalModelConfig(local)
-			return cfg, true
+			return ApplyTimeWindow(cfg, at), true
 		}
 	}
 
 	if provider != nil {
 		if defaults := provider.GetDefaultModelPricing(); defaults != nil {
 			if cfg, ok := defaults[modelName]; ok {
-				return cloneModelConfig(cfg), true
+				return ApplyTimeWindow(cloneModelConfig(cfg), at), true
 			}
 		}
 	}
 
 	if cfg, ok := GetGlobalModelConfig(modelName); ok {
-		return cfg, true
+		return ApplyTimeWindow(cfg, at), true
 	}
 
 	return adaptor.ModelConfig{}, false
@@ -45,13 +46,12 @@ func ResolveModelConfig(modelName string, channelConfigs map[string]model.ModelC
 // ResolveAudioPricing resolves audio pricing metadata with three-layer precedence:
 // channel overrides (when they include audio pricing), provider defaults, then global pricing.
 // It returns nil when no audio metadata is defined in any layer.
-func ResolveAudioPricing(modelName string, channelConfigs map[string]model.ModelConfigLocal, provider adaptor.Adaptor) (*adaptor.AudioPricingConfig, bool) {
+func ResolveAudioPricing(modelName string, channelConfigs map[string]model.ModelConfigLocal, provider adaptor.Adaptor, at time.Time) (*adaptor.AudioPricingConfig, bool) {
 	if channelConfigs != nil {
 		if local, ok := channelConfigs[modelName]; ok {
-			// Optimization: Only convert audio config from local instead of everything.
-			// No clone needed as convertLocalAudio returns a fresh object.
-			if audio := convertLocalAudio(local.Audio); audio != nil && audio.HasData() {
-				return audio, true
+			cfg := ApplyTimeWindow(convertLocalModelConfig(local), at)
+			if cfg.Audio != nil && cfg.Audio.HasData() {
+				return cfg.Audio.Clone(), true
 			}
 		}
 	}
@@ -59,6 +59,7 @@ func ResolveAudioPricing(modelName string, channelConfigs map[string]model.Model
 	if provider != nil {
 		if defaults := provider.GetDefaultModelPricing(); defaults != nil {
 			if cfg, ok := defaults[modelName]; ok {
+				cfg = ApplyTimeWindow(cloneModelConfig(cfg), at)
 				if cfg.Audio != nil && cfg.Audio.HasData() {
 					return cfg.Audio.Clone(), true
 				}
@@ -66,9 +67,10 @@ func ResolveAudioPricing(modelName string, channelConfigs map[string]model.Model
 		}
 	}
 
-	if cfg := GetGlobalAudioPricing(modelName); cfg != nil {
-		if cfg.HasData() {
-			return cfg, true
+	if cfg, ok := GetGlobalModelConfig(modelName); ok {
+		cfg = ApplyTimeWindow(cfg, at)
+		if cfg.Audio != nil && cfg.Audio.HasData() {
+			return cfg.Audio.Clone(), true
 		}
 	}
 
@@ -78,13 +80,12 @@ func ResolveAudioPricing(modelName string, channelConfigs map[string]model.Model
 // ResolveImagePricing resolves image pricing metadata with three-layer precedence:
 // channel overrides (when they include image pricing), provider defaults, then global pricing.
 // It returns nil when no image metadata is defined in any layer.
-func ResolveImagePricing(modelName string, channelConfigs map[string]model.ModelConfigLocal, provider adaptor.Adaptor) (*adaptor.ImagePricingConfig, bool) {
+func ResolveImagePricing(modelName string, channelConfigs map[string]model.ModelConfigLocal, provider adaptor.Adaptor, at time.Time) (*adaptor.ImagePricingConfig, bool) {
 	if channelConfigs != nil {
 		if local, ok := channelConfigs[modelName]; ok {
-			// Optimization: Only convert image config from local instead of everything.
-			// No clone needed as convertLocalImage returns a fresh object.
-			if image := convertLocalImage(local.Image); image != nil && image.HasData() {
-				return image, true
+			cfg := ApplyTimeWindow(convertLocalModelConfig(local), at)
+			if cfg.Image != nil && cfg.Image.HasData() {
+				return cfg.Image.Clone(), true
 			}
 		}
 	}
@@ -92,6 +93,7 @@ func ResolveImagePricing(modelName string, channelConfigs map[string]model.Model
 	if provider != nil {
 		if defaults := provider.GetDefaultModelPricing(); defaults != nil {
 			if cfg, ok := defaults[modelName]; ok {
+				cfg = ApplyTimeWindow(cloneModelConfig(cfg), at)
 				if cfg.Image != nil && cfg.Image.HasData() {
 					return cfg.Image.Clone(), true
 				}
@@ -99,9 +101,10 @@ func ResolveImagePricing(modelName string, channelConfigs map[string]model.Model
 		}
 	}
 
-	if cfg := GetGlobalImagePricing(modelName); cfg != nil {
-		if cfg.HasData() {
-			return cfg, true
+	if cfg, ok := GetGlobalModelConfig(modelName); ok {
+		cfg = ApplyTimeWindow(cfg, at)
+		if cfg.Image != nil && cfg.Image.HasData() {
+			return cfg.Image.Clone(), true
 		}
 	}
 
@@ -121,15 +124,19 @@ func convertLocalModelConfig(local model.ModelConfigLocal) adaptor.ModelConfig {
 		cfg.Tiers = make([]adaptor.ModelRatioTier, 0, len(local.Tiers))
 		for _, t := range local.Tiers {
 			cfg.Tiers = append(cfg.Tiers, adaptor.ModelRatioTier{
-				Ratio:               t.Ratio,
-				CompletionRatio:     t.CompletionRatio,
-				CachedInputRatio:    t.CachedInputRatio,
-				CacheWrite5mRatio:   t.CacheWrite5mRatio,
-				CacheWrite1hRatio:   t.CacheWrite1hRatio,
-				InputTokenThreshold: t.InputTokenThreshold,
+				Ratio:                t.Ratio,
+				CompletionRatio:      t.CompletionRatio,
+				CachedInputRatio:     t.CachedInputRatio,
+				CacheWrite5mRatio:    t.CacheWrite5mRatio,
+				CacheWrite1hRatio:    t.CacheWrite1hRatio,
+				InputTokenThreshold:  t.InputTokenThreshold,
+				OutputTokenThreshold: t.OutputTokenThreshold,
 			})
 		}
 		sort.Slice(cfg.Tiers, func(i, j int) bool {
+			if cfg.Tiers[i].InputTokenThreshold == cfg.Tiers[j].InputTokenThreshold {
+				return cfg.Tiers[i].OutputTokenThreshold < cfg.Tiers[j].OutputTokenThreshold
+			}
 			return cfg.Tiers[i].InputTokenThreshold < cfg.Tiers[j].InputTokenThreshold
 		})
 	}
@@ -144,6 +151,9 @@ func convertLocalModelConfig(local model.ModelConfigLocal) adaptor.ModelConfig {
 	}
 	if local.Embedding != nil {
 		cfg.Embedding = convertLocalEmbedding(local.Embedding)
+	}
+	if len(local.TimeWindows) > 0 {
+		cfg.TimeWindows = convertLocalTimeWindows(local.TimeWindows)
 	}
 	return cfg
 }
@@ -234,14 +244,43 @@ func convertLocalEmbedding(local *model.EmbeddingPricingLocal) *adaptor.Embeddin
 	}
 }
 
+// convertLocalTimeWindows converts channel-scoped time-window pricing overlays into adaptor form.
+// Parameters: local is the persisted ordered window list.
+// Returns: a deep-converted adaptor window list preserving order.
+func convertLocalTimeWindows(local []model.TimeWindowLocal) []adaptor.TimeWindow {
+	if len(local) == 0 {
+		return nil
+	}
+	windows := make([]adaptor.TimeWindow, 0, len(local))
+	for _, window := range local {
+		ranges := make([]adaptor.ClockRange, 0, len(window.Ranges))
+		for _, clockRange := range window.Ranges {
+			ranges = append(ranges, adaptor.ClockRange{
+				Start: clockRange.Start,
+				End:   clockRange.End,
+			})
+		}
+		windows = append(windows, adaptor.TimeWindow{
+			Name:       window.Name,
+			TimeZone:   window.TimeZone,
+			Ranges:     ranges,
+			DaysOfWeek: append([]int(nil), window.DaysOfWeek...),
+			DateFrom:   window.DateFrom,
+			DateTo:     window.DateTo,
+			Overlay:    convertLocalModelConfig(window.Overlay),
+		})
+	}
+	return windows
+}
+
 // ResolveModelConfigRatioOnly returns a shallow configuration by applying
 // channel overrides first, then adaptor defaults, then global fallbacks.
 // It omits media metadata to optimize for token-only billing paths.
-func ResolveModelConfigRatioOnly(modelName string, channelConfigs map[string]model.ModelConfigLocal, provider adaptor.Adaptor) (adaptor.ModelConfig, bool) {
+func ResolveModelConfigRatioOnly(modelName string, channelConfigs map[string]model.ModelConfigLocal, provider adaptor.Adaptor, at time.Time) (adaptor.ModelConfig, bool) {
 	if channelConfigs != nil {
 		if local, ok := channelConfigs[modelName]; ok {
 			cfg := convertLocalModelConfigRatioOnly(local)
-			return cfg, true
+			return ApplyTimeWindowRatioOnly(cfg, at), true
 		}
 	}
 
@@ -258,13 +297,13 @@ func ResolveModelConfigRatioOnly(modelName string, channelConfigs map[string]mod
 				if cfg.Embedding != nil {
 					clone.Embedding = cfg.Embedding.Clone()
 				}
-				return clone, true
+				return ApplyTimeWindowRatioOnly(clone, at), true
 			}
 		}
 	}
 
 	if cfg, ok := GetGlobalModelConfigRatioOnly(modelName); ok {
-		return cfg, true
+		return ApplyTimeWindowRatioOnly(cfg, at), true
 	}
 
 	return adaptor.ModelConfig{}, false
@@ -283,17 +322,24 @@ func convertLocalModelConfigRatioOnly(local model.ModelConfigLocal) adaptor.Mode
 		cfg.Tiers = make([]adaptor.ModelRatioTier, 0, len(local.Tiers))
 		for _, t := range local.Tiers {
 			cfg.Tiers = append(cfg.Tiers, adaptor.ModelRatioTier{
-				Ratio:               t.Ratio,
-				CompletionRatio:     t.CompletionRatio,
-				CachedInputRatio:    t.CachedInputRatio,
-				CacheWrite5mRatio:   t.CacheWrite5mRatio,
-				CacheWrite1hRatio:   t.CacheWrite1hRatio,
-				InputTokenThreshold: t.InputTokenThreshold,
+				Ratio:                t.Ratio,
+				CompletionRatio:      t.CompletionRatio,
+				CachedInputRatio:     t.CachedInputRatio,
+				CacheWrite5mRatio:    t.CacheWrite5mRatio,
+				CacheWrite1hRatio:    t.CacheWrite1hRatio,
+				InputTokenThreshold:  t.InputTokenThreshold,
+				OutputTokenThreshold: t.OutputTokenThreshold,
 			})
 		}
 		sort.Slice(cfg.Tiers, func(i, j int) bool {
+			if cfg.Tiers[i].InputTokenThreshold == cfg.Tiers[j].InputTokenThreshold {
+				return cfg.Tiers[i].OutputTokenThreshold < cfg.Tiers[j].OutputTokenThreshold
+			}
 			return cfg.Tiers[i].InputTokenThreshold < cfg.Tiers[j].InputTokenThreshold
 		})
+	}
+	if len(local.TimeWindows) > 0 {
+		cfg.TimeWindows = convertLocalTimeWindows(local.TimeWindows)
 	}
 	return cfg
 }

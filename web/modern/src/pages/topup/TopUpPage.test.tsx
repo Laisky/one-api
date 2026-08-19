@@ -1,8 +1,12 @@
+import { NotificationsProvider } from '@/components/ui/notifications';
 import { api } from '@/lib/api';
 import { useAuthStore } from '@/lib/stores/auth';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import type { ReactElement } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { TopUpPage } from './TopUpPage';
+
+const renderWithProviders = (ui: ReactElement) => render(<NotificationsProvider>{ui}</NotificationsProvider>);
 
 vi.mock('@/lib/api', () => {
   const get = vi.fn();
@@ -58,7 +62,7 @@ describe('TopUpPage', () => {
   });
 
   it('renders and redeems a code', async () => {
-    render(<TopUpPage />);
+    renderWithProviders(<TopUpPage />);
 
     // Field should be present
     const input = await screen.findByPlaceholderText(/enter your redemption code/i);
@@ -79,7 +83,7 @@ describe('TopUpPage', () => {
   });
 
   it('loads user quota on mount', async () => {
-    render(<TopUpPage />);
+    renderWithProviders(<TopUpPage />);
 
     await waitFor(() => {
       expect(api.get).toHaveBeenCalledWith('/api/user/self');

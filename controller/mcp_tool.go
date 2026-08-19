@@ -6,9 +6,9 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/songquanpeng/one-api/common/config"
-	"github.com/songquanpeng/one-api/common/helper"
-	"github.com/songquanpeng/one-api/model"
+	"github.com/Laisky/one-api/common/config"
+	"github.com/Laisky/one-api/common/helper"
+	"github.com/Laisky/one-api/model"
 )
 
 // GetMCPTools lists MCP tools with optional filters.
@@ -32,7 +32,11 @@ func GetMCPTools(c *gin.Context) {
 		sortOrder = "desc"
 	}
 
-	serverID, _ := strconv.Atoi(c.Query("server_id"))
+	serverID, err := resolveOptionalMCPServerRef(c.Query("server_id"))
+	if err != nil {
+		helper.RespondError(c, err)
+		return
+	}
 	status, statusProvided := parseOptionalInt(c.Query("status"))
 	var statusPtr *int
 	if statusProvided {

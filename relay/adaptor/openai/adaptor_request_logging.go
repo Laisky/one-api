@@ -8,8 +8,8 @@ import (
 	"github.com/Laisky/zap"
 	"github.com/gin-gonic/gin"
 
-	"github.com/songquanpeng/one-api/relay/meta"
-	"github.com/songquanpeng/one-api/relay/model"
+	"github.com/Laisky/one-api/relay/meta"
+	"github.com/Laisky/one-api/relay/model"
 )
 
 func generalToolSummary(tools []model.Tool) (bool, []string) {
@@ -117,9 +117,10 @@ func logConvertedRequest(c *gin.Context, metaInfo *meta.Meta, relayMode int, pay
 		zap.Int("relay_mode", relayMode),
 	}
 	if metaInfo != nil {
+		// The request-scoped logger already carries the channel identity
+		// (channel_id + channel_uuid + channel_name).
 		fields = append(fields,
 			zap.String("model", metaInfo.ActualModelName),
-			zap.Int("channel_id", metaInfo.ChannelId),
 		)
 	}
 	switch req := payload.(type) {

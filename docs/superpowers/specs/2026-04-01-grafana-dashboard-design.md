@@ -1,5 +1,7 @@
 # One API Grafana Dashboard Design Document
 
+> **Update (2026-06):** The `one_api_user_*` metrics no longer carry `user_id`/`username` labels (unbounded-cardinality removal); they are now broken down by `group` (and `token_type` on `one_api_user_tokens_total`), and `one_api_user_balance` is no longer populated. The PromQL/variables below that reference `username` on `one_api_user_*` metrics are historical; the shipped `docs/grafana-dashboard.json` uses group-based breakdowns. `$username` is sourced from `one_api_billing_quota_processed_total` (which still carries `username`) and applies only to the billing-based "User Quota Consumption" panel. Per-user breakdowns come from the request logs / billing tables in the database.
+
 ## Overview
 
 A single Grafana Dashboard containing 7 collapsible Row sections, covering both Ops/SRE and platform management perspectives. All `one_api_*` Prometheus metrics are mapped to panels. Panels marked as "reserved" currently have no production data, but are pre-configured with PromQL and will automatically display data when it becomes available.

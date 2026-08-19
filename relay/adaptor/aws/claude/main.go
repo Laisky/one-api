@@ -4,7 +4,6 @@ package aws
 import (
 	"bytes"
 	"encoding/json"
-	"fmt"
 	"io"
 	"net/http"
 	"time"
@@ -18,16 +17,16 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/jinzhu/copier"
 
-	"github.com/songquanpeng/one-api/common"
-	"github.com/songquanpeng/one-api/common/config"
-	"github.com/songquanpeng/one-api/common/ctxkey"
-	"github.com/songquanpeng/one-api/common/helper"
-	"github.com/songquanpeng/one-api/common/tracing"
-	"github.com/songquanpeng/one-api/model"
-	"github.com/songquanpeng/one-api/relay/adaptor/anthropic"
-	"github.com/songquanpeng/one-api/relay/adaptor/aws/utils"
-	"github.com/songquanpeng/one-api/relay/adaptor/openai"
-	relaymodel "github.com/songquanpeng/one-api/relay/model"
+	"github.com/Laisky/one-api/common/config"
+	"github.com/Laisky/one-api/common/ctxkey"
+	"github.com/Laisky/one-api/common/helper"
+	"github.com/Laisky/one-api/common/tracing"
+	"github.com/Laisky/one-api/model"
+	"github.com/Laisky/one-api/relay/adaptor/anthropic"
+	"github.com/Laisky/one-api/relay/adaptor/aws/utils"
+	"github.com/Laisky/one-api/relay/adaptor/openai"
+	"github.com/Laisky/one-api/relay/adaptor/openai_compatible"
+	relaymodel "github.com/Laisky/one-api/relay/model"
 )
 
 // https://docs.aws.amazon.com/bedrock/latest/userguide/model-ids.html
@@ -53,6 +52,7 @@ var AwsModelIDMap = map[string]string{
 	"claude-sonnet-4-5":          "anthropic.claude-sonnet-4-5-20250929-v1:0",
 	"claude-sonnet-4-5-20250929": "anthropic.claude-sonnet-4-5-20250929-v1:0",
 	"claude-sonnet-4-6":          "anthropic.claude-sonnet-4-6",
+	"claude-sonnet-5":            "anthropic.claude-sonnet-5",
 	// opus
 	"claude-3-opus-20240229":   "anthropic.claude-3-opus-20240229-v1:0",
 	"claude-opus-4-0":          "anthropic.claude-opus-4-20250514-v1:0",
@@ -63,6 +63,9 @@ var AwsModelIDMap = map[string]string{
 	"claude-opus-4-5-20251101": "anthropic.claude-opus-4-5-20251101-v1:0",
 	"claude-opus-4-6":          "anthropic.claude-opus-4-6-v1",
 	"claude-opus-4-7":          "anthropic.claude-opus-4-7",
+	"claude-opus-4-8":          "anthropic.claude-opus-4-8",
+	"claude-opus-5":            "anthropic.claude-opus-5",
+	"claude-fable-5":           "anthropic.claude-fable-5",
 }
 
 func AwsModelID(requestModel string) (string, error) {
@@ -78,7 +81,7 @@ func AwsClaudeModelTransArn(c *gin.Context, awsCli *bedrockruntime.Client) strin
 	// First, try to get ARN from channel's inference profile ARN mapping
 	if channelModel, ok := c.Get(ctxkey.ChannelModel); ok {
 		if channel, ok := channelModel.(*model.Channel); ok {
-			arnMap := channel.GetInferenceProfileArnMap()
+			arnMap := channel.GetInferenceProfileArnMapWithContext(gmw.Ctx(c))
 			if arnMap != nil {
 				if arn, exists := arnMap[reqModelID]; exists && arn != "" {
 					gmw.GetLogger(c).Debug("using channel inference profile ARN",
@@ -97,6 +100,63 @@ func AwsClaudeModelTransArn(c *gin.Context, awsCli *bedrockruntime.Client) strin
 
 // Deprecated: FastClaudeModelTransArn is no longer used
 // ARN mapping is now handled through channel configuration
+
+// buildClaudeUsage converts an unmarshaled Bedrock Claude response into the
+// billing usage snapshot. Bedrock's input_tokens EXCLUDES the cache-read and
+// cache-creation buckets, so those are mapped into dedicated fields instead of
+// being folded into PromptTokens. This mirrors the native Anthropic handler.
+func buildClaudeUsage(claudeResponse *anthropic.Response) relaymodel.Usage {
+	usage := relaymodel.Usage{
+		PromptTokens:     claudeResponse.Usage.InputTokens,
+		CompletionTokens: claudeResponse.Usage.OutputTokens,
+		TotalTokens:      claudeResponse.Usage.InputTokens + claudeResponse.Usage.OutputTokens,
+	}
+
+	if claudeResponse.Usage.CacheReadInputTokens > 0 {
+		usage.PromptTokensDetails = &relaymodel.UsagePromptTokensDetails{
+			CachedTokens: claudeResponse.Usage.CacheReadInputTokens,
+		}
+	}
+
+	// Map cache creation tokens to CacheWrite fields.
+	if claudeResponse.Usage.CacheCreation != nil {
+		usage.CacheWrite5mTokens = claudeResponse.Usage.CacheCreation.Ephemeral5mInputTokens
+		usage.CacheWrite1hTokens = claudeResponse.Usage.CacheCreation.Ephemeral1hInputTokens
+	} else if claudeResponse.Usage.CacheCreationInputTokens > 0 {
+		// Backward compatibility: legacy field carries total cache-write tokens.
+		usage.CacheWrite5mTokens = claudeResponse.Usage.CacheCreationInputTokens
+	}
+
+	return usage
+}
+
+// accumulateClaudeStreamUsage folds a streamed Bedrock Claude usage meta (returned
+// by anthropic.StreamResponseClaude2OpenAI for message_start / message_delta events)
+// into the running billing snapshot. Cache-read and cache-creation buckets are
+// accumulated separately because Bedrock's input_tokens excludes them.
+func accumulateClaudeStreamUsage(usage *relaymodel.Usage, meta *anthropic.Response) {
+	if meta == nil {
+		return
+	}
+	usage.PromptTokens += meta.Usage.InputTokens
+	usage.CompletionTokens += meta.Usage.OutputTokens
+
+	if meta.Usage.CacheReadInputTokens > 0 {
+		if usage.PromptTokensDetails == nil {
+			usage.PromptTokensDetails = &relaymodel.UsagePromptTokensDetails{}
+		}
+		usage.PromptTokensDetails.CachedTokens += meta.Usage.CacheReadInputTokens
+	}
+
+	// Accumulate cache creation tokens.
+	if meta.Usage.CacheCreation != nil {
+		usage.CacheWrite5mTokens += meta.Usage.CacheCreation.Ephemeral5mInputTokens
+		usage.CacheWrite1hTokens += meta.Usage.CacheCreation.Ephemeral1hInputTokens
+	} else if meta.Usage.CacheCreationInputTokens > 0 {
+		// Backward compatibility: legacy field carries total cache-write tokens.
+		usage.CacheWrite5mTokens += meta.Usage.CacheCreationInputTokens
+	}
+}
 
 func Handler(c *gin.Context, awsCli *bedrockruntime.Client, modelName string) (*relaymodel.ErrorWithStatusCode, *relaymodel.Usage) {
 	logger := gmw.GetLogger(c).With(
@@ -159,11 +219,7 @@ func Handler(c *gin.Context, awsCli *bedrockruntime.Client, modelName string) (*
 		return utils.WrapErr(errors.Wrap(err, "unmarshal response")), nil
 	}
 
-	usage := relaymodel.Usage{
-		PromptTokens:     claudeResponse.Usage.InputTokens,
-		CompletionTokens: claudeResponse.Usage.OutputTokens,
-		TotalTokens:      claudeResponse.Usage.InputTokens + claudeResponse.Usage.OutputTokens,
-	}
+	usage := buildClaudeUsage(claudeResponse)
 
 	if native, ok := c.Get(ctxkey.ClaudeMessagesNative); ok {
 		if useNative, _ := native.(bool); useNative {
@@ -186,6 +242,7 @@ func Handler(c *gin.Context, awsCli *bedrockruntime.Client, modelName string) (*
 }
 
 func StreamHandler(c *gin.Context, awsCli *bedrockruntime.Client) (*relaymodel.ErrorWithStatusCode, *relaymodel.Usage) {
+	lg := gmw.GetLogger(c)
 	createdTime := helper.GetTimestamp()
 	awsModelID, err := AwsModelID(c.GetString(ctxkey.RequestModel))
 	if err != nil {
@@ -202,7 +259,7 @@ func StreamHandler(c *gin.Context, awsCli *bedrockruntime.Client) (*relaymodel.E
 
 	if arn := AwsClaudeModelTransArn(c, awsCli); arn != "" {
 		awsReq.ModelId = aws.String(arn)
-		gmw.GetLogger(c).Debug("final modelId override applied", zap.String("model_id", arn))
+		lg.Debug("final modelId override applied", zap.String("model_id", arn))
 	}
 
 	claudeReq_, ok := c.Get(ctxkey.ConvertedRequest)
@@ -247,7 +304,7 @@ func StreamHandler(c *gin.Context, awsCli *bedrockruntime.Client) (*relaymodel.E
 	c.Stream(func(w io.Writer) bool {
 		event, ok := <-stream.Events()
 		if !ok {
-			c.Render(-1, common.CustomEvent{Data: "data: [DONE]"})
+			openai_compatible.FinalizeStreamWithBridge(c, &usage)
 			return false
 		}
 
@@ -256,14 +313,13 @@ func StreamHandler(c *gin.Context, awsCli *bedrockruntime.Client) (*relaymodel.E
 			claudeResp := new(anthropic.StreamResponse)
 			err := json.NewDecoder(bytes.NewReader(v.Value.Bytes)).Decode(claudeResp)
 			if err != nil {
-				gmw.GetLogger(c).Error("error unmarshalling stream response", zap.Error(err))
+				lg.Error("error unmarshalling stream response", zap.Error(err))
 				return false
 			}
 
 			response, meta := anthropic.StreamResponseClaude2OpenAI(c, claudeResp)
 			if meta != nil {
-				usage.PromptTokens += meta.Usage.InputTokens
-				usage.CompletionTokens += meta.Usage.OutputTokens
+				accumulateClaudeStreamUsage(&usage, meta)
 				if len(meta.Id) > 0 { // only message_start has an id, otherwise it's a finish_reason event.
 					id = tracing.GenerateChatCompletionID(c)
 					return true
@@ -291,18 +347,16 @@ func StreamHandler(c *gin.Context, awsCli *bedrockruntime.Client) (*relaymodel.E
 					lastToolCallChoice = choice
 				}
 			}
-			jsonStr, err := json.Marshal(response)
-			if err != nil {
-				gmw.GetLogger(c).Error("error marshalling stream response", zap.Error(err))
+			if err := openai_compatible.RenderStreamChunkWithBridge(c, response); err != nil {
+				lg.Error("error rendering stream response", zap.Error(err))
 				return true
 			}
-			c.Render(-1, common.CustomEvent{Data: "data: " + string(jsonStr)})
 			return true
 		case *types.UnknownUnionMember:
-			fmt.Println("unknown tag:", v.Tag)
+			lg.Warn("received unknown AWS Claude response stream union", zap.String("union_tag", v.Tag))
 			return false
 		default:
-			fmt.Println("union is nil or unknown type")
+			lg.Warn("received empty or unsupported AWS Claude response stream union")
 			return false
 		}
 	})

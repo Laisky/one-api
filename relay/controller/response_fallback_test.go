@@ -19,18 +19,19 @@ import (
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 
-	"github.com/songquanpeng/one-api/common"
-	"github.com/songquanpeng/one-api/common/client"
-	"github.com/songquanpeng/one-api/common/config"
-	"github.com/songquanpeng/one-api/common/ctxkey"
-	"github.com/songquanpeng/one-api/common/graceful"
-	"github.com/songquanpeng/one-api/common/logger"
-	"github.com/songquanpeng/one-api/model"
-	"github.com/songquanpeng/one-api/relay/adaptor/openai"
-	"github.com/songquanpeng/one-api/relay/adaptor/openai_compatible"
-	"github.com/songquanpeng/one-api/relay/channeltype"
-	metalib "github.com/songquanpeng/one-api/relay/meta"
-	relaymodel "github.com/songquanpeng/one-api/relay/model"
+	"github.com/Laisky/one-api/common"
+	"github.com/Laisky/one-api/common/client"
+	"github.com/Laisky/one-api/common/config"
+	"github.com/Laisky/one-api/common/ctxkey"
+	"github.com/Laisky/one-api/common/graceful"
+	"github.com/Laisky/one-api/common/logger"
+	"github.com/Laisky/one-api/model"
+	"github.com/Laisky/one-api/relay/adaptor/openai"
+	"github.com/Laisky/one-api/relay/adaptor/openai_compatible"
+	"github.com/Laisky/one-api/relay/apitype"
+	"github.com/Laisky/one-api/relay/channeltype"
+	metalib "github.com/Laisky/one-api/relay/meta"
+	relaymodel "github.com/Laisky/one-api/relay/model"
 )
 
 var (
@@ -45,6 +46,7 @@ const (
 	fallbackCompatibleChannelID = 99004
 	fallbackAnthropicChannelID  = 99005
 	fallbackOpenAIChannelID     = 99006
+	fallbackNVIDIAChannelID     = 99007
 )
 
 func TestRenderChatResponseAsResponseAPI(t *testing.T) {
@@ -164,6 +166,9 @@ func TestRelayResponseAPIHelper_FallbackAzure(t *testing.T) {
 	c.Set(ctxkey.Config, model.ChannelConfig{APIVersion: "2024-02-15-preview"})
 
 	apiErr := RelayResponseAPIHelper(c)
+	// Drain async billing before assertions/cleanups so its DB writes cannot race
+	// this test's fixture teardown under -race (fixes the SQLITE_LOCKED flake).
+	drainResponseFallbackBilling(t)
 	require.Nil(t, apiErr, "RelayResponseAPIHelper returned error")
 
 	require.Equal(t, http.StatusOK, recorder.Code, "unexpected status code")
@@ -274,6 +279,9 @@ func TestRelayResponseAPIHelper_FallbackSearchPreviewModel(t *testing.T) {
 	c.Set(ctxkey.Config, model.ChannelConfig{})
 
 	apiErr := RelayResponseAPIHelper(c)
+	// Drain async billing before assertions/cleanups so its DB writes cannot race
+	// this test's fixture teardown under -race (fixes the SQLITE_LOCKED flake).
+	drainResponseFallbackBilling(t)
 	require.Nil(t, apiErr, "RelayResponseAPIHelper returned error")
 
 	require.Equal(t, http.StatusOK, recorder.Code, "unexpected status code")
@@ -297,6 +305,123 @@ func TestRelayResponseAPIHelper_FallbackSearchPreviewModel(t *testing.T) {
 	require.Equal(t, "search fallback ok", fallbackResp.Output[0].Content[0].Text, "unexpected output content")
 	require.NotNil(t, fallbackResp.Usage)
 	require.Equal(t, 14, fallbackResp.Usage.TotalTokens, "unexpected usage total tokens")
+}
+
+func TestRelayResponseAPIHelper_FallbackNVIDIADeepSeekModelFullPath(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	ensureResponseFallbackFixtures(t)
+
+	prevRedis := common.IsRedisEnabled()
+	common.SetRedisEnabled(false)
+	t.Cleanup(func() { common.SetRedisEnabled(prevRedis) })
+
+	prevLogConsume := config.IsLogConsumeEnabled()
+	config.SetLogConsumeEnabled(false)
+	t.Cleanup(func() { config.SetLogConsumeEnabled(prevLogConsume) })
+
+	upstreamCalled := false
+	var upstreamPath string
+	var upstreamAuth string
+	var upstreamBody []byte
+
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		upstreamCalled = true
+		upstreamPath = r.URL.Path
+		upstreamAuth = r.Header.Get("Authorization")
+		body, err := io.ReadAll(r.Body)
+		require.NoError(t, err, "failed to read upstream body")
+		upstreamBody = body
+
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+		  "id": "chatcmpl-nvidia",
+		  "object": "chat.completion",
+		  "created": 1741036800,
+		  "model": "deepseek-ai/deepseek-v4-flash",
+		  "choices": [
+		    {
+		      "index": 0,
+		      "message": {"role": "assistant", "content": "NVIDIA fallback ok"},
+		      "finish_reason": "stop"
+		    }
+		  ],
+		  "usage": {"prompt_tokens": 11, "completion_tokens": 5, "total_tokens": 16}
+		}`))
+	}))
+	t.Cleanup(upstream.Close)
+
+	prevClient := client.HTTPClient
+	client.HTTPClient = upstream.Client()
+	t.Cleanup(func() { client.HTTPClient = prevClient })
+
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+
+	requestPayload := `{"model":"deepseek-ai/deepseek-v4-flash","stream":false,"instructions":"Answer briefly.","input":[{"role":"user","content":[{"type":"input_text","text":"Check NVIDIA response fallback"}]}]}`
+	req := httptest.NewRequest(http.MethodPost, "/v1/responses", strings.NewReader(requestPayload))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer nvapi-integration")
+	c.Request = req
+
+	gmw.SetLogger(c, logger.Logger)
+
+	c.Set(ctxkey.Channel, channeltype.NVIDIA)
+	c.Set(ctxkey.ChannelId, fallbackNVIDIAChannelID)
+	c.Set(ctxkey.ChannelModel, &model.Channel{Id: fallbackNVIDIAChannelID, Type: channeltype.NVIDIA})
+	c.Set(ctxkey.TokenId, fallbackTokenID)
+	c.Set(ctxkey.TokenName, "fallback-token")
+	c.Set(ctxkey.Id, fallbackUserID)
+	c.Set(ctxkey.Group, "default")
+	c.Set(ctxkey.ModelMapping, map[string]string{})
+	c.Set(ctxkey.ChannelRatio, 1.0)
+	c.Set(ctxkey.RequestModel, "deepseek-ai/deepseek-v4-flash")
+	c.Set(ctxkey.BaseURL, upstream.URL+"/v1")
+	c.Set(ctxkey.ContentType, "application/json")
+	c.Set(ctxkey.RequestId, "req_fallback_nvidia")
+	c.Set(ctxkey.TokenQuotaUnlimited, true)
+	c.Set(ctxkey.TokenQuota, int64(0))
+	c.Set(ctxkey.Username, "response-fallback")
+	c.Set(ctxkey.UserObj, &model.User{Quota: 1_000_000})
+	c.Set(ctxkey.Config, model.ChannelConfig{})
+
+	apiErr := RelayResponseAPIHelper(c)
+	// Drain async billing before assertions/cleanups so its DB writes cannot race
+	// this test's fixture teardown under -race (fixes the SQLITE_LOCKED flake).
+	drainResponseFallbackBilling(t)
+	require.Nil(t, apiErr, "RelayResponseAPIHelper returned error")
+
+	require.Equal(t, http.StatusOK, recorder.Code, "unexpected status code")
+	require.True(t, upstreamCalled, "expected upstream to be called")
+	require.Equal(t, "/v1/chat/completions", upstreamPath, "expected NVIDIA chat fallback path")
+	require.Equal(t, "Bearer nvapi-integration", upstreamAuth, "expected NVIDIA bearer auth upstream")
+
+	var chatReq relaymodel.GeneralOpenAIRequest
+	err := json.Unmarshal(upstreamBody, &chatReq)
+	require.NoError(t, err, "failed to unmarshal upstream chat request")
+	require.Equal(t, "deepseek-ai/deepseek-v4-flash", chatReq.Model, "expected mapped NVIDIA model")
+	require.False(t, chatReq.Stream, "expected non-streaming chat request")
+	require.Len(t, chatReq.Messages, 2, "expected system+user messages")
+	require.Equal(t, "system", chatReq.Messages[0].Role)
+	require.Equal(t, "Answer briefly.", chatReq.Messages[0].StringContent())
+	require.Equal(t, "user", chatReq.Messages[1].Role)
+	require.Equal(t, "Check NVIDIA response fallback", chatReq.Messages[1].StringContent())
+
+	metaInfo := metalib.GetByContext(c)
+	require.Equal(t, apitype.NVIDIA, metaInfo.APIType, "NVIDIA-hosted DeepSeek weights must keep NVIDIA adaptor")
+	require.True(t, metaInfo.ResponseAPIFallback, "expected Response API fallback flag")
+	pricingAdaptor := resolvePricingAdaptor(metaInfo)
+	require.NotNil(t, pricingAdaptor)
+	require.Equal(t, "nvidia", pricingAdaptor.GetChannelName())
+	require.Equal(t, 0.0, pricingAdaptor.GetModelRatio("deepseek-ai/deepseek-v4-flash"))
+
+	var fallbackResp openai.ResponseAPIResponse
+	err = json.Unmarshal(recorder.Body.Bytes(), &fallbackResp)
+	require.NoError(t, err, "failed to unmarshal fallback response body")
+	require.Equal(t, "completed", fallbackResp.Status, "expected response status completed")
+	require.Len(t, fallbackResp.Output, 1, "expected single output item")
+	require.Equal(t, "NVIDIA fallback ok", fallbackResp.Output[0].Content[0].Text)
+	require.NotNil(t, fallbackResp.Usage)
+	require.Equal(t, 16, fallbackResp.Usage.TotalTokens)
 }
 
 func TestRelayResponseAPIHelper_FallbackGroqGPTOSSMultimodalValidation(t *testing.T) {
@@ -342,6 +467,9 @@ func TestRelayResponseAPIHelper_FallbackGroqGPTOSSMultimodalValidation(t *testin
 	c.Set(ctxkey.Config, model.ChannelConfig{})
 
 	apiErr := RelayResponseAPIHelper(c)
+	// Drain async billing before assertions/cleanups so its DB writes cannot race
+	// this test's fixture teardown under -race (fixes the SQLITE_LOCKED flake).
+	drainResponseFallbackBilling(t)
 	require.NotNil(t, apiErr, "expected validation error for multimodal gpt-oss request")
 	require.Equal(t, http.StatusBadRequest, apiErr.StatusCode)
 	require.Equal(t, "invalid_request_error", apiErr.Code)
@@ -401,6 +529,9 @@ func TestRelayResponseAPIHelper_FallbackBlocksDisallowedWebSearch(t *testing.T) 
 	c.Set(ctxkey.Config, model.ChannelConfig{})
 
 	apiErr := RelayResponseAPIHelper(c)
+	// Drain async billing before assertions/cleanups so its DB writes cannot race
+	// this test's fixture teardown under -race (fixes the SQLITE_LOCKED flake).
+	drainResponseFallbackBilling(t)
 	require.NotNil(t, apiErr, "expected error when web_search tool is not whitelisted")
 	require.Equal(t, http.StatusBadRequest, apiErr.StatusCode, "expected status 400")
 	require.Contains(t, apiErr.Message, "web_search", "expected error mentioning web_search")
@@ -485,6 +616,9 @@ func TestRelayResponseAPIHelper_FallbackStreaming(t *testing.T) {
 	c.Set(ctxkey.Config, model.ChannelConfig{})
 
 	apiErr := RelayResponseAPIHelper(c)
+	// Drain async billing before assertions/cleanups so its DB writes cannot race
+	// this test's fixture teardown under -race (fixes the SQLITE_LOCKED flake).
+	drainResponseFallbackBilling(t)
 	require.Nil(t, apiErr, "RelayResponseAPIHelper returned error")
 
 	require.Equal(t, http.StatusOK, recorder.Code, "unexpected status code")
@@ -608,6 +742,9 @@ func TestRelayResponseAPIHelper_FallbackStreamingToolCalls(t *testing.T) {
 	c.Set(ctxkey.Config, model.ChannelConfig{})
 
 	apiErr := RelayResponseAPIHelper(c)
+	// Drain async billing before assertions/cleanups so its DB writes cannot race
+	// this test's fixture teardown under -race (fixes the SQLITE_LOCKED flake).
+	drainResponseFallbackBilling(t)
 	require.Nil(t, apiErr, "RelayResponseAPIHelper returned error")
 
 	require.Equal(t, http.StatusOK, recorder.Code, "unexpected status code")
@@ -728,6 +865,9 @@ func TestRelayResponseAPIHelper_FallbackAnthropicStreamingHandled(t *testing.T) 
 	c.Set(ctxkey.Config, model.ChannelConfig{})
 
 	apiErr := RelayResponseAPIHelper(c)
+	// Drain async billing before assertions/cleanups so its DB writes cannot race
+	// this test's fixture teardown under -race (fixes the SQLITE_LOCKED flake).
+	drainResponseFallbackBilling(t)
 	require.Nil(t, apiErr, "expected anthropic streaming fallback to succeed")
 
 	require.Equal(t, http.StatusOK, recorder.Code, "expected status 200")
@@ -866,6 +1006,20 @@ func parseSSEEvents(raw string) []parsedSSE {
 	return events
 }
 
+// drainResponseFallbackBilling waits for the post-response billing/logging tasks
+// that RelayResponseAPIHelper spawns via graceful.GoCritical. Those tasks write to
+// the shared in-memory SQLite database on their own goroutines; under -race timing
+// they overlap the current test's own fixture cleanups (and the next test's setup),
+// which raised SQLITE_LOCKED ("database table is locked") and flaked ~1-in-3 -race
+// runs. Draining before any DB mutation serializes them out. Best-effort: a drain
+// timeout must not fail an otherwise-passing test.
+func drainResponseFallbackBilling(t *testing.T) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	_ = graceful.Drain(ctx)
+}
+
 func ensureResponseFallbackFixtures(t *testing.T) {
 	t.Helper()
 	responseFallbackFixtureMu.Lock()
@@ -945,8 +1099,21 @@ func ensureResponseFallbackDB(t *testing.T) {
 			}
 			return
 		}
-		db, err := gorm.Open(sqlite.Open("file:response_fallback_tests?mode=memory&cache=shared"), &gorm.Config{})
+		// Pin the pool to a single connection. Shared-cache SQLite raises SQLITE_LOCKED
+		// ("database table is locked") immediately when two pooled connections touch the
+		// same table, and busy_timeout does not apply to those table locks. The billing
+		// and logging tasks these tests spawn via graceful.GoCritical run on their own
+		// goroutines, so with the default pool the fixture resets race them and flake.
+		// Every test in this package must additionally drain those tasks before mutating
+		// fixtures (see drainResponseFallbackBilling) so a leaked goroutine cannot collide
+		// with the next test's setup/cleanup under -race timing.
+		db, err := gorm.Open(sqlite.Open("file:response_fallback_tests?mode=memory&cache=shared&_busy_timeout=5000"), &gorm.Config{})
 		require.NoError(t, err, "failed to open sqlite database")
+		sqlDB, err := db.DB()
+		require.NoError(t, err, "failed to access sqlite pool")
+		sqlDB.SetMaxOpenConns(1)
+		sqlDB.SetMaxIdleConns(1)
+		sqlDB.SetConnMaxLifetime(0)
 		model.DB = db
 		model.LOG_DB = db
 	})

@@ -1,0 +1,7 @@
+# ast-grep configuration. Run with `ast-grep scan` (or `make lint-race-guard`).
+# Houses the structural guardrail that keeps the async/sync billing race class from
+# returning: see .ast-grep/rules and docs/proposals/20260608_relay-billing-async-sync-race-fixes.md.
+ruleDirs:
+  - .ast-grep/rules
+testConfigs:
+  - testDir: .ast-grep/rule-tests

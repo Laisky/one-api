@@ -1,0 +1,486 @@
+package replicate
+
+import (
+	"github.com/Laisky/one-api/relay/adaptor"
+	ratio "github.com/Laisky/one-api/relay/billing/ratio"
+)
+
+// replicateLanguageModelRatios enumerates LLM-style chat models hosted on
+// Replicate. Each entry declares full chat metadata (context, sampling,
+// features, HuggingFaceID, quantization) so OpenRouter mapping can advertise
+// them accurately. Pricing fields remain immutable.
+//
+// https://replicate.com/collections/language-models
+var replicateLanguageModelRatios = map[string]adaptor.ModelConfig{
+	"anthropic/claude-3.5-haiku": {
+		Ratio: 1.0 * ratio.MilliTokensUsd, CompletionRatio: 5.0 / 1.0,
+		ContextLength: 200000, MaxOutputTokens: 8192,
+		InputModalities: visionTextInputs, OutputModalities: textOnlyOutputs,
+		SupportedFeatures: chatFeatures, SupportedSamplingParameters: commonSamplingParams,
+		Description: "Anthropic Claude 3.5 Haiku hosted on Replicate; 200k context, vision-capable.",
+	},
+	"anthropic/claude-3.5-sonnet": {
+		Ratio: 3.75 * ratio.MilliTokensUsd, CompletionRatio: 18.75 / 3.75,
+		ContextLength: 200000, MaxOutputTokens: 8192,
+		InputModalities: visionTextInputs, OutputModalities: textOnlyOutputs,
+		SupportedFeatures: chatFeatures, SupportedSamplingParameters: commonSamplingParams,
+		Description: "Anthropic Claude 3.5 Sonnet hosted on Replicate; 200k context, vision-capable.",
+	},
+	"anthropic/claude-3.7-sonnet": {
+		Ratio: 3.0 * ratio.MilliTokensUsd, CompletionRatio: 15.0 / 3.0,
+		ContextLength: 200000, MaxOutputTokens: 8192,
+		InputModalities: visionTextInputs, OutputModalities: textOnlyOutputs,
+		SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs", "reasoning"},
+		SupportedSamplingParameters: commonSamplingParams,
+		Description:                 "Anthropic Claude 3.7 Sonnet hybrid-reasoning model hosted on Replicate.",
+	},
+	"anthropic/claude-4-sonnet": {
+		Ratio: 3.0 * ratio.MilliTokensUsd, CompletionRatio: 15.0 / 3.0,
+		ContextLength: 200000, MaxOutputTokens: 64000,
+		InputModalities: visionTextInputs, OutputModalities: textOnlyOutputs,
+		SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs", "reasoning"},
+		SupportedSamplingParameters: commonSamplingParams,
+		Description:                 "Anthropic Claude 4 Sonnet hosted on Replicate; supports extended thinking.",
+	},
+	"anthropic/claude-4.5-haiku": {
+		// $1/M input, $5/M output; 200K context; up to 64K output; vision-capable.
+		// https://replicate.com/anthropic/claude-4.5-haiku
+		Ratio: 1.0 * ratio.MilliTokensUsd, CompletionRatio: 5.0 / 1.0,
+		ContextLength: 200000, MaxOutputTokens: 64000,
+		InputModalities: visionTextInputs, OutputModalities: textOnlyOutputs,
+		SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs", "reasoning"},
+		SupportedSamplingParameters: commonSamplingParams,
+		Description:                 "Anthropic Claude Haiku 4.5 hosted on Replicate; 200K context, 64K output, vision-capable.",
+	},
+	"anthropic/claude-4.5-sonnet": {
+		// $3/M input, $15/M output; 1M context window; vision-capable.
+		// https://replicate.com/anthropic/claude-4.5-sonnet
+		Ratio: 3.0 * ratio.MilliTokensUsd, CompletionRatio: 15.0 / 3.0,
+		ContextLength: 1000000, MaxOutputTokens: 64000,
+		InputModalities: visionTextInputs, OutputModalities: textOnlyOutputs,
+		SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs", "reasoning"},
+		SupportedSamplingParameters: commonSamplingParams,
+		Description:                 "Anthropic Claude Sonnet 4.5 hosted on Replicate; 1M context, vision-capable, extended thinking.",
+	},
+	"anthropic/claude-opus-4.6": {
+		// $5/M input, $0.025/thousand output = $25/M output. 1M context (beta), up to 128K output.
+		// https://replicate.com/anthropic/claude-opus-4.6#pricing
+		Ratio: 5.0 * ratio.MilliTokensUsd, CompletionRatio: 25.0 / 5.0,
+		ContextLength: 1000000, MaxOutputTokens: 128000,
+		InputModalities: visionTextInputs, OutputModalities: textOnlyOutputs,
+		SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs", "reasoning"},
+		SupportedSamplingParameters: commonSamplingParams,
+		Description:                 "Anthropic Claude Opus 4.6 flagship model hosted on Replicate; 1M context (beta), 128K output, extended thinking.",
+	},
+	"anthropic/claude-opus-4.7": {
+		// Anthropic published $5/M input and $25/M output for Opus 4.7 (unchanged from 4.6).
+		Ratio: 5.0 * ratio.MilliTokensUsd, CompletionRatio: 25.0 / 5.0,
+		ContextLength: 1000000, MaxOutputTokens: 128000,
+		InputModalities: visionTextInputs, OutputModalities: textOnlyOutputs,
+		SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs", "reasoning"},
+		SupportedSamplingParameters: commonSamplingParams,
+		Description:                 "Anthropic Claude Opus 4.7 frontier model hosted on Replicate; 1M context, extended thinking.",
+	},
+	"deepseek-ai/deepseek-r1": {
+		Ratio: 3.75 * ratio.MilliTokensUsd, CompletionRatio: 10.0 / 3.75,
+		ContextLength: 65536, MaxOutputTokens: 8192,
+		InputModalities: textOnlyInputs, OutputModalities: textOnlyOutputs,
+		SupportedFeatures: reasoningFeatures, SupportedSamplingParameters: commonSamplingParams,
+		Quantization:  "fp8",
+		HuggingFaceID: "deepseek-ai/DeepSeek-R1",
+		Description:   "DeepSeek-R1 671B-parameter MoE reasoning model with chain-of-thought training.",
+	},
+	"deepseek-ai/deepseek-v3": {
+		Ratio: 1.45 * ratio.MilliTokensUsd, CompletionRatio: 1.0,
+		ContextLength: 65536, MaxOutputTokens: 8192,
+		InputModalities: textOnlyInputs, OutputModalities: textOnlyOutputs,
+		SupportedFeatures: chatFeatures, SupportedSamplingParameters: commonSamplingParams,
+		Quantization:  "fp8",
+		HuggingFaceID: "deepseek-ai/DeepSeek-V3",
+		Description:   "DeepSeek-V3 671B-parameter MoE chat model with strong coding and reasoning.",
+	},
+	"deepseek-ai/deepseek-v3.1": {
+		Ratio: 0.672 * ratio.MilliTokensUsd, CompletionRatio: 2.016 / 0.672,
+		ContextLength: 131072, MaxOutputTokens: 8192,
+		InputModalities: textOnlyInputs, OutputModalities: textOnlyOutputs,
+		SupportedFeatures: reasoningFeatures, SupportedSamplingParameters: commonSamplingParams,
+		Quantization:  "fp8",
+		HuggingFaceID: "deepseek-ai/DeepSeek-V3.1",
+		Description:   "DeepSeek-V3.1 hybrid reasoning + chat MoE model with 128k context.",
+	},
+	"google/gemini-2.5-flash": {
+		Ratio: 0.30 * ratio.MilliTokensUsd, CompletionRatio: 2.50 / 0.30,
+		ContextLength: 1048576, MaxOutputTokens: 65536,
+		InputModalities: visionTextInputs, OutputModalities: textOnlyOutputs,
+		SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs", "reasoning"},
+		SupportedSamplingParameters: commonSamplingParams,
+		Description:                 "Google Gemini 2.5 Flash multimodal model with adaptive thinking and 1M context.",
+	},
+	"google/gemini-3-pro": {
+		// Tiered on Replicate: input ≤200K = $2/M in, $12/M out; >200K = $4/M in, $18/M out.
+		// Literal uses the base (≤200K) tier. Multimodal: accepts text/image/video/audio, outputs text.
+		// https://replicate.com/google/gemini-3-pro#pricing
+		Ratio: 2.0 * ratio.MilliTokensUsd, CompletionRatio: 12.0 / 2.0,
+		ContextLength: 1048576, MaxOutputTokens: 65535,
+		InputModalities: []string{"text", "image", "video", "audio"}, OutputModalities: textOnlyOutputs,
+		SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs", "reasoning"},
+		SupportedSamplingParameters: commonSamplingParams,
+		Description:                 "Google Gemini 3 Pro most-advanced reasoning Gemini model hosted on Replicate; 1M context, multimodal (text/image/video/audio).",
+	},
+	"google/gemini-3.1-pro": {
+		// Tiered on Replicate, identical scheme to gemini-3-pro: input ≤200K = $2/M in, $12/M out; >200K = $4/M in, $18/M out.
+		// Literal uses the base (≤200K) tier. Multimodal: accepts text/image/video/audio, outputs text.
+		// https://replicate.com/google/gemini-3.1-pro#pricing
+		Ratio: 2.0 * ratio.MilliTokensUsd, CompletionRatio: 12.0 / 2.0,
+		ContextLength: 1000000, MaxOutputTokens: 65535,
+		InputModalities: []string{"text", "image", "video", "audio"}, OutputModalities: textOnlyOutputs,
+		SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs", "reasoning"},
+		SupportedSamplingParameters: commonSamplingParams,
+		Description:                 "Google Gemini 3.1 Pro reasoning Gemini model hosted on Replicate; 1M context, multimodal (text/image/video/audio).",
+	},
+	"ibm-granite/granite-20b-code-instruct-8k": {
+		Ratio: 0.1 * ratio.MilliTokensUsd, CompletionRatio: 0.5 / 0.1,
+		ContextLength: 8192, MaxOutputTokens: 4096,
+		InputModalities: textOnlyInputs, OutputModalities: textOnlyOutputs,
+		SupportedFeatures: basicChatFeatures, SupportedSamplingParameters: commonSamplingParams,
+		Quantization:  "bf16",
+		HuggingFaceID: "ibm-granite/granite-20b-code-instruct-8k",
+		Description:   "IBM Granite 20B Code Instruct open-weight code-completion model with 8k context.",
+	},
+	"ibm-granite/granite-3.0-2b-instruct": {
+		Ratio: 0.03 * ratio.MilliTokensUsd, CompletionRatio: 0.25 / 0.03,
+		ContextLength: 4096, MaxOutputTokens: 4096,
+		InputModalities: textOnlyInputs, OutputModalities: textOnlyOutputs,
+		SupportedFeatures: chatFeatures, SupportedSamplingParameters: commonSamplingParams,
+		Quantization:  "bf16",
+		HuggingFaceID: "ibm-granite/granite-3.0-2b-instruct",
+		Description:   "IBM Granite 3.0 2B Instruct open-weight chat model.",
+	},
+	"ibm-granite/granite-3.0-8b-instruct": {
+		Ratio: 0.05 * ratio.MilliTokensUsd, CompletionRatio: 0.25 / 0.05,
+		ContextLength: 4096, MaxOutputTokens: 4096,
+		InputModalities: textOnlyInputs, OutputModalities: textOnlyOutputs,
+		SupportedFeatures: chatFeatures, SupportedSamplingParameters: commonSamplingParams,
+		Quantization:  "bf16",
+		HuggingFaceID: "ibm-granite/granite-3.0-8b-instruct",
+		Description:   "IBM Granite 3.0 8B Instruct open-weight chat model.",
+	},
+	"ibm-granite/granite-3.1-2b-instruct": {
+		Ratio: 0.03 * ratio.MilliTokensUsd, CompletionRatio: 0.25 / 0.03,
+		ContextLength: 131072, MaxOutputTokens: 8192,
+		InputModalities: textOnlyInputs, OutputModalities: textOnlyOutputs,
+		SupportedFeatures: chatFeatures, SupportedSamplingParameters: commonSamplingParams,
+		Quantization:  "bf16",
+		HuggingFaceID: "ibm-granite/granite-3.1-2b-instruct",
+		Description:   "IBM Granite 3.1 2B Instruct open-weight chat model with 128k context.",
+	},
+	"ibm-granite/granite-3.1-8b-instruct": {
+		Ratio: 0.03 * ratio.MilliTokensUsd, CompletionRatio: 0.25 / 0.03,
+		ContextLength: 131072, MaxOutputTokens: 8192,
+		InputModalities: textOnlyInputs, OutputModalities: textOnlyOutputs,
+		SupportedFeatures: chatFeatures, SupportedSamplingParameters: commonSamplingParams,
+		Quantization:  "bf16",
+		HuggingFaceID: "ibm-granite/granite-3.1-8b-instruct",
+		Description:   "IBM Granite 3.1 8B Instruct open-weight chat model with 128k context.",
+	},
+	"ibm-granite/granite-3.2-8b-instruct": {
+		Ratio: 0.03 * ratio.MilliTokensUsd, CompletionRatio: 0.25 / 0.03,
+		ContextLength: 131072, MaxOutputTokens: 8192,
+		InputModalities: textOnlyInputs, OutputModalities: textOnlyOutputs,
+		SupportedFeatures: chatFeatures, SupportedSamplingParameters: commonSamplingParams,
+		Quantization:  "bf16",
+		HuggingFaceID: "ibm-granite/granite-3.2-8b-instruct",
+		Description:   "IBM Granite 3.2 8B Instruct open-weight chat model with 128k context.",
+	},
+	"ibm-granite/granite-3.3-8b-instruct": {
+		Ratio: 0.03 * ratio.MilliTokensUsd, CompletionRatio: 0.25 / 0.03,
+		ContextLength: 131072, MaxOutputTokens: 8192,
+		InputModalities: textOnlyInputs, OutputModalities: textOnlyOutputs,
+		SupportedFeatures: chatFeatures, SupportedSamplingParameters: commonSamplingParams,
+		Quantization:  "bf16",
+		HuggingFaceID: "ibm-granite/granite-3.3-8b-instruct",
+		Description:   "IBM Granite 3.3 8B Instruct open-weight chat model with 128k context.",
+	},
+	"ibm-granite/granite-4.0-h-small": {
+		Ratio: 0.06 * ratio.MilliTokensUsd, CompletionRatio: 0.25 / 0.06,
+		ContextLength: 131072, MaxOutputTokens: 8192,
+		InputModalities: textOnlyInputs, OutputModalities: textOnlyOutputs,
+		SupportedFeatures: chatFeatures, SupportedSamplingParameters: commonSamplingParams,
+		Quantization:  "bf16",
+		HuggingFaceID: "ibm-granite/granite-4.0-h-small",
+		Description:   "IBM Granite 4.0 H Small hybrid Mamba/Transformer chat model with 128k context.",
+	},
+	"ibm-granite/granite-8b-code-instruct-128k": {
+		Ratio: 0.05 * ratio.MilliTokensUsd, CompletionRatio: 0.25 / 0.05,
+		ContextLength: 131072, MaxOutputTokens: 8192,
+		InputModalities: textOnlyInputs, OutputModalities: textOnlyOutputs,
+		SupportedFeatures: basicChatFeatures, SupportedSamplingParameters: commonSamplingParams,
+		Quantization:  "bf16",
+		HuggingFaceID: "ibm-granite/granite-8b-code-instruct-128k",
+		Description:   "IBM Granite 8B Code Instruct open-weight code model with 128k context.",
+	},
+	"meta/llama-2-13b": {
+		Ratio: 0.1 * ratio.MilliTokensUsd, CompletionRatio: 0.5 / 0.1,
+		ContextLength: 4096, MaxOutputTokens: 4096,
+		InputModalities: textOnlyInputs, OutputModalities: textOnlyOutputs,
+		SupportedFeatures: basicChatFeatures, SupportedSamplingParameters: commonSamplingParams,
+		Quantization:  "fp16",
+		HuggingFaceID: "meta-llama/Llama-2-13b-hf",
+		Description:   "Meta Llama 2 13B base open-weight model.",
+	},
+	"meta/llama-2-13b-chat": {
+		Ratio: 0.1 * ratio.MilliTokensUsd, CompletionRatio: 0.5 / 0.1,
+		ContextLength: 4096, MaxOutputTokens: 4096,
+		InputModalities: textOnlyInputs, OutputModalities: textOnlyOutputs,
+		SupportedFeatures: basicChatFeatures, SupportedSamplingParameters: commonSamplingParams,
+		Quantization:  "fp16",
+		HuggingFaceID: "meta-llama/Llama-2-13b-chat-hf",
+		Description:   "Meta Llama 2 13B Chat open-weight RLHF chat model.",
+	},
+	"meta/llama-2-70b": {
+		Ratio: 0.65 * ratio.MilliTokensUsd, CompletionRatio: 2.75 / 0.65,
+		ContextLength: 4096, MaxOutputTokens: 4096,
+		InputModalities: textOnlyInputs, OutputModalities: textOnlyOutputs,
+		SupportedFeatures: basicChatFeatures, SupportedSamplingParameters: commonSamplingParams,
+		Quantization:  "fp16",
+		HuggingFaceID: "meta-llama/Llama-2-70b-hf",
+		Description:   "Meta Llama 2 70B base open-weight model.",
+	},
+	"meta/llama-2-70b-chat": {
+		Ratio: 0.65 * ratio.MilliTokensUsd, CompletionRatio: 2.75 / 0.65,
+		ContextLength: 4096, MaxOutputTokens: 4096,
+		InputModalities: textOnlyInputs, OutputModalities: textOnlyOutputs,
+		SupportedFeatures: basicChatFeatures, SupportedSamplingParameters: commonSamplingParams,
+		Quantization:  "fp16",
+		HuggingFaceID: "meta-llama/Llama-2-70b-chat-hf",
+		Description:   "Meta Llama 2 70B Chat open-weight RLHF chat model.",
+	},
+	"meta/llama-2-7b": {
+		Ratio: 0.05 * ratio.MilliTokensUsd, CompletionRatio: 0.25 / 0.05,
+		ContextLength: 4096, MaxOutputTokens: 4096,
+		InputModalities: textOnlyInputs, OutputModalities: textOnlyOutputs,
+		SupportedFeatures: basicChatFeatures, SupportedSamplingParameters: commonSamplingParams,
+		Quantization:  "fp16",
+		HuggingFaceID: "meta-llama/Llama-2-7b-hf",
+		Description:   "Meta Llama 2 7B base open-weight model.",
+	},
+	"meta/llama-2-7b-chat": {
+		Ratio: 0.05 * ratio.MilliTokensUsd, CompletionRatio: 0.25 / 0.05,
+		ContextLength: 4096, MaxOutputTokens: 4096,
+		InputModalities: textOnlyInputs, OutputModalities: textOnlyOutputs,
+		SupportedFeatures: basicChatFeatures, SupportedSamplingParameters: commonSamplingParams,
+		Quantization:  "fp16",
+		HuggingFaceID: "meta-llama/Llama-2-7b-chat-hf",
+		Description:   "Meta Llama 2 7B Chat open-weight RLHF chat model.",
+	},
+	"meta/llama-4-maverick-instruct": {
+		Ratio: 1.2 * ratio.MilliTokensUsd, CompletionRatio: 3.8 / 1.2,
+		ContextLength: 1048576, MaxOutputTokens: 8192,
+		InputModalities: visionTextInputs, OutputModalities: textOnlyOutputs,
+		SupportedFeatures: chatFeatures, SupportedSamplingParameters: commonSamplingParams,
+		Quantization:  "bf16",
+		HuggingFaceID: "meta-llama/Llama-4-Maverick-17B-128E-Instruct",
+		Description:   "Meta Llama 4 Maverick Instruct multimodal MoE chat model with 1M context.",
+	},
+	"meta/llama-4-scout-instruct": {
+		Ratio: 0.17 * ratio.MilliTokensUsd, CompletionRatio: 0.65 / 0.17,
+		ContextLength: 10485760, MaxOutputTokens: 8192,
+		InputModalities: visionTextInputs, OutputModalities: textOnlyOutputs,
+		SupportedFeatures: chatFeatures, SupportedSamplingParameters: commonSamplingParams,
+		Quantization:  "bf16",
+		HuggingFaceID: "meta-llama/Llama-4-Scout-17B-16E-Instruct",
+		Description:   "Meta Llama 4 Scout Instruct multimodal MoE chat model with up to 10M context.",
+	},
+	"meta/meta-llama-3.1-405b-instruct": {
+		Ratio: 9.5 * ratio.MilliTokensUsd, CompletionRatio: 1.0,
+		ContextLength: 131072, MaxOutputTokens: 8192,
+		InputModalities: textOnlyInputs, OutputModalities: textOnlyOutputs,
+		SupportedFeatures: chatFeatures, SupportedSamplingParameters: commonSamplingParams,
+		Quantization:  "fp16",
+		HuggingFaceID: "meta-llama/Meta-Llama-3.1-405B-Instruct",
+		Description:   "Meta Llama 3.1 405B Instruct open-weight flagship chat model with 128k context.",
+	},
+	"meta/meta-llama-3-70b": {
+		Ratio: 0.65 * ratio.MilliTokensUsd, CompletionRatio: 2.75 / 0.65,
+		ContextLength: 8192, MaxOutputTokens: 8192,
+		InputModalities: textOnlyInputs, OutputModalities: textOnlyOutputs,
+		SupportedFeatures: basicChatFeatures, SupportedSamplingParameters: commonSamplingParams,
+		Quantization:  "fp16",
+		HuggingFaceID: "meta-llama/Meta-Llama-3-70B",
+		Description:   "Meta Llama 3 70B base open-weight model.",
+	},
+	"meta/meta-llama-3-70b-instruct": {
+		Ratio: 0.65 * ratio.MilliTokensUsd, CompletionRatio: 2.75 / 0.65,
+		ContextLength: 8192, MaxOutputTokens: 8192,
+		InputModalities: textOnlyInputs, OutputModalities: textOnlyOutputs,
+		SupportedFeatures: chatFeatures, SupportedSamplingParameters: commonSamplingParams,
+		Quantization:  "fp16",
+		HuggingFaceID: "meta-llama/Meta-Llama-3-70B-Instruct",
+		Description:   "Meta Llama 3 70B Instruct open-weight chat model.",
+	},
+	"meta/meta-llama-3-8b": {
+		Ratio: 0.05 * ratio.MilliTokensUsd, CompletionRatio: 0.25 / 0.05,
+		ContextLength: 8192, MaxOutputTokens: 8192,
+		InputModalities: textOnlyInputs, OutputModalities: textOnlyOutputs,
+		SupportedFeatures: basicChatFeatures, SupportedSamplingParameters: commonSamplingParams,
+		Quantization:  "fp16",
+		HuggingFaceID: "meta-llama/Meta-Llama-3-8B",
+		Description:   "Meta Llama 3 8B base open-weight model.",
+	},
+	"meta/meta-llama-3-8b-instruct": {
+		Ratio: 0.05 * ratio.MilliTokensUsd, CompletionRatio: 0.25 / 0.05,
+		ContextLength: 8192, MaxOutputTokens: 8192,
+		InputModalities: textOnlyInputs, OutputModalities: textOnlyOutputs,
+		SupportedFeatures: chatFeatures, SupportedSamplingParameters: commonSamplingParams,
+		Quantization:  "fp16",
+		HuggingFaceID: "meta-llama/Meta-Llama-3-8B-Instruct",
+		Description:   "Meta Llama 3 8B Instruct open-weight chat model.",
+	},
+	"mistralai/mistral-7b-instruct-v0.2": {
+		Ratio: 0.05 * ratio.MilliTokensUsd, CompletionRatio: 0.25 / 0.05,
+		ContextLength: 32768, MaxOutputTokens: 8192,
+		InputModalities: textOnlyInputs, OutputModalities: textOnlyOutputs,
+		SupportedFeatures: basicChatFeatures, SupportedSamplingParameters: commonSamplingParams,
+		Quantization:  "fp16",
+		HuggingFaceID: "mistralai/Mistral-7B-Instruct-v0.2",
+		Description:   "Mistral 7B Instruct v0.2 open-weight chat model with 32k context.",
+	},
+	"mistralai/mistral-7b-v0.1": {
+		Ratio: 0.05 * ratio.MilliTokensUsd, CompletionRatio: 0.25 / 0.05,
+		ContextLength: 8192, MaxOutputTokens: 4096,
+		InputModalities: textOnlyInputs, OutputModalities: textOnlyOutputs,
+		SupportedFeatures: basicChatFeatures, SupportedSamplingParameters: commonSamplingParams,
+		Quantization:  "fp16",
+		HuggingFaceID: "mistralai/Mistral-7B-v0.1",
+		Description:   "Mistral 7B v0.1 base open-weight model.",
+	},
+	"moonshotai/kimi-k2.5": {
+		Ratio: 0.72 * ratio.MilliTokensUsd, CompletionRatio: 3.60 / 0.72,
+		ContextLength: 256000, MaxOutputTokens: 8192,
+		InputModalities: visionTextInputs, OutputModalities: textOnlyOutputs,
+		SupportedFeatures: reasoningFeatures, SupportedSamplingParameters: commonSamplingParams,
+		Quantization:  "fp8",
+		HuggingFaceID: "moonshotai/Kimi-K2.5",
+		Description:   "Moonshot AI Kimi K2.5 large MoE chat model with strong agent and reasoning skills.",
+	},
+	"openai/gpt-4.1": {
+		Ratio: 2.0 * ratio.MilliTokensUsd, CompletionRatio: 8.0 / 2.0,
+		ContextLength: 1047576, MaxOutputTokens: 32768,
+		InputModalities: visionTextInputs, OutputModalities: textOnlyOutputs,
+		SupportedFeatures: chatFeatures, SupportedSamplingParameters: commonSamplingParams,
+		Description: "OpenAI GPT-4.1 hosted on Replicate; multimodal chat model with 1M context.",
+	},
+	"openai/gpt-5": {
+		Ratio: 1.25 * ratio.MilliTokensUsd, CompletionRatio: 10.0 / 1.25,
+		ContextLength: 400000, MaxOutputTokens: 128000,
+		InputModalities: visionTextInputs, OutputModalities: textOnlyOutputs,
+		SupportedFeatures: reasoningFeatures, SupportedSamplingParameters: reasoningSamplingParams,
+		Description: "OpenAI GPT-5 hosted on Replicate; multimodal reasoning model with 400k context.",
+	},
+	"openai/gpt-5-mini": {
+		Ratio: 0.25 * ratio.MilliTokensUsd, CompletionRatio: 2.0 / 0.25,
+		ContextLength: 400000, MaxOutputTokens: 128000,
+		InputModalities: visionTextInputs, OutputModalities: textOnlyOutputs,
+		SupportedFeatures: reasoningFeatures, SupportedSamplingParameters: reasoningSamplingParams,
+		Description: "OpenAI GPT-5 Mini hosted on Replicate; lower-cost reasoning model.",
+	},
+	"openai/gpt-5-nano": {
+		Ratio: 0.05 * ratio.MilliTokensUsd, CompletionRatio: 0.40 / 0.05,
+		ContextLength: 400000, MaxOutputTokens: 128000,
+		InputModalities: visionTextInputs, OutputModalities: textOnlyOutputs,
+		SupportedFeatures: reasoningFeatures, SupportedSamplingParameters: reasoningSamplingParams,
+		Description: "OpenAI GPT-5 Nano hosted on Replicate; smallest, fastest GPT-5 reasoning variant.",
+	},
+	"openai/gpt-5-structured": {
+		Ratio: 1.25 * ratio.MilliTokensUsd, CompletionRatio: 10.0 / 1.25,
+		ContextLength: 400000, MaxOutputTokens: 128000,
+		InputModalities: visionTextInputs, OutputModalities: textOnlyOutputs,
+		SupportedFeatures: reasoningFeatures, SupportedSamplingParameters: reasoningSamplingParams,
+		Description: "OpenAI GPT-5 Structured Outputs variant biased toward strict JSON schema adherence.",
+	},
+	"openai/gpt-5.2": {
+		// $1.75/M input, $0.014/thousand output = $14/M output; up to 256K context; vision + reasoning.
+		// https://replicate.com/openai/gpt-5.2#pricing
+		Ratio: 1.75 * ratio.MilliTokensUsd, CompletionRatio: 14.0 / 1.75,
+		ContextLength: 256000, MaxOutputTokens: 128000,
+		InputModalities: visionTextInputs, OutputModalities: textOnlyOutputs,
+		SupportedFeatures: reasoningFeatures, SupportedSamplingParameters: reasoningSamplingParams,
+		Description: "OpenAI GPT-5.2 frontier model hosted on Replicate; 256K context, vision, reasoning.",
+	},
+	"openai/gpt-5.6-sol": {
+		// $5/M input, $0.50/M cached input, $30/M output; vision + reasoning.
+		// ContextLength / MaxOutputTokens are UNCONFIRMED — not published on the Replicate
+		// page; mirrored from the sibling openai/gpt-5.2 entry (256K / 128K).
+		// https://replicate.com/openai/gpt-5.6-sol
+		Ratio: 5.0 * ratio.MilliTokensUsd, CompletionRatio: 30.0 / 5.0,
+		CachedInputRatio: 0.50 * ratio.MilliTokensUsd,
+		ContextLength:    256000, MaxOutputTokens: 128000,
+		InputModalities: visionTextInputs, OutputModalities: textOnlyOutputs,
+		SupportedFeatures: reasoningFeatures, SupportedSamplingParameters: reasoningSamplingParams,
+		Description: "OpenAI GPT-5.6 Sol frontier model hosted on Replicate; vision, reasoning. Context/max-output unconfirmed (mirrored from GPT-5.2).",
+	},
+	"openai/gpt-5.6-terra": {
+		// $2.50/M input, $0.25/M cached input, $15/M output; vision + reasoning.
+		// ContextLength / MaxOutputTokens are UNCONFIRMED — not published on the Replicate
+		// page; mirrored from the sibling openai/gpt-5.2 entry (256K / 128K).
+		// https://replicate.com/openai/gpt-5.6-terra
+		Ratio: 2.5 * ratio.MilliTokensUsd, CompletionRatio: 15.0 / 2.5,
+		CachedInputRatio: 0.25 * ratio.MilliTokensUsd,
+		ContextLength:    256000, MaxOutputTokens: 128000,
+		InputModalities: visionTextInputs, OutputModalities: textOnlyOutputs,
+		SupportedFeatures: reasoningFeatures, SupportedSamplingParameters: reasoningSamplingParams,
+		Description: "OpenAI GPT-5.6 Terra model hosted on Replicate; vision, reasoning. Context/max-output unconfirmed (mirrored from GPT-5.2).",
+	},
+	"openai/gpt-5.6-luna": {
+		// $1/M input, $0.10/M cached input, $6/M output; vision + reasoning.
+		// ContextLength / MaxOutputTokens are UNCONFIRMED — not published on the Replicate
+		// page; mirrored from the sibling openai/gpt-5.2 entry (256K / 128K).
+		// https://replicate.com/openai/gpt-5.6-luna
+		Ratio: 1.0 * ratio.MilliTokensUsd, CompletionRatio: 6.0 / 1.0,
+		CachedInputRatio: 0.10 * ratio.MilliTokensUsd,
+		ContextLength:    256000, MaxOutputTokens: 128000,
+		InputModalities: visionTextInputs, OutputModalities: textOnlyOutputs,
+		SupportedFeatures: reasoningFeatures, SupportedSamplingParameters: reasoningSamplingParams,
+		Description: "OpenAI GPT-5.6 Luna model hosted on Replicate; vision, reasoning. Context/max-output unconfirmed (mirrored from GPT-5.2).",
+	},
+	"openai/gpt-oss-120b": {
+		// $0.18/M input, $0.72/M output; 131K context; Apache 2.0 open weights; reasoning + tools + structured outputs.
+		// https://replicate.com/openai/gpt-oss-120b#pricing
+		Ratio: 0.18 * ratio.MilliTokensUsd, CompletionRatio: 0.72 / 0.18,
+		ContextLength: 131072, MaxOutputTokens: 8192,
+		InputModalities: textOnlyInputs, OutputModalities: textOnlyOutputs,
+		SupportedFeatures: reasoningFeatures, SupportedSamplingParameters: commonSamplingParams,
+		Quantization:  "mxfp4",
+		HuggingFaceID: "openai/gpt-oss-120b",
+		Description:   "OpenAI gpt-oss-120b open-weight MoE (117B/5.1B active) reasoning model under Apache 2.0; 131K context.",
+	},
+	"openai/gpt-oss-20b": {
+		// $0.09/M input, $0.36/M output; 131K context; Apache 2.0 open weights; reasoning + tools + structured outputs.
+		// https://replicate.com/openai/gpt-oss-20b
+		Ratio: 0.09 * ratio.MilliTokensUsd, CompletionRatio: 0.36 / 0.09,
+		ContextLength: 131072, MaxOutputTokens: 8192,
+		InputModalities: textOnlyInputs, OutputModalities: textOnlyOutputs,
+		SupportedFeatures: reasoningFeatures, SupportedSamplingParameters: commonSamplingParams,
+		Quantization:  "mxfp4",
+		HuggingFaceID: "openai/gpt-oss-20b",
+		Description:   "OpenAI gpt-oss-20b open-weight MoE (21B/3.6B active) reasoning model under Apache 2.0; 131K context.",
+	},
+	"qwen/qwen3-235b-a22b-instruct-2507": {
+		// $0.264/M input, $1.06/M output; 262K native context; non-thinking instruct MoE (235B/22B active), FP8.
+		// https://replicate.com/qwen/qwen3-235b-a22b-instruct-2507#pricing
+		Ratio: 0.264 * ratio.MilliTokensUsd, CompletionRatio: 1.06 / 0.264,
+		ContextLength: 262144, MaxOutputTokens: 16384,
+		InputModalities: textOnlyInputs, OutputModalities: textOnlyOutputs,
+		SupportedFeatures: chatFeatures, SupportedSamplingParameters: commonSamplingParams,
+		Quantization:  "fp8",
+		HuggingFaceID: "Qwen/Qwen3-235B-A22B-Instruct-2507-FP8",
+		Description:   "Qwen3-235B-A22B-Instruct-2507 non-thinking MoE chat model (235B/22B active) with 262K context, hosted on Replicate.",
+	},
+	"xai/grok-4": {
+		Ratio: 7.2 * ratio.MilliTokensUsd, CompletionRatio: 36.0 / 7.2,
+		ContextLength: 256000, MaxOutputTokens: 8192,
+		InputModalities: visionTextInputs, OutputModalities: textOnlyOutputs,
+		SupportedFeatures: reasoningFeatures, SupportedSamplingParameters: commonSamplingParams,
+		Description: "xAI Grok 4 frontier reasoning model hosted on Replicate.",
+	},
+}

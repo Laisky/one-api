@@ -10,21 +10,21 @@ import (
 	"github.com/Laisky/errors/v2"
 	"github.com/gin-gonic/gin"
 
-	"github.com/songquanpeng/one-api/common/ctxkey"
-	"github.com/songquanpeng/one-api/relay/adaptor"
-	channelhelper "github.com/songquanpeng/one-api/relay/adaptor"
-	"github.com/songquanpeng/one-api/relay/adaptor/geminiOpenaiCompatible"
-	vertexaiClaude "github.com/songquanpeng/one-api/relay/adaptor/vertexai/claude"
-	"github.com/songquanpeng/one-api/relay/adaptor/vertexai/deepseek"
-	"github.com/songquanpeng/one-api/relay/adaptor/vertexai/imagen"
-	"github.com/songquanpeng/one-api/relay/adaptor/vertexai/openai"
-	"github.com/songquanpeng/one-api/relay/adaptor/vertexai/qwen"
-	"github.com/songquanpeng/one-api/relay/adaptor/vertexai/veo"
-	"github.com/songquanpeng/one-api/relay/billing/ratio"
-	"github.com/songquanpeng/one-api/relay/meta"
-	"github.com/songquanpeng/one-api/relay/model"
-	relayModel "github.com/songquanpeng/one-api/relay/model"
-	"github.com/songquanpeng/one-api/relay/relaymode"
+	"github.com/Laisky/one-api/common/ctxkey"
+	"github.com/Laisky/one-api/relay/adaptor"
+	channelhelper "github.com/Laisky/one-api/relay/adaptor"
+	"github.com/Laisky/one-api/relay/adaptor/geminiOpenaiCompatible"
+	vertexaiClaude "github.com/Laisky/one-api/relay/adaptor/vertexai/claude"
+	"github.com/Laisky/one-api/relay/adaptor/vertexai/deepseek"
+	"github.com/Laisky/one-api/relay/adaptor/vertexai/imagen"
+	"github.com/Laisky/one-api/relay/adaptor/vertexai/openai"
+	"github.com/Laisky/one-api/relay/adaptor/vertexai/qwen"
+	"github.com/Laisky/one-api/relay/adaptor/vertexai/veo"
+	"github.com/Laisky/one-api/relay/billing/ratio"
+	"github.com/Laisky/one-api/relay/meta"
+	"github.com/Laisky/one-api/relay/model"
+	relayModel "github.com/Laisky/one-api/relay/model"
+	"github.com/Laisky/one-api/relay/relaymode"
 )
 
 var _ adaptor.Adaptor = new(Adaptor)
@@ -248,8 +248,13 @@ func (a *Adaptor) GetDefaultModelPricing() map[string]adaptor.ModelConfig {
 	// Import Veo models from veo subadaptor
 	maps.Copy(pricing, veo.ModelRatios)
 
-	// Import DeepSeek models from deepseek subadaptor
-	maps.Copy(pricing, deepseek.ModelRatios)
+	// Import DeepSeek models from deepseek subadaptor. Strip the DeepSeek
+	// first-party peak-hour time windows: Vertex AI bills these models at its
+	// own flat rate and has no Beijing peak-valley schedule.
+	for name, cfg := range deepseek.ModelRatios {
+		cfg.TimeWindows = nil
+		pricing[name] = cfg
+	}
 
 	// Import OpenAI models from openai subadaptor
 	maps.Copy(pricing, openai.ModelRatios)

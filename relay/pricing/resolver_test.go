@@ -3,11 +3,12 @@ package pricing
 import (
 	"encoding/json"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/songquanpeng/one-api/model"
-	"github.com/songquanpeng/one-api/relay/adaptor"
+	"github.com/Laisky/one-api/model"
+	"github.com/Laisky/one-api/relay/adaptor"
 )
 
 // TestResolveImagePricing_ChannelConfigMissingImageFallback verifies image pricing falls back
@@ -31,7 +32,7 @@ func TestResolveImagePricing_ChannelConfigMissingImageFallback(t *testing.T) {
 		},
 	}
 
-	cfg, ok := ResolveImagePricing(modelName, channelConfigs, provider)
+	cfg, ok := ResolveImagePricing(modelName, channelConfigs, provider, time.Now())
 
 	require.True(t, ok, "expected resolver to return image pricing")
 	require.NotNil(t, cfg, "expected non-nil image pricing config")
@@ -61,7 +62,7 @@ func TestResolveAudioPricing_ChannelConfigMissingAudioFallback(t *testing.T) {
 		},
 	}
 
-	cfg, ok := ResolveAudioPricing(modelName, channelConfigs, provider)
+	cfg, ok := ResolveAudioPricing(modelName, channelConfigs, provider, time.Now())
 
 	require.True(t, ok, "expected resolver to return audio pricing")
 	require.NotNil(t, cfg, "expected non-nil audio pricing config")
@@ -108,6 +109,7 @@ func TestResolveModelConfig_ChannelOverridePreservesCacheAndTiers(t *testing.T) 
 			"tiers": [
 				{
 					"input_token_threshold": 200000,
+					"output_token_threshold": 1000,
 					"ratio": 3.086,
 					"completion_ratio": 11.571,
 					"cached_input_ratio": 3.086,
@@ -119,13 +121,14 @@ func TestResolveModelConfig_ChannelOverridePreservesCacheAndTiers(t *testing.T) 
 	}`), &channelConfigs)
 	require.NoError(t, err)
 
-	cfg, ok := ResolveModelConfig(modelName, channelConfigs, nil)
+	cfg, ok := ResolveModelConfig(modelName, channelConfigs, nil, time.Now())
 	require.True(t, ok)
 	require.InDelta(t, 1.543, cfg.CachedInputRatio, 0.0000001)
 	require.InDelta(t, 1.543, cfg.CacheWrite5mRatio, 0.0000001)
 	require.InDelta(t, 1.543, cfg.CacheWrite1hRatio, 0.0000001)
 	require.Len(t, cfg.Tiers, 1)
 	require.Equal(t, 200000, cfg.Tiers[0].InputTokenThreshold)
+	require.Equal(t, 1000, cfg.Tiers[0].OutputTokenThreshold)
 	require.InDelta(t, 3.086, cfg.Tiers[0].Ratio, 0.0000001)
 	require.InDelta(t, 3.086, cfg.Tiers[0].CachedInputRatio, 0.0000001)
 	require.InDelta(t, 3.086, cfg.Tiers[0].CacheWrite5mRatio, 0.0000001)
@@ -154,7 +157,7 @@ func TestResolveModelConfig_ChannelOverrideSortsUnorderedTiers(t *testing.T) {
 	}`), &channelConfigs)
 	require.NoError(t, err)
 
-	cfg, ok := ResolveModelConfig(modelName, channelConfigs, nil)
+	cfg, ok := ResolveModelConfig(modelName, channelConfigs, nil, time.Now())
 	require.True(t, ok)
 	require.Len(t, cfg.Tiers, 2)
 	require.Equal(t, 1000, cfg.Tiers[0].InputTokenThreshold)

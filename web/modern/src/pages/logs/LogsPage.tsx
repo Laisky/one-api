@@ -1,10 +1,13 @@
 import { LogDetailsModal } from '@/components/LogDetailsModal';
+import { NameWithId } from '@/components/shared/NameWithId';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
+import { useConfirmDialog } from '@/components/ui/confirm-dialog';
 import { EnhancedDataTable } from '@/components/ui/enhanced-data-table';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { useNotifications } from '@/components/ui/notifications';
 import { ResponsivePageContainer } from '@/components/ui/responsive-container';
 import { SearchableDropdown, type SearchOption } from '@/components/ui/searchable-dropdown';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -13,6 +16,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { STORAGE_KEYS, usePageSize } from '@/hooks/usePersistentState';
 import { api } from '@/lib/api';
 import { LOG_TYPES, LOG_TYPE_OPTIONS } from '@/lib/constants/logs';
+import { buildCsv, fetchAllPaginatedResults, mapWithConcurrency } from '@/lib/export';
 import { useAuthStore } from '@/lib/stores/auth';
 import { cn, formatTimestamp, fromDateTimeLocal, renderQuota, toDateTimeLocal } from '@/lib/utils';
 import type { LogEntry, LogMetadata } from '@/types/log';
@@ -25,6 +29,15 @@ import { useSearchParams } from 'react-router-dom';
 import { LogModelCell } from './components/LogModelCell';
 
 type LogRow = LogEntry;
+
+const logRef = (log: Pick<LogRow, 'id' | 'uuid'>): string | number => log.uuid || log.id || '';
+
+// channelDisplayName returns the visible channel label for a log row.
+const channelDisplayName = (log: Pick<LogRow, 'channel_name' | 'channel_uuid' | 'channel'>, fallback: string) =>
+  log.channel_name || log.channel_uuid || log.channel || fallback;
+
+// channelDisplayRef returns the external channel reference exposed on name click.
+const channelDisplayRef = (log: Pick<LogRow, 'channel_uuid' | 'channel'>): string | number | null => log.channel_uuid || log.channel || null;
 
 interface LogStatistics {
   quota: number;
@@ -39,6 +52,7 @@ const LOG_TYPE_TRANSLATION_KEYS: Record<number, string> = {
   [LOG_TYPES.MANAGE]: 'manage',
   [LOG_TYPES.SYSTEM]: 'system',
   [LOG_TYPES.TEST]: 'test',
+  [LOG_TYPES.TOOL]: 'tool',
 };
 
 const formatLatency = (ms?: number, fallback: string = '-') => {
@@ -71,12 +85,29 @@ const getCacheWriteSummaries = (metadata?: LogMetadata) => {
   };
 };
 
+interface ExportTracePayload {
+  id: number;
+  trace_id: string;
+  url: string;
+  method: string;
+  body_size: number;
+  status: number;
+  created_at: number;
+  updated_at: number;
+  timestamps?: Record<string, unknown>;
+  durations?: Record<string, unknown>;
+  log?: Record<string, unknown>;
+}
+
 export function LogsPage() {
   const { t } = useTranslation();
+  const { notify } = useNotifications();
   const { user } = useAuthStore();
+  const [confirmAction, ConfirmActionDialog] = useConfirmDialog();
   const [searchParams, setSearchParams] = useSearchParams();
   const [data, setData] = useState<LogRow[]>([]);
   const [loading, setLoading] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const [pageIndex, setPageIndex] = useState(Math.max(0, parseInt(searchParams.get('p') || '1') - 1));
   const [pageSize, setPageSize] = usePageSize(STORAGE_KEYS.PAGE_SIZE);
   const [total, setTotal] = useState(0);
@@ -117,8 +148,7 @@ export function LogsPage() {
   const selectedLog = useMemo(() => {
     const idStr = searchParams.get('id');
     if (!idStr) return null;
-    const id = parseInt(idStr);
-    return data.find((row) => row.id === id) ?? null;
+    return data.find((row) => String(logRef(row)) === idStr || String(row.id) === idStr) ?? null;
   }, [searchParams, data]);
   const detailsModalOpen = selectedLog !== null;
 
@@ -137,6 +167,8 @@ export function LogsPage() {
         return <Badge className="bg-muted text-muted-foreground">{label}</Badge>;
       case LOG_TYPES.TEST:
         return <Badge className="bg-warning-muted text-warning-foreground">{label}</Badge>;
+      case LOG_TYPES.TOOL:
+        return <Badge className="bg-secondary text-secondary-foreground">{label}</Badge>;
       default:
         return <Badge variant="outline">{label}</Badge>;
     }
@@ -225,7 +257,7 @@ export function LogsPage() {
 
       if (success && Array.isArray(responseData)) {
         const options: SearchOption[] = responseData.slice(0, 10).map((log: LogRow) => ({
-          key: log.id.toString(),
+          key: String(logRef(log)),
           value: log.content || log.model_name || t('logs.search.log_entry'),
           text: log.content || log.model_name || t('logs.search.log_entry'),
           content: (
@@ -300,64 +332,165 @@ export function LogsPage() {
 
   const handleClearLogs = async () => {
     const ts = fromDateTimeLocal(filters.end_timestamp);
-    const confirmed = window.confirm(t('logs.confirm.delete_before', { timestamp: filters.end_timestamp }));
+    const confirmed = await confirmAction({
+      title: t('logs.actions.clear'),
+      description: t('logs.confirm.delete_before', { timestamp: filters.end_timestamp }),
+      details: [
+        {
+          label: t('logs.filters.end'),
+          value: filters.end_timestamp,
+        },
+      ],
+      variant: 'destructive',
+    });
     if (!confirmed) return;
 
     try {
       // Unified API call - complete URL with /api prefix
-      await api.delete('/api/log?target_timestamp=' + ts);
+      const res = await api.delete('/api/log?target_timestamp=' + ts);
+      if (!res.data?.success) {
+        notify({
+          type: 'error',
+          title: t('logs.notifications.clear_failed_title', 'Clear failed'),
+          message: res.data?.message || t('logs.notifications.clear_failed_message', 'Failed to clear logs.'),
+        });
+        return;
+      }
       load(0, pageSize);
+      notify({
+        type: 'success',
+        title: t('logs.notifications.clear_success_title', 'Logs cleared'),
+        message: t('logs.notifications.clear_success_message', 'Logs cleared successfully.'),
+      });
     } catch (error) {
       console.error('Failed to clear logs:', error);
+      notify({
+        type: 'error',
+        title: t('logs.notifications.clear_failed_title', 'Clear failed'),
+        message:
+          (error as any)?.response?.data?.message ||
+          (error as Error)?.message ||
+          t('logs.notifications.clear_failed_message', 'Failed to clear logs.'),
+      });
     }
   };
 
-  const handleExportLogs = () => {
-    // Implementation for exporting logs to CSV
-    const csvHeaders = [
-      t('logs.export.headers.time'),
-      t('logs.export.headers.type'),
-      t('logs.export.headers.model'),
-      t('logs.export.headers.origin_model'),
-      t('logs.export.headers.token'),
-      t('logs.export.headers.username'),
-      t('logs.export.headers.quota'),
-      t('logs.export.headers.prompt_tokens'),
-      t('logs.export.headers.completion_tokens'),
-      t('logs.export.headers.cached_prompt_tokens'),
-      t('logs.export.headers.cache_write_5m'),
-      t('logs.export.headers.cache_write_1h'),
-      t('logs.export.headers.latency'),
-      t('logs.export.headers.content'),
-    ];
-    const csvData = data.map((log) => {
-      const { fiveMinute, oneHour } = getCacheWriteSummaries(log.metadata);
-      return [
-        formatTimestamp(log.created_at),
-        log.type,
-        log.model_name,
-        log.origin_model_name || '',
-        log.token_name || '',
-        log.username || '',
-        log.quota,
-        log.prompt_tokens || 0,
-        log.completion_tokens || 0,
-        log.cached_prompt_tokens || 0,
-        fiveMinute,
-        oneHour,
-        log.elapsed_time || 0,
-        (log.content || '').replace(/,/g, ';').replace(/\n/g, ' '),
-      ];
-    });
+  const handleExportLogs = async () => {
+    setExporting(true);
+    try {
+      const params = new URLSearchParams();
+      if (filters.type !== '0') params.set('type', filters.type);
+      if (filters.model_name) params.set('model_name', filters.model_name);
+      if (filters.token_name) params.set('token_name', filters.token_name);
+      if (isAdminOrRoot && filters.username) params.set('username', filters.username);
+      if (filters.channel && isAdminOrRoot) params.set('channel', filters.channel);
+      if (filters.start_timestamp) params.set('start_timestamp', String(fromDateTimeLocal(filters.start_timestamp)));
+      if (filters.end_timestamp) params.set('end_timestamp', String(fromDateTimeLocal(filters.end_timestamp)));
+      if (sortBy) {
+        params.set('sort', sortBy);
+        params.set('order', sortOrder);
+      }
 
-    const csv = [csvHeaders, ...csvData].map((row) => row.join(',')).join('\n');
-    const blob = new Blob([csv], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `logs_${new Date().toISOString().split('T')[0]}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
+      const exportPath = isAdminOrRoot ? '/api/log/' : '/api/log/self';
+      const exportData = await fetchAllPaginatedResults<LogRow>((url) => api.get(url), exportPath, params);
+      const logsWithTrace = exportData.filter((log) => log.trace_id?.trim());
+      const traceEntries = await mapWithConcurrency(logsWithTrace, async (log) => {
+        const ref = logRef(log);
+        try {
+          const traceResponse = await api.get(`/api/trace/log/${ref}`);
+          if (traceResponse.data?.success === false) {
+            return {
+              logId: ref,
+              trace: { error: traceResponse.data?.message || t('logs.details.load_failed') } as ExportTracePayload | { error: string },
+            };
+          }
+
+          return {
+            logId: ref,
+            trace: (traceResponse.data?.data as ExportTracePayload | undefined) ?? null,
+          };
+        } catch (_error) {
+          return {
+            logId: ref,
+            trace: { error: t('logs.details.load_failed') } as ExportTracePayload | { error: string },
+          };
+        }
+      });
+      const tracesByLogId = new Map<string | number, ExportTracePayload | { error: string } | null>(
+        traceEntries.map((entry) => [entry.logId, entry.trace])
+      );
+
+      const csvHeaders = [
+        t('logs.details.recorded_at'),
+        t('logs.details.type'),
+        t('logs.details.log_id'),
+        t('logs.details.model'),
+        t('logs.details.origin_model'),
+        t('logs.details.token'),
+        t('logs.details.user'),
+        t('logs.details.channel'),
+        t('logs.details.quota'),
+        t('logs.details.quota_raw'),
+        t('logs.details.prompt_tokens_input'),
+        t('logs.details.completion_tokens_output'),
+        t('logs.details.prompt_tokens_cached'),
+        t('logs.details.cache_write_5m'),
+        t('logs.details.cache_write_1h'),
+        t('logs.details.total_tokens'),
+        t('logs.details.latency'),
+        t('logs.details.request_id'),
+        t('logs.details.trace_id'),
+        t('logs.details.stream'),
+        t('logs.details.system_reset'),
+        t('logs.details.content'),
+        t('logs.details.metadata'),
+        t('logs.details.tracing'),
+      ];
+      const csvData = exportData.map((log) => {
+        const { fiveMinute, oneHour } = getCacheWriteSummaries(log.metadata);
+        const totalTokens = (log.prompt_tokens ?? 0) + (log.completion_tokens ?? 0);
+        const tracePayload = tracesByLogId.get(logRef(log)) ?? null;
+        return [
+          formatTimestamp(log.created_at),
+          `${getLogTypeLabelText(log.type)} (${log.type})`,
+          logRef(log),
+          log.model_name,
+          log.origin_model_name || '',
+          log.token_name || '',
+          log.username || '',
+          log.channel_uuid || log.channel || '',
+          renderQuota(log.quota),
+          log.quota,
+          log.prompt_tokens || 0,
+          log.completion_tokens || 0,
+          log.cached_prompt_tokens || 0,
+          fiveMinute,
+          oneHour,
+          totalTokens,
+          formatLatency(log.elapsed_time, t('logs.labels.not_available')),
+          log.request_id || '',
+          log.trace_id || '',
+          Boolean(log.is_stream),
+          Boolean(log.system_prompt_reset),
+          log.content || '',
+          log.metadata ?? null,
+          tracePayload,
+        ];
+      });
+
+      const csv = buildCsv([csvHeaders, ...csvData]);
+      const blob = new Blob([csv], { type: 'text/csv' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `logs_${new Date().toISOString().split('T')[0]}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Failed to export logs:', error);
+    } finally {
+      setExporting(false);
+    }
   };
 
   const CopyButton = ({ text }: { text: string }) => (
@@ -386,7 +519,13 @@ export function LogsPage() {
           {
             accessorKey: 'channel',
             header: t('logs.table.channel'),
-            cell: ({ row }: { row: any }) => <span className="font-mono text-sm">{row.original.channel || t('logs.labels.missing')}</span>,
+            cell: ({ row }: { row: any }) => (
+              <NameWithId
+                name={channelDisplayName(row.original, t('logs.labels.missing'))}
+                refId={channelDisplayRef(row.original)}
+                idLabel={t('logs.table.channel')}
+              />
+            ),
           } as ColumnDef<LogRow>,
         ]
       : []),
@@ -413,17 +552,19 @@ export function LogsPage() {
           {
             accessorKey: 'username',
             header: t('logs.table.user'),
-            cell: ({ row }) => <span className="text-sm">{row.original.username || user?.username || t('logs.labels.missing')}</span>,
+            cell: ({ row }: { row: any }) => (
+              <span className="text-sm">{row.original.username || user?.username || t('logs.labels.missing')}</span>
+            ),
           } as ColumnDef<LogRow>,
           {
             accessorKey: 'token_name',
             header: t('logs.table.token'),
-            cell: ({ row }) => <span className="text-sm">{row.original.token_name || t('logs.labels.missing')}</span>,
+            cell: ({ row }: { row: any }) => <span className="text-sm">{row.original.token_name || t('logs.labels.missing')}</span>,
           },
           {
             accessorKey: 'prompt_tokens',
             header: t('logs.table.prompt'),
-            cell: ({ row }) => (
+            cell: ({ row }: { row: any }) => (
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>
@@ -450,7 +591,7 @@ export function LogsPage() {
           {
             accessorKey: 'completion_tokens',
             header: t('logs.table.completion'),
-            cell: ({ row }) => {
+            cell: ({ row }: { row: any }) => {
               const { fiveMinute, oneHour } = getCacheWriteSummaries(row.original.metadata);
               return (
                 <TooltipProvider>
@@ -481,7 +622,7 @@ export function LogsPage() {
           {
             accessorKey: 'quota',
             header: t('logs.table.cost'),
-            cell: ({ row }) => (
+            cell: ({ row }: { row: any }) => (
               <span className="font-mono text-sm" title={row.original.content || ''}>
                 {renderQuota(row.original.quota)}
               </span>
@@ -490,7 +631,7 @@ export function LogsPage() {
           {
             accessorKey: 'elapsed_time',
             header: t('logs.table.latency'),
-            cell: ({ row }) => (
+            cell: ({ row }: { row: any }) => (
               <span className={cn('font-mono text-sm', getLatencyColor(row.original.elapsed_time))}>
                 {formatLatency(row.original.elapsed_time, t('logs.labels.not_available'))}
               </span>
@@ -529,7 +670,7 @@ export function LogsPage() {
 
   const handleRowClick = (log: LogRow) => {
     setSearchParams((prev) => {
-      prev.set('id', log.id.toString());
+      prev.set('id', String(logRef(log)));
       return prev;
     });
   };
@@ -574,8 +715,14 @@ export function LogsPage() {
               {showStat ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
               {showStat ? t('logs.actions.hide_stats') : t('logs.actions.show_stats')}
             </Button>
-            <Button variant="outline" onClick={handleExportLogs} className="gap-2 whitespace-nowrap w-full sm:w-auto" size="sm">
-              <FileDown className="h-4 w-4" />
+            <Button
+              variant="outline"
+              onClick={handleExportLogs}
+              className="gap-2 whitespace-nowrap w-full sm:w-auto"
+              size="sm"
+              disabled={exporting}
+            >
+              {exporting ? <RefreshCw className="h-4 w-4 animate-spin" /> : <FileDown className="h-4 w-4" />}
               {t('logs.actions.export')}
             </Button>
             {isAdmin && (
@@ -742,6 +889,7 @@ export function LogsPage() {
         </CardContent>
       </Card>
 
+      <ConfirmActionDialog />
       <LogDetailsModal open={detailsModalOpen} onOpenChange={handleDetailsModalChange} log={selectedLog} />
     </ResponsivePageContainer>
   );

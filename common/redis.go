@@ -10,8 +10,8 @@ import (
 	"github.com/Laisky/zap"
 	"github.com/go-redis/redis/v8"
 
-	"github.com/songquanpeng/one-api/common/config"
-	"github.com/songquanpeng/one-api/common/logger"
+	"github.com/Laisky/one-api/common/config"
+	"github.com/Laisky/one-api/common/logger"
 )
 
 // RDB exposes the active Redis client used throughout the application.

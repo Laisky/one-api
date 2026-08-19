@@ -4,7 +4,6 @@ const RedemptionTableHead = () => {
   return (
     <TableHead>
       <TableRow>
-        <TableCell>ID</TableCell>
         <TableCell>名称</TableCell>
         <TableCell>状态</TableCell>
         <TableCell>额度</TableCell>

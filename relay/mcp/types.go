@@ -10,7 +10,7 @@ import (
 type ToolDescriptor struct {
 	Name        string         `json:"name"`
 	Description string         `json:"description,omitempty"`
-	InputSchema map[string]any `json:"input_schema,omitempty"`
+	InputSchema map[string]any `json:"inputSchema,omitempty"`
 }
 
 // UnmarshalJSON decodes MCP tool descriptors while supporting multiple schema field names.

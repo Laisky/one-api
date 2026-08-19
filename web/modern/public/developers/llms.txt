@@ -1,0 +1,9 @@
+# Laisky One API Developer Notes For Agents
+
+- [Developer overview](https://oneapi.laisky.com/developers)
+- [Agent mode](https://oneapi.laisky.com/?mode=agent)
+- [Agent card](https://oneapi.laisky.com/.well-known/agent-card.json)
+- [Agent skills index](https://oneapi.laisky.com/.well-known/agent-skills/index.json)
+- [Agentic resource catalog](https://oneapi.laisky.com/.well-known/ai-catalog.json)
+
+Use these files to discover capabilities before attempting authenticated relay calls.

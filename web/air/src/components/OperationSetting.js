@@ -50,20 +50,27 @@ const OperationSetting = () => {
 
   const updateOption = async (key, value) => {
     setLoading(true);
-    if (key.endsWith('Enabled')) {
-      value = inputs[key] === 'true' ? 'false' : 'true';
+    try {
+      if (key.endsWith('Enabled')) {
+        value = inputs[key] === 'true' ? 'false' : 'true';
+      }
+      const res = await API.put('/api/option/', {
+        key,
+        value
+      });
+      // The shared axios interceptor resolves to undefined on error; bail out before
+      // reading res.data so a failed request can't throw and leave the <Form loading>
+      // overlay stuck, which would lock every control in the form until a page reload.
+      if (!res) return;
+      const { success, message } = res.data;
+      if (success) {
+        setInputs((inputs) => ({ ...inputs, [key]: value }));
+      } else {
+        showError(message);
+      }
+    } finally {
+      setLoading(false);
     }
-    const res = await API.put('/api/option/', {
-      key,
-      value
-    });
-    const { success, message } = res.data;
-    if (success) {
-      setInputs((inputs) => ({ ...inputs, [key]: value }));
-    } else {
-      showError(message);
-    }
-    setLoading(false);
   };
 
   const handleInputChange = async (e, { name, value }) => {

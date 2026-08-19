@@ -5,7 +5,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/songquanpeng/one-api/relay/adaptor"
+	"github.com/Laisky/one-api/relay/adaptor"
 )
 
 // TestGetVideoPricingWithThreeLayers_AllLayers verifies channel/provider/global fallback behavior for video pricing.

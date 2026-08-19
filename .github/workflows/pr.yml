@@ -17,7 +17,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.26.2'
+          go-version: '1.26.3'
 
       - name: Run go vet
         run: go vet ./...
@@ -26,14 +26,87 @@ jobs:
     name: Run Tests
     runs-on: ubuntu-latest
     needs: go_vet
+
+    # The UUID-migration regression suites qualify themselves: every live scenario is an
+    # ordinary Go test that provisions what it can (pinned old binaries build themselves from
+    # their recorded commits) and consumes what it cannot (database engines) from the
+    # environment below. ONEAPI_REQUIRE_DB_BACKENDS=1 is the no-skip guard, enforced inside
+    # the tests: with it set, a missing DSN fails the suite instead of skipping it, so this
+    # job cannot go green while silently not running the live tests. The heavy opt-in tiers
+    # (COMPACT_UUID_TEST_SCALE=1 for 100k/1m fixtures, COMPACT_UUID_TEST_REPLICATION=1 for
+    # replica provisioning) stay off in PR CI and are run manually before releases.
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: oneapi
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -proot"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=12
+          --health-start-period=20s
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: oneapi
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres -d oneapi"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=12
+          --health-start-period=10s
+
+    env:
+      # External UUID backfill (v3) live suites.
+      MYSQL_DSN: root:root@tcp(127.0.0.1:3306)/oneapi?charset=utf8mb4&parseTime=True&loc=Local
+      PG_DSN: postgres://postgres:postgres@127.0.0.1:5432/oneapi?sslmode=disable
+      MYSQL_LOG_DSN: root:root@tcp(127.0.0.1:3306)/oneapi_log?charset=utf8mb4&parseTime=True&loc=Local
+      PG_LOG_DSN: postgres://postgres:postgres@127.0.0.1:5432/oneapi_log?sslmode=disable
+      # Compact UUID storage live suites; the log DSNs drive the split-topology branches.
+      COMPACT_UUID_TEST_MYSQL_DSN: root:root@tcp(127.0.0.1:3306)/oneapi?charset=utf8mb4&parseTime=True&loc=Local
+      COMPACT_UUID_TEST_POSTGRES_DSN: postgres://postgres:postgres@127.0.0.1:5432/oneapi?sslmode=disable
+      COMPACT_UUID_TEST_LOG_MYSQL_DSN: root:root@tcp(127.0.0.1:3306)/oneapi_log?charset=utf8mb4&parseTime=True&loc=Local
+      COMPACT_UUID_TEST_LOG_POSTGRES_DSN: postgres://postgres:postgres@127.0.0.1:5432/oneapi_log?sslmode=disable
+      # The section 12 workload's migration-disabled baseline database.
+      COMPACT_UUID_TEST_POSTGRES_BASE_DSN: postgres://postgres:postgres@127.0.0.1:5432/oneapi_workload_base?sslmode=disable
+      # The in-test no-skip guard: a live suite that cannot run FAILS here rather than skips.
+      ONEAPI_REQUIRE_DB_BACKENDS: '1'
+      CGO_ENABLED: '1'
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          # The old-binary compatibility tests build pinned historical commits from source;
+          # a shallow clone would not carry them.
+          fetch-depth: 0
 
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.26.2'
+          go-version: '1.26.3'
+
+      - name: Create the secondary databases
+        env:
+          MYSQL_PWD: root
+          PGPASSWORD: postgres
+        run: |
+          set -euo pipefail
+          sudo apt-get update -q && sudo apt-get install -y -q mysql-client postgresql-client
+          mysql -h 127.0.0.1 -P 3306 -uroot \
+            -e "CREATE DATABASE IF NOT EXISTS oneapi_log CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;"
+          for db in oneapi_log oneapi_workload_base; do
+            psql -h 127.0.0.1 -p 5432 -U postgres -d postgres -tAc \
+              "SELECT 1 FROM pg_database WHERE datname = '${db}'" | grep -q 1 \
+              || psql -h 127.0.0.1 -p 5432 -U postgres -d postgres -c "CREATE DATABASE ${db};"
+          done
 
       - name: Run tests
         run: go test -race -v ./...

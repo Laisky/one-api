@@ -6,11 +6,11 @@ import (
 	"github.com/Laisky/zap"
 	"github.com/gin-gonic/gin"
 
-	"github.com/songquanpeng/one-api/common/ctxkey"
-	"github.com/songquanpeng/one-api/relay/billing/ratio"
-	metalib "github.com/songquanpeng/one-api/relay/meta"
-	relaymodel "github.com/songquanpeng/one-api/relay/model"
-	"github.com/songquanpeng/one-api/relay/pricing"
+	"github.com/Laisky/one-api/common/ctxkey"
+	"github.com/Laisky/one-api/relay/billing/ratio"
+	metalib "github.com/Laisky/one-api/relay/meta"
+	relaymodel "github.com/Laisky/one-api/relay/model"
+	"github.com/Laisky/one-api/relay/pricing"
 )
 
 // getOutputAudioSeconds reads the output audio duration from Gin context.
@@ -96,7 +96,7 @@ func applyOutputAudioCharges(c *gin.Context, usagePtr **relaymodel.Usage, meta *
 		*usagePtr = usage
 	}
 
-	audioPricing, ok := pricing.ResolveAudioPricing(billingCtx.ModelName, billingCtx.ChannelModelConfigs, billingCtx.PricingAdaptor)
+	audioPricing, ok := pricing.ResolveAudioPricing(billingCtx.ModelName, billingCtx.ChannelModelConfigs, billingCtx.PricingAdaptor, billingCtx.RequestTime)
 	if !ok || audioPricing == nil || !audioPricing.HasData() {
 		if billingCtx.Logger != nil {
 			billingCtx.Logger.Debug("output audio billing skipped due to missing pricing metadata",
@@ -122,7 +122,7 @@ func applyOutputAudioCharges(c *gin.Context, usagePtr **relaymodel.Usage, meta *
 		if audioPricing.CompletionRatio > 0 {
 			completionRatio = audioPricing.CompletionRatio
 		}
-		modelRatio := pricing.GetModelRatioWithThreeLayers(billingCtx.ModelName, billingCtx.ChannelModelRatio, billingCtx.PricingAdaptor)
+		modelRatio := pricing.ResolveModelRatioAt(billingCtx.ModelName, billingCtx.ChannelModelConfigs, billingCtx.ChannelModelRatio, billingCtx.PricingAdaptor, billingCtx.RequestTime)
 		cost := float64(tokens) * promptRatio * completionRatio * modelRatio * groupRatio
 		audioQuota = int64(math.Ceil(cost))
 	}

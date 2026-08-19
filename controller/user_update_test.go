@@ -11,9 +11,9 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 
-	"github.com/songquanpeng/one-api/common"
-	"github.com/songquanpeng/one-api/common/ctxkey"
-	"github.com/songquanpeng/one-api/model"
+	"github.com/Laisky/one-api/common"
+	"github.com/Laisky/one-api/common/ctxkey"
+	"github.com/Laisky/one-api/model"
 )
 
 func setupUserControllerTest(t *testing.T) {
@@ -66,7 +66,7 @@ func TestUpdateUserQuotaToZero(t *testing.T) {
 	})
 
 	payload := map[string]any{
-		"id":    user.Id,
+		"uuid":  user.UUID,
 		"quota": 0,
 	}
 	body, err := json.Marshal(payload)
@@ -114,7 +114,7 @@ func TestUpdateUserClearEmail(t *testing.T) {
 	})
 
 	payload := map[string]any{
-		"id":    user.Id,
+		"uuid":  user.UUID,
 		"email": "",
 	}
 	body, err := json.Marshal(payload)
@@ -162,7 +162,7 @@ func TestUpdateUserEmailNullSkipsChange(t *testing.T) {
 	})
 
 	payload := map[string]any{
-		"id":    user.Id,
+		"uuid":  user.UUID,
 		"email": nil,
 	}
 	body, err := json.Marshal(payload)
@@ -187,4 +187,235 @@ func TestUpdateUserEmailNullSkipsChange(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "existing@example.com", updated.Email)
 	require.Equal(t, int64(42), updated.Quota)
+}
+
+// TestDeleteUserRespondsWithSuccess verifies that admin deletion returns a
+// JSON success payload and removes the target user from the database.
+func TestDeleteUserRespondsWithSuccess(t *testing.T) {
+	setupUserControllerTest(t)
+
+	target := &model.User{
+		Username:    "delete-target",
+		Password:    "hashed-password",
+		DisplayName: "Delete Target",
+		Role:        model.RoleCommonUser,
+		Group:       "default",
+		Status:      model.UserStatusEnabled,
+	}
+	require.NoError(t, model.DB.Create(target).Error)
+
+	router := gin.New()
+	router.DELETE("/api/user/:id", func(c *gin.Context) {
+		c.Set("role", model.RoleRootUser)
+		DeleteUser(c)
+	})
+
+	req := httptest.NewRequest(http.MethodDelete, "/api/user/"+target.UUID, nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+
+	var resp struct {
+		Success bool   `json:"success"`
+		Message string `json:"message"`
+	}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	require.True(t, resp.Success, resp.Message)
+
+	updated, err := model.GetUserById(target.Id, true)
+	require.NoError(t, err)
+	require.Equal(t, model.UserStatusDeleted, updated.Status)
+	require.NotEqual(t, "delete-target", updated.Username)
+}
+
+// createLockTargetUser creates a regular common user fixture for the password
+// lock tests. The hashed password is preserved so individual cases can verify
+// it has (or has not) been mutated by the controller.
+func createLockTargetUser(t *testing.T, username string, locked bool) *model.User {
+	t.Helper()
+	hashed, err := common.Password2Hash("oldpassword")
+	require.NoError(t, err)
+	user := &model.User{
+		Username:    username,
+		Password:    hashed,
+		DisplayName: "Lock Target",
+		Email:       username + "@example.com",
+		Role:        model.RoleCommonUser,
+		Group:       "default",
+		Status:      model.UserStatusEnabled,
+		Metadata:    model.UserMetadata{PasswordLocked: locked},
+	}
+	require.NoError(t, model.DB.Create(user).Error)
+	return user
+}
+
+// TestUpdateUserMetadataPasswordLockByRoot ensures a root admin can flip the
+// metadata.password_locked flag and the change is persisted.
+func TestUpdateUserMetadataPasswordLockByRoot(t *testing.T) {
+	setupUserControllerTest(t)
+
+	target := createLockTargetUser(t, "lock-by-root", false)
+
+	router := gin.New()
+	router.PUT("/api/user/", func(c *gin.Context) {
+		c.Set(ctxkey.Role, model.RoleRootUser)
+		c.Set(ctxkey.Id, 1)
+		UpdateUser(c)
+	})
+
+	payload := map[string]any{
+		"uuid":     target.UUID,
+		"metadata": map[string]any{"password_locked": true},
+	}
+	body, err := json.Marshal(payload)
+	require.NoError(t, err)
+
+	req := httptest.NewRequest(http.MethodPut, "/api/user/", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+
+	var resp struct {
+		Success bool   `json:"success"`
+		Message string `json:"message"`
+	}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	require.True(t, resp.Success, resp.Message)
+
+	updated, err := model.GetUserById(target.Id, true)
+	require.NoError(t, err)
+	require.True(t, updated.Metadata.PasswordLocked)
+}
+
+// TestUpdateUserMetadataPasswordLockByAdminRejected ensures only the root
+// admin can change the password lock flag; a regular admin must be rejected
+// and the database record must be untouched.
+func TestUpdateUserMetadataPasswordLockByAdminRejected(t *testing.T) {
+	setupUserControllerTest(t)
+
+	target := createLockTargetUser(t, "lock-by-admin", false)
+
+	router := gin.New()
+	router.PUT("/api/user/", func(c *gin.Context) {
+		c.Set(ctxkey.Role, model.RoleAdminUser)
+		c.Set(ctxkey.Id, 1)
+		UpdateUser(c)
+	})
+
+	payload := map[string]any{
+		"uuid":     target.UUID,
+		"metadata": map[string]any{"password_locked": true},
+	}
+	body, err := json.Marshal(payload)
+	require.NoError(t, err)
+
+	req := httptest.NewRequest(http.MethodPut, "/api/user/", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+
+	var resp struct {
+		Success bool   `json:"success"`
+		Message string `json:"message"`
+	}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	require.False(t, resp.Success)
+	require.Contains(t, resp.Message, "Only root admin can change password lock")
+
+	updated, err := model.GetUserById(target.Id, true)
+	require.NoError(t, err)
+	require.False(t, updated.Metadata.PasswordLocked)
+}
+
+// TestUpdateUserPasswordRejectedWhenLocked ensures admins (including root)
+// cannot change the password while metadata.password_locked is true.
+func TestUpdateUserPasswordRejectedWhenLocked(t *testing.T) {
+	setupUserControllerTest(t)
+
+	target := createLockTargetUser(t, "locked-target", true)
+	originalHash := target.Password
+
+	router := gin.New()
+	router.PUT("/api/user/", func(c *gin.Context) {
+		c.Set(ctxkey.Role, model.RoleRootUser)
+		c.Set(ctxkey.Id, 1)
+		UpdateUser(c)
+	})
+
+	payload := map[string]any{
+		"uuid":     target.UUID,
+		"password": "newpass99",
+	}
+	body, err := json.Marshal(payload)
+	require.NoError(t, err)
+
+	req := httptest.NewRequest(http.MethodPut, "/api/user/", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+
+	var resp struct {
+		Success bool   `json:"success"`
+		Message string `json:"message"`
+	}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	require.False(t, resp.Success)
+	require.Contains(t, resp.Message, "Password is locked for this user")
+
+	var stored model.User
+	require.NoError(t, model.DB.First(&stored, target.Id).Error)
+	require.Equal(t, originalHash, stored.Password)
+	require.True(t, stored.Metadata.PasswordLocked)
+}
+
+// TestUpdateUserRootCanUnlockAndChangePasswordInOneRequest ensures a root
+// admin can clear the password lock and change the password atomically in
+// the same PUT request.
+func TestUpdateUserRootCanUnlockAndChangePasswordInOneRequest(t *testing.T) {
+	setupUserControllerTest(t)
+
+	target := createLockTargetUser(t, "unlock-and-change", true)
+	originalHash := target.Password
+
+	router := gin.New()
+	router.PUT("/api/user/", func(c *gin.Context) {
+		c.Set(ctxkey.Role, model.RoleRootUser)
+		c.Set(ctxkey.Id, 1)
+		UpdateUser(c)
+	})
+
+	payload := map[string]any{
+		"uuid":     target.UUID,
+		"metadata": map[string]any{"password_locked": false},
+		"password": "newpass99",
+	}
+	body, err := json.Marshal(payload)
+	require.NoError(t, err)
+
+	req := httptest.NewRequest(http.MethodPut, "/api/user/", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+
+	var resp struct {
+		Success bool   `json:"success"`
+		Message string `json:"message"`
+	}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	require.True(t, resp.Success, resp.Message)
+
+	var stored model.User
+	require.NoError(t, model.DB.First(&stored, target.Id).Error)
+	require.False(t, stored.Metadata.PasswordLocked)
+	require.NotEqual(t, originalHash, stored.Password)
+	require.True(t, common.ValidatePasswordAndHash("newpass99", stored.Password))
 }
