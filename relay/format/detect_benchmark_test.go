@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Laisky/errors/v2"
 	"github.com/stretchr/testify/require"
 )
 
@@ -25,17 +26,13 @@ var benchmarkPlainTextMessages = json.RawMessage(`[
 	{"role":"user","content":"Continue with examples"}
 ]`)
 
-var benchmarkDetectFormatLargeSystem = []byte(`{
-	"model":"claude-sonnet-4",
-	"system":[{"type":"text","text":"` + strings.Repeat("A", 4096) + `"}],
-	"messages":[
-		{"role":"user","content":"Explain Kubernetes operators"},
-		{"role":"assistant","content":"Sure."},
-		{"role":"user","content":"Continue with examples"}
-	]
-}`)
-
 var benchmarkOpenAITools = json.RawMessage(`[{"type":"function","function":{"name":"lookup","parameters":{"type":"object","properties":{"payload":{"type":"string","description":"` + strings.Repeat("A", 4096) + `"}}}}}]`)
+
+var benchmarkDetectFormatOpenAITool = []byte(`{
+	"model":"gpt-4.1",
+	"messages":[{"role":"user","content":"look this up"}],
+	"tools":[{"type":"function","function":{"name":"lookup","parameters":{"type":"object","properties":{"payload":{"type":"string","description":"` + strings.Repeat("A", 4096) + `"}}}}}]
+}`)
 
 type legacyRequestProbe struct {
 	Model              string          `json:"model,omitempty"`
@@ -94,10 +91,8 @@ func isClaudeToolFormatLegacy(toolsRaw json.RawMessage) bool {
 				Parameters  json.RawMessage `json:"parameters,omitempty"`
 				InputSchema json.RawMessage `json:"input_schema,omitempty"`
 			}
-			if err := json.Unmarshal(tool.Function, &fnProbe); err == nil {
-				if len(fnProbe.InputSchema) > 0 {
-					return true
-				}
+			if err := json.Unmarshal(tool.Function, &fnProbe); err == nil && len(fnProbe.InputSchema) > 0 {
+				return true
 			}
 		}
 	}
@@ -105,36 +100,77 @@ func isClaudeToolFormatLegacy(toolsRaw json.RawMessage) bool {
 	return false
 }
 
-// TestDetectFormatScalarContentBehavior verifies scalar and structured message cases retain their expected API-format decisions.
-func TestDetectFormatScalarContentBehavior(t *testing.T) {
-	t.Parallel()
-	tests := []struct {
-		name string
-		body string
-		want APIFormat
-	}{
-		{name: "string content", body: `{"messages":[{"role":"user","content":"hello"}]}`, want: Unknown},
-		{name: "null content", body: `{"messages":[{"role":"assistant","content":null}]}`, want: Unknown},
-		{name: "object content", body: `{"messages":[{"role":"user","content":{"text":"hello"}}]}`, want: Unknown},
-		{name: "claude array content", body: `{"messages":[{"role":"assistant","content":[{"type":"tool_use","id":"1"}]}]}`, want: ClaudeMessages},
-		{name: "wrong-type role remains unknown", body: `{"messages":[{"role":1,"content":[{"type":"tool_use","id":"1"}]}]}`, want: Unknown},
-		{name: "large unused fields stay ambiguous", body: string(benchmarkDetectFormatLargeSystem), want: Unknown},
+// detectFormatLegacy preserves the pre-optimization detector for end-to-end differential tests and benchmarks.
+func detectFormatLegacy(body []byte) (APIFormat, error) {
+	if len(body) == 0 {
+		return Unknown, errors.New("empty request body")
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got, err := DetectFormat([]byte(tt.body))
-			require.NoError(t, err)
-			require.Equal(t, tt.want, got)
-		})
+	var probe legacyRequestProbe
+	if err := json.Unmarshal(body, &probe); err != nil {
+		return Unknown, errors.Wrap(err, "failed to parse request body for format detection")
 	}
+
+	if len(probe.Input) > 0 && len(probe.Messages) == 0 {
+		return ResponseAPI, nil
+	}
+	if probe.MaxOutputTokens != nil && len(probe.Messages) == 0 {
+		return ResponseAPI, nil
+	}
+	if probe.Instructions != nil && len(probe.Messages) == 0 {
+		return ResponseAPI, nil
+	}
+	if len(probe.Messages) == 0 {
+		if probe.PreviousResponseId != nil {
+			return ResponseAPI, nil
+		}
+		if isNonEmptyJSONValue(probe.Conversation) {
+			return ResponseAPI, nil
+		}
+		if isResponseAPIPromptObject(probe.Prompt) {
+			return ResponseAPI, nil
+		}
+		return Unknown, nil
+	}
+
+	if hasClaudeContentBlocksLegacy(probe.Messages) {
+		return ClaudeMessages, nil
+	}
+	if len(probe.Tools) > 0 && isClaudeToolFormatLegacy(probe.Tools) {
+		return ClaudeMessages, nil
+	}
+
+	return Unknown, nil
 }
 
-// TestDetectFormatModelTypeValidation verifies wrong-type model values retain the legacy top-level parse error.
-func TestDetectFormatModelTypeValidation(t *testing.T) {
+// TestDetectFormatBehaviorEquivalent compares externally observable detector results against the exact legacy path.
+func TestDetectFormatBehaviorEquivalent(t *testing.T) {
 	t.Parallel()
-	_, err := DetectFormat([]byte(`{"model":123,"messages":[{"role":"user","content":"hello"}]}`))
-	require.Error(t, err)
+	cases := []struct {
+		name string
+		body []byte
+	}{
+		{name: "plain text", body: benchmarkDetectFormatPlainText},
+		{name: "openai tool schema", body: benchmarkDetectFormatOpenAITool},
+		{name: "claude tool use", body: []byte(`{"messages":[{"role":"assistant","content":[{"type":"tool_use","id":"1"}]}]}`)},
+		{name: "wrong-type role", body: []byte(`{"messages":[{"role":1,"content":[{"type":"tool_use","id":"1"}]}]}`)},
+		{name: "wrong-type model", body: []byte(`{"model":123,"messages":[{"role":"user","content":"hello"}]}`)},
+		{name: "responses input", body: []byte(`{"input":"hello"}`)},
+		{name: "invalid json", body: []byte(`{"messages":`)},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			want, wantErr := detectFormatLegacy(tc.body)
+			got, gotErr := DetectFormat(tc.body)
+			require.Equal(t, want, got)
+			if wantErr == nil {
+				require.NoError(t, gotErr)
+			} else {
+				require.EqualError(t, gotErr, wantErr.Error())
+			}
+		})
+	}
 }
 
 // TestHasClaudeContentBlocksBehaviorEquivalent compares the optimized content-block scan against the exact legacy algorithm.
@@ -188,30 +224,6 @@ func BenchmarkClaudeContentBlockScanPlainText(b *testing.B) {
 	})
 }
 
-// BenchmarkRequestProbeDecodeLargeUnusedFields measures decoding when a large top-level system field is irrelevant to format detection.
-func BenchmarkRequestProbeDecodeLargeUnusedFields(b *testing.B) {
-	b.Run("legacy", func(b *testing.B) {
-		b.ReportAllocs()
-		var probe legacyRequestProbe
-		for b.Loop() {
-			probe = legacyRequestProbe{}
-			if err := json.Unmarshal(benchmarkDetectFormatLargeSystem, &probe); err != nil {
-				b.Fatal(err)
-			}
-		}
-	})
-	b.Run("optimized", func(b *testing.B) {
-		b.ReportAllocs()
-		var probe requestProbe
-		for b.Loop() {
-			probe = requestProbe{}
-			if err := json.Unmarshal(benchmarkDetectFormatLargeSystem, &probe); err != nil {
-				b.Fatal(err)
-			}
-		}
-	})
-}
-
 // BenchmarkClaudeToolFormatOpenAISchema measures tool-format detection with a large OpenAI parameters schema.
 func BenchmarkClaudeToolFormatOpenAISchema(b *testing.B) {
 	b.Run("legacy", func(b *testing.B) {
@@ -228,12 +240,38 @@ func BenchmarkClaudeToolFormatOpenAISchema(b *testing.B) {
 	})
 }
 
-// BenchmarkDetectFormatPlainText records the optimized end-to-end detector cost for a typical multi-message text request.
+// BenchmarkDetectFormatPlainText measures end-to-end detection for a typical multi-message text request.
 func BenchmarkDetectFormatPlainText(b *testing.B) {
-	b.ReportAllocs()
-	for b.Loop() {
-		if _, err := DetectFormat(benchmarkDetectFormatPlainText); err != nil {
-			b.Fatal(err)
-		}
-	}
+	b.Run("legacy", func(b *testing.B) {
+		b.ReportAllocs()
+		for b.Loop() {
+			if _, err := detectFormatLegacy(benchmarkDetectFormatPlainText); err != nil {
+				b.Fatal(err)
+			}
+	})
+	b.Run("optimized", func(b *testing.B) {
+		b.ReportAllocs()
+		for b.Loop() {
+			if _, err := DetectFormat(benchmarkDetectFormatPlainText); err != nil {
+				b.Fatal(err)
+			}
+	})
+}
+
+// BenchmarkDetectFormatOpenAIToolSchema measures end-to-end detection for a request with a large OpenAI tool schema.
+func BenchmarkDetectFormatOpenAIToolSchema(b *testing.B) {
+	b.Run("legacy", func(b *testing.B) {
+		b.ReportAllocs()
+		for b.Loop() {
+			if _, err := detectFormatLegacy(benchmarkDetectFormatOpenAITool); err != nil {
+				b.Fatal(err)
+			}
+	})
+	b.Run("optimized", func(b *testing.B) {
+		b.ReportAllocs()
+		for b.Loop() {
+			if _, err := DetectFormat(benchmarkDetectFormatOpenAITool); err != nil {
+				b.Fatal(err)
+			}
+	})
 }

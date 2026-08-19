@@ -61,8 +61,6 @@ func (f APIFormat) Endpoint() string {
 // It only parses the fields necessary to distinguish between formats,
 // avoiding the overhead of full request parsing.
 type requestProbe struct {
-	// Model is retained to preserve legacy JSON type validation even though
-	// format detection does not inspect its value.
 	Model string `json:"model,omitempty"`
 
 	// ChatCompletion / Claude Messages indicator
@@ -78,6 +76,9 @@ type requestProbe struct {
 	Conversation       json.RawMessage `json:"conversation,omitempty"`
 	Prompt             json.RawMessage `json:"prompt,omitempty"`
 
+	// Claude Messages indicator
+	System any `json:"system,omitempty"`
+
 	// Response API specific
 	MaxOutputTokens *int `json:"max_output_tokens,omitempty"`
 
@@ -87,7 +88,6 @@ type requestProbe struct {
 
 // messageProbe is used to inspect the structure of messages array entries.
 type messageProbe struct {
-	// Role is retained to preserve legacy JSON type validation in the message scan.
 	Role    string          `json:"role,omitempty"`
 	Content json.RawMessage `json:"content,omitempty"`
 }
