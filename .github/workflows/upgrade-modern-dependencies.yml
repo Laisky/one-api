@@ -23,11 +23,8 @@ jobs:
       github.actor != 'github-actions[bot]' &&
       github.event.pull_request.head.repo.full_name == github.repository &&
       github.event.pull_request.head.ref == 'agent/modern-upgrade-work-20260819'
-    runs-on: windows-latest
+    runs-on: macos-15
     timeout-minutes: 60
-    defaults:
-      run:
-        shell: bash
     env:
       CI: 'true'
       YARN_NETWORK_TIMEOUT: '600000'
