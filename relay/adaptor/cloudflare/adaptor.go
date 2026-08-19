@@ -1,279 +1,271 @@
 package cloudflare
 
 import (
-	"encoding/json"
-	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/Laisky/errors/v2"
 	"github.com/gin-gonic/gin"
 
-	"github.com/Laisky/one-api/common/ctxkey"
 	"github.com/Laisky/one-api/relay/adaptor"
-	openai_compatible "github.com/Laisky/one-api/relay/adaptor/openai_compatible"
+	openaiadaptor "github.com/Laisky/one-api/relay/adaptor/openai"
+	openaicompatible "github.com/Laisky/one-api/relay/adaptor/openai_compatible"
 	"github.com/Laisky/one-api/relay/billing/ratio"
 	"github.com/Laisky/one-api/relay/meta"
 	"github.com/Laisky/one-api/relay/model"
 	"github.com/Laisky/one-api/relay/relaymode"
 )
 
-type Adaptor struct {
-	meta *meta.Meta
-}
+const (
+	legacyAIGatewayHost       = "gateway.ai.cloudflare.com"
+	legacyAIGatewayPathSuffix = "/workers-ai"
+)
 
-// ConvertImageRequest implements adaptor.Adaptor.
-func (*Adaptor) ConvertImageRequest(_ *gin.Context, request *model.ImageRequest) (any, error) {
-	return nil, errors.New("not implemented")
-}
+// Adaptor implements the Cloudflare Workers AI relay using Cloudflare's
+// OpenAI-compatible HTTP endpoints.
+type Adaptor struct{}
 
-// ConvertImageRequest implements adaptor.Adaptor.
+// Init initializes the adaptor for a request. Cloudflare does not require
+// request-local adaptor state.
+func (a *Adaptor) Init(_ *meta.Meta) {}
 
-func (a *Adaptor) Init(meta *meta.Meta) {
-	a.meta = meta
-}
-
-// WorkerAI cannot be used across accounts with AIGateWay
-// https://developers.cloudflare.com/ai-gateway/providers/workersai/#openai-compatible-endpoints
-// https://gateway.ai.cloudflare.com/v1/{account_id}/{gateway_id}/workers-ai
-func (a *Adaptor) isAIGateWay(baseURL string) bool {
-	return strings.HasPrefix(baseURL, "https://gateway.ai.cloudflare.com") && strings.HasSuffix(baseURL, "/workers-ai")
-}
-
-func (a *Adaptor) GetRequestURL(meta *meta.Meta) (string, error) {
-	isAIGateWay := a.isAIGateWay(meta.BaseURL)
-	var urlPrefix string
-	if isAIGateWay {
-		urlPrefix = meta.BaseURL
-	} else {
-		urlPrefix = fmt.Sprintf("%s/client/v4/accounts/%s/ai", meta.BaseURL, meta.Config.UserID)
+// GetRequestURL returns the Cloudflare endpoint that matches the incoming relay
+// mode. Requests converted from legacy Completions or Claude Messages use the
+// Chat Completions endpoint so their request and response schemas remain paired.
+func (a *Adaptor) GetRequestURL(metaInfo *meta.Meta) (string, error) {
+	if metaInfo == nil {
+		return "", errors.New("cloudflare meta is nil")
 	}
 
-	switch meta.Mode {
-	case relaymode.ChatCompletions:
-		return fmt.Sprintf("%s/v1/chat/completions", urlPrefix), nil
-	case relaymode.Embeddings:
-		return fmt.Sprintf("%s/v1/embeddings", urlPrefix), nil
-	default:
-		if isAIGateWay {
-			return fmt.Sprintf("%s/%s", urlPrefix, meta.ActualModelName), nil
-		}
-		return fmt.Sprintf("%s/run/%s", urlPrefix, meta.ActualModelName), nil
+	apiBaseURL, err := cloudflareAPIBaseURL(metaInfo.BaseURL, metaInfo.Config.UserID)
+	if err != nil {
+		return "", errors.Wrap(err, "build cloudflare API base URL")
 	}
+
+	endpoint, err := cloudflareOpenAIEndpoint(metaInfo.Mode)
+	if err != nil {
+		return "", err
+	}
+	return apiBaseURL + endpoint, nil
 }
 
-func (a *Adaptor) SetupRequestHeader(c *gin.Context, req *http.Request, meta *meta.Meta) error {
-	adaptor.SetupCommonRequestHeader(c, req, meta)
-	req.Header.Set("Authorization", "Bearer "+meta.APIKey)
+// SetupRequestHeader configures authentication and content negotiation for a
+// Cloudflare Workers AI request.
+func (a *Adaptor) SetupRequestHeader(c *gin.Context, req *http.Request, metaInfo *meta.Meta) error {
+	adaptor.SetupCommonRequestHeader(c, req, metaInfo)
+	req.Header.Set("Authorization", "Bearer "+metaInfo.APIKey)
+	req.Header.Set("Content-Type", "application/json")
 	return nil
 }
 
-func (a *Adaptor) ConvertRequest(c *gin.Context, relayMode int, request *model.GeneralOpenAIRequest) (any, error) {
+// ConvertRequest converts supported OpenAI request modes to the schema accepted
+// by the selected Cloudflare OpenAI-compatible endpoint.
+func (a *Adaptor) ConvertRequest(_ *gin.Context, relayMode int, request *model.GeneralOpenAIRequest) (any, error) {
 	if request == nil {
-		return nil, errors.New("request is nil")
+		return nil, errors.New("cloudflare request is nil")
 	}
+
 	switch relayMode {
-	case relaymode.Completions:
-		return ConvertCompletionsRequest(*request), nil
-	case relaymode.ChatCompletions, relaymode.Embeddings:
+	case relaymode.ChatCompletions, relaymode.Embeddings, relaymode.ResponseAPI:
 		return request, nil
+	case relaymode.Completions:
+		return convertCompletionToChatRequest(request)
 	default:
-		return nil, errors.New("not implemented")
+		return nil, errors.Errorf("cloudflare relay mode %d is not supported", relayMode)
 	}
 }
 
+// ConvertImageRequest reports that image multipart requests are not implemented
+// by this text-focused Cloudflare adaptor.
+func (a *Adaptor) ConvertImageRequest(_ *gin.Context, _ *model.ImageRequest) (any, error) {
+	return nil, errors.New("cloudflare image requests are not supported")
+}
+
+// ConvertClaudeRequest converts Anthropic Claude Messages input into an OpenAI
+// Chat Completions request while preserving tools, structured content, streaming,
+// and the context markers needed for response conversion.
 func (a *Adaptor) ConvertClaudeRequest(c *gin.Context, request *model.ClaudeRequest) (any, error) {
-	if request == nil {
-		return nil, errors.New("request is nil")
+	converted, err := openaicompatible.ConvertClaudeRequest(c, request)
+	if err != nil {
+		return nil, errors.Wrap(err, "convert Claude Messages request for Cloudflare")
 	}
-
-	// Convert Claude Messages API request to OpenAI format first
-	openaiRequest := &model.GeneralOpenAIRequest{
-		Model:       request.Model,
-		MaxTokens:   request.MaxTokens,
-		Temperature: request.Temperature,
-		TopP:        request.TopP,
-		Stream:      request.Stream != nil && *request.Stream,
-		Stop:        request.StopSequences,
-	}
-
-	// Convert system prompt
-	if request.System != nil {
-		switch system := request.System.(type) {
-		case string:
-			if system != "" {
-				openaiRequest.Messages = append(openaiRequest.Messages, model.Message{
-					Role:    "system",
-					Content: system,
-				})
-			}
-		case []any:
-			// For structured system content, extract text parts
-			var systemParts []string
-			for _, block := range system {
-				if blockMap, ok := block.(map[string]any); ok {
-					if text, exists := blockMap["text"]; exists {
-						if textStr, ok := text.(string); ok {
-							systemParts = append(systemParts, textStr)
-						}
-					}
-				}
-			}
-			if len(systemParts) > 0 {
-				systemText := strings.Join(systemParts, "\n")
-				openaiRequest.Messages = append(openaiRequest.Messages, model.Message{
-					Role:    "system",
-					Content: systemText,
-				})
-			}
-		}
-	}
-
-	// Convert messages
-	for _, msg := range request.Messages {
-		openaiMessage := model.Message{
-			Role: msg.Role,
-		}
-
-		// Convert content based on type
-		switch content := msg.Content.(type) {
-		case string:
-			// Simple string content
-			openaiMessage.Content = content
-		case []any:
-			// Structured content blocks - convert to OpenAI format
-			var contentParts []model.MessageContent
-			for _, block := range content {
-				if blockMap, ok := block.(map[string]any); ok {
-					if blockType, exists := blockMap["type"]; exists {
-						switch blockType {
-						case "text":
-							if text, exists := blockMap["text"]; exists {
-								if textStr, ok := text.(string); ok {
-									contentParts = append(contentParts, model.MessageContent{
-										Type: "text",
-										Text: &textStr,
-									})
-								}
-							}
-						case "image":
-							if source, exists := blockMap["source"]; exists {
-								if sourceMap, ok := source.(map[string]any); ok {
-									imageURL := model.ImageURL{}
-									if mediaType, exists := sourceMap["media_type"]; exists {
-										if data, exists := sourceMap["data"]; exists {
-											if dataStr, ok := data.(string); ok {
-												// Convert to data URL format
-												imageURL.Url = fmt.Sprintf("data:%s;base64,%s", mediaType, dataStr)
-											}
-										}
-									}
-									contentParts = append(contentParts, model.MessageContent{
-										Type:     "image_url",
-										ImageURL: &imageURL,
-									})
-								}
-							}
-						}
-					}
-				}
-			}
-			if len(contentParts) > 0 {
-				openaiMessage.Content = contentParts
-			}
-		default:
-			// Fallback: convert to string
-			if contentBytes, err := json.Marshal(content); err == nil {
-				openaiMessage.Content = string(contentBytes)
-			}
-		}
-
-		openaiRequest.Messages = append(openaiRequest.Messages, openaiMessage)
-	}
-
-	// Convert tools
-	for _, tool := range request.Tools {
-		openaiTool := model.Tool{
-			Type: "function",
-			Function: &model.Function{
-				Name:        tool.Name,
-				Description: tool.Description,
-			},
-		}
-
-		// Convert input schema
-		if tool.InputSchema != nil {
-			if schemaMap, ok := tool.InputSchema.(map[string]any); ok {
-				openaiTool.Function.Parameters = schemaMap
-			}
-		}
-
-		openaiRequest.Tools = append(openaiRequest.Tools, openaiTool)
-	}
-
-	// Convert tool choice
-	if request.ToolChoice != nil {
-		openaiRequest.ToolChoice = request.ToolChoice
-	}
-
-	// Mark this as a Claude Messages conversion for response handling
-	c.Set(ctxkey.ClaudeMessagesConversion, true)
-	c.Set(ctxkey.OriginalClaudeRequest, request)
-
-	// Now convert using Cloudflare's existing logic
-	return a.ConvertRequest(c, relaymode.ChatCompletions, openaiRequest)
+	return converted, nil
 }
 
-func (a *Adaptor) DoRequest(c *gin.Context, meta *meta.Meta, requestBody io.Reader) (*http.Response, error) {
-	return adaptor.DoRequestHelper(a, c, meta, requestBody)
+// DoRequest sends a Cloudflare request using the common adaptor transport.
+func (a *Adaptor) DoRequest(c *gin.Context, metaInfo *meta.Meta, requestBody io.Reader) (*http.Response, error) {
+	return adaptor.DoRequestHelper(a, c, metaInfo, requestBody)
 }
 
-func (a *Adaptor) DoResponse(c *gin.Context, resp *http.Response, meta *meta.Meta) (usage *model.Usage, err *model.ErrorWithStatusCode) {
-	if meta.IsStream {
-		// Use unified OpenAI-compatible streaming handler to enable consistent behavior and thinking support
-		err, usage = openai_compatible.StreamHandler(c, resp, meta.PromptTokens, meta.ActualModelName)
-	} else {
-		// Use unified OpenAI-compatible non-stream handler
-		err, usage = openai_compatible.Handler(c, resp, meta.PromptTokens, meta.ActualModelName)
-	}
-	return
+// DoResponse handles Cloudflare's OpenAI-compatible responses, including native
+// Responses API output and conversion back to Claude Messages when requested.
+func (a *Adaptor) DoResponse(c *gin.Context, resp *http.Response, metaInfo *meta.Meta) (usage *model.Usage, err *model.ErrorWithStatusCode) {
+	return (&openaiadaptor.Adaptor{}).DoResponse(c, resp, metaInfo)
 }
 
+// GetModelList returns the currently supported Cloudflare model identifiers.
 func (a *Adaptor) GetModelList() []string {
-	return adaptor.GetModelListFromPricing(ModelRatios)
+	return ModelList
 }
 
+// GetChannelName returns the human-readable provider name.
 func (a *Adaptor) GetChannelName() string {
 	return "cloudflare"
 }
 
-// Pricing methods - Cloudflare adapter manages its own model pricing
+// GetDefaultModelPricing returns Cloudflare's built-in model metadata and
+// pricing table.
 func (a *Adaptor) GetDefaultModelPricing() map[string]adaptor.ModelConfig {
-	// Use the constants.go ModelRatios which already use ratio.MilliTokensUsd correctly
 	return ModelRatios
 }
 
+// GetModelRatio returns the configured input-token price ratio for a model.
 func (a *Adaptor) GetModelRatio(modelName string) float64 {
-	pricing := a.GetDefaultModelPricing()
-	if price, exists := pricing[modelName]; exists {
+	if price, ok := ModelRatios[modelName]; ok {
 		return price.Ratio
 	}
-
-	// Default Cloudflare pricing - use global constant for consistency
-	return 5 * ratio.MilliTokensUsd // Default quota-based pricing
+	return 5 * ratio.MilliTokensUsd
 }
 
+// GetCompletionRatio returns the output-to-input price ratio for a model.
 func (a *Adaptor) GetCompletionRatio(modelName string) float64 {
-	pricing := a.GetDefaultModelPricing()
-	if price, exists := pricing[modelName]; exists {
+	if price, ok := ModelRatios[modelName]; ok {
 		return price.CompletionRatio
 	}
-	// Default completion ratio for Cloudflare
-	return 1.0
+	return 1
 }
 
-// DefaultToolingConfig returns Cloudflare tooling defaults (no published server-side tool fees as of 2025-11-12).
+// DefaultToolingConfig returns the provider-level tool capabilities. Per-model
+// metadata remains authoritative for whether a particular model supports tools.
 func (a *Adaptor) DefaultToolingConfig() adaptor.ChannelToolConfig {
 	return CloudflareToolingDefaults
+}
+
+// cloudflareOpenAIEndpoint maps one-api relay modes to Cloudflare's supported
+// OpenAI-compatible endpoints.
+func cloudflareOpenAIEndpoint(relayMode int) (string, error) {
+	switch relayMode {
+	case relaymode.ChatCompletions, relaymode.Completions, relaymode.ClaudeMessages:
+		return "/v1/chat/completions", nil
+	case relaymode.Embeddings:
+		return "/v1/embeddings", nil
+	case relaymode.ResponseAPI:
+		return "/v1/responses", nil
+	default:
+		return "", errors.Errorf("cloudflare relay mode %d has no OpenAI-compatible endpoint", relayMode)
+	}
+}
+
+// cloudflareAPIBaseURL normalizes either the standard Workers AI base URL, a
+// full account-scoped Workers AI URL, or the legacy AI Gateway workers-ai URL.
+func cloudflareAPIBaseURL(rawBaseURL, accountID string) (string, error) {
+	rawBaseURL = strings.TrimSpace(rawBaseURL)
+	if rawBaseURL == "" {
+		return "", errors.New("cloudflare base URL is empty")
+	}
+
+	parsed, err := url.Parse(rawBaseURL)
+	if err != nil {
+		return "", errors.Wrap(err, "parse cloudflare base URL")
+	}
+	if parsed.Scheme != "http" && parsed.Scheme != "https" {
+		return "", errors.Errorf("cloudflare base URL must use http or https, got %q", parsed.Scheme)
+	}
+	if parsed.Host == "" {
+		return "", errors.New("cloudflare base URL must include a host")
+	}
+	if parsed.User != nil {
+		return "", errors.New("cloudflare base URL must not include credentials")
+	}
+	if parsed.RawQuery != "" || parsed.Fragment != "" {
+		return "", errors.New("cloudflare base URL must not include a query or fragment")
+	}
+
+	parsed.Path = strings.TrimRight(parsed.Path, "/")
+	parsed.RawPath = ""
+	normalized := strings.TrimRight(parsed.String(), "/")
+
+	segments := splitURLPath(parsed.Path)
+	if strings.EqualFold(parsed.Hostname(), legacyAIGatewayHost) {
+		switch {
+		case hasPathSuffix(segments, "workers-ai", "v1"):
+			return strings.TrimSuffix(normalized, "/v1"), nil
+		case hasPathSuffix(segments, "workers-ai"):
+			return normalized, nil
+		default:
+			return "", errors.Errorf("legacy Cloudflare AI Gateway URL must end with %s or %s/v1", legacyAIGatewayPathSuffix, legacyAIGatewayPathSuffix)
+		}
+	}
+
+	if hasPathSuffix(segments, "client", "v4", "accounts", "*", "ai", "v1") {
+		return strings.TrimSuffix(normalized, "/v1"), nil
+	}
+	if hasPathSuffix(segments, "client", "v4", "accounts", "*", "ai") {
+		return normalized, nil
+	}
+
+	accountID = strings.TrimSpace(accountID)
+	if accountID == "" {
+		return "", errors.New("cloudflare account ID is required")
+	}
+	if strings.ContainsAny(accountID, "/?#") {
+		return "", errors.New("cloudflare account ID contains invalid path characters")
+	}
+
+	escapedAccountID := url.PathEscape(accountID)
+	switch {
+	case hasPathSuffix(segments, "client", "v4", "accounts", "*"):
+		return normalized + "/ai", nil
+	case hasPathSuffix(segments, "client", "v4"):
+		return normalized + "/accounts/" + escapedAccountID + "/ai", nil
+	default:
+		return normalized + "/client/v4/accounts/" + escapedAccountID + "/ai", nil
+	}
+}
+
+// splitURLPath returns non-empty path segments for suffix matching.
+func splitURLPath(path string) []string {
+	parts := strings.Split(strings.Trim(path, "/"), "/")
+	if len(parts) == 1 && parts[0] == "" {
+		return nil
+	}
+	return parts
+}
+
+// hasPathSuffix reports whether path segments end with the supplied pattern.
+// The literal "*" matches any non-empty segment.
+func hasPathSuffix(segments []string, pattern ...string) bool {
+	if len(segments) < len(pattern) {
+		return false
+	}
+	start := len(segments) - len(pattern)
+	for i, expected := range pattern {
+		actual := segments[start+i]
+		if expected == "*" {
+			if actual == "" {
+				return false
+			}
+			continue
+		}
+		if !strings.EqualFold(actual, expected) {
+			return false
+		}
+	}
+	return true
+}
+
+// convertCompletionToChatRequest converts a legacy text completion prompt to a
+// single user message while preserving shared sampling and streaming fields.
+func convertCompletionToChatRequest(request *model.GeneralOpenAIRequest) (*model.GeneralOpenAIRequest, error) {
+	prompt := strings.TrimSpace(request.Prompt)
+	if prompt == "" {
+		return nil, errors.New("cloudflare completion prompt is empty")
+	}
+
+	converted := *request
+	converted.Prompt = ""
+	converted.Messages = []model.Message{{Role: "user", Content: request.Prompt}}
+	return &converted, nil
 }
