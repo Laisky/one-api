@@ -2,6 +2,7 @@ package controller
 
 import (
 	"encoding/json"
+	"math"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -85,6 +86,58 @@ func TestChatToResponseStreamBridge_EmitEventExactBytes(t *testing.T) {
 
 			bridge.emitEvent(c, tt.eventType, event)
 			require.Equal(t, expected.String(), recorder.Body.String())
+		})
+	}
+}
+
+func TestResponseStreamFrameCapacity(t *testing.T) {
+	const (
+		dataOnlyOverhead   = len(responseStreamDataPrefix) + len(responseStreamFrameSuffix)
+		namedEventOverhead = len(responseStreamEventPrefix) + 1
+	)
+
+	tests := []struct {
+		name         string
+		payloadLen   int
+		eventTypeLen int
+		want         int
+		wantOK       bool
+	}{
+		{
+			name:       "data-only frame",
+			payloadLen: 128,
+			want:       128 + dataOnlyOverhead,
+			wantOK:     true,
+		},
+		{
+			name:         "named event frame",
+			payloadLen:   128,
+			eventTypeLen: len("response.output_text.delta"),
+			want:         128 + dataOnlyOverhead + namedEventOverhead + len("response.output_text.delta"),
+			wantOK:       true,
+		},
+		{name: "negative payload length", payloadLen: -1},
+		{name: "negative event type length", eventTypeLen: -1},
+		{
+			name:       "data-only overflow",
+			payloadLen: math.MaxInt - dataOnlyOverhead + 1,
+		},
+		{
+			name:         "named event overhead overflow",
+			payloadLen:   math.MaxInt - dataOnlyOverhead,
+			eventTypeLen: 1,
+		},
+		{
+			name:         "event type length overflow",
+			eventTypeLen: math.MaxInt,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, ok := responseStreamFrameCapacity(tt.payloadLen, tt.eventTypeLen)
+			require.Equal(t, tt.wantOK, ok)
+			require.Equal(t, tt.want, got)
 		})
 	}
 }

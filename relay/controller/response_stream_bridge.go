@@ -2,6 +2,7 @@ package controller
 
 import (
 	"encoding/json"
+	"math"
 	"strings"
 	"time"
 
@@ -696,6 +697,34 @@ func (h *chatToResponseStreamBridge) finalStatus() (string, *openai.IncompleteDe
 	}
 }
 
+const (
+	responseStreamEventPrefix = "event: "
+	responseStreamDataPrefix  = "data: "
+	responseStreamFrameSuffix = "\n\n"
+)
+
+func responseStreamFrameCapacity(payloadLen, eventTypeLen int) (int, bool) {
+	const dataOnlyOverhead = len(responseStreamDataPrefix) + len(responseStreamFrameSuffix)
+	if payloadLen < 0 || eventTypeLen < 0 || payloadLen > math.MaxInt-dataOnlyOverhead {
+		return 0, false
+	}
+
+	frameSize := payloadLen + dataOnlyOverhead
+	if eventTypeLen == 0 {
+		return frameSize, true
+	}
+
+	const namedEventOverhead = len(responseStreamEventPrefix) + 1
+	if frameSize > math.MaxInt-namedEventOverhead {
+		return 0, false
+	}
+	frameSize += namedEventOverhead
+	if eventTypeLen > math.MaxInt-frameSize {
+		return 0, false
+	}
+	return frameSize + eventTypeLen, true
+}
+
 func (h *chatToResponseStreamBridge) emitEvent(c *gin.Context, eventType string, event openai.ResponseAPIStreamEvent) {
 	event.Type = eventType
 	if event.Id == "" {
@@ -708,25 +737,21 @@ func (h *chatToResponseStreamBridge) emitEvent(c *gin.Context, eventType string,
 		return
 	}
 
-	const (
-		eventPrefix = "event: "
-		dataPrefix  = "data: "
-		frameSuffix = "\n\n"
-	)
-
-	frameSize := len(dataPrefix) + len(payload) + len(frameSuffix)
-	if eventType != "" {
-		frameSize += len(eventPrefix) + len(eventType) + 1
+	frameSize, ok := responseStreamFrameCapacity(len(payload), len(eventType))
+	if !ok {
+		gmw.GetLogger(c).Warn("response stream event is too large", zap.String("event_type", eventType))
+		return
 	}
+
 	frame := make([]byte, 0, frameSize)
 	if eventType != "" {
-		frame = append(frame, eventPrefix...)
+		frame = append(frame, responseStreamEventPrefix...)
 		frame = append(frame, eventType...)
 		frame = append(frame, '\n')
 	}
-	frame = append(frame, dataPrefix...)
+	frame = append(frame, responseStreamDataPrefix...)
 	frame = append(frame, payload...)
-	frame = append(frame, frameSuffix...)
+	frame = append(frame, responseStreamFrameSuffix...)
 
 	if _, err := c.Writer.Write(frame); err != nil {
 		gmw.GetLogger(c).Warn("failed to write response stream event", zap.String("event_type", eventType), zap.Error(err))
