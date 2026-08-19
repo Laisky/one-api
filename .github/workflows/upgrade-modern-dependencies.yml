@@ -1,29 +1,39 @@
 name: Upgrade modern frontend dependencies
 
 on:
-  push:
+  pull_request:
     branches:
-      - agent/upgrade-modern-dependencies-20260819
+      - main
+    types:
+      - opened
+      - reopened
+      - synchronize
 
 permissions:
   contents: write
+  pull-requests: read
 
 concurrency:
-  group: upgrade-modern-dependencies-20260819
-  cancel-in-progress: true
+  group: upgrade-modern-dependencies-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
 
 jobs:
   upgrade-and-test:
-    if: github.actor != 'github-actions[bot]'
+    if: >-
+      github.actor != 'github-actions[bot]' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.head.ref == 'agent/upgrade-modern-dependencies-20260819'
     runs-on: ubuntu-latest
     timeout-minutes: 60
     env:
       CI: 'true'
       YARN_NETWORK_TIMEOUT: '600000'
+      UPGRADE_BRANCH: ${{ github.event.pull_request.head.ref }}
     steps:
       - name: Checkout branch
         uses: actions/checkout@v4
         with:
+          ref: ${{ github.event.pull_request.head.ref }}
           fetch-depth: 0
 
       - name: Set up Node.js 24
@@ -58,7 +68,7 @@ jobs:
             echo 'Dependency manifest and lockfile are already current.'
           else
             git commit -m 'Upgrade modern frontend dependencies'
-            git push origin HEAD:${GITHUB_REF_NAME}
+            git push origin "HEAD:${UPGRADE_BRANCH}"
           fi
 
       - name: Verify no direct dependency is outdated
