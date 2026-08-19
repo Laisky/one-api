@@ -1,40 +1,33 @@
 name: Upgrade modern frontend dependencies
 
 on:
-  pull_request_target:
+  push:
     branches:
-      - agent/modern-upgrade-staging-20260819
-    types:
-      - opened
-      - reopened
-      - synchronize
+      - main
 
 permissions:
   contents: write
-  pull-requests: read
 
 concurrency:
-  group: upgrade-modern-dependencies-${{ github.event.pull_request.number }}
+  group: upgrade-modern-dependencies-staging
   cancel-in-progress: true
 
 jobs:
   upgrade-and-test:
     if: >-
       github.actor != 'github-actions[bot]' &&
-      github.event.pull_request.head.repo.full_name == github.repository &&
-      github.event.pull_request.head.ref == 'agent/modern-upgrade-work-20260819'
+      github.event.head_commit.message == 'Run isolated Modern dependency upgrade'
     runs-on: ubuntu-latest
     timeout-minutes: 60
     env:
       CI: 'true'
       YARN_NETWORK_TIMEOUT: '600000'
-      UPGRADE_BRANCH: ${{ github.event.pull_request.head.ref }}
+      UPGRADE_BRANCH: agent/modern-upgrade-work-20260819
     steps:
-      - name: Checkout branch
+      - name: Checkout isolated work branch
         uses: actions/checkout@v4
         with:
-          repository: ${{ github.event.pull_request.head.repo.full_name }}
-          ref: ${{ github.event.pull_request.head.ref }}
+          ref: agent/modern-upgrade-work-20260819
           fetch-depth: 0
 
       - name: Set up Node.js 24
