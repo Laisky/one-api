@@ -137,13 +137,19 @@ transform('web/modern/src/components/chat/ChatInterface.tsx', (text) =>
   ),
 );
 
-// Zod 4 requires defaults to satisfy the parsed output type. Preserve the
-// previous nested field defaults explicitly.
+// Zod 4 applies defaults before parsing through prefault; the persisted source
+// already uses this behavior. Keep the older intermediate form migratable if
+// this script is re-run against a partially upgraded branch.
 transform('web/modern/src/pages/channels/schemas.ts', (text) =>
-  text.replace(
-    '.default(() => ({})),',
-    ".default(() => ({ auth_type: 'personal_access_token', api_format: 'chat_completion' as const })),",
-  ),
+  text
+    .replace(
+      '.default(() => ({})),',
+      '.prefault({}),',
+    )
+    .replace(
+      ".default(() => ({ auth_type: 'personal_access_token', api_format: 'chat_completion' as const })),",
+      '.prefault({}),',
+    ),
 );
 
 // Keep the Recharts 3 ComponentProps import idempotent across validation runs.
@@ -186,7 +192,8 @@ globalThis.ResizeObserver = MockResizeObserver;`,
 );
 
 // Testing Library 16 correctly requires a label/control relationship. Add an
-// explicit stable ID instead of relying on wrapper structure.
+// explicit stable ID instead of relying on wrapper structure. Zod 4's unified
+// error API also requires an explicit error parameter for numeric bounds.
 transform('web/modern/src/pages/topup/TopUpPage.tsx', (text) =>
   text
     .replace(
@@ -196,7 +203,150 @@ transform('web/modern/src/pages/topup/TopUpPage.tsx', (text) =>
     .replace(
       '<Input\n                                type="number"',
       '<Input\n                                id="stripe-amount-usd"\n                                type="number"',
+    )
+    .replace(
+      ".min(minTopUpUSD, tr('stripe.min', `Minimum is $${minTopUpUSD}`, { value: minTopUpUSD }))",
+      ".min(minTopUpUSD, { error: tr('stripe.min', `Minimum is $${minTopUpUSD}`, { value: minTopUpUSD }) })",
+    )
+    .replace(
+      ".max(100000, tr('stripe.max', 'Amount too large'))",
+      ".max(100000, { error: tr('stripe.max', 'Amount too large') })",
     ),
+);
+
+// Tailwind 4 cannot @apply an arbitrary custom component selector. The actual
+// responsive card rules remain in mobile.css for .mobile-table, while the
+// generic .data-table class retains its own explicit component declarations.
+transform('web/modern/src/index.css', (text) =>
+  text.replace(
+    `
+  /* Mobile table enhancements */
+  @media (max-width: 768px) {
+    .data-table {
+      @apply mobile-table;
+    }
+  }
+`,
+    '\n',
+  ),
+);
+
+// Vite 8 uses Rolldown. Preserve the existing chunk strategy with the supported
+// function form and remove Rollup's obsolete treeshake preset property.
+write(
+  'web/modern/vite.config.ts',
+  `/// <reference types="vitest" />
+import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+const manualChunkGroups: Record<string, string[]> = {
+  vendor: ['react', 'react-dom'],
+  router: ['react-router-dom'],
+  'tanstack-query': ['@tanstack/react-query'],
+  'tanstack-table': ['@tanstack/react-table'],
+  'radix-ui-core': [
+    '@radix-ui/react-dialog',
+    '@radix-ui/react-dropdown-menu',
+    '@radix-ui/react-popover',
+    '@radix-ui/react-tooltip',
+  ],
+  'radix-ui-forms': [
+    '@radix-ui/react-checkbox',
+    '@radix-ui/react-label',
+    '@radix-ui/react-select',
+    '@radix-ui/react-switch',
+  ],
+  'radix-ui-layout': [
+    '@radix-ui/react-scroll-area',
+    '@radix-ui/react-separator',
+    '@radix-ui/react-slot',
+    '@radix-ui/react-tabs',
+    '@radix-ui/react-toast',
+    '@radix-ui/react-hover-card',
+  ],
+  'markdown-core': ['react-markdown', 'marked'],
+  'markdown-remark': ['remark-gfm', 'remark-math', 'remark-emoji'],
+  'markdown-rehype-highlight': ['rehype-highlight'],
+  'markdown-rehype-katex': ['rehype-katex', 'katex'],
+  'markdown-rehype-sanitize': ['rehype-sanitize'],
+  charts: ['recharts'],
+  'ui-utils': ['lucide-react', 'class-variance-authority', 'clsx', 'tailwind-merge', 'cmdk'],
+  forms: ['react-hook-form', '@hookform/resolvers', 'zod'],
+  network: ['axios'],
+  'misc-utils': ['qrcode', 'zustand'],
+};
+
+function manualChunks(moduleId: string): string | undefined {
+  const normalizedId = moduleId.replaceAll('\\\\', '/');
+  if (!normalizedId.includes('/node_modules/')) return undefined;
+
+  for (const [chunkName, packages] of Object.entries(manualChunkGroups)) {
+    if (packages.some((packageName) => normalizedId.includes(`/node_modules/${packageName}/`))) {
+      return chunkName;
+    }
+  }
+
+  return undefined;
+}
+
+// The build uses the latest locked caniuse-lite data. Suppress Browserslist's
+// age warning so CI stays deterministic when the system date is ahead of the
+// newest published browser metadata.
+process.env.BROWSERSLIST_IGNORE_OLD_DATA ??= '1';
+
+export default defineConfig(({ mode }) => ({
+  plugins: [react()],
+  resolve: {
+    alias: {
+      '@': path.resolve(__dirname, './src'),
+    },
+  },
+  build: {
+    outDir: '../build/modern',
+    sourcemap: mode === 'development',
+    chunkSizeWarningLimit: 500,
+    minify: 'esbuild',
+    target: 'esnext',
+    cssCodeSplit: true,
+    assetsInlineLimit: 4096,
+    reportCompressedSize: true,
+    esbuild: {
+      legalComments: 'none',
+      treeShaking: true,
+      minifyIdentifiers: true,
+      minifySyntax: true,
+      minifyWhitespace: true,
+    },
+    rollupOptions: {
+      treeshake: {
+        moduleSideEffects: 'no-external',
+        propertyReadSideEffects: false,
+        tryCatchDeoptimization: false,
+      },
+      external: [],
+      output: {
+        chunkFileNames: '[name].[hash].js',
+        manualChunks,
+      },
+    },
+  },
+  server: {
+    port: 3001,
+    proxy: {
+      '/api': { target: 'http://localhost:3000', changeOrigin: true },
+    },
+  },
+  test: {
+    globals: true,
+    environment: 'jsdom',
+    setupFiles: ['./src/test/setup.ts'],
+  },
+}));
+`,
 );
 
 console.log('Finalized Modern latest-stable compatibility configuration.');
