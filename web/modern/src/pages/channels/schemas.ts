@@ -56,7 +56,7 @@ export const createChannelSchema = (tr?: SchemaTranslationFn) => {
         tencent_secret_id: z.string().optional(),
         tencent_secret_key: z.string().optional(),
       })
-      .default(() => ({ auth_type: 'personal_access_token', api_format: 'chat_completion' })),
+      .default(() => ({ auth_type: 'personal_access_token', api_format: 'chat_completion' as const })),
     inference_profile_arn_map: z.string().optional(),
   });
 };
