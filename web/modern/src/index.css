@@ -209,12 +209,6 @@
     @apply bg-muted/30;
   }
 
-  /* Mobile table enhancements */
-  @media (max-width: 768px) {
-    .data-table {
-      @apply mobile-table;
-    }
-  }
 }
 
 /* Form enhancements */

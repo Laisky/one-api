@@ -93,8 +93,8 @@ export function TopUpPage() {
       z.object({
         amount_usd: z.coerce
           .number({ error: tr('stripe.required', 'Enter an amount in USD') })
-          .min(minTopUpUSD, tr('stripe.min', `Minimum is $${minTopUpUSD}`, { value: minTopUpUSD }))
-          .max(100000, tr('stripe.max', 'Amount too large')),
+          .min(minTopUpUSD, { error: tr('stripe.min', `Minimum is ${minTopUpUSD}`, { value: minTopUpUSD }) })
+          .max(100000, { error: tr('stripe.max', 'Amount too large') }),
       }),
     [minTopUpUSD, tr]
   );
