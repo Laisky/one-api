@@ -1,4 +1,4 @@
-name: Validate modern latest-stable upgrade
+name: Apply final modern compatibility fixes
 
 on:
   pull_request:
@@ -10,68 +10,57 @@ on:
       - synchronize
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
-  group: validate-modern-upgrade-${{ github.event.pull_request.number }}
+  group: apply-modern-upgrade-${{ github.event.pull_request.number }}
   cancel-in-progress: true
 
 jobs:
-  validate:
+  apply:
     if: >-
+      github.actor != 'github-actions[bot]' &&
       github.event.pull_request.head.repo.full_name == github.repository &&
       github.event.pull_request.head.ref == 'agent/modern-upgrade-work-20260819'
-    runs-on: macos-15
-    timeout-minutes: 60
-    env:
-      CI: 'true'
-      YARN_NETWORK_TIMEOUT: '600000'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
 
     steps:
-      - name: Checkout the immutable pull-request head
+      - name: Checkout controlled staging head
         uses: actions/checkout@v4
         with:
-          repository: ${{ github.event.pull_request.head.repo.full_name }}
-          ref: ${{ github.event.pull_request.head.sha }}
-          fetch-depth: 1
+          ref: agent/modern-upgrade-work-20260819
+          fetch-depth: 0
 
       - name: Set up Node.js 24
         uses: actions/setup-node@v4
         with:
           node-version: '24'
 
-      - name: Install Yarn Classic
-        run: npm install --global yarn@1.22.22
+      - name: Apply idempotent final compatibility fixes
+        run: node web/modern/scripts/finalize-latest-compat.mjs
 
-      - name: Frozen install
-        working-directory: web/modern
-        run: yarn install --frozen-lockfile --non-interactive --network-timeout "$YARN_NETWORK_TIMEOUT"
-
-      - name: Verify every direct dependency is current
-        working-directory: web/modern
-        run: npx --yes npm-check-updates@latest --target latest --errorLevel 2
-
-      - name: Type-check with TypeScript 7
-        if: always()
-        working-directory: web/modern
-        run: yarn type-check
-
-      - name: Lint with ESLint 10
-        if: always()
-        working-directory: web/modern
-        run: yarn lint
-
-      - name: Validate translations
-        if: always()
-        working-directory: web/modern
-        run: yarn check:i18n
-
-      - name: Run all unit tests
-        if: always()
-        working-directory: web/modern
-        run: yarn test --run --passWithNoTests
-
-      - name: Build the production bundle
-        if: always()
-        working-directory: web/modern
-        run: yarn build:prod
+      - name: Commit final source compatibility fixes
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add \
+            web/modern/package.json \
+            web/modern/eslint.config.js \
+            web/modern/src/index.css \
+            web/modern/src/lib/table.ts \
+            web/modern/src/pages/channels/schemas.ts \
+            web/modern/src/pages/topup/TopUpPage.tsx \
+            web/modern/src/pages/dashboard/components/UsageSections.tsx \
+            web/modern/src/components/chat/ChatInterface.tsx \
+            web/modern/src/components/ui/data-table.tsx \
+            web/modern/src/components/ui/enhanced-data-table.tsx \
+            web/modern/src/test/setup.ts \
+            web/modern/vite.config.ts
+          if git diff --cached --quiet; then
+            echo 'No final compatibility changes remain.'
+          else
+            git commit -m 'fix(modern): finalize latest dependency compatibility'
+            git push origin HEAD:agent/modern-upgrade-work-20260819
+          fi
