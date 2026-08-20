@@ -1,3 +1,6 @@
+import typography from '@tailwindcss/typography';
+import animate from 'tailwindcss-animate';
+
 /** @type {import('tailwindcss').Config} */
 export default {
   darkMode: ['class'],
@@ -175,8 +178,8 @@ export default {
     },
   },
   plugins: [
-    require('tailwindcss-animate'),
-    require('@tailwindcss/typography'),
+    animate,
+    typography,
     // Custom plugin for responsive utilities
     function ({ addUtilities, theme }) {
       const newUtilities = {

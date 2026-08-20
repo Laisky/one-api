@@ -14,7 +14,7 @@ import { api } from '@/lib/api';
 import { buildLarkOAuthUrl, buildOidcOAuthUrl, getOAuthState } from '@/lib/oauth';
 import { useAuthStore } from '@/lib/stores/auth';
 import { loadSystemStatus, type SystemStatus } from '@/lib/utils';
-import { zodResolver } from '@hookform/resolvers/zod';
+import { zodResolver } from '@/lib/zod-resolver';
 import { browserSupportsWebAuthn, startRegistration } from '@simplewebauthn/browser';
 import QRCode from 'qrcode';
 import { useEffect, useMemo, useState } from 'react';

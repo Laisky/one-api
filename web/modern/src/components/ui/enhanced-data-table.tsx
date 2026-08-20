@@ -4,8 +4,9 @@ import { SearchableDropdown, type SearchOption } from '@/components/ui/searchabl
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useResponsive } from '@/hooks/useResponsive';
 import { cn } from '@/lib/utils';
-import type { ColumnDef, SortingState } from '@tanstack/react-table';
-import { flexRender, getCoreRowModel, useReactTable } from '@tanstack/react-table';
+import { flexRender, type SortingState } from '@tanstack/react-table';
+import { getCoreRowModel, useLegacyTable as useReactTable } from '@tanstack/react-table/legacy';
+import type { LegacyColumnDef as ColumnDef } from '@tanstack/react-table/legacy';
 import { ArrowDown, ArrowUp, ArrowUpDown, RotateCcw, Search } from 'lucide-react';
 import * as React from 'react';
 import { createPortal } from 'react-dom';

@@ -6,7 +6,7 @@ import { ResponsivePageContainer } from '@/components/ui/responsive-container';
 import { api } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/lib/stores/auth';
-import { zodResolver } from '@hookform/resolvers/zod';
+import { zodResolver } from '@/lib/zod-resolver';
 import {
   AlertCircle,
   ArrowUpRight,
@@ -92,7 +92,7 @@ export function TopUpPage() {
     () =>
       z.object({
         amount_usd: z.coerce
-          .number({ invalid_type_error: tr('stripe.required', 'Enter an amount in USD') })
+          .number({ error: tr('stripe.required', 'Enter an amount in USD') })
           .min(minTopUpUSD, tr('stripe.min', `Minimum is $${minTopUpUSD}`, { value: minTopUpUSD }))
           .max(100000, tr('stripe.max', 'Amount too large')),
       }),

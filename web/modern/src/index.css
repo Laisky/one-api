@@ -1,9 +1,6 @@
-/* Import mobile responsive styles */
+@import 'tailwindcss';
 @import './styles/mobile.css';
-
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@config '../tailwind.config.js';
 
 @layer base {
   :root {
