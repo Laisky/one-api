@@ -1,4 +1,4 @@
-name: Apply final amount validation fix
+name: Validate modern latest-stable upgrade
 
 on:
   pull_request:
@@ -10,53 +10,68 @@ on:
       - synchronize
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
-  group: apply-final-amount-${{ github.event.pull_request.number }}
+  group: validate-modern-upgrade-${{ github.event.pull_request.number }}
   cancel-in-progress: true
 
 jobs:
-  apply:
+  validate:
     if: >-
-      github.actor != 'github-actions[bot]' &&
       github.event.pull_request.head.repo.full_name == github.repository &&
       github.event.pull_request.head.ref == 'agent/modern-upgrade-work-20260819'
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
+    runs-on: macos-15
+    timeout-minutes: 60
+    env:
+      CI: 'true'
+      YARN_NETWORK_TIMEOUT: '600000'
 
     steps:
-      - name: Checkout controlled staging head
+      - name: Checkout the immutable pull-request head
         uses: actions/checkout@v4
         with:
-          ref: agent/modern-upgrade-work-20260819
-          fetch-depth: 0
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 1
 
-      - name: Route dynamic minimum validation through Zod
-        run: |
-          set -euo pipefail
-          python3 <<'PY'
-          from pathlib import Path
+      - name: Set up Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
 
-          path = Path('web/modern/src/pages/topup/TopUpPage.tsx')
-          text = path.read_text()
-          old = '                                min={minTopUpUSD}\n'
-          if old in text:
-              text = text.replace(old, '', 1)
-          elif 'min={minTopUpUSD}' in text:
-              raise SystemExit('Unexpected amount-input indentation')
-          path.write_text(text)
-          PY
+      - name: Install Yarn Classic
+        run: npm install --global yarn@1.22.22
 
-      - name: Commit final amount validation fix
-        run: |
-          set -euo pipefail
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add web/modern/src/pages/topup/TopUpPage.tsx
-          if git diff --cached --quiet; then
-            echo 'Amount input already delegates minimum validation to Zod.'
-          else
-            git commit -m 'fix(modern): delegate dynamic minimum validation to Zod'
-            git push origin HEAD:agent/modern-upgrade-work-20260819
-          fi
+      - name: Frozen install
+        working-directory: web/modern
+        run: yarn install --frozen-lockfile --non-interactive --network-timeout "$YARN_NETWORK_TIMEOUT"
+
+      - name: Verify every direct dependency is current
+        working-directory: web/modern
+        run: npx --yes npm-check-updates@latest --target latest --errorLevel 2
+
+      - name: Type-check with TypeScript 7
+        if: always()
+        working-directory: web/modern
+        run: yarn type-check
+
+      - name: Lint with ESLint 10
+        if: always()
+        working-directory: web/modern
+        run: yarn lint
+
+      - name: Validate translations
+        if: always()
+        working-directory: web/modern
+        run: yarn check:i18n
+
+      - name: Run all unit tests
+        if: always()
+        working-directory: web/modern
+        run: yarn test --run --passWithNoTests
+
+      - name: Build the production bundle
+        if: always()
+        working-directory: web/modern
+        run: yarn build:prod
