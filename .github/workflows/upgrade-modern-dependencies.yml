@@ -30,6 +30,7 @@ jobs:
       YARN_NETWORK_TIMEOUT: '600000'
       UPGRADE_BRANCH: ${{ github.event.pull_request.head.ref }}
       DIAGNOSTIC_FILE: .github/modern-upgrade-diagnostics.md
+      VITEST_FILE: .github/modern-upgrade-vitest.json
 
     steps:
       - name: Checkout isolated work branch
@@ -58,6 +59,7 @@ jobs:
           rm -f package-lock.json
           cd ../..
           node web/modern/scripts/apply-latest-compat.mjs
+          node web/modern/scripts/finalize-latest-compat.mjs
 
       - name: Persist dependency targets and compatibility source changes
         run: |
@@ -120,8 +122,14 @@ jobs:
           rm -f web/modern/tsconfig.tsbuildinfo
 
           if [ "$overall" -eq 0 ]; then
-            rm -f "$DIAGNOSTIC_FILE"
+            rm -f "$DIAGNOSTIC_FILE" "$VITEST_FILE"
           else
+            if [ -f "$logs/vitest.json" ]; then
+              cp "$logs/vitest.json" "$VITEST_FILE"
+            else
+              rm -f "$VITEST_FILE"
+            fi
+
             {
               echo '# Modern latest-stable compatibility diagnostics'
               echo
@@ -141,22 +149,34 @@ jobs:
                 echo
                 python3 - "$logs/vitest.json" <<'PY'
           import json
+          import re
           import sys
 
+          ansi = re.compile(r'\x1b\[[0-9;]*m')
           with open(sys.argv[1], encoding='utf-8') as handle:
               report = json.load(handle)
 
           print(f"- suites: {report.get('numTotalTestSuites', 0)} total, {report.get('numFailedTestSuites', 0)} failed")
           print(f"- tests: {report.get('numTotalTests', 0)} total, {report.get('numFailedTests', 0)} failed")
+
           failed = []
           for result in report.get('testResults', []):
               for assertion in result.get('assertionResults', []):
-                  if assertion.get('status') == 'failed':
-                      failed.append(' > '.join(assertion.get('ancestorTitles', []) + [assertion.get('title', '')]))
+                  if assertion.get('status') != 'failed':
+                      continue
+                  name = ' > '.join(assertion.get('ancestorTitles', []) + [assertion.get('title', '')])
+                  messages = assertion.get('failureMessages') or []
+                  message = ansi.sub('', messages[0]) if messages else ''
+                  failed.append((name, message))
+
           if failed:
               print('\n```text')
-              for name in failed:
+              for name, message in failed:
                   print(name)
+                  if message:
+                      lines = [line for line in message.splitlines() if line.strip()]
+                      for line in lines[:12]:
+                          print(f"  {line}")
               print('```')
           PY
               fi
