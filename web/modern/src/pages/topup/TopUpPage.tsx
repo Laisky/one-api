@@ -484,7 +484,7 @@ export function TopUpPage() {
               </CardHeader>
               <CardContent>
                 <Form {...stripeForm}>
-                  <form onSubmit={stripeForm.handleSubmit(onStripeSubmit)} className="space-y-5">
+                  <form noValidate onSubmit={stripeForm.handleSubmit(onStripeSubmit)} className="space-y-5">
                     <div className="flex flex-wrap gap-2">
                       {presets.map((amount) => {
                         const active = Number(watchedAmount) === amount;
