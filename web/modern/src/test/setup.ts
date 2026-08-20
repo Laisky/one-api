@@ -77,12 +77,18 @@ Object.defineProperty(window, 'matchMedia', {
   })),
 });
 
-// Mock ResizeObserver
-globalThis.ResizeObserver = vi.fn().mockImplementation(() => ({
-  observe: vi.fn(),
-  unobserve: vi.fn(),
-  disconnect: vi.fn(),
-}));
+// Mock ResizeObserver with a real constructable class for Vitest 4.
+class MockResizeObserver implements ResizeObserver {
+  constructor(_callback: ResizeObserverCallback) {}
+
+  observe(_target: Element, _options?: ResizeObserverOptions) {}
+
+  unobserve(_target: Element) {}
+
+  disconnect() {}
+}
+
+globalThis.ResizeObserver = MockResizeObserver;
 
 // Polyfill pointer capture APIs used by Radix UI under jsdom
 if (!HTMLElement.prototype.hasPointerCapture) {
@@ -102,7 +108,6 @@ if (typeof window.PointerEvent === 'undefined') {
       super(type, props);
     }
   }
-  // @ts-expect-error assigning test-only PointerEvent polyfill for jsdom
   window.PointerEvent = MockPointerEvent as unknown as typeof PointerEvent;
 }
 

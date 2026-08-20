@@ -1,8 +1,16 @@
-import { rowPaginationFeature, rowSortingFeature, tableFeatures } from '@tanstack/react-table';
+import {
+  columnVisibilityFeature,
+  rowPaginationFeature,
+  rowSelectionFeature,
+  rowSortingFeature,
+  tableFeatures,
+} from '@tanstack/react-table';
 import type { ColumnDef, RowData } from '@tanstack/react-table';
 
 export const modernTableFeatures = tableFeatures({
+  columnVisibilityFeature,
   rowPaginationFeature,
+  rowSelectionFeature,
   rowSortingFeature,
 });
 

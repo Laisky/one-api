@@ -215,7 +215,7 @@ export function EnhancedDataTable<TData extends RowData, TValue = unknown>({
   const table = useTable({
     features: modernTableFeatures,
     data,
-    columns: enhancedColumns,
+    columns: enhancedColumns as ColumnDef<TData, unknown>[],
     state: {
       sorting,
       pagination: {
