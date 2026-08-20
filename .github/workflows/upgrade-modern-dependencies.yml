@@ -1,4 +1,4 @@
-name: Apply final Modern compatibility fixes
+name: Validate modern latest-stable upgrade
 
 on:
   pull_request:
@@ -10,29 +10,30 @@ on:
       - synchronize
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
-  group: apply-final-modern-${{ github.event.pull_request.number }}
+  group: validate-modern-upgrade-${{ github.event.pull_request.number }}
   cancel-in-progress: true
 
 jobs:
-  apply:
+  validate:
     if: >-
-      github.actor != 'github-actions[bot]' &&
       github.event.pull_request.head.repo.full_name == github.repository &&
       github.event.pull_request.head.ref == 'agent/modern-upgrade-work-20260819'
     runs-on: macos-15
-    timeout-minutes: 20
+    timeout-minutes: 60
     env:
+      CI: 'true'
       YARN_NETWORK_TIMEOUT: '600000'
 
     steps:
-      - name: Checkout controlled staging head
+      - name: Checkout the immutable pull-request head
         uses: actions/checkout@v4
         with:
-          ref: agent/modern-upgrade-work-20260819
-          fetch-depth: 0
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 1
 
       - name: Set up Node.js 24
         uses: actions/setup-node@v4
@@ -42,41 +43,35 @@ jobs:
       - name: Install Yarn Classic
         run: npm install --global yarn@1.22.22
 
-      - name: Delegate amount validation to React Hook Form and Zod
-        run: |
-          set -euo pipefail
-          python3 <<'PY'
-          from pathlib import Path
-
-          path = Path('web/modern/src/pages/topup/TopUpPage.tsx')
-          text = path.read_text()
-          old = '<form onSubmit={stripeForm.handleSubmit(onStripeSubmit)} className="space-y-5">'
-          new = '<form noValidate onSubmit={stripeForm.handleSubmit(onStripeSubmit)} className="space-y-5">'
-          if old in text:
-              text = text.replace(old, new, 1)
-          elif new not in text:
-              raise SystemExit('Stripe form declaration could not be located')
-          path.write_text(text)
-          PY
-
-      - name: Install the Vite 8 esbuild peer at latest stable
+      - name: Frozen install
         working-directory: web/modern
-        run: |
-          yarn add --dev esbuild@latest --non-interactive --network-timeout "$YARN_NETWORK_TIMEOUT"
-          npx --yes npm-check-updates@latest --target latest --errorLevel 2
+        run: yarn install --frozen-lockfile --non-interactive --network-timeout "$YARN_NETWORK_TIMEOUT"
 
-      - name: Commit final compatibility fixes
-        run: |
-          set -euo pipefail
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add \
-            web/modern/package.json \
-            web/modern/yarn.lock \
-            web/modern/src/pages/topup/TopUpPage.tsx
-          if git diff --cached --quiet; then
-            echo 'No final compatibility changes remain.'
-          else
-            git commit -m 'fix(modern): complete Vite 8 and form validation migration'
-            git push origin HEAD:agent/modern-upgrade-work-20260819
-          fi
+      - name: Verify every direct dependency is current
+        working-directory: web/modern
+        run: npx --yes npm-check-updates@latest --target latest --errorLevel 2
+
+      - name: Type-check with TypeScript 7
+        if: always()
+        working-directory: web/modern
+        run: yarn type-check
+
+      - name: Lint with ESLint 10
+        if: always()
+        working-directory: web/modern
+        run: yarn lint
+
+      - name: Validate translations
+        if: always()
+        working-directory: web/modern
+        run: yarn check:i18n
+
+      - name: Run all unit tests
+        if: always()
+        working-directory: web/modern
+        run: yarn test --run --passWithNoTests
+
+      - name: Build the production bundle
+        if: always()
+        working-directory: web/modern
+        run: yarn build:prod
