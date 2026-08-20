@@ -1,4 +1,4 @@
-name: Apply final Modern validation fixes
+name: Validate modern latest-stable upgrade
 
 on:
   pull_request:
@@ -10,29 +10,30 @@ on:
       - synchronize
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
-  group: apply-final-modern-${{ github.event.pull_request.number }}
+  group: validate-modern-upgrade-${{ github.event.pull_request.number }}
   cancel-in-progress: true
 
 jobs:
-  apply:
+  validate:
     if: >-
-      github.actor != 'github-actions[bot]' &&
       github.event.pull_request.head.repo.full_name == github.repository &&
       github.event.pull_request.head.ref == 'agent/modern-upgrade-work-20260819'
     runs-on: macos-15
-    timeout-minutes: 20
+    timeout-minutes: 60
     env:
+      CI: 'true'
       YARN_NETWORK_TIMEOUT: '600000'
 
     steps:
-      - name: Checkout controlled staging head
+      - name: Checkout the immutable pull-request head
         uses: actions/checkout@v4
         with:
-          ref: agent/modern-upgrade-work-20260819
-          fetch-depth: 0
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 1
 
       - name: Set up Node.js 24
         uses: actions/setup-node@v4
@@ -42,111 +43,35 @@ jobs:
       - name: Install Yarn Classic
         run: npm install --global yarn@1.22.22
 
-      - name: Apply final source and configuration fixes
-        run: |
-          set -euo pipefail
-          python3 <<'PY'
-          import json
-          import re
-          from pathlib import Path
-
-          topup = Path('web/modern/src/pages/topup/TopUpPage.tsx')
-          text = topup.read_text()
-          text = text.replace(
-              ".min(minTopUpUSD, { error: tr('stripe.min', `Minimum is ${minTopUpUSD}`, { value: minTopUpUSD }) })",
-              ".min(minTopUpUSD, { error: tr('stripe.min', `Minimum is $${minTopUpUSD}`, { value: minTopUpUSD }) })",
-          )
-          guard = """    if (data.amount_usd < minTopUpUSD) {
-              stripeForm.setError('amount_usd', {
-                type: 'min',
-                message: tr('stripe.min', `Minimum is $${minTopUpUSD}`, { value: minTopUpUSD }),
-              });
-              return;
-            }
-          """
-          if "type: 'min'" not in text:
-              text, count = re.subn(
-                  r"(  const onStripeSubmit = async \(data: StripeForm\) => \{\n)(\s*)setIsStripeSubmitting\(true\);",
-                  lambda match: match.group(1) + guard + match.group(2) + 'setIsStripeSubmitting(true);',
-                  text,
-                  count=1,
-              )
-              if count != 1:
-                  raise SystemExit('TopUp submit handler could not be located')
-          topup.write_text(text)
-
-          tailwind = Path('web/modern/tailwind.config.js')
-          text = tailwind.read_text()
-          for line in [
-              "      touch: { raw: '(hover: none) and (pointer: coarse)' },\n",
-              "      'no-touch': { raw: '(hover: hover) and (pointer: fine)' },\n",
-              "      portrait: { raw: '(orientation: portrait)' },\n",
-              "      landscape: { raw: '(orientation: landscape)' },\n",
-              "      'reduce-motion': { raw: '(prefers-reduced-motion: reduce)' },\n",
-              "      'high-contrast': { raw: '(prefers-contrast: high)' },\n",
-          ]:
-              text = text.replace(line, '')
-          tailwind.write_text(text)
-
-          css = Path('web/modern/src/index.css')
-          text = css.read_text()
-          marker = "@config '../tailwind.config.js';\n"
-          variants = """@custom-variant touch (@media (hover: none) and (pointer: coarse));
-          @custom-variant no-touch (@media (hover: hover) and (pointer: fine));
-          @custom-variant portrait (@media (orientation: portrait));
-          @custom-variant landscape (@media (orientation: landscape));
-          @custom-variant reduce-motion (@media (prefers-reduced-motion: reduce));
-          @custom-variant high-contrast (@media (prefers-contrast: high));
-          """
-          if '@custom-variant touch ' not in text:
-              if marker not in text:
-                  raise SystemExit('Tailwind config marker missing from index.css')
-              text = text.replace(marker, marker + '\n' + variants)
-          css.write_text(text)
-
-          vite = Path('web/modern/vite.config.ts')
-          vite.write_text(vite.read_text().replace("        tryCatchDeoptimization: false,\n", ''))
-
-          package_path = Path('web/modern/package.json')
-          package_json = json.loads(package_path.read_text())
-          package_json['dependencies']['react-is'] = '^19.2.8'
-          package_json['dependencies'] = dict(sorted(package_json['dependencies'].items()))
-          package_path.write_text(json.dumps(package_json, indent=2) + '\n')
-
-          for temporary in [
-              Path('web/modern/scripts/apply-latest-compat.mjs'),
-              Path('web/modern/scripts/finalize-latest-compat.mjs'),
-              Path('.github/modern-upgrade-diagnostics.md'),
-              Path('.github/modern-upgrade-vitest.json'),
-          ]:
-              temporary.unlink(missing_ok=True)
-          PY
-
-      - name: Regenerate lockfile and validate direct versions
+      - name: Frozen install
         working-directory: web/modern
-        run: |
-          rm -rf node_modules
-          yarn install --non-interactive --network-timeout "$YARN_NETWORK_TIMEOUT"
-          npx --yes npm-check-updates@latest --target latest --errorLevel 2
+        run: yarn install --frozen-lockfile --non-interactive --network-timeout "$YARN_NETWORK_TIMEOUT"
 
-      - name: Commit final validation fixes
-        run: |
-          set -euo pipefail
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add -A \
-            web/modern/package.json \
-            web/modern/yarn.lock \
-            web/modern/tailwind.config.js \
-            web/modern/vite.config.ts \
-            web/modern/src/index.css \
-            web/modern/src/pages/topup/TopUpPage.tsx \
-            web/modern/scripts \
-            .github/modern-upgrade-diagnostics.md \
-            .github/modern-upgrade-vitest.json
-          if git diff --cached --quiet; then
-            echo 'No final validation fixes remain.'
-          else
-            git commit -m 'fix(modern): resolve final latest-dependency validation issues'
-            git push origin HEAD:agent/modern-upgrade-work-20260819
-          fi
+      - name: Verify every direct dependency is current
+        working-directory: web/modern
+        run: npx --yes npm-check-updates@latest --target latest --errorLevel 2
+
+      - name: Type-check with TypeScript 7
+        if: always()
+        working-directory: web/modern
+        run: yarn type-check
+
+      - name: Lint with ESLint 10
+        if: always()
+        working-directory: web/modern
+        run: yarn lint
+
+      - name: Validate translations
+        if: always()
+        working-directory: web/modern
+        run: yarn check:i18n
+
+      - name: Run all unit tests
+        if: always()
+        working-directory: web/modern
+        run: yarn test --run --passWithNoTests
+
+      - name: Build the production bundle
+        if: always()
+        working-directory: web/modern
+        run: yarn build:prod
