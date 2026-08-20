@@ -506,13 +506,14 @@ export function TopUpPage() {
                       name="amount_usd"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>{tr('stripe.label', 'Amount (USD)')}</FormLabel>
+                          <FormLabel htmlFor="stripe-amount-usd">{tr('stripe.label', 'Amount (USD)')}</FormLabel>
                           <FormControl>
                             <div className="relative">
                               <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-sm text-muted-foreground">
                                 $
                               </span>
                               <Input
+                                id="stripe-amount-usd"
                                 type="number"
                                 inputMode="decimal"
                                 min={minTopUpUSD}
