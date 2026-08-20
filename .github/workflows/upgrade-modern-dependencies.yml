@@ -112,7 +112,7 @@ jobs:
           run_check type-check yarn --cwd web/modern type-check
           run_check lint yarn --cwd web/modern lint
           run_check i18n yarn --cwd web/modern check:i18n
-          run_check unit-tests yarn --cwd web/modern test --run --passWithNoTests
+          run_check unit-tests bash -lc "cd web/modern && yarn test --run --passWithNoTests --reporter=json --outputFile=${logs}/vitest.json"
           run_check production-build yarn --cwd web/modern build:prod
           run_check frozen-lockfile bash -lc 'cd web/modern && rm -rf node_modules && yarn install --frozen-lockfile --non-interactive --network-timeout 600000'
 
@@ -134,6 +134,33 @@ jobs:
               echo '```text'
               cat "$logs/status"
               echo '```'
+
+              if [ -f "$logs/vitest.json" ]; then
+                echo
+                echo '## Vitest summary'
+                echo
+                python3 - "$logs/vitest.json" <<'PY'
+          import json
+          import sys
+
+          with open(sys.argv[1], encoding='utf-8') as handle:
+              report = json.load(handle)
+
+          print(f"- suites: {report.get('numTotalTestSuites', 0)} total, {report.get('numFailedTestSuites', 0)} failed")
+          print(f"- tests: {report.get('numTotalTests', 0)} total, {report.get('numFailedTests', 0)} failed")
+          failed = []
+          for result in report.get('testResults', []):
+              for assertion in result.get('assertionResults', []):
+                  if assertion.get('status') == 'failed':
+                      failed.append(' > '.join(assertion.get('ancestorTitles', []) + [assertion.get('title', '')]))
+          if failed:
+              print('\n```text')
+              for name in failed:
+                  print(name)
+              print('```')
+          PY
+              fi
+
               for log in "$logs"/*.log; do
                 name=$(basename "$log" .log)
                 code=$(awk -F= -v name="$name" '$1 == name { print $2 }' "$logs/status" | tail -n1)
