@@ -2,8 +2,8 @@
 
 Source baseline: `f62501f2fc43a7eca87c723f3cab907fca00039d`
 
-Staging workflow base: `dbe925b727dea25dfa996075f2ff0a9ffaea40cf`
+Staging workflow base: `605168b013ed41816f2f5191cc82ce43415df197`
 
-Runner generation: `apply-form-vite-final-1`
+Runner generation: `immutable-release-candidate-1`
 
 This file is temporary and must not appear in the final production PR.
