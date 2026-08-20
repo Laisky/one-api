@@ -2,8 +2,8 @@
 
 Source baseline: `f62501f2fc43a7eca87c723f3cab907fca00039d`
 
-Staging workflow base: `3d781fb2c6ffa12f67d5213285113256aa406c1d`
+Staging workflow base: `3d6e21a4832cba450f0864a46823bc9eefcf7a53`
 
-Runner generation: `macos-15-compat-2`
+Runner generation: `macos-15-compat-3`
 
 This file is temporary and must not appear in the final production PR.
