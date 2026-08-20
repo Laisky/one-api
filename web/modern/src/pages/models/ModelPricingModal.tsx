@@ -3,9 +3,16 @@ import { CopyButton } from '@/components/ui/copy-button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Separator } from '@/components/ui/separator';
 import { useResponsive } from '@/hooks/useResponsive';
+import { cn } from '@/lib/utils';
 import { formatTierThreshold } from '@/pages/models/tier-threshold';
+import {
+  NO_ACTIVE_TIME_WINDOW,
+  UNRESOLVED_TIME_WINDOWS,
+  resolveActiveTimeWindowIndex,
+  timeWindowScheduleSignature,
+} from '@/pages/models/time-window';
 import { X } from 'lucide-react';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 
@@ -115,6 +122,43 @@ interface TimeWindowOverlayData {
   image_pricing?: ImagePricingData;
   embedding_pricing?: EmbeddingPricingData;
   per_call_pricing?: PerCallPricingData;
+}
+
+// ---- Active time window tracking ----
+
+/** How often the active pricing window is re-evaluated against the wall clock. */
+const ACTIVE_WINDOW_POLL_MS = 1000;
+
+/**
+ * useActiveTimeWindowIndex tracks which pricing window is active right now.
+ * Parameters: windows is the ordered window list rendered by the pricing modal.
+ * Returns: the active window index, NO_ACTIVE_TIME_WINDOW when none matches, or
+ * UNRESOLVED_TIME_WINDOWS when the runtime cannot evaluate any window.
+ *
+ * The interval is owned by the mounted content, so closing the modal or
+ * switching models tears it down before a new one starts: at most one timer
+ * exists per mounted pricing panel.
+ */
+function useActiveTimeWindowIndex(windows: TimeWindowData[] | undefined): number {
+  const windowsRef = useRef(windows);
+  windowsRef.current = windows;
+  const signature = useMemo(() => timeWindowScheduleSignature(windows), [windows]);
+  const [activeIndex, setActiveIndex] = useState(() => resolveActiveTimeWindowIndex(windows, new Date()));
+
+  useEffect(() => {
+    const evaluate = () => {
+      const next = resolveActiveTimeWindowIndex(windowsRef.current, new Date());
+      // Only commit real transitions so the modal does not re-render every second.
+      setActiveIndex((prev) => (prev === next ? prev : next));
+    };
+    evaluate();
+    const timer = setInterval(evaluate, ACTIVE_WINDOW_POLL_MS);
+    return () => clearInterval(timer);
+    // `signature` covers every schedule field read by the evaluator; the latest
+    // window list itself is always read through windowsRef.
+  }, [signature]);
+
+  return activeIndex;
 }
 
 // ---- Props ----
@@ -356,6 +400,7 @@ function PricingContent({
   tr: TrFn;
   locale: string;
 }) {
+  const activeTimeWindowIndex = useActiveTimeWindowIndex(data.time_windows);
   const hasCache =
     (data.cached_input_price !== undefined && data.cached_input_price !== data.input_price) ||
     (data.cache_write_5m_price !== undefined && data.cache_write_5m_price > 0) ||
@@ -552,13 +597,29 @@ function PricingContent({
           <div className="space-y-3">
             {data.time_windows.map((window, index) => {
               const label = window.name || `${tr('window_name', 'Window')} ${index + 1}`;
-              const isActive = data.active_time_window && window.name === data.active_time_window;
+              // Fall back to the server-rendered name only when the browser cannot
+              // evaluate the schedules itself (missing timezone data).
+              const isActive =
+                activeTimeWindowIndex === UNRESOLVED_TIME_WINDOWS
+                  ? Boolean(data.active_time_window && window.name === data.active_time_window)
+                  : activeTimeWindowIndex !== NO_ACTIVE_TIME_WINDOW && activeTimeWindowIndex === index;
               return (
-                <div key={`${label}-${index}`} className="rounded-lg border bg-muted/20 p-3">
+                <div
+                  key={`${label}-${index}`}
+                  aria-current={isActive ? 'true' : undefined}
+                  className={cn(
+                    'rounded-lg border p-3 transition-colors',
+                    isActive ? 'border-accent/50 bg-accent/[0.07] ring-1 ring-accent/20' : 'bg-muted/20'
+                  )}
+                >
                   <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div className="font-medium">{label}</div>
+                    <div className={cn('font-medium', isActive && 'text-accent')}>{label}</div>
                     {isActive && (
-                      <Badge variant="secondary" className="text-xs">
+                      <Badge variant="outline" className="gap-1.5 border-accent/40 bg-accent/10 text-xs text-accent">
+                        <span className="relative flex h-1.5 w-1.5">
+                          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-accent opacity-60 reduce-motion:hidden" />
+                          <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-accent" />
+                        </span>
                         {tr('window_active', 'Active now')}
                       </Badge>
                     )}
