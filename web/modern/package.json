@@ -5,13 +5,13 @@
   "type": "module",
   "scripts": {
     "dev": "vite --host 0.0.0.0",
-    "build": "tsgo -b && vite build --emptyOutDir",
-    "build:prod": "tsgo -b && vite build --mode production --emptyOutDir",
+    "build": "tsc -b && vite build --emptyOutDir",
+    "build:prod": "tsc -b && vite build --mode production --emptyOutDir",
     "preview": "vite preview",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "check:i18n": "node scripts/check-i18n-locales.mjs",
-    "type-check": "tsgo --noEmit",
+    "type-check": "tsc --noEmit",
     "test": "vitest",
     "test:ui": "vitest --ui"
   },
