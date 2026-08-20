@@ -142,7 +142,7 @@ transform('web/modern/src/components/chat/ChatInterface.tsx', (text) =>
 transform('web/modern/src/pages/channels/schemas.ts', (text) =>
   text.replace(
     '.default(() => ({})),',
-    ".default(() => ({ auth_type: 'personal_access_token', api_format: 'chat_completion' })),",
+    ".default(() => ({ auth_type: 'personal_access_token', api_format: 'chat_completion' as const })),",
   ),
 );
 
@@ -182,6 +182,20 @@ globalThis.ResizeObserver = MockResizeObserver;`,
     .replace(
       '  // @ts-expect-error assigning test-only PointerEvent polyfill for jsdom\n',
       '',
+    ),
+);
+
+// Testing Library 16 correctly requires a label/control relationship. Add an
+// explicit stable ID instead of relying on wrapper structure.
+transform('web/modern/src/pages/topup/TopUpPage.tsx', (text) =>
+  text
+    .replace(
+      "<FormLabel>{tr('stripe.label', 'Amount (USD)')}</FormLabel>",
+      "<FormLabel htmlFor=\"stripe-amount-usd\">{tr('stripe.label', 'Amount (USD)')}</FormLabel>",
+    )
+    .replace(
+      '<Input\n                                type="number"',
+      '<Input\n                                id="stripe-amount-usd"\n                                type="number"',
     ),
 );
 
