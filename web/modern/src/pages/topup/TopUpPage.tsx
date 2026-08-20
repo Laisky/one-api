@@ -93,7 +93,7 @@ export function TopUpPage() {
       z.object({
         amount_usd: z.coerce
           .number({ error: tr('stripe.required', 'Enter an amount in USD') })
-          .min(minTopUpUSD, { error: tr('stripe.min', `Minimum is ${minTopUpUSD}`, { value: minTopUpUSD }) })
+          .min(minTopUpUSD, { error: tr('stripe.min', `Minimum is $${minTopUpUSD}`, { value: minTopUpUSD }) })
           .max(100000, { error: tr('stripe.max', 'Amount too large') }),
       }),
     [minTopUpUSD, tr]
@@ -275,6 +275,13 @@ export function TopUpPage() {
 
   /** onStripeSubmit creates a Checkout Session and redirects the browser to Stripe. */
   const onStripeSubmit = async (data: StripeForm) => {
+    if (data.amount_usd < minTopUpUSD) {
+    stripeForm.setError('amount_usd', {
+      type: 'min',
+      message: tr('stripe.min', `Minimum is $${minTopUpUSD}`, { value: minTopUpUSD }),
+    });
+    return;
+  }
     setIsStripeSubmitting(true);
     try {
       const res = await api.post('/api/user/topup/stripe', { amount_usd: data.amount_usd });

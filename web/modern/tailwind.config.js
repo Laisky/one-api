@@ -35,15 +35,9 @@ export default {
       tablet: { min: '768px', max: '1023px' },
       desktop: { min: '1024px' },
       // Touch device detection
-      touch: { raw: '(hover: none) and (pointer: coarse)' },
-      'no-touch': { raw: '(hover: hover) and (pointer: fine)' },
       // Orientation
-      portrait: { raw: '(orientation: portrait)' },
-      landscape: { raw: '(orientation: landscape)' },
       // Reduced motion
-      'reduce-motion': { raw: '(prefers-reduced-motion: reduce)' },
       // High contrast
-      'high-contrast': { raw: '(prefers-contrast: high)' },
     },
     extend: {
       colors: {

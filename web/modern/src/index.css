@@ -2,6 +2,13 @@
 @import './styles/mobile.css';
 @config '../tailwind.config.js';
 
+@custom-variant touch (@media (hover: none) and (pointer: coarse));
+@custom-variant no-touch (@media (hover: hover) and (pointer: fine));
+@custom-variant portrait (@media (orientation: portrait));
+@custom-variant landscape (@media (orientation: landscape));
+@custom-variant reduce-motion (@media (prefers-reduced-motion: reduce));
+@custom-variant high-contrast (@media (prefers-contrast: high));
+
 @layer base {
   :root {
     /* Slate & Teal — clean, modern, data-forward */
