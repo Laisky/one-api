@@ -18,7 +18,7 @@ import { api } from '@/lib/api';
 import { useAuthStore } from '@/lib/stores/auth';
 import { cn, renderQuota } from '@/lib/utils';
 import { zodResolver } from '@/lib/zod-resolver';
-import type { LegacyColumnDef as ColumnDef } from '@tanstack/react-table/legacy';
+import type { ModernColumnDef as ColumnDef } from '@/lib/table';
 import { Ban, CheckCircle, CreditCard, Settings, ShieldOff, Trash2 } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';

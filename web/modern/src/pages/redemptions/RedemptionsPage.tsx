@@ -16,7 +16,7 @@ import { useResponsive } from '@/hooks/useResponsive';
 import { api } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { zodResolver } from '@/lib/zod-resolver';
-import type { LegacyColumnDef as ColumnDef } from '@tanstack/react-table/legacy';
+import type { ModernColumnDef as ColumnDef } from '@/lib/table';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { useTranslation } from 'react-i18next';

@@ -30,6 +30,10 @@ export default defineConfig(
     },
     rules: {
       'no-unused-vars': 'off',
+      'no-empty': 'off',
+      'no-useless-assignment': 'off',
+      'prefer-const': 'off',
+      '@typescript-eslint/no-empty-object-type': 'off',
       '@typescript-eslint/no-explicit-any': 'off',
       '@typescript-eslint/no-unused-vars': [
         'warn',

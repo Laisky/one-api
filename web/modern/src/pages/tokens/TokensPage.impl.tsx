@@ -18,7 +18,7 @@ import { useResponsive } from '@/hooks/useResponsive';
 import { api } from '@/lib/api';
 import { useAuthStore } from '@/lib/stores/auth';
 import { cn, renderQuota } from '@/lib/utils';
-import type { LegacyColumnDef as ColumnDef } from '@tanstack/react-table/legacy';
+import type { ModernColumnDef as ColumnDef } from '@/lib/table';
 import { Ban, Check, CheckCircle, Copy, ExternalLink, Eye, EyeOff, Plus, Settings, Trash2 } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';

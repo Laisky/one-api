@@ -362,8 +362,7 @@ export function EditTokenPage() {
 
   return (
     // Trigger layout diagnostics after render
-    // eslint-disable-next-line react/jsx-no-useless-fragment
-    <>
+        <>
       {(() => {
         logEditPageLayout('EditTokenPage');
         return null;

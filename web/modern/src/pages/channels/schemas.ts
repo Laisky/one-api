@@ -44,9 +44,9 @@ export const createChannelSchema = (tr?: SchemaTranslationFn) => {
         supported_endpoints: z.array(z.string()).optional(),
         // Per-endpoint full upstream URL overrides, keyed by endpoint name.
         // An empty/absent value for an endpoint means "use the default URL".
-        endpoint_urls: z.record(z.string()).optional(),
+        endpoint_urls: z.record(z.string(), z.string()).optional(),
         mcp_tool_blacklist: z.array(z.string()).optional(),
-        custom_headers: z.record(z.string()).optional(),
+        custom_headers: z.record(z.string(), z.string()).optional(),
         // iFlytek Spark (type 18): APPID|APISecret|APIKey
         spark_app_id: z.string().optional(),
         spark_api_secret: z.string().optional(),
@@ -56,7 +56,7 @@ export const createChannelSchema = (tr?: SchemaTranslationFn) => {
         tencent_secret_id: z.string().optional(),
         tencent_secret_key: z.string().optional(),
       })
-      .default({}),
+      .default(() => ({})),
     inference_profile_arn_map: z.string().optional(),
   });
 };

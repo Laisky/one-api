@@ -16,7 +16,7 @@ import { useResponsive } from '@/hooks/useResponsive';
 import { api } from '@/lib/api';
 import { cn, formatTimestamp } from '@/lib/utils';
 import { NameWithId } from '@/components/shared/NameWithId';
-import type { LegacyColumnDef as ColumnDef } from '@tanstack/react-table/legacy';
+import type { ModernColumnDef as ColumnDef } from '@/lib/table';
 import { Ban, Banknote, CheckCircle, ChevronDown, Copy, FlaskConical, Plus, RefreshCw, Settings, Trash2 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';

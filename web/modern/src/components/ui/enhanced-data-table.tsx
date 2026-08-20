@@ -4,9 +4,8 @@ import { SearchableDropdown, type SearchOption } from '@/components/ui/searchabl
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useResponsive } from '@/hooks/useResponsive';
 import { cn } from '@/lib/utils';
-import { flexRender, type SortingState } from '@tanstack/react-table';
-import { getCoreRowModel, useLegacyTable as useReactTable } from '@tanstack/react-table/legacy';
-import type { LegacyColumnDef as ColumnDef } from '@tanstack/react-table/legacy';
+import { flexRender, type RowData, type SortingState, useTable } from '@tanstack/react-table';
+import { modernTableFeatures, type ModernColumnDef as ColumnDef } from '@/lib/table';
 import { ArrowDown, ArrowUp, ArrowUpDown, RotateCcw, Search } from 'lucide-react';
 import * as React from 'react';
 import { createPortal } from 'react-dom';
@@ -14,7 +13,7 @@ import { useTranslation } from 'react-i18next';
 
 const INTERACTIVE_ROW_TARGET_SELECTOR = ['button', 'a[href]', 'input', 'select', 'textarea', '[role="button"]', '[role="link"]'].join(', ');
 
-export interface EnhancedDataTableProps<TData, TValue> {
+export interface EnhancedDataTableProps<TData extends RowData, TValue = unknown> {
   columns: ColumnDef<TData, TValue>[];
   data: TData[];
   pageIndex?: number;
@@ -57,7 +56,7 @@ export interface EnhancedDataTableProps<TData, TValue> {
   emptyMessage?: string;
 }
 
-export function EnhancedDataTable<TData, TValue>({
+export function EnhancedDataTable<TData extends RowData, TValue = unknown>({
   columns,
   data,
   pageIndex = 0,
@@ -100,7 +99,7 @@ export function EnhancedDataTable<TData, TValue>({
   // Floating actions state
   const [hoveredRowData, setHoveredRowData] = React.useState<TData | null>(null);
   const [floatingPos, setFloatingPos] = React.useState<{ top: number; left: number } | null>(null);
-  const hoverTimeoutRef = React.useRef<NodeJS.Timeout>();
+  const hoverTimeoutRef = React.useRef<NodeJS.Timeout | undefined>(undefined);
 
   const clearFloatingActions = () => {
     setHoveredRowData(null);
@@ -213,7 +212,8 @@ export function EnhancedDataTable<TData, TValue>({
     } as ColumnDef<TData, TValue>;
   });
 
-  const table = useReactTable({
+  const table = useTable({
+    features: modernTableFeatures,
     data,
     columns: enhancedColumns,
     state: {
@@ -224,11 +224,10 @@ export function EnhancedDataTable<TData, TValue>({
       },
     },
     onSortingChange: setSorting,
-    getCoreRowModel: getCoreRowModel(),
     manualSorting: !!onSortChange, // Use manual sorting if server-side sorting is available
     manualPagination: true,
     pageCount: Math.ceil(total / pageSize),
-  });
+  }, (state) => state);
 
   const handleSearchAddition = (value: string) => {
     if (onSearchValueChange) {

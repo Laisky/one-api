@@ -67,7 +67,7 @@ export function Header() {
   const { isMobile } = useResponsive();
   const { systemStatus } = useSystemStatus();
 
-  const isAdmin = user?.role >= 10;
+  const isAdmin = (user?.role ?? 0) >= 10;
 
   // Navigation items visible to logged-in users
   const authenticatedNavItems = user

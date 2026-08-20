@@ -1,6 +1,5 @@
-import '@testing-library/jest-dom';
+import '@testing-library/jest-dom/vitest';
 import { vi } from 'vitest';
-import enTranslations from '../i18n/locales/en';
 
 // Mock react-i18next
 vi.mock('react-i18next', async () => {
@@ -28,6 +27,8 @@ vi.mock('react-i18next', async () => {
       // Fallback to default value if provided
       if (typeof arg2 === 'string') {
         value = arg2;
+      } else if (options?.defaultValue !== undefined) {
+        value = options.defaultValue;
       } else {
         return key;
       }
@@ -101,7 +102,7 @@ if (typeof window.PointerEvent === 'undefined') {
       super(type, props);
     }
   }
-  // @ts-ignore assigning test-only PointerEvent polyfill for jsdom
+  // @ts-expect-error assigning test-only PointerEvent polyfill for jsdom
   window.PointerEvent = MockPointerEvent as unknown as typeof PointerEvent;
 }
 

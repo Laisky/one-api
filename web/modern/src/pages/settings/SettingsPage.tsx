@@ -20,7 +20,7 @@ export function SettingsPage() {
   const { isMobile } = useResponsive();
   const { tab } = useParams<{ tab?: string }>();
   const navigate = useNavigate();
-  const isRoot = user?.role >= 100;
+  const isRoot = (user?.role ?? 0) >= 100;
 
   const tabCount = 1 + (isRoot ? 3 : 0); // Personal + 3 admin tabs
 

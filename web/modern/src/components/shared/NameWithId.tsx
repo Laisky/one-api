@@ -31,7 +31,7 @@ export function NameWithId({ name, refId, idLabel = 'ID', className }: NameWithI
   const [copied, setCopied] = useState(false);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const lastTouchAtRef = useRef(0);
-  const copyResetRef = useRef<ReturnType<typeof setTimeout>>();
+  const copyResetRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const id = refId == null ? '' : String(refId);
 
   useEffect(() => {
