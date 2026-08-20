@@ -23,6 +23,7 @@
     "balance": {
       "available": "Available quota for API usage",
       "description": "Your current quota balance",
+      "note": "Credits are billed in USD and never expire.",
       "refresh": "Refresh Balance",
       "title": "Current Balance"
     },
@@ -45,6 +46,26 @@
       "success": "Successfully redeemed! Added {{value}} tokens.",
       "title": "Redeem Code"
     },
+    "stripe": {
+      "button": "Continue to Stripe",
+      "description": "Pay by card via Stripe. USD only, ${{min}} minimum. A receipt is emailed to your registered address.",
+      "failed": "Failed to create checkout session",
+      "label": "Amount (USD)",
+      "max": "Amount too large",
+      "min": "Minimum is ${{value}}",
+      "note": "You will be redirected to Stripe Checkout. Your balance will update once payment is confirmed.",
+      "outcome_cancel": "You have not been charged.",
+      "outcome_cancel_title": "Payment canceled",
+      "outcome_credited": "Your balance has been updated from the server order status.",
+      "outcome_credited_title": "Credits added",
+      "outcome_failed": "Payment was recorded but needs operator review. Contact support if balance is wrong.",
+      "outcome_failed_title": "Payment needs review",
+      "outcome_success": "Confirming with the server… your balance updates after the webhook settles the order.",
+      "outcome_success_title": "Payment received",
+      "processing": "Redirecting…",
+      "required": "Enter an amount in USD",
+      "title": "Add credits"
+    },
     "tips": {
       "content": [
         "Quota is consumed based on your API usage and model costs",
@@ -55,6 +76,7 @@
       ],
       "title": "Tips"
     },
-    "title": "Top Up"
+    "title": "Top Up",
+    "tokens": "tokens"
   }
 }

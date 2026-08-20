@@ -23,6 +23,7 @@
     "balance": {
       "available": "可用于 API 使用的额度",
       "description": "您当前的额度余额",
+      "note": "额度以 USD 计费，永不过期。",
       "refresh": "刷新余额",
       "title": "当前余额"
     },
@@ -45,6 +46,26 @@
       "success": "兑换成功！增加了 {{value}} 令牌。",
       "title": "兑换代码"
     },
+    "stripe": {
+      "button": "前往 Stripe 付款",
+      "description": "通过 Stripe 使用银行卡支付。仅支持 USD，最低 ${{min}}。付款后会向您的注册邮箱发送收据。",
+      "failed": "创建结账会话失败",
+      "label": "金额（USD）",
+      "max": "金额过大",
+      "min": "最低 ${{value}}",
+      "note": "您将被重定向到 Stripe Checkout。付款确认后余额将自动更新。",
+      "outcome_cancel": "您尚未被扣款。",
+      "outcome_cancel_title": "付款已取消",
+      "outcome_credited": "余额已根据服务器订单状态更新。",
+      "outcome_credited_title": "已到账",
+      "outcome_failed": "付款已记录，但需要管理员审核。如果余额有误，请联系客服。",
+      "outcome_failed_title": "付款需要审核",
+      "outcome_success": "正在与服务器确认…Webhook 结算订单后余额将更新。",
+      "outcome_success_title": "已收到付款",
+      "processing": "正在跳转…",
+      "required": "请输入 USD 金额",
+      "title": "充值"
+    },
     "tips": {
       "content": [
         "额度根据您的 API 使用量和模型成本消耗",
@@ -55,6 +76,7 @@
       ],
       "title": "提示"
     },
-    "title": "充值"
+    "title": "充值",
+    "tokens": "个额度"
   }
 }

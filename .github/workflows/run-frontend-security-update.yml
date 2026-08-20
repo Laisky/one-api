@@ -32,7 +32,7 @@ jobs:
       FRONTEND_SECURITY_REPORT: /tmp/frontend-security-validation-report.md
     steps:
       - name: Checkout the pull-request head branch
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7.0.1
         with:
           ref: ${{ github.event.pull_request.head.ref }}
           fetch-depth: 0
@@ -41,7 +41,7 @@ jobs:
         run: git fetch --no-tags origin main
 
       - name: Setup the production Node.js line
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7.0.0
         with:
           node-version: '24'
 
@@ -188,7 +188,7 @@ jobs:
           cat "${FRONTEND_SECURITY_REPORT}" >> "${GITHUB_STEP_SUMMARY}"
 
       - name: Upload generated patch and validation report
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7.0.1
         with:
           name: frontend-security-update
           path: /tmp/frontend-security-update.tar.gz

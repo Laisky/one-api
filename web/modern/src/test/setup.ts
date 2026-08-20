@@ -25,9 +25,14 @@ vi.mock('react-i18next', async () => {
       if (options?.returnObjects) {
         return ['Item 1', 'Item 2'];
       }
-      // Fallback to default value if provided
+      // Fallback to default value if provided, either as the second argument
+      // (t(key, defaultValue, options)) or inside the options object
+      // (t(key, { defaultValue, ...options }), which react-i18next supports
+      // and the codebase uses).
       if (typeof arg2 === 'string') {
         value = arg2;
+      } else if (typeof options?.defaultValue === 'string') {
+        value = options.defaultValue;
       } else {
         return key;
       }

@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"net/url"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -548,16 +549,35 @@ func (proxy *compactFaultProxy) setOpen(open bool) {
 	proxy.conns = map[net.Conn]struct{}{}
 }
 
-// compactFaultRedirectDSN rewrites a key/value DSN's host and port, returning both forms.
+// compactFaultRedirectDSN rewrites a live DSN so its host:port points at the
+// relay address, returning the rewritten DSN and the original host:port target.
+// Both URL DSNs (postgres://user:pass@host:port/db?params) and libpq keyword
+// DSNs (host=... port=...) are accepted, mirroring what pr.yml and the manual
+// qualification runs set in COMPACT_UUID_TEST_POSTGRES_DSN.
 // Parameters:
-//   - dsn: key/value PostgreSQL DSN.
-//   - addr: the relay's host:port, or an empty string to only read the server's address.
+//   - dsn: the live DSN to rewrite.
+//   - addr: relay listener address in host:port form, or "" to keep the DSN as-is.
 //
 // Return values:
-//   - string: the DSN, redirected when addr was supplied.
-//   - string: the original server's host:port.
-//   - error: wrapped error when an address is missing or cannot be split.
+//   - string: the DSN with host:port replaced by addr when addr is non-empty.
+//   - string: the original host:port for the relay to dial.
+//   - error: wrapped parse failures, or an error when the DSN names no host/port.
 func compactFaultRedirectDSN(dsn string, addr string) (string, string, error) {
+	if strings.Contains(dsn, "://") {
+		parsed, err := url.Parse(dsn)
+		if err != nil {
+			return "", "", errors.Wrap(err, "parse DSN url")
+		}
+		if parsed.Hostname() == "" || parsed.Port() == "" {
+			return "", "", errors.New("dsn must name a host and a port")
+		}
+		target := net.JoinHostPort(parsed.Hostname(), parsed.Port())
+		if addr != "" {
+			parsed.Host = addr
+		}
+		return parsed.String(), target, nil
+	}
+
 	host, port := "", ""
 	if addr != "" {
 		split, splitPort, err := net.SplitHostPort(addr)

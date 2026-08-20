@@ -23,6 +23,7 @@
     "balance": {
       "available": "Quota disponible pour l'utilisation de l'API",
       "description": "Votre solde de quota actuel",
+      "note": "Les crédits sont facturés en USD et n'expirent jamais.",
       "refresh": "Actualiser le solde",
       "title": "Solde actuel"
     },
@@ -45,6 +46,26 @@
       "success": "Utilisé avec succès ! Ajout de {{value}} jetons.",
       "title": "Utiliser un code"
     },
+    "stripe": {
+      "button": "Continuer vers Stripe",
+      "description": "Payez par carte via Stripe. USD uniquement, minimum ${{min}}. Un reçu est envoyé à votre adresse e-mail enregistrée.",
+      "failed": "Échec de la création de la session de paiement",
+      "label": "Montant (USD)",
+      "max": "Montant trop élevé",
+      "min": "Minimum ${{value}}",
+      "note": "Vous serez redirigé vers Stripe Checkout. Votre solde sera mis à jour une fois le paiement confirmé.",
+      "outcome_cancel": "Vous n'avez pas été débité.",
+      "outcome_cancel_title": "Paiement annulé",
+      "outcome_credited": "Votre solde a été mis à jour depuis le statut de la commande serveur.",
+      "outcome_credited_title": "Crédits ajoutés",
+      "outcome_failed": "Le paiement a été enregistré mais nécessite une vérification par un opérateur. Contactez le support si le solde est incorrect.",
+      "outcome_failed_title": "Paiement à vérifier",
+      "outcome_success": "Confirmation avec le serveur… votre solde se met à jour après le règlement du webhook.",
+      "outcome_success_title": "Paiement reçu",
+      "processing": "Redirection…",
+      "required": "Saisissez un montant en USD",
+      "title": "Ajouter des crédits"
+    },
     "tips": {
       "content": [
         "Le quota est consommé en fonction de votre utilisation de l'API et des coûts des modèles",
@@ -55,6 +76,7 @@
       ],
       "title": "Conseils"
     },
-    "title": "Recharger"
+    "title": "Recharger",
+    "tokens": "crédits"
   }
 }

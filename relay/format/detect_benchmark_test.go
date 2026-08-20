@@ -167,6 +167,24 @@ func TestDetectFormatBehaviorEquivalent(t *testing.T) {
 			if wantErr == nil {
 				require.NoError(t, gotErr)
 			} else {
+				// The legacy and optimized probes use different struct names
+				// (legacyRequestProbe vs requestProbe), which json.Unmarshal
+				// embeds in UnmarshalTypeError messages. The externally
+				// observable contract is the error KIND plus the offending
+				// field and type, not the internal struct identifier, so
+				// compare those instead of the full message text.
+				require.Error(t, gotErr)
+				var wantType, gotType *json.UnmarshalTypeError
+				if errors.As(wantErr, &wantType) && errors.As(gotErr, &gotType) {
+					require.Equal(t, wantType.Field, gotType.Field)
+					require.Equal(t, wantType.Type, gotType.Type)
+					return
+				}
+				var wantSyntax, gotSyntax *json.SyntaxError
+				if errors.As(wantErr, &wantSyntax) && errors.As(gotErr, &gotSyntax) {
+					require.Equal(t, wantSyntax.Offset, gotSyntax.Offset)
+					return
+				}
 				require.EqualError(t, gotErr, wantErr.Error())
 			}
 		})

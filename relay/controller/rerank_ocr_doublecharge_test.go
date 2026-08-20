@@ -30,6 +30,13 @@ const doubleChargeOverrideRatio = 1000.0
 // a groupRatio (ChannelRatio) of 1.0.
 const doubleChargeTotalQuota = int64(1000)
 
+// doubleChargeRerankPromptTokens mirrors the token count reported by the rerank
+// upstream fixture (meta.tokens.input_tokens). The rerank channel override in
+// newDoubleChargeChannel carries only a Ratio (ModelConfigLocal has no per-call
+// field), so rerank billing follows the token-priced path and one settled
+// request costs ceil(promptTokens * ratio * groupRatio).
+const doubleChargeRerankPromptTokens = 12
+
 // doubleChargeUserQuota is a small finite quota: large enough that pre-consume
 // succeeds (userQuota-totalQuota >= 0) yet small enough that the trust-skip
 // branch (userQuota > 100*totalQuota) never fires, so PreConsumeTokenQuota
@@ -149,14 +156,20 @@ func TestRelayRerankHelper_SuccessDoesNotDoubleCharge(t *testing.T) {
 	endQuota := reloadUserQuota(t)
 	decremented := startQuota - endQuota
 
-	require.EqualValues(t, doubleChargeTotalQuota, decremented,
+	// The fixture's channel override has no per-call pricing, so a successful
+	// rerank settles at the token-priced quota for the upstream-reported prompt
+	// tokens (12). Asserting the exact single charge keeps the regression
+	// meaningful: a ~2x decrement means the pre-consume stayed deducted AND
+	// postConsume recharged the full quota on top.
+	expectedQuota := calculateRerankQuota(doubleChargeRerankPromptTokens, doubleChargeOverrideRatio, 1.0, false)
+	require.EqualValues(t, expectedQuota, decremented,
 		"successful rerank must charge for exactly ONE settled request; "+
 			"totalQuota=%d actual_decrement=%d (a ~2x decrement indicates the "+
 			"pre-consumed quota stayed deducted AND postConsume recharged full totalQuota)",
-		doubleChargeTotalQuota, decremented)
+		expectedQuota, decremented)
 
 	// The settled request cost must also equal a single charge.
-	require.EqualValues(t, doubleChargeTotalQuota, requestCostQuota(t, "req_rerank_doublecharge"),
+	require.EqualValues(t, expectedQuota, requestCostQuota(t, "req_rerank_doublecharge"),
 		"settled request cost must equal one totalQuota")
 }
 

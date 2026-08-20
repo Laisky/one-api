@@ -442,21 +442,13 @@ func compactFaultInjectedFaults(t *testing.T) {
 		// seconds, and the DDL layer does install a session lock_timeout around every compact
 		// DDL statement. This asserts the cycle as a whole honours that bound.
 		//
-		// It currently FAILS, and the failure is a real defect: the statement that blocks is
-		// not the DDL but the metadata read that precedes it. compactTableExpanded
-		// (compact_uuid_schema.go:276) issues an information_schema column query through the
-		// gorm Migrator, which needs ACCESS SHARE on the relation and carries NO lock_timeout
-		// and NO statement_timeout — those are installed only inside execUUIDDDLWithTimeout.
-		// Observed directly in pg_stat_activity: the cycle's
-		// "SELECT c.column_name, c.is_nullable ..." sat in wait_event_type=Lock for 7m21s
-		// against a 5s cap, and stopped only when this test's own context was cancelled. The
-		// production worker passes an application-lifetime context with no deadline, and
-		// runCompactCycle applies compactCycleDuration() only to row reconciliation, so a
-		// conflicting DDL/VACUUM FULL/operator ALTER blocks a cycle indefinitely while it holds
-		// the compact ownership lock, and no other instance can take over.
-		//
-		// The bounded context below only stops this test from hanging; it is not the
-		// coordinator bounding itself, which is the point.
+		// The statement that blocks is not the DDL but the metadata read that precedes it:
+		// compactTableExpanded issues an information_schema column query through the gorm
+		// Migrator, which needs ACCESS SHARE on the relation. withCompactMetadataDeadline
+		// (compact_uuid_schema.go) now bounds those reads with compactMetadataTimeout, so the
+		// cycle returns an error within the cap instead of blocking for as long as the caller's
+		// context allows. This assertion locks in that bound; the 40s context below is only a
+		// safety net and must never be what stops the cycle.
 		table := compactTablesForTopology(topology)[0].table
 
 		// The fault is injected and removed inside this closure, so a failed assertion below
@@ -487,9 +479,8 @@ func compactFaultInjectedFaults(t *testing.T) {
 		require.False(t, compactFaultMarkerIntegrity(t, ctx, topology))
 		t.Logf("cycle blocked behind ACCESS EXCLUSIVE on %s returned in %s: %v", table, elapsed, cycleErr)
 
-		// Fault removed: work resumes automatically, with no command. This is asserted before
-		// the bound below so that AUTO-T12's recovery half is exercised even though the bound
-		// currently fails.
+		// Fault removed: work resumes automatically, with no command. This asserts AUTO-T12's
+		// recovery half after the bound below proves the cycle refuses to hang.
 		require.Equal(t, compactStateReady, driveCompactToReady(t, newCompactCoordinator(topology)).state)
 		require.Equal(t, digest, compactFaultDigest(db, compactFaultSeedRows))
 

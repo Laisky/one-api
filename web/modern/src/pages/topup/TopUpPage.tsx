@@ -477,7 +477,11 @@ export function TopUpPage() {
               </CardHeader>
               <CardContent>
                 <Form {...stripeForm}>
-                  <form onSubmit={stripeForm.handleSubmit(onStripeSubmit)} className="space-y-5">
+                  {/* noValidate: the amount input carries a native min attribute whose
+                      constraint bubble would shadow the styled zod validation message
+                      (e.g. "Minimum is $5") and block onSubmit before react-hook-form
+                      ever sees the event. Custom validation owns the UX here. */}
+                  <form onSubmit={stripeForm.handleSubmit(onStripeSubmit)} noValidate className="space-y-5">
                     <div className="flex flex-wrap gap-2">
                       {presets.map((amount) => {
                         const active = Number(watchedAmount) === amount;
@@ -506,13 +510,16 @@ export function TopUpPage() {
                       name="amount_usd"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>{tr('stripe.label', 'Amount (USD)')}</FormLabel>
-                          <FormControl>
-                            <div className="relative">
-                              <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-sm text-muted-foreground">
-                                $
-                              </span>
+                          {/* This repo's FormControl is a plain div and does not inject an
+                              id, so the label must associate with the input explicitly. */}
+                          <FormLabel htmlFor="topup-amount-usd">{tr('stripe.label', 'Amount (USD)')}</FormLabel>
+                          <div className="relative">
+                            <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-sm text-muted-foreground">
+                              $
+                            </span>
+                            <FormControl>
                               <Input
+                                id="topup-amount-usd"
                                 type="number"
                                 inputMode="decimal"
                                 min={minTopUpUSD}
@@ -521,9 +528,9 @@ export function TopUpPage() {
                                 className="min-h-11 pl-7 tabular-nums"
                                 {...field}
                               />
-                            </div>
-                          </FormControl>
-                          <FormMessage />
+                            </FormControl>
+                          </div>
+                          <FormMessage>{stripeForm.formState.errors.amount_usd?.message}</FormMessage>
                         </FormItem>
                       )}
                     />
