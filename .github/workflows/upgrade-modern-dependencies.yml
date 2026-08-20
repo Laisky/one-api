@@ -1,4 +1,4 @@
-name: Upgrade modern frontend dependencies
+name: Validate modern latest-stable upgrade
 
 on:
   pull_request:
@@ -10,17 +10,15 @@ on:
       - synchronize
 
 permissions:
-  contents: write
-  pull-requests: read
+  contents: read
 
 concurrency:
-  group: upgrade-modern-dependencies-staging
+  group: validate-modern-upgrade-${{ github.event.pull_request.number }}
   cancel-in-progress: true
 
 jobs:
-  upgrade-and-test:
+  validate:
     if: >-
-      github.actor != 'github-actions[bot]' &&
       github.event.pull_request.head.repo.full_name == github.repository &&
       github.event.pull_request.head.ref == 'agent/modern-upgrade-work-20260819'
     runs-on: macos-15
@@ -28,17 +26,14 @@ jobs:
     env:
       CI: 'true'
       YARN_NETWORK_TIMEOUT: '600000'
-      UPGRADE_BRANCH: ${{ github.event.pull_request.head.ref }}
-      DIAGNOSTIC_FILE: .github/modern-upgrade-diagnostics.md
-      VITEST_FILE: .github/modern-upgrade-vitest.json
 
     steps:
-      - name: Checkout isolated work branch
+      - name: Checkout the immutable pull-request head
         uses: actions/checkout@v4
         with:
           repository: ${{ github.event.pull_request.head.repo.full_name }}
-          ref: ${{ github.event.pull_request.head.ref }}
-          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 1
 
       - name: Set up Node.js 24
         uses: actions/setup-node@v4
@@ -48,167 +43,35 @@ jobs:
       - name: Install Yarn Classic
         run: npm install --global yarn@1.22.22
 
-      - name: Upgrade direct dependencies and apply compatibility migrations
-        run: |
-          set -euo pipefail
-          cd web/modern
-          npx --yes npm-check-updates@latest \
-            --upgrade \
-            --target latest \
-            --packageManager yarn
-          rm -f package-lock.json
-          cd ../..
-          node web/modern/scripts/apply-latest-compat.mjs
-          node web/modern/scripts/finalize-latest-compat.mjs
-
-      - name: Persist dependency targets and compatibility source changes
-        run: |
-          set -euo pipefail
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add -A web/modern
-          if ! git diff --cached --quiet; then
-            git commit -m 'fix(modern): migrate latest dependency APIs'
-            git push origin "HEAD:${UPGRADE_BRANCH}"
-          fi
-
-      - name: Resolve upgraded Yarn graph
+      - name: Frozen install
         working-directory: web/modern
-        run: |
-          set -euo pipefail
-          rm -rf node_modules
-          yarn install \
-            --non-interactive \
-            --network-timeout "${YARN_NETWORK_TIMEOUT}"
+        run: yarn install --frozen-lockfile --non-interactive --network-timeout "$YARN_NETWORK_TIMEOUT"
 
-      - name: Persist regenerated lockfile
-        run: |
-          set -euo pipefail
-          git add web/modern/yarn.lock
-          if ! git diff --cached --quiet; then
-            git commit -m 'chore(modern): regenerate Yarn lockfile'
-            git push origin "HEAD:${UPGRADE_BRANCH}"
-          fi
+      - name: Verify every direct dependency is current
+        working-directory: web/modern
+        run: npx --yes npm-check-updates@latest --target latest --errorLevel 2
 
-      - name: Validate upgraded graph and record diagnostics
-        id: validate
-        run: |
-          set -uo pipefail
-          logs=/tmp/modern-upgrade-logs
-          mkdir -p "$logs"
-          : >"$logs/status"
-          overall=0
+      - name: Type-check with TypeScript 7
+        if: always()
+        working-directory: web/modern
+        run: yarn type-check
 
-          run_check() {
-            local name="$1"
-            shift
-            set +e
-            "$@" >"${logs}/${name}.log" 2>&1
-            local code=$?
-            set -e
-            echo "${name}=${code}" >>"${logs}/status"
-            if [ "$code" -ne 0 ]; then overall=1; fi
-          }
+      - name: Lint with ESLint 10
+        if: always()
+        working-directory: web/modern
+        run: yarn lint
 
-          run_check current bash -lc 'cd web/modern && npx --yes npm-check-updates@latest --target latest --errorLevel 2'
-          run_check type-check yarn --cwd web/modern type-check
-          run_check lint yarn --cwd web/modern lint
-          run_check i18n yarn --cwd web/modern check:i18n
-          run_check unit-tests bash -lc "cd web/modern && yarn test --run --passWithNoTests --reporter=json --outputFile=${logs}/vitest.json"
-          run_check production-build yarn --cwd web/modern build:prod
-          run_check frozen-lockfile bash -lc 'cd web/modern && rm -rf node_modules && yarn install --frozen-lockfile --non-interactive --network-timeout 600000'
+      - name: Validate translations
+        if: always()
+        working-directory: web/modern
+        run: yarn check:i18n
 
-          git restore --source=HEAD --worktree --staged -- web/build/modern 2>/dev/null || true
-          rm -f web/modern/tsconfig.tsbuildinfo
+      - name: Run all unit tests
+        if: always()
+        working-directory: web/modern
+        run: yarn test --run --passWithNoTests
 
-          if [ "$overall" -eq 0 ]; then
-            rm -f "$DIAGNOSTIC_FILE" "$VITEST_FILE"
-          else
-            if [ -f "$logs/vitest.json" ]; then
-              cp "$logs/vitest.json" "$VITEST_FILE"
-            else
-              rm -f "$VITEST_FILE"
-            fi
-
-            {
-              echo '# Modern latest-stable compatibility diagnostics'
-              echo
-              echo '- Resolver base: latest `main` at staging reset'
-              echo '- Node: `24.x`'
-              echo '- Yarn: `1.22.22`'
-              echo
-              echo '## Check status'
-              echo
-              echo '```text'
-              cat "$logs/status"
-              echo '```'
-
-              if [ -f "$logs/vitest.json" ]; then
-                echo
-                echo '## Vitest summary'
-                echo
-                python3 - "$logs/vitest.json" <<'PY'
-          import json
-          import re
-          import sys
-
-          ansi = re.compile(r'\x1b\[[0-9;]*m')
-          with open(sys.argv[1], encoding='utf-8') as handle:
-              report = json.load(handle)
-
-          print(f"- suites: {report.get('numTotalTestSuites', 0)} total, {report.get('numFailedTestSuites', 0)} failed")
-          print(f"- tests: {report.get('numTotalTests', 0)} total, {report.get('numFailedTests', 0)} failed")
-
-          failed = []
-          for result in report.get('testResults', []):
-              for assertion in result.get('assertionResults', []):
-                  if assertion.get('status') != 'failed':
-                      continue
-                  name = ' > '.join(assertion.get('ancestorTitles', []) + [assertion.get('title', '')])
-                  messages = assertion.get('failureMessages') or []
-                  message = ansi.sub('', messages[0]) if messages else ''
-                  failed.append((name, message))
-
-          if failed:
-              print('\n```text')
-              for name, message in failed:
-                  print(name)
-                  if message:
-                      lines = [line for line in message.splitlines() if line.strip()]
-                      for line in lines[:12]:
-                          print(f"  {line}")
-              print('```')
-          PY
-              fi
-
-              for log in "$logs"/*.log; do
-                name=$(basename "$log" .log)
-                code=$(awk -F= -v name="$name" '$1 == name { print $2 }' "$logs/status" | tail -n1)
-                if [ "${code:-1}" -ne 0 ]; then
-                  echo
-                  echo "## ${name}"
-                  echo
-                  echo '```text'
-                  tail -n 500 "$log"
-                  echo '```'
-                fi
-              done
-            } >"$DIAGNOSTIC_FILE"
-          fi
-
-          git add -A .github web/modern
-          if ! git diff --cached --quiet; then
-            if [ "$overall" -eq 0 ]; then
-              git commit -m 'test(modern): validate latest stable dependencies'
-            else
-              git commit -m 'test(modern): record compatibility diagnostics'
-            fi
-            git push origin "HEAD:${UPGRADE_BRANCH}"
-          fi
-
-          echo "overall=${overall}" >>"$GITHUB_OUTPUT"
-          exit 0
-
-      - name: Require all compatibility checks
-        if: steps.validate.outputs.overall != '0'
-        run: exit 1
+      - name: Build the production bundle
+        if: always()
+        working-directory: web/modern
+        run: yarn build:prod
