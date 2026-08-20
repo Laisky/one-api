@@ -2,8 +2,8 @@
 
 Source baseline: `f62501f2fc43a7eca87c723f3cab907fca00039d`
 
-Staging workflow base: `605168b013ed41816f2f5191cc82ce43415df197`
+Staging workflow base: `dd5977eeff108351691a8377a2cac26bd5e7dea9`
 
-Runner generation: `immutable-release-candidate-1`
+Runner generation: `apply-final-amount-1`
 
 This file is temporary and must not appear in the final production PR.
