@@ -38,7 +38,19 @@ jobs:
           node-version: '24'
 
       - name: Apply idempotent final compatibility fixes
-        run: node web/modern/scripts/finalize-latest-compat.mjs
+        run: |
+          python3 <<'PY'
+          from pathlib import Path
+
+          path = Path('web/modern/scripts/finalize-latest-compat.mjs')
+          text = path.read_text()
+          text = text.replace(
+              "normalizedId.includes(`/node_modules/${packageName}/`)",
+              "normalizedId.includes('/node_modules/' + packageName + '/')",
+          )
+          path.write_text(text)
+          PY
+          node web/modern/scripts/finalize-latest-compat.mjs
 
       - name: Commit final source compatibility fixes
         run: |
