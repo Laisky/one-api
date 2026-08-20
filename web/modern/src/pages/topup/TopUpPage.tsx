@@ -523,7 +523,6 @@ export function TopUpPage() {
                                 id="stripe-amount-usd"
                                 type="number"
                                 inputMode="decimal"
-                                min={minTopUpUSD}
                                 step="0.01"
                                 placeholder={String(minTopUpUSD)}
                                 className="min-h-11 pl-7 tabular-nums"
