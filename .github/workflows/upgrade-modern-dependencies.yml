@@ -47,24 +47,26 @@ jobs:
       - name: Install Yarn Classic
         run: npm install --global yarn@1.22.22
 
-      - name: Upgrade every direct dependency to latest stable
-        working-directory: web/modern
+      - name: Upgrade direct dependencies and apply compatibility migrations
         run: |
           set -euo pipefail
+          cd web/modern
           npx --yes npm-check-updates@latest \
             --upgrade \
             --target latest \
             --packageManager yarn
           rm -f package-lock.json
+          cd ../..
+          node web/modern/scripts/apply-latest-compat.mjs
 
-      - name: Persist exact target versions before dependency resolution
+      - name: Persist dependency targets and compatibility source changes
         run: |
           set -euo pipefail
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add web/modern/package.json
+          git add -A web/modern
           if ! git diff --cached --quiet; then
-            git commit -m 'Record latest stable Modern dependency targets'
+            git commit -m 'fix(modern): migrate latest dependency APIs'
             git push origin "HEAD:${UPGRADE_BRANCH}"
           fi
 
@@ -82,7 +84,7 @@ jobs:
           set -euo pipefail
           git add web/modern/yarn.lock
           if ! git diff --cached --quiet; then
-            git commit -m 'Regenerate Modern Yarn lockfile'
+            git commit -m 'chore(modern): regenerate Yarn lockfile'
             git push origin "HEAD:${UPGRADE_BRANCH}"
           fi
 
@@ -112,6 +114,7 @@ jobs:
           run_check i18n yarn --cwd web/modern check:i18n
           run_check unit-tests yarn --cwd web/modern test --run --passWithNoTests
           run_check production-build yarn --cwd web/modern build:prod
+          run_check frozen-lockfile bash -lc 'cd web/modern && rm -rf node_modules && yarn install --frozen-lockfile --non-interactive --network-timeout 600000'
 
           git restore --source=HEAD --worktree --staged -- web/build/modern 2>/dev/null || true
           rm -f web/modern/tsconfig.tsbuildinfo
@@ -139,19 +142,19 @@ jobs:
                   echo "## ${name}"
                   echo
                   echo '```text'
-                  tail -n 400 "$log"
+                  tail -n 500 "$log"
                   echo '```'
                 fi
               done
             } >"$DIAGNOSTIC_FILE"
           fi
 
-          git add -A .github web/modern/package.json web/modern/yarn.lock
+          git add -A .github web/modern
           if ! git diff --cached --quiet; then
             if [ "$overall" -eq 0 ]; then
-              git commit -m 'Validate latest stable Modern dependencies'
+              git commit -m 'test(modern): validate latest stable dependencies'
             else
-              git commit -m 'Record Modern dependency compatibility diagnostics'
+              git commit -m 'test(modern): record compatibility diagnostics'
             fi
             git push origin "HEAD:${UPGRADE_BRANCH}"
           fi
