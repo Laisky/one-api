@@ -47,6 +47,7 @@ jobs:
           set -euo pipefail
           python3 <<'PY'
           import json
+          import re
           from pathlib import Path
 
           topup = Path('web/modern/src/pages/topup/TopUpPage.tsx')
@@ -55,21 +56,23 @@ jobs:
               ".min(minTopUpUSD, { error: tr('stripe.min', `Minimum is ${minTopUpUSD}`, { value: minTopUpUSD }) })",
               ".min(minTopUpUSD, { error: tr('stripe.min', `Minimum is $${minTopUpUSD}`, { value: minTopUpUSD }) })",
           )
-          old_submit = """  const onStripeSubmit = async (data: StripeForm) => {
-            setIsStripeSubmitting(true);"""
-          new_submit = """  const onStripeSubmit = async (data: StripeForm) => {
-            if (data.amount_usd < minTopUpUSD) {
+          guard = """    if (data.amount_usd < minTopUpUSD) {
               stripeForm.setError('amount_usd', {
                 type: 'min',
                 message: tr('stripe.min', `Minimum is $${minTopUpUSD}`, { value: minTopUpUSD }),
               });
               return;
             }
-            setIsStripeSubmitting(true);"""
-          if old_submit in text:
-              text = text.replace(old_submit, new_submit)
-          elif new_submit not in text:
-              raise SystemExit('TopUp submit handler shape changed')
+          """
+          if "type: 'min'" not in text:
+              text, count = re.subn(
+                  r"(  const onStripeSubmit = async \(data: StripeForm\) => \{\n)(\s*)setIsStripeSubmitting\(true\);",
+                  lambda match: match.group(1) + guard + match.group(2) + 'setIsStripeSubmitting(true);',
+                  text,
+                  count=1,
+              )
+              if count != 1:
+                  raise SystemExit('TopUp submit handler could not be located')
           topup.write_text(text)
 
           tailwind = Path('web/modern/tailwind.config.js')
@@ -88,15 +91,13 @@ jobs:
           css = Path('web/modern/src/index.css')
           text = css.read_text()
           marker = "@config '../tailwind.config.js';\n"
-          variants = """
-
-          @custom-variant touch (@media (hover: none) and (pointer: coarse));
+          variants = """@custom-variant touch (@media (hover: none) and (pointer: coarse));
           @custom-variant no-touch (@media (hover: hover) and (pointer: fine));
           @custom-variant portrait (@media (orientation: portrait));
           @custom-variant landscape (@media (orientation: landscape));
           @custom-variant reduce-motion (@media (prefers-reduced-motion: reduce));
           @custom-variant high-contrast (@media (prefers-contrast: high));
-          """.strip('\n') + '\n'
+          """
           if '@custom-variant touch ' not in text:
               if marker not in text:
                   raise SystemExit('Tailwind config marker missing from index.css')
@@ -104,8 +105,7 @@ jobs:
           css.write_text(text)
 
           vite = Path('web/modern/vite.config.ts')
-          text = vite.read_text().replace("        tryCatchDeoptimization: false,\n", '')
-          vite.write_text(text)
+          vite.write_text(vite.read_text().replace("        tryCatchDeoptimization: false,\n", ''))
 
           package_path = Path('web/modern/package.json')
           package_json = json.loads(package_path.read_text())
