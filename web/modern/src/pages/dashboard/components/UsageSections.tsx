@@ -1,6 +1,7 @@
 import type { TFunction } from 'i18next';
 import type { ComponentProps } from 'react';
 import type { ComponentProps } from 'react';
+import type { ComponentProps } from 'react';
 import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { barColor } from '../services/chartConfig';
