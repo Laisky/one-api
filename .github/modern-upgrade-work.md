@@ -2,8 +2,8 @@
 
 Source baseline: `f62501f2fc43a7eca87c723f3cab907fca00039d`
 
-Staging workflow base: `d4c4f050635520b71c0a8cfec083a0c4d57910a5`
+Staging workflow base: `65653c38b23c6ede8ff1b3e729fcb807d5d05e83`
 
-Runner generation: `apply-final-2`
+Runner generation: `immutable-head-2`
 
 This file is temporary and must not appear in the final production PR.
