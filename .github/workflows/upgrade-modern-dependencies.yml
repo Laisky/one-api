@@ -1,4 +1,4 @@
-name: Validate modern latest-stable upgrade
+name: Build final Modern latest-stable upgrade
 
 on:
   pull_request:
@@ -10,68 +10,191 @@ on:
       - synchronize
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
-  group: validate-modern-upgrade-${{ github.event.pull_request.number }}
+  group: build-final-modern-upgrade-${{ github.event.pull_request.number }}
   cancel-in-progress: true
 
 jobs:
-  validate:
+  build-final:
     if: >-
+      github.actor != 'github-actions[bot]' &&
       github.event.pull_request.head.repo.full_name == github.repository &&
       github.event.pull_request.head.ref == 'agent/modern-upgrade-work-20260819'
-    runs-on: macos-15
-    timeout-minutes: 60
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
     env:
       CI: 'true'
       YARN_NETWORK_TIMEOUT: '600000'
+      FINAL_BRANCH: agent/modern-latest-stable-final-20260821
+      STAGING_REF: agent/modern-upgrade-work-20260819
+      BASELINE_SHA: a9ac7284b75420b2a4821c0a3b28f1bf6bdf6051
 
     steps:
-      - name: Checkout the immutable pull-request head
-        uses: actions/checkout@v4
+      - name: Checkout current main
+        uses: actions/checkout@v7.0.1
         with:
-          repository: ${{ github.event.pull_request.head.repo.full_name }}
-          ref: ${{ github.event.pull_request.head.sha }}
-          fetch-depth: 1
+          ref: main
+          fetch-depth: 0
 
       - name: Set up Node.js 24
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7.0.0
         with:
           node-version: '24'
 
       - name: Install Yarn Classic
         run: npm install --global yarn@1.22.22
 
-      - name: Frozen install
-        working-directory: web/modern
-        run: yarn install --frozen-lockfile --non-interactive --network-timeout "$YARN_NETWORK_TIMEOUT"
+      - name: Rebuild the candidate from current main
+        shell: bash
+        run: |
+          set -euo pipefail
 
-      - name: Verify every direct dependency is current
-        working-directory: web/modern
-        run: npx --yes npm-check-updates@latest --target latest --errorLevel 2
+          git fetch --prune origin main "$STAGING_REF"
+          main_sha="$(git rev-parse origin/main)"
+          staging_sha='${{ github.event.pull_request.head.sha }}'
+          git cat-file -e "${staging_sha}^{commit}"
+          git cat-file -e "${BASELINE_SHA}^{commit}"
+          git checkout -B "$FINAL_BRANCH" "$main_sha"
 
-      - name: Type-check with TypeScript 7
-        if: always()
+          while IFS=$'\t' read -r status path extra; do
+            [[ -n "${path:-}" ]] || continue
+            if [[ "$path" == 'web/modern/src/pages/topup/TopUpPage.tsx' ]]; then
+              continue
+            fi
+            case "$status" in
+              D*) git rm --ignore-unmatch -- "$path" ;;
+              R*|C*)
+                echo "Unexpected rename/copy in staged source: $status $path ${extra:-}" >&2
+                exit 1
+                ;;
+              *) git checkout "$staging_sha" -- "$path" ;;
+            esac
+          done < <(git diff --name-status "$BASELINE_SHA" "$staging_sha" -- web/modern)
+
+          python3 <<'PY'
+          from pathlib import Path
+
+          topup = Path('web/modern/src/pages/topup/TopUpPage.tsx')
+          text = topup.read_text()
+          replacements = {
+              "import { zodResolver } from '@hookform/resolvers/zod';":
+                  "import { zodResolver } from '@/lib/zod-resolver';",
+              ".number({ invalid_type_error: tr('stripe.required', 'Enter an amount in USD') })":
+                  ".number({ error: tr('stripe.required', 'Enter an amount in USD') })",
+              ".min(minTopUpUSD, tr('stripe.min', `Minimum is $${minTopUpUSD}`, { value: minTopUpUSD }))":
+                  ".min(minTopUpUSD, { error: tr('stripe.min', `Minimum is $${minTopUpUSD}`, { value: minTopUpUSD }) })",
+              ".max(100000, tr('stripe.max', 'Amount too large'))":
+                  ".max(100000, { error: tr('stripe.max', 'Amount too large') })",
+          }
+          for old, new in replacements.items():
+              if old not in text:
+                  raise SystemExit(f'Current-main TopUp shape changed; missing: {old}')
+              text = text.replace(old, new, 1)
+          topup.write_text(text)
+
+          form = Path('web/modern/src/components/ui/form.tsx')
+          text = form.read_text()
+          old = "  const error = name ? form.getFieldState(name, form.formState).error : undefined;"
+          new = "  const error = name && form ? form.getFieldState(name, form.formState).error : undefined;"
+          if old not in text:
+              raise SystemExit('Expected upgraded FormMessage implementation is missing')
+          form.write_text(text.replace(old, new, 1))
+          PY
+
+          git diff --check
+          echo "MAIN_SHA=$main_sha" >> "$GITHUB_ENV"
+          echo "STAGING_SHA=$staging_sha" >> "$GITHUB_ENV"
+          printf 'Rebuilt candidate from main %s using staged compatibility source %s\n' "$main_sha" "$staging_sha"
+
+      - name: Upgrade every direct dependency and regenerate the lockfile
+        working-directory: web/modern
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx --yes npm-check-updates@latest --target latest -u
+          yarn install --non-interactive --network-timeout "$YARN_NETWORK_TIMEOUT"
+          yarn install --frozen-lockfile --non-interactive --network-timeout "$YARN_NETWORK_TIMEOUT"
+          npx --yes npm-check-updates@latest --target latest --errorLevel 2
+
+      - name: Type-check
         working-directory: web/modern
         run: yarn type-check
 
-      - name: Lint with ESLint 10
-        if: always()
+      - name: Lint
         working-directory: web/modern
         run: yarn lint
 
       - name: Validate translations
-        if: always()
         working-directory: web/modern
         run: yarn check:i18n
 
       - name: Run all unit tests
-        if: always()
         working-directory: web/modern
         run: yarn test --run --passWithNoTests
 
       - name: Build the production bundle
-        if: always()
         working-directory: web/modern
         run: yarn build:prod
+
+      - name: Enforce final scope and publish the clean branch
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          git restore --source="$MAIN_SHA" --staged --worktree -- web/build 2>/dev/null || true
+          git clean -fd -- web/build >/dev/null 2>&1 || true
+          git diff --check
+
+          python3 <<'PY'
+          import subprocess
+
+          raw = subprocess.check_output(['git', 'status', '--porcelain=v1', '-z'])
+          records = [r.decode() for r in raw.split(b'\0') if r]
+          paths = []
+          for record in records:
+              path = record[3:]
+              if ' -> ' in path:
+                  path = path.split(' -> ', 1)[1]
+              paths.append(path)
+
+          if not paths:
+              raise SystemExit('Candidate unexpectedly contains no changes')
+          forbidden = [
+              p for p in paths
+              if not p.startswith('web/modern/')
+              or p.endswith('package-lock.json')
+              or p.startswith('web/build/')
+              or p.startswith('.github/')
+          ]
+          if forbidden:
+              raise SystemExit('Out-of-scope paths: ' + ', '.join(forbidden))
+          print(f'Validated {len(paths)} changed paths, all confined to web/modern/')
+          PY
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -- web/modern
+          git diff --cached --check
+
+          bad="$(git diff --cached --name-only | grep -Ev '^web/modern/' || true)"
+          if [[ -n "$bad" ]]; then
+            echo "Out-of-scope staged paths:" >&2
+            echo "$bad" >&2
+            exit 1
+          fi
+
+          git commit -m 'chore(modern): upgrade dependencies to latest stable releases'
+          final_sha="$(git rev-parse HEAD)"
+          git push --force origin "HEAD:refs/heads/$FINAL_BRANCH"
+
+          {
+            echo '## Final Modern upgrade candidate'
+            echo
+            echo "- main baseline: \`$MAIN_SHA\`"
+            echo "- staging compatibility source: \`$STAGING_SHA\`"
+            echo "- final branch: \`$FINAL_BRANCH\`"
+            echo "- final commit: \`$final_sha\`"
+            echo '- frozen install, latest-version check, type-check, lint, i18n, full tests, and production build: passed'
+          } >> "$GITHUB_STEP_SUMMARY"
