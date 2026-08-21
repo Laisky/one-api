@@ -108,13 +108,18 @@ jobs:
           echo "STAGING_SHA=$staging_sha" >> "$GITHUB_ENV"
           printf 'Rebuilt candidate from main %s using staged compatibility source %s\n' "$main_sha" "$staging_sha"
 
-      - name: Upgrade every direct dependency and regenerate the lockfile
+      - name: Cold-generate the latest dependency graph and lockfile
         working-directory: web/modern
         shell: bash
         run: |
           set -euo pipefail
           npx --yes npm-check-updates@latest --target latest -u
+          rm -rf node_modules
+          rm -f yarn.lock
+          export YARN_CACHE_FOLDER="$RUNNER_TEMP/yarn-cache-modern"
+          rm -rf "$YARN_CACHE_FOLDER"
           yarn install --non-interactive --network-timeout "$YARN_NETWORK_TIMEOUT"
+          rm -rf node_modules
           yarn install --frozen-lockfile --non-interactive --network-timeout "$YARN_NETWORK_TIMEOUT"
           npx --yes npm-check-updates@latest --target latest --errorLevel 2
 
@@ -196,5 +201,5 @@ jobs:
             echo "- staging compatibility source: \`$STAGING_SHA\`"
             echo "- final branch: \`$FINAL_BRANCH\`"
             echo "- final commit: \`$final_sha\`"
-            echo '- frozen install, latest-version check, type-check, lint, i18n, full tests, and production build: passed'
+            echo '- cold lockfile generation, frozen reinstall, latest-version check, type-check, lint, i18n, full tests, and production build: passed'
           } >> "$GITHUB_STEP_SUMMARY"
